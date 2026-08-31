@@ -19,6 +19,19 @@
     as the literal "(none)" so a reader can tell "nothing here" from "the
     model forgot".
 
+  DELIVERY CHANNEL — USE DOCTRINE (PLAN-179 W3 US10, declared S334)
+    The consumer of this template is the OPERATOR, through the interactive
+    `/compact <instructions>` command of the CLI, in long sessions that are
+    about to compact and carry load-bearing state. It is deliberately NOT
+    wired to the API `instructions` parameter of `compact_20260112`: that
+    parameter REPLACES the default compaction prompt wholesale
+    (PLAN-179/research-S309.md §1), so an incomplete rendering there is
+    strictly worse than the default — omission becomes recall loss. The
+    mechanical half of continuity does not live here at all: constraint
+    re-injection travels through its own channel (pinned constraints via
+    SessionStart(matcher=compact) + PostCompact, PLAN-179 W1-b), which does
+    not depend on the operator remembering this template.
+
     WHO FEEDS IT: an operator, manually. Nothing in this framework feeds this
     template automatically, and inside Claude Code nothing can — the routes
     and the local evidence are evaluated in the first section of the body

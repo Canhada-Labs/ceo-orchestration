@@ -1,0 +1,171 @@
+
+[1mG-PRE — substrato e base declarada[0m
+[32m  ok[0m  G-PRE: jq aceita --slurpfile (jq-1.7.1-apple)
+[32m  ok[0m  G-PRE: templates/settings/settings.base.json presente
+
+[1mG0 — insumos, materiais rastreados e arvore limpa[0m
+[32m  ok[0m  G0: HEAD em main
+[32m  ok[0m  sentinel, patch, .asc, mensagem e base esperada presentes
+[32m  ok[0m  materiais e 12 registro(s) de rail rastreados
+  [33mWARN[0m mudancas nao-guardadas fora do patch (toleradas, NAO entram no commit):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log
+  .claude/plans/PLAN-185/NIGHT-S329-RUNBOOK.md
+  .claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-090916-actionlint.log
+  .claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-090916-e2e.log
+  .claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-093536-actionlint.log
+  .claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-093536-e2e.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260826-191601.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-083217.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-083514.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-090402.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-093124.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-114006.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-144515.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-C-finalize.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-C-land-dry.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-C-land.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-C-sign.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-E-finalize.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-E-land-dry.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-E-land.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-E-sign.log
+[32m  ok[0m  nenhum arquivo do patch sujo; nenhum path canonico sujo fora do Scope
+
+[1mG1 — assinatura GPG + ancora[0m
+    gpg: Signature made Thu Aug 27 14:45:35 2026 -03
+    gpg:                using EDDSA key AE9B236FDAF0462874060C6BCFCFACF00335DC74
+    gpg: Good signature from "João Canhada <joaocanhada@users.noreply.github.com>" [ultimate]
+[32m  ok[0m  assinatura verificada
+[32m  ok[0m  signer AE9B236FDAF0462874060C6BCFCFACF00335DC74 consta no rail rastreado
+[32m  ok[0m  ancora casa HEAD (4efdfac4fbfa3e65092efe20c01e04a63ce5d7c4)
+
+[1mG2 — binding do patch (Patch-sha256)[0m
+[32m  ok[0m  patch casa o sha256 assinado (dfe1866b2a07c4a447e694bf1c7939fdc871c02a84fef6d3594083174c5ebec1)
+
+[1mG3 — o patch aplica limpo (modo checagem, nada muda ainda)[0m
+[32m  ok[0m  aplica limpo
+
+[1mG4 — touched == scope (NOS DOIS SENTIDOS)[0m
+[32m  ok[0m  5 path(s): touched == scope nos dois sentidos
+[32m  ok[0m  base 5d6ae25649cddb0b3260ec124317110efe3717d4 ancestral do HEAD; nenhum path do patch derivou
+[32m  ok[0m  G4: conjunto de paths casa EXPECTED_PATCH_PATHS
+
+[1mG5 — grants do sentinel + coerencia do manifesto ADR-192[0m
+  2 path(s) canonico(s), todos concedidos pelo sentinel
+  0 membro(s) do manifesto ADR-192 tocado(s)
+[32m  ok[0m  grants provados e manifesto estruturalmente coerente
+[32m  ok[0m  G5: 2 path(s) canonico(s) (esperado 2)
+[32m  ok[0m  G5: membros do manifesto tocados = 0 (esperado 0)
+
+[1mAPLICANDO o patch assinado[0m
+[32m  ok[0m  patch aplicado (5 paths)
+
+[1mV1 — sintaxe dos scripts shell tocados[0m
+[32m  ok[0m  V1a: bash -n verde em 2 script(s)
+[32m  ok[0m  V1b: shellcheck verde em 2 script(s)
+
+[1mV4 — o workflow pos-patch e valido E enxerga o teste[0m
+[32m  ok[0m  V4a: yaml.safe_load OK
+[32m  ok[0m  V4b: actionlint verde
+[32m  ok[0m  V4c: o workflow referencia o e2e 3 vez(es)
+[32m  ok[0m  V4d: timeout-minutes = 126 (esperado 126)
+
+[1mV5 — o invariante anti-rot no ARQUIVO landado[0m
+[32m  ok[0m  V5: _merge_lifecycle_hooks_into_settings tem 526 linhas e cita 0 nome(s) .py
+
+[1mV6 — o roster que a derivacao entrega[0m
+[32m  ok[0m  V6: templates/settings/settings.base.json enumera 47 registro(s) (esperado 47)
+[32m  ok[0m  V6-bis: templates/settings/settings.user.json enumera 20 registro(s) (esperado 20)
+
+[1mV2 — suite de unidade (conjunto DECLARADO, nunca 'passou')[0m
+    ........................................................................ [ 81%]
+    ................                                                         [100%]
+    88 passed in 5.05s
+[32m  ok[0m  V2: 88/88 testes de unidade verdes (rc=0)
+
+[1mV3 — e2e com install e upgrade REAIS (~9 min; o gate caro)[0m
+  isto demora ~9 min (8 fixtures de adopter, 10 upgrades reais)...
+      ok   E.9a extracted 6/6 pre-cure literal blocks out of git HEAD
+      ok   E.9b 5 of them had already DRIFTED from the template — the second copy was not merely redundant, it was rewriting adopters with stale text on every upgrade
+    
+    ==============================================================
+    RESULT: 71 passed, 0 failed
+    ==============================================================
+[32m  ok[0m  V3: e2e 71/71 passed, 0 failed (rc=0)
+
+[1mV7 — gates de governanca do repositorio[0m
+[32m  ok[0m  V7a: ceremony-lint blocking=0 (esperado 0)
+[32m  ok[0m  V7b: validate-governance.sh --fast verde
+[32m  ok[0m  V7c: COMMAND-SKILL-HOOK-MAP.md sem drift
+[32m  ok[0m  V7d: check-test-env-hygiene.py verde
+[32m  ok[0m  V7e: check-claude-md-claims.py verde
+[32m  ok[0m  V7f: verify-counts.sh verde
+
+[1mS — staging explicito (nunca 'git add -u')[0m
+    staged: .claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
+    staged: .claude/plans/PLAN-169/wave-s329-E-approved.md
+    staged: .claude/plans/PLAN-169/wave-s329-E-approved.md.asc
+    staged: .claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
+    staged: .github/workflows/smoke-install.yml
+    staged: scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
+    staged: scripts/upgrade.sh
+[32m  ok[0m  7 path(s) staged == patch + sentinel + .asc
+[32m  ok[0m  modo de execucao do e2e coerente no index
+
+[1mC — commit (sem editor) e push[0m
+[main 5930974] feat(PLAN-169 wave-s329-E): upgrade.sh DERIVA o roster de hooks do template DA CERIMONIA (6 literais -> 47 do settings.base.json; 20 do settings.user.json sob --ceremony user), semantica ADITIVA, e o e2e que vigia isso entra no CI
+ 7 files changed, 4088 insertions(+), 104 deletions(-)
+ create mode 100644 .claude/plans/PLAN-169/wave-s329-E-approved.md.asc
+ create mode 100644 .claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
+ create mode 100755 scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
+[32m  ok[0m  commit criado: 59309740f0dc4525cfbefbbe06598edffdb4d117
+      5930974 feat(PLAN-169 wave-s329-E): upgrade.sh DERIVA o roster de hooks do template DA CERIMONIA (6 literais -> 47 do settings.base.json; 20 do settings.user.json sob --ceremony user), semantica ADITIVA, e o e2e que vigia isso entra no CI
+
+[1mPUSH[0m
+To https://github.com/Canhada-Labs/ceo-orchestration.git
+   5d6ae25..5930974  HEAD -> main
+[32m  ok[0m  empurrado para origin/main
+
+[1mLAND OK[0m
+
+  commit : 59309740f0dc4525cfbefbbe06598edffdb4d117
+  paths  : 7
+  V1 shellcheck : verde (2 arquivo(s))
+  V2 unidade    : 88 teste(s)
+  V3 e2e        : 71 passed / 0 failed
+
+  Ultimos runs de CI:
+    in_progress		chore(PLAN-169 s329-E): patch derivado da sombra e baseado em fb79e71…	Validate CEO Orchestration governance	main	push	33099753980	18m44s	2026-08-27T17:42:13Z
+    completed	success	chore(PLAN-169 s329-E): patch derivado da sombra e baseado em fb79e71…	Ceremony script lint	main	push	33099752712	50s	2026-08-27T17:42:12Z
+    completed	success	fix(S329 main): o oráculo D3 localiza o call-site de render do CODEOW…	Validate CEO Orchestration governance	main	push	33090943911	21m51s	2026-08-27T16:00:28Z
+
+  LEMBRETE — o que observar depois deste land:
+  1. O `Smoke Install` passa a rodar um e2e a mais. O `timeout-minutes` de 96 e
+     uma ESTIMATIVA no fator 2-3x de runner; a PRIMEIRA execucao real e o
+     numero que deve substitui-la. Re-apertar no p95 observado, nunca na
+     aritmetica — um timeout que corta um run verde reporta como `cancelled`
+     num passo inocente.
+  2. Os casos `E.3` e `E.9` do e2e comparam contra `git HEAD`. Com a cura em
+     HEAD eles degradam para SKIP explicito, com instrucao de re-armar. Isso e
+     por desenho (sao medicoes historicas), mas e um verde que muda de
+     significado — a classe "instrumento verde cuja PERGUNTA envelheceu".
+  3. Ficam abertas as OQ-E1 (denylist de opt-out por hook) e OQ-E6 (quem REPARA
+     um registro deformado — hoje ninguem). As duas sao chamada do Owner.
+
+  Se algum editor abrir em QUALQUER momento:
+    aperte Esc, digite  :q!  e Enter  (sai sem salvar; nada se perde).

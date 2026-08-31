@@ -1,0 +1,62 @@
+
+[1mG-PRE — a metade NAO-CANONICA tem de estar em HEAD[0m
+[32m  ok[0m  G-PRE: profiler em HEAD conhece as 4 flags; teste do gate presente
+[32m  ok[0m  G-PRE: OQ-7..OQ-12 presentes em HEAD (7 ocorrencia(s), minimo 6)
+
+[1mG0 — insumos, materiais rastreados e arvore limpa[0m
+[32m  ok[0m  G0: HEAD em main
+[32m  ok[0m  sentinel, patch, .asc, mensagem e base esperada presentes
+[32m  ok[0m  materiais e 5 registro(s) de rail rastreados
+  [33mWARN[0m mudancas nao-guardadas fora do patch (toleradas, NAO entram no commit):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhum arquivo do patch sujo; nenhum path canonico sujo fora do Scope
+
+[1mG1 — assinatura GPG + ancora[0m
+    gpg: Signature made Wed Aug 26 09:20:25 2026 -03
+    gpg:                using EDDSA key AE9B236FDAF0462874060C6BCFCFACF00335DC74
+    gpg: Good signature from "João Canhada <joaocanhada@users.noreply.github.com>" [ultimate]
+[32m  ok[0m  assinatura verificada
+[32m  ok[0m  signer AE9B236FDAF0462874060C6BCFCFACF00335DC74 consta no rail rastreado
+[32m  ok[0m  ancora casa HEAD (44610ab2173672c31d9008835ce22d61f53d7da8)
+
+[1mG2 — binding do patch (Patch-sha256)[0m
+[32m  ok[0m  patch casa o sha256 assinado (e635498ac63422537574a5ce9229d36a1ef11bc7c4aaa2f157c25b048d5e0950)
+
+[1mG3 — o patch aplica limpo (modo checagem, nada muda ainda)[0m
+[32m  ok[0m  aplica limpo
+
+[1mG4 — touched == scope (NOS DOIS SENTIDOS)[0m
+[32m  ok[0m  3 path(s): touched == scope nos dois sentidos
+[32m  ok[0m  base 5bbc256e23f491c1306c32c8cd31d27791ad474f ancestral do HEAD; nenhum path do patch derivou
+[32m  ok[0m  G4: conjunto de paths casa EXPECTED_PATCH_PATHS
+
+[1mG5 — grants do sentinel + coerencia do manifesto ADR-192[0m
+  3 path(s) canonico(s), todos concedidos pelo sentinel
+  0 membro(s) do manifesto ADR-192 tocado(s)
+[32m  ok[0m  grants provados e manifesto estruturalmente coerente
+[32m  ok[0m  G5: membros do manifesto tocados = 0 (esperado 0)
+
+[1mAPLICANDO o patch assinado[0m
+[32m  ok[0m  patch aplicado (3 paths)
+
+[1mV1 — sintaxe dos scripts shell tocados[0m
+[32m  ok[0m  V1: nenhum script shell no patch (esperado: o patch e 1 yml + 2 ADRs)
+
+[1mV6 — o workflow pos-patch e valido e os literais sobreviveram[0m
+[32m  ok[0m  V6a: yaml.safe_load OK
+[32m  ok[0m  V6b: actionlint verde
+[32m  ok[0m  V6c: literal de compatibilidade preservado (2 ocorrencia(s))
+
+[33mDRY-RUN[0m — G-PRE, G0..G5 verdes; patch aplicado; V1 e V6 executados.
+  O V-block longo (V2..V5, V7) NAO roda em dry-run.
+  Restaurando arvore e index...
+[32m  ok[0m  arvore e index restaurados byte a byte (patch revertido; nada foi commitado)

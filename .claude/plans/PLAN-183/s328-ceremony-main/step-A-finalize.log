@@ -1,0 +1,54 @@
+
+[1m0 — pre-condicoes[0m
+[32m  ok[0m  HEAD em main: 4bd7def0ee0710bce4c04858a84b9ba88ef411d4
+      BASE-SHA.txt : 560dad00ff8fba81584208014e04bbe8572bb83e
+      HEAD vivo    : 4bd7def0ee0710bce4c04858a84b9ba88ef411d4
+
+[1m1 — precisa re-basear?[0m
+  o HEAD andou desde a finalizacao — re-basear
+
+[1m2 — arvore-sombra em 4bd7def0ee0710bce4c04858a84b9ba88ef411d4[0m
+[32m  ok[0m  sombra: /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//s328A-shadow.TlqXzd/wt
+
+[1m3 — re-aplicando o A.patch na sombra (--3way)[0m
+[32m  ok[0m  patch re-aplicado sem conflito e sem marcadores
+
+[1m4 — bateria curta NA SOMBRA[0m
+[32m  ok[0m  bash -n scripts/install.sh
+[32m  ok[0m  scripts/tests/test-ownership-verdict-unit.sh (rc=0)
+[32m  ok[0m  scripts/tests/test-manifest-delivery-route.sh (rc=0)
+
+[1m5 — re-gerando patch, Scope, Patch-base e Patch-sha256[0m
+  patch: /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/s328-ceremony-A/A.patch (32238 bytes)
+  sha256: 2d9326a28ff1d8e51078f7a059e0b90a3b38b720e7296addf15ab9b95f47f05d
+  arquivos NOVOS no patch: 0
+  paths tocados (DERIVADOS de git apply --numstat): 4
+    .claude/adr/ADR-194-delivery-route-resolution.md               CANONICO
+    CLAUDE.md                                                      
+    scripts/install.sh                                             CANONICO
+    scripts/tests/test-manifest-delivery-route.sh                  
+  canonicos: 2   membros do manifesto tocados: 0
+  base do patch (Patch-base): 4bd7def0ee0710bce4c04858a84b9ba88ef411d4
+  Scope, Patch-sha256 e Patch-base escritos em:
+    /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/wave-s328-A-approved.md
+    /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/s328-ceremony-A/PROPOSED-PATCH.md
+
+  PROXIMO PASSO: commite os materiais, depois assine.
+[32m  ok[0m  BASE-SHA.txt atualizado
+[32m  ok[0m  git apply --check verde na arvore viva
+
+[1m6 — commit dos materiais regenerados (sem editor)[0m
+    staged: .claude/plans/PLAN-183/s328-ceremony-A/A.patch
+    staged: .claude/plans/PLAN-183/s328-ceremony-A/BASE-SHA.txt
+    staged: .claude/plans/PLAN-183/s328-ceremony-A/PROPOSED-PATCH.md
+    staged: .claude/plans/PLAN-183/wave-s328-A-approved.md
+[32m  ok[0m  commit criado: 0ff80fa
+
+[1mPRONTO[0m
+
+  O pacote A esta baseado em  0ff80fab785d074ea1e273b283c3d131def92413  e o patch aplica limpo.
+
+  PROXIMO COMANDO (copie e cole inteiro):
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/OWNER-S328-A-SIGN.sh
+

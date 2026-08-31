@@ -1,0 +1,137 @@
+
+[1mG0 — insumos, materiais rastreados e arvore limpa[0m
+[32m  ok[0m  G0: HEAD em main
+[32m  ok[0m  sentinel, patch, .asc, mensagem e base esperada presentes
+[32m  ok[0m  materiais e 4 registro(s) de rail rastreados
+  [33mWARN[0m mudancas nao-guardadas fora do patch (toleradas, NAO entram no commit):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhum arquivo do patch sujo; nenhum path canonico sujo fora do Scope
+
+[1mG1 — assinatura GPG + ancora[0m
+    gpg: Signature made Wed Aug 26 09:22:43 2026 -03
+    gpg:                using EDDSA key AE9B236FDAF0462874060C6BCFCFACF00335DC74
+    gpg: Good signature from "João Canhada <joaocanhada@users.noreply.github.com>" [ultimate]
+[32m  ok[0m  assinatura verificada
+[32m  ok[0m  signer AE9B236FDAF0462874060C6BCFCFACF00335DC74 consta no rail rastreado
+[32m  ok[0m  ancora casa HEAD (0ff80fab785d074ea1e273b283c3d131def92413)
+
+[1mG2 — binding do patch (Patch-sha256)[0m
+[32m  ok[0m  patch casa o sha256 assinado (2d9326a28ff1d8e51078f7a059e0b90a3b38b720e7296addf15ab9b95f47f05d)
+
+[1mG3 — o patch aplica limpo (modo checagem, nada muda ainda)[0m
+[32m  ok[0m  aplica limpo
+
+[1mG4 — touched == scope (NOS DOIS SENTIDOS)[0m
+[32m  ok[0m  4 path(s): touched == scope nos dois sentidos
+[32m  ok[0m  base 4bd7def0ee0710bce4c04858a84b9ba88ef411d4 ancestral do HEAD; nenhum path do patch derivou
+
+[1mG5 — grants do sentinel + coerencia do manifesto ADR-192[0m
+  2 path(s) canonico(s), todos concedidos pelo sentinel
+  0 membro(s) do manifesto ADR-192 tocado(s)
+[32m  ok[0m  grants provados e manifesto estruturalmente coerente
+
+[1mAPLICANDO o patch assinado[0m
+[32m  ok[0m  patch aplicado (4 paths)
+
+[1mV1 — sintaxe dos scripts shell tocados[0m
+[32m  ok[0m  V1a: bash -n verde em 2 script(s)
+[32m  ok[0m  V1b: shellcheck verde em 2 script(s)
+
+[1mV2 — manifesto ADR-192 casa byte a byte[0m
+[32m  ok[0m  V2: 9/9 membros do manifesto ADR-192 conferidos
+
+[1mV3 — oraculo unitario de ownership[0m
+    
+    unit oracle: PASS=63  FAIL=0  SKIPPED(execution-fault rows)=2
+      not decision cells, covered by the e2e: OWN-0024 OWN-0027 
+[32m  ok[0m  V3: oraculo unitario FAIL=0 (esperado 0)
+
+[1mV4 — manifesto de baseline do install[0m
+    ==> C.7 — manifest (re)written on upgrade for a manifestless adopter
+      ok   C.7 upgrade (re)wrote a valid baseline manifest
+      ok   C.7 second upgrade runs on the manifest-present path
+    
+    ==> C.8 — upgrade records the docs/ + .github/ deliveries (PLAN-183 W5 D1/D3)
+      ok   C.8 docs/BRANCH-PROTECTION.md recorded with the digest of templates/docs/BRANCH-PROTECTION.md
+      ok   C.8 docs/rotation-log.md recorded with the digest of templates/docs/rotation-log.md
+      ok   C.8 .github/CODEOWNERS.template recorded with the digest of templates/.github/CODEOWNERS.template
+      ok   C.8 .github/workflows/validate.yml.template recorded with the digest of templates/.github/workflows/validate.yml.template
+      ok   C.8 .github/workflows/benchmarks.yml.template recorded with the digest of templates/.github/workflows/benchmarks.yml.template
+      ok   C.8 5 verbatim route(s) were actually checked (0 would be a vacuous pass)
+      ok   C.8 rendered .github/CODEOWNERS recorded with the digest of the DELIVERED bytes
+      ok   C.8 the not-taken CODEOWNERS route is absent from the manifest
+    
+    ==> RESULT: 33 passed, 1 failed
+[32m  ok[0m  V4: baseline-manifest rc=1 com o conjunto known-open EXATO [C.6.2]
+
+[1mV5 — paridade install/upgrade (contra a base DECLARADA)[0m
+    log: /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/tmp.85w808zM5R/parity-maintainer.log
+      STALE                      0  (esperado 0)
+      MISSING_IN_B               0  (esperado 0)
+      UNCLASSIFIED               0  (esperado 0)
+      MODE_DIFF                  0  (esperado 0)
+      ONLY_IN_B_OUTSIDE_CLAUDE   0  (esperado 0)
+[32m  ok[0m  V5[maintainer]: rc=0 e as 5 contagens fatais casam a base declarada
+    log: /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/tmp.85w808zM5R/parity-user.log
+      STALE                      0  (esperado 0)
+      MISSING_IN_B               0  (esperado 0)
+      UNCLASSIFIED               0  (esperado 0)
+      MODE_DIFF                  0  (esperado 0)
+      ONLY_IN_B_OUTSIDE_CLAUDE   0  (esperado 0)
+[32m  ok[0m  V5[user]: rc=0 e as 5 contagens fatais casam a base declarada
+
+[1mV6 — gates de corpus + subconjunto pytest[0m
+[32m  ok[0m  V6a: verify-counts.sh verde
+[32m  ok[0m  V6b: check-claude-md-claims.py verde
+[32m  ok[0m  V6c: pytest — 63 passed, 1 skipped in 19.75s
+
+[1mV7 — e2e de ownership (--ownership-e2e=defer)[0m
+  [33mWARN[0m V7: DIFERIDO por escolha explicita. O nightly do CI (ownership-nightly.yml)
+        compara o conjunto RED contra scripts/tests/ownership-expected-reds.txt.
+        Conjunto esperado: OWN-0016 OWN-0024 OWN-0027
+        Encolher o conjunto e FALHA, nao sucesso.
+
+[1mS — staging explicito (nunca 'git add -u')[0m
+    staged: .claude/adr/ADR-194-delivery-route-resolution.md
+    staged: .claude/plans/PLAN-183/wave-s328-A-approved.md
+    staged: .claude/plans/PLAN-183/wave-s328-A-approved.md.asc
+    staged: CLAUDE.md
+    staged: scripts/install.sh
+    staged: scripts/tests/test-manifest-delivery-route.sh
+[32m  ok[0m  6 path(s) staged == patch + sentinel + .asc
+
+[1mC — commit (sem editor) e push[0m
+[main 3bc3638] closeout(PLAN-183 W5-b): ADR-194 ACCEPTED com a §7 de ratificação da OQ-4; discriminante do hash_source do CODEOWNERS line-exact
+ 6 files changed, 203 insertions(+), 12 deletions(-)
+ create mode 100644 .claude/plans/PLAN-183/wave-s328-A-approved.md.asc
+[32m  ok[0m  commit criado: 3bc36383714fac0cc2e03a4228f68fa901ece726
+      3bc3638 closeout(PLAN-183 W5-b): ADR-194 ACCEPTED com a §7 de ratificação da OQ-4; discriminante do hash_source do CODEOWNERS line-exact
+
+[1mPUSH[0m
+To https://github.com/Canhada-Labs/ceo-orchestration.git
+   4bd7def..3bc3638  HEAD -> main
+[32m  ok[0m  empurrado para origin/main
+
+[1mLAND OK[0m
+
+  commit : 3bc36383714fac0cc2e03a4228f68fa901ece726
+  paths  : 6
+  V1 shellcheck : verde (2 arquivo(s))
+  V7 ownership  : defer
+
+  Agora e so acompanhar o CI. Se algum editor abrir em QUALQUER momento:
+    aperte Esc, digite  :q!  e Enter  (sai sem salvar; nada se perde).

@@ -1,0 +1,65 @@
+
+[1mP0 — pre-condicoes[0m
+[32m  ok[0m  metade nao-canonica presente em HEAD (profiler com as flags + teste do gate)
+  [33mNOTA[0m untracked nao-canonicos tolerados (nao entram no land):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhuma modificacao rastreada; untracked (se houver) sao nao-canonicos
+[32m  ok[0m  materiais e 5 registro(s) de rail rastreados
+[32m  ok[0m  sentinel finalizado (sem placeholders de patch)
+
+[1mP1 — binding do patch (o que voce esta assinando)[0m
+[32m  ok[0m  patch casa o sha256 do sentinel
+[32m  ok[0m  PROPOSED-PATCH.md aponta para o mesmo patch
+[32m  ok[0m  base 5bbc256e23f491c1306c32c8cd31d27791ad474f e ancestral do HEAD e nenhum path do patch derivou
+[32m  ok[0m  BASE-SHA.txt casa o Patch-base assinado
+[32m  ok[0m  o patch aplica limpo na arvore atual
+      3 arquivo(s) no patch:
+        .claude/adr/ADR-144-subagent-model-tiering-frontmatter.md
+        .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
+        .github/workflows/validate.yml
+
+[1mP2 — identidade do signer[0m
+[32m  ok[0m  signer: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+[32m  ok[0m  consta no rail rastreado
+
+[1mP3 — preenchendo os campos[0m
+  campos preenchidos
+[32m  ok[0m  Anchor-SHA=44610ab2173672c31d9008835ce22d61f53d7da8  Data=2026-08-26
+
+  Bloco que sera assinado:
+      <!-- BEGIN SIGNED SCOPE -->
+      Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
+      Plans: PLAN-169
+      Scope:
+        - .claude/adr/ADR-144-subagent-model-tiering-frontmatter.md
+        - .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
+        - .github/workflows/validate.yml
+      <!-- END SIGNED SCOPE -->
+
+[1mP4 — assinando[0m
+[32m  ok[0m  assinatura gerada: .claude/plans/PLAN-169/wave-s328-B-approved.md.asc
+    gpg: Signature made Wed Aug 26 09:20:25 2026 -03
+    gpg:                using EDDSA key AE9B236FDAF0462874060C6BCFCFACF00335DC74
+    gpg: Good signature from "João Canhada <joaocanhada@users.noreply.github.com>" [ultimate]
+
+[1mPRONTO[0m
+
+  A assinatura cobre o HEAD 44610ab2173672c31d9008835ce22d61f53d7da8.
+  NAO commite nada agora — qualquer commit invalida o Anchor-SHA.
+
+  PROXIMO COMANDO (copie e cole inteiro):
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-169/OWNER-S328-B-LAND.sh --dry-run
+
+  Se todos os gates passarem, o comando seguinte aplica, verifica, commita e
+  empurra (voce nao digita 'git' em momento nenhum):
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-169/OWNER-S328-B-LAND.sh

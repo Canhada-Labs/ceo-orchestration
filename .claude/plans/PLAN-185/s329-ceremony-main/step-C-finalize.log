@@ -1,0 +1,94 @@
+
+[1m0 — pre-condicoes[0m
+[32m  ok[0m  HEAD em main: cb234f4d8f056f11f0b910fb38e36e744a5b630a
+[32m  ok[0m  sombra: /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/bc917148-eaee-414e-8a9f-3158c3261a04/scratchpad/shadow-185 (base c53f4f804708b68f95a8401b8a7f9ac38a14752e)
+
+[1m1 — fronteira de paths: REQUIRED presente, nada fora de ALLOWED[0m
+      10 obrigatorio(s), 13 tolerado(s), 1 gerado(s) por este script
+[32m  ok[0m  a sombra mexeu em 21 path(s); os 10 obrigatorios estao presentes
+
+[1m2 — guard de drift (a licao da S329: o pack nao pode REVERTER o destino)[0m
+[32m  ok[0m  nenhum path do pacote derivou entre a base da sombra e o HEAD vivo
+
+[1m3 — arvore-sombra em cb234f4d8f056f11f0b910fb38e36e744a5b630a, censo PRE, copia por conteudo[0m
+[32m  ok[0m  arvore-sombra: /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//s329C-wt.cZc3uV/wt
+[32m  ok[0m  instrumento do censo em HEAD: e368a4e7146c8dfea30ec8d4ce83938036ca823ce4c01747468ebd860fcbee71
+[32m  ok[0m  censo PRE-patch (arvore limpa em HEAD): desguardado=197
+[32m  ok[0m  21 arquivo(s) copiados, 0 removido(s)
+  [33mWARN[0m pus o bit de execucao em scripts/tests/test-installer-write-safety-e2e.sh (a sombra o trazia 644;
+        os vizinhos de scripts/tests/ sao 755 e o passo S do LAND confere)
+[32m  ok[0m  nenhum marcador de conflito nos paths copiados
+
+[1m4 — bateria CURTA na arvore-sombra[0m
+[32m  ok[0m  4a: bash -n verde em 4 script(s)
+[32m  ok[0m  4b: shellcheck -S warning verde em 4 script(s)
+[32m  ok[0m  4c: 2 workflow(s) parseiam
+[32m  ok[0m  4d: actionlint verde
+[32m  ok[0m  4e: _wbm_dst_refuses definido 1x em scripts/_framework_manifest_set.sh e consumido por 2 arquivo(s)
+[32m  ok[0m  4e: scripts/doctor.sh referencia o predicado 0 vez(es) (FU-7 em aberto por desenho)
+  [33mWARN[0m 4f: o baseline regenerado saiu byte-identico ao de HEAD.
+        A cura nao moveu nenhum fingerprint. E possivel, e nesse caso
+        o path simplesmente nao viaja no patch — o passo 5 sabe disso.
+[32m  ok[0m  4f: ratchet LIMPO pos-regeneracao (rc=0, 0 nova(s), 0 morta(s)) — o step do CI sai verde
+[32m  ok[0m  4f: desguardado 197 -> 194, sites=838
+
+[1m5 — patch, Scope, Patch-base e Patch-sha256[0m
+  patch: /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-185/s329-ceremony-C/C.patch (255032 bytes)
+  sha256: effaeb877ae41cee977807850015e5a354e3582266d0d4a45f3bcebdb839c79e
+  arquivos NOVOS no patch: 3
+  paths tocados (DERIVADOS de git apply --numstat): 21
+    .claude/adr/ADR-196-installer-write-confinement.md             CANONICO
+    .claude/plans/PLAN-185/s329-ceremony-C/DESIGN-C.md             
+    .claude/scripts/data/installer-write-safety-baseline.txt       
+    .claude/scripts/tests/test_check_installer_write_safety.py     
+    .github/workflows/smoke-install.yml                            CANONICO
+    .github/workflows/validate.yml                                 CANONICO
+    CHANGELOG.md                                                   
+    CLAUDE.md                                                      
+    README.md                                                      
+    README.pt-BR.md                                                
+    docs/ARCHITECTURE.md                                           
+    docs/CTO-GUIDE.md                                              
+    docs/FAQ.md                                                    
+    docs/GUIA-COMPLETO.md                                          
+    docs/README.md                                                 
+    docs/threat-model.md                                           
+    npm/README.md                                                  
+    scripts/_framework_manifest_set.sh                             CANONICO
+    scripts/install.sh                                             CANONICO
+    scripts/tests/test-installer-write-safety-e2e.sh               
+    scripts/upgrade.sh                                             CANONICO
+  canonicos: 6   membros do manifesto tocados: 0
+  base do patch (Patch-base): cb234f4d8f056f11f0b910fb38e36e744a5b630a
+  Scope, Patch-sha256 e Patch-base escritos em:
+    /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-185/wave-s329-C-approved.md
+    /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-185/s329-ceremony-C/PROPOSED-PATCH.md
+
+  PROXIMO PASSO: commite os materiais, depois assine.
+      patch inalterado (effaeb877ae41cee977807850015e5a354e3582266d0d4a45f3bcebdb839c79e)
+[32m  ok[0m  o patch toca 21 path(s), dentro da fronteira; 1 gerado(s) presente(s)
+[32m  ok[0m  6 path(s) canonico(s) (minimo 6)
+
+[1m6 — bloco AUTO do EXPECTED-BASELINE.txt[0m
+  bloco AUTO reescrito: 21 path(s), 6 canonico(s), censo 197 -> 194 desguardado(s)
+[32m  ok[0m  bloco AUTO relido e coerente
+[32m  ok[0m  BASE-SHA.txt atualizado
+[32m  ok[0m  git apply --check verde na arvore viva
+
+[1m7 — commit dos materiais regenerados (sem editor)[0m
+    staged: .claude/plans/PLAN-185/s329-ceremony-C/BASE-SHA.txt
+    staged: .claude/plans/PLAN-185/s329-ceremony-C/EXPECTED-BASELINE.txt
+    staged: .claude/plans/PLAN-185/wave-s329-C-approved.md
+[32m  ok[0m  commit criado: 00f56df
+
+[1mPRONTO[0m
+
+  O pacote C esta baseado em  00f56df544d7ec7caa631c9c683aad1bc4bd9232  e o patch aplica limpo.
+    patch  : .claude/plans/PLAN-185/s329-ceremony-C/C.patch
+    sha256 : effaeb877ae41cee977807850015e5a354e3582266d0d4a45f3bcebdb839c79e
+    paths  : 21  (6 canonico(s))
+
+  PROXIMO COMANDO (copie e cole inteiro):
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-185/OWNER-S329-C-SIGN.sh
+

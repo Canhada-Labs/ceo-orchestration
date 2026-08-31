@@ -1,0 +1,77 @@
+
+[1m========================================================================[0m
+[1mS329 — CERIMÔNIA DA MANHÃ[0m
+[1m========================================================================[0m
+
+      data      : 2026-08-26 19:16:01 -03
+      repo      : /Users/joaocanhada/canhada-labs/ceo-orchestration
+      branch    : main
+      HEAD      : bf092a6 — ceremony(S329): registro do rail U2 fase 3 (ba7c244 APPROVE) — U2 FECH
+      ordem     : C → E
+      ownership : --ownership-e2e=defer
+      modo      : --dry-run GLOBAL (não executo nada; só mostro o que faria)
+
+
+[1mEM DIA COM O GITHUB?[0m
+[32m  ok[0m  em dia com origin/main
+
+[1mCHAVE DE ASSINATURA (GPG)[0m
+[32m  ok[0m  gpg disponível — 2 chave(s) secreta(s)
+
+[1mPACOTES ENCONTRADOS[0m
+  [32m✓[0m C  C (PLAN-185 W1+W2 — instalador: symlink e handle do GitHub)   (patch)
+  [32m✓[0m E  E (PLAN-169 — upgrade.sh: registro de hooks derivado)   (patch)
+
+[1mÁRVORE DE TRABALHO[0m
+      untracked esperados da noite (não entram em commit nenhum):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log
+  .claude/plans/PLAN-185/NIGHT-S329-RUNBOOK.md
+  .claude/plans/PLAN-185/s329-ceremony-main/
+[33m  AVISO[0m untracked que eu NÃO esperava — confira se algum deveria ter sido commitado:
+  .claude/plans/PLAN-169/OWNER-S329-E-LAND.sh
+  .claude/plans/PLAN-169/OWNER-S329-E-SIGN.sh
+  .claude/plans/PLAN-169/s329-ceremony-E/BASE-SHA.txt
+  .claude/plans/PLAN-169/s329-ceremony-E/COMMIT-MSG-E.txt
+  .claude/plans/PLAN-169/s329-ceremony-E/E.patch
+  .claude/plans/PLAN-169/s329-ceremony-E/EXPECTED-BASELINE.txt
+  .claude/plans/PLAN-169/s329-ceremony-E/PROPOSED-PATCH.md
+  .claude/plans/PLAN-169/s329-ceremony-E/README-E.md
+  .claude/plans/PLAN-169/s329-ceremony-E/finalize-E.sh
+  .claude/plans/PLAN-169/s329-ceremony-E/rail-round-4.md
+  .claude/plans/PLAN-169/s329-ceremony-E/test-ceremony-scripts-E.sh
+  .claude/plans/PLAN-169/wave-s329-E-approved.md
+  .claude/plans/PLAN-185/OWNER-S329-C-LAND.sh
+  .claude/plans/PLAN-185/OWNER-S329-C-SIGN.sh
+  .claude/plans/PLAN-185/OWNER-S329-MORNING.sh
+  .claude/plans/PLAN-185/README-MANHA.md
+  .claude/plans/PLAN-185/s329-ceremony-C/BASE-SHA.txt
+  .claude/plans/PLAN-185/s329-ceremony-C/C.patch
+  .claude/plans/PLAN-185/s329-ceremony-C/COMMIT-MSG-C.txt
+  .claude/plans/PLAN-185/s329-ceremony-C/EXPECTED-BASELINE.txt
+  .claude/plans/PLAN-185/s329-ceremony-C/PROPOSED-PATCH.md
+  .claude/plans/PLAN-185/s329-ceremony-C/README-C.md
+  .claude/plans/PLAN-185/s329-ceremony-C/finalize-C.sh
+  .claude/plans/PLAN-185/s329-ceremony-C/test-ceremony-scripts-C.sh
+  .claude/plans/PLAN-185/wave-s329-C-approved.md
+   M .claude/plans/PLAN-185/w0-censo-S329.md
+   M .claude/scripts/check-installer-write-safety.py
+   M .claude/scripts/tests/test_check_installer_write_safety.py
+
+[31mABORT:[0m há modificações RASTREADAS na árvore (linhas acima).
+  Nenhum pacote pode ser assinado assim: a âncora da assinatura não
+  descreveria o que será landado. Chame o CEO com a lista acima.

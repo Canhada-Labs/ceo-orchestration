@@ -1,0 +1,104 @@
+
+[1m========================================================================[0m
+[1mS328 — CERIMÔNIA DA MANHÃ[0m
+[1m========================================================================[0m
+
+      data      : 2026-08-26 08:36:17 -03
+      repo      : /Users/joaocanhada/canhada-labs/ceo-orchestration
+      branch    : main
+      HEAD      : 0aa05c3 — ceremony(S328, pacote D): tabela final da land-sim na rodada 6 (14/15;
+      ordem     : B → A → C → D
+      ownership : --ownership-e2e=defer
+
+
+[1mPACOTES ENCONTRADOS[0m
+  [32m✓[0m B  B (PLAN-169 — emenda ADR-163 + gate de hook-latency)   (patch)
+  [32m✓[0m A  A (PLAN-183 W5-b — ADR-194 + discriminante do CODEOWNERS)   (patch, LAND --ownership-e2e=defer)
+  [33m—[0m C  C (PLAN-185 W1/W2 — symlink + handle validado)   (ausente)
+  [32m✓[0m D  D (PLAN-179 W2+W4 — ledger checkpoint)   (manifesto)
+
+[1mÁRVORE DE TRABALHO[0m
+      untracked esperados da noite (não entram em commit nenhum):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhuma modificação rastreada
+
+[1m========================================================================[0m
+[1mPACOTE B (PLAN-169 — emenda ADR-163 + gate de hook-latency)[0m
+[1m========================================================================[0m
+      SIGN     : .claude/plans/PLAN-169/OWNER-S328-B-SIGN.sh
+      LAND     : .claude/plans/PLAN-169/OWNER-S328-B-LAND.sh  (sem argumentos extras)
+      tipo     : patch
+      materiais: .claude/plans/PLAN-169/s328-ceremony-B
+      sentinel : .claude/plans/PLAN-169/wave-s328-B-approved.md
+      finalize : .claude/plans/PLAN-169/s328-ceremony-B/finalize-B.sh
+
+[1m[B] 1/5 — estado da árvore[0m
+      untracked esperados da noite (não entram em commit nenhum):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhuma modificação rastreada
+
+[1m[B] 2/5 — re-base do pacote no HEAD vivo (finalize)[0m
+
+  [1m$[0m bash .claude/plans/PLAN-169/s328-ceremony-B/finalize-B.sh
+
+
+[1m0 — pre-condicoes[0m
+[32m  ok[0m  metade nao-canonica presente em HEAD
+[32m  ok[0m  HEAD em main: 0aa05c3efabc598721005d3bc721ce065fcc28bd
+      BASE-SHA.txt : 47b20044e5af50bdf5d12830eb2f461dca791cb4
+      HEAD vivo    : 0aa05c3efabc598721005d3bc721ce065fcc28bd
+
+[1m1 — precisa re-basear?[0m
+  o HEAD andou desde a finalizacao — re-basear
+
+[1m2 — arvore-sombra em 0aa05c3efabc598721005d3bc721ce065fcc28bd[0m
+[32m  ok[0m  sombra: /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//s328B-shadow.gBXjZT/wt
+
+[1m3 — re-aplicando o B.patch na sombra (--3way)[0m
+[32m  ok[0m  patch re-aplicado sem conflito e sem marcadores
+
+[1m4 — bateria curta NA SOMBRA[0m
+[32m  ok[0m  4a: yaml.safe_load OK
+[32m  ok[0m  4b: actionlint verde
+[32m  ok[0m  4c: literal de compatibilidade preservado (2)
+
+[31mABORT:[0m 4d: nao consegui ler 'N passed' — log em /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//s328B-shadow.gBXjZT/wt.pytest.log
+
+[31m========================================================================[0m
+[31mVERMELHO[0m — pacote B, etapa finalize (rc=1)
+[31m========================================================================[0m
+
+  DIAGNÓSTICO
+    o re-base do pacote falhou — leia a mensagem do script acima.
+
+  O QUE FAZER
+    Causa mais comum: o patch não re-aplica porque alguém editou os
+    mesmos arquivos depois que o pacote foi montado.
+    NÃO force nada. Copie a saída inteira e mande para o CEO.
+    Log desta etapa: /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+
+  RETOMAR (depois de resolver, copie e cole a linha inteira)
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/OWNER-S328-MORNING.sh --from B
+
+  LOG COMPLETO
+    /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+
+
+[1mRESUMO[0m
+  B  B (PLAN-169 — emenda ADR-163 + gate de hook-latency)     não avaliado
+  A  A (PLAN-183 W5-b — ADR-194 + discriminante do CODEOWNERS) não avaliado
+  C  C (PLAN-185 W1/W2 — symlink + handle validado)           não avaliado
+  D  D (PLAN-179 W2+W4 — ledger checkpoint)                   não avaliado
+
+  HEAD agora: 0aa05c3  (main)

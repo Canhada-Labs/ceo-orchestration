@@ -1,0 +1,121 @@
+
+[1mG-PRE — a metade NAO-CANONICA tem de estar em HEAD[0m
+[32m  ok[0m  G-PRE: profiler em HEAD conhece as 4 flags; teste do gate presente
+[32m  ok[0m  G-PRE: OQ-7..OQ-12 presentes em HEAD (7 ocorrencia(s), minimo 6)
+
+[1mG0 — insumos, materiais rastreados e arvore limpa[0m
+[32m  ok[0m  G0: HEAD em main
+[32m  ok[0m  sentinel, patch, .asc, mensagem e base esperada presentes
+[32m  ok[0m  materiais e 5 registro(s) de rail rastreados
+  [33mWARN[0m mudancas nao-guardadas fora do patch (toleradas, NAO entram no commit):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhum arquivo do patch sujo; nenhum path canonico sujo fora do Scope
+
+[1mG1 — assinatura GPG + ancora[0m
+    gpg: Signature made Wed Aug 26 09:20:25 2026 -03
+    gpg:                using EDDSA key AE9B236FDAF0462874060C6BCFCFACF00335DC74
+    gpg: Good signature from "João Canhada <joaocanhada@users.noreply.github.com>" [ultimate]
+[32m  ok[0m  assinatura verificada
+[32m  ok[0m  signer AE9B236FDAF0462874060C6BCFCFACF00335DC74 consta no rail rastreado
+[32m  ok[0m  ancora casa HEAD (44610ab2173672c31d9008835ce22d61f53d7da8)
+
+[1mG2 — binding do patch (Patch-sha256)[0m
+[32m  ok[0m  patch casa o sha256 assinado (e635498ac63422537574a5ce9229d36a1ef11bc7c4aaa2f157c25b048d5e0950)
+
+[1mG3 — o patch aplica limpo (modo checagem, nada muda ainda)[0m
+[32m  ok[0m  aplica limpo
+
+[1mG4 — touched == scope (NOS DOIS SENTIDOS)[0m
+[32m  ok[0m  3 path(s): touched == scope nos dois sentidos
+[32m  ok[0m  base 5bbc256e23f491c1306c32c8cd31d27791ad474f ancestral do HEAD; nenhum path do patch derivou
+[32m  ok[0m  G4: conjunto de paths casa EXPECTED_PATCH_PATHS
+
+[1mG5 — grants do sentinel + coerencia do manifesto ADR-192[0m
+  3 path(s) canonico(s), todos concedidos pelo sentinel
+  0 membro(s) do manifesto ADR-192 tocado(s)
+[32m  ok[0m  grants provados e manifesto estruturalmente coerente
+[32m  ok[0m  G5: membros do manifesto tocados = 0 (esperado 0)
+
+[1mAPLICANDO o patch assinado[0m
+[32m  ok[0m  patch aplicado (3 paths)
+
+[1mV1 — sintaxe dos scripts shell tocados[0m
+[32m  ok[0m  V1: nenhum script shell no patch (esperado: o patch e 1 yml + 2 ADRs)
+
+[1mV6 — o workflow pos-patch e valido e os literais sobreviveram[0m
+[32m  ok[0m  V6a: yaml.safe_load OK
+[32m  ok[0m  V6b: actionlint verde
+[32m  ok[0m  V6c: literal de compatibilidade preservado (2 ocorrencia(s))
+
+[1mV2 — suite do gate relativo (conjunto DECLARADO, nunca 'passou')[0m
+    ..............................................................           [100%]
+    62 passed in 62.72s (0:01:02)
+[32m  ok[0m  V2: 62/62 testes do gate verdes (rc=0)
+
+[1mV3 — o profiler EM DISCO conhece as flags que o workflow passa[0m
+[32m  ok[0m  V3: as 4 flags constam do --help
+
+[1mV4 — execucao REAL curta: as chaves da segunda chave existem[0m
+  phase=1-advisory, 5 entrada(s), todas com R_e, ref_p50_ms, verdict_label
+[32m  ok[0m  V4: relatorio real carrega a segunda chave em todas as entradas
+
+[1mV5 — o PYSUM do workflow LE esse relatorio[0m
+[32m  ok[0m  V5: o PYSUM publicou a linha da segunda chave (marcador 'second key phase=' presente)
+
+[1mV7 — gates de governanca do repositorio[0m
+[32m  ok[0m  V7a: ceremony-lint blocking=0 (esperado 0)
+[32m  ok[0m  V7b: validate_governance_fast verde
+[32m  ok[0m  V7c: check-claude-md-claims.py verde
+[32m  ok[0m  V7d: verify-counts.sh verde
+
+[1mS — staging explicito (nunca 'git add -u')[0m
+    staged: .claude/adr/ADR-144-subagent-model-tiering-frontmatter.md
+    staged: .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md
+    staged: .claude/plans/PLAN-169/wave-s328-B-approved.md
+    staged: .claude/plans/PLAN-169/wave-s328-B-approved.md.asc
+    staged: .github/workflows/validate.yml
+[32m  ok[0m  5 path(s) staged == patch + sentinel + .asc
+
+[1mC — commit (sem editor) e push[0m
+[main 4bd7def] feat(PLAN-169 wave-s328-B): segunda chave RELATIVA do gate hook-latency, fase 1 advisory (ADR-163 + ADR-144 + 3 linhas no validate.yml)
+ 5 files changed, 292 insertions(+), 3 deletions(-)
+ create mode 100644 .claude/plans/PLAN-169/wave-s328-B-approved.md.asc
+[32m  ok[0m  commit criado: 4bd7def0ee0710bce4c04858a84b9ba88ef411d4
+      4bd7def feat(PLAN-169 wave-s328-B): segunda chave RELATIVA do gate hook-latency, fase 1 advisory (ADR-163 + ADR-144 + 3 linhas no validate.yml)
+
+[1mPUSH[0m
+To https://github.com/Canhada-Labs/ceo-orchestration.git
+   5bbc256..4bd7def  HEAD -> main
+[32m  ok[0m  empurrado para origin/main
+
+[1mLAND OK[0m
+
+  commit : 4bd7def0ee0710bce4c04858a84b9ba88ef411d4
+  paths  : 5
+  V1 shellcheck : nao-aplicavel
+  V2 suite gate : 62 teste(s)
+
+  Ultimos runs de CI:
+    completed	success	ceremony(S328, pacote B): parser de 'N passed' aceita a linha do pyte…	Ceremony script lint	main	push	32965120617	44s	2026-08-26T11:47:26Z
+    completed	success	ceremony(S328, pacote B): parser de 'N passed' aceita a linha do pyte…	Validate CEO Orchestration governance	main	push	32965120606	19m32s	2026-08-26T11:47:26Z
+    completed	success	mcp-smoke	mcp-smoke	main	schedule	32962092395	18s	2026-08-26T11:11:50Z
+
+  LEMBRETE — o que fazer com este land:
+  Apos o land, o proximo `Validate` publica no step-summary, POR ENTRADA, o
+  rotulo e o `ref_p50` (e o `R_e`). Colete >= 10 runs VERDES ao longo de >= 3
+  dias antes de tentar fixar K (OQ-9). Um K escrito antes dessa janela e
+  INVENTADO — e a fase 1 nao muda veredito nenhum, entao o verde de hoje vem do
+  rerun, nao deste pacote.
+
+  Se algum editor abrir em QUALQUER momento:
+    aperte Esc, digite  :q!  e Enter  (sai sem salvar; nada se perde).

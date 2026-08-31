@@ -176,6 +176,57 @@ if ! ( cd "$TARGET" && bash .claude/scripts/validate-governance.sh >/dev/null 2>
   fail=1
 fi
 
+# ---------------------------------------------------------------------------
+# PLAN-183 W0-US3 / AC-5 (S334): the delivered CI template ACTIVATES.
+# The adopter's documented activation move is a rename of the .template;
+# this leg exercises that rename in the disposable target and validates
+# the ACTIVATED workflow — with actionlint when available, and with a
+# structural stdlib check ALWAYS (so the leg never silently no-ops).
+# The step-set contract itself is guarded by
+# .claude/scripts/tests/test_validate_template_frozen_subset.py (Ramo B).
+# ---------------------------------------------------------------------------
+TPL_REL=".github/workflows/validate.yml.template"
+ACT_REL=".github/workflows/validate.yml"
+if [[ ! -f "$TARGET/$TPL_REL" ]]; then
+  echo "::error::CI template not delivered: $TPL_REL"
+  fail=1
+else
+  mv "$TARGET/$TPL_REL" "$TARGET/$ACT_REL"
+  if [[ -e "$TARGET/$TPL_REL" || ! -f "$TARGET/$ACT_REL" ]]; then
+    echo "::error::activation rename did not take effect"
+    fail=1
+  fi
+  if ! python3 - "$TARGET/$ACT_REL" <<'PYCHK'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+ok = True
+for key in ("^name:", "^on:", "^jobs:"):
+    if not re.search(key, text, re.M):
+        print("activated workflow missing top-level key %r" % key, file=sys.stderr)
+        ok = False
+steps = re.findall(r"^\s+- name:\s*(.+?)\s*$", text, re.M)
+if len(steps) != 11:
+    print("activated workflow has %d steps, expected the 11 frozen ones" % len(steps), file=sys.stderr)
+    ok = False
+sys.exit(0 if ok else 1)
+PYCHK
+  then
+    echo "::error::activated validate.yml failed structural validation"
+    fail=1
+  fi
+  if command -v actionlint >/dev/null 2>&1; then
+    if ! actionlint "$TARGET/$ACT_REL"; then
+      echo "::error::actionlint rejected the activated validate.yml"
+      fail=1
+    fi
+  else
+    echo "note: actionlint not on PATH - structural check only for the activated template"
+  fi
+  # Restore the delivered state: activation is the ADOPTER's move, and the
+  # parity/upgrade legs downstream must see the tree exactly as installed.
+  mv "$TARGET/$ACT_REL" "$TARGET/$TPL_REL"
+fi
+
 # WS4-user-ceremony: --ceremony user must (a) pass validate-governance.sh and
 # (b) write nothing outside .claude/. Fresh install into a second temp dir.
 UTARGET="$(mktemp -d 2>/dev/null || mktemp -d -t ceo-smoke-user)"

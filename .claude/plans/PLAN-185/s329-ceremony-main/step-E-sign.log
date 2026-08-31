@@ -1,0 +1,95 @@
+
+[1mP0 — pre-condicoes[0m
+  [33mNOTA[0m untracked nao-canonicos tolerados (nao entram no land):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log
+  .claude/plans/PLAN-185/NIGHT-S329-RUNBOOK.md
+  .claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-090916-actionlint.log
+  .claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-090916-e2e.log
+  .claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-093536-actionlint.log
+  .claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-093536-e2e.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260826-191601.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-083217.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-083514.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-090402.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-093124.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-114006.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-144515.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-C-finalize.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-C-land-dry.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-C-land.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-C-sign.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-E-finalize.log
+  .claude/plans/PLAN-185/s329-ceremony-main/step-E-sign.log
+[32m  ok[0m  nenhuma modificacao rastreada; untracked (se houver) sao nao-canonicos
+[32m  ok[0m  12 registro(s) de rail rastreados; o ultimo (rail-round-12.md) e APPROVE
+[32m  ok[0m  jq aceita --slurpfile (jq-1.7.1-apple)
+[32m  ok[0m  sentinel finalizado (sem placeholders de patch)
+
+[1mP1 — binding do patch (o que voce esta assinando)[0m
+[32m  ok[0m  patch casa o sha256 do sentinel
+[32m  ok[0m  PROPOSED-PATCH.md aponta para o mesmo patch
+[32m  ok[0m  base 5d6ae25649cddb0b3260ec124317110efe3717d4 e ancestral do HEAD e nenhum path do patch derivou
+[32m  ok[0m  BASE-SHA.txt casa o Patch-base assinado
+[32m  ok[0m  o patch aplica limpo na arvore atual
+      5 arquivo(s) no patch:
+        .claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
+        .claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
+        .github/workflows/smoke-install.yml
+        scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
+        scripts/upgrade.sh
+
+[1mP2 — identidade do signer[0m
+[32m  ok[0m  signer: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+[32m  ok[0m  consta no rail rastreado
+
+[1mP3 — preenchendo os campos[0m
+  campos preenchidos
+[32m  ok[0m  Anchor-SHA=4efdfac4fbfa3e65092efe20c01e04a63ce5d7c4  Data=2026-08-27
+
+  Bloco que sera assinado:
+      <!-- BEGIN SIGNED SCOPE -->
+      Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
+      Plans: PLAN-169
+      Scope:
+        - .claude/plans/PLAN-169/s329-ceremony-E/DESIGN-E.md
+        - .claude/scripts/tests/test_upgrade_lifecycle_hooks_derived.py
+        - .github/workflows/smoke-install.yml
+        - scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
+        - scripts/upgrade.sh
+      <!-- END SIGNED SCOPE -->
+
+[1mP4 — assinando[0m
+[32m  ok[0m  assinatura gerada: .claude/plans/PLAN-169/wave-s329-E-approved.md.asc
+    gpg: Signature made Thu Aug 27 14:45:35 2026 -03
+    gpg:                using EDDSA key AE9B236FDAF0462874060C6BCFCFACF00335DC74
+    gpg: Good signature from "João Canhada <joaocanhada@users.noreply.github.com>" [ultimate]
+
+[1mPRONTO[0m
+
+  A assinatura cobre o HEAD 4efdfac4fbfa3e65092efe20c01e04a63ce5d7c4.
+  NAO commite nada agora — qualquer commit invalida o Anchor-SHA.
+
+  PROXIMO COMANDO (copie e cole inteiro):
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-169/OWNER-S329-E-LAND.sh --dry-run
+
+  Se todos os gates passarem, o comando seguinte aplica, verifica, commita e
+  empurra (voce nao digita 'git' em momento nenhum). Ele demora ~10 min: o
+  V-block roda o e2e de instalacao real, que e o gate caro deste pacote.
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-169/OWNER-S329-E-LAND.sh

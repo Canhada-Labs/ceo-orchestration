@@ -1,0 +1,102 @@
+
+[1mG0 — branch, insumos, materiais e arvore[0m
+[32m  ok[0m  HEAD em main
+[32m  ok[0m  27 destino(s) derivado(s) do MANIFEST, todos dentro do repo
+[32m  ok[0m  materiais e 27 arquivo(s) do pack rastreados
+[32m  ok[0m  arvore sem modificacao rastreada (21 untracked nao-canonico(s) tolerado(s))
+
+[1mG1 — baseline anti-stale[0m
+[32m  ok[0m  22/22 destino(s) pre-existente(s) identico(s) ao baseline
+[32m  ok[0m  5 arquivo(s) novo(s) ausente(s) no vivo
+
+[1mG2 — integridade do pack (conteudo E conjunto)[0m
+[32m  ok[0m  27 arquivo(s) conferem em conjunto E conteudo
+
+[1mG2b — escopo do sentinel == manifesto (derivado, nao recordado)[0m
+[32m  ok[0m  escopo identico ao manifesto (27 paths)
+
+[1mG3 — sentinel GPG (signer-pin + anchor == HEAD)[0m
+[32m  ok[0m  assinatura do Owner + anchor == HEAD (d9d9cab483b49c5a03d5a27e9c7f49801cf96968)
+
+[1mG4 — smoke em clone (rc AGREGADO por comando, fora do TMPDIR)[0m
+   -> python3 -m py_compile .claude/hooks/check_ledger_checkpoint.py .claude/hooks/_lib/ledger_provenance.py .claude/hooks/_lib/audit_emit.py
+   -> python3 -c import json;json.load(open('.claude/settings.json'))
+   -> python3 -c import json;json.load(open('templates/settings/settings.base.json'))
+   -> python3 -m pytest -q -p no:cacheprovider --tb=short .claude/hooks/tests/test_check_ledger_checkpoint.py
+   -> python3 -m pytest -q -p no:cacheprovider --tb=short .claude/hooks/tests/test_ledger_provenance.py
+   -> python3 -m pytest -q -p no:cacheprovider --tb=short .claude/hooks/tests/test_audit_emit_api_contract.py
+   -> python3 .claude/scripts/check-audit-registry-coverage.py --check
+   -> python3 .claude/scripts/validate_governance_fast.py
+[32m  ok[0m  smoke em clone verde (todos os comandos, nao so o ultimo)
+
+[1mG5 — apply (modos derivados, nunca chmod cego)[0m
+   applied .claude/adr/ADR-195-work-boundary-persistence.md
+   applied .claude/data/audit-registry.golden.txt
+   applied .claude/hooks/_lib/audit_emit.py
+   applied .claude/hooks/_lib/ledger_provenance.py
+   applied .claude/hooks/check_ledger_checkpoint.py
+   applied .claude/hooks/tests/test_audit_emit_api_contract.py
+   applied .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py
+   applied .claude/hooks/tests/test_check_ledger_checkpoint.py
+   applied .claude/hooks/tests/test_codex_egress_proof_telemetry.py
+   applied .claude/hooks/tests/test_git_bypass_guard.py
+   applied .claude/hooks/tests/test_ledger_provenance.py
+   applied .claude/hooks/tests/test_template_dogfood_parity.py
+   applied .claude/hooks/tests/test_w5_scrub_enforcement.py
+   applied .claude/settings.json
+   applied CHANGELOG.md
+   applied CLAUDE.md
+   applied INSTALL.md
+   applied README.md
+   applied README.pt-BR.md
+   applied docs/ARCHITECTURE.md
+   applied docs/CTO-GUIDE.md
+   applied docs/FAQ.md
+   applied docs/GUIA-COMPLETO.md
+   applied docs/README.md
+   applied npm/README.md
+   applied SPEC/v1/audit-log.schema.md  (do pack: spec-v1-audit-log.schema.md)
+   applied templates/settings/settings.base.json
+[32m  ok[0m  aplicado: 22 modificado(s), 5 novo(s)
+
+[1mV1 — o codigo aplicado importa e os JSON carregam[0m
+[32m  ok[0m  V1: sintaxe (sem escrita) + 2 JSON + registracao presente nos dois settings
+
+[1mV2 — contagens contra os conjuntos DECLARADOS[0m
+[32m  ok[0m  len(_KNOWN_ACTIONS) = 330 (declarado)
+  3 acoes registradas, nenhuma em _EMIT_GENERIC_PASSTHROUGH
+[32m  ok[0m  V2: as 3 acoes estao registradas e fora do passthrough
+[32m  ok[0m  linhas do audit-registry.golden.txt = 334 (declarado)
+[32m  ok[0m  linhas de historico do SPEC v2.59 = 1 (declarado)
+[32m  ok[0m  hooks .py = 59 (declarado)
+[32m  ok[0m  hooks ligados = 48 (declarado)
+[32m  ok[0m  registros de hook = 50 (declarado)
+[32m  ok[0m  modulos _lib = 71 (declarado)
+[32m  ok[0m  ADRs = 196 (declarado)
+
+[1mV3 — cobertura do registro de auditoria (SPEC <-> codigo)[0m
+OK: audit registry golden in sync
+[32m  ok[0m  V3: registro de auditoria coerente
+
+[1mV4 — pytest .claude/hooks/tests (split do CI: 'not serial' + 'serial')[0m
+   -> python3 -m pytest .claude/hooks/tests/ -n auto -m not serial --strict-markers --tb=no -q -p no:cacheprovider
+[32m  ok[0m  V4a hooks/tests not-serial — 6858 passed, 34 skipped, 4 xfailed, 37 warnings in 743.70s (0:12:23)
+   -> python3 -m pytest .claude/hooks/tests/ -m serial --strict-markers --tb=no -q -p no:cacheprovider
+[32m  ok[0m  V4b hooks/tests serial — 481 passed, 2 skipped, 6895 deselected, 5 xfailed, 1 xpassed in 117.76s (0:01:57)
+
+[1mV5 — pytest .claude/hooks/_lib/tests (mesmo split)[0m
+   -> python3 -m pytest .claude/hooks/_lib/tests -n auto -m not serial --strict-markers --tb=no -q -p no:cacheprovider
+[32m  ok[0m  V5a _lib/tests not-serial — 393 passed in 1.83s
+   -> python3 -m pytest .claude/hooks/_lib/tests -m serial --strict-markers --tb=no -q -p no:cacheprovider
+[32m  ok[0m  V5b _lib/tests serial — 13 passed, 393 deselected in 2.21s
+
+[1mV6 — gates de corpus sobre a arvore aplicada[0m
+[32m  ok[0m  V6a: validate-governance.sh completo verde
+[32m  ok[0m  V6a: CLAUDE.md 34926 bytes (<= 40000)
+[32m  ok[0m  V6b: verify-counts.sh verde
+[32m  ok[0m  V6c: check-claude-md-claims.py verde
+[32m  ok[0m  V6d: check-test-env-hygiene.py verde
+[32m  ok[0m  V6e: manifesto ADR-192 casa (9/9 membro(s) verificados)
+
+[33mDRY-RUN[0m — G0..G5 e V1..V6 verdes. Desfazendo o apply agora.
+[32m  ok[0m  arvore e index restaurados byte a byte (nada foi commitado)

@@ -1168,11 +1168,12 @@ com a revisão refrescada, ou vira plano próprio.
       falha **para preservação**, e backup em `$BAK_DIR`.
       Check: e2e — instalação feita com a versão ANTERIOR, ao rodar upgrade.sh, termina com ponteiro relativo
       — ⛔ S328: não existe reconhecedor de "absoluto legado" — o único da árvore, `_protocol_pointer_is_degraded` (`scripts/_framework_manifest_set.sh:1439`, `67a4c75`), reconhece a classe do literal `{{PROTOCOL_SOURCE}}`, e o e2e "instalar com a versão ANTERIOR e depois dar upgrade" não existe.
-- [ ] `[P0]` Usar a interface que **já existe**: `--protocol-source` e
+- [x] `[P0]` Usar a interface que **já existe**: `--protocol-source` e
       `CEO_PROTOCOL_SOURCE` (`install.sh:409,522,663-668`), reusada pelo
       upgrade via install-state. Não introduzir env nova.
-      Check: CEO_ORCHESTRATION_DIR nao aparece no gerador nem no plano; --protocol-source e o unico escape citado
+      Check: nenhuma env alternativa ao par `--protocol-source`/`CEO_PROTOCOL_SOURCE` aparece em `scripts/`; `--protocol-source` e o unico escape citado *(Check reescrito por PROPRIEDADE na S334 — a redacao anterior nomeava o proprio token que proibia, e por isso nunca podia fechar)*
       — ◐ S328: entregue a metade do gerador — `--protocol-source`/`CEO_PROTOCOL_SOURCE` em `scripts/install.sh:409,522`, reusados pelo upgrade via install-state (`scripts/upgrade.sh:1745-1760`), e a env alternativa com 0 ocorrências em `scripts/`, tudo código pré-existente do PLAN-167/168 e não entrega desta wave; falta a metade do plano — o token que o Check proíbe segue presente no próprio Check (:1172) e em 5 arquivos de `PLAN-183/debate/round-1/`.
+      — ✅ S334: FECHADO. O Check acima foi reescrito por propriedade (não nomeia mais o token); os 5 arquivos de `debate/round-1/` são registro histórico CONGELADO — ficam anotados aqui como tal e não se editam (a doutrina de evidência congelada proíbe reescrever debate landado; menção histórica em debate não é ocorrência em `scripts/`, que é onde a propriedade mira). Gerador: 0 ocorrências, medido.
 - [ ] `[P0]` O corpo renderizado passa a **nomear** a interface — hoje
       ele manda "editar" sem dizer que existe flag para isso.
       Check: o ponteiro renderizado contem a string --protocol-source
@@ -1197,7 +1198,8 @@ com a revisão refrescada, ou vira plano próprio.
       de "subconjunto mínimo congelado", com o teste que a executa.
       Check: a wave escolhe UM ramo na abertura e registra qual. Ramo A (gate de drift) — existe gate que falha quando o vivo ganha step fora da allowlist de divergencia. Ramo B (subconjunto congelado) — existe teste que falha se o template divergir do subconjunto declarado, e a declaracao nomeia cada step congelado. [pair-rail r8: o Check anterior exigia o ramo A e tornava o ramo B inexecutavel]
       — ⛔ S328: nenhum ramo foi escolhido nem registrado — "Ramo A"/"Ramo B" não aparecem em lugar nenhum de `.claude/plans/PLAN-183/` fora deste Check, e nenhum teste diffa o template contra o vivo (os 4 arquivos de teste que citam `validate.yml.template` o tratam como DESTINO de rota de entrega, não como gate de drift).
-- [ ] `[P0]` **Re-derivar o censo step a step**, com mecanismo nomeado
+      — ✅ S334: **Ramo B escolhido e REGISTRADO** (decisão de abertura de wave; autonomia da sessão ratificada pelo Owner em chat). A declaração congelada vive em `.claude/scripts/tests/test_validate_template_frozen_subset.py` (`FROZEN_STEPS` nomeia cada um dos 11 steps, na ordem; pins congelados junto: checkout SHA-pinado 40-hex, `VERSION="1.7.7"` do actionlint, `timeout-minutes: 15`) e o teste falha em QUALQUER divergência — step a mais, a menos, fora de ordem, pin perdido, ou retorno de um dos 3 removidos. Coletado por `pytest.ini` testpaths (`.claude/scripts/tests`); controle negativo provado vermelho (step renomeado ⇒ FAIL) na S334. Racional contra o Ramo A: o vivo (71 steps) muda por cerimônia própria e um gate vivo→template re-acoplaria as duas superfícies que `4f750f0` separou deliberadamente; divergência DELIBERADA do template passa a exigir editar a declaração no MESMO patch.
+- [x] `[P0]` **Re-derivar o censo step a step**, com mecanismo nomeado
       por step. Mínimo a cobrir: `:108-109` (PyYAML — dependência de
       terceiro, contra o stdlib-only do `CLAUDE.md` §3), `:148,158`
       (`unittest discover` — falso-vermelho por conftest pytest-only),
@@ -1207,6 +1209,24 @@ com a revisão refrescada, ou vira plano próprio.
       (checkout sem pin).
       Check: tabela step para mecanismo para disposicao cobrindo os 14 steps; nenhum step fica sem veredito
       — ◐ S328: entregue o censo aplicado — `4f750f0` levou `templates/.github/workflows/validate.yml.template` de 14 para 11 steps, com mecanismo nomeado por step no próprio arquivo (checkout SHA-pinado :31, PyYAML condicional :107-113, actionlint pinado em 1.7.7 :177, timeout 15 :26, remoção do skill-inventory explicada :193-198); falta a tabela step→mecanismo→disposição cobrindo os 14 steps, e o artefato mais próximo (`PLAN-183/resposta-ao-campo.md:63-75`) dispõe só os 3 steps removidos.
+      — ✅ S334: tabela completa abaixo, derivada COMPORTAMENTALMENTE (steps velhos de `git show afd228b:templates/.github/workflows/validate.yml.template`, novos do HEAD; razões dos removidos de `resposta-ao-campo.md` §A2 e dos comentários in-file do template). Item FECHADO.
+
+      | # | step (afd228b, 14) | mecanismo | disposição |
+      |---|---|---|---|
+      | 1 | Checkout | `actions/checkout@SHA` 40-hex (:31) + `timeout-minutes: 15` (:26) | mantido, endurecido |
+      | 2 | Run validate-governance.sh | governança core no adopter | mantido |
+      | 3 | Run check-skill-health.sh --ci | telemetria advisory | mantido |
+      | 4 | Run check-pitfall-regression.sh | catálogo universal de pitfalls | mantido |
+      | 5 | Contamination check | allowlist NEUTRA pós-A7 (identidade do mantenedor removida) | mantido |
+      | 6 | Placeholder lint | core/frontend only | mantido |
+      | 7 | Validate settings.json and YAML catalogs | PyYAML **condicional** (:107-113) — stdlib-only preservado quando ausente | mantido, mecanismo trocado |
+      | 8 | Shellcheck hooks and scripts | exclui `legacy/` | mantido |
+      | 9 | Run Python hook unit tests | `unittest discover` contra `.claude/hooks/tests` que o install **nunca embarca** ⇒ `Ran 0 tests OK` rc=0 — **verde vácuo**; na população mis-installed purgada, `ImportError` (template :148-156) | **REMOVIDO** (`4f750f0`; slot documentado: "Put YOUR OWN test command") |
+      | 10 | Run Python script unit tests | idem #9 (`.claude/scripts/tests` nunca embarcada) | **REMOVIDO** (mesmo slot) |
+      | 11 | Check tier boundaries | core/frontend não referencia domains | mantido |
+      | 12 | actionlint | release asset **pinado** `VERSION="1.7.7"` (:176-178) — antes baixava de `main` sem pin (supply-chain grading os workflows do adopter) | mantido, endurecido |
+      | 13 | Skill inventory idempotency | estruturalmente impossível no adopter (inventário por perfil ≠ completo; template :193-198) | **REMOVIDO** |
+      | 14 | Hook and script executable bits | bits de exec | mantido |
 - [x] `[P0]` **`Contamination check`: manter "ele estava CERTO"** quanto
       ao gatilho do A1, **e** curar o A7 — o padrão embarca a identidade
       do mantenedor, o arquivo é entregue ao adopter, e ele se
@@ -1234,7 +1254,7 @@ com a revisão refrescada, ou vira plano próprio.
 
 ### W3 — Catálogo e a regra de VETO (A4)
 
-- [ ] `[P0]` **Marcador de VETO machine-readable (cura do r9 #2 —
+- [x] *(S334 — landado em `ed4d1cf`: `.claude/scripts/veto_skill_map.py` DERIVA dos DOIS organogramas; `test_veto_skill_map.py` é lint bidirecional com `test_no_orphans` (:175); nenhum número fixo no check — a derivação produz o conjunto, hoje incluindo `accessibility-and-wcag`.)* `[P0]` **Marcador de VETO machine-readable (cura do r9 #2 —
       pré-requisito do invariante abaixo):** hoje NENHUMA fonte
       machine-readable diz quais skills são VETO — as duas financeiras
       só têm `risk_class`, e o status vive em prosa de roteamento e no
@@ -1249,17 +1269,17 @@ com a revisão refrescada, ou vira plano próprio.
       consistência inventário↔organograma nos DOIS sentidos, para que a
       PRÓXIMA skill de VETO não nasça demovível.
       Check: as entradas do inventario sao GERADAS por derivacao do organograma; o lint falha nos dois sentidos (VETO no organograma ausente do inventario; entrada sem lastro no organograma); nenhum numero fixo de entradas aparece no check — o conjunto e o que a derivacao produzir, e no estado atual ele inclui accessibility-and-wcag
-- [ ] `[P0]` **O invariante mora no GERADOR:** conjunto de exclusão por
+- [x] *(S334 — landado em `ed4d1cf`: eixo `veto_skills` em `skill-budget-generator.py:340,354-362,378` — "TWO protection axes, not one"; `test_no_veto_skill_is_shipped_name_only` em `test_veto_skill_map.py:291`.)* `[P0]` **O invariante mora no GERADOR:** conjunto de exclusão por
       VETO em `skill-budget-generator.py:352-362` mais asserção nos
       testes dele. Hoje o único eixo é `tier`, e o conceito de VETO
       aparece **0 vez** no arquivo.
       Check: teste do gerador falha se uma skill marcada VETO (pelo marcador acima) for demovida, independente do tier
-- [ ] `[P0]` **Corrigir a direção do fail-soft:** log de auditoria
+- [x] *(S334 — landado em `ed4d1cf`: log ausente demove NADA; `test_missing_audit_log_fail_soft_zero_counts_exit_zero` em `test_skill_budget_generator.py:189`.)* `[P0]` **Corrigir a direção do fail-soft:** log de auditoria
       ausente hoje demove **tudo** — e adopter novo não tem histórico
       por construção. Falha de infra não pode ter consequência de
       segurança.
       Check: com log ausente, o gerador NAO demove; teste com diretorio de auditoria vazio
-- [ ] `[P0]` **Validar o handle do CODEOWNERS na instalação** (achado
+- [x] *(S334 — ENTREGUE pelo PLAN-185 W2 em `cc00235`: `_wbm_github_handle_ok` (`_framework_manifest_set.sh:876`), gramática ÚNICA produtor+consumidor; `&`, espaço e aspas RECUSADOS com erro nomeado, e2e F2 em bytes. **EMENDA à perna r8:** o Owner decidiu DEPOIS (PLAN-185 OQ-2, default ratificado) o CONTRÁRIO do Check abaixo quanto a `org/time` — o handle de time é RECUSADO deliberadamente, com mensagem que NOMEIA o caso org/team (e2e F2.1 assere a recusa explicativa). A perna "org/time PASSA" do Check está SUPERSEDIDA por essa decisão posterior; o resto do Check vale e está coberto.)* `[P0]` **Validar o handle do CODEOWNERS na instalação** (achado
       K5 do debate, mantido pelo consenso e ausente da primeira
       redação): a substituição por `sed` não escapa o valor de
       `--github-owner`. Um handle contendo `/` **quebra o install**, e um
@@ -1431,11 +1451,19 @@ com a revisão refrescada, ou vira plano próprio.
 1. **W2** — os dois steps de `unittest discover` saem do template ou são
    reescritos para a invocação real do CI? (a rota "preservar atrás de
    guarda" já foi eliminada em §6)
+   > ✅ **Respondida POR IMPLEMENTAÇÃO** (`4f750f0`, registrada S334): os dois
+   > steps SAÍRAM — eram verde-vácuo (`Ran 0 tests OK` contra árvores nunca
+   > embarcadas) — e o template documenta o slot ("Put YOUR OWN test
+   > command", :148-156). Não há invocação real possível: o install não
+   > embarca testes por decisão do manifesto.
 2. **W0-US3** — o repo descartável vira fixture permanente de CI (custo
    recorrente, cobertura real) ou roteiro de release?
 3. **W2** — o gate de drift template contra vivo é diff estrutural de
    steps ou declaração congelada com teste? A primeira é mais forte e
    mais cara.
+   > ✅ **Respondida na S334: declaração congelada com teste (Ramo B)** —
+   > registro e racional no item W2 do vínculo; teste em
+   > `.claude/scripts/tests/test_validate_template_frozen_subset.py`.
 4. **W5-b** (em `PLAN-183/w5-draft-s323.md`) — quantas linhas novas o
    `ownership_table.tsv` recebe, e qual a regra de legalidade irmã da
    R-04b em `docs/ownership-decision-table.md`? **A rota "ficam FORA da
@@ -1766,7 +1794,7 @@ foi verificado no mesmo run. Vale também para os outros dois steps
 skipped, que testam ownership de entrega — exatamente a área que a W5-b
 mexe.
 
-- [ ] `[P0]` O controle positivo da paridade roda **independentemente** do
+- [x] *(S334 — ENTREGUE: `if: always()` nos TRÊS steps nomeados — paridade positive-control `smoke-install.yml:553`, delivery-record ownership `:593`, night-mode efficacy `:611` (o próprio step cita "§9.8: third of the three steps"); 17 ocorrências de `if: always()` no arquivo. Implementação canônica landou nas waves W5/W5-b assinadas — a nota CHECKBOX≠IMPLEMENTAÇÃO abaixo descreve o estado pré-S328 e fica como histórico.)* `[P0]` O controle positivo da paridade roda **independentemente** do
       veredito do step principal (`if: always()`), e o mesmo para os outros
       dois steps skipped (delivery-record ownership, night-mode).
       Check: num run com o step principal VERMELHO, o controle positivo sai

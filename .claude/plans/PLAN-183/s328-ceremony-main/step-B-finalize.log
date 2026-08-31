@@ -1,0 +1,53 @@
+
+[1m0 — pre-condicoes[0m
+[32m  ok[0m  metade nao-canonica presente em HEAD
+[32m  ok[0m  HEAD em main: 5bbc256e23f491c1306c32c8cd31d27791ad474f
+      BASE-SHA.txt : 0aa05c3efabc598721005d3bc721ce065fcc28bd
+      HEAD vivo    : 5bbc256e23f491c1306c32c8cd31d27791ad474f
+
+[1m1 — precisa re-basear?[0m
+  o HEAD andou desde a finalizacao — re-basear
+
+[1m2 — arvore-sombra em 5bbc256e23f491c1306c32c8cd31d27791ad474f[0m
+[32m  ok[0m  sombra: /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T//s328B-shadow.E7m2J5/wt
+
+[1m3 — re-aplicando o B.patch na sombra (--3way)[0m
+[32m  ok[0m  patch re-aplicado sem conflito e sem marcadores
+
+[1m4 — bateria curta NA SOMBRA[0m
+[32m  ok[0m  4a: yaml.safe_load OK
+[32m  ok[0m  4b: actionlint verde
+[32m  ok[0m  4c: literal de compatibilidade preservado (2)
+[32m  ok[0m  4d: suite do gate 62/62 na sombra
+
+[1m5 — re-gerando patch, Scope, Patch-base e Patch-sha256[0m
+  patch: /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-169/s328-ceremony-B/B.patch (19288 bytes)
+  sha256: e635498ac63422537574a5ce9229d36a1ef11bc7c4aaa2f157c25b048d5e0950
+  arquivos NOVOS no patch: 0
+  paths tocados (DERIVADOS de git apply --numstat): 3
+    .claude/adr/ADR-144-subagent-model-tiering-frontmatter.md      CANONICO
+    .claude/adr/ADR-163-hook-latency-gate-percentile-stability.md  CANONICO
+    .github/workflows/validate.yml                                 CANONICO
+  canonicos: 3   membros do manifesto tocados: 0
+  base do patch (Patch-base): 5bbc256e23f491c1306c32c8cd31d27791ad474f
+  Scope, Patch-sha256 e Patch-base escritos em:
+    /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-169/wave-s328-B-approved.md
+    /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-169/s328-ceremony-B/PROPOSED-PATCH.md
+
+  PROXIMO PASSO: commite os materiais, depois assine.
+[32m  ok[0m  BASE-SHA.txt atualizado
+[32m  ok[0m  git apply --check verde na arvore viva
+
+[1m6 — commit dos materiais regenerados (sem editor)[0m
+    staged: .claude/plans/PLAN-169/s328-ceremony-B/BASE-SHA.txt
+    staged: .claude/plans/PLAN-169/wave-s328-B-approved.md
+[32m  ok[0m  commit criado: 44610ab
+
+[1mPRONTO[0m
+
+  O pacote B esta baseado em  44610ab2173672c31d9008835ce22d61f53d7da8  e o patch aplica limpo.
+
+  PROXIMO COMANDO (copie e cole inteiro):
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-169/OWNER-S328-B-SIGN.sh
+

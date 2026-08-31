@@ -1,0 +1,130 @@
+
+[1m========================================================================[0m
+[1mS329 — CERIMÔNIA DA MANHÃ[0m
+[1m========================================================================[0m
+
+      data      : 2026-08-27 08:32:17 -03
+      repo      : /Users/joaocanhada/canhada-labs/ceo-orchestration
+      branch    : main
+      HEAD      : 925ec36 — closeout(S329): CLAUDE.md §5 — night-run S329: D landado, pacotes C+E 
+      ordem     : C → E
+      ownership : --ownership-e2e=defer
+
+
+[1mEM DIA COM O GITHUB?[0m
+[32m  ok[0m  em dia com origin/main
+
+[1mCHAVE DE ASSINATURA (GPG)[0m
+[32m  ok[0m  gpg disponível — 2 chave(s) secreta(s)
+
+[1mPACOTES ENCONTRADOS[0m
+  [32m✓[0m C  C (PLAN-185 W1+W2 — instalador: symlink e handle do GitHub)   (patch)
+  [32m✓[0m E  E (PLAN-169 — upgrade.sh: registro de hooks derivado)   (patch)
+
+[1mÁRVORE DE TRABALHO[0m
+      untracked esperados da noite (não entram em commit nenhum):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log
+  .claude/plans/PLAN-185/NIGHT-S329-RUNBOOK.md
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260826-191601.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-083217.log
+[32m  ok[0m  nenhuma modificação rastreada
+
+[1m========================================================================[0m
+[1mPACOTE C (PLAN-185 W1+W2 — instalador: symlink e handle do GitHub)[0m
+[1m========================================================================[0m
+      SIGN     : .claude/plans/PLAN-185/OWNER-S329-C-SIGN.sh
+      LAND     : .claude/plans/PLAN-185/OWNER-S329-C-LAND.sh  (sem argumentos extras)
+      tipo     : patch
+      materiais: .claude/plans/PLAN-185/s329-ceremony-C
+      sentinel : .claude/plans/PLAN-185/wave-s329-C-approved.md
+      finalize : .claude/plans/PLAN-185/s329-ceremony-C/finalize-C.sh
+
+[1m[C] 1/5 — estado da árvore[0m
+      untracked esperados da noite (não entram em commit nenhum):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log
+  .claude/plans/PLAN-185/NIGHT-S329-RUNBOOK.md
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260826-191601.log
+  .claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-083217.log
+[32m  ok[0m  nenhuma modificação rastreada
+[32m  ok[0m  revisão cruzada: 4 rodada(s); a última (rail-round-5.md) é APPROVE
+
+[1m[C] 2/5 — re-base do pacote no HEAD vivo (finalize)[0m
+
+  [1m$[0m bash .claude/plans/PLAN-185/s329-ceremony-C/finalize-C.sh
+
+
+[1m0 — pre-condicoes[0m
+[32m  ok[0m  HEAD em main: 925ec3667f0e9ab38b9685835bb2f9af9897f5f1
+[32m  ok[0m  sombra: /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/bc917148-eaee-414e-8a9f-3158c3261a04/scratchpad/shadow-185 (base a485296507b62e19c959ec4082da7e608a3c4fdd)
+
+[1m1 — fronteira de paths: REQUIRED presente, nada fora de ALLOWED[0m
+      10 obrigatorio(s), 13 tolerado(s), 1 gerado(s) por este script
+[32m  ok[0m  a sombra mexeu em 21 path(s); os 10 obrigatorios estao presentes
+
+[1m2 — guard de drift (a licao da S329: o pack nao pode REVERTER o destino)[0m
+
+[31mABORT:[0m path(s) do pacote mudaram no HEAD vivo depois que a sombra foi criada:
+  CLAUDE.md
+
+  Copiar a sombra por cima REVERTERIA essas edicoes — foi exatamente o que
+  abortou o pacote D duas vezes na S329. A cura NAO e forcar: e re-derivar a
+  sombra POR ITEM sobre o conteudo novo e rodar este script de novo.
+    git -C /private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/bc917148-eaee-414e-8a9f-3158c3261a04/scratchpad/shadow-185 diff a485296507b62e19c959ec4082da7e608a3c4fdd HEAD -- <path>   (o que a sombra mudou)
+    git show HEAD:<path>                              (o que o vivo tem hoje)
+
+[31m========================================================================[0m
+[31mVERMELHO[0m — pacote C, etapa finalize (rc=1)
+[31m========================================================================[0m
+
+  DIAGNÓSTICO
+    o re-base do pacote falhou — leia a mensagem do script acima.
+
+  O QUE FAZER
+    Causa mais comum: o patch não re-aplica porque alguém editou os
+    mesmos arquivos depois que o pacote foi montado.
+    NÃO force nada. Copie a saída inteira e mande para o CEO.
+    Log desta etapa: /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-185/s329-ceremony-main/step-C-finalize.log
+
+  RETOMAR (depois de resolver, copie e cole a linha inteira)
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-185/OWNER-S329-MORNING.sh --from C
+
+  LOG COMPLETO
+    /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-083217.log
+
+
+[1mRESUMO[0m
+  C  C (PLAN-185 W1+W2 — instalador: symlink e handle do GitHub) não avaliado
+  E  E (PLAN-169 — upgrade.sh: registro de hooks derivado)    não avaliado
+
+  HEAD agora: 925ec36  (main)

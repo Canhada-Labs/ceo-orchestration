@@ -1,0 +1,140 @@
+=== PLAN-185 W1+W2 installer write-safety e2e ===
+    framework root under test : /Users/joaocanhada/canhada-labs/ceo-orchestration
+    installer                 : /Users/joaocanhada/canhada-labs/ceo-orchestration/scripts/install.sh
+    workroot                  : /var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/ceo-wsafe-XXXXXX.7QYvrTq7BC
+
+==> F0 the destination predicate, per form, with clause-removal controls
+  ok   F0 baseline — _wbm_dst_refuses is defined by the library under test
+  ok   F0 baseline — a confined destination is accepted
+  ok   F0 dangling-symlink — refused, and the reason names the form (DANGLING symlink)
+  ok   F0 dangling-symlink CONTROL — removing the clause removes the refusal entirely (load-bearing)
+  ok   F0 resolved-symlink — refused, and the reason names the form (is a symlink)
+  ok   F0 resolved-symlink CONTROL — removing the clause removes the refusal entirely (load-bearing)
+  ok   F0 hard-link — refused, and the reason names the form (hard links)
+  ok   F0 hard-link CONTROL — removing the clause removes the refusal entirely (load-bearing)
+  ok   F0 escaping-relpath — refused, and the reason names the form (not a confined relative path)
+  ok   F0 escaping-relpath CONTROL — removing the clause removes THIS reason; a deeper wall still refuses (layered, load-bearing)
+  ok   F0 absolute — refused by the lexical wall
+  ok   F0 glob — refused by the lexical wall
+  ok   F0 symlinked-ancestor — refused, naming the component
+==> F1.1 dangling symlink destination -> outside the target
+  ok   F1.1 — external path does not exist (zero bytes written outside the target)
+  ok   F1.1 — refusal is NAMED in the run output
+  ok   F1.1 — the run fails (rc=1), so the refusal is not swallowed
+==> F1.2 resolved symlink destination -> outside the target
+  ok   F1.2 — the external file is byte-identical after the run
+  ok   F1.2 — refusal is NAMED in the run output
+==> F1.3 symlinked parent directory -> outside the target
+  ok   F1.3 — external path does not exist (zero bytes written outside the target)
+  ok   F1.3 (second destination) — external path does not exist (zero bytes written outside the target)
+  ok   F1.3 — refusal is NAMED in the run output
+==> F1.4 hard-linked destination sharing an inode with an external file
+  ok   F1.4 — the hard-linked external file is byte-identical after the run
+  ok   F1.4 — refusal is NAMED in the run output
+==> F1.5 pre-flight: a refusal on the SECOND destination leaves the FIRST unwritten
+  ok   F1.5 — the FIRST destination was never written (group refused before its first write)
+  ok   F1.5 — external path does not exist (zero bytes written outside the target)
+==> F1.9 global pre-flight: a refused destination leaves the target ENTIRELY untouched
+  ok   F1.9 — the run fails (rc=1)
+  ok   F1.9 — ZERO files were written into the target
+  ok   F1.9 — .claude was never created (the refusal precedes the first touch)
+  ok   F1.9 — absent after the refusal, as it must be: PROTOCOL.md
+  ok   F1.9 — absent after the refusal, as it must be: .github
+  ok   F1.9 — absent after the refusal, as it must be: .claude/.install-manifest.sha256
+  ok   F1.9 — absent after the refusal, as it must be: .claude/.install-state.json
+  ok   F1.9 — external path does not exist (zero bytes written outside the target)
+==> F1.10 a dangling CLAUDE.md is refused BEFORE the framework is delivered
+  ok   F1.10 — the run fails (rc=1)
+  ok   F1.10 — the refusal NAMES CLAUDE.md
+  ok   F1.10 — ZERO files written into the target
+  ok   F1.10 — .claude/ was never created
+  ok   F1.10 — docs/ was never created
+  ok   F1.10 — .github/ was never created
+  ok   F1.10 — external path does not exist (zero bytes written outside the target)
+==> F1.11 a symlinked target root is refused, naming the referent
+  ok   F1.11 — the run fails (rc=1)
+  ok   F1.11 — nothing was written under the referent
+  ok   F1.11 — the refusal NAMES the root symlink
+  ok   F1.11 — the refusal carries the recovery path (fail-closed WITH a way out)
+==> F1.11 control: a real directory root installs, fixed templates included
+  ok   F1.11 control — a real directory root installs (rc=0)
+  ok   F1.11 control — no refusal on a real directory root
+  ok   F1.11 control — fixed template delivered: CLAUDE.md
+  ok   F1.11 control — fixed template delivered: MEMORY.md
+  ok   F1.11 control — fixed template delivered: .mcp.json
+  ok   F1.11 control — fixed template delivered: .claude/tier-policy.json
+  ok   F1.11 control — fixed template delivered: .claude/tier-policy.json.sigchain
+==> F1.6 dangling PROTOCOL.md pointer -> outside the target
+  ok   F1.6 — external path does not exist (zero bytes written outside the target)
+  ok   F1.6 — refusal is NAMED in the run output
+==> F1.7 dangling .claude/settings.json -> outside the target
+  ok   F1.7 — external path does not exist (zero bytes written outside the target)
+  ok   F1.7 — refusal is NAMED in the run output
+==> F1.8 non-regression: a clean target installs unchanged
+  ok   F1.8 — clean install returns 0
+  ok   F1.8 — a clean target produces no refusal
+  ok   F1.8 — delivered: docs/BRANCH-PROTECTION.md
+  ok   F1.8 — delivered: docs/rotation-log.md
+  ok   F1.8 — delivered: PROTOCOL.md
+  ok   F1.8 — delivered: .claude/settings.json
+  ok   F1.8 — delivered: .github/CODEOWNERS.template
+  ok   F1.8 — re-installing into the same path is byte-identical (568 files)
+==> F2.1 --github-owner with a slash is refused before anything is created
+  ok   F2.1 — refused (rc=2)
+  ok   F2.1 — no .github/CODEOWNERS exists
+  ok   F2.1 — the refusal precedes every mkdir (.github/ does not exist)
+  ok   F2.1 — the failure NAMES the grammar
+  ok   F2.1 — the failure says team handles are unsupported (OQ-2 default)
+==> F2.2 the other out-of-grammar handles
+  ok   F2.2 — refused, nothing written: leading-hyphen
+  ok   F2.2 — refused, nothing written: forty-chars
+  ok   F2.2 — refused, nothing written: embedded-space
+  ok   F2.2 — refused, nothing written: ampersand
+  ok   F2.2 — refused, nothing written: backslash
+==> F2.3 a valid handle renders, with every expectation derived from the source
+  ok   F2.3 — the install succeeds and .github/CODEOWNERS exists
+  ok   F2.3 — non-empty (1409 bytes)
+  ok   F2.3 — line count matches the source (33)
+  ok   F2.3 — the handle appears once per source marker (11)
+  ok   F2.3 — byte count matches the derived render size (1409)
+  ok   F2.3 — mode is 0644 (mktemp creates 0600; an unreadable CODEOWNERS is a regression bytes do not catch)
+  ok   F2.3 — no unrendered markers remain
+  ok   F2.3 — no staging file left behind
+==> F2.4 a second identical run leaves CODEOWNERS unchanged
+  ok   F2.4 — second run rc=0 and CODEOWNERS is byte-identical
+==> F2.5 a 0-byte CODEOWNERS the framework can PROVE it wrote is recovered
+  ok   F2.5 — the empty file was re-rendered (1409 bytes)
+  ok   F2.5 — the recovery is RUIDOSA (RECOVERED: names the evidence)
+==> F2.6 a 0-byte CODEOWNERS with NO provenance is left untouched
+  ok   F2.6 — the adopter's empty file is still empty (nothing was re-enabled)
+  ok   F2.6 — a NAMED warning is emitted
+  ok   F2.6 — the warning points at scripts/doctor.sh, as the plan requires
+==> F2.8 a recorded owner is NOT a delivery record
+  ok   F2.8 — the adopter's own CODEOWNERS was left alone by the install
+  ok   F2.8 — no delivery row in the manifest for a file the framework did not write
+  ok   F2.8 — the deliberately emptied file is STILL empty (a request is not provenance)
+  ok   F2.8 — no recovery was claimed
+==> F3 dry-run against an absent target, and the preview that must not lie
+  ok   F3 — dry-run against an absent target returns 0
+  ok   F3 — the dry-run created nothing
+  ok   F3 — an absent root produces no refusals
+  ok   F3 — the preview NAMES the refusal instead of promising 'would COPY'
+  ok   F3 (dry-run) — external path does not exist (zero bytes written outside the target)
+==> F4.1 an inherited trap variable must not become an arbitrary deletion
+  ok   F4.1 (_ATOMIC_TMP_PENDING) — the inherited path survives byte-identical
+  ok   F4.1 (_STATE_OPS_FILE) — the inherited path survives byte-identical
+==> F4.2 an owner that cannot survive the transport is refused at the source
+  ok   F4.2 — extracted the reader from the shipped upgrade.sh (30 lines)
+  ok   F4.2 — owner carrying a NUL => refused
+  ok   F4.2 — owner with two trailing newlines => refused
+  ok   F4.2 — owner with a carriage return => refused
+  ok   F4.2 — a clean handle (control) => accepted:acme-platform
+==> F2.7 the shared grammar answers identically to the regex it was adopted from
+  ok   F2.7 — shell predicate and reference regex agree on all 22 values
+  ok   F2.7 — the grammar rejects an embedded newline
+
+=== summary ===
+    framework root : /Users/joaocanhada/canhada-labs/ceo-orchestration
+    passed         : 105
+    failed         : 0
+OK

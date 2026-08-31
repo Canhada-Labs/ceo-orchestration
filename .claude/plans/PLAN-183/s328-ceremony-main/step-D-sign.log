@@ -1,0 +1,101 @@
+
+[1mP0 — pre-condicoes[0m
+[32m  ok[0m  27 destino(s) derivado(s) do MANIFEST
+  [33mNOTA[0m untracked nao-canonicos tolerados (nao entram no land):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhuma modificacao rastreada; untracked (se houver) sao nao-canonicos e fora do pack
+[32m  ok[0m  materiais + pack (27 arquivo(s)) e 6 rodada(s); ultima (.claude/plans/PLAN-179/s328-ceremony-D/rail-round-6.md) = APPROVE
+
+[1mP1 — frescor do pack (o que voce esta assinando)[0m
+[32m  ok[0m  MANIFEST: 27 arquivo(s), conjunto E conteudo conferem
+[32m  ok[0m  BASELINE: 22 destino(s) pre-existente(s) identico(s) ao momento da montagem
+[32m  ok[0m  5 destino(s) novo(s) ausente(s) no vivo
+
+[1mP1b — Scope do sentinel == MANIFEST (derivado, nunca recordado)[0m
+[32m  ok[0m  Scope do draft == manifesto (27 paths)
+
+[1mP2 — identidade do signer[0m
+[32m  ok[0m  signer: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+[32m  ok[0m  consta no rail rastreado
+
+[1mP3 — materializando o sentinel e preenchendo os campos[0m
+  campos preenchidos
+[32m  ok[0m  Anchor-SHA=d9d9cab483b49c5a03d5a27e9c7f49801cf96968  Data=2026-08-26
+
+  Bloco que sera assinado:
+      <!-- BEGIN SIGNED SCOPE -->
+      
+      ## Scope
+      
+      <!-- SCOPE-BLOCK — gerado do MANIFEST.sha256 do pack; nao editar a mao.
+           Regenerar com:  sed 's/^[0-9a-f]\{64\}  //' staged-w24/MANIFEST.sha256
+           (aplicando o PACKMAP ao unico path mapeado). -->
+      ```
+      .claude/adr/ADR-195-work-boundary-persistence.md
+      .claude/data/audit-registry.golden.txt
+      .claude/hooks/_lib/audit_emit.py
+      .claude/hooks/_lib/ledger_provenance.py
+      .claude/hooks/check_ledger_checkpoint.py
+      .claude/hooks/tests/test_audit_emit_api_contract.py
+      .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py
+      .claude/hooks/tests/test_check_ledger_checkpoint.py
+      .claude/hooks/tests/test_codex_egress_proof_telemetry.py
+      .claude/hooks/tests/test_git_bypass_guard.py
+      .claude/hooks/tests/test_ledger_provenance.py
+      .claude/hooks/tests/test_template_dogfood_parity.py
+      .claude/hooks/tests/test_w5_scrub_enforcement.py
+      .claude/settings.json
+      CHANGELOG.md
+      CLAUDE.md
+      INSTALL.md
+      README.md
+      README.pt-BR.md
+      SPEC/v1/audit-log.schema.md
+      docs/ARCHITECTURE.md
+      docs/CTO-GUIDE.md
+      docs/FAQ.md
+      docs/GUIA-COMPLETO.md
+      docs/README.md
+      npm/README.md
+      templates/settings/settings.base.json
+      ```
+      
+      <!-- END SIGNED SCOPE -->
+
+[1mP4 — assinando[0m
+[32m  ok[0m  assinatura gerada: .claude/plans/PLAN-179/W179-W24-approved.md.asc
+    gpg: Signature made Wed Aug 26 12:31:54 2026 -03
+    gpg:                using EDDSA key AE9B236FDAF0462874060C6BCFCFACF00335DC74
+    gpg: Good signature from "João Canhada <joaocanhada@users.noreply.github.com>" [ultimate]
+
+[1mPRONTO[0m
+
+  A assinatura cobre o HEAD d9d9cab483b49c5a03d5a27e9c7f49801cf96968 e 27 path(s) do pack.
+  NAO commite nada agora — qualquer commit invalida o Anchor-SHA.
+
+  PROXIMO COMANDO (copie e cole inteiro):
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh --dry-run
+
+  O dry-run aplica o pack, roda a bateria INTEIRA e depois DESFAZ tudo
+  (arvore e index voltam byte a byte). Se ele terminar verde, o comando
+  seguinte aplica, verifica, commita e empurra — voce nao digita 'git':
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh

@@ -442,6 +442,18 @@ em PreCompact. O AC de saída W0 permanece aberto por (i) e (ii). W2/W4
 **LANDADAS em `b07be9b` (S329 U0, 2026-08-26, pack `staged-w24` — sentinel
 `W179-W24-approved.md` assinado pelo Owner às 14:14; LAND V1–V6 verdes)**.
 
+### Registro de execução — reconciliação pós-pack-D (S334, 2026-08-31)
+
+Reconciliação das checkboxes de W2/W4 contra o land REAL de `b07be9b`
+(verificado por recon read-only S334: `git show --stat b07be9b` + Scope
+do sentinel `W179-W24-approved.md.asc`): US6 ×2, US9 (→ADR-195), US13,
+US14, US15c marcadas `[x]` com evidência inline; US9c fechada pelo
+veredito já escrito em `floor-reduction.md` §6. **US7 e US8 seguem
+`[ ]`** — fora do Scope assinado do pack (US8 tem spec pronta em
+`staged-w24/SESSIONEND-NOTE.md`); ambas são cerimônia futura de hook
+canônico. Residuais do pack D (3, declarados no sentinel) anotados nos
+próprios itens — wave própria com debate, não linha de cerimônia.
+
 ### W2 — Ledger de trabalho contínuo (a mudança de doutrina)
 
 Move a escrita de evento terminal para **fronteira de unidade de
@@ -449,12 +461,12 @@ execução**. Forma adotada do padrão multissessão da Anthropic
 (`research-S309.md §2`), montada sobre o que o repo já tem: ACs de plano
 + git + audit log.
 
-- [ ] `[P1][US6][.claude/plans/PLAN-NNN/LEDGER.md]`
+- [x] `[P1][US6][.claude/plans/PLAN-NNN/LEDGER.md]` — *reconciliado na S334: landado em `b07be9b` (pack `staged-w24`, sentinel `W179-W24-approved.md.asc`); o contrato vive no template/validador do `check_ledger_checkpoint.py` (1296L).*
       Contrato do ledger por plano: unidade corrente, ACs com estado
       verificado, último commit, decisões tomadas, bloqueios abertos.
       Uma seção por unidade; identificadores verbatim (paths absolutos,
       SHAs, PLAN-/ADR-ids) — nunca paráfrase.
-- [ ] `[P1][US6][.claude/hooks/check_ledger_checkpoint.py]`
+- [x] `[P1][US6][.claude/hooks/check_ledger_checkpoint.py]` — *reconciliado na S334: landado em `b07be9b`; gatilho por PATHS do commit (teste AST garante ausência de `resolve_plan_id`), ADVISORY, `ledger_checkpoint_skipped` com enum fechado.*
       Hook novo: em fronteira de unidade, verifica que o ledger foi
       atualizado no mesmo commit. **ADVISORY primeiro** — janela
       measure-first, como o `CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED` (ADR-191).
@@ -476,14 +488,16 @@ execução**. Forma adotada do padrão multissessão da Anthropic
       nomeado por entrada (comando + exit code), porque entrada errada é
       pior que ausente (o modelo escreve o checkpoint já degradado).
 - [ ] `[P1][US7][.claude/hooks/check_precompact_continuity.py]`
+      — *nota S334: NÃO entrou no pack `b07be9b` (ausente do Scope assinado; `grep -i ledger` no hook = 0). Hook canônico ⇒ cerimônia futura, pode compartilhar com US8.*
       PreCompact passa a apontar para o ledger; o snapshot vira o
       **índice** do ledger, não a cópia do estado.
 - [ ] `[P2][US8][.claude/hooks/SessionEnd.py]`
+      — *nota S334: spec pronta e assinada no pack (`PLAN-179/staged-w24/SESSIONEND-NOTE.md`, PACK-DOC que deliberadamente não aterrissou); implementação aguarda cerimônia que toque `SessionEnd.py`.*
       SessionEnd deixa de só verificar: emite o delta candidato de
       memória (contagem + paths, nunca corpo) para o operador ratificar.
       Escrita de memória continua sendo decisão do modelo/Owner — o hook
       torna a OMISSÃO visível, não escreve por conta própria.
-- [ ] `[P1][US9][.claude/adr/ADR-193-work-boundary-persistence.md]`
+- [x] `[P1][US9][.claude/adr/ADR-193-work-boundary-persistence.md]` — *reconciliado na S334: landado em `b07be9b` como **ADR-195** (renumerado — 193/194 tomados por outros planos), com SPEC v2.59 e as 3 ações de audit.*
       ADR novo: "escrita em fronteira de trabalho". Registra a doutrina,
       o porquê (E1–E3) e a fronteira honesta. **Canônico — cerimônia.**
 
@@ -491,6 +505,10 @@ execução**. Forma adotada do padrão multissessão da Anthropic
 nova recupera o estado a partir do ledger, sem arqueologia de git.
 Ensaio obrigatório em clone, não no repo vivo
 ([[project-s301-rc3-nogo-cures-overnight]]).
+> ✅ **EVIDENCIADO na S334** — ensaio executado em clone descartável, dois
+> processos (morte real entre eles), recuperação COMPLETA rc=0 com
+> verifier negativo batendo. Registro completo:
+> `PLAN-179/w2-recovery-rehearsal-S334.md`.
 
 ### W3 — Baixar o piso, melhorar a compactação, fechar as sondas órfãs
 
@@ -505,7 +523,7 @@ Ensaio obrigatório em clone, não no repo vivo
       **Dono do trabalho de poda é o PLAN-175** (skills-pruning-discovery) —
       este item DEFINE o alvo e o critério de aceite, não re-executa a poda.
       Reestruturar o core skill exige cerimônia/debate próprios.
-- [ ] `[P2][US9c][PLAN-179/floor-reduction.md]`
+- [x] `[P2][US9c][PLAN-179/floor-reduction.md]` — *reconciliado na S334: veredito escrito em `floor-reduction.md` §6 — NÃO-ADOTAR como implementação (o substrato não expõe o controle; DAG sem eviction seria implementar em falso), ADOTAR como doutrina de uso. Exatamente o entregável ADOTAR/NÃO-ADOTAR com razão que o item pede.*
       Avaliar **eviction estruturada** (`research-S309.md §2.4`) como
       alternativa à sumarização: DAG de episódios exploratory/action,
       remoção primeiro do que persiste no ambiente. Registrar como
@@ -513,7 +531,15 @@ Ensaio obrigatório em clone, não no repo vivo
       controle, então provavelmente é doutrina de uso, não implementação.
       Ganho colateral relevante: prefixo de cache estável (23% de custo).
 
-- [ ] `[P2][US10][templates/compaction.md]`
+- [x] `[P2][US10][templates/compaction.md]` — *fechado na S334 por
+      DOUTRINA-DE-USO declarada com razão (rota prevista pelo próprio
+      item): consumidor = OPERADOR via `/compact <instruções>` em sessão
+      longa prestes a compactar; a rota API `instructions` foi REJEITADA
+      porque substitui integralmente o prompt padrão (omissão = perda de
+      recall, `research-S309.md §1`); a metade mecânica da continuidade
+      não depende deste template (pinned constraints têm canal próprio,
+      W1-b). Doutrina registrada NO PRÓPRIO template (cabeçalho "DELIVERY
+      CHANNEL — USE DOCTRINE").*
       Ligar o template de 9 seções (PLAN-133 D4) como instrução real de
       compactação, em vez de template que ninguém alimenta. Avaliar as
       duas rotas: `/compact <instruções>` no CLI e o parâmetro
@@ -546,11 +572,11 @@ Fecha os primitivos ausentes apontados pelo survey de segurança de
 memória (`research-S309.md §3`): *write-gate validation* e
 *post-deletion verification* não existem em nenhuma arquitetura revisada.
 
-- [ ] `[P1][US13][.claude/hooks/_lib/ledger_provenance.py]`
+- [x] `[P1][US13][.claude/hooks/_lib/ledger_provenance.py]` — *reconciliado na S334: landado em `b07be9b` (1125L; tags de proveniência por entrada). Residual declarado no sentinel: `admit_entry` sem call-site de produção — wave própria com debate.*
       Tag de proveniência por entrada do ledger: `owner-instruction` |
       `ceo-derived` | `agent-returned` | `external-tool`. Entrada de
       origem externa nunca é relida como instrução.
-- [ ] `[P2][US14][.claude/hooks/check_ledger_checkpoint.py]`
+- [x] `[P2][US14][.claude/hooks/check_ledger_checkpoint.py]` — *reconciliado na S334: landado em `b07be9b`; write-gate fail-CLOSED (`ledger_provenance.py:50`), default `would_reject` sob janela measure-first (`CEO_LEDGER_WRITE_GATE_ENFORCE`). Residual bind-vs-measure declarado no sentinel.*
       Write-gate: entrada de ledger passa pelo scanner de
       harness-mimicry antes de persistir (mesma rota do Step-4 do
       `/ceo-boot`). Hit ⇒ entrada DESCARTADA, nunca redigida.
@@ -569,7 +595,7 @@ memória (`research-S309.md §3`): *write-gate validation* e
       que hoje renderiza lições aprovadas no boot: avaliar se o gate A6
       (`sha256(trigger + advisory_text)` verificado contra a cadeia HMAC)
       cobre erosão progressiva ou só adulteração pontual.
-- [ ] `[P2][US15c][.claude/hooks/_lib/ledger_provenance.py]`
+- [x] `[P2][US15c][.claude/hooks/_lib/ledger_provenance.py]` — *reconciliado na S334: landado em `b07be9b` (`ledger_provenance.py:908+`). Residual declarado: deleção staged do `LEDGER.md` ainda conta como `ledger_updated` (3 saídas mapeadas em `s328-ceremony-D/rail-round-1.md` §P2-1; mexe em enum fechado do SPEC — wave própria).*
       *Post-deletion verification* (primitivo ausente em toda arquitetura
       revisada, `research-S309.md §2.5`): remoção de entrada do ledger é
       verificada, não presumida — e a sumarização do ledger é auditada

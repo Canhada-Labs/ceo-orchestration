@@ -1,0 +1,442 @@
+
+[1m========================================================================[0m
+[1mS328 — CERIMÔNIA DA MANHÃ[0m
+[1m========================================================================[0m
+
+      data      : 2026-08-26 12:31:51 -03
+      repo      : /Users/joaocanhada/canhada-labs/ceo-orchestration
+      branch    : main
+      HEAD      : d9d9cab — fix(PLAN-179 s328-D harness): T0 tolera pack já commitado em HEAD (ind
+      ordem     : B → A → C → D
+      ownership : --ownership-e2e=defer
+      retomada  : começando no pacote D
+
+
+[1mPACOTES ENCONTRADOS[0m
+  [32m✓[0m B  B (PLAN-169 — emenda ADR-163 + gate de hook-latency)   (patch, JÁ LANDADO)
+  [32m✓[0m A  A (PLAN-183 W5-b — ADR-194 + discriminante do CODEOWNERS)   (patch, LAND --ownership-e2e=defer, JÁ LANDADO)
+  [33m—[0m C  C (PLAN-185 W1/W2 — symlink + handle validado)   (ausente)
+  [32m✓[0m D  D (PLAN-179 W2+W4 — ledger checkpoint)   (manifesto)
+
+[1mÁRVORE DE TRABALHO[0m
+      untracked esperados da noite (não entram em commit nenhum):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhuma modificação rastreada
+
+[1m========================================================================[0m
+[1mPACOTE D (PLAN-179 W2+W4 — ledger checkpoint)[0m
+[1m========================================================================[0m
+      SIGN     : .claude/plans/PLAN-179/OWNER-W179-W24-SIGN.sh
+      LAND     : .claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh  (sem argumentos extras)
+      tipo     : manifesto
+      materiais: .claude/plans/PLAN-179/s328-ceremony-D
+      sentinel : .claude/plans/PLAN-179/W179-W24-approved.md
+
+[1m[D] 1/5 — estado da árvore[0m
+      untracked esperados da noite (não entram em commit nenhum):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhuma modificação rastreada
+
+[1m[D] 2/5 — re-base do pacote no HEAD vivo (finalize)[0m
+[32m  ok[0m  este pacote não tem finalize (é manifesto) — nada a re-basear.
+      o frescor dele é o BASELINE.sha256, conferido dentro do SIGN.
+
+[1m[D] 3/5 — assinatura do sentinel (GPG)[0m
+      o script vai pedir a senha da sua chave. Digite e dê Enter.
+
+  [1m$[0m bash .claude/plans/PLAN-179/OWNER-W179-W24-SIGN.sh
+
+
+[1mP0 — pre-condicoes[0m
+[32m  ok[0m  27 destino(s) derivado(s) do MANIFEST
+  [33mNOTA[0m untracked nao-canonicos tolerados (nao entram no land):
+  .claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log
+  .claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land-dry.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-land.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log
+  .claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log
+  .claude/plans/PLAN-185/
+  .claude/scripts/check-installer-write-safety.py
+  .claude/scripts/data/
+  .claude/scripts/tests/test_check_installer_write_safety.py
+[32m  ok[0m  nenhuma modificacao rastreada; untracked (se houver) sao nao-canonicos e fora do pack
+[32m  ok[0m  materiais + pack (27 arquivo(s)) e 6 rodada(s); ultima (.claude/plans/PLAN-179/s328-ceremony-D/rail-round-6.md) = APPROVE
+
+[1mP1 — frescor do pack (o que voce esta assinando)[0m
+[32m  ok[0m  MANIFEST: 27 arquivo(s), conjunto E conteudo conferem
+[32m  ok[0m  BASELINE: 22 destino(s) pre-existente(s) identico(s) ao momento da montagem
+[32m  ok[0m  5 destino(s) novo(s) ausente(s) no vivo
+
+[1mP1b — Scope do sentinel == MANIFEST (derivado, nunca recordado)[0m
+[32m  ok[0m  Scope do draft == manifesto (27 paths)
+
+[1mP2 — identidade do signer[0m
+[32m  ok[0m  signer: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+[32m  ok[0m  consta no rail rastreado
+
+[1mP3 — materializando o sentinel e preenchendo os campos[0m
+  campos preenchidos
+[32m  ok[0m  Anchor-SHA=d9d9cab483b49c5a03d5a27e9c7f49801cf96968  Data=2026-08-26
+
+  Bloco que sera assinado:
+      <!-- BEGIN SIGNED SCOPE -->
+      
+      ## Scope
+      
+      <!-- SCOPE-BLOCK — gerado do MANIFEST.sha256 do pack; nao editar a mao.
+           Regenerar com:  sed 's/^[0-9a-f]\{64\}  //' staged-w24/MANIFEST.sha256
+           (aplicando o PACKMAP ao unico path mapeado). -->
+      ```
+      .claude/adr/ADR-195-work-boundary-persistence.md
+      .claude/data/audit-registry.golden.txt
+      .claude/hooks/_lib/audit_emit.py
+      .claude/hooks/_lib/ledger_provenance.py
+      .claude/hooks/check_ledger_checkpoint.py
+      .claude/hooks/tests/test_audit_emit_api_contract.py
+      .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py
+      .claude/hooks/tests/test_check_ledger_checkpoint.py
+      .claude/hooks/tests/test_codex_egress_proof_telemetry.py
+      .claude/hooks/tests/test_git_bypass_guard.py
+      .claude/hooks/tests/test_ledger_provenance.py
+      .claude/hooks/tests/test_template_dogfood_parity.py
+      .claude/hooks/tests/test_w5_scrub_enforcement.py
+      .claude/settings.json
+      CHANGELOG.md
+      CLAUDE.md
+      INSTALL.md
+      README.md
+      README.pt-BR.md
+      SPEC/v1/audit-log.schema.md
+      docs/ARCHITECTURE.md
+      docs/CTO-GUIDE.md
+      docs/FAQ.md
+      docs/GUIA-COMPLETO.md
+      docs/README.md
+      npm/README.md
+      templates/settings/settings.base.json
+      ```
+      
+      <!-- END SIGNED SCOPE -->
+
+[1mP4 — assinando[0m
+[32m  ok[0m  assinatura gerada: .claude/plans/PLAN-179/W179-W24-approved.md.asc
+    gpg: Signature made Wed Aug 26 12:31:54 2026 -03
+    gpg:                using EDDSA key AE9B236FDAF0462874060C6BCFCFACF00335DC74
+    gpg: Good signature from "João Canhada <joaocanhada@users.noreply.github.com>" [ultimate]
+
+[1mPRONTO[0m
+
+  A assinatura cobre o HEAD d9d9cab483b49c5a03d5a27e9c7f49801cf96968 e 27 path(s) do pack.
+  NAO commite nada agora — qualquer commit invalida o Anchor-SHA.
+
+  PROXIMO COMANDO (copie e cole inteiro):
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh --dry-run
+
+  O dry-run aplica o pack, roda a bateria INTEIRA e depois DESFAZ tudo
+  (arvore e index voltam byte a byte). Se ele terminar verde, o comando
+  seguinte aplica, verifica, commita e empurra — voce nao digita 'git':
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh
+[32m  ok[0m  sentinel assinado
+
+[1m[D] 4/5 — ensaio do land (--dry-run: não altera nada em definitivo)[0m
+
+  [1m$[0m bash .claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh --dry-run
+
+
+[1mG0 — branch, insumos, materiais e arvore[0m
+[32m  ok[0m  HEAD em main
+[32m  ok[0m  27 destino(s) derivado(s) do MANIFEST, todos dentro do repo
+[32m  ok[0m  materiais e 27 arquivo(s) do pack rastreados
+[32m  ok[0m  arvore sem modificacao rastreada (21 untracked nao-canonico(s) tolerado(s))
+
+[1mG1 — baseline anti-stale[0m
+[32m  ok[0m  22/22 destino(s) pre-existente(s) identico(s) ao baseline
+[32m  ok[0m  5 arquivo(s) novo(s) ausente(s) no vivo
+
+[1mG2 — integridade do pack (conteudo E conjunto)[0m
+[32m  ok[0m  27 arquivo(s) conferem em conjunto E conteudo
+
+[1mG2b — escopo do sentinel == manifesto (derivado, nao recordado)[0m
+[32m  ok[0m  escopo identico ao manifesto (27 paths)
+
+[1mG3 — sentinel GPG (signer-pin + anchor == HEAD)[0m
+[32m  ok[0m  assinatura do Owner + anchor == HEAD (d9d9cab483b49c5a03d5a27e9c7f49801cf96968)
+
+[1mG4 — smoke em clone (rc AGREGADO por comando, fora do TMPDIR)[0m
+   -> python3 -m py_compile .claude/hooks/check_ledger_checkpoint.py .claude/hooks/_lib/ledger_provenance.py .claude/hooks/_lib/audit_emit.py
+   -> python3 -c import json;json.load(open('.claude/settings.json'))
+   -> python3 -c import json;json.load(open('templates/settings/settings.base.json'))
+   -> python3 -m pytest -q -p no:cacheprovider --tb=short .claude/hooks/tests/test_check_ledger_checkpoint.py
+   -> python3 -m pytest -q -p no:cacheprovider --tb=short .claude/hooks/tests/test_ledger_provenance.py
+   -> python3 -m pytest -q -p no:cacheprovider --tb=short .claude/hooks/tests/test_audit_emit_api_contract.py
+   -> python3 .claude/scripts/check-audit-registry-coverage.py --check
+   -> python3 .claude/scripts/validate_governance_fast.py
+[32m  ok[0m  smoke em clone verde (todos os comandos, nao so o ultimo)
+
+[1mG5 — apply (modos derivados, nunca chmod cego)[0m
+   applied .claude/adr/ADR-195-work-boundary-persistence.md
+   applied .claude/data/audit-registry.golden.txt
+   applied .claude/hooks/_lib/audit_emit.py
+   applied .claude/hooks/_lib/ledger_provenance.py
+   applied .claude/hooks/check_ledger_checkpoint.py
+   applied .claude/hooks/tests/test_audit_emit_api_contract.py
+   applied .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py
+   applied .claude/hooks/tests/test_check_ledger_checkpoint.py
+   applied .claude/hooks/tests/test_codex_egress_proof_telemetry.py
+   applied .claude/hooks/tests/test_git_bypass_guard.py
+   applied .claude/hooks/tests/test_ledger_provenance.py
+   applied .claude/hooks/tests/test_template_dogfood_parity.py
+   applied .claude/hooks/tests/test_w5_scrub_enforcement.py
+   applied .claude/settings.json
+   applied CHANGELOG.md
+   applied CLAUDE.md
+   applied INSTALL.md
+   applied README.md
+   applied README.pt-BR.md
+   applied docs/ARCHITECTURE.md
+   applied docs/CTO-GUIDE.md
+   applied docs/FAQ.md
+   applied docs/GUIA-COMPLETO.md
+   applied docs/README.md
+   applied npm/README.md
+   applied SPEC/v1/audit-log.schema.md  (do pack: spec-v1-audit-log.schema.md)
+   applied templates/settings/settings.base.json
+[32m  ok[0m  aplicado: 22 modificado(s), 5 novo(s)
+
+[1mV1 — o codigo aplicado importa e os JSON carregam[0m
+[32m  ok[0m  V1: sintaxe (sem escrita) + 2 JSON + registracao presente nos dois settings
+
+[1mV2 — contagens contra os conjuntos DECLARADOS[0m
+[32m  ok[0m  len(_KNOWN_ACTIONS) = 330 (declarado)
+  3 acoes registradas, nenhuma em _EMIT_GENERIC_PASSTHROUGH
+[32m  ok[0m  V2: as 3 acoes estao registradas e fora do passthrough
+[32m  ok[0m  linhas do audit-registry.golden.txt = 334 (declarado)
+[32m  ok[0m  linhas de historico do SPEC v2.59 = 1 (declarado)
+[32m  ok[0m  hooks .py = 59 (declarado)
+[32m  ok[0m  hooks ligados = 48 (declarado)
+[32m  ok[0m  registros de hook = 50 (declarado)
+[32m  ok[0m  modulos _lib = 71 (declarado)
+[32m  ok[0m  ADRs = 196 (declarado)
+
+[1mV3 — cobertura do registro de auditoria (SPEC <-> codigo)[0m
+OK: audit registry golden in sync
+[32m  ok[0m  V3: registro de auditoria coerente
+
+[1mV4 — pytest .claude/hooks/tests (split do CI: 'not serial' + 'serial')[0m
+   -> python3 -m pytest .claude/hooks/tests/ -n auto -m not serial --strict-markers --tb=no -q -p no:cacheprovider
+[32m  ok[0m  V4a hooks/tests not-serial — 6858 passed, 34 skipped, 4 xfailed, 37 warnings in 743.70s (0:12:23)
+   -> python3 -m pytest .claude/hooks/tests/ -m serial --strict-markers --tb=no -q -p no:cacheprovider
+[32m  ok[0m  V4b hooks/tests serial — 481 passed, 2 skipped, 6895 deselected, 5 xfailed, 1 xpassed in 117.76s (0:01:57)
+
+[1mV5 — pytest .claude/hooks/_lib/tests (mesmo split)[0m
+   -> python3 -m pytest .claude/hooks/_lib/tests -n auto -m not serial --strict-markers --tb=no -q -p no:cacheprovider
+[32m  ok[0m  V5a _lib/tests not-serial — 393 passed in 1.83s
+   -> python3 -m pytest .claude/hooks/_lib/tests -m serial --strict-markers --tb=no -q -p no:cacheprovider
+[32m  ok[0m  V5b _lib/tests serial — 13 passed, 393 deselected in 2.21s
+
+[1mV6 — gates de corpus sobre a arvore aplicada[0m
+[32m  ok[0m  V6a: validate-governance.sh completo verde
+[32m  ok[0m  V6a: CLAUDE.md 34926 bytes (<= 40000)
+[32m  ok[0m  V6b: verify-counts.sh verde
+[32m  ok[0m  V6c: check-claude-md-claims.py verde
+[32m  ok[0m  V6d: check-test-env-hygiene.py verde
+[32m  ok[0m  V6e: manifesto ADR-192 casa (9/9 membro(s) verificados)
+
+[33mDRY-RUN[0m — G0..G5 e V1..V6 verdes. Desfazendo o apply agora.
+[32m  ok[0m  arvore e index restaurados byte a byte (nada foi commitado)
+[32m  ok[0m  ensaio verde
+
+[1m[D] 5/5 — land de verdade (aplica, commita e empurra)[0m
+
+  [1m$[0m bash .claude/plans/PLAN-179/OWNER-W179-W24-LAND.sh
+
+
+[1mG0 — branch, insumos, materiais e arvore[0m
+[32m  ok[0m  HEAD em main
+[32m  ok[0m  27 destino(s) derivado(s) do MANIFEST, todos dentro do repo
+[32m  ok[0m  materiais e 27 arquivo(s) do pack rastreados
+[32m  ok[0m  arvore sem modificacao rastreada (22 untracked nao-canonico(s) tolerado(s))
+
+[1mG1 — baseline anti-stale[0m
+[32m  ok[0m  22/22 destino(s) pre-existente(s) identico(s) ao baseline
+[32m  ok[0m  5 arquivo(s) novo(s) ausente(s) no vivo
+
+[1mG2 — integridade do pack (conteudo E conjunto)[0m
+[32m  ok[0m  27 arquivo(s) conferem em conjunto E conteudo
+
+[1mG2b — escopo do sentinel == manifesto (derivado, nao recordado)[0m
+[32m  ok[0m  escopo identico ao manifesto (27 paths)
+
+[1mG3 — sentinel GPG (signer-pin + anchor == HEAD)[0m
+[32m  ok[0m  assinatura do Owner + anchor == HEAD (d9d9cab483b49c5a03d5a27e9c7f49801cf96968)
+
+[1mG4 — smoke em clone (rc AGREGADO por comando, fora do TMPDIR)[0m
+   -> python3 -m py_compile .claude/hooks/check_ledger_checkpoint.py .claude/hooks/_lib/ledger_provenance.py .claude/hooks/_lib/audit_emit.py
+   -> python3 -c import json;json.load(open('.claude/settings.json'))
+   -> python3 -c import json;json.load(open('templates/settings/settings.base.json'))
+   -> python3 -m pytest -q -p no:cacheprovider --tb=short .claude/hooks/tests/test_check_ledger_checkpoint.py
+   -> python3 -m pytest -q -p no:cacheprovider --tb=short .claude/hooks/tests/test_ledger_provenance.py
+   -> python3 -m pytest -q -p no:cacheprovider --tb=short .claude/hooks/tests/test_audit_emit_api_contract.py
+   -> python3 .claude/scripts/check-audit-registry-coverage.py --check
+   -> python3 .claude/scripts/validate_governance_fast.py
+[32m  ok[0m  smoke em clone verde (todos os comandos, nao so o ultimo)
+
+[1mG5 — apply (modos derivados, nunca chmod cego)[0m
+   applied .claude/adr/ADR-195-work-boundary-persistence.md
+   applied .claude/data/audit-registry.golden.txt
+   applied .claude/hooks/_lib/audit_emit.py
+   applied .claude/hooks/_lib/ledger_provenance.py
+   applied .claude/hooks/check_ledger_checkpoint.py
+   applied .claude/hooks/tests/test_audit_emit_api_contract.py
+   applied .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py
+   applied .claude/hooks/tests/test_check_ledger_checkpoint.py
+   applied .claude/hooks/tests/test_codex_egress_proof_telemetry.py
+   applied .claude/hooks/tests/test_git_bypass_guard.py
+   applied .claude/hooks/tests/test_ledger_provenance.py
+   applied .claude/hooks/tests/test_template_dogfood_parity.py
+   applied .claude/hooks/tests/test_w5_scrub_enforcement.py
+   applied .claude/settings.json
+   applied CHANGELOG.md
+   applied CLAUDE.md
+   applied INSTALL.md
+   applied README.md
+   applied README.pt-BR.md
+   applied docs/ARCHITECTURE.md
+   applied docs/CTO-GUIDE.md
+   applied docs/FAQ.md
+   applied docs/GUIA-COMPLETO.md
+   applied docs/README.md
+   applied npm/README.md
+   applied SPEC/v1/audit-log.schema.md  (do pack: spec-v1-audit-log.schema.md)
+   applied templates/settings/settings.base.json
+[32m  ok[0m  aplicado: 22 modificado(s), 5 novo(s)
+
+[1mV1 — o codigo aplicado importa e os JSON carregam[0m
+[32m  ok[0m  V1: sintaxe (sem escrita) + 2 JSON + registracao presente nos dois settings
+
+[1mV2 — contagens contra os conjuntos DECLARADOS[0m
+[32m  ok[0m  len(_KNOWN_ACTIONS) = 330 (declarado)
+  3 acoes registradas, nenhuma em _EMIT_GENERIC_PASSTHROUGH
+[32m  ok[0m  V2: as 3 acoes estao registradas e fora do passthrough
+[32m  ok[0m  linhas do audit-registry.golden.txt = 334 (declarado)
+[32m  ok[0m  linhas de historico do SPEC v2.59 = 1 (declarado)
+[32m  ok[0m  hooks .py = 59 (declarado)
+[32m  ok[0m  hooks ligados = 48 (declarado)
+[32m  ok[0m  registros de hook = 50 (declarado)
+[32m  ok[0m  modulos _lib = 71 (declarado)
+[32m  ok[0m  ADRs = 196 (declarado)
+
+[1mV3 — cobertura do registro de auditoria (SPEC <-> codigo)[0m
+OK: audit registry golden in sync
+[32m  ok[0m  V3: registro de auditoria coerente
+
+[1mV4 — pytest .claude/hooks/tests (split do CI: 'not serial' + 'serial')[0m
+   -> python3 -m pytest .claude/hooks/tests/ -n auto -m not serial --strict-markers --tb=no -q -p no:cacheprovider
+    ........................................................................ [ 94%]
+    ...................................................sss.s................ [ 95%]
+    ........................................................................ [ 96%]
+    ........................................................................ [ 97%]
+    ........................................................................ [ 98%]
+    ........................................................................ [ 99%]
+    ................................................                         [100%]
+    =============================== warnings summary ===============================
+    .claude/hooks/tests/test_tier_policy_agent_frontmatter_disposition.py::TierPolicyAgentFrontmatterDispositionTest::test_no_production_hook_imports_lib_agent_frontmatter
+      <unknown>:1: DeprecationWarning: invalid escape sequence \*
+    
+    .claude/hooks/tests/test_audit_emit_ghost_action_guard.py: 12 warnings
+      /Users/joaocanhada/canhada-labs/ceo-orchestration/dist/ceo-plugin/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
+        """
+    
+    .claude/hooks/tests/test_audit_emit_ghost_action_guard.py: 12 warnings
+      /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/hooks/_lib/team.py:1: DeprecationWarning: invalid escape sequence \*
+        """
+    
+    .claude/hooks/tests/test_audit_emit_ghost_action_guard.py: 12 warnings
+      /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/scripts/architect-bundle-validate.py:2: DeprecationWarning: invalid escape sequence \`
+        """architect-bundle-validate.py — verify an Architect draft bundle.
+    
+    -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+    =========================== short test summary info ============================
+    FAILED .claude/hooks/tests/test_ledger_provenance.py::TestDiscardIsVisible::test_missing_emitter_degrades_loudly_to_unavailable
+    FAILED .claude/hooks/tests/test_ledger_provenance.py::TestDiscardIsVisible::test_scanner_hit_routes_to_the_dedicated_action
+    FAILED .claude/hooks/tests/test_ledger_provenance.py::TestDiscardIsVisible::test_scanner_unavailable_reaches_its_own_action
+    FAILED .claude/hooks/tests/test_ledger_provenance.py::TestDiscardIsVisible::test_the_detection_action_is_never_used_for_a_discard
+    4 failed, 6854 passed, 34 skipped, 4 xfailed, 37 warnings in 1608.58s (0:26:48)
+
+[31mABORT:[0m V4a hooks/tests not-serial: pytest rc=1
+[32m  ok[0m  arvore e index restaurados byte a byte (nada foi commitado)
+
+[31m========================================================================[0m
+[31mVERMELHO[0m — pacote D, etapa LAND (rc=1)
+[31m========================================================================[0m
+
+  DIAGNÓSTICO
+    o land falhou. O script restaura a árvore ao abortar — mas CONFIRME:
+
+  O QUE FAZER
+      cd /Users/joaocanhada/canhada-labs/ceo-orchestration && git status --short
+    Se aparecer qualquer coisa modificada, pare e chame o CEO.
+    Se o land chegou a commitar e falhou DEPOIS, a mensagem diz isso com
+    todas as letras — nesse caso NÃO rode nada, chame o CEO.
+    Log desta etapa: /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/s328-ceremony-main/step-D-land.log
+
+  RETOMAR (depois de resolver, copie e cole a linha inteira)
+
+    bash /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/OWNER-S328-MORNING.sh --from D
+
+  LOG COMPLETO
+    /Users/joaocanhada/canhada-labs/ceo-orchestration/.claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log
+
+
+[1mRESUMO[0m
+  B  B (PLAN-169 — emenda ADR-163 + gate de hook-latency)     já estava landado (antes do --from)
+  A  A (PLAN-183 W5-b — ADR-194 + discriminante do CODEOWNERS) já estava landado (antes do --from)
+  C  C (PLAN-185 W1/W2 — symlink + handle validado)           pulado por --from D
+  D  D (PLAN-179 W2+W4 — ledger checkpoint)                   não avaliado
+
+  HEAD agora: d9d9cab  (main)
