@@ -697,10 +697,11 @@ _jc_obs="$( { grep -c '_skill_budget_comment' "$SETTINGS" || true; } )"
 ok "V6a-b: header INERT e comment do gerador no lugar"
 _a5x="$( { grep -c -- '- \[x\] AC-5' "$PLAN_FILE" || true; } )"
 [ "$_a5x" = "$(_expect EXPECTED_AC5_CHECKED)" ] \
-  || die "V6c: '- [x] AC-5' aparece $_a5x vez(es) no plano, esperado $(_expect EXPECTED_AC5_CHECKED)."
-grep -qF 'FECHADO por REGISTRO' "$PLAN_FILE" \
-  || die "V6d: o plano nao carrega a nota 'FECHADO por REGISTRO' do AC-5."
-ok "V6c-d: AC-5 flipado por registro"
+  || die "V6c: '- [x] AC-5' aparece $_a5x vez(es) no plano, esperado $(_expect EXPECTED_AC5_CHECKED) — o flip e PROIBIDO (rail 183-r1)."
+_a5n="$( { grep -c 'REGISTRO S335' "$PLAN_FILE" || true; } )"
+[ "$_a5n" = "$(_expect EXPECTED_AC5_NOTE_REFS)" ] \
+  || die "V6d: a nota 'REGISTRO S335' aparece $_a5n vez(es), esperado $(_expect EXPECTED_AC5_NOTE_REFS)."
+ok "V6c-d: AC-5 aberto com registro (flip barrado)"
 
 # ---------------------------------------------------------------------------
 step "V3 — o settings sob o gerador, nos DOIS sentidos"
@@ -786,15 +787,20 @@ UNIT_STATUS="$_unit_obs teste(s), $_skip_obs skip(s)"
 ok "V2: suite $_unit_obs/$_unit_exp (skips $_skip_obs)"
 
 # ---------------------------------------------------------------------------
-step "V5 — o AC-5 viaja VERDADEIRO (flip por registro)"
+step "V5 — o AC-5 viaja VERDADEIRO (registro SEM flip — rail 183-r1)"
 # ---------------------------------------------------------------------------
+# O texto do AC exige EXECUTAR o CI entregue; a execucao real segue aberta
+# (W0-US3/OQ-2). O gate garante as DUAS metades da honestidade: o registro
+# com evidencia nomeada ESTA no plano, e o checkbox NAO flipou.
 _a5x="$( { grep -c -- '- \[x\] AC-5' "$PLAN_FILE" || true; } )"
 [ "$_a5x" = "$(_expect EXPECTED_AC5_CHECKED)" ] \
-  || die "V5: '- [x] AC-5' aparece $_a5x vez(es), esperado $(_expect EXPECTED_AC5_CHECKED)"
-grep -qF 'FECHADO por REGISTRO' "$PLAN_FILE" || die "V5: nota de registro ausente"
+  || die "V5: '- [x] AC-5' aparece $_a5x vez(es), esperado $(_expect EXPECTED_AC5_CHECKED) — flip proibido nesta wave"
+_a5n="$( { grep -c 'REGISTRO S335' "$PLAN_FILE" || true; } )"
+[ "$_a5n" = "$(_expect EXPECTED_AC5_NOTE_REFS)" ] \
+  || die "V5: nota 'REGISTRO S335' aparece $_a5n vez(es), esperado $(_expect EXPECTED_AC5_NOTE_REFS)"
 grep -qF 'smoke-install.yml:485' "$PLAN_FILE" \
   || die "V5: a evidencia (yml:485) nao esta nomeada no registro"
-ok "V5: AC-5 flipado com evidencia nomeada"
+ok "V5: registro com evidencia presente; checkbox intacto (aberto)"
 
 # ---------------------------------------------------------------------------
 step "V8 — os gates de contagem do corpus"
@@ -989,9 +995,10 @@ cat <<'EOF'
   2. O template do adopter agora nasce com o header INERT: a ativacao e um
      `git mv` explicito documentado no proprio header. O frozen-subset (11
      steps + pins) esta intacto — o Smoke Install prova.
-  3. AC-5 do PLAN-183 fechou por REGISTRO (a evidencia e o wiring que JA
-     existia: smoke-install.yml:485 -> sh:180). A EXECUCAO real do workflow
-     ativado continua sendo a prova do AC-2, gateada na OQ-2 (decisao sua).
+  3. AC-5 do PLAN-183 segue ABERTO por desenho (rail 183-r1 barrou o flip:
+     o texto exige EXECUTAR o CI entregue). O que landou e o REGISTRO com a
+     evidencia do wiring (yml:485 -> sh:180); a execucao real e W0-US3/OQ-2
+     — decisao sua.
   4. W1 do PLAN-183 segue na fila (itens 1-5 em sombra; o re-baseline de
      ownership por ultimo) — «avancar sem promessa», como ratificado.
 

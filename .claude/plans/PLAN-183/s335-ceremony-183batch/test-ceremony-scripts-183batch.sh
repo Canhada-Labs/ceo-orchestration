@@ -708,7 +708,7 @@ step "T16 — V5: o AC-5 e comparado de verdade (LAND completo)"
 # ---------------------------------------------------------------------------
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
   D="$( _fresh )"
-  _set_expect "$D" EXPECTED_AC5_CHECKED 5
+  _set_expect "$D" EXPECTED_AC5_NOTE_REFS 5
   _commit_plant "$D" "$BASELINE_ENV" || fail "T16: nao consegui commitar o plant"
   _sign "$D" || fail "T16: SIGN falhou no setup"
   _er_rc=0; _land "$D" || _er_rc=$?

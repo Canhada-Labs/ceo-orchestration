@@ -10,7 +10,7 @@
 > deste arquivo depois de assinar invalida o `.asc`.
 
 Plans: PLAN-183
-Wave: wave-183batch (PLAN-183 — «Batch menor + começar W1», ratificação do Owner de 2026-08-31: settings.json regenerado pelo skill-budget-generator com +4 skills 0-dispatch demoted, header «INERT AS SHIPPED» no validate.yml.template no molde do benchmarks, e AC-5 fechado por REGISTRO — a metade «canônica» que a nota ◐ declarava faltante já existia no wiring do CI)
+Wave: wave-183batch (PLAN-183 — «Batch menor + começar W1», ratificação do Owner de 2026-08-31: settings.json regenerado pelo skill-budget-generator com +4 skills 0-dispatch demoted, header «INERT AS SHIPPED» no validate.yml.template no molde do benchmarks, e o REGISTRO do AC-5 — a metade «canônica» que a nota ◐ declarava faltante já existia no wiring do CI; o CHECKBOX segue aberto porque a execução real do workflow é W0-US3/OQ-2, e o rail 183-r1 barrou o flip, corretamente)
 Patch: .claude/plans/PLAN-183/s335-ceremony-183batch/W183BATCH.patch
 Patch-sha256: TO-FILL-AT-FINAL-PATCH
 Patch-base: TO-FILL-AT-FINAL-PATCH
@@ -38,14 +38,16 @@ não-canônicos** que só são verdadeiros juntos:
    `benchmarks.yml.template:3-7`: comentário puro, a ativação é o `git mv`
    explícito do adopter. O contrato frozen-subset (11 steps + pins) fica
    INTACTO — `test_validate_template_frozen_subset.py` 7/7 (4c/V2).
-3. **`.claude/plans/PLAN-183-adopter-fitness.md`** (livre) — AC-5 [P0]
-   flipado **por REGISTRO, com evidência nomeada**: a «metade canônica»
-   que a nota ◐ da S334 declarava faltante JÁ EXISTE —
+3. **`.claude/plans/PLAN-183-adopter-fitness.md`** (livre) — o REGISTRO
+   do AC-5 **sem flip** (rail 183-r1 barrou o `[x]`, corretamente): a
+   «metade canônica» que a nota ◐ da S334 declarava faltante JÁ EXISTE —
    `.github/workflows/smoke-install.yml:485` invoca
    `bash scripts/tests/smoke-install.sh` por inteiro e a perna de ativação
-   vive em `scripts/tests/smoke-install.sh:180`. Zero edição de yml. A
-   «EXECUÇÃO real do workflow ativado» fica deliberadamente FORA: é a
-   prova do AC-2, gateada na OQ-2 (decisão do Owner).
+   vive em `scripts/tests/smoke-install.sh:180`. Zero edição de yml. O
+   checkbox permanece aberto porque o texto do AC exige «EXECUTAR o CI
+   entregue» e a execução REAL é exatamente W0-US3 + OQ-2 (decisão do
+   Owner) — um `[x]` seria registro falso. O V5 do LAND prova as DUAS
+   metades: nota presente E checkbox intacto.
 
 ## Kernel
 
@@ -63,8 +65,12 @@ validado VIVO contra o contrato do hook — mecanismo idêntico ao adrgate
 - W3-P1 (de-embed dos overrides para `settings.base.json`) ficou FORA por
   decisão do runbook: exige coordenação com a arquitetura `_derivation` da
   wave-F; se a rota não fosse óbvia em 30 min, virava follow-up.
-- A EXECUÇÃO do workflow ativado no CI do adopter (AC-2/OQ-2) segue aberta
-  — decisão do Owner, não item deste batch.
+- A EXECUÇÃO do workflow ativado no CI do adopter (AC-2/W0-US3/OQ-2) segue
+  aberta — decisão do Owner; por isso o AC-5 NÃO flipou nesta wave.
+- O header de ativação usa `mv` (não `git mv`): num install fresco o
+  template nasce UNTRACKED e `git mv` falha (rail 183-r1). MOLD-FINDING:
+  `benchmarks.yml.template:5-7` carrega o MESMO `git mv` latente — fora
+  deste patch (3 paths), registrado para cura futura.
 
 <!-- BEGIN SIGNED SCOPE -->
 Approved-By: APPROVED-BY-PLACEHOLDER

@@ -1,4 +1,4 @@
-ceremony(PLAN-183 wave-183batch): settings regenerado (+4 demoted), template INERT, AC-5 por registro
+ceremony(PLAN-183 wave-183batch): settings regenerado (+4 demoted), template INERT, registro do AC-5 (sem flip)
 
 O settings: skillOverrides regenerado pelo skill-budget-generator
 (--jq-fragment idempotente; +4 skills domain-tier 0-dispatch demoted a
@@ -13,16 +13,17 @@ molde exato de benchmarks.yml.template:3-7 (comentário puro; ativação =
 git mv explícito do adopter). Frozen-subset (11 steps + pins) intacto —
 7/7.
 
-O AC-5: fechado por REGISTRO com evidência nomeada — a «metade canônica»
-que a nota ◐ da S334 declarava faltante JÁ existia
-(smoke-install.yml:485 invoca o sh inteiro; a perna de ativação vive em
-smoke-install.sh:180). Zero edição de yml; AC-2/OQ-2 (execução real do
-workflow ativado) segue deliberadamente aberta — decisão do Owner.
+O AC-5: REGISTRO com evidência nomeada, SEM flip — o rail 183-r1 barrou
+o [x] (o texto do AC exige EXECUTAR o CI entregue; a execução real é
+W0-US3/OQ-2, decisão do Owner). A «metade canônica» que a nota ◐
+declarava faltante JÁ existia (smoke-install.yml:485 invoca o sh
+inteiro; a perna de ativação vive em smoke-install.sh:180). O header de
+ativação usa mv (git mv falha em template untracked de install fresco).
 
 Sentinel: .claude/plans/PLAN-183/wave-183batch-approved.md (+ .asc).
 Bateria V1-V9 do OWNER-S335-183BATCH-LAND.sh verde contra
-EXPECTED-BASELINE.txt (frozen-subset 7/0; overrides 108; INERT/COMMENT/
-AC-5 = 1; verify-counts e governança 0).
+EXPECTED-BASELINE.txt (frozen-subset 7/0; overrides 108; INERT/COMMENT
+= 1; AC5_CHECKED=0 + NOTE_REFS=1; verify-counts e governança 0).
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01B3eLhwF8QM1TW7f5buaHkP

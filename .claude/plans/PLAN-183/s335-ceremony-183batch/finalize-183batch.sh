@@ -405,13 +405,15 @@ rm -f "$FIRE_JSON" "$FIRE_JSON.re"
 [ "$_fk" = "name-only" ] || die "4e: a chave apagada NAO foi recuperada pelo fragment (veio: $_fk)"
 ok "4e: fragment recupera chave apagada na copia descartavel (nao-vacuo)"
 
-# 4f — o flip do AC-5 esta no plano, por REGISTRO.
+# 4f — o AC-5 NAO flipa (rail 183-r1: a execucao real segue aberta); o que
+# viaja e o REGISTRO. Um [x] aqui seria registro falso de governanca.
 _a5x="$( { grep -c -- '- \[x\] AC-5' "$WT/$PLAN_FILE" || true; } )"
 [ "$_a5x" = "$(_expect EXPECTED_AC5_CHECKED)" ] \
-  || die "4f: '- [x] AC-5' aparece $_a5x vez(es), esperado $(_expect EXPECTED_AC5_CHECKED)"
-grep -qF 'FECHADO por REGISTRO' "$WT/$PLAN_FILE" \
-  || die "4f: o plano nao carrega a nota 'FECHADO por REGISTRO' do AC-5"
-ok "4f: AC-5 flipado por registro no plano"
+  || die "4f: '- [x] AC-5' aparece $_a5x vez(es), esperado $(_expect EXPECTED_AC5_CHECKED) — o flip e PROIBIDO nesta wave"
+_a5n="$( { grep -c 'REGISTRO S335' "$WT/$PLAN_FILE" || true; } )"
+[ "$_a5n" = "$(_expect EXPECTED_AC5_NOTE_REFS)" ] \
+  || die "4f: a nota 'REGISTRO S335' aparece $_a5n vez(es), esperado $(_expect EXPECTED_AC5_NOTE_REFS)"
+ok "4f: AC-5 segue aberto com o REGISTRO no lugar (flip barrado por desenho)"
 
 # 4g — o gate estatico de harness-config sobre o settings POS-PATCH.
 HC_LOG="$WT.harness-config.log"

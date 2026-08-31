@@ -20,17 +20,23 @@ W1» — batch canônico completo com rail; W1 avança sem promessa.
 3. **INERT header = comentário puro no molde do benchmarks** — o
    frozen-subset (11 steps + pins) não muda um byte de contrato;
    `test_validate_template_frozen_subset.py` 7/7 é a régua.
-4. **AC-5 por REGISTRO com evidência nomeada** (yml:485 → sh:180). A nota
-   ◐ da S334 descrevia o estado pré-`738007e`; medição contra o DISCO
-   supersede prosa. AC-2/OQ-2 (execução real do workflow ativado) fica
-   explicitamente fora — decisão do Owner.
+4. **AC-5: registro SEM flip** (rail 183-r1 barrou o `[x]`, corretamente —
+   o texto do AC exige EXECUTAR o CI entregue e isso é W0-US3/OQ-2). O que
+   viaja é o REGISTRO com evidência (yml:485 → sh:180); a nota ◐ da S334
+   descrevia o estado pré-`738007e`. O runbook previa as duas saídas
+   («se sim… se não») — a medição respondeu NÃO.
 5. **KERNEL**: settings.json ∈ `_KERNEL_PATHS`; LAND arma o override no
    menor escopo (molde adrgate/cfab980, contrato reason-SLUG+I-ACCEPT
    validado vivo — T20e do harness).
 6. **W3-P1 (de-embed) FORA** por regra do runbook (coordenação com a
    `_derivation` da wave-F não é óbvia em 30 min ⇒ follow-up).
 
-## Mold-finding (paga pela família)
+## Mold-findings (pagos pela família)
+
+**`git mv` no header de ativação falha em install fresco** (template
+nasce untracked) — curado aqui com `mv`; o MESMO defeito está latente em
+`benchmarks.yml.template:5-7` (fora do patch; cura futura).
+
 
 O T0 dos harnesses herdados usava `grep -ohE '_expect [A-Z_]+'` — corta
 chaves com DÍGITO (`EXPECTED_AC5_CHECKED` → `EXPECTED_AC`) e dá falso
