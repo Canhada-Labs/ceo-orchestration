@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..cefece7 100755
+index 0faffc3..a7adf79 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -95,7 +95,7 @@ index 0faffc3..cefece7 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,13 +337,569 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,13 +337,599 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
@@ -196,6 +196,15 @@ index 0faffc3..cefece7 100755
 +                raw = fh.read(_MEMORY_DELTA_ANCHOR_MAX_BYTES)
 +            window_covers_file = size <= _MEMORY_DELTA_ANCHOR_MAX_BYTES
 +            lines = raw.decode("utf-8", "replace").splitlines()
++            # Rail r8 P2-c: o corte por LINHAS tambem descarta prefixo — a
++            # flag tem de refletir os DOIS caps (SPEC: genesis so quando a
++            # janela cobre o arquivo INTEIRO). Sem isto, um arquivo pequeno
++            # em bytes com >200 linhas manteria covers=True com prefixo
++            # dropado, e uma linha genesis-assinada na 1a posicao retida
++            # verificaria contra GENESIS com o acima-de-si INVERIFICAVEL
++            # (fora da janela).
++            if len(lines) > _MEMORY_DELTA_ANCHOR_MAX_LINES:
++                window_covers_file = False
 +            lines = lines[-_MEMORY_DELTA_ANCHOR_MAX_LINES:]
 +            # Rail r2 P1-c: the catch-all SessionStart matcher re-fires on a
 +            # compact resume and emits a SECOND session_start for the SAME
@@ -317,6 +326,12 @@ index 0faffc3..cefece7 100755
 +                    continue
 +                if not _anchor_verified(_idx, ev, line):
 +                    continue
++                # Rail r8 P2-d: a verificacao (parse de predecessores +
++                # HMAC) pode cruzar o deadline — o contrato assinado exige
++                # exaustao => None, nunca uma resposta tardia (mesma
++                # doutrina do stat lento, r5 P2-d).
++                if time.monotonic() > deadline:
++                    return None, "none"
 +                return ts, "chain"
 +    except Exception:
 +        pass
@@ -607,10 +622,25 @@ index 0faffc3..cefece7 100755
 +    if outcome in ("written", "index_only"):
 +        raw_names = delta.get("names")
 +        names = [str(n) for n in raw_names] if isinstance(raw_names, list) else []
++        # Rail r8 P2-e: o index ja esta em modified_count E em names — o
++        # sufixo "+ index" o reportava DUAS vezes ("1 topic(s) + index"
++        # com zero topicos reais no caso index_only). Display-only: o
++        # wire (counts/enums) nao muda.
++        index_mod = delta.get("index_modified") is True
++        if index_mod:
++            names = [n for n in names if n != "MEMORY.md"]
++        topics = modified_count
++        if index_mod and isinstance(modified_count, int) and modified_count > 0:
++            topics = modified_count - 1
++        suffix = " + index" if index_mod else ""
 +        rendered = ", ".join(names[:_MEMORY_DELTA_MAX_NAMES])
-+        suffix = " + index" if delta.get("index_modified") is True else ""
++        if not rendered:
++            rendered = (
++                "index only" if (index_mod and topics == 0)
++                else "names withheld"
++            )
 +        return "SessionEnd: memory delta = %s topic(s)%s (%s)" % (
-+            modified_count, suffix, rendered or "names withheld",
++            topics, suffix, rendered,
 +        )
 +    if outcome == "start_unknown":
 +        return (
@@ -667,7 +697,7 @@ index 0faffc3..cefece7 100755
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +914,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +944,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -701,7 +731,7 @@ index 0faffc3..cefece7 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
-@@ -353,15 +959,29 @@ def main() -> int:
+@@ -353,15 +989,29 @@ def main() -> int:
          sys.stdout.write(_emit_observe() + "\n")
          return 0
  
@@ -952,7 +982,7 @@ index fbc5498..8c64e77 100755
          if isinstance(flags, list) and flags:
              safe = [_sanitize_line(str(f)) for f in flags[:5] if f]
 diff --git a/.claude/hooks/check_precompact_continuity.py b/.claude/hooks/check_precompact_continuity.py
-index c0880a3..dce3a09 100755
+index c0880a3..e9f406e 100755
 --- a/.claude/hooks/check_precompact_continuity.py
 +++ b/.claude/hooks/check_precompact_continuity.py
 @@ -88,6 +88,7 @@ from __future__ import annotations
@@ -963,7 +993,7 @@ index c0880a3..dce3a09 100755
  import subprocess
  import sys
  import time
-@@ -175,11 +176,16 @@ def _sanitize_text(raw: str, clamp: int) -> str:
+@@ -175,11 +176,23 @@ def _sanitize_text(raw: str, clamp: int) -> str:
      return cleaned[:clamp]
  
  
@@ -974,16 +1004,23 @@ index c0880a3..dce3a09 100755
 +
 +    ``timeout_s`` (rail r2 P2-f): a caller under a shared wall deadline
 +    passes its REMAINING time — a fixed 2s here let a late call run past
-+    the hook budget. Existing call sites keep the historical default."""
++    the hook budget. Existing call sites keep the historical default.
++
++    Rail r8 P2-b: um resto de budget ABAIXO do floor de subprocess não é
++    budget útil — o antigo ``max(0.05, ...)`` ESTICAVA um resto de 10ms
++    para 50ms e furava o wall deadline compartilhado. Sem budget, a
++    resposta honesta é o fail-open imediato, nunca uma chamada tardia."""
++    if timeout_s < 0.05:
++        return ""
      try:
          p = subprocess.run(
 -            ["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=2
 +            ["git"] + args, cwd=cwd, capture_output=True, text=True,
-+            timeout=max(0.05, timeout_s),
++            timeout=timeout_s,
          )
          return p.stdout.strip() if p.returncode == 0 else ""
      except (subprocess.TimeoutExpired, OSError):
-@@ -891,7 +897,9 @@ def _progress_guard(
+@@ -891,7 +904,9 @@ def _progress_guard(
      channel, and by the time the hook fires the harness has already decided to
      compact. So the guard is implemented honestly as its observable half — a
      stderr breadcrumb for the operator plus one closed-enum audit event — and
@@ -994,7 +1031,7 @@ index c0880a3..dce3a09 100755
  
      Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
      strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
-@@ -1051,6 +1059,250 @@ def _progress_guard(
+@@ -1051,6 +1066,250 @@ def _progress_guard(
          _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
  
  
@@ -1245,7 +1282,7 @@ index c0880a3..dce3a09 100755
  def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
      """Build + persist the snapshot; emit the closed-enum event. Always allows.
  
-@@ -1078,6 +1330,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1078,6 +1337,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          "trigger": trigger,
          "plan_id": plan_id,
          "execution_unit": _execution_unit(plan_path, cwd, deadline),
@@ -1256,7 +1293,7 @@ index c0880a3..dce3a09 100755
          "ceremony_flags": _ceremony_flags(cwd, deadline),
          "hmac_chain": _hmac_chain_breadcrumb(),
      }
-@@ -1088,6 +1344,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1088,6 +1351,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          chain_length = 0
      outcome = _write_snapshot(plan_id, blob, session_id)
      _emit_snapshot_event(trigger, plan_id, chain_length, outcome)
@@ -1361,10 +1398,10 @@ index 572a320..372dd8c 100755
      def test_never_passthrough(self) -> None:
          for action in ("directory_added_recorded", "notification_lifecycle"):
 diff --git a/.claude/hooks/tests/test_check_compaction_continuity.py b/.claude/hooks/tests/test_check_compaction_continuity.py
-index d696c14..eb96387 100755
+index d696c14..06dc5fb 100755
 --- a/.claude/hooks/tests/test_check_compaction_continuity.py
 +++ b/.claude/hooks/tests/test_check_compaction_continuity.py
-@@ -895,5 +895,296 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
+@@ -895,5 +895,311 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
          self.assertIn("other", _staged_ae._COMPACTION_SNAPSHOT_OUTCOMES)
  
  
@@ -1494,6 +1531,21 @@ index d696c14..eb96387 100755
 +        self.assertIsNone(
 +            _pre_hook._plan_id_from_path(".claude/plans/PLAN-042-dir/x.md")
 +        )
++
++    def test_git_refuses_sub_floor_budget(self):
++        """Rail r8 P2-b — a remaining budget below the subprocess floor is
++        not usable budget: the old max(0.05, ...) STRETCHED a 10 ms
++        remainder to 50 ms past the shared wall deadline. Sub-floor now
++        fail-opens immediately, without invoking git."""
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmp:
++            self.assertEqual(
++                _pre_hook._git(["version"], tmp, timeout_s=0.01), ""
++            )
++            # Sanity: a real budget still works (any git output or '' on a
++            # non-repo is fine — the assertion is that the call above never
++            # stretched; this one exercises the normal path).
++            _pre_hook._git(["version"], tmp, timeout_s=2.0)
 +
 +    def test_never_calls_resolve_plan_id_ast(self):
 +        """Emenda r1-C6, SCOPED: the hook legitimately uses _resolve_plan_id
@@ -1714,10 +1766,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..dcc35ac
+index 0000000..9b681c6
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,721 @@
+@@ -0,0 +1,809 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -2257,6 +2309,94 @@ index 0000000..dcc35ac
 +        self.assertEqual(d["outcome"], "written")
 +        self.assertNotEqual(d["outcome"], "index_only")
 +        self.assertTrue(d["index_modified"])
++
++    def test_line_capped_window_never_claims_genesis(self) -> None:
++        """Rail r8 P2-c — the LINE cap also drops prefix: a byte-small log
++        with >200 lines must NOT treat the window as covering the file. A
++        genesis-signed row at the first RETAINED position has an
++        UNVERIFIABLE above-window prefix; the honest answer is skip
++        (start_unknown), never a genesis match over dropped lines."""
++        now = time.time()
++        log_path = self._anchor_log_path()
++        log_path.parent.mkdir(parents=True, exist_ok=True)
++        with open(log_path, "a", encoding="utf-8") as fh:
++            for _i in range(5):
++                fh.write(json.dumps({"action": "noise", "hmac": None}) + "\n")
++        # Genesis-signed (the seed traverses the null prefix => GENESIS):
++        self._seed_session_start(now - 3600)
++        with open(log_path, "a", encoding="utf-8") as fh:
++            for _i in range(199):
++                fh.write(json.dumps({"action": "noise", "hmac": None}) + "\n")
++        # 205 lines total, well under the byte cap; slice drops the nulls
++        # and retains the candidate as the FIRST line.
++        ts, anchor = SessionEnd._session_start_ts(
++            self.SESSION_ID, self.repo_root
++        )
++        self.assertIsNone(ts)
++        self.assertEqual(anchor, "none")
++
++    def test_line_uncapped_genesis_path_still_anchors(self) -> None:
++        """Companion positive control for r8 P2-c: the SAME construction
++        under 200 total lines (window really covers the file) keeps the
++        legit genesis-over-null-prefix path anchoring."""
++        now = time.time()
++        log_path = self._anchor_log_path()
++        log_path.parent.mkdir(parents=True, exist_ok=True)
++        with open(log_path, "a", encoding="utf-8") as fh:
++            for _i in range(5):
++                fh.write(json.dumps({"action": "noise", "hmac": None}) + "\n")
++        self._seed_session_start(now - 3600)
++        with open(log_path, "a", encoding="utf-8") as fh:
++            for _i in range(150):
++                fh.write(json.dumps({"action": "noise", "hmac": None}) + "\n")
++        ts, anchor = SessionEnd._session_start_ts(
++            self.SESSION_ID, self.repo_root
++        )
++        self.assertIsNotNone(ts)
++        self.assertEqual(anchor, "chain")
++
++    def test_anchor_deadline_rechecked_after_verification(self) -> None:
++        """Rail r8 P2-d — HMAC verification can be the step that crosses
++        the 100 ms anchor budget: the signed contract says exhaustion
++        returns None, never a late answer. Clock reads for a 1-line log:
++        deadline calc, per-line check, then the POST-VERIFY re-check."""
++        now = time.time()
++        self._seed_session_start(now - 3600)
++        seq = iter([0.0, 0.0])
++
++        def _mono():
++            try:
++                return next(seq)
++            except StopIteration:
++                return 1e9
++
++        with mock.patch.object(SessionEnd.time, "monotonic", _mono):
++            ts, anchor = SessionEnd._session_start_ts(
++                self.SESSION_ID, self.repo_root
++            )
++        self.assertIsNone(ts)
++        self.assertEqual(anchor, "none")
++
++    def test_render_does_not_double_report_index(self) -> None:
++        """Rail r8 P2-e — MEMORY.md is already inside modified_count and
++        names; the "+ index" suffix must not count it a second time.
++        Display-only: the delta dict (wire source) is untouched."""
++        line = SessionEnd._render_memory_delta_line({
++            "outcome": "index_only", "files_count": 3, "modified_count": 1,
++            "index_modified": True, "names": ["MEMORY.md"],
++            "anchor_source": "chain",
++        })
++        self.assertIn("0 topic(s) + index", line)
++        self.assertNotIn("1 topic(s)", line)
++        self.assertNotIn("MEMORY.md", line)
++        mixed = SessionEnd._render_memory_delta_line({
++            "outcome": "written", "files_count": 3, "modified_count": 2,
++            "index_modified": True, "names": ["MEMORY.md", "t1.md"],
++            "anchor_source": "chain",
++        })
++        self.assertIn("1 topic(s) + index", mixed)
++        self.assertIn("t1.md", mixed)
++        self.assertNotIn("MEMORY.md", mixed)
 +
 +    def test_nonfinite_wire_ts_is_unparseable(self) -> None:
 +        """Rail r7 P2-f — json.loads accepts NaN/Infinity; a NaN anchor
