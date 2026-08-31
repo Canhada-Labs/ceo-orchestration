@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..6a74712 100755
+index 0faffc3..cefece7 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -39,7 +39,7 @@ index 0faffc3..6a74712 100755
  
  ## Fail-open contract (ADR-005)
  
-@@ -31,6 +40,15 @@ observational.
+@@ -31,16 +40,27 @@ observational.
  - `CEO_AUDIT_TOKENS_AUTO=0` — disables responsibility #4 only.
    Responsibilities #1-#3 still run. Default is ON (per ADR-090 #6
    Session 67 default flip).
@@ -55,8 +55,9 @@ index 0faffc3..6a74712 100755
  """
  
  from __future__ import annotations
-@@ -38,9 +56,10 @@ from __future__ import annotations
+ 
  import json
++import math
  import os
  import sys
 +import time
@@ -67,7 +68,7 @@ index 0faffc3..6a74712 100755
  
  _HOOKS_DIR = Path(__file__).resolve().parent
  if str(_HOOKS_DIR) not in sys.path:
-@@ -80,6 +99,26 @@ _AUDIT_TOKENS_AUTO_ENV = "CEO_AUDIT_TOKENS_AUTO"
+@@ -80,6 +100,26 @@ _AUDIT_TOKENS_AUTO_ENV = "CEO_AUDIT_TOKENS_AUTO"
  # while still bounding worst-case session-close latency.
  _AUDIT_TOKENS_TIMEOUT_SECONDS = 1.0
  
@@ -94,7 +95,7 @@ index 0faffc3..6a74712 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,13 +336,541 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,13 +337,569 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
@@ -124,6 +125,13 @@ index 0faffc3..6a74712 100755
 +    if isinstance(raw, bool):
 +        return None
 +    if isinstance(raw, (int, float)):
++        # Rail r7 P2-f: json.loads aceita NaN/Infinity por default (com
++        # HMAC desligado nada mais barra a linha). NaN faz TODA comparacao
++        # `st_mtime >= start` dar False => falso "absent" a partir de uma
++        # ancora malformada — exatamente a classe "unparseable laundered
++        # into a claim". Nao-finito e imparseavel: None.
++        if not math.isfinite(float(raw)):
++            return None
 +        return float(raw)
 +    if not isinstance(raw, str):
 +        return None
@@ -223,6 +231,16 @@ index 0faffc3..6a74712 100755
 +                _ah_key = None
 +
 +            def _anchor_verified(idx: int, ev_obj: dict, raw_line: str) -> bool:
++                # Fronteira declarada (rail r7 P2-a, refutado como ganho
++                # REAL): a verificacao e POR-ENTRADA — o candidato contra o
++                # digest DECLARADO da linha predecessora; o predecessor em
++                # si nao e re-verificado. Verificar o segmento nao
++                # compraria nada contra o atacante do threat model: quem
++                # escreve neste log roda sob o MESMO UID e le a chave 0600
++                # (CLAUDE.md §5 — fronteira real exigiria UID separado,
++                # fora de escopo por decisao), logo forjaria a cadeia
++                # inteira. Integridade de cadeia COMPLETA e trabalho do
++                # verify_chain offline, nunca deste leitor bounded.
 +                if _ah_disabled:
 +                    return True
 +                if _ah is None or _ah_key is None:
@@ -505,12 +523,23 @@ index 0faffc3..6a74712 100755
 +            if safe is not None:
 +                names.append(safe)
 +        out["names"] = names
++        # Rail r7 P2-c: o ULTIMO sanitize pode ser o que estoura o budget
++        # (import frio, scanner lento) — o check pre-chamada passou e nada
++        # re-checava antes do outcome otimista. O wall-cap assinado cobre a
++        # funcao INTEIRA: exaustao aqui devolve "error" com os counts ja
++        # finalizados.
++        if time.monotonic() > deadline:
++            return out
 +        if modified:
 +            # Positive evidence stands even on an incomplete pass (counts may
-+            # UNDERCOUNT; the outcome class is still truthful).
++            # UNDERCOUNT; the outcome class is still truthful) — but the
++            # EXCLUSIVE claim does not: index_only asserts "nothing but the
++            # index changed", which an unreadable entry may falsify (rail r7
++            # P2-d). An incomplete pass degrades to "written".
 +            out["outcome"] = (
 +                "index_only"
-+                if (index_modified and len(modified) == 1)
++                if (index_modified and len(modified) == 1
++                    and not scan_incomplete)
 +                else "written"
 +            )
 +        elif scan_incomplete:
@@ -638,7 +667,7 @@ index 0faffc3..6a74712 100755
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +885,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +914,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -672,7 +701,7 @@ index 0faffc3..6a74712 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
-@@ -353,15 +930,29 @@ def main() -> int:
+@@ -353,15 +959,29 @@ def main() -> int:
          sys.stdout.write(_emit_observe() + "\n")
          return 0
  
@@ -923,7 +952,7 @@ index fbc5498..8c64e77 100755
          if isinstance(flags, list) and flags:
              safe = [_sanitize_line(str(f)) for f in flags[:5] if f]
 diff --git a/.claude/hooks/check_precompact_continuity.py b/.claude/hooks/check_precompact_continuity.py
-index c0880a3..ebeea8d 100755
+index c0880a3..dce3a09 100755
 --- a/.claude/hooks/check_precompact_continuity.py
 +++ b/.claude/hooks/check_precompact_continuity.py
 @@ -88,6 +88,7 @@ from __future__ import annotations
@@ -965,7 +994,7 @@ index c0880a3..ebeea8d 100755
  
      Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
      strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
-@@ -1051,6 +1059,241 @@ def _progress_guard(
+@@ -1051,6 +1059,250 @@ def _progress_guard(
          _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
  
  
@@ -1032,9 +1061,18 @@ index c0880a3..ebeea8d 100755
 +    ident = tail[:8]
 +    if len(tail) < 9 or not ident[5:8].isdigit():
 +        return None
-+    if tail[8] not in ("/", "-"):
-+        return None
-+    return ident
++    if tail[8] == "/":
++        return ident
++    if tail[8] == "-":
++        # Rail r7 P2-e: o shape documentado do branch `-` e um ARQUIVO de
++        # plano (`PLAN-NNN-*.md`) — sem estas duas checagens, um path
++        # qualquer com hifen na 9a posicao (`PLAN-042-not-a-plan`, ou um
++        # diretorio `PLAN-042-x/f.md`) derivava id e podia vencer o
++        # tie-break apontando para um ledger errado/inexistente.
++        if "/" in tail or not tail.endswith(".md"):
++            return None
++        return ident
++    return None
 +
 +
 +#: Rail r6 P2-c — a perna (b) do ``derive_scope`` (plan_ac), espelhada.
@@ -1207,7 +1245,7 @@ index c0880a3..ebeea8d 100755
  def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
      """Build + persist the snapshot; emit the closed-enum event. Always allows.
  
-@@ -1078,6 +1321,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1078,6 +1330,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          "trigger": trigger,
          "plan_id": plan_id,
          "execution_unit": _execution_unit(plan_path, cwd, deadline),
@@ -1218,7 +1256,7 @@ index c0880a3..ebeea8d 100755
          "ceremony_flags": _ceremony_flags(cwd, deadline),
          "hmac_chain": _hmac_chain_breadcrumb(),
      }
-@@ -1088,6 +1335,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1088,6 +1344,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          chain_length = 0
      outcome = _write_snapshot(plan_id, blob, session_id)
      _emit_snapshot_event(trigger, plan_id, chain_length, outcome)
@@ -1323,10 +1361,10 @@ index 572a320..372dd8c 100755
      def test_never_passthrough(self) -> None:
          for action in ("directory_added_recorded", "notification_lifecycle"):
 diff --git a/.claude/hooks/tests/test_check_compaction_continuity.py b/.claude/hooks/tests/test_check_compaction_continuity.py
-index d696c14..0419107 100755
+index d696c14..eb96387 100755
 --- a/.claude/hooks/tests/test_check_compaction_continuity.py
 +++ b/.claude/hooks/tests/test_check_compaction_continuity.py
-@@ -895,5 +895,287 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
+@@ -895,5 +895,296 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
          self.assertIn("other", _staged_ae._COMPACTION_SNAPSHOT_OUTCOMES)
  
  
@@ -1447,6 +1485,15 @@ index d696c14..0419107 100755
 +        )
 +        self.assertIsNone(_pre_hook._plan_id_from_path("docs/PLAN-179.md"))
 +        self.assertIsNone(_pre_hook._plan_id_from_path(".claude/plans/PLAN-17"))
++        # Rail r7 P2-e — the `-` branch is the documented FILE shape
++        # (PLAN-NNN-*.md): no extension => not a plan file; a dashed
++        # DIRECTORY (path with a further "/") is not the file shape either.
++        self.assertIsNone(
++            _pre_hook._plan_id_from_path(".claude/plans/PLAN-042-not-a-plan")
++        )
++        self.assertIsNone(
++            _pre_hook._plan_id_from_path(".claude/plans/PLAN-042-dir/x.md")
++        )
 +
 +    def test_never_calls_resolve_plan_id_ast(self):
 +        """Emenda r1-C6, SCOPED: the hook legitimately uses _resolve_plan_id
@@ -1667,10 +1714,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..7e01454
+index 0000000..dcc35ac
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,667 @@
+@@ -0,0 +1,721 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -2168,6 +2215,60 @@ index 0000000..7e01454
 +        self.assertEqual(d["anchor_source"], "none")
 +        self.assertEqual(d["modified_count"], 0)
 +
++    def test_final_sanitize_exhaustion_is_error(self) -> None:
++        """Rail r7 P2-c — the LAST sanitizer call can be the one that blows
++        the budget: the pre-call check passed, so only a post-loop re-check
++        stops an optimistic outcome past the wall-cap. Counts stay
++        finalized; outcome is "error"."""
++        now = time.time()
++        self._mkmem("t1.md", now)
++        self._mkmem("t2.md", now)
++        # deadline calc + 2 entries x (pre + post-stat) + 2 name pre-checks
++        # = 7 reads under budget; the POST-LOOP check then exhausts.
++        seq = iter([0.0] * 7)
++
++        def _mono():
++            try:
++                return next(seq)
++            except StopIteration:
++                return 1e9
++
++        with mock.patch.object(
++            SessionEnd, "_session_start_ts",
++            return_value=(now - 3600.0, "chain"),
++        ), mock.patch.object(SessionEnd.time, "monotonic", _mono):
++            d = self._observe()
++        self.assertEqual(d["outcome"], "error")
++        self.assertEqual(d["modified_count"], 2)
++
++    def test_incomplete_scan_never_claims_index_only(self) -> None:
++        """Rail r7 P2-d — index_only is an EXCLUSIVE claim ("nothing but
++        the index changed"); an unreadable entry may falsify it, so an
++        incomplete pass degrades to "written" (positive evidence stands,
++        exclusivity does not)."""
++        now = time.time()
++        self._mkmem("MEMORY.md", now)
++        os.symlink(
++            self.memory_dir / "no-such-target",
++            self.memory_dir / "broken-entry",
++        )
++        self._seed_session_start(now - 3600)
++        d = self._observe()
++        self.assertEqual(d["outcome"], "written")
++        self.assertNotEqual(d["outcome"], "index_only")
++        self.assertTrue(d["index_modified"])
++
++    def test_nonfinite_wire_ts_is_unparseable(self) -> None:
++        """Rail r7 P2-f — json.loads accepts NaN/Infinity; a NaN anchor
++        makes every mtime comparison False (false "absent" from a
++        malformed anchor). Non-finite is unparseable: None, never a
++        window."""
++        self.assertIsNone(SessionEnd._parse_wire_ts(float("nan")))
++        self.assertIsNone(SessionEnd._parse_wire_ts(float("inf")))
++        self.assertIsNone(SessionEnd._parse_wire_ts(float("-inf")))
++        self.assertEqual(SessionEnd._parse_wire_ts(123), 123.0)
++        self.assertEqual(SessionEnd._parse_wire_ts(123.5), 123.5)
++
 +
 +class TestWireContract(_DeltaBase):
 +    """§7 tests 5-6 — what reaches (and never reaches) audit_emit."""
@@ -2520,14 +2621,14 @@ index 196e574..b446d8e 100644
  
  HEAD `f622900`, árvore limpa, **Validate verde**, Smoke Install verde, red-team
 diff --git a/SPEC/v1/audit-log.schema.md b/SPEC/v1/audit-log.schema.md
-index a96cd45..3b914c1 100644
+index a96cd45..1627c0e 100644
 --- a/SPEC/v1/audit-log.schema.md
 +++ b/SPEC/v1/audit-log.schema.md
 @@ -502,6 +502,7 @@ ${CEO_AUDIT_LOG_PATH:-$HOME/.claude/projects/<native-slug>/audit-log.jsonl}
  | `ledger_checkpoint_recorded` (v2.59) | `action`, `session_id`, `project`, `outcome` (str — CLOSED enum: `ledger_updated` / `ledger_missing` / `ledger_absent_from_plan` / `error` / `other`; off-enum COERCED to `other`, never echoed), `plan_id` (str — strict `PLAN-NNN` shape via the shared `_compaction_plan_id_ok` validator, else `unknown`; a path-traversal attempt smuggled through this field is rejected, not echoed), `scope_source` (str — CLOSED enum: `plan_dir` / `plan_ac` / `both` / `other`; how the commit was found to be in scope), `in_scope_path_count` (int 0..99 — clamped), `ledger_size_bucket_kib` (int 0..99 — clamped KiB bucket; the unit is in the field NAME), `over_ceiling` (int 0/1), `unverified_ac_claim_count` (int 0..99 — ledger bullets naming an AC/US id with no `verifier:` clause), `commits_since_last_observation` (int 0..99 — clamped), `state_kind` (str — CLOSED enum: `fresh` / `resumed` / `unavailable`; off-enum COERCED to `unavailable`), `would_block` (int 0/1 — what the FUTURE enforce flip WOULD have done; the hook has no deny path today), `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-179 W2 US6 / ADR-195 — the work-boundary ledger checkpoint, ADVISORY by construction (`check_ledger_checkpoint.py`, PreToolUse/Bash; no branch in that module returns `permissionDecision`). EVERY int is TYPE-strict: `bool` is rejected as an `int` subclass and a `float` becomes `0` rather than being rounded, because `_lib/canonical_json.py` refuses floats in HMAC-covered fields and the spool writer would drop the ENTIRE event to an `audit-log.errors` breadcrumb (S181 / ADR-055-AMEND-2). Routes through the dedicated `_scrub_*` branch + `_LEDGER_CHECKPOINT_RECORDED_ALLOWLIST`, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: the commit MESSAGE, the committed PATHS, the ledger CONTENT, the repo root, any AC text. NO ATLAS technique (governance breadcrumb, not a detection signal). |
  | `ledger_checkpoint_skipped` (v2.59) | `action`, `session_id`, `project`, `reason` (str — CLOSED enum: `out_of_scope_paths` / `kill_switch` / `hotfix` / `exploratory` / `operator_opt_out` / `unparseable` / `budget_exhausted` / `no_repo` / `other`; off-enum COERCED to `other`, never echoed — the reason is an ENUM and never free text, so "why the rail stayed quiet" is countable without ever describing the commit), `plan_id` (str — strict `PLAN-NNN`, else `unknown`), `commits_since_last_observation` (int 0..99 — clamped), `state_kind` (str — CLOSED enum: `fresh` / `resumed` / `unavailable`), `would_block` (int 0/1 — always `0` on this row: a skip is never a would-block), `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-179 W2 US6 / ADR-195 — the same rail's NEGATIVE case, a separate action on purpose: the measure-first window needs a DENOMINATOR, and "skipped because the commit touched no plan-scoped path" and "never observed at all" are different facts that absence alone cannot distinguish. `reason=kill_switch` is emitted even when `CEO_LEDGER_CHECKPOINT=0`, so "the rail is off" is itself measured; `CEO_SOTA_DISABLE=1` is the one fully silent posture (master precedence, CLAUDE.md §4). Same TYPE-strict int discipline as the row above. Routes through the dedicated `_scrub_*` branch + `_LEDGER_CHECKPOINT_SKIPPED_ALLOWLIST`, NEVER `_EMIT_GENERIC_PASSTHROUGH`. NO ATLAS technique. |
  | `ledger_entry_rejected` (v2.59) | `action`, `session_id`, `project`, `signal` (str — fixed vocabulary of ONE: `ledger_write_gate`; this action has exactly one producer, so any other value names a caller that is not the gate and is COERCED), `decision` (str — CLOSED enum: `accept` / `reject`; an unreadable value COERCES to `reject`, FAIL-CLOSED, because an unreadable security verdict is a rejection and never an acceptance), `reason` (str — CLOSED enum: `ok` / `not_scanned_trusted_provenance` / `scanner_hit` / `scanner_unavailable` / `oversize` / `malformed_input`; off-enum COERCES to `malformed_input`, also fail-CLOSED), `family` (str — CLOSED enum, the UNION of the gate's own local families {`none`, `scanner_unavailable`, `oversize`, `malformed_input`, `unknown_family`} and the pattern CATALOGUE `_lib/injection_patterns.family_names()` {`directive_prose`, `harness_mimicry`, `provider_tokens`, `role_preamble`}; off-enum COERCED to `unknown_family`. Deliberately STRICTER than `prompt_injection_detected`, whose branch allowlists `family` by NAME but leaves its VALUE caller-chosen), `hits_count` (int 0..9999 — clamped), `bytes_scanned` (int 0..8192 — clamped at the gate's `MAX_ENTRY_BYTES`; an oversize body is rejected WITHOUT scanning, so this ceiling can never truncate a legitimate value), `scanned` (int 0/1), `enforced` (int 0/1 — whether the fail-CLOSED verdict BINDS in the current posture; kept separate from `decision` so an advisory-window row records what enforcement WOULD have done without pretending it happened), `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-179 W4 / ADR-195 — the ledger write-gate discard (`_lib/ledger_provenance.py`), registered by Owner decision 2026-08-25 ("3 actions"). It exists precisely so a discard is NOT filed as `prompt_injection_detected`: routing `scanner_unavailable` / `oversize` / `malformed_input` into a DETECTION action would poison the very false-positive series the advisory window has to measure. There is deliberately NO fallback action — a missing or raising emitter degrades to a LOUD breadcrumb and `audit_channel="unavailable"`, never to a quieter series. Typed emitter `emit_ledger_entry_rejected` (keywords mirror `GateVerdict.to_audit_fields()` exactly). Routes through the dedicated `_scrub_*` branch + `_LEDGER_ENTRY_REJECTED_ALLOWLIST`, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: the rejected entry BODY (not even a truncated preview — public repo, LLM06), the entry id, and any path. NO ATLAS technique (the DETECTION that may underlie a `scanner_hit` is `prompt_injection_detected`'s job; this row is the gate's disposal record). |
-+| `session_memory_delta_observed` (v2.60) | `action`, `session_id` (str — threaded from the harness event, clamped ≤128, no silent default), `project` (str — `str(repo_root)`, clamped ≤256, the same field every event on this rail already carries), `outcome` (str — CLOSED enum `written` · `absent` · `index_only` · `start_unknown` · `dir_missing` · `not_writable` · `error` · `other`; off-enum COERCED to `other`, NEVER to `written` — an unparseable observation must never be laundered into a healthy-class value), `files_count` (int — clamped 0..99999; entries in the native memory dir), `modified_count` (int — clamped 0..99999; entries whose `st_mtime` falls inside THIS session's window — a WINDOW-scoped observation over the SHARED per-project dir: a CONCURRENT session's write inside the window counts (ADR-005 overlap is a supported case) and stat carries no author, so this is never an authorship claim), `index_modified` (bool — `MEMORY.md` specifically; non-bool coerced to `false`), `anchor_source` (str — CLOSED enum `chain` · `state_file` · `none`: which step of the session-start resolution answered — the HMAC chain's own `session_start` event via bounded scan (≤200 lines / ≤256 KiB / ≤100 ms; the OLDEST in-window match wins — a compact-restart re-emit for the same session id must not shrink the window — and a candidate is consumed only after its per-entry HMAC verifies against the previous line with the project key (verify-before-consume, ADR-160; `CEO_AUDIT_HMAC_DISABLE=1` waives the integrity claim); the chain is the anchor, never a mutable side file — the ADR-160 §3 / A6 principle), `state_file` — RETIRED in this same ceremony (rail r5: the record file is rewritten via `os.replace` on every tool update, which allocates a NEW inode and resets even `st_birthtime` — no immutable artifact exists on that surface); the enum value stays registered for wire-compat and is NEVER produced. Resolution is therefore chain-or-`none`, with REAL predecessor resolution on the chain leg (legacy `hmac:null` prefix lines are traversed to the last SIGNED line, mirroring `verify_chain`; genesis applies only when the bounded window covers the whole file), or the terminal `none` = "I do not know": the hook never substitutes "since midnight" or process start, because a wrong window produces a false `written`, worse than absent), `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-179 W2 US8 (wave-179-close ceremony; implements the signed spec `PLAN-179/staged-w24/SESSIONEND-NOTE.md`) — SessionEnd memory-delta observation: ONE emit per session from `.claude/hooks/SessionEnd.py::decide`, immediately BEFORE the `session_end` emit so a reader scanning backwards from `session_end` finds it adjacent. STAT-ONLY producer: counts `st_mtime >= session_start` over the native memory dir and NEVER opens a memory file for write — memory writing stays a model/Owner decision; the count is window activity over the project dir, not per-session authorship (rail r6 P2-a); this action makes the OMISSION visible (`outcome=absent` is the case the historical `memory_writable` bit could not express). A NEW action deliberately, not extra fields on `session_end`: overloading would conflate "the hook ran" with "a delta was observed" and change the meaning of an event with a landed row (v2.7). Typed producer `emit_session_memory_delta_observed` routes through the dedicated deny-by-default `_SESSION_MEMORY_DELTA_OBSERVED_ALLOWLIST` scrub branch with closed-enum VALUE re-coercion + TYPE-strict int clamps (bool is an int subclass, and a float would drop the ENTIRE event at the canonical-json layer — both coerce to the sentinel 0, never rounded, never echoed), NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire, by name: the memory file names/basenames (the sanitized, ≤5, ≤64-chars-post-NFKC basenames travel ONLY on the `systemMessage` operator channel — the split that reconciles the W2 AC's "contagem + paths" with the no-path schema doctrine: counts+enums to the signed chain, names to the operator), the file bodies or any excerpt, the resolved memory-dir absolute path and the `$HOME`-derived slug, the raw `session_start` source line, any environment value. Kill-switch `CEO_SESSION_MEMORY_DELTA` (unset = full; `quiet`/`1q` = event only, no operator line; `0`/`false`/`off`/`no` = nothing emitted — the `off` state carries the `.claude/hooks/harness-noop-allowlist.txt` gate-side entry per the ADR-160 §7 route). Completeness residual (honest boundary, same as ADR-153 §H2): an ABSENT row is not evidence of an absent session — `CEO_EXTENDED_LIFECYCLE=0`, `disableAllHooks`, or a killed process all suppress it. Pre-registered DEATH criterion (SESSIONEND-NOTE.md §8): `outcome=absent` dominating a measurement window with no behaviour change means the rail is REMOVED, not kept as debt. NO ATLAS technique (governance/omission-visibility breadcrumb, not a detection signal). |
++| `session_memory_delta_observed` (v2.60) | `action`, `session_id` (str — threaded from the harness event, clamped ≤128, no silent default), `project` (str — `str(repo_root)`, clamped ≤256, the same field every event on this rail already carries), `outcome` (str — CLOSED enum `written` · `absent` · `index_only` · `start_unknown` · `dir_missing` · `not_writable` · `error` · `other`; off-enum COERCED to `other`, NEVER to `written` — an unparseable observation must never be laundered into a healthy-class value), `files_count` (int — clamped 0..99999; entries in the native memory dir), `modified_count` (int — clamped 0..99999; entries whose `st_mtime` falls inside THIS session's window — a WINDOW-scoped observation over the SHARED per-project dir: a CONCURRENT session's write inside the window counts (ADR-005 overlap is a supported case) and stat carries no author, so this is never an authorship claim), `index_modified` (bool — `MEMORY.md` specifically; non-bool coerced to `false`), `anchor_source` (str — CLOSED enum `chain` · `state_file` · `none`: which step of the session-start resolution answered — the HMAC chain's own `session_start` event via bounded scan (≤200 lines / ≤256 KiB / ≤100 ms; the OLDEST in-window match wins — a compact-restart re-emit for the same session id must not shrink the window — and a candidate is consumed only after its per-entry HMAC verifies against the previous line with the project key (verify-before-consume, ADR-160; `CEO_AUDIT_HMAC_DISABLE=1` waives the integrity claim; scope is PER-ENTRY — the candidate against the ADJACENT line's declared digest, the predecessor itself NOT re-verified: a same-UID log writer reads the 0600 key and forges whole chains anyway (CLAUDE.md §5 boundary), so whole-chain integrity stays `verify_chain`'s offline job, never this bounded reader's claim); the chain is the anchor, never a mutable side file — the ADR-160 §3 / A6 principle), `state_file` — RETIRED in this same ceremony (rail r5: the record file is rewritten via `os.replace` on every tool update, which allocates a NEW inode and resets even `st_birthtime` — no immutable artifact exists on that surface); the enum value stays registered for wire-compat and is NEVER produced. Resolution is therefore chain-or-`none`, with REAL predecessor resolution on the chain leg (legacy `hmac:null` prefix lines are traversed to the last SIGNED line, mirroring `verify_chain`; genesis applies only when the bounded window covers the whole file), or the terminal `none` = "I do not know": the hook never substitutes "since midnight" or process start, because a wrong window produces a false `written`, worse than absent), `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-179 W2 US8 (wave-179-close ceremony; implements the signed spec `PLAN-179/staged-w24/SESSIONEND-NOTE.md`) — SessionEnd memory-delta observation: ONE emit per session from `.claude/hooks/SessionEnd.py::decide`, immediately BEFORE the `session_end` emit so a reader scanning backwards from `session_end` finds it adjacent. STAT-ONLY producer: counts `st_mtime >= session_start` over the native memory dir and NEVER opens a memory file for write — memory writing stays a model/Owner decision; the count is window activity over the project dir, not per-session authorship (rail r6 P2-a); this action makes the OMISSION visible (`outcome=absent` is the case the historical `memory_writable` bit could not express). A NEW action deliberately, not extra fields on `session_end`: overloading would conflate "the hook ran" with "a delta was observed" and change the meaning of an event with a landed row (v2.7). Typed producer `emit_session_memory_delta_observed` routes through the dedicated deny-by-default `_SESSION_MEMORY_DELTA_OBSERVED_ALLOWLIST` scrub branch with closed-enum VALUE re-coercion + TYPE-strict int clamps (bool is an int subclass, and a float would drop the ENTIRE event at the canonical-json layer — both coerce to the sentinel 0, never rounded, never echoed), NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire, by name — the scrub operates on field NAMES (non-allowlisted keys are dropped; identity fields `session_id`/`project` are type-checked and clamped, their VALUES being the emitter-wide baseline contract every action shares — the typed wrapper is the sole sanctioned producer and `test_no_paths_on_the_wire` pins what it sends): the memory file names/basenames (the sanitized, ≤5, ≤64-chars-post-NFKC basenames travel ONLY on the `systemMessage` operator channel — the split that reconciles the W2 AC's "contagem + paths" with the no-path schema doctrine: counts+enums to the signed chain, names to the operator), the file bodies or any excerpt, the resolved memory-dir absolute path and the `$HOME`-derived slug, the raw `session_start` source line, any environment value. Kill-switch `CEO_SESSION_MEMORY_DELTA` (unset = full; `quiet`/`1q` = event only, no operator line; `0`/`false`/`off`/`no` = nothing emitted — the `off` state carries the `.claude/hooks/harness-noop-allowlist.txt` gate-side entry per the ADR-160 §7 route). Completeness residual (honest boundary, same as ADR-153 §H2): an ABSENT row is not evidence of an absent session — `CEO_EXTENDED_LIFECYCLE=0`, `disableAllHooks`, or a killed process all suppress it. Pre-registered DEATH criterion (SESSIONEND-NOTE.md §8): `outcome=absent` dominating a measurement window with no behaviour change means the rail is REMOVED, not kept as debt. NO ATLAS technique (governance/omission-visibility breadcrumb, not a detection signal). |
  | `env_var_hijack_blocked` (v2.41) | `action`, `session_id`, `project`, `hijack_class` (str — CLOSED enum: `linker_preload` / `linker_path` / `runtime_hook` / `linker_other` / `parse_failure`; unrecognized value COERCED to `parse_failure`, never echoed), `event_schema`, `ts`, plus baseline `tokens_in`/`tokens_out`/`tokens_total`/`hmac`/`hmac_error`. PLAN-133 A1 (Goose-harvest) — env-var hijack guard breadcrumb (`LD_PRELOAD`/`DYLD_*`/`LD_LIBRARY_PATH` and kin blocked on Bash). Routes through the dedicated `_scrub_*` branch + `_ENV_VAR_HIJACK_BLOCKED_ALLOWLIST`, NEVER `_EMIT_GENERIC_PASSTHROUGH`. DENIED on the wire: the var name, the value, the command bytes. NO ATLAS technique (governance breadcrumb, not a detection signal). |
  | `invisible_unicode_blocked` (v2.41) | `action`, `session_id`, `project`, `surface` (str — CLOSED enum), `unicode_class` (str — CLOSED enum mirroring `spec_context_sanitizer.INVISIBLE_UNICODE_CLASSES`; coerced), `char_count` (int — bounded), `enforced` (bool), `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-133 A2 (Goose-harvest) — invisible/bidi/zero-width Unicode guard breadcrumb on prompt/skill surfaces. Routes through the dedicated `_scrub_*` branch + `_INVISIBLE_UNICODE_BLOCKED_ALLOWLIST` (built on `_FEDERATION_ENVELOPE`). DENIED on the wire: prompt/skill text, the matched characters, any var/value. NO ATLAS technique (governance breadcrumb, not a detection signal). |
  | `egress_destination_detected` (v2.41) | `action`, `session_id`, `project`, `egress_class` (str — CLOSED enum: `network_http` / `ssh_remote` / `cloud_store` / `container_push` / `package_publish` / `raw_socket` / `pair_rail` / `unknown`; coerced to `unknown`), `destination` (str — BARE HOST only; scheme/userinfo/port/path/query re-truncated off before write, ≤253 chars), `event_schema`, `ts`, plus baseline `tokens_*`/`hmac`/`hmac_error`. PLAN-133 A3 (Goose-harvest) — egress-destination taxonomy telemetry. Routes through the dedicated `_scrub_*` branch + `_EGRESS_DESTINATION_DETECTED_ALLOWLIST`. DENIED on the wire: full URL, path, query, inline credentials. NO ATLAS technique (observability telemetry, not a detection signal). |
