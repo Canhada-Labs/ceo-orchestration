@@ -121,6 +121,26 @@ ACCEPTED: List[Tuple[str, Optional[str], str]] = [
         "seed-once adopter doc — same upgrade.sh preserve contract",
     ),
     (
+        r"^\.claude/adr/README\.md$",
+        None,
+        "seed-once adopter doc, same family as CLAUDE.md/MEMORY.md above, and "
+        "the authority is STRUCTURAL rather than a comment: `.claude/adr` is "
+        "absent from `_framework_target_entries` "
+        "(scripts/_framework_manifest_set.sh) — the tree was never in the set "
+        "the upgrade considers its own — while install seeds the file through "
+        "a one-off `install_adr_template` (install.sh:1656) OUTSIDE that walk. "
+        "install.sh:2804 names `.claude/adr/ADR-*.md` as the adopter's own "
+        "ADRs, so the directory belongs to the adopter after the seed. The "
+        "divergence stayed invisible until S332 only because the seed's "
+        "CONTENT had not changed since v1.2.0: the wave-s330-F land "
+        "regenerated the embedded ADR index (170 -> 198 rows) and the "
+        "classifier saw a real first difference. Declared, not cured: the seed "
+        "carries the FRAMEWORK's own ADR index into the adopter's tree, which "
+        "is a product wart of the A7 contamination family and its cure is "
+        "canonical (install.sh + an index-free template) — follow-up "
+        "FU-ADR-README-SEED, not this gate's business",
+    ),
+    (
         r"^PROTOCOL\.md$",
         "maintainer",
         "generated pointer. install.sh substitutes the resolved SOURCE_DIR; "
