@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..497caa9 100755
+index 0faffc3..68fb084 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -94,10 +94,12 @@ index 0faffc3..497caa9 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,6 +336,440 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,13 +336,493 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
+-def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+-    """Pure decision function."""
 +
 +def _memory_delta_rail_state() -> str:
 +    """Resolve the US8 kill-switch into the CLOSED three-value state.
@@ -244,7 +246,16 @@ index 0faffc3..497caa9 100755
 +                    return False
 +                try:
 +                    entry = dict(ev_obj)
++                    # Rail r4 P1: o produtor assina EXCLUINDO `hmac` E
++                    # `hmac_error` (audit_emit._write_event: `entry_sans =
++                    # {... if k != "hmac" and k != "hmac_error"}`). Um
++                    # verificador que tira so `hmac` reprovaria toda linha
++                    # que carregue `hmac_error` — o field-set da verificacao
++                    # TEM de espelhar o da assinatura byte a byte, ou o
++                    # verify-before-consume vira gerador de falso
++                    # start_unknown.
 +                    entry.pop("hmac", None)
++                    entry.pop("hmac_error", None)
 +                    calc = _ah.compute_entry_hmac(_ah_key, prev, entry)
 +                    return _ah.hex_digest(calc) == ev_hmac
 +                except Exception:
@@ -532,10 +543,26 @@ index 0faffc3..497caa9 100755
 +    return "SessionEnd: memory delta UNAVAILABLE (%s)" % outcome
 +
 +
- def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
-     """Pure decision function."""
++def decide(
++    *,
++    repo_root: Path,
++    session_id: str,
++    reason: str,
++    payload_session_id: Optional[str] = None,
++) -> str:
++    """Pure decision function.
++
++    ``payload_session_id`` (rail r4 P2): o id COMO VEIO DO PAYLOAD do
++    harness, sem fallback. O rail de memory-delta (US8) exige proveniencia
++    de payload ("threaded from the harness event, no silent default" —
++    SESSIONEND-NOTE par.4): um id vindo de CLAUDE_SESSION_ID (spoofable) ou
++    fabricado de timestamp ancoraria o scan na chain ERRADA e emitiria
++    atribuicao escolhida/fabricada. None = chamador legado/teste que ja
++    passa o id confiavel em ``session_id`` (compat); STRING VAZIA = o
++    payload NAO trouxe id, o delta e PULADO com breadcrumb LOUD (omissao
++    visivel) e o resto do hook segue com o id legado."""
      if _kill_switch_active():
-@@ -304,6 +777,16 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+         return _emit_observe(system_message="SessionEnd: kill-switch active, no-op")
  
      try:
          memory_state = _memory_dir_state(repo_root)
@@ -546,13 +573,24 @@ index 0faffc3..497caa9 100755
 +        # #1 — inverting these silently degrades every session to
 +        # anchor_source="none", a green-looking rail answering nothing).
 +        rail = _memory_delta_rail_state()
++        _delta_sid = (
++            session_id if payload_session_id is None else payload_session_id
++        )
 +        delta: Optional[Dict[str, object]] = None
-+        if rail != "off":
-+            delta = _memory_delta_observed(repo_root, session_id)
++        if rail != "off" and not _delta_sid:
++            # rail r4 P2 — sem id de payload nao ha ancora atribuivel:
++            # pular e DIZER e o honesto; fabricar um id violaria o par.4.
++            sys.stderr.write(
++                "# SessionEnd US8: payload sem session_id — memory-delta "
++                "PULADO (contrato de proveniencia par.4: no silent "
++                "default)\n"
++            )
++        elif rail != "off":
++            delta = _memory_delta_observed(repo_root, _delta_sid)
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +801,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +837,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -561,7 +599,7 @@ index 0faffc3..497caa9 100755
 +        # backwards from session_end (SESSIONEND-NOTE.md §5 constraint #2).
 +        if delta is not None:
 +            _emit_session_memory_delta(
-+                session_id=session_id, repo_root=repo_root, delta=delta,
++                session_id=_delta_sid, repo_root=repo_root, delta=delta,
 +            )
          _emit_session_end(
              session_id=session_id,
@@ -586,7 +624,7 @@ index 0faffc3..497caa9 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
-@@ -353,9 +846,15 @@ def main() -> int:
+@@ -353,15 +882,29 @@ def main() -> int:
          sys.stdout.write(_emit_observe() + "\n")
          return 0
  
@@ -596,14 +634,29 @@ index 0faffc3..497caa9 100755
 +    # from the harness event". Um env divergente do payload faria o scan
 +    # ancorar na sessao ERRADA (falso written/absent). O env sobrevive
 +    # apenas como fallback para um harness sem id no payload.
++    payload_sid = getattr(event, "session_id", "") or ""
      session_id = (
 -        os.environ.get("CLAUDE_SESSION_ID", "")
 -        or getattr(event, "session_id", "") or ""
-+        (getattr(event, "session_id", "") or "")
++        payload_sid
 +        or os.environ.get("CLAUDE_SESSION_ID", "")
      ) or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
++    # (payload_sid segue SEPARADO: o rail de memory-delta exige proveniencia
++    # de payload e recusa os dois fallbacks acima — rail r4 P2.)
      reason = os.environ.get("CLAUDE_SESSION_END_REASON", "normal")
      repo_root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+ 
+     try:
+-        out = decide(repo_root=repo_root, session_id=session_id, reason=reason)
++        out = decide(
++            repo_root=repo_root,
++            session_id=session_id,
++            reason=reason,
++            payload_session_id=payload_sid,
++        )
+     except Exception as e:
+         sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
+         sys.stdout.write(_emit_observe() + "\n")
 diff --git a/.claude/hooks/_lib/audit_emit.py b/.claude/hooks/_lib/audit_emit.py
 index 8758e2d..44c2f0b 100644
 --- a/.claude/hooks/_lib/audit_emit.py
@@ -1417,10 +1470,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..6111ad0
+index 0000000..23710d8
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,547 @@
+@@ -0,0 +1,574 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -1557,6 +1610,11 @@ index 0000000..6111ad0
 +        if hmac_override:
 +            row["hmac"] = hmac_override
 +        elif sign:
++            # rail r4 P1: producao grava linhas fail-open com `hmac_error`
++            # PRESENTE; a assinatura exclui hmac E hmac_error. O seed poe a
++            # chave (None) antes de assinar para que qualquer verificador
++            # que nao espelhe o field-set caia no controle.
++            row["hmac_error"] = None
 +            from _lib import audit_hmac as ah
 +            prev = ah.GENESIS_PREV
 +            if log_path.is_file():
@@ -1570,8 +1628,13 @@ index 0000000..6111ad0
 +                        prev = ah.from_hex(prev_hex)
 +                    break
 +            key = ah.get_or_create_key()
++            # espelha o PRODUTOR: assina excluindo hmac E hmac_error
++            # (audit_emit._write_event entry_sans) — e a linha CARREGA o
++            # hmac_error, que e o que o controle r4-P1 exercita.
++            _sans = {k: v for k, v in row.items()
++                     if k not in ("hmac", "hmac_error")}
 +            row["hmac"] = ah.hex_digest(
-+                ah.compute_entry_hmac(key, prev, dict(row))
++                ah.compute_entry_hmac(key, prev, _sans)
 +            )
 +        with open(log_path, "a", encoding="utf-8") as fh:
 +            fh.write(json.dumps(row) + "\n")
@@ -1927,6 +1990,23 @@ index 0000000..6111ad0
 +                else:
 +                    setattr(_lib, "tool_lifecycle", saved_attr)
 +
++    def test_no_payload_sid_skips_delta_loudly(self) -> None:
++        """Rail r4 P2 — payload sem session_id: o delta e PULADO (zero
++        emits, sem linha no systemMessage); fabricar id violaria o
++        contrato par.4 (no silent default). O resto do hook segue."""
++        captured: list = []
++        with _stub_audit_emit(captured):
++            out = SessionEnd.decide(
++                repo_root=self.repo_root,
++                session_id="legacy-fallback-id",
++                reason="normal",
++                payload_session_id="",
++            )
++        payload = json.loads(out)
++        self.assertTrue(payload.get("continue") is True)
++        self.assertNotIn("memory delta", payload.get("systemMessage", ""))
++        self.assertEqual(captured, [])
++
 +    def test_kill_switch_off_is_silent(self) -> None:
 +        """§7.8 — CEO_SESSION_MEMORY_DELTA=0: zero delta emits, no delta
 +        line, and {"continue": true} still on stdout."""
@@ -1983,7 +2063,7 @@ index db7816f..38b1b23 100755
  
  class TestAdminKeyScrub(_W5Base):
 diff --git a/.claude/plans/PLAN-179-context-continuity-durable-state.md b/.claude/plans/PLAN-179-context-continuity-durable-state.md
-index 2ef3878..82aee43 100644
+index 2ef3878..9ec2d1a 100644
 --- a/.claude/plans/PLAN-179-context-continuity-durable-state.md
 +++ b/.claude/plans/PLAN-179-context-continuity-durable-state.md
 @@ -1,8 +1,10 @@
@@ -2116,7 +2196,7 @@ index 2ef3878..82aee43 100644
 +      operador (a OMISSÃO vira visível: `memory delta ABSENT`),
 +      kill-switch 3-estados `CEO_SESSION_MEMORY_DELTA` + entrada
 +      gate-side no `harness-noop-allowlist.txt`; suíte própria em
-+      `test_session_end_memory_delta.py` (20 testes).*
++      `test_session_end_memory_delta.py` (21 testes).*
 +      *(nota S334, histórica: spec pronta, aguardava cerimônia.)*
        SessionEnd deixa de só verificar: emite o delta candidato de
        memória (contagem + paths, nunca corpo) para o operador ratificar.
