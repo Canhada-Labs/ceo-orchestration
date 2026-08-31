@@ -122,7 +122,8 @@ _expect() {
 }
 
 WT=""
-_fin_ok=0   # rail r2 P2-e: nunca herdar do ambiente
+_fin_ok=0        # rail r2 P2-e: nunca herdar do ambiente
+_fin_captured=0  # rail r7: mesma classe — a flag do trap tambem nao se herda
 _cleanup() {
   # rail-materials r1 P2-b: um abort DEPOIS do gerador restaura os tres
   # materiais vivos ao estado pre-gerador (backup feito no passo 6).
