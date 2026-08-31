@@ -12,8 +12,8 @@
 Plans: PLAN-183
 Wave: wave-183batch (PLAN-183 — «Batch menor + começar W1», ratificação do Owner de 2026-08-31: settings.json regenerado pelo skill-budget-generator com +4 skills 0-dispatch demoted, header «INERT AS SHIPPED» no validate.yml.template no molde do benchmarks, e o REGISTRO do AC-5 — a metade «canônica» que a nota ◐ declarava faltante já existia no wiring do CI; o CHECKBOX segue aberto porque a execução real do workflow é W0-US3/OQ-2, e o rail 183-r1 barrou o flip, corretamente)
 Patch: .claude/plans/PLAN-183/s335-ceremony-183batch/W183BATCH.patch
-Patch-sha256: TO-FILL-AT-FINAL-PATCH
-Patch-base: TO-FILL-AT-FINAL-PATCH
+Patch-sha256: bde333f02df59195f2574d3f9f3299aca702fb3fc169d1e0170b1f1f2899d9fc
+Patch-base: b3b6d91a697b0f6884ace196f1431f3d80e3ddcc
 Anchor-SHA: ANCHOR-PLACEHOLDER
 Data: DATA-PLACEHOLDER
 
@@ -76,5 +76,7 @@ validado VIVO contra o contrato do hook — mecanismo idêntico ao adrgate
 Approved-By: APPROVED-BY-PLACEHOLDER
 Plans: PLAN-183
 Scope:
-  - placeholder
+  - .claude/plans/PLAN-183-adopter-fitness.md
+  - .claude/settings.json
+  - templates/.github/workflows/validate.yml.template
 <!-- END SIGNED SCOPE -->
