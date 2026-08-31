@@ -57,7 +57,7 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
 | Shared library modules | **71** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
 | Slash commands | **27** | under `.claude/commands/` |
 | Architecture decision records | **198** | under `.claude/adr/` |
-| Tests | **~14,700 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+| Tests | **~15,400 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
 
 The gap between **59 hook scripts** on disk and **48 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
 
@@ -120,7 +120,7 @@ Don't take the table on faith. From a clean checkout:
 find .claude/skills -name SKILL.md | wc -l        # 166 skills
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
 ls .claude/adr | grep -c '^ADR-'                  # 198 ADRs
-python3 -m pytest --collect-only -q | tail -1     # ~14,700 collected cases
+python3 -m pytest --collect-only -q | tail -1     # ~15,400 collected cases
 ```
 
 ---

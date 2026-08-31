@@ -68,8 +68,26 @@ ADR_ID_RE = re.compile(r"ADR-(\d{3})")
 #      (the block used by ADR-082 through ADR-097 and some later ADRs)
 #
 # Both patterns capture a named group `status` with the leading status word.
+#
+# The start-of-line class accepts a markdown LIST BULLET, and three details
+# are load-bearing rather than stylistic (all three found by the pair-rail):
+#   * the bullet REQUIRES trailing whitespace, so `-status:` / `---status:`
+#     — neither a list field nor a YAML key — are not read as a status;
+#   * the bold marker is exactly TWO asterisks, because a bare `\**` happily
+#     absorbed the stray `*` the class had just refused;
+#   * the class is HORIZONTAL-ONLY (`[\t ]`, never `\s`): `\s` matches a
+#     newline, so with `-` in the class the match could anchor on the OPENING
+#     `---` FENCE of frontmatter and swallow the line break — and the inline
+#     successor scan below reads only the line the match starts on, so the
+#     supported `status: SUPERSEDED by ADR-NNN` form was silently lost.
+#
+# Twelve ADRs write the field as `- **Status:** VALUE`; for nine of them (the
+# other three also carry frontmatter) it was INVISIBLE here and the gate
+# reported `missing Status:` — a defect of the READER, not of the data.
+# Measured: widening moves exactly those nine and changes no status already
+# being read.
 _STATUS_INLINE_RE = re.compile(
-    r"(?im)^[#\s]*\**\s*status\s*\**\s*:\s*\**\s*(?P<status>[A-Z][A-Z0-9\- ]*)"
+    r"(?im)^(?:[-*][\t ]+)?[#\t ]*(?:\*\*)?[\t ]*status[\t ]*(?:\*\*)?[\t ]*:[\t ]*(?:\*\*)?[\t ]*(?P<status>[A-Z][A-Z0-9\- ]*)"
 )
 _STATUS_HEADING_RE = re.compile(
     r"(?im)^##\s+Status\s*\n+(?P<status>[A-Z][A-Z0-9\-]+)"
@@ -94,7 +112,7 @@ def _extract_status(text: str) -> str:
 STATUS_RE = _STATUS_INLINE_RE
 
 SUPERSEDED_BY_RE = re.compile(
-    r"(?im)^[#\s]*\**\s*superseded[- ]by\s*\**\s*:\s*(?P<ref>.+)$"
+    r"(?im)^(?:[-*][\t ]+)?[#\t ]*(?:\*\*)?[\t ]*superseded[- ]by[\t ]*(?:\*\*)?[\t ]*:[\t ]*(?P<ref>.+)$"
 )
 # SUPERSEDES_RE: matches a `supersedes:` key/line and captures the reference
 # value on the SAME line only (no cross-line capture).  This prevents a YAML
@@ -105,7 +123,7 @@ SUPERSEDED_BY_RE = re.compile(
 # The regex uses [^\n]+ (any char except newline) so it never crosses lines,
 # even though \s would match \n by default.
 SUPERSEDES_RE = re.compile(
-    r"(?im)^[ \t#]*\**[ \t]*supersedes(?:[ \t]*\([^)\n]*\))?[ \t]*\**[ \t]*:[ \t]*(?P<ref>[^\n]+)"
+    r"(?im)^(?:[-*][\t ]+)?[ \t#]*(?:\*\*)?[ \t]*supersedes(?:[ \t]*\([^)\n]*\))?[ \t]*(?:\*\*)?[ \t]*:[ \t]*(?P<ref>[^\n]+)"
 )
 
 # YAML frontmatter extractor — used to read `supersedes:` block sequences

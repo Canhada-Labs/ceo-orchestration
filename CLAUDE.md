@@ -70,7 +70,7 @@ workflow — the value here is governance and auditability, not throughput.
 | Role             | Framework / meta-repo (dogfood)                                       |
 | Runtime          | Python ≥ 3.9, stdlib-only (zero third-party runtime deps — see `SBOM.md`) |
 | Clone            | `https://github.com/Canhada-Labs/ceo-orchestration.git`               |
-| Tests            | ~810 test files; `make test-collect` (pytest `--collect-only`) reports ~14,700 parametrized cases |
+| Tests            | ~810 test files; `make test-collect` (pytest `--collect-only`) reports ~15,400 parametrized cases |
 | CI               | Workflows under `.github/workflows/`; key: `validate.yml` (governance), `release.yml` (tag gate), `coverage.yml` (tiered coverage) |
 | Plans            | `.claude/plans/PLAN-<NNN>-<slug>.md`                                   |
 | ADRs             | `.claude/adr/ADR-<NNN>-<slug>.md`                                      |

@@ -39,7 +39,7 @@ documentation bug.
 
 | Artifact | Count | Verify |
 |---|---|---|
-| Python tests collected | ~14,700 | `make test-collect` (or `python3 -m pytest --collect-only -q \| tail -1` — pytest.ini pins the testpath roots) |
+| Python tests collected | ~15,400 | `make test-collect` (or `python3 -m pytest --collect-only -q \| tail -1` — pytest.ini pins the testpath roots) |
 | Test files | ~810 | `git ls-files '*test_*.py' '*_test.py' \| wc -l` |
 | ADRs shipped | 198 | `ls .claude/adr/ADR-*.md \| wc -l` |
 | SPEC/v1 files | 32 (28 `*.schema.md`) | `ls SPEC/v1/*.md \| wc -l` |
@@ -83,7 +83,7 @@ bash .claude/scripts/validate-governance.sh   # PASS expected
 python3 -m pytest -q \
   .claude/hooks/tests/ .claude/scripts/tests/
 # Expect: 0 failures, ≤ handful of skipped (live-adapter gated).
-# Full collection across ALL testpath roots = ~14,700 collected cases
+# Full collection across ALL testpath roots = ~15,400 collected cases
 # (run `make test-collect`).
 ```
 

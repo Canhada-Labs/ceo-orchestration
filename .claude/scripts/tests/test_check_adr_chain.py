@@ -420,6 +420,133 @@ class TestADRChainValidation(unittest.TestCase):
             self.assertEqual(bidir, [], f"bidirectional link should be satisfied; warnings={warnings!r}")
 
 
+class TestFieldAnchorGrammar(unittest.TestCase):
+    """S333: the field grammar the corpus actually writes.
+
+    Twelve ADRs record the field as a markdown list item (`- **Status:** X`).
+    The reader anchored on `^[#\\s]*`, so for nine of them the field was
+    invisible and `check-adr-chain.py` reported `missing Status:` — a defect of
+    the READER, not of the data. Every negative case below was found by the
+    pair-rail against the cure itself.
+    """
+
+    def _make_corpus(self, td: Path, files: dict) -> Path:
+        for name, body in files.items():
+            (td / name).write_text(body, encoding="utf-8")
+        return td
+
+    def test_bullet_form_status_is_parsed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            d = self._make_corpus(
+                Path(td), {"ADR-001-bullet.md": "# ADR-001\n\n- **Status:** ACCEPTED\n"})
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertEqual(errors, [], "bullet-form status must parse; got %r" % (errors,))
+
+    def test_bullet_form_chain_fields_are_parsed(self) -> None:
+        """The sibling fields carry the same widening — one grammar, three readers."""
+        with tempfile.TemporaryDirectory() as td:
+            d = self._make_corpus(
+                Path(td),
+                {
+                    "ADR-001-old.md": (
+                        "# ADR-001\n\n- **Status:** SUPERSEDED\n"
+                        "- **Superseded-By:** ADR-002\n"
+                    ),
+                    "ADR-002-new.md": (
+                        "# ADR-002\n\n- **Status:** ACCEPTED\n"
+                        "- **Supersedes:** ADR-001\n"
+                    ),
+                },
+            )
+            errors, warnings = check_adr_chain.validate_chain(d)
+            self.assertEqual(errors, [], "bullet-form chain must parse; got %r" % (errors,))
+            self.assertEqual(
+                [w for w in warnings if "bidirectional" in w], [],
+                "the bullet-form Supersedes must close the link: %r" % (warnings,))
+
+    def test_a_genuinely_statusless_adr_is_still_an_error(self) -> None:
+        """The widening must not make the status gate vacuous."""
+        with tempfile.TemporaryDirectory() as td:
+            d = self._make_corpus(
+                Path(td), {"ADR-001-none.md": "# ADR-001\n\nNo status here.\n"})
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertTrue(
+                any("missing `Status:` field" in e for e in errors),
+                "a statusless ADR must still be an error; got %r" % (errors,))
+
+    def test_a_bullet_needs_whitespace_to_be_a_field(self) -> None:
+        """pair-rail: `-status:`, `---status:` and `*status:` are neither a
+        markdown list field nor a YAML key. The index generator rejects the
+        same lines, so accepting them here would let malformed input agree
+        with itself across two readers."""
+        for body in ("# ADR-001\n\n-status: ACCEPTED\n",
+                     "# ADR-001\n\n---status: ACCEPTED\n",
+                     "# ADR-001\n\n*status: ACCEPTED\n"):
+            with tempfile.TemporaryDirectory() as td:
+                d = self._make_corpus(Path(td), {"ADR-001-malformed.md": body})
+                errors, _ = check_adr_chain.validate_chain(d)
+                self.assertTrue(
+                    any("missing `Status:` field" in e for e in errors),
+                    "malformed %r must not read as a status; got %r" % (body, errors))
+
+    def test_a_real_bullet_field_still_parses(self) -> None:
+        """The positive side of the same rule."""
+        with tempfile.TemporaryDirectory() as td:
+            d = self._make_corpus(
+                Path(td), {"ADR-001-bullet.md": "# ADR-001\n\n-  **Status:** ACCEPTED\n"})
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertEqual(errors, [], "a real bullet field must parse; got %r" % (errors,))
+
+    def test_frontmatter_inline_successor_survives_the_widened_anchor(self) -> None:
+        """pair-rail. `status: SUPERSEDED by ADR-NNN` on the FIRST line after
+        the opening `---` fence must still register the successor.
+
+        The widening introduced this regression: `\\s` matches a newline, so
+        with `-` in the class the match anchored on the fence and the
+        inline-successor scan (which reads only the matched line) read `---`.
+        The class is horizontal-only for exactly this reason.
+        """
+        with tempfile.TemporaryDirectory() as td:
+            d = self._make_corpus(
+                Path(td),
+                {
+                    "ADR-001-old.md": (
+                        "---\nstatus: SUPERSEDED by ADR-002\n---\n# ADR-001\n"
+                    ),
+                    "ADR-002-new.md": (
+                        "---\nid: ADR-002\nstatus: ACCEPTED\n"
+                        "supersedes: ADR-001\n---\n# ADR-002\n"
+                    ),
+                },
+            )
+            errors, warnings = check_adr_chain.validate_chain(d)
+            self.assertEqual(errors, [], "inline successor form must parse; got %r" % (errors,))
+            self.assertEqual(
+                [w for w in warnings if "bidirectional" in w], [],
+                "the inline successor must close the link: %r" % (warnings,))
+
+    def test_the_shipped_corpus_has_only_the_two_declared_qualifier_errors(self) -> None:
+        """State of the corpus AFTER this commit, asserted so it cannot drift.
+
+        Before: 11 errors. Nine were unreadable statuses and are closed here.
+        The remaining two are the `supersedes:` edges that carry a qualifier
+        (a completed ADR-117 rename in ADR-120; a clause-scoped supersession in
+        ADR-182 whose target declares `amended_by:`). They are NOT data
+        defects, and the mechanism that teaches the checker to read the
+        qualifier is a separate, canonical wave — this test pins the interim
+        state so a NEW chain break reddens here instead of hiding among them.
+        """
+        adr_dir = Path(__file__).resolve().parent.parent.parent / "adr"
+        if not adr_dir.is_dir():
+            self.skipTest("ADR corpus not present in this tree")
+        errors, _ = check_adr_chain.validate_chain(adr_dir)
+        self.assertEqual(
+            len(errors), 2,
+            "expected exactly the two declared qualifier edges; got %r" % (errors,))
+        for e in errors:
+            self.assertIn("ADR-111", e, "an unexpected chain error appeared: %r" % (e,))
+
+
 class TestAmendLineageValidation(unittest.TestCase):
     """Check 5 — amends: lineage validation for AMEND files."""
 

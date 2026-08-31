@@ -55,7 +55,7 @@ Anthropic's (which Claude Code already needs).
 ### 6. We are stdlib-only Python ≥3.9, MIT-licensed, fork-friendly.
 
 Zero third-party runtime dependencies. All GitHub Actions SHA-pinned.
-~14,700 test cases (by `pytest --collect-only`) across hooks + scripts +
+~15,400 test cases (by `pytest --collect-only`) across hooks + scripts +
 formal + integration with tiered coverage (Tier-1 security-critical hooks
 ≥86%; repo floor 67%).
 SBOM published. The framework is auditable end-to-end
@@ -125,7 +125,7 @@ ceremony unavoidable.
 > a 50-person org. We wrap Claude Code with Plan → Debate → Execute,
 > a tamper-evident audit chain, and a Codex Pair-Rail that catches
 > L3+ mistakes before they ship. What you get is governance-as-code:
-> ~14,700 test cases, an inspectable HMAC-chained log, and a cross-LLM
+> ~15,400 test cases, an inspectable HMAC-chained log, and a cross-LLM
 > rail. We make no speed claim — six experiments found no general
 > speedup (PLAN-122), and we publish that null result honestly. Skip us
 > for one-file edits — overhead beats velocity below.

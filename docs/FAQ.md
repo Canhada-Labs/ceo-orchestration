@@ -106,7 +106,7 @@ Don't take the README table on faith. From a clean checkout:
 find .claude/skills -name SKILL.md | wc -l        # 166 skills (42 core + 8 frontend + 116 domain)
 ls .claude/commands/*.md | wc -l                  # 27 slash commands
 ls .claude/adr | grep -c '^ADR-'                  # 198 ADRs
-python3 -m pytest --collect-only -q | tail -1     # ~14,700 collected cases
+python3 -m pytest --collect-only -q | tail -1     # ~15,400 collected cases
 ```
 
 Every count in the README is reproducible this way. See the README "Verifying the numbers" section.
