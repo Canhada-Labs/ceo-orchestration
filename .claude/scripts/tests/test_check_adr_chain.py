@@ -950,6 +950,60 @@ class TestDeclaredExemptionLedger(unittest.TestCase):
             self.assertIn("ADR-003", supers[0])
             self.assertFalse(any("did not fire" in e for e in errors), errors)
 
+    def test_absent_declarer_makes_entry_na_not_error(self):
+        """Codex rail r1 P2 (adopter-seed case): install.sh ships this
+        README + the checker into trees with NONE of the framework ADRs.
+        An entry whose declarer base id is absent from the corpus is N/A —
+        no fire required, no error emitted."""
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                {
+                    "ADR-900-adopter-own.md": (
+                        "# ADR-900\n\n**Status:** ACCEPTED\n"
+                    ),
+                },
+                readme=self._ledger(
+                    "**ADR-120 -> ADR-111: framework-only pair**",
+                    "**ADR-182 -> ADR-111: framework-only pair**",
+                ),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertEqual(errors, [], errors)
+
+    def test_stem_pinned_entry_suppresses_when_stem_matches(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                dict(self.A_SUPERSEDES_B),
+                readme=self._ledger(
+                    "**ADR-002-new -> ADR-001-old: stem-pinned pair**"
+                ),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertEqual(errors, [], errors)
+
+    def test_stem_pinned_entry_refuses_a_different_file_with_same_id(self):
+        """The collision guard: an adopter's own ADR-002 reusing the base
+        id must NOT inherit suppression from a stem-pinned entry that
+        describes a DIFFERENT file — and with the declarer id present but
+        never firing, mandatory-fire reports the stale entry."""
+        with tempfile.TemporaryDirectory() as td:
+            d = self._corpus(
+                Path(td),
+                dict(self.A_SUPERSEDES_B),  # files: ADR-002-new.md
+                readme=self._ledger(
+                    "**ADR-002-something-else -> ADR-001-old: wrong stem**"
+                ),
+            )
+            errors, _ = check_adr_chain.validate_chain(d)
+            self.assertTrue(
+                any("should be SUPERSEDED" in e for e in errors), errors
+            )
+            self.assertTrue(
+                any("did not fire" in e for e in errors), errors
+            )
+
     def test_amend_declarer_matches_by_base_id(self):
         with tempfile.TemporaryDirectory() as td:
             d = self._corpus(

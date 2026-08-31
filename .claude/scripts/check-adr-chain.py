@@ -266,7 +266,8 @@ _README_EXEMPTION_SECTION_RE = re.compile(
 #: A full ledger entry: **ADR-NNN -> ADR-MMM: reason** (arrow or unicode
 #: arrow). Reason is bounded and horizontal-only.
 _EXEMPTION_ENTRY_RE = re.compile(
-    r"^\*\*(ADR-\d{3})\s*(?:\u2192|->)\s*(ADR-\d{3})\s*:\s*"
+    r"^\*\*(ADR-\d{3}(?:-[A-Za-z0-9.-]{1,120})?)\s*(?:\u2192|->)\s*"
+    r"(ADR-\d{3}(?:-[A-Za-z0-9.-]{1,120})?)\s*:\s*"
     r"([^\n]{1,200}?)\*\*[\t ]*$",
     re.MULTILINE,
 )
@@ -307,15 +308,23 @@ def _load_declared_exemptions(adr_dir: Path):
     section = m.group(0)
     parsed_spans = []
     for em in _EXEMPTION_ENTRY_RE.finditer(section):
-        declarer, target, reason = em.group(1), em.group(2), em.group(3)
-        pair = (declarer.upper(), target.upper())
-        if pair in exemptions:
+        declarer_tok, target_tok = em.group(1), em.group(2)
+        reason = em.group(3)
+        base_pair = (
+            _base_adr_id(declarer_tok),
+            _base_adr_id(target_tok),
+        )
+        if base_pair in exemptions:
             parse_errors.append(
                 "README declared supersession exemptions: duplicate entry "
-                f"{pair[0]} -> {pair[1]} — one edge, one entry"
+                f"{base_pair[0]} -> {base_pair[1]} — one edge, one entry"
             )
             continue
-        exemptions[pair] = reason.strip()
+        exemptions[base_pair] = {
+            "reason": reason.strip(),
+            "declarer_token": declarer_tok,
+            "target_token": target_tok,
+        }
         parsed_spans.append((em.start(), em.end()))
     for mm in _EXEMPTION_MARKER_RE.finditer(section):
         if not any(a <= mm.start() < b for a, b in parsed_spans):
@@ -331,6 +340,30 @@ def _base_adr_id(corpus_key: str):
     """``ADR-120`` from either ``ADR-120`` or a full AMEND stem."""
     m = re.match(r"(ADR-\d{3})", str(corpus_key))
     return m.group(1).upper() if m else None
+
+
+def _stem_of(d: dict) -> str:
+    """File stem (no ``.md``) of a corpus entry, from its ``path``."""
+    name = Path(str(d.get("path") or "")).name
+    return name[:-3] if name.endswith(".md") else name
+
+
+def _token_matches(token: str, corpus_key: str, d: dict) -> bool:
+    """A declared token matches when it is the bare base id, OR equals the
+    on-disk stem of the file holding that id (stem-pin). A full-stem token
+    that does not equal the real stem must NOT match — that is the
+    adopter-reuses-the-id collision guard (codex rail r1 P2)."""
+    tok = str(token)
+    if re.fullmatch(r"ADR-\d{3}", tok):
+        return True  # bare id: base-pair equality already established
+    return tok == _stem_of(d) or tok == str(corpus_key)
+
+
+def _exemption_tokens_match(entry, declarer_key, declarer_d,
+                            target_key, target_d) -> bool:
+    return _token_matches(
+        entry["declarer_token"], declarer_key, declarer_d
+    ) and _token_matches(entry["target_token"], target_key, target_d)
 
 
 def _extract_yaml_supersedes(text: str) -> List[str]:
@@ -575,12 +608,15 @@ def validate_chain(adr_dir: Path) -> Tuple[List[str], List[str]]:
             target_d = adrs[target]
             if not str(target_d.get("status") or "").startswith("SUPERSEDED"):
                 pair = (_base_adr_id(adr_id), _base_adr_id(target))
-                if pair in declared_exemptions:
+                entry = declared_exemptions.get(pair)
+                if entry is not None and _exemption_tokens_match(
+                    entry, adr_id, d, target, target_d
+                ):
                     # Reviewed data says this exact edge is legitimate
                     # (e.g. a rename completed under ADR-117 doctrine, or a
                     # clause supersession with `amended_by` on the target).
                     # Suppress THIS error only, and record the firing —
-                    # an entry that never fires fails the run below.
+                    # an unfired entry whose declarer EXISTS fails below.
                     fired_exemptions.add(pair)
                     continue
                 errors.append(
@@ -707,17 +743,28 @@ def validate_chain(adr_dir: Path) -> Tuple[List[str], List[str]]:
                     f"section if it is intentional)"
                 )
 
-    # Mandatory-fire: every declared exemption must have suppressed a real
-    # error edge in THIS run. A stale entry is an ERROR, not a comment —
-    # the ledger cannot outlive the bug it names (rail-round-3 route).
+    # Mandatory-fire: every declared exemption whose DECLARER exists in
+    # this corpus must have suppressed a real error edge in THIS run. A
+    # stale entry is an ERROR, not a comment — the ledger cannot outlive
+    # the bug it names (rail-round-3 route). An entry whose declarer base
+    # id is ABSENT from the corpus is N/A, deliberately (codex rail r1
+    # P2): install.sh seeds this README + the checker into adopter trees
+    # that carry none of the framework's ADRs, and a hard fire there
+    # would be a permanent false red. The stem-pin above still guards the
+    # collision case: an adopter's own ADR-NNN reusing a base id does not
+    # get suppression unless its full stem matches the declared one.
+    corpus_base_ids = {_base_adr_id(k) for k in adrs}
     for pair in sorted(declared_exemptions):
-        if pair not in fired_exemptions:
-            errors.append(
-                f"README declared exemption {pair[0]} -> {pair[1]} did not "
-                "fire (mandatory-fire): no matching "
-                "'Supersedes without SUPERSEDED target' edge exists — "
-                "remove the stale entry or fix the reference it names"
-            )
+        if pair in fired_exemptions:
+            continue
+        if pair[0] not in corpus_base_ids:
+            continue  # N/A: nothing this entry could name exists here
+        errors.append(
+            f"README declared exemption {pair[0]} -> {pair[1]} did not "
+            "fire (mandatory-fire): no matching "
+            "'Supersedes without SUPERSEDED target' edge exists — "
+            "remove the stale entry or fix the reference it names"
+        )
 
     return errors, warnings
 
