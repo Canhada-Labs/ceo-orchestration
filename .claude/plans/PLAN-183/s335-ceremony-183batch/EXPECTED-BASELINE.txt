@@ -4,9 +4,9 @@
 # decisao CONSCIENTE com fonte — nunca relaxamento.
 #
 # Medidos na sombra (base 8f01202) em 2026-08-31, S335:
-#   - 101 = 104 vivas + 4 demoted 0-dispatch (skill-frag) − 7 undemote A4
-#     (veto-undemote, rail 183-r4: chaves VETO-bearing saem dos DOIS alvos;
-#     settings.base 104→97);
+#   - 99 = 104 + 4 (skill-frag) − 9 undemote A4 (7 slugs + 2 grafias
+#     loaded-name «Kill Switches»/«Latency Budgets», rail 183-r5 — o teste
+#     normaliza via INVENTARIO; settings.base 104→95);
 #   - 28/0 = frozen-subset (7) + test_veto_skill_map (21, agora SEM o
 #     @expectedFailure — o invariante VETO-discovery passa DE VERDADE e o
 #     teste-companheiro foi deletado como ele mesmo instruia);
@@ -22,7 +22,7 @@ EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=1
 EXPECTED_UNIT_PYTEST_PASSED=28
 EXPECTED_UNIT_PYTEST_SKIPPED=0
-EXPECTED_SETTINGS_OVERRIDES=101
+EXPECTED_SETTINGS_OVERRIDES=99
 EXPECTED_INERT_REFS=1
 EXPECTED_BUDGET_COMMENT_REFS=1
 EXPECTED_AC5_CHECKED=0
