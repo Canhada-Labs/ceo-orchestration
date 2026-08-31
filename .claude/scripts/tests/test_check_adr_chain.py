@@ -525,26 +525,32 @@ class TestFieldAnchorGrammar(unittest.TestCase):
                 [w for w in warnings if "bidirectional" in w], [],
                 "the inline successor must close the link: %r" % (warnings,))
 
-    def test_the_shipped_corpus_has_only_the_two_declared_qualifier_errors(self) -> None:
-        """State of the corpus AFTER this commit, asserted so it cannot drift.
+    def test_the_shipped_corpus_is_clean_with_the_two_ledger_entries_fired(self) -> None:
+        """State of the corpus AFTER the wave-adrgate ceremony, pinned.
 
-        Before: 11 errors. Nine were unreadable statuses and are closed here.
-        The remaining two are the `supersedes:` edges that carry a qualifier
-        (a completed ADR-117 rename in ADR-120; a clause-scoped supersession in
-        ADR-182 whose target declares `amended_by:`). They are NOT data
-        defects, and the mechanism that teaches the checker to read the
-        qualifier is a separate, canonical wave — this test pins the interim
-        state so a NEW chain break reddens here instead of hiding among them.
+        History of this pin: 11 errors -> 2 (anchor cure, S333 f348ee9)
+        -> 0 (this ceremony: the two legitimate qualifier edges —
+        ADR-120's completed ADR-117 rename and ADR-182's clause-scoped
+        supersession — became DECLARED entries in the README ledger).
+        The ledger is mandatory-fire, so this test asserts BOTH sides:
+        the corpus is clean, AND the two entries are present and firing
+        (an empty ledger passing vacuously would not prove the route).
+        A new chain break reddens here instead of hiding.
         """
         adr_dir = Path(__file__).resolve().parent.parent.parent / "adr"
         if not adr_dir.is_dir():
             self.skipTest("ADR corpus not present in this tree")
         errors, _ = check_adr_chain.validate_chain(adr_dir)
         self.assertEqual(
-            len(errors), 2,
-            "expected exactly the two declared qualifier edges; got %r" % (errors,))
-        for e in errors:
-            self.assertIn("ADR-111", e, "an unexpected chain error appeared: %r" % (e,))
+            errors, [],
+            "expected a clean corpus with the ledger firing; got %r" % (errors,))
+        exemptions, parse_errors = check_adr_chain._load_declared_exemptions(
+            adr_dir)
+        self.assertEqual(parse_errors, [])
+        self.assertEqual(
+            sorted(exemptions),
+            [("ADR-120", "ADR-111"), ("ADR-182", "ADR-111")],
+            "the shipped ledger must hold exactly the two reviewed edges")
 
 
 class TestAmendLineageValidation(unittest.TestCase):

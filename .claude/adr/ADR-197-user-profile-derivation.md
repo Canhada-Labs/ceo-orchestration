@@ -1,10 +1,11 @@
 ---
 adr_id: ADR-197
 title: O perfil `user` é DERIVADO de `settings.base.json` por subtração declarada — nunca uma segunda cópia literal, e a lista de exclusão é dado com leitores
-status: PROPOSED
+status: ACCEPTED
+accepted_at: 2026-08-31
 proposed_at: 2026-08-30
 proposed_by: CEO (S331 — PLAN-169 OQ-E5, wave-s330-F; classificação por mérito em `4f4df3a`, código em `6a51eca`)
-decided_by: Owner (PENDENTE — a assinatura GPG do sentinel `PLAN-169/wave-s330-F-approved.md` É a ratificação; o flip textual para ACCEPTED chega ao main por cerimônia própria, como ADR-194 e ADR-196 registraram)
+decided_by: Owner (ratificado — a assinatura GPG real é o `.asc` commitado sobre `PLAN-169/wave-s330-F-approved.md`, land `303ae55` na S332; este flip textual chegou por cerimônia própria na S334, como ADR-194 e ADR-196 registraram)
 risk_tier: B
 debate_required: false
 debate: "Sem debate formal. A decisão de PRINCÍPIO já tinha precedente ratificado (ADR-194 rota de entrega, ADR-196 confinamento de escrita: o metadado vira DADO com leitores em vez de literal replicado); o que faltava era MEDIÇÃO, e ela existe — classificação por mérito dos 26 hooks só-na-base contra o critério declarado (`4f4df3a`, 43,5 KB, evidência por hook), OQ-E5 ratificada pelo Owner em 2026-08-27, e as quatro decisões de empacotamento ratificadas em 2026-08-30 (FU-F-ACCEL no mesmo patch; OQ-F1 congelada; OQ-F3 incluída; ADR novo em vez de AMEND). A revisão adversarial é o pair-rail cross-vendor sobre a sombra."

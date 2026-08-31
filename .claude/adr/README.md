@@ -64,6 +64,44 @@ Rather than backfilling a historical AMEND-1 for the earlier prose edits
 signal that AMEND-1 exists only as in-place prose revisions within the
 base ADR-040 file itself. This gap is by design, not an error.
 
+## Declared supersession exemptions (reviewed data, mandatory-fire)
+
+The entries below are the DECLARED ledger that the chain checker
+(`check-adr-chain.py`) consumes: each names one `Supersedes:` edge whose
+target legitimately stays non-SUPERSEDED. The ledger is MANDATORY-FIRE —
+an entry that stops matching a real edge FAILS the run, so an exemption
+cannot outlive the situation it names. Malformed arrow-bearing entries
+are fail-closed parse errors. Route: three rail rounds (S333) found
+fail-open holes in qualifier-grammar inference — the same class each
+round — so reviewed DATA replaced grammar
+(`PLAN-169/s333-ceremony-adrgate/rail-round-3.md`).
+
+Entry grammar (one line, bold): `**<declarer> -> <target>: reason**`,
+where each side is a bare base id (`ADR-NNN`) or, PREFERRED, the full
+file stem (`ADR-NNN-<slug>`) — the stem PINS the entry to that exact
+file, so an adopter's own ADR reusing the base id never inherits the
+suppression. An entry whose declarer base id is absent from the corpus
+is N/A (the installed-tree case: this README travels to adopters that
+carry none of the framework's ADRs). Prose between entries is free-form.
+
+**ADR-120-pii-core-promotion -> ADR-111-locked-corpus-governance: rename completed under ADR-117 doctrine**
+
+`ADR-120-pii-core-promotion.md` carries `original_id: ADR-111` — the PII
+file that HELD id ADR-111 was renamed to ADR-120 in the ADR-117
+collision-rename ceremony (`renamed_at: 2026-05-12`). The surviving
+`ADR-111-locked-corpus-governance.md` is a DIFFERENT decision that
+remains ACCEPTED: flipping it to SUPERSEDED would re-introduce the
+ledger bug repaired by PLAN-163 T5.2 (errata at ADR-111:20-31), and a
+live consumer still reads it (`SPEC/v1/audit-log.schema.md:329`).
+
+**ADR-182-codex-payload-pin-enforcement -> ADR-111-locked-corpus-governance: clause supersession with amended_by declared on the target**
+
+`ADR-182` supersedes ONLY the pin clauses of ADR-111 (frontmatter:
+`supersedes: "ADR-111 §pin clauses + ..."`); the base decision stays
+ACCEPTED by design and itself declares the relationship via
+`amended_by: ADR-182` (ADR-111 frontmatter line 5). ADR-182 §6 records
+the relationship prose-side.
+
 ## When to write an ADR
 
 Write an ADR when a decision has **L3+ blast radius** — i.e., it touches
@@ -410,7 +448,7 @@ _Auto-generated: 198 ADR(s) on disk. Run `python3 .claude/scripts/generate-adr-i
 | [ADR-194](ADR-194-delivery-route-resolution.md) | A rota de entrega é DADO compartilhado — um resolvedor destino→(fonte, transformação) para os três consumidores, e as duas árvores entram na decisão de propriedade | ACCEPTED |
 | [ADR-195](ADR-195-work-boundary-persistence.md) | Persistência em fronteira de trabalho — ledger de plano com obrigação derivada, e por que ele NÃO é derivado do audit log | PROPOSED |
 | [ADR-196](ADR-196-installer-write-confinement.md) | O destino de uma escrita do installer é respondido por UM predicado de confinamento na biblioteca — a política fica no chamador, e o valor de flag é validado no parse, não no sítio de escrita | PROPOSED |
-| [ADR-197](ADR-197-user-profile-derivation.md) | O perfil `user` é DERIVADO de `settings.base.json` por subtração declarada — nunca uma segunda cópia literal, e a lista de exclusão é dado com leitores | PROPOSED |
+| [ADR-197](ADR-197-user-profile-derivation.md) | O perfil `user` é DERIVADO de `settings.base.json` por subtração declarada — nunca uma segunda cópia literal, e a lista de exclusão é dado com leitores | ACCEPTED |
 
 <!-- END ADR-INDEX -->
 

@@ -92,6 +92,42 @@ jobs:
           python3 .claude/scripts/check-agents-md.py
 
       # -----------------------------------------------------------------
+      # Step: ADR chain integrity (PLAN-169 wave-adrgate)
+      #
+      # check-adr-chain.py validates Status grammar, supersede/amend
+      # chains, and the README "Declared supersession exemptions" ledger
+      # (reviewed data, MANDATORY-FIRE: a stale entry fails the run; a
+      # malformed entry is a fail-closed parse error). The declared-data
+      # route replaced qualifier-grammar inference after three rail
+      # rounds found fail-open holes in the same class
+      # (PLAN-169/s333-ceremony-adrgate/rail-round-3.md). Static,
+      # stdlib-only, NO network, NO credential — safe on fork PRs.
+      # Failure remediation: read the named error; either fix the ADR
+      # edge it cites or update the README ledger THROUGH a sentinel
+      # ceremony (the README is canonical).
+      # -----------------------------------------------------------------
+      - name: ADR chain integrity (declared-exemption ledger)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/check-adr-chain.py
+
+      # -----------------------------------------------------------------
+      # Step: ADR index drift (PLAN-169 wave-adrgate)
+      #
+      # The "Current ADRs" table between the ADR-INDEX markers in
+      # .claude/adr/README.md is GENERATED; --check exits 1 on drift
+      # WITHOUT writing (the README is canonical — writes only happen
+      # inside sentinel-gated rounds). Static, stdlib-only, NO network.
+      # Failure remediation: regenerate the table inside the next
+      # ceremony that touches .claude/adr/ (generate-adr-index.py
+      # --write), never by hand.
+      # -----------------------------------------------------------------
+      - name: ADR index drift (generate-adr-index --check)
+        run: |
+          set -euo pipefail
+          python3 .claude/scripts/generate-adr-index.py --check
+
+      # -----------------------------------------------------------------
       # Step: Doc skill-path resolves (PLAN-112-FOLLOWUP-install-md-skill-path)
       #
       # Every `.claude/skills/...SKILL.md` literal in INSTALL/README/CLAUDE.md

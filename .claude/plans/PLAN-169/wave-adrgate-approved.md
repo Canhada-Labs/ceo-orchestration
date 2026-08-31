@@ -14,8 +14,8 @@ Wave: wave-adrgate (PLAN-169 — o ledger DECLARADO de isenção de supersessão
 Patch: .claude/plans/PLAN-169/s334-ceremony-adrgate/ADRGATE.patch
 Patch-sha256: 09582f3477a864b691904b81256a5694c48bb48dd49c96310fd4b635a60fe88f
 Patch-base: e715aa81d1b8b61278d17f0b6a541a65e0613c43
-Anchor-SHA: ANCHOR-PLACEHOLDER
-Data: DATA-PLACEHOLDER
+Anchor-SHA: d93bf202f0561f8378489a99598d4f27c17cda6f
+Data: 2026-08-31
 
 ## O que esta wave entrega
 
@@ -60,7 +60,7 @@ sem o dado do README, e um gate ligado sem o dado nasceria vermelho.
    se esconda atrás do verde.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: APPROVED-BY-PLACEHOLDER
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-169
 Scope:
   - .claude/adr/ADR-197-user-profile-derivation.md
