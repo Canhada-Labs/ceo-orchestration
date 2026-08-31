@@ -820,6 +820,71 @@ else
   skip "T21: depende de um SIGN verde"
 fi
 
+# ---------------------------------------------------------------------------
+step "T22 — abort do finalize PRESERVA index pre-existente (redesenho r4)"
+# ---------------------------------------------------------------------------
+# O cenario exato do rail r4 P2: um material com conteudo INDEX-ONLY de
+# terceiro (staged, worktree limpo) atravessa um abort do finalize
+# INTACTO. A sombra do clone nasce do proprio ADRGATE.patch commitado, a
+# bateria curta passa DE VERDADE, o gerador roda e o abort cai no guard
+# pre-add (index nao-vazio) — o caminho pos-gerador que o rollback cobre.
+if [ "$RAIL_IS_APPROVE" = "1" ]; then
+  D="$( _fresh )"
+  _t22_shadow="$D.shadow"
+  _t22_prop="$CEREMONY_DIR/PROPOSED-PATCH.md"
+  if git -C "$D" worktree add --detach "$_t22_shadow" HEAD >/dev/null 2>&1 \
+     && git -C "$_t22_shadow" apply "$D/$CEREMONY_DIR/ADRGATE.patch" >/dev/null 2>&1; then
+    # INDEX-ONLY content no PROPOSED: stage de uma versao com marcador e
+    # worktree devolvido ao byte de HEAD — index != worktree != nada.
+    # rail r5 (2a forma): o PRE gate T-S329-2 ja garante materiais
+    # COMMITADOS na arvore que vira $SRC — o clone os tem em HEAD. O run
+    # e SEM --no-commit: o guard pre-add (o abort que este caso
+    # exercita) vive no ramo de commit. Setup = so o INDEX-ONLY content.
+    ( cd "$D" \
+      && printf '\nINDEXMARK-T22\n' >> "$_t22_prop" \
+      && git add -- "$_t22_prop" \
+      && git checkout -- "$_t22_prop" ) 2> "$WORK/t22-setup.err" || {
+        sed 's/^/        setup-err: /' "$WORK/t22-setup.err" >&2
+        fail "T22: setup do index-only falhou (stderr acima)"
+      }
+    _t22_wt_before="$( shasum -a 256 "$D/$_t22_prop" | awk '{print $1}' )"
+    mkdir -p "$( _logdir "$D" )"
+    _er_rc=0
+    ( cd "$D" && CEO_ADRGATE_SHADOW="$_t22_shadow" \
+        bash "$CEREMONY_DIR/finalize-adrgate.sh" \
+        > "$( _logdir "$D" )/finalize-t22.log" 2>&1 ) || _er_rc=$?
+    _t22_log="$( _logdir "$D" )/finalize-t22.log"
+    if [ "$_er_rc" -eq 0 ]; then
+      fail "T22: o finalize deveria ter abortado no guard de index nao-vazio e saiu 0"
+    else
+      _t22_fail=0
+      # ANTI-VACUO (r5): o abort tem de ser O guard, e o gerador tem de
+      # ter rodado antes — um abort de pre-condicao (passo 0/sombra) com
+      # marcador intacto seria verde por vacuidade.
+      grep -q "patch, Scope, Patch-base e Patch-sha256" "$_t22_log" \
+        || { echo "  T22: o gerador NUNCA rodou (abort pre-gerador) — caso vacuo; log: $_t22_log"; _t22_fail=1; }
+      grep -q "index ja carrega path(s) staged de outro trabalho" "$_t22_log" \
+        || { echo "  T22: o abort nao foi o guard pre-add — razao errada; log: $_t22_log"; _t22_fail=1; }
+      grep -q "INDEXMARK-T22" <( cd "$D" && git diff --cached -- "$_t22_prop" ) \
+        || { echo "  T22: o INDEXMARK sumiu do cached (index pre-existente DESTRUIDO)"; _t22_fail=1; }
+      _t22_wt_after="$( shasum -a 256 "$D/$_t22_prop" | awk '{print $1}' )"
+      [ "$_t22_wt_before" = "$_t22_wt_after" ] \
+        || { echo "  T22: worktree do PROPOSED nao voltou byte a byte"; _t22_fail=1; }
+      if [ "$_t22_fail" = "0" ]; then
+        pass "T22: abort REAL pos-gerador (guard pre-add) preservou index + worktree byte a byte"
+      else
+        fail "T22: pre-estado NAO preservado ou caso vacuo (acima); log: $_t22_log"
+      fi
+    fi
+    git -C "$D" worktree remove --force "$_t22_shadow" >/dev/null 2>&1 || true
+  else
+    fail "T22: nao consegui montar a sombra do clone a partir do ADRGATE.patch"
+  fi
+  _done "$D"
+else
+  skip "T22: depende de um SIGN verde"
+fi
+
 step "RESUMO"
 # ---------------------------------------------------------------------------
 printf '\n  PASS=%d  FAIL=%d  SKIP=%d\n' "$PASS" "$FAIL" "$SKIP"

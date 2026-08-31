@@ -199,6 +199,7 @@ TMPDIR_LAND="$(mktemp -d)"
 # aplicado. O trap entra AQUI, nao depois dos gates.
 APPLIED=0
 RESTORE_ON_EXIT=0
+STAGED_BY_LAND=0   # rail r4: NUNCA herdado do ambiente
 FP_BEFORE=""
 _fingerprint() {
   {
@@ -931,11 +932,11 @@ step "S — staging explicito (nunca 'git add -u')"
 # exige. E `-u` tambem arrastaria um path rastreado sujo tolerado no G0.
 # Stage EXATAMENTE: paths do patch + sentinel + .asc, com prova por `cmp`.
 { cat "$TOUCHED_FILE"; printf '%s\n' "$SENTINEL" "$SENTINEL.asc"; } | sort -u > "$EXPECTED_FILE"
+STAGED_BY_LAND=1   # rail r4: ANTES do loop — um add parcial ja autoriza o des-stage
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   git add -- "$f"
 done < "$EXPECTED_FILE"
-STAGED_BY_LAND=1   # rail r3 P2-k: habilita o des-stage escopado do _restore
 git diff --cached --name-only | sort -u > "$STAGED_FILE"
 git diff --cached --name-only | sed 's/^/    staged: /'
 if ! cmp -s "$EXPECTED_FILE" "$STAGED_FILE"; then

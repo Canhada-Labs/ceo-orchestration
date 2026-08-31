@@ -127,7 +127,9 @@ _cleanup() {
   # rail-materials r1 P2-b: um abort DEPOIS do gerador restaura os tres
   # materiais vivos ao estado pre-gerador (backup feito no passo 6).
   if [ -n "${_fin_bak:-}" ] && [ "${_fin_ok:-0}" != "1" ]; then
-    _fin_restore 2>/dev/null || printf ''
+    # rail r5: o aviso de recovery TEM de chegar ao operador — nada de
+    # engolir o stderr do restore.
+    _fin_restore || printf ''
   fi
   if [ -n "$WT" ] && [ -d "$WT" ]; then
     git worktree remove --force "$WT" >/dev/null 2>&1 || printf ''
@@ -550,21 +552,40 @@ for _bf in "$PATCH" "$SENTINEL" "$PROPOSED" "$BASE_SHA_FILE"; do
     printf '%s\n' "$_bf" >> "$_fin_bak/.absent-before"
   fi
 done
+# rail r4 (REDESENHO, criterio da r3 disparado): o INDEX tambem e
+# pre-estado. Captura o diff staged EXATO dos 4 materiais; o rollback
+# zera o staged deles e RE-APLICA este patch — index-only content de
+# terceiros sobrevive a qualquer abort byte a byte.
+if ! git diff --cached --binary -- "$PATCH" "$SENTINEL" "$PROPOSED" "$BASE_SHA_FILE" \
+       > "$_fin_bak/index-prestate.patch" 2>"$_fin_bak/index-capture.err"; then
+  # rail r5: fail-CLOSED — sem captura do pre-estado do index, este script
+  # NAO muta os materiais (um rollback sem a captura apagaria staging
+  # pre-existente em silencio).
+  die "nao consegui capturar o pre-estado do INDEX dos materiais:
+$( sed 's/^/    /' "$_fin_bak/index-capture.err" 2>/dev/null )
+  Recusando mutar qualquer material. Resolva e re-rode."
+fi
 _fin_restore() {
-  # rail r2 P2-f: a transacao cobre os QUATRO materiais (BASE-SHA.txt
-  # tambem e mutado) e des-stageia o que este script stageou — um
-  # commit-fail nao pode deixar index misto.
+  # rail r4 (REDESENHO): restaura o pre-estado EXATO — worktree (bytes ou
+  # ausencia) E index (o diff staged capturado) — dos QUATRO materiais.
+  # Nao ha mais boolean por caso: o estado capturado E a verdade.
   for _bf in "$PATCH" "$SENTINEL" "$PROPOSED" "$BASE_SHA_FILE"; do
     git reset -q -- "$_bf" >/dev/null 2>&1 || true
     if [ -f "$_fin_bak/$(basename "$_bf")" ]; then
       cp -p "$_fin_bak/$(basename "$_bf")" "$_bf"
     elif grep -qxF "$_bf" "$_fin_bak/.absent-before" 2>/dev/null; then
-      # rail r3 P2-i: o arquivo NAO existia antes do gerador — um abort
-      # remove o parcial em vez de deixa-lo orfao na arvore.
       rm -f "$_bf" 2>/dev/null || true
     fi
   done
-  printf '  finalize: patch/sentinel/PROPOSED/BASE-SHA RESTAURADOS ao estado pre-gerador (e des-stageados)\n' >&2
+  if [ -s "$_fin_bak/index-prestate.patch" ]; then
+    if git apply --cached "$_fin_bak/index-prestate.patch" >/dev/null 2>&1; then
+      printf '  finalize: index pre-existente dos materiais RE-APLICADO byte a byte\n' >&2
+    else
+      printf '  finalize: AVISO — nao consegui re-aplicar o index pre-existente;\n' >&2
+      printf '            o patch capturado esta preservado em %s\n' "$_fin_bak/index-prestate.patch" >&2
+    fi
+  fi
+  printf '  finalize: materiais RESTAURADOS ao pre-estado exato (worktree + index)\n' >&2
 }
 python3 "$FINALIZE" \
   --shadow "$WT" \
