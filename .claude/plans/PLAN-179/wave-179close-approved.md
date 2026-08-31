@@ -49,7 +49,10 @@ claim falsa numa superfície de governança.
 3. **`SessionEnd.py`** (canônico, US8) — implementado A PARTIR da spec
    assinada `PLAN-179/staged-w24/SESSIONEND-NOTE.md`: observação
    STAT-ONLY (`st_mtime` vs âncora de início de sessão), âncora resolvida
-   chain → state_file → terminal honesto `start_unknown` (nunca um chute),
+   chain (oldest-in-window, HMAC com predecessor REAL) → terminal honesto
+   (a perna state_file foi APOSENTADA no r5: os.replace reseta até o
+   st_birthtime — nenhum artefato imutável; o valor do enum segue
+   registrado no wire, nunca produzido),
    observação ANTES do cleanup do tool_lifecycle (§5 constraint #1), emit
    ANTES do `session_end` (§5 constraint #2), linha de ratificação do
    operador (a OMISSÃO vira visível: `memory delta ABSENT`), sanitização
@@ -66,10 +69,11 @@ claim falsa numa superfície de governança.
 
 Não-canônicos que viajam juntos: o golden regenerado (`# count: 331`), o
 `harness-noop-allowlist.txt` novo (rota gate-side ADR-160 §7 exigida pela
-spec §3), a suíte nova `test_session_end_memory_delta.py` (21 testes = §7 da
-spec + paridade de enums + os controles das curas dos rails r1-r4 —
-NFKC-bypass, âncora forjada e field-set da assinatura, compact-restart,
-birthtime, scan incompleto, delta payload-gated), extensões em `test_check_compaction_continuity.py`
+spec §3), a suíte nova `test_session_end_memory_delta.py` (24 testes = §7 da
+spec + paridade de enums + os controles dos rails r1-r5 — NFKC-bypass,
+âncora forjada/field-set/predecessor-real, compact-restart, perna
+state_file APOSENTADA, scan incompleto, stat-final lento, preâmbulo de
+papel, delta payload-gated), extensões em `test_check_compaction_continuity.py`
 (14 testes US7/válvula/reinjector, incl. os controles de injeção do
 título hostil e do shape do pointer — path/sha fora de forma caem), o rebaseline consciente dos 5 pins de contagem
 (`test_audit_emit_api_contract.py` — contagem+SHA re-derivado+símbolo
@@ -94,6 +98,10 @@ reason-SLUG + `I-ACCEPT` — o mecanismo idêntico ao do adrgate (land real
 
 ## Residuais declarados
 
+- A perna state_file da spec §2 está APOSENTADA (r5 — falsificada duas
+  vezes: mtime é o último tool-use e o rewrite atômico reseta o
+  birthtime); `anchor_source="state_file"` permanece registrado no wire
+  por compat, nunca produzido.
 - `_session_start_ts` devolve `(ts, anchor_source)` — a spec §3 declara
   `-> Optional[float]`, mas o contrato de wire §4 exige `anchor_source` e
   nenhuma assinatura §3 o produz. Reconciliação MÍNIMA, documentada no
