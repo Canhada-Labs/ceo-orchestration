@@ -66,9 +66,10 @@ claim falsa numa superfície de governança.
 
 Não-canônicos que viajam juntos: o golden regenerado (`# count: 331`), o
 `harness-noop-allowlist.txt` novo (rota gate-side ADR-160 §7 exigida pela
-spec §3), a suíte nova `test_session_end_memory_delta.py` (20 testes = §7 da
-spec + paridade de enums + os controles das curas dos rails r1+r2 —
-NFKC-bypass, âncora forjada, compact-restart, birthtime, scan incompleto), extensões em `test_check_compaction_continuity.py`
+spec §3), a suíte nova `test_session_end_memory_delta.py` (21 testes = §7 da
+spec + paridade de enums + os controles das curas dos rails r1-r4 —
+NFKC-bypass, âncora forjada e field-set da assinatura, compact-restart,
+birthtime, scan incompleto, delta payload-gated), extensões em `test_check_compaction_continuity.py`
 (14 testes US7/válvula/reinjector, incl. os controles de injeção do
 título hostil e do shape do pointer — path/sha fora de forma caem), o rebaseline consciente dos 5 pins de contagem
 (`test_audit_emit_api_contract.py` — contagem+SHA re-derivado+símbolo

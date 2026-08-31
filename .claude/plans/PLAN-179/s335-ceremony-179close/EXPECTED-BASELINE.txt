@@ -6,10 +6,10 @@
 # EXPECTED_* envelhece, S328).
 #
 # Medidos na sombra (base cfab980) em 2026-08-31, S335:
-#   - 304 = pytest -q das 9 suites declaradas (72 das 3 tocadas + 12 do
+#   - 305 = pytest -q das 9 suites declaradas (73 das 3 tocadas + 12 do
 #     contrato de API + 135 das 4 suites de pin rebaselineadas + 85 do
 #     git_bypass_guard, o 6o pin achado pela bateria integral; inclui os
-#     8 controles das curas dos rails r1+r2), 0 skips;
+#     controles das curas dos rails r1-r4), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -19,7 +19,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=304
+EXPECTED_UNIT_PYTEST_PASSED=305
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
