@@ -1,0 +1,28 @@
+ceremony(PLAN-183 wave-183batch): settings regenerado (+4 demoted), template INERT, AC-5 por registro
+
+O settings: skillOverrides regenerado pelo skill-budget-generator
+(--jq-fragment idempotente; +4 skills domain-tier 0-dispatch demoted a
+name-only: cpp-testing, frontend-slides, prisma-patterns, ui-demo — 104
+→ 108). KERNEL: settings.json ∈ _KERNEL_PATHS, o LAND armou o override
+no menor escopo. Prova tripla: idempotência (sha), não-vacuidade (chave
+apagada em cópia é recuperada pelo fragment), gate real
+(check_harness_config rc 0 pós-patch).
+
+O template: validate.yml.template ganha o header "INERT AS SHIPPED" no
+molde exato de benchmarks.yml.template:3-7 (comentário puro; ativação =
+git mv explícito do adopter). Frozen-subset (11 steps + pins) intacto —
+7/7.
+
+O AC-5: fechado por REGISTRO com evidência nomeada — a «metade canônica»
+que a nota ◐ da S334 declarava faltante JÁ existia
+(smoke-install.yml:485 invoca o sh inteiro; a perna de ativação vive em
+smoke-install.sh:180). Zero edição de yml; AC-2/OQ-2 (execução real do
+workflow ativado) segue deliberadamente aberta — decisão do Owner.
+
+Sentinel: .claude/plans/PLAN-183/wave-183batch-approved.md (+ .asc).
+Bateria V1-V9 do OWNER-S335-183BATCH-LAND.sh verde contra
+EXPECTED-BASELINE.txt (frozen-subset 7/0; overrides 108; INERT/COMMENT/
+AC-5 = 1; verify-counts e governança 0).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01B3eLhwF8QM1TW7f5buaHkP

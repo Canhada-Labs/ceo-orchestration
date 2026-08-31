@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# test-ceremony-scripts-179close.sh — harness do pacote de cerimonia wave-179close.
+# test-ceremony-scripts-183batch.sh — harness do pacote de cerimonia wave-183batch.
 # CEREMONY-LINT: handwritten-exception: harness de cerimonia autorado a mao;
 # nao ha gerador (o generate-ceremony.sh assume o layout
 # architect/round-N/approved.md, que esta cerimonia nao usa).
@@ -34,23 +34,23 @@
 # roda depois do push — ver o RESUMO.
 #
 # Uso:
-#   bash .claude/plans/PLAN-179/s335-ceremony-179close/test-ceremony-scripts-179close.sh
-#   CEO_179CLOSE_HARNESS_UNCOMMITTED=1 bash .../test-ceremony-scripts-179close.sh  # pre-commit
+#   bash .claude/plans/PLAN-183/s335-ceremony-183batch/test-ceremony-scripts-183batch.sh
+#   CEO_183BATCH_HARNESS_UNCOMMITTED=1 bash .../test-ceremony-scripts-183batch.sh  # pre-commit
 set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P )"
 ROOT="$( cd "$SCRIPT_DIR" && git rev-parse --show-toplevel )"
 
 # --- constantes do pacote --------------------------------------------------
-PLAN_DIR=".claude/plans/PLAN-179"
-CEREMONY_DIR="$PLAN_DIR/s335-ceremony-179close"
-SENTINEL="$PLAN_DIR/wave-179close-approved.md"
-PATCH="$CEREMONY_DIR/W179CLOSE.patch"
+PLAN_DIR=".claude/plans/PLAN-183"
+CEREMONY_DIR="$PLAN_DIR/s335-ceremony-183batch"
+SENTINEL="$PLAN_DIR/wave-183batch-approved.md"
+PATCH="$CEREMONY_DIR/W183BATCH.patch"
 BASELINE_ENV="$CEREMONY_DIR/EXPECTED-BASELINE.txt"
-SIGN_SCRIPT="$PLAN_DIR/OWNER-S335-179CLOSE-SIGN.sh"
-LAND_SCRIPT="$PLAN_DIR/OWNER-S335-179CLOSE-LAND.sh"
+SIGN_SCRIPT="$PLAN_DIR/OWNER-S335-183BATCH-SIGN.sh"
+LAND_SCRIPT="$PLAN_DIR/OWNER-S335-183BATCH-LAND.sh"
 THREAT_MODEL="docs/threat-model.md"
-COMMIT_MSG_FILE="$CEREMONY_DIR/COMMIT-MSG-179CLOSE.txt"
+COMMIT_MSG_FILE="$CEREMONY_DIR/COMMIT-MSG-183BATCH.txt"
 # --------------------------------------------------------------------------
 
 PASS=0; FAIL=0; SKIP=0
@@ -84,7 +84,7 @@ done
   $SP_BASE/$REPO_SLUG/*/scratchpad
   Este harness so roda sob o scratchpad (os scripts recusam o interruptor de
   auto-teste em qualquer outra arvore)."
-WORK="$( mktemp -d "$SESSION_DIR/ceremony-selftest-s335w179c.XXXXXX" )"
+WORK="$( mktemp -d "$SESSION_DIR/ceremony-selftest-s335w183b.XXXXXX" )"
 # Logs sao preservados quando ha FAIL (licao S329: LANDs preservam os logs
 # caros no abort — sem eles a triagem de um FAIL exige re-rodar tudo).
 trap '[ "${FAIL:-0}" -gt 0 ] && { printf "\n  logs preservados em %s/logs\n" "$WORK"; find "$WORK" -mindepth 1 -maxdepth 1 ! -name logs -exec rm -rf {} +; } || rm -rf "$WORK"' EXIT
@@ -101,23 +101,23 @@ MATERIAL_LIST=(
   "$COMMIT_MSG_FILE"
   "$BASELINE_ENV"
   "$CEREMONY_DIR/BASE-SHA.txt"
-  "$CEREMONY_DIR/finalize-179close.sh"
-  "$CEREMONY_DIR/test-ceremony-scripts-179close.sh"
-  "$CEREMONY_DIR/DESIGN-179CLOSE-S335.md"
+  "$CEREMONY_DIR/finalize-183batch.sh"
+  "$CEREMONY_DIR/test-ceremony-scripts-183batch.sh"
+  "$CEREMONY_DIR/DESIGN-183BATCH-S335.md"
   "$PATCH"
   "$SENTINEL"
 )
 UNCOMMITTED=""
 for m in "${MATERIAL_LIST[@]}"; do
   [ -f "$ROOT/$m" ] || die "material AUSENTE na arvore viva: $m
-  Rode primeiro:  bash $ROOT/$CEREMONY_DIR/finalize-179close.sh"
+  Rode primeiro:  bash $ROOT/$CEREMONY_DIR/finalize-183batch.sh"
   git -C "$ROOT" ls-files --error-unmatch -- "$m" >/dev/null 2>&1 \
     || UNCOMMITTED="$UNCOMMITTED  $m
 "
 done
 if [ -n "$UNCOMMITTED" ]; then
-  if [ "${CEO_179CLOSE_HARNESS_UNCOMMITTED:-}" = "1" ]; then
-    printf '\033[33m  CEO_179CLOSE_HARNESS_UNCOMMITTED=1\033[0m — material(is) ainda NAO commitado(s):\n'
+  if [ "${CEO_183BATCH_HARNESS_UNCOMMITTED:-}" = "1" ]; then
+    printf '\033[33m  CEO_183BATCH_HARNESS_UNCOMMITTED=1\033[0m — material(is) ainda NAO commitado(s):\n'
     printf '%s' "$UNCOMMITTED"
     printf '        Sigo com a copia EM DISCO. Isto responde "os scripts funcionam?",\n'
     printf '        NAO responde "o pack em HEAD esta correto". Rode de novo DEPOIS\n'
@@ -128,7 +128,7 @@ if [ -n "$UNCOMMITTED" ]; then
     printf '  Um harness que passa sobre um pack untracked mede outra arvore que\n' >&2
     printf '  nao a que sera landada (licao T-S329-2). Commite os materiais e\n' >&2
     printf '  repita, ou — se voce esta so exercitando os scripts antes do commit:\n' >&2
-    printf '    CEO_179CLOSE_HARNESS_UNCOMMITTED=1 bash %s\n' "$ROOT/$CEREMONY_DIR/test-ceremony-scripts-179close.sh" >&2
+    printf '    CEO_183BATCH_HARNESS_UNCOMMITTED=1 bash %s\n' "$ROOT/$CEREMONY_DIR/test-ceremony-scripts-183batch.sh" >&2
     exit 1
   fi
 else
@@ -172,7 +172,7 @@ if git -C "$SRC" diff --cached --quiet; then
   printf '  materiais ja commitados em HEAD — commit sintetico dispensado\n'
 else
   git -C "$SRC" -c user.name=selftest -c user.email=selftest@example.invalid \
-    commit -q -m "selftest: materiais da cerimonia wave-179close" \
+    commit -q -m "selftest: materiais da cerimonia wave-183batch" \
     || die "commit sintetico falhou no clone"
 fi
 SYNTH_HEAD="$( git -C "$SRC" rev-parse HEAD )"
@@ -182,8 +182,8 @@ printf '  commit sintetico: %s (%d registro(s) de rail)\n' "$SYNTH_HEAD" "$RAIL_
 # sintetico. Isso e exatamente a forma que o SIGN/LAND esperam (base ancestral,
 # sem drift nos paths tocados), entao nao ha nada a re-gerar.
 git -C "$SRC" apply --check "$PATCH" \
-  || die "o W179CLOSE.patch nao aplica no clone — o setup do harness esta errado"
-printf '  W179CLOSE.patch aplica limpo no clone\n'
+  || die "o W183BATCH.patch nao aplica no clone — o setup do harness esta errado"
+printf '  W183BATCH.patch aplica limpo no clone\n'
 
 # O ultimo registro de rail precisa ser APPROVE para os casos que exigem o SIGN
 # VERDE. Se ainda for REJECT (ou nao existir), esses casos seriam vermelhos
@@ -220,7 +220,7 @@ if [ "$RAIL_IS_APPROVE" = "0" ]; then
 Rail-Verdict: APPROVE
 
 Este arquivo existe SO dentro do clone descartavel do
-test-ceremony-scripts-179close.sh, para destravar os casos que exigem um SIGN
+test-ceremony-scripts-183batch.sh, para destravar os casos que exigem um SIGN
 verde enquanto a rodada de rail de verdade nao foi escrita. Ele nunca e
 commitado na arvore viva. Se voce esta lendo isto fora de /private/tmp, algo
 deu errado.
@@ -351,7 +351,7 @@ step "T0 — bijecao das chaves EXPECTED (usadas <-> declaradas)"
 # chaves com DIGITO no nome — EXPECTED_AC5_CHECKED virava EXPECTED_AC e o
 # T0 dava falso vermelho; latente em toda a familia, exposto no batch.)
 _used="$( grep -ohE '_expect [A-Z0-9_]+' \
-            "$ROOT/$CEREMONY_DIR/finalize-179close.sh" \
+            "$ROOT/$CEREMONY_DIR/finalize-183batch.sh" \
             "$ROOT/$SIGN_SCRIPT" "$ROOT/$LAND_SCRIPT" \
           | awk '{print $2}' | LC_ALL=C sort -u )"
 _declared="$( grep -oE '^[A-Z_]+=' "$ROOT/$BASELINE_ENV" | tr -d '=' | LC_ALL=C sort -u )"
@@ -435,8 +435,8 @@ if [ "$RAIL_IS_APPROVE" = "1" ]; then
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-s2 = s.replace("  - .claude/hooks/SessionEnd.py\n",
-               "  - .claude/hooks/SessionEnd.py\n  - scripts/install.sh\n", 1)
+s2 = s.replace("  - .claude/settings.json\n",
+               "  - .claude/settings.json\n  - scripts/install.sh\n", 1)
 assert s2 != s, "plant T4 MORTO: a ancora nao existe no Scope deste sentinel"
 open(p, "w", encoding="utf-8").write(s2)
 PY
@@ -458,7 +458,7 @@ if [ "$RAIL_IS_APPROVE" = "1" ]; then
 import sys
 p = sys.argv[1]
 s = open(p, encoding="utf-8").read()
-s2 = s.replace("  - .claude/hooks/_lib/audit_emit.py\n", "", 1)
+s2 = s.replace("  - templates/.github/workflows/validate.yml.template\n", "", 1)
 assert s2 != s, "plant T5 MORTO: a ancora nao existe no Scope deste sentinel"
 open(p, "w", encoding="utf-8").write(s2)
 PY
@@ -588,37 +588,36 @@ fi
 _done "$D"
 
 # ---------------------------------------------------------------------------
-step "T11 — V6a: contagem ERRADA de linhas de acao no SPEC => vermelho"
+step "T11 — V6a: contagem ERRADA do header INERT => vermelho"
 # ---------------------------------------------------------------------------
 # `unwired = no test`. Este caso prova que o V6a COMPARA, em vez de so contar.
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
   D="$( _fresh )"
-  _set_expect "$D" EXPECTED_SPEC_ACTION_ROWS 7
+  _set_expect "$D" EXPECTED_INERT_REFS 7
   _commit_plant "$D" "$BASELINE_ENV" || fail "T11: nao consegui commitar o plant"
   _sign "$D" || fail "T11: SIGN falhou no setup"
   _er_rc=0; _land "$D" --dry-run || _er_rc=$?
-  _expect_red "$D" "esperado 7" "T11: V6a pega contagem de wire errada"
+  _expect_red "$D" "esperado 7" "T11: V6a pega contagem do INERT errada"
   _done "$D"
 else
   skip "T11: depende de um SIGN verde"
 fi
 
 # ---------------------------------------------------------------------------
-step "T12 — V6c: a contagem do cabecalho do golden e COMPARADA de verdade"
+step "T12 — V4: a contagem de overrides do settings e COMPARADA de verdade"
 # ---------------------------------------------------------------------------
-# O golden e o espelho derivado do _KNOWN_ACTIONS. Declarar 999 com o arquivo
-# dizendo 331 tem de ficar vermelho — se passar, o V6c esta lendo outra
-# coisa. A forma re-sign (plant -> reset -> re-assina) tambem exercita o
-# caminho de re-assinatura do SIGN, herdado do T12 do adrgate.
+# Declarar 999 com o settings carregando a contagem real tem de ficar
+# vermelho — se passar, o V4 esta lendo outra coisa. A forma re-sign
+# (plant -> reset -> re-assina) exercita o caminho de re-assinatura.
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
   D="$( _fresh )"
   _sign "$D" || fail "T12: SIGN falhou no setup"
-  _set_expect "$D" EXPECTED_GOLDEN_COUNT 999
+  _set_expect "$D" EXPECTED_SETTINGS_OVERRIDES 999
   _reset_sign_fields "$D"
   _commit_plant "$D" "$BASELINE_ENV" "$SENTINEL" || fail "T12: nao consegui commitar o plant"
   _sign "$D" || fail "T12: re-SIGN falhou (o EXPECTED mudou)"
   _er_rc=0; _land "$D" --dry-run || _er_rc=$?
-  _expect_red "$D" "count: 999" "T12: V6c compara a contagem declarada do golden"
+  _expect_red "$D" "esperado 999" "T12: V4 compara a contagem de overrides"
   _done "$D"
 else
   skip "T12: depende de um SIGN verde"
@@ -642,21 +641,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-step "T14 — V4: a valvula e executada de VERDADE e o permille e comparado"
+step "T14 — G5: a contagem de canonicos e COMPARADA de verdade"
 # ---------------------------------------------------------------------------
-# O caso que prova a CURA da wave na cerimonia, nao apenas na suite: o V4
-# importa o modulo POS-PATCH, roda `_eta_advisory()` e compara o permille
-# contra o DECLARADO. Plantar 123 com as constantes medidas dando 887 tem de
-# ficar vermelho — um V4 que passe aqui nao esta rodando a valvula.
+# Um patch que perdesse o settings (o unico canonico do batch) passaria por
+# "todos concedidos" com zero canonicos; o G5 compara contra a base.
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
   D="$( _fresh )"
   _sign "$D" || fail "T14: SIGN falhou no setup"
-  _set_expect "$D" EXPECTED_ETA_PERMILLE 123
+  _set_expect "$D" EXPECTED_PATCH_CANONICAL_PATHS 7
   _reset_sign_fields "$D"
   _commit_plant "$D" "$BASELINE_ENV" "$SENTINEL" || fail "T14: nao consegui commitar o plant"
   _sign "$D" || fail "T14: re-SIGN falhou (o EXPECTED mudou)"
   _er_rc=0; _land "$D" --dry-run || _er_rc=$?
-  _expect_red "$D" "123 permille" "T14: V4 roda a valvula e compara o permille"
+  _expect_red "$D" "esperado 7" "T14: G5 compara a contagem de canonicos"
   _done "$D"
 else
   skip "T14: depende de um SIGN verde"
@@ -667,7 +664,7 @@ step "T15a — mensagem de commit com o trailer por preencher => vermelho"
 # ---------------------------------------------------------------------------
 # O gate do passo C recusa `Pair-Rail-Reviewed: TO-FILL*`: um land que
 # aceitasse isso gravaria no historico um commit que mente sobre a propria
-# revisao. O COMMIT-MSG-179CLOSE.txt VIVO nao carrega o trailer (o CEO o
+# revisao. O COMMIT-MSG-183BATCH.txt VIVO nao carrega o trailer (o CEO o
 # adiciona depois da ultima rodada), entao este caso PLANTA a forma
 # por-preencher no clone — o gate tem de recusa-la mesmo assim.
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
@@ -707,18 +704,15 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-step "T16 — V5: o flip do plano e comparado de verdade (nao assumido)"
+step "T16 — V5: o AC-5 e comparado de verdade (LAND completo)"
 # ---------------------------------------------------------------------------
-# O `done` do PLAN-179 viaja NO patch, e um done com checkbox aberto e claim
-# falsa. Este caso prova que o V5 CONTA os checkboxes abertos e compara com o
-# declarado (LAND COMPLETO — o V5 vive depois do corte do dry-run).
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
   D="$( _fresh )"
-  _set_expect "$D" EXPECTED_PLAN_OPEN_CHECKBOXES 5
+  _set_expect "$D" EXPECTED_AC5_CHECKED 5
   _commit_plant "$D" "$BASELINE_ENV" || fail "T16: nao consegui commitar o plant"
   _sign "$D" || fail "T16: SIGN falhou no setup"
   _er_rc=0; _land "$D" || _er_rc=$?
-  _expect_red "$D" "esperado 5" "T16: V5 conta os checkboxes do plano e compara"
+  _expect_red "$D" "esperado 5" "T16: V5 conta o AC-5 e compara"
   _done "$D"
 else
   skip "T16: depende de um SIGN verde"
@@ -752,10 +746,10 @@ step "T20 — curas do rail-materials r2 seguem WIRED (contrato executavel)"
 # que o valor antigo (com espacos, ACK=1) era recusado em silencio.
 _t20_fail=0
 # (a) _fin_ok=1 dentro do ramo --no-commit (P1-d)
-awk '/if \[ "\$NO_COMMIT" = "1" \]; then/,/^else$/' "$ROOT/$CEREMONY_DIR/finalize-179close.sh" \
+awk '/if \[ "\$NO_COMMIT" = "1" \]; then/,/^else$/' "$ROOT/$CEREMONY_DIR/finalize-183batch.sh" \
   | grep -q '_fin_ok=1' || { echo "  T20a: _fin_ok=1 SUMIU do ramo --no-commit"; _t20_fail=1; }
 # (b) _fin_ok inicializado (P2-e)
-grep -q '^_fin_ok=0' "$ROOT/$CEREMONY_DIR/finalize-179close.sh" \
+grep -q '^_fin_ok=0' "$ROOT/$CEREMONY_DIR/finalize-183batch.sh" \
   || { echo "  T20b: init _fin_ok=0 ausente"; _t20_fail=1; }
 # (c) _land_rc=$? e a PRIMEIRA instrucao de _restore (P2-h)
 _t20_first="$( awk '/^_restore\(\) \{/{f=1;next} f && !/^[[:space:]]*#/ && NF {print; exit}' "$ROOT/$LAND_SCRIPT" )"
@@ -793,23 +787,23 @@ step "T21 — abort do LAND PRESERVA o log do gate que falhou (rail r2 P2-h)"
 # ---------------------------------------------------------------------------
 # Pre-cura, _land_rc lia $? DEPOIS de um unset e via sempre 0 — o ramo de
 # preservacao nunca rodava e o Owner de um abort ficava sem a evidencia
-# (a licao S329-manha, de novo). Reusa o cenario vermelho do T14 (permille
-# plantado; o V4 roda no dry-run) e assere que um land-179close-*.log
+# (a licao S329-manha, de novo). Reusa o cenario vermelho do T12 (overrides
+# plantados; o V4 roda no dry-run) e assere que um land-183batch-*.log
 # aparece no ceremony dir do CLONE.
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
   D="$( _fresh )"
-  _set_expect "$D" EXPECTED_ETA_PERMILLE 123
+  _set_expect "$D" EXPECTED_SETTINGS_OVERRIDES 999
   _commit_plant "$D" "$BASELINE_ENV" || fail "T21: nao consegui commitar o plant"
   _sign "$D" || fail "T21: SIGN falhou no setup"
   _er_rc=0; _land "$D" --dry-run || _er_rc=$?
   if [ "$_er_rc" -eq 0 ]; then
     fail "T21: o land deveria ter abortado (EXPECTED plantado) e saiu 0"
   else
-    _t21_kept="$( find "$D/$CEREMONY_DIR" -maxdepth 1 -name 'land-179close-*.log' 2>/dev/null | head -1 )"
+    _t21_kept="$( find "$D/$CEREMONY_DIR" -maxdepth 1 -name 'land-183batch-*.log' 2>/dev/null | head -1 )"
     if [ -n "$_t21_kept" ]; then
       pass "T21: abort preservou o log ($( basename "$_t21_kept" ))"
     else
-      fail "T21: abort NAO deixou land-179close-*.log no ceremony dir (regressao P2-h)"
+      fail "T21: abort NAO deixou land-183batch-*.log no ceremony dir (regressao P2-h)"
     fi
   fi
   _done "$D"
@@ -822,7 +816,7 @@ step "T22 — abort do finalize PRESERVA index pre-existente (redesenho r4)"
 # ---------------------------------------------------------------------------
 # O cenario exato do rail r4 P2: um material com conteudo INDEX-ONLY de
 # terceiro (staged, worktree limpo) atravessa um abort do finalize
-# INTACTO. A sombra do clone nasce do proprio W179CLOSE.patch commitado, a
+# INTACTO. A sombra do clone nasce do proprio W183BATCH.patch commitado, a
 # bateria curta passa DE VERDADE, o gerador roda e o abort cai no guard
 # pre-add (index nao-vazio) — o caminho pos-gerador que o rollback cobre.
 if [ "$RAIL_IS_APPROVE" = "1" ]; then
@@ -830,7 +824,7 @@ if [ "$RAIL_IS_APPROVE" = "1" ]; then
   _t22_shadow="$D.shadow"
   _t22_prop="$CEREMONY_DIR/PROPOSED-PATCH.md"
   if git -C "$D" worktree add --detach "$_t22_shadow" HEAD >/dev/null 2>&1 \
-     && git -C "$_t22_shadow" apply "$D/$CEREMONY_DIR/W179CLOSE.patch" >/dev/null 2>&1; then
+     && git -C "$_t22_shadow" apply "$D/$CEREMONY_DIR/W183BATCH.patch" >/dev/null 2>&1; then
     # INDEX-ONLY content no PROPOSED: stage de uma versao com marcador e
     # worktree devolvido ao byte de HEAD — index != worktree != nada.
     # rail r5 (2a forma): o PRE gate T-S329-2 ja garante materiais
@@ -847,8 +841,8 @@ if [ "$RAIL_IS_APPROVE" = "1" ]; then
     _t22_wt_before="$( shasum -a 256 "$D/$_t22_prop" | awk '{print $1}' )"
     mkdir -p "$( _logdir "$D" )"
     _er_rc=0
-    ( cd "$D" && CEO_179CLOSE_SHADOW="$_t22_shadow" \
-        bash "$CEREMONY_DIR/finalize-179close.sh" \
+    ( cd "$D" && CEO_183BATCH_SHADOW="$_t22_shadow" \
+        bash "$CEREMONY_DIR/finalize-183batch.sh" \
         > "$( _logdir "$D" )/finalize-t22.log" 2>&1 ) || _er_rc=$?
     _t22_log="$( _logdir "$D" )/finalize-t22.log"
     if [ "$_er_rc" -eq 0 ]; then
@@ -875,7 +869,7 @@ if [ "$RAIL_IS_APPROVE" = "1" ]; then
     fi
     git -C "$D" worktree remove --force "$_t22_shadow" >/dev/null 2>&1 || true
   else
-    fail "T22: nao consegui montar a sombra do clone a partir do W179CLOSE.patch"
+    fail "T22: nao consegui montar a sombra do clone a partir do W183BATCH.patch"
   fi
   _done "$D"
 else
@@ -890,8 +884,8 @@ printf '    - Esta wave nao tem gate CARO: o mais pesado e o verify-counts\n'
 printf '      (~3 min, so nos casos de land completo), entao nao ha caso opt-in\n'
 printf '      nem interruptor de pulo. O que o harness NAO cobre e o\n'
 printf '      `Smoke Install` e o `Validate` do CI, que so rodam depois do push\n'
-printf '      — incl. os gates de registry/golden que este patch mantem verdes\n'
-printf '      e o primeiro SessionEnd real com o rail de delta LIGADO.\n'
+printf '      — o Smoke Install prova o template INERT entregue + ativado, e o\n'
+printf '      proximo boot carrega o settings regenerado (KERNEL).\n'
 if [ "$RAIL_SYNTHETIC" != "0" ]; then
 printf '    - O ultimo rail da arvore VIVA nao e APPROVE; os casos que exigem um\n'
 printf '      SIGN verde rodaram sobre um rail-round-%s.md SINTETICO, plantado so\n' "$RAIL_SYNTHETIC"

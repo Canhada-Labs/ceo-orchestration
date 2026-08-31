@@ -1,0 +1,29 @@
+# EXPECTED-BASELINE — wave-183batch (PLAN-183, S335)
+# Fonte UNICA dos valores que finalize-183batch.sh e OWNER-S335-183BATCH-LAND.sh
+# comparam. Leitor fail-CLOSED (chave ausente ABORTA). Atualizar um valor e
+# decisao CONSCIENTE com fonte — nunca relaxamento.
+#
+# Medidos na sombra (base 8f01202) em 2026-08-31, S335:
+#   - 108 = jq '.skillOverrides|length' pos-regen (104 vivas + 4 demoted
+#     0-dispatch: cpp-testing, frontend-slides, prisma-patterns, ui-demo);
+#   - 7/0 = pytest do frozen-subset (11 steps + pins INTACTOS sob o header
+#     INERT — comentario puro);
+#   - INERT/COMMENT/AC5 = greps em arquivo unico (1 cada);
+#   - canonical=1 (settings.json — KERNEL; template e plano respondem 0 no
+#     oraculo); manifest ADR-192 nao contem settings.json.
+EXPECTED_PATCH_PATHS=".claude/settings.json templates/.github/workflows/validate.yml.template .claude/plans/PLAN-183-adopter-fitness.md"
+EXPECTED_PATCH_CANONICAL_PATHS=1
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
+EXPECTED_PATCH_PY_FILES=0
+EXPECTED_UNIT_PYTEST_PASSED=7
+EXPECTED_UNIT_PYTEST_SKIPPED=0
+EXPECTED_SETTINGS_OVERRIDES=108
+EXPECTED_INERT_REFS=1
+EXPECTED_BUDGET_COMMENT_REFS=1
+EXPECTED_AC5_CHECKED=1
+EXPECTED_ADR_COUNT=198
+EXPECTED_CLAUDE_MD_CLAIMS_RC=0
+EXPECTED_VERIFY_COUNTS_RC=0
+EXPECTED_CEREMONY_LINT_BLOCKING=0
+EXPECTED_GOVERNANCE_ERRORS=0
+EXPECTED_RATCHET_RC=0
