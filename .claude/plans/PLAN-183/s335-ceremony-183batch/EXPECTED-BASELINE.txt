@@ -4,22 +4,25 @@
 # decisao CONSCIENTE com fonte — nunca relaxamento.
 #
 # Medidos na sombra (base 8f01202) em 2026-08-31, S335:
-#   - 108 = jq '.skillOverrides|length' pos-regen (104 vivas + 4 demoted
-#     0-dispatch: cpp-testing, frontend-slides, prisma-patterns, ui-demo);
-#   - 7/0 = pytest do frozen-subset (11 steps + pins INTACTOS sob o header
-#     INERT — comentario puro);
+#   - 101 = 104 vivas + 4 demoted 0-dispatch (skill-frag) − 7 undemote A4
+#     (veto-undemote, rail 183-r4: chaves VETO-bearing saem dos DOIS alvos;
+#     settings.base 104→97);
+#   - 28/0 = frozen-subset (7) + test_veto_skill_map (21, agora SEM o
+#     @expectedFailure — o invariante VETO-discovery passa DE VERDADE e o
+#     teste-companheiro foi deletado como ele mesmo instruia);
 #   - INERT/COMMENT = greps em arquivo unico (1 cada); AC5_CHECKED=0 e
 #     NOTE_REFS=1 (rail 183-r1: o flip foi BARRADO — a execucao real do
 #     workflow segue aberta em W0-US3/OQ-2; o pack entrega o REGISTRO);
-#   - canonical=1 (settings.json — KERNEL; template e plano respondem 0 no
-#     oraculo); manifest ADR-192 nao contem settings.json.
-EXPECTED_PATCH_PATHS=".claude/settings.json templates/.github/workflows/validate.yml.template .claude/plans/PLAN-183-adopter-fitness.md"
-EXPECTED_PATCH_CANONICAL_PATHS=1
+#   - canonical=2 (settings.json — KERNEL — e templates/settings/
+#     settings.base.json; validate-template, teste e plano respondem 0);
+#     manifest ADR-192 nao contem nenhum dos alvos.
+EXPECTED_PATCH_PATHS=".claude/settings.json templates/settings/settings.base.json templates/.github/workflows/validate.yml.template .claude/scripts/tests/test_veto_skill_map.py .claude/plans/PLAN-183-adopter-fitness.md"
+EXPECTED_PATCH_CANONICAL_PATHS=2
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
-EXPECTED_PATCH_PY_FILES=0
-EXPECTED_UNIT_PYTEST_PASSED=7
+EXPECTED_PATCH_PY_FILES=1
+EXPECTED_UNIT_PYTEST_PASSED=28
 EXPECTED_UNIT_PYTEST_SKIPPED=0
-EXPECTED_SETTINGS_OVERRIDES=108
+EXPECTED_SETTINGS_OVERRIDES=101
 EXPECTED_INERT_REFS=1
 EXPECTED_BUDGET_COMMENT_REFS=1
 EXPECTED_AC5_CHECKED=0

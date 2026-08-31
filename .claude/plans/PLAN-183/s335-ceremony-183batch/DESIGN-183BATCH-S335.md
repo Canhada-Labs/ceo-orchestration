@@ -45,6 +45,15 @@ chaves com DÍGITO (`EXPECTED_AC5_CHECKED` → `EXPECTED_AC`) e dá falso
 vermelho na bijeção. Curado aqui E retrofit no harness do 179close;
 latente nos molds anteriores (nenhuma chave tinha dígito até hoje).
 
+7. **A4 de verdade (rail 183-r4).** O runbook mandava «regen do
+   skillOverrides» com o A4 vivo; a leitura correta — apontada pelo rail
+   e confirmada pelo teste pré-escrito (`test_veto_skill_map` com
+   @expectedFailure + companheiro que manda deletá-lo «quando a
+   cerimônia landar») — é que as 7 chaves VETO-bearing name-only SÃO o
+   defeito. Como o gerador não remove chaves, o undemote é o SEGUNDO
+   material versionado (`veto-undemote-s335.jq`), aplicado aos DOIS
+   alvos; a lista das 7 veio da AUTORIDADE (bound ∩ overrides, medida).
+
 ## Números medidos (fontes no EXPECTED-BASELINE.txt)
 
 - overrides 104 → 108; frozen-subset 7/0; INERT/COMMENT/AC5 = 1 cada;

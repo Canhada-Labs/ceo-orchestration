@@ -4,11 +4,13 @@ Patch: `W183BATCH.patch` (derivado da sombra `shadow-183batch` pelo
 `finalize-183batch.sh`; base declarada em `BASE-SHA.txt`).
 Patch-sha256: bde333f02df59195f2574d3f9f3299aca702fb3fc169d1e0170b1f1f2899d9fc
 
-## Por path (3)
+## Por path (5)
 
 | path | oráculo | o que muda |
 |---|---|---|
-| `.claude/settings.json` | CANÔNICO (KERNEL) | `skillOverrides` regenerado pelo `skill-budget-generator --jq-fragment`: +4 name-only 0-dispatch (`cpp-testing`, `frontend-slides`, `prisma-patterns`, `ui-demo`), 104→108; zero remoções/alterações |
+| `.claude/settings.json` | CANÔNICO (KERNEL) | +4 demotions 0-dispatch (skill-frag versionado) **− 7 undemote A4** (veto-undemote versionado, rail 183-r4: chaves VETO-bearing fora do name-only), 104→101 |
+| `templates/settings/settings.base.json` | CANÔNICO | −7 undemote A4 (104→97) — o template do adopter nasce com as VETO skills descritas |
+| `.claude/scripts/tests/test_veto_skill_map.py` | livre | `@expectedFailure` REMOVIDO + teste-companheiro deletado, exatamente como o arquivo instruía — o invariante «nenhuma VETO skill name-only» vira permanente (21 passed reais) |
 | `templates/.github/workflows/validate.yml.template` | livre | header «INERT AS SHIPPED» (molde `benchmarks.yml.template:3-7`; comentário puro — frozen-subset intacto) |
 | `.claude/plans/PLAN-183-adopter-fitness.md` | livre | REGISTRO do AC-5 (evidência: `smoke-install.yml:485` → `smoke-install.sh:180`) **sem flip** — o rail 183-r1 barrou o `[x]`: a execução real do workflow é W0-US3/OQ-2 |
 

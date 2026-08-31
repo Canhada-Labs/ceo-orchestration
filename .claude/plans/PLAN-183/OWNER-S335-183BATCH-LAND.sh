@@ -79,7 +79,9 @@ TEMPLATE="templates/.github/workflows/validate.yml.template"
 PLAN_FILE=".claude/plans/PLAN-183-adopter-fitness.md"
 BUDGET_GEN=".claude/scripts/skill-budget-generator.py"
 ADR_DIR=".claude/adr"
-UNIT_TESTS=".claude/scripts/tests/test_validate_template_frozen_subset.py"
+TEMPLATE_BASE="templates/settings/settings.base.json"
+UNIT_TESTS=".claude/scripts/tests/test_validate_template_frozen_subset.py \
+.claude/scripts/tests/test_veto_skill_map.py"
 PUSH_REMOTE="origin"
 PUSH_BRANCH="main"
 # --------------------------------------------------------------------------
@@ -167,6 +169,7 @@ MATERIALS=(
   "$CEREMONY_DIR/BASE-SHA.txt"
   "$CEREMONY_DIR/finalize-183batch.sh"
   "$CEREMONY_DIR/skill-frag-s335.jq"
+  "$CEREMONY_DIR/veto-undemote-s335.jq"
   "$CEREMONY_DIR/test-ceremony-scripts-183batch.sh"
   "$CEREMONY_DIR/DESIGN-183BATCH-S335.md"
   "$FINALIZE"
@@ -705,31 +708,32 @@ _a5n="$( { grep -c 'REGISTRO S335' "$PLAN_FILE" || true; } )"
 ok "V6c-d: AC-5 aberto com registro (flip barrado)"
 
 # ---------------------------------------------------------------------------
-step "V3 — o settings e base+fragment, nos DOIS sentidos"
+step "V3 — os DOIS settings derivam dos materiais versionados"
 # ---------------------------------------------------------------------------
-# O gerador e INCREMENTAL (sobre a arvore ja atualizada emite 0 chaves), por
-# isso a autoridade e o FRAGMENT VERSIONADO da cerimonia: (a) aplicado ao
-# settings-BASE (HEAD~ do land = o estado pre-patch registrado no proprio
-# patch), reproduz o settings POS-PATCH byte a byte; (b) nao-vacuo NOMEADO:
-# prisma-patterns ABSENT no base -> name-only no derivado.
+# Cadeias (rail 183-r4: o A4 exige o UNDEMOTE das 7 chaves VETO-bearing):
+#   settings.json : base | skill-frag | veto-undemote == pos-patch
+#   settings.base : base |              veto-undemote == pos-patch
+# + nao-vacuo NOMEADO dos dois materiais (frag ESCREVE prisma; undemote
+# APAGA kill-switches nos dois alvos).
 FRAG_MAT="$CEREMONY_DIR/skill-frag-s335.jq"
-[ -f "$FRAG_MAT" ] || die "V3: fragment versionado ausente: $FRAG_MAT"
-_base_json="$TMPDIR_LAND/settings-base.json"
-# O patch ja esta APLICADO na arvore; o base e o conteudo pre-apply, que o
-# proprio patch registra — extrai-lo do patch evita depender de HEAD~.
-git show HEAD:.claude/settings.json > "$_base_json" 2>/dev/null \
-  || die "V3: nao consegui ler o settings-base do HEAD"
-_derived_json="$TMPDIR_LAND/settings-derived.json"
-jq -f "$FRAG_MAT" "$_base_json" > "$_derived_json" \
-  || die "V3a: jq -f do fragment versionado falhou"
-cmp -s "$_derived_json" "$SETTINGS" \
-  || die "V3a: base+fragment NAO reproduz o settings pos-patch byte a byte"
-ok "V3a: settings pos-patch == base + fragment versionado (byte a byte)"
-_fk_base="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_base_json" )"
-_fk_derived="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_derived_json" )"
-{ [ "$_fk_base" = "ABSENT" ] && [ "$_fk_derived" = "name-only" ]; } \
-  || die "V3b: nao-vacuo falhou (base=$_fk_base derivado=$_fk_derived)"
-ok "V3b: fragment ESCREVE (prisma-patterns ABSENT -> name-only)"
+UNDEMOTE_MAT="$CEREMONY_DIR/veto-undemote-s335.jq"
+[ -f "$FRAG_MAT" ] || die "V3: fragment ausente: $FRAG_MAT"
+[ -f "$UNDEMOTE_MAT" ] || die "V3: undemote ausente: $UNDEMOTE_MAT"
+_b1="$TMPDIR_LAND/settings-base.json"; _d1="$TMPDIR_LAND/settings-derived.json"
+git show HEAD:.claude/settings.json > "$_b1" 2>/dev/null || die "V3: base do settings ilegivel"
+jq -f "$FRAG_MAT" "$_b1" | jq -f "$UNDEMOTE_MAT" > "$_d1" || die "V3a: cadeia jq falhou"
+cmp -s "$_d1" "$SETTINGS" || die "V3a: base|frag|undemote != settings pos-patch"
+_b2="$TMPDIR_LAND/base-tpl.json"; _d2="$TMPDIR_LAND/base-tpl-derived.json"
+git show HEAD:templates/settings/settings.base.json > "$_b2" 2>/dev/null || die "V3: base do template ilegivel"
+jq -f "$UNDEMOTE_MAT" "$_b2" > "$_d2" || die "V3a: undemote falhou (template)"
+cmp -s "$_d2" "$TEMPLATE_BASE" || die "V3a: base|undemote != settings.base pos-patch"
+ok "V3a: os DOIS settings == derivacao dos materiais (byte a byte)"
+_fk="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_d1" )"
+_ks1="$( jq -r '.skillOverrides["kill-switches"] // "ABSENT"' "$_d1" )"
+_ks2="$( jq -r '.skillOverrides["kill-switches"] // "ABSENT"' "$_d2" )"
+{ [ "$_fk" = "name-only" ] && [ "$_ks1" = "ABSENT" ] && [ "$_ks2" = "ABSENT" ]; } \
+  || die "V3b: nao-vacuo falhou (prisma=$_fk kill-switches=$_ks1/$_ks2)"
+ok "V3b: frag ESCREVE e undemote APAGA (nomeados)"
 
 # ---------------------------------------------------------------------------
 step "V4 — sonda comportamental: harness-config gate + contagem de overrides"
@@ -992,8 +996,11 @@ fi
 cat <<'EOF'
 
   LEMBRETE — o que observar depois deste land:
-  1. O settings.json mudou (KERNEL): a PROXIMA sessao carrega os 4 skills
-     novos como name-only. Se um deles voltar a ser despachado, o gerador
+  1. O settings.json mudou (KERNEL): +4 demotions 0-dispatch E o A4 fechou
+     — as 7 skills VETO-bearing (financial-*, trading-execution, kill-
+     switches, latency-budgets, equity-research, prediction-markets)
+     voltam ao discovery COM descricao, nos dois alvos; o invariante e
+     permanente (test_veto_skill_map sem xfail). Se um deles voltar a ser despachado, o gerador
      re-promove na proxima regen — isso e o desenho, nao um bug.
   2. O template do adopter agora nasce com o header INERT: a ativacao e um
      `git mv` explicito documentado no proprio header. O frozen-subset (11

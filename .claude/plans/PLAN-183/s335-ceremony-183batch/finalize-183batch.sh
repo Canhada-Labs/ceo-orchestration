@@ -104,7 +104,10 @@ SETTINGS=".claude/settings.json"
 TEMPLATE="templates/.github/workflows/validate.yml.template"
 PLAN_FILE=".claude/plans/PLAN-183-adopter-fitness.md"
 BUDGET_GEN=".claude/scripts/skill-budget-generator.py"
-UNIT_TESTS=".claude/scripts/tests/test_validate_template_frozen_subset.py"
+TEMPLATE_BASE="templates/settings/settings.base.json"
+UNDEMOTE_MAT="$CEREMONY_DIR/veto-undemote-s335.jq"
+UNIT_TESTS=".claude/scripts/tests/test_validate_template_frozen_subset.py \
+.claude/scripts/tests/test_veto_skill_map.py"
 # --------------------------------------------------------------------------
 
 die() { printf '\n\033[31mABORT:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -342,27 +345,27 @@ step "4 — bateria CURTA na arvore-sombra"
 # informacao — salvo sob `--with-slow`, que existe para conferir antes.
 # O que roda aqui e o que responde "o conteudo copiado ainda e valido?".
 
-# 4a — o gate central da wave: o settings do patch e EXATAMENTE
-# base + fragment. O skill-budget-generator e INCREMENTAL (le o estado
-# corrente e emite so demotions NOVAS — medido: rodado sobre a sombra ja
-# atualizada ele emite 0 chaves), entao "re-gerar no WT e comparar" seria
-# prova vacua. A prova forte: o fragment EXATO da mudanca e MATERIAL
-# VERSIONADO da cerimonia (skill-frag-s335.jq, gerado do estado-base 104),
-# e aplica-lo ao settings do HEAD (pre-patch) tem de reproduzir o settings
-# do patch BYTE A BYTE.
+# 4a — o gate central da wave: os DOIS settings do patch sao EXATAMENTE
+# derivaveis dos materiais versionados. O gerador e INCREMENTAL, entao os
+# fragments EXATOS da mudanca sao MATERIAIS: skill-frag-s335.jq (demotions
+# novas, so no settings.json) e veto-undemote-s335.jq (A4, rail 183-r4: as
+# 7 chaves VETO-bearing saem dos DOIS alvos). Cadeias:
+#   settings.json : base | skill-frag | veto-undemote  == patch (byte a byte)
+#   settings.base : base |              veto-undemote  == patch (byte a byte)
 FRAG_MAT="$CEREMONY_DIR/skill-frag-s335.jq"
 [ -f "$FRAG_MAT" ] || die "4a: fragment versionado ausente: $FRAG_MAT"
-_base_json="$WT.settings-base.json"
-git -C "$WT" show HEAD:.claude/settings.json > "$_base_json" \
-  || die "4a: nao consegui ler o settings do HEAD"
-_derived_json="$WT.settings-derived.json"
-jq -f "$FRAG_MAT" "$_base_json" > "$_derived_json" \
-  || die "4a: jq -f do fragment versionado falhou"
-cmp -s "$_derived_json" "$WT/$SETTINGS" \
-  || die "4a: base+fragment NAO reproduz o settings do patch byte a byte —
-  ou o fragment versionado nao e o usado, ou o settings ganhou edicao fora
-  do regen. Re-derive: python3 $BUDGET_GEN --jq-fragment (no estado-base)."
-ok "4a: settings do patch == base + fragment versionado (byte a byte)"
+[ -f "$UNDEMOTE_MAT" ] || die "4a: undemote versionado ausente: $UNDEMOTE_MAT"
+_b1="$WT.settings-base.json"; _d1="$WT.settings-derived.json"
+git -C "$WT" show HEAD:.claude/settings.json > "$_b1" || die "4a: base do settings ilegivel"
+jq -f "$FRAG_MAT" "$_b1" | jq -f "$UNDEMOTE_MAT" > "$_d1" || die "4a: cadeia jq falhou (settings)"
+cmp -s "$_d1" "$WT/$SETTINGS" \
+  || die "4a: base|frag|undemote NAO reproduz o settings do patch byte a byte"
+_b2="$WT.base-tpl.json"; _d2="$WT.base-tpl-derived.json"
+git -C "$WT" show HEAD:templates/settings/settings.base.json > "$_b2" || die "4a: base do template ilegivel"
+jq -f "$UNDEMOTE_MAT" "$_b2" > "$_d2" || die "4a: undemote falhou (template)"
+cmp -s "$_d2" "$WT/$TEMPLATE_BASE" \
+  || die "4a: base|undemote NAO reproduz o settings.base do patch byte a byte"
+ok "4a: os DOIS settings == derivacao dos materiais versionados (byte a byte)"
 
 # 4b — o settings parseia e a contagem de overrides e a DECLARADA.
 jq -e . "$WT/$SETTINGS" >/dev/null || die "4b: settings.json nao parseia"
@@ -397,18 +400,21 @@ _in_obs="$( { grep -c 'INERT AS SHIPPED' "$WT/$TEMPLATE" || true; } )"
   || die "4d: 'INERT AS SHIPPED' aparece $_in_obs vez(es) no template, esperado $(_expect EXPECTED_INERT_REFS)"
 ok "4d: header INERT presente ($_in_obs)"
 
-# 4e — nao-vacuidade do fragment, na MESMA prova: uma chave nova (prisma-
-# patterns) tem de estar AUSENTE no base e name-only no derivado — um
-# fragment que nada escreve reproduziria o base e o 4a ja teria morrido;
-# este gate NOMEIA a chave para que a falha diga qual metade quebrou.
-_fk_base="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_base_json" )"
-_fk_derived="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_derived_json" )"
-[ "$_fk_base" = "ABSENT" ] \
-  || die "4e: prisma-patterns JA existe no base ($_fk_base) — o fragment
-  versionado nao corresponde ao estado-base desta wave"
-[ "$_fk_derived" = "name-only" ] \
-  || die "4e: o fragment nao escreve prisma-patterns no derivado (veio: $_fk_derived) — regen vacuo"
-ok "4e: fragment ESCREVE (prisma-patterns: ABSENT no base -> name-only no derivado)"
+# 4e — nao-vacuidade NOMEADA dos dois materiais, na MESMA prova:
+#   frag     : prisma-patterns  ABSENT no base  -> name-only no derivado;
+#   undemote : kill-switches    PRESENTE no base -> ABSENT no derivado
+#              (e ausente tambem do template derivado).
+_fk_base="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_b1" )"
+_fk_der="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_d1" )"
+{ [ "$_fk_base" = "ABSENT" ] && [ "$_fk_der" = "name-only" ]; } \
+  || die "4e: frag nao escreve (prisma: base=$_fk_base derivado=$_fk_der)"
+_ks_base="$( jq -r '.skillOverrides["kill-switches"] // "ABSENT"' "$_b1" )"
+_ks_der="$( jq -r '.skillOverrides["kill-switches"] // "ABSENT"' "$_d1" )"
+{ [ "$_ks_base" = "name-only" ] && [ "$_ks_der" = "ABSENT" ]; } \
+  || die "4e: undemote nao APAGA (kill-switches: base=$_ks_base derivado=$_ks_der)"
+_ks_tpl="$( jq -r '.skillOverrides["kill-switches"] // "ABSENT"' "$_d2" )"
+[ "$_ks_tpl" = "ABSENT" ] || die "4e: undemote nao apagou no TEMPLATE (kill-switches=$_ks_tpl)"
+ok "4e: frag ESCREVE e undemote APAGA, nomeados nos dois alvos"
 
 # 4f — o AC-5 NAO flipa (rail 183-r1: a execucao real segue aberta); o que
 # viaja e o REGISTRO. Um [x] aqui seria registro falso de governanca.

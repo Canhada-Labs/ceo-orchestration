@@ -10,7 +10,7 @@
 > deste arquivo depois de assinar invalida o `.asc`.
 
 Plans: PLAN-183
-Wave: wave-183batch (PLAN-183 — «Batch menor + começar W1», ratificação do Owner de 2026-08-31: settings.json regenerado pelo skill-budget-generator com +4 skills 0-dispatch demoted, header «INERT AS SHIPPED» no validate.yml.template no molde do benchmarks, e o REGISTRO do AC-5 — a metade «canônica» que a nota ◐ declarava faltante já existia no wiring do CI; o CHECKBOX segue aberto porque a execução real do workflow é W0-US3/OQ-2, e o rail 183-r1 barrou o flip, corretamente)
+Wave: wave-183batch (PLAN-183 — «Batch menor + começar W1», ratificação do Owner de 2026-08-31: settings regenerado nos DOIS alvos — +4 demotions 0-dispatch E o undemote A4 das 7 chaves VETO-bearing (o invariante «nenhuma VETO skill name-only» vira permanente, teste sem xfail), header «INERT AS SHIPPED» no validate.yml.template, e o REGISTRO do AC-5 — a metade «canônica» que a nota ◐ declarava faltante já existia no wiring do CI; o CHECKBOX segue aberto porque a execução real do workflow é W0-US3/OQ-2, e o rail 183-r1 barrou o flip, corretamente)
 Patch: .claude/plans/PLAN-183/s335-ceremony-183batch/W183BATCH.patch
 Patch-sha256: bde333f02df59195f2574d3f9f3299aca702fb3fc169d1e0170b1f1f2899d9fc
 Patch-base: b3b6d91a697b0f6884ace196f1431f3d80e3ddcc
@@ -19,8 +19,9 @@ Data: DATA-PLACEHOLDER
 
 ## O que esta wave entrega
 
-**Um arquivo canônico** (`.claude/settings.json` — KERNEL) e **dois
-não-canônicos** que só são verdadeiros juntos:
+**Dois arquivos canônicos** (`.claude/settings.json` — KERNEL — e
+`templates/settings/settings.base.json`) e **três não-canônicos** que só
+são verdadeiros juntos:
 
 1. **`.claude/settings.json`** (canônico, KERNEL — ADR-116 vetor 1+2) — o
    bloco `skillOverrides` regenerado por
