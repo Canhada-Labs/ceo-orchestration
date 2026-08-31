@@ -1,6 +1,6 @@
 ---
 id: PLAN-179-FOLLOWUP
-title: "Residual da wave-179close r6: SessionStart grava session_start com precedencia env-first e o consumidor payload-gated do US8 perde a ancora quando os ids divergem"
+title: "Residuais da wave-179close (rails r6+r8): precedencia de id do produtor do session_start; entrega do harness-noop-allowlist.txt ao adopter"
 status: draft
 created: 2026-08-31
 related_commits: []
@@ -58,6 +58,31 @@ alinhamento do PRODUTOR, unica direcao compativel com a doutrina.
       cadeia (grep por leitores do action) para confirmar que nenhum
       depende da grafia env-first do produtor antes do flip.
 
+## Item 2 — entrega do `harness-noop-allowlist.txt` ao adopter (rail r8 P2-a)
+
+Achado REAL da r8, registrado em
+`.claude/plans/PLAN-179/s335-ceremony-179close/rail-round-8.md`:
+`install_hooks_selective()` (`scripts/install.sh`) copia apenas `*.sh` e
+`*.py` do top-level de `.claude/hooks/` — o `harness-noop-allowlist.txt`
+(novo nesta wave, e o UNICO `.txt` do diretorio) nunca chega ao adopter.
+O consumidor `check_harness_config.py` VIAJA (e `.py`), entao um adopter
+que ative `CEO_SESSION_MEMORY_DELTA=0` teria a rota de waiver (b) do
+gate indisponivel ⇒ preflight vermelho-falso. `scripts/install.sh` esta
+FORA do conjunto revisado pela cerimonia wave-179close (alarga-lo pos-rail
+assinaria superficie nao-revisada), e entrega de artefato e o dominio da
+maquinaria delivery-routes (PLAN-183) — proximo do trem ratificado.
+
+- [ ] `[P1][US2][scripts/install.sh]` Entregar o allowlist no install
+      (glob consciente OU rota em `scripts/delivery-routes.tsv` — decidir
+      pelo mecanismo do PLAN-183 W1; localizadores literais migram no
+      MESMO patch). Check: smoke-install prova o arquivo no target.
+- [ ] `[P1][US2][scripts/upgrade.sh]` Mesma entrega no upgrade (hash-gate
+      da familia D1). Check: e2e de upgrade prova o arquivo entregue.
+- [ ] `[P2][US2]` Residual DECLARADO ate landar: adopter com o
+      kill-switch em `off` e o gate harness-config rodando ve
+      vermelho-falso; workaround documentavel = criar o txt a mao ou
+      marker `_comment` (rota (a) do gate).
+
 ## Restricoes
 
 - `SessionStart.py` e hook canonico: a wave exige sentinel + assinatura
@@ -65,3 +90,5 @@ alinhamento do PRODUTOR, unica direcao compativel com a doutrina.
 - A trava do consumidor (`test_divergent_env_id_never_anchors`) NAO pode
   ser relaxada por esta wave — o alinhamento e no produtor; o consumidor
   payload-gated fica como esta.
+- Item 2 nao mexe em `check_harness_config.py` nem no allowlist em si —
+  so na ENTREGA; o conteudo do txt e da wave-179close assinada.
