@@ -19,9 +19,13 @@
 #     existente) E os 5 da r8 (janela cortada por LINHAS nunca reivindica
 #     genesis + controle positivo companheiro; deadline re-checado apos a
 #     verificacao HMAC; render nao dobra o index; _git recusa budget
-#     sub-floor) E os 2 da r9 (merge-aware -m -z no git do indice;
-#     matching plan_ac com cap 500 + deadline por path; medido na sombra
-#     pos-cura r9: 323 passed / 0 skips em 8.29s), 0 skips;
+#     sub-floor), os 2 da r9 (merge-aware -m -z no git do indice;
+#     matching plan_ac com cap 500 + deadline por path) E os 4 da r10
+#     (errors=replace no _git; fatia de 1.0s do indice OPCIONAL no budget;
+#     cap 2000 pre-dedupe; lstat no scan de memoria — symlink nunca e
+#     seguido, e os 3 testes de mecanismo stat migraram para lstat;
+#     medido na sombra pos-cura r10: 325 passed / 0 skips em 8.01s),
+#     0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -31,7 +35,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=323
+EXPECTED_UNIT_PYTEST_PASSED=325
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
