@@ -12,8 +12,8 @@
 Plans: PLAN-169
 Wave: wave-adrgate (PLAN-169 — o ledger DECLARADO de isenção de supersessão vira DADO revisado no `.claude/adr/README.md`, os DOIS gates de ADR entram no `validate.yml`, e o ADR-197 recebe o flip textual PROPOSED → ACCEPTED cuja ratificação real já está commitada)
 Patch: .claude/plans/PLAN-169/s334-ceremony-adrgate/ADRGATE.patch
-Patch-sha256:
-Patch-base: TO-FILL-AT-FINAL-PATCH
+Patch-sha256: 09582f3477a864b691904b81256a5694c48bb48dd49c96310fd4b635a60fe88f
+Patch-base: 82446c2fb9a7e52a09ea887369f6a17c30c86466
 Anchor-SHA: ANCHOR-PLACEHOLDER
 Data: DATA-PLACEHOLDER
 
@@ -63,7 +63,10 @@ sem o dado do README, e um gate ligado sem o dado nasceria vermelho.
 Approved-By: APPROVED-BY-PLACEHOLDER
 Plans: PLAN-169
 Scope:
-  - placeholder-scope-derivado-pelo-finalize
+  - .claude/adr/ADR-197-user-profile-derivation.md
+  - .claude/adr/README.md
+  - .claude/scripts/tests/test_check_adr_chain.py
+  - .github/workflows/validate.yml
 <!-- END SIGNED SCOPE -->
 
 ## Fronteiras honestas

@@ -2,7 +2,7 @@
 
 Patch: `ADRGATE.patch` (derivado da sombra `shadow-adrgate` pelo
 `finalize-adrgate.sh`; base declarada em `BASE-SHA.txt`).
-Patch-sha256:
+Patch-sha256: 09582f3477a864b691904b81256a5694c48bb48dd49c96310fd4b635a60fe88f
 
 ## Por path
 

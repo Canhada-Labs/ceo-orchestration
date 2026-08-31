@@ -1,0 +1,174 @@
+diff --git a/.claude/adr/ADR-197-user-profile-derivation.md b/.claude/adr/ADR-197-user-profile-derivation.md
+index 9be2034..ee861dc 100644
+--- a/.claude/adr/ADR-197-user-profile-derivation.md
++++ b/.claude/adr/ADR-197-user-profile-derivation.md
+@@ -1,10 +1,11 @@
+ ---
+ adr_id: ADR-197
+ title: O perfil `user` é DERIVADO de `settings.base.json` por subtração declarada — nunca uma segunda cópia literal, e a lista de exclusão é dado com leitores
+-status: PROPOSED
++status: ACCEPTED
++accepted_at: 2026-08-31
+ proposed_at: 2026-08-30
+ proposed_by: CEO (S331 — PLAN-169 OQ-E5, wave-s330-F; classificação por mérito em `4f4df3a`, código em `6a51eca`)
+-decided_by: Owner (PENDENTE — a assinatura GPG do sentinel `PLAN-169/wave-s330-F-approved.md` É a ratificação; o flip textual para ACCEPTED chega ao main por cerimônia própria, como ADR-194 e ADR-196 registraram)
++decided_by: Owner (ratificado — a assinatura GPG real é o `.asc` commitado sobre `PLAN-169/wave-s330-F-approved.md`, land `303ae55` na S332; este flip textual chegou por cerimônia própria na S334, como ADR-194 e ADR-196 registraram)
+ risk_tier: B
+ debate_required: false
+ debate: "Sem debate formal. A decisão de PRINCÍPIO já tinha precedente ratificado (ADR-194 rota de entrega, ADR-196 confinamento de escrita: o metadado vira DADO com leitores em vez de literal replicado); o que faltava era MEDIÇÃO, e ela existe — classificação por mérito dos 26 hooks só-na-base contra o critério declarado (`4f4df3a`, 43,5 KB, evidência por hook), OQ-E5 ratificada pelo Owner em 2026-08-27, e as quatro decisões de empacotamento ratificadas em 2026-08-30 (FU-F-ACCEL no mesmo patch; OQ-F1 congelada; OQ-F3 incluída; ADR novo em vez de AMEND). A revisão adversarial é o pair-rail cross-vendor sobre a sombra."
+diff --git a/.claude/adr/README.md b/.claude/adr/README.md
+index a22f221..92e552c 100644
+--- a/.claude/adr/README.md
++++ b/.claude/adr/README.md
+@@ -64,6 +64,44 @@ Rather than backfilling a historical AMEND-1 for the earlier prose edits
+ signal that AMEND-1 exists only as in-place prose revisions within the
+ base ADR-040 file itself. This gap is by design, not an error.
+ 
++## Declared supersession exemptions (reviewed data, mandatory-fire)
++
++The entries below are the DECLARED ledger that the chain checker
++(`check-adr-chain.py`) consumes: each names one `Supersedes:` edge whose
++target legitimately stays non-SUPERSEDED. The ledger is MANDATORY-FIRE —
++an entry that stops matching a real edge FAILS the run, so an exemption
++cannot outlive the situation it names. Malformed arrow-bearing entries
++are fail-closed parse errors. Route: three rail rounds (S333) found
++fail-open holes in qualifier-grammar inference — the same class each
++round — so reviewed DATA replaced grammar
++(`PLAN-169/s333-ceremony-adrgate/rail-round-3.md`).
++
++Entry grammar (one line, bold): `**<declarer> -> <target>: reason**`,
++where each side is a bare base id (`ADR-NNN`) or, PREFERRED, the full
++file stem (`ADR-NNN-<slug>`) — the stem PINS the entry to that exact
++file, so an adopter's own ADR reusing the base id never inherits the
++suppression. An entry whose declarer base id is absent from the corpus
++is N/A (the installed-tree case: this README travels to adopters that
++carry none of the framework's ADRs). Prose between entries is free-form.
++
++**ADR-120-pii-core-promotion -> ADR-111-locked-corpus-governance: rename completed under ADR-117 doctrine**
++
++`ADR-120-pii-core-promotion.md` carries `original_id: ADR-111` — the PII
++file that HELD id ADR-111 was renamed to ADR-120 in the ADR-117
++collision-rename ceremony (`renamed_at: 2026-05-12`). The surviving
++`ADR-111-locked-corpus-governance.md` is a DIFFERENT decision that
++remains ACCEPTED: flipping it to SUPERSEDED would re-introduce the
++ledger bug repaired by PLAN-163 T5.2 (errata at ADR-111:20-31), and a
++live consumer still reads it (`SPEC/v1/audit-log.schema.md:329`).
++
++**ADR-182-codex-payload-pin-enforcement -> ADR-111-locked-corpus-governance: clause supersession with amended_by declared on the target**
++
++`ADR-182` supersedes ONLY the pin clauses of ADR-111 (frontmatter:
++`supersedes: "ADR-111 §pin clauses + ..."`); the base decision stays
++ACCEPTED by design and itself declares the relationship via
++`amended_by: ADR-182` (ADR-111 frontmatter line 5). ADR-182 §6 records
++the relationship prose-side.
++
+ ## When to write an ADR
+ 
+ Write an ADR when a decision has **L3+ blast radius** — i.e., it touches
+@@ -410,7 +448,7 @@ _Auto-generated: 198 ADR(s) on disk. Run `python3 .claude/scripts/generate-adr-i
+ | [ADR-194](ADR-194-delivery-route-resolution.md) | A rota de entrega é DADO compartilhado — um resolvedor destino→(fonte, transformação) para os três consumidores, e as duas árvores entram na decisão de propriedade | ACCEPTED |
+ | [ADR-195](ADR-195-work-boundary-persistence.md) | Persistência em fronteira de trabalho — ledger de plano com obrigação derivada, e por que ele NÃO é derivado do audit log | PROPOSED |
+ | [ADR-196](ADR-196-installer-write-confinement.md) | O destino de uma escrita do installer é respondido por UM predicado de confinamento na biblioteca — a política fica no chamador, e o valor de flag é validado no parse, não no sítio de escrita | PROPOSED |
+-| [ADR-197](ADR-197-user-profile-derivation.md) | O perfil `user` é DERIVADO de `settings.base.json` por subtração declarada — nunca uma segunda cópia literal, e a lista de exclusão é dado com leitores | PROPOSED |
++| [ADR-197](ADR-197-user-profile-derivation.md) | O perfil `user` é DERIVADO de `settings.base.json` por subtração declarada — nunca uma segunda cópia literal, e a lista de exclusão é dado com leitores | ACCEPTED |
+ 
+ <!-- END ADR-INDEX -->
+ 
+diff --git a/.claude/scripts/tests/test_check_adr_chain.py b/.claude/scripts/tests/test_check_adr_chain.py
+index 2fb3cae..02830ba 100644
+--- a/.claude/scripts/tests/test_check_adr_chain.py
++++ b/.claude/scripts/tests/test_check_adr_chain.py
+@@ -525,26 +525,32 @@ class TestFieldAnchorGrammar(unittest.TestCase):
+                 [w for w in warnings if "bidirectional" in w], [],
+                 "the inline successor must close the link: %r" % (warnings,))
+ 
+-    def test_the_shipped_corpus_has_only_the_two_declared_qualifier_errors(self) -> None:
+-        """State of the corpus AFTER this commit, asserted so it cannot drift.
+-
+-        Before: 11 errors. Nine were unreadable statuses and are closed here.
+-        The remaining two are the `supersedes:` edges that carry a qualifier
+-        (a completed ADR-117 rename in ADR-120; a clause-scoped supersession in
+-        ADR-182 whose target declares `amended_by:`). They are NOT data
+-        defects, and the mechanism that teaches the checker to read the
+-        qualifier is a separate, canonical wave — this test pins the interim
+-        state so a NEW chain break reddens here instead of hiding among them.
++    def test_the_shipped_corpus_is_clean_with_the_two_ledger_entries_fired(self) -> None:
++        """State of the corpus AFTER the wave-adrgate ceremony, pinned.
++
++        History of this pin: 11 errors -> 2 (anchor cure, S333 f348ee9)
++        -> 0 (this ceremony: the two legitimate qualifier edges —
++        ADR-120's completed ADR-117 rename and ADR-182's clause-scoped
++        supersession — became DECLARED entries in the README ledger).
++        The ledger is mandatory-fire, so this test asserts BOTH sides:
++        the corpus is clean, AND the two entries are present and firing
++        (an empty ledger passing vacuously would not prove the route).
++        A new chain break reddens here instead of hiding.
+         """
+         adr_dir = Path(__file__).resolve().parent.parent.parent / "adr"
+         if not adr_dir.is_dir():
+             self.skipTest("ADR corpus not present in this tree")
+         errors, _ = check_adr_chain.validate_chain(adr_dir)
+         self.assertEqual(
+-            len(errors), 2,
+-            "expected exactly the two declared qualifier edges; got %r" % (errors,))
+-        for e in errors:
+-            self.assertIn("ADR-111", e, "an unexpected chain error appeared: %r" % (e,))
++            errors, [],
++            "expected a clean corpus with the ledger firing; got %r" % (errors,))
++        exemptions, parse_errors = check_adr_chain._load_declared_exemptions(
++            adr_dir)
++        self.assertEqual(parse_errors, [])
++        self.assertEqual(
++            sorted(exemptions),
++            [("ADR-120", "ADR-111"), ("ADR-182", "ADR-111")],
++            "the shipped ledger must hold exactly the two reviewed edges")
+ 
+ 
+ class TestAmendLineageValidation(unittest.TestCase):
+diff --git a/.github/workflows/validate.yml b/.github/workflows/validate.yml
+index 2f27ffc..0063740 100644
+--- a/.github/workflows/validate.yml
++++ b/.github/workflows/validate.yml
+@@ -91,6 +91,42 @@ jobs:
+           set -euo pipefail
+           python3 .claude/scripts/check-agents-md.py
+ 
++      # -----------------------------------------------------------------
++      # Step: ADR chain integrity (PLAN-169 wave-adrgate)
++      #
++      # check-adr-chain.py validates Status grammar, supersede/amend
++      # chains, and the README "Declared supersession exemptions" ledger
++      # (reviewed data, MANDATORY-FIRE: a stale entry fails the run; a
++      # malformed entry is a fail-closed parse error). The declared-data
++      # route replaced qualifier-grammar inference after three rail
++      # rounds found fail-open holes in the same class
++      # (PLAN-169/s333-ceremony-adrgate/rail-round-3.md). Static,
++      # stdlib-only, NO network, NO credential — safe on fork PRs.
++      # Failure remediation: read the named error; either fix the ADR
++      # edge it cites or update the README ledger THROUGH a sentinel
++      # ceremony (the README is canonical).
++      # -----------------------------------------------------------------
++      - name: ADR chain integrity (declared-exemption ledger)
++        run: |
++          set -euo pipefail
++          python3 .claude/scripts/check-adr-chain.py
++
++      # -----------------------------------------------------------------
++      # Step: ADR index drift (PLAN-169 wave-adrgate)
++      #
++      # The "Current ADRs" table between the ADR-INDEX markers in
++      # .claude/adr/README.md is GENERATED; --check exits 1 on drift
++      # WITHOUT writing (the README is canonical — writes only happen
++      # inside sentinel-gated rounds). Static, stdlib-only, NO network.
++      # Failure remediation: regenerate the table inside the next
++      # ceremony that touches .claude/adr/ (generate-adr-index.py
++      # --write), never by hand.
++      # -----------------------------------------------------------------
++      - name: ADR index drift (generate-adr-index --check)
++        run: |
++          set -euo pipefail
++          python3 .claude/scripts/generate-adr-index.py --check
++
+       # -----------------------------------------------------------------
+       # Step: Doc skill-path resolves (PLAN-112-FOLLOWUP-install-md-skill-path)
+       #
