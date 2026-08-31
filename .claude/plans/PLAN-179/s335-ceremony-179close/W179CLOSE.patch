@@ -982,7 +982,7 @@ index fbc5498..8c64e77 100755
          if isinstance(flags, list) and flags:
              safe = [_sanitize_line(str(f)) for f in flags[:5] if f]
 diff --git a/.claude/hooks/check_precompact_continuity.py b/.claude/hooks/check_precompact_continuity.py
-index c0880a3..e9f406e 100755
+index c0880a3..d53df0b 100755
 --- a/.claude/hooks/check_precompact_continuity.py
 +++ b/.claude/hooks/check_precompact_continuity.py
 @@ -88,6 +88,7 @@ from __future__ import annotations
@@ -1031,7 +1031,7 @@ index c0880a3..e9f406e 100755
  
      Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
      strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
-@@ -1051,6 +1066,250 @@ def _progress_guard(
+@@ -1051,6 +1066,268 @@ def _progress_guard(
          _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
  
  
@@ -1123,6 +1123,9 @@ index c0880a3..e9f406e 100755
 +_LEDGER_PLAN_FILE_ID_RE = re.compile(r"^(PLAN-[0-9]{3})-")
 +_LEDGER_AC_SCAN_MAX_FILES = 200
 +_LEDGER_AC_SCAN_MAX_BYTES = 256 * 1024
++#: Rail r9 P2-b — cap de paths considerados no matching plan_ac (o loop e
++#: O(paths x ACs); um commit gigante nao pode estourar o budget do hook).
++_LEDGER_AC_MATCH_MAX_PATHS = 500
 +
 +
 +def _ac_path_index_mirror(cwd: str, deadline: float) -> Dict[str, str]:
@@ -1191,18 +1194,23 @@ index c0880a3..e9f406e 100755
 +    failure; bounded by the shared wall deadline."""
 +    if time.monotonic() > deadline:
 +        return {}
++    # Rail r9 P2-a: `-m` porque um commit de MERGE sob combined-diff
++    # devolve lista VAZIA (o pointer sumia em commit valido); `-z` porque
++    # o quoting C de nomes nao-ASCII (`"src/\303\251.py"`) nunca casaria
++    # shape nem AC. Com -m os paths repetem por parent — dedupe preserva
++    # a ordem e conta cada path UMA vez.
 +    names = _git(
-+        ["log", "-1", "--name-only", "--format="], cwd,
++        ["log", "-1", "-m", "--name-only", "--format=", "-z"], cwd,
 +        timeout_s=deadline - time.monotonic(),
 +    )
 +    if not names:
 +        return {}
++    seen_paths = list(dict.fromkeys(
++        p.strip() for p in names.split("\0") if p.strip()
++    ))
 +    counts: Dict[str, int] = {}
 +    unmatched: List[str] = []
-+    for line in names.splitlines():
-+        stripped = line.strip()
-+        if not stripped:
-+            continue
++    for stripped in seen_paths:
 +        pid = _plan_id_from_path(stripped)
 +        if pid is not None:
 +            counts[pid] = counts.get(pid, 0) + 1
@@ -1215,9 +1223,19 @@ index c0880a3..e9f406e 100755
 +    # plano. A perna plan_ac roda so para paths nao-casados, sob o mesmo
 +    # deadline (prefix-match de diretorio identico ao derive_scope).
 +    if unmatched and time.monotonic() <= deadline:
++        # Rail r9 P2-b: o matching e O(paths x ACs) e o mirror pode
++        # retornar JA no deadline — sem cap nem re-check, um commit
++        # gigante estourava o budget do PreCompact ANTES do
++        # _write_snapshot (perder o snapshot para ganhar um pointer e
++        # inverter a prioridade do hook). Cap + deadline por path;
++        # exaustao para o matching e segue com o que ja contou
++        # (degradacao honesta, mesma doutrina do resto do indice).
++        unmatched = unmatched[:_LEDGER_AC_MATCH_MAX_PATHS]
 +        _ac_index = _ac_path_index_mirror(cwd, deadline)
 +        if _ac_index:
 +            for path in unmatched:
++                if time.monotonic() > deadline:
++                    break
 +                pid = _ac_index.get(path)
 +                if pid is None:
 +                    for ac_path, candidate in _ac_index.items():
@@ -1282,7 +1300,7 @@ index c0880a3..e9f406e 100755
  def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
      """Build + persist the snapshot; emit the closed-enum event. Always allows.
  
-@@ -1078,6 +1337,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1078,6 +1355,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          "trigger": trigger,
          "plan_id": plan_id,
          "execution_unit": _execution_unit(plan_path, cwd, deadline),
@@ -1293,7 +1311,7 @@ index c0880a3..e9f406e 100755
          "ceremony_flags": _ceremony_flags(cwd, deadline),
          "hmac_chain": _hmac_chain_breadcrumb(),
      }
-@@ -1088,6 +1351,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1088,6 +1369,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          chain_length = 0
      outcome = _write_snapshot(plan_id, blob, session_id)
      _emit_snapshot_event(trigger, plan_id, chain_length, outcome)
@@ -1398,10 +1416,10 @@ index 572a320..372dd8c 100755
      def test_never_passthrough(self) -> None:
          for action in ("directory_added_recorded", "notification_lifecycle"):
 diff --git a/.claude/hooks/tests/test_check_compaction_continuity.py b/.claude/hooks/tests/test_check_compaction_continuity.py
-index d696c14..06dc5fb 100755
+index d696c14..ae25669 100755
 --- a/.claude/hooks/tests/test_check_compaction_continuity.py
 +++ b/.claude/hooks/tests/test_check_compaction_continuity.py
-@@ -895,5 +895,311 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
+@@ -895,5 +895,387 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
          self.assertIn("other", _staged_ae._COMPACTION_SNAPSHOT_OUTCOMES)
  
  
@@ -1531,6 +1549,82 @@ index d696c14..06dc5fb 100755
 +        self.assertIsNone(
 +            _pre_hook._plan_id_from_path(".claude/plans/PLAN-042-dir/x.md")
 +        )
++
++    def test_merge_commit_still_derives_plan(self):
++        """Rail r9 P2-a — a merge commit under combined-diff semantics
++        reported NO paths (`git log -1 --name-only`), silently omitting
++        the pointer for a valid plan-scoped merge; `-m` + `-z` (raw,
++        NUL-delimited, per-parent, deduped) cures it."""
++        import subprocess
++        import tempfile
++        import time as _t
++        with tempfile.TemporaryDirectory() as tmp:
++            self._mkrepo(tmp, ["README.md"])
++
++            def g(*args):
++                subprocess.run(
++                    ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
++                    + list(args),
++                    cwd=tmp, check=True, capture_output=True,
++                )
++            g("checkout", "-q", "-b", "side")
++            f = Path(tmp) / ".claude/plans/PLAN-042/notes.md"
++            f.parent.mkdir(parents=True, exist_ok=True)
++            f.write_text("x\n", encoding="utf-8")
++            g("add", "-A")
++            g("commit", "-q", "-m", "plan work on side")
++            g("checkout", "-q", "-")
++            other = Path(tmp) / "other.md"
++            other.write_text("y\n", encoding="utf-8")
++            g("add", "-A")
++            g("commit", "-q", "-m", "mainline work")
++            g("merge", "-q", "--no-ff", "side", "-m", "merge side")
++            idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 5.0)
++        self.assertEqual(idx.get("plan_id"), "PLAN-042")
++
++    def test_ac_matching_stops_at_the_deadline(self):
++        """Rail r9 P2-b — the O(paths x ACs) matching loop must stop at
++        the shared wall deadline (the index runs BEFORE _write_snapshot;
++        overrunning trades the snapshot for a pointer). Clock reads:
++        top check, timeout calc, unmatched gate, one mirror plan-file
++        check, then the FIRST per-path check exhausts."""
++        import subprocess
++        import tempfile
++        with tempfile.TemporaryDirectory() as tmp:
++            self._mkrepo(tmp, [
++                ".claude/plans/PLAN-042-some-feature.md",
++                "src/impl.py",
++            ])
++
++            def g(*args):
++                subprocess.run(
++                    ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
++                    + list(args),
++                    cwd=tmp, check=True, capture_output=True,
++                )
++            plan = Path(tmp) / ".claude/plans/PLAN-042-some-feature.md"
++            plan.write_text(
++                "# P\n\n- [ ] [P1][US7][src/impl.py] does the thing\n",
++                encoding="utf-8",
++            )
++            impl = Path(tmp) / "src/impl.py"
++            impl.write_text("y = 2\n", encoding="utf-8")
++            g("add", "-A")
++            g("commit", "-q", "-m", "declare the AC")
++            impl.write_text("y = 3\n", encoding="utf-8")
++            g("add", "src/impl.py")
++            g("commit", "-q", "-m", "impl only")
++            seq = iter([0.0, 0.0, 0.0, 0.0])
++
++            def _mono():
++                try:
++                    return next(seq)
++                except StopIteration:
++                    return 1e9
++
++            with mock.patch.object(_pre_hook.time, "monotonic", _mono):
++                idx = _pre_hook._ledger_index(tmp, 5.0)
++        self.assertEqual(idx, {})
 +
 +    def test_git_refuses_sub_floor_budget(self):
 +        """Rail r8 P2-b — a remaining budget below the subprocess floor is
