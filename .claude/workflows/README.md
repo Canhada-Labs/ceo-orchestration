@@ -32,18 +32,23 @@ All three workflows operate under ADR-136-AMEND-1 (ADOPT-CONFINED):
   pristine should run from a throwaway clone or with a session-level audit-dir
   redirect, and re-verify the chain LAST.
 
-## The W0a caveat: `opts.model` is INERT
+## The W0a caveat, AMENDED: `opts.model` ROUTES on the current harness
 
-`PLAN-134/W0a-VERDICT.md` (S227, double ground truth): the Workflow tool's
-per-agent `opts.model` override does **not** route on this harness version —
-every Workflow agent runs the inherited session model. Consequences baked into
-these scripts:
+`PLAN-134/W0a-VERDICT.md` (S227) measured `opts.model` as inert. That verdict
+was **refuted in part on the current harness** by the ADR-144 S328 amendment
+(PLAN-169 W4.3, probe `wf_9ddaabab`: haiku actually served ≠ inherited
+fable-5) — Workflow per-agent `opts.model` DOES route today. What stays true,
+and why these scripts keep their shape:
 
-- Workflow agents are priced at the session model's rate. Keep their prompts
-  lean; they orchestrate and grade, they do not do cheap-tier work.
-- Any cheap-tier or cross-model execution happens via a
-  **`claude -p --model <exact-id>` subprocess** (the W0b methodology) — never
-  via `opts.model`. `eval-baseline-n20` is built on exactly this substrate.
+- Priced-at-session-model is no longer structurally guaranteed — an override
+  now routes AND bills at the override's rate. Keep orchestrator prompts lean
+  either way.
+- `eval-baseline-n20` STILL executes subjects via a
+  **`claude -p --model <exact-id>` subprocess** (the W0b methodology) — by
+  DESIGN, not because of inertness: the subprocess gives per-task config
+  isolation (scratch `CLAUDE_CONFIG_DIR`) and billing ground truth that an
+  in-workflow override does not, and it keeps the instrument comparable with
+  the frozen ledger-grade `PLAN-134/w0b/w0b_baseline.py`.
 
 ## Workflow script contract (for authors)
 

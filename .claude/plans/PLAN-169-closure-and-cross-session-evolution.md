@@ -1490,6 +1490,20 @@ pelo Owner; `OWNER-S329-E-LAND.sh` G-PRE..G5 + V1..V7 verdes; patch
   descrição da skill `eval-baseline-n20`, que ainda diz "Workflow
   opts.model is INERT"), ou vão a follow-up? Deixá-los mantém um
   terceiro sítio vivo de uma claim refutada.
+  > ◐ **Medido e PARCIALMENTE curado na S334.** O pacote B NÃO levou os
+  > herdeiros (medido no disco). Estado por sítio: (1) `ADR-144` — curado
+  > pela própria emenda S328 (`:97` marca "Refuted in part", `:114` é a
+  > emenda). (2) `.claude/workflows/README.md` §"The W0a caveat" — LIVRE
+  > (oráculo 0), CURADO na S334: a seção agora abre com a refutação e
+  > explica por que o substrato subprocess do eval-baseline continua
+  > correto POR DESENHO (isolamento + billing ground truth), não por
+  > inércia. (3) `.claude/workflows/eval-baseline-n20.js` (description +
+  > note) — **CANÔNICO (oráculo 1)**: cura textual redigida e REVERTIDA
+  > ao byte de HEAD na mesma sessão (edição fora de cerimônia não landa);
+  > pendente de carona numa cerimônia futura. (4) `ADR-151` (`:63`,
+  > `:139`) — herdeiro canônico que cita o claim como vivo sem apontar a
+  > emenda; mesma carona. A resposta operacional da OQ: follow-up de
+  > texto canônico (itens 3-4), não pacote próprio.
 - **OQ-12 (Owner, S328):** `test_hook_latency.py` NÃO é rede de
   segurança para este hook: os dois testes são `xfail(strict=False)`
   (`:160`, `:204`) e o corpus é `check_agent_spawn` + `audit_log` —

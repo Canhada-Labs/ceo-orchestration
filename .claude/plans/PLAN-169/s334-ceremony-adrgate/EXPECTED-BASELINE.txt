@@ -1,0 +1,85 @@
+# EXPECTED-BASELINE.txt — wave-adrgate (PLAN-169, rota rail-round-3 S333)
+#
+# Base DECLARADA contra a qual o V-block do OWNER-S334-ADRGATE-LAND.sh compara.
+# Nunca "contra zero" e nunca "> 0". Cada valor foi MEDIDO na S334, na arvore
+# sombra (shadow-adrgate, base 5df5c48), com PYTHONDONTWRITEBYTECODE=1; o
+# comando produtor esta no comentario imediatamente acima.
+#
+# Formato: CHAVE=valor. O leitor `_expect` e fail-CLOSED: chave ausente ABORTA.
+#
+# Divergencia PARA MENOS e regressao. Divergencia PARA MAIS nao e sucesso
+# automatico: atualize conscientemente, com a medicao nova num rail-round.
+
+# --- G4: forma do patch -----------------------------------------------------
+# Conjunto EXATO de paths. Tres canonicos + um livre que so e verdadeiro
+# JUNTO com o dado (o fixture de corpus flipa 2-erros -> 0-erros-2-entradas):
+#   (a) o dado    — .claude/adr/README.md (CANONICO): secao nova
+#       "Declared supersession exemptions" com as DUAS entradas revisadas,
+#       e a tabela ADR-INDEX regenerada (o flip do ADR-197 muda a linha dele).
+#   (b) a decisao — .claude/adr/ADR-197-user-profile-derivation.md (CANONICO):
+#       flip textual PROPOSED -> ACCEPTED; a ratificacao real ja existe
+#       (.asc sobre wave-s330-F-approved.md, land 303ae55).
+#   (c) o wire    — .github/workflows/validate.yml (CANONICO, KERNEL):
+#       2 steps novos no job de governanca (chain + index --check).
+#   (d) o fixture — .claude/scripts/tests/test_check_adr_chain.py (LIVRE):
+#       o pin de estado do corpus flipa para "clean com 2 entradas firing".
+EXPECTED_PATCH_PATHS=".claude/adr/README.md .claude/adr/ADR-197-user-profile-derivation.md .claude/scripts/tests/test_check_adr_chain.py .github/workflows/validate.yml"
+# Medido: `python3 .claude/hooks/check_canonical_edit.py --is-canonical <p>`
+# devolve 1 para README, ADR-197 e validate.yml; 0 para o teste.
+EXPECTED_PATCH_CANONICAL_PATHS=3
+# `comm -12` entre os 4 paths e os membros de
+# .claude/governance/gate-scripts-manifest.txt = vazio.
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
+
+# --- V2: suite de unidade ---------------------------------------------------
+# PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider \
+#   .claude/scripts/tests/test_check_adr_chain.py \
+#   .claude/scripts/tests/test_generate_adr_index.py \
+#   .claude/scripts/tests/test_validate_template_frozen_subset.py
+# Medido S334 na sombra: 66 passed, rc 0. Composicao: 49 chain (39 da S333 +
+# 10 do ledger, 5df5c48) com o fixture de corpus flipado DENTRO do patch,
+# 10 index, 7 frozen-subset (a familia do validate.yml que o patch toca).
+EXPECTED_UNIT_PYTEST_PASSED=66
+EXPECTED_UNIT_PYTEST_SKIPPED=0
+
+# --- V3: o gate de cadeia, nos DOIS sentidos --------------------------------
+# `python3 .claude/scripts/check-adr-chain.py` -> rc 0,
+# stdout contem "PASS: ADR chain clean". Era FAIL com 2 erros (ambos
+# ADR-111) desde f348ee9; o ledger com as 2 entradas zera.
+EXPECTED_ADR_CHAIN_RC=0
+# `python3 -c` sobre _load_declared_exemptions no vivo pos-patch:
+# exatamente {(ADR-120,ADR-111),(ADR-182,ADR-111)}, zero parse errors.
+EXPECTED_LEDGER_ENTRIES=2
+# CONTROLE NEGATIVO (mandatory-fire), rodado em COPIA descartavel do
+# .claude/adr — NUNCA no vivo: append de entrada orfa
+# `**ADR-001 -> ADR-002: stale**` na secao => rc 1 e stderr/stdout contem
+# "did not fire". Prova que o ledger nao aceita entrada morta.
+EXPECTED_MANDATORY_FIRE_CONTROL_RC=1
+
+# --- V4: indice -------------------------------------------------------------
+# `python3 .claude/scripts/generate-adr-index.py --check` -> rc 0
+# (a tabela regenerada no patch ja carrega ADR-197=ACCEPTED).
+EXPECTED_ADR_INDEX_CHECK_RC=0
+
+# --- V6: wire no CI ---------------------------------------------------------
+# `grep -c 'check-adr-chain.py' .github/workflows/validate.yml` (step + comentario)
+EXPECTED_YML_CHAIN_REFS=2
+# `grep -c 'generate-adr-index.py --check' .github/workflows/validate.yml`
+EXPECTED_YML_INDEX_CHECK_REFS=1
+
+# --- V8: gates de contagem --------------------------------------------------
+# `ls .claude/adr/ADR-*.md | wc -l` — o patch NAO adiciona ADR.
+EXPECTED_ADR_COUNT=198
+# `python3 .claude/scripts/check-claude-md-claims.py` -> rc 0
+EXPECTED_CLAUDE_MD_CLAIMS_RC=0
+# `bash .claude/scripts/local/verify-counts.sh` -> rc 0 (medido na sombra S334)
+EXPECTED_VERIFY_COUNTS_RC=0
+
+# --- V9: governanca ---------------------------------------------------------
+# `bash .claude/scripts/validate-governance.sh` -> "Errors: 0"
+EXPECTED_GOVERNANCE_ERRORS=0
+# `python3 .claude/scripts/check-installer-write-safety.py` -> rc 0; o patch
+# nao toca scripts/ entao o baseline do ratchet nao regenera.
+EXPECTED_RATCHET_RC=0
+# `python3 .claude/scripts/check-ceremony-script.py --json` -> blocking_unwaived
+EXPECTED_CEREMONY_LINT_BLOCKING=0

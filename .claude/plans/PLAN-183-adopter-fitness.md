@@ -1392,6 +1392,18 @@ com a revisão refrescada, ou vira plano próprio.
       *"Check 5 - slow hooks"*, dirigido por MODELO).
 - [ ] AC-5 [P0] `smoke-install` passa a cobrir `.github/` e a EXECUTAR o
       CI entregue — hoje o grep pelos templates devolve zero.
+      — ◐ S334: entregue a metade NÃO-canônica — `scripts/tests/smoke-install.sh`
+      ganhou a perna "PLAN-183 W0-US3 / AC-5" (`826688f`): o template
+      entregue é ATIVADO no target descartável (rename do adopter),
+      validado estruturalmente por stdlib SEMPRE (name/on/jobs + os 11
+      steps congelados) e por `actionlint` quando presente no PATH, com o
+      estado entregue restaurado para as pernas seguintes; run local
+      completo verde. O premissa "grep pelos templates devolve zero" do
+      texto acima descreve o estado pré-S328 e já não vale. FALTA a
+      metade CANÔNICA (wiring de step em `.github/workflows/smoke-install.yml`,
+      oráculo 1 — entra no batch de cerimônia da W1/W5-b) e a resposta da
+      OQ-2 (fixture permanente vs roteiro) para a EXECUÇÃO real do
+      workflow ativado — que é também a prova que fecha o AC-2.
 - [x] AC-6 [P1] O A7 é curado: instalação limpa não planta a identidade
       do mantenedor no repositório do adopter. **FECHADO (S324,
       2026-08-23) — reconciliado contra o DISCO e contra o CI, não contra

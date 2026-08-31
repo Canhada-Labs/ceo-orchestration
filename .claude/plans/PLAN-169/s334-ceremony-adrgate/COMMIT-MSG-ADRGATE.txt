@@ -1,0 +1,26 @@
+ceremony(PLAN-169 wave-adrgate): os 2 gates de ADR entram no CI com o ledger DECLARADO — e o ADR-197 flipa ACCEPTED
+
+O dado: .claude/adr/README.md ganha a seção "Declared supersession
+exemptions" com as DUAS entradas revisadas (ADR-120 -> ADR-111, rename
+ADR-117 completado; ADR-182 -> ADR-111, supersessão de cláusula com
+amended_by no alvo) — o mecanismo mandatory-fire landou LIVRE em 5df5c48
+e esta é a metade CANÔNICA da rota rail-round-3 (S333): dado revisado no
+lugar da gramática de qualificador que o rail furou 1+4+4 vezes.
+
+O wire: validate.yml roda check-adr-chain.py e generate-adr-index.py
+--check no job de governança — até aqui NENHUM CI rodava os dois
+(28 regenerações de índice não-feitas ficaram invisíveis por isso).
+A cadeia sai de FAIL 2 para PASS 0; o índice regenerado no patch já
+carrega o ADR-197 ACCEPTED (o flip textual cuja ratificação real é o
+.asc sobre wave-s330-F-approved.md, land 303ae55).
+
+O fixture: test_check_adr_chain.py pina o estado novo nos DOIS lados —
+corpus limpo E as duas entradas presentes e firing (um ledger vazio
+passando vácuo não se esconde atrás do verde).
+
+Sentinel: .claude/plans/PLAN-169/wave-adrgate-approved.md (+ .asc).
+Bateria V1-V9 do OWNER-S334-ADRGATE-LAND.sh verde contra
+EXPECTED-BASELINE.txt (66 unit; controle negativo mandatory-fire rc 1
+em cópia; verify-counts e governança 0).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
