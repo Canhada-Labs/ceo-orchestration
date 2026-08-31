@@ -13,7 +13,7 @@ Plans: PLAN-169
 Wave: wave-adrgate (PLAN-169 — o ledger DECLARADO de isenção de supersessão vira DADO revisado no `.claude/adr/README.md`, os DOIS gates de ADR entram no `validate.yml`, e o ADR-197 recebe o flip textual PROPOSED → ACCEPTED cuja ratificação real já está commitada)
 Patch: .claude/plans/PLAN-169/s334-ceremony-adrgate/ADRGATE.patch
 Patch-sha256: 09582f3477a864b691904b81256a5694c48bb48dd49c96310fd4b635a60fe88f
-Patch-base: 82446c2fb9a7e52a09ea887369f6a17c30c86466
+Patch-base: e715aa81d1b8b61278d17f0b6a541a65e0613c43
 Anchor-SHA: ANCHOR-PLACEHOLDER
 Data: DATA-PLACEHOLDER
 
