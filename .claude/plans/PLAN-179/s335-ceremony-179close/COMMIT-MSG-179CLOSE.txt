@@ -1,0 +1,40 @@
+ceremony(PLAN-179 wave-179close): US7 índice de ledger + US8 memory-delta no SessionEnd + válvula η — e o PLAN-179 fecha
+
+US7: o snapshot do PreCompact ganha `ledger_index` — plan derivado dos
+PATHS do último commit (espelho literal do derive_scope; NUNCA
+resolve_plan_id, emenda r1-C6, teste AST escopado), apontando
+PLAN-NNN/LEDGER.md + seções + last-commit. O PostCompact rende o pointer
+ESTRUTURAL (path + short-sha); títulos de seção nunca entram no
+instruction stream (R5 P1-1). pointer_count mantém a semântica.
+
+US8: SessionEnd.py implementado DA spec assinada
+(staged-w24/SESSIONEND-NOTE.md) — observação stat-only do delta de
+memória (st_mtime vs âncora chain→state_file→unknown), ação
+`session_memory_delta_observed` (SPEC v2.60; emitter tipado + allowlist
+deny-by-default; _KNOWN_ACTIONS 330→331, golden regenerado), linha de
+ratificação do operador (`memory delta ABSENT` torna a OMISSÃO visível),
+kill-switch 3-estados + entrada gate-side no noop-allowlist (ADR-160 §7).
+O hook nunca escreve memória; critério de morte pré-registrado (spec §8).
+
+US2b-valve (ratificação 2026-08-31 «Eta advisory + doutrina»):
+`_eta_advisory()` emite η=(T−F−S)/T = 887‰ em aritmética inteira das
+constantes MEDIDAS (F+S=112638, T=998043); «negar» documentado como
+limite do substrato (guia §6) — PreCompact não tem canal de deny.
+
+O plano flipa `executing → done` NO patch (frontmatter completed_at +
+related_commits; 4 últimos checkboxes fechados: US1-veredito supersedido
+pela r1-C3, US2b-valve, US7, US8; AC(a) do W0 supersedido; registro
+S335). Guia §2/§6 atualizado (a claim «verifies writability only»
+ficaria stale). 4 pins de contagem 330→331 rebaselineados
+conscientemente; contrato de API com SHA re-derivado.
+
+KERNEL: audit_emit.py ∈ _KERNEL_PATHS — o LAND armou o override no menor
+escopo (molde adrgate/cfab980).
+
+Sentinel: .claude/plans/PLAN-179/wave-179close-approved.md (+ .asc).
+Bateria V1-V9 do OWNER-S335-179CLOSE-LAND.sh verde contra
+EXPECTED-BASELINE.txt (211 unit / 0 skip; registry OK nomeado + controle
+negativo por --repo-root; golden idempotente; verify-counts e governança 0).
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01B3eLhwF8QM1TW7f5buaHkP

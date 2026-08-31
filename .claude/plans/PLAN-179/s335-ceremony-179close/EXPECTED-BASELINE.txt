@@ -1,0 +1,35 @@
+# EXPECTED-BASELINE — wave-179close (PLAN-179, S335)
+# Fonte UNICA dos valores que finalize-179close.sh e OWNER-S335-179CLOSE-LAND.sh
+# comparam. Formato chave=valor, um por linha; leitor fail-CLOSED (chave
+# ausente ABORTA). Atualizar um valor aqui e decisao CONSCIENTE com fonte —
+# nunca relaxamento ([[feedback-blockers-expire-verify-before-asking]] /
+# EXPECTED_* envelhece, S328).
+#
+# Medidos na sombra (base cfab980) em 2026-08-31, S335:
+#   - 214 = pytest -q das 8 suites declaradas (67 das 3 tocadas + 12 do
+#     contrato de API + 135 das 4 suites de pin rebaselineadas; inclui os
+#     3 controles das curas do rail r1), 0 skips;
+#   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
+#     golden regenerado por --write-golden no mesmo patch;
+#   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
+#   - 198 ADRs (esta wave nao toca o corpus de ADRs);
+#   - verify-counts rc 0 medido na sombra (margem de ±5% absorveu +25 testes).
+EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks/check_postcompact_reinject.py .claude/hooks/SessionEnd.py .claude/hooks/_lib/audit_emit.py SPEC/v1/audit-log.schema.md .claude/data/audit-registry.golden.txt .claude/hooks/harness-noop-allowlist.txt .claude/hooks/tests/test_session_end_memory_delta.py .claude/hooks/tests/test_check_compaction_continuity.py .claude/hooks/tests/test_audit_emit_api_contract.py .claude/hooks/tests/test_check_ledger_checkpoint.py .claude/hooks/tests/test_w5_scrub_enforcement.py .claude/hooks/tests/test_codex_egress_proof_telemetry.py .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py .claude/plans/PLAN-179-context-continuity-durable-state.md .claude/plans/PLAN-179/LEDGER.md docs/CONTEXT-CONTINUITY-GUIDE.md"
+EXPECTED_PATCH_CANONICAL_PATHS=5
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
+EXPECTED_PATCH_PY_FILES=11
+EXPECTED_UNIT_PYTEST_PASSED=214
+EXPECTED_UNIT_PYTEST_SKIPPED=0
+EXPECTED_GOLDEN_COUNT=331
+EXPECTED_GOLDEN_ACTION_REFS=1
+EXPECTED_SPEC_ACTION_ROWS=1
+EXPECTED_SPEC_VERSION_ROWS=1
+EXPECTED_NOOP_REFS=1
+EXPECTED_PLAN_OPEN_CHECKBOXES=0
+EXPECTED_ETA_PERMILLE=887
+EXPECTED_ADR_COUNT=198
+EXPECTED_CLAUDE_MD_CLAIMS_RC=0
+EXPECTED_VERIFY_COUNTS_RC=0
+EXPECTED_CEREMONY_LINT_BLOCKING=0
+EXPECTED_GOVERNANCE_ERRORS=0
+EXPECTED_RATCHET_RC=0
