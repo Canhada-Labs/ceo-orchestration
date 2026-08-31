@@ -747,6 +747,79 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+step "T20 — curas do rail-materials r2 seguem WIRED (contrato executavel)"
+# ---------------------------------------------------------------------------
+# Cinco assercoes de regressao sobre os proprios scripts, incluindo UMA
+# semantica VIVA: os valores exportados de CEO_KERNEL_OVERRIDE/_ACK sao
+# avaliados contra o _override_granted() REAL do hook — o rail r2 provou
+# que o valor antigo (com espacos, ACK=1) era recusado em silencio.
+_t20_fail=0
+# (a) _fin_ok=1 dentro do ramo --no-commit (P1-d)
+awk '/if \[ "\$NO_COMMIT" = "1" \]; then/,/^else$/' "$ROOT/$CEREMONY_DIR/finalize-adrgate.sh" \
+  | grep -q '_fin_ok=1' || { echo "  T20a: _fin_ok=1 SUMIU do ramo --no-commit"; _t20_fail=1; }
+# (b) _fin_ok inicializado (P2-e)
+grep -q '^_fin_ok=0' "$ROOT/$CEREMONY_DIR/finalize-adrgate.sh" \
+  || { echo "  T20b: init _fin_ok=0 ausente"; _t20_fail=1; }
+# (c) _land_rc=$? e a PRIMEIRA instrucao de _restore (P2-h)
+_t20_first="$( awk '/^_restore\(\) \{/{f=1;next} f && !/^[[:space:]]*#/ && NF {print; exit}' "$ROOT/$LAND_SCRIPT" )"
+case "$_t20_first" in
+  *'_land_rc=$?'*) : ;;
+  *) echo "  T20c: _land_rc=\$? nao e a primeira instrucao de _restore (era: $_t20_first)"; _t20_fail=1 ;;
+esac
+# (d) disarm pos-commit presente (P1-c)
+grep -A3 'o patch vive no commit a partir daqui' "$ROOT/$LAND_SCRIPT" \
+  | grep -q 'unset CEO_KERNEL_OVERRIDE' || { echo "  T20d: disarm pos-commit ausente"; _t20_fail=1; }
+# (e) VIVO: os valores exportados satisfazem _override_granted() do hook real
+_t20_reason="$( sed -n 's/^export CEO_KERNEL_OVERRIDE="\(.*\)"$/\1/p' "$ROOT/$LAND_SCRIPT" | head -1 )"
+_t20_ack="$( sed -n 's/^export CEO_KERNEL_OVERRIDE_ACK="\(.*\)"$/\1/p' "$ROOT/$LAND_SCRIPT" | head -1 )"
+if ! python3 - "$_t20_reason" "$_t20_ack" <<'T20PY'
+import importlib.util, sys
+from pathlib import Path
+spec = importlib.util.spec_from_file_location(
+    "cak", Path(".claude/hooks/check_arbitration_kernel.py"))
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+env = {"CEO_KERNEL_OVERRIDE": sys.argv[1], "CEO_KERNEL_OVERRIDE_ACK": sys.argv[2]}
+sys.exit(0 if m._override_granted(env) else 1)
+T20PY
+then
+  echo "  T20e: o par exportado NAO satisfaz _override_granted() do hook (reason='$_t20_reason' ack='$_t20_ack')"
+  _t20_fail=1
+fi
+if [ "$_t20_fail" = "0" ]; then
+  pass "T20: as 5 curas do rail r2 wired (incl. override avaliado VIVO no hook)"
+else
+  fail "T20: regressao de cura do rail r2 (acima)"
+fi
+
+# ---------------------------------------------------------------------------
+step "T21 — abort do LAND PRESERVA o log do gate que falhou (rail r2 P2-h)"
+# ---------------------------------------------------------------------------
+# Pre-cura, _land_rc lia $? DEPOIS de um unset e via sempre 0 — o ramo de
+# preservacao nunca rodava e o Owner de um abort ficava sem a evidencia
+# (a licao S329-manha, de novo). Reusa o cenario vermelho do T16 e assere
+# que um land-adrgate-*.log aparece no ceremony dir do CLONE.
+if [ "$RAIL_IS_APPROVE" = "1" ]; then
+  D="$( _fresh )"
+  _set_expect "$D" EXPECTED_ADR_INDEX_CHECK_RC 1
+  _commit_plant "$D" "$BASELINE_ENV" || fail "T21: nao consegui commitar o plant"
+  _sign "$D" || fail "T21: SIGN falhou no setup"
+  _er_rc=0; _land "$D" --dry-run || _er_rc=$?
+  if [ "$_er_rc" -eq 0 ]; then
+    fail "T21: o land deveria ter abortado (EXPECTED plantado) e saiu 0"
+  else
+    _t21_kept="$( find "$D/$CEREMONY_DIR" -maxdepth 1 -name 'land-adrgate-*.log' 2>/dev/null | head -1 )"
+    if [ -n "$_t21_kept" ]; then
+      pass "T21: abort preservou o log ($( basename "$_t21_kept" ))"
+    else
+      fail "T21: abort NAO deixou land-adrgate-*.log no ceremony dir (regressao P2-h)"
+    fi
+  fi
+  _done "$D"
+else
+  skip "T21: depende de um SIGN verde"
+fi
+
 step "RESUMO"
 # ---------------------------------------------------------------------------
 printf '\n  PASS=%d  FAIL=%d  SKIP=%d\n' "$PASS" "$FAIL" "$SKIP"

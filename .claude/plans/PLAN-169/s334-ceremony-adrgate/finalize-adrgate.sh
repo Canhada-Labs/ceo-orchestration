@@ -122,7 +122,13 @@ _expect() {
 }
 
 WT=""
+_fin_ok=0   # rail r2 P2-e: nunca herdar do ambiente
 _cleanup() {
+  # rail-materials r1 P2-b: um abort DEPOIS do gerador restaura os tres
+  # materiais vivos ao estado pre-gerador (backup feito no passo 6).
+  if [ -n "${_fin_bak:-}" ] && [ "${_fin_ok:-0}" != "1" ]; then
+    _fin_restore 2>/dev/null || printf ''
+  fi
   if [ -n "$WT" ] && [ -d "$WT" ]; then
     git worktree remove --force "$WT" >/dev/null 2>&1 || printf ''
     rm -rf "$WT" 2>/dev/null || printf ''
@@ -532,6 +538,34 @@ fi
 OLD_PATCH_SHA=""
 [ -f "$PATCH" ] && OLD_PATCH_SHA="$( shasum -a 256 "$PATCH" | awk '{print $1}' )"
 
+# rail-materials r1 P2-b: o gerador sobrescreve patch, sentinel e
+# PROPOSED em sequencia; um abort dos checks seguintes NAO pode
+# deixar os tres pela metade. Backup antes, restore no abort.
+_fin_bak="$(mktemp -d)"
+: > "$_fin_bak/.absent-before"   # rail r3 P2-i: ausencia tambem e estado
+for _bf in "$PATCH" "$SENTINEL" "$PROPOSED" "$BASE_SHA_FILE"; do
+  if [ -f "$_bf" ]; then
+    cp -p "$_bf" "$_fin_bak/$(basename "$_bf")"
+  else
+    printf '%s\n' "$_bf" >> "$_fin_bak/.absent-before"
+  fi
+done
+_fin_restore() {
+  # rail r2 P2-f: a transacao cobre os QUATRO materiais (BASE-SHA.txt
+  # tambem e mutado) e des-stageia o que este script stageou — um
+  # commit-fail nao pode deixar index misto.
+  for _bf in "$PATCH" "$SENTINEL" "$PROPOSED" "$BASE_SHA_FILE"; do
+    git reset -q -- "$_bf" >/dev/null 2>&1 || true
+    if [ -f "$_fin_bak/$(basename "$_bf")" ]; then
+      cp -p "$_fin_bak/$(basename "$_bf")" "$_bf"
+    elif grep -qxF "$_bf" "$_fin_bak/.absent-before" 2>/dev/null; then
+      # rail r3 P2-i: o arquivo NAO existia antes do gerador — um abort
+      # remove o parcial em vez de deixa-lo orfao na arvore.
+      rm -f "$_bf" 2>/dev/null || true
+    fi
+  done
+  printf '  finalize: patch/sentinel/PROPOSED/BASE-SHA RESTAURADOS ao estado pre-gerador (e des-stageados)\n' >&2
+}
 python3 "$FINALIZE" \
   --shadow "$WT" \
   --out "$ROOT/$PATCH" \
@@ -572,6 +606,10 @@ ok "git apply --check verde na arvore viva"
 step "6 — commit dos materiais regenerados (sem editor)"
 # ---------------------------------------------------------------------------
 if [ "$NO_COMMIT" = "1" ]; then
+  # rail r2 P1-d: no modo --no-commit os materiais mutados SAO o produto —
+  # sem isto o EXIT "bem-sucedido" restauraria os 4 e o modo viraria um
+  # no-op destrutivo silencioso.
+  _fin_ok=1
   warn "--no-commit: nada foi staged nem commitado."
   printf '        Os 4 materiais estao no disco, prontos para o commit de quem\n'
   printf '        estiver conduzindo a cerimonia:\n'
@@ -583,11 +621,23 @@ else
 # Staging EXPLICITO, arquivo a arquivo. Um staging por DIRETORIO (ou o add-tudo)
 # arrastaria o trabalho de outros pacotes que ainda esteja na arvore; o conjunto
 # e conferido logo abaixo e um path a mais ABORTA.
+# rail-materials r1 P2-b: o guard de index roda ANTES do add — um abort
+# depois do add deixaria os 4 staged, e o remedio antigo (git reset global)
+# des-stagearia trabalho de terceiros junto.
+_PRE_STAGED="$( git diff --cached --name-only | LC_ALL=C sort -u )"
+[ -z "$_PRE_STAGED" ] || die "o index ja carrega path(s) staged de outro trabalho:
+$( printf '  %s\n' $_PRE_STAGED )
+  Commite ou des-stageie (git reset -- <path>) ANTES do finalize — o commit
+  dos materiais nao pode arrastar staging alheio."
 for f in "$PATCH" "$SENTINEL" "$PROPOSED" "$BASE_SHA_FILE"; do
   git add -- "$f"
 done
 STAGED="$( git diff --cached --name-only | LC_ALL=C sort -u )"
 if [ -z "$STAGED" ]; then
+  # rail r3 P2-j: este caminho e SUCESSO — sem a flag, o EXIT trataria
+  # o "nada a fazer" como abort e imprimiria um RESTAURADOS confuso
+  # depois do PRONTO.
+  _fin_ok=1
   ok "os 4 materiais sairam byte-identicos — NADA a fazer"
 else
   printf '%s\n' "$STAGED" | sed 's/^/    staged: /'
@@ -597,9 +647,11 @@ else
   # shellcheck disable=SC2086  # lista controlada, sem espacos nos paths
   [ -z "$EXTRA" ] || die "index carrega path(s) fora dos 4 materiais:
 $( printf '  %s\n' $EXTRA )
-  Rode  git reset  e comece de novo."
+  Des-stageie SO esses paths (git reset -- <path>) e re-rode — nunca um
+  git reset global (arrastaria staging de terceiros; rail-materials r1)."
   git commit -q -m "chore(PLAN-169 s334-adrgate): patch derivado da sombra e baseado em $HEAD_SHA (finalize-adrgate.sh)" \
     || die "o commit falhou — o staging esta intacto; chame o CEO"
+  _fin_ok=1
   ok "commit criado: $( git rev-parse --short HEAD )"
 fi
 fi

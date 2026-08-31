@@ -208,12 +208,26 @@ _fingerprint() {
   } | shasum -a 256 | awk '{print $1}'
 }
 _restore() {
-  # exit status na ENTRADA do trap: != 0 significa que um die/abort disparou.
-  # Logs caros so sao preservados nesse caso — um dry-run VERDE nao pode
-  # deixar arquivo novo na arvore (o harness T2 confere byte a byte).
+  # exit status na ENTRADA do trap — capturado na PRIMEIRA linha (rail r2
+  # P2-h: qualquer comando antes daqui zera o $? e os logs de um abort
+  # jamais seriam preservados). != 0 significa que um die/abort disparou.
   _land_rc=$?
+  # Backstop do override de kernel (r1 P1): qualquer saida desarma.
+  unset CEO_KERNEL_OVERRIDE CEO_KERNEL_OVERRIDE_ACK 2>/dev/null || true
   if [ "$RESTORE_ON_EXIT" = "1" ] && [ "$APPLIED" = "1" ]; then
-    git reset -q >/dev/null 2>&1 || true   # um abort DEPOIS do staging deixaria o index sujo
+    # Reset SCOPED aos paths do patch (rail-materials r1 P2-a): o G0
+    # tolera staged nao-canonico de terceiros, e um reset global o
+    # des-stagearia junto. Deriva os paths do proprio patch.
+    git apply --numstat "$PATCH" 2>/dev/null | cut -f3 | while IFS= read -r _pp; do
+      [ -n "$_pp" ] && git reset -q -- "$_pp" >/dev/null 2>&1 || true
+    done
+    # O passo S tambem stageia sentinel + .asc (rail r2 P2-g) — mas SO
+    # este script pode des-stagear o que ELE stageou (rail r3 P2-k): num
+    # dry-run que nunca chega ao passo S, um reset incondicional
+    # destruiria staged pre-existente que o G0 tolera.
+    if [ "${STAGED_BY_LAND:-0}" = "1" ]; then
+      git reset -q -- "$SENTINEL" "$SENTINEL.asc" >/dev/null 2>&1 || true
+    fi
     if git apply -R "$PATCH" >/dev/null 2>&1; then
       APPLIED=0
       _fp_after="$(_fingerprint)"
@@ -235,15 +249,39 @@ _restore() {
   # remover o tmpdir.
   _keep_dir="$ROOT/$CEREMONY_DIR"
   if [ "$_land_rc" != "0" ] && [ -d "$TMPDIR_LAND" ] && [ -d "$_keep_dir" ] && [ -w "$_keep_dir" ]; then
+    _logs_kept=0
     for _l in "$TMPDIR_LAND"/*.log; do
       [ -f "$_l" ] || continue
       _kept="$_keep_dir/land-adrgate-$(date +%Y%m%d-%H%M%S)-$(basename "$_l")"
-      cp -p "$_l" "$_kept" 2>/dev/null && printf '  log preservado: %s\n' "$_kept"
+      # rail-materials r1 P2-a: destino pre-existente ou symlink e
+      # RECUSADO (cp -p seguiria o link para fora do repo).
+      if [ -e "$_kept" ] || [ -L "$_kept" ]; then
+        printf '  log NAO preservado (destino ja existe): %s\n' "$_kept" >&2
+        continue
+      fi
+      cp -p "$_l" "$_kept" 2>/dev/null && { _logs_kept=$((_logs_kept+1)); printf '  log preservado: %s\n' "$_kept"; }
     done
+    if [ "$_logs_kept" -gt 0 ]; then
+      printf '  NOTA: %s log(s) preservados na arvore DE PROPOSITO (abort com evidencia);\n' "$_logs_kept"
+      printf '        a restauracao acima cobre os paths do patch, nao estes logs.\n'
+    fi
   fi
   rm -rf "$TMPDIR_LAND"
 }
 trap _restore EXIT
+
+# --- kernel-override hygiene (molde W3K; rail-materials r1 P1) -------
+# O patch toca .github/workflows/validate.yml (_KERNEL_PATHS). A
+# cerimonia de kernel ARMA o override ELA MESMA, no menor escopo
+# (export logo antes do apply, unset apos o commit, backstop no trap)
+# — e RECUSA rodar se o override ja vier do ambiente: duas cerimonias
+# na mesma sessao e onde um export sobra e autoriza o pack seguinte
+# sem ninguem pedir.
+if [ -n "${CEO_KERNEL_OVERRIDE:-}" ] || [ -n "${CEO_KERNEL_OVERRIDE_ACK:-}" ]; then
+  die "CEO_KERNEL_OVERRIDE/_ACK ja estao no ambiente ANTES deste script.
+  Desarme (unset CEO_KERNEL_OVERRIDE CEO_KERNEL_OVERRIDE_ACK) e re-rode —
+  este LAND arma e desarma o proprio override, no menor escopo."
+fi
 
 DIRTY_FILE="$TMPDIR_LAND/dirty"
 PATCHED_FILE="$TMPDIR_LAND/patched"
@@ -590,6 +628,15 @@ step "APLICANDO o patch assinado"
 # com o patch aplicado — so o dry-run restaurava. Agora TODO abort depois do
 # apply restaura arvore e index; o land bem-sucedido desliga o restore logo
 # apos o commit.
+# Arma o override de kernel SO agora (menor escopo — rail-materials r1
+# P1, molde W3K). O Scope assinado que o G5 acabou de validar NOMEIA o
+# validate.yml; o override e a segunda chave, nunca a primeira.
+# Contrato do hook (check_arbitration_kernel.py: _REASON_RE + _ACK_TOKEN):
+# reason e um SLUG [A-Za-z0-9._-]{1,120}; o ACK e o literal I-ACCEPT.
+# Valores fora do contrato = override NAO concedido em silencio (medido
+# pelo rail r2 avaliando _override_granted() = False com o valor antigo).
+export CEO_KERNEL_OVERRIDE="PLAN-169-wave-adrgate-validate-yml-wire.sentinel-wave-adrgate-approved"
+export CEO_KERNEL_OVERRIDE_ACK="I-ACCEPT"
 RESTORE_ON_EXIT=1
 git apply "$PATCH"
 APPLIED=1
@@ -888,6 +935,7 @@ while IFS= read -r f; do
   [ -z "$f" ] && continue
   git add -- "$f"
 done < "$EXPECTED_FILE"
+STAGED_BY_LAND=1   # rail r3 P2-k: habilita o des-stage escopado do _restore
 git diff --cached --name-only | sort -u > "$STAGED_FILE"
 git diff --cached --name-only | sed 's/^/    staged: /'
 if ! cmp -s "$EXPECTED_FILE" "$STAGED_FILE"; then
@@ -941,6 +989,9 @@ fi
 NEW_SHA="$(git rev-parse HEAD)"
 ok "commit criado: $NEW_SHA"
 RESTORE_ON_EXIT=0   # o patch vive no commit a partir daqui
+# Desarma o override de kernel AGORA (rail r2 P1-c): o menor escopo termina
+# no commit — o push e os comandos seguintes rodam sem a chave no ambiente.
+unset CEO_KERNEL_OVERRIDE CEO_KERNEL_OVERRIDE_ACK 2>/dev/null || true
 git --no-pager log -1 --format='    %h %s' | sed 's/^/  /'
 
 if [ "$SELFTEST" = "1" ]; then
