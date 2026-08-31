@@ -2,7 +2,8 @@
 #
 # Base DECLARADA contra a qual o V-block do OWNER-S334-ADRGATE-LAND.sh compara.
 # Nunca "contra zero" e nunca "> 0". Cada valor foi MEDIDO na S334, na arvore
-# sombra (shadow-adrgate, base 5df5c48), com PYTHONDONTWRITEBYTECODE=1; o
+# sombra (shadow-adrgate, base 2858924 — re-derivada pós-cura r1), com
+# PYTHONDONTWRITEBYTECODE=1; o
 # comando produtor esta no comentario imediatamente acima.
 #
 # Formato: CHAVE=valor. O leitor `_expect` e fail-CLOSED: chave ausente ABORTA.
@@ -36,10 +37,12 @@ EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 #   .claude/scripts/tests/test_check_adr_chain.py \
 #   .claude/scripts/tests/test_generate_adr_index.py \
 #   .claude/scripts/tests/test_validate_template_frozen_subset.py
-# Medido S334 na sombra: 66 passed, rc 0. Composicao: 49 chain (39 da S333 +
-# 10 do ledger, 5df5c48) com o fixture de corpus flipado DENTRO do patch,
-# 10 index, 7 frozen-subset (a familia do validate.yml que o patch toca).
-EXPECTED_UNIT_PYTEST_PASSED=66
+# Medido S334 na sombra re-derivada (2858924): 69 passed, rc 0. Composicao:
+# 52 chain (39 da S333 + 10 do ledger 5df5c48 + 3 da cura r1 2858924 —
+# N/A-por-ausencia do adopter, stem-pin casa, stem divergente recusa E acusa)
+# com o fixture de corpus flipado DENTRO do patch, 10 index, 7 frozen-subset
+# (a familia do validate.yml que o patch toca).
+EXPECTED_UNIT_PYTEST_PASSED=69
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 
 # --- V3: o gate de cadeia, nos DOIS sentidos --------------------------------
@@ -51,8 +54,9 @@ EXPECTED_ADR_CHAIN_RC=0
 # exatamente {(ADR-120,ADR-111),(ADR-182,ADR-111)}, zero parse errors.
 EXPECTED_LEDGER_ENTRIES=2
 # CONTROLE NEGATIVO (mandatory-fire), rodado em COPIA descartavel do
-# .claude/adr — NUNCA no vivo: append de entrada orfa
-# `**ADR-001 -> ADR-002: stale**` na secao => rc 1 e stderr/stdout contem
+# .claude/adr — NUNCA no vivo. Pos-cura r1 a entrada de controle precisa de
+# declarante PRESENTE no corpus (ausente = N/A por desenho): append de
+# `**ADR-120 -> ADR-197: stale**` na secao => rc 1 e a saida contem
 # "did not fire". Prova que o ledger nao aceita entrada morta.
 EXPECTED_MANDATORY_FIRE_CONTROL_RC=1
 
