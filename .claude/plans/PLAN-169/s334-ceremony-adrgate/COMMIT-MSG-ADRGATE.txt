@@ -20,7 +20,7 @@ passando vácuo não se esconde atrás do verde).
 
 Sentinel: .claude/plans/PLAN-169/wave-adrgate-approved.md (+ .asc).
 Bateria V1-V9 do OWNER-S334-ADRGATE-LAND.sh verde contra
-EXPECTED-BASELINE.txt (66 unit; controle negativo mandatory-fire rc 1
+EXPECTED-BASELINE.txt (69 unit; controle negativo mandatory-fire rc 1
 em cópia; verify-counts e governança 0).
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

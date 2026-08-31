@@ -17,6 +17,7 @@ stem-pin + índice regenerado), validate.yml (2 steps de gate — KERNEL,
 o LAND arma o override), ADR-197 flip ACCEPTED, fixture do corpus.
 
 ```
+export CEO_ADRGATE_SHADOW=/private/tmp/claude-501/-Users-joaocanhada-canhada-labs-ceo-orchestration/7d42c549-7941-48ac-b629-924bebc8b395/scratchpad/shadow-adrgate
 bash .claude/plans/PLAN-169/s334-ceremony-adrgate/finalize-adrgate.sh
 bash .claude/plans/PLAN-169/OWNER-S334-ADRGATE-SIGN.sh
 bash .claude/plans/PLAN-169/OWNER-S334-ADRGATE-LAND.sh --dry-run

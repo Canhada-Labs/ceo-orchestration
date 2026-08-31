@@ -27,7 +27,7 @@ Patch-sha256: 09582f3477a864b691904b81256a5694c48bb48dd49c96310fd4b635a60fe88f
 - `generate-adr-index.py --check`: **rc 0** (após regenerar no patch; a
   primeira bateria da sombra REPROVOU aqui porque o flip do 197 muda a
   linha da tabela — o gate novo pegou o próprio patch, prova viva de valor).
-- pytest (chain 49 + index 10 + frozen-subset 7): **66 passed**.
-- `verify-counts.sh` na sombra: rc 0. `validate-governance.sh --fast`: 0.
+- pytest (chain 52 + index 10 + frozen-subset 7): **69 passed**.
+- `verify-counts.sh` na sombra: rc 0. `validate-governance.sh` (COMPLETO no V9 do LAND): 0.
 - Controle negativo mandatory-fire (cópia descartável, entrada órfã):
   rc 1 com `did not fire` — o ledger não aceita entrada morta.
