@@ -27,11 +27,11 @@ não-canônicos** que só são verdadeiros juntos:
    `python3 .claude/scripts/skill-budget-generator.py --jq-fragment`:
    **+4 chaves** name-only para skills domain-tier com 0 dispatches na
    janela (`cpp-testing`, `frontend-slides`, `prisma-patterns`,
-   `ui-demo`), 104 → 108. O settings shipado é o DERIVADO do gerador —
-   idempotência provada no finalize (4a) e no LAND (V3a), com controle
-   NEGATIVO em cópia descartável (chave apagada é recuperada pelo
-   fragment — 4e/V3b: um fragment que nada escreve seria idempotente por
-   vacuidade). O gate real (`check_harness_config.py`) roda verde sobre o
+   `ui-demo`), 104 → 108. O settings shipado é o DERIVADO —
+   e como o gerador é INCREMENTAL, o fragment exato da mudança é MATERIAL
+   VERSIONADO (`skill-frag-s335.jq`): `base + fragment` reproduz o
+   settings do patch byte a byte (4a/V3a) com não-vácuo nomeado na mesma
+   prova (`prisma-patterns` ABSENT→name-only — 4e/V3b). O gate real (`check_harness_config.py`) roda verde sobre o
    settings pós-patch (4g/V4).
 2. **`templates/.github/workflows/validate.yml.template`** (livre) — o
    header «INERT AS SHIPPED» no molde EXATO de

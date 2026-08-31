@@ -102,6 +102,7 @@ MATERIAL_LIST=(
   "$BASELINE_ENV"
   "$CEREMONY_DIR/BASE-SHA.txt"
   "$CEREMONY_DIR/finalize-183batch.sh"
+  "$CEREMONY_DIR/skill-frag-s335.jq"
   "$CEREMONY_DIR/test-ceremony-scripts-183batch.sh"
   "$CEREMONY_DIR/DESIGN-183BATCH-S335.md"
   "$PATCH"

@@ -6,12 +6,14 @@ W1» — batch canônico completo com rail; W1 avança sem promessa.
 
 ## Decisões de desenho
 
-1. **O settings shipado é o DERIVADO, nunca um snapshot.** Prova em três
-   pernas: idempotência (re-gerar+re-aplicar = sha idêntico, finalize 4a e
-   LAND V3a), NÃO-vacuidade (cópia descartável sem `prisma-patterns` →
-   o fragment a recupera, 4e/V3b — um fragment inerte seria idempotente
-   por vacuidade), e o gate REAL (`check_harness_config.py` rc 0 sobre o
-   pós-patch, 4g/V4, custa <1s).
+1. **O settings shipado é o DERIVADO, nunca um snapshot.** O gerador é
+   INCREMENTAL (medido no redesenho pós-abort do 4e: sobre a árvore já
+   atualizada emite 0 chaves — «re-gerar e comparar» seria prova vácua),
+   então o fragment EXATO da mudança virou MATERIAL VERSIONADO
+   (`skill-frag-s335.jq`) e a prova é: `base + fragment` ⇒ settings do
+   patch BYTE A BYTE (4a/V3a), com não-vácuo NOMEADO na mesma passada
+   (`prisma-patterns` ABSENT→name-only, 4e/V3b) e o gate REAL
+   (`check_harness_config.py` rc 0, 4g/V4).
 2. **Delta medido antes de fixar**: `jq -f` do fragment sobre o vivo =
    **+4 adds, zero remoções, zero mudanças de valor** (cpp-testing,
    frontend-slides, prisma-patterns, ui-demo — 0-dispatch na janela). As

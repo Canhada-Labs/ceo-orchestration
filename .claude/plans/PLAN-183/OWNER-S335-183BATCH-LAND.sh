@@ -166,6 +166,7 @@ MATERIALS=(
   "$BASELINE_ENV"
   "$CEREMONY_DIR/BASE-SHA.txt"
   "$CEREMONY_DIR/finalize-183batch.sh"
+  "$CEREMONY_DIR/skill-frag-s335.jq"
   "$CEREMONY_DIR/test-ceremony-scripts-183batch.sh"
   "$CEREMONY_DIR/DESIGN-183BATCH-S335.md"
   "$FINALIZE"
@@ -704,32 +705,31 @@ _a5n="$( { grep -c 'REGISTRO S335' "$PLAN_FILE" || true; } )"
 ok "V6c-d: AC-5 aberto com registro (flip barrado)"
 
 # ---------------------------------------------------------------------------
-step "V3 — o settings sob o gerador, nos DOIS sentidos"
+step "V3 — o settings e base+fragment, nos DOIS sentidos"
 # ---------------------------------------------------------------------------
-# (a) IDEMPOTENTE: re-gerar o fragment e re-aplica-lo ao settings POS-PATCH
-#     nao muda um byte — o settings shipado E o derivado do codigo;
-# (b) NAO-VACUO: numa copia descartavel sem uma das chaves novas, o
-#     fragment tem de RECUPERA-LA — um fragment que nada escreve seria
-#     idempotente por vacuidade.
-FRAG="$TMPDIR_LAND/skill-frag.jq"
-python3 "$BUDGET_GEN" --jq-fragment > "$FRAG" 2>"$TMPDIR_LAND/frag.err" \
-  || { sed 's/^/    /' "$TMPDIR_LAND/frag.err" >&2; die "V3a: gerador falhou"; }
-_s_before="$( shasum -a 256 "$SETTINGS" | awk '{print $1}' )"
-jq -f "$FRAG" "$SETTINGS" > "$TMPDIR_LAND/settings.regen" \
-  || die "V3a: jq -f do fragment falhou"
-_s_after="$( shasum -a 256 "$TMPDIR_LAND/settings.regen" | awk '{print $1}' )"
-[ "$_s_before" = "$_s_after" ] \
-  || die "V3a: re-aplicar o fragment MUDA o settings pos-patch — o patch nao
-  carrega o derivado do gerador. Refinalize com o regen."
-ok "V3a: settings idempotente sob o gerador"
-FIRE_JSON="$TMPDIR_LAND/settings-fire.json"
-jq 'del(.skillOverrides["prisma-patterns"])' "$SETTINGS" > "$FIRE_JSON" \
-  || die "V3b: nao consegui montar a copia mutilada"
-jq -f "$FRAG" "$FIRE_JSON" > "$FIRE_JSON.re" || die "V3b: re-aplicacao falhou"
-_fk="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$FIRE_JSON.re" )"
-[ "$_fk" = "name-only" ] \
-  || die "V3b: a chave apagada NAO foi recuperada (veio: $_fk) — regen vacuo"
-ok "V3b: fragment recupera chave apagada (nao-vacuo)"
+# O gerador e INCREMENTAL (sobre a arvore ja atualizada emite 0 chaves), por
+# isso a autoridade e o FRAGMENT VERSIONADO da cerimonia: (a) aplicado ao
+# settings-BASE (HEAD~ do land = o estado pre-patch registrado no proprio
+# patch), reproduz o settings POS-PATCH byte a byte; (b) nao-vacuo NOMEADO:
+# prisma-patterns ABSENT no base -> name-only no derivado.
+FRAG_MAT="$CEREMONY_DIR/skill-frag-s335.jq"
+[ -f "$FRAG_MAT" ] || die "V3: fragment versionado ausente: $FRAG_MAT"
+_base_json="$TMPDIR_LAND/settings-base.json"
+# O patch ja esta APLICADO na arvore; o base e o conteudo pre-apply, que o
+# proprio patch registra — extrai-lo do patch evita depender de HEAD~.
+git show HEAD:.claude/settings.json > "$_base_json" 2>/dev/null \
+  || die "V3: nao consegui ler o settings-base do HEAD"
+_derived_json="$TMPDIR_LAND/settings-derived.json"
+jq -f "$FRAG_MAT" "$_base_json" > "$_derived_json" \
+  || die "V3a: jq -f do fragment versionado falhou"
+cmp -s "$_derived_json" "$SETTINGS" \
+  || die "V3a: base+fragment NAO reproduz o settings pos-patch byte a byte"
+ok "V3a: settings pos-patch == base + fragment versionado (byte a byte)"
+_fk_base="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_base_json" )"
+_fk_derived="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_derived_json" )"
+{ [ "$_fk_base" = "ABSENT" ] && [ "$_fk_derived" = "name-only" ]; } \
+  || die "V3b: nao-vacuo falhou (base=$_fk_base derivado=$_fk_derived)"
+ok "V3b: fragment ESCREVE (prisma-patterns ABSENT -> name-only)"
 
 # ---------------------------------------------------------------------------
 step "V4 — sonda comportamental: harness-config gate + contagem de overrides"

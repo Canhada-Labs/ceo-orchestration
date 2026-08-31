@@ -342,20 +342,27 @@ step "4 — bateria CURTA na arvore-sombra"
 # informacao — salvo sob `--with-slow`, que existe para conferir antes.
 # O que roda aqui e o que responde "o conteudo copiado ainda e valido?".
 
-# 4a — o gate central da wave: o settings do patch e IDEMPOTENTE sob o
-# gerador (re-gerar o fragment no WT e re-aplica-lo nao muda um byte) —
-# o settings shipado E o derivado do codigo, nunca um snapshot a mao.
-FRAG="$WT.skill-frag.jq"
-( cd "$WT" && python3 "$BUDGET_GEN" --jq-fragment ) > "$FRAG" 2>"$WT.frag.err" \
-  || { sed 's/^/      /' "$WT.frag.err" >&2; die "4a: skill-budget-generator falhou no WT"; }
-_s_before="$( shasum -a 256 "$WT/$SETTINGS" | awk '{print $1}' )"
-jq -f "$FRAG" "$WT/$SETTINGS" > "$WT.settings.regen" \
-  || die "4a: jq -f do fragment falhou"
-_s_after="$( shasum -a 256 "$WT.settings.regen" | awk '{print $1}' )"
-[ "$_s_before" = "$_s_after" ] \
-  || die "4a: re-aplicar o fragment MUDA o settings — o patch nao carrega o
-  derivado do gerador. Regenere na sombra de trabalho e re-derive o patch."
-ok "4a: settings idempotente sob o gerador (sha inalterado)"
+# 4a — o gate central da wave: o settings do patch e EXATAMENTE
+# base + fragment. O skill-budget-generator e INCREMENTAL (le o estado
+# corrente e emite so demotions NOVAS — medido: rodado sobre a sombra ja
+# atualizada ele emite 0 chaves), entao "re-gerar no WT e comparar" seria
+# prova vacua. A prova forte: o fragment EXATO da mudanca e MATERIAL
+# VERSIONADO da cerimonia (skill-frag-s335.jq, gerado do estado-base 104),
+# e aplica-lo ao settings do HEAD (pre-patch) tem de reproduzir o settings
+# do patch BYTE A BYTE.
+FRAG_MAT="$CEREMONY_DIR/skill-frag-s335.jq"
+[ -f "$FRAG_MAT" ] || die "4a: fragment versionado ausente: $FRAG_MAT"
+_base_json="$WT.settings-base.json"
+git -C "$WT" show HEAD:.claude/settings.json > "$_base_json" \
+  || die "4a: nao consegui ler o settings do HEAD"
+_derived_json="$WT.settings-derived.json"
+jq -f "$FRAG_MAT" "$_base_json" > "$_derived_json" \
+  || die "4a: jq -f do fragment versionado falhou"
+cmp -s "$_derived_json" "$WT/$SETTINGS" \
+  || die "4a: base+fragment NAO reproduz o settings do patch byte a byte —
+  ou o fragment versionado nao e o usado, ou o settings ganhou edicao fora
+  do regen. Re-derive: python3 $BUDGET_GEN --jq-fragment (no estado-base)."
+ok "4a: settings do patch == base + fragment versionado (byte a byte)"
 
 # 4b — o settings parseia e a contagem de overrides e a DECLARADA.
 jq -e . "$WT/$SETTINGS" >/dev/null || die "4b: settings.json nao parseia"
@@ -390,20 +397,18 @@ _in_obs="$( { grep -c 'INERT AS SHIPPED' "$WT/$TEMPLATE" || true; } )"
   || die "4d: 'INERT AS SHIPPED' aparece $_in_obs vez(es) no template, esperado $(_expect EXPECTED_INERT_REFS)"
 ok "4d: header INERT presente ($_in_obs)"
 
-# 4e — controle NEGATIVO do regen em COPIA descartavel: apagar uma das 4
-# chaves novas e re-aplicar o fragment tem de RECUPERA-LA — um fragment que
-# nao escreve nada seria idempotente por vacuidade.
-FIRE_JSON="$( mktemp "${TMPDIR:-/tmp}/s335w183b-fire.XXXXXX" )"
-jq 'del(.skillOverrides["prisma-patterns"])' "$WT/$SETTINGS" > "$FIRE_JSON" \
-  || { rm -f "$FIRE_JSON"; die "4e: nao consegui montar a copia sem a chave"; }
-_f1="$( shasum -a 256 "$FIRE_JSON" | awk '{print $1}' )"
-jq -f "$FRAG" "$FIRE_JSON" > "$FIRE_JSON.re" || { rm -f "$FIRE_JSON" "$FIRE_JSON.re"; die "4e: re-aplicacao falhou"; }
-_f2="$( shasum -a 256 "$FIRE_JSON.re" | awk '{print $1}' )"
-_fk="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$FIRE_JSON.re" )"
-rm -f "$FIRE_JSON" "$FIRE_JSON.re"
-[ "$_f1" != "$_f2" ] || die "4e: o fragment nao mudou uma copia MUTILADA — regen vacuo"
-[ "$_fk" = "name-only" ] || die "4e: a chave apagada NAO foi recuperada pelo fragment (veio: $_fk)"
-ok "4e: fragment recupera chave apagada na copia descartavel (nao-vacuo)"
+# 4e — nao-vacuidade do fragment, na MESMA prova: uma chave nova (prisma-
+# patterns) tem de estar AUSENTE no base e name-only no derivado — um
+# fragment que nada escreve reproduziria o base e o 4a ja teria morrido;
+# este gate NOMEIA a chave para que a falha diga qual metade quebrou.
+_fk_base="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_base_json" )"
+_fk_derived="$( jq -r '.skillOverrides["prisma-patterns"] // "ABSENT"' "$_derived_json" )"
+[ "$_fk_base" = "ABSENT" ] \
+  || die "4e: prisma-patterns JA existe no base ($_fk_base) — o fragment
+  versionado nao corresponde ao estado-base desta wave"
+[ "$_fk_derived" = "name-only" ] \
+  || die "4e: o fragment nao escreve prisma-patterns no derivado (veio: $_fk_derived) — regen vacuo"
+ok "4e: fragment ESCREVE (prisma-patterns: ABSENT no base -> name-only no derivado)"
 
 # 4f — o AC-5 NAO flipa (rail 183-r1: a execucao real segue aberta); o que
 # viaja e o REGISTRO. Um [x] aqui seria registro falso de governanca.

@@ -23,8 +23,10 @@ Patch-sha256: TO-FILL-AT-FINAL-PATCH
 
 ## Evidência pré-assinatura (S335, sombra base 8f01202)
 
-- Idempotência: re-gerar + re-aplicar o fragment ⇒ sha inalterado.
-- Não-vacuidade: cópia sem `prisma-patterns` ⇒ o fragment a RECUPERA.
+- Derivação: `base + skill-frag-s335.jq` (fragment VERSIONADO — o gerador
+  é incremental e re-gerar sobre a árvore atualizada emite 0 chaves) ⇒
+  settings do patch BYTE A BYTE; não-vácuo nomeado: `prisma-patterns`
+  ABSENT no base → name-only no derivado.
 - `check_harness_config.py` rc 0 sobre o settings pós-patch (<1s).
 - frozen-subset: **7 passed / 0 skipped**. jq parse ok; overrides 108.
 - ceremony-lint: 0 blockings. Rail codex r1: 1 P1 + 1 P2, ambos REAIS e
