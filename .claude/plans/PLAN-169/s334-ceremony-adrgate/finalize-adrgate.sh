@@ -126,7 +126,7 @@ _fin_ok=0   # rail r2 P2-e: nunca herdar do ambiente
 _cleanup() {
   # rail-materials r1 P2-b: um abort DEPOIS do gerador restaura os tres
   # materiais vivos ao estado pre-gerador (backup feito no passo 6).
-  if [ -n "${_fin_bak:-}" ] && [ "${_fin_ok:-0}" != "1" ]; then
+  if [ "${_fin_captured:-0}" = "1" ] && [ "${_fin_ok:-0}" != "1" ]; then
     # rail r5: o aviso de recovery TEM de chegar ao operador — nada de
     # engolir o stderr do restore.
     _fin_restore || printf ''
@@ -587,6 +587,9 @@ _fin_restore() {
   fi
   printf '  finalize: materiais RESTAURADOS ao pre-estado exato (worktree + index)\n' >&2
 }
+# rail r6: a flag so liga quando captura E funcao existem — o caminho de
+# falha-da-captura aborta ANTES daqui e o trap nao chama nada indefinido.
+_fin_captured=1
 python3 "$FINALIZE" \
   --shadow "$WT" \
   --out "$ROOT/$PATCH" \
