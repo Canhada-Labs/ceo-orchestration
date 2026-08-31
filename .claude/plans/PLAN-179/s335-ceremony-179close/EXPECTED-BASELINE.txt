@@ -6,11 +6,14 @@
 # EXPECTED_* envelhece, S328).
 #
 # Medidos na sombra (base cfab980) em 2026-08-31, S335:
-#   - 308 = pytest -q das 9 suites declaradas (76 das 3 tocadas + 12 do
+#   - 313 = pytest -q das 9 suites declaradas (76 das 3 tocadas + 12 do
 #     contrato de API + 135 das 4 suites de pin rebaselineadas + 85 do
 #     git_bypass_guard, o 6o pin achado pela bateria integral; inclui os
 #     controles das curas dos rails r1-r5 — incl. a perna state_file
-#     APOSENTADA em r5), 0 skips;
+#     APOSENTADA em r5 — E os 5 controles da r6 (S336): partial-counts no
+#     timeout, name-scan sob deadline, semantica de janela no overlap,
+#     trava env-nunca-ancora, perna plan_ac do espelho do derive_scope;
+#     medido na sombra pos-cura r6: 313 passed / 0 skips em 8.97s), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -20,7 +23,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=308
+EXPECTED_UNIT_PYTEST_PASSED=313
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
