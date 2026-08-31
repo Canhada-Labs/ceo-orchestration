@@ -25,14 +25,14 @@ bash .claude/plans/PLAN-169/OWNER-S334-ADRGATE-LAND.sh
 
 Resultado esperado: `check-adr-chain.py` FAIL 2 → PASS 0 no main, os 2
 gates de ADR rodando em TODO push/PR (hoje NENHUM CI os roda), ADR-197
-ACCEPTED. STATUS DOS SCRIPTS: harness `test-ceremony-scripts-adrgate.sh`
-**19 PASS / 0 FAIL / 0 SKIP** (T15b prova o land COMPLETO verde com o
-.asc dentro; V-blocks todos vivos e comparados — checker, pytest,
-mandatory-fire, índice, ledger no consumidor). O finalize já rodou:
-patch `09582f34…` na base `4399238`, `git apply --check` verde. Se o
-SIGN reclamar de HEAD ≠ base por causa de commits posteriores desta
-mesma sessão (closeout), re-rode o finalize primeiro — ele re-baseia e
-re-commita em segundos, recusando qualquer drift real dos 4 paths.
+ACCEPTED. STATUS DOS SCRIPTS: rail de MATERIAIS fechado em **APPROVE na r8**
+(8 rodadas, 20 defeitos reais curados — incl. kernel-arming validado
+VIVO contra o hook e o redesenho transacional por pré-estado exato);
+harness `test-ceremony-scripts-adrgate.sh` **22 PASS / 0 FAIL / 0 SKIP**
+SEM escape, na árvore commitada. IMPORTANTE: o HEAD andou depois do
+finalize (curas do rail) — **rode o finalize PRIMEIRO** (1º comando da
+fila acima): ele re-baseia o patch no HEAD atual em segundos e recusa
+qualquer drift real dos 4 paths; depois SIGN → LAND --dry-run → LAND.
 
 ### 2. Decisões que SÓ você pode tomar (nenhuma bloqueia o item 1)
 
