@@ -14,8 +14,8 @@ Wave: wave-s330-F (PLAN-169 OQ-E5 — `templates/settings/settings.user.json` de
 Patch: .claude/plans/PLAN-169/s330-ceremony-F/F.patch
 Patch-sha256: 7297ab4fb1ff0e048b16d6c62097b7245170da708a94cb64617bb88ef1f5f441
 Patch-base: ad6e78ef6721d83806fdaedb3e8ac3723566d748
-Anchor-SHA: TO-FILL-AT-SIGN
-Data: TO-FILL-AT-SIGN
+Anchor-SHA: 50626cdcfd58e407b58f64d592e28df9d56f6c88
+Data: 2026-08-31
 
 ## O que esta wave entrega
 
@@ -92,7 +92,7 @@ o CI cobra, seria uma janela vermelha.
    narrativa da §5 continua sendo trabalho de closeout.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: @Canhada-Labs TO-FILL-AT-SIGN
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-169
 Scope:
   - .claude/adr/ADR-197-user-profile-derivation.md

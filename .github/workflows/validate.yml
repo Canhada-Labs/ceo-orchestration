@@ -923,6 +923,44 @@ jobs:
           python3 scripts/build-plugin.py --check
 
       # -----------------------------------------------------------------
+      # Step: User-template derivation gate (PLAN-169 wave-s330-F, ADR-197)
+      #
+      # `templates/settings/settings.user.json` is DERIVED from
+      # `settings.base.json` by the declared subtraction in its own
+      # `_derivation` key — never a hand-maintained second copy. That is
+      # the cure for the defect the wave measured: the old user template
+      # was a manual copy frozen at 9777a8d whose own `_comment` asserted
+      # a hook count and a byte-parity that nothing read, and both had
+      # rotted (26 basenames missing, a hand-narrowed matcher, a dropped
+      # second registration). A numeral in JSON prose is watched by
+      # nothing.
+      #
+      # `--check` re-derives the template from base + spec in memory and
+      # byte-diffs it against the committed file — the same
+      # regen-and-diff shape as the two idempotency steps above. The
+      # pytest suite already covers this (`.claude/scripts/tests/` IS
+      # collected by CI), so this step is not the only coverage; it
+      # exists because a dedicated step names the failure and prints the
+      # repair command instead of burying it in a suite summary.
+      # Stdlib-only, NO network, NO credential — safe on fork PRs.
+      # Kill-switch: the job-level `if:` CEO_SOTA_DISABLE gate above
+      # covers this step like every other. Exit contract: 0 in-sync /
+      # 1 drift / 2 unusable input (missing file, missing `_derivation`)
+      # — ANY non-zero fails this step, fail-closed by design: a spec the
+      # generator cannot read is not a pass.
+      # -----------------------------------------------------------------
+      - name: User-template derivation (PLAN-169 F — regen+diff)
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE"
+          if ! python3 .claude/scripts/gen-settings-user-template.py --check; then
+            echo "::error::templates/settings/settings.user.json is not what its _derivation produces."
+            echo "Repair: python3 .claude/scripts/gen-settings-user-template.py --write"
+            echo "If the CHANGE is intended, edit the _derivation spec (not the hooks) and re-run --write."
+            exit 1
+          fi
+
+      # -----------------------------------------------------------------
       # Step: Install-profiles manifest gate (PLAN-153 Wave B item 4)
       #
       # scripts/profiles/profiles.json is a DERIVED, schema-validated

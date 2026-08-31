@@ -1,9 +1,242 @@
 {
-  "_comment": "CEO Orchestration — USER ceremony settings (PLAN-122 WS-4). Derived from settings.base.json by REMOVING exactly the 10 governance/sentinel/kernel hooks that block edits or require GPG/sentinel ceremony infra (check_plan_edit, check_arbitration_kernel, check_tier_policy, check_canonical_edit, check_protocol_semver_cascade, check_skill_patch_sentinel, check_scratchpad_access, check_skill_reference_read, check_skill_bootstrap_post, check_bash_canonical_forensic). Every RETAINED entry's BEHAVIORAL fields (matcher/command/timeout) are byte-identical to settings.base.json; some _comment annotations differ (the retained UserPromptSubmit entry carries an added PLAN-122 optimizer note). The advisory/safety scanners AND the UserPromptSubmit optimizer recommender (the whole point of the user profile) are KEPT — none of them block adopter code, and they never need a sentinel or GPG. All hook FILES are still copied to disk by install.sh so validate-governance.sh REQUIRED_FILES are satisfied; the governance subset is simply not registered, so it is dormant for the no-GPG user profile.",
+  "_comment": "CEO Orchestration - USER ceremony settings. GENERATED FILE, do not hand-edit: every hook registration, env key and top-level value below is DERIVED from templates/settings/settings.base.json by .claude/scripts/gen-settings-user-template.py, applying the subtraction declared in the `_derivation` key of this same file. To change what the user profile carries, edit `_derivation` and re-run the generator with --write; CI re-runs it with --check and reddens on any drift. The rule the exclusions follow is stated once, in `_derivation.criterion`, and every excluded hook carries its own class, reason and evidence. Retained entries are byte-identical to the base template, including their `_comment` annotations, except where `_derivation.matcher_overrides` or `_derivation.annotation_overrides` declares a difference and says why. All hook FILES are still copied to disk by install.sh, so validate-governance.sh REQUIRED_FILES stay satisfied; an omitted hook is simply never registered, and is therefore dormant for the no-GPG user profile.",
+  "_derivation": {
+    "_comment": "PLAN-169 wave-s330-F (OQ-E5). THE SUBTRACTION, AS DATA. This object is the only place that says what the USER ceremony profile removes from templates/settings/settings.base.json; .claude/scripts/gen-settings-user-template.py is the only mechanism that applies it, and its --check mode is re-run by the test suite. It replaces a prose claim that had rotted: the frozen copy said it removed \"exactly 10\" hooks and kept every retained entry byte-identical in its behavioural fields, while the S330 census measured 26 removed basenames, one hand-narrowed matcher, one silently dropped second registration, three hand-edited _comment annotations and one hand-edited statusMessage. The per-hook audit behind every verdict below is .claude/plans/PLAN-169/s330-ceremony-F/hook-classification-S330.md.",
+    "source": "settings.base.json",
+    "generator": ".claude/scripts/gen-settings-user-template.py",
+    "classification": ".claude/plans/PLAN-169/s330-ceremony-F/hook-classification-S330.md",
+    "provisional": false,
+    "criterion": "Regra de EXCLUSAO aplicada aos 26 hooks que a base registra e o perfil user nao registrava (classificacao S330). NAO e uma caracterizacao do perfil inteiro: o perfil registra hooks bloqueantes desde a v1.0.0 por decisoes anteriores a esta wave. Fica de fora todo hook que (a) bloqueia uma chamada de ferramenta sem deixar ao adopter uma rota praticavel — modo advisory, kill-switch, ou uma forma alternativa do proprio comando —, (b) exige infraestrutura de cerimonia que --ceremony user nao instala, ou (c) observa/reforca um rito de mantenedor cuja metade enforcing o perfil nao registra. Todo hook que esta wave ACRESCENTA e que ainda pode bloquear esta nomeado em blocking_inclusions, com a sua rota.",
+    "blocking_inclusions": [
+      {
+        "hook": "accel_dispatch.py",
+        "route": "CEO_TURBO=0 ou o arquivo <projeto>/.claude/turbo-off desliga a camada aceleradora inteira",
+        "evidence": ".claude/hooks/accel_dispatch.py:42 (master opt-out via turbo_profile); o bloco propaga so quando um sub-check vota block (:77-80)"
+      },
+      {
+        "hook": "check_config_change.py",
+        "route": "CEO_CONFIG_CHANGE_GUARD=0 (a chave entra em env_overrides com o valor 1 EXPLICITO, para que o default nao viva so em codigo)",
+        "evidence": ".claude/hooks/check_config_change.py:116 (le a chave; default '1'); bloqueia so achado de FORBIDDEN_KEYS em camada de settings (:245-249)"
+      },
+      {
+        "hook": "codex_review_user_code.py",
+        "route": "nao setar CEO_CODEX_USER_REVIEW_BLOCK=1 (default e DETECT-ONLY: mensagem, nunca bloqueio); CEO_CODEX_USER_REVIEW=0 desliga o hook",
+        "evidence": ".claude/hooks/codex_review_user_code.py:323-324 e :331-332 — os DOIS unicos sitios de block sao guardados pela mesma chave opt-in; :285 e o kill-switch"
+      },
+      {
+        "hook": "review_loop.py",
+        "route": "nao setar CEO_REVIEW_LOOP=1 — o hook inteiro retorna {} sem o opt-in; com ele, o cap e de 3 iteracoes",
+        "evidence": ".claude/hooks/review_loop.py:280-284 (o unico sitio de block) sob o opt-in default-OFF documentado no cabecalho do modulo"
+      }
+    ],
+    "literals": {
+      "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature."
+    },
+    "top_level_exclude": [
+      {
+        "name": "_model_pin_comment",
+        "reason": "prosa do pin do MANTENEDOR (fala de availableModels/enforceAvailableModels); o perfil advisory carrega _model_comment no lugar, que proibe exatamente essas duas chaves"
+      },
+      {
+        "name": "availableModels",
+        "reason": "o perfil user e advisory por desenho: nao restringe o conjunto de modelos. test_template_dogfood_parity.py reprova a presenca desta chave aqui"
+      },
+      {
+        "name": "fallbackModel",
+        "reason": "par de availableModels; sem allowlist nao ha para onde cair"
+      },
+      {
+        "name": "_posture_keys_comment",
+        "reason": "prosa que explica o bloco permissions acima"
+      },
+      {
+        "name": "_default_mode_arbitration_comment",
+        "reason": "prosa que explica permissions.defaultMode"
+      },
+      {
+        "name": "_night_mode_deny_surface_comment",
+        "reason": "prosa da superficie de deny do night-mode, que e rito do mantenedor"
+      },
+      {
+        "name": "permissions",
+        "reason": "deny/allow/defaultMode do MANTENEDOR. install.sh constroi a deny-baseline do adopter do zero na cerimonia user; test-install-deny-baseline.sh perna (D) exige que este template NAO traga bloco permissions"
+      },
+      {
+        "name": "cleanupPeriodDays",
+        "reason": "politica de retencao do checkout do mantenedor"
+      },
+      {
+        "name": "plansDirectory",
+        "reason": "aponta para .claude/plans/, que a cerimonia user nao instala"
+      },
+      {
+        "name": "attribution",
+        "reason": "atribuicao de commit do repo do framework"
+      },
+      {
+        "name": "_skill_budget_comment",
+        "reason": "prosa que explica skillListingBudgetFraction"
+      },
+      {
+        "name": "skillListingBudgetFraction",
+        "reason": "tuning do catalogo de skills do mantenedor"
+      },
+      {
+        "name": "skillOverrides",
+        "reason": "overrides por skill do mantenedor"
+      },
+      {
+        "name": "disableSkillShellExecution",
+        "reason": "postura de execucao de shell em skills, decidida pelo mantenedor"
+      },
+      {
+        "name": "statusLine",
+        "reason": "statusline do framework (statusline-ceo.py), ferramenta de mantenedor"
+      }
+    ],
+    "exclude_hooks": [
+      {
+        "name": "check_canonical_edit.py",
+        "class": "exige-gpg-sentinel",
+        "reason": "bloqueia toda edicao de path canonico sem approved.md assinado pelo Owner; o perfil user nao tem rito de sentinel nem GPG",
+        "evidence": ".claude/hooks/check_canonical_edit.py:686,3110"
+      },
+      {
+        "name": "check_skill_patch_sentinel.py",
+        "class": "exige-gpg-sentinel",
+        "reason": "bloqueia escrita de SKILL.md sem proposta SP-NNN em .claude/proposals/ (nao instalado) + CEO_SKILL_PATCH_SHA",
+        "evidence": ".claude/hooks/check_skill_patch_sentinel.py:81; scripts/install.sh nao instala .claude/proposals/"
+      },
+      {
+        "name": "check_tier_policy.py",
+        "class": "exige-gpg-sentinel",
+        "reason": "bloqueia edicao dos 2 agentes com VETO sem sentinel Approved-By",
+        "evidence": ".claude/hooks/check_tier_policy.py:80,84-88"
+      },
+      {
+        "name": "check_arbitration_kernel.py",
+        "class": "bloqueia-edicao",
+        "reason": "HARD-DENY do kernel de arbitragem; anti-sentinel por desenho, sem rota advisory",
+        "evidence": ".claude/hooks/check_arbitration_kernel.py:309, docstring :4-10"
+      },
+      {
+        "name": "check_plan_edit.py",
+        "class": "bloqueia-edicao",
+        "reason": "bloqueia transicoes ilegais de status: em arquivos de plano",
+        "evidence": ".claude/hooks/check_plan_edit.py:239,733"
+      },
+      {
+        "name": "check_adversary.py",
+        "class": "bloqueia-edicao",
+        "reason": "bloqueia comando Bash com credencial viva mesmo com CEO_ADVERSARY unset (ask tambem emite block); nao existe switch para esse caminho",
+        "evidence": ".claude/hooks/check_adversary.py:156-158,254-271; a mensagem :260 e falsa para o caminho de segredo"
+      },
+      {
+        "name": "check_scratchpad_access.py",
+        "class": "bloqueia-edicao",
+        "reason": "casa por SUFIXO qualquer caminho que termine em scratchpad.py (folga deliberada para fixtures de teste), entao um adopter que rode o PROPRIO script homonimo com --plan X leva bloqueio de um guard do CLI do framework, sem rota praticavel e sem saber por que; decisao do Owner de 2026-08-30 (rail-round-7 P2-a) revertendo o INCLUIR-NO-USER da classificacao S330 s1.1 pelo criterio (a) da propria regra",
+        "evidence": ".claude/hooks/check_scratchpad_access.py:96-120 (_tokens_target_scratchpad aceita qualquer dirname); .claude/plans/PLAN-169/s330-ceremony-F/rail-round-7.md"
+      },
+      {
+        "name": "check_pair_rail.py",
+        "class": "exige-infra-ausente-no-user",
+        "reason": "exige Codex CLI + .claude/governance/codex-cli-pin-manifest.json (nao instalado); 210s; os globs L3+ incluem .github/workflows/*.yml do proprio adopter",
+        "evidence": ".claude/hooks/check_pair_rail.py:157-169,1502-1511"
+      },
+      {
+        "name": "check_protocol_semver_cascade.py",
+        "class": "exige-infra-ausente-no-user",
+        "reason": "vigia PROTOCOL.md, que --ceremony user nao instala; advisory fail-OPEN sempre, entao o criterio antigo (bloqueia) era falso",
+        "evidence": ".claude/hooks/check_protocol_semver_cascade.py:14-15; scripts/install.sh:2655"
+      },
+      {
+        "name": "check_codex_filewrite.py",
+        "class": "maintainer-only-por-desenho",
+        "reason": "deny-list compartilhada com _CANONICAL_GUARDS contem paths que num adopter sao DELE (.github/workflows/*.yml, .github/CODEOWNERS, AGENTS.md, requirements.toml); fail-CLOSED por ADR-107",
+        "evidence": ".claude/hooks/check_codex_filewrite.py:24-25,275,294,356"
+      },
+      {
+        "name": "check_worktree_writer.py",
+        "class": "maintainer-only-por-desenho",
+        "reason": "policia o modo parallel-writer (ADR-049a AMEND-1) do mantenedor; inerte sem CEO_PARALLEL_WRITER, que nada no perfil user seta",
+        "evidence": ".claude/hooks/check_worktree_writer.py:31-33,665"
+      },
+      {
+        "name": "check_bash_canonical_forensic.py",
+        "class": "maintainer-only-por-desenho",
+        "reason": "metade forense E.4 de um par cuja metade E.3 (check_canonical_edit) o perfil nao registra; nunca bloqueia",
+        "evidence": ".claude/hooks/check_bash_canonical_forensic.py:4,8-9"
+      },
+      {
+        "name": "check_skill_bootstrap_post.py",
+        "class": "maintainer-only-por-desenho",
+        "reason": "audita o bypass _bootstrap_bypass_allows de check_skill_patch_sentinel, que o perfil nao registra; sem sujeito",
+        "evidence": ".claude/hooks/check_skill_bootstrap_post.py:7-14"
+      },
+      {
+        "name": "check_closeout_guard.py",
+        "class": "maintainer-only-por-desenho",
+        "reason": "lembra o rito de closeout do mantenedor (CLAUDE.md, CHANGELOG, finish-*.sh em staged/)",
+        "evidence": ".claude/hooks/check_closeout_guard.py:11,14"
+      },
+      {
+        "name": "check_ledger_checkpoint.py",
+        "class": "maintainer-only-por-desenho",
+        "reason": "checkpoint do ledger plan-scoped (ADR-195); sem .claude/plans/PLAN-NNN/ sai sempre por out_of_scope_paths pagando um cold-start por chamada Bash",
+        "evidence": ".claude/hooks/check_ledger_checkpoint.py:1235-1246"
+      },
+      {
+        "name": "check_compact_pinning.py",
+        "class": "maintainer-only-por-desenho",
+        "reason": "reinjeta PINNED_CONSTRAINTS cujas entradas 1 e 2 sao PROTOCOL.md/ADR-052 e o rito de sentinel ADR-031 - nenhum dos dois existe no perfil user",
+        "evidence": ".claude/hooks/check_compact_pinning.py:19-21; scripts/install.sh:2655"
+      },
+      {
+        "name": "check_postcompact_reinject.py",
+        "class": "maintainer-only-por-desenho",
+        "reason": "re-emite o mesmo bloco de check_compact_pinning; mesma razao, e depende do par PreCompact",
+        "evidence": ".claude/hooks/check_postcompact_reinject.py:1-11"
+      },
+      {
+        "name": "check_precompact_continuity.py",
+        "class": "maintainer-only-por-desenho",
+        "reason": "metade PreCompact do par acima; incluir uma sem a outra reproduz a assimetria que esta wave cura",
+        "evidence": ".claude/hooks/check_precompact_continuity.py:1-12; CLAUDE.md secao 5 (ADR-153 fires-proof NEGATIVO)"
+      }
+    ],
+    "exclude_hooks_pending": [],
+    "env_exclude": [],
+    "env_overrides": {
+      "CEO_CONFIG_PROTECTION_ADVISORY": "1",
+      "CEO_CONFIG_CHANGE_GUARD": "1"
+    },
+    "matcher_overrides": {
+      "PreToolUse/check_anti_ceo_overhead.py": {
+        "matcher": "Read|Edit|Write|MultiEdit|Bash",
+        "reason": "Escolha DELIBERADA de latencia do perfil advisory: 5 ferramentas em vez de 14 cold-starts por chamada. O hook e fail-OPEN, advisory, com budget <=20/dia. Antes da wave F esta divergencia era drift NAO-declarado e nenhum oraculo a via (o keyset dos testes colapsa o matcher).",
+        "evidence": "hook-classification-S330.md secao 1.2; scripts/tests/test-upgrade-lifecycle-hooks-derived.sh _keys_raw colapsa o matcher"
+      }
+    },
+    "annotation_overrides": {
+      "PreToolUse/check_anti_ceo_overhead.py": {
+        "_comment": "PLAN-083 Wave 0a sub-agent 0.5: anti-CEO-overhead detector. PreToolUse hook detecting CEO doing work a sub-agent could do equally well. Fail-OPEN. Emit budget ≤20/day. Override CEO_OVERHEAD_ACK=1. Kill-switch CEO_ANTI_OVERHEAD=0.",
+        "reason": "Acompanha o matcher_overrides acima: o texto da base explica o matcher LARGO (PLAN-125 WS-1, carimbo de ciclo de vida por tool-call), que este perfil deliberadamente nao usa."
+      },
+      "PreToolUse/check_config_protection.py": {
+        "_comment": "PLAN-124 WS-2 (ECC value-harvest) — adopter linter/formatter config protection, ADVISORY variant for the USER ceremony. Same hook as the maintainer ceremony but NON-BLOCKING: the top-level env sets CEO_CONFIG_PROTECTION_ADVISORY=1, so on an edit of an EXISTING adopter linter config the hook ALLOWS the tool call and attaches a systemMessage steer ('fix the code, not the config') instead of blocking. Per the user-ceremony doctrine this hook only ever reads/writes the adopter's own files and never blocks the session. Escape hatches still apply (CEO_CONFIG_PROTECTION=0 / <repo>/.claude/.config-protection-disable). To make it BLOCKING in a user install, remove CEO_CONFIG_PROTECTION_ADVISORY from env.",
+        "hook": {
+          "statusMessage": "Checking adopter config protection (advisory)..."
+        },
+        "reason": "O perfil user seta CEO_CONFIG_PROTECTION_ADVISORY=1, entao este hook PERMITE e orienta em vez de bloquear. O texto da base descreve a variante bloqueante do mantenedor."
+      },
+      "UserPromptSubmit/UserPromptSubmit.py": {
+        "_comment": "PLAN-028 / ADR-056 lifecycle hook. Fires pre-model-inference on each user prompt — redact-hit breadcrumb + 5-family injection smell-test + advisory banner on hit. Observer-only at State 0 (never blocks). Also carries the PLAN-122 optimizer recommender (advisory additionalContext; never dispatches). Kill-switches: CEO_EXTENDED_LIFECYCLE=0 (disables hook), CEO_PROMPT_INJECTION_SCAN=0 (disables only the scan), CEO_OPTIMIZER=0 (disables only the recommender).",
+        "reason": "A copia congelada documentava o recomendador PLAN-122, que e a razao de existir do perfil user. Preservado por ser exato para este perfil."
+      }
+    }
+  },
   "_squad_allowlist_comment": "Sprint 11 CR2: empty default means nothing imports. Owners add entries via git; see ADR-039 + docs/squad-marketplace.md.",
   "squad_allowlist": [],
-  "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature.",
-  "model": "claude-opus-5",
   "hooks": {
     "PreToolUse": [
       {
@@ -187,6 +420,44 @@
             "statusMessage": "Scanning Codex response for injection patterns..."
           }
         ]
+      },
+      {
+        "_comment": "Skill-reference Read scanner (Session 75 Codex Finding 2 mirror from dogfood): tracks Read tool calls against SKILL.md files to detect skill-bootstrap drift. Advisory only.",
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_skill_reference_read.py",
+            "timeout": 5,
+            "statusMessage": "Tracking skill-reference Read..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-128 W1 #1+#4: after-edit verify dispatcher (advisory default-on; CEO_VERIFY_AFTER_EDIT=0 to disable). Runs syntax/lint on the changed file; surfaces findings as additionalContext for self-repair. Fail-OPEN.",
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" accel_dispatch.py",
+            "timeout": 20,
+            "statusMessage": "Verifying edit..."
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "_comment": "PLAN-125 WS-1 (kooky-harvest): per-tool-call lifecycle FAILURE coverage. Fires only on the rare tool-failure path (not the hot success path). Reuses check_output_secrets.py — it reads the native duration_ms + tool_use_id, pairs with the PreToolUse stamp, and emits tool_call_lifecycle_recorded with success=false (the PostToolUseFailure phase IS the success signal — no marker scan). Routes through the dedicated scrub-branch + allowlist (NEVER _EMIT_GENERIC_PASSTHROUGH, MF-SEC-2); raw mcp__* tool name → mcp_other (MF-SEC-1); duration_bucket only, never raw ms (MF-SEC-3). Advisory + fail-open. Kill-switch CEO_TOOL_LIFECYCLE=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_output_secrets.py",
+            "timeout": 5,
+            "statusMessage": "Recording tool-failure lifecycle..."
+          }
+        ]
       }
     ],
     "SubagentStop": [
@@ -213,6 +484,18 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" SessionStart.py",
             "timeout": 5,
             "statusMessage": "Session warmup..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-128 W2: turbo what's-on line + first-run banner + (opt-in CEO_AUTO_BOOT=1) /ceo-boot nudge. Advisory additionalContext; fail-open. Kill: CEO_TURBO=0 / .claude/turbo-off.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" turbo_sessionstart.py",
+            "timeout": 5,
+            "statusMessage": "Turbo status..."
           }
         ]
       }
@@ -257,11 +540,85 @@
             "statusMessage": "Session interrupt cleanup..."
           }
         ]
+      },
+      {
+        "_comment": "PLAN-128 W1 #3: cross-model review detector (detect-only default; CEO_CODEX_USER_REVIEW_AUTO=1 to auto-run codex; CEO_CODEX_USER_REVIEW=0 to disable). On a NEW risky diff advises `codex review --uncommitted`. Fail-OPEN.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" codex_review_user_code.py",
+            "timeout": 130,
+            "statusMessage": "Checking for risky diff..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-128 W2: auto review-loop. OPT-IN (CEO_REVIEW_LOOP=1; default OFF/no-op). On a risky+unreviewed uncommitted diff, BLOCKS Stop with a 'run codex review --uncommitted' nudge, bounded at 3 iters then fail-open. READ-ONLY. Kill: CEO_REVIEW_LOOP=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" review_loop.py",
+            "timeout": 15,
+            "statusMessage": "Checking review loop..."
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "_comment": "PLAN-135 W2 H2: ConfigChange guard — ADVISORY audit + advisory-block of out-of-band settings.json tamper (the S197 class). Resolves multi-layer settings via _lib/effective_config (shared FORBIDDEN-KEYS source) + classifies tamper on the settings-FILE surfaces; emits config_change_observed (benign) / config_change_forbidden_key (advisory-block, ONE per tamper class). Fail-OPEN, never blocks on infra. Honest coverage boundary: disarmed by disableAllHooks + blind to outside-harness edits; compensators = /ceo-boot tripwires (S3) + W5 O10 OTEL witness (ADR-153 §H2). Kill: CEO_CONFIG_CHANGE_GUARD=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_config_change.py",
+            "timeout": 5,
+            "statusMessage": "Checking config change for tamper..."
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "_comment": "PLAN-135 W2 H3: SubagentStart lifecycle recorder — records the spawn instant + spawn context (agent_type, session binding) into a local sidecar keyed by sha256(agent_id)[:16] (raw agent_id NEVER persisted). The SubagentStop half (check_fluency_nudge.py) consumes it + agent_transcript_path to emit ONE closed-enum subagent_lifecycle_observed bracket (per-agent wall-time + token + claim; feeds persona-ledger). ADVISORY, fail-OPEN, never blocks, NO audit action from this hook. Kill: CEO_SUBAGENT_LIFECYCLE=0.",
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_subagent_start.py",
+            "timeout": 5,
+            "statusMessage": "Recording sub-agent spawn instant..."
+          }
+        ]
+      }
+    ],
+    "Setup": [
+      {
+        "_comment": "PLAN-135 W2 H8: Setup-event post-install self-verification (init matcher) — validate-governance --fast + verify-counts + hook exec-bits (the S228 exec-bit class) + CLAUDE_ENV_FILE allowlist persistence (explicit CEO_* include-list; every override/escape-hatch/kill-switch EXCLUDED, S185/S197 stale-override class). ADVISORY + fail-open; NEVER blocks. Kill-switch: CEO_SETUP_VERIFICATION=0.",
+        "matcher": "init",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_setup_verification.py",
+            "timeout": 15,
+            "statusMessage": "Post-install self-verification..."
+          }
+        ]
       }
     ]
   },
   "env": {
     "CEO_QUIET_MODE": "1",
-    "CEO_CONFIG_PROTECTION_ADVISORY": "1"
-  }
+    "CLAUDE_CODE_SUBAGENT_MODEL": "inherit",
+    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
+    "BASH_MAX_TIMEOUT_MS": "600000",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "ENABLE_TOOL_SEARCH": "auto",
+    "CEO_CONFIG_PROTECTION_ADVISORY": "1",
+    "CEO_CONFIG_CHANGE_GUARD": "1"
+  },
+  "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature.",
+  "model": "claude-opus-5"
 }

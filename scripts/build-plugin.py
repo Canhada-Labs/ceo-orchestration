@@ -38,33 +38,24 @@ OUT_ROOT = REPO / "dist"
 PLUGIN = OUT_ROOT / "ceo-plugin"
 MARKET = OUT_ROOT / "ceo-marketplace"
 MANIFESTS = REPO / ".claude-plugin"   # committed, generator-owned (PLAN-153 B6)
+USER_TEMPLATE = REPO / "templates/settings/settings.user.json"
 NS = "ceo"
 VERSION = (REPO / "VERSION").read_text().strip()
 
-# Accelerators (PLAN-128) to add on top of the advisory settings.user.json set.
-ACCEL = {
-    "PostToolUse": [
-        {"matcher": "Edit|Write|MultiEdit", "hooks": [
-            {"type": "command",
-             "command": 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh" accel_dispatch.py',
-             "timeout": 20, "statusMessage": "Verifying edit..."}]},
-    ],
-    "Stop": [
-        {"matcher": "", "hooks": [
-            {"type": "command",
-             "command": 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh" codex_review_user_code.py',
-             "timeout": 130, "statusMessage": "Checking for risky diff..."},
-            {"type": "command",
-             "command": 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh" review_loop.py',
-             "timeout": 60}]},
-    ],
-    "SessionStart": [
-        {"matcher": "", "hooks": [
-            {"type": "command",
-             "command": 'bash "$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh" turbo_sessionstart.py',
-             "timeout": 10}]},
-    ],
-}
+# Accelerators (PLAN-128) are NOT a table here. They ship inside
+# `templates/settings/settings.user.json`, which since wave-s330-F (ADR-197) is
+# DERIVED from `settings.base.json` by declared subtraction — the four
+# accelerator hooks (accel_dispatch.py, codex_review_user_code.py,
+# review_loop.py, turbo_sessionstart.py) are part of what the user profile
+# inherits. This module used to carry its own ACCEL literal and append it on
+# top of the template, which after wave-F registered each of the four TWICE in
+# the plugin's hooks.json — and with timeouts that had drifted (review_loop.py
+# 60 s, turbo_sessionstart.py 10 s) away from what both the base template and
+# this repo's live `.claude/settings.json` actually run (15 s and 5 s).
+# Reading the template and nothing else IS the reconciliation (DESIGN-F
+# FU-F-ACCEL). Guard against a re-introduced parallel source:
+# `.claude/scripts/tests/test_gen_settings_user_template.py`
+# ::PluginHooksHaveNoParallelSource.
 
 
 def log(msg: str) -> None:
@@ -257,9 +248,79 @@ def copy_agents() -> int:
     return n
 
 
+def _rewrite_hook_paths(obj):
+    """Repoint `$CLAUDE_PROJECT_DIR/.claude/hooks/` at `${CLAUDE_PLUGIN_ROOT}/hooks/`."""
+    if isinstance(obj, dict):
+        return {k: _rewrite_hook_paths(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_rewrite_hook_paths(v) for v in obj]
+    if isinstance(obj, str):
+        return obj.replace('"$CLAUDE_PROJECT_DIR/.claude/hooks/',
+                           '"${CLAUDE_PLUGIN_ROOT}/hooks/')
+    return obj
+
+
+def compose_plugin_hooks(template_path: Path) -> dict:
+    """The plugin's hook registrations, derived from the user template alone.
+
+    Pure: reads one file, returns a dict, writes nothing. Only the template's
+    `.hooks` travels — sibling keys (`env`, and the `_derivation` spec the
+    generator embeds) stay out of the plugin by construction.
+    """
+    template = json.loads(template_path.read_text(encoding="utf-8"))
+    return _rewrite_hook_paths(template.get("hooks", {}))
+
+
+def dump_manifest_hooks(hooks: dict) -> str:
+    """Serialize composed hooks the way hooks.json is written on disk."""
+    return json.dumps({"hooks": hooks}, indent=2) + "\n"
+
+
+#: CLIs that a shipped hook GUARDS. Registering the guard without its subject is
+#: worse than shipping neither: `check_scratchpad_access.py` matches on the
+#: SUFFIX `scratchpad.py`, so a plugin-only adopter running their OWN script by
+#: that name would be blocked by a guard protecting a CLI the plugin never
+#: shipped (pair-rail round 6).
+#:
+#: This is NOT a parallel roster — it is the opposite. The hook list still comes
+#: from the template alone; this pairs a hook with the file it exists to guard.
+GUARDED_CLIS = (
+    ("check_scratchpad_access.py", ".claude/scripts/scratchpad.py", "scripts"),
+)
+
+
+def copy_guarded_clis() -> None:
+    """Ship the CLI behind every guard the plugin registers.
+
+    Destination matters: `scratchpad.py` resolves `_lib` as
+    `Path(__file__).parent.parent / "hooks"`, so landing it in
+    `<plugin>/scripts/` makes that resolve to `<plugin>/hooks`, which
+    `copy_hooks` has already populated.
+    """
+    registered = " ".join(
+        entry.get("command", "")
+        for _ev, groups in compose_plugin_hooks(USER_TEMPLATE).items()
+        for group in groups for entry in group.get("hooks", [])
+    )
+    for hook_name, rel_src, rel_dst in GUARDED_CLIS:
+        if hook_name not in registered:
+            continue                      # guard not registered -> CLI not needed
+        src = REPO / rel_src
+        if not src.is_file():
+            raise SystemExit(
+                "build-plugin: the template registers %s but %s is missing — "
+                "the plugin would ship a guard for a CLI it does not carry"
+                % (hook_name, rel_src)
+            )
+        dst_dir = PLUGIN / rel_dst
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst_dir / src.name)
+        log("copied %s (guarded by %s)" % (src.name, hook_name))
+
+
 def copy_hooks() -> None:
     """Copy ALL hook .py + _lib + shim (so imports resolve), then write a
-    hooks.json that registers ONLY the advisory + accelerator subset."""
+    hooks.json that registers exactly what the user template registers."""
     src = REPO / ".claude/hooks"
     dst = PLUGIN / "hooks"
     dst.mkdir(parents=True, exist_ok=True)
@@ -280,26 +341,11 @@ def copy_hooks() -> None:
                                                   "test_isolation.py", "testing.py"))
     log(f"copied {npy} hook .py + _lib + shim")
 
-    # Build hooks.json: advisory set (settings.user.json) + accelerators, paths rewritten.
-    advisory = json.loads((REPO / "templates/settings/settings.user.json").read_text())
-    hooks = advisory.get("hooks", {})
-    for ev, arr in ACCEL.items():
-        hooks.setdefault(ev, [])
-        hooks[ev].extend(arr)
-
-    def rewrite(obj):
-        if isinstance(obj, dict):
-            return {k: rewrite(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [rewrite(v) for v in obj]
-        if isinstance(obj, str):
-            return obj.replace('"$CLAUDE_PROJECT_DIR/.claude/hooks/',
-                               '"${CLAUDE_PLUGIN_ROOT}/hooks/')
-        return obj
-
-    hooks = rewrite(hooks)
-    (dst / "hooks.json").write_text(json.dumps({"hooks": hooks}, indent=2) + "\n")
-    log("wrote hooks/hooks.json (advisory + accelerators, ${CLAUDE_PLUGIN_ROOT} paths)")
+    # Build hooks.json from the user template — the ONLY source (see the
+    # accelerator note at the top of this module).
+    (dst / "hooks.json").write_text(
+        dump_manifest_hooks(compose_plugin_hooks(USER_TEMPLATE)))
+    log("wrote hooks/hooks.json (user template, ${CLAUDE_PLUGIN_ROOT} paths)")
 
 
 def write_readme(nskills: int, nagents: int, ncmds: int) -> None:
@@ -411,6 +457,7 @@ def build() -> int:
     n_cmd = copy_dir(".claude/commands", "commands", "*.md")
     log(f"copied {n_ag} agents, {n_cmd} commands")
     copy_hooks()
+    copy_guarded_clis()
     write_readme(n_sk, n_ag, n_cmd)
     write_marketplace()
     sanitize_paths()

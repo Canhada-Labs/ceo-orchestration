@@ -53,7 +53,7 @@ ceo-orchestration/
     │   ├── core/                   # 42 universal backend skills
     │   ├── frontend/               # 8 universal frontend skills
     │   └── domains/                # 116 skills across 33 domain profiles
-    ├── adr/                        # 197 architecture decision records
+    ├── adr/                        # 198 architecture decision records
     └── plans/                      # plan schemas + per-plan working files
 ```
 
@@ -68,7 +68,7 @@ faith — run the commands:
 | Hook registrations | 48 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
 | `_lib` modules     | 71 top-level (144 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
 | Slash commands     | 27                           | `ls .claude/commands/*.md \| wc -l`                       |
-| ADRs               | 197                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
+| ADRs               | 198                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
 | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
 | Test files         | ~810                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
 | Collected cases    | ~14.7k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
