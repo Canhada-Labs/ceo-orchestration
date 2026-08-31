@@ -738,15 +738,18 @@ step "V4 — sonda comportamental: harness-config gate + contagem de overrides"
 # dry-run porque custa <1s), e a contagem de overrides e comparada com a
 # DECLARADA.
 jq -e . "$SETTINGS" >/dev/null || die "V4: settings.json nao parseia"
-_ov_obs="$( jq '.skillOverrides|length' "$SETTINGS" )"
-[ "$_ov_obs" = "$(_expect EXPECTED_SETTINGS_OVERRIDES)" ] \
-  || die "V4: $_ov_obs override(s), esperado $(_expect EXPECTED_SETTINGS_OVERRIDES)"
+# O gate REAL roda PRIMEIRO: seu log nasce antes de qualquer die deste
+# bloco, entao um abort posterior (overrides) ainda preserva evidencia
+# (P2-h — o T21 do harness cobra exatamente isso).
 HC_LOG="$TMPDIR_LAND/harness-config.log"
 HC_RC=0
 python3 .claude/hooks/check_harness_config.py > "$HC_LOG" 2>&1 || HC_RC=$?
 [ "$HC_RC" = "0" ] || { tail -10 "$HC_LOG" | sed 's/^/    /' >&2
   die "V4: check_harness_config reprovou (rc=$HC_RC) — log em $HC_LOG"; }
-ok "V4: settings parseia ($_ov_obs overrides); harness-config gate verde"
+_ov_obs="$( jq '.skillOverrides|length' "$SETTINGS" )"
+[ "$_ov_obs" = "$(_expect EXPECTED_SETTINGS_OVERRIDES)" ] \
+  || die "V4: $_ov_obs override(s), esperado $(_expect EXPECTED_SETTINGS_OVERRIDES)"
+ok "V4: harness-config gate verde; settings parseia ($_ov_obs overrides)"
 
 # O corte do dry-run. Ele fica AQUI, depois dos gates baratos que operam sobre
 # a arvore JA PATCHADA (V1, V6, V3, V4) e antes dos caros — a mesma posicao que

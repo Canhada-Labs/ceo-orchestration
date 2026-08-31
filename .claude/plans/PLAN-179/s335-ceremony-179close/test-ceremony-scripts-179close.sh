@@ -354,7 +354,7 @@ _used="$( grep -ohE '_expect [A-Z0-9_]+' \
             "$ROOT/$CEREMONY_DIR/finalize-179close.sh" \
             "$ROOT/$SIGN_SCRIPT" "$ROOT/$LAND_SCRIPT" \
           | awk '{print $2}' | LC_ALL=C sort -u )"
-_declared="$( grep -oE '^[A-Z_]+=' "$ROOT/$BASELINE_ENV" | tr -d '=' | LC_ALL=C sort -u )"
+_declared="$( grep -oE '^[A-Z0-9_]+=' "$ROOT/$BASELINE_ENV" | tr -d '=' | LC_ALL=C sort -u )"
 _missing="$( comm -23 <( printf '%s\n' "$_used" ) <( printf '%s\n' "$_declared" ) )"
 _orphan="$( comm -13 <( printf '%s\n' "$_used" ) <( printf '%s\n' "$_declared" ) )"
 if [ -n "$_missing" ]; then
