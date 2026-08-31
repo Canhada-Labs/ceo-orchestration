@@ -1417,10 +1417,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..42e29b7
+index 0000000..6111ad0
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,560 @@
+@@ -0,0 +1,547 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -1432,6 +1432,8 @@ index 0000000..42e29b7
 +"""
 +from __future__ import annotations
 +
++import importlib
++import importlib.util
 +import json
 +import os
 +import sys
@@ -1456,32 +1458,28 @@ index 0000000..42e29b7
 +
 +@contextmanager
 +def _stub_audit_emit(captured):
-+    """Bind a stub `_lib.audit_emit` transiently (sys.modules + package attr —
-+    a bare sys.modules rebind does NOT update the package attribute; same
-+    AC-B7 discipline as test_check_compaction_continuity)."""
++    """Bind a stub `_lib.audit_emit` transiently. O SLOT sys.modules vai por
++    `mock.patch.dict` (auto-restore — a forma que o gate estatico
++    check-test-audit-isolation ACEITA, doc do proprio linter); o ATRIBUTO do
++    pacote `_lib` nao vive em sys.modules e ganha save/restore manual (a
++    disciplina AC-B7 do irmao test_check_compaction_continuity)."""
 +    stub = types.ModuleType("_lib.audit_emit")
 +
 +    def _typed(**kwargs):
 +        captured.append(dict(kwargs))
 +
 +    stub.emit_session_memory_delta_observed = _typed  # type: ignore[attr-defined]
-+    dotted = "_lib.audit_emit"
-+    saved_sm = sys.modules.get(dotted, _SENTINEL)
 +    saved_attr = getattr(_lib, "audit_emit", _SENTINEL)
-+    sys.modules[dotted] = stub
-+    setattr(_lib, "audit_emit", stub)
-+    try:
-+        yield stub
-+    finally:
-+        if saved_sm is _SENTINEL:
-+            sys.modules.pop(dotted, None)
-+        else:
-+            sys.modules[dotted] = saved_sm
-+        if saved_attr is _SENTINEL:
-+            if hasattr(_lib, "audit_emit"):
-+                delattr(_lib, "audit_emit")
-+        else:
-+            setattr(_lib, "audit_emit", saved_attr)
++    with mock.patch.dict(sys.modules, {"_lib.audit_emit": stub}):
++        setattr(_lib, "audit_emit", stub)
++        try:
++            yield stub
++        finally:
++            if saved_attr is _SENTINEL:
++                if hasattr(_lib, "audit_emit"):
++                    delattr(_lib, "audit_emit")
++            else:
++                setattr(_lib, "audit_emit", saved_attr)
 +
 +
 +class _DeltaBase(TestEnvContext):
@@ -1711,7 +1709,7 @@ index 0000000..42e29b7
 +        """Rail r1 P1-2 control — the record file is REWRITTEN on every tool
 +        update, so its mtime is the LAST update; the anchor must be the
 +        immutable birth time (or the fallback is unusable). Skipped where
-+        the platform exposes no st_birthtime."""
++        the platform exposes no st_birthtime. Slot por mock.patch.dict."""
 +        rec = Path(self.project_dir) / "rec-bt"
 +        rec.write_text("x", encoding="utf-8")
 +        st = rec.stat()
@@ -1721,25 +1719,19 @@ index 0000000..42e29b7
 +        os.utime(rec, (st.st_mtime + 9999, st.st_mtime + 9999))
 +        stub = types.ModuleType("_lib.tool_lifecycle")
 +        stub._record_path = lambda sid: rec  # type: ignore[attr-defined]
-+        dotted = "_lib.tool_lifecycle"
-+        saved_sm = sys.modules.get(dotted, _SENTINEL)
 +        saved_attr = getattr(_lib, "tool_lifecycle", _SENTINEL)
-+        sys.modules[dotted] = stub
-+        setattr(_lib, "tool_lifecycle", stub)
-+        try:
-+            ts, src = SessionEnd._session_start_ts(
-+                self.SESSION_ID, self.repo_root
-+            )
-+        finally:
-+            if saved_sm is _SENTINEL:
-+                sys.modules.pop(dotted, None)
-+            else:
-+                sys.modules[dotted] = saved_sm
-+            if saved_attr is _SENTINEL:
-+                if hasattr(_lib, "tool_lifecycle"):
-+                    delattr(_lib, "tool_lifecycle")
-+            else:
-+                setattr(_lib, "tool_lifecycle", saved_attr)
++        with mock.patch.dict(sys.modules, {"_lib.tool_lifecycle": stub}):
++            setattr(_lib, "tool_lifecycle", stub)
++            try:
++                ts, src = SessionEnd._session_start_ts(
++                    self.SESSION_ID, self.repo_root
++                )
++            finally:
++                if saved_attr is _SENTINEL:
++                    if hasattr(_lib, "tool_lifecycle"):
++                        delattr(_lib, "tool_lifecycle")
++                else:
++                    setattr(_lib, "tool_lifecycle", saved_attr)
 +        self.assertEqual(src, "state_file")
 +        assert ts is not None
 +        self.assertLess(ts, st.st_mtime + 9000)  # birthtime, nunca o mtime
@@ -1900,45 +1892,40 @@ index 0000000..42e29b7
 +
 +    def test_ordering_negative_control_anchor_degrades(self) -> None:
 +        """§7.7 negative control — in the swapped-order world (record file
-+        already deleted, chain empty) the anchor degrades to "none"."""
++        already deleted, chain empty) the anchor degrades to "none". O slot
++        sys.modules vai por mock.patch.dict (gate check-test-audit-isolation);
++        o atributo do pacote ganha save/restore manual."""
 +        record = Path(self.project_dir) / "rec-file"
 +        record.write_text("x", encoding="utf-8")
-+
 +        stub = types.ModuleType("_lib.tool_lifecycle")
 +        stub._record_path = lambda sid: record  # type: ignore[attr-defined]
-+        dotted = "_lib.tool_lifecycle"
-+        saved_sm = sys.modules.get(dotted, _SENTINEL)
 +        saved_attr = getattr(_lib, "tool_lifecycle", _SENTINEL)
-+        sys.modules[dotted] = stub
-+        setattr(_lib, "tool_lifecycle", stub)
-+        try:
-+            ts, src = SessionEnd._session_start_ts(
-+                self.SESSION_ID, self.repo_root
-+            )
-+            # Rail r3 P1-a: no Linux nao ha st_birthtime e o fallback e
-+            # honestamente INUTILIZAVEL por desenho (rail r1 P1-2) — o
-+            # esperado depende da plataforma; incondicional quebrava o CI
-+            # Ubuntu que coleta todos os hook tests.
-+            if getattr(record.stat(), "st_birthtime", None) is not None:
-+                self.assertEqual(src, "state_file")
-+                self.assertIsNotNone(ts)
-+            else:
-+                self.assertEqual((ts, src), (None, "none"))
-+            record.unlink()  # the "cleanup ran first" world
-+            ts2, src2 = SessionEnd._session_start_ts(
-+                self.SESSION_ID, self.repo_root
-+            )
-+            self.assertEqual((ts2, src2), (None, "none"))
-+        finally:
-+            if saved_sm is _SENTINEL:
-+                sys.modules.pop(dotted, None)
-+            else:
-+                sys.modules[dotted] = saved_sm
-+            if saved_attr is _SENTINEL:
-+                if hasattr(_lib, "tool_lifecycle"):
-+                    delattr(_lib, "tool_lifecycle")
-+            else:
-+                setattr(_lib, "tool_lifecycle", saved_attr)
++        with mock.patch.dict(sys.modules, {"_lib.tool_lifecycle": stub}):
++            setattr(_lib, "tool_lifecycle", stub)
++            try:
++                ts, src = SessionEnd._session_start_ts(
++                    self.SESSION_ID, self.repo_root
++                )
++                # Rail r3 P1-a: no Linux nao ha st_birthtime e o fallback e
++                # honestamente INUTILIZAVEL por desenho (rail r1 P1-2) — o
++                # esperado depende da plataforma; incondicional quebrava o
++                # CI Ubuntu que coleta todos os hook tests.
++                if getattr(record.stat(), "st_birthtime", None) is not None:
++                    self.assertEqual(src, "state_file")
++                    self.assertIsNotNone(ts)
++                else:
++                    self.assertEqual((ts, src), (None, "none"))
++                record.unlink()  # the "cleanup ran first" world
++                ts2, src2 = SessionEnd._session_start_ts(
++                    self.SESSION_ID, self.repo_root
++                )
++                self.assertEqual((ts2, src2), (None, "none"))
++            finally:
++                if saved_attr is _SENTINEL:
++                    if hasattr(_lib, "tool_lifecycle"):
++                        delattr(_lib, "tool_lifecycle")
++                else:
++                    setattr(_lib, "tool_lifecycle", saved_attr)
 +
 +    def test_kill_switch_off_is_silent(self) -> None:
 +        """§7.8 — CEO_SESSION_MEMORY_DELTA=0: zero delta emits, no delta
