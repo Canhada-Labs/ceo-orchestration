@@ -12,8 +12,8 @@
 Plans: PLAN-183
 Wave: wave-183batch (PLAN-183 — «Batch menor + começar W1», ratificação do Owner de 2026-08-31: settings regenerado nos DOIS alvos — +4 demotions 0-dispatch E o undemote A4 das 7 chaves VETO-bearing (o invariante «nenhuma VETO skill name-only» vira permanente, teste sem xfail), header «INERT AS SHIPPED» no validate.yml.template, e o REGISTRO do AC-5 — a metade «canônica» que a nota ◐ declarava faltante já existia no wiring do CI; o CHECKBOX segue aberto porque a execução real do workflow é W0-US3/OQ-2, e o rail 183-r1 barrou o flip, corretamente)
 Patch: .claude/plans/PLAN-183/s335-ceremony-183batch/W183BATCH.patch
-Patch-sha256: bde333f02df59195f2574d3f9f3299aca702fb3fc169d1e0170b1f1f2899d9fc
-Patch-base: b3b6d91a697b0f6884ace196f1431f3d80e3ddcc
+Patch-sha256: 78c237adf27df1f8b0438e2323d47bbd494c6af05a5be6bf18a71d231781d772
+Patch-base: 6e1951cb32fbf3fee00431ea66b621ee4ae51d0a
 Anchor-SHA: ANCHOR-PLACEHOLDER
 Data: DATA-PLACEHOLDER
 
@@ -78,6 +78,8 @@ Approved-By: APPROVED-BY-PLACEHOLDER
 Plans: PLAN-183
 Scope:
   - .claude/plans/PLAN-183-adopter-fitness.md
+  - .claude/scripts/tests/test_veto_skill_map.py
   - .claude/settings.json
   - templates/.github/workflows/validate.yml.template
+  - templates/settings/settings.base.json
 <!-- END SIGNED SCOPE -->

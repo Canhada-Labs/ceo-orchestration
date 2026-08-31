@@ -24,12 +24,87 @@ index bbd0721..22a8733 100644
        ganhou a perna "PLAN-183 W0-US3 / AC-5" (`826688f`): o template
        entregue é ATIVADO no target descartável (rename do adopter),
        validado estruturalmente por stdlib SEMPRE (name/on/jobs + os 11
+diff --git a/.claude/scripts/tests/test_veto_skill_map.py b/.claude/scripts/tests/test_veto_skill_map.py
+index 534cbf6..8f30b2d 100644
+--- a/.claude/scripts/tests/test_veto_skill_map.py
++++ b/.claude/scripts/tests/test_veto_skill_map.py
+@@ -287,8 +287,11 @@ class TestVetoSkillsShippedAsNameOnly(_LiveTreeBase):
+         )
+         return sorted(k for k in overrides if k in self.bound)
+ 
+-    @unittest.expectedFailure
+     def test_no_veto_skill_is_shipped_name_only(self):
++        # wave-183batch (rail 183-r4 P1): o decorator @expectedFailure saiu e
++        # o teste-companheiro foi deletado EXATAMENTE como este arquivo
++        # instruia — a cerimonia landou o undemote das 7 chaves
++        # (veto-undemote-s335.jq) e o invariante e permanente.
+         for rel in self.SETTINGS_TARGETS:
+             offenders = self._offenders(rel)
+             self.assertEqual(
+@@ -297,18 +300,6 @@ class TestVetoSkillsShippedAsNameOnly(_LiveTreeBase):
+                 "{1}".format(rel, offenders),
+             )
+ 
+-    def test_the_expected_failure_marker_is_still_warranted(self):
+-        total = 0
+-        for rel in self.SETTINGS_TARGETS:
+-            total += len(self._offenders(rel))
+-        self.assertGreater(
+-            total, 0,
+-            "no VETO skill is shipped name-only any more — the ceremony "
+-            "landed. Delete the @unittest.expectedFailure decorator on "
+-            "test_no_veto_skill_is_shipped_name_only and delete THIS "
+-            "test; the invariant is now permanent.",
+-        )
+-
+ 
+ if __name__ == "__main__":
+     unittest.main()
 diff --git a/.claude/settings.json b/.claude/settings.json
-index 5eb4c64..38f84f4 100644
+index 5eb4c64..14a4747 100644
 --- a/.claude/settings.json
 +++ b/.claude/settings.json
-@@ -941,7 +941,11 @@
-     "trading-execution": "name-only",
+@@ -873,7 +873,6 @@
+     "discovery-coach": "name-only",
+     "document-review": "name-only",
+     "embedded-firmware": "name-only",
+-    "equity-research": "name-only",
+     "exchange-api-integration": "name-only",
+     "exchange-onboarding-playbook": "name-only",
+     "executive-summary": "name-only",
+@@ -881,8 +880,6 @@
+     "filament-specialist": "name-only",
+     "finance-tracker": "name-only",
+     "financial-analyst": "name-only",
+-    "financial-correctness-and-math": "name-only",
+-    "financial-display": "name-only",
+     "fintech-frontend-patterns": "name-only",
+     "foia-and-records": "name-only",
+     "fpa-analyst": "name-only",
+@@ -895,10 +892,8 @@
+     "hr-onboarding": "name-only",
+     "identity-graph-operator": "name-only",
+     "instagram-curator": "name-only",
+-    "kill-switches": "name-only",
+     "korean-business": "name-only",
+     "language-translator": "name-only",
+-    "latency-budgets": "name-only",
+     "learning-analytics": "name-only",
+     "legal-billing": "name-only",
+     "linkedin-content-creator": "name-only",
+@@ -912,7 +907,6 @@
+     "pipeline-analyst": "name-only",
+     "podcast-strategist": "name-only",
+     "ppc-strategist": "name-only",
+-    "prediction-markets": "name-only",
+     "programmatic-buyer": "name-only",
+     "project-shepherd": "name-only",
+     "proposal-strategist": "name-only",
+@@ -938,10 +932,13 @@
+     "tax-strategist": "name-only",
+     "tiktok-strategist": "name-only",
+     "tracking-specialist": "name-only",
+-    "trading-execution": "name-only",
      "twitter-engager": "name-only",
      "video-optimization-specialist": "name-only",
 -    "voice-ai-integration": "name-only"
@@ -63,3 +138,51 @@ index f55bfde..715f37c 100644
  on:
    pull_request:
    push:
+diff --git a/templates/settings/settings.base.json b/templates/settings/settings.base.json
+index 912b436..e7c2ef0 100644
+--- a/templates/settings/settings.base.json
++++ b/templates/settings/settings.base.json
+@@ -683,7 +683,6 @@
+     "discovery-coach": "name-only",
+     "document-review": "name-only",
+     "embedded-firmware": "name-only",
+-    "equity-research": "name-only",
+     "exchange-api-integration": "name-only",
+     "exchange-onboarding-playbook": "name-only",
+     "executive-summary": "name-only",
+@@ -691,8 +690,6 @@
+     "filament-specialist": "name-only",
+     "finance-tracker": "name-only",
+     "financial-analyst": "name-only",
+-    "financial-correctness-and-math": "name-only",
+-    "financial-display": "name-only",
+     "fintech-frontend-patterns": "name-only",
+     "foia-and-records": "name-only",
+     "fpa-analyst": "name-only",
+@@ -705,10 +702,8 @@
+     "hr-onboarding": "name-only",
+     "identity-graph-operator": "name-only",
+     "instagram-curator": "name-only",
+-    "kill-switches": "name-only",
+     "korean-business": "name-only",
+     "language-translator": "name-only",
+-    "latency-budgets": "name-only",
+     "learning-analytics": "name-only",
+     "legal-billing": "name-only",
+     "linkedin-content-creator": "name-only",
+@@ -722,7 +717,6 @@
+     "pipeline-analyst": "name-only",
+     "podcast-strategist": "name-only",
+     "ppc-strategist": "name-only",
+-    "prediction-markets": "name-only",
+     "programmatic-buyer": "name-only",
+     "project-shepherd": "name-only",
+     "proposal-strategist": "name-only",
+@@ -748,7 +742,6 @@
+     "tax-strategist": "name-only",
+     "tiktok-strategist": "name-only",
+     "tracking-specialist": "name-only",
+-    "trading-execution": "name-only",
+     "twitter-engager": "name-only",
+     "video-optimization-specialist": "name-only",
+     "voice-ai-integration": "name-only"

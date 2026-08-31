@@ -2,7 +2,7 @@
 
 Patch: `W183BATCH.patch` (derivado da sombra `shadow-183batch` pelo
 `finalize-183batch.sh`; base declarada em `BASE-SHA.txt`).
-Patch-sha256: bde333f02df59195f2574d3f9f3299aca702fb3fc169d1e0170b1f1f2899d9fc
+Patch-sha256: 78c237adf27df1f8b0438e2323d47bbd494c6af05a5be6bf18a71d231781d772
 
 ## Por path (5)
 
