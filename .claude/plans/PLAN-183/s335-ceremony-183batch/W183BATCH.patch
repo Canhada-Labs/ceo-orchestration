@@ -25,12 +25,26 @@ index bbd0721..22a8733 100644
        entregue é ATIVADO no target descartável (rename do adopter),
        validado estruturalmente por stdlib SEMPRE (name/on/jobs + os 11
 diff --git a/.claude/scripts/tests/test_veto_skill_map.py b/.claude/scripts/tests/test_veto_skill_map.py
-index 534cbf6..8f30b2d 100644
+index 534cbf6..b2846b6 100644
 --- a/.claude/scripts/tests/test_veto_skill_map.py
 +++ b/.claude/scripts/tests/test_veto_skill_map.py
-@@ -287,8 +287,11 @@ class TestVetoSkillsShippedAsNameOnly(_LiveTreeBase):
+@@ -285,10 +285,24 @@ class TestVetoSkillsShippedAsNameOnly(_LiveTreeBase):
+             "{0} has no skillOverrides map — this test would pass by "
+             "vacuity".format(rel),
          )
-         return sorted(k for k in overrides if k in self.bound)
+-        return sorted(k for k in overrides if k in self.bound)
++        # rail 183-r5: o gerador grava overrides em DUAS grafias (frontmatter
++        # `name` e `dir_name`); `bound` e sempre slug. Comparar a chave CRUA
++        # contra slugs deixava "Kill Switches"/"Latency Budgets" invisiveis
++        # — invariante falso-verde. Normaliza via o INVENTARIO (autoridade),
++        # nunca por transformacao textual.
++        alias = {}
++        for skill in self.inventory:
++            alias[str(skill["name"])] = str(skill["dir_name"])
++            alias[str(skill["dir_name"])] = str(skill["dir_name"])
++        return sorted(
++            k for k in overrides if alias.get(k, k) in self.bound
++        )
  
 -    @unittest.expectedFailure
      def test_no_veto_skill_is_shipped_name_only(self):
@@ -41,7 +55,7 @@ index 534cbf6..8f30b2d 100644
          for rel in self.SETTINGS_TARGETS:
              offenders = self._offenders(rel)
              self.assertEqual(
-@@ -297,18 +300,6 @@ class TestVetoSkillsShippedAsNameOnly(_LiveTreeBase):
+@@ -297,18 +311,6 @@ class TestVetoSkillsShippedAsNameOnly(_LiveTreeBase):
                  "{1}".format(rel, offenders),
              )
  
@@ -61,10 +75,19 @@ index 534cbf6..8f30b2d 100644
  if __name__ == "__main__":
      unittest.main()
 diff --git a/.claude/settings.json b/.claude/settings.json
-index 5eb4c64..14a4747 100644
+index 5eb4c64..8f18159 100644
 --- a/.claude/settings.json
 +++ b/.claude/settings.json
-@@ -873,7 +873,6 @@
+@@ -839,8 +839,6 @@
+   "skillListingBudgetFraction": 0.01,
+   "skillOverrides": {
+     "Fintech Frontend Data Layer & Real-Time": "name-only",
+-    "Kill Switches": "name-only",
+-    "Latency Budgets": "name-only",
+     "Order Routing": "name-only",
+     "accessibility-section-508": "name-only",
+     "account-strategist": "name-only",
+@@ -873,7 +871,6 @@
      "discovery-coach": "name-only",
      "document-review": "name-only",
      "embedded-firmware": "name-only",
@@ -72,7 +95,7 @@ index 5eb4c64..14a4747 100644
      "exchange-api-integration": "name-only",
      "exchange-onboarding-playbook": "name-only",
      "executive-summary": "name-only",
-@@ -881,8 +880,6 @@
+@@ -881,8 +878,6 @@
      "filament-specialist": "name-only",
      "finance-tracker": "name-only",
      "financial-analyst": "name-only",
@@ -81,7 +104,7 @@ index 5eb4c64..14a4747 100644
      "fintech-frontend-patterns": "name-only",
      "foia-and-records": "name-only",
      "fpa-analyst": "name-only",
-@@ -895,10 +892,8 @@
+@@ -895,10 +890,8 @@
      "hr-onboarding": "name-only",
      "identity-graph-operator": "name-only",
      "instagram-curator": "name-only",
@@ -92,7 +115,7 @@ index 5eb4c64..14a4747 100644
      "learning-analytics": "name-only",
      "legal-billing": "name-only",
      "linkedin-content-creator": "name-only",
-@@ -912,7 +907,6 @@
+@@ -912,7 +905,6 @@
      "pipeline-analyst": "name-only",
      "podcast-strategist": "name-only",
      "ppc-strategist": "name-only",
@@ -100,7 +123,7 @@ index 5eb4c64..14a4747 100644
      "programmatic-buyer": "name-only",
      "project-shepherd": "name-only",
      "proposal-strategist": "name-only",
-@@ -938,10 +932,13 @@
+@@ -938,10 +930,13 @@
      "tax-strategist": "name-only",
      "tiktok-strategist": "name-only",
      "tracking-specialist": "name-only",
@@ -139,10 +162,19 @@ index f55bfde..715f37c 100644
    pull_request:
    push:
 diff --git a/templates/settings/settings.base.json b/templates/settings/settings.base.json
-index 912b436..e7c2ef0 100644
+index 912b436..cfd15e7 100644
 --- a/templates/settings/settings.base.json
 +++ b/templates/settings/settings.base.json
-@@ -683,7 +683,6 @@
+@@ -649,8 +649,6 @@
+   "skillListingBudgetFraction": 0.01,
+   "skillOverrides": {
+     "Fintech Frontend Data Layer & Real-Time": "name-only",
+-    "Kill Switches": "name-only",
+-    "Latency Budgets": "name-only",
+     "Order Routing": "name-only",
+     "accessibility-section-508": "name-only",
+     "account-strategist": "name-only",
+@@ -683,7 +681,6 @@
      "discovery-coach": "name-only",
      "document-review": "name-only",
      "embedded-firmware": "name-only",
@@ -150,7 +182,7 @@ index 912b436..e7c2ef0 100644
      "exchange-api-integration": "name-only",
      "exchange-onboarding-playbook": "name-only",
      "executive-summary": "name-only",
-@@ -691,8 +690,6 @@
+@@ -691,8 +688,6 @@
      "filament-specialist": "name-only",
      "finance-tracker": "name-only",
      "financial-analyst": "name-only",
@@ -159,7 +191,7 @@ index 912b436..e7c2ef0 100644
      "fintech-frontend-patterns": "name-only",
      "foia-and-records": "name-only",
      "fpa-analyst": "name-only",
-@@ -705,10 +702,8 @@
+@@ -705,10 +700,8 @@
      "hr-onboarding": "name-only",
      "identity-graph-operator": "name-only",
      "instagram-curator": "name-only",
@@ -170,7 +202,7 @@ index 912b436..e7c2ef0 100644
      "learning-analytics": "name-only",
      "legal-billing": "name-only",
      "linkedin-content-creator": "name-only",
-@@ -722,7 +717,6 @@
+@@ -722,7 +715,6 @@
      "pipeline-analyst": "name-only",
      "podcast-strategist": "name-only",
      "ppc-strategist": "name-only",
@@ -178,7 +210,7 @@ index 912b436..e7c2ef0 100644
      "programmatic-buyer": "name-only",
      "project-shepherd": "name-only",
      "proposal-strategist": "name-only",
-@@ -748,7 +742,6 @@
+@@ -748,7 +740,6 @@
      "tax-strategist": "name-only",
      "tiktok-strategist": "name-only",
      "tracking-specialist": "name-only",
