@@ -51,8 +51,11 @@
 #     r16 fechado no 2o e ultimo sitio) E a r18 (primeiro match
 #     inverificavel e terminal-unknown — nunca cai para restart mais
 #     novo; re-stat do dir POS-scan fecha o TOCTOU do interleaving, com o
-#     residuo pos-re-stat declarado; medido na sombra pos-cura r18:
-#     344 passed / 0 skips em 8.02s), 0 skips;
+#     residuo pos-re-stat declarado) E a r19 (pernas semanticas rodam
+#     tambem na copia separador-EXPANDIDA — diretiva hifenizada dentro do
+#     alfabeto cai; ts imparseavel no oldest e terminal-unknown; mtime de
+#     DIR acima do teto e skew; guia §7 refresh do fechamento; medido na
+#     sombra pos-cura r19: 347 passed / 0 skips em 8.33s), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -62,7 +65,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=344
+EXPECTED_UNIT_PYTEST_PASSED=347
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
