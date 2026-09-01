@@ -93,7 +93,8 @@ class TestW5OffPassthrough(TestEnvContext):
         # registered + restored by the SENT-S318 pack) -> 326; +1 PLAN-182
         # W1 (salt_rotation_registered, SENT-S319 pack) -> 327.
         # +3 PLAN-179 W2/W4 (ADR-195, staged-w24 pack; Owner decision 2026-08-25 "3 actions"): ledger_checkpoint_recorded + ledger_checkpoint_skipped + ledger_entry_rejected = 330.
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 330)
+        # +1 PLAN-179 W2 US8 (wave-179close, SPEC v2.60): session_memory_delta_observed = 331.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 331)
 
 
 class TestAdminKeyScrub(_W5Base):

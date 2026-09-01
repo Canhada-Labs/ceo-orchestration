@@ -88,10 +88,11 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 # Make the local `_lib` importable (matches the pattern of existing hooks).
 from pathlib import Path
@@ -175,13 +176,38 @@ def _sanitize_text(raw: str, clamp: int) -> str:
     return cleaned[:clamp]
 
 
-def _git(args: List[str], cwd: str) -> str:
-    """stdout on success, '' on any failure (fail-open)."""
+def _git(
+    args: List[str], cwd: str, timeout_s: float = 2.0, raw: bool = False
+) -> str:
+    """stdout on success, '' on any failure (fail-open).
+
+    ``timeout_s`` (rail r2 P2-f): a caller under a shared wall deadline
+    passes its REMAINING time — a fixed 2s here let a late call run past
+    the hook budget. Existing call sites keep the historical default.
+
+    Rail r8 P2-b: um resto de budget ABAIXO do floor de subprocess não é
+    budget útil — o antigo ``max(0.05, ...)`` ESTICAVA um resto de 10ms
+    para 50ms e furava o wall deadline compartilhado. Sem budget, a
+    resposta honesta é o fail-open imediato, nunca uma chamada tardia."""
+    if timeout_s < 0.05:
+        return ""
     try:
+        # Rail r10 P2-a: errors="replace" — filename nao-UTF-8 (legal em
+        # Linux) sob `-z` vem em bytes crus; o decode ESTRITO do text=True
+        # levantava UnicodeDecodeError que NENHUM except aqui pegava e o
+        # snapshot inteiro morria por causa do indice OPCIONAL. Com
+        # replacement o path vira U+FFFD, nao casa shape nenhum e degrada
+        # honesto.
         p = subprocess.run(
-            ["git"] + args, cwd=cwd, capture_output=True, text=True, timeout=2
+            ["git"] + args, cwd=cwd, capture_output=True, text=True,
+            errors="replace", timeout=timeout_s,
         )
-        return p.stdout.strip() if p.returncode == 0 else ""
+        if p.returncode != 0:
+            return ""
+        # Rail r11 P2-c: em modo raw (-z) o strip do output INTEIRO
+        # corromperia whitespace legitimo do primeiro/ultimo path — os
+        # limites exatos ja vem dos NULs.
+        return p.stdout if raw else p.stdout.strip()
     except (subprocess.TimeoutExpired, OSError):
         return ""
 
@@ -320,7 +346,10 @@ def _execution_unit(plan_path: Optional[str], cwd: str, deadline: float) -> Dict
     return {"plan_path": rel}
 
 
-def _last_tag_time(cwd: str) -> float:
+def _last_tag_time(cwd: str, timeout_s: float = 2.0) -> float:
+    # Rail r21 P2-c: o caller sob deadline compartilhado passa o RESTO —
+    # o default fixo de 2.0s somado a fatia do indice estourava o
+    # TIME_BUDGET_S de 2.5s do gate num repositorio lento.
     out = _git(
         [
             "for-each-ref",
@@ -330,6 +359,7 @@ def _last_tag_time(cwd: str) -> float:
             "refs/tags",
         ],
         cwd,
+        timeout_s=timeout_s,
     )
     try:
         return float(out)
@@ -341,14 +371,19 @@ def _ceremony_flags(cwd: str, deadline: float) -> List[str]:
     """Pending Owner-GPG ceremonies — executable finish-*.sh newer than the
     last tag (the closeout-guard's signal). Repo-relative, sanitized, sorted,
     bounded. These are POINTERS the operator must act on post-compaction."""
-    tag_time = _last_tag_time(cwd)
+    tag_time = _last_tag_time(cwd, timeout_s=deadline - time.monotonic())
     found = set()
     patterns = (
         os.path.join(cwd, ".claude", "plans", "PLAN-*", "staged", "**", "finish-*.sh"),
         os.path.join(cwd, "scripts", "local", "finish-*.sh"),
     )
     for pattern in patterns:
-        for path in glob.glob(pattern, recursive=True):
+        # Rail r22 P2-c: deadline ANTES de cada glob e iteracao LAZY —
+        # glob.glob materializava a arvore inteira antes do primeiro
+        # check interno e o 2o pattern rodava mesmo apos o break.
+        if time.monotonic() > deadline:
+            break
+        for path in glob.iglob(pattern, recursive=True):
             if time.monotonic() > deadline:
                 break
             try:
@@ -361,7 +396,7 @@ def _ceremony_flags(cwd: str, deadline: float) -> List[str]:
     return sorted(found)[:MAX_CEREMONY_FLAGS]
 
 
-def _hmac_chain_breadcrumb() -> Dict[str, Any]:
+def _hmac_chain_breadcrumb(deadline: Optional[float] = None) -> Dict[str, Any]:
     """READ-ONLY snapshot of the HMAC-chain anchor: last-hmac hex PREFIX +
     chain-length counter.
 
@@ -396,10 +431,16 @@ def _hmac_chain_breadcrumb() -> Dict[str, Any]:
         except Exception:
             out["last_hmac_prefix"] = ""
 
-    if _have_lock and FileLock is not None:
+    # Rail r21 P2-c: a espera de lock respeita o deadline compartilhado —
+    # sem resto de budget, leitura lockless direta (advisory sidecar; a
+    # corrida de um evento e inofensiva, doutrina ja declarada acima).
+    _lock_wait = 0.5
+    if deadline is not None:
+        _lock_wait = min(0.5, deadline - time.monotonic())
+    if _have_lock and FileLock is not None and _lock_wait > 0:
         try:
             lock_path = audit_hmac.last_hmac_path().with_name("audit-log.lock")
-            with FileLock(lock_path, timeout=0.5):
+            with FileLock(lock_path, timeout=_lock_wait):
                 _read()
             return out
         except FileLockTimeout:
@@ -891,7 +932,9 @@ def _progress_guard(
     channel, and by the time the hook fires the harness has already decided to
     compact. So the guard is implemented honestly as its observable half — a
     stderr breadcrumb for the operator plus one closed-enum audit event — and
-    the actual valve stays a W1+ item on a surface that owns a decision.
+    the valve question CLOSED by ratification (2026-08-31, US2b-valve):
+    eta advisory + doctrine via ``_eta_advisory``; deny is a documented
+    substrate limit owned by no surface (PreCompact has no deny channel).
 
     Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
     strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
@@ -1051,6 +1094,369 @@ def _progress_guard(
         _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
 
 
+# PLAN-179 US2b-valve (Owner-ratified 2026-08-31) — MEASURED constants from
+# `PLAN-179/w0-measurement.md` §C/§E. F+S is the re-paid gate-boot floor at a
+# real compaction boundary (TOTAL_IN 112638 − postTokens 15346, decomposed as
+# cache_read 68980 + cache_creation 28310); T is the context-window total the
+# same measurement derived. Integers only — η travels as permille.
+_ETA_FLOOR_REPAID_TOKENS = 112638  # F+S, measured
+_ETA_WINDOW_TOKENS = 998043        # T, measured
+
+
+def _eta_advisory() -> None:
+    """The US2b VALVE, as ratified (2026-08-31): η advisory + doctrine.
+
+    η = (T − F − S)/T with the measured constants above — the usable-context
+    ratio kept after paying the compaction's re-boot floor. TWO stderr lines
+    per compaction (the breadcrumb clamps at 160 chars), ADVISORY by
+    doctrine. The two halves the original valve item named resolve as:
+    (i) "a channel able to DENY" — does not exist: PreCompact has no deny
+    channel and ``gate()`` returns ``{}`` by contract, so refusal is
+    documented as a SUBSTRATE limit (the same honest route as US9c's
+    eviction verdict), never claimed as hook behaviour; (ii) "η computed,
+    not a token threshold" — computed here, integer permille, no floats."""
+    eta_permille = (
+        (_ETA_WINDOW_TOKENS - _ETA_FLOOR_REPAID_TOKENS) * 1000
+    ) // _ETA_WINDOW_TOKENS
+    # Rail r2 P1-e: the constants are THIS framework repo's measured trace
+    # (w0-measurement §C/§E), not a property of every installation — F
+    # varies with the governance surface, T with the model. The advisory
+    # SAYS so (no cross-repo efficiency claim; AGENTS no-claim rule).
+    _breadcrumb(
+        "valve (advisory; framework-trace numbers, measure your own — "
+        "guide sec.5): re-pays F+S=%d on T=%d — eta=(T-F-S)/T = %d "
+        "permille (%d.%d%%)"
+        % (
+            _ETA_FLOOR_REPAID_TOKENS,
+            _ETA_WINDOW_TOKENS,
+            eta_permille,
+            eta_permille // 10,
+            eta_permille % 10,
+        )
+    )
+    _breadcrumb(
+        "valve doctrine: PreCompact has NO deny channel — refusing a "
+        "compaction is a substrate limit (US2b-valve, ratified 2026-08-31)"
+    )
+
+
+_LEDGER_INDEX_MAX_SECTIONS = 5
+_LEDGER_INDEX_MAX_BYTES = 65536
+
+
+def _plan_id_from_path(path: str) -> Optional[str]:
+    """``PLAN-NNN`` from a repo-relative path, by PATH SHAPE alone.
+
+    Matches ONLY ``.claude/plans/PLAN-NNN/...`` (plan dir) — espelho
+    FIEL do ``derive_scope`` canonico (rail r21 P2-b: o arquivo de plano
+    NAO classifica direto; cai em unmatched e segue a perna AC). No
+    session state, no env, no audit log — emenda r1-C6."""
+    base = ".claude/plans/"
+    if not path.startswith(base + "PLAN-"):
+        return None
+    tail = path[len(base):]
+    ident = tail[:8]
+    if len(tail) < 9 or not ident[5:8].isdigit():
+        return None
+    if tail[8] == "/":
+        return ident
+    # Rail r21 P2-b (remove o branch `-` que a r7 apenas apertara): o
+    # `derive_scope` CANONICO so aceita plan_dir (`PLAN-NNN/**`) e paths
+    # AC-declarados — um 3o shape (o ARQUIVO de plano) fazia este espelho
+    # eleger plano DIFERENTE do checkpoint no mesmo commit (empate
+    # PLAN-010-x.md vs PLAN-020/n.md ⇒ pointers divergentes). Fidelidade
+    # de espelho e o contrato; o arquivo de plano cai em unmatched e
+    # segue a MESMA perna AC do canonico.
+    return None
+
+
+#: Rail r6 P2-c — a perna (b) do ``derive_scope`` (plan_ac), espelhada.
+#: Espelho LITERAL de ``check_ledger_checkpoint.py`` (o contrato de hooks
+#: proibe import hook-a-hook): _AC_PATH_RE / _PLAN_FILE_GLOB /
+#: _PLAN_FILE_ID_RE / _AC_SCAN_MAX_FILES / _AC_SCAN_MAX_BYTES.
+_LEDGER_AC_PATH_RE = re.compile(
+    r"\[P[0-3]\]\[US[0-9]{1,6}[a-z]{0,2}\]\[([^\[\]\n]{1,200})\]"
+)
+_LEDGER_PLAN_FILE_GLOB = "PLAN-[0-9][0-9][0-9]-*.md"
+_LEDGER_PLAN_FILE_ID_RE = re.compile(r"^(PLAN-[0-9]{3})-")
+_LEDGER_AC_SCAN_MAX_FILES = 200
+_LEDGER_AC_SCAN_MAX_BYTES = 256 * 1024
+#: Rail r9 P2-b — cap de paths considerados no matching plan_ac (o loop e
+#: O(paths x ACs); um commit gigante nao pode estourar o budget do hook).
+_LEDGER_AC_MATCH_MAX_PATHS = 500
+#: Rail r10 P2-c — cap de entradas materializadas do commit (pre-dedupe;
+#: `-m` repete por parent) e fatia de budget do indice OPCIONAL (r10
+#: P2-b: o indice nunca come o tempo reservado ao _write_snapshot).
+_LEDGER_GIT_PATHS_MAX = 2000
+_LEDGER_INDEX_MAX_SHARE_S = 1.0
+
+
+def _ac_path_index_mirror(
+    cwd: str, deadline: float
+) -> Tuple[Dict[str, str], bool]:
+    """``(AC path -> PLAN-NNN, complete)`` — perna plan_ac espelhada.
+
+    Bounded pelos MESMOS caps do checkpoint + o wall deadline
+    compartilhado; em path repetido o MENOR plan id vence (determinismo).
+    Nada aqui consulta session state, env ou audit log (emenda r1-C6).
+
+    Rail r15 P2-b: ``complete=False`` em QUALQUER corte — glob falho,
+    >200 arquivos de plano (o slice esconderia planos), deadline no meio,
+    arquivo ilegivel, ou AC alem do cap de 256 KiB de UM arquivo (lido
+    cap+1 para detectar). Um mapeamento parcial elege plano ERRADO no
+    tie-break do chamador; o chamador recusa o indice inteiro."""
+    index: Dict[str, str] = {}
+    complete = True
+    try:
+        # Rail r24 P2-a: glob.iglob ENGOLE falha de enumeracao — um
+        # `.claude/plans` pesquisavel mas nao-listavel (0111/ACL/erro de
+        # I/O) renderia zero matches com complete=True, e o plan_dir
+        # direto elegeria SEM a perna AC (pointer errado). A sonda
+        # explicita de listabilidade converte a falha em incompleto.
+        _plans_dir = os.path.join(cwd, ".claude", "plans")
+        try:
+            with os.scandir(_plans_dir) as _probe:
+                next(_probe, None)
+        except OSError:
+            return index, False
+        pattern = os.path.join(
+            cwd, ".claude", "plans", _LEDGER_PLAN_FILE_GLOB
+        )
+        # Rail r23 P2-a: enumeracao LAZY com cap+1 e deadline por item —
+        # glob.glob materializava e ordenava o conjunto INTEIRO antes de
+        # qualquer check. Acima do cap o indice ja e recusado (r15),
+        # entao a ordem dos coletados nao importa nesse ramo; ate o cap,
+        # o sort mantem o determinismo de antes.
+        all_files: List[str] = []
+        for _pf in glob.iglob(pattern):
+            if time.monotonic() >= deadline:
+                return index, False
+            all_files.append(_pf)
+            if len(all_files) > _LEDGER_AC_SCAN_MAX_FILES:
+                complete = False
+                break
+        all_files.sort()
+    except Exception:
+        return index, False
+    files = all_files[:_LEDGER_AC_SCAN_MAX_FILES]
+    for plan_file in files:
+        if time.monotonic() >= deadline:
+            complete = False
+            break
+        m = _LEDGER_PLAN_FILE_ID_RE.match(os.path.basename(plan_file))
+        if m is None:
+            continue
+        plan_id = m.group(1)
+        try:
+            # Rail r16 P2-a: leitura BINARIA — TextIO.read(n) conta
+            # CARACTERES, e 300 KiB de chars de 2 bytes passariam
+            # inteiros com complete=True alem do cap prometido em BYTES.
+            # O corte byte-a-byte pode partir um char multibyte na borda;
+            # errors="replace" o degrada em U+FFFD, inofensivo ao regex.
+            with open(plan_file, "rb") as fh:
+                raw_bytes = fh.read(_LEDGER_AC_SCAN_MAX_BYTES + 1)
+        except OSError:
+            complete = False
+            continue
+        if len(raw_bytes) > _LEDGER_AC_SCAN_MAX_BYTES:
+            complete = False
+            raw_bytes = raw_bytes[:_LEDGER_AC_SCAN_MAX_BYTES]
+        text = raw_bytes.decode("utf-8", "replace")
+        for ac_path in _LEDGER_AC_PATH_RE.findall(text):
+            candidate = ac_path.strip().strip("`").strip()
+            # "./" e PREFIXO, nao classe de caracteres (espelho fiel:
+            # lstrip("./") comeria o ponto de `.claude/...`).
+            while candidate.startswith("./"):
+                candidate = candidate[2:]
+            if not candidate or candidate.startswith("<"):
+                continue
+            current = index.get(candidate)
+            if current is None or plan_id < current:
+                index[candidate] = plan_id
+    return index, complete
+
+
+def _ledger_index(cwd: str, deadline: float) -> Dict[str, Any]:
+    """PLAN-179 W2 US7 — the snapshot's LEDGER INDEX (a pointer, not a copy).
+
+    Derives the active plan from the PATHS of the last commit — NEVER from
+    ``_resolve_plan_id`` (emenda r1-C6: a trigger derived from session state
+    re-inherits root cause E2; ``check_ledger_checkpoint.derive_scope``
+    established the paths-only discipline and BOTH its legs are mirrored
+    LITERALLY, not imported — hook contract forbids hook-to-hook imports:
+    plan_dir paths AND AC-declared implementation paths (plan_ac, rail r6
+    P2-c via ``_ac_path_index_mirror``); most in-scope paths wins, ties
+    break on the LOWEST plan id). Returns
+
+      ``{plan_id, ledger_path, present, sections, last_commit}``
+
+    or ``{}`` when no plan is derivable from paths. ``sections`` (``## ``
+    headers, sanitized + clamped, ≤5) and ``last_commit`` live in the
+    SNAPSHOT for the /memory-scratchpad recall path; the PostCompact half
+    renders only the STRUCTURAL pair (path + short sha) — section titles
+    are file content and never enter the instruction stream (same Codex R5
+    P1-1 doctrine as the checkbox label). Fail-open on every git/IO
+    failure; bounded by the shared wall deadline."""
+    # Rail r10 P2-b: o indice e OPCIONAL e roda ANTES do _write_snapshot —
+    # a fatia dele no budget compartilhado e limitada, reservando o resto
+    # para o snapshot e os passos de gate que ainda tem timeouts fixos
+    # proprios. Um repositorio lento degrada o INDICE, nunca o snapshot.
+    deadline = min(deadline, time.monotonic() + _LEDGER_INDEX_MAX_SHARE_S)
+    if time.monotonic() > deadline:
+        return {}
+    # Rail r9 P2-a: `-m` porque um commit de MERGE sob combined-diff
+    # devolve lista VAZIA (o pointer sumia em commit valido); `-z` porque
+    # o quoting C de nomes nao-ASCII (`"src/\303\251.py"`) nunca casaria
+    # shape nem AC. Rail r26 P1-a: `--first-parent` porque `-m` sozinho
+    # devolve a UNIAO dos diffs contra TODOS os parents — num merge, as
+    # mudancas que ja estavam na MAINLINE entravam no tie-break e um
+    # PLAN-010 do historico vencia o PLAN-042 que o merge de fato
+    # INTRODUZIU (pointer errado). O delta vs primeiro parent e o que o
+    # merge trouxe. Rail r10 P2-c: o slice cap vem ANTES do dedupe
+    # (materializacao limitada mesmo num commit gigante).
+    names = _git(
+        ["log", "-1", "-m", "--first-parent", "--name-only",
+         "--format=", "-z"], cwd,
+        timeout_s=deadline - time.monotonic(), raw=True,
+    )
+    if not names:
+        return {}
+    # Rail r11 P2-c: paths VERBATIM — `-z` ja da os limites exatos e um
+    # strip por path colaria ` .claude/...` (filename legal com espaco)
+    # no path canonico do plano, apontando o pointer ERRADO. Filtra so
+    # campos vazios. Rail r11 P2-d: `maxsplit` limita a materializacao de
+    # strings pequenas; o residuo (ultimo elemento) cai no slice. O
+    # output em si ja e limitado por timeout x throughput da fatia de
+    # 1.0s (r10) — fronteira declarada, transiente e sub-segundo.
+    _parts = names.split("\0", _LEDGER_GIT_PATHS_MAX)
+    # Rail r14 P2-a: derivacao de escopo PARCIAL nao elege plano — um
+    # tie-break sobre contagens truncadas pode apontar o LEDGER ERRADO
+    # (pior que nenhum). Qualquer truncamento => {}. Rail r15 P3-c: o
+    # residuo do maxsplit e truncamento SO se carrega path de verdade —
+    # em exatamente 2000 paths o NUL final produz um residuo VAZIO e um
+    # commit legitimo no limite perderia o pointer.
+    truncated = (
+        len(_parts) > _LEDGER_GIT_PATHS_MAX
+        and _parts[_LEDGER_GIT_PATHS_MAX] not in ("", "\n")
+    )
+    seen_paths = list(dict.fromkeys(
+        p
+        for p in _parts[:_LEDGER_GIT_PATHS_MAX]
+        if p and p != "\n"
+    ))
+    counts: Dict[str, int] = {}
+    unmatched: List[str] = []
+    for stripped in seen_paths:
+        pid = _plan_id_from_path(stripped)
+        if pid is not None:
+            counts[pid] = counts.get(pid, 0) + 1
+        else:
+            unmatched.append(stripped)
+    # Rail r6 P2-c: derive_scope tem DUAS pernas e o espelho trazia so a
+    # primeira — um commit tocando apenas implementation paths declarados
+    # por AC (`[P?][USn][path]`) derivava indice VAZIO, e o US7 omitia o
+    # pointer exatamente no commit que o checkpoint-rail associa a um
+    # plano. A perna plan_ac roda so para paths nao-casados, sob o mesmo
+    # deadline (prefix-match de diretorio identico ao derive_scope).
+    if unmatched:
+        # Rail r9 P2-b: o matching e O(paths x ACs) e o mirror pode
+        # retornar JA no deadline — sem cap nem re-check, um commit
+        # gigante estourava o budget do PreCompact ANTES do
+        # _write_snapshot (perder o snapshot para ganhar um pointer e
+        # inverter a prioridade do hook). Cap + deadline por path.
+        # Rail r14 P2-a: exaustao ou cap NAO seguem com contagem
+        # parcial — escopo truncado elege plano ERRADO no tie-break;
+        # marca e recusa abaixo.
+        if len(unmatched) > _LEDGER_AC_MATCH_MAX_PATHS:
+            truncated = True
+        if time.monotonic() > deadline:
+            truncated = True
+        elif not truncated:
+            _ac_index, _ac_complete = _ac_path_index_mirror(cwd, deadline)
+            # Rail r15 P2-b: espelho INCOMPLETO (>200 planos, arquivo
+            # ilegivel, AC alem do cap por-arquivo, deadline) elege plano
+            # errado no tie-break — recusa o indice inteiro.
+            if not _ac_complete:
+                truncated = True
+                _ac_index = {}
+            if _ac_index:
+                for path in unmatched:
+                    if time.monotonic() > deadline:
+                        truncated = True
+                        break
+                    pid = _ac_index.get(path)
+                    if pid is None:
+                        for ac_path, candidate in _ac_index.items():
+                            if ac_path.endswith("/") and path.startswith(ac_path):
+                                pid = candidate
+                                break
+                            if path.startswith(ac_path + "/"):
+                                pid = candidate
+                                break
+                    if pid is not None:
+                        counts[pid] = counts.get(pid, 0) + 1
+            # O mirror pode ter parado NO deadline com indice incompleto:
+            # o re-check pos-fase cobre essa perna tambem.
+            if time.monotonic() > deadline:
+                truncated = True
+    if truncated:
+        return {}
+    if not counts:
+        return {}
+    best = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+    rel = ".claude/plans/%s/LEDGER.md" % best
+    out: Dict[str, Any] = {
+        "plan_id": best,
+        "ledger_path": _sanitize_text(rel, _PATH_CLAMP),
+        "present": False,
+        "sections": [],
+        "last_commit": "",
+    }
+    ledger_abs = os.path.join(cwd, rel)
+    if not os.path.isfile(ledger_abs):
+        # Honest index: the plan is derivable but keeps no ledger (yet).
+        return out
+    out["present"] = True
+    # Rail r1 P2-5: the shared wall deadline is re-checked before EACH
+    # further step — on a slow repository the first `git log` can consume
+    # most of the budget, and an unconditional follow-up would run its own
+    # fixed 2s timeout PAST the deadline, delaying the compaction beyond
+    # the hook's stated budget. A degraded index (no sections / no sha) is
+    # honest; a late one is not.
+    if time.monotonic() > deadline:
+        return out
+    try:
+        # Rail r17 P2-d: leitura BINARIA — mesma classe r16 P2-a no 2o
+        # sitio (censo da classe varrido: era o ultimo read capado em
+        # modo texto dos dois hooks). read(n) de TextIO conta CHARS e um
+        # LEDGER multibyte estourava o teto declarado em BYTES.
+        with open(ledger_abs, "rb") as fh:
+            text = fh.read(_LEDGER_INDEX_MAX_BYTES).decode(
+                "utf-8", "replace"
+            )
+        sections: List[str] = []
+        for line in text.splitlines():
+            if time.monotonic() > deadline:
+                break
+            if line.startswith("## "):
+                sections.append(_sanitize_text(line[3:].strip(), _LABEL_CLAMP))
+                if len(sections) >= _LEDGER_INDEX_MAX_SECTIONS:
+                    break
+        out["sections"] = sections
+    except OSError as exc:
+        _breadcrumb("ledger read failed (%s)" % str(exc)[:60])
+    if time.monotonic() > deadline:
+        return out  # rail r1 P2-5: no second git call past the deadline
+    out["last_commit"] = _sanitize_text(
+        _git(
+            ["log", "-1", "--format=%h", "--", rel], cwd,
+            timeout_s=deadline - time.monotonic(),  # rail r2 P2-f
+        ),
+        16,
+    )
+    return out
+
+
 def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
     """Build + persist the snapshot; emit the closed-enum event. Always allows.
 
@@ -1078,8 +1484,12 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
         "trigger": trigger,
         "plan_id": plan_id,
         "execution_unit": _execution_unit(plan_path, cwd, deadline),
+        # PLAN-179 W2 US7 — the ledger INDEX: derived from commit PATHS
+        # (never _resolve_plan_id), pointing at PLAN-NNN/LEDGER.md +
+        # sections + last commit instead of copying state.
+        "ledger_index": _ledger_index(cwd, deadline),
         "ceremony_flags": _ceremony_flags(cwd, deadline),
-        "hmac_chain": _hmac_chain_breadcrumb(),
+        "hmac_chain": _hmac_chain_breadcrumb(deadline),
     }
     chain_length = 0
     try:
@@ -1088,6 +1498,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
         chain_length = 0
     outcome = _write_snapshot(plan_id, blob, session_id)
     _emit_snapshot_event(trigger, plan_id, chain_length, outcome)
+    # PLAN-179 US2b-valve — advisory only, AFTER the snapshot + its
+    # event: the valve must never delay or endanger the snapshot.
+    _eta_advisory()
     # PLAN-179 W0 US2b — last, and only when the operator armed a floor: the
     # guard must never delay or endanger the snapshot above it.
     floor_tokens = _progress_floor_tokens()

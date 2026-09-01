@@ -14,8 +14,8 @@ Wave: wave-179close (PLAN-179 — «Fechar tudo», ratificação do Owner de 202
 Patch: .claude/plans/PLAN-179/s335-ceremony-179close/W179CLOSE.patch
 Patch-sha256: 03e92def462c96b9fc2ec7a72111269da7a5485dba4e829ca2b6f3d580fb0dde
 Patch-base: 2baed3895934098153899a7d6ec40d8e5f240875
-Anchor-SHA: ANCHOR-PLACEHOLDER
-Data: DATA-PLACEHOLDER
+Anchor-SHA: c07096ff25bac132675c4289a808f95ffe8206b9
+Data: 2026-09-01
 
 ## O que esta wave entrega
 
@@ -116,7 +116,7 @@ reason-SLUG + `I-ACCEPT` — o mecanismo idêntico ao do adrgate (land real
   (spec §8) — remover, não manter como dívida.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: APPROVED-BY-PLACEHOLDER
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-179
 Scope:
   - .claude/data/audit-registry.golden.txt

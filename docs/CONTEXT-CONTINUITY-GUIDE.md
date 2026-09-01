@@ -45,9 +45,12 @@ unconditional and does not depend on any snapshot.
 
 Everything else is conditional on the snapshot existing. When it does, the
 block can also carry the active `PLAN-NNN`, the execution-unit position as a
-`path:line` **location only**, pending Owner-ceremony breadcrumbs (up to 5),
-an audit HMAC-chain anchor, a staleness warning past 12 hours, and the
-scratchpad address for the detail.
+`path:line` **location only**, the work-ledger pointer (PLAN-179 W2 US7:
+`PLAN-NNN/LEDGER.md` + the short sha that last touched it — the plan id
+derived from the last commit's PATHS, never from session state; section
+titles stay in the scratchpad), pending Owner-ceremony breadcrumbs (up to
+5), an audit HMAC-chain anchor, a staleness warning past 12 hours, and
+the scratchpad address for the detail.
 
 Hard caps in the shipped code, so you can size expectations:
 
@@ -232,8 +235,23 @@ Given §2, do not rely on the machinery. Rely on habits:
   snapshot write no longer depends on it (§7's session-scoped fallback), but
   plan-*scoped* continuity does: an unresolved id gets you a snapshot, not a
   plan-scoped one.
-- **Nothing writes memory automatically.** `SessionEnd.py` verifies
-  writability only.
+- **A compaction cannot be refused.** PreCompact has no deny channel: by
+  the time the hook fires the harness has already decided to compact, and
+  no value of the hook's return can stop it. The ratified valve
+  (US2b-valve, 2026-08-31) is therefore an ADVISORY — and its numbers are
+  **this repository's own measured trace** (w0-measurement §C/§E: re-paid
+  floor `F+S = 112,638` on a `T = 998,043` window, eta=(T−F−S)/T = 887
+  permille), NOT a claim about your installation: `F` varies with each
+  target's governance surface and `T` with the model. The advisory line
+  says so and points here; measure your own values per §5 above. "Refuse"
+  stays a SUBSTRATE limit, not a missing hook feature.
+- **Nothing writes memory automatically.** True by design, and it stays
+  true — but since PLAN-179 W2 US8 (wave-179-close) `SessionEnd.py` no
+  longer verifies writability only: it OBSERVES the delta stat-only
+  (`st_mtime` vs the session-start anchor) and renders the omission
+  (`memory delta ABSENT`) at the moment the operator can still act. The
+  hook never writes a memory file; `outcome=absent` dominating a window
+  with no behaviour change is the rail's pre-registered death criterion.
 - **A pointer is not a preserved constraint.** The *pointer* block is a
   reminder, not the rules. Constraint pinning (§7) now re-states a small set
   of rules themselves, but only that set — everything outside it is still a
@@ -291,7 +309,18 @@ positive local precedent) and PostCompact as reinforcement. Do not read the
 pinning block's existence as evidence that the PostCompact channel works.
 
 Sections 2 through 6 still describe the surrounding behaviour; §2's
-measurement is retained as pre-PLAN-179 history, not as current output. Track
-the remaining waves in
-`.claude/plans/PLAN-179-context-continuity-durable-state.md` (W2–W4) and the
-amendment to `.claude/adr/ADR-153-compaction-continuity.md`.
+measurement is retained as pre-PLAN-179 history, not as current output.
+
+### The wave-179close ceremony CLOSED the plan (r19 refresh)
+
+W2's US7 and US8 landed with the `wave-179close` ceremony: the PreCompact
+snapshot now carries a **ledger INDEX** (plan id derived from the last
+commit's PATHS — both derive_scope legs mirrored, truncation refuses to
+elect — with the PostCompact half rendering only the structural path+sha
+pair), and `SessionEnd.py` emits the **memory-delta observation**
+(`session_memory_delta_observed`, stat-only, chain-or-none anchor with
+per-entry verify-before-consume, window bounded on BOTH ends, structural
+namespace activity blocking the absence class). PLAN-179 is `done`; the
+producer-side residuals live in
+`.claude/plans/PLAN-179-FOLLOWUP-sessionstart-anchor-id.md`, and the
+amendment history stays in `.claude/adr/ADR-153-compaction-continuity.md`.

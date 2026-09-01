@@ -1139,11 +1139,13 @@ class TestLedgerCheckpointActionsAreRegistered(_LedgerAuditBase):
                 "namespace" % action,
             )
 
-    def test_known_actions_count_is_the_measured_330(self) -> None:
-        # 327 measured live at 560dad0; +3 by this ceremony (Owner decision
-        # 2026-08-25: ledger_checkpoint_recorded + ledger_checkpoint_skipped
-        # + ledger_entry_rejected).
-        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 330)
+    def test_known_actions_count_is_the_measured_331(self) -> None:
+        # 327 measured live at 560dad0; +3 by the staged-w24 ceremony (Owner
+        # decision 2026-08-25: ledger_checkpoint_recorded +
+        # ledger_checkpoint_skipped + ledger_entry_rejected) = 330;
+        # +1 PLAN-179 W2 US8 (wave-179close ceremony, SPEC v2.60):
+        # session_memory_delta_observed = 331.
+        self.assertEqual(len(audit_emit._KNOWN_ACTIONS), 331)
 
 
 class TestLedgerCheckpointEnumParity(_LedgerAuditBase):

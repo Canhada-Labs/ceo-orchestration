@@ -80,6 +80,7 @@ input — never from ``CLAUDE_SESSION_ID`` (env is agent-spoofable, consensus M2
 from __future__ import annotations
 
 import json
+import re
 import os
 import sys
 import time
@@ -348,6 +349,43 @@ def _build_pointers(
                 )
             else:
                 pointers.append("Active plan file: %s — re-open it." % path)
+        # PLAN-179 W2 US7 (wave-179-close) — the ledger INDEX pointer:
+        # the snapshot points at the work ledger instead of copying
+        # state. Only STRUCTURAL references are rendered (path + short
+        # sha): the section TITLES captured in the snapshot are file
+        # CONTENT — the same trust class as the checkbox label above
+        # (Codex R5 P1-1) — and stay in the scratchpad blob for the
+        # on-demand /memory-scratchpad recall path.
+        # Rail r2 P1-b: the snapshot lives in an agent-writable store, so a
+        # stale/tampered blob can carry arbitrary printable text in these
+        # fields and _sanitize_line strips only control characters. The gate
+        # is SHAPE, not sanitization: the path must be EXACTLY
+        # .claude/plans/PLAN-NNN/LEDGER.md and the sha exactly 4-16 lowercase
+        # hex — anything else drops the pointer (path) or the suffix (sha).
+        lidx = snapshot.get("ledger_index")
+        if (isinstance(lidx, dict) and lidx.get("ledger_path")
+                and lidx.get("present") is True):
+            _lp_raw = str(lidx.get("ledger_path", ""))
+            # rail r5 P2-e: fullmatch — o `$` do re.match casa ANTES de um
+            # `\n` final e a quebra atravessaria o gate "exato".
+            if not re.fullmatch(r"\.claude/plans/PLAN-[0-9]{3}/LEDGER\.md", _lp_raw):
+                _breadcrumb("ledger_index path off-shape — pointer dropped")
+                lpath = ""
+            else:
+                lpath = _lp_raw
+            _lc_raw = str(lidx.get("last_commit", ""))
+            lcommit = _lc_raw if re.fullmatch(r"[0-9a-f]{4,16}", _lc_raw) else ""
+            if lpath and lcommit:
+                pointers.append(
+                    "Work ledger: %s (last touched at commit %s) — "
+                    "re-open it to resume from the last recorded unit."
+                    % (lpath, lcommit)
+                )
+            elif lpath:
+                pointers.append(
+                    "Work ledger: %s — re-open it to resume from the "
+                    "last recorded unit." % lpath
+                )
         flags = snapshot.get("ceremony_flags")
         if isinstance(flags, list) and flags:
             safe = [_sanitize_line(str(f)) for f in flags[:5] if f]

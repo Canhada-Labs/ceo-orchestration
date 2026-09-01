@@ -4,6 +4,24 @@
 > na morte da sessão. Só identificadores verbatim (paths, SHAs, ids) —
 > nunca corpo de transcript. Teto ≤2k tokens; seções antigas arquivadas.
 
+## Unidade corrente — wave-179-close (S335, 2026-08-31)
+
+Pack de fechamento do PLAN-179, construído em sombra (base `cfab980`).
+Canônicos: `check_precompact_continuity.py` (US7 `_ledger_index` +
+US2b-valve `_eta_advisory`), `check_postcompact_reinject.py` (pointer
+estrutural), `SessionEnd.py` (US8 da spec `staged-w24/SESSIONEND-NOTE.md`),
+`_lib/audit_emit.py` (ação `session_memory_delta_observed` v2.60),
+`SPEC/v1/audit-log.schema.md` (linhas v2.60). Livres: golden registry
+regenerado (330→331) — o `harness-noop-allowlist.txt` foi RETIRADO do
+patch no rail r14 (inerte + bypass ADR-158) —,
+`test_session_end_memory_delta.py` (novo, 20 testes) + extensões em
+`test_check_compaction_continuity.py` (14) + 5 pins 330→331
+rebaselineados (incl. `test_git_bypass_guard`, achado pela bateria
+integral), este LEDGER, o plano (flip `done` NO patch + registro S335),
+guia §2/§6. Verificador: bateria de testes de
+hooks no clone sombra (comando + rc registrados no material da
+cerimônia). Aguarda: rail codex → APPROVE → SIGN + LAND do Owner.
+
 ## Fechamento (18:27) — CI VERDE, dois packs assináveis
 
 HEAD `f622900`, árvore limpa, **Validate verde**, Smoke Install verde, red-team

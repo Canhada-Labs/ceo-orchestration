@@ -276,6 +276,7 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
     "emit_mcp_non_loopback_rejected",
     # PLAN-085 v1.19.0 (S111 2026-05-12) — Wave G.1b ATLAS schema (4).
     "emit_ledger_entry_rejected",  # PLAN-179 W4 / ADR-195 (staged-w24)
+    "emit_session_memory_delta_observed",  # PLAN-179 W2 US8 / wave-179-close (SPEC v2.60)
     "emit_prompt_injection_detected",
     "emit_secret_leak_detected",
     "emit_pii_redacted_outgoing",
@@ -526,6 +527,14 @@ _EXPECTED_PUBLIC_SYMBOLS = frozenset({
 # branches, none in _EMIT_GENERIC_PASSTHROUGH. SPEC amend v2.59. SHA
 # re-derived from the STAGED audit_emit.py, never hand-edited.
 # Count: 327 -> 330.
+# PLAN-179 W2 US8 wave-179-close ceremony (Owner ratification 2026-08-31
+# "Fechar tudo") — added session_memory_delta_observed (SessionEnd.py
+# stat-only memory-delta observation; ONE new typed emitter
+# emit_session_memory_delta_observed added to _EXPECTED_PUBLIC_SYMBOLS).
+# Deny-by-default with a dedicated scrub branch, NOT in
+# _EMIT_GENERIC_PASSTHROUGH. SPEC amend v2.60 under the ADR-195
+# work-boundary doctrine. SHA re-derived from the shadow audit_emit.py,
+# never hand-edited. Count: 330 -> 331.
 _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # Updated PLAN-105 Wave A (S134-cont) — rebaselined to absorb 28
     # actions from S128..S134 that were never folded into this contract:
@@ -786,7 +795,7 @@ _EXPECTED_KNOWN_ACTIONS_SHA256 = (
     # sha256(json.dumps(sorted(_KNOWN_ACTIONS))) derivation; the value
     # matched independently on local darwin and the ubuntu CI matrix
     # (S318 fix-forward).
-    "cbc718f6678877c7ae3aa788ee79823dca3a181466e45c9ea3293eee1aa44928"
+    "8c278ae7221e0300001dd3f51b4edeb51205188cac85ea255b6ca0fb488b65a6"
 )
 
 
@@ -828,7 +837,7 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         self.assertEqual(
             actual, _EXPECTED_KNOWN_ACTIONS_SHA256,
             f"_KNOWN_ACTIONS drift detected. "
-            f"Count={len(actions)} (expected 330). "
+            f"Count={len(actions)} (expected 331). "
             f"Rebaseline this test + add audit-registry entry if the change is intentional.",
         )
 
@@ -841,13 +850,15 @@ class AuditEmitPublicSurfaceTests(unittest.TestCase):
         # posture toggle, ADR-185; ceremony [SENT-PLAN165]).
         # 325 = 324 + 1 PLAN-179 W0 US2 (context_pressure_observed — the
         # edge-triggered context-pressure breadcrumb, amendment 8.1).
+        # 331 = 330 + 1 PLAN-179 W2 US8 (session_memory_delta_observed —
+        # SessionEnd stat-only memory delta, wave-179-close; SPEC v2.60).
         # 327 = 326 + 1 PLAN-182 W1 (salt_rotation_registered, SENT-S319 pack;
         # per-project salt mint register, ADR-079 S318 §2). Was: 326 = 325
         # + 1 PLAN-174 W1 registration completion (SENT-S318 pack,
         # 2026-08-20: ceremony_lint_unlock_used — ceremony-lint ADR-186
         # escape-hatch breadcrumb parked in 908707e, registered + restored).
         self.assertEqual(
-            len(audit_emit._KNOWN_ACTIONS), 330,
+            len(audit_emit._KNOWN_ACTIONS), 331,
             "_KNOWN_ACTIONS count drifted from 163 baseline (PLAN-088 S114 Wave 1 +11 actions: "
             "cache_discipline_alerted + first_run_wizard_dispatched + "
             "estimate_calibrator_pipeline_run + subagent_findings_partial_drop + "

@@ -1,8 +1,10 @@
 ---
 id: PLAN-179
 title: Continuidade de contexto — estado durável escrito em fronteira de trabalho, não na morte da sessão
-status: executing
+status: done
 executing_since: 2026-08-20
+completed_at: 2026-08-31
+related_commits: [c042f9e, 6f7f20e, 45c75e3, 08e25f4, b07be9b, 826688f]
 reviewed_at: 2026-08-18
 reviewed_by: "Owner — flip draft→reviewed autorizado na S313 (2026-08-18) após debate L3 round-1 (S312, consensus PROCEED, 3× ADJUST/0 VETO; 9 emendas C1-C9 aplicadas ao §8). GA v1.3.0 saiu 2026-08-17 — o bloqueio do external_wait caiu. Execução W0→W4 em sessão(ões) próprias."
 created: 2026-08-16
@@ -246,12 +248,17 @@ Barata, read-only, responde as perguntas que dimensionam W1–W4. Nenhuma
 wave posterior desenha em cima de premissa não medida
 ([[feedback-branch-local-patching-induces-regressions]]).
 
-- [ ] `[P1][US1][.claude/scripts/probes/probe_postcompact_channel.py]`
-      Sonda viva do canal: `/compact` manual com um canário único
-      injetado via `additionalContext` em PostCompact; assertar se o
-      token aparece no contexto pós-compactação. Resultado positivo OU
-      negativo é entregável — negativo redireciona W1 para o canal
-      `SessionStart(matcher=compact)` com stdout puro.
+- [x] `[P1][US1][.claude/scripts/probes/probe_postcompact_channel.py]`
+      — *SUPERSEDIDO pela r1-C3 (ratificação do Owner, 2026-08-31,
+      wave-179-close): o Constraint Pinning fez de
+      `SessionStart(matcher=compact)` o canal PRIMÁRIO por construção
+      (r1-C5: constante de CÓDIGO, nunca lida de disco), exatamente para
+      que a governança pós-compactação NÃO dependa do veredito vivo deste
+      canal. A sonda segue shipada e executável (operador/local, exige
+      compaction paga); o veredito deixou de ser bloqueante.* Texto
+      original: sonda viva do canal — `/compact` manual com canário único
+      via `additionalContext` em PostCompact; positivo OU negativo era
+      entregável.
 - [x] `[P1][US1][.claude/scripts/probes/probe_postcompact_channel.py]`
       (landado `c042f9e` — `test_probe_postcompact_channel.py`, 326
       linhas, inclui o controle que falha sem canário)
@@ -313,7 +320,14 @@ wave posterior desenha em cima de premissa não medida
       "HALTAR"; marcar `[x]` com aquele texto embarcaria claim falsa numa
       superfície de governança — daí a reescrita, e daí o item separado
       abaixo para a válvula que ainda não existe.
-- [ ] `[P1][US2b-valve][.claude/hooks/check_precompact_continuity.py]`
+- [x] `[P1][US2b-valve][.claude/hooks/check_precompact_continuity.py]`
+      — *fechado na wave-179-close (ratificação do Owner 2026-08-31:
+      «Eta advisory + doutrina»): `_eta_advisory()` calcula η=(T−F−S)/T
+      em permille INTEIRO (887‰) das constantes MEDIDAS `F+S=112638` /
+      `T=998043` (§C/§E do relatório) e avisa o operador a cada
+      compactação; (i) «canal capaz de NEGAR» fica documentado como
+      LIMITE DO SUBSTRATO (guia §6 — a mesma rota honesta do US9c), não
+      como feature faltante.*
       **VÁLVULA — o delta que falta** (item novo, S316). O que separa o
       observador acima da válvula que o Owner pediu, nomeado:
       (i) **canal capaz de NEGAR** — PreCompact não tem; exige outra
@@ -326,10 +340,13 @@ wave posterior desenha em cima de premissa não medida
       (iii) a precondição "requer o `F` medido" está **SATISFEITA**
       (§C): o que falta é (i) e (ii), não mais medição.
 
-**AC de saída W0 (reconciliado S316):**
-(a) o veredito do canal está escrito e é falsificável — **ABERTO**: a
-sonda está shipada (`c042f9e`), mas o veredito exige uma compaction
-paga, operador/local;
+**AC de saída W0 (reconciliado S316; fechado 2026-08-31):**
+(a) o veredito do canal está escrito e é falsificável — **SUPERSEDIDO
+pela r1-C3 (ratificação do Owner, 2026-08-31, wave-179-close)**: o canal
+PRIMÁRIO de governança pós-compactação é `SessionStart(matcher=compact)`
+com constante de CÓDIGO (r1-C5), por desenho independente do veredito de
+`additionalContext`; a sonda (`c042f9e`) permanece disponível como
+medição opcional, não bloqueante;
 (b) a taxa de `plan_id=unknown` está medida, não estimada — **MEDIDA E
 VAZIA**: `{'unknown': 2}`, N = 1, sem taxa derivável, e a
 não-derivabilidade está declarada por escrito (§D do relatório);
@@ -340,8 +357,15 @@ reescrita em `w0-measurement.md` §E (`F` = 97.097/98.636,
 plano NÃO foi reescrita in loco e fica marcada como estimativa
 REFUTADA (`F=50k`, ≈2,0× abaixo do medido), superseded por §C/§E; a
 DECOMPOSIÇÃO de `F` segue `estimativa declarada, fonte ausente` (§B).
-O AC de saída permanece **ABERTO** por (a) e pelo sub-item ausente do
-relatório (custo de gate-boot re-pago).
+O AC de saída **FECHOU na cerimônia wave-179close** (conclusão
+reescrita no rail r25 — um `done` com criterio aberto é claim falsa):
+o item (a) foi SUPERSEDIDO pela emenda r1-C3 da própria cerimônia
+(registro `s335-ceremony-179close/rail-round-1.md`), e o sub-item do
+custo de gate-boot re-pago foi MEDIDO na S322 — `F` = 97.292 tokens na
+fronteira de uma compactação real, com controle cold-F independente em
+97.097 (delta 0,20%; instrumento `PLAN-179/w0/gateboot_repay.py`; série
+cold-F n=41 em `w0-measurement.md` §E). As duas evidências viajam com o
+`done` desta wave.
 
 ### W1 — Curar o snapshot vazio (o bug real)
 
@@ -433,12 +457,16 @@ tem **515 linhas** (`wc -l`) e landou em `08e25f4` (2026-08-18
 15:44:52 -0300) — **DOIS DIAS ANTES** de a nota entrar em `18de98e`
 (2026-08-20 14:38:42 -0300). `F` e `T` estão MEDIDOS lá, não pendentes.
 
-**Seguem ABERTOS no W0, deliberadamente:** (i) o veredito VIVO do canal
-(US1 #1 — a sonda está shipada, mas exige uma compaction paga,
-operador/local); (ii) UM sub-item do relatório (custo de gate-boot
-re-pago — ausente do arquivo, ver checkbox); (iii) a VÁLVULA do US2b —
-o OBSERVADOR de pressão shipou em `c042f9e`, mas HALTAR não tem canal
-em PreCompact. O AC de saída W0 permanece aberto por (i) e (ii). W2/W4
+**Reconciliação r25 (um `done` não carrega "permanece aberto"):**
+(i) o veredito VIVO do canal (US1 #1) foi SUPERSEDIDO pela emenda r1-C3
+da cerimônia wave-179close — a sonda segue shipada e rodá-la é ação de
+OPERADOR pós-land (uma compaction paga), fora do AC do plano;
+(ii) o custo de gate-boot re-pago foi MEDIDO na S322 (97.292 na
+fronteira real / cold-F 97.097, delta 0,20% — instrumento
+`PLAN-179/w0/gateboot_repay.py`); (iii) a VÁLVULA do US2b entregou
+NESTA wave como `_eta_advisory` (η=887‰ das constantes medidas;
+«negar» documentado como limite de substrato — PreCompact não tem canal
+de deny). Nada do W0 segue aberto. W2/W4
 **LANDADAS em `b07be9b` (S329 U0, 2026-08-26, pack `staged-w24` — sentinel
 `W179-W24-approved.md` assinado pelo Owner às 14:14; LAND V1–V6 verdes)**.
 
@@ -453,6 +481,31 @@ veredito já escrito em `floor-reduction.md` §6. **US7 e US8 seguem
 `staged-w24/SESSIONEND-NOTE.md`); ambas são cerimônia futura de hook
 canônico. Residuais do pack D (3, declarados no sentinel) anotados nos
 próprios itens — wave própria com debate, não linha de cerimônia.
+
+### Registro de execução — fechamento do plano (S335, 2026-08-31, wave-179-close)
+
+Ratificação do Owner (AskUserQuestion, fim da S334; verbatim no runbook
+`PLAN-179/NEXT-S335-RUNBOOK.md`): «Fechar tudo» — pack US7+US8, AC(a) do
+W0 supersedido pela r1-C3, válvula US2b = «Eta advisory + doutrina».
+Este registro viaja NO patch assinado (o `done` do frontmatter só é
+verdade no land — por isso ambos viajam juntos):
+
+- **US7** — `_ledger_index()` no blob (plan por PATHS do último commit;
+  NUNCA `resolve_plan_id` — r1-C6, teste AST escopado) + pointer
+  ESTRUTURAL no reinjector (path + short-sha; títulos só no scratchpad,
+  doutrina R5 P1-1).
+- **US8** — implementado DA spec assinada (`staged-w24/SESSIONEND-NOTE.md`):
+  stat-only, âncora chain→none (state_file APOSENTADA no rail r5) com terminal honesto,
+  `session_memory_delta_observed` (SPEC v2.60), linha do operador,
+  kill-switch 3-estados (rota gate-side RETIRADA no rail r14: inerte
+  para a heurística e bypass do ADR-158).
+- **US2b-valve** — `_eta_advisory()`: η em permille inteiro (887‰) das
+  constantes MEDIDAS; «negar» documentado como limite de substrato
+  (guia §6).
+- **US1 (veredito vivo)** — supersedido pela r1-C3 (ver checkbox).
+- `related_commits` lista os commits históricos do plano; o commit do
+  land desta cerimônia completa a lista por definição (não é conhecível
+  antes de existir).
 
 ### W2 — Ledger de trabalho contínuo (a mudança de doutrina)
 
@@ -487,12 +540,31 @@ execução**. Forma adotada do padrão multissessão da Anthropic
       cobre o path novo). "ACs com estado verificado" ganha VERIFICADOR
       nomeado por entrada (comando + exit code), porque entrada errada é
       pior que ausente (o modelo escreve o checkpoint já degradado).
-- [ ] `[P1][US7][.claude/hooks/check_precompact_continuity.py]`
-      — *nota S334: NÃO entrou no pack `b07be9b` (ausente do Scope assinado; `grep -i ledger` no hook = 0). Hook canônico ⇒ cerimônia futura, pode compartilhar com US8.*
+- [x] `[P1][US7][.claude/hooks/check_precompact_continuity.py]`
+      — *fechado na wave-179-close (S335): `_ledger_index()` no blob do
+      snapshot — plan derivado dos PATHS do último commit (tie-break
+      determinístico espelhado de `derive_scope`; NUNCA
+      `resolve_plan_id`, emenda r1-C6, com teste AST escopado à função),
+      apontando `PLAN-NNN/LEDGER.md` + seções (≤5, clampadas, SÓ no
+      scratchpad) + last-commit; o reinjector renderiza o pointer
+      ESTRUTURAL (path + short-sha — títulos são CONTEÚDO e não entram
+      no instruction stream, doutrina R5 P1-1).*
+      *(nota S334, histórica: não tinha entrado no pack `b07be9b`.)*
       PreCompact passa a apontar para o ledger; o snapshot vira o
       **índice** do ledger, não a cópia do estado.
-- [ ] `[P2][US8][.claude/hooks/SessionEnd.py]`
-      — *nota S334: spec pronta e assinada no pack (`PLAN-179/staged-w24/SESSIONEND-NOTE.md`, PACK-DOC que deliberadamente não aterrissou); implementação aguarda cerimônia que toque `SessionEnd.py`.*
+- [x] `[P2][US8][.claude/hooks/SessionEnd.py]`
+      — *fechado na wave-179-close (S335): implementado A PARTIR da spec
+      assinada (`staged-w24/SESSIONEND-NOTE.md`) — rail stat-only com
+      âncora chain→none (state_file APOSENTADA no rail r5), ação
+      `session_memory_delta_observed` (SPEC v2.60; emitter tipado +
+      allowlist dedicada deny-by-default), linha de ratificação do
+      operador (a OMISSÃO vira visível: `memory delta ABSENT`),
+      kill-switch 3-estados `CEO_SESSION_MEMORY_DELTA` (a entrada
+      gate-side no `harness-noop-allowlist.txt` foi RETIRADA no rail
+      r14 — inerte para a heurística constant-emitter e bypass de
+      substring do ADR-158); suíte própria em
+      `test_session_end_memory_delta.py`.*
+      *(nota S334, histórica: spec pronta, aguardava cerimônia.)*
       SessionEnd deixa de só verificar: emite o delta candidato de
       memória (contagem + paths, nunca corpo) para o operador ratificar.
       Escrita de memória continua sendo decisão do modelo/Owner — o hook

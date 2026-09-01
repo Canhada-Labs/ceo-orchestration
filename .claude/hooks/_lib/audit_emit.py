@@ -1155,6 +1155,16 @@ _KNOWN_ACTIONS = {
     # counters. DENIED on the wire: the rejected entry BODY (not even a
     # preview), the entry id, and any path.
     "ledger_entry_rejected",
+    # PLAN-179 W2 US8 (wave-179-close ceremony; SPEC v2.60) — SessionEnd
+    # memory-delta observation: one emit per session, immediately before
+    # `session_end` — did THIS session modify any file under the native
+    # memory dir? Stat-only producer; closed enums + INT counters only.
+    # DENIED on the wire: memory file names/basenames, file bodies, the
+    # memory-dir absolute path and the $HOME-derived slug, the raw
+    # session_start source line, any env value (LLM06 side-channel guard
+    # — the sanitized basenames travel ONLY on the systemMessage operator
+    # channel, never the signed chain).
+    "session_memory_delta_observed",
 }
 
 
@@ -4201,6 +4211,39 @@ def emit_ledger_entry_rejected(
     )
 
 
+def emit_session_memory_delta_observed(
+    *,
+    outcome: str = "",
+    files_count: int = 0,
+    modified_count: int = 0,
+    index_modified: bool = False,
+    anchor_source: str = "",
+    session_id: str = "",
+    project: str = "",
+) -> None:
+    """Emit session_memory_delta_observed (PLAN-179 W2 US8, SPEC v2.60).
+
+    One emit per session from ``SessionEnd.py``, immediately before the
+    ``session_end`` emit: the stat-only observation of whether THIS session
+    modified anything under the native memory dir. Deliberately NO ``int()``
+    coercion here: the scrub branch is TYPE-strict and a float must become
+    0, not be rounded into the signed chain. The memory file NAMES are not
+    a parameter of this function at all — the producer never forwards them
+    (they travel only on the ``systemMessage`` operator channel; the wire
+    denies basenames by contract).
+    """
+    emit_generic(
+        "session_memory_delta_observed",
+        outcome=outcome,
+        files_count=files_count,
+        modified_count=modified_count,
+        index_modified=index_modified,
+        anchor_source=anchor_source,
+        session_id=session_id,
+        project=project,
+    )
+
+
 def emit_secret_leak_detected(
     *,
     signal: str = "",
@@ -7232,6 +7275,59 @@ def emit_generic(action: str, **kwargs: Any) -> None:
                 f"emit_generic ledger_entry_rejected dropped "
                 f"forbidden field(s): {sorted(dropped)[:10]}"
             )
+    # PLAN-179 W2 US8 (wave-179-close) — SessionEnd memory-delta
+    # observation. Dedicated deny-by-default branch (NEVER
+    # _EMIT_GENERIC_PASSTHROUGH). The field-name scrub DROPS
+    # non-allowlisted keys, so a smuggled memory BASENAME / dir path /
+    # $HOME slug never reaches the wire; the closed-enum + TYPE-strict
+    # coercions then close the direct emit_generic-caller path (S172
+    # doctrine — rejected values are replaced with the safe sentinel,
+    # never echoed). Every membership test is isinstance-guarded FIRST:
+    # `x in frozenset` raises TypeError when x is UNHASHABLE (a list/dict
+    # from a direct caller) and that exception would escape emit_generic's
+    # never-raises contract before _write_event's fail-open wrapper could
+    # absorb it (PLAN-179 rail finding B / H4 class).
+    elif action == "session_memory_delta_observed":
+        event, dropped = _scrub_ceo_boot_event(
+            event, _SESSION_MEMORY_DELTA_OBSERVED_ALLOWLIST
+        )
+        _smd_outcome = event.get("outcome")
+        if (not isinstance(_smd_outcome, str)
+                or _smd_outcome not in _SESSION_MEMORY_DELTA_OUTCOMES):
+            # NEVER coerced to "written": an unparseable observation must
+            # not be laundered into a healthy-class value.
+            event["outcome"] = "other"
+        _smd_anchor = event.get("anchor_source")
+        if (not isinstance(_smd_anchor, str)
+                or _smd_anchor not in _SESSION_MEMORY_DELTA_ANCHOR_SOURCES):
+            event["anchor_source"] = "none"
+        for _smd_key in ("files_count", "modified_count"):
+            _smd_val = event.get(_smd_key)
+            # TYPE-strict: bool is an int subclass, and a float in an
+            # HMAC-covered field drops the WHOLE event at the
+            # canonical-json layer — both become the safe sentinel 0,
+            # never rounded, never echoed.
+            if isinstance(_smd_val, bool) or not isinstance(_smd_val, int):
+                event[_smd_key] = 0
+            else:
+                event[_smd_key] = max(0, min(99999, _smd_val))
+        if not isinstance(event.get("index_modified"), bool):
+            event["index_modified"] = False
+        _smd_sid = event.get("session_id")
+        if not isinstance(_smd_sid, str):
+            event["session_id"] = ""
+        else:
+            event["session_id"] = _smd_sid[:128]
+        _smd_proj = event.get("project")
+        if not isinstance(_smd_proj, str):
+            event["project"] = ""
+        else:
+            event["project"] = _smd_proj[:256]
+        if dropped:
+            _breadcrumb(
+                f"emit_generic session_memory_delta_observed dropped "
+                f"forbidden field(s): {sorted(dropped)[:10]}"
+            )
     # PLAN-135 W2 H5 (ADR-154) — corrective bash-input rewrite breadcrumb.
     # Dedicated scrub branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The
     # field-name scrub DROPS non-allowlisted keys (so a smuggled command
@@ -8588,6 +8684,39 @@ _LEDGER_ENTRY_REJECTED_ALLOWLIST = frozenset({
     "ts", "event_schema",
     "tokens_in", "tokens_out", "tokens_total",
     "hmac", "hmac_error",
+})
+
+# PLAN-179 W2 US8 (wave-179-close) — SessionEnd memory-delta observation.
+# Field allowlist (deny-by-default) + closed value sets. The sets MUST
+# mirror the producer's own literals in `.claude/hooks/SessionEnd.py`
+# (`_MEMORY_DELTA_OUTCOMES`); kept LITERAL here (never imported) for the
+# same zero-import-time-dependency posture as `_LEDGER_CHECKPOINT_OUTCOMES`
+# below; drift is caught by the enum-parity test in
+# `.claude/hooks/tests/test_session_end_memory_delta.py`.
+_SESSION_MEMORY_DELTA_OBSERVED_ALLOWLIST = frozenset({
+    "action", "session_id", "project",
+    "outcome", "files_count", "modified_count", "index_modified",
+    "anchor_source",
+    # _write_event envelope (pre-allowed so scrub doesn't strip on round-trip):
+    "ts", "event_schema",
+    "tokens_in", "tokens_out", "tokens_total",
+    "hmac", "hmac_error",
+})
+
+#: Closed outcome enum for `session_memory_delta_observed`. Off-enum values
+#: are COERCED to "other" — NEVER to "written": an unparseable observation
+#: must never be laundered into a healthy-class value (SESSIONEND-NOTE.md
+#: §4, the same S172 never-echo doctrine as every sibling).
+_SESSION_MEMORY_DELTA_OUTCOMES = frozenset({
+    "written", "absent", "index_only", "start_unknown",
+    "dir_missing", "not_writable", "error", "other",
+})
+
+#: Which resolution step of the session-start anchor answered
+#: (SESSIONEND-NOTE.md §2): the HMAC chain, the tool-lifecycle per-session
+#: state file, or none (terminal "I do not know" — never a guess).
+_SESSION_MEMORY_DELTA_ANCHOR_SOURCES = frozenset({
+    "chain", "state_file", "none",
 })
 
 # PLAN-179 W2 (ADR-195) — closed enums for the two checkpoint actions. These

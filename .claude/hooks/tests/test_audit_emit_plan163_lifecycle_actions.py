@@ -169,7 +169,8 @@ class TestRegistration(_Plan163Base):
         #   (ceremony_lint_unlock_used) = 326; +1 PLAN-182 W1 SENT-S319
         #   (salt_rotation_registered) = 327.
         # +3 PLAN-179 W2/W4 (ADR-195, staged-w24 pack; Owner decision 2026-08-25 "3 actions"): ledger_checkpoint_recorded + ledger_checkpoint_skipped + ledger_entry_rejected = 330.
-        self.assertEqual(len(self.ae._KNOWN_ACTIONS), 330)
+        # +1 PLAN-179 W2 US8 (wave-179close, SPEC v2.60): session_memory_delta_observed = 331.
+        self.assertEqual(len(self.ae._KNOWN_ACTIONS), 331)
 
     def test_never_passthrough(self) -> None:
         for action in ("directory_added_recorded", "notification_lifecycle"):
