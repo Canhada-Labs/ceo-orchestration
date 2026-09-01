@@ -72,10 +72,12 @@
 #     iglob lazy no ceremony_flags) E a r23 (glob do espelho lazy com
 #     cap+1 e deadline por item; linha ABSENT rotula "entries" — o count
 #     inclui o index; capture do git REFUTADO como residuo r11-F4 ja
-#     declarado) E a r24 (UM achado: sonda de listabilidade no plans dir
+#     declarado), a r24 (UM achado: sonda de listabilidade no plans dir
 #     — iglob engole 0111/ACL como zero-matches; agora incompleto ⇒
-#     recusa; medido na sombra pos-cura r24: 350 passed / 0 skips em
-#     7.47s), 0 skips;
+#     recusa) E a r25 (2 blocos "permanece ABERTO" do plano reconciliados
+#     com a evidencia de fechamento — r1-C3 supersede US1/(a), gate-boot
+#     MEDIDO S322, valvula entregue NESTA wave; grep ABERTO = 0; pointer
+#     do FOLLOWUP re-refutado: af6aaf8; bateria segue 350/0), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
