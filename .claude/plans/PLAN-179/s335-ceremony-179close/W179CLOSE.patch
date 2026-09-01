@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..6a4f902 100755
+index 0faffc3..42c0d39 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -95,7 +95,7 @@ index 0faffc3..6a4f902 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,13 +337,619 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,13 +337,634 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
@@ -455,7 +455,14 @@ index 0faffc3..6a4f902 100755
 +        state = _memory_dir_state(repo_root)
 +        slug = str(state.get("slug") or "")
 +        if not slug:
-+            out["outcome"] = "dir_missing"
++            # Rail r12 P2-c: slug vazio e falha de INFRA (runtime_paths
++            # ausente/raise num upgrade parcial), nunca evidencia de
++            # diretorio ausente — dir_missing aqui seria claim FALSO
++            # escondendo a falha real. outcome fica "error" (o default) e
++            # o breadcrumb nomeia a causa (regra fail-open de infra).
++            sys.stderr.write(
++                "[SessionEnd] memory-delta: slug unresolved (infra)\n"
++            )
 +            return out
 +        # Fronteira declarada (rail r11 P2-a, refutado): o DIRETORIO de
 +        # memoria pode ser um symlink legitimo (dotfiles managers) e e
@@ -486,6 +493,14 @@ index 0faffc3..6a4f902 100755
 +        # sem atividade nenhuma. Fora da janela ⇒ nao conta — o desenho
 +        # prefere perder a inventar (mesma doutrina da borda r3).
 +        scan_upper = time.time() + 2.0
++        # Rail r12 P2-a: janela INVERTIDA (rollback de relogio / VM
++        # restore DEPOIS do session_start): start acima do teto nao e
++        # janela — e "nao sei" (contrato terminal-unknown), nunca um
++        # "absent" fabricado por um range vazio.
++        if start_ts is not None and start_ts > scan_upper:
++            start_ts = None
++            anchor_source = "none"
++            out["anchor_source"] = "none"
 +        deadline = time.monotonic() + (_MEMORY_DELTA_SCAN_BUDGET_MS / 1000.0)
 +        files_count = 0
 +        modified: List[str] = []
@@ -717,7 +732,7 @@ index 0faffc3..6a4f902 100755
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +964,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +979,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -751,25 +766,24 @@ index 0faffc3..6a4f902 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
-@@ -353,15 +1009,29 @@ def main() -> int:
+@@ -353,15 +1024,29 @@ def main() -> int:
          sys.stdout.write(_emit_observe() + "\n")
          return 0
  
-+    # Rail r3 P2-b: PAYLOAD-first. CLAUDE_SESSION_ID e agent-spoofable
-+    # (consensus M2 — a mesma razao pela qual _session_scope_id do
-+    # PreCompact recusa o env), e o SPEC row do delta exige o id "threaded
-+    # from the harness event". Um env divergente do payload faria o scan
-+    # ancorar na sessao ERRADA (falso written/absent). O env sobrevive
-+    # apenas como fallback para um harness sem id no payload.
++    # Rail r12 P2-b (corrige a r3): o ciclo de vida LEGADO (session_end,
++    # closeout de dashboard/audit-tokens, cleanup) usa a MESMA precedencia
++    # env-first do SessionStart.py:559-561 — a v2.60 declara "NO change to
++    # any existing action", e um id divergente quebraria a correlacao
++    # start<->end das actions landadas. A doutrina payload-only da r3/r4
++    # (env e agent-spoofable, consensus M2) vale INTEIRA no rail NOVO:
++    # payload_sid viaja separado, sem fallback nenhum, e e o unico id que
++    # o memory-delta aceita (a trava de consumo esta testada).
 +    payload_sid = getattr(event, "session_id", "") or ""
      session_id = (
--        os.environ.get("CLAUDE_SESSION_ID", "")
+         os.environ.get("CLAUDE_SESSION_ID", "")
 -        or getattr(event, "session_id", "") or ""
-+        payload_sid
-+        or os.environ.get("CLAUDE_SESSION_ID", "")
++        or payload_sid
      ) or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-+    # (payload_sid segue SEPARADO: o rail de memory-delta exige proveniencia
-+    # de payload e recusa os dois fallbacks acima — rail r4 P2.)
      reason = os.environ.get("CLAUDE_SESSION_END_REASON", "normal")
      repo_root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
  
@@ -1958,10 +1972,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..3823cc8
+index 0000000..ae84afd
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,844 @@
+@@ -0,0 +1,886 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -2594,6 +2608,48 @@ index 0000000..3823cc8
 +        self.assertIn("1 topic(s) + index", mixed)
 +        self.assertIn("t1.md", mixed)
 +        self.assertNotIn("MEMORY.md", mixed)
++
++    def test_inverted_window_is_start_unknown(self) -> None:
++        """Rail r12 P2-a — clock rollback / VM restore AFTER session_start
++        puts the start above the observation ceiling: an empty range must
++        read as "I do not know", never as a fabricated "absent"."""
++        now = time.time()
++        self._mkmem("fresh.md", now)
++        self._seed_session_start(now + 7200)  # start no FUTURO
++        d = self._observe()
++        self.assertEqual(d["outcome"], "start_unknown")
++        self.assertEqual(d["anchor_source"], "none")
++        self.assertEqual(d["modified_count"], 0)
++
++    def test_unresolved_slug_is_error_not_dir_missing(self) -> None:
++        """Rail r12 P2-c — an empty slug is an INFRA failure (runtime_paths
++        missing/raising in a partial upgrade), never evidence of an absent
++        directory: dir_missing there would be a false claim hiding the
++        real fault."""
++        with mock.patch.object(
++            SessionEnd, "_memory_dir_state",
++            return_value={"writable": False, "memory_md_present": False,
++                          "slug": ""},
++        ):
++            d = self._observe()
++        self.assertEqual(d["outcome"], "error")
++        self.assertNotEqual(d["outcome"], "dir_missing")
++
++    def test_lifecycle_id_mirrors_sessionstart_env_first(self) -> None:
++        """Rail r12 P2-b — the LEGACY lifecycle (session_end, closeouts)
++        keeps SessionStart's env-first precedence (v2.60 declares existing
++        actions unchanged; a divergent id would break start<->end
++        correlation). The payload-only doctrine lives ENTIRELY in the new
++        delta rail (payload_sid, no fallback — consumer lock tested).
++        Source-level: main() is driven by the stdin adapter and not
++        honestly constructible here; the delta half is behavioural above."""
++        import inspect
++        src = inspect.getsource(SessionEnd.main)
++        env_pos = src.index('os.environ.get("CLAUDE_SESSION_ID"')
++        payload_pos = src.index("or payload_sid")
++        self.assertLess(env_pos, payload_pos,
++                        "legacy session_id must be env-first")
++        self.assertIn("payload_session_id=payload_sid", src)
 +
 +    def test_future_mtime_is_outside_the_window(self) -> None:
 +        """Rail r11 P2-b — a pre-existing topic with a FUTURE mtime (clock
