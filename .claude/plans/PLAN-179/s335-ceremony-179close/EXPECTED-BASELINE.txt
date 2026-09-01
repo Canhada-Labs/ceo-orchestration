@@ -40,12 +40,16 @@
 #     asserts de AUSENCIA), a r15 (charset ALLOWLIST no basename —
 #     preambulo de papel impossivel por construcao; espelho AC com flag
 #     de completude — >200 planos/ilegivel/cap-por-arquivo recusam;
-#     residuo vazio nos 2000 exatos NAO e truncamento) E a r16 (cap do
+#     residuo vazio nos 2000 exatos NAO e truncamento), a r16 (cap do
 #     espelho em BYTES via leitura binaria; janela da chain quebrada em
 #     b"\n" — U+2028 literal de ensure_ascii=False nao fragmenta linha
 #     assinada; traversal de null e SO-prefixo — lacuna fail-open depois
-#     de linha assinada recusa a ancora; medido na sombra pos-cura r16:
-#     338 passed / 0 skips em 11.17s), 0 skips;
+#     de linha assinada recusa a ancora) E a r17 (segmentos brancos caem
+#     ANTES do cap e do walk; registro nao-objeto e line_not_object —
+#     nunca legacy-null; rename/delete detectado pelo mtime do DIRETORIO
+#     bloqueia classe-ausencia; cap do LEDGER em BYTES — censo da classe
+#     r16 fechado no 2o e ultimo sitio; medido na sombra pos-cura r17:
+#     342 passed / 0 skips em 7.81s), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -55,7 +59,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=338
+EXPECTED_UNIT_PYTEST_PASSED=342
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
