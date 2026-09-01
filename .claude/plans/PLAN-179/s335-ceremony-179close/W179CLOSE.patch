@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..b76a4ca 100755
+index 0faffc3..2ed1c40 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -100,7 +100,7 @@ index 0faffc3..b76a4ca 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,13 +342,793 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,13 +342,796 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
@@ -816,8 +816,11 @@ index 0faffc3..b76a4ca 100755
 +    files_count = delta.get("files_count", 0)
 +    modified_count = delta.get("modified_count", 0)
 +    if outcome == "absent":
++        # Rail r23 P3-c: files_count inclui o MEMORY.md — "topics" aqui
++        # inflaria a contagem em 1 (o ramo written conta o index em
++        # separado). "entries" e o rotulo honesto.
 +        return (
-+            "SessionEnd: memory delta ABSENT (0 of %s topics touched this "
++            "SessionEnd: memory delta ABSENT (0 of %s entries touched this "
 +            "session) — ratify or record before closing" % files_count
 +        )
 +    if outcome in ("written", "index_only"):
@@ -896,7 +899,7 @@ index 0faffc3..b76a4ca 100755
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +1143,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +1146,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -930,7 +933,7 @@ index 0faffc3..b76a4ca 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
-@@ -353,15 +1188,29 @@ def main() -> int:
+@@ -353,15 +1191,29 @@ def main() -> int:
          sys.stdout.write(_emit_observe() + "\n")
          return 0
  
@@ -1180,7 +1183,7 @@ index fbc5498..8c64e77 100755
          if isinstance(flags, list) and flags:
              safe = [_sanitize_line(str(f)) for f in flags[:5] if f]
 diff --git a/.claude/hooks/check_precompact_continuity.py b/.claude/hooks/check_precompact_continuity.py
-index c0880a3..75ddb7b 100755
+index c0880a3..524c979 100755
 --- a/.claude/hooks/check_precompact_continuity.py
 +++ b/.claude/hooks/check_precompact_continuity.py
 @@ -88,10 +88,11 @@ from __future__ import annotations
@@ -1320,7 +1323,7 @@ index c0880a3..75ddb7b 100755
  
      Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
      strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
-@@ -1051,6 +1094,342 @@ def _progress_guard(
+@@ -1051,6 +1094,353 @@ def _progress_guard(
          _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
  
  
@@ -1441,11 +1444,22 @@ index c0880a3..75ddb7b 100755
 +        pattern = os.path.join(
 +            cwd, ".claude", "plans", _LEDGER_PLAN_FILE_GLOB
 +        )
-+        all_files = sorted(glob.glob(pattern))
++        # Rail r23 P2-a: enumeracao LAZY com cap+1 e deadline por item —
++        # glob.glob materializava e ordenava o conjunto INTEIRO antes de
++        # qualquer check. Acima do cap o indice ja e recusado (r15),
++        # entao a ordem dos coletados nao importa nesse ramo; ate o cap,
++        # o sort mantem o determinismo de antes.
++        all_files: List[str] = []
++        for _pf in glob.iglob(pattern):
++            if time.monotonic() >= deadline:
++                return index, False
++            all_files.append(_pf)
++            if len(all_files) > _LEDGER_AC_SCAN_MAX_FILES:
++                complete = False
++                break
++        all_files.sort()
 +    except Exception:
 +        return index, False
-+    if len(all_files) > _LEDGER_AC_SCAN_MAX_FILES:
-+        complete = False
 +    files = all_files[:_LEDGER_AC_SCAN_MAX_FILES]
 +    for plan_file in files:
 +        if time.monotonic() >= deadline:
@@ -1663,7 +1677,7 @@ index c0880a3..75ddb7b 100755
  def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
      """Build + persist the snapshot; emit the closed-enum event. Always allows.
  
-@@ -1078,8 +1457,12 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1078,8 +1468,12 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          "trigger": trigger,
          "plan_id": plan_id,
          "execution_unit": _execution_unit(plan_path, cwd, deadline),
@@ -1677,7 +1691,7 @@ index c0880a3..75ddb7b 100755
      }
      chain_length = 0
      try:
-@@ -1088,6 +1471,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1088,6 +1482,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          chain_length = 0
      outcome = _write_snapshot(plan_id, blob, session_id)
      _emit_snapshot_event(trigger, plan_id, chain_length, outcome)
@@ -2432,10 +2446,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..e432c13
+index 0000000..37cd3b4
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,1253 @@
+@@ -0,0 +1,1255 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -2628,7 +2642,9 @@ index 0000000..e432c13
 +        self.assertEqual(d["modified_count"], 0)
 +        self.assertEqual(d["files_count"], 2)
 +        self.assertEqual(d["anchor_source"], "chain")
-+        self.assertIn("ABSENT", SessionEnd._render_memory_delta_line(d))
++        line = SessionEnd._render_memory_delta_line(d)
++        self.assertIn("ABSENT", line)
++        self.assertIn("entries", line)  # r23 P3-c: nunca "topics" (inclui o index)
 +
 +    def test_written_delta_counts_only(self) -> None:
 +        now = time.time()
