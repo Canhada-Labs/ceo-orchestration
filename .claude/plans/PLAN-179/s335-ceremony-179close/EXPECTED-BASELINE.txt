@@ -60,7 +60,12 @@
 #     estruturalmente, maior token de slug real medido = 10; pointer do
 #     FOLLOWUP refutado com evidencia: rastreado no main desde af6aaf8,
 #     classe escopo-do-clone; bateria segue 347/0 — os asserts novos
-#     entraram em teste existente), 0 skips;
+#     entraram em teste existente) E a r21 (cap de run 24→14 = corpus
+#     medido 13 + 1, ratchet declarado; branch de plan-FILE REMOVIDO do
+#     espelho — fidelidade ao derive_scope canonico, teste re-escrito;
+#     deadline compartilhado atravessa _last_tag_time e o lock do
+#     hmac-breadcrumb — o indice nunca empurra o snapshot alem do
+#     TIME_BUDGET_S; bateria segue 347/0), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
