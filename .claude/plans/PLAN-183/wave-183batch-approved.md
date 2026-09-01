@@ -14,8 +14,8 @@ Wave: wave-183batch (PLAN-183 — «Batch menor + começar W1», ratificação d
 Patch: .claude/plans/PLAN-183/s335-ceremony-183batch/W183BATCH.patch
 Patch-sha256: 620053a28a99dc463bdd05e499142b10538557dce33eeacd7f558eb2b4a55ab7
 Patch-base: bc8265157ca2f9821a2544ef3123eb05ffbfd764
-Anchor-SHA: ANCHOR-PLACEHOLDER
-Data: DATA-PLACEHOLDER
+Anchor-SHA: ec7e8253d30087f1f39d197c84d8ddfb26b9e0b5
+Data: 2026-09-01
 
 ## O que esta wave entrega
 
@@ -74,7 +74,7 @@ validado VIVO contra o contrato do hook — mecanismo idêntico ao adrgate
   deste patch (3 paths), registrado para cura futura.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: APPROVED-BY-PLACEHOLDER
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-183
 Scope:
   - .claude/plans/PLAN-183-adopter-fitness.md

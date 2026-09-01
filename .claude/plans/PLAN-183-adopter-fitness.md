@@ -1392,7 +1392,20 @@ com a revisão refrescada, ou vira plano próprio.
       *"Check 5 - slow hooks"*, dirigido por MODELO).
 - [ ] AC-5 [P0] `smoke-install` passa a cobrir `.github/` e a EXECUTAR o
       CI entregue — hoje o grep pelos templates devolve zero.
-      — ◐ S334: entregue a metade NÃO-canônica — `scripts/tests/smoke-install.sh`
+      — ◕ **REGISTRO S335 (wave-183batch, medido contra o DISCO; rail
+      183-r1 barrou o flip — corretamente):** a «metade canônica» que a
+      nota ◐ abaixo declarava faltante JÁ EXISTE —
+      `.github/workflows/smoke-install.yml:485` invoca
+      `bash scripts/tests/smoke-install.sh` por inteiro, e a perna de
+      ativação vive em `scripts/tests/smoke-install.sh:180`: o template
+      entregue é ATIVADO no target, validado estruturalmente (11 steps
+      congelados) e por actionlint quando presente. A nota pré-`738007e`
+      («wiring faltante») está superada. **O checkbox NÃO flipa** porque o
+      texto do AC exige «EXECUTAR o CI entregue» e a execução REAL do
+      workflow ativado segue não feita — é exatamente W0-US3 + OQ-2
+      (decisão do Owner); um `[x]` aqui seria registro falso de
+      governança. Resta SÓ essa perna.
+      — ◐ S334 (nota histórica): entregue a metade NÃO-canônica — `scripts/tests/smoke-install.sh`
       ganhou a perna "PLAN-183 W0-US3 / AC-5" (`826688f`): o template
       entregue é ATIVADO no target descartável (rename do adopter),
       validado estruturalmente por stdlib SEMPRE (name/on/jobs + os 11

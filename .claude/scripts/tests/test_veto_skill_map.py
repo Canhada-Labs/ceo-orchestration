@@ -285,10 +285,24 @@ class TestVetoSkillsShippedAsNameOnly(_LiveTreeBase):
             "{0} has no skillOverrides map — this test would pass by "
             "vacuity".format(rel),
         )
-        return sorted(k for k in overrides if k in self.bound)
+        # rail 183-r5: o gerador grava overrides em DUAS grafias (frontmatter
+        # `name` e `dir_name`); `bound` e sempre slug. Comparar a chave CRUA
+        # contra slugs deixava "Kill Switches"/"Latency Budgets" invisiveis
+        # — invariante falso-verde. Normaliza via o INVENTARIO (autoridade),
+        # nunca por transformacao textual.
+        alias = {}
+        for skill in self.inventory:
+            alias[str(skill["name"])] = str(skill["dir_name"])
+            alias[str(skill["dir_name"])] = str(skill["dir_name"])
+        return sorted(
+            k for k in overrides if alias.get(k, k) in self.bound
+        )
 
-    @unittest.expectedFailure
     def test_no_veto_skill_is_shipped_name_only(self):
+        # wave-183batch (rail 183-r4 P1): o decorator @expectedFailure saiu e
+        # o teste-companheiro foi deletado EXATAMENTE como este arquivo
+        # instruia — a cerimonia landou o undemote das 7 chaves
+        # (veto-undemote-s335.jq) e o invariante e permanente.
         for rel in self.SETTINGS_TARGETS:
             offenders = self._offenders(rel)
             self.assertEqual(
@@ -296,18 +310,6 @@ class TestVetoSkillsShippedAsNameOnly(_LiveTreeBase):
                 "{0} demotes VETO-bearing skills to name-only: "
                 "{1}".format(rel, offenders),
             )
-
-    def test_the_expected_failure_marker_is_still_warranted(self):
-        total = 0
-        for rel in self.SETTINGS_TARGETS:
-            total += len(self._offenders(rel))
-        self.assertGreater(
-            total, 0,
-            "no VETO skill is shipped name-only any more — the ceremony "
-            "landed. Delete the @unittest.expectedFailure decorator on "
-            "test_no_veto_skill_is_shipped_name_only and delete THIS "
-            "test; the invariant is now permanent.",
-        )
 
 
 if __name__ == "__main__":

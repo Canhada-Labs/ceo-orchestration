@@ -1,5 +1,17 @@
 name: Validate CEO Orchestration governance
 
+# INERT AS SHIPPED. install.sh copies this file to
+# `.github/workflows/validate.yml.template` — the `.template` suffix means
+# GitHub Actions never reads it. Activation is an EXPLICIT adopter step
+# (plain `mv -n`: on a fresh install the file is UNTRACKED so `git mv`
+# fails — rail 183-r1 — and `-n` refuses to clobber a pre-existing
+# validate.yml of your own — rail 183-r3; pick another name if it exists,
+# and commit afterwards):
+#   mv -n .github/workflows/validate.yml.template \
+#         .github/workflows/validate.yml
+# (PLAN-183 wave-183batch; mirrors benchmarks.yml.template:3-7. The
+# frozen-subset contract — 11 steps + pins — is untouched: comments only.)
+
 on:
   pull_request:
   push:
