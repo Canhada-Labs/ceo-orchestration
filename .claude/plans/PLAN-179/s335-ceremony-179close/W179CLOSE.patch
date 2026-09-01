@@ -1183,7 +1183,7 @@ index fbc5498..8c64e77 100755
          if isinstance(flags, list) and flags:
              safe = [_sanitize_line(str(f)) for f in flags[:5] if f]
 diff --git a/.claude/hooks/check_precompact_continuity.py b/.claude/hooks/check_precompact_continuity.py
-index c0880a3..e48a192 100755
+index c0880a3..8730318 100755
 --- a/.claude/hooks/check_precompact_continuity.py
 +++ b/.claude/hooks/check_precompact_continuity.py
 @@ -88,10 +88,11 @@ from __future__ import annotations
@@ -1323,7 +1323,7 @@ index c0880a3..e48a192 100755
  
      Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
      strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
-@@ -1051,6 +1094,364 @@ def _progress_guard(
+@@ -1051,6 +1094,369 @@ def _progress_guard(
          _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
  
  
@@ -1540,11 +1540,16 @@ index c0880a3..e48a192 100755
 +    # Rail r9 P2-a: `-m` porque um commit de MERGE sob combined-diff
 +    # devolve lista VAZIA (o pointer sumia em commit valido); `-z` porque
 +    # o quoting C de nomes nao-ASCII (`"src/\303\251.py"`) nunca casaria
-+    # shape nem AC. Com -m os paths repetem por parent — dedupe preserva
-+    # a ordem e conta cada path UMA vez. Rail r10 P2-c: o slice cap vem
-+    # ANTES do dedupe (materializacao limitada mesmo num commit gigante).
++    # shape nem AC. Rail r26 P1-a: `--first-parent` porque `-m` sozinho
++    # devolve a UNIAO dos diffs contra TODOS os parents — num merge, as
++    # mudancas que ja estavam na MAINLINE entravam no tie-break e um
++    # PLAN-010 do historico vencia o PLAN-042 que o merge de fato
++    # INTRODUZIU (pointer errado). O delta vs primeiro parent e o que o
++    # merge trouxe. Rail r10 P2-c: o slice cap vem ANTES do dedupe
++    # (materializacao limitada mesmo num commit gigante).
 +    names = _git(
-+        ["log", "-1", "-m", "--name-only", "--format=", "-z"], cwd,
++        ["log", "-1", "-m", "--first-parent", "--name-only",
++         "--format=", "-z"], cwd,
 +        timeout_s=deadline - time.monotonic(), raw=True,
 +    )
 +    if not names:
@@ -1688,7 +1693,7 @@ index c0880a3..e48a192 100755
  def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
      """Build + persist the snapshot; emit the closed-enum event. Always allows.
  
-@@ -1078,8 +1479,12 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1078,8 +1484,12 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          "trigger": trigger,
          "plan_id": plan_id,
          "execution_unit": _execution_unit(plan_path, cwd, deadline),
@@ -1702,7 +1707,7 @@ index c0880a3..e48a192 100755
      }
      chain_length = 0
      try:
-@@ -1088,6 +1493,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1088,6 +1498,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          chain_length = 0
      outcome = _write_snapshot(plan_id, blob, session_id)
      _emit_snapshot_event(trigger, plan_id, chain_length, outcome)
@@ -1789,10 +1794,10 @@ index 572a320..372dd8c 100755
      def test_never_passthrough(self) -> None:
          for action in ("directory_added_recorded", "notification_lifecycle"):
 diff --git a/.claude/hooks/tests/test_check_compaction_continuity.py b/.claude/hooks/tests/test_check_compaction_continuity.py
-index d696c14..84c879f 100755
+index d696c14..7856fdc 100755
 --- a/.claude/hooks/tests/test_check_compaction_continuity.py
 +++ b/.claude/hooks/tests/test_check_compaction_continuity.py
-@@ -895,5 +895,646 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
+@@ -895,5 +895,682 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
          self.assertIn("other", _staged_ae._COMPACTION_SNAPSHOT_OUTCOMES)
  
  
@@ -1958,6 +1963,42 @@ index d696c14..84c879f 100755
 +            other.write_text("y\n", encoding="utf-8")
 +            g("add", "-A")
 +            g("commit", "-q", "-m", "mainline work")
++            g("merge", "-q", "--no-ff", "side", "-m", "merge side")
++            idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 5.0)
++        self.assertEqual(idx.get("plan_id"), "PLAN-042")
++
++    def test_merge_union_does_not_leak_mainline_plan(self):
++        """Rail r26 P1-a — `-m` alone unions the diffs against EVERY
++        parent: a PLAN-010 change already on the MAINLINE entered the
++        tie-break and beat the PLAN-042 the merge actually introduced
++        (wrong pointer). --first-parent keeps only the introduced
++        delta."""
++        import subprocess
++        import tempfile
++        import time as _t
++        with tempfile.TemporaryDirectory() as tmp:
++            self._mkrepo(tmp, ["README.md"])
++
++            def g(*args):
++                subprocess.run(
++                    ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
++                    + list(args),
++                    cwd=tmp, check=True, capture_output=True,
++                )
++            # Ramo lateral introduz PLAN-042:
++            g("checkout", "-qb", "side")
++            f42 = Path(tmp) / ".claude/plans/PLAN-042/notes.md"
++            f42.parent.mkdir(parents=True, exist_ok=True)
++            f42.write_text("x\n", encoding="utf-8")
++            g("add", "-A")
++            g("commit", "-q", "-m", "side: plan 42")
++            # Mainline avanca com PLAN-010 (ja na historia ANTES do merge):
++            g("checkout", "-q", "-")
++            f10 = Path(tmp) / ".claude/plans/PLAN-010/notes.md"
++            f10.parent.mkdir(parents=True, exist_ok=True)
++            f10.write_text("y\n", encoding="utf-8")
++            g("add", "-A")
++            g("commit", "-q", "-m", "mainline: plan 10")
 +            g("merge", "-q", "--no-ff", "side", "-m", "merge side")
 +            idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 5.0)
 +        self.assertEqual(idx.get("plan_id"), "PLAN-042")
