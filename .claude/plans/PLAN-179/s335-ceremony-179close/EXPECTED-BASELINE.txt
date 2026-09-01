@@ -65,7 +65,12 @@
 #     espelho — fidelidade ao derive_scope canonico, teste re-escrito;
 #     deadline compartilhado atravessa _last_tag_time e o lock do
 #     hmac-breadcrumb — o indice nunca empurra o snapshot alem do
-#     TIME_BUDGET_S; bateria segue 347/0), 0 skips;
+#     TIME_BUDGET_S) E a r22 (TROCA DE ARQUITETURA na classe de basename:
+#     canal de NOMES fechado — systemMessage e counts-only, sanitizer
+#     vira gate interno; resume nativo segmenta a ancora no ultimo
+#     session_end verificado do mesmo id; deadline antes de cada glob +
+#     iglob lazy no ceremony_flags; medido na sombra pos-cura r22:
+#     349 passed / 0 skips em 7.85s), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -75,7 +80,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=347
+EXPECTED_UNIT_PYTEST_PASSED=349
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
