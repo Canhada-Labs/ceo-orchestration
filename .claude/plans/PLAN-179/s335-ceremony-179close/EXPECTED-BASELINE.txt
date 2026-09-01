@@ -37,11 +37,15 @@
 #     entrada inerte para a heuristica constant-emitter + bypass de
 #     substring do ADR-158 — 18 paths viraram 17, EXPECTED_NOOP_REFS
 #     removida junto dos DOIS consumidores, 4g/V6d invertidos para
-#     asserts de AUSENCIA) E a r15 (charset ALLOWLIST no basename —
+#     asserts de AUSENCIA), a r15 (charset ALLOWLIST no basename —
 #     preambulo de papel impossivel por construcao; espelho AC com flag
 #     de completude — >200 planos/ilegivel/cap-por-arquivo recusam;
-#     residuo vazio nos 2000 exatos NAO e truncamento; medido na sombra
-#     pos-cura r15: 335 passed / 0 skips em 8.11s), 0 skips;
+#     residuo vazio nos 2000 exatos NAO e truncamento) E a r16 (cap do
+#     espelho em BYTES via leitura binaria; janela da chain quebrada em
+#     b"\n" — U+2028 literal de ensure_ascii=False nao fragmenta linha
+#     assinada; traversal de null e SO-prefixo — lacuna fail-open depois
+#     de linha assinada recusa a ancora; medido na sombra pos-cura r16:
+#     338 passed / 0 skips em 11.17s), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -51,7 +55,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=335
+EXPECTED_UNIT_PYTEST_PASSED=338
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
