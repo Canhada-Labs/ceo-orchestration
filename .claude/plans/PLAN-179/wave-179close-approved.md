@@ -12,8 +12,8 @@
 Plans: PLAN-179
 Wave: wave-179close (PLAN-179 — «Fechar tudo», ratificação do Owner de 2026-08-31: US7 = o snapshot do PreCompact vira ÍNDICE do ledger e o PostCompact rende o pointer ESTRUTURAL; US8 = SessionEnd ganha o rail stat-only de delta de memória implementado DA spec assinada, com a ação `session_memory_delta_observed` SPEC v2.60; US2b-valve = η advisory + doutrina do deny como limite de substrato; US1-veredito e AC(a) do W0 supersedidos pela r1-C3; e o flip `executing → done` do plano viaja NO patch, porque o done só é verdade no land)
 Patch: .claude/plans/PLAN-179/s335-ceremony-179close/W179CLOSE.patch
-Patch-sha256: 4c972fcf3a817b73a2a77198022d849f5397716f3594d0053e510528222e490c
-Patch-base: bd3ff66d945c75cf2379d7ee534fc66625b9f2fe
+Patch-sha256: c791b04aede32f0b9b90530086b32dda35c4028a5061bf2d50038ee8a2283506
+Patch-base: 592d4c635fa5e55f55d02991320e2bb4bdcd6609
 Anchor-SHA: ANCHOR-PLACEHOLDER
 Data: DATA-PLACEHOLDER
 
@@ -124,7 +124,6 @@ Scope:
   - .claude/hooks/_lib/audit_emit.py
   - .claude/hooks/check_postcompact_reinject.py
   - .claude/hooks/check_precompact_continuity.py
-  - .claude/hooks/harness-noop-allowlist.txt
   - .claude/hooks/tests/test_audit_emit_api_contract.py
   - .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py
   - .claude/hooks/tests/test_check_compaction_continuity.py
