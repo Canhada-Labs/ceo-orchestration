@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..00b85e5 100755
+index 0faffc3..10853d7 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -99,7 +99,7 @@ index 0faffc3..00b85e5 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,13 +341,711 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,13 +341,730 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
@@ -356,7 +356,13 @@ index 0faffc3..00b85e5 100755
 +                if ts is None:
 +                    continue
 +                if not _anchor_verified(_idx, ev, line):
-+                    continue
++                    # Rail r18 P2-a: o PRIMEIRO match e o start mais
++                    # antigo da janela (contrato oldest-match). Se ele nao
++                    # verifica (null fail-open, forjado), cair para um
++                    # restart pos-compact MAIS NOVO encolheria a janela e
++                    # fabricaria absent — inverificavel ⇒ terminal
++                    # unknown, nunca um anchor mais tardio.
++                    return None, "none"
 +                # Rail r8 P2-d: a verificacao (parse de predecessores +
 +                # HMAC) pode cruzar o deadline — o contrato assinado exige
 +                # exaustao => None, nunca uma resposta tardia (mesma
@@ -621,6 +627,19 @@ index 0faffc3..00b85e5 100755
 +        out["files_count"] = files_count
 +        out["modified_count"] = len(modified)
 +        out["index_modified"] = index_modified
++        # Rail r18 P2-b: re-stat do DIRETORIO pos-scan — com overlap
++        # suportado, um rename/delete entre o stat pre-scan e o iterdir
++        # escaparia da flag (o mtime do dir e pegajoso: um bump em
++        # qualquer momento ate aqui aparece agora). O residuo — bump
++        # DEPOIS deste re-stat — e TOCTOU irredutivel de um observador
++        # stat-only, declarado.
++        if start_ts is not None and not structural_seen:
++            try:
++                _dstat2 = memory_dir.stat()
++                if start_ts <= _dstat2.st_mtime <= scan_upper:
++                    structural_seen = True
++            except OSError:
++                scan_incomplete = True
 +        names: List[str] = []
 +        for name in sorted(modified):
 +            if len(names) >= _MEMORY_DELTA_MAX_NAMES:
@@ -813,7 +832,7 @@ index 0faffc3..00b85e5 100755
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +1060,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +1079,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -847,7 +866,7 @@ index 0faffc3..00b85e5 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
-@@ -353,15 +1105,29 @@ def main() -> int:
+@@ -353,15 +1124,29 @@ def main() -> int:
          sys.stdout.write(_emit_observe() + "\n")
          return 0
  
@@ -2256,10 +2275,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..b6169e5
+index 0000000..08c5270
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,1092 @@
+@@ -0,0 +1,1137 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -2885,6 +2904,51 @@ index 0000000..b6169e5
 +        )
 +        self.assertIsNotNone(ts)
 +        self.assertEqual(anchor, "chain")
++
++    def test_unverifiable_oldest_start_never_falls_to_restart(self) -> None:
++        """Rail r18 P2-a — the FIRST in-window match is the oldest start
++        (oldest-match contract). If it cannot verify (fail-open null row),
++        anchoring on a LATER compact-restart row would shrink the window
++        and fabricate absent; the resolution is terminal unknown."""
++        now = time.time()
++        # O start REAL desta sessao caiu em fail-open (sem hmac):
++        self._seed_session_start(now - 3600, sign=False)
++        # O restart pos-compact veio assinado... mas assinado sobre o
++        # arquivo cuja ultima linha nao tem hmac ⇒ o seed encadeia de
++        # GENESIS; com a janela cobrindo o arquivo ele VERIFICARIA:
++        self._seed_session_start(now - 60)
++        ts, src = SessionEnd._session_start_ts(
++            self.SESSION_ID, self.repo_root
++        )
++        self.assertEqual((ts, src), (None, "none"))
++
++    def test_dir_mtime_rechecked_after_scan(self) -> None:
++        """Rail r18 P2-b — a rename/delete AFTER the pre-scan dir stat but
++        before/durante o iterdir escapava da flag estrutural. O re-stat
++        pos-scan pega o bump pegajoso. Simulado com stat de duas fases
++        no diretorio (1a leitura = velho; 2a = dentro da janela)."""
++        now = time.time()
++        self._mkmem("stale.md", now - 7200)
++        self._age_dir(now - 7200)
++        self._seed_session_start(now - 3600)
++        real_stat = Path.stat
++        mem_dir = self.memory_dir
++        calls = {"n": 0}
++
++        def _phased_stat(self_path, **kw):
++            st = real_stat(self_path, **kw)
++            if self_path == mem_dir:
++                calls["n"] += 1
++                if calls["n"] >= 2:
++                    lst = list(st)
++                    lst[8] = int(now)  # st_mtime dentro da janela
++                    return os.stat_result(tuple(lst))
++            return st
++
++        with mock.patch.object(Path, "stat", _phased_stat):
++            d = self._observe()
++        self.assertEqual(d["outcome"], "error")
++        self.assertNotIn(d["outcome"], ("absent", "index_only"))
 +
 +    def test_rename_only_session_never_claims_absent(self) -> None:
 +        """Rail r17 P2-c — a rename keeps the file's old mtime under the
