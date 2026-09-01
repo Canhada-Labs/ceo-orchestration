@@ -72,7 +72,10 @@
 #     iglob lazy no ceremony_flags) E a r23 (glob do espelho lazy com
 #     cap+1 e deadline por item; linha ABSENT rotula "entries" — o count
 #     inclui o index; capture do git REFUTADO como residuo r11-F4 ja
-#     declarado; bateria segue 349/0 em 7.56s), 0 skips;
+#     declarado) E a r24 (UM achado: sonda de listabilidade no plans dir
+#     — iglob engole 0111/ACL como zero-matches; agora incompleto ⇒
+#     recusa; medido na sombra pos-cura r24: 350 passed / 0 skips em
+#     7.47s), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -82,7 +85,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=349
+EXPECTED_UNIT_PYTEST_PASSED=350
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
