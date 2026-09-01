@@ -48,8 +48,11 @@
 #     ANTES do cap e do walk; registro nao-objeto e line_not_object —
 #     nunca legacy-null; rename/delete detectado pelo mtime do DIRETORIO
 #     bloqueia classe-ausencia; cap do LEDGER em BYTES — censo da classe
-#     r16 fechado no 2o e ultimo sitio; medido na sombra pos-cura r17:
-#     342 passed / 0 skips em 7.81s), 0 skips;
+#     r16 fechado no 2o e ultimo sitio) E a r18 (primeiro match
+#     inverificavel e terminal-unknown — nunca cai para restart mais
+#     novo; re-stat do dir POS-scan fecha o TOCTOU do interleaving, com o
+#     residuo pos-re-stat declarado; medido na sombra pos-cura r18:
+#     344 passed / 0 skips em 8.02s), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -59,7 +62,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=342
+EXPECTED_UNIT_PYTEST_PASSED=344
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
