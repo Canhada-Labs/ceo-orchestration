@@ -455,13 +455,17 @@ _svr_obs="$( { grep -c '^| v2.60 |' "$WT/$SPEC_FILE" || true; } )"
   || die "4f: linha de versao v2.60 aparece $_svr_obs vez(es) no SPEC, esperado $(_expect EXPECTED_SPEC_VERSION_ROWS)"
 ok "4f: SPEC carrega a linha de acao e a de versao v2.60 (1 de cada)"
 
-# 4g — o noop-allowlist existe e nomeia SessionEnd.py (a rota gate-side do
-# ADR-160 §7 que a spec assinada exige para o estado off).
-[ -f "$WT/$NOOP_ALLOWLIST" ] || die "4g: $NOOP_ALLOWLIST ausente da arvore-sombra"
-_noop_obs="$( { grep -c '^SessionEnd.py$' "$WT/$NOOP_ALLOWLIST" || true; } )"
-[ "$_noop_obs" = "$(_expect EXPECTED_NOOP_REFS)" ] \
-  || die "4g: 'SessionEnd.py' aparece $_noop_obs vez(es) no noop-allowlist, esperado $(_expect EXPECTED_NOOP_REFS)"
-ok "4g: noop-allowlist presente com a entrada do SessionEnd"
+# 4g — INVERTIDO no rail r14: o noop-allowlist foi RETIRADO do patch (a
+# entrada era inerte para a heuristica constant-emitter — o comando
+# registrado e um hook real — e abria bypass de substring do ADR-158 §2).
+# O gate agora prova que a remocao FICA removida: o arquivo nao pode
+# existir na arvore-sombra.
+if [ -f "$WT/$NOOP_ALLOWLIST" ]; then
+  die "4g: $NOOP_ALLOWLIST EXISTE na arvore-sombra — a rota gate-side foi
+  retirada no rail r14 (inerte + bypass ADR-158); um patch que a re-embarca
+  precisa de rodada de rail propria"
+fi
+ok "4g: noop-allowlist AUSENTE (remocao r14 preservada)"
 
 # 4h — o flip do plano viaja VERDADEIRO no patch: status done (1x),
 # completed_at presente, e ZERO checkbox aberto no plano inteiro (os 4

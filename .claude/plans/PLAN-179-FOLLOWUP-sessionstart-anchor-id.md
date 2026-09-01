@@ -58,7 +58,19 @@ alinhamento do PRODUTOR, unica direcao compativel com a doutrina.
       cadeia (grep por leitores do action) para confirmar que nenhum
       depende da grafia env-first do produtor antes do flip.
 
-## Item 2 — entrega do `harness-noop-allowlist.txt` ao adopter (rail r8 P2-a)
+## Item 2 — RETIRADO na r14 (o artefato saiu do patch)
+
+> **Status: WITHDRAWN (rail r14, S336).** A r14 provou que a entrada era
+> INERTE para o propósito declarado (o comando registrado é um hook real
+> — a heurística constant-emitter do gate nunca dispara sobre ele; o
+> próprio comentário do arquivo admitia) e que o waiver de substring
+> abria bypass do ADR-158 §2 (um comando substituído por
+> `printf 'SessionEnd.py disabled'` passaria calado). O
+> `harness-noop-allowlist.txt` foi REMOVIDO do patch da wave-179close;
+> não há mais nada a entregar. O texto abaixo fica como registro
+> histórico do achado r8 que o motivou.
+
+## [HISTÓRICO — retirado] entrega do `harness-noop-allowlist.txt` ao adopter (rail r8 P2-a)
 
 Achado REAL da r8, registrado em
 `.claude/plans/PLAN-179/s335-ceremony-179close/rail-round-8.md`:
@@ -72,13 +84,13 @@ FORA do conjunto revisado pela cerimonia wave-179close (alarga-lo pos-rail
 assinaria superficie nao-revisada), e entrega de artefato e o dominio da
 maquinaria delivery-routes (PLAN-183) — proximo do trem ratificado.
 
-- [ ] `[P1][US2][scripts/install.sh]` Entregar o allowlist no install
+- retirado: `(P1)(US2)(scripts/install.sh)` Entregar o allowlist no install
       (glob consciente OU rota em `scripts/delivery-routes.tsv` — decidir
       pelo mecanismo do PLAN-183 W1; localizadores literais migram no
       MESMO patch). Check: smoke-install prova o arquivo no target.
-- [ ] `[P1][US2][scripts/upgrade.sh]` Mesma entrega no upgrade (hash-gate
+- retirado: `(P1)(US2)(scripts/upgrade.sh)` Mesma entrega no upgrade (hash-gate
       da familia D1). Check: e2e de upgrade prova o arquivo entregue.
-- [ ] `[P2][US2]` Residual DECLARADO ate landar: adopter com o
+- retirado: `(P2)(US2)` Residual DECLARADO ate landar: adopter com o
       kill-switch em `off` e o gate harness-config rodando ve
       vermelho-falso; workaround documentavel = criar o txt a mao ou
       marker `_comment` (rota (a) do gate).

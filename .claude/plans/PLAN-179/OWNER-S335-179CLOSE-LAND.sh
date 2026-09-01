@@ -725,10 +725,14 @@ _gac_obs="$( { grep -c '^session_memory_delta_observed$' "$GOLDEN" || true; } )"
   || die "V6c: a acao aparece $_gac_obs vez(es) no golden, esperado $(_expect EXPECTED_GOLDEN_ACTION_REFS)."
 grep -qF "# count: $(_expect EXPECTED_GOLDEN_COUNT)" "$GOLDEN" \
   || die "V6c: o golden nao declara 'count: $(_expect EXPECTED_GOLDEN_COUNT)' no cabecalho."
-_noop_obs="$( { grep -c '^SessionEnd.py$' "$NOOP_ALLOWLIST" || true; } )"
-[ "$_noop_obs" = "$(_expect EXPECTED_NOOP_REFS)" ] \
-  || die "V6d: 'SessionEnd.py' aparece $_noop_obs vez(es) no noop-allowlist, esperado $(_expect EXPECTED_NOOP_REFS)."
-ok "V6c-d: golden (acao + count) e noop-allowlist no lugar"
+# V6d INVERTIDO no rail r14: o noop-allowlist foi RETIRADO do patch (a
+# entrada era inerte para a heuristica constant-emitter e abria bypass de
+# substring do ADR-158 §2). O gate prova que a remocao FICA removida.
+if [ -f "$NOOP_ALLOWLIST" ]; then
+  die "V6d: $NOOP_ALLOWLIST EXISTE na arvore — a rota gate-side foi retirada
+  no rail r14 (inerte + bypass ADR-158); re-embarca-la exige rodada propria."
+fi
+ok "V6c-d: golden (acao + count) no lugar; noop-allowlist AUSENTE (r14)"
 
 # ---------------------------------------------------------------------------
 step "V3 — o registry de audit, nos DOIS sentidos"

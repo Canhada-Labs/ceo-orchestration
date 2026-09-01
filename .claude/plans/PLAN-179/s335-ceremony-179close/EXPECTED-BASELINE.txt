@@ -32,24 +32,27 @@
 #     INTEIRO no rail novo) E os 2 da r13 (mtime acima do teto e ANOMALIA:
 #     bloqueia classe-ausencia e a exclusividade do index_only — rollback
 #     PARCIAL nunca fabrica absent; breadcrumb ALTO na falha de infra do
-#     emitter; medido na sombra pos-cura r13: 331 passed / 0 skips em
-#     7.29s), 0 skips;
+#     emitter) E a r14 (escopo TRUNCADO nao elege plano — {} em cap/
+#     deadline estourados; harness-noop-allowlist.txt RETIRADO do patch:
+#     entrada inerte para a heuristica constant-emitter + bypass de
+#     substring do ADR-158 — 18 paths viraram 17, EXPECTED_NOOP_REFS
+#     removida junto dos DOIS consumidores, 4g/V6d invertidos para
+#     asserts de AUSENCIA), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
 #   - 198 ADRs (esta wave nao toca o corpus de ADRs);
 #   - verify-counts rc 0 medido na sombra (margem de ±5% absorveu +25 testes).
-EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks/check_postcompact_reinject.py .claude/hooks/SessionEnd.py .claude/hooks/_lib/audit_emit.py SPEC/v1/audit-log.schema.md .claude/data/audit-registry.golden.txt .claude/hooks/harness-noop-allowlist.txt .claude/hooks/tests/test_session_end_memory_delta.py .claude/hooks/tests/test_check_compaction_continuity.py .claude/hooks/tests/test_audit_emit_api_contract.py .claude/hooks/tests/test_check_ledger_checkpoint.py .claude/hooks/tests/test_w5_scrub_enforcement.py .claude/hooks/tests/test_codex_egress_proof_telemetry.py .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py .claude/hooks/tests/test_git_bypass_guard.py .claude/plans/PLAN-179-context-continuity-durable-state.md .claude/plans/PLAN-179/LEDGER.md docs/CONTEXT-CONTINUITY-GUIDE.md"
+EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks/check_postcompact_reinject.py .claude/hooks/SessionEnd.py .claude/hooks/_lib/audit_emit.py SPEC/v1/audit-log.schema.md .claude/data/audit-registry.golden.txt .claude/hooks/tests/test_session_end_memory_delta.py .claude/hooks/tests/test_check_compaction_continuity.py .claude/hooks/tests/test_audit_emit_api_contract.py .claude/hooks/tests/test_check_ledger_checkpoint.py .claude/hooks/tests/test_w5_scrub_enforcement.py .claude/hooks/tests/test_codex_egress_proof_telemetry.py .claude/hooks/tests/test_audit_emit_plan163_lifecycle_actions.py .claude/hooks/tests/test_git_bypass_guard.py .claude/plans/PLAN-179-context-continuity-durable-state.md .claude/plans/PLAN-179/LEDGER.md docs/CONTEXT-CONTINUITY-GUIDE.md"
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=331
+EXPECTED_UNIT_PYTEST_PASSED=332
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
 EXPECTED_SPEC_ACTION_ROWS=1
 EXPECTED_SPEC_VERSION_ROWS=1
-EXPECTED_NOOP_REFS=1
 EXPECTED_PLAN_OPEN_CHECKBOXES=0
 EXPECTED_ETA_PERMILLE=887
 EXPECTED_ADR_COUNT=198
