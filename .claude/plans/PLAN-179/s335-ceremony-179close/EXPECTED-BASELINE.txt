@@ -54,8 +54,13 @@
 #     residuo pos-re-stat declarado) E a r19 (pernas semanticas rodam
 #     tambem na copia separador-EXPANDIDA — diretiva hifenizada dentro do
 #     alfabeto cai; ts imparseavel no oldest e terminal-unknown; mtime de
-#     DIR acima do teto e skew; guia §7 refresh do fechamento; medido na
-#     sombra pos-cura r19: 347 passed / 0 skips em 8.33s), 0 skips;
+#     DIR acima do teto e skew; guia §7 refresh do fechamento) E a r20
+#     (expansao camel/letra-digito na copia semantica + run alfabetico
+#     >24 recusado fail-closed — a concatenacao INTOKENIZAVEL cai
+#     estruturalmente, maior token de slug real medido = 10; pointer do
+#     FOLLOWUP refutado com evidencia: rastreado no main desde af6aaf8,
+#     classe escopo-do-clone; bateria segue 347/0 — os asserts novos
+#     entraram em teste existente), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
