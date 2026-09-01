@@ -1183,7 +1183,7 @@ index fbc5498..8c64e77 100755
          if isinstance(flags, list) and flags:
              safe = [_sanitize_line(str(f)) for f in flags[:5] if f]
 diff --git a/.claude/hooks/check_precompact_continuity.py b/.claude/hooks/check_precompact_continuity.py
-index c0880a3..524c979 100755
+index c0880a3..e48a192 100755
 --- a/.claude/hooks/check_precompact_continuity.py
 +++ b/.claude/hooks/check_precompact_continuity.py
 @@ -88,10 +88,11 @@ from __future__ import annotations
@@ -1323,7 +1323,7 @@ index c0880a3..524c979 100755
  
      Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
      strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
-@@ -1051,6 +1094,353 @@ def _progress_guard(
+@@ -1051,6 +1094,364 @@ def _progress_guard(
          _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
  
  
@@ -1441,6 +1441,17 @@ index c0880a3..524c979 100755
 +    index: Dict[str, str] = {}
 +    complete = True
 +    try:
++        # Rail r24 P2-a: glob.iglob ENGOLE falha de enumeracao — um
++        # `.claude/plans` pesquisavel mas nao-listavel (0111/ACL/erro de
++        # I/O) renderia zero matches com complete=True, e o plan_dir
++        # direto elegeria SEM a perna AC (pointer errado). A sonda
++        # explicita de listabilidade converte a falha em incompleto.
++        _plans_dir = os.path.join(cwd, ".claude", "plans")
++        try:
++            with os.scandir(_plans_dir) as _probe:
++                next(_probe, None)
++        except OSError:
++            return index, False
 +        pattern = os.path.join(
 +            cwd, ".claude", "plans", _LEDGER_PLAN_FILE_GLOB
 +        )
@@ -1677,7 +1688,7 @@ index c0880a3..524c979 100755
  def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
      """Build + persist the snapshot; emit the closed-enum event. Always allows.
  
-@@ -1078,8 +1468,12 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1078,8 +1479,12 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          "trigger": trigger,
          "plan_id": plan_id,
          "execution_unit": _execution_unit(plan_path, cwd, deadline),
@@ -1691,7 +1702,7 @@ index c0880a3..524c979 100755
      }
      chain_length = 0
      try:
-@@ -1088,6 +1482,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1088,6 +1493,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          chain_length = 0
      outcome = _write_snapshot(plan_id, blob, session_id)
      _emit_snapshot_event(trigger, plan_id, chain_length, outcome)
@@ -1778,10 +1789,10 @@ index 572a320..372dd8c 100755
      def test_never_passthrough(self) -> None:
          for action in ("directory_added_recorded", "notification_lifecycle"):
 diff --git a/.claude/hooks/tests/test_check_compaction_continuity.py b/.claude/hooks/tests/test_check_compaction_continuity.py
-index d696c14..23632cc 100755
+index d696c14..84c879f 100755
 --- a/.claude/hooks/tests/test_check_compaction_continuity.py
 +++ b/.claude/hooks/tests/test_check_compaction_continuity.py
-@@ -895,5 +895,611 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
+@@ -895,5 +895,646 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
          self.assertIn("other", _staged_ae._COMPACTION_SNAPSHOT_OUTCOMES)
  
  
@@ -2179,6 +2190,41 @@ index d696c14..23632cc 100755
 +            g("add", "-A")
 +            g("commit", "-q", "-m", "giant commit")
 +            idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 5.0)
++        self.assertEqual(idx, {})
++
++    def test_unlistable_plans_dir_refuses_election(self):
++        """Rail r24 P2-a — a searchable-but-unlistable plans dir makes
++        iglob yield NOTHING without raising: complete would stay True and
++        a direct plan_dir path would elect WITHOUT the AC leg. The
++        explicit listability probe converts that into a refusal."""
++        import subprocess
++        import tempfile
++        import time as _t
++        with tempfile.TemporaryDirectory() as tmp:
++            self._mkrepo(tmp, [
++                ".claude/plans/PLAN-042/notes.md",
++                "src/impl.py",
++            ])
++
++            def g(*args):
++                subprocess.run(
++                    ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
++                    + list(args),
++                    cwd=tmp, check=True, capture_output=True,
++                )
++            (Path(tmp) / ".claude/plans/PLAN-042/notes.md").write_text(
++                "n2\n", encoding="utf-8"
++            )
++            impl = Path(tmp) / "src/impl.py"
++            impl.write_text("y = 2\n", encoding="utf-8")
++            g("add", "-A")
++            g("commit", "-q", "-m", "mixed touch")
++            plans = Path(tmp) / ".claude" / "plans"
++            os.chmod(plans, 0o111)  # pesquisavel, nao-listavel
++            try:
++                idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 5.0)
++            finally:
++                os.chmod(plans, 0o755)
 +        self.assertEqual(idx, {})
 +
 +    def test_ceremony_globs_respect_expired_deadline(self):
