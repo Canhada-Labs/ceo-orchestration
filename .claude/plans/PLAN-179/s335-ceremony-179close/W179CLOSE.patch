@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..42c0d39 100755
+index 0faffc3..dcbf682 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -95,7 +95,7 @@ index 0faffc3..42c0d39 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,13 +337,634 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,13 +337,657 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
@@ -506,6 +506,7 @@ index 0faffc3..42c0d39 100755
 +        modified: List[str] = []
 +        index_modified = False
 +        scan_incomplete = False
++        skewed_seen = False
 +        for entry in memory_dir.iterdir():
 +            if time.monotonic() > deadline:
 +                # Rail r6 P2-e: partial COUNTS, plural — every count
@@ -546,7 +547,16 @@ index 0faffc3..42c0d39 100755
 +            files_count += 1
 +            if start_ts is None:
 +                continue
-+            if start_ts <= _st.st_mtime <= scan_upper:
++            if _st.st_mtime > scan_upper:
++                # Rail r13 P2-a (refina r11): mtime acima do teto com
++                # janela NAO-invertida (rollback PARCIAL: o relogio voltou
++                # mas segue depois do start) e ANOMALIA — nem "written"
++                # (r11: pode ser skew de metadados) nem uma classe de
++                # ausencia (o arquivo PODE ter sido escrito na sessao
++                # pre-rollback). Marca e segue; o outcome resolve abaixo.
++                skewed_seen = True
++                continue
++            if start_ts <= _st.st_mtime:
 +                # Window predicate, not authorship (rail r6 P2-a): any
 +                # writer's mtime inside the window counts — see docstring.
 +                # Upper-bounded (r11 P2-b): um mtime futuro fica FORA.
@@ -584,17 +594,19 @@ index 0faffc3..42c0d39 100755
 +            # Positive evidence stands even on an incomplete pass (counts may
 +            # UNDERCOUNT; the outcome class is still truthful) — but the
 +            # EXCLUSIVE claim does not: index_only asserts "nothing but the
-+            # index changed", which an unreadable entry may falsify (rail r7
-+            # P2-d). An incomplete pass degrades to "written".
++            # index changed", which an unreadable entry (rail r7 P2-d) or a
++            # skew-anomalous one (rail r13 P2-a) may falsify. Both degrade
++            # to "written".
 +            out["outcome"] = (
 +                "index_only"
 +                if (index_modified and len(modified) == 1
-+                    and not scan_incomplete)
++                    and not scan_incomplete and not skewed_seen)
 +                else "written"
 +            )
-+        elif scan_incomplete:
-+            # Rail r1 P2-4: an incomplete pass with nothing observed must
-+            # never be laundered into an absence-class claim.
++        elif scan_incomplete or skewed_seen:
++            # Rail r1 P2-4 + r13 P2-a: um passe incompleto — ou com mtime
++            # anomalo acima do teto — sem nada observado nunca vira claim
++            # de classe-ausencia.
 +            out["outcome"] = "error"
 +        elif start_ts is None:
 +            out["outcome"] = "start_unknown"
@@ -637,7 +649,18 @@ index 0faffc3..42c0d39 100755
 +            session_id=session_id,
 +            project=str(repo_root),
 +        )
-+    except Exception:
++    except Exception as e:
++        # Rail r13 P2-b: falha de infra deixa breadcrumb ALTO (regra
++        # fail-open) — sem ele a evidencia assinada do US8 sumiria em
++        # silencio num upgrade parcial. So o TIPO da excecao (o repr
++        # poderia carregar internals do emitter).
++        try:
++            sys.stderr.write(
++                "[SessionEnd] memory-delta emit failed: %s\n"
++                % type(e).__name__
++            )
++        except Exception:
++            pass
 +        return
 +
 +
@@ -732,7 +755,7 @@ index 0faffc3..42c0d39 100755
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +979,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +1002,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -766,7 +789,7 @@ index 0faffc3..42c0d39 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
-@@ -353,15 +1024,29 @@ def main() -> int:
+@@ -353,15 +1047,29 @@ def main() -> int:
          sys.stdout.write(_emit_observe() + "\n")
          return 0
  
@@ -1972,10 +1995,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..ae84afd
+index 0000000..11258af
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,886 @@
+@@ -0,0 +1,914 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -2652,17 +2675,45 @@ index 0000000..ae84afd
 +        self.assertIn("payload_session_id=payload_sid", src)
 +
 +    def test_future_mtime_is_outside_the_window(self) -> None:
-+        """Rail r11 P2-b — a pre-existing topic with a FUTURE mtime (clock
-+        rollback, metadata restore, touch -t) satisfied the lower-bound-only
-+        predicate FOREVER, emitting "written" with no session activity.
-+        The window now has an upper bound captured at observation time."""
++        """Rail r11 P2-b + r13 P2-a — a FUTURE mtime (clock rollback,
++        metadata restore, touch -t) never counts as "written" (r11 upper
++        bound), and — r13 refinement — an above-ceiling mtime on a regular
++        file is an ANOMALY: with nothing else observed the outcome is
++        "error", never a fabricated absence claim (partial rollback: the
++        file may genuinely have been written pre-rollback)."""
 +        now = time.time()
 +        self._mkmem("skewed.md", now + 86400.0)
 +        self._seed_session_start(now - 3600)
 +        d = self._observe()
-+        self.assertEqual(d["outcome"], "absent")
++        self.assertEqual(d["outcome"], "error")
++        self.assertNotIn(d["outcome"], ("written", "index_only", "absent"))
 +        self.assertEqual(d["modified_count"], 0)
 +        self.assertEqual(d["files_count"], 1)
++
++    def test_emitter_infra_failure_leaves_breadcrumb(self) -> None:
++        """Rail r13 P2-b — a raising typed emitter is an INFRA failure:
++        fail-open, but with a LOUD stderr breadcrumb (silent loss of the
++        US8 signed evidence is the class this rail exists to expose)."""
++        import io
++        now = time.time()
++        self._mkmem("t1.md", now)
++        self._seed_session_start(now - 3600)
++        d = self._observe()
++
++        def _boom(**kwargs):
++            raise RuntimeError("emitter down")
++
++        captured_err = io.StringIO()
++        from _lib import audit_emit as _ae
++        with mock.patch.object(
++            _ae, "emit_session_memory_delta_observed", _boom, create=True,
++        ), mock.patch.object(sys, "stderr", captured_err):
++            SessionEnd._emit_session_memory_delta(
++                session_id=self.SESSION_ID, repo_root=self.repo_root,
++                delta=d,
++            )
++        self.assertIn("memory-delta emit failed", captured_err.getvalue())
++        self.assertIn("RuntimeError", captured_err.getvalue())
 +
 +    def test_symlink_target_edit_is_not_memory_written(self) -> None:
 +        """Rail r10 P2-d — a symlink in the memory dir must never follow
