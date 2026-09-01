@@ -12,8 +12,8 @@
 Plans: PLAN-179
 Wave: wave-179close (PLAN-179 — «Fechar tudo», ratificação do Owner de 2026-08-31: US7 = o snapshot do PreCompact vira ÍNDICE do ledger e o PostCompact rende o pointer ESTRUTURAL; US8 = SessionEnd ganha o rail stat-only de delta de memória implementado DA spec assinada, com a ação `session_memory_delta_observed` SPEC v2.60; US2b-valve = η advisory + doutrina do deny como limite de substrato; US1-veredito e AC(a) do W0 supersedidos pela r1-C3; e o flip `executing → done` do plano viaja NO patch, porque o done só é verdade no land)
 Patch: .claude/plans/PLAN-179/s335-ceremony-179close/W179CLOSE.patch
-Patch-sha256: 7b93c9331c769b037ab843ea7b1c2ea5e6b777648ede44089589d893bc177e39
-Patch-base: c2f9cc6971b974a5e8debe82bc26df24c4e5b06d
+Patch-sha256: ed92e37423c5c1aa15f9f6557e5a6f17e55ca4007cbab886d50fcb785091a768
+Patch-base: 433971bb35020924da117407b2f45fbe82165c20
 Anchor-SHA: ANCHOR-PLACEHOLDER
 Data: DATA-PLACEHOLDER
 
