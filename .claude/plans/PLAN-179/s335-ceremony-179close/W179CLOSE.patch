@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..b9faa73 100755
+index 0faffc3..2d36eeb 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -99,7 +99,7 @@ index 0faffc3..b9faa73 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,13 +341,666 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,13 +341,684 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
@@ -199,7 +199,16 @@ index 0faffc3..b9faa73 100755
 +                fh.seek(max(0, size - _MEMORY_DELTA_ANCHOR_MAX_BYTES))
 +                raw = fh.read(_MEMORY_DELTA_ANCHOR_MAX_BYTES)
 +            window_covers_file = size <= _MEMORY_DELTA_ANCHOR_MAX_BYTES
-+            lines = raw.decode("utf-8", "replace").splitlines()
++            # Rail r16 P2-b: split nos BYTES b"\n", nunca str.splitlines()
++            # — producao grava ensure_ascii=False e um campo com U+2028/
++            # U+2029 literal (validos em string JSON) fragmentaria a
++            # PROPRIA linha assinada em pedacos imparseaveis (anchor
++            # perdido) e inflaria a contagem da janela de 200 linhas.
++            lines = [
++                seg.decode("utf-8", "replace") for seg in raw.split(b"\n")
++            ]
++            if lines and lines[-1] == "":
++                lines.pop()  # newline final: nao e registro
 +            # Rail r8 P2-c: o corte por LINHAS tambem descarta prefixo — a
 +            # flag tem de refletir os DOIS caps (SPEC: genesis so quando a
 +            # janela cobre o arquivo INTEIRO). Sem isto, um arquivo pequeno
@@ -269,6 +278,7 @@ index 0faffc3..b9faa73 100755
 +                # sabe o que ficou fora => inverificavel, skip).
 +                prev = None
 +                j = idx - 1
++                crossed_null = False
 +                while j >= 0:
 +                    try:
 +                        prev_obj = json.loads(lines[j])
@@ -279,12 +289,20 @@ index 0faffc3..b9faa73 100755
 +                        if isinstance(prev_obj, dict) else None
 +                    )
 +                    if isinstance(prev_hex, str) and len(prev_hex) == 64:
++                        # Rail r16 P2-c: null DEPOIS de linha assinada e
++                        # LACUNA fail-open (verify_chain acusa a transicao)
++                        # — atravessa-la e consumir ancora de cadeia
++                        # QUEBRADA. O traversal de nulls so vale para o
++                        # PREFIXO legado (nada assinado acima).
++                        if crossed_null:
++                            return False
 +                        try:
 +                            prev = _ah.from_hex(prev_hex)
 +                        except Exception:
 +                            return False
 +                        break
 +                    if prev_hex is None:
++                        crossed_null = True
 +                        j -= 1  # legado/fail-open: atravessa (verify_chain)
 +                        continue
 +                    return False  # hmac presente mas mal-formado
@@ -768,7 +786,7 @@ index 0faffc3..b9faa73 100755
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +1015,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +1033,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -802,7 +820,7 @@ index 0faffc3..b9faa73 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
-@@ -353,15 +1060,29 @@ def main() -> int:
+@@ -353,15 +1078,29 @@ def main() -> int:
          sys.stdout.write(_emit_observe() + "\n")
          return 0
  
@@ -1052,7 +1070,7 @@ index fbc5498..8c64e77 100755
          if isinstance(flags, list) and flags:
              safe = [_sanitize_line(str(f)) for f in flags[:5] if f]
 diff --git a/.claude/hooks/check_precompact_continuity.py b/.claude/hooks/check_precompact_continuity.py
-index c0880a3..c8d394c 100755
+index c0880a3..4ff6190 100755
 --- a/.claude/hooks/check_precompact_continuity.py
 +++ b/.claude/hooks/check_precompact_continuity.py
 @@ -88,10 +88,11 @@ from __future__ import annotations
@@ -1122,7 +1140,7 @@ index c0880a3..c8d394c 100755
  
      Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
      strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
-@@ -1051,6 +1079,333 @@ def _progress_guard(
+@@ -1051,6 +1079,337 @@ def _progress_guard(
          _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
  
  
@@ -1259,16 +1277,20 @@ index c0880a3..c8d394c 100755
 +            continue
 +        plan_id = m.group(1)
 +        try:
-+            with open(
-+                plan_file, "r", encoding="utf-8", errors="replace"
-+            ) as fh:
-+                text = fh.read(_LEDGER_AC_SCAN_MAX_BYTES + 1)
++            # Rail r16 P2-a: leitura BINARIA — TextIO.read(n) conta
++            # CARACTERES, e 300 KiB de chars de 2 bytes passariam
++            # inteiros com complete=True alem do cap prometido em BYTES.
++            # O corte byte-a-byte pode partir um char multibyte na borda;
++            # errors="replace" o degrada em U+FFFD, inofensivo ao regex.
++            with open(plan_file, "rb") as fh:
++                raw_bytes = fh.read(_LEDGER_AC_SCAN_MAX_BYTES + 1)
 +        except OSError:
 +            complete = False
 +            continue
-+        if len(text) > _LEDGER_AC_SCAN_MAX_BYTES:
++        if len(raw_bytes) > _LEDGER_AC_SCAN_MAX_BYTES:
 +            complete = False
-+            text = text[:_LEDGER_AC_SCAN_MAX_BYTES]
++            raw_bytes = raw_bytes[:_LEDGER_AC_SCAN_MAX_BYTES]
++        text = raw_bytes.decode("utf-8", "replace")
 +        for ac_path in _LEDGER_AC_PATH_RE.findall(text):
 +            candidate = ac_path.strip().strip("`").strip()
 +            # "./" e PREFIXO, nao classe de caracteres (espelho fiel:
@@ -1456,7 +1478,7 @@ index c0880a3..c8d394c 100755
  def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
      """Build + persist the snapshot; emit the closed-enum event. Always allows.
  
-@@ -1078,6 +1433,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1078,6 +1437,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          "trigger": trigger,
          "plan_id": plan_id,
          "execution_unit": _execution_unit(plan_path, cwd, deadline),
@@ -1467,7 +1489,7 @@ index c0880a3..c8d394c 100755
          "ceremony_flags": _ceremony_flags(cwd, deadline),
          "hmac_chain": _hmac_chain_breadcrumb(),
      }
-@@ -1088,6 +1447,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1088,6 +1451,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          chain_length = 0
      outcome = _write_snapshot(plan_id, blob, session_id)
      _emit_snapshot_event(trigger, plan_id, chain_length, outcome)
@@ -1554,10 +1576,10 @@ index 572a320..372dd8c 100755
      def test_never_passthrough(self) -> None:
          for action in ("directory_added_recorded", "notification_lifecycle"):
 diff --git a/.claude/hooks/tests/test_check_compaction_continuity.py b/.claude/hooks/tests/test_check_compaction_continuity.py
-index d696c14..388ef20 100755
+index d696c14..0ec97b4 100755
 --- a/.claude/hooks/tests/test_check_compaction_continuity.py
 +++ b/.claude/hooks/tests/test_check_compaction_continuity.py
-@@ -895,5 +895,537 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
+@@ -895,5 +895,571 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
          self.assertIn("other", _staged_ae._COMPACTION_SNAPSHOT_OUTCOMES)
  
  
@@ -1833,6 +1855,40 @@ index d696c14..388ef20 100755
 +            impl.write_text("y = 2\n", encoding="utf-8")
 +            g("add", "-A")
 +            g("commit", "-q", "-m", "mixed")
++            idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 10.0)
++        self.assertEqual(idx, {})
++
++    def test_ac_scan_cap_is_bytes_not_chars(self):
++        """Rail r16 P2-a — TextIO.read(n) counts CHARS: a plan of ~270 KiB
++        in two-byte characters was read in full with complete=True past
++        the promised 256 KiB BYTE cap (and its beyond-cap AC elected a
++        plan). Binary read caps in bytes; the beyond-cap AC is lost and
++        the incomplete mirror refuses."""
++        import subprocess
++        import tempfile
++        import time as _t
++        with tempfile.TemporaryDirectory() as tmp:
++            self._mkrepo(tmp, ["README.md"])
++
++            def g(*args):
++                subprocess.run(
++                    ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
++                    + list(args),
++                    cwd=tmp, check=True, capture_output=True,
++                )
++            plans = Path(tmp) / ".claude" / "plans"
++            plans.mkdir(parents=True, exist_ok=True)
++            big = ("á" * 135000) + \
++                "\n- [ ] [P1][US1][src/impl.py] the thing\n"
++            (plans / "PLAN-042-big.md").write_text(big, encoding="utf-8")
++            impl = Path(tmp) / "src" / "impl.py"
++            impl.parent.mkdir(parents=True, exist_ok=True)
++            impl.write_text("y = 1\n", encoding="utf-8")
++            g("add", "-A")
++            g("commit", "-q", "-m", "big plan")
++            impl.write_text("y = 2\n", encoding="utf-8")
++            g("add", "src/impl.py")
++            g("commit", "-q", "-m", "impl only")
 +            idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 10.0)
 +        self.assertEqual(idx, {})
 +
@@ -2148,10 +2204,10 @@ index 5031368..7f089ba 100755
          # git_bypass.GIT_BYPASS_FLAG_CLASSES MUST equal the audit_emit mirror.
 diff --git a/.claude/hooks/tests/test_session_end_memory_delta.py b/.claude/hooks/tests/test_session_end_memory_delta.py
 new file mode 100644
-index 0000000..9a44450
+index 0000000..7d6106c
 --- /dev/null
 +++ b/.claude/hooks/tests/test_session_end_memory_delta.py
-@@ -0,0 +1,940 @@
+@@ -0,0 +1,1011 @@
 +"""PLAN-179 W2 US8 — SessionEnd memory-delta observation (wave-179-close).
 +
 +Test surface from the SIGNED spec ``PLAN-179/staged-w24/SESSIONEND-NOTE.md``
@@ -2767,6 +2823,77 @@ index 0000000..9a44450
 +        )
 +        self.assertIsNotNone(ts)
 +        self.assertEqual(anchor, "chain")
++
++    def test_u2028_in_signed_row_does_not_fragment(self) -> None:
++        """Rail r16 P2-b — production writes ensure_ascii=False; a literal
++        U+2028 in a string field is legal JSON, but str.splitlines()
++        fragmented the SIGNED row into unparseable pieces (anchor lost).
++        Byte-level b"\\n" splitting keeps the record whole."""
++        now = time.time()
++        log_path = self._anchor_log_path()
++        log_path.parent.mkdir(parents=True, exist_ok=True)
++        iso = datetime.fromtimestamp(now - 3600, tz=timezone.utc).strftime(
++            "%Y-%m-%dT%H:%M:%SZ"
++        )
++        row = {
++            "action": "session_start",
++            "session_id": self.SESSION_ID,
++            "ts": iso,
++            "project": "/tmp/weird path",
++            "hmac_error": None,
++        }
++        from _lib import audit_hmac as ah
++        key = ah.get_or_create_key()
++        _sans = {k: v for k, v in row.items()
++                 if k not in ("hmac", "hmac_error")}
++        row["hmac"] = ah.hex_digest(
++            ah.compute_entry_hmac(key, ah.GENESIS_PREV, _sans)
++        )
++        with open(log_path, "a", encoding="utf-8") as fh:
++            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
++        self._mkmem("fresh.md", now)
++        d = self._observe()
++        self.assertEqual(d["anchor_source"], "chain")
++        self.assertEqual(d["outcome"], "written")
++
++    def test_null_gap_after_signed_row_refuses_anchor(self) -> None:
++        """Rail r16 P2-c — an hmac:null row BETWEEN signed rows is a
++        fail-open GAP (verify_chain flags the transition): traversing it
++        consumed an anchor from a BROKEN chain. Null traversal is
++        prefix-only (nothing signed above)."""
++        now = time.time()
++        # Linha assinada A (outra sessao, genesis):
++        self._seed_session_start(now - 7200, session_id="other-sess")
++        log_path = self._anchor_log_path()
++        row_a = json.loads(
++            log_path.read_text(encoding="utf-8").splitlines()[0]
++        )
++        with open(log_path, "a", encoding="utf-8") as fh:
++            fh.write(json.dumps({"action": "noise", "hmac": None}) + "\n")
++        # Candidato assinado com prev = digest de A (escritor que
++        # atravessa a lacuna — exatamente o cenario do achado):
++        iso = datetime.fromtimestamp(now - 3600, tz=timezone.utc).strftime(
++            "%Y-%m-%dT%H:%M:%SZ"
++        )
++        cand = {
++            "action": "session_start",
++            "session_id": self.SESSION_ID,
++            "ts": iso,
++            "hmac_error": None,
++        }
++        from _lib import audit_hmac as ah
++        key = ah.get_or_create_key()
++        _sans = {k: v for k, v in cand.items()
++                 if k not in ("hmac", "hmac_error")}
++        cand["hmac"] = ah.hex_digest(
++            ah.compute_entry_hmac(key, ah.from_hex(row_a["hmac"]), _sans)
++        )
++        with open(log_path, "a", encoding="utf-8") as fh:
++            fh.write(json.dumps(cand) + "\n")
++        self._mkmem("fresh.md", now)
++        d = self._observe()
++        self.assertEqual(d["outcome"], "start_unknown")
++        self.assertEqual(d["anchor_source"], "none")
 +
 +    def test_anchor_deadline_rechecked_after_verification(self) -> None:
 +        """Rail r8 P2-d — HMAC verification can be the step that crosses

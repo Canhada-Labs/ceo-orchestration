@@ -2,7 +2,7 @@
 
 Patch: `W179CLOSE.patch` (derivado da sombra `shadow-179close` pelo
 `finalize-179close.sh`; base declarada em `BASE-SHA.txt`).
-Patch-sha256: 22277ea3d05116bf063c95cac382eba336186371a3f287a3790c3c7f1b921b9a
+Patch-sha256: 13de16d32b4eb89b1cc77ff56d4be7baeab56c7cfe70837066d1f2ca5bca2dcd
 
 ## Por path (18)
 
