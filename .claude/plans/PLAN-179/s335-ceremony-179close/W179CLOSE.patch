@@ -20,7 +20,7 @@ index e445c00..2793211 100644
  session_stop
  settings_tamper_detected
 diff --git a/.claude/hooks/SessionEnd.py b/.claude/hooks/SessionEnd.py
-index 0faffc3..4a66841 100755
+index 0faffc3..c27e1e2 100755
 --- a/.claude/hooks/SessionEnd.py
 +++ b/.claude/hooks/SessionEnd.py
 @@ -17,6 +17,15 @@ Fires at the end of every Claude Code session. Four responsibilities:
@@ -100,7 +100,7 @@ index 0faffc3..4a66841 100755
  
  def _emit_observe(system_message: Optional[str] = None) -> str:
      """Schema-compliant lifecycle hook output (see SessionStart docstring)."""
-@@ -297,13 +342,761 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
+@@ -297,13 +342,763 @@ def _flush_audit_log_filelock(repo_root: Path) -> None:
          return
  
  
@@ -433,12 +433,14 @@ index 0faffc3..4a66841 100755
 +    # copia expandida abre separador E fronteiras camel/letra-digito
 +    # para os validadores verem palavras. A forma que NENHUM validador
 +    # pode tokenizar — run alfabetico continuo longo
-+    # ("ignoreallpreviousinstructions...") — cai ESTRUTURALMENTE: uma
-+    # diretiva precisa de comprimento e o maior token de um slug real
-+    # deste repo tem 10 chars (medido); >24 e recusado fail-closed
-+    # (forma que o matcher nao parseia e finding, nao skip).
++    # ("ignorepreviousrules", 19 — rail r21 P1-a) — cai ESTRUTURALMENTE:
++    # uma diretiva precisa de comprimento; o maior token do corpus REAL
++    # de memoria deste repo mede 13 ("authorization", sonda r21) e o cap
++    # e medido+1 = 14, fail-closed (forma que o matcher nao parseia e
++    # finding, nao skip). Ratchet de CORPUS, nao prova semantica —
++    # declarado no registro r21.
 +    for _run in re.findall(r"[A-Za-z]+", norm):
-+        if len(_run) > 24:
++        if len(_run) > 14:
 +            return None
 +    expanded = re.sub(r"[._-]+", " ", norm)
 +    expanded = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", expanded)
@@ -864,7 +866,7 @@ index 0faffc3..4a66841 100755
          # PLAN-125 WS-1 — evict the per-session lifecycle record file (MF-PERF-2).
          _cleanup_tool_lifecycle(session_id)
          _flush_audit_log_filelock(repo_root)
-@@ -318,18 +1111,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
+@@ -318,18 +1113,28 @@ def decide(*, repo_root: Path, session_id: str, reason: str) -> str:
              repo_root=repo_root,
              session_id=session_id,
          )
@@ -898,7 +900,7 @@ index 0faffc3..4a66841 100755
      except Exception as e:
          sys.stderr.write(f"[SessionEnd] FATAL: {type(e).__name__}: {e}\n")
          return _emit_observe()
-@@ -353,15 +1156,29 @@ def main() -> int:
+@@ -353,15 +1158,29 @@ def main() -> int:
          sys.stdout.write(_emit_observe() + "\n")
          return 0
  
@@ -1148,7 +1150,7 @@ index fbc5498..8c64e77 100755
          if isinstance(flags, list) and flags:
              safe = [_sanitize_line(str(f)) for f in flags[:5] if f]
 diff --git a/.claude/hooks/check_precompact_continuity.py b/.claude/hooks/check_precompact_continuity.py
-index c0880a3..b1b7b30 100755
+index c0880a3..20c797f 100755
 --- a/.claude/hooks/check_precompact_continuity.py
 +++ b/.claude/hooks/check_precompact_continuity.py
 @@ -88,10 +88,11 @@ from __future__ import annotations
@@ -1207,7 +1209,64 @@ index c0880a3..b1b7b30 100755
      except (subprocess.TimeoutExpired, OSError):
          return ""
  
-@@ -891,7 +917,9 @@ def _progress_guard(
+@@ -320,7 +346,10 @@ def _execution_unit(plan_path: Optional[str], cwd: str, deadline: float) -> Dict
+     return {"plan_path": rel}
+ 
+ 
+-def _last_tag_time(cwd: str) -> float:
++def _last_tag_time(cwd: str, timeout_s: float = 2.0) -> float:
++    # Rail r21 P2-c: o caller sob deadline compartilhado passa o RESTO —
++    # o default fixo de 2.0s somado a fatia do indice estourava o
++    # TIME_BUDGET_S de 2.5s do gate num repositorio lento.
+     out = _git(
+         [
+             "for-each-ref",
+@@ -330,6 +359,7 @@ def _last_tag_time(cwd: str) -> float:
+             "refs/tags",
+         ],
+         cwd,
++        timeout_s=timeout_s,
+     )
+     try:
+         return float(out)
+@@ -341,7 +371,7 @@ def _ceremony_flags(cwd: str, deadline: float) -> List[str]:
+     """Pending Owner-GPG ceremonies — executable finish-*.sh newer than the
+     last tag (the closeout-guard's signal). Repo-relative, sanitized, sorted,
+     bounded. These are POINTERS the operator must act on post-compaction."""
+-    tag_time = _last_tag_time(cwd)
++    tag_time = _last_tag_time(cwd, timeout_s=deadline - time.monotonic())
+     found = set()
+     patterns = (
+         os.path.join(cwd, ".claude", "plans", "PLAN-*", "staged", "**", "finish-*.sh"),
+@@ -361,7 +391,7 @@ def _ceremony_flags(cwd: str, deadline: float) -> List[str]:
+     return sorted(found)[:MAX_CEREMONY_FLAGS]
+ 
+ 
+-def _hmac_chain_breadcrumb() -> Dict[str, Any]:
++def _hmac_chain_breadcrumb(deadline: Optional[float] = None) -> Dict[str, Any]:
+     """READ-ONLY snapshot of the HMAC-chain anchor: last-hmac hex PREFIX +
+     chain-length counter.
+ 
+@@ -396,10 +426,16 @@ def _hmac_chain_breadcrumb() -> Dict[str, Any]:
+         except Exception:
+             out["last_hmac_prefix"] = ""
+ 
+-    if _have_lock and FileLock is not None:
++    # Rail r21 P2-c: a espera de lock respeita o deadline compartilhado —
++    # sem resto de budget, leitura lockless direta (advisory sidecar; a
++    # corrida de um evento e inofensiva, doutrina ja declarada acima).
++    _lock_wait = 0.5
++    if deadline is not None:
++        _lock_wait = min(0.5, deadline - time.monotonic())
++    if _have_lock and FileLock is not None and _lock_wait > 0:
+         try:
+             lock_path = audit_hmac.last_hmac_path().with_name("audit-log.lock")
+-            with FileLock(lock_path, timeout=0.5):
++            with FileLock(lock_path, timeout=_lock_wait):
+                 _read()
+             return out
+         except FileLockTimeout:
+@@ -891,7 +927,9 @@ def _progress_guard(
      channel, and by the time the hook fires the harness has already decided to
      compact. So the guard is implemented honestly as its observable half — a
      stderr breadcrumb for the operator plus one closed-enum audit event — and
@@ -1218,7 +1277,7 @@ index c0880a3..b1b7b30 100755
  
      Emits ``context_pressure_observed`` with ``event_source="precompact"``, the
      strict ``plan_id`` and the crossed integer PERCENT rung in ``used_bucket``.
-@@ -1051,6 +1079,343 @@ def _progress_guard(
+@@ -1051,6 +1089,342 @@ def _progress_guard(
          _breadcrumb("pressure emit failed (%s)" % str(exc)[:80])
  
  
@@ -1275,9 +1334,10 @@ index c0880a3..b1b7b30 100755
 +def _plan_id_from_path(path: str) -> Optional[str]:
 +    """``PLAN-NNN`` from a repo-relative path, by PATH SHAPE alone.
 +
-+    Matches ``.claude/plans/PLAN-NNN/...`` (plan dir) and
-+    ``.claude/plans/PLAN-NNN-*.md`` (the plan file). No session state, no
-+    env, no audit log — emenda r1-C6."""
++    Matches ONLY ``.claude/plans/PLAN-NNN/...`` (plan dir) — espelho
++    FIEL do ``derive_scope`` canonico (rail r21 P2-b: o arquivo de plano
++    NAO classifica direto; cai em unmatched e segue a perna AC). No
++    session state, no env, no audit log — emenda r1-C6."""
 +    base = ".claude/plans/"
 +    if not path.startswith(base + "PLAN-"):
 +        return None
@@ -1287,15 +1347,13 @@ index c0880a3..b1b7b30 100755
 +        return None
 +    if tail[8] == "/":
 +        return ident
-+    if tail[8] == "-":
-+        # Rail r7 P2-e: o shape documentado do branch `-` e um ARQUIVO de
-+        # plano (`PLAN-NNN-*.md`) — sem estas duas checagens, um path
-+        # qualquer com hifen na 9a posicao (`PLAN-042-not-a-plan`, ou um
-+        # diretorio `PLAN-042-x/f.md`) derivava id e podia vencer o
-+        # tie-break apontando para um ledger errado/inexistente.
-+        if "/" in tail or not tail.endswith(".md"):
-+            return None
-+        return ident
++    # Rail r21 P2-b (remove o branch `-` que a r7 apenas apertara): o
++    # `derive_scope` CANONICO so aceita plan_dir (`PLAN-NNN/**`) e paths
++    # AC-declarados — um 3o shape (o ARQUIVO de plano) fazia este espelho
++    # eleger plano DIFERENTE do checkpoint no mesmo commit (empate
++    # PLAN-010-x.md vs PLAN-020/n.md ⇒ pointers divergentes). Fidelidade
++    # de espelho e o contrato; o arquivo de plano cai em unmatched e
++    # segue a MESMA perna AC do canonico.
 +    return None
 +
 +
@@ -1562,7 +1620,7 @@ index c0880a3..b1b7b30 100755
  def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
      """Build + persist the snapshot; emit the closed-enum event. Always allows.
  
-@@ -1078,6 +1443,10 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+@@ -1078,8 +1452,12 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          "trigger": trigger,
          "plan_id": plan_id,
          "execution_unit": _execution_unit(plan_path, cwd, deadline),
@@ -1571,9 +1629,12 @@ index c0880a3..b1b7b30 100755
 +        # sections + last commit instead of copying state.
 +        "ledger_index": _ledger_index(cwd, deadline),
          "ceremony_flags": _ceremony_flags(cwd, deadline),
-         "hmac_chain": _hmac_chain_breadcrumb(),
+-        "hmac_chain": _hmac_chain_breadcrumb(),
++        "hmac_chain": _hmac_chain_breadcrumb(deadline),
      }
-@@ -1088,6 +1457,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
+     chain_length = 0
+     try:
+@@ -1088,6 +1466,9 @@ def gate(event: Dict[str, Any], cwd: Optional[str] = None) -> Dict[str, Any]:
          chain_length = 0
      outcome = _write_snapshot(plan_id, blob, session_id)
      _emit_snapshot_event(trigger, plan_id, chain_length, outcome)
@@ -1660,10 +1721,10 @@ index 572a320..372dd8c 100755
      def test_never_passthrough(self) -> None:
          for action in ("directory_added_recorded", "notification_lifecycle"):
 diff --git a/.claude/hooks/tests/test_check_compaction_continuity.py b/.claude/hooks/tests/test_check_compaction_continuity.py
-index d696c14..04fb8f8 100755
+index d696c14..852e726 100755
 --- a/.claude/hooks/tests/test_check_compaction_continuity.py
 +++ b/.claude/hooks/tests/test_check_compaction_continuity.py
-@@ -895,5 +895,590 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
+@@ -895,5 +895,597 @@ class TestEmitGenericScrubDenyByDefault(unittest.TestCase):
          self.assertIn("other", _staged_ae._COMPACTION_SNAPSHOT_OUTCOMES)
  
  
@@ -1774,12 +1835,19 @@ index d696c14..04fb8f8 100755
 +            idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 5.0)
 +        self.assertEqual(idx.get("plan_id"), "PLAN-042")
 +
-+    def test_plan_file_shape_also_matches(self):
-+        """`.claude/plans/PLAN-NNN-slug.md` (the plan FILE) counts too."""
-+        self.assertEqual(
++    def test_plan_file_shape_does_not_match_directly(self):
++        """Rail r21 P2-b — o espelho e FIEL ao derive_scope canonico:
++        apenas plan_dir classifica direto. O ARQUIVO de plano (3o shape
++        que a r7 apertara) cai em unmatched e segue a perna AC — um
++        empate PLAN-010-x.md vs PLAN-020/n.md elegia planos DIFERENTES
++        nos dois derivadores para o MESMO commit."""
++        self.assertIsNone(
 +            _pre_hook._plan_id_from_path(
 +                ".claude/plans/PLAN-179-context-continuity-durable-state.md"
-+            ),
++            )
++        )
++        self.assertEqual(
++            _pre_hook._plan_id_from_path(".claude/plans/PLAN-179/x.md"),
 +            "PLAN-179",
 +        )
 +        self.assertIsNone(_pre_hook._plan_id_from_path("docs/PLAN-179.md"))
