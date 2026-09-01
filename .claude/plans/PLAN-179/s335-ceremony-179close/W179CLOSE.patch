@@ -3766,7 +3766,7 @@ index db7816f..38b1b23 100755
  
  class TestAdminKeyScrub(_W5Base):
 diff --git a/.claude/plans/PLAN-179-context-continuity-durable-state.md b/.claude/plans/PLAN-179-context-continuity-durable-state.md
-index 2ef3878..94c8ae5 100644
+index 2ef3878..4ae1758 100644
 --- a/.claude/plans/PLAN-179-context-continuity-durable-state.md
 +++ b/.claude/plans/PLAN-179-context-continuity-durable-state.md
 @@ -1,8 +1,10 @@
@@ -3839,7 +3839,48 @@ index 2ef3878..94c8ae5 100644
  (b) a taxa de `plan_id=unknown` está medida, não estimada — **MEDIDA E
  VAZIA**: `{'unknown': 2}`, N = 1, sem taxa derivável, e a
  não-derivabilidade está declarada por escrito (§D do relatório);
-@@ -454,6 +471,31 @@ veredito já escrito em `floor-reduction.md` §6. **US7 e US8 seguem
+@@ -340,8 +357,15 @@ reescrita em `w0-measurement.md` §E (`F` = 97.097/98.636,
+ plano NÃO foi reescrita in loco e fica marcada como estimativa
+ REFUTADA (`F=50k`, ≈2,0× abaixo do medido), superseded por §C/§E; a
+ DECOMPOSIÇÃO de `F` segue `estimativa declarada, fonte ausente` (§B).
+-O AC de saída permanece **ABERTO** por (a) e pelo sub-item ausente do
+-relatório (custo de gate-boot re-pago).
++O AC de saída **FECHOU na cerimônia wave-179close** (conclusão
++reescrita no rail r25 — um `done` com criterio aberto é claim falsa):
++o item (a) foi SUPERSEDIDO pela emenda r1-C3 da própria cerimônia
++(registro `s335-ceremony-179close/rail-round-1.md`), e o sub-item do
++custo de gate-boot re-pago foi MEDIDO na S322 — `F` = 97.292 tokens na
++fronteira de uma compactação real, com controle cold-F independente em
++97.097 (delta 0,20%; instrumento `PLAN-179/w0/gateboot_repay.py`; série
++cold-F n=41 em `w0-measurement.md` §E). As duas evidências viajam com o
++`done` desta wave.
+ 
+ ### W1 — Curar o snapshot vazio (o bug real)
+ 
+@@ -433,12 +457,16 @@ tem **515 linhas** (`wc -l`) e landou em `08e25f4` (2026-08-18
+ 15:44:52 -0300) — **DOIS DIAS ANTES** de a nota entrar em `18de98e`
+ (2026-08-20 14:38:42 -0300). `F` e `T` estão MEDIDOS lá, não pendentes.
+ 
+-**Seguem ABERTOS no W0, deliberadamente:** (i) o veredito VIVO do canal
+-(US1 #1 — a sonda está shipada, mas exige uma compaction paga,
+-operador/local); (ii) UM sub-item do relatório (custo de gate-boot
+-re-pago — ausente do arquivo, ver checkbox); (iii) a VÁLVULA do US2b —
+-o OBSERVADOR de pressão shipou em `c042f9e`, mas HALTAR não tem canal
+-em PreCompact. O AC de saída W0 permanece aberto por (i) e (ii). W2/W4
++**Reconciliação r25 (um `done` não carrega "permanece aberto"):**
++(i) o veredito VIVO do canal (US1 #1) foi SUPERSEDIDO pela emenda r1-C3
++da cerimônia wave-179close — a sonda segue shipada e rodá-la é ação de
++OPERADOR pós-land (uma compaction paga), fora do AC do plano;
++(ii) o custo de gate-boot re-pago foi MEDIDO na S322 (97.292 na
++fronteira real / cold-F 97.097, delta 0,20% — instrumento
++`PLAN-179/w0/gateboot_repay.py`); (iii) a VÁLVULA do US2b entregou
++NESTA wave como `_eta_advisory` (η=887‰ das constantes medidas;
++«negar» documentado como limite de substrato — PreCompact não tem canal
++de deny). Nada do W0 segue aberto. W2/W4
+ **LANDADAS em `b07be9b` (S329 U0, 2026-08-26, pack `staged-w24` — sentinel
+ `W179-W24-approved.md` assinado pelo Owner às 14:14; LAND V1–V6 verdes)**.
+ 
+@@ -454,6 +482,31 @@ veredito já escrito em `floor-reduction.md` §6. **US7 e US8 seguem
  canônico. Residuais do pack D (3, declarados no sentinel) anotados nos
  próprios itens — wave própria com debate, não linha de cerimônia.
  
@@ -3871,7 +3912,7 @@ index 2ef3878..94c8ae5 100644
  ### W2 — Ledger de trabalho contínuo (a mudança de doutrina)
  
  Move a escrita de evento terminal para **fronteira de unidade de
-@@ -487,12 +529,31 @@ execução**. Forma adotada do padrão multissessão da Anthropic
+@@ -487,12 +540,31 @@ execução**. Forma adotada do padrão multissessão da Anthropic
        cobre o path novo). "ACs com estado verificado" ganha VERIFICADOR
        nomeado por entrada (comando + exit code), porque entrada errada é
        pior que ausente (o modelo escreve o checkpoint já degradado).
