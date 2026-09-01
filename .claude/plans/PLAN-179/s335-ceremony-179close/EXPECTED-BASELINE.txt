@@ -77,7 +77,10 @@
 #     recusa) E a r25 (2 blocos "permanece ABERTO" do plano reconciliados
 #     com a evidencia de fechamento — r1-C3 supersede US1/(a), gate-boot
 #     MEDIDO S322, valvula entregue NESTA wave; grep ABERTO = 0; pointer
-#     do FOLLOWUP re-refutado: af6aaf8; bateria segue 350/0), 0 skips;
+#     do FOLLOWUP re-refutado: af6aaf8) E a r26 (UM P1: --first-parent no
+#     git do indice — `-m` sozinho unia diffs de TODOS os parents e a
+#     mainline vazava no tie-break; medido na sombra pos-cura r26:
+#     351 passed / 0 skips em 7.57s), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -87,7 +90,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=350
+EXPECTED_UNIT_PYTEST_PASSED=351
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
