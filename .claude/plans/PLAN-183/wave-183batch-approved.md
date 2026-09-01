@@ -13,7 +13,7 @@ Plans: PLAN-183
 Wave: wave-183batch (PLAN-183 — «Batch menor + começar W1», ratificação do Owner de 2026-08-31: settings regenerado nos DOIS alvos — +4 demotions 0-dispatch E o undemote A4 das 7 chaves VETO-bearing (o invariante «nenhuma VETO skill name-only» vira permanente, teste sem xfail), header «INERT AS SHIPPED» no validate.yml.template, e o REGISTRO do AC-5 — a metade «canônica» que a nota ◐ declarava faltante já existia no wiring do CI; o CHECKBOX segue aberto porque a execução real do workflow é W0-US3/OQ-2, e o rail 183-r1 barrou o flip, corretamente)
 Patch: .claude/plans/PLAN-183/s335-ceremony-183batch/W183BATCH.patch
 Patch-sha256: 620053a28a99dc463bdd05e499142b10538557dce33eeacd7f558eb2b4a55ab7
-Patch-base: cc951f66fee5b12dc9de7293d6136e8a0b146d3d
+Patch-base: bc8265157ca2f9821a2544ef3123eb05ffbfd764
 Anchor-SHA: ANCHOR-PLACEHOLDER
 Data: DATA-PLACEHOLDER
 
