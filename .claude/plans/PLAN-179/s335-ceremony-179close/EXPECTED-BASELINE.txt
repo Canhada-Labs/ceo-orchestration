@@ -26,8 +26,11 @@
 #     seguido, e os 3 testes de mecanismo stat migraram para lstat) E os
 #     2 da r11 (janela com limite SUPERIOR — mtime futuro fica fora;
 #     paths -z VERBATIM com _git raw= — espaco inicial nunca vira o path
-#     canonico; medido na sombra pos-cura r11: 327 passed / 0 skips em
-#     8.87s), 0 skips;
+#     canonico) E os 3 da r12 (janela invertida e start_unknown; slug
+#     vazio e ERROR de infra, nunca dir_missing; ciclo de vida legado
+#     volta a env-first espelhando SessionStart — payload-only fica
+#     INTEIRO no rail novo; medido na sombra pos-cura r12: 330 passed /
+#     0 skips em 7.49s), 0 skips;
 #   - 331 = len(_KNOWN_ACTIONS) pos-registro (330 + session_memory_delta_observed),
 #     golden regenerado por --write-golden no mesmo patch;
 #   - 887 = (T−F−S)*1000//T com F+S=112638, T=998043 (w0-measurement.md §C/§E);
@@ -37,7 +40,7 @@ EXPECTED_PATCH_PATHS=".claude/hooks/check_precompact_continuity.py .claude/hooks
 EXPECTED_PATCH_CANONICAL_PATHS=5
 EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
 EXPECTED_PATCH_PY_FILES=12
-EXPECTED_UNIT_PYTEST_PASSED=327
+EXPECTED_UNIT_PYTEST_PASSED=330
 EXPECTED_UNIT_PYTEST_SKIPPED=0
 EXPECTED_GOLDEN_COUNT=331
 EXPECTED_GOLDEN_ACTION_REFS=1
