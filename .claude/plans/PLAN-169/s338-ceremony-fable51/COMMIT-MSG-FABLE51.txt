@@ -1,0 +1,70 @@
+ceremony(PLAN-169 wave-fable51): adopt-fable-5.1 — claude-fable-5-1 entra no working set do ADR-149 (Amendment 2, rota c); floor, fallback e pin intactos; upgrade.sh ganha baseline SUPERSEDED; cache-read 0.025x por modelo; 5 rodadas de rail (r5 limpa)
+
+A fonte: ADR-149 ganha `claude-fable-5-1` APPENDED AT END no
+AVAILABLE_MODELS_WORKING_SET + Amendment 2 (id dateless confirmado na
+doc oficial; $10/$50, 1M ctx; cache hits 0.025x = $0.25/MTok RESOLVIDO
+na pagina de pricing; rota (c) ratificada pelo Owner na S338:
+working-set ONLY). Os DOIS settings sao regenerados do ADR (generator
+--check: MATCH, 7 ids, ordem preservada); settings.user.json nao muda
+(a _derivation exclui availableModels). Os espelhos independentes que a
+paridade amarra por igualdade de conjunto viajam juntos: case-arm do
+validate-governance.sh (membro ADR-192 -> sha re-derivado no
+manifesto), VALID_MODEL_IDS do tier_policy_cli (6->7) e
+ALLOWED_MODELS/EXPECTED_AVAILABLE do smoke-install-parity.sh.
+
+O upgrade: _T54_BASELINES_JSON.availableModels ganha "superseded" — a
+lista de 6 ids que v1.2.0 e v1.3.0 SHIPARAM, literal congelado (mesma
+doutrina de OLD_PAIR_RAIL_CAPS) — e a politica de 3 estados ganha o ramo
+"matched SUPERSEDED shipped baseline -> new baseline" (byte-exato,
+ordem incluida; reordenado segue PRESERVED). Sem isto todo adopter das
+duas releases seria lido como ADOPTER-CUSTOMIZED e nunca receberia o
+setimo id — em SILENCIO, porque a parity e2e trata settings.json como
+divergencia ACEITA (keys, not bytes). TestSupersededShippedBaseline (6
+testes) fixa o literal, a migracao nomeada, o reordenado, a
+idempotencia e o nao-vacuo.
+
+O que o rail achou (r1: 2 P1 + 1 P2; r2: 2 P2; r3: 1 P1; r4: 1 P2; r5
+limpa — 7 achados reais curados, todos no derivador):
+learn._tier_rank nao conhecia o id (rank -1 -> um demote sairia como
+promote e passaria pelo gate assinado) -> rank 7 + teste de PARIDADE
+allowlist<->ladder; budget-summary precificava cache-read a 0.10x fixo
+-> multiplicador POR MODELO (0.025x no 5.1) e, com o alias bare "fable"
+agora ambiguo, fallback para o message.model exato do transcript em vez
+de TBD; build-canonical-models.price_for colapsava a versao minor no
+row do fable-5 pelo prefixo -> so pin DATADO resolve, 5.1 fica UNKNOWN
+(flag, nunca palpite) ate o re-fetch do Owner.
+success-receipt._DEFAULT_PRICING era PRE-GEN-5 (sem fable-5/opus-5/
+sonnet-5/opus-4-8): em sessao mista o recibo emitia total numerico
+descartando em silencio todo gasto da frota corrente -> frota corrente
+nas taxas do budget-summary + TestSuccessReceiptFleetPresence (recibo
+misto sintetico: 1M input de 5.1 == $10 DENTRO do total).
+test_a4_pricing_doctrine certificava «sem premio de long-context» para
+o 5.1 enquanto o doc dizia «nao sondado» -> evidencia DOCUMENTAL nomeada
+nos dois (pricing page §Long context: 4.6+ = 1M a preco padrao).
+
+Custo/telemetria (classe T1.5): cost-table.yaml, audit-telemetry,
+budget-summary, ceo-cost e value-dashboard ganham a linha do 5.1 a
+$10/$50; overpowered e wasteful_thinking enxergam o 5.1 como modelo
+grande; model_normalize ganha o alias fable-5-1 (minor distinto). Docs:
+CEO-MODEL-ROUTING (literal + nota S338), cost-of-operation e
+provider-pricing (3 tabelas + excecao 0.025x).
+
+Tudo DERIVADO de um unico material versionado
+(s338-ceremony-fable51/apply-fable51-edits.py — 55 edicoes com ancora
+exata e contagem declarada); o LAND prova HEAD + script == patch byte a
+byte nos 30 paths (V3) e o nao-vacuo nomeado (V6: id ausente em HEAD,
+ULTIMO nos dois availableModels, presente em cada espelho; floor com 3
+membros, pin e fallback inalterados).
+
+FOLLOW-UP livre registrado na A2.3: o preco intro do Sonnet 5 virou
+padrao ($2/$10) — as _DATED_PRICING e o sticker $3/$15 estao defasados
+desde 2026-09-01; e canonical_models.json vence em 2026-09-01.
+
+Sentinel: .claude/plans/PLAN-169/wave-fable51-approved.md (+ .asc).
+Bateria V1-V9 do OWNER-S338-FABLE51-LAND.sh verde contra
+EXPECTED-BASELINE.txt (unit 351/2; generator MATCH 7; manifesto
+shasum -c 0; harness-config 0; parity smoke 0; 5 canonicos; verify-counts
+e governanca completa 0; ratchet 0 sem regenerar o baseline).
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_014M8ukS9ZWt5cWAMuuMXzJ9

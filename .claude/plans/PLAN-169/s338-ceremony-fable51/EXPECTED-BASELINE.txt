@@ -1,0 +1,51 @@
+# EXPECTED-BASELINE — wave-fable51 (PLAN-169, S338 — adopt-fable-5.1, rota (c))
+# Fonte UNICA dos valores que finalize-fable51.sh e OWNER-S338-FABLE51-LAND.sh
+# comparam. Leitor fail-CLOSED (chave ausente ABORTA). Atualizar um valor e
+# decisao CONSCIENTE com fonte — nunca relaxamento.
+#
+# Medidos na sombra (base dc72bf1) em 2026-09-01/02, S338 (re-medidos apos as
+# curas dos rails r1, r2 e r3 — learn.py, test_learn_mutation.py,
+# build-canonical-models.py, test_build_canonical_models.py e
+# success-receipt.py entraram):
+#   - 30 paths = 5 canonicos (ADR-149, settings.json — KERNEL —,
+#     settings.base.json, gate-scripts-manifest.txt, upgrade.sh) + 25 livres;
+#     validate-governance.sh e MEMBRO do manifesto ADR-192 (1) e o sha da
+#     linha dele e re-derivado pelo apply-fable51-edits.py;
+#   - 19 .py (10 fontes + 9 testes) e 3 .sh (upgrade, smoke-install-parity,
+#     validate-governance) — o ratchet installer-write-safety sai 0 SEM
+#     regenerar o baseline: as edicoes de shell sao literais/branch, nenhum
+#     sitio de escrita novo (o baseline e path do pacote S337, disjunto);
+#   - 351/2 = os 5 testes de paridade do hooks/ (48) + 9 suites de scripts/
+#     (257/2: os 2 skips sao pre-existentes em test_gen_settings_user_template
+#     — OQ-E5 resolvida e py3.9 sem `match`) + test_upgrade_settings_migration
+#     (46, incl. os 6 novos de TestSupersededShippedBaseline);
+#   - generator --check: 7 ids, ordem do ADR; availableModels[-1] e o id novo
+#     nos DOIS settings; pin claude-opus-5 e fallback ["claude-opus-5"]
+#     INALTERADOS (rota c); VETO_FLOOR_ALLOWED segue com 3 membros;
+#     superseded = 1 lista (a 6-id que v1.2.0/v1.3.0 shiparam);
+#   - o id novo aparece 0 vezes nos 30 paths em HEAD (nao-vacuo da wave).
+EXPECTED_PATCH_PATHS=".claude/adr/ADR-149-model-id-allowlist.md .claude/governance/gate-scripts-manifest.txt .claude/hooks/tests/test_adr149_validator_parity.py .claude/scripts/audit-telemetry.py .claude/scripts/budget-summary.py .claude/scripts/build-canonical-models.py .claude/scripts/ceo-cost.py .claude/scripts/cost-table.yaml .claude/scripts/detectors/overpowered.py .claude/scripts/detectors/wasteful_thinking.py .claude/scripts/optimizer/model_normalize.py .claude/scripts/success-receipt.py .claude/scripts/tests/test_a4_pricing_doctrine.py .claude/scripts/tests/test_build_canonical_models.py .claude/scripts/tests/test_generate_available_models.py .claude/scripts/tests/test_model_fleet_presence.py .claude/scripts/tests/test_upgrade_settings_migration.py .claude/scripts/tier_policy_cli/_types.py .claude/scripts/tier_policy_cli/learn.py .claude/scripts/tier_policy_cli/tests/test_learn_mutation.py .claude/scripts/tier_policy_cli/tests/test_types.py .claude/scripts/validate-governance.sh .claude/scripts/value-dashboard.py .claude/settings.json docs/CEO-MODEL-ROUTING.md docs/cost-of-operation.md docs/provider-pricing.md scripts/local/smoke-install-parity.sh scripts/upgrade.sh templates/settings/settings.base.json"
+EXPECTED_PATCH_CANONICAL_PATHS=5
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=1
+EXPECTED_PATCH_PY_FILES=19
+EXPECTED_PATCH_SH_FILES=3
+EXPECTED_UNIT_PYTEST_PASSED=351
+EXPECTED_UNIT_PYTEST_SKIPPED=2
+EXPECTED_GENERATOR_CHECK_LINE="CHECK availableModels: MATCH (7 ids, ADR order preserved)"
+EXPECTED_AVAILABLE_MODELS_COUNT=7
+EXPECTED_NEW_MODEL_ID=claude-fable-5-1
+EXPECTED_NEW_ID_REFS_HEAD=0
+EXPECTED_MODEL_PIN=claude-opus-5
+EXPECTED_FALLBACK_JSON=["claude-opus-5"]
+EXPECTED_VETO_FLOOR_COUNT=3
+EXPECTED_SUPERSEDED_COUNT=1
+EXPECTED_HARNESS_CONFIG_RC=0
+EXPECTED_USER_TEMPLATE_CHECK_RC=0
+EXPECTED_PARITY_SMOKE_RC=0
+EXPECTED_ADR_COUNT=198
+EXPECTED_CLAUDE_MD_CLAIMS_RC=0
+EXPECTED_VERIFY_COUNTS_RC=0
+EXPECTED_CEREMONY_LINT_BLOCKING=0
+EXPECTED_GOVERNANCE_ERRORS=0
+EXPECTED_RATCHET_RC=0
+EXPECTED_BUILD_PLUGIN_CHECK_RC=0

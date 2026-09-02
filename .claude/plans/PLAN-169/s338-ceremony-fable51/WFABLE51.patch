@@ -1,0 +1,1006 @@
+diff --git a/.claude/adr/ADR-149-model-id-allowlist.md b/.claude/adr/ADR-149-model-id-allowlist.md
+index 22178f2..002ed5e 100644
+--- a/.claude/adr/ADR-149-model-id-allowlist.md
++++ b/.claude/adr/ADR-149-model-id-allowlist.md
+@@ -89,6 +89,10 @@ AVAILABLE_MODELS_WORKING_SET: tuple = (
+     #    ADR-181 justification) --
+     "claude-opus-5",      # debate/arch routing + fallback target + floor member
+     "claude-sonnet-5",    # advisory tier target (ADR-157 member; OQ2 migrate-now)
++    # -- Fable 5.1 -- ADR-149 Amendment 2, S338 2026-09-01; APPENDED AT END.
++    #    Working-set ONLY: not a floor member, not the fallback, not the
++    #    session pin. The legacy claude-fable-5 stays available. --
++    "claude-fable-5-1",   # Mythos-class flagship 5.1; dateless id per the models overview
+ )
+ ```
+ 
+@@ -201,3 +205,89 @@ undeclared mid-turn switch is evidence-degraded and must say so.
+   failing the spawn — fine for the routing floor, but it means frontmatter
+   pins are not self-verifying; the spawn gate (`check_agent_spawn` /
+   `VETO_FLOOR_ALLOWED`) remains the enforcement layer for VETO personas.
++
++## Amendment 2 (S338 — Fable 5.1 joins the working set; floor, fallback and pin unchanged)
++
++> Authored S338 (2026-09-01) under PLAN-169 (fleet-currency remit, W2.10
++> class cure: functional surfaces DERIVE from this ADR). Ratified by the
++> Owner via AskUserQuestion at the S338 opening — **route (c) of three**:
++> working-set append only. Lands through the `wave-fable51` sentinel ceremony
++> (`.claude/plans/PLAN-169/wave-fable51-approved.md`).
++
++### A2.1 Facts the amendment rests on (models overview, fetched 2026-09-01)
++
++- Claude Fable 5.1 launched 2026-09-01 alongside Mythos 5.1 (same
++  underlying model; Fable carries the additional dual-use safety
++  measures and is the generally available one).
++- **API id = alias = `claude-fable-5-1`** — dateless. Every id from the
++  4.6 generation on is a pinned snapshot, so a date suffix must NEVER be
++  appended (the S337 recon measured 233 files citing `claude-fable-5`
++  and 0 citing the 5.1 id; the cure is this data change, not a hunt).
++- $10 in / $50 out per MTok (equal to Fable 5); 1M context; 128K max
++  output; knowledge cutoff June 2026; adaptive always-on thinking;
++  retirement no earlier than 2027-09-01.
++- **Cache hits on Fable 5.1 are 0.025x the base input price ($0.25/MTok)**
++  — the pricing page (fetched 2026-09-01) resolves the conflict the S337
++  recon recorded between the models overview (0.1x) and the launch note;
++  every other model keeps the standard 0.1x. `budget-summary.py` is the
++  ONE cost surface that prices cache reads (input-equivalents), so it
++  gains a per-model multiplier instead of the flat 0.10x that would have
++  overstated Fable 5.1 cache reads 4x (codex rail r1 P2).
++- `claude-fable-5` remains available as LEGACY: the change is ADDITIVE.
++
++### A2.2 Decision
++
++1. `AVAILABLE_MODELS_WORKING_SET` gains `claude-fable-5-1` **at the end**
++   (A1.1 order rule — no reorder, no removal). The generated
++   `availableModels` mirrors (`.claude/settings.json`,
++   `templates/settings/settings.base.json`) follow byte-for-byte via
++   `generate-available-models.py`; every INDEPENDENT mirror bound by
++   `test_adr149_validator_parity.py` (validate-governance case-arm,
++   `tier_policy_cli.VALID_MODEL_IDS`, `smoke-install-parity.sh`
++   `ALLOWED_MODELS`) carries the same append in the same patch.
++2. `VETO_FLOOR_ALLOWED` is **unchanged**: Fable 5.1 is selectable, not
++   VETO-eligible. Routes (a)/(b) — floor membership with or without
++   migrating the six `agents/*.md` pins — stay open as a FUTURE amendment
++   that the Owner may ratify after measuring the 5.1 verdict quality;
++   nothing here pre-empts it.
++3. `FALLBACK_MODEL_CHAIN` is **unchanged** (`claude-opus-5`).
++4. The session-default `model` pin stays `claude-opus-5` in all three
++   adopter-facing mirrors. Flipping it is a SEPARATE decision with its own
++   blast radius (adopter default cost x2; `upgrade.sh` pin migration;
++   `test_template_dogfood_parity.py` EXPECTED_PIN) and is not made here.
++   A maintainer who wants 5.1 as the session default on ONE machine sets
++   it in `.claude/settings.local.json` (highest-precedence project layer;
++   the generator `--check` resolves that overlay, A1.2).
++5. `scripts/upgrade.sh` learns a **`superseded`** list for the
++   `availableModels` leaf: the 6-id array that v1.2.0 and v1.3.0 SHIPPED
++   is a frozen historical literal (same doctrine as the pair-rail
++   `OLD_PAIR_RAIL_CAPS`). Without it the 3-state migration would read
++   every v1.2.0/v1.3.0 adopter as ADOPTER-CUSTOMIZED and never deliver
++   the seventh id — SILENTLY: the install/upgrade parity e2e declares
++   `.claude/settings.json` an ACCEPTED divergence (the two routes
++   converge on keys, not bytes), so CI would not have noticed. The match
++   stays byte-exact (values AND order), so a genuinely customized array
++   is still PRESERVED.
++6. `tier_policy_cli/learn.py` `_tier_rank` ranks the new id ABOVE
++   `claude-fable-5` (codex rail r1 P1): an id admitted to
++   `VALID_MODEL_IDS` but unknown to the ladder ranks -1, so a move away
++   from it would sign as `promote` and bypass the signed-demote gate.
++   A parity test now requires every allowlisted id to carry a rank.
++
++### A2.3 What this amendment does NOT decide
++
++- Cost/quality routing for 5.1 (`_lib/model_routing.py` `_ROUTING_TABLE`
++  is untouched; debate/arch stay on `claude-opus-5`).
++- The `hooks/_lib/tier_policy` `MODEL_ID` enum (AEK tier targets, a
++  different contract from availability — it never carried Fable 5 either).
++- Automatic model currency (PLAN-176): this amendment is the manual
++  ceremony that plan would only DETECT the need for, never perform.
++- Sonnet 5 pricing: the same pricing page states the $2/$10 intro rate
++  became the STANDARD price (the 2026-09-01 increase to $3/$15 will not
++  occur). The dated flip in `audit-telemetry.py`, `ceo-cost.py`,
++  `budget-summary.py` and the sticker rows in `cost-table.yaml` /
++  `docs/cost-of-operation.md` are therefore stale from today — a
++  FOLLOW-UP on free surfaces, deliberately outside this amendment.
++
++The A1.1 prose sentence *"the primary session model is `claude-fable-5`"*
++is historical (it predates the ADR-181 pin); the pin above is the truth.
+diff --git a/.claude/governance/gate-scripts-manifest.txt b/.claude/governance/gate-scripts-manifest.txt
+index d78ef17..a2634a5 100644
+--- a/.claude/governance/gate-scripts-manifest.txt
++++ b/.claude/governance/gate-scripts-manifest.txt
+@@ -1,5 +1,5 @@
+ 3b72d56544a0f0f0a463188e1b0ed0cbd15d8e3f8ff2b8b9db478ad4240e142a  .claude/scripts/local/verify-counts.sh
+-62310e466f0b702d7742533c7472f9d63ce96f9d4645361cf9d501b4426c83d0  .claude/scripts/validate-governance.sh
++6da6fbec3f8ac8a696964fc43e71e00f836f697487b6ae9f99c9c7cde604110b  .claude/scripts/validate-governance.sh
+ db8eea5b66e7e144135396a14029fd7511857a3cf42c9e5116e57000dd4ffd62  .claude/scripts/local/_release_tag_guard.py
+ fe72ecce835780e2515842bd2d05ee46b063b0ed00d564da75424089efeb67dc  .claude/scripts/check-canonical-doc-freshness.py
+ 2f06780eab259db9f0178befb625b0b0501f7ca726e256b31278c748d6af6340  scripts/tests/ownership-nightly-gate.sh
+diff --git a/.claude/hooks/tests/test_adr149_validator_parity.py b/.claude/hooks/tests/test_adr149_validator_parity.py
+index 735345d..6a096fa 100644
+--- a/.claude/hooks/tests/test_adr149_validator_parity.py
++++ b/.claude/hooks/tests/test_adr149_validator_parity.py
+@@ -140,6 +140,11 @@ class TestAdrBlocksPresent(TestEnvContext):
+         self.assertTrue(ws, "AVAILABLE_MODELS_WORKING_SET block missing")
+         self.assertIn("claude-opus-5", ws, "ADR-181 refresh id missing")
+         self.assertIn("claude-sonnet-5", ws, "ADR-181 refresh id missing")
++        self.assertIn(
++            "claude-fable-5-1", ws,
++            "ADR-149 Amendment 2 (S338) id missing from the working set",
++        )
++        self.assertEqual(ws[-1], "claude-fable-5-1", "A2 append must be LAST")
+         self.assertNotIn(RETIRED_ID, ws)
+ 
+     def test_floor_is_subset_of_working_set(self) -> None:
+diff --git a/.claude/scripts/audit-telemetry.py b/.claude/scripts/audit-telemetry.py
+index ae2118e..7a5940d 100755
+--- a/.claude/scripts/audit-telemetry.py
++++ b/.claude/scripts/audit-telemetry.py
+@@ -57,6 +57,7 @@ _PRICING_PER_MTOK: Dict[str, Dict[str, float]] = {
+     "claude-opus-4-8[1m]": {"input": 5.00, "output": 25.00},
+     "claude-opus-4-8-fast": {"input": 10.00, "output": 50.00},  # fast-mode premium row (W2 P2b)
+     "claude-fable-5": {"input": 10.00, "output": 50.00},
++    "claude-fable-5-1": {"input": 10.00, "output": 50.00},  # ADR-149 Amendment 2 (S338): Fable 5.1 at the Fable 5 rate
+     "claude-opus-5": {"input": 5.00, "output": 25.00},  # drop-in at 4.8 rate; 1M ctx default
+     "claude-opus-5-fast": {"input": 10.00, "output": 50.00},  # fast-mode premium row
+     # Sonnet 5: INTRO pricing through 2026-08-31 — the dated row in
+diff --git a/.claude/scripts/budget-summary.py b/.claude/scripts/budget-summary.py
+index a5a4b09..0836d67 100755
+--- a/.claude/scripts/budget-summary.py
++++ b/.claude/scripts/budget-summary.py
+@@ -127,6 +127,7 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
+     "claude-opus-4-8":             {"in": 0.005, "out": 0.025},
+     "claude-opus-4-8-fast":       {"in": 0.010, "out": 0.050},
+     "claude-fable-5":             {"in": 0.010, "out": 0.050},
++    "claude-fable-5-1":           {"in": 0.010, "out": 0.050},  # ADR-149 Amendment 2 (S338)
+     "claude-opus-5":              {"in": 0.005, "out": 0.025},
+     "claude-opus-5-fast":         {"in": 0.010, "out": 0.050},
+     "claude-sonnet-5":            {"in": 0.002, "out": 0.010},
+@@ -975,6 +976,24 @@ _NATIVE_USAGE_KEYS: Tuple[str, ...] = (
+ )
+ 
+ 
++#: ADR-149 Amendment 2 (S338, codex rail r1 P2): the cache-read multiplier
++#: is PER MODEL. The pricing page (fetched 2026-09-01) prices cache hits on
++#: Claude Fable 5.1 / Mythos 5.1 at 0.025x the base input price
++#: ($0.25/MTok); every other model keeps the standard 0.10x. A flat 0.10x
++#: would OVERSTATE Fable 5.1 cache reads 4x. Keys are canonical ids.
++_CACHE_READ_MULTIPLIER_DEFAULT: float = 0.10
++_CACHE_READ_MULTIPLIER_OVERRIDES: Dict[str, float] = {
++    "claude-fable-5-1": 0.025,
++}
++
++
++def _cache_read_multiplier(model_id: str) -> float:
++    """Cache-read multiplier for ``model_id`` (0.10x unless overridden)."""
++    return _CACHE_READ_MULTIPLIER_OVERRIDES.get(
++        model_id, _CACHE_READ_MULTIPLIER_DEFAULT
++    )
++
++
+ def _read_native_spawn(
+     transcript: Path,
+     rail: str,
+@@ -988,7 +1007,11 @@ def _read_native_spawn(
+     malformed/truncated line (live session appending), or a missing
+     field degrades the record — it never raises. Model precedence:
+     ``meta.model`` first, else the first ``message.model`` seen in the
+-    transcript (the workflow-path metas carry NO model at all).
++    transcript (the workflow-path metas carry NO model at all). A
++    ``meta.model`` that resolves to NOTHING (a bare family alias such as
++    ``fable`` once the registry holds two Fable ids — ADR-149 Amendment
++    2) falls back to the transcript's exact ``message.model``: exact
++    evidence beats an ambiguous alias, and neither is ever guessed.
+     """
+     stem = transcript.name[: -len(".jsonl")]
+     meta_path = transcript.with_name(stem + ".meta.json")
+@@ -1094,10 +1117,24 @@ def _read_native_spawn(
+ 
+     model_raw = meta_model or transcript_model
+     model_id = _normalize_model_id(model_raw, pricing=pricing)
++    if (
++        model_id is None
++        and meta_model
++        and transcript_model
++        and transcript_model.strip().lower() != meta_model.strip().lower()
++    ):
++        # ADR-149 Amendment 2 (S338, codex rail r2 P2): a bare family
++        # alias in the meta ("fable") turned AMBIGUOUS once the registry
++        # held two Fable ids, and the doctrine never guesses a version.
++        # The transcript's own message.model is exact evidence, not a
++        # guess — fall back to it. Still unresolved => TBD, as before.
++        model_raw = transcript_model
++        model_id = _normalize_model_id(model_raw, pricing=pricing)
+     t_in = sums["input_tokens"]
+     t_out = sums["output_tokens"]
+     # Cache classes are BILLABLE (docs/provider-pricing.md: read @0.10x
+-    # input, write @1.25x on the 5m TTL and @2.00x on the 1h TTL). When the
++    # input — 0.025x on Fable 5.1, see _CACHE_READ_MULTIPLIER_OVERRIDES —,
++    # write @1.25x on the 5m TTL and @2.00x on the 1h TTL). When the
+     # transcript carries the nested ``usage.cache_creation`` split, each
+     # tier gets its own multiplier (codex S306 r3 P2 cure); writes NOT
+     # attributed by the split assume 5m, the API default. Priced as
+@@ -1109,7 +1146,7 @@ def _read_native_spawn(
+     c_5m = min(cache_5m, c_total - c_1h)
+     c_rest = c_total - c_1h - c_5m    # unattributed -> 5m assumption
+     cache_equiv_in = int(
+-        0.10 * sums["cache_read_input_tokens"]
++        _cache_read_multiplier(model_id) * sums["cache_read_input_tokens"]
+         + 1.25 * (c_5m + c_rest)
+         + 2.00 * c_1h
+     )
+@@ -1643,7 +1680,8 @@ def _format_native_block(native: Dict[str, Any]) -> List[str]:
+         cost_col = f"${cost:,.4f}"
+     lines.append(f"  Native cost     : {cost_col}")
+     lines.append(
+-        "                    (cache priced as input-equivalents: read @0.10x,"
++        "                    (cache priced as input-equivalents: read @0.10x"
++        " — 0.025x on Fable 5.1 —,"
+         " write @1.25x — 5m-TTL assumption, docs/provider-pricing.md)"
+     )
+     unreadable = int(native.get("native_transcripts_unreadable", 0) or 0)
+diff --git a/.claude/scripts/build-canonical-models.py b/.claude/scripts/build-canonical-models.py
+index 88eaba0..6c56ea2 100644
+--- a/.claude/scripts/build-canonical-models.py
++++ b/.claude/scripts/build-canonical-models.py
+@@ -180,6 +180,13 @@ def _normalize_lookup_key(model: str) -> str:
+     return (model or "").strip().lower()
+ 
+ 
++#: A DATE-STAMPED release pin of a known row (`-YYYYMMDD`). Only this shape
++#: may resolve through the prefix rule in price_for — a MINOR version
++#: (`claude-fable-5-1`) is a different model with its own rate card
++#: (ADR-149 Amendment 2, S338: cache read 0.025x, not 0.1x).
++_DATED_SUFFIX_RE = re.compile(r"^\d{8}$")
++
++
+ def price_for(
+     model: str, data: Optional[Dict[str, Any]] = None
+ ) -> Tuple[Dict[str, float], bool]:
+@@ -214,11 +221,20 @@ def price_for(
+     for mid, row in models.items():
+         if mid.lower() == key:
+             return (_coerce_price_row(row), True)
+-    # 2) prefix match (a dated id `claude-opus-4-8-20260101` resolves to the
+-    #    base `claude-opus-4-8` row) — longest prefix wins.
++    # 2) prefix match — ONLY a DATE-STAMPED release pin of a known row
++    #    (`claude-opus-4-8-20260101` resolves to the base `claude-opus-4-8`
++    #    row); longest prefix wins. ADR-149 Amendment 2 (S338, codex rail
++    #    r2 P2): a MINOR version (`claude-fable-5-1`) is a different model
++    #    with its own rate card and must NOT collapse onto the
++    #    `claude-fable-5` row — it resolves UNKNOWN (flag, never guess)
++    #    until the Owner re-fetches the table.
+     best: Optional[Tuple[str, Dict[str, Any]]] = None
+     for mid, row in models.items():
+-        if key.startswith(mid.lower() + "-") and (best is None or len(mid) > len(best[0])):
++        if not key.startswith(mid.lower() + "-"):
++            continue
++        if not _DATED_SUFFIX_RE.match(key[len(mid) + 1:]):
++            continue
++        if best is None or len(mid) > len(best[0]):
+             best = (mid, row)
+     if best is not None:
+         return (_coerce_price_row(best[1]), True)
+diff --git a/.claude/scripts/ceo-cost.py b/.claude/scripts/ceo-cost.py
+index ed2fbf9..5eedfab 100755
+--- a/.claude/scripts/ceo-cost.py
++++ b/.claude/scripts/ceo-cost.py
+@@ -84,6 +84,7 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
+     "claude-opus-4-8[1m]": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
+     "claude-opus-4-8-fast": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
+     "claude-fable-5": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
++    "claude-fable-5-1": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},  # ADR-149 Amendment 2 (S338)
+     "claude-opus-5": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
+     "claude-opus-5-fast": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
+     "claude-sonnet-5": {"input_per_mtok": 2.00, "output_per_mtok": 10.00},
+diff --git a/.claude/scripts/cost-table.yaml b/.claude/scripts/cost-table.yaml
+index a0dafdb..b7a61bd 100644
+--- a/.claude/scripts/cost-table.yaml
++++ b/.claude/scripts/cost-table.yaml
+@@ -67,6 +67,11 @@ models:
+     output_per_mtok: 50.00
+     tier: fable
+     source_url: "https://models.dev/api.json"  # Owner fetch 2026-06-10 sha a6f5cb21; live-confirmed by W0b reconciliation 20/20 calls drift~0.0000
++  claude-fable-5-1:
++    input_per_mtok: 10.00
++    output_per_mtok: 50.00
++    tier: fable
++    source_url: "https://platform.claude.com/docs/en/about-claude/models/overview"  # ADR-149 Amendment 2 (S338, launch 2026-09-01): Fable 5.1 at the Fable 5 base rate; 1M ctx / 128K out; cache hits 0.025x base ($0.25/MTok, pricing page 2026-09-01) — this table has no cache field, budget-summary.py carries the per-model multiplier
+   claude-opus-4-8:
+     input_per_mtok: 5.00
+     output_per_mtok: 25.00
+diff --git a/.claude/scripts/detectors/overpowered.py b/.claude/scripts/detectors/overpowered.py
+index 38a89ad..b7f3e3b 100644
+--- a/.claude/scripts/detectors/overpowered.py
++++ b/.claude/scripts/detectors/overpowered.py
+@@ -30,10 +30,12 @@ _DETECTOR = "overpowered"
+ # PLAN-163 FXeta (C8): += claude-sonnet-5 — W2 uplift added fable-5/opus-5
+ # but omitted the advisory (sonnet) tier, blinding the detector to short
+ # devops spawns on the new-generation Sonnet.
++# ADR-149 Amendment 2 (S338): += claude-fable-5-1 (Fable 5.1 flagship).
+ # historical ids retained for audit-log replay (ADR-142).
+ _LARGE_MODELS = frozenset({
+     "claude-opus-5",
+     "claude-fable-5",
++    "claude-fable-5-1",
+     "claude-sonnet-5",
+     "claude-opus-4-8",
+     "claude-opus-4-7",
+diff --git a/.claude/scripts/detectors/wasteful_thinking.py b/.claude/scripts/detectors/wasteful_thinking.py
+index 10fdb2d..ec38dbb 100644
+--- a/.claude/scripts/detectors/wasteful_thinking.py
++++ b/.claude/scripts/detectors/wasteful_thinking.py
+@@ -29,6 +29,7 @@ _DETECTOR = "wasteful_thinking"
+ _TARGET_MODELS = frozenset({
+     "claude-opus-5",
+     "claude-fable-5",
++    "claude-fable-5-1",  # ADR-149 Amendment 2 (S338)
+     "claude-opus-4-8",
+     "claude-opus-4-7",
+ })
+diff --git a/.claude/scripts/optimizer/model_normalize.py b/.claude/scripts/optimizer/model_normalize.py
+index 7776bae..91f349e 100644
+--- a/.claude/scripts/optimizer/model_normalize.py
++++ b/.claude/scripts/optimizer/model_normalize.py
+@@ -77,6 +77,7 @@ _RAW_ALIASES = {
+     # exist in that generation.
+     "opus-5": "claude-opus-5",
+     "fable-5": "claude-fable-5",
++    "fable-5-1": "claude-fable-5-1",  # ADR-149 Amendment 2 (S338): a distinct minor, never folded into fable-5
+     "sonnet-5": "claude-sonnet-5",
+     "opus-5-fast": "claude-opus-5-fast",
+ }
+diff --git a/.claude/scripts/success-receipt.py b/.claude/scripts/success-receipt.py
+index d53c01a..f332d19 100755
+--- a/.claude/scripts/success-receipt.py
++++ b/.claude/scripts/success-receipt.py
+@@ -106,7 +106,23 @@ _DEDUP_STRIP_FIELDS: Tuple[str, ...] = (
+ #: Pricing table mirror — kept in sync by hand with budget-summary.py
+ #: defaults so the receipt is deterministic when budget-summary is not
+ #: importable (e.g. early Wave 2 staging).
++#: ADR-149 Amendment 2 (S338, codex rail r3 P1): the mirror had NO gen-5
++#: row (nor opus-4-8), so in a MIXED session a known model set
++#: cost_known=True while every current-fleet event was silently omitted
++#: from the numeric total (1M Fable input == $10 dropped). Current fleet
++#: rows added at the budget-summary per-1k rates (fable 5.1 == fable 5
++#: base rate; sonnet-5 $2/$10 is the standard price per the 2026-09-01
++#: pricing page); historical rows retained (ADR-142 replay).
+ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
++    "claude-fable-5-1":   {"in": 0.010, "out": 0.050},
++    "claude-fable-5":     {"in": 0.010, "out": 0.050},
++    "claude-opus-5":      {"in": 0.005, "out": 0.025},
++    "claude-opus-5-fast": {"in": 0.010, "out": 0.050},
++    "claude-sonnet-5":    {"in": 0.002, "out": 0.010},
++    "claude-opus-4-8":    {"in": 0.005, "out": 0.025},
++    "claude-opus-4-8-fast": {"in": 0.010, "out": 0.050},
++    "claude-sonnet-4-6":  {"in": 0.003, "out": 0.015},
++    "claude-haiku-4-5":   {"in": 0.001, "out": 0.005},
+     "claude-opus-4-7":   {"in": 0.015, "out": 0.075},
+     "claude-opus-4":     {"in": 0.015, "out": 0.075},
+     "claude-sonnet-4-5": {"in": 0.003, "out": 0.015},
+diff --git a/.claude/scripts/tests/test_a4_pricing_doctrine.py b/.claude/scripts/tests/test_a4_pricing_doctrine.py
+index a826aa5..69f9312 100644
+--- a/.claude/scripts/tests/test_a4_pricing_doctrine.py
++++ b/.claude/scripts/tests/test_a4_pricing_doctrine.py
+@@ -44,6 +44,10 @@ _EXPECTED_RATES = {
+     "claude-opus-4-7": (5.00, 25.00),
+     "claude-sonnet-4-6": (3.00, 15.00),
+     "claude-fable-5": (10.00, 50.00),
++    # ADR-149 Amendment 2 (S338): DOCUMENTARY evidence, not the PLAN-137
++    # live probe — pricing page (2026-09-01) §Long context: 4.6+ models
++    # carry the full 1M window at standard pricing (provider-pricing.md row).
++    "claude-fable-5-1": (10.00, 50.00),
+     "claude-haiku-4-5": (1.00, 5.00),
+ }
+ 
+diff --git a/.claude/scripts/tests/test_build_canonical_models.py b/.claude/scripts/tests/test_build_canonical_models.py
+index ebabc1e..58f8d76 100644
+--- a/.claude/scripts/tests/test_build_canonical_models.py
++++ b/.claude/scripts/tests/test_build_canonical_models.py
+@@ -240,6 +240,25 @@ class TestPriceFor(TestEnvContext):
+         self.assertTrue(exact_known)
+         self.assertEqual(exact_price["input_per_mtok"], 5.0)
+ 
++    def test_minor_version_does_not_collapse_onto_base_row(self):
++        # ADR-149 Amendment 2 (S338, codex rail r2 P2): `claude-fable-5-1` is
++        # a MINOR version with its own rate card (cache read 0.025x), not a
++        # dated pin of `claude-fable-5`. Without an explicit row it must
++        # resolve UNKNOWN (flag, never guess); the dated pin keeps resolving.
++        data = _sample_data()
++        minor_price, minor_known = bcm.price_for("claude-opus-4-8-1", data=data)
++        self.assertFalse(minor_known)
++        self.assertEqual(minor_price["cache_read_per_mtok"], 0.0)
++        dated_price, dated_known = bcm.price_for("claude-opus-4-8-20260101", data=data)
++        self.assertTrue(dated_known)
++        self.assertEqual(dated_price["input_per_mtok"], 5.0)
++        shipped = bcm.load_canonical_models_safe()
++        if shipped is not None:
++            price, known = bcm.price_for("claude-fable-5-1", data=shipped)
++            self.assertFalse(known, "the shipped table has no 5.1 row — it must not"
++                                    " borrow the claude-fable-5 cache rate")
++            self.assertEqual(price["cache_read_per_mtok"], 0.0)
++
+     def test_fail_open_on_missing_data(self):
+         # When the data file is unreadable, price_for degrades to the all-zero
+         # fallback and never raises (fail-open contract).
+diff --git a/.claude/scripts/tests/test_generate_available_models.py b/.claude/scripts/tests/test_generate_available_models.py
+index 42f10c3..fb01aa0 100644
+--- a/.claude/scripts/tests/test_generate_available_models.py
++++ b/.claude/scripts/tests/test_generate_available_models.py
+@@ -40,6 +40,7 @@ WORKING_SET = [
+     "claude-haiku-4-5",
+     "claude-opus-5",
+     "claude-sonnet-5",
++    "claude-fable-5-1",  # ADR-149 Amendment 2, S338
+ ]
+ 
+ AMENDED_ADR = """# ADR-149 fixture (amended)
+@@ -61,6 +62,7 @@ AVAILABLE_MODELS_WORKING_SET: tuple = (
+     "claude-haiku-4-5",   # tier
+     "claude-opus-5",      # ADR-181 refresh
+     "claude-sonnet-5",    # ADR-181 refresh
++    "claude-fable-5-1",   # ADR-149 Amendment 2, S338
+ )
+ ```
+ """
+diff --git a/.claude/scripts/tests/test_model_fleet_presence.py b/.claude/scripts/tests/test_model_fleet_presence.py
+index 7c00581..70e4d68 100644
+--- a/.claude/scripts/tests/test_model_fleet_presence.py
++++ b/.claude/scripts/tests/test_model_fleet_presence.py
+@@ -53,10 +53,13 @@ _COST_TABLE = _SCRIPTS_DIR / "cost-table.yaml"
+ #: claude-opus-4-8-fast added by W2 P2b — it is the live replacement id in
+ #: model-deprecations.json (4-6-fast and 4-7-fast both point at it) and was
+ #: silently priced $0/unknown by every surface.
++#: claude-fable-5-1 added by ADR-149 Amendment 2 (S338) — Fable 5.1 at the
++#: Fable 5 rate; the same silent-$0 class this file exists to keep honest.
+ _NEW_FLEET = (
+     "claude-opus-4-8",
+     "claude-opus-4-8-fast",
+     "claude-fable-5",
++    "claude-fable-5-1",
+     "claude-opus-5",
+     "claude-opus-5-fast",
+     "claude-sonnet-5",
+@@ -104,6 +107,7 @@ class TestAuditTelemetryFleetPresence(TestEnvContext):
+             "claude-opus-4-8": (5.00, 25.00),
+             "claude-opus-4-8-fast": (10.00, 50.00),  # W2 P2b
+             "claude-fable-5": (10.00, 50.00),
++            "claude-fable-5-1": (10.00, 50.00),  # ADR-149 A2 (S338)
+             "claude-opus-5": (5.00, 25.00),
+             "claude-opus-5-fast": (10.00, 50.00),
+             # Base-row intro rate; the 2026-08-31 flip is event-date-aware
+@@ -181,7 +185,7 @@ class TestDetectorFleetPresence(TestEnvContext):
+ 
+     def test_overpowered_large_models(self) -> None:
+         from detectors import overpowered
+-        for model in ("claude-fable-5", "claude-opus-5"):
++        for model in ("claude-fable-5", "claude-fable-5-1", "claude-opus-5"):
+             self.assertIn(
+                 model, overpowered._LARGE_MODELS,
+                 "%s missing from overpowered._LARGE_MODELS" % model,
+@@ -192,7 +196,7 @@ class TestDetectorFleetPresence(TestEnvContext):
+ 
+     def test_wasteful_thinking_target_models(self) -> None:
+         from detectors import wasteful_thinking
+-        for model in ("claude-fable-5", "claude-opus-5"):
++        for model in ("claude-fable-5", "claude-fable-5-1", "claude-opus-5"):
+             self.assertIn(
+                 model, wasteful_thinking._TARGET_MODELS,
+                 "%s missing from wasteful_thinking._TARGET_MODELS" % model,
+@@ -284,6 +288,7 @@ class TestBudgetSummaryFleetPresence(TestEnvContext):
+             "claude-opus-5": (0.005, 0.025),
+             "claude-opus-5-fast": (0.010, 0.050),
+             "claude-fable-5": (0.010, 0.050),
++            "claude-fable-5-1": (0.010, 0.050),  # ADR-149 A2 (S338)
+             "claude-sonnet-5": (0.002, 0.010),  # base row; dated flip below
+         }
+         for model, (inp, out) in expected.items():
+@@ -291,6 +296,50 @@ class TestBudgetSummaryFleetPresence(TestEnvContext):
+             self.assertAlmostEqual(row["in"], inp, msg="%s in" % model)
+             self.assertAlmostEqual(row["out"], out, msg="%s out" % model)
+ 
++    def test_fable51_cache_read_multiplier(self) -> None:
++        """ADR-149 A2 (S338): Fable 5.1 cache hits are 0.025x base input
++        (pricing page 2026-09-01); every other fleet id keeps 0.10x."""
++        self.assertAlmostEqual(
++            self.mod._cache_read_multiplier("claude-fable-5-1"), 0.025)
++        for model in ("claude-fable-5", "claude-opus-5", "claude-sonnet-5",
++                      "some-unknown-model"):
++            self.assertAlmostEqual(self.mod._cache_read_multiplier(model), 0.10)
++
++    def test_bare_fable_alias_is_ambiguous_and_versioned_alias_resolves(self) -> None:
++        """ADR-149 A2 (S338, codex r2 P2): with two Fable ids in the
++        registry the bare family alias resolves to NOTHING (never guess a
++        version); the versioned aliases and exact ids still resolve."""
++        self.assertIsNone(self.mod._normalize_model_id("fable"))
++        self.assertEqual(self.mod._normalize_model_id("fable-5-1"), "claude-fable-5-1")
++        self.assertEqual(self.mod._normalize_model_id("fable-5"), "claude-fable-5")
++        self.assertEqual(self.mod._normalize_model_id("claude-fable-5-1[1m]"),
++                         "claude-fable-5-1")
++
++    def test_native_spawn_ambiguous_meta_alias_falls_back_to_transcript(self) -> None:
++        """ADR-149 A2 (S338, codex r2 P2): meta.model="fable" (measured in
++        native metas) must not turn the spawn into cost TBD when the
++        transcript names the exact model."""
++        import tempfile
++        from pathlib import Path
++        with tempfile.TemporaryDirectory() as td:
++            tr = Path(td) / "agent-x.jsonl"
++            tr.write_text(
++                '{"timestamp": "2026-09-01T00:00:00Z", "message": '
++                '{"model": "claude-fable-5-1", "usage": {"input_tokens": 1000000, '
++                '"output_tokens": 0, "cache_read_input_tokens": 1000000}}}\n',
++                encoding="utf-8",
++            )
++            (Path(td) / "agent-x.meta.json").write_text(
++                '{"agentType": "t", "spawnDepth": 1, "model": "fable"}',
++                encoding="utf-8",
++            )
++            rec = self.mod._read_native_spawn(tr, "native", "sess")
++        self.assertIsNotNone(rec)
++        self.assertEqual(rec["model_id"], "claude-fable-5-1")
++        self.assertFalse(rec["cost_tbd"])
++        # 1M fresh input at $10 + 1M cache reads at 0.025x ($0.25) == $10.25
++        self.assertAlmostEqual(rec["cost_usd"], 10.25, places=6)
++
+     def test_sonnet5_dated_compute_cost(self) -> None:
+         """W2 P2a: compute_cost_usd honours the event's own ts."""
+         self.assertAlmostEqual(
+@@ -314,6 +363,58 @@ class TestBudgetSummaryFleetPresence(TestEnvContext):
+             )
+ 
+ 
++class TestSuccessReceiptFleetPresence(TestEnvContext):
++    """`_DEFAULT_PRICING` (success-receipt.py) knows the current fleet.
++
++    ADR-149 Amendment 2 (S338, codex rail r3 P1): this mirror had no gen-5
++    row at all, so a MIXED session (one known model + fable-5-1 events)
++    emitted a numeric `default-pricing-table` total that silently dropped
++    every Fable 5.1 token. The presence guard binds it to the fleet.
++    """
++
++    @classmethod
++    def setUpClass(cls):
++        super().setUpClass()
++        cls.mod = _load_hyphenated("success_receipt_fleet", "success-receipt.py")
++
++    def test_new_fleet_present(self) -> None:
++        pricing = self.mod._DEFAULT_PRICING
++        for model in _NEW_FLEET:
++            self.assertIn(
++                model, pricing,
++                "%s missing from success-receipt _DEFAULT_PRICING "
++                "(ADR-149 A2 / rail r3 P1 presence fix)" % model,
++            )
++
++    def test_per_1k_rates_mirror_budget_summary(self) -> None:
++        bs = _load_hyphenated("budget_summary_for_receipt", "budget-summary.py")
++        for model in _NEW_FLEET:
++            row = self.mod._DEFAULT_PRICING[model]
++            ref = bs._DEFAULT_PRICING[model]
++            self.assertAlmostEqual(row["in"], ref["in"], msg="%s in" % model)
++            self.assertAlmostEqual(row["out"], ref["out"], msg="%s out" % model)
++
++    def test_historical_rows_retained(self) -> None:
++        pricing = self.mod._DEFAULT_PRICING
++        for model in ("claude-opus-4-7", "claude-opus-4", "claude-sonnet-4-5",
++                      "claude-sonnet-4", "claude-haiku-4"):
++            self.assertIn(model, pricing, "%s dropped (ADR-142 replay)" % model)
++
++    def test_mixed_session_receipt_counts_fable51_spend(self) -> None:
++        """The r3 finding, as a receipt: 1M Fable 5.1 input == $10.00 must be
++        IN the total, not silently dropped behind a known sonnet event."""
++        events = [
++            {"action": "agent_spawn", "model": "claude-sonnet-4-5",
++             "tokens_in": 1000, "tokens_out": 0},
++            {"action": "agent_spawn", "model": "claude-fable-5-1",
++             "tokens_in": 1_000_000, "tokens_out": 0},
++        ]
++        section = self.mod.build_value_created(events)
++        self.assertEqual(section["cost_source"], "default-pricing-table")
++        # sonnet-4-5 1k in @0.003 + fable-5-1 1M in @0.010/1k == 0.003 + 10.0
++        self.assertAlmostEqual(section["cost_usd"], 10.003, places=4)
++
++
+ class TestCostTableFleetPresence(TestEnvContext):
+     """cost-table.yaml carries the NEW ids (opus-5 + fast row).
+ 
+@@ -347,6 +448,12 @@ class TestCostTableFleetPresence(TestEnvContext):
+         self.assertIn("input_per_mtok: 10.00", text)
+         self.assertIn("output_per_mtok: 50.00", text)
+ 
++    def test_fable51_row(self) -> None:
++        """ADR-149 Amendment 2 (S338): Fable 5.1 priced at the Fable 5 rate."""
++        text = self._block("claude-fable-5-1")
++        self.assertIn("input_per_mtok: 10.00", text)
++        self.assertIn("output_per_mtok: 50.00", text)
++
+     def test_opus48_fast_row(self) -> None:
+         """W2 P2b: 4-8-fast is a live replacement id and must be priced."""
+         text = self._block("claude-opus-4-8-fast")
+diff --git a/.claude/scripts/tests/test_upgrade_settings_migration.py b/.claude/scripts/tests/test_upgrade_settings_migration.py
+index cb67c89..9e71bcc 100644
+--- a/.claude/scripts/tests/test_upgrade_settings_migration.py
++++ b/.claude/scripts/tests/test_upgrade_settings_migration.py
+@@ -209,6 +209,83 @@ class TestArrayLeafKeyBranches(_MigrationHarness):
+                 self.assertNotIn("WARNING: " + key, proc.stderr)
+ 
+ 
++class TestSupersededShippedBaseline(_MigrationHarness):
++    """ADR-149 Amendment 2 (S338) — the ``superseded`` list of an ARRAY leaf.
++
++    v1.2.0 and v1.3.0 SHIPPED the 6-id availableModels that was the NEW
++    baseline until claude-fable-5-1 was appended. Under the 3-state policy
++    that array is neither OLD nor NEW, so without ``superseded`` every such
++    adopter would be read as ADOPTER-CUSTOMIZED and never receive the
++    seventh id — silently, because the install/upgrade parity e2e treats
++    settings.json as an ACCEPTED divergence (keys, not bytes). The list
++    carries frozen historical literals, the
++    same doctrine as SUPERSEDED_SHIPPED_CAPS below; the match is byte-exact
++    (values AND order), so a reordered array is still PRESERVED.
++    """
++
++    #: The availableModels array v1.2.0 AND v1.3.0 shipped (frozen literal:
++    #: `git show v1.3.0:templates/settings/settings.base.json`). Must stay
++    #: declared as superseded for as long as such installs exist.
++    SHIPPED_V12_V13_AVAILABLE = [
++        "claude-opus-4-8", "claude-fable-5", "claude-sonnet-4-6",
++        "claude-haiku-4-5", "claude-opus-5", "claude-sonnet-5",
++    ]
++
++    def test_shipped_6_id_array_is_declared_superseded(self) -> None:
++        spec = baselines()["availableModels"]
++        self.assertIn(self.SHIPPED_V12_V13_AVAILABLE, spec.get("superseded", []))
++        # Non-vacuity: it is neither the OLD nor the NEW baseline.
++        self.assertNotEqual(self.SHIPPED_V12_V13_AVAILABLE, spec["old"])
++        self.assertNotEqual(self.SHIPPED_V12_V13_AVAILABLE, spec["new"])
++
++    def test_new_baseline_appends_fable51_last(self) -> None:
++        new = baselines()["availableModels"]["new"]
++        self.assertEqual(new[-1], "claude-fable-5-1")
++        self.assertEqual(new[:-1], self.SHIPPED_V12_V13_AVAILABLE,
++                         "order is normative: append at the END only")
++
++    def test_every_superseded_array_migrates_to_new(self) -> None:
++        for key in ("availableModels", "fallbackModel"):
++            for sup in baselines()[key].get("superseded", []):
++                with self.subTest(key=key, superseded=sup):
++                    self.setUp()
++                    self.seed({key: list(sup)})
++                    proc = self.run_migration()
++                    self.assertEqual(self.read_settings()[key],
++                                     baselines()[key]["new"])
++                    self.assertIn(
++                        "MIGRATE (matched SUPERSEDED shipped baseline -> "
++                        "new baseline): " + key,
++                        proc.stdout,
++                    )
++                    self.assertNotIn("WARNING: " + key + " is ADOPTER-CUSTOMIZED",
++                                     proc.stderr)
++
++    def test_availableModels_superseded_is_exercised(self) -> None:
++        """The loop above must not pass vacuously on an empty list."""
++        self.assertTrue(baselines()["availableModels"].get("superseded"))
++
++    def test_reordered_superseded_is_customized_and_preserved(self) -> None:
++        sup = list(baselines()["availableModels"]["superseded"][0])
++        custom = list(reversed(sup))
++        self.assertNotEqual(custom, sup)
++        self.seed({"availableModels": custom})
++        proc = self.run_migration()
++        self.assertEqual(self.read_settings()["availableModels"], custom)
++        self.assertIn("WARNING: availableModels is ADOPTER-CUSTOMIZED",
++                      proc.stderr)
++
++    def test_second_run_after_superseded_migration_is_noop(self) -> None:
++        sup = baselines()["availableModels"]["superseded"][0]
++        self.seed({"availableModels": list(sup)})
++        self.run_migration()
++        first = self.settings_path.read_bytes()
++        proc = self.run_migration()
++        self.assertEqual(self.settings_path.read_bytes(), first)
++        self.assertIn("OK (already at new baseline): availableModels",
++                      proc.stdout)
++
++
+ class TestDefaultModeBranches(_MigrationHarness):
+     """U2 — per-branch oracles for permissions.defaultMode.
+ 
+diff --git a/.claude/scripts/tier_policy_cli/_types.py b/.claude/scripts/tier_policy_cli/_types.py
+index 5e43539..65c0505 100644
+--- a/.claude/scripts/tier_policy_cli/_types.py
++++ b/.claude/scripts/tier_policy_cli/_types.py
+@@ -23,11 +23,13 @@ from typing import Dict, Final, List, Literal, Optional, Tuple
+ # Model ID type alias (C-P0-9 — full IDs only; no short names).
+ # Matches ADR-052 canonical form + .claude/agents/<slug>.md model: field.
+ # ---------------------------------------------------------------------
+-MODEL_ID = "Literal['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-5', 'claude-sonnet-5']"
++MODEL_ID = "Literal['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-5', 'claude-sonnet-5', 'claude-fable-5-1']"
+ # Runtime constant — used by loader.py / learn.py for allowlist checks.
+ # ADR-149: claude-fable-5 added (flagship generation bump, additive).
+ # ADR-181 (PLAN-163 T1.2d): claude-opus-5 + claude-sonnet-5 added — the
+ # Claude 5 refresh working-set members; additive, historical ids stay.
++# ADR-149 Amendment 2 (S338): claude-fable-5-1 appended — working-set
++# only (not a VETO-floor member); additive.
+ # Independent mirror of the ADR-149 AVAILABLE_MODELS_WORKING_SET
+ # (defense-in-depth literal; parity enforced by
+ # hooks/tests/test_adr149_validator_parity.py).
+@@ -38,6 +40,7 @@ VALID_MODEL_IDS: "Final[Tuple[str, ...]]" = (
+     "claude-haiku-4-5-20251001",
+     "claude-opus-5",
+     "claude-sonnet-5",
++    "claude-fable-5-1",
+ )
+ 
+ 
+diff --git a/.claude/scripts/tier_policy_cli/learn.py b/.claude/scripts/tier_policy_cli/learn.py
+index 40cfbb1..0d507fa 100644
+--- a/.claude/scripts/tier_policy_cli/learn.py
++++ b/.claude/scripts/tier_policy_cli/learn.py
+@@ -553,6 +553,7 @@ def _tier_rank(model_id: str) -> int:
+         "claude-opus-5": 5,
+         "claude-opus-5-fast": 5,  # fast mode: same model, premium rate
+         "claude-fable-5": 6,  # ADR-149 flagship (Mythos-class, above Opus)
++        "claude-fable-5-1": 7,  # ADR-149 Amendment 2 (S338): Fable 5.1, above Fable 5
+     }
+     return order.get(model_id, -1)
+ 
+diff --git a/.claude/scripts/tier_policy_cli/tests/test_learn_mutation.py b/.claude/scripts/tier_policy_cli/tests/test_learn_mutation.py
+index 55d09b1..03b64f6 100644
+--- a/.claude/scripts/tier_policy_cli/tests/test_learn_mutation.py
++++ b/.claude/scripts/tier_policy_cli/tests/test_learn_mutation.py
+@@ -491,6 +491,26 @@ class DirectionMutationTests(LearnMutationTestBase):
+             learn._tier_rank(_SONNET), learn._tier_rank(_OPUS)
+         )
+ 
++    def test_every_valid_model_id_has_a_rank(self):
++        """ADR-149 Amendment 2 (S338, codex rail r1 P1): an id admitted to
++        VALID_MODEL_IDS but unknown to ``_tier_rank`` ranks -1, so a move
++        AWAY from it signs as "promote" and sails past the signed-demote
++        gate. Every allowlisted id must carry a rank."""
++        for model_id in VALID_MODEL_IDS:
++            self.assertGreaterEqual(learn._tier_rank(model_id), 0, model_id)
++
++    def test_kill_fable51_ranks_above_fable5(self):
++        """Fable 5.1 is the newer flagship: above Fable 5 and Opus 5;
++        moving off it is a demote (needs a signature)."""
++        self.assertGreater(learn._tier_rank("claude-fable-5-1"),
++                           learn._tier_rank("claude-fable-5"))
++        self.assertEqual(
++            learn._direction("claude-fable-5-1", "claude-opus-5"), "demote"
++        )
++        self.assertEqual(
++            learn._direction("claude-fable-5", "claude-fable-5-1"), "promote"
++        )
++
+     def test_kill_direction_promote_vs_demote(self):
+         """Kill ``_direction`` comparison flip.
+ 
+diff --git a/.claude/scripts/tier_policy_cli/tests/test_types.py b/.claude/scripts/tier_policy_cli/tests/test_types.py
+index c8d001c..76bf567 100644
+--- a/.claude/scripts/tier_policy_cli/tests/test_types.py
++++ b/.claude/scripts/tier_policy_cli/tests/test_types.py
+@@ -38,7 +38,8 @@ class TestValidModelIds(unittest.TestCase):
+     def test_three_canonical_tiers(self):
+         # ADR-149 (PLAN-134 W0): claude-fable-5 added — 4 legal IDs.
+         # ADR-181 (PLAN-163 T1.2d): opus-5 + sonnet-5 added — 6 legal IDs.
+-        self.assertEqual(len(VALID_MODEL_IDS), 6)
++        # ADR-149 Amendment 2 (S338): fable-5-1 added — 7 legal IDs.
++        self.assertEqual(len(VALID_MODEL_IDS), 7)
+ 
+     def test_includes_all_three_tiers(self):
+         self.assertIn("claude-fable-5", VALID_MODEL_IDS)
+@@ -47,6 +48,7 @@ class TestValidModelIds(unittest.TestCase):
+         self.assertIn("claude-haiku-4-5-20251001", VALID_MODEL_IDS)
+         self.assertIn("claude-opus-5", VALID_MODEL_IDS)
+         self.assertIn("claude-sonnet-5", VALID_MODEL_IDS)
++        self.assertIn("claude-fable-5-1", VALID_MODEL_IDS)
+ 
+     def test_retired_generation_not_valid(self):
+         # Non-vacuity guard: a known-retired id must NOT be accepted
+diff --git a/.claude/scripts/validate-governance.sh b/.claude/scripts/validate-governance.sh
+index 335086f..cdd573e 100755
+--- a/.claude/scripts/validate-governance.sh
++++ b/.claude/scripts/validate-governance.sh
+@@ -708,7 +708,8 @@ if [ -d "$AGENTS_DIR" ]; then
+     # ERROR if present but not in the ADR-149 working set — PLAN-163
+     # T1.2d/ADR-181 refresh: the accepted set is the ADR-149
+     # AVAILABLE_MODELS_WORKING_SET (opus-4-8, fable-5, sonnet-4-6,
+-    # haiku-4-5, opus-5, sonnet-5) plus the dated haiku id that agent
++    # haiku-4-5, opus-5, sonnet-5, fable-5-1 — ADR-149 Amendment 2,
++    # S338) plus the dated haiku id that agent
+     # files carry historically. Independent-mirror doctrine (ADR-149
+     # Decision): this literal deliberately duplicates the ADR block;
+     # test_adr149_validator_parity.py reddens on drift.
+@@ -719,11 +720,11 @@ if [ -d "$AGENTS_DIR" ]; then
+     else
+       model_val=$(echo "$model_line" | sed -E 's/^model:[[:space:]]*//' | tr -d '[:space:]')
+       case "$model_val" in
+-        claude-fable-5|claude-opus-4-8|claude-sonnet-4-6|claude-haiku-4-5|claude-haiku-4-5-20251001|claude-opus-5|claude-sonnet-5|"")
++        claude-fable-5|claude-opus-4-8|claude-sonnet-4-6|claude-haiku-4-5|claude-haiku-4-5-20251001|claude-opus-5|claude-sonnet-5|claude-fable-5-1|"")
+           : ;;
+         *)
+           echo "  ERROR: $base has invalid model value: '$model_val'"
+-          echo "    Expected one of: claude-fable-5, claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5, claude-haiku-4-5-20251001, claude-opus-5, claude-sonnet-5, or empty (inherit)"
++          echo "    Expected one of: claude-fable-5, claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5, claude-haiku-4-5-20251001, claude-opus-5, claude-sonnet-5, claude-fable-5-1, or empty (inherit)"
+           ERRORS=$((ERRORS + 1))
+           ;;
+       esac
+diff --git a/.claude/scripts/value-dashboard.py b/.claude/scripts/value-dashboard.py
+index 2eb916a..93b009a 100755
+--- a/.claude/scripts/value-dashboard.py
++++ b/.claude/scripts/value-dashboard.py
+@@ -276,6 +276,7 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
+     # ceo-cost.py (per-MTok) converted to per-1k. Sonnet 5 uses the intro
+     # rate ($2/$10 until 2026-08-31; sticker $3/$15) — same as the mirror.
+     "claude-fable-5":              {"in": 0.010, "out": 0.050},
++    "claude-fable-5-1":            {"in": 0.010, "out": 0.050},  # ADR-149 Amendment 2 (S338)
+     "claude-opus-5":               {"in": 0.005, "out": 0.025},
+     "claude-opus-5-fast":          {"in": 0.010, "out": 0.050},
+     # NOTE (repass-r2 part-c P2): this is the INTRO rate, valid until
+diff --git a/.claude/settings.json b/.claude/settings.json
+index 8f18159..0565678 100644
+--- a/.claude/settings.json
++++ b/.claude/settings.json
+@@ -776,7 +776,8 @@
+     "claude-sonnet-4-6",
+     "claude-haiku-4-5",
+     "claude-opus-5",
+-    "claude-sonnet-5"
++    "claude-sonnet-5",
++    "claude-fable-5-1"
+   ],
+   "_enforce_available_models_comment": "PLAN-153 wave-backlog (Anthropic ADOPT sweep 2026-07) — Claude Code >=2.1.202 verified semantics: when true and availableModels is a non-empty array, the DEFAULT model selection is also constrained to the allowlist (if the tier default is not in availableModels, Default resolves to the first allowed entry). Closes Default-model drift when the harness tier default moves ahead of our pinned set. Schema-verified optional boolean, valid in project settings (cascade-trust mode). Caveat straight from the binary: if a MANAGED-POLICY settings source exists but fails to load, the harness refuses cascade-trust mode and model enforcement from user/project settings is DISABLED with a warning — fail-open at harness level; acceptable because the availableModels pins still gate explicit selection.",
+   "enforceAvailableModels": true,
+diff --git a/docs/CEO-MODEL-ROUTING.md b/docs/CEO-MODEL-ROUTING.md
+index 9828d00..3b87153 100644
+--- a/docs/CEO-MODEL-ROUTING.md
++++ b/docs/CEO-MODEL-ROUTING.md
+@@ -57,9 +57,14 @@ switch is a no-op — the upgraded path doesn't exist.**
+ **Working set (`availableModels`, order is normative — new ids appended):**
+ 
+ ```
+-["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]
++["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5","claude-fable-5-1"]
+ ```
+ 
++> **UPDATED S338 (ADR-149 Amendment 2, 2026-09-01):** `claude-fable-5-1`
++> (Fable 5.1, $10/$50, 1M ctx) appended to the working set — availability
++> only. The VETO floor, the fallback chain, the session pin and every row
++> of the table below are unchanged; 5.1 is selectable, not routed to.
++
+ **Fallback (`fallbackModel`, OQ1=b — full refresh, no soak):** `["claude-opus-5"]`
+ 
+ | Role / surface | Model (post-PLAN-163) | Notes |
+diff --git a/docs/cost-of-operation.md b/docs/cost-of-operation.md
+index 94e4a42..434e0f9 100644
+--- a/docs/cost-of-operation.md
++++ b/docs/cost-of-operation.md
+@@ -103,6 +103,7 @@ inheritance surprise.
+ | Model | Input ($/M tokens) | Output ($/M tokens) | vs Opus 4-8 |
+ |-------|--------------------|----------------------|-------------|
+ | `claude-fable-5` (current — Mythos-class flagship) | $10.00 | $50.00 | 2.0× |
++| `claude-fable-5-1` (current — Mythos-class flagship 5.1; ADR-149 Amendment 2, S338 — selectable, not the pin) | $10.00 | $50.00 | 2.0× |
+ | `claude-opus-5` (current) | $5.00 | $25.00 | 1.0× |
+ | `claude-sonnet-5` (current; intro $2/$10 until 2026-08-31, sticker $3/$15) | $2.00 | $10.00 | 0.4× |
+ | `claude-haiku-4-5` (current) | $1.00 | $5.00 | 0.2× |
+diff --git a/docs/provider-pricing.md b/docs/provider-pricing.md
+index adb32a1..de0791e 100644
+--- a/docs/provider-pricing.md
++++ b/docs/provider-pricing.md
+@@ -62,6 +62,7 @@ would require a fresh Owner check before billing).
+ | Provider   | Model                   | Input $/1k | Output $/1k |
+ |------------|-------------------------|------------|-------------|
+ | Anthropic  | claude-fable-5          | 0.010      | 0.050       |
++| Anthropic  | claude-fable-5-1        | 0.010      | 0.050       |
+ | Anthropic  | claude-opus-4-8         | 0.005      | 0.025       |
+ | Anthropic  | claude-opus-4-7         | 0.005      | 0.025       |
+ | Anthropic  | claude-opus-4-6         | 0.005      | 0.025       |
+@@ -104,6 +105,7 @@ standard rates across the full window.
+ | claude-opus-4-6 | Y (1M) | **No** | 2026-06-15 |
+ | claude-sonnet-4-6 | Y (1M) | **No** | 2026-06-15 |
+ | claude-fable-5 | Y (1M) | **No** | 2026-06-15 |
++| claude-fable-5-1 | Y (1M) | **No** — documentary: the pricing page (fetched 2026-09-01) §Long context pricing states that Claude 4.6 and later models include the full 1M window at STANDARD pricing; the PLAN-137 live probe was not re-run for 5.1 (ADR-149 Amendment 2, S338) | 2026-09-01 |
+ | claude-haiku-4-5 | **N — 200K only** | n/a (window caps at 200K) | 2026-06-15 |
+ 
+ **Three non-classic spend multipliers the doctrine MUST still account for** (none is
+@@ -142,7 +144,10 @@ on the flat-rate assumption, conditional on the three multipliers above.
+ | output                     | 1.00x           | `output_tokens`                |
+ 
+ Source: Anthropic prompt-caching docs (write 1.25× at the 5-minute TTL, 2.0× at
+-the 1-hour TTL; read 0.10× regardless of tier). Last verified 2026-06-02 for
++the 1-hour TTL; read 0.10× regardless of tier — EXCEPT Claude Fable 5.1 /
++Mythos 5.1, whose cache hits are 0.025× base = $0.25/MTok: pricing page
++2026-09-01, ADR-149 Amendment 2; `budget-summary.py` carries the per-model
++multiplier). Last verified 2026-06-02 for
+ PLAN-123. Mirrors `freeze/pricing.py` `CACHE_WRITE_MULT` / `CACHE_READ_MULT`; a
+ cache read billed at the full input rate (the gate-0b accounting) over-bills ~10×.
+ 
+@@ -214,6 +219,7 @@ cache read billed at the full input rate (the gate-0b accounting) over-bills ~10
+ | Slug                    | Per-1M in | Per-1M out | Last verified | Confidence | Source                                                                                         |
+ |-------------------------|-----------|------------|---------------|------------|------------------------------------------------------------------------------------------------|
+ | claude-fable-5          | 10.00     | 50.00      | 2026-06-10    | high       | https://models.dev/api.json (Owner fetch sha a6f5cb21; live-confirmed 2026-06-11 by GATE-W0b reconciliation, 20/20 calls drift~0.0000 — docs/fable-5-baseline.md) |
++| claude-fable-5-1        | 10.00     | 50.00      | 2026-09-01    | medium     | https://platform.claude.com/docs/en/about-claude/models/overview (Fable 5.1 launch 2026-09-01; base rate equals Fable 5; cache hits 0.025x base = $0.25/MTok per the pricing page fetched 2026-09-01 — the ONLY model off the standard 0.1x; ADR-149 Amendment 2, S338) |
+ | claude-opus-4-8         | 5.00      | 25.00      | 2026-06-10    | high       | https://models.dev/api.json (Owner fetch sha a6f5cb21; live-confirmed 2026-06-11 by GATE-W0b reconciliation; was live-confirmed 2026-05-29 via PLAN-120 WS-C) |
+ | claude-opus-4-7         | 5.00      | 25.00      | 2026-06-10    | high       | https://models.dev/api.json (Owner fetch sha a6f5cb21; live-confirmed 2026-06-11 by GATE-W0b reconciliation 20/20. NOTE: billed $15/$75 until the 4.8 launch price cut — pre-4.8 log replay must use the era rate, see git history of this row) |
+ | claude-opus-4-6         | 5.00      | 25.00      | 2026-06-15    | high       | https://platform.claude.com/docs/en/about-claude/pricing (Opus 4.6 rebased to $5/$25 at the post-4.8 Opus rate-card cut — the prior $15/$75 was the pre-4.8 Opus rate, now retired; PLAN-137 A4 live-verified 2026-06-15) |
+diff --git a/scripts/local/smoke-install-parity.sh b/scripts/local/smoke-install-parity.sh
+index 4e074d7..4d3b5e4 100755
+--- a/scripts/local/smoke-install-parity.sh
++++ b/scripts/local/smoke-install-parity.sh
+@@ -55,7 +55,8 @@ FAIL=0
+ # PLAN-163 T1.7 (ADR-181): claude-opus-5 + claude-sonnet-5 appended —
+ # Claude 5 refresh working-set members (additive; membership here is a
+ # frontmatter/env lint only, NOT the availableModels evidence — see [6/6]).
+-ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 claude-opus-5 claude-sonnet-5 haiku sonnet opus inherit"
++# ADR-149 Amendment 2 (S338): claude-fable-5-1 appended (working set only).
++ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 claude-opus-5 claude-sonnet-5 claude-fable-5-1 haiku sonnet opus inherit"
+ 
+ is_allowed_model() {
+   # $1 = candidate value (already trimmed). Empty == inherit == allowed.
+@@ -210,6 +211,7 @@ EXPECTED_AVAILABLE = [
+     "claude-haiku-4-5",
+     "claude-opus-5",
+     "claude-sonnet-5",
++    "claude-fable-5-1",  # ADR-149 Amendment 2 (S338) — appended at the end
+ ]
+ # ADR-149 FALLBACK_MODEL_CHAIN (ADR-181 / PLAN-163 OQ1=b).
+ EXPECTED_FALLBACK = ["claude-opus-5"]
+diff --git a/scripts/upgrade.sh b/scripts/upgrade.sh
+index 14fff65..adc5c85 100755
+--- a/scripts/upgrade.sh
++++ b/scripts/upgrade.sh
+@@ -147,13 +147,25 @@ fi
+ # claude-opus-5 IS present, so the pin is set and enforceAvailableModels
+ # accepts it. Any PRESENT model value != the new pin is adopter-custom and
+ # PRESERVED with a named warning (never re-flipped).
++# ADR-149 Amendment 2 (S338): an ARRAY leaf may also carry "superseded" —
++# EVERY previously SHIPPED value that is neither the original OLD baseline
++# nor the NEW one, as frozen historical literals (the same doctrine as
++# OLD_PAIR_RAIL_CAPS below). v1.2.0 and v1.3.0 shipped the 6-id
++# availableModels that was "new" until claude-fable-5-1 was appended;
++# without this list the 3-state policy would read every such adopter as
++# ADOPTER-CUSTOMIZED and never deliver the seventh id — silently: the
++# install/upgrade parity e2e declares settings.json an ACCEPTED divergence
++# (keys, not bytes), so CI would not notice. The match is
++# byte-exact (values AND order): a genuinely customized array still lands
++# in the PRESERVED branch.
+ # Each registration carries a "match" filename used for the idempotent
+ # append (mirrors the H8 jq `_reg` semantics: an event entry whose
+ # hooks[].command references the filename counts as already registered).
+ _T54_BASELINES_JSON='{
+   "availableModels": {
+     "old": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5"],
+-    "new": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]
++    "superseded": [["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]],
++    "new": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5","claude-fable-5-1"]
+   },
+   "fallbackModel": {
+     "old": ["claude-opus-4-8"],
+@@ -3221,6 +3233,14 @@ for key in ("availableModels", "fallbackModel"):
+         resolved = list(spec["new"])
+         changed[0] = True
+         act("MIGRATE (matched OLD baseline -> new baseline): " + key)
++    elif cur in spec.get("superseded", []):
++        # ADR-149 Amendment 2 (S338): a previously SHIPPED baseline
++        # (frozen literal, byte-exact incl. order) migrates like OLD.
++        if not dry:
++            data[key] = list(spec["new"])
++        resolved = list(spec["new"])
++        changed[0] = True
++        act("MIGRATE (matched SUPERSEDED shipped baseline -> new baseline): " + key)
+     else:
+         warn("WARNING: " + key + " is ADOPTER-CUSTOMIZED - PRESERVED "
+              "(not migrated to the new baseline)")
+diff --git a/templates/settings/settings.base.json b/templates/settings/settings.base.json
+index cfd15e7..3f9a43f 100644
+--- a/templates/settings/settings.base.json
++++ b/templates/settings/settings.base.json
+@@ -609,7 +609,8 @@
+     "claude-sonnet-4-6",
+     "claude-haiku-4-5",
+     "claude-opus-5",
+-    "claude-sonnet-5"
++    "claude-sonnet-5",
++    "claude-fable-5-1"
+   ],
+   "fallbackModel": [
+     "claude-opus-5"
