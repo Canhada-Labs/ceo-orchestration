@@ -57,8 +57,13 @@ switch is a no-op — the upgraded path doesn't exist.**
 **Working set (`availableModels`, order is normative — new ids appended):**
 
 ```
-["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]
+["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5","claude-fable-5-1"]
 ```
+
+> **UPDATED S338 (ADR-149 Amendment 2, 2026-09-01):** `claude-fable-5-1`
+> (Fable 5.1, $10/$50, 1M ctx) appended to the working set — availability
+> only. The VETO floor, the fallback chain, the session pin and every row
+> of the table below are unchanged; 5.1 is selectable, not routed to.
 
 **Fallback (`fallbackModel`, OQ1=b — full refresh, no soak):** `["claude-opus-5"]`
 

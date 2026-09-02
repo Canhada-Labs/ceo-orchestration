@@ -84,6 +84,7 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-opus-4-8[1m]": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
     "claude-opus-4-8-fast": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
     "claude-fable-5": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
+    "claude-fable-5-1": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},  # ADR-149 Amendment 2 (S338)
     "claude-opus-5": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
     "claude-opus-5-fast": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
     "claude-sonnet-5": {"input_per_mtok": 2.00, "output_per_mtok": 10.00},

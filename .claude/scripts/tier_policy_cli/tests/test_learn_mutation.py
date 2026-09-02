@@ -491,6 +491,26 @@ class DirectionMutationTests(LearnMutationTestBase):
             learn._tier_rank(_SONNET), learn._tier_rank(_OPUS)
         )
 
+    def test_every_valid_model_id_has_a_rank(self):
+        """ADR-149 Amendment 2 (S338, codex rail r1 P1): an id admitted to
+        VALID_MODEL_IDS but unknown to ``_tier_rank`` ranks -1, so a move
+        AWAY from it signs as "promote" and sails past the signed-demote
+        gate. Every allowlisted id must carry a rank."""
+        for model_id in VALID_MODEL_IDS:
+            self.assertGreaterEqual(learn._tier_rank(model_id), 0, model_id)
+
+    def test_kill_fable51_ranks_above_fable5(self):
+        """Fable 5.1 is the newer flagship: above Fable 5 and Opus 5;
+        moving off it is a demote (needs a signature)."""
+        self.assertGreater(learn._tier_rank("claude-fable-5-1"),
+                           learn._tier_rank("claude-fable-5"))
+        self.assertEqual(
+            learn._direction("claude-fable-5-1", "claude-opus-5"), "demote"
+        )
+        self.assertEqual(
+            learn._direction("claude-fable-5", "claude-fable-5-1"), "promote"
+        )
+
     def test_kill_direction_promote_vs_demote(self):
         """Kill ``_direction`` comparison flip.
 

@@ -44,6 +44,10 @@ _EXPECTED_RATES = {
     "claude-opus-4-7": (5.00, 25.00),
     "claude-sonnet-4-6": (3.00, 15.00),
     "claude-fable-5": (10.00, 50.00),
+    # ADR-149 Amendment 2 (S338): DOCUMENTARY evidence, not the PLAN-137
+    # live probe — pricing page (2026-09-01) §Long context: 4.6+ models
+    # carry the full 1M window at standard pricing (provider-pricing.md row).
+    "claude-fable-5-1": (10.00, 50.00),
     "claude-haiku-4-5": (1.00, 5.00),
 }
 

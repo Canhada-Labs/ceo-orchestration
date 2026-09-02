@@ -776,7 +776,8 @@
     "claude-sonnet-4-6",
     "claude-haiku-4-5",
     "claude-opus-5",
-    "claude-sonnet-5"
+    "claude-sonnet-5",
+    "claude-fable-5-1"
   ],
   "_enforce_available_models_comment": "PLAN-153 wave-backlog (Anthropic ADOPT sweep 2026-07) — Claude Code >=2.1.202 verified semantics: when true and availableModels is a non-empty array, the DEFAULT model selection is also constrained to the allowlist (if the tier default is not in availableModels, Default resolves to the first allowed entry). Closes Default-model drift when the harness tier default moves ahead of our pinned set. Schema-verified optional boolean, valid in project settings (cascade-trust mode). Caveat straight from the binary: if a MANAGED-POLICY settings source exists but fails to load, the harness refuses cascade-trust mode and model enforcement from user/project settings is DISABLED with a warning — fail-open at harness level; acceptable because the availableModels pins still gate explicit selection.",
   "enforceAvailableModels": true,

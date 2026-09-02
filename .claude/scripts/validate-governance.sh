@@ -708,7 +708,8 @@ if [ -d "$AGENTS_DIR" ]; then
     # ERROR if present but not in the ADR-149 working set — PLAN-163
     # T1.2d/ADR-181 refresh: the accepted set is the ADR-149
     # AVAILABLE_MODELS_WORKING_SET (opus-4-8, fable-5, sonnet-4-6,
-    # haiku-4-5, opus-5, sonnet-5) plus the dated haiku id that agent
+    # haiku-4-5, opus-5, sonnet-5, fable-5-1 — ADR-149 Amendment 2,
+    # S338) plus the dated haiku id that agent
     # files carry historically. Independent-mirror doctrine (ADR-149
     # Decision): this literal deliberately duplicates the ADR block;
     # test_adr149_validator_parity.py reddens on drift.
@@ -719,11 +720,11 @@ if [ -d "$AGENTS_DIR" ]; then
     else
       model_val=$(echo "$model_line" | sed -E 's/^model:[[:space:]]*//' | tr -d '[:space:]')
       case "$model_val" in
-        claude-fable-5|claude-opus-4-8|claude-sonnet-4-6|claude-haiku-4-5|claude-haiku-4-5-20251001|claude-opus-5|claude-sonnet-5|"")
+        claude-fable-5|claude-opus-4-8|claude-sonnet-4-6|claude-haiku-4-5|claude-haiku-4-5-20251001|claude-opus-5|claude-sonnet-5|claude-fable-5-1|"")
           : ;;
         *)
           echo "  ERROR: $base has invalid model value: '$model_val'"
-          echo "    Expected one of: claude-fable-5, claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5, claude-haiku-4-5-20251001, claude-opus-5, claude-sonnet-5, or empty (inherit)"
+          echo "    Expected one of: claude-fable-5, claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5, claude-haiku-4-5-20251001, claude-opus-5, claude-sonnet-5, claude-fable-5-1, or empty (inherit)"
           ERRORS=$((ERRORS + 1))
           ;;
       esac

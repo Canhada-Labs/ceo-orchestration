@@ -127,6 +127,7 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-opus-4-8":             {"in": 0.005, "out": 0.025},
     "claude-opus-4-8-fast":       {"in": 0.010, "out": 0.050},
     "claude-fable-5":             {"in": 0.010, "out": 0.050},
+    "claude-fable-5-1":           {"in": 0.010, "out": 0.050},  # ADR-149 Amendment 2 (S338)
     "claude-opus-5":              {"in": 0.005, "out": 0.025},
     "claude-opus-5-fast":         {"in": 0.010, "out": 0.050},
     "claude-sonnet-5":            {"in": 0.002, "out": 0.010},
@@ -975,6 +976,24 @@ _NATIVE_USAGE_KEYS: Tuple[str, ...] = (
 )
 
 
+#: ADR-149 Amendment 2 (S338, codex rail r1 P2): the cache-read multiplier
+#: is PER MODEL. The pricing page (fetched 2026-09-01) prices cache hits on
+#: Claude Fable 5.1 / Mythos 5.1 at 0.025x the base input price
+#: ($0.25/MTok); every other model keeps the standard 0.10x. A flat 0.10x
+#: would OVERSTATE Fable 5.1 cache reads 4x. Keys are canonical ids.
+_CACHE_READ_MULTIPLIER_DEFAULT: float = 0.10
+_CACHE_READ_MULTIPLIER_OVERRIDES: Dict[str, float] = {
+    "claude-fable-5-1": 0.025,
+}
+
+
+def _cache_read_multiplier(model_id: str) -> float:
+    """Cache-read multiplier for ``model_id`` (0.10x unless overridden)."""
+    return _CACHE_READ_MULTIPLIER_OVERRIDES.get(
+        model_id, _CACHE_READ_MULTIPLIER_DEFAULT
+    )
+
+
 def _read_native_spawn(
     transcript: Path,
     rail: str,
@@ -988,7 +1007,11 @@ def _read_native_spawn(
     malformed/truncated line (live session appending), or a missing
     field degrades the record — it never raises. Model precedence:
     ``meta.model`` first, else the first ``message.model`` seen in the
-    transcript (the workflow-path metas carry NO model at all).
+    transcript (the workflow-path metas carry NO model at all). A
+    ``meta.model`` that resolves to NOTHING (a bare family alias such as
+    ``fable`` once the registry holds two Fable ids — ADR-149 Amendment
+    2) falls back to the transcript's exact ``message.model``: exact
+    evidence beats an ambiguous alias, and neither is ever guessed.
     """
     stem = transcript.name[: -len(".jsonl")]
     meta_path = transcript.with_name(stem + ".meta.json")
@@ -1094,10 +1117,24 @@ def _read_native_spawn(
 
     model_raw = meta_model or transcript_model
     model_id = _normalize_model_id(model_raw, pricing=pricing)
+    if (
+        model_id is None
+        and meta_model
+        and transcript_model
+        and transcript_model.strip().lower() != meta_model.strip().lower()
+    ):
+        # ADR-149 Amendment 2 (S338, codex rail r2 P2): a bare family
+        # alias in the meta ("fable") turned AMBIGUOUS once the registry
+        # held two Fable ids, and the doctrine never guesses a version.
+        # The transcript's own message.model is exact evidence, not a
+        # guess — fall back to it. Still unresolved => TBD, as before.
+        model_raw = transcript_model
+        model_id = _normalize_model_id(model_raw, pricing=pricing)
     t_in = sums["input_tokens"]
     t_out = sums["output_tokens"]
     # Cache classes are BILLABLE (docs/provider-pricing.md: read @0.10x
-    # input, write @1.25x on the 5m TTL and @2.00x on the 1h TTL). When the
+    # input — 0.025x on Fable 5.1, see _CACHE_READ_MULTIPLIER_OVERRIDES —,
+    # write @1.25x on the 5m TTL and @2.00x on the 1h TTL). When the
     # transcript carries the nested ``usage.cache_creation`` split, each
     # tier gets its own multiplier (codex S306 r3 P2 cure); writes NOT
     # attributed by the split assume 5m, the API default. Priced as
@@ -1109,7 +1146,7 @@ def _read_native_spawn(
     c_5m = min(cache_5m, c_total - c_1h)
     c_rest = c_total - c_1h - c_5m    # unattributed -> 5m assumption
     cache_equiv_in = int(
-        0.10 * sums["cache_read_input_tokens"]
+        _cache_read_multiplier(model_id) * sums["cache_read_input_tokens"]
         + 1.25 * (c_5m + c_rest)
         + 2.00 * c_1h
     )
@@ -1643,7 +1680,8 @@ def _format_native_block(native: Dict[str, Any]) -> List[str]:
         cost_col = f"${cost:,.4f}"
     lines.append(f"  Native cost     : {cost_col}")
     lines.append(
-        "                    (cache priced as input-equivalents: read @0.10x,"
+        "                    (cache priced as input-equivalents: read @0.10x"
+        " — 0.025x on Fable 5.1 —,"
         " write @1.25x — 5m-TTL assumption, docs/provider-pricing.md)"
     )
     unreadable = int(native.get("native_transcripts_unreadable", 0) or 0)

@@ -276,6 +276,7 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     # ceo-cost.py (per-MTok) converted to per-1k. Sonnet 5 uses the intro
     # rate ($2/$10 until 2026-08-31; sticker $3/$15) — same as the mirror.
     "claude-fable-5":              {"in": 0.010, "out": 0.050},
+    "claude-fable-5-1":            {"in": 0.010, "out": 0.050},  # ADR-149 Amendment 2 (S338)
     "claude-opus-5":               {"in": 0.005, "out": 0.025},
     "claude-opus-5-fast":          {"in": 0.010, "out": 0.050},
     # NOTE (repass-r2 part-c P2): this is the INTRO rate, valid until

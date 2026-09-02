@@ -89,6 +89,10 @@ AVAILABLE_MODELS_WORKING_SET: tuple = (
     #    ADR-181 justification) --
     "claude-opus-5",      # debate/arch routing + fallback target + floor member
     "claude-sonnet-5",    # advisory tier target (ADR-157 member; OQ2 migrate-now)
+    # -- Fable 5.1 -- ADR-149 Amendment 2, S338 2026-09-01; APPENDED AT END.
+    #    Working-set ONLY: not a floor member, not the fallback, not the
+    #    session pin. The legacy claude-fable-5 stays available. --
+    "claude-fable-5-1",   # Mythos-class flagship 5.1; dateless id per the models overview
 )
 ```
 
@@ -201,3 +205,89 @@ undeclared mid-turn switch is evidence-degraded and must say so.
   failing the spawn — fine for the routing floor, but it means frontmatter
   pins are not self-verifying; the spawn gate (`check_agent_spawn` /
   `VETO_FLOOR_ALLOWED`) remains the enforcement layer for VETO personas.
+
+## Amendment 2 (S338 — Fable 5.1 joins the working set; floor, fallback and pin unchanged)
+
+> Authored S338 (2026-09-01) under PLAN-169 (fleet-currency remit, W2.10
+> class cure: functional surfaces DERIVE from this ADR). Ratified by the
+> Owner via AskUserQuestion at the S338 opening — **route (c) of three**:
+> working-set append only. Lands through the `wave-fable51` sentinel ceremony
+> (`.claude/plans/PLAN-169/wave-fable51-approved.md`).
+
+### A2.1 Facts the amendment rests on (models overview, fetched 2026-09-01)
+
+- Claude Fable 5.1 launched 2026-09-01 alongside Mythos 5.1 (same
+  underlying model; Fable carries the additional dual-use safety
+  measures and is the generally available one).
+- **API id = alias = `claude-fable-5-1`** — dateless. Every id from the
+  4.6 generation on is a pinned snapshot, so a date suffix must NEVER be
+  appended (the S337 recon measured 233 files citing `claude-fable-5`
+  and 0 citing the 5.1 id; the cure is this data change, not a hunt).
+- $10 in / $50 out per MTok (equal to Fable 5); 1M context; 128K max
+  output; knowledge cutoff June 2026; adaptive always-on thinking;
+  retirement no earlier than 2027-09-01.
+- **Cache hits on Fable 5.1 are 0.025x the base input price ($0.25/MTok)**
+  — the pricing page (fetched 2026-09-01) resolves the conflict the S337
+  recon recorded between the models overview (0.1x) and the launch note;
+  every other model keeps the standard 0.1x. `budget-summary.py` is the
+  ONE cost surface that prices cache reads (input-equivalents), so it
+  gains a per-model multiplier instead of the flat 0.10x that would have
+  overstated Fable 5.1 cache reads 4x (codex rail r1 P2).
+- `claude-fable-5` remains available as LEGACY: the change is ADDITIVE.
+
+### A2.2 Decision
+
+1. `AVAILABLE_MODELS_WORKING_SET` gains `claude-fable-5-1` **at the end**
+   (A1.1 order rule — no reorder, no removal). The generated
+   `availableModels` mirrors (`.claude/settings.json`,
+   `templates/settings/settings.base.json`) follow byte-for-byte via
+   `generate-available-models.py`; every INDEPENDENT mirror bound by
+   `test_adr149_validator_parity.py` (validate-governance case-arm,
+   `tier_policy_cli.VALID_MODEL_IDS`, `smoke-install-parity.sh`
+   `ALLOWED_MODELS`) carries the same append in the same patch.
+2. `VETO_FLOOR_ALLOWED` is **unchanged**: Fable 5.1 is selectable, not
+   VETO-eligible. Routes (a)/(b) — floor membership with or without
+   migrating the six `agents/*.md` pins — stay open as a FUTURE amendment
+   that the Owner may ratify after measuring the 5.1 verdict quality;
+   nothing here pre-empts it.
+3. `FALLBACK_MODEL_CHAIN` is **unchanged** (`claude-opus-5`).
+4. The session-default `model` pin stays `claude-opus-5` in all three
+   adopter-facing mirrors. Flipping it is a SEPARATE decision with its own
+   blast radius (adopter default cost x2; `upgrade.sh` pin migration;
+   `test_template_dogfood_parity.py` EXPECTED_PIN) and is not made here.
+   A maintainer who wants 5.1 as the session default on ONE machine sets
+   it in `.claude/settings.local.json` (highest-precedence project layer;
+   the generator `--check` resolves that overlay, A1.2).
+5. `scripts/upgrade.sh` learns a **`superseded`** list for the
+   `availableModels` leaf: the 6-id array that v1.2.0 and v1.3.0 SHIPPED
+   is a frozen historical literal (same doctrine as the pair-rail
+   `OLD_PAIR_RAIL_CAPS`). Without it the 3-state migration would read
+   every v1.2.0/v1.3.0 adopter as ADOPTER-CUSTOMIZED and never deliver
+   the seventh id — SILENTLY: the install/upgrade parity e2e declares
+   `.claude/settings.json` an ACCEPTED divergence (the two routes
+   converge on keys, not bytes), so CI would not have noticed. The match
+   stays byte-exact (values AND order), so a genuinely customized array
+   is still PRESERVED.
+6. `tier_policy_cli/learn.py` `_tier_rank` ranks the new id ABOVE
+   `claude-fable-5` (codex rail r1 P1): an id admitted to
+   `VALID_MODEL_IDS` but unknown to the ladder ranks -1, so a move away
+   from it would sign as `promote` and bypass the signed-demote gate.
+   A parity test now requires every allowlisted id to carry a rank.
+
+### A2.3 What this amendment does NOT decide
+
+- Cost/quality routing for 5.1 (`_lib/model_routing.py` `_ROUTING_TABLE`
+  is untouched; debate/arch stay on `claude-opus-5`).
+- The `hooks/_lib/tier_policy` `MODEL_ID` enum (AEK tier targets, a
+  different contract from availability — it never carried Fable 5 either).
+- Automatic model currency (PLAN-176): this amendment is the manual
+  ceremony that plan would only DETECT the need for, never perform.
+- Sonnet 5 pricing: the same pricing page states the $2/$10 intro rate
+  became the STANDARD price (the 2026-09-01 increase to $3/$15 will not
+  occur). The dated flip in `audit-telemetry.py`, `ceo-cost.py`,
+  `budget-summary.py` and the sticker rows in `cost-table.yaml` /
+  `docs/cost-of-operation.md` are therefore stale from today — a
+  FOLLOW-UP on free surfaces, deliberately outside this amendment.
+
+The A1.1 prose sentence *"the primary session model is `claude-fable-5`"*
+is historical (it predates the ADR-181 pin); the pin above is the truth.

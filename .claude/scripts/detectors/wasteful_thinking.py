@@ -29,6 +29,7 @@ _DETECTOR = "wasteful_thinking"
 _TARGET_MODELS = frozenset({
     "claude-opus-5",
     "claude-fable-5",
+    "claude-fable-5-1",  # ADR-149 Amendment 2 (S338)
     "claude-opus-4-8",
     "claude-opus-4-7",
 })

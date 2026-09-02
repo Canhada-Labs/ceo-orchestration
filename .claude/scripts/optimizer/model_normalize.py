@@ -77,6 +77,7 @@ _RAW_ALIASES = {
     # exist in that generation.
     "opus-5": "claude-opus-5",
     "fable-5": "claude-fable-5",
+    "fable-5-1": "claude-fable-5-1",  # ADR-149 Amendment 2 (S338): a distinct minor, never folded into fable-5
     "sonnet-5": "claude-sonnet-5",
     "opus-5-fast": "claude-opus-5-fast",
 }

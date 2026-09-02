@@ -240,6 +240,25 @@ class TestPriceFor(TestEnvContext):
         self.assertTrue(exact_known)
         self.assertEqual(exact_price["input_per_mtok"], 5.0)
 
+    def test_minor_version_does_not_collapse_onto_base_row(self):
+        # ADR-149 Amendment 2 (S338, codex rail r2 P2): `claude-fable-5-1` is
+        # a MINOR version with its own rate card (cache read 0.025x), not a
+        # dated pin of `claude-fable-5`. Without an explicit row it must
+        # resolve UNKNOWN (flag, never guess); the dated pin keeps resolving.
+        data = _sample_data()
+        minor_price, minor_known = bcm.price_for("claude-opus-4-8-1", data=data)
+        self.assertFalse(minor_known)
+        self.assertEqual(minor_price["cache_read_per_mtok"], 0.0)
+        dated_price, dated_known = bcm.price_for("claude-opus-4-8-20260101", data=data)
+        self.assertTrue(dated_known)
+        self.assertEqual(dated_price["input_per_mtok"], 5.0)
+        shipped = bcm.load_canonical_models_safe()
+        if shipped is not None:
+            price, known = bcm.price_for("claude-fable-5-1", data=shipped)
+            self.assertFalse(known, "the shipped table has no 5.1 row — it must not"
+                                    " borrow the claude-fable-5 cache rate")
+            self.assertEqual(price["cache_read_per_mtok"], 0.0)
+
     def test_fail_open_on_missing_data(self):
         # When the data file is unreadable, price_for degrades to the all-zero
         # fallback and never raises (fail-open contract).

@@ -53,10 +53,13 @@ _COST_TABLE = _SCRIPTS_DIR / "cost-table.yaml"
 #: claude-opus-4-8-fast added by W2 P2b — it is the live replacement id in
 #: model-deprecations.json (4-6-fast and 4-7-fast both point at it) and was
 #: silently priced $0/unknown by every surface.
+#: claude-fable-5-1 added by ADR-149 Amendment 2 (S338) — Fable 5.1 at the
+#: Fable 5 rate; the same silent-$0 class this file exists to keep honest.
 _NEW_FLEET = (
     "claude-opus-4-8",
     "claude-opus-4-8-fast",
     "claude-fable-5",
+    "claude-fable-5-1",
     "claude-opus-5",
     "claude-opus-5-fast",
     "claude-sonnet-5",
@@ -104,6 +107,7 @@ class TestAuditTelemetryFleetPresence(TestEnvContext):
             "claude-opus-4-8": (5.00, 25.00),
             "claude-opus-4-8-fast": (10.00, 50.00),  # W2 P2b
             "claude-fable-5": (10.00, 50.00),
+            "claude-fable-5-1": (10.00, 50.00),  # ADR-149 A2 (S338)
             "claude-opus-5": (5.00, 25.00),
             "claude-opus-5-fast": (10.00, 50.00),
             # Base-row intro rate; the 2026-08-31 flip is event-date-aware
@@ -181,7 +185,7 @@ class TestDetectorFleetPresence(TestEnvContext):
 
     def test_overpowered_large_models(self) -> None:
         from detectors import overpowered
-        for model in ("claude-fable-5", "claude-opus-5"):
+        for model in ("claude-fable-5", "claude-fable-5-1", "claude-opus-5"):
             self.assertIn(
                 model, overpowered._LARGE_MODELS,
                 "%s missing from overpowered._LARGE_MODELS" % model,
@@ -192,7 +196,7 @@ class TestDetectorFleetPresence(TestEnvContext):
 
     def test_wasteful_thinking_target_models(self) -> None:
         from detectors import wasteful_thinking
-        for model in ("claude-fable-5", "claude-opus-5"):
+        for model in ("claude-fable-5", "claude-fable-5-1", "claude-opus-5"):
             self.assertIn(
                 model, wasteful_thinking._TARGET_MODELS,
                 "%s missing from wasteful_thinking._TARGET_MODELS" % model,
@@ -284,12 +288,57 @@ class TestBudgetSummaryFleetPresence(TestEnvContext):
             "claude-opus-5": (0.005, 0.025),
             "claude-opus-5-fast": (0.010, 0.050),
             "claude-fable-5": (0.010, 0.050),
+            "claude-fable-5-1": (0.010, 0.050),  # ADR-149 A2 (S338)
             "claude-sonnet-5": (0.002, 0.010),  # base row; dated flip below
         }
         for model, (inp, out) in expected.items():
             row = pricing[model]
             self.assertAlmostEqual(row["in"], inp, msg="%s in" % model)
             self.assertAlmostEqual(row["out"], out, msg="%s out" % model)
+
+    def test_fable51_cache_read_multiplier(self) -> None:
+        """ADR-149 A2 (S338): Fable 5.1 cache hits are 0.025x base input
+        (pricing page 2026-09-01); every other fleet id keeps 0.10x."""
+        self.assertAlmostEqual(
+            self.mod._cache_read_multiplier("claude-fable-5-1"), 0.025)
+        for model in ("claude-fable-5", "claude-opus-5", "claude-sonnet-5",
+                      "some-unknown-model"):
+            self.assertAlmostEqual(self.mod._cache_read_multiplier(model), 0.10)
+
+    def test_bare_fable_alias_is_ambiguous_and_versioned_alias_resolves(self) -> None:
+        """ADR-149 A2 (S338, codex r2 P2): with two Fable ids in the
+        registry the bare family alias resolves to NOTHING (never guess a
+        version); the versioned aliases and exact ids still resolve."""
+        self.assertIsNone(self.mod._normalize_model_id("fable"))
+        self.assertEqual(self.mod._normalize_model_id("fable-5-1"), "claude-fable-5-1")
+        self.assertEqual(self.mod._normalize_model_id("fable-5"), "claude-fable-5")
+        self.assertEqual(self.mod._normalize_model_id("claude-fable-5-1[1m]"),
+                         "claude-fable-5-1")
+
+    def test_native_spawn_ambiguous_meta_alias_falls_back_to_transcript(self) -> None:
+        """ADR-149 A2 (S338, codex r2 P2): meta.model="fable" (measured in
+        native metas) must not turn the spawn into cost TBD when the
+        transcript names the exact model."""
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            tr = Path(td) / "agent-x.jsonl"
+            tr.write_text(
+                '{"timestamp": "2026-09-01T00:00:00Z", "message": '
+                '{"model": "claude-fable-5-1", "usage": {"input_tokens": 1000000, '
+                '"output_tokens": 0, "cache_read_input_tokens": 1000000}}}\n',
+                encoding="utf-8",
+            )
+            (Path(td) / "agent-x.meta.json").write_text(
+                '{"agentType": "t", "spawnDepth": 1, "model": "fable"}',
+                encoding="utf-8",
+            )
+            rec = self.mod._read_native_spawn(tr, "native", "sess")
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec["model_id"], "claude-fable-5-1")
+        self.assertFalse(rec["cost_tbd"])
+        # 1M fresh input at $10 + 1M cache reads at 0.025x ($0.25) == $10.25
+        self.assertAlmostEqual(rec["cost_usd"], 10.25, places=6)
 
     def test_sonnet5_dated_compute_cost(self) -> None:
         """W2 P2a: compute_cost_usd honours the event's own ts."""
@@ -312,6 +361,58 @@ class TestBudgetSummaryFleetPresence(TestEnvContext):
                 "%s dropped — historical rows must be retained (ADR-142)"
                 % model,
             )
+
+
+class TestSuccessReceiptFleetPresence(TestEnvContext):
+    """`_DEFAULT_PRICING` (success-receipt.py) knows the current fleet.
+
+    ADR-149 Amendment 2 (S338, codex rail r3 P1): this mirror had no gen-5
+    row at all, so a MIXED session (one known model + fable-5-1 events)
+    emitted a numeric `default-pricing-table` total that silently dropped
+    every Fable 5.1 token. The presence guard binds it to the fleet.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.mod = _load_hyphenated("success_receipt_fleet", "success-receipt.py")
+
+    def test_new_fleet_present(self) -> None:
+        pricing = self.mod._DEFAULT_PRICING
+        for model in _NEW_FLEET:
+            self.assertIn(
+                model, pricing,
+                "%s missing from success-receipt _DEFAULT_PRICING "
+                "(ADR-149 A2 / rail r3 P1 presence fix)" % model,
+            )
+
+    def test_per_1k_rates_mirror_budget_summary(self) -> None:
+        bs = _load_hyphenated("budget_summary_for_receipt", "budget-summary.py")
+        for model in _NEW_FLEET:
+            row = self.mod._DEFAULT_PRICING[model]
+            ref = bs._DEFAULT_PRICING[model]
+            self.assertAlmostEqual(row["in"], ref["in"], msg="%s in" % model)
+            self.assertAlmostEqual(row["out"], ref["out"], msg="%s out" % model)
+
+    def test_historical_rows_retained(self) -> None:
+        pricing = self.mod._DEFAULT_PRICING
+        for model in ("claude-opus-4-7", "claude-opus-4", "claude-sonnet-4-5",
+                      "claude-sonnet-4", "claude-haiku-4"):
+            self.assertIn(model, pricing, "%s dropped (ADR-142 replay)" % model)
+
+    def test_mixed_session_receipt_counts_fable51_spend(self) -> None:
+        """The r3 finding, as a receipt: 1M Fable 5.1 input == $10.00 must be
+        IN the total, not silently dropped behind a known sonnet event."""
+        events = [
+            {"action": "agent_spawn", "model": "claude-sonnet-4-5",
+             "tokens_in": 1000, "tokens_out": 0},
+            {"action": "agent_spawn", "model": "claude-fable-5-1",
+             "tokens_in": 1_000_000, "tokens_out": 0},
+        ]
+        section = self.mod.build_value_created(events)
+        self.assertEqual(section["cost_source"], "default-pricing-table")
+        # sonnet-4-5 1k in @0.003 + fable-5-1 1M in @0.010/1k == 0.003 + 10.0
+        self.assertAlmostEqual(section["cost_usd"], 10.003, places=4)
 
 
 class TestCostTableFleetPresence(TestEnvContext):
@@ -344,6 +445,12 @@ class TestCostTableFleetPresence(TestEnvContext):
 
     def test_opus5_fast_row(self) -> None:
         text = self._block("claude-opus-5-fast")
+        self.assertIn("input_per_mtok: 10.00", text)
+        self.assertIn("output_per_mtok: 50.00", text)
+
+    def test_fable51_row(self) -> None:
+        """ADR-149 Amendment 2 (S338): Fable 5.1 priced at the Fable 5 rate."""
+        text = self._block("claude-fable-5-1")
         self.assertIn("input_per_mtok: 10.00", text)
         self.assertIn("output_per_mtok: 50.00", text)
 

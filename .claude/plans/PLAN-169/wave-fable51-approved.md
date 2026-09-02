@@ -14,8 +14,8 @@ Wave: wave-fable51 (PLAN-169 — cerimônia `adopt-fable-5.1`, ratificada pelo O
 Patch: .claude/plans/PLAN-169/s338-ceremony-fable51/WFABLE51.patch
 Patch-sha256: eb46ef0a42a272bdb8bf7677c89b28a4a6928052d73a534d6dbac9da45e1ca67
 Patch-base: 6160578c0518db43cba6804996ee58fe2427e229
-Anchor-SHA: ANCHOR-PLACEHOLDER
-Data: DATA-PLACEHOLDER
+Anchor-SHA: 6325f850de8deefc4aa62bc7487a2c6f1c7c2929
+Data: 2026-09-02
 
 ## O que esta wave entrega
 
@@ -124,7 +124,7 @@ validado VIVO contra o contrato do hook — mecanismo idêntico ao 183batch
   traz o row do 5.1).
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: APPROVED-BY-PLACEHOLDER
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-169
 Scope:
   - .claude/adr/ADR-149-model-id-allowlist.md

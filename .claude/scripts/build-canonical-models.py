@@ -180,6 +180,13 @@ def _normalize_lookup_key(model: str) -> str:
     return (model or "").strip().lower()
 
 
+#: A DATE-STAMPED release pin of a known row (`-YYYYMMDD`). Only this shape
+#: may resolve through the prefix rule in price_for — a MINOR version
+#: (`claude-fable-5-1`) is a different model with its own rate card
+#: (ADR-149 Amendment 2, S338: cache read 0.025x, not 0.1x).
+_DATED_SUFFIX_RE = re.compile(r"^\d{8}$")
+
+
 def price_for(
     model: str, data: Optional[Dict[str, Any]] = None
 ) -> Tuple[Dict[str, float], bool]:
@@ -214,11 +221,20 @@ def price_for(
     for mid, row in models.items():
         if mid.lower() == key:
             return (_coerce_price_row(row), True)
-    # 2) prefix match (a dated id `claude-opus-4-8-20260101` resolves to the
-    #    base `claude-opus-4-8` row) — longest prefix wins.
+    # 2) prefix match — ONLY a DATE-STAMPED release pin of a known row
+    #    (`claude-opus-4-8-20260101` resolves to the base `claude-opus-4-8`
+    #    row); longest prefix wins. ADR-149 Amendment 2 (S338, codex rail
+    #    r2 P2): a MINOR version (`claude-fable-5-1`) is a different model
+    #    with its own rate card and must NOT collapse onto the
+    #    `claude-fable-5` row — it resolves UNKNOWN (flag, never guess)
+    #    until the Owner re-fetches the table.
     best: Optional[Tuple[str, Dict[str, Any]]] = None
     for mid, row in models.items():
-        if key.startswith(mid.lower() + "-") and (best is None or len(mid) > len(best[0])):
+        if not key.startswith(mid.lower() + "-"):
+            continue
+        if not _DATED_SUFFIX_RE.match(key[len(mid) + 1:]):
+            continue
+        if best is None or len(mid) > len(best[0]):
             best = (mid, row)
     if best is not None:
         return (_coerce_price_row(best[1]), True)

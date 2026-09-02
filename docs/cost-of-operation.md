@@ -103,6 +103,7 @@ inheritance surprise.
 | Model | Input ($/M tokens) | Output ($/M tokens) | vs Opus 4-8 |
 |-------|--------------------|----------------------|-------------|
 | `claude-fable-5` (current — Mythos-class flagship) | $10.00 | $50.00 | 2.0× |
+| `claude-fable-5-1` (current — Mythos-class flagship 5.1; ADR-149 Amendment 2, S338 — selectable, not the pin) | $10.00 | $50.00 | 2.0× |
 | `claude-opus-5` (current) | $5.00 | $25.00 | 1.0× |
 | `claude-sonnet-5` (current; intro $2/$10 until 2026-08-31, sticker $3/$15) | $2.00 | $10.00 | 0.4× |
 | `claude-haiku-4-5` (current) | $1.00 | $5.00 | 0.2× |

@@ -1,5 +1,5 @@
 3b72d56544a0f0f0a463188e1b0ed0cbd15d8e3f8ff2b8b9db478ad4240e142a  .claude/scripts/local/verify-counts.sh
-62310e466f0b702d7742533c7472f9d63ce96f9d4645361cf9d501b4426c83d0  .claude/scripts/validate-governance.sh
+6da6fbec3f8ac8a696964fc43e71e00f836f697487b6ae9f99c9c7cde604110b  .claude/scripts/validate-governance.sh
 db8eea5b66e7e144135396a14029fd7511857a3cf42c9e5116e57000dd4ffd62  .claude/scripts/local/_release_tag_guard.py
 fe72ecce835780e2515842bd2d05ee46b063b0ed00d564da75424089efeb67dc  .claude/scripts/check-canonical-doc-freshness.py
 2f06780eab259db9f0178befb625b0b0501f7ca726e256b31278c748d6af6340  scripts/tests/ownership-nightly-gate.sh

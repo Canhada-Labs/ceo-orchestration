@@ -140,6 +140,11 @@ class TestAdrBlocksPresent(TestEnvContext):
         self.assertTrue(ws, "AVAILABLE_MODELS_WORKING_SET block missing")
         self.assertIn("claude-opus-5", ws, "ADR-181 refresh id missing")
         self.assertIn("claude-sonnet-5", ws, "ADR-181 refresh id missing")
+        self.assertIn(
+            "claude-fable-5-1", ws,
+            "ADR-149 Amendment 2 (S338) id missing from the working set",
+        )
+        self.assertEqual(ws[-1], "claude-fable-5-1", "A2 append must be LAST")
         self.assertNotIn(RETIRED_ID, ws)
 
     def test_floor_is_subset_of_working_set(self) -> None:

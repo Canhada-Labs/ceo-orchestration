@@ -106,7 +106,23 @@ _DEDUP_STRIP_FIELDS: Tuple[str, ...] = (
 #: Pricing table mirror — kept in sync by hand with budget-summary.py
 #: defaults so the receipt is deterministic when budget-summary is not
 #: importable (e.g. early Wave 2 staging).
+#: ADR-149 Amendment 2 (S338, codex rail r3 P1): the mirror had NO gen-5
+#: row (nor opus-4-8), so in a MIXED session a known model set
+#: cost_known=True while every current-fleet event was silently omitted
+#: from the numeric total (1M Fable input == $10 dropped). Current fleet
+#: rows added at the budget-summary per-1k rates (fable 5.1 == fable 5
+#: base rate; sonnet-5 $2/$10 is the standard price per the 2026-09-01
+#: pricing page); historical rows retained (ADR-142 replay).
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
+    "claude-fable-5-1":   {"in": 0.010, "out": 0.050},
+    "claude-fable-5":     {"in": 0.010, "out": 0.050},
+    "claude-opus-5":      {"in": 0.005, "out": 0.025},
+    "claude-opus-5-fast": {"in": 0.010, "out": 0.050},
+    "claude-sonnet-5":    {"in": 0.002, "out": 0.010},
+    "claude-opus-4-8":    {"in": 0.005, "out": 0.025},
+    "claude-opus-4-8-fast": {"in": 0.010, "out": 0.050},
+    "claude-sonnet-4-6":  {"in": 0.003, "out": 0.015},
+    "claude-haiku-4-5":   {"in": 0.001, "out": 0.005},
     "claude-opus-4-7":   {"in": 0.015, "out": 0.075},
     "claude-opus-4":     {"in": 0.015, "out": 0.075},
     "claude-sonnet-4-5": {"in": 0.003, "out": 0.015},

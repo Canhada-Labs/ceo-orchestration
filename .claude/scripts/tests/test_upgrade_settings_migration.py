@@ -209,6 +209,83 @@ class TestArrayLeafKeyBranches(_MigrationHarness):
                 self.assertNotIn("WARNING: " + key, proc.stderr)
 
 
+class TestSupersededShippedBaseline(_MigrationHarness):
+    """ADR-149 Amendment 2 (S338) — the ``superseded`` list of an ARRAY leaf.
+
+    v1.2.0 and v1.3.0 SHIPPED the 6-id availableModels that was the NEW
+    baseline until claude-fable-5-1 was appended. Under the 3-state policy
+    that array is neither OLD nor NEW, so without ``superseded`` every such
+    adopter would be read as ADOPTER-CUSTOMIZED and never receive the
+    seventh id — silently, because the install/upgrade parity e2e treats
+    settings.json as an ACCEPTED divergence (keys, not bytes). The list
+    carries frozen historical literals, the
+    same doctrine as SUPERSEDED_SHIPPED_CAPS below; the match is byte-exact
+    (values AND order), so a reordered array is still PRESERVED.
+    """
+
+    #: The availableModels array v1.2.0 AND v1.3.0 shipped (frozen literal:
+    #: `git show v1.3.0:templates/settings/settings.base.json`). Must stay
+    #: declared as superseded for as long as such installs exist.
+    SHIPPED_V12_V13_AVAILABLE = [
+        "claude-opus-4-8", "claude-fable-5", "claude-sonnet-4-6",
+        "claude-haiku-4-5", "claude-opus-5", "claude-sonnet-5",
+    ]
+
+    def test_shipped_6_id_array_is_declared_superseded(self) -> None:
+        spec = baselines()["availableModels"]
+        self.assertIn(self.SHIPPED_V12_V13_AVAILABLE, spec.get("superseded", []))
+        # Non-vacuity: it is neither the OLD nor the NEW baseline.
+        self.assertNotEqual(self.SHIPPED_V12_V13_AVAILABLE, spec["old"])
+        self.assertNotEqual(self.SHIPPED_V12_V13_AVAILABLE, spec["new"])
+
+    def test_new_baseline_appends_fable51_last(self) -> None:
+        new = baselines()["availableModels"]["new"]
+        self.assertEqual(new[-1], "claude-fable-5-1")
+        self.assertEqual(new[:-1], self.SHIPPED_V12_V13_AVAILABLE,
+                         "order is normative: append at the END only")
+
+    def test_every_superseded_array_migrates_to_new(self) -> None:
+        for key in ("availableModels", "fallbackModel"):
+            for sup in baselines()[key].get("superseded", []):
+                with self.subTest(key=key, superseded=sup):
+                    self.setUp()
+                    self.seed({key: list(sup)})
+                    proc = self.run_migration()
+                    self.assertEqual(self.read_settings()[key],
+                                     baselines()[key]["new"])
+                    self.assertIn(
+                        "MIGRATE (matched SUPERSEDED shipped baseline -> "
+                        "new baseline): " + key,
+                        proc.stdout,
+                    )
+                    self.assertNotIn("WARNING: " + key + " is ADOPTER-CUSTOMIZED",
+                                     proc.stderr)
+
+    def test_availableModels_superseded_is_exercised(self) -> None:
+        """The loop above must not pass vacuously on an empty list."""
+        self.assertTrue(baselines()["availableModels"].get("superseded"))
+
+    def test_reordered_superseded_is_customized_and_preserved(self) -> None:
+        sup = list(baselines()["availableModels"]["superseded"][0])
+        custom = list(reversed(sup))
+        self.assertNotEqual(custom, sup)
+        self.seed({"availableModels": custom})
+        proc = self.run_migration()
+        self.assertEqual(self.read_settings()["availableModels"], custom)
+        self.assertIn("WARNING: availableModels is ADOPTER-CUSTOMIZED",
+                      proc.stderr)
+
+    def test_second_run_after_superseded_migration_is_noop(self) -> None:
+        sup = baselines()["availableModels"]["superseded"][0]
+        self.seed({"availableModels": list(sup)})
+        self.run_migration()
+        first = self.settings_path.read_bytes()
+        proc = self.run_migration()
+        self.assertEqual(self.settings_path.read_bytes(), first)
+        self.assertIn("OK (already at new baseline): availableModels",
+                      proc.stdout)
+
+
 class TestDefaultModeBranches(_MigrationHarness):
     """U2 — per-branch oracles for permissions.defaultMode.
 

@@ -30,10 +30,12 @@ _DETECTOR = "overpowered"
 # PLAN-163 FXeta (C8): += claude-sonnet-5 — W2 uplift added fable-5/opus-5
 # but omitted the advisory (sonnet) tier, blinding the detector to short
 # devops spawns on the new-generation Sonnet.
+# ADR-149 Amendment 2 (S338): += claude-fable-5-1 (Fable 5.1 flagship).
 # historical ids retained for audit-log replay (ADR-142).
 _LARGE_MODELS = frozenset({
     "claude-opus-5",
     "claude-fable-5",
+    "claude-fable-5-1",
     "claude-sonnet-5",
     "claude-opus-4-8",
     "claude-opus-4-7",

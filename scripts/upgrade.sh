@@ -147,13 +147,25 @@ fi
 # claude-opus-5 IS present, so the pin is set and enforceAvailableModels
 # accepts it. Any PRESENT model value != the new pin is adopter-custom and
 # PRESERVED with a named warning (never re-flipped).
+# ADR-149 Amendment 2 (S338): an ARRAY leaf may also carry "superseded" —
+# EVERY previously SHIPPED value that is neither the original OLD baseline
+# nor the NEW one, as frozen historical literals (the same doctrine as
+# OLD_PAIR_RAIL_CAPS below). v1.2.0 and v1.3.0 shipped the 6-id
+# availableModels that was "new" until claude-fable-5-1 was appended;
+# without this list the 3-state policy would read every such adopter as
+# ADOPTER-CUSTOMIZED and never deliver the seventh id — silently: the
+# install/upgrade parity e2e declares settings.json an ACCEPTED divergence
+# (keys, not bytes), so CI would not notice. The match is
+# byte-exact (values AND order): a genuinely customized array still lands
+# in the PRESERVED branch.
 # Each registration carries a "match" filename used for the idempotent
 # append (mirrors the H8 jq `_reg` semantics: an event entry whose
 # hooks[].command references the filename counts as already registered).
 _T54_BASELINES_JSON='{
   "availableModels": {
     "old": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5"],
-    "new": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]
+    "superseded": [["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]],
+    "new": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5","claude-fable-5-1"]
   },
   "fallbackModel": {
     "old": ["claude-opus-4-8"],
@@ -3221,6 +3233,14 @@ for key in ("availableModels", "fallbackModel"):
         resolved = list(spec["new"])
         changed[0] = True
         act("MIGRATE (matched OLD baseline -> new baseline): " + key)
+    elif cur in spec.get("superseded", []):
+        # ADR-149 Amendment 2 (S338): a previously SHIPPED baseline
+        # (frozen literal, byte-exact incl. order) migrates like OLD.
+        if not dry:
+            data[key] = list(spec["new"])
+        resolved = list(spec["new"])
+        changed[0] = True
+        act("MIGRATE (matched SUPERSEDED shipped baseline -> new baseline): " + key)
     else:
         warn("WARNING: " + key + " is ADOPTER-CUSTOMIZED - PRESERVED "
              "(not migrated to the new baseline)")

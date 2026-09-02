@@ -55,7 +55,8 @@ FAIL=0
 # PLAN-163 T1.7 (ADR-181): claude-opus-5 + claude-sonnet-5 appended —
 # Claude 5 refresh working-set members (additive; membership here is a
 # frontmatter/env lint only, NOT the availableModels evidence — see [6/6]).
-ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 claude-opus-5 claude-sonnet-5 haiku sonnet opus inherit"
+# ADR-149 Amendment 2 (S338): claude-fable-5-1 appended (working set only).
+ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 claude-opus-5 claude-sonnet-5 claude-fable-5-1 haiku sonnet opus inherit"
 
 is_allowed_model() {
   # $1 = candidate value (already trimmed). Empty == inherit == allowed.
@@ -210,6 +211,7 @@ EXPECTED_AVAILABLE = [
     "claude-haiku-4-5",
     "claude-opus-5",
     "claude-sonnet-5",
+    "claude-fable-5-1",  # ADR-149 Amendment 2 (S338) — appended at the end
 ]
 # ADR-149 FALLBACK_MODEL_CHAIN (ADR-181 / PLAN-163 OQ1=b).
 EXPECTED_FALLBACK = ["claude-opus-5"]

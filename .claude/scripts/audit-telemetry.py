@@ -57,6 +57,7 @@ _PRICING_PER_MTOK: Dict[str, Dict[str, float]] = {
     "claude-opus-4-8[1m]": {"input": 5.00, "output": 25.00},
     "claude-opus-4-8-fast": {"input": 10.00, "output": 50.00},  # fast-mode premium row (W2 P2b)
     "claude-fable-5": {"input": 10.00, "output": 50.00},
+    "claude-fable-5-1": {"input": 10.00, "output": 50.00},  # ADR-149 Amendment 2 (S338): Fable 5.1 at the Fable 5 rate
     "claude-opus-5": {"input": 5.00, "output": 25.00},  # drop-in at 4.8 rate; 1M ctx default
     "claude-opus-5-fast": {"input": 10.00, "output": 50.00},  # fast-mode premium row
     # Sonnet 5: INTRO pricing through 2026-08-31 — the dated row in

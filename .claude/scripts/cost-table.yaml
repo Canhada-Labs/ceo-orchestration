@@ -67,6 +67,11 @@ models:
     output_per_mtok: 50.00
     tier: fable
     source_url: "https://models.dev/api.json"  # Owner fetch 2026-06-10 sha a6f5cb21; live-confirmed by W0b reconciliation 20/20 calls drift~0.0000
+  claude-fable-5-1:
+    input_per_mtok: 10.00
+    output_per_mtok: 50.00
+    tier: fable
+    source_url: "https://platform.claude.com/docs/en/about-claude/models/overview"  # ADR-149 Amendment 2 (S338, launch 2026-09-01): Fable 5.1 at the Fable 5 base rate; 1M ctx / 128K out; cache hits 0.025x base ($0.25/MTok, pricing page 2026-09-01) — this table has no cache field, budget-summary.py carries the per-model multiplier
   claude-opus-4-8:
     input_per_mtok: 5.00
     output_per_mtok: 25.00
