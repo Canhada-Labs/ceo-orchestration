@@ -14,8 +14,8 @@ Wave: wave-179fu (PLAN-179-FOLLOWUP-sessionstart-anchor-id, AC item 1 + emenda S
 Patch: .claude/plans/PLAN-179/s338-followup-flip/W179FU.patch
 Patch-sha256: ba5efe981865076e132f688b6b52741f8eb55ede877601cf6bb8ddc212dc021b
 Patch-base: f0e98de30f420559cc6b7ac0b525f8410dcb3a26
-Anchor-SHA: ANCHOR-PLACEHOLDER
-Data: DATA-PLACEHOLDER
+Anchor-SHA: ab56e76f057f7cd6ad4a855cfb2a32590ef4a43e
+Data: 2026-09-02
 
 ## O que esta wave entrega
 
@@ -77,7 +77,7 @@ validado VIVO contra o contrato do hook — mecanismo idêntico ao fable51, ao
   janela do consumidor (deliberado, documentado no teste).
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: APPROVED-BY-PLACEHOLDER
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-179
 Scope:
   - .claude/hooks/SessionEnd.py

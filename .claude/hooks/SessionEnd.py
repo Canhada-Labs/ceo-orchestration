@@ -1191,18 +1191,24 @@ def main() -> int:
         sys.stdout.write(_emit_observe() + "\n")
         return 0
 
-    # Rail r12 P2-b (corrige a r3): o ciclo de vida LEGADO (session_end,
-    # closeout de dashboard/audit-tokens, cleanup) usa a MESMA precedencia
-    # env-first do SessionStart.py:559-561 — a v2.60 declara "NO change to
-    # any existing action", e um id divergente quebraria a correlacao
-    # start<->end das actions landadas. A doutrina payload-only da r3/r4
-    # (env e agent-spoofable, consensus M2) vale INTEIRA no rail NOVO:
-    # payload_sid viaja separado, sem fallback nenhum, e e o unico id que
-    # o memory-delta aceita (a trava de consumo esta testada).
+    # Rail r12 P2-b (wave-179close) kept the LEGACY lifecycle (session_end,
+    # dashboard/audit-tokens closeout, cleanup) env-first to mirror the
+    # SessionStart producer of the day. PLAN-179-FOLLOWUP (S338) flips the
+    # FOUR lifecycle producers (SessionStart / UserPromptSubmit / Stop /
+    # SessionEnd) together to PAYLOAD-first — payload > env > timestamp —
+    # so start<->end correlation is preserved AND the ids are the ones the
+    # US8 consumer reads: `_session_start_ts` matches `session_start` and
+    # segments on `session_end` by the PAYLOAD id only (env is
+    # agent-spoofable and never anchors — rails r3/r4, consumer lock kept).
+    # An env-first `session_end` was invisible to that segmentation whenever
+    # env != payload (S337 P2 sweep); a PARTIAL flip would split one
+    # lifecycle across two ids (pair-rail r1 of this wave). `payload_sid`
+    # still travels separately, with NO fallback: it is the only id the
+    # memory-delta rail accepts.
     payload_sid = getattr(event, "session_id", "") or ""
     session_id = (
-        os.environ.get("CLAUDE_SESSION_ID", "")
-        or payload_sid
+        payload_sid
+        or os.environ.get("CLAUDE_SESSION_ID", "")
     ) or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     reason = os.environ.get("CLAUDE_SESSION_END_REASON", "normal")
     repo_root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())

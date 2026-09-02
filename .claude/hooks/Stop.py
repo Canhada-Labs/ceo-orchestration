@@ -184,9 +184,19 @@ def main() -> int:
         sys.stdout.write(_emit_observe() + "\n")
         return 0
 
+    # PLAN-179-FOLLOWUP (S338): PAYLOAD-first — payload > env > timestamp.
+    # The SPEC threads the id "from the harness event" and CLAUDE_SESSION_ID
+    # is agent-spoofable; the US8 consumer (SessionEnd._session_start_ts)
+    # and every session-partitioning reader match rows by the PAYLOAD id, so
+    # an env-first producer stranded every divergent session in
+    # start_unknown (rail r6 P2-b of wave-179close) and split one lifecycle
+    # across two ids. The FOUR lifecycle producers (SessionStart /
+    # UserPromptSubmit / Stop / SessionEnd) flip in the SAME patch (S337 P2
+    # sweep + pair-rail r1 of this wave). Env stays the fallback for a
+    # payload without an id; the timestamp fallback is unchanged.
     session_id = (
-        os.environ.get("CLAUDE_SESSION_ID", "")
-        or getattr(event, "session_id", "") or ""
+        (getattr(event, "session_id", "") or "")
+        or os.environ.get("CLAUDE_SESSION_ID", "")
     ) or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     reason = os.environ.get("CLAUDE_STOP_REASON", "user_stop")
     end_already_ran = (
