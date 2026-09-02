@@ -39,23 +39,113 @@ esta wave DEPOIS da OQ-E5 do PLAN-169 (wave-s330-F) — que landou em
 
 **Forma da wave (molde = pacote E do PLAN-185):**
 
-- [ ] `[P1][FU7][scripts/doctor.sh]` Converter os ~15 sitios de escrita ao
+> **EXECUTADA na S337 (2026-09-01), SEM cerimônia — a premissa "1 canônico"
+> estava errada.** Medido antes de tocar qualquer byte: o oráculo
+> `check_canonical_edit.py --is-canonical scripts/doctor.sh` responde **0**
+> nas três formas (relativo, absoluto, `CLAUDE_PROJECT_DIR` explícito); a
+> lista canônica de `scripts/` (`check_canonical_edit.py:189-199`) é
+> `install.sh`, `install-npm.sh`, `upgrade.sh`, `_hash_lib.sh`,
+> `_framework_manifest_set.sh` — `doctor.sh` não está nela, e o precedente
+> `aaf32c7` (D4, S325) já o editou sem sentinel. O `level: L3` do
+> frontmatter herdou a premissa errada; a wave real é L2 (1 script + 1 e2e +
+> baseline), pair-rail advisory (rodada registrada abaixo). **O que o censo
+> "~15 sítios" era de verdade:** 3 CLASSES de destino sob o `$TARGET` —
+> (i) restore de regfile (`_restore_file`), (ii) backup pré-overwrite
+> (`_backup_file` → `.claude.bak/doctor-<ts>/<rel>`), (iii) re-link de
+> registros LINK (2 sítios); o resto do censo mecânico era `>&2`,
+> `$WORKDIR`/`$SANITIZED` (temp fora do target) e `_log` — medidos, não
+> convertidos, com razão. E o achado de FORMA: `doctor.sh` já tinha um
+> `_restore_refuses` LOCAL (walk de symlink + resolução física) — a segunda
+> implementação que o PLAN-182 proíbe — aplicado só à classe (i) e **sem a
+> cláusula de hardlink** que o predicado compartilhado tem; (ii) e (iii) não
+> perguntavam nada.
+
+- [x] `[P1][FU7][scripts/doctor.sh]` Converter os ~15 sitios de escrita ao
       predicado: pre-voo dos destinos antes da primeira escrita, recusa
       NOMEADA (mensagem cita o path e a razao), politica no chamador.
       Check: e2e com symlink pendente plantado em cada classe de destino de
       reparo ⇒ recusa nomeada e ZERO bytes escritos fora do `$TARGET`
       (asserido em bytes, arvore-sombra descartavel — nunca no vivo).
-- [ ] `[P1][FU7]` Controle positivo: o mesmo e2e SEM o predicado (arvore
+      — ✅ S337: `_restore_refuses` mantém as pernas de FONTE
+      (`_wbm_route_relpath_ok` + `_wbm_source_confined`) e delega a metade de
+      DESTINO a `_wbm_dst_refuses "$TARGET" "$rel"` (a cópia local saiu);
+      `_backup_file` pré-voa `"$BAK_REL_DIR/$rel"` ANTES do `mkdir -p` de
+      `_ensure_bak_dir` e passa a devolver rc — os dois chamadores só
+      sobrescrevem com backup feito ("sem backup, sem overwrite");
+      `_link_dst_refuses` cobre os 2 sítios de `ln -s` (leaf ausente ⇒
+      relpath inteiro; leaf presente ⇒ o PAI, porque o leaf de um registro
+      LINK é legitimamente um symlink e é substituído por `rm -f`, nunca
+      escrito através); `_wbm_dst_refuses` entra na lista `_fms_req` do
+      startup (biblioteca sem ele ⇒ exit 2 nomeado); contador `Refused:` no
+      summary e `UNRESOLVED` ⇒ exit 1. Mensagens: `RESTORE-BLOCKED
+      (destination refused — nothing written: <why>)`, `BACKUP-BLOCKED (…)`.
+      E2E: `scripts/tests/test-installer-write-safety-e2e.sh` ganhou a seção
+      **D** (D.0 baseline não-vácuo: install limpo é `rc=0` e um drift
+      simples É reparado com `BACKED-UP`+`RESTORED`; D.1 hardlink; D.2
+      `.claude.bak` symlink + `--dry-run`; D.3 leaf pendente = type-change).
+      Pós-cura: **122 passed / 0 failed**. Registros LINK (`--link`): sem
+      perna e2e — o sanitizador já derruba ancestral symlinkado no INGEST, e
+      sem corrida TOCTOU não há escape pré-cura reprodutível; o predicado ali
+      é belt-and-braces, declarado.
+- [x] `[P1][FU7]` Controle positivo: o mesmo e2e SEM o predicado (arvore
       pre-cura) reproduz a escrita fora do target — prova que o teste ve o
       defeito (doutrina write-path-tests-need-a-disposable-tree).
-- [ ] `[P2][FU7]` O ratchet `check-installer-write-safety.py` re-baselina no
+      — ✅ S337: o MESMO arquivo apontado para um worktree em `dc72bf1`
+      (pré-cura): **112 passed / 10 failed — as 10 são exatamente D.1 (4) +
+      D.2 (6)**: «the outside file CHANGED through the hard link
+      (dd3be2fa… → 4d0bb564…)», «1 file(s) landed OUTSIDE the target through
+      the symlinked .claude.bak», «the file was overwritten WITHOUT a
+      backup», «doctor exited 0». D.0 e D.3 verdes nas duas árvores (D.3 já
+      era coberto pelo veredito type-change do loop; a perna pina isso).
+      Bancada prévia (S337, antes do e2e): D.1 medido à mão no vivo curado —
+      vítima com sha idêntico, `Refused: 1`, rc 1.
+- [x] `[P2][FU7]` O ratchet `check-installer-write-safety.py` re-baselina no
       MESMO patch (regra do plano-pai: qualquer wave que toque `scripts/`
       regenera o baseline).
       Check: `validate.yml` verde no clone pos-patch sem afrouxar regra.
-- [ ] `[P1][FU7]` Cerimonia GPG de 1 canonico (`scripts/doctor.sh` tem
-      oraculo `--is-canonical` = 1): sentinel + SIGN/LAND no molde F, com
-      gate `touched − scope = ∅` e bateria que inclui os steps do Smoke
-      Install que grepam `doctor.sh` (licao LAND-verde≠CI-verde).
+      — ✅ S337: pré-regen `rc=1` (2 sítios novos `write-candidate
+      indeterminado` — as DUAS chamadas `if _wbm_dst_refuses …`, a forma
+      «predicado domina» que o FU-1 diz que o censo não modela); `--write-
+      baseline` ⇒ 672 entradas; check `rc=0`; diff do baseline só em
+      `scripts/doctor.sh` (renumeração + 2 entradas). Regra intacta.
+- [x] `[P1][FU7]` ~~Cerimonia GPG de 1 canonico (`scripts/doctor.sh` tem
+      oraculo `--is-canonical` = 1)~~ **N/A — oráculo = 0 (medido, ver o
+      quadro acima).** O que desse item SOBREVIVE e foi feito: a bateria que
+      inclui os oráculos que grepam/extraem `doctor.sh`: `scripts/tests/
+      test-doctor.sh` **44/0**; `scripts/tests/test-doctor-delivery-route.sh`
+      — a R.7 EXTRAI `_restore_refuses` e a avalia num harness próprio, que
+      não carregava o predicado ao qual a função passou a delegar ⇒ «guard
+      did not refuse (got WROTE)» (a classe LAND-verde≠CI-verde, prevista
+      pelo próprio item); cura no harness pelo padrão que ele mesmo documenta
+      (`_wbm_nlink` e `_wbm_dst_refuses` entram na lista de extração;
+      `REFUSED_COUNT=0` nos 4 harnesses) — resultado do re-run no registro
+      abaixo. Sem sentinel, sem SIGN/LAND: o land é um commit normal do Owner.
+
+## Registro de execução — FU-7 (S337, 2026-09-01)
+
+- **Bateria (todas na árvore viva curada):** `scripts/tests/
+  test-installer-write-safety-e2e.sh` **122/0** (pós-cura) vs **112/10**
+  contra worktree `dc72bf1` (pré-cura; as 10 = D.1 + D.2); `scripts/tests/
+  test-doctor.sh` **44/0**; `scripts/tests/test-doctor-delivery-route.sh`
+  **113/0** após o harness R.7 carregar `_wbm_dst_refuses`/`_wbm_nlink` (antes:
+  2 FAIL «guard did not refuse (got WROTE)» — o harness, não o guard);
+  `check-installer-write-safety.py` rc 0 com baseline regenerado (672
+  entradas); `.claude/scripts/tests/test_check_installer_write_safety.py` +
+  `test_parity_source_resolution.py` 161 passed; `shellcheck -S warning`
+  limpo em `doctor.sh`, `uninstall.sh` e nos dois e2e; `bash -n` limpo.
+- **Pair-rail:** rodada Codex r1 sobre o diff não-commitado da sessão (o
+  resultado é anexado a esta linha quando a rodada termina — ver memória
+  `project-s337-session-state`).
+- **Ciclo de vida do plano:** o `status: draft` NÃO foi flipado por mim — a
+  metade FU-7 executou sob a autorização de chat do Owner (S337, "vamos agir
+  no que dá pra concluir"), a metade FU-1 segue gated na decisão do Owner
+  sobre `OQ-W0-STOP`. O Owner decide entre `draft → executing` retroativo
+  (FU-1 pendente) ou `superseded`/`done` com FU-1 movido para item nomeado.
+- **Lição de forma (paga aqui, vale além):** o plano afirmava um oráculo
+  que não mediu (`doctor.sh` = 1) e dimensionou a wave por ele (L3, GPG,
+  40-80k). O oráculo custa 1 comando e mudou o custo em uma ordem de
+  grandeza — [[feedback-oracle-before-editing-any-path]] agora vale também
+  para DIMENSIONAR, não só para editar.
 
 ## FU-1 — o censo nao modela «predicado domina»
 

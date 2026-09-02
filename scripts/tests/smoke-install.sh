@@ -222,6 +222,47 @@ PYCHK
   else
     echo "note: actionlint not on PATH - structural check only for the activated template"
   fi
+  # -------------------------------------------------------------------------
+  # PLAN-183 W0-US3 / AC-5 (S337): EXECUTE the activated workflow — the half
+  # that was missing. scripts/tests/run-activated-workflow.py runs the
+  # workflow's OWN `run:` steps, in order, inside the installed tree, the way
+  # the hosted runner does (one `bash -eo pipefail` per step, stop at the first
+  # failure; `uses:` steps are runner-provided and skipped BY NAME). Nothing is
+  # re-implemented: a step that fails here is a step the adopter's CI would
+  # fail on day one. The adopter commits the install before CI ever runs, and
+  # the git-ls-files based steps (Contamination check) see NOTHING on an
+  # uncommitted tree — so the tree is committed first (install.sh writes no
+  # git hooks; the smoke log stays out of the commit).
+  # Linux under CI only (rail r1, S337): the template pins a linux_amd64
+  # actionlint release asset (its step 10), and its shellcheck step runs
+  # `sudo apt-get` when shellcheck is absent — so the delivered steps execute
+  # only where they were written to run: a Linux runner with CI=true (what
+  # GitHub sets), or an operator who opts in with CEO_SMOKE_EXECUTE_CI=1 (the
+  # docker proof recorded in PLAN-183 W0-US3). Everywhere else the steps are
+  # LISTED, not run, and the note says so.
+  # -------------------------------------------------------------------------
+  RUNNER="$SOURCE_DIR/scripts/tests/run-activated-workflow.py"
+  if [[ ! -f "$RUNNER" ]]; then
+    echo "::error::workflow runner missing: $RUNNER (the AC-5 execution leg cannot run)"
+    fail=1
+  elif [[ "$(uname -s)" == "Linux" && ( "${CI:-}" == "true" || "${CEO_SMOKE_EXECUTE_CI:-0}" == "1" ) ]]; then
+    if ! ( cd "$TARGET" \
+           && git add -A -- . ':!.smoke-install.log' >/dev/null 2>&1 \
+           && git -c user.name=smoke -c user.email=smoke@example.invalid -c commit.gpgsign=false \
+                  commit -q -m "smoke: installed tree (PLAN-183 AC-5)" >/dev/null 2>&1 ); then
+      echo "::error::could not commit the installed tree before executing the delivered CI"
+      fail=1
+    elif ! python3 "$RUNNER" "$TARGET" "$ACT_REL"; then
+      echo "::error::the activated validate.yml FAILED when EXECUTED in the installed tree — a step the adopter's CI would run went red (step output above)"
+      fail=1
+    fi
+  else
+    echo "note: the delivered CI is EXECUTED only on Linux under CI=true or CEO_SMOKE_EXECUTE_CI=1 (its steps may apt-get/sudo and download a linux_amd64 actionlint asset); listing its steps instead:"
+    if ! python3 "$RUNNER" "$TARGET" "$ACT_REL" --list; then
+      echo "::error::the activated validate.yml could not be parsed by the workflow runner"
+      fail=1
+    fi
+  fi
   # Restore the delivered state: activation is the ADOPTER's move, and the
   # parity/upgrade legs downstream must see the tree exactly as installed.
   mv "$TARGET/$ACT_REL" "$TARGET/$TPL_REL"
@@ -318,6 +359,137 @@ if [[ -f "$GTARGET/.claude/settings.json" ]]; then
   fi
 fi
 rm -rf "$GTARGET"
+
+# ---------------------------------------------------------------------------
+# PLAN-183 §9.8 (S337): uninstall.sh exercised with the two delivered trees.
+# W5 made the install manifest record the docs/ and .github/ deliveries, which
+# widened the reach of the ONE destructive consumer of that manifest without
+# any check touching it. Three legs, each MEASURED before it was written:
+#  (a) install -> uninstall removes the docs/ and .github/ deliveries and
+#      touches nothing outside the target (asserted on an outside probe's
+#      bytes, never on rc alone);
+#  (b) .github/CODEOWNERS: the manifest records the RENDERED bytes (install
+#      hashes what it wrote — measured: manifest sha == rendered file sha !=
+#      template sha), so a pristine rendered file is removed like any other
+#      delivery, while an adopter-EDITED one is PRESERVED, the summary is
+#      marked incomplete, the manifest is KEPT for a --force re-run and the
+#      exit is 0. The plan's earlier prose ("the rendered file never matches
+#      the template sha => PRESERVED") described the pre-W5 generator and is
+#      superseded by this measurement;
+#  (c) the directories the deliveries emptied (docs/, .github/workflows/,
+#      .github/, SPEC/...) are swept, and the pre-uninstall backup covers
+#      every manifest record the run removes, not only .claude/ (measured
+#      pre-cure: docs/ + .github/workflows/ + SPEC/v1 left behind empty, and
+#      0 docs/.github entries in the backup tarball).
+# ---------------------------------------------------------------------------
+_x_sum() {
+  python3 - "$1" <<'PY'
+import hashlib, sys
+print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
+PY
+}
+X_DELIVERED="docs/BRANCH-PROTECTION.md docs/rotation-log.md .github/CODEOWNERS .github/workflows/validate.yml.template .github/workflows/benchmarks.yml.template"
+XT="$(mktemp -d 2>/dev/null || mktemp -d -t ceo-smoke-uninst)"
+XO="$(mktemp -d 2>/dev/null || mktemp -d -t ceo-smoke-outside)"
+( cd "$XT" && git init -q )
+printf 'OUTSIDE PROBE - MUST NOT CHANGE\n' > "$XO/probe.md"
+XO_BEFORE="$(_x_sum "$XO/probe.md")"
+if ! CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 \
+     bash "$SOURCE_DIR/scripts/install.sh" "$XT" --profile core --github-owner smoke-owner >"$XO/install.log" 2>&1; then
+  echo "::error::9.8: install for the uninstall leg failed (see $XO/install.log)"
+  fail=1
+else
+  for p in $X_DELIVERED; do
+    if [[ ! -f "$XT/$p" ]]; then
+      echo "::error::9.8: $p was not delivered"
+      fail=1
+    elif ! grep -q "  $p\$" "$XT/.claude/.install-manifest.sha256"; then
+      echo "::error::9.8: $p is not in the install manifest - uninstall could never reach it"
+      fail=1
+    fi
+  done
+  # (a)+(c) pristine: every delivery goes, the emptied trees go, the probe is untouched,
+  # the backup covers the removed deliveries.
+  if ! bash "$SOURCE_DIR/scripts/uninstall.sh" "$XT" >"$XO/uninstall.log" 2>&1; then
+    echo "::error::9.8: uninstall.sh failed on a pristine install (see $XO/uninstall.log)"
+    fail=1
+  fi
+  for p in $X_DELIVERED; do
+    if [[ -e "$XT/$p" ]]; then
+      echo "::error::9.8: $p survived a pristine uninstall"
+      fail=1
+    fi
+  done
+  for d in docs .github SPEC; do
+    if [[ -e "$XT/$d" ]]; then
+      echo "::error::9.8: the emptied directory $d/ was left behind by uninstall"
+      fail=1
+    fi
+  done
+  if [[ "$(_x_sum "$XO/probe.md")" != "$XO_BEFORE" ]]; then
+    echo "::error::9.8: the outside probe CHANGED during uninstall"
+    fail=1
+  fi
+  X_BK="$(ls "$XT"/.claude.backup-uninstall-*.tar.gz 2>/dev/null | head -n 1 || true)"
+  if [[ -z "$X_BK" ]]; then
+    echo "::error::9.8: no pre-uninstall backup tarball was written"
+    fail=1
+  else
+    # List to a FILE, then grep: `tar tzf | grep -q` under pipefail kills tar
+    # with SIGPIPE on the first match and reports the SUCCESS as rc 141.
+    # Measured (S337): green on macOS/bsdtar, red on Linux/GNU tar 1.35 for the
+    # same tarball with the same entries.
+    tar tzf "$X_BK" > "$XO/backup.list" 2>/dev/null || true
+    if ! grep -qE '^(\./)?docs/BRANCH-PROTECTION\.md$' "$XO/backup.list"; then
+      echo "::error::9.8: the pre-uninstall backup does not cover docs/ - the removed deliveries must be restorable"
+      fail=1
+    fi
+  fi
+  # (b) adopter-edited CODEOWNERS: PRESERVED, summary incomplete, manifest KEPT, exit 0;
+  # the untouched deliveries are still removed.
+  XT2="$(mktemp -d 2>/dev/null || mktemp -d -t ceo-smoke-uninst2)"
+  ( cd "$XT2" && git init -q )
+  if ! CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 \
+       bash "$SOURCE_DIR/scripts/install.sh" "$XT2" --profile core --github-owner smoke-owner >"$XO/install2.log" 2>&1; then
+    echo "::error::9.8: second install (edited-CODEOWNERS leg) failed (see $XO/install2.log)"
+    fail=1
+  else
+    printf '\n# adopter rule\n* @smoke-owner\n' >> "$XT2/.github/CODEOWNERS"
+    bash "$SOURCE_DIR/scripts/uninstall.sh" "$XT2" >"$XO/uninstall2.log" 2>&1
+    x_rc=$?
+    if [[ "$x_rc" -ne 0 ]]; then
+      echo "::error::9.8: uninstall exited $x_rc with an adopter-edited CODEOWNERS (expected 0 + PRESERVED)"
+      fail=1
+    fi
+    if [[ ! -f "$XT2/.github/CODEOWNERS" ]]; then
+      echo "::error::9.8: the adopter-edited .github/CODEOWNERS was DELETED"
+      fail=1
+    fi
+    if ! grep -q "PRESERVED (sha mismatch, user-modified): .github/CODEOWNERS" "$XO/uninstall2.log"; then
+      echo "::error::9.8: no PRESERVED line for the edited CODEOWNERS (see $XO/uninstall2.log)"
+      fail=1
+    fi
+    if ! grep -q "Uninstall summary (incomplete)" "$XO/uninstall2.log"; then
+      echo "::error::9.8: the summary does not say incomplete with a preserved file"
+      fail=1
+    fi
+    if [[ ! -f "$XT2/.claude/.install-manifest.sha256" ]]; then
+      echo "::error::9.8: the manifest was removed despite a preserved file (a --force re-run is impossible)"
+      fail=1
+    fi
+    if [[ -e "$XT2/docs/rotation-log.md" ]]; then
+      echo "::error::9.8: a pristine docs/ delivery survived while only CODEOWNERS should be preserved"
+      fail=1
+    fi
+    # rail r1 (S337): the PARTIAL path must sweep too — docs/ was emptied here.
+    if [[ -e "$XT2/docs" ]]; then
+      echo "::error::9.8: the emptied docs/ directory was left behind by a partial uninstall (preserved CODEOWNERS)"
+      fail=1
+    fi
+  fi
+  rm -rf "$XT2"
+fi
+rm -rf "$XT" "$XO"
 
 if [[ "$CLEANUP" -eq 1 ]]; then
   rm -rf "$TARGET"

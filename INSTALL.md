@@ -749,7 +749,13 @@ cd /path/to/your/project
 ```
 
 `uninstall.sh` honours the install manifest and supports `--restore` and
-`--force` flags. For manual removal as a fallback:
+`--force` flags. Before removing anything it writes
+`.claude.backup-uninstall-<UTC-ts>.tar.gz` covering **every manifest record it
+is about to remove** — the `docs/`, `.github/`, `SPEC/` and root deliveries
+included, not only `.claude/` — and, after the walk, it sweeps the directories
+those deliveries left EMPTY (`docs/`, `.github/workflows/`, `SPEC/v1`, ...);
+a directory that still holds a file of yours, or a PRESERVED (user-modified)
+delivery, is never touched. For manual removal as a fallback:
 
 ```bash
 cd /path/to/your/project

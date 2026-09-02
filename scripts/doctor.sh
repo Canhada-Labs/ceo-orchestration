@@ -32,6 +32,12 @@
 #     interactive [y/N] prompt when stdin is a TTY. Overwritten files are
 #     first backed up to .claude.bak/doctor-<UTC-ts>/<relpath>.
 #   * Orphan candidates are report-only. doctor.sh deletes nothing, ever.
+#   * Every write under the target (restore, backup, re-link) is answered
+#     first by the destination-confinement predicate the installer and the
+#     upgrader use (_wbm_dst_refuses, PLAN-185 / PLAN-185-FOLLOWUP FU-7): a
+#     symlinked or hard-linked destination, a symlinked ancestor, or a path
+#     that resolves outside the target is REFUSED by name and nothing is
+#     written — a refusal counts as an unresolved finding (exit 1).
 #
 # Usage:
 #   ./doctor.sh <target-repo-path> [options]
@@ -86,7 +92,9 @@ YES_FILES="
 
 usage() {
   # Header spans line 2 .. the "bash 3.2-safe" sentinel line (keep in sync).
-  sed -n '2,59p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # rail r2 (S337) P3: terminate at the sentinel, not at a line number — the
+  # header grows and a fixed range silently truncates the exit-code section.
+  sed -n '2,/^# bash 3\.2-safe/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -213,8 +221,14 @@ fi
 # widened that to the THREE sites that resolve a source — the write site and
 # both HASH sites — so this name is now load-bearing for CLASSIFICATION too,
 # not only for the copy.
+# PLAN-185-FOLLOWUP FU-7 (S337) added _wbm_dst_refuses: every write doctor
+# makes under the target (restore, backup, re-link) is now answered by the SAME
+# destination-confinement predicate install.sh and upgrade.sh consume, so a
+# library without it must fail here, by name, instead of letting doctor fall
+# back to the retired local copy.
 for _fms_req in _wbm_route_src _wbm_route_relpath_ok _wbm_route_row_ok \
-                _wbm_route_table_ok _wbm_route_table_gate _wbm_source_confined; do
+                _wbm_route_table_ok _wbm_route_table_gate _wbm_source_confined \
+                _wbm_dst_refuses; do
   if ! command -v "$_fms_req" >/dev/null 2>&1; then
     echo "ERROR: $SCRIPT_DIR/_framework_manifest_set.sh does not define $_fms_req —" >&2
     echo "       the shared delivery-route reader is unavailable. Refusing to run" >&2
@@ -420,20 +434,78 @@ fi
 # ---------------------------------------------------------------------------
 # Repair helpers
 # ---------------------------------------------------------------------------
-BAK_DIR=""   # created lazily on the first backup
+BAK_DIR=""       # created lazily on the first backup
+BAK_REL_DIR=""   # its relpath under $TARGET — the confinement predicate walks relpaths
+_ensure_bak_rel() {
+  if [ -z "$BAK_REL_DIR" ]; then
+    BAK_REL_DIR=".claude.bak/doctor-$(date -u +%Y%m%d-%H%M%SZ)"
+  fi
+}
 _ensure_bak_dir() {
+  _ensure_bak_rel
   if [ -z "$BAK_DIR" ]; then
-    BAK_DIR="$TARGET/.claude.bak/doctor-$(date -u +%Y%m%d-%H%M%SZ)"
+    BAK_DIR="$TARGET/$BAK_REL_DIR"
     mkdir -p "$BAK_DIR"
   fi
 }
 
 _backup_file() {
   # $1 = relpath of an existing regular file to preserve before overwrite.
+  # Returns 0 when the backup landed, 1 when it was REFUSED (nothing written):
+  # a caller must never overwrite a file whose backup could not be made.
   _bf_rel="$1"
+  # PLAN-185-FOLLOWUP FU-7 (S337): the backup destination is a write under the
+  # target too, and nothing sanitised it at ingest — `.claude.bak` is not a
+  # manifest record. A symlink planted there sends the ADOPTER'S OWN bytes
+  # outside the target through `mkdir -p` + `cp -p` (e2e D.2 reproduces it
+  # against the pre-cure copy). Same shared predicate as every other write,
+  # asked about the relpath that will be written, BEFORE _ensure_bak_dir's own
+  # mkdir: the timestamped directory does not exist yet, so the walk covers
+  # `.claude.bak` and the nearest existing ancestor.
+  _ensure_bak_rel
+  if _wbm_dst_refuses "$TARGET" "$BAK_REL_DIR/$_bf_rel"; then
+    REFUSED_COUNT=$((REFUSED_COUNT + 1))
+    _log "    BACKUP-BLOCKED (destination refused — nothing written: ${_WBM_DST_REFUSE_WHY:-unknown reason}): $_bf_rel"
+    return 1
+  fi
   _ensure_bak_dir
   mkdir -p "$BAK_DIR/$( dirname "$_bf_rel" )"
   cp -p "$TARGET/$_bf_rel" "$BAK_DIR/$_bf_rel"
+}
+
+# PLAN-185-FOLLOWUP FU-7 (S337): confinement for LINK-record repairs. A LINK
+# record's LEAF is legitimately a symlink (that is what the record describes),
+# so when the leaf is present and about to be replaced, the shared predicate is
+# asked about the PARENT the link is created in — a symlinked or escaping
+# ancestor is the write-through hazard; the leaf itself is replaced (`rm -f`
+# never follows a link), not written through. When the leaf is absent, the full
+# relpath is asked, exactly as for a regular file. $1 = link relpath.
+# Returns 0 to REFUSE (the polarity of _restore_refuses).
+_link_dst_refuses() {
+  _ld_rel="$1"
+  # rail r1 (S337) P1: the shared predicate refuses a SYMLINKED target root for
+  # every relpath it is asked about, and doctor resolves $TARGET logically
+  # (`cd && pwd`, symlink preserved) — so a root-level link whose parent IS the
+  # root must not skip that clause. Same test, same message, same recovery.
+  if [ -L "$TARGET" ]; then
+    REFUSED_COUNT=$((REFUSED_COUNT + 1))
+    _ld_ref="$( cd -P "$TARGET" 2>/dev/null && pwd -P || true )"
+    _log "    RESTORE-BLOCKED (link destination refused — nothing written: the target root '$TARGET' is a SYMLINK${_ld_ref:+ to '$_ld_ref'} — every write would follow it; re-run against the referent): $_ld_rel"
+    return 0
+  fi
+  _ld_ask="$_ld_rel"
+  if [ -e "$TARGET/$_ld_rel" ] || [ -L "$TARGET/$_ld_rel" ]; then
+    _ld_ask="$( dirname "$_ld_rel" )"
+    case "$_ld_ask" in
+      .|"") return 1 ;;   # root-level link: the (non-symlink) target root is the parent
+    esac
+  fi
+  if _wbm_dst_refuses "$TARGET" "$_ld_ask"; then
+    REFUSED_COUNT=$((REFUSED_COUNT + 1))
+    _log "    RESTORE-BLOCKED (link destination refused — nothing written: ${_WBM_DST_REFUSE_WHY:-unknown reason}): $_ld_rel"
+    return 0
+  fi
+  return 1
 }
 
 # Per-file confirmation: --yes-file match, else interactive [y/N] on a TTY,
@@ -536,39 +608,23 @@ _restore_refuses() {
     _log "    RESTORE-BLOCKED (source not confined to the framework checkout — ${_WBM_SRC_CONFINE_WHY:-unknown reason}): $_rr_rel"
     return 0
   fi
-  if [ -L "$TARGET/$_rr_rel" ]; then
-    _log "    RESTORE-BLOCKED (destination is a symlink — a copy would write through it): $_rr_rel"
+  # PLAN-185-FOLLOWUP FU-7 (S337): the destination half is the SHARED
+  # predicate install.sh and upgrade.sh consume (_wbm_dst_refuses,
+  # scripts/_framework_manifest_set.sh) — one implementation, not doctor's own
+  # copy of the symlink walk + physical resolution that lived here. It refuses
+  # everything the retired copy refused (symlinked leaf, symlinked ancestor,
+  # unresolvable ancestor, resolution outside the RESOLVED target) and one
+  # thing the copy did not: a HARD-LINKED leaf (nlink > 1). `cp -p` writes an
+  # existing destination IN PLACE, so every other name for that inode —
+  # including names outside the target — sees the framework bytes; e2e D.1
+  # reproduces that escape against the pre-cure copy. Polarity preserved:
+  # 0 = REFUSE.
+  if _wbm_dst_refuses "$TARGET" "$_rr_rel"; then
+    REFUSED_COUNT=$((REFUSED_COUNT + 1))
+    _log "    RESTORE-BLOCKED (destination refused — nothing written: ${_WBM_DST_REFUSE_WHY:-unknown reason}): $_rr_rel"
     return 0
   fi
-  _rr_walk="$( dirname "$_rr_rel" )"
-  while [ -n "$_rr_walk" ] && [ "$_rr_walk" != "." ] && [ "$_rr_walk" != "/" ]; do
-    if [ -L "$TARGET/$_rr_walk" ]; then
-      _log "    RESTORE-BLOCKED (ancestor $_rr_walk is a symlink — refusing to write through it): $_rr_rel"
-      return 0
-    fi
-    _rr_walk="$( dirname "$_rr_walk" )"
-  done
-  _rr_tgt="$( cd -P "$TARGET" 2>/dev/null && pwd -P || true )"
-  if [ -z "$_rr_tgt" ]; then
-    _log "    RESTORE-BLOCKED (the target directory does not resolve): $_rr_rel"
-    return 0
-  fi
-  _rr_anc="$( dirname "$TARGET/$_rr_rel" )"
-  while [ -n "$_rr_anc" ] && [ ! -d "$_rr_anc" ]; do
-    _rr_next="$( dirname "$_rr_anc" )"
-    [ "$_rr_next" != "$_rr_anc" ] || break
-    _rr_anc="$_rr_next"
-  done
-  _rr_res="$( cd -P "$_rr_anc" 2>/dev/null && pwd -P || true )"
-  if [ -z "$_rr_res" ]; then
-    _log "    RESTORE-BLOCKED (its nearest existing ancestor does not resolve): $_rr_rel"
-    return 0
-  fi
-  case "$_rr_res" in
-    "$_rr_tgt"|"$_rr_tgt"/*) return 1 ;;
-  esac
-  _log "    RESTORE-BLOCKED (resolves outside the target — $_rr_res is not under $_rr_tgt): $_rr_rel"
-  return 0
+  return 1
 }
 
 # Restore one hash-record file from SOURCE_DIR. Preconditions already checked
@@ -619,6 +675,7 @@ REPAIRED_COUNT=0
 WOULD_REPAIR=0
 SKIPPED_CONFIRM=0
 BLOCKED_COUNT=0
+REFUSED_COUNT=0   # FU-7: writes refused by the destination-confinement predicate
 UNRESOLVED=0
 ORPHAN_COUNT=0
 
@@ -647,6 +704,8 @@ while IFS= read -r line || [ -n "$line" ]; do
             _log "    (dry-run) would RE-LINK: $rel -> $target"
             WOULD_REPAIR=$((WOULD_REPAIR + 1))
             UNRESOLVED=$((UNRESOLVED + 1))
+          elif _link_dst_refuses "$rel"; then
+            UNRESOLVED=$((UNRESOLVED + 1))
           else
             mkdir -p "$TARGET/$( dirname "$rel" )"
             if ln -s "$target" "$lpath" 2>/dev/null; then
@@ -673,17 +732,25 @@ while IFS= read -r line || [ -n "$line" ]; do
             WOULD_REPAIR=$((WOULD_REPAIR + 1))
             UNRESOLVED=$((UNRESOLVED + 1))
           else
+            _lk_go=1
             if [ -f "$lpath" ] && [ ! -L "$lpath" ]; then
-              _backup_file "$rel"
-              _log "    BACKED-UP: $rel -> $BAK_DIR/$rel"
+              if _backup_file "$rel"; then
+                _log "    BACKED-UP: $rel -> $BAK_DIR/$rel"
+              else
+                _lk_go=0   # FU-7: no backup, no overwrite
+              fi
             fi
-            rm -f "$lpath"
-            if ln -s "$target" "$lpath" 2>/dev/null; then
-              _log "    RE-LINKED: $rel -> $target"
-              REPAIRED_COUNT=$((REPAIRED_COUNT + 1))
-            else
-              _log "    RESTORE-FAILED (ln -s failed): $rel"
+            if [ "$_lk_go" -eq 0 ] || _link_dst_refuses "$rel"; then
               UNRESOLVED=$((UNRESOLVED + 1))
+            else
+              rm -f "$lpath"
+              if ln -s "$target" "$lpath" 2>/dev/null; then
+                _log "    RE-LINKED: $rel -> $target"
+                REPAIRED_COUNT=$((REPAIRED_COUNT + 1))
+              else
+                _log "    RESTORE-FAILED (ln -s failed): $rel"
+                UNRESOLVED=$((UNRESOLVED + 1))
+              fi
             fi
           fi
         else
@@ -813,12 +880,15 @@ while IFS= read -r line || [ -n "$line" ]; do
               WOULD_REPAIR=$((WOULD_REPAIR + 1))
               UNRESOLVED=$((UNRESOLVED + 1))
             else
-              _backup_file "$rel"
-              _log "    BACKED-UP: $rel -> $BAK_DIR/$rel"
-              if _restore_file "$rel" "$base"; then
-                REPAIRED_COUNT=$((REPAIRED_COUNT + 1))
+              if _backup_file "$rel"; then
+                _log "    BACKED-UP: $rel -> $BAK_DIR/$rel"
+                if _restore_file "$rel" "$base"; then
+                  REPAIRED_COUNT=$((REPAIRED_COUNT + 1))
+                else
+                  UNRESOLVED=$((UNRESOLVED + 1))
+                fi
               else
-                UNRESOLVED=$((UNRESOLVED + 1))
+                UNRESOLVED=$((UNRESOLVED + 1))   # FU-7: no backup, no overwrite
               fi
             fi
           else
@@ -990,6 +1060,7 @@ else
 fi
 _log "    Skipped:   $SKIPPED_CONFIRM (awaiting per-file confirm)"
 _log "    Blocked:   $BLOCKED_COUNT (baseline/framework divergence — use upgrade.sh)"
+_log "    Refused:   $REFUSED_COUNT (destination not confined to the target — nothing written)"
 _log "    Orphans:   $ORPHAN_COUNT (candidates, report-only)"
 if [ -n "$BAK_DIR" ]; then
   _log "    Backups:   $BAK_DIR"

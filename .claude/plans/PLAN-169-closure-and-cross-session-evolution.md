@@ -1361,12 +1361,34 @@ pelo Owner; `OWNER-S329-E-LAND.sh` G-PRE..G5 + V1..V7 verdes; patch
       ADR (incl. decisão de visibilidade de tentativas recusadas e,
       se `inbound != refuse`, escopo degradado EXPLÍCITO da claim de
       auditabilidade).
-- [ ] AC-6 [P1] Pré-registro da bateria E7 assinado (hash commitado)
+- [x] AC-6 [P1] Pré-registro da bateria E7 assinado (hash commitado)
       ANTES de qualquer run + **E0 executado** (**S** medido com
       inputs impressos [codex r4: S, não "H" — a fração serial inclui
       tempo-morto], decisão E1/E2/banda-intermediária registrada) +
       PLAN-170 criado com orçamento próprio declarado e gatilho
       nomeado (pós-corte v1.4.0-rc.1).
+      **Fechado por medição (reconciliado 2026-09-01, S337): o checkbox
+      envelheceu — as três pernas estavam no disco desde 2026-08-18.**
+      (1) Pré-registro assinado ANTES de qualquer run:
+      `PLAN-169/W5-preregistration.md` (sha256
+      `3febff4b4fc655e9cc64a6f33a7c2fabf3a85b92bf7394db74f6b2221f157d9a`)
+      + `W5-preregistration.md.asc` com `gpg --verify` = *Good signature*
+      (João Canhada), ambos commitados em `fcac12d` (2026-08-09). A
+      assinatura destacada sobre bytes commitados é o "hash commitado"
+      (compromisso mais forte que uma linha sha256 em texto), e nenhum
+      run E1–E4 existe até hoje (PLAN-170 W0 aberto; E0 é retrospectivo,
+      sem invocação de agente). (2) E0 executado com inputs impressos:
+      `PLAN-172:28-36` (registrado em `20600ce`, 2026-08-11) — 14 planos
+      (M=155→168), 723 h de wall-clock, máquina 155,4 h (21 %), humano
+      137,9 h (19 %), tempo-morto 429,6 h (59 %); S conservador = 1,000
+      (otimista ≥ 0,785); decisão pela regra pré-registrada
+      (`W5-preregistration.md:52-55`: S ≥ 0,40 ⇒ E1/E2 NÃO financiados;
+      a banda 0,20 < S < 0,40 não se aplica a S = 1,000) — registrada
+      como "E1/E2 desfinanciados". (3) PLAN-170 criado em `1e3ffaa`
+      (2026-08-18) com orçamento próprio (`budget_tokens`: CEO-context
+      700k–1,2M + frota em orçamento SEPARADO, teto duro 14M) e gatilho
+      nomeado (`external_wait`: corte da `v1.4.0-rc.1`). Sem cerimônia:
+      arquivo de plano (oráculo `--is-canonical` = 0).
 - [ ] AC-7 [P1] Marcador 12º site: controle plantado vermelho + bump
       1.4.0 real verde (as duas evidências).
 - [ ] AC-8 [P1] v1.4.0 GA publicada (trem completo com hold).
@@ -1693,6 +1715,12 @@ auditável, e `scripts/tests/**` continua sem lint em CI.
 
 ## Progress log
 
+- 2026-09-01 (S337): **AC-6 reconciliado** — fechado por medição contra o
+  disco (pré-registro assinado em `fcac12d`, E0 em `20600ce`, PLAN-170 em
+  `1e3ffaa`; evidência no próprio AC). Nenhum artefato novo — o checkbox
+  envelhecera desde 2026-08-18, a mesma classe do AC-2/AC-3 reconciliados
+  na S322. Restam AC-4/AC-5 (live-fire operador-dependente), AC-7/AC-8
+  (trem v1.4.0).
 - 2026-08-25 (S328, 19:03): **W4.1.0 live-fire MEDIDO** —
   `PLAN-169/w4.1-probe-S328.md`: estouro de quota às 17:17 local
   (`You've hit your session limit · resets 7pm`), 7 agentes caídos POR

@@ -967,6 +967,355 @@ sys.exit(0 if re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$", sys.argv[1]) else
 fi
 
 # ---------------------------------------------------------------------------
+# D — doctor.sh repair writes are confined (PLAN-185-FOLLOWUP FU-7, S337).
+#
+# doctor.sh REPAIRS an installed tree from the framework checkout: it copies a
+# framework file over a drifted destination, backs the adopter's copy up first,
+# and re-creates LINK records. Until FU-7 the destination side of those writes
+# was a LOCAL copy of the confinement walk (a second implementation of what
+# install.sh/upgrade.sh already consume from the shared library) that never
+# asked about HARD LINKS, and the backup path was not asked anything at all.
+# Both escapes were MEASURED against the pre-cure doctor.sh — the positive
+# control is this same file pointed at a pre-cure tree (see the header):
+#   D.1  the delivered file replaced by a HARD LINK to an outside file: doctor
+#        classified it DRIFT (adopter-modified), --yes-file confirmed the
+#        repair, `cp -p` wrote the destination IN PLACE — and the outside name
+#        showed the framework bytes. rc=0, "RESTORED:".
+#   D.2  `.claude.bak` a symlink to an outside directory: the pre-restore
+#        backup followed it through `mkdir -p` + `cp -p` — the ADOPTER'S bytes
+#        landed outside the target, then the file was overwritten.
+# Post-cure both are refused BY NAME, nothing lands outside, and the run exits
+# 1 (a refusal is an unresolved finding). Same doctrine as F1: assert on the
+# EXTERNAL BYTES, never on rc alone — the pre-cure runs exit 0.
+# ---------------------------------------------------------------------------
+DOCTOR="$FRAMEWORK_ROOT/scripts/doctor.sh"
+# A regular manifest record delivered by --profile core on the identity route
+# (`.claude/**` falls back to identity), so doctor CAN restore it when nothing
+# stands in the way — which is what makes a refusal meaningful (D.0 proves it).
+D_REL=".claude/scripts/check-tier-boundaries.py"
+
+# One doctor run against $TARGET. rc in RC, output in $LOG (never piped).
+_doctor() {
+  bash "$DOCTOR" "$TARGET" "$@" >"$LOG" 2>&1
+  RC=$?
+}
+
+echo "==> D.0 doctor baseline: a fresh install verifies clean and a plain drift IS repaired"
+_mkcase d0-baseline
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "D.0 — install failed (rc=$RC, see $LOG); the D legs cannot run"
+elif [ ! -f "$TARGET/$D_REL" ]; then
+  bad "D.0 — $D_REL was not delivered; the D legs need a delivered regular-file record"
+else
+  LOG="$CASE/doctor-clean.log"; _doctor
+  [ "$RC" -eq 0 ] \
+    && ok "D.0 — doctor reports a fresh install clean (rc=0)" \
+    || bad "D.0 — doctor is not clean on a fresh install (rc=$RC, see $LOG)"
+  printf '\n# adopter edit\n' >> "$TARGET/$D_REL"
+  LOG="$CASE/doctor-repair.log"; _doctor --repair --yes-file "$D_REL"
+  grep -q "RESTORED: $D_REL" "$LOG" \
+    && ok "D.0 — a plain adopter drift is repaired (RESTORED:) — the refusals below are not vacuous" \
+    || bad "D.0 — the plain drift was NOT repaired (see $LOG); every refusal below would be vacuous"
+  grep -q "BACKED-UP: $D_REL" "$LOG" \
+    && ok "D.0 — the adopter's copy was backed up before the overwrite" \
+    || bad "D.0 — no BACKED-UP line for the repaired file"
+  [ "$RC" -eq 0 ] \
+    && ok "D.0 — the repair run exits 0 (nothing left unresolved)" \
+    || bad "D.0 — the repair run exited $RC on a plain drift"
+fi
+
+# ---------------------------------------------------------------------------
+# D.1 — HARD-LINKED destination. Every path test passes (a second name for one
+# inode is not a link any walk encounters), doctor sees a regular file whose
+# bytes drifted, and `cp -p` over it writes IN PLACE: the outside name sees the
+# framework bytes. Asserted on the outside file's BYTES.
+# ---------------------------------------------------------------------------
+echo "==> D.1 a hard-linked destination must not be written in place"
+_mkcase d1-hardlink
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "D.1 — install failed (rc=$RC, see $LOG)"
+else
+  printf 'OUTSIDE FILE - MUST KEEP THESE BYTES\n' > "$OUTSIDE/victim.py"
+  D1_BEFORE="$( shasum -a 256 < "$OUTSIDE/victim.py" | awk '{print $1}' )"
+  rm -f "$TARGET/$D_REL"
+  ln "$OUTSIDE/victim.py" "$TARGET/$D_REL"    # a second name for the OUTSIDE inode
+  LOG="$CASE/doctor.log"; _doctor --repair --yes-file "$D_REL"
+  D1_AFTER="$( shasum -a 256 < "$OUTSIDE/victim.py" | awk '{print $1}' )"
+  [ "$D1_BEFORE" = "$D1_AFTER" ] \
+    && ok "D.1 — the outside file is byte-identical (nothing written through the hard link)" \
+    || bad "D.1 — the outside file CHANGED through the hard link ($D1_BEFORE -> $D1_AFTER)"
+  grep -q "RESTORE-BLOCKED (destination refused" "$LOG" \
+    && ok "D.1 — the refusal is NAMED in the run output" \
+    || bad "D.1 — no named refusal in $LOG (a silent skip is fail-open on repair)"
+  grep -q "hard links" "$LOG" \
+    && ok "D.1 — the reason names the hard link" \
+    || bad "D.1 — the refusal reason does not mention hard links"
+  [ "$RC" -ne 0 ] \
+    && ok "D.1 — doctor exits non-zero (rc=$RC): the refusal is an unresolved finding" \
+    || bad "D.1 — doctor exited 0 with a refused repair"
+fi
+
+# ---------------------------------------------------------------------------
+# D.2 — symlinked BACKUP directory. `.claude.bak` is not a manifest record, so
+# nothing sanitised it: the pre-restore backup's `mkdir -p` + `cp -p` follow the
+# link and the ADOPTER'S bytes land outside the target — then the overwrite
+# proceeds. Post-cure: BACKUP-BLOCKED, no overwrite without a backup, the
+# adopter's edit survives, nothing outside.
+# ---------------------------------------------------------------------------
+echo "==> D.2 a symlinked .claude.bak must not receive the adopter's backup outside the target"
+_mkcase d2-bakjail
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "D.2 — install failed (rc=$RC, see $LOG)"
+else
+  mkdir -p "$OUTSIDE/bakjail"
+  ln -s "$OUTSIDE/bakjail" "$TARGET/.claude.bak"
+  printf '\n# adopter edit\n' >> "$TARGET/$D_REL"
+  LOG="$CASE/doctor.log"; _doctor --repair --yes-file "$D_REL"
+  D2_LEAK="$( find "$OUTSIDE/bakjail" -type f 2>/dev/null | wc -l | tr -d ' ' )"
+  [ "${D2_LEAK:-0}" = "0" ] \
+    && ok "D.2 — nothing landed outside the target under the symlinked backup dir" \
+    || bad "D.2 — $D2_LEAK file(s) landed OUTSIDE the target through the symlinked .claude.bak"
+  grep -q "BACKUP-BLOCKED" "$LOG" \
+    && ok "D.2 — the backup refusal is NAMED" \
+    || bad "D.2 — no BACKUP-BLOCKED line in $LOG"
+  if grep -q "RESTORED: $D_REL" "$LOG"; then
+    bad "D.2 — the file was overwritten WITHOUT a backup"
+  else
+    ok "D.2 — no overwrite without a backup"
+  fi
+  grep -q "adopter edit" "$TARGET/$D_REL" \
+    && ok "D.2 — the adopter's edit survives" \
+    || bad "D.2 — the adopter's edit is gone"
+  [ "$RC" -ne 0 ] \
+    && ok "D.2 — doctor exits non-zero (rc=$RC)" \
+    || bad "D.2 — doctor exited 0 with a refused backup"
+  # --dry-run with the same plant: previews, writes nothing anywhere.
+  LOG="$CASE/doctor-dry.log"; _doctor --repair --dry-run --yes-file "$D_REL"
+  D2_LEAK="$( find "$OUTSIDE/bakjail" -type f 2>/dev/null | wc -l | tr -d ' ' )"
+  [ "${D2_LEAK:-0}" = "0" ] \
+    && ok "D.2 — --dry-run writes nothing outside either" \
+    || bad "D.2 — --dry-run wrote $D2_LEAK file(s) outside the target"
+fi
+
+# ---------------------------------------------------------------------------
+# D.3 — DANGLING symlink at a regular-file destination. Doctor's verification
+# loop already classifies this as a type-change (regular file recorded,
+# non-file found) and never repairs through it; this leg pins that behaviour
+# so the class stays covered from BOTH sides (loop verdict + write predicate).
+# ---------------------------------------------------------------------------
+echo "==> D.3 a dangling symlink at a delivered file is never written through"
+_mkcase d3-dangling
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "D.3 — install failed (rc=$RC, see $LOG)"
+else
+  rm -f "$TARGET/$D_REL"
+  ln -s "$OUTSIDE/pwned.py" "$TARGET/$D_REL"
+  LOG="$CASE/doctor.log"; _doctor --repair --yes-file "$D_REL"
+  _assert_external_untouched "$OUTSIDE/pwned.py" "D.3"
+  grep -qE "type-change|destination refused" "$LOG" \
+    && ok "D.3 — the dangling destination is NAMED (type-change / refused), not repaired" \
+    || bad "D.3 — nothing in $LOG names the dangling destination"
+  [ "$RC" -ne 0 ] \
+    && ok "D.3 — doctor exits non-zero (rc=$RC)" \
+    || bad "D.3 — doctor exited 0 over a dangling destination"
+fi
+
+# ---------------------------------------------------------------------------
+# D.4 — root-level LINK repair through a SYMLINKED target root (rail r1 S337,
+# P1). doctor resolves $TARGET logically (`cd && pwd`), and the shared
+# predicate refuses a symlinked root for every regular-file write — but a
+# root-level LINK record whose parent IS the root took an early return that
+# skipped the clause, so `rm -f` + `ln -s` followed the root symlink into the
+# referent. Post-cure the refusal names the root and nothing is rewritten.
+# ---------------------------------------------------------------------------
+echo "==> D.4 a LINK repair through a symlinked target root is refused"
+_mkcase d4-rootlink
+D4_REAL="$CASE/real"; D4_VIA="$CASE/via"
+D4_REL=".claude/hooks/SessionStart.py"   # a real LINK record on a --link install
+mkdir -p "$D4_REAL"
+ln -s "$D4_REAL" "$D4_VIA"
+LOG="$CASE/install.log"
+CEO_RAG_INSTALL_PROMPT=0 bash "$INSTALLER" "$D4_REAL" --profile core --ceremony maintainer --link >"$LOG" 2>&1
+RC=$?
+if [ "$RC" -ne 0 ]; then
+  bad "D.4 — --link install failed (rc=$RC, see $LOG)"
+elif ! grep -q "^LINK  $D4_REL  " "$D4_REAL/.claude/.install-manifest.sha256" 2>/dev/null; then
+  # NOTE (measured, S337): root-level files like VERSION are symlinks on disk
+  # but NOT manifest records on a --link install ("seeded outside the walk"),
+  # so the leg pins a NESTED record — the root-symlink clause fires for every
+  # LINK record when the target ROOT is the symlink, nesting included.
+  bad "D.4 — $D4_REL is not a LINK record on this --link install; the leg cannot run"
+else
+  rm -f "$D4_REAL/$D4_REL"
+  ln -s "$OUTSIDE/nowhere" "$D4_REAL/$D4_REL"     # a drifted link record
+  TARGET="$D4_VIA"; LOG="$CASE/doctor.log"; _doctor --repair --yes-file "$D4_REL"
+  D4_READ="$( readlink "$D4_REAL/$D4_REL" 2>/dev/null || true )"
+  [ "$D4_READ" = "$OUTSIDE/nowhere" ] \
+    && ok "D.4 — the link under the referent was NOT rewritten through the symlinked root" \
+    || bad "D.4 — doctor re-linked through the symlinked target root (now -> $D4_READ)"
+  grep -q "target root .* is a SYMLINK" "$LOG" \
+    && ok "D.4 — the refusal names the symlinked root" \
+    || bad "D.4 — no symlinked-root refusal in $LOG"
+  [ "$RC" -ne 0 ] \
+    && ok "D.4 — doctor exits non-zero (rc=$RC)" \
+    || bad "D.4 — doctor exited 0 after writing through the root symlink"
+fi
+
+# ---------------------------------------------------------------------------
+# U — uninstall.sh confinement (PLAN-183 §9.8 + rail r1 S337). The install
+# manifest is a FILE in the target and it is NOT integrity-checked before the
+# walk; W5 made it name deliveries OUTSIDE .claude/, which widened what the one
+# DESTRUCTIVE consumer of that file can reach. Measured pre-cure:
+#   U.1  docs/ replaced by a symlink to an outside directory: the walk removed
+#        the outside file (sha matched — `rm -f` follows the ancestor) and the
+#        pre-uninstall backup archived bytes read through the link;
+#   U.2  a record `<sha>  ../outside/victim.txt` was REMOVED outside the target;
+#   U.3  --restore ran `tar xzf` over whatever existed at the archived paths;
+#   U.4  (rail r5 S337, P2) --force with a refused record skipped the
+#        "incomplete" branch — its `&& FORCE -eq 0` guard negated the refusal
+#        too — and printed the "everything matched" summary: a complete-looking
+#        report carrying `Refused: 1` and `Manifest: KEPT` in its own body.
+# Post-cure: refused BY NAME, nothing outside touched, restore never clobbers,
+# and --force never reports a run that refused a record as complete.
+# ---------------------------------------------------------------------------
+UNINSTALLER="$FRAMEWORK_ROOT/scripts/uninstall.sh"
+_uninstall() {
+  bash "$UNINSTALLER" "$TARGET" "$@" >"$LOG" 2>&1
+  RC=$?
+}
+
+echo "==> U.1 a symlinked ancestor must not let uninstall delete (or archive) outside the target"
+_mkcase u1-ancestor
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.1 — install failed (rc=$RC, see $LOG)"
+elif [ ! -f "$TARGET/docs/BRANCH-PROTECTION.md" ]; then
+  bad "U.1 — docs/BRANCH-PROTECTION.md was not delivered; the leg cannot run"
+else
+  mv "$TARGET/docs" "$OUTSIDE/docs-jail"
+  ln -s "$OUTSIDE/docs-jail" "$TARGET/docs"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ -f "$OUTSIDE/docs-jail/BRANCH-PROTECTION.md" ] \
+    && ok "U.1 — the outside file survived (uninstall did not follow the symlinked ancestor)" \
+    || bad "U.1 — uninstall DELETED a file outside the target through the symlinked docs/"
+  grep -q "symlinked ancestor" "$LOG" \
+    && ok "U.1 — the refusal is NAMED" \
+    || bad "U.1 — no named refusal in $LOG"
+  U1_BK="$( ls "$TARGET"/.claude.backup-uninstall-*.tar.gz 2>/dev/null | head -n 1 || true )"
+  if [ -n "$U1_BK" ]; then
+    tar tzf "$U1_BK" > "$CASE/backup.list" 2>/dev/null || true
+    if grep -qE '^(\./)?docs/' "$CASE/backup.list"; then
+      bad "U.1 — the backup archived bytes read THROUGH the symlinked docs/"
+    else
+      ok "U.1 — the backup carries nothing from behind the symlinked ancestor"
+    fi
+  else
+    bad "U.1 — no backup tarball written"
+  fi
+fi
+
+echo "==> U.2 a manifest record that escapes the target is refused, not removed"
+_mkcase u2-traversal
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.2 — install failed (rc=$RC, see $LOG)"
+else
+  printf 'ADOPTER FILE OUTSIDE THE TARGET\n' > "$OUTSIDE/victim.txt"
+  U2_SHA="$( shasum -a 256 < "$OUTSIDE/victim.txt" | awk '{print $1}' )"
+  printf '%s  ../outside/victim.txt\n' "$U2_SHA" >> "$TARGET/.claude/.install-manifest.sha256"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ -f "$OUTSIDE/victim.txt" ] \
+    && ok "U.2 — the outside file survived a crafted ../ manifest record" \
+    || bad "U.2 — uninstall DELETED a file outside the target via a ../ record"
+  grep -q "unsafe manifest path" "$LOG" \
+    && ok "U.2 — the refusal is NAMED" \
+    || bad "U.2 — no named refusal for the ../ record in $LOG"
+  [ -d "$OUTSIDE" ] \
+    && ok "U.2 — the outside directory still exists (the sweep never left the target)" \
+    || bad "U.2 — the sweep removed the outside directory"
+fi
+
+echo "==> U.3 --restore never overwrites a file that exists at a non-.claude path"
+_mkcase u3-restore
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.3 — install failed (rc=$RC, see $LOG)"
+else
+  LOG="$CASE/uninstall.log"; _uninstall
+  U3_BK="$( ls "$TARGET"/.claude.backup-uninstall-*.tar.gz 2>/dev/null | head -n 1 || true )"
+  if [ -z "$U3_BK" ]; then
+    bad "U.3 — no backup tarball written by the uninstall"
+  else
+    if [ -e "$TARGET/docs/BRANCH-PROTECTION.md" ]; then
+      bad "U.3 — precondition: the docs delivery is still present after uninstall"
+    else
+      ok "U.3 — precondition: the docs delivery was removed"
+    fi
+    mkdir -p "$TARGET/docs"
+    printf 'MINE - written after the uninstall\n' > "$TARGET/docs/BRANCH-PROTECTION.md"
+    U3_BEFORE="$( shasum -a 256 < "$TARGET/docs/BRANCH-PROTECTION.md" | awk '{print $1}' )"
+    LOG="$CASE/restore.log"
+    bash "$UNINSTALLER" "$TARGET" --restore "$U3_BK" >"$LOG" 2>&1
+    RC=$?
+    U3_AFTER="$( shasum -a 256 < "$TARGET/docs/BRANCH-PROTECTION.md" 2>/dev/null | awk '{print $1}' )"
+    [ "$U3_BEFORE" = "$U3_AFTER" ] \
+      && ok "U.3 — the adopter's file is byte-identical after --restore" \
+      || bad "U.3 — --restore OVERWROTE the adopter's file"
+    grep -q "PRESERVED (exists" "$LOG" \
+      && ok "U.3 — the preservation is NAMED" \
+      || bad "U.3 — no PRESERVED line in $LOG"
+    [ -f "$TARGET/docs/rotation-log.md" ] \
+      && ok "U.3 — the other docs delivery WAS restored" \
+      || bad "U.3 — docs/rotation-log.md was not restored"
+    [ -f "$TARGET/.claude/settings.json" ] \
+      && ok "U.3 — .claude/ was restored" \
+      || bad "U.3 — .claude/settings.json is missing after restore"
+    [ "$RC" -eq 0 ] \
+      && ok "U.3 — restore exits 0" \
+      || bad "U.3 — restore exited $RC (see $LOG)"
+  fi
+fi
+
+echo "==> U.4 --force never reports a run that refused a record as complete"
+_mkcase u4-force-refused
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.4 — install failed (rc=$RC, see $LOG)"
+else
+  # A fresh install: every recorded sha matches, so mismatch_count is 0 and the
+  # ONLY thing --force meets is the refused record — the exact cell the guard
+  # got wrong. Exit code and manifest do NOT discriminate the two exit paths
+  # (both exit 0; the manifest block already kept the ledger on a refusal), the
+  # summary header does: pre-cure this run printed "==> Uninstall summary:".
+  printf 'ADOPTER FILE OUTSIDE THE TARGET\n' > "$OUTSIDE/victim.txt"
+  U4_SHA="$( shasum -a 256 < "$OUTSIDE/victim.txt" | awk '{print $1}' )"
+  printf '%s  ../outside/victim.txt\n' "$U4_SHA" >> "$TARGET/.claude/.install-manifest.sha256"
+  LOG="$CASE/uninstall.log"; _uninstall --force
+  [ -f "$OUTSIDE/victim.txt" ] \
+    && ok "U.4 — the outside file survived the ../ record under --force" \
+    || bad "U.4 — --force DELETED a file outside the target via a ../ record"
+  grep -q "Uninstall summary (incomplete)" "$LOG" \
+    && ok "U.4 — the summary is INCOMPLETE (a refused record routes --force to the refused path)" \
+    || bad "U.4 — --force with a refused record printed a COMPLETE summary (see $LOG)"
+  grep -q "Refused:   1 (unsafe" "$LOG" \
+    && ok "U.4 — the refusal is COUNTED in the summary" \
+    || bad "U.4 — no 'Refused:   1' line in $LOG"
+  [ -f "$TARGET/.claude/.install-manifest.sha256" ] \
+    && ok "U.4 — the manifest survived (--force overrides a mismatch, never a refusal)" \
+    || bad "U.4 — --force REMOVED the manifest with a refused record still on the ledger"
+  grep -q "re-run with --force" "$LOG" \
+    && bad "U.4 — the incomplete summary tells a --force run to re-run with --force" \
+    || ok "U.4 — no misleading --force hint under --force"
+  [ "$RC" -eq 0 ] \
+    && ok "U.4 — the refused run under --force exits 0 (the incomplete path's exit code)" \
+    || bad "U.4 — the refused run exited $RC (see $LOG)"
+fi
+
+# ---------------------------------------------------------------------------
 echo ""
 echo "=== summary ==="
 echo "    framework root : $FRAMEWORK_ROOT"

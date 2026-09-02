@@ -1119,11 +1119,32 @@ com a revisão refrescada, ou vira plano próprio.
       cada sessão (esta medição já andou 635 linhas em relação à do
       recon, 3 h antes).
       Check: a taxa de censura é um número publicado no plano, por hook, com o método ao lado
-- [ ] `[P0][US3]` **Estender** `smoke-install.sh` e
+- [x] `[P0][US3]` **Estender** `smoke-install.sh` e
       `smoke-install.yml` (o step `:276` já existe) para cobrir
       `.github/` e para ATIVAR e EXECUTAR o CI entregue. Nunca uma
       bateria paralela.
       Check: smoke-install passa a referenciar validate.yml.template; hoje o grep devolve ZERO — o teste é essa referência existir e o step rodar
+      — ✅ S337 (2026-09-01): a metade que faltava era a EXECUÇÃO.
+      `scripts/tests/run-activated-workflow.py` (novo, stdlib) roda os
+      `run:` do workflow ATIVADO dentro do target, em ordem, um
+      `bash --noprofile --norc -eo pipefail` por step (o shell do runner
+      hospedado), parando no primeiro vermelho; `uses:` são pulados POR
+      NOME; qualquer shape fora do subconjunto congelado (`if:`/`shell:`/
+      `env:`/`working-directory:` de step, 2º job, step sem `run:`) é falha
+      de parse (rc 2), nunca verde-vácuo — os 4 shapes auto-testados. O
+      `smoke-install.sh` COMMITA a árvore instalada antes (os steps
+      baseados em `git ls-files`, como o Contamination check, veem NADA numa
+      árvore sem commit — o adopter commita o install antes do CI rodar) e
+      executa; em plataforma ≠ Linux só LISTA os steps, com nota (o template
+      pina o asset `linux_amd64` do actionlint). **Medido:** macOS 9/10
+      steps verdes localmente (só actionlint falha — binário linux);
+      **Linux (docker `ubuntu:24.04`, GNU tar 1.35, Python 3.12): os 10
+      steps `run:` EXECUTARAM e passaram, actionlint incluído; smoke completo
+      `OK`, rc 0**. O `.yml` não muda (`:485` já invoca o `.sh` inteiro) —
+      sem cerimônia. "Nunca uma bateria paralela" honrado: nenhum check é
+      reimplementado, só o loop de despacho do runner. Achado colateral:
+      o Contamination check pós-A7 saiu VERDE no adopter sem tocar a
+      allowlist — evidência antecipada para o item da W2 gated na W1.
 - [x] `[P1][US4]` Inventariar quais dos cinco artefatos de ownership a
       W1 vai tocar, e orçar o ciclo de re-baseline em tokens e sessões.
       **FECHADO (S322) — VEREDITO: a W1 toca 4 dos 5 nomeados, e a lista
@@ -1390,8 +1411,23 @@ com a revisão refrescada, ou vira plano próprio.
       e `timedOut=true`; a arqueologia não precisou abrir — a fonte do
       `/doctor` saiu de graça (prompt embutido no binário 2.1.237,
       *"Check 5 - slow hooks"*, dirigido por MODELO).
-- [ ] AC-5 [P0] `smoke-install` passa a cobrir `.github/` e a EXECUTAR o
+- [x] AC-5 [P0] `smoke-install` passa a cobrir `.github/` e a EXECUTAR o
       CI entregue — hoje o grep pelos templates devolve zero.
+      — ✅ **S337 (2026-09-01): FECHADO — a perna que restava era a
+      execução, e ela agora acontece dentro do `smoke-install.sh`.** O que
+      "EXECUTAR" significa aqui, sem ambiguidade: os `run:` do workflow
+      ativado são executados VERBATIM, em ordem, no target instalado, pelo
+      mesmo shell do runner hospedado (`scripts/tests/run-activated-
+      workflow.py`; detalhe no W0-US3); `uses:` (checkout) é pulado por nome;
+      parse fail-closed. Evidência: Linux (docker `ubuntu:24.04`) — **10/10
+      steps `run:` executados e verdes, actionlint incluído, smoke `OK`**;
+      macOS — 9/10 (actionlint é binário linux; fora de Linux o smoke LISTA
+      e diz por quê). A CI real (`smoke-install.yml:485`, ubuntu-latest)
+      passa a executar isto em todo PR sem tocar o `.yml` (canônico
+      intocado). O que NÃO está neste AC e continua ABERTO com nome: a
+      prova em repositório GitHub descartável nosso (Actions de verdade) é
+      o **AC-2**, e a forma dela (fixture permanente vs roteiro de release)
+      é a **OQ-2**, decisão do Owner. Nota S335 abaixo mantida como histórico.
       — ◕ **REGISTRO S335 (wave-183batch, medido contra o DISCO; rail
       183-r1 barrou o flip — corretamente):** a «metade canônica» que a
       nota ◐ abaixo declarava faltante JÁ EXISTE —
@@ -1843,3 +1879,41 @@ mexe.
       `uninstall.sh:272` (`find "$TARGET/.claude" -depth -type d -empty
       -delete`) cobre **só** `.claude/`.
       Oráculo: `scripts/uninstall.sh` = **0** ⇒ pode landar sem cerimônia.
+      — ✅ **S337 (2026-09-01): EXERCITADO e curado, medido ANTES de
+      escrever cada asserção.** Fatos do disco (install `--profile core` /
+      `core,frontend`, com e sem `--github-owner`): o manifesto pós-W5 JÁ
+      registra as 5 rotas (`docs/rotation-log.md`, `docs/BRANCH-PROTECTION.md`,
+      `.github/CODEOWNERS[.template]`, os 2 `workflows/*.template`) — a
+      perna (a) tinha base; um uninstall pristino removia as 551 entradas e
+      deixava para trás `docs/`, `.github/workflows/` e `SPEC/v1` VAZIOS, e o
+      tar de backup pré-uninstall tinha **0 entradas** das duas árvores
+      (`tar czf … .claude/`). **(b) a prosa acima envelheceu:** o manifesto
+      grava o sha do RENDERIZADO (`9e360b3f…` = arquivo entregue ≠
+      `1955b01a…` do template) — o install hasheia o que escreveu —, logo um
+      `CODEOWNERS` renderizado e intocado é removido como qualquer entrega
+      (coerente com o contrato "remove só o que bate o sha"), e é o
+      `CODEOWNERS` EDITADO pelo adopter que sai `PRESERVED (sha mismatch,
+      user-modified)`, com summary "incomplete", manifesto MANTIDO (para o
+      `--force`) e exit 0. **Curas em `scripts/uninstall.sh` (livre):** o
+      backup passa a cobrir TODO registro do manifesto que o run vai remover
+      (lista derivada do próprio manifesto, regfiles existentes, `tar -T`;
+      medido depois: 38 entradas fora de `.claude`, no bsdtar e no GNU tar
+      1.35), e uma varredura `-depth -type d -empty -delete` nas árvores de
+      onde o run removeu entradas (dado, não lista fixa: `docs/`, `.github/`,
+      `SPEC/`; `.claude/` já tinha a sua) — dir com arquivo do adopter ou
+      entrega PRESERVED nunca é tocado; `--dry-run` anuncia. **Asserções em
+      `scripts/tests/smoke-install.sh` (bloco "PLAN-183 §9.8", 2 installs):**
+      (a) 5 entregas presentes E no manifesto → uninstall → nenhuma sobrevive,
+      `docs/`/`.github/`/`SPEC/` ausentes, sonda EXTERNA byte-idêntica,
+      tarball cobre `docs/BRANCH-PROTECTION.md`; (b) install novo + edição do
+      `CODEOWNERS` → `PRESERVED`, "incomplete", manifesto mantido, rc 0, e as
+      entregas pristinas ainda removidas. Verde no macOS e no Linux (docker
+      `ubuntu:24.04`); a 1ª rodada Linux ficou vermelha por `tar tzf |
+      grep -q` sob `pipefail` (SIGPIPE 141 no produtor — verde no bsdtar,
+      vermelho no GNU tar com o MESMO tarball) — curado listando para
+      arquivo. `INSTALL.md` §Uninstall descreve o comportamento novo. Fora
+      do escopo, REGISTRADO: o uninstall deixa ~30 arquivos em `.claude/`
+      que o install entrega FORA do manifesto (`adr/README.md`, `plans/*`,
+      `policies/*`, `dispatcher/*`, `.install-state.json`) e `state/
+      mcp_client_secrets/` vazio — classe "semeado fora do walk" (mesma do
+      `FU-ADR-README-SEED`), não desta perna.

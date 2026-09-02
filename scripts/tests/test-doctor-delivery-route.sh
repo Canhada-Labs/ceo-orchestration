@@ -174,9 +174,14 @@ FRAG_OK=1
 # rail round-7 F2 — _wbm_source_confined joined the set _restore_refuses CALLS.
 # A fragment without it makes the harness die under `set -u` (measured: the
 # R.7 legs printed nothing), which reads as "the guard did not refuse".
+# PLAN-185-FOLLOWUP FU-7 (S337) — _wbm_dst_refuses (and _wbm_nlink, which it
+# calls) joined the set too: _restore_refuses now delegates its DESTINATION
+# half to the shared predicate. Measured before this line existed: the R.7
+# GREEN leg reported "guard did not refuse (got WROTE)" — an undefined
+# function answers non-zero, which the guard reads as "allowed".
 for _fn in _wbm_route_relpath_ok _wbm_route_domain_ok _wbm_route_row_ok \
            _wbm_route_table_ok _wbm_route_table_gate _wbm_route_meta \
-           _wbm_route_src _wbm_source_confined; do
+           _wbm_route_src _wbm_source_confined _wbm_nlink _wbm_dst_refuses; do
   sed -n "/^$_fn() {\$/,/^}\$/p" "$FMS_LIB" >> "$FRAG"
   if grep -q "^$_fn() {\$" "$FRAG"; then
     ok "R.1 $_fn extracted from _framework_manifest_set.sh"
@@ -709,6 +714,7 @@ else
       # SOURCE_DIR, so the harness has to name it or die under `set -u`.
       echo "SOURCE_DIR=\"$SOURCE_DIR\""
       echo '_log() { printf "%s\n" "$*"; }'
+      echo 'REFUSED_COUNT=0'   # FU-7: _restore_refuses counts refusals; set -u needs it defined
       cat "$FRAG"
       if [ "$2" -eq 1 ]; then cat "$GUARD_FRAG"; else echo '_restore_refuses() { return 1; }'; fi
       echo 'if _restore_refuses "docs/PWNED.md" "templates/docs/rotation-log.md"; then echo REFUSED; exit 0; fi'
@@ -747,6 +753,7 @@ else
       # SOURCE_DIR, so the harness has to name it or die under `set -u`.
       echo "SOURCE_DIR=\"$SOURCE_DIR\""
       echo '_log() { printf "%s\n" "$*"; }'
+      echo 'REFUSED_COUNT=0'   # FU-7: _restore_refuses counts refusals; set -u needs it defined
       cat "$FRAG"; cat "$GUARD_FRAG"
       echo "if _restore_refuses \"$1\" \"$2\"; then echo REFUSED; else echo ALLOWED; fi"
     } > "$WORKROOT/r7-lex.sh"
@@ -765,6 +772,7 @@ else
     echo "TARGET=\"$R7T\""
     echo "SOURCE_DIR=\"$SOURCE_DIR\""
     echo '_log() { printf "%s\n" "$*"; }'
+    echo 'REFUSED_COUNT=0'   # FU-7: _restore_refuses counts refusals; set -u needs it defined
     cat "$FRAG"; cat "$GUARD_FRAG"
     echo 'if _restore_refuses "docs2/ok.md" "templates/docs/rotation-log.md"; then echo REFUSED; else echo ALLOWED; fi'
   } > "$WORKROOT/r7-benign.sh"
@@ -1022,6 +1030,7 @@ else
       echo "TARGET=\"$R10_TGT\""
       echo "SOURCE_DIR=\"$R10_SRC\""
       echo '_log() { printf "%s\n" "$*"; }'
+      echo 'REFUSED_COUNT=0'   # FU-7: _restore_refuses counts refusals; set -u needs it defined
       cat "$FRAG"
       if [ "$1" -eq 1 ]; then
         cat "$GUARD_FRAG"
