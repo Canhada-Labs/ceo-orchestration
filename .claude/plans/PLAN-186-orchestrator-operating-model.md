@@ -1,0 +1,274 @@
+---
+id: PLAN-186
+title: "Modelo operacional do orquestrador: roteamento papel × modelo × effort, herança explícita, teto de concorrência, coordenação entre terminais e CI em matriz"
+status: reviewed
+reviewed_at: 2026-09-02
+reviewed_by: "Owner - ratificação S339 via AskUserQuestion (7 OQs decididas verbatim em PLAN-186/debate/owner-decisions-S339.md; debate 3 rounds, round 3 = 3× ACCEPT, design-coherent)"
+created: 2026-09-02
+owner: CEO
+depends_on: [PLAN-169]   # ordem de retorno depende do land da cerimônia `wave-fable51`: enquanto o assento ficar em `claude-fable-5` paga $1,00/MTok de cache read (58,6 % da fatura de 30 d). PLAN-184 é «COORDENA COM», não dependência: está em `status: draft` com `[P0][US4]` (:959) e `[P0][US5]` (:970) abertos e os números marcados NÃO-DERIVADOS (:979) — dependência não satisfazível.
+level: L3
+# UNIDADE (round 1): `budget_tokens` aqui é a do PLAN-SCHEMA §324 — tokens de CONTEXTO do CEO, comparável com os outros ~15 planos. NÃO é a do instrumento da W0 (faturáveis de TODOS os transcripts, cache read incluso = 96,8 % do volume) nem a da skill `llm-routing-and-finops` §180 (CEO + fan-out). As três coexistem; OQ-6 DECIDIDA (S339): a normativa repo-wide passa a ser a do instrumento (faturáveis, campo de gate-boot separado); `budget_tokens`/`budget_tokens_gateboot` aqui ficam como unidade LEGADA (PLAN-SCHEMA §324) até a migração dos ~15 planos existentes.
+# COMPOSIÇÃO (round 2, D2): `budget_tokens` é TRABALHO. O gate-boot está FORA e vai no campo próprio abaixo, porque `PLAN-SCHEMA:328` publica «~27k por sessão» e o valor MEDIDO neste repo é 3,6× maior (`PLAN-179/w0-measurement.md:539`: F = 97.292; cold-F 97.097; n=41, spread 51,7 % da média). Antes desta re-derivação o piso do campo (850k) era MENOR que o boot mínimo (9 × 97k = 875k).
+budget_tokens: 1.06M-1.84M (trabalho; W0 200-320k; W1 200-350k cerimônia [herança+camada T fundidas, OQ-9]; W-ROTA 80-150k; W4 280-520k cerimônia; W5 200-300k; W6 100-200k)
+budget_tokens_gateboot: 1.36M-1.75M   # 14-18 sessões × F=97.292 (ponto). Faixa honesta por sessão = 47-147k (spread 51,7 %); o produto usa o ponto e a incerteza fica declarada aqui, não escondida.
+budget_tokens_total: 2.42M-3.59M      # trabalho + boot. É o número que o Owner deve ler.
+budget_tokens_billable_est: 48_000_000   # unidade do instrumento, sem cache read; ~3,47M/sessão (mediana medida) × 14. RECALIBRAR com `ceo-cost-transcripts.py` ao fim da W0.
+budget_usd_estimate: 2_200   # API-equivalente; o Owner opera por assinatura.
+tier_mix_estimate:   # DOIS blocos: assento e subagente são camadas diferentes (T e P). OQ-1 eliminou o A/B — o assento roda o pin corrente até o land da W1 e `claude-fable-5-1` fixo depois.
+  seat_pre_w1:  {opus_5: 1.00, fable_5_1: 0.0, haiku: 0.0}   # antes do land da W1 (pin corrente `.claude/settings.json`)
+  seat_post_w1: {fable_5_1: 1.00, opus_5: 0.0, haiku: 0.0}   # após o land da W1 (pin fixado, OQ-1 — sem A/B)
+  subagent:     {opus_5: 0.55, sonnet_5: 0.40, fable_5_1: 0.05, haiku: 0.0}
+tier_mix_rationale: |
+  Assento: OQ-1 (S339) eliminou o A/B — o pin muda uma vez, no land da cerimônia de roteamento (W1), sem janela de experimento nem 14 dias de observação.
+  Subagente: quem DEFINE uma pergunta (gate, oráculo, critério de aceite, refutação, DESENHO de predicado de censo) em Opus 5; quem EXECUTA uma derivação de CÓDIGO/CONFIG (`.py`/`.sh`/`.js`/`.yml`/`.json`) também em Opus 5 (OQ-3); quem EXECUTA uma derivação de TEXTO (docs, anchor-exact em prosa, relatório) ou PESQUISA sob pergunta fixada em Sonnet 5; só síntese/REDUCE em Fable 5.1. Ver §2b — partição TOTAL desde o round 2, refinada por tipo de artefato no round 3/S339 (OQ-3).
+  Haiku 0 % — PROIBIDO sem evidência de torneio (n≥30/célula, gap≥25pp). O estudo recomendou Haiku para pesquisa (§5.1 linha 7) e esta matriz RECUSA a linha: quem ler o estudo depois não deve "restaurar" a opção mais barata.
+budget_sessions: 14-18 (W0 2; W1 4 cerimônia [herança+camada T fundidas]; W-ROTA 1-2; W4 4-6 cerimônia; W5 2; W6 1-2)
+context_risk: medium
+external_wait: "W1 e W4 esperam ASSINATURA GPG do Owner: as duas tocam paths canônicos (round 2, K18) e NENHUMA pode landar em night-run. OQ-1 (sem A/B) removeu a espera de 14 dias-calendário que a W2 exigia."
+eta_calendar: "W0 = mesmo dia a D+1; W1 = build + cerimônia do Owner (herança + camada T fundidas); W-ROTA = 1 sessão após o land da W1; W4 = medição + build + cerimônia; W5-W6 sem espera externa."
+tags: [orquestrador, roteamento, finops, quota, workflow, ci, governanca, substrato]
+---
+
+# PLAN-186 — Modelo operacional do orquestrador
+
+> **Insumo:** `docs/research/orchestrator-operating-model-S339.md` (síntese) e os cinco
+> relatórios de `docs/research/s339-orchestrator-study/` (S339, 2026-09-02).
+> **Moeda:** dólares são API-equivalentes; o Owner opera por assinatura (janela de 5 h +
+> semanal). A decisão do assento é de QUOTA e se mede, não se deriva de preço.
+> **Nível:** L3 — muda o Spawn Protocol (Step 0), pins de camada T e dois workflows de CI.
+> Exige `/debate start PLAN-186` antes de qualquer wave canônica (W1, W5).
+
+## 1. Contexto — o que o estudo mediu
+
+| # | fato | valor | fonte |
+|---|---|---|---|
+| 1 | Custo 30 d (API-equivalente) | US$ 11.001 pelo instrumento da W0 após a cura do dedup progressivo (Codex P1, S339); o relatório 05 dizia 11.138 (delta −1,2 %, dentro do AC-1; causa residual em `w0/instrument-S339.md` §3) | W0 S339; 05 §1.3 |
+| 2 | Mix de tokens | cache-read 96,8 % dos tokens e 61 % do custo | 05 §1.4 |
+| 3 | Cache-read por MTok | Fable 5.1 0,25 · Opus 5 0,50 · Fable 5 1,00 · Sonnet 5 0,20 | 05 §1.4 |
+| 4 | Assento Fable 5.1 → Opus 5 | economiza 5,5 %, não 50 % | 05 §1.4 |
+| 5 | Builders mecânicos em Sonnet 5 | **NÃO É FATO** até re-derivação (round 1, C2): o split 80/20 que produz o −US$ 1.369/mês vem da tabela 05 §2.1, derivada dos arquivos que a W0 mostrou inflados ~2,8× — e a inflação é POR BLOCO DE CONTEÚDO, logo enviesada por papel (builders emitem `tool_use`, refutadores `thinking`/`text`) | 05 §5.2; W0 §3.4 |
+| 6 | Herança de modelo | `CLAUDE_CODE_SUBAGENT_MODEL=inherit` + 10 sítios reais de `agent()` sem `model:` (17 ocorrências textuais, 7 são comentários — W1 S339) | 05 §4.3 |
+| 7 | Override honrado | `model:` no Agent tool e `opts.model` no Workflow (desde 2.1.237) | F1, ADR-144 |
+| 8 | Instrumento cego | `ceo-cost.py` = US$ 0; o assento não emite tokens no audit log | 05 §P0-1 |
+| 9 | Night-run S338 | RAZÕES sobrevivem (assento ≈ 2× o fan-out; −14,2 % e −38,9 % são contrafactuais sobre o mesmo perfil, a inflação cancela); ABSOLUTOS inflados ~2,8× — «US$ 457 de US$ 681» NÃO deve ser citado. 1 builder = 84 % do wall-clock (medida de relógio, não contaminada) | 05 §2.2, 04 §(d); W0 §3.4 |
+| 10 | CI | Validate 23 min (87 % em 3 steps); Smoke 88 min (26 steps seriais) | 04 §(b) |
+| 11 | Quota oficial | Fable capado em 50 % do semanal e «consome mais rápido»; sem multiplicador publicado | 05 §3 |
+| 12 | Hooks | doc oficial lista 33 eventos; sonda viu 31; settings religa 15 | 03 §4 |
+
+O que o estudo NÃO mediu e este plano mede: (a) o teto de concorrência de
+agentes/workflows antes de `429`/`retry-after` numa assinatura; (b) se dois terminais
+em repos diferentes se atrapalham em quota, estado ou git, e como coordená-los.
+
+## 2. Perguntas do Owner (S339) e onde o plano as responde
+
+1. «O próximo terminal deveria ter o Fable 5.1 nativo?» — Sim para DISPONIBILIDADE:
+   `claude-fable-5-1` está em `availableModels` desde `ab56e76`. **Decidido (OQ-1,
+   S339): sem A/B** — o pin `model` de `.claude/settings.json` fixa `claude-fable-5-1`
+   direto na cerimônia de roteamento (W1), substituindo `claude-opus-5`. Até o land da
+   W1 o assento segue `claude-opus-5`; para 5.1 antes disso nesta máquina, o Owner
+   escreve `"model": "claude-fable-5-1"` em `.claude/settings.local.json` à mão
+   (arquivo canônico e deny-listado para ferramentas; camada de maior precedência).
+2. «Qual o máximo de workflows em paralelo sem rate limit?» — sem número medido.
+   Não há teto de concorrência publicado para assinatura; a restrição vinculante é a
+   janela de 5 h, e cada agente paralelo consome a MESMA janela. Paralelismo não cria
+   quota, gasta-a mais rápido. A W0-US2 mede o teto empírico (429/`retry-after`
+   nos transcripts) e a W1 estica a janela ~3× ao mover builders para Sonnet 5.
+   `workflowSizeGuideline: medium` (< 15 agentes) é diretriz, não limite.
+   **A sonda de S339 NÃO respondeu isto** (round 1, C7): n=1 por célula, detector de
+   `429` sem controle positivo, tarefa de output ~zero, dois terminais não testados.
+   A OQ-4 está ABERTA e nenhum teto é citado como fato até a repetição.
+3. «Os terminais se comunicam para um não atrapalhar o outro, mesmo em repos
+   diferentes?» — O substrato já expõe `ListAgents` e `SendMessage` entre sessões da
+   mesma máquina (medido nesta sessão: peers em três repos). O que NÃO existe é rail:
+   nenhum hook audita essa troca e nenhuma doutrina diz quando usar. Quota é
+   compartilhada por conta, não por terminal; estado de auditoria é por projeto
+   (PLAN-182); colisão real só dentro do MESMO repo (git index, sombras). A W5-US3
+   mede e propõe o rail.
+4. «Ganhar velocidade de workflow?» — o caminho crítico do S338 foi UM builder de
+   design sem especificação (84 %). Velocidade vem de: `model:` explícito (W1),
+   checagem de dependência sequencial antes de decompor (W5-US1), pipelining WIP=2
+   já praticado (PLAN-172 E5, medir), e CI em matriz (W4). A claim honesta do repo
+   segue: não há speedup geral; há wall-clock de gates e CI a cortar.
+
+## 2b. Matriz papel × modelo × effort (eixo trocado no round 1 C3; TOTALIZADA no round 2 D3)
+
+O eixo NÃO é blast radius. É a natureza do artefato, que é o mesmo eixo da regra de
+effort — incerteza de especificação. A partição é **TOTAL**: toda tarefa cai em
+exatamente uma linha produtiva.
+
+| classe de artefato | modelo | effort |
+|---|---|---|
+| **DEFINE uma pergunta**: gate, oráculo, instrumento, critério de aceite, refutação, **DESENHO do predicado de um censo** | `claude-opus-5` | `xhigh` |
+| **EXECUTA uma derivação DE TEXTO** com pergunta já fixada: relatório, doc, anchor-exact em prosa/Markdown | `claude-sonnet-5` | `high` |
+| **EXECUTA uma derivação DE CÓDIGO/CONFIG** (`.py`/`.sh`/`.js`/`.yml`/`.json`) com pergunta já fixada, inclusive **censo MECÂNICO** que edita esses formatos (OQ-3) | `claude-opus-5` | `high` |
+| **PESQUISA/LEITURA sob pergunta FIXADA pelo CEO**: ler fontes e devolver claim com citação verificável, sem escolher a pergunta | `claude-sonnet-5` | `high` |
+| VETO (5 arquétipos) | camada T, decisão de capacidade — ver W1 | `max` |
+| síntese / REDUCE | `claude-fable-5-1` | `max` |
+| assento CEO | `claude-fable-5-1` fixo (OQ-1, sem A/B) | `high` |
+
+Por que o eixo antigo falhava: a classe de defeito dominante deste repo é «instrumento verde cuja pergunta envelheceu», e ela mora quase toda no balde que a partição por raio chamava de «builder livre». Sonnet 5 num derivador anchor-exact é seguro; Sonnet 5 escrevendo o ORÁCULO que decide se o derivador está certo, não é — o rail revisa a superfície do diff e aprova um check plausível.
+
+**Por que a terceira linha existe (D3):** sem ela «pesquisa/leitura» não tinha casa e «censo» inteiro caía em DEFINE — o que condenaria RETROATIVAMENTE os quatro pesquisadores em Sonnet 5 dos relatórios 01-04, cuja citação verificada é a evidência que sustenta esta matriz. Partição que não cobre o domínio não classifica. Discriminante entre linhas 1 e 2 = quem escolhe o predicado: as 9 dimensões de `nightly-hygiene` executam scripts NOMEADOS sob predicado dado (linha 2); escrever a dimensão nova é linha 1.
+
+**A regra é NORMATIVA já na W1.** O classificador da W5-US2 (AC-14) a REFINA, não a suspende; até ele existir a W1 roteia por **lista NOMEADA de 13 decisões pontuais**, publicada sítio a sítio com a classe §2b de cada uma e revisável no rail. Correção do round 1: «`.github/workflows/**` é livre por cerimônia» era FALSO em disco (`check_canonical_edit.py:183-185`) — aquela árvore define perguntas E é cerimônia; a linha 1 vale pelas duas razões.
+
+**Decidido (OQ-3, S339): o discriminante final é o TIPO de artefato produzido, não só quem fixa a pergunta** — texto/doc fica em Sonnet 5, código/config em Opus 5 mesmo com a pergunta já fixada; a W1 re-deriva a lista de 13 decisões pontuais sob esse discriminante antes da cerimônia.
+
+## 3. Waves
+
+### W0 — Instrumento e sondas (livre, 2 sessões, 200-320k — re-orçada no round 2: +US4, +US5, +US6 e a US2 re-desenhada)
+- `ceo-cost.py` e `budget-summary.py` passam a derivar de `message.usage` dos transcripts (`~/.claude/projects/<slug>/*.jsonl` + `subagents/**/agent-*.jsonl`), com split cache-read/write/output e preço por modelo; o audit log fica como fonte secundária. Sem isto, nada das outras waves é falsificável.
+- **US2 RE-DESENHADA (C7)** — N ∈ {4, 8, 12, 16} com **3 repetições por N**, mais (a) controle POSITIVO do detector de `429` — provar que ele morde antes de ler «0 erros» como ausência de limite —, (b) uma célula de OUTPUT ALTO, porque o limite é por tokens/minuto e não por contagem de agentes, (c) uma célula de DOIS TERMINAIS × N, que é a pergunta 3 do Owner. Sem separar fila do cap local, latência sob carga e backoff silencioso, a subida de 5 s → 11 s não decide nada.
+- **US4 (nova, C-K6) — precedência `inherit` × pin de arquétipo.** 3 spawns SEM `model:` (um VETO, um IC, um `general-purpose`), modelo servido lido do transcript. Decide duas coisas materiais: se `inherit` vence, o piso VETO **não é enforcement de runtime** — o hook valida o ARQUIVO, nunca o modelo SERVIDO, e um `code-reviewer` despachado de um assento Sonnet roda Sonnet com o gate verde (falha de governança do tamanho do V-block); se o pin vence, a camada T (agora dentro da W1 — OQ-9) é alavanca de dólar real.
+- **US5 (nova, C-K1) — censo mecânico das superfícies de roteamento.** Quatro já decidem papel→modelo: pins de `.claude/agents/*.md`, o bloco `MODEL_HINT` de `.claude/scripts/inject-agent-context.sh:278-314` (o `case` inteiro; `:281-302` do round 1 subestimava o bloco), `.claude/dispatcher/routing-matrix.yaml` (`coder_model`) e `VETO_HARDCODE`. O censo é ENTREGÁVEL; a tabela fonte-única com as quatro como LEITORAS (molde de `scripts/delivery-routes.tsv`) vira a wave **W-ROTA** (OQ-7, decidida: depois da W1) — sem ela a W1 teria criado a quinta grafia do mesmo fato, que é a forma exata dos defeitos D1-D4.
+- **US6 (nova, C5) — sonda de hookabilidade de `SendMessage`/`ListAgents`.** Verificado: zero ocorrências em `.claude/settings.json` e em `.claude/hooks/` fora de testes. O PreToolUse dispara para `SendMessage`? Um payload plantado é bloqueado? O precedente do substrato é negativo (`agent()` de Workflow não passa pelo `check_agent_spawn`, probe `wf_d7af49d9`). Se não dispara, a resposta à OQ-5 é «doutrina + emissão voluntária» e isso fica ESCRITO. Se religar, ALARGAR o matcher — enumerar mais um nome nasce cego para o próximo tool (lição r22 do PLAN-179).
+- `check-substrate-watch.py --probe-installed --refresh`; re-sonda dos hook events (31 → 33); inventário de `PreModelSwitch`/`PostModelSwitch`, `TeammateIdle`, `TaskCompleted`, `CLAUDE_CODE_PROJECT_DIR_NAME`.
+- Re-derivar o split builder/refutador com o instrumento novo sobre os 7 transcripts do S338 antes de qualquer nova citação do −US$ 1.369 (C2; execução de segundos).
+- Cura textual dos 2 sítios «INERT» (carona em cerimônia que já toque os arquivos).
+
+### W1 — Cerimônia de roteamento (herança explícita + camada T fundidas, OQ-9; **cerimônia GPG**, 4 sessões, 200-350k)
+> `.claude/workflows/**/*.js` (`check_canonical_edit.py:331`, ratificação `:329-330`: «authoring ANY `.claude/workflows/*.js` becomes a sentinel ceremony») e os 5 `.claude/agents/*.md` VETO são canônicos — a W1 edita os dois grupos numa assinatura só (OQ-9: «W1+W3 juntas, W4 separada»). Molde `OWNER-S338-FABLE51-LAND.sh` + `w1/DESIGN-W1-S339.md` §3 (LAND com `ANCHOR_SHA`, sentinel, assinatura). **Não pode landar em night-run.**
+> **Pré-requisito residual: a resposta da W0-US4** — se `inherit` vence o pin de arquétipo, a parte de camada T é higiene e pode esperar; se o pin vence, é alavanca de dólar real.
+
+**Herança explícita (ex-W1):**
+- `model:` explícito nos 10 sítios reais de `agent()` dos 4 workflows (3+2+3+2; W1 S339) e nas 3 do molde de night-run, roteados pela matriz §2b **refinada por OQ-3** (texto/doc → Sonnet 5, código/config → Opus 5, mesmo com pergunta já fixada). A W1 RE-DERIVA os 10 sítios sob o discriminante novo e publica a TABELA por sítio (sítio → classe §2b → model id → razão) ANTES da cerimônia — o derivador em disco (`w1/apply-w1-explicit-model.py`, eixo antigo) é só INSUMO.
+- Wave de CORREÇÃO DE ROTEAMENTO, não de economia (D1/D3): nenhum número de retorno é citado até o C2 ser re-derivado com o instrumento da W0. Cobre o caminho de WORKFLOW (AC-3a), não o dominante (C2) — o spawn DIRETO do CEO tem AC-3b própria, re-precificado contra a fração MEDIDA de tokens que passa pelos 13 sítios.
+- Enforce com rota de recuperação nomeada (C4): emissão VISÍVEL `spawn_model_recorded` (`model=''` na omissão); flip por `CEO_SPAWN_MODEL_REQUIRED=1`, UNSET até measure-first com tabela would-block/TP-FP. Lint de model id no MESMO patch (`assertDispatchable` só vê a STRING do prompt). Detector PERMANENTE assevera «modelo servido == declarado» a cada execução (`ADR-144:140` não garante forward). Morte falsificável (C-K9): 2 P1 num builder Sonnet que o refutador não pegue em 6 waves/30 dias ⇒ reverter esse builder.
+
+**Camada T (ex-W3, OQ-1 + OQ-2):**
+- Pin `model` do `settings.json` fixa `claude-fable-5-1` (OQ-1: sem A/B). Pins dos 5 VETO `claude-fable-5` → `claude-fable-5-1` pela **rota (a) do ADR-149** (OQ-2: piso + migrar os agents) — `claude-fable-5-1` entra em `VETO_FLOOR_ALLOWED` com os DOIS ids aceitos durante a transição (`git revert` não desfaz camada T) e gatilho de FIM no sentinel: 1 wave completa sem violação de piso, registrada pelo detector permanente acima, remove `claude-fable-5` numa edição derivada. O raio é ~9 sítios, não «os 5 pins» (C1) — derivado mecanicamente com **um oráculo por sítio** (`generate-available-models.py --check`, parity e2e), nunca de memória. O piso efetivo é o membro MAIS FRACO da allowlist — hoje `claude-opus-4-8`; o despejo do id antigo é decisão, não consequência.
+- `VETO_HARDCODE` + `VETO_HARDCODE_APPLY`: sha256 regenerado no MESMO patch (asserção em tempo de IMPORT). Os 4 pins de IC em `claude-sonnet-4-6` (`qa-architect`, `devops`, `performance-engineer`, `llm-finops-architect`) entram no escopo — mesma assinatura. Armadilha nomeada: `set-quality-profile.sh` deriva de `VETO_HARDCODE` e reverte pins em SILÊNCIO sem a constante. Controle POSITIVO: spawn VETO real verificado pelo campo `model` servido, não por grep; os 9 arquivos de teste da superfície verdes.
+
+### W-ROTA — Rota única papel→model id (OQ-7, wave própria após a W1; 1-2 sessões, 80-150k)
+> Vem DEPOIS do land da W1, não é pré-requisito dela (OQ-7: «wave própria depois da W1»). Toca `.claude/agents/*.md` (canônico) só se migrar dados para lá; se ficar só leitura, é livre.
+- Tabela fonte-única papel → model id, molde `scripts/delivery-routes.tsv`, com as QUATRO superfícies do censo W0-US5 (pins de `agents/*.md`, `MODEL_HINT` de `inject-agent-context.sh:278-314`, `routing-matrix.yaml` `coder_model`, `VETO_HARDCODE`) como LEITORAS — nenhuma delas dona local do fato duplicado.
+- Sem esta wave a W1 teria criado a quinta grafia do mesmo fato (D1-D4); a ordem decidida na OQ-7 aceita a W1 rodar primeiro porque o censo mecânico (US5) já publica as quatro superfícies.
+
+### W4 — CI: primeiro a deleção, depois a matriz (**cerimônia GPG**, 4-6 sessões, 280-520k)
+> **Cerimônia, não wave livre** (round 2, K18): `.github/workflows/*.yml` e `*.yaml` são canônicos (`check_canonical_edit.py:183-185`) e a W4 reescreve `validate.yml` e `smoke-install.yml`. **Não pode landar em night-run.**
+
+- **W4a — MEDIR A DELEÇÃO ANTES DE CONSTRUIR O SPLIT** (round 2, K20). Verificado: `hook-tests-python-matrix` (`validate.yml:1606`, `runs-on: Ceo`) já roda no `push` em 3.9 **e 3.12** o comando `pytest .claude/hooks/tests/ .claude/scripts/tests/ .claude/scripts/optimizer/tests/` nos DOIS passes (`:1636-1646`) — a união exata dos dois steps mais caros do job `validate`: «Run Python hook unit tests» (`:454`, 5m57s) e «Run Python script unit tests» (`:539`, 8m05s). São 14m02s dos 22m22s. Candidato: **−14 min sem runner novo**, contra ~+4 min pagos do split. Uma execução decide, gated pelo MESMO baseline de node-ids que a matriz exige, mais o **delta de ambiente DUPLO declarado**: `PYTHONPATH: "."` existe no matrix e falta nos dois steps; `CEO_HOOK_ADAPTER: claude` existe no step de hooks (`:455-456`) e falta no matrix. Se a deleção for recusada por cobertura, **a recusa fica ESCRITA** e a W4b segue.
+- **W4b — o split só depois, e a justificativa muda** (K21): verificado que `validate.yml` tem **zero** `if: always()` — hoje um step vermelho impede os posteriores de rodar. O ganho real do split é ATRIBUIÇÃO INDEPENDENTE de falha, não velocidade: as duas rotas param no MESMO piso de **10m39s**, que é `hook-tests-python-matrix (3.12)`, job FORA do escopo desta wave. Deleção e split são COMPLEMENTARES.
+- Validate: job `validate` dividido em 3 jobs (unit hooks / unit scripts / installer-harness-matrix); alvo de wall-clock a MEDIR (baseline 22m22s; bound estimado pelo job `hook-tests-python-matrix`, 10m39s). Nota: meta de wall-clock da CI DESTE repo, medida em `startedAt→completedAt` pelo AC-6 — não é claim de velocidade do framework (AGENTS.md §0).
+- **A pré-condição escrita estava satisfeita E era a pergunta errada** (C-K15): `GITHUB_ENV`, `GITHUB_OUTPUT`, `upload-artifact`, `download-artifact` e `actions/cache` dão ZERO nos dois workflows. O estado partilhado real é o TOOLCHAIN — `setup-python` fixa **3.12** e o `pip install` de pytest/PyYAML/pytest-xdist roda no MEIO do job, só antes dos blocos caros. Cada job novo replica versão e install, e o `echo "Python version"` que já existe vira ASSERT.
+- **`fail-fast: false` explícito em TODA matriz nova** (C-K13): o default cancela os legs irmãos ao primeiro vermelho e reverte sozinho a doutrina dos **17** `if: always()` do Smoke (o relatório 04 diz 8 — número velho, re-medir antes de citar). Leg cancelado reporta `cancelled`, a assinatura que este repo já confundiu com estouro de timeout. Mais um gate de FORMA no `validate.yml` que reprova `strategy.matrix` sem a chave; as duas matrizes existentes (`:1578`, `:1613`) já são o padrão da casa.
+- **Teste de «matriz correta» ANTES do flip** (C-K14): baseline versionado de node-ids por `pytest --collect-only -q` por raiz, comparando a UNIÃO dos jobs novos contra o baseline do monolito — verificação por CONJUNTO, nunca por `grep`. Cada suíte roda em DOIS passes (`-n auto -m 'not serial'` e `-m 'serial'`): copiar um e esquecer o outro é edição de uma linha que não produz vermelho nenhum.
+- **Nome de job é nome de check requerido, e o censo é DERIVADO** (C-K16 + round 2 K19): a lista de três sítios do round 1 estava incompleta — classe `feedback-closed-sets-must-be-derived-not-recalled`, já paga uma vez quando K16 cresceu de 2 para 3. O conjunto NÃO é lembrado: o LAND executa `grep -rn "Governance, health, contamination, shellcheck" --include='*.md' --include='*.yml' --include='*.yaml' --include='*.template' . | grep -v '^./\.git/'` e o patch cobre **os sítios que ESSE comando retorna**. Conhecidos hoje (≥ 5): `RELEASE.md:258`, `docs/BRANCH-PROTECTION.md:104`, `templates/docs/BRANCH-PROTECTION.md:44`, `templates/.github/workflows/validate.yml.template:33` e o próprio `.github/workflows/validate.yml:30`; mais `PLAN-184:128` e `:1100`, que são o plano ATIVO com que a W4 coordena. Dois são ENTREGUES a adopters. O job base preserva o `name:` byte a byte, os novos entram AO LADO, todos os sítios derivados mudam no MESMO patch, e um gate reprova o literal fora do conjunto derivado. Config server-side não volta com `git revert`.
+- Smoke Install: `strategy: matrix` por step; alvo de wall-clock a MEDIR (baseline 87m50s; bound estimado pelo maior step, 32m43s); só depois do Validate provar o padrão. **Composite action único** `.github/actions/smoke-bootstrap` (fetch do pin e das tags, `--unshallow` com guard `gens>=2`, `Gate-scripts integrity` do ADR-192, jq, setup-python) + gate que asserta que TODO leg o usa: um leg raso reporta `STALE 3` em vez de `STALE 0` — seguro mas CEGO, o defeito S327b de volta — e o `shasum -c` do manifesto hoje protege o job por rodar primeiro, em matriz protegeria um leg só. **O `actions/checkout` fica FORA do composite** (round 2, K22): `uses: ./.github/actions/...` exige o repositório já em disco, logo o checkout é o primeiro step de cada leg e o gate asserta DUAS coisas — checkout pinado + uso do composite. (`check-action-sha-drift.py` isenta `./` em `_EXEMPT_PREFIXES`, então o composite local não quebra o C12.) Timeouts dimensionados POR LEG a partir dos deltas medidos, preservando as cem linhas de derivação do `timeout-minutes: 126` como ledger.
+- **Runner-minutos são um AC denominado por CLASSE de runner** (C8 + round 2 K23/K24): verificado que `validate.yml:36` e as duas matrizes rodam em `Ceo` (larger runner PAGO por budget de org) e `smoke-install.yml:196` em `ubuntu-latest` (GRÁTIS em repo público). Um AC único sobre «minutos totais» reprovaria a matriz do Smoke por um número que custa zero e passaria folgado no Validate, que é onde o dinheiro está. Instrumento PRÓPRIO da wave: soma por classe via `gh run view <id> --json jobs` cruzada com o label do runner, comparada a um **baseline LOCAL de 3 runs verdes pré-matriz** — não ao teto diário do PLAN-184, que segue em `draft` com dois `[P0]` abertos e números `NÃO-DERIVADOS`. O gate de perf continua em `ubuntu-latest`.
+
+### W5 — Doutrina (debate L3+ e ADR, 2 sessões, 200-300k)
+- US1: Step 0 do Spawn Protocol ganha a checagem de DEPENDÊNCIA SEQUENCIAL antes da de sobreposição de arquivos (Kim et al. 2026: −70 % em tarefa sequencial).
+  - **A regra já existe, com default oposto** (C-K4): `parallelization-by-default/SKILL.md` critério 2 diz «Item B depending on Item A's output means serial» três linhas depois de «>=3 independent items ⇒ CEO MUST dispatch in parallel», e `check_anti_ceo_overhead.py` recomenda dispatch por CONTAGEM, sem nenhum predicado sobre dependência. O escopo inclui as DUAS skills e o hook: doutrina que não vence o predicado que empurra para o dispatch é texto sem mecanismo.
+  - **Censo: 6 sítios**, não 2 (C-K3): `PROTOCOL.md`, `PROTOCOL.pt-BR.md`, `team.en.md` (raiz do repo, NÃO sob `.claude/`), `.claude/team.md`, `.claude/commands/spawn.md`, `.claude/skills/core/ceo-orchestration/SKILL.md`, + menção em `docs/ROADMAP.md`. Só os dois primeiros pares têm gate de paridade; `spawn.md` e a skill não têm nada. A skill é Gate-2 cache-stable: a edição pertence a um CLOSEOUT, não ao meio de wave.
+  - **Terceiro critério: custo fixo por spawn** (C9) — ~95 k tokens de contexto por agente (medido, W0), logo 14 concorrentes são ~1,33 M de overhead por barreira antes de qualquer trabalho. Agente cujo trabalho útil esperado não excede um múltiplo do próprio overhead vira chamada de ferramenta no assento.
+  - **`CONSUMES:` na gramática do ADR-191** (C-K5): dependência é aresta escrita→leitura e o ADR só declara conjunto de ESCRITA, logo `escrita ∩ escrita` não a exprime. O ADR NOMEIA o residual: dependências de valor de RETORNO (finder→refutador do `audit-fanout`) seguem fora do alcance mecânico — um check por arquivo que declare a classe fechada é falso-verde.
+- US2: teto de effort documentado na skill `effort`; regra «escala por incerteza de especificação, não por blast radius» + o **classificador de "tarefa especificada"** (AC-14), que REFINA a §2b sem suspendê-la — a §2b decide desde a W1, o classificador a torna falsificável e auditável; citações de MAST, 2310.01798 e 2502.00271 no `PROTOCOL.md` como fundamento de V0–V3 e da razão de existir do V3.
+- US3: coordenação entre terminais — o desenho do rail COMEÇA pela sonda da W0-US6; sem saber se o PreToolUse dispara para `SendMessage`, «hook novo» não é opção, é palpite. ADR que define quando o CEO consulta peers (antes de tocar estado compartilhado); Agent Teams segue FORA. O rail OBSERVA antes de bloquear: fail-open em infraestrutura, fail-closed em input.
+  - **A troca é incorrelacionável por construção** (C6): depois do PLAN-182 a cadeia HMAC é por PROJETO, com chave e salt próprios — os dois lados caem em cadeias que não se falam e «A pediu, B fez» não é verificável. É a superfície onde permission laundering vive. Reusar a forma do `fed_correlation_id` (federação): `peer_message_sent` / `peer_message_received` nos DOIS lados com `{correlation_id, session_id do emissor, slug do projeto emissor, nome do receptor, sha256 do corpo}` — o HASH, nunca o corpo — e o VEREDITO local do receptor: `acted | refused-by-policy | ignored`. Sem registrar a RECUSA, laundering e cooperação legítima são indistinguíveis no log. Se o custo for proibitivo, o ADR declara a incorrelação como limite ACEITO (molde do ADR-190).
+
+### W6 — Adapter opcional (livre, 1-2 sessões, 100-200k)
+- Sob `CEO_LIVE_CLAUDE=1`: refusal fallback `default`, cache 1 h TTL,
+  `thinking.display: "updates"` no lugar do header datado, effort por mensagem.
+
+## Acceptance criteria
+
+- [ ] AC-1 (W0) Reancorado no que a W0 provou (round 1, C-K8 — o AC antigo era insatisfazível: script diferente, delta 5,6 %, e a REFERÊNCIA é que está errada): o instrumento reproduz `claude-fable-5`, `claude-opus-5` e `claude-opus-4-8` byte a byte nas 5 classes de token, e a reconstrução DELIBERADA do defeito converge a +0,41 % do total publicado.
+- [ ] AC-1b (W0) `ceo-cost.py` e `budget-summary.py` INTEGRADOS ao instrumento de transcripts — o item que torna todo o resto falsificável e que segue aberto.
+- [ ] AC-2 (W0) Teto de concorrência: N máximo sem `429` em **3/3 repetições por N**, com controle POSITIVO do detector, uma célula de output alto e uma de dois terminais; p50/p95 e consumo da janela por N.
+- [ ] AC-10 (W0) Precedência `inherit` × pin de arquétipo MEDIDA em 3 spawns sem `model:`, com o modelo servido lido do transcript; o resultado é uma afirmação de governança sobre o piso VETO, não só de custo.
+- [ ] AC-12 (W0) Censo das superfícies de roteamento papel→modelo publicado, com cada uma classificada como LEITORA candidata ou dona local.
+- [ ] AC-13 (W0) Detector PERMANENTE de roteamento no ar (C-K2): o invariante «modelo SERVIDO por label == modelo DECLARADO no sítio» é asseverado a cada execução do instrumento, com critério de morte pré-registrado — não uma prova pontual no land, que `ADR-144:140` já declara sem garantia forward.
+- [ ] AC-15 (W0) Sonda de hookabilidade da US6 executada e RESPONDIDA por escrito: o PreToolUse dispara para `SendMessage`? um payload plantado é bloqueado? A resposta negativa é resultado válido e fecha a OQ-5 como «doutrina + emissão voluntária».
+- [ ] AC-3a (W1) Zero chamadas `agent()` sem `model:` nos 4 workflows + molde de night-run, provado pelo campo `model` da resposta servida, não por grep; **e** o `model` de cada sítio bate com a classe §2b do sítio na TABELA publicada pela wave (round 2, D1 — sem esta perna o AC fica verde sobre a classificação do eixo antigo).
+- [ ] AC-3b (W1) Caminho de spawn DIRETO coberto: `spawn_model_recorded` emitido em todo spawn nomeado, e o ganho re-precificado contra a fração MEDIDA de tokens que passa pelos 13 sítios.
+- [ ] AC-4 REMOVIDO (OQ-1, S339): sem A/B do assento, não há braço a contrabalancear.
+- [ ] AC-5 (W1) Conjunto de sítios DERIVADO mecanicamente e coberto por **um oráculo por sítio**: `VETO_FLOOR_ALLOWED` + espelhos do ADR-149, `VETO_HARDCODE`, `VETO_HARDCODE_APPLY` com o sha256 congelado regenerado no MESMO patch, os 5 pins VETO, os 9 testes da superfície verdes, parity e2e e `generate-available-models.py --check` verdes, controle POSITIVO com spawn VETO real, `.asc` do Owner sobre o sentinel.
+- [ ] AC-17 (W-ROTA) Tabela fonte-única papel→model id publicada com as 4 superfícies do censo (W0-US5) como leitoras; nenhuma delas dona local do fato duplicado.
+- [ ] AC-16 (W4a) Deleção dos steps duplicados MEDIDA em uma execução antes de qualquer split: delta de relógio e de minutos `Ceo`, união de node-ids idêntica ao baseline, e o delta de ambiente DUPLO (`PYTHONPATH`, `CEO_HOOK_ADAPTER`) declarado. Recusa por cobertura é resultado válido e fica ESCRITA.
+- [ ] AC-6 (W4) Validate ≤ 14 min e Smoke ≤ 45 min em 3 runs consecutivos verdes no MESMO evento (`push`), medidos em `startedAt`→`completedAt` do RUN (não do maior job), sem perda de step e sem perda de node-id contra o baseline. **O job-bound é `hook-tests-python-matrix (3.12)`, 10m39s medidos, FORA do escopo da wave** — um AC-6 vermelho tem de ser diagnosticável sem re-derivar de onde veio o piso.
+- [ ] AC-11 (W4) Runner-minutos por CLASSE de runner, instrumento nomeado: soma de `gh run view <id> --json jobs` cruzada com o label do runner, em 3 runs. `Ceo` (PAGO) ≤ 1,3× do baseline LOCAL pré-matriz, convertido em dólares; `ubuntu-latest` (GRÁTIS em repo público) REPORTADO e gated, se for o caso, contra o limite de jobs concorrentes da conta — nunca contra custo. Não ancorado no teto do PLAN-184 enquanto seus dois `[P0]` seguirem abertos.
+- [ ] AC-7 (W5) Step 0 com dependência sequencial + custo fixo por spawn nos **6 sítios** do censo, reconciliado com `parallelization-by-default` e `check_anti_ceo_overhead.py`, com ADR e debate `design-coherent`.
+- [ ] AC-14 (W5) Classificador de «tarefa especificada» PUBLICADO, com pelo menos um caso de cada linha §2b e um caso de fronteira decidido — é o que torna a regra falsificável e revisável; sem ele a §2b é normativa mas não auditável.
+- [ ] AC-8 (W5) ADR de coordenação entre terminais com sonda executada em ≥ 2 repos e correlation id emitido nos DOIS projetos, com hash do corpo e o veredito local do receptor incluindo `refused-by-policy` — ou a incorrelação declarada como limite aceito.
+- [ ] AC-9 (todas) Nenhum item canônico landa sem rodada de pair-rail; os 4 arquivos do estudo marcados «RISKY DIFF» passam pelo `codex review` antes do commit.
+
+## Open questions
+
+- OQ-1 (Owner): autoriza o A/B da W2 antes de qualquer mudança de pin do assento?
+  - **Decidida 2026-09-02 (Owner, AskUserQuestion): «Fixar Fable 5.1 no pin já, sem A/B».**
+- OQ-2 (Owner): rota (a) ou (b) do ADR-149 para os pins VETO em 5.1?
+  - **Decidida 2026-09-02 (Owner, AskUserQuestion): «Rota (a): piso + migrar os agents (Recomendado)».**
+- OQ-3 (Owner): ratifica builders mecânicos em Sonnet 5 com o critério de morte da W1?
+  - **Decidida 2026-09-02 (Owner, AskUserQuestion): «Só em docs e derivações, nunca em código».**
+- OQ-4 (medição) **REABERTA no round 1** (C7): teto de concorrência — a sonda de S339 é
+  n=1 por célula, sem controle positivo do detector de `429`, com output ~zero e sem a
+  célula de dois terminais. Fechada só pela repetição que o AC-2 exige.
+- OQ-5 (debate → sonda): o rail de coordenação entre terminais é hook novo ou só doutrina
+  + auditoria? **Responde a W0-US6, não o debate** — se o PreToolUse não dispara para
+  `SendMessage`, «hook novo» não é opção.
+- OQ-6 (Owner, **repo-wide**): TRÊS partes, não uma (round 2, D2). (a) **Definição** —
+  qual unidade é normativa? Coexistem `PLAN-SCHEMA:324` («CEO-context», a que os ~15
+  planos usam), a skill `llm-routing-and-finops:180` («CEO + fan-out») e o instrumento
+  novo (faturáveis, cache read = 96,8 % do volume); diferem em 1-3 ordens de grandeza.
+  (b) **Composição** — o gate-boot entra no campo? Duas autoridades podem concordar em
+  (a) e discordar aqui, e é o boot que domina em planos de muitas sessões curtas, que é
+  a forma deste. (c) **Âncora** — `PLAN-SCHEMA.md:328` publica «~27k por sessão» e o
+  medido é `F = 97.292` (cold-F 97.097, n=41, spread 51,7 %): folclore de 3,6× no sítio
+  que converte `budget_sessions` em tokens para TODOS os planos, perdido pelo varrimento
+  da S325. Curar em carona, com FAIXA e não constante.
+  - **Decidida 2026-09-02 (Owner, AskUserQuestion): «Tokens faturáveis dos transcripts, boot à parte (Recomendado)».** OQ-6 FECHADA: normativa repo-wide = faturáveis, com campo de gate-boot separado; `PLAN-SCHEMA.md:324/328` curam em carona com FAIXA.
+- OQ-7 (Owner): a rota única papel→model id (tabela fonte-única com as 4 superfícies
+  existentes como LEITORAS, molde de `delivery-routes.tsv`) é pré-requisito da W1 ou wave
+  própria? Muda o tamanho da W1 e é a diferença entre curar a classe e criar a 5ª grafia.
+  - **Decidida 2026-09-02 (Owner, AskUserQuestion): «Wave própria depois da W1 (Recomendado)».** Vira a wave **W-ROTA**.
+- OQ-8 (Owner): qual o orçamento de runner-minutos `Ceo` (PAGO) que a W4 pode consumir?
+  O teto diário do corte A0 do PLAN-184 é a referência natural, mas aquele plano está em
+  `draft` com dois `[P0]` abertos, então o AC-11 usa baseline LOCAL até ele fechar.
+  - **Decidida 2026-09-02 (Owner, AskUserQuestion): «≤ 1,3× o baseline pré-W4, medido localmente (Recomendado)».** Ratifica o AC-11 como escrito; PLAN-184 segue «coordena com».
+- OQ-9 (Owner): W1, W3 e W4 são três cerimônias GPG distintas ou algumas viajam numa
+  assinatura só? Muda a contagem de sessões (cada cerimônia custa build + SIGN/LAND) e
+  o risco de invalidação cruzada: enquanto um pack espera assinatura, nenhum destino
+  pré-existente dele pode ser editado — a lição do land de A invalidando o pack D duas
+  vezes na S328.
+  - **Decidida 2026-09-02 (Owner, AskUserQuestion): «W1+W3 juntas, W4 separada (Recomendado)».** W1 e W3 fundem numa cerimônia («W1 — Cerimônia de roteamento»); W4 (CI) segue cerimônia própria.
+
+## Riscos
+
+- **Furo do gate de contaminação (achado S339, Codex P1):** `validate-governance.sh` completo passou com `/Users/<username-real>/…` em `docs/research/*` e em `.claude/plans/PLAN-186/w1/*` — `.claude/plans/*` é isento por atacado e o scanner não casou a forma de path pessoal em `docs/`. Curado à mão neste patch (placeholders `<user>`/`<project-slug>`/`<scratchpad>`); FOLLOW-UP livre: regra de path pessoal para `docs/**` e para `.claude/plans/**` fora de sentinels/OWNER-*.sh, com controle positivo.
+
+- Paralelizar o V-block do LAND fica FORA (corrida na cadeia HMAC viva; ganho de segundos).
+- `used_pct` do sidecar não prova exaustão; o A/B usa minutos úteis por janela.
+- Matriz de CI sobe runner-minutos totais; PLAN-184 mede o custo.
+- Decompor pacotes por reflexo é o caso de −70 %: a checagem de dependência precede a decomposição.
+- `set-quality-profile.sh` deriva de `VETO_HARDCODE`: mudar os pins sem a constante os
+  reverte em SILÊNCIO na próxima invocação (armadilha já registrada na S298).
+- Budget de Actions estourado não degrada: TODOS os workflows falham em 2-3 s com zero
+  steps, inclusive os de `ubuntu-latest` — parece bug de código. A W4 aumenta a exposição.
+- Rollback da camada T não é um botão: `git revert` não desfaz cerimônia GPG nem
+  configuração server-side de branch protection.
+- **Duas das seis waves são canônicas (W1, W4) e NENHUMA landa em night-run** — W3 fundiu-se na W1 (OQ-9), W2 saiu do plano (OQ-1). O planejamento noturno que assumia W1 e W4 livres está refutado; agendar build à noite e cerimônia de manhã, no molde das S328/S329.
+- `validate.yml` tem ZERO `if: always()`: hoje um step vermelho esconde os posteriores, e
+  a atribuição de falha do job é ambígua antes de qualquer split.
+
+## Progress log
+
+- 2026-09-02 (S339): plano criado como rascunho a partir do estudo; nenhuma wave iniciada.
+- 2026-09-02 (S339): **round 1 sintetizado** — 3 críticos anonimizados, 3 `ADJUST`,
+  26 must-fix. 9 consensus findings (C1-C9) aplicados, 17 insights de agente único
+  mantidos após verificação em disco, 6 rejeitados ou deferidos com razão escrita
+  (inclusive a aritmética do envelope de custo, refutada contra `PLAN-SCHEMA:324`).
+  Verdict **RUN-ANOTHER-ROUND**: o plano saiu do round com estrutura diferente e o
+  round 2 tem de revisar o plano REVISADO. Detalhe em
+  `.claude/plans/PLAN-186/debate/round-1/consensus.md`.
+- 2026-09-02 (S339): **round 2 sintetizado** — 3 `ADJUST`; dos 26 must-fix do round 1,
+  20 resolvidos / 6 parciais / 0 abertos; 13 novos (12 após dedup), todos aplicados.
+  3 consensus findings (D1 derivador da W1 no eixo antigo; D2 orçamento refutado pela
+  própria aritmética; D3 partição §2b não-total) + 13 insights de agente único
+  verificados em disco. Achado material: **W1 e W4 tocam paths canônicos e são cerimônia
+  GPG** (`check_canonical_edit.py:183-185` e `:331`). Orçamento re-derivado de
+  `F = 97.292`: 9-12 → 15-18 sessões, total 2,48-3,51 M. Verdict **PROCEED** — o round 3
+  é confirmação curta sobre os próprios must-fix. Detalhe em
+  `.claude/plans/PLAN-186/debate/round-2/consensus.md`.
+- 2026-09-02 (S339): **round 3 sintetizado** — 3× `ACCEPT`, zero must-fix; plano design-coherent. Owner decidiu as 7 OQs pendentes (OQ-1, 2, 3, 6, 7, 8, 9) via AskUserQuestion: W2 sai do plano, W1+W3 fundem em UMA cerimônia de roteamento, W-ROTA nasce como wave própria (OQ-7), §2b ganha o discriminante de tipo de artefato (OQ-3). Detalhe em `.claude/plans/PLAN-186/debate/round-3/synthesis.md`.
