@@ -1,0 +1,50 @@
+ceremony(PLAN-179-FOLLOWUP wave-179fu): os 4 produtores legados de ciclo de vida gravam o session_id PAYLOAD-first (payload > CLAUDE_SESSION_ID > timestamp) — SessionStart, UserPromptSubmit, Stop, SessionEnd; +9 testes incl. integração produtor→consumidor; 3 rodadas de rail
+
+Origem: achado do pair-rail r6 da wave-179close + varredura P2 da S337: os
+produtores LEGADOS resolviam o id env-first enquanto o consumidor US8
+(SessionEnd._session_start_ts) casa session_start e session_end pelo id do
+PAYLOAD (env e agent-spoofable e NUNCA ancora). Com env != payload toda
+sessao degradava para start_unknown / anchor_source=none e a segmentacao do
+resume ficava cega ao session_end. A degradacao era SEGURA; esta wave
+alinha o PRODUTOR — a unica direcao compativel com a doutrina.
+
+O que muda (11 edicoes anchor-exact em 5 paths, derivadas de
+s338-followup-flip/apply-179fu-flip.py; marcador "PLAN-179-FOLLOWUP (S338)"
+em todo substituto): SessionStart.py::main, UserPromptSubmit.py::main,
+Stop.py::main e SessionEnd.py::main (produtor legado) passam a
+`payload > CLAUDE_SESSION_ID > timestamp`; payload_sid do rail novo e o
+consumidor INTOCADOS; fallbacks preservados e testados nos 4.
+
+Por que QUATRO e nao dois (rail r1 P1, REAL, ratificado pelo Owner ao
+assinar): o censo mecanico de todo sitio CLAUDE_SESSION_ID em hooks/scripts
+mostrou que a classe «produtor de ciclo de vida env-first» tem exatamente
+4 membros com a MESMA linha; um flip PARCIAL fragmenta UMA sessao em dois
+ids para leitores que particionam por session_id
+(ceo-escalation-detector.py:163-178). Patch ramo-a-ramo gera a proxima
+regressao; rail acha a classe, censo fecha.
+
+Testes (test_session_end_memory_delta.py 52 -> 60): helpers que dirigem o
+main() REAL de cada hook; TestProducerIdPrecedence (as 4 actions gravam o
+id do PAYLOAD sob env divergente; fallback env x4; timestamp x4);
+TestProducerConsumerAlignment (start ancorado chain/written; session_end
+segmenta a janela do resume); o lock env-first da r12 P2-b INVERTIDO
+em-lugar em lock payload-first ESTRUTURAL (AST) sobre os 4 main().
+Controle positivo: 4 hooks em HEAD + testes novos = 7 failed / 2 passed
+(RED exatamente os dependentes do flip). Suite de 21 arquivos 551/0/2
+xfailed (pre-existentes); hook-stdout-schema --only x4: 4 wired, 4
+registrations, 0 violations; active-hooks 0; env-hygiene 0.
+
+Efeito colateral medido: codex-advisory-teeth.py deixa de emitir falso
+boot_breadcrumb_absence quando env != payload; ceo-escalation-detector
+passa a ver o boot dentro da particao da sessao.
+
+KERNEL: os 4 hooks estao em _KERNEL_PATHS; o LAND armou CEO_KERNEL_OVERRIDE
+no menor escopo com o par reason-SLUG + I-ACCEPT validado vivo.
+
+Sentinel: .claude/plans/PLAN-179/wave-179fu-approved.md (+ .asc).
+Bateria V1-V9 do OWNER-S338-179FU-LAND.sh verde contra
+EXPECTED-BASELINE.txt (unit 551/0/2; arquivo tocado 60; hook-schema linha
+exata; active-hooks 0; 4 canonicos; verify-counts e governanca completa 0;
+ratchet 0 — scripts/ intocado).
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

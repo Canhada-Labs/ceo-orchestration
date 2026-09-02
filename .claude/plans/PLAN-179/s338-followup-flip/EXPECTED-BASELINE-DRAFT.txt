@@ -1,0 +1,64 @@
+# EXPECTED-BASELINE (DRAFT) — wave 179-followup-flip (PLAN-179-FOLLOWUP AC item 1 + rail r1, S338)
+# Fonte UNICA dos valores que o finalize e o OWNER-LAND da cerimonia (a
+# escrever) comparam. Formato chave=valor, um por linha; leitor fail-CLOSED
+# (chave ausente ABORTA). Atualizar um valor aqui e decisao CONSCIENTE com
+# fonte — nunca relaxamento ([[feedback-blockers-expire-verify-before-asking]] /
+# EXPECTED_* envelhece, S328).
+#
+# Medidos na sombra shadow-179fu em 2026-09-02, S338, com o script FINAL
+# apply-179fu-flip.py (11 edicoes / 5 paths), sombra RE-DERIVADA do zero
+# (worktree remove --force + add + apply) antes da bateria. Base = HEAD no
+# momento do finalize: o script foi verificado em dc72bf1 (inicio da S338) e
+# em f0e98de (HEAD corrente) — os 5 paths sao byte-identicos entre os dois e
+# nenhum e tocado pelo pack fable51 nem pelo pacote S337 (6160578):
+#   - 5 paths = 4 canonicos (SessionStart.py, UserPromptSubmit.py, Stop.py,
+#     SessionEnd.py — TODOS membros de _KERNEL_PATHS,
+#     check_arbitration_kernel.py:218-221, desde v1.0.0 9777a8d => o LAND arma
+#     CEO_KERNEL_OVERRIDE/_ACK no menor escopo, molde 179close/183batch/
+#     fable51) + 1 livre (o teste); 0 membros do manifesto ADR-192; 5 .py,
+#     0 .sh (scripts/ intocado => o ratchet sai 0 SEM regenerar baseline);
+#   - EXPECTED_UNIT_PYTEST_* = pytest -q dos 21 arquivos declarados
+#     (test_session_end_memory_delta + os 18 arquivos de hooks/tests que citam
+#     session_start|session_end + test_stop / test_user_prompt_submit /
+#     test_user_prompt_submit_salt pelos 2 hooks que o rail r1 trouxe); os
+#     xfailed sao marcadores PRE-EXISTENTES e deterministicos
+#     (test_audit_emit_async_flush.py:249 run=False; test_audit_emit_coverage.py:1595);
+#   - 60 = so o arquivo tocado (52 em HEAD -> 60: +9 novos, -1 substituido
+#     em-lugar — o lock env-first da r12 P2-b vira lock payload-first
+#     estrutural sobre os 4 main());
+#   - controle positivo = script FINAL aplicado numa worktree de controle
+#     descartada + `git checkout` dos QUATRO hooks para HEAD: 7 failed /
+#     2 passed nos 9 testes novos (RED exatamente os 7 dependentes do flip;
+#     GREEN os 2 de preservacao de fallback, que DEVEM passar pre-flip);
+#     arquivo inteiro no controle 7 failed / 53 passed (pre-existentes imoveis);
+#   - hook-stdout-schema com --only nos 4 hooks: "4 wired script(s), N
+#     registration(s), 0 violation(s)" — ver EXPECTED_HOOK_SCHEMA_LINE;
+#   - marcador de dupla aplicacao "PLAN-179-FOLLOWUP (S338)" = 0 ocorrencias
+#     em HEAD nos 5 paths (nao-vacuo da wave) e presente em TODO substituto;
+#   - 198 ADRs (esta wave nao toca o corpus de ADRs);
+#   - verify-counts rc 0 medido na sombra (+8 testes liquidos).
+EXPECTED_PATCH_PATHS=".claude/hooks/SessionStart.py .claude/hooks/UserPromptSubmit.py .claude/hooks/Stop.py .claude/hooks/SessionEnd.py .claude/hooks/tests/test_session_end_memory_delta.py"
+EXPECTED_PATCH_CANONICAL_PATHS=4
+EXPECTED_PATCH_KERNEL_PATHS=4
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
+EXPECTED_PATCH_PY_FILES=5
+EXPECTED_PATCH_SH_FILES=0
+EXPECTED_APPLY_EDITS=11
+EXPECTED_UNIT_PYTEST_PASSED=551
+EXPECTED_UNIT_PYTEST_SKIPPED=0
+EXPECTED_UNIT_PYTEST_XFAILED=2
+EXPECTED_TOUCHED_SUITE_PASSED=60
+EXPECTED_POSITIVE_CONTROL_FAILED=7
+EXPECTED_POSITIVE_CONTROL_PASSED=2
+EXPECTED_MARKER="PLAN-179-FOLLOWUP (S338)"
+EXPECTED_MARKER_REFS_HEAD=0
+EXPECTED_HOOK_SCHEMA_RC=0
+EXPECTED_HOOK_SCHEMA_LINE="hook-stdout-schema: 4 wired script(s), 4 registration(s), 0 violation(s)"
+EXPECTED_ENV_HYGIENE_RC=0
+EXPECTED_ACTIVE_HOOKS_RC=0
+EXPECTED_ADR_COUNT=198
+EXPECTED_CLAUDE_MD_CLAIMS_RC=0
+EXPECTED_VERIFY_COUNTS_RC=0
+EXPECTED_CEREMONY_LINT_BLOCKING=0
+EXPECTED_GOVERNANCE_ERRORS=0
+EXPECTED_RATCHET_RC=0
