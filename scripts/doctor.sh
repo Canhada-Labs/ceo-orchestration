@@ -310,7 +310,63 @@ _DUP_GUARD="
 _INVALID="
 "
 
+# PLAN-185-FOLLOWUP FU-7 (S340) — a record this sanitizer DROPS is a record
+# doctor never verifies, and every drop below used to be SILENT. MEASURED at
+# b6dce78: with `<sha>  ../outside/victim.txt` appended to an adopter's
+# manifest, doctor printed `OK: 535`, `Refused: 0` and exited 0 — an
+# all-clear over a manifest that had been edited. Nothing was written outside
+# (the drop is what prevents that, and e2e D.5 asserts the bytes), but the
+# REPORT is the other half of doctor's contract: `rc=0` means "I verified
+# this tree", and it did not. Same class test-doctor.sh D.10 cured in S261
+# one layer down (a symlinked LEAF is "reported, not silently dropped"), and
+# the class uninstall.sh already names on its side ("unsafe manifest path",
+# e2e U.2).
+#
+# A legitimate install drops NOTHING — measured S340 on this tree: 535/535
+# records survive a copy install and 349/349 survive a --link install — so a
+# non-zero count here means the manifest is malformed or crafted, which is
+# why the count is folded into UNRESOLVED (rc 1) below and not merely
+# printed. On a healthy install the output stays BYTE-IDENTICAL: both the
+# listing and the summary line are conditional on DROPPED_COUNT > 0.
+DROPPED_COUNT=0
+_DROPPED=""
+_DROP_LIST_CAP=20
+_mark_dropped() {
+  # $1 = reason (fixed text from THIS file). $2 = the MANIFEST-SUPPLIED
+  # string — never echoed raw: the unsafe class it belongs to INCLUDES
+  # control characters, and this line goes to the operator's terminal, where
+  # an escape sequence rewrites what he believes he read. Non-printable => '?'
+  # (LC_ALL=C, so the classification is byte-wise), and the name is capped so
+  # one crafted 4 KB record cannot bury the rest of the report.
+  DROPPED_COUNT=$((DROPPED_COUNT + 1))
+  [ "$DROPPED_COUNT" -le "$_DROP_LIST_CAP" ] || return 0
+  _md_safe="$( printf '%s' "$2" | LC_ALL=C tr -c '[:print:]' '?' | cut -c1-160 )"
+  _DROPPED="${_DROPPED}    DROPPED ($1): ${_md_safe}
+"
+}
+
 # Reject an unsafe relpath. $2 = "link" to allow a symlinked LEAF.
+_field_has_control_bytes() {
+  # Locale-INDEPENDENT control-byte test (rail S340 r3, codex P2). Under
+  # LC_ALL=C bash matches RAW bytes, so C0 (0x00-0x1f) and DEL are caught
+  # whatever locale the operator runs doctor in; C1 controls are caught both as
+  # valid UTF-8 (U+0080-U+009F = C2 80..C2 9F) and as stray 8-bit bytes (a raw
+  # 0x9b, the 8-bit CSI, is never valid UTF-8 — any non-ASCII field is validated
+  # with iconv; no iconv ⇒ non-ASCII is refused, fail-closed). The framework's
+  # own manifests are ASCII, so on a sane install this never spawns anything.
+  local LC_ALL=C
+  case "$1" in
+    *[[:cntrl:]]*) return 0 ;;
+    *$'\xc2'[$'\x80'-$'\x9f']*) return 0 ;;
+    *[$'\x80'-$'\xff']*)
+      [ "$_ICONV_OK" -eq 1 ] || return 0
+      printf '%s' "$1" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 || return 0
+      ;;
+  esac
+  return 1
+}
+_ICONV_OK=0
+command -v iconv >/dev/null 2>&1 && _ICONV_OK=1
 _relpath_unsafe() {
   _ru_rel="$1"
   _ru_kind="${2:-file}"
@@ -318,9 +374,7 @@ _relpath_unsafe() {
     ''|/*) return 0 ;;
     *..*)  return 0 ;;
   esac
-  case "$_ru_rel" in
-    *[$'\n\r\t']*) return 0 ;;
-  esac
+  if _field_has_control_bytes "$_ru_rel"; then return 0; fi
   _ru_parent="$( dirname "$_ru_rel" )"
   _ru_cur="$TARGET"
   _ru_oldIFS="$IFS"
@@ -368,6 +422,18 @@ $1
   esac
 }
 
+# PLAN-185-FOLLOWUP FU-7 (S340, rail r4 P1): `read -r` DROPS or truncates at a
+# NUL byte before any per-field check can see it, so a record carrying 0x00 is
+# not sanitizable line by line — it is unparseable security input and fails
+# CLOSED here, on the RAW bytes, before the line loop (same exit class as an
+# empty/corrupted manifest). Counted with tr on the raw file: locale-independent.
+_nul_count="$( LC_ALL=C tr -cd '\000' < "$MANIFEST" | wc -c | tr -d ' ' )"
+if [ "${_nul_count:-0}" -gt 0 ]; then
+  echo "ERROR: manifest at $MANIFEST carries $_nul_count NUL byte(s) — unparseable (corrupted or tampered); refusing to verify." >&2
+  echo "       Run upgrade.sh to regenerate the baseline." >&2
+  exit 2
+fi
+
 while IFS= read -r line || [ -n "$line" ]; do
   [ -n "$line" ] || continue
   case "$line" in
@@ -379,26 +445,46 @@ while IFS= read -r line || [ -n "$line" ]; do
           rel="${rest%%  *}"
           target="${rest#*  }"
           ;;
-        *) continue ;;   # malformed LINK (no target) — drop
+        *) _mark_dropped "malformed LINK record (no target)" "$rest"; continue ;;
       esac
-      case "$target" in
-        ''|*[$'\n\r\t']*) continue ;;
-      esac
-      if _relpath_unsafe "$rel" link; then continue; fi
-      if _seen_before "$rel"; then _mark_invalid "$rel"; continue; fi
+      if [ -z "$target" ] || _field_has_control_bytes "$target"; then
+        _mark_dropped "LINK target empty or carrying a control byte" "$rel"; continue
+      fi
+      if _relpath_unsafe "$rel" link; then
+        _mark_dropped "unsafe manifest path (traversal, absolute, control character, or symlinked ancestor)" "$rel"
+        continue
+      fi
+      if _seen_before "$rel"; then
+        _mark_invalid "$rel"
+        _mark_dropped "duplicate relpath (ambiguous — every record for it is dropped)" "$rel"
+        continue
+      fi
       _mark_seen "$rel"
       printf 'LINK  %s  %s\n' "$rel" "$target" >> "$SANITIZED"
       ;;
     *)
       digest="${line%%  *}"
       rel="${line#*  }"
-      [ "$digest" != "$line" ] || continue
+      if [ "$digest" = "$line" ]; then
+        _mark_dropped "malformed record (no two-space separator)" "$line"
+        continue
+      fi
       case "$digest" in
-        *[!0-9a-f]*) continue ;;
+        *[!0-9a-f]*) _mark_dropped "malformed record (digest is not hexadecimal)" "$rel"; continue ;;
       esac
-      [ "${#digest}" -eq 64 ] || continue
-      if _relpath_unsafe "$rel" file; then continue; fi
-      if _seen_before "$rel"; then _mark_invalid "$rel"; continue; fi
+      if [ "${#digest}" -ne 64 ]; then
+        _mark_dropped "malformed record (digest is not 64 characters)" "$rel"
+        continue
+      fi
+      if _relpath_unsafe "$rel" file; then
+        _mark_dropped "unsafe manifest path (traversal, absolute, control character, or symlinked ancestor)" "$rel"
+        continue
+      fi
+      if _seen_before "$rel"; then
+        _mark_invalid "$rel"
+        _mark_dropped "duplicate relpath (ambiguous — every record for it is dropped)" "$rel"
+        continue
+      fi
       _mark_seen "$rel"
       printf '%s  %s\n' "$digest" "$rel" >> "$SANITIZED"
       ;;
@@ -418,7 +504,7 @@ if [ "$_INVALID" != "
     case "$_INVALID" in
       *"
 $rel_probe
-"*) continue ;;
+"*) _mark_dropped "duplicate relpath (this earlier record is dropped too)" "$rel_probe"; continue ;;
     esac
     printf '%s\n' "$line" >> "$SANITIZED.f"
   done < "$SANITIZED"
@@ -426,6 +512,17 @@ $rel_probe
 fi
 
 if [ ! -s "$SANITIZED" ]; then
+  # PLAN-185-FOLLOWUP FU-7 (S340, rail r2 P2): when EVERY record was rejected the
+  # drop report further down is never reached — print it here first, so an
+  # all-dropped manifest still tells the operator what was dropped and why.
+  if [ "$DROPPED_COUNT" -gt 0 ]; then
+    _log "==> Manifest records DROPPED at ingest — every record was rejected:"
+    printf '%s' "$_DROPPED"
+    if [ "$DROPPED_COUNT" -gt "$_DROP_LIST_CAP" ]; then
+      _log "    ... and $(( DROPPED_COUNT - _DROP_LIST_CAP )) more (names sanitized: non-printable shown as '?', truncated to 160 characters)"
+    fi
+    _log "    Dropped:   $DROPPED_COUNT (unsafe or malformed manifest records — NOT verified)"
+  fi
   echo "ERROR: manifest at $MANIFEST contains no valid records after sanitization." >&2
   echo "       It may be corrupted. Run upgrade.sh to regenerate the baseline." >&2
   exit 2
@@ -679,6 +776,20 @@ REFUSED_COUNT=0   # FU-7: writes refused by the destination-confinement predicat
 UNRESOLVED=0
 ORPHAN_COUNT=0
 
+# PLAN-185-FOLLOWUP FU-7 (S340): what the sanitizer dropped is reported BEFORE
+# the verification it is missing from, and counted as unresolved — a record
+# doctor could not read is a finding, not a silence. UNRESOLVED is folded here
+# (not at the drop sites) because the counters block above initialises it.
+if [ "$DROPPED_COUNT" -gt 0 ]; then
+  _log ""
+  _log "==> Manifest records DROPPED at ingest — NOT verified below"
+  _log "    (a valid install drops none: measured 535/535 copy, 349/349 --link):"
+  printf '%s' "$_DROPPED"   # each entry already carries its own newline
+  if [ "$DROPPED_COUNT" -gt "$_DROP_LIST_CAP" ]; then
+    _log "    ... and $(( DROPPED_COUNT - _DROP_LIST_CAP )) more (names sanitized: non-printable shown as '?', truncated to 160 characters)"
+  fi
+  UNRESOLVED=$((UNRESOLVED + DROPPED_COUNT))
+fi
 _log "==> Verifying $( wc -l < "$SANITIZED" | tr -d ' ' ) manifest records"
 
 while IFS= read -r line || [ -n "$line" ]; do
@@ -1062,6 +1173,12 @@ _log "    Skipped:   $SKIPPED_CONFIRM (awaiting per-file confirm)"
 _log "    Blocked:   $BLOCKED_COUNT (baseline/framework divergence — use upgrade.sh)"
 _log "    Refused:   $REFUSED_COUNT (destination not confined to the target — nothing written)"
 _log "    Orphans:   $ORPHAN_COUNT (candidates, report-only)"
+# Conditional ON PURPOSE (S340): a healthy run must keep printing exactly the
+# summary it printed before this pack — the line appears only when there is
+# something to report.
+if [ "$DROPPED_COUNT" -gt 0 ]; then
+  _log "    Dropped:   $DROPPED_COUNT (unsafe or malformed manifest records — NOT verified)"
+fi
 if [ -n "$BAK_DIR" ]; then
   _log "    Backups:   $BAK_DIR"
 fi

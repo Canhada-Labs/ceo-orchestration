@@ -1166,6 +1166,182 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# D.5 — a manifest record that ESCAPES the target. uninstall.sh has had this
+# leg since S337 (U.2) because uninstall REMOVES what the manifest names;
+# doctor WRITES what it names and had no leg at all. MEASURED at b6dce78
+# (pre-cure): the ingest sanitizer drops the record, so nothing lands outside
+# — the property that matters, asserted first below — but the drop was
+# SILENT: `OK: 535`, `Refused: 0`, rc 0, i.e. a clean bill of health for a
+# manifest that had been edited. Post-cure the drop is NAMED, counted in the
+# summary, and unresolved (rc 1). Both halves are asserted, because only the
+# second one was ever red.
+# ---------------------------------------------------------------------------
+echo "==> D.5 a manifest record that escapes the target is NAMED, not silently dropped"
+_mkcase d5-traversal
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "D.5 — install failed (rc=$RC, see $LOG)"
+else
+  printf 'ADOPTER FILE OUTSIDE THE TARGET\n' > "$OUTSIDE/victim.txt"
+  D5_BEFORE="$( shasum -a 256 < "$OUTSIDE/victim.txt" | awk '{print $1}' )"
+  # A digest that does NOT match the outside file: a doctor that VERIFIED this
+  # record would classify DRIFT and repair it — writing through the `../`.
+  printf '%s  ../outside/victim.txt\n' \
+    "$( printf 'FRAMEWORK BYTES\n' | shasum -a 256 | awk '{print $1}' )" \
+    >> "$TARGET/.claude/.install-manifest.sha256"
+  LOG="$CASE/doctor.log"; _doctor --repair --yes-file "../outside/victim.txt"
+  D5_AFTER="$( shasum -a 256 < "$OUTSIDE/victim.txt" | awk '{print $1}' )"
+  [ "$D5_BEFORE" = "$D5_AFTER" ] \
+    && ok "D.5 — the outside file is byte-identical (nothing written through the ../ record)" \
+    || bad "D.5 — the outside file CHANGED through a ../ manifest record ($D5_BEFORE -> $D5_AFTER)"
+  grep -q "DROPPED (unsafe manifest path" "$LOG" \
+    && ok "D.5 — the dropped record is NAMED in the run output" \
+    || bad "D.5 — the ../ record was dropped SILENTLY (no DROPPED line in $LOG)"
+  grep -q "Dropped:   1 " "$LOG" \
+    && ok "D.5 — the summary counts exactly one dropped record" \
+    || bad "D.5 — no 'Dropped:   1' summary line (see $LOG)"
+  [ "$RC" -ne 0 ] \
+    && ok "D.5 — doctor exits non-zero (rc=$RC): an unread record is an unresolved finding" \
+    || bad "D.5 — doctor exited 0 over a manifest it did not fully read"
+fi
+
+# ---------------------------------------------------------------------------
+# D.6 — a SYMLINKED ANCESTOR under the target (the doctor analogue of U.1).
+# With `.claude/scripts` moved out and replaced by a link, all 196 records
+# under it resolve through that link. MEASURED pre-cure: the sanitizer drops
+# every one of them (nothing is written behind the link — asserted on the
+# outside file's bytes) and doctor then reports the SURVIVORS as OK and exits
+# 0: a healthy verdict for an install whose whole scripts/ tree it never
+# looked at. Post-cure: NAMED, counted, rc 1 — and this leg is what exercises
+# the 20-entry listing cap, since 196 > 20.
+# ---------------------------------------------------------------------------
+echo "==> D.6 records behind a symlinked ancestor are NAMED, not silently unverified"
+_mkcase d6-ancestor
+_install
+D6_LEAF="$( basename "$D_REL" )"
+if [ "$RC" -ne 0 ]; then
+  bad "D.6 — install failed (rc=$RC, see $LOG)"
+elif [ ! -f "$TARGET/$D_REL" ]; then
+  bad "D.6 — $D_REL was not delivered; the leg cannot run"
+else
+  mv "$TARGET/.claude/scripts" "$OUTSIDE/scripts-jail"
+  ln -s "$OUTSIDE/scripts-jail" "$TARGET/.claude/scripts"
+  printf '\n# adopter edit\n' >> "$OUTSIDE/scripts-jail/$D6_LEAF"
+  D6_BEFORE="$( shasum -a 256 < "$OUTSIDE/scripts-jail/$D6_LEAF" | awk '{print $1}' )"
+  LOG="$CASE/doctor.log"; _doctor --repair --yes-file "$D_REL"
+  D6_AFTER="$( shasum -a 256 < "$OUTSIDE/scripts-jail/$D6_LEAF" | awk '{print $1}' )"
+  [ "$D6_BEFORE" = "$D6_AFTER" ] \
+    && ok "D.6 — the file behind the symlinked ancestor is byte-identical" \
+    || bad "D.6 — doctor wrote THROUGH the symlinked ancestor ($D6_BEFORE -> $D6_AFTER)"
+  grep -q "DROPPED (unsafe manifest path" "$LOG" \
+    && ok "D.6 — the records behind the symlinked ancestor are NAMED" \
+    || bad "D.6 — a whole subtree was dropped SILENTLY (see $LOG)"
+  grep -qE "^    Dropped:   [0-9]+ " "$LOG" \
+    && ok "D.6 — the summary carries a Dropped: count" \
+    || bad "D.6 — no Dropped: line in the summary (see $LOG)"
+  grep -q "more (names sanitized" "$LOG" \
+    && ok "D.6 — the listing cap is exercised (a crafted manifest cannot bury the report)" \
+    || bad "D.6 — no cap line; expected more than 20 dropped records under .claude/scripts/"
+  [ "$RC" -ne 0 ] \
+    && ok "D.6 — doctor exits non-zero (rc=$RC)" \
+    || bad "D.6 — doctor exited 0 while a whole subtree went unverified"
+fi
+
+# ---------------------------------------------------------------------------
+# D.7 — a manifest relpath carrying a CONTROL BYTE other than \n \r \t (here ESC,
+# the start of a terminal escape sequence). Rail S340 r2 (codex P1): the ingest
+# sanitizer only rejected newline/CR/tab, so such a record was ACCEPTED, then
+# classified MISSING/DRIFT and its name interpolated RAW into the operator's
+# terminal. Post-cure: rejected at ingest as unsafe (any [[:cntrl:]] byte),
+# NAMED with the byte shown as '?', and no raw ESC ever reaches the log.
+# ---------------------------------------------------------------------------
+echo "==> D.7 a manifest relpath with a control byte is DROPPED, never echoed raw"
+_mkcase d7-control-byte
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "D.7 — install failed (rc=$RC, see $LOG)"
+else
+  D7_REL="$( printf 'docs/\033[2Jevil.md' )"
+  printf '%s  %s\n' \
+    "$( printf 'FRAMEWORK BYTES\n' | shasum -a 256 | awk '{print $1}' )" "$D7_REL" \
+    >> "$TARGET/.claude/.install-manifest.sha256"
+  LOG="$CASE/doctor.log"; _doctor --repair --yes-file "docs/evil.md"
+  grep -q "DROPPED (unsafe manifest path" "$LOG" \
+    && ok "D.7 — the control-byte record is NAMED as dropped" \
+    || bad "D.7 — the control-byte record was NOT dropped at ingest (see $LOG)"
+  if LC_ALL=C grep -q "$( printf '\033' )" "$LOG"; then
+    bad "D.7 — a RAW ESC byte reached the doctor output (terminal-control injection)"
+  else
+    ok "D.7 — no raw control byte in the doctor output"
+  fi
+  [ "$RC" -ne 0 ] \
+    && ok "D.7 — doctor exits non-zero (rc=$RC)" \
+    || bad "D.7 — doctor exited 0 over a manifest with a control-byte record"
+fi
+
+# ---------------------------------------------------------------------------
+# D.8 — the same class under LC_ALL=C: a RAW 8-bit C1 byte (0x9b, the 8-bit CSI)
+# in a relpath. Rail S340 r3 (codex P2): [[:cntrl:]] is locale-dependent — under
+# C/POSIX it sees only C0+DEL, so 0x9b passed the v2 guard and reached the
+# output raw. The ingest test is now locale-independent (C1 as UTF-8, stray
+# 8-bit bytes via UTF-8 validation), so the record is dropped whatever locale
+# doctor runs in. Asserted under LC_ALL=C on purpose.
+# ---------------------------------------------------------------------------
+echo "==> D.8 a raw C1 byte in a manifest relpath is DROPPED even under LC_ALL=C"
+_mkcase d8-c1-byte
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "D.8 — install failed (rc=$RC, see $LOG)"
+else
+  D8_REL="$( printf 'docs/\233evil.md' )"
+  printf '%s  %s\n' \
+    "$( printf 'FRAMEWORK BYTES\n' | shasum -a 256 | awk '{print $1}' )" "$D8_REL" \
+    >> "$TARGET/.claude/.install-manifest.sha256"
+  LOG="$CASE/doctor.log"
+  env LC_ALL=C bash "$DOCTOR" "$TARGET" --repair --yes-file "docs/evil.md" >"$LOG" 2>&1; RC=$?
+  grep -q "DROPPED (unsafe manifest path" "$LOG" \
+    && ok "D.8 — the raw-C1 record is NAMED as dropped under LC_ALL=C" \
+    || bad "D.8 — the raw-C1 record was NOT dropped under LC_ALL=C (see $LOG)"
+  if LC_ALL=C grep -q "$( printf '\233' )" "$LOG"; then
+    bad "D.8 — a RAW 0x9b byte reached the doctor output under LC_ALL=C"
+  else
+    ok "D.8 — no raw C1 byte in the doctor output"
+  fi
+  [ "$RC" -ne 0 ] \
+    && ok "D.8 — doctor exits non-zero (rc=$RC)" \
+    || bad "D.8 — doctor exited 0 over a manifest with a raw C1 record"
+fi
+
+# ---------------------------------------------------------------------------
+# D.9 — a NUL byte INSIDE a manifest record. Rail S340 r4 (codex P1): bash's
+# `read -r` drops (or, on 3.2, truncates at) the NUL before any per-field check
+# runs, so `<sha>  docs/<NUL>evil.md` was parsed as a clean-looking record and
+# doctor carried on. Post-cure the RAW manifest is scanned for NUL before the
+# line loop and refused as unparseable (exit 2) — fail-closed on input.
+# ---------------------------------------------------------------------------
+echo "==> D.9 a NUL byte in the manifest is refused before parsing"
+_mkcase d9-nul
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "D.9 — install failed (rc=$RC, see $LOG)"
+else
+  printf '%s  docs/\000evil.md\n' \
+    "$( printf 'FRAMEWORK BYTES\n' | shasum -a 256 | awk '{print $1}' )" \
+    >> "$TARGET/.claude/.install-manifest.sha256"
+  D9_NULS="$( LC_ALL=C tr -cd '\000' < "$TARGET/.claude/.install-manifest.sha256" | wc -c | tr -d ' ' )"
+  [ "$D9_NULS" -eq 1 ] \
+    && ok "D.9 — the crafted manifest carries exactly one NUL byte (fixture sane)" \
+    || bad "D.9 — fixture broken: $D9_NULS NUL byte(s) in the manifest"
+  LOG="$CASE/doctor.log"; _doctor --repair --yes-file "docs/evil.md"
+  grep -q "NUL byte" "$LOG" \
+    && ok "D.9 — doctor refuses the manifest and NAMES the NUL byte" \
+    || bad "D.9 — no NUL refusal: the record was parsed around the NUL (see $LOG)"
+  [ "$RC" -ne 0 ] \
+    && ok "D.9 — doctor exits non-zero (rc=$RC)" \
+    || bad "D.9 — doctor exited 0 over a manifest carrying a NUL byte"
+fi
+
+# ---------------------------------------------------------------------------
 # U — uninstall.sh confinement (PLAN-183 §9.8 + rail r1 S337). The install
 # manifest is a FILE in the target and it is NOT integrity-checked before the
 # walk; W5 made it name deliveries OUTSIDE .claude/, which widened what the one
