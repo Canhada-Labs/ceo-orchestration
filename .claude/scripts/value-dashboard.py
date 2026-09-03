@@ -273,16 +273,18 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     # PLAN-169 W2.10 F3: the ENTIRE gen-5 fleet was absent here, so
     # compute_cost_usd returned None for every current-fleet model and the
     # dashboard showed the running fleet as costless. Rows mirror
-    # ceo-cost.py (per-MTok) converted to per-1k. Sonnet 5 uses the intro
-    # rate ($2/$10 until 2026-08-31; sticker $3/$15) — same as the mirror.
+    # ceo-cost.py (per-MTok) converted to per-1k. Sonnet 5 at $2/$10 — the
+    # standard rate since the intro price became permanent (NOTE below).
     "claude-fable-5":              {"in": 0.010, "out": 0.050},
     "claude-fable-5-1":            {"in": 0.010, "out": 0.050},  # ADR-149 Amendment 2 (S338)
     "claude-opus-5":               {"in": 0.005, "out": 0.025},
     "claude-opus-5-fast":          {"in": 0.010, "out": 0.050},
-    # NOTE (repass-r2 part-c P2): this is the INTRO rate, valid until
-    # 2026-08-31 (sticker $3/$15). compute_cost_usd has no event-date
-    # selection, so after that date this row UNDERSTATES sonnet-5 cost
-    # until swept — same semantics as the ceo-cost.py mirror; sweep both.
+    # NOTE (repass-r2 part-c P2, superseded by the PLAN-169 S338 follow-up):
+    # $2/$10 was the INTRO rate through 2026-08-31 with a $3/$15 sticker
+    # after; the official pricing page (fetched 2026-09-01) made $2/$10 the
+    # STANDARD price — the scheduled 2026-09-01 increase "will not occur".
+    # No event-date selection is needed here any more: this row is exact on
+    # both sides of 2026-09-01, same as the ceo-cost.py mirror.
     "claude-sonnet-5":             {"in": 0.002, "out": 0.010},
     "claude-opus-4-8":             {"in": 0.005, "out": 0.025},
     "claude-opus-4-7":            {"in": 0.015, "out": 0.075},

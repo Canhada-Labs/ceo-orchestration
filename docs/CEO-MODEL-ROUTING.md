@@ -71,7 +71,7 @@ switch is a no-op — the upgraded path doesn't exist.**
 |---|---|---|
 | VETO roles (`code-reviewer`, `security-engineer`) | **`claude-fable-5` remains the ceiling** | `VETO_FLOOR_ALLOWED` += `claude-opus-5` (ADR-149 amendment) — opus-5 becomes an allowed floor member, Fable 5 stays the top of the VETO family |
 | Debate / arch task classes (`model_routing.py`) | `claude-opus-5` | was `claude-opus-4-8`; $5/$25 drop-in rate, 1M ctx default |
-| Advisory tier (qa / perf / non-VETO staff, `code_gen`/`finops`) | `claude-sonnet-5` | OQ2 = migrate now; intro pricing $2/$10 through 2026-08-31 (then $3/$15); tokenizer ~+30% tokens — shipped budgets NOT re-baselined yet (follow-up plan, see `docs/substrate-adopt-2026-08.md` §Tokenizer note) |
+| Advisory tier (qa / perf / non-VETO staff, `code_gen`/`finops`) | `claude-sonnet-5` | OQ2 = migrate now; $2/$10 per MTok is the STANDARD price — the launch intro rate became permanent and the scheduled 2026-09-01 increase to $3/$15 will not occur (pricing page fetched 2026-09-01, PLAN-169 S338 follow-up; `docs/substrate-adopt-2026-08.md` is a DATED adoption record — its G2 row still shows the pre-cancellation $3/$15 flip and is superseded by this row); tokenizer ~+30% tokens — shipped budgets NOT re-baselined yet (follow-up plan, see `docs/substrate-adopt-2026-08.md` §Tokenizer note) |
 | Explore / digest / mechanical scans | `claude-haiku-4-5` | unchanged |
 
 **Opus 5 rate-limit bucket (compatibility fact, not a routing input):**

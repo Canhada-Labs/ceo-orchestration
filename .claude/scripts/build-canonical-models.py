@@ -345,6 +345,13 @@ _MM_TIERS: List[Tuple[str, Tuple[float, float, float, float, float]]] = [
     (r"opus-4-[01](?:\D|$)", (15.0, 18.75, 30.0, 1.50, 75.0)),
     (r"opus-4-(?:[2-9]|1\d)", (5.0, 6.25, 10.0, 0.50, 25.0)),
     (r"opus-(?:[5-9]|\d\d)", (5.0, 6.25, 10.0, 0.50, 25.0)),
+    # PLAN-169 S338 follow-up: Sonnet 5 is $2/$10 — the launch intro price
+    # became the STANDARD price (official pricing page fetched 2026-09-01; the
+    # scheduled 2026-09-01 increase to $3/$15 will not occur); cache
+    # multipliers unchanged (1.25x / 2x write, 0.1x read). MUST precede the
+    # generic sonnet tier, which would otherwise match it at $3/$15 and raise
+    # five false divergences the day an Owner refresh adds the row.
+    (r"sonnet-5(?:\D|$)", (2.0, 2.50, 4.00, 0.20, 10.0)),
     (r"sonnet-[3-9]", (3.0, 3.75, 6.00, 0.30, 15.0)),
     (r"haiku-4", (1.0, 1.25, 2.00, 0.10, 5.0)),
     (r"haiku-3", (0.80, 1.00, 1.60, 0.08, 4.0)),

@@ -60,9 +60,11 @@ _PRICING_PER_MTOK: Dict[str, Dict[str, float]] = {
     "claude-fable-5-1": {"input": 10.00, "output": 50.00},  # ADR-149 Amendment 2 (S338): Fable 5.1 at the Fable 5 rate
     "claude-opus-5": {"input": 5.00, "output": 25.00},  # drop-in at 4.8 rate; 1M ctx default
     "claude-opus-5-fast": {"input": 10.00, "output": 50.00},  # fast-mode premium row
-    # Sonnet 5: INTRO pricing through 2026-08-31 — the dated row in
-    # _DATED_PRICING_PER_MTOK carries the post-intro sticker; this base row
-    # is the fallback for events with no parseable ts (W2 P2a).
+    # Sonnet 5: $2/$10 is the STANDARD rate. The launch-time intro price
+    # became permanent — the official pricing page (fetched 2026-09-01,
+    # platform.claude.com/docs/en/about-claude/pricing) states the scheduled
+    # 2026-09-01 increase to $3/$15 "will not occur". The dated flip row this
+    # comment used to point at was retired (PLAN-169 S338 follow-up).
     "claude-sonnet-5": {"input": 2.00, "output": 10.00},
     # -- retained historical (ADR-142 replay — never remove) --
     "claude-opus-4-7": {"input": 15.00, "output": 75.00},
@@ -120,15 +122,15 @@ def resolve_log_path() -> Optional[Path]:
 #: on a date boundary. An event is priced by its OWN ``ts`` (never by
 #: "today", and never by mutating the global row — mutation would repaint
 #: history on replay). Shape: model -> (cutoff_iso_date,
-#: rates_through_cutoff_inclusive, rates_after). Sonnet 5: $2/$10 intro
-#: through 2026-08-31, $3/$15 sticker after.
-_DATED_PRICING_PER_MTOK: Dict[str, Tuple[str, Dict[str, float], Dict[str, float]]] = {
-    "claude-sonnet-5": (
-        "2026-08-31",
-        {"input": 2.00, "output": 10.00},
-        {"input": 3.00, "output": 15.00},
-    ),
-}
+#: rates_through_cutoff_inclusive, rates_after).
+#: EMPTY since the PLAN-169 S338 follow-up: the only row ever carried here
+#: (Sonnet 5 — $2/$10 intro through 2026-08-31, then $3/$15) was retired
+#: when the official pricing page (fetched 2026-09-01) made $2/$10 the
+#: standard price and cancelled the 2026-09-01 increase — both legs equal
+#: the base row, so the row was dead data. The MECHANISM
+#: (``_rates_for_event``) stays and is exercised through a synthetic row in
+#: test_model_fleet_presence.py.
+_DATED_PRICING_PER_MTOK: Dict[str, Tuple[str, Dict[str, float], Dict[str, float]]] = {}
 
 
 def _rates_for_event(model: str, ts: Any) -> Optional[Dict[str, float]]:

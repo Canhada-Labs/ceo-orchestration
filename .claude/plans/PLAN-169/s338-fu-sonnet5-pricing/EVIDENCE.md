@@ -130,3 +130,66 @@ Residual `$3/$15` mentions on the touched surfaces after the patch: only Sonnet 
 
 Raw outputs: `codex-r1.txt` [saída bruta, NÃO versionada — scratchpad S338 `codex-logs/s338-fu-sonnet5-pricing/`] (5.816 lines), `codex-r2.txt` [saída bruta, NÃO versionada — scratchpad S338 `codex-logs/s338-fu-sonnet5-pricing/`] (9.809), `codex-r3.txt` [saída bruta, NÃO versionada — scratchpad S338 `codex-logs/s338-fu-sonnet5-pricing/`]
 (5.906); records: `rail-round-{1,2,3}.md`. Last verdict: **APPROVE** (r3).
+
+## Aplicado — S340 (2026-09-02)
+
+Aplicado na ÁRVORE VIVA pelo orquestrador da noite S340, sobre a base
+HEAD `400638e` (a wave `wave-fable51` — dependência de âncora deste pack —
+landou como `ab56e76`; `400638e` é o closeout do estudo do PLAN-186 que
+veio depois e não toca nenhum dos 10 paths). Árvore limpa antes de aplicar
+(`git status --porcelain` vazio).
+
+### As duas mensagens do `--check` (verbatim)
+
+Antes (rc 0):
+
+```
+apply-sonnet5-pricing-fu: 21 edit(s) applicable in 10 path(s); nothing written
+```
+
+Aplicação (rc 0): `21 edit(s) applied in 10 path(s)` — os 10 paths da
+tabela de sítios, e `git status --short` listou EXATAMENTE esses 10.
+
+Depois, segundo `--check` (rc **1**, guarda de dupla aplicação — o mesmo
+comportamento já documentado acima para o shadow):
+
+```
+apply-sonnet5-pricing-fu: REFUSED
+  - <17 âncoras> anchor found 0x, expected 1 — ...
+  - <os 10 paths> already contains 'PLAN-169 S338 follow-up' — tree already patched?
+```
+
+Os 4 sítios ADITIVOS permanecem 1x por construção; para eles a
+idempotência repousa no marcador — e o marcador disparou nos 10 paths.
+
+### Bateria (na árvore final, DEPOIS da última edição)
+
+```
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider \
+  .claude/scripts/tests/test_model_fleet_presence.py .claude/scripts/tests/test_a4_pricing_doctrine.py \
+  .claude/scripts/tests/test_budget_summary.py .claude/scripts/tests/test_build_canonical_models.py
+    -> 119 passed                                                   rc 0
+
+PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider <15 arquivos consumidores>
+  (adapters/live/test_cost.py, test_audit_emit.py, test_audit_emit_coverage.py,
+   test_session_end_memory_delta.py, test_tier_policy_sonnet5_routing_pin.py,
+   test_audit_telemetry.py, test_ceo_cost.py, test_ceo_cost_stream.py,
+   test_ceo_cost_transcripts.py, test_ceo_info.py, test_rate_card_calibrate.py,
+   test_success_receipt.py, test_token_estimator.py, test_value_dashboard.py,
+   tests/unit/test_value_dashboard_emit.py)
+    -> 555 passed, 1 xfailed (pré-existente)                        rc 0
+
+python3 .claude/scripts/rate-card-calibrate.py --check
+    -> "clean — all 5 ratified rates match cost-table.yaml + provider-pricing.md"   rc 0
+python3 .claude/scripts/budget-summary.py                                            rc 0
+python3 -m py_compile <os 7 .py tocados>                                             rc 0
+python3 .claude/scripts/validate_governance_fast.py -> errors 0 / warnings 0         rc 0
+```
+
+O conjunto dos 15 consumidores foi DERIVADO por censo (`grep -rl` dos
+nomes de módulo e de `cost-table` em `.claude/scripts/tests/`,
+`.claude/hooks/tests/` e `tests/`), não recordado — o mesmo método da
+derivação original, re-executado nesta base.
+
+Gates de corpus sobre a árvore STAGED e rodadas de pair-rail desta
+aplicação: ver o corpo do commit desta entrega. rail: see the commit body.

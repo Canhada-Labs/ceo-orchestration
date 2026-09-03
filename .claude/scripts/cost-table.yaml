@@ -108,10 +108,10 @@ models:
     tier: sonnet
     source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"
   claude-sonnet-5:
-    input_per_mtok: 3.00
-    output_per_mtok: 15.00
+    input_per_mtok: 2.00
+    output_per_mtok: 10.00
     tier: sonnet
-    source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"  # ADR-157: sticker rate; intro $2/$10 through 2026-08-31 not modeled (estimator uses standard); tokenizer +30% tokens vs 4.6
+    source_url: "https://platform.claude.com/docs/en/about-claude/pricing"  # PLAN-169 S338 follow-up (fetched 2026-09-01): the $2/$10 launch intro price is now the STANDARD price — the scheduled 2026-09-01 increase to $3/$15 will not occur; supersedes the ADR-157 sticker note ($3/$15 sticker, intro not modeled); tokenizer +30% tokens vs 4.6
   claude-haiku-4-5:
     input_per_mtok: 1.00
     output_per_mtok: 5.00

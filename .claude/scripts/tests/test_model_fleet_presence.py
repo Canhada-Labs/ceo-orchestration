@@ -19,13 +19,19 @@ Pricing pins asserted here (public rates, per MTok):
                                       cost-table.yaml / rate-card fixtures)
   - claude-opus-5         $5 / $25   (drop-in at the 4.8 rate)
   - claude-opus-5-fast    $10 / $50  (fast-mode premium row)
-  - claude-sonnet-5       $2 / $10   intro through 2026-08-31, then $3/$15 —
-                          EVENT-DATE-AWARE on the replay/rollup surfaces
-                          (W2 P2a: each event is priced by its OWN ts via the
-                          _DATED_PRICING tables; the global row is never
-                          mutated). cost-table.yaml deliberately keeps the
-                          $3/$15 sticker per its ADR-157 comment (forward
-                          estimator, intro not modeled) — NOT asserted here.
+  - claude-sonnet-5       $2 / $10   STANDARD rate on BOTH sides of 2026-09-01
+                          (PLAN-169 S338 follow-up): the launch intro price
+                          became permanent — the official pricing page
+                          (fetched 2026-09-01) states the scheduled 2026-09-01
+                          increase to $3/$15 "will not occur". The dated
+                          $3/$15 flip row was retired from the three
+                          _DATED_PRICING tables (both legs equalled the base
+                          row = dead data); the event-date MECHANISM (W2 P2a:
+                          each event priced by its OWN ts, the global row
+                          never mutated) stays and is asserted below through
+                          a SYNTHETIC dated row. cost-table.yaml now carries
+                          $2/$10 too (the ADR-157 sticker note is superseded)
+                          — asserted below.
 
 Reads only repo files — touches no env, no network. Stdlib-only unittest,
 env-isolated via TestEnvContext (env-hygiene gate compliance).
@@ -37,6 +43,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _SCRIPTS_DIR = _REPO_ROOT / ".claude" / "scripts"
@@ -138,46 +145,56 @@ class TestAuditTelemetryFleetPresence(TestEnvContext):
         )
         self.assertAlmostEqual(cost, 5.00)
 
-    # -- W2 P2a: Sonnet 5 pricing is event-date-aware, never global-mutated --
+    # -- PLAN-169 S338 follow-up: Sonnet 5 is $2/$10 on BOTH sides of
+    #    2026-09-01 (the intro price became the standard price; the dated
+    #    $3/$15 flip row was retired). The W2 P2a event-date MECHANISM is
+    #    kept alive below through a SYNTHETIC dated row. --
 
-    def test_sonnet5_intro_rate_before_cutoff(self) -> None:
-        cost = self.mod._compute_event_cost_usd(
-            {"model": "claude-sonnet-5", "tokens_in": 1_000_000,
-             "tokens_out": 0, "ts": "2026-08-01T00:00:00Z"}
-        )
-        self.assertAlmostEqual(cost, 2.00)
+    def test_sonnet5_standard_rate_on_both_sides_of_2026_09_01(self) -> None:
+        for ts in ("2026-08-01T00:00:00Z", "2026-08-31T23:59:59Z",
+                   "2026-09-01T00:00:00Z", "2026-12-31T23:59:59Z"):
+            cost = self.mod._compute_event_cost_usd(
+                {"model": "claude-sonnet-5", "tokens_in": 1_000_000,
+                 "tokens_out": 1_000_000, "ts": ts}
+            )
+            # $2 in + $10 out — never $3 + $15.
+            self.assertAlmostEqual(cost, 12.00, msg="ts=%s" % ts)
 
-    def test_sonnet5_cutoff_day_is_inclusive(self) -> None:
-        cost = self.mod._compute_event_cost_usd(
-            {"model": "claude-sonnet-5", "tokens_in": 1_000_000,
-             "tokens_out": 0, "ts": "2026-08-31T23:59:59Z"}
-        )
-        self.assertAlmostEqual(cost, 2.00)
-
-    def test_sonnet5_sticker_rate_after_cutoff(self) -> None:
-        cost = self.mod._compute_event_cost_usd(
-            {"model": "claude-sonnet-5", "tokens_in": 1_000_000,
-             "tokens_out": 1_000_000, "ts": "2026-09-01T00:00:00Z"}
-        )
-        self.assertAlmostEqual(cost, 18.00)  # $3 in + $15 out
-
-    def test_sonnet5_missing_ts_falls_back_to_base_row(self) -> None:
+    def test_sonnet5_missing_ts_uses_base_row(self) -> None:
         cost = self.mod._compute_event_cost_usd(
             {"model": "claude-sonnet-5", "tokens_in": 1_000_000,
              "tokens_out": 0}
         )
         self.assertAlmostEqual(cost, 2.00)
 
-    def test_dated_lookup_does_not_mutate_global_row(self) -> None:
-        before = dict(self.mod._PRICING_PER_MTOK["claude-sonnet-5"])
-        self.mod._compute_event_cost_usd(
-            {"model": "claude-sonnet-5", "tokens_in": 1_000_000,
-             "tokens_out": 0, "ts": "2026-09-01T00:00:00Z"}
-        )
-        self.assertEqual(
-            self.mod._PRICING_PER_MTOK["claude-sonnet-5"], before,
-            "dated pricing must never repaint the global row (P2a)",
-        )
+    def test_sonnet5_has_no_dated_row(self) -> None:
+        """The $3/$15 flip row is dead data since 2026-09-01 — retired."""
+        self.assertNotIn("claude-sonnet-5", self.mod._DATED_PRICING_PER_MTOK)
+
+    def test_dated_pricing_mechanism_synthetic_row(self) -> None:
+        """W2 P2a mechanism survives the row retirement: a synthetic dated
+        row prices by the event's OWN ts (cutoff inclusive), a missing ts
+        falls back to the base row, and the global row is never mutated."""
+        model = "synthetic-dated-model"
+        base = {"input": 2.00, "output": 10.00}
+        dated = ("2026-08-31", {"input": 2.00, "output": 10.00},
+                 {"input": 3.00, "output": 15.00})
+        with mock.patch.dict(self.mod._PRICING_PER_MTOK, {model: base}), \
+                mock.patch.dict(self.mod._DATED_PRICING_PER_MTOK, {model: dated}):
+            ev = {"model": model, "tokens_in": 1_000_000, "tokens_out": 1_000_000}
+            self.assertAlmostEqual(
+                self.mod._compute_event_cost_usd(dict(ev, ts="2026-08-31T23:59:59Z")),
+                12.00)
+            self.assertAlmostEqual(
+                self.mod._compute_event_cost_usd(dict(ev, ts="2026-09-01T00:00:00Z")),
+                18.00)
+            self.assertAlmostEqual(self.mod._compute_event_cost_usd(ev), 12.00)
+            self.assertEqual(
+                self.mod._PRICING_PER_MTOK[model], base,
+                "dated pricing must never repaint the global row (P2a)",
+            )
+        self.assertNotIn(model, self.mod._PRICING_PER_MTOK)
+        self.assertNotIn(model, self.mod._DATED_PRICING_PER_MTOK)
 
 
 class TestDetectorFleetPresence(TestEnvContext):
@@ -239,29 +256,58 @@ class TestCeoCostFleetPresence(TestEnvContext):
         self.assertAlmostEqual(row["input_per_mtok"], 5.00)
         self.assertAlmostEqual(row["output_per_mtok"], 25.00)
 
-    # -- W2 P2a: cost_usd honours the event's own ts for dated rows --
+    # -- PLAN-169 S338 follow-up: Sonnet 5 is $2/$10 on BOTH sides of
+    #    2026-09-01; the W2 P2a ts branch of cost_usd is kept alive through
+    #    a SYNTHETIC dated row. --
 
-    def test_sonnet5_dated_cost_usd(self) -> None:
+    def test_sonnet5_standard_rate_on_both_sides_of_2026_09_01(self) -> None:
         p = self.mod._DEFAULT_PRICING
-        self.assertAlmostEqual(
-            self.mod.cost_usd(p, "claude-sonnet-5", 1_000_000, 0,
-                              ts="2026-08-31T12:00:00Z"), 2.00)
-        self.assertAlmostEqual(
-            self.mod.cost_usd(p, "claude-sonnet-5", 1_000_000, 0,
-                              ts="2026-09-01T00:00:00Z"), 3.00)
-        # No ts -> static row (pre-P2a behaviour preserved).
+        for ts in ("2026-08-31T12:00:00Z", "2026-09-01T00:00:00Z",
+                   "2026-12-31T23:59:59Z"):
+            # $2 in + $10 out — never $3 + $15.
+            self.assertAlmostEqual(
+                self.mod.cost_usd(p, "claude-sonnet-5", 1_000_000, 1_000_000,
+                                  ts=ts), 12.00, msg="ts=%s" % ts)
+        # No ts -> static row.
         self.assertAlmostEqual(
             self.mod.cost_usd(p, "claude-sonnet-5", 1_000_000, 0), 2.00)
+        self.assertNotIn("claude-sonnet-5", self.mod._DATED_PRICING)
 
-    def test_sonnet5_custom_override_beats_dated_row(self) -> None:
+    def test_dated_cost_usd_mechanism_synthetic_row(self) -> None:
+        """W2 P2a mechanism (ts-aware row selection, cutoff inclusive, no
+        mutation) survives the Sonnet 5 row retirement."""
+        model = "synthetic-dated-model"
+        base = {"input_per_mtok": 2.00, "output_per_mtok": 10.00}
+        dated = ("2026-08-31", dict(base),
+                 {"input_per_mtok": 3.00, "output_per_mtok": 15.00})
+        with mock.patch.dict(self.mod._DEFAULT_PRICING, {model: base}), \
+                mock.patch.dict(self.mod._DATED_PRICING, {model: dated}):
+            p = self.mod._DEFAULT_PRICING
+            self.assertAlmostEqual(
+                self.mod.cost_usd(p, model, 1_000_000, 0,
+                                  ts="2026-08-31T12:00:00Z"), 2.00)
+            self.assertAlmostEqual(
+                self.mod.cost_usd(p, model, 1_000_000, 0,
+                                  ts="2026-09-01T00:00:00Z"), 3.00)
+            self.assertAlmostEqual(self.mod.cost_usd(p, model, 1_000_000, 0), 2.00)
+            self.assertEqual(p[model], base,
+                             "dated pricing must never repaint the global row")
+        self.assertNotIn(model, self.mod._DEFAULT_PRICING)
+        self.assertNotIn(model, self.mod._DATED_PRICING)
+
+    def test_custom_override_beats_dated_row_synthetic(self) -> None:
         """CEO_COST_PRICING_JSON custom rows win over built-in dated rows."""
-        custom = dict(self.mod._DEFAULT_PRICING)
-        custom["claude-sonnet-5"] = {
-            "input_per_mtok": 9.00, "output_per_mtok": 9.00
-        }
-        self.assertAlmostEqual(
-            self.mod.cost_usd(custom, "claude-sonnet-5", 1_000_000, 0,
-                              ts="2026-09-01T00:00:00Z"), 9.00)
+        model = "synthetic-dated-model"
+        base = {"input_per_mtok": 2.00, "output_per_mtok": 10.00}
+        dated = ("2026-08-31", dict(base),
+                 {"input_per_mtok": 3.00, "output_per_mtok": 15.00})
+        with mock.patch.dict(self.mod._DEFAULT_PRICING, {model: base}), \
+                mock.patch.dict(self.mod._DATED_PRICING, {model: dated}):
+            custom = dict(self.mod._DEFAULT_PRICING)
+            custom[model] = {"input_per_mtok": 9.00, "output_per_mtok": 9.00}
+            self.assertAlmostEqual(
+                self.mod.cost_usd(custom, model, 1_000_000, 0,
+                                  ts="2026-09-01T00:00:00Z"), 9.00)
 
 
 class TestBudgetSummaryFleetPresence(TestEnvContext):
@@ -340,17 +386,40 @@ class TestBudgetSummaryFleetPresence(TestEnvContext):
         # 1M fresh input at $10 + 1M cache reads at 0.025x ($0.25) == $10.25
         self.assertAlmostEqual(rec["cost_usd"], 10.25, places=6)
 
-    def test_sonnet5_dated_compute_cost(self) -> None:
-        """W2 P2a: compute_cost_usd honours the event's own ts."""
-        self.assertAlmostEqual(
-            self.mod.compute_cost_usd("claude-sonnet-5", 1000, 0,
-                                      ts="2026-08-31T12:00:00Z"), 0.002)
-        self.assertAlmostEqual(
-            self.mod.compute_cost_usd("claude-sonnet-5", 1000, 1000,
-                                      ts="2026-09-01T00:00:00Z"), 0.018)
-        # No ts -> static row (pre-P2a behaviour preserved).
+    def test_sonnet5_standard_rate_on_both_sides_of_2026_09_01(self) -> None:
+        """PLAN-169 S338 follow-up: $2/$10 per MTok (0.002/0.010 per 1k) on
+        both sides of 2026-09-01 — the intro price became the standard price
+        and the dated $3/$15 flip row was retired."""
+        for ts in ("2026-08-31T12:00:00Z", "2026-09-01T00:00:00Z",
+                   "2026-12-31T23:59:59Z"):
+            # 1k in + 1k out = 0.002 + 0.010 — never 0.003 + 0.015.
+            self.assertAlmostEqual(
+                self.mod.compute_cost_usd("claude-sonnet-5", 1000, 1000, ts=ts),
+                0.012, msg="ts=%s" % ts)
+        # No ts -> static row.
         self.assertAlmostEqual(
             self.mod.compute_cost_usd("claude-sonnet-5", 1000, 0), 0.002)
+        self.assertNotIn("claude-sonnet-5", self.mod._DATED_PRICING)
+
+    def test_dated_compute_cost_mechanism_synthetic_row(self) -> None:
+        """W2 P2a mechanism (ts-aware row selection, cutoff inclusive, no
+        mutation, lower-cased key) survives the Sonnet 5 row retirement."""
+        model = "synthetic-dated-model"
+        base = {"in": 0.002, "out": 0.010}
+        dated = ("2026-08-31", dict(base), {"in": 0.003, "out": 0.015})
+        with mock.patch.dict(self.mod._DEFAULT_PRICING, {model: base}), \
+                mock.patch.dict(self.mod._DATED_PRICING, {model: dated}):
+            self.assertAlmostEqual(
+                self.mod.compute_cost_usd(model, 1000, 0,
+                                          ts="2026-08-31T12:00:00Z"), 0.002)
+            self.assertAlmostEqual(
+                self.mod.compute_cost_usd(model.upper(), 1000, 1000,
+                                          ts="2026-09-01T00:00:00Z"), 0.018)
+            self.assertAlmostEqual(self.mod.compute_cost_usd(model, 1000, 0), 0.002)
+            self.assertEqual(self.mod._DEFAULT_PRICING[model], base,
+                             "dated pricing must never repaint the global row")
+        self.assertNotIn(model, self.mod._DEFAULT_PRICING)
+        self.assertNotIn(model, self.mod._DATED_PRICING)
 
     def test_historical_ids_retained(self) -> None:
         pricing = self.mod._DEFAULT_PRICING
@@ -419,8 +488,9 @@ class TestCostTableFleetPresence(TestEnvContext):
     """cost-table.yaml carries the NEW ids (opus-5 + fast row).
 
     fable-5 / opus-4-8 / sonnet-5 rows already existed there pre-PLAN-163
-    (asserted by test_a4_pricing_doctrine.py); only the ids new to this
-    plan are asserted here.
+    (fable-5 / opus-4-8 rates asserted by test_a4_pricing_doctrine.py); the
+    ids new to this plan are asserted here, plus the sonnet-5 RATE since the
+    PLAN-169 S338 follow-up (the $3/$15 sticker became $2/$10).
     """
 
     def setUp(self) -> None:
@@ -459,6 +529,17 @@ class TestCostTableFleetPresence(TestEnvContext):
         text = self._block("claude-opus-4-8-fast")
         self.assertIn("input_per_mtok: 10.00", text)
         self.assertIn("output_per_mtok: 50.00", text)
+
+    def test_sonnet5_row_standard_rate(self) -> None:
+        """PLAN-169 S338 follow-up: the estimator sticker is $2/$10 — the
+        launch intro price became the standard price (pricing page fetched
+        2026-09-01; the 2026-09-01 increase to $3/$15 will not occur). The
+        ADR-157 'sticker $3/$15' note is superseded."""
+        text = self._block("claude-sonnet-5")
+        self.assertIn("input_per_mtok: 2.00", text)
+        self.assertIn("output_per_mtok: 10.00", text)
+        self.assertNotIn("input_per_mtok: 3.00", text)
+        self.assertNotIn("output_per_mtok: 15.00", text)
 
     def test_historical_rows_retained(self) -> None:
         for model in ("claude-opus-4-7", "claude-opus-4-7-1m",

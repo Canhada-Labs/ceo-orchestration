@@ -121,8 +121,10 @@ _DEDUP_STRIP_FIELDS: Tuple[str, ...] = ("hmac", "hmac_error", "hook_duration_ms"
 #: sessions; Sonnet 4.6 = $3/$15; Haiku 4.5 = $1/$5 (was 4x underpriced).
 #: PLAN-163 T1.5b — ADDITIVE Claude 5 fleet rows (historical rows retained,
 #: ADR-142): fable-5 $10/$50; opus-5 $5/$25 (drop-in at the 4.8 rate);
-#: opus-5-fast $10/$50 premium row; sonnet-5 $2/$10 INTRO rate through
-#: 2026-08-31 (post-intro sticker $3/$15 — bump when the window lapses).
+#: opus-5-fast $10/$50 premium row; sonnet-5 $2/$10 — the launch intro price
+#: became the STANDARD price (official pricing page fetched 2026-09-01: the
+#: scheduled 2026-09-01 increase to $3/$15 "will not occur"; PLAN-169 S338
+#: follow-up).
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-opus-4-8":             {"in": 0.005, "out": 0.025},
     "claude-opus-4-8-fast":       {"in": 0.010, "out": 0.050},
@@ -371,15 +373,15 @@ def build_plan_attribution(
 
 #: PLAN-163 W2 P2a — event-date-aware rows (per-1k twin of the tables in
 #: audit-telemetry.py / ceo-cost.py): an event is priced by its OWN ``ts``,
-#: never by "today" and never by mutating the global row. Sonnet 5: $2/$10
-#: per MTok intro through 2026-08-31 (inclusive), $3/$15 sticker after.
-_DATED_PRICING: Dict[str, Tuple[str, Dict[str, float], Dict[str, float]]] = {
-    "claude-sonnet-5": (
-        "2026-08-31",
-        {"in": 0.002, "out": 0.010},
-        {"in": 0.003, "out": 0.015},
-    ),
-}
+#: never by "today" and never by mutating the global row. Shape: model ->
+#: (cutoff_iso_date, row_through_cutoff_inclusive, row_after).
+#: EMPTY since the PLAN-169 S338 follow-up: the Sonnet 5 row ($2/$10 per
+#: MTok intro through 2026-08-31, then $3/$15) was retired when the official
+#: pricing page (fetched 2026-09-01) made $2/$10 the standard price and
+#: cancelled the 2026-09-01 increase — both legs equal the base row. The
+#: MECHANISM (the ``ts`` branch of ``compute_cost_usd``) stays;
+#: test_model_fleet_presence.py exercises it through a synthetic row.
+_DATED_PRICING: Dict[str, Tuple[str, Dict[str, float], Dict[str, float]]] = {}
 
 
 def compute_cost_usd(

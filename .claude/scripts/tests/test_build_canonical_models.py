@@ -171,6 +171,30 @@ class TestReconcile(TestEnvContext):
         findings = bcm.reconcile(data, cost_table_path=_COST_TABLE_PATH)
         self.assertEqual(findings, [])
 
+    def test_mm_tier_sonnet5_is_standard_2_10_and_generic_sonnet_kept(self):
+        """PLAN-169 S338 follow-up: Sonnet 5 resolves to its own $2/$10 tier
+        (cache 1.25x/2x write, 0.1x read); Sonnet 4.6 keeps the generic
+        $3/$15 tier. Dated suffixes resolve like the bare id."""
+        sonnet5 = (2.0, 2.50, 4.00, 0.20, 10.0)
+        for mid in ("claude-sonnet-5", "claude-sonnet-5-20260630",
+                    "claude-sonnet-5[1m]"):
+            self.assertEqual(bcm._mm_tier_for(mid), sonnet5, mid)
+        self.assertEqual(bcm._mm_tier_for("claude-sonnet-4-6"),
+                         (3.0, 3.75, 6.00, 0.30, 15.0))
+
+    def test_reconcile_sonnet5_row_at_standard_rate_is_clean(self):
+        """A canonical Sonnet 5 row at the standard $2/$10 (+ standard cache
+        multipliers) reconciles with ZERO findings against BOTH the
+        cost-table.yaml sticker and the tier table — the day an Owner
+        models.dev refresh adds the row, it must not raise false drift."""
+        models = {"claude-sonnet-5": {
+            "input_per_mtok": 2.0, "cache_write_5m_per_mtok": 2.5,
+            "cache_write_1h_per_mtok": 4.0, "cache_read_per_mtok": 0.2,
+            "output_per_mtok": 10.0}}
+        data = _sample_data(models=models)
+        findings = bcm.reconcile(data, cost_table_path=_COST_TABLE_PATH)
+        self.assertEqual(findings, [])
+
     def test_divergence_is_flagged_not_overwritten(self):
         before = _COST_TABLE_PATH.read_text()
         models = {"claude-opus-4-8": {

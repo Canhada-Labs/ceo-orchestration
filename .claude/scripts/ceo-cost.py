@@ -76,9 +76,10 @@ from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolv
 # PLAN-163 T1.5b — ADDITIVE Claude 5 fleet rows (never remove historical ids,
 # ADR-142): fable-5 $10/$50 (rate the repo already carries in cost-table.yaml);
 # opus-5 $5/$25 drop-in at the 4.8 rate (1M ctx default); opus-5-fast $10/$50
-# premium row; sonnet-5 at the $2/$10 INTRO rate through 2026-08-31 (post-intro
-# sticker $3/$15 — bump the row when the intro window lapses; this table prices
-# actual logged spend, unlike the forward-looking cost-table.yaml sticker).
+# premium row; sonnet-5 $2/$10 — the launch intro price became the STANDARD
+# price (official pricing page fetched 2026-09-01: the scheduled 2026-09-01
+# increase to $3/$15 "will not occur"; PLAN-169 S338 follow-up), so no bump
+# is due and cost-table.yaml now carries the same $2/$10.
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-opus-4-8": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
     "claude-opus-4-8[1m]": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
@@ -232,15 +233,15 @@ def load_pricing() -> Dict[str, Dict[str, float]]:
 
 #: PLAN-163 W2 P2a — event-date-aware rows (see audit-telemetry.py twin):
 #: an event is priced by its OWN ``ts``, never by "today" and never by
-#: mutating the global row. Sonnet 5: $2/$10 intro through 2026-08-31
-#: (inclusive), $3/$15 sticker after.
-_DATED_PRICING: Dict[str, Tuple[str, Dict[str, float], Dict[str, float]]] = {
-    "claude-sonnet-5": (
-        "2026-08-31",
-        {"input_per_mtok": 2.00, "output_per_mtok": 10.00},
-        {"input_per_mtok": 3.00, "output_per_mtok": 15.00},
-    ),
-}
+#: mutating the global row. Shape: model -> (cutoff_iso_date,
+#: row_through_cutoff_inclusive, row_after).
+#: EMPTY since the PLAN-169 S338 follow-up: the Sonnet 5 row ($2/$10 intro
+#: through 2026-08-31, then $3/$15) was retired when the official pricing
+#: page (fetched 2026-09-01) made $2/$10 the standard price and cancelled
+#: the 2026-09-01 increase — both legs equal the base row. The MECHANISM
+#: (the ``ts`` branch of ``cost_usd``) stays; test_model_fleet_presence.py
+#: exercises it through a synthetic row.
+_DATED_PRICING: Dict[str, Tuple[str, Dict[str, float], Dict[str, float]]] = {}
 
 
 def cost_usd(

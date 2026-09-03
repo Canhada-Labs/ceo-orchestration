@@ -105,7 +105,7 @@ inheritance surprise.
 | `claude-fable-5` (current — Mythos-class flagship) | $10.00 | $50.00 | 2.0× |
 | `claude-fable-5-1` (current — Mythos-class flagship 5.1; ADR-149 Amendment 2, S338 — selectable, not the pin) | $10.00 | $50.00 | 2.0× |
 | `claude-opus-5` (current) | $5.00 | $25.00 | 1.0× |
-| `claude-sonnet-5` (current; intro $2/$10 until 2026-08-31, sticker $3/$15) | $2.00 | $10.00 | 0.4× |
+| `claude-sonnet-5` (current; $2/$10 is the standard rate — the launch intro price became permanent, pricing page fetched 2026-09-01) | $2.00 | $10.00 | 0.4× |
 | `claude-haiku-4-5` (current) | $1.00 | $5.00 | 0.2× |
 | `claude-opus-4-8` (N-1, active) | $5.00 | $25.00 | 1.0× |
 | `claude-opus-4-7` (historical — retained for log replay) | $15.00 | $75.00 | 3.0× |
@@ -113,6 +113,7 @@ inheritance surprise.
 | `claude-haiku-4-5-20251001` (dated pin of haiku-4-5) | $1.00 | $5.00 | 0.2× |
 
 Gen-5 rows added 2026-08-09 (PLAN-169 W2.10 D7, mirroring `ceo-cost.py`).
+Sonnet 5 row re-verified 2026-09-01 (PLAN-169 S338 follow-up): the official pricing page (https://platform.claude.com/docs/en/about-claude/pricing) states the $2/$10 launch intro price is now the standard price and the previously scheduled 2026-09-01 increase to $3/$15 will not occur — the dated $3/$15 flip was retired from every rollup surface (`audit-telemetry.py`, `ceo-cost.py`, `budget-summary.py`) and from the `cost-table.yaml` sticker.
 Live-confirmed 2026-05-29 from https://www.anthropic.com/api (Opus 4.8 = $5/$25, Sonnet 4.6 = $3/$15, Haiku 4.5 = $1/$5). The prior Haiku row ($0.25/$1.25) propagated a stale rate from ADR-052 §Cost magnitude and underpriced Haiku 4x. Adopters with their own contractual
 pricing should override the table via `CEO_PRICING_PATH=<json>` —
 the `_lib/adapters/live/_cost.py` resolver picks it up.

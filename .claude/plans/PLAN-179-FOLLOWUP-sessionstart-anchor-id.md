@@ -42,7 +42,7 @@ alinhamento do PRODUTOR, unica direcao compativel com a doutrina.
 
 ## AC
 
-- [ ] `[P1][US1][.claude/hooks/SessionStart.py]` O produtor do
+- [x] `[P1][US1][.claude/hooks/SessionStart.py]` O produtor do
       `session_start` passa a resolver o id **payload-first** (payload >
       env > fallback de timestamp), espelhando a precedencia do
       `SessionEnd.py::main` (rail r3 P2-b da wave-179close) — mesma
@@ -59,11 +59,19 @@ alinhamento do PRODUTOR, unica direcao compativel com a doutrina.
       redação "espelhando a precedência do `SessionEnd.py::main`" acima
       está errada como referência — o `main` legado é `env or payload`; a
       precedência-modelo é a do rail novo (`payload_sid`, `:1202`).
-- [ ] `[P1][US1][.claude/hooks/tests/test_session_end_memory_delta.py]`
+      — ✅ S340 (2026-09-02): pago pela cerimônia wave-179fu, land
+      `8efe09b` (GPG do Owner). Censo do rail r1: a classe tinha QUATRO
+      produtores legados (SessionStart, UserPromptSubmit, Stop,
+      SessionEnd), não dois — a assinatura ratificou a expansão 2→4.
+- [x] `[P1][US1][.claude/hooks/tests/test_session_end_memory_delta.py]`
       Teste de integracao produtor→consumidor: com env divergente, o
       `session_start` gravado pelo produtor payload-first E ancorado pelo
       consumidor payload-gated (`anchor_source=chain`) — o caso que hoje
       degrada para `start_unknown` passa a resolver.
+      — ✅ S340 (2026-09-02): pago pela cerimônia wave-179fu, land
+      `8efe09b` (GPG do Owner). Censo do rail r1: a classe tinha QUATRO
+      produtores legados (SessionStart, UserPromptSubmit, Stop,
+      SessionEnd), não dois — a assinatura ratificou a expansão 2→4.
 - [x] `[P2][US1]` Varredura dos DEMAIS consumidores de `session_start` na
       cadeia (grep por leitores do action) para confirmar que nenhum
       depende da grafia env-first do produtor antes do flip.
