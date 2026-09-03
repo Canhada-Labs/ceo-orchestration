@@ -15,6 +15,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import patch
 
 
 def _load_module():
@@ -167,6 +168,19 @@ class CLITests(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="ceo-cost-cli-")).resolve()
         self.log = self.tmp / "audit-log.jsonl"
         _write_log(self.log, [_entry()])
+        # PLAN-186 W0 (AC-1b): --source now defaults to `both`, so the CLI
+        # reaches the transcripts corpus. patch.dict restores os.environ on
+        # teardown (env-hygiene mandate); the root is pinned at an EMPTY
+        # dir so no test here ever reads the real ~/.claude/projects tree.
+        self._empty_transcripts = self.tmp / "transcripts-empty"
+        self._empty_transcripts.mkdir()
+        self._env_patch = patch.dict(
+            os.environ,
+            {"CEO_COST_TRANSCRIPTS_DIR": str(self._empty_transcripts)},
+            clear=False,
+        )
+        self._env_patch.start()
+        self.addCleanup(self._env_patch.stop)
 
     def tearDown(self):
         import shutil

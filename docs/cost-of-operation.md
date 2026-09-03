@@ -204,6 +204,53 @@ dominate the framework's cost advantage — see below.
 > *shape* above. Measure your own spend rather than trusting the
 > illustrative table.
 
+## The two cost sources (PLAN-186 W0)
+
+`ceo-cost.py` and `budget-summary.py` read **two different ledgers**, and
+since PLAN-186 W0 they print both, labelled, side by side. Which one you
+get is chosen with `--source transcripts|audit|both` (default `both`).
+
+| | PRIMARY — transcripts | SECONDARY — audit log |
+|---|---|---|
+| What it is | `message.usage` on every assistant turn of the harness-native transcripts | the HMAC-chained **governance** log (`agent_spawn` rows) |
+| Where | `<state-dir>/<session>.jsonl` + `<session>/subagents/**/agent-*.jsonl` | `<state-dir>/audit-log*.jsonl` |
+| Token classes | input, output, cache-read, cache-write 5m, cache-write 1h | `tokens_in`, `tokens_out` only |
+| Covers the seat (the main session) | yes | no — the seat emits no token fields at all |
+| Read by | `.claude/scripts/ceo-cost-transcripts.py` | the two callers' own rollups |
+
+The audit log is a governance log, not a token ledger: it was never given
+the seat's own spend, and `tokens_in`/`tokens_out` are best-effort even on
+the spawns it does carry. That is why a 30-day audit-only rollup can
+print `$0.00` on a month that cost four figures — the number is not
+wrong about what it measures, it is measuring the wrong thing. The
+transcripts source is the one to quote for spend; the audit source stays
+because it is the one that can attribute a spawn to a plan, a skill and a
+session.
+
+```bash
+# both ledgers, labelled (default)
+.claude/scripts/ceo-cost.py --since 24h
+
+# only the real spend
+.claude/scripts/ceo-cost.py --since 30d --source transcripts
+
+# only the governance ledger (byte-identical to the pre-PLAN-186 output)
+.claude/scripts/ceo-cost.py --since 30d --source audit
+
+# same three modes on the FinOps rollup
+.claude/scripts/budget-summary.py summary --since 30d --source both
+```
+
+The transcripts root resolves as `--transcripts-root` >
+`$CEO_COST_TRANSCRIPTS_DIR` > the shared `_lib.runtime_paths` resolver.
+Tests always inject it; nothing in the suite reads the real corpus.
+
+Three pricing tables still exist in the tree (`ceo-cost.py`'s
+`_DEFAULT_PRICING`, the model registry behind `budget-summary.py`, and the
+instrument's `cost-table.yaml` loader). The transcripts block is priced by
+the instrument and says so in its `pricing:` line; unifying the three is a
+separate wave, deliberately out of scope here.
+
 ## Measuring cost
 
 ### Real-time per-session check
@@ -236,12 +283,21 @@ python3 .claude/scripts/ceo-cost.py --since 30d --by-day
 ### JSON for monitoring
 
 ```bash
+# PRIMARY — real spend, from message.usage (PLAN-186 W0)
+python3 .claude/scripts/ceo-cost.py --since 30d --format json | \
+  jq '.transcripts.totals.usd'
+
+# SECONDARY — the governance ledger's own estimate, for attribution
 python3 .claude/scripts/ceo-cost.py --since 30d --format json | \
   jq '.totals.cost_usd'
 ```
 
-Wire that into your monitoring dashboard for a continuous spend
-signal.
+Wire the FIRST one into your monitoring dashboard: `.totals.cost_usd`
+is the audit rollup, which cannot see the seat's own spend at all and
+reads `$0.00` on months that cost four figures (see "The two cost
+sources" above). Rail S341 r2 caught this page recommending the
+secondary number two sections after declaring the primary one
+authoritative.
 
 ### Honest limitation
 

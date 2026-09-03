@@ -45,6 +45,17 @@ from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import patch
 
+# ``_lib.testing`` (TestEnvContext). PLAN-186 W0 (AC-1b) made the two
+# CLI classes below env-dependent (the `summary --source` default is
+# `both`), and the contract for an env-touching test is TestEnvContext
+# COMBINED with patch.dict — the base class sandboxes HOME and
+# CLAUDE_PROJECT_DIR, patch.dict pins the individual variables.
+_LIB_HOOKS_DIR = Path(__file__).resolve().parents[3] / ".claude" / "hooks"
+if str(_LIB_HOOKS_DIR) not in sys.path:
+    sys.path.insert(0, str(_LIB_HOOKS_DIR))
+
+from _lib.testing import TestEnvContext  # noqa: E402
+
 
 # Load the staging budget-summary.py module.
 _HERE = Path(__file__).resolve().parent
@@ -415,11 +426,44 @@ class TestJsonOutputShape(unittest.TestCase):
         self.assertEqual(decoded["memory_claim_validation"]["status"], "pass")
 
 
-class TestCli(unittest.TestCase):
+class TestCli(TestEnvContext):
     @classmethod
     def setUpClass(cls) -> None:
         cls.tmp = Path(tempfile.mkdtemp(prefix="ceo-cli-"))
         generate_fixtures.build_fixture_set(cls.tmp)
+
+    def setUp(self) -> None:
+        super().setUp()
+        # PLAN-186 W0 (AC-1b): `summary --source` defaults to `both`, so
+        # main() now reaches the transcripts corpus. Pin it at an EMPTY dir
+        # (patch.dict restores os.environ on teardown) — no test in this
+        # file may read the real ~/.claude/projects tree.
+        empty = self.tmp / "transcripts-empty"
+        empty.mkdir(exist_ok=True)
+        # `CEO_NATIVE_USAGE_DIR` is pinned in the SAME patch and
+        # `CEO_BUDGET_NATIVE` forced off (rail r1 P2-2): an ambient
+        # opt-in in the developer's shell would otherwise send the
+        # pre-existing --native branch at the real HOME corpus.
+        self._env_patch = patch.dict(
+            os.environ,
+            {
+                "CEO_COST_TRANSCRIPTS_DIR": str(empty),
+                "CEO_NATIVE_USAGE_DIR": str(empty),
+                "CEO_BUDGET_NATIVE": "0",
+            },
+            clear=False,
+        )
+        self._env_patch.start()
+
+    def tearDown(self) -> None:
+        # Rail S341 r1 [P1]: unittest runs addCleanup callbacks AFTER
+        # tearDown, so stopping this patch.dict from a cleanup would
+        # restore the snapshot taken INSIDE the sandbox on top of the
+        # ambient environment super().tearDown() has just put back --
+        # leaving HOME at a tmp tree that was just deleted. The order
+        # below is load-bearing.
+        self._env_patch.stop()
+        super().tearDown()
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -468,18 +512,32 @@ class TestCli(unittest.TestCase):
         self.assertGreater(decoded["total_events"], 0)
 
 
-class TestBenchmarkCoReport(unittest.TestCase):
+class TestBenchmarkCoReport(TestEnvContext):
     """PLAN-133 C4 — harbor-style benchmark co-report: cost + compute +
     turns alongside pass-rate. Default-OFF; --benchmarks / env opt-in."""
 
     def setUp(self) -> None:
+        super().setUp()
         self.tmp = Path(tempfile.mkdtemp(prefix="ceo-c4-"))
         # patch.dict restores os.environ on teardown (env-hygiene mandate); we
         # remove CEO_BUDGET_BENCHMARKS so the default-OFF path is exercised, and
         # individual tests overlay it via a nested patch.dict.
-        self._env_patch = patch.dict(os.environ, {}, clear=False)
+        # PLAN-186 W0 (AC-1b): the transcripts root is pinned at an EMPTY
+        # dir inside the SAME patch.dict, so the default `--source both`
+        # never reaches the real HOME corpus and no bare os.environ write
+        # is introduced (env-hygiene gate).
+        _empty_transcripts = self.tmp / "transcripts-empty"
+        _empty_transcripts.mkdir(parents=True, exist_ok=True)
+        self._env_patch = patch.dict(
+            os.environ,
+            {
+                "CEO_COST_TRANSCRIPTS_DIR": str(_empty_transcripts),
+                "CEO_NATIVE_USAGE_DIR": str(_empty_transcripts),
+                "CEO_BUDGET_NATIVE": "0",
+            },
+            clear=False,
+        )
         self._env_patch.start()
-        self.addCleanup(self._env_patch.stop)
         os.environ.pop("CEO_BUDGET_BENCHMARKS", None)
         # int-encoded (live emitter) form
         self._int_events = [
@@ -509,8 +567,16 @@ class TestBenchmarkCoReport(unittest.TestCase):
         _write_jsonl(self.tmp / "audit-log.jsonl", self._int_events)
 
     def tearDown(self) -> None:
-        # os.environ is restored by the patch.dict cleanup registered in setUp.
         shutil.rmtree(self.tmp, ignore_errors=True)
+        # Rail S341 r1 [P1]: the patch.dict is stopped HERE, not from an
+        # addCleanup -- cleanups run after tearDown, so a cleanup-stopped
+        # patch would re-install the sandbox snapshot on top of the
+        # ambient environment the line below restores.
+        self._env_patch.stop()
+        # TestEnvContext's own teardown restores HOME / CLAUDE_PROJECT_DIR
+        # / CEO_AUDIT_* and removes its tmp tree; a custom tearDown that
+        # forgets super() leaves the sandbox installed for the next test.
+        super().tearDown()
 
     def _silence(self):
         from contextlib import redirect_stdout, redirect_stderr

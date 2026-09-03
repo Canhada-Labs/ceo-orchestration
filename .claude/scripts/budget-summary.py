@@ -66,6 +66,7 @@ from __future__ import annotations
 import argparse
 import glob
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -1750,9 +1751,171 @@ def _format_native_block(native: Dict[str, Any]) -> List[str]:
     return lines
 
 
+# ---------------------------------------------------------------------------
+# PLAN-186 W0 (AC-1b) — transcripts as the PRIMARY cost source
+# ---------------------------------------------------------------------------
+#
+# The audit log is a GOVERNANCE ledger (agent_spawn rows; tokens_in/out on
+# them are best-effort and frequently absent). The real token ledger is the
+# harness-native transcript corpus — `message.usage` per assistant turn —
+# which `.claude/scripts/ceo-cost-transcripts.py` reads with the full
+# input / output / cache-read / cache-write-5m / cache-write-1h split and
+# per-model prices. This module consumes that instrument through its
+# programmatic API and prints BOTH sources, labelled, side by side.
+# `--source audit` restores the pre-PLAN-186 rendering byte-for-byte.
+#
+# SCOPE NOTE (deliberate, not an oversight): this repo carries THREE
+# independent pricing tables — `ceo-cost.py::_DEFAULT_PRICING`, the model
+# registry behind `budget-summary.py::compute_cost_usd`, and the
+# instrument's `_EMBEDDED_PRICING` / `cost-table.yaml` loader. Unifying them
+# is a separate wave. This integration only REUSES what the instrument
+# already exposes: the transcripts block is priced by the instrument, the
+# audit block by whatever priced it before, and each block says so.
+#
+# The loader below is the one thing that cannot live in the instrument: its
+# filename is hyphenated, so every caller needs its own importlib bootstrap.
+# Everything else (root resolution, collection, rendering) is delegated, so
+# the two callers cannot drift apart.
+
+_TRANSCRIPTS_MODULE_NAME = "ceo_cost_transcripts"
+_TRANSCRIPTS_FILENAME = "ceo-cost-transcripts.py"
+
+
+def load_transcripts_instrument():
+    """Import `ceo-cost-transcripts.py` from next to this file, or None.
+
+    Fail-soft by construction: an unimportable instrument degrades the
+    primary source to a labelled note, it never breaks the audit rollup.
+    """
+    cached = sys.modules.get(_TRANSCRIPTS_MODULE_NAME)
+    if cached is not None:
+        return cached
+    src = Path(__file__).resolve().parent / _TRANSCRIPTS_FILENAME
+    if not src.is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location(
+            _TRANSCRIPTS_MODULE_NAME, src
+        )
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        # Registered BEFORE exec_module: with `from __future__ import
+        # annotations`, @dataclass resolves sys.modules[cls.__module__] at
+        # class-definition time and blows up on a missing entry.
+        sys.modules[_TRANSCRIPTS_MODULE_NAME] = mod
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        sys.modules.pop(_TRANSCRIPTS_MODULE_NAME, None)
+        return None
+
+
+#: Resolved ONCE, from the instrument, so the two callers cannot publish a
+#: different `--source` domain or a different banner than the block they
+#: render. The literals are a fail-soft fallback for a missing instrument
+#: (argparse needs a concrete tuple at parser-build time) and are asserted
+#: equal to the instrument's in test_ceo_cost_integration.py.
+_TX_MODULE = load_transcripts_instrument()
+SOURCE_CHOICES = (
+    _TX_MODULE.SOURCE_CHOICES
+    if _TX_MODULE is not None
+    else ("transcripts", "audit", "both")
+)
+AUDIT_BANNER = (
+    _TX_MODULE.AUDIT_BANNER
+    if _TX_MODULE is not None
+    else "=== SOURCE: AUDIT LOG (governance ledger -- SECONDARY) ==="
+)
+ROOT_ENV = (
+    _TX_MODULE.ROOT_ENV
+    if _TX_MODULE is not None
+    else "CEO_COST_TRANSCRIPTS_DIR"
+)
+
+
+def transcripts_root(root_arg: Optional[str] = None) -> Optional[Path]:
+    """Resolve the transcripts corpus root (flag > env > shared resolver)."""
+    mod = load_transcripts_instrument()
+    if mod is None:
+        return Path(root_arg) if root_arg else None
+    return mod.resolve_root(root_arg)
+
+
+#: The audit-path env carriers THIS caller actually obeys.
+#: `default_audit_dir()` reads CEO_AUDIT_LOG_DIR and nothing else, so
+#: CEO_AUDIT_LOG_PATH does not move budget-summary's ledger and must not
+#: be read as a cross-project pin (rail S341 r1 [P2]; measured: audit_dir
+#: byte-identical with and without that var). ceo-cost.py honours both
+#: carriers and passes none.
+_AUDIT_ENV_CARRIERS = ("CEO_AUDIT_LOG_DIR",)
+
+
+def _tx_audit_pinned(path_arg: Optional[str] = None) -> bool:
+    """True when the SECONDARY (audit) ledger was pointed at a specific
+    place — by flag or by CEO_AUDIT_LOG_PATH / CEO_AUDIT_LOG_DIR. Rail r3
+    P1-1: a flag is not the only carrier, and the cross-project pairing only
+    EXISTS when both ledgers are on screen.
+    """
+    mod = load_transcripts_instrument()
+    if mod is None:
+        return bool(path_arg)
+    return mod.audit_source_is_pinned(
+        path_arg, carriers=_AUDIT_ENV_CARRIERS
+    )
+
+
+def collect_transcripts(
+    root_arg: Optional[str] = None,
+    cutoff: Optional[datetime] = None,
+    audit_override: bool = False,
+) -> Dict[str, Any]:
+    """Primary-source rollup, or a `{"available": False, "reason": ...}` note.
+
+    `budget-summary` has no `--by` flag, so the breakdown dimension is fixed
+    to `model` — the same dimension its audit-side `per_plan` table is most
+    comparable against. `audit_override` says `--audit-dir` pointed the
+    SECONDARY source at an explicit path; with no explicit transcripts root
+    that pairing crosses projects and is refused by name (rail r2 P1-1).
+    """
+    mod = load_transcripts_instrument()
+    if mod is None:
+        return {
+            "available": False,
+            "reason": "instrument ceo-cost-transcripts.py is not importable",
+        }
+    return mod.collect(
+        root_arg=root_arg,
+        cutoff=cutoff,
+        by="model",
+        audit_override=audit_override,
+    )
+
+
 def format_human(data: Dict[str, Any], memory_claim: Optional[Dict[str, Any]] = None) -> str:
-    """Render the rollup as a human-readable text block."""
+    """Render the rollup as a human-readable text block.
+
+    PLAN-186 W0 (AC-1b): when `data` carries a `source` key the PRIMARY
+    transcripts block is rendered first, labelled; `source == 'audit'`
+    sets NO key at all, so that rendering is byte-identical to the
+    pre-integration one.
+    """
     lines: List[str] = []
+    source = data.get("source")
+    if source is not None:
+        mod = load_transcripts_instrument()
+        if mod is None:
+            lines.append(
+                "transcripts source UNAVAILABLE: instrument "
+                "ceo-cost-transcripts.py is not importable"
+            )
+        else:
+            lines.extend(mod.render_block(data.get("transcripts")))
+        lines.append("")
+        if source == "transcripts":
+            return "\n".join(lines)
+        lines.append(AUDIT_BANNER)
+        lines.append("")
     scope = data.get("plan_filter") or "(all plans)"
     since = data.get("since") or "(all time)"
     lines.append(f"FinOps summary — scope={scope} since={since}")
@@ -1845,6 +2008,13 @@ def format_human(data: Dict[str, Any], memory_claim: Optional[Dict[str, Any]] = 
         lines.append("Memory-claim validation:")
         lines.append(f"  status  : {memory_claim['status']}")
         lines.append(f"  message : {memory_claim['message']}")
+        # Rail r2 P2-2: say WHICH ledger the verdict is about. Only when
+        # a second ledger is on screen — audit-only output is unchanged.
+        if data.get("source") is not None:
+            lines.append(
+                "  scope   : validates the AUDIT total (SECONDARY); the "
+                "transcripts total above is the PRIMARY figure"
+            )
 
     return "\n".join(lines)
 
@@ -1909,6 +2079,23 @@ def build_parser() -> argparse.ArgumentParser:
                         "~/.claude/projects/<cwd-slug>; env override "
                         "CEO_NATIVE_USAGE_DIR)."
                     ))
+    # PLAN-186 W0 (AC-1b) — the two-source surface.
+    sp.add_argument("--source", choices=SOURCE_CHOICES, default="both",
+                    help=(
+                        "Which ledger to report. 'transcripts' = "
+                        "harness-native message.usage (PRIMARY, "
+                        "cache-aware); 'audit' = the governance audit "
+                        "log (SECONDARY, byte-identical to the "
+                        "pre-PLAN-186 output); 'both' (default) prints "
+                        "them labelled, side by side."
+                    ))
+    sp.add_argument("--transcripts-root", metavar="PATH", default=None,
+                    help=(
+                        "Transcripts corpus root. Default: $%s, else the "
+                        "shared _lib.runtime_paths resolver. Distinct "
+                        "from --native-root, which feeds the older "
+                        "--native cross-check." % ROOT_ENV
+                    ))
     return p
 
 
@@ -1931,6 +2118,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         args.benchmarks = False
         args.native = False
         args.native_root = None
+        args.source = "both"
+        args.transcripts_root = None
 
     if args.subcommand != "summary":
         sys.stderr.write(f"budget-summary: unknown subcommand {args.subcommand!r}\n")
@@ -1953,19 +2142,107 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     audit_dir = Path(args.audit_dir) if args.audit_dir else None
 
-    data = rollup(
-        audit_dir=audit_dir,
-        plan_filter=args.plan_id,
-        since=since_delta,
-        by_wave=args.by_wave,
-    )
-    data["since"] = args.since
+    # Rail r3 P2-1: ONE wall clock for both ledgers. `rollup()` captures
+    # its own `now` internally; taking a second one after it returns let
+    # a record land inside the audit window and outside the transcripts
+    # window while both blocks printed the same `--since`.
+    _now = datetime.now(timezone.utc)
+
+    # PLAN-186 W0 (AC-1b): the PRIMARY source. `--source audit` adds NO
+    # key to `data`, which is what keeps that rendering byte-identical.
+    source = getattr(args, "source", "audit")
+    # Rail r1 P1-2: the transcript corpus carries NO plan field (the same
+    # limitation the --native cross-check hit in S306). A project-wide
+    # transcripts total printed as PRIMARY beside a plan-scoped audit
+    # block is the wrong number for the plan that was asked about. Under
+    # --plan-id it is suppressed; an EXPLICIT --source transcripts there
+    # is a named refusal, never a silently unscoped answer.
+    if source != "audit" and getattr(args, "plan_id", None):
+        if source == "transcripts":
+            sys.stderr.write(
+                "budget-summary: --source transcripts cannot be scoped "
+                "by --plan-id (the transcript corpus has no plan "
+                "field); drop one of the two flags\n"
+            )
+            return 2
+        sys.stderr.write(
+            "budget-summary: transcripts source suppressed under "
+            "--plan-id (the transcript corpus has no plan field; run "
+            "without --plan-id to see it)\n"
+        )
+        source = "audit"
+    # Rail r2 P2-2: --validate-memory-claim compares the AUDIT total
+    # against CLAUDE.md's claim band; under --source transcripts there is
+    # no audit total to validate, and returning 'unknown' would look like
+    # a verdict. Named refusal instead.
+    if source == "transcripts" and getattr(
+        args, "validate_memory_claim", False
+    ):
+        sys.stderr.write(
+            "budget-summary: --validate-memory-claim validates the AUDIT "
+            "total and cannot run under --source transcripts; use "
+            "--source both or audit\n"
+        )
+        return 2
+    if source == "transcripts":
+        # Rail S341 (A): --by-wave shapes the AUDIT rollup (wave_hint
+        # on agent_spawn rows). With rollup() skipped there is no block
+        # to shape, so the flag is DROPPED -- named on stderr, never
+        # silently swallowed, exactly like the two co-reports below.
+        if getattr(args, "by_wave", False):
+            sys.stderr.write(
+                "budget-summary: --by-wave shapes the AUDIT rollup and "
+                "is dropped under --source transcripts (the transcript "
+                "corpus has no wave field); use --source both or "
+                "audit\n"
+            )
+        data: Dict[str, Any] = {"since": args.since}
+    else:
+        data = rollup(
+            audit_dir=audit_dir,
+            plan_filter=args.plan_id,
+            since=since_delta,
+            by_wave=args.by_wave,
+            # Rail S341 r1 [P2]: capturing `_now` and letting rollup()
+            # take its own clock delivers HALF of D10 -- a record on the
+            # window boundary could still land inside one ledger and
+            # outside the other while both blocks print the same --since.
+            now=_now,
+        )
+        data["since"] = args.since
+    if source != "audit":
+        data["source"] = source
+        data["transcripts"] = collect_transcripts(
+            root_arg=getattr(args, "transcripts_root", None),
+            cutoff=(
+                _now - since_delta if since_delta is not None else None
+            ),
+            audit_override=(
+                source == "both"
+                and _tx_audit_pinned(
+                    str(audit_dir) if audit_dir is not None else None
+                )
+            ),
+        )
 
     # PLAN-133 C4 — default-OFF benchmark co-report. Enabled by --benchmarks
     # or CEO_BUDGET_BENCHMARKS=1. When OFF, output is byte-for-byte unchanged.
     benchmarks_on = bool(getattr(args, "benchmarks", False)) or (
         os.environ.get("CEO_BUDGET_BENCHMARKS", "") == "1"
     )
+    # Both co-reports are AUDIT-side; under --source transcripts there is
+    # no audit rollup to append them to. Rail S341 (A): a REQUESTED
+    # block that vanishes with rc 0 and an empty stderr is the shape
+    # this pack removed everywhere else -- so it is dropped by NAME,
+    # mirroring the CEO_NATIVE_COST_DISABLE / --plan-id lines below.
+    if source == "transcripts":
+        if benchmarks_on:
+            sys.stderr.write(
+                "budget-summary: --benchmarks is an AUDIT-side "
+                "co-report and is dropped under --source transcripts; "
+                "use --source both or audit\n"
+            )
+        benchmarks_on = False
     if benchmarks_on:
         data["benchmarks"] = benchmark_rollup(
             audit_dir=audit_dir,
@@ -1980,6 +2257,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     native_on = bool(getattr(args, "native", False)) or (
         os.environ.get("CEO_BUDGET_NATIVE", "") == "1"
     )
+    if source == "transcripts":
+        if native_on:
+            sys.stderr.write(
+                "budget-summary: --native is an AUDIT-side cross-check "
+                "and is dropped under --source transcripts; use "
+                "--source both or audit\n"
+            )
+        native_on = False
     # Kill-switch (W1.2-5b, env-inventory.json): dominates the opt-in.
     if native_on and os.environ.get("CEO_NATIVE_COST_DISABLE", "") == "1":
         native_on = False

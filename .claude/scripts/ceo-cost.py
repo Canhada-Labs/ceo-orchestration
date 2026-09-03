@@ -47,6 +47,7 @@ Exit codes::
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -447,6 +448,180 @@ def aggregate(
 
 
 # ---------------------------------------------------------------------------
+# PLAN-186 W0 (AC-1b) — transcripts as the PRIMARY cost source
+# ---------------------------------------------------------------------------
+#
+# The audit log is a GOVERNANCE ledger (agent_spawn rows; tokens_in/out on
+# them are best-effort and frequently absent). The real token ledger is the
+# harness-native transcript corpus — `message.usage` per assistant turn —
+# which `.claude/scripts/ceo-cost-transcripts.py` reads with the full
+# input / output / cache-read / cache-write-5m / cache-write-1h split and
+# per-model prices. This module consumes that instrument through its
+# programmatic API and prints BOTH sources, labelled, side by side.
+# `--source audit` restores the pre-PLAN-186 rendering byte-for-byte.
+#
+# SCOPE NOTE (deliberate, not an oversight): this repo carries THREE
+# independent pricing tables — `ceo-cost.py::_DEFAULT_PRICING`, the model
+# registry behind `budget-summary.py::compute_cost_usd`, and the
+# instrument's `_EMBEDDED_PRICING` / `cost-table.yaml` loader. Unifying them
+# is a separate wave. This integration only REUSES what the instrument
+# already exposes: the transcripts block is priced by the instrument, the
+# audit block by whatever priced it before, and each block says so.
+#
+# The loader below is the one thing that cannot live in the instrument: its
+# filename is hyphenated, so every caller needs its own importlib bootstrap.
+# Everything else (root resolution, collection, rendering) is delegated, so
+# the two callers cannot drift apart.
+
+_TRANSCRIPTS_MODULE_NAME = "ceo_cost_transcripts"
+_TRANSCRIPTS_FILENAME = "ceo-cost-transcripts.py"
+
+
+def load_transcripts_instrument():
+    """Import `ceo-cost-transcripts.py` from next to this file, or None.
+
+    Fail-soft by construction: an unimportable instrument degrades the
+    primary source to a labelled note, it never breaks the audit rollup.
+    """
+    cached = sys.modules.get(_TRANSCRIPTS_MODULE_NAME)
+    if cached is not None:
+        return cached
+    src = Path(__file__).resolve().parent / _TRANSCRIPTS_FILENAME
+    if not src.is_file():
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location(
+            _TRANSCRIPTS_MODULE_NAME, src
+        )
+        if spec is None or spec.loader is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        # Registered BEFORE exec_module: with `from __future__ import
+        # annotations`, @dataclass resolves sys.modules[cls.__module__] at
+        # class-definition time and blows up on a missing entry.
+        sys.modules[_TRANSCRIPTS_MODULE_NAME] = mod
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        sys.modules.pop(_TRANSCRIPTS_MODULE_NAME, None)
+        return None
+
+
+#: Resolved ONCE, from the instrument, so the two callers cannot publish a
+#: different `--source` domain or a different banner than the block they
+#: render. The literals are a fail-soft fallback for a missing instrument
+#: (argparse needs a concrete tuple at parser-build time) and are asserted
+#: equal to the instrument's in test_ceo_cost_integration.py.
+_TX_MODULE = load_transcripts_instrument()
+SOURCE_CHOICES = (
+    _TX_MODULE.SOURCE_CHOICES
+    if _TX_MODULE is not None
+    else ("transcripts", "audit", "both")
+)
+AUDIT_BANNER = (
+    _TX_MODULE.AUDIT_BANNER
+    if _TX_MODULE is not None
+    else "=== SOURCE: AUDIT LOG (governance ledger -- SECONDARY) ==="
+)
+ROOT_ENV = (
+    _TX_MODULE.ROOT_ENV
+    if _TX_MODULE is not None
+    else "CEO_COST_TRANSCRIPTS_DIR"
+)
+
+
+def transcripts_root(root_arg: Optional[str] = None) -> Optional[Path]:
+    """Resolve the transcripts corpus root (flag > env > shared resolver)."""
+    mod = load_transcripts_instrument()
+    if mod is None:
+        return Path(root_arg) if root_arg else None
+    return mod.resolve_root(root_arg)
+
+
+def _tx_audit_pinned(path_arg: Optional[str] = None) -> bool:
+    """True when the SECONDARY (audit) ledger was pointed at a specific
+    place — by flag or by CEO_AUDIT_LOG_PATH / CEO_AUDIT_LOG_DIR. Rail r3
+    P1-1: a flag is not the only carrier, and the cross-project pairing only
+    EXISTS when both ledgers are on screen.
+    """
+    mod = load_transcripts_instrument()
+    if mod is None:
+        return bool(path_arg)
+    return mod.audit_source_is_pinned(path_arg)
+
+
+def _audit_path_is_out_of_project(resolved: Path) -> bool:
+    """True when the RESOLVED audit log lives outside this project's
+    state dir.
+
+    Rail S341 r2 [P1]: `default_log_path()` has a sanctioned fallback to
+    the pre-migration LEGACY state dir when this project's scoped log
+    does not exist yet. That route sets NO carrier, so
+    `_tx_audit_pinned()` cannot see it — yet the transcripts resolver
+    still returns THIS project's corpus, which is exactly the
+    cross-project pairing the D8 guard refuses. Asking about the
+    resolved path closes the hole a carrier-only question leaves open.
+
+    Fail-soft: an unresolvable path is NOT reported as a pin, so a
+    filesystem oddity degrades to the pre-existing behaviour instead of
+    suppressing the primary block.
+    """
+    try:
+        return (
+            Path(resolved).resolve().parent
+            != _rp.runtime_state_dir().resolve()
+        )
+    except Exception:
+        return False
+
+
+#: `ceo-cost`'s audit buckets vs the instrument's dimensions. The transcript
+#: corpus carries no `skill` field (that is an audit-log-only annotation), so
+#: `--by-skill` degrades to the role split WITH A NOTE rather than inventing
+#: a dimension.
+_BUCKET_TO_TRANSCRIPT_DIM = {
+    "by-model": "model",
+    "by-day": "day",
+    "by-session": "session",
+    "by-skill": "role",
+}
+
+
+def collect_transcripts(
+    root_arg: Optional[str] = None,
+    cutoff: Optional[datetime] = None,
+    bucket: str = "by-model",
+    audit_override: bool = False,
+) -> Dict[str, Any]:
+    """Primary-source rollup, or a `{"available": False, "reason": ...}` note.
+
+    `audit_override` says the SECONDARY source was pointed at an explicit
+    path (`--log`); with no explicit transcripts root that pairing crosses
+    projects and is refused by name (rail r2 P1-1).
+    """
+    mod = load_transcripts_instrument()
+    if mod is None:
+        return {
+            "available": False,
+            "reason": "instrument ceo-cost-transcripts.py is not importable",
+        }
+    dim = _BUCKET_TO_TRANSCRIPT_DIM.get(bucket, "model")
+    note = None
+    if bucket == "by-skill":
+        note = (
+            "note: the transcript corpus carries no skill field "
+            "(audit-log-only annotation) - showing the role split instead."
+        )
+    return mod.collect(
+        root_arg=root_arg,
+        cutoff=cutoff,
+        by=dim,
+        note=note,
+        audit_override=audit_override,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Rendering
 # ---------------------------------------------------------------------------
 
@@ -467,9 +642,34 @@ def render_text(
     agg: Dict[str, Any],
     bucket: str,
     since_label: str,
+    transcripts: Optional[Dict[str, Any]] = None,
+    source: str = "audit",
 ) -> str:
-    """Render text-table output."""
+    """Render text-table output.
+
+    `source` selects which of the two ledgers is rendered (PLAN-186 W0,
+    AC-1b). With the default `"audit"` the output is byte-for-byte the
+    pre-integration rendering — no banner, no extra line — which is what
+    the frozen-literal regression test pins.
+    """
     out: List[str] = []
+
+    if source in ("transcripts", "both"):
+        mod = load_transcripts_instrument()
+        if mod is None:
+            out.append(
+                "transcripts source UNAVAILABLE: instrument "
+                "ceo-cost-transcripts.py is not importable"
+            )
+        else:
+            out.extend(mod.render_block(transcripts))
+        out.append("")
+    if source == "transcripts":
+        return "\n".join(out)
+    if source == "both":
+        out.append(AUDIT_BANNER)
+        out.append("")
+
     totals = agg["totals"]
 
     out.append(f"since={since_label}  by={bucket}")
@@ -553,8 +753,20 @@ def render_text(
     return "\n".join(out)
 
 
-def render_json(agg: Dict[str, Any]) -> str:
-    return json.dumps(agg, indent=2, sort_keys=True, default=str)
+def render_json(
+    agg: Dict[str, Any],
+    transcripts: Optional[Dict[str, Any]] = None,
+    source: str = "audit",
+) -> str:
+    # `--source audit` keeps the historical top-level shape EXACTLY (no
+    # new keys); `both` keeps every audit key and ADDS the primary source
+    # beside it, so existing JSON consumers never break.
+    if source == "audit":
+        return json.dumps(agg, indent=2, sort_keys=True, default=str)
+    payload: Dict[str, Any] = {} if source == "transcripts" else dict(agg)
+    payload["source"] = source
+    payload["transcripts"] = transcripts
+    return json.dumps(payload, indent=2, sort_keys=True, default=str)
 
 
 # ---------------------------------------------------------------------------
@@ -1086,6 +1298,28 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Aggregate across rotated audit-log*.jsonl siblings",
     )
+    # --- PLAN-186 W0 (AC-1b) two-source flags -----------------------------
+    p.add_argument(
+        "--source",
+        choices=SOURCE_CHOICES,
+        default="both",
+        help=(
+            "Which ledger to report. 'transcripts' = harness-native "
+            "message.usage (PRIMARY, cache-aware); 'audit' = the "
+            "governance audit log (SECONDARY, byte-identical to the "
+            "pre-PLAN-186 output); 'both' (default) prints them "
+            "labelled, side by side."
+        ),
+    )
+    p.add_argument(
+        "--transcripts-root",
+        default=None,
+        help=(
+            "Transcripts corpus root (the dir holding <session>.jsonl + "
+            "<session>/subagents/**). Default: $%s, else the shared "
+            "_lib.runtime_paths resolver." % ROOT_ENV
+        ),
+    )
     # --- PLAN-040 streaming flags (ADR-061) --------------------------------
     p.add_argument(
         "--stream",
@@ -1145,6 +1379,24 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # --- PLAN-040: streaming path -----------------------------------------
     if args.stream:
+        # Rail r2 P2-1: stream mode tails the AUDIT log only. Emitting
+        # the secondary estimate while the caller asked for the primary
+        # source would be the wrong number under the right flag.
+        stream_source = getattr(args, "source", "audit")
+        if stream_source == "transcripts":
+            print(
+                "ceo-cost: --stream tails the audit log only and cannot "
+                "stream the transcripts source; drop --stream or use "
+                "--source audit",
+                file=sys.stderr,
+            )
+            return 2
+        if stream_source != "audit":
+            print(
+                "ceo-cost: --stream tails the AUDIT log only (SECONDARY "
+                "source); the transcripts source is not streamed",
+                file=sys.stderr,
+            )
         if os.environ.get("CEO_COST_STREAMING") == "0":
             print(
                 "CEO_COST_STREAMING=0 kill-switch active; streaming disabled",
@@ -1173,8 +1425,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
 
     # --- batch aggregation (pre-PLAN-040 path, unchanged) -----------------
+    source = getattr(args, "source", "audit")
     paths = discover_logs(log_path, args.include_rotated)
-    if not paths:
+    if not paths and source != "transcripts":
         print(f"audit log not found: {log_path}", file=sys.stderr)
         return 1
 
@@ -1187,10 +1440,40 @@ def main(argv: Optional[List[str]] = None) -> int:
     entries = read_entries(paths)
     agg = aggregate(entries, since=since, pricing=pricing)
 
+    transcripts: Optional[Dict[str, Any]] = None
+    if source in ("transcripts", "both"):
+        transcripts = collect_transcripts(
+            root_arg=getattr(args, "transcripts_root", None),
+            cutoff=since,
+            bucket=args.bucket,
+            audit_override=(
+                # Rail r3 P1-1: the cross-project pairing only EXISTS
+                # when both ledgers are on screen, and the audit one can
+                # be redirected by env as well as by --log.
+                # Rail S341 r2 [P1]: a carrier is not the only way the
+                # audit ledger leaves this project — default_log_path()
+                # falls back to the pre-migration LEGACY dir with no
+                # carrier set at all. Ask the resolved path too.
+                source == "both"
+                and (
+                    _tx_audit_pinned(args.log)
+                    or _audit_path_is_out_of_project(log_path)
+                )
+            ),
+        )
+
     if args.format == "json":
-        print(render_json(agg))
+        print(render_json(agg, transcripts=transcripts, source=source))
     else:
-        print(render_text(agg, args.bucket, args.since))
+        print(
+            render_text(
+                agg,
+                args.bucket,
+                args.since,
+                transcripts=transcripts,
+                source=source,
+            )
+        )
     return 0
 
 

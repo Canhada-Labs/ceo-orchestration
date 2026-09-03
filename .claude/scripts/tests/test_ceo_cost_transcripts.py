@@ -20,6 +20,7 @@ from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from unittest import mock
 
 # ``_lib.testing`` (TestEnvContext) — same bootstrap as
 # test_a4_pricing_doctrine.py / test_check_test_env_hygiene.py.
@@ -157,16 +158,77 @@ class NormalizeAndPricingTests(TestEnvContext):
         self.assertEqual(result.table, cct._EMBEDDED_PRICING)
         self.assertIn("embedded", result.source)
 
-    def test_load_pricing_default_applies_ratified_sonnet5_override(self):
-        # Default path (pricing_arg=None) resolves the in-repo
-        # cost-table.yaml, which still carries the pre-intro $3/$15
-        # Sonnet 5 row (S337/S338 note) — the ratified $2/$10 correction
-        # must be layered on top when the DEFAULT path is used.
-        result = cct.load_pricing(None)
+    def _default_table(self, body: str):
+        """Run load_pricing(None) against a SYNTHETIC default table.
+
+        `_SCRIPT_DIR` is read at call time, so pointing it at the tmp dir
+        makes `pricing_arg=None` resolve there: the DEFAULT-path branch
+        runs, without the test depending on what the real in-tree
+        cost-table.yaml happens to say today.
+        """
+        (self.project_dir / "cost-table.yaml").write_text(
+            body, encoding="utf-8"
+        )
+        with mock.patch.object(cct, "_SCRIPT_DIR", self.project_dir):
+            return cct.load_pricing(None)
+
+    def test_default_table_with_stale_row_gets_the_ratified_correction(self):
+        # Achado B (S341): the correction exists for THIS case -- a default
+        # table whose row differs from the ratified rate.
+        result = self._default_table(
+            "models:\n"
+            "  claude-sonnet-5:\n"
+            "    input_per_mtok: 3.00\n"
+            "    output_per_mtok: 15.00\n"
+        )
         self.assertFalse(result.used_fallback)
         self.assertEqual(result.table["claude-sonnet-5"]["input_per_mtok"], 2.00)
         self.assertEqual(result.table["claude-sonnet-5"]["output_per_mtok"], 10.00)
-        self.assertIn("ratified correction", result.source)
+        self.assertIn(
+            "ratified correction (claude-sonnet-5 -> $2/$10", result.source
+        )
+        self.assertNotIn("NOT needed", result.source)
+
+    def test_default_table_already_ratified_is_not_corrected(self):
+        # The S340 residual: overwriting a row that already matches printed
+        # a "ratified correction" that corrected nothing, and would mask a
+        # legitimate refresh of the table the day one lands.
+        result = self._default_table(
+            "models:\n"
+            "  claude-sonnet-5:\n"
+            "    input_per_mtok: 2.00\n"
+            "    output_per_mtok: 10.00\n"
+        )
+        self.assertFalse(result.used_fallback)
+        self.assertEqual(result.table["claude-sonnet-5"]["input_per_mtok"], 2.00)
+        self.assertIn(
+            "ratified correction NOT needed for claude-sonnet-5", result.source
+        )
+        self.assertNotIn("ratified correction (", result.source)
+
+    def test_refreshed_default_table_is_not_masked(self):
+        # The consequence the gate exists for: a table refreshed to a NEW
+        # rate is still corrected while the override IS the ratified
+        # truth -- and the source NAMES what it did, so a stale override
+        # is visible instead of silent.
+        result = self._default_table(
+            "models:\n"
+            "  claude-sonnet-5:\n"
+            "    input_per_mtok: 2.50\n"
+            "    output_per_mtok: 12.50\n"
+        )
+        self.assertEqual(result.table["claude-sonnet-5"]["input_per_mtok"], 2.00)
+        self.assertIn("ratified correction (claude-sonnet-5", result.source)
+
+    def test_in_tree_default_table_is_already_ratified(self):
+        # Ties the prose to the tree: since b6dce78 the shipped
+        # cost-table.yaml carries the ratified row, so the real default
+        # path takes the no-op branch. If this ever flips, the docstring
+        # and the epilog are wrong again and this test says so.
+        result = cct.load_pricing(None)
+        self.assertFalse(result.used_fallback)
+        self.assertEqual(result.table["claude-sonnet-5"]["input_per_mtok"], 2.00)
+        self.assertIn("NOT needed", result.source)
 
     def test_load_pricing_explicit_path_not_overridden(self):
         custom = self.project_dir / "custom-pricing.yaml"
