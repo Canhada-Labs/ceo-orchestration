@@ -17,12 +17,14 @@ import io
 import json
 import os
 import sys
+import textwrap
 import time
 import types
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 from unittest import mock
 
 _HOOKS_DIR = Path(__file__).resolve().parents[1]
@@ -37,6 +39,34 @@ import _lib  # noqa: E402
 from _lib.testing import TestEnvContext  # noqa: E402
 
 _SENTINEL = object()
+
+#: Budget WALL-CLOCK que ``_DeltaBase._observe`` injeta na observacao.
+#: Producao capa a passada de stat em 50 ms e o reverse-scan da ancora
+#: em 100 ms, os dois medidos com ``time.monotonic()`` — WALL clock,
+#: nao CPU. Um runner carregado estoura QUALQUER um dos dois sobre um
+#: diretorio de 2 entradas, e as duas exaustoes degradam para
+#: ``names == []`` (foi assim que o main ficou VERMELHO em ba15c71).
+#:
+#: O valor e CALIBRADO, nao chutado. Uma observacao completa (2 topicos
+#: + ancora assinada) foi MEDIDA em n=30 nesta maquina: p50 0,331 ms,
+#: max 7,932 ms. Logo os 50 ms de producao sobrevivem a um runner so
+#: ~6x mais lento que o pior caso local — DENTRO do envelope de drift
+#: ja documentado para este repo (hook p50 local 77 ms vs 209-435 ms na
+#: CI). 1 h de budget da ~450.000x de margem, e o primeiro chute de 60 s
+#: (~7.500x) ja foi REPROVADO pelo controle positivo de relogio x20000.
+#: O teto e o sentinela de relogio dos testes que mockam
+#: ``time.monotonic`` (1e9 s), DERIVADO por ast em
+#: ``test_injected_budget_cannot_outrun_the_mocked_clock`` — 3600 s fica
+#: 6 ordens de grandeza abaixo dele.
+#:
+#: Isto NAO enfraquece asercao nenhuma: remove uma variavel de ambiente
+#: que nenhum teste aqui pretende exercitar (o budget e um CAP, nao um
+#: sleep — um budget maior nao alonga run nenhum). O valor de PRODUCAO
+#: fica intocado: este pack nao edita ``SessionEnd.py`` (KERNEL).
+#: FALSO-NEGATIVO DECLARADO: um runner >450.000x mais lento ainda
+#: esfomearia a passada — nesse caso a mensagem NOMEIA o outcome (item
+#: 2 desta cura), entao o modo de falha e diagnosticavel, nao mudo.
+_TEST_WALL_BUDGET_MS = 3600000
 
 
 @contextmanager
@@ -141,6 +171,28 @@ class _DeltaBase(TestEnvContext):
             Path.home() / ".claude" / "projects" / self.slug / "memory"
         )
         self.memory_dir.mkdir(parents=True, exist_ok=True)
+        # CEO refutation of pack `memdelta-flake` (S341): the `_observe` seam
+        # covers the ONE call site of `_memory_delta_observed`, but
+        # `_session_start_ts` — which owns `_MEMORY_DELTA_ANCHOR_BUDGET_MS` —
+        # is called DIRECTLY from 13 sites in this file, and those stayed on
+        # production's wall clock. MEASURED with both budgets starved to 0:
+        # 23 failures before the pack, 3 after it, 0 after this. Patching the
+        # module here covers every call site, present and future, without
+        # touching 13 of them — a per-site edit would leave the 14th blind.
+        # SCOPE, narrowed by measurement (not by taste): ONLY the anchor
+        # budget is patched here. Patching the SCAN budget too broke
+        # `test_slow_final_stat_is_error`, which sleeps 80 ms to prove a slow
+        # final stat yields outcome="error" and therefore NEEDS production's
+        # 50 ms — it opts out via `_observe(budget_ms=None)`, an opt-out a
+        # setUp-level patch silently overrides. The scan budget already has
+        # its seam in `_observe`; the anchor budget had none, which is exactly
+        # the gap. A test that deliberately starves the anchor must patch it
+        # itself, inside the test, where the intent is visible.
+        _b = mock.patch.object(
+            SessionEnd, "_MEMORY_DELTA_ANCHOR_BUDGET_MS", _TEST_WALL_BUDGET_MS
+        )
+        _b.start()
+        self.addCleanup(_b.stop)
 
     # -- helpers ----------------------------------------------------------
     def _mkmem(self, name: str, mtime: float) -> Path:
@@ -226,8 +278,63 @@ class _DeltaBase(TestEnvContext):
         with open(log_path, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row) + "\n")
 
-    def _observe(self):
-        return SessionEnd._memory_delta_observed(self.repo_root, self.SESSION_ID)
+    def _observe(self, budget_ms: Optional[int] = _TEST_WALL_BUDGET_MS):
+        """A observacao sob teste, com os budgets WALL-CLOCK injetados.
+
+        Este e o UNICO call site de ``_memory_delta_observed`` neste
+        arquivo (DERIVADO, nao recordado: ``grep -c
+        '_memory_delta_observed('`` == 1), logo a costura de relogio
+        pertence AQUI e nao ao helper de uma classe — flake por carga
+        de runner e propriedade de toda observacao, nao dos testes de
+        wire. As duas rotas de degradacao foram MEDIDAS: scan
+        esfomeado => ``outcome="error"``, ``anchor_source="chain"``;
+        ancora esfomeada => ``outcome="start_unknown"``,
+        ``anchor_source="none"``. As duas devolvem ``names == []`` —
+        o sintoma exato de ba15c71 (``'zz-canary-topic.md' not found
+        in []``), e por isso os DOIS budgets sao injetados.
+
+        ``budget_ms=None`` significa "quem chama e dono do relogio", e
+        e reservado aos DOIS testes que exercitam o budget de verdade.
+        O conjunto foi DERIVADO, nao recordado: aplicando o patch
+        interno da cura sobre TODAS as chamadas do arquivo, falharam
+        exatamente ``test_slow_final_stat_is_error`` (dorme 80 ms
+        acima do cap real de 50 ms) e
+        ``test_budget_exhaustion_is_not_written`` (patcha a constante
+        para -1); os outros 58 passaram sem mudanca. Os tres testes
+        que mockam ``time.monotonic`` mantem os dentes de qualquer
+        forma — eles esfomeiam o RELOGIO, nao a constante."""
+        if budget_ms is None:
+            return SessionEnd._memory_delta_observed(
+                self.repo_root, self.SESSION_ID
+            )
+        with mock.patch.object(
+            SessionEnd, "_MEMORY_DELTA_SCAN_BUDGET_MS", budget_ms
+        ), mock.patch.object(
+            SessionEnd, "_MEMORY_DELTA_ANCHOR_BUDGET_MS", budget_ms
+        ):
+            return SessionEnd._memory_delta_observed(
+                self.repo_root, self.SESSION_ID
+            )
+
+    @staticmethod
+    def _delta_diag(delta) -> str:
+        """Digest de UMA linha de uma observacao, para ``msg=``.
+
+        O log de CI da canaria reprovada mostrava so ``[]``, que nao
+        distingue uma passada de stat esfomeada (``outcome="error"``)
+        de uma ancora irresoluvel (``outcome="start_unknown"``) — duas
+        causas, uma mensagem, e nenhuma triagem sem re-rodar. O digest
+        nomeia OUTCOME e ANCHOR_SOURCE, que sao exatamente o
+        discriminante medido. Sem path e sem slug: esses dois sao
+        asseridos AUSENTES do wire neste mesmo arquivo, e uma
+        mensagem de falha nao e lugar de reintroduzi-los."""
+        return (
+            "outcome=%r anchor_source=%r files_count=%r "
+            "modified_count=%r index_modified=%r names=%r"
+            % (delta.get("outcome"), delta.get("anchor_source"),
+               delta.get("files_count"), delta.get("modified_count"),
+               delta.get("index_modified"), delta.get("names"))
+        )
 
     def _chain_rows(self, action: str) -> list:
         """Rows of ``action`` on the isolated chain, in file order — read
@@ -460,8 +567,16 @@ class TestSpecSurface(_DeltaBase):
             return st
 
         with mock.patch.object(Path, "lstat", _slow_lstat):
-            d = self._observe()
-        self.assertEqual(d["outcome"], "error")
+            # budget_ms=None: ESTE teste e dono do relogio — dorme 80 ms
+            # acima do cap REAL de 50 ms, entao precisa do valor de
+            # producao. Um runner carregado so torna a premissa MAIS
+            # verdadeira (sleep > budget), nunca menos.
+            d = self._observe(budget_ms=None)
+        self.assertEqual(
+            d["outcome"], "error",
+            "stat final acima do budget nao pode virar written/absent; "
+            + self._delta_diag(d),
+        )
 
     def test_role_preamble_name_dropped(self) -> None:
         """Rail r5 P1-b — a 2a perna do gate (injection-patterns scan)
@@ -523,9 +638,14 @@ class TestSpecSurface(_DeltaBase):
         self._mkmem("t2.md", now)
         self._seed_session_start(now - 3600)
         with mock.patch.object(SessionEnd, "_MEMORY_DELTA_SCAN_BUDGET_MS", -1):
-            d = self._observe()
-        self.assertEqual(d["outcome"], "error")
-        self.assertNotEqual(d["outcome"], "written")
+            # budget_ms=None: o patch de FORA e o sujeito do teste; sem
+            # o opt-out a injecao interna do `_observe` o sobrescreveria
+            # e o teste morreria em silencio (mediria producao).
+            d = self._observe(budget_ms=None)
+        self.assertEqual(
+            d["outcome"], "error", self._delta_diag(d)
+        )
+        self.assertNotEqual(d["outcome"], "written", self._delta_diag(d))
 
     def test_budget_exhaustion_preserves_partial_counts(self) -> None:
         """Rail r6 P2-e — a timeout AFTER observations keeps every count
@@ -552,6 +672,92 @@ class TestSpecSurface(_DeltaBase):
         self.assertEqual(d["outcome"], "error")
         self.assertEqual(d["files_count"], 1)
         self.assertEqual(d["modified_count"], 1)
+
+    def test_budget_exhaustion_leaves_names_empty_not_raw(self) -> None:
+        """DECISAO (S340): o retorno de timeout do loop de entradas
+        copiar apenas os COUNTS e deixar ``names == []`` e
+        INTENCIONAL, nao uma omissao.
+
+        ``names`` nao e uma vista de ``modified``: e a projecao
+        SANITIZADA construida por um loop POSTERIOR
+        (``_sanitize_memory_basename`` derruba basenames
+        hostis/injection-shaped — varios testes desta classe
+        exercitam esse gate). No deadline do loop de entradas aquele
+        loop ainda nao rodou, entao ``[]`` e o conjunto sanitizado
+        VERDADEIRO; "consertar" producao copiando ``modified`` para
+        ``names`` poria basenames NAO sanitizados num campo cujo
+        contrato e "sanitizado" — regressao de seguranca, nao cura. O
+        docstring de producao diz "partial COUNTS, plural" de
+        proposito. Este teste PINA a invariante para que um conserto
+        bem-intencionado futuro fique VERMELHO: os counts sobrevivem,
+        os names nao, e a chave esta sempre PRESENTE."""
+        now = time.time()
+        self._mkmem("t1.md", now)
+        self._mkmem("t2.md", now)
+        # mesma escada do teste acima: o 4o read do relogio estoura,
+        # ja com uma entrada contada como modificada.
+        seq = iter([0.0, 0.0, 0.0])
+
+        def _mono():
+            try:
+                return next(seq)
+            except StopIteration:
+                return 1e9
+
+        with mock.patch.object(
+            SessionEnd, "_session_start_ts",
+            return_value=(now - 3600.0, "chain"),
+        ), mock.patch.object(SessionEnd.time, "monotonic", _mono):
+            d = self._observe()
+        self.assertIn("names", d, self._delta_diag(d))
+        self.assertGreaterEqual(
+            d["modified_count"], 1,
+            "controle anti-vacuo: sem uma entrada modificada COLETADA "
+            "a asercao de names vazio seria trivial; "
+            + self._delta_diag(d),
+        )
+        self.assertEqual(
+            d["names"], [],
+            "names e a projecao SANITIZADA, nunca uma copia de "
+            "modified: no deadline do loop de entradas o sanitizador "
+            "ainda nao rodou; "
+            + self._delta_diag(d),
+        )
+
+    def test_injected_budget_cannot_outrun_the_mocked_clock(self) -> None:
+        """Auto-teste do INSTRUMENTO: o budget generoso que ``_observe``
+        injeta tem de ficar ABAIXO do sentinela que os testes de
+        relogio mockado devolvem depois da escada — senao eles param
+        de esgotar e perdem os dentes. O sentinela e DERIVADO da
+        FONTE deles por ast, nunca recordado: um valor digitado de
+        memoria envelhece em silencio."""
+        sentinels = []
+        for meth in (
+            TestSpecSurface.test_budget_exhaustion_preserves_partial_counts,
+            TestSpecSurface.test_name_scan_respects_wall_deadline,
+            TestSpecSurface.test_final_sanitize_exhaustion_is_error,
+        ):
+            tree = ast.parse(textwrap.dedent(inspect.getsource(meth)))
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, (int, float))
+                    and not isinstance(node.value, bool)
+                    and node.value >= 1e6
+                ):
+                    sentinels.append(float(node.value))
+        self.assertTrue(
+            sentinels,
+            "nenhum sentinela de relogio encontrado — a derivacao "
+            "envelheceu (teste renomeado?) e o bound abaixo seria "
+            "VACUO",
+        )
+        self.assertLess(
+            _TEST_WALL_BUDGET_MS / 1000.0, min(sentinels),
+            "budget injetado (%d ms) alcancaria o sentinela %r: os "
+            "testes de exaustao deixariam de esgotar"
+            % (_TEST_WALL_BUDGET_MS, min(sentinels)),
+        )
 
     def test_name_scan_respects_wall_deadline(self) -> None:
         """Rail r6 P2-d — the sanitizer loop is INSIDE the wall-cap: an
@@ -1197,17 +1403,33 @@ class TestWireContract(_DeltaBase):
     }
 
     def _emit_captured(self):
+        """Planta a canaria + o indice, observa, e captura o UNICO evento
+        emitido. A observacao e GUARDADA antes de ir para as asercoes de
+        wire: uma observacao degradada (relogio esfomeado, ancora
+        irresoluvel) faz todo ``assertNotIn`` a jusante passar
+        VACUAMENTE, entao a guarda dispara AQUI, nomeando a rota, em vez
+        de aparecer tres callers depois como ``not found in []``."""
         now = time.time()
         self._mkmem("zz-canary-topic.md", now)
         self._mkmem("MEMORY.md", now)
         self._seed_session_start(now - 3600)
         d = self._observe()
+        self.assertEqual(
+            d["outcome"], "written",
+            "observacao DEGRADADA — as asercoes de wire abaixo "
+            "passariam vacuamente; "
+            + self._delta_diag(d),
+        )
         captured: list = []
         with _stub_audit_emit(captured):
             SessionEnd._emit_session_memory_delta(
                 session_id=self.SESSION_ID, repo_root=self.repo_root, delta=d,
             )
-        self.assertEqual(len(captured), 1)
+        self.assertEqual(
+            len(captured), 1,
+            "esperado EXATAMENTE um evento emitido; "
+            + self._delta_diag(d),
+        )
         return d, captured[0]
 
     def test_no_paths_on_the_wire(self) -> None:
@@ -1216,12 +1438,29 @@ class TestWireContract(_DeltaBase):
         serialized event (positive control: the canary IS in the observed
         names, so its absence on the wire is the emitter's doing)."""
         d, kw = self._emit_captured()
-        self.assertEqual(set(kw), self._EXPECTED_KWARGS)
-        self.assertIn("zz-canary-topic.md", d["names"])
+        self.assertEqual(
+            set(kw), self._EXPECTED_KWARGS,
+            "kwargs set != a lista de caller do §4; %r" % (sorted(kw),),
+        )
+        self.assertIn(
+            "zz-canary-topic.md", d["names"],
+            "canaria anti-vacuo AUSENTE dos names OBSERVADOS — os "
+            "assertNotIn abaixo passariam vacuamente; "
+            + self._delta_diag(d),
+        )
         serialized = json.dumps(kw)
-        self.assertNotIn("zz-canary-topic", serialized)
-        self.assertNotIn(str(self.memory_dir), serialized)
-        self.assertNotIn(self.slug, serialized)
+        self.assertNotIn(
+            "zz-canary-topic", serialized,
+            "basename plantado chegou ao wire: %s" % serialized,
+        )
+        self.assertNotIn(
+            str(self.memory_dir), serialized,
+            "o path do dir de memoria chegou ao wire: %s" % serialized,
+        )
+        self.assertNotIn(
+            self.slug, serialized,
+            "o slug do projeto chegou ao wire: %s" % serialized,
+        )
 
     def test_no_floats_on_the_wire(self) -> None:
         """§7.6 — every numeric kwarg is int (and not bool where an int is
