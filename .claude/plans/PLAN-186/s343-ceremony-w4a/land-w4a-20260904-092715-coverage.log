@@ -1,0 +1,8 @@
+    [todos] |B| scripts+optimizer = 6136, DECLARADO 6122 — a suite mudou de tamanho; atualize o EXPECTED-BASELINE.txt CONSCIENTEMENTE, com a propriedade re-verificada, nunca relaxando o numero
+    [todos] |matriz| = 13612, DECLARADO 13598 — a suite mudou de tamanho; atualize o EXPECTED-BASELINE.txt CONSCIENTEMENTE, com a propriedade re-verificada, nunca relaxando o numero
+  [todos] |A|=7476 |B|=6136 |A&B|=0 |AuB|=13612 |matriz|=13612
+        sha(AuB)=7c4578d943625a6a
+        sha(M)  =7c4578d943625a6a
+  [serial] |A|=494 |B|=452 |A&B|=0 |AuB|=946 |matriz|=946
+        sha(AuB)=98290245961e7285
+        sha(M)  =98290245961e7285

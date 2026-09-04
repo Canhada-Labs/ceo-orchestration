@@ -25,10 +25,21 @@
 #   - COBERTURA re-derivada em HEAD por `pytest --collect-only -q` (a
 #     comparacao e por CONJUNTO de node-ids — sha256 da lista ordenada —,
 #     nunca por contagem: dois conjuntos diferentes podem ter o mesmo
-#     tamanho). Todos: A=7476, B=6122, A∩B=0, A∪B=13598 == matriz 13598.
-#     Recorte `-m 'serial'`: 494 + 452 = 946 == matriz 946. (Os numeros da
+#     tamanho). Todos: A=7476, B=6136, A∩B=0, A∪B=13612 == matriz 13612
+#     (sha 7c4578d943625a6a nos dois lados). Recorte `-m 'serial'`:
+#     494 + 452 = 946 == matriz 946 (sha 98290245961e7285). (Os numeros da
 #     S341 — 7474/6063/13537, serial 924 — descreviam uma arvore mais
 #     antiga; a PROPRIEDADE continua valendo.)
+#     ATUALIZACAO CONSCIENTE 2026-09-04 (S344): o LAND real abortou no V5
+#     sobre HEAD 449f157 com B=6136 / matriz=13612 contra os 6122 / 13598
+#     medidos na sombra em 76578f3. Delta = +14 node-ids, TODOS de
+#     `.claude/scripts/tests/test_ac14_classifier_check_rc.py` (commit
+#     b53fec1, AC-14, landado DEPOIS do congelamento dos materiais em
+#     44c16f4): `git diff --stat 76578f3..HEAD` nas raizes de B devolve SO
+#     esse arquivo, que coleta 14 ids e 0 seriais. Uniao == matriz manteve
+#     (sha identico nos dois recortes); serial inalterado. Numeros
+#     atualizados com a propriedade re-verificada em worktree limpo de
+#     449f157 pelo mesmo bloco Python do V5 (rc=0) — nada relaxado.
 #   - actionlint com os flags EXATOS do step da CI e
 #     `check-action-sha-drift.py --offline`: rc 0 nos dois;
 #   - governanca COMPLETA (sem --fast) 0 erros, verify-counts sem drift,
@@ -55,8 +66,8 @@ EXPECTED_ACTIONLINT_RC=0
 EXPECTED_ACTIONLINT_FLAGS="-S error -e SC2002,SC2012,SC2016,SC2129"
 EXPECTED_ACTION_SHA_DRIFT_RC=0
 EXPECTED_NODEID_HOOKS=7476
-EXPECTED_NODEID_SCRIPTS=6122
-EXPECTED_NODEID_MATRIX=13598
+EXPECTED_NODEID_SCRIPTS=6136
+EXPECTED_NODEID_MATRIX=13612
 EXPECTED_NODEID_OVERLAP=0
 EXPECTED_NODEID_SERIAL_HOOKS=494
 EXPECTED_NODEID_SERIAL_SCRIPTS=452

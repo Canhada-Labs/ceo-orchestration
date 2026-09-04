@@ -5,8 +5,11 @@ e em 3.9 E 3.12, a uniao EXATA dos dois steps mais caros do job `validate`:
 «Run Python hook unit tests (CEO_HOOK_ADAPTER=claude default)» e «Run Python
 script unit tests». A igualdade foi RE-DERIVADA sobre este HEAD — nao citada
 do relatorio da S341, cujos numeros ja descreviam outra arvore: hooks 7476 +
-scripts/optimizer 6122, intersecao 0, uniao 13598 == matriz 13598, com o
-mesmo sha256 da lista ordenada; no recorte `-m 'serial'`, 494 + 452 = 946 ==
+scripts/optimizer 6136, intersecao 0, uniao 13612 == matriz 13612, com o
+mesmo sha256 da lista ordenada (re-derivada DE NOVO no LAND real da S344,
+sobre 449f157: a sombra em 76578f3 dizia 6122/13598 e os +14 node-ids sao o
+teste do AC-14, b53fec1, landado depois do congelamento dos materiais); no
+recorte `-m 'serial'`, 494 + 452 = 946 ==
 946. A comparacao e por CONJUNTO de proposito: um gate que so soma aceitaria
 uma troca 1-por-1 em silencio.
 

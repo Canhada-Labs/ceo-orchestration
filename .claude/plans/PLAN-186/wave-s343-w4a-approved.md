@@ -76,15 +76,18 @@ recortes que a CI executa:
 
 | Recorte | \|A\| (hooks) | \|B\| (scripts+optimizer) | A ∩ B | A ∪ B | Matriz | Igualdade |
 |---|---|---|---|---|---|---|
-| todos | 7 476 | 6 122 | **0** | **13 598** | **13 598** | `sha(U) == sha(M)` |
-| `-m 'not serial'` | 6 982 | 5 670 | **0** | **12 652** | **12 652** | `sha(U) == sha(M)` |
+| todos | 7 476 | 6 136 | **0** | **13 612** | **13 612** | `sha(U) == sha(M)` |
+| `-m 'not serial'` | 6 982 | 5 684 | **0** | **12 666** | **12 666** | `sha(U) == sha(M)` |
 | `-m 'serial'` | 494 | 452 | **0** | **946** | **946** | `sha(U) == sha(M)` |
 
 A comparação é por CONJUNTO de node-ids (sha256 da lista ordenada), nunca por
 contagem: dois conjuntos diferentes podem ter o mesmo tamanho. Os números da
 S341 (7 474 / 6 063 / 13 537, serial 924) descreviam uma árvore mais antiga —
 a suíte cresceu e a PROPRIEDADE continua valendo. **A deleção não é recusada
-por cobertura.**
+por cobertura.** (Re-derivada DE NOVO no LAND real de 2026-09-04, sobre `449f157`, depois que
+os materiais congelados em `44c16f4` envelheceram: a sombra em `76578f3` dizia
+6 122 / 13 598 e os +14 node-ids são o teste do AC-14, `b53fec1`, 0 seriais —
+`s343-ceremony-w4a/EVIDENCE.md` §3-b.)
 
 ## O que esta wave NÃO faz
 

@@ -75,6 +75,41 @@ Os números da S341 eram 7 474 / 6 063 / 13 537 e serial 924. **A suíte
 cresceu**; a propriedade continua valendo. É por isso que o V5 do LAND
 RE-DERIVA em vez de citar.
 
+### 3-b. Re-derivação no LAND real (S344, 2026-09-04 09:27, HEAD `449f157`) — ABORT no V5 e cura do baseline
+
+O primeiro LAND real (dry-run e land; `land-w4a-20260904-092715-*.log` e
+`land-w4a-20260904-092746-*.log`, preservados neste diretório) passou
+G-PRE..G7, V1, V3 e V4 e **abortou no V5**. A propriedade CONTINUOU valendo
+(união == matriz por conjunto, sha idêntico nos dois recortes); o que
+divergiu foi a segunda perna do gate, a contagem DECLARADA:
+
+```
+[todos]  |A|=7476 |B|=6136 |A&B|=0 |AuB|=13612 |matriz|=13612   sha(U)=sha(M)=7c4578d943625a6a
+[serial] |A|=494  |B|=452  |A&B|=0 |AuB|=946   |matriz|=946     sha(U)=sha(M)=98290245961e7285 (inalterado)
+```
+
+Declarado em `EXPECTED-BASELINE.txt`: B=6122, matriz=13598. Delta = **+14
+node-ids em B**, atribuído pela fonte e não por palpite: `git diff --stat
+76578f3..HEAD -- .claude/scripts/tests .claude/scripts/optimizer/tests`
+devolve UM arquivo, `.claude/scripts/tests/test_ac14_classifier_check_rc.py`
+(+644 linhas, commit `b53fec1`, AC-14), que coleta exatamente 14 node-ids e
+0 seriais (`pytest --collect-only -q -p no:cacheprovider` sobre o arquivo,
+em worktree destacado de `449f157`). Os materiais foram congelados em
+`44c16f4` (01:32) e três lands livres da mesma noite (`685868a`, `b53fec1`,
+`37fd85b`) vieram DEPOIS: o baseline envelheceu por construção e o gate fez o
+que existe para fazer — parar em vez de relaxar.
+
+Cura (S344, consciente, com fonte): `EXPECTED_NODEID_SCRIPTS` 6122 → 6136 e
+`EXPECTED_NODEID_MATRIX` 13598 → 13612; `COMMIT-MSG-W4A.txt` e a tabela de
+cobertura do sentinel-draft passam a citar os mesmos números (recorte
+`not serial` MEDIDO no mesmo worktree, não subtraído: 6 982 / 5 684 / 12 666,
+sha 829e9e817588bc10 nos dois lados); nada mais muda (A, serial, patch e
+derivador intocados). O V5 foi replicado com o bloco Python do LAND, byte a byte, em
+worktree destacado de `449f157` com os valores novos: rc=0, «a delecao NAO e
+recusada por cobertura». A cura muda o HEAD e, com ele, o `Anchor-SHA`: o
+sentinel volta ao draft e o Owner re-assina; a assinatura anterior (sobre
+`449f157`) fica inválida por desenho (G1).
+
 ## 4. Lint e forma, na sombra
 
 ```
