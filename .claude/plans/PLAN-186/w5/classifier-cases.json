@@ -1,0 +1,305 @@
+{
+  "schema": 1,
+  "ac": "AC-14 (PLAN-186 W5-US2)",
+  "what": "Worked cases for the «tarefa especificada» classifier. The rows are a FROZEN COPY of PLAN-186 §2b. Provenance is not a one-shot generator (rail round 1 [P2]: an unshippable generator is an unverifiable claim) but a CONTINUOUS re-derivation — check-classifier-cases.py re-parses the §2b table on every run and fails 2B-DRIFT on any cell difference, in the plan, in this fixture or in the doc. The procedure the cases walk is published in docs/task-classifier-2b.md §2 and its `procedure-map` block; the checker binds all three. Citations are (path, anchor) and carry NO line number (S343 v2): a line pin is invalidated by any edit ABOVE it, and .claude/scripts/tests/test_ac14_classifier_check_rc.py verifies this fixture against the shipped tree, so a line pin turns main RED for a fact that never moved. Uniqueness of the anchor inside its file is the location proof; the checker refuses a surviving 'line' key by name.",
+  "checked_by": ".claude/plans/PLAN-186/w5/check-classifier-cases.py",
+  "derived_from": {
+    "plan": ".claude/plans/PLAN-186-orchestrator-operating-model.md",
+    "section": "## 2b.",
+    "doc": "docs/task-classifier-2b.md"
+  },
+  "rows": [
+    {
+      "id": "R1",
+      "artefact_cell": "**DEFINE uma pergunta**: gate, oráculo, instrumento, critério de aceite, refutação, **DESENHO do predicado de um censo**",
+      "model_cell": "`claude-opus-5`",
+      "effort_cell": "`xhigh`"
+    },
+    {
+      "id": "R2",
+      "artefact_cell": "**EXECUTA uma derivação DE TEXTO** com pergunta já fixada: relatório, doc, anchor-exact em prosa/Markdown",
+      "model_cell": "`claude-sonnet-5`",
+      "effort_cell": "`high`"
+    },
+    {
+      "id": "R3",
+      "artefact_cell": "**EXECUTA uma derivação DE CÓDIGO/CONFIG** (`.py`/`.sh`/`.js`/`.yml`/`.json`) com pergunta já fixada, inclusive **censo MECÂNICO** que edita esses formatos (OQ-3)",
+      "model_cell": "`claude-opus-5`",
+      "effort_cell": "`high`"
+    },
+    {
+      "id": "R4",
+      "artefact_cell": "**PESQUISA/LEITURA sob pergunta FIXADA pelo CEO**: ler fontes e devolver claim com citação verificável, sem escolher a pergunta",
+      "model_cell": "`claude-sonnet-5`",
+      "effort_cell": "`high`"
+    },
+    {
+      "id": "R5",
+      "artefact_cell": "VETO (5 arquétipos)",
+      "model_cell": "camada T, decisão de capacidade — ver W1",
+      "effort_cell": "`max`"
+    },
+    {
+      "id": "R6",
+      "artefact_cell": "síntese / REDUCE",
+      "model_cell": "`claude-fable-5-1`",
+      "effort_cell": "`max`"
+    },
+    {
+      "id": "R7",
+      "artefact_cell": "assento CEO",
+      "model_cell": "`claude-fable-5-1` fixo (OQ-1, sem A/B)",
+      "effort_cell": "`high`"
+    }
+  ],
+  "cases": [
+    {
+      "id": "C1",
+      "row": "R1",
+      "boundary": false,
+      "task": "Design the DISCOVERY predicate of the installer write-safety census: decide what counts as a site at all (5th pass: a command is a site unless its name is proven read-only).",
+      "path_taken": [
+        "Q0=no",
+        "Q1=no",
+        "Q2=no",
+        "Q3=yes"
+      ],
+      "why": "Q3(a) and Q3(c): the census's future PASS/FAIL depends on the predicate chosen here, and the task decides what COUNTS AS a site rather than running a census with a given predicate. The file's own docstring records that passes 1-4 were fail-open because discovery was a denylist — the predicate IS the deliverable.",
+      "citations": [
+        {
+          "path": ".claude/scripts/check-installer-write-safety.py",
+          "anchor": "PROVEN_READONLY = frozenset("
+        },
+        {
+          "path": ".claude/workflows/audit-fanout.js",
+          "anchor": "refuterPrompt(dim, refuteFences[dim])"
+        }
+      ],
+      "observed_gap": "The refuter dispatch cited above is R1 work by Q3(d) (refutacao) and carries NO model: today — the AC-3a defect the W1 ceremony closes."
+    },
+    {
+      "id": "C2",
+      "row": "R2",
+      "boundary": false,
+      "task": "Render the human-readable ownership decision table from the TSV that holds the truth; the verdicts are already decided.",
+      "path_taken": [
+        "Q0=no",
+        "Q1=no",
+        "Q2=no",
+        "Q3=no",
+        "Q4=yes",
+        "Q5=no"
+      ],
+      "why": "Q3 is NO because the doc decides nothing: two oracles read the TSV, not the prose. Q4 is YES (it writes) and Q5 is NO (the artefact is Markdown and no script is produced), so the row is the TEXT derivation.",
+      "citations": [
+        {
+          "path": "docs/ownership-decision-table.md",
+          "anchor": "**the truth** — one row per legal cell"
+        },
+        {
+          "path": "scripts/tests/ownership_table.tsv",
+          "anchor": "THIS FILE IS THE TRUTH"
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "row": "R3",
+      "boundary": false,
+      "task": "Write the deriver that adds an explicit model: to the real agent() sites of the four Workflow scripts, GIVEN the per-site classification table.",
+      "path_taken": [
+        "Q0=no",
+        "Q1=no",
+        "Q2=no",
+        "Q3=no",
+        "Q4=yes",
+        "Q5=yes"
+      ],
+      "why": "Q3 is NO only because the table is given: choosing which model each site gets is R1 work, and W1 re-derives that table under OQ-3 before the ceremony. Q5 is YES — the artefact is a .py deriver whose destinations are .js.",
+      "citations": [
+        {
+          "path": ".claude/plans/PLAN-186/w1/apply-w1-explicit-model.py",
+          "anchor": "SITES = [",
+          "role": "subject"
+        },
+        {
+          "path": ".claude/workflows/nightly-hygiene.js",
+          "anchor": "agent(assertDispatchable(dimPrompt(d)",
+          "role": "destination"
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "row": "R4",
+      "boundary": false,
+      "task": "Run one nightly-hygiene dimension (a NAMED script under a given predicate) and return findings, each with an evidence pointer, writing nothing.",
+      "path_taken": [
+        "Q0=no",
+        "Q1=no",
+        "Q2=no",
+        "Q3=no",
+        "Q4=no"
+      ],
+      "why": "Q3 is NO because the dimension's predicate was written elsewhere (adding a NEW dimension is R1); Q4 is NO because the dispatch is read-only and returns claims, so the walk lands in the RESEARCH row without ever reaching the artefact-type question.",
+      "citations": [
+        {
+          "path": ".claude/workflows/nightly-hygiene.js",
+          "anchor": "label: `hygiene:${d.key}`, phase: 'Sweep'"
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "row": "R5",
+      "boundary": false,
+      "task": "The `code-reviewer` archetype's OWN merge-gate pass on a canonical patch: read the diff and exercise, or withhold, the VETO. (Deciding to dispatch that review is R7 by Q0 — the seat's work — and is not this case.)",
+      "path_taken": [
+        "Q0=no",
+        "Q1=yes"
+      ],
+      "why": "Q0 is NO because the task is the review itself, not the routing of it: what is handed back is a verdict on a patch, not a decision about what happens next. Q1 is YES: the actor is in the roster DERIVED on disk by `grep -l '^veto_floor: true' .claude/agents/*.md` (5 files), whose code authority is the 5-member VETO_FLOOR_ROLES frozenset (agent_frontmatter.py), bound to that flag by test_veto_floor_bijection.py. NOT VETO_HARDCODE, which carries only 2 of the 5 keys on this HEAD. The model is the camada-T decision, not this classifier's; W0-US4 (AC-10) measured that the hook validates the FILE, never the model SERVED, so this row is a capability claim, not runtime enforcement.",
+      "citations": [
+        {
+          "path": ".claude/agents/code-reviewer.md",
+          "anchor": "veto_floor: true"
+        },
+        {
+          "path": ".claude/hooks/_lib/agent_frontmatter.py",
+          "anchor": "VETO_FLOOR_ROLES: FrozenSet[str] = frozenset({"
+        },
+        {
+          "path": ".claude/hooks/tests/test_veto_floor_bijection.py",
+          "anchor": "Bidirectional invariant test: VETO_FLOOR_ROLES"
+        }
+      ]
+    },
+    {
+      "id": "C6",
+      "row": "R6",
+      "boundary": false,
+      "task": "Merge the nine dimension returns into ONE markdown report — no tools, no files.",
+      "path_taken": [
+        "Q0=no",
+        "Q1=no",
+        "Q2=yes"
+      ],
+      "why": "Q2 is YES verbatim on disk: the dispatch text orders 'read-only - use NO tools, write NO files', and every sentence of the output traces to a fenced return. A synthesis that re-checked evidence against disk would be refutacao, hence R1.",
+      "citations": [
+        {
+          "path": ".claude/workflows/nightly-hygiene.js",
+          "anchor": "nightly-hygiene synthesizer (read-only"
+        },
+        {
+          "path": ".claude/workflows/audit-fanout.js",
+          "anchor": "audit-fanout synthesizer (use NO tools, write NO files)"
+        }
+      ]
+    },
+    {
+      "id": "C7",
+      "row": "R7",
+      "boundary": false,
+      "task": "The CEO turn itself - Gate-1/2 reads, choosing the next execution unit, classifying and dispatching, arbitrating. What it hands back is a DECISION about what happens next, not an artefact.",
+      "path_taken": [
+        "Q0=yes"
+      ],
+      "why": "Q0 is YES on the ROLE, not on the mechanism (rail round 1 P1): the artefact handed back is a decision about what to do next. A task that produces a file, a claim or a report keeps its own row even when the seat runs it inline (T5). The citations are PROTOCOL.md's own sentences about the seat deciding — S343 v2 replaced v1's citation of the session pin in .claude/settings.json, which v1 called a deliberate ratchet: the pin flip of PLAN-186 W1 deletes that anchor, and since this fixture is verified by a pytest case that pytest.ini collects, the ratchet was a RED main, not a signal. The seat's model stays camada T (Owner-signed), so no citation here decides it.",
+      "citations": [
+        {
+          "path": "PROTOCOL.md",
+          "anchor": "The CEO drafts the plan: who does what, in what order, with which skill loaded."
+        },
+        {
+          "path": "PROTOCOL.md",
+          "anchor": "If 1 agent flags a risk no one else saw, the CEO evaluates and decides."
+        }
+      ]
+    },
+    {
+      "id": "C8",
+      "row": "R3",
+      "boundary": false,
+      "task": "Write the anchor-exact deriver of the adopt-fable-5.1 ceremony: one .py program carrying every edit of the wave over 30 destinations (19 .py, 4 .md, 3 .sh, 2 .json, 1 .txt, 1 .yaml), each with its exact anchor and expected count, GIVEN the Owner-ratified rota (c).",
+      "path_taken": [
+        "Q0=no",
+        "Q1=no",
+        "Q2=no",
+        "Q3=no",
+        "Q4=yes",
+        "Q5=yes"
+      ],
+      "why": "Q3 is NO because the question was settled BEFORE the task: the Owner ratified rota (c) — claude-fable-5-1 enters the ADR-149 working set ONLY, with the VETO floor, the fallback and the session pin untouched — so «which ids move» is not this task's to decide; what is left is the mechanical derivation. Q5 is YES, and deliberately on the CONFIG half of the row's cell: C3 already exercises a code destination (.js), so without this case the (.yml/.json) half of R3 is normative but exercised by nobody. The artefact is the deriver, not the 30 destinations — the same discriminant B1 decides.",
+      "citations": [
+        {
+          "path": ".claude/plans/PLAN-169/s338-ceremony-fable51/apply-fable51-edits.py",
+          "anchor": "NEW_ID = \"claude-fable-5-1\"",
+          "role": "subject"
+        },
+        {
+          "path": ".claude/scripts/cost-table.yaml",
+          "anchor": "claude-fable-5-1:",
+          "role": "destination"
+        }
+      ]
+    },
+    {
+      "id": "B1",
+      "row": "R3",
+      "boundary": true,
+      "between": [
+        "R2",
+        "R3"
+      ],
+      "task": "The mixed sonnet5-pricing-fu pack: 21 edits over 10 paths — 8 code/config (.py x7, .yaml x1) and 2 prose (.md x2). One anchor-exact deriver. R2 or R3?",
+      "path_taken": [
+        "Q0=no",
+        "Q1=no",
+        "Q2=no",
+        "Q3=no",
+        "Q4=yes",
+        "Q5=yes"
+      ],
+      "why": "Decided R3, as ONE task.",
+      "reason": "1) The artefact is the DERIVER, not the destination bytes: under OQ-3 the discriminant is the type of artefact PRODUCED, and what this task produces is a .py program — prose destinations do not make a program a document. 2) The invariant is whole-script: '21 edits in 10 paths', the per-anchor expected counts and the double-application refusal are properties of the plan step; split the pack and neither half can verify the count the other half owns. 3) Evidence crosses the split: the rail's r2 finding was in build-canonical-models.py _MM_TIERS, a code surface reached FROM the prose claim. Consequence stated: a prose-only task that writes no script is STILL R2 — B1 refuses to split one deriver, it does not swallow the row.",
+      "citations": [
+        {
+          "path": ".claude/plans/PLAN-169/s338-fu-sonnet5-pricing/apply-sonnet5-pricing-fu.py",
+          "anchor": "EDITS: List[Tuple[str, str, str, int]] = ["
+        },
+        {
+          "path": "docs/CEO-MODEL-ROUTING.md",
+          "anchor": "$2/$10 per MTok is the STANDARD price"
+        }
+      ]
+    },
+    {
+      "id": "B2",
+      "row": "R1",
+      "boundary": true,
+      "between": [
+        "R1",
+        "R3"
+      ],
+      "task": "Write the ORACLE that checks _ownership_verdict() against the TSV, versus adding a TSV row and making the function satisfy it. Both are claude-opus-5. R1 or R3?",
+      "path_taken": [
+        "Q0=no",
+        "Q1=no",
+        "Q2=no",
+        "Q3=yes"
+      ],
+      "why": "Decided R1 for the oracle; the derivation half stays R3.",
+      "reason": "Q3(a) settles it: after the oracle lands, a future run's PASS/FAIL depends on a rule the oracle chose, while making the function satisfy a GIVEN row decides nothing. The two sides share the model, so a hand-router feels no friction here and the boundary is invisible unless written down — what differs is EFFORT (xhigh vs high). This pair is the canonical shape of the repo's dominant defect class (a green instrument whose question went stale) and is the whole reason R1 carries the higher effort tier.",
+      "citations": [
+        {
+          "path": "scripts/tests/test-ownership-verdict-unit.sh",
+          "anchor": "TSV=\"$SCRIPT_DIR/ownership_table.tsv\""
+        },
+        {
+          "path": "scripts/_framework_manifest_set.sh",
+          "anchor": "_ownership_verdict() {"
+        }
+      ]
+    }
+  ]
+}
