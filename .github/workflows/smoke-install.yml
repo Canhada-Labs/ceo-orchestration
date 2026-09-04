@@ -293,7 +293,48 @@ jobs:
     # by taking the larger of the two (111) would have under-sized the job
     # by exactly the PLAN-185 step — the `cancelled`-on-an-innocent-step
     # class the doctrine above exists to prevent.
-    timeout-minutes: 126
+    # PLAN-186 W4a (S343): 126 -> 150 — the first number in this block
+    # sized on MEASURED wall instead of on additive step arithmetic. Every
+    # block above composes per-step estimates; the samples below give an
+    # observed RANGE for this job, which the arithmetic never had. They do
+    # NOT say what causes the spread — see the note under the table.
+    # Instrument: wall of the JOB `smoke` (startedAt -> completedAt), which
+    # is what `timeout-minutes` gates. The RUN wall is 1-5 min longer and is
+    # NOT the right instrument — an earlier note in the project memory read
+    # `1h32` off a RUN, which is the same run measured as 92m32s here.
+    # Read with `gh run view <id> --json jobs`, seven most recent GREEN runs
+    # of this workflow, newest first (2026-09-03):
+    #   33809424817  92m32s   35f33a8
+    #   33743649231  90m40s   ba15c71
+    #   33630753302  77m53s   8efe09b
+    #   33582381725  87m50s   f0e98de
+    #   33503515412  86m52s   b7dad83
+    #   33388608651  86m44s   826688f
+    #   33364620284  73m18s   f348ee9
+    # min 73m18s, max 92m32s. What that establishes is the observed RANGE
+    # and nothing more: the seven runs share this workflow definition but
+    # NOT the executed workload — 826688f changed
+    # scripts/tests/smoke-install.sh; ba15c71 changed scripts/doctor.sh and
+    # the installer write-safety e2e; this job invokes all of them.
+    # Attributing the spread to the RUNNER would need repeated runs at ONE
+    # sha, which nobody has done. So this block sizes on the observed
+    # maximum and claims no cause. (The runner-variance class is real in
+    # this repo — S327: the hook-latency gate measured 77 ms locally and
+    # 209-435 ms in CI on the SAME sha — but that is a precedent, not
+    # evidence about these seven numbers.)
+    # 126 leaves 33m28s over the observed max (1.36x); 150 leaves 57m28s
+    # (1.62x). The house rule fires below 20% headroom and 126 was still
+    # ABOVE it at 26.6% — so the trigger that fired is not that one. The
+    # S336 deferral (Owner, 2026-09-01) named three, and this is the third:
+    # the next wave that already touches `.github/workflows/` takes the bump
+    # along at ~zero marginal cost. That wave is PLAN-186 W4a.
+    # What is deliberately NOT claimed: this is not a prediction that the
+    # job will take 150 minutes, and the W4a deletion riding in the same
+    # patch touches `validate.yml`, not this job — no number here is
+    # adjusted for it. Re-tighten on a real CI p95 with >= 3 further
+    # samples, never on arithmetic (AGENTS.md:9-11: this file records
+    # measurements and subtractions, never speed claims).
+    timeout-minutes: 150
     permissions:
       contents: read
     steps:

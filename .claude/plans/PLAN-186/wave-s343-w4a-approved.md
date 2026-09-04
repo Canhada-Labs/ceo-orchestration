@@ -14,8 +14,8 @@ Wave: wave-s343-w4a (PLAN-186 W4a — a DELEÇÃO dos dois steps duplicados do j
 Patch: .claude/plans/PLAN-186/s343-ceremony-w4a/W4A.patch
 Patch-sha256: 35e26cdc47e606d12eca45a267d6c147a3ed8f381693a25782f3f823066f6db3
 Patch-base: 76578f33eaa25a373643a96d7df908ebd3082408
-Anchor-SHA: ANCHOR-PLACEHOLDER
-Data: DATA-PLACEHOLDER
+Anchor-SHA: 93efbb17d7b8c1ef0dfb13ea861fcbc0e32e26b2
+Data: 2026-09-04
 
 ## O que esta wave entrega
 
@@ -143,7 +143,7 @@ os materiais congelados em `44c16f4` envelheceram: a sombra em `76578f3` dizia
   a janela é a rota de PR, não a rota que este land usa.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: APPROVED-BY-PLACEHOLDER
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-186
 Scope:
   - .github/workflows/smoke-install.yml
