@@ -9,7 +9,7 @@ name: Validate CEO Orchestration governance
 # and commit afterwards):
 #   mv -n .github/workflows/validate.yml.template \
 #         .github/workflows/validate.yml
-# (PLAN-183 wave-183batch; mirrors benchmarks.yml.template:3-7. The
+# (PLAN-183 wave-183batch; mirrors benchmarks.yml.template:3-12. The
 # frozen-subset contract — 11 steps + pins — is untouched: comments only.)
 
 on:

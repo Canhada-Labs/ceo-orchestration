@@ -2,9 +2,14 @@ name: Skill benchmarks (advisory)
 
 # INERT AS SHIPPED. install.sh copies this file to
 # `.github/workflows/benchmarks.yml.template` — the `.template` suffix means
-# GitHub Actions never reads it. Activation is an EXPLICIT adopter step:
-#   git mv .github/workflows/benchmarks.yml.template \
-#          .github/workflows/benchmarks.yml
+# GitHub Actions never reads it. Activation is an EXPLICIT adopter step
+# (plain `mv -n`, not `git mv`: on a fresh install the delivered file is
+# UNTRACKED so `git mv` fails — measured S344, PLAN-183 AC-2 — and `-n`
+# refuses to clobber a benchmarks.yml of your own — but on that collision
+# `mv -n` exits 0 WITHOUT moving, so the workflow stays INERT: check the
+# rename landed, or pick another name, before you commit):
+#   mv -n .github/workflows/benchmarks.yml.template \
+#         .github/workflows/benchmarks.yml
 #
 # ONCE ACTIVATED THIS COSTS REAL MONEY ON YOUR OWN ACCOUNT. It requires the
 # repository secret ANTHROPIC_API_KEY (Settings -> Secrets and variables ->

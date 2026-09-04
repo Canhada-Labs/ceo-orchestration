@@ -1268,10 +1268,24 @@ com a revisão refrescada, ou vira plano próprio.
       (16 ocorrências no vivo contra 0 no template).
       Check: actionlint limpo e o if presente no nivel de job
       — ✅ S328 (2026-08-25): templates/.github/workflows/validate.yml.template:25 (`if` no nível de job) · commit 4f750f0 — ressalva: a metade "actionlint limpo" está atestada só no corpo do commit, nenhum gate vivo linta o template.
-- [ ] `[P1]` Nomear que o install entrega `.template` (**inerte**) e que
+- [x] `[P1]` Nomear que o install entrega `.template` (**inerte**) e que
       o CI só existe após rename — o passo de ativação vira explícito.
       Check: AC-2 nomeia o passo de ativacao; prova em repo descartavel nosso
       — ◐ S328: entregue a nomeação para UM dos dois templates — `templates/.github/workflows/benchmarks.yml.template:3-7` declara "INERT AS SHIPPED" e o `git mv` de ativação (`4f750f0`; 1 ocorrência da string em todo `templates/`); falta o mesmo cabeçalho em `validate.yml.template`, e o AC-2 (:1301 pré-S328) segue `- [ ]` sem prova de template ativado saindo verde em repo descartável.
+      — ✅ **S344 (2026-09-04): as DUAS metades do Check fechadas.**
+      «AC-2 nomeia o passo de ativação»: a nota do AC-2 abaixo nomeia
+      `mv -n .github/workflows/validate.yml.template
+      .github/workflows/validate.yml`. «prova em repo descartável nosso»:
+      run `33896213436` em `Canhada-Labs/ceo-smoke-disposable-s344`,
+      `success`, 11/11 passos verdes — evidência RASTREADA em
+      `.claude/plans/PLAN-183/s344-p183-ac2-evidence/github-run-33896213436.md`.
+      E os DOIS templates deste item passam a documentar um comando que
+      FUNCIONA numa instalação nova: `validate.yml.template:3-13`
+      (wave-183batch) e `benchmarks.yml.template:5-12`, cujo `git mv` —
+      exatamente o comando que esta prova mediu FALHANDO, porque o
+      arquivo entregue nasce UNTRACKED — virou `mv -n` nesta mesma
+      derivação (rail de land r3, P2). A linha ◐ S328 acima descreve o
+      commit `4f750f0` e fica como registro datado.
 
 ### W3 — Catálogo e a regra de VETO (A4)
 
@@ -1352,8 +1366,76 @@ com a revisão refrescada, ou vira plano próprio.
 - [ ] AC-1 [P0] **Nenhum caminho de home ou de usuário no ponteiro
       entregue** (asserção explícita, mais forte que "é relativo"), com
       INV-4 intacto.
-- [ ] AC-2 [P0] Template de CI ativado sai VERDE num repositório
+- [x] AC-2 [P0] Template de CI ativado sai VERDE num repositório
       **descartável nosso**, com o passo de ativação nomeado.
+      — ◐ **S344 (2026-09-04): segunda perna medida — a EXECUÇÃO do
+      `run-activated-workflow.py` dentro do Smoke Install real, duas
+      amostras verdes.** Run `33874751633` (job `smoke`, step `Run smoke
+      install`, sha `8003b65`): `==> activated workflow PASSED: 10 run
+      step(s) executed, 1 runner-provided step(s) skipped by name`
+      (12:56:50Z, ~9,7 s de janela de execução desde o `step 2/11`).
+      Run `33809424817` (mesmo job/step, sha `35f33a8`): a MESMA linha
+      de veredito, `21:50:03Z`, ~7,6 s de janela — segunda amostra
+      independente, mesmo resultado. **O que isto prova:** os `run:`
+      do template entregue (`validate.yml.template` → ativado por
+      rename) executam, em ordem, num runner Linux hospedado de
+      verdade, dentro do job `smoke` do
+      `.github/workflows/smoke-install.yml` — não é mais só a validação
+      estrutural do S334/S335.
+      **O que essa perna, sozinha, NÃO provava:** o Actions scheduler de
+      verdade disparando por `on:` num repositório do adopter. Essa
+      lacuna é a que a terceira perna abaixo fecha; a forma dela (fixture
+      permanente vs roteiro executado uma vez) foi a OQ-2, DECIDIDA pelo
+      Owner na S344 (`PLAN-183/owner-decisions-S344.md`). Evidência = os
+      runs `33874751633` (job `smoke`, commit `8003b65`) e `33809424817`
+      (commit `35f33a8`), 15 h 06 min entre eles, lidos por
+      `gh run view <id> --log`; as linhas citadas estão em
+      `.claude/plans/PLAN-183/s344-p183-ac2-evidence/smoke-install-runs.md`
+      (estes dois runs são DESTE repositório, logo `gh run view <id> --log`
+      de um clone os alcança).
+      — ✅ **S344 (2026-09-04, terceira perna — a PROVA que o AC pede):
+      repositório privado descartável `Canhada-Labs/ceo-smoke-disposable-s344`
+      (criado uma vez com autorização explícita do Owner — OQ-2 decidida
+      como ROTEIRO executado uma vez, `PLAN-183/owner-decisions-S344.md` —
+      e ARQUIVADO ao final, `isArchived=true`), instalado por
+      `install.sh <target> --profile core,frontend --github-owner Canhada-Labs`
+      (rc 0, VERSION 1.3.0, framework em `bc52016`). PASSO DE ATIVAÇÃO
+      NOMEADO: `mv -n .github/workflows/validate.yml.template
+      .github/workflows/validate.yml` (o arquivo entregue é UNTRACKED numa
+      instalação nova, logo `git mv` falha — cabeçalho do template, rail
+      183-r1; `cmp` contra o template: byte-idêntico). GitHub Actions REAL:
+      run `33896213436` (evento `push`, sha `11dc08f`, árvore só com o
+      workflow entregue) `success`, job «Governance, health, contamination,
+      shellcheck» em 17 s, **11/11 passos verdes** (Checkout + os 10 `run:`;
+      14/14 entradas contando os wrappers do runner); run corroborante
+      `33896053568` (sha `54f70e7`) idem. Cobre o que o emulador não cobre:
+      shellcheck pré-instalado no `ubuntu-latest`, `actionlint v1.7.7`
+      baixado pelo próprio step, `Checkout` pinado por SHA executado.
+      EVIDÊNCIA RASTREADA (cura do rail de land r3, P1 — o fecho de um P0
+      tem de ser auditável do estado commitado):
+      `.claude/plans/PLAN-183/s344-p183-ac2-evidence/github-run-33896213436.md`
+      é a cópia auditável, com o objeto `gh run view --json` INTEIRO no
+      apêndice — os números se reconferem offline, sem rede e sem
+      credencial. O repositório descartável é PRIVADO e ARQUIVADO: de um
+      clone, `gh run view <id>` aponta para `Canhada-Labs/ceo-orchestration`
+      e NÃO acha estes runs; alcançá-los pede
+      `gh run view <id> --repo Canhada-Labs/ceo-smoke-disposable-s344` mais
+      credenciais com acesso. Dois achados registrados:
+      (1) os 3 primeiros pushes NÃO criaram run algum durante ~18 min com
+      o workflow registrado e Actions habilitado; os runs começaram no 4.º
+      push, mas duas mudanças chegaram juntas (PUT reafirmando
+      `actions/permissions` e um 2.º workflow) — causa NÃO atribuída;
+      (2) o guard de Bash do framework recusa o `mv` de ativação pelo TEXTO
+      do comando mesmo num clone fora da árvore — cego ao repositório;
+      item para o plano do guard.
+      LIMITE DECLARADO (rail de land r2, P1): por causa do achado (1), o
+      que este run prova é o que o AC pede e o que o Owner fixou por
+      escrito como critério de fecho (`PLAN-183/owner-decisions-S344.md`,
+      «o AC-2 fecha quando a evidência mostrar o run verde com o passo de
+      ativação nomeado») — template ATIVADO saindo VERDE num repositório
+      descartável nosso. NÃO prova que o rename SOZINHO arma o scheduler:
+      essa atribuição segue em aberto, com o achado (1) como registro.
+      Checkbox FLIPADO por esta nota.**
 - [x] AC-3 [P0] Skill de VETO em `name-only` é impossível **por teste do
       gerador** — não por correção no `settings.json`. **FECHADO (S324,
       2026-08-23) — verificado COMPORTAMENTALMENTE, rodando o gerador.**
@@ -1519,6 +1601,11 @@ com a revisão refrescada, ou vira plano próprio.
    > embarca testes por decisão do manifesto.
 2. **W0-US3** — o repo descartável vira fixture permanente de CI (custo
    recorrente, cobertura real) ou roteiro de release?
+   > ✅ **Respondida pelo Owner na S344** (`PLAN-183/owner-decisions-S344.md`,
+   > linha OQ-2): **roteiro executado UMA vez**, não fixture permanente —
+   > repositório privado descartável `Canhada-Labs/ceo-smoke-disposable-s344`,
+   > criado com autorização explícita e ARQUIVADO ao final. A evidência do
+   > run verde está na nota do AC-2 acima.
 3. **W2** — o gate de drift template contra vivo é diff estrutural de
    steps ou declaração congelada com teste? A primeira é mais forte e
    mais cara.
@@ -1917,3 +2004,7 @@ mexe.
       `policies/*`, `dispatcher/*`, `.install-state.json`) e `state/
       mcp_client_secrets/` vazio — classe "semeado fora do walk" (mesma do
       `FU-ADR-README-SEED`), não desta perna.
+
+## Progress log
+
+- 2026-09-04 (S344, Owner presente, land combinado): `p183-ac2-evidence` landado — **AC-2 [P0] FLIPADO** ([ ] -> [x]) e o item de ativacao da W2 FLIPADO, ambos decididos pelo texto do proprio Check e pelo criterio ESCRITO do Owner (`PLAN-183/owner-decisions-S344.md`: o AC-2 fecha quando a evidencia mostrar o run verde com o passo de ativacao nomeado). O fecho de um P0 passa a ser auditavel do estado COMMITADO: dois artefatos sanitizados e RASTREADOS em `PLAN-183/s344-p183-ac2-evidence/`, o primeiro com o objeto `gh run view --json` INTEIRO no apendice. `benchmarks.yml.template` deixa de documentar `git mv` — o comando que este pack MEDIU falhando numa instalacao nova, porque o arquivo entregue nasce UNTRACKED — e passa a `mv -n` com o aviso de que, na colisao, `mv -n` sai 0 SEM mover; a unica citacao viva do intervalo movido (`validate.yml.template:12`) migra na mesma derivacao. OQ-2 respondida no plano. Rail de land r1-r2 (duas lanes codex em paralelo por rodada): 2 P1 e 3 P2 REAIS na r1, todos curados NO DERIVADOR (nenhuma edicao a mao na arvore viva), r2 com os 2 P1 caidos e 2 residuais DECLARADOS em `rail-land-round-2.md`. Bateria: 8 verificacoes de citacao rc 0 (self-json 30/30 x2, json-run 30/30 x2, log 13/13 x2, EVIDENCE 22/22 e 15/15), 4 controles positivos plantados cada um rc 1 com MISS, censo independente de completude 13/13 igual em CONJUNTO e ORDEM, os 11 nomes de passo do run conferidos contra o template em `bc52016`, pytest 20 passed, e os 6 gates de corpus rc 0 sobre a arvore STAGED (`validate-governance.sh` COMPLETO com Errors: 0; `verify-counts.sh` observed 15724 sem drift). Oraculo `--is-canonical` = 0 nos 5 paths (100% LIVRE, nenhuma assinatura devida).
