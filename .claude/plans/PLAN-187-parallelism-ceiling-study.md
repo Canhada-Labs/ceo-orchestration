@@ -40,6 +40,7 @@ tags: [paralelismo, quota, workflow, worktree, multi-terminal, codex, grok, subs
 | 7 | Grok 0.2.106 (`grok-4.6-build`, sandbox `council`) | responde em 10 s a prompt trivial (US$ 0,012); **brief de 25 KB em argv e de 40 KB por artefato: morto por alarme aos 5 e 15 min, saída vazia** — sob carga de máquina | S344 sondas `xlane/` |
 | 8 | Um land por vez na árvore viva | landers serializados por gate de árvore limpa; dois landers = colisão de index | S343 lição `feedback-workflow-script-authoring-lessons-s343` |
 | 9 | Worktrees por frente já são a prática | cada construtor deriva numa sombra `git worktree add --detach`; refutadores em worktree próprio | S343/S344 |
+| 10 | **Stress test S344 (instrumento §4, `[8,16]×1`, Sonnet, tarefa fixa ~1,2 k palavras, com 14 frentes + revisões codex rodando ao mesmo tempo)** | N=8: 8/8, 0 erros, 6 min, mem livre 12,3→10,8 GB, load 27→34. **N=16: 6/16 devolvidos; 10 mortos com «Server is temporarily limiting requests (not your usage limit) · Rate limited»** — teto de CONCORRÊNCIA do servidor, não a quota da conta (que estava em 50 %); o classificador de segurança do modo auto morreu pelo mesmo motivo no mesmo instante. **Conclusão preliminar: nesta máquina e sob a carga de hoje, o teto útil de chamadas Claude simultâneas fica entre 8 e 16 (somando TUDO: frentes, sondas, classificador); trocar de conta zera a quota mas NÃO sobe esse teto — só distribuir por máquina/IP ou escalonar lançamentos.** Repetir com a máquina ociosa (3 reps) para separar o teto do servidor da carga local. | run `wf_5aa7b0e9-926`, journal no scratchpad da S344 |
 
 ## 2. Perguntas do estudo (cada uma com falsificador)
 
@@ -115,3 +116,4 @@ domina) — rodar em conta DEDICADA, nunca na conta do terminal principal.
 - 2026-09-04 (S344): plano criado como rascunho a pedido do Owner; fatos §1 medidos na própria
   S344; instrumento §4 escrito no scratchpad da sessão e lançado uma vez em degrau reduzido
   (ver nota abaixo quando existir).
+- 2026-09-04 (S344, ~15:30): stress `[8,16]×1` executado sob carga (fato §1 #10): N=8 limpo, N=16 com 10/16 recusados pelo SERVIDOR («not your usage limit»). Q1 ganha a hipótese H1: o teto observado é por servidor+carga, não por conta; falsificador = repetir com a máquina ociosa e ver N=16 limpo.
