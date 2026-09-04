@@ -1,8 +1,12 @@
 ---
 id: PLAN-185-FOLLOWUP
 title: "Residuais do installer-write-safety: doctor.sh como 3o consumidor do predicado (FU-7) e a modelagem do censo (FU-1)"
-status: draft
+status: done
 created: 2026-08-31
+completed_at: 2026-09-04
+executing_at: 2026-09-04   # retroativo: a metade FU-7 executou na S337 (cc00235..c0cb915); o self-gate cai neste commit de fechamento
+reviewed_at: 2026-09-04
+reviewed_by: "Owner (S344, AskUserQuestion — OQ-W0-STOP decidida: «Manter o ratchet e fechar o plano (Recomendado)»; FU-7 ja executado sob autorizacao de chat na S337)"
 related_commits: [cc00235, adb6e84, 2f71dea, c0cb915]
 owner: CEO
 depends_on: [PLAN-185]
@@ -155,14 +159,37 @@ RATCHET fail-closed no `validate.yml` com pontos cegos declarados
 (`OQ-W0-STOP`), e a regua do AC-3 do plano-pai ficou registrada como
 TROCADA, nao cumprida.
 
-- [ ] `[P2][FU1]` **Gatilho: decisao do Owner sobre OQ-W0-STOP** (modelar o
+- [x] `[P2][FU1]` **Gatilho: decisao do Owner sobre OQ-W0-STOP** (modelar o
       predicado no censo vs manter o ratchet). Sem a decisao, NADA a
       executar aqui — abrir uma 4a arquitetura de regra sem novo desenho
       repetiria a classe que ja consumiu 7 levas.
-- [ ] `[P2][FU1]` Se o Owner decidir MODELAR: wave de modelagem do
+      — ✅ S344 (2026-09-04): **DECIDIDA pelo Owner (AskUserQuestion, verbatim):
+      «Manter o ratchet e fechar o plano (Recomendado)».** O censo
+      `check-installer-write-safety.py` permanece RATCHET fail-closed no
+      `validate.yml` com os pontos cegos declarados em `OQ-W0-STOP` do
+      plano-pai; a modelagem do predicado «domina» fica registrada como
+      LIMITE ACEITO (molde do ADR-190), nao como divida com gatilho. Quem
+      tocar `scripts/` regenera o baseline no MESMO patch (regra do PLAN-185).
+- [x] `[P2][FU1]` Se o Owner decidir MODELAR: wave de modelagem do
       instrumento com debate proprio (L3), começando pelo desenho — nunca
       pela regra. O criterio de morte da tentativa anterior (fail-open na
       mesma classe em 2 rodadas consecutivas de rail) vale desde a abertura.
+      — ✅ S344: NAO se aplica (o Owner decidiu manter o ratchet). O item
+      fecha por decisao, sem trabalho; se um dia a modelagem for reaberta,
+      e wave NOVA com debate proprio, nao reabertura deste followup.
+
+## Registro de fechamento — S344 (2026-09-04)
+
+- **FU-7:** executado e landado na S337 (`cc00235`, `adb6e84`, `2f71dea`,
+  `c0cb915`; bateria e rail no registro acima). Sem cerimonia: o oraculo
+  responde 0 para `scripts/doctor.sh`.
+- **FU-1:** DECIDIDO pelo Owner (AskUserQuestion, verbatim): «Manter o
+  ratchet e fechar o plano (Recomendado)». O censo segue RATCHET fail-closed
+  com pontos cegos declarados (`OQ-W0-STOP` no plano-pai); a modelagem do
+  predicado «domina» e LIMITE ACEITO, nao divida com gatilho.
+- **Ciclo de vida:** `draft → reviewed → executing → done` neste commit, pelo
+  Edit tool (o hook `check_plan_edit.py` validou cada transicao); `executing_at`
+  retroativo a S337 declarado no frontmatter. Nenhum AC aberto.
 
 ## Fronteiras
 
