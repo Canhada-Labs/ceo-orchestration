@@ -235,7 +235,22 @@ class TestSmokeInvoke:
         and asserts post-install artifacts. A zero exit from this flow
         exercises steps 3-5 of the P1-QA-7 acceptance spec in one shot.
         """
-        proc = _run_script("--smoke", timeout=300.0)
+        # HERMETIC (S343/S344): npm_config_audit/fund/update_notifier=false keep
+        # `npm install --no-save <tarball>` from calling the registry for a LOCAL
+        # tarball. Measurements and the CI timeout history live in the pack
+        # evidence (PLAN-186 W0, s344 npm-smoke-hermetic-v2), not here.
+        # install-npm.sh is CANONICAL, so the cure lives in this env hook; the
+        # follow-up for the Owner's ceremony is `--no-audit --no-fund` in the
+        # script itself. `timeout=300.0` is UNCHANGED (no relaxation).
+        proc = _run_script(
+            "--smoke",
+            timeout=300.0,
+            env_extra={
+                "npm_config_audit": "false",
+                "npm_config_fund": "false",
+                "npm_config_update_notifier": "false",
+            },
+        )
         assert proc.returncode == 0, (
             f"smoke run failed rc={proc.returncode}\n"
             f"stdout={proc.stdout[-2000:]}\nstderr={proc.stderr[-2000:]}"
