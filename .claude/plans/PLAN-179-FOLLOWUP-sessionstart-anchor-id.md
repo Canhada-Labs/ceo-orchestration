@@ -1,8 +1,10 @@
 ---
 id: PLAN-179-FOLLOWUP
 title: "Residuais da wave-179close (rails r6+r8): precedencia de id do produtor do session_start; entrega do harness-noop-allowlist.txt ao adopter"
-status: draft
+status: reviewed
 created: 2026-08-31
+reviewed_at: 2026-09-04
+reviewed_by: "Owner (S344, item 2 da lista de abertura — os 3 ACs [x] ja landaram em 8efe09b/b6dce78; flip draft→reviewed ratificado com o Owner presente)"
 related_commits: []
 owner: CEO
 depends_on: [PLAN-179]
