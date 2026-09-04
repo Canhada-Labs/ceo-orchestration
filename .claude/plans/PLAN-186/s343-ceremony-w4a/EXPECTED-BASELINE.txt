@@ -1,0 +1,75 @@
+# EXPECTED-BASELINE — wave-s343-w4a (PLAN-186 W4a — delecao dos 2 steps
+# duplicados do job `validate` + bump diferido do timeout do Smoke Install)
+#
+# Fonte UNICA dos valores que finalize-w4a.sh, OWNER-S343-W4A-SIGN.sh e
+# OWNER-S343-W4A-LAND.sh comparam. Leitor fail-CLOSED (chave ausente ABORTA).
+# Atualizar um valor e decisao CONSCIENTE com fonte — nunca relaxamento.
+# Nada e contado a partir do DESIGN, do PROPOSED ou do EVIDENCE: os tres
+# CITAM estes valores, nenhum e a fonte deles.
+#
+# Medidos na sombra (base 76578f33eaa25a373643a96d7df908ebd3082408) em
+# 2026-09-03/04, S343:
+#
+#   - 2 paths, os DOIS canonicos; ZERO .py e ZERO .sh no patch (as duas
+#     contagens sao GUARDA DE ESCOPO: um .py ou um .sh aparecendo neste
+#     patch e superficie que a revisao nao leu);
+#   - ZERO membros do manifesto ADR-192 tocados;
+#   - 10 hunks NO PATCH (11 sob `git diff -U0`, onde dois vizinhos nao se
+#     fundem), 2 arquivos, `83 insertions(+), 40 deletions(-)`. A 1a
+#     redacao tinha 5 hunks; o rail codex r2 achou a CLASSE dos
+#     comentarios orfaos e o censo mecanico acrescentou 6 edicoes, e os
+#     rails r4/r5 reescreveram duas delas por imprecisao de texto;
+#   - job `validate`: 50 steps em HEAD -> 48 pos-patch (delta EXATO de 2);
+#     `smoke`: timeout 126 -> 150; os 7 jobs de validate.yml e o 1 job de
+#     smoke-install.yml permanecem;
+#   - COBERTURA re-derivada em HEAD por `pytest --collect-only -q` (a
+#     comparacao e por CONJUNTO de node-ids — sha256 da lista ordenada —,
+#     nunca por contagem: dois conjuntos diferentes podem ter o mesmo
+#     tamanho). Todos: A=7476, B=6122, A∩B=0, A∪B=13598 == matriz 13598.
+#     Recorte `-m 'serial'`: 494 + 452 = 946 == matriz 946. (Os numeros da
+#     S341 — 7474/6063/13537, serial 924 — descreviam uma arvore mais
+#     antiga; a PROPRIEDADE continua valendo.)
+#   - actionlint com os flags EXATOS do step da CI e
+#     `check-action-sha-drift.py --offline`: rc 0 nos dois;
+#   - governanca COMPLETA (sem --fast) 0 erros, verify-counts sem drift,
+#     contaminacao limpa, claims/env-hygiene/command-skill-hook-map/
+#     build-plugin verdes.
+EXPECTED_PATCH_PATHS=".github/workflows/smoke-install.yml .github/workflows/validate.yml"
+EXPECTED_PATCH_CANONICAL_PATHS=2
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=0
+EXPECTED_PATCH_PY_FILES=0
+EXPECTED_PATCH_SH_FILES=0
+EXPECTED_VALIDATE_YML_REL=".github/workflows/validate.yml"
+EXPECTED_SMOKE_YML_REL=".github/workflows/smoke-install.yml"
+EXPECTED_YAML_JOBS_VALIDATE=7
+EXPECTED_YAML_JOBS_SMOKE=1
+EXPECTED_VALIDATE_STEPS_HEAD=50
+EXPECTED_VALIDATE_STEPS_POST=48
+EXPECTED_SMOKE_TIMEOUT_HEAD=126
+EXPECTED_SMOKE_TIMEOUT_POST=150
+EXPECTED_DELETED_STEP_A="Run Python hook unit tests"
+EXPECTED_DELETED_STEP_B="Run Python script unit tests"
+EXPECTED_DELETED_STEP_REFS_POST=0
+EXPECTED_MATRIX_JOB_NAME=hook-tests-python-matrix
+EXPECTED_ACTIONLINT_RC=0
+EXPECTED_ACTIONLINT_FLAGS="-S error -e SC2002,SC2012,SC2016,SC2129"
+EXPECTED_ACTION_SHA_DRIFT_RC=0
+EXPECTED_NODEID_HOOKS=7476
+EXPECTED_NODEID_SCRIPTS=6122
+EXPECTED_NODEID_MATRIX=13598
+EXPECTED_NODEID_OVERLAP=0
+EXPECTED_NODEID_SERIAL_HOOKS=494
+EXPECTED_NODEID_SERIAL_SCRIPTS=452
+EXPECTED_NODEID_SERIAL_MATRIX=946
+EXPECTED_GOVERNANCE_ERRORS=0
+EXPECTED_VERIFY_COUNTS_RC=0
+EXPECTED_CLAUDE_MD_CLAIMS_RC=0
+EXPECTED_CONTAMINATION_RC=0
+EXPECTED_CEREMONY_LINT_BLOCKING=0
+EXPECTED_BUILD_PLUGIN_CHECK_RC=0
+EXPECTED_TEST_ENV_HYGIENE_RC=0
+EXPECTED_CSHM_CHECK_RC=0
+EXPECTED_UNIT_TEST_FILES=6
+EXPECTED_REQUIRED_CHECK_MATRIX_39="hook-tests-python-matrix (3.9)"
+EXPECTED_REQUIRED_CHECK_MATRIX_312="hook-tests-python-matrix (3.12)"
+EXPECTED_MATRIX_JOB_MENTIONS=8

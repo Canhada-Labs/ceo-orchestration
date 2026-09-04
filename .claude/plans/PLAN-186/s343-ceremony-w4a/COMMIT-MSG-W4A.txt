@@ -1,0 +1,105 @@
+ceremony(PLAN-186 wave-s343-w4a): deleta os 2 steps duplicados do job validate (cobertura re-derivada por CONJUNTO de node-ids) e executa o bump diferido do timeout do Smoke Install (126 -> 150) com a derivacao reescrita sobre 7 amostras MEDIDAS
+
+A delecao. O job `hook-tests-python-matrix` ja roda, no MESMO evento `push`
+e em 3.9 E 3.12, a uniao EXATA dos dois steps mais caros do job `validate`:
+«Run Python hook unit tests (CEO_HOOK_ADAPTER=claude default)» e «Run Python
+script unit tests». A igualdade foi RE-DERIVADA sobre este HEAD — nao citada
+do relatorio da S341, cujos numeros ja descreviam outra arvore: hooks 7476 +
+scripts/optimizer 6122, intersecao 0, uniao 13598 == matriz 13598, com o
+mesmo sha256 da lista ordenada; no recorte `-m 'serial'`, 494 + 452 = 946 ==
+946. A comparacao e por CONJUNTO de proposito: um gate que so soma aceitaria
+uma troca 1-por-1 em silencio.
+
+O delta de ambiente e DUPLO e os dois lados sao perdas ACEITAS. `PYTHONPATH:
+"."` so existia na matriz — a suite passa a rodar sempre COM ele, e
+recuperar o outro lado exigiria uma dimensao de matriz que dobra o custo de
+um job PAGO. `CEO_HOOK_ADAPTER: claude` so existia no step A, que rodava so
+`.claude/hooks/tests`; NAO e adicionado a matriz, porque ela roda
+hooks+scripts+optimizer num unico pytest e sata-la ALTERARIA o ambiente de
+scripts/optimizer. Como e o default documentado do adapter, a ausencia
+exercita o mesmo caminho — e a razao ficou ESCRITA no `env:` da matriz, onde
+o proximo leitor procura, em vez de so num plano.
+
+SETE comentarios do arquivo apontavam para os steps deletados — «step below»,
+o BANNER do step de hooks, «dir-collected above», «split above» e as duas
+ocorrencias de «directory pins in the pytest steps above» — e todos passam a
+nomear o `hook-tests-python-matrix`. Um arquivo que se contradiz e a classe
+feedback-reconcile-the-conclusions-not-just-the-table; a primeira redacao
+curou UM sitio e o rail codex r2 achou a CLASSE. O censo mecanico dos seis
+restantes esta no V6c do LAND, nas DUAS pernas: os 6 literais velhos a ZERO E
+o nome do job novo × 8 (1 definicao + 7 comentarios) — so a perna de ausencia
+passaria com os comentarios APAGADOS em vez de reescritos.
+
+O bump que pega carona. O Owner diferiu o `timeout-minutes` do Smoke Install
+em 2026-09-01 nomeando TRES gatilhos; o que disparou e o terceiro — «a
+proxima wave que ja toque .github/workflows/». Os outros dois nao dispararam
+(nenhuma run passou de 101 min, nenhum `cancelled` sem causa), e isso ficou
+escrito para que ninguem leia 150 como resposta a uma emergencia. O bloco de
+historia aditiva NAO e apagado: ele e o ledger de como se chegou a 126. O
+bloco novo mede — wall do JOB `smoke` (startedAt->completedAt, que e o que
+`timeout-minutes` fecha; a nota da S336 lia `1h32` de um RUN, e o mesmo run
+mede 92m32s como JOB) nos 7 runs verdes mais recentes: 73m18s a 92m32s.
+Isso estabelece a FAIXA observada e nada alem dela — o rail r4 apontou
+(P3, aceito) que os sete runs compartilham a definicao do workflow mas NAO
+a carga executada, e separar runner de carga exigiria execucoes repetidas
+no MESMO sha. O bloco dimensiona sobre o MAXIMO observado e nao afirma
+causa: 126 deixa 33m28s (1,36x); 150 deixa 57m28s (1,62x). Nao ha previsao
+de wall-clock aqui (AGENTS.md:9-11): um teto de timeout nao e medida de
+duracao.
+
+Dois paths, os DOIS canonicos (`validate.yml` esta em `_KERNEL_PATHS` — o
+LAND arma o proprio override, no menor escopo, com o par reason/ack validado
+VIVO contra o contrato do hook), 5 hunks, zero `.py` e zero `.sh`. Tudo
+DERIVADO de um unico material versionado
+(s343-ceremony-w4a/apply-w4a-validate-deletion.py, 11 edicoes com ancora
+exata e contagem declarada, com rollback transacional quando uma pos-condicao
+reprova); o V3 do LAND prova `HEAD + script == patch` byte a byte nos 2 paths,
+o V5 re-deriva a cobertura, o V4 roda o actionlint com os flags EXATOS do step
+da CI, o V6 prova o nao-vacuo — inclusive que o ledger aditivo do timeout
+SOBREVIVEU — e o V6c fecha o censo dos comentarios.
+
+O que NAO entra: split de jobs, `fail-fast`, composite action — isso e a W4b,
+cuja justificativa e ATRIBUICAO DE FALHA e nao velocidade (K21).
+
+O que o rail achou (r1: 2 P1; r2: 1 P2; materiais r1: 1 blocking):
+o codex levantou, de forma INDEPENDENTE e com a mesma citacao de linha, o
+achado r24 P1 do relatorio da S340 — `docs/BRANCH-PROTECTION.md:101-105`
+documenta UM status check obrigatorio, o do job `validate`, e depois desta
+delecao ele nao roda mais as suites de hooks/scripts: quem as roda e
+`hook-tests-python-matrix (3.9)` e `(3.12)`, que NAO sao obrigatorios. Numa
+PR, uma matriz VERMELHA coexistiria com um Validate «verde».
+A cura NAO foi uma nota: virou o G7 do LAND, que LE a config VIVA
+(`gh api .../branches/main/protection/required_status_checks`) e classifica
+em `covered` (passa), `unprotected` (404 — a janela nao se abre hoje),
+`window` e `unreadable`; nos dois ultimos o land PARA ate o Owner escolher
+entre fechar a janela (config + doc, na mesma janela) e aceita-la com
+`CEO_W4A_REQUIRED_CHECK_ACK=I-ACCEPT`. As duas metades da cura definitiva
+seguem FORA do patch por decisao: config server-side nao e um path, e o doc
+sem a config documentaria um estado inexistente.
+O segundo item do r1 — «attach signed sentinel evidence» — e o artefato que a
+CERIMONIA produz: o sentinel e o `.asc` vivem na arvore viva (materiais
+commitados ANTES do SIGN) e NAO podem existir na sombra por construcao.
+O rail r2 rodou em modo PROMPT (com o contexto de cerimonia dado, para que o
+item estrutural nao consumisse a rodada) e CONFIRMOU o nucleo da wave, em
+outra voz: «The deleted test commands are functionally covered by the matrix
+with equivalent paths, markers, flags, working directory, and default Claude
+adapter behavior… The smoke timeout block records measurements rather than
+predicting speed or duration.» O P2 dele foi a CLASSE dos comentarios orfaos,
+curada acima.
+A rodada de MATERIAIS pegou o exec-bit: os 4 `.sh` e o `.py` do pacote
+nasceram 100755 e o `check-ceremony-script.py` os reprovou por R8 (4
+blocking, rc=1) — o V9a do proprio LAND abortaria. Curado nos DOIS lados
+(filesystem e index), rc=0.
+
+O AC-16 NAO fecha com este commit: o push dele e a corrida 1/3. O
+OWNER-S343-W4A-MEASURE.sh empurra as outras duas, SERIALIZADAS (o
+concurrency.cancel-in-progress do validate.yml cancela runs consecutivos), e
+escreve .claude/plans/PLAN-186/w4/validate-deletion-RESULT.md com a subtracao
+bruta contra os 3 baselines REGISTRADOS por id.
+
+Sentinel: .claude/plans/PLAN-186/wave-s343-w4a-approved.md (+ .asc).
+Bateria G-PRE/G0-G6 + V1-V9 do OWNER-S343-W4A-LAND.sh verde contra
+EXPECTED-BASELINE.txt.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_016ibx8JK94ZRDMESX9d1py6

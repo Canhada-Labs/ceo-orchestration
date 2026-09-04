@@ -1,0 +1,207 @@
+diff --git a/.github/workflows/smoke-install.yml b/.github/workflows/smoke-install.yml
+index 9f01ec9..e298a58 100644
+--- a/.github/workflows/smoke-install.yml
++++ b/.github/workflows/smoke-install.yml
+@@ -293,7 +293,48 @@ jobs:
+     # by taking the larger of the two (111) would have under-sized the job
+     # by exactly the PLAN-185 step — the `cancelled`-on-an-innocent-step
+     # class the doctrine above exists to prevent.
+-    timeout-minutes: 126
++    # PLAN-186 W4a (S343): 126 -> 150 — the first number in this block
++    # sized on MEASURED wall instead of on additive step arithmetic. Every
++    # block above composes per-step estimates; the samples below give an
++    # observed RANGE for this job, which the arithmetic never had. They do
++    # NOT say what causes the spread — see the note under the table.
++    # Instrument: wall of the JOB `smoke` (startedAt -> completedAt), which
++    # is what `timeout-minutes` gates. The RUN wall is 1-5 min longer and is
++    # NOT the right instrument — an earlier note in the project memory read
++    # `1h32` off a RUN, which is the same run measured as 92m32s here.
++    # Read with `gh run view <id> --json jobs`, seven most recent GREEN runs
++    # of this workflow, newest first (2026-09-03):
++    #   33809424817  92m32s   35f33a8
++    #   33743649231  90m40s   ba15c71
++    #   33630753302  77m53s   8efe09b
++    #   33582381725  87m50s   f0e98de
++    #   33503515412  86m52s   b7dad83
++    #   33388608651  86m44s   826688f
++    #   33364620284  73m18s   f348ee9
++    # min 73m18s, max 92m32s. What that establishes is the observed RANGE
++    # and nothing more: the seven runs share this workflow definition but
++    # NOT the executed workload — 826688f changed
++    # scripts/tests/smoke-install.sh; ba15c71 changed scripts/doctor.sh and
++    # the installer write-safety e2e; this job invokes all of them.
++    # Attributing the spread to the RUNNER would need repeated runs at ONE
++    # sha, which nobody has done. So this block sizes on the observed
++    # maximum and claims no cause. (The runner-variance class is real in
++    # this repo — S327: the hook-latency gate measured 77 ms locally and
++    # 209-435 ms in CI on the SAME sha — but that is a precedent, not
++    # evidence about these seven numbers.)
++    # 126 leaves 33m28s over the observed max (1.36x); 150 leaves 57m28s
++    # (1.62x). The house rule fires below 20% headroom and 126 was still
++    # ABOVE it at 26.6% — so the trigger that fired is not that one. The
++    # S336 deferral (Owner, 2026-09-01) named three, and this is the third:
++    # the next wave that already touches `.github/workflows/` takes the bump
++    # along at ~zero marginal cost. That wave is PLAN-186 W4a.
++    # What is deliberately NOT claimed: this is not a prediction that the
++    # job will take 150 minutes, and the W4a deletion riding in the same
++    # patch touches `validate.yml`, not this job — no number here is
++    # adjusted for it. Re-tighten on a real CI p95 with >= 3 further
++    # samples, never on arithmetic (AGENTS.md:9-11: this file records
++    # measurements and subtractions, never speed claims).
++    timeout-minutes: 150
+     permissions:
+       contents: read
+     steps:
+diff --git a/.github/workflows/validate.yml b/.github/workflows/validate.yml
+index 0063740..cfc88ba 100644
+--- a/.github/workflows/validate.yml
++++ b/.github/workflows/validate.yml
+@@ -327,8 +327,8 @@ jobs:
+       # pytest note (debate C1 — no double-collection): the Wave C test
+       # files test_gen_command_skill_hook_map.py, test_skill_health.py,
+       # test_context_budget.py live under .claude/scripts/tests/ which
+-      # is ALREADY collected by "Run Python script unit tests" below and
+-      # by hook-tests-python-matrix — do NOT re-list them as paths.
++      # is ALREADY collected by the hook-tests-python-matrix job
++      # (PLAN-186 W4a) — do NOT re-list them as paths.
+       # -----------------------------------------------------------------
+       - name: Command->skill->hook map drift gate (PLAN-153 Wave C)
+         run: |
+@@ -394,10 +394,11 @@ jobs:
+       # comment. `--strict` is the target state once W1/W2 and the triage
+       # shrink the set; flipping it is a wave of its own, not a flag change.
+       #
+-      # The instrument's own unit suite needs no step here: the "Run Python
+-      # script unit tests" step below runs the whole `.claude/scripts/tests/`
+-      # directory, so it is wired by membership — the same rule `:291-295`
+-      # states for the Wave C tests ("do NOT re-list them as paths").
++      # The instrument's own unit suite needs no step here: the
++      # `hook-tests-python-matrix` job runs the whole `.claude/scripts/tests/`
++      # directory (PLAN-186 W4a), so it is wired by membership — the same
++      # rule the double-collection note above states for the Wave C tests
++      # ("do NOT re-list them as paths").
+       #
+       # UNCONDITIONAL on purpose. The instrument ships in its own commit
+       # (PLAN-185 W0, 7383518) and is a tracked file, so there is no checkout
+@@ -435,10 +436,22 @@ jobs:
+           tail -n 15 "$LOG"
+ 
+       # -----------------------------------------------------------------
+-      # Step: Python hook unit tests (Sprint 2 A.4)
+-      # Runs every test under .claude/hooks/tests/. Uses Python 3.12
+-      # from setup-python (audit-v2 hot-fix: ubuntu-24.04 runner's
+-      # default python3 ships without pytest; set up explicitly).
++      # Step: Python toolchain for the steps below (Sprint 2 A.4)
++      # PLAN-186 W4a deleted the hook/script unit-test steps this banner
++      # used to introduce; `hook-tests-python-matrix` runs those suites
++      # now, in 3.9 AND 3.12. What stays is the toolchain later steps of
++      # this job still use — MEASURED, not assumed: TWO of them INVOKE
++      # pytest (the PLAN-155 Wave 6 teeth and the PLAN-152 tests-01
++      # roots); the npm packlist gate uses the selected python3
++      # interpreter but NOT pytest. So: Python 3.12 from setup-python
++      # (audit-v2 hot-fix: the ubuntu-24.04 default python3 ships
++      # without pytest) plus pytest itself.
++      # NOT verified by this wave: whether anything still standing in
++      # this job needs PyYAML. The install below keeps bringing it, and
++      # its own comment names two tests that now run in the matrix; no
++      # later pytest ROOT imports yaml, and the two `import yaml`
++      # one-liners in this job run BEFORE this step. Dropping it is a
++      # functional change, so it is FLAGGED here, not guessed at.
+       # -----------------------------------------------------------------
+       - name: Set up Python for hook tests
+         # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
+@@ -451,16 +464,6 @@ jobs:
+         # in .claude/scripts/tests/; pytest used by all hook tests.
+         run: python3 -m pip install --quiet --no-cache-dir "pytest==8.*" "PyYAML>=6.0" pytest-xdist
+ 
+-      - name: Run Python hook unit tests (CEO_HOOK_ADAPTER=claude default)
+-        env:
+-          CEO_HOOK_ADAPTER: claude
+-        run: |
+-          set -euo pipefail
+-          echo "Python version: $(python3 --version)"
+-          cd "$GITHUB_WORKSPACE"
+-          python3 -m pytest .claude/hooks/tests/ -n auto -m 'not serial' --strict-markers --tb=no -q
+-          python3 -m pytest .claude/hooks/tests/ -m 'serial' --strict-markers --tb=no -q
+-
+       # -----------------------------------------------------------------
+       # Step: Installer --harness codex matrix (PLAN-155 Wave 5, debate A11)
+       # The nine-case `install.sh --harness codex` matrix + uninstall
+@@ -486,8 +489,9 @@ jobs:
+       # -----------------------------------------------------------------
+       # PLAN-155 Wave 6 -- inverted pair-rail + advisory-rail teeth.
+       # Explicit positive-control paths (the plan asks for them even though
+-      # hooks/tests/ is dir-collected above): the Stop-review gate + the
+-      # advisory-teeth chain-scan, pinned green under BOTH adapters. Plus a
++      # hooks/tests/ is dir-collected by the hook-tests-python-matrix job —
++      # PLAN-186 W4a): the Stop-review gate + the advisory-teeth chain-scan,
++      # pinned green under BOTH adapters. Plus a
+       # FUNCTIONAL self-test that the RED-on-absence teeth exit non-zero on a
+       # synthetic chain with tool activity but no boot breadcrumb (a
+       # fail-open rail's silence is NOT health -- the teeth must bite in CI).
+@@ -532,25 +536,14 @@ jobs:
+           cd "$GITHUB_WORKSPACE"
+           python3 .claude/scripts/check-action-sha-drift.py --offline
+ 
+-      # -----------------------------------------------------------------
+-      # Step: Python script unit tests (audit-query, run-skill-benchmark,
+-      # check-tier-boundaries)
+-      # -----------------------------------------------------------------
+-      - name: Run Python script unit tests
+-        run: |
+-          set -euo pipefail
+-          cd "$GITHUB_WORKSPACE"
+-          # PLAN-122 WS12 — optimizer (WS-1/WS-2) unit suite CI-gated.
+-          python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ -n auto -m 'not serial' --strict-markers --tb=no -q
+-          python3 -m pytest .claude/scripts/tests/ .claude/scripts/optimizer/tests/ -m 'serial' --strict-markers --tb=no -q
+-
+       # -----------------------------------------------------------------
+       # Step: PLAN-152 tests-01 — v1.0.1 formerly-CI-dark test roots.
+       # These ~1,4k tests (incl. the 3 SECURITY files now in tests/unit/)
+       # shipped in v1.0.0 but ran in NO CI job. Wired as EXPLICIT paths
+       # (debate C1: no bare `pytest`/testpaths job — bare `tests/` would
+       # double-collect the 7 existing tests/<subdir> pytest.ini entries),
+-      # replicating the two-pass `not serial`/`serial` split above.
++      # replicating the two-pass `not serial`/`serial` split that the
++      # hook-tests-python-matrix job runs (PLAN-186 W4a).
+       # Ordering is load-bearing: .claude/scripts/replay/tests is
+       # co-located immediately AFTER swarm/tests to reproduce the S228
+       # collection ordering. Pre-wiring audit (debate C2) ran per-root:
+@@ -1019,8 +1012,9 @@ jobs:
+       # Collection note (PLAN-153 Wave B): the Wave B pytest files
+       # (test_check_install_profiles.py, test_build_plugin_idempotency.py,
+       # test_release_workflow_asserts.py -> .claude/scripts/tests/) are
+-      # collected by the EXISTING directory pins in the pytest steps
+-      # above — deliberately NOT re-listed as explicit paths (debate C1
++      # collected by the EXISTING directory pins of the
++      # hook-tests-python-matrix job (PLAN-186 W4a) — deliberately NOT
++      # re-listed as explicit paths (debate C1
+       # in the PLAN-152 tests-01 comment: re-listing files under an
+       # already-pinned directory double-collects them). Wave B introduces
+       # NO new pytest root. Its shell tests
+@@ -1130,8 +1124,9 @@ jobs:
+       # test_postcompact_reinject_no_exec_payload.py -> .claude/hooks/tests/;
+       # test_ceo_boot_liveness.py, test_check_action_sha_drift.py [ext],
+       # test_check_agents_md.py -> .claude/scripts/tests/) are collected
+-      # by the EXISTING directory pins in the pytest steps above —
+-      # deliberately NOT re-listed as explicit paths (debate C1 in the
++      # by the EXISTING directory pins of the hook-tests-python-matrix job
++      # (PLAN-186 W4a) — deliberately NOT re-listed as explicit paths
++      # (debate C1 in the
+       # PLAN-152 tests-01 comment: explicit re-listing of files under an
+       # already-pinned directory double-collects them).
+       # -----------------------------------------------------------------
+@@ -1636,6 +1631,13 @@ jobs:
+       - name: Run hook + script tests on Python ${{ matrix.python-version }}
+         env:
+           PYTHONPATH: "."
++          # PLAN-186 W4a — NOT inherited (rail r17 P2): the deleted step A set
++          # CEO_HOOK_ADAPTER=claude for .claude/hooks/tests ONLY, while this matrix
++          # step runs hooks + scripts + optimizer in ONE pytest. Setting it here would
++          # ALTER the scripts/optimizer environment (they ran with it ABSENT in both
++          # the deleted step B and this matrix). The variable is the documented default
++          # of the adapter, so its absence exercises the default path — the same path
++          # step A exercised explicitly. Declared as the second ACCEPTED env delta.
+         run: |
+           set -euo pipefail
+           echo "Python version: $(python3 --version)"
