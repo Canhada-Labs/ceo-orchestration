@@ -245,6 +245,48 @@ The transcripts root resolves as `--transcripts-root` >
 `$CEO_COST_TRANSCRIPTS_DIR` > the shared `_lib.runtime_paths` resolver.
 Tests always inject it; nothing in the suite reads the real corpus.
 
+The instrument's own CLI takes a **closed** window and a
+multi-dimension cut. The window's lower bound is either `--since` (a
+span measured back from *now*) or `--since-at <ISO-8601>` (an absolute
+instant); the two are mutually exclusive and passing both is refused by
+name. `--until <ISO-8601>` is the upper bound. All three filter the SAME
+record timestamp, and the absolute bounds are **inclusive at record
+resolution** — a record stamped exactly at a bound is inside the window,
+its neighbour 1 ms away is not. `--by` takes a comma-separated list
+whose order is the grouping order; a REPEATED `--by` is refused rather
+than resolved by keeping the last one. A malformed value on any of
+these flags is refused by name (exit 2), never reduced to a looser
+query, and a run whose `--until` is not strictly after the lower bound
+is refused instead of printing an empty report.
+
+`--since-at` is what makes a documented window **reproducible**: a
+command whose lower bound is `--since` selects a different set of
+records every day it is re-run.
+
+```bash
+# PLAN-186 AC-1's byte-for-byte check, with no external harness and no
+# subtraction: ONE run over the report's own window,
+# [2026-08-03, 2026-09-02T12:55:05.807Z]. Both bounds are ABSOLUTE, so
+# re-running this command later selects exactly the same records.
+python3 .claude/scripts/ceo-cost-transcripts.py \
+  --since-at 2026-08-03T00:00:00Z --until 2026-09-02T12:55:05.807Z \
+  --by role,model --json
+```
+
+**Both bounds are applied BEFORE dedup, and that is a property of the
+closed window itself.** A message whose progressive snapshots straddle a
+bound is deduped from the snapshots INSIDE the window only, so the
+window reports a truncated turn rather than carrying the whole message
+in or out. The same fact is why subtracting two upper-bounded runs is
+NOT universally identical to one `--since-at`/`--until` run: for such a
+group the subtraction yields zero turns but a non-zero token delta (and
+it can move a total between model buckets on the groups whose model
+metadata is not constant). Measured on the corpus this reproduction ran
+against: **0 of 46,393 dedup groups straddle the lower bound** (1
+straddles the upper one; 3 carry non-constant model metadata), so the
+numbers above are the same either way — and the single closed-window
+run is the form to prefer, being one command with one dedup pass.
+
 Three pricing tables still exist in the tree (`ceo-cost.py`'s
 `_DEFAULT_PRICING`, the model registry behind `budget-summary.py`, and the
 instrument's `cost-table.yaml` loader). The transcripts block is priced by

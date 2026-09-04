@@ -676,5 +676,621 @@ class DefaultProjectDirResolutionTests(TestEnvContext):
         self.assertTrue(str(got).startswith(str(self.home_dir)))
 
 
+class WindowUpperBoundCliTests(TestEnvContext):
+    """`--until` (PLAN-186 AC-1, S344): the UPPER bound of the window.
+
+    Every assertion is about RECORD resolution -- the bound is compared
+    against the same `UsageRecord.ts` the `--since` cutoff filters, and a
+    record stamped exactly at it is INSIDE. All fixtures live under
+    TestEnvContext's per-test tmp dir; the real corpus is never read.
+    """
+
+    #: The bound and its two neighbours, 13 ms apart -- the same shape the
+    #: AC-1 measurement hit on the live corpus (last included record at
+    #: ...05.807Z, next one at ...18.718Z).
+    AT_BOUND = datetime(2026, 9, 2, 12, 55, 5, 807000, tzinfo=timezone.utc)
+    JUST_AFTER = datetime(2026, 9, 2, 12, 55, 5, 808000, tzinfo=timezone.utc)
+    BEFORE = datetime(2026, 9, 2, 12, 0, 0, tzinfo=timezone.utc)
+
+    def setUp(self):
+        super().setUp()
+        self.corpus = self.project_dir / "window-corpus"
+        self.corpus.mkdir(parents=True, exist_ok=True)
+        rows = [
+            ("msg_before", self.BEFORE, 1_000_000, 0),
+            ("msg_at_bound", self.AT_BOUND, 0, 1_000_000),
+            ("msg_after", self.JUST_AFTER, 0, 2_000_000),
+        ]
+        (self.corpus / "win-sess.jsonl").write_text(
+            "\n".join(
+                _assistant_line(
+                    msg_id=mid,
+                    model="claude-haiku-4-5",
+                    ts=ts,
+                    usage=_usage(input_tokens=inp, output_tokens=outp),
+                    session_id="win-sess",
+                )
+                for mid, ts, inp, outp in rows
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self.pricing_file = self.project_dir / "pricing.yaml"
+        self.pricing_file.write_text(
+            "models:\n"
+            "  claude-haiku-4-5:\n"
+            "    input_per_mtok: 1.00\n"
+            "    output_per_mtok: 5.00\n",
+            encoding="utf-8",
+        )
+
+    def _json(self, extra: List[str]) -> Dict[str, Any]:
+        buf = io.StringIO()
+        argv = [
+            "--project-dir",
+            str(self.corpus),
+            "--pricing",
+            str(self.pricing_file),
+            "--json",
+            # wide enough that the fixture's 2026-09-02 stamps are inside
+            # the lower bound no matter when the suite runs.
+            "--since",
+            "36500d",
+        ] + extra
+        with redirect_stdout(buf):
+            rc = cct.main(argv)
+        self.assertEqual(rc, 0)
+        return json.loads(buf.getvalue())
+
+    def _exit_code(self, extra: List[str]) -> int:
+        err = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx:
+            with redirect_stdout(io.StringIO()):
+                with mock.patch.object(sys, "stderr", err):
+                    cct.main(
+                        ["--project-dir", str(self.corpus), "--json"] + extra
+                    )
+        self.last_stderr = err.getvalue()
+        return ctx.exception.code
+
+    def test_no_until_sees_the_whole_corpus(self):
+        payload = self._json([])
+        self.assertEqual(payload["grand_total"]["turns"], 3)
+        self.assertIsNone(payload["until"])
+
+    def test_until_is_inclusive_at_the_record(self):
+        # The bound IS a record's own stamp: that record is inside, the
+        # next one (1 ms later) is outside. Resolution is the record's,
+        # not a grid's.
+        payload = self._json(["--until", "2026-09-02T12:55:05.807Z"])
+        self.assertEqual(payload["grand_total"]["turns"], 2)
+        # 1,000,000 input @ $1 + 1,000,000 output @ $5 = $6.00
+        self.assertAlmostEqual(payload["grand_total"]["usd"], 6.00, places=6)
+        self.assertEqual(payload["until"], "2026-09-02T12:55:05.807Z")
+
+    def test_until_excludes_a_record_after_the_bound(self):
+        payload = self._json(["--until", "2026-09-02T12:00:00Z"])
+        self.assertEqual(payload["grand_total"]["turns"], 1)
+        self.assertAlmostEqual(payload["grand_total"]["usd"], 1.00, places=6)
+
+    def test_until_accepts_an_explicit_offset_and_a_naive_value(self):
+        offset = self._json(["--until", "2026-09-02T12:55:05.807+00:00"])
+        naive = self._json(["--until", "2026-09-02T12:55:05.807"])
+        self.assertEqual(offset["grand_total"]["turns"], 2)
+        self.assertEqual(naive["grand_total"]["turns"], 2)
+
+    def test_until_filters_the_same_field_the_since_cutoff_does(self):
+        # Both bounds are applied to UsageRecord.ts by the ONE pipeline:
+        # a lower bound just above the first record and an upper bound at
+        # the second leave exactly the second record.
+        res = cct.transcript_rollup(
+            self.corpus,
+            cutoff=self.AT_BOUND,
+            until=self.AT_BOUND,
+            pricing_arg=str(self.pricing_file),
+            by="model",
+        )
+        self.assertEqual(res["grand_total"]["turns"], 1)
+        self.assertAlmostEqual(res["grand_total"]["usd"], 5.00, places=6)
+
+    def test_malformed_until_is_refused_by_name_with_rc_2(self):
+        for bad in ("not-a-date", "2026-13-02T00:00:00Z", "yesterday", ""):
+            with self.subTest(bad=bad):
+                code = self._exit_code(["--since", "36500d", "--until", bad])
+                self.assertEqual(code, 2)
+
+    def test_until_before_the_since_cutoff_is_refused_by_name(self):
+        code = self._exit_code(["--since", "24h", "--until", "2020-01-01T00:00:00Z"])
+        self.assertEqual(code, 2)
+        self.assertIn("does not follow the window's LOWER bound", self.last_stderr)
+        # the refusal NAMES the moving bound it computed, not just the flag
+        self.assertIn("--since 24h", self.last_stderr)
+
+    def test_human_report_names_the_upper_bound(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cct.main(
+                [
+                    "--project-dir",
+                    str(self.corpus),
+                    "--pricing",
+                    str(self.pricing_file),
+                    "--since",
+                    "36500d",
+                    "--until",
+                    "2026-09-02T12:55:05.807Z",
+                ]
+            )
+        self.assertEqual(rc, 0)
+        self.assertIn("2026-09-02T12:55:05.807Z", buf.getvalue())
+
+
+class MultiDimensionBreakdownTests(TestEnvContext):
+    """`--by role,model` (PLAN-186 AC-1, S344): the two-dimension cut the
+    published reference table is written in. Grouping ORDER is the order
+    given, and the groups partition the ungrouped total exactly."""
+
+    def setUp(self):
+        super().setUp()
+        self.corpus = self.project_dir / "cut-corpus"
+        (self.corpus / "cut-sess" / "subagents").mkdir(parents=True, exist_ok=True)
+        now = datetime.now(timezone.utc) - timedelta(hours=1)
+        (self.corpus / "cut-sess.jsonl").write_text(
+            _assistant_line(
+                msg_id="msg_seat_a",
+                model="claude-haiku-4-5",
+                ts=now,
+                usage=_usage(input_tokens=1_000_000),
+                session_id="cut-sess",
+            )
+            + "\n"
+            + _assistant_line(
+                msg_id="msg_seat_b",
+                model="claude-opus-5",
+                ts=now,
+                usage=_usage(input_tokens=2_000_000),
+                session_id="cut-sess",
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (self.corpus / "cut-sess" / "subagents" / "agent-1.jsonl").write_text(
+            _assistant_line(
+                msg_id="msg_sub_a",
+                model="claude-haiku-4-5",
+                ts=now,
+                usage=_usage(input_tokens=4_000_000),
+                session_id="cut-sess",
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self.pricing_file = self.project_dir / "pricing.yaml"
+        self.pricing_file.write_text(
+            "models:\n"
+            "  claude-haiku-4-5:\n"
+            "    input_per_mtok: 1.00\n"
+            "    output_per_mtok: 5.00\n"
+            "  claude-opus-5:\n"
+            "    input_per_mtok: 1.00\n"
+            "    output_per_mtok: 5.00\n",
+            encoding="utf-8",
+        )
+
+    def _json(self, by: str) -> Dict[str, Any]:
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cct.main(
+                [
+                    "--project-dir",
+                    str(self.corpus),
+                    "--pricing",
+                    str(self.pricing_file),
+                    "--json",
+                    "--since",
+                    "24h",
+                    "--by",
+                    by,
+                ]
+            )
+        self.assertEqual(rc, 0)
+        return json.loads(buf.getvalue())
+
+    def test_grouping_order_follows_the_flag(self):
+        role_first = set(self._json("role,model")["by_role,model"])
+        model_first = set(self._json("model,role")["by_model,role"])
+        self.assertEqual(
+            role_first,
+            {
+                "assento | claude-haiku-4-5",
+                "assento | claude-opus-5",
+                "subagent | claude-haiku-4-5",
+            },
+        )
+        self.assertEqual(
+            model_first,
+            {
+                "claude-haiku-4-5 | assento",
+                "claude-opus-5 | assento",
+                "claude-haiku-4-5 | subagent",
+            },
+        )
+
+    def test_group_totals_equal_the_ungrouped_total(self):
+        payload = self._json("role,model")
+        groups = payload["by_role,model"]
+        grand = payload["grand_total"]
+        self.assertAlmostEqual(
+            sum(g["usd"] for g in groups.values()), grand["usd"], places=6
+        )
+        self.assertEqual(sum(g["turns"] for g in groups.values()), grand["turns"])
+        for cls in cct._TOKEN_CLASSES:
+            self.assertEqual(
+                sum(g[cls] for g in groups.values()), grand[cls], msg=cls
+            )
+
+    def test_single_dimension_is_unchanged(self):
+        payload = self._json("model")
+        self.assertEqual(
+            set(payload["by_model"]), {"claude-haiku-4-5", "claude-opus-5"}
+        )
+
+    def test_split_by_preserves_order_and_refuses_by_name(self):
+        self.assertEqual(cct._split_by("role,model"), ["role", "model"])
+        self.assertEqual(cct._split_by("model, role"), ["model", "role"])
+        self.assertEqual(cct._split_by("day"), ["day"])
+        for bad, needle in (
+            ("role,nope", "unknown breakdown dimension"),
+            ("role,", "empty dimension"),
+            (",model", "empty dimension"),
+            ("role,role", "duplicated dimension"),
+            ("", "empty --by value"),
+        ):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError) as ctx:
+                    cct._split_by(bad)
+                self.assertIn(needle, str(ctx.exception))
+
+    def test_composite_label_is_injective_when_a_value_holds_the_separator(self):
+        # Rail r1 [P2]: a raw join would merge the tuples ('a | b', 'c')
+        # and ('a', 'b | c') into one bucket. Session ids come from the
+        # corpus, not from a flag, so the label must be injective by
+        # CONSTRUCTION rather than by an assumption about the values.
+        class _Rec(object):
+            def __init__(self, session_id, model):
+                self.session_id = session_id
+                self.model = model
+
+        class _Priced(object):
+            def __init__(self, rec):
+                self.rec = rec
+
+        key = cct._group_key_fn(["session", "model"])
+        left = key(_Priced(_Rec("a | b", "c")))
+        right = key(_Priced(_Rec("a", "b | c")))
+        self.assertNotEqual(left, right)
+        # and a value with no separator is untouched
+        self.assertEqual(
+            key(_Priced(_Rec("sess-1", "claude-opus-5"))),
+            "sess-1 | claude-opus-5",
+        )
+
+    def test_malformed_by_exits_2_without_falling_back_to_one_dimension(self):
+        for bad in ("role,nope", "role,", "role,role", ""):
+            with self.subTest(bad=bad):
+                err = io.StringIO()
+                with self.assertRaises(SystemExit) as ctx:
+                    with redirect_stdout(io.StringIO()):
+                        with mock.patch.object(sys, "stderr", err):
+                            cct.main(
+                                [
+                                    "--project-dir",
+                                    str(self.corpus),
+                                    "--by",
+                                    bad,
+                                ]
+                            )
+                self.assertEqual(ctx.exception.code, 2)
+                self.assertIn("invalid --by", err.getvalue())
+
+    def test_a_repeated_by_flag_is_refused_by_name(self):
+        # Rail r4 [P1]: with argparse's default `store` action,
+        # `--by role --by model` kept only the LAST value and grouped by
+        # ONE dimension, silently dropping `role` -- contradicting the
+        # help's promise. `action="append"` turns that into a refusal.
+        err = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx:
+            with redirect_stdout(io.StringIO()):
+                with mock.patch.object(sys, "stderr", err):
+                    cct.main(
+                        [
+                            "--project-dir",
+                            str(self.corpus),
+                            "--by",
+                            "role",
+                            "--by",
+                            "model",
+                        ]
+                    )
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn(
+            "pass ONE --by with a comma-separated list", err.getvalue()
+        )
+        # and the single comma-separated form still cuts both dimensions,
+        # with the groups still partitioning the ungrouped total
+        payload = self._json("role,model")
+        groups = payload["by_role,model"]
+        self.assertEqual(len(groups), 3)
+        self.assertEqual(
+            sum(g["turns"] for g in groups.values()),
+            payload["grand_total"]["turns"],
+        )
+
+
+class AbsoluteLowerBoundCliTests(TestEnvContext):
+    """`--since-at` (PLAN-186 AC-1, rail r4): the ABSOLUTE lower bound.
+
+    `--since` is measured back from the wall clock, so a command
+    DOCUMENTED as a closed window selects a different set of records on a
+    later run -- the reproduction in docs/cost-of-operation.md was not
+    literally re-runnable. `--since-at` fixes the lower end to an instant
+    at the SAME record resolution as `--until`. Fixtures live under
+    TestEnvContext's per-test tmp dir; the real corpus is never read.
+    """
+
+    #: Three records, 1 ms apart, around the bound.
+    LO = datetime(2026, 9, 2, 12, 55, 5, 806000, tzinfo=timezone.utc)
+    MID = datetime(2026, 9, 2, 12, 55, 5, 807000, tzinfo=timezone.utc)
+    HI = datetime(2026, 9, 2, 12, 55, 5, 808000, tzinfo=timezone.utc)
+
+    def setUp(self):
+        super().setUp()
+        self.corpus = self.project_dir / "lower-corpus"
+        self.corpus.mkdir(parents=True, exist_ok=True)
+        rows = [
+            ("msg_lo", self.LO, 100),
+            ("msg_mid", self.MID, 200),
+            ("msg_hi", self.HI, 400),
+        ]
+        (self.corpus / "low-sess.jsonl").write_text(
+            "\n".join(
+                _assistant_line(
+                    msg_id=mid,
+                    model="claude-haiku-4-5",
+                    ts=ts,
+                    usage=_usage(input_tokens=0, output_tokens=outp),
+                    session_id="low-sess",
+                )
+                for mid, ts, outp in rows
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        self.pricing_file = self.project_dir / "pricing.yaml"
+        self.pricing_file.write_text(
+            "models:\n"
+            "  claude-haiku-4-5:\n"
+            "    input_per_mtok: 1.00\n"
+            "    output_per_mtok: 5.00\n",
+            encoding="utf-8",
+        )
+
+    def _json(self, extra: List[str]) -> Dict[str, Any]:
+        buf = io.StringIO()
+        argv = [
+            "--project-dir",
+            str(self.corpus),
+            "--pricing",
+            str(self.pricing_file),
+            "--json",
+        ] + extra
+        with redirect_stdout(buf):
+            rc = cct.main(argv)
+        self.assertEqual(rc, 0)
+        return json.loads(buf.getvalue())
+
+    def _exit_code(self, extra: List[str]) -> int:
+        err = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx:
+            with redirect_stdout(io.StringIO()):
+                with mock.patch.object(sys, "stderr", err):
+                    cct.main(
+                        ["--project-dir", str(self.corpus), "--json"] + extra
+                    )
+        self.last_stderr = err.getvalue()
+        return ctx.exception.code
+
+    def test_since_at_is_inclusive_at_the_record(self):
+        # The bound IS the middle record's own stamp: that record is IN,
+        # the one 1 ms earlier is OUT. Same resolution as --until.
+        payload = self._json(["--since-at", "2026-09-02T12:55:05.807Z"])
+        self.assertEqual(payload["grand_total"]["turns"], 2)
+        self.assertEqual(payload["grand_total"]["output_tokens"], 600)
+        self.assertEqual(payload["since_at"], "2026-09-02T12:55:05.807Z")
+        # the relative bound is reported ABSENT, not as the unused 30d
+        self.assertIsNone(payload["since"])
+
+    def test_since_at_one_millisecond_earlier_admits_the_first_record(self):
+        payload = self._json(["--since-at", "2026-09-02T12:55:05.806Z"])
+        self.assertEqual(payload["grand_total"]["turns"], 3)
+        self.assertEqual(payload["grand_total"]["output_tokens"], 700)
+
+    def test_since_at_after_the_last_record_selects_nothing(self):
+        payload = self._json(["--since-at", "2026-09-02T12:55:05.809Z"])
+        self.assertEqual(payload["grand_total"]["turns"], 0)
+
+    def test_since_at_accepts_an_explicit_offset_and_a_naive_value(self):
+        offset = self._json(["--since-at", "2026-09-02T12:55:05.807+00:00"])
+        naive = self._json(["--since-at", "2026-09-02T12:55:05.807"])
+        self.assertEqual(offset["grand_total"]["turns"], 2)
+        self.assertEqual(naive["grand_total"]["turns"], 2)
+
+    def test_closed_absolute_window_isolates_one_record(self):
+        # [.807, .807999] holds the middle record ALONE, and both ends are
+        # absolute: re-running this command tomorrow selects the same
+        # record -- the property `--since` cannot offer.
+        payload = self._json(
+            [
+                "--since-at",
+                "2026-09-02T12:55:05.807Z",
+                "--until",
+                "2026-09-02T12:55:05.807999Z",
+            ]
+        )
+        self.assertEqual(payload["grand_total"]["turns"], 1)
+        self.assertEqual(payload["grand_total"]["output_tokens"], 200)
+
+    def test_since_and_since_at_together_are_refused_by_name(self):
+        code = self._exit_code(
+            ["--since", "36500d", "--since-at", "2026-09-02T00:00:00Z"]
+        )
+        self.assertEqual(code, 2)
+        self.assertIn("--since-at", self.last_stderr)
+        self.assertIn("not allowed with", self.last_stderr)
+
+    def test_malformed_since_at_is_refused_by_name_with_rc_2(self):
+        for bad in ("not-a-date", "2026-13-02T00:00:00Z", "yesterday", ""):
+            with self.subTest(bad=bad):
+                code = self._exit_code(["--since-at", bad])
+                self.assertEqual(code, 2)
+                self.assertIn("invalid --since-at", self.last_stderr)
+
+    def test_upper_bound_not_after_the_lower_one_is_refused_by_name(self):
+        # EQUAL bounds included: refused rather than reported. An empty
+        # report is indistinguishable from a corpus with no records, and
+        # a moving `--since` lower bound can climb above a fixed --until
+        # between two runs of the very same command.
+        cases = (
+            (["--since-at", "2026-09-02T12:55:05.807Z"], "2026-09-02T12:55:05.807Z"),
+            (["--since-at", "2026-09-03T00:00:00Z"], "2026-09-02T00:00:00Z"),
+            (["--since", "24h"], "2020-01-01T00:00:00Z"),
+        )
+        for lower, upper in cases:
+            with self.subTest(lower=lower[0], upper=upper):
+                code = self._exit_code(lower + ["--until", upper])
+                self.assertEqual(code, 2)
+                self.assertIn(
+                    "does not follow the window's LOWER bound", self.last_stderr
+                )
+
+    def test_human_report_names_the_absolute_lower_bound(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = cct.main(
+                [
+                    "--project-dir",
+                    str(self.corpus),
+                    "--pricing",
+                    str(self.pricing_file),
+                    "--since-at",
+                    "2026-09-02T12:55:05.807Z",
+                ]
+            )
+        self.assertEqual(rc, 0)
+        out = buf.getvalue()
+        self.assertIn("2026-09-02T12:55:05.807Z", out)
+        # the unused relative default must NOT be advertised as the window
+        self.assertNotIn("janela: 30d", out)
+
+
+class WindowSubtractionLimitTests(TestEnvContext):
+    """What the closed window does NOT promise (rail r2, S344).
+
+    Two facts the doc and the --help now DECLARE, frozen here so a
+    later edit cannot quietly change them: the default upper bound is
+    ABSENT (not `now`), and both bounds are applied BEFORE dedup, so a
+    group straddling a bound is truncated rather than carried whole.
+    """
+
+    BOUND = datetime(2026, 9, 2, 12, 55, 5, 807000, tzinfo=timezone.utc)
+    AFTER = datetime(2026, 9, 2, 13, 0, 0, tzinfo=timezone.utc)
+    FUTURE = datetime(2099, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    def setUp(self):
+        super().setUp()
+        self.corpus = self.project_dir / "limit-corpus"
+        self.corpus.mkdir(parents=True, exist_ok=True)
+        self.pricing_file = self.project_dir / "pricing.yaml"
+        self.pricing_file.write_text(
+            "models:\n"
+            "  claude-haiku-4-5:\n"
+            "    input_per_mtok: 1.00\n"
+            "    output_per_mtok: 5.00\n",
+            encoding="utf-8",
+        )
+
+    def _write(self, rows):
+        (self.corpus / "lim-sess.jsonl").write_text(
+            "\n".join(
+                _assistant_line(
+                    msg_id=mid,
+                    model="claude-haiku-4-5",
+                    ts=ts,
+                    usage=_usage(input_tokens=0, output_tokens=outp),
+                    session_id="lim-sess",
+                )
+                for mid, ts, outp in rows
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    def _json(self, extra):
+        buf = io.StringIO()
+        argv = [
+            "--project-dir",
+            str(self.corpus),
+            "--pricing",
+            str(self.pricing_file),
+            "--json",
+            "--since",
+            "36500d",
+        ] + extra
+        with redirect_stdout(buf):
+            rc = cct.main(argv)
+        self.assertEqual(rc, 0)
+        return json.loads(buf.getvalue())
+
+    def test_default_upper_bound_is_absent_not_now(self):
+        # A future-dated record (clock skew) is KEPT when --until is
+        # omitted. If the default silently became `now`, this record
+        # would vanish from the report without a word.
+        self._write([("m_now", self.AFTER, 10), ("m_future", self.FUTURE, 20)])
+        payload = self._json([])
+        self.assertIsNone(payload["until"])
+        self.assertEqual(payload["grand_total"]["turns"], 2)
+        self.assertEqual(payload["grand_total"]["output_tokens"], 30)
+
+    def test_until_help_does_not_promise_a_default_it_never_applies(self):
+        parser = cct.build_parser()
+        helps = [
+            a.help
+            for a in parser._actions
+            if "--until" in getattr(a, "option_strings", [])
+        ]
+        self.assertEqual(len(helps), 1)
+        self.assertNotIn("Default: now", helps[0])
+        self.assertIn("unbounded above", helps[0])
+
+    def test_a_group_straddling_the_bound_is_TRUNCATED_not_carried(self):
+        # One message, two progressive snapshots either side of the
+        # bound. Both bounds filter BEFORE dedup, so the bounded run
+        # sees only the first snapshot -- which is why subtracting two
+        # runs is not identical to one closed-window rollup, the limit
+        # docs/cost-of-operation.md declares by name.
+        self._write([("m_split", self.BOUND, 100), ("m_split", self.AFTER, 900)])
+        whole = self._json([])
+        self.assertEqual(whole["grand_total"]["turns"], 1)
+        self.assertEqual(whole["grand_total"]["output_tokens"], 900)
+        bounded = self._json(["--until", "2026-09-02T12:55:05.807Z"])
+        self.assertEqual(bounded["grand_total"]["turns"], 1)
+        self.assertEqual(bounded["grand_total"]["output_tokens"], 100)
+        # The subtraction of the two runs reports ZERO turns and 800
+        # output tokens -- neither what a closed rollup would say.
+        self.assertEqual(
+            whole["grand_total"]["turns"] - bounded["grand_total"]["turns"], 0
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

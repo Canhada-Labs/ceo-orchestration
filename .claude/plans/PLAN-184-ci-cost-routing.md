@@ -189,22 +189,41 @@ Duas consequências, as duas ruins:
 > parênteses como *leitura de 30 dias*, nunca como o número que fecha um
 > AC.
 >
-> ### ⚠️ As magnitudes abaixo são **NÃO-DERIVADAS** até a W0-US5
+> ### ✅ DERIVADAS na S344 (2026-09-04) — W0-US5 fechada, e a manchete caiu
 >
-> Elas repousam em **duas bases de custo por-run mutuamente
-> inconsistentes** (nota de reconciliação da §1):
+> As duas bases inconsistentes foram substituídas por **uma**: minutos por
+> **JOB** por run, `Ceo` apenas, cada job arredondado para cima ao minuto,
+> sobre os **167** runs de `push` em `main` da janela. Derivação completa,
+> com todos os comandos, em `.claude/plans/PLAN-184/w0/w0-derivation-S344.md`.
+>
+> **A base que sobreviveu é a por-JOB** — é a única com comando. A base
+> "TABELA" da §1 era a média global `13.428 / 167 = 80,4`, e a base
+> "MEDIDA" era uma agregação por workflow que esta derivação **não
+> reproduz**.
 >
 > ```
-> A1 base MEDIDA  (228,95 - governança 15*106*0,022) = 193,97  <- "US$ 194"
-> A1 base TABELA  (heavy 65,4 * 106 * 0,022)         = 152,51  <- 21% a menos
-> A2 base TABELA  (8,1 * 167 * 0,022)                =  29,76  <- "US$ 30"
-> sobreposição    (8,1 * 106 * 0,022)                =  18,89  <- "US$ 19"
+> minutos pagos na janela   14.265,7 wall  |  15.045,0 faturáveis  (US$ 330,99)
+> por-run medido (5 jobs pagos)     85,42  vs  80,40 da tabela  ->  +6,2 %
 > ```
 >
-> **O que sobrevive às duas bases, e é o que autoriza o plano:** a
-> *direção*. A A1 é o termo dominante em qualquer leitura (US$ 194 ou
-> US$ 153), e 77,7% do custo cai em commits que não tocam código.
-> **O que não sobrevive:** a precisão da manchete. Ver **OQ-6**.
+> **Resíduo de +6,2 % com causa NOMEADA** (o Check da US5 pede <5 % *ou* a
+> causa): o `13.428` do plano não é reproduzível por nenhuma base
+> construível a partir dos jobs — nem wall cru (14.265,7), nem só
+> tentativa 1 (14.150,8), nem excluindo cancelados (6.412,4).
+>
+> **E a hipótese pré-registrada da US5 está REFUTADA.** Não houve erro de
+> classificação de ~23-24 runs: reproduzindo a regra original, a
+> atribuição bate (98 runs / 10.035 min contra 106 / 10.407). O que falha
+> é a premissa de **custo por run uniforme** — um push só-docs custa
+> **97,62 min** de wall contra **68,09** de um push de código (**+43 %**).
+> O `±1.884` da nota de reconciliação é artefato da média.
+>
+> **O que a derivação MUDA na direção, e não só na magnitude:** sob a
+> gramática que a própria W1 adotou (`<prefixo>/**/*.md`), a A1 pula
+> **48 de 167 pushes**, não 98 — a âncora de extensão remove **75 % do
+> prêmio**, porque `.claude/plans/**` hospeda `.py`/`.sh`/`.patch`
+> encenados. Somado ao fato de a **A0 já ter landado** (`5ff06c9`), o
+> teto da A1 é **US$ 1,443/dia**. Ver **OQ-6** e **OQ-11**.
 
 **A1 — filtro de paths nos 4 jobs pesados.**
 `hook-tests-python-matrix`, `hook-tests-dual-rail`, `E2E integration
@@ -212,16 +231,30 @@ tests` e `Formal verification mutation harness` passam a rodar **somente
 quando o código muda**. O job `Governance, health, contamination,
 shellcheck` **continua rodando em TODO commit** — é ele que valida os
 `.md` (`check-claude-md-claims.py`, `verify-counts.sh`, staleness,
-contamination). Economia estimada: **US$ 9,24/dia** (`193,97 / 21`;
-leitura de 30 dias: US$ 277) na base MEDIDA, ou **US$ 7,26/dia**
-(`152,51 / 21`; 30 dias: US$ 218) na base TABELA. **NÃO-DERIVADA** até a
-W0-US5.
+contamination). Economia **DERIVADA (S344)**, na base por-JOB e sob a
+gramática de denylist da própria W1 (`<prefixo>/**/*.md`, sem `docs/` e
+sem `.github/`), que pula **48 dos 167 pushes**:
+
+| leitura | minutos A1 | US$ na janela | **US$/dia** | leitura de 30 dias |
+|---|---|---|---|---|
+| **pós-A0** (o que ainda há para ganhar) | 1.377,0 | US$ 30,29 | **US$ 1,443** | US$ 43 |
+| pré-A0 (janela como medida) | 2.095,0 | US$ 46,09 | US$ 2,195 | US$ 66 |
+| contrafactual sem a âncora `*.md` (regra por prefixo cru) | 8.301,0 | US$ 182,62 | US$ 8,696 | US$ 261 |
+
+A **A0 landou em `5ff06c9` (2026-08-23), depois da janela**; ler a A1 na
+linha pré-A0 conta duas vezes o mesmo minuto de matriz. Os antigos
+**US$ 9,24/dia** e **US$ 7,26/dia** estão **substituídos**. Comando e
+tabelas em `.claude/plans/PLAN-184/w0/w0-derivation-S344.md`.
 
 **A2 — os 2 jobs que não paralelizam saem do runner pago.**
 `E2E integration tests` e `Formal verification mutation harness` trocam
-`runs-on: Ceo` por `runs-on: ubuntu-latest`. Economia estimada:
-**US$ 1,42/dia** (`29,76 / 21`; leitura de 30 dias: US$ 43) — base
-TABELA, **NÃO-DERIVADA**.
+`runs-on: Ceo` por `runs-on: ubuntu-latest`. Economia **DERIVADA
+(S344)**, base por-JOB: **US$ 1,756/dia** isolada
+(1.676,0 min = US$ 36,87 na janela; leitura de 30 dias: US$ 53) e
+**US$ 1,578/dia** marginal depois da A1 (1.506,0 min = US$ 33,13).
+**A sobreposição A1 ∩ A2 é US$ 3,74 na janela (US$ 0,178/dia)** — e não
+os US$ 19 estimados, porque a A1 real pula 48 pushes e não 106. A A2
+não toca a matriz, logo a A0 não a altera. Derivação em `.claude/plans/PLAN-184/w0/w0-derivation-S344.md`.
 
 **Projeção declarada na medição: US$ 224 na janela de 21 dias =
 US$ 10,67/dia de corte (71%); custo residual US$ 90/21d =
@@ -866,11 +899,34 @@ mecânico". A decisão é dele; o plano não a antecipa.
       residual registrado. Valores medidos hoje para calibrar a escolha,
       não para substituí-la: teto da A1 ≈ US$ 4,04/dia, fração ≈ 58,8%.
       Check: N e M estao escritos aqui com a data e a assinatura da decisao ANTES do primeiro numero da US1; um resultado abaixo do piso fecha o plano em vez de reabrir a discussao
+      **CALIBRAÇÃO DERIVADA (S344, 2026-09-04) — N e M são decisão do
+      Owner.** Os valores que este item citava (teto ≈ US$ 4,04/dia,
+      fração ≈ 58,8%) **não sobrevivem** à gramática `<prefixo>/**/*.md`
+      que a W1 adotou no round 2 nem à A0 já landada. Medido, na base
+      por-JOB e sob essa gramática (derivação em `.claude/plans/PLAN-184/w0/w0-derivation-S344.md`):
+
+      | grandeza | valor derivado |
+      |---|---|
+      | teto da A1, **pós-A0** | **US$ 1,443/dia** |
+      | fração de custo só-docs, pós-A0 | **17,8 %** |
+      | teto da A1, pré-A0 (para comparar com o texto antigo) | US$ 2,195/dia |
+      | fração só-docs, pré-A0 | 18,1 % |
+      | contrafactual sem a âncora de extensão (regra por prefixo cru) | US$ 6,063/dia · 66,8 % |
+      | A0 já entregue, medida por replay da janela | US$ 3,963/dia |
+      | gasto total remanescente do `validate.yml` no runner pago | US$ 11,798/dia |
+
+      Leitura honesta do que foi medido, e não uma recomendação: com
+      **N ≥ US$ 1,50/dia** o pré-registro fecha o plano. **N e M são
+      decisão do Owner** — esta nota calibra a escolha, não a substitui.
 - [ ] `[P0][US0b]` **A unidade é o PUSH, não o commit.** `paths-ignore`
       no gatilho `push` avalia o diff `before...after` — a UNIÃO de
-      todos os commits do push. Medido: 20 dos 167 pushes da janela
-      carregam mais de um commit (um deles 21). Toda contagem da §1 e
-      todo controle positivo passam a ser por push.
+      todos os commits do push. **Re-derivado (S344): são 21 dos 167
+      pushes** que carregam mais de um commit (o maior carrega 21
+      commits), e **zero** pushes têm diff vazio. Os 167 heads estão
+      todos em `--first-parent main` (`on_first_parent=167 off=0`), logo
+      `head[i-1]..head[i]` é exatamente a união do push. Toda contagem da
+      §1 e todo controle positivo passam a ser por push. Comando e
+      saída em `.claude/plans/PLAN-184/w0/w0-derivation-S344.md`.
       Check: a §1 nao contem a palavra "commit" como unidade de contagem; a derivacao da US1 usa `git diff --name-only head[i-1] head[i]` sobre os 167 heads reais
 
 > **Read-only sobre `main`** (corrigido no debate r1 — a redação anterior
@@ -886,6 +942,32 @@ mecânico". A decisão é dele; o plano não a antecipa.
       só-docs que cada um explica, para que a denylist seja curta e
       cubra o que de fato paga a conta.
       Check: a lista de prefixos e publicada no plano com o comando que a produziu ao lado e a soma das fracoes declarada; enumeracao escrita de memoria e rejeitada
+      **DERIVADA (S344, 2026-09-04).** Censo dos prefixos `.md` que
+      **aparecem** nos diffs dos 167 pushes (nada de memória), ordenado
+      por ganho marginal em minutos pagos atribuíveis à A1, cobertura
+      gulosa, gramática da W1, com `docs/**` e `.github/**` fora (§4/AC-4):
+
+      | # | entrada | min A1 acum. | marginal | pushes | fração acum. |
+      |---|---|---|---|---|---|
+      | 1 | `.claude/plans/**/*.md` | 1.715,0 | 1.715,0 | 40 | 13,9 % |
+      | 2 | `*.md` (raiz) | 1.899,0 | 184,0 | 44 | 15,4 % |
+      | 3 | `npm/**/*.md` | 1.986,0 | 87,0 | 46 | 16,1 % |
+      | 4 | `.claude/governance/**/*.md` | 2.041,0 | 55,0 | 47 | 16,5 % |
+      | 5 | `.claude/commands/**/*.md` | 2.095,0 | 54,0 | **48** | **17,0 %** |
+
+      **Soma declarada: 5 entradas explicam 2.095,0 de 12.341,0 minutos
+      pagos atribuíveis à A1 = 17,0 % (US$ 46,09 de US$ 271,50), pulando
+      48 de 167 pushes.** `.claude/adr/**/*.md`, `SPEC/**/*.md` e
+      `templates/**/*.md` **não entram**: ganho marginal ZERO — todo push
+      que os toca também toca algo fora da lista.
+
+      **Custo da gramática, medido:** a regra cega à extensão (a que a
+      medição original usou) pularia **98** pushes e 8.301,0 min; a âncora
+      `/**/*.md` derruba para **48** pushes e 2.095,0 min — **75 % do
+      prêmio some**, porque dentro dos 50 pushes perdidos vivem 174 `.py`,
+      46 `.sha256`, 44 `.sh`, 41 `.txt`, 30 `.patch` e 17 `.yml`. A
+      gramática está certa E o prêmio é pequeno, ao mesmo tempo. Comandos
+      e censo completo em `.claude/plans/PLAN-184/w0/w0-derivation-S344.md`.
 - [ ] `[P0][US2]` **Provar inércia, por entrada.** Para cada candidato da
       US1, duas provas: (a) **estática** — buscar leituras do caminho
       real do repositório (`_REPO_ROOT` / `Path(__file__).parents[...]`)
@@ -975,9 +1057,22 @@ mecânico". A decisão é dele; o plano não a antecipa.
       código. Hipótese barata a testar primeiro, porque os deltas são
       quase simétricos e opostos: **erro de classificação** de ~23-24 dos
       106 runs "só-docs" que seriam de código. Se for isso, a A1 cai
-      ~US$ 34 na janela (≈ US$ 1,62/dia). Enquanto não reconciliar, os
-      números US$ 194 / US$ 224 permanecem marcados **NÃO-DERIVADOS** no
-      corpo do plano.
+      ~US$ 34 na janela (≈ US$ 1,62/dia).
+      **RECONCILIADA (S344, 2026-09-04) — e a hipótese está REFUTADA.**
+      Não houve erro de classificação: reproduzindo a regra original
+      (prefixo, cega à extensão), a atribuição bate — **98 runs /
+      10.035 min** contra os 106 / 10.407 do plano (−7,5 % e −3,6 %). O
+      que falha é a premissa de **custo por run uniforme**: um push
+      só-docs custa **97,62 min** de wall contra **68,09** de um push de
+      código (**+43 %**), e o `±1.884` é artefato de aplicar a média
+      global 80,4 por bucket. Tabela por JOB (167 runs), resíduo de
+      **+6,2 %** contra a tabela da §1 **com a causa nomeada** (o 13.428
+      é uma agregação por workflow que nenhuma base por-job reproduz), e
+      a base sobrevivente registrada na §2 — tudo em `.claude/plans/PLAN-184/w0/w0-derivation-S344.md`.
+      Colateral que a reconciliação expõe, com número: **431 jobs `Ceo`
+      terminaram `cancelled` carregando 7.853,4 min (US$ 172,77) = 55 %
+      de todos os minutos pagos da janela** — termo maior que A1 e A2
+      somadas, e que é a OQ-4, não escopo deste plano.
       Check: a saida do gh run view por job esta agregada por bucket e publicada; o delta residual contra a tabela por-job da §1 esta abaixo de 5% OU a causa esta nomeada; a §2 registra qual das duas bases sobreviveu e reexpressa A1/A2/sobreposicao nela
 
 ### W1 — A1: os 4 jobs pesados atrás de filtro fail-closed
@@ -1190,7 +1285,12 @@ mecânico". A decisão é dele; o plano não a antecipa.
       `224/21`) ou perto de **US$ 9,76/dia** (`205/21`, com a sobreposição
       A1∩A2)? O número que vale é o da fatura. E a comparação só é
       legítima se a W0-US5 já reconciliou as bases — senão a projeção
-      contra a qual se mede é ela própria NÃO-DERIVADA.
+      contra a qual se mede é ela própria NÃO-DERIVADA. **Pré-condição
+      SATISFEITA (S344): a US5 reconciliou, a base sobrevivente é a
+      por-JOB, e as duas leituras a comparar deixam de ser US$ 10,67 e
+      US$ 9,76/dia — na base derivada e pós-A0 a projeção combinada é
+      A1 US$ 1,443/dia + A2 marginal US$ 1,578/dia = US$ 3,021/dia**
+      (`.claude/plans/PLAN-184/w0/w0-derivation-S344.md`).
       Check: o plano registra qual das duas leituras a fatura confirmou, com o delta em US$/dia; divergencia acima de 20% contra a projecao — medida na MESMA base de tempo — reabre o plano em vez de fecha-lo; e o registro cita o resultado da W0-US5 como pre-condicao da comparacao
 - [ ] `[P1]` Registrar o resíduo com número (§9) para quem for decidir
       um eventual A3.
@@ -1652,3 +1752,7 @@ esse é conferido à mão, pelo AC-10.
   `docs/CTO-GUIDE.md:46` — a contagem exata de workflows (F4).
 - `templates/.github/workflows/validate.yml.template:22-23` — o adopter
   em `ubuntu-latest`; fora do alcance desta mudança (F3).
+
+## Progress log
+
+- 2026-09-04 (S344, Owner presente, land combinado): `p184-derive-ci-cost` landado — W0 DERIVADA (US5/US1/US0b) sobre os 167 runs de push em `main` da janela 01-21/08 numa unica base por-JOB (`Ceo`, cada job arredondado ao minuto): a manchete caiu, a hipotese pre-registrada da US5 esta REFUTADA (o que falha e a premissa de custo por run uniforme — docs-only 97,62 min contra 68,09 de codigo) e o residuo de +6,2 % fica com a causa NOMEADA. Derivacao completa em `.claude/plans/PLAN-184/w0/w0-derivation-S344.md`; W0-US0 (N e M) segue decisao do Owner. Rail r1 (duas lanes codex em paralelo): 2 P2 declarados neste pack — a linha de metodo omite o `PRED_HEAD` (a aritmetica dos 167 intervalos foi REFUTADA em disco: o instrumento parte de um predecessor explicito) e a subsecao «Ressalva de composicao» fica sem marcador de substituicao, com o numero novo nomeando o velho dois paragrafos acima. Registro em `.claude/plans/PLAN-184/w0/s344-p184-derive-ci-cost/rail-land-round-1.md`. Bateria: 62 passed / 2 skipped nos testes de plano dos hooks, suite `.claude/scripts/tests/` completa e 6 gates de corpus rc 0 sobre a arvore STAGED; oraculo `--is-canonical` = 0 nos 2 paths.

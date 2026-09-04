@@ -617,6 +617,71 @@ _GROUP_KEYS = {
     "day": lambda p: p.rec.ts.strftime("%Y-%m-%d"),
 }
 
+#: How the ORDERED dimensions of a multi-dimension `--by` are joined into
+#: ONE bucket label. Rail r1 [P2]: assuming the separator is absent from
+#: every dimension's value space is an ASSERTION, not a guarantee -- a
+#: session id carrying it would merge two distinct tuples into one
+#: bucket. Each component is ESCAPED first, so the label is injective
+#: whatever the corpus contains.
+_BY_SEPARATOR = " | "
+
+
+def _escape_dim_value(v: Any) -> str:
+    """Make one dimension value safe to join with `_BY_SEPARATOR`.
+
+    Backslash first, then the pipe: after this, a literal `|` inside a
+    value can never be read as the joiner, so distinct tuples keep
+    distinct labels (the mapping is injective, not merely usually
+    unambiguous).
+    """
+    return str(v).replace("\\", "\\\\").replace("|", "\\|")
+
+
+def _split_by(by: Any) -> List[str]:
+    """The ONE grammar for `--by`: an ORDERED, comma-separated dimension list.
+
+    The flag, ``transcript_rollup()`` and ``aggregate()`` all parse through
+    this function, so a second grafia of the grammar cannot appear (the
+    D1-D4 defect class of CLAUDE.md section 5). The ORDER given is the
+    GROUPING order. Raises ``ValueError`` with a NAMED reason; ``main()``
+    turns that into an rc-2 refusal instead of quietly grouping by
+    something else.
+    """
+    raw = by if isinstance(by, str) else ",".join(str(d) for d in by)
+    valid = ", ".join(sorted(_GROUP_KEYS))
+    if not raw.strip():
+        raise ValueError("empty --by value; expected one or more of: %s" % valid)
+    out: List[str] = []
+    for d in [part.strip() for part in raw.split(",")]:
+        if not d:
+            raise ValueError(
+                "empty dimension in --by %r (stray comma); expected one or "
+                "more of: %s" % (raw, valid)
+            )
+        if d not in _GROUP_KEYS:
+            raise ValueError(
+                "unknown breakdown dimension: %r; expected one or more of: "
+                "%s" % (d, valid)
+            )
+        if d in out:
+            raise ValueError("duplicated dimension %r in --by %r" % (d, raw))
+        out.append(d)
+    return out
+
+
+def _group_key_fn(dims: List[str]) -> Any:
+    """Bucket key for an ORDERED dimension list, `_BY_SEPARATOR`-joined.
+
+    One dimension keeps the bare value it always had (so a `--by model`
+    report is byte-identical to the pre-`--until` one); two or more are
+    ESCAPED and joined in the order the caller asked for.
+    """
+    fns = [_GROUP_KEYS[d] for d in dims]
+    if len(fns) == 1:
+        return fns[0]
+    return lambda p: _BY_SEPARATOR.join(_escape_dim_value(fn(p)) for fn in fns)
+
+
 _TOKEN_CLASSES = (
     "input_tokens",
     "output_tokens",
@@ -643,7 +708,7 @@ def aggregate(priced: List[Priced], by: str) -> Tuple[Dict[str, float], Dict[str
     grand = _bucket_totals()
     role_totals: Dict[str, Dict[str, float]] = {}
     group_totals: Dict[str, Dict[str, float]] = {}
-    key_fn = _GROUP_KEYS[by]
+    key_fn = _group_key_fn(_split_by(by))
 
     for p in priced:
         for d in (grand, role_totals.setdefault(p.rec.role, _bucket_totals()), group_totals.setdefault(key_fn(p), _bucket_totals())):
@@ -682,15 +747,17 @@ def transcript_rollup(
     cutoff: Optional[datetime] = None,
     pricing_arg: Optional[str] = None,
     by: str = "model",
+    until: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """Scan + dedup + price `project_dir`, returning the rollup as data.
 
     `cutoff` is an aware datetime; records strictly older are dropped.
-    `None` means the whole corpus. This is the single pipeline the CLI
-    itself runs, so the API and the printed report can never disagree.
+    `until` is the UPPER bound, INCLUSIVE at record resolution; records
+    stamped after it are dropped. `None` on either side means unbounded
+    there. This is the single pipeline the CLI itself runs, so the API
+    and the printed report can never disagree.
     """
-    if by not in _GROUP_KEYS:
-        raise ValueError("unknown breakdown dimension: %r" % (by,))
+    _split_by(by)  # validate the breakdown BY NAME before any I/O
     project_dir = Path(project_dir)
     pricing_result = load_pricing(pricing_arg)
 
@@ -699,8 +766,16 @@ def transcript_rollup(
     records = scan_files(top_files, "assento", project_dir, counters)
     records += scan_files(sub_files, "subagent", project_dir, counters)
 
+    # ONE timestamp field carries BOTH bounds: `UsageRecord.ts`, the
+    # parsed `timestamp` of the transcript line. A window whose two ends
+    # filtered different fields would be a lie, so the two filters sit
+    # here, adjacent, over the same attribute. The upper bound is
+    # INCLUSIVE at record resolution (`<=`, never `<`): a record stamped
+    # exactly at the bound belongs to the window.
     if cutoff is not None:
         records = [r for r in records if r.ts >= cutoff]
+    if until is not None:
+        records = [r for r in records if r.ts <= until]
 
     deduped, dropped = dedup(records)
     counters.deduped_records = len(deduped)
@@ -982,6 +1057,29 @@ def _parse_since(expr: str) -> timedelta:
     return timedelta(days=n) if m.group(2) == "d" else timedelta(hours=n)
 
 
+def _parse_instant(expr: str, flag: str = "--until") -> datetime:
+    """An ABSOLUTE ISO-8601 window bound, read by the SAME reader the records use.
+
+    ``_parse_ts`` is what turns a transcript line's ``timestamp`` into
+    ``UsageRecord.ts``; parsing a bound with it is what keeps the bound
+    and the field it filters from drifting apart -- a ``Z`` suffix, an
+    explicit offset and a naive value are all read exactly as a record's
+    own stamp would be. BOTH absolute bounds go through this ONE function
+    (``--until``, and ``--since-at`` since rail r4), so the two ends of a
+    closed window can never be read by two different grammars. Both are
+    INCLUSIVE at record resolution: a record stamped exactly at a bound
+    is INSIDE the window.
+    """
+    dt = _parse_ts(expr.strip() if isinstance(expr, str) else expr)
+    if dt is None:
+        raise argparse.ArgumentTypeError(
+            "invalid %s %r; expected an ISO-8601 instant such as "
+            "2026-09-02T12:55:05.807Z, 2026-09-02T12:55:05.807+00:00 or "
+            "2026-09-02 (a naive value is read as UTC)" % (flag, expr)
+        )
+    return dt
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ceo-cost-transcripts.py",
@@ -1009,14 +1107,70 @@ def build_parser() -> argparse.ArgumentParser:
             "explicitly to use a different file's rates as-is (no "
             "correction applied). Cache-read multiplier: 0.10x base "
             "(0.025x for claude-fable-5-1). Cache-write multiplier: 1.25x "
-            "base at the 5-minute TTL, 2.00x at the 1-hour TTL."
+            "base at the 5-minute TTL, 2.00x at the 1-hour TTL. "
+            "WINDOW: the LOWER bound is either --since (a span measured "
+            "back from now) or --since-at <ISO-8601> (an absolute "
+            "instant), and --until <ISO-8601> is the UPPER one; all "
+            "three filter the SAME record timestamp (UsageRecord.ts), "
+            "and the absolute bounds are INCLUSIVE at RECORD resolution "
+            "-- a record stamped exactly at a bound is kept, its "
+            "neighbour 1 ms away is not. --since-at with --until is a "
+            "CLOSED window that is REPRODUCIBLE: re-run tomorrow it "
+            "selects the same records, which --since cannot promise "
+            "because its bound moves with the wall clock. With the "
+            "two-dimension cut (--by role,model) they make PLAN-186 "
+            "AC-1's byte-for-byte check reproducible from this CLI "
+            "alone, with no external harness."
         ),
     )
-    p.add_argument(
+    # The window's LOWER bound has exactly TWO spellings and they are
+    # mutually exclusive at the PARSER level: a run cannot carry both a
+    # relative and an absolute lower bound with one of them silently
+    # winning (rail r4 [P1]).
+    lower = p.add_mutually_exclusive_group()
+    lower.add_argument(
         "--since",
         default="30d",
         type=str,
-        help="window ending now: <N>d or <N>h (default 30d; 7d and 24h also documented)",
+        help=(
+            "LOWER bound of the window, RELATIVE to now: <N>d or <N>h "
+            "(default 30d; 7d and 24h also documented). Filters "
+            "UsageRecord.ts. Because it is measured back from the wall "
+            "clock, the SAME command run later selects a DIFFERENT set "
+            "of records -- use --since-at when the window has to be "
+            "reproducible."
+        ),
+    )
+    lower.add_argument(
+        "--since-at",
+        default=None,
+        metavar="ISO8601",
+        help=(
+            "LOWER bound of the window as an ABSOLUTE instant, INCLUSIVE "
+            "at record resolution (e.g. 2026-08-03T00:00:00Z; a naive "
+            "value is read as UTC). Filters the SAME field --since and "
+            "--until do (UsageRecord.ts). Mutually exclusive with "
+            "--since: passing both is refused BY NAME (rc 2). Together "
+            "with --until it makes a CLOSED, REPRODUCIBLE window -- the "
+            "same command tomorrow returns the same numbers. "
+            "Default: the relative --since."
+        ),
+    )
+    p.add_argument(
+        "--until",
+        default=None,
+        metavar="ISO8601",
+        help=(
+            "UPPER bound of the window, INCLUSIVE at record resolution "
+            "(e.g. 2026-09-02T12:55:05.807Z; a naive value is read as "
+            "UTC). Filters the SAME field --since does (UsageRecord.ts), "
+            "so the two bounds always describe one window. Rail r2 "
+            "[P2]: the default is NO upper bound, not `now` -- "
+            "defaulting to `now` would SILENTLY drop a "
+            "clock-skewed future-dated record, and a report that "
+            "hides records is worse than one that shows them. "
+            "Default: unbounded above."
+        ),
     )
     p.add_argument(
         "--project-dir",
@@ -1031,9 +1185,19 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--json", action="store_true", help="emit JSON instead of a human table")
     p.add_argument(
         "--by",
-        choices=sorted(_GROUP_KEYS.keys()),
-        default="model",
-        help="breakdown dimension for the report table (default: model)",
+        action="append",
+        default=None,
+        metavar="DIM[,DIM...]",
+        help=(
+            "breakdown dimension(s) for the report table, comma-separated; "
+            "the ORDER given is the grouping order (default: model). "
+            "Valid: " + ", ".join(sorted(_GROUP_KEYS)) + ". Example: "
+            "--by role,model. A malformed value is refused BY NAME (rc 2), "
+            "never silently reduced to one dimension -- and so is a "
+            "REPEATED flag (--by role --by model), which argparse's "
+            "default `store` action would resolve by keeping only the "
+            "LAST value, dropping a dimension without a word."
+        ),
     )
     p.add_argument(
         "--pricing",
@@ -1061,6 +1225,22 @@ def _fmt_int(v: float) -> str:
     return "{:,}".format(int(v))
 
 
+def _window_label(args: argparse.Namespace) -> str:
+    """The window as the report prints it: the lower bound the run really
+    APPLIED (relative `--since` or absolute `--since-at`), plus the upper
+    one when `--until` was given. Never invents a bound the run did not
+    apply -- which is why `main()` blanks `since_raw` under `--since-at`
+    instead of leaving the unused `30d` default to be printed here.
+    """
+    if getattr(args, "since_at_raw", None) is not None:
+        lower = "%s (limite inferior ABSOLUTO, inclusivo)" % args.since_at_raw
+    else:
+        lower = args.since_raw
+    if getattr(args, "until_raw", None) is None:
+        return lower
+    return "%s ate %s (limite superior INCLUSIVO)" % (lower, args.until_raw)
+
+
 def _human_report(
     args: argparse.Namespace,
     project_dir: Path,
@@ -1073,7 +1253,7 @@ def _human_report(
     elapsed_s: float,
 ) -> str:
     lines: List[str] = []
-    lines.append("ceo-cost-transcripts — janela: %s" % args.since_raw)
+    lines.append("ceo-cost-transcripts — janela: %s" % _window_label(args))
     lines.append("project-dir: %s" % project_dir)
     lines.append("pricing: %s" % pricing_result.source)
     lines.append(
@@ -1162,7 +1342,13 @@ def _json_report(
     elapsed_s: float,
 ) -> str:
     payload = {
+        # Exactly ONE of `since` / `since_at` is non-null: the bound the
+        # run actually applied. The unused `--since` default is reported
+        # as null rather than as a window nobody asked for.
         "since": args.since_raw,
+        "since_at": args.since_at_raw,
+        "until": args.until_raw,
+        "by": args.by,
         "project_dir": str(project_dir),
         "pricing_source": pricing_result.source,
         "pricing_used_fallback": pricing_result.used_fallback,
@@ -1199,6 +1385,54 @@ def main(argv: Optional[List[str]] = None) -> int:
         parser.error(str(exc))
         return 2  # pragma: no cover - parser.error() calls sys.exit()
 
+    # The two ABSOLUTE bounds, read by the ONE instant parser. The parser
+    # already refuses --since together with --since-at, so at most one
+    # lower bound reaches the pipeline; when the absolute one is given,
+    # `since_raw` is BLANKED so neither the report header nor the JSON
+    # can advertise a `30d` default that was never applied.
+    args.since_at_raw = args.since_at
+    args.until_raw = args.until
+    try:
+        args.since_at = (
+            _parse_instant(args.since_at_raw, "--since-at")
+            if args.since_at_raw is not None
+            else None
+        )
+        args.until = (
+            _parse_instant(args.until_raw, "--until")
+            if args.until_raw is not None
+            else None
+        )
+    except argparse.ArgumentTypeError as exc:
+        parser.error(str(exc))
+        return 2  # pragma: no cover - parser.error() calls sys.exit()
+    if args.since_at is not None:
+        args.since_raw = None
+
+    # `--by` is `action="append"`, so a REPEATED flag arrives as a LIST
+    # and can be refused. Rail r4 [P1]: with the default `store` action
+    # `--by role --by model` kept only `model` and grouped by one
+    # dimension without a word -- the exact silent reduction the help
+    # promises never happens.
+    by_flags = args.by if args.by is not None else ["model"]
+    if len(by_flags) > 1:
+        parser.error(
+            "--by was given %d times (%s); pass ONE --by with a "
+            "comma-separated list (e.g. --by %s) -- a repeated flag would "
+            "keep only the LAST value and silently drop a dimension"
+            % (
+                len(by_flags),
+                ", ".join(repr(b) for b in by_flags),
+                ",".join(by_flags),
+            )
+        )
+        return 2  # pragma: no cover - parser.error() calls sys.exit()
+    try:
+        args.by = ",".join(_split_by(by_flags[0]))
+    except ValueError as exc:
+        parser.error("invalid --by %r: %s" % (by_flags[0], exc))
+        return 2  # pragma: no cover - parser.error() calls sys.exit()
+
     if args.project_dir:
         project_dir = Path(args.project_dir)
     else:
@@ -1214,14 +1448,39 @@ def main(argv: Optional[List[str]] = None) -> int:
         sys.stderr.write("ceo-cost-transcripts: --project-dir does not exist: %s\n" % project_dir)
         return 2
 
+    # ONE lower bound reaches the pipeline: the ABSOLUTE `--since-at` if
+    # it was given, otherwise `now - --since`. Before rail r4 only the
+    # relative form existed, so a command documented as a `closed window`
+    # was not reproducible -- its lower end moved with the wall clock.
+    if args.since_at is not None:
+        cutoff = args.since_at
+        lower_flag = "--since-at %s" % args.since_at_raw
+    else:
+        cutoff = datetime.now(timezone.utc) - args.since
+        lower_flag = "--since %s (= %s)" % (args.since_raw, cutoff.isoformat())
+    # A window whose upper bound does not STRICTLY follow its lower one
+    # is refused BY NAME instead of printing a report over it: an empty
+    # report is indistinguishable from a corpus with no records, and the
+    # relative lower bound can climb above a fixed `--until` between two
+    # runs of the very same command (rail r4 [P1]).
+    if args.until is not None and args.until <= cutoff:
+        parser.error(
+            "--until %s does not follow the window's LOWER bound %s: the "
+            "upper bound must be STRICTLY after the lower one, so this run "
+            "is refused rather than reported as an empty corpus"
+            % (args.until_raw, lower_flag)
+        )
+        return 2  # pragma: no cover - parser.error() calls sys.exit()
+
     # ONE pipeline for the CLI and for the programmatic callers
     # (PLAN-186 W0, AC-1b): a second copy here is how the printed report
     # and ceo-cost.py's block would silently disagree.
     rolled = transcript_rollup(
         project_dir,
-        cutoff=datetime.now(timezone.utc) - args.since,
+        cutoff=cutoff,
         pricing_arg=args.pricing,
         by=args.by,
+        until=args.until,
     )
     pricing_result = rolled["pricing_result"]
     counters = rolled["counters"]
