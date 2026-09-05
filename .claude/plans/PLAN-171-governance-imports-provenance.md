@@ -1,7 +1,8 @@
 ---
 id: PLAN-171
 title: Imports de governança (cloudflare-os/xirp) — batch-approval, proveniência de leituras, FILE ASSIGNMENT write-time, living docs local
-status: reviewed
+status: executing
+executing_at: 2026-09-05
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
@@ -215,3 +216,18 @@ AC-9. Gate 3: `/debate start PLAN-171` antes do primeiro item L3.
 **Debate:** pair-rail Codex 3 rounds (r1 REJECT → r3 APPROVE,
 S302c) cumpre o review cross-model do conjunto; o `/debate` formal
 L3 roda no início da execução (Gate 3), como manda o protocolo.
+
+## Registro de execução
+
+- **2026-09-05 (S345)** — W0 lote 1/6 MEDIDO: os 10 gates do runbook
+  §7 (canonical-edit, bash-safety, agent-spawn, pair-rail, overhead,
+  adequacy, audit-emit, injector, sentinel-unlock, credential-leak),
+  cada um com o controle positivo rodado nas DUAS metades (verde como
+  está; **vermelho com o enforcement removido**, mutação mínima numa
+  worktree descartável). 10/10 verde, 0 vácuo, 0 sem-controle; ZERO
+  dívidas herdadas do AC-9 do PLAN-169 — as três dívidas de S294 estão
+  CLOSED no fechamento do 169, e a evidência de disco de CADA uma está
+  no §2 do relatório (uma linha por dívida, com o arquivo que a fecha).
+  Relatório: `.claude/plans/PLAN-171/w0/lote-1-S345.md` — §1 é a tabela
+  do censo, §2 a herança do AC-9, Apêndices A e B as duas metades do
+  controle. Falta: lotes 2-6.

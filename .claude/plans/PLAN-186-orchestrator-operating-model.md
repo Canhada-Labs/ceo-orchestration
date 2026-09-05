@@ -2,7 +2,7 @@
 id: PLAN-186
 title: "Modelo operacional do orquestrador: roteamento papel × modelo × effort, herança explícita, teto de concorrência, coordenação entre terminais e CI em matriz"
 status: executing
-related_commits: [400638e, 7535b2f, 35f33a8, b590f00, 44c16f4, 685868a, b53fec1, 37fd85b, 449f157, 93efbb1, 8003b65, 0bd0620, 532ad22, 0b5e6ed, 5cae2f6, bc52016, 2ef423e, 5ceae29]
+related_commits: [400638e, 7535b2f, 35f33a8, b590f00, 44c16f4, 685868a, b53fec1, 37fd85b, 449f157, 93efbb1, 8003b65, 0bd0620, 532ad22, 0b5e6ed, 5cae2f6, bc52016, 2ef423e, 5ceae29, 2f6cde1, de42dfb]
 # related_commits (S344, 2026-09-04): lista RE-DERIVADA de `git log --grep=PLAN-186 --reverse` (13 SHAs) + 35f33a8 mantido pela cadeia de causa; 8003b65 = land da wave-s343-w4a, 0bd0620/532ad22 = corridas 2/3 da medição, 0b5e6ed = RESULT do AC-16. O SHA deste commit entra no próximo.
 # related_commits: 400638e = estudo + instrumento W0 (S339). Derivados de `git log --grep=PLAN-186`: 400638e, 7535b2f, b590f00, 44c16f4 (35f33a8 é PLAN-179, landado na mesma sessão e mantido pela cadeia de causa). O SHA deste land entra no proximo commit (rail r13 P2; `.claude/plans/README.md:82-87`).
 executing_at: 2026-09-03   # rail r5 P2-b: PLAN-SCHEMA:404-406 — o self-gate `reviewed → executing` cai no PRIMEIRO commit de trabalho do plano, e este é ele (relatórios W0 + AC-10). Deixar `reviewed` publicaria estado durável falso — a mesma mentira que deixou o PLAN-183 stranded.
