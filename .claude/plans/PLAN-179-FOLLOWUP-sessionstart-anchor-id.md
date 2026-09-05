@@ -1,11 +1,13 @@
 ---
 id: PLAN-179-FOLLOWUP
 title: "Residuais da wave-179close (rails r6+r8): precedencia de id do produtor do session_start; entrega do harness-noop-allowlist.txt ao adopter"
-status: reviewed
+status: done
 created: 2026-08-31
+completed_at: 2026-09-04
+executing_at: 2026-09-02   # retroativo: os 3 ACs executaram na cerimônia wave-179fu (land 8efe09b, 2026-09-02, GPG do Owner); o self-gate reviewed→executing cai neste commit de fechamento (PLAN-SCHEMA:404-406)
 reviewed_at: 2026-09-04
 reviewed_by: "Owner (S344, item 2 da lista de abertura — os 3 ACs [x] ja landaram em 8efe09b/b6dce78; flip draft→reviewed ratificado com o Owner presente)"
-related_commits: []
+related_commits: [2bda673, 8efe09b, b6dce78, de35103]   # 2bda673 materiais da cerimônia wave-179fu; 8efe09b LAND (GPG do Owner) — os 2 ACs P1 e a expansão 2→4 produtores; b6dce78 pack sonnet5-fu; de35103 flip draft→reviewed (S344)
 owner: CEO
 depends_on: [PLAN-179]
 level: L3
@@ -155,3 +157,20 @@ maquinaria delivery-routes (PLAN-183) — proximo do trem ratificado.
   payload-gated fica como esta.
 - Item 2 nao mexe em `check_harness_config.py` nem no allowlist em si —
   so na ENTREGA; o conteudo do txt e da wave-179close assinada.
+
+## Fechamento (S345, 2026-09-04 — noite autônoma, sem GPG: só escrituração)
+
+- Os três ACs estão `[x]` e landados: P1/US1 (produtor payload-first) e o
+  teste de integração produtor→consumidor pela cerimônia `wave-179fu`
+  (materiais `2bda673`, LAND `8efe09b` assinado pelo Owner em 2026-09-02; o censo
+  do rail r1 expandiu a classe de 2 para 4 produtores legados), e a varredura
+  P2 (S337, read-only). O item 2 foi RETIRADO na r14 da wave-179close (o
+  artefato saiu do patch). Nada resta a executar.
+- Ciclo de vida: `draft → reviewed` em `de35103` (S344, Owner presente);
+  `reviewed → executing → done` neste commit, pelo Edit tool com o hook
+  `check_plan_edit.py` validando cada transição; `executing_at` é retroativo
+  à data do land (`8efe09b`, 2026-09-02).
+- Residual herdado (inalterado): a trava do consumidor
+  (`test_divergent_env_id_never_anchors`) permanece; o SPEC v2.7 do
+  `session_start` não registra a precedência (opcional, canônico, fora deste
+  plano).
