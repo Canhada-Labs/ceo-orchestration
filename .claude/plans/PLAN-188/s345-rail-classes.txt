@@ -1,0 +1,55 @@
+records=168 packs=12 finding-blocks=528 (classified by: {'kw': 270, 'path': 156, '': 102})
+
+ALL findings by class:
+  docs          132   25.0%
+  ceremony      122   23.1%
+  unknown       102   19.3%
+  instrument     63   11.9%
+  product        62   11.7%
+  other-path     36    6.8%
+  tests          11    2.1%
+HIGH (P0/P1/BLOCKER/HIGH) by class: total=215
+  ceremony       60   27.9%
+  unknown        58   27.0%
+  docs           45   20.9%
+  product        28   13.0%
+  instrument     18    8.4%
+  tests           3    1.4%
+  other-path      3    1.4%
+
+per pack:
+  ac13-routing-drift-v5      71  docs=30, ceremony=11, unknown=10, product=7, other-path=6, instrument=5, tests=2
+  contamination-gate-v4      54  docs=21, unknown=16, ceremony=8, product=6, tests=1, other-path=1, instrument=1
+  p169-w41-quota-resume      34  unknown=11, ceremony=10, docs=7, product=2, tests=2, other-path=1, instrument=1
+  p171-w0-lote1              48  instrument=28, docs=10, unknown=4, ceremony=3, other-path=2, tests=1
+  p183-w1-pointer            21  unknown=7, instrument=5, product=4, docs=2, ceremony=2, other-path=1
+  p187-night-facts           21  unknown=7, docs=5, product=5, ceremony=1, tests=1, instrument=1, other-path=1
+  us5-followup-docs           7  docs=4, instrument=1, other-path=1, product=1
+  w1-widen                    1  ceremony=1
+  w4b-ci-matrix              66  ceremony=24, docs=14, product=11, other-path=11, unknown=4, tests=2
+  w5-doctrine                65  unknown=26, ceremony=12, product=10, instrument=8, docs=6, other-path=3
+  w6-adapter                 89  ceremony=43, docs=20, unknown=8, product=7, instrument=7, other-path=3, tests=1
+  walkroot-test-fix          51  docs=13, product=9, unknown=9, ceremony=7, instrument=6, other-path=6, tests=1
+
+samples:
+  [product] ac13-routing-drift-v5 :: **[P1] Enforce the VETO floor on explicitly overridden agents** | (`check-routing-drift.py:674-676`). REAL. A VETO persona (`code-reviewer`, | pinned inside `VETO_FLOOR_ALLOWED`) spawned with `meta.model="haiku"` and | served 
+  [product] ac13-routing-drift-v5 :: **[P1] Use the authoritative VETO role set** (`:719-721`). REAL, and the | measurement backs it: `.claude/hooks/_lib/agent_frontmatter.py:118-124` defines | `VETO_FLOOR_ROLES` (5 slugs) as the persona set, and its own commen
+  [product] ac13-routing-drift-v5 :: **[P2] Detect inaccessible transcript subtrees** (`:664`). REAL: | `Path.rglob` suppresses `PermissionError` and omits the subtree, so an | unreadable branch produced `unreadable == 0` and no breadcrumb. Cure: | `_walk_transcr
+  [tests] ac13-routing-drift-v5 :: **[P2] Align the printed verdict with `--assert-floor`** (`:876-880`). REAL: | the report printed `verdict: clean (0 drift)` and then returned rc 1 — a text | consumer would read the opposite of the exit code. Cure: the verd
+  [tests] ac13-routing-drift-v5 :: **[P2] `--assert-floor` / class-V polish** — carried from r5, verified here.
+  [tests] contamination-gate-v4 :: | A-P1-1 | REPRODUCED end to end: a tracked symlink whose target string carries a home path is **rc 1**; replace the link with a DIRECTORY (index still mode 120000) and the same tree is **rc 0** | | | A-P2-1 | REPRODUCED: 
+  [docs] ac13-routing-drift-v5 :: **[P2] Check the full transcript scope priced by the caller** | (`ceo-cost-transcripts.py:1085`). REAL. `advisory_line` defaulted to the CLI's | 5 most recent session dirs while the caller prices the whole `--since` window. | 
+  [docs] ac13-routing-drift-v5 :: **[P2] Preserve vacuity and evidence-loss warnings in advisory output** | (`check-routing-drift.py:900-904`). REAL, and the sharpest of the three: the | one-line summary discarded `VACUOUS` and the assistant-rows-without-mod
+  [docs] ac13-routing-drift-v5 :: **[P1] Reject schema-invalid transcript rows** (`:494-500`). REAL. A row that | is valid JSON but not an object (`[]`), and an assistant row whose `message` is | not an object, were both `continue`d — a clean rc 0 over evide
+  [ceremony] ac13-routing-drift-v5 :: | 1 | P1 | Workflow metas omit `model`, so every workflow spawn is skipped as inherit | **PARTIALLY REFUTED** — measured: `workflow-subagent` metas DO carry `model` when one was passed (`opus` / `sonnet`), and one of the
+  [ceremony] ac13-routing-drift-v5 :: | 1 | P1 | Not registered on any recurring execution path | **TRUE, OUT OF SCOPE** (repeat of r1 #2) — DESIGN §6 names the two wiring sites and why the wire is a ceremony, not this pack. | | | 2 | P2 | A missing `audit_log
+  [ceremony] ac13-routing-drift-v5 :: | 1 | P1 | Wire the detector into every cost-instrument run | **TRUE, OUT OF SCOPE** (3rd repeat) — the task forbids touching CI/settings. DESIGN §6 names the two wiring sites and marks it a ceremony item. This is the pa
+  [instrument] ac13-routing-drift-v5 :: **[P1] Invoke drift detection from the shared transcript API** | (`ceo-cost-transcripts.py:1177`). REAL, and the sharpest finding of the night. | Verified on disk: `ceo-cost.py:615-621` and `budget-summary.py:1887-1891` reac
+  [instrument] ac13-routing-drift-v5 :: * each cure carries a probe that is RED on the previous derivation and GREEN on | this one (`_controls.txt`: **20 failed / 7 passed** on the previous pack | versus **27 passed** here, same node ids);
+  [instrument] ac13-routing-drift-v5 :: **#1 [P1] — REPRODUCED, and it is the round's real prize.** | Probed with `v5-probes/p1a_metamodel.py`, then folded into one consolidated run | (`v5-probes/p1a_consolidated.txt`):
+  [other-path] ac13-routing-drift-v5 :: **[P2] Run the routing detector for JSON reports** | (`ceo-cost-transcripts.py:1176`). REAL and exact: the only call site was inside | `_human_report`, and `main()` selects `_json_report` under `--json`, so that | execution ra
+  [other-path] ac13-routing-drift-v5 :: * Raw output: `codex-cure-r1.txt` (~400 KB).
+  [other-path] ac13-routing-drift-v5 :: * The streaming class is **3 message ids out of 27,046** (`_streamcensus.txt`), | which matches the canonical `ceo-cost-transcripts.py::dedup` measurement of | "model metadata in 3/21,414 [groups]". So finding 1 is REAL and 
+  [unknown] ac13-routing-drift-v5 :: **[P2] Count below-floor events per spawn** (`:722-725`). REAL: identical lines | from two transcripts collapsed, so the count was signatures, not spawns. Cure: | `below_floor_events` counts occurrences; the report prints bo
+  [unknown] ac13-routing-drift-v5 :: **[P2] Treat declaration read errors as infrastructure** (`:227-229`). REAL and | broader than the r5 instance: `is_file()` does not protect the read that | follows it, and the pattern repeated in the working-set, fallback, 
+  [unknown] ac13-routing-drift-v5 :: **[P1] Bind all-session checks to spawn-time declarations** (`:1088-1089`). | REAL and forward-looking: the consumer now scans every historical session while | `check_served` compares a pin-declared transcript against TODAY'
