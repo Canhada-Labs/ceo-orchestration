@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -76,7 +78,7 @@ class TestSessionStartWarmup(unittest.TestCase):
         self.assertEqual(total, 0)
 
 
-class TestSessionStartDecide(unittest.TestCase):
+class TestSessionStartDecide(TestEnvContext):
     def test_decide_returns_allow_decision_healthy(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         out = SessionStart.decide(repo_root=repo_root, session_id="test1")
@@ -95,14 +97,116 @@ class TestSessionStartDecide(unittest.TestCase):
         self.assertIn("degraded", payload.get("systemMessage", "").lower())
 
     def test_decide_never_raises(self) -> None:
-        """Even on malformed inputs, decide() returns a valid JSON."""
-        for weird_root in (None, "", "/dev/null"):
+        """Even on malformed inputs, decide() returns a valid JSON.
+
+        WALK-ROOT (pack ``walkroot-test-fix``, S345 — the property
+        stays, the input becomes finite). Until this pack, ``None`` and
+        ``""`` BOTH mapped to ``Path("/")``, so ``decide()`` handed the
+        FILESYSTEM ROOT to ``_lib.guardrail_validator.discover_hint_dirs``
+        along a chain with exactly one production link at each step:
+        ``SessionStart.py:397`` is the only non-test caller of
+        ``validate_hierarchical_hints``, and
+        ``guardrail_validator.py:469`` (inside it) is the only call site
+        of ``discover_hint_dirs`` — both counted by grepping the two
+        symbol names over every ``*.py`` in the repo, not just one dir.
+        ``_validate_injection_channels`` passes
+        ``project_dir = str(repo_root)`` straight through.
+        That walk is bounded by DEPTH (``MAX_HINT_DIR_DEPTH``) and by FILE
+        COUNT (``MAX_HINT_FILES``) but NOT by wall clock. On the
+        maintainer's macOS host it did not return inside EITHER
+        window this pack measured (below); no claim is made about
+        windows that were not measured.
+
+        MEASURED 2026-09-05 on a PRISTINE worktree (so: not caused by any
+        in-flight wave) — this test under a 300 s alarm ended rc 142 at
+        300 s, and ``discover_hint_dirs("/")`` called DIRECTLY under a
+        120 s alarm ended rc 142 at 120 s. It is NOT wedged in one
+        syscall: sampled with macOS ``sample`` for 5 s while stuck, the
+        thread shows 3811 samples, of which 835 sit in ``__opendir2``
+        and 686 in ``readdir`` (684 of those inside
+        ``__getdirentries64``, which is nested under it - the two are
+        NOT additive). Those are summed call-graph WEIGHTS, not line
+        counts. Throughout the 5 s SAMPLED it was
+        progressing (the sample says nothing about the rest of the run,
+        and it is not an iteration RATE): it simply has an unbounded
+        NUMBER of directories to visit —
+        the depth cap bounds DEPTH, ``MAX_HINT_FILES`` counts only hints
+        FOUND, and nothing bounds directories visited or elapsed time.
+        Either way the FULL hook battery could not complete on a
+        developer machine. This pack measured nothing in CI and makes no
+        claim about CI.
+
+        What is ASSERTED is unchanged: ``decide()`` must never raise on a
+        malformed root, and the output must stay schema-compliant. Only
+        the INPUTS changed. The falsy cases now resolve to a fresh EMPTY
+        real directory — a real directory with no ``.claude/hints.md``, so
+        the real discovery code still runs, over a FINITE tree — instead
+        of ``/``. (This test asserts TERMINATION and the lifecycle
+        schema, never a duration.) ``"/dev/null"`` stays as the
+        not-a-directory case; and
+        the filesystem root is kept as an EXPLICIT case that is OMITTED by
+        default — the case is simply not built, it is NOT a ``skipTest``,
+        so a default run records no skip for it — and is enabled with
+        ``CEO_TEST_WALK_ROOT=1`` for a host where the walk terminates.
+        That opt-in is not decorative: with it ON, this test ends rc 142
+        under a 90 s alarm on this host (measured 2026-09-05).
+
+        The CANONICAL cure — bounding the walk (a between-yields
+        time budget plus a deterministic cap on directories VISITED)
+        and making truncation visible to the caller — is deliberately
+        NOT here; it belongs to a follow-up of ``PLAN-186``
+        (follow-up plan: pending — this pack ships the test
+        alone, so no plan path is cited).
+
+        HONEST about COVERAGE: the asserted property is unchanged,
+        but the DEFAULT input domain is strictly NARROWER — ``/``
+        used to be exercised twice per default run (``None`` and
+        ``""`` both mapped to it) and is now opt-in. That coverage
+        returns when the FOLLOWUP bounds the walk. ``None``/``""``
+        are subTest LABELS, not arguments: ``decide()`` always
+        receives a real ``Path``.
+        """
+        # justified: the forensic record (what hung, in which
+        # measured windows, and where the canonical cure lives) is
+        # the reason this test was allowed to narrow its default
+        # input domain; dropping it would leave the narrowing
+        # unexplained at the only place a reader meets it.
+        empty_root = tempfile.mkdtemp(prefix="ceo-walkroot-empty-")
+        self.addCleanup(shutil.rmtree, empty_root, True)
+        # (label kept for the subTest id, resolved path handed to decide())
+        cases = [
+            (weird_root, Path(str(weird_root) if weird_root else empty_root))
+            for weird_root in (None, "", "/dev/null")
+        ]
+        if os.environ.get("CEO_TEST_WALK_ROOT") == "1":
+            # Opt-in ONLY — see the walk-root note above: this case does
+            # not terminate on the maintainer host until the FOLLOWUP
+            # bounds the walk.
+            cases.append(("/", Path("/")))
+        for weird_root, root_path in cases:
             with self.subTest(root=weird_root):
                 try:
-                    out = SessionStart.decide(
-                        repo_root=Path(str(weird_root) if weird_root else "/"),
-                        session_id="x",
-                    )
+                    # Kill switch FORCED OFF. With an ambient
+                    # CEO_EXTENDED_LIFECYCLE of 0/false/off/no,
+                    # decide() returns at the kill-switch guard
+                    # (SessionStart.py:_kill_switch_active) and never
+                    # reaches the hint walk — every assertion below
+                    # would pass without exercising anything, and the
+                    # FOLLOWUP's opt-in oracle would go green before
+                    # the production fix exists (codex rail r6,
+                    # mechanism lane).
+                    # (the audit/HOME surface is handled by the class
+                    # inheriting TestEnvContext — see the class line;
+                    # the walk root stays separate from the audit root)
+                    with patch.dict(
+                        os.environ,
+                        {"CEO_EXTENDED_LIFECYCLE": "1"},
+                        clear=False,
+                    ):
+                        out = SessionStart.decide(
+                            repo_root=root_path,
+                            session_id="x",
+                        )
                     payload = json.loads(out)
                     # Schema-compliant lifecycle output: continue=True OR
                     # decision=block (we never emit block from SessionStart)
