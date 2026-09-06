@@ -1,0 +1,339 @@
+# contamination-personal-path-allowlist.txt — waivers for RULE 2 of
+# .claude/scripts/check_contamination.py (the `personal-path` rule).
+#
+# ONE row per file, `<path> | sha256:<64 hex> | <reason>`. No globs, no
+# directory prefixes, no generated baselines: every shape that waives a
+# file nobody named is the shape the rule exists to remove. A row is a
+# DECISION and the decision is written down; adding one belongs in the
+# same change as the file it waives.
+#
+# THE DIGEST IS PART OF THE DECISION. A row waives the file only while
+# its bytes still hash to the recorded sha256 — the bytes a human read
+# when they wrote the reason. Edit the file and the waiver LAPSES on
+# purpose: the gate names the file, `--emit-personal-path-rows` prints
+# the new row with the new digest, and a human re-reads and re-approves.
+# A row can no longer waive a file forever, which is what let a second
+# leak land silently in an already-waived file.
+#
+# A row waives the whole file AT THAT DIGEST, and it never waives a
+# PATH: a file whose own name carries a home directory has to be
+# RENAMED — a row naming one is refused at parse time.
+#
+# NOTHING IS EXEMPT BY NAME OR BY SUFFIX. Not `OWNER-*.sh`, not `*.asc`,
+# not any extension: every in-scope tracked path is read and matched the
+# same way, symlinks included (a link is judged by its target string).
+# Three versions of this rule shipped a name-shaped skip and the
+# pair-rail found each one -- the last of them let a tracked symlink
+# named `OWNER-*.sh` carry a home path straight through the gate that
+# failed the same target under any other name.
+#
+# A SIGNED SENTINEL IS NOT SPECIAL. `approved.md` / `*-approved.md` used
+# to be waived by a RULE that asked four questions of content -- a
+# sibling `.asc`, an armoured signature body, an `Approved-By`
+# fingerprint granted by a `signer-fingerprint:` row here, and
+# not-a-symlink. Every answer is transplantable by anyone who can write a
+# file, so it was a waiver earned by the NAME `*-approved.md` in a
+# content-shaped costume. It waived nothing on this tree and it is GONE.
+# A frozen signed artifact that really does carry a home path takes a row
+# like anything else -- and because the signature freezes the bytes, that
+# row's digest cannot lapse behind anyone's back.
+#
+# UPGRADING FROM v4.0: delete any `signer-fingerprint: <40 hex>` line.
+# The directive no longer exists, so the parser reads it as a MALFORMED
+# row and the gate goes red naming it -- deliberately, rather than
+# ignoring a line an operator believes is still granting something.
+# Verifying a real signature is
+# `PLAN-186-FOLLOWUP-sentinel-gpg-verification.md`; when it lands it is a
+# SECOND way to waive, earned by a signature this gate checks.
+#
+# THIS FILE MUST BE TRACKED BY GIT to waive anything. The gate
+# confirms that with `git ls-files` before it parses a single row:
+# an untracked copy -- or one removed from the index with
+# `git rm --cached` -- is read as EMPTY, so no row waives.
+# Trackedness is what makes a waiver a diff somebody reviewed rather
+# than a file somebody touched. It is NOT a promise that this file is
+# readable in `git diff`: a staged `.gitattributes`, a diff driver
+# configured as binary, or `core.bigFileThreshold` can each make git
+# print one `Binary files ... differ` line where the rows are. Four
+# rail rounds tried to defend the readability of this file and each
+# cure was defeated by a NAME one round later, which is the one kind of
+# decision this rule refuses to make.
+#
+# So the gate no longer asks git anything about how this file renders.
+# On EVERY run it PRINTS the rows it HONOURED --
+# `<path> | sha256:<64 hex> | <reason>`, one line each, in path order,
+# uncapped, with a sha256 over the set. A waiver that grants a file is
+# therefore visible in the log of the run that granted it, whatever a
+# diff shows and whether or not anybody opens one.
+#
+# THE REASON IS PART OF THE GRAMMAR. After NFKC it must carry at least
+# EIGHT characters from [A-Za-z0-9], and every character must be
+# printable. A one-word reason (`frozen`), an empty one, or one built
+# from invisible or filler codepoints is MALFORMED by row number and
+# waives nothing. Eight is a word somebody typed: it is what separates a
+# written decision from a character that satisfies a predicate.
+#
+# A row that matches no file is STALE: reported, never fatal (a row waives one
+# path, so a row matching nothing waives nothing). `--fail-on-stale` makes it
+# fatal for a maintainer who wants the rot flagged.
+#
+# ADOPTERS: this file DOES NOT YET TRAVEL WITH A FRESH INSTALL -- the
+# installer copies `*.sh`, `*.py` and `*.yaml` out of `.claude/scripts/` and
+# nothing copies a `.txt`, so a new checkout gets the rule and an EMPTY
+# allowlist (fail-closed: your own findings are reported, never waived). The
+# installer fix is canonical and travels in a signed ceremony. If you DID
+# receive this file -- by upgrading, or by copying it in -- nearly every row
+# below names a framework plan artifact your checkout does not have. Those
+# are the stale rows. Delete them and record YOUR tree instead:
+#     python3 .claude/scripts/check_contamination.py --emit-personal-path-rows
+# then write a reason on each row (the emitted placeholder is refused).
+#
+# WHAT THESE ROWS ARE, honestly: GRANDFATHER entries. Every path below carried
+# an absolute home directory before the rule existed. `CEREMONY:` and `RAIL:`
+# rows are frozen evidence that must not be rewritten. `RESIDUAL:` rows are
+# NOT ceremony material — they are real findings with no cure in this change
+# (rewriting another wave's plan artifact is out of scope); they are named
+# file:line in the pack EVIDENCE and are the follow-up work.
+
+.claude/plans/PLAN-156-FOLLOWUP/council-3lane-S280.md | sha256:c856c50bb38b34f42d3ab427fd4970920dc3d9c2aa92ada53b212aebfc8a26c4 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-156/README-WAKEUP.md | sha256:862c58062f4b11ab74eb3fd956838867f8e20dcbe0a1ad49787b2ba12b53666d | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-158/ga-review-transcript.txt | sha256:a677e2223c9f8e5a136a7fa9a36b0557104302976acecb8d6892f20b00e644f5 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-158/rc-review-transcript.txt | sha256:d4ffad4e42b06ce1bbc7db5c893a3fd5d2dc65e82ba44259dc9b3a2b6fe87498 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-161/pair-rail/round-2.md | sha256:2f5c0e54d6ced50d2778dd5d553438908d67151eb8f2524e066626561a92e3d2 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-161/pair-rail/w2-round-3.md | sha256:ff56db220dea7964fef20347316f14a1e4688837f412b3524a9471d53c042387 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-162/probe-210s-GO-EVIDENCE.md | sha256:a2f7ef5dee75342d7236ee942873c98d790d57c53d396d0d0c8db558e7c3a308 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-163/probes/depth-probes.md | sha256:ad8a3298921b2600378f02d8928f1645e850b058337c57654044f7459e4a6eb6 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-163/probes/diradd-blockability.md | sha256:e0e3d32749a0b329c7d26a8495f7659f25add75578bf879856a202ac44bd7f98 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-163/probes/ledger-refresh-draft.md | sha256:93647cf60da4464ce4b3d18d75ba21933c661a897a6d05116085409600136688 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-163/probes/payload-sha-evidence.md | sha256:12369cc70fa081e9948d0a0c6f0783d4f9976a25898f2e212f963c055adc5b42 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-164/review/codex-rail-r1.md | sha256:581c6141a99b35c18adeb795f1b820949f179ec9242a421dc6c3fde701b75a8d | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-164/review/codex-rail-r2.md | sha256:ee4865f5ed936bdfa7ca0f2716de6b8a24da60cf1679f71bdae6faa0a788f353 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-164/review/codex-rail-r3.md | sha256:0ae8fcfc8a78a19921c4428cb314757cf30e2866b6b4fd2e943aa0be61d2deb5 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-164/review/codex-rail-r4.md | sha256:3419e2eb4c0daf9c4c392c995689771b76c0834e44837d71271729f2f34a9955 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-164/review/codex-rail-r5.md | sha256:b20a9b8765566afa32b6bd14b13b07622d2d249001a3c7310d582c2fd9762f58 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-164/review/codex-rail-r6.md | sha256:6f05f74bbe5c6bce60ad77950322bcd62089c195153a3dc4df697cbe3bb61c27 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-164/review/w1-delta-bundle.md | sha256:d061d7d3dda46690a36f1cab844772835081ce2e26947e3bb3a528744ce82987 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-165/architect/round-1/claude-panel.md | sha256:c6498e3264a51bd64a6fee997a4df3f736b96cc6f65bc81f9208605ee89174a3 | CEREMONY: architect-ceremony round record, frozen alongside its signed sentinel
+.claude/plans/PLAN-165/architect/round-2/security-review.md | sha256:b6aacc34e838ce6116867b5f26422f3f23053f8b886b753076140e3e50f6173e | CEREMONY: architect-ceremony round record, frozen alongside its signed sentinel
+.claude/plans/PLAN-165/architect/round-2/suite-status.md | sha256:b594d7ab1d34ab35a87b5f582d01407a645394cca7994a759dc9b1007f7f7d8f | CEREMONY: architect-ceremony round record, frozen alongside its signed sentinel
+.claude/plans/PLAN-165/architect/round-2/test-verification.md | sha256:045ffa713ff23ea076647bfe617c87d3261e0f099004152c1b0e42b6ccc9de4d | CEREMONY: architect-ceremony round record, frozen alongside its signed sentinel
+.claude/plans/PLAN-165/architect/round-3/security-review.md | sha256:20ea2cd5583dd0240bdd79d1dba8483099c91c2119cc37f42168ac664904557d | CEREMONY: architect-ceremony round record, frozen alongside its signed sentinel
+.claude/plans/PLAN-165/probes/W0-EVIDENCE.md | sha256:8029af0bbe52eeb6a355b0cf390f88b8a435f051e929723a92506e803cdce71e | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-166/OWNER-MORNING-RC3.md | sha256:9cf20a8fa37cd3ebfecd0df0301621d477c159d30022521e99b61f03e2790570 | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-166/archive/codex-r6-2059.md | sha256:96eddacd08620902d70348e45c23a6da7303c3870f546f0b8c53440f33ad5c54 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-r7-stophook-2135.md | sha256:603ff24331c4cb933141faf4c10563eb86a20f561b80dd0e73f6117589d797a6 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-sentinel.md | sha256:f80e8671c8df3f0a5bbbe9a3d839daa20abe244c5264b8e2c04a7219e1f65709 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w0-residuals.md | sha256:1b44d6cbbd59d16429519f5c12b525a16ce576104bea9a25766f9a8e617ed430 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-ceremony.md | sha256:a98653f54eae34a2daa9b23a3923ebe2ded046c656205558cf12282dc00acea9 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round10.md | sha256:8c41f3ec9693bb3d9e78e8b155d5201af20132bce575712aec44f8ed80fb4f8d | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round11.md | sha256:069933b7d077237930a4aaf88ec619e25e6b5cfa93477395980ff5f2588a6a00 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round2.md | sha256:6c01a8294a9108724bc336e3a6761f753cd6b1966589550842042f71d951065d | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round3.md | sha256:e7ed0ad640a2e5b85ed36411eac986d603b3762417557a63bad4db266c09d93b | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round4.md | sha256:41c7534b1993eafa1c30b66cfbcf67bb6a68d33a0c1d3bf5130ce5e7fa13eb48 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round5.md | sha256:437e019bb76f64494d4e0c343b8f39e671bfef40d6130775239c26e0dec7492f | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round6.md | sha256:2df1b5c25a6198ce5d7ab179dfb067423d00e37df68f4671484db0d52f495d5f | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round7.md | sha256:5ad7ae5a491a1a44f4dda68b304a109f08a992a9407153757f07dc9b4460f3ba | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round8.md | sha256:c3959fb2d1f8e2d981ac8c2ecdc80c217d04488b29d37d54815c98b96772f827 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/codex-review-w1-round9.md | sha256:8c26414957a42a12e8910224e1d071f741166618f63ad43b50dd7098711a9602 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-166/archive/mirror-fixes.sh | sha256:50d05f8260229e0b8511de4247c3bd78ee93ddbcb0f2fdc373f9611f0a874221 | CEREMONY: wave ceremony/harness script — names the checkout it is run from
+.claude/plans/PLAN-166/repass-ga-rc2-NOGO/transcript-ga-2.log | sha256:587fb67fb66a7aa4f0efd411c5bd72f172bc486c510624ad33dce3bf44f6c084 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-ga/transcript-ga-1.log | sha256:ac035479d622443679911c3848f27ddd0e52e455aa12fdb19466123cf66c2667 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-r1/transcript-r1.log | sha256:3c7ade7fbe85d1623c3831d06843ddfcbc69e76eec050dfe6c1bf29978fb1f0f | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-r2/transcript-c.log | sha256:75a87359f8add6c981be79239c66695be52aaff0486ab3ea2cd214a330f96dc8 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-r2/transcript-d.log | sha256:0750c06569b70651a6da332c2978bb698d5296bec1218204e5b5d1bbd5b3c993 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-cures/run-rc3-cure-review.sh | sha256:9ae90d0ffade60f531a17e8ece39eafb684d21f2ce508daca35f142b8d41623f | CEREMONY: wave ceremony/harness script — names the checkout it is run from
+.claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round1.log | sha256:4f113b8de3f6310926d1fda4400974dfae0c6a9c7b1e66000e1e04ee041c2764 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round2.log | sha256:385dcb965447299e5d4dab20322128a37e86c6c0bcc2b593dded88876d49d832 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round3.log | sha256:104d6f2a3ed6cc500ebea5aa9224be771f7f99654b18e354a591438e9b9de473 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round4.log | sha256:242f3edd45a5c451a4908a301eabb370b42268af9bad7a6fe8bff051001a32c6 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round5.log | sha256:5e8345d046be03d29fd050e02e5d4e5503c7f2ee1360908423f7c121b9f1abbf | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round6.log | sha256:3fa069868f63a23639d2c02dac088af849dc34137d0f2bd2ca7f274fd275b2dc | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-cures/transcript-cures-round7.log | sha256:63bb707092c46808ea3fb96a42127fcb92821b289d94a76bcc5a54467085d9ed | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-cures/verdict-cures-round6.txt | sha256:6c8b4580b2d999ddab85ecd42e5acc0643aa71cb7c8ee61174f89414d4046f95 | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-166/repass-rc3-scripts/run-rc3-scripts-review.sh | sha256:e8f3290d7ca7dd753a4fa3d8981436524ed6bfe53cfc821fb59d177cb76b66aa | CEREMONY: wave ceremony/harness script — names the checkout it is run from
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round10.log | sha256:b2beda766cfe2ac38825917df88676d506e146bcee7d3de03a0a2fec798d64f0 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round11.log | sha256:b17bb18d863b68d0b1620bf8ed4c1013a239d90feb595b5a350a135ca68be8b3 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round12.log | sha256:e8308855e69e470a1550c2ec7b0b299883a2599c4955e7434a63ae624692d4fc | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round13.log | sha256:4e69698b87699d600fe205b066c8736baaa2602e2ea65f0622ca4ab3998d0c14 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round14.log | sha256:e9f3a349d6537a6706f536fd0475cccd1df47bf9134fd14d7a52670801224ae9 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round15.log | sha256:4852740450309391711ed84bfda1a8bc0f1d3bf5c6663554237fe32fab2fd1e7 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round16.log | sha256:c3c01cd94fc592ab48eae9debbbc40f181ffb450f2271c157f6f42019c9733f5 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round17.log | sha256:cf3f17ec4a40a98b0e85aed403af6f1e0440c0e78d6ade1ca3e1ac242225e47a | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round18.log | sha256:858a520b2e0328d7b0a9f3c932e943d80dabe62a487b3400b399732e0da34003 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round19.log | sha256:8b3465c9350233873ebd6959f30628589fb36920ae8a8b564d1939f378023dbf | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round20.log | sha256:49a550d784929718e53dea0bd92c1026baa819524a9c79a3d4904812fb4cf450 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round21.log | sha256:8880e272078a1a6c5f591c2ac3ba7009ccb344fc2947c29c7f5d0e89e35cfb04 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round22.log | sha256:3d38a3bb5ae849f1f21b9483f8d6ab4753df33963fce5e987447985f83571cf7 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round23.log | sha256:8bc33e11ab213dce26d2780ae95288d8cb5f4e08c6a055d070de0d59944e2e68 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round24.log | sha256:aacf8422fd34a5e85d5dff9d45d03cb785bd23cde985e2bf109eb7142082d224 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round25.log | sha256:d3f1035b0034da8efb69352ada08796d23ae63f0de35e51659768779f3c67bf9 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round26.log | sha256:269712f0872b9710de6bae2b19f3583ab88a529e7fb518473a0f3c531e5b69f7 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round27.log | sha256:ecf811adab786a91ac849d1382c98ccd8a52894eb893bfe0e8253bee32889ba8 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round28.log | sha256:a2606446ef8e8525569f41bf5787858060c2289724ef7467779d999cd6506ca5 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round29.log | sha256:31789cd0a8259fffff85ea029917a05aaa20cf12b681024f542467df98bbfd97 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round30.log | sha256:2ce6f6b2503bc8c9eedab720080a33cfd46dde6382704e6db29246d498f6df52 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round31.log | sha256:62e530dd236e99a45a96501da5b80e31d89b939a8a8dedcb65242d78aa77dafe | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round5.log | sha256:51770ddd5d2ef44e7dbcb9ce7def202c36962ad7c49a38a4a4828e56a0e57f93 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round6.log | sha256:2c74e759b58b6531a51582ce27a2a3d605001eb6c1d3a6a06d241a18863332be | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round7.log | sha256:d666e3d8e9a6f352f99c4f7b9e0f1416ec8082904b1dd2a3f30dd26d6856feda | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round8.log | sha256:8378c4986f42b6a1bccc9050a25ebdf9632ef8b1ffb293a184d186f33be38d00 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-166/repass-rc3-scripts/transcript-cures-round9.log | sha256:1a19a2b07e981be368f0e5764c7a0695606993b157ec76abfc577ad138c6b9f7 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-167/evidence/W2-marker-refactor-map.txt | sha256:28bdd6e4b94caa4acbc50a0cb4cf138cc4d6c3ea11e74d4634d06feb14da01f0 | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-167/evidence/W2-post-refactor-map.txt | sha256:1a025c33b26412ae7b5b9392276540231a7c3571cbfdb68914724653c09c7bbb | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-167/evidence/W2-protocol-refactor-map.txt | sha256:79a1af5a43d8eb2866fa96a1847c13ad82860efabefa98ae7b2aa68fc7909019 | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-167/evidence/W2-shadow-map.txt | sha256:6b3c1a8cc9cfef12e8b8b151943a5b0d76827b11014ecc79013f8720af18e7c7 | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-167/evidence/W2.3-FAILED-map.txt | sha256:69d9612661a627852f0caa0c5db94cff3d93808f31c0ca5e5f63880df7f53d00 | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-167/evidence/W2.3-v2-map-54-8.txt | sha256:c903bbd51d11a539dfd6304a09f8cdeff8f2e74f6d605c728b43005b8de81fe4 | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-167/evidence/W3-final-map-58-4.txt | sha256:9f5877ab2420063f3160f8e7298d611e430890e2ed007d8da3db765ef47bd944 | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-167/rail/codex-r1.md | sha256:c065fd7c5e0cfa36ad631836149650734ceb7457cf03745cc8debd648c763afb | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-167/rail/codex-r2.md | sha256:9ee179e0b07b79865c278d3a3631783e9a5bf2915a99b4ad5de54576f665e08b | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-167/rail/codex-r3.md | sha256:b2f236cf7851969ed04e3283bc2d28b441625ac1ca1c812ad5ae773ed28e2df5 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-167/rail/codex-r4.md | sha256:eff71744644c5f83fd6ce6405efcccbda2c1124e44352dcdb2e17ffe9d359ff1 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-168/archive/0003-plan168-baseline-map-re-gravado-62-GREEN-3-RED-run-2.patch | sha256:6a1143ba4f22da6836bf8482379a3cc34fdc61832bfbf3e8a08df54c2fa53ed1 | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-168/archive/full-e2e-20260807-2017.log | sha256:2996e859277f65be29dd67fe38360da7b51a797ebe51e230c5fa4aab5026bed5 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-168/archive/pack-full.diff | sha256:6eb37013ae30b41c4c4807e134e9e5be02fc2ea4c1814fd86fbd7af8feee1395 | CEREMONY: frozen ceremony artifact (patch / e2e map) — byte-identical to what was reviewed
+.claude/plans/PLAN-168/rail/codex-pack-r1.md | sha256:5206e6e425f32e284607a9a25659267c92885bb7bd6c6b51d82fb15cc734b201 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-168/rail/codex-r1.md | sha256:474193fa2eb238090047c10ec69ac980b9f024cc04e8ce8a665de63e0ae07389 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-168/rail/codex-r2.md | sha256:4deab8b0a6ba33ed246343e209f5bef3ab33546bc2cad901015acebd65a1be50 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-168/rail/codex-r3.md | sha256:0af17a202d2b2990381fc8fee0ebe68ca5ddf1434f9584f6c3db964a94278fb7 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-169/E0-EVIDENCE.md | sha256:d3e1a297c6d16926e3fbe5228c60589fb30209a9285c75fcfc353111b2b23752 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-169/OWNER-MORNING-S334.md | sha256:c2275263268ae3b3ba5b99de37fce9dbaafcd7cd8ac123b3cb46f9875a8eff68 | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-169/e0-report-s300.txt | sha256:d07935b3fc67d48dd0101a989b64b1ee04e071c3ac8c2550160baf68672e4f34 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-169/s330-ceremony-F/README-F.md | sha256:50328ba9081bb66288ff110f7b6de56be16e7bb112f0bfecb4e8a119512ff058 | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-169/s333-ceremony-adrgate/README-MANHA.md | sha256:9b4e81950f7bc3d1ed0cda7efc707e4fd03a9cca5917ca57348fa39b44bc7d81 | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-169/s338-fu-sonnet5-pricing/EVIDENCE.md | sha256:6c19bcee32c6048b720246ec54a1d3934bdc2d8505409345561e76fcb5f997c0 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-169/s338-fu-sonnet5-pricing/rail-round-1.md | sha256:a97484550d7c083ee50620d51e05d5c016d4010ddd47e5b99a71c20d7c92b677 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-173/w2-fork-agpl-decision.md | sha256:f0e0b551b863de18798a88cdd5cbab34033f9b5501d4302f100aee8c5754e70e | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-177/repass-rc4-20260813-NOGO/transcript-rc4-1.log | sha256:601e4305328012c36d74e69213d6d6b200f2ffe017e2084f86eddd3d5c131700 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260813-NOGO/transcript-rc4-2.log | sha256:6f90f39409f45567e1042aa35c8b28ffbf990e45cbc1bdcd94a553a778a234d1 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t10-NOGO/transcript-rc4-1.log | sha256:bf48ea1c172e6d87a5faeabc4170df82ea4ecf27334be8e80bf181b09cd8afea | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t10-NOGO/transcript-rc4-2.log | sha256:9124e546edda2668b33d3639d7dfbf18788807d05f2428fe0bfd07799a220757 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t11-NOGO/transcript-rc4-1.log | sha256:64da51358723824a3ae73faf6c5c179d9ab8221ccf1202df17238832f5d53f8b | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t12-NOGO/transcript-rc4-1.log | sha256:fbfdcee993f0f8eefd5806bb5ca71983ac620bf83bba71355c8705b0faafdfa6 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t12-NOGO/transcript-rc4-2.log | sha256:861d6afeee8d49966643a2b88a504de5608bc399e0411d17feec7b7724619c95 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t2-NOGO/transcript-rc4-1.log | sha256:fa5d1fb37706d22b254c3bfd854752ca3cdeb71f1104f4b73cdbb967ed0966fe | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t2-NOGO/transcript-rc4-2.log | sha256:87ae6267ff205095a53fe5a6975c3fdc1e190d933710992628e0fb22712a253e | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t3-NOGO/transcript-rc4-1.log | sha256:4a4f14db82601ee953b6bc81f9cd70533f1498b2b69d9f1b352fcb826aa6ccfc | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t3-NOGO/transcript-rc4-2.log | sha256:6c054a1cff07ed3f11b484024107e631afd33b2558873f77e35e728b073496d8 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t5-NOGO/transcript-rc4-1.log | sha256:2cfd245e5a53ca258175df6fdeef0e97904c8622f0e48c65fe0b2a32ef874717 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t5-NOGO/transcript-rc4-2.log | sha256:07f293603f825da8cb3e6e9a6a44010f9f1a7043b4e781f5253c3f8616e5a2a9 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t6-GWC-superseded/transcript-rc4-1.log | sha256:cd3f6459650335a2ebb11cd250e3baf0e2a6d48e1e97c342de30997da99e222a | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t6-GWC-superseded/transcript-rc4-2.log | sha256:2230531560577d24dd63f2f770a3bec505c9b16d1507a129c3c69de028f2a3a0 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t7-NOGO/transcript-rc4-1.log | sha256:8ac70430c8027d1b7cf1ebb897020ddf6cad2155e9932eaef738ab60f8d08903 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t7-NOGO/transcript-rc4-2.log | sha256:f7585991088de54e4cc0120f9ba5c21b388825f882e94487ba755e5fc7673840 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t8-NOGO/transcript-rc4-1.log | sha256:867631a5c4611695a4e7a1a5a212041a4f9de7e1052f69c15262d7ec8facbb3f | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t8-NOGO/transcript-rc4-2.log | sha256:a4ae57e8a0110272501f6f45691e8c43b1f3f5f7efac01687044e9482500bc78 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t9-NOGO/transcript-rc4-1.log | sha256:e94c7d1a6915e5abbda6970d030a979304ee552049f580386587c0509e799c39 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-20260816-t9-NOGO/transcript-rc4-2.log | sha256:ca749cec147a6b8423651b5a319a0a803d05e5fc7b866d6021751cf51eb8ed0e | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/repass-rc4-advisory-preparent/codex-advisory-r1.md | sha256:7bbcf4e86500a624a928709a7e04c517f08829274226473261b816340de5aa3f | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-177/repass-rc4-advisory-preparent/codex-advisory-r2.md | sha256:0fabfa01aa9a44332991e0e3e792bfcdd2c4c384a17576eff8a9ab3ca3c0c072 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-177/repass-rc4-advisory-preparent/codex-advisory-r3.md | sha256:88e18319b0c7145e397958d120712086ac9a3960144f142fd377dacf7871704f | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-177/repass-rc4/transcript-rc4-1.log | sha256:4f6fc7f160c75d58985bf3b446af741fe4bd950c676789646c28c43163ea21bf | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-177/staged-w1/BYTE-PROOF.md | sha256:5d606518de103d33dec3d99074f59d53eaa833b7083c98238e134f054e579c49 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r1.md | sha256:24bb6716fd7c6fd68e2cc376ff9863cf1c20e62c09f421751dafc977e992dc96 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r10.md | sha256:89d2dfa32b1c3e77883ad1547d628a03c960c6e42fb127f1ddd677e7845f279a | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r11.md | sha256:525bb378a46a9bbb439526d83ef6ff9f3060fb4787f1c2b49dd76050959831de | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r12.md | sha256:ad4de3eea983164e952a6d6ee9661bef17d5a8cbf7eb08fdc599cb643b2422e5 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r13.md | sha256:13a92e6da98df75f75ef6a7701f2ad1ef109981e489308506136afd1c452bd6e | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r14.md | sha256:1d2c39f2499c3faca34eb2728914f72c4c4ed7f3592f61cf6f7df5b8f44a138e | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r15.md | sha256:032d2fbc1f06d1a9a30bb509ce9de1758cc491922ccd3a9c1dbde6cb8d4eecaa | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r16.md | sha256:a884c305a1d92ee7cf9c926cb9e98c7a1f453095741cb46157ec4c11171919ad | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r17.md | sha256:1ccf630e363ae231f94b010a2c4ca546013ecf221c00e88d0c43fe292a5ba233 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r18.md | sha256:0e959206452cf377c240fe9c147201ff6b2ac92069185ed34ea8c4a2fea6190e | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r19.md | sha256:46d0f07896872715c2805a26f8c58a072ba72509e0db1f8915c00b963ed1fade | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r2.md | sha256:e2dad14985ae7be8f74e450a1656b61992e6a080b4490fb810664f0614db613c | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r20.md | sha256:b867c54c02da417e8a79183df688c520bd86cfaba14f8b71d9d3ebeecb510f89 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r22.md | sha256:12ce55a137d019add4b15df8e9a1c00a9ce97d4b3ca5f752a246c0343f6066fe | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r23.md | sha256:3cb17ead0ad080377a2cd7f34d0b6dd555a8575bc715189fdd9854254e855144 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r24.md | sha256:04a51fa756511f6c037468eabdc5644821041a1dab841ec02b3bc35d1b0db580 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r25.md | sha256:754ce37d09076c39087c274b68b8811e5d4e3759f92b66e7a4863240eb4d9ac0 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r26.md | sha256:9e5f45c0b049a9fa9b8ec1b21a5da66fcd79c1786cf78717bc1224a7c584de24 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r27.md | sha256:46202628428c5e9d1f8a3a156d3e640cb18bdbad8ce1857227a284417edcb7f9 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r28.md | sha256:29e9ad8b5c0d15d4097538884c08a3e6f1e66364536b0ba050f73911bec232f1 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r29.md | sha256:3cc82e3eed37795f3b2efd4ce81a8b398de0d4bdae13f68c47072a1237f0508b | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r3.md | sha256:3d694b9c3d2f64b60a39efb25073690026d04a811777c25be283351e006e8b01 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r30.md | sha256:dd6acb3f6cdd4ced1f55ffe1836d92e933271c0d28bc72effb5a096547366ed4 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r31.md | sha256:780e3193e14e41ab8c75a0106b6dd73bc72536d957e2a79c682006e992d6d2b2 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r32.md | sha256:7ee47ca2b6602408722c5451d7f65a5a98866b24194dd8972d1d56961acce2ac | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r33.md | sha256:cbe6fded8f06043fe18201ad376f026f44530a5d78637fbec683c8400299ee6f | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r34.md | sha256:5629b654b9eb46c55157198ccd1e859ab4543487e8d57f1750a5f15a4657b364 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r35.md | sha256:bb685fcc236a8d92a9e3aea7081d2be686975b53e3639e72f2d196ac7b66005f | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r37.md | sha256:9d4b7ad8c2aa28b183b6e00195c505d3814ee6f97217b7173c40a1a2bf210cd3 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r38.md | sha256:3614a2e48e53f6514ff720f674072a165f5c5bd2d83e6e1694f9ca27cff79698 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r39.md | sha256:f4dff322b791cfd59a1ccf8011cc8ed0abed383e6acd238adc8f703d11626393 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r4.md | sha256:574b026d96667ee0464222e25da08edf1452c959c5915a31722defde21efd15c | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r40.md | sha256:544578212abbc6985ad3a691d10583f267b46813a536b35e6e39041fef00ef8a | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r41.md | sha256:93f4fae4c318bfe171f8b7d7e616661d5dc4097fa017bfa2134098a6875ce968 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r42.md | sha256:bdd884475d658305901016ba6474eb59f2c6e5efc1bdcb2d404c329f5c2608a0 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r5.md | sha256:480271a72f26207b36b75d3acf1a317586fc7293c3e10440e3fc56db322fae48 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r6.md | sha256:828094245a16c4bb866f7e9a8d3dcc1ccceb5bab06f86c062d1b56d910bde411 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r7.md | sha256:a33324801e670c78ce1ceabfce55090f839f8afcb5f21df68646b98776315919 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r8.md | sha256:36261f904db09876c733b06e82939d3fd9b6a2affd6403814fed3a40b6238e73 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/staged-loteB/codex_loteB_r9.md | sha256:fa0f3021ba1f89a3631d74d636fdb461fe4c02f433814ede0347ae936ce56cb2 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-178/w12-native-cost-probe.md | sha256:84ddf619b3fb1499bd3be6e5d8225466fbaf4fd3ea33db176cebf385148443a4 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-179/audit-emit-stale-census-S329.md | sha256:a77eeb32670f0bd10bf70f7e864505331fdd27126280db01fc652eefb670b745 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-179/rail-round-1/VERDICT.txt | sha256:d5c687e1b32fd9e4ed7393256e4bc10c3e89f5f5035cc4b0a4b67c122aef4a8e | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-10/VERDICT.txt | sha256:353bb148ddace809c1daca80907d131ce58bce8e22f47d67f150f81e9d086582 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-11/VERDICT.txt | sha256:fe1bd7b7d945852fd3172d0e33525c8d8c45dc413127e952ebecc125237b4139 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-3/VERDICT.txt | sha256:5e746ca0bdc90016a83096953c696e356a073cadeb0f7e62ca09c6930c7a55bb | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-3/control-symlink-negative.py | sha256:40624d1dd9746b261403df75c44f7551dd2c2cbaa027bd0916f024c70456fb90 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-4/VERDICT.txt | sha256:c4504c14c8a344bd089616eab889827694a8e87e886e1570867090ef5d5b1382 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-5/VERDICT.txt | sha256:3751f6baa79fc7996f9b6f76bd42f73a5f08635e2413c26f7b8a8b38fe2d8822 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-6/VERDICT.txt | sha256:a9047bec56f57c200bcb3eff416bb0378add14aadfe044b37eb82095c92c152a | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-7/VERDICT.txt | sha256:3933533c272db165fc8e935c4a6d27e18f1ad3275cb6eb2587abb661b4e255ce | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-8/VERDICT.txt | sha256:67484f0aababa8342cf0264f7b3fc71c10e5b040ebe7aa6e982de5fc307bea33 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/rail-round-9/VERDICT.txt | sha256:0f91af299ca626bbc5a430a4ecab77f00226ef0685def412c1712e96629c1c1a | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-179/s328-ceremony-D/land-sim.log | sha256:01f2c90036560ef52aba44d1a1feee09750e4e2c32737805f057c2d22f0e34fc | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-179/staged-w24/.claude/hooks/tests/test_ledger_provenance.py | sha256:0829ce3c655708054d14a18e26815ea592f1b552d55cbdf3791fc2bdd4138871 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-179/w0-measurement.md | sha256:8258f5af7fc9ee3b4c71c8703182a5b9320c121021b07ccc8d85af58081b3f84 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-179/w0/gateboot_repay.py | sha256:d8ce59a6d59c74982be7bb90091d4d0780d15a72d83d22d617ac937b8029e126 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-182/debate/round-1/security-engineer.md | sha256:57fc2e8094bc7063be47b1d0e1eeb454808d01a4d969643c86d928d7025b48ad | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-182/w0-medicao-S316.md | sha256:89b31fc8d76efe698131dc6a2ed5b031b9921632c282b1cf8842d30b986e0836 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-182/w1-followup-ceremony/VERIFICATION-PLAN.md | sha256:a7257ced74464ca9d4a39bb77d8c90efc0a0202fa7750f12201f4e87afdb04e8 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-183/NIGHT-S325-RUNBOOK.md | sha256:1c9a3caced4ed7996d0d97ab8a907c2d19dcebf6e0861249a0bebf3fff6ea7ed | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-183/NIGHT-S328-RUNBOOK.md | sha256:f55050eff66d0855c58cf3a68609569d3066c5ddcf877a9db15a1f9921db84cc | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-183/README-MANHA.md | sha256:b288e1471d2de5726fe5b5c480ec598b34b14835286586b7b64daf4bef1d3b11 | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-183/s328-ceremony-A/README-A.md | sha256:a95eb1ebd32d27ca5266d5f2b19d6c7cc393a2a4011f9b84b1a122615c2fb8bd | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-183/s328-ceremony-A/test-ceremony-scripts-A.sh | sha256:4e0eb42a3cdac6c55c689a50bab1cceaa23eee4a1bcb483cbfbfaadd43c88427 | CEREMONY: wave ceremony/harness script — names the checkout it is run from
+.claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-083617.log | sha256:2e9cf05d870150b4e7530e6764f2382f73726b646809e81e2bb7e1984eff36e6 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-091917.log | sha256:6bb874a708cceebce8393a7f11a32ac3f02a6ec09e5192b28c1590ccd3e192db | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-120119.log | sha256:72cd090bb3c461bfd0d3ed02bd3d6b881ef3d833cbde4c4afb614b495654092c | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/morning-20260826-123151.log | sha256:046584299796160f458d52fce440c34ebadf14787c0b11a2ad3933478c3bcfb7 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/step-A-finalize.log | sha256:dd775317de64488475bad51b7928f3a269c40f51b22f56860ac51b7d4cf086e3 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/step-A-sign.log | sha256:75365521133f9b0d257abd72e79bd434c518737dad75a98adb084957cf329802 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/step-B-finalize.log | sha256:c3f8528cdca730f2e5eeb49e3d1022facf2ce48dfb3e9dd1c69fd8d8aeef82f0 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/step-B-sign.log | sha256:a07d9a33101d482aac07e98dfb60f8d400c9d3e55455865771bc09437cb09709 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/step-D-land.log | sha256:128d2b57b86fc270d8534a03a8086f7ad8b174cd23bd0f5d8645e2ae635d4da2 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/step-D-sign.log | sha256:09ab1de4527e1f4c1678560cf811d847fc98e65bcf9d51ca3237f022d157b5ed | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-183/s328-ceremony-main/test-morning.sh | sha256:207f5e2f5fd7ce1f5cfe6a5b90f24efd0b497e5da9f66c3f5328937aa95ecaca | CEREMONY: wave ceremony/harness script — names the checkout it is run from
+.claude/plans/PLAN-183/s338-w1-draft/DESIGN-W1-S338.md | sha256:6de0aa73b1b7ee898b22d8cd1af2cd132f9effd551e6451247dc98e7820f4d00 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-183/s338-w1-draft/EVIDENCE.md | sha256:c0a7afdb7811fc2c2c13c63d9e71c70e11747c001a2610fbfcd313f5d3765b20 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-183/w5-brief-S327.md | sha256:ac80cbe20f1785b82e971dc02e99ee702d5487545cf7f510b0434cd32779c5c4 | RESIDUAL: pre-existing plan artifact, not ceremony material (PLAN-186 follow-up) — cure by placeholder when the owning plan is next touched
+.claude/plans/PLAN-183/w5-ceremony/README-CERIMONIA.md | sha256:db017411505b26bd15a2deaa3e5f2e573bbdb2f72c39d4e0b5c8f0a755598e9b | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-183/w5-ceremony/rail-materials-round-1.md | sha256:acc79fb9f3c97691966ec330f812ab796035416c6243e05e418ba3d28c77e26b | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-183/w5-ceremony/rail-round-1.md | sha256:1093501642ecf8c13ffe4311dc4de59b49a127bdfc3575b75d0c76a1a8e6b37d | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-183/w5-ceremony/rail-round-2.md | sha256:6f8d6d653d73e8d03a96cc2f129805a6a5ac276bf647a7e564e0e2b1aaa5c339 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-183/w5-ceremony/rail-round-3.md | sha256:99235e2ec912a5dc95cc22baf03d9096050dd832efce3f19705343fb4d0b84a0 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-183/w5-ceremony/rail-round-4.md | sha256:dd91b43bd3bf6e0229660a26c7ae23ef54540def844e227eccea1786e1a8f3fd | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-183/w5-ceremony/rail-round-5.md | sha256:0cf2735ab3643507f906b7b2bbd5fbae055d5f7927bce30343af009b8d35d364 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-183/w5-ceremony/rail-round-6.md | sha256:e012ccea6e86f30982a079b2458b6931e4da256681c26ee4180721b2c57031ad | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-183/w5-ceremony/rail-round-7.md | sha256:400bdfdb631bff91184e3b7340a9767d3c8da8fdce8d2a06827644d1be24c03c | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-183/w5-ceremony/rail-round-8.md | sha256:d446b90f1339be42a09be24b7e0f88e65e5566331db94965a375327581a20ee4 | RAIL: frozen cross-vendor pair-rail output, committed verbatim as round evidence
+.claude/plans/PLAN-183/w5-ceremony/test-ceremony-scripts-w5fix.sh | sha256:e0ea60e4582ce3dd897001e8cb98101c60dd71c5b5cf6c119cd500889e94fc44 | CEREMONY: wave ceremony/harness script — names the checkout it is run from
+.claude/plans/PLAN-183/w5-ceremony/test-ceremony-scripts.sh | sha256:bb0e41126110365d48736a75f1d34601ba12efca44a037af696c3aa8513c449e | CEREMONY: wave ceremony/harness script — names the checkout it is run from
+.claude/plans/PLAN-185/NIGHT-S329-RUNBOOK.md | sha256:e6ffa8ca7077e4662ed14d3f1b840d6c17b041a436c062f6032102ebdc50a18e | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-185/README-MANHA.md | sha256:f716a80f2bcc1e5f304e4776f7d9525561c37244158e770a563fe208fefcbb18 | CEREMONY: operator runbook — the commands it hands the Owner are written against the Owner checkout
+.claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-090916-e2e.log | sha256:5721f6c1b8fb07e294cebae1bb6c414e0bc74f9550524767a303cd0892ab7fa8 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/land-C-20260827-093536-e2e.log | sha256:ad5692f35f3ee4157b2cdc6d9c9701673d93c4a2592b4602872471317d68eb87 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/morning-20260826-191601.log | sha256:8d44d4fddab9908f4ec90fb32f8976cecb7cedbc72c82f3f93a268b8d29c6010 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-083217.log | sha256:41b11f3cae6ce27bb72e3d305fdde21d4d9973e5a97693840b3a4850fb7f6580 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-083514.log | sha256:17e1d72dc66f85ccaadae6ea985f14a71f763ad6722f3dd5d7a3edbc6ca1445d | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-090402.log | sha256:3d8918554459d55fce2ffa503ce5fccac6dcfc1286ff40123a5aefd4605f0a40 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-093124.log | sha256:663ad20425dd088cce3eaf8d59358145102d09dd77d77e978c975d5f248aa527 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-114006.log | sha256:9b74e61774604c903066a32381b54e547404b7871ce1eed179395e2b60ab9abc | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/morning-20260827-144515.log | sha256:c63f2ae9bc1fcaceb698209bbf525df1c0fdbc4c9be0fb25b16eb46bbc817c15 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/step-C-finalize.log | sha256:06784f040f30c59de71efb79d14ed629e72f3e3292667ea851e2c4210abf6d62 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/step-C-land.log | sha256:c481057df5be67a6c819cc4fbd5654191089fa16be3404ed7f284d871a49f007 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/step-C-sign.log | sha256:c522cb4e5026fb89ea03dda9923b51f41e164be75a0cd563990274d2a67f73d9 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/step-E-finalize.log | sha256:91d02447627a4e6b7bdf0570ab7c16d4670bb1da09829cb7ba1b2ed6aff10173 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-185/s329-ceremony-main/step-E-sign.log | sha256:21d24afbcd780e2043bc1de7cf289612de9eee19a11b36314df076e98ab33f06 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
