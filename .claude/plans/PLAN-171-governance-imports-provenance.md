@@ -231,3 +231,18 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   Relatório: `.claude/plans/PLAN-171/w0/lote-1-S345.md` — §1 é a tabela
   do censo, §2 a herança do AC-9, Apêndices A e B as duas metades do
   controle. Falta: lotes 2-6.
+- **2026-09-06 (S347)** — W0 lote 2/6 MEDIDO: os 10 hooks REGISTRADOS de
+  `R[0:10]` da partição determinística (§1 do relatório): adversary,
+  plan-edit, protocol-semver-cascade, skill-patch-sentinel, tier-policy,
+  arbitration-kernel, scratchpad-access, budget, read-injection,
+  codex-filewrite. Cada um com o controle positivo rodado nas TRÊS
+  metades — verde como está; **vermelho com o enforcement removido**
+  (mutação mínima numa worktree descartável); e verde OUTRA VEZ depois
+  do `git restore` (o **controle de restauração**, novo neste lote:
+  sem ele um `.pyc` velho no `sys.pycache_prefix` do macOS falsifica a
+  medição, o que foi reproduzido e está no §4 do relatório). 10/10
+  verde, 0 vácuo, 0 sem-controle. Relatório:
+  `.claude/plans/PLAN-171/w0/lote-2-S347.md`. O **lote 3 roda em
+  PARALELO** sobre `R[10:20]` e reporta em arquivo PRÓPRIO — as duas
+  fatias são disjuntas por construção da partição, não por acordo.
+  Falta: lotes 3-6.
