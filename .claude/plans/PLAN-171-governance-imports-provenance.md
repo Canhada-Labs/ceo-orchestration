@@ -246,3 +246,31 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   PARALELO** sobre `R[10:20]` e reporta em arquivo PRÓPRIO — as duas
   fatias são disjuntas por construção da partição, não por acordo.
   Falta: lotes 3-6.
+- **2026-09-06 (S347, noite autônoma, land combinado)** —
+  `p171-w0-lote2-fix` landado: cura pós-land dos DOIS P1 que o rail achou
+  DEPOIS do land do lote 2 (`184a1a2`). (a) A classificação «advisory por
+  desenho — SEMPRE allow» das linhas 3, 8 e 9 era falsa para
+  `check_read_injection.py`, que BLOQUEIA sob `CEO_UNICODE_HARDBLOCK=1`:
+  a rota opt-in passou a ser MEDIDA por instrumento (`measure-optin.py`,
+  novo Apêndice F) nas três metades, com os limites do detector GERADOS
+  como complemento dos conjuntos que ele imprime — `0 / 0 / 1` construtos
+  de bloqueio nos três hooks advisory. (b) A linha de contagem do §2, que
+  se dizia «derivada por comando» enquanto os seis números eram literais
+  digitados no gerador, passou a ser PRODUZIDA por `gen-count.py` sobre a
+  própria tabela, com o Apêndice C reproduzindo `10 / 10 / 0 / 0 / 10`.
+  Bateria: 10 node ids do censo (10 passed in 1.19s) + 3 node ids do
+  Apêndice F (3 passed in 0.11s), controle das formas do detector
+  («VEREDITO: todos os controles OK», incluindo o arquivo REAL rastreado
+  `.claude/hooks/check_harness_config.py` l. 688 e a RECUSA do instrumento
+  inteiro), Apêndice F re-derivado byte-idêntico do JSON, gates de corpus
+  todos rc 0 (`validate-governance.sh` COMPLETO Errors: 0;
+  `verify-counts.sh` sem drift, 818 arquivos / 15.724 testes;
+  claude-md-claims; staleness; test-env-hygiene; contaminação). Rail r1
+  do land: as DUAS pistas codex (`review --uncommitted` e texto)
+  APPROVE, zero P1/P2 — registro em
+  `.claude/plans/PLAN-171/w0/s345-p171-w0-lote2-fix/rail-land-round-1.md`.
+  Residuais NOMEADOS: `PLAN-171-FOLLOWUP-lote2-generated-figures` (as
+  figuras de §1/§4/§5 e dos Apêndices A/B/D seguem literais no gerador do
+  lote 2) e `PLAN-171-FOLLOWUP-readinjection-docstring` (o docstring
+  canônico ainda diz «always allows» — sai por cerimônia GPG). Os lotes
+  3-6 herdam o detector de QUATRO formas.

@@ -94,13 +94,13 @@ isso não estavam em `L` para serem removidos. `|R| = 48 − 6 = 42`.
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | adversary | `.claude/hooks/check_adversary.py` | `PreToolUse` / `Bash` (`settings.json`: matcher l. 160 → `command` l. 164) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_adversary_live.py::CheckAdversaryE2E::test_deny_rule_blocks_when_enforced` | PASS (`1 passed in 0.34s`) | **FAIL** (rc 1, `1 failed in 0.33s`) | PASS (`1 passed in 0.31s`) | **verde** | bloqueia o comando quando a regra é `deny` **e** o enforcement está LIGADO (`CEO_ADVERSARY`). A rota `ask` e a rota advisory-off têm testes próprios e **não** foram medidas aqui |
 | 2 | plan-edit | `.claude/hooks/check_plan_edit.py` | `PreToolUse` / `Edit\|Write\|MultiEdit` (`settings.json`: matcher l. 172 → `command` l. 176) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_plan_edit.py::TestTransitions::test_draft_to_executing_blocked` | PASS (`1 passed in 0.08s`) | **FAIL** (rc 1, `1 failed in 0.09s`) | PASS (`1 passed in 0.08s`) | **verde** | bloqueia transição ilegal de status de plano |
-| 3 | protocol-semver-cascade | `.claude/hooks/check_protocol_semver_cascade.py` | `PreToolUse` / `Edit\|Write\|MultiEdit` (`settings.json`: matcher l. 196 → `command` l. 200) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_protocol_semver_cascade.py::TestProtocolSemverCascadeHook::test_b_edit_protocol_without_adr_amend_warns` | PASS (`1 passed in 0.25s`) | **FAIL** (rc 1, `1 failed in 0.27s`) | PASS (`1 passed in 0.25s`) | **verde** | **advisory por desenho** — o enforcement é a OBSERVAÇÃO (`additionalContext` com o WARN), nunca um bloqueio |
+| 3 | protocol-semver-cascade | `.claude/hooks/check_protocol_semver_cascade.py` | `PreToolUse` / `Edit\|Write\|MultiEdit` (`settings.json`: matcher l. 196 → `command` l. 200) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_protocol_semver_cascade.py::TestProtocolSemverCascadeHook::test_b_edit_protocol_without_adr_amend_warns` | PASS (`1 passed in 0.25s`) | **FAIL** (rc 1, `1 failed in 0.27s`) | PASS (`1 passed in 0.25s`) | **verde** | **advisory — MEDIDO, não suposto:** o Apêndice F não acha no arquivo deste hook nenhum construto de bloqueio das formas que procura, nem env lida que o guarde; o enforcement é a OBSERVAÇÃO (`additionalContext` com o WARN) |
 | 4 | skill-patch-sentinel | `.claude/hooks/check_skill_patch_sentinel.py` | `PreToolUse` / `Edit\|Write\|MultiEdit` (`settings.json`: matcher l. 208 → `command` l. 212) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_skill_patch_sentinel.py::CheckSkillPatchSentinelTest::test_direct_skill_md_edit_without_proposal_blocks` | PASS (`1 passed in 0.26s`) | **FAIL** (rc 1, `1 failed in 0.20s`) | PASS (`1 passed in 0.26s`) | **verde** | bloqueia edição de `SKILL.md` sem proposta SP-NNN |
 | 5 | tier-policy | `.claude/hooks/check_tier_policy.py` | `PreToolUse` / `Edit\|Write\|MultiEdit` (`settings.json`: matcher l. 220 → `command` l. 224) | `validate.yml` job `integration-tests` (l.1224), step «Run tier_policy_cli tests (VETO-floor + adversarial)» (l.1259; comando l.1263). **Não** roda no `hook-tests-python-matrix` nem no `hook-tests-dual-rail` (nenhum dos dois fixa `.claude/scripts/tier_policy_cli/tests`), nem no `coverage.yml`, nem no `release.yml` | `.claude/scripts/tier_policy_cli/tests/test_check_tier_policy_hook.py::CheckTierPolicyHookTests::test_veto_file_without_sentinel_blocked` | PASS (`1 passed in 0.07s`) | **FAIL** (rc 1, `1 failed in 0.09s`) | PASS (`1 passed in 0.08s`) | **verde** | bloqueia edição de agente VETO sem sentinel (VETO floor) |
 | 6 | arbitration-kernel | `.claude/hooks/check_arbitration_kernel.py` | `PreToolUse` / `Edit\|Write\|MultiEdit\|mcp__.*` (`settings.json`: matcher l. 232 → `command` l. 236) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_arbitration_kernel.py::CheckArbitrationKernelTest::test_kernel_governance_hook_blocks` | PASS (`1 passed in 0.26s`) | **FAIL** (rc 1, `1 failed in 0.20s`) | PASS (`1 passed in 0.25s`) | **verde** | bloqueia edição de path do kernel de governança sem override válido |
 | 7 | scratchpad-access | `.claude/hooks/check_scratchpad_access.py` | `PreToolUse` / `Bash` (`settings.json`: matcher l. 244 → `command` l. 248) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_scratchpad_access.py::TestCrossPlanGate::test_cross_plan_blocked` | PASS (`1 passed in 0.08s`) | **FAIL** (rc 1, `1 failed in 0.09s`) | PASS (`1 passed in 0.09s`) | **verde** | bloqueia acesso cross-plan ao scratchpad |
-| 8 | budget | `.claude/hooks/check_budget.py` | `PreToolUse` / `Agent` (`settings.json`: matcher l. 256 → `command` l. 260) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_budget.py::TestMainEndToEnd::test_over_cap_emits_warning` | PASS (`1 passed in 0.09s`) | **FAIL** (rc 1, `1 failed in 0.10s`) | PASS (`1 passed in 0.08s`) | **verde** | **advisory por desenho** — SEMPRE allow; o enforcement é a OBSERVAÇÃO (`systemMessage` `BUDGET WARNING` + evento `budget_exceeded`) |
-| 9 | read-injection | `.claude/hooks/check_read_injection.py` | `PreToolUse` / `Read` (`settings.json`: matcher l. 268 → `command` l. 272) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_read_injection.py::CheckReadInjectionTest::test_malicious_file_allows_with_system_message` | PASS (`1 passed in 0.27s`) | **FAIL** (rc 1, `1 failed in 0.28s`) | PASS (`1 passed in 0.27s`) | **verde** | **advisory por desenho** — SEMPRE allow; o enforcement é a OBSERVAÇÃO (`systemMessage` nomeando a família de injeção) |
+| 8 | budget | `.claude/hooks/check_budget.py` | `PreToolUse` / `Agent` (`settings.json`: matcher l. 256 → `command` l. 260) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_budget.py::TestMainEndToEnd::test_over_cap_emits_warning` | PASS (`1 passed in 0.09s`) | **FAIL** (rc 1, `1 failed in 0.10s`) | PASS (`1 passed in 0.08s`) | **verde** | **advisory — MEDIDO:** todo construtor de decisão do módulo é `allow(` e o Apêndice F não acha rota de bloqueio nem env lida que a ligue (inclusive `CEO_BUDGET_ENFORCE`, que o docstring cita e o módulo nunca lê); o enforcement é a OBSERVAÇÃO (`systemMessage` `BUDGET WARNING` + evento `budget_exceeded`) |
+| 9 | read-injection | `.claude/hooks/check_read_injection.py` | `PreToolUse` / `Read` (`settings.json`: matcher l. 268 → `command` l. 272) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_read_injection.py::CheckReadInjectionTest::test_malicious_file_allows_with_system_message` | PASS (`1 passed in 0.27s`) | **FAIL** (rc 1, `1 failed in 0.28s`) | PASS (`1 passed in 0.27s`) | **verde** | **advisory por DEFAULT; BLOQUEIA sob `CEO_UNICODE_HARDBLOCK=1`** — rota opt-in MEDIDA nas três metades no Apêndice F. O controle DESTA linha prova a rota advisory: a OBSERVAÇÃO (`systemMessage` nomeando a família de injeção) |
 | 10 | codex-filewrite | `.claude/hooks/check_codex_filewrite.py` | `PreToolUse` / `mcp__codex__codex\|mcp__codex__codex-reply` (`settings.json`: matcher l. 291 → `command` l. 295) | `validate.yml` job `hook-tests-python-matrix` (l.1601), step «Run hook + script tests on Python …» (l.1631; comandos l.1644/1646); também `hook-tests-dual-rail` (l.1566, comandos l.1594/1595); `coverage.yml:102`; `release.yml:390` | `.claude/hooks/tests/test_check_codex_filewrite.py::TestCanonicalPathDenial::test_hook_source_file_blocked` | PASS (`1 passed in 0.22s`) | **FAIL** (rc 1, `1 failed in 0.24s`) | PASS (`1 passed in 0.22s`) | **verde** | bloqueia escrita do codex MCP em path canônico |
 
 **Como ler a coluna 4:** cada registro é um par — a linha `"matcher"`
@@ -128,10 +128,11 @@ saída no §7b do `EVIDENCE.md` (as invocações `pytest` de cada job, os
 `mutation-gate.yml`); referência de linha sozinha não prova inclusão, e
 esse era um achado de rail.
 
-**Contagem (derivada por comando — ver Apêndice C):** 10 gates no lote;
-10 com controle positivo PROVADO vermelho E provado verde de novo após
+**Contagem (GERADA por instrumento — `gen-count.py` do pack, sobre a
+tabela do §2 deste arquivo; ver Apêndice C):** 10 gates no lote; 10 com
+controle positivo PROVADO vermelho E provado verde de novo após
 restauração; 0 `controle vácuo`; 0 `sem controle`; 0
-`sem-controle-por-design`; 0 `UNREGISTERED` (todos os dez são, por
+`sem-controle-por-design`; 0 `UNREGISTERED` (todos os 10 são, por
 construção da partição, hooks registrados em `settings.json`).
 
 ## 3. O que este lote NÃO afirma
@@ -142,13 +143,22 @@ construção da partição, hooks registrados em `settings.json`).
 - Não afirma que o controle cobre TODO o gate: cada linha prova UM
   caminho de *enforcement*, não a superfície inteira do hook. Onde esse
   caminho não é o bloqueio de uma ferramenta, a última coluna do §2 o
-  NOMEIA — três linhas são **advisory por desenho**
-  (`protocol-semver-cascade`, `budget`, `read-injection`): elas sempre
-  permitem, e o que o controle prova é que a OBSERVAÇÃO é emitida.
+  NOMEIA — as linhas **advisory** (`protocol-semver-cascade`, `budget`,
+  `read-injection`), cujo controle prova que a OBSERVAÇÃO é emitida.
+  «Advisory» aqui é MEDIDO, não assumido: o Apêndice F procura, para
+  cada uma, os construtos de bloqueio e as env que os armariam.
+  `read-injection` TEM uma rota opt-in — bloqueia sob
+  `CEO_UNICODE_HARDBLOCK=1` — e ela está medida ali nas três metades;
+  nas outras o instrumento não acha rota nenhuma, o que sustenta a
+  classificação **até onde ele enxerga** (os limites estão declarados no
+  fim do Apêndice F, e este parágrafo os herda). Este relatório dizia,
+  antes, que as linhas advisory «sempre permitem»: era falso para
+  `read-injection`, e o defeito foi achado por rodada de rail DEPOIS do
+  land (`LANDER-BLOCKED-S344.json` do pack `p171-w0-lote2`).
 - Não afirma que o gate roda em produção: prova que o CÓDIGO produz a
-  saída de enforcement especificada — **recusa** nas sete linhas
+  saída de enforcement especificada — **recusa** nas linhas
   bloqueantes, **saída advisory** (`systemMessage` / `additionalContext`)
-  nas três advisory-por-desenho — e que o teste enxerga essa saída. Um
+  nas linhas advisory — e que o teste enxerga essa saída. Um
   matcher que nunca casa em campo passaria neste censo; isso é medição
   de outra wave.
 - A metade RED foi obtida removendo o enforcement do jeito MÍNIMO
@@ -295,14 +305,26 @@ as duas tabelas com o MESMO padrão e rotular o resultado como se fosse
 do Apêndice B foi um defeito de rótulo pego numa rodada de rail:
 
 ```
-grep -cE '^\| [0-9]+ \|.*::' .claude/plans/PLAN-171/w0/lote-2-S347.md                # 10
-grep -cE '^\| [0-9]+ \|.*::.*\*\*verde\*\*' .claude/plans/PLAN-171/w0/lote-2-S347.md   # 10
-grep -cE '^\| [0-9]+ \|.*::.*vácuo' .claude/plans/PLAN-171/w0/lote-2-S347.md         # 0
-grep -cE '^\| [0-9]+ \|.*::.*sem controle' .claude/plans/PLAN-171/w0/lote-2-S347.md  # 0
-grep -cE '^\| [0-9]+ \|.*\(rc 1\) \| `E ' .claude/plans/PLAN-171/w0/lote-2-S347.md  # 10
+grep -cE '^\| [0-9]+ \|.*::' .claude/plans/PLAN-171/w0/lote-2-S347.md                 # 10
+grep -cE '^\| [0-9]+ \|.*::.*\*\*verde\*\*' .claude/plans/PLAN-171/w0/lote-2-S347.md  # 10
+grep -cE '^\| [0-9]+ \|.*::.*vácuo' .claude/plans/PLAN-171/w0/lote-2-S347.md          # 0
+grep -cE '^\| [0-9]+ \|.*::.*sem controle' .claude/plans/PLAN-171/w0/lote-2-S347.md   # 0
+grep -cE '^\| [0-9]+ \|.*\(rc 1\) \| `E ' .claude/plans/PLAN-171/w0/lote-2-S347.md    # 10
 ```
 
-As saídas medidas na derivação FINAL estão no `EVIDENCE.md` do pack.
+Estes DOIS blocos — a linha de contagem do §2 e os `# N` acima —
+não são digitados: quem os escreve é o `gen-count.py` do pack de
+cura, que localiza a coluna «Verdito» pelo CABEÇALHO, conta as
+linhas do §2 delimitado pelos próprios títulos markdown e roda os
+`grep` acima sobre o arquivo FINAL; o derivador re-deriva os dois
+blocos DEPOIS de escrever e recusa se o resultado diferir do que
+inseriu (ponto fixo). **O resto das figuras deste relatório** (§1,
+§4, §5, Apêndices A, B e D) veio do `gen-report.py` do pack do
+lote 2 e **continua literal lá** — a cura de proveniência aqui
+cobre só os dois blocos nomeados; gerar as demais é follow-up
+NOMEADO (`PLAN-171-FOLLOWUP-lote2-generated-figures`), fora do
+escopo deste pacote. As saídas da derivação FINAL estão no
+`EVIDENCE.md` do pack de cura.
 
 ## Apêndice D — o defeito de medição do §4, com comando e saída
 
@@ -335,3 +357,160 @@ $ PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q --no-header \
   (quem executa). `mutation-gate.yml` foi lido e **não** muta nenhum
   dos dez módulos deste lote (os quatro legs são `redact`,
   `audit_hmac`, `canonical_guard`, `check_pair_rail`).
+
+## Apêndice F — as linhas «advisory» do §2, medidas contra o seu próprio switch
+
+Achado pós-land: a lane de TEXTO da rodada de rail do land terminou
+DEPOIS do push e mostrou que o §2 classificava hooks como advisory
+afirmando, sem condição, que «elas sempre permitem» — enquanto
+`check_read_injection.py` tem uma rota de BLOQUEIO **opt-in**. A regra
+que fica: **um censo que chama um gate de advisory só pode fazê-lo
+depois de medir todo switch que o faz bloquear que ele consiga enxergar
+— e de declarar o que não enxerga.**
+
+Instrumento: `measure-optin.py` do pack, sobre a worktree de censo em
+`HEAD = bb68edf55413`. Duas derivações. **Estática:** procura, no
+ARQUIVO do hook, construtos de BLOQUEIO nas formas abaixo; lista as env
+de prefixo `CEO_` / `CLAUDE_` que o módulo lê por um getter reconhecido
+(`_env_int` / `_is_truthy` / `get` / `get_trusted` / `getenv`); e nomeia
+as env que o docstring cita mas o módulo NUNCA lê — uma variável
+documentada e não lida não liga bloqueio nenhum. As formas saem da
+tabela de chaves de decisão do instrumento (`"decision": "block"`,
+`"permissionDecision": "deny"`), não de prosa: o detector é CONSERVADOR
+por desenho — prefere acusar um construto e exigir medição a deixá-lo
+passar. Formas procuradas:
+
+- chamada `*.block(...)` (AST)
+- dicionário literal com `"decision": "block"` (AST, multilinha e
+  aninhado inclusive)
+- comparação com literal — `<x>.get("decision") == "block"` ou
+  `<x>["decision"] == "block"` (AST)
+- varredura de texto de reforço: `"decision"` seguido de `"block"` na
+  mesma linha (pega o que o AST não parseie)
+- dicionário literal com `"permissionDecision": "deny"` (AST, multilinha
+  e aninhado inclusive)
+- comparação com literal — `<x>.get("permissionDecision") == "deny"` ou
+  `<x>["permissionDecision"] == "deny"` (AST)
+- varredura de texto de reforço: `"permissionDecision"` seguido de
+  `"deny"` na mesma linha (pega o que o AST não parseie)
+
+**Dinâmica:** onde existe construto de bloqueio, as TRÊS metades do §4
+(como está / enforcement removido / restaurado) sobre o controle
+positivo que exercita ESSE construto. O instrumento RECUSA rodar se um
+módulo tem construto de bloqueio sem controle dinâmico declarado — o
+caso exato que escapou no land. Saída bruta:
+`payload/optin-measurement.json` no pack.
+
+### `.claude/hooks/check_protocol_semver_cascade.py`
+
+- construtos de BLOQUEIO das formas procuradas, neste arquivo: **0**.
+- por FORMA procurada, neste arquivo (todas as formas, inclusive as
+  zeradas): `call-block` ×0; `dict-decision` ×0; `cmp-decision` ×0;
+  `text-decision` ×0; `dict-permissionDecision` ×0;
+  `cmp-permissionDecision` ×0; `text-permissionDecision` ×0.
+- construtores de decisão no módulo: `allow(` ×0, `block(` ×0.
+- env de prefixo `CEO_` / `CLAUDE_` lidas por getter reconhecido (AST,
+  com a linha): `CEO_PROTOCOL_SYNC_CASCADE` (l. 344),
+  `CLAUDE_PROJECT_DIR` (l. 332).
+- env citadas no docstring e NUNCA lidas pelo módulo: nenhuma.
+- **Verdito: nenhum switch opt-in de bloqueio VISÍVEL a esta
+  derivação.** Nenhum construto das formas procuradas neste arquivo, e
+  nenhuma env lida que o guarde ⇒ a classificação advisory do §2 está
+  sustentada até onde o instrumento enxerga. NÃO é prova de que
+  configuração nenhuma bloqueie: as rotas fora do alcance estão
+  declaradas no fim deste apêndice.
+
+### `.claude/hooks/check_budget.py`
+
+- construtos de BLOQUEIO das formas procuradas, neste arquivo: **0**.
+- por FORMA procurada, neste arquivo (todas as formas, inclusive as
+  zeradas): `call-block` ×0; `dict-decision` ×0; `cmp-decision` ×0;
+  `text-decision` ×0; `dict-permissionDecision` ×0;
+  `cmp-permissionDecision` ×0; `text-permissionDecision` ×0.
+- construtores de decisão no módulo: `allow(` ×11, `block(` ×0.
+- env de prefixo `CEO_` / `CLAUDE_` lidas por getter reconhecido (AST,
+  com a linha): `CEO_AUDIT_LOG_DIR` (l. 197), `CEO_BUDGET_BYPASS` (l.
+  1049), `CEO_BUDGET_BYPASS_MAX_PER_DAY` (l. 1050),
+  `CEO_BUDGET_QUOTA_HINT` (l. 211), `CEO_MAX_PLAN_TOKENS` (l. 544, 1044,
+  1047), `CEO_STATUSLINE_SIDECAR` (l. 194), `CLAUDE_PROJECT_DIR` (l.
+  973).
+- env citadas no docstring e NUNCA lidas pelo módulo:
+  `CEO_BUDGET_ENFORCE`, `CEO_MAX_SPAWN_TOKENS`.
+- **Verdito: nenhum switch opt-in de bloqueio VISÍVEL a esta
+  derivação.** Nenhum construto das formas procuradas neste arquivo, e
+  nenhuma env lida que o guarde ⇒ a classificação advisory do §2 está
+  sustentada até onde o instrumento enxerga. NÃO é prova de que
+  configuração nenhuma bloqueie: as rotas fora do alcance estão
+  declaradas no fim deste apêndice.
+
+### `.claude/hooks/check_read_injection.py`
+
+- construtos de BLOQUEIO das formas procuradas, neste arquivo: **1** —
+  call *.block(...) na l. 377.
+- por FORMA procurada, neste arquivo (todas as formas, inclusive as
+  zeradas): `call-block` ×1; `dict-decision` ×0; `cmp-decision` ×0;
+  `text-decision` ×0; `dict-permissionDecision` ×0;
+  `cmp-permissionDecision` ×0; `text-permissionDecision` ×0.
+- construtores de decisão no módulo: `allow(` ×0, `block(` ×1.
+- env de prefixo `CEO_` / `CLAUDE_` lidas por getter reconhecido (AST,
+  com a linha): `CEO_READ_INJECTION_SCAN` (l. 260), `CEO_SOTA_DISABLE`
+  (l. 141, 176), `CEO_UNICODE_HARDBLOCK` (l. 143, 146, 179, 183),
+  `CLAUDE_PROJECT_DIR` (l. 242, 298).
+- env citadas no docstring e NUNCA lidas pelo módulo: nenhuma.
+- **Verdito: bloqueia sob `CEO_UNICODE_HARDBLOCK=1` — rota opt-in MEDIDA
+  (`verde`).** Controle positivo que exercita o construto, nas três
+  metades:
+
+```
+# como está (switch ARMADO no próprio controle):
+PYTHONPATH=<CENSUS-WT> PYTHONDONTWRITEBYTECODE=1 \
+  python3 -m pytest -q --no-header -p no:cacheprovider \
+  .claude/hooks/tests/test_check_read_injection_coverage.py::ReadInjectionInProcessTest::test_unicode_hardblock_blocks_payload_past_cap
+1 passed in 0.12s   (rc 0)
+
+# enforcement removido: `if _unicode_hardblock_enabled():` -> `if False:` (1 ocorrência)
+1 failed in 0.10s   (rc 1)
+E       AssertionError: None != 'block'
+
+# git restore -> MESMO node id (controle de restauração do §4)
+1 passed in 0.12s   (rc 0)
+git status --porcelain -> (vazio)
+```
+
+- a outra metade da frase — o switch é **default-OFF**, logo a linha
+  advisory do §2 é verdadeira da configuração DEFAULT — tem controle
+  próprio, rodado como está:
+
+```
+.claude/hooks/tests/test_check_read_injection_coverage.py::ReadInjectionInProcessTest::test_unicode_gate_default_off_skips_content_work
+1 passed in 0.08s   (rc 0)
+.claude/hooks/tests/test_check_read_injection_coverage.py::ReadInjectionInProcessTest::test_unicode_gate_helper_derivation
+1 passed in 0.08s   (rc 0)
+```
+
+**O que este apêndice NÃO afirma.** Não afirma que os hooks medidos não
+tenham outras rotas de saída. Cada limite abaixo é o COMPLEMENTO de um
+conjunto IMPRESSO acima — é assim, e não por uma lista de rotas cegas
+escrita à mão, que eles são declarados: quando o instrumento ganha uma
+forma, o limite encolhe sozinho (a lista à mão foi exatamente o defeito
+que a refutação da S347 achou nas linhas geradas por este apêndice).
+
+- **LOCUS:** olha o ARQUIVO do hook, sem seguir `import` — um bloqueio
+  produzido dentro de um MÓDULO IMPORTADO cai fora.
+
+- **LITERALIDADE:** exige chave E valor LITERAIS no próprio construto —
+  chave ou valor chegando por variável, f-string ou constante importada
+  caem fora.
+
+- **VOCABULÁRIO:** conhece exatamente os pares `"decision": "block"`,
+  `"permissionDecision": "deny"` (mais a chamada `*.block(...)`) —
+  QUALQUER outra chave/valor com que um hook recuse cai fora.
+
+- **ENV:** reconhece nomes de prefixo `CEO_` / `CLAUDE_` lidos pelos
+  getters `_env_int` / `_is_truthy` / `get` / `get_trusted` / `getenv` —
+  nome ou getter fora desses conjuntos cai fora.
+
+Onde este apêndice diz «nenhum switch opt-in», leia «nenhum VISÍVEL a
+esta derivação» — é o mesmo limite que o §3 declara para o resto do
+censo, e vale para os lotes 3-6, que herdam o método e a tabela de
+chaves.
