@@ -274,3 +274,33 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   lote 2) e `PLAN-171-FOLLOWUP-readinjection-docstring` (o docstring
   canônico ainda diz «always allows» — sai por cerimônia GPG). Os lotes
   3-6 herdam o detector de QUATRO formas.
+- **2026-09-06 (S347)** — W0 lotes 3 e 4/6 no registro. **Lote 3**
+  (`R[10:20]`: cost-envelope, worktree-writer, config-protection,
+  ledger-checkpoint, audit-log, confidence-gate, output-safety,
+  subagent-fabrication, skill-reference-read, output-secrets) landou em
+  `00839a6` como pack SÓ-RELATÓRIO — sem linha de registro, que esta paga:
+  relatório em `.claude/plans/PLAN-171/w0/lote-3-S347.md`. **Lote 4/6
+  MEDIDO** sobre `R[20:30]` da MESMA partição determinística —
+  skill-bootstrap-post, webfetch-injection, mcp-response, codex-response,
+  bash-canonical-forensic, SessionStart, turbo-sessionstart,
+  compact-pinning, SessionEnd, UserPromptSubmit —, cada um nas TRÊS
+  metades (verde como está; **vermelho com o enforcement removido**, mutação
+  ancorada numa worktree descartável; verde outra vez depois do `git
+  restore`). 10/10 verde, 0 vácuo, 0 sem-controle, 0 UNREGISTERED. Duas
+  coisas que este lote acrescenta ao método: (a) uma coluna «O que o
+  controle prova» por linha, porque oito dos dez hooks são OBSERVADORES e um
+  `verde` sem essa coluna seria lido como «bloqueia» — quatro linhas provam
+  DETECÇÃO, não emissão, e o §4 declara essa lacuna do corpus; (b) o
+  detector de bloqueio herdado do `lote2-fix` ganhou DUAS formas com
+  controle positivo próprio, e a primeira delas
+  (`getattr(<x>, "decision", ...) == "block"`) DESMENTIU um zero: o
+  detector de quatro formas reportava «nenhum construto de bloqueio» para
+  `SessionStart.py`, que REGISTRA a recusa do validador a um
+  `.claude/instructions.md` envenenado — contabiliza
+  `instructions_blocked` e emite `persistent_instructions_blocked`. O que
+  a medição NÃO estabelece, e por isso não está afirmado aqui: essa função
+  não carrega o arquivo em nenhuma das versões (`SessionStart.py:347-363`),
+  então o vermelho prova a perda do REGISTRO, não um carregamento
+  impedido. Relatório:
+  `.claude/plans/PLAN-171/w0/lote-4-S347.md`. Falta: lotes 5-6 (`R[30:42]`,
+  12 hooks).
