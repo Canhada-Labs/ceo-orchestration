@@ -1587,3 +1587,15 @@ escolher) viajam no MESMO patch da W0a. Só então proponha a W1.»
   nomeado; a consequência do braço (iii) da OQ-9 é escrita DENTRO da opção; e o
   censo declara o mecanismo certo (o filtro `is_tracked`, não a `gitignore`).
   Nenhuma OQ foi decidida. O plano segue `draft`.
+
+### Respostas do Owner às OQs (S348, 2026-09-07 ~05:1x–08:5x; AskUserQuestion; rótulos VERBATIM; registro em `s344-packs/OWNER-DECISIONS-S348-C.md`)
+
+- Investimento da manhã: «Responder as OQs e construir a W0 (Recomendado)».
+- OQ-2 (ordem de migração e janelas): «W6a → 169 W4.1 → w4b-gates-v2 → W1-widen; uma assinatura por manhã (Recomendado)». O PLAN-183 W1 sai pelos moldes por exceção explícita do Owner à regra R3 (mesma data).
+- OQ-4 (cinco chaves de orçamento): «Ratificar a omissão (Recomendado)» — o frontmatter segue sem números inventados; cada wave imprime o que gastou.
+- OQ-5 (instrumento): «(a) Corrigir o classificador e re-medir a base (Recomendado)» — os 6 limites + a raiz `.claude/scripts/ceremony/**` entram no classificador; a base de 23,1 % morre; as 3 assinaturas seguintes são medidas com o MESMO binário novo. Amostra intermediária com o binário antigo em `PLAN-188/s348-rail-classes.txt` (426 registros, 27 packs).
+- OQ-6 (registro nos gates): «Manifesto + hook, na W1 (Recomendado)» — a entrada em `_CANONICAL_GUARDS` viaja no mesmo patch assinado do bump do manifesto (AC-6).
+- OQ-7 (alcance do `--describe`): «(b) Chave opcional; sem ela, escopo gravado pelo finalize (Recomendado)» — o leitor aceita as duas formas e recusa só chave apontando para comando inexistente.
+- OQ-8 (destino dos clones): «`scripts/local/historical/` para assinados; clone nunca assinado é removido (Recomendado)» — o clone removido fica registrado por digest no `STATE.md` do pack.
+- OQ-9 (executor dos controles + 4.º sítio): «(ii) Workflow próprio e barato, disparado pelos paths do toolkit (Recomendado)» — replica o step de integridade (aditivo; o do `smoke` nunca sai), roda os controles vermelhos, semeia chaveiro GPG descartável. O arquivo de workflow é canônico (oráculo 1): nasce no pack da W0 e é assinado com ela.
+- Corpus de defeitos do molde para a W0: `PLAN-188/ceremony-defect-corpus-S348.md` (17 classes; §3 propõe a invariante 11 «o leitor falha para cima», CM-09 na W1, controle de CM-10 do lado do SIGN, nuance de CM-12).

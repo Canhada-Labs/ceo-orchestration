@@ -1081,3 +1081,5 @@ resumo criptográfico.
   plano para `status: executing` só acontece DEPOIS da revisão landar —
   não volta a ser perguntado. `status:` permanece `reviewed` até lá.
   Check: none (doc-only)
+
+- **2026-09-07 (S348, Owner acordado; verbatim):** OQ-1 (número do ADR) — «Manter ADR-180 (Recomendado)». OQ-2 e OQ-3 apresentadas a seguir na mesma sessão.

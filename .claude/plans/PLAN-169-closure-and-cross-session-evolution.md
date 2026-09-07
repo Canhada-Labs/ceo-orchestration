@@ -2083,3 +2083,5 @@ auditável, e `scripts/tests/**` continua sem lint em CI.
   tempo-morto, M=14 pinado; exec bit 100644; header v2.2) → v2.2.
   W0.4 triado E curado na sessão (seção night-mode espelhada no
   pt-BR). Transcripts do rail: archive privado da sessão S298.
+
+- **2026-09-07 (S348, Owner acordado; verbatim):** W4.1 (quota-resume) refutado na 2.ª passada da noite (22 registros de rail, acima da linha R3; 2 P1 nos gates do SIGN; 2 artefatos stale) — decisão: «(b) Esperar o toolkit do PLAN-188 (Recomendado)». O quota-resume permanece dentro do PLAN-169 (decisão de 2026-09-06); a assinatura vem com o LAND compartilhado, 2.º na ordem de migração (PLAN-188 OQ-2).

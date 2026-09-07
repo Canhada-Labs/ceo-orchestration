@@ -1070,3 +1070,5 @@ redação.
   (casava dois testes alheios) e o censo do §4.7 media 8 documentos onde a
   superfície real é 13. **Oito perguntas continuam abertas e são do Owner
   (§10); nenhuma foi decidida aqui.** `status:` permanece `reviewed`.
+
+- **2026-09-07 (S348, Owner acordado; verbatim):** OQ-1 (arquitetura da elegibilidade, opções A/B/C/D da §2.1) — «D — não mensurável hoje» (contra a recomendação C). Consequência: sem rodada 3 e sem wave de poda até existir um instrumento que meça a elegibilidade; o plano permanece `reviewed`. A wave de instrumento é decisão seguinte do Owner.
