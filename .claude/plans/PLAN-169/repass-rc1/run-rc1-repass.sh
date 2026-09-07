@@ -1,0 +1,450 @@
+#!/bin/bash
+# CEREMONY-LINT: handwritten-exception: clone do PLAN-177/repass-rc4/run-rc4-repass.sh com base, partes e
+# resolucao PINADA do codex novas; nao ha gerador para runners de re-pass.
+# Re-pass do CANDIDATO v1.4.0-rc.1 (PLAN-169) - 6 PARTES.
+#
+# Revisa o delta v1.3.0..CANDIDATO na ordem de RISCO PARA O ADOTANTE:
+#   1 upgrade.sh                     (o caminho que roda na arvore do adopter)
+#   2 install.sh + _framework_manifest_set.sh + delivery-routes.tsv
+#   3 doctor.sh + uninstall.sh + templates/**
+#   4 SPEC/** + npm/README + CHANGELOG + settings.json + workflows entregues
+#   5 hooks da familia de continuidade (precompact/postcompact/SessionEnd/...)
+#   6 nucleo de cadeia e auditoria em _lib/ (audit_emit, ledger_provenance, ...)
+#
+# Pipeline por parte, identico ao run-rc4-repass.sh do PLAN-177:
+#   prompt + diff -> codex_egress_redact --outgoing -> controles -> codex exec
+#   --sandbox read-only, de um worktree DETACHED no SHA candidato (doutrina
+#   r17: a tag rc.1 ainda nao existe; exigir worktree da tag seria circular).
+#
+# Saida por parte: payload-rc1-N.redacted.txt, diff-rc1-N.patch,
+# paths-rc1-N.manifest.txt (DERIVADO da pathspec contra o candidato, nao
+# lido de uma lista fixa), verdict-rc1-N.txt, transcript-rc1-N.log;
+# agregado em PROVENANCE-rc1.md + MANIFEST-rc1.sha256.
+#
+# ---------------------------------------------------------------------------
+# CODEX PINADO SEM MEXER NA MAQUINA. `codex --version` global esta em 0.153.4;
+# `.claude/governance/codex-cli-pin.txt` exige >=0.128.0,<0.148.0 e
+# `codex-cli-pin-manifest.json` pina o payload de 0.147.0. Os DOIS sao
+# canonicos e NAO sao editados aqui. Este runner resolve a 0.147.0 por
+# `npx` num cache PROPRIO, VERIFICA o sha256 do payload nativo contra o
+# manifesto (fail-CLOSED, pelo mesmo oraculo do pair-rail-gate) e poe um
+# diretorio-shim no inicio do PATH para que qualquer `codex` invocado durante
+# o run seja o pinado. Medido em 2026-09-07: o npx resolve 0.147.0 e o
+# payload bate 19c4f144...; o codex GLOBAL responde "mismatch" no mesmo
+# oraculo — o controle negativo e gratis.
+# ---------------------------------------------------------------------------
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)" || exit 2
+cd "$REPO_ROOT" || exit 2
+OUT="$REPO_ROOT/.claude/plans/PLAN-169/repass-rc1"
+
+BASE_TAG="v1.3.0"
+BASE_TAG_OBJ="ec0543b615c4621e259a409e9eace951539a6632"
+BASE_TAG_COMMIT="d789721c2fd4a11c36c87eda0e1118eab59092e4"
+PARTS="1 2 3 4 5 6"
+NPARTS=6
+CODEX_PKG="@openai/codex@0.147.0"
+MAX_RAW_BYTES=200000
+
+die() { printf 'FATAL: %s\n' "$*" >&2; exit 1; }
+
+# --- 0. o candidato vem de CANDIDATE.sha, escrito pelo OWNER-RC1-CUT.sh ----
+# Nunca de uma constante editada a mao: o candidato REAL e o commit do bump,
+# que so existe depois do `release.sh bump`.
+CAND_FILE="$OUT/CANDIDATE.sha"
+[ -f "$CAND_FILE" ] \
+  || die "$CAND_FILE ausente — o OWNER-RC1-CUT.sh o escreve depois do bump"
+CANDIDATE_SHA="$(tr -d ' \t\r\n' < "$CAND_FILE")" || die "leitura de CANDIDATE.sha falhou"
+case "$CANDIDATE_SHA" in
+  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) : ;;
+  *) die "CANDIDATE.sha nao e um sha40 minusculo: '$CANDIDATE_SHA'" ;;
+esac
+git cat-file -e "$CANDIDATE_SHA^{commit}" 2>/dev/null \
+  || die "candidato $CANDIDATE_SHA nao existe neste repositorio"
+
+# --- 1. base PINADA e verificada, local E remotamente ----------------------
+git tag -v "$BASE_TAG" >/dev/null 2>&1 \
+  || die "assinatura da $BASE_TAG nao verifica"
+[ "$(git rev-parse "$BASE_TAG")" = "$BASE_TAG_OBJ" ] \
+  || die "objeto local da $BASE_TAG != pin"
+[ "$(git rev-parse "$BASE_TAG^{commit}")" = "$BASE_TAG_COMMIT" ] \
+  || die "commit da $BASE_TAG != pin"
+_bt_rls="$(git ls-remote origin "refs/tags/$BASE_TAG" "refs/tags/$BASE_TAG^{}")" \
+  || die "ls-remote da $BASE_TAG falhou (transporte) — nao vou assumir ausente"
+_bt_plain="$(printf '%s\n' "$_bt_rls" | awk -v r="refs/tags/$BASE_TAG" '$2==r{print $1}')"
+_bt_peel="$(printf '%s\n' "$_bt_rls" | awk -v r="refs/tags/$BASE_TAG^{}" '$2==r{print $1}')"
+[ "$_bt_plain" = "$BASE_TAG_OBJ" ] || die "$BASE_TAG remota != pin"
+[ -z "$_bt_peel" ] || [ "$_bt_peel" = "$BASE_TAG_COMMIT" ] \
+  || die "peel remoto da $BASE_TAG != pin"
+git merge-base --is-ancestor "$BASE_TAG_COMMIT" "$CANDIDATE_SHA" \
+  || die "a base nao e ancestral do candidato"
+_rm_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')" \
+  || die "ls-remote de main falhou"
+[ "$_rm_main" = "$CANDIDATE_SHA" ] \
+  || die "origin/main ($_rm_main) != candidato ($CANDIDATE_SHA) — main avancou; re-rode o CUT ou re-pine conscientemente"
+
+# --- 2. resolver e VERIFICAR o codex pinado --------------------------------
+# `CODEX_BIN` e o seam do harness (stub que nao gasta codex). Quando ele esta
+# posto, o pin do npx NAO e exigido — e o harness declara isso alto. Em
+# execucao real o seam esta vazio e a verificacao e fail-CLOSED.
+SHIM_DIR=""
+if [ -n "${CODEX_BIN:-}" ]; then
+  [ -x "$CODEX_BIN" ] || die "CODEX_BIN='$CODEX_BIN' nao e executavel"
+  printf 'AVISO: CODEX_BIN posto — rodando com STUB, o pin 0.147.0 NAO foi exigido\n' >&2
+  CODEX_CLI_VERSION="stub"
+  CODEX_PAYLOAD_SHA="stub"
+  CODEX_TRIPLE="stub"
+else
+  command -v npx >/dev/null 2>&1 || die "npx ausente — nao consigo resolver o codex pinado"
+  NPX_CACHE="$OUT/.npx-cache"
+  mkdir -p "$NPX_CACHE" || die "mkdir do cache do npx falhou"
+  printf 'resolvendo %s pelo npx (cache proprio, o codex global NAO e tocado)...\n' "$CODEX_PKG"
+  _nv="$(npm_config_cache="$NPX_CACHE" npx -y "$CODEX_PKG" --version 2>/dev/null)" \
+    || die "npx nao conseguiu resolver $CODEX_PKG (rede?)"
+  CODEX_CLI_VERSION="$(printf '%s' "$_nv" | awk '{print $NF}')"
+  [ "$CODEX_CLI_VERSION" = "0.147.0" ] \
+    || die "npx devolveu versao '$CODEX_CLI_VERSION', esperado 0.147.0"
+  # O launcher e o `.bin/codex` que o npx materializou. Achado por busca
+  # EXATA no cache proprio; zero ou mais de um e recusa nomeada.
+  _lf="$(mktemp)"
+  find "$NPX_CACHE/_npx" -type l -o -type f -name codex -path '*/node_modules/.bin/codex' > "$_lf" 2>/dev/null
+  _ln="$(grep -c . "$_lf")"
+  [ "$_ln" = "1" ] || { rm -f "$_lf"; die "encontrei $_ln launchers no cache do npx (esperado 1)"; }
+  CODEX_LAUNCHER="$(cat "$_lf")"; rm -f "$_lf"
+  # Verificacao fail-CLOSED pelo MESMO oraculo do pair-rail-gate (ADR-182).
+  _pin_json="$(python3 "$REPO_ROOT/.claude/hooks/check_pair_rail.py" \
+    --verify-codex-pin "$CODEX_LAUNCHER")"
+  _pin_rc=$?
+  [ "$_pin_rc" -eq 0 ] \
+    || die "check_pair_rail --verify-codex-pin rc=$_pin_rc sobre o launcher do npx: $_pin_json"
+  CODEX_PAYLOAD_SHA="$(printf '%s' "$_pin_json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["sha256"])')" \
+    || die "sha256 ilegivel na saida do oraculo"
+  CODEX_TRIPLE="$(printf '%s' "$_pin_json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["target_triple"])')" \
+    || die "target_triple ilegivel"
+  _exp="$(printf '%s' "$_pin_json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["expected_sha256"])')"
+  [ -n "$CODEX_PAYLOAD_SHA" ] && [ "$CODEX_PAYLOAD_SHA" = "$_exp" ] \
+    || die "payload sha ($CODEX_PAYLOAD_SHA) != manifesto ($_exp)"
+  printf '   pin VERIFICADO: %s / %s / %s\n' "$CODEX_CLI_VERSION" "$CODEX_TRIPLE" "$CODEX_PAYLOAD_SHA"
+  # Shim: qualquer `codex` invocado daqui pra frente e o PINADO. O global
+  # (0.153.4) fica fora do PATH deste processo.
+  SHIM_DIR="$OUT/.codex-shim"
+  mkdir -p "$SHIM_DIR" || die "mkdir do shim falhou"
+  {
+    printf '#!/bin/bash\n'
+    printf '# shim do runner rc.1 — delega ao codex 0.147.0 resolvido pelo npx\n'
+    printf 'exec %s "$@"\n' "$(printf '%q' "$CODEX_LAUNCHER")"
+  } > "$SHIM_DIR/codex" || die "escrita do shim falhou"
+  chmod 0755 "$SHIM_DIR/codex" || die "chmod do shim falhou"
+  PATH="$SHIM_DIR:$PATH"; export PATH
+  _shim_v="$(codex --version 2>/dev/null | awk '{print $NF}')"
+  [ "$_shim_v" = "0.147.0" ] \
+    || die "o shim nao esta ativo: 'codex --version' responde '$_shim_v'"
+  CODEX_BIN="codex"
+fi
+
+# --- 3. worktree DETACHED no candidato -------------------------------------
+WTBASE="$(mktemp -d "${TMPDIR:-/tmp}/repass-rc1.XXXXXX")" || die "mktemp falhou"
+WT="$WTBASE/wt"
+git worktree add --detach "$WT" "$CANDIDATE_SHA" >/dev/null || die "worktree add falhou"
+_cleanup() {
+  git worktree remove --force "$WT" >/dev/null 2>&1 || true
+  mkdir -p "$HOME/.rc2-backup"
+  for _raw in "$OUT"/payload-rc1-*.raw.txt; do
+    [ -e "$_raw" ] || continue
+    mv "$_raw" "$HOME/.rc2-backup/quarantine-$(date +%s)-$(basename "$_raw")" \
+      && echo "quarentena: $(basename "$_raw") -> ~/.rc2-backup/" >&2
+  done
+}
+trap _cleanup EXIT
+_wt_st="$(git -C "$WT" status --porcelain)" || die "git status do worktree falhou"
+[ -z "$_wt_st" ] || die "worktree do candidato sujo"
+
+# A PATHSPEC de cada parte e a INTENCAO; o manifesto e DERIVADO dela contra
+# o candidato, no momento do run. Uma lista fixa medida noutro commit
+# esqueceria os sitios que so mudam no commit do BUMP (npm/package.json,
+# .claude-plugin/*.json, os stamps de SBOM/SECURITY/VERSIONING/INSTALL/
+# ARCHITECTURE) — o re-pass reviraria uma arvore diferente da que sera
+# taggeada. Um arquivo sem mudanca na faixa simplesmente nao aparece.
+part_pathspec() {
+  case "$1" in
+    1) printf '%s\n' \
+         "scripts/upgrade.sh" ;;
+    2) printf '%s\n' \
+         "scripts/install.sh" "scripts/_framework_manifest_set.sh" \
+         "scripts/delivery-routes.tsv" "scripts/install-npm.sh" ;;
+    3) printf '%s\n' \
+         "scripts/doctor.sh" "scripts/uninstall.sh" "templates/" ;;
+    4) printf '%s\n' \
+         "SPEC/" "npm/" "CHANGELOG.md" "VERSION" \
+         ".claude/settings.json" ".claude/.framework-version" \
+         ".claude-plugin/" ":(glob).github/workflows/*" ;;
+    5) printf '%s\n' \
+         ".claude/hooks/check_precompact_continuity.py" \
+         ".claude/hooks/check_postcompact_reinject.py" \
+         ".claude/hooks/SessionEnd.py" \
+         ".claude/hooks/check_compact_pinning.py" \
+         ".claude/hooks/SessionStart.py" \
+         ".claude/hooks/audit_log.py" ;;
+    6) printf '%s\n' \
+         ".claude/hooks/_lib/audit_emit.py" \
+         ".claude/hooks/_lib/ledger_provenance.py" \
+         ".claude/hooks/_lib/runtime_paths.py" \
+         ".claude/hooks/_lib/injection_salt.py" \
+         ".claude/hooks/_lib/audit_hmac.py" \
+         ".claude/hooks/_lib/spool_writer.py" \
+         ".claude/hooks/_lib/state_store.py" \
+         ".claude/hooks/_lib/test_isolation.py" ;;
+    *) return 1 ;;
+  esac
+}
+
+part_label() {
+  case "$1" in
+    1) echo "upgrade.sh — o caminho que roda na arvore do adopter" ;;
+    2) echo "install.sh + o set de manifesto + a tabela de rotas de entrega" ;;
+    3) echo "doctor.sh + uninstall.sh + templates/** entregues" ;;
+    4) echo "SPEC/** + npm README + CHANGELOG + settings.json + workflows entregues" ;;
+    5) echo "hooks da familia de continuidade de compaction" ;;
+    6) echo "nucleo de cadeia e auditoria em _lib/" ;;
+  esac
+}
+part_coverage() {
+  # As rodadas de rail que JA revisaram este conteudo ao landar. Isto entra
+  # no prompt para que o revisor possa dar GO-WITH-CONDITIONS com a condicao
+  # NOMEANDO a cobertura, em vez de tratar tudo como inedito.
+  case "$1" in
+    1) echo "PLAN-183 W5 (D1: entrega de docs/ e .github/ com hash-gate; 8 rodadas), pacote E da S329 (roster de hooks derivado do template da cerimonia; 7 rodadas sobre a sombra RE-DERIVADA, 4 P1 reais), PLAN-185 W1-W3 (confinamento de destino; 5 rodadas)" ;;
+    2) echo "PLAN-185 W1-W3 (predicado de confinamento e gramatica do handle; e2e 105/0 em bytes, controle 22/33 pre-cura), PLAN-183 W5 D3 (gerador de manifesto como 3o leitor de delivery-routes.tsv)" ;;
+    3) echo "PLAN-183 W5 (doctor.sh no mesmo leitor de rotas), wave-s330-F (perfil user derivado da base; 11 rodadas, 15 defeitos reais)" ;;
+    4) echo "wave-s330-F (settings.user.json derivado, --check byte-a-byte no validate.yml), S337 (smoke-install EXECUTA o CI entregue; docker ubuntu 24.04 10/10 steps verdes)" ;;
+    5) echo "PLAN-179 wave-179close (US7 snapshot do PreCompact com indice de ledger, US8 delta de memoria; 27 rodadas de pair-rail, 83 defeitos reais)" ;;
+    6) echo "PLAN-182 W1 (resolvedor por projeto, chave HMAC e salt por projeto; marcador M4 e censo 16->7->0), S326 wave-cli (Axis 3 do isolamento de coleta; 9 rodadas)" ;;
+  esac
+}
+
+prompt_header() {
+cat <<PROMPT
+You are the cross-vendor reviewer for the v1.4.0-rc.1 CANDIDATE of the
+repo ceo-orchestration. Be adversarial and concrete. Your output is
+advisory evidence, not an authorization. Scope is SPLIT across $NPARTS
+payloads; this is payload $1/$NPARTS: $2
+
+CONTEXT
+- Base is the v1.3.0 GA tag (cut 2026-08-17). The delta to this candidate
+  is LARGE: 1318 files and ~470k added lines across the whole tree. This
+  re-pass deliberately reviews only the ADOPTER-FACING surface, split by
+  blast radius, and the parts are ordered by that risk. Everything outside
+  the $NPARTS payloads is DECLARED out of scope in
+  .claude/plans/PLAN-169/repass-rc1/README-rc1.md, with the reason.
+- This content is NOT unreviewed. It already went through per-wave
+  cross-model rails when it landed. For THIS part: $3
+  Treat that as prior coverage, not as a reason to skip: your job is the
+  INTEGRATION view that no single wave rail had — the whole delta at once,
+  against a tag an adopter actually installed.
+- Python is stdlib-only and must stay Python >= 3.9 compatible (no runtime
+  PEP 604 unions, no match statement).
+- A GO-WITH-CONDITIONS verdict is a legitimate and expected outcome here.
+  If you would condition the GO on something, say exactly what — the
+  conditions become part of the SIGNED material of the release envelope.
+
+WHAT TO VERIFY
+1. Adopter blast radius: what does this delta do to a repository that
+   installed v1.3.0 and runs the upgrade? Name the concrete failure.
+2. Fail direction: does any new guard fail OPEN where it should fail
+   closed (or the reverse, blocking a legitimate adopter path)?
+3. Delivery: does anything write outside the target tree, follow a
+   symlink, or claim ownership of a file the adopter authored?
+4. Honesty of claims: does any shipped doc, template or message promise a
+   behavior this diff does not implement?
+5. What a reviewer would most plausibly miss in a diff this size.
+
+OUTPUT FORMAT
+Per finding: SEVERITY (P0 blocks rc.1 / P1 fix before rc.1 / P2
+follow-up), FILE:LINE, concrete failure scenario, minimal fix. Cite the
+diff. End with exactly one line: "VERDICT: GO" or "VERDICT: NO-GO" or
+"VERDICT: GO-WITH-CONDITIONS", plus one sentence. A clean round is a
+legitimate result — do not manufacture findings.
+
+UNIFIED DIFF ($BASE_TAG..candidate-$CANDIDATE_SHA, part $1/$NPARTS) FOLLOWS.
+PROMPT
+}
+
+# --- 4. evidencia anterior COMPLETA aborta (triagem antes de re-rodar) -----
+if [ -f "$OUT/MANIFEST-rc1.sha256" ] \
+   && ( cd "$OUT" && shasum -a 256 -c MANIFEST-rc1.sha256 --status ) 2>/dev/null \
+   && grep -qE "^RUNNER-OVERALL: rc=" "$OUT/PROVENANCE-rc1.md" 2>/dev/null; then
+  die "evidencia COMPLETA de tentativa anterior presente.
+  NO-GO: triagem + mv para repass-rc1-<data>-NOGO/ antes de re-rodar."
+fi
+for P in $PARTS; do
+  for _o in "payload-rc1-$P.redacted.txt" "payload-rc1-$P.raw.txt" \
+            "diff-rc1-$P.patch" "verdict-rc1-$P.txt" "transcript-rc1-$P.log" \
+            "paths-rc1-$P.manifest.txt.tmp"; do
+    _op="$OUT/$_o"
+    [ -e "$_op" ] || [ -L "$_op" ] || continue
+    { [ -L "$_op" ] || [ ! -f "$_op" ]; } && die "output pre-existente NAO-regular: $_op"
+    rm -f "$_op" || die "nao consegui limpar $_op"
+  done
+done
+for _o in PROVENANCE-rc1.md MANIFEST-rc1.sha256 MANIFEST-rc1.sha256.tmp; do
+  _op="$OUT/$_o"
+  [ -e "$_op" ] || [ -L "$_op" ] || continue
+  { [ -L "$_op" ] || [ ! -f "$_op" ]; } && die "output pre-existente NAO-regular: $_op"
+  rm -f "$_op" || die "nao consegui limpar $_op"
+done
+
+OVERALL=0
+{
+  echo "# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - $NPARTS partes"
+  echo "- Base: $BASE_TAG ($BASE_TAG_OBJ -> $BASE_TAG_COMMIT) .. Candidato: $CANDIDATE_SHA (PRE-tag, doutrina r17)"
+  echo "- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only"
+  echo "- codex: $CODEX_CLI_VERSION / $CODEX_TRIPLE / payload $CODEX_PAYLOAD_SHA"
+  echo "- Data: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$OUT/PROVENANCE-rc1.md" || die "escrita da proveniencia falhou"
+
+for P in $PARTS; do
+  LABEL="$(part_label "$P")"
+  COVER="$(part_coverage "$P")"
+  MAN="$OUT/paths-rc1-$P.manifest.txt"
+  # DERIVAR o manifesto da pathspec contra o candidato (nunca ler uma lista
+  # fixa: ela foi medida noutro commit). Escrita atomica; o arquivo shipado
+  # e o snapshot da medicao de S349 e e substituido pelo que sera revisado.
+  _spec="$(part_pathspec "$P")" || die "parte $P sem pathspec"
+  [ -n "$_spec" ] || die "pathspec vazia na parte $P"
+  _specline="$(printf '%s' "$_spec" | tr '\n' ' ')"
+  # shellcheck disable=SC2086
+  git diff --name-only "$BASE_TAG_COMMIT".."$CANDIDATE_SHA" -- $_specline \
+    | sort > "$MAN.tmp" \
+    || die "derivacao do manifesto da parte $P falhou"
+  mv -f "$MAN.tmp" "$MAN" || die "rename do manifesto da parte $P falhou"
+  _mn="$(grep -c . "$MAN")"
+  [ "$_mn" -ge 1 ] \
+    || die "parte $P: nenhum arquivo da pathspec mudou na faixa — pathspec errada?"
+  while IFS= read -r p; do
+    [ -z "$p" ] && continue
+    git cat-file -e "$CANDIDATE_SHA:$p" 2>/dev/null \
+      || die "caminho do manifesto ausente no candidato: $p (parte $P)"
+  done < "$MAN"
+  printf 'parte %s: manifesto DERIVADO com %s arquivo(s)\n' "$P" "$_mn"
+  DIFF="$OUT/diff-rc1-$P.patch"
+  _ps="$(tr '\n' ' ' < "$MAN")" || die "pathspec parte $P"
+  [ -n "$_ps" ] || die "pathspec vazio na parte $P"
+  # shellcheck disable=SC2086
+  git diff "$BASE_TAG_COMMIT".."$CANDIDATE_SHA" -- $_ps > "$DIFF" \
+    || die "git diff da parte $P rc!=0"
+  DL=$(wc -l < "$DIFF" | tr -d ' ')
+  [ "$DL" -ge 50 ] || die "parte $P com so $DL linhas — manifesto errado?"
+  RAW="$OUT/payload-rc1-$P.raw.txt"; RED="$OUT/payload-rc1-$P.redacted.txt"
+  { prompt_header "$P" "$LABEL" "$COVER" && echo && cat "$DIFF"; } > "$RAW" \
+    || die "montagem do raw da parte $P"
+  RAWB=$(wc -c < "$RAW" | tr -d ' ')
+  [ "$RAWB" -lt "$MAX_RAW_BYTES" ] \
+    || die "parte $P com ${RAWB}B >= ${MAX_RAW_BYTES}B — re-particione"
+  python3 .claude/hooks/_lib/codex_egress_redact.py --outgoing < "$RAW" > "$RED" \
+    || die "redator rc!=0 na parte $P"
+  # Controles: truncamento, hunks preservados, linhas preservadas.
+  set +e
+  grep -q 'CODEX-OUTPUT-TRUNCATED' "$RED"; _trc=$?
+  set -e
+  case "$_trc" in
+    0) die "parte $P truncada pelo redator" ;;
+    1) : ;;
+    *) die "grep de truncamento rc=$_trc na parte $P" ;;
+  esac
+  RH=$(grep -c '^@@' "$RAW"); _rhrc=$?
+  [ "$_rhrc" -le 1 ] || die "grep de hunks no RAW rc=$_rhrc"
+  DH=$(grep -c '^@@' "$RED"); _dhrc=$?
+  [ "$_dhrc" -le 1 ] || die "grep de hunks no RED rc=$_dhrc"
+  [ "$RH" = "$DH" ] || die "parte $P: hunks $RH -> $DH"
+  RAWL=$(wc -l < "$RAW" | tr -d ' '); REDL=$(wc -l < "$RED" | tr -d ' ')
+  [ "$RAWL" = "$REDL" ] || die "parte $P: linhas $RAWL -> $REDL"
+  PRE_SHA_RED=$(shasum -a 256 "$RED" | awk '{print $1}') || die "shasum do RED"
+  PRE_SHA_DIFF=$(shasum -a 256 "$DIFF" | awk '{print $1}') || die "shasum do DIFF"
+  PRE_SHA_MAN=$(shasum -a 256 "$MAN" | awk '{print $1}') || die "shasum do MAN"
+  # `printf -v` no lugar de `eval`: a atribuicao indireta fica visivel para o
+  # linter, e nenhuma string vinda do disco e interpretada como codigo.
+  printf -v "PIN_RED_$P" '%s' "$PRE_SHA_RED" || die "pin do RED da parte $P"
+  printf -v "PIN_DIFF_$P" '%s' "$PRE_SHA_DIFF" || die "pin do DIFF da parte $P"
+  printf -v "PIN_MAN_$P" '%s' "$PRE_SHA_MAN" || die "pin do MAN da parte $P"
+  printf 'parte %s/%s OK (%sB, %s hunks) - codex rodando (~10-15 min)...\n' \
+    "$P" "$NPARTS" "$RAWB" "$RH"
+  ( cd "$WT" && "$CODEX_BIN" exec --sandbox read-only --color never \
+      --output-last-message "$OUT/verdict-rc1-$P.txt" \
+      - < "$RED" > "$OUT/transcript-rc1-$P.log" 2>&1 )
+  CRC=$?
+  # Exatamente UMA linha VERDICT (CM-03 do corpus S348): um arquivo com
+  # GO seguido de NO-GO e ambiguo, nunca aprovacao.
+  VN=$(grep -cE '^VERDICT:' "$OUT/verdict-rc1-$P.txt" 2>/dev/null || true)
+  if [ "$VN" = "1" ]; then
+    VLINE=$(grep -E '^VERDICT:' "$OUT/verdict-rc1-$P.txt")
+  else
+    VLINE="(VERDICT ambiguo: $VN linhas - inspecionar transcript; rc=$CRC)"
+  fi
+  RAW_SHA=$(shasum -a 256 "$RAW" | awk '{print $1}') || die "shasum do raw da parte $P"
+  case "$RAW_SHA" in
+    ????????????????????????????????????????????????????????????????) : ;;
+    *) die "pin raw invalido na parte $P" ;;
+  esac
+  {
+    echo "- parte $P ($LABEL): $VLINE [codex rc=$CRC]"
+    echo "  - payload-rc1-$P.raw.txt NAO commitado; pin sha256: $RAW_SHA"
+  } >> "$OUT/PROVENANCE-rc1.md" || die "proveniencia da parte $P"
+  mkdir -p "$HOME/.rc2-backup"
+  mv "$RAW" "$HOME/.rc2-backup/payload-rc1-$P.raw.txt" || die "quarentena do raw falhou"
+  [ "$(shasum -a 256 "$RED" | awk '{print $1}')" = "$PRE_SHA_RED" ] \
+    || die "payload da parte $P mudou durante o codex"
+  [ "$(shasum -a 256 "$DIFF" | awk '{print $1}')" = "$PRE_SHA_DIFF" ] \
+    || die "diff da parte $P mudou durante o run"
+  [ "$(shasum -a 256 "$MAN" | awk '{print $1}')" = "$PRE_SHA_MAN" ] \
+    || die "manifesto da parte $P mudou durante o run"
+  printf 'parte %s: %s [rc=%s]\n' "$P" "$VLINE" "$CRC"
+  if [ "$CRC" -ne 0 ]; then
+    OVERALL=1
+  else
+    case "$VLINE" in
+      "VERDICT: GO"|"VERDICT: GO-WITH-CONDITIONS"*) : ;;
+      *) OVERALL=1 ;;
+    esac
+  fi
+done
+
+echo "RUNNER-OVERALL: rc=$OVERALL" >> "$OUT/PROVENANCE-rc1.md"
+for _pp in $PARTS; do
+  # Leitura indireta por `${!nome}` — sem eval, e o shellcheck enxerga.
+  _n_red="PIN_RED_$_pp"; _n_dif="PIN_DIFF_$_pp"; _n_man="PIN_MAN_$_pp"
+  _prd="${!_n_red}"; _pdf="${!_n_dif}"; _pmn="${!_n_man}"
+  [ -n "$_prd" ] && [ -n "$_pdf" ] && [ -n "$_pmn" ] \
+    || die "pin ausente para a parte $_pp — o laco principal nao a completou"
+  [ "$(shasum -a 256 "$OUT/payload-rc1-$_pp.redacted.txt" | awk '{print $1}')" = "$_prd" ] \
+    || die "payload da parte $_pp mudou antes da agregacao"
+  [ "$(shasum -a 256 "$OUT/diff-rc1-$_pp.patch" | awk '{print $1}')" = "$_pdf" ] \
+    || die "diff da parte $_pp mudou antes da agregacao"
+  [ "$(shasum -a 256 "$OUT/paths-rc1-$_pp.manifest.txt" | awk '{print $1}')" = "$_pmn" ] \
+    || die "manifesto da parte $_pp mudou antes da agregacao"
+done
+
+# O runner ENTRA no MANIFEST (licao t7 do rc.4): ele e commitado junto do
+# envelope, e a delta_allowlist so o aceita fechado sob o MANIFEST.
+_mfiles=""
+for _pp in $PARTS; do
+  _mfiles="$_mfiles payload-rc1-$_pp.redacted.txt diff-rc1-$_pp.patch"
+  _mfiles="$_mfiles paths-rc1-$_pp.manifest.txt verdict-rc1-$_pp.txt transcript-rc1-$_pp.log"
+done
+# shellcheck disable=SC2086
+( cd "$OUT" && shasum -a 256 $_mfiles PROVENANCE-rc1.md CANDIDATE.sha \
+    run-rc1-repass.sh > MANIFEST-rc1.sha256.tmp ) \
+  || die "geracao do MANIFEST-rc1 falhou"
+mv -f "$OUT/MANIFEST-rc1.sha256.tmp" "$OUT/MANIFEST-rc1.sha256" \
+  || die "rename do MANIFEST-rc1 falhou"
+MREAL=$(grep -c . "$OUT/MANIFEST-rc1.sha256" || true)
+MWANT=$(( NPARTS * 5 + 3 ))
+[ "$MREAL" = "$MWANT" ] || die "MANIFEST-rc1 com $MREAL linhas (esperado $MWANT)"
+( cd "$OUT" && shasum -a 256 -c MANIFEST-rc1.sha256 --status ) \
+  || die "MANIFEST-rc1 nao verifica"
+if [ "$OVERALL" -eq 0 ]; then
+  echo "OVERALL: GO nas $NPARTS partes"
+else
+  echo "OVERALL: alguma parte SEM GO - triagem"
+fi
+exit "$OVERALL"

@@ -1,0 +1,13 @@
+.claude/settings.json
+.github/workflows/ceremony-lint.yml
+.github/workflows/mcp-smoke.yml
+.github/workflows/npm-publish.yml
+.github/workflows/ownership-nightly.yml
+.github/workflows/release.yml
+.github/workflows/smoke-install.yml
+.github/workflows/supply-chain-watch.yml
+.github/workflows/validate.yml
+CHANGELOG.md
+SPEC/v1/audit-log.schema.md
+SPEC/v1/state-stores.schema.md
+npm/README.md

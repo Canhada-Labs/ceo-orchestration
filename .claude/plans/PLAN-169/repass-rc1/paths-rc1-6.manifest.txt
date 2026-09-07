@@ -1,0 +1,8 @@
+.claude/hooks/_lib/audit_emit.py
+.claude/hooks/_lib/audit_hmac.py
+.claude/hooks/_lib/injection_salt.py
+.claude/hooks/_lib/ledger_provenance.py
+.claude/hooks/_lib/runtime_paths.py
+.claude/hooks/_lib/spool_writer.py
+.claude/hooks/_lib/state_store.py
+.claude/hooks/_lib/test_isolation.py
