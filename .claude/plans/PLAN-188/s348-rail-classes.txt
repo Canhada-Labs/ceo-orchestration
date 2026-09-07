@@ -1,0 +1,75 @@
+# Medição S348 das classes de achado de rail (instrumento: .claude/plans/PLAN-188/measure-rail-classes-v2.py, inalterado desde bb68edf)
+# Comando: python3 .claude/plans/PLAN-188/measure-rail-classes-v2.py --pack-dir <PK>   (<PK> = diretório dos packs s344-packs, fora do repo)
+# Janela: registros com mtime >= 2026-09-04 20:00 (constante SINCE do instrumento) até 2026-09-07 04:2x — noites S345, S347 e S348
+# HEAD no instante da medição: d00c73a. Comparar com s345-rail-classes.txt (mesmo instrumento, 168 registros / 12 packs): produto 11,7% -> 9,2% do total; cerimônia 23,1% -> 18,2% do total e 27,9% -> 21,0% dos HIGH; «unknown» 19,3% -> 19,9% (32,2% dos HIGH) — a classe não modelada CRESCEU nos HIGH e é o próximo alvo do instrumento.
+# Linhas por pack são BLOCOS de achado, não registros (p169 = 54 blocos em 22 registros).
+records=426 packs=27 finding-blocks=1809 (classified by: {'kw': 800, 'path': 649, '': 360})
+
+ALL findings by class:
+  docs          465   25.7%
+  unknown       360   19.9%
+  ceremony      330   18.2%
+  instrument    283   15.6%
+  product       166    9.2%
+  other-path    158    8.7%
+  tests          47    2.6%
+HIGH (P0/P1/BLOCKER/HIGH) by class: total=724
+  unknown       233   32.2%
+  docs          177   24.4%
+  ceremony      152   21.0%
+  instrument     92   12.7%
+  product        43    5.9%
+  other-path     16    2.2%
+  tests          11    1.5%
+
+per pack:
+  ac13-routing-drift-v5     169  docs=46, ceremony=27, unknown=27, instrument=24, other-path=21, product=14, tests=10
+  contamination-gate-v4     108  docs=38, unknown=32, product=17, ceremony=10, instrument=6, other-path=4, tests=1
+  p169-w41-quota-resume      54  ceremony=19, unknown=13, docs=9, instrument=7, tests=3, product=2, other-path=1
+  p171-w0-lote1              48  instrument=28, docs=10, unknown=4, ceremony=3, other-path=2, tests=1
+  p171-w0-lote2              18  docs=7, unknown=5, instrument=2, product=2, other-path=1, ceremony=1
+  p171-w0-lote2-fix          18  docs=9, instrument=4, ceremony=2, other-path=2, unknown=1
+  p171-w0-lote3              65  docs=27, unknown=15, instrument=10, ceremony=6, tests=4, product=2, other-path=1
+  p171-w0-lote4              12  docs=6, instrument=5, other-path=1
+  p171-w0-lote5               8  docs=4, unknown=3, instrument=1
+  p171-w0-lote6              57  instrument=33, docs=10, unknown=8, other-path=4, product=1, ceremony=1
+  p183-w1-pointer            56  docs=13, product=12, instrument=10, unknown=9, ceremony=6, other-path=6
+  p186fu-census-runtime-w0   81  other-path=24, unknown=22, docs=14, instrument=9, product=6, tests=4, ceremony=2
+  p187-night-facts           21  unknown=7, docs=5, product=5, ceremony=1, tests=1, instrument=1, other-path=1
+  p188-plan-draft            57  instrument=19, unknown=17, docs=12, ceremony=6, other-path=2, product=1
+  p188-plan-r2               61  docs=17, unknown=16, instrument=12, ceremony=10, product=5, tests=1
+  p188-plan-r3               27  docs=10, unknown=9, instrument=4, ceremony=2, product=2
+  p189-pilot-specs           48  docs=19, unknown=15, instrument=5, tests=3, ceremony=2, other-path=2, product=2
+  p189-plan-draft            96  docs=32, unknown=27, instrument=17, other-path=10, product=5, ceremony=4, tests=1
+  p189-runner                37  instrument=16, docs=8, ceremony=5, other-path=4, product=2, unknown=1, tests=1
+  us5-followup-docs           7  docs=4, instrument=1, other-path=1, product=1
+  w1-widen                   34  docs=13, ceremony=9, product=8, unknown=3, other-path=1
+  w4b-ci-matrix             220  ceremony=76, unknown=47, docs=37, product=35, other-path=20, instrument=3, tests=2
+  w5-doctrine                66  unknown=27, ceremony=12, product=11, instrument=8, docs=7, other-path=1
+  w6-adapter                315  ceremony=111, docs=70, instrument=38, other-path=38, unknown=32, product=17, tests=9
+  walkroot-fix               14  docs=7, tests=4, instrument=3
+  walkroot-followup-plan     61  docs=18, unknown=11, instrument=11, ceremony=8, product=7, other-path=5, tests=1
+  walkroot-test-fix          51  docs=13, product=9, unknown=9, ceremony=7, instrument=6, other-path=6, tests=1
+
+samples:
+  [product] ac13-routing-drift-v5 :: **[P1] Enforce the VETO floor on explicitly overridden agents** | (`check-routing-drift.py:674-676`). REAL. A VETO persona (`code-reviewer`, | pinned inside `VETO_FLOOR_ALLOWED`) spawned with `meta.model="haiku"` and | served 
+  [product] ac13-routing-drift-v5 :: **[P1] Use the authoritative VETO role set** (`:719-721`). REAL, and the | measurement backs it: `.claude/hooks/_lib/agent_frontmatter.py:118-124` defines | `VETO_FLOOR_ROLES` (5 slugs) as the persona set, and its own commen
+  [product] ac13-routing-drift-v5 :: **[P2] Detect inaccessible transcript subtrees** (`:664`). REAL: | `Path.rglob` suppresses `PermissionError` and omits the subtree, so an | unreadable branch produced `unreadable == 0` and no breadcrumb. Cure: | `_walk_transcr
+  [tests] ac13-routing-drift-v5 :: **[P2] Align the printed verdict with `--assert-floor`** (`:876-880`). REAL: | the report printed `verdict: clean (0 drift)` and then returned rc 1 — a text | consumer would read the opposite of the exit code. Cure: the verd
+  [tests] ac13-routing-drift-v5 :: **[P2] `--assert-floor` / class-V polish** — carried from r5, verified here.
+  [tests] ac13-routing-drift-v5 :: R18-5 REPRODUCED (a stored routing_drift added 1 forged line) | reproduced: 3 / 3 | ARM POST-CURE  reproduced: 0 / 3 | ```
+  [docs] ac13-routing-drift-v5 :: **[P2] Check the full transcript scope priced by the caller** | (`ceo-cost-transcripts.py:1085`). REAL. `advisory_line` defaulted to the CLI's | 5 most recent session dirs while the caller prices the whole `--since` window. | 
+  [docs] ac13-routing-drift-v5 :: **[P2] Preserve vacuity and evidence-loss warnings in advisory output** | (`check-routing-drift.py:900-904`). REAL, and the sharpest of the three: the | one-line summary discarded `VACUOUS` and the assistant-rows-without-mod
+  [docs] ac13-routing-drift-v5 :: **[P1] Reject schema-invalid transcript rows** (`:494-500`). REAL. A row that | is valid JSON but not an object (`[]`), and an assistant row whose `message` is | not an object, were both `continue`d — a clean rc 0 over evide
+  [ceremony] ac13-routing-drift-v5 :: | 1 | P1 | Workflow metas omit `model`, so every workflow spawn is skipped as inherit | **PARTIALLY REFUTED** — measured: `workflow-subagent` metas DO carry `model` when one was passed (`opus` / `sonnet`), and one of the
+  [ceremony] ac13-routing-drift-v5 :: | 1 | P1 | Not registered on any recurring execution path | **TRUE, OUT OF SCOPE** (repeat of r1 #2) — DESIGN §6 names the two wiring sites and why the wire is a ceremony, not this pack. | | | 2 | P2 | A missing `audit_log
+  [ceremony] ac13-routing-drift-v5 :: | 1 | P1 | Wire the detector into every cost-instrument run | **TRUE, OUT OF SCOPE** (3rd repeat) — the task forbids touching CI/settings. DESIGN §6 names the two wiring sites and marks it a ceremony item. This is the pa
+  [instrument] ac13-routing-drift-v5 :: **[P1] Invoke drift detection from the shared transcript API** | (`ceo-cost-transcripts.py:1177`). REAL, and the sharpest finding of the night. | Verified on disk: `ceo-cost.py:615-621` and `budget-summary.py:1887-1891` reac
+  [instrument] ac13-routing-drift-v5 :: * each cure carries a probe that is RED on the previous derivation and GREEN on | this one (`_controls.txt`: **20 failed / 7 passed** on the previous pack | versus **27 passed** here, same node ids);
+  [instrument] ac13-routing-drift-v5 :: **#1 [P1] — REPRODUCED, and it is the round's real prize.** | Probed with `v5-probes/p1a_metamodel.py`, then folded into one consolidated run | (`v5-probes/p1a_consolidated.txt`):
+  [other-path] ac13-routing-drift-v5 :: **[P2] Run the routing detector for JSON reports** | (`ceo-cost-transcripts.py:1176`). REAL and exact: the only call site was inside | `_human_report`, and `main()` selects `_json_report` under `--json`, so that | execution ra
+  [other-path] ac13-routing-drift-v5 :: * Raw output: `codex-cure-r1.txt` (~400 KB).
+  [other-path] ac13-routing-drift-v5 :: * The streaming class is **3 message ids out of 27,046** (`_streamcensus.txt`), | which matches the canonical `ceo-cost-transcripts.py::dedup` measurement of | "model metadata in 3/21,414 [groups]". So finding 1 is REAL and 
+  [unknown] ac13-routing-drift-v5 :: **[P2] Count below-floor events per spawn** (`:722-725`). REAL: identical lines | from two transcripts collapsed, so the count was signatures, not spawns. Cure: | `below_floor_events` counts occurrences; the report prints bo
+  [unknown] ac13-routing-drift-v5 :: **[P2] Treat declaration read errors as infrastructure** (`:227-229`). REAL and | broader than the r5 instance: `is_file()` does not protect the read that | follows it, and the pattern repeated in the working-set, fallback, 
+  [unknown] ac13-routing-drift-v5 :: **[P1] Bind all-session checks to spawn-time declarations** (`:1088-1089`). | REAL and forward-looking: the consumer now scans every historical session while | `check_served` compares a pin-declared transcript against TODAY'
