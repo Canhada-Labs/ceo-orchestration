@@ -304,3 +304,21 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   impedido. Relatório:
   `.claude/plans/PLAN-171/w0/lote-4-S347.md`. Falta: lotes 5-6 (`R[30:42]`,
   12 hooks).
+- **2026-09-06 (S347)** — W0 lote 5/6 MEDIDO: os 6 hooks REGISTRADOS de
+  `R[30:36]` da partição determinística (§1 do relatório): Stop, codex-review-user-code, review-loop, closeout-guard, fluency-nudge, precompact-continuity.
+  Cada um com o controle positivo rodado nas TRÊS metades — verde como
+  está; **vermelho com o enforcement removido** (mutação mínima de âncora
+  contada, o instrumento RECUSA se a contagem divergir); e verde OUTRA VEZ
+  depois do `git restore`. 6/6 verde, 0 vácuo, 0 sem-controle. A
+  fatia é de CICLO DE VIDA (`Stop`, `SubagentStop`, `PreCompact`): os seis
+  registros têm matcher vazio, e os seis controles vivem em
+  `.claude/hooks/tests/`, logo rodam nos DOIS jobs de hook do
+  `validate.yml` — ao contrário do lote 1, cujo controle do injector fica
+  fora do dual-rail. A classe de cada hook é **MEDIDA**, não lida no
+  docstring (o P1 que o `lote-2-fix` pagou): Apêndice E conta os construtos
+  de recusa em quatro formas — 2 bloqueantes, ambos **opt-in**
+  (`codex_review_user_code.py` sob `CEO_CODEX_USER_REVIEW_BLOCK=1`;
+  `review_loop.py` sob `CEO_REVIEW_LOOP=1`, `review_loop.py:42`+`:200`) e
+  4 com ZERO. Relatório:
+  `.claude/plans/PLAN-171/w0/lote-5-S347.md`. Falta: lote 6 (`R[36:42]`,
+  6 hooks).
