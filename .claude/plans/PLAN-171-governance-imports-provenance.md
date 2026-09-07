@@ -353,3 +353,31 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   `Registro de execução` ainda devidas por relatório já em disco: nenhuma.
   O W0 ainda deve, além disso, a consolidação dos seis num veredito
   único.
+- **2026-09-06 (S348)** — W0 CONSOLIDADA: os seis relatórios de lote
+  (`lote-1-S345.md` a `lote-6-S347.md`) somados num veredito único, sem
+  medição nova — cada número citado por `arquivo:linha`. Partição:
+  `|L| = 48` arquivos de hook em `settings.json` (50 registrações, 49
+  nomeando `.py`); o lote 1 cobre 6 desses 48 (mais 2 arquivos fora de
+  `L`); os lotes 2-6 cobrem os 42 restantes (`R[0:42]`), em fatias de
+  10/10/10/6/6. Total: 52 linhas de gate censadas, 51 verde (controle
+  positivo provado vermelho e, a partir do lote 2, restaurado verde de
+  novo), 0 vácuo, 0 sem-controle-por-design, 0 UNREGISTERED, **1 sem
+  controle** (`check_cost_envelope.py`, caminho de bloqueio sem
+  controle demonstrado nos 59 testes existentes — achado do lote 3).
+  Cobertura de `L`: **100% (48/48)**. O AC do §7 («100% dos hooks com
+  positive control OU sem-controle-por-design justificado») fica a UMA
+  linha de fechar. Dívida declarada consolidada: os 11 arquivos de hook
+  em disco fora de `L` (59 no total), a condição
+  `if: vars.CEO_SOTA_DISABLE != '1'` dos jobs de CI nunca exercitada, o
+  replay de seletores `-m`/`-k` (necessário, não suficiente) e os dois
+  follow-ups já nomeados (`PLAN-171-FOLLOWUP-lote2-generated-figures`,
+  `PLAN-171-FOLLOWUP-readinjection-docstring`), nenhum ainda com
+  arquivo de plano próprio no disco. Fora do escopo desta consolidação:
+  as waves W1-W5 do plano, que a revisão de portfólio S348 recomendou
+  RE-ESCOPAR (3/3 críticos,
+  `PLAN-186/portfolio-review-S348/portfolio-review-S348.md:40`) citando
+  «4 de 6 lotes landados» — premissa escrita em `7f6b564` (22:41:55)
+  ANTES dos lotes 5 e 6 landarem (`ef4c1b3` 22:48:17, `690c3e2`
+  23:26:39); a ratificação dessa recomendação segue PENDENTE do Owner
+  em 2026-09-07, agora com a W0 em 6/6. Relatório:
+  `.claude/plans/PLAN-171/w0/W0-consolidated-verdict-S348.md`.
