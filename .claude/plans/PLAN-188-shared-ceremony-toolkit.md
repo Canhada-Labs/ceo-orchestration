@@ -17,7 +17,9 @@ tags: [cerimonia, assinatura, land, manifesto, rail, governanca]
 >
 > **Dependência declarada:** PLAN-186 (`status: executing`) — o piloto do AC-2
 > é o pacote W6a, um pacote DESSE plano; por isso `depends_on: [PLAN-186]`
-> (round 1, K8; grafo de dependências em `PLAN-SCHEMA.md:462-470`).
+> (round 1, K8; grafo de dependências em
+> `.claude/plans/PLAN-SCHEMA.md:462-470` — o path completo, que resolve no
+> HEAD; round 2, K11).
 >
 > **Relacionados (leitura, não dependência):** PLAN-185, PLAN-183,
 > ADR-010 (sentinel de edição canônica — é ELE que
@@ -123,21 +125,204 @@ das cinco classes BLOQUEANTES do próprio lint (R1 proveniência, R2 `|| true` e
 operação irreversível, R3 `grep … | tail` em parsing de VERDICT, R4 `git add` de
 diretório, R8 exec-bit no índice): falso-verde por endereço.
 
-**Decisão:** o endereço fica, e a W0 entrega no MESMO patch os TRÊS sítios que
-fazem o lint valer para o toolkit: (a) a entrada em `DISCOVERY_ROOTS`; (b) o
-`paths:` dos DOIS gatilhos do `ceremony-lint.yml` (uma sem a outra dá lint que
-nunca roda, ou gatilho que não descobre nada); e (c) o ALARGAMENTO da regra R8,
-que hoje é escopada a `.claude/plans/` — `if git_mode == "100755" and
-rel.startswith(".claude/plans/")`,
-`.claude/scripts/check-ceremony-script.py:194` —, e sem a qual o toolkit
-descoberto herdaria QUATRO das cinco classes bloqueantes (R1-R4), não cinco.
-DOIS controles POSITIVOS: um script do toolkit com `|| true` numa linha de `gpg`
-tem de REPROVAR (R2), e um script do toolkit com exec-bit no índice tem de
-REPROVAR (R8). Nota de risco (round 1, K10):
+**Decisão (a) — a entrada em `DISCOVERY_ROOTS` NÃO basta: o predicado de
+descoberta do toolkit é por DIRETÓRIO (round 2, D1).** A cura escrita no
+round 1 era de ENDEREÇO, e a descoberta do lint é por CONTEÚDO e só `.sh`:
+`.claude/scripts/check-ceremony-script.py:137` (`if not fn.endswith(".sh"):
+continue`) e `:146` (`if SHEBANG_RE.match(body) and
+CEREMONY_OPS_RE.search(body)`), com `CEREMONY_OPS_RE` em `:71-73`
+(`gpg|git tag|gh release|npm publish|sentinel|approved\.md|VERDICT`). Sob esse
+predicado, pôr `.claude/scripts/ceremony/` na lista **não descobre**
+`read_manifest.py` — o parser fail-CLOSED no ponto exato onde o Owner assina —
+e qualquer arquivo do toolkit sem token de cerimônia nasce invisível.
+**Decisão:** a W0 entrega a MUDANÇA DE PREDICADO junto com a entrada — dentro
+do TOOLKIT ROOT (`.claude/scripts/ceremony/`) todo arquivo `.sh` **ou** `.py`
+é descoberto INCONDICIONALMENTE, sem teste de shebang e sem
+`CEREMONY_OPS_RE`, porque ali o DIRETÓRIO é a superfície de cerimônia; o
+predicado por conteúdo continua valendo para `.claude/plans/**`, onde o mesmo
+diretório carrega material que não é cerimônia. O que isso muda no julgamento
+de um membro `.py`: R1 (proveniência) e R8 (exec-bit) independem de linguagem e
+valem como valem hoje; R2-R4 são regex de TEXTO e disparam se o padrão
+aparecer; o `shellcheck` do `.github/workflows/validate.yml:341-359` não cobre
+`.py` — cobre, sim, todo `.sh` novo do toolkit, porque o
+`find .claude/scripts .claude/hooks -name '*.sh'` daquele step é recursivo e o
+endereço escolhido cai dentro dele. **E há um consumidor do `--list` que a
+mudança de predicado QUEBRA (rail r3 C3):** o job `shellcheck-ceremony` do
+`.github/workflows/ceremony-lint.yml:78-82` alimenta o `shellcheck` com o
+conjunto INTEIRO devolvido por
+`python3 .claude/scripts/check-ceremony-script.py --list`; um `.py` nesse
+conjunto sai como `SC1071` e o passo devolve rc 1 (medido no HEAD com
+shellcheck 0.11.0 — o comando está na EVIDENCE do pacote), de modo que o
+relatório advisory passaria a nascer com erro permanente a cada mudança
+legítima do toolkit. **Decisão:** a W0 entrega, no MESMO patch, o filtro de
+shell nesse consumidor — ao `shellcheck` vai só o subconjunto `.sh`, enquanto
+o julgamento do lint (R1-R4 e R8) continua cobrindo o `.py` inteiro. O
+`.github/workflows/ceremony-lint.yml` já está no file assignment da W0a, então
+o filtro não acrescenta path.
+
+**O piso do lint não responde «o guard vê o meu alvo?».**
+`check-ceremony-script.py:100` fixa `DEFAULT_FLOOR = 41` e `:334-335` calcula
+`floor_ok = len(tracked) >= floor` — piso de ENCOLHIMENTO. Os valores estão no
+CENSO ÚNICO do §Riscos («A dimensão disso — CENSO ÚNICO desta revisão»), medido
+em worktree limpo e único sítio deste plano que os declara: o conjunto
+descoberto está muito acima do `floor`, e quase todo ele vem de
+`.claude/plans/**`. Somar o toolkit não pede bump, e pela mesma aritmética o
+piso JAMAIS ficaria vermelho se o toolkit saísse da descoberta. Quem responde
+é o controle positivo do AC-1 — e é por isso que ele passou a ser um arquivo do
+toolkit SEM token de cerimônia.
+
+**Decisão (b) — as CINCO classes bloqueantes valem, e a marca é decidida
+arquivo a arquivo (round 2, D2).** Com a descoberta funcionando, a R1
+(`check-ceremony-script.py:163-166`: corpo sem `PROVENANCE_MARK` nem
+`EXCEPTION_MARK`; `:84-85` = `"AUTO-GENERATED"` e
+`"CEREMONY-LINT: handwritten-exception:"`) reprova TODO script escrito à mão.
+São **cinco** classes herdadas, não quatro (rail r1 #13, que corrigiu a
+aritmética desta frase): a versão anterior deste plano enumerava R1-R4 e tratava
+a R8 como a quinta que só o alargamento traria — mas a R1 já estava DENTRO
+daquelas quatro, e é ela que a marca anula. Ou seja: descoberto, o toolkit herda
+R1-R4 de imediato e a R8 assim que a decisão (c) alargar o escopo; a marca de
+exceção não é consequência da descoberta, é ENTREGA da W0, sem a qual a W0
+nasce vermelha na R1 no dia 1. Decisão escrita: os arquivos do toolkit
+são escritos à mão e carregam `CEREMONY-LINT: handwritten-exception: <razão>`
+com razão auditável na própria linha; nenhum recebe `AUTO-GENERATED`, porque a
+marca de proveniência afirma «produzido por gerador» e usá-la num arquivo
+escrito à mão destrói o significado dela no corpus inteiro.
+
+| arquivo (W0/W1) | marca | razão que a linha registra |
+|---|---|---|
+| `ceremony/lib.sh`, `ceremony/read_manifest.py` | `handwritten-exception` | biblioteca e leitor do manifesto; não há gerador, e a proteção contra edição é o AC-6 (manifesto ADR-192) |
+| `ceremony/sign.sh`, `land.sh`, `finalize.sh`, `harness.sh` | `handwritten-exception` | são o GATE da assinatura; gerar o gate a partir de outro gerador só move a pergunta de lugar |
+| `ceremony/controls/*.sh` e `controls/run.sh` | `handwritten-exception` | controles vermelhos: um controle gerado pelo mesmo produtor que ele testa não falsifica nada (lição S332) |
+| `<pacote>/ceremony.tsv` | — | não é `.sh` nem `.py`, fica FORA da descoberta por desenho; quem o julga é o leitor fail-CLOSED |
+
+**Decisão (c) — a R8 é alargada, e o plano declara o modo de invocação que
+reconcilia a razão escrita no próprio checador (round 2, D4).** O comentário
+`check-ceremony-script.py:192-194` escopa a R8 a `.claude/plans/` com a razão
+«exec-bit em ferramenta de `scripts/local/` é legítimo (invocada
+diretamente)». O toolkit **não** é invocado diretamente: o Owner o roda como
+`bash .claude/scripts/ceremony/sign.sh <pacote>`, e os arquivos ficam `100644`
+no índice — a razão do comentário não o alcança, e o alargamento não a
+contradiz. A W0 alarga a R8 ao TOOLKIT ROOT **e emenda esse comentário no mesmo
+patch**, para que a razão escrita continue descrevendo a regra escrita. Duas
+consequências medidas: (i) `CLAUDE.md` §4 registra que o exec-bit volta no
+primeiro `git add -A` se for largado só do índice — o modo sai do índice **e**
+do sistema de arquivos, e o harness confere os dois; (ii) hoje
+`.claude/scripts/local/generate-ceremony.sh` e
+`.claude/scripts/local/verify-counts.sh` são `100755` no índice, e dos 48
+`OWNER-*(SIGN|LAND)*.sh` rastreados **41 são `100644` e 7 são `100755`**
+(`git ls-files -s .claude/plans | grep -E 'OWNER-.*(SIGN|LAND).*\.sh$' |
+awk '{print $1}' | sort | uniq -c`; o round 2 escrevia «os `OWNER-*.sh` de
+plano são `100644`», e este censo REFINA a aproximação — 41 são, 7 não) — a R8
+já dispara hoje sobre **28**
+arquivos descobertos, e os **28** estão isentos por waiver (a medição está na
+seção seguinte): o que mantém essa regra verde no repo não é conformidade, é o
+arquivo de isenções.
+
+TRÊS controles POSITIVOS, um por decisão: um arquivo do toolkit SEM nenhum
+token da `CEREMONY_OPS_RE` tem de APARECER no `--list` (a); um script do
+toolkit com `|| true` numa linha de `gpg` tem de REPROVAR na R2 (b); e um
+script do toolkit com exec-bit no índice tem de REPROVAR na R8 (c).
+Nota de risco (round 1, K10):
 `.github/workflows/validate.yml:354` já exclui
 `.claude/scripts/owner-ceremony/archive/*` do shellcheck e
 `.claude/scripts/owner-ceremony/` não existe — um nome de diretório vizinho já
 tirou scripts de um gate uma vez, e a exclusão morta ficou.
+
+**Ganho de custódia do endereço novo — argumento A FAVOR que o plano não
+fazia (round 2, K9).** `.claude/scripts/check_contamination.py` isenta, por
+cadeia de custódia, `".claude/scripts/owner-ceremony/*"` (`:298`),
+`".claude/scripts/local/*"` (`:319`), `"OWNER-*.sh"` (`:320`),
+`"scripts/local/historical/*"` (`:301`) e `"archive/*"` (`:326`) — as duas
+últimas com o comentário «retained for chain-of-custody. Never re-executed».
+Os clones de hoje casam a isenção por NOME (`OWNER-*.sh`) esteja onde
+estiverem; um toolkit em `.claude/scripts/ceremony/` não casa nenhum dos cinco
+padrões e passa, pela primeira vez, a ser julgado por essa regra. O endereço,
+portanto, não troca só a visibilidade do lint: ele SUBTRAI uma isenção.
+**Mas o ganho é da regra de TERMOS, não da de PATH PESSOAL — e o plano diz
+qual (rail r2 M3, que reproduziu a confusão):** as cinco isenções acima valem
+para a varredura de TERMOS privados; a regra de path pessoal tem escopo
+PRÓPRIO, `_PERSONAL_PATH_SCOPE = (".claude/plans/", "docs/")`
+(`.claude/scripts/check_contamination.py:625`), que **não** inclui
+`.claude/scripts/ceremony/`. Consequência escrita: mudar de endereço NÃO
+transfere a proteção de path pessoal para o toolkit — no novo endereço quem
+responde por ela é a invariante 3 (guard de path absoluto no `sign.sh`, no
+finalize e no harness, com o guard se auto-escaneando), e estender
+`_PERSONAL_PATH_SCOPE` ao toolkit é follow-up nomeado, não pressuposto desta
+wave. Um home path cujo dono não esteja na lista de termos privados escaparia
+do gate de contaminação no endereço novo se a invariante 3 não existisse; ela
+existe, e é por isso que ela é entrega da W0.
+
+### O ESCAPE do lint: isenção por sha256 de CONTEÚDO (round 2, D3)
+
+O plano tratava o `ceremony-lint` como se descobrir fosse reprovar. Não é:
+`.claude/scripts/check-ceremony-script.py:288-297` carrega
+`.claude/scripts/ceremony-lint-waivers.json` e `:312` isenta o arquivo cujo
+**sha256 de CONTEÚDO** esteja na lista, com três rotas de escape somadas:
+(i) a própria lista, hoje com **44** entradas
+(`python3 -c "import json; print(len(json.load(open('.claude/scripts/ceremony-lint-waivers.json'))))"`
+= 44, e o mesmo número sai como `waivers_active` no `--json`); (ii) o override `--waivers
+<path>` (`:261-262`), que a CI nunca usa — `.github/workflows/ceremony-lint.yml:35-40`
+invoca o checador sem argumento nenhum —, de modo que uma execução que passe
+`--waivers` não é evidência de nada; (iii) o desbloqueio por ambiente
+`CEO_CEREMONY_LINT_UNLOCK=<sha256>` + `CEO_CEREMONY_LINT_UNLOCK_REASON`
+(`:34-35`, `:313-320`), que exige motivo e emite auditoria, mas continua sendo
+uma isenção decidida fora do arquivo. O lint é fail-CLOSED em waiver ILEGÍVEL
+(`:296-301`), e a isenção RE-ARMA quando o arquivo muda, porque a chave é o
+conteúdo.
+
+**A dimensão disso — CENSO ÚNICO desta revisão (refutação S347, F1).**
+Todo número de descoberta e de bloqueio deste plano vive AQUI, uma vez; os
+outros sítios APONTAM para este parágrafo em vez de repeti-lo — um sítio que
+aponta não pode divergir do que ele aponta. **Base declarada: worktree limpo
+(`git worktree add --detach`) no `a6629d0`**, só arquivos rastreados; os
+diretórios `staged/` são `gitignore`d e ficam fora POR CONSTRUÇÃO. Uma árvore
+de trabalho de mantenedor devolve números MAIORES: a refutação da S347 mediu
+122 descobertos / 121 de `.claude/plans/**` / 55 com BLOCKING na árvore viva
+contra 109 / 108 / 42 no checkout limpo — 13 arquivos de diferença, todos sob
+`.claude/plans/PLAN-1{55,56,58,61,64,66,67,68}/staged/**`. O plano publica o
+número do checkout limpo, porque é o que a CI e um clone novo enxergam.
+Comando: `python3 .claude/scripts/check-ceremony-script.py --json`.
+
+| figura | valor em `a6629d0` (worktree limpo) |
+|---|---|
+| `discovered_total` | **109** |
+| `discovered_tracked` | **109** |
+| descobertos sob `.claude/plans/**` | **108** (o 109.º é o `generate-ceremony.sh` de `EXPLICIT_FILES`) |
+| arquivos com ao menos um achado BLOCKING | **42** |
+| desses, isentos por waiver | **42** |
+| `blocking_unwaived` | **0** |
+| arquivos com achado R8 / isentos | **28** / **28** |
+| `floor` | **41** |
+| `waivers_active` | **44** |
+
+Ou seja, a superfície bloqueante viva do repo hoje é **inteiramente absorvida
+por isenções** — 42 de 42, `blocking_unwaived: 0`, sem sobra para «arquivos não
+rastreados», que num checkout limpo não existem — e um toolkit descoberto entra
+nesse mesmo regime: a sua reprovação se apaga acrescentando uma linha a um
+JSON.
+
+**E a autoridade do lint mora fora de todo gate.** Medido, com o comando de
+cada número ao lado: `python3 .claude/hooks/check_canonical_edit.py
+--is-canonical <path>` responde `.claude/scripts/check-ceremony-script.py	0` e
+`.claude/scripts/ceremony-lint-waivers.json	0`; `_KERNEL_PATHS`
+(`.claude/hooks/check_arbitration_kernel.py:85`) tem **110** padrões e não casa
+nenhum dos dois — `python3 -c "import importlib.util,fnmatch;
+s=importlib.util.spec_from_file_location('k','.claude/hooks/check_arbitration_kernel.py');
+m=importlib.util.module_from_spec(s); s.loader.exec_module(m);
+print(len(m._KERNEL_PATHS))"` = 110, e o mesmo carregamento com `fnmatch`
+devolve `False` para os dois paths (o consenso do round 2 cita «113 padrões»;
+a contagem que este plano publica é a que o comando acima devolve em worktree
+limpo no `a6629d0` — a base declarada no censo único do §Riscos, e a mesma de
+toda medição deste documento —, e é ela que vale); e nenhum dos dois está entre os **9** membros do
+`.claude/governance/gate-scripts-manifest.txt`
+(`grep -cve '^#' -e '^$' .claude/governance/gate-scripts-manifest.txt` = 9). Logo a cura do C1 —
+predicado de descoberta, `paths:` e escopo da R8 — pode ser desfeita por um
+Edit livre, e a reprovação do toolkit pode ser apagada por um append de waiver,
+sem cerimônia nenhuma. **Decisão:** os dois arquivos entram no manifesto
+ADR-192 pelo AC-6, com controle vermelho próprio para o append de waiver. O
+limite que sobra está escrito no §Riscos e é o mesmo do toolkit: a verificação
+do ADR-192 é de CI, portanto detecção post-hoc; fechar a janela no ato da
+edição é a OQ-6.
 
 ### O FORMATO do manifesto é decidido ANTES da W0 (round 1, C3)
 
@@ -187,7 +372,14 @@ braço o `finalize.sh` GERA o arquivo de escopo a partir das ops do derivador e 
 manifesto uma chave que aponta para um comando inexistente, nem (b) trocar
 «escopo GERADO e conferido» por «escopo digitado». A W0 entrega um dos dois
 braços, e o AC-1 exige o controle vermelho do braço entregue. Qual dos dois:
-OQ-7.
+OQ-7 — que por isso **deixa de ser pergunta de execução e vira PRÉ-CONDIÇÃO da
+W0** (round 2, K3). A razão é mecânica, não de gosto: o leitor do manifesto é
+entrega da W0 e as suas RECUSAS NOMEADAS incluem «chave desconhecida» e «chave
+obrigatória ausente» — as duas leituras da OQ-7 produzem leitores DIFERENTES.
+No braço (a) `scope_generated_from` é chave OBRIGATÓRIA e a sua ausência é
+recusa; no braço (b) ela é chave OPCIONAL-POR-CONSTRUÇÃO, o leitor aceita as
+duas formas e recusa apenas a chave que aponte para um comando inexistente.
+Escrever o leitor antes da escolha é escrever o leitor errado.
 
 ### Reconciliação com `generate-ceremony.sh` (round 1, K1)
 
@@ -219,6 +411,34 @@ Portanto a subwave da aposentadoria (a) migra ou aposenta essa suíte junto, e
 responsabilidade para o toolkit ou manter o gerador até ela fechar. Antes disso,
 o `generate-ceremony.sh` não sai.
 
+**Essa decisão está TOMADA (Owner, S348).** Na revisão de portfólio da S348 o
+Owner respondeu à decisão D2 («um dono para a cerimônia: PLAN-174 × PLAN-188»)
+com a opção (a): *«PLAN-174 vira superseded pelo PLAN-188»*. Registro em
+`.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md:136-137`
+(a decisão D2 e as duas opções, §6) e
+`.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md:174` (a
+resposta do Owner, tabela do §7) — arquivo RASTREADO na base desta derivação.
+As consequências, escritas aqui porque é exatamente isto que o parágrafo acima
+exigia para poder aposentar o gerador:
+
+1. O PLAN-174 **JÁ RECEBEU** `status: superseded` e `superseded_by: PLAN-188`
+   (`.claude/plans/PLAN-174-ceremony-generation.md:4-5`), por pacote separado da
+   S348; esta wave não edita aquele arquivo.
+2. **O PLAN-188 ASSUME a W3 do PLAN-174 como item nomeado.** A W3 de lá
+   (`.claude/plans/PLAN-174-ceremony-generation.md:125-126`: «estender
+   `generate-ceremony.sh` para emitir cortes rc/GA de input declarativo, o
+   gerado passando `bash -n` + lint por construção, corpo ASCII-safe») deixa
+   de ser extensão de um gerador que vai sair e passa a ser um MODO do
+   toolkit, entregue na subwave da aposentadoria (§Items, W2). Aposentar o
+   gerador sem essa capacidade perderia uma função já planejada.
+3. A suíte `.claude/scripts/local/tests/test_generate_ceremony.sh` migra para o
+   toolkit ou é aposentada na MESMA subwave — é a alínea (a) acima, agora com
+   dono e data.
+
+O que esta decisão NÃO faz: ela não muda o gate da aposentadoria (o gerador só
+sai quando o último pacote migrar) nem antecipa a OQ-2 (a ordem das subwaves
+segue do Owner).
+
 Invariantes fechadas UMA vez, com controle vermelho cada:
 1. Gate das DUAS famílias de rail: o registro LISTADO de maior número de cada
    família lê exatamente `Rail-Verdict: APPROVE`; registro em disco fora da
@@ -233,11 +453,27 @@ Invariantes fechadas UMA vez, com controle vermelho cada:
 3. Guard de path absoluto fora do repo em qualquer material, em `sign.sh` P0,
    no finalize e no harness; o guard se auto-escaneia. **A exceção do self-test
    NÃO é um literal de máquina** (round 1, C7): a regra publicada não conhece
-   UID nenhum — o próprio self-test injeta um MARCADOR (variável de ambiente do
-   harness, ou sentinela de conteúdo no fixture) e o guard isenta o MARCADOR,
-   não um path. O rascunho isentava por regex o glob real de scratchpad desta
-   máquina: um material assinado colocado sob ela passaria. Controle vermelho:
-   material sob essa árvore, sem o marcador, tem de REPROVAR.
+   UID nenhum. **O BRAÇO do marcador é decidido AQUI, antes da W0 (round 2,
+   K2), e não é nenhum dos dois que o texto anterior oferecia.** Os dois eram
+   inseguros de formas opostas: sentinela de CONTEÚDO no fixture põe a isenção
+   DENTRO do material que o guard existe para julgar; variável de AMBIENTE do
+   harness é herdada por todo processo filho, inclusive o `sign.sh` do Owner —
+   a classe de carrier que `CLAUDE.md` §5 registra ter sido curada por
+   NEUTRALIZAÇÃO no import, não por enumeração. **Decisão:** o marcador é um
+   ARGUMENTO EXPLÍCITO do guard (`--selftest-fixtures <path>`), cujo valor é um
+   arquivo FORA da árvore do material; ele não é herdado por filho nenhum e não
+   existe como byte dentro de nada que seja assinado. TRÊS controles vermelhos:
+   (i) material sob a árvore de scratchpad, sem o argumento, REPROVA; (ii)
+   material que CARREGA a sentinela de conteúdo do rascunho, e um processo com
+   a variável de ambiente do rascunho exportada, REPROVAM do mesmo jeito — é o
+   controle que prova que os dois canais estão MORTOS, não apenas
+   desaconselhados; e (iii) **material MARCADO fora do self-test REPROVA** —
+   um arquivo que se declara fixture (pelo nome, por um cabeçalho, ou por
+   qualquer marca CARREGADA por ele) e que NÃO está no arquivo apontado por
+   `--selftest-fixtures` continua reprovando. É o controle que o round 2 exigiu
+   nesses termos (K2: «controle vermelho que reprove material MARCADO fora do
+   self-test») e o que torna a escolha do braço verificável: a isenção vem do
+   ARGUMENTO, nunca do material.
 4. `EXPECTED-BASELINE` e `BASE-SHA` escritos SÓ pelo finalize; `sign.sh`
    regenera e compara byte a byte (edição manual ⇒ recusa).
 5. Escopo do sentinel e `PROPOSED-PATCH` GERADOS das ops por path, nunca
@@ -279,6 +515,17 @@ Invariantes fechadas UMA vez, com controle vermelho cada:
     responde «foi a chave do Owner?» — de **33 SCRIPTS** (a unidade que o
     comando conta; quantos PACOTES eles cobrem é outro censo, não feito aqui).
     Controle vermelho: `.asc` de chave fora da allowlist ⇒ recusa nomeada.
+    **O rail da própria allowlist, nomeado para o leitor não supor gate único
+    (round 2, K10):** `.claude/sentinel-signers.txt` casa `_KERNEL_PATHS`
+    (`.claude/hooks/check_arbitration_kernel.py:85`), o guard de arbitragem
+    fail-closed — logo consolidar as 33 checagens nela não cria ponto único
+    forjável por Edit. Medido, e registrado porque contraria a leitura fácil:
+    `python3 .claude/hooks/check_canonical_edit.py --is-canonical
+    .claude/sentinel-signers.txt` responde `.claude/sentinel-signers.txt	0`,
+    isto é, o `check_canonical_edit.py` NÃO é o guard desse arquivo — o round 2
+    (K10) sugeria nomeá-lo como segundo rail, e a medição diz que ele não é. O segundo
+    rail é a assinatura em si: forjar exige editar um arquivo guardado pelo
+    kernel **e** possuir uma chave privada.
 
 ### Riscos e o que NÃO muda
 
@@ -317,12 +564,48 @@ Invariantes fechadas UMA vez, com controle vermelho cada:
   menciona `.claude/scripts/ceremony/**` ou
   `.claude/governance/gate-scripts-manifest.txt`, então um PR que toca SÓ o
   toolkit nunca roda o step, e a promessa «toda edição do toolkit custa uma
-  assinatura» seria falsa. Por isso a W0 acrescenta as DUAS entradas nas DUAS
-  listas do `smoke-install.yml` — QUARTO sítio do mesmo patch, ao lado dos três
-  sítios de lint —, com controle POSITIVO: um PR que toca só um arquivo do
-  toolkit tem de EXECUTAR o step de integridade. Com esse quarto sítio no lugar,
-  e só com ele, um toolkit alterado fora de cerimônia fica VISÍVEL: o CI reprova
-  no PR seguinte.
+  assinatura» seria falsa. Por isso a W0 acrescenta um QUARTO sítio no mesmo
+  patch, ao lado dos três sítios de lint, com controle POSITIVO: um PR que toca
+  só um arquivo do toolkit tem de EXECUTAR o step de integridade. Com esse
+  quarto sítio no lugar, e só com ele, um toolkit alterado fora de cerimônia
+  fica VISÍVEL: o CI reprova no PR seguinte.
+  **ONDE mora esse sítio é decisão da OQ-9, porque o CUSTO foi medido
+  (round 2, K1):** o `smoke-install.yml`
+  tem UM job (`smoke`, `.github/workflows/smoke-install.yml:193`,
+  `runs-on: ubuntu-latest` em `:196`) com `timeout-minutes: 150` (`:337`), e
+  `CLAUDE.md` §5 registra duas execuções reais de **1 h 08** e **58 min**;
+  o step que interessa (`:355-360`) é um `shasum -a 256 -c` de segundos. Pôr
+  `.claude/scripts/ceremony/**` e `.claude/governance/gate-scripts-manifest.txt`
+  nos dois `paths:` desse workflow faz todo PR do
+  toolkit pagar a hora inteira para rodar um checksum. **Alternativas
+  nomeadas** — a escolha é da OQ-9, promovida a pré-condição da W0: (i) as duas
+  entradas nos `paths:` do `smoke-install.yml`, aceitando a hora por PR;
+  (ii) um JOB próprio dentro do `smoke-install.yml`, com `if:`/`paths` que o
+  faça rodar sozinho quando só o toolkit muda; (iii) o step de integridade
+  ADR-192 REPLICADO num workflow BARATO, disparado pelo `paths:` do toolkit e
+  do manifesto, **sem tirar o step de dentro do job `smoke`** (rail r2 M1).
+  Mover o step para fora seria um erro de ORDEM, não de custo: o
+  `ADR-192:49-53` exige a verificação «fail-closed e ANTES de qualquer membro
+  ser invocado», e o job `smoke` instala o framework e EXECUTA o
+  `validate-governance.sh` entregue — dois workflows separados não têm ordem
+  entre si, então a relocação deixaria o consumidor rodando antes do checksum.
+  A opção (iii) é portanto ADITIVA: o step barato responde pelo PR que toca só
+  o toolkit, o step de dentro do job continua respondendo pela ordem.
+  **A superfície de gatilho do quarto sítio, em QUALQUER das três opções, é a
+  do manifesto INTEIRO (rail r1 #5):** `.claude/scripts/ceremony/**`,
+  `.claude/governance/gate-scripts-manifest.txt` **e** os dois arquivos que o
+  AC-6 absorve — `.claude/scripts/check-ceremony-script.py` e
+  `.claude/scripts/ceremony-lint-waivers.json`. Sem os dois últimos, um PR que
+  edite SÓ o checador, ou que só acrescente um waiver, entra no manifesto sem
+  nunca executar o `shasum -c` — que é exatamente o buraco «membresia sem
+  execução» que este parágrafo existe para fechar. O controle positivo passa a
+  ser TRÊS: um PR que toca só um arquivo do toolkit, um que toca só o checador
+  e um que só acrescenta uma entrada de waiver — os três têm de EXECUTAR o step
+  de integridade. O plano não escolhe
+  por conta própria porque as três têm custo de runner diferente e a decisão é
+  de orçamento; o que ele fixa é que ALGUM sítio existe no MESMO patch da W0,
+  com o mesmo controle positivo: um PR que toque só um arquivo do toolkit tem
+  de EXECUTAR o step de integridade.
   **O que isso NÃO faz — limite declarado, não nota de rodapé:** a verificação
   do ADR-192 é de CI. O próprio ADR a define como «`shasum -a 256 -c`,
   fail-closed e ANTES de qualquer membro ser invocado, em **4 superfícies**»
@@ -345,16 +628,18 @@ Invariantes fechadas UMA vez, com controle vermelho cada:
 ## Items
 
 Cada unidade traz **file assignment**, **critério de aceite** e **hint de
-mensagem de commit**, como `PLAN-SCHEMA.md:441` exige; e cada uma DECLARA o
+mensagem de commit**, como `.claude/plans/PLAN-SCHEMA.md:441` exige (path
+completo, round 2, K11); e cada uma DECLARA o
 corte do modelo de operação v2 (≤ 400 linhas alteradas OU ≤ 8 paths por
 pacote), que o rascunho estourava sem dizer (round 1, K4).
 
-**W0 — manifesto, leitor e o subconjunto falsificável.** Gate: **canônico por
-DOIS paths** — os scripts do toolkit são oráculo 0, mas a cura do C1 põe
-`.github/workflows/ceremony-lint.yml` (oráculo **1**) e a do C5 põe
-`.github/workflows/smoke-install.yml` (oráculo **1**) no mesmo patch, e são eles
-que decidem, respectivamente, se o lint e o step de integridade enxergam o
-toolkit (§Riscos). A W0 do rascunho dizia «livre» pela razão refutada; ela é
+**W0 — leitor do manifesto, `lib.sh` e o subconjunto falsificável.** Gate:
+**canônico por DOIS paths** — os scripts do toolkit são oráculo 0, mas a cura
+do C1 põe `.github/workflows/ceremony-lint.yml` (oráculo **1**) e a do C5 põe
+um workflow no mesmo patch, e são eles que decidem, respectivamente, se o lint
+e o step de integridade enxergam o toolkit (§Riscos). O gate NÃO depende de
+QUAL workflow a OQ-9 escolher para o quarto sítio: todo `.github/workflows/*`
+é oráculo 1, então a W0 é canônica nos dois braços. A W0 do rascunho dizia «livre» pela razão refutada; ela é
 canônica pela razão medida.
 - Arquivos: `.claude/scripts/ceremony/lib.sh`,
   `.claude/scripts/ceremony/read_manifest.py`, e UM arquivo de controle por
@@ -362,17 +647,58 @@ canônica pela razão medida.
   `controls/inv3_abs_path.sh`, `controls/inv4_baseline.sh`,
   `controls/inv5_scope.sh`, `controls/inv10_signer.sh`, mais o runner
   `controls/run.sh` [todos criados na W0]; e, no MESMO patch, os TRÊS arquivos
-  de gate — `.claude/scripts/check-ceremony-script.py` (+`DISCOVERY_ROOTS`
-  **e** escopo da R8), `.github/workflows/ceremony-lint.yml` (+`paths:` nos dois
-  gatilhos) e `.github/workflows/smoke-install.yml` (+ as duas entradas do
-  toolkit nos dois `paths:`, para o step de integridade disparar).
+  de gate — (1) `.claude/scripts/check-ceremony-script.py`, que recebe o
+  PREDICADO de descoberta por diretório (`.sh` **e** `.py` sob o toolkit root,
+  §Approach decisão (a)) além da entrada em `DISCOVERY_ROOTS`, o escopo
+  alargado da R8 e o comentário de `:192-194` emendado junto (decisão (c));
+  (2) `.github/workflows/ceremony-lint.yml` (+`paths:` nos dois gatilhos); e
+  (3) o QUARTO sítio, que dispara o step de integridade ADR-192 para o toolkit
+  — as duas entradas nos dois `paths:` do `.github/workflows/smoke-install.yml`
+  **ou** o workflow barato que o substitua, conforme a OQ-9 (§Riscos: o job
+  `smoke` é único e custa ~1 h para rodar um `shasum -c` de segundos).
 - Aceite: AC-1, metade W0. As invariantes que `lib.sh` falsifica SOZINHO são
   **1, 3, 4, 5 e 10** — todas predicados sobre ARQUIVOS. As invariantes 2, 6, 7
   e 8 são propriedades de `land.sh` e `harness.sh`, que só existem na W1
   (round 1, C6): controle sem o objeto que ele falsifica é verde vacuoso, o
   oposto do que a W0 promete provar.
+- **QUEM escreve o arquivo que cada controle da W0 falsifica (round 2, K5).**
+  Três das cinco invariantes estão DEFINIDAS em termos de escritores da W1 — a
+  1 fala em «pinados por sha256 gravado pelo `finalize`», a 4 em «escritos SÓ
+  pelo finalize» e a 5 em «`sign.sh` regenera e compara» —, e sem esta tabela a
+  justificativa «todas predicados sobre ARQUIVOS» fica incoerente. Na W0 o
+  ESCRITOR é sempre a fixture do próprio controle; o escritor de PRODUÇÃO chega
+  na W1, e o que a W0 prova é o LEITOR/COMPARADOR de `lib.sh`, não a disciplina
+  de escrita:
+
+  | inv. | arquivo falsificado | quem o escreve na W0 | quem na produção (W1) |
+  |---|---|---|---|
+  | 1 | `ceremony.tsv` + registros de rail pinados | fixture de `controls/inv1_rail_set.sh` | `finalize.sh` |
+  | 3 | material com path absoluto fora do repo | fixture de `controls/inv3_abs_path.sh` | qualquer material do pacote |
+  | 4 | `EXPECTED-BASELINE` / `BASE-SHA` | fixture de `controls/inv4_baseline.sh` | `finalize.sh` |
+  | 5 | arquivo de escopo do sentinel | fixture de `controls/inv5_scope.sh` | `finalize.sh` ou `apply-<key>.py --describe` (OQ-7) |
+  | 10 | `.asc` + chaveiro GPG descartável | fixture de `controls/inv10_signer.sh` | o Owner, na assinatura |
+
+  Consequência escrita, não escondida: a metade «escrito SÓ pelo finalize» das
+  invariantes 4 e 5 é falsificável apenas na W1, e migra para o aceite dela
+  junto com as invariantes 2, 6, 7 e 8. A fixture da inv. 10 precisa de um
+  chaveiro GPG descartável que nenhum runner semeia hoje — custo que a OQ-9
+  passa a cobrir.
 - Corte v2: **11 paths** (2 de biblioteca + 6 de controle + 3 arquivos de
-  gate) — isso ESTOURA a metade «≤ 8 paths» do critério. A W0 só passa
+  gate) — **e 11 é o piso, não o total: a contagem depende da OQ-9** (rail
+  r1 #1). Se ela puser o quarto sítio num workflow BARATO próprio e/ou o runner
+  de controles noutro workflow, cada um desses é um path a mais — e o branch
+  «step no `validate.yml`» acrescenta ESSE arquivo, que hoje não está nem na
+  W0a nem na W0b: **12 paths**, não 11 (rail r2 M2). Pior que a aritmética:
+  `.github/workflows/validate.yml` é path de KERNEL
+  (`.claude/hooks/check_arbitration_kernel.py:144`), então a cerimônia de
+  sentinel COMUM da W0 não autoriza essa edição — ela exige a rota de kernel.
+  **Decisão:** o executor do runner é uma SUBWAVE própria (`W0c`), com o seu
+  file assignment e o requisito de kernel escrito nele; nenhum braço da OQ-9
+  entra na W0a por acidente. Contagem por braço: **11** com o quarto sítio no
+  `smoke-install.yml` e o runner FORA da W0; **12** quando um workflow entra;
+  **13** quando entram dois. A W0 reconta os paths depois da decisão e antes de
+  abrir o patch. Em qualquer dos braços isso ESTOURA a metade
+  «≤ 8 paths» do critério. A W0 só passa
   pela outra metade da disjunção, «≤ 400 linhas alteradas», e a wave MEDE isso
   sobre a árvore STAGED — `git add -A` e então
   `git diff --cached --numstat` —, nunca com `git diff` sozinho: oito dos onze
@@ -380,10 +706,32 @@ canônica pela razão medida.
   não-rastreado, o que faria a medição admitir um pacote que estoura os DOIS
   tetos. É a mesma ordem que `CLAUDE.md` §4 impõe aos gates de corpus
   («`git add -A` → gates sobre a árvore staged → `git commit`»). Se não couber,
-  a divisão
-  concreta é **W0a** (manifesto + leitor + os TRÊS arquivos de gate = 5
-  paths; os quatro sítios continuam no MESMO patch, que é a exigência do C1 e
-  do C5) e **W0b** (os seis arquivos de controle = 6 paths). Declarado aqui
+  a divisão concreta nomeia ARQUIVOS, não categorias (round 2, K4 — a redação
+  anterior dizia «manifesto» para um artefato que a W0 não entrega: o
+  `ceremony.tsv` é da W1, e `lib.sh` não aparecia em metade nenhuma):
+  **W0a = 5 paths** — `.claude/scripts/ceremony/lib.sh`,
+  `.claude/scripts/ceremony/read_manifest.py`,
+  `.claude/scripts/check-ceremony-script.py`,
+  `.github/workflows/ceremony-lint.yml` e o QUARTO sítio escolhido pela OQ-9
+  (`.github/workflows/smoke-install.yml` ou o workflow barato que o substitua);
+  **W0b = 6 paths** — `controls/inv1_rail_set.sh`, `controls/inv3_abs_path.sh`,
+  `controls/inv4_baseline.sh`, `controls/inv5_scope.sh`,
+  `controls/inv10_signer.sh` e `controls/run.sh`. **W0c = 0 ou 1 path,
+  CONDICIONAL à OQ-9 (rail r3 C2)** — o executor do runner de controles:
+  VAZIA no braço em que a OQ-9 não cria executor de CI; **um** path no braço
+  que o cria. **A autorização da W0c é DERIVADA do path escolhido, não
+  declarada aqui (rail r4 D2):** a lista `_KERNEL_PATHS`
+  (`.claude/hooks/check_arbitration_kernel.py:85`) enumera NOMES de arquivo e
+  não tem glob para `.github/workflows/*` — o `.github/workflows/validate.yml`
+  do braço (i) está nela (`:144`) e a edição exige a rota de KERNEL; um
+  workflow NOVO, criado pelo braço (ii), NÃO está, é canônico COMUM e a
+  cerimônia de sentinel da W0 basta. Pedir override de kernel para um path que
+  o kernel não guarda relaxaria a proteção sem necessidade. **A W0 não fecha com a W0c em aberto
+  quando a OQ-9 escolhe um executor:** sem ela os cinco controles vermelhos
+  existem e ninguém os roda — exatamente a classe «a red gate nobody runs» que
+  a D5 mandou fechar. Os quatro sítios de gate
+  continuam no MESMO patch (W0a), que é a exigência do C1 e do C5; a W0b sem a
+  W0a seria controle sem lint que o enxergue. Declarado aqui
   porque a contagem mudou duas vezes — quando os controles passaram a ser
   nomeados um a um, e quando o `smoke-install.yml` entrou —, e cura que gera o
   defeito seguinte é classe conhecida.
@@ -396,8 +744,10 @@ CLONADA (o bootstrap de §Riscos).
   `.claude/scripts/ceremony/land.sh`, `.claude/scripts/ceremony/finalize.sh`,
   `.claude/scripts/ceremony/harness.sh` [criados na W1]; o `ceremony.tsv` do
   pacote piloto; `.claude/governance/gate-scripts-manifest.txt`.
-- Aceite: AC-2, AC-6 e a metade migrada do AC-1 (controles das invariantes 2, 6,
-  7 e 8 + o harness rodando a partir de um clone descartável em worktree).
+- Aceite: AC-2, AC-6 e a metade migrada do AC-1 — controles das invariantes 2,
+  6, 7 e 8, MAIS as duas metades de ESCRITA das invariantes 4 e 5 que a W0
+  declara não-falsificáveis sem o `finalize.sh` (rail r1 #4), + o harness
+  rodando a partir de um clone descartável em worktree. São **6/6**, não 4/4.
 - Corte v2: 4 scripts + manifesto do piloto + `gate-scripts-manifest.txt` =
   **6 paths**, e o critério é uma DISJUNÇÃO (≤ 400 linhas **OU** ≤ 8 paths):
   6 paths já satisfazem o teto, qualquer que seja a contagem de linhas. Se o
@@ -428,6 +778,17 @@ CLONADA (o bootstrap de §Riscos).
   `ceremony.tsv` que ela cria): `<PK>/<dir do pacote>/ceremony.tsv` (novo) +
   os `OWNER-*-{SIGN,LAND}.sh` daquele pacote (removidos ou movidos para
   custódia, um a um, nomeados) + a linha do MAPA do AC-3.
+- **A subwave que migrar o ÚLTIMO pacote é a da APOSENTADORIA, e ela leva TRÊS
+  entregas nomeadas (Owner, S348 — §Approach «Reconciliação»):** (i) o
+  `generate-ceremony.sh` sai, e no MESMO patch `EXPLICIT_FILES`
+  (`.claude/scripts/check-ceremony-script.py:66-68`) e o `paths:` do
+  `.github/workflows/ceremony-lint.yml` deixam de citá-lo; (ii)
+  `.claude/scripts/local/tests/test_generate_ceremony.sh` migra ou é aposentada
+  junto; (iii) o **corte rc/GA de input declarativo** — a W3 herdada do
+  `.claude/plans/PLAN-174-ceremony-generation.md:125-126` — nasce como MODO do
+  toolkit. Se as três não couberem no teto v2 dessa subwave, ela se parte em
+  duas (a regra de corte vale para qualquer `W2x`), e a segunda metade herda o
+  gate canônico porque toca `.github/workflows/*`.
 - Aceite: AC-3 — e o AC-3 só conta com o mapa COMPLETO (6/6, ver abaixo).
 - Commit: `refactor(PLAN-188 w2<x>): <pacote> migra para o manifesto; clones
   assinados para custódia`.
@@ -436,7 +797,11 @@ CLONADA (o bootstrap de §Riscos).
 - Arquivos: `.claude/adr/ADR-2xx-shared-ceremony-toolkit.md` [criado na W3],
   `.claude/plans/PLAN-188/measure-rail-classes-v2.py` (o AC-4 exige `--since`
   obrigatório e a regra de classificação do toolkit — ver abaixo; sem esse
-  arquivo no escopo, seguir este file assignment não satisfaz o AC-4) e
+  arquivo no escopo, seguir este file assignment não satisfaz o AC-4),
+  `.claude/plans/PLAN-188/measure-rail-classes-v2.sha256`
+  [criado na W3 — rail r2 M4: o passo (1) do `Check:` do AC-4 roda
+  `shasum -a 256 -c` contra ESTE arquivo, e um file assignment que não o
+  entrega faz o AC-4 falhar antes de medir] e
   este plano. **A emenda ao ADR-010 NÃO é agendada aqui:** a OQ-1 deixa com o
   Owner tanto o número `ADR-2xx` quanto a WAVE em que a emenda entra; enquanto
   ela estiver aberta, a emenda não pertence a wave nenhuma. Se o Owner a
@@ -455,23 +820,88 @@ CLONADA (o bootstrap de §Riscos).
       `harness.sh` e MIGRAM para o aceite da W1 — na W0 eles não teriam objeto
       para falsificar.
       Check (W0): `bash -n` + `shellcheck -S warning` nos scripts entregues; o
-      runner de controles imprime **5/5** VERMELHO-antes / VERDE-depois; e o
-      `check-ceremony-script.py` DESCOBRE os scripts do toolkit. Controle
-      POSITIVO da descoberta: um script do toolkit com `|| true` numa linha de
-      `gpg` REPROVA na regra R2, e o `ceremony-lint.yml` dispara pelo `paths:`
-      do diretório novo. Falha = qualquer controle que passe com a invariante
-      removida, ou um script do toolkit que o lint não enxergue.
-      Check (W1): **4/4** VERMELHO-antes / VERDE-depois para as invariantes 2,
-      6, 7 e 8, com o harness rodando de um clone descartável em worktree.
-      Nota de custo (round 1, K6 ⇒ OQ-9): a metade «shellcheck limpo» já é
-      automática — `.github/workflows/validate.yml:341-359` roda
+      runner de controles imprime **5/5** VERMELHO-antes / VERDE-depois; e
+      `python3 .claude/scripts/check-ceremony-script.py --list` LISTA todos os
+      arquivos do toolkit, os `.py` inclusive — a flag EXISTE hoje
+      (`.claude/scripts/check-ceremony-script.py:266-268`, «só imprime os
+      arquivos descobertos, um por linha»), não é entrega de wave nenhuma.
+      **Controle POSITIVO da descoberta, REFEITO (round 2, D1): um arquivo do
+      toolkit SEM nenhum token da `CEREMONY_OPS_RE`** (`:71-73` — sem `gpg`,
+      sem `sentinel`, sem `VERDICT`) **tem de aparecer no `--list`.** O controle
+      anterior era verde por construção: ele exigia um script com `|| true`
+      numa linha de `gpg`, e a palavra `gpg` é ELA PRÓPRIA o token que torna o
+      arquivo descoberto sob o predicado por conteúdo — o controle fornecia a
+      condição que dizia medir e passaria mesmo com a cura ausente. Ele fica,
+      mas na função certa: prova que a REGRA R2 dispara no toolkit, não que a
+      DESCOBERTA funciona. Terceiro controle: um script do toolkit com exec-bit
+      no índice REPROVA na R8. E o piso do lint não substitui nenhum dos três —
+      pelo CENSO ÚNICO do §Riscos (worktree limpo, base declarada lá), o
+      conjunto descoberto está muito acima do `floor` e quase todo ele vem de
+      `.claude/plans/**`, então o conjunto pode perder o toolkit inteiro sem
+      ficar vermelho.
+      **Quarto controle — de EVENTO, não de descoberta (rail r1 #6):** um PR
+      que toca SÓ um arquivo do toolkit tem de DISPARAR o `ceremony-lint.yml`
+      pelo `paths:` novo. Descoberta e gatilho são perguntas diferentes — um
+      lint que enxerga o arquivo mas nunca roda no PR é a mesma classe «a red
+      gate nobody runs» —, e por isso os dois controles coexistem; o controle
+      de evento do step de integridade ADR-192 é o do quarto sítio (§Riscos).
+      Falha = qualquer controle que passe com a invariante removida, o arquivo
+      SEM token ausente do `--list`, um script do toolkit que o lint não
+      enxergue, um PR do toolkit que não dispare o `ceremony-lint.yml`, ou o job
+      `shellcheck-ceremony` recebendo um `.py` no conjunto do `--list`
+      (rail r3 C3).
+      Check (W1): **6/6** VERMELHO-antes / VERDE-depois — as invariantes 2, 6,
+      7 e 8, com o harness rodando de um clone descartável em worktree, MAIS as
+      duas metades de ESCRITA que a tabela da W0 declara não-falsificáveis lá
+      (rail r1 #4): «`EXPECTED-BASELINE` e `BASE-SHA` escritos SÓ pelo
+      `finalize`» (inv. 4) e «o arquivo de escopo escrito SÓ pelo `finalize`
+      ou pelo `--describe`» (inv. 5). Na W0 essas duas foram provadas do lado
+      do COMPARADOR, com o arquivo plantado por fixture; o lado do ESCRITOR só
+      tem objeto quando o `finalize.sh` existe. Controle vermelho de cada uma:
+      um arquivo cujo conteúdo DIFERE da regeneração pelo
+      `finalize` (respectivamente pelo `--describe`) ⇒ recusa nomeada. O
+      controle compara BYTES REGENERÁVEIS, não a identidade do processo que
+      escreveu (rail r3 C1) — «escrito só pelo `finalize`» na forma literal
+      não é falsificável por teste nenhum. **Limite declarado:** nem o
+      manifesto nem estas invariantes autenticam o PRODUTOR; um segundo
+      programa que escreva bytes idênticos aos que o `finalize` escreveria
+      passa, e passar é o comportamento CORRETO sob este contrato. Autenticar
+      proveniência de produtor (assinar o próprio artefato de baseline/escopo)
+      é follow-up NOMEADO — `PLAN-188-FOLLOWUP-producer-provenance` —, nunca
+      requisito de aceite da W1.
+      Nota de custo (round 1, K6; round 2, D5 — a classe «a red gate nobody
+      runs»): a metade «shellcheck limpo» já é automática E já cobre o endereço
+      escolhido — `.github/workflows/validate.yml:341-359` roda
       `shellcheck -S warning` sobre `find .claude/scripts .claude/hooks -name
-      '*.sh'`; a metade CARA é o runner de controles, que hoje não tem workflow,
-      step nem custo de runner-minutos medido.
+      '*.sh'`, que é recursivo, então todo `.sh` do toolkit entra sem sítio
+      novo. A metade CARA é o runner de controles: hoje não tem workflow, não
+      tem step e não tem custo de runner-minutos medido, e o controle vermelho
+      da invariante 10 ainda pede um chaveiro GPG descartável que nenhum runner
+      semeia (aquele step é o único de shell relevante e não invoca `gpg`).
+      **O EXECUTOR é nomeado ANTES da W0:** a OQ-9 vira pré-condição e é
+      reduzida a UMA pergunta — qual das três opções nomeadas executa o
+      runner —, porque sem executor o AC-1 não FECHA; o custo em runner-minutos
+      pode ser medido depois, o evento não.
 - [ ] AC-2 Um pacote piloto (W6a) migra para o manifesto e assina/landa por
       `ceremony/sign.sh` + `land.sh` sem script próprio.
-      Check: o commit landado do piloto não referencia nenhum `OWNER-*-{SIGN,LAND}.sh`
-      próprio e o `.asc` verifica; falha = o piloto precisar de um script clonado.
+      **O Check do round 1 tinha a MESMA vacuidade que o C2 curou no AC-3
+      (round 2, K6):** «o commit landado não referencia nenhum
+      `OWNER-*-{SIGN,LAND}.sh` próprio» já é verdade ANTES do trabalho, porque
+      os pacotes ficam fora do repo (§Context) e
+      `git ls-files | grep -icE 'w4b|w5a|w1a|w6a'` = **0** no HEAD — a pergunta
+      responde «não» tanto se a migração acontecer quanto se ela fracassar.
+      O AC-2 herda, portanto, a forma do AC-3:
+      Check: (a) a linha `W6a → <PK>/<diretório do pacote>` existe no MAPA das
+      seis chaves definido no AC-3, escrita pela W1; (b) esse diretório tem
+      `ceremony.tsv` e NENHUM `OWNER-*-{SIGN,LAND}.sh`; (c) o `.asc` do sentinel
+      verifica contra `.claude/sentinel-signers.txt`.
+      **Controle POSITIVO (obrigatório):** plantar um `OWNER-W6a-SIGN.sh` no
+      diretório do piloto faz o Check ficar VERMELHO; se não ficar, o
+      instrumento está morto e o AC não conta.
+      **Critério de morte pré-registrado:** corpus `<PK>` indisponível na sessão
+      que mede ⇒ **NÃO CONCLUSIVO**, nunca «falhou».
+      Falha = o piloto precisar de um script clonado, ou o controle positivo não
+      reprovar.
 - [ ] AC-3 Os 5 pacotes restantes (W4b, W5a, W1a, SF, WR) migram por
       manifesto; os `OWNER-*-{SIGN,LAND}.sh` próprios deixam de ser o caminho
       de assinatura.
@@ -499,6 +929,14 @@ CLONADA (o bootstrap de §Riscos).
       diretórios do mapa faz o Check ficar VERMELHO. Se não ficar, o instrumento
       está morto e o AC não conta — é a classe «instrumento verde cuja pergunta
       envelheceu», que esta casa já pagou duas vezes.
+      **Critério de morte pré-registrado (round 2, K7 — o AC-4 tinha, o AC-3
+      não):** os seis diretórios do mapa vivem FORA do repo, na árvore de
+      trabalho `<PK>`; se `<PK>` não estiver disponível na sessão que mede, o
+      AC-3 sai **NÃO CONCLUSIVO** — nem «passou» nem «falhou» —, com o porquê
+      escrito, e a medição é refeita numa sessão que tenha o corpus. O AC-3 só
+      fica VERDE numa sessão em que (a) o mapa esteja completo 6/6, (b) os seis
+      diretórios sejam legíveis e (c) o controle positivo tenha rodado nessa
+      MESMA sessão. Ausência de corpus nunca é evidência de migração.
       Falha = qualquer pacote do mapa sobreviver com script próprio, ou o
       controle positivo não reprovar.
 - [ ] AC-4 Medição: fração «cerimônia» dos achados de rail nas 3 assinaturas
@@ -511,7 +949,19 @@ CLONADA (o bootstrap de §Riscos).
       base de 23,1 % é
       `.claude/plans/PLAN-188/measure-rail-classes-v2.py`, sha256
       `d2234bdfd78bc9b26bd8c85fe9561df7642d333aa5164b7913aeff1aeb181062`
-      (`shasum -a 256 <esse path>`, no HEAD deste plano). A comparação só vale
+      (`shasum -a 256 <esse path>`, no HEAD deste plano).
+      **O pin é CONFERIDO por máquina, não é prosa (round 2, K8):** um valor
+      esperado digitado num plano é exatamente a classe «instrumento verde cuja
+      pergunta envelheceu», e a W3 edita esse binário por desenho. A wave da
+      medição grava o digest em
+      `.claude/plans/PLAN-188/measure-rail-classes-v2.sha256`
+      [criado na wave da medição], no formato de `shasum -c`, e o `Check:`
+      abaixo roda `shasum -a 256 -c` contra ele ANTES de ler qualquer número;
+      digest que não bate ⇒ a medição não acontece. O leitor desse arquivo é o
+      `Check:` do próprio AC — o instrumento NÃO entra no manifesto ADR-192,
+      que pina scripts de GATE, e escrever que entra seria inventar membresia.
+      Quando a W3 editar o binário, o digest novo é gravado no MESMO arquivo, no
+      MESMO patch, e a base é re-medida com ele. A comparação só vale
       contra ESSE digest; instrumento re-editado invalida a série, porque quem o
       editaria é justamente a parte MEDIDA. Se a OQ-5 escolher corrigir o
       classificador, o plano grava o digest NOVO no mesmo lugar e re-mede a base
@@ -560,7 +1010,12 @@ CLONADA (o bootstrap de §Riscos).
       a medição roda sobre a LISTA sha256-pinada dos registros DESSES três — a
       mesma exigência que a base congelada já carrega. `--since` fica como
       filtro auxiliar dentro da coorte, nunca como seletor da amostra.
-      Check: `python3 .claude/plans/PLAN-188/measure-rail-classes-v2.py
+      Check, em DOIS passos e nesta ordem — o segundo só roda se o primeiro
+      sair verde: (1) `shasum -a 256 -c
+      .claude/plans/PLAN-188/measure-rail-classes-v2.sha256`
+      [arquivo criado na wave da medição] confere o binário contra o digest
+      gravado; digest que não bate ⇒ a medição não acontece e o AC não conta.
+      (2) `python3 .claude/plans/PLAN-188/measure-rail-classes-v2.py
       --pack-dir <PK> --cohort <as 3 chaves de pacote> --since <TS>`
       [`--cohort` e `--since` criados na wave da medição] imprime `ceremony`
       com numerador e denominador para EXATAMENTE as 3 assinaturas da coorte,
@@ -592,11 +1047,27 @@ CLONADA (o bootstrap de §Riscos).
       scripts por sha256. Round 1, C5: o script que decide se a assinatura do
       Owner acontece não pode ser MENOS protegido que o `verify-counts.sh`, que
       só conta e tem sentinel e checksum.
-      Check: `shasum -c` sobre o manifesto passa com as linhas novas e FALHA
-      quando um byte de `sign.sh` ou de `land.sh` muda sem bump do manifesto —
-      esse controle vermelho é obrigatório e é a evidência do AC.
-      Falha = o toolkit shipado fora do manifesto, ou o bump feito sem que o
-      controle vermelho tenha sido visto.
+      **O AC-6 ABSORVE também a autoridade do lint (round 2, D3), porque é
+      entrega e não gosto:** `.claude/scripts/check-ceremony-script.py` e
+      `.claude/scripts/ceremony-lint-waivers.json` entram no MESMO manifesto.
+      Medido no HEAD, os dois são oráculo **0**, não casam `_KERNEL_PATHS`
+      (`.claude/hooks/check_arbitration_kernel.py:85`, 110 padrões) e não estão
+      entre os 9 membros — de modo que a cura do C1 (predicado de descoberta,
+      `paths:`, escopo da R8) pode ser desfeita por um Edit livre, e a
+      reprovação do toolkit pode ser apagada por um append de waiver. Sem esta
+      absorção, tudo o que a W0 constrói tem uma porta lateral sem cerimônia.
+      Check: `shasum -a 256 -c` sobre o manifesto passa com as linhas novas e
+      falha em DOIS controles vermelhos obrigatórios, que são a evidência do
+      AC — (i) um byte de `sign.sh` ou de `land.sh` muda sem bump do manifesto;
+      (ii) **uma entrada é acrescentada ao `ceremony-lint-waivers.json` sem bump
+      do manifesto**. Ver os dois vermelhos é parte do AC.
+      **Limite escrito, não nota de rodapé:** a verificação do ADR-192 mora em
+      workflows (`ADR-192:49-53`), nunca num lançador local — isto é DETECÇÃO
+      post-hoc. Ela também não fecha a rota `--waivers <path>` nem o
+      `CEO_CEREMONY_LINT_UNLOCK`, que são decididos fora do arquivo; o que fecha
+      a janela no ato da edição é a OQ-6.
+      Falha = o toolkit ou os dois arquivos do lint shipados fora do manifesto,
+      ou o bump feito sem que os dois controles vermelhos tenham sido vistos.
 
 ## Open questions
 
@@ -677,8 +1148,10 @@ CLONADA (o bootstrap de §Riscos).
   integridade do `smoke-install.yml` — DESDE QUE o `paths:` do workflow o
   dispare para o toolkit. Hoje não dispara: nenhuma das duas listas casa
   `.claude/scripts/ceremony/**` nem
-  `.claude/governance/gate-scripts-manifest.txt`, e é a W0 que acrescenta as
-  duas entradas (§Riscos, quarto sítio do patch). Com esse sítio no lugar, um
+  `.claude/governance/gate-scripts-manifest.txt`, e é a W0 que acrescenta o
+  QUARTO sítio (§Riscos) — nos `paths:` deste workflow ou no workflow barato
+  que a OQ-9 escolher, porque o job `smoke` é único e custa ~1 h para rodar um
+  `shasum -c` de segundos. Com esse sítio no lugar, um
   toolkit alterado fora de cerimônia fica VISÍVEL no CI seguinte. **Mas a
   proteção direta não é redundante, e por isso a OQ-6 é decisão de verdade:** a
   verificação do ADR-192 mora em workflows (`ADR-192:49-53`), nunca num lançador
@@ -686,14 +1159,23 @@ CLONADA (o bootstrap de §Riscos).
   antes de qualquer reprovação. O que a OQ-6 escolhe é entre detecção post-hoc
   (só o manifesto) e prevenção no ato da edição (manifesto + hook) — e, enquanto
   estiver aberta, o §Riscos declara a janela como limite assumido.
-- OQ-7: o alcance do contrato `--describe`. A W0 o especifica e o exige de cada
-  pacote migrado; nenhum derivador rastreado o implementa hoje. Em aberto: se o
+- OQ-7 — **PROMOVIDA a PRÉ-CONDIÇÃO da W0 (round 2, K3), decisão do Owner:** o
+  alcance do contrato `--describe`. A W0 o especifica e o exige de cada pacote
+  migrado; nenhum derivador rastreado o implementa hoje. Em aberto: se o
   contrato é RETRO-aplicado aos derivadores dos 5 pacotes do AC-3 (custo por
   pacote) ou se `scope_generated_from` é chave OPCIONAL, caindo no braço (b) da
   invariante 5 (escopo gravado pelo `finalize`). **A escolha é entre BRAÇOS, não
   entre verificar e não verificar:** nenhum pacote migrado assina escopo que não
   tenha sido gerado e conferido. O que não é aceitável é a chave apontar para um
-  comando inexistente — nem um pacote sem braço nenhum.
+  comando inexistente — nem um pacote sem braço nenhum. **Por que é
+  pré-condição, e não pergunta de execução:** o leitor do manifesto é ENTREGA da
+  W0 e as suas recusas nomeadas incluem «chave desconhecida» e «chave
+  obrigatória ausente» (§Approach), então as duas leituras produzem leitores
+  DIFERENTES — no braço (a) a chave é obrigatória e a ausência dela é recusa;
+  no braço (b) ela é opcional-por-construção, o leitor aceita as duas formas e
+  recusa só a chave que aponte para comando inexistente. Escrever o leitor antes
+  da escolha é escrever o leitor errado, e reescrevê-lo depois custa uma
+  cerimônia. Como a OQ-3, esta pode ser colhida em PARALELO ao round 3.
 - OQ-8 (Owner): o DESTINO dos clones. O plano já decide que clone de cerimônia
   JÁ ASSINADA vai para custódia e não para o `rm` — a razão está escrita em
   `.claude/scripts/check_contamination.py:299-301` («retained for
@@ -701,26 +1183,63 @@ CLONADA (o bootstrap de §Riscos).
   diretórios isentos recebe os clones migrados (`scripts/local/historical/` ou
   `archive/`), ou um terceiro; e se o clone que NUNCA assinou nada é removido ou
   também arquivado.
-- OQ-9: quem EXECUTA o runner de controles, em que evento e a que custo. Medido
-  (round 1, K6): `.github/workflows/validate.yml:341-359` já roda
-  `shellcheck -S warning` sobre `find .claude/scripts .claude/hooks -name
-  '*.sh'`, então a metade barata do AC-1 é automática; a metade CARA — rodar os
-  controles vermelhos — não tem workflow, step nem custo de runner-minutos
-  medido. Opções nomeadas pelo round: step no `validate.yml`, workflow próprio
-  disparado pelo `paths:` do toolkit, ou execução local exigida pelo
-  `harness.sh` de cada cerimônia.
+- OQ-9 — **PROMOVIDA a PRÉ-CONDIÇÃO da W0 (round 2, D5 + K1), decisão do
+  Owner:** quem EXECUTA o runner de controles, em que evento — e, agora, onde
+  mora o QUARTO sítio. Medido (round 1, K6):
+  `.github/workflows/validate.yml:341-359` já roda `shellcheck -S warning`
+  sobre `find .claude/scripts .claude/hooks -name '*.sh'`, que é recursivo,
+  então a metade barata do AC-1 é automática e cobre o endereço novo; a metade
+  CARA — rodar os controles vermelhos — não tem workflow, step nem custo de
+  runner-minutos medido, e o controle da invariante 10 ainda pede um chaveiro
+  GPG descartável que nenhum runner semeia hoje. Opções nomeadas, com a
+  consequência de cada uma: (i) step no `validate.yml` — barato de escrever,
+  paga o tempo dos controles em todo PR que o dispare; (ii) workflow próprio
+  disparado pelo `paths:` do toolkit — isola o custo, exige um sítio novo;
+  (iii) execução local exigida pelo `harness.sh` de cada cerimônia — custo zero
+  de runner, mas volta a ser «a red gate nobody runs» fora da janela de
+  assinatura. **A OQ-9 passa a decidir junto o CUSTO do quarto sítio (K1):** as
+  duas entradas no `smoke-install.yml` arrastam um job único de
+  `timeout-minutes: 150`, medido em 1 h 08 e 58 min (`CLAUDE.md` §5), para
+  executar um `shasum -a 256 -c` de segundos — as alternativas (job próprio,
+  ou o step de integridade REPLICADO num workflow barato) estão escritas no
+  §Riscos — e a regra que vale é a de LÁ, escrita uma vez: a réplica é
+  ADITIVA e o step de dentro do job `smoke` NUNCA sai, porque dois workflows
+  separados não têm ordem entre si e o `ADR-192:49-53` exige a verificação
+  ANTES de qualquer membro ser invocado (rail r2 M1). Ler a opção (iii) como
+  «mover» é lê-la contra o §Riscos — e removeria a verificação que hoje corre
+  antes de o job `smoke` executar o `validate-governance.sh` entregue
+  (rail r4 D1). É pré-condição porque sem executor nomeado o AC-1 não FECHA e a W0
+  nasce com um controle que ninguém roda. O custo em runner-minutos pode ser
+  medido depois da escolha; o evento, não. Colhível em PARALELO ao round 3.
 
 ## How to continue
 
+**O ponteiro deste plano, escrito uma vez (round 2, K12):** o arquivo é
+`.claude/plans/PLAN-188-shared-ceremony-toolkit.md`. **`.claude/plans/PLAN-188.md`
+NÃO existe no HEAD** (`git ls-files .claude/plans/PLAN-188.md` não devolve nada;
+o plano não afirma nada sobre o histórico, rail r1 #16);
+`.claude/plans/PLAN-188/` é o DIRETÓRIO de
+materiais (instrumento de medição, saída congelada e as rodadas do debate).
+Prompts e runbooks que citem o caminho curto estão apontando para nada.
+
 Primeira mensagem de uma sessão futura: «Leia
-`.claude/plans/PLAN-188-shared-ceremony-toolkit.md`, o consenso do round 1 em
-`.claude/plans/PLAN-188/debate/round-1/consensus.md` e o resultado do round 2.
-O round 1 fechou `RUN-ANOTHER-ROUND`, então o round 2 revisa ESTE arquivo
-revisado, não o rascunho. Se o round 2 ainda não rodou, rode-o (L3). Se rodou e
-o Owner marcou o plano `reviewed`, execute a W0 — leitor TSV + `lib.sh` + os
-controles vermelhos das invariantes 1, 3, 4, 5 e 10 + os QUATRO sítios de gate
-(DISCOVERY_ROOTS, escopo da R8, `paths:` do `ceremony-lint.yml` e `paths:` do
-`smoke-install.yml`) no mesmo patch — e só então proponha a W1.»
+`.claude/plans/PLAN-188-shared-ceremony-toolkit.md` e os consensos do debate em
+`.claude/plans/PLAN-188/debate/round-1/consensus.md` e
+`.claude/plans/PLAN-188/debate/round-2/consensus.md`. O round 2 fechou
+`RUN-ANOTHER-ROUND` com 5 consensos (D1-D5) e 15 must-fix, TODOS absorvidos
+neste arquivo — então o round 3 revisa ESTA revisão, não a anterior. Se o
+round 3 ainda não rodou, rode-o (L3). Duas decisões do Owner podem ser colhidas
+em PARALELO ao round 3, porque são pré-condições da W0: **OQ-7** (o braço do
+`scope_generated_from`, que define o leitor) e **OQ-9** (quem executa o runner
+de controles e onde mora o quarto sítio). Se o round 3 rodou e o Owner marcou o
+plano `reviewed`, execute a W0a — `lib.sh` + `read_manifest.py` + os TRÊS
+arquivos de gate — e depois a W0b, os CINCO controles vermelhos das
+invariantes 1, 3, 4, 5 e 10 mais o runner `controls/run.sh` (seis ARQUIVOS,
+cinco controles: o AC-1 espera 5/5, rail r1 #14); e, se a OQ-9 tiver
+escolhido um executor de CI para esse runner, a **W0c** — um path, pela rota
+de KERNEL — ANTES de dar a W0 por fechada (rail r3 C2); os QUATRO sítios (predicado de descoberta em `DISCOVERY_ROOTS`,
+escopo da R8, `paths:` do `ceremony-lint.yml` e o quarto sítio que a OQ-9
+escolher) viajam no MESMO patch da W0a. Só então proponha a W1.»
 
 ## Success criteria
 
@@ -748,3 +1267,50 @@ controles vermelhos das invariantes 1, 3, 4, 5 e 10 + os QUATRO sítios de gate
   dos clones assinados; OQ-3 promovida a pré-condição e OQ-6 a OQ-9 abertas.
   Round 2 devido sobre o arquivo REVISADO — o round 1 não concedeu
   `design-coherent`.
+- 2026-09-06 (S347): round 2 do debate L3 sintetizado
+  (`.claude/plans/PLAN-188/debate/round-2/consensus.md`; três críticos `ADJUST`
+  com 10 bloqueantes somados, veredito `RUN-ANOTHER-ROUND`; dos 15 must-fix do
+  round 1, o sintetizador verificou 12 FECHADOS e 3 PARCIAIS em disco). Os 5
+  achados de consenso (D1-D5) e os 15 must-fix do round 2 foram absorvidos
+  NESTE arquivo: predicado de descoberta por DIRETÓRIO incluindo `.py`, com o
+  controle positivo trocado por um arquivo SEM token de cerimônia (D1); as
+  CINCO classes bloqueantes e a marca decidida arquivo a arquivo (D2); o ESCAPE
+  do lint — 44 waivers por sha256 de conteúdo, `--waivers`,
+  `CEO_CEREMONY_LINT_UNLOCK` — escrito, com os dois arquivos de autoridade
+  absorvidos pelo AC-6 (D3); a R8 alargada com o modo de invocação declarado
+  (D4); o executor do runner promovido a pré-condição e o custo do quarto sítio
+  medido (D5, K1); o braço do marcador da invariante 3 decidido como argumento
+  explícito (K2); OQ-7 e OQ-9 promovidas a pré-condições da W0 (K3, D5); W0a/W0b
+  nomeando ARQUIVOS e a tabela de QUEM escreve o arquivo que cada controle
+  falsifica (K4, K5); AC-2 com mapa e controle positivo (K6); AC-3 com critério
+  de morte (K7); AC-4 com digest conferido por `shasum -c` (K8); o ganho de
+  custódia do endereço novo escrito (K9); o rail da allowlist de signatários
+  nomeado (K10); citações do `PLAN-SCHEMA.md` com path completo (K11); e o
+  ponteiro do plano corrigido (K12). Round 3 devido; o plano segue `draft`.
+- 2026-09-06 (S348): duas correções sobre a revisão acima. (i) **Refutação F1**
+  — as figuras do lint que esta revisão passou a citar (122 descobertos, 121 de
+  `.claude/plans/**`, 55 com BLOCKING) eram propriedade da ÁRVORE VIVA do
+  mantenedor, cujos diretórios `staged/` são `gitignore`d; um checkout limpo
+  devolve 109 / 108 / 42. Os números passaram a viver em UM censo (§Riscos),
+  medido em worktree limpo com a base declarada, e os outros dois sítios
+  APONTAM para ele em vez de repeti-lo. (ii) **Decisão do Owner (S348)**: o
+  PLAN-174 vira `superseded_by: PLAN-188`, e a W3 dele — cortes rc/GA de input
+  declarativo — passa a ser item NOMEADO da subwave de aposentadoria do
+  `generate-ceremony.sh`, junto com a suíte `test_generate_ceremony.sh`
+  (§Approach «Reconciliação», §Items W2). O plano segue `draft` e o round 3
+  segue devido.
+- 2026-09-07 (S348, noite autônoma, Owner ausente, land livre combinado):
+  `p188-plan-r3` landado — a revisão do round 2 do debate L3 entra na árvore
+  (52 ops, 15/15 must-fix com o denominador LIDO do consenso, 636/85 linhas),
+  rebaseada em `a6629d0`: o censo do §Riscos volta a conferir com a medição em
+  checkout limpo (`gen-figures.py` rc 0, 10/10 linhas), o colchete falso sobre
+  a revisão de portfólio saiu e as duas citações do PLAN-174 apontam para as
+  linhas que existem hoje (`:4-5` e `:125-126`). Sem rodada de codex por regra
+  R1 do Owner (pacote de DOCS): o portão foi os gates de corpus + verificação
+  do CEO + CI. Bateria: validate-governance COMPLETO 0 erros, staleness rc 0,
+  claude-md-claims rc 0, env-hygiene rc 0, contamination rc 0, verify-counts
+  rc 0 (15993 em [15193..16792]), validadores de plano 76 passed, âncoras
+  43/43 na árvore VIVA, inventário 100 citações com OUT-OF-RANGE 0, oráculo 0.
+  Controles negativos: sha do censo revertido rc 2, árvore não derivada rc 2,
+  2.ª aplicação rc 2, `--root` ausente rc 2. O plano segue `draft`: o round 3
+  do debate L3 continua devido.
