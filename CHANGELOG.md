@@ -150,7 +150,6 @@ directory shared by every project (`9de4efc`, `965fb13`, `3d16070`).
   hooks than in v1.3.0** (20 → 29 registrations, 28 basenames); every
   newly included hook that can still block is named in
   `_derivation.blocking_inclusions` together with its escape route.
-- ADR-197 is `PROPOSED`, not `ACCEPTED` — the flip is a separate ceremony.
 
 ### Added — compaction continuity and work-boundary persistence (PLAN-179, ADR-195)
 
@@ -258,8 +257,7 @@ call today**:
   separate files counted by `verify-counts.sh`): ADR-192 gate-scripts
   checksum manifest, ADR-193 break-glass repo kill switches, ADR-194
   delivery-route resolution, ADR-195 work-boundary persistence, ADR-196
-  installer write confinement, ADR-197 user-profile derivation
-  (`PROPOSED`).
+  installer write confinement, ADR-197 user-profile derivation.
 - Counts moved: hook scripts on disk 57 → **59**; wired in
   `settings.json` 46 → **48** (48 → **50** event registrations); shared
   `_lib` modules 68 → **71**; ADR files 192 → **198**; collected test

@@ -209,9 +209,14 @@ D. Edit `CLAUDE_FULL.md` instead; the short file is cache-stable.
 
 **Correct: B.** Gate-1 files (`CLAUDE.md`, `PROTOCOL.md`, `team.md`,
 `frontend-team.md`, core `ceo-orchestration/SKILL.md`) are cache-stable
-across sessions — each mid-session edit invalidates the ~44,786-token
-gate-boot cache and re-pays that cost on the next turn. Save edits for
-the closeout ceremony. See `docs/opus-4-7-operations.md` §2.
+across sessions — each mid-session edit invalidates the gate-boot cache
+and re-pays that cost on the next turn. The re-paid floor was MEASURED
+at 97,292 tokens at a real compaction boundary (independent cold control
+97,097, delta 0.20%), and it is not a constant — a 41-sample cold series
+spreads 51.7% around its mean, and the boundary measurement itself is
+`n = 1`. The older ~44,786 figure is REFUTED. Save edits for the closeout
+ceremony. Measurement: `.claude/plans/PLAN-179/w0-measurement.md` §F.2
+(cold control §C.4; series and honest boundaries §F.7-§F.8).
 </details>
 
 ### Q10. Which of these DOES invalidate the Gate-1 cache?
@@ -249,16 +254,23 @@ Edit CHANGELOG.md whenever you commit.
 
 A. ~1,000.
 B. ~5,000.
-C. ~44,786 (the gate-boot prefix).
-D. ~100,000 (the full context window).
+C. ~97,000 (the measured re-paid gate-boot floor).
+D. ~250,000.
 
 <details>
 <summary>Answer</summary>
 
-**Correct: C.** The gate-boot prefix is ~44,786 tokens (CLAUDE.md +
-PROTOCOL.md + team.md + frontend-team.md + core SKILL.md). An edit
-invalidates the whole prefix. The rest of context remains cached but
-the gate prefix re-pays from scratch. See `docs/opus-4-7-operations.md`.
+**Correct: C.** The re-paid floor was MEASURED at 97,292 tokens at a
+real compaction boundary, with an independent cold control at 97,097
+(delta 0.20%). An edit invalidates the whole gate-boot prefix (CLAUDE.md
++ PROTOCOL.md + team.md + frontend-team.md + core SKILL.md); the rest of
+context stays cached but that prefix re-pays from scratch. Treat the
+number as an order of magnitude, not a constant: the boundary
+measurement is `n = 1`, and the 41-sample cold series spreads 51.7%
+around its mean. The ~44,786 figure earlier revisions of this file
+taught is REFUTED. Measurement and series:
+`.claude/plans/PLAN-179/w0-measurement.md` §F.2 (cold control §C.4;
+series and honest boundaries §F.7-§F.8).
 </details>
 
 ---

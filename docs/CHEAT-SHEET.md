@@ -306,7 +306,7 @@ the dominant cost driver of multi-wave plans.
 
 | Anti-pattern | Why |
 |--------------|-----|
-| Edit `CLAUDE.md` / `PROTOCOL.md` / `team.md` / `frontend-team.md` / `ceo-orchestration` SKILL.md mid-session | Invalidates the prompt cache; re-pays ~44,786-token gate-boot per turn (PLAN-020 §cache discipline) |
+| Edit `CLAUDE.md` / `PROTOCOL.md` / `team.md` / `frontend-team.md` / `ceo-orchestration` SKILL.md mid-session | Invalidates the prompt cache; re-pays the gate-boot per turn — MEASURED at 97,292 tokens at a real compaction boundary (cold control 97,097; boundary sample is n=1 and the 41-sample cold series spreads 51.7%, so treat it as an order of magnitude). The older ~44,786 figure is REFUTED. See `.claude/plans/PLAN-179/w0-measurement.md` §F.2 (PLAN-020 §cache discipline) |
 | Run hooks directly (`python3 .claude/hooks/check_*.py`) outside Claude Code | They expect Claude Code's PreToolUse/PostToolUse JSON envelope on stdin |
 | Use `CEO_SOTA_DISABLE=1` as a debugging shortcut | It hides bugs you would otherwise see; use only for emergency fallback |
 | Edit `.claude/agents/<archetype>.md` `model:` field without reading ADR-052 | The model split is calibrated against rubrics; arbitrary changes regress quality |
