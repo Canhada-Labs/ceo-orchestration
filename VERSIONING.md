@@ -111,7 +111,10 @@ Three artifacts move together at a tag:
 1. `VERSION` at repo root reflects the new version number.
 2. `npm/package.json` `version` matches (npm publishes on tag via
    `.github/workflows/npm-publish.yml`).
-3. `CHANGELOG.md` entry exists under `## [vN.N.N] - YYYY-MM-DD`.
+3. `CHANGELOG.md` entry exists under `## [N.N.N] - YYYY-MM-DD` (the
+   heading carries the bare version, with no `v` prefix, and for an RC
+   it is the BASE version — `release.sh preflight` greps
+   `^## \[<base>\]`).
 
 The tag is the single event. If any of these three is out of sync at
 tag time, `release.yml` fails.

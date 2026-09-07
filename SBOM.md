@@ -61,32 +61,48 @@ any hook execution path:
 The stdlib modules used by the core are enumerated below.
 
 **Count: 0 third-party runtime dependencies in `.claude/hooks` + `_lib`.** Every
-module below ships with CPython ≥ 3.9 (ADR-002 stdlib-only invariant).
+module below ships with CPython ≥ 3.9 (ADR-002 stdlib-only invariant). The
+table is derived by AST over `.claude/hooks/_lib/*.py`, `.claude/hooks/check_*.py`
+and `.claude/hooks/audit_log.py`, keeping top-level absolute imports only; the
+grep recipe above is the quick approximation of the same scan.
 
 | Module | Usage in framework |
 |---|---|
 | `argparse` | CLI surface of `.claude/scripts/*.py` |
+| `atexit` | spool drain + test-isolation teardown (`_lib/spool_writer.py`) |
 | `base64` | `_lib/redact.py` b64-string redaction |
 | `binascii` | fingerprint hex encoding |
+| `bisect` | sorted-window lookup in overhead accounting |
 | `collections` | `Counter`, `defaultdict` in metrics + redactors |
+| `contextlib` | context managers in the harness-config reader |
 | `dataclasses` | SPEC/v1 record shapes |
 | `datetime` | UTC timestamps in audit emit |
 | `enum` | decision codes, severity levels |
 | `errno` | filelock contention detection |
+| `fcntl` | advisory file locking (`_lib/filelock.py`) |
 | `fnmatch` | allowlist pattern matching |
 | `getpass` | `$USER` fallback for audit records |
+| `glob` | plan/scratchpad path enumeration |
 | `hashlib` | SHA-256 fixture hashing, canonical-edit sentinel |
+| `hmac` | the audit-chain HMAC itself (`_lib/audit_hmac.py`) |
+| `importlib` | guarded optional-module probes; contract loading |
+| `io` | in-memory streams in the bash-safety and config readers |
 | `json` | payload parsing, audit emit |
+| `logging` | diagnostic channel in the secret-pattern compiler |
 | `math` | confidence/effort calculations |
 | `os` | env, path, perm bits |
 | `pathlib` | file paths |
+| `platform` | OS discrimination in the pair-rail substrate probe |
 | `random` | jitter in retry (test-only) |
 | `re` | regex policy matching |
+| `secrets` | key material + salt generation (`_lib/audit_hmac.py`) |
 | `shlex` | bash safety tokenizer |
 | `shutil` | install.sh companion utilities |
+| `signal` | regex-compile and scan timeouts |
 | `socket` | audit-dashboard SSE loopback |
 | `sqlite3` | audit-registry drift index (read-only adopter view) |
 | `ssl` | adapter HTTPS live path |
+| `stat` | permission-bit checks on the audit dir, key and state files |
 | `statistics` | perf-baseline median/p95 |
 | `subprocess` | install.sh shell-outs (guarded) |
 | `sys` | stdio, exit codes |
@@ -97,6 +113,8 @@ module below ships with CPython ≥ 3.9 (ADR-002 stdlib-only invariant).
 | `unicodedata` | redaction normalization |
 | `unittest` | test runner fallback |
 | `urllib` | adapter live-call transport |
+| `uuid` | correlation ids for spool records and RAG bridge calls |
+| `zlib` | compression in audit emit |
 
 ---
 

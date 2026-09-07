@@ -565,7 +565,7 @@ smoke gate.
 ## SPEC v1 schemas
 
 The framework ships its own published compliance contract at
-`SPEC/v1/` (~32 `.md` schema files at v1.18.0). These schemas define
+`SPEC/v1/` (32 `.md` files, 28 of them `*.schema.md`). These schemas define
 the canonical shapes the framework guarantees stable across minor
 versions:
 
@@ -642,6 +642,20 @@ What gets refreshed:
 - `.claude/.framework-version` — the framework version marker, rewritten
   to the source version on every upgrade (this is what
   `check-framework-updates.sh` and forensic triage read post-upgrade).
+- `docs/` and `.github/` deliveries — **new in v1.4.0**; skipped on
+  `--ceremony user` installs. Upgrades from v1.3.0 and earlier never
+  delivered these two trees, so an adopter who installed once and
+  upgraded thereafter kept the ORIGINAL `docs/BRANCH-PROTECTION.md`,
+  `docs/rotation-log.md`, `.github/CODEOWNERS` and the two workflow
+  templates indefinitely. Which source file produces each destination is
+  answered by `scripts/delivery-routes.tsv` (ADR-194), and delivery is
+  hash-gated against the git generations of that source: a byte-pristine
+  copy of a known prior framework generation is replaced, anything you
+  edited is PRESERVED with a named `STALE` report. A failed delivery
+  exits 3 and records `upgrade_succeeded: false` in the install-state.
+  In CI, a depth-1 `actions/checkout` cannot see older generations, so
+  files are preserved and reported `STALE` — deepen the history first if
+  you want the refresh.
 
 What is **NOT** touched (user data):
 
@@ -660,7 +674,18 @@ from `.claude/.install-state.json` with a dedicated reader that runs
 even under `--no-replay`. **Installs without a readable
 `.install-state.json` (all pre-Wave-B installs) are treated as
 `user` on upgrade** — the fail-SAFE default since the rc.4 re-pass
-(root PROTOCOL/SPEC/.gitignore delivery is SKIPPED, loudly). A
+(root PROTOCOL/SPEC/.gitignore delivery is SKIPPED, loudly).
+
+**Since v1.4.0 an unknown ceremony also withholds hook registration.**
+With no readable install-state, no `--ceremony` flag and no
+`CEO_UPGRADE_CEREMONY`, the upgrade reports `PARTIAL (ceremony unknown)`
+and registers NO hooks — only the settings BOTH profiles declare with
+the same value are written, and `settings.json` is otherwise untouched.
+The roster is DERIVED from the settings template of the ceremony you
+name, so a wrong guess can no longer promote a `--ceremony user` install
+to the maintainer profile (which would turn an advisory hook into a
+blocking one). Pass `--ceremony maintainer` or `--ceremony user` to
+register the profile you actually installed. A
 pre-state MAINTAINER install opts back in with
 `upgrade.sh <target> --ceremony maintainer` (or the
 `CEO_UPGRADE_CEREMONY=maintainer` env override); an EXPLICIT choice is

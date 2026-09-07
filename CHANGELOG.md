@@ -9,11 +9,295 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> v1.3.0: 166 skills, 27 slash commands, 198 ADRs, 71 `_lib` modules) are
+> v1.4.0: 166 skills, 27 slash commands, 198 ADRs, 71 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
 
 ---
+
+## [1.4.0] - 2026-09-07
+
+Continuity, delivery and installer-safety train (PLAN-179 compaction
+continuity and work-boundary persistence; PLAN-182 per-project audit
+isolation; PLAN-183 delivery routes and an upgrade that finally
+delivers `docs/` and `.github/`; PLAN-185 installer write
+confinement; PLAN-169 a `user` profile derived from the base instead
+of hand-maintained). The headline for an adopter is that
+`upgrade.sh` now delivers the two trees it silently skipped for four
+releases, and that the installer can no longer write outside the
+directory you hand it. Two security fixes in the install path, one
+audit-log scope change adopters share a machine over, and the honest
+part: the compaction-continuity feature this train is named after
+shipped only after its first design was measured and found to deliver
+nothing. As always: governance and auditability — no speed claim.
+
+### Fixed — `upgrade.sh` silently skipped `docs/` and `.github/` (PLAN-183, ADR-194)
+
+The most consequential adopter-visible defect closed in this release.
+From v1.0.0 through v1.3.0, `scripts/upgrade.sh` never delivered the
+`docs/` and `.github/` trees that `install.sh` delivers — an adopter
+who installed once and upgraded thereafter kept the *original*
+`docs/BRANCH-PROTECTION.md`, `docs/rotation-log.md`, `.github/CODEOWNERS`
+and the two CI workflow templates forever, with no warning.
+
+- **Upgrade now delivers both trees**, hash-gated against the git
+  generations of the SOURCE file: a byte-pristine copy of a known prior
+  framework generation is replaced, anything you edited is PRESERVED
+  loudly. Delivery is registered only after it actually happened, or
+  when a prior registration's digest still matches. A failed delivery
+  exits 3 and persists `upgrade_succeeded: false` in the install-state
+  rather than recording a full upgrade that did not happen (`6304f66`).
+- **One route table, three readers.** `scripts/delivery-routes.tsv` is
+  now the single answer to "which source file produces this
+  destination?", read by the manifest generator, `doctor.sh` and the
+  parity classifier — no reader carries a private copy. Four separate
+  defects (`upgrade.sh` not delivering, the parity classifier and the
+  manifest generator resolving the wrong source, and `doctor.sh`
+  REPAIRING with the wrong file) all had the same shape: no single
+  owner for that question. Contract: ADR-194 (`b6de7cf`, `aaf32c7`,
+  `6304f66`, `3bc3638`).
+- **`doctor.sh` repaired deliveries from the wrong source** before this
+  release; the positive control reproduced a leak of the maintainer's
+  live `.github/CODEOWNERS` into an adopter repo. `doctor.sh` now reads
+  the same route table (`6304f66`).
+- **Shallow-clone caveat, named:** in CI with `actions/checkout` at
+  depth 1 the hash gate cannot see older generations, so files are
+  PRESERVED (safe) and reported `STALE`. Deepen the history before
+  upgrading in CI if you want the refresh.
+
+### Security — the installer can no longer write outside the target (PLAN-185, ADR-196)
+
+- **`install.sh` wrote outside `$TARGET`** when a destination path was a
+  pending symlink or hardlink. One destination-confinement predicate now
+  lives in `scripts/_framework_manifest_set.sh`; `install.sh` pre-flies
+  EVERY destination before the first write and refuses by name,
+  `upgrade.sh` consumes the same predicate. E2E in bytes: 105/0 after the
+  cure against 22/33 before it (`cc00235`).
+- **`--github-owner` with a `/` in it left `.github/CODEOWNERS` at zero
+  bytes, permanently.** The handle grammar is now shared by producer and
+  consumer, the file is rendered through a pipe and written atomically,
+  and a truncated CODEOWNERS is recovered from delivery EVIDENCE
+  (`cc00235`).
+- **`uninstall.sh` followed a crafted manifest out of the target.** The
+  install manifest is a plain file in your repo and is NOT
+  integrity-checked before the removal walk; pre-cure, a record naming
+  `../outside/victim.txt` was REMOVED, and with a symlinked `docs`
+  component the walk deleted an outside file and the backup archived
+  bytes read through the link. Every removal, backup entry and restore
+  member is now tested lexically (absolute paths, `..` segments, control
+  characters, whitespace and glob metacharacters, option-like `-`
+  leaders) and physically (a symlinked ancestor under the target)
+  (`6160578`).
+- **`doctor.sh` stopped discarding unsafe manifest records in silence** —
+  traversal, absolute path, any control byte, symlinked ancestor,
+  malformed digest and duplicate relpath are each a NAMED discard, capped
+  at 20 and folded into `UNRESOLVED` (rc 1); a manifest containing a NUL
+  is refused before the parse (`ba15c71`).
+- A fail-closed census of installer write sites
+  (`check-installer-write-safety.py`) ships as a RATCHET in `validate.yml`
+  with its blind spots declared in the plan, not papered over.
+
+### Changed — audit log resolves per PROJECT, not per `$HOME` (PLAN-182, ADR-001)
+
+**Adopter-visible if you run the framework in more than one repository
+under the same `$HOME`.** Runtime state — the HMAC audit log, its key,
+lock, errors, salt and sidecars — now resolves through one family
+resolver (`.claude/hooks/_lib/runtime_paths.py`) using Claude Code's own
+path-based project slug, instead of a literal `ceo-orchestration`
+directory shared by every project (`9de4efc`, `965fb13`, `3d16070`).
+
+- What this buys, measured: chains that no longer interleave, correct
+  `project` attribution, a `verify_chain()` that means something per
+  project, and a per-project HMAC key and salt — so `prompt_sha256` stops
+  correlating across your repositories.
+- **The old location is not migrated for you.** The pre-v1.4.0 chain
+  under `$HOME/.claude/projects/ceo-orchestration/` stays where it is;
+  `SPEC/v1/audit-log.schema.md` records the change as v2.58 and names the
+  legacy path.
+- **The limit that does NOT go away:** under the same UID one project's
+  process can still read another's `0700` directory and `0600` key. A
+  real boundary needs a separate UID; that is out of scope by decision,
+  and said here rather than implied away.
+- The resolver ships with a CLI
+  (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir|--slug|--project-dir
+  [--project PATH]`) used by the pre-push templates and by
+  `ceo-backup`/`ceo-restore` (`3d16070`).
+
+### Changed — upgrade withholds hook registration when the ceremony is unknown (PLAN-169, `5930974`)
+
+- `upgrade.sh` now DERIVES which hooks to register from the settings
+  template of the ceremony you actually installed, instead of a
+  hardcoded roster that would have silently promoted a `--ceremony user`
+  install to the maintainer profile.
+- **New behavior you may see:** with no readable install-state, no
+  `--ceremony` flag and no `CEO_UPGRADE_CEREMONY`, the upgrade reports
+  `PARTIAL (ceremony unknown)` and registers NO hooks — only the settings
+  both profiles declare identically. Pass `--ceremony maintainer` or
+  `--ceremony user` to register the profile you installed. The previous
+  behavior (inferring, and getting it wrong) could turn an advisory hook
+  into a blocking one.
+
+### Changed — the `user` ceremony profile is now DERIVED, not hand-maintained (PLAN-169, ADR-197)
+
+- `templates/settings/settings.user.json` is generated from
+  `settings.base.json` by a declared subtraction recorded in its own
+  `_derivation` key, applied by `.claude/scripts/gen-settings-user-template.py`,
+  with a byte-for-byte `--check` mode wired into `validate.yml` (`303ae55`).
+- The prose it replaces had rotted: it claimed the profile removed
+  "exactly 10" hooks while a census measured 26 removed basenames, a
+  hand-narrowed matcher, a silently dropped second registration and four
+  hand-edited annotations. **The `user` profile therefore registers more
+  hooks than in v1.3.0** (20 → 29 registrations, 28 basenames); every
+  newly included hook that can still block is named in
+  `_derivation.blocking_inclusions` together with its escape route.
+- ADR-197 is `PROPOSED`, not `ACCEPTED` — the flip is a separate ceremony.
+
+### Added — compaction continuity and work-boundary persistence (PLAN-179, ADR-195)
+
+Two new hooks, both **advisory, both fail-open, neither blocks a tool
+call today**:
+
+- **`check_compact_pinning.py`** (`SessionStart`, matcher `compact`):
+  after a context compaction, re-states the pinned governance
+  constraints from a CODE constant (`_lib/pinned_constraints.py`) via
+  `additionalContext`, so the summarizer cannot evict them. Kill switch:
+  `CEO_CONSTRAINT_PINNING=0`.
+- **`check_ledger_checkpoint.py`** (`PreToolUse`, matcher `Bash`): on a
+  `git commit` that lands plan-scoped work, reports whether that plan's
+  `LEDGER.md` is in the same commit. Scope is derived MECHANICALLY from
+  the committed PATHS. No branch in the module returns a decision —
+  there is no deny arm to disarm. Kill switches:
+  `CEO_LEDGER_CHECKPOINT=0`, `CEO_SOTA_DISABLE=1` (`b07be9b`, `bc82651`).
+- **`session_memory_delta_observed`** at `SessionEnd` records whether a
+  session that did work also wrote memory (stat-only: no memory content
+  is read or logged).
+- **Audit-log SPEC v2.55 → v2.60**, additive as always
+  (`SPEC/v1/audit-log.schema.md`); the known-action set is 331 entries.
+- **The honest part.** ADR-153's original continuity design shipped in an
+  earlier train and delivered NOTHING: the real autocompact fired both
+  hooks and produced `snapshot_outcome=scratchpad_unavailable`,
+  `plan_id=unknown`, because plan resolution required an event from the
+  session's own history — 2 such events in 12,515 log lines. The rebuilt
+  version derives the plan from committed paths instead. Related
+  measurement that corrects a number this project published: the context
+  floor re-paid after a compaction was measured at **97,292 tokens** at a
+  real compaction boundary (independent cold control: 97,097), roughly
+  twice the ~45-55k this repository previously claimed, and it is not a
+  constant — a 41-sample series spreads 51.7% around its mean.
+
+### Added — the CI template we deliver is now actually EXECUTED in the smoke test (PLAN-183, `6160578`)
+
+- `scripts/tests/smoke-install.sh` activates the delivered
+  `validate.yml.template` in a throwaway target and runs its steps in
+  order, one `bash -eo pipefail` per step, stopping at the first red. Any
+  workflow shape outside the frozen subset is a parse FAILURE, never a
+  vacuous green. Runs on Linux with `CI=true` or
+  `CEO_SMOKE_EXECUTE_CI=1`; elsewhere it lists the steps with a note.
+- **The delivered template changed accordingly:** it is SHA-pinned
+  (`actions/checkout`), honors a `CEO_SOTA_DISABLE=1` repository variable
+  as a kill switch, raises its own timeout 5 → 15 minutes, and skips the
+  YAML catalog syntax check when PyYAML is absent instead of red-flagging
+  a slim runner. It ships INERT with a `.template` suffix; activation is
+  still an explicit `mv -n` you perform.
+
+### Added — `claude-fable-5-1` in the model allowlist (`ab56e76`)
+
+- `claude-fable-5-1` joins `availableModels` in `.claude/settings.json`
+  and in the shipped settings templates. Adopting a new model is
+  deliberately never automatic: the VETO floor, the pins and the agent
+  definitions stay Owner-signed by design (ADR-149 remains the single
+  source for the model catalog).
+
+### Fixed — seven VETO-bearing skills were demoted to name-only (`b7dad83`)
+
+- `kill-switches`, `latency-budgets`, `equity-research`,
+  `financial-correctness-and-math`, `financial-display`,
+  `prediction-markets` and `trading-execution` were listed under
+  `skillOverrides` as `name-only`, which withholds their body from the
+  agent — including from the veto paths that are supposed to read them.
+  All seven are undemoted in BOTH settings profiles. Four skills with no
+  veto role (`cpp-testing`, `frontend-slides`, `prisma-patterns`,
+  `ui-demo`) were added to the name-only list in their place.
+
+### Fixed — the test suite was writing into the live HMAC chain (`2ae16d2`, `7a618c9`, `3d16070`)
+
+- Measured: 2,356 `policy_*` events over 7 days — 19 processes × exactly
+  124 — all with an empty `session_id`, 79% of the live segment. The
+  emitter was `python3 -m pytest --collect-only`, run before every
+  commit: the isolation layer popped the environment carrier at import
+  time but redirected the log in a session FIXTURE, and `--collect-only`
+  runs the first without the second. Cured in two layers, with a positive
+  control and an anti-rot guard. Adopter-relevant only if you run this
+  repository's own suite; recorded here because it corrupted the
+  integrity signal this project sells.
+
+### Fixed — `git log --since=<N>h` was a silent misparse (`9af6114`)
+
+- Two instruments passed an hour-suffixed window to `git log --since`,
+  which git's approxidate parser DISCARDS — collapsing the window
+  silently rather than erroring. Both sites cured, twelve regression
+  tests added.
+
+### Changed — documentation
+
+- `docs/UPGRADE-PROCEDURE.md` said `--pin` was "durable; subsequent
+  `upgrade.sh` calls honor the pinned version". **It is not, and never
+  was.** The pin checks the source tree out at the ref, runs the upgrade,
+  and restores the original branch on exit; only `--profile` and
+  `--stack` are replayed from the install-state. The document is
+  corrected to match `VERSIONING.md`, which was right all along.
+- New: `docs/CONTEXT-CONTINUITY-GUIDE.md`, `docs/task-classifier-2b.md`,
+  an expanded `docs/threat-model.md`, and
+  `docs/BUG-REPORT-adopter-harness-config-replay-fixtures.pt-BR.md`. These are
+  framework-repo documents; `install.sh` delivers only the two `docs/`
+  files named in `scripts/delivery-routes.tsv`.
+
+### Governance
+
+- ADRs 191 → **197** by NUMBER; 198 ADR files on disk (amendments are
+  separate files counted by `verify-counts.sh`): ADR-192 gate-scripts
+  checksum manifest, ADR-193 break-glass repo kill switches, ADR-194
+  delivery-route resolution, ADR-195 work-boundary persistence, ADR-196
+  installer write confinement, ADR-197 user-profile derivation
+  (`PROPOSED`).
+- Counts moved: hook scripts on disk 57 → **59**; wired in
+  `settings.json` 46 → **48** (48 → **50** event registrations); shared
+  `_lib` modules 68 → **71**; ADR files 192 → **198**; collected test
+  cases ~14,000 → **~15,400**. Unchanged since v1.3.0: **166 skills**
+  (42 core + 8 frontend + 116 domain), **27 slash commands**, **32
+  `SPEC/v1` files** (28 `*.schema.md`), **4 TLA+ specifications**.
+- 435 commits since v1.3.0. Canonical changes landed as
+  Owner-GPG-signed ceremonies with per-phase sentinels and closed scopes.
+
+### Known issues
+
+Carried into 1.4.0 deliberately, each with its state named:
+
+- **The `PROTOCOL.md` pointer delivered to an adopter is absolute**, not
+  relative — it embeds the maintainer's framework path. Found in field
+  testing at S315, still OPEN; the cure is PLAN-183 W1 and did not make
+  this release.
+- **The CI hook-latency gate is sensitive to a slow runner.** The probe
+  measures spawn cost and cannot see runner contention: the same hooks at
+  the same SHA measured 77 ms locally and 209-435 ms in CI, failing three
+  afternoon runs and passing at night. A RELATIVE gate
+  (`hook_p50 ≤ K × ref_p50`) is landed in phase 1 ADVISORY only
+  (`4bd7def`); making it the enforcing gate is decided but not shipped.
+- **The pair-rail is inert until you install Codex separately**, and it
+  is a same-class reviewer — unchanged from v1.3.0, restated because it
+  is the most misread property of this framework.
+- **The ownership e2e ends 62 green / 3 red by design**
+  (`OWN-0016`/`0024`/`0027`, causes in ADR-190). An all-green run means
+  the decision table changed — stop and find out why.
+- **Fence-shadow variant 5 in the release verdict gate** stays outside
+  the threat model (the signer is the Owner); the fixed-format envelope
+  that closes it is named for a future release.
+- **The formal model is still not in CI.** The TLA+ specifications under
+  `docs/formal-verification/` are specifications, not a verified claim.
+- **`upgrade.sh` under `--pin <ref>` where `<ref>` predates `aaf32c7`**
+  finds no route table in the pinned tree; the running upgrader now
+  copies the table's bytes out of its own checkout first, so the pinned
+  upgrade still delivers.
 
 ## [1.3.0] - 2026-08-04
 

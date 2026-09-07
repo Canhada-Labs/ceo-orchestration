@@ -266,6 +266,17 @@ get a "by-design" response:
   tamper, **preserve audit-log.jsonl + audit-key TOGETHER** before
   remediation — the forensics depend on the pair. Full residual list
   in `docs/HONEST-LIMITATIONS.md` §7 and ADR-055 §Threat Model.
+- **Cross-project reads under the same UID** (v1.4.0, PLAN-182 /
+  ADR-001). Runtime state now resolves PER PROJECT: each project gets
+  its own `0700` state directory, `0600` HMAC key and salt under
+  `~/.claude/projects/<slug>/`, so chains no longer interleave and
+  `prompt_sha256` no longer correlates across your repositories. What
+  this does NOT do: a process running as your user in project A can
+  still read project B's directory and key — file modes are not a
+  boundary against the UID that owns them. A real boundary needs a
+  separate UID, which is out of scope by decision. Note also that the
+  pre-v1.4.0 chain under `~/.claude/projects/ceo-orchestration/` is
+  **not migrated for you**; preserve it yourself if you need it.
 - **Nation-state attacker** — out of scope. The framework cannot defend
   against a Tier-4 adversary that compromises Anthropic's TLS stack or
   the Claude model itself.

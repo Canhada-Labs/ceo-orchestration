@@ -118,8 +118,13 @@ bash scripts/upgrade.sh --pin v1.11.2
 The `--pin` mode:
 
 - Refuses to upgrade if `.claude/` has uncommitted changes.
-- Records the pinned version in your project (durable across
-  subsequent `upgrade.sh` calls without `--pin`).
+- Is **one-shot, not durable**. It checks the framework source out at
+  that ref, runs the upgrade, and restores the source branch on exit
+  (`scripts/upgrade.sh` `_upgrade_cleanup`). The ref is recorded in
+  `.claude/.install-state.json` under `last_upgrade.pin` as history
+  only: the next `upgrade.sh` replays `--profile` and `--stack` from
+  that file and **nothing else** (`scripts/upgrade.sh:817,822`). To stay
+  on a pinned version, pass `--pin <tag>` on every upgrade.
 - Has no MAJOR-boundary guard and no `--allow-major` flag — it
   checks out exactly the tag you pass. Consult `CHANGELOG.md`
   before crossing a MAJOR.
@@ -443,8 +448,10 @@ bash scripts/upgrade.sh --pin v1.11.2
 bash scripts/upgrade.sh --pin v1.11.x    # promote to GA when audit-v3 + soak windows clear
 ```
 
-The `--pin` flag is durable; subsequent `bash scripts/upgrade.sh`
-calls (without `--pin`) honor the pinned version.
+The `--pin` flag is **one-shot**: a subsequent `bash scripts/upgrade.sh`
+without `--pin` follows the source checkout's current default branch, not
+the version you pinned. Pass `--pin` on every upgrade to hold a version
+(see `VERSIONING.md` §Adopter pinning).
 
 ## Coordinating an upgrade across a team
 
