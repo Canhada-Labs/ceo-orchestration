@@ -1,8 +1,9 @@
 ---
 id: PLAN-184
 title: "Corte de custo de CI: filtro de paths e saida do runner pago"
-status: draft
+status: abandoned
 created: 2026-08-21
+abandoned_at: 2026-09-06
 owner: CEO
 depends_on: []
 level: L3
@@ -15,6 +16,40 @@ tags: [ci, custo, github-actions, runner, paths-filter, governanca]
 ---
 
 # PLAN-184 — Corte de custo de CI
+
+## Abandonment reason
+
+> **Fechado como residual registrado em 2026-09-06 (S347), por decisão do
+> Owner sobre o próprio pré-registro do plano (item `[P0][US0]` da W0).**
+
+O plano se auto-gateou: a W0-US0 (§ logo abaixo, "Waves") exigia que o
+Owner fixasse **N** (US$/dia) e **M** (%) tais que, se o teto medido da
+A1 ficasse abaixo de N OU a fração de custo só-docs abaixo de M, **a W1
+não abriria** e o plano fecharia como residual registrado — em vez de
+reabrir a discussão. O Owner decidiu **N = US$ 3/dia e M = 40 %**
+(`PLAN-186/debate/owner-decisions-S347.md`, item 4.6, AskUserQuestion,
+2026-09-06). Os dois números medidos na W0 (S344,
+`.claude/plans/PLAN-184/w0/w0-derivation-S344.md`) ficam abaixo dos dois
+pisos em QUALQUER das duas bases derivadas:
+
+| base | teto da A1 | fração só-docs |
+|---|---|---|
+| pré-A0 (citada pela decisão do Owner) | US$ 2,195/dia | 18,1 % |
+| pós-A0 (mais correta — a A0 já landou em `5ff06c9`) | US$ 1,443/dia | 17,8 % |
+
+Ambas abaixo de N = US$ 3/dia e de M = 40 %. **O que NÃO é abandono:** a
+premissa do plano (existe custo real de CI a cortar) não estava errada —
+a **A0** (§6-A, redução da matriz de Python de 4 para 2 versões no
+`push`) já landou e captura a maior parte do valor barato e sem risco
+novo de "guard verde porque não vê o alvo" (§3). O que fecha aqui é
+especificamente **A1** (filtro de paths nos 4 jobs pesados) e **A2** (os
+2 jobs seriais saindo do runner pago): o prêmio residual depois da A0 não
+justifica, na avaliação pré-registrada do próprio Owner, o custo de uma
+cerimônia canônica sobre 4 superfícies derivadas (§6, F10) e uma
+gramática de denylist nova para manter viva. As waves W1/W2/W3 (não
+iniciadas) ficam sem abrir; W-A0 permanece `done` como está.
+
+---
 
 > ## ⛔ ROUND 2 DO DEBATE (S321) — OS NÚMEROS DESTA SEÇÃO ESTÃO REFUTADOS
 >
@@ -888,7 +923,7 @@ mecânico". A decisão é dele; o plano não a antecipa.
 
 ### W0 — Medir e derivar antes de filtrar (read-only)
 
-- [ ] `[P0][US0]` **PRÉ-REGISTRO — o resultado que MATA o plano.**
+- [x] `[P0][US0]` **PRÉ-REGISTRO — o resultado que MATA o plano.**
       (Achado do round 2: nenhum dos cinco Checks da W0 interrompia o
       plano; as duas bases da US5 eram aceitáveis por construção, e a
       US1 não tinha fração mínima. Um pré-registro que não nomeia o
@@ -918,6 +953,22 @@ mecânico". A decisão é dele; o plano não a antecipa.
       Leitura honesta do que foi medido, e não uma recomendação: com
       **N ≥ US$ 1,50/dia** o pré-registro fecha o plano. **N e M são
       decisão do Owner** — esta nota calibra a escolha, não a substitui.
+
+      **✅ DECIDIDO pelo Owner (S347, 2026-09-06 — item 4.6 de
+      `PLAN-186/debate/owner-decisions-S347.md`, AskUserQuestion):**
+      «N = US$ 3/dia e M = 40 % (Recomendado)». O teto medido citado pela
+      decisão é **US$ 2,195/dia** (a base PRÉ-A0 da tabela acima) — abaixo
+      de N; e, sob a mesma base, a fração só-docs é 18,1 %, também abaixo
+      de M. **Leitura honesta:** o teto PÓS-A0 (US$ 1,443/dia, 17,8 %) —
+      a base mais correta, porque a A0 já landou (`5ff06c9`) — fica ainda
+      mais longe do piso, então a decisão fecha o plano sob QUALQUER das
+      duas bases. Registrado também: N e M foram fixados DEPOIS de a US1/US5
+      já terem publicado os números acima (S344), não antes — a ORDEM que o
+      próprio `Check:` deste item pede não foi seguida à risca; o veredito
+      em si (plano fecha) não muda com nenhuma das duas bases. **Efeito:**
+      o pré-registro US0 está CUMPRIDO, a W1 NÃO abre, e o plano fecha como
+      residual registrado — ver `## Abandonment reason` e o novo `status:`
+      no frontmatter.
 - [ ] `[P0][US0b]` **A unidade é o PUSH, não o commit.** `paths-ignore`
       no gatilho `push` avalia o diff `before...after` — a UNIÃO de
       todos os commits do push. **Re-derivado (S344): são 21 dos 167
@@ -1756,3 +1807,4 @@ esse é conferido à mão, pelo AC-10.
 ## Progress log
 
 - 2026-09-04 (S344, Owner presente, land combinado): `p184-derive-ci-cost` landado — W0 DERIVADA (US5/US1/US0b) sobre os 167 runs de push em `main` da janela 01-21/08 numa unica base por-JOB (`Ceo`, cada job arredondado ao minuto): a manchete caiu, a hipotese pre-registrada da US5 esta REFUTADA (o que falha e a premissa de custo por run uniforme — docs-only 97,62 min contra 68,09 de codigo) e o residuo de +6,2 % fica com a causa NOMEADA. Derivacao completa em `.claude/plans/PLAN-184/w0/w0-derivation-S344.md`; W0-US0 (N e M) segue decisao do Owner. Rail r1 (duas lanes codex em paralelo): 2 P2 declarados neste pack — a linha de metodo omite o `PRED_HEAD` (a aritmetica dos 167 intervalos foi REFUTADA em disco: o instrumento parte de um predecessor explicito) e a subsecao «Ressalva de composicao» fica sem marcador de substituicao, com o numero novo nomeando o velho dois paragrafos acima. Registro em `.claude/plans/PLAN-184/w0/s344-p184-derive-ci-cost/rail-land-round-1.md`. Bateria: 62 passed / 2 skipped nos testes de plano dos hooks, suite `.claude/scripts/tests/` completa e 6 gates de corpus rc 0 sobre a arvore STAGED; oraculo `--is-canonical` = 0 nos 2 paths.
+- 2026-09-06 (S347, docs, land livre): **plano FECHADO — `status: draft` -> `abandoned`.** O Owner decidiu N = US$ 3/dia e M = 40% para o pre-registro US0 (`PLAN-186/debate/owner-decisions-S347.md` item 4.6, AskUserQuestion). Os dois numeros medidos na W0 (S344) ficam abaixo dos dois pisos nas duas bases derivadas (pre-A0: US$ 2,195/dia e 18,1%; pos-A0: US$ 1,443/dia e 17,8%) — o pre-registro esta CUMPRIDO, a W1 nao abre, e o item `[P0][US0]` fecha `[x]`. Secao `## Abandonment reason` adicionada com a leitura completa. A W-A0 (ja landada em `5ff06c9`) fica como o resultado que sobrevive; W1/W2/W3 nao abrem.

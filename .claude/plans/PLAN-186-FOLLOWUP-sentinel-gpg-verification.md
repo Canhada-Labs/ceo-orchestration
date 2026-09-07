@@ -142,7 +142,9 @@ A decisao e do Owner porque muda o contrato entregue ao adopter.
 ## AC
 
 - [x] **AC-0 — DECIDIDO: (b) REMOVER. Feito e medido no proprio pacote
-  (S345); falta a RATIFICACAO do Owner.** O AC-0 nascera como pergunta
+  (S345); RATIFICADO pelo Owner em 2026-09-06 (S347, item 4.2 de
+  `PLAN-186/debate/owner-decisions-S347.md`, AskUserQuestion: «Ratificar
+  a remoção (Recomendado)»).** O AC-0 nascera como pergunta
   aberta entre **(a) verificar** e **(b) remover**. Uma rodada de refutacao
   sobre o pacote ja curado transformou a recomendacao em ACHADO: a isencao
   nao era apenas inutil, era FORJAVEL. As quatro checagens perguntavam por

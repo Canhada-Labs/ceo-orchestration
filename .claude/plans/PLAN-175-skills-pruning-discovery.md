@@ -170,3 +170,13 @@ Nenhum passo muda. Leitura ADICIONAL (advisory) no AC do P5: medir com
 a skill `context-budget` o delta de tokens do catálogo pré/pós-poda e
 publicar junto das superfícies derivadas — transforma a poda em ganho
 medido, não só em contagem honesta.
+
+## Progress log
+
+- 2026-09-06 (S347, docs): **Decisão do Owner (item 4.15 de
+  `PLAN-186/debate/owner-decisions-S347.md`, AskUserQuestion):**
+  «Autorizar a revisão do plano (Recomendado)» — autoriza o pack docs com
+  os 9 consensos do debate round-1. **Decisão derivada (item 4.10 do
+  mesmo ledger):** o flip deste plano para `status: executing` só
+  acontece DEPOIS da revisão landar — não volta a ser perguntado.
+  `status:` permanece `reviewed` até lá.

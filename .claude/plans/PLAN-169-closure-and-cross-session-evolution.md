@@ -544,6 +544,29 @@ cron do coverage. Ledger E.2 vira CLOSED nesta entrada; E.7 segue como o
   o registro falsificável de "por que não" rebaixa o rótulo, não o
   aceite.** Doc promete EXATAMENTE o que o teste provou.
 
+**Decisão do Owner (S347, 2026-09-06 — item 4.3 de
+`PLAN-186/debate/owner-decisions-S347.md`, sobre a retomada por cota):**
+«Aceitar as 6 recomendações (Recomendado)», nomeadas 1-6 abaixo, cada
+uma como wave própria/entrega nomeada — nota do lander: o artefato que o
+ledger original cita como destino (`p169-w41-quota-resume/OWNER-DECISION-r8-scope-and-allowlist.md`)
+não existe nesta árvore no momento deste registro; a decisão fica
+lançada aqui, no corpo da W4.1, até esse pacote landar.
+
+1. **Marcador de estado:** opção (c) — marcador por SESSÃO, com lock de
+   disparo por PROJETO; wave própria.
+2. **Contrato do dogfood:** opção (b) — duas entradas exatas
+   (`--consume`, `--mark-armed`) no dogfood, mais o template base.
+3. **Dedupe:** opção (c) — dedupe em memória, por processo.
+4. **Prefixo de comando permitido:** opção (b) — prefixo auto-resolvente
+   `cd "$(git rev-parse --show-toplevel)" && python3 …`, com a entrada
+   de allow casando exatamente essa forma composta.
+5. **Ordem de reserva:** opção (b) — reservar o marcador ANTES do
+   `CronCreate`; rótulo EXPERIMENTAL.
+6. **Id do job:** opção (A) — condicionado à sonda; follow-up.
+
+O rótulo **EXPERIMENTAL** permanece e declara: «inerte para adotantes até
+o piso de `StopFailure` mudar».
+
 **W4.2 — Governança cross-session (fleet-ready).**
 > Fatos do substrato (research §2.1, doc oficial): mensagens = SÓ
 > texto plano (nunca history/files); entrega Delivered/Held/Refused;

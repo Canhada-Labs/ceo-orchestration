@@ -1591,6 +1591,33 @@ com a revisão refrescada, ou vira plano próprio.
 > o plano. A alternativa «183 → abandoned com transferência de AC-1/2/5
 > para plano novo» foi apresentada e NÃO escolhida.
 
+> **Decisão do Owner em 2026-09-06 (S347, AskUserQuestion, item 4.5 de
+> `PLAN-186/debate/owner-decisions-S347.md`), sobre as 4 leituras do pack
+> `p183-w1-pointer` (ponteiro portátil da W1):** «Aceitar as 4 leituras
+> (Recomendado)». As quatro: **OQ-3, opção 1** — o registro de ownership
+> tem precedência só ENQUANTO resolve; um artefato demovido é mantido e
+> avisado, nunca apagado silenciosamente. **AC-1** — passa a exigir
+> população de PREFIXO COMUM, com o limite escrito no próprio AC (não
+> apenas "nenhum caminho de home"). **Item 4d** — opção A: o e2e roda só
+> no nightly; o custo é medido ANTES de entrar num PR. **OQ-3c** — a
+> receita fica guardada agora; a wave `live_content` (as novas linhas do
+> `ownership_table.tsv` que a §7.1 nomeia) só entra DEPOIS da assinatura
+> da W1. **Colateral aceito pelo Owner:** a tabela de posse cresce de 65
+> para 68 células, e a frase «62 green / 3 red» do `CLAUDE.md` §4 muda no
+> próximo closeout. **Nota do lander (2026-09-06):** o texto integral das
+> 4 perguntas originais vive no pack `p183-w1-pointer`, que nesta sessão
+> ainda está em rail (worktrees `shadow-p183-w1-pointer` /
+> `verify-p183-w1-pointer`, não landado nesta árvore) — este parágrafo
+> registra a DECISÃO do Owner sobre esse pack; o texto formal das
+> perguntas e a implementação chegam quando o pack landar.
+
+> **Decisão do Owner em 2026-09-06 (S347, AskUserQuestion, item 5.a de
+> `PLAN-186/debate/owner-decisions-S347.md`) — nome de projeto privado em
+> 6 planos, achado do refutador do pack `p183`:** «Aceitar como está»
+> (esta opção NÃO era a recomendação do CEO). Nenhum commit de limpeza é
+> autorizado por esta decisão; o achado fica aceito e registrado aqui,
+> sem ação de remediação aberta por este plano.
+
 1. **W2** — os dois steps de `unittest discover` saem do template ou são
    reescritos para a invocação real do CI? (a rota "preservar atrás de
    guarda" já foi eliminada em §6)

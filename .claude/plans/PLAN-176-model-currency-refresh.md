@@ -159,3 +159,14 @@ Fora da classe modelo (itens independentes, mais barato→mais urgente:
 npm-publish.yml Node 20 EOL desde 30/04; SIGN_KEY GPG hardcoded em
 release.sh; `runs-on: Ceo` sem fallback em 6 sites; python-version
 misto 3.11/3.12; actionlint triplicado c/ 1 cópia sem hash).
+
+## Progress log
+
+- 2026-09-06 (S347, docs): **Decisão do Owner (item 4.14 de
+  `PLAN-186/debate/owner-decisions-S347.md`, AskUserQuestion):**
+  «Autorizar a revisão do plano (Recomendado)» — autoriza o pack docs:
+  renumerar ADR, mover o fetcher para um módulo canônico próprio, W0a/W0b,
+  e dar `Check:` a cada AC; a rodada 2 do debate roda depois dessa
+  revisão. **Decisão derivada (item 4.10 do mesmo ledger):** o flip deste
+  plano para `status: executing` só acontece DEPOIS da revisão landar —
+  não volta a ser perguntado. `status:` permanece `reviewed` até lá.
