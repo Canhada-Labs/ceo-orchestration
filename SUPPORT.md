@@ -1,6 +1,6 @@
 # Support Matrix
 
-<!-- last-reviewed: 2026-06-06 v1.0.0 -->
+<!-- last-reviewed: 2026-09-07 v1.4.0 -->
 
 > **Honest framing.** This is a one-Owner framework with no paid
 > support tier. The matrix below is what we **dogfood** — what runs
@@ -54,8 +54,9 @@ only.
 
 | OS | Status | Notes |
 |----|--------|-------|
-| macOS 14 (Sonoma) | ✅ Supported | Owner daily driver |
-| macOS 13 (Ventura) | ✅ Supported | Should work; not regularly tested |
+| macOS 26 | ✅ Supported | Owner daily driver (`sw_vers` 26.6.2, Darwin 25.6.0) |
+| macOS 14 (Sonoma) / 15 | ✅ Supported | Previously the daily driver; Python 3.9 floor met |
+| macOS 13 (Ventura) | ⚠️ Best-effort | Should work; not regularly tested |
 | macOS 12 (Monterey) | ⚠️ Best-effort | EOL by Apple; Python 3.9 floor still met |
 | Ubuntu 24.04 LTS | ✅ Supported | CI default for newest matrix entry |
 | Ubuntu 22.04 LTS | ✅ Supported | Primary CI target (`ubuntu-latest` GitHub Actions) |
@@ -82,15 +83,38 @@ only.
 
 Per ADR-052 multi-model dispatch:
 
+The allowlist below is `availableModels` in `.claude/settings.json`, and
+the "used by" column is the `model:` field of the matching
+`.claude/agents/*.md`. `enforceAvailableModels` is `true`, so a model
+outside this list cannot be selected. The session default is pinned to
+`claude-opus-5` (top-level `model` key), and `fallbackModel` is
+`claude-opus-5`.
+
 | Model | Used by | Status |
 |-------|---------|--------|
-| Opus 4.8 (`claude-opus-4-8`) | CEO orchestrator + code-reviewer + security-engineer | ✅ Required |
-| Opus 4.8 1M context (`claude-opus-4-8[1m]`) | CEO orchestrator (long sessions) | ✅ Supported |
-| Sonnet 4.6 (`claude-sonnet-4-6`) | qa-architect + performance-engineer | ✅ Required (all-Opus override: set the agent's `model:` field to `claude-opus-4-8` manually) |
-| Haiku 4.5 (`claude-haiku-4-5-20251001`) | devops | ✅ Required (or override) |
-| Opus 4.8 / "Fast mode" | CEO orchestrator (faster output, 2× cost / 2.5× speed) | ✅ Supported via the native Claude Code `/fast` toggle |
-| Older Claude 4.x (Opus 4.0–4.5, Sonnet 4.0–4.5, Haiku 4.0–4.4) | Fallback if newer unavailable | ⚠️ Works but not optimized |
-| Claude 3.x or earlier | Anything | ❌ Not supported — context window too small for gate-1 boot (~44,786 tokens) |
+| Opus 5 (`claude-opus-5`) | CEO orchestrator — session default pin + fallback | ✅ Required |
+| Opus 5 1M context (`claude-opus-5[1m]`) | CEO orchestrator (long sessions) | ✅ Supported |
+| Fable 5.1 (`claude-fable-5-1`) | Verification lanes | ✅ Supported (added v1.4.0) |
+| Fable 5 (`claude-fable-5`) | code-reviewer, security-engineer, identity-trust-architect, incident-commander, threat-detection-engineer | ✅ Required (or override) |
+| Sonnet 5 (`claude-sonnet-5`) | Allowlisted; documentation lanes | ✅ Supported |
+| Sonnet 4.6 (`claude-sonnet-4-6`) | qa-architect, performance-engineer, devops, llm-finops-architect | ✅ Required (override by editing the agent's `model:` field) |
+| Haiku 4.5 (`claude-haiku-4-5`) | Speed lanes | ✅ Supported |
+| Opus 4.8 (`claude-opus-4-8`) | Allowlisted for continuity | ⚠️ Works but no longer the default |
+| "Fast mode" | CEO orchestrator (faster output, higher cost) | ✅ Supported via the native Claude Code `/fast` toggle on Opus |
+| Older Claude 4.x (Opus 4.0–4.5, Sonnet 4.0–4.5, Haiku 4.0–4.4) | Fallback if newer unavailable | ⚠️ Works but not allowlisted — `enforceAvailableModels` blocks selection |
+| Claude 3.x or earlier | Anything | ❌ Not supported — context window too small for the governance boot |
+
+**Adopting a new model is never automatic.** ADR-149 is the single source
+for the catalog and `generate-available-models.py --check` diffs the
+settings against it, but the VETO floor, the pins and the agent
+definitions are Owner-signed by design.
+
+> **On context cost.** Earlier revisions of this file cited a
+> "~44,786-token gate-1 boot". That figure is REFUTED. The re-paid
+> context floor was MEASURED at **97,292 tokens** at a real compaction
+> boundary (independent cold control 97,097, delta 0.20%), and it is not
+> a constant — a 41-sample series spreads 51.7% around its mean. Do not
+> size a context budget off a single number.
 
 To downgrade gracefully when a model ID becomes deprecated, see
 [`VERSIONING.md`](VERSIONING.md) §Model ID bumps.
@@ -100,7 +124,8 @@ To downgrade gracefully when a model ID becomes deprecated, see
 | LLM | Status | Path |
 |-----|--------|------|
 | Gemini (Google) | ✅ Supported (shape-probing) | `_lib/adapters/gemini.py` parses Gemini-CLI-style payloads and emits Claude-compatible decisions. Canonical envelope parity with Claude adapter. Live Gemini-CLI fixture capture pending (adopters using Gemini CLI as hook host: capture first PreToolUse payload and open issue if drift is observed). |
-| Codex CLI / OpenAI | ❌ Deferred indefinitely | Out of roadmap as of v1.6 |
+| Codex CLI as a **hook host** | ❌ Not supported | No adapter; the framework expects Claude Code as the hook host |
+| Codex CLI as the **pair-rail reviewer** | ✅ Supported, not bundled | The cross-model review rail shells out to the Codex CLI, which you install separately. Absent Codex the rail fails open and contributes zero review — see `docs/HONEST-LIMITATIONS.md` and ADR-145 |
 | Other Anthropic-API-compatible providers | ⚠️ Best-effort | HAL adapter pattern is in place; no production install |
 
 ## CI / GitHub
@@ -152,7 +177,7 @@ without installing any of the above. CI installs them transiently.
 | `git clone` + `bash scripts/install.sh .` | ✅ Primary | Works for any version, any time |
 | `git submodule add` + `--link` install | ✅ Supported | Recommended for monorepos |
 | GitHub template repo | ✅ Supported | "Use this template" button on the GitHub UI |
-| `npm install -g ceo-orchestration` | ✅ Supported (≥ v1.5) | `npm/` package; integrity = Sigstore provenance. A global install cannot be audited with `npm audit signatures` (npm exits `EAUDITGLOBAL`) — read the npm "Provenance" panel, or install into a throwaway project and audit that. No SHA256 manifest ships in the tarball — see `npm/INTEGRITY.md` |
+| `npm install -g ceo-orchestration` | ✅ Supported | `npm/` package; integrity = SLSA Level-2 provenance (`npm publish --provenance`, Sigstore-attested via OIDC; Level-3 is out of scope). A global install cannot be audited with `npm audit signatures` (npm exits `EAUDITGLOBAL`) — read the npm "Provenance" panel, or install into a throwaway project and audit that. No SHA256 manifest ships in the tarball — see `npm/INTEGRITY.md` |
 | Homebrew tap | ❌ Not yet | Considered for v2.0 |
 
 The `npm` package is the easiest path for projects that already have
@@ -186,6 +211,15 @@ Disclosure) for the full audit.
 | GitHub Security Advisory | Security defects only (see [`SECURITY.md`](SECURITY.md)) |
 | Owner email | Private coordination, adopter onboarding for production install |
 
+**Before opening an issue, run the diagnostics.** From the framework
+checkout, `bash scripts/doctor.sh <target-repo>` inspects an install and
+reports what drifted — missing or altered deliveries, unresolved manifest
+records, and delivery routes that no longer match their source. It reads
+the same `scripts/delivery-routes.tsv` the installer and the manifest
+generator read, so its verdict and theirs cannot disagree. Paste its
+output into the issue. `bash .claude/scripts/validate-governance.sh` (run
+inside the installed project) prints an error count; 0 = healthy.
+
 There is no Slack, Discord, or chat channel. The Owner reads GitHub
 notifications and replies as time permits. Expect responses within
 a few business days for non-security issues.
@@ -211,4 +245,5 @@ For ❌ Not supported:
   but you should not assume we will support the combination going
   forward.
 
-Last reviewed: 2026-05-24 (Session 160 / PLAN-112-FOLLOWUP-canonical-doc-refresh-gate).
+Freshness is tracked by the `last-reviewed` stamp at the top of this
+file, checked by `.claude/scripts/check-canonical-doc-freshness.py`.
