@@ -64,7 +64,34 @@ produz e um ALIAS DE TIER (`opus`/`sonnet`), nunca um `model_id`; o heredoc
 `MODEL_HINT_HEADER` apenas INTERPOLA a variavel, logo uma regex ancorada NELE
 devolve o template, jamais um mapa. Nao sao codigo Python importavel, mas
 tambem nao precisam da heuristica de coluna que o instrumento atual usa sobre
-prosa livre — leem-se por regex ANCORADA as ATRIBUICOES.
+prosa livre. O QUE se le, porem, MUDOU no piloto W0, e a frase
+anterior descrevia a versao SUPERADA: uma regex ancorada as
+ATRIBUICOES `MODEL_HINT=` associa a atribuicao ao padrao, mas NUNCA
+prova que ela EXECUTA (braco morto, braco anterior que casa antes
+sem atribuir, `set -e` que aborta o script). O censo por runtime
+PERGUNTA ao dono: o bloco `case "$DETECTED_SKILL" in` ... `esac` e
+EXECUTADO verbatim e INTEIRO, em confinamento (interpretador por
+caminho absoluto, ambiente zerado, `PATH` vazio, cwd descartavel,
+timeout), sob as opcoes de shell que o proprio arquivo declara, uma
+vez por ALTERNATIVA LITERAL, e o vinculo publicado e o que aquela
+execucao PRODUZ, lido por canal emoldurado com nonce. A regex
+ancorada as atribuicoes e ADVISORY e o censo nao a consulta: a
+guarda de cobertura que ele EXECUTA e uma varredura por SUBSTRING
+(linha com o literal `MODEL_HINT=` fora do `case` ou dentro do
+heredoc e recusa NOMEADA). Derivar
+QUAIS sondas rodar ainda LE a gramatica do `case`, e por isso a
+promessa desta superficie e ESTREITA e esta DITA assim nos bytes
+entregues: nas QUATRO direcoes que o pair-rail r4 mediu (braco
+compacto, aspas no padrao, curinga, opcoes de shell) a guarda de
+cobertura e fail-CLOSED — forma nao modelada vira VERMELHO
+NOMEADO; FORA dela ficam, por construcao e por MEDIDA (r6, ambos
+reproduzidos por plant), a DELIMITACAO de bracos que dividem a
+MESMA linha e a ALCANCABILIDADE do bloco (`case` sob `if false`,
+em funcao nunca chamada, ou depois de um `exit`). A linha
+`MODEL_HINT` da tabela e, portanto, publicada como OBSERVACAO
+explicitamente NAO-EXAUSTIVA (coluna «cobertura»), nunca como
+vinculo do keyspace inteiro; os dois itens estao NOMEADOS na §4-b
+com a sua rota de cura.
 
 **As quatro superficies NAO falam a mesma UNIDADE — e essa, nao o formato, e
 a divisao que o censo por runtime tem de respeitar.** MEDIDO no land deste
@@ -131,6 +158,64 @@ ser medido contra ele antes de ser aceito como avanco.
       nota classifica SUPERFICIES — estas quatro, com UM rotulo, «dona local» —
       e NAO publica nenhum conjunto de papeis. O lado direito das comparacoes
       abaixo e, portanto, so essa LISTA DE QUATRO; nada mais e lembrado dela.
+      **A MESMA nota REABRE o escopo — e a citacao acima parava
+      exatamente onde ela o faz.** O resto do mesmo bullet, tambem
+      VERBATIM da nota (so as quebras de linha sao deste plano):
+      «REABERTO pelo rail (codex r3, P1): há donos VIVOS a mais —
+      `set-quality-profile.sh:157-169` (hardcoda pares papel/modelo e
+      os escreve nos `agents/*.md`), `task-route.py:504-555`, o
+      fallback papel→modelo do audit log, e (r4) o baseline ADR-052 do
+      tier-policy (`tier_policy_cli/_types.py:202-237`, usado por
+      `loader.py:111-113,423-460` quando `.claude/tier-policy.json`
+      falta — já diverge do pin: devops = Haiku lá, Sonnet no
+      `agents/`) e, achados pelo r6, `templates/.claude/tier-policy.json`
+      (dono ENTREGUE a todo adopter pelo `install.sh`, que faz o loader
+      bypassar o fallback de `_types.py`) e `_ADR_052_ROLE_TO_MODEL`
+      (`.claude/hooks/audit_log.py:922-954`, 20 chaves). O r6 também
+      RETIROU uma atribuição FALSA: `task-route.py` lê o
+      `VETO_HARDCODE` HOMÔNIMO de `_lib.tier_policy._constants`
+      (`role -> FrozenSet[task_type]`), não o de `tier_policy_cli`
+      (`role -> model_id`) — não é leitor desta superfície. O AC fecha
+      quando o censo os incluir, com o conjunto DERIVADO e não
+      lembrado.»
+      **Por isso esta caixa continua DESMARCADA.** A W0 entregue e o
+      PILOTO DO METODO sobre as quatro superficies originais — ela
+      prova que perguntar ao dono (import, parser do dono, execucao
+      confinada) substitui o fingerprint de texto, e mede onde o
+      metodo ainda nao fecha (a unica superficie SEM API de dono).
+      A W1 estende o censo aos donos REABERTOS pela nota, e e nela
+      que a caixa fecha. Escopo EXPLICITO da W1, cada dono com a sua
+      classe e o leitor que o alcanca:
+      1. `set-quality-profile.sh:157-169` — dono SCRIPT-SHELL (hardcoda
+         pares papel/modelo e os ESCREVE nos `agents/*.md`): mesma
+         arquitetura de EXECUCAO CONFINADA do `MODEL_HINT`; bloco que
+         nao caiba no confinamento declarado e RECUSA NOMEADA, nunca
+         leitura de coluna.
+      2. `task-route.py:504-555` — dono PYTHON-IMPORTAVEL: import do
+         modulo e pergunta ao que ele expoe. A errata do r6 acima e
+         parte do Check: publica-se o que o import devolve, jamais a
+         atribuicao que a propria nota RETIROU.
+      3. fallback papel->modelo do audit log, localizado pelo r6 em
+         `_ADR_052_ROLE_TO_MODEL` (`.claude/hooks/audit_log.py:922-954`,
+         20 chaves) — dono PYTHON-IMPORTAVEL: import. Se o fallback do
+         r3 e a constante do r6 forem o MESMO dono, a W1 publica UMA
+         linha — identidade PROVADA pelo import, nunca lembrada.
+      4. baseline ADR-052 do tier-policy (`tier_policy_cli/_types.py:
+         202-237`, consumido por `loader.py` quando
+         `.claude/tier-policy.json` falta) — dono PYTHON-IMPORTAVEL:
+         import. A nota ja MEDE divergencia com o pin (`devops` =
+         Haiku la, Sonnet no `agents/`): a W1 publica as duas linhas,
+         nunca uma reconciliada.
+      5. `templates/.claude/tier-policy.json` — dono DADO, ENTREGUE a
+         todo adopter pelo `install.sh`: lido pelo carregador do
+         proprio tier-policy (parser do dono), nunca por regex.
+      Os Checks (a) e (b) abaixo valem COMO ESTAO para as quatro do
+      piloto e sao ESTENDIDOS POR DONO na W1 — cada dono IMPORTAVEL
+      pelo Check (a) (import + comparacao par a par com a linha da
+      tabela), cada dono DADO ou SCRIPT pelo Check (b) (parser ou
+      carregador do proprio dono; execucao confinada quando o valor
+      sai de fluxo de controle). Perder um dono da lista reprova o AC
+      do mesmo modo que perder uma das quatro superficies.
       As quatro se dividem em TRES classes de dono (Tese acima): `VETO_HARDCODE`
       e codigo Python IMPORTAVEL (`.claude/scripts/tier_policy_cli/_constants.py`);
       `routing-matrix.yaml` (`.claude/dispatcher/routing-matrix.yaml`) e DADO
@@ -151,12 +236,30 @@ ser medido contra ele antes de ser aceito como avanco.
       e falta no outro. O modo de falha que este Check guarda e a REGRESSAO
       para fingerprint — uma linha derivada do TEXTO diverge do valor
       importado assim que a forma do texto muda sem o comportamento mudar.
-      Check (b) — donos DADO / SCRIPT, um parser por dono
-      (`yaml.safe_load` para `routing-matrix.yaml`; parser de frontmatter
-      YAML por arquivo para cada `agents/*.md`; regex ANCORADA as ATRIBUICOES
-      `MODEL_HINT=` de `inject-agent-context.sh` — NUNCA ao heredoc
+      Check (b) — donos DADO / SCRIPT, UM DONO POR SUPERFICIE, sem
+      heuristica de coluna. (i) `routing-matrix.yaml`: o parser do
+      PROPRIO dono em runtime (`routing-matrix-loader.py`, stdlib) e a
+      verdade; `yaml.safe_load` roda so como CROSS-CHECK quando PyYAML
+      existe e a divergencia entre os dois e VERMELHO. (ii)
+      `agents/*.md`: o parser de frontmatter do repo, um arquivo por
+      papel, CHAVEADO PELO SLUG DO ARQUIVO (e assim que o runtime
+      resolve papel); nenhum `*.md` some em silencio. (iii)
+      `MODEL_HINT`: o bloco `case` INTEIRO de `inject-agent-context.sh`
+      e EXECUTADO verbatim em confinamento (interpretador absoluto, env
+      zerado, `PATH` vazio, cwd descartavel, timeout), sob as opcoes de
+      shell do proprio arquivo, UMA VEZ POR ALTERNATIVA LITERAL, e o
+      vinculo publicado e o que aquela execucao produz, lido por canal
+      emoldurado com nonce — associar a atribuicao ao padrao nunca
+      provou que ela EXECUTA, e reconstruir o `case` braco a braco nao
+      preservava nem o primeiro-que-casa nem as alternativas; a regex
+      ancorada as ATRIBUICOES `MODEL_HINT=` (e NUNCA ao heredoc
       `MODEL_HINT_HEADER`, que so interpola a variavel e devolveria o
-      template —, sem heuristica de coluna).
+      template) e ADVISORY: o censo nao a consulta, e a cobertura
+      que ele executa e a varredura por SUBSTRING. Os donos
+      DADO respondem pela sua API PUBLICA de runtime
+      (`load_routing_matrix`, `parse_agent_file`), nao so pelo parser
+      de texto: uma matriz que o runtime REJEITA e um arquivo de agente
+      em SYMLINK sao VERMELHOS nomeados.
       VERDE quando os TRES parsers devolvem valor **e** a tabela tem UMA
       linha por superficie, as tres rotuladas «dona local» como a nota as
       rotula; e TODA superficie de valor em ALIAS (aqui `MODEL_HINT` **e**
@@ -168,7 +271,7 @@ ser medido contra ele antes de ser aceito como avanco.
       bloco/chave, quando uma superficie some da tabela, ou quando a tabela
       rotula uma delas de outro modo. (a) e (b) juntos sao a cobertura
       MINIMA — as quatro superficies, quatro linhas: perder uma reprova o AC.
-- [ ] **AC-F2** O caso `SUPPORT.md:88` (§2 acima) serve como CONTROLE
+- [x] **AC-F2** O caso `SUPPORT.md:88` (§2 acima) serve como CONTROLE
       DISCRIMINANTE: o desenho declara, por escrito, se um censo-por-runtime
       cobre esse residual (porque `SUPPORT.md` normalmente e PROSA e ficaria
       fora do escopo importavel) ou se ele continua fora do escopo do
@@ -178,7 +281,7 @@ ser medido contra ele antes de ser aceito como avanco.
       de `SUPPORT.md:88`) e afirma o comportamento declarado (RED se a
       declaracao disser "cobre" e o teste ficar verde; GREEN se a
       declaracao disser "fora do escopo do runtime" e citar a razao).
-- [ ] **AC-F3** Regra de parada PRE-REGISTRADA para este followup, escrita
+- [x] **AC-F3** Regra de parada PRE-REGISTRADA para este followup, escrita
       ANTES da primeira rodada de rail sobre o piloto: um numero de P1 e a
       classe que os torna "mesma pergunta, gramatica nova" (o padrao que
       disparou a r6 e a r8 do `us5-census-v5`) — se disparar, o followup
@@ -239,6 +342,36 @@ ou superar antes de qualquer wave de conversao.
    did not run at all in rounds 5, 6 and 8: two large codex sessions at once
    die on this machine, measured in round 5 and unchanged."
 
+## 4-b. Residuais NOMEADOS deste W0 (pair-rail r6)
+
+Os dois foram MEDIDOS e REPRODUZIDOS por plant em copia descartavel
+(tabela byte-identica, rc 0).
+
+Os dois itens abaixo ficam FORA do que a guarda de cobertura do
+`MODEL_HINT` responde. Eles NAO sao formas a mais para uma proxima
+rodada modelar: sao perguntas que a extracao de um TRECHO nao
+responde por construcao. Estao ditos nos BYTES entregues (docstring
+do modulo, itens (v) e (vi)) e a linha da tabela e publicada como
+OBSERVACAO NAO-EXAUSTIVA na coluna «cobertura».
+
+1. **Dois bracos na MESMA linha** (`a) ... ;; escondido) ... ;;`).
+   A gramatica de `;;` do `bash` permite varios bracos por linha; uma
+   particao «linha do padrao … terminador» nao os separa e a rota
+   escondida sai da tabela em SILENCIO. Fechar por regra pediria um
+   PARSER de shell, nao outro regex.
+2. **Alcancabilidade do bloco.** Com o bloco extraido e executado com
+   fidelidade perfeita, o vinculo publicado ainda pode ser um que o
+   dono real NUNCA executa (`case` sob `if false; then … fi`, dentro
+   de funcao nunca chamada, ou depois de um `exit`).
+
+**Rota de cura (uma, para os dois):** dar um DONO ao `MODEL_HINT` —
+uma funcao shell com contrato (`model_hint_for_skill <skill>`) ou um
+dado (TSV/YAML) que o script consome — e entao perguntar a ele como
+este censo ja faz nas outras tres superficies. E edicao CANONICA em
+`.claude/scripts/inject-agent-context.sh`, logo cerimonia GPG e wave
+propria: e a opcao (3) da §5 de `ARCHITECTURE-NOTE-S347.md`, fora do
+alcance deste pack LIVRE.
+
 ## 5. Fronteiras deste followup
 
 - Nao reabre nem redefine o AC-12 do PLAN-186 — a nota S345 no plano-pai e a
@@ -270,3 +403,86 @@ ou superar antes de qualquer wave de conversao.
 
 - 2026-09-04 (S345): plano criado em `draft`, a partir da decisao do CEO
   registrada em `us5-census-v5/ARCHITECTURE-NOTE-S344.md` §5 (item 2).
+- 2026-09-05 (S347, W0): instrumento de censo POR RUNTIME entregue em
+  `PLAN-186-FOLLOWUP-census-runtime/w0/census_runtime.py` + bateria em
+  `.claude/scripts/tests/test_census_runtime.py`. **AC-F1 SEGUE
+  ABERTO**: a MESMA nota S340 que nomeia as quatro superficies REABRE
+  o escopo e nomeia >= 5 donos VIVOS a mais (citacao completa e lista
+  por classe dentro do proprio AC-F1); esta W0 e o PILOTO DO METODO
+  sobre as quatro originais e a caixa fecha na W1, que estende os
+  Checks (a) e (b) dono a dono. O piloto entrega quatro
+  superficies, quatro linhas, TRES classes de dono — `VETO_HARDCODE`
+  IMPORTADO, `routing-matrix.yaml` e `agents/*.md` por parser real,
+  `MODEL_HINT` NAO por leitura: o bloco `case "$DETECTED_SKILL" in` ...
+  `esac` do dono e EXECUTADO **VERBATIM e INTEIRO**, em confinamento
+  (`/bin/bash --noprofile --norc` por caminho absoluto, env zerado
+  exceto `DETECTED_SKILL`, `PATH` VAZIO, cwd temporaria descartavel,
+  timeout 20 s), sob as MESMAS opcoes de shell que o arquivo declara
+  (`set -euo pipefail`, derivada do proprio arquivo), UMA VEZ POR
+  ALTERNATIVA LITERAL de cada braco, e o vinculo e lido por um canal
+  EMOLDURADO com nonce. Assim o primeiro-braco-que-casa decide como no
+  runtime, alternativas do MESMO braco que rendam valores diferentes
+  sao publicadas SEPARADAMENTE, a saida comum do bloco nao se passa
+  pelo valor, e um comando que aborta o script real tambem aborta a
+  sonda — quatro defeitos REAIS de pair-rail (r2 P1; r3 P1, P1, P2, P2)
+  que a leitura estatica e depois a reconstrucao braco-a-braco davam
+  por vinculados. Nao produzir vinculo e VERMELHO
+  (`hint_probe_yields_no_value` / `hint_probe_no_binding`). A
+  cobertura desta superficie e uma varredura por SUBSTRING, e nao
+  um regex: uma linha com o literal `MODEL_HINT=` tem de estar no
+  bloco `case` e fora do heredoc `MODEL_HINT_HEADER` (controle
+  positivo: atribuicao plantada no heredoc e recusada por
+  `hint_matched_heredoc`); o matcher ancorado as atribuicoes e
+  ADVISORY e o censo nao o consulta. Bloco com `$(`, crase, `>`, `<`, `&` ou
+  `|&` e RECUSADO POR NOME e nunca executado — lista enumeravel, logo
+  cortesia: a defesa e o confinamento. Os donos DADO sao alcancados
+  pela API PUBLICA do runtime (`load_routing_matrix`, que VALIDA, e
+  `parse_agent_file`, que RECUSA symlink), nao so pelos seus parsers
+  de texto. Nenhum `*.md` de
+  `.claude/agents/` some em silencio: a saida DECLARADA pelo gerador do
+  repo (`generate-dispatch.DISPATCH_PATH`) aparece como
+  `<sem-pin: tabela de despacho gerada>`. Passo de resolucao
+  alias->model_id
+  DECLARADO como RS-1 (ADR-149 `AVAILABLE_MODELS_WORKING_SET` pelo
+  parser do proprio repo x `_infer_tier`); RS-1 devolve o CONJUNTO
+  declarado porque o repo NAO declara pin unico — reduzi-lo a singleton
+  seria o mapa inventado que a Tese proibe (residual nomeado). As
+  quatro direcoes fail-OPEN que o pair-rail r4 mediu nesta superficie
+  fecharam fail-CLOSED, cada uma com o seu controle plantado: braco
+  COMPACTO de uma linha e sondado, e o span do `case` e verificado
+  por PARTICAO e nao por contagem de terminadores: linha de CODIGO
+  numa lacuna entre os corpos reconhecidos e
+  `hint_arm_coverage_incomplete`, e o que a particao nao delimita
+  esta DITO como fora da cobertura no item (v) do docstring;
+  alternativa com ASPAS e recusada
+  (`hint_pattern_probe_underivable`), porque o dono as remove ao casar
+  e a sonda literal cairia noutro braco; o braco curinga publica a
+  limitacao NO ROTULO (`*[sonda sintetica; nao generaliza]`) — uma
+  sonda sintetica e OBSERVACAO, nunca vinculo de todo o keyspace; e as
+  opcoes de shell aceitam comentario inline, com declaracao `set -…`
+  existente e nao interpretavel virando VERMELHO
+  (`hint_shell_options_uninterpretable`), alem do vinculo passar a ser
+  validado EXATO, sem aparo de espacos. O que NAO fecha por
+  instrumento, e esta DITO no docstring do modulo: enquanto esta
+  superficie nao tiver uma API de dono a quem PERGUNTAR (as outras
+  tres tem), derivar QUAIS sondas rodar continua sendo leitura de
+  gramatica — a razao pela qual a regra de parada deste followup
+  disparou na r4 e a decisao de seguir foi do CEO. AC-F2
+  [x]: a leitura DECLARADA e «fora do escopo do runtime» — `SUPPORT.md`
+  e prosa normativa, nenhum modulo e dono dela, o censo nunca a le; o
+  teste planta a mutacao do refutador (remove `[1m]` de `SUPPORT.md:88`)
+  e mede tabela byte-identica + rc 0. AC-F3 [x]: regra de parada escrita
+  no topo de `rail-round-1.md` ANTES do primeiro `codex exec review`.
+  **S348 (decisao do CEO, opcao (2)):** a promessa da superficie
+  `MODEL_HINT` foi ESTREITADA nos dois lugares entregues — o
+  docstring do modulo passa a declarar o que a guarda de cobertura
+  NAO responde (bracos que dividem a MESMA linha; alcancabilidade do
+  bloco) e a linha da tabela e publicada com a coluna «cobertura» =
+  OBSERVACAO NAO-EXAUSTIVA, fail-CLOSED (uma linha sem a marca, ou
+  uma `MODEL_HINT` que se declare resposta do dono, e
+  `coverage_marker_missing`). Os dois achados P1 da r6 estao
+  NOMEADOS na §4-b com a rota de cura unica (dar um DONO ao
+  `MODEL_HINT` — edicao canonica, wave propria).
+  Status permanece `draft`: PLAN-SCHEMA §Lifecycle constraints — um
+  followup nao entra em `executing` enquanto o pai nao chega a `done`, e
+  o PLAN-186 esta `executing`.
