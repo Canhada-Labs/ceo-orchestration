@@ -27,3 +27,10 @@ Contexto de cada pergunta: `s344-packs/MORNING-S348.md` §3 e §4 (perguntas 8, 
 14. PLAN-188 OQ-7 (alcance do `--describe`): «(b) Chave opcional; sem ela, escopo gravado pelo finalize (Recomendado)»
 15. PLAN-188 OQ-8 (destino dos clones): «`scripts/local/historical/` para assinados; clone nunca assinado é removido (Recomendado)»
 16. `w4b-gates-v2` (após as 2 rodadas do sujeito): «(i) Passe sucessor noutra noite: verificação PRIMEIRO em todo job + as 2 curas do censo, 2 codex (Recomendado)»
+
+## Bloco C, perguntas 17-20 (~09:4x; rótulos VERBATIM)
+
+17. PLAN-176 OQ-2 (forense de auditoria): «Emendar o audit_emit.py na W1 (rota cara)» — CONTRA a recomendação (manter degradado). Consequência: a W1 ganha +1 caminho canônico (`.claude/hooks/_lib/audit_emit.py`) e a assinatura cobre o `_lib`.
+18. PLAN-176 OQ-3 (corte da W1b): «Duas assinaturas: W1b + W1c (Recomendado)».
+19. PLAN-176 flip `reviewed → executing`: «Sim: executing agora; W0a (offline, livre) começa hoje (Recomendado)».
+20. PLAN-175 próximo passo (após «D — não mensurável hoje»): «W0 de instrumento (livre): medir a elegibilidade antes de podar (Recomendado)».

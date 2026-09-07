@@ -1072,3 +1072,4 @@ redação.
   (§10); nenhuma foi decidida aqui.** `status:` permanece `reviewed`.
 
 - **2026-09-07 (S348, Owner acordado; verbatim):** OQ-1 (arquitetura da elegibilidade, opções A/B/C/D da §2.1) — «D — não mensurável hoje» (contra a recomendação C). Consequência: sem rodada 3 e sem wave de poda até existir um instrumento que meça a elegibilidade; o plano permanece `reviewed`. A wave de instrumento é decisão seguinte do Owner.
+- **2026-09-07 (S348, Owner acordado; verbatim):** próximo passo após «D — não mensurável hoje» — «W0 de instrumento (livre): medir a elegibilidade antes de podar (Recomendado)». A W0 constrói o instrumento (citações reais por arquétipo, uso no audit log, roteamento) e publica a série; a poda só depois, com a arquitetura escolhida sobre números. `status:` permanece `reviewed` até a W0 ser landada e a arquitetura ratificada.

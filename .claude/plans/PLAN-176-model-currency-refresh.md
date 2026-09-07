@@ -1,7 +1,7 @@
 ---
 id: PLAN-176
 title: Currency de modelos — detectar lançamento novo; adoção nunca automática
-status: reviewed
+status: executing
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
@@ -1083,3 +1083,4 @@ resumo criptográfico.
   Check: none (doc-only)
 
 - **2026-09-07 (S348, Owner acordado; verbatim):** OQ-1 (número do ADR) — «Manter ADR-180 (Recomendado)». OQ-2 e OQ-3 apresentadas a seguir na mesma sessão.
+- **2026-09-07 (S348, Owner acordado; verbatim):** OQ-2 (forense de auditoria) — «Emendar o audit_emit.py na W1 (rota cara)» (contra a recomendação): a W1 ganha `.claude/hooks/_lib/audit_emit.py` como caminho canônico adicional e a assinatura cobre o `_lib`. OQ-3 (corte da W1b) — «Duas assinaturas: W1b + W1c (Recomendado)». Flip — «Sim: executing agora; W0a (offline, livre) começa hoje (Recomendado)»: `status: reviewed → executing` neste commit; a W0a (detecção OFFLINE a partir do ADR-149 e da tabela local) é a unidade corrente.
