@@ -157,7 +157,11 @@ class TestContendedFreshSpoolIsSilent(_Base):
             # full-suite ceremony rehearsal.) The assertion is about a FRESH
             # spool; pin freshness instead of hoping for it.
             os.utime(spool_writer._spool_path(os.getpid()), None)
-            with mock.patch.object(spool_writer, "should_drain", return_value=True):
+            # S348: the pin alone still races the 100 ms window on a loaded
+            # runner — freshness is the premise here, so raise the trigger by
+            # construction (see TestSustainedStarvationBreadcrumb for the twin).
+            with mock.patch.object(spool_writer, "DRAIN_TRIGGER_MTIME_MS", 10 * 60 * 1000), \
+                    mock.patch.object(spool_writer, "should_drain", return_value=True):
                 stats = spool_writer.drain_now(force=False)
         self.assertTrue(stats.contended_skip, "force=False must yield on contention")
         self.assertTrue(stats.ok, "yield is NOT an error — ok stays True")
@@ -249,7 +253,14 @@ class TestSustainedStarvationBreadcrumb(_Base):
             # the spool past the trigger so the drain path CORRECTLY emits a
             # starvation breadcrumb. Pin freshness at the moment it is asserted.
             os.utime(spool_writer._spool_path(os.getpid()), None)
-            with mock.patch.object(spool_writer, "should_drain", return_value=True):
+            # S348: the utime pin still races the 100 ms window on a loaded CI
+            # runner (measured: 1 failure in 937 on a shared runner while the
+            # sibling matrix leg ran). Freshness is the test's PREMISE, not its
+            # subject, so pin it by construction: raise the trigger far past any
+            # scheduler stall. The stale-spool sibling keeps the real value and
+            # remains the positive control for the starvation breadcrumb.
+            with mock.patch.object(spool_writer, "DRAIN_TRIGGER_MTIME_MS", 10 * 60 * 1000), \
+                    mock.patch.object(spool_writer, "should_drain", return_value=True):
                 spool_writer.drain_now(force=False)
         self.assertEqual(_starved_breadcrumb_count(), 0,
                          "a FRESH spool must never emit a STARVED breadcrumb")
