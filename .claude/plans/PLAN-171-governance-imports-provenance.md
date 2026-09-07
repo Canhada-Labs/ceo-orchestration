@@ -322,3 +322,34 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   4 com ZERO. Relatório:
   `.claude/plans/PLAN-171/w0/lote-5-S347.md`. Falta: lote 6 (`R[36:42]`,
   6 hooks).
+- **2026-09-06 (S347)** — W0 lote 6/6 MEDIDO: os 6 hooks REGISTRADOS de
+  `R[36:42]` da partição determinística (§1 do relatório) — a ÚLTIMA
+  fatia: postcompact-reinject, config-change, subagent-start, setup-verification,
+  directory-added, notification. Cada um com o controle positivo rodado nas
+  TRÊS metades — verde como está; **vermelho com o enforcement removido**
+  (mutação mínima numa worktree descartável); verde OUTRA VEZ depois do
+  `git restore` (o controle de restauração do lote 2). 6/6 verde, 0
+  vácuo, 0 sem-controle. Fatia de eventos de CICLO DE VIDA: 5 das 6
+  linhas são OBSERVADORES — e o §4 do relatório declara, POR LINHA (do
+  campo `proves` do `red-half.json`), qual mecanismo cada controle
+  estabelece: emissão da observação em 4 delas e o SCRUB de
+  não-eco na de `notification`, que NÃO prova emissão. A palavra
+  «advisory» só é usada depois de `measure-optin.py` medir os
+  construtos de bloqueio e sondar cada switch fim-a-fim com controle
+  positivo próprio — 1 hook com construto de bloqueio (3 construtos
+  ao todo), 0 rodada(s) do probe classificada(s) como BLOCK. Quem
+  COLETA cada controle é derivado por COLEÇÃO (`--collect-only` sobre
+  os ALVOS de pytest de cada step E sobre os seletores `-m`/`-k`
+  desse step, os DOIS replayados), não por grep — e coletar
+  SOBREVIVENDO ao seletor é condição NECESSÁRIA, não suficiente: o
+  replay não exercita a condição `if:` do job nem o ambiente do
+  runner. Relatório:
+  `.claude/plans/PLAN-171/w0/lote-6-S347.md`. Esta é a ÚLTIMA fatia por
+  ÍNDICE — o que **não** quer dizer que `R` esteja coberto: no momento
+  desta derivação não falta em disco NENHUM relatório de lote: os outros
+  cinco já estão lá e este pack acrescenta o sexto — medido por
+  `os.listdir` sobre `.claude/plans/PLAN-171/w0/`
+  (é o §5 do relatório). Linhas de
+  `Registro de execução` ainda devidas por relatório já em disco: nenhuma.
+  O W0 ainda deve, além disso, a consolidação dos seis num veredito
+  único.
