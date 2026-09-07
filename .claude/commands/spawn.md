@@ -27,8 +27,8 @@ protocol requires that every named-agent Agent-tool call carry:
 
 The hook at `.claude/hooks/check_agent_spawn.py` (Python single-file,
 invoked via `_python-hook.sh`) blocks any Agent spawn that matches a
-team-member name in its description but is missing the `## SKILL CONTENT`
-section. This slash command is the safest way to construct a compliant
+team-member name in its description but is missing the skill section
+(`## SKILL CONTENT` or `## SKILL REFERENCE`). This slash command is the safest way to construct a compliant
 prompt.
 
 **Dispatch path (PLAN-061 / ADR-082):** the injector resolves the rail
@@ -37,7 +37,10 @@ per archetype default. `Staff Code Reviewer` runs on the **native**
 Every other archetype defaults to **mitigated** dispatch — the injector
 emits a `## DISPATCH MITIGATION` header instructing this slash-command
 flow to call the Agent tool with `subagent_type="general-purpose"` plus
-the persona injected via `## SKILL CONTENT`. This bypasses the H4 rail
+the persona carried by the skill section the injector emitted —
+`## SKILL REFERENCE` by default (reference mode since ADR-090;
+`## SKILL CONTENT` only under `--mode=inline` or `CEO_SOTA_DISABLE=1`).
+This bypasses the H4 rail
 anomaly per ADR-080 (custom subagent_types receive only Grep+Glob from
 the runtime despite frontmatter declaring full tools).
 
@@ -149,7 +152,8 @@ The final prompt structure is:
 
 ```
 <scaffold from inject-agent-context.sh — contains ## AGENT PROFILE,
- ## SKILL CONTENT, ## RELEVANT PITFALLS, ## TASK placeholder>
+ ## SKILL REFERENCE (default; ## SKILL CONTENT under --mode=inline),
+ ## PROMPT DEFENSE, ## RELEVANT PITFALLS, ## TASK placeholder>
 
 ## FILE ASSIGNMENT
 <your explicit assignment from Step 4 — MUST use the parseable grammar:
@@ -181,7 +185,13 @@ Use the Agent tool with:
 - `subagent_type`: per the dispatch path (PLAN-061 / ADR-082) —
   - If the injector emitted a `## DISPATCH MITIGATION` header (default
     for non-`code-reviewer` archetypes): use `general-purpose`. The
-    persona is already injected via `## SKILL CONTENT` in the prompt.
+    persona is already carried by the prompt's skill section
+    (`## SKILL REFERENCE` by default; `## SKILL CONTENT` under
+    `--mode=inline`). **Strip the `## DISPATCH MITIGATION` and
+    `## DISPATCH MODEL` blocks before passing the prompt to the Agent
+    tool** — they are instructions to YOU, the caller; a subagent that
+    reads them attempts a nested spawn, which the classifier blocks
+    (measured S348).
   - If no mitigation header (default for `code-reviewer`, or operator
     forced native): use the matching custom subagent type
     (`code-reviewer`, etc.) or fall back to `general-purpose` for
@@ -239,7 +249,7 @@ CEO procedure:
 
 ## Anti-patterns (NEVER do)
 
-1. **NEVER call the Agent tool directly with just a one-line task.** The hook will block it if the description contains a team member name and the prompt lacks `## SKILL CONTENT`. Even if the hook allows it (generic description), you are bypassing governance.
+1. **NEVER call the Agent tool directly with just a one-line task.** The hook will block it if the description contains a team member name and the prompt lacks both `## SKILL CONTENT` and `## SKILL REFERENCE`. Even if the hook allows it (generic description), you are bypassing governance.
 2. **NEVER skip Step 2 (roster verification).** Inventing persona names = cosmetic spawn = forbidden.
 3. **NEVER skip Step 4 (file assignment).** Even for research tasks, write "read-only" explicitly.
 4. **NEVER use `$ARGUMENTS` without parsing.** If the user sent a malformed argument set, stop and ask.

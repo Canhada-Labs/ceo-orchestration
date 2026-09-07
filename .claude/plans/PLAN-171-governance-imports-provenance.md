@@ -411,3 +411,5 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   arquivo como histórico, não apagado. W4 pode voltar como follow-up
   próprio se alguém pedir. Nenhuma mudança de `status:` — o plano
   segue `executing`.
+
+- **2026-09-07 (S348, madrugada autônoma) — W1d METADE LIVRE feita:** `.claude/commands/spawn.md` deixa de descrever o scaffold padrão como `## SKILL CONTENT` (o injetor emite `## SKILL REFERENCE` por padrão desde o ADR-090; `## SKILL CONTENT` só sob `--mode=inline` ou `CEO_SOTA_DISABLE=1`) — 5 passagens corrigidas (dispatch mitigado, Step 6, Step 7, duas regras «NEVER»), mais a instrução de cortar os blocos `## DISPATCH MITIGATION`/`## DISPATCH MODEL` antes de passar o prompt ao Agent (spawn aninhado bloqueado pelo classificador, medido na S348). Verificação: `grep -c 'injected via .## SKILL CONTENT' .claude/commands/spawn.md` = 0. **Metade CANÔNICA pendente:** a propagação do teto G12 (6 → 8 read-only) vive em `.claude/skills/core/parallelization-by-default/SKILL.md` §«Ceiling enforcement» (oráculo `--is-canonical` = 1) — cerimônia própria, com a medição PLAN-083 P0-1 re-lida antes de mudar o número.
