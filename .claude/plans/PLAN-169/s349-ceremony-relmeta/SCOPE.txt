@@ -1,0 +1,3 @@
+Scope:
+  - .claude/governance/gate-scripts-manifest.txt
+  - .claude/scripts/local/release.sh

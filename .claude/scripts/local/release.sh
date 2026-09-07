@@ -71,46 +71,40 @@ set -euo pipefail
 # The tag stands for the WHOLE release train in CHANGELOG.md, never just the
 # newest plan: list every plan of the train and the full ADR range.
 # ---------------------------------------------------------------------------
-TARGET_BASE="1.3.0"
-RELEASE_TITLE="night-mode + release-mechanics hardening"
-# repass-r2 part-d P1 (S299): the v1.3.0 train grew past the rc.1 text —
-# 167/168 (ownership decision table) and 169 W0-W2 (Linux port + verified
-# fixes) landed between rc.1 and rc.2. The tag stands for the WHOLE train.
-RELEASE_SCOPE="PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / PLAN-169 W0-W2 / PLAN-177 / PLAN-178 (ADRs 184 -> 191 + ADR-089-AMEND-1)"
-RELEASE_HEADLINE="night-mode — the Owner arms per-machine autonomy for one upcoming
-session (gitignored overlay, next-session semantics), and arming it is a
-HUMAN action by construction: the writer script self-path-guards, the Bash
-rail matches invocation best-effort, and every on/off/refusal lands in the
-HMAC chain as night_mode_toggled (proven live, not by fixture).
+TARGET_BASE="1.4.0"
+RELEASE_TITLE="per-project audit family + compaction continuity + installer write-safety"
+# O tag vale pelo TREM INTEIRO do CHANGELOG [1.4.0], nunca pelo plano
+# mais novo. Este bloco e DERIVADO por
+# .claude/plans/PLAN-169/s349-ceremony-relmeta/apply-relmeta-edits.py
+# a partir de `git log v1.3.0..HEAD` (planos CITADOS nos assuntos de
+# commit da faixa) e do conjunto de ADRs tocados na mesma faixa —
+# nao digite nada aqui a mao.
+RELEASE_SCOPE="PLAN-119 / PLAN-169 / PLAN-170 / PLAN-171 / PLAN-172 / PLAN-173 / PLAN-174 / PLAN-175 / PLAN-176 / PLAN-177 / PLAN-178 / PLAN-179 / PLAN-180 / PLAN-181 / PLAN-182 / PLAN-183 / PLAN-184 / PLAN-185 / PLAN-186 / PLAN-187 / PLAN-188 / PLAN-189 (ADRs tocados: ADR-001 ADR-079 ADR-081 ADR-144 ADR-149 ADR-153 ADR-163 ADR-186 ADR-192 ADR-193 ADR-194 ADR-195 ADR-196 ADR-197)"
+RELEASE_HEADLINE="A correcao que mais importa para quem ja instalou:
+da v1.0.0 ate a v1.3.0 o upgrade NUNCA entregou as arvores docs/ e
+.github/ que a instalacao entrega. Quem instalou uma vez e so
+atualizou depois ficou com os arquivos originais para sempre, sem
+aviso. Agora as duas arvores sao entregues com hash-gate contra as
+geracoes git da FONTE: uma copia intacta de geracao anterior e
+substituida, e qualquer coisa que voce editou e PRESERVADA em voz
+alta. Uma tabela de rotas, tres leitores.
 
-Also: a case-fold bypass that let .claude/settings.JSON slip past BOTH the
-canonical and kernel rails on case-insensitive filesystems (P0, fixed on
-both rails); ADR-186 settles the hook-deadline conflict — the canonical
-matcher wall deadline fails CLOSED as a named exception to the published
-fail-open-on-infrastructure contract, with a provenance-pinned unlock as the
-recovery route; sentinel unlock inside a git worktree now REQUIRES that
-provenance (ADR-119 Invariant 5); pair-rail 120/150 -> 180/210 with
-timeout_ms and a censoring-rate trigger, ratified only after a live probe
-proved the harness honors a 210 s registration; four scheduled workflows that
-had been red without ever surfacing in push CI; and the release mechanics
-themselves — an idempotent bump, plus an ancestry gate and a restricted-delta
-gate on the tag phase (PLAN-166).
+Seguranca: o instalador nao escreve mais fora do diretorio que voce
+entrega a ele (destino que era symlink ou hardlink pendente), e um
+handle de GitHub com barra nao deixa mais o CODEOWNERS com zero
+bytes para sempre. Um predicado de confinamento, produtor e
+consumidor na mesma gramatica.
 
-rc.4 additions: the GA re-pass NO-GO cures (PLAN-177 — the two release
-verdict readers now share ONE fail-closed ASCII/YAML grammar: indented
-continuations, glued comments, Unicode whitespace and separator-less
-keys are all named rejections, proven by cross-reader probes; gitignore
-delivery is symlink-safe with honest dry-run previews; plans/ schema
-docs refresh hash-gated, never clobbering adopter edits; pre-state
-ceremony migration fails safe to user with explicit recoverable
-opt-in) and PLAN-178 Lote B, the spawn acceptance contract v2 (ADR-191:
-FILE ASSIGNMENT grammar with taint semantics + advisory telemetry,
-fenced+capped inter-agent ingest with per-dimension truncation
-poisoning, pre-dispatch validator in all four Workflow skills, shared
-memory query() fenced with a fireable SEC-P0-02 reopen trigger, and the
-multi-plan budget-cap cure), authored under its own GPG sentinel and a
-44-round cross-model rail."
+Auditoria: sob o mesmo HOME, cadeias HMAC de projetos diferentes
+deixam de se entrelacar — cada projeto tem diretorio de estado,
+chave e salt proprios. O limite fica declarado, nao escondido: sob
+o mesmo UID um processo ainda le o diretorio e a chave do outro, e
+fechar isso exigiria UID separado.
 
+E a parte honesta: a continuidade de compaction que da nome a este
+trem so shipou depois de o primeiro desenho ser MEDIDO e nao
+entregar nada. Sem afirmacao de velocidade — governanca e
+auditabilidade, como sempre."
 RC_NUM="1"
 STABLE=0
 DRY_RUN=0

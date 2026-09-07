@@ -1,0 +1,5 @@
+BASE-HEAD 875ac92f13783759eb2776eabcce82b43c734db8
+PRE 37ce0045fa03e8eae9d1e37e6842f68306a039da .claude/scripts/local/release.sh
+PRE a2634a52e96e243e46b3ab83c650ec6fc2fbcff9 .claude/governance/gate-scripts-manifest.txt
+PATCH-SHA256 f55e54732eaf0621d8b7fd0e1efe6cde1202f9121181e07a4466005338d59986
+SCOPE-COUNT 2
