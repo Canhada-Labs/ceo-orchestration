@@ -329,7 +329,7 @@ HEAD: **os quatro são CRIADOS por esta onda.** O diretório de testes
 está em `pytest.ini` `testpaths` (`.claude/scripts/tests`, linha 41),
 logo tudo o que as caixas abaixo invocam é coletável.
 
-- [ ] `[P0][US1][.claude/scripts/check-model-currency.py]` O detector lê os
+- [x] `[P0][US1][.claude/scripts/check-model-currency.py]` O detector lê os
       blocos `VETO_FLOOR_ALLOWED` e `AVAILABLE_MODELS_WORKING_SET` do
       ADR-149 e os compara com `cost-table.yaml`,
       `model-deprecations.json` e `settings.json`; divergência sai como
@@ -339,7 +339,7 @@ logo tudo o que as caixas abaixo invocam é coletável.
       achado, `≥2` o detector quebrou — e a asserção do achado é do
       teste, não do `$?`.
       Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k names_the_finding_and_separates_exit_codes`
-- [ ] `[P0][US1][.claude/scripts/check-model-currency.py]` **Controle
+- [x] `[P0][US1][.claude/scripts/check-model-currency.py]` **Controle
       NEGATIVO de rede por oráculo de RUNTIME, não por texto.** O
       detector roda com `socket.socket` e `socket.create_connection`
       substituídos por uma função que levanta; a execução completa. O
@@ -348,19 +348,19 @@ logo tudo o que as caixas abaixo invocam é coletável.
       transitiva (`from _lib import model_feed_fetch`) faz o MESMO
       oráculo ficar VERMELHO.
       Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k no_network_runtime_oracle_with_transitive_import_control`
-- [ ] `[P0][US1][.claude/scripts/check-model-currency.py]` Controle
+- [x] `[P0][US1][.claude/scripts/check-model-currency.py]` Controle
       POSITIVO da detecção: injetar um identificador falso
       (`claude-opus-6`) no bloco do ADR numa cópia descartável faz o
       detector ficar VERMELHO; sem a injeção, VERDE.
       Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k injected_model_turns_red`
-- [ ] `[P1][US1][.claude/data/model-currency-state.json]` O estado de
+- [x] `[P1][US1][.claude/data/model-currency-state.json]` O estado de
       cada ciclo é gravado em arquivo RASTREADO pelo git, com o número
       do ciclo, o resultado por raia, a soma de falsos-positivos **e o
       carimbo `ts` do relógio de parede** (§1 — é a perna que enxerga a
       rotina parada). O teste assere os quatro campos, não só que o
       arquivo é JSON válido.
       Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k state_file_contract_has_cycle_lanes_fp_and_ts`
-- [ ] `[P0][US1][.claude/scripts/check-model-currency.py]` **A bandeira
+- [x] `[P0][US1][.claude/scripts/check-model-currency.py]` **A bandeira
       de leitura `--state --json` existe e serve os SETE critérios de
       morte.** É o comando único do §4: o teste enumera os sete
       critérios e assere que cada um encontra o seu campo na saída. Um
@@ -377,19 +377,25 @@ W0a. O conteúdo do achado não muda: o oráculo `replacements ⊆
 valid_override_ids` como escrito no texto original é um **erro de
 categoria** — compara substitutos Anthropic contra `_VALID_MODELS`, que
 é a lista de revisores da linha OpenAI. Na forma correta, por família de
-fornecedor, **quatro identificadores estão vermelhos hoje**:
+fornecedor e por SUPERFÍCIE, **sete identificadores estão
+vermelhos hoje** — medido na W0a, contra as TRÊS superfícies que a primeira
+caixa desta onda manda comparar. Quatro vêm da superfície de SUBSTITUTOS:
 `claude-haiku-4-5-20251001`, `claude-mythos-5` e `claude-opus-4-8-fast`
 fora do conjunto de trabalho do ADR-149, e `gpt-5.6-sol` fora de
-`_VALID_MODELS`. Publicados, não escondidos.
+`_VALID_MODELS`. Três vêm da superfície de PREÇO, e a revisão anterior não
+os contava: `claude-opus-4-7` e `claude-opus-4-7-1m` (geração anterior, linha
+de preço histórica retida) e `claude-opus-5-fast` (variante de modo rápido que
+o ADR-149 não assina). Publicados, não escondidos — e publicar quatro faria o
+portão da caixa `--expected-reds` nascer vermelho no primeiro dia.
 
-- [ ] `[P1][US1][.claude/data/model-currency-expected-reds.txt]` **O
+- [x] `[P1][US1][.claude/data/model-currency-expected-reds.txt]` **O
       conjunto VERMELHO conhecido nasce aqui, em arquivo rastreado**, no
       molde de `scripts/tests/ownership-expected-reds.txt` (comentários
       com a causa de cada linha; uma linha por identificador). Ele é
       livre (oráculo = 0), e por isso NÃO entra no pacote assinado da
       W1b — foi o defeito nomeado pelo round 2.
       Check: `git ls-files --error-unmatch .claude/data/model-currency-expected-reds.txt && python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k expected_reds_file_has_a_cause_per_line`
-- [ ] `[P0][US1][.claude/scripts/check-model-currency.py]` **A bandeira
+- [x] `[P0][US1][.claude/scripts/check-model-currency.py]` **A bandeira
       `--expected-reds` compara o conjunto EXATO e falha em QUALQUER
       diferença — inclusive encolhimento**, como o
       `ownership-nightly-gate.sh` faz: um vermelho que some sem
@@ -397,7 +403,7 @@ fora do conjunto de trabalho do ADR-149, e `gpt-5.6-sol` fora de
       (`CLAUDE.md` §4). O controle positivo planta um identificador a
       mais e outro a menos, e as duas plantas ficam VERMELHAS.
       Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k expected_reds_exact_set_with_shrinkage_control`
-- [ ] `[P1][US1][.claude/scripts/check-model-currency.py]` **A raia de um
+- [x] `[P1][US1][.claude/scripts/check-model-currency.py]` **A raia de um
       fornecedor só abre se ele for ATIVO**, definido como: membro do
       conjunto de trabalho do ADR-149 **e** com linha de preço em
       `cost-table.yaml`. Fornecedor sem linha de preço é INERTE por
@@ -1002,6 +1008,37 @@ de CI sem alternativa em 6 lugares; versão de Python misturada entre
 resumo criptográfico.
 
 ## Progress log
+
+- 2026-09-07 (S349, W0a): **detecção OFFLINE entregue — 4 arquivos NOVOS mais
+  este plano, oráculo 0 nos cinco, zero rede.** Nascem
+  `.claude/scripts/check-model-currency.py` (lê os dois blocos do ADR-149 por
+  AST e compara contra três superfícies — tabela de preços, registro de
+  descontinuações e settings —, com achado NOMEADO e códigos de saída que
+  separam EXECUÇÃO de ACHADO: 0 sem achado, 1 com achado, ≥2 quebrado),
+  `.claude/data/model-currency-state.json` (estado rastreado; cada critério
+  de morte do §4 tem campo, e `--state --json` RECUSA com ≥2 quando um
+  critério fica sem campo), `.claude/data/model-currency-expected-reds.txt`
+  (conjunto vermelho no molde de `ownership-expected-reds.txt`, causa por
+  linha, comparado EXATO com encolhimento vermelho) e
+  `.claude/scripts/tests/test_check_model_currency.py` (11 casos — 8 ACs da
+  onda, um por caixa, mais 3 da cura pós-refutação; cada um com controle
+  POSITIVO, e quatro plants provados vermelho→verde).
+  **O texto desta seção mudou de QUATRO para SETE no mesmo patch**, medido: a
+  contagem antiga era a superfície de SUBSTITUTOS sozinha, e a primeira caixa
+  desta onda manda comparar TRÊS superfícies; a de PREÇO acrescenta
+  `claude-opus-4-7`, `claude-opus-4-7-1m` e `claude-opus-5-fast`. Os quatro
+  antigos são um subconjunto dos sete. Publicar quatro faria o portão
+  `--expected-reds` nascer vermelho.
+  **Curas da refutação (QA), no mesmo pacote:** `--state --json` passa a
+  APLICAR os limiares do §4 em vez de só servir os campos — K-2, K-4, K-7 e
+  K-8 são `fail_closed` (uma ocorrência ⇒ saída 2), os demais `report_only`
+  (⇒ 1), e os que contam ciclos ou relógio ficam `not_yet_wired` até a W3b
+  ligar a cadência; a composição `--state` + `--expected-reds` passa a manter
+  o código MAIS SEVERO (antes o portão do conjunto vermelho saía silenciado);
+  e o contador de K-6 passa a avançar POR RAIA, com a raia inerte deixando de
+  herdar achado alheio.
+  Fica para a **W0b**: a perna com rede (fetcher canônico).
+  Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q`
 
 - 2026-09-07 (S348, docs): **cura da rodada 2 do debate executada.** Este
   texto absorve os 16 ajustes de

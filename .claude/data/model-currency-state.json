@@ -1,0 +1,40 @@
+{
+  "_note": "PLAN-176 W0a — tracked cycle state of check-model-currency.py. Every field below is bound to a death criterion of PLAN-176 §4; the binding lives in _DEATH_CRITERIA in .claude/scripts/check-model-currency.py and `--state --json` refuses (exit 2) when a criterion has no field here. Advanced by `--record-cycle`. cadence_started stays false until the nightly-hygiene dimension of W3b wires the routine: until then K-8/K-9 report not_yet_wired instead of pretending a cadence exists.",
+  "cadence_started": false,
+  "cadence_target_hours": 24,
+  "cycle": 0,
+  "false_negative_probe": {
+    "every_n_cycles": 4,
+    "last_cycle": 0,
+    "passed": true,
+    "runs_outside_lanes": true
+  },
+  "false_positives": {
+    "count": 0,
+    "window_cycles": 8
+  },
+  "lanes": {
+    "anthropic": {
+      "active": true,
+      "consecutive_failures": 0,
+      "result": "seed"
+    },
+    "openai": {
+      "active": false,
+      "consecutive_failures": 0,
+      "result": "inert"
+    }
+  },
+  "phase2_auto_merge_enabled": false,
+  "reader_errors": 0,
+  "schema": 1,
+  "schema_break": false,
+  "trust_layer_touches": 0,
+  "ts": "2026-09-07T00:00:00Z",
+  "upstream": {
+    "age_cycles": null,
+    "age_hours": null,
+    "complete": false,
+    "present": false
+  }
+}

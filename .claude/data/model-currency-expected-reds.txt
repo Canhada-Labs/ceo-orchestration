@@ -1,0 +1,50 @@
+# PLAN-176 W0a — the EXPECTED set of RED model ids for check-model-currency.py.
+# Mould: scripts/tests/ownership-expected-reds.txt. The --expected-reds gate
+# compares the OBSERVED red set against the bare ids below and fails on ANY
+# difference — SHRINKAGE INCLUDED: a red that disappears without an
+# explanation is a reason to STOP, not to celebrate (CLAUDE.md §4).
+#
+# One bare id per line, each immediately preceded by its cause: which surface
+# reports it, and which authority does not cover it.
+#
+# Scope note, measured at authorship (2026-09-07, HEAD 88a30b1). PLAN-176 §W0a
+# publishes FOUR reds. That count is the REPLACEMENT surface alone
+# (model-deprecations.json). The W0a AC compares THREE surfaces — cost table,
+# deprecation ledger and settings — and the priced surface adds three more ids
+# the plan text does not count. The union is SEVEN, and the plan's four are a
+# subset of it. Publishing four here would make the gate red on day one.
+
+# cost-table.yaml:95 — previous flagship generation, price row retained for
+# historical cost reconciliation. The deprecation ledger itself declares the
+# cost table a by-design id carrier (`by-design-id-carriers`, "historical
+# pricing/replay tables"). Surface: cost table. Authority: ADR-149 working set.
+claude-opus-4-7
+# cost-table.yaml:100 — same generation, 1M-context variant of the row above.
+# Surface: cost table. Authority: ADR-149 working set.
+claude-opus-4-7-1m
+# cost-table.yaml:90 — fast-mode premium row for the Opus 5 flagship. A real
+# product variant that ADR-149 does not sign: the working set carries the base
+# id only. Surface: cost table. Authority: ADR-149 working set.
+claude-opus-5-fast
+# cost-table.yaml:80 AND the replacement of 2 deprecation rows
+# (claude-opus-4-6-fast, claude-opus-4-7-fast). Same class as the row above: a
+# fast-mode variant outside the signed working set, reported by two surfaces.
+# Authority: ADR-149 working set.
+claude-opus-4-8-fast
+# The DATED form. ADR-149 signs the dateless `claude-haiku-4-5`; the price
+# table (cost-table.yaml:120) and 4 deprecation rows both carry the dated one.
+# Genuine drift between two spellings of one model, not a second model.
+# Surfaces: cost table + deprecation ledger. Authority: ADR-149 working set.
+claude-haiku-4-5-20251001
+# Replacement of claude-mythos-preview. The Mythos line is not generally
+# available, has no price row, and is not in the working set.
+# Surface: deprecation ledger. Authority: ADR-149 working set.
+claude-mythos-5
+# OpenAI-family replacement of 4 rows (gpt-5, gpt-5.2, gpt-5.3-codex, o3),
+# checked against codex_cli_shape.py `_VALID_MODELS`, whose newest member is
+# gpt-5.5. This is the live defect already inventoried in PLAN-176 §8: the
+# reviewer allowlist rejects the migration target the deprecation ledger itself
+# recommends. Its lane (openai) is INERT — zero priced rows — so the finding is
+# reported without opening a lane.
+# Surface: deprecation ledger. Authority: codex_cli_shape `_VALID_MODELS`.
+gpt-5.6-sol
