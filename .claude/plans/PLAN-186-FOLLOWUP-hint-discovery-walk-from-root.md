@@ -11,7 +11,7 @@ level: L3
 budget_tokens: 180-360k   # derivacao em §0.2
 budget_sessions: 2
 context_risk: high   # split-session (`PLAN-SCHEMA:329-330`); §0.3
-external_wait: "QUATRO bloqueios, nao um: (i) assinatura GPG do Owner num sentinel cujo Scope enumera todos os paths tocados; (ii) DOIS dos quatro sao KERNEL e sentinel assinado NAO destrava kernel; (iii) §1.4 — este followup so entra em `executing` depois que o PLAN-186 chegar a `done`; (iv) a cascata de VERSAO, com o PISO de 24 h entre a ultima tag RC e a tag **GA**. Enumeracao completa, com os paths, os oraculos e as citacoes, em §0.4."
+external_wait: "QUATRO bloqueios, nao um: (i) assinatura GPG do Owner num sentinel cujo Scope enumera todos os paths tocados; (ii) DOIS dos quatro sao KERNEL e sentinel assinado NAO destrava kernel; (iii) §1.4 — este followup so entra em `executing` depois que o PLAN-186 chegar a `done`; (iv) a cascata de VERSAO, com o PISO de 24 h entre a ultima tag RC e a tag **GA**. Enumeracao completa, com os paths, os oraculos e as citacoes, em §0.4. Revisao de portfolio S348 (2026-09-06, veredito 3/3 'adiar' — plano ja landado, nenhuma onda aberta, nenhum comprador hoje) confirma o gatilho: o bloqueio PRATICO dominante e (iii), verificavel por `grep -m1 '^status:' .claude/plans/PLAN-186-orchestrator-operating-model.md` (hoje 'executing') — reabre para 'executing' quando esse comando ler 'done'."
 eta_calendar: "D+1 no MINIMO, contado a partir do fecho do PLAN-186. DERIVADO por `PLAN-SCHEMA.md:336-350` (`eta_calendar = max(external_waits)`): das QUATRO esperas, tres sao gatilhos do Owner sem duracao propria e a quarta tem duracao medida em contrato — as 24 h do hold RC->GA (`VERSIONING.md:78-88`). Logo o maximo e o hold de 24 h e a wave NAO corta a tag **GA** no mesmo dia em que landa. Derivacao completa em §0.5."
 tags: [hooks, guardrail, hint-discovery, bateria, followup, canonico, kernel]
 ---
@@ -798,3 +798,12 @@ passa a ser observavel (acima). O resto fica — nunca levanta, shallow-first.
   (este repo nao faz claim de velocidade); o caso `/` continua opt-in, e a
   partir daqui ele termina no oraculo do AC-4 — nao "em qualquer arvore":
   um unico `scandir` ainda pode demorar arbitrariamente.
+
+## Progress log
+
+- 2026-09-06 (S348): revisao de portfolio (3 criticos, 3/3 "adiar")
+  confirma o congelamento em `draft` — nenhuma onda aberta, nenhum
+  comprador hoje. `external_wait` ganha a citacao explicita do
+  comando que decide o bloqueio dominante (iii, status do PLAN-186
+  pai). Nenhum AC tocado, nenhuma wave iniciada. Fonte:
+  `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.

@@ -15,7 +15,7 @@ tier_mix_estimate: "sonnet ~90% / opus ~10% (opus só nos debates L3)"
 tier_mix_rationale: "tick mecânico é sonnet; Haiku proibido sem torneio (ADR-052); opus reservado ao debate, que é onde a decisão mora"
 budget_sessions: 2-3
 context_risk: low
-external_wait: "BLOQUEADO até GA v1.3.0 (freeze rota-SEQUÊNCIA S304 + decisão t10 do Owner pendente). W0 (piloto) só existe DURANTE um hold RC→GA ativo. W3 exige /debate (L3) + 1 GPG do Owner."
+external_wait: "BLOQUEADO por AUSÊNCIA de hold RC→GA ativo — não mais por GA v1.3.0 (que já saiu em 2026-08-17; a redação anterior deste campo ficou stale, corrigida pela revisão de portfólio S348, 2026-09-06, veredito 3/3 'adiar'). W0 (piloto) só existe DURANTE um hold RC→GA ativo, nunca fora dele. Verificável por comando: `git tag --list 'v1.4.0-rc*'` não-vazio E o step \"Assert 24h Codex re-pass window\" da release ainda correndo para essa tag (ADR-103) — só nessa janela W0 pode rodar, em CLONE com tag falsa (nunca no hold real, emenda r1-C3). W1 não depende do hold. W3 exige /debate (L3) + 1 GPG do Owner."
 eta_calendar: "W0 = dentro do próximo hold 24h pós-tag; W1 = mesmo-dia pós-GA; W2-W3 = mesmo-dia a D+1 após debate. Sem hold ativo, W0 espera o próximo trem."
 ---
 
@@ -198,3 +198,12 @@ Wrapper que fecha os 7 gaps da tabela do estudo (cada linha = 1 AC):
 Sessão nova pós-GA: Gate 1-2, ler este plano + memória
 `project-s310-loop-adoption-study.md`. Se houver hold ativo: W0.
 Senão: W1 → W2 → W3. Commits `feat(PLAN-181 W<n>): ...`.
+
+## Progress log
+
+- 2026-09-06 (S348): revisão de portfólio (3 críticos, 3/3 «adiar»)
+  confirma o congelamento e corrige a redação stale do `external_wait`
+  (dizia "até GA v1.3.0", já satisfeito desde 2026-08-17; o bloqueio
+  real é a ausência de um hold RC→GA ativo). Campo ganha a condição
+  executável de reabertura. Nenhuma wave iniciada. Fonte:
+  `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.

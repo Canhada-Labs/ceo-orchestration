@@ -10,7 +10,7 @@ depends_on: [PLAN-171, PLAN-172]
 budget_tokens: 250-400k (estudo completo; spike W1 ≤200k dentro disso; firmado S302e). Build FORA deste plano (L3+ com ADR e budget próprios)
 budget_sessions: 3-4 (spike ≤2 por AC; W2-W4 1-2)
 context_risk: medium
-external_wait: "gated: resultados do PLAN-172 (E0b/E5/E6) + gate retrospectivo dos NO-GOs para best-of-N"
+external_wait: "gated: resultados do PLAN-172 (E0b/E5/E6) + gate retrospectivo dos NO-GOs para best-of-N. Verificável por comando: `grep -m1 '^status:' .claude/plans/PLAN-172-honest-speed-e0b-e5-e6.md` (hoje 'reviewed', nenhuma wave iniciada) — reabre quando o PLAN-172 publicar o relatório do E0b (seu §5) ou mudar de status. Revisão de portfólio S348 (2026-09-06, veredito 3/3 'adiar'): dependência de segunda ordem — o 172 nem rodou."
 tags: [cockpit, warp, mcp, vision, seed]
 ---
 
@@ -195,3 +195,12 @@ build) + E5 substrato existente (cross-session).
 
 **Debate:** Codex r1→r3 GO desde o r2; `/debate start PLAN-173` no
 início da execução (Gate 3).
+
+## Progress log
+
+- 2026-09-06 (S348): revisão de portfólio (3 críticos, 3/3 «adiar»)
+  confirma o congelamento — dependência de segunda ordem do PLAN-172
+  (que ainda não rodou) segue aberta; `external_wait` ganha a condição
+  executável de reabertura. Nenhuma wave iniciada além do pré-gate da
+  W4 (já registrado acima). Fonte:
+  `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.

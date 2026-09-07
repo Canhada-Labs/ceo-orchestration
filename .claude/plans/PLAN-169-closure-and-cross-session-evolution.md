@@ -1555,6 +1555,15 @@ pelo Owner; `OWNER-S329-E-LAND.sh` G-PRE..G5 + V1..V7 verdes; patch
   `check_output_secrets`, a entrada que falha, não é vigiada por mais
   nada no repo. Acrescentá-la, ou aceitar a exposição de instrumento
   único.
+- **OQ-13 (Owner, revisão de portfólio S348, 2026-09-06):** re-escopar
+  este plano — a GA v1.4.0 (AC-8) é o entregável; o quota-resume
+  (W4.1, EXPERIMENTAL) vira follow-up próprio, fora deste plano?
+  **Recomendação da revisão S348 (3/3): re-escopar** — a GA v1.4.0
+  (AC-8) é o entregável; o quota-resume (W4.1) vira follow-up próprio.
+  **PENDENTE de ratificação do Owner** (pergunta da manhã de
+  2026-09-07). Fonte:
+  `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
+  §2 (linha do PLAN-169).
 
 ## How to continue
 

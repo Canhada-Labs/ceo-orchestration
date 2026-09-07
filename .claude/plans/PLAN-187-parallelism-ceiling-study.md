@@ -1,8 +1,9 @@
 ---
 id: PLAN-187
 title: "Estudo do teto de paralelismo: agentes, revisores externos, cópias do repo, terminais e contas"
-status: draft
+status: abandoned
 created: 2026-09-04
+abandoned_at: 2026-09-06
 owner: CEO
 depends_on: [PLAN-186]
 level: L3
@@ -144,15 +145,47 @@ domina) — rodar em conta DEDICADA, nunca na conta do terminal principal.
 ## Acceptance criteria
 
 - [ ] AC-1 Q1 medida: tabela N × {p50, p95, erros, mem, load} com 3 repetições e o teto NOMEADO
-      com o critério que o definiu (memória, latência ou 429).
+      com o critério que o definiu (memória, latência ou 429). **Encerrado sem medição (S348):
+      pergunta já respondida pelos fatos 11–26 — o teto observado é cota da conta + recusa de
+      concorrência do servidor, não capacidade de máquina. Ver `## Abandonment reason`.**
 - [ ] AC-2 Q2/Q3 medidas: 2 workflows na mesma sessão e 2 terminais em 2 contas, com p95
-      comparado ao caso de 1 workflow.
+      comparado ao caso de 1 workflow. **Encerrado sem medição (S348): duplicado com o AC-2 do
+      PLAN-186 (`PLAN-186-orchestrator-operating-model.md:192`), dono único. Ver `## Abandonment
+      reason`.**
 - [ ] AC-3 Q5 medida: teto de revisões codex simultâneas sem 429 (3/3 repetições) e o maior
-      brief que o grok responde em < 5 min; recomendação de uso por tamanho de brief.
+      brief que o grok responde em < 5 min; recomendação de uso por tamanho de brief. **Encerrado
+      sem medição (S348): mesma razão do AC-1 — fatos 6, 7 e 11–26 já respondem. Ver
+      `## Abandonment reason`.**
 - [ ] AC-4 Q4/Q6: custo de RAM por agente e por worktree medido; proposta de topologia
       multi-terminal com partição de paths, levada a `/debate` (L3) antes de qualquer adoção.
-- [ ] AC-5 Relatório `docs/research/parallelism-ceiling-S34x.md` com todo número acompanhado
-      do comando; nenhuma claim de speedup do framework (AGENTS.md §0).
+      **Encerrado sem medição (S348): RSS por agente e custo por worktree inobserváveis por
+      construção (linhas 76–89 deste plano). Ver `## Abandonment reason`.**
+- [x] AC-5 Relatório `docs/research/parallelism-ceiling-S348.md` com todo número acompanhado
+      do comando; nenhuma claim de speedup do framework (AGENTS.md §0). **Entregue (S348).**
+
+## Abandonment reason
+
+Fechado por veredito **3/3** da revisão de portfólio S348
+(`.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md:53` e `:70`): *"a pergunta
+já foi respondida e o AC-4 é inobservável por construção (RSS por agente não é observável; custo
+por worktree não é derivável)"*. O único entregável deste fechamento é o AC-5 — o relatório
+`docs/research/parallelism-ceiling-S348.md`, escrito só com números já medidos e landados (fatos
+1–26 deste plano, §1).
+
+Razão por acceptance criterion, sem medição nova:
+
+- **AC-1 e AC-3** — encerrados sem medição (S348): a pergunta já foi respondida pelos fatos 11–26
+  (land livre da noite S345, linha do progress log abaixo) — o teto observado na prática é cota da
+  conta + recusa de concorrência do servidor, não uma contagem fixa de agentes por máquina. Rodar o
+  instrumento `stress-parallelism` (§4) não mudaria essa resposta.
+- **AC-2** — encerrado sem medição (S348): medição duplicada com o AC-2 do PLAN-186
+  (`.claude/plans/PLAN-186-orchestrator-operating-model.md:192` — «Teto de concorrência: N máximo
+  sem 429 em 3/3 repetições por N»); dono único da medição é aquele plano.
+- **AC-4** — encerrado sem medição (S348): RSS por agente e custo por worktree são inobserváveis
+  por construção, não por falta de tempo — ver a nota deste próprio plano nas linhas 76–89 (RSS:
+  um único processo casa o binário `claude` nas 102 amostras; worktree: só existe correlação de
+  Pearson −0,7502, confundida pelo tempo), resumida no progress log de 2026-09-05 abaixo.
+- **AC-5** — `[x]`, entregue por este fechamento: `docs/research/parallelism-ceiling-S348.md`.
 
 ## Open questions
 
@@ -167,3 +200,4 @@ domina) — rodar em conta DEDICADA, nunca na conta do terminal principal.
 - 2026-09-04 (S344, ~15:30): stress `[8,16]×1` executado sob carga (fato §1 #10): N=8 limpo, N=16 com 10/16 recusados pelo SERVIDOR («not your usage limit»). Q1 ganha a hipótese H1: o teto observado é por servidor+carga, não por conta; falsificador = repetir com a máquina ociosa e ver N=16 limpo.
 - 2026-09-04 (S344, ~15:50): o Owner mostrou uma 2.ª sessão Claude (mesma conta, mesma máquina, repo `arbitrage-monitor`, 8 workflows, ≥8 agentes) ativa durante o stress — medição #10 marcada CONTAMINADA; Q0 (inventário de concorrência externa) adicionada como pré-condição de toda célula.
 - 2026-09-05 (S345, noite autônoma, land livre): `p187-night-facts` landado — a §1 ganha os fatos 11–26 medidos na PRÓPRIA noite, cada número acompanhado do comando que o reproduz, e o CSV do amostrador (102 amostras, `2026-09-04T20:36:35` → `2026-09-05T05:01:54`) passa a viajar RASTREADO em `.claude/plans/PLAN-187/s345-night-sampler.csv`. AC-4 fica PARCIALMENTE informado e a nota diz por quê: RSS por agente NÃO é observável (um único processo casa o binário nas 102 amostras) e custo por worktree NÃO é derivável (correlação de Pearson −0,7502, confundida pelo tempo e sem atribuição). Rail de land r1 APPROVE nas duas lanes (mecanismo sem defeito acionável; texto com 4 residuais declarados, 3 deles contra a redação do brief e não contra os bytes); bateria: 14/14 linhas re-derivadas da árvore viva, 9 pernas de recusa reproduzidas (idempotência rc=3 com sha do plano inalterado; escape por symlink rc=3 com 0 arquivos fora da árvore), `validate-governance.sh` COMPLETO Errors 0, staleness/claims/env-hygiene/contaminação rc 0, oráculo 0 nos 3 paths.
+- 2026-09-06 (S348): plano FECHADO por veredito 3/3 da revisão de portfólio S348 (`PLAN-186/portfolio-review-S348/portfolio-review-S348.md:53,70`). AC-5 entregue em `docs/research/parallelism-ceiling-S348.md` (só números já medidos, cada um com fonte). AC-1 a AC-4 encerrados sem medição nova — razão de cada um em `## Abandonment reason`. `status: draft → abandoned`, `abandoned_at: 2026-09-06`.

@@ -156,7 +156,7 @@ Por que o eixo antigo falhava: a classe de defeito dominante deste repo é «ins
 
 - **W4a — MEDIR A DELEÇÃO ANTES DE CONSTRUIR O SPLIT** (round 2, K20). Verificado: `hook-tests-python-matrix` (`validate.yml:1606`, `runs-on: Ceo`) já roda no `push` em 3.9 **e 3.12** o comando `pytest .claude/hooks/tests/ .claude/scripts/tests/ .claude/scripts/optimizer/tests/` nos DOIS passes (`:1636-1646`) — a união exata dos dois steps mais caros do job `validate`: «Run Python hook unit tests» (`:454`, ~6m (média 3 runs S341)) e «Run Python script unit tests» (`:539`, ~6m30s (média 3 runs S341)). São 12m26s (média de 3 runs; W4a S341 — a redação original dizia 14m02s) dos 20m31s (média; original 22m22s).  Três execuções SERIALIZADAS decidem (pré-registro W4a S341), gated pelo MESMO baseline de node-ids que a matriz exige, mais o **delta de ambiente DUPLO declarado**: `PYTHONPATH: "."` existe no matrix e falta nos dois steps; `CEO_HOOK_ADAPTER: claude` existe no step de hooks (`:455-456`) e falta no matrix. Se a deleção for recusada por cobertura, **a recusa fica ESCRITA** e a W4b segue. **LANDADA (S344, 2026-09-04): `8003b65`; medição em `0b5e6ed`; AC-16 ✓ — detalhe no AC.**
 - **W4b — o split só depois, e a justificativa muda** (K21): verificado que `validate.yml` tem **zero** `if: always()` — hoje um step vermelho impede os posteriores de rodar. O ganho real do split é ATRIBUIÇÃO INDEPENDENTE de falha, não velocidade: depois da deleção o maior job restante é `hook-tests-python-matrix (3.9)` — FORA do escopo da wave (W4a S341; a redação original apontava a 3.12) — e nenhuma previsão de wall é feita (`AGENTS.md:9-11`). Deleção e split são COMPLEMENTARES.
-- **W4b — janela de required-check (item NOMEADO; decisão do Owner S344, 2026-09-04: «Registrar no plano e tratar na W4b (Recomendado)»)**: hoje o `main` NÃO tem branch protection (API `.../branches/main/protection` → 404 «Branch not protected», medido pelo G7 do LAND em 2026-09-04) e recebe push direto por cerimônia; a janela «matriz vermelha + Validate verde numa PR» só EXISTE no dia em que a proteção for ligada com a lista de `docs/BRANCH-PROTECTION.md:101-105`, que hoje nomeia SÓ `validate / Governance, health, contamination, shellcheck` — e, depois da deleção do W4a, esse check não roda mais as suítes de hooks/scripts (quem roda é `hook-tests-python-matrix (3.9)` e `(3.12)`). A W4b fecha a janela nas DUAS metades no MESMO passo: os dois legs da matriz entram na lista do doc E na config server-side, com a nota de que a config do doc (PR obrigatória + «do not allow bypassing») BLOQUEIA os pushes diretos de SIGN/LAND/MEASURE — ligar a proteção é mudança de ROTA das cerimônias (ADR próprio), não checkbox. O `CEO_W4A_REQUIRED_CHECK_ACK` do LAND e o item do checklist do MEASURE repetem a decisão a cada cerimônia da W4. **Decisão do Owner (S347, 2026-09-06 — item 4.8 de `PLAN-186/debate/owner-decisions-S347.md`, pack `w4b-ci-matrix`):** «Aceitar as duas (Recomendado)» — a W4b ganha o ACK do desvio dos required checks (`CEO_W4B_REQUIRED_CHECK_ACK=I-ACCEPT` no LAND, irmão do `CEO_W4A_REQUIRED_CHECK_ACK` acima) mais o crescimento do manifesto ADR-192 (`.claude/governance/gate-scripts-manifest.txt`) de 9 para 12 membros.
+- **W4b — janela de required-check (item NOMEADO; decisão do Owner S344, 2026-09-04: «Registrar no plano e tratar na W4b (Recomendado)»)**: hoje o `main` NÃO tem branch protection (API `.../branches/main/protection` → 404 «Branch not protected», medido pelo G7 do LAND em 2026-09-04) e recebe push direto por cerimônia; a janela «matriz vermelha + Validate verde numa PR» só EXISTE no dia em que a proteção for ligada com a lista de `docs/BRANCH-PROTECTION.md:101-105`, que hoje nomeia SÓ `validate / Governance, health, contamination, shellcheck` — e, depois da deleção do W4a, esse check não roda mais as suítes de hooks/scripts (quem roda é `hook-tests-python-matrix (3.9)` e `(3.12)`). A W4b fecha a janela nas DUAS metades no MESMO passo: os dois legs da matriz entram na lista do doc E na config server-side, com a nota de que a config do doc (PR obrigatória + «do not allow bypassing») BLOQUEIA os pushes diretos de SIGN/LAND/MEASURE — ligar a proteção é mudança de ROTA das cerimônias (ADR próprio), não checkbox. O `CEO_W4A_REQUIRED_CHECK_ACK` do LAND e o item do checklist do MEASURE repetem a decisão a cada cerimônia da W4. **Decisão do Owner (S347, 2026-09-06 — item 4.8 de `PLAN-186/debate/owner-decisions-S347.md`, pack `w4b-ci-matrix`):** «Aceitar as duas (Recomendado)» — a W4b ganha o ACK do desvio dos required checks (`CEO_W4B_REQUIRED_CHECK_ACK=I-ACCEPT` no LAND, irmão do `CEO_W4A_REQUIRED_CHECK_ACK` acima) mais o crescimento do manifesto ADR-192 (`.claude/governance/gate-scripts-manifest.txt`) de 9 para 12 membros. **Ratificado pela revisão de portfólio S348 (2026-09-06, Q2 de `owner-decisions-S348.md`, relatório `PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §7):** «Sim, o w4b-ci-matrix, teto 2 rodadas (Recomendado)» — `w4b-ci-matrix` é o ÚNICO canônico da madrugada 06→07/09 (cura S347-r8 + 1 rodada de mecanismo + 1 de confirmação); P1 na confirmação ⇒ `partial`; codex sem cota ⇒ `PENDING-CODEX`; W1 (`w1-widen`) e W6a (`w6-adapter`) esperam a manhã de 07/09.
 - Validate: job `validate` dividido em 3 jobs (unit hooks / unit scripts / installer-harness-matrix); alvo de wall-clock a MEDIR (baseline 20m31s (média; original 22m22s); original citava 3.12 a 10m39s)). Nota: meta de wall-clock da CI DESTE repo, medida em `startedAt→completedAt` pelo AC-6 — não é claim de velocidade do framework (AGENTS.md §0).
 - **A pré-condição escrita estava satisfeita E era a pergunta errada** (C-K15): `GITHUB_ENV`, `GITHUB_OUTPUT`, `upload-artifact`, `download-artifact` e `actions/cache` dão ZERO nos dois workflows. O estado partilhado real é o TOOLCHAIN — `setup-python` fixa **3.12** e o `pip install` de pytest/PyYAML/pytest-xdist roda no MEIO do job, só antes dos blocos caros. Cada job novo replica versão e install, e o `echo "Python version"` que já existe vira ASSERT.
 - **`fail-fast: false` explícito em TODA matriz nova** (C-K13): o default cancela os legs irmãos ao primeiro vermelho e reverte sozinho a doutrina dos **17** `if: always()` do Smoke (o relatório 04 diz 8 — número velho, re-medir antes de citar). Leg cancelado reporta `cancelled`, a assinatura que este repo já confundiu com estouro de timeout. Mais um gate de FORMA no `validate.yml` que reprova `strategy.matrix` sem a chave; as duas matrizes existentes (`:1578`, `:1613`) já são o padrão da casa.
@@ -270,6 +270,43 @@ Por que o eixo antigo falhava: a classe de defeito dominante deste repo é «ins
 - **4.16 — gate de latência de hooks:** «Recalibrar com teto relativo, follow-up livre (Recomendado)» — promover a fase 1 advisory (chave relativa `hook_p50 ≤ K_e × ref_p50`, medida na S328) a gate; emenda ADR-163; pack livre, follow-up de `PLAN-159`.
 - **4.11 — flakes de CI:** «Follow-up livre, sem urgência (Recomendado)» — isolar do relógio do runner `test_ceo_boot_enhanced.py::TestIdempotency::test_back_to_back_identical_results` e `test_write_endpoints.py::TestRealHandlerIntegration::test_audit_event_push_handler_rejects_action_not_in_allowlist`.
 - **4.1 — cota do codex:** «Reservar para sessões de assinatura (Recomendado)» — lander sem codex disponível registra `PENDING-CODEX` e para; nenhum pack anda para assinatura com registro de rail pendente.
+
+### Modelo de operação v2.1 — regras ratificadas pelo Owner (S348, 2026-09-06)
+
+Fonte: revisão de portfólio
+`PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §4 e §7,
+decisão do Owner via `AskUserQuestion` (Q1 de `owner-decisions-S348.md`):
+«Ratificar as 4 regras (Recomendado)».
+
+- **R1 — Codex só toca bytes que vão para uma assinatura.** Plano,
+  desenho, evidência, estado, material de cerimônia e instrumento
+  **não** vão a modelo externo; o gate deles são as 2 lanes do próprio
+  lander. *Fato: 11% dos 504 achados de rail eram sobre o código
+  assinado; 59% eram docs+cerimônia+instrumento.*
+- **R2 — Teto de rodadas por CLASSE, verificado pelo lançador antes de
+  abrir a rodada N+1.** Prosa/docs: 1. Material de cerimônia: 1.
+  Instrumento: 2. Bytes canônicos: 2 (mecanismo + confirmação). *Fato:
+  372 rodadas em 40 packs; o teto já existia como texto nas notas do
+  CEO e foi furado — texto não é gate; condição de arquivo é.*
+- **R3 — Rescisão de pack acima de 20 rodadas.** O pack vira nota de
+  residual e a classe só volta com ARQUITETURA diferente. *Fato:
+  `ac13` 52, `w1-widen` 40, `w5-doctrine` 28, `contamination-gate-v4`
+  26 = 146 rodadas (39% do total) e UM land — e esse só saiu com troca
+  de arquitetura.*
+- **R6 — Um defeito, um dono.** Duplicata vira `superseded`, nunca
+  «coordena com». *Fato: `PLAN-188:213-219` não podia aposentar o
+  gerador de cerimônia porque `PLAN-174:98` agendava uma wave que o
+  estende — o próprio plano pedia a decisão; é a decisão Q3/D2 desta
+  mesma revisão, aplicada em `PLAN-174-ceremony-generation.md`.*
+- **R7 — Todo plano declara a condição de fecho como COMANDO.** *Fato:
+  `PLAN-170:11` diz «abre quando `git tag --list v1.4.0-rc.1` deixar de
+  ser vazio» e por isso ninguém precisa reavaliá-lo.*
+
+**Consequência operacional:** land de docs fecha SEM codex — o gate
+passa a ser gates de corpus + verificação do CEO + CI; canônico
+continua exigindo 2 rodadas de rail (mecanismo + confirmação) e
+assinatura GPG do Owner; orçamento de codex da madrugada 06→07/09 ≤ 3
+rodadas no total.
 
 ## Riscos
 

@@ -1,0 +1,41 @@
+pack	rail_round_records	ceo_decision_notes	refute_records	state_head
+ac1-close	2	0	1	# STATE (S344)
+ac13-routing-drift-v4	8	0	5	# STATE — ac13-routing-drift-v4 (S344) — CURED after refutation (r6/r6b)
+ac13-routing-drift-v5	52	1	7	# STATE — ac13-routing-drift **v5**, ROUND 34 CURED, ROUND 35 IN FLIGHT
+contamination-gate-v3	4	0	3	# STATE — contamination-gate-v3 (S344) — COMPLETE, TRACKEDNESS CURED
+contamination-gate-v4	26	2	1	# CEO r15 (S347 02:50) — eighth refutation = ONE P3: rail-round-25/26 opened with a QUAL
+npm-smoke-hermetic-v2	1	0	1	# STATE (S344)
+p169-w41-quota-resume	18	2	1	# CEO class note S345-d (13:00) — from ac13 r9: a rail verdict is scoped to its SUBJECT.
+p171-w0-lote1	15	3	1	# CEO decisions r5 (S345 ~05:45) — refuter round 4: ZERO defects in the two COMMITTED fi
+p171-w0-lote2-fix	3	0	1	# CEO decisions r2 (S347 02:20, night) — refuted on ONE P2 (F1): Apêndice F enumerates 
+p171-w0-lote2	3	0	1	# STATE — p171-w0-lote2 (PLAN-171 W0, lote 2/6) — noite S347
+p171-w0-lote3	11	0	1	# r3 CURED (S347 03:29) — the three P3 of the second refutation are CLOSED, by GENERATIO
+p171-w0-lote4	4	0	1	# CEO note S347-lote4 (04:35) — INHERIT the lote-2 and lote-3 lessons before your first 
+p171-w0-lote5	3	0	1	# STATE — p171-w0-lote5 (PLAN-171 W0 censo, lote 5/6) — READY (cura r2 FEITA)
+p171-w0-lote6	15	0	0	# STATE — pack `p171-w0-lote6` (PLAN-171 W0, lote 6/6)
+p183-ac2-evidence	3	0	1	# STATE (S344)
+p183-ac2-github-run	0	0	0	
+p183-w1-pointer	18	1	1	# CEO decisions S347-p183 (04:30, night; Owner AWAKE and switched accounts — Claude quot
+p184-derive-ci-cost	0	0	2	# STATE — p184-derive-ci-cost (S344)
+p186fu-census-runtime-w0	6	0	1	# CEO decisions r3 (S347 09:20, morning; Owner not yet up) — second refutation: two P1 i
+p187-night-facts	6	0	1	# STATE — pack `p187-night-facts` (night S345), base HEAD `1e2f657`
+p188-plan-draft	10	0	1	# CEO r6 (S347 00:50) — fifth refutation = ONE docs-only P2 (H3: DESIGN credited round 1
+p188-plan-r2	8	0	1	# CEO decisions r7 (S347 04:20, night) — second refutation = ONE P2 (G1): BASE DRIFT —
+p188-plan-r3	4	0	1	# CEO decisions r8 (S347 20:12, evening; Owner present but this terminal starts NOTHING ne
+p188-shared-ceremony-toolkit	0	0	0	
+p189-astra-builder-ab	0	0	0	
+p189-pilot-specs	11	1	1	# RETOMADA r5 (S348 dia, sessao ceo-orchestration-23) — em curso
+p189-plan-draft	18	3	1	# CEO decisions r14 (S347 09:36, day; Owner OFFLINE — internet outage; this is the CEO's
+p189-runner	6	1	1	# CEO decisions r5 (S347 23:40, night; Owner ABSENT) — second refutation (S347-F1/F2/F3 
+scripts-fu-ceremony	0	0	1	# CEO class note S345-d (13:00) — from ac13 r9: a rail verdict is scoped to its SUBJECT.
+us5-census-v5	9	0	4	# STATE — us5-census-v5 (S344, rodada de cura 7)
+us5-followup-docs	5	0	1	# STATE -- us5-followup-docs (builder, night S345)
+w-rota-build	2	0	1	# CEO class note S345-d (13:00) — from ac13 r9: a rail verdict is scoped to its SUBJECT.
+w-rota-recon	0	0	1	
+w1-widen	40	1	2	# STATE S347-m11 (06/09 09:5x, autonomous night; Owner ABSENT) — o resumo
+w4b-ci-matrix	0	1	1	# CEO decisions S347-r8 (20:12, evening; Owner present, no new work in THIS terminal - the
+w5-doctrine	28	2	2	# CEO decisions r22 (S347 06:30, night; NOT relaunched — Claude quota at the closeout re
+w6-adapter	10	2	2	# BUILDER S347 step 27 (09:16) — m9 LAUNCHED. The confirmation of the m8 cures is runnin
+walkroot-fix	2	0	1	# CEO r3-b (S347 23:12) — REVERIFY PASSED (refuted=false; wf_b293d70a-43b). Two P3 resid
+walkroot-followup-plan	10	0	1	# CEO r5 (S347 01:52) — fourth round = ONE P2 in pack MATERIAL (NRF4-1: a hardcoded sing
+walkroot-test-fix	11	0	1	# STATE (S345, 11:35) — F6 EXECUTADO; pacote `ready`

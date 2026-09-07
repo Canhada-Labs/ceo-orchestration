@@ -10,7 +10,7 @@ depends_on: [PLAN-169, PLAN-171]
 budget_tokens: "firmado S302e — W-IM 150-300k; E0b 50-100k; replay M3 80-150k; W-DH (2 emendas + cerimônia) 150-250k; E6 30k telemetria + 100-200k experimento; E5 2-4M SÓ se E0b liberar. Total sem E5: ~0,6-1,1M"
 budget_sessions: "W-IM 2-3; E0b 1-2; M3 1; W-DH 2; E6 passivo + 1-2; E5 6-9 pós-gate"
 context_risk: high
-external_wait: "gatilho: pós-GA v1.3.0 + W3/W4; E5 adicionalmente pós-PLAN-171 W5 (log único de worktree)"
+external_wait: "gatilho: pós-GA v1.3.0 (satisfeito, 2026-08-17) + PLAN-169 W4 fechada + PLAN-171 W5 fechada; E5 adicionalmente pós-PLAN-171 W5 (log único de worktree). Verificável por comando: `grep -m1 '^status:' .claude/plans/PLAN-169-closure-and-cross-session-evolution.md` (hoje 'executing') e `grep -m1 '^status:' .claude/plans/PLAN-171-governance-imports-provenance.md` (hoje 'executing') — reabre quando os dois lerem 'done'. Revisão de portfólio S348 (2026-09-06, veredito 3/3 'adiar'): nenhuma das duas fechou ainda."
 tags: [experiments, speed, pipelining, review, seed, pre-registration]
 ---
 
@@ -327,3 +327,11 @@ fundamentação e prioridade relativa.
   (escalar verificadores > escalar builders). Execução do gate
   permanece DESTE plano; PLAN-178 apenas cruza a referência.
 - **E3: INTOCADO** — nada deste anexo emenda pré-registro assinado.
+
+## Progress log
+
+- 2026-09-06 (S348): revisão de portfólio (3 críticos, 3/3 «adiar»)
+  confirma o congelamento — dupla dependência declarada no próprio
+  plano (PLAN-169 + PLAN-171 W5) segue aberta; `external_wait` ganha
+  a condição executável de reabertura. Nenhuma wave iniciada. Fonte:
+  `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.

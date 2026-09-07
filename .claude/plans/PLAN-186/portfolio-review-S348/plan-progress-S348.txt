@@ -1,0 +1,93 @@
+PLAN | status | level | waves done/total | all boxes done/total | last commit
+PLAN-128-sota-solo-accelerator                             | done       | ?   | 0/0 (-%) | 4/4 (100%) | 1fe0243 2026-07-02
+PLAN-139-canonical-invariants-and-debt-ledger              | done       | ?   | 0/0 (-%) | 0/0 (-%) | 9777a8d 2026-06-29
+PLAN-140-compaction-hook-origin-dropfix                    | done       | ?   | 0/0 (-%) | 0/0 (-%) | 9777a8d 2026-06-29
+PLAN-141-mcp-smoke-staging-ruff-tolerance                  | done       | ?   | 0/0 (-%) | 0/0 (-%) | 9777a8d 2026-06-29
+PLAN-142-codex-cli-0139-adapter-migration                  | done       | ?   | 0/0 (-%) | 0/0 (-%) | 9777a8d 2026-06-29
+PLAN-143-repo-hygiene-debt                                 | done       | ?   | 0/0 (-%) | 0/0 (-%) | 9777a8d 2026-06-29
+PLAN-152-v1-0-1-hardening-sweep                            | done       | ?   | 39/39 (100%) | 49/49 (100%) | 58d446a 2026-07-06
+PLAN-153-ecc-comparative-uplift                            | done       | ?   | 0/0 (-%) | 1/7 (14%) | 18de98e 2026-08-20
+PLAN-154-gated-learning-loop                               | done       | ?   | 0/0 (-%) | 0/0 (-%) | db6d1b8 2026-07-10
+PLAN-155-codex-harness-compat                              | done       | ?   | 0/53 (0%) | 0/62 (0%) | 72cac50 2026-07-10
+PLAN-156-FOLLOWUP-council-livefire-findings                | done       | ?   | 4/15 (26%) | 6/18 (33%) | aeeb1b2 2026-07-27
+PLAN-156-grok-harness-56-refresh-council                   | done       | ?   | 0/0 (-%) | 0/7 (0%) | a2848f4 2026-07-13
+PLAN-157-architect-graduation                              | done       | ?   | 12/13 (92%) | 16/17 (94%) | bb804e3 2026-07-16
+PLAN-158-release-v1-1-0                                    | done       | ?   | 20/22 (90%) | 25/27 (92%) | 0f226a4 2026-07-16
+PLAN-159-perf-gate-robustness                              | done       | ?   | 11/11 (100%) | 14/14 (100%) | 0ae4fe2 2026-07-16
+PLAN-160-canonical-edit-council-findings                   | done       | ?   | 5/14 (35%) | 5/18 (27%) | da1397e 2026-07-17
+PLAN-161-maintenance-sweep                                 | done       | ?   | 20/30 (66%) | 27/37 (72%) | 4bc3179 2026-07-27
+PLAN-162-canonical-edit-council-s280-triage                | done       | ?   | 0/0 (-%) | 4/4 (100%) | bea9ad8 2026-08-04
+PLAN-163-substrate-uplift                                  | done       | ?   | 0/0 (-%) | 11/11 (100%) | d2d46fd 2026-08-04
+PLAN-164-pair-rail-timeout-uplift                          | done       | ?   | 19/19 (100%) | 24/24 (100%) | d64b830 2026-07-30
+PLAN-165-night-mode-owner-autonomy-toggle                  | done       | ?   | 0/0 (-%) | 13/13 (100%) | 27583a6 2026-08-04
+PLAN-166-release-hold-findings-closure                     | done       | ?   | 0/0 (-%) | 5/7 (71%) | 2474431 2026-08-22
+PLAN-167-ownership-decision-table                          | done       | ?   | 0/0 (-%) | 0/10 (0%) | a71229e 2026-08-18
+PLAN-168-ownership-followups-closure                       | done       | ?   | 0/0 (-%) | 0/11 (0%) | a71229e 2026-08-18
+PLAN-169-closure-and-cross-session-evolution               | executing  | ?   | 0/0 (-%) | 5/9 (55%) | 6160578 2026-09-01
+PLAN-170-e7-battery-execution                              | draft      | ?   | 0/22 (0%) | 0/35 (0%) | 18de98e 2026-08-20
+PLAN-171-governance-imports-provenance                     | executing  | ?   | 0/0 (-%) | 0/0 (-%) | 3b4300a 2026-09-06
+PLAN-172-honest-speed-e0b-e5-e6                            | reviewed   | ?   | 0/0 (-%) | 0/0 (-%) | 6b3a2ca 2026-08-20
+PLAN-173-ceo-cockpit-warp-study                            | reviewed   | ?   | 0/0 (-%) | 0/0 (-%) | 60466f0 2026-08-23
+PLAN-174-ceremony-generation                               | reviewed   | ?   | 0/0 (-%) | 0/0 (-%) | e3618d9 2026-08-23
+PLAN-175-skills-pruning-discovery                          | reviewed   | ?   | 0/0 (-%) | 0/0 (-%) | 071e594 2026-08-23
+PLAN-176-model-currency-refresh                            | reviewed   | ?   | 0/0 (-%) | 0/0 (-%) | 18de98e 2026-08-20
+PLAN-177-rc4-ga-repass-cures                               | done       | ?   | 0/0 (-%) | 0/7 (0%) | a71229e 2026-08-18
+PLAN-178-mast-audit-substrate-adoption                     | done       | ?   | 0/0 (-%) | 9/9 (100%) | 5ba9cf6 2026-08-20
+PLAN-179-FOLLOWUP-sessionstart-anchor-id                   | done       | L3  | 0/0 (-%) | 3/3 (100%) | 2292979 2026-09-04
+PLAN-179-context-continuity-durable-state                  | done       | ?   | 0/0 (-%) | 30/30 (100%) | bc82651 2026-09-01
+PLAN-180-time-unit-doctrine-propagation                    | done       | L2  | 0/0 (-%) | 0/0 (-%) | 18de98e 2026-08-20
+PLAN-181-loop-governed-adoption                            | reviewed   | L3  | 0/0 (-%) | 0/0 (-%) | 1ea7777 2026-08-23
+PLAN-182-audit-path-isolation                              | done       | ?   | 23/30 (76%) | 30/37 (81%) | 1c34eb5 2026-08-27
+PLAN-183-adopter-fitness                                   | executing  | ?   | 14/23 (60%) | 21/32 (65%) | 5ceae29 2026-09-04
+PLAN-184-ci-cost-routing                                   | draft      | L3  | 4/36 (11%) | 4/48 (8%) | 2ef423e 2026-09-04
+PLAN-185-FOLLOWUP-doctor-confinement                       | done       | L3  | 0/0 (-%) | 6/6 (100%) | e2f3fbc 2026-09-04
+PLAN-185-installer-write-safety                            | done       | L3  | 0/16 (0%) | 3/20 (15%) | 1c34eb5 2026-08-27
+PLAN-186-FOLLOWUP-census-runtime                           | draft      | L2  | 0/0 (-%) | 0/3 (0%) | 2f6cde1 2026-09-05
+PLAN-186-FOLLOWUP-hint-discovery-walk-from-root            | draft      | L3  | 0/0 (-%) | 0/0 (-%) | 3f8f4f0 2026-09-06
+PLAN-186-FOLLOWUP-sentinel-gpg-verification                | draft      | L3  | 0/0 (-%) | 1/8 (12%) | db05586 2026-09-06
+PLAN-186-orchestrator-operating-model                      | executing  | L3  | 0/0 (-%) | 5/19 (26%) | 3b4300a 2026-09-06
+PLAN-187-parallelism-ceiling-study                         | draft      | L3  | 0/0 (-%) | 0/5 (0%) | b00ba27 2026-09-05
+PLAN-188-shared-ceremony-toolkit                           | draft      | L3  | 0/0 (-%) | 0/6 (0%) | fad3d02 2026-09-06
+PLAN-SCHEMA                                                | accepted   | ?   | 0/0 (-%) | 0/4 (0%) | 996d72b 2026-08-18
+
+PACKS (key: claim / refuted / lander-blocked):
+  ac1-close                        ready    refuted=False  
+  ac13-routing-drift-v4            ready    refuted=False  BLOCKED
+  ac13-routing-drift-v5            partial  refuted=True   BLOCKED
+  contamination-gate-v3            ready    refuted=False  BLOCKED
+  contamination-gate-v4            ready    refuted=False  
+  npm-smoke-hermetic-v2            ready    refuted=False  
+  p169-w41-quota-resume            partial  refuted=True   
+  p171-w0-lote1                    ready    refuted=False  
+  p171-w0-lote2-fix                ready    refuted=False  
+  p171-w0-lote2                    ready    refuted=False  BLOCKED
+  p171-w0-lote3                    ready    refuted=False  
+  p171-w0-lote4                    ready    refuted=False  
+  p171-w0-lote5                    ready    refuted=True   
+  p171-w0-lote6                    ready    refuted=-      
+  p183-ac2-evidence                ready    refuted=False  
+  p183-ac2-github-run              -        refuted=-      
+  p183-w1-pointer                  partial  refuted=True   
+  p184-derive-ci-cost              ready    refuted=False  
+  p186fu-census-runtime-w0         partial  refuted=True   
+  p187-night-facts                 ready    refuted=False  
+  p188-plan-draft                  ready    refuted=False  
+  p188-plan-r2                     ready    refuted=False  
+  p188-plan-r3                     partial  refuted=True   
+  p188-shared-ceremony-toolkit     -        refuted=-      
+  p189-astra-builder-ab            -        refuted=-      
+  p189-pilot-specs                 ready    refuted=False  
+  p189-plan-draft                  ready    refuted=True   BLOCKED
+  p189-runner                      partial  refuted=True   
+  scripts-fu-ceremony              partial  refuted=True   
+  us5-census-v5                    partial  refuted=-      
+  us5-followup-docs                partial  refuted=False  
+  w-rota-build                     partial  refuted=True   
+  w-rota-recon                     ready    refuted=False  
+  w1-widen                         partial  refuted=True   
+  w4b-ci-matrix                    ready    refuted=True   
+  w5-doctrine                      partial  refuted=True   
+  w6-adapter                       partial  refuted=True   
+  walkroot-fix                     ready    refuted=False  
+  walkroot-followup-plan           ready    refuted=False  
+  walkroot-test-fix                ready    refuted=False  BLOCKED

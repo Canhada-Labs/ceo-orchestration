@@ -413,3 +413,8 @@ Check: none (doc-only)
       metade restante do AC-6 do PLAN-169. Escopo reduzido a E3+E4 pelo
       verdito do E0; orçamento re-derivado do zero (§2). Aguardando
       gatilho (corte v1.4.0-rc.1), debate L3 e promoção do Owner.
+- [ ] 2026-09-06 (S348) — revisão de portfólio (3 críticos, 3/3
+      «adiar») confirma o congelamento: `git tag --list 'v1.4.0-rc.1'`
+      segue vazio hoje. Gatilho já executável (linha acima desta
+      seção); nenhuma mudança de `status`, nenhuma wave iniciada.
+      Fonte: `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.

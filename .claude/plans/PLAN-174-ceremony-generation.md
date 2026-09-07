@@ -1,7 +1,8 @@
 ---
 id: PLAN-174
 title: Geração de cerimônia de release — template endurecido + lint de classes + cortes rc/GA declarativos
-status: reviewed
+status: superseded
+superseded_by: PLAN-188
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
@@ -28,6 +29,32 @@ tags: [release, ceremony, codegen, review-cost, seed]
 > E a semente estimava ~40-50% de achados mecânicos recorrentes —
 > medido no debate r1: ~34% (28 de ~83); a cauda que decide GO/NO-GO é
 > semântica (seção B do catálogo).
+
+## Superseded (S348, 2026-09-06)
+
+**Decisão do Owner (revisão de portfólio S348, Q3 de
+`owner-decisions-S348.md`):** «PLAN-174 vira superseded pelo PLAN-188 (Recomendado)».
+
+Razão: PLAN-174 e `PLAN-188-shared-ceremony-toolkit.md` atacam o mesmo
+defeito (a classe de cerimônia gerada/compartilhada) com dois donos —
+`PLAN-188:213-219` cita `PLAN-174:98` e exige, por escrito, uma decisão
+registrada sobre a W3 deste plano antes de poder aposentar
+`generate-ceremony.sh`. Essa decisão é a que o Owner acabou de tomar.
+
+A W3 deste plano (estender `generate-ceremony.sh` para emitir cortes
+rc/GA a partir de input declarativo) é formalmente assumida pelo
+PLAN-188 através do pack `p188-plan-r3` — este arquivo não é o lugar
+onde essa formalização mora; ela entra em
+`PLAN-188-shared-ceremony-toolkit.md`, que não foi editado por este
+pacote.
+
+O trabalho já fechado deste plano (W1 e o wire de CI da W2, ambos
+registrados abaixo em «Registro de execução») permanece válido e não é
+desfeito — `superseded` sinaliza que o escopo passa a ser rastreado em
+outro lugar, não que o trabalho estivesse errado.
+
+Fonte: `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
+§2 (linha do PLAN-174) e §6 D2.
 
 ## 1. Hipótese
 
