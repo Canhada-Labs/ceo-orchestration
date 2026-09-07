@@ -176,3 +176,26 @@ perguntas — nota em §6 acima.
 
 Decisão da mesma sessão, anterior a estas quatro (21:1x): «Revisão de portfólio dos 13 planos (Recomendado)» como primeiro passo antes de
 relançar canônicos — é esta revisão.
+
+---
+
+## 8. Decisões do Owner — bloco B (2026-09-06 ~23:5x)
+
+Respondidas via `AskUserQuestion` por volta de 23:5x (terminal
+`ceo-orchestration-46`; o Owner acordou brevemente), registradas
+verbatim em `owner-decisions-S348-b.md` (fora do repo, diretório de
+trabalho da sessão). Fonte: `MORNING-S348.md` §4 (7 perguntas) + 1
+pergunta extra na mesma janela.
+
+| # | pergunta (resumo) | resposta verbatim do Owner | efeito |
+|---|---|---|---|
+| Q1 | Como fechar o pacote W4b (matriz de CI) nesta madrugada? | «Um lote final de curas + 2 rodadas, teto absoluto (Recomendado)» | Pack `w4b-ci-matrix`: curas (nome-base amarrado ao `jobs.validate`; prefixo `r`; prosa do R24-1), re-derivar, 1 codex sujeito + 1 confirmação de materiais = teto; se falhar uma vez ⇒ rescindir e re-arquitetar (opção c). |
+| Q2 | Re-escopar o PLAN-169 tirando o quota-resume (W4.1) para um follow-up próprio, como a revisão recomendou (3/3)? | «Não: manter o quota-resume dentro do PLAN-169» **(CONTRA a recomendação 3/3 da revisão)** | OQ-13 do PLAN-169 fecha como «manter» — o W4.1 permanece no plano; a GA espera a W4.1. |
+| Q3 | Cortar o PLAN-171 para W0+W1+W2, largando W3/W4/W5? | «Sim: o plano vira W0 + W1 + W2 (Recomendado)» | W3/W4/W5 do PLAN-171 são cortadas (docs; W4 vira follow-up próprio se alguém pedir). |
+| Q4 | Qual a ordem do próximo canônico — W1, W6a ou W4b primeiro? | «W6a primeiro; W1 só re-arquitetada (Recomendado)» | Muda a ordem 4.17 (W1 → W6a → W4b) para W4b (lote final) → W6a → W1 (só re-arquitetada como pack novo, regra R3). |
+| Q5 | Estreitar o censo por runtime (`PLAN-186-FOLLOWUP-census-runtime`) para uma promessa mais estreita, sem codex? | «Sim: estreitar a promessa + 1 confirmação, sem codex (Recomendado)» | O pack do follow-up registra a decisão no próprio arquivo; sem rodada de codex. |
+| Q6 | Ratificar o `external_wait: none` do PLAN-175 junto com o flip para `executing`? | «Sim, ratificar junto com o flip para executing (Recomendado)» | `external_wait: none` do PLAN-175 fica RATIFICADO; o flip para `executing` e a rodada 2 do debate seguem pendentes (decisão 4.10). |
+| Q7 | Manter o PLAN-173 (estudo do cockpit Warp) congelado? | «Manter congelado (Recomendado)» | PLAN-173 permanece `reviewed`, congelado, com o gatilho de reabertura já escrito no plano. |
+| Q8 | Quantos canônicos rodam em paralelo nesta madrugada — só o W4b, ou também o W6a? | «W4b e W6a agora, em paralelo» **(CONTRA a recomendação «só a W4b agora»)** | Dois canônicos em sombra ao mesmo tempo (exceção autorizada ao WIP noturno), até 4 rodadas de codex no total. |
+
+**Marcadas contra a recomendação:** Q2 (PLAN-169) e Q8 (paralelismo desta noite).

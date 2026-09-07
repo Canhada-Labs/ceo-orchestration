@@ -526,3 +526,11 @@ Regra da casa: medida que sustenta decisão imprime seus inputs.
   acontece DEPOIS da revisão landar — não volta a ser perguntado.
   `status:` permanece `reviewed` até lá.
 - 2026-09-06 (S348, nota do CEO ao aplicar a revisão): o campo `external_wait` ratificado na S302f («gatilho: pós-GA v1.3.0; W1c do PLAN-171 (fronteira de ownership) primeiro») foi substituído por `none` nesta revisão, com a justificativa no corpo do plano (o bloqueio por calendário está refutado: a GA v1.3.0 saiu em 2026-08-17 e o denominador de telemetria já existe). **PENDENTE de ratificação do Owner**, junto com o flip para `executing` (decisão 4.10) e a rodada 2 do debate.
+- 2026-09-06 (S348, ~23:5x): **Owner ratifica o `external_wait: none`.**
+  Decisão Q6 do bloco B: «Sim, ratificar junto com o flip para
+  executing (Recomendado)» — registrada em
+  `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
+  §8. O `external_wait: none` do frontmatter fica RATIFICADO. O flip
+  para `status: executing` e a rodada 2 do debate seguem como já
+  fixado na decisão 4.10 — não mudam nesta nota; `status:` permanece
+  `reviewed`.

@@ -308,6 +308,34 @@ continua exigindo 2 rodadas de rail (mecanismo + confirmação) e
 assinatura GPG do Owner; orçamento de codex da madrugada 06→07/09 ≤ 3
 rodadas no total.
 
+#### Bloco B — decisões do Owner (2026-09-06 ~23:5x, revisão S348)
+
+Fonte: revisão de portfólio
+`PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §8, decisões
+do Owner via `AskUserQuestion` registradas em
+`owner-decisions-S348-b.md`.
+
+- **Q1 — W4b (fechamento):** «Um lote final de curas + 2 rodadas, teto
+  absoluto (Recomendado)» — pack `w4b-ci-matrix`: curas, re-derivar,
+  1 codex sujeito + 1 confirmação de materiais = teto; se falhar uma
+  vez ⇒ rescindir e re-arquitetar (opção c, o fallback já previsto).
+- **Q4 — ordem do próximo canônico:** «W6a primeiro; W1 só
+  re-arquitetada (Recomendado)» — substitui a ordem 4.17 (W1 → W6a →
+  W4b, acima) pela ordem W4b (lote final) → W6a → W1, e W1 só volta à
+  fila como pack NOVO, re-arquitetado (regra R3 — pack que estoura o
+  teto de rodadas não se remenda, se re-arquiteta).
+- **Q8 — paralelismo desta madrugada (2026-09-07):** «W4b e W6a agora,
+  em paralelo» — CONTRA a recomendação «só a W4b agora»; registrado
+  como EXCEÇÃO AUTORIZADA ao WIP noturno (regra 4.17 acima, que
+  reserva o paralelismo à noite autônoma): dois canônicos em sombra ao
+  mesmo tempo, até 4 rodadas de codex no total entre os dois.
+- **Q5 — censo por runtime:** «Sim: estreitar a promessa + 1
+  confirmação, sem codex (Recomendado)» — a decisão é registrada no
+  próprio pacote de follow-up
+  (`PLAN-186-FOLLOWUP-census-runtime.md`), não neste plano.
+
+**Marcada contra a recomendação:** Q8 (paralelismo desta madrugada).
+
 ## Riscos
 
 - **Furo do gate de contaminação (achado S339, Codex P1):** `validate-governance.sh` completo passou com `/Users/<username-real>/…` em `docs/research/*` e em `.claude/plans/PLAN-186/w1/*` — `.claude/plans/*` é isento por atacado e o scanner não casou a forma de path pessoal em `docs/`. Curado à mão neste patch (placeholders `<user>`/`<project-slug>`/`<scratchpad>`); FOLLOW-UP livre: regra de path pessoal para `docs/**` e para `.claude/plans/**` fora de sentinels/OWNER-*.sh, com controle positivo.

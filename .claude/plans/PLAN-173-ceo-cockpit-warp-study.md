@@ -204,3 +204,9 @@ início da execução (Gate 3).
   executável de reabertura. Nenhuma wave iniciada além do pré-gate da
   W4 (já registrado acima). Fonte:
   `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.
+- 2026-09-06 (S348, ~23:5x): **Owner confirma o congelamento.** Decisão
+  Q7 do bloco B: «Manter congelado (Recomendado)» — registrada em
+  `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
+  §8. Nenhuma mudança de `status:` (permanece `reviewed`) nem de
+  `external_wait` — o gatilho de reabertura já escrito no frontmatter
+  continua sendo a condição válida.

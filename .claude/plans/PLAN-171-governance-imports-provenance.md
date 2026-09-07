@@ -77,6 +77,13 @@ de fronteira: leituras de lanes fora do harness (`codex exec`) são
 INVISÍVEIS — documentar como limite, não vender cobertura total.
 
 ### W3 — FILE ASSIGNMENT enforcado em write-time
+
+**CORTADA (Owner, 2026-09-06 23:5x, revisão S348):** duplica o flip da
+janela advisory já agendado no PLAN-178 — mesma classe, outro dono.
+Decisão registrada em
+`.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
+§8 (Q3, bloco B). Texto da wave preservado abaixo como histórico.
+
 Hook PreToolUse(Edit/Write) que bloqueia escrita de agente nomeado fora
 do `## FILE ASSIGNMENT` declarado no spawn. Converte declaração
 advisory em invariante mecânica. **Classificação corrigida (Codex r1,
@@ -87,6 +94,13 @@ defense-in-depth ("Bash escapa"), não fronteira — escrever a claim no
 tamanho do enforcement.
 
 ### W4 — Living documentation LOCAL-ONLY
+
+**CORTADA (Owner, 2026-09-06 23:5x, revisão S348):** vira follow-up
+próprio se alguém pedir — não segue como wave deste plano. Decisão
+registrada em
+`.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
+§8 (Q3, bloco B). Texto da wave preservado abaixo como histórico.
+
 Gerador stdlib que materializa docs navegáveis ("o que aconteceu e por
 quê") a partir do audit log + closeouts. Tudo local e advisory; log
 renderizado como untrusted data; de-id por CLASSES (não por-nome)
@@ -94,6 +108,13 @@ antes de qualquer materialização; qualquer versão que saia do disco
 passa pelo redactor ADR-114 ou não existe.
 
 ### W5 — Higiene de worktree para paralelismo (pré-requisito E5)
+
+**CORTADA (Owner, 2026-09-06 23:5x, revisão S348):** servia ao E5 do
+PLAN-172, que está congelado — sem comprador enquanto o PLAN-172 não
+reabrir. Decisão registrada em
+`.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
+§8 (Q3, bloco B). Texto da wave preservado abaixo como histórico.
+
 Audit log e memória são keyed por cwd-slug: N worktrees fragmentam a
 cadeia. Definir convenção de log ÚNICO no repo principal (worktrees
 anotam `worktree_id` no evento) ANTES de qualquer execução WIP=2 do
@@ -381,3 +402,12 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   23:26:39); a ratificação dessa recomendação segue PENDENTE do Owner
   em 2026-09-07, agora com a W0 em 6/6. Relatório:
   `.claude/plans/PLAN-171/w0/W0-consolidated-verdict-S348.md`.
+- **2026-09-06 (S348, ~23:5x)** — **Owner RATIFICA o re-escopo:** «Sim:
+  o plano vira W0 + W1 + W2 (Recomendado)» — decisão Q3 do bloco B,
+  registrada em
+  `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
+  §8. W3, W4 e W5 (§2 acima) são CORTADAS, cada uma com a nota e a
+  razão no topo da própria seção; o texto das três waves permanece no
+  arquivo como histórico, não apagado. W4 pode voltar como follow-up
+  próprio se alguém pedir. Nenhuma mudança de `status:` — o plano
+  segue `executing`.

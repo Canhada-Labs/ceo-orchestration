@@ -1560,10 +1560,13 @@ pelo Owner; `OWNER-S329-E-LAND.sh` G-PRE..G5 + V1..V7 verdes; patch
   (W4.1, EXPERIMENTAL) vira follow-up próprio, fora deste plano?
   **Recomendação da revisão S348 (3/3): re-escopar** — a GA v1.4.0
   (AC-8) é o entregável; o quota-resume (W4.1) vira follow-up próprio.
-  **PENDENTE de ratificação do Owner** (pergunta da manhã de
-  2026-09-07). Fonte:
+  **FECHADA pelo Owner (2026-09-06 ~23:5x): «Não: manter o
+  quota-resume dentro do PLAN-169»** — decisão CONTRA a recomendação
+  3/3 da revisão de portfólio S348; o W4.1 permanece dentro deste
+  plano, não vira follow-up. Fonte:
   `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
-  §2 (linha do PLAN-169).
+  §2 (linha do PLAN-169) e §8 (Q2, bloco B); registro do Owner em
+  `owner-decisions-S348-b.md`.
 
 ## How to continue
 
