@@ -1,0 +1,9 @@
+Scope:
+  - .claude/scripts/data/installer-write-safety-baseline.txt
+  - scripts/_framework_manifest_set.sh
+  - scripts/tests/test-installer-write-safety-e2e.sh
+  - scripts/tests/test-manifest-delivery-route.sh
+  - scripts/tests/test-upgrade-historical-adopter.sh
+  - scripts/uninstall.sh
+  - scripts/upgrade.sh
+  - templates/codex/pre-push-review-gate.sh

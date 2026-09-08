@@ -1,0 +1,13 @@
+BASE-HEAD cf27162000ed8a819208afa6b8c2f3547b2b1a4f
+PRE 48572b96e1c233e70bf0102b7decc37ce296df2a .claude/scripts/data/installer-write-safety-baseline.txt
+PRE a27e0162dfd649c96b770f6a30827c5c8004787d scripts/_framework_manifest_set.sh
+PRE 11b82d35d71850643bc01a070914144bc1035333 scripts/tests/test-installer-write-safety-e2e.sh
+PRE 07045c4e8ab94d9950d80cd79f1b0a305c40903e scripts/tests/test-manifest-delivery-route.sh
+PRE bed35321b421f967f2ef7fbd36e4d3762ff3091b scripts/tests/test-upgrade-historical-adopter.sh
+PRE bd7226fa07eff08b7bdefa4c7dd2b87802c038c6 scripts/uninstall.sh
+PRE ee43c04a43362b48116dd3cb40c5dcaecce4d625 scripts/upgrade.sh
+PRE bb7962d3db47c26b45b2ad9a543a89ace8a87207 templates/codex/pre-push-review-gate.sh
+PATCH-SHA256 d0ab17e1bd02d1743dfc1eb3526c4fc7557aa495c5433d460a6d57a49d2657e0
+SCOPE-COUNT 8
+CANONICAL-COUNT 2
+TODAY 2026-09-08
