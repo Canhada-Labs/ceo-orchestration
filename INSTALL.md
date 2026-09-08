@@ -619,7 +619,7 @@ To refresh framework-derived content in an existing adopter install
 ```bash
 cd /path/to/ceo-orchestration   # source framework checkout
 git pull                         # get the latest framework
-bash scripts/upgrade.sh /path/to/your/project --pin v1.3.0
+bash scripts/upgrade.sh /path/to/your/project --pin v1.4.0
 ```
 
 What gets refreshed:

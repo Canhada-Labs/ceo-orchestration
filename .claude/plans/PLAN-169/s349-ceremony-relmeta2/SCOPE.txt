@@ -1,0 +1,17 @@
+Scope:
+  - .claude-plugin/marketplace.json
+  - .claude-plugin/plugin.json
+  - .claude/.framework-version
+  - .claude/adr/README.md
+  - .claude/governance/gate-scripts-manifest.txt
+  - .claude/scripts/local/release.sh
+  - .claude/scripts/tests/test_release_bump_sites.py
+  - INSTALL.md
+  - SBOM.md
+  - SECURITY.md
+  - VERSION
+  - VERSIONING.md
+  - docs/ARCHITECTURE.md
+  - npm/README.md
+  - npm/package.json
+  - pyproject.toml

@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs)
 
-<!-- last-reviewed: 2026-06-06 v1.0.0 -->
+<!-- last-reviewed: 2026-09-08 v1.4.0 -->
 
 This directory captures **cross-cutting architectural decisions** that
 affect the ceo-orchestration framework in ways that aren't obvious from
@@ -452,12 +452,13 @@ _Auto-generated: 198 ADR(s) on disk. Run `python3 .claude/scripts/generate-adr-i
 
 <!-- END ADR-INDEX -->
 
-> Index staleness note (pre-existing, PLAN-163 T5.2): rows ADR-157
-> through ADR-181 are not yet listed above — the tail of this index has
-> lagged the on-disk ledger since ADR-157. Regenerate the index (or
-> backfill the missing rows) at the next derived-surfaces refresh;
-> ADR-182 is listed out-of-band here because the pin-pack repairs the
-> ADR-111 row in the same edit.
+> Index note (re-measured 2026-09-08, cerimonia rel-meta-2): a nota anterior
+> afirmava que as linhas ADR-157..ADR-181 nao estavam listadas. A
+> medicao diz o contrario: **198 arquivos `ADR-*.md` no disco, 175 ids
+> distintos** (a diferenca sao as colisoes de id documentadas acima),
+> e **todo id em disco aparece no indice** — o conjunto de ausentes e
+> vazio. A afirmacao de atraso era, ela propria, o que estava
+> desatualizado.
 
 ## Why retroactive ADRs
 

@@ -73,7 +73,8 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 TARGET_BASE="1.4.0"
 RELEASE_TITLE="per-project audit family + compaction continuity + installer write-safety"
-# O tag vale pelo TREM INTEIRO do CHANGELOG [1.4.0], nunca pelo plano
+# O tag vale pelo TREM INTEIRO da entrada do CHANGELOG desta versao,
+# nunca pelo plano
 # mais novo. Este bloco e DERIVADO por
 # .claude/plans/PLAN-169/s349-ceremony-relmeta/apply-relmeta-edits.py
 # a partir de `git log v1.3.0..HEAD` (planos CITADOS nos assuntos de

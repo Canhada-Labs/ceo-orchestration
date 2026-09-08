@@ -1,6 +1,6 @@
 # Security Policy
 
-<!-- last-reviewed: 2026-08-04 v1.3.0 -->
+<!-- last-reviewed: 2026-09-08 v1.4.0 -->
 
 > **Status:** pre-adopter (framework dogfooded by Owner; no third-party
 > install in production yet). This policy mirrors the maturity level
@@ -285,8 +285,8 @@ get a "by-design" response:
 
 Active support window per [`SUPPORT.md`](SUPPORT.md):
 
-- **Current MINOR** (`v1.3.x`) — full security support.
-- **Previous MINOR** (`v1.2.x`) — security-only patches for 6 months
+- **Current MINOR** (`v1.4.x`) — full security support.
+- **Previous MINOR** (`v1.3.x`) — security-only patches for 6 months
   after the next MINOR ships.
 - **Older** — best-effort; we will tell you the upgrade path, not ship
   a back-port.

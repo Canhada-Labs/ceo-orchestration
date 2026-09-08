@@ -1,6 +1,6 @@
 # Versioning Policy
 
-<!-- last-reviewed: 2026-08-04 v1.3.0 -->
+<!-- last-reviewed: 2026-09-08 v1.4.0 -->
 
 > **TL;DR** — SemVer at the **Compliance SPEC level** (`SPEC/v1/`),
 > not at every internal symbol. Tagged releases mark SPEC-level
@@ -186,8 +186,8 @@ upgrade_agents_canonical_only`).
 
 | Window | Status |
 |--------|--------|
-| Current MINOR (`v1.3.x`) | Full support — features + security + bug fixes |
-| Previous MINOR (`v1.2.x`) | Security-only patches for **6 months** after the next MINOR ships |
+| Current MINOR (`v1.4.x`) | Full support — features + security + bug fixes |
+| Previous MINOR (`v1.3.x`) | Security-only patches for **6 months** after the next MINOR ships |
 | Older (`v1.0.x`, `v1.1.x`) | Best-effort — we describe the upgrade path; no back-ports |
 
 Upgrade via `bash scripts/upgrade.sh --pin vX.Y.Z` (consult

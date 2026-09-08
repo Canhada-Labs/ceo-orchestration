@@ -46,6 +46,63 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 LOCAL = REPO_ROOT / ".claude" / "scripts" / "local"
 DRIVER_SRC = LOCAL / "release.sh"
 SITES_SRC = LOCAL / "_release_bump_sites.py"
+
+
+# ---------------------------------------------------------------------------
+# O MUNDO SINTETICO SEGUE O DRIVER, NUNCA UM LITERAL.
+#
+# A fixture `synth` monta um repositorio descartavel e copia para dentro dele o
+# `release.sh` VIVO. Enquanto a base sintetica era o literal "1.3.0", ela
+# concordava com o driver por COINCIDENCIA: no instante em que TARGET_BASE
+# avanca para a release seguinte, fixture e driver discordam, e todo teste que
+# exercita o caminho no-op (que exige VERSION == TARGET_BASE) ou a fase `tag`
+# (que compara os dois) reprova sem que nada esteja errado no produto. Foi o
+# que aconteceu no Validate de 511fdc2: nove testes vermelhos numa janela que o
+# proprio driver documenta como legitima.
+#
+# As constantes abaixo dao ao mundo sintetico a MESMA escada de versoes que o
+# driver tem, derivada dele. Nenhum teste perde a propriedade que guarda: o que
+# muda e o numero, nunca a pergunta.
+#
+#   SYNTH_BASE   o alvo do driver — a arvore sintetica nasce JA nele, que e a
+#                pre-condicao do caminho no-op
+#   SYNTH_PREV   um minor atras — de onde um bump real parte
+#   SYNTH_PREV2  dois minors atras — a janela de suporte que ja saiu
+#   SYNTH_NEXT   um minor a frente — um alvo que o driver AINDA nao mira, para
+#                os testes que precisam de um retarget que mude alguma coisa
+#
+# O bump de MAJOR (2.0.0) fica ABSOLUTO de proposito: ele testa a semantica de
+# major, que nao depende de onde o trem esta.
+# ---------------------------------------------------------------------------
+def _driver_target() -> str:
+    m = re.search(r'(?m)^TARGET_BASE="(\d+\.\d+\.\d+)"$',
+                  DRIVER_SRC.read_text(encoding="utf-8"))
+    assert m, "driver has no bare-semver TARGET_BASE"
+    return m.group(1)
+
+
+def _shift_minor(version: str, delta: int) -> str:
+    major, minor, _patch = (int(x) for x in version.split("."))
+    minor += delta
+    assert minor >= 0, "no minor %+d from %s" % (delta, version)
+    return "%d.%d.0" % (major, minor)
+
+
+def _window(version: str) -> str:
+    return "v%s.x" % ".".join(version.split(".")[:2])
+
+
+SYNTH_BASE = _driver_target()
+SYNTH_PREV = _shift_minor(SYNTH_BASE, -1)
+SYNTH_PREV2 = _shift_minor(SYNTH_BASE, -2)
+SYNTH_NEXT = _shift_minor(SYNTH_BASE, +1)
+WIN_BASE = _window(SYNTH_BASE)
+WIN_PREV = _window(SYNTH_PREV)
+WIN_PREV2 = _window(SYNTH_PREV2)
+WIN_NEXT = _window(SYNTH_NEXT)
+TAG_RC = "v%s-rc.2" % SYNTH_BASE
+TAG_STABLE = "v%s" % SYNTH_BASE
+TAG_HIST = "v%s" % SYNTH_PREV
 GUARD_SRC = LOCAL / "_release_tag_guard.py"
 VALIDATOR_SRC = REPO_ROOT / ".github" / "scripts" / "validate-pair-rail-verdict.py"
 GOVERNANCE = REPO_ROOT / ".claude" / "governance"
@@ -302,7 +359,8 @@ def write_sites(repo: Path, version: str, stamp_date: str) -> None:
         encoding="utf-8",
     )
     (repo / "CHANGELOG.md").write_text(
-        "# Changelog\n\n## [1.3.0]\n\n- fixture\n", encoding="utf-8"
+        "# Changelog\n\n## [%s]\n\n- fixture\n" % version,
+        encoding="utf-8",
     )
 
 
@@ -333,7 +391,7 @@ def synth(tmp_path):
         STUB_FRESHNESS, encoding="utf-8"
     )
 
-    write_sites(repo, "1.3.0", D0)
+    write_sites(repo, SYNTH_BASE, D0)
     run([sys.executable, "scripts/build-plugin.py", "--write-manifests"], repo, env)
 
     git(repo, env, "init", "-q")
@@ -341,7 +399,7 @@ def synth(tmp_path):
     git(repo, env, "config", "commit.gpgsign", "false")
     git(repo, env, "config", "tag.gpgsign", "false")
     git(repo, env, "add", "-A")
-    git(repo, env, "commit", "-q", "-m", "fixture: tree at 1.3.0")
+    git(repo, env, "commit", "-q", "-m", "fixture: tree at %s" % SYNTH_BASE)
 
     origin = tmp_path / "origin.git"
     git(repo, env, "init", "-q", "--bare", str(origin))
@@ -393,7 +451,7 @@ def test_print_sites_enumerates_the_table_and_the_generated_manifests():
 
 
 def test_today_is_a_required_parameter_with_no_default(synth):
-    proc = module(synth, "bump", "--target", "1.3.0")
+    proc = module(synth, "bump", "--target", SYNTH_BASE)
     assert proc.returncode != 0
     assert "--today" in proc.stderr
     assert "required" in proc.stderr
@@ -405,7 +463,7 @@ def test_today_is_a_required_parameter_with_no_default(synth):
 @pytest.mark.parametrize("today", [D0, D1])
 def test_stamps_are_frozen_when_the_version_already_matches(synth, today):
     before = tree_fingerprint(synth["repo"])
-    proc = module(synth, "bump", "--target", "1.3.0", "--today", today)
+    proc = module(synth, "bump", "--target", SYNTH_BASE, "--today", today)
     assert proc.returncode == 0, proc.stderr
     assert tree_fingerprint(synth["repo"]) == before, (
         "a stamp moved on --today=%s with the version unchanged" % today
@@ -415,31 +473,31 @@ def test_stamps_are_frozen_when_the_version_already_matches(synth, today):
 
 def test_a_real_version_change_still_writes_every_site(synth):
     repo = synth["repo"]
-    write_sites(repo, "1.2.0", D0)
-    proc = module(synth, "bump", "--target", "1.3.0", "--today", D1)
+    write_sites(repo, SYNTH_PREV, D0)
+    proc = module(synth, "bump", "--target", SYNTH_BASE, "--today", D1)
     assert proc.returncode == 0, proc.stderr
-    assert (repo / "VERSION").read_text() == "1.3.0\n"
-    assert '"version": "1.3.0"' in (repo / "npm/package.json").read_text()
-    assert 'version = "1.3.0"' in (repo / "pyproject.toml").read_text()
-    assert "--pin v1.3.0" in (repo / "INSTALL.md").read_text()
-    assert "currently v1.3.0, aligned" in (repo / "docs/ARCHITECTURE.md").read_text()
+    assert (repo / "VERSION").read_text() == "%s\n" % SYNTH_BASE
+    assert '"version": "%s"' % SYNTH_BASE in (repo / "npm/package.json").read_text()
+    assert 'version = "%s"' % SYNTH_BASE in (repo / "pyproject.toml").read_text()
+    assert "--pin v%s" % SYNTH_BASE in (repo / "INSTALL.md").read_text()
+    assert "currently v%s, aligned" % SYNTH_BASE in (repo / "docs/ARCHITECTURE.md").read_text()
     # README.md is NOT a version site: `VERSION=` never existed there
     # (verify-counts removed its dead rule in S291 with the archaeology in a
     # comment; the release checklist says the same). The fixture PLANTS the
     # literal so this asserts the writer leaves it alone — a writer row for a
     # site no oracle watches would rewrite a file every other surface
     # declares out of scope.
-    assert (repo / "README.md").read_text() == "VERSION=1.2.0\n"
+    assert (repo / "README.md").read_text() == "VERSION=%s\n" % SYNTH_PREV
     for stamped in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
         text = (repo / stamped).read_text()
-        assert "last-reviewed: %s v1.3.0" % D1 in text, stamped
+        assert "last-reviewed: %s v%s" % (D1, SYNTH_BASE) in text, stamped
     # the support window moved with the version: Current <- target minor,
     # Previous <- the minor before it (the oracle's own derivation)
     for doc in ("SECURITY.md", "VERSIONING.md"):
         text = (repo / doc).read_text()
-        assert "v1.3.x" in text, doc
-        assert "v1.2.x" in text, doc
-        assert "v1.1.x" not in text, doc
+        assert WIN_BASE in text, doc
+        assert WIN_PREV in text, doc
+        assert WIN_PREV2 not in text, doc
 
 
 # ===========================================================================
@@ -450,13 +508,13 @@ def test_a_real_version_change_still_writes_every_site(synth):
 # ===========================================================================
 def test_minor_bump_rewrites_the_support_window_sites(synth):
     repo = synth["repo"]
-    proc = module(synth, "bump", "--target", "1.4.0", "--today", D2)
+    proc = module(synth, "bump", "--target", SYNTH_NEXT, "--today", D2)
     assert proc.returncode == 0, proc.stderr
     for doc in ("SECURITY.md", "VERSIONING.md"):
         text = (repo / doc).read_text()
-        assert "v1.4.x" in text, doc  # Current shifted to the target minor
-        assert "v1.3.x" in text, doc  # Previous = the old Current
-        assert "v1.2.x" not in text, doc  # the stale window is GONE
+        assert WIN_NEXT in text, doc  # Current shifted to the target minor
+        assert WIN_BASE in text, doc  # Previous = the old Current
+        assert WIN_PREV not in text, doc  # the stale window is GONE
 
 
 def test_major_bump_shifts_current_and_leaves_previous_to_judgment(synth):
@@ -470,8 +528,8 @@ def test_major_bump_shifts_current_and_leaves_previous_to_judgment(synth):
     assert proc.returncode == 0, proc.stderr
     for doc in ("SECURITY.md", "VERSIONING.md"):
         text = (repo / doc).read_text()
-        assert "v2.0.x" in text, doc
-        assert "v1.2.x" in text, doc  # the old Previous, untouched
+        assert "v2.0.x" in text, doc  # major is ABSOLUTE de proposito
+        assert WIN_PREV in text, doc  # the old Previous, untouched
     assert "release-train judgment" in proc.stdout, proc.stdout
 
 
@@ -486,10 +544,12 @@ def test_minor_bump_survives_the_drivers_own_oracle_end_to_end(synth):
     m = re.search(r'(?m)^TARGET_BASE="(\d+\.\d+\.\d+)"$', src)
     assert m, "driver has no bare-semver TARGET_BASE"
     drv.write_text(
-        src.replace(m.group(0), 'TARGET_BASE="1.4.0"'), encoding="utf-8"
+        src.replace(m.group(0), 'TARGET_BASE="%s"' % SYNTH_NEXT),
+        encoding="utf-8",
     )
     git(repo, env, "add", "-A")
-    git(repo, env, "commit", "-q", "-m", "fixture: retarget driver to 1.4.0")
+    git(repo, env, "commit", "-q", "-m",
+        "fixture: retarget driver to %s" % SYNTH_NEXT)
     head_before = git(repo, env, "rev-parse", "HEAD")
 
     proc = driver(synth, "bump", "--stable", "--npm-readme-reviewed", "--today", D2)
@@ -497,10 +557,10 @@ def test_minor_bump_survives_the_drivers_own_oracle_end_to_end(synth):
     assert "a site is unpatched" not in proc.stderr, proc.stderr
     assert git(repo, env, "rev-parse", "HEAD") != head_before, "no commit made"
     index_and_worktree_clean(repo, env)
-    assert (repo / "VERSION").read_text() == "1.4.0\n"
+    assert (repo / "VERSION").read_text() == "%s\n" % SYNTH_NEXT
     for doc in ("SECURITY.md", "VERSIONING.md"):
         text = (repo / doc).read_text()
-        assert "v1.4.x" in text and "v1.3.x" in text, doc
+        assert WIN_NEXT in text and WIN_BASE in text, doc
 
 
 def test_writer_table_covers_every_mode_of_the_live_oracle():
@@ -532,10 +592,11 @@ def test_writer_table_covers_every_mode_of_the_live_oracle():
 
 def test_restamp_moves_the_stamps_at_an_unchanged_version(synth):
     repo = synth["repo"]
-    proc = module(synth, "bump", "--target", "1.3.0", "--today", D1, "--restamp")
+    proc = module(synth, "bump", "--target", SYNTH_BASE, "--today", D1,
+                  "--restamp")
     assert proc.returncode == 0, proc.stderr
     for stamped in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
-        assert "last-reviewed: %s v1.3.0" % D1 in (repo / stamped).read_text()
+        assert "last-reviewed: %s v%s" % (D1, SYNTH_BASE) in (repo / stamped).read_text()
 
 
 # ===========================================================================
@@ -570,16 +631,16 @@ def test_the_noop_path_does_not_demand_the_npm_readme_ack(synth):
 
 def test_a_real_bump_still_commits(synth):
     repo, env = synth["repo"], synth["env"]
-    write_sites(repo, "1.2.0", D0)
+    write_sites(repo, SYNTH_PREV, D0)
     run([sys.executable, "scripts/build-plugin.py", "--write-manifests"], repo, env)
     git(repo, env, "add", "-A")
-    git(repo, env, "commit", "-q", "-m", "fixture: back to 1.2.0")
+    git(repo, env, "commit", "-q", "-m", "fixture: back to %s" % SYNTH_PREV)
     head_before = git(repo, env, "rev-parse", "HEAD")
 
     proc = driver(synth, "bump", "--stable", "--npm-readme-reviewed", "--today", D1)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert git(repo, env, "rev-parse", "HEAD") != head_before
-    assert (repo / "VERSION").read_text() == "1.3.0\n"
+    assert (repo / "VERSION").read_text() == "%s\n" % SYNTH_BASE
     index_and_worktree_clean(repo, env)
     # and it warns that the tag phase will now require a push
     assert "ancestry guard" in proc.stderr
@@ -606,7 +667,7 @@ def test_restamp_survives_the_noop_fast_path(synth):
     assert "no-op: tree is already at" not in proc.stdout
     assert git(repo, env, "rev-parse", "HEAD") != head_before
     for stamped in ("npm/README.md", "SBOM.md", "SECURITY.md", "VERSIONING.md"):
-        assert "last-reviewed: %s v1.3.0" % D2 in (repo / stamped).read_text()
+        assert "last-reviewed: %s v%s" % (D2, SYNTH_BASE) in (repo / stamped).read_text()
 
 
 # ===========================================================================
@@ -614,10 +675,10 @@ def test_restamp_survives_the_noop_fast_path(synth):
 # ===========================================================================
 def test_dry_run_leaves_index_and_worktree_clean(synth):
     repo, env = synth["repo"], synth["env"]
-    write_sites(repo, "1.2.0", D0)
+    write_sites(repo, SYNTH_PREV, D0)
     run([sys.executable, "scripts/build-plugin.py", "--write-manifests"], repo, env)
     git(repo, env, "add", "-A")
-    git(repo, env, "commit", "-q", "-m", "fixture: back to 1.2.0")
+    git(repo, env, "commit", "-q", "-m", "fixture: back to %s" % SYNTH_PREV)
     head_before = git(repo, env, "rev-parse", "HEAD")
 
     proc = driver(
@@ -627,14 +688,14 @@ def test_dry_run_leaves_index_and_worktree_clean(synth):
     assert "restored to HEAD" in proc.stdout
     assert git(repo, env, "rev-parse", "HEAD") == head_before
     index_and_worktree_clean(repo, env)
-    assert (repo / "VERSION").read_text() == "1.2.0\n"
+    assert (repo / "VERSION").read_text() == "%s\n" % SYNTH_PREV
 
 
 def test_dry_run_restores_a_site_the_table_grew(synth):
     """S273 class, closed by derivation. The restore list is not typed: growing
     the site table must automatically grow what the dry-run puts back."""
     repo, env = synth["repo"], synth["env"]
-    (repo / "EXTRA.md").write_text("pinned v1.2.0\n", encoding="utf-8")
+    (repo / "EXTRA.md").write_text("pinned v%s\n" % SYNTH_PREV, encoding="utf-8")
     mod = repo / ".claude/scripts/local/_release_bump_sites.py"
     marker = 'if __name__ == "__main__":'
     src = mod.read_text(encoding="utf-8")
@@ -646,7 +707,7 @@ def test_dry_run_restores_a_site_the_table_grew(synth):
         ),
         encoding="utf-8",
     )
-    write_sites(repo, "1.2.0", D0)
+    write_sites(repo, SYNTH_PREV, D0)
     run([sys.executable, "scripts/build-plugin.py", "--write-manifests"], repo, env)
     git(repo, env, "add", "-A")
     git(repo, env, "commit", "-q", "-m", "fixture: extra site")
@@ -659,7 +720,7 @@ def test_dry_run_restores_a_site_the_table_grew(synth):
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
     index_and_worktree_clean(repo, env)
-    assert (repo / "EXTRA.md").read_text() == "pinned v1.2.0\n"
+    assert (repo / "EXTRA.md").read_text() == "pinned v%s\n" % SYNTH_PREV
 
 
 def test_dry_run_restores_when_a_derived_site_is_absent_from_head(synth):
@@ -671,10 +732,11 @@ def test_dry_run_restores_when_a_derived_site_is_absent_from_head(synth):
     bump created) and the trap must ASSERT the postcondition, not the
     attempt."""
     repo, env = synth["repo"], synth["env"]
-    write_sites(repo, "1.2.0", D0)
+    write_sites(repo, SYNTH_PREV, D0)
     git(repo, env, "rm", "-q", "-r", ".claude-plugin")
     git(repo, env, "add", "-A")
-    git(repo, env, "commit", "-q", "-m", "fixture: 1.2.0 tree, no plugin manifests in HEAD")
+    git(repo, env, "commit", "-q", "-m",
+    "fixture: %s tree, no plugin manifests in HEAD" % SYNTH_PREV)
     head_before = git(repo, env, "rev-parse", "HEAD")
 
     proc = driver(
@@ -684,7 +746,7 @@ def test_dry_run_restores_when_a_derived_site_is_absent_from_head(synth):
     assert "restored to HEAD" in proc.stdout
     assert git(repo, env, "rev-parse", "HEAD") == head_before
     index_and_worktree_clean(repo, env)
-    assert (repo / "VERSION").read_text() == "1.2.0\n"
+    assert (repo / "VERSION").read_text() == "%s\n" % SYNTH_PREV
     # the files the bump CREATED (not in HEAD) are gone again, not debris
     assert not (repo / ".claude-plugin" / "plugin.json").exists()
     assert not (repo / ".claude-plugin" / "marketplace.json").exists()
@@ -1156,9 +1218,14 @@ def test_delta_refuses_to_pass_vacuously_when_the_verdict_anchors_itself(synth):
 # ===========================================================================
 @pytest.mark.parametrize(
     "tag,flags",
-    [("v1.3.0-rc.2", ["--rc", "2"]), ("v1.3.0", ["--stable"])],
+    [(TAG_RC, ["--rc", "2"]), (TAG_STABLE, ["--stable"])],
 )
 def test_tag_phase_runs_both_guards_for_rc_and_stable(synth, tag, flags):
+    """As tags sao DERIVADAS do trem que a arvore sintetica carrega
+    (SYNTH_BASE). A propriedade guardada e o WIRING dos dois guards nas duas
+    invocacoes; qual versao esta em voo nao faz parte dela, e pinar um numero
+    aqui so garantia que o teste morreria na release seguinte por comparar
+    VERSION com TARGET_BASE."""
     repo, env = synth["repo"], synth["env"]
     arm_verdict(synth, tag)
 
@@ -1180,17 +1247,33 @@ def test_tag_phase_runs_both_guards_for_rc_and_stable(synth, tag, flags):
 
 
 def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
-    arm_verdict(synth, "v1.3.0")
+    """DELIBERADAMENTE PINADO, e re-pinado a cada release.
+
+    Derivar o escopo do proprio driver tornaria o teste tautologico: a
+    anotacao E montada a partir de RELEASE_SCOPE, entao afirmar que ela o
+    contem nao prova nada. O valor deste teste e obrigar uma atualizacao
+    CONSCIENTE do trem a cada corte — foi assim que a rc.1-era stale string
+    foi pega (repass-r2 part-d P1).
+
+    Trem 1.4.0 (re-pinado na cerimonia rel-meta-2): o escopo passou a ser
+    DERIVADO por apply-relmeta-edits.py de `git log v1.3.0..HEAD` mais os ADRs
+    tocados na faixa, LISTADOS e nunca como intervalo. A linha de titulo,
+    diferente do escopo, e derivada: ela so afirma que a anotacao nomeia a
+    propria tag."""
+    arm_verdict(synth, TAG_STABLE)
     proc = driver(synth, "tag", "--stable", "--dry-run")
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    # repass-r2 part-d P1: the expectation must track the LIVE train scope —
-    # pinning the rc.1-era string here blessed a stale signed-tag annotation.
     assert (
-        "PLAN-162 / PLAN-165 / PLAN-166 / PLAN-167 / PLAN-168 / "
-        "PLAN-169 W0-W2 / PLAN-177 / PLAN-178 "
-        "(ADRs 184 -> 191 + ADR-089-AMEND-1)" in proc.stdout
+        "PLAN-119 / PLAN-169 / PLAN-170 / PLAN-171 / PLAN-172 / PLAN-173 / "
+        "PLAN-174 / PLAN-175 / PLAN-176 / PLAN-177 / PLAN-178 / PLAN-179 / "
+        "PLAN-180 / PLAN-181 / PLAN-182 / PLAN-183 / PLAN-184 / PLAN-185 / "
+        "PLAN-186 / PLAN-187 / PLAN-188 / PLAN-189 (ADRs tocados: ADR-001 "
+        "ADR-079 ADR-081 ADR-144 ADR-149 ADR-153 ADR-163 ADR-186 ADR-192 "
+        "ADR-193 ADR-194 ADR-195 ADR-196 ADR-197)" in proc.stdout
     )
-    assert "v1.3.0 —" in proc.stdout
+    # nenhuma string de release ANTERIOR pode ter sobrevivido na anotacao
+    assert "PLAN-162 / PLAN-165" not in proc.stdout
+    assert "%s —" % TAG_STABLE in proc.stdout
 
 
 # ===========================================================================
