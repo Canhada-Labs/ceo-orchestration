@@ -1590,7 +1590,7 @@ index 1c50a17..66a0584 100755
      echo "       Install without --github-owner (the .github/CODEOWNERS.template is delivered instead) and write the team line by hand." >&2
      exit 2
 diff --git a/scripts/tests/test-installer-write-safety-e2e.sh b/scripts/tests/test-installer-write-safety-e2e.sh
-index c9ffda7..137f097 100755
+index f4cd6c0..11b82d3 100755
 --- a/scripts/tests/test-installer-write-safety-e2e.sh
 +++ b/scripts/tests/test-installer-write-safety-e2e.sh
 @@ -935,17 +935,21 @@ else

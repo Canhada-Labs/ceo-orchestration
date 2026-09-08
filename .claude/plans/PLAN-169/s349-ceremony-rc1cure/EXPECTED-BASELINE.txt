@@ -1,4 +1,4 @@
-BASE-HEAD 279497e06ffe8ba11e36f0c6273d64b7ec3c06eb
+BASE-HEAD b86850787cdef5deb89e35667ff9bde28eda853b
 PRE 44c2f0b5fb8277c1b1e676178119d25d2a99bd79 .claude/hooks/_lib/audit_emit.py
 PRE 859470e50ada2a66ba59f6e4724c82287ef53bc2 .claude/hooks/_lib/injection_salt.py
 PRE 8c64e77f3a5df50ad15098fd823425c5479a52a3 .claude/hooks/check_postcompact_reinject.py
@@ -15,7 +15,7 @@ PRE f4cd6c0c8835caab424a4ca3648f14c52297a10a scripts/tests/test-installer-write-
 PRE c6401673bd04adf7f0879463f756e18a864a64e2 scripts/tests/test-manifest-delivery-route.sh
 PRE 75b48146b5e32c8826f4d501438e087d33e77ccc scripts/tests/test-upgrade-historical-adopter.sh
 PRE adc5c85debc0c7620d2e279b8895b998fa3cb12a scripts/upgrade.sh
-PATCH-SHA256 a9af0337cb0ada3233502d72697972faf538342a77ee33fc1013c3fd82b7f3f3
+PATCH-SHA256 a9df985c1553b68fd2e3870b8fe7950b965fae537c4f9128c212c3a158de44dd
 SCOPE-COUNT 16
 CANONICAL-COUNT 9
 TODAY 2026-09-08
