@@ -1,0 +1,21 @@
+BASE-HEAD 279497e06ffe8ba11e36f0c6273d64b7ec3c06eb
+PRE 44c2f0b5fb8277c1b1e676178119d25d2a99bd79 .claude/hooks/_lib/audit_emit.py
+PRE 859470e50ada2a66ba59f6e4724c82287ef53bc2 .claude/hooks/_lib/injection_salt.py
+PRE 8c64e77f3a5df50ad15098fd823425c5479a52a3 .claude/hooks/check_postcompact_reinject.py
+PRE 87303183fe40f4368530593c6d3bf942c92cd821 .claude/hooks/check_precompact_continuity.py
+PRE 7856fdc0ab84cac1cf6f2f2fe892f97cf090bbdd .claude/hooks/tests/test_check_compaction_continuity.py
+PRE e125f167bce149379f234f8f0f9250c60405babc .claude/hooks/tests/test_injection_salt.py
+PRE d6abf7f77ee68629e9aaf3a8b475fd2c01cd4023 .claude/hooks/tests/test_postcompact_reinject_no_exec_payload.py
+PRE cd1c703ba530e5fad443608ede5bb19f477d49ee .claude/scripts/data/installer-write-safety-baseline.txt
+PRE cfc88ba44609b61bce734b7f265e6a5b509cab1e .github/workflows/validate.yml
+PRE a36591be7bbe96af3055558947ef1917a959aaa0 SPEC/v1/audit-log.schema.md
+PRE d18c3d6be376ad9372be6d5b8659c6c938840b42 scripts/_framework_manifest_set.sh
+PRE 1c50a17302451e2468254f0f629944f56cdd6418 scripts/install.sh
+PRE f4cd6c0c8835caab424a4ca3648f14c52297a10a scripts/tests/test-installer-write-safety-e2e.sh
+PRE c6401673bd04adf7f0879463f756e18a864a64e2 scripts/tests/test-manifest-delivery-route.sh
+PRE 75b48146b5e32c8826f4d501438e087d33e77ccc scripts/tests/test-upgrade-historical-adopter.sh
+PRE adc5c85debc0c7620d2e279b8895b998fa3cb12a scripts/upgrade.sh
+PATCH-SHA256 a9af0337cb0ada3233502d72697972faf538342a77ee33fc1013c3fd82b7f3f3
+SCOPE-COUNT 16
+CANONICAL-COUNT 9
+TODAY 2026-09-08

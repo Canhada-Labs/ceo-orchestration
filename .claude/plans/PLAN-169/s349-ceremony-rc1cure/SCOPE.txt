@@ -1,0 +1,17 @@
+Scope:
+  - .claude/hooks/_lib/audit_emit.py
+  - .claude/hooks/_lib/injection_salt.py
+  - .claude/hooks/check_postcompact_reinject.py
+  - .claude/hooks/check_precompact_continuity.py
+  - .claude/hooks/tests/test_check_compaction_continuity.py
+  - .claude/hooks/tests/test_injection_salt.py
+  - .claude/hooks/tests/test_postcompact_reinject_no_exec_payload.py
+  - .claude/scripts/data/installer-write-safety-baseline.txt
+  - .github/workflows/validate.yml
+  - SPEC/v1/audit-log.schema.md
+  - scripts/_framework_manifest_set.sh
+  - scripts/install.sh
+  - scripts/tests/test-installer-write-safety-e2e.sh
+  - scripts/tests/test-manifest-delivery-route.sh
+  - scripts/tests/test-upgrade-historical-adopter.sh
+  - scripts/upgrade.sh
