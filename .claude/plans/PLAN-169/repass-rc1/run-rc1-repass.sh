@@ -156,7 +156,16 @@ _cleanup() {
       && echo "quarentena: $(basename "$_raw") -> ~/.rc2-backup/" >&2
   done
 }
-trap _cleanup EXIT
+# Saida VISIVEL (2026-09-08: o 1.o run real morreu depois do codex sem uma
+# linha de FATAL no log): o EXIT imprime rc + linha, e HUP/TERM sao nomeados.
+_on_exit() {
+  local rc=$?
+  printf 'runner: saida rc=%s (ultima linha %s)\n' "$rc" "$LINENO" >&2
+  _cleanup
+}
+trap _on_exit EXIT
+trap 'printf "runner: SIGHUP recebido\n" >&2; exit 129' HUP
+trap 'printf "runner: SIGTERM recebido\n" >&2; exit 143' TERM
 _wt_st="$(git -C "$WT" status --porcelain)" || die "git status do worktree falhou"
 [ -z "$_wt_st" ] || die "worktree do candidato sujo"
 
@@ -294,12 +303,21 @@ for _o in PROVENANCE-rc1.md MANIFEST-rc1.sha256 MANIFEST-rc1.sha256.tmp; do
   rm -f "$_op" || die "nao consegui limpar $_op"
 done
 
+# --- 1b. MODELO explicito para a CLI pinada --------------------------------
+# A config global do maintainer (~/.codex/config.toml) pede `gpt-6-astra`, que a
+# 0.147.0 NAO conhece (a API responde 400 "requires a newer version of Codex")
+# e `gpt-5.6` nao e servido a contas ChatGPT. Medido em 2026-09-08 com a CLI
+# pinada e a conta do maintainer: `gpt-5.6-sol` responde. O modelo vai para a
+# PROVENANCE; `CODEX_MODEL=...` no ambiente sobrepoe (registrado do mesmo jeito).
+CODEX_MODEL="${CODEX_MODEL:-gpt-5.6-sol}"
+
 OVERALL=0
 {
   echo "# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - $NPARTS partes"
   echo "- Base: $BASE_TAG ($BASE_TAG_OBJ -> $BASE_TAG_COMMIT) .. Candidato: $CANDIDATE_SHA (PRE-tag, doutrina r17)"
   echo "- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only"
   echo "- codex: $CODEX_CLI_VERSION / $CODEX_TRIPLE / payload $CODEX_PAYLOAD_SHA"
+  echo "- modelo: $CODEX_MODEL (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)"
   echo "- Data: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 } > "$OUT/PROVENANCE-rc1.md" || die "escrita da proveniencia falhou"
 
@@ -370,6 +388,7 @@ for P in $PARTS; do
   printf 'parte %s/%s OK (%sB, %s hunks) - codex rodando (~10-15 min)...\n' \
     "$P" "$NPARTS" "$RAWB" "$RH"
   ( cd "$WT" && "$CODEX_BIN" exec --sandbox read-only --color never \
+      -m "$CODEX_MODEL" \
       --output-last-message "$OUT/verdict-rc1-$P.txt" \
       - < "$RED" > "$OUT/transcript-rc1-$P.log" 2>&1 )
   CRC=$?

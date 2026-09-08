@@ -1,0 +1,7 @@
+# Arquivos de TRABALHO do runner do re-pass (nunca evidencia): o passo 8 do
+# OWNER-RC1-CUT.sh stageia so a lista literal do MANIFEST-rc1.sha256, mas um
+# `git add -A` de qualquer outra mao levaria o cache do npx junto.
+.npx-cache/
+.codex-shim/
+.cut-state
+*.raw.txt
