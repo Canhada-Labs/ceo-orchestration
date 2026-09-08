@@ -100,9 +100,20 @@ Go to **Settings → Branches → Add rule** for pattern `main`:
     [x] Require review from Code Owners
 [x] Require status checks to pass before merging
     [x] Require branches to be up to date before merging
-    Select status checks:
+    Select status checks (ALL of these — since v1.4.0 the hook and
+    script test suites run in their own jobs, so the governance job
+    alone no longer proves the tests passed; a matrix leg can be red
+    while the governance check is green):
       - validate / Governance, health, contamination, shellcheck
-      (and "Skill benchmarks (advisory)" once the secret is configured)
+      - validate / hook-tests-python-matrix (3.9)
+      - validate / hook-tests-python-matrix (3.12)
+      - validate / hook-tests-dual-rail (0)
+      - validate / hook-tests-dual-rail (1)
+      - validate / E2E integration tests (pytest)
+      - validate / Hook stdout/exit-code contract oracle (PLAN-163 T2)
+      (and "Skill benchmarks (advisory)" once the secret is configured;
+      do NOT require `opus-4-7-profiler-smoke` — its hook-latency gate
+      is runner-speed sensitive and is re-run, not merged around)
 [x] Require conversation resolution before merging
 [x] Require signed commits                                 (optional)
 [x] Require linear history                                 (optional)

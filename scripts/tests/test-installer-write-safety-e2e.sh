@@ -1486,9 +1486,12 @@ else
   grep -q "re-run with --force" "$LOG" \
     && bad "U.4 — the incomplete summary tells a --force run to re-run with --force" \
     || ok "U.4 — no misleading --force hint under --force"
-  [ "$RC" -eq 0 ] \
-    && ok "U.4 — the refused run under --force exits 0 (the incomplete path's exit code)" \
-    || bad "U.4 — the refused run exited $RC (see $LOG)"
+  # rc.1 re-pass (part 3, U2): an INCOMPLETE uninstall is never a success —
+  # a refused record exits 6 (never lifted by --force), a preserved mismatch
+  # without --force exits 5, and only a dry-run preview stays 0.
+  [ "$RC" -eq 6 ] \
+    && ok "U.4 — the refused run under --force exits 6 (INCOMPLETE by refusal is not a success)" \
+    || bad "U.4 — the refused run exited $RC, expected 6 (see $LOG)"
 fi
 
 # ---------------------------------------------------------------------------

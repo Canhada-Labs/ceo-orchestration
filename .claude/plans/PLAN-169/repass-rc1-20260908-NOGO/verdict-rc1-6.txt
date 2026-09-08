@@ -1,0 +1,33 @@
+Adopter blast radius: the default audit/state family moves from the shared literal directory to the native project slug. The audit-chain discontinuity is disclosed at `CHANGELOG.md:113`; the scratchpad discontinuity is not.
+
+1. **P1 (fix before rc.1) — `.claude/hooks/_lib/state_store.py:126`**
+
+   A v1.3 adopter with an active plan has its scratchpad SQLite database under the legacy directory. After upgrade, `_state_root()` silently selects the new slug directory and opens a new empty database. `/resume` and inter-agent handoffs therefore report missing state even though the old database remains on disk. The release note only warns about the audit chain, not state stores. Minimal fix: migrate state stores during upgrade, or preserve the legacy `CEO_STATE_ROOT` until an explicit migration; document the continuity break.
+
+2. **P1 (fix before rc.1) — `.claude/hooks/_lib/injection_salt.py:198`**
+
+   First mint is not concurrency-safe. Two sessions submitting their first prompt after upgrade can both observe no salt, generate different values, and truncate the same file at `:164`; each process then caches and uses its own value at `:215`. At least one emitted `prompt_sha256` becomes irreproducible because its salt was overwritten. Minimal fix: elect the creator with `O_CREAT|O_EXCL|O_NOFOLLOW`; losing processes must read and use the winner’s persisted salt.
+
+3. **P1 (fix before rc.1) — `.claude/hooks/_lib/injection_salt.py:246`**
+
+   The new `salt-minted.json` write uses `Path.write_text`, following a pre-existing symlink and truncating its target; `chmod` at `:251` follows it again. Because v1.4 writes into an already-existing native Claude project directory, this can overwrite an adopter/tool-owned file or a file outside the state tree. Minimal fix: write a randomized `O_EXCL|O_NOFOLLOW` temporary file and `os.replace` it, while refusing an existing non-framework marker.
+
+4. **P1 (fix before rc.1) — `.claude/hooks/_lib/audit_hmac.py:226`**
+
+   The compatibility branch preserves legacy HMAC sidecars under `CEO_AUDIT_LOG_DIR` and returns that directory at `:243`, but candidate writers unconditionally move their lock to the `CEO_AUDIT_LOG_PATH` parent in `audit_emit.py:2382` and `spool_writer.py:422`. During an in-session upgrade, an old v1.3 hook locks `LOG_DIR` while a new hook locks `LOG_PATH.parent`; both append to the same log and mutate the same legacy chain sidecars. This can fork the HMAC chain or lose the chain-length increment. Minimal fix: centralize the preservation decision so key, sidecars, and lock remain under one directory, or require a quiesced atomic migration before switching locks.
+
+5. **P1 (fix before rc.1) — `.claude/hooks/_lib/injection_salt.py:266`**
+
+   The salt event sends `project=str(runtime_paths.project_dir())`—an absolute repository path—at `:268-274`. The scrub allowlist admits `project` without value validation (`audit_emit.py:8638`), contradicting both the branch’s “slug/path never reaches the wire” claim at `audit_emit.py:6954` and the published contract at `SPEC/v1/audit-log.schema.md:501`. A first prompt can therefore record `<HOME>/private-repo` in the signed chain. Minimal fix: use a validated opaque project identifier or the existing hash prefix, and add a test asserting that no absolute path survives this action.
+
+6. **P2 (follow-up) — `.claude/hooks/_lib/spool_writer.py:196`**
+
+   The cache key omits cwd whenever *any* candidate input is absolute, rather than when the selected highest-precedence input is absolute. With relative `CEO_AUDIT_LOG_DIR=logs` plus the normal absolute `CLAUDE_PROJECT_DIR`, a long-lived process can `chdir` without invalidating the state-dir or per-PID spool caches, sending prior-project headers/journal state into the new cwd. Minimal fix: determine the winning resolver input first and include cwd whenever that winning path is relative.
+
+7. **P2 (follow-up) — `.claude/hooks/_lib/ledger_provenance.py:833`**
+
+   `rejection_marker()` always says the body was “DISCARDED,” but the shipping advisory posture returns that same rejected entry at `:902-904`. The module also has no non-test consumer, so this is currently dormant, as the signed residual states; nevertheless, any adopter or future writer calling the API receives false disposition evidence. Minimal fix: make advisory markers say the body was admitted and would be discarded under enforcement, and require a binding-posture decision before adding a production caller.
+
+The stdlib-only checker passed all 449 framework Python files; I found no Python 3.9 syntax violation in this payload.
+
+VERDICT: NO-GO — the scratchpad cutover, first-mint race, symlink-following write, mixed-version lock split, and false no-path audit claim must be corrected before rc.1.

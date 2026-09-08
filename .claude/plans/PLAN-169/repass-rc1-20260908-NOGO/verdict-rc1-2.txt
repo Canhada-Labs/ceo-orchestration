@@ -1,0 +1,19 @@
+P1 — `scripts/install.sh:3286`, `scripts/_framework_manifest_set.sh:1271`  
+Concrete failure: v1.3.0’s installer never set `FMS_LINK_PATHS`, so its allow-all manifest writer could record a pre-existing adopter symlink under an enumerated directory as framework-owned. The candidate treats any unique prior `LINK` record whose live target still matches as valid provenance and emits it again. Thus a v1.3 over-claim survives upgrade/re-install; `doctor --repair` may later recreate or police an adopter-authored link.  
+Minimal fix: do not authorize legacy `LINK` records solely by prior-record/live-target equality. Require the link to target the expected framework source for its confined relpath, or drop pre-v1.4 LINK continuity conservatively. Add a v1.3-generated polluted-manifest migration test covering both upgrade and re-install.
+
+P1 — `scripts/install.sh:1863`, `scripts/_framework_manifest_set.sh:1240`  
+Concrete failure: with `delivery-routes.tsv` missing, header-corrupt, or containing a rejected row, install still copies the hard-coded `docs/` and `.github/` destinations. Registration returns success at line 1866, manifest generation returns success at line 1245, install-state is written, and the process reports successful completion with an absent or partial ownership baseline. A caller checking only `$?` cannot distinguish this from a complete install. This contradicts the new classification of the table as required, untrusted input that fails closed.  
+Minimal fix: validate the entire route table before the global first-write preflight and abort untouched on failure; propagate registration/table rejection into the run-level verdict instead of returning success.
+
+P1 — `scripts/_framework_manifest_set.sh:1121`  
+Concrete failure: the gate claims to require a regular table, but `-f` follows symlinks. A symlinked `scripts/delivery-routes.tsv` is therefore read—and the upgrade snapshot dereferences it—without preserving evidence that its bytes came from outside the checkout. A well-formed external table can reroute an absent `.github/CODEOWNERS` to another allowed `templates/*` source and the upgrade will install those wrong bytes successfully.  
+Minimal fix: reject a symlink leaf and symlinked components before reading or snapshotting the table, then require physical confinement to the executing checkout. Cover this with a symlink-table negative test.
+
+P2 — `scripts/_framework_manifest_set.sh:887`, `scripts/install.sh:485`  
+Concrete failure: the predicate and error text call this a GitHub-handle grammar, but `owner-` and consecutive-hyphen forms are accepted. The installer can exit successfully after rendering an invalid owner token into every CODEOWNERS rule, leaving the repository without the protection the message implies.  
+Minimal fix: require an alphanumeric final character and reject consecutive hyphens, or rename the contract honestly to an interpolation-safe token grammar and warn that GitHub validity is not checked.
+
+The ordinary copy-mode v1.3→candidate route resolves the shipped six-row table correctly; `bash -n` and `git diff --check` are clean. Release condition: before signing rc.1, close the three P1 cases and add negative fixtures proving that a polluted v1.3 LINK record is dropped and that missing, malformed, or symlinked route tables leave the target untouched with a non-zero exit.
+
+VERDICT: GO-WITH-CONDITIONS

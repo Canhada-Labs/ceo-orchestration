@@ -61,6 +61,32 @@ bash .claude/scripts/ceo-backup.sh
 This snapshots audit log + memory + agent-metrics so you can
 recover if the upgrade misbehaves.
 
+**Upgrading from v1.3.0 with an ACTIVE plan? Read this first.** Since
+v1.4.0 the audit log AND the plan state stores (scratchpad SQLite files
+used by `/resume` and inter-agent handoffs) resolve per project through
+`.claude/hooks/_lib/runtime_paths.py`, not through the legacy
+`$HOME/.claude/projects/ceo-orchestration/` directory. Nothing is
+migrated: after the upgrade a repository with a plan in flight opens a
+NEW, empty state store, and the old files stay on disk. Before you run
+the first session on the new version, pick one route:
+
+- keep reading the legacy store until the plan closes by exporting
+  `CEO_PROJECT_NAME=ceo-orchestration` (the documented escape hatch in
+  `state_store.py`; it re-creates the basename-collision hazard, so drop
+  it as soon as the plan is done), or
+- copy `$HOME/.claude/projects/ceo-orchestration/state/` into the new
+  per-project directory printed by
+  `python3 .claude/hooks/_lib/runtime_paths.py --state-dir`.
+
+The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`
+[1.4.0], «audit log resolves per PROJECT»).
+
+And run the upgrade with **no Claude session open** on the repository: a
+session started on v1.3.0 keeps its hooks resident, and two hook generations
+appending to the same audit log (only when `CEO_AUDIT_LOG_PATH` is set)
+interleave their records — `verify_chain()` then reports a break that is
+an artefact of the mixed window, not tampering.
+
 ### 4. Verify CI is green pre-upgrade
 
 ```bash

@@ -47,6 +47,10 @@ and the two CI workflow templates forever, with no warning.
   when a prior registration's digest still matches. A failed delivery
   exits 3 and persists `upgrade_succeeded: false` in the install-state
   rather than recording a full upgrade that did not happen (`6304f66`).
+  One named exception in this release candidate: a route whose
+  transform has no renderer in the running version is reported as a
+  named `SKIP` and the run still exits 0 — unreachable with the shipped
+  six-row table, and a signed condition of rc.1 (cure lands before GA).
 - **One route table, three readers.** `scripts/delivery-routes.tsv` is
   now the single answer to "which source file produces this
   destination?", read by the manifest generator, `doctor.sh` and the
@@ -114,6 +118,16 @@ directory shared by every project (`9de4efc`, `965fb13`, `3d16070`).
   under `$HOME/.claude/projects/ceo-orchestration/` stays where it is;
   `SPEC/v1/audit-log.schema.md` records the change as v2.58 and names the
   legacy path.
+- **Plan state and scratchpads move too, and are not migrated either.**
+  `state_store.py` resolves through the same family resolver, so a
+  repository with an ACTIVE plan on v1.3.0 opens a NEW, empty state
+  store after the upgrade — `/resume` and inter-agent handoffs report
+  missing state while the old SQLite files stay on disk under the
+  legacy directory. Two documented routes: set `CEO_PROJECT_NAME` to
+  the legacy slug (the explicit escape hatch in `state_store.py`) until
+  the plan closes, or copy `<legacy>/state/` into the new per-project
+  directory (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir`).
+  A migration is a signed condition of rc.1 (see the release envelope).
 - **The limit that does NOT go away:** under the same UID one project's
   process can still read another's `0700` directory and `0600` key. A
   real boundary needs a separate UID; that is out of scope by decision,
@@ -214,7 +228,12 @@ call today**:
   `prediction-markets` and `trading-execution` were listed under
   `skillOverrides` as `name-only`, which withholds their body from the
   agent — including from the veto paths that are supposed to read them.
-  All seven are undemoted in BOTH settings profiles. Four skills with no
+  All seven are undemoted in BOTH settings profiles on a FRESH install.
+  An existing v1.3.0 installation keeps its own `skillOverrides` on
+  upgrade (the upgrader preserves settings outside the enumerated
+  additive migrations), so the undemotion reaches upgraded adopters
+  only through a baseline-aware migration — a signed condition of rc.1
+  (lands before GA). Four skills with no
   veto role (`cpp-testing`, `frontend-slides`, `prisma-patterns`,
   `ui-demo`) were added to the name-only list in their place.
 

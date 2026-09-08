@@ -1,0 +1,19 @@
+REJECT
+
+- P1 — `scripts/upgrade.sh:2885` — Concrete failure: the merge walks the entire current template and appends every absent registration. A v1.3.0 maintainer who deliberately removed `check_canonical_edit.py`, `check_bash_safety.py`, or another existing hook gets it silently re-armed. Lines 2903–2904 likewise restore deliberately removed `.env` keys. This contradicts the help’s “new lifecycle hooks” claim at `scripts/upgrade.sh:393`. Minimal fix: derive only registrations/settings introduced since the installed version; if that baseline is unavailable, withhold them unless an explicit repair option is supplied.
+
+- P1 — `scripts/upgrade.sh:4746` — Concrete failure: byte equality alone causes an existing file to be registered as framework-owned at line 4755. A v1.3.0 adopter-authored `.github/CODEOWNERS.template` identical to the shipped template—previously skipped and absent from the old manifest—is claimed by this upgrade; a later manifest-honoring uninstall deletes it. Minimal fix: treat an equal pre-existing file without a prior delivery record as `PRESERVED (unclaimed)` and do not register it.
+
+- P1 — `scripts/upgrade.sh:4903` — Concrete failure: an explicitly “UNSIGNED, advisory” target-side state value becomes authority for active CODEOWNERS content at `scripts/upgrade.sh:5031`. Changing `request.github_owner` and removing the current CODEOWNERS makes the next upgrade install review routing for the substituted handle without an explicit owner decision. Minimal fix: require an explicit upgrade flag or verify that the recorded handle equals the handle already proven in the current framework-owned CODEOWNERS; syntax validation is not provenance.
+
+- P1 — `scripts/upgrade.sh:5077` — Concrete failure: an unsupported or malformed transform is counted as `SKIPPED`, satisfies the conservation law, leaves `_UP_DELIVERY_PRECONDITION_FAILED=0`, persists `upgrade_succeeded=true`, and prints “Upgrade complete.” A poisoned route table can therefore omit required delivery while exiting 0, contrary to the documented exit-3 behavior. Minimal fix: preflight every transform/renderer pairing before delivery and set the deferred failure flag for any unrenderable row.
+
+- P2 — `scripts/upgrade.sh:1773` — Concrete failure: v1.3.0 accepted arbitrary `--protocol-source` values, but the new consumer rejects legitimate values such as literal `$HOME/...` or `/opt/ceo+src`. If the existing pointer cannot be reconstructed, line 1802 silently changes it to the checkout running the upgrade. Minimal fix: share a producer/consumer grammar covering previously supported renderer-safe values; on rejection, preserve rather than replace the pointer.
+
+- P2 — `scripts/upgrade.sh:4353` — Concrete failure: mode-setting failure is ignored, and an unavailable mode skips `chmod`; the 0600 `mktemp` inode is still renamed into place and reported/registered as successfully delivered. Minimal fix: require and verify the intended mode before `mv`, otherwise remove the temporary file and return failure.
+
+- P2 — `scripts/upgrade.sh:5041` — Concrete failure: branch exclusivity is only enforced within one pass. An owner install followed by deletion, `upgrade --no-replay` (installs `.template`), then a default upgrade (installs rendered CODEOWNERS) leaves both files because the template branch merely skips the existing template. Minimal fix: resolve the pair before writing; remove only a proven framework-owned template, otherwise refuse the rendered install and name the conflict.
+
+Static controls were clean: `bash -n`, ShellCheck warning level, stdlib-only validation, and AGENTS freshness.
+
+VERDICT: NO-GO — The settings re-arming, ownership laundering, unsigned CODEOWNERS authority, and success-on-poisoned-route P1 findings must be fixed before rc.1.

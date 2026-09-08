@@ -22,9 +22,15 @@
 #   0  success (or dry-run preview)
 #   1  generic failure / invalid args
 #   2  target path invalid OR no manifest found
-#   3  HMAC verification failed (manifest tampered)
+#   3  (reserved) — the install MANIFEST is NOT HMAC-verified in this version;
+#      only the pre-uninstall backup carries an HMAC (see --restore). A
+#      manifest record is trusted for its PATH shape and SHA only.
 #   4  --restore: backup tar.gz invalid or HMAC mismatch
-#   5  --force not provided when SHA mismatches encountered
+#   5  uninstall INCOMPLETE: SHA mismatches encountered without --force
+#      (user-modified files preserved, manifest kept)
+#   6  uninstall INCOMPLETE: one or more manifest records REFUSED (unsafe
+#      path or symlinked ancestor) — never lifted by --force
+#   A dry-run always exits 0: it is a preview, whatever it would refuse.
 #
 # Bash 3.2 portability guard
 if [ -z "${BASH_VERSINFO:-}" ]; then
@@ -451,7 +457,13 @@ if [ "$unsafe_count" -gt 0 ] || { [ "$mismatch_count" -gt 0 ] && [ "$FORCE" -eq 
     _log "    Refused records are never removed, with or without --force: fix the manifest path or the symlinked ancestor, then re-run."
   fi
   _log "    Preserved files were NOT touched."
-  exit 0
+  # An INCOMPLETE uninstall is never a success (rc.1 re-pass, part 3 U2):
+  # automation that reads only $? must not record a refused or preserved
+  # run as done. The dry-run stays 0 — it is a preview (header). Refusal
+  # outranks mismatch: a refused record is never lifted by --force.
+  if [ "$DRY_RUN" -eq 1 ]; then exit 0; fi
+  if [ "$unsafe_count" -gt 0 ]; then exit 6; fi
+  exit 5
 fi
 
 # Clean up manifest + empty .claude/ subdirs (only if everything matched)

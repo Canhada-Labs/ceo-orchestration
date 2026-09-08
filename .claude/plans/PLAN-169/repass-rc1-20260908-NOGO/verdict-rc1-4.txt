@@ -1,0 +1,21 @@
+No P0 findings. Static workflow, manifest-integrity, contamination, stdlib, ADR, settings-derivation, and exact-count checks passed.
+
+P1 — `.github/workflows/validate.yml:327`, `.github/workflows/validate.yml:464`, `.github/workflows/validate.yml:1601`; `docs/BRANCH-PROTECTION.md:104`
+
+Concrete failure scenario: the hook/script/optimizer tests were removed from the `validate / Governance, health, contamination, shellcheck` job and moved into `hook-tests-python-matrix`. The delivered branch-protection instructions require only the former check. An adopter following those instructions can therefore merge while one or more Python-matrix jobs are red, including a Python 3.9 compatibility failure. The workflow is red, but the configured required check is green.
+
+Minimal fix: preserve the documented check name as a fail-closed aggregator that runs with `if: always()` and succeeds only when both the core validation job and every matrix leg succeeded. Alternatively, restore the load-bearing suites to the required job. Add a structural test proving that the documented required check transitively depends on the matrix.
+
+P1 — `CHANGELOG.md:210`, `CHANGELOG.md:217`; `scripts/upgrade.sh:3111`, `scripts/upgrade.sh:3218`
+
+Concrete failure scenario: the CHANGELOG says the seven VETO-bearing skills are undemoted, but an adopter upgrading an existing v1.3.0 installation retains the old `skillOverrides` entries. The upgrader explicitly preserves settings except enumerated additive migrations, and `skillOverrides` is not among those migrations. The upgrade reports success while veto-bearing skill bodies remain `name-only`; only a fresh installation receives the corrected profile. The four replacement `name-only` entries are likewise not consistently delivered by upgrade.
+
+Minimal fix: add an idempotent, baseline-aware v1.3 migration that removes only the exact legacy `name-only` entries, preserves adopter-modified values, and applies the intended replacements consistently. Add a historical v1.3 fixture testing both the first and repeated upgrade. If no migration is intended, narrow the CHANGELOG claim explicitly to fresh installations, though that leaves the substantive veto defect unfixed for existing adopters.
+
+P2 — `.claude/settings.json:363`; `SPEC/v1/audit-log.schema.md:11`
+
+Concrete failure scenario: the SPEC and implementation move audit state to `$HOME/.claude/projects/<native-slug>/`, but the live settings comment still directs operators to `$HOME/.claude/projects/ceo-orchestration/audit-log.jsonl`. An operator diagnosing an upgraded installation can inspect the abandoned legacy chain and conclude that current hooks are not emitting audit events.
+
+Minimal fix: replace the hardcoded comment with the native-slug path or the `runtime_paths.py --state-dir` command. For upgraded installations, rewrite only the byte-identical legacy comment so adopter-authored annotations remain untouched.
+
+VERDICT: GO-WITH-CONDITIONS — Cut rc.1 only after the required-check aggregation and historical v1.3 `skillOverrides` migration are implemented and regression-tested.

@@ -131,6 +131,15 @@ tamanho do delta — estas são as condições que o material assinado deve
 carregar. Elas descrevem o que a revisão **não** cobriu, para que a
 assinatura não afirme mais do que aconteceu.
 
+> **Rodada 1 (2026-09-08, candidato `4a1b448`) terminou NO-GO em 3 das 6 partes.**
+> Cada achado foi verificado adversarialmente contra o código e os textos
+> ratificados (registros em `../repass-rc1-20260908-NOGO/`); o resultado é o
+> arquivo `CONDITIONS-rc1.md` ao lado deste README — as condições REAIS do
+> envelope, que substituem o rascunho abaixo e que o runner passa ao revisor da
+> rodada seguinte como DATA a ser julgada (honestas e suficientes para uma
+> pré-release ⇒ GO-WITH-CONDITIONS; senão NO-GO). O rascunho fica como
+> registro do que se esperava antes da rodada 1.
+
 1. **Cobertura declarada.** O re-pass cobriu 42 arquivos e cerca de 848 mil
    bytes de diff, escolhidos por risco ao adotante. `.claude/scripts/**` ficou fora
    por orçamento e permanece coberto apenas pelas rodadas por wave.

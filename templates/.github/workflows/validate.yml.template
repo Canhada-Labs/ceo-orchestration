@@ -116,16 +116,20 @@ jobs:
           set -euo pipefail
           jq empty .claude/settings.json
           echo "✓ .claude/settings.json is valid JSON"
-          # PyYAML is a THIRD-PARTY module and the framework runtime is
-          # stdlib-only (CLAUDE.md §3). Validate the YAML catalogs only when
-          # a yaml module actually exists, so a slim runner never false-reds.
+          # PyYAML is a THIRD-PARTY module and the framework RUNTIME is
+          # stdlib-only (CLAUDE.md §3) — but this is CI, dev-time. A syntax
+          # gate that silently skips when its parser is missing is a gate
+          # that fails OPEN (a broken catalog would ride a green job), so the
+          # parser is installed here when absent and its absence is a failure.
+          if ! python3 -c 'import yaml' 2>/dev/null; then
+            python3 -m pip install --quiet --no-cache-dir "PyYAML>=6.0,<7" >/dev/null 2>&1 \
+              || sudo apt-get install -y -qq python3-yaml >/dev/null 2>&1 || true
+          fi
+          python3 -c 'import yaml' 2>/dev/null \
+            || { echo "ERROR: no YAML parser available — the catalog syntax gate cannot run (refusing to pass it silently)" >&2; exit 1; }
           for y in .claude/pitfalls-catalog.yaml .claude/task-chains.yaml; do
             [ -f "$y" ] || continue
-            if python3 -c 'import yaml' 2>/dev/null; then
-              python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1])); print('✓ '+sys.argv[1]+' is valid YAML')" "$y"
-            else
-              echo "NOTE: PyYAML absent — skipped YAML syntax check for $y"
-            fi
+            python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1])); print('✓ '+sys.argv[1]+' is valid YAML')" "$y"
           done
 
       # -----------------------------------------------------------------
@@ -187,8 +191,14 @@ jobs:
           # Pinned release asset — never `main` (unpinned remote script = a
           # supply-chain hole that grades YOUR workflows).
           VERSION="1.7.7"
+          # Digest of the pinned release asset, verified BEFORE extraction. The
+          # URL pin alone still downloads and EXECUTES whatever the release
+          # host serves; the digest closes that hole (same check as the
+          # framework's own validate.yml).
+          EXPECTED_SHA256="023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
           ASSET="actionlint_${VERSION}_linux_amd64.tar.gz"
-          curl -sSLO "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${ASSET}"
+          curl -fsSLO "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${ASSET}"
+          echo "${EXPECTED_SHA256}  ${ASSET}" | sha256sum -c -
           tar -xzf "$ASSET" actionlint
           chmod +x actionlint
           # nullglob so an adopter with no activated *.yml does not hand

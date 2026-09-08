@@ -5,3 +5,6 @@
 .codex-shim/
 .cut-state
 *.raw.txt
+# CANDIDATE.sha: o runner e o CUT o escrevem; o sha do candidato ja vive em
+# PROVENANCE-rc1.md — untracked aqui derrubaria `release.sh tag` (arvore suja).
+CANDIDATE.sha

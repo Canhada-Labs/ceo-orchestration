@@ -1,0 +1,18 @@
+# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - 6 partes
+- Base: v1.3.0 (ec0543b615c4621e259a409e9eace951539a6632 -> d789721c2fd4a11c36c87eda0e1118eab59092e4) .. Candidato: 4a1b4488459230e293c4091603730f166dee6013 (PRE-tag, doutrina r17)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- codex: 0.147.0 / aarch64-apple-darwin / payload 19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+- modelo: gpt-5.6-sol (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)
+- Data: 2026-09-08T01:39:05Z
+- parte 1 (upgrade.sh — o caminho que roda na arvore do adopter): VERDICT: NO-GO — The settings re-arming, ownership laundering, unsigned CODEOWNERS authority, and success-on-poisoned-route P1 findings must be fixed before rc.1. [codex rc=0]
+  - payload-rc1-1.raw.txt NAO commitado; pin sha256: a2fdd5b680be2644370b2deb0a97615161fac10ae25aaf39cb53f70b4ff3e951
+- parte 2 (install.sh + o set de manifesto + a tabela de rotas de entrega): VERDICT: GO-WITH-CONDITIONS [codex rc=0]
+  - payload-rc1-2.raw.txt NAO commitado; pin sha256: 691818b8a29d4b3b57305eb541f8b4bca99967d614f205b80f5e2ccfa97cf766
+- parte 3 (doctor.sh + uninstall.sh + templates/** entregues): VERDICT: NO-GO — rc.1 should wait for the LINK/untrusted-manifest uninstall failures, backup destination escape, and validation-workflow fail-open and supply-chain defects to be fixed and covered by negative integration tests. [codex rc=0]
+  - payload-rc1-3.raw.txt NAO commitado; pin sha256: 327e0ebe73e565bfe8d1f974a40f75f36b2ad20ad609ab454d8cbb75844c14fd
+- parte 4 (SPEC/** + npm README + CHANGELOG + settings.json + workflows entregues): VERDICT: GO-WITH-CONDITIONS — Cut rc.1 only after the required-check aggregation and historical v1.3 `skillOverrides` migration are implemented and regression-tested. [codex rc=0]
+  - payload-rc1-4.raw.txt NAO commitado; pin sha256: 24d47c59e9a574d1d393ed4d09306003fbda921817da3109dcd524277aa6d3f3
+- parte 5 (hooks da familia de continuidade de compaction): VERDICT: NO-GO — Fix the three P1 issues before rc.1 and explicitly sign the two P2 follow-ups into the release envelope. [codex rc=0]
+  - payload-rc1-5.raw.txt NAO commitado; pin sha256: 5720526cdfcfd184ad6dba9e25497e6b1a9cf2716a1a922050a4f05ea56cb07e
+- parte 6 (nucleo de cadeia e auditoria em _lib/): VERDICT: NO-GO — the scratchpad cutover, first-mint race, symlink-following write, mixed-version lock split, and false no-path audit claim must be corrected before rc.1. [codex rc=0]
+  - payload-rc1-6.raw.txt NAO commitado; pin sha256: 6bc009d3132878d203f80a847434e9ba3552d6f8ae745e24a6ead1fbee8d6eb0
