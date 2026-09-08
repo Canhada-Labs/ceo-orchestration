@@ -43,7 +43,14 @@ and the two CI workflow templates forever, with no warning.
 - **Upgrade now delivers both trees**, hash-gated against the git
   generations of the SOURCE file: a byte-pristine copy of a known prior
   framework generation is replaced, anything you edited is PRESERVED
-  loudly. Delivery is registered only after it actually happened, or
+  loudly. A pre-existing copy of yours that is byte-identical to a prior
+  generation counts as pristine too — replaced and registered as
+  framework-owned — even if the framework never delivered it (signed
+  condition of rc.1: edit or move such a file before upgrading).
+  Backups go to `.claude.bak/<timestamp>` without the destination
+  confinement the deliveries get: keep that path a real directory,
+  never a symlink (signed condition of rc.1). Delivery is registered
+  only after it actually happened, or
   when a prior registration's digest still matches. A failed delivery
   exits 3 and persists `upgrade_succeeded: false` in the install-state
   rather than recording a full upgrade that did not happen (`6304f66`).

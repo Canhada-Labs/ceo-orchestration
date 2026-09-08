@@ -9,7 +9,7 @@
 > Emendado (v6) depois da wave-rc1cure (`5518888`) e da rodada 3, parte 1: itens 1, 9,
 > 17, 18, 21 e 23 marcados como CURADOS pelo pack assinado; item 8 reescrito (laundering
 > pelo snapshot); itens 31 e 32 novos. A versão que os revisores da rodada 3 receberam
-> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41.) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
+> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41. v10: itens 8 (frestas b/c) e 31 marcados CURADOS em `144b0ef` (wave-rc1cure2); condição 5 remete ao 42; itens 42-43 DUROS (posse por igualdade histórica; diretório de backup não confinado) e 44 — rodada 4, parte 1.) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
 
 Cada item descreve o que o código FAZ nesta rc, para que a assinatura não afirme
 mais do que aconteceu. Fonte: re-pass do candidato (codex 0.147.0 pinado, modelo
@@ -67,6 +67,33 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     (rota em docs/UPGRADE-PROCEDURE.md); cura antes do GA: fallback nomeado ao registro
     legado quando o novo está ausente, com controle positivo de registro vencido
     (rodada 3, parte 6).
+42. **Posse por igualdade HISTÓRICA sem registro anterior** (rodada 4, parte 1):
+    `scripts/upgrade.sh` (`_up_tpl_generations` e os ramos de entrega de `docs/` e
+    `.github/`) trata um arquivo PRÉ-EXISTENTE do adopter byte-igual a uma geração
+    ANTERIOR do template — que o framework nunca entregou e que não tem digest no
+    manifesto — como «pristine prior generation»: substitui-o pela geração atual e passa a
+    registrá-lo como framework-owned (se igual à geração ATUAL, o ramo `IDENTICAL` ainda
+    pode alterar o modo antes do registro). Os bytes substituídos são iguais ao template
+    antigo, mas a POSSE muda: upgrades seguintes o reescrevem, `doctor.sh --repair` trata
+    edições como drift e `uninstall` o apaga. Condição DURA: antes de rodar `upgrade.sh`,
+    qualquer arquivo seu em `docs/` ou `.github/` que coincida byte a byte com um template
+    de versão anterior do framework e que você NÃO recebeu do framework deve ser editado
+    (um byte basta) ou movido — `docs/UPGRADE-PROCEDURE.md` diz isto. Cura antes do GA: sem
+    digest exato no manifesto anterior, igualdade atual ou histórica = `PRESERVED
+    (unclaimed)`, sem `chmod`, substituição ou registro; perna com colisão pré-existente
+    não entregue pela v1.3.0 (pack `rc1-cure-3` se o Owner o assinar; senão rc.2).
+43. **O diretório de backup do upgrade não é confinado ao alvo** (rodada 4, parte 1):
+    `scripts/upgrade.sh` cria `.claude.bak/<timestamp>` com `mkdir -p` e grava ali os
+    backups (SPEC, docs, CODEOWNERS…) SEM passar por `_wbm_dst_refuses`; se
+    `<alvo>/.claude.bak` for um symlink (ou estiver sob um) para fora do alvo, o `mkdir -p`
+    e os backups escrevem lá fora — ao contrário do que o `--help` afirma (backups
+    internos ao alvo). Classe same-UID/symlink (`docs/threat-model.md`, Tier-2), mas é a
+    forma fail-open que o PLAN-185 já fechou para os DESTINOS de entrega e o backup não
+    herdou. Condição DURA: `.claude.bak` não pode ser symlink nem estar sob um —
+    `docs/UPGRADE-PROCEDURE.md` diz isto. Cura antes do GA: validar `.claude.bak/<timestamp>`
+    e cada leaf de backup com `_wbm_dst_refuses` antes da primeira mutação (symlink,
+    ancestral symlink, hard link) e perna com sentinel externo intacto (pack `rc1-cure-3`
+    se assinado; senão rc.2).
 
 ## B. Residuais DECLARADOS por desenho ratificado (não mudam na rc.2 sem decisão do Owner)
 
@@ -90,7 +117,11 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
    o apaga. O arquivo é igual ao render, não necessariamente aos bytes literais do
    template público. Cura antes do GA: exigir registro de entrega anterior, não
    igualdade nua, antes de `_append_delivered_template` (rodada 2, partes 2 e 3).
-   Decisão de posse = wave com o Owner.
+   Decisão de posse = wave com o Owner. **Rodada 4 (parte 1): o mesmo princípio vale para
+   a igualdade HISTÓRICA** — ver o item 42: `_up_tpl_generations` trata um arquivo
+   pré-existente byte-igual a uma geração ANTERIOR do template (nunca entregue, sem digest
+   no manifesto) como «pristine prior generation», substitui-o e o registra como do
+   framework.
 6. **O handle do install-state (UNSIGNED, `request.github_owner`) é REPLAY do pedido
    gravado, não proveniência** (ADR-155; round-7 F4): CODEOWNERS ausente + handle
    gravado ⇒ render sem flag. Quem edita o install-state edita o CODEOWNERS
@@ -107,13 +138,16 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
 8. **Tabela de rotas no CHECKOUT do framework — três frestas fail-open.** (a) Ausente ou
    corrompida: `install.sh` ainda copia `docs/` e `.github/` fixos e reporta sucesso (cura
    antes do GA). (b) Symlink no leaf: o leitor `_wbm_route_table` passou a recusar `-L`
-   (**CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**), MAS `scripts/upgrade.sh` faz o SNAPSHOT da tabela
-   (`[[ -f ]]` + `cp`, que seguem o link) ANTES de validar, e `_WBM_ROUTES_TSV` passa a
-   apontar para o tempfile regular — o `-L` examina o snapshot, não o leaf: uma tabela
-   externa bem formada entra e o upgrade entrega bytes errados com rc 0 (laundering pelo
-   snapshot; rodada 3, parte 1). Cura antes do GA: validar a origem com o gate da tabela
-   antes do `cp` (pack `rc1-cure-2`). A tabela vive no checkout que executa — fora do
-   modelo de ameaça como ataque; é a forma fail-open que importa.
+   (**CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**). (c) Laundering
+   pelo SNAPSHOT — **CURADO em `144b0ef` (wave-rc1cure2, assinada pelo Owner em 08/09)**:
+   `scripts/upgrade.sh` copiava a tabela (`[[ -f ]]` + `cp`, que seguem o link) ANTES de
+   validar e o `-L` examinava o tempfile, não o leaf (rodada 3, parte 1); agora a origem é
+   testada com `-L` ANTES do snapshot, o ponteiro fica na origem recusada, todo leitor
+   responde zero rotas e a precondição AC-9 sai `exit 3` + `upgrade_succeeded: false`
+   (perna H.15e: tabela symlinkada ⇒ rc 3, `docs/rotation-log.md` byte-idêntico). Residual
+   DECLARADO da mesma classe, NÃO fechado: componentes de caminho symlinkados e o
+   confinamento físico da tabela ao checkout que executa. A tabela vive no checkout que
+   executa — fora do modelo de ameaça como ataque; era a forma fail-open que importava.
 9. **Gramática do handle** — **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**: `_wbm_github_handle_ok` (produtor e
    consumidor) exige último caractere alfanumérico e recusa hífens consecutivos; o
    harness e2e discrimina `trail-`, `a-`, `a--b`.
@@ -293,15 +327,14 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     as claims gerais de isolamento por projeto não. Ressalva declarada + controle positivo
     de unicidade dos slugs dos repositórios em escopo; desambiguação = decisão própria
     (rodada 2, parte 6, P2).
-31. **Destinos DUPLICADOS na tabela de rotas não são recusados** (rodada 3, parte 1):
-    `_wbm_route_dests` emite as duas linhas e a conservation law passa (rotas == linhas),
-    mas `_wbm_route_src(dest)` pára na primeira ocorrência — com duas linhas para o mesmo
-    destino, a primeira rota executa DUAS vezes, a segunda é ignorada e o run sai 0. O
-    parser de paridade (`_parity_classify.py`) já considera a tabela inválida: os
-    leitores discordam exatamente onde importa. Cura antes do GA: recusar destino
-    duplicado em `_wbm_route_table_ok`, antes de qualquer leitor consumir (pack
-    `rc1-cure-2`); teste com duas linhas válidas e metadados diferentes ⇒ zero delivery,
-    `upgrade_succeeded: false`, rc 3.
+31. **Destinos DUPLICADOS na tabela de rotas** — **CURADO em `144b0ef` (wave-rc1cure2,
+    assinada pelo Owner em 08/09)**: `_wbm_route_table_ok` recusa por NOME um destino
+    declarado duas vezes, antes de qualquer leitor consumir a tabela (`upgrade.sh` ⇒ zero
+    rotas, `upgrade_succeeded: false`, rc 3 — pernas H.15f e S.10e, com controle de que a
+    tabela sem a duplicata continua aceita). Antes (rodada 3, parte 1): `_wbm_route_dests`
+    emitia as duas linhas, a conservation law passava (rotas == linhas) e `_wbm_route_src`
+    parava na primeira — a primeira rota executava DUAS vezes, a segunda era ignorada e o
+    run saía 0, enquanto o parser de paridade (`_parity_classify.py`) já recusava a tabela.
 32. CURADO em `5518888` sem condição própria: o `concurrency` do `validate.yml` do
     próprio framework passa a incluir o nome do evento — um push em `main` não cancela
     mais o run agendado, o único que exercita Python 3.10/3.11 (rodada 2, parte 4).
@@ -339,6 +372,11 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     floats, mas `int(...)` converte `1.9` em `1` e `True` em `1` — um chamador genérico
     recebe um valor lavado em vez do sentinela zero. Recusar `bool` e não-`int` antes do
     clamp (padrão `_ledger_int_field`), com controles (rodada 3, parte 6, P2).
+44. Comentário e rótulo de `scripts/upgrade.sh` (~linha 2629) dizem que 20 registros
+    compartilhados «do arrive» com cerimônia desconhecida, mas o código deriva `hooks: {}`
+    e só aplica os valores de `env` iguais entre os perfis (o resumo do run está certo; o
+    comentário e o rótulo não). Texto, não comportamento; canônico — próxima cerimônia
+    (rodada 4, parte 1, P2).
 
 ## D. O que este re-pass NÃO cobriu
 

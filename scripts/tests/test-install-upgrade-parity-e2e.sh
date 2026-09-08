@@ -261,6 +261,17 @@ if [ "$POSITIVE_CONTROL" -eq 1 ]; then
     [ -e "$_f" ] || continue
     _b="$( basename "$_f" )"
     [ "$_b" = "upgrade.sh" ] && continue
+    # rc.1 re-pass round 3 (wave-rc1cure2, `144b0ef`): upgrade.sh now refuses a
+    # SYMLINKED delivery-route table at its ORIGIN, before the snapshot — the
+    # cure for the laundering-by-snapshot defect. A symlinked table here would
+    # make the docs/.github delivery refuse for the WRONG reason (zero routes,
+    # exit 3, SCAFFOLD rc 9) and the control would fail spuriously — measured
+    # in the Smoke Install of `144b0ef`. Copy the table for real, like
+    # templates/; every other script may stay a symlink.
+    if [ "$_b" = "delivery-routes.tsv" ]; then
+      cp "$_f" "$PLANTED_SRC/scripts/$_b" || scaffold "could not copy delivery-routes.tsv into the planted source"
+      continue
+    fi
     ln -s "$_f" "$PLANTED_SRC/scripts/$_b" 2>/dev/null || true
   done
   _before="$( grep -c "^backup_and_replace \"$PLANT_TARGET\"\$" "$REPO_ROOT/scripts/upgrade.sh" || true )"

@@ -280,6 +280,75 @@ else
 fi
 
 # ===========================================================================
+say "E. topologia do commit do veredito x os DOIS gates (guard local + bind do release.yml)"
+# O release.yml (step 15 e o gate delta+ancestry) exige parent_sha == PAI do
+# commit que INTRODUZ o veredito; o guard local exige parent_sha == arvore
+# revisada, com o veredito DENTRO do delta. As duas so fecham quando evidencia,
+# fields e veredito sentam num commit SO sobre o candidato — e o guard local
+# SOZINHO nao enxerga a topologia errada (E2 e o controle vermelho disso). Foi
+# assim que o rc.4 e o GA v1.3.0 landaram; o molde do OWNER-RC1-CUT.sh fazia
+# dois commits e reprovaria DEPOIS da tag empurrada (ensaio S349).
+_envf="${CLONE:+$CLONE/.claude/governance/pair-rail-verdict-v1.4.0-rc.1.md}"
+if [ -n "$CLONE" ] && [ -f "$_envf" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]; then
+  _e_vd=".claude/governance/pair-rail-verdict-v1.4.0-rc.1.md"
+  _e_vf="$PLAN_DIR/verdict-fields-v1.4.0-rc.1.md"
+  _e_list="$SCRATCH/e.list"
+  { awk '{print $2}' "$CLONE/$EV/MANIFEST-rc1.sha256" | sed "s|^|$EV/|"
+    printf '%s\n' "$EV/MANIFEST-rc1.sha256" "$EV/README-rc1.md"
+    [ -f "$CLONE/$EV/CONDITIONS-rc1.md" ] && printf '%s\n' "$EV/CONDITIONS-rc1.md"
+    printf '%s\n' "$_e_vf" "$_e_vd"; } > "$_e_list"
+  _e_parent="$(awk '/^parent_sha:/{print $2; exit}' "$_envf")"
+  if [ "$_e_parent" = "$CAND" ]; then ok "E0: o envelope declara parent_sha == candidato revisado"
+  else bad "E0: parent_sha ($_e_parent) != candidato ($CAND)"; fi
+  # Replica da derivacao do release.yml: pai do commit que introduziu o veredito.
+  _e_bind() {
+    local _c _p
+    _c="$(git -C "$1" log -n1 --format=%H -- "$_e_vd")"; [ -n "$_c" ] || return 2
+    _p="$(git -C "$1" rev-parse "${_c}^" 2>/dev/null)"; [ -n "$_p" ] || return 2
+    [ "$_p" = "$_e_parent" ]
+  }
+  _e_prep() {  # $1 = dir: clone do CLONE no candidato, com a evidencia e o veredito copiados (untracked)
+    git clone --quiet --local --shared --no-checkout "$CLONE" "$1" 2>/dev/null || return 1
+    git -C "$1" checkout --quiet --detach "$CAND" 2>/dev/null || return 1
+    ( cd "$CLONE" && tar -cf - -T "$_e_list" ) | ( cd "$1" && tar -xf - ) || return 1
+    return 0
+  }
+  _e_guard() { python3 "$ROOT/.claude/scripts/local/_release_tag_guard.py" delta --repo "$1" --tag v1.4.0-rc.1; }
+  _e_commit() { git -C "$1" -c user.name=kit -c user.email=kit@invalid -c commit.gpgsign=false commit -q -m "$2"; }
+
+  # E1 — topologia CURADA: um commit so (evidencia + fields + veredito) sobre o candidato.
+  _e1="$SCRATCH/e1"
+  if _e_prep "$_e1"; then
+    if ( cd "$_e1" && xargs git add -- < "$_e_list" ) && _e_commit "$_e1" "kit: evidencia + fields + veredito num commit so"; then
+      ok "E1: commit unico (evidencia + fields + veredito) sobre o candidato"
+    else bad "E1: commit unico falhou"; fi
+    if _e_guard "$_e1" > "$SCRATCH/e1.guard" 2>&1; then
+      ok "E1: guard local delta rc 0 ($(grep -c '  ok' "$SCRATCH/e1.guard") asserts)"
+    else bad "E1: guard local delta recusou"; sed -n '1,12p' "$SCRATCH/e1.guard"; fi
+    if _e_bind "$_e1"; then ok "E1: bind do release.yml fecha (pai do commit do veredito == parent_sha)"
+    else bad "E1: bind do release.yml NAO fecha"; fi
+  else bad "E1: preparacao do clone falhou"; fi
+
+  # E2 — CONTROLE VERMELHO: a topologia do molde (evidencia num commit, veredito
+  # no seguinte). O guard local passa; o bind do servidor tem de FALHAR.
+  _e2="$SCRATCH/e2"
+  if _e_prep "$_e2"; then
+    grep -vxF -e "$_e_vf" -e "$_e_vd" "$_e_list" > "$SCRATCH/e2.ev"
+    if ( cd "$_e2" && xargs git add -- < "$SCRATCH/e2.ev" ) && _e_commit "$_e2" "kit: evidencia" \
+       && git -C "$_e2" add -- "$_e_vf" "$_e_vd" && _e_commit "$_e2" "kit: veredito"; then
+      ok "E2: topologia do molde reproduzida (2 commits)"
+    else bad "E2: nao consegui reproduzir os 2 commits"; fi
+    if _e_guard "$_e2" > "$SCRATCH/e2.guard" 2>&1; then
+      ok "E2: o guard local PASSA sobre os 2 commits — ele e cego a topologia (por isso o E2 existe)"
+    else bad "E2: o guard local recusou os 2 commits (inesperado: $(grep -m1 FAIL "$SCRATCH/e2.guard"))"; fi
+    if _e_bind "$_e2"; then bad "E2: o bind do release.yml FECHOU sobre 2 commits — o controle nao reproduz a classe"
+    else ok "E2 (controle vermelho): o bind do release.yml FALHA com o veredito num 2.o commit"; fi
+  else bad "E2: preparacao do clone falhou"; fi
+else
+  printf '  (E pulado: sem envelope da seccao C)\n'
+fi
+
+# ===========================================================================
 say "D. controles VERMELHOS — cada gate tem de RECUSAR o defeito plantado"
 
 # D1 (CM-03) — dois vereditos no mesmo arquivo e ambiguidade, nao aprovacao.

@@ -45,7 +45,15 @@ BASE_TAG_COMMIT="d789721c2fd4a11c36c87eda0e1118eab59092e4"
 PARTS="1 2 3 4 5 6"
 NPARTS=6
 CODEX_PKG="@openai/codex@0.147.0"
-MAX_RAW_BYTES=200000
+# Teto de SANIDADE do tamanho de uma parte (particao errada), nao um limite do
+# codex: a parte 1 correu a 172 KB com transcript de 631 KB. MEDIDO em
+# 2026-09-08: CONDITIONS-rc1.md entra como DATA em TODAS as partes e cresceu
+# de 18 KB (rodada 3) para 32 KB (v10), e as partes 4/5/6 ja estavam em
+# 189/199/195 KB na rodada 3 — a 200000 as tres morreriam em FATAL na rodada
+# 5 (o ensaio do kit pegou a parte 4 a 200142 B). 240000 cobre o maior
+# (~215 KB) com folga de ~10 %; re-particionar mudaria manifestos e escopo de
+# tres partes as vesperas do corte.
+MAX_RAW_BYTES=240000
 
 die() { printf 'FATAL: %s\n' "$*" >&2; exit 1; }
 
