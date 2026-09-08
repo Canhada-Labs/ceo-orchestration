@@ -486,3 +486,11 @@ alcance deste pack LIVRE.
   Status permanece `draft`: PLAN-SCHEMA §Lifecycle constraints — um
   followup nao entra em `executing` enquanto o pai nao chega a `done`, e
   o PLAN-186 esta `executing`.
+- 2026-09-08 (S348, trem rc.1 da v1.4.0): o CONTROLE AC-F2 foi RE-ANCORADO
+  por CONTEÚDO. A releitura do `SUPPORT.md` para a v1.4.0 (`39771db`)
+  moveu a linha 88 e trocou a linha do modelo 1M para `claude-opus-5[1m]`;
+  o teste que fixava o índice 87 e o token antigo ficou vermelho na CI de
+  `43f5152` (3.9 e 3.12). Agora `SupportMdDiscriminantTest` localiza a
+  ÚNICA linha que carrega o token `[1m]` e planta a mutação nela — a
+  declaração sob teste (prosa fora do escopo do censo) não mudou. Classe
+  de defeito: teste ancorado num NÚMERO DE LINHA de um documento vivo.

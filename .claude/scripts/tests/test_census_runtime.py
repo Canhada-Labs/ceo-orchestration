@@ -22,10 +22,12 @@ from a text fingerprint. These tests prove:
   runtime rejects and a symlinked agent file are named REDs.
 * No file under ``agents/`` is silently dropped: the output the repo
   generator declares (``_dispatch.md``) is a named, visible row.
-* AC-F2 discriminant: the refuter's ``SUPPORT.md:88`` mutation (drop the
-  ``[1m]`` token) moves NOTHING — the declared reading is "out of the
-  runtime scope"; ``SUPPORT.md`` is normative prose, no module owns it,
-  the census never reads it.
+* AC-F2 discriminant: the refuter's ``SUPPORT.md`` mutation (drop the
+  ``[1m]`` token from the model row that carries it — line 88 at the time
+  of the refutation, located by CONTENT since the v1.4.0 re-read moved it)
+  moves NOTHING — the declared reading is "out of the runtime scope";
+  ``SUPPORT.md`` is normative prose, no module owns it, the census never
+  reads it.
 * The five findings of pair-rail round 1, each as a mutation probe.
 
 Env-isolated via ``TestEnvContext`` (env-hygiene gate). Stdlib only.
@@ -788,22 +790,33 @@ class RailRound3ProbesTest(TestEnvContext):
             self.assertIn("agents_symlink_rejected", proc.stderr)
 
 
-class SupportMd88DiscriminantTest(TestEnvContext):
+class SupportMdDiscriminantTest(TestEnvContext):
     """AC-F2 — the declared reading is OUT OF THE RUNTIME SCOPE.
 
     ``SUPPORT.md`` is normative prose: no module owns it, it is none of
     the four surfaces, and the census never opens it. The refuter's
-    mutation (drop ``[1m]`` from line 88) must therefore move NOTHING —
-    the table stays byte-identical and rc stays 0. That is the DESIGN's
-    declaration under test, not an assumption: if a future census learned
-    to read prose, this test goes RED and the declaration must be rewritten.
+    mutation (drop ``[1m]`` from the model row that carries it — line 88
+    at the time of the refutation; located by CONTENT since the v1.4.0
+    re-read of ``SUPPORT.md`` moved the row and renamed the model) must
+    therefore move NOTHING — the table stays byte-identical and rc stays
+    0. That is the DESIGN's declaration under test, not an assumption: if
+    a future census learned to read prose, this test goes RED and the
+    declaration must be rewritten.
     """
 
-    _NEEDLE = "claude-opus-4-8[1m]"
+    _NEEDLE = "claude-opus-5[1m]"
 
-    def test_support_md_88_still_carries_the_token(self):
-        line = (_REPO_ROOT / "SUPPORT.md").read_text(encoding="utf-8").split("\n")[87]
-        self.assertIn(self._NEEDLE, line, "SUPPORT.md:88 moved — re-anchor the control")
+    @classmethod
+    def _needle_hits(cls, text):
+        return [i for i, line in enumerate(text.split("\n")) if cls._NEEDLE in line]
+
+    def test_support_md_still_carries_the_token(self):
+        hits = self._needle_hits((_REPO_ROOT / "SUPPORT.md").read_text(encoding="utf-8"))
+        self.assertEqual(
+            len(hits), 1,
+            "SUPPORT.md must carry the `[1m]` control token on exactly one line "
+            "— re-anchor the control (_NEEDLE) to the row that carries it",
+        )
 
     def test_mutation_moves_nothing(self):
         with TemporaryDirectory() as tmp:
@@ -812,9 +825,11 @@ class SupportMd88DiscriminantTest(TestEnvContext):
             self.assertEqual(before.returncode, 0, before.stderr)
 
             support = Path(root) / "SUPPORT.md"
-            lines = support.read_text(encoding="utf-8").split("\n")
-            self.assertIn(self._NEEDLE, lines[87])
-            lines[87] = lines[87].replace(self._NEEDLE, "claude-opus-4-8")
+            text = support.read_text(encoding="utf-8")
+            hits = self._needle_hits(text)
+            self.assertEqual(len(hits), 1, "control token missing or duplicated in the copied SUPPORT.md")
+            lines = text.split("\n")
+            lines[hits[0]] = lines[hits[0]].replace(self._NEEDLE, "claude-opus-5")
             support.write_text("\n".join(lines), encoding="utf-8")
 
             after = _run(root)

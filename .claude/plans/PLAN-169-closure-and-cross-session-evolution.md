@@ -7,6 +7,7 @@ reviewed_at: 2026-08-08
 reviewed_by: "Owner — ratificação explícita em chat (S298): 'ratifica tudo com as recomendações e commita o pack'. Cobre R-A (esta transição), R-B (gate de debate §12.4 aceito como design-coherent), R-C (deferral de higiene de registro), OQ-1..5 e W0.8 conforme as recomendações do checklist."
 owner: CEO
 depends_on: [PLAN-166, PLAN-167, PLAN-168]
+related_commits: ["875ac92f13783759eb2776eabcce82b43c734db8", "511fdc2a9f15265338a394b185afbd106eb5b018", "22755b12b2efeb9a4404aa1dbd821763b9f9f444", "43f51528e36ef690bec0665c143fc085a6050529"]
 budget_tokens: 500-800k (fechamento + DOIS trens com rodadas de rail; bateria E1-E4 EXCLUÍDA — orçamento próprio no PLAN-170)
 budget_sessions: 11-14
 context_risk: high
