@@ -208,10 +208,13 @@ call today**:
   `CEO_SMOKE_EXECUTE_CI=1`; elsewhere it lists the steps with a note.
 - **The delivered template changed accordingly:** it is SHA-pinned
   (`actions/checkout`), honors a `CEO_SOTA_DISABLE=1` repository variable
-  as a kill switch, raises its own timeout 5 → 15 minutes, and skips the
-  YAML catalog syntax check when PyYAML is absent instead of red-flagging
-  a slim runner. It ships INERT with a `.template` suffix; activation is
-  still an explicit `mv -n` you perform.
+  as a kill switch, raises its own timeout 5 → 15 minutes, installs PyYAML
+  in CI when it is absent and FAILS the YAML catalog syntax check if no
+  parser can be had (a syntax gate that skips silently is a gate that
+  fails open; a slim offline runner therefore goes red, by design), and
+  verifies the SHA-256 of the actionlint release asset before running it.
+  It ships INERT with a `.template` suffix; activation is still an
+  explicit `mv -n` you perform.
 
 ### Added — `claude-fable-5-1` in the model allowlist (`ab56e76`)
 

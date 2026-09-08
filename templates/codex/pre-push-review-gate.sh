@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # pre-push-review-gate.sh -- inverted pair-rail push backstop (PLAN-155 Wave 6).
 #
-# THIRD install surface (debate A9): the installer copies this to
-# `.git/hooks/pre-push` on a `--harness codex` target. No manifest walk
-# reaches `.git/` naturally, so Wave 5's lifecycle-symmetry criteria must
-# list it explicitly (manifest + uninstall + backup + restore).
+# NOT DELIVERED BY THE INSTALLER in v1.4.0 (rc.1 re-pass, round 2, part 3):
+# the Codex emission roster ships `hooks.json`, `ceo.rules` and `AGENTS.md`
+# only, so a `--harness codex` target has NO push backstop unless you install
+# this file yourself:
+#     cp templates/codex/pre-push-review-gate.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+# The original design (debate A9, PLAN-155 Wave 6) named `.git/hooks/pre-push`
+# as a THIRD install surface that no manifest walk reaches naturally; wiring
+# it into the roster with the lifecycle symmetry (manifest + uninstall +
+# backup + restore) is a named item of the next release.
 #
 # ## What it enforces
 #
@@ -126,8 +131,14 @@ _commits_in_range() {
     return 0  # branch deletion — nothing to push
   fi
   if [ "$remote_sha" = "$_zero" ]; then
-    # New branch: commits reachable from local_sha but not from any other ref.
-    git rev-list "$local_sha" --not --all 2>/dev/null || true
+    # New branch: commits reachable from local_sha that are NOT already on any
+    # remote-tracking ref. `--not --all` was wrong and dangerous (pair-rail R4,
+    # S272; cured in the Grok twin first): `--all` includes LOCAL refs — among
+    # them refs/heads/<the branch being pushed>, which points at $local_sha
+    # itself — so the range subtracted itself and a first push of a branch
+    # carrying canonical edits sailed through with an EMPTY set. `--remotes`
+    # subtracts only what the remote already has.
+    git rev-list "$local_sha" --not --remotes 2>/dev/null || true
   else
     git rev-list "${remote_sha}..${local_sha}" 2>/dev/null || true
   fi

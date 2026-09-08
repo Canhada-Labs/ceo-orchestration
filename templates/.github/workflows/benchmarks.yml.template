@@ -115,14 +115,18 @@ jobs:
             echo "::group::Running $bench"
             out="benchmark-results/${base}.json"
             md="benchmark-results/${base}.md"
-            if ! python3 .claude/scripts/run-skill-benchmark.py \
+            # `$?` inside `if ! cmd` is the status of `!` (always 0), so the
+            # floor breach was reported as "runner error rc=0": capture the
+            # real status first, then branch on it.
+            rc=0
+            python3 .claude/scripts/run-skill-benchmark.py \
                  "$bench" \
                  --output-json "$out" \
                  --markdown \
                  --floor 0.6 \
                  --write-lessons \
-                 --skip-if-no-key > "$md"; then
-              rc=$?
+                 --skip-if-no-key > "$md" || rc=$?
+            if [ "$rc" -ne 0 ]; then
               if [ "$rc" -eq 1 ]; then
                 echo "::error::$bench below floor (CRITICAL or <0.6)"
                 FAILED=1

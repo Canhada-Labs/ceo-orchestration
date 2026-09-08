@@ -15,7 +15,7 @@
 #   --restore <backup-path>    Inverse mode: restore .claude/ from a backup .tar.gz
 #   --force                    Remove files even if SHA mismatches (DESTRUCTIVE)
 #   --no-backup                Skip the pre-uninstall backup tarball
-#   --no-hmac-verify           Skip HMAC verification of the manifest sidecar
+#   --no-hmac-verify           Skip HMAC verification of the restore backup's .hmac sidecar
 #   -h, --help                 Show this help
 #
 # Exit codes:
@@ -61,7 +61,9 @@ while [ $# -gt 0 ]; do
     --no-backup)       NO_BACKUP=1; shift ;;
     --no-hmac-verify)  NO_HMAC_VERIFY=1; shift ;;
     -h|--help)
-      sed -n '1,30p' "${BASH_SOURCE[0]}"
+      # The whole header comment, up to the Bash guard — not the first 30
+      # lines, which hid the exit codes documented below them.
+      sed -n '2,/^# Bash 3.2 portability guard/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     -*)
@@ -366,12 +368,40 @@ preserved_count=0
 absent_count=0
 mismatch_files=""
 unsafe_count=0
+valid_count=0
 
-while IFS= read -r line; do
+# rc.1 re-pass (round 2, part 3): the walk is a TOTAL parser. `read` alone drops
+# an unterminated final record (a manifest whose trailing newline was lost never
+# processed its last delivery); a record that matched no shape was skipped in
+# silence — so an empty, comment-only or malformed manifest left every counter
+# at zero, the ledger was DELETED below and the run exited 0 with framework
+# files still on disk. Now: EOF-safe read, strict grammar per record, and
+# anything outside the grammar is REFUSED and counted, never skipped.
+while IFS= read -r line || [ -n "$line" ]; do
   # Skip comments and blank lines
   case "$line" in
     '#'*|'') continue ;;
   esac
+  if printf '%s' "$line" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+    unsafe_count=$((unsafe_count + 1))
+    _log "    REFUSED (manifest record carries control bytes — not touched)"
+    continue
+  fi
+  case "$line" in
+    LINK\ *)
+      # `LINK <relpath> <target>` is what a --link install records; this
+      # uninstaller handles copy-mode records only (rc.1 condition): the
+      # link stays, the refusal is named and counted.
+      unsafe_count=$((unsafe_count + 1))
+      _log "    REFUSED (LINK record — copy-mode uninstaller; the link is left in place): ${line#LINK }"
+      continue ;;
+  esac
+  if ! printf '%s' "$line" | LC_ALL=C grep -qE '^[0-9a-f]{64}  ?[^ ]'; then
+    unsafe_count=$((unsafe_count + 1))
+    _log "    REFUSED (malformed manifest record — not touched): $line"
+    continue
+  fi
+  valid_count=$((valid_count + 1))
   # Format: <sha>  <relpath>
   recorded_sha="${line%% *}"
   rel="${line#* }"
@@ -431,6 +461,14 @@ with open(sys.argv[1], 'rb') as f:
     fi
   fi
 done < "$MANIFEST"
+
+# No valid record at all (empty, comment-only or wholly malformed manifest) is
+# not "everything matched": it is an unreadable ledger, and deleting it would
+# erase the only evidence of what was installed.
+if [ "$valid_count" -eq 0 ]; then
+  unsafe_count=$((unsafe_count + 1))
+  _log "    REFUSED (manifest has no valid record — empty, comment-only or malformed; kept for inspection)"
+fi
 
 # Refuse if mismatches were encountered without --force, or if ANY record was
 # refused. rail r5 (S337) P2: --force overrides a sha MISMATCH, never a REFUSAL

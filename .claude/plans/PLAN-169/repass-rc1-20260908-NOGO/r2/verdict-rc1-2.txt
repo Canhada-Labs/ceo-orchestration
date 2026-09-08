@@ -1,0 +1,17 @@
+Advisory review found two P1 inaccuracies in the proposed signed envelope. The shipped six-row route table itself passed structural and source-confinement checks.
+
+1. **P1 — `scripts/install.sh:2020-2024, 2071-2083, 2103-2104`**
+
+   **Concrete failure:** Condition 5 says byte-equality ownership affects only an explicit uninstall. That is false for `CODEOWNERS`. An adopter-authored file matching the rendered output is skipped but added to the framework manifest. If the adopter later empties it intentionally to disable review routing, `_codeowners_provenance` treats that manifest row as proof of delivery and a subsequent install re-renders the file, silently re-enabling routing. The claimed file is equal to rendered output, not necessarily to the public template’s literal bytes.
+
+   **Minimal fix:** Before rc.1 signing, amend condition 5 to disclose that byte-equality creates operational provenance used by subsequent install/upgrade actions, including zero-byte `CODEOWNERS` recovery. Alternatively, require a prior delivery record—not naked byte equality—before `_append_delivered_template`.
+
+2. **P1 — `scripts/upgrade.sh:5154-5172`; `scripts/_framework_manifest_set.sh:344-367, 1271-1278`**
+
+   **Concrete failure:** Condition 7 claims legacy `LINK` continuity requires equality between the prior record and the live target. The upgrade actually places every prior `LINK` relpath into `FMS_LINK_PATHS`; `_wbm_link_allowed` checks only relpath membership, then the manifest writer records the symlink’s current `readlink` value. If an adopter retargets a previously recorded symlink, the next upgrade launders the new target into the framework baseline. This is outside the stated copy-mode cohort, but the proposed signed statement is still factually wrong.
+
+   **Minimal fix:** Filter `FMS_LINK_PATHS` to unique prior records whose recorded target exactly equals the live `readlink`. For rc.1, at minimum amend condition 7 to disclose path-only authorization and retargeted-link rebaselining, retaining the code cure as mandatory before GA.
+
+Static evidence was otherwise clean: `bash -n`, `git diff --check`, repository-map freshness, claims, and contamination checks passed; the route reader returned all 6 expected routes. Mutation suites requiring temporary writes could not run in the read-only review sandbox.
+
+VERDICT: NO-GO — Conditions 5 and 7 materially understate implemented ownership behavior and must be corrected in the signed envelope, or fixed in code, before rc.1.

@@ -1,0 +1,17 @@
+Não encontrei P0/P1 novo neste payload.
+
+P2 — `scripts/upgrade.sh:2903`, `scripts/upgrade.sh:5585`  
+Cenário: o merge derivado adiciona chaves `.env` ausentes, mas o resumo final afirma que apenas hooks novos e folhas baseline-aware mudaram. Um adopter que removeu `CEO_QUIET_MODE`, por exemplo, recebe a chave novamente enquanto a mensagem omite essa mutação. A condição 4 descreve o comportamento corretamente, mas menciona apenas o `--help` desatualizado.  
+Correção mínima: atualizar `--help` e o resumo final para dizer “hooks e settings/env derivados do roster”. Para rc.1, ampliar a condição 4 para nomear também a mensagem final inexata.
+
+P2 — `scripts/upgrade.sh:673`  
+Cenário: `_up_tmpbase` detecta TMPDIR dentro do alvo e escolhe `/tmp`, mas não revalida o fallback. Com `TARGET=/tmp` e `TMPDIR=/tmp`, inclusive `--dry-run` cria o snapshot de rotas dentro do alvo; o trap o remove normalmente, mas `SIGKILL` deixa o arquivo. Isso contradiz a garantia comentada de que scratch nunca entra no target.  
+Correção mínima: selecionar e validar fisicamente cada candidato de diretório temporário, recusando a operação com mensagem nomeada se nenhum ficar fora do target. Até a cura, declarar essa exceção na seção C do envelope.
+
+Impacto normal sobre um v1.3.0 em copy mode: entrega/atualiza `docs/` e `.github/`, preserva conteúdo modificado, registra os hooks ausentes e migra `availableModels` de seis para sete entradas. A tabela ausente ou com linha rejeitada termina em rc 3 após os demais passos; somente o transform sem renderer permanece como `SKIP`/rc 0, conforme declarado.
+
+As condições 1, 2, 4–12 são honestas para este payload e suficientes para a pré-release restrita aos seis routes entregues e ao copy mode. Não há P1 omitido. Antes da assinatura, eu também renumeraria os itens 15/16 duplicados para evitar referências ambíguas.
+
+Validação estática: `bash -n`, ShellCheck, `git diff --check` e os checkers de stdlib, `AGENTS.md`, contaminação e contagens passaram. A sandbox read-only impediu testes dinâmicos que precisam de `mktemp`; isso limita a evidência executada, não constitui falha do candidato.
+
+VERDICT: GO-WITH-CONDITIONS — Ampliar a condição 4 e acrescentar a exceção de `_up_tmpbase`; não há P0/P1 novo que bloqueie a rc.1.

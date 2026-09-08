@@ -1494,6 +1494,93 @@ else
     || bad "U.4 — the refused run exited $RC, expected 6 (see $LOG)"
 fi
 
+# U.5 — the manifest parser is TOTAL (rc.1 re-pass, round 2, part 3). Pre-cure,
+# `read` dropped an unterminated final record and unknown shapes were skipped in
+# silence, so an empty / comment-only / malformed manifest zeroed every counter,
+# the ledger was deleted and the run exited 0 with framework files on disk.
+echo "==> U.5a an unterminated final manifest record is still processed"
+_mkcase u5a-unterminated
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.5a — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U5_LAST="$( grep -v '^#' "$MAN" | grep -v '^$' | tail -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  python3 - "$MAN" <<'PY'
+import sys
+p = sys.argv[1]
+b = open(p, 'rb').read().rstrip(b'\n')
+open(p, 'wb').write(b)
+PY
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ ! -e "$TARGET/$U5_LAST" ] \
+    && ok "U.5a — the unterminated final record was processed ($U5_LAST is gone)" \
+    || bad "U.5a — the unterminated final record was SKIPPED ($U5_LAST survived, see $LOG)"
+  [ "$RC" -eq 0 ] \
+    && ok "U.5a — a complete run still exits 0" \
+    || bad "U.5a — the complete run exited $RC (see $LOG)"
+fi
+
+echo "==> U.5b an EMPTY manifest never completes: refused, ledger kept, framework files untouched"
+_mkcase u5b-empty
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.5b — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  : > "$MAN"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ "$RC" -eq 6 ] \
+    && ok "U.5b — the empty manifest is REFUSED (rc=6)" \
+    || bad "U.5b — the empty manifest exited $RC, expected 6 (see $LOG)"
+  [ -f "$MAN" ] \
+    && ok "U.5b — the ledger was kept for inspection" \
+    || bad "U.5b — the empty ledger was DELETED"
+  [ -d "$TARGET/.claude/hooks" ] \
+    && ok "U.5b — framework files are still on disk (nothing was silently 'completed')" \
+    || bad "U.5b — .claude/hooks vanished on an empty manifest"
+fi
+
+echo "==> U.5c a comment-only manifest never completes"
+_mkcase u5c-comment-only
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.5c — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  printf '# nothing but a comment\n' > "$MAN"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ "$RC" -eq 6 ] && [ -f "$MAN" ] \
+    && ok "U.5c — comment-only manifest: refused (rc=6) and kept" \
+    || bad "U.5c — comment-only manifest exited $RC / ledger present=$([ -f "$MAN" ] && echo yes || echo no) (see $LOG)"
+fi
+
+echo "==> U.5d a malformed record (truncated digest) is REFUSED and counted, and the ledger survives"
+_mkcase u5d-malformed
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.5d — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  python3 - "$MAN" <<'PY'
+import sys
+p = sys.argv[1]
+lines = open(p, encoding='utf-8').read().split('\n')
+for i, ln in enumerate(lines):
+    if ln and not ln.startswith('#'):
+        lines[i] = ln[:10] + ln[64:]   # truncated digest: 10 hex chars instead of 64
+        break
+open(p, 'w', encoding='utf-8').write('\n'.join(lines))
+PY
+  LOG="$CASE/uninstall.log"; _uninstall
+  grep -q 'REFUSED (malformed manifest record' "$LOG" \
+    && ok "U.5d — the malformed record is REFUSED by name" \
+    || bad "U.5d — no named refusal for the malformed record (see $LOG)"
+  [ "$RC" -eq 6 ] && [ -f "$MAN" ] \
+    && ok "U.5d — the run is INCOMPLETE (rc=6) and the ledger survives" \
+    || bad "U.5d — exited $RC / ledger present=$([ -f "$MAN" ] && echo yes || echo no) (see $LOG)"
+fi
+
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== summary ==="

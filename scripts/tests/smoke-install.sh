@@ -373,7 +373,7 @@ rm -rf "$GTARGET"
 #      template sha), so a pristine rendered file is removed like any other
 #      delivery, while an adopter-EDITED one is PRESERVED, the summary is
 #      marked incomplete, the manifest is KEPT for a --force re-run and the
-#      exit is 0. The plan's earlier prose ("the rendered file never matches
+#      exit is 5 (rc.1: incomplete is never 0). The plan's earlier prose ("the rendered file never matches
 #      the template sha => PRESERVED") described the pre-W5 generator and is
 #      superseded by this measurement;
 #  (c) the directories the deliveries emptied (docs/, .github/workflows/,
@@ -457,8 +457,10 @@ else
     printf '\n# adopter rule\n* @smoke-owner\n' >> "$XT2/.github/CODEOWNERS"
     bash "$SOURCE_DIR/scripts/uninstall.sh" "$XT2" >"$XO/uninstall2.log" 2>&1
     x_rc=$?
-    if [[ "$x_rc" -ne 0 ]]; then
-      echo "::error::9.8: uninstall exited $x_rc with an adopter-edited CODEOWNERS (expected 0 + PRESERVED)"
+    # rc.1 re-pass (part 3, U2): a preserved mismatch without --force is an
+    # INCOMPLETE uninstall and exits 5 — never 0 (only a dry-run preview does).
+    if [[ "$x_rc" -ne 5 ]]; then
+      echo "::error::9.8: uninstall exited $x_rc with an adopter-edited CODEOWNERS (expected 5 + PRESERVED)"
       fail=1
     fi
     if [[ ! -f "$XT2/.github/CODEOWNERS" ]]; then

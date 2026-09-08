@@ -1,0 +1,25 @@
+O envelope não é honesto nem suficiente para rc.1. Há quatro P1 ausentes/incorretos.
+
+- **P1 — [state_store.py:133](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/state_store.py:133), [CHANGELOG.md:121](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/CHANGELOG.md:121)**  
+  **Cenário:** um plano ativo em v1.3.0 abre um SQLite novo e vazio após o upgrade; `/resume` e handoffs perdem o estado visível, embora os arquivos antigos sobrevivam. O CHANGELOG diz explicitamente que essa migração é condição assinada de rc.1, mas ela não existe no envelope.  
+  **Correção mínima:** adicionar condição DURA exigindo ausência de plano ativo, `CEO_PROJECT_NAME=ceo-orchestration` temporário, ou cópia verificada de `<legacy>/state/` para o novo diretório antes da primeira sessão.
+
+- **P1 — [audit_emit.py:2358](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/audit_emit.py:2358), [audit_hmac.py:247](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/audit_hmac.py:247), [spool_writer.py:203](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/spool_writer.py:203)**  
+  **Cenário:** com o override documentado `CEO_PROJECT_STATE_DIR`, `audit_hmac` mantém chave, último HMAC e contador no override, enquanto o log e spool mudam para o slug nativo. Em modo síncrono, a primeira linha do novo log é encadeada à cabeça ausente do log antigo; no modo async, o contador antigo excede o novo log. `verify_chain` acusa `hmac_mismatch` ou `chain_length_truncation` imediatamente após um upgrade legítimo. Com `CEO_AUDIT_LOG_PATH`, o log muda, mas os spools continuam no diretório nativo, contrariando a alegada atomicidade da família.  
+  **Correção mínima:** uma única resolução da matriz de overrides para log, HMAC e spool, acompanhada de migração/reset explícito dos sidecars. Para rc.1, ao menos proibir e verificar esses estados no preflight do envelope.
+
+- **P1 — [audit_emit.py:9105](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/audit_emit.py:9105), [audit_emit.py:9164](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/audit_emit.py:9164), [audit_emit.py:9252](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/audit_emit.py:9252)**  
+  **Cenário:** se `.claude/state` for symlink para um diretório externo, o novo rail de pressão de contexto escreve marker e `.gc-shard-cursor` fora do repositório. O GC também percorre esse alvo e pode apagar até 32 markers expirados ali. `O_NOFOLLOW` protege somente o arquivo temporário final, não o ancestral symlinkado, apesar do comentário “SYMLINK-SAFE”.  
+  **Correção mínima:** abrir o diretório com `O_DIRECTORY|O_NOFOLLOW`, operar por `dir_fd` e validar identidade/posse antes de `replace`/`unlink`; falhar aberto apenas na emissão, sem fazer I/O externo. Até a cura, exigir `.claude/state` real e confinada como condição assinada.
+
+- **P1 — [ledger_provenance.py:403](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/ledger_provenance.py:403), [audit_emit.py:4183](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/audit_emit.py:4183), [audit_emit.py:7245](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/audit_emit.py:7245)**  
+  **Cenário:** a condição 21 afirma que todo emissor preenche `project` com o caminho absoluto. O único produtor de `ledger_entry_rejected` não inclui `project` nem `session_id`; o wrapper usa `""`, e o scrub apagaria qualquer caminho absoluto. Essas rejeições são, portanto, não atribuídas—especialmente problemático num log compartilhado. A condição assinaria uma afirmação demonstravelmente falsa.  
+  **Correção mínima:** restringir a condição 21 aos emissores que realmente transportam o path e declarar separadamente a ausência de identidade nesta ação; ou corrigir produtor e contrato antes da assinatura.
+
+- **P2 — [runtime_paths.py:123](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.ceHJUv/wt/.claude/hooks/_lib/runtime_paths.py:123)**  
+  **Cenário:** `/srv/a-b/c` e `/srv/a/b-c` produzem o mesmo slug `-srv-a-b-c`, compartilhando log, chave e salt. O código admite isso, mas as claims gerais de isolamento por projeto e o envelope não.  
+  **Correção mínima:** acrescentar a ressalva e um controle positivo de unicidade dos slugs dos repositórios em escopo; tratar desambiguação numa decisão própria.
+
+Os gates estáticos passaram: stdlib-only, parsing Python 3.9, freshness de `AGENTS.md`, contagens e `git diff --check`. Isso não cobre as integrações acima.
+
+VERDICT: NO-GO — o envelope contém uma afirmação falsa e omite condições P1 necessárias para uma atualização v1.3.0→rc.1 auditável.

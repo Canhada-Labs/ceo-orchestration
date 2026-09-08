@@ -1,0 +1,25 @@
+REJECT — advisory evidence only.
+
+- **P1 — `scripts/uninstall.sh:370-379,433,442-476`**  
+  Concrete failure: the manifest loop lacks `|| [ -n "$line" ]`. Remove only the trailing newline from a valid copy-mode manifest and its final record is never processed. With a one-record, empty, comment-only, or safely shaped malformed manifest, all refusal counters can remain zero; the script then deletes the manifest at line 476 and exits 0 while framework files remain. An unsafe unterminated final record likewise bypasses the new refusal guard. This contradicts envelope conditions 14 and 16 at `.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:66-79`.  
+  Minimal fix: implement a total, strict parser: EOF-safe `read`, validate 64-hex and `LINK` grammar, reject NUL/control bytes, require at least one valid record, count every malformed record as refused, and never remove the manifest unless the complete input was parsed. Add negative tests for empty/comment-only, malformed digest, and terminated/unterminated safe and unsafe final records.
+
+- **P1 — `templates/codex/pre-push-review-gate.sh:4-7,91-109`; `scripts/_codex_harness.sh:244-248,309-312`**  
+  Concrete failure: the changed Codex template says the installer copies it to `.git/hooks/pre-push`, but the Codex emission roster contains only `hooks.json`, `ceo.rules`, and `AGENTS.md`. A v1.3.0 repository upgraded with `--harness codex` receives no push backstop; killing or exhausting the Stop gate permits a canonical push despite shipped documentation saying the pre-push gate holds. The state-directory fix in this payload is therefore dead for adopters. Simply delivering the current template is unsafe because its new-branch range uses self-subtracting `--not --all` at `templates/codex/pre-push-review-gate.sh:128-130`, a bypass already fixed in the Grok twin. No signed condition declares this.  
+  Minimal fix: either deliver a Codex gate ported from the hardened Grok range/classifier implementation, with collision-safe lifecycle and existing/new/root-branch controls, or remove/narrow every Codex push-backstop claim before rc.1.
+
+- **P2 — `scripts/uninstall.sh:18,31-33,64,197-218`**  
+  Concrete failure: `--help` prints only lines 1–30, hiding the newly documented exit 6 and dry-run rule. It also says `--no-hmac-verify` concerns a “manifest sidecar,” while the implementation only optionally verifies the restore backup’s `.hmac`.  
+  Minimal fix: terminate help extraction at the Bash sentinel, as `doctor.sh` now does, and rename the option description to “backup HMAC sidecar.”
+
+- **P2 — `.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:35-38`; `scripts/doctor.sh:985-1008`**  
+  Concrete failure: condition 5 says byte-identical ownership has an effect only during explicit uninstall. Once recorded as framework-owned, `doctor.sh` also classifies later edits as adopter drift and can back up and overwrite them under explicit `--repair` confirmation.  
+  Minimal fix: describe both consequences: uninstall deletion and doctor verification/confirmed restoration.
+
+- **P2 — `templates/.github/workflows/benchmarks.yml.template:118-131`**  
+  Concrete failure: inside `if ! command; then`, `$?` is the status of `!`, therefore zero. A real floor breach still makes the workflow fail, but is falsely reported as `runner error rc=0`, defeating the documented distinction.  
+  Minimal fix: capture the command status without `!`, then branch on the real value.
+
+Conditions 3 and 15 accurately describe the LINK refusal and predictable backup-path residual. The doctor route-table/confinement changes, YAML fail-closed gate, actionlint checksum, generated user settings, shell syntax, ShellCheck, JSON parsing, stdlib-only checker, and AGENTS freshness checks passed statically. Dynamic integration suites could not run because this reviewer sandbox is read-only and they require temporary directories.
+
+VERDICT: NO-GO — The envelope omits the uninstall parser’s fail-open completion bug and the absent Codex pre-push backstop, both P1 gaps that must be fixed and positively tested before rc.1.
