@@ -78,6 +78,15 @@ the first session on the new version, pick one route:
   per-project directory printed by
   `python3 .claude/hooks/_lib/runtime_paths.py --state-dir`.
 
+Two more per-project records move with v1.4.0 and are NOT migrated either
+(signed conditions of rc.1): the cost-envelope counters
+(`cost-envelope-*.json` — with them at zero, a swarm dispatch that your
+accumulated spend would have blocked is allowed; do not enable `CEO_SWARM`
+after the upgrade before copying them), and `credential-rotation.json`
+(a stale credential loses its rotation warning and the blocking decision
+until the record is copied). Copy both from the legacy directory into the
+new per-project directory before the first session, like `state/`.
+
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`
 [1.4.0], «audit log resolves per PROJECT»).
 

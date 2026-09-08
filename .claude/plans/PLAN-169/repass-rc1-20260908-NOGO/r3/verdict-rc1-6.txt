@@ -1,0 +1,33 @@
+1. **P1 — [.claude/hooks/_lib/cost_envelope.py:142](<<WT>/.claude/hooks/_lib/cost_envelope.py:142>)**
+
+   The diff changes cost-state storage from the v1.3 no-leading-dash slug (`Users-u-repo`) to the native slug (`-Users-u-repo`) without migration or fallback. Existing daily, weekly, monthly, and per-plan spend becomes zero; [check_cost_envelope.py:249](<<WT>/.claude/hooks/check_cost_envelope.py:249>) then permits a swarm dispatch that the v1.3 accumulated spend would have blocked. Condition 27 covers only plan SQLite files in the literal legacy directory, not these decision-bearing `cost-envelope-*.json` files. The function also reconstructs `$HOME/.claude/projects/...` itself, so it ignores the documented `CLAUDE_PROJECT_DIR_NATIVE` whole-directory override.
+
+   Minimal fix: use `runtime_state_dir(project_path) / "state"` and migrate or dual-read the previous no-leading-dash files for the trailing 30-day window. Add an rc.1 hard condition requiring migration—or proving no legacy cost files exist—before enabling `CEO_SWARM`; require a seeded-counter upgrade test whose first post-upgrade dispatch remains blocked.
+
+2. **P1 — [.claude/hooks/_lib/injection_salt.py:203](<<WT>/.claude/hooks/_lib/injection_salt.py:203>)**
+
+   The proposed first-mint cure remains racy. Process A creates the final `.salt` with `O_EXCL` at line 206, but does not write its 32 bytes until line 214. Process B can receive `EEXIST`, read A’s still-empty file at [line 276](<<WT>/.claude/hooks/_lib/injection_salt.py:276>), classify it as malformed, and reopen it with `O_TRUNC` at line 293. Both processes then cache different salts. This contradicts the shipped “exactly one process wins” claim at [line 44](<<WT>/.claude/hooks/_lib/injection_salt.py:44>) and makes condition 21’s prescribed `O_EXCL + reread` cure insufficient. Its test pre-creates a fully written winner and therefore cannot exercise this interval.
+
+   Minimal fix: serialize read/create/repair with a dedicated lock, or publish a completely written same-directory temporary inode using a no-replace atomic operation. Add a test that pauses the winner after final-path creation but before its write, then starts the loser.
+
+3. **P1 — [.claude/hooks/_lib/adapters/live/claude.py:391](<<WT>/.claude/hooks/_lib/adapters/live/claude.py:391>)**
+
+   The v1.3 `credential-rotation.json` lived in the literal legacy directory; the candidate reads only the new project directory and treats a missing record as unconfigured at lines 395–405. Thus an existing stale credential loses its rotation warning, blocking event, and `CredentialExpired` decision immediately after upgrade. The PLAN-182 inventory explicitly included this file, but condition 27 and the upgrade procedure migrate only `state/`; the credential record is a top-level sibling.
+
+   Minimal fix: migrate or deliberately copy the legacy rotation record to every applicable project before live adapters run, or read the legacy record as a named compatibility fallback when the new file is absent. Add this as a hard rc.1 condition with a stale-record positive control.
+
+4. **P1 — [.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:164](<<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:164>)**
+
+   Condition 23’s promised ledger cure cannot work as written. It requires passing the resolved repository root as `project`, but [audit_emit.py:7258](<<WT>/.claude/hooks/_lib/audit_emit.py:7258>) clears any value not matching the slash-free 64-character identity regex at [line 8763](<<WT>/.claude/hooks/_lib/audit_emit.py:8763>). Implementing the signed condition literally would still produce unattributed rejection rows. The current producer already omits both fields at [ledger_provenance.py:651](<<WT>/.claude/hooks/_lib/ledger_provenance.py:651>).
+
+   Minimal fix: decide whether `project` is the baseline absolute path or a bounded opaque identifier, then align the condition, SPEC row, scrubber, producer, and exact-wire test. The envelope must name that compatible representation before signing.
+
+5. **P2 — [.claude/hooks/_lib/audit_emit.py:7090](<<WT>/.claude/hooks/_lib/audit_emit.py:7090>)**
+
+   The comment claims `constraint_count` follows strict integer discipline and that floats are refused, but `int(...)` at line 7096 converts `1.9` to `1` and `True` to `1`. A future or direct generic caller therefore gets a signed, laundered value rather than the documented sentinel zero.
+
+   Minimal fix: reject `bool` and non-`int` values before clamping, using the existing `_ledger_int_field` pattern, and add float/bool controls.
+
+The stdlib-only gate, repository-map/count gates, and Python 3.9 grammar parse passed. No P0 was found.
+
+VERDICT: NO-GO — The envelope omits two decision-bearing state migrations, and conditions 21 and 23 prescribe cures that do not satisfy the current code paths.

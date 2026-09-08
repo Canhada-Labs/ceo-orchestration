@@ -1,0 +1,19 @@
+P1 — `SPEC/v1/audit-log.schema.md:500,502-503`; `CHANGELOG.md:113-116`
+
+Concrete failure: the SPEC declares `session_id` and `project` for `ceremony_lint_unlock_used`, `ledger_checkpoint_recorded`, and `ledger_checkpoint_skipped`, while the implementations omit `project`; the ceremony-lint event also omits `session_id` (`.claude/scripts/check-ceremony-script.py:233-234`, `.claude/hooks/check_ledger_checkpoint.py:956-966,1023-1050`). With a shared `CEO_AUDIT_LOG_PATH`, events from multiple repositories become unattributable. Condition 23 claims universal attribution and names other exceptions, but omits these three, so the signed envelope would be incomplete.
+
+Minimal fix: before rc.1, either populate the missing identity fields with exact-wire tests, or amend condition 23 to name all three omissions and narrow the SPEC/CHANGELOG claims; retain code remediation as mandatory before GA.
+
+P2 — `SPEC/v1/audit-log.schema.md:504`
+
+Concrete failure: `ledger_entry_rejected` documents `decision=accept` and reasons including `ok` as valid wire values, but `audit_emit.py:7235-7270` deliberately rewrites every non-`reject` decision to `reject` and `ok` to `malformed_input`; the producer emits only rejected entries (`ledger_provenance.py:888-891`). A consumer generated from the public SPEC therefore accepts states the reference implementation guarantees cannot exist.
+
+Minimal fix: document the actual rejection-only wire subset—`decision` fixed to `reject`, with only producible rejection reasons—or change the implementation and tests if acceptance events are genuinely intended.
+
+P2 — `.github/workflows/ceremony-lint.yml:6-18`
+
+Concrete failure: the workflow filters cover plan scripts and the current generator, but the checker’s discovery contract also includes `.claude/scripts/local/historical` (`check-ceremony-script.py:62-65`). A PR introducing or changing only a historical ceremony script would not trigger this workflow, so the new fail-closed lint would never run.
+
+Minimal fix: add `.claude/scripts/local/historical/**/*.sh` to both path-filter lists, or cover `.claude/scripts/local/**/*.sh`.
+
+VERDICT: NO-GO — Condition 23 omits a P1 attribution gap affecting three newly registered audit actions, so the proposed signed rc.1 envelope is not yet truthful.

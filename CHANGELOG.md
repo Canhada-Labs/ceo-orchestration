@@ -47,10 +47,9 @@ and the two CI workflow templates forever, with no warning.
   when a prior registration's digest still matches. A failed delivery
   exits 3 and persists `upgrade_succeeded: false` in the install-state
   rather than recording a full upgrade that did not happen (`6304f66`).
-  One named exception in this release candidate: a route whose
-  transform has no renderer in the running version is reported as a
-  named `SKIP` and the run still exits 0 — unreachable with the shipped
-  six-row table, and a signed condition of rc.1 (cure lands before GA).
+  A route whose transform has no renderer in the running version is
+  a failed delivery too: named, `upgrade_succeeded: false`, exit 3
+  (`5518888`, all four sites of the class).
 - **One route table, three readers.** `scripts/delivery-routes.tsv` is
   now the single answer to "which source file produces this
   destination?", read by the manifest generator, `doctor.sh` and the
@@ -74,9 +73,14 @@ and the two CI workflow templates forever, with no warning.
 - **`install.sh` wrote outside `$TARGET`** when a destination path was a
   pending symlink or hardlink. One destination-confinement predicate now
   lives in `scripts/_framework_manifest_set.sh`; `install.sh` pre-flies
-  EVERY destination before the first write and refuses by name,
-  `upgrade.sh` consumes the same predicate. E2E in bytes: 105/0 after the
-  cure against 22/33 before it (`cc00235`).
+  every delivered-template destination before the first write and
+  refuses by name, `upgrade.sh` consumes the same predicate. E2E in
+  bytes: 105/0 after the cure against 22/33 before it (`cc00235`). Two
+  seams stay outside that preflight in this release candidate and are
+  signed conditions of rc.1: the `state/mcp_client_secrets` seed (a
+  symlinked `TARGET/state` is followed by `mkdir -p`/`chmod`), and a
+  refused SOURCE template (symlink outside the checkout) that install
+  reports as `SKIP` and upgrade as `PRESERVED` while still exiting 0.
 - **`--github-owner` with a `/` in it left `.github/CODEOWNERS` at zero
   bytes, permanently.** The handle grammar is now shared by producer and
   consumer, the file is rendered through a pipe and written atomically,

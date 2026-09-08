@@ -1,0 +1,33 @@
+Resultado da revisão: REJECT. O caminho normal de upgrade adiciona o sétimo modelo, recompõe hooks/`.env` conforme a cerimônia e entrega cinco das seis rotas mutuamente exclusivas de `docs/`/`.github/`. Os riscos declarados de reapropriação de arquivo byte-idêntico e de reintrodução de settings removidos são reais.
+
+### Achados
+
+P1 — [scripts/upgrade.sh:687](<WT>/scripts/upgrade.sh:687), [scripts/_framework_manifest_set.sh:1144](<WT>/scripts/_framework_manifest_set.sh:1144)
+
+Cenário concreto: o snapshot da tabela acontece antes de sua validação. `[[ -f ]]` e `cp` seguem um `scripts/delivery-routes.tsv` symlink; depois `_WBM_ROUTES_TSV` aponta para um tempfile regular. Assim, o novo teste `-L` do leitor examina o snapshot, não o leaf original, e aceita a tabela externa. Uma tabela bem-formada pode mapear um destino permitido para outro arquivo sob `templates/`; o upgrade entrega bytes errados no adopter e termina com sucesso.
+
+Correção mínima: validar `_UP_ROUTES_ORIGIN` com `_wbm_route_table_gate` antes do `cp`, ou recusar explicitamente `-L` antes de `-f`. Adicionar e2e do `upgrade.sh` com o leaf da tabela como symlink; o teste unitário atual valida apenas o leitor isolado. A condição 8 deve nomear este laundering pelo snapshot, não dizer genericamente que o leitor ainda aceita o link.
+
+P1 — [scripts/upgrade.sh:4851](<WT>/scripts/upgrade.sh:4851), [scripts/upgrade.sh:4954](<WT>/scripts/upgrade.sh:4954), [scripts/_framework_manifest_set.sh:962](<WT>/scripts/_framework_manifest_set.sh:962)
+
+Cenário concreto: destinos duplicados não são recusados. `_wbm_route_dests` emite as duas linhas, o número de rotas continua igual ao de linhas e a conservation law passa. Porém cada iteração consulta `_wbm_route_src(dest)`, cujo leitor para na primeira ocorrência. Com duas linhas para `docs/rotation-log.md`, a segunda declarando outra origem ou transform, a primeira rota é executada duas vezes, a segunda é ignorada e o processo sai 0. O parser Python de paridade já considera isso inválido em [scripts/tests/_parity_classify.py:317](<WT>/scripts/tests/_parity_classify.py:317), portanto os leitores discordam justamente sobre input ambíguo.
+
+Correção mínima: rejeitar destinos duplicados em `_wbm_route_table_ok`, antes de qualquer leitor consumir a tabela, e testar duas linhas válidas com o mesmo destino e metadados diferentes, exigindo zero delivery, `upgrade_succeeded:false` e rc 3. Este P1 não aparece no envelope proposto.
+
+P1 — [CONDITIONS-rc1.md:18](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:18), [CHANGELOG.md:47](<WT>/CHANGELOG.md:47), [scripts/upgrade.sh:4197](<WT>/scripts/upgrade.sh:4197)
+
+Cenário concreto: a condição 1 e o CHANGELOG descrevem o código anterior à cura. O candidato atual marca `unrenderable-transform` como precondition failure, persiste falha, imprime “Upgrade INCOMPLETE” e sai 3 em [scripts/upgrade.sh:5653](<WT>/scripts/upgrade.sh:5653). O material proposto afirma “Upgrade complete”, rc 0 e promete a cura para depois. Assinar isso atestaria o oposto do binário entregue.
+
+Correção mínima: marcar a condição 1 como CURADA, remover a exceção das linhas 50–53 do CHANGELOG e regenerar/pinar a proveniência do envelope.
+
+P1 — [CONDITIONS-rc1.md:83](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:83), [scripts/upgrade.sh:4258](<WT>/scripts/upgrade.sh:4258), [scripts/_framework_manifest_set.sh:887](<WT>/scripts/_framework_manifest_set.sh:887)
+
+Cenário concreto: a condição 9 também está obsoleta. O consumidor do upgrade usa `_wbm_github_handle_ok`, que agora rejeita tanto `owner-` quanto hífens consecutivos. O envelope ainda afirma que ambos são aceitos e que a correção é futura.
+
+Correção mínima: marcar o item 9 como CURADO ou removê-lo dos residuais, regenerando o hash assinado.
+
+No recorte deste payload, as condições 4, 5 e 25 descrevem corretamente os comportamentos observáveis: `.env` ausente é adicionado apesar do resumo dizer “only hooks”, arquivo autoral byte-idêntico é registrado como entregue, e o fallback de `_up_tmpbase` não revalida `/tmp`. Elas não compensam as afirmações falsas nem o P1 ausente.
+
+`bash -n`, `shellcheck -x -S warning` e `git diff --check` passaram. A suíte dinâmica não pôde ser executada porque o sandbox somente-leitura recusou o `mktemp -d`; os achados acima decorrem diretamente do fluxo estático.
+
+VERDICT: NO-GO — O envelope está factualmente desatualizado e o fail-closed da tabela ainda aceita symlink laundering e destinos duplicados.

@@ -6,6 +6,11 @@
 > receberam como DATA tem sha256 `7f0dd2513413039c07a09e58697074e6305a8a0460bdd72b774a2f8f3207b12c` (pinada em
 > `PROVENANCE-rc1.md` da rodada 2).
 
+> Emendado (v6) depois da wave-rc1cure (`5518888`) e da rodada 3, parte 1: itens 1, 9,
+> 17, 18, 21 e 23 marcados como CURADOS pelo pack assinado; item 8 reescrito (laundering
+> pelo snapshot); itens 31 e 32 novos. A versão que os revisores da rodada 3 receberam
+> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41.) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
+
 Cada item descreve o que o código FAZ nesta rc, para que a assinatura não afirme
 mais do que aconteceu. Fonte: re-pass do candidato (codex 0.147.0 pinado, modelo
 gpt-5.6-sol, 6 partes) + verificação adversarial de cada achado contra o código e
@@ -15,11 +20,12 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
 
 ## A. Condições DURAS (o texto da release foi estreitado para dizer isto)
 
-1. **Rota com transform sem renderer sai 0.** `scripts/upgrade.sh` conta uma rota
-   cujo transform o binário não sabe renderizar como `SKIP` nomeado e o run termina
-   «Upgrade complete», rc 0 — as duas outras formas de tabela envenenada saem 3.
-   Inalcançável com a tabela de seis linhas que a rc entrega; o CHANGELOG [1.4.0]
-   nomeia a exceção. Cura antes do GA (~6 linhas + controle positivo).
+1. **Rota com transform sem renderer** — **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**: os quatro sítios da
+   classe em `scripts/upgrade.sh` marcam `unrenderable-transform` como falha de
+   pré-condição, persistem `upgrade_succeeded: false`, imprimem «Upgrade INCOMPLETE» e
+   saem 3 (controle positivo no harness e2e). O texto anterior desta condição e a
+   exceção que o CHANGELOG [1.4.0] nomeava descreviam o código PRÉ-cura e foram
+   removidos (rodada 3, parte 1).
 2. **Undemote das 7 skills VETO só em install FRESCO.** Uma instalação v1.3.0 que faz
    upgrade mantém o seu `skillOverrides` (o upgrader preserva settings fora das
    migrações aditivas enumeradas). O CHANGELOG foi estreitado; a migração
@@ -39,6 +45,28 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     condição DURA que o CHANGELOG promete e entra antes do GA (rodada 2, parte 4).
     (Numeração estável: os itens são numerados na ordem em que entraram no envelope,
     não na ordem das seções, para que as referências dos revisores continuem válidas.)
+
+39. **O estado de CUSTO (cost-envelope) muda de slug sem migração — e isso decide despachos.**
+    `cost_envelope.py` passa a gravar `cost-envelope-*.json` sob o slug nativo (com traço
+    inicial) em vez do slug v1.3.0 sem traço; os totais diário/semanal/mensal/por plano
+    voltam a ZERO no upgrade e `check_cost_envelope.py` PERMITE um despacho de swarm que o
+    gasto acumulado da v1.3.0 teria bloqueado; a função também reconstrói o caminho
+    `$HOME/.claude/projects/…` por conta própria, ignorando `CLAUDE_PROJECT_DIR_NATIVE`.
+    Condição DURA: não habilitar `CEO_SWARM` depois do upgrade sem migrar (ou provar
+    ausentes) os arquivos de custo do slug antigo; cura antes do GA: usar
+    `runtime_state_dir(project)/state` e dual-read dos arquivos antigos na janela de 30
+    dias, com teste de contador semeado cujo primeiro despacho pós-upgrade continua
+    bloqueado (rodada 3, parte 6).
+40. **O registro `credential-rotation.json` da v1.3.0 não é lido depois do upgrade.** O
+    adapter vivo (`_lib/adapters/live/claude.py`) só lê o diretório novo do projeto e
+    trata a ausência como «não configurado»: uma credencial já VENCIDA perde o aviso de
+    rotação, o evento bloqueante e a decisão `CredentialExpired` logo após o upgrade. O
+    inventário do PLAN-182 incluía este arquivo, mas a condição 27 e o procedimento de
+    upgrade migram só `state/` — o registro é um irmão de topo. Condição DURA: copiar o
+    registro legado para o diretório novo de cada projeto ANTES de rodar adapters vivos
+    (rota em docs/UPGRADE-PROCEDURE.md); cura antes do GA: fallback nomeado ao registro
+    legado quando o novo está ausente, com controle positivo de registro vencido
+    (rodada 3, parte 6).
 
 ## B. Residuais DECLARADOS por desenho ratificado (não mudam na rc.2 sem decisão do Owner)
 
@@ -76,12 +104,19 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
    coorte copy-mode desta rc, mas é o que o código faz. Cura OBRIGATÓRIA antes do GA:
    filtrar `FMS_LINK_PATHS` aos registros únicos cujo alvo gravado é igual ao `readlink`
    vivo (rodada 2, parte 2).
-8. **Tabela de rotas ausente/corrompida no CHECKOUT do framework**: `install.sh` ainda
-   copia `docs/` e `.github/` fixos e reporta sucesso; e `_wbm_route_table` aceita
-   symlink no leaf (`-f`). A tabela vive no checkout que executa (mesma superfície do
-   próprio script) — fora do modelo de ameaça como ataque; fail-closed = cura antes do GA.
-9. **Gramática do handle aceita `owner-` e hífens consecutivos** (GitHub os rejeita);
-   apertar no produtor e no consumidor = cura antes do GA.
+8. **Tabela de rotas no CHECKOUT do framework — três frestas fail-open.** (a) Ausente ou
+   corrompida: `install.sh` ainda copia `docs/` e `.github/` fixos e reporta sucesso (cura
+   antes do GA). (b) Symlink no leaf: o leitor `_wbm_route_table` passou a recusar `-L`
+   (**CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**), MAS `scripts/upgrade.sh` faz o SNAPSHOT da tabela
+   (`[[ -f ]]` + `cp`, que seguem o link) ANTES de validar, e `_WBM_ROUTES_TSV` passa a
+   apontar para o tempfile regular — o `-L` examina o snapshot, não o leaf: uma tabela
+   externa bem formada entra e o upgrade entrega bytes errados com rc 0 (laundering pelo
+   snapshot; rodada 3, parte 1). Cura antes do GA: validar a origem com o gate da tabela
+   antes do `cp` (pack `rc1-cure-2`). A tabela vive no checkout que executa — fora do
+   modelo de ameaça como ataque; é a forma fail-open que importa.
+9. **Gramática do handle** — **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**: `_wbm_github_handle_ok` (produtor e
+   consumidor) exige último caractere alfanumérico e recusa hífens consecutivos; o
+   harness e2e discrimina `trail-`, `a-`, `a--b`.
 
 ## C. Hardening não bloqueante (nomeado para não se perder)
 
@@ -109,15 +144,23 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     (dry-run segue 0); o template de CI entregue verifica o SHA-256 do actionlint antes
     de extrair (o vivo já fazia; a v1.3.0 rodava `bash <(curl)` sem pin) e o gate de
     sintaxe YAML instala o parser em CI e FALHA se ele faltar, em vez de pular em verde.
-    Rodada 2 (parte 3): o parser do manifesto do `uninstall.sh` é TOTAL — leitura
-    EOF-safe (um registro final sem newline era descartado), gramática estrita por
-    registro (`<sha256> <relpath>` ou `LINK …`), bytes de controle/registro malformado
-    REFUSADOS e contados, manifesto vazio/só-comentários REFUSADO e mantido — antes,
-    tudo isso zerava os contadores, apagava o ledger e saía 0 com arquivos do framework
-    no lugar; `--help` imprime o cabeçalho inteiro (os códigos de saída estavam
-    escondidos além da linha 30); `benchmarks.yml.template` reporta o status real em vez
-    de `$?` depois de `!`; `templates/codex/pre-push-review-gate.sh` diz a verdade sobre
-    não ser entregue (item 26) e usa `--not --remotes` no range de branch nova.
+    Rodada 2 (parte 3) e rodada 3 (parte 3): o parser do manifesto do `uninstall.sh`
+    passou a ser TOTAL em duas etapas — a primeira (leitura EOF-safe, gramática por
+    registro, controle/malformado REFUSADOS e contados, manifesto vazio REFUSADO) NÃO
+    era total no Bash 3.2 (`read -r` descarta um NUL e o resto do registro ANTES do
+    check de controle; diretório/FIFO caíam em `continue` sem contar; symlink pendente
+    contava como ausente; symlink-leaf para arquivo externo passava `-f` e era lido
+    através; o backup só levava registros com DOIS espaços enquanto a remoção aceitava
+    um) — a segunda, no pack `rc1-cure-2`: NUL detectado no ARQUIVO antes do loop
+    (manifesto inteiro REFUSADO, ledger mantido), tipo não-regular ou symlink =
+    REFUSADO e contado (nunca lido), UMA gramática canônica de dois espaços parseada
+    uma vez num ledger que alimenta backup E remoção, e o sweep de diretórios vazios
+    restrito às cadeias de pais dos arquivos removidos (`rmdir` de baixo para cima),
+    em vez de `find -empty -delete` na árvore inteira. `--help` imprime o cabeçalho
+    inteiro; `benchmarks.yml.template` reporta o status real em vez de `$?` depois de
+    `!`; `templates/codex/pre-push-review-gate.sh` diz a verdade sobre não ser entregue
+    (item 26), usa `--not --remotes` no range de branch nova e `--root` no
+    `git diff-tree` (pack 2).
 17. **PostCompact reinjeta campos do snapshot em `additionalContext` com sanitização só de
     não-imprimíveis** (`check_postcompact_reinject.py`): um NOME de arquivo `finish-*.sh`
     ou um valor de snapshot adulterado atravessa a fronteira da compaction como texto
@@ -129,10 +172,17 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     «Active plan: …» com checagem só de prefixo (`startswith("PLAN-")`), e a checagem
     estrita de `audit_emit.py` só sanitiza o EVENTO, depois de o valor cru já ter entrado
     no contexto — também curada no pack (`fullmatch` `PLAN-NNN`; pointer dropado e contado).
+    Estado: **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)** (gate de FORMA por campo, cerimônias como contagem, `plan_id`
+    com `fullmatch` em dois consumidores, 3 testes adversariais).
 18. **PreCompact segue symlink em `PLAN-NNN/LEDGER.md`** e copia até 5 headings `## `
     (≤ 160 chars) de um arquivo fora do repo para o BLOB do snapshot (nunca para o
-    `additionalContext`); quem cria o symlink já lê o alvo (same-UID). Cura antes do GA:
-    `lstat` + `O_NOFOLLOW` (superfície nova da W2 US7).
+    `additionalContext`); quem cria o symlink já lê o alvo (same-UID). **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**:
+    `lstat` + `O_NOFOLLOW` + `fstat` (mesmo inode) no `LEDGER.md` — isto confina o LEAF,
+    NÃO os ancestrais: um `PLAN-NNN/` (ou `.claude/plans/`) symlinkado para fora do repo
+    ainda é atravessado pela abertura, e os headings do alvo externo entram no BLOB do
+    snapshot (rodada 3, parte 5). Cura antes do GA: abrir por descritor de diretório
+    (`O_DIRECTORY|O_NOFOLLOW`) ancestral a ancestral, ou `os.path.realpath` confinado à
+    raiz do repo antes de abrir (superfície nova da W2 US7).
 19. **Orçamento de 2,5 s do PreCompact não chega ao lock de 5 s do `state_store`** (medido
     5,14 s sob holder vivo > 2,4 s): sob contenção rara o harness mata o hook e o snapshot
     e o evento de auditoria se perdem em silêncio; a compaction nunca bloqueia. Cura curta
@@ -152,10 +202,22 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     o mesmo arquivo; o `prompt_sha256` das perdedoras fica irreproduzível (reproduzido:
     5/5 rodadas, 6/6 salts distintos); a cadeia HMAC segue íntegra. Pré-existente na
     v1.3.0; o upgrade reabre UM momento de mint por projeto. Mitigação operacional: abra
-    a primeira sessão de cada repositório SOZINHA depois do upgrade. Cura antes do GA:
-    `O_CREAT|O_EXCL|O_NOFOLLOW` e a perdedora relê; na mesma cerimônia, a escrita do
-    marcador `salt-minted.json` deixa de seguir symlink (classe same-UID, fora do modelo
-    de ameaça como ataque — `docs/threat-model.md` Tier-2).
+    a primeira sessão de cada repositório SOZINHA depois do upgrade (mitigação válida
+    para quem instala uma versão anterior). **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**: first-mint com
+    `O_CREAT|O_EXCL|O_NOFOLLOW`, a perdedora relê o salt do vencedor (classificação
+    DEPOIS do create exclusivo — a 1.ª versão da cura reintroduzia a corrida pelo
+    classificador e foi pega pelo próprio teste), e o marcador `salt-minted.json` é
+    escrito por tempfile `O_EXCL|O_NOFOLLOW` + `os.replace`, recusando symlink (classe
+    same-UID, fora do modelo de ameaça como ataque — `docs/threat-model.md` Tier-2).
+    **A cura do first-mint AINDA tem uma janela** (rodada 3, parte 6): o vencedor cria o
+    `.salt` final com `O_EXCL` mas só escreve os 32 bytes depois; um perdedor que receba
+    `EEXIST` nesse intervalo lê o arquivo VAZIO, classifica-o como malformado e o reabre
+    com `O_TRUNC` — os dois processos ficam com salts diferentes, contra a claim «exatamente
+    um processo vence» do docstring; o teste do pack pré-cria um vencedor já escrito e não
+    exercita essa janela. Cura antes do GA: publicar um inode temporário COMPLETAMENTE
+    escrito por operação atômica sem substituição (`link()`/`O_EXCL` no nome final), ou
+    serializar leitura/criação/reparo sob lock; teste que pausa o vencedor entre a criação e
+    a escrita. A mitigação operacional (primeira sessão SOZINHA) continua válida.
 22. **Locks em diretórios diferentes entre hooks v1.3.0 e v1.4.0** só ocorrem com
     `CEO_AUDIT_LOG_PATH` definido E as duas gerações de hooks correndo durante o upgrade;
     o efeito é appends intercalados no mesmo log = alarme de `verify_chain` (tamper-
@@ -164,8 +226,8 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
 23. **O campo `project` dos eventos carrega o caminho absoluto do repositório** — campo-base
     contratual (`SPEC/v1/audit-log.schema.md` §501), preenchido assim por TODO emissor nas
     duas versões: não há exposição nova; a frase «slug/path never reaches the wire» no
-    docstring de `audit_emit.py` e a redação DENIED do SPEC estão erradas e serão
-    corrigidas no pack `rc1-cure` (texto, não comportamento). EXCEÇÃO medida (rodada 2,
+    docstring de `audit_emit.py` e a redação DENIED do SPEC estavam erradas e foram
+    corrigidas — **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)** (texto, não comportamento). EXCEÇÃO medida (rodada 2,
     parte 5): os dois emissores da família de compaction (`check_precompact_continuity.py`,
     `check_postcompact_reinject.py`) NÃO preenchem `session_id` nem `project` —
     `emit_generic()` não os sintetiza — logo, num log de auditoria compartilhado ou com
@@ -173,8 +235,18 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     GA: passar o session id da entrada do hook e a raiz do projeto resolvida aos dois
     emissores, com testes de wire exato. Idem o único produtor de `ledger_entry_rejected`
     (`ledger_provenance.py`): não inclui `project` nem `session_id` (o wrapper usa `""`)
-    — rejeições não atribuídas num log compartilhado. A afirmação desta condição vale
-    para os emissores que TRANSPORTAM o caminho, não para todos (rodada 2, parte 6).
+    — rejeições não atribuídas num log compartilhado. Idem (rodada 3, parte 4) três
+    ações registradas nesta versão cujo SPEC declara `session_id` e `project` mas cujas
+    implementações omitem `project` — `ceremony_lint_unlock_used` (que também omite
+    `session_id`; `check-ceremony-script.py`), `ledger_checkpoint_recorded` e
+    `ledger_checkpoint_skipped` (`check_ledger_checkpoint.py`). A afirmação desta condição
+    vale para os emissores que TRANSPORTAM o caminho, não para todos; num
+    `CEO_AUDIT_LOG_PATH` compartilhado, esses eventos não são atribuíveis. A cura «passar a
+    raiz do repositório como `project`» NÃO funciona como escrita para `ledger_entry_rejected`
+    (rodada 3, parte 6): o scrubber dessa ação apaga qualquer valor fora de um identificador
+    de 64 caracteres sem barra — a representação precisa ser decidida (caminho absoluto como
+    nos emissores-base, ou identificador opaco limitado) e alinhada em SPEC, scrubber,
+    produtor e teste de wire exato ANTES da cura; até lá, as linhas ficam sem atribuição.
 24. Follow-ups pós-GA (P2): chave de cache do `spool_writer` omite `cwd` quando qualquer
     candidato é absoluto (canto: override RELATIVO + processo longo + `chdir`); o marcador
     de rejeição de `ledger_provenance` diz «DISCARDED» num corpo que a postura advisory
@@ -192,9 +264,11 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     para `.git/hooks/pre-push` — um repositório v1.3.0 subido com `--harness codex` fica
     sem gate de push (matar ou esgotar o Stop gate permite um push canônico). O cabeçalho
     do template passa a dizer isto e como instalar à mão; o range de branch nova deixou
-    de se auto-subtrair (`--not --remotes`, como no twin do Grok). Porte completo (roster
-    + ciclo de vida manifesto/uninstall/backup/restore) = item nomeado da rc.2
-    (rodada 2, parte 3).
+    de se auto-subtrair (`--not --remotes`, como no twin do Grok) e o `git diff-tree`
+    ganhou `--root` (sem ele, arquivos canônicos introduzidos por um root commit não
+    produziam paths e escapavam à revisão — rodada 3, parte 3; pack `rc1-cure-2`).
+    Porte completo (roster + ciclo de vida manifesto/uninstall/backup/restore) = item
+    nomeado da rc.2 (rodada 2, parte 3).
 28. Todo run habilitado do PostCompact limpa um marcador sob `<repo>/.claude/state` sem
     verificar se `state` é symlink (`marker.unlink()`; o escritor de pressão idem quando
     armado): um adopter com `.claude/state -> /external/state` tem o arquivo externo
@@ -219,6 +293,52 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     as claims gerais de isolamento por projeto não. Ressalva declarada + controle positivo
     de unicidade dos slugs dos repositórios em escopo; desambiguação = decisão própria
     (rodada 2, parte 6, P2).
+31. **Destinos DUPLICADOS na tabela de rotas não são recusados** (rodada 3, parte 1):
+    `_wbm_route_dests` emite as duas linhas e a conservation law passa (rotas == linhas),
+    mas `_wbm_route_src(dest)` pára na primeira ocorrência — com duas linhas para o mesmo
+    destino, a primeira rota executa DUAS vezes, a segunda é ignorada e o run sai 0. O
+    parser de paridade (`_parity_classify.py`) já considera a tabela inválida: os
+    leitores discordam exatamente onde importa. Cura antes do GA: recusar destino
+    duplicado em `_wbm_route_table_ok`, antes de qualquer leitor consumir (pack
+    `rc1-cure-2`); teste com duas linhas válidas e metadados diferentes ⇒ zero delivery,
+    `upgrade_succeeded: false`, rc 3.
+32. CURADO em `5518888` sem condição própria: o `concurrency` do `validate.yml` do
+    próprio framework passa a incluir o nome do evento — um push em `main` não cancela
+    mais o run agendado, o único que exercita Python 3.10/3.11 (rodada 2, parte 4).
+33. **O installer NÃO pré-valida «EVERY destination»** (rodada 3, parte 2): a semente
+    `state/mcp_client_secrets` fica FORA do preflight de confinamento e, com
+    `TARGET/state` symlinkado para um diretório externo, `mkdir -p` cria o diretório
+    fora do alvo e `chmod` atua lá. Sítio já reconhecido como não curado em
+    `PLAN-185/wave-s329-C-approved.md`; o CHANGELOG deixa de dizer «EVERY». Cura antes
+    do GA: incluir o destino no preflight e repetir a guarda no sítio.
+34. **Recusa de FONTE fail-open no RESULTADO** (rodada 3, parte 2): quando um template
+    de origem é um symlink externo, a contenção bloqueia a leitura, mas `install.sh`
+    apenas registra `SKIP` e `upgrade.sh` conta `PRESERVED`, deixa
+    `_UP_DELIVERY_PRECONDITION_FAILED=0`, imprime «Upgrade complete» e sai 0 — entrega
+    incompleta por input recusado, não falha de infraestrutura. Cura antes do GA:
+    acumular as recusas de fonte e marcar o run como INCOMPLETO (rc ≠ 0).
+35. `install.sh --dry-run` promete «sempre rc 0» no `--help`, mas uma recusa de destino
+    acumulada termina rc 1 (rodada 3, parte 2, P2). Documentar a exceção no help
+    (canônico; próxima cerimônia).
+36. `SPEC/v1/audit-log.schema.md` documenta, para `ledger_entry_rejected`, `decision=accept`
+    e razões como `ok` que a implementação NUNCA produz (`audit_emit.py` reescreve toda
+    decisão ≠ `reject` para `reject` e `ok` para `malformed_input`; o único produtor só
+    emite rejeições): um consumidor gerado do SPEC aceita estados que não existem.
+    Estreitar o SPEC ao subconjunto produzível (canônico; rodada 3, parte 4, P2).
+37. `.github/workflows/ceremony-lint.yml` filtra `paths:` sem `.claude/scripts/local/historical/**`,
+    que o contrato de descoberta do `check-ceremony-script.py` inclui — um PR que só toque
+    um script histórico não dispara o lint fail-closed (rodada 3, parte 4, P2). Próxima
+    cerimônia de workflows.
+38. Docstrings PRÉ-cura que sobreviveram (rodada 3, parte 5, P2): `check_precompact_continuity.py`
+    diz que o snapshot é passado como `str` e redigido por `state_store.set` (hoje a
+    redação é campo a campo e passa `bytes`); `check_postcompact_reinject.py` diz que
+    `constraint_count` «ainda será» allowlisted (já foi); `SessionEnd.py` descreve basenames
+    entrando em `systemMessage` (o render é counts-only). Texto, não comportamento;
+    canônicos — próxima cerimônia.
+41. `audit_emit.py` diz que `constraint_count` segue disciplina estrita de inteiro e recusa
+    floats, mas `int(...)` converte `1.9` em `1` e `True` em `1` — um chamador genérico
+    recebe um valor lavado em vez do sentinela zero. Recusar `bool` e não-`int` antes do
+    clamp (padrão `_ledger_int_field`), com controles (rodada 3, parte 6, P2).
 
 ## D. O que este re-pass NÃO cobriu
 
