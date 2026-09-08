@@ -455,8 +455,11 @@ else
     fail=1
   else
     printf '\n# adopter rule\n* @smoke-owner\n' >> "$XT2/.github/CODEOWNERS"
-    bash "$SOURCE_DIR/scripts/uninstall.sh" "$XT2" >"$XO/uninstall2.log" 2>&1
-    x_rc=$?
+    # Under `set -e` a bare non-zero exit would kill this script before the
+    # assertions below ran — which is exactly what happened when the uninstall
+    # started exiting 5 on a preserved mismatch (rc.1): "exit code 5", no message.
+    x_rc=0
+    bash "$SOURCE_DIR/scripts/uninstall.sh" "$XT2" >"$XO/uninstall2.log" 2>&1 || x_rc=$?
     # rc.1 re-pass (part 3, U2): a preserved mismatch without --force is an
     # INCOMPLETE uninstall and exits 5 — never 0 (only a dry-run preview does).
     if [[ "$x_rc" -ne 5 ]]; then
