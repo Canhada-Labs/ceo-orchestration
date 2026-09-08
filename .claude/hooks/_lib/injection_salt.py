@@ -41,14 +41,27 @@ emits the registered ``salt_rotation_registered`` chain event.
 
 ## Thread safety
 
-The module-level ``_CACHED_SALT`` is read-once-write-once. Concurrent
-readers in the unloaded state may both invoke ``os.urandom`` + write,
-but the second writer's ``write_bytes`` is atomic on POSIX (single
-``write(2)`` for 32 bytes). The losing writer's bytes are discarded;
-the winner's bytes seed the cache for both processes on next call.
-This is acceptable because hooks run as short-lived subprocesses;
-the race window is sub-millisecond and the salt remains 32 random
-bytes either way.
+The module-level ``_CACHED_SALT`` is read-once-write-once, and the
+FIRST MINT is elected by the filesystem: ``_generate_and_persist``
+creates with ``O_CREAT|O_EXCL|O_NOFOLLOW``, so exactly one process
+wins and every loser RE-READS the winner's bytes.
+
+rc.1 re-pass part 6 C2 — this section used to accept the race, on the
+grounds that "the winner's bytes seed the cache for both processes on
+next call". That was false: the cache is a hit before any disk read
+(``get_instance_salt`` returns at the ``_CACHED_SALT`` check), so each
+loser kept and used the value it had generated, and the ``.salt`` on
+disk was whatever the last ``write_bytes`` left behind. The re-pass
+reproduced it with a spin barrier: **5 of 5 rounds, 6 of 6 processes
+holding DISTINCT salts, 5 of them orphaned** — and every
+``prompt_sha256`` an orphan emitted is irreproducible from the
+persisted salt, which is the one thing this module exists to keep
+reproducible. The window is small and opens at most once per project,
+but the upgrade to v1.4 re-opens it in EVERY project at once.
+
+A salt that is already on disk and MALFORMED is a different case: that
+is a deliberate rotation (``reason="other"``), and it still replaces
+the file — with ``O_NOFOLLOW`` but without ``O_EXCL``.
 
 ## Stdlib-only
 
@@ -64,7 +77,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 try:  # loaded as package member (_lib.injection_salt)
     from . import runtime_paths as _runtime_paths
@@ -137,11 +150,34 @@ def _read_existing(path: Path) -> Optional[bytes]:
     return data
 
 
-def _generate_and_persist(path: Path) -> bytes:
+def _generate_and_persist(
+    path: Path, replace_existing: bool = False
+) -> Tuple[bytes, str]:
     """Generate a new 32-byte salt and write it to ``path``.
 
-    Returns the salt on success; ``b""`` on any I/O failure. Sets
-    file mode ``0o600`` and parent dir mode ``0o700`` (best-effort).
+    Returns ``(salt, outcome)`` where outcome is one of:
+
+    * ``"created"`` — this process won the race and the returned bytes
+      are the ones now on disk;
+    * ``"exists"`` — another process created the file first; NOTHING was
+      written and the caller must read the winner's bytes;
+    * ``"error"`` — an I/O failure; the salt is ``b""`` (fail-open, the
+      caller degrades to the unsalted hash).
+
+    rc.1 re-pass part 6 C2 — the outcome is the whole point of the
+    signature. Pre-cure this returned bare bytes written with
+    ``path.write_bytes``, which TRUNCATES: two processes minting at once
+    both "succeeded", each cached its own value, and one of the two was
+    orphaned from the file. A caller that cannot tell "I created it"
+    from "someone else did" also cannot tell whether it may register a
+    mint, and the loser used to write a ``salt-minted.json`` marker for
+    a mint it never performed.
+
+    ``replace_existing`` selects ``O_TRUNC`` over ``O_EXCL`` for the one
+    case that must overwrite: a pre-existing MALFORMED salt, which
+    ``_read_existing`` rejected and ``get_instance_salt`` records as a
+    rotation rather than a first mint. ``O_NOFOLLOW`` holds in both
+    arms. Sets file mode ``0o600`` and parent dir mode ``0o700``.
     """
     try:
         # rail r2 F + r5: cria e aperta SO no caminho default — um dir
@@ -158,12 +194,27 @@ def _generate_and_persist(path: Path) -> bytes:
         ))
         _runtime_paths.ensure_state_dir(path.parent, tighten=not _overridden)
     except Exception:
-        return b""
+        return b"", "error"
+    salt = os.urandom(_SALT_BYTES)
+    # O_EXCL is the election; O_NOFOLLOW refuses a symlink squatting on
+    # the salt path (same discipline as the marker below, and as the
+    # audit writer PLAN-024 already ratified). O_TRUNC only on the
+    # deliberate replace-a-malformed-salt arm.
+    _flags = os.O_WRONLY | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    _flags |= os.O_TRUNC if replace_existing else os.O_EXCL
     try:
-        salt = os.urandom(_SALT_BYTES)
-        path.write_bytes(salt)
+        _fd = os.open(str(path), _flags, _SALT_MODE)
+    except FileExistsError:
+        # Lost the race. Writing nothing is the entire cure: the winner's
+        # bytes stay on disk and the caller re-reads them.
+        return b"", "exists"
     except OSError:
-        return b""
+        return b"", "error"
+    try:
+        with os.fdopen(_fd, "wb") as _fh:
+            _fh.write(salt)
+    except OSError:
+        return b"", "error"
     try:
         os.chmod(path, _SALT_MODE)
     except OSError:
@@ -172,7 +223,7 @@ def _generate_and_persist(path: Path) -> bytes:
         # the salt; future readers may face stricter access but the
         # current process succeeds.
         pass
-    return salt
+    return salt, "created"
 
 
 def get_instance_salt() -> bytes:
@@ -205,15 +256,44 @@ def get_instance_salt() -> bytes:
     # devolver None e cair aqui — registrar isso como `first_mint`
     # esconderia uma ROTACAO real (que invalida a correlacao de
     # prompt_sha256) e sobrescreveria o marcador anterior.
-    _preexisting = False
-    try:
-        _preexisting = path.exists()
-    except OSError:
-        pass
-    salt = _generate_and_persist(path)
-    if salt:
+    #
+    # rc.1 re-pass part 6 C2 — that distinction used to be drawn by a
+    # `path.exists()` probe right here, and the probe cannot draw it: it
+    # cannot tell "was already there, malformed" from "appeared one
+    # microsecond ago because another process just won the mint". A loser
+    # that read the file as absent and then found it present concluded
+    # ROTATION and truncated the winner — which is the very defect this
+    # cure exists to close, re-introduced by the classifier. The first
+    # cut of this cure did exactly that, and its own concurrency test
+    # caught it.
+    #
+    # So the classification moves AFTER the exclusive create, which is the
+    # only race-free moment available: O_EXCL succeeding IS "first mint",
+    # and O_EXCL failing hands us a file we can then read and judge.
+    _rotation = False
+    salt, _outcome = _generate_and_persist(path)
+    if _outcome == "exists":
+        _winner = _read_existing(path)
+        if _winner is not None:
+            # We lost the race. The winner's bytes are on disk, so they are
+            # what every future reader reproduces `prompt_sha256` from — we
+            # adopt them and register NO mint, because we minted nothing and
+            # a marker here would be forensic ground truth for an event that
+            # never happened.
+            _CACHED_SALT = (path_id, _winner)
+            return _winner
+        # Present but malformed: the rotation case (rail r15 P2-4). Replace
+        # it ONCE — never a retry loop, since a second EEXIST would mean a
+        # third writer we would simply lose to again. A well-formed salt
+        # landing between the read above and this replace would be
+        # overwritten; that window is a few instructions wide and only
+        # opens when the file was already corrupt, which is strictly
+        # narrower than the pre-cure behaviour of always truncating.
+        _rotation = True
+        salt, _outcome = _generate_and_persist(path, replace_existing=True)
+    if _outcome == "created" and salt:
         _CACHED_SALT = (path_id, salt)
-        _register_mint(path, reason="other" if _preexisting else "first_mint")
+        _register_mint(path, reason="other" if _rotation else "first_mint")
     return salt
 
 
@@ -223,8 +303,18 @@ def _register_mint(salt_path: Path, reason: str = "first_mint") -> None:
     (a) Marker sidecar next to the salt — forensic ground truth that
         survives even when no emitter ever runs in this project.
     (b) Best-effort lazy chain event ``salt_rotation_registered``
-        (kwargs top-level; the slug travels only as a 16-hex sha256
-        prefix — the path text never reaches the wire).
+        (kwargs top-level; the SLUG travels only as a 16-hex sha256
+        prefix, and the salt path text is never sent).
+
+    rc.1 re-pass part 6 C5 — this used to say "the path text never
+    reaches the wire" without qualification, which reads as a claim
+    about the whole event and is false: ``project`` is a REQUIRED base
+    field of every registered line (SPEC/v1/audit-log.schema.md) and
+    carries the repository path here exactly as it does on every other
+    event, in this version and in v1.3.0. What this arm keeps off the
+    wire is the SLUG text and the salt's own path, not the repository
+    identifier the schema requires.
+
     Neither arm may raise: salt availability is invariant (ADR-005).
     """
     slug = ""
@@ -244,13 +334,48 @@ def _register_mint(salt_path: Path, reason: str = "first_mint") -> None:
             "pid": os.getpid(),
         }
         marker_path = salt_path.parent / _MINT_MARKER_FILENAME
-        marker_path.write_text(
-            json.dumps(marker, sort_keys=True) + "\n", encoding="utf-8"
+        # rc.1 re-pass part 6 C3 — `write_text` FOLLOWS a symlink and
+        # truncates its target, and the `chmod` that used to follow it
+        # dropped that target to 0600. The re-pass reproduced both against
+        # a file outside the state tree. Planting the link needs write
+        # access to a 0700 directory, so this is same-UID hardening rather
+        # than a modelled threat (docs/threat-model.md) — but the write
+        # side of this library already refuses to follow links (PLAN-024),
+        # and one writer in the family behaving differently is the
+        # inconsistency, not the risk calculation.
+        if os.path.islink(str(marker_path)):
+            # Named refusal, fail-open like the rest of this arm: the salt
+            # is minted and usable; only the forensic sidecar is skipped.
+            _breadcrumb_target = str(marker_path)
+            raise OSError(
+                "mint marker path is a symlink, refusing to follow: %s"
+                % _breadcrumb_target
+            )
+        _tmp_path = marker_path.parent / (
+            "." + _MINT_MARKER_FILENAME + "." + os.urandom(6).hex() + ".tmp"
+        )
+        _mfd = os.open(
+            str(_tmp_path),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            _SALT_MODE,
         )
         try:
-            os.chmod(marker_path, _SALT_MODE)
-        except OSError:
-            pass
+            with os.fdopen(_mfd, "w", encoding="utf-8") as _mfh:
+                _mfh.write(json.dumps(marker, sort_keys=True) + "\n")
+            try:
+                os.chmod(str(_tmp_path), _SALT_MODE)
+            except OSError:
+                pass
+            # `os.replace` renames ONTO the destination: it does not follow
+            # a symlink there, it replaces it. The islink check above is
+            # what makes the refusal explicit rather than incidental.
+            os.replace(str(_tmp_path), str(marker_path))
+        except Exception:
+            try:
+                os.unlink(str(_tmp_path))
+            except OSError:
+                pass
+            raise
     except Exception:
         pass
     try:

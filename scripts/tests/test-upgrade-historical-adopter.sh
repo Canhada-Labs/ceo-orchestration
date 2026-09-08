@@ -1012,7 +1012,24 @@ _UPGRADE_SEQ=$(( _UPGRADE_SEQ + 1 ))
 LOG_T="$T.upgrade.$_UPGRADE_SEQ.log"
 _T_RC=0
 bash "$T_SRC/scripts/upgrade.sh" "$T" --profile core --no-diff-warn --no-replay > "$LOG_T" 2>&1 || _T_RC=$?
-[ "$_T_RC" -eq 0 ] || { tail -40 "$LOG_T" >&2; scaffold "upgrade.sh returned rc=$_T_RC on the bad-transform fixture (the table is well-formed, so the whole-table precondition must NOT fire here)"; }
+# rc.1 re-pass part 1 P1-4 — this used to demand rc=0 and call a non-zero a
+# SCAFFOLD failure, which is how the defect stayed green: the WHOLE-table
+# preconditions (zero routes, rejected row) do not fire on this fixture (the
+# table is well-formed, routes == rows, and H.15c below still proves every
+# route reached a verdict) — but a route this upgrader cannot render is a
+# FAILED delivery all the same, and CHANGELOG.md:48 of this release says a
+# failed delivery exits 3. rc=0 here was the contradiction.
+if [ "$_T_RC" -eq 3 ]; then
+  ok "H.15a the unrenderable route exits 3 (a named refusal that returns success is a failure the caller cannot see)"
+else
+  tail -40 "$LOG_T" >&2
+  bad "H.15a upgrade.sh returned rc=$_T_RC on the bad-transform fixture, expected 3 — nothing was delivered for .github/CODEOWNERS and the run reported success (see $LOG_T)"
+fi
+if grep -q "precondition=FAILED" "$LOG_T" && grep -q "unrenderable-transform" "$LOG_T"; then
+  ok "H.15a2 the delivery summary and the banner both name the reason (unrenderable-transform)"
+else
+  bad "H.15a2 the run exits non-zero but neither the summary line nor the banner names the precondition — a log-only consumer sees a plausible summary (see $LOG_T)"
+fi
 
 if grep -q "SKIPPED (unsupported transform 'substitute:{{OWNER_HANDLE}}-NOT-A-REAL-TRANSFORM')" "$LOG_T"; then
   ok "H.15 the unrenderable transform was refused BY NAME (and by its value, so the message cannot go stale)"
@@ -1034,6 +1051,74 @@ if [ "$T_SEEN" -eq "$EXPECTED_ROUTES" ]; then
   ok "H.15c the refused route still reached a verdict — $T_SEEN of $EXPECTED_ROUTES accounted for"
 else
   bad "H.15c $T_SEEN verdict(s) for $EXPECTED_ROUTES routes — the refusal dropped a destination instead of counting it (see $LOG_T)"
+fi
+
+# --- H.15d (rc.1 re-pass part 1 P1-4) a GENERIC route with no renderer ------
+# H.15 covers the CODEOWNERS branch, which has its own transform test. The
+# finding was measured on the OTHER site: the `*)` arm of the delivery case
+# analysis, which every ordinary identity route falls through. A table whose
+# `docs/rotation-log.md` row declares a transformation nobody taught this
+# renderer used to print a named SKIP, count it, satisfy the conservation law,
+# print "Upgrade complete." and exit 0 with that document NOT delivered. That
+# is the benign shape that matters: not an attacker, but a route added upstream
+# without teaching the renderer — the D1..D4 class by another door.
+echo ""
+echo "==> H.15d — a generic route declaring an unrenderable transform exits 3"
+G="$WORK/badgeneric/adopter"
+_install_into "$G"
+BAD_GEN_TSV="$WORK/badgeneric/routes-bad-generic.tsv"
+mkdir -p "$( dirname "$BAD_GEN_TSV" )"
+# Same six destinations (routes == rows, so the whole-table preconditions stay
+# silent and the per-route refusal is the ONLY thing under test); one transform
+# changed on a row that is otherwise valid and confined.
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "docs/rotation-log.md" && $2 != "src" { $3 = "substitute:{{TYPO}}" }
+  { print }' "$ROUTES" > "$BAD_GEN_TSV" || scaffold "H.15d could not write the hostile table copy"
+grep -q 'substitute:{{TYPO}}' "$BAD_GEN_TSV" || scaffold "H.15d the planted transform is absent — the control would be vacuous"
+ROT_SHA_G="$( _sha "$G/docs/rotation-log.md" )"
+G_SRC="$WORK/badgeneric/srccopy"
+_mk_source_copy "$G_SRC" "$BAD_GEN_TSV" \
+  || scaffold "H.15d could not build the copied checkout carrying the bad-transform table"
+_UPGRADE_SEQ=$(( _UPGRADE_SEQ + 1 ))
+LOG_G="$G.upgrade.$_UPGRADE_SEQ.log"
+_G_RC=0
+bash "$G_SRC/scripts/upgrade.sh" "$G" --profile core --no-diff-warn --no-replay > "$LOG_G" 2>&1 || _G_RC=$?
+if [ "$_G_RC" -eq 3 ]; then
+  ok "H.15d the unrenderable generic route exits 3 (CHANGELOG: a failed delivery exits 3)"
+else
+  tail -40 "$LOG_G" >&2
+  bad "H.15d upgrade.sh returned rc=$_G_RC, expected 3 — docs/rotation-log.md was not delivered and the run reported success (see $LOG_G)"
+fi
+if grep -q "SKIP (route declares a transform with no renderer, or the row is malformed): docs/rotation-log.md" "$LOG_G"; then
+  ok "H.15d2 the refusal names the destination it refused"
+else
+  bad "H.15d2 no named refusal for docs/rotation-log.md — the route was dropped silently (see $LOG_G)"
+fi
+if grep -q "Upgrade INCOMPLETE" "$LOG_G" && ! grep -q "==> Upgrade complete." "$LOG_G"; then
+  ok "H.15d3 the human banner agrees with the exit code (INCOMPLETE, never 'Upgrade complete.')"
+else
+  bad "H.15d3 the banner and the rc disagree — the two surfaces a human and a script read tell different stories (see $LOG_G)"
+fi
+if grep -q '"upgrade_succeeded": false' "$G/.claude/.install-state.json" 2>/dev/null; then
+  ok "H.15d4 the persisted install-state records upgrade_succeeded: false"
+else
+  bad "H.15d4 the install-state does not persist upgrade_succeeded: false after a refused route (see $G/.claude/.install-state.json)"
+fi
+if [ "$( _sha "$G/docs/rotation-log.md" )" = "$ROT_SHA_G" ]; then
+  ok "H.15d5 docs/rotation-log.md is byte-identical to before — the refusal wrote nothing"
+else
+  bad "H.15d5 docs/rotation-log.md changed under a route this upgrader declared it cannot render"
+fi
+G_SEEN=0
+for _k in installed refreshed identical preserved skipped; do
+  _v="$( _summary_field "$LOG_G" "$_k" )"
+  case "${_v:-}" in ''|*[!0-9]*) _v=0 ;; esac
+  G_SEEN=$(( G_SEEN + _v ))
+done
+if [ "$G_SEEN" -eq "$EXPECTED_ROUTES" ]; then
+  ok "H.15d6 the refused route still reached a verdict — $G_SEEN of $EXPECTED_ROUTES accounted for (the conservation law survives the cure)"
+else
+  bad "H.15d6 $G_SEEN verdict(s) for $EXPECTED_ROUTES routes — the fail-closed refusal dropped a destination instead of counting it (see $LOG_G)"
 fi
 
 # --- H.17 (rail round-3 F5) a DANGLING CODEOWNERS symlink counts as PRESENT -

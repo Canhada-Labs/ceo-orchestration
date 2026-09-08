@@ -887,6 +887,31 @@ for _case in "t-missing.tsv:no such file" "t-nohdr.tsv:no header" "t-hdronly.tsv
   fi
 done
 
+# rc.1 re-pass part 2 P1 — a SYMLINKED table leaf. `-f` follows links, so the
+# "readable regular file" gate answered YES for a table whose bytes live
+# outside the checkout, and both the reader and the upgrade snapshot consumed
+# them. The link here points at the REAL table, so the run is well-formed in
+# every respect except provenance: rejecting it is a statement about where the
+# bytes came from, not about whether they parse. That is what makes this leg
+# discriminating — a gate that only refused MALFORMED external tables would
+# pass this and still be the defect.
+if ln -s "$ROUTES" "$WORKROOT/t-symlink.tsv" 2>/dev/null; then
+  R="$( _table_ok "$WORKROOT/t-symlink.tsv" )"
+  if [ "${R%%|*}" = "1" ] && [ -n "${R#*|}" ]; then
+    ok "S.10d a symlinked table is REFUSED by name (${R#*|})"
+  else
+    bad "S.10d a symlinked table gave '$R' — expected rc=1: -f follows links, so the 'regular file' gate was reading bytes from outside the checkout"
+  fi
+  # Control: the same bytes, reached directly, are still accepted. Without it
+  # S.10d is satisfied by a gate that refuses everything.
+  R="$( _table_ok "$ROUTES" )"
+  [ "${R%%|*}" = "0" ] \
+    && ok "S.10d-control the same table read directly is still accepted (the refusal is about the LINK)" \
+    || bad "S.10d-control the real table is now rejected ($R) — the symlink refusal is over-broad"
+else
+  bad "S.10d could not create the symlink fixture — this leg is dead, not passing"
+fi
+
 # _wbm_prior_digest: the manifest relpaths carry `.` (`.github/CODEOWNERS`),
 # and the retired `grep -E "^[0-9a-f]{64}  $1$"` treated them as a REGEX, so a
 # record for `Xgithub/CODEOWNERS` answered a query for `.github/CODEOWNERS`.

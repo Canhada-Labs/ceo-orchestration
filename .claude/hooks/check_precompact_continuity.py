@@ -89,6 +89,7 @@ import glob
 import json
 import os
 import re
+import stat as stat_mod
 import subprocess
 import sys
 import time
@@ -1413,8 +1414,27 @@ def _ledger_index(cwd: str, deadline: float) -> Dict[str, Any]:
         "last_commit": "",
     }
     ledger_abs = os.path.join(cwd, rel)
-    if not os.path.isfile(ledger_abs):
-        # Honest index: the plan is derivable but keeps no ledger (yet).
+    # rc.1 re-pass part 5 H3 — `os.path.isfile` follows symlinks, and so does
+    # the `open` below. A `.claude/plans/PLAN-NNN/LEDGER.md` symlinked OUTSIDE
+    # the repository made this reader copy up to 64 KiB of someone else's
+    # Markdown headings into the continuity snapshot (reproduced: an
+    # `## EXFIL-HEADING-OUTSIDE-REPO` heading landed in the blob). The library
+    # this hook is part of already refuses symlinks on confined-read surfaces
+    # (`scratchpad_lib._gc_write_cursor`, `runtime_paths`), and the table-read
+    # gate in the installer was cured of the identical `-f`-follows-links
+    # defect in this same re-pass. Fail-closed on INPUT is the house rule
+    # (CLAUDE.md §4): a ledger this reader cannot prove is a regular file
+    # inside the tree yields a DEGRADED index, never external content.
+    try:
+        _lst = os.lstat(ledger_abs)
+    except OSError:
+        # Absent, or a path we cannot stat: the honest "no ledger yet" answer.
+        return out
+    if stat_mod.S_ISLNK(_lst.st_mode):
+        _breadcrumb("ledger is a symlink — refusing to follow (index degraded)")
+        return out
+    if not stat_mod.S_ISREG(_lst.st_mode):
+        _breadcrumb("ledger is not a regular file — index degraded")
         return out
     out["present"] = True
     # Rail r1 P2-5: the shared wall deadline is re-checked before EACH
@@ -1430,7 +1450,20 @@ def _ledger_index(cwd: str, deadline: float) -> Dict[str, Any]:
         # sitio (censo da classe varrido: era o ultimo read capado em
         # modo texto dos dois hooks). read(n) de TextIO conta CHARS e um
         # LEDGER multibyte estourava o teto declarado em BYTES.
-        with open(ledger_abs, "rb") as fh:
+        # O_NOFOLLOW closes the TOCTOU window between the lstat above and
+        # this open (a link swapped in between the two would otherwise be
+        # followed); the fstat comparison is what makes the refusal provable
+        # rather than assumed. `getattr` because O_NOFOLLOW is POSIX and 0 is
+        # a safe no-op elsewhere — the fstat check still holds there.
+        _fd = os.open(
+            ledger_abs, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        )
+        with os.fdopen(_fd, "rb") as fh:
+            _fst = os.fstat(fh.fileno())
+            if (_fst.st_dev, _fst.st_ino) != (_lst.st_dev, _lst.st_ino):
+                _breadcrumb("ledger changed identity between stat and open")
+                out["sections"] = []
+                return out
             text = fh.read(_LEDGER_INDEX_MAX_BYTES).decode(
                 "utf-8", "replace"
             )

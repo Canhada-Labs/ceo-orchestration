@@ -935,17 +935,21 @@ else
 
   GRAMMAR_MISMATCH=0
   GRAMMAR_CHECKED=0
+  # rc.1 re-pass part 2 P2 — 'trail-', 'a--b' and 'a-' are the values that
+  # DISCRIMINATE the tightened grammar. Without them this leg would keep
+  # passing by agreeing with the reference regex on the defect they name.
   for v in 'a' 'A9' 'acme-platform' 'a-b-c' \
            'abcdefghij0123456789abcdefghij012345678' \
            'abcdefghij0123456789abcdefghij0123456789' \
-           '' '-lead' 'acme/platform' 'amp&sand' 'back\slash' 'has space' \
+           '' '-lead' 'trail-' 'a-' 'a--b' 'a---b' 'acme--' \
+           'acme/platform' 'amp&sand' 'back\slash' 'has space' \
            'dot.dot' 'under_score' 'pipe|pipe' 'semi;colon' 'tick`tick' \
            'dollar$sign' 'at@sign' 'tilde~x' 'quote"x' "apos'x"; do
     if _grammar_accepts "$v" 2>/dev/null; then
       SH_ANS=accept; else SH_ANS=reject; fi
     if PYTHONNOUSERSITE=1 python3 -I -c '
 import re, sys
-sys.exit(0 if re.match(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$", sys.argv[1]) else 1)
+sys.exit(0 if re.match(r"^[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}$", sys.argv[1]) else 1)
 ' "$v" 2>/dev/null; then PY_ANS=accept; else PY_ANS=reject; fi
     GRAMMAR_CHECKED=$((GRAMMAR_CHECKED+1))
     if [ "$SH_ANS" != "$PY_ANS" ]; then

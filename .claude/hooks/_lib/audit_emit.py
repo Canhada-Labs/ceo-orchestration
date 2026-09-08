@@ -6951,10 +6951,20 @@ def emit_generic(action: str, **kwargs: Any) -> None:
             )
     # PLAN-182 W1 (ADR-079 S318 amendment §2) — salt mint register.
     # Dedicated scrub branch (NEVER _EMIT_GENERIC_PASSTHROUGH). The
-    # field-name scrub DROPS non-allowlisted keys (a smuggled slug/path/
-    # salt value never reaches the wire); closed-enum + shape coercion
-    # closes the direct emit_generic-caller path (S172 doctrine —
-    # rejected values are replaced with the safe sentinel, never echoed).
+    # field-name scrub DROPS non-allowlisted keys, so a slug, salt path or
+    # salt value SMUGGLED IN UNDER A KEY THIS ACTION DOES NOT DECLARE never
+    # reaches the wire; closed-enum + shape coercion closes the direct
+    # emit_generic-caller path (S172 doctrine — rejected values are
+    # replaced with the safe sentinel, never echoed).
+    #
+    # rc.1 re-pass part 6 C5 — the sentence above used to read "a smuggled
+    # slug/path/salt value never reaches the wire" without saying WHICH
+    # keys, which a reader takes as a claim that no path is ever emitted
+    # here. `project` is an ALLOWLISTED base field required of every
+    # registered line (SPEC/v1/audit-log.schema.md), and it carries the
+    # repository path on this action exactly as it does on every other one,
+    # in this version and in v1.3.0. The scrub is about UNDECLARED keys;
+    # it is not, and never was, a promise that the event carries no path.
     elif action == "salt_rotation_registered":
         event, dropped = _scrub_ceo_boot_event(
             event, _SALT_ROTATION_REGISTERED_ALLOWLIST

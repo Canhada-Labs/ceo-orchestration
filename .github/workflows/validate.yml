@@ -17,8 +17,17 @@ on:
 # Cancel in-progress runs when a newer commit lands on the same ref.
 # Prevents duplicate compute on rapid-fire PR updates and matches the
 # devops-ci-cd skill's concurrency-control mandate.
+#
+# rc.1 re-pass round 2, part 4 — the group carries the EVENT NAME because
+# `schedule` and `push` share `github.ref` on the default branch: both are
+# `refs/heads/main`. With one group and `cancel-in-progress: true`, a push
+# to main during the nightly CANCELLED it, and the replacement run is a
+# `push` run — which the matrix above deliberately narrows to 3.9 and 3.12.
+# The A0 backstop exists precisely so 3.10/3.11 stay covered on this branch;
+# sharing the group is what silently spent that coverage. (`pull_request`
+# never collided: its ref is `refs/pull/<n>/merge`.)
 concurrency:
-  group: validate-${{ github.ref }}
+  group: validate-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 # Least-privilege: this workflow only reads the repo to validate.

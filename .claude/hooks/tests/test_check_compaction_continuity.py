@@ -936,6 +936,76 @@ class TestLedgerIndexUS7(unittest.TestCase):
         self.assertEqual(idx["sections"], ["Unit A", "Unit B"])
         self.assertTrue(idx["last_commit"])
 
+    # --- rc.1 re-pass part 5 H3: the ledger read is CONFINED ---------------
+    # `os.path.isfile()` and `open()` both follow symlinks. An adopter (or any
+    # agent with write access to the tree) could point
+    # `.claude/plans/PLAN-NNN/LEDGER.md` at a file OUTSIDE the repository, and
+    # this reader copied up to 64 KiB of its `## ` headings into the
+    # continuity snapshot. Reproduced in the re-pass: an
+    # `## EXFIL-HEADING-OUTSIDE-REPO-XYZ` heading arrived in the blob.
+
+    def test_symlinked_ledger_is_refused_and_reads_nothing_outside_the_repo(self):
+        import tempfile
+        import time as _t
+        marker = "EXFIL-HEADING-OUTSIDE-REPO-XYZ"
+        with tempfile.TemporaryDirectory() as outside:
+            secret = Path(outside) / "elsewhere.md"
+            secret.write_text(
+                "# Outside\n\n## %s\nbody\n" % marker, encoding="utf-8"
+            )
+            with tempfile.TemporaryDirectory() as tmp:
+                self._mkrepo(tmp, [".claude/plans/PLAN-042/notes.md"])
+                link = Path(tmp) / ".claude/plans/PLAN-042/LEDGER.md"
+                link.parent.mkdir(parents=True, exist_ok=True)
+                link.symlink_to(secret)
+                self.assertTrue(link.is_symlink(), "fixture: no symlink planted")
+                self.assertIn(
+                    marker, secret.read_text(encoding="utf-8"),
+                    "fixture: the external file does not carry the marker",
+                )
+                idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 5.0)
+        # The index still ANSWERS — degraded, not absent: the plan is still
+        # derivable, there is simply no ledger this reader will vouch for.
+        self.assertEqual(idx["plan_id"], "PLAN-042")
+        self.assertFalse(
+            idx["present"],
+            "a symlinked ledger was accepted as present: %r" % (idx,),
+        )
+        self.assertEqual(idx["sections"], [])
+        self.assertNotIn(marker, json.dumps(idx))
+
+    def test_ledger_that_is_not_a_regular_file_is_refused(self):
+        # A FIFO at the ledger path would otherwise block the reader inside a
+        # hook that owns a 2.5 s budget. lstat answers before any open.
+        import os as _os
+        import tempfile
+        import time as _t
+        with tempfile.TemporaryDirectory() as tmp:
+            self._mkrepo(tmp, [".claude/plans/PLAN-042/notes.md"])
+            fifo = Path(tmp) / ".claude/plans/PLAN-042/LEDGER.md"
+            fifo.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                _os.mkfifo(str(fifo))
+            except (AttributeError, OSError):
+                self.skipTest("mkfifo unavailable on this platform")
+            idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 5.0)
+        self.assertFalse(idx["present"])
+        self.assertEqual(idx["sections"], [])
+
+    def test_regular_ledger_inside_the_repo_still_reads(self):
+        """The refusal must be about the LINK, not about ledgers."""
+        import tempfile
+        import time as _t
+        with tempfile.TemporaryDirectory() as tmp:
+            self._mkrepo(
+                tmp,
+                [".claude/plans/PLAN-042/notes.md"],
+                ledger_text="# L\n\n## Kept\n",
+            )
+            idx = _pre_hook._ledger_index(tmp, _t.monotonic() + 5.0)
+        self.assertTrue(idx["present"])
+        self.assertEqual(idx["sections"], ["Kept"])
+
     def test_no_plan_paths_returns_empty(self):
         import tempfile
         import time as _t

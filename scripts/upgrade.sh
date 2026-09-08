@@ -4176,6 +4176,29 @@ _UP_DELIVERY_PRECONDITION_FAILED=0
 # entry that only knows "failed" cannot be triaged a week later.
 _UP_DELIVERY_PRECONDITION_REASON=""
 
+# rc.1 re-pass part 1 P1-4 — a route the table DECLARES and this run cannot
+# render is a FAILED delivery, never "nothing to do". Pre-cure the four sites
+# that call this printed a named SKIP, bumped _UP_TPL_SKIPPED, satisfied the
+# conservation law, and left the flag at 0: "Upgrade complete." and exit 0 with
+# docs/ or .github/ NOT delivered — the exact observable CHANGELOG.md:48 of
+# this release denies ("A failed delivery exits 3 and persists
+# upgrade_succeeded: false"), and the same shape as the D1..D4 class that cost
+# six sessions of red main. The two OTHER ways to poison the same table (zero
+# routes, a rejected row) already exit 3; this one did not, and that
+# inconsistency was the finding.
+# One function, not four inline pairs: the sites that must fail-closed are a
+# CLASS, and a fifth one added later either calls this or is visibly missing it.
+# The SKIPPED counter stays where it was — a refusal is still a verdict, so the
+# conservation law below keeps holding and the summary line still balances.
+# NOT called from the BENIGN skips, which are decisions rather than failures:
+# "branch not taken" (the mutually exclusive CODEOWNERS/.template pair),
+# "CODEOWNERS present"/"present as symlink" (the same exclusivity), and
+# "source missing (at pin ...)" (a --pin tree legitimately lacking the bytes).
+_up_route_unrenderable() {
+  _UP_DELIVERY_PRECONDITION_FAILED=1
+  _UP_DELIVERY_PRECONDITION_REASON="unrenderable-transform"
+}
+
 # The GitHub handle a previous install recorded, or empty. Same trust class as
 # every other install-state read: target-side, UNSIGNED, advisory. STRICTLY
 # charset-validated before it is ever interpolated into a sed script —
@@ -4977,6 +5000,7 @@ elif [ "$_TEMPLATE_DELIVERY" -eq 1 ]; then
         if [ "$_up_rc" -ne 2 ] || [ "$_UP_CO_TRANSFORM" != "$_UP_CO_TRANSFORM_SUPPORTED" ]; then
           echo "    SKIPPED (unsupported transform '$_UP_CO_TRANSFORM'): .github/CODEOWNERS (this upgrader renders only '$_UP_CO_TRANSFORM_SUPPORTED'; route reader rc=$_up_rc) — nothing written" >&2
           _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          _up_route_unrenderable
           continue
         fi
         if [ -z "$_UP_CO_SRC_REL" ] \
@@ -4984,6 +5008,7 @@ elif [ "$_TEMPLATE_DELIVERY" -eq 1 ]; then
                 && ! _wbm_route_relpath_ok "$_UP_CO_SRC_REL"; }; then
           echo "    SKIPPED (unsupported transform '$_UP_CO_TRANSFORM'): .github/CODEOWNERS (the row declares no usable source: '$_UP_CO_SRC_REL') — nothing written" >&2
           _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          _up_route_unrenderable
           continue
         fi
         # MUTUALLY EXCLUSIVE with .github/CODEOWNERS.template per run
@@ -5067,8 +5092,9 @@ elif [ "$_TEMPLATE_DELIVERY" -eq 1 ]; then
           continue
         fi
         if [ "$_up_rc" -ne 0 ] || [ -z "$_up_src_rel" ]; then
-          echo "    SKIP (no identity route): $_up_dest"
+          echo "    SKIP (no identity route): $_up_dest" >&2
           _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          _up_route_unrenderable
           continue
         fi
         _up_deliver_template "$_up_dest" "$SOURCE_DIR/$_up_src_rel" "$_up_src_rel" ""
@@ -5080,6 +5106,7 @@ elif [ "$_TEMPLATE_DELIVERY" -eq 1 ]; then
           # renderer for: fail-CLOSED, named, never a silent skip.
           echo "    SKIP (route declares a transform with no renderer, or the row is malformed): $_up_dest" >&2
           _UP_TPL_SKIPPED=$(( _UP_TPL_SKIPPED + 1 ))
+          _up_route_unrenderable
           continue
         fi
         _up_deliver_template "$_up_dest" "$SOURCE_DIR/$_up_src_rel" "$_up_src_rel" ""
@@ -5115,7 +5142,14 @@ UPTPLLOOP
     _UP_DELIVERY_PRECONDITION_FAILED=1
     _UP_DELIVERY_PRECONDITION_REASON="unclassified-route"
   fi
-  echo "    docs/.github delivery: routes=$_UP_TPL_ROUTES installed=$_UP_TPL_INSTALLED refreshed=$_UP_TPL_REFRESHED identical=$_UP_TPL_IDENTICAL preserved=$_UP_TPL_PRESERVED skipped=$_UP_TPL_SKIPPED"
+  # rc.1 re-pass part 1 P1-4 — the two precondition branches above already
+  # carry `precondition=FAILED` on this line for log-only consumers; a
+  # per-route refusal has to say the same thing on the same surface, or a
+  # log reader sees a plausible summary while the run exits 3.
+  _UP_TPL_SUMMARY_TAIL=""
+  [ "${_UP_DELIVERY_PRECONDITION_FAILED:-0}" -eq 1 ] \
+    && _UP_TPL_SUMMARY_TAIL=" precondition=FAILED — PRECONDITION FAILED (${_UP_DELIVERY_PRECONDITION_REASON:-unspecified})"
+  echo "    docs/.github delivery: routes=$_UP_TPL_ROUTES installed=$_UP_TPL_INSTALLED refreshed=$_UP_TPL_REFRESHED identical=$_UP_TPL_IDENTICAL preserved=$_UP_TPL_PRESERVED skipped=$_UP_TPL_SKIPPED$_UP_TPL_SUMMARY_TAIL"
 fi
 
 # PLAN-161 U3 — mis-install scan/purge. Runs in ALL modes (flag-absent and

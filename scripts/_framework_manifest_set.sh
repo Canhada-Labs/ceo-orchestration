@@ -873,6 +873,17 @@ _wbm_dst_refuses() {
 # delimiter in every consumer, which is its own wave; until then the refusal
 # says so instead of corrupting the file.
 # rc 0 = the value is a handle this framework may interpolate.
+#
+# rc.1 re-pass part 2 P2 — the predicate and the error text both call this a
+# GitHub-handle grammar, and it accepted `owner-` and `a--b`, which GitHub
+# does not issue. The installer then exited 0 after rendering that token into
+# every CODEOWNERS rule, so the repository carried the syntax of review
+# routing with none of the protection the success message implies. Two
+# refusals close the gap without renaming the contract: a final alphanumeric
+# character, and no consecutive hyphens. The consumers (install.sh's
+# `_assert_github_owner_grammar`, upgrade.sh's install-state reader,
+# doctor.sh) all pass through THIS function, so tightening it here tightens
+# them together — which is the reason it is one function and not three.
 _wbm_github_handle_ok() {
   _wbm_gh_v="${1:-}"
   [ -n "$_wbm_gh_v" ] || return 1
@@ -880,6 +891,8 @@ _wbm_github_handle_ok() {
   case "$_wbm_gh_v" in
     [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789]*) return 1 ;;
     *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-]*) return 1 ;;
+    *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789]) return 1 ;;
+    *--*) return 1 ;;
   esac
   return 0
 }
@@ -1116,6 +1129,20 @@ _wbm_route_table_ok() {
   _wbm_tok_rows=0
   if [ -z "$_wbm_tok_tbl" ]; then
     _WBM_ROUTE_TABLE_WHY="_WBM_ROUTES_TSV is empty"
+    return 1
+  fi
+  # rc.1 re-pass part 2 P1 — `-f` FOLLOWS symlinks, so the gate below claimed
+  # to require a regular file while a symlinked table was read (and, on the
+  # upgrade path, snapshotted) with no evidence left that its bytes came from
+  # outside the checkout. A well-formed external table can reroute an absent
+  # `.github/CODEOWNERS` to another allowed `templates/*` source, and the
+  # upgrade then installs those wrong bytes successfully. The leaf test comes
+  # FIRST: `-f` on a link to a regular file is true, so asking afterwards
+  # would be asking too late. (Symlinked path COMPONENTS and physical
+  # confinement to the executing checkout are the same class and are NOT
+  # closed here — named as an rc.2 item.)
+  if [ -L "$_wbm_tok_tbl" ]; then
+    _WBM_ROUTE_TABLE_WHY="delivery-route table is a symlink (refusing to follow): $_wbm_tok_tbl"
     return 1
   fi
   if [ ! -f "$_wbm_tok_tbl" ]; then

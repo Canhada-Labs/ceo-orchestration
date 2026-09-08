@@ -19,6 +19,7 @@ Verifies the per-installation salt module that backs the
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -230,15 +231,167 @@ class TestFailOpen(_IsolatedHomeMixin):
         self.assertEqual(salt, b"", "must return empty bytes on dir failure")
 
     def test_fail_open_when_file_unwritable(self) -> None:
-        # Allow mkdir to succeed but force write_bytes to fail
+        # Allow mkdir to succeed but force the salt WRITE to fail.
+        #
+        # rc.1 re-pass part 6 C2 — this used to patch `pathlib.Path.write_bytes`,
+        # which is the seam the pre-cure code wrote through. The cure writes via
+        # `os.open` + `os.fdopen`, so that patch stopped reaching the write path
+        # and this test passed while asserting nothing: it was handed a real
+        # 32-byte salt and `assertEqual(salt, b"")` failed loudly, which is the
+        # only reason the staleness was visible at all. Injecting at `os.open`
+        # keeps the fault where the code actually writes.
         path = self._expected_salt_path()
         # First ensure parent exists so the test isolates the write failure
         path.parent.mkdir(parents=True, exist_ok=True)
-        with mock.patch(
-            "pathlib.Path.write_bytes", side_effect=OSError("disk full")
-        ):
+        _real_open = os.open
+
+        def _fail_on_salt(target, *args, **kwargs):
+            if str(target) == str(path):
+                raise OSError("disk full")
+            return _real_open(target, *args, **kwargs)
+
+        with mock.patch("os.open", side_effect=_fail_on_salt):
             salt = self.salt_mod.get_instance_salt()
         self.assertEqual(salt, b"", "must return empty bytes on write failure")
+        self.assertFalse(path.exists(), "a failed mint must leave no salt file")
+
+
+class TestFirstMintIsExclusive(_IsolatedHomeMixin):
+    """rc.1 re-pass part 6 C2 — exactly one process mints; losers re-read.
+
+    Pre-cure, `_generate_and_persist` wrote with `path.write_bytes`, which
+    truncates: concurrent first-minters each generated a salt, each cached its
+    OWN value, and the file on disk kept whichever write landed last. The
+    re-pass measured 5 of 5 rounds with 6 of 6 processes holding distinct
+    salts and 5 of them orphaned from the persisted file — every
+    `prompt_sha256` those five emitted is irreproducible.
+    """
+
+    def test_loser_returns_the_winners_salt_and_registers_no_mint(self) -> None:
+        path = self._expected_salt_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        winner = bytes(range(32))
+        path.write_bytes(winner)
+
+        # The loser's view of the world: `_read_existing` answered None (it ran
+        # before the winner's write landed), so it walks into the mint branch
+        # and meets EEXIST there. Patching the reader for ONE call reproduces
+        # that interleaving without threads.
+        real_read = self.salt_mod._read_existing
+        calls = {"n": 0}
+
+        def _first_call_sees_nothing(target):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return None
+            return real_read(target)
+
+        with mock.patch.object(
+            self.salt_mod, "_read_existing", side_effect=_first_call_sees_nothing
+        ):
+            salt = self.salt_mod.get_instance_salt()
+
+        self.assertEqual(
+            salt, winner,
+            "the loser must return the WINNER's salt, not the one it generated",
+        )
+        self.assertEqual(
+            path.read_bytes(), winner,
+            "the loser must not have truncated the winner's file",
+        )
+        marker = path.parent / "salt-minted.json"
+        self.assertFalse(
+            marker.exists(),
+            "the loser minted nothing and must write no mint marker",
+        )
+
+    def test_exclusive_create_is_the_mechanism(self) -> None:
+        """The election is O_EXCL, asserted at the syscall, not inferred."""
+        path = self._expected_salt_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        seen = []
+        _real_open = os.open
+
+        def _record(target, *args, **kwargs):
+            if str(target) == str(path) and args:
+                seen.append(args[0])
+            return _real_open(target, *args, **kwargs)
+
+        with mock.patch("os.open", side_effect=_record):
+            salt = self.salt_mod.get_instance_salt()
+        self.assertEqual(len(salt), 32)
+        self.assertTrue(seen, "the salt was not created through os.open")
+        self.assertTrue(
+            seen[0] & os.O_EXCL,
+            "first mint opened without O_EXCL — two processes can both win",
+        )
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        if nofollow:
+            self.assertTrue(
+                seen[0] & nofollow,
+                "first mint opened without O_NOFOLLOW",
+            )
+
+    def test_malformed_preexisting_salt_is_still_replaced(self) -> None:
+        """O_EXCL must not break the deliberate rotation path."""
+        path = self._expected_salt_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"too-short")
+        salt = self.salt_mod.get_instance_salt()
+        self.assertEqual(len(salt), 32)
+        self.assertEqual(path.read_bytes(), salt)
+        marker = path.parent / "salt-minted.json"
+        self.assertTrue(marker.exists(), "a rotation must still be observable")
+        self.assertEqual(
+            json.loads(marker.read_text(encoding="utf-8"))["reason"], "other",
+            "replacing a malformed salt is a rotation, never a first mint",
+        )
+
+
+class TestMintMarkerDoesNotFollowSymlinks(_IsolatedHomeMixin):
+    """rc.1 re-pass part 6 C3 — the marker write refuses a symlinked path.
+
+    Reproduced pre-cure: a symlink planted at `salt-minted.json` had its
+    target OUTSIDE the state tree truncated, replaced by the marker JSON, and
+    its mode dropped to 0600 through the link.
+    """
+
+    def test_symlinked_marker_leaves_the_target_untouched(self) -> None:
+        path = self._expected_salt_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        outside = Path(self._tmp.name) / "outside-the-state-tree.txt"
+        outside.write_text("ADOPTER BYTES\n", encoding="utf-8")
+        before = outside.read_text(encoding="utf-8")
+        marker = path.parent / "salt-minted.json"
+        marker.symlink_to(outside)
+        self.assertTrue(marker.is_symlink(), "fixture: no symlink planted")
+
+        salt = self.salt_mod.get_instance_salt()
+
+        # Salt availability is invariant (ADR-005): the refusal is fail-open.
+        self.assertEqual(len(salt), 32, "the marker refusal must not cost the salt")
+        self.assertEqual(
+            outside.read_text(encoding="utf-8"), before,
+            "the symlink target was written through — C3 reproduces",
+        )
+        self.assertTrue(marker.is_symlink(), "the link itself must be left alone")
+
+    def test_marker_is_written_normally_when_no_link_is_present(self) -> None:
+        """Control: without this the refusal test passes on a dead writer."""
+        path = self._expected_salt_path()
+        salt = self.salt_mod.get_instance_salt()
+        self.assertEqual(len(salt), 32)
+        marker = path.parent / "salt-minted.json"
+        self.assertTrue(marker.exists(), "the marker is not being written at all")
+        self.assertFalse(marker.is_symlink())
+        body = json.loads(marker.read_text(encoding="utf-8"))
+        self.assertEqual(body["reason"], "first_mint")
+        # No temporary file survives the atomic replace.
+        leftovers = [
+            q.name for q in path.parent.iterdir()
+            if q.name.startswith(".salt-minted.json.")
+        ]
+        self.assertEqual(leftovers, [], "an atomic write left a temp file behind")
 
 
 if __name__ == "__main__":

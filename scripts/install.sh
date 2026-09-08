@@ -482,7 +482,7 @@ _assert_github_owner_grammar() {
     exit 2
   fi
   if ! _wbm_github_handle_ok "$_ago_val"; then
-    echo "ERROR: $_ago_where must be a GitHub handle: 1-39 characters, starting with a letter or digit, containing only letters, digits and hyphens (got: '$_ago_val')" >&2
+    echo "ERROR: $_ago_where must be a GitHub handle: 1-39 characters, starting AND ending with a letter or digit, containing only letters, digits and single (non-consecutive) hyphens (got: '$_ago_val')" >&2
     echo "       TEAM handles (org/team) are NOT supported by this flag — '/' is the substitution delimiter, and interpolating it is what leaves .github/CODEOWNERS empty." >&2
     echo "       Install without --github-owner (the .github/CODEOWNERS.template is delivered instead) and write the team line by hand." >&2
     exit 2
