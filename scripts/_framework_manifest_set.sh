@@ -1127,6 +1127,14 @@ _wbm_route_table_ok() {
   _wbm_tok_why=""
   _wbm_tok_hdr=0
   _wbm_tok_rows=0
+  # rc.1 re-pass round 3, part 1 — destinations SEEN so far, wrapped in the
+  # one byte a destination cannot contain (TAB is the field separator), so a
+  # membership test is exact. Quoting the expansion inside `case` keeps the
+  # value literal, which matters: a destination carrying a glob character
+  # would otherwise be matched as a PATTERN.
+  _wbm_tok_seen=""
+  _wbm_tok_tab="$( printf '\t' )"
+  _wbm_tok_dupe=""
   if [ -z "$_wbm_tok_tbl" ]; then
     _WBM_ROUTE_TABLE_WHY="_WBM_ROUTES_TSV is empty"
     return 1
@@ -1166,7 +1174,29 @@ _wbm_route_table_ok() {
       continue
     fi
     _wbm_tok_rows=$(( _wbm_tok_rows + 1 ))
+    # rc.1 re-pass round 3, part 1 — a DUPLICATE destination is ambiguous
+    # input, and the readers disagreed about it. `_wbm_route_dests` emits
+    # both rows, so routes == rows and the conservation law holds, but every
+    # consumer then asks `_wbm_route_src <dest>`, whose reader stops at the
+    # FIRST match: the first row runs twice, the second is silently ignored,
+    # and the run exits 0. The Python parity reader already refuses this
+    # (`scripts/tests/_parity_classify.py`), so the shell and Python halves of
+    # the same contract answered differently on exactly the input where
+    # ambiguity matters. Refused HERE, in the one gate every reader passes,
+    # so no consumer ever sees a table it would read two ways.
+    case "$_wbm_tok_seen" in
+      *"$_wbm_tok_tab$_wbm_tok_a$_wbm_tok_tab"*)
+        [ -n "$_wbm_tok_dupe" ] || _wbm_tok_dupe="$_wbm_tok_a"
+        ;;
+      *)
+        _wbm_tok_seen="$_wbm_tok_seen$_wbm_tok_tab$_wbm_tok_a$_wbm_tok_tab"
+        ;;
+    esac
   done < "$_wbm_tok_tbl"
+  if [ -n "$_wbm_tok_dupe" ]; then
+    _WBM_ROUTE_TABLE_WHY="duplicate destination '$_wbm_tok_dupe' (a destination declared twice is read one way by _wbm_route_src and another by the enumeration): $_wbm_tok_tbl"
+    return 1
+  fi
   if [ "$_wbm_tok_hdr" -ne 1 ]; then
     _WBM_ROUTE_TABLE_WHY="${_wbm_tok_why:-no 'dest<TAB>src<TAB>transform' header row}: $_wbm_tok_tbl"
     return 1

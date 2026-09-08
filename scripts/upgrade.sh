@@ -684,7 +684,29 @@ _up_tmpbase() {
 
 _UP_ROUTES_ORIGIN="${_WBM_ROUTES_TSV:-}"
 _UP_ROUTES_SNAPSHOT=""
-if [[ -n "$_UP_ROUTES_ORIGIN" ]] && [[ -f "$_UP_ROUTES_ORIGIN" ]]; then
+# rc.1 re-pass round 3, part 1 — the snapshot LAUNDERED a symlinked table.
+# `[[ -f ]]` and `cp` both FOLLOW links, and the copy is a regular file, so
+# after the snapshot `_WBM_ROUTES_TSV` names a regular tempfile and the
+# reader's own `-L` refusal examines THAT — never the leaf the operator
+# actually has on disk. A well-formed external table therefore passed a gate
+# written to refuse it, and a route could point an allowed destination at
+# different `templates/` bytes with the upgrade exiting 0.
+#
+# The test goes BEFORE `-f`, because `-f` on a link to a regular file is
+# true and asking afterwards is asking too late. On refusal the pointer is
+# LEFT on the origin: the reader gate then refuses it by name, every reader
+# answers zero routes, and the AC-9 precondition below turns that into
+# `exit 3` + `upgrade_succeeded: false`. Two mechanisms saying the same
+# thing is deliberate — this one names it early, where an operator reads the
+# log, and the reader gate is the one that decides.
+# (Symlinked path COMPONENTS and physical confinement to the executing
+# checkout are the same class and are NOT closed here — declared residual.)
+if [[ -n "$_UP_ROUTES_ORIGIN" ]] && [[ -L "$_UP_ROUTES_ORIGIN" ]]; then
+  echo "    ERROR: the delivery-route table is a SYMLINK — refusing to snapshot it" >&2
+  echo "           ($_UP_ROUTES_ORIGIN). Copying it first would hand the reader a" >&2
+  echo "           regular tempfile and launder the link past its own -L refusal;" >&2
+  echo "           the reader keeps the ORIGINAL path and fails closed on it." >&2
+elif [[ -n "$_UP_ROUTES_ORIGIN" ]] && [[ -f "$_UP_ROUTES_ORIGIN" ]]; then
   _UP_ROUTES_SNAPSHOT="$( mktemp "$( _up_tmpbase )/ceo-upgrade-routes.XXXXXX" 2>/dev/null || true )"
   if [[ -n "$_UP_ROUTES_SNAPSHOT" ]] && cp "$_UP_ROUTES_ORIGIN" "$_UP_ROUTES_SNAPSHOT" 2>/dev/null; then
     _WBM_ROUTES_TSV="$_UP_ROUTES_SNAPSHOT"

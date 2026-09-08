@@ -147,7 +147,12 @@ _commits_in_range() {
 # Canonical paths changed by one commit.
 _canonical_paths_in_commit() {
   local sha="$1" p
-  git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null | while IFS= read -r p; do
+  # --root: without it, diff-tree emits NOTHING for a ROOT commit (there is no
+  # parent to diff against), so a first push whose root commit ADDS canonical
+  # files classified an empty set and passed the gate. The Grok twin has
+  # carried this flag since pair-rail R5 (S272); this copy did not, and the
+  # two gates disagreed about the one commit that has no parent.
+  git diff-tree --root --no-commit-id --name-only -r "$sha" 2>/dev/null | while IFS= read -r p; do
     [ -n "$p" ] || continue
     if _is_canonical_path "$p"; then
       printf '%s\n' "$p"

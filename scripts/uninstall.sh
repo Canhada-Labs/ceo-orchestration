@@ -141,20 +141,36 @@ _rel_ancestor_link() {
   return 1
 }
 
-# PLAN-183 §9.8 (S337): remember which top-level trees (other than .claude,
-# which has its own sweep) this run removed from — exact-sha AND --force
-# removals — so the empty directories the deliveries leave behind are swept.
-swept_trees=""
+# PLAN-183 §9.8 (S337): remember the directories a removal may have emptied.
+#
+# rc.1 re-pass round 3, part 3 — this used to remember the TOP-LEVEL component
+# and the sweep then ran `find <top> -type d -empty -delete` over the whole
+# tree. Removing one framework file under `docs/` therefore deleted every
+# empty directory anywhere below `docs/`, including ones the adopter created.
+# The claim the sweep makes is "the directories MY deliveries left empty", and
+# the only paths that can be is the PARENT CHAIN of a file this run removed.
+swept_dirs=""
 _track_tree() {
   case "$1" in
-    .claude/*) ;;
-    */*)
-      _tt_top="${1%%/*}"
-      case " $swept_trees " in
-        *" $_tt_top "*) ;;
-        *) swept_trees="$swept_trees $_tt_top" ;;
-      esac ;;
+    .claude/*) return 0 ;;   # .claude has its own sweep
+    */*) ;;
+    *) return 0 ;;           # a top-level file leaves no directory behind
   esac
+  _tt_dir="${1%/*}"
+  while [ -n "$_tt_dir" ] && [ "$_tt_dir" != "." ] && [ "$_tt_dir" != "/" ]; do
+    case "
+$swept_dirs" in
+      *"
+$_tt_dir
+"*) ;;
+      *) swept_dirs="$swept_dirs
+$_tt_dir" ;;
+    esac
+    case "$_tt_dir" in
+      */*) _tt_dir="${_tt_dir%/*}" ;;
+      *) _tt_dir="" ;;
+    esac
+  done
 }
 # The sweep itself: only EMPTY directories go (-empty), so a tree that still
 # holds a file of the adopter's — or a PRESERVED delivery — is never touched,
@@ -162,13 +178,24 @@ _track_tree() {
 # BOTH exit paths (complete and incomplete): a partial uninstall that removed
 # every docs/ delivery but preserved an edited CODEOWNERS still empties docs/.
 _sweep_emptied_trees() {
-  for _tree in $swept_trees; do
-    case "$_tree" in ''|.|..|/*) continue ;; esac   # never leave the target
-    [ -d "$TARGET/$_tree" ] || continue
-    if ! _dry "would REMOVE empty directories left under $_tree/"; then
-      find "$TARGET/$_tree" -depth -type d -empty -delete 2>/dev/null || true
-    fi
-  done
+  # DEEPEST FIRST, so `docs/a/b` is tried before `docs/a` and a chain empties
+  # in one pass. `rmdir` on the exact path, never `find -delete` over a tree:
+  # rmdir refuses a non-empty directory by itself, so a directory holding
+  # anything at all — an adopter's file, a PRESERVED delivery, another
+  # adopter-created directory — survives without this code having to reason
+  # about it.
+  printf '%s\n' "$swept_dirs" \
+    | awk 'NF { print gsub(/\//, "/") "\t" $0 }' \
+    | sort -rn -k1,1 \
+    | cut -f2- \
+    | while IFS= read -r _dir; do
+        case "$_dir" in ''|.|..|/*|*..*) continue ;; esac   # never leave the target
+        [ -d "$TARGET/$_dir" ] || continue
+        [ -L "$TARGET/$_dir" ] && continue
+        if ! _dry "would REMOVE the empty directory $_dir/"; then
+          rmdir "$TARGET/$_dir" 2>/dev/null || true
+        fi
+      done
 }
 
 # ---------------------------------------------------------------------------
@@ -320,6 +347,73 @@ _log "    Dry-run:  $DRY_RUN"
 _log "    Force:    $FORCE"
 _log ""
 
+# --- rc.1 re-pass round 3, part 3: the NUL preflight ------------------------
+# `read -r` on the Bash 3.2 floor this project supports DISCARDS a NUL and
+# everything after it in that record, so the per-record `grep [[:cntrl:]]`
+# below never sees it: `<valid-sha>  docs/file<NUL>garbage` arrived at the
+# parser already truncated to `<valid-sha>  docs/file`, hashed, matched, and
+# was deleted — with the manifest removed and the run exiting 0. The reviewer
+# reproduced exactly that under 3.2.57. A per-record check cannot see a byte
+# that `read` ate; the question has to be asked of the FILE, in raw bytes,
+# before anything parses it. Refusing the WHOLE manifest is the only honest
+# answer: a NUL means the file is not the text this uninstaller can read, and
+# picking the survivors would be deciding which truncation to trust.
+if ! LC_ALL=C tr -d '\000' < "$MANIFEST" | cmp -s - "$MANIFEST"; then
+  _log "    REFUSED: the manifest contains NUL byte(s) — this uninstaller"
+  _log "             cannot read it, and `read` would silently truncate the"
+  _log "             affected record(s) into shapes that look valid."
+  _log "             NOTHING was removed; the manifest is left as it stands."
+  exit 6
+fi
+
+# --- rc.1 re-pass round 3, part 3: ONE grammar, parsed ONCE ----------------
+# Backup construction and the removal walk used DIFFERENT grammars: the walk
+# accepted one OR two spaces after the digest (`  ?`), while the backup list
+# only matched records containing two consecutive spaces. A one-space record
+# was therefore deleted but never archived — the recovery tarball silently
+# missing exactly what the run removed. The canonical grammar is EXACTLY two
+# spaces (what the writer emits); it is applied once, here, into a sanitized
+# ledger that both the backup and the walk read. No second parser can drift
+# from this one because there is no second parser.
+_LEDGER="$(mktemp 2>/dev/null || mktemp -t ceo-uninstall-ledger)"
+unsafe_count=0
+valid_count=0
+while IFS= read -r line || [ -n "$line" ]; do
+  case "$line" in '#'*|'') continue ;; esac
+  if printf '%s' "$line" | LC_ALL=C grep -q '[[:cntrl:]]'; then
+    unsafe_count=$((unsafe_count + 1))
+    _log "    REFUSED (manifest record carries control bytes — not touched)"
+    continue
+  fi
+  case "$line" in
+    LINK\ *)
+      # `LINK <relpath> <target>` is what a --link install records; this
+      # uninstaller handles copy-mode records only (rc.1 condition): the
+      # link stays, the refusal is named and counted.
+      unsafe_count=$((unsafe_count + 1))
+      _log "    REFUSED (LINK record — copy-mode uninstaller; the link is left in place): ${line#LINK }"
+      continue ;;
+  esac
+  if ! printf '%s' "$line" | LC_ALL=C grep -qE '^[0-9a-f]{64}  [^ ]'; then
+    unsafe_count=$((unsafe_count + 1))
+    _log "    REFUSED (malformed manifest record — not touched): $line"
+    continue
+  fi
+  _rel="${line#*  }"
+  if _rel_unsafe "$_rel"; then
+    unsafe_count=$((unsafe_count + 1))
+    _log "    REFUSED (unsafe manifest path — not touched): $_rel"
+    continue
+  fi
+  if _rel_ancestor_link "$_rel"; then
+    unsafe_count=$((unsafe_count + 1))
+    _log "    REFUSED (symlinked ancestor — a removal would follow it outside the target): $_rel"
+    continue
+  fi
+  valid_count=$((valid_count + 1))
+  printf '%s\t%s\n' "${line%%  *}" "$_rel" >> "$_LEDGER"
+done < "$MANIFEST"
+
 # Pre-uninstall backup (unless --no-backup)
 if [ "$NO_BACKUP" -eq 0 ]; then
   if ! _dry "would BACKUP .claude/ before uninstall"; then
@@ -333,12 +427,14 @@ if [ "$NO_BACKUP" -eq 0 ]; then
     # from the manifest itself, regular files only, nothing outside it.
     backup_list="$(mktemp 2>/dev/null || mktemp -t ceo-uninstall-list)"
     printf '.claude\n' > "$backup_list"
-    awk '{ idx = index($0, "  "); if (idx == 0) next; print substr($0, idx + 2) }' "$MANIFEST" \
+    # rc.1 re-pass round 3, part 3 — from the SANITIZED LEDGER, which is the
+    # same set of records the removal walk below acts on. The path checks that
+    # used to be repeated here now live in the single parse; what is left is
+    # the archive-specific question of whether the file exists as a regular
+    # file right now (`-f` and `tar` follow links, `! -L` tests the leaf).
+    cut -f2- "$_LEDGER" 2>/dev/null \
       | while IFS= read -r _brel; do
-          case "$_brel" in '#'*|.claude/*) continue ;; esac
-          # rail r1 (S337): never read THROUGH a symlinked ancestor into the
-          # archive — `-f` and `tar` follow it, `! -L` only tests the leaf.
-          if _rel_unsafe "$_brel" || _rel_ancestor_link "$_brel"; then continue; fi
+          case "$_brel" in .claude/*) continue ;; esac
           [ -f "$TARGET/$_brel" ] && [ ! -L "$TARGET/$_brel" ] && printf '%s\n' "$_brel"
         done >> "$backup_list"
     # NO --no-recursion: the list carries `.claude` as a DIRECTORY entry whose
@@ -361,65 +457,41 @@ sys.stdout.write(hmac.new(key, tar_sha, hashlib.sha256).hexdigest())
   fi
 fi
 
-# Walk the manifest; for each entry, verify SHA before delete.
+# Walk the SANITIZED LEDGER; for each entry, verify SHA before delete.
 mismatch_count=0
 removed_count=0
 preserved_count=0
 absent_count=0
 mismatch_files=""
-unsafe_count=0
-valid_count=0
 
-# rc.1 re-pass (round 2, part 3): the walk is a TOTAL parser. `read` alone drops
-# an unterminated final record (a manifest whose trailing newline was lost never
+# rc.1 re-pass (round 2, part 3): the parse is TOTAL. `read` alone drops an
+# unterminated final record (a manifest whose trailing newline was lost never
 # processed its last delivery); a record that matched no shape was skipped in
 # silence — so an empty, comment-only or malformed manifest left every counter
 # at zero, the ledger was DELETED below and the run exited 0 with framework
-# files still on disk. Now: EOF-safe read, strict grammar per record, and
-# anything outside the grammar is REFUSED and counted, never skipped.
-while IFS= read -r line || [ -n "$line" ]; do
-  # Skip comments and blank lines
-  case "$line" in
-    '#'*|'') continue ;;
-  esac
-  if printf '%s' "$line" | LC_ALL=C grep -q '[[:cntrl:]]'; then
-    unsafe_count=$((unsafe_count + 1))
-    _log "    REFUSED (manifest record carries control bytes — not touched)"
-    continue
-  fi
-  case "$line" in
-    LINK\ *)
-      # `LINK <relpath> <target>` is what a --link install records; this
-      # uninstaller handles copy-mode records only (rc.1 condition): the
-      # link stays, the refusal is named and counted.
-      unsafe_count=$((unsafe_count + 1))
-      _log "    REFUSED (LINK record — copy-mode uninstaller; the link is left in place): ${line#LINK }"
-      continue ;;
-  esac
-  if ! printf '%s' "$line" | LC_ALL=C grep -qE '^[0-9a-f]{64}  ?[^ ]'; then
-    unsafe_count=$((unsafe_count + 1))
-    _log "    REFUSED (malformed manifest record — not touched): $line"
-    continue
-  fi
-  valid_count=$((valid_count + 1))
-  # Format: <sha>  <relpath>
-  recorded_sha="${line%% *}"
-  rel="${line#* }"
-  rel="${rel#* }"  # strip second space if double-space format
-  rel="$(printf '%s' "$line" | awk '{ $1=""; sub(/^ +/, ""); print }')"
-  # rail r1 (S337): a record is REFUSED — never tested, hashed or removed —
-  # when its path escapes the target lexically or through a symlinked ancestor.
-  if _rel_unsafe "$rel"; then
-    unsafe_count=$((unsafe_count + 1))
-    _log "    REFUSED (unsafe manifest path — not touched): $rel"
-    continue
-  fi
-  if _rel_ancestor_link "$rel"; then
-    unsafe_count=$((unsafe_count + 1))
-    _log "    REFUSED (symlinked ancestor — a removal would follow it outside the target): $rel"
-    continue
-  fi
+# files still on disk.
+#
+# rc.1 re-pass (round 3, part 3): that parse now happens ONCE, above, into
+# `$_LEDGER` — the same records the backup archived. What is left here is the
+# filesystem question, and it used to fail OPEN on every answer but "regular
+# file": a directory or a FIFO at a managed path fell through `continue`
+# without touching a counter, so the run could remove the ownership manifest
+# and exit 0 with the managed path still there; a dangling symlink counted as
+# ABSENT; and a symlink leaf pointing at an external regular file passed `-f`
+# and was read THROUGH by the hasher. Every one of those is now REFUSED and
+# counted, which keeps the manifest and exits 6.
+while IFS="$( printf '\t' )" read -r recorded_sha rel || [ -n "$rel" ]; do
+  [ -n "$rel" ] || continue
   fpath="$TARGET/$rel"
+
+  # BEFORE -e, because -e is FALSE for a dangling link and the link would
+  # otherwise be filed as "absent" and left behind. A link is never followed:
+  # not to test it, not to hash it, not to remove it.
+  if [ -L "$fpath" ]; then
+    unsafe_count=$((unsafe_count + 1))
+    _log "    REFUSED (manifest path is a symlink — never followed, never removed): $rel"
+    continue
+  fi
 
   if [ ! -e "$fpath" ]; then
     absent_count=$((absent_count + 1))
@@ -427,6 +499,8 @@ while IFS= read -r line || [ -n "$line" ]; do
   fi
 
   if [ ! -f "$fpath" ]; then
+    unsafe_count=$((unsafe_count + 1))
+    _log "    REFUSED (manifest path exists but is not a regular file — not touched): $rel"
     continue
   fi
 
@@ -460,7 +534,8 @@ with open(sys.argv[1], 'rb') as f:
       _log "    PRESERVED (sha mismatch, user-modified): $rel"
     fi
   fi
-done < "$MANIFEST"
+done < "$_LEDGER"
+rm -f "$_LEDGER"
 
 # No valid record at all (empty, comment-only or wholly malformed manifest) is
 # not "everything matched": it is an unreadable ledger, and deleting it would

@@ -912,6 +912,39 @@ else
   bad "S.10d could not create the symlink fixture — this leg is dead, not passing"
 fi
 
+# rc.1 re-pass round 3, part 1 — a DUPLICATE destination. Two rows that are
+# each perfectly valid, same `dest`, different `src`. Pre-cure the gate said
+# yes: `_wbm_route_dests` emitted both, `routes == rows` held, the conservation
+# law passed — and every consumer then asked `_wbm_route_src <dest>`, whose
+# reader stops at the FIRST match, so the first row ran twice and the second
+# was silently dropped with the run exiting 0. The Python parity reader
+# (`_parity_classify.py`) already refused this, so the two halves of one
+# contract disagreed on exactly the ambiguous input.
+DUP_TSV="$WORKROOT/t-dup-dest.tsv"
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  { print }
+  $1 == "docs/rotation-log.md" && $2 != "src" {
+    $2 = "templates/docs/BRANCH-PROTECTION.md"; print
+  }' "$ROUTES" > "$DUP_TSV" || scaffold "S.10e could not write the duplicate-destination table"
+if [ "$( grep -c '^docs/rotation-log\.md' "$DUP_TSV" )" -ne 2 ]; then
+  scaffold "S.10e the duplicate row is absent — the control would be vacuous"
+fi
+R="$( _table_ok "$DUP_TSV" )"
+if [ "${R%%|*}" = "1" ] && [ -n "${R#*|}" ]; then
+  ok "S.10e a duplicate destination is REFUSED by name (${R#*|})"
+else
+  bad "S.10e duplicate destination gave '$R' — expected rc=1: the enumeration counts two routes and _wbm_route_src answers for one, so the first row runs twice and the second is dropped"
+fi
+# Control: the same table with the duplicate row REMOVED is still accepted, so
+# S.10e is not satisfied by a gate that refuses every multi-row table.
+NODUP_TSV="$WORKROOT/t-nodup-dest.tsv"
+awk -F '\t' 'BEGIN { OFS = "\t" } { print }' "$ROUTES" > "$NODUP_TSV" \
+  || scaffold "S.10e could not write the control table"
+R="$( _table_ok "$NODUP_TSV" )"
+[ "${R%%|*}" = "0" ] \
+  && ok "S.10e-control the same table without the duplicate row is accepted" \
+  || bad "S.10e-control a table with unique destinations was rejected ($R) — the refusal is over-broad"
+
 # _wbm_prior_digest: the manifest relpaths carry `.` (`.github/CODEOWNERS`),
 # and the retired `grep -E "^[0-9a-f]{64}  $1$"` treated them as a REGEX, so a
 # record for `Xgithub/CODEOWNERS` answered a query for `.github/CODEOWNERS`.

@@ -1121,6 +1121,109 @@ else
   bad "H.15d6 $G_SEEN verdict(s) for $EXPECTED_ROUTES routes — the fail-closed refusal dropped a destination instead of counting it (see $LOG_G)"
 fi
 
+# --- H.15e (rc.1 re-pass round 3, part 1) the SNAPSHOT cannot launder a link -
+# The unit oracle in test-manifest-delivery-route.sh proves the READER refuses a
+# symlinked table. It cannot see the defect that mattered: `upgrade.sh` COPIES
+# the table to a tempfile before anyone validates it, and `[[ -f ]]` and `cp`
+# both follow links — so the reader was handed a regular tempfile and its own
+# `-L` refusal examined THAT. A well-formed table living outside the checkout
+# therefore passed a gate written to refuse it. Measured pre-cure on this exact
+# fixture: rc=0, "Upgrade complete.", and docs/rotation-log.md REWRITTEN from
+# the source the external table named.
+echo ""
+echo "==> H.15e — a symlinked route table cannot be laundered by the snapshot"
+L="$WORK/linkedtable/adopter"
+_install_into "$L"
+ROT_SHA_L="$( _sha "$L/docs/rotation-log.md" )"
+[ -n "$ROT_SHA_L" ] || scaffold "H.15e fixture: the install delivered no docs/rotation-log.md"
+OUTSIDE_TSV="$WORK/linkedtable/outside-routes.tsv"
+mkdir -p "$( dirname "$OUTSIDE_TSV" )"
+# Well-formed in every respect but one: it reroutes a destination to OTHER
+# template bytes. Provenance is the only thing wrong with it, which is what
+# makes the refusal a statement about where the bytes came from.
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "docs/rotation-log.md" && $2 != "src" { $2 = "templates/docs/BRANCH-PROTECTION.md" }
+  { print }' "$ROUTES" > "$OUTSIDE_TSV" || scaffold "H.15e could not write the outside table"
+grep -q 'BRANCH-PROTECTION' "$OUTSIDE_TSV" || scaffold "H.15e the reroute did not land"
+L_SRC="$WORK/linkedtable/srccopy"
+_mk_source_copy "$L_SRC" "NONE" || scaffold "H.15e could not build the copied checkout"
+ln -s "$OUTSIDE_TSV" "$L_SRC/scripts/delivery-routes.tsv" \
+  || scaffold "H.15e could not link the route table"
+[ -L "$L_SRC/scripts/delivery-routes.tsv" ] || scaffold "H.15e the table leaf is not a symlink"
+_UPGRADE_SEQ=$(( _UPGRADE_SEQ + 1 ))
+LOG_L="$L.upgrade.$_UPGRADE_SEQ.log"
+_L_RC=0
+bash "$L_SRC/scripts/upgrade.sh" "$L" --profile core --no-diff-warn --no-replay > "$LOG_L" 2>&1 || _L_RC=$?
+if [ "$_L_RC" -eq 3 ]; then
+  ok "H.15e a symlinked route table exits 3 (the snapshot no longer hands the reader a regular copy)"
+else
+  tail -30 "$LOG_L" >&2
+  bad "H.15e upgrade.sh returned rc=$_L_RC, expected 3 — an external table was laundered past the -L refusal (see $LOG_L)"
+fi
+if [ "$( _sha "$L/docs/rotation-log.md" )" = "$ROT_SHA_L" ]; then
+  ok "H.15e2 docs/rotation-log.md is byte-identical — no bytes came from the outside table"
+else
+  bad "H.15e2 docs/rotation-log.md was REWRITTEN from a table outside the checkout (see $LOG_L)"
+fi
+if grep -q "SYMLINK" "$LOG_L" && grep -q "delivery-route table REFUSED" "$LOG_L"; then
+  ok "H.15e3 both the snapshot site and the reader gate name the refusal"
+else
+  bad "H.15e3 the refusal is not named on both surfaces — an operator reading the log top-down sees nothing (see $LOG_L)"
+fi
+if grep -q '"upgrade_succeeded": false' "$L/.claude/.install-state.json" 2>/dev/null; then
+  ok "H.15e4 the persisted install-state records upgrade_succeeded: false"
+else
+  bad "H.15e4 the install-state does not persist upgrade_succeeded: false (see $L/.claude/.install-state.json)"
+fi
+
+# --- H.15f (rc.1 re-pass round 3, part 1) duplicate destinations ------------
+# Two valid rows, one destination. Pre-cure: routes=7 for 6 real destinations,
+# identical=6 (the first row's verdict counted twice), the second row never
+# resolved to its own source, rc=0, upgrade_succeeded true. The conservation
+# law could not see it — it counts verdicts against the ENUMERATION, and the
+# enumeration was the thing that double-counted.
+echo ""
+echo "==> H.15f — a route table with a duplicate destination is refused"
+Q="$WORK/duptable/adopter"
+_install_into "$Q"
+ROT_SHA_Q="$( _sha "$Q/docs/rotation-log.md" )"
+DUP_TSV_H="$WORK/duptable/routes-dup.tsv"
+mkdir -p "$( dirname "$DUP_TSV_H" )"
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  { print }
+  $1 == "docs/rotation-log.md" && $2 != "src" {
+    $2 = "templates/docs/BRANCH-PROTECTION.md"; print
+  }' "$ROUTES" > "$DUP_TSV_H" || scaffold "H.15f could not write the duplicate table"
+[ "$( grep -c '^docs/rotation-log\.md' "$DUP_TSV_H" )" -eq 2 ] \
+  || scaffold "H.15f the duplicate row is absent — the leg would be vacuous"
+Q_SRC="$WORK/duptable/srccopy"
+_mk_source_copy "$Q_SRC" "$DUP_TSV_H" || scaffold "H.15f could not build the copied checkout"
+_UPGRADE_SEQ=$(( _UPGRADE_SEQ + 1 ))
+LOG_Q="$Q.upgrade.$_UPGRADE_SEQ.log"
+_Q_RC=0
+bash "$Q_SRC/scripts/upgrade.sh" "$Q" --profile core --no-diff-warn --no-replay > "$LOG_Q" 2>&1 || _Q_RC=$?
+if [ "$_Q_RC" -eq 3 ]; then
+  ok "H.15f a duplicate destination exits 3 (ambiguous input is refused, not read two ways)"
+else
+  tail -30 "$LOG_Q" >&2
+  bad "H.15f upgrade.sh returned rc=$_Q_RC, expected 3 — the first row ran twice and the second was dropped (see $LOG_Q)"
+fi
+if grep -q "duplicate destination 'docs/rotation-log.md'" "$LOG_Q"; then
+  ok "H.15f2 the refusal names the duplicated destination"
+else
+  bad "H.15f2 the refusal does not name which destination is duplicated (see $LOG_Q)"
+fi
+Q_ROUTES="$( _summary_field "$LOG_Q" "routes" )"
+case "${Q_ROUTES:-}" in
+  0) ok "H.15f3 the delivery enumerated ZERO routes — no consumer saw the ambiguous table" ;;
+  *) bad "H.15f3 the delivery enumerated '${Q_ROUTES:-<none>}' routes on a refused table (see $LOG_Q)" ;;
+esac
+if [ "$( _sha "$Q/docs/rotation-log.md" )" = "$ROT_SHA_Q" ]; then
+  ok "H.15f4 docs/rotation-log.md is byte-identical — the refused run delivered nothing"
+else
+  bad "H.15f4 docs/rotation-log.md changed under a table this upgrader refused"
+fi
+
 # --- H.17 (rail round-3 F5) a DANGLING CODEOWNERS symlink counts as PRESENT -
 # `-e` is FALSE for a dangling symlink. A historical adopter with no recorded
 # handle and a dangling .github/CODEOWNERS therefore read as "no CODEOWNERS

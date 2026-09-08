@@ -1585,6 +1585,150 @@ PY
     || bad "U.5d — exited $RC / ledger present=$([ -f "$MAN" ] && echo yes || echo no) (see $LOG)"
 fi
 
+
+# ---------------------------------------------------------------------------
+# U.6 — the parser is total in BYTES and closed over filesystem TYPES
+# (rc.1 re-pass, round 3, part 3). U.5 proved the parser was total over the
+# SHAPES `read` hands it. These legs are about the two things `read` and `-f`
+# never showed it: a byte `read` eats before any check runs, and a path whose
+# type is not "regular file".
+# ---------------------------------------------------------------------------
+echo "==> U.6a a NUL byte in the manifest refuses the WHOLE file"
+_mkcase u6a-nul
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.6a — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U6_VICTIM="$( grep -v '^#' "$MAN" | grep -v '^$' | head -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  [ -n "$U6_VICTIM" ] && [ -f "$TARGET/$U6_VICTIM" ] \
+    || scaffold "U.6a fixture: no usable first manifest record"
+  # Append a NUL and garbage to the FIRST record. On Bash 3.2 `read -r` eats
+  # the NUL and everything after it, handing the loop a record that looks
+  # perfectly valid — which is exactly how the file got deleted pre-cure.
+  python3 - "$MAN" <<'PY'
+import sys
+p = sys.argv[1]
+lines = open(p, 'rb').read().split(b'\n')
+for i, ln in enumerate(lines):
+    if ln and not ln.startswith(b'#'):
+        lines[i] = ln + b'\x00GARBAGE'
+        break
+open(p, 'wb').write(b'\n'.join(lines))
+PY
+  grep -qU $'\x00' "$MAN" 2>/dev/null || python3 -c "
+import sys
+sys.exit(0 if b'\x00' in open(sys.argv[1],'rb').read() else 1)" "$MAN" \
+    || scaffold "U.6a fixture: the NUL did not land — the leg would be vacuous"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ "$RC" -eq 6 ] \
+    && ok "U.6a — a manifest carrying a NUL is REFUSED whole (rc=6)" \
+    || bad "U.6a — exited $RC, expected 6: read(1) ate the NUL and the truncated record looked valid (see $LOG)"
+  [ -f "$TARGET/$U6_VICTIM" ] \
+    && ok "U.6a — the file named by the truncated record is still on disk" \
+    || bad "U.6a — $U6_VICTIM was DELETED through a NUL-truncated record (see $LOG)"
+  [ -f "$MAN" ] \
+    && ok "U.6a — the ledger was kept for inspection" \
+    || bad "U.6a — the manifest was deleted on a refused run"
+fi
+
+echo "==> U.6b a symlink at a manifest path is refused, never followed"
+_mkcase u6b-symlink-leaf
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.6b — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U6_REL="$( grep -v '^#' "$MAN" | grep -v '^$' | head -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  [ -n "$U6_REL" ] || scaffold "U.6b fixture: no usable manifest record"
+  # The managed path becomes a LINK to a file OUTSIDE the target whose bytes
+  # happen to hash to the recorded digest — the shape `-f` says yes to and the
+  # hasher reads THROUGH.
+  U6_OUT="$CASE/outside-target.txt"
+  cp "$TARGET/$U6_REL" "$U6_OUT" || scaffold "U.6b fixture: could not stage the outside file"
+  rm -f "$TARGET/$U6_REL"
+  ln -s "$U6_OUT" "$TARGET/$U6_REL" || scaffold "U.6b fixture: could not create the symlink"
+  [ -L "$TARGET/$U6_REL" ] || scaffold "U.6b fixture: the path is not a symlink"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ "$RC" -eq 6 ] \
+    && ok "U.6b — a symlink leaf is REFUSED (rc=6), not read through" \
+    || bad "U.6b — exited $RC, expected 6: -f follows the link and the hasher read outside the target (see $LOG)"
+  [ -f "$U6_OUT" ] \
+    && ok "U.6b — the external target file is untouched" \
+    || bad "U.6b — the file OUTSIDE the target was removed through the link"
+  [ -L "$TARGET/$U6_REL" ] \
+    && ok "U.6b — the link itself was left in place" \
+    || bad "U.6b — the link was removed (a removal that followed the record)"
+fi
+
+echo "==> U.6c a directory at a manifest path is refused and COUNTED"
+_mkcase u6c-directory
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.6c — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U6_REL="$( grep -v '^#' "$MAN" | grep -v '^$' | head -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  [ -n "$U6_REL" ] || scaffold "U.6c fixture: no usable manifest record"
+  rm -f "$TARGET/$U6_REL"
+  mkdir -p "$TARGET/$U6_REL" || scaffold "U.6c fixture: could not create the directory"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ "$RC" -eq 6 ] \
+    && ok "U.6c — a non-regular type at a managed path is REFUSED (rc=6)" \
+    || bad "U.6c — exited $RC, expected 6: the type fell through the loop without touching a counter (see $LOG)"
+  [ -d "$TARGET/$U6_REL" ] \
+    && ok "U.6c — the directory is still there (refused, not removed)" \
+    || bad "U.6c — the directory was removed"
+fi
+
+echo "==> U.6d a ONE-space record is malformed for BOTH the backup and the walk"
+_mkcase u6d-one-space
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.6d — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U6_REL="$( grep -v '^#' "$MAN" | grep -v '^$' | head -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  [ -n "$U6_REL" ] || scaffold "U.6d fixture: no usable manifest record"
+  # Collapse the double space on the FIRST record. Pre-cure the walk accepted
+  # it (`  ?`) and deleted the file, while the backup list — which required two
+  # consecutive spaces — omitted it: deleted without ever being archived.
+  python3 - "$MAN" <<'PY'
+import sys
+p = sys.argv[1]
+lines = open(p, 'rb').read().split(b'\n')
+for i, ln in enumerate(lines):
+    if ln and not ln.startswith(b'#') and b'  ' in ln:
+        lines[i] = ln.replace(b'  ', b' ', 1)
+        break
+open(p, 'wb').write(b'\n'.join(lines))
+PY
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ "$RC" -eq 6 ] \
+    && ok "U.6d — the one-space record is REFUSED (rc=6) by the single grammar" \
+    || bad "U.6d — exited $RC, expected 6: the walk and the backup accept different grammars (see $LOG)"
+  [ -f "$TARGET/$U6_REL" ] \
+    && ok "U.6d — the file was NOT deleted by a grammar the backup would not archive" \
+    || bad "U.6d — $U6_REL was deleted through a record the backup omitted (see $LOG)"
+fi
+
+echo "==> U.6e the empty-directory sweep does not claim the adopter's directories"
+_mkcase u6e-sweep
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.6e — install failed (rc=$RC, see $LOG)"
+else
+  [ -d "$TARGET/docs" ] || scaffold "U.6e fixture: the install delivered no docs/"
+  # An adopter's own empty directory, unrelated to any delivery, under the same
+  # top-level tree a delivery lives in.
+  mkdir -p "$TARGET/docs/adopter-notes/drafts" \
+    || scaffold "U.6e fixture: could not create the adopter directory"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ -d "$TARGET/docs/adopter-notes/drafts" ] \
+    && ok "U.6e — the adopter's empty directory under docs/ survived the sweep" \
+    || bad "U.6e — the sweep claimed an adopter directory the framework never created (rc=$RC, see $LOG)"
+fi
+
 # ---------------------------------------------------------------------------
 echo ""
 echo "=== summary ==="
