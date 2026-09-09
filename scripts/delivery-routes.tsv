@@ -6,9 +6,11 @@
 # in PLAN-183 §8.5.1/§8.5.2; for the readers above the values live ONLY here.
 # A second copy in bash or Python that DECIDES ownership would be the "local
 # branch" CLAUDE.md §4 forbids; the installer's copies deliver, they do not decide.
-# Measured from scripts/install.sh (S324/S325 census): install_docs_template
-# :1446-1474, install_docs_templates :1476-1482, install_github_templates
-# :1488-1523. Both delivery functions are gated on CEREMONY != user (:1484, :1525).
+# Writers in scripts/install.sh (re-measured for v1.4.0-rc.1, round 11): the
+# functions install_docs_template, install_docs_templates and
+# install_github_templates; CODEOWNERS is rendered by _render_owner_handle
+# (no sed). Line numbers move — locate the SYMBOLS, not a line. Both
+# delivery functions are gated on CEREMONY != user.
 # Conventions: transform = "identity" (verbatim cp) or "substitute:<token>".
 #   flag_dep = the install.sh flag the route depends on; "-" = unconditional,
 #   "!github-owner" = the else-branch taken when the flag is ABSENT.
@@ -21,7 +23,7 @@
 dest	src	transform	flag_dep	origin	note
 docs/BRANCH-PROTECTION.md	templates/docs/BRANCH-PROTECTION.md	identity	-	install_docs_templates	D2: a root homonym exists; comparing against it reports UNCLASSIFIED where the truth is STALE
 docs/rotation-log.md	templates/docs/rotation-log.md	identity	-	install_docs_templates	D2: a root homonym exists; latent, same class as BRANCH-PROTECTION.md
-.github/CODEOWNERS	templates/.github/CODEOWNERS.template	substitute:{{OWNER_HANDLE}}	github-owner	install_github_templates	rendered at install (install.sh:1508); the delivered bytes exist nowhere in a checkout, so it resolves to None fail-LOUD
+.github/CODEOWNERS	templates/.github/CODEOWNERS.template	substitute:{{OWNER_HANDLE}}	github-owner	install_github_templates	rendered at install by _render_owner_handle in install_github_templates; the delivered bytes exist nowhere in a checkout, so it resolves to None fail-LOUD
 .github/CODEOWNERS.template	templates/.github/CODEOWNERS.template	identity	!github-owner	install_github_templates	else-branch: same source as the rendered row, different destination
 .github/workflows/validate.yml.template	templates/.github/workflows/validate.yml.template	identity	-	install_github_templates	the .template suffix SURVIVES delivery; the adopter never gets a live workflow from install
 .github/workflows/benchmarks.yml.template	templates/.github/workflows/benchmarks.yml.template	identity	-	install_github_templates	the .template suffix SURVIVES delivery; the adopter never gets a live workflow from install

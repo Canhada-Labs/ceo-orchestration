@@ -234,9 +234,14 @@ call today**:
   `additionalContext`, so the summarizer cannot evict them. Kill switch:
   `CEO_CONSTRAINT_PINNING=0`.
 - **`check_ledger_checkpoint.py`** (`PreToolUse`, matcher `Bash`): on a
-  `git commit` that lands plan-scoped work, reports whether that plan's
-  `LEDGER.md` is in the same commit. Scope is derived MECHANICALLY from
-  the committed PATHS. No branch in the module returns a decision —
+  STANDALONE `git commit` (staging done in earlier tool calls; exactly one
+  commit in the Bash call) that lands plan-scoped work, reports whether
+  that plan's `LEDGER.md` is in the same commit. Scope is derived
+  MECHANICALLY from the paths staged at the moment the hook fires, BEFORE
+  the command runs: `git add x && git commit`, `git commit -a` after a
+  mutation in the same call, and several commits in one call are
+  `skipped`, not observed (signed condition 77 of rc.1). No branch in the
+  module returns a decision —
   there is no deny arm to disarm. Kill switches:
   `CEO_LEDGER_CHECKPOINT=0`, `CEO_SOTA_DISABLE=1` (`b07be9b`, `bc82651`).
 - **`session_memory_delta_observed`** at `SessionEnd` records whether the
@@ -254,7 +259,10 @@ call today**:
   hooks and produced `snapshot_outcome=scratchpad_unavailable`,
   `plan_id=unknown`, because plan resolution required an event from the
   session's own history — 2 such events in 12,515 log lines. The rebuilt
-  version derives the plan from committed paths instead. Related
+  version falls back to a SESSION-scoped snapshot when no plan resolves
+  (the plan id itself still comes from the audit history) and carries a
+  separate ledger INDEX derived from the last commit's paths — a pointer,
+  not a copy. Related
   measurement that corrects a number this project published: the context
   floor re-paid after a compaction was measured at **97,292 tokens** at a
   real compaction boundary (independent cold control: 97,097), roughly
@@ -302,7 +310,10 @@ call today**:
   only through a baseline-aware migration — a signed condition of rc.1
   (lands before GA). Four skills with no
   veto role (`cpp-testing`, `frontend-slides`, `prisma-patterns`,
-  `ui-demo`) were added to the name-only list in their place.
+  `ui-demo`) were added to the name-only list in their place — in the
+  framework checkout's own live settings only; the delivered templates
+  (`templates/settings/`) do not carry them, so a fresh install and an
+  upgraded adopter see neither the four names nor the undemotion.
 
 ### Fixed — the test suite was writing into the live HMAC chain (`2ae16d2`, `7a618c9`, `3d16070`)
 

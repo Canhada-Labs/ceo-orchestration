@@ -1,0 +1,20 @@
+REJECT
+
+SEVERITY: P1  
+FILE:LINE: `.claude/settings.json:349`, `CHANGELOG.md:236`, `SPEC/v1/audit-log.schema.md:590`; implementation evidence: `.claude/hooks/check_ledger_checkpoint.py:540`, `:710`, `:1230`  
+Concrete failure scenario: `git add src/payment.py && git commit -m feat` is inspected before `git add` executes. With an initially clean index, the hook sees zero paths and emits `ledger_checkpoint_skipped(reason=out_of_scope_paths)`; the command then commits plan-scoped work without `LEDGER.md` and without the promised warning. Commands that modify files before `git commit -a`, conditional commits, and multiple commits in one Bash call have the same observation gap. This corrupts the measure-first denominator that the diff says will support a future enforcing flip. The repository itself documents this compound form at `INSTALL.md:459`. No declared condition covers it.  
+Minimal fix: Before rc.1, add a HARD signed condition requiring staging and other mutations in earlier tool calls, followed by exactly one standalone `git commit` command. Narrow the three coverage claims accordingly. The code cure should classify commits with state-changing prefixes or multiple commits as `unparseable` with a split-command warning, plus a clean-index `git add … && git commit …` regression test.
+
+SEVERITY: P2  
+FILE:LINE: `CHANGELOG.md:303`  
+Concrete failure scenario: The adopter-facing changelog says `cpp-testing`, `frontend-slides`, `prisma-patterns`, and `ui-demo` were added to the name-only list. They exist only in the framework’s live settings at `.claude/settings.json:937`; the delivered maintainer template ends at `templates/settings/settings.base.json:746`, and the user template excludes `skillOverrides`. A fresh install therefore receives none of the four, while a v1.3.0 upgrade preserves its old list.  
+Minimal fix: Say these four were added only to the framework checkout’s dogfood settings, or add them to the delivered maintainer template if adopter delivery was intended.
+
+SEVERITY: P2  
+FILE:LINE: `CHANGELOG.md:252`  
+Concrete failure scenario: The changelog says the rebuilt continuity feature derives “the plan from committed paths instead.” The top-level `plan_id` still comes from session/audit history at `.claude/hooks/check_precompact_continuity.py:258` and `:1509`; only the optional `ledger_index` uses the last commit’s paths at `:1280` and `:1520`. A long session without a usable `plan_transition` still records `plan_id=unknown` and writes session-scoped state, contrary to the plain reading of the claim.  
+Minimal fix: State that unresolved snapshots now fall back to session scope, while a separate optional ledger index derives a plan pointer from the last commit’s paths.
+
+The scoped JSON, settings derivation, stdlib-only, audit-registry, contamination, freshness, and count checks passed. I found no P0, but the declared envelope is insufficient because it omits the P1 checkpoint-observation limitation.
+
+VERDICT: NO-GO — The signed draft must add the standalone-commit condition before rc.1 because the new ledger checkpoint rail silently misclassifies a common compound staging-and-commit path.

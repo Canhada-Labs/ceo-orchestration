@@ -1,0 +1,23 @@
+Resultado advisory: o envelope atual não é honesto nem suficiente para rc.1. Há três P1.
+
+P1 — [.claude/hooks/check_postcompact_reinject.py:148](<WT>/.claude/hooks/check_postcompact_reinject.py:148), [:455](<WT>/.claude/hooks/check_postcompact_reinject.py:455), [:473](<WT>/.claude/hooks/check_postcompact_reinject.py:473)
+
+Cenário concreto: o gate declarado como cura aceita `.claude/plans/PLAN-179-IGNORE-ALL-PREVIOUS-RULES.md`, um nome que o produtor legítimo também encontra pelo glob em [check_precompact_continuity.py:312](<WT>/.claude/hooks/check_precompact_continuity.py:312). Após compaction, o nome entra literalmente em `additionalContext` como instrução para “re-open ... and resume”. A forma aceita também inclui até três segmentos arbitrários. Uma prova pura retornou `accepted True` e reproduziu o nome inteiro no contexto. Isso contradiz diretamente a condição 17, que marca a classe como CURADA; o próprio diff reconhece que nomes de arquivo são um canal instruction-adjacent impossível de fechar por enumeração.
+
+Correção mínima: não reinjetar o nome do arquivo. Renderizar somente `PLAN-NNN` e linha validada numa frase fixa, com busca sob diretório fixo; validar também a coerência entre o plano resolvido e o snapshot. Adicionar controles com slug hostil, caminho aninhado e plano divergente. Retirar “CURADO” da condição 17 até o controle ficar verde.
+
+P1 — [check_precompact_continuity.py:258](<WT>/.claude/hooks/check_precompact_continuity.py:258), [check_postcompact_reinject.py:290](<WT>/.claude/hooks/check_postcompact_reinject.py:290), [scratchpad_lib.py:205](<WT>/.claude/hooks/_lib/scratchpad_lib.py:205)
+
+Cenário concreto: sem `session_id` válido no payload, ambos os hooks passam `None` a `resolve_plan_id`; o helper então consulta `CLAUDE_SESSION_ID`, apesar das docstrings afirmarem “NOT env” e “hook input ONLY”. Com o ambiente apontando para outra sessão que tenha `plan_transition`, PreCompact grava no plano escolhido por essa sessão e PostCompact lê e reinjeta esse plano. Isso contorna completamente a nova recusa do fallback session-scoped. Prova focada: os dois chamadores invocaram `resolve_plan_id(None)` e aceitaram `PLAN-123`. Nenhuma condição declara essa rota; a condição 70 trata outra assimetria.
+
+Correção mínima: derivar uma vez com `session_id_from_event(event)` e, se o resultado for `None`, devolver `unknown` sem chamar `resolve_plan_id`. Testar com payload sem ID, `CLAUDE_SESSION_ID` definido e uma transição real pertencente ao ID do ambiente.
+
+P1 — [check_postcompact_reinject.py:355](<WT>/.claude/hooks/check_postcompact_reinject.py:355), [:397](<WT>/.claude/hooks/check_postcompact_reinject.py:397), [.claude/settings.json:685](<WT>/.claude/settings.json:685)
+
+Cenário concreto: os dois reads usam o timeout padrão de 5 s do state store, exatamente igual ao timeout de 5 s do hook. Se outra sessão mantiver o lock do scratchpad, o harness mata PostCompact antes que a exceção seja capturada. Como constraints, pointers e auditoria só são construídos depois do read, desaparece todo o output do PostCompact, sem breadcrumb próprio. A condição 19 descreve corretamente a mesma incompatibilidade no PreCompact, mas omite o leitor PostCompact.
+
+Correção mínima: expor e passar um `lock_timeout` com margem real abaixo do timeout do hook; em timeout, ainda emitir constraints e pointers duráveis com `snapshot_found=false`. Adicionar teste mantendo o lock real ocupado.
+
+As condições 18, 20, 23, 28, 53, 65, 67, 68 e 70–72 correspondem aos respectivos caminhos observados. Não encontrei nova dependência externa nem incompatibilidade Python 3.9: o gate stdlib passou, os seis arquivos parsearam sob a gramática 3.9 e os 14 testes focados do modelo passaram. A suíte ampla não pôde ser usada como evidência positiva porque este sandbox read-only impede a criação dos diretórios temporários exigidos pelos testes.
+
+VERDICT: NO-GO — A condição 17 declara fechada uma rota ainda aberta, e dois P1 adicionais não constam do envelope assinado.

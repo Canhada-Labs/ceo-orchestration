@@ -74,9 +74,20 @@ the first session on the new version, pick one route:
   `CEO_PROJECT_NAME=ceo-orchestration` (the documented escape hatch in
   `state_store.py`; it re-creates the basename-collision hazard, so drop
   it as soon as the plan is done), or
-- copy `$HOME/.claude/projects/ceo-orchestration/state/` into the new
-  per-project directory printed by
-  `python3 .claude/hooks/_lib/runtime_paths.py --state-dir`.
+- copy ONLY the store subdirectories — `scratchpad/` (the `/resume` store),
+  `skill_proposals/`, `skill_index/`, `session_graph/` — from
+  `$HOME/.claude/projects/ceo-orchestration/state/` into the new per-project
+  directory printed by `python3 .claude/hooks/_lib/runtime_paths.py --state-dir`.
+  NEVER copy the flat files at the root of `state/`: they include the audit
+  crash-recovery spools (`audit-spool.*`, `audit-pending.*`), and the drainer
+  re-chains any spool it finds under the CURRENT project's key without
+  checking where it came from — a copied spool contaminates the new chain
+  (signed condition 27 of rc.1). Before copying, drain the legacy spools on
+  the v1.3 chain (`CEO_AUDIT_LOG_DIR=<legacy dir>` + `drain_now(force=True)`
+  from `_lib/spool_writer.py`), prove that
+  `find <legacy state> -maxdepth 1 \( -name 'audit-spool.*' -o -name 'audit-pending.*' \)`
+  prints nothing, and move whatever remains to a quarantine directory
+  outside any `state/`.
 
 Two more per-project records move with v1.4.0 and are NOT migrated either
 (signed conditions of rc.1): the cost-envelope counters
@@ -306,9 +317,43 @@ existing regular file at that path is overwritten (signed condition of rc.1).
 And before EVERY `uninstall.sh` and `doctor.sh --repair`, `<target>` and
 `<target>/.claude` must be real directories, not symlinks, with nothing else
 replacing them while the script runs: both scripts refuse a symlinked
-manifest LEAF but read a manifest that sits behind a symlinked `.claude`,
+manifest LEAF (the doctor since rc.1's round 12, with the manifest's
+device:inode pinned and re-proved before every write of `--repair`) but
+read a manifest that sits behind a symlinked `.claude`,
 act on that external provenance, and the uninstaller then deletes the
 external manifest (signed condition 69 of rc.1).
+
+(13) The upgrader and the installer inherit their scratch directory from
+YOUR environment and validate nothing about it (signed condition 76 of
+rc.1). Before `scripts/upgrade.sh` and `scripts/install.sh`, `TMPDIR` must
+be unset, or an existing, writable directory physically OUTSIDE the target
+— `mktemp -d` from that same shell must succeed. With an unusable `TMPDIR`
+the upgrader silently loses its baseline (a customized `.claude/team.md`
+is overwritten even under `--on-conflict=refuse`) and then aborts with
+rc 1 in the middle of its mutations, leaving no new manifest, no
+install-state and no banner; `--dry-run` passes before that failure.
+Two hook-side variables belong to the same check: launch Claude Code with
+`CLAUDE_SESSION_ID` ABSENT from the environment (`env -u CLAUDE_SESSION_ID`;
+never export it in a shell profile) — with no session id in a hook payload
+the compaction hooks fall back to that variable and can write and reinject
+ANOTHER session's plan (signed condition 78). And run the test suite with
+`CEO_STATE_ROOT` unset (`env -u CEO_STATE_ROOT python3 -m pytest ...`): the
+isolation layer does not neutralize it, and an exported value lets the
+compaction tests write real state outside the isolated tree (signed
+condition 79). Before `scripts/install.sh` and `scripts/upgrade.sh`, no
+`FMS_*` variable may be exported in your shell (`env | grep -c '^FMS_'` must
+print 0): the manifest generator reads them as inputs and neither
+entrypoint clears the ones it does not set — an inherited
+`FMS_HASH_ROOT_PATHS` makes the manifest record the TARGET's hash for a
+customized hook, which the next upgrade then overwrites as
+FRAMEWORK-CHANGED even under `--on-conflict=refuse` (signed condition 81).
+If you export `CEO_AUDIT_LOG_DIR`, make it ABSOLUTE: a
+relative value is cached relative and, after a `chdir`, the invalidation
+flush writes the previous directory's journal under the NEW cwd (signed
+condition 24). And keep `.claude/state` a real directory holding only real
+files and directories — a symlink, FIFO or other object at
+`.gc-shard-cursor` or `context-pressure-last-bucket[.*]` is followed,
+replaced or blocks the hook (signed condition 28).
 
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`
 [1.4.0], «audit log resolves per PROJECT»).

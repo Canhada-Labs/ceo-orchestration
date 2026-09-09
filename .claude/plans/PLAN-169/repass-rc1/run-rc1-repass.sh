@@ -202,7 +202,7 @@ part_pathspec() {
     4) printf '%s\n' \
          "SPEC/" "npm/" "CHANGELOG.md" "VERSION" \
          ".claude/settings.json" ".claude/.framework-version" \
-         ".claude-plugin/" ;;
+         ".claude-plugin/" ".github/workflows/smoke-install.yml" ;;
     5) printf '%s\n' \
          ".claude/hooks/check_precompact_continuity.py" \
          ".claude/hooks/SessionEnd.py" \
@@ -220,7 +220,7 @@ part_pathspec() {
          ".claude/hooks/_lib/runtime_paths.py" \
          ".claude/hooks/_lib/state_store.py" \
          ".claude/hooks/_lib/test_isolation.py" \
-         ":(glob).github/workflows/*" ;;
+         ":(glob).github/workflows/*" ":(exclude).github/workflows/smoke-install.yml" ;;
     *) return 1 ;;
   esac
 }
@@ -230,10 +230,10 @@ part_label() {
     1) echo "upgrade.sh — o caminho que roda na arvore do adopter" ;;
     2) echo "install.sh + o set de manifesto + a tabela de rotas de entrega" ;;
     3) echo "doctor.sh + uninstall.sh + templates/** entregues" ;;
-    4) echo "SPEC/** + npm README + CHANGELOG + settings.json (workflows entregues: parte 7)" ;;
+    4) echo "SPEC/** + npm README + CHANGELOG + settings.json + smoke-install.yml (os outros workflows entregues: parte 7)" ;;
     5) echo "hooks da familia de continuidade de compaction (PostCompact: parte 7)" ;;
     6) echo "nucleo de cadeia e auditoria em _lib/ (resolvedor, store de estado e isolamento de teste: parte 7)" ;;
-    7) echo "PostCompact + resolvedor por projeto + store de estado + isolamento de teste + workflows entregues (parte aberta na rodada 11: o envelope viaja em toda parte e 4/5/6 passaram o teto do redator)" ;;
+    7) echo "PostCompact + resolvedor por projeto + store de estado + isolamento de teste + workflows entregues exceto smoke-install.yml (parte aberta na rodada 11; smoke-install.yml foi para a parte 4 na rodada 12 pelo teto do redator)" ;;
   esac
 }
 part_coverage() {

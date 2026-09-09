@@ -1877,6 +1877,41 @@ else
     || bad "U.9d — exited $RC / manifest present=$([ -f "$MAN" ] && echo yes || echo no) (see $LOG)"
 fi
 
+echo "==> U.9e doctor --repair refuses a manifest LEAF that is a symlink — foreign provenance never drives a write"
+_mkcase u9e-doctor-symlink-manifest
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.9e — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U9E_REL="$( grep -v '^#' "$MAN" | grep -v '^$' | grep '  docs/' | head -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  [ -n "$U9E_REL" ] && [ -f "$TARGET/$U9E_REL" ] || scaffold "U.9e fixture: no docs/ record with a file on disk"
+  rm -f "$TARGET/$U9E_REL"   # one MISSING (restorable) record: the write --repair would make
+  mv "$MAN" "$OUTSIDE/manifest-outside" || scaffold "U.9e fixture: could not move the manifest aside"
+  ln -s "$OUTSIDE/manifest-outside" "$MAN" || scaffold "U.9e fixture: could not create the symlink"
+  LOG="$CASE/doctor.log"; _doctor --repair
+  [ "$RC" -eq 2 ] \
+    && ok "U.9e — doctor refuses the symlinked manifest (rc=2) before reading it" \
+    || bad "U.9e — doctor exited $RC, expected 2: -f followed the link and the manifest was read through it (see $LOG)"
+  grep -q 'ERROR: install manifest at .* is a SYMLINK' "$LOG" \
+    && ok "U.9e — the refusal is NAMED" \
+    || bad "U.9e — no named refusal for the symlinked manifest (see $LOG)"
+  [ ! -e "$TARGET/$U9E_REL" ] \
+    && ok "U.9e — the missing file was NOT recreated from the foreign manifest" \
+    || bad "U.9e — $U9E_REL was restored through the symlinked manifest"
+  [ -L "$MAN" ] && [ -f "$OUTSIDE/manifest-outside" ] \
+    && ok "U.9e — the link and the outside manifest were left as they stood" \
+    || bad "U.9e — the link or the outside manifest was altered"
+  # Positive control: the SAME fixture with the real manifest back in place IS
+  # repaired — the missing record was restorable, so the refusal above is what
+  # stopped the write, not an unrelated block.
+  rm -f "$MAN" && mv "$OUTSIDE/manifest-outside" "$MAN" || scaffold "U.9e control: could not put the manifest back"
+  LOG="$CASE/doctor-control.log"; _doctor --repair
+  [ "$RC" -eq 0 ] && [ -f "$TARGET/$U9E_REL" ] \
+    && ok "U.9e — control: with the real manifest the same record IS restored (rc=0)" \
+    || bad "U.9e — control failed: rc=$RC present=$([ -f "$TARGET/$U9E_REL" ] && echo yes || echo no) (see $LOG)"
+fi
+
 echo "==> U.9b a manifest that is itself a SYMLINK is refused before anything is read"
 _mkcase u9b-symlink-manifest
 _install

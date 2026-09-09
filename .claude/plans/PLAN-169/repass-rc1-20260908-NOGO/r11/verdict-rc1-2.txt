@@ -1,0 +1,17 @@
+Encontrei dois P1; não encontrei P0.
+
+- **P1 — `scripts/_framework_manifest_set.sh:325`, `scripts/_framework_manifest_set.sh:1392`, `scripts/upgrade.sh:5195`**  
+  **Falha concreta:** `upgrade.sh` define `FMS_HASH_ROOT`, mas não limpa `FMS_HASH_ROOT_PATHS` herdado. Com `FMS_HASH_ROOT_PATHS=SPEC/v1`, o manifesto pós-upgrade grava o hash do **alvo** para um hook customizado e preservado. No segundo upgrade, `H_dst == H_base` faz o classificador declará-lo `FRAMEWORK-CHANGED` (`scripts/upgrade.sh:1291`) e sobrescrevê-lo (`scripts/upgrade.sh:1442`), mesmo com `--on-conflict=refuse`. O validador da condição 14 aceita esse manifesto porque sua gramática é válida. Uma prova estática confirmou `hook_scope=target` nesse ambiente. O installer tem o gêmeo: `scripts/install.sh:3073` não limpa `FMS_HASH_ROOT` antes de gerar o manifesto.  
+  **Correção mínima:** inicializar explicitamente todos os inputs FMS nos dois entrypoints; no upgrade, ao menos `unset FMS_HASH_ROOT_PATHS` antes da geração; no install, `unset FMS_HASH_ROOT FMS_HASH_ROOT_PATHS`. Adicionar controle com variável exportada e hook customizado, incluindo um segundo upgrade. Se não houver cura na rc.1, adicionar ao envelope a condição DURA exata de executar esses `unset` antes dos comandos.
+
+- **P1 — `scripts/install.sh:2811`, `scripts/install.sh:2817`, `scripts/install.sh:2866`; `CONDITIONS-rc1.md:974`; `INSTALL.md:141`**  
+  **Falha concreta:** a condição 74 não descreve nem protege todo o conjunto realmente reescrito. Além de `CLAUDE.md`, `MEMORY.md` e `PROTOCOL.md`, o passe alcança `docs/BRANCH-PROTECTION.md`, `docs/rotation-log.md`, `.claude/team.md`, `.claude/frontend-team.md` e `.claude/agent-metrics.md`. Um adopter pode cumprir literalmente o envelope, manter um `.claude/team.md` autoral contendo `{{PROJECT_NAME}}`, receber `EXISTS (skipping)` e ainda ter seus bytes substituídos depois. O texto também diz “todo `*.md`/`*.py`” em skills, mas o código usa um conjunto nominal que inclui `pitfalls.yaml` (`scripts/install.sh:2876`).  
+  **Correção mínima:** corrigir a condição 74 e `INSTALL.md` enumerando os oito caminhos explícitos e os padrões reais de skills; preferencialmente, limitar o passe no código aos arquivos escritos ou com posse comprovada nesta execução.
+
+- **P2 — `scripts/delivery-routes.tsv:9`, `scripts/delivery-routes.tsv:24`, `scripts/_framework_manifest_set.sh:382`**  
+  **Falha concreta:** o arquivo novo de rotas aponta para linhas antigas (`install.sh:1446-1523`, hoje código do dispatcher) e ainda afirma que CODEOWNERS é produzido por `sed`, embora o diff o tenha substituído por `_render_owner_handle`. Um reviewer seguindo essa evidência inspeciona o escritor errado.  
+  **Correção mínima:** referenciar os símbolos, não linhas móveis, ou atualizar para `install_docs_template:1791`, `install_docs_templates:1904` e `install_github_templates:2030`; remover a alegação de `sed`.
+
+Validação disponível: `bash -n` passou; a tabela corrente produziu 6 destinos para 6 linhas e as checagens de claims/contaminação passaram. Os e2e que criam temporários não puderam ser reexecutados no sandbox read-only.
+
+VERDICT: NO-GO — O envelope omite o isolamento obrigatório das variáveis FMS e a condição 74 não cobre os arquivos que o installer realmente reescreve; ambos precisam ser corrigidos antes do corte da rc.1.

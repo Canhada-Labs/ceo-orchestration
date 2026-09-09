@@ -1,0 +1,22 @@
+# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - 7 partes
+- Base: v1.3.0 (ec0543b615c4621e259a409e9eace951539a6632 -> d789721c2fd4a11c36c87eda0e1118eab59092e4) .. Candidato: 6df13ce8c9a88e212686f204ee2958d746f0a31d (PRE-tag, doutrina r17)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- codex: 0.147.0 / aarch64-apple-darwin / payload 19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+- modelo: gpt-5.6-sol (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-rc1.md sha256 ff61be0258bb0efd3e2fca9c700f4e0e8c2626e5f731c41c7de788fb44356e65
+- Data: 2026-09-09T17:20:56Z
+- parte 1 (upgrade.sh — o caminho que roda na arvore do adopter): VERDICT: NO-GO — O envelope omite uma falha P1 de `TMPDIR` que pode sobrescrever um arquivo customizado e interromper o upgrade antes de registrar o fracasso. [codex rc=0]
+  - payload-rc1-1.raw.txt NAO commitado; pin sha256: 6f64728a3509651c240c6ee8145af2a9bf3fceb834cdbd57290e8653a69138c2
+- parte 2 (install.sh + o set de manifesto + a tabela de rotas de entrega): VERDICT: NO-GO — O envelope omite o isolamento obrigatório das variáveis FMS e a condição 74 não cobre os arquivos que o installer realmente reescreve; ambos precisam ser corrigidos antes do corte da rc.1. [codex rc=0]
+  - payload-rc1-2.raw.txt NAO commitado; pin sha256: 9fd28556a9b8318ac04263b3d5aff058687512f2b940ba495c627c98aee5141c
+- parte 3 (doctor.sh + uninstall.sh + templates/** entregues): VERDICT: NO-GO — The signed draft omits a P1 manifest-leaf precondition, allowing external provenance to drive `doctor.sh --repair` writes while shipped guidance claims that path is refused. [codex rc=0]
+  - payload-rc1-3.raw.txt NAO commitado; pin sha256: 9ffe76f8f18350c8dc30ab5b61c2941f1c1bf520c3a6f33ca1f06a50df45bf49
+- parte 4 (SPEC/** + npm README + CHANGELOG + settings.json (workflows entregues: parte 7)): VERDICT: NO-GO — The signed draft must add the standalone-commit condition before rc.1 because the new ledger checkpoint rail silently misclassifies a common compound staging-and-commit path. [codex rc=0]
+  - payload-rc1-4.raw.txt NAO commitado; pin sha256: c1ecb273094e47b4a6efc6f31358aec43b642005b90b029ee5bc9aaf1dd0e989
+- parte 5 (hooks da familia de continuidade de compaction (PostCompact: parte 7)): VERDICT: NO-GO — A condição 17 declara fechada uma rota ainda aberta, e dois P1 adicionais não constam do envelope assinado. [codex rc=0]
+  - payload-rc1-5.raw.txt NAO commitado; pin sha256: bbefef1a29633e5e0d4801b43f0abbfd1fafaabf6e9a753d9bf97f30f8dd9e53
+- parte 6 (nucleo de cadeia e auditoria em _lib/ (resolvedor, store de estado e isolamento de teste: parte 7)): VERDICT: NO-GO — Conditions 27 and 28 permit cross-project audit contamination and destructive takeover of adopter-authored state leaves, so the proposed signed envelope is not sufficient for rc.1. [codex rc=0]
+  - payload-rc1-6.raw.txt NAO commitado; pin sha256: 277d819c747886a9397d72776b289cdf931578c91ced9b3e97f25500840d69ed
+- parte 7 (PostCompact + resolvedor por projeto + store de estado + isolamento de teste + workflows entregues (parte aberta na rodada 11: o envelope viaja em toda parte e 4/5/6 passaram o teto do redator)): VERDICT: NO-GO — The signed envelope is not honest or sufficient because condition 70 overpromises continuity, condition 38 contradicts the shipped code, and the undeclared state-store isolation escape is P1. [codex rc=0]
+  - payload-rc1-7.raw.txt NAO commitado; pin sha256: 9ade6ba1bd7f47f1023c475337a553143d957341a03f5913d43084f3bf53f67f
+RUNNER-OVERALL: rc=1

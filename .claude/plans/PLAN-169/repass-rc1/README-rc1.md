@@ -31,20 +31,28 @@ recebe e executa. O resto está declarado no §4, não escondido.
 > viaja dentro de toda parte e o redator trunca a 256 KiB — as partes 4, 5 e 6 passaram
 > o teto. Ela recebe `.github/workflows/*` (da 4), `check_postcompact_reinject.py` (da 5)
 > e `_lib/runtime_paths.py` + `_lib/state_store.py` + `_lib/test_isolation.py` (da 6).
+>
+> Rodada 12 (2026-09-09): `.github/workflows/smoke-install.yml` (31.449 B de diff) passa da
+> parte 7 para a parte 4. Aritmética: payload = diff + envelope + ~3,4 KB de cabeçalho, e o
+> runner recusa > 260.000 B brutos; com o envelope a ~110 KB a parte 7 (148.254 B de diff)
+> daria ~262 KB. A parte 4 (103.499 B) era a única com folga. A parte 1 (`upgrade.sh`, um só
+> arquivo, 139.411 B) fixa o teto do envelope em ~112 KB: acima disso é preciso ENCOLHER o
+> envelope, não reparticionar.
 
 A ordem não é arbitrária: é a ordem em que uma regressão machucaria alguém
 que instalou a v1.3.0 e roda o upgrade.
 
-| # | conteúdo | arquivos | bytes de diff |
+| # | conteúdo | arquivos | bytes de diff (rodada 11, `d789721..6df13ce`) |
 |---|---|---|---|
-| 1 | `scripts/upgrade.sh` | 1 | 135.668 |
-| 2 | `install.sh`, `_framework_manifest_set.sh`, `delivery-routes.tsv` | 3 | 111.809 |
-| 3 | `doctor.sh`, `uninstall.sh`, `templates/**` | 11 | 111.488 |
-| 4 | `SPEC/**`, `npm/**`, `CHANGELOG.md`, `VERSION`, `.claude/settings.json`, `.claude-plugin/**`, `.github/workflows/**` | 13 | 163.400 |
-| 5 | hooks da família de continuidade de compaction | 6 | 162.268 |
-| 6 | núcleo de cadeia e auditoria em `_lib/` | 8 | 163.676 |
+| 1 | `scripts/upgrade.sh` | 1 | 139.411 |
+| 2 | `install.sh`, `_framework_manifest_set.sh`, `delivery-routes.tsv` | 3 | 115.769 |
+| 3 | `doctor.sh`, `uninstall.sh`, `templates/**` | 11 | 132.343 |
+| 4 | `SPEC/**`, `npm/**`, `CHANGELOG.md`, `VERSION`, `.claude/settings.json`, `.claude-plugin/**`, `.github/workflows/smoke-install.yml` (desde a rodada 12) | 11 | 103.499 + 31.449 |
+| 5 | hooks da família de continuidade de compaction (PreCompact, SessionEnd, SessionStart, pinning, audit_log) | 5 | 138.251 |
+| 6 | núcleo de cadeia e auditoria em `_lib/` (audit_emit, ledger_provenance, injection_salt, audit_hmac, spool_writer) | 5 | 139.149 |
+| 7 | PostCompact, `_lib/runtime_paths.py`, `_lib/state_store.py`, `_lib/test_isolation.py`, `.github/workflows/*` exceto smoke-install.yml | 11 | 148.254 - 31.449 |
 
-Todas abaixo de 180 KB. A parte 4 é a de menor folga (16,6 KB) porque a
+Todas abaixo de 150 KB de diff. Na rodada 10 a parte 4 era a de menor folga porque a
 seção `[1.4.0]` do CHANGELOG landou em `e242544`; o bump acrescenta a ela
 `VERSION`, `npm/package.json` e os dois manifestos de plugin, poucas linhas
 cada. O redator do ADR-114 preserva linhas e hunks (o

@@ -1,0 +1,25 @@
+REJECT — advisory evidence, not authorization.
+
+1. **SEVERITY: P1 — fix before rc.1**  
+   **FILE:LINE:** [CONDITIONS-rc1.md:31](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:31), [UPGRADE-PROCEDURE.md:77](<WT>/docs/UPGRADE-PROCEDURE.md:77), [spool_writer.py:228](<WT>/.claude/hooks/_lib/spool_writer.py:228), [spool_writer.py:1323](<WT>/.claude/hooks/_lib/spool_writer.py:1323), [spool_writer.py:1895](<WT>/.claude/hooks/_lib/spool_writer.py:1895)  
+   **Concrete failure scenario:** condition 27 recommends copying the entire shared v1.3 `state/` directory, but that directory contains audit crash-recovery files as well as plan SQLite stores. If repository B previously crashed leaving `audit-spool.<dead-pid>.jsonl`, copying the directory for repository A imports that spool into A’s new per-project state. The candidate drainer accepts it without project binding, removes its prior HMAC fields, re-chains it with A’s key, and appends it to A’s log. This recreates cross-project audit contamination inside the supposedly isolated chain; some affected actions are not even attributable by their event fields. It also conflicts with condition 68’s requirement that the new `state` name be absent before first use.  
+   **Minimal fix:** remove the whole-directory-copy route from condition 27 and the upgrade guide. For rc.1, require `CEO_PROJECT_NAME=ceo-orchestration` until the active plan closes. Any migration must selectively copy the named plan’s SQLite data and must first drain or quarantine all legacy `audit-spool*` and `audit-pending*` files using the v1.3 chain.
+
+2. **SEVERITY: P1 — fix before rc.1**  
+   **FILE:LINE:** [audit_emit.py:9103](<WT>/.claude/hooks/_lib/audit_emit.py:9103), [audit_emit.py:9131](<WT>/.claude/hooks/_lib/audit_emit.py:9131), [audit_emit.py:9190](<WT>/.claude/hooks/_lib/audit_emit.py:9190), [audit_emit.py:9322](<WT>/.claude/hooks/_lib/audit_emit.py:9322), [CONDITIONS-rc1.md:527](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:527)  
+   **Concrete failure scenario:** condition 28 guards only the `.claude/state` directory, not the new leaves. A normal, single-linked adopter file `.claude/state/.gc-shard-cursor` passes every stated preflight, then the first armed pressure transition replaces it unconditionally with `os.replace`. PostCompact similarly unlinks any homonymous context marker without proving the framework created it, while GC deletes any aged file matching the prefix. A FIFO at the fixed cursor or marker path blocks in `read_text()` instead of failing open.  
+   **Minimal fix:** add a hard rc.1 condition requiring `.gc-shard-cursor`, `context-pressure-last-bucket`, and `context-pressure-last-bucket.*` to contain no adopter-owned objects before hooks run. The code fix is a dedicated, provenance-established framework directory plus `lstat`/directory-descriptor operations that preserve unproved leaves.
+
+3. **SEVERITY: P2 — follow-up**  
+   **FILE:LINE:** [spool_writer.py:225](<WT>/.claude/hooks/_lib/spool_writer.py:225), [spool_writer.py:251](<WT>/.claude/hooks/_lib/spool_writer.py:251), [spool_writer.py:306](<WT>/.claude/hooks/_lib/spool_writer.py:306)  
+   **Concrete failure scenario:** with relative `CEO_AUDIT_LOG_DIR=runtime`, the cache stores `Path("runtime/state")`. After a long-lived process changes from cwd A to cwd B, invalidation correctly detects the switch but opens that cached “old” path relative to B. If B’s directory exists, A’s buffered audit journal is written into B; otherwise it is silently discarded. Condition 24 covers the separate omitted-cwd case, not this relative cached-path flush.  
+   **Minimal fix:** resolve the selected directory to an absolute path before caching it. Add an A→B test with a relative override, pending journal envelopes, and an existing B directory; require that only A receives the flush.
+
+4. **SEVERITY: P2 — follow-up**  
+   **FILE:LINE:** [spool_writer.py:184](<WT>/.claude/hooks/_lib/spool_writer.py:184), [spool_writer.py:186](<WT>/.claude/hooks/_lib/spool_writer.py:186), [AGENTS.md:9](<WT>/AGENTS.md:9)  
+   **Concrete failure scenario:** the new docstring claims the hot path performs three `getenv` calls, but the implementation unconditionally performs four. This is both unreproducible and prohibited by the repository’s no-speed-claim reviewer contract.  
+   **Minimal fix:** remove the hot-path performance sentence rather than replacing it with another speed claim.
+
+Read-only gates passed: stdlib-only across 449 framework Python files, Python 3.9 AST parsing for all five payload files, `AGENTS.md` freshness, contamination, and `git diff --check`. No P0 was found.
+
+VERDICT: NO-GO — Conditions 27 and 28 permit cross-project audit contamination and destructive takeover of adopter-authored state leaves, so the proposed signed envelope is not sufficient for rc.1.

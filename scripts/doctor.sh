@@ -32,6 +32,10 @@
 #     interactive [y/N] prompt when stdin is a TTY. Overwritten files are
 #     first backed up to .claude.bak/doctor-<UTC-ts>/<relpath>.
 #   * Orphan candidates are report-only. doctor.sh deletes nothing, ever.
+#   * The manifest is never read through a symlink (a symlinked LEAF is
+#     refused before `-f`, exit 2), and its identity (device:inode) is
+#     pinned after sanitization and re-proved before every write of
+#     --repair: foreign provenance never drives a write (rc.1 round 11).
 #   * Every write under the target (restore, backup, re-link) is answered
 #     first by the destination-confinement predicate the installer and the
 #     upgrader use (_wbm_dst_refuses, PLAN-185 / PLAN-185-FOLLOWUP FU-7): a
@@ -271,6 +275,18 @@ if ! _wbm_route_table_gate; then
 fi
 
 MANIFEST="$TARGET/.claude/.install-manifest.sha256"
+# rc.1 re-pass round 11, part 3 (P1): `-f` FOLLOWS a link, so a manifest leaf
+# symlinked to ANOTHER repository's valid manifest was read through it and
+# --repair recreated files and links from that foreign provenance, exit 0.
+# The link is refused (never followed) before anything reads it — the same
+# posture as uninstall.sh — in the manifest-input exit class (2). The
+# identity of the file the sanitizer reads is pinned below (_MANIFEST_ID)
+# and re-proved before every write.
+if [ -L "$MANIFEST" ]; then
+  echo "ERROR: install manifest at $MANIFEST is a SYMLINK — doctor never reads a manifest through a link; refusing (nothing verified, nothing written)." >&2
+  echo "       Replace the link with the real manifest (or run upgrade.sh to regenerate it), then re-run doctor." >&2
+  exit 2
+fi
 if [ ! -f "$MANIFEST" ]; then
   echo "ERROR: install manifest not found at $MANIFEST" >&2
   echo "       This target has no recorded baseline (pre-PLAN-138 install?)." >&2
@@ -433,6 +449,30 @@ if [ "${_nul_count:-0}" -gt 0 ]; then
   echo "       Run upgrade.sh to regenerate the baseline." >&2
   exit 2
 fi
+
+# Pin the manifest identity (device:inode by lstat — `stat` without -L; the GNU
+# spelling is tried first because `stat -f` is a DIFFERENT command on GNU and
+# would succeed with filesystem numbers) so every write below re-proves it is
+# the SAME regular file the sanitizer read: a leaf swapped for a link or for
+# another file mid-run is refused before the write, never followed.
+_manifest_identity() { stat -c '%d:%i' "$1" 2>/dev/null || stat -f '%d:%i' "$1" 2>/dev/null; }
+_MANIFEST_ID="$( _manifest_identity "$MANIFEST" )"
+if [ -z "$_MANIFEST_ID" ]; then
+  echo "ERROR: cannot establish the identity of $MANIFEST (stat failed); refusing to verify." >&2
+  exit 2
+fi
+# rc 0 only while the manifest is still that non-symlink regular file.
+_manifest_still_pinned() {
+  [ ! -L "$MANIFEST" ] && [ -f "$MANIFEST" ] \
+    && [ "$( _manifest_identity "$MANIFEST" )" = "$_MANIFEST_ID" ]
+}
+# One refusal for every write site (restore, backup+restore, re-link); the
+# caller counts the finding as unresolved exactly as it does for a refused
+# destination.
+_manifest_pin_refused() {
+  _log "    REFUSED: the install manifest changed identity or became a SYMLINK during this run — nothing written: $1"
+  REFUSED_COUNT=$((REFUSED_COUNT + 1))
+}
 
 while IFS= read -r line || [ -n "$line" ]; do
   [ -n "$line" ] || continue
@@ -732,6 +772,10 @@ _restore_refuses() {
 _restore_file() {
   _rf_rel="$1"
   _rf_base="$2"
+  if ! _manifest_still_pinned; then
+    _manifest_pin_refused "$_rf_rel"
+    return 1
+  fi
   # D4: repair from the route's SOURCE, never from the destination relpath.
   _rf_rc=0
   _rf_src="$( _wbm_route_src "$_rf_rel" )" || _rf_rc=$?
@@ -814,6 +858,9 @@ while IFS= read -r line || [ -n "$line" ]; do
           if [ "$DRY_RUN" -eq 1 ]; then
             _log "    (dry-run) would RE-LINK: $rel -> $target"
             WOULD_REPAIR=$((WOULD_REPAIR + 1))
+            UNRESOLVED=$((UNRESOLVED + 1))
+          elif ! _manifest_still_pinned; then
+            _manifest_pin_refused "$rel"
             UNRESOLVED=$((UNRESOLVED + 1))
           elif _link_dst_refuses "$rel"; then
             UNRESOLVED=$((UNRESOLVED + 1))
@@ -991,7 +1038,10 @@ while IFS= read -r line || [ -n "$line" ]; do
               WOULD_REPAIR=$((WOULD_REPAIR + 1))
               UNRESOLVED=$((UNRESOLVED + 1))
             else
-              if _backup_file "$rel"; then
+              if ! _manifest_still_pinned; then
+                _manifest_pin_refused "$rel"
+                UNRESOLVED=$((UNRESOLVED + 1))
+              elif _backup_file "$rel"; then
                 _log "    BACKED-UP: $rel -> $BAK_DIR/$rel"
                 if _restore_file "$rel" "$base"; then
                   REPAIRED_COUNT=$((REPAIRED_COUNT + 1))
