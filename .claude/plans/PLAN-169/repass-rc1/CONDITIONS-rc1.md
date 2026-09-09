@@ -9,7 +9,7 @@
 > Emendado (v6) depois da wave-rc1cure (`5518888`) e da rodada 3, parte 1: itens 1, 9,
 > 17, 18, 21 e 23 marcados como CURADOS pelo pack assinado; item 8 reescrito (laundering
 > pelo snapshot); itens 31 e 32 novos. A versão que os revisores da rodada 3 receberam
-> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41. v10: itens 8 (frestas b/c) e 31 marcados CURADOS em `144b0ef` (wave-rc1cure2); condição 5 remete ao 42; itens 42-43 DUROS (posse por igualdade histórica; diretório de backup não confinado) e 44 — rodada 4, parte 1.) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
+> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41. v10: itens 8 (frestas b/c) e 31 marcados CURADOS em `144b0ef` (wave-rc1cure2); condição 5 remete ao 42; itens 42-43 DUROS (posse por igualdade histórica; diretório de backup não confinado) e 44 — rodada 4, parte 1. v11 (rodada 5, parte 1): 42 vale para igualdade ATUAL ou histórica e diz por que a cura literal não serve; 43 exige `.claude.bak` ausente/vazio; 45 DURO (fonte ausente ⇒ SKIPPED ⇒ rc 0) e 46 (P2).) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
 
 Cada item descreve o que o código FAZ nesta rc, para que a assinatura não afirme
 mais do que aconteceu. Fonte: re-pass do candidato (codex 0.147.0 pinado, modelo
@@ -77,11 +77,15 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     antigo, mas a POSSE muda: upgrades seguintes o reescrevem, `doctor.sh --repair` trata
     edições como drift e `uninstall` o apaga. Condição DURA: antes de rodar `upgrade.sh`,
     qualquer arquivo seu em `docs/` ou `.github/` que coincida byte a byte com um template
-    de versão anterior do framework e que você NÃO recebeu do framework deve ser editado
-    (um byte basta) ou movido — `docs/UPGRADE-PROCEDURE.md` diz isto. Cura antes do GA: sem
-    digest exato no manifesto anterior, igualdade atual ou histórica = `PRESERVED
-    (unclaimed)`, sem `chmod`, substituição ou registro; perna com colisão pré-existente
-    não entregue pela v1.3.0 (pack `rc1-cure-3` se o Owner o assinar; senão rc.2).
+    de QUALQUER versão do framework — a ATUAL incluída — e que você NÃO recebeu do framework
+    deve ser editado (um byte basta) ou movido; igual à geração atual, o ramo `IDENTICAL`
+    normaliza o modo e registra a posse do mesmo jeito (rodada 5, parte 1) —
+    `docs/UPGRADE-PROCEDURE.md` diz isto. A cura NÃO é a literal («sem digest anterior,
+    igualdade = PRESERVED»): MEDIDO em 08/09 que a v1.3.0 entrega `docs/` e `.github/` ao
+    disco e registra ZERO linhas deles no manifesto — a cura literal congelaria essas cinco
+    entregas para todo adopter v1.3.0, exatamente o que esta release existe para passar a
+    entregar. Cura = posse por EVIDÊNCIA (registro anterior OU entrega comprovada da
+    v1.3.0), decisão de produto do Owner, rc.2 (pack `rc1-cure-3` em preparação).
 43. **O diretório de backup do upgrade não é confinado ao alvo** (rodada 4, parte 1):
     `scripts/upgrade.sh` cria `.claude.bak/<timestamp>` com `mkdir -p` e grava ali os
     backups (SPEC, docs, CODEOWNERS…) SEM passar por `_wbm_dst_refuses`; se
@@ -89,11 +93,31 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     e os backups escrevem lá fora — ao contrário do que o `--help` afirma (backups
     internos ao alvo). Classe same-UID/symlink (`docs/threat-model.md`, Tier-2), mas é a
     forma fail-open que o PLAN-185 já fechou para os DESTINOS de entrega e o backup não
-    herdou. Condição DURA: `.claude.bak` não pode ser symlink nem estar sob um —
-    `docs/UPGRADE-PROCEDURE.md` diz isto. Cura antes do GA: validar `.claude.bak/<timestamp>`
-    e cada leaf de backup com `_wbm_dst_refuses` antes da primeira mutação (symlink,
-    ancestral symlink, hard link) e perna com sentinel externo intacto (pack `rc1-cure-3`
-    se assinado; senão rc.2).
+    herdou. «Não ser symlink» NÃO basta (rodada 5, parte 1): o timestamp tem precisão de
+    segundos e o script usa `mkdir -p`, então um symlink pré-colocado em
+    `.claude.bak/<timestamp>/docs` ou um leaf de backup hard-linked ainda dirige o `cp` a um
+    inode externo com `.claude.bak` regular. Condição DURA: antes do upgrade,
+    `<alvo>/.claude.bak` deve estar AUSENTE ou VAZIO (nenhuma entrada dentro, de nenhum
+    tipo), não pode ser symlink nem estar sob um, e nenhum outro processo pode escrever
+    nele durante o upgrade — `docs/UPGRADE-PROCEDURE.md` diz isto. Cura antes do GA: criar o
+    diretório concreto da execução EXCLUSIVAMENTE (recusar se já existir) e validar cada
+    leaf de backup com `_wbm_dst_refuses` antes da primeira mutação (symlink, ancestral
+    symlink, hard link), com perna de sentinel externo intacto (pack `rc1-cure-3` se
+    assinado; senão rc.2).
+45. **Fonte AUSENTE no checkout corrente vira `SKIPPED`, não falha** (rodada 5, parte 1):
+    uma rota válida cuja fonte (`templates/...`) está ausente ou não é arquivo regular no
+    checkout que executa `scripts/upgrade.sh`, sem `--pin`, é contada como `SKIPPED`; a
+    conservação fecha, `_UP_DELIVERY_PRECONDITION_FAILED` fica 0, o install-state grava
+    `upgrade_succeeded: true`, o run imprime «Upgrade complete» e sai 0 — entrega PARCIAL
+    indistinguível de sucesso pelo código de saída (a condição 34 cobre a fonte recusada
+    por symlink; esta é a variante ausente/não-regular). Condição DURA: rode o upgrade a
+    partir de um checkout COMPLETO do framework (clone limpo ou checkout da tag,
+    `git status --porcelain` vazio, todas as fontes de `scripts/delivery-routes.tsv`
+    presentes como arquivos regulares) e leia o resumo da entrega: qualquer rota `SKIPPED`
+    sem `--pin` significa upgrade INCOMPLETO — repita a partir de um checkout completo.
+    Cura antes do GA: permitir o skip só com `PIN_REF` definido e a fonte realmente ausente
+    na versão pinada; no checkout corrente, ausência/tipo inválido chama a função comum de
+    falha, persiste `false` e sai 3, com teste do estado, do banner e do código de saída.
 
 ## B. Residuais DECLARADOS por desenho ratificado (não mudam na rc.2 sem decisão do Owner)
 
@@ -349,7 +373,9 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     apenas registra `SKIP` e `upgrade.sh` conta `PRESERVED`, deixa
     `_UP_DELIVERY_PRECONDITION_FAILED=0`, imprime «Upgrade complete» e sai 0 — entrega
     incompleta por input recusado, não falha de infraestrutura. Cura antes do GA:
-    acumular as recusas de fonte e marcar o run como INCOMPLETO (rc ≠ 0).
+    acumular as recusas de fonte e marcar o run como INCOMPLETO (rc ≠ 0). A variante
+    «fonte AUSENTE ou não-regular no checkout corrente ⇒ `SKIPPED` ⇒ rc 0» é o item 45
+    (DURO; rodada 5, parte 1).
 35. `install.sh --dry-run` promete «sempre rc 0» no `--help`, mas uma recusa de destino
     acumulada termina rc 1 (rodada 3, parte 2, P2). Documentar a exceção no help
     (canônico; próxima cerimônia).
@@ -377,6 +403,10 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     e só aplica os valores de `env` iguais entre os perfis (o resumo do run está certo; o
     comentário e o rótulo não). Texto, não comportamento; canônico — próxima cerimônia
     (rodada 4, parte 1, P2).
+46. O `--help` de `scripts/upgrade.sh` diz que `--dry-run preview` retorna 0, mas uma
+    precondição de rotas (ou um transform inválido) também é avaliada no dry-run e termina
+    em 3. Dizer «dry-run limpo» no código 0 e documentar o 3 para preview incompleto —
+    texto, canônico, próxima cerimônia (rodada 5, parte 1, P2).
 
 ## D. O que este re-pass NÃO cobriu
 

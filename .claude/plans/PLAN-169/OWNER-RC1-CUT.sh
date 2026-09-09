@@ -201,21 +201,30 @@ _man="$(awk -v f="$RELEASE" '$2==f{print $1}' .claude/governance/gate-scripts-ma
 git fetch --quiet origin main || die "git fetch falhou"
 [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
   || die "HEAD != origin/main — pushe ou puxe primeiro"
-git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1 \
-  && die "tag $TAG ja existe (local)"
+# Os tres objetos abaixo (tag local, tag remota, GitHub Release) so podem
+# EXISTIR numa retomada depois do passo que os cria (15, 16, 17). Numa corrida
+# FRESCA a existencia e um corte anterior abortado — recusa nomeada, como
+# antes. A retomada pos-tag so tem passos de espera e verificacao (17-20).
+if ! done_step 15; then
+  git rev-parse -q --verify "refs/tags/$TAG" >/dev/null 2>&1 \
+    && die "tag $TAG ja existe (local)"
+fi
 # Tag REMOTA tambem: transporte falhando e ERRO, nunca "ausente".
 _rls="$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}")" \
   || die "git ls-remote falhou (transporte) — nao vou assumir tag remota ausente"
-[ -z "$_rls" ] || die "tag $TAG ja existe no REMOTO:
+if ! done_step 16; then
+  [ -z "$_rls" ] || die "tag $TAG ja existe no REMOTO:
 $_rls"
+fi
 # Release fantasma de tentativa abortada furaria o hold do GA. A sonda vive
 # DENTRO do `if`: sob `set -e` uma atribuicao com rc!=0 mataria o script
 # antes da classificacao NOT-FOUND.
 if _grv="$(gh release view "$TAG" --json name 2>&1)"; then
-  die "GitHub Release do $TAG JA EXISTE — triagem antes: gh release delete $TAG"
+  done_step 17 || die "GitHub Release do $TAG JA EXISTE — triagem antes: gh release delete $TAG"
+else
+  printf '%s' "$_grv" | grep -qi "not found\|release not found\|HTTP 404" \
+    || die "gh release view falhou sem ser NOT-FOUND (API?): $_grv"
 fi
-printf '%s' "$_grv" | grep -qi "not found\|release not found\|HTTP 404" \
-  || die "gh release view falhou sem ser NOT-FOUND (API?): $_grv"
 # Untracked e tolerado dentro do namespace do plano: os proprios
 # materiais do corte (evidencia, fields, condicoes) nascem ali. Nada
 # fora dele, e modificacao RASTREADA nunca e tolerada em lugar nenhum.

@@ -87,19 +87,26 @@ after the upgrade before copying them), and `credential-rotation.json`
 until the record is copied). Copy both from the legacy directory into the
 new per-project directory before the first session, like `state/`.
 
-Two more things to check BEFORE running `scripts/upgrade.sh` (signed
-conditions of rc.1, both in the upgrader's delivery of `docs/` and
+Three more things to check BEFORE running `scripts/upgrade.sh` (signed
+conditions of rc.1, all in the upgrader's delivery of `docs/` and
 `.github/`): (1) a file of yours under `docs/` or `.github/` that is
-byte-identical to a template of an EARLIER framework version, but that the
-framework never delivered, is treated as a pristine prior generation —
-replaced by the current template and registered as framework-owned (later
-upgrades rewrite it, `doctor.sh --repair` treats your edits as drift,
-`uninstall` removes it); edit or move such a file first if you want to keep
-it yours. (2) `<target>/.claude.bak` must be a real directory (or absent),
-never a symlink or under one: the upgrader creates `.claude.bak/<timestamp>`
-with `mkdir -p` and writes its backups there without the destination
-confinement the deliveries get, so a symlinked `.claude.bak` is followed
-outside the target.
+byte-identical to a template of ANY framework version — the current one
+included — but that the framework never delivered, is treated as the
+framework's own copy: replaced (or mode-normalised) and registered as
+framework-owned (later upgrades rewrite it, `doctor.sh --repair` treats your
+edits as drift, `uninstall` removes it); edit or move such a file first if
+you want to keep it yours. (2) `<target>/.claude.bak` must be ABSENT or
+EMPTY — no entries of any kind inside it — and neither a symlink nor under
+one, and nothing else may write there while the upgrade runs: the upgrader
+creates `.claude.bak/<timestamp>` with `mkdir -p` and writes its backups
+there without the destination confinement the deliveries get, so a
+pre-placed symlink or hard link inside it is followed outside the target.
+(3) Run the upgrade from a COMPLETE checkout of the framework (a fresh
+clone or a tag checkout, `git status --porcelain` empty, every source named
+in `scripts/delivery-routes.tsv` present as a regular file) and read the
+delivery summary: a route reported SKIPPED without `--pin` means the source
+was missing from your checkout and the upgrade is INCOMPLETE even though it
+exits 0 — repeat it from a complete checkout.
 
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`
 [1.4.0], «audit log resolves per PROJECT»).
