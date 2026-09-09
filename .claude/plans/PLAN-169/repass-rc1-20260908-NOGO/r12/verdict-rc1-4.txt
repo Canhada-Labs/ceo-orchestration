@@ -1,0 +1,10 @@
+SEVERITY: P1 — fix before rc.1  
+FILE:LINE: `CHANGELOG.md:186`
+
+Concrete failure scenario: The CHANGELOG instructs a v1.3 adopter to copy the entire legacy `state/` directory. That includes `audit-spool.*` files from the formerly shared state root. The v1.4 drainer accepts those spools without project identity, removes their old HMAC fields, re-signs them with the current project’s key, and appends them to its supposedly isolated audit chain. This directly contradicts declared condition 27.
+
+Minimal fix: Replace the whole-directory instruction with condition 27’s exact procedure: either retain `CEO_PROJECT_NAME=ceo-orchestration` temporarily, or first drain/quarantine legacy spools and copy only `scratchpad/`, `skill_proposals/`, `skill_index/`, and `session_graph/` into the new root’s `state/` directory. Explicitly forbid copying flat files from the legacy `state/` root.
+
+The remaining scoped static checks passed: JSON/YAML and actionlint validation, matching workflow path filters, disk-derived counts, settings-template derivation, model-list generation, audit-registry coverage, stdlib-only enforcement, and diff whitespace.
+
+VERDICT: NO-GO — The shipped CHANGELOG currently directs adopters to perform the exact cross-project contamination operation that signed condition 27 forbids.

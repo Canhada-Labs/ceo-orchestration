@@ -1,0 +1,47 @@
+The envelope is not signable as drafted. I found no new P0 or undisclosed runtime P1, but two release-honesty defects require correction before rc.1.
+
+1. **SEVERITY: P1 — fix before rc.1**
+
+   **FILE:LINE:** [spool_writer.py:184](<WT>/.claude/hooks/_lib/spool_writer.py:184), [spool_writer.py:186](<WT>/.claude/hooks/_lib/spool_writer.py:186), [AGENTS.md:9](<WT>/AGENTS.md:9), [CONDITIONS-rc1.md:689](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:689)
+
+   **Concrete failure scenario:** the diff claims the hot path performs three `getenv` calls, but lines 186–189 unconditionally perform four. More importantly, the reviewer contract requires rejection of added throughput/speed claims. Condition 38 acknowledges the false statement but defers it, which cannot waive that rule.
+
+   **Minimal fix:** remove the hot-path performance sentence before rc.1; do not replace it with another speed claim.
+
+2. **SEVERITY: P1 — fix the signed claim before rc.1**
+
+   **FILE:LINE:** [audit_emit.py:1122](<WT>/.claude/hooks/_lib/audit_emit.py:1122), [audit_emit.py:8646](<WT>/.claude/hooks/_lib/audit_emit.py:8646), [injection_salt.py:393](<WT>/.claude/hooks/_lib/injection_salt.py:393), [CONDITIONS-rc1.md:532](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:532)
+
+   **Concrete failure scenario:** two comments still state that slug/path text never reaches the audit log. The producer explicitly passes the absolute repository path as `project`, and the allowlist preserves it. An auditor relying on those comments could incorrectly classify the event as path-free. Condition 23 says this textual defect is cured, but the same unqualified claim remains twice in the shipped file.
+
+   **Minimal fix:** qualify both comments as excluding only the slug and salt-path payload values, matching the corrected SPEC and dispatch comment; alternatively, remove the false “CURADO” assertion from condition 23.
+
+3. **SEVERITY: P2 — follow-up and signed disclosure**
+
+   **FILE:LINE:** [audit_emit.py:9065](<WT>/.claude/hooks/_lib/audit_emit.py:9065), [audit_emit.py:9167](<WT>/.claude/hooks/_lib/audit_emit.py:9167), [audit_emit.py:9174](<WT>/.claude/hooks/_lib/audit_emit.py:9174)
+
+   **Concrete failure scenario:** the GC claims guaranteed coverage without starvation, but every sweep starts a fresh `scandir()` and stops at the 250 ms deadline. With a stable, sufficiently large prefix of unrelated or non-expired entries, every sweep stops before the same tail. Rotating the hash shard does not rotate the directory position, so expired markers in that tail can remain forever and accumulate.
+
+   **Minimal fix:** persist a per-shard continuation cursor and test with an undeletable prefix plus an expired marker beyond the deadline. Until fixed, disclose that marker reclamation is best-effort, not guaranteed.
+
+4. **SEVERITY: P2 — follow-up**
+
+   **FILE:LINE:** [audit_emit.py:1160](<WT>/.claude/hooks/_lib/audit_emit.py:1160), [audit_emit.py:4227](<WT>/.claude/hooks/_lib/audit_emit.py:4227)
+
+   **Concrete failure scenario:** both comments say the event determines whether “THIS session” modified memory. The directory is project-shared: a concurrent session’s write inside the observation window can make this session emit `written`. This can produce false forensic attribution. Condition 20 describes the behavior correctly but condition 38 omits these two stale sites.
+
+   **Minimal fix:** say “activity occurred in the shared project memory directory during this session’s window; no session authorship is proven,” and add the sites to condition 38 until corrected.
+
+5. **SEVERITY: P2 — follow-up**
+
+   **FILE:LINE:** [ledger_provenance.py:36](<WT>/.claude/hooks/_lib/ledger_provenance.py:36), [ledger_provenance.py:335](<WT>/.claude/hooks/_lib/ledger_provenance.py:335), [ledger_provenance.py:868](<WT>/.claude/hooks/_lib/ledger_provenance.py:868)
+
+   **Concrete failure scenario:** the module first says every rejected entry is discarded and that the durable series uses `prompt_injection_detected`; shipping posture actually admits would-rejected entries, and `_emit_rejection` writes `ledger_entry_rejected`. An operator following line 337 queries the wrong action and obtains an empty FPR series.
+
+   **Minimal fix:** make the top-level text conditional on enforcement and name `ledger_entry_rejected` as the durable action. Add this to condition 24; the module remains dormant outside tests in this rc.
+
+The main adopter blast radius is otherwise disclosed accurately: the default family moves from the v1.3 literal directory to the native per-project directory without migration, so active stores appear empty and new key/salt/chain state is created while legacy data remains. Conditions 21, 27, 29, 65, 67, and 68 provide workable—though strict—mitigations for the stated maintainer copy-mode cohort. Runtime state intentionally lives outside the repository under `$HOME/.claude/projects/...`; I found no additional undisclosed delivery write in this five-file payload. The scanner’s input failures are fail-closed and audit infrastructure failures remain fail-open as intended.
+
+Read-only checks passed: stdlib-only over 449 framework files, Python 3.9 syntax/compilation for the payload, `git diff --check`, AGENTS freshness, count claims, and contamination.
+
+VERDICT: NO-GO — Remove the prohibited performance claim and correct condition 23’s incomplete cure assertion before rc.1, then carry findings 3–5 as explicit P2 residuals in the signed envelope.

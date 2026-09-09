@@ -1,0 +1,19 @@
+O caminho nominal entrega até cinco arquivos por execução a partir das seis rotas — o par `CODEOWNERS`/`.template` é mutuamente exclusivo ([delivery-routes.tsv:24](<WT>/scripts/delivery-routes.tsv:24)). A mudança de posse descrita nas condições 5/42 é honesta: igualdade atual ou histórica pode transformar conteúdo pré-existente em baseline do framework.
+
+### Finding 1
+
+**SEVERITY: P1 — fix before rc.1**
+
+**FILE:LINE:** [_framework_manifest_set.sh:799](<WT>/scripts/_framework_manifest_set.sh:799), [install.sh:1081](<WT>/scripts/install.sh:1081), [upgrade.sh:4630](<WT>/scripts/upgrade.sh:4630)
+
+**Concrete failure scenario:** o predicado percorre os componentes procurando apenas symlinks. Se `docs` for um arquivo regular, `docs/BRANCH-PROTECTION.md` passa: o algoritmo recua até o diretório-alvo ([linha 816](<WT>/scripts/_framework_manifest_set.sh:816)), o teste de tipo cobre somente o leaf inexistente ([linha 834](<WT>/scripts/_framework_manifest_set.sh:834)) e retorna “seguro”. A prova direta no candidato, usando o arquivo regular `VERSION` como ancestral, resultou em `rc=1 reason=<empty>` — isto é, não recusado.
+
+Um adopter copy-mode da v1.3.0 pode legitimamente ter substituído a árvore adopter-owned `docs/` por um arquivo regular `docs`. Os comandos assinados da condição 47 imprimem nada: não há symlink nem hard link. O upgrade já realizou mutações quando chega à entrega; depois, o `mkdir -p "$TARGET/docs"` não tratado ([upgrade.sh:4761](<WT>/scripts/upgrade.sh:4761)) aborta sob `set -e`. Não há manifesto novo, `_write_upgrade_state` nem banner final, estes últimos somente em [upgrade.sh:5629](<WT>/scripts/upgrade.sh:5629). O estado anterior pode continuar afirmando sucesso, numa árvore parcialmente atualizada. O instalador tem o mesmo erro: a preflight passa, começa a escrever em [install.sh:1101](<WT>/scripts/install.sh:1101) e aborta depois em [install.sh:1834](<WT>/scripts/install.sh:1834). O dry-run mente com `would COPY/INSTALL` e rc 0.
+
+Esta é precisamente a variante plausível de passar despercebida: o e2e de preflight cobre symlink pendente ([test-installer-write-safety-e2e.sh:387](<WT>/scripts/tests/test-installer-write-safety-e2e.sh:387)), mas não ancestral regular/FIFO.
+
+**Minimal fix:** em ambos os percursos, exigir que todo componente intermediário existente seja diretório real; caso contrário, recusar nominalmente. Acrescentar e2e v1.3.0→rc.1 com `docs` regular, provando dry-run e execução real recusados antes de qualquer mutação. Alternativamente, para esta pré-release, emendar e reassinar o envelope exigindo que todos os ancestrais existentes dos destinos sejam diretórios reais; as condições 47/60 atuais não dizem isso e suas checagens não detectam o caso.
+
+`bash -n`, ShellCheck, `diff --check`, contagem da tabela 6/6 e checks de claims/contaminação passaram. O sandbox read-only impediu executar o e2e mutante; a falha do predicado foi reproduzida diretamente sem escrita.
+
+VERDICT: NO-GO — O envelope não cobre o P1 de ancestral não-diretório, que transforma uma preflight verde em upgrade parcial sem manifesto, estado final ou banner.

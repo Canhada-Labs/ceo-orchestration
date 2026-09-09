@@ -1,0 +1,17 @@
+REJECT
+
+P1 — `scripts/upgrade.sh:4630`, `scripts/upgrade.sh:4765`
+
+Concrete failure: a v1.3 copy-mode adopter can replace `.github/workflows/` with a committed, ordinary file. Conditions 47 and 60 still pass: it is neither a symlink nor multi-linked, and `.github/` remains writable. The confinement check climbs past the non-directory component and approves its nearest directory ancestor. The delivery path then treats the destination as absent and executes unguarded `mkdir -p`; under `set -e`, this exits 1 after hooks/settings and earlier routes may already have changed. The manifest, failure state, delivery summary, and `Upgrade INCOMPLETE` banner are never written.
+
+Minimal fix: before the first mutation, require every existing strict ancestor of every validated delivery destination to be a real directory. For the rc.1 envelope, minimally add a hard check that `docs`, `.github`, and `.github/workflows` are absent or real directories. Add an e2e fixture with `.github/workflows` as a regular file and prove a named preflight refusal with an unchanged tree and install-state.
+
+P2 — `scripts/upgrade.sh:34`, `scripts/upgrade.sh:2634`
+
+Concrete failure: the shipped header still says the merge installs “today” only the Setup hook, while the changed implementation derives the complete ceremony-specific roster and also adds missing `.env` keys. An adopter auditing the script understates the settings blast radius, including registrations that condition 63 acknowledges may block. Condition 4 names two inaccurate texts but omits this third one.
+
+Minimal fix: update the header, or explicitly add it to condition 4’s signed inventory.
+
+Static checks passed: `bash -n`, ShellCheck warning level, `git diff --check`, AGENTS freshness, count claims, and contamination. The write-heavy e2e harness could not run in the mandated read-only sandbox.
+
+VERDICT: NO-GO — The signed conditions omit a P1 non-directory-ancestor case that can leave a v1.3 adopter only partially upgraded.

@@ -1,0 +1,20 @@
+Scope:
+  - .claude/hooks/_lib/audit_emit.py
+  - .claude/hooks/_lib/ledger_provenance.py
+  - .claude/hooks/_lib/spool_writer.py
+  - .claude/hooks/check_precompact_continuity.py
+  - .claude/hooks/tests/test_check_compaction_continuity.py
+  - .claude/plans/PLAN-169/OWNER-RC1-CUT.sh
+  - .claude/plans/PLAN-169/gen-envelope-rc1.py
+  - .claude/plans/PLAN-169/repass-rc1/CONDITIONS-history.md
+  - .claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md
+  - .claude/plans/PLAN-169/repass-rc1/README-rc1.md
+  - .claude/plans/PLAN-169/repass-rc1/run-rc1-repass.sh
+  - .claude/plans/PLAN-169/test-rc1-kit.sh
+  - .claude/scripts/data/installer-write-safety-baseline.txt
+  - CHANGELOG.md
+  - docs/UPGRADE-PROCEDURE.md
+  - scripts/_framework_manifest_set.sh
+  - scripts/install.sh
+  - scripts/tests/test-installer-write-safety-e2e.sh
+  - scripts/upgrade.sh

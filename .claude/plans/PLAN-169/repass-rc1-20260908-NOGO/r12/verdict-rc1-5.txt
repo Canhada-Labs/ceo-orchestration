@@ -1,0 +1,9 @@
+P1 — [.claude/hooks/check_precompact_continuity.py:1257](<WT>/.claude/hooks/check_precompact_continuity.py:1257), [.claude/hooks/check_precompact_continuity.py:1266](<WT>/.claude/hooks/check_precompact_continuity.py:1266), [.claude/hooks/check_precompact_continuity.py:1407](<WT>/.claude/hooks/check_precompact_continuity.py:1407), [.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:420](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:420)
+
+Concrete failure scenario: the new US7 AC-index enumerates `PLAN-NNN-*.md` and opens each candidate with plain `open()`, following a leaf symlink. An adopter checks out `PLAN-001-external.md -> /outside/foreign.md`; that external file declares `[P1][US7][src/x.py]`; the latest commit touches `src/x.py`. The hook consumes the external bytes, elects `PLAN-001`, and can reinject its local ledger as the work-resumption pointer. Condition 18 accurately describes the cured `LEDGER.md` leaf and remaining ancestor problem, but omits this separate leaf reader. Condition 47 checks only at upgrade time; a later checkout can introduce the link.
+
+Minimal fix: apply `lstat`/regular-file validation, `O_NOFOLLOW`, and `fstat` identity checking to every `plan_file`, while validating ancestors through `dir_fd`. Until cured, add a hard runtime condition requiring the entire `.claude/plans` ancestry and every matching plan file to be non-symlinks after each checkout and before compaction, or disable continuity.
+
+The scoped Python-3.9 AST, stdlib-only, claims-count, contamination, AGENTS freshness, and scoped `diff --check` checks passed.
+
+VERDICT: NO-GO — The signed conditions omit a P1 out-of-tree read and wrong-plan selection path in the new US7 index.
