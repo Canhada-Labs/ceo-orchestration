@@ -42,8 +42,13 @@ OUT="$REPO_ROOT/.claude/plans/PLAN-169/repass-rc1"
 BASE_TAG="v1.3.0"
 BASE_TAG_OBJ="ec0543b615c4621e259a409e9eace951539a6632"
 BASE_TAG_COMMIT="d789721c2fd4a11c36c87eda0e1118eab59092e4"
-PARTS="1 2 3 4 5 6"
-NPARTS=6
+# Rodada 11 (2026-09-09): SETE partes. O envelope CONDITIONS-rc1.md (98 KB na v37) viaja em
+# toda parte e o redator trunca a 256 KiB; as partes 4/5/6 (diff 179/177/173 KB) passaram
+# o teto — a parte 7 recebe os workflows entregues, o PostCompact, o resolvedor por projeto
+# e o isolamento de teste (131 KB), deixando 4/5/6 em 114/138/147 KB; o store de estado
+# (7 KB) segue para a 7 no mesmo dia, para 6 e 7 ficarem em ~139/~138 KB.
+PARTS="1 2 3 4 5 6 7"
+NPARTS=7
 CODEX_PKG="@openai/codex@0.147.0"
 # Teto de SANIDADE do tamanho de uma parte (particao errada), nao um limite do
 # codex: a parte 1 correu a 172 KB com transcript de 631 KB. MEDIDO em
@@ -197,10 +202,9 @@ part_pathspec() {
     4) printf '%s\n' \
          "SPEC/" "npm/" "CHANGELOG.md" "VERSION" \
          ".claude/settings.json" ".claude/.framework-version" \
-         ".claude-plugin/" ":(glob).github/workflows/*" ;;
+         ".claude-plugin/" ;;
     5) printf '%s\n' \
          ".claude/hooks/check_precompact_continuity.py" \
-         ".claude/hooks/check_postcompact_reinject.py" \
          ".claude/hooks/SessionEnd.py" \
          ".claude/hooks/check_compact_pinning.py" \
          ".claude/hooks/SessionStart.py" \
@@ -208,12 +212,15 @@ part_pathspec() {
     6) printf '%s\n' \
          ".claude/hooks/_lib/audit_emit.py" \
          ".claude/hooks/_lib/ledger_provenance.py" \
-         ".claude/hooks/_lib/runtime_paths.py" \
          ".claude/hooks/_lib/injection_salt.py" \
          ".claude/hooks/_lib/audit_hmac.py" \
-         ".claude/hooks/_lib/spool_writer.py" \
+         ".claude/hooks/_lib/spool_writer.py" ;;
+    7) printf '%s\n' \
+         ".claude/hooks/check_postcompact_reinject.py" \
+         ".claude/hooks/_lib/runtime_paths.py" \
          ".claude/hooks/_lib/state_store.py" \
-         ".claude/hooks/_lib/test_isolation.py" ;;
+         ".claude/hooks/_lib/test_isolation.py" \
+         ":(glob).github/workflows/*" ;;
     *) return 1 ;;
   esac
 }
@@ -223,9 +230,10 @@ part_label() {
     1) echo "upgrade.sh — o caminho que roda na arvore do adopter" ;;
     2) echo "install.sh + o set de manifesto + a tabela de rotas de entrega" ;;
     3) echo "doctor.sh + uninstall.sh + templates/** entregues" ;;
-    4) echo "SPEC/** + npm README + CHANGELOG + settings.json + workflows entregues" ;;
-    5) echo "hooks da familia de continuidade de compaction" ;;
-    6) echo "nucleo de cadeia e auditoria em _lib/" ;;
+    4) echo "SPEC/** + npm README + CHANGELOG + settings.json (workflows entregues: parte 7)" ;;
+    5) echo "hooks da familia de continuidade de compaction (PostCompact: parte 7)" ;;
+    6) echo "nucleo de cadeia e auditoria em _lib/ (resolvedor, store de estado e isolamento de teste: parte 7)" ;;
+    7) echo "PostCompact + resolvedor por projeto + store de estado + isolamento de teste + workflows entregues (parte aberta na rodada 11: o envelope viaja em toda parte e 4/5/6 passaram o teto do redator)" ;;
   esac
 }
 part_coverage() {
@@ -239,6 +247,7 @@ part_coverage() {
     4) echo "wave-s330-F (settings.user.json derivado, --check byte-a-byte no validate.yml), S337 (smoke-install EXECUTA o CI entregue; docker ubuntu 24.04 10/10 steps verdes)" ;;
     5) echo "PLAN-179 wave-179close (US7 snapshot do PreCompact com indice de ledger, US8 delta de memoria; 27 rodadas de pair-rail, 83 defeitos reais)" ;;
     6) echo "PLAN-182 W1 (resolvedor por projeto, chave HMAC e salt por projeto; marcador M4 e censo 16->7->0), S326 wave-cli (Axis 3 do isolamento de coleta; 9 rodadas)" ;;
+    7) echo "PLAN-179 wave-179close (PostCompact: reinjecao de ponteiros e restricoes pinadas; 27 rodadas de pair-rail), PLAN-182 W1 (resolvedor por projeto) e S326 wave-cli (Axis 3 do isolamento de coleta), S337 (smoke-install EXECUTA o CI entregue; docker ubuntu 24.04 10/10 steps verdes)" ;;
   esac
 }
 
@@ -416,13 +425,44 @@ for P in $PARTS; do
   printf -v "PIN_RED_$P" '%s' "$PRE_SHA_RED" || die "pin do RED da parte $P"
   printf -v "PIN_DIFF_$P" '%s' "$PRE_SHA_DIFF" || die "pin do DIFF da parte $P"
   printf -v "PIN_MAN_$P" '%s' "$PRE_SHA_MAN" || die "pin do MAN da parte $P"
-  printf 'parte %s/%s OK (%sB, %s hunks) - codex rodando (~10-15 min)...\n' \
+  printf 'parte %s/%s OK (%sB, %s hunks) - payload pronto\n' \
     "$P" "$NPARTS" "$RAWB" "$RH"
+done
+
+# --- fase B: codex por parte. Serial por default (RC1_CODEX_JOBS=1, o comportamento
+# historico); RC1_CODEX_JOBS=N corre ate N partes ao mesmo tempo, em ondas. Cada parte
+# escreve so os SEUS arquivos (verdict/transcript); o rc do codex viaja por
+# .codex-rc-<parte>, lido e apagado na fase C. Medido na rodada 9: 2h04 em serie, a
+# parte mais longa ~45 min — uma onda de 6 e o teto da rodada.
+RC1_CODEX_JOBS="${RC1_CODEX_JOBS:-1}"
+case "$RC1_CODEX_JOBS" in ''|*[!0-9]*|0) die "RC1_CODEX_JOBS invalido: '$RC1_CODEX_JOBS'" ;; esac
+_running=0
+for P in $PARTS; do
+  RED="$OUT/payload-rc1-$P.redacted.txt"
+  rm -f "$OUT/.codex-rc-$P"
+  printf 'parte %s/%s: codex rodando (~10-45 min; jobs=%s)...\n' "$P" "$NPARTS" "$RC1_CODEX_JOBS"
   ( cd "$WT" && "$CODEX_BIN" exec --sandbox read-only --color never \
       -m "$CODEX_MODEL" \
       --output-last-message "$OUT/verdict-rc1-$P.txt" \
-      - < "$RED" > "$OUT/transcript-rc1-$P.log" 2>&1 )
-  CRC=$?
+      - < "$RED" > "$OUT/transcript-rc1-$P.log" 2>&1
+    echo "$?" > "$OUT/.codex-rc-$P" ) &
+  _running=$((_running + 1))
+  if [ "$_running" -ge "$RC1_CODEX_JOBS" ]; then wait; _running=0; fi
+done
+wait
+
+# --- fase C: veredito, proveniencia, quarentena e integridade, na ORDEM das partes ---
+for P in $PARTS; do
+  LABEL="$(part_label "$P")"
+  MAN="$OUT/paths-rc1-$P.manifest.txt"; DIFF="$OUT/diff-rc1-$P.patch"
+  RAW="$OUT/payload-rc1-$P.raw.txt"; RED="$OUT/payload-rc1-$P.redacted.txt"
+  _n_red="PIN_RED_$P"; _n_dif="PIN_DIFF_$P"; _n_man="PIN_MAN_$P"
+  PRE_SHA_RED="${!_n_red}"; PRE_SHA_DIFF="${!_n_dif}"; PRE_SHA_MAN="${!_n_man}"
+  [ -n "$PRE_SHA_RED" ] && [ -n "$PRE_SHA_DIFF" ] && [ -n "$PRE_SHA_MAN" ] \
+    || die "pin ausente para a parte $P — a fase A nao a completou"
+  CRC="$(cat "$OUT/.codex-rc-$P" 2>/dev/null || echo 99)"
+  rm -f "$OUT/.codex-rc-$P"
+  case "$CRC" in ''|*[!0-9]*) CRC=99 ;; esac
   # Exatamente UMA linha VERDICT (CM-03 do corpus S348): um arquivo com
   # GO seguido de NO-GO e ambiguo, nunca aprovacao.
   VN=$(grep -cE '^VERDICT:' "$OUT/verdict-rc1-$P.txt" 2>/dev/null || true)

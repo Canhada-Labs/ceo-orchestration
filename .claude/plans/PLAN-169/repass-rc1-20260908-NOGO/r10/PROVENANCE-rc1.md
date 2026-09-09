@@ -1,0 +1,13 @@
+# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - 6 partes
+- Base: v1.3.0 (ec0543b615c4621e259a409e9eace951539a6632 -> d789721c2fd4a11c36c87eda0e1118eab59092e4) .. Candidato: ab194c91719916850e9cee78406b59c700184f0e (PRE-tag, doutrina r17)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- codex: 0.147.0 / aarch64-apple-darwin / payload 19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+- modelo: gpt-5.6-sol (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-rc1.md sha256 07c03f98ae7575e6825aa8a6ceaab4f6171b96ea421aebb5d459b64d43ec919c
+- Data: 2026-09-09T16:12:54Z
+- parte 1 (upgrade.sh — o caminho que roda na arvore do adopter): VERDICT: NO-GO — A condição DURA 14 aceita manifestos que acionam o fallback destrutivo, portanto o envelope ainda não é honesto nem suficiente para a rc.1. [codex rc=0]
+  - payload-rc1-1.raw.txt NAO commitado; pin sha256: c239c33bb74979913e99729f8b13c68885cdf174e0dc43467338496500268fd9
+- parte 2 (install.sh + o set de manifesto + a tabela de rotas de entrega): VERDICT: NO-GO — O envelope v36 omite três P1 concretos nesta superfície e ainda não é suficiente para assinar a rc.1. [codex rc=0]
+  - payload-rc1-2.raw.txt NAO commitado; pin sha256: a7baa2efe7a60451949dce9f4d7b09c2786d737c94d0270b7ad7490def17013a
+- parte 3 (doctor.sh + uninstall.sh + templates/** entregues): VERDICT: NO-GO — Condition 69’s leaf-only manifest cure misses a P1 ancestor-symlink escape affecting both doctor and uninstall. [codex rc=0]
+  - payload-rc1-3.raw.txt NAO commitado; pin sha256: 5b91b2400e9c51ee6856f2c96b9a7aedde14abb30275c21058fb603564d46dcd

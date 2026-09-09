@@ -1,0 +1,23 @@
+Não encontrei P0, mas há dois P1 no preflight assinado e uma inexatidão adicional no envelope.
+
+1. **P1 — [`scripts/upgrade.sh:1123`](<<WT>/scripts/upgrade.sh:1123>), [`CONDITIONS-rc1.md:307`](<<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:307>), [`docs/UPGRADE-PROCEDURE.md:240`](<<WT>/docs/UPGRADE-PROCEDURE.md:240>) — o “parser TOTAL” aceita manifesto vazio.**
+
+   Cenário concreto: `.claude/.install-manifest.sha256` existe, é regular, mas tem zero bytes. O comando assinado imprime nada e retorna 0 — reproduzido com arquivo regular vazio. O loader, porém, transforma isso em “sem manifesto” em `upgrade.sh:1228-1232`; `backup_and_replace` cai no caminho legado em `:1546-1660`, removendo e recopiando arquivos não excluídos. Uma customização do adopter em um hook entregue é sobrescrita mesmo com `--on-conflict=refuse`; o manifesto é reescrito em `:5367` e o upgrade termina 0.
+
+   Correção mínima: o awk assinado deve contar registros válidos e rejeitar `n == 0`. No código, manifesto presente mas vazio/malformado deve abortar antes da primeira mutação, ou todos os caminhos afetados devem virar `CONFLICT`. Adicionar controle positivo de manifesto vazio com hook customizado intacto.
+
+2. **P1 — [`scripts/upgrade.sh:1080`](<<WT>/scripts/upgrade.sh:1080>), [`scripts/upgrade.sh:1241`](<<WT>/scripts/upgrade.sh:1241>), [`scripts/upgrade.sh:1463`](<<WT>/scripts/upgrade.sh:1463>) — o mesmo preflight aceita aliases que o lookup não reconhece.**
+
+   Cenário concreto: trocar uma linha legítima por `64hex  ./.claude/hooks/foo.py` ou `.claude//hooks/foo.py`. Ambos passam silenciosamente pelo comando da condição 14. `_baseline_relpath_unsafe` ignora componentes `.` e vazios durante a inspeção, mas preserva a grafia original no manifesto sanitizado; `_baseline_lookup` exige igualdade textual exata com `.claude/hooks/foo.py`. Resultado: `FALLBACK`, sobrescrita da customização e desconsideração de `--on-conflict=refuse`.
+
+   Correção mínima: rejeitar ao menos `./` inicial, `//` e barra final, e verificar unicidade após canonicalização/identidade — a mesma classe já reconhecida no item 69. O loader não deve simplesmente descartar ou aceitar grafias não canônicas; deve falhar fechado antes das mutações. Incluir controles para cada alias.
+
+3. **P2 — [`CONDITIONS-rc1.md:748`](<<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:748>), [`scripts/upgrade.sh:1407`](<<WT>/scripts/upgrade.sh:1407>) — a condição 64 exagera a superfície de colisão.**
+
+   O comando proposto lista 54 caminhos novos; 35 estão em árvores de testes/fixtures explicitamente excluídas da entrega. Por exemplo, um arquivo do adopter em `.claude/hooks/tests/test_runtime_paths.py` é ignorado e preservado pelo updater, mas a condição manda movê-lo como se fosse sobrescrito e apropriado pelo framework.
+
+   Correção mínima: filtrar a lista por `_framework_path_excluded`, ou declarar explicitamente as árvores excluídas. É P2 no comportamento, mas torna o material assinado inexato.
+
+`bash -n`, `git diff --check`, ShellCheck em nível warning e os gates de stdlib, contagens, AGENTS e contaminação passaram. Os e2e que criam fixtures não puderam rodar no sandbox somente-leitura; os dois casos do parser foram verificados sem escrita.
+
+VERDICT: NO-GO — A condição DURA 14 aceita manifestos que acionam o fallback destrutivo, portanto o envelope ainda não é honesto nem suficiente para a rc.1.

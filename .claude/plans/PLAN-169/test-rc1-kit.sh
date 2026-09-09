@@ -121,7 +121,7 @@ if [ -n "$CLONE" ]; then
     for f in $SHELLS $PYS "$EV/README-rc1.md"; do
       [ -f "$f" ] && cp "$f" "$CLONE/$f"
     done
-    for n in 1 2 3 4 5 6; do
+    for n in 1 2 3 4 5 6 7; do
       cp "$EV/paths-rc1-$n.manifest.txt" "$CLONE/$EV/" 2>/dev/null \
         || bad "manifesto da parte $n ausente"
     done
@@ -153,13 +153,13 @@ STUBEOF
     if ( cd "$CLONE" && CODEX_BIN="$STUB" HOME="$SCRATCH/fakehome" \
          GNUPGHOME="$_real_gnupg" \
          bash "$EV/run-rc1-repass.sh" ) > "$_run" 2>&1; then
-      ok "runner completou as 6 partes (rc 0)"
+      ok "runner completou as 7 partes (rc 0)"
     else
       bad "runner rc!=0"; sed -n '1,25p' "$_run"
     fi
     _ml="$(grep -c . "$CLONE/$EV/MANIFEST-rc1.sha256" 2>/dev/null || echo 0)"
-    if [ "$_ml" = "33" ]; then ok "MANIFEST-rc1 com 33 entradas"
-    else bad "MANIFEST-rc1 com $_ml entradas (esperado 33)"; fi
+    if [ "$_ml" = "38" ]; then ok "MANIFEST-rc1 com 38 entradas"
+    else bad "MANIFEST-rc1 com $_ml entradas (esperado 38)"; fi
     if ( cd "$CLONE/$EV" && shasum -a 256 -c MANIFEST-rc1.sha256 --status ); then
       ok "MANIFEST-rc1 verifica"
     else bad "MANIFEST-rc1 nao verifica"; fi
@@ -190,7 +190,7 @@ if [ -n "$CLONE" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]; then
   if [ -n "${FPR:-}" ]; then
     VF="$CLONE/$PLAN_DIR/verdict-fields-v1.4.0-rc.1.md"
     COND="$SCRATCH/CONDITIONS.md"
-    printf -- '- Cobertura declarada: 6 partes, o resto fora por orcamento.\n' > "$COND"
+    printf -- '- Cobertura declarada: 7 partes, o resto fora por orcamento.\n' > "$COND"
     _gen="$SCRATCH/gen.log"
     # C1 — CONTROLE VERMELHO: evidencia de um run com STUB nao pode virar
     # envelope de release. O gerador tem de RECUSAR, nomeando o motivo.
@@ -208,7 +208,7 @@ if [ -n "$CLONE" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]; then
     fi
     # C2 — caminho REAL. A linha do codex na PROVENANCE e reescrita para os
     # valores PINADOS (0.147.0 / aarch64-apple-darwin / payload do manifesto)
-    # e o MANIFEST e regenerado. Isto e PLUMBING: o veredito das 6 partes
+    # e o MANIFEST e regenerado. Isto e PLUMBING: o veredito das 7 partes
     # continua vindo do stub-revisor; nenhuma aprovacao e plantada.
     _pinman="$ROOT/.claude/governance/codex-cli-pin-manifest.json"
     _real_sha="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["payloads"]["aarch64-apple-darwin"]["sha256"])' "$_pinman")"
@@ -223,7 +223,7 @@ t = re.sub(r"^- codex: .*$",
 p.write_text(t, encoding="utf-8")
 PYPROV
     _mf=""
-    for n in 1 2 3 4 5 6; do
+    for n in 1 2 3 4 5 6 7; do
       _mf="$_mf payload-rc1-$n.redacted.txt diff-rc1-$n.patch"
       _mf="$_mf paths-rc1-$n.manifest.txt verdict-rc1-$n.txt transcript-rc1-$n.log"
     done

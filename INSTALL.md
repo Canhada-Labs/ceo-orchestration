@@ -130,6 +130,29 @@ same repo produces:
 
 ---
 
+> ## ⚠ Pre-install: three preconditions signed for v1.4.0-rc.1
+>
+> 1. **`--profile` takes names, never paths.** Each comma-separated part must
+>    be `core`, `frontend` or the name of a directory that exists under
+>    `.claude/skills/domains/` in your checkout (`^[A-Za-z0-9_-]+$`). The
+>    installer does not validate the value: a part carrying `..` or `/`
+>    resolves to a path OUTSIDE the target and is written there, and the
+>    manifest records it (signed condition 73).
+> 2. **The placeholder pass rewrites files of yours.** After reporting a
+>    pre-existing `CLAUDE.md`, `MEMORY.md`, `PROTOCOL.md` or any `*.md`/`*.py`
+>    under `.claude/skills/` as `EXISTS (skipping template)`, the installer
+>    still runs its `{{PLACEHOLDER}}` substitution over them and replaces
+>    the inode even when nothing matches (a hard link of yours is broken).
+>    Copy such files out first, or accept the rewrite (signed condition 74).
+> 3. **Anything of yours under the delivered trees becomes framework-owned.**
+>    The install manifest is built by walking `.claude/hooks/`,
+>    `.claude/scripts/`, `.claude/commands/` and the profile's skills
+>    directories in the TARGET: a file you placed there is recorded with its
+>    own hash, and `uninstall.sh` removes it while it stays unchanged. Keep
+>    your own files out of those trees at install time, and read
+>    `uninstall.sh --dry-run` line by line before a real uninstall (signed
+>    condition 75).
+
 ## Option 1 — Bash script (recommended for most cases)
 
 Works for **any existing repo**, copies files in place. Easy to explain. No

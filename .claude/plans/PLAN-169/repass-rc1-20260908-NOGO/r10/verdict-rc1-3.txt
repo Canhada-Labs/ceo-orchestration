@@ -1,0 +1,7 @@
+REJECT — advisory evidence.
+
+P1 — `scripts/uninstall.sh:364`, `scripts/uninstall.sh:371`, `scripts/uninstall.sh:396`, `scripts/uninstall.sh:692`; `scripts/doctor.sh:273`, `scripts/doctor.sh:430`: the manifest’s leaf is checked, but a symlinked `.claude` ancestor is not. If `<target>/.claude` points to an external directory containing a valid manifest, uninstall reads that external provenance, removes matching target files, then deletes the external manifest while reporting success. Doctor likewise trusts the external manifest and can repair files using provenance from another repository. Condition 69 therefore overstates the cure; its U.9b test only covers a symlink at the manifest leaf (`scripts/tests/test-installer-write-safety-e2e.sh:1880`). Minimal fix: reject a symlinked target root or `.claude` directory before reading the manifest, verify the full ancestor chain and leaf identity again before mutation, and add e2e controls proving both scripts leave the target and external manifest untouched. Until fixed, the signed envelope must explicitly require a real, non-symlinked `<target>/.claude` before every doctor or uninstall run and exclude concurrent replacement.
+
+The other payload-relevant declared conditions match the inspected code. Bash parsing, ShellCheck, stdlib-only, generated-user-template parity, and repository freshness checks passed.
+
+VERDICT: NO-GO — Condition 69’s leaf-only manifest cure misses a P1 ancestor-symlink escape affecting both doctor and uninstall.

@@ -180,10 +180,12 @@ row in the v1.3.0 manifest is classified FALLBACK, which bypasses
 `--on-conflict=refuse`, backs the file up, replaces it, and the manifest
 rewrite at the end records the FRAMEWORK hash (signed condition of rc.1).
 Before upgrading, list the paths new since v1.3.0 from the framework
-checkout and move or rename any file of yours that coincides:
+checkout — filtered by the updater's own exclusion rule, since the test
+trees, `__pycache__` and `*.pyc` are never delivered — and move or rename
+any file of yours that coincides:
 
 ```bash
-git diff --name-status --diff-filter=A v1.3.0 v1.4.0-rc.1 -- .claude/hooks .claude/scripts .claude/commands .claude/agents .claude/skills
+git diff --name-status --diff-filter=A v1.3.0 v1.4.0-rc.1 -- .claude/hooks .claude/scripts .claude/commands .claude/agents .claude/skills | awk '$2 !~ /^\.claude\/(hooks\/(tests|legacy)|scripts\/tests|hooks\/_lib\/tests)\// && $2 !~ /(__pycache__|\.pyc$|_lib\/(test_isolation|testing)\.py$)/'
 ```
 
 (11) v1.4.0 keeps its audit family in the per-project directory Claude Code
@@ -243,14 +245,54 @@ or a path recorded twice, is dropped or invalidated silently, the file then
 has "no baseline", and the FALLBACK branch overwrites it even under the
 default `--on-conflict=refuse` (backup kept; ownership and the rewritten
 manifest pass to the framework) — signed condition of rc.1. Before
-upgrading, run the total parser from the target root: it requires a regular
-file (not a symlink), every line in the grammar (HASH record = 64 lowercase
-hex, two spaces, relpath; LINK record = `LINK`, two spaces, relpath, two
-spaces, target), safe relpaths (relative, no `..`, no tab or CR) and no
-relpath recorded twice. It must print nothing and exit 0:
+upgrading, run this validator from the target root (python3, standard
+library only). It requires a regular file that is not a symlink; every line
+in the loader's grammar (HASH record = 64 lowercase hex, two spaces, relpath;
+LINK record = `LINK`, two spaces, relpath, two spaces, target); only
+CANONICAL spellings (`./x`, `a//b`, `a/./b`, a trailing slash and `..` are
+refused — the loader keeps the original spelling and the lookup demands
+exact text, so an alias becomes FALLBACK); no control byte anywhere; at
+least one record (a zero-byte manifest is "no manifest" to the loader, and
+the upgrade then takes the legacy delete-and-recopy path); no relpath
+recorded twice, textually or by identity (two spellings of one inode). It
+must print nothing and exit 0:
 
 ```bash
-f=.claude/.install-manifest.sha256; [ -f "$f" ] && [ ! -L "$f" ] && awk -F'  ' 'NF==0||/^#/{next} $1=="LINK"{ if (NF!=3 || $2=="" || $3=="" || $2 ~ /^\// || index($2,"..") || $2 ~ /[\t\r]/ || $3 ~ /[\t\r]/) {print "BAD line " NR; b++} else if (s[$2]++) {print "DUP " $2; b++}; next } { if (NF!=2 || length($1)!=64 || $1 !~ /^[0-9a-f]+$/ || $2=="" || $2 ~ /^\// || index($2,"..") || $2 ~ /[\t\r]/) {print "BAD line " NR; b++} else if (s[$2]++) {print "DUP " $2; b++} } END{exit (b>0)}' "$f"
+python3 - <<'PY'
+import os, re, sys
+f = ".claude/.install-manifest.sha256"
+if os.path.islink(f) or not os.path.isfile(f):
+    print("BAD manifest: missing, a symlink, or not a regular file"); sys.exit(1)
+bad = n = 0; seen = {}; ident = {}; ctl = re.compile(r"[\x00-\x1f\x7f]")
+for i, line in enumerate(open(f, "rb").read().decode("utf-8", "replace").split("\n"), 1):
+    if line == "" or line.startswith("#"):
+        continue
+    if line.startswith("LINK  "):
+        parts = line[6:].split("  ", 1); rel = parts[0]
+        ok = len(parts) == 2 and parts[1] != "" and not ctl.search(parts[1])
+    else:
+        parts = line.split("  ", 1); rel = parts[1] if len(parts) == 2 else ""
+        ok = len(parts) == 2 and re.fullmatch(r"[0-9a-f]{64}", parts[0]) is not None and "  " not in rel
+    comps = rel.split("/")
+    ok = ok and rel != "" and not rel.startswith("/") and not ctl.search(rel) \
+        and os.path.normpath(rel) == rel and "" not in comps and "." not in comps and ".." not in comps
+    if not ok:
+        print("BAD line %d" % i); bad += 1; continue
+    n += 1
+    if rel in seen:
+        print("DUP " + rel); bad += 1
+    seen[rel] = i
+    try:
+        st = os.lstat(rel); ident.setdefault((st.st_dev, st.st_ino), []).append(rel)
+    except OSError:
+        pass
+for rels in ident.values():
+    if len(rels) > 1:
+        print("ALIAS " + " = ".join(sorted(rels))); bad += 1
+if n == 0:
+    print("BAD manifest: no record"); bad += 1
+sys.exit(1 if bad else 0)
+PY
 ```
 
 Run the same check before `scripts/uninstall.sh` to see what it will refuse:
@@ -261,6 +303,12 @@ a file you modified without `--force` (signed condition of rc.1). Before
 `scripts/doctor.sh --repair`, `<target>/.claude.bak` must be absent or empty,
 as before an upgrade: doctor's backup directory is predictable and an
 existing regular file at that path is overwritten (signed condition of rc.1).
+And before EVERY `uninstall.sh` and `doctor.sh --repair`, `<target>` and
+`<target>/.claude` must be real directories, not symlinks, with nothing else
+replacing them while the script runs: both scripts refuse a symlinked
+manifest LEAF but read a manifest that sits behind a symlinked `.claude`,
+act on that external provenance, and the uninstaller then deletes the
+external manifest (signed condition 69 of rc.1).
 
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`
 [1.4.0], «audit log resolves per PROJECT»).

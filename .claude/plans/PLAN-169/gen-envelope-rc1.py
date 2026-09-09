@@ -56,7 +56,7 @@ ENVELOPE = REPO / ".claude/governance" / ("pair-rail-verdict-%s.md" % TAG)
 GOV = REPO / ".claude/governance"
 PRECEDENT = GOV / "pair-rail-verdict-v1.3.0.md"
 SIGNERS = REPO / ".claude/sentinel-signers.txt"
-NPARTS = 6
+NPARTS = 7
 PARTS = list(range(1, NPARTS + 1))
 
 ARTIFACTS = ["MANIFEST-rc1.sha256", "PROVENANCE-rc1.md", "CANDIDATE.sha"]
@@ -368,7 +368,7 @@ def build_envelope(fields_text: str, sig_b64: str, fpr: str) -> str:
         "",
         "- Contexto: primeiro rc do trem pos-GA v1.3.0 (17/08). O delta e de",
         "  1318 arquivos / ~470k linhas adicionadas; o re-pass cobre a",
-        "  superficie ENTREGUE ao adotante, em 6 partes ordenadas por raio de",
+        "  superficie ENTREGUE ao adotante, em 7 partes ordenadas por raio de",
         "  dano, e o que fica de fora esta DECLARADO em",
         "  %s/repass-rc1/README-rc1.md §4 — nao omitido." % PLAN,
         "- Cada parte cita, dentro do proprio prompt, as rodadas de rail que",

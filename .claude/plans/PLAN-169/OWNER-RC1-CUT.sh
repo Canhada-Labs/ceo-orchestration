@@ -313,7 +313,7 @@ if should 5; then
 fi
 
 if should 6; then
-  say "6/20 re-pass do codex — 6 partes, ~1 a 2 h. Deixe rodando."
+  say "6/20 re-pass do codex — 7 partes (RC1_CODEX_JOBS=7 corre-as ao mesmo tempo, ~50 min; em serie ~2 h 30). Deixe rodando."
   if evidence_complete_for "$CAND"; then
     # S349: o CEO rodou o re-pass ANTES desta cerimonia, sobre este MESMO
     # candidato, e deixou a evidencia completa. O runner recusa rodar por cima
@@ -323,18 +323,18 @@ if should 6; then
   else
     printf 'O codex roda PINADO em 0.147.0 (npx, cache proprio). O binario\n'
     printf 'global desta maquina NAO e usado e NAO e alterado.\n'
-    bash "$RUNNER" || die "o re-pass NAO terminou GO nas 6 partes.
+    bash "$RUNNER" || die "o re-pass NAO terminou GO nas 7 partes.
 Leia $EV/PROVENANCE-rc1.md. Se for NO-GO: triagem, mv de $EV para
 repass-rc1-$(date +%Y%m%d)-NOGO/, cura, e me chame no Claude."
   fi
-  bell "re-pass GO nas 6 partes"
+  bell "re-pass GO nas 7 partes"
   mark_step 6
 fi
 
 if should 7; then
   say "7/20 condicoes do veredito"
   _agg_gwc=0
-  for n in 1 2 3 4 5 6; do
+  for n in 1 2 3 4 5 6 7; do
     grep -qE '^VERDICT: GO-WITH-CONDITIONS' "$EV/verdict-rc1-$n.txt" && _agg_gwc=1
   done
   if [ "$_agg_gwc" -eq 1 ]; then
@@ -480,7 +480,7 @@ contra codex-cli-pin.txt pela funcao do proprio validador — nunca de
 'codex --version' desta maquina, que esta fora da faixa.
 
 Evidencia do re-pass no MESMO commit (topologia do rc.4 e do GA v1.3.0):
-seis partes, ordenadas por raio de dano ao adotante, sobre o delta
+sete partes, ordenadas por raio de dano ao adotante, sobre o delta
 v1.3.0..$CAND. Reviewer: codex-cli PINADO em 0.147.0 (npx, cache
 proprio, payload verificado contra o manifesto ADR-182 antes da
 revisao). Escopo coberto e o que ficou de fora: repass-rc1/README-rc1.md.

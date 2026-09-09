@@ -25,7 +25,12 @@ invocações**, o máximo teórico revisável é ~1,08 MB de diff. Este kit cobr
 **848.309 bytes em 42 arquivos** — a superfície que o adotante realmente
 recebe e executa. O resto está declarado no §4, não escondido.
 
-## 2. As seis partes, na ordem de risco para o adotante
+## 2. As sete partes, na ordem de risco para o adotante
+
+> Rodada 11 (2026-09-09): a parte 7 foi aberta porque o envelope de condições (98 KB)
+> viaja dentro de toda parte e o redator trunca a 256 KiB — as partes 4, 5 e 6 passaram
+> o teto. Ela recebe `.github/workflows/*` (da 4), `check_postcompact_reinject.py` (da 5)
+> e `_lib/runtime_paths.py` + `_lib/state_store.py` + `_lib/test_isolation.py` (da 6).
 
 A ordem não é arbitrária: é a ordem em que uma regressão machucaria alguém
 que instalou a v1.3.0 e roda o upgrade.
@@ -44,7 +49,7 @@ seção `[1.4.0]` do CHANGELOG landou em `e242544`; o bump acrescenta a ela
 `VERSION`, `npm/package.json` e os dois manifestos de plugin, poucas linhas
 cada. O redator do ADR-114 preserva linhas e hunks (o
 runner **prova** isso por controle a cada parte), e o cabeçalho do prompt
-soma cerca de 3 KB. O teto duro do runner é 200.000 bytes de payload cru:
+soma cerca de 3 KB. O teto duro do runner é 260.000 bytes de payload cru (o redator trunca a 256 KiB):
 acima disso ele recusa e manda re-particionar.
 
 ### O manifesto é DERIVADO, nunca uma lista fixa
@@ -115,7 +120,7 @@ uma condição do veredito possa apontá-la.
 
 ## 5. Orçamento e critério de parada
 
-- **6 invocações de codex**, uma por parte. O runner não repete parte.
+- **7 invocações de codex**, uma por parte (`RC1_CODEX_JOBS=7` corre-as em paralelo). O runner não repete parte.
 - Cada parte é julgada de forma independente; o `RUNNER-OVERALL` é 0 apenas
   se as **seis** terminarem em `GO` ou `GO-WITH-CONDITIONS`.
 - Exatamente **uma** linha `VERDICT:` por parte. Duas linhas é ambiguidade,
