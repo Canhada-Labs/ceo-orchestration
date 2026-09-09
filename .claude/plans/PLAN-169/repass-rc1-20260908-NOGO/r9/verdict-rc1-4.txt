@@ -1,0 +1,11 @@
+**P1 — [npm/README.md:3](<<WT>/npm/README.md:3>), [npm/README.md:98](<<WT>/npm/README.md:98>), [npm/README.md:136](<<WT>/npm/README.md:136>)**
+
+Concrete failure: the diff stamps this npm-facing document as reviewed for v1.4.0 while retaining two promises that `--ceremony user` has advisory hooks only. A v1.3.0 user-profile upgrade additively registers default-enabled `check_config_change.py`; a settings change removing a protection returns `{"decision":"block"}` at [check_config_change.py:297](<<WT>/.claude/hooks/check_config_change.py:297>). Fresh v1.4.0 user installs also receive this registration ([settings.user.json:569](<<WT>/templates/settings/settings.user.json:569>)). `--no-settings-migrate` does not prevent the upgrade case.
+
+Condition 63 describes the blocking behavior but is insufficient: it says the root README and FAQ were narrowed and names only the installer header as remaining inaccurate, omitting both npm README claims ([CONDITIONS-rc1.md:662](<<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:662>)). This is the likely large-diff miss: the corrected root documentation was not propagated to its separately maintained npm copy.
+
+Minimal fix: replace both npm statements with the root README’s narrower “no signing; most hooks advisory; blocking hooks and kill switches listed in `blocking_inclusions`” wording. Until fixed, condition 63 must explicitly name the npm README and be re-pinned in the signed envelope.
+
+No other scoped P0/P1 mismatch was found. JSON, actionlint, version parity, inventory counts, ADR/index, settings derivation, audit registry, checksum manifest, and whitespace checks passed; dynamic suites could not run because the reviewer sandbox had no writable temporary directory.
+
+VERDICT: NO-GO — A P1 adopter-facing behavior contradiction is absent from the proposed signed conditions.

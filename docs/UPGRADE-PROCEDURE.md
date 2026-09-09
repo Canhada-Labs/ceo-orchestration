@@ -114,12 +114,17 @@ files; the `.claude/hooks/` delivery; `backup_and_replace` over
 `.claude/scripts`, `.claude/commands`, `.claude/skills` and the agent
 copies — all test `-d`/`-f` and copy with plain `cp`), so a hard link to
 an outside file or a symlink anywhere under `.claude/` or the other
-managed trees is written THROUGH. `<target>/.claude` itself must be a
-real directory. Before upgrading, both of these must print nothing:
+managed trees is written THROUGH, and the root `PROTOCOL.md` pointer is
+refreshed with a plain redirect, so a hard-linked pointer is rewritten in
+place too. `<target>/.claude` itself must be a real directory. Before
+upgrading, both of these must print nothing (paths a `--ceremony user`
+install never has are skipped; the symlinks the framework itself created in a
+`--link` install are excluded through their `LINK` manifest records — a link
+with no such record is yours, not the framework's):
 
 ```bash
-find <target>/.claude <target>/docs <target>/.github <target>/SPEC <target>/.gitignore -type l
-find <target>/.claude <target>/docs <target>/.github <target>/SPEC <target>/.gitignore -type f -links +1
+for p in .claude docs .github SPEC .gitignore PROTOCOL.md; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type l; done | while IFS= read -r l; do r="${l#<target>/}"; grep -qF "LINK  $r  " "<target>/.claude/.install-manifest.sha256" 2>/dev/null || printf '%s\n' "$l"; done
+for p in .claude docs .github SPEC .gitignore PROTOCOL.md; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type f -links +1; done
 ```
 
 (5) v1.4.0 mints a per-project injection salt in the native Claude project
@@ -181,17 +186,48 @@ checkout and move or rename any file of yours that coincides:
 git diff --name-status --diff-filter=A v1.3.0 v1.4.0-rc.1 -- .claude/hooks .claude/scripts .claude/commands .claude/agents .claude/skills
 ```
 
-(11) The per-project state directory of v1.4.0 starts without an HMAC key,
-and the first `get_or_create_key()` is not exclusive: two hook processes can
-both publish a key, and one of them keeps signing with a key that is no
-longer on disk (signed condition of rc.1). After the upgrade and BEFORE the
-first session, create the key with a single writer, and do not open two
-sessions (or run the hook test-suite next to a session) on the repository
-until the file exists:
+(11) v1.4.0 keeps its audit family in the per-project directory Claude Code
+itself owns (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir` prints
+it). That directory already exists, and the framework claims these names in
+it WITHOUT checking who wrote them: `audit-log.jsonl`, `audit-log.errors`,
+`audit-log.lock`, `audit-log.jsonl.lock`, `audit-log.last-hmac`,
+`audit-log.chain-length`, `audit-log.rotation-manifest.json`, `audit-key`,
+`.salt`, `salt-minted.json` (plus the temporaries `*.tmp.<pid>` and
+`.salt-minted.json.<hex>.tmp`, the monthly rotation files
+`audit-log-<YYYY-MM>[-n].jsonl`, the subdirectory `memory-shared/`) and the
+subdirectory `state`, under which the session scratchpad, the spool and five
+registered hooks write — a symlinked `state` or `memory-shared` is followed.
+A file of yours
+under one of those names is appended to and `chmod 0600`ed (the log),
+replaced (the sidecars; a malformed `.salt` is truncated in place, check 5)
+or, if it is a FIFO, blocks the hook on `open`; and the first key tightens the
+directory's mode from 0755 to 0700. At
+`audit-key` specifically: a 32-byte file of yours is adopted silently as the
+framework's signing key, a file of any other size makes every audit event
+carry `hmac=null` (the chain runs unsigned, the session is not blocked), and a
+FIFO blocks the hook while reading it. The
+first `get_or_create_key()` is also not exclusive: two hook processes can
+both publish a key, and one keeps signing with a key that is no longer on
+disk (signed conditions of rc.1). After the upgrade and BEFORE the first
+session: (a) run this from the target root; it must print nothing — every
+reserved name absent, no symlink, no hard link, no non-regular file, the
+directory itself not a symlink (it prints RESOLVER FAILED instead of
+approving by silence when the path cannot be resolved):
 
 ```bash
-d=$(python3 .claude/hooks/_lib/runtime_paths.py --state-dir); mkdir -p -m 700 "$d"; [ -e "$d/audit-key" ] || ( umask 077; head -c 32 /dev/urandom > "$d/audit-key" )
+d=$(python3 .claude/hooks/_lib/runtime_paths.py --state-dir); [ -n "$d" ] || echo "RESOLVER FAILED (run from the target root)"; [ -L "$d" ] && echo "SYMLINK DIR: $d"; for n in state memory-shared audit-log.jsonl audit-log.errors audit-log.lock audit-log.jsonl.lock audit-log.last-hmac audit-log.chain-length audit-log.rotation-manifest.json audit-key .salt salt-minted.json; do p="$d/$n"; if [ -L "$p" ] || [ -e "$p" ]; then echo "PRESENT: $p"; fi; done; for p in "$d"/audit-log-*.jsonl "$d"/audit-*.tmp.* "$d"/.salt-minted.json.*.tmp; do { [ -L "$p" ] || [ -e "$p" ]; } && echo "PRESENT: $p"; done
 ```
+
+(b) create the key with ONE writer, exclusively and without following links
+(the command refuses anything already present at that name, a dangling
+symlink included — a plain `>` redirect would have written through it):
+
+```bash
+d=$(python3 .claude/hooks/_lib/runtime_paths.py --state-dir); python3 -c 'import os,sys; d=sys.argv[1]; os.makedirs(d, 0o700, exist_ok=True); p=os.path.join(d,"audit-key"); fd=os.open(p, os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW, 0o600); os.write(fd, os.urandom(32)); os.close(fd)' "$d"
+```
+
+and do not open two sessions (or run the hook test-suite next to a session)
+on the repository until `audit-key` exists.
 
 The append path has the mirror-image race: the previous HMAC is read before
 the log lock is taken, so two parallel writers (two sessions, or two parallel
@@ -200,6 +236,31 @@ agent spawns of one session) can chain to the same predecessor, and
 integrity only for stretches written by one writer at a time; detection of a
 break still holds, the absence of false breaks under concurrent writers does
 not (signed condition of rc.1).
+
+(12) The upgrader's provenance classification is fail-OPEN on a malformed
+manifest: a record whose digest is not exactly 64 lowercase hex characters,
+or a path recorded twice, is dropped or invalidated silently, the file then
+has "no baseline", and the FALLBACK branch overwrites it even under the
+default `--on-conflict=refuse` (backup kept; ownership and the rewritten
+manifest pass to the framework) — signed condition of rc.1. Before
+upgrading, run the total parser from the target root: it requires a regular
+file (not a symlink), every line in the grammar (HASH record = 64 lowercase
+hex, two spaces, relpath; LINK record = `LINK`, two spaces, relpath, two
+spaces, target), safe relpaths (relative, no `..`, no tab or CR) and no
+relpath recorded twice. It must print nothing and exit 0:
+
+```bash
+f=.claude/.install-manifest.sha256; [ -f "$f" ] && [ ! -L "$f" ] && awk -F'  ' 'NF==0||/^#/{next} $1=="LINK"{ if (NF!=3 || $2=="" || $3=="" || $2 ~ /^\// || index($2,"..") || $2 ~ /[\t\r]/ || $3 ~ /[\t\r]/) {print "BAD line " NR; b++} else if (s[$2]++) {print "DUP " $2; b++}; next } { if (NF!=2 || length($1)!=64 || $1 !~ /^[0-9a-f]+$/ || $2=="" || $2 ~ /^\// || index($2,"..") || $2 ~ /[\t\r]/) {print "BAD line " NR; b++} else if (s[$2]++) {print "DUP " $2; b++} } END{exit (b>0)}' "$f"
+```
+
+Run the same check before `scripts/uninstall.sh` to see what it will refuse:
+since this rc the uninstaller refuses a manifest that is itself a symlink and
+every occurrence of a path recorded more than once (exit 6; nothing under
+them is archived or removed) — before this rc the second record could remove
+a file you modified without `--force` (signed condition of rc.1). Before
+`scripts/doctor.sh --repair`, `<target>/.claude.bak` must be absent or empty,
+as before an upgrade: doctor's backup directory is predictable and an
+existing regular file at that path is overwritten (signed condition of rc.1).
 
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`
 [1.4.0], «audit log resolves per PROJECT»).

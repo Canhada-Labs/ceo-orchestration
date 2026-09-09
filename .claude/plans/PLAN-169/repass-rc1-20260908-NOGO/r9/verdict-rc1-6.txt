@@ -1,0 +1,10 @@
+REJECT
+
+SEVERITY: P1 — fix before rc.1  
+FILE:LINE: `.claude/hooks/_lib/audit_hmac.py:406`, `.claude/hooks/_lib/audit_hmac.py:447`, `.claude/hooks/_lib/audit_hmac.py:450`, `docs/UPGRADE-PROCEDURE.md:184`, `docs/UPGRADE-PROCEDURE.md:193`  
+Concrete failure scenario: condition 68 correctly describes the concurrent-creation race, but falsely assumes the new native directory has no `audit-key`. That directory commonly predates v1.4.0. If an adopter-authored `audit-key` already exists, the prescribed `[ -e ... ] || ...` skips creation. A 32-byte file is silently adopted as the framework credential; a malformed file makes each event continue with `hmac=null`; and a same-UID FIFO can block at `read_bytes()` because `_check_perm_0600()` never requires a regular file. Worse, a dangling symlink makes `-e` false and the shell redirection can create or overwrite its target outside the state tree. Conditions 21 and 64 recognize this new-path ownership class for other files, but condition 68 omits it.  
+Minimal fix: before rc.1, amend the signed condition and upgrade procedure to require `audit-key` to be absent by `lstat`—neither existing nor symlink—and create it with one exclusive `O_CREAT|O_EXCL|O_NOFOLLOW` writer. Alternatively require an existing key to be explicitly validated and adopted as a 32-byte, owner-only regular file. Before GA, make `get_or_create_key()` reject unproved pre-existing objects and publish via an exclusive link/lock protocol.
+
+Condition 67 is honest: `.claude/hooks/audit_log.py:1258-1270` reads the predecessor and computes the HMAC before the lock acquired at line 1278. Condition 68 is honest about its named race, but its operational mitigation is insufficient. The stdlib, Python 3.9 AST, resolver-migration, environment-hygiene, contamination, and AGENTS freshness gates passed; pytest could not run because the read-only sandbox provided no writable temporary directory.
+
+VERDICT: NO-GO — The signed envelope is missing the P1 ownership, file-type, and symlink precondition for the newly claimed `audit-key` path.

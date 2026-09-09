@@ -94,7 +94,7 @@ install means two registrations firing the same hook scripts.
 |---|---|---|
 | `scripts/install.sh <target>` from a clone (Option 1) or submodule `--link` mode (Option 2) | The reference installer — Options 1 and 2 below are the **same script**, so they count as one path | Supported |
 | `npx ceo-orchestration <target>` | npm shim that spawns the *same bundled* `install.sh` and forwards your flags unchanged | Supported |
-| Claude Code plugin (`scripts/build-plugin.py`) | Experimental packager of the advisory (`--ceremony user`) surface — see the note under Option 3 | Experimental — not a supported install path |
+| Claude Code plugin (`scripts/build-plugin.py`) | Experimental packager of the no-signing (`--ceremony user`) surface — see the note under Option 3 | Experimental — not a supported install path |
 
 (Option 3, the GitHub template, creates a brand-new repo rather than
 installing into an existing one, so it does not enter this conflict.)

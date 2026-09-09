@@ -1,0 +1,21 @@
+As condições 17–20, 23, 28, 38, 53, 64–67 descrevem materialmente o código. A condição 68 não é suficiente, e dois P1 adicionais estão ausentes.
+
+- **P1 — `.claude/hooks/check_precompact_continuity.py:258,510`; `.claude/hooks/check_postcompact_reinject.py:389`**  
+  Cenário: um `plan_transition` não verificado contém `PLAN-123-slug`. O PreCompact aceita qualquer prefixo `PLAN-`, grava o snapshot no store de plano e reporta `written`; o PostCompact exige exatamente `PLAN-NNN`, rejeita o id e procura o store de sessão — onde nada foi gravado. O resultado é `snapshot_found=false` e perda silenciosa da continuidade. Esta assimetria foi criada ao endurecer apenas o leitor; a condição 17 não cobre o escritor.  
+  Correção mínima: validar/coagir o `plan_id` para `unknown` uma única vez no PreCompact, antes de `_plan_file_for`, `_write_snapshot`, blob e evento; ids inválidos devem usar o store de sessão. Adicionar teste round-trip com `PLAN-123-slug`.
+
+- **P1 — `.claude/hooks/audit_log.py:307,311,1138,1285,1307,1315`; `.claude/hooks/_lib/audit_hmac.py:406,447,518,524`; `.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:748,752`**  
+  Cenário: a rc começa a usar o diretório nativo do harness, que já existia mas não era propriedade do framework v1.3.0. Um `audit-log.jsonl` autoral é anexado e recebe `chmod 0600`; `audit-log.last-hmac` e outros sidecars autorais são substituídos por `os.replace`. Um FIFO owner-owned passa por `_is_safe_audit_path` e pode bloquear no `open`. A condição 68 afirma que o diretório “nasce sem `audit-key`”, algo que o código não garante. Pior: seu comando `[ -e "$d/audit-key" ] || ... > "$d/audit-key"` segue um symlink pendente e pode escrever fora do diretório.  
+  Correção mínima: condição DURA exigindo ausência comprovada de todos os nomes reservados da família de auditoria, sem symlinks, hardlinks ou tipos não regulares, seguida de criação com `O_EXCL|O_NOFOLLOW`. No código, recusar folhas pré-existentes sem proveniência ou mover a família para um subdiretório próprio.
+
+- **P1 — `.claude/hooks/audit_log.py:39,46,873,879,922`; `.claude/agents/devops.md:6`; `.claude/plans/AUDIT-LOG-SCHEMA.md:353,376`**  
+  Cenário: a própria docstring mede que 199/199 eventos não trazem `tool_response.model`, portanto o fallback domina. Um spawn `devops` executa `claude-sonnet-4-6` pelo frontmatter, mas registra `claude-haiku-4-5`; `code-reviewer` executa Fable 5, mas registra Opus 5. Isso contradiz tanto “model ID used for the spawn” quanto a afirmação de que o log “proves which model made the decision”. O teste de 14 casos passa porque verifica o frontmatter e a tabela separadamente, nunca sua paridade.  
+  Correção mínima: quando o modelo não for observado, ler o frontmatter autoritativo ou emitir `model=null`; se o valor for apenas política, registrá-lo em outro campo. Alinhar o schema e adicionar teste de paridade.
+
+- **P2 — `.claude/hooks/SessionEnd.py:322,336`; `.claude/hooks/_lib/audit_emit.py:2388,2392`**  
+  Cenário: a suposta barreira usa `audit-log.jsonl.lock`, mas os escritores usam `audit-log.lock`. Como ainda condiciona a aquisição à existência do arquivo errado, normalmente retorna imediatamente; com o caminho assíncrono de spool, os emits posteriores também não garantem a drenagem prometida.  
+  Correção mínima: usar o resolvedor compartilhado `_lock_path()` e adquirir o lock real independentemente de já existir, com teste que mantenha esse lock ocupado.
+
+Validações locais: stdlib-only passou para 449 arquivos; freshness de `AGENTS.md` passou com 52 caminhos e zero problemas. A suíte dependente de temporários não pôde ser concluída porque o sandbox read-only não oferece diretório temporário gravável.
+
+VERDICT: NO-GO — O envelope contém uma condição P1 insuficiente e omite dois outros P1 que tornam a continuidade e a evidência forense falsas para caminhos legítimos de upgrade.

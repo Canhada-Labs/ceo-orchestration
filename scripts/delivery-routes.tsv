@@ -1,7 +1,11 @@
-# PLAN-183 W5 — delivery route table. THIS FILE IS THE TRUTH.
+# PLAN-183 W5 — delivery route table. THIS FILE IS THE TRUTH for its three
+# readers (the manifest generator, the upgrader and doctor); scripts/install.sh's
+# writers still carry their destinations in code, and CI checks that PARITY
+# (D3) instead of deriving it (v1.4.0-rc.1 conditions 8 and 62).
 # Destination relpath -> (source relpath, transformation). Reasoning lives
-# in PLAN-183 §8.5.1/§8.5.2; values live ONLY here. A second copy in bash or
-# Python would be the "local branch that decides ownership" CLAUDE.md §4 forbids.
+# in PLAN-183 §8.5.1/§8.5.2; for the readers above the values live ONLY here.
+# A second copy in bash or Python that DECIDES ownership would be the "local
+# branch" CLAUDE.md §4 forbids; the installer's copies deliver, they do not decide.
 # Measured from scripts/install.sh (S324/S325 census): install_docs_template
 # :1446-1474, install_docs_templates :1476-1482, install_github_templates
 # :1488-1523. Both delivery functions are gated on CEREMONY != user (:1484, :1525).
@@ -9,8 +13,10 @@
 #   flag_dep = the install.sh flag the route depends on; "-" = unconditional,
 #   "!github-owner" = the else-branch taken when the flag is ABSENT.
 # WARNING: .github/CODEOWNERS and .github/CODEOWNERS.template are MUTUALLY
-#   EXCLUSIVE (install.sh:1496 elif vs :1511 else) — any single run delivers 5
-#   files, never 6. A table keyed by DESTINATION needs both rows anyway.
+#   EXCLUSIVE (install.sh --github-owner takes the CODEOWNERS branch, its absence
+#   the .template branch): one run delivers one of the two, never both — and a
+#   `user` ceremony, a missing source or a preserved destination deliver fewer
+#   than the remaining routes. A table keyed by DESTINATION needs both rows anyway.
 # note carries PROSE ONLY. Structured values live in columns.
 dest	src	transform	flag_dep	origin	note
 docs/BRANCH-PROTECTION.md	templates/docs/BRANCH-PROTECTION.md	identity	-	install_docs_templates	D2: a root homonym exists; comparing against it reports UNCLASSIFIED where the truth is STALE

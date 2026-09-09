@@ -13,8 +13,10 @@ name: Skill benchmarks (advisory)
 #
 # ONCE ACTIVATED THIS COSTS REAL MONEY ON YOUR OWN ACCOUNT. It requires the
 # repository secret ANTHROPIC_API_KEY (Settings -> Secrets and variables ->
-# Actions). Each run bills YOUR Anthropic account: one API call per benchmark
-# scenario per repetition, for every benchmark YAML under
+# Actions). Each run bills YOUR Anthropic account: one SUCCESSFUL response per
+# benchmark scenario per repetition — the runner makes up to three request
+# attempts on a rate limit or API error, so request volume can exceed that
+# count — for every benchmark YAML under
 # `.claude/skills/**/benchmarks/`. The runner refuses any single benchmark
 # YAML whose ESTIMATED cost exceeds $1.00 unless invoked with
 # --allow-expensive — a per-invocation cap, not a budget; there is NO

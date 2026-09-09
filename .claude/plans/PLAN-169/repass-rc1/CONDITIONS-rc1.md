@@ -9,7 +9,7 @@
 > Emendado (v6) depois da wave-rc1cure (`5518888`) e da rodada 3, parte 1: itens 1, 9,
 > 17, 18, 21 e 23 marcados como CURADOS pelo pack assinado; item 8 reescrito (laundering
 > pelo snapshot); itens 31 e 32 novos. A versão que os revisores da rodada 3 receberam
-> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41. v10: itens 8 (frestas b/c) e 31 marcados CURADOS em `144b0ef` (wave-rc1cure2); condição 5 remete ao 42; itens 42-43 DUROS (posse por igualdade histórica; diretório de backup não confinado) e 44 — rodada 4, parte 1. v11 (rodada 5, parte 1): 42 vale para igualdade ATUAL ou histórica e diz por que a cura literal não serve; 43 exige `.claude.bak` ausente/vazio; 45 DURO (fonte ausente ⇒ SKIPPED ⇒ rc 0) e 46 (P2). v12 (rodada 6, parte 1): 42/43/45 aceitas pelo revisor; 47 DURO declara a CLASSE das escritas fora do confinamento (instância: refresh do PLAN-SCHEMA por `cp` sobre inode hard-linked). v13 (rodada 6, parte 2): 45 cobre também o install; 47 nomeia os appends de `.gitignore` e o dispatcher e alarga os `find`; 48 DURO (re-run do install sobrescreve o dispatcher editado). v14 (rodada 6, parte 3): 16 diz o que é verdade (sweep de `.claude/` continua; dry-run 0 só com manifesto parseado); 49-50 DUROS (sweep de `.claude/`; restore-aside previsível); 51 (HMAC opcional). v15 (rodada 6, parte 4): headline e secção do CHANGELOG estreitados; claim de atribuição qualificada pela 23; contagem volátil de commits removida; 52 (piso do ceremony-lint re-pinado, residual por contagem). v16 (rodada 6, parte 5): 20 ganha o falso-AUSENTE pós-compaction (DURO); 47 ganha a entrega de hooks e `.claude/hooks` entra nos `find`; 38 ganha as descrições dos settings; 53 (ts não finito). v17 (rodada 6, parte 6): 21 ganha a posse destrutiva sobre `.salt`/`salt-minted.json` pré-existentes no diretório nativo (DURO: ausentes antes do primeiro prompt); 54 (`bytes_scanned`). v18 (rodada 7, parte 1): 55 DURO (migração ignora a cerimônia — `user` roda com `--no-settings-migrate`); 47 cobre a árvore `.claude` inteira; 4 ganha o rótulo «hook registration(s)». v19 (rodada 7, parte 2): 47 ganha o tempfile previsível do deny-baseline do install (+ condição para installs); 56 (preflight nlink sobre create-only, P2). v20 (rodada 7, parte 3 + morte da parte 4): 16 diz o que o restore faz depois da cura livre do dry-run; 26 diz que o template manual não é gate; 57 DURO (gramática do archive do restore); 58 (deriva NFKC do redator); reticências removidas do texto. v21 (rodada 8, parte 1): 59 DURO (caminho sensível rastreado aborta depois das mutações); 60 DURO (falha do escritor vira PRESERVED, rc 0 — CHANGELOG estreitado). v22 (rodada 8, parte 2): 5 corrigida (só o re-run do install re-renderiza); 14 + 61 DURO (proveniência do CODEOWNERS por sufixo, sem gramática); 62 (omissão semântica na tabela, P2). v23 (rodada 8, parte 3): 50 corrigida (o aside move vem depois da validação e do dry-run, antes da extração); 63 DURO (perfil user recebe hooks bloqueantes pelo merge aditivo — README/FAQ estreitados). v24 (rodada 8, parte 4): 58 honesta (mitigação PARCIAL; deriva na mesma linha passa); CHANGELOG estreitado em três claims (restore members fora de .claude; posse por igualdade nua; Fable só no template base). v25 (rodada 8, parte 5): 20 ganha o primeiro segundo (ABSENT desconhecido) e a leitura de `written` como atividade na janela, não autoria; 38 ganha o cabeçalho do `SessionEnd.py`; 64 DURO (colisão de posse num caminho NOVO da v1.4.0 — FALLBACK sobrescreve e o manifesto registra o hash do framework); 65 DURO (store de sessão do scratchpad segue symlink — classe da 28 no raiz de estado nativo); 66 (SPEC do scratchpad sem o store de sessão, P2); CHANGELOG: a linha do delta de memória diz atividade na janela, não autoria; UPGRADE-PROCEDURE ganha a checagem (10). v26 (rodada 8, parte 6): 67 DURO (`append_entry` lê o predecessor fora do lock — dois escritores concorrentes quebram a cadeia sem adulteração; classe pré-existente na v1.3.0; a cadeia prova integridade só por trechos de um escritor) e 68 DURO (criação da chave HMAC não exclusiva — pré-criar com um único escritor antes da primeira sessão); UPGRADE-PROCEDURE ganha a checagem (11); cabeçalho de `test_two_writer_chain.py` corrigido.) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
+> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41. v10: itens 8 (frestas b/c) e 31 marcados CURADOS em `144b0ef` (wave-rc1cure2); condição 5 remete ao 42; itens 42-43 DUROS (posse por igualdade histórica; diretório de backup não confinado) e 44 — rodada 4, parte 1. v11 (rodada 5, parte 1): 42 vale para igualdade ATUAL ou histórica e diz por que a cura literal não serve; 43 exige `.claude.bak` ausente/vazio; 45 DURO (fonte ausente ⇒ SKIPPED ⇒ rc 0) e 46 (P2). v12 (rodada 6, parte 1): 42/43/45 aceitas pelo revisor; 47 DURO declara a CLASSE das escritas fora do confinamento (instância: refresh do PLAN-SCHEMA por `cp` sobre inode hard-linked). v13 (rodada 6, parte 2): 45 cobre também o install; 47 nomeia os appends de `.gitignore` e o dispatcher e alarga os `find`; 48 DURO (re-run do install sobrescreve o dispatcher editado). v14 (rodada 6, parte 3): 16 diz o que é verdade (sweep de `.claude/` continua; dry-run 0 só com manifesto parseado); 49-50 DUROS (sweep de `.claude/`; restore-aside previsível); 51 (HMAC opcional). v15 (rodada 6, parte 4): headline e secção do CHANGELOG estreitados; claim de atribuição qualificada pela 23; contagem volátil de commits removida; 52 (piso do ceremony-lint re-pinado, residual por contagem). v16 (rodada 6, parte 5): 20 ganha o falso-AUSENTE pós-compaction (DURO); 47 ganha a entrega de hooks e `.claude/hooks` entra nos `find`; 38 ganha as descrições dos settings; 53 (ts não finito). v17 (rodada 6, parte 6): 21 ganha a posse destrutiva sobre `.salt`/`salt-minted.json` pré-existentes no diretório nativo (DURO: ausentes antes do primeiro prompt); 54 (`bytes_scanned`). v18 (rodada 7, parte 1): 55 DURO (migração ignora a cerimônia — `user` roda com `--no-settings-migrate`); 47 cobre a árvore `.claude` inteira; 4 ganha o rótulo «hook registration(s)». v19 (rodada 7, parte 2): 47 ganha o tempfile previsível do deny-baseline do install (+ condição para installs); 56 (preflight nlink sobre create-only, P2). v20 (rodada 7, parte 3 + morte da parte 4): 16 diz o que o restore faz depois da cura livre do dry-run; 26 diz que o template manual não é gate; 57 DURO (gramática do archive do restore); 58 (deriva NFKC do redator); reticências removidas do texto. v21 (rodada 8, parte 1): 59 DURO (caminho sensível rastreado aborta depois das mutações); 60 DURO (falha do escritor vira PRESERVED, rc 0 — CHANGELOG estreitado). v22 (rodada 8, parte 2): 5 corrigida (só o re-run do install re-renderiza); 14 + 61 DURO (proveniência do CODEOWNERS por sufixo, sem gramática); 62 (omissão semântica na tabela, P2). v23 (rodada 8, parte 3): 50 corrigida (o aside move vem depois da validação e do dry-run, antes da extração); 63 DURO (perfil user recebe hooks bloqueantes pelo merge aditivo — README/FAQ estreitados). v24 (rodada 8, parte 4): 58 honesta (mitigação PARCIAL; deriva na mesma linha passa); CHANGELOG estreitado em três claims (restore members fora de .claude; posse por igualdade nua; Fable só no template base). v25 (rodada 8, parte 5): 20 ganha o primeiro segundo (ABSENT desconhecido) e a leitura de `written` como atividade na janela, não autoria; 38 ganha o cabeçalho do `SessionEnd.py`; 64 DURO (colisão de posse num caminho NOVO da v1.4.0 — FALLBACK sobrescreve e o manifesto registra o hash do framework); 65 DURO (store de sessão do scratchpad segue symlink — classe da 28 no raiz de estado nativo); 66 (SPEC do scratchpad sem o store de sessão, P2); CHANGELOG: a linha do delta de memória diz atividade na janela, não autoria; UPGRADE-PROCEDURE ganha a checagem (10). v26 (rodada 8, parte 6): 67 DURO (`append_entry` lê o predecessor fora do lock — dois escritores concorrentes quebram a cadeia sem adulteração; classe pré-existente na v1.3.0; a cadeia prova integridade só por trechos de um escritor) e 68 DURO (criação da chave HMAC não exclusiva — pré-criar com um único escritor antes da primeira sessão); UPGRADE-PROCEDURE ganha a checagem (11); cabeçalho de `test_two_writer_chain.py` corrigido. v27 (rodada 9, parte 1): 14 ganha o fail-open do upgrade sobre manifesto malformado/duplicado (FALLBACK sobrescreve um hook customizado sob `refuse`; preflight DURO = parser TOTAL do manifesto, o mesmo da 61); 47 ganha o refresh do ponteiro `PROTOCOL.md` da raiz por redirect através de hard link e as duas checagens de link passam a incluir `<alvo>/PROTOCOL.md`; UPGRADE-PROCEDURE: checagem (4) com `PROTOCOL.md` e checagem (12). v28 (rodada 9, parte 2): 61 reescrita — parser TOTAL do manifesto (gramática por linha, relpath seguro, unicidade global; ensaiado com controles) no lugar do `grep` que deixava passar `lixo␠␠sufixo`, e o opt-out do CODEOWNERS dito como o código faz (vazio é re-renderizado sob `--github-owner` quando há registro; ausente é criado; sobrevive só sem a flag); 62 ganha as cópias em código do installer; cabeçalho do `delivery-routes.tsv` (livre) deixa de se anunciar única verdade e «5 por run». v29 (rodada 9, parte 3): 61 deixa de creditar ao parser do `uninstall.sh` a recusa de duplicados; 69 CURADO nesta rc (livre: uninstall recusa manifesto symlink antes do `-f` e toda ocorrência de relpath duplicado antes de backup e remoção, exit 6 — e2e U.9a/U.9b com controle pré-cura); 43 ganha o diretório de backup previsível do `doctor.sh --repair` (P2); o template `benchmarks.yml.template` (livre) diz «uma resposta bem-sucedida, até três tentativas» em vez de «uma chamada» (P2); UPGRADE-PROCEDURE (12) cobre uninstall e doctor. v30 (rodada 9, parte 4): a classe «advisory hooks only» fecha em todos os textos entregues — `npm/README.md` (linhas 98 e 136), `README.md` (tabela do plugin e válvula de escape) e `README.pt-BR.md`; 63 nomeia cada texto estreitado e o único remanescente canônico (`install.sh:11`). v31 (rodada 9, parte 5): 68 reescrita (o diretório nativo já existe e é do harness; nomes reservados da família de auditoria AUSENTES antes da primeira sessão, checagem que vê symlink pendente, chave criada com `O_EXCL|O_NOFOLLOW` — o comando da rodada 8 seguia o symlink e escreveu fora, medido); 70 DURO (assimetria de `plan_id` PreCompact/PostCompact perde a continuidade em silêncio); 71 DURO (`model` dos spawns é a tabela de política, não observação); 72 (barreira do SessionEnd usa o lock errado, P2); UPGRADE-PROCEDURE (11) reescrita. v32 (rodada 9, parte 6; 67 aceita como honesta): 68 ganha as três consequências de um objeto pré-existente em `audit-key` — 32 bytes seus adotados em silêncio; outro tamanho ⇒ todo evento com `hmac=null`; FIFO bloqueia o hook (`_check_perm_0600` não exige arquivo regular) — e a checagem (11) idem. v33 (refutadores da rodada 10, antes do candidato): 69 ganha o alias por segmento vazio (`docs//x`) que a unicidade por string não via — curado no mesmo candidato (`_rel_unsafe` recusa `//` e barra final; e2e U.9c) e declarado no `doctor.sh`; 63 nomeia `INSTALL.md` (estreitado) e afirma o único remanescente por grep, não por enumeração. v34 (arquitetura da cura, rodada 10): 69 ganha o passe de IDENTIDADE por `(st_dev, st_ino)` — a classe de alias fecha por construção (e2e U.9d, hard link, com controle contra a cura sem identidade). v35 (refutadores da rodada 10): 14 cita as linhas certas do `uninstall.sh` (25-31); o parser total testa também o ALVO do registro LINK (14, 61, guia 12); 47 e a checagem (4) em laço — ignoram caminhos que uma instalação `user` não tem e EXCLUEM os links registrados `LINK` de uma instalação `--link` (antes: insatisfazível nesse modo; `find` errava em `user`); 68 e a checagem (11) ganham `state` na lista de nomes reservados (raiz do scratchpad de sessão, seguido através de symlink — reproduzido) e 65 aponta para a mesma checagem; 38 refeito — três cláusulas curadas retiradas. v36 (caudas dos refutadores, 8 P2): 47 tira `.claude.bak/` do texto (regra mais forte na 43); 64 diz como os agentes canônicos são copiados (à parte, `cp` incondicional); 20 com os três limites da janela; 68: `.salt` truncado (não `os.replace`), temporário do marcador, rotação mensal e `memory-shared/` na lista, modo do diretório 0755→0700, e a checagem (11) avisa quando o resolvedor falha em vez de aprovar por silêncio.) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
 
 Cada item descreve o que o código FAZ nesta rc, para que a assinatura não afirme
 mais do que aconteceu. Fonte: re-pass do candidato (codex 0.147.0 pinado, modelo
@@ -103,7 +103,14 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     diretório concreto da execução EXCLUSIVAMENTE (recusar se já existir) e validar cada
     leaf de backup com `_wbm_dst_refuses` antes da primeira mutação (symlink, ancestral
     symlink, hard link), com perna de sentinel externo intacto (pack `rc1-cure-3` se
-    assinado; senão rc.2).
+    assinado; senão rc.2). Idem `doctor.sh --repair` (rodada 9, parte 3, P2; arquivo livre): o
+    diretório de backup `.claude.bak/doctor-<timestamp UTC, segundos>` é previsível e criado
+    com `mkdir -p`; o predicado de confinamento recusa symlink e hard link, mas ACEITA um leaf
+    regular de link único já existente, que o `cp -p` seguinte sobrescreve — um arquivo seu
+    nesse caminho exato é destruído durante o repair. A condição de `.claude.bak` AUSENTE ou
+    VAZIO vale também antes de `doctor.sh --repair`. Cura antes do GA: reservar o diretório da
+    execução exclusivamente (sem `-p`; sufixo único em colisão) e recusar leaf de backup
+    pré-existente.
 45. **Fonte AUSENTE no checkout corrente vira `SKIPPED`, não falha** (rodada 5, parte 1):
     uma rota válida cuja fonte (`templates/...`) está ausente ou não é arquivo regular no
     checkout que executa `scripts/upgrade.sh`, sem `--pin`, é contada como `SKIPPED`; a
@@ -148,29 +155,46 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     olha só `settings.json`); um symlink pré-plantado com esse nome faz o redirect do `jq`
     (ou do Python) escrever fora do alvo e o `mv` seguinte substitui o `settings.json` pelo
     link, com «Install complete» — a frase «neither is reachable once the shared verdict
-    is consulted» no comentário dessa função é FALSA para este tempfile. Um destino
-    hard-linked a um arquivo
+    is consulted» no comentário dessa função é FALSA para este tempfile; e o REFRESH do
+    ponteiro `PROTOCOL.md` da RAIZ (rodada 9, parte 1): o observador do ponteiro distingue
+    symlink, diretório e arquivo especial (e recusa escrever através deles), mas um ponteiro
+    REGULAR com link count > 1 é lido como «regular, owned» e o
+    `printf '%s\n' "$_ptr_full" > "$pointer"` do ramo DELIVER/REFRESH (~linha 1919) trunca e
+    reescreve o inode compartilhado — as duas checagens de link abaixo NÃO cobriam
+    `<alvo>/PROTOCOL.md`, então um adopter podia seguir o preflight assinado à letra e ainda
+    passar essa forma. Um destino hard-linked a um arquivo
     FORA do alvo é alterado junto (o inode é o mesmo) e um symlink (leaf ou ancestral) é
     seguido, com o upgrade reportando `REFRESHED` e saindo 0 — o próprio diff reconhece a
     forma insegura ao entregar `docs/` por rename atômico. Classe same-UID
     (`docs/threat-model.md`, Tier-2), fora do modelo de ameaça como ataque; é a forma
     fail-open que importa. Condição DURA: antes do upgrade, sob `<alvo>/.claude/plans/`,
-    `<alvo>/docs/`, `<alvo>/.github/`, `<alvo>/SPEC/` e `<alvo>/.claude.bak/` não pode
+    `<alvo>/docs/`, `<alvo>/.github/` e `<alvo>/SPEC/` (o `.claude.bak/` tem na 43 a regra MAIS
+    forte — ausente ou vazio — e por isso não entra no comando; rodada 10) não pode
     haver symlink (leaf ou ancestral) nem arquivo com link count > 1 — medido com
     (rodada 7, parte 1: a lista por subárvore NÃO bastava — `backup_and_replace` e a cópia
     de agentes fazem `cp` através de `.claude/scripts`, `.claude/commands`, `.claude/skills`,
     `.claude/agents` e rosters symlinkados; a checagem cobre agora a árvore `.claude`
     INTEIRA, e o próprio `<alvo>/.claude` tem de ser um diretório real)
-    `find <alvo>/.claude <alvo>/docs <alvo>/.github <alvo>/SPEC <alvo>/.gitignore -type l` e o mesmo
-    `find ... -type f -links +1` (sobre os caminhos que existirem), ambos VAZIOS —
+    (rodada 10, refutador: em laço, porque numa instalação `--ceremony user` não existem
+    `SPEC/`, `docs/`, `.github/` nem `PROTOCOL.md` e um `find` com operando ausente erra e sai
+    1; e EXCLUINDO os links que o próprio framework criou numa instalação `--link` — cada
+    destino de `install_one` é um symlink por construção, registrado como `LINK` no
+    manifesto e detectado e preservado pelo `upgrade.sh` — senão a condição era
+    insatisfazível para esse modo)
+    `for p in .claude docs .github SPEC .gitignore PROTOCOL.md; do [ -e "<alvo>/$p" ] || [ -L "<alvo>/$p" ] || continue; find "<alvo>/$p" -type l; done | while IFS= read -r l; do r="${l#<alvo>/}"; grep -qF "LINK  $r  " "<alvo>/.claude/.install-manifest.sha256" 2>/dev/null || printf '%s\n' "$l"; done`
+    e
+    `for p in .claude docs .github SPEC .gitignore PROTOCOL.md; do [ -e "<alvo>/$p" ] || [ -L "<alvo>/$p" ] || continue; find "<alvo>/$p" -type f -links +1; done`
+    (`<alvo>/PROTOCOL.md` entrou na rodada 9, parte 1), ambos imprimindo NADA — um link sem
+    registro `LINK` é de quem o pôs lá, não do framework —
     `docs/UPGRADE-PROCEDURE.md` diz isto; vale igualmente para `install.sh` (dispatcher,
     `.gitignore`s e o tempfile do deny-baseline: nenhum `.claude/settings.json.deny-baseline.*`
     pré-existente e nenhum outro processo criando entradas em `.claude/` enquanto o install
     roda — o `find -type l` sobre a árvore `.claude` inteira pega um link pré-plantado).
     Cura antes do GA: `mktemp` no diretório do destino registrado em `_ATOMIC_TMP_PENDING` e
     publicação por rename para o deny-baseline; `_wbm_dst_refuses`
-    + recusa de `nlink > 1` antes de QUALQUER mutação em todos esses caminhos, e tempfile no
-    diretório do destino + `mv` atômico em vez de `cp` direto; controle positivo com
+    + recusa de `nlink > 1` antes de QUALQUER mutação em todos esses caminhos (o ponteiro
+    `PROTOCOL.md` incluído), e tempfile no diretório do destino + `mv` atômico em vez de `cp`
+    direto ou de redirect; controle positivo com
     `PLAN-SCHEMA.md` v1.3.0 hard-linked a um sentinel externo (bytes e modo intactos)
     (pack `rc1-cure-3`, se o Owner o assinar; senão rc.2).
 48. **`install_dispatcher` copia incondicionalmente** (rodada 6, parte 2): `install.sh`
@@ -281,11 +305,29 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     (`projects/ceo-orchestration/`); o caminho real é o slug nativo por projeto
     (`runtime_paths.py --state-dir`). Canônico; próxima cerimônia.
 14. **O manifesto de instalação não é autenticado** (`uninstall.sh` o diz nas próprias
-    linhas 89-92): um registro seguro-na-forma é tratado como prova de posse — e, no
+    linhas 25-31): um registro seguro-na-forma é tratado como prova de posse — e, no
     installer, nem a FORMA é exigida (item 61). Escrita
     same-UID no alvo já é game-over pelo modelo de ameaça (§T-05); sidecar autenticado
     = item de v2. O cabeçalho do script deixa de anunciar um `exit 3` de HMAC que não
-    existia.
+    existia. E no UPGRADE (rodada 9, parte 1, P1) a FORMA é exigida do jeito errado: o
+    carregador do manifesto (`scripts/upgrade.sh`, ~1150-1215) DESCARTA em silêncio um
+    registro cujo digest não seja exatamente 64 hex minúsculos (ou sem o separador de dois
+    espaços) e INVALIDA um relpath registrado duas vezes; `_baseline_lookup` então devolve
+    «sem baseline» para esse caminho, `_classify_against_baseline` responde `FALLBACK`, e o
+    ramo FALLBACK (o mesmo do item 64) ignora `--on-conflict=refuse` e SOBRESCREVE um hook
+    que o adopter tinha CUSTOMIZADO (backup em `.claude.bak`; a posse e o registro reescrito
+    passam ao framework). É fail-OPEN sobre input de proveniência — o contrário do contrato —
+    e um registro de 63 caracteres basta. (Sem manifesto NENHUM, todo arquivo existente cai
+    na classificação legada `diff -q` com aviso — comportamento da v1.3.0, anunciado no
+    início do upgrade como «fallback diff -q classification».) Condição DURA: antes do
+    upgrade, `.claude/.install-manifest.sha256` tem de ser arquivo REGULAR (não symlink) e
+    passar no parser TOTAL da condição 61 — gramática integral por linha, relpath seguro,
+    unicidade global de relpath; o comando imprime NADA e termina com código 0:
+    `f=.claude/.install-manifest.sha256; [ -f "$f" ] && [ ! -L "$f" ] && awk -F'  ' 'NF==0||/^#/{next} $1=="LINK"{ if (NF!=3 || $2=="" || $3=="" || $2 ~ /^\// || index($2,"..") || $2 ~ /[\t\r]/ || $3 ~ /[\t\r]/) {print "BAD line " NR; b++} else if (s[$2]++) {print "DUP " $2; b++}; next } { if (NF!=2 || length($1)!=64 || $1 !~ /^[0-9a-f]+$/ || $2=="" || $2 ~ /^\// || index($2,"..") || $2 ~ /[\t\r]/) {print "BAD line " NR; b++} else if (s[$2]++) {print "DUP " $2; b++} } END{exit (b>0)}' "$f"`
+    — `docs/UPGRADE-PROCEDURE.md` diz isto (checagem 12). Cura antes do GA: registrar os
+    relpaths REJEITADOS no carregador e classificá-los `CONFLICT` (preservados sob `refuse`),
+    ou recusar a fase de mutação quando existir registro malformado não atribuível; controle
+    positivo com digest de 63 caracteres sobre um hook customizado.
 15. **O backup pré-uninstall usa caminho previsível sem criação exclusiva**
     (`.claude.backup-uninstall-<timestamp>.tar.gz` + `.hmac`): um link pré-plantado
     com esse nome faz a escrita seguir para outro inode (reproduzido: 578 bytes fora do
@@ -350,7 +392,8 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     na mesma cerimônia (lock_timeout com folga abaixo do timeout do harness).
 20. **O delta de memória do `SessionEnd` pode dar um falso AUSENTE numa sessão LONGA que
     compactou** (rodada 6, parte 5, P1): a janela de leitura é limitada (200 registros de
-    auditoria ou 256 KiB); passado isso, o `session_start` ORIGINAL sai da janela e o
+    auditoria, 256 KiB ou 100 ms de relógio — o terceiro limite, apontado na rodada 10, só
+    aumenta a chance do falso AUSENTE); passado isso, o `session_start` ORIGINAL sai da janela e o
     segundo `session_start` (o do restart pós-compaction) é aceito como âncora mais
     antiga — um arquivo de memória alterado ANTES da compaction e não tocado depois sai
     como `outcome="absent"` e o render diz «0 ... entries touched this session». O código
@@ -546,20 +589,23 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     que o contrato de descoberta do `check-ceremony-script.py` inclui — um PR que só toque
     um script histórico não dispara o lint fail-closed (rodada 3, parte 4, P2). Próxima
     cerimônia de workflows.
-38. Docstrings PRÉ-cura que sobreviveram (rodada 3, parte 5, P2): `check_precompact_continuity.py`
-    diz que o snapshot é passado como `str` e redigido por `state_store.set` (hoje a
-    redação é campo a campo e passa `bytes`); `check_postcompact_reinject.py` diz que
-    `constraint_count` «ainda será» allowlisted (já foi); `SessionEnd.py` descreve basenames
-    entrando em `systemMessage` (o render é counts-only). Idem (rodada 6, parte 5) as
-    descrições em `.claude/settings.json` e `templates/settings/settings.base.json` dos
-    hooks de compaction: ainda dizem armazenamento do snapshot só no plano (hoje há
-    fallback dominante de escopo de sessão), reinjeção só de ponteiros (hoje as restrições
-    pinadas vêm antes), `constraint_count` por allowlistar (já está) e nomes de memória
-    renderizados (só contagens); e (rodada 8, parte 5) o cabeçalho de `SessionEnd.py` (item 5
-    da lista de responsabilidades, linhas 20-24) diz que o rail responde «DID it?» — se ESTA
-    sessão gravou memória — quando a docstring de `_memory_delta_observed`, a SPEC v2.60 e a
-    condição 20 dizem atividade na janela, sem autoria. Texto, não comportamento; canônicos —
-    próxima cerimônia.
+38. Docstrings PRÉ-cura que sobreviveram (rodada 3, parte 5, P2; lista REFEITA na rodada 10 —
+    três cláusulas descreviam código que o pack já tinha curado): a docstring de
+    `check_precompact_continuity.py` (linhas 57-63) diz que o snapshot é passado como `str` e
+    redigido por `state_store.set`, quando a escrita real (~549) é campo a campo; a docstring
+    de `_sanitize_memory_basename` (`SessionEnd.py` ~659-660) descreve basenames entrando em
+    `systemMessage`, quando o render é counts-only (~1006, ~1070); e (rodada 8, parte 5) o
+    cabeçalho de `SessionEnd.py` (item 5 da lista de responsabilidades, linhas 20-24) diz que o
+    rail responde «DID it?» — se ESTA sessão gravou memória — quando a docstring de
+    `_memory_delta_observed`, a SPEC v2.60 e a condição 20 dizem atividade na janela, sem
+    autoria. Idem (rodada 6, parte 5) duas descrições em `.claude/settings.json` e
+    `templates/settings/settings.base.json`: a do PostCompact ainda diz snapshot lido do
+    scratchpad do PLANO (hoje há fallback dominante de escopo de sessão) e reinjeção só de
+    PONTEIROS (hoje as restrições pinadas vêm antes). Retiradas por estarem CURADAS (rodada 10,
+    verificado): «`constraint_count` ainda será allowlisted» — a docstring do PostCompact diz
+    hoje o contrário — e as descrições de settings sobre `constraint_count` e sobre nomes de
+    memória renderizados, que não existem (`grep` = 0 nos dois arquivos). Texto, não
+    comportamento; canônicos — próxima cerimônia.
 41. `audit_emit.py` diz que `constraint_count` segue disciplina estrita de inteiro e recusa
     floats, mas `int(...)` converte `1.9` em `1` e `True` em `1` — um chamador genérico
     recebe um valor lavado em vez do sentinela zero. Recusar `bool` e não-`int` antes do
@@ -650,15 +696,33 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     .github/CODEOWNERS` satisfaz. Cenário: o adopter esvazia o `CODEOWNERS` de propósito
     para desligar o roteamento de revisão, existe um registro malformado com esse sufixo,
     e um re-run de `install.sh --github-owner` sobrescreve o arquivo, anuncia `RECOVERED` e
-    sai 0 — contra o fail-closed sobre input de proveniência. Condição DURA: antes de
-    QUALQUER re-run de `install.sh --github-owner` num alvo já instalado, o manifesto
-    `.claude/.install-manifest.sha256` tem de ser arquivo regular, intacto e canônico:
-    `grep -vE '^(#|$|[0-9a-f]{64}  [^ ]|LINK )' .claude/.install-manifest.sha256` imprime
-    NADA e `grep -c '  .github/CODEOWNERS$'` imprime 0 ou 1 — e um `CODEOWNERS` que você
-    esvaziou de propósito deve ser REMOVIDO (não deixado vazio) antes do re-run. Cura
-    antes do GA: aceitar exatamente um registro HASH canônico (64 hex minúsculos, dois
-    espaços, relpath exato), recusar manifesto symlink/não-regular/duplicado — o
-    sanitizador do `uninstall.sh` já faz isto.
+    sai 0 — contra o fail-closed sobre input de proveniência. Condição DURA (reescrita na
+    rodada 9, parte 2 — a checagem por `grep` da rodada 8 deixava passar
+    `<64 hex>␠␠lixo␠␠.github/CODEOWNERS`, que satisfaz também o `grep` do código e
+    recuperaria um `CODEOWNERS` vazio): antes de QUALQUER re-run de `install.sh
+    --github-owner` num alvo já instalado, o manifesto `.claude/.install-manifest.sha256`
+    tem de ser arquivo REGULAR (não symlink) e passar no parser TOTAL — gramática integral
+    por linha (registro HASH = exatamente 64 hex minúsculos, dois espaços, relpath; registro
+    LINK = `LINK`, dois espaços, relpath, dois espaços, alvo), relpath seguro (relativo, sem
+    `..`, sem tab ou CR) e unicidade GLOBAL de relpath — o comando imprime NADA e termina com
+    código 0:
+    `f=.claude/.install-manifest.sha256; [ -f "$f" ] && [ ! -L "$f" ] && awk -F'  ' 'NF==0||/^#/{next} $1=="LINK"{ if (NF!=3 || $2=="" || $3=="" || $2 ~ /^\// || index($2,"..") || $2 ~ /[\t\r]/ || $3 ~ /[\t\r]/) {print "BAD line " NR; b++} else if (s[$2]++) {print "DUP " $2; b++}; next } { if (NF!=2 || length($1)!=64 || $1 !~ /^[0-9a-f]+$/ || $2=="" || $2 ~ /^\// || index($2,"..") || $2 ~ /[\t\r]/) {print "BAD line " NR; b++} else if (s[$2]++) {print "DUP " $2; b++} } END{exit (b>0)}' "$f"`
+    (gramática igual ou mais estrita que a do carregador do `upgrade.sh` — o ALVO do registro
+    LINK com tab ou CR, que o carregador descarta, entrou na rodada 10; ensaiado em 09/09 com
+    controles positivos — 63 hex, `lixo␠␠sufixo`, duplicado, absoluto, `..`, tab no relpath e
+    no alvo, maiúsculas são todos apanhados). E o opt-out: um `CODEOWNERS` que você esvaziou de
+    propósito NÃO deve ser removido — a AUSÊNCIA leva ao ramo normal, que o CRIA de novo
+    (`install.sh` ~2106-2109). Com `--github-owner`, um `CODEOWNERS` VAZIO é re-renderizado
+    (`RECOVERED`) sempre que o manifesto tem um registro dele — inclusive um registro LEGÍTIMO
+    de uma entrega que o framework fez de verdade — e só fica intacto (com aviso) quando não
+    há registro; o opt-out vazio só sobrevive com certeza a um re-run que NÃO passe
+    `--github-owner` (o installer entrega então `.github/CODEOWNERS.template` e não toca no
+    `CODEOWNERS`). Cura antes do GA: aplicar essa validação DENTRO de `_codeowners_provenance`
+    (exatamente um registro HASH canônico para `.github/CODEOWNERS`, manifesto regular, sem
+    duplicados) e distinguir «esvaziado pelo adopter» de «truncado pelo defeito» por outra
+    evidência que não o tamanho. O parser do `uninstall.sh` validava a GRAMÁTICA por linha;
+    a unicidade de relpath e o symlink do próprio manifesto faltavam e foram CURADOS nesta rc
+    (item 69) — a rodada 8 dizia aqui que ele «já recusa» duplicados; era falso então.
 63. **O perfil `user` recebe, pelo merge ADITIVO do upgrade, hooks que podem BLOQUEAR** —
     e «advisory hooks only» não é verdade (rodada 8, parte 3, P1): o merge registra
     `check_config_change.py` (default ligado), que devolve `{"decision":"block"}` numa
@@ -666,9 +730,15 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     `blocking_inclusions` de `templates/settings/settings.user.json` nomeia mais três que
     podem bloquear sob opt-in (`accel_dispatch.py`, `codex_review_user_code.py`,
     `review_loop.py`). O `--no-settings-migrate` da condição 55 NÃO evita isto (o merge
-    aditivo continua). O `README.md` e o `docs/FAQ.md` deixaram de dizer «advisory hooks
-    only» (livre); o cabeçalho canônico de `scripts/install.sh` ainda diz — texto inexato
-    até a próxima cerimônia. Condição DURA: quem quer o comportamento advisory da v1.3.0
+    aditivo continua). Deixaram de dizer «advisory hooks only» (arquivos livres): o `README.md`
+    (a linha da cerimônia na rodada 8; a tabela do plugin e a cauda da válvula de escape na
+    rodada 9, parte 4), o `docs/FAQ.md`, o `README.pt-BR.md` (as três ocorrências) e o
+    `npm/README.md` — a cópia do npm mantinha as duas promessas, linhas 98 e 136, quando a
+    rodada 8 estreitou só o README raiz — e `INSTALL.md` (tabela do plugin, linha 97; apanhado
+    pelo refutador da rodada 10). A classe foi procurada por grep em toda a árvore entregue
+    (`*.md`, `*.sh`, `*.json`, `*.template`): o ÚNICO texto que ainda diz «advisory hooks only»
+    é o cabeçalho canônico de `scripts/install.sh` (linha 11) — inexato até a próxima
+    cerimônia. Condição DURA: quem quer o comportamento advisory da v1.3.0
     intacto roda o upgrade também com `--no-settings-merge`; quem aceita o merge conhece as
     rotas de saída: `CEO_CONFIG_CHANGE_GUARD=0` (check_config_change), `CEO_TURBO=0` ou
     `.claude/turbo-off` (accel_dispatch), não setar `CEO_CODEX_USER_REVIEW_BLOCK=1`
@@ -678,7 +748,11 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
 64. **Colisão de posse num caminho NOVO da v1.4.0** (rodada 8, parte 5, P1): a atualização por
     arquivo do `scripts/upgrade.sh` (`_per_file_classified_update`, ~linhas 1424-1471, chamada
     por `backup_and_replace` para `.claude/hooks`, `.claude/scripts`, `.claude/commands`, os
-    domínios de skills e os agentes) só trata «arquivo novo do framework» quando o destino está
+    rosters e os domínios de skills; os cinco agentes canônicos NÃO passam por ela — rodada 10,
+    refutador — `upgrade_agents_canonical_only` os copia por `cp` INCONDICIONAL, com backup em
+    `.claude.bak/<ts>/agents-<nome>.bak` e preservando SÓ o override de modelo do adopter: qualquer
+    outra edição sua num desses cinco arquivos é substituída a cada upgrade, classe da 48) só
+    trata «arquivo novo do framework» quando o destino está
     AUSENTE. Se o adopter tem um arquivo PRÓPRIO no caminho que a v1.4.0 passa a entregar
     (instância: `.claude/hooks/check_compact_pinning.py` — o hook não existia na v1.3.0, logo o
     manifesto v1.3.0 não tem linha para ele), `_classify_against_baseline` devolve `FALLBACK`
@@ -710,9 +784,11 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     dele e o GC pode apagar arquivos externos homônimos. A condição 28 cobre `<repo>/.claude/state`,
     não este raiz. Condição DURA: `<raiz de estado>/scratchpad-session` deve estar AUSENTE antes do
     primeiro prompt ou ser um diretório REAL criado pelo framework, sem arquivos estranhos com esses
-    nomes; nenhum symlink (leaf ou ancestral) sob o raiz de estado (`python3
-    .claude/hooks/_lib/runtime_paths.py --state-dir` imprime o diretório nativo; o raiz é o seu
-    `state/`). Cura antes do GA: validar o caminho completo sob o raiz resolvido, recusar leaf
+    nomes; nenhum symlink (leaf ou ancestral) sob o raiz de estado — o raiz é `<nativo>/state`,
+    onde `<nativo>` é o que `python3 .claude/hooks/_lib/runtime_paths.py --state-dir` imprime; a
+    checagem da condição 68 apanha um `state` que seja symlink (rodada 10) e, existindo o
+    diretório, `find "$d/state" -type l` tem de imprimir NADA (o mesmo `d` da 68). Cura antes do
+    GA: validar o caminho completo sob o raiz resolvido, recusar leaf
     symlink ou hard-linked e fazer criação, abertura SQLite, varredura e unlink por descritores de
     diretório verificados (`O_DIRECTORY|O_NOFOLLOW`), como a 28 já pede.
 67. **`append_entry` lê o predecessor e calcula o HMAC FORA do lock** (rodada 8, parte 6, P1;
@@ -745,19 +821,126 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     processos podem ver o segundo `exists()` falso e AMBOS publicar por `replace` — o primeiro lê
     e guarda em cache a chave A, o disco fica com a chave B: toda linha assinada com A fica
     permanentemente inverificável. A ordem é a mesma da v1.3.0 (não é regressão), mas a v1.4.0
-    REABRE a primeira criação para todo adopter que atualiza: o diretório por projeto nasce sem
-    `audit-key`, e mais de um processo de hook pode chamar `get_or_create_key()` antes de a chave
-    existir. A condição 21 declara a eleição do `.salt`, não a da chave. Condição DURA: depois do
-    upgrade e ANTES da primeira sessão, crie a chave com um único escritor —
-    `d=$(python3 .claude/hooks/_lib/runtime_paths.py --state-dir); mkdir -p -m 700 "$d"; [ -e "$d/audit-key" ] || ( umask 077; head -c 32 /dev/urandom > "$d/audit-key" )`
-    (32 bytes, modo 0600; `get_or_create_key()` encontra a chave e não a substitui — ensaiado em
-    09/09 com HOME isolado: o diretório do resolver é o `key_path().parent` e o sha256 é o mesmo
-    antes e depois) — e não abra duas sessões nem rode a suíte de testes dos hooks no mesmo
-    repositório enquanto `audit-key` não existir. `docs/UPGRADE-PROCEDURE.md` diz isto (checagem
-    11). Cura antes do GA (canônico, rc.2): publicar a chave por `link()` exclusivo do tempfile
+    REABRE a primeira criação para todo adopter que atualiza: no diretório por projeto ainda não
+    há `audit-key` do framework, e mais de um processo de hook pode chamar `get_or_create_key()`
+    antes de a chave existir. A condição 21 declara a eleição do `.salt`, não a da chave.
+    Condição DURA (reescrita na rodada 9, parte 5 — a versão da rodada 8 afirmava que o diretório
+    «nasce sem `audit-key`», o que o código não garante, e o seu comando de criação seguia um
+    symlink pendente: medido em 09/09, 32 bytes escritos FORA do diretório): o diretório nativo
+    do projeto (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir`) já EXISTE — é do
+    harness, não do framework — e a v1.4.0 passa a reclamar nele a família de auditoria sem
+    verificar proveniência: `audit-log.jsonl`, `audit-log.errors`, `audit-log.lock`,
+    `audit-log.last-hmac`, `audit-log.chain-length`, `audit-log.rotation-manifest.json`,
+    `audit-key`, `.salt`, `salt-minted.json` (mais `audit-log.jsonl.lock`, item 72, os
+    temporários `*.tmp.<pid>` e `.salt-minted.json.<hex>.tmp`, os arquivos de rotação mensal
+    `audit-log-<AAAA-MM>[-n].jsonl`, o subdiretório `memory-shared/` (sem consumidor vivo nesta
+    rc; `mkdir` + `chmod 0700` ATRAVÉS de um symlink, medido) e — rodada 10, refutador — o
+    SUBDIRETÓRIO `state`, raiz do
+    scratchpad de sessão, do spool e de cinco hooks registrados, que `state_store.py` cria com
+    `mkdir(parents=True)` e abre com `sqlite3.connect` ATRAVÉS de um symlink — reproduzido: um
+    `state` apontando para fora recebe o SQLite do scratchpad); um `audit-log.jsonl` SEU ali é
+    ANEXADO e recebe `chmod 0600`,
+    `audit-log.last-hmac` e os outros sidecars seus são SUBSTITUÍDOS por `os.replace` (o `.salt`
+    fora de forma é TRUNCADO no lugar, `O_TRUNC` — sobre um hard link isso destrói o inode
+    partilhado; a checagem (5) do guia já o dizia; rodada 10), e um FIFO
+    seu passa em `_is_safe_audit_path` (que só olha symlink e dono) e bloqueia o `open`. Para o
+    `audit-key` em particular (rodada 9, parte 6): um arquivo SEU de exatamente 32 bytes nesse
+    nome é ADOTADO em silêncio como a credencial do framework (`get_or_create_key` só cria
+    quando o nome não existe); um arquivo de qualquer OUTRO tamanho faz `get_or_create_key`
+    levantar `AuditHmacError` e TODO evento sai com `hmac=null` e
+    `hmac_error=AuditHmacError` — a cadeia corre sem assinatura, sem bloquear a sessão; e um
+    FIFO seu passa em `_check_perm_0600` (que testa modo e dono, nunca «arquivo regular») e
+    bloqueia o hook em `read_bytes()`; e a primeira chave muda o MODO do diretório do harness
+    de 0755 para 0700 (`ensure_state_dir(tighten=True)`, medido; rodada 10). Antes da
+    primeira sessão depois do upgrade, TODOS esses nomes têm de estar AUSENTES do diretório —
+    nem symlink, nem hard link, nem tipo não regular — e o diretório não pode ser symlink; o
+    comando imprime NADA (com um `$d` vazio — resolvedor a falhar por cwd errado — ele avisa em
+    vez de aprovar por silêncio; rodada 10):
+    `d=$(python3 .claude/hooks/_lib/runtime_paths.py --state-dir); [ -n "$d" ] || echo "RESOLVER FAILED (run from the target root)"; [ -L "$d" ] && echo "SYMLINK DIR: $d"; for n in state memory-shared audit-log.jsonl audit-log.errors audit-log.lock audit-log.jsonl.lock audit-log.last-hmac audit-log.chain-length audit-log.rotation-manifest.json audit-key .salt salt-minted.json; do p="$d/$n"; if [ -L "$p" ] || [ -e "$p" ]; then echo "PRESENT: $p"; fi; done; for p in "$d"/audit-log-*.jsonl "$d"/audit-*.tmp.* "$d"/.salt-minted.json.*.tmp; do { [ -L "$p" ] || [ -e "$p" ]; } && echo "PRESENT: $p"; done`
+    ; e a chave é criada por UM escritor, com `O_EXCL|O_NOFOLLOW` (recusa qualquer coisa já
+    presente, symlink pendente incluído — ensaiado em 09/09 com HOME isolado:
+    `get_or_create_key()` devolve os mesmos bytes; o controle com symlink pendente termina em
+    `FileExistsError` e nada é escrito fora):
+    `d=$(python3 .claude/hooks/_lib/runtime_paths.py --state-dir); python3 -c 'import os,sys; d=sys.argv[1]; os.makedirs(d, 0o700, exist_ok=True); p=os.path.join(d,"audit-key"); fd=os.open(p, os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW, 0o600); os.write(fd, os.urandom(32)); os.close(fd)' "$d"`
+    — e não abra duas sessões nem rode a suíte de testes dos hooks no mesmo repositório enquanto
+    `audit-key` não existir. `docs/UPGRADE-PROCEDURE.md` diz isto (checagem 11). Cura antes do GA
+    (canônico, rc.2): recusar folhas pré-existentes sem proveniência (ou mover a família para um
+    subdiretório próprio do framework) e publicar a chave por `link()` exclusivo do tempfile
     `0600` + `fsync` para o nome final (sem `replace`), perdedores relendo a vencedora; teste
     multiprocesso com barreira depois do segundo `exists()` exigindo UMA chave em disco e em cache
     e cadeia verificável.
+69. **`uninstall.sh` não checava UNICIDADE de relpath nem recusava manifesto symlink — CURADO
+    nesta rc** (rodada 9, parte 3, P1; arquivos livres): o parser do pack 2 validava cada linha
+    isoladamente e gravava no ledger TODA ocorrência sintaticamente válida; a varredura de
+    remoção processava o ledger linha a linha. Com `<sha-antigo>␠␠docs/x` seguido de
+    `<sha-atual>␠␠docs/x`, a primeira linha reportava o arquivo modificado pelo adopter como
+    PRESERVADO e a segunda o REMOVIA (`rm -f`, SEM `--force`); o `exit 5` chegava depois da
+    remoção. E `[ ! -f "$MANIFEST" ]` seguia symlink: um manifesto symlinkado era lido através
+    do link. A condição 61 dizia, até a rodada 9, que este sanitizador «já recusa» duplicados —
+    era FALSO; corrigido. Cura nesta rc (livre, mesmo commit do candidato): (a) `[ -L
+    "$MANIFEST" ]` ANTES do `-f` ⇒ `REFUSED` nomeado e `exit 6`, também em `--dry-run` (falha
+    de integridade do input, não preview); (b) segundo passe sobre o ledger sanitizado: TODA
+    ocorrência de um relpath registrado mais de uma vez é RECUSADA (contada em `Refused`,
+    nunca arquivada nem removida) ANTES do backup e da varredura — o mesmo tratamento em dois
+    passes do `doctor.sh`; a legenda de códigos e o sumário nomeiam a classe; e (c) — achado
+    do refutador da rodada 10 sobre a própria cura — a unicidade compara STRINGS, e `_rel_unsafe`
+    não recusava SEGMENTO VAZIO: `docs/x` e `docs//x` são duas linhas para UM inode, `uniq -d`
+    não as pareia e a varredura preservava na primeira e removia na segunda (reproduzido);
+    `_rel_unsafe` passa a recusar `//` e barra final (a cláusula que o predicado compartilhado
+    `_wbm_route_relpath_ok` já tinha), recusando o alias no PRIMEIRO passe; e, porque enumerar
+    grafias não converge (alias por caixa em sistema de arquivos sem distinção de maiúsculas,
+    normalização Unicode do APFS, hard link entre dois caminhos registrados), (d) um passe de
+    IDENTIDADE: todo relpath do ledger que exista é `lstat`-ado (leaf nunca seguido) e TODA
+    grafia cujo `(st_dev, st_ino)` apareça sob mais de um nome é recusada antes do backup e da
+    remoção — a classe fecha por construção, não por lista. O `doctor.sh` tem a brecha de
+    string no seu `_relpath_unsafe` (aceita `//` e `./docs/x`) e nenhum passe de identidade —
+    declarado, cura na rc.2. Evidência: e2e
+    `scripts/tests/test-installer-write-safety-e2e.sh` U.9a (arquivo modificado sobrevive byte
+    a byte a um relpath duplicado; recusa nomeada; rc 6; manifesto mantido) e U.9b (manifesto
+    symlink: rc 6 antes de qualquer leitura; arquivo do framework intacto; link e manifesto
+    externo intactos) e U.9c (alias `docs//x`: arquivo intacto; recusa nomeada como caminho
+    inseguro; rc 6) e U.9d (hard link `docs/alias` do mesmo inode, registrado com o sha atual:
+    os dois nomes sobrevivem; as duas linhas recusadas por identidade; rc 6 — portátil a
+    qualquer sistema de arquivos, ao contrário de uma fixture por caixa), com controle positivo
+    contra a árvore PRÉ-cura (`git archive` do candidato anterior: U.9a/U.9b vermelhas; U.9c
+    vermelha contra a cura só de unicidade; U.9d vermelha contra a cura sem identidade; resto
+    verde). O censo de escrita segura ganhou no
+    baseline os sítios dos `mv` entre ledgers próprios (`mktemp`, nunca um caminho do alvo). O
+    parser TOTAL da condição 61 continua útil ANTES de `uninstall.sh` para ver o que será
+    recusado; o `doctor.sh --repair` segue coberto pela 43.
+70. **Assimetria de `plan_id` entre PreCompact e PostCompact perde a continuidade em silêncio**
+    (rodada 9, parte 5, P1; canônicos): `check_precompact_continuity.py` aceita qualquer PREFIXO
+    `PLAN-` (`startswith`, ~310 e ~510) e, com um `plan_transition` NÃO verificado que traga
+    `PLAN-123-slug`, grava o snapshot no store de PLANO com esse id e reporta `written`;
+    `check_postcompact_reinject.py` exige a FORMA exata `PLAN-NNN` (`_plan_id_ok`, ~389 — a cura
+    da rodada 2 endureceu só o leitor) e, ao rejeitar o id, procura o store de SESSÃO, onde nada
+    foi gravado: `snapshot_found=false`, continuidade perdida sem aviso. A condição 17 cobre o
+    render, não o escritor. Condição DURA: a continuidade pós-compaction só é garantida para
+    planos cujo id nos eventos `plan_transition` é exatamente `PLAN-NNN`; um `snapshot_found=false`
+    no PostCompact com `written` no PreCompact da mesma sessão é esta assimetria, não ausência de
+    snapshot. Cura antes do GA (canônico, rc.2): validar e coagir o `plan_id` para `unknown` UMA
+    vez no PreCompact, antes de `_plan_file_for`, `_write_snapshot`, do blob e do evento (id
+    inválido vai ao store de sessão), com teste round-trip `PLAN-123-slug`.
+71. **O campo `model` dos eventos `agent_spawn` é POLÍTICA, não observação** (rodada 9, parte 5,
+    P1; canônicos): a docstring de `audit_log.py` (~876) mede que 199/199 eventos não trazem
+    `tool_response.model`, então o fallback pela tabela ADR-052 (`_ADR_052_ROLE_TO_MODEL`) domina —
+    um spawn `devops` corre com `claude-sonnet-4-6` pelo frontmatter de `.claude/agents/devops.md`
+    mas é registrado como `claude-haiku-4-5`; um `code-reviewer` corre `claude-fable-5` pelo
+    frontmatter e é registrado como `claude-opus-5`. Isso contradiz «Claude model ID used for the
+    spawn» e «the audit log proves which model made the decision» (`audit_log.py` ~39-47;
+    `.claude/plans/AUDIT-LOG-SCHEMA.md` §14). O teste de 14 casos verifica o frontmatter e a
+    tabela separadamente, nunca a paridade. Condição DURA: leia `model` como «modelo previsto pela
+    política de roteamento para o `subagent_type`», nunca como prova forense do modelo que
+    executou — para atribuição real use o frontmatter do agente ou o relatório de custo do
+    harness. Cura antes do GA (canônico): sem observação, ler o frontmatter autoritativo ou
+    emitir `model=null` e registrar a política em campo separado; alinhar o schema; teste de
+    paridade frontmatter × tabela.
+72. A barreira de drenagem do `SessionEnd` (`_flush_audit_log_filelock`, ~322-338) usa
+    `audit-log.jsonl.lock` enquanto os escritores usam `audit-log.lock` (`audit_emit._lock_path`
+    e `audit_paths()`), e só tenta adquirir se o arquivo ERRADO existir — na prática retorna
+    imediatamente; a drenagem prometida não acontece, e os emits pelo caminho assíncrono do spool
+    depois dela também não a têm. Cura: usar o `_lock_path()` compartilhado e adquirir o lock
+    real sempre, com teste que o mantenha ocupado (rodada 9, parte 5, P2; canônico).
 57. **O `--restore` valida NOMES, não TIPOS de membro** (rodada 7, parte 3, P1): a única
     checagem estrutural é «existe um membro cujo nome começa por `.claude`»; depois o
     archive é extraído em bloco (`tar xzf ... .claude`) e os membros `.claude/*` são pulados
@@ -800,7 +983,14 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     não para OMISSÃO semântica: remover a linha de `benchmarks.yml.template` deixa cinco
     linhas válidas, `routes == rows`, o upgrade omite a entrega e sai 0. Mitigado nesta
     rc pela condição 45 (checkout completo da tag); cura: pinar por release o conjunto
-    exato de destinos ou o digest esperado da tabela (rodada 8, parte 2, P2).
+    exato de destinos ou o digest esperado da tabela (rodada 8, parte 2, P2). Idem (rodada 9,
+    parte 2, P2): o `install.sh` repete em código os destinos e pares fonte/destino que a
+    tabela declara (`_dst_global_preflight`, `install_docs_templates` e os writers de
+    `.github/`); remover ou alterar uma rota não altera essas cópias e o installer ainda
+    tenta a entrega fixa (a fresta (a) da condição 8) — a paridade installer/tabela é
+    VERIFICADA em CI (D3), não derivada. O cabeçalho de `scripts/delivery-routes.tsv` (arquivo
+    livre) deixou de se anunciar «única verdade» para todos e de prometer «5 arquivos por
+    run»: uma cerimônia `user`, uma fonte ausente ou um destino preservado entregam menos.
 66. `SPEC/v1/scratchpad.schema.md` (canônico, versão 1.0.0-rc.1) continua normativo SÓ para o
     store por plano (`scratchpad/<plan_id>.sqlite`): o store de sessão
     `scratchpad-session/session-<uuid>.sqlite` — escopo, gramática do id, TTL, GC por store, lock

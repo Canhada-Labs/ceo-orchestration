@@ -1,0 +1,17 @@
+Há um P1 no envelope; não encontrei P0.
+
+1. **SEVERITY: P1 — fix before rc.1**  
+   **FILE:LINE:** [scripts/install.sh:2020](<<WT>/scripts/install.sh:2020>), [scripts/install.sh:2071](<<WT>/scripts/install.sh:2071>), [scripts/install.sh:2106](<<WT>/scripts/install.sh:2106>), [CONDITIONS-rc1.md:647](<<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:647>)  
+   **Concrete failure scenario:** a condição 61 reconhece corretamente que `_codeowners_provenance` aceita qualquer sufixo `␠␠.github/CODEOWNERS`, mas sua validação operacional não fecha o defeito. A linha malformada `aaaaaaaa…(64 hex)…  junk  .github/CODEOWNERS` produz zero saída no `grep -vE` recomendado, contagem 1 no segundo `grep` e também satisfaz o `grep` do código. Com `CODEOWNERS` vazio, o installer anuncia `RECOVERED`, sobrescreve-o e sai 0. Além disso, a instrução de remover um `CODEOWNERS` deliberadamente vazio não preserva o opt-out: a ausência leva diretamente ao ramo normal que cria o arquivo em `install.sh:2106-2109`.  
+   **Minimal fix:** antes de assinar, substituir os comandos da condição por um parser total que exija arquivo regular não-symlink, gramática integral por linha, relpaths seguros e unicidade global; declarar que um opt-out vazio só sobrevive se o re-run não usar `--github-owner`. Preferível: aplicar essa validação dentro de `_codeowners_provenance`.
+
+2. **SEVERITY: P2 — follow-up**  
+   **FILE:LINE:** [scripts/delivery-routes.tsv:1](<<WT>/scripts/delivery-routes.tsv:1>), [scripts/install.sh:1053](<<WT>/scripts/install.sh:1053>), [scripts/install.sh:1904](<<WT>/scripts/install.sh:1904>)  
+   **Concrete failure scenario:** a tabela afirma “THIS FILE IS THE TRUTH” e que os valores vivem somente nela, mas o preflight e os escritores do installer repetem destinos e pares fonte/destino em código. Remover ou alterar uma rota não altera essas cópias; o installer ainda tenta a entrega fixa e pode sair 0, exatamente o residual reconhecido pelas condições 8 e 62. A afirmação de que “any single run delivers 5 files” também não vale para cerimônia `user`, fontes ausentes ou destinos preservados.  
+   **Minimal fix:** estreitar o comentário para “fonte de verdade da resolução do manifesto/upgrader, com paridade do installer verificada em CI”, ou fazer o installer consumir a tabela diretamente e pinar o conjunto esperado por release.
+
+No upgrade normal v1.3.0 copy-mode, o blast radius principal está corretamente declarado: a v1.3.0 entregava `docs/` e `.github/` sem registrá-los; a nova enumeração pode tomar posse de arquivos autorais iguais à geração atual ou histórica, após o que `doctor`, upgrades futuros e uninstall os tratam como framework-owned. As condições 5, 8, 9, 31, 33–35, 42, 43, 45, 47, 48, 56 e 62 são compatíveis com os ramos examinados; a condição 61 não é suficiente.
+
+Passaram `bash -n`, ShellCheck, `git diff --check`, os verificadores de freshness/claims/contaminação e a leitura das seis rotas, cujas fontes atuais são arquivos regulares não-symlink. Os E2E mutáveis não puderam ser repetidos porque o sandbox read-only recusou `mktemp`; os 105/0 foram tratados somente como cobertura anterior.
+
+VERDICT: NO-GO — A condição 61 ainda permite que proveniência malformada reative silenciosamente o CODEOWNERS e fornece uma mitigação incorreta para o opt-out deliberado.

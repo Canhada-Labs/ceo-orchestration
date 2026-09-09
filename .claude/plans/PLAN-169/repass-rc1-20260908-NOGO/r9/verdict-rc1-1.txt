@@ -1,0 +1,13 @@
+The declared conditions are materially accurate where spot-checked, but they are not sufficient. Two P1 adopter hazards remain outside the envelope.
+
+- **P1 — [scripts/upgrade.sh:1163](<WT>/scripts/upgrade.sh:1163), [scripts/upgrade.sh:1201](<WT>/scripts/upgrade.sh:1201), [scripts/upgrade.sh:1281](<WT>/scripts/upgrade.sh:1281), [scripts/upgrade.sh:1463](<WT>/scripts/upgrade.sh:1463)**  
+  **Concrete failure:** A malformed record in the v1.3 manifest—such as a 63-character digest for an adopter-customized hook—is silently dropped. Lookup then returns `FALLBACK`, which bypasses the default `--on-conflict=refuse` and overwrites the customized file at line 1469. The backup is recoverable, but the live file and subsequent ownership record are taken by the framework. This is fail-open on malformed provenance input and is not disclosed by condition 14.  
+  **Minimal fix:** Track rejected manifest records and classify the affected path as `CONFLICT`, or refuse the mutation phase globally when an unassignable malformed record exists. For rc.1, add a hard preflight condition requiring a regular, canonical, duplicate-free manifest before upgrade.
+
+- **P1 — [scripts/upgrade.sh:1843](<WT>/scripts/upgrade.sh:1843), [scripts/upgrade.sh:1906](<WT>/scripts/upgrade.sh:1906), [scripts/upgrade.sh:1919](<WT>/scripts/upgrade.sh:1919), [docs/UPGRADE-PROCEDURE.md:121](<WT>/docs/UPGRADE-PROCEDURE.md:121)**  
+  **Concrete failure:** Condition 47’s required `find` checks omit root `PROTOCOL.md`. A v1.3 framework-generated or degraded pointer hard-linked to a file outside the target is observed as a regular owned file and refreshed using direct `printf > "$pointer"`, truncating and rewriting the external inode. An adopter can follow the signed preflight exactly and still pass this unsafe shape.  
+  **Minimal fix:** Add `<target>/PROTOCOL.md` to both symlink and hard-link preflight checks and to condition 47. The code cure should use the shared destination/nlink refusal plus a same-directory temporary file and atomic rename.
+
+Static checks passed: `bash -n`, ShellCheck warnings, `git diff --check`, AGENTS freshness, stdlib-only, count-claims, and contamination gates. Dynamic fixture execution was unavailable because this review sandbox forbids temporary-directory creation.
+
+VERDICT: NO-GO — The signed envelope omits two P1 adopter hazards and must be corrected before rc.1 is cut.

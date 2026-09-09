@@ -58,6 +58,8 @@ trap cleanup EXIT
 
 ok()  { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1" >&2; }
+# A fixture that could not be built is a FAILED leg, never a silent skip.
+scaffold() { bad "$1 — fixture could not be built"; }
 
 echo "=== PLAN-185 W1+W2 installer write-safety e2e ==="
 echo "    framework root under test : $FRAMEWORK_ROOT"
@@ -1782,6 +1784,123 @@ else
       && bad "U.8b — the dry-run moved something aside" \
       || ok "U.8b — the dry-run moved nothing aside"
   fi
+fi
+
+# ---------------------------------------------------------------------------
+# U.9 — a relpath recorded MORE THAN ONCE never removes the file, and a manifest
+# that is itself a symlink is refused before it is read (rc.1 re-pass, round 9,
+# part 3). Pre-cure, each record was validated alone: `<old-sha>  rel` followed
+# by `<current-sha>  rel` PRESERVED the adopter-modified file on the first row
+# and `rm -f`ed it on the second, without --force (exit 5 only afterwards); and
+# `-f` followed a symlinked manifest, so the ledger was read through the link.
+echo "==> U.9a a relpath recorded twice is REFUSED whole — the adopter-modified file survives"
+_mkcase u9a-dup-relpath
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.9a — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U9_REL="$( grep -v '^#' "$MAN" | grep -v '^$' | grep '  docs/' | head -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  [ -n "$U9_REL" ] && [ -f "$TARGET/$U9_REL" ] || scaffold "U.9a fixture: no docs/ record with a file on disk"
+  # The adopter edits the delivered file (its sha no longer matches the record),
+  # then a SECOND record for the SAME relpath appears, matching the edited bytes.
+  printf '\nadopter edit %s\n' "$$" >> "$TARGET/$U9_REL"
+  U9_NEW_SHA="$( shasum -a 256 < "$TARGET/$U9_REL" | awk '{print $1}' )"
+  printf '%s  %s\n' "$U9_NEW_SHA" "$U9_REL" >> "$MAN"
+  U9_SUM_BEFORE="$U9_NEW_SHA"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ -f "$TARGET/$U9_REL" ] && [ "$( shasum -a 256 < "$TARGET/$U9_REL" | awk '{print $1}' )" = "$U9_SUM_BEFORE" ] \
+    && ok "U.9a — the adopter-modified file survived a duplicated relpath (bytes intact)" \
+    || bad "U.9a — the file under the duplicated relpath was REMOVED or altered (see $LOG)"
+  grep -q 'REFUSED (relpath recorded more than once' "$LOG" \
+    && ok "U.9a — the refusal is NAMED" \
+    || bad "U.9a — no named refusal for the duplicated relpath (see $LOG)"
+  [ "$RC" -eq 6 ] && [ -f "$MAN" ] \
+    && ok "U.9a — the run is INCOMPLETE (rc=6) and the manifest survives" \
+    || bad "U.9a — exited $RC / manifest present=$([ -f "$MAN" ] && echo yes || echo no) (see $LOG)"
+fi
+
+echo "==> U.9c an EMPTY-SEGMENT alias of a recorded path is REFUSED — one inode, two strings, never removed"
+_mkcase u9c-alias-relpath
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.9c — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U9C_REL="$( grep -v '^#' "$MAN" | grep -v '^$' | grep '  docs/' | head -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  [ -n "$U9C_REL" ] && [ -f "$TARGET/$U9C_REL" ] || scaffold "U.9c fixture: no docs/ record with a file on disk"
+  # The adopter edits the file; a second record for the SAME inode appears under
+  # the alias spelling `docs//name`, matching the edited bytes. String-wise the
+  # two relpaths differ, so a uniqueness pass alone cannot pair them.
+  printf '\nadopter edit %s\n' "$$" >> "$TARGET/$U9C_REL"
+  U9C_SUM="$( shasum -a 256 < "$TARGET/$U9C_REL" | awk '{print $1}' )"
+  U9C_ALIAS="${U9C_REL%%/*}//${U9C_REL#*/}"
+  printf '%s  %s\n' "$U9C_SUM" "$U9C_ALIAS" >> "$MAN"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ -f "$TARGET/$U9C_REL" ] && [ "$( shasum -a 256 < "$TARGET/$U9C_REL" | awk '{print $1}' )" = "$U9C_SUM" ] \
+    && ok "U.9c — the adopter-modified file survived the empty-segment alias (bytes intact)" \
+    || bad "U.9c — the file was REMOVED or altered through the alias record (see $LOG)"
+  grep -q 'REFUSED (unsafe manifest path' "$LOG" \
+    && ok "U.9c — the alias record is REFUSED as an unsafe path" \
+    || bad "U.9c — the alias record was not refused (see $LOG)"
+  [ "$RC" -eq 6 ] && [ -f "$MAN" ] \
+    && ok "U.9c — the run is INCOMPLETE (rc=6) and the manifest survives" \
+    || bad "U.9c — exited $RC / manifest present=$([ -f "$MAN" ] && echo yes || echo no) (see $LOG)"
+fi
+
+echo "==> U.9d a HARD-LINK alias of a recorded path is REFUSED by identity — one inode under two names, neither removed"
+_mkcase u9d-hardlink-alias
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.9d — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U9D_REL="$( grep -v '^#' "$MAN" | grep -v '^$' | grep '  docs/' | head -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  [ -n "$U9D_REL" ] && [ -f "$TARGET/$U9D_REL" ] || scaffold "U.9d fixture: no docs/ record with a file on disk"
+  # A second NAME for the same inode, recorded with the CURRENT sha: string-wise
+  # a different, well-formed relpath — only the inode says they are one file.
+  # (A case-folding alias would need a case-insensitive filesystem; a hard link
+  # exercises the same identity mechanism on every filesystem.)
+  U9D_ALIAS="${U9D_REL%/*}/alias-$$.md"
+  ln "$TARGET/$U9D_REL" "$TARGET/$U9D_ALIAS" || scaffold "U.9d fixture: could not create the hard link"
+  U9D_SHA="$( shasum -a 256 < "$TARGET/$U9D_REL" | awk '{print $1}' )"
+  printf '%s  %s\n' "$U9D_SHA" "$U9D_ALIAS" >> "$MAN"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ -f "$TARGET/$U9D_REL" ] && [ -f "$TARGET/$U9D_ALIAS" ] \
+    && ok "U.9d — both names of the shared inode survived" \
+    || bad "U.9d — a name of the shared inode was REMOVED (see $LOG)"
+  [ "$( grep -c 'REFUSED (relpath is an alias of another recorded path' "$LOG" )" -eq 2 ] \
+    && ok "U.9d — both records are REFUSED by identity, by name" \
+    || bad "U.9d — expected two identity refusals, got $( grep -c 'REFUSED (relpath is an alias' "$LOG" ) (see $LOG)"
+  [ "$RC" -eq 6 ] && [ -f "$MAN" ] \
+    && ok "U.9d — the run is INCOMPLETE (rc=6) and the manifest survives" \
+    || bad "U.9d — exited $RC / manifest present=$([ -f "$MAN" ] && echo yes || echo no) (see $LOG)"
+fi
+
+echo "==> U.9b a manifest that is itself a SYMLINK is refused before anything is read"
+_mkcase u9b-symlink-manifest
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.9b — install failed (rc=$RC, see $LOG)"
+else
+  MAN="$TARGET/.claude/.install-manifest.sha256"
+  U9B_REL="$( grep -v '^#' "$MAN" | grep -v '^$' | grep '  docs/' | head -n 1 | awk '{ $1=""; sub(/^ +/, ""); print }' )"
+  [ -n "$U9B_REL" ] && [ -f "$TARGET/$U9B_REL" ] || scaffold "U.9b fixture: no docs/ record with a file on disk"
+  mv "$MAN" "$OUTSIDE/manifest-outside" || scaffold "U.9b fixture: could not move the manifest aside"
+  ln -s "$OUTSIDE/manifest-outside" "$MAN" || scaffold "U.9b fixture: could not create the symlink"
+  LOG="$CASE/uninstall.log"; _uninstall
+  [ "$RC" -eq 6 ] \
+    && ok "U.9b — a symlinked manifest is REFUSED (rc=6), not read through" \
+    || bad "U.9b — exited $RC, expected 6: -f followed the link and the manifest was read through it (see $LOG)"
+  grep -q 'REFUSED: the install manifest at .* is a SYMLINK' "$LOG" \
+    && ok "U.9b — the refusal is NAMED" \
+    || bad "U.9b — no named refusal for the symlinked manifest (see $LOG)"
+  [ -f "$TARGET/$U9B_REL" ] \
+    && ok "U.9b — the framework file is still on disk (nothing was removed through the link)" \
+    || bad "U.9b — $U9B_REL was removed through the symlinked manifest"
+  [ -L "$MAN" ] && [ -f "$OUTSIDE/manifest-outside" ] \
+    && ok "U.9b — the link and the outside manifest were left as they stood" \
+    || bad "U.9b — the link or the outside manifest was altered"
 fi
 
 # ---------------------------------------------------------------------------

@@ -32,12 +32,14 @@
 #   5  uninstall INCOMPLETE: SHA mismatches encountered without --force
 #      (user-modified files preserved, manifest kept)
 #   6  uninstall INCOMPLETE: one or more manifest records REFUSED (unsafe
-#      path or symlinked ancestor) — never lifted by --force
+#      path, symlinked ancestor, a relpath recorded more than once, or an
+#      alias of another recorded path — same inode) —
+#      never lifted by --force
 #   A dry-run over a PARSED manifest exits 0: it previews what would be
 #   removed, preserved or refused. Input-integrity failures happen BEFORE
 #   the preview and exit non-zero even under --dry-run: a manifest carrying
-#   a NUL byte (6), a --restore tar.gz that is invalid or fails its HMAC
-#   check (4).
+#   a NUL byte (6), a manifest that is itself a symlink (6), a --restore
+#   tar.gz that is invalid or fails its HMAC check (4).
 #
 # Bash 3.2 portability guard
 if [ -z "${BASH_VERSINFO:-}" ]; then
@@ -118,6 +120,13 @@ _dry() {
 _rel_unsafe() {
   case "$1" in
     ''|/*|.|./*|..|../*|*/./*|*/../*|*/.|*/..) return 0 ;;
+    # rc.1 re-pass round 10 (refuter): an EMPTY SEGMENT is an alias of the
+    # same path — `docs/x` and `docs//x` name one inode but are two strings,
+    # so the relpath-uniqueness pass below could not see them as one record
+    # and the walk acted on both (preserve, then remove). The shared route
+    # predicate (_wbm_route_relpath_ok) refuses `//` too; a trailing `/` is
+    # the same alias class.
+    *//*|*/) return 0 ;;
     *[$'\n\r\t']*) return 0 ;;
     # rail r2 (S337) P2: whitespace and glob metacharacters — no delivery route
     # ever carries them (_wbm_route_relpath_ok rejects both), and a crafted
@@ -347,6 +356,18 @@ fi
 # ---------------------------------------------------------------------------
 MANIFEST="$TARGET/.claude/.install-manifest.sha256"
 
+# rc.1 re-pass round 9, part 3: `-f` FOLLOWS a link, so a manifest that is a
+# symlink was read THROUGH it — the ledger, the backup list and the removal
+# walk all came from bytes at a path nobody validated. The link itself is
+# refused (never followed) before anything reads it; exit 6 like every other
+# refusal, dry-run included (an input-integrity failure, not a preview).
+if [ -L "$MANIFEST" ]; then
+  _log "    REFUSED: the install manifest at $MANIFEST is a SYMLINK — this"
+  _log "             uninstaller never reads a manifest through a link."
+  _log "             NOTHING was removed; the link is left as it stands."
+  exit 6
+fi
+
 if [ ! -f "$MANIFEST" ]; then
   echo "ERROR: install manifest not found at $MANIFEST" >&2
   echo "       This target was not installed via PLAN-083 install.sh." >&2
@@ -427,6 +448,74 @@ while IFS= read -r line || [ -n "$line" ]; do
   valid_count=$((valid_count + 1))
   printf '%s\t%s\n' "${line%%  *}" "$_rel" >> "$_LEDGER"
 done < "$MANIFEST"
+
+# rc.1 re-pass round 9, part 3: relpath UNIQUENESS across the whole ledger.
+# Each record was validated on its own, so a relpath recorded TWICE produced
+# two ledger rows and the walk below acts per row: `<old-sha>  docs/x` followed
+# by `<current-sha>  docs/x` PRESERVED the adopter's modified file on the first
+# row and REMOVED it on the second — without --force, exit 5 only afterwards.
+# Ambiguous provenance is refused WHOLE (every occurrence, as doctor.sh does):
+# nothing under a duplicated relpath is archived or removed.
+_dup_rels="$( cut -f2- "$_LEDGER" | LC_ALL=C sort | LC_ALL=C uniq -d )"
+if [ -n "$_dup_rels" ]; then
+  _LEDGER_UNIQ="$(mktemp 2>/dev/null || mktemp -t ceo-uninstall-ledger-uniq)"
+  while IFS="$( printf '\t' )" read -r _lsha _lrel || [ -n "$_lrel" ]; do
+    [ -n "$_lrel" ] || continue
+    if printf '%s\n' "$_dup_rels" | LC_ALL=C grep -qxF -- "$_lrel"; then
+      unsafe_count=$((unsafe_count + 1))
+      valid_count=$((valid_count - 1))
+      _log "    REFUSED (relpath recorded more than once — ambiguous provenance, not touched): $_lrel"
+      continue
+    fi
+    printf '%s\t%s\n' "$_lsha" "$_lrel" >> "$_LEDGER_UNIQ"
+  done < "$_LEDGER"
+  mv -f "$_LEDGER_UNIQ" "$_LEDGER"
+fi
+
+# rc.1 re-pass round 10 (refuter): uniqueness by STRING cannot see every alias
+# of one inode — an empty segment (`docs//x`), case folding on a
+# case-insensitive filesystem (`docs/X`), Unicode normalisation on APFS, or a
+# hard link between two recorded paths. Enumerating spellings does not
+# converge; IDENTITY does: every ledger relpath that exists is lstat()ed
+# (the leaf is never followed) and EVERY relpath whose (st_dev, st_ino)
+# appears under more than one spelling is refused before backup and removal.
+# The grammar above already refused control bytes, whitespace and glob
+# characters, so the relpaths round-trip through python3 byte-exact.
+_alias_rels="$(python3 - "$TARGET" "$_LEDGER" <<'PY'
+import os, sys
+target, ledger = sys.argv[1], sys.argv[2]
+seen = {}
+with open(ledger, 'r', encoding='utf-8') as fh:
+    for line in fh:
+        line = line.rstrip('\n')
+        if '\t' not in line:
+            continue
+        rel = line.split('\t', 1)[1]
+        try:
+            st = os.lstat(os.path.join(target, rel))
+        except OSError:
+            continue
+        seen.setdefault((st.st_dev, st.st_ino), set()).add(rel)
+for rels in seen.values():
+    if len(rels) > 1:
+        for rel in sorted(rels):
+            sys.stdout.write(rel + '\n')
+PY
+)"
+if [ -n "$_alias_rels" ]; then
+  _LEDGER_IDENT="$(mktemp 2>/dev/null || mktemp -t ceo-uninstall-ledger-ident)"
+  while IFS="$( printf '\t' )" read -r _lsha _lrel || [ -n "$_lrel" ]; do
+    [ -n "$_lrel" ] || continue
+    if printf '%s\n' "$_alias_rels" | LC_ALL=C grep -qxF -- "$_lrel"; then
+      unsafe_count=$((unsafe_count + 1))
+      valid_count=$((valid_count - 1))
+      _log "    REFUSED (relpath is an alias of another recorded path — same inode, ambiguous provenance, not touched): $_lrel"
+      continue
+    fi
+    printf '%s\t%s\n' "$_lsha" "$_lrel" >> "$_LEDGER_IDENT"
+  done < "$_LEDGER"
+  mv -f "$_LEDGER_IDENT" "$_LEDGER"
+fi
 
 # Pre-uninstall backup (unless --no-backup)
 if [ "$NO_BACKUP" -eq 0 ]; then
@@ -573,7 +662,7 @@ if [ "$unsafe_count" -gt 0 ] || { [ "$mismatch_count" -gt 0 ] && [ "$FORCE" -eq 
   _log "    Removed:   $removed_count"
   _log "    Preserved: $preserved_count (user-modified — sha didn't match manifest)"
   _log "    Absent:    $absent_count (already gone)"
-  _log "    Refused:   $unsafe_count (unsafe manifest path or symlinked ancestor — not touched)"
+  _log "    Refused:   $unsafe_count (unsafe manifest path, symlinked ancestor or relpath recorded more than once — not touched)"
   _log ""
   # The --force hint is only true for a sha mismatch met WITHOUT --force; a
   # refusal is never lifted by --force, so say that instead of suggesting it.
@@ -619,6 +708,6 @@ _log "==> Uninstall summary:"
 _log "    Removed:   $removed_count"
 _log "    Preserved: $preserved_count"
 _log "    Absent:    $absent_count"
-_log "    Refused:   $unsafe_count (unsafe manifest path or symlinked ancestor — not touched)"
+_log "    Refused:   $unsafe_count (unsafe manifest path, symlinked ancestor or relpath recorded more than once — not touched)"
 _log "    Manifest:  $([ -f "$MANIFEST" ] && echo "KEPT" || echo "REMOVED")"
 exit 0
