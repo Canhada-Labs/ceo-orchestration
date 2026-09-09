@@ -47,15 +47,18 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     isto): copie SÓ os subdiretórios de store — `scratchpad/` (o do `/resume`),
     `skill_proposals/`, `skill_index/`, `session_graph/` (`state_store.py` ~29-38:
     `<state_root>/<store>/<PLAN-NNN>.sqlite` + `.lock`) —, nunca os arquivos planos da raiz
-    do `state/`; antes, drene os spools legados NA cadeia v1.3 (`CEO_AUDIT_LOG_DIR` apontada ao
-    diretório legado + `drain_now(force=True)` de `_lib/spool_writer.py`), prove com
-    `find <state legado> -maxdepth 1 \( -name 'audit-spool.*' -o -name 'audit-pending.*' \)`
-    vazio e mova o que sobrar para quarentena FORA de qualquer `state/`. A migração automática
+    do `state/`; antes, drene os spools legados NA cadeia v1.3: a partir da raiz do checkout, com
+    `CEO_AUDIT_LOG_DIR` apontada ao diretório de AUDITORIA legado
+    (`$HOME/.claude/projects/ceo-orchestration`, SEM `/state` — `_state_dir()` é
+    `<audit_dir>/state`, ~395), corra
+    `python3 -c "import sys; sys.path.insert(0,'.claude/hooks'); from _lib import spool_writer; print(spool_writer.drain_now(force=True))"`;
+    depois prove com
+    `find <state legado> -maxdepth 1 \( -name 'audit-spool.*.jsonl' -o -name 'audit-spool.*.draining.*' \)`
+    vazio (`.lock` e `audit-pending.*.journal` sobram por desenho; não são copiados) e mova
+    qualquer spool restante para quarentena FORA de qualquer `state/`. A migração automática
     (baseline-aware) segue sendo a condição DURA que o CHANGELOG promete e entra antes do GA
     (rodada 2, parte 4); cura do drainer (canônico, rc.2): gravar o projeto no header do spool
     (~814) e recusar por nome, no drain, spool de projeto alheio.
-    (Numeração estável: os itens são numerados na ordem em que entraram no envelope,
-    não na ordem das seções, para que as referências dos revisores continuem válidas.)
 
 39. **O estado de CUSTO (cost-envelope) muda de slug sem migração — e isso decide despachos.**
     `cost_envelope.py` passa a gravar `cost-envelope-*.json` sob o slug nativo (com traço
@@ -683,10 +686,9 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     parte 7, P2 — a retirada da rodada 10 estava errada): a docstring do EMISSOR em
     `check_postcompact_reinject.py` (~677) ainda diz que `constraint_count` será descartado
     «until» for allowlisted, enquanto a allowlist de `audit_emit.py` (~8890) já o contém. E
-    (rodada 11, parte 6, P2) a docstring de `spool_writer.py` (~184-186) afirma «three getenv
-    calls» no hot path quando o código faz quatro — uma claim de velocidade não reproduzível,
-    que o contrato de revisão do repositório (`AGENTS.md`) proíbe; sai a frase, não entra outra
-    contagem. Texto, não comportamento; canônicos — próxima cerimônia.
+    (rodada 11, parte 6, P2) a docstring de `spool_writer.py` (~184) afirma «three getenv calls»
+    no hot path quando o corpo faz quatro (~186-189) — corrigir a contagem ou retirar a frase.
+    Texto, não comportamento; canônicos — próxima cerimônia.
 41. `audit_emit.py` diz que `constraint_count` segue disciplina estrita de inteiro e recusa
     floats, mas `int(...)` converte `1.9` em `1` e `True` em `1` — um chamador genérico
     recebe um valor lavado em vez do sentinela zero. Recusar `bool` e não-`int` antes do
@@ -1135,23 +1137,25 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     tratar explicitamente o `mktemp` dos survivors; e2e com manifesto válido, roster customizado e
     `TMPDIR` inexistente ou não gravável, verificando bytes e install-state intactos.
 77. **O rail de checkpoint do ledger só vê o commit ISOLADO** (rodada 11, parte 4, P1; canônico):
-    `check_ledger_checkpoint.py` (PreToolUse, matcher `Bash`) deriva o escopo do INDEX real — `git
-    diff --cached --name-only -z` (~709), mais `git diff --name-only HEAD` sob `-a` (~713) — no
-    instante em que o hook dispara, ANTES de o comando correr; o parser reconhece a forma composta
-    (`&&` está em `_SEPARATORS`, ~374) mas o index ainda está limpo, e ~1235 emite
-    `ledger_checkpoint_skipped(reason=out_of_scope_paths)` com `{}`. Reproduzido com controle
-    positivo: `git add <plano> && git commit -m feat` devolveu `{}` e `plan_id=unknown`; o MESMO
-    arquivo já staged num `git commit` isolado devolveu o advisory `ledger_missing`; `git commit -am`
-    após mutação no mesmo comando, idem `{}`. O commit sai com trabalho de plano sem `LEDGER.md` e
-    sem o aviso prometido — e corrompe o denominador measure-first que o flip futuro de enforcement
-    usaria. As frases «on a git commit that lands plan-scoped work»
-    (`CHANGELOG.md`, `.claude/settings.json` ~349, `SPEC/v1/audit-log.schema.md` v2.59) prometem
-    mais do que isso. Condição DURA: o rail cobre só a forma «stage em chamadas anteriores, depois
-    exatamente UM `git commit` sozinho na chamada Bash»; qualquer forma composta é `skipped`, não
-    observada. `CHANGELOG.md` e `INSTALL.md` dizem isto (o exemplo do submodule deixou de encadear
-    `git add && git commit`). Cura antes do GA (canônico, rc.2): classificar comandos com prefixo
-    que muda estado ou com mais de um commit como `unparseable` com aviso «split the command», e
-    teste de regressão com index limpo + `git add x && git commit`; alinhar as duas descrições.
+    `check_ledger_checkpoint.py` (PreToolUse, matcher `Bash`) analisa só o PRIMEIRO `git commit` da
+    chamada (o parser reconhece `&&`, ~374, e devolve no primeiro verbo) e deriva o escopo do
+    INDEX real no instante do disparo — `git diff --cached --name-only -z` (~710) mais, sob `-a`,
+    as modificações RASTREADAS ainda não staged (`git diff --name-only -z HEAD`, ~715) —, ANTES
+    de o comando correr: é CEGO ao que a mesma chamada estagia antes do commit e a qualquer commit
+    depois do primeiro. Medido: `git add <plano> && git commit -m feat` com index limpo devolve
+    `{}` e `ledger_checkpoint_skipped(reason=out_of_scope_paths)` (~1235); o MESMO arquivo já
+    staged, num `git commit` isolado, devolve o advisory `ledger_missing`; `git commit -am` após
+    mutação no mesmo comando, `{}`; com o path já staged, `git commit -m a && git commit -m b` e
+    `git commit && git push` DISPARAM o advisory (só o primeiro commit é analisado). O commit cego
+    sai sem `LEDGER.md` e sem o aviso — e corrompe o denominador measure-first do flip futuro. As
+    descrições «on a git commit that lands plan-scoped work» (`CHANGELOG.md`,
+    `.claude/settings.json` ~349; a SPEC v2.59 promete o mesmo em substância) prometem mais do que
+    isso. Condição DURA: para ser observado, o stage vem em chamadas Bash ANTERIORES e o
+    `git commit` é o primeiro comando da chamada; o que a mesma chamada estagia antes dele e
+    qualquer commit posterior não são observados. `CHANGELOG.md` e `INSTALL.md` dizem isto. Cura
+    antes do GA (canônico, rc.2): classificar prefixo que muda estado ou mais de um commit como
+    `unparseable` com aviso «split the command»; teste com index limpo + `git add x && git
+    commit`; alinhar as descrições.
 78. **Sem `session_id` no payload, os dois hooks de compaction caem para a variável de ambiente
     `CLAUDE_SESSION_ID`** (rodada 11, parte 5, P1; canônico): `check_precompact_continuity.py`
     (~268-273) e `check_postcompact_reinject.py` (~297-299) passam `None` quando o payload não traz
@@ -1234,16 +1238,14 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     normaliza o texto (NFKC) para casar padrões, mas os offsets encontrados são aplicados ao
     texto ORIGINAL — cada caractere que o NFKC expande («...» de um só caractere vira três;
     ligaturas, frações) desloca as redações SEGUINTES em (n-1) caracteres: a redação cai em
-    cima de texto inocente e o valor casado fica parcial ou totalmente VISÍVEL (medido: o
-    id de 11 dígitos de um run de CI saiu meio-redigido na rodada 6 e a redação atravessou
-    uma quebra de linha na rodada 7). Mitigação nesta rc: PARCIAL (rodada 8, parte 4) — só
+    cima de texto inocente e o valor casado fica parcial ou totalmente VISÍVEL (medido nas
+    rodadas 6 e 7). Mitigação nesta rc: PARCIAL (rodada 8, parte 4) — só
     o TEXTO das condições deixou de usar o caractere de reticências; o DIFF que viaja no
     mesmo payload carrega os caracteres expansíveis dos arquivos de origem (três U+2026 só
     na parte 4, além de ligaturas), e o controle de contagem de linhas do runner só pega a
     deriva que CRUZA uma quebra de linha — a deriva na mesma linha passa. Os payloads das
-    rodadas 6 a 8 saíram com rótulos de redação deslocados (identificador de formato válido
-    parcialmente visível; texto inocente redigido): defeito do INSTRUMENTO, presente na
-    evidência arquivada, sem efeito no código entregue. Cura antes do GA: mapear os spans de volta ao texto
+    rodadas 6 a 8 carregam rótulos deslocados — defeito do INSTRUMENTO, sem efeito no código
+    entregue. Cura antes do GA: mapear os spans de volta ao texto
     original (ou redigir sobre o texto normalizado e emitir ESSE texto), com teste de
     controle positivo «segredo depois de N reticências» (rodada 7, parte 4 — falha do
     instrumento, P1 para quem envia texto com Unicode ao rail).

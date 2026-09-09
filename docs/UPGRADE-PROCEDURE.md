@@ -83,11 +83,15 @@ the first session on the new version, pick one route:
   re-chains any spool it finds under the CURRENT project's key without
   checking where it came from — a copied spool contaminates the new chain
   (signed condition 27 of rc.1). Before copying, drain the legacy spools on
-  the v1.3 chain (`CEO_AUDIT_LOG_DIR=<legacy dir>` + `drain_now(force=True)`
-  from `_lib/spool_writer.py`), prove that
-  `find <legacy state> -maxdepth 1 \( -name 'audit-spool.*' -o -name 'audit-pending.*' \)`
-  prints nothing, and move whatever remains to a quarantine directory
-  outside any `state/`.
+  the v1.3 chain: from the checkout root, with `CEO_AUDIT_LOG_DIR` set to
+  the legacy AUDIT directory (`$HOME/.claude/projects/ceo-orchestration`,
+  without `/state` — the drainer derives `state/` from it), run
+  `python3 -c "import sys; sys.path.insert(0,'.claude/hooks'); from _lib import spool_writer; print(spool_writer.drain_now(force=True))"`;
+  then prove that
+  `find <legacy state> -maxdepth 1 \( -name 'audit-spool.*.jsonl' -o -name 'audit-spool.*.draining.*' \)`
+  prints nothing (`.lock` files and `audit-pending.*.journal` remain by
+  design and are never copied), and move any remaining spool to a
+  quarantine directory outside any `state/`.
 
 Two more per-project records move with v1.4.0 and are NOT migrated either
 (signed conditions of rc.1): the cost-envelope counters

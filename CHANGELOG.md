@@ -233,15 +233,15 @@ call today**:
   constraints from a CODE constant (`_lib/pinned_constraints.py`) via
   `additionalContext`, so the summarizer cannot evict them. Kill switch:
   `CEO_CONSTRAINT_PINNING=0`.
-- **`check_ledger_checkpoint.py`** (`PreToolUse`, matcher `Bash`): on a
-  STANDALONE `git commit` (staging done in earlier tool calls; exactly one
-  commit in the Bash call) that lands plan-scoped work, reports whether
-  that plan's `LEDGER.md` is in the same commit. Scope is derived
-  MECHANICALLY from the paths staged at the moment the hook fires, BEFORE
-  the command runs: `git add x && git commit`, `git commit -a` after a
-  mutation in the same call, and several commits in one call are
-  `skipped`, not observed (signed condition 77 of rc.1). No branch in the
-  module returns a decision —
+- **`check_ledger_checkpoint.py`** (`PreToolUse`, matcher `Bash`): on the
+  FIRST `git commit` of a Bash call (staging done in earlier tool calls)
+  that lands plan-scoped work, reports whether that plan's `LEDGER.md` is
+  in the same commit. Scope is derived MECHANICALLY from the paths staged
+  (and, under `-a`, the tracked modifications present) at the moment the
+  hook fires, BEFORE the command runs: `git add x && git commit` on a
+  clean index is `skipped`, a mutation made earlier in the same call is
+  not seen, and a second commit in the same call is not inspected (signed
+  condition 77 of rc.1). No branch in the module returns a decision —
   there is no deny arm to disarm. Kill switches:
   `CEO_LEDGER_CHECKPOINT=0`, `CEO_SOTA_DISABLE=1` (`b07be9b`, `bc82651`).
 - **`session_memory_delta_observed`** at `SessionEnd` records whether the
@@ -311,9 +311,11 @@ call today**:
   (lands before GA). Four skills with no
   veto role (`cpp-testing`, `frontend-slides`, `prisma-patterns`,
   `ui-demo`) were added to the name-only list in their place — in the
-  framework checkout's own live settings only; the delivered templates
-  (`templates/settings/`) do not carry them, so a fresh install and an
-  upgraded adopter see neither the four names nor the undemotion.
+  framework checkout's own live settings only: the delivered templates
+  (`templates/settings/`) do not carry the four names. The undemotion
+  itself DOES reach a fresh install (the seven names are absent from
+  `skillOverrides` in both files); only an upgraded adopter keeps the old
+  list until the baseline-aware migration.
 
 ### Fixed — the test suite was writing into the live HMAC chain (`2ae16d2`, `7a618c9`, `3d16070`)
 
