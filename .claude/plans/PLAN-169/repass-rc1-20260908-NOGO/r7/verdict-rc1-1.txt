@@ -1,0 +1,17 @@
+Há dois P1 ausentes do envelope; o candidato não está liberável nas condições atuais.
+
+- **P1 — `scripts/upgrade.sh:3240-3249,3311-3317,3963-3968`**  
+  **Cenário:** um adopter instalado com v1.3.0 `--ceremony user` começa sem `availableModels`, `fallbackModel` e `permissions`, conforme `templates/settings/settings.user.json:33,41-62`. O novo merge seleciona corretamente o template `user`, mas a migração executada imediatamente depois ignora a cerimônia e adiciona os três campos — inclusive `permissions.defaultMode=manual`. O resultado deixa de corresponder ao perfil `user` de uma instalação nova. Os testes plausivelmente perdem isso porque exercitam o merge e a migração separadamente.  
+  **Correção mínima:** derivar as folhas migráveis do template da cerimônia; para cerimônia desconhecida, migrar apenas a interseção dos perfis. Até a cura, adicionar condição DURA exigindo `--no-settings-migrate` para upgrades `user` ou de cerimônia desconhecida, com teste do fluxo completo v1.3.0→rc.1.
+
+- **P1 — `scripts/upgrade.sh:1384-1385,3762-3766,3919-3933`; `docs/UPGRADE-PROCEDURE.md:119-122`**  
+  **Cenário:** a condição 47 se declara uma classe, mas sua checagem não inclui `.claude/scripts`, `.claude/commands`, `.claude/skills`, `.claude/agents`, rosters ou o ancestral `.claude`. Com `.claude/scripts` symlinkado para fora, os `find` documentados imprimem vazio, mas `backup_and_replace` termina em `cp "$s" "$d"` através do link. Analogamente, `.claude/agents` symlinkado ou um agente hard-linked é alterado por `cp "$SRC" "$DST"`. O arquivo externo muda e o upgrade pode sair 0. Portanto, a condição 47 não é suficiente nem descreve honestamente sua mitigação.  
+  **Correção mínima:** para rc.1, exigir que todo `<target>/.claude` seja uma árvore real e que o scan de symlinks/hard links cubra a árvore inteira. Antes do GA, aplicar a guarda compartilhada e substituição atômica a todos os escritores, com controles positivos para `.claude/scripts` e `.claude/agents`.
+
+- **P2 — `scripts/upgrade.sh:3008-3013,3056,3099`**  
+  **Cenário:** `ADD-ENV` incrementa `_adds`, mas o dry-run e o run real chamam o total de “hook registration(s)”. Se faltar apenas uma chave `.env`, o script anuncia uma inscrição de hook inexistente. A condição 4 reconhece a inexatidão do resumo final, mas não essas mensagens.  
+  **Correção mínima:** separar contadores de hooks e env, ou dizer “settings entries (hooks + env)”; ampliar a condição 4 enquanto não houver cura.
+
+`bash -n`, `git diff --check` e a limpeza do worktree passaram. As condições 42, 43 e 45 são honestas para os casos que nomeiam; a 47 não é.
+
+VERDICT: NO-GO — O envelope atual omite a quebra P1 do perfil user e oferece uma checagem P1 de confinamento que não cobre vários escritores ativos do upgrader.

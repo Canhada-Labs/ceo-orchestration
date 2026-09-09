@@ -102,7 +102,11 @@ and the two CI workflow templates forever, with no warning.
   and the `.claude/dispatcher/` copies, which test `-L` only, so a hard
   link there is written through; and `install_dispatcher`, which
   re-copies unconditionally on a rerun (edited dispatcher files are
-  overwritten — back them up first).
+  overwritten — back them up first); and the deny-baseline merge of
+  `install.sh`, which writes a PID-named sibling of `.claude/settings.json`
+  outside the preflight (a pre-placed symlink there is written through —
+  the `find` check over `.claude/` in `docs/UPGRADE-PROCEDURE.md` catches
+  it; run it before a fresh install too).
 - **`--github-owner` with a `/` in it left `.github/CODEOWNERS` at zero
   bytes, permanently.** The handle grammar is now shared by producer and
   consumer, the file is rendered through a pipe and written atomically,
@@ -523,10 +527,13 @@ train (rc.4) instead of being deferred:
   signature the parity e2e flagged. The refresh writes over the
   existing inode (`cp`, not an atomic rename), so a hard link to that
   file outside the target changes with it — signed condition of rc.1:
-  no hard links or symlinks under `.claude/plans/`, `.claude/hooks/`,
-  `docs/`, `.github/` and `SPEC/` before upgrading (two `find` commands
-  in `docs/UPGRADE-PROCEDURE.md`; the hook delivery itself copies
-  through a link the same way).
+  no hard links or symlinks anywhere under `.claude/`, `docs/`, `.github/`
+  and `SPEC/` before upgrading (two `find` commands in
+  `docs/UPGRADE-PROCEDURE.md`; the hook, script, command, skill and
+  agent deliveries copy through a link the same way). A `--ceremony
+  user` repository upgrades with `--no-settings-migrate` (signed
+  condition of rc.1: the leaf migration adds three maintainer-profile
+  keys to the advisory profile otherwise).
 - **Pre-state ceremony migration fails safe to `user`** and only an
   EXPLICIT `--ceremony` flag / env / recorded state persists into the
   synthesized install-state — the fail-safe inference itself is never

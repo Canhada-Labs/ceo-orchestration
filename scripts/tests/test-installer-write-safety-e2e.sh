@@ -1730,6 +1730,61 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# U.8 — `--dry-run --restore` VALIDATES the archive before it previews
+# (rc.1 re-pass, round 7, part 3). Pre-cure the preview ran first: an ordinary
+# file printed "would EXTRACT" and exited 0, while the help promised exit 4 for
+# an invalid archive BEFORE the preview. Two legs: the refusal, and the control
+# that a real backup still previews (rc 0) so the cure is not "refuse always".
+# ---------------------------------------------------------------------------
+echo "==> U.8a dry-run restore of a NON-tarball exits 4 without previewing"
+_mkcase u8a-restore-dryrun-nontar
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.8a — install failed (rc=$RC, see $LOG)"
+else
+  printf 'this is not a tar archive\n' > "$CASE/not-a-tar.txt"
+  LOG="$CASE/restore-dry.log"; _uninstall --dry-run --restore "$CASE/not-a-tar.txt"
+  [ "$RC" -eq 4 ] \
+    && ok "U.8a — a non-tarball under --dry-run --restore exits 4" \
+    || bad "U.8a — exited $RC, expected 4: the preview ran before the archive was validated (see $LOG)"
+  grep -q 'would EXTRACT' "$LOG" \
+    && bad "U.8a — the dry-run PREVIEWED an archive it cannot even list (see $LOG)" \
+    || ok "U.8a — no preview was printed for an invalid archive"
+  [ -f "$TARGET/.claude/settings.json" ] \
+    && ok "U.8a — the live .claude/ was not moved aside" \
+    || bad "U.8a — .claude/settings.json is gone after a refused dry-run restore"
+fi
+
+echo "==> U.8b dry-run restore of a REAL backup still previews (rc 0)"
+_mkcase u8b-restore-dryrun-real
+_install
+if [ "$RC" -ne 0 ]; then
+  bad "U.8b — install failed (rc=$RC, see $LOG)"
+else
+  LOG="$CASE/uninstall.log"; _uninstall
+  U8_BK="$( ls "$TARGET"/.claude.backup-uninstall-*.tar.gz 2>/dev/null | head -n 1 || true )"
+  if [ -z "$U8_BK" ]; then
+    bad "U.8b — no backup tarball written by the uninstall (see $LOG)"
+  else
+    LOG="$CASE/restore-dry.log"; _uninstall --dry-run --restore "$U8_BK"
+    [ "$RC" -eq 0 ] \
+      && ok "U.8b — a real backup previews under --dry-run --restore (rc 0)" \
+      || bad "U.8b — exited $RC, expected 0: the validation refuses a VALID archive (see $LOG)"
+    grep -q 'would EXTRACT' "$LOG" \
+      && ok "U.8b — the preview names the extraction and the member count" \
+      || bad "U.8b — no preview line for a valid archive (see $LOG)"
+    # `.claude/` itself SURVIVES a complete uninstall by design (settings.json,
+    # install-state, policies... are the adopter's); the manifest is what goes.
+    [ -f "$TARGET/.claude/.install-manifest.sha256" ] \
+      && bad "U.8b — precondition: the manifest is still present after the real uninstall (see $CASE/uninstall.log)" \
+      || ok "U.8b — precondition: the real uninstall completed (manifest removed)"
+    ls -d "$TARGET"/.claude.pre-restore-* >/dev/null 2>&1 \
+      && bad "U.8b — the dry-run moved something aside" \
+      || ok "U.8b — the dry-run moved nothing aside"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 echo ""
 echo "=== summary ==="
 echo "    framework root : $FRAMEWORK_ROOT"

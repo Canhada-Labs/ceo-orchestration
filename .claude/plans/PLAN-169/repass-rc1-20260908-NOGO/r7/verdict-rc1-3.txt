@@ -1,0 +1,17 @@
+The envelope is not yet honest or sufficient for rc.1. No P0 found, but three P1 findings remain.
+
+1. **P1 — [scripts/uninstall.sh:256](<WT>/scripts/uninstall.sh:256)**  
+   **Scenario:** `bash scripts/uninstall.sh . --dry-run --restore README.md` prints “would EXTRACT” and exits 0, although `README.md` is not a tarball. Archive validation only occurs later at [line 290](<WT>/scripts/uninstall.sh:290). This directly contradicts the new help text at lines 36–40 and signed condition 16, which say an invalid restore archive exits 4 before the preview.  
+   **Minimal fix:** perform archive listing and structural validation before the dry-run return; add a regression asserting an ordinary file produces rc 4 under `--dry-run`.
+
+2. **P1 — [scripts/uninstall.sh:296](<WT>/scripts/uninstall.sh:296)**  
+   **Scenario:** restore validates only that some listed name begins with `.claude`; it does not validate the member type. It then bulk-extracts `.claude` at line 302 and skips all `.claude` members during the safety walk at line 312. A valid unsigned tar containing a regular file or symlink named `.claude` is therefore accepted and reported as “Restore complete,” replacing the live governance directory with the wrong type or an external link. Non-`.claude` symlink/hardlink members are also extracted at line 322 without type validation. Conditions 50 and 51 disclose the predictable aside and missing authentication, but not this fail-open archive grammar.  
+   **Minimal fix:** inspect member metadata before mutation, require a real `.claude/` directory, reject unexpected link/member types outside it, and extract into a newly created confined staging directory before swapping it into place. Until cured, add a hard condition restricting restore to custody-protected archives produced by this exact uninstaller.
+
+3. **P1 — [templates/codex/pre-push-review-gate.sh:72](<WT>/templates/codex/pre-push-review-gate.sh:72)**  
+   **Scenario:** the newly documented manual installation path at lines 4–8 installs a gate claiming to block all L3/canonical changes, but its classifier recognizes only `.claude`, `.github`, `scripts`, `SPEC`, and `PROTOCOL.md`. The candidate’s canonical oracle classifies `.codex/rules/ceo.rules`, `.grok/config.toml`, `AGENTS.md`, `requirements.toml`, and `templates/settings/settings.base.json` as canonical; this gate returns non-canonical for all of them and permits the push without review. Its “over-triggers only” statement at lines 41–44 is false. Condition 26 correctly says the gate is not automatically delivered, but its manual workaround remains fail-open and is not disclosed.  
+   **Minimal fix:** port the fine canonical oracle and fail-closed superset fallback already present in the Grok twin. Until then, remove the manual-install instruction or state explicitly that this template must not be used as a security gate.
+
+The doctor confinement changes, LINK refusal, predictable backup/restore-aside behavior, `.claude` empty-directory sweep, JSON derivation, shell syntax, and the narrow “HMAC is optional” statement otherwise matched the inspected code.
+
+VERDICT: NO-GO — Signed condition 16 is demonstrably false, and the restore parser plus advertised manual Codex gate add two undeclared P1 fail-open paths.

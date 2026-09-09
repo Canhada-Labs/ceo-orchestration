@@ -253,7 +253,38 @@ sys.stdout.write(hmac.new(key, tar_sha, hashlib.sha256).hexdigest())
     fi
   fi
 
-  if _dry "would EXTRACT $RESTORE_PATH into $TARGET"; then
+  # rc.1 re-pass (round 7, part 3): the archive is VALIDATED before the
+  # dry-run preview, not after it. `--dry-run --restore README.md` used to
+  # print "would EXTRACT" and exit 0 for a file that is not a tarball —
+  # the help promises exit 4 for an invalid archive BEFORE the preview, and
+  # a preview that cannot fail is not a preview. The listing and the
+  # .claude-member check need nothing moved aside, so they run first; the
+  # rollback helper below tolerates an unset `aside` for exactly that.
+  _rst_rollback() {
+    # rail r3 (S337) P2: a FAILED .claude extraction can leave a PARTIAL
+    # $TARGET/.claude directory, which the `! -d` guard would treat as "already
+    # restored". Clear the partial first so the moved-aside tree comes back
+    # whole rather than merged with half an extraction.
+    if [ -n "${aside:-}" ] && [ -d "$aside" ]; then
+      rm -rf "$TARGET/.claude" 2>/dev/null || true
+      mv "$aside" "$TARGET/.claude"
+      _log "    Rolled the previous .claude/ back into place."
+    fi
+  }
+  _rst_list="$(mktemp 2>/dev/null || mktemp -t ceo-restore-list)"
+  if ! tar tzf "$RESTORE_PATH" > "$_rst_list" 2>/dev/null; then
+    rm -f "$_rst_list"
+    echo "ERROR: cannot list the backup archive (corrupt tarball?)" >&2
+    exit 4
+  fi
+  if ! grep -qE '^(\./)?\.claude(/|$)' "$_rst_list"; then
+    rm -f "$_rst_list"
+    echo "ERROR: the archive carries no .claude/ member — not a ceo-orchestration backup" >&2
+    exit 4
+  fi
+
+  if _dry "would EXTRACT $RESTORE_PATH into $TARGET ($(grep -c . "$_rst_list") member(s) listed)"; then
+    rm -f "$_rst_list"
     exit 0
   fi
 
@@ -275,30 +306,6 @@ sys.stdout.write(hmac.new(key, tar_sha, hashlib.sha256).hexdigest())
   # note — a broken/absent .claude member rolls the moved-aside .claude back
   # and exits 4; a failed or refused non-.claude member exits 1. Members are
   # read from a LIST FILE, not a pipeline, so the counters survive the loop.
-  _rst_rollback() {
-    # rail r3 (S337) P2: a FAILED .claude extraction can leave a PARTIAL
-    # $TARGET/.claude directory, which the `! -d` guard would treat as "already
-    # restored". Clear the partial first so the moved-aside tree comes back
-    # whole rather than merged with half an extraction.
-    if [ -n "${aside:-}" ] && [ -d "$aside" ]; then
-      rm -rf "$TARGET/.claude" 2>/dev/null || true
-      mv "$aside" "$TARGET/.claude"
-      _log "    Rolled the previous .claude/ back into place."
-    fi
-  }
-  _rst_list="$(mktemp 2>/dev/null || mktemp -t ceo-restore-list)"
-  if ! tar tzf "$RESTORE_PATH" > "$_rst_list" 2>/dev/null; then
-    rm -f "$_rst_list"
-    echo "ERROR: cannot list the backup archive (corrupt tarball?)" >&2
-    _rst_rollback
-    exit 4
-  fi
-  if ! grep -qE '^(\./)?\.claude(/|$)' "$_rst_list"; then
-    rm -f "$_rst_list"
-    echo "ERROR: the archive carries no .claude/ member — not a ceo-orchestration backup" >&2
-    _rst_rollback
-    exit 4
-  fi
   if ! ( cd "$TARGET" && tar xzf "$RESTORE_PATH" .claude 2>/dev/null ); then
     rm -f "$_rst_list"
     echo "ERROR: failed to extract .claude/ from the backup" >&2

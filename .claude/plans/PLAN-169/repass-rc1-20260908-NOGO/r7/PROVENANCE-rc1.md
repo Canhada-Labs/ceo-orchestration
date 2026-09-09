@@ -1,0 +1,13 @@
+# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - 6 partes
+- Base: v1.3.0 (ec0543b615c4621e259a409e9eace951539a6632 -> d789721c2fd4a11c36c87eda0e1118eab59092e4) .. Candidato: e92e74acf1112e6a1beae6d19a229e5888817498 (PRE-tag, doutrina r17)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- codex: 0.147.0 / aarch64-apple-darwin / payload 19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+- modelo: gpt-5.6-sol (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-rc1.md sha256 8a8b362af5c47a2d4ca41e854393074939359c1b0aaa6d98fd7bfdaa0157eb9e
+- Data: 2026-09-09T07:34:38Z
+- parte 1 (upgrade.sh — o caminho que roda na arvore do adopter): VERDICT: NO-GO — O envelope atual omite a quebra P1 do perfil user e oferece uma checagem P1 de confinamento que não cobre vários escritores ativos do upgrader. [codex rc=0]
+  - payload-rc1-1.raw.txt NAO commitado; pin sha256: f3150e9cb421b6c962970266007db054b618709c24c3ea28f132d99a2b1cf5bf
+- parte 2 (install.sh + o set de manifesto + a tabela de rotas de entrega): VERDICT: NO-GO. O envelope v17 precisa curar ou declarar operacionalmente o tempfile previsível do deny-baseline antes de assinar a rc.1. [codex rc=0]
+  - payload-rc1-2.raw.txt NAO commitado; pin sha256: a4a388fc5f5c11153ed332ee10f04755bdec671008e887dcddabbe5613d84a64
+- parte 3 (doctor.sh + uninstall.sh + templates/** entregues): VERDICT: NO-GO — Signed condition 16 is demonstrably false, and the restore parser plus advertised manual Codex gate add two undeclared P1 fail-open paths. [codex rc=0]
+  - payload-rc1-3.raw.txt NAO commitado; pin sha256: ad8427d5a8765c918c222e4dc47fa99a643ba3a9ab701ba5fd7435b450448ade

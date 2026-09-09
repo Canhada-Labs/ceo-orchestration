@@ -38,10 +38,16 @@
 #   (validate.yml) which re-checks the (a) trailer path server-side.
 # - The (b) sidecar is machine-local; on a fresh clone only the (a) trailer
 #   survives. CI therefore checks (a) only.
-# - Coarse first-segment path classifier (mirror of
-#   check_canonical_edit._CANONICAL_PREFIXES): it OVER-triggers review
-#   (safe direction; a missed L3 touch is the danger, an extra review is
-#   not).
+# - Coarse first-segment path classifier: `.claude/`, `.github/`, `scripts/`,
+#   `SPEC/` and `PROTOCOL.md` ONLY. It does NOT recognize every path the
+#   framework's canonical oracle (`check_canonical_edit.py --is-canonical`)
+#   classifies as canonical — `.codex/rules/ceo.rules`, `.grok/config.toml`,
+#   `AGENTS.md`, `requirements.toml`, `templates/settings/settings.base.json`
+#   are canonical there and NON-canonical here (rc.1 re-pass, round 7,
+#   part 3). Installed by hand, this file is therefore a REMINDER, not a
+#   security gate: a push that touches only those paths passes without
+#   review. The Grok twin ports the fine oracle with a fail-closed superset
+#   fallback; porting it here is a named item of the next release.
 #
 # ## Controls
 #

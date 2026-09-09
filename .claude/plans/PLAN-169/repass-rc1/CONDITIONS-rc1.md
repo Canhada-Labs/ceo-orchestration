@@ -9,7 +9,7 @@
 > Emendado (v6) depois da wave-rc1cure (`5518888`) e da rodada 3, parte 1: itens 1, 9,
 > 17, 18, 21 e 23 marcados como CURADOS pelo pack assinado; item 8 reescrito (laundering
 > pelo snapshot); itens 31 e 32 novos. A versão que os revisores da rodada 3 receberam
-> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41. v10: itens 8 (frestas b/c) e 31 marcados CURADOS em `144b0ef` (wave-rc1cure2); condição 5 remete ao 42; itens 42-43 DUROS (posse por igualdade histórica; diretório de backup não confinado) e 44 — rodada 4, parte 1. v11 (rodada 5, parte 1): 42 vale para igualdade ATUAL ou histórica e diz por que a cura literal não serve; 43 exige `.claude.bak` ausente/vazio; 45 DURO (fonte ausente ⇒ SKIPPED ⇒ rc 0) e 46 (P2). v12 (rodada 6, parte 1): 42/43/45 aceitas pelo revisor; 47 DURO declara a CLASSE das escritas fora do confinamento (instância: refresh do PLAN-SCHEMA por `cp` sobre inode hard-linked). v13 (rodada 6, parte 2): 45 cobre também o install; 47 nomeia os appends de `.gitignore` e o dispatcher e alarga os `find`; 48 DURO (re-run do install sobrescreve o dispatcher editado). v14 (rodada 6, parte 3): 16 diz o que é verdade (sweep de `.claude/` continua; dry-run 0 só com manifesto parseado); 49-50 DUROS (sweep de `.claude/`; restore-aside previsível); 51 (HMAC opcional). v15 (rodada 6, parte 4): headline e secção do CHANGELOG estreitados; claim de atribuição qualificada pela 23; contagem volátil de commits removida; 52 (piso do ceremony-lint re-pinado, residual por contagem). v16 (rodada 6, parte 5): 20 ganha o falso-AUSENTE pós-compaction (DURO); 47 ganha a entrega de hooks e `.claude/hooks` entra nos `find`; 38 ganha as descrições dos settings; 53 (ts não finito). v17 (rodada 6, parte 6): 21 ganha a posse destrutiva sobre `.salt`/`salt-minted.json` pré-existentes no diretório nativo (DURO: ausentes antes do primeiro prompt); 54 (`bytes_scanned`).) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
+> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41. v10: itens 8 (frestas b/c) e 31 marcados CURADOS em `144b0ef` (wave-rc1cure2); condição 5 remete ao 42; itens 42-43 DUROS (posse por igualdade histórica; diretório de backup não confinado) e 44 — rodada 4, parte 1. v11 (rodada 5, parte 1): 42 vale para igualdade ATUAL ou histórica e diz por que a cura literal não serve; 43 exige `.claude.bak` ausente/vazio; 45 DURO (fonte ausente ⇒ SKIPPED ⇒ rc 0) e 46 (P2). v12 (rodada 6, parte 1): 42/43/45 aceitas pelo revisor; 47 DURO declara a CLASSE das escritas fora do confinamento (instância: refresh do PLAN-SCHEMA por `cp` sobre inode hard-linked). v13 (rodada 6, parte 2): 45 cobre também o install; 47 nomeia os appends de `.gitignore` e o dispatcher e alarga os `find`; 48 DURO (re-run do install sobrescreve o dispatcher editado). v14 (rodada 6, parte 3): 16 diz o que é verdade (sweep de `.claude/` continua; dry-run 0 só com manifesto parseado); 49-50 DUROS (sweep de `.claude/`; restore-aside previsível); 51 (HMAC opcional). v15 (rodada 6, parte 4): headline e secção do CHANGELOG estreitados; claim de atribuição qualificada pela 23; contagem volátil de commits removida; 52 (piso do ceremony-lint re-pinado, residual por contagem). v16 (rodada 6, parte 5): 20 ganha o falso-AUSENTE pós-compaction (DURO); 47 ganha a entrega de hooks e `.claude/hooks` entra nos `find`; 38 ganha as descrições dos settings; 53 (ts não finito). v17 (rodada 6, parte 6): 21 ganha a posse destrutiva sobre `.salt`/`salt-minted.json` pré-existentes no diretório nativo (DURO: ausentes antes do primeiro prompt); 54 (`bytes_scanned`). v18 (rodada 7, parte 1): 55 DURO (migração ignora a cerimônia — `user` roda com `--no-settings-migrate`); 47 cobre a árvore `.claude` inteira; 4 ganha o rótulo «hook registration(s)». v19 (rodada 7, parte 2): 47 ganha o tempfile previsível do deny-baseline do install (+ condição para installs); 56 (preflight nlink sobre create-only, P2). v20 (rodada 7, parte 3 + morte da parte 4): 16 diz o que o restore faz depois da cura livre do dry-run; 26 diz que o template manual não é gate; 57 DURO (gramática do archive do restore); 58 (deriva NFKC do redator); reticências removidas do texto.) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
 
 Cada item descreve o que o código FAZ nesta rc, para que a assinatura não afirme
 mais do que aconteceu. Fonte: re-pass do candidato (codex 0.147.0 pinado, modelo
@@ -51,7 +51,7 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     inicial) em vez do slug v1.3.0 sem traço; os totais diário/semanal/mensal/por plano
     voltam a ZERO no upgrade e `check_cost_envelope.py` PERMITE um despacho de swarm que o
     gasto acumulado da v1.3.0 teria bloqueado; a função também reconstrói o caminho
-    `$HOME/.claude/projects/…` por conta própria, ignorando `CLAUDE_PROJECT_DIR_NATIVE`.
+    `$HOME/.claude/projects/...` por conta própria, ignorando `CLAUDE_PROJECT_DIR_NATIVE`.
     Condição DURA: não habilitar `CEO_SWARM` depois do upgrade sem migrar (ou provar
     ausentes) os arquivos de custo do slug antigo; cura antes do GA: usar
     `runtime_state_dir(project)/state` e dual-read dos arquivos antigos na janela de 30
@@ -88,7 +88,7 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     v1.3.0), decisão de produto do Owner, rc.2 (pack `rc1-cure-3` em preparação).
 43. **O diretório de backup do upgrade não é confinado ao alvo** (rodada 4, parte 1):
     `scripts/upgrade.sh` cria `.claude.bak/<timestamp>` com `mkdir -p` e grava ali os
-    backups (SPEC, docs, CODEOWNERS…) SEM passar por `_wbm_dst_refuses`; se
+    backups (SPEC, docs, CODEOWNERS...) SEM passar por `_wbm_dst_refuses`; se
     `<alvo>/.claude.bak` for um symlink (ou estiver sob um) para fora do alvo, o `mkdir -p`
     e os backups escrevem lá fora — ao contrário do que o `--help` afirma (backups
     internos ao alvo). Classe same-UID/symlink (`docs/threat-model.md`, Tier-2), mas é a
@@ -131,7 +131,7 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     a mesma forma). O PLAN-185 confinou os DESTINOS de entrega (`_wbm_dst_refuses` + rename
     atômico), mas `scripts/upgrade.sh` ainda escreve por OUTROS caminhos sem esse predicado
     e por `cp` direto sobre o inode existente: o refresh dos schema docs de `.claude/plans/`
-    (`_refresh_schema_doc`, ~linhas 3845-3879 — o digest `8ca4f866…` é exatamente o
+    (`_refresh_schema_doc`, ~linhas 3845-3879 — o digest `8ca4f866...` é exatamente o
     `PLAN-SCHEMA.md` da v1.3.0, então todo adopter v1.3.0 copy-mode entra no ramo «pristine
     prior generation» e recebe `cp "$_rsd_src" "$_rsd_dst"`), os backups (43) e os ramos
     `REFRESHED`/`IDENTICAL` sobre destino pré-existente; os APPENDS (`>>`) em `.gitignore` e
@@ -142,7 +142,14 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     leaf) symlinkado para fora, ou um hook com link count > 1, faz o registro de baseline
     ser descartado como inseguro, mas a entrega seguinte usa `-d`/`-f` (que seguem) e `cp`
     simples — o hook novo de pinning e as atualizações de hooks são escritos ATRAVÉS do
-    link. Um destino hard-linked a um arquivo
+    link; e o TEMPFILE do deny-baseline em `install.sh` (rodada 7, parte 2):
+    `apply_deny_baseline` grava o merge em `$SETTINGS_DST.deny-baseline.$$` — irmão de
+    `.claude/settings.json` com nome PREVISÍVEL (PID) que o preflight nunca examina (ele
+    olha só `settings.json`); um symlink pré-plantado com esse nome faz o redirect do `jq`
+    (ou do Python) escrever fora do alvo e o `mv` seguinte substitui o `settings.json` pelo
+    link, com «Install complete» — a frase «neither is reachable once the shared verdict
+    is consulted» no comentário dessa função é FALSA para este tempfile. Um destino
+    hard-linked a um arquivo
     FORA do alvo é alterado junto (o inode é o mesmo) e um symlink (leaf ou ancestral) é
     seguido, com o upgrade reportando `REFRESHED` e saindo 0 — o próprio diff reconhece a
     forma insegura ao entregar `docs/` por rename atômico. Classe same-UID
@@ -150,11 +157,18 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     fail-open que importa. Condição DURA: antes do upgrade, sob `<alvo>/.claude/plans/`,
     `<alvo>/docs/`, `<alvo>/.github/`, `<alvo>/SPEC/` e `<alvo>/.claude.bak/` não pode
     haver symlink (leaf ou ancestral) nem arquivo com link count > 1 — medido com
-    `find <alvo>/.claude/plans <alvo>/.claude/hooks <alvo>/docs <alvo>/.github <alvo>/SPEC
-    <alvo>/.claude/dispatcher <alvo>/.gitignore <alvo>/.claude/.gitignore -type l` e o mesmo
-    `find … -type f -links +1` (sobre os caminhos que existirem), ambos VAZIOS —
-    `docs/UPGRADE-PROCEDURE.md` diz isto; vale igualmente para `install.sh` (dispatcher e
-    `.gitignore`s). Cura antes do GA: `_wbm_dst_refuses`
+    (rodada 7, parte 1: a lista por subárvore NÃO bastava — `backup_and_replace` e a cópia
+    de agentes fazem `cp` através de `.claude/scripts`, `.claude/commands`, `.claude/skills`,
+    `.claude/agents` e rosters symlinkados; a checagem cobre agora a árvore `.claude`
+    INTEIRA, e o próprio `<alvo>/.claude` tem de ser um diretório real)
+    `find <alvo>/.claude <alvo>/docs <alvo>/.github <alvo>/SPEC <alvo>/.gitignore -type l` e o mesmo
+    `find ... -type f -links +1` (sobre os caminhos que existirem), ambos VAZIOS —
+    `docs/UPGRADE-PROCEDURE.md` diz isto; vale igualmente para `install.sh` (dispatcher,
+    `.gitignore`s e o tempfile do deny-baseline: nenhum `.claude/settings.json.deny-baseline.*`
+    pré-existente e nenhum outro processo criando entradas em `.claude/` enquanto o install
+    roda — o `find -type l` sobre a árvore `.claude` inteira pega um link pré-plantado).
+    Cura antes do GA: `mktemp` no diretório do destino registrado em `_ATOMIC_TMP_PENDING` e
+    publicação por rename para o deny-baseline; `_wbm_dst_refuses`
     + recusa de `nlink > 1` antes de QUALQUER mutação em todos esses caminhos, e tempfile no
     diretório do destino + `mv` atômico em vez de `cp` direto; controle positivo com
     `PLAN-SCHEMA.md` v1.3.0 hard-linked a um sentinel externo (bytes e modo intactos)
@@ -193,12 +207,14 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
 
 4. **Merge de settings é aditivo por roster da cerimônia gravada** (Pacote E, ADR-197):
    uma registração de hook ou chave `.env` removida à mão pelo adopter VOLTA no
-   upgrade — com log nomeado («REGISTERED: …») e backup `settings.json.pre-h8-merge`;
+   upgrade — com log nomeado («REGISTERED: ...») e backup `settings.json.pre-h8-merge`;
    remoção deliberada exige `--no-settings-merge`. Dois textos ficam INEXATOS até a
    próxima cerimônia canônica: o `--help` («registers new lifecycle hooks», o mecanismo
    antigo) e o RESUMO FINAL do upgrade, que afirma que só hooks novos e folhas
    baseline-aware mudaram enquanto chaves `.env` ausentes também foram re-adicionadas
-   (rodada 2, parte 1).
+   (rodada 2, parte 1); e (rodada 7, parte 1, P2) o total impresso como «hook
+   registration(s)» no dry-run e no run real soma também os `ADD-ENV` — com uma única
+   chave `.env` ausente o script anuncia uma registração de hook que não existe.
 5. **Arquivo pré-existente byte-igual à SAÍDA RENDERIZADA entra no manifesto como
    framework-owned** (`install.sh` e `upgrade.sh`, paridade entre os dois). Isso não é
    só um efeito de `uninstall`: a linha do manifesto vira PROVENIÊNCIA operacional que
@@ -271,7 +287,11 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
 16. CURADO nesta rc (livres): a recusa/preservação do `uninstall.sh` sai 5/6 em vez de 0
     (um dry-run sobre manifesto PARSEADO sai 0; falhas de INTEGRIDADE DE ENTRADA — NUL no
     manifesto (6), tar.gz inválido ou HMAC errado no `--restore` (4) — acontecem ANTES do
-    preview e são não-zero mesmo em dry-run; o `--help` diz isto desde a rodada 6); o
+    preview e são não-zero mesmo em dry-run; o `--help` diz isto desde a rodada 6 — e a
+    rodada 7 (parte 3) mostrou que o `--restore` validava a listagem do archive DEPOIS do
+    preview: `--dry-run --restore README.md` dizia «would EXTRACT» e saía 0; CURADO nesta rc
+    (livre): a listagem e a checagem do membro `.claude` correm antes do preview, perna
+    U.8a/U.8b com controle de que um backup real continua a pré-visualizar); o
     template de CI entregue verifica o SHA-256 do actionlint antes
     de extrair (o vivo já fazia; a v1.3.0 rodava `bash <(curl)` sem pin) e o gate de
     sintaxe YAML instala o parser em CI e FALHA se ele faltar, em vez de pular em verde.
@@ -303,7 +323,7 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     validação estrutural full-match por campo (cerimônias como contagem/ponteiro fixo)
     — CURADA no pack `rc1-cure`. Segunda rota (rodada 2, parte 5): o `plan_id` que
     `resolve_plan_id()` lê de JSON de auditoria NÃO verificado entrava no pointer
-    «Active plan: …» com checagem só de prefixo (`startswith("PLAN-")`), e a checagem
+    «Active plan: ...» com checagem só de prefixo (`startswith("PLAN-")`), e a checagem
     estrita de `audit_emit.py` só sanitiza o EVENTO, depois de o valor cru já ter entrado
     no contexto — também curada no pack (`fullmatch` `PLAN-NNN`; pointer dropado e contado).
     Estado: **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)** (gate de FORMA por campo, cerimônias como contagem, `plan_id`
@@ -326,7 +346,7 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     auditoria ou 256 KiB); passado isso, o `session_start` ORIGINAL sai da janela e o
     segundo `session_start` (o do restart pós-compaction) é aceito como âncora mais
     antiga — um arquivo de memória alterado ANTES da compaction e não tocado depois sai
-    como `outcome="absent"` e o render diz «0 … entries touched this session». O código
+    como `outcome="absent"` e o render diz «0 ... entries touched this session». O código
     reconhece o residual em comentário; o teste cobre dois starts só quando ambos ficam na
     janela. É um falso negativo na claim central do instrumento (a spec §8 pré-registra
     «ABSENT numa sessão que trabalhou» como o instrumento FUNCIONANDO — numa sessão longa
@@ -431,7 +451,15 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     ganhou `--root` (sem ele, arquivos canônicos introduzidos por um root commit não
     produziam paths e escapavam à revisão — rodada 3, parte 3; pack `rc1-cure-2`).
     Porte completo (roster + ciclo de vida manifesto/uninstall/backup/restore) = item
-    nomeado da rc.2 (rodada 2, parte 3).
+    nomeado da rc.2 (rodada 2, parte 3). **Instalado à mão, este template NÃO é um gate de
+    segurança** (rodada 7, parte 3): o classificador é grosseiro (`.claude/`, `.github/`,
+    `scripts/`, `SPEC/`, `PROTOCOL.md`) e responde «não canônico» para caminhos que o
+    oráculo do framework classifica como canônicos — `.codex/rules/ceo.rules`,
+    `.grok/config.toml`, `AGENTS.md`, `requirements.toml`,
+    `templates/settings/settings.base.json` — um push que toque só esses passa sem
+    revisão; a frase «over-triggers only» do cabeçalho era falsa e foi trocada (livre) por
+    esta lista. Cura antes do GA: portar o oráculo fino e o fallback superset fail-closed do
+    twin do Grok.
 28. Todo run habilitado do PostCompact limpa um marcador sob `<repo>/.claude/state` sem
     verificar se `state` é symlink (`marker.unlink()`; o escritor de pressão idem quando
     armado): um adopter com `.claude/state -> /external/state` tem o arquivo externo
@@ -544,12 +572,58 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     bloco inteiro do PostCompact (restrições, ponteiros, evento de auditoria) é descartado.
     Cura: exigir timestamp finito e capturar `OverflowError`, degradando só o campo de idade;
     testes com `1e309`, `Infinity` e `NaN` (canônico; rodada 6, parte 5, P2).
+55. **A migração de settings ignora a CERIMÔNIA e quebra o perfil `user`** (rodada 7,
+    parte 1, P1): um adopter instalado com a v1.3.0 `--ceremony user` começa SEM
+    `availableModels`, `fallbackModel` e `permissions` (o perfil advisory os exclui por
+    desenho — `templates/settings/settings.user.json`); o merge do upgrade escolhe o
+    template `user` corretamente, mas a migração baseline-aware (T5.4) que corre logo
+    depois trata «ausente» como «migrar para o baseline novo» sem olhar a cerimônia e ADICIONA
+    os três — inclusive `permissions.defaultMode=manual` — e o `settings.json` deixa de
+    corresponder a uma instalação `user` nova. Condição DURA: adopters `user` (ou de
+    cerimônia desconhecida) rodam o upgrade com `--no-settings-migrate` — o merge aditivo
+    continua; só a migração de folhas é desligada — e `docs/UPGRADE-PROCEDURE.md` diz isto.
+    Cura antes do GA: derivar as folhas migráveis do template da cerimônia (cerimônia
+    desconhecida ⇒ só a interseção dos perfis), com teste do fluxo COMPLETO v1.3.0 `user`
+    → rc.1 (os testes atuais exercitam merge e migração separadamente).
 54. `ledger_provenance.py` aceita um resultado «limpo» do scanner com `bytes_scanned`
     menor do que a entrada (uma cauda hostil nunca examinada passa) e com `bytes_scanned`
     booleano (`bool` é `int`), contra o próprio contrato fail-closed «ele olhou de fato?».
     Dormente: o módulo não tem consumidor fora dos testes nesta rc. Cura: exigir `int`
     puro e `bytes_scanned == len(encoded)`, senão `scanner_unavailable` (rodada 6,
     parte 6, P2).
+57. **O `--restore` valida NOMES, não TIPOS de membro** (rodada 7, parte 3, P1): a única
+    checagem estrutural é «existe um membro cujo nome começa por `.claude`»; depois o
+    archive é extraído em bloco (`tar xzf ... .claude`) e os membros `.claude/*` são pulados
+    na varredura de segurança. Um tar válido e não assinado com um ARQUIVO REGULAR ou um
+    SYMLINK chamado `.claude` é aceito e reportado «Restore complete», substituindo o
+    diretório de governança vivo pelo tipo errado ou por um link externo; membros
+    symlink/hard link fora de `.claude` também são extraídos sem validação de tipo.
+    Condição DURA: restaure SÓ um archive que ESTE `uninstall.sh` produziu a partir
+    DESTE alvo, não modificado e com o `.hmac` verificado quando existir chave (item 51);
+    nunca um archive de outra origem. Cura antes do GA: inspecionar os metadados dos
+    membros antes de qualquer mutação, exigir um diretório `.claude/` real, recusar tipos
+    de link fora dele e extrair num diretório de staging confinado recém-criado antes de
+    trocar no lugar.
+56. O preflight global de destinos do `install.sh` recusa `nlink > 1` também em destinos
+    CREATE-ONLY que aquela execução só PRESERVARIA (`EXISTS → SKIP`): um `.mcp.json`
+    regular hard-linked a uma configuração central dá rc 1 antes da primeira escrita,
+    embora não haja escrita. Fail-closed seguro, mas bloqueia um caminho legítimo. Cura:
+    preflight consciente da operação — ancestrais para todos, recusa de hard link no leaf
+    só quando a execução vai escrevê-lo/substituí-lo (rodada 7, parte 2, P2).
+58. **O redator de saída para o Codex aplica spans NFKC no texto original**
+    (`.claude/hooks/_lib/codex_egress_redact.py` via `secret_patterns.scan_and_redact`,
+    canônico; encontrado quando a rodada 7 do re-pass morreu na parte 4): o scanner
+    normaliza o texto (NFKC) para casar padrões, mas os offsets encontrados são aplicados ao
+    texto ORIGINAL — cada caractere que o NFKC expande («...» de um só caractere vira três;
+    ligaturas, frações) desloca as redações SEGUINTES em (n-1) caracteres: a redação cai em
+    cima de texto inocente e o valor casado fica parcial ou totalmente VISÍVEL (medido: o
+    id de 11 dígitos de um run de CI saiu meio-redigido na rodada 6 e a redação atravessou
+    uma quebra de linha na rodada 7). Mitigação nesta rc: o material que viaja para o
+    revisor não usa o caractere de reticências; o controle de contagem de linhas do runner
+    pega a deriva que cruza linha. Cura antes do GA: mapear os spans de volta ao texto
+    original (ou redigir sobre o texto normalizado e emitir ESSE texto), com teste de
+    controle positivo «segredo depois de N reticências» (rodada 7, parte 4 — falha do
+    instrumento, P1 para quem envia texto com Unicode ao rail).
 
 ## D. O que este re-pass NÃO cobriu
 

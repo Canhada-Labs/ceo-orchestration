@@ -110,16 +110,16 @@ exits 0 — repeat it from a complete checkout.
 (4) The upgrader still writes through a few paths that do not go through
 the destination confinement of PLAN-185 (the `.claude/plans/` schema-doc
 refresh copies over the existing inode; backups; refreshed pre-existing
-files; the `.claude/hooks/` delivery itself, which tests `-d`/`-f` and
-copies with plain `cp`), so a hard link to an outside file or a symlink under the managed
-trees is written THROUGH. Before upgrading, both of these must print
-nothing:
+files; the `.claude/hooks/` delivery; `backup_and_replace` over
+`.claude/scripts`, `.claude/commands`, `.claude/skills` and the agent
+copies — all test `-d`/`-f` and copy with plain `cp`), so a hard link to
+an outside file or a symlink anywhere under `.claude/` or the other
+managed trees is written THROUGH. `<target>/.claude` itself must be a
+real directory. Before upgrading, both of these must print nothing:
 
 ```bash
-find <target>/.claude/plans <target>/.claude/hooks <target>/docs <target>/.github <target>/SPEC \
-     <target>/.claude/dispatcher <target>/.gitignore <target>/.claude/.gitignore -type l
-find <target>/.claude/plans <target>/.claude/hooks <target>/docs <target>/.github <target>/SPEC \
-     <target>/.claude/dispatcher <target>/.gitignore <target>/.claude/.gitignore -type f -links +1
+find <target>/.claude <target>/docs <target>/.github <target>/SPEC <target>/.gitignore -type l
+find <target>/.claude <target>/docs <target>/.github <target>/SPEC <target>/.gitignore -type f -links +1
 ```
 
 (5) v1.4.0 mints a per-project injection salt in the native Claude project
@@ -130,6 +130,19 @@ prompt after the upgrade treats a `.salt` that is not exactly 32 bytes as
 malformed and truncates it in place, and replaces a regular
 `salt-minted.json` unconditionally (signed condition of rc.1). Move both out
 of the way BEFORE the first session.
+
+(6) If the repository was installed with `--ceremony user` (or you do not
+know its ceremony), run the upgrade with `--no-settings-migrate`. The
+additive settings merge still runs; only the baseline-aware leaf migration
+is skipped — without the flag it adds `availableModels`, `fallbackModel`
+and `permissions.defaultMode: manual` to a profile that excludes them by
+design (signed condition of rc.1).
+
+(7) The two `find` checks of (4) apply before a fresh `install.sh` as well:
+its deny-baseline merge writes `.claude/settings.json.deny-baseline.<pid>`
+outside the destination preflight, so make sure no
+`.claude/settings.json.deny-baseline.*` exists and nothing else creates
+entries under `.claude/` while the install runs (signed condition of rc.1).
 
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`
 [1.4.0], «audit log resolves per PROJECT»).

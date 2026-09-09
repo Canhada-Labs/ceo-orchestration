@@ -1,0 +1,33 @@
+NO-GO para o envelope v17 atual. Não encontrei P0, mas há um P1 de escrita externa ausente das condições.
+
+### Finding 1
+
+**P1 — fix before rc.1**  
+**FILE:LINE:** `scripts/install.sh:2333`, `scripts/install.sh:2375`, `scripts/install.sh:2383`, `scripts/install.sh:2395`; `.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:150`
+
+**Concrete failure scenario:** o diff adiciona a afirmação de que a guarda de `.claude/settings.json` torna inalcançáveis as escritas por symlink, mas o merge do deny-baseline continua usando o nome previsível:
+
+```bash
+$TARGET/.claude/settings.json.deny-baseline.$$
+```
+
+Um wrapper pode criar esse nome como symlink para um arquivo externo e executar `install.sh` via `exec`, preservando o PID. A preflight examina apenas `.claude/settings.json`, não o sibling temporário. A redireção do ramo `jq` ou Python segue o symlink, sobrescreve o arquivo externo e depois move o symlink para `.claude/settings.json`. O instalador pode continuar até “Install complete”.
+
+A condição 47 se declara como classe, mas sua condição operacional e seus comandos `find` enumeram planos, hooks, docs, GitHub, SPEC, dispatcher e gitignores — não esse tempfile. O CHANGELOG também o omite da lista de frestas. Portanto a condição não é suficiente nem a afirmação nova em `install.sh:2337` é verdadeira. Este caminho é de instalação, não do upgrade copy-mode estrito, mas integra o payload e o próprio envelope estende condições a instalações novas.
+
+**Minimal fix:** substituir o nome baseado em `$$` por `mktemp` no diretório de destino, registrar o arquivo em `_ATOMIC_TMP_PENDING` e publicar com rename; adicionar teste positivo com sentinel externo. Se for carregado como condição da rc.1, exigir ausência de qualquer `.claude/settings.json.deny-baseline.*`, nenhuma criação concorrente durante o install e atualizar a lista de frestas assinada.
+
+### Finding 2
+
+**P2 — follow-up**  
+**FILE:LINE:** `scripts/install.sh:1053`, `scripts/install.sh:1065`, `scripts/install.sh:1088`; `scripts/_framework_manifest_set.sh:840`
+
+**Concrete failure scenario:** a preflight global aplica a recusa de `nlink > 1` até a destinos create-only que seriam simplesmente preservados. Por exemplo, um adopter com `.mcp.json` regular hard-linked a uma configuração central recebe rc 1 antes da primeira escrita, embora `install_template` fosse executar apenas `EXISTS → SKIP` e `.mcp.json` não participe da substituição posterior. É fail-closed seguro, mas bloqueia um caminho legítimo sem risco de escrita.
+
+**Minimal fix:** tornar a preflight consciente da operação: verificar ancestrais para todos os destinos, mas aplicar a recusa de hardlink ao leaf somente quando aquela execução realmente o escreveria ou substituiria.
+
+No restante desta parte, as condições 5/8/9/31/33/34/42/45/47/48 descrevem corretamente os ramos observados. Em particular, a v17 incorporou os três bloqueios da rodada anterior: fonte ausente/recusada termina em `SKIP` com rc 0, dispatcher segue fora do confinamento e o re-run o sobrescreve. Para o upgrade v1.3.0 copy-mode, não encontrei outro P1 além dos já declarados.
+
+Passaram `git diff --check`, Bash 3.2 `-n`, ShellCheck, os verificadores de frescor/claims e a leitura das seis rotas. A e2e mutável não pôde ser repetida no sandbox somente-leitura; os números 105/0 foram tratados apenas como evidência anterior.
+
+VERDICT: NO-GO. O envelope v17 precisa curar ou declarar operacionalmente o tempfile previsível do deny-baseline antes de assinar a rc.1.
