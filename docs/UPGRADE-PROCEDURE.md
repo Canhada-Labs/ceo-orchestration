@@ -107,6 +107,29 @@ in `scripts/delivery-routes.tsv` present as a regular file) and read the
 delivery summary: a route reported SKIPPED without `--pin` means the source
 was missing from your checkout and the upgrade is INCOMPLETE even though it
 exits 0 — repeat it from a complete checkout.
+(4) The upgrader still writes through a few paths that do not go through
+the destination confinement of PLAN-185 (the `.claude/plans/` schema-doc
+refresh copies over the existing inode; backups; refreshed pre-existing
+files; the `.claude/hooks/` delivery itself, which tests `-d`/`-f` and
+copies with plain `cp`), so a hard link to an outside file or a symlink under the managed
+trees is written THROUGH. Before upgrading, both of these must print
+nothing:
+
+```bash
+find <target>/.claude/plans <target>/.claude/hooks <target>/docs <target>/.github <target>/SPEC \
+     <target>/.claude/dispatcher <target>/.gitignore <target>/.claude/.gitignore -type l
+find <target>/.claude/plans <target>/.claude/hooks <target>/docs <target>/.github <target>/SPEC \
+     <target>/.claude/dispatcher <target>/.gitignore <target>/.claude/.gitignore -type f -links +1
+```
+
+(5) v1.4.0 mints a per-project injection salt in the native Claude project
+directory (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir` prints
+it) as `.salt` plus a `salt-minted.json` marker. v1.3.0 never owned those two
+names there. If a file of yours already sits at either path, the first
+prompt after the upgrade treats a `.salt` that is not exactly 32 bytes as
+malformed and truncates it in place, and replaces a regular
+`salt-minted.json` unconditionally (signed condition of rc.1). Move both out
+of the way BEFORE the first session.
 
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`
 [1.4.0], «audit log resolves per PROJECT»).

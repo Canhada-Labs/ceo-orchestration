@@ -1,0 +1,15 @@
+Resultado advisory: **REJECT**. As condições 42, 43 e 45 descrevem corretamente os respectivos comportamentos, mas o envelope omite uma P1 nesta superfície.
+
+**P1 — escrita fora da árvore por hard link no refresh do PLAN-SCHEMA**
+
+- **FILE:LINE:** `scripts/upgrade.sh:3879`, ativando `scripts/upgrade.sh:3845-3849`
+- **Citação do diff:** a mudança acrescenta o digest `8ca4f866…` como geração anterior conhecida. Verifiquei que esse é exatamente o SHA-256 de `.claude/plans/PLAN-SCHEMA.md` no tag `v1.3.0`.
+- **Cenário concreto:** depois da instalação v1.3.0 em copy mode, o adopter cria outro nome, fora do alvo, hard-linked a `.claude/plans/PLAN-SCHEMA.md`. No upgrade, o digest novo faz o arquivo entrar no ramo “pristine prior generation”; a linha 3849 executa `cp "$_rsd_src" "$_rsd_dst"` sobre o inode existente. O arquivo externo é alterado junto, embora o upgrade reporte `REFRESHED` e termine com sucesso.
+- **Evidência interna:** o próprio diff reconhece em `scripts/upgrade.sh:4359-4367` que escrever com `cp src dst` sobre um destino hard-linked altera o arquivo externo; a entrega nova de `docs/` evita isso por rename atômico. `_refresh_schema_doc` conserva justamente o padrão considerado inseguro.
+- **Por que o envelope não basta:** a condição 43 confina somente `.claude.bak`; exigir esse diretório ausente/vazio não muda o link count do destino em `.claude/plans/`. A condição 42 cobre somente posse em `docs/` e `.github/`.
+- **Correção mínima:** antes de qualquer mutação, aplicar `_wbm_dst_refuses "$TARGET" "$_rsd_rel"` e recusar destinos com múltiplos links; estruturalmente, substituir o `cp` direto por tempfile no diretório do destino seguido de `mv` atômico. Adicionar controle positivo com um PLAN-SCHEMA v1.3 hard-linked a um sentinel externo, verificando bytes e modo intactos.
+- **Alternativa provisória para o envelope:** declarar como condição dura que os schema docs de destino sejam arquivos regulares com link count exatamente 1, sem leaf ou ancestral symlinkado, antes do upgrade. O draft atual não contém essa restrição.
+
+As verificações estáticas passaram: sintaxe em Bash 3.2, ShellCheck, stdlib-only, consistência do `AGENTS.md` e claims contáveis. A reprodução mutável não foi executada porque este rail é estritamente read-only; a seleção do ramo é demonstrada pelo digest exato do tag e pelo fluxo direto até o `cp`.
+
+VERDICT: NO-GO — O digest novo da geração v1.3 ativa um refresh que pode alterar um inode hard-linked fora do alvo, e essa P1 não está curada nem declarada no envelope.

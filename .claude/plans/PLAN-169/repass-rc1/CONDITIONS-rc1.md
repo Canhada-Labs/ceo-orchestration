@@ -9,7 +9,7 @@
 > Emendado (v6) depois da wave-rc1cure (`5518888`) e da rodada 3, parte 1: itens 1, 9,
 > 17, 18, 21 e 23 marcados como CURADOS pelo pack assinado; item 8 reescrito (laundering
 > pelo snapshot); itens 31 e 32 novos. A versão que os revisores da rodada 3 receberam
-> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41. v10: itens 8 (frestas b/c) e 31 marcados CURADOS em `144b0ef` (wave-rc1cure2); condição 5 remete ao 42; itens 42-43 DUROS (posse por igualdade histórica; diretório de backup não confinado) e 44 — rodada 4, parte 1. v11 (rodada 5, parte 1): 42 vale para igualdade ATUAL ou histórica e diz por que a cura literal não serve; 43 exige `.claude.bak` ausente/vazio; 45 DURO (fonte ausente ⇒ SKIPPED ⇒ rc 0) e 46 (P2).) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
+> (v7: item 16 reescrito para o pack 2; item 26 com `--root`; itens 33-35 novos. v8: condição 23 com mais três emissores; condição 18 diz que só o LEAF é confinado; itens 36-38. v9: condição 21 declara a janela do first-mint; condição 23 nomeia a representação; itens 39-40 DUROS (custo e credencial) e 41. v10: itens 8 (frestas b/c) e 31 marcados CURADOS em `144b0ef` (wave-rc1cure2); condição 5 remete ao 42; itens 42-43 DUROS (posse por igualdade histórica; diretório de backup não confinado) e 44 — rodada 4, parte 1. v11 (rodada 5, parte 1): 42 vale para igualdade ATUAL ou histórica e diz por que a cura literal não serve; 43 exige `.claude.bak` ausente/vazio; 45 DURO (fonte ausente ⇒ SKIPPED ⇒ rc 0) e 46 (P2). v12 (rodada 6, parte 1): 42/43/45 aceitas pelo revisor; 47 DURO declara a CLASSE das escritas fora do confinamento (instância: refresh do PLAN-SCHEMA por `cp` sobre inode hard-linked). v13 (rodada 6, parte 2): 45 cobre também o install; 47 nomeia os appends de `.gitignore` e o dispatcher e alarga os `find`; 48 DURO (re-run do install sobrescreve o dispatcher editado). v14 (rodada 6, parte 3): 16 diz o que é verdade (sweep de `.claude/` continua; dry-run 0 só com manifesto parseado); 49-50 DUROS (sweep de `.claude/`; restore-aside previsível); 51 (HMAC opcional). v15 (rodada 6, parte 4): headline e secção do CHANGELOG estreitados; claim de atribuição qualificada pela 23; contagem volátil de commits removida; 52 (piso do ceremony-lint re-pinado, residual por contagem). v16 (rodada 6, parte 5): 20 ganha o falso-AUSENTE pós-compaction (DURO); 47 ganha a entrega de hooks e `.claude/hooks` entra nos `find`; 38 ganha as descrições dos settings; 53 (ts não finito). v17 (rodada 6, parte 6): 21 ganha a posse destrutiva sobre `.salt`/`salt-minted.json` pré-existentes no diretório nativo (DURO: ausentes antes do primeiro prompt); 54 (`bytes_scanned`).) Como DATA tem sha256 `dd39a1455924ecbde254e974d7bd9e9897ed10d5b603fd7ae7548ace3ea76bd4` (pinada em `PROVENANCE-rc1.md` da rodada 3).
 
 Cada item descreve o que o código FAZ nesta rc, para que a assinatura não afirme
 mais do que aconteceu. Fonte: re-pass do candidato (codex 0.147.0 pinado, modelo
@@ -118,6 +118,76 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     Cura antes do GA: permitir o skip só com `PIN_REF` definido e a fonte realmente ausente
     na versão pinada; no checkout corrente, ausência/tipo inválido chama a função comum de
     falha, persiste `false` e sai 3, com teste do estado, do banner e do código de saída.
+    **`install.sh` tem o MESMO buraco** (rodada 6, parte 2): com a tabela íntegra e uma fonte
+    declarada ausente ou não regular, `_wbm_source_confined` deixa o caso chegar ao `-f`, o
+    instalador imprime `SKIP`, omite só aquela entrega do manifesto, grava sucesso e anuncia
+    «Install complete» com rc 0. Condição DURA, também para instalações NOVAS: instale a
+    partir de um checkout completo (as mesmas checagens acima) e leia o resumo — qualquer
+    `SKIP` de rota significa instalação INCOMPLETA. Cura antes do GA: validar, antes da
+    primeira escrita, que todas as fontes das rotas do install existem, são regulares e
+    confinadas, acumulando falha não zero.
+47. **CLASSE: escritas do upgrader FORA do predicado de confinamento** (rodada 6, parte 1;
+    declarada como classe porque enumerar variantes uma a uma não converge — 43 e esta são
+    a mesma forma). O PLAN-185 confinou os DESTINOS de entrega (`_wbm_dst_refuses` + rename
+    atômico), mas `scripts/upgrade.sh` ainda escreve por OUTROS caminhos sem esse predicado
+    e por `cp` direto sobre o inode existente: o refresh dos schema docs de `.claude/plans/`
+    (`_refresh_schema_doc`, ~linhas 3845-3879 — o digest `8ca4f866…` é exatamente o
+    `PLAN-SCHEMA.md` da v1.3.0, então todo adopter v1.3.0 copy-mode entra no ramo «pristine
+    prior generation» e recebe `cp "$_rsd_src" "$_rsd_dst"`), os backups (43) e os ramos
+    `REFRESHED`/`IDENTICAL` sobre destino pré-existente; os APPENDS (`>>`) em `.gitignore` e
+    `.claude/.gitignore` pelos helpers de `_framework_manifest_set.sh` (chamados de
+    `upgrade.sh` ~4094-4117), que só testam `-L`; e os três `cp` de `install_dispatcher`
+    em `.claude/dispatcher/` (`install.sh`, fora do preflight; rodada 6, parte 2); e a
+    ENTREGA DE HOOKS do `upgrade.sh` (rodada 6, parte 5): um `.claude/hooks` (diretório ou
+    leaf) symlinkado para fora, ou um hook com link count > 1, faz o registro de baseline
+    ser descartado como inseguro, mas a entrega seguinte usa `-d`/`-f` (que seguem) e `cp`
+    simples — o hook novo de pinning e as atualizações de hooks são escritos ATRAVÉS do
+    link. Um destino hard-linked a um arquivo
+    FORA do alvo é alterado junto (o inode é o mesmo) e um symlink (leaf ou ancestral) é
+    seguido, com o upgrade reportando `REFRESHED` e saindo 0 — o próprio diff reconhece a
+    forma insegura ao entregar `docs/` por rename atômico. Classe same-UID
+    (`docs/threat-model.md`, Tier-2), fora do modelo de ameaça como ataque; é a forma
+    fail-open que importa. Condição DURA: antes do upgrade, sob `<alvo>/.claude/plans/`,
+    `<alvo>/docs/`, `<alvo>/.github/`, `<alvo>/SPEC/` e `<alvo>/.claude.bak/` não pode
+    haver symlink (leaf ou ancestral) nem arquivo com link count > 1 — medido com
+    `find <alvo>/.claude/plans <alvo>/.claude/hooks <alvo>/docs <alvo>/.github <alvo>/SPEC
+    <alvo>/.claude/dispatcher <alvo>/.gitignore <alvo>/.claude/.gitignore -type l` e o mesmo
+    `find … -type f -links +1` (sobre os caminhos que existirem), ambos VAZIOS —
+    `docs/UPGRADE-PROCEDURE.md` diz isto; vale igualmente para `install.sh` (dispatcher e
+    `.gitignore`s). Cura antes do GA: `_wbm_dst_refuses`
+    + recusa de `nlink > 1` antes de QUALQUER mutação em todos esses caminhos, e tempfile no
+    diretório do destino + `mv` atômico em vez de `cp` direto; controle positivo com
+    `PLAN-SCHEMA.md` v1.3.0 hard-linked a um sentinel externo (bytes e modo intactos)
+    (pack `rc1-cure-3`, se o Owner o assinar; senão rc.2).
+48. **`install_dispatcher` copia incondicionalmente** (rodada 6, parte 2): `install.sh`
+    faz `mkdir -p .claude/dispatcher` e três `cp` sem consultar proveniência — um re-run
+    SOBRESCREVE arquivos do dispatcher editados pelo adopter, ao contrário do que o
+    cabeçalho do script afirma («re-running won't clobber edited files»); o censo ratchet
+    já classifica esses sítios como desguardados. Condição DURA: antes de re-rodar
+    `install.sh`, copie para fora qualquer arquivo editado em `.claude/dispatcher/` (ele será
+    substituído pelo template) — e o diretório entra nas checagens do item 47. Cura antes do
+    GA: incluir os três relpaths no preflight global, `_dst_preflight` no grupo, e troca do
+    `cp` incondicional por atualização baseada em proveniência; o texto do cabeçalho é
+    canônico e muda na mesma cerimônia.
+49. **`uninstall.sh` apaga diretórios VAZIOS seus sob `.claude/`** (rodada 6, parte 3): o
+    sweep por cadeia de pais (pack 2) exclui `.claude/*` de propósito, e o sweep recursivo
+    antigo `find "$TARGET/.claude" -depth -type d -empty -delete` continua — depois de um
+    upgrade da v1.3.0, uma árvore vazia criada por você (ex.: `.claude/local/drafts/`),
+    ausente do manifesto, é removida no uninstall, ao contrário da promessa de posse do
+    cabeçalho. Nenhum ARQUIVO é removido por essa via (só diretórios vazios). Condição
+    DURA: se diretórios vazios sob `.claude/` importam para você, recrie-os depois do
+    uninstall. Cura antes do GA: rastrear as cadeias de pais de `.claude` como as demais
+    entregas, remover o sweep recursivo e perna equivalente à U.6e numa subárvore de
+    `.claude/` não relacionada.
+50. **O `--restore` move o `.claude/` vivo para um caminho PREVISÍVEL sem confinamento**
+    (rodada 6, parte 3): antes de qualquer checagem, `uninstall.sh --restore` faz `mv
+    .claude .claude.pre-restore-<timestamp UTC, precisão de segundos>`; um symlink
+    pré-posicionado com esse nome para um diretório externo leva o SEU `.claude/` vivo
+    para fora do alvo — gêmeo, do lado do restore, do defeito do backup da condição 15, e
+    instância da classe 47. Condição DURA: antes de `--restore`, `<alvo>/.claude.pre-restore-*`
+    deve estar AUSENTE (nenhuma entrada com esse prefixo). Cura antes do GA: criar
+    exclusivamente e confinar um diretório de restore-aside e mover `.claude` para DENTRO
+    dele, recusando colisão ou symlink; teste com sentinel externo.
 
 ## B. Residuais DECLARADOS por desenho ratificado (não mudam na rc.2 sem decisão do Owner)
 
@@ -199,7 +269,10 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     alvo, same-UID). Mesma classe do ADR-196 num sítio não convertido; cura antes do
     GA: `_wbm_dst_refuses` + criação exclusiva (`PLAN-185-FOLLOWUP-uninstall-backup-confine`).
 16. CURADO nesta rc (livres): a recusa/preservação do `uninstall.sh` sai 5/6 em vez de 0
-    (dry-run segue 0); o template de CI entregue verifica o SHA-256 do actionlint antes
+    (um dry-run sobre manifesto PARSEADO sai 0; falhas de INTEGRIDADE DE ENTRADA — NUL no
+    manifesto (6), tar.gz inválido ou HMAC errado no `--restore` (4) — acontecem ANTES do
+    preview e são não-zero mesmo em dry-run; o `--help` diz isto desde a rodada 6); o
+    template de CI entregue verifica o SHA-256 do actionlint antes
     de extrair (o vivo já fazia; a v1.3.0 rodava `bash <(curl)` sem pin) e o gate de
     sintaxe YAML instala o parser em CI e FALHA se ele faltar, em vez de pular em verde.
     Rodada 2 (parte 3) e rodada 3 (parte 3): o parser do manifesto do `uninstall.sh`
@@ -212,11 +285,14 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     um) — a segunda, no pack `rc1-cure-2`: NUL detectado no ARQUIVO antes do loop
     (manifesto inteiro REFUSADO, ledger mantido), tipo não-regular ou symlink =
     REFUSADO e contado (nunca lido), UMA gramática canônica de dois espaços parseada
-    uma vez num ledger que alimenta backup E remoção, e o sweep de diretórios vazios
-    restrito às cadeias de pais dos arquivos removidos (`rmdir` de baixo para cima),
-    em vez de `find -empty -delete` na árvore inteira. `--help` imprime o cabeçalho
+    uma vez num ledger que alimenta backup E remoção, e — para as árvores FORA de
+    `.claude/` — o sweep de diretórios vazios restrito às cadeias de pais dos arquivos
+    removidos (`rmdir` de baixo para cima) em vez de `find -empty -delete`; **sob `.claude/`
+    o sweep recursivo antigo CONTINUA** (item 49; rodada 6, parte 3). `--help` imprime o cabeçalho
     inteiro; `benchmarks.yml.template` reporta o status real em vez de `$?` depois de
-    `!`; `templates/codex/pre-push-review-gate.sh` diz a verdade sobre não ser entregue
+    `!` e diz (rodada 6) que o teto de custo do runner é POR invocação de benchmark
+    (US$ 1,00 estimado, `--allow-expensive` para passar) e que não há teto agregado do
+    workflow; `templates/codex/pre-push-review-gate.sh` diz a verdade sobre não ser entregue
     (item 26), usa `--not --remotes` no range de branch nova e `--root` no
     `git diff-tree` (pack 2).
 17. **PostCompact reinjeta campos do snapshot em `additionalContext` com sanitização só de
@@ -245,7 +321,21 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     5,14 s sob holder vivo > 2,4 s): sob contenção rara o harness mata o hook e o snapshot
     e o evento de auditoria se perdem em silêncio; a compaction nunca bloqueia. Cura curta
     na mesma cerimônia (lock_timeout com folga abaixo do timeout do harness).
-20. `SessionEnd` varre nomes modificados por dois scanners antes de fixar o desfecho; numa
+20. **O delta de memória do `SessionEnd` pode dar um falso AUSENTE numa sessão LONGA que
+    compactou** (rodada 6, parte 5, P1): a janela de leitura é limitada (200 registros de
+    auditoria ou 256 KiB); passado isso, o `session_start` ORIGINAL sai da janela e o
+    segundo `session_start` (o do restart pós-compaction) é aceito como âncora mais
+    antiga — um arquivo de memória alterado ANTES da compaction e não tocado depois sai
+    como `outcome="absent"` e o render diz «0 … entries touched this session». O código
+    reconhece o residual em comentário; o teste cobre dois starts só quando ambos ficam na
+    janela. É um falso negativo na claim central do instrumento (a spec §8 pré-registra
+    «ABSENT numa sessão que trabalhou» como o instrumento FUNCIONANDO — numa sessão longa
+    compactada isso NÃO vale). Condição DURA: em sessão que compactou, leia «memory delta
+    ABSENT»/«0 entries» como DESCONHECIDO, não como zero. Cura antes do GA: sem prova de
+    que o evento retido é o start ORIGINAL, devolver `start_unknown`; melhor, persistir uma
+    âncora imutável do primeiro start (ou validar a fonte do SessionStart); teste com o
+    start original evictado e o restart retido. Além disso, `SessionEnd`
+    varre nomes modificados por dois scanners antes de fixar o desfecho; numa
     cauda rara de 50 ms um `written` real sai como `error`/UNAVAILABLE (contrato assinado
     r6/r7/r22 — instrumento, sem impacto de segurança). O GC do scratchpad NUNCA apaga
     `.sqlite.lock` (declarado em `scratchpad_lib.py`): um inode de 0 bytes por sessão sem
@@ -276,12 +366,27 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     escrito por operação atômica sem substituição (`link()`/`O_EXCL` no nome final), ou
     serializar leitura/criação/reparo sob lock; teste que pausa o vencedor entre a criação e
     a escrita. A mitigação operacional (primeira sessão SOZINHA) continua válida.
+    **Posse destrutiva sobre arquivos PRÉ-EXISTENTES no diretório nativo do projeto**
+    (rodada 6, parte 6, P1): a v1.3.0 nunca foi dona de `.salt` nem de `salt-minted.json`
+    em `$HOME/.claude/projects/<slug nativo>/`; depois do upgrade, um `.salt` SEU
+    pré-existente com tamanho ≠ 32 bytes é classificado como malformado e reaberto com
+    `O_TRUNC` (bytes destruídos, modo alterado) e um `salt-minted.json` regular
+    pré-existente é substituído sem condição — sem concorrência, symlink ou atacante.
+    Condição DURA: ANTES do primeiro prompt pós-upgrade, esses dois caminhos devem estar
+    AUSENTES no diretório nativo do projeto (`python3 .claude/hooks/_lib/runtime_paths.py
+    --state-dir` imprime o diretório; `docs/UPGRADE-PROCEDURE.md` diz isto). Cura antes do
+    GA: distinguir ausente de pré-existente/não-provado e nunca reparar in loco uma folha
+    não provada (preservar + breadcrumb, ou caminho com namespace do framework e evidência
+    de migração); criar o marcador sem substituição salvo se o existente for reconhecido
+    como do framework.
 22. **Locks em diretórios diferentes entre hooks v1.3.0 e v1.4.0** só ocorrem com
     `CEO_AUDIT_LOG_PATH` definido E as duas gerações de hooks correndo durante o upgrade;
     o efeito é appends intercalados no mesmo log = alarme de `verify_chain` (tamper-
     EVIDENTE, não silencioso). Regra: faça o upgrade sem nenhuma sessão aberta no
     repositório (docs/UPGRADE-PROCEDURE.md).
-23. **O campo `project` dos eventos carrega o caminho absoluto do repositório** — campo-base
+23. **O campo `project` dos eventos carrega o caminho absoluto do repositório** (o CHANGELOG
+    diz, desde a rodada 6, que a atribuição correta vale para os emissores que TRANSPORTAM o
+    campo e remete a esta condição para os que não o fazem) — campo-base
     contratual (`SPEC/v1/audit-log.schema.md` §501), preenchido assim por TODO emissor nas
     duas versões: não há exposição nova; a frase «slug/path never reaches the wire» no
     docstring de `audit_emit.py` e a redação DENIED do SPEC estavam erradas e foram
@@ -366,7 +471,10 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     `state/mcp_client_secrets` fica FORA do preflight de confinamento e, com
     `TARGET/state` symlinkado para um diretório externo, `mkdir -p` cria o diretório
     fora do alvo e `chmod` atua lá. Sítio já reconhecido como não curado em
-    `PLAN-185/wave-s329-C-approved.md`; o CHANGELOG deixa de dizer «EVERY». Cura antes
+    `PLAN-185/wave-s329-C-approved.md`; o CHANGELOG deixa de dizer «EVERY» e, desde a
+    rodada 6, o título da secção e o headline deixam de dizer «can no longer write outside
+    the target» — dizem o que é verdade: os DESTINOS de template entregues são confinados,
+    e as frestas são as condições 33, 47 e 48. Cura antes
     do GA: incluir o destino no preflight e repetir a guarda no sítio.
 34. **Recusa de FONTE fail-open no RESULTADO** (rodada 3, parte 2): quando um template
     de origem é um symlink externo, a contenção bloqueia a leitura, mas `install.sh`
@@ -392,8 +500,12 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     diz que o snapshot é passado como `str` e redigido por `state_store.set` (hoje a
     redação é campo a campo e passa `bytes`); `check_postcompact_reinject.py` diz que
     `constraint_count` «ainda será» allowlisted (já foi); `SessionEnd.py` descreve basenames
-    entrando em `systemMessage` (o render é counts-only). Texto, não comportamento;
-    canônicos — próxima cerimônia.
+    entrando em `systemMessage` (o render é counts-only). Idem (rodada 6, parte 5) as
+    descrições em `.claude/settings.json` e `templates/settings/settings.base.json` dos
+    hooks de compaction: ainda dizem armazenamento do snapshot só no plano (hoje há
+    fallback dominante de escopo de sessão), reinjeção só de ponteiros (hoje as restrições
+    pinadas vêm antes), `constraint_count` por allowlistar (já está) e nomes de memória
+    renderizados (só contagens). Texto, não comportamento; canônicos — próxima cerimônia.
 41. `audit_emit.py` diz que `constraint_count` segue disciplina estrita de inteiro e recusa
     floats, mas `int(...)` converte `1.9` em `1` e `True` em `1` — um chamador genérico
     recebe um valor lavado em vez do sentinela zero. Recusar `bool` e não-`int` antes do
@@ -407,6 +519,37 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     precondição de rotas (ou um transform inválido) também é avaliada no dry-run e termina
     em 3. Dizer «dry-run limpo» no código 0 e documentar o 3 para preview incompleto —
     texto, canônico, próxima cerimônia (rodada 5, parte 1, P2).
+51. **O HMAC do backup pré-uninstall é OPCIONAL na prática** (rodada 6, parte 3): o sidecar
+    `.hmac` só é criado quando existe uma chave local ao alvo (`.claude/.audit-key` ou
+    `.claude/.install-backup-key`), e nem o install nem o upgrade em copy mode criam
+    alguma delas (a chave de runtime vive no diretório por projeto do `$HOME`); um backup
+    copy-mode normal sai SEM `.hmac` e o `--restore` o aceita sem `--no-hmac-verify`. O
+    `--help` deixou de dizer que o backup «carrega um HMAC» (texto corrigido, livre). Cura
+    antes do GA: resolver a chave de runtime real e garantir o sidecar, ou exigir bypass
+    explícito para restaurar um backup não assinado (rodada 6, parte 3, P2).
+52. **O piso de descoberta do `ceremony-lint` estava DEFASADO** (rodada 6, parte 4): o
+    `check-ceremony-script.py` falha quando o conjunto de scripts de cerimônia RASTREADOS
+    encolhe abaixo de um piso, mas o piso pinado no primeiro censo (41) ficou parado enquanto
+    a descoberta chegou a 124 — apagar ou tornar invisível um script deixava 123 ≥ 41 e o
+    gate saía 0 sem inspecioná-lo, embora o `ceremony-lint.yml` (canônico) o chame de
+    fail-closed. Cura mínima LANDADA nesta rc (livre): o piso é re-pinado em 124 (o valor
+    medido no candidato), de modo que qualquer remoção falha o gate e uma remoção
+    intencional exige re-pinar conscientemente. Residual DECLARADO: um piso por CONTAGEM
+    ainda aceita a substituição «tira um, põe um»; cura antes do GA: pinar o conjunto exato
+    de caminhos rastreados (manifesto gerado, comparado por igualdade) com controle positivo
+    de remoção de um membro conhecido.
+53. `check_postcompact_reinject.py` lê o snapshot do scratchpad da sessão (gravável pelo
+    agente) e um `"ts": 1e309` parseia como infinito: `int(time.time() - inf)` levanta
+    `OverflowError`, que `_snapshot_age_s` não captura — o handler externo devolve `{}` e o
+    bloco inteiro do PostCompact (restrições, ponteiros, evento de auditoria) é descartado.
+    Cura: exigir timestamp finito e capturar `OverflowError`, degradando só o campo de idade;
+    testes com `1e309`, `Infinity` e `NaN` (canônico; rodada 6, parte 5, P2).
+54. `ledger_provenance.py` aceita um resultado «limpo» do scanner com `bytes_scanned`
+    menor do que a entrada (uma cauda hostil nunca examinada passa) e com `bytes_scanned`
+    booleano (`bool` é `int`), contra o próprio contrato fail-closed «ele olhou de fato?».
+    Dormente: o módulo não tem consumidor fora dos testes nesta rc. Cura: exigir `int`
+    puro e `bytes_scanned == len(encoded)`, senão `scanner_unavailable` (rodada 6,
+    parte 6, P2).
 
 ## D. O que este re-pass NÃO cobriu
 

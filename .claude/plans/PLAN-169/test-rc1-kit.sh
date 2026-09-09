@@ -344,6 +344,108 @@ if [ -n "$CLONE" ] && [ -f "$_envf" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]
     if _e_bind "$_e2"; then bad "E2: o bind do release.yml FECHOU sobre 2 commits — o controle nao reproduz a classe"
     else ok "E2 (controle vermelho): o bind do release.yml FALHA com o veredito num 2.o commit"; fi
   else bad "E2: preparacao do clone falhou"; fi
+
+  # E3 — o passo 11 do OWNER-RC1-CUT.sh, VERBATIM (extraido entre os seus
+  # marcadores, com say/bell/mark_step/die shimados), sobre um clone com a
+  # evidencia + fields + envelope + .asc untracked. Esperado: UM commit sobre o
+  # candidato, com veredito + fields + evidencia, o .asc movido para o backup
+  # do HOME (desviado), guard local e bind do servidor fechando.
+  _cut="$ROOT/$PLAN_DIR/OWNER-RC1-CUT.sh"
+  _e3="$SCRATCH/e3"; _e3home="$SCRATCH/e3home"; mkdir -p "$_e3home"
+  if _e_prep "$_e3" && cp "$CLONE/$_e_vf.asc" "$_e3/$_e_vf.asc"; then
+    {
+      printf '#!/bin/bash\nset -euo pipefail\n'
+      printf 'say() { :; }; bell() { :; }; mark_step() { :; }\n'
+      printf 'die() { printf "FAIL: %%s\\n" "$*" >&2; exit 1; }\n'
+      printf 'PLAN_DIR=%s; EV=%s; TAG=v1.4.0-rc.1\n' "$PLAN_DIR" "$EV"
+      printf 'COND="$EV/CONDITIONS-rc1.md"; VF="$PLAN_DIR/verdict-fields-$TAG.md"\n'
+      printf 'VD=".claude/governance/pair-rail-verdict-$TAG.md"; CAND=%s\n' "$CAND"
+      awk '/^evidence_list\(\) \{$/,/^\}$/' "$_cut"
+      awk '/^if should 11; then$/{f=1; next} /^  mark_step 11$/{f=0} f' "$_cut"
+    } > "$SCRATCH/e3.sh"
+    _e3_n="$(grep -c 'git commit -q -F -' "$SCRATCH/e3.sh" || true)"
+    [ "$_e3_n" = "1" ] || bad "E3: o bloco extraido nao contem exatamente 1 commit (tem $_e3_n)"
+    if ( cd "$_e3" && HOME="$_e3home" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign \
+         GIT_CONFIG_VALUE_0=false bash "$SCRATCH/e3.sh" ) > "$SCRATCH/e3.log" 2>&1; then
+      ok "E3: o passo 11 verbatim corre limpo sobre o clone (rc 0)"
+    else bad "E3: o passo 11 verbatim falhou"; sed -n '1,12p' "$SCRATCH/e3.log"; fi
+    if [ "$(git -C "$_e3" rev-parse HEAD^ 2>/dev/null)" = "$CAND" ]; then
+      ok "E3: o commit senta DIRETAMENTE sobre o candidato"
+    else bad "E3: pai do commit != candidato"; fi
+    if git -C "$_e3" log -1 --format=%s | grep -qF 'verdito pair-rail v1.4.0-rc.1 assinado'; then
+      ok "E3: assunto do commit sobreviveu (CM-07)"
+    else bad "E3: assunto do commit inesperado: $(git -C "$_e3" log -1 --format=%s | cut -c1-80)"; fi
+    _e3_files="$(git -C "$_e3" show --name-only --format= HEAD)"
+    if printf '%s\n' "$_e3_files" | grep -qxF "$_e_vd" \
+       && printf '%s\n' "$_e3_files" | grep -qxF "$_e_vf" \
+       && printf '%s\n' "$_e3_files" | grep -qxF "$EV/MANIFEST-rc1.sha256"; then
+      ok "E3: o commit carrega veredito + fields + MANIFEST ($(printf '%s\n' "$_e3_files" | grep -c .) caminhos)"
+    else bad "E3: o commit nao carrega veredito/fields/MANIFEST"; fi
+    if [ -f "$_e3home/.rc2-backup/verdict-fields-v1.4.0-rc.1.md.asc" ] && [ ! -e "$_e3/$_e_vf.asc" ]; then
+      ok "E3: o .asc foi movido para o backup do HOME e nao ficou na arvore"
+    else bad "E3: o .asc nao foi movido como o passo 11 promete"; fi
+    if _e_guard "$_e3" > "$SCRATCH/e3.guard" 2>&1; then ok "E3: guard local delta rc 0 sobre o commit do passo 11"
+    else bad "E3: guard local recusou o commit do passo 11"; sed -n '1,10p' "$SCRATCH/e3.guard"; fi
+    if _e_bind "$_e3"; then ok "E3: bind do release.yml fecha sobre o commit do passo 11"
+    else bad "E3: bind do release.yml NAO fecha"; fi
+  else bad "E3: preparacao do clone (ou copia do .asc) falhou"; fi
+
+  # E4 — o passo 2: `release.sh bump` num clone local do HEAD (a forma que o
+  # CUT usa porque o driver recusa porcelain nao vazio e a arvore viva carrega
+  # a evidencia untracked). Esperado: no-op, rc 0, HEAD do clone inalterado.
+  _e4="$SCRATCH/e4"
+  if git clone --quiet --local --no-hardlinks "$ROOT" "$_e4" 2>/dev/null; then
+    _e4_head="$(git -C "$_e4" rev-parse HEAD)"
+    _e4_rc=0
+    ( cd "$_e4" && bash .claude/scripts/local/release.sh bump --rc 1 \
+        --today "$(date -u +%Y-%m-%d)" --npm-readme-reviewed ) > "$SCRATCH/e4.log" 2>&1 || _e4_rc=$?
+    if [ "$_e4_rc" -eq 0 ] && grep -q 'no-op' "$SCRATCH/e4.log"; then
+      ok "E4: bump --rc 1 no clone e no-op (rc 0)"
+    else bad "E4: bump no clone rc=$_e4_rc / sem no-op"; grep -E 'oracle|FAIL|no-op' "$SCRATCH/e4.log" | head -6; fi
+    if [ "$(git -C "$_e4" rev-parse HEAD)" = "$_e4_head" ]; then ok "E4: HEAD do clone inalterado pelo bump"
+    else bad "E4: o bump moveu o HEAD do clone"; fi
+  else bad "E4: clone local para o bump falhou"; fi
+
+  # E5 — evidence_complete_for() (passo 6): evidencia sintetica, um positivo e
+  # quatro negativos (cada fonte de verdade mutada por vez).
+  _e5="$SCRATCH/e5"
+  _e5_run() {  # $1 = mutacao: none | manifest | rc | prov-sha | cand-sha
+    local X=0123456789abcdef0123456789abcdef01234567 Y=fedcba9876543210fedcba9876543210fedcba98 d
+    d="$_e5/$1"; mkdir -p "$d"
+    printf 'a\n' > "$d/x.txt"; printf 'b\n' > "$d/y.txt"
+    ( cd "$d" && shasum -a 256 x.txt y.txt > MANIFEST-rc1.sha256 )
+    printf -- '- Base: v1.3.0 (o) .. Candidato: %s (PRE-tag, doutrina r17)\nRUNNER-OVERALL: rc=0\n' "$X" > "$d/PROVENANCE-rc1.md"
+    printf '%s\n' "$X" > "$d/CANDIDATE.sha"
+    case "$1" in
+      manifest) printf 'z\n' >> "$d/x.txt" ;;
+      rc)       sed -i '' 's/rc=0/rc=1/' "$d/PROVENANCE-rc1.md" ;;
+      prov-sha) sed -i '' "s/$X/$Y/" "$d/PROVENANCE-rc1.md" ;;
+      cand-sha) printf '%s\n' "$Y" > "$d/CANDIDATE.sha" ;;
+    esac
+    ( EV="$d"; eval "$(awk '/^evidence_complete_for\(\) \{$/,/^\}$/' "$_cut")"; evidence_complete_for "$X" )
+  }
+  if _e5_run none; then ok "E5: evidencia completa rc=0 do MESMO candidato e reconhecida"
+  else bad "E5: o positivo foi recusado"; fi
+  for _m in manifest rc prov-sha cand-sha; do
+    if _e5_run "$_m"; then bad "E5: mutacao '$_m' passou como evidencia completa"
+    else ok "E5 (controle vermelho): mutacao '$_m' e recusada"; fi
+  done
+
+  # E6 — o validador do SERVIDOR (step 15 do release.yml, argv literal) sobre
+  # o commit do passo 11. So a presenca da assinatura e verificada aqui (a
+  # verificacao GPG do servidor e do `git verify-tag`), entao a chave
+  # descartavel serve.
+  if [ -d "$_e3" ] && [ "$(git -C "$_e3" rev-parse HEAD^ 2>/dev/null)" = "$CAND" ]; then
+    if ( cd "$_e3" && GNUPGHOME="$GH" python3 .github/scripts/validate-pair-rail-verdict.py \
+          --verdict-file "$_e_vd" --parent-sha "$CAND" --release-tag v1.4.0-rc.1 \
+          --max-age-hours 24 --recompute-inputs-hash \
+          --codex-cli-pin-file .claude/governance/codex-cli-pin.txt \
+          --codex-cli-binary-sha256-file .claude/governance/codex-cli-binary-sha256.txt \
+          --codex-pin-manifest-file .claude/governance/codex-cli-pin-manifest.json \
+          --inputs-hash-paths-file .claude/governance/pair-rail-inputs-hash-manifest.txt ) > "$SCRATCH/e6.log" 2>&1; then
+      ok "E6: validador do servidor (argv do step 15) aceita o envelope sobre o commit unico"
+    else bad "E6: validador do servidor RECUSOU"; grep -E 'INVALID|FAIL|Error|error' "$SCRATCH/e6.log" | head -6; fi
+  else printf '  (E6 pulado: sem commit do E3)\n'; fi
 else
   printf '  (E pulado: sem envelope da seccao C)\n'
 fi

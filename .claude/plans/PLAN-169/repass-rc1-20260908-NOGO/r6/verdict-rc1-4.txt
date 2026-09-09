@@ -1,0 +1,29 @@
+REJECT
+
+P1 — [CHANGELOG.md:25-28](<WT>/CHANGELOG.md:25), [CHANGELOG.md:84-96](<WT>/CHANGELOG.md:84), [scripts/install.sh:2437-2472](<WT>/scripts/install.sh:2437)
+
+Concrete failure: The release headline twice says the installer “can no longer write outside” its target. The same diff admits the counterexample: `TARGET/state` may be a symlink, after which `mkdir -p` and `chmod` operate outside the target. Condition 33 describes the implementation honestly, but cannot make the unconditional shipped claim true.
+
+Minimal fix: Narrow both headline and section title to “delivered-template destinations are confined,” or cure the `mcp_client_secrets` path before rc.1.
+
+P1 — [.github/workflows/ceremony-lint.yml:36-42](<WT>/.github/workflows/ceremony-lint.yml:36), [.claude/scripts/check-ceremony-script.py:96-100](<WT>/.claude/scripts/check-ceremony-script.py:96), [.claude/scripts/check-ceremony-script.py:334-370](<WT>/.claude/scripts/check-ceremony-script.py:334)
+
+Concrete failure: The new workflow labels discovery “fail-closed” but invokes a default floor of 41. HEAD discovers 124 tracked ceremony scripts. Deleting or making one invisible leaves 123 ≥ 41, so the gate exits 0 after ceasing to inspect that script. Condition 37 covers the missing historical-directory trigger, not this stale-floor failure.
+
+Minimal fix: Pin and compare the exact tracked discovery set, not merely its count; add a positive control proving removal of a known member fails. At minimum update the floor, though count equality still permits add-one/remove-one substitution.
+
+P1 — [CHANGELOG.md:130-133](<WT>/CHANGELOG.md:130), [SPEC/v1/audit-log.schema.md:500](<WT>/SPEC/v1/audit-log.schema.md:500), [.claude/hooks/check_ledger_checkpoint.py:1023-1050](<WT>/.claude/hooks/check_ledger_checkpoint.py:1023), [.claude/hooks/check_postcompact_reinject.py:688-695](<WT>/.claude/hooks/check_postcompact_reinject.py:688)
+
+Concrete failure: The CHANGELOG promises “correct `project` attribution,” while several newly specified emitters omit `project`, and some omit `session_id`. With a shared `CEO_AUDIT_LOG_PATH`, checkpoint, compaction, unlock, and rejection events cannot reliably be assigned to a repository/session. Condition 23 accurately admits this exception; the shipped release claim does not.
+
+Minimal fix: Qualify the CHANGELOG claim to the emitters that actually transport project identity, referencing condition 23, or populate and wire-test the identity fields before rc.1.
+
+P2 — [CHANGELOG.md:306](<WT>/CHANGELOG.md:306)
+
+Concrete failure: The diff claims 435 commits since v1.3.0; both full and first-parent counts at candidate `861ee97` are 458. This is the likely large-diff miss.
+
+Minimal fix: Remove the volatile count or regenerate it at the final candidate commit and identify that commit.
+
+The remaining scoped mechanical evidence was clean: all changed workflows pass `actionlint`; version markers are byte-identical; documented component counts match disk; stdlib, ADR-chain/index, audit-registry, settings derivation, gate-manifest, and diff-whitespace checks pass.
+
+VERDICT: NO-GO — Before rc.1, correct the two contradictory CHANGELOG claims and close the ceremony-lint discovery fail-open, which the proposed envelope does not declare.

@@ -94,10 +94,15 @@ DEFAULT_WAIVERS = os.path.join(
     REPO_ROOT, ".claude", "scripts", "ceremony-lint-waivers.json"
 )
 # Piso de descoberta (arquivos RASTREADOS): pinado no primeiro censo
-# S316 (41 rastreados de 54 descobertos). Falha quando o conjunto
+# S316 (41 rastreados de 54 descobertos) e RE-PINADO na rodada 6 do
+# re-pass da v1.4.0-rc.1 (S349, 2026-09-08): o piso ficou em 41 enquanto
+# a descoberta chegou a 124 rastreados, e apagar um script deixava o gate
+# verde sem inspecioná-lo — o valor e o CENSO do candidato, e toda
+# remoção exige re-pinar conscientemente. Falha quando o conjunto
 # ENCOLHE — a pergunta "o guard vê o meu alvo?" respondida em toda
-# execução.
-DEFAULT_FLOOR = 41
+# execução. Residual declarado (rc.1 condição 52): um piso por CONTAGEM
+# aceita «tira um, põe um»; a cura estrutural é pinar o CONJUNTO.
+DEFAULT_FLOOR = 124
 
 
 def _sha256(path: str) -> str:

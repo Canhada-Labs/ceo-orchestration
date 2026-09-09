@@ -52,8 +52,10 @@ CODEX_PKG="@openai/codex@0.147.0"
 # 189/199/195 KB na rodada 3 — a 200000 as tres morreriam em FATAL na rodada
 # 5 (o ensaio do kit pegou a parte 4 a 200142 B). 240000 cobre o maior
 # (~215 KB) com folga de ~10 %; re-particionar mudaria manifestos e escopo de
-# tres partes as vesperas do corte.
-MAX_RAW_BYTES=240000
+# tres partes as vesperas do corte. Rodada 6 MEDIDA: partes 4/5 a 207/216 KB
+# com CONDITIONS de 35 KB; a v15 tem ~46 KB, logo ~218/227 KB — 260000 mantem
+# a folga de ~12 %.
+MAX_RAW_BYTES=260000
 
 die() { printf 'FATAL: %s\n' "$*" >&2; exit 1; }
 

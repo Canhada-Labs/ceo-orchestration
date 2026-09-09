@@ -15,9 +15,12 @@ name: Skill benchmarks (advisory)
 # repository secret ANTHROPIC_API_KEY (Settings -> Secrets and variables ->
 # Actions). Each run bills YOUR Anthropic account: one API call per benchmark
 # scenario per repetition, for every benchmark YAML under
-# `.claude/skills/**/benchmarks/`. There is no framework-side spend cap — the
-# only throttle is the paths filter below. With no secret configured the job
-# skips visibly and bills nothing.
+# `.claude/skills/**/benchmarks/`. The runner refuses any single benchmark
+# YAML whose ESTIMATED cost exceeds $1.00 unless invoked with
+# --allow-expensive — a per-invocation cap, not a budget; there is NO
+# aggregate workflow-wide cap, and the paths filter below is the only
+# throttle on how often the whole job runs. With no secret configured the
+# job skips visibly and bills nothing.
 #
 # SELF-CONTAINED BY CONTRACT (PLAN-183 W2 / finding A3): every script this
 # workflow calls must be one the installer actually delivers.

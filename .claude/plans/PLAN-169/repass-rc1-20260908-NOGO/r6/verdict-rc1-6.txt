@@ -1,0 +1,15 @@
+REJECT (advisory evidence).
+
+- **P1 — fix before rc.1**  
+  **FILE:LINE:** `.claude/hooks/_lib/runtime_paths.py:158-161`; `.claude/hooks/_lib/injection_salt.py:135-150,176-206,249-296,336-372`  
+  **Concrete failure:** v1.3 never owned `.salt` or `salt-minted.json` in the native Claude project directory. After upgrade, a pre-existing adopter-authored `.salt` of non-32-byte size is classified as malformed and reopened with `O_TRUNC`, destroying its bytes and changing its mode. Independently, a regular pre-existing `salt-minted.json` is unconditionally replaced. Neither case requires concurrency, a symlink, or an attacker. Condition 21 covers the first-mint race and marker symlinks but omits these ownership takeovers outside the target tree.  
+  **Minimal fix:** distinguish absent from pre-existing/unproven salt files; never repair an unproven leaf in place. Preserve it and degrade with a breadcrumb, or use a framework-namespaced path with migration evidence. Create the marker without replacement unless an existing marker is positively recognized as framework-owned. If code remains unchanged, add a hard preflight condition requiring both native leaves to be absent or provenance-verified before the first prompt.
+
+- **P2 — follow-up**  
+  **FILE:LINE:** `.claude/hooks/_lib/ledger_provenance.py:777-805,823-829`  
+  **Concrete failure:** a usable-but-defective scanner can return `matched=False, bytes_scanned=1` for a much larger external entry. The gate accepts it as clean even though the hostile tail was never scanned; `bytes_scanned=True` also passes because `bool` is an `int`. This contradicts the module’s fail-closed “did it actually look?” contract. The defect is dormant because this module currently has no non-test consumer.  
+  **Minimal fix:** require a plain integer and `bytes_scanned == len(encoded)` before accepting a clean result; otherwise return `scanner_unavailable`. Add this to hardening section C.
+
+Conditions 15/18/21/23/27/29/30/39/40 otherwise describe the inspected code accurately. Static stdlib, Python 3.9 parsing, repository-map, count, and diff-whitespace gates passed. Targeted pytest could not start because the reviewer sandbox provided no writable temporary directory.
+
+VERDICT: NO-GO — The proposed envelope omits a P1 destructive ownership claim over pre-existing files in the newly selected native state directory.

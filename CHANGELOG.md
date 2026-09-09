@@ -24,8 +24,11 @@ delivers `docs/` and `.github/`; PLAN-185 installer write
 confinement; PLAN-169 a `user` profile derived from the base instead
 of hand-maintained). The headline for an adopter is that
 `upgrade.sh` now delivers the two trees it silently skipped for four
-releases, and that the installer can no longer write outside the
-directory you hand it. Two security fixes in the install path, one
+releases, and that every delivered-template destination is now confined
+to the directory you hand it (the seams that are not — backups, the
+schema-doc refresh, `.gitignore` appends, the dispatcher copies, the
+`state/` seed — are signed conditions of this rc, with the pre-upgrade
+checks in `docs/UPGRADE-PROCEDURE.md`). Two security fixes in the install path, one
 audit-log scope change adopters share a machine over, and the honest
 part: the compaction-continuity feature this train is named after
 shipped only after its first design was measured and found to deliver
@@ -81,19 +84,25 @@ and the two CI workflow templates forever, with no warning.
   PRESERVED (safe) and reported `STALE`. Deepen the history before
   upgrading in CI if you want the refresh.
 
-### Security — the installer can no longer write outside the target (PLAN-185, ADR-196)
+### Security — delivered-template destinations are confined to the target (PLAN-185, ADR-196)
 
 - **`install.sh` wrote outside `$TARGET`** when a destination path was a
   pending symlink or hardlink. One destination-confinement predicate now
   lives in `scripts/_framework_manifest_set.sh`; `install.sh` pre-flies
   every delivered-template destination before the first write and
   refuses by name, `upgrade.sh` consumes the same predicate. E2E in
-  bytes: 105/0 after the cure against 22/33 before it (`cc00235`). Two
-  seams stay outside that preflight in this release candidate and are
-  signed conditions of rc.1: the `state/mcp_client_secrets` seed (a
-  symlinked `TARGET/state` is followed by `mkdir -p`/`chmod`), and a
-  refused SOURCE template (symlink outside the checkout) that install
-  reports as `SKIP` and upgrade as `PRESERVED` while still exiting 0.
+  bytes: 105/0 after the cure against 22/33 before it (`cc00235`).
+  Several seams stay outside that preflight in this release candidate
+  and are signed conditions of rc.1: the `state/mcp_client_secrets`
+  seed (a symlinked `TARGET/state` is followed by `mkdir -p`/`chmod`);
+  a refused SOURCE template (symlink outside the checkout) that install
+  reports as `SKIP` and upgrade as `PRESERVED` while still exiting 0; a
+  source MISSING from the executing checkout (`SKIP`, exit 0, on both
+  install and upgrade); the `.gitignore`/`.claude/.gitignore` appends
+  and the `.claude/dispatcher/` copies, which test `-L` only, so a hard
+  link there is written through; and `install_dispatcher`, which
+  re-copies unconditionally on a rerun (edited dispatcher files are
+  overwritten — back them up first).
 - **`--github-owner` with a `/` in it left `.github/CODEOWNERS` at zero
   bytes, permanently.** The handle grammar is now shared by producer and
   consumer, the file is rendered through a pipe and written atomically,
@@ -128,9 +137,12 @@ path-based project slug, instead of a literal `ceo-orchestration`
 directory shared by every project (`9de4efc`, `965fb13`, `3d16070`).
 
 - What this buys, measured: chains that no longer interleave, correct
-  `project` attribution, a `verify_chain()` that means something per
-  project, and a per-project HMAC key and salt — so `prompt_sha256` stops
-  correlating across your repositories.
+  `project` attribution for the emitters that carry the field (a handful
+  of newly specified actions still omit `project` or `session_id` and
+  cannot be attributed in a shared `CEO_AUDIT_LOG_PATH` — rc.1 condition
+  23), a `verify_chain()` that means something per project, and a
+  per-project HMAC key and salt — so `prompt_sha256` stops correlating
+  across your repositories.
 - **The old location is not migrated for you.** The pre-v1.4.0 chain
   under `$HOME/.claude/projects/ceo-orchestration/` stays where it is;
   `SPEC/v1/audit-log.schema.md` records the change as v2.58 and names the
@@ -303,8 +315,10 @@ call today**:
   cases ~14,000 → **~15,400**. Unchanged since v1.3.0: **166 skills**
   (42 core + 8 frontend + 116 domain), **27 slash commands**, **32
   `SPEC/v1` files** (28 `*.schema.md`), **4 TLA+ specifications**.
-- 435 commits since v1.3.0. Canonical changes landed as
-  Owner-GPG-signed ceremonies with per-phase sentinels and closed scopes.
+- Commit count since v1.3.0: `git rev-list --count v1.3.0..<tag>` at the
+  tagged commit (a number written here ages with every candidate).
+  Canonical changes landed as Owner-GPG-signed ceremonies with per-phase
+  sentinels and closed scopes.
 
 ### Known issues
 
@@ -506,7 +520,13 @@ train (rc.4) instead of being deferred:
   byte-pristine copy of a KNOWN prior framework generation of
   `PLAN-SCHEMA.md`/`DEBATE-SCHEMA.md` is replaced (with backup);
   an adopter-modified schema is PRESERVED loudly. Closes the F3 STALE
-  signature the parity e2e flagged.
+  signature the parity e2e flagged. The refresh writes over the
+  existing inode (`cp`, not an atomic rename), so a hard link to that
+  file outside the target changes with it — signed condition of rc.1:
+  no hard links or symlinks under `.claude/plans/`, `.claude/hooks/`,
+  `docs/`, `.github/` and `SPEC/` before upgrading (two `find` commands
+  in `docs/UPGRADE-PROCEDURE.md`; the hook delivery itself copies
+  through a link the same way).
 - **Pre-state ceremony migration fails safe to `user`** and only an
   EXPLICIT `--ceremony` flag / env / recorded state persists into the
   synthesized install-state — the fail-safe inference itself is never

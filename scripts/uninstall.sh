@@ -22,15 +22,22 @@
 #   0  success (or dry-run preview)
 #   1  generic failure / invalid args
 #   2  target path invalid OR no manifest found
-#   3  (reserved) — the install MANIFEST is NOT HMAC-verified in this version;
-#      only the pre-uninstall backup carries an HMAC (see --restore). A
+#   3  (reserved) — the install MANIFEST is NOT HMAC-verified in this version.
+#      The pre-uninstall backup gets an HMAC sidecar ONLY when a target-local
+#      key exists (.claude/.audit-key or .claude/.install-backup-key); neither
+#      install nor upgrade creates one in copy mode, so a normal backup is
+#      UNSIGNED and --restore accepts it as such (rc.1 condition 51). A
 #      manifest record is trusted for its PATH shape and SHA only.
 #   4  --restore: backup tar.gz invalid or HMAC mismatch
 #   5  uninstall INCOMPLETE: SHA mismatches encountered without --force
 #      (user-modified files preserved, manifest kept)
 #   6  uninstall INCOMPLETE: one or more manifest records REFUSED (unsafe
 #      path or symlinked ancestor) — never lifted by --force
-#   A dry-run always exits 0: it is a preview, whatever it would refuse.
+#   A dry-run over a PARSED manifest exits 0: it previews what would be
+#   removed, preserved or refused. Input-integrity failures happen BEFORE
+#   the preview and exit non-zero even under --dry-run: a manifest carrying
+#   a NUL byte (6), a --restore tar.gz that is invalid or fails its HMAC
+#   check (4).
 #
 # Bash 3.2 portability guard
 if [ -z "${BASH_VERSINFO:-}" ]; then

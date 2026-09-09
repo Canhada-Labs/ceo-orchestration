@@ -1,0 +1,21 @@
+REJECT (advisory). Within this payload, conditions 18, 19, 20, 21, 23 and 28 accurately describe the measured residuals, but the envelope omits two P1 failures.
+
+- **P1 — `.claude/hooks/SessionEnd.py:461-472,605-643,990-995,1054-1060`**  
+  Concrete failure: after more than 200 audit records or 256 KiB, the real `session_start` can leave the bounded window while the second `session_start` emitted after compaction remains. The code knowingly accepts that restart as the oldest in-window anchor. A memory file changed before compaction but untouched afterward is then reported as `outcome="absent"` and rendered as “0 … entries touched this session.” The diff itself acknowledges this residual at lines 470–472; the test at `test_session_end_memory_delta.py:505-516` covers two starts only when both remain in-window. This is a false negative on the feature’s central claim and is missing from condition 20.  
+  Minimal fix: unless the reader can prove the retained event is the original invocation start, return `start_unknown`; preferably persist an immutable first-start anchor or record and validate the SessionStart source. Add a test with the original start evicted and a compact restart retained.
+
+- **P1 — `scripts/upgrade.sh:1102-1117,1374-1385,1423-1429,1463-1470,3762`; `.claude/hooks/check_compact_pinning.py:1`**  
+  Concrete failure: a copy-mode v1.3 adopter whose `.claude/hooks` directory—or an individual hook leaf—is a symlink to an external location causes the baseline record to be discarded as unsafe, but the delivery path subsequently uses following `-d`/`-f` tests and plain `cp`. Delivering the new pinning hook or updating existing hooks therefore writes through the link outside `$TARGET`. A multiply-linked regular hook can similarly mutate an external inode. Condition 43 confines only `.claude.bak`; condition 28 concerns runtime `.claude/state`; neither covers core hook destinations.  
+  Minimal fix: before backup or copying, apply a physical destination guard to `.claude/hooks` and every leaf, rejecting symlink ancestors, symlink leaves and `st_nlink > 1`; persist an incomplete result and exit nonzero. Add an external-sentinel upgrade test.
+
+- **P2 — `.claude/hooks/check_postcompact_reinject.py:405-411,753-759`**  
+  Concrete failure: the session scratchpad is agent-writable, and JSON such as `"ts":1e309` parses to infinity. `int(time.time() - inf)` raises `OverflowError`, which `_snapshot_age_s` does not catch; the outer handler then returns `{}`, dropping the entire PostCompact constraint block, pointers and audit event.  
+  Minimal fix: require a finite timestamp and catch `OverflowError`, degrading only the age field to zero/unknown. Test `1e309`, `Infinity` and `NaN`.
+
+- **P2 — `.claude/settings.json:665,679`; `templates/settings/settings.base.json:527,541`; `.claude/hooks/check_postcompact_reinject.py:677-682`; `.claude/hooks/SessionEnd.py:117,659-660`**  
+  Concrete failure: shipped descriptions still claim plan-only snapshot storage, pointers-only reinjection, a not-yet-allowlisted `constraint_count`, and operator-rendered memory names. The implementation now uses dominant session-scope fallback, prepends pinned constraints, allowlists the counter, and renders counts only. Operators following the settings comments can inspect the wrong store and audit consumers can implement the wrong schema expectation. Condition 38 is honest but should include these additional shipped sites.  
+  Minimal fix: align both settings copies and the stale inline documentation with current behavior.
+
+Static verification passed the stdlib-only check for 449 files, Python 3.9 AST parsing for all six payload files, and `check-agents-md.py`. The focused pytest suite could not start because the read-only environment provided no writable temporary directory.
+
+VERDICT: NO-GO — The signed draft omits the false-ABSENT memory classification and unconstrained hook-delivery write, both P1 conditions for this rc.1.
