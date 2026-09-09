@@ -889,6 +889,9 @@ while IFS= read -r line || [ -n "$line" ]; do
             _log "    (dry-run) would RE-LINK (replacing current): $rel -> $target"
             WOULD_REPAIR=$((WOULD_REPAIR + 1))
             UNRESOLVED=$((UNRESOLVED + 1))
+          elif ! _manifest_still_pinned; then
+            _manifest_pin_refused "$rel"
+            UNRESOLVED=$((UNRESOLVED + 1))
           else
             _lk_go=1
             if [ -f "$lpath" ] && [ ! -L "$lpath" ]; then

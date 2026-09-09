@@ -139,14 +139,14 @@ same repo produces:
 >    resolves to a path OUTSIDE the target and is written there, and the
 >    manifest records it (signed condition 73).
 > 2. **The placeholder pass rewrites files of yours.** After reporting a
->    pre-existing file as `EXISTS (skipping template)`, the installer still
+>    pre-existing file as `EXISTS (skipping)`, the installer still
 >    runs its `{{PLACEHOLDER}}` substitution over a FIXED set and replaces
 >    the inode even when nothing matches (a hard link of yours is broken):
 >    `.claude/team.md`, `.claude/frontend-team.md`, `.claude/agent-metrics.md`
 >    in every ceremony; `CLAUDE.md`, `MEMORY.md`, `PROTOCOL.md`,
 >    `docs/BRANCH-PROTECTION.md`, `docs/rotation-log.md` unless the ceremony
 >    is `user`; and, under `.claude/skills/`, every `SKILL.md`, `SKILL-*.md`,
->    `team-personas.md`, `pitfalls.yaml` and `references/*.md`.
+>    `team-personas.md`, `pitfalls.yaml`, `references/*.md` and `reference/*.md`.
 >    Copy such files out first, or accept the rewrite (signed condition 74).
 > 3. **Anything of yours under the delivered trees becomes framework-owned.**
 >    The install manifest is built by walking `.claude/hooks/`,

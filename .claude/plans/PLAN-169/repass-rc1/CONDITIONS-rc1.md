@@ -436,9 +436,11 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     com outra sessão a segurar o lock do scratchpad, o harness mata o PostCompact antes de a
     exceção ser capturada e TODA a saída desaparece, sem breadcrumb; sobrevive só
     `_clear_pressure_marker` (~713). Mitigação já existente: o canal PRIMÁRIO das restrições
-    pinadas é `check_compact_pinning.py` (settings ~559). Condição DURA: com duas sessões do mesmo
-    projeto a compactar ao mesmo tempo, o PostCompact pode não render nada — a continuidade fica
-    no snapshot em disco, para o `/resume`. Cura antes do GA (canônico): `lock_timeout` explícito
+    pinadas é `check_compact_pinning.py` (settings ~559). Condição DURA: com duas sessões que
+    resolvam o MESMO plano (o lock é por arquivo de store, `scratchpad/PLAN-NNN.sqlite`,
+    `state_store.py` ~214-216; o escopo de sessão usa um arquivo por sessão) a compactar ao mesmo
+    tempo, o PostCompact pode não render nada — a continuidade fica no snapshot em disco, para o
+    `/resume`. Cura antes do GA (canônico): `lock_timeout` explícito
     com folga real (ordem de 1,5 s) nos dois reads; em timeout, ainda emitir constraints e pointers
     duráveis com `snapshot_found=false`; teste com o lock real ocupado.
 20. **O delta de memória do `SessionEnd` pode dar um falso AUSENTE numa sessão LONGA que
@@ -1029,7 +1031,9 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     cai para o store de sessão quando o do plano está vazio. Se o PreCompact não viu transição
     (gravou no store de SESSÃO) e, entre os dois hooks, um drain assíncrono do spool expôs um
     `plan_transition` com `PLAN-123` exato, o PostCompact lê o store de plano vazio e devolve
-    `snapshot_found=false` (medido: `result=None`, zero chamadas ao fallback de sessão). Um
+    `snapshot_found=false` (medido: com o snapshot só no store de sessão,
+    `_read_snapshot('PLAN-123', sid)` devolve `None`; o fallback de sessão não é alcançado por
+    construção, ~389-390). Um
     `snapshot_found=false` com `written` no PreCompact da mesma sessão é uma destas duas
     assimetrias, não ausência de snapshot; o `/resume` lê o snapshot em disco na mesma. Cura antes
     do GA (canônico, rc.2): no miss do store de plano, ler o store de sessão do `session_id`
@@ -1071,7 +1075,8 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     antes do GA (canônico): validar cada segmento antes da primeira escrita com a gramática de
     segmento único, no install, no upgrade e no gerador do manifesto, com sentinel externo positivo.
 74. **O passe global de placeholders reescreve arquivos SEUS** (rodada 10, parte 2, P1; canônico):
-    depois de reportar um arquivo regular pré-existente como `EXISTS (skipping template)` (~1263),
+    depois de reportar um arquivo regular pré-existente como `EXISTS (skipping)` (~1210, ~1830; a
+    variante `EXISTS (skipping template)` é outro sítio, ~1263),
     `install.sh` corre a substituição de placeholders (~2811-2879) sobre um conjunto NOMINAL
     (rodada 11, parte 2, P1 — a lista anterior estava incompleta): em TODA cerimônia,
     `.claude/team.md`, `.claude/frontend-team.md` e `.claude/agent-metrics.md`; quando a
@@ -1080,7 +1085,7 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     recursivamente, só os nomes `SKILL.md`, `SKILL-*.md`, `team-personas.md`, `pitfalls.yaml` e
     `references/*.md`/`reference/*.md` (~2876-2879) — não «todo `*.md`/`*.py`». Sem perguntar se
     foi ESTA execução que os escreveu: um `.claude/team.md` SEU com `{{PROJECT_NAME}}` recebe
-    `EXISTS (skipping template)` e ainda tem os bytes substituídos. Os defaults (~685-703: nome do projeto = basename do alvo, caminho, stack, fonte do
+    `EXISTS (skipping)` e ainda tem os bytes substituídos. Os defaults (~685-703: nome do projeto = basename do alvo, caminho, stack, fonte do
     protocolo) tornam o script `sed` não vazio mesmo sem flags: um `CLAUDE.md` seu que contenha
     `{{PROJECT_NAME}}` tem os bytes alterados, e mesmo sem token `portable_sed_inplace` substitui o
     INODE por `mv -f` (um hard link seu é quebrado). O cabeçalho («re-running won't clobber edited
@@ -1152,7 +1157,7 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     (~268-273) e `check_postcompact_reinject.py` (~297-299) passam `None` quando o payload não traz
     `session_id` nem `sessionId`; `_resolve_session_id` (`scratchpad_lib.py` ~213) lê então
     `CLAUDE_SESSION_ID` do ambiente e `resolve_plan_id` consome esse valor (~253) — apesar de as
-    docstrings dos dois hooks (~259, ~291) dizerem «NOT env» e «hook input ONLY». Reproduzido: com
+    docstrings dos dois hooks (~259, ~291) dizerem «NOT env». Reproduzido: com
     um log que traz um `plan_transition` de OUTRA sessão e a variável a apontar para ela, os dois
     hooks devolvem `PLAN-123` (sem a variável, `unknown`): o PreCompact grava o snapshot no plano
     escolhido por essa sessão e o PostCompact reinjeta esse plano, contornando a recusa do
@@ -1178,7 +1183,8 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     intacta só conta registros JSON parseáveis e ignora linhas malformadas em silêncio — `prev` e
     HMAC quebrados passam. É um nome errado num teste de legibilidade, não uma verificação de
     cadeia; a verificação real é `verify_chain()` (`_lib/audit_hmac.py`), que o step não invoca.
-    Texto e instrumento, canônico (workflow entregue): cura na rc.2 — invocar o verificador real ou
+    Texto e instrumento, canônico (workflow de CI DESTE repositório — não é entregue ao adopter; a
+    tabela de rotas entrega só os dois `.template`): cura na rc.2 — invocar o verificador real ou
     renomear o step como «JSON readability only» (rodada 11, parte 7, P2).
 81. **Os entrypoints herdam as variáveis `FMS_*` do ambiente sem as inicializar** (rodada 11, parte
     2, P1; canônicos): a biblioteca lê 19 knobs `FMS_*` do ambiente (`_framework_manifest_set.sh`
