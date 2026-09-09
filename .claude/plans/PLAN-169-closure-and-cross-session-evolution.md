@@ -340,6 +340,17 @@ completa 7.049 passed. Curas V1/V2/V4/V5 do verdito rc.2 CURADAS.
   na mesma cerimônia futura da W2.8 ou noutra — 1 pinentry cobre."
   Execução: ADR renumerado 191→193 no mesmo trem staged-w28.
 
+### OQ — decisão estruturada do Owner (S349, 2026-09-09 09:55, AskUserQuestion)
+
+- **Rota da rodada 9 do re-pass da v1.4.0-rc.1:** pergunta «A rodada 9 deve
+  ser a ÚLTIMA revisão da pré-versão rc.1 em qualquer caso, salvo defeito de
+  código novo e grave?» — opção selecionada VERBATIM: **"Não — só corta com
+  6/6 aprovadas"**. A rota alternativa (secção R de residual declarado pelo
+  Owner no `CONDITIONS-rc1.md` + `OWNER-RC1-CUT.sh` aceitando
+  `RUNNER-OVERALL: rc=1` + E7 no kit) fica RECUSADA e não é construída; cada
+  NO-GO gera nova rodada até as seis partes aprovarem. Execução: envelope
+  v25/v26 (achados das partes 5 e 6 da rodada 8) e candidato da rodada 9.
+
 ### Registro de execução — W2.8 + W0.9 LANDADOS (S313, 2026-08-18, commit `874117c`)
 
 Cerimônia GPG (`W28-approved.md` + `.asc`, anchor `aa6462b`): 15 targets

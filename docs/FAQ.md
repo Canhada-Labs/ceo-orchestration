@@ -82,7 +82,7 @@ Install with the advisory mode:
 ./scripts/install.sh /path/to/your-app --ceremony user
 ```
 
-`--ceremony user` runs **advisory hooks only** — no signing ceremonies, and the installer writes only under `.claude/`. You get the audit trail and the spawn/plan structure to feel out, without the GPG friction on protected paths. Switch to the default `--ceremony maintainer` when you want the full gate. See the [README](../README.md) Quick start and [`docs/QUICKSTART.md`](QUICKSTART.md).
+`--ceremony user` runs **no signing ceremonies**, and the installer writes only under `.claude/`; most hooks are advisory, and the few that can block a change (for example `check_config_change.py`, on a settings edit that removes a protection) are listed with their kill-switch under `blocking_inclusions` in `templates/settings/settings.user.json`. You get the audit trail and the spawn/plan structure to feel out, without the GPG friction on protected paths. Switch to the default `--ceremony maintainer` when you want the full gate. See the [README](../README.md) Quick start and [`docs/QUICKSTART.md`](QUICKSTART.md).
 
 ---
 

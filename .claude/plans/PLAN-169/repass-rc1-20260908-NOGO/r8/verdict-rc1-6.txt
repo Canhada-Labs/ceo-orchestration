@@ -1,0 +1,19 @@
+Foram encontrados dois P1 não cobertos pelo envelope. As condições 20–24, 27, 29, 30, 39–41, 53 e 54 descrevem corretamente os respectivos ramos, mas não tornam a cadeia HMAC concorrente.
+
+P1 — fix before rc.1  
+FILE:LINE: `.claude/hooks/audit_log.py:307-316,1258-1278,1310-1316`; `.claude/hooks/_lib/audit_hmac.py:250-252`
+
+Concrete failure scenario: o diff move `audit_log.py` para a cadeia por projeto e afirma “one log, one lock”, mas `append_entry()` lê `audit-log.last-hmac` e calcula o novo HMAC antes de adquirir esse lock. Dois `agent_spawn` concorrentes no mesmo repositório podem ler o mesmo predecessor; o lock apenas serializa os appends. A segunda linha fica encadeada ao predecessor antigo, e `verify_chain()` acusa tamper apesar de nenhuma adulteração ter ocorrido. Isso acontece na configuração default, depois do upgrade, sem `CEO_AUDIT_LOG_PATH` e sem mistura de gerações; portanto as condições 22 e 29 não o cobrem. O teste concorrente em `.claude/hooks/tests/test_audit_log.py:245-276` verifica apenas quantidade e JSON válido, enquanto `.claude/hooks/tests/test_two_writer_chain.py:3-11` anuncia um sexto teste concorrente que não existe.
+
+Minimal fix: adquirir `paths["lock"]` antes de rotação, leitura do predecessor e cálculo do HMAC, mantendo rotação → leitura → cálculo → append → `write_last_hmac()` na mesma seção crítica. Adicionar teste multiprocesso com barreira antes da leitura e exigir `verify_chain().status == intact`, não apenas linhas JSON distintas. Até a cura, o envelope teria de proibir sessões concorrentes no mesmo repositório; como isso é P1 ausente, a versão atual do envelope é insuficiente.
+
+P1 — fix before rc.1  
+FILE:LINE: `.claude/hooks/_lib/audit_hmac.py:250-252,406-429,447-464`
+
+Concrete failure scenario: o novo resolver faz cada adopter começar num diretório por projeto sem `audit-key`, mas a criação descrita como “atomic” e “race-safe” contém um TOCTOU. Dois processos escrevem temporários distintos, ambos podem observar `p.exists() == False` e ambos executar `os.replace()` sobre o nome final. Um processo pode armazenar a chave A no cache enquanto o arquivo persistido termina com a chave B; qualquer linha assinada com A torna-se permanentemente não verificável. A mudança de diretório reabre essa primeira criação para cada repositório v1.3 atualizado. A condição 21 trata apenas a eleição do salt e não declara esta eleição independente da chave HMAC.
+
+Minimal fix: publicar uma chave completamente escrita com operação atômica sem substituição — por exemplo, tempfile `0600` + `fsync` + `link()` exclusivo para o nome final — e fazer perdedores relerem a chave vencedora. Adicionar uma barreira multiprocesso que force ambos os processos além do segundo teste de existência e confirme uma única chave em cache/disco e uma cadeia verificável.
+
+Os gates estáticos do payload passaram: stdlib-only, parsing Python 3.9, higiene de ambiente, contaminação, freshness de `AGENTS.md` e `diff --check`. O sandbox read-only não permitiu executar a reprodução multiprocesso em diretório temporário; os dois interleavings acima decorrem diretamente das seções críticas mostradas.
+
+VERDICT: NO-GO — O envelope omite duas falhas P1 de concorrência que podem quebrar a nova cadeia HMAC por projeto sem adulteração.

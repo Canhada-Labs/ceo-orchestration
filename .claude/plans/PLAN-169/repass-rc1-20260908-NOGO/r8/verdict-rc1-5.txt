@@ -1,0 +1,35 @@
+The listed payload-5 conditions are honest, but the draft envelope is not sufficient.
+
+1. **P1 — `.claude/hooks/check_compact_pinning.py:1`; `scripts/upgrade.sh:1429,1463-1470,3762`; `scripts/upgrade.sh:5195-5198`**
+
+   Concrete failure: this filename did not exist in v1.3.0. If an adopter created its own `.claude/hooks/check_compact_pinning.py`, the v1.3 manifest has no baseline row for it. Upgrade classifies it as `FALLBACK`, bypasses the default `--on-conflict=refuse`, backs it up, overwrites it, and rewrites the manifest with the framework hash. The framework thereby takes operational ownership of an adopter-authored file. Conditions 42, 47, and 48 do not cover this ordinary-file collision.
+
+   Minimal fix: treat “source newly introduced + destination pre-existing + no prior manifest record” as `CONFLICT`, preserving it under the default policy. For rc.1, a signed condition could instead require this exact path to be absent before upgrade.
+
+2. **P1 — `.claude/hooks/SessionEnd.py:820-829,983-995`; `SPEC/v1/audit-log.schema.md:505`; `.claude/hooks/tests/test_session_end_memory_delta.py:1707-1717`**
+
+   Concrete failure: audit timestamps have whole-second resolution, so the implementation advances the lower bound by one second. A memory file created or modified during the first second of the session is excluded; if nothing is written later, the hook returns `outcome="absent"`. The test itself waits for the next whole-second boundary rather than testing this gap. This contradicts the SPEC’s explicit `st_mtime >= session_start` claim and is a false `ABSENT` not covered by condition 20.
+
+   Minimal fix: preserve a subsecond anchor, or treat any file/directory activity in the ambiguous first second as `start_unknown`/`error`, never `absent`; add a positive test at `start_ts + 0.5s`. If deferred, add a hard signed condition that `ABSENT` is unknown for this interval.
+
+3. **P1 — `CHANGELOG.md:217-219`; `.claude/hooks/SessionEnd.py:20-24,780-786`; `SPEC/v1/audit-log.schema.md:505`**
+
+   Concrete failure: the release note and module header say the rail determines whether the session “wrote memory” or “DID it?”. The implementation and SPEC correctly admit the opposite: the directory is shared, stat has no authorship, and a concurrent session’s write causes this session to report `written`. Thus an adopter can incorrectly conclude that session A persisted memory when only session B did. No declared condition narrows this claim.
+
+   Minimal fix: replace the authorship language with “observes memory-directory activity during the session’s time window; concurrent sessions are not distinguishable.”
+
+4. **P1 — `.claude/hooks/check_precompact_continuity.py:596-610`; `.claude/hooks/_lib/state_store.py:214-235`; `.claude/hooks/_lib/scratchpad_lib.py:592-594,622-637,696-700`**
+
+   Concrete failure: v1.4 introduces `$STATE_ROOT/scratchpad-session`, but creation and `sqlite3.connect()` follow directory and leaf symlinks. Its GC likewise accepts a symlinked store directory, scans the external directory, and unlinks old files named `session-<id>.sqlite{-wal,-shm}`. A path unused by v1.3 can therefore already be an adopter symlink or namespace; the first unresolved-plan PreCompact writes through it, and GC can delete matching external files. Condition 28 covers `<repo>/.claude/state`, not this native `$HOME`/`CEO_STATE_ROOT` store.
+
+   Minimal fix: validate the complete store path under the resolved state root, reject symlink/hard-linked leaves, and perform creation, SQLite opening, scanning, and unlinking through verified directory descriptors. For rc.1, require `scratchpad-session` to be absent or a real framework-owned directory containing no foreign matching files.
+
+5. **P2 — `SPEC/v1/scratchpad.schema.md:8-29`; `.claude/hooks/_lib/scratchpad_lib.py:125-134,392-429`**
+
+   Concrete failure: the normative scratchpad SPEC still defines only the plan-scoped `scratchpad/<PLAN>.sqlite` store. Backup, migration, or retention tooling derived from that contract omits the newly dominant `scratchpad-session/session-<id>.sqlite` state, so a recorded `written_session_scope` snapshot can disappear across such operations.
+
+   Minimal fix: version the SPEC to document the session store, scope grammar, TTL, GC behavior, and permanent lock-file residual.
+
+Static verification passed the stdlib-only, Python 3.9 AST, AGENTS freshness, count-claim, and diff-whitespace checks. Targeted dynamic suites could not run because the reviewer sandbox provides no writable temporary directory.
+
+VERDICT: NO-GO — The declared payload-5 conditions are accurate, but they omit four P1 conditions required for an honest and sufficiently constrained rc.1 envelope.

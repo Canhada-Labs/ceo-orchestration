@@ -1,0 +1,13 @@
+Advisory evidence only. No P0 found; two P1 issues prevent this envelope from honestly describing rc.1.
+
+- **P1 — `templates/settings/settings.user.json:9,17-19,569-578`; `README.md:144`; `docs/FAQ.md:85`; `scripts/install.sh:11`.**  
+  Concrete failure: upgrading a v1.3.0 `--ceremony user` installation additively registers the new, default-enabled `check_config_change.py`. On a forbidden settings change it returns `{"decision":"block"}` (`.claude/hooks/check_config_change.py:244-249,280-297`). This contradicts the shipped “advisory hooks only” promise. Following condition 55 with `--no-settings-migrate` does not prevent it—the condition explicitly leaves the additive hook merge enabled. The CHANGELOG acknowledges blocking inclusions, but the signed conditions do not.  
+  Minimal fix: either make the user registration non-blocking, or replace every “advisory hooks only” claim with the narrower no-GPG contract and add a hard envelope condition enumerating the blocking inclusions, defaults, and escape routes.
+
+- **P1 — `.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:196-204`; `scripts/uninstall.sh:233-289,291-295`.**  
+  Concrete failure: condition 50 says restore moves the live `.claude/` “before any check.” The diff now verifies an optional HMAC, lists the archive, requires a `.claude` member, and completes dry-run before that move. For example, `--dry-run --restore README.md` exits 4 during `tar tzf` and never moves `.claude`. The predictable, unconfined aside defect remains for a valid non-dry-run archive, but the proposed signed description is false.  
+  Minimal fix: state that the move occurs after existence/HMAC/archive-name validation and the dry-run boundary, but before extraction, then repin the envelope provenance.
+
+Static checks passed: `bash -n`, ShellCheck, actionlint, JSON parsing, generated-user-template parity, `git diff --check`, stdlib-only, contamination, and AGENTS freshness. Dynamic suites could not run because the reviewer sandbox exposes no writable temporary directory.
+
+VERDICT: NO-GO — The envelope contains a false hard condition and omits a newly introduced blocking behavior in the advertised user profile.

@@ -136,13 +136,70 @@ know its ceremony), run the upgrade with `--no-settings-migrate`. The
 additive settings merge still runs; only the baseline-aware leaf migration
 is skipped — without the flag it adds `availableModels`, `fallbackModel`
 and `permissions.defaultMode: manual` to a profile that excludes them by
-design (signed condition of rc.1).
+design (signed condition of rc.1). The additive hook merge still runs with
+that flag and registers `check_config_change.py`, which can BLOCK a settings
+edit that removes a protection (kill-switch `CEO_CONFIG_CHANGE_GUARD=0`);
+to keep the v1.3.0 advisory behaviour exactly, add `--no-settings-merge`
+too. The other hooks that can block are listed with their kill-switch
+under `blocking_inclusions` in `templates/settings/settings.user.json`
+(signed condition of rc.1).
 
 (7) The two `find` checks of (4) apply before a fresh `install.sh` as well:
 its deny-baseline merge writes `.claude/settings.json.deny-baseline.<pid>`
 outside the destination preflight, so make sure no
 `.claude/settings.json.deny-baseline.*` exists and nothing else creates
 entries under `.claude/` while the install runs (signed condition of rc.1).
+
+(8) This must print nothing before upgrading (signed condition of rc.1):
+
+```bash
+git ls-files -- .claude/settings.local.json .claude/state state/mcp_client_secrets
+```
+
+If it prints a path, `git rm --cached` it and commit first: the upgrader's
+ignore helpers refuse a TRACKED sensitive path, but they run after hooks,
+scripts, skills and settings were already rewritten, so the refusal leaves a
+partially upgraded tree with no manifest, no install-state and no banner.
+
+(9) Run the upgrade with `docs/`, `.github/` and `.claude/` writable by the
+user running it and with free disk space, and read the delivery summary: a
+failure of the writer or renderer after a route was selected (a read-only
+`docs/`, a failed tempfile or rename, a failed CODEOWNERS render) is reported
+PRESERVED with exit 0 — a PRESERVED route you never edited is a delivery
+that failed (signed condition of rc.1).
+
+(10) A file of YOURS sitting at a path that v1.4.0 introduces is OVERWRITTEN
+and becomes framework-owned: the per-file update only treats a framework
+file as "new" when the destination is absent; a pre-existing file with no
+row in the v1.3.0 manifest is classified FALLBACK, which bypasses
+`--on-conflict=refuse`, backs the file up, replaces it, and the manifest
+rewrite at the end records the FRAMEWORK hash (signed condition of rc.1).
+Before upgrading, list the paths new since v1.3.0 from the framework
+checkout and move or rename any file of yours that coincides:
+
+```bash
+git diff --name-status --diff-filter=A v1.3.0 v1.4.0-rc.1 -- .claude/hooks .claude/scripts .claude/commands .claude/agents .claude/skills
+```
+
+(11) The per-project state directory of v1.4.0 starts without an HMAC key,
+and the first `get_or_create_key()` is not exclusive: two hook processes can
+both publish a key, and one of them keeps signing with a key that is no
+longer on disk (signed condition of rc.1). After the upgrade and BEFORE the
+first session, create the key with a single writer, and do not open two
+sessions (or run the hook test-suite next to a session) on the repository
+until the file exists:
+
+```bash
+d=$(python3 .claude/hooks/_lib/runtime_paths.py --state-dir); mkdir -p -m 700 "$d"; [ -e "$d/audit-key" ] || ( umask 077; head -c 32 /dev/urandom > "$d/audit-key" )
+```
+
+The append path has the mirror-image race: the previous HMAC is read before
+the log lock is taken, so two parallel writers (two sessions, or two parallel
+agent spawns of one session) can chain to the same predecessor, and
+`verify_chain()` then reports a break nobody caused. The chain is proof of
+integrity only for stretches written by one writer at a time; detection of a
+break still holds, the absence of false breaks under concurrent writers does
+not (signed condition of rc.1).
 
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`
 [1.4.0], «audit log resolves per PROJECT»).

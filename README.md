@@ -141,7 +141,9 @@ By default the installer copies the core and frontend skill profiles and the gov
 Two install modes:
 
 - `--ceremony maintainer` (default): full governance, including signed-edit ceremonies on protected paths.
-- `--ceremony user`: advisory hooks only, no signing — writes only under `.claude/`. Good for a low-friction trial.
+- `--ceremony user`: no signing ceremonies — writes only under `.claude/`. Most hooks are advisory; the
+  few that can block a change are named, with their kill-switch, under `blocking_inclusions` in
+  `templates/settings/settings.user.json`. Good for a low-friction trial.
 
 ### Harness: Claude Code (default), Codex CLI, or Grok Build
 

@@ -1,14 +1,19 @@
 """PLAN-085 Wave B.3 — audit_log.append_entry HMAC chain coverage.
 
-6 cases asserting that the inline HMAC computation closes the
-two-writer chain gap (T0-line-168 transition_violation):
+6 cases on the inline HMAC computation of append_entry (the SEQUENTIAL
+two-writer chain gap, T0-line-168 transition_violation):
 
   1. test_append_entry_writes_hmac_field
   2. test_consecutive_entries_chain_correctly
   3. test_disabled_hmac_yields_null_field
-  4. test_rotation_resets_chain
-  5. test_agent_spawn_action_carries_hmac
-  6. test_concurrent_writers_produce_distinct_hmacs
+  4. test_agent_spawn_action_carries_hmac
+  5. test_append_entry_preserves_f0106_symlink_defense
+  6. test_hmac_error_recorded_on_subsystem_failure
+
+There is NO concurrent-writer case here (signed condition 67 of
+v1.4.0-rc.1): append_entry reads the previous HMAC before taking the log
+lock, so two parallel writers can chain to the same predecessor; the
+multiprocess barrier test that pins the fix belongs to the rc.2 cure.
 """
 
 from __future__ import annotations

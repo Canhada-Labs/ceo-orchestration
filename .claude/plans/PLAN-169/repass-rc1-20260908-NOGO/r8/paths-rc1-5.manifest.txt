@@ -1,0 +1,6 @@
+.claude/hooks/SessionEnd.py
+.claude/hooks/SessionStart.py
+.claude/hooks/audit_log.py
+.claude/hooks/check_compact_pinning.py
+.claude/hooks/check_postcompact_reinject.py
+.claude/hooks/check_precompact_continuity.py

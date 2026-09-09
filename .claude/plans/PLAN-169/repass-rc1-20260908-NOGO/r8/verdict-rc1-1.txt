@@ -1,0 +1,17 @@
+Resultado advisory: REJECT. Encontrei dois P1 de integração ausentes do envelope.
+
+P1 — FILE:LINE: `scripts/upgrade.sh:1021`, `scripts/upgrade.sh:4094-4117`, `scripts/upgrade.sh:5629`; `scripts/_framework_manifest_set.sh:1892-1900`
+
+Concrete failure scenario: o hunk PLAN-177 só chama `_apply_mcp_secrets_ignore`, `_apply_posture_state_ignores` e `_apply_claude_dir_gitignore` depois de o upgrader já atualizar hooks, scripts, skills, schemas, settings e outros arquivos. Um adopter v1.3.0 pode ter `.claude/settings.local.json` versionado — inclusive com `git status --porcelain` vazio. O helper detecta o arquivo rastreado, retorna 1 e, por causa de `set -e`, encerra o processo imediatamente. A árvore fica parcialmente atualizada; a entrega de `docs/`/`.github/`, o novo manifesto, `_write_upgrade_state` e o banner final não acontecem. O install-state anterior pode continuar indicando sucesso. O teste em `scripts/tests/test_install_state_replay.sh:545-570` verifica o rc não zero, mas não verifica que a rejeição ocorreu antes das mutações. Nenhuma condição atual cobre arquivos sensíveis já rastreados; as condições 43/47 tratam links e confinamento, não o índice Git.
+
+Minimal fix: executar um preflight somente leitura para todos os caminhos sensíveis imediatamente após resolver o alvo e antes de `mkdir -p "$BAK_DIR"` ou qualquer outra escrita. Acrescentar um e2e v1.3.0→rc.1 que compare a árvore antes/depois da recusa. Como mitigação de envelope, exigir saída vazia de `git ls-files -- .claude/settings.local.json .claude/state state/mcp_client_secrets`, mas a correção de código deve entrar antes do GA.
+
+P1 — FILE:LINE: `scripts/upgrade.sh:4766-4769`, `scripts/upgrade.sh:4834-4837`, `scripts/upgrade.sh:5076-5082`, `scripts/upgrade.sh:5525`, `scripts/upgrade.sh:5635-5683`; `CHANGELOG.md:58-60`
+
+Concrete failure scenario: falhas reais de staging ou renderização da nova entrega não chamam `_up_route_unrenderable`. Se, por exemplo, `docs/` já existir sem permissão de escrita, `mkdir -p` passa, o `mktemp` de `_up_tpl_write` falha, e a rota vira apenas `PRESERVED`. O mesmo ocorre quando o refresh não consegue fazer o write atômico ou quando o tempfile/`sed` de CODEOWNERS falha. A conservation law continua balanceada, `upgrade_succeeded` é persistido como `true`, o banner diz `Upgrade complete` e o processo sai 0. Isso contradiz a claim de `CHANGELOG.md:58-60` de que uma entrega falha sai 3 e persiste `upgrade_succeeded:false`. As condições 34 e 45 cobrem fontes recusadas/ausentes, mas não falha do writer ou renderer.
+
+Minimal fix: toda falha depois de uma rota ter sido selecionada para `INSTALLED` ou `REFRESHED` deve marcar a entrega como incompleta, com reason token específico, estado `upgrade_succeeded:false`, banner `INCOMPLETE` e rc 3. Adicionar controles positivos para falha do tempfile de destino, `mv` e renderização de CODEOWNERS.
+
+As condições 42, 43, 45, 47 e 55 descrevem honestamente os respectivos caminhos observados, mas não são suficientes enquanto esses dois P1 estiverem ausentes. `bash -n`, ShellCheck, `git diff --check` e os gates de AGENTS/contaminação/contagens passaram; os harnesses dinâmicos não puderam criar seus diretórios temporários no sandbox read-only, portanto não os alego como verdes.
+
+VERDICT: NO-GO — O envelope atual omite dois P1 que permitem, respectivamente, um upgrade parcial sem estado final e uma entrega incompleta registrada como sucesso.

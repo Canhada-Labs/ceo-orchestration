@@ -54,10 +54,22 @@ and the two CI workflow templates forever, with no warning.
   Backups go to `.claude.bak/<timestamp>` without the destination
   confinement the deliveries get: keep that path absent or empty, never
   a symlink (signed condition of rc.1). Delivery is registered
-  only after it actually happened, or
-  when a prior registration's digest still matches. A failed delivery
-  exits 3 and persists `upgrade_succeeded: false` in the install-state
-  rather than recording a full upgrade that did not happen (`6304f66`).
+  only after it actually happened, when a prior registration's digest
+  still matches, or — the third route — when a pre-existing file's bytes
+  equal the current or a historical generation of the source (naked byte
+  equality; signed conditions 5 and 42). A delivery that
+  fails its PRECONDITION (route table, source, transform) exits 3 and
+  persists `upgrade_succeeded: false` in the install-state rather than
+  recording a full upgrade that did not happen (`6304f66`); a failure of
+  the WRITER or the RENDERER after a route was selected (a read-only
+  `docs/`, a failed tempfile or rename, a failed CODEOWNERS render) is
+  still reported PRESERVED with exit 0 — signed condition of rc.1: read
+  the delivery summary, a PRESERVED route you never edited is a failed
+  delivery. A sensitive path already TRACKED by git
+  (`.claude/settings.local.json`, `.claude/state`,
+  `state/mcp_client_secrets`) aborts the upgrade AFTER hooks, scripts and
+  settings were rewritten (signed condition of rc.1: `git ls-files` over
+  those paths must print nothing before upgrading).
   A route whose SOURCE file is missing (or not a regular file) in the
   executing checkout is counted SKIPPED, not failed — the run still exits
   0 (signed condition of rc.1: upgrade from a complete checkout and read
@@ -111,17 +123,23 @@ and the two CI workflow templates forever, with no warning.
   bytes, permanently.** The handle grammar is now shared by producer and
   consumer, the file is rendered through a pipe and written atomically,
   and a truncated CODEOWNERS is recovered from delivery EVIDENCE
-  (`cc00235`).
+  (`cc00235`) — evidence meaning a manifest line that NAMES the path;
+  the line's digest grammar is not validated, so keep the manifest
+  intact and delete (do not empty) a CODEOWNERS you switched off before
+  re-running the installer (signed condition of rc.1).
 - **`uninstall.sh` followed a crafted manifest out of the target.** The
   install manifest is a plain file in your repo and is NOT
   integrity-checked before the removal walk; pre-cure, a record naming
   `../outside/victim.txt` was REMOVED, and with a symlinked `docs`
   component the walk deleted an outside file and the backup archived
-  bytes read through the link. Every removal, backup entry and restore
-  member is now tested lexically (absolute paths, `..` segments, control
-  characters, whitespace and glob metacharacters, option-like `-`
-  leaders) and physically (a symlinked ancestor under the target)
-  (`6160578`).
+  bytes read through the link. Every removal, every backup entry and
+  every restore member OUTSIDE `.claude/` is now tested lexically
+  (absolute paths, `..` segments, control characters, whitespace and glob
+  metacharacters, option-like `-` leaders) and physically (a symlinked
+  ancestor under the target) (`6160578`); the `.claude` subtree of a
+  restore archive is still extracted whole after a name-only check
+  (signed condition 57 of rc.1: restore only unmodified archives this
+  uninstaller produced).
 - **`doctor.sh` stopped discarding unsafe manifest records in silence** —
   traversal, absolute path, any control byte, symlinked ancestor,
   malformed digest and duplicate relpath are each a NAMED discard, capped
@@ -144,9 +162,16 @@ directory shared by every project (`9de4efc`, `965fb13`, `3d16070`).
   `project` attribution for the emitters that carry the field (a handful
   of newly specified actions still omit `project` or `session_id` and
   cannot be attributed in a shared `CEO_AUDIT_LOG_PATH` — rc.1 condition
-  23), a `verify_chain()` that means something per project, and a
-  per-project HMAC key and salt — so `prompt_sha256` stops correlating
-  across your repositories.
+  23), a `verify_chain()` that means something per project — for stretches
+  written by one writer at a time: the previous HMAC is still read before
+  the log lock is taken, so two parallel writers can chain to the same
+  predecessor and a break is then reported that nobody caused (signed
+  condition 67 of rc.1; same order as v1.3.0) — and a per-project HMAC key
+  and salt — so `prompt_sha256` stops correlating across your
+  repositories. The per-project key is minted on first use and that first
+  mint is not exclusive: create it with a single writer before the first
+  session (signed condition 68 of rc.1; `docs/UPGRADE-PROCEDURE.md`,
+  check 11).
 - **The old location is not migrated for you.** The pre-v1.4.0 chain
   under `$HOME/.claude/projects/ceo-orchestration/` stays where it is;
   `SPEC/v1/audit-log.schema.md` records the change as v2.58 and names the
@@ -214,9 +239,14 @@ call today**:
   the committed PATHS. No branch in the module returns a decision —
   there is no deny arm to disarm. Kill switches:
   `CEO_LEDGER_CHECKPOINT=0`, `CEO_SOTA_DISABLE=1` (`b07be9b`, `bc82651`).
-- **`session_memory_delta_observed`** at `SessionEnd` records whether a
-  session that did work also wrote memory (stat-only: no memory content
-  is read or logged).
+- **`session_memory_delta_observed`** at `SessionEnd` records whether the
+  project's memory directory saw activity inside this session's time window
+  (stat-only: no memory content is read or logged). The directory is shared
+  by every session of the project and a stat carries no author, so a
+  concurrent session's write counts too: `written` is window activity, never
+  proof that THIS session wrote memory. The window opens at the whole second
+  after the recorded session start, so a write inside that first second is
+  not counted (signed condition 20 of rc.1).
 - **Audit-log SPEC v2.55 → v2.60**, additive as always
   (`SPEC/v1/audit-log.schema.md`); the known-action set is 331 entries.
 - **The honest part.** ADR-153's original continuity design shipped in an
@@ -252,7 +282,8 @@ call today**:
 ### Added — `claude-fable-5-1` in the model allowlist (`ab56e76`)
 
 - `claude-fable-5-1` joins `availableModels` in `.claude/settings.json`
-  and in the shipped settings templates. Adopting a new model is
+  and in the maintainer/base settings template (the advisory `user`
+  profile deliberately carries no `availableModels`). Adopting a new model is
   deliberately never automatic: the VETO floor, the pins and the agent
   definitions stay Owner-signed by design (ADR-149 remains the single
   source for the model catalog).
