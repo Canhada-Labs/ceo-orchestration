@@ -331,7 +331,10 @@ be unset, or an existing, writable directory physically OUTSIDE the target
 the upgrader silently loses its baseline (a customized `.claude/team.md`
 is overwritten even under `--on-conflict=refuse`) and then aborts with
 rc 1 in the middle of its mutations, leaving no new manifest, no
-install-state and no banner; `--dry-run` passes before that failure.
+install-state and no banner. `--dry-run` returns before that failure but
+SHOWS the symptom: `would BACKUP + UPDATE` for a customized file where a
+healthy run shows `CONFLICT` — stop there; `mktemp -d "${TMPDIR:-/tmp}/ceo.XXXXXX"`
+from the same shell is the test, `env -u TMPDIR` the fix.
 Two hook-side variables belong to the same check: launch Claude Code with
 `CLAUDE_SESSION_ID` ABSENT from the environment (`env -u CLAUDE_SESSION_ID`;
 never export it in a shell profile) — with no session id in a hook payload
@@ -342,11 +345,14 @@ isolation layer does not neutralize it, and an exported value lets the
 compaction tests write real state outside the isolated tree (signed
 condition 79). Before `scripts/install.sh` and `scripts/upgrade.sh`, no
 `FMS_*` variable may be exported in your shell (`env | grep -c '^FMS_'` must
-print 0): the manifest generator reads them as inputs and neither
-entrypoint clears the ones it does not set — an inherited
-`FMS_HASH_ROOT_PATHS` makes the manifest record the TARGET's hash for a
-customized hook, which the next upgrade then overwrites as
-FRAMEWORK-CHANGED even under `--on-conflict=refuse` (signed condition 81).
+print 0): the manifest generator reads them as inputs and the entrypoints
+initialize only the ones they set — `FMS_HASH_ROOT_PATHS` is never
+initialized by either, and `install.sh` never initializes `FMS_HASH_ROOT`.
+An inherited `FMS_HASH_ROOT_PATHS` makes the upgrade manifest record the
+TARGET's hash for a customized hook, which the next upgrade then overwrites
+as FRAMEWORK-CHANGED even under `--on-conflict=refuse`; an inherited
+`FMS_HASH_ROOT` makes a clean install record source hashes for rendered
+files (doctor then reports every one as DRIFT) (signed condition 81).
 If you export `CEO_AUDIT_LOG_DIR`, make it ABSOLUTE: a
 relative value is cached relative and, after a `chdir`, the invalidation
 flush writes the previous directory's journal under the NEW cwd (signed

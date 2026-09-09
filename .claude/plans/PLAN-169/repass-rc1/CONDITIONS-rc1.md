@@ -1114,12 +1114,17 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     (~3741, `backup_and_replace`) é sobrescrito pelo caminho legado apesar de `--on-conflict=refuse`;
     a seguir o `mktemp` dos survivors (~1621) não tem guarda e, sob `set -e`, encerra o upgrade com
     rc 1 no meio das mutações — backups parciais, sem manifesto novo, sem `_write_upgrade_state`,
-    sem banner; o install-state anterior pode continuar a afirmar sucesso. O `--dry-run` não chega a
-    esse `mktemp` (passa antes da falha real) e o `--help` reserva o rc 1 a erro de uso. A condição
-    25 cobre só o inverso (`TARGET=/tmp`). Condição DURA: antes de `upgrade.sh` (e de `install.sh`),
-    `TMPDIR` tem de estar UNSET ou apontar para um diretório existente, gravável e fisicamente fora
-    do alvo — `mktemp -d` nessa mesma shell tem de suceder; `docs/UPGRADE-PROCEDURE.md` diz isto
-    (checagem 13). Cura antes do GA (canônico): resolver e provar UM diretório scratch utilizável e
+    sem banner; o install-state anterior continua a afirmar o sucesso antigo (`_write_upgrade_state`
+    só é chamado no fim, ~5629). Medido: sem baseline, `--on-conflict` (lido só em ~1449-1461 e
+    ~1576-1584) fica fora do circuito e o caminho legado (~1594-1602) imprime `UPDATED`; `TMPDIR`
+    existente mas sem escrita falha igual. O `--dry-run` retorna em ~1519 sem chegar ao `mktemp`
+    de ~1621, mas DENUNCIA a perda: `would BACKUP + UPDATE` no arquivo customizado onde uma
+    execução sã mostra `CONFLICT`. O `--help` reserva o rc 1 a erro de uso. A condição 25 cobre só
+    o inverso (`TARGET=/tmp`). Condição DURA: antes de `upgrade.sh` (e de `install.sh`), `TMPDIR`
+    tem de estar UNSET ou apontar para um diretório existente, gravável e fisicamente fora do alvo
+    — `mktemp -d "${TMPDIR:-/tmp}/ceo.XXXXXX"` nessa shell tem de suceder (senão `env -u TMPDIR`)
+    — e o `--dry-run` prévio tem de mostrar `PRESERVE`/`CONFLICT`, nunca `would BACKUP + UPDATE`,
+    nos seus arquivos customizados; `docs/UPGRADE-PROCEDURE.md` diz isto (checagem 13). Cura antes do GA (canônico): resolver e provar UM diretório scratch utilizável e
     externo ao alvo antes de `mkdir -p "$BAK_DIR"` ou de qualquer mutação, recusar nomeado se não
     houver, nunca converter a falha de sanitização de um manifesto PRESENTE em «sem baseline», e
     tratar explicitamente o `mktemp` dos survivors; e2e com manifesto válido, roster customizado e
@@ -1176,17 +1181,22 @@ cópia. «Cura antes do GA» = entra na rc.2 por cerimônia assinada, com contro
     Texto e instrumento, canônico (workflow entregue): cura na rc.2 — invocar o verificador real ou
     renomear o step como «JSON readability only» (rodada 11, parte 7, P2).
 81. **Os entrypoints herdam as variáveis `FMS_*` do ambiente sem as inicializar** (rodada 11, parte
-    2, P1; canônicos): `upgrade.sh` exporta `FMS_ROOT`, `FMS_HASH_ROOT`, `FMS_PROFILE_PARTS`,
-    `FMS_MODE` e, condicionalmente, `FMS_LINK_PATHS` (~5195-5231), mas NÃO limpa
-    `FMS_HASH_ROOT_PATHS`, `FMS_DELIVERED_*`, `FMS_HASH_SOURCE_*` nem `FMS_PRIOR_MANIFEST`, que a
-    biblioteca lê como knobs (`_framework_manifest_set.sh` ~65, ~136-217, ~326-331, ~378-390,
-    ~453); `install.sh` (~3073-3075) não limpa `FMS_HASH_ROOT` nem `FMS_HASH_ROOT_PATHS`. Com
-    `FMS_HASH_ROOT_PATHS=SPEC/v1` herdado, o `FMS_HASH_ROOT` do upgrade passa a valer só para esse
-    caminho e o manifesto pós-upgrade grava, para um hook CUSTOMIZADO e preservado, o hash do
-    ALVO; no upgrade seguinte `H_dst == H_base` e `H_src != H_base` classificam-no
-    `FRAMEWORK-CHANGED` (~1291-1292) e `_apply_single_file` o sobrescreve (~1442) mesmo com
-    `--on-conflict=refuse` — e o validador da condição 14 aceita esse manifesto, porque a
-    gramática é válida. Condição DURA: antes de `install.sh` e de `upgrade.sh`, NENHUMA variável
+    2, P1; canônicos): a biblioteca lê 19 knobs `FMS_*` do ambiente (`_framework_manifest_set.sh`
+    ~65-453; `FMS_HASH_ROOT_PATHS` em `_wbm_hash_root_applies` ~325-342, onde VAZIA significa
+    «todos os caminhos»). `upgrade.sh` exporta os seus (`FMS_ROOT`, `FMS_HASH_ROOT`,
+    `FMS_PROFILE_PARTS`, `FMS_MODE`, `FMS_PROTOCOL_HASH`, `FMS_SOURCE_ROOT`, `FMS_PRIOR_MANIFEST`,
+    `FMS_HASH_SOURCE_*`, `FMS_DELIVERED_*` — ~5195-5255, ~5338, ~5362-5364) mas NUNCA inicializa
+    `FMS_HASH_ROOT_PATHS` (e `FMS_LINK_PATHS`/`FMS_HASH_SOURCE_CODEOWNERS` só nos ramos que os
+    exportam); `install.sh` (~3073-3313) nunca inicializa `FMS_HASH_ROOT` (só o desfaz no fim,
+    ~3317) nem `FMS_HASH_ROOT_PATHS`. Herdada, `FMS_HASH_ROOT_PATHS` restringe o hash-de-fonte aos
+    caminhos listados e o escritor cai em `_wbm_hash_path="$_wbm_abs"` (~1392-1393): o hash do
+    ALVO para um hook CUSTOMIZADO e preservado. Medido: com `FMS_HASH_ROOT_PATHS=SPEC/v1` no
+    primeiro upgrade e nenhuma variável no segundo, `H_dst == H_base` e `H_src != H_base`
+    classificam-no `FRAMEWORK-CHANGED` (~1291-1292) e `_apply_single_file` o sobrescreve
+    (~1442-1443) apesar de `--on-conflict=refuse` (controle preservou); o validador da condição
+    14 aceita esse manifesto (gramática válida). Gêmeo no installer: um install limpo com
+    `FMS_HASH_ROOT` herdado gravou para `.claude/team.md` o hash da FONTE não renderizada —
+    `doctor.sh` reporta 39 DRIFT, rc 1 (controle 0/0). Condição DURA: antes de `install.sh` e de `upgrade.sh`, NENHUMA variável
     `FMS_*` pode estar exportada — `env | grep -c '^FMS_'` tem de imprimir 0 (ou lance com
     `env -u FMS_HASH_ROOT -u FMS_HASH_ROOT_PATHS ...` para cada nome que aparecer);
     `docs/UPGRADE-PROCEDURE.md` diz isto (checagem 13). Cura antes do GA (canônico): inicializar
