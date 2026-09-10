@@ -59,9 +59,12 @@ CODEX_PKG="@openai/codex@0.147.0"
 # 5 (o ensaio do kit pegou a parte 4 a 200142 B). 240000 cobre o maior
 # (~215 KB) com folga de ~10 %; re-particionar mudaria manifestos e escopo de
 # tres partes as vesperas do corte. Rodada 6 MEDIDA: partes 4/5 a 207/216 KB
-# com CONDITIONS de 35 KB; a v15 tem ~46 KB, logo ~218/227 KB — 260000 mantem
-# a folga de ~12 %.
-MAX_RAW_BYTES=260000
+# com CONDITIONS de 35 KB; a v15 tem ~46 KB, logo ~218/227 KB. Rodada 15 (v63,
+# CONDITIONS ~108 KB): a parte 1 passa de 260000. O teto REAL e o do redator:
+# codex_egress_redact._MAX_REDACT_INPUT_BYTES = 262144 sobre o INPUT (trunca ANTES
+# de redigir), logo um raw < 262000 nunca e truncado, seja qual for a expansao
+# das redacoes. 262000 e o limite; medir sempre (payload = header + CONDITIONS + diff).
+MAX_RAW_BYTES=262000
 
 die() { printf 'FATAL: %s\n' "$*" >&2; exit 1; }
 
@@ -428,7 +431,10 @@ for P in $PARTS; do
   _ps="$(tr '\n' ' ' < "$MAN")" || die "pathspec parte $P"
   [ -n "$_ps" ] || die "pathspec vazio na parte $P"
   # shellcheck disable=SC2086
-  git diff "$BASE_TAG_COMMIT".."$CANDIDATE_SHA" -- $_ps > "$DIFF" \
+  # -U2 (rodada 15): a parte 1 (upgrade.sh, ~149 KB a -U3) nao cabia mais com o
+  # envelope de ~109 KB; o revisor le o worktree inteiro, o contexto do hunk nao
+  # decide nada. O orcamento e medido: header + CONDITIONS + este diff < MAX_RAW_BYTES.
+  git diff -U2 "$BASE_TAG_COMMIT".."$CANDIDATE_SHA" -- $_ps > "$DIFF" \
     || die "git diff da parte $P rc!=0"
   DL=$(wc -l < "$DIFF" | tr -d ' ')
   [ "$DL" -ge 50 ] || die "parte $P com so $DL linhas — manifesto errado?"

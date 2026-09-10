@@ -63,7 +63,7 @@ recover if the upgrade misbehaves.
 
 **Upgrading from v1.3.0 with an ACTIVE plan? Read this first.** Since
 v1.4.0 the audit log AND the plan state stores (scratchpad SQLite files
-used by `/resume` and inter-agent handoffs) resolve per project through
+for inter-agent handoffs; `/resume` never reads them) resolve per project through
 `.claude/hooks/_lib/runtime_paths.py`, not through the legacy
 `$HOME/.claude/projects/ceo-orchestration/` directory. Nothing is
 migrated: after the upgrade a repository with a plan in flight opens a
@@ -73,7 +73,12 @@ the first session on the new version, pick one route:
 - keep reading the legacy store until the plan closes by exporting
   `CEO_PROJECT_NAME=ceo-orchestration` (the documented escape hatch in
   `state_store.py`; it re-creates the basename-collision hazard, so drop
-  it as soon as the plan is done), or
+  it as soon as the plan is done). It moves ONLY the state stores, the
+  graph cache and the skill index: the audit log, HMAC key and spool keep
+  writing to the NEW per-project directory (check (11) still applies there)
+  and signed condition 65's symlink rule then applies to the legacy `state/`
+  root. Never set it to an absolute path (the prefix
+  `$HOME/.claude/projects` is discarded); `CEO_STATE_ROOT` wins over it. Or
 - copy ONLY the store subdirectories — `scratchpad/` (the inter-agent
   handoff store), `skill_proposals/`, `skill_index/`, `session_graph/` — from
   `$HOME/.claude/projects/ceo-orchestration/state/` into
@@ -81,8 +86,10 @@ the first session on the new version, pick one route:
   cached graphs `/resume` reads; otherwise it rebuilds from the audit log, git
   and the plan markdown — it never reads the SQLite stores or the compaction
   snapshot; sessions and events recorded BEFORE the upgrade stay in the legacy
-  chain and do not appear in a graph rebuilt at the new root — `CEO_PROJECT_NAME`
-  is the way to read them). The command
+  chain and do not appear in a graph rebuilt at the new root; `CEO_PROJECT_NAME`
+  only selects the legacy graph CACHE (used while fresh and decryptable) — the
+  rebuild still reads the NEW project's audit log, so this rc has no supported
+  route to rebuild a graph with legacy history). The command
   `python3 .claude/hooks/_lib/runtime_paths.py --state-dir` prints
   `<new-runtime-root>`; append `/state` for the store destination.
   NEVER copy the flat files at the root of `state/`: they include the audit
@@ -149,14 +156,15 @@ an outside file or a symlink anywhere under `.claude/` or the other
 managed trees is written THROUGH, and the root `PROTOCOL.md` pointer is
 refreshed with a plain redirect, so a hard-linked pointer is rewritten in
 place too. `<target>/.claude` itself must be a real directory. Before
-upgrading, both of these must print nothing (paths a `--ceremony user`
+upgrading, all three of these must print nothing (paths a `--ceremony user`
 install never has are skipped; the symlinks the framework itself created in a
 `--link` install are excluded through their `LINK` manifest records — a link
 with no such record is yours, not the framework's):
 
 ```bash
-for p in .claude docs .github SPEC .gitignore PROTOCOL.md .codex .grok .git/hooks AGENTS.md; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type l; done | while IFS= read -r l; do r="${l#<target>/}"; grep -qF "LINK  $r  " "<target>/.claude/.install-manifest.sha256" 2>/dev/null || printf '%s\n' "$l"; done
-for p in .claude docs .github SPEC .gitignore PROTOCOL.md .codex .grok .git/hooks AGENTS.md; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type f -links +1; done
+for p in .claude docs .github SPEC .gitignore PROTOCOL.md .codex .grok .git AGENTS.md requirements.toml; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type l; done | while IFS= read -r l; do r="${l#<target>/}"; grep -qF "LINK  $r  " "<target>/.claude/.install-manifest.sha256" 2>/dev/null || printf '%s\n' "$l"; done
+for p in .claude docs .github SPEC .gitignore PROTOCOL.md .codex .grok .git/hooks AGENTS.md requirements.toml; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type f -links +1; done
+find "<target>" -maxdepth 1 \( -name 'AGENTS.md.ceo-bak-*' -o -name 'requirements.toml.ceo-bak-*' \) \( -type l -o -links +1 \)
 ```
 
 (5) v1.4.0 mints a per-project injection salt in the native Claude project
@@ -379,8 +387,8 @@ relative value is cached relative and, after a `chdir`, the invalidation
 flush writes the previous directory's journal under the NEW cwd (signed
 condition 24). And keep `.claude/state` a real directory holding only real
 files and directories — a symlink, FIFO or other object at
-`.gc-shard-cursor`, `context-pressure-last-bucket[.*]` or `.context-pressure-last-bucket*`
-(the GC strips one leading dot before matching, then deletes) is followed,
+`.gc-shard-cursor`, `context-pressure-last-bucket[.*]` or `.context-pressure-last-bucket.?*`
+(the GC strips one leading dot, then matches the dotted prefix, then deletes) is followed,
 replaced or blocks the hook (signed condition 28).
 
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`

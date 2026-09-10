@@ -355,8 +355,9 @@ call today**:
 - `docs/UPGRADE-PROCEDURE.md` said `--pin` was "durable; subsequent
   `upgrade.sh` calls honor the pinned version". **It is not, and never
   was.** The pin checks the source tree out at the ref, runs the upgrade,
-  and restores the original branch on exit; only `--profile` and
-  `--stack` are replayed from the install-state. The document is
+  and restores the original branch on exit; `--profile`, `--stack` and the
+  recorded harness are replayed from the install-state (signed condition
+  82). The document is
   corrected to match `VERSIONING.md`, which was right all along.
 - New: `docs/CONTEXT-CONTINUITY-GUIDE.md`, `docs/task-classifier-2b.md`,
   an expanded `docs/threat-model.md`, and

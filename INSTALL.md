@@ -151,7 +151,8 @@ same repo produces:
 > 3. **Anything of yours under the delivered trees becomes framework-owned**
 >    — except the paths the manifest walk skips (`.claude/hooks/tests/`,
 >    `.claude/hooks/legacy/`, `.claude/scripts/tests/`, `.claude/hooks/_lib/tests/`,
->    `_lib/test_isolation.py`, `_lib/testing.py`, `__pycache__`, `*.pyc`), which
+>    `.claude/hooks/_lib/test_isolation.py`, `.claude/hooks/_lib/testing.py`,
+>    `__pycache__`, `*.pyc`), which
 >    are neither recorded nor removed. The install manifest is built by walking
 >    `.claude/hooks/`, `.claude/scripts/`, `.claude/commands/` and the profile's
 >    skills directories in the TARGET: any other file you placed there is

@@ -1,0 +1,35 @@
+No P0 found. One undeclared P1 makes the frozen envelope insufficient.
+
+SEVERITY: P1 — fix before rc.1  
+FILE:LINE: `npm/README.md:98-100`, `CHANGELOG.md:355-360`
+
+Concrete failure scenario: `--ceremony user` and `--harness codex` are accepted together. The installer checks its “only `.claude/`” invariant at `scripts/install.sh:3021-3059`, then emits `.codex/**` and root `AGENTS.md` at `:3592-3602`. The Codex registration installs enforcing canonical-edit, plan-lifecycle, and kernel gates (`templates/codex/hooks.json:5-24`) without consulting the ceremony; once trusted, a canonical edit requires the Owner-signed sentinel that `user` mode promises to avoid. On upgrade, the recorded/explicit Codex harness is refreshed at `scripts/upgrade.sh:5685-5711`, even though the CHANGELOG claims only profile and stack replay. Grok similarly writes `AGENTS.md`, `.grok/**`, and `.git/hooks/**` outside `.claude/`.
+
+A v1.3 user+Codex adopter following conditions 55 and 63 (`--no-settings-migrate --no-settings-merge`) plus condition 82 (`--harness codex`) therefore still loses the promised no-signing posture. Conditions 47/82 disclose harness paths, but none discloses this ceremony override; condition 63’s mitigation is insufficient.
+
+Minimal fix: before the first mutation, reject `--ceremony user` with non-Claude harnesses, or generate ceremony-aware harness registrations and run the user-boundary check after harness emission. Correct the README/CHANGELOG and add `user × {claude,codex,grok}` install-and-upgrade controls.
+
+SEVERITY: P2 — follow-up  
+FILE:LINE: `.github/workflows/smoke-install.yml:5-120`, `:124-186`, `:355-362`, `:695-704`
+
+Concrete failure scenario: the newly wired installer-safety test invokes `scripts/uninstall.sh`, as does `smoke-install.sh`, but `scripts/uninstall.sh` is absent from both path filters. A PR changing only the uninstaller skips its only destructive install/uninstall e2e. The checksum manifest and `validate-governance.sh` are also absent, as already recorded in condition 80.
+
+Minimal fix: add `scripts/uninstall.sh`, `.claude/governance/gate-scripts-manifest.txt`, and its consumed members to both filters; preferably derive and parity-check the dependency set.
+
+SEVERITY: P2 — follow-up  
+FILE:LINE: `SPEC/v1/state-stores.schema.md:9-22`
+
+Concrete failure scenario: the normative schema describes only plan-scoped `<plan_id>.sqlite` stores. Backup or migration tooling derived from it omits the dominant `scratchpad-session/session-<uuid>.sqlite` continuity store.
+
+Minimal fix: version and specify the session-scoped store, identifier grammar, TTL, GC, and persistent lock. Condition 66 already declares this accurately.
+
+SEVERITY: P2 — follow-up  
+FILE:LINE: `SPEC/v1/audit-log.schema.md:504`
+
+Concrete failure scenario: `ledger_entry_rejected` permits `decision=accept` and `reason=ok`, although its sole producer and scrubber produce rejection states only. Generated consumers can consequently accept impossible wire states.
+
+Minimal fix: narrow the normative enums to the producible subset. Condition 36 already covers this.
+
+The remaining scoped conditions were internally consistent in spot checks, including delivery/ownership, state relocation, compaction, audit attribution, and ledger-checkpoint limitations. Validation was otherwise clean: exact conditions SHA-256, JSON, `actionlint`, diff whitespace, disk-derived counts, user-settings derivation, seven-model ADR parity, 331-action audit registry, and stdlib/Python compatibility.
+
+VERDICT: NO-GO — The frozen conditions do not cover the supported user-ceremony plus Codex-harness composition, which defeats both the advertised no-signing posture and the `.claude`-only write boundary.

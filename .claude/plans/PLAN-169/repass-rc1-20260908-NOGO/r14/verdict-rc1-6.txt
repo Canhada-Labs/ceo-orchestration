@@ -1,0 +1,26 @@
+Resultado: 3 achados P1 e 1 P2; nenhum P0.
+
+1. **P1 — overrides HMAC por arquivo partem a cadeia após o upgrade.**  
+   **FILE:LINE:** [audit_hmac.py:247](<WT>/.claude/hooks/_lib/audit_hmac.py:247), [audit_hmac.py:255](<WT>/.claude/hooks/_lib/audit_hmac.py:255), [audit_emit.py:2849](<WT>/.claude/hooks/_lib/audit_emit.py:2849), [spool_writer.py:2123](<WT>/.claude/hooks/_lib/spool_writer.py:2123).  
+   **Falha concreta:** o default muda do diretório legado para o slug nativo, mas `CEO_AUDIT_KEY_PATH`, `CEO_AUDIT_LAST_HMAC_PATH` e `CEO_AUDIT_CHAIN_LENGTH_PATH` continuam vencendo individualmente. Um adopter v1.3.0 com `LAST_HMAC_PATH` e `CHAIN_LENGTH_PATH` apontando para o legado passa pelas condições atuais: o log/chave vão para o slug novo, mas predecessor e contador ficam no legado. No modo síncrono, a primeira linha do log novo encadeia no HMAC antigo enquanto `verify_chain()` começa em genesis: `hmac_mismatch` na linha 1. No assíncrono, o contador legado vira `N+k` para um log novo com `k` linhas: `chain_length_truncation`. Se somente `KEY_PATH` estiver definido e ausente, a chave criada manualmente pela condição 68 está no caminho errado e não elimina a corrida de criação.  
+   As condições [29:559](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:559) e [68:844](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:844) cobrem overrides de diretório e nomes nativos, não esses carriers por arquivo.  
+   **Correção mínima:** resolver log, lock, chave, predecessor e contador como uma família única, com migração/reset explícito. Uma mitigação apenas textual teria de exigir os três overrides ausentes ou migrados; isso seria condição nova no envelope congelado e, portanto, exige novo re-pass.
+
+2. **P1 — a garantia publicada de eleição do salt é falsa.**  
+   **FILE:LINE:** [injection_salt.py:44](<WT>/.claude/hooks/_lib/injection_salt.py:44), [injection_salt.py:203](<WT>/.claude/hooks/_lib/injection_salt.py:203), [injection_salt.py:274](<WT>/.claude/hooks/_lib/injection_salt.py:274).  
+   **Falha concreta:** o texto afirma que exatamente um processo vence e todos os perdedores releem seus bytes. Porém o vencedor publica primeiro um arquivo final vazio e só depois escreve 32 bytes. Um perdedor que lê nessa janela classifica o arquivo como malformado e entra no ramo `replace_existing=True`, que usa `O_TRUNC`; os processos podem cachear salts diferentes e um `prompt_sha256` fica irreproduzível. A condição 21 descreve corretamente essa janela, mas o arquivo entregue contradiz o envelope.  
+   **Correção mínima:** publicar um inode já completo sob lock/link exclusivo; para rc.1 condicionada, ao menos substituir a garantia pela limitação exata da condição 21.
+
+3. **P1 — o diff adiciona alegações quantitativas/de desempenho proibidas e não implementadas.**  
+   **FILE:LINE:** [ledger_provenance.py:926](<WT>/.claude/hooks/_lib/ledger_provenance.py:926), [injection_salt.py:382](<WT>/.claude/hooks/_lib/injection_salt.py:382), contra [AGENTS.md:9](<WT>/AGENTS.md:9).  
+   **Falha concreta:** “cheap enough to run on every deletion” não é garantido: `_read_surface` faz `open` e leitura bloqueante de até 1 MiB, sem deadline nem validação de arquivo regular; um FIFO bloqueia, como a própria condição 24 reconhece. “99.999% of calls” também não é derivado de qualquer medição ou invariante. O módulo de ledger ainda está dormente fora dos testes, mas o contrato do reviewer manda rejeitar a própria alegação de velocidade.  
+   **Correção mínima:** remover ambas as afirmações e documentar somente os limites estruturais efetivamente implementados.
+
+4. **P2 — o reset de isolamento não limpa o novo estado assíncrono por PID.**  
+   **FILE:LINE:** [spool_writer.py:158](<WT>/.claude/hooks/_lib/spool_writer.py:158), [spool_writer.py:234](<WT>/.claude/hooks/_lib/spool_writer.py:234), [spool_writer.py:307](<WT>/.claude/hooks/_lib/spool_writer.py:307), [testing.py:169](<WT>/.claude/hooks/_lib/testing.py:169).  
+   **Falha concreta:** `TestEnvContext` chama `_reset_caches_for_test()`, que zera apenas os dois caches de diretório. `_SPOOL_HEADER_CACHE`, `_ORDINAL_COUNTER` e `_JOURNAL_BUFFER` sobrevivem; como `_STATE_DIR_CACHE` passa a `None`, a próxima resolução não executa o novo detector de troca de projeto. Um buffer do teste A pode então ser descarregado no journal isolado do teste B. Confirmei diretamente que os três mapas permanecem populados após o reset.  
+   **Correção mínima:** antes de zerar o cache de diretório, descarregar no diretório antigo e limpar os três mapas por PID; adicionar canário assíncrono A→B.
+
+O blast radius padrão — store/cadeia legados deixados no diretório antigo e nova família reclamada sob o slug nativo — está honestamente descrito pelas condições 21, 27 e 68. Não encontrei dependência externa, `match`, união PEP 604 em runtime ou outra escrita não declarada além das classes já cobertas por 28, 65 e 68. O problema decisivo é que as condições 29/68 são insuficientes para configurações HMAC por arquivo.
+
+VERDICT: NO-GO — O envelope omite os overrides HMAC por arquivo e o payload ainda contém garantias falsas e alegações proibidas, exigindo correção e novo re-pass.
