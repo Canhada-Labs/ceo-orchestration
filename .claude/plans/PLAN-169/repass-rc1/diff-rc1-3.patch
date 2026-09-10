@@ -1,0 +1,2252 @@
+diff --git a/scripts/doctor.sh b/scripts/doctor.sh
+index 7425a2a6f540..9d77a256aa90 100755
+--- a/scripts/doctor.sh
++++ b/scripts/doctor.sh
+@@ -34,2 +34,12 @@
+ #   * Orphan candidates are report-only. doctor.sh deletes nothing, ever.
++#   * The manifest is never read through a symlink (a symlinked LEAF is
++#     refused before `-f`, exit 2), and its identity (device:inode) is
++#     pinned after sanitization and re-proved before every write of
++#     --repair: foreign provenance never drives a write (rc.1 round 11).
++#   * Every write under the target (restore, backup, re-link) is answered
++#     first by the destination-confinement predicate the installer and the
++#     upgrader use (_wbm_dst_refuses, PLAN-185 / PLAN-185-FOLLOWUP FU-7): a
++#     symlinked or hard-linked destination, a symlinked ancestor, or a path
++#     that resolves outside the target is REFUSED by name and nothing is
++#     written — a refusal counts as an unresolved finding (exit 1).
+ #
+@@ -88,3 +98,5 @@ usage() {
+   # Header spans line 2 .. the "bash 3.2-safe" sentinel line (keep in sync).
+-  sed -n '2,59p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
++  # rail r2 (S337) P3: terminate at the sentinel, not at a line number — the
++  # header grows and a fixed range silently truncates the exit-code section.
++  sed -n '2,/^# bash 3\.2-safe/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+ }
+@@ -183,8 +195,81 @@ fi
+ 
+-# _framework_manifest_set.sh is OPTIONAL — only the orphan scan needs it.
+-HAVE_FMS=0
+-if [ -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
+-  # shellcheck source=scripts/_framework_manifest_set.sh
+-  . "$SCRIPT_DIR/_framework_manifest_set.sh"
+-  HAVE_FMS=1
++# _framework_manifest_set.sh is REQUIRED (PLAN-183 W6). It has TWO consumers
++# here now: the orphan scan (framework-owned enumeration) and — since W6 — the
++# ONE validated reader of scripts/delivery-routes.tsv. doctor used to carry its
++# own copy of that parser; the copy WAS the defect (see the delivery-route
++# section below), so there is no longer anything to degrade to. Falling back to
++# identity resolution is D4 returning, and D4 does not merely misclassify: it
++# REPAIRS with the wrong bytes. Fail-closed to rc=2 (infra), mirroring the
++# _hash_lib.sh treatment above.
++if [ ! -f "$SCRIPT_DIR/_framework_manifest_set.sh" ]; then
++  echo "ERROR: $SCRIPT_DIR/_framework_manifest_set.sh not found — partial checkout?" >&2
++  echo "       doctor resolves every delivery route through that library; without" >&2
++  echo "       it a repair would fall back to identity and copy the WRONG source." >&2
++  exit 2
++fi
++# shellcheck source=scripts/_framework_manifest_set.sh
++. "$SCRIPT_DIR/_framework_manifest_set.sh"
++# Presence of the FILE is not presence of the CONTRACT. Assert the three route
++# functions BY NAME, so an upstream rename fails HERE, loudly, instead of
++# silently taking the identity path at the first repair. _wbm_route_row_ok is
++# asserted even though doctor never calls it directly: it is what makes
++# _wbm_route_src fail-closed, and a reader missing it would answer rc=2 to
++# everything. (The S327 rail round paid this exact lesson on the manifest
++# oracle's own fragment harness.)
++# rail round-6 F2 added _wbm_route_table_gate to that set: the three readers
++# call it, so a library missing it would answer rc=2 to every lookup — the
++# right posture, reached the wrong way and with no name attached to it.
++# rail round-7 F2 added _wbm_source_confined for the same reason: _restore_file
++# COPIES from "$SOURCE_DIR/$src", and a library without that predicate would
++# copy through a symlinked source without anything saying so. rail round-8
++# widened that to the THREE sites that resolve a source — the write site and
++# both HASH sites — so this name is now load-bearing for CLASSIFICATION too,
++# not only for the copy.
++# PLAN-185-FOLLOWUP FU-7 (S337) added _wbm_dst_refuses: every write doctor
++# makes under the target (restore, backup, re-link) is now answered by the SAME
++# destination-confinement predicate install.sh and upgrade.sh consume, so a
++# library without it must fail here, by name, instead of letting doctor fall
++# back to the retired local copy.
++for _fms_req in _wbm_route_src _wbm_route_relpath_ok _wbm_route_row_ok \
++                _wbm_route_table_ok _wbm_route_table_gate _wbm_source_confined \
++                _wbm_dst_refuses; do
++  if ! command -v "$_fms_req" >/dev/null 2>&1; then
++    echo "ERROR: $SCRIPT_DIR/_framework_manifest_set.sh does not define $_fms_req —" >&2
++    echo "       the shared delivery-route reader is unavailable. Refusing to run" >&2
++    echo "       rather than resolve delivery routes by identity (defect D4)." >&2
++    exit 2
++  fi
++done
++unset _fms_req
++
++# rail round-4 F3 — the READER being present is not the TABLE being present.
++# _wbm_route_src answers rc=1 ("no row for this destination") when the table is
++# missing or unreadable, and every call site below answers rc=1 with the
++# identity fallback `$SOURCE_DIR/$rel`. On a partial checkout that is defect D4
++# arriving through an absent file instead of a wrong branch — and D4 does not
++# merely misclassify: `_restore_file` COPIES. MEASURED pre-cure (S327): with
++# the table removed, `--repair` of a deleted `docs/BRANCH-PROTECTION.md` wrote
++# the ROOT homonym's bytes into the adopter tree, and the same path applied to
++# `.github/CODEOWNERS` copies THIS repo's live maintainer file — the exact
++# contamination class PLAN-183 A3 closed elsewhere.
++#
++# So the table is a REQUIRED input, asserted once, before any verdict is
++# computed. Fail-closed rc=2 (infra), mirroring _hash_lib.sh and the library
++# itself above. The shape question is answered by the table's OWNER
++# (_wbm_route_table_ok); doctor parsing a header here would be the private copy
++# W6 deleted.
++#
++# rc=1 from _wbm_route_src keeps its meaning — "no route declared for this
++# path" — but now only for a path genuinely absent from a table that IS there.
++# Rail r8 (S327, P2): call the MEMOIZED gate so the parent process seeds the
++# memo — every later _wbm_route_src runs inside a command substitution and would
++# otherwise rescan the table once per manifest record.
++if ! _wbm_route_table_gate; then
++  echo "ERROR: the shared delivery-route table is unusable — ${_WBM_ROUTE_TABLE_WHY:-unknown reason}." >&2
++  echo "       doctor resolves every delivery route through that table; without it" >&2
++  echo "       a repair would fall back to identity and copy the WRONG source" >&2
++  echo "       (defect D4). Refusing to run rather than verify or repair blind." >&2
++  echo "       Expected scripts/delivery-routes.tsv next to the manifest library," >&2
++  echo "       readable, with its dest/src/transform header and at least one row." >&2
++  exit 2
+ fi
+@@ -192,2 +277,14 @@ fi
+ MANIFEST="$TARGET/.claude/.install-manifest.sha256"
++# rc.1 re-pass round 11, part 3 (P1): `-f` FOLLOWS a link, so a manifest leaf
++# symlinked to ANOTHER repository's valid manifest was read through it and
++# --repair recreated files and links from that foreign provenance, exit 0.
++# The link is refused (never followed) before anything reads it — the same
++# posture as uninstall.sh — in the manifest-input exit class (2). The
++# identity of the file the sanitizer reads is pinned below (_MANIFEST_ID)
++# and re-proved before every write.
++if [ -L "$MANIFEST" ]; then
++  echo "ERROR: install manifest at $MANIFEST is a SYMLINK — doctor never reads a manifest through a link; refusing (nothing verified, nothing written)." >&2
++  echo "       Replace the link with the real manifest (or run upgrade.sh to regenerate it), then re-run doctor." >&2
++  exit 2
++fi
+ if [ ! -f "$MANIFEST" ]; then
+@@ -231,3 +328,59 @@ _INVALID="
+ 
++# PLAN-185-FOLLOWUP FU-7 (S340) — a record this sanitizer DROPS is a record
++# doctor never verifies, and every drop below used to be SILENT. MEASURED at
++# b6dce78: with `<sha>  ../outside/victim.txt` appended to an adopter's
++# manifest, doctor printed `OK: 535`, `Refused: 0` and exited 0 — an
++# all-clear over a manifest that had been edited. Nothing was written outside
++# (the drop is what prevents that, and e2e D.5 asserts the bytes), but the
++# REPORT is the other half of doctor's contract: `rc=0` means "I verified
++# this tree", and it did not. Same class test-doctor.sh D.10 cured in S261
++# one layer down (a symlinked LEAF is "reported, not silently dropped"), and
++# the class uninstall.sh already names on its side ("unsafe manifest path",
++# e2e U.2).
++#
++# A legitimate install drops NOTHING — measured S340 on this tree: 535/535
++# records survive a copy install and 349/349 survive a --link install — so a
++# non-zero count here means the manifest is malformed or crafted, which is
++# why the count is folded into UNRESOLVED (rc 1) below and not merely
++# printed. On a healthy install the output stays BYTE-IDENTICAL: both the
++# listing and the summary line are conditional on DROPPED_COUNT > 0.
++DROPPED_COUNT=0
++_DROPPED=""
++_DROP_LIST_CAP=20
++_mark_dropped() {
++  # $1 = reason (fixed text from THIS file). $2 = the MANIFEST-SUPPLIED
++  # string — never echoed raw: the unsafe class it belongs to INCLUDES
++  # control characters, and this line goes to the operator's terminal, where
++  # an escape sequence rewrites what he believes he read. Non-printable => '?'
++  # (LC_ALL=C, so the classification is byte-wise), and the name is capped so
++  # one crafted 4 KB record cannot bury the rest of the report.
++  DROPPED_COUNT=$((DROPPED_COUNT + 1))
++  [ "$DROPPED_COUNT" -le "$_DROP_LIST_CAP" ] || return 0
++  _md_safe="$( printf '%s' "$2" | LC_ALL=C tr -c '[:print:]' '?' | cut -c1-160 )"
++  _DROPPED="${_DROPPED}    DROPPED ($1): ${_md_safe}
++"
++}
++
+ # Reject an unsafe relpath. $2 = "link" to allow a symlinked LEAF.
++_field_has_control_bytes() {
++  # Locale-INDEPENDENT control-byte test (rail S340 r3, codex P2). Under
++  # LC_ALL=C bash matches RAW bytes, so C0 (0x00-0x1f) and DEL are caught
++  # whatever locale the operator runs doctor in; C1 controls are caught both as
++  # valid UTF-8 (U+0080-U+009F = C2 80..C2 9F) and as stray 8-bit bytes (a raw
++  # 0x9b, the 8-bit CSI, is never valid UTF-8 — any non-ASCII field is validated
++  # with iconv; no iconv ⇒ non-ASCII is refused, fail-closed). The framework's
++  # own manifests are ASCII, so on a sane install this never spawns anything.
++  local LC_ALL=C
++  case "$1" in
++    *[[:cntrl:]]*) return 0 ;;
++    *$'\xc2'[$'\x80'-$'\x9f']*) return 0 ;;
++    *[$'\x80'-$'\xff']*)
++      [ "$_ICONV_OK" -eq 1 ] || return 0
++      printf '%s' "$1" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1 || return 0
++      ;;
++  esac
++  return 1
++}
++_ICONV_OK=0
++command -v iconv >/dev/null 2>&1 && _ICONV_OK=1
+ _relpath_unsafe() {
+@@ -239,5 +392,3 @@ _relpath_unsafe() {
+   esac
+-  case "$_ru_rel" in
+-    *[$'\n\r\t']*) return 0 ;;
+-  esac
++  if _field_has_control_bytes "$_ru_rel"; then return 0; fi
+   _ru_parent="$( dirname "$_ru_rel" )"
+@@ -289,2 +440,38 @@ $1
+ 
++# PLAN-185-FOLLOWUP FU-7 (S340, rail r4 P1): `read -r` DROPS or truncates at a
++# NUL byte before any per-field check can see it, so a record carrying 0x00 is
++# not sanitizable line by line — it is unparseable security input and fails
++# CLOSED here, on the RAW bytes, before the line loop (same exit class as an
++# empty/corrupted manifest). Counted with tr on the raw file: locale-independent.
++_nul_count="$( LC_ALL=C tr -cd '\000' < "$MANIFEST" | wc -c | tr -d ' ' )"
++if [ "${_nul_count:-0}" -gt 0 ]; then
++  echo "ERROR: manifest at $MANIFEST carries $_nul_count NUL byte(s) — unparseable (corrupted or tampered); refusing to verify." >&2
++  echo "       Run upgrade.sh to regenerate the baseline." >&2
++  exit 2
++fi
++
++# Pin the manifest identity (device:inode by lstat — `stat` without -L; the GNU
++# spelling is tried first because `stat -f` is a DIFFERENT command on GNU and
++# would succeed with filesystem numbers) so every write below re-proves it is
++# the SAME regular file the sanitizer read: a leaf swapped for a link or for
++# another file mid-run is refused before the write, never followed.
++_manifest_identity() { stat -c '%d:%i' "$1" 2>/dev/null || stat -f '%d:%i' "$1" 2>/dev/null; }
++_MANIFEST_ID="$( _manifest_identity "$MANIFEST" )"
++if [ -z "$_MANIFEST_ID" ]; then
++  echo "ERROR: cannot establish the identity of $MANIFEST (stat failed); refusing to verify." >&2
++  exit 2
++fi
++# rc 0 only while the manifest is still that non-symlink regular file.
++_manifest_still_pinned() {
++  [ ! -L "$MANIFEST" ] && [ -f "$MANIFEST" ] \
++    && [ "$( _manifest_identity "$MANIFEST" )" = "$_MANIFEST_ID" ]
++}
++# One refusal for every write site (restore, backup+restore, re-link); the
++# caller counts the finding as unresolved exactly as it does for a refused
++# destination.
++_manifest_pin_refused() {
++  _log "    REFUSED: the install manifest changed identity or became a SYMLINK during this run — nothing written: $1"
++  REFUSED_COUNT=$((REFUSED_COUNT + 1))
++}
++
+ while IFS= read -r line || [ -n "$line" ]; do
+@@ -300,9 +487,16 @@ while IFS= read -r line || [ -n "$line" ]; do
+           ;;
+-        *) continue ;;   # malformed LINK (no target) — drop
+-      esac
+-      case "$target" in
+-        ''|*[$'\n\r\t']*) continue ;;
++        *) _mark_dropped "malformed LINK record (no target)" "$rest"; continue ;;
+       esac
+-      if _relpath_unsafe "$rel" link; then continue; fi
+-      if _seen_before "$rel"; then _mark_invalid "$rel"; continue; fi
++      if [ -z "$target" ] || _field_has_control_bytes "$target"; then
++        _mark_dropped "LINK target empty or carrying a control byte" "$rel"; continue
++      fi
++      if _relpath_unsafe "$rel" link; then
++        _mark_dropped "unsafe manifest path (traversal, absolute, control character, or symlinked ancestor)" "$rel"
++        continue
++      fi
++      if _seen_before "$rel"; then
++        _mark_invalid "$rel"
++        _mark_dropped "duplicate relpath (ambiguous — every record for it is dropped)" "$rel"
++        continue
++      fi
+       _mark_seen "$rel"
+@@ -313,9 +507,22 @@ while IFS= read -r line || [ -n "$line" ]; do
+       rel="${line#*  }"
+-      [ "$digest" != "$line" ] || continue
++      if [ "$digest" = "$line" ]; then
++        _mark_dropped "malformed record (no two-space separator)" "$line"
++        continue
++      fi
+       case "$digest" in
+-        *[!0-9a-f]*) continue ;;
++        *[!0-9a-f]*) _mark_dropped "malformed record (digest is not hexadecimal)" "$rel"; continue ;;
+       esac
+-      [ "${#digest}" -eq 64 ] || continue
+-      if _relpath_unsafe "$rel" file; then continue; fi
+-      if _seen_before "$rel"; then _mark_invalid "$rel"; continue; fi
++      if [ "${#digest}" -ne 64 ]; then
++        _mark_dropped "malformed record (digest is not 64 characters)" "$rel"
++        continue
++      fi
++      if _relpath_unsafe "$rel" file; then
++        _mark_dropped "unsafe manifest path (traversal, absolute, control character, or symlinked ancestor)" "$rel"
++        continue
++      fi
++      if _seen_before "$rel"; then
++        _mark_invalid "$rel"
++        _mark_dropped "duplicate relpath (ambiguous — every record for it is dropped)" "$rel"
++        continue
++      fi
+       _mark_seen "$rel"
+@@ -339,3 +546,3 @@ if [ "$_INVALID" != "
+ $rel_probe
+-"*) continue ;;
++"*) _mark_dropped "duplicate relpath (this earlier record is dropped too)" "$rel_probe"; continue ;;
+     esac
+@@ -347,2 +554,13 @@ fi
+ if [ ! -s "$SANITIZED" ]; then
++  # PLAN-185-FOLLOWUP FU-7 (S340, rail r2 P2): when EVERY record was rejected the
++  # drop report further down is never reached — print it here first, so an
++  # all-dropped manifest still tells the operator what was dropped and why.
++  if [ "$DROPPED_COUNT" -gt 0 ]; then
++    _log "==> Manifest records DROPPED at ingest — every record was rejected:"
++    printf '%s' "$_DROPPED"
++    if [ "$DROPPED_COUNT" -gt "$_DROP_LIST_CAP" ]; then
++      _log "    ... and $(( DROPPED_COUNT - _DROP_LIST_CAP )) more (names sanitized: non-printable shown as '?', truncated to 160 characters)"
++    fi
++    _log "    Dropped:   $DROPPED_COUNT (unsafe or malformed manifest records — NOT verified)"
++  fi
+   echo "ERROR: manifest at $MANIFEST contains no valid records after sanitization." >&2
+@@ -355,6 +573,13 @@ fi
+ # ---------------------------------------------------------------------------
+-BAK_DIR=""   # created lazily on the first backup
++BAK_DIR=""       # created lazily on the first backup
++BAK_REL_DIR=""   # its relpath under $TARGET — the confinement predicate walks relpaths
++_ensure_bak_rel() {
++  if [ -z "$BAK_REL_DIR" ]; then
++    BAK_REL_DIR=".claude.bak/doctor-$(date -u +%Y%m%d-%H%M%SZ)"
++  fi
++}
+ _ensure_bak_dir() {
++  _ensure_bak_rel
+   if [ -z "$BAK_DIR" ]; then
+-    BAK_DIR="$TARGET/.claude.bak/doctor-$(date -u +%Y%m%d-%H%M%SZ)"
++    BAK_DIR="$TARGET/$BAK_REL_DIR"
+     mkdir -p "$BAK_DIR"
+@@ -365,3 +590,19 @@ _backup_file() {
+   # $1 = relpath of an existing regular file to preserve before overwrite.
++  # Returns 0 when the backup landed, 1 when it was REFUSED (nothing written):
++  # a caller must never overwrite a file whose backup could not be made.
+   _bf_rel="$1"
++  # PLAN-185-FOLLOWUP FU-7 (S337): the backup destination is a write under the
++  # target too, and nothing sanitised it at ingest — `.claude.bak` is not a
++  # manifest record. A symlink planted there sends the ADOPTER'S OWN bytes
++  # outside the target through `mkdir -p` + `cp -p` (e2e D.2 reproduces it
++  # against the pre-cure copy). Same shared predicate as every other write,
++  # asked about the relpath that will be written, BEFORE _ensure_bak_dir's own
++  # mkdir: the timestamped directory does not exist yet, so the walk covers
++  # `.claude.bak` and the nearest existing ancestor.
++  _ensure_bak_rel
++  if _wbm_dst_refuses "$TARGET" "$BAK_REL_DIR/$_bf_rel"; then
++    REFUSED_COUNT=$((REFUSED_COUNT + 1))
++    _log "    BACKUP-BLOCKED (destination refused — nothing written: ${_WBM_DST_REFUSE_WHY:-unknown reason}): $_bf_rel"
++    return 1
++  fi
+   _ensure_bak_dir
+@@ -371,2 +612,37 @@ _backup_file() {
+ 
++# PLAN-185-FOLLOWUP FU-7 (S337): confinement for LINK-record repairs. A LINK
++# record's LEAF is legitimately a symlink (that is what the record describes),
++# so when the leaf is present and about to be replaced, the shared predicate is
++# asked about the PARENT the link is created in — a symlinked or escaping
++# ancestor is the write-through hazard; the leaf itself is replaced (`rm -f`
++# never follows a link), not written through. When the leaf is absent, the full
++# relpath is asked, exactly as for a regular file. $1 = link relpath.
++# Returns 0 to REFUSE (the polarity of _restore_refuses).
++_link_dst_refuses() {
++  _ld_rel="$1"
++  # rail r1 (S337) P1: the shared predicate refuses a SYMLINKED target root for
++  # every relpath it is asked about, and doctor resolves $TARGET logically
++  # (`cd && pwd`, symlink preserved) — so a root-level link whose parent IS the
++  # root must not skip that clause. Same test, same message, same recovery.
++  if [ -L "$TARGET" ]; then
++    REFUSED_COUNT=$((REFUSED_COUNT + 1))
++    _ld_ref="$( cd -P "$TARGET" 2>/dev/null && pwd -P || true )"
++    _log "    RESTORE-BLOCKED (link destination refused — nothing written: the target root '$TARGET' is a SYMLINK${_ld_ref:+ to '$_ld_ref'} — every write would follow it; re-run against the referent): $_ld_rel"
++    return 0
++  fi
++  _ld_ask="$_ld_rel"
++  if [ -e "$TARGET/$_ld_rel" ] || [ -L "$TARGET/$_ld_rel" ]; then
++    _ld_ask="$( dirname "$_ld_rel" )"
++    case "$_ld_ask" in
++      .|"") return 1 ;;   # root-level link: the (non-symlink) target root is the parent
++    esac
++  fi
++  if _wbm_dst_refuses "$TARGET" "$_ld_ask"; then
++    REFUSED_COUNT=$((REFUSED_COUNT + 1))
++    _log "    RESTORE-BLOCKED (link destination refused — nothing written: ${_WBM_DST_REFUSE_WHY:-unknown reason}): $_ld_rel"
++    return 0
++  fi
++  return 1
++}
++
+ # Per-file confirmation: --yes-file match, else interactive [y/N] on a TTY,
+@@ -391,2 +667,101 @@ $_cf_rel
+ 
++# ---------------------------------------------------------------------------
++# Delivery-route resolution (PLAN-183 W5 defect D4; consolidated in W6)
++# ---------------------------------------------------------------------------
++# Truth: scripts/delivery-routes.tsv. READER: _wbm_route_src, in
++# scripts/_framework_manifest_set.sh, sourced above — the SAME reader install.sh,
++# upgrade.sh and scripts/tests/_parity_classify.py resolve through. doctor is the
++# fourth consumer, and until W6 it was the odd one out: it carried a PRIVATE copy
++# of the parser.
++#
++# What the copy cost, MEASURED (pair-rail round 1, finding F2 — S327): the
++# canonical reader had grown path validation the copy never received, so a route
++# table with an absolute or `..`-bearing `src` resolved rc=0 here and reached
++# `cp "$SOURCE_DIR/$src"` in _restore_file — a read from OUTSIDE the framework
++# checkout, delivered into an adopter tree as framework content. The second
++# implementation was the defect, not a convenience: it is the same class
++# CLAUDE.md §4 records closing twice already (PLAN-182, 16 modules -> one
++# resolver; PLAN-167, _ownership_verdict).
++#
++# The contract the three call sites below depend on is the canonical one, and it
++# is byte-for-byte the contract doctor's retired copy published:
++#   stdout = source relpath, exit 0 : identity route — hashable and copyable
++#   exit 1                          : no route declared — identity applies
++#   exit 2                          : RENDERED, malformed, or a REJECTED
++#                                     (hostile) row — the delivered bytes exist
++#                                     in NO checkout; nothing to hash, nothing
++#                                     to copy.
++# rc=2 must never collapse into rc=1: rc=1 is answered by the identity fallback,
++# which is exactly D4 coming back.
++#
++# Table location: resolved by the READER, next to the library it ships in
++# (rail round-6 F3 removed the environment channel entirely). doctor's own
++# DELIVERY_ROUTES_TSV was RETIRED in W6. A second knob the reader does not
++# honour is worse than none: a caller could poison a table nobody reads and see
++# a green run for it.
++
++# Last gate before anything touches the filesystem. Returns 0 to REFUSE — the
++# polarity of upgrade.sh's _up_tpl_confined_refuses / _up_tpl_symlink_refuses,
++# deliberately, so the two files read as a pair; keep them consistent when
++# either changes. $1 = destination relpath, $2 = resolved source relpath.
++#
++# The route reader already rejects a hostile row, and doctor's manifest
++# sanitiser (_relpath_unsafe, above) already screens every destination at
++# INGEST. Neither of those is a property of THIS write: the table is a FILE and
++# a partial checkout or a tampered tree still reaches these fields, the
++# sanitiser ran before the whole verification loop (a symlink planted in
++# between is a real TOCTOU window), and this is the LAST place before `cp`.
++# Belt and braces, on BOTH halves of the copy:
++#   1. LEXICAL — the reader's own predicate, applied to the destination AND to
++#      the source relpath that will be appended to $SOURCE_DIR.
++#   2. SYMLINK — never write THROUGH a link: refuse a symlinked leaf and any
++#      symlinked ancestor component.
++#   3. PHYSICAL — the deepest EXISTING ancestor of the destination must resolve
++#      (cd -P/pwd -P; the bash 3.2 floor has no realpath) to $TARGET or to a
++#      path under it, comparing against the RESOLVED $TARGET so a symlinked
++#      target directory is not a spurious refusal.
++# `|| true` inside each command substitution is load-bearing under `set -e`:
++# without it a failing `cd -P` aborts the whole script (measured) and the
++# named-refusal branch below is unreachable.
++_restore_refuses() {
++  _rr_rel="$1"
++  _rr_src="${2:-}"
++  if ! _wbm_route_relpath_ok "$_rr_rel"; then
++    _log "    RESTORE-BLOCKED (destination is not a confined relative path): $_rr_rel"
++    return 0
++  fi
++  if [ -n "$_rr_src" ] && ! _wbm_route_relpath_ok "$_rr_src"; then
++    _log "    RESTORE-BLOCKED (source '$_rr_src' is not a confined relative path — route table poisoned?): $_rr_rel"
++    return 0
++  fi
++  # rail round-7 F2 — LEXICAL is not PHYSICAL on the source side either. `cp -p`
++  # follows symlinks, so a source whose leaf or ancestor is a link to a regular
++  # file outside this checkout would be copied into the adopter tree as
++  # framework content — the same escape measured on the upgrade side (S327),
++  # and the same class as D4/A3 (doctor copying the WRONG source) arriving
++  # through a different door. This covers BOTH lanes: the route lane and the
++  # identity fallback that answers for every `.claude/**` manifest record.
++  if [ -n "$_rr_src" ] && ! _wbm_source_confined "$SOURCE_DIR" "$_rr_src"; then
++    _log "    RESTORE-BLOCKED (source not confined to the framework checkout — ${_WBM_SRC_CONFINE_WHY:-unknown reason}): $_rr_rel"
++    return 0
++  fi
++  # PLAN-185-FOLLOWUP FU-7 (S337): the destination half is the SHARED
++  # predicate install.sh and upgrade.sh consume (_wbm_dst_refuses,
++  # scripts/_framework_manifest_set.sh) — one implementation, not doctor's own
++  # copy of the symlink walk + physical resolution that lived here. It refuses
++  # everything the retired copy refused (symlinked leaf, symlinked ancestor,
++  # unresolvable ancestor, resolution outside the RESOLVED target) and one
++  # thing the copy did not: a HARD-LINKED leaf (nlink > 1). `cp -p` writes an
++  # existing destination IN PLACE, so every other name for that inode —
++  # including names outside the target — sees the framework bytes; e2e D.1
++  # reproduces that escape against the pre-cure copy. Polarity preserved:
++  # 0 = REFUSE.
++  if _wbm_dst_refuses "$TARGET" "$_rr_rel"; then
++    REFUSED_COUNT=$((REFUSED_COUNT + 1))
++    _log "    RESTORE-BLOCKED (destination refused — nothing written: ${_WBM_DST_REFUSE_WHY:-unknown reason}): $_rr_rel"
++    return 0
++  fi
++  return 1
++}
++
+ # Restore one hash-record file from SOURCE_DIR. Preconditions already checked
+@@ -399,4 +774,24 @@ _restore_file() {
+   _rf_base="$2"
++  if ! _manifest_still_pinned; then
++    _manifest_pin_refused "$_rf_rel"
++    return 1
++  fi
++  # D4: repair from the route's SOURCE, never from the destination relpath.
++  _rf_rc=0
++  _rf_src="$( _wbm_route_src "$_rf_rel" )" || _rf_rc=$?
++  if [ "$_rf_rc" -eq 2 ]; then
++    _log "    RESTORE-BLOCKED (delivered through a transform, or its route row was rejected — the bytes exist in no checkout): $_rf_rel"
++    return 1
++  fi
++  if [ "$_rf_rc" -ne 0 ] || [ -z "${_rf_src:-}" ]; then
++    _rf_src="$_rf_rel"
++  fi
++  # Belt and braces (W6). Deliberately AHEAD of `mkdir -p`: mkdir -p of an
++  # escaping destination already creates directories outside the target, so a
++  # check placed after it would be too late to prevent the side effect.
++  if _restore_refuses "$_rf_rel" "$_rf_src"; then
++    return 1
++  fi
+   mkdir -p "$TARGET/$( dirname "$_rf_rel" )"
+-  cp -p "$SOURCE_DIR/$_rf_rel" "$TARGET/$_rf_rel"
++  cp -p "$SOURCE_DIR/$_rf_src" "$TARGET/$_rf_rel"
+   # Post-copy verification: the restored content MUST re-hash to the recorded
+@@ -423,2 +818,3 @@ SKIPPED_CONFIRM=0
+ BLOCKED_COUNT=0
++REFUSED_COUNT=0   # FU-7: writes refused by the destination-confinement predicate
+ UNRESOLVED=0
+@@ -426,2 +822,16 @@ ORPHAN_COUNT=0
+ 
++# PLAN-185-FOLLOWUP FU-7 (S340): what the sanitizer dropped is reported BEFORE
++# the verification it is missing from, and counted as unresolved — a record
++# doctor could not read is a finding, not a silence. UNRESOLVED is folded here
++# (not at the drop sites) because the counters block above initialises it.
++if [ "$DROPPED_COUNT" -gt 0 ]; then
++  _log ""
++  _log "==> Manifest records DROPPED at ingest — NOT verified below"
++  _log "    (a valid install drops none: measured 535/535 copy, 349/349 --link):"
++  printf '%s' "$_DROPPED"   # each entry already carries its own newline
++  if [ "$DROPPED_COUNT" -gt "$_DROP_LIST_CAP" ]; then
++    _log "    ... and $(( DROPPED_COUNT - _DROP_LIST_CAP )) more (names sanitized: non-printable shown as '?', truncated to 160 characters)"
++  fi
++  UNRESOLVED=$((UNRESOLVED + DROPPED_COUNT))
++fi
+ _log "==> Verifying $( wc -l < "$SANITIZED" | tr -d ' ' ) manifest records"
+@@ -451,2 +861,7 @@ while IFS= read -r line || [ -n "$line" ]; do
+             UNRESOLVED=$((UNRESOLVED + 1))
++          elif ! _manifest_still_pinned; then
++            _manifest_pin_refused "$rel"
++            UNRESOLVED=$((UNRESOLVED + 1))
++          elif _link_dst_refuses "$rel"; then
++            UNRESOLVED=$((UNRESOLVED + 1))
+           else
+@@ -476,14 +891,25 @@ while IFS= read -r line || [ -n "$line" ]; do
+             UNRESOLVED=$((UNRESOLVED + 1))
++          elif ! _manifest_still_pinned; then
++            _manifest_pin_refused "$rel"
++            UNRESOLVED=$((UNRESOLVED + 1))
+           else
++            _lk_go=1
+             if [ -f "$lpath" ] && [ ! -L "$lpath" ]; then
+-              _backup_file "$rel"
+-              _log "    BACKED-UP: $rel -> $BAK_DIR/$rel"
++              if _backup_file "$rel"; then
++                _log "    BACKED-UP: $rel -> $BAK_DIR/$rel"
++              else
++                _lk_go=0   # FU-7: no backup, no overwrite
++              fi
+             fi
+-            rm -f "$lpath"
+-            if ln -s "$target" "$lpath" 2>/dev/null; then
+-              _log "    RE-LINKED: $rel -> $target"
+-              REPAIRED_COUNT=$((REPAIRED_COUNT + 1))
+-            else
+-              _log "    RESTORE-FAILED (ln -s failed): $rel"
++            if [ "$_lk_go" -eq 0 ] || _link_dst_refuses "$rel"; then
+               UNRESOLVED=$((UNRESOLVED + 1))
++            else
++              rm -f "$lpath"
++              if ln -s "$target" "$lpath" 2>/dev/null; then
++                _log "    RE-LINKED: $rel -> $target"
++                REPAIRED_COUNT=$((REPAIRED_COUNT + 1))
++              else
++                _log "    RESTORE-FAILED (ln -s failed): $rel"
++                UNRESOLVED=$((UNRESOLVED + 1))
++              fi
+             fi
+@@ -506,3 +932,30 @@ while IFS= read -r line || [ -n "$line" ]; do
+         MISSING_COUNT=$((MISSING_COUNT + 1))
+-        src_hash="$( _hash_file "$SOURCE_DIR/$rel" 2>/dev/null || true )"
++        # D4: hash the route's SOURCE. A rendered route yields an empty
++        # src_hash on purpose, which the existing branch below already
++        # reports as not-repairable — the correct verdict.
++        _ms_rc=0
++        src_rel="$( _wbm_route_src "$rel" )" || _ms_rc=$?
++        if [ "$_ms_rc" -eq 2 ]; then
++          src_hash=""
++        else
++          if [ "$_ms_rc" -ne 0 ] || [ -z "${src_rel:-}" ]; then src_rel="$rel"; fi
++          # rail round-8 — the WRITE site (_restore_refuses) has demanded
++          # PHYSICAL source confinement since round 7; the two HASH sites did
++          # not, and `_hash_file` follows symlinks exactly as `cp -p` does. A
++          # source whose leaf OR ancestor links to a regular file outside this
++          # checkout therefore hashed FOREIGN bytes, and the verdict flipped
++          # away from the conservative one: here to "MISSING (restorable)" for
++          # a file `_restore_file` would then refuse to write, and at the DRIFT
++          # site below to "baseline-stale" — a verdict that TELLS the operator
++          # to bless foreign bytes into the baseline by running upgrade.sh.
++          # Same predicate as the write site (no second implementation — the
++          # PLAN-182 lesson), and the refusal travels on the EXISTING
++          # empty-src_hash channel, so no verdict here is new.
++          if _wbm_source_confined "$SOURCE_DIR" "$src_rel"; then
++            src_hash="$( _hash_file "$SOURCE_DIR/$src_rel" 2>/dev/null || true )"
++          else
++            _log "    SOURCE-BLOCKED (source '$src_rel' is not confined to the framework checkout — ${_WBM_SRC_CONFINE_WHY:-unknown reason}): $rel"
++            src_hash=""
++          fi
++        fi
+         if [ -z "$src_hash" ]; then
+@@ -552,3 +1005,23 @@ while IFS= read -r line || [ -n "$line" ]; do
+       DRIFT_COUNT=$((DRIFT_COUNT + 1))
+-      src_hash="$( _hash_file "$SOURCE_DIR/$rel" 2>/dev/null || true )"
++      # D4: hash the route's SOURCE (see the MISSING branch above).
++      _dr_rc=0
++      src_rel="$( _wbm_route_src "$rel" )" || _dr_rc=$?
++      if [ "$_dr_rc" -eq 2 ]; then
++        src_hash=""
++      else
++        if [ "$_dr_rc" -ne 0 ] || [ -z "${src_rel:-}" ]; then src_rel="$rel"; fi
++        # rail round-8 — the same physical confinement the MISSING branch above
++        # explains. THIS is the site the finding named: unguarded, a symlinked
++        # source made `cur` and `src_hash` agree on the FOREIGN bytes and the
++        # run reported `DRIFT (baseline-stale)`, i.e. "your baseline is behind
++        # the framework, run upgrade.sh" — laundering content from outside the
++        # checkout into the adopter's recorded framework baseline. Refused, the
++        # empty src_hash lands on the existing not-repairable verdict below.
++        if _wbm_source_confined "$SOURCE_DIR" "$src_rel"; then
++          src_hash="$( _hash_file "$SOURCE_DIR/$src_rel" 2>/dev/null || true )"
++        else
++          _log "    SOURCE-BLOCKED (source '$src_rel' is not confined to the framework checkout — ${_WBM_SRC_CONFINE_WHY:-unknown reason}): $rel"
++          src_hash=""
++        fi
++      fi
+       if [ -z "$src_hash" ]; then
+@@ -570,8 +1043,14 @@ while IFS= read -r line || [ -n "$line" ]; do
+             else
+-              _backup_file "$rel"
+-              _log "    BACKED-UP: $rel -> $BAK_DIR/$rel"
+-              if _restore_file "$rel" "$base"; then
+-                REPAIRED_COUNT=$((REPAIRED_COUNT + 1))
+-              else
++              if ! _manifest_still_pinned; then
++                _manifest_pin_refused "$rel"
+                 UNRESOLVED=$((UNRESOLVED + 1))
++              elif _backup_file "$rel"; then
++                _log "    BACKED-UP: $rel -> $BAK_DIR/$rel"
++                if _restore_file "$rel" "$base"; then
++                  REPAIRED_COUNT=$((REPAIRED_COUNT + 1))
++                else
++                  UNRESOLVED=$((UNRESOLVED + 1))
++                fi
++              else
++                UNRESOLVED=$((UNRESOLVED + 1))   # FU-7: no backup, no overwrite
+               fi
+@@ -601,3 +1080,7 @@ done < "$SANITIZED"
+ if [ "$NO_ORPHAN_SCAN" -eq 0 ]; then
+-  if [ "$HAVE_FMS" -eq 1 ]; then
++  # W6: the old `if [ "$HAVE_FMS" -eq 1 ]` guard and its "orphan scan skipped"
++  # else-branch are GONE, not silenced — _framework_manifest_set.sh is required
++  # at startup now, so the branch was unreachable, and an unreachable branch
++  # that reports a degraded mode is a lie a future reader has to disprove.
++  {
+     if [ -n "$PROFILE" ]; then
+@@ -674,5 +1157,3 @@ if [ "$NO_ORPHAN_SCAN" -eq 0 ]; then
+     fi
+-  else
+-    _log "    NOTE: orphan scan skipped — _framework_manifest_set.sh not found beside doctor.sh"
+-  fi
++  }
+ fi
+@@ -745,3 +1226,10 @@ _log "    Skipped:   $SKIPPED_CONFIRM (awaiting per-file confirm)"
+ _log "    Blocked:   $BLOCKED_COUNT (baseline/framework divergence — use upgrade.sh)"
++_log "    Refused:   $REFUSED_COUNT (destination not confined to the target — nothing written)"
+ _log "    Orphans:   $ORPHAN_COUNT (candidates, report-only)"
++# Conditional ON PURPOSE (S340): a healthy run must keep printing exactly the
++# summary it printed before this pack — the line appears only when there is
++# something to report.
++if [ "$DROPPED_COUNT" -gt 0 ]; then
++  _log "    Dropped:   $DROPPED_COUNT (unsafe or malformed manifest records — NOT verified)"
++fi
+ if [ -n "$BAK_DIR" ]; then
+diff --git a/scripts/uninstall.sh b/scripts/uninstall.sh
+index 7739ca6f7137..1fed5927af7b 100755
+--- a/scripts/uninstall.sh
++++ b/scripts/uninstall.sh
+@@ -17,3 +17,3 @@
+ #   --no-backup                Skip the pre-uninstall backup tarball
+-#   --no-hmac-verify           Skip HMAC verification of the manifest sidecar
++#   --no-hmac-verify           Skip HMAC verification of the restore backup's .hmac sidecar
+ #   -h, --help                 Show this help
+@@ -24,5 +24,20 @@
+ #   2  target path invalid OR no manifest found
+-#   3  HMAC verification failed (manifest tampered)
++#   3  (reserved) — the install MANIFEST is NOT HMAC-verified in this version.
++#      The pre-uninstall backup gets an HMAC sidecar ONLY when a target-local
++#      key exists (.claude/.audit-key or .claude/.install-backup-key); neither
++#      install nor upgrade creates one in copy mode, so a normal backup is
++#      UNSIGNED and --restore accepts it as such (rc.1 condition 51). A
++#      manifest record is trusted for its PATH shape and SHA only.
+ #   4  --restore: backup tar.gz invalid or HMAC mismatch
+-#   5  --force not provided when SHA mismatches encountered
++#   5  uninstall INCOMPLETE: SHA mismatches encountered without --force
++#      (user-modified files preserved, manifest kept)
++#   6  uninstall INCOMPLETE: one or more manifest records REFUSED (unsafe
++#      path, symlinked ancestor, a relpath recorded more than once, or an
++#      alias of another recorded path — same inode) —
++#      never lifted by --force
++#   A dry-run over a PARSED manifest exits 0: it previews what would be
++#   removed, preserved or refused. Input-integrity failures happen BEFORE
++#   the preview and exit non-zero even under --dry-run: a manifest carrying
++#   a NUL byte (6), a manifest that is itself a symlink (6), a --restore
++#   tar.gz that is invalid or fails its HMAC check (4).
+ #
+@@ -57,3 +72,5 @@ while [ $# -gt 0 ]; do
+     -h|--help)
+-      sed -n '1,30p' "${BASH_SOURCE[0]}"
++      # The whole header comment, up to the Bash guard — not the first 30
++      # lines, which hid the exit codes documented below them.
++      sed -n '2,/^# Bash 3.2 portability guard/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'
+       exit 0
+@@ -87,2 +104,114 @@ _dry() {
+ 
++# ---------------------------------------------------------------------------
++# Manifest-path safety (PLAN-183 §9.8, rail r1 S337). The manifest is a FILE in
++# the target and it is NOT integrity-checked before the walk: a crafted or
++# corrupted record must not turn this script into a deleter, reader or
++# extractor OUTSIDE the target. Two tests, applied before every removal, every
++# backup entry and every restore member:
++#   _rel_unsafe REL         lexical — empty, absolute, `.`/`..` segments,
++#                           control characters                 (rc 0 = unsafe)
++#   _rel_ancestor_link REL  physical — an ancestor component under $TARGET is
++#                           a symlink; `-f`, `rm -f` and `tar` all follow it,
++#                           `! -L` only ever tests the leaf     (rc 0 = linked)
++# Measured pre-cure (S337): a record `<sha>  ../outside/victim.txt` was
++# REMOVED (outside the target), and with `docs -> <outside dir>` the walk
++# deleted the outside file and the backup archived bytes read through the link.
++# ---------------------------------------------------------------------------
++_rel_unsafe() {
++  case "$1" in
++    ''|/*|.|./*|..|../*|*/./*|*/../*|*/.|*/..) return 0 ;;
++    # rc.1 re-pass round 10 (refuter): an EMPTY SEGMENT is an alias of the
++    # same path — `docs/x` and `docs//x` name one inode but are two strings,
++    # so the relpath-uniqueness pass below could not see them as one record
++    # and the walk acted on both (preserve, then remove). The shared route
++    # predicate (_wbm_route_relpath_ok) refuses `//` too; a trailing `/` is
++    # the same alias class.
++    *//*|*/) return 0 ;;
++    *[$'\n\r\t']*) return 0 ;;
++    # rail r2 (S337) P2: whitespace and glob metacharacters — no delivery route
++    # ever carries them (_wbm_route_relpath_ok rejects both), and a crafted
++    # name with either would word-split or pathname-expand in the sweep loop.
++    *' '*|*'*'*|*'?'*|*'['*|*']'*|*'\'*) return 0 ;;
++    # rail r3 (S337) P1: an option-like path — the leaf OR any component
++    # starting with '-' — would be read by tar as a flag, not an operand.
++    -*|*/-*) return 0 ;;
++  esac
++  return 1
++}
++_rel_ancestor_link() {
++  _ral_cur="$TARGET"
++  _ral_parent="$( dirname "$1" )"
++  _ral_old="$IFS"
++  IFS='/'
++  # shellcheck disable=SC2086  # intentional word-split on the relpath components
++  for _ral_c in $_ral_parent; do
++    [ -n "$_ral_c" ] || continue
++    [ "$_ral_c" = "." ] && continue
++    _ral_cur="$_ral_cur/$_ral_c"
++    if [ -L "$_ral_cur" ]; then
++      IFS="$_ral_old"
++      return 0
++    fi
++  done
++  IFS="$_ral_old"
++  return 1
++}
++
++# PLAN-183 §9.8 (S337): remember the directories a removal may have emptied.
++#
++# rc.1 re-pass round 3, part 3 — this used to remember the TOP-LEVEL component
++# and the sweep then ran `find <top> -type d -empty -delete` over the whole
++# tree. Removing one framework file under `docs/` therefore deleted every
++# empty directory anywhere below `docs/`, including ones the adopter created.
++# The claim the sweep makes is "the directories MY deliveries left empty", and
++# the only paths that can be is the PARENT CHAIN of a file this run removed.
++swept_dirs=""
++_track_tree() {
++  case "$1" in
++    .claude/*) return 0 ;;   # .claude has its own sweep
++    */*) ;;
++    *) return 0 ;;           # a top-level file leaves no directory behind
++  esac
++  _tt_dir="${1%/*}"
++  while [ -n "$_tt_dir" ] && [ "$_tt_dir" != "." ] && [ "$_tt_dir" != "/" ]; do
++    case "
++$swept_dirs" in
++      *"
++$_tt_dir
++"*) ;;
++      *) swept_dirs="$swept_dirs
++$_tt_dir" ;;
++    esac
++    case "$_tt_dir" in
++      */*) _tt_dir="${_tt_dir%/*}" ;;
++      *) _tt_dir="" ;;
++    esac
++  done
++}
++# The sweep itself: only EMPTY directories go (-empty), so a tree that still
++# holds a file of the adopter's — or a PRESERVED delivery — is never touched,
++# and trees this run did not remove from are not visited at all. Called on
++# BOTH exit paths (complete and incomplete): a partial uninstall that removed
++# every docs/ delivery but preserved an edited CODEOWNERS still empties docs/.
++_sweep_emptied_trees() {
++  # DEEPEST FIRST, so `docs/a/b` is tried before `docs/a` and a chain empties
++  # in one pass. `rmdir` on the exact path, never `find -delete` over a tree:
++  # rmdir refuses a non-empty directory by itself, so a directory holding
++  # anything at all — an adopter's file, a PRESERVED delivery, another
++  # adopter-created directory — survives without this code having to reason
++  # about it.
++  printf '%s\n' "$swept_dirs" \
++    | awk 'NF { print gsub(/\//, "/") "\t" $0 }' \
++    | sort -rn -k1,1 \
++    | cut -f2- \
++    | while IFS= read -r _dir; do
++        case "$_dir" in ''|.|..|/*|*..*) continue ;; esac   # never leave the target
++        [ -d "$TARGET/$_dir" ] || continue
++        [ -L "$TARGET/$_dir" ] && continue
++        if ! _dry "would REMOVE the empty directory $_dir/"; then
++          rmdir "$TARGET/$_dir" 2>/dev/null || true
++        fi
++      done
++}
++
+ # ---------------------------------------------------------------------------
+@@ -135,3 +264,34 @@ sys.stdout.write(hmac.new(key, tar_sha, hashlib.sha256).hexdigest())
+ 
+-  if _dry "would EXTRACT $RESTORE_PATH into $TARGET"; then
++  # rc.1 re-pass (round 7, part 3): the archive is VALIDATED before the
++  # dry-run preview, not after it. `--dry-run --restore README.md` used to
++  # print "would EXTRACT" and exit 0 for a file that is not a tarball —
++  # the help promises exit 4 for an invalid archive BEFORE the preview, and
++  # a preview that cannot fail is not a preview. The listing and the
++  # .claude-member check need nothing moved aside, so they run first; the
++  # rollback helper below tolerates an unset `aside` for exactly that.
++  _rst_rollback() {
++    # rail r3 (S337) P2: a FAILED .claude extraction can leave a PARTIAL
++    # $TARGET/.claude directory, which the `! -d` guard would treat as "already
++    # restored". Clear the partial first so the moved-aside tree comes back
++    # whole rather than merged with half an extraction.
++    if [ -n "${aside:-}" ] && [ -d "$aside" ]; then
++      rm -rf "$TARGET/.claude" 2>/dev/null || true
++      mv "$aside" "$TARGET/.claude"
++      _log "    Rolled the previous .claude/ back into place."
++    fi
++  }
++  _rst_list="$(mktemp 2>/dev/null || mktemp -t ceo-restore-list)"
++  if ! tar tzf "$RESTORE_PATH" > "$_rst_list" 2>/dev/null; then
++    rm -f "$_rst_list"
++    echo "ERROR: cannot list the backup archive (corrupt tarball?)" >&2
++    exit 4
++  fi
++  if ! grep -qE '^(\./)?\.claude(/|$)' "$_rst_list"; then
++    rm -f "$_rst_list"
++    echo "ERROR: the archive carries no .claude/ member — not a ceo-orchestration backup" >&2
++    exit 4
++  fi
++
++  if _dry "would EXTRACT $RESTORE_PATH into $TARGET ($(grep -c . "$_rst_list") member(s) listed)"; then
++    rm -f "$_rst_list"
+     exit 0
+@@ -147,3 +307,44 @@ sys.stdout.write(hmac.new(key, tar_sha, hashlib.sha256).hexdigest())
+   _log "    Extracting backup..."
+-  ( cd "$TARGET" && tar xzf "$RESTORE_PATH" )
++  # PLAN-183 §9.8 (rail r1, S337): the archive now carries deliveries OUTSIDE
++  # .claude/ (docs/, .github/, SPEC/, root files). `.claude/` is restored whole
++  # (the live one was moved aside above); every OTHER member is restored only
++  # when nothing exists at its path — a file the adopter recreated or edited
++  # since the uninstall is PRESERVED — and a member whose path is unsafe or
++  # whose ancestor is a symlink is never extracted (traversal / write-through).
++  # rail r2 (S337) P1: a restore that could not deliver is a FAILURE, not a
++  # note — a broken/absent .claude member rolls the moved-aside .claude back
++  # and exits 4; a failed or refused non-.claude member exits 1. Members are
++  # read from a LIST FILE, not a pipeline, so the counters survive the loop.
++  if ! ( cd "$TARGET" && tar xzf "$RESTORE_PATH" .claude 2>/dev/null ); then
++    rm -f "$_rst_list"
++    echo "ERROR: failed to extract .claude/ from the backup" >&2
++    _rst_rollback
++    exit 4
++  fi
++  restore_failed=0
++  restore_refused=0
++  while IFS= read -r _m; do
++    _mrel="${_m#./}"
++    case "$_mrel" in .claude|.claude/*|*/) continue ;; esac
++    if _rel_unsafe "$_mrel" || _rel_ancestor_link "$_mrel"; then
++      restore_refused=$((restore_refused + 1))
++      _log "    SKIPPED (unsafe path or symlinked ancestor — not extracted): $_mrel"
++      continue
++    fi
++    if [ -e "$TARGET/$_mrel" ] || [ -L "$TARGET/$_mrel" ]; then
++      _log "    PRESERVED (exists — not overwritten by restore): $_mrel"
++      continue
++    fi
++    if ( cd "$TARGET" && tar xzf "$RESTORE_PATH" -- "$_m" 2>/dev/null ); then
++      _log "    RESTORED: $_mrel"
++    else
++      restore_failed=$((restore_failed + 1))
++      _log "    RESTORE-FAILED: $_mrel"
++    fi
++  done < "$_rst_list"
++  rm -f "$_rst_list"
++  if [ "$restore_failed" -gt 0 ] || [ "$restore_refused" -gt 0 ]; then
++    _log "    Restore INCOMPLETE: $restore_failed member(s) failed, $restore_refused refused (unsafe path) — see the lines above."
++    exit 1
++  fi
+   _log "    Restore complete."
+@@ -157,2 +358,14 @@ MANIFEST="$TARGET/.claude/.install-manifest.sha256"
+ 
++# rc.1 re-pass round 9, part 3: `-f` FOLLOWS a link, so a manifest that is a
++# symlink was read THROUGH it — the ledger, the backup list and the removal
++# walk all came from bytes at a path nobody validated. The link itself is
++# refused (never followed) before anything reads it; exit 6 like every other
++# refusal, dry-run included (an input-integrity failure, not a preview).
++if [ -L "$MANIFEST" ]; then
++  _log "    REFUSED: the install manifest at $MANIFEST is a SYMLINK — this"
++  _log "             uninstaller never reads a manifest through a link."
++  _log "             NOTHING was removed; the link is left as it stands."
++  exit 6
++fi
++
+ if [ ! -f "$MANIFEST" ]; then
+@@ -171,2 +384,137 @@ _log ""
+ 
++# --- rc.1 re-pass round 3, part 3: the NUL preflight ------------------------
++# `read -r` on the Bash 3.2 floor this project supports DISCARDS a NUL and
++# everything after it in that record, so the per-record `grep [[:cntrl:]]`
++# below never sees it: `<valid-sha>  docs/file<NUL>garbage` arrived at the
++# parser already truncated to `<valid-sha>  docs/file`, hashed, matched, and
++# was deleted — with the manifest removed and the run exiting 0. The reviewer
++# reproduced exactly that under 3.2.57. A per-record check cannot see a byte
++# that `read` ate; the question has to be asked of the FILE, in raw bytes,
++# before anything parses it. Refusing the WHOLE manifest is the only honest
++# answer: a NUL means the file is not the text this uninstaller can read, and
++# picking the survivors would be deciding which truncation to trust.
++if ! LC_ALL=C tr -d '\000' < "$MANIFEST" | cmp -s - "$MANIFEST"; then
++  _log "    REFUSED: the manifest contains NUL byte(s) — this uninstaller"
++  _log "             cannot read it, and `read` would silently truncate the"
++  _log "             affected record(s) into shapes that look valid."
++  _log "             NOTHING was removed; the manifest is left as it stands."
++  exit 6
++fi
++
++# --- rc.1 re-pass round 3, part 3: ONE grammar, parsed ONCE ----------------
++# Backup construction and the removal walk used DIFFERENT grammars: the walk
++# accepted one OR two spaces after the digest (`  ?`), while the backup list
++# only matched records containing two consecutive spaces. A one-space record
++# was therefore deleted but never archived — the recovery tarball silently
++# missing exactly what the run removed. The canonical grammar is EXACTLY two
++# spaces (what the writer emits); it is applied once, here, into a sanitized
++# ledger that both the backup and the walk read. No second parser can drift
++# from this one because there is no second parser.
++_LEDGER="$(mktemp 2>/dev/null || mktemp -t ceo-uninstall-ledger)"
++unsafe_count=0
++valid_count=0
++while IFS= read -r line || [ -n "$line" ]; do
++  case "$line" in '#'*|'') continue ;; esac
++  if printf '%s' "$line" | LC_ALL=C grep -q '[[:cntrl:]]'; then
++    unsafe_count=$((unsafe_count + 1))
++    _log "    REFUSED (manifest record carries control bytes — not touched)"
++    continue
++  fi
++  case "$line" in
++    LINK\ *)
++      # `LINK <relpath> <target>` is what a --link install records; this
++      # uninstaller handles copy-mode records only (rc.1 condition): the
++      # link stays, the refusal is named and counted.
++      unsafe_count=$((unsafe_count + 1))
++      _log "    REFUSED (LINK record — copy-mode uninstaller; the link is left in place): ${line#LINK }"
++      continue ;;
++  esac
++  if ! printf '%s' "$line" | LC_ALL=C grep -qE '^[0-9a-f]{64}  [^ ]'; then
++    unsafe_count=$((unsafe_count + 1))
++    _log "    REFUSED (malformed manifest record — not touched): $line"
++    continue
++  fi
++  _rel="${line#*  }"
++  if _rel_unsafe "$_rel"; then
++    unsafe_count=$((unsafe_count + 1))
++    _log "    REFUSED (unsafe manifest path — not touched): $_rel"
++    continue
++  fi
++  if _rel_ancestor_link "$_rel"; then
++    unsafe_count=$((unsafe_count + 1))
++    _log "    REFUSED (symlinked ancestor — a removal would follow it outside the target): $_rel"
++    continue
++  fi
++  valid_count=$((valid_count + 1))
++  printf '%s\t%s\n' "${line%%  *}" "$_rel" >> "$_LEDGER"
++done < "$MANIFEST"
++
++# rc.1 re-pass round 9, part 3: relpath UNIQUENESS across the whole ledger.
++# Each record was validated on its own, so a relpath recorded TWICE produced
++# two ledger rows and the walk below acts per row: `<old-sha>  docs/x` followed
++# by `<current-sha>  docs/x` PRESERVED the adopter's modified file on the first
++# row and REMOVED it on the second — without --force, exit 5 only afterwards.
++# Ambiguous provenance is refused WHOLE (every occurrence, as doctor.sh does):
++# nothing under a duplicated relpath is archived or removed.
++_dup_rels="$( cut -f2- "$_LEDGER" | LC_ALL=C sort | LC_ALL=C uniq -d )"
++if [ -n "$_dup_rels" ]; then
++  _LEDGER_UNIQ="$(mktemp 2>/dev/null || mktemp -t ceo-uninstall-ledger-uniq)"
++  while IFS="$( printf '\t' )" read -r _lsha _lrel || [ -n "$_lrel" ]; do
++    [ -n "$_lrel" ] || continue
++    if printf '%s\n' "$_dup_rels" | LC_ALL=C grep -qxF -- "$_lrel"; then
++      unsafe_count=$((unsafe_count + 1))
++      valid_count=$((valid_count - 1))
++      _log "    REFUSED (relpath recorded more than once — ambiguous provenance, not touched): $_lrel"
++      continue
++    fi
++    printf '%s\t%s\n' "$_lsha" "$_lrel" >> "$_LEDGER_UNIQ"
++  done < "$_LEDGER"
++  mv -f "$_LEDGER_UNIQ" "$_LEDGER"
++fi
++
++# rc.1 re-pass round 10 (refuter): uniqueness by STRING cannot see every alias
++# of one inode — an empty segment (`docs//x`), case folding on a
++# case-insensitive filesystem (`docs/X`), Unicode normalisation on APFS, or a
++# hard link between two recorded paths. Enumerating spellings does not
++# converge; IDENTITY does: every ledger relpath that exists is lstat()ed
++# (the leaf is never followed) and EVERY relpath whose (st_dev, st_ino)
++# appears under more than one spelling is refused before backup and removal.
++# The grammar above already refused control bytes, whitespace and glob
++# characters, so the relpaths round-trip through python3 byte-exact.
++_alias_rels="$(python3 - "$TARGET" "$_LEDGER" <<'PY'
++import os, sys
++target, ledger = sys.argv[1], sys.argv[2]
++seen = {}
++with open(ledger, 'r', encoding='utf-8') as fh:
++    for line in fh:
++        line = line.rstrip('\n')
++        if '\t' not in line:
++            continue
++        rel = line.split('\t', 1)[1]
++        try:
++            st = os.lstat(os.path.join(target, rel))
++        except OSError:
++            continue
++        seen.setdefault((st.st_dev, st.st_ino), set()).add(rel)
++for rels in seen.values():
++    if len(rels) > 1:
++        for rel in sorted(rels):
++            sys.stdout.write(rel + '\n')
++PY
++)"
++if [ -n "$_alias_rels" ]; then
++  _LEDGER_IDENT="$(mktemp 2>/dev/null || mktemp -t ceo-uninstall-ledger-ident)"
++  while IFS="$( printf '\t' )" read -r _lsha _lrel || [ -n "$_lrel" ]; do
++    [ -n "$_lrel" ] || continue
++    if printf '%s\n' "$_alias_rels" | LC_ALL=C grep -qxF -- "$_lrel"; then
++      unsafe_count=$((unsafe_count + 1))
++      valid_count=$((valid_count - 1))
++      _log "    REFUSED (relpath is an alias of another recorded path — same inode, ambiguous provenance, not touched): $_lrel"
++      continue
++    fi
++    printf '%s\t%s\n' "$_lsha" "$_lrel" >> "$_LEDGER_IDENT"
++  done < "$_LEDGER"
++  mv -f "$_LEDGER_IDENT" "$_LEDGER"
++fi
++
+ # Pre-uninstall backup (unless --no-backup)
+@@ -177,3 +525,25 @@ if [ "$NO_BACKUP" -eq 0 ]; then
+     _log "==> Pre-uninstall backup: $backup"
+-    ( cd "$TARGET" && tar czf "$backup" .claude/ 2>/dev/null )
++    # PLAN-183 §9.8 (S337): the manifest records deliveries OUTSIDE .claude/
++    # (docs/, .github/ since W5; SPEC/, PROTOCOL.md, the marker) and the walk
++    # below removes them, so the backup must cover them too — a tarball of
++    # .claude/ alone could not restore what this run deletes. The list comes
++    # from the manifest itself, regular files only, nothing outside it.
++    backup_list="$(mktemp 2>/dev/null || mktemp -t ceo-uninstall-list)"
++    printf '.claude\n' > "$backup_list"
++    # rc.1 re-pass round 3, part 3 — from the SANITIZED LEDGER, which is the
++    # same set of records the removal walk below acts on. The path checks that
++    # used to be repeated here now live in the single parse; what is left is
++    # the archive-specific question of whether the file exists as a regular
++    # file right now (`-f` and `tar` follow links, `! -L` tests the leaf).
++    cut -f2- "$_LEDGER" 2>/dev/null \
++      | while IFS= read -r _brel; do
++          case "$_brel" in .claude/*) continue ;; esac
++          [ -f "$TARGET/$_brel" ] && [ ! -L "$TARGET/$_brel" ] && printf '%s\n' "$_brel"
++        done >> "$backup_list"
++    # NO --no-recursion: the list carries `.claude` as a DIRECTORY entry whose
++    # contents must be archived (its files are excluded from the list by
++    # design). Adding it emptied every backup of .claude/* — caught by e2e U.3
++    # and by the pair rail in the same round (r3 defect, cured r4).
++    ( cd "$TARGET" && tar czf "$backup" -T "$backup_list" 2>/dev/null )
++    rm -f "$backup_list"
+     key_path="$(_resolve_backup_key || true)"
+@@ -192,3 +562,3 @@ fi
+ 
+-# Walk the manifest; for each entry, verify SHA before delete.
++# Walk the SANITIZED LEDGER; for each entry, verify SHA before delete.
+ mismatch_count=0
+@@ -199,14 +569,31 @@ mismatch_files=""
+ 
+-while IFS= read -r line; do
+-  # Skip comments and blank lines
+-  case "$line" in
+-    '#'*|'') continue ;;
+-  esac
+-  # Format: <sha>  <relpath>
+-  recorded_sha="${line%% *}"
+-  rel="${line#* }"
+-  rel="${rel#* }"  # strip second space if double-space format
+-  rel="$(printf '%s' "$line" | awk '{ $1=""; sub(/^ +/, ""); print }')"
++# rc.1 re-pass (round 2, part 3): the parse is TOTAL. `read` alone drops an
++# unterminated final record (a manifest whose trailing newline was lost never
++# processed its last delivery); a record that matched no shape was skipped in
++# silence — so an empty, comment-only or malformed manifest left every counter
++# at zero, the ledger was DELETED below and the run exited 0 with framework
++# files still on disk.
++#
++# rc.1 re-pass (round 3, part 3): that parse now happens ONCE, above, into
++# `$_LEDGER` — the same records the backup archived. What is left here is the
++# filesystem question, and it used to fail OPEN on every answer but "regular
++# file": a directory or a FIFO at a managed path fell through `continue`
++# without touching a counter, so the run could remove the ownership manifest
++# and exit 0 with the managed path still there; a dangling symlink counted as
++# ABSENT; and a symlink leaf pointing at an external regular file passed `-f`
++# and was read THROUGH by the hasher. Every one of those is now REFUSED and
++# counted, which keeps the manifest and exits 6.
++while IFS="$( printf '\t' )" read -r recorded_sha rel || [ -n "$rel" ]; do
++  [ -n "$rel" ] || continue
+   fpath="$TARGET/$rel"
+ 
++  # BEFORE -e, because -e is FALSE for a dangling link and the link would
++  # otherwise be filed as "absent" and left behind. A link is never followed:
++  # not to test it, not to hash it, not to remove it.
++  if [ -L "$fpath" ]; then
++    unsafe_count=$((unsafe_count + 1))
++    _log "    REFUSED (manifest path is a symlink — never followed, never removed): $rel"
++    continue
++  fi
++
+   if [ ! -e "$fpath" ]; then
+@@ -217,2 +604,4 @@ while IFS= read -r line; do
+   if [ ! -f "$fpath" ]; then
++    unsafe_count=$((unsafe_count + 1))
++    _log "    REFUSED (manifest path exists but is not a regular file — not touched): $rel"
+     continue
+@@ -233,2 +622,3 @@ with open(sys.argv[1], 'rb') as f:
+     fi
++    _track_tree "$rel"   # PLAN-183 §9.8: remember the tree for the emptied-directory sweep
+   else
+@@ -243,2 +633,3 @@ with open(sys.argv[1], 'rb') as f:
+       fi
++      _track_tree "$rel"   # rail r1 (S337): forced removals empty trees too
+     else
+@@ -248,6 +639,22 @@ with open(sys.argv[1], 'rb') as f:
+   fi
+-done < "$MANIFEST"
++done < "$_LEDGER"
++rm -f "$_LEDGER"
++
++# No valid record at all (empty, comment-only or wholly malformed manifest) is
++# not "everything matched": it is an unreadable ledger, and deleting it would
++# erase the only evidence of what was installed.
++if [ "$valid_count" -eq 0 ]; then
++  unsafe_count=$((unsafe_count + 1))
++  _log "    REFUSED (manifest has no valid record — empty, comment-only or malformed; kept for inspection)"
++fi
+ 
+-# Refuse if mismatches encountered without --force
+-if [ "$mismatch_count" -gt 0 ] && [ "$FORCE" -eq 0 ]; then
++# Refuse if mismatches were encountered without --force, or if ANY record was
++# refused. rail r5 (S337) P2: --force overrides a sha MISMATCH, never a REFUSAL
++# (the manifest block below already says so), so a --force run that refused a
++# record is still an INCOMPLETE uninstall. Before this cure the `&& FORCE -eq 0`
++# applied to the refusal too: such a run fell through to the "everything
++# matched" summary below — a complete-looking report contradicted by its own
++# `Refused:` and `Manifest: KEPT` lines.
++if [ "$unsafe_count" -gt 0 ] || { [ "$mismatch_count" -gt 0 ] && [ "$FORCE" -eq 0 ]; }; then
++  _sweep_emptied_trees   # rail r1 (S337): the partial path empties trees too
+   _log ""
+@@ -257,6 +664,20 @@ if [ "$mismatch_count" -gt 0 ] && [ "$FORCE" -eq 0 ]; then
+   _log "    Absent:    $absent_count (already gone)"
++  _log "    Refused:   $unsafe_count (unsafe manifest path, symlinked ancestor or relpath recorded more than once — not touched)"
+   _log ""
+-  _log "    To force-remove user-modified files: re-run with --force"
++  # The --force hint is only true for a sha mismatch met WITHOUT --force; a
++  # refusal is never lifted by --force, so say that instead of suggesting it.
++  if [ "$mismatch_count" -gt 0 ] && [ "$FORCE" -eq 0 ]; then
++    _log "    To force-remove user-modified files: re-run with --force"
++  fi
++  if [ "$unsafe_count" -gt 0 ]; then
++    _log "    Refused records are never removed, with or without --force: fix the manifest path or the symlinked ancestor, then re-run."
++  fi
+   _log "    Preserved files were NOT touched."
+-  exit 0
++  # An INCOMPLETE uninstall is never a success (rc.1 re-pass, part 3 U2):
++  # automation that reads only $? must not record a refused or preserved
++  # run as done. The dry-run stays 0 — it is a preview (header). Refusal
++  # outranks mismatch: a refused record is never lifted by --force.
++  if [ "$DRY_RUN" -eq 1 ]; then exit 0; fi
++  if [ "$unsafe_count" -gt 0 ]; then exit 6; fi
++  exit 5
+ fi
+@@ -265,3 +686,7 @@ fi
+ if ! _dry "would REMOVE manifest $MANIFEST"; then
+-  if [ "$mismatch_count" -eq 0 ] || [ "$FORCE" -eq 1 ]; then
++  # rail r3 (S337) P1: a refused record (unsafe path / symlinked ancestor) means
++  # the install was not fully removed — keep the manifest for a --force retry.
++  # rail r4 (S337) P2: --force overrides a sha MISMATCH, never a REFUSAL —
++  # a refused record was not removed by any run, so the ledger must survive.
++  if [ "$unsafe_count" -eq 0 ] && { [ "$mismatch_count" -eq 0 ] || [ "$FORCE" -eq 1 ]; }; then
+     rm -f "$MANIFEST"
+@@ -275,2 +700,7 @@ fi
+ 
++# PLAN-183 §9.8 (S337): the same sweep for every other top-level tree this run
++# removed deliveries from (docs/, .github/, SPEC/ …). Measured before the cure:
++# a pristine uninstall left docs/, .github/workflows/ and SPEC/v1 behind, empty.
++_sweep_emptied_trees
++
+ _log ""
+@@ -280,2 +710,3 @@ _log "    Preserved: $preserved_count"
+ _log "    Absent:    $absent_count"
++_log "    Refused:   $unsafe_count (unsafe manifest path, symlinked ancestor or relpath recorded more than once — not touched)"
+ _log "    Manifest:  $([ -f "$MANIFEST" ] && echo "KEPT" || echo "REMOVED")"
+diff --git a/templates/.github/workflows/benchmarks.yml.template b/templates/.github/workflows/benchmarks.yml.template
+index 14ba3b3aedee..2c9cf6a2208e 100644
+--- a/templates/.github/workflows/benchmarks.yml.template
++++ b/templates/.github/workflows/benchmarks.yml.template
+@@ -2,2 +2,32 @@ name: Skill benchmarks (advisory)
+ 
++# INERT AS SHIPPED. install.sh copies this file to
++# `.github/workflows/benchmarks.yml.template` — the `.template` suffix means
++# GitHub Actions never reads it. Activation is an EXPLICIT adopter step
++# (plain `mv -n`, not `git mv`: on a fresh install the delivered file is
++# UNTRACKED so `git mv` fails — measured S344, PLAN-183 AC-2 — and `-n`
++# refuses to clobber a benchmarks.yml of your own — but on that collision
++# `mv -n` exits 0 WITHOUT moving, so the workflow stays INERT: check the
++# rename landed, or pick another name, before you commit):
++#   mv -n .github/workflows/benchmarks.yml.template \
++#         .github/workflows/benchmarks.yml
++#
++# ONCE ACTIVATED THIS COSTS REAL MONEY ON YOUR OWN ACCOUNT. It requires the
++# repository secret ANTHROPIC_API_KEY (Settings -> Secrets and variables ->
++# Actions). Each run bills YOUR Anthropic account: one SUCCESSFUL response per
++# benchmark scenario per repetition — the runner makes up to three request
++# attempts on a rate limit or API error, so request volume can exceed that
++# count — for every benchmark YAML under
++# `.claude/skills/**/benchmarks/`. The runner refuses any single benchmark
++# YAML whose ESTIMATED cost exceeds $1.00 unless invoked with
++# --allow-expensive — a per-invocation cap, not a budget; there is NO
++# aggregate workflow-wide cap, and the paths filter below is the only
++# throttle on how often the whole job runs. With no secret configured the
++# job skips visibly and bills nothing.
++#
++# SELF-CONTAINED BY CONTRACT (PLAN-183 W2 / finding A3): every script this
++# workflow calls must be one the installer actually delivers.
++# `.claude/scripts/run-skill-benchmark.py` ships via
++# install.sh::install_scripts_selective(). The framework's own
++# `.github/scripts/` is NOT installed, so nothing here may reference it.
++#
+ # Only runs on changes to skill benchmarks, the runner, or this workflow
+@@ -91,3 +121,8 @@ jobs:
+             out="benchmark-results/${base}.json"
+-            if ! python3 .claude/scripts/run-skill-benchmark.py \
++            md="benchmark-results/${base}.md"
++            # `$?` inside `if ! cmd` is the status of `!` (always 0), so the
++            # floor breach was reported as "runner error rc=0": capture the
++            # real status first, then branch on it.
++            rc=0
++            python3 .claude/scripts/run-skill-benchmark.py \
+                  "$bench" \
+@@ -97,4 +132,4 @@ jobs:
+                  --write-lessons \
+-                 --skip-if-no-key; then
+-              rc=$?
++                 --skip-if-no-key > "$md" || rc=$?
++            if [ "$rc" -ne 0 ]; then
+               if [ "$rc" -eq 1 ]; then
+@@ -107,2 +142,3 @@ jobs:
+             fi
++            if [ -s "$md" ]; then cat "$md"; fi
+             echo "::endgroup::"
+@@ -128,4 +164,12 @@ jobs:
+           fi
+-          python3 .github/scripts/summarize-benchmarks.py benchmark-results/*.json \
+-            >> "$GITHUB_STEP_SUMMARY"
++          # PLAN-183 W2 / A3: the summary is built from the per-benchmark
++          # Markdown that .claude/scripts/run-skill-benchmark.py emits with
++          # --markdown (captured per bench in the step above). The framework's
++          # .github/scripts/ is NOT installed, so it must not be called here.
++          if ls benchmark-results/*.md >/dev/null 2>&1; then
++            cat benchmark-results/*.md >> "$GITHUB_STEP_SUMMARY"
++          else
++            printf '## Benchmarks: results produced but no Markdown captured\n' \
++              >> "$GITHUB_STEP_SUMMARY"
++          fi
+ 
+diff --git a/templates/.github/workflows/validate.yml.template b/templates/.github/workflows/validate.yml.template
+index 10d943cf8592..5709949a43b1 100644
+--- a/templates/.github/workflows/validate.yml.template
++++ b/templates/.github/workflows/validate.yml.template
+@@ -2,2 +2,14 @@ name: Validate CEO Orchestration governance
+ 
++# INERT AS SHIPPED. install.sh copies this file to
++# `.github/workflows/validate.yml.template` — the `.template` suffix means
++# GitHub Actions never reads it. Activation is an EXPLICIT adopter step
++# (plain `mv -n`: on a fresh install the file is UNTRACKED so `git mv`
++# fails — rail 183-r1 — and `-n` refuses to clobber a pre-existing
++# validate.yml of your own — rail 183-r3; pick another name if it exists,
++# and commit afterwards):
++#   mv -n .github/workflows/validate.yml.template \
++#         .github/workflows/validate.yml
++# (PLAN-183 wave-183batch; mirrors benchmarks.yml.template:3-12. The
++# frozen-subset contract — 11 steps + pins — is untouched: comments only.)
++
+ on:
+@@ -22,3 +34,6 @@ jobs:
+     runs-on: ubuntu-latest
+-    timeout-minutes: 5
++    # Kill-switch parity with the framework's own validate job: set the repo
++    # variable CEO_SOTA_DISABLE=1 to disable this job without editing CI.
++    if: vars.CEO_SOTA_DISABLE != '1'
++    timeout-minutes: 15
+ 
+@@ -26,3 +41,4 @@ jobs:
+       - name: Checkout
+-        uses: actions/checkout@v4
++        # SHA-pinned (a floating major tag is mutable). Bump via Dependabot.
++        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+ 
+@@ -88,3 +104,3 @@ jobs:
+             echo "Either fill the placeholder, replace with archetype text, or add it"
+-            echo "to the ALLOWED list in .github/workflows/validate.yml (only if it is"
++            echo "to the ALLOWED list in THIS workflow file (only if it is"
+             echo "genuinely a shared template variable)."
+@@ -102,9 +118,17 @@ jobs:
+           echo "✓ .claude/settings.json is valid JSON"
+-          for t in templates/settings/*.json; do
+-            [ -f "$t" ] || continue
+-            jq empty "$t"
+-            echo "✓ $t is valid JSON"
++          # PyYAML is a THIRD-PARTY module and the framework RUNTIME is
++          # stdlib-only (CLAUDE.md §3) — but this is CI, dev-time. A syntax
++          # gate that silently skips when its parser is missing is a gate
++          # that fails OPEN (a broken catalog would ride a green job), so the
++          # parser is installed here when absent and its absence is a failure.
++          if ! python3 -c 'import yaml' 2>/dev/null; then
++            python3 -m pip install --quiet --no-cache-dir "PyYAML>=6.0,<7" >/dev/null 2>&1 \
++              || sudo apt-get install -y -qq python3-yaml >/dev/null 2>&1 || true
++          fi
++          python3 -c 'import yaml' 2>/dev/null \
++            || { echo "ERROR: no YAML parser available — the catalog syntax gate cannot run (refusing to pass it silently)" >&2; exit 1; }
++          for y in .claude/pitfalls-catalog.yaml .claude/task-chains.yaml; do
++            [ -f "$y" ] || continue
++            python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1])); print('✓ '+sys.argv[1]+' is valid YAML')" "$y"
+           done
+-          python3 -c 'import yaml; yaml.safe_load(open(".claude/pitfalls-catalog.yaml")); print("✓ pitfalls-catalog.yaml is valid YAML")'
+-          python3 -c 'import yaml; yaml.safe_load(open(".claude/task-chains.yaml")); print("✓ task-chains.yaml is valid YAML")'
+ 
+@@ -138,22 +162,13 @@ jobs:
+       # -----------------------------------------------------------------
+-      # Step: Python hook unit tests (Sprint 2 A.4)
+-      # Runs every test under .claude/hooks/tests/. Uses Python 3.12
+-      # from ubuntu-24.04 runner default (3.10 is also acceptable).
++      # NOTE (PLAN-183 W2/A2): the framework's own hook + script unit
++      # suites are deliberately ABSENT here. `.claude/hooks/tests/` and
++      # `.claude/scripts/tests/` are framework-internal: install.sh never
++      # copies them (install_scripts_selective / install_hooks_selective
++      # ship top-level files only) and _framework_path_excluded() in
++      # scripts/_framework_manifest_set.sh classifies both as never-shipped
++      # — upgrade.sh actively PURGES them as mis-installed. Running
++      # `unittest discover` against them here fails with
++      # `ImportError: Start directory is not importable`. Put YOUR OWN
++      # test command in this slot.
+       # -----------------------------------------------------------------
+-      - name: Run Python hook unit tests
+-        run: |
+-          set -euo pipefail
+-          echo "Python version: $(python3 --version)"
+-          cd "$GITHUB_WORKSPACE"
+-          python3 -m unittest discover -s .claude/hooks/tests -p 'test_*.py' -v
+-
+-      # -----------------------------------------------------------------
+-      # Step: Python script unit tests (audit-query, run-skill-benchmark,
+-      # check-tier-boundaries)
+-      # -----------------------------------------------------------------
+-      - name: Run Python script unit tests
+-        run: |
+-          set -euo pipefail
+-          cd "$GITHUB_WORKSPACE"
+-          python3 -m unittest discover -s .claude/scripts/tests -p 'test_*.py' -v
+ 
+@@ -175,24 +190,34 @@ jobs:
+           cd "$RUNNER_TEMP"
+-          bash <(curl -sSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+-          ./actionlint -color "$GITHUB_WORKSPACE/.github/workflows/"*.yml
++          # Pinned release asset — never `main` (unpinned remote script = a
++          # supply-chain hole that grades YOUR workflows).
++          VERSION="1.7.7"
++          # Digest of the pinned release asset, verified BEFORE extraction. The
++          # URL pin alone still downloads and EXECUTES whatever the release
++          # host serves; the digest closes that hole (same check as the
++          # framework's own validate.yml).
++          EXPECTED_SHA256="023070a287cd8cccd71515fedc843f1985bf96c436b7effaecce67290e7e0757"
++          ASSET="actionlint_${VERSION}_linux_amd64.tar.gz"
++          curl -fsSLO "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${ASSET}"
++          echo "${EXPECTED_SHA256}  ${ASSET}" | sha256sum -c -
++          tar -xzf "$ASSET" actionlint
++          chmod +x actionlint
++          # nullglob so an adopter with no activated *.yml does not hand
++          # actionlint an unexpanded literal glob.
++          shopt -s nullglob
++          WF=( "$GITHUB_WORKSPACE/.github/workflows/"*.yml "$GITHUB_WORKSPACE/.github/workflows/"*.yaml )
++          if [ ${#WF[@]} -eq 0 ]; then
++            echo "NOTE: no activated workflow files (*.yml) — nothing to lint"
++          else
++            ./actionlint -color "${WF[@]}"
++          fi
+ 
+       # -----------------------------------------------------------------
+-      # Step: Skill inventory idempotency — generator output must match
+-      # the committed block in ceo-orchestration/SKILL.md.
++      # NOTE (PLAN-183 W2/A2): the skill-inventory idempotency gate is
++      # framework-only and CANNOT hold at an adopter site. install.sh ships
++      # ceo-orchestration/SKILL.md with the framework's FULL inventory
++      # baked in, while domain squads install SELECTIVELY — so
++      # generate-skill-inventory.sh and the committed block diverge by
++      # construction for any adopter that did not install all domains
++      # (measured: 82 generated lines vs 341 committed, diff rc=1).
+       # -----------------------------------------------------------------
+-      - name: Skill inventory idempotency
+-        run: |
+-          set -euo pipefail
+-          GEN=$(bash .claude/scripts/generate-skill-inventory.sh)
+-          # Extract the BEGIN/END block from the committed SKILL.md
+-          COMMITTED=$(awk '/<!-- BEGIN AUTO-GENERATED SKILL INVENTORY -->/,/<!-- END AUTO-GENERATED SKILL INVENTORY -->/' \
+-            .claude/skills/core/ceo-orchestration/SKILL.md)
+-          if [ "$GEN" != "$COMMITTED" ]; then
+-            echo "❌ Skill inventory in ceo-orchestration/SKILL.md is stale."
+-            echo "Run: bash .claude/scripts/generate-skill-inventory.sh"
+-            echo "Then re-embed the BEGIN/END block."
+-            diff <(printf '%s\n' "$GEN") <(printf '%s\n' "$COMMITTED") || true
+-            exit 1
+-          fi
+-          echo "✓ Skill inventory is up-to-date"
+ 
+diff --git a/templates/codex/pre-push-review-gate.sh b/templates/codex/pre-push-review-gate.sh
+index 5b6e9fbb2d85..6a2a3e564d4e 100755
+--- a/templates/codex/pre-push-review-gate.sh
++++ b/templates/codex/pre-push-review-gate.sh
+@@ -3,6 +3,11 @@
+ #
+-# THIRD install surface (debate A9): the installer copies this to
+-# `.git/hooks/pre-push` on a `--harness codex` target. No manifest walk
+-# reaches `.git/` naturally, so Wave 5's lifecycle-symmetry criteria must
+-# list it explicitly (manifest + uninstall + backup + restore).
++# NOT DELIVERED BY THE INSTALLER in v1.4.0 (rc.1 re-pass, round 2, part 3):
++# the Codex emission roster ships `hooks.json`, `ceo.rules` and `AGENTS.md`
++# only, so a `--harness codex` target has NO push backstop unless you install
++# this file yourself:
++#     cp templates/codex/pre-push-review-gate.sh .git/hooks/pre-push && chmod +x .git/hooks/pre-push
++# The original design (debate A9, PLAN-155 Wave 6) named `.git/hooks/pre-push`
++# as a THIRD install surface that no manifest walk reaches naturally; wiring
++# it into the roster with the lifecycle symmetry (manifest + uninstall +
++# backup + restore) is a named item of the next release.
+ #
+@@ -35,6 +40,12 @@
+ #   survives. CI therefore checks (a) only.
+-# - Coarse first-segment path classifier (mirror of
+-#   check_canonical_edit._CANONICAL_PREFIXES): it OVER-triggers review
+-#   (safe direction; a missed L3 touch is the danger, an extra review is
+-#   not).
++# - Coarse first-segment path classifier: `.claude/`, `.github/`, `scripts/`,
++#   `SPEC/` and `PROTOCOL.md` ONLY. It does NOT recognize every path the
++#   framework's canonical oracle (`check_canonical_edit.py --is-canonical`)
++#   classifies as canonical — `.codex/rules/ceo.rules`, `.grok/config.toml`,
++#   `AGENTS.md`, `requirements.toml`, `templates/settings/settings.base.json`
++#   are canonical there and NON-canonical here (rc.1 re-pass, round 7,
++#   part 3). Installed by hand, this file is therefore a REMINDER, not a
++#   security gate: a push that touches only those paths passes without
++#   review. The Grok twin ports the fine oracle with a fail-closed superset
++#   fallback; porting it here is a named item of the next release.
+ #
+@@ -59,2 +70,3 @@ fi
+ ADVISORY="${CEO_CODEX_PUSH_GATE_ADVISORY:-0}"
++_repo_top="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+ 
+@@ -89,3 +101,21 @@ _state_dir() {
+   else
+-    printf '%s' "${HOME:-/tmp}/.claude/projects/ceo-orchestration/state"
++    # PLAN-182 OQ-6 (S326): the per-project runtime state dir comes from the
++    # framework single resolver -- never rebuilt here. Rebuilding the literal
++    # made every adopter under one $HOME share ONE review log, so an APPROVE
++    # recorded in one repository satisfied this gate in ANOTHER. Resolver
++    # missing (partial upgrade) or python3 absent => EMPTY: the sidecar
++    # acceptance path (b) is simply unavailable and only per-commit APPROVE
++    # trailers (path a) can clear the push -- the same degradation an oracle
++    # failure already takes. Never a literal fallback.
++    _rp="${_repo_top}/.claude/hooks/_lib/runtime_paths.py"
++    if [ -f "$_rp" ] && command -v python3 >/dev/null 2>&1; then
++      _base="$(CLAUDE_PROJECT_DIR="$_repo_top" python3 "$_rp" --state-dir 2>/dev/null || true)"
++      if [ -n "$_base" ]; then
++        printf '%s/state' "$_base"
++      else
++        echo "pre-push-review-gate: single resolver failed; sidecar APPROVE path unavailable (trailers still clear the push)" >&2
++      fi
++    else
++      echo "pre-push-review-gate: single resolver not found at $_rp; sidecar APPROVE path unavailable (run scripts/upgrade.sh)" >&2
++    fi
+   fi
+@@ -94,3 +124,7 @@ _state_dir() {
+ _review_log() {
+-  printf '%s/codex-review-log.jsonl' "$(_state_dir)"
++  local sd
++  sd="$(_state_dir)"
++  # Empty state dir (resolver unavailable) => no sidecar log at all.
++  [ -n "$sd" ] || return 0
++  printf '%s/codex-review-log.jsonl' "$sd"
+ }
+@@ -105,4 +139,10 @@ _commits_in_range() {
+   if [ "$remote_sha" = "$_zero" ]; then
+-    # New branch: commits reachable from local_sha but not from any other ref.
+-    git rev-list "$local_sha" --not --all 2>/dev/null || true
++    # New branch: commits reachable from local_sha that are NOT already on any
++    # remote-tracking ref. `--not --all` was wrong and dangerous (pair-rail R4,
++    # S272; cured in the Grok twin first): `--all` includes LOCAL refs — among
++    # them refs/heads/<the branch being pushed>, which points at $local_sha
++    # itself — so the range subtracted itself and a first push of a branch
++    # carrying canonical edits sailed through with an EMPTY set. `--remotes`
++    # subtracts only what the remote already has.
++    git rev-list "$local_sha" --not --remotes 2>/dev/null || true
+   else
+@@ -115,3 +155,8 @@ _canonical_paths_in_commit() {
+   local sha="$1" p
+-  git diff-tree --no-commit-id --name-only -r "$sha" 2>/dev/null | while IFS= read -r p; do
++  # --root: without it, diff-tree emits NOTHING for a ROOT commit (there is no
++  # parent to diff against), so a first push whose root commit ADDS canonical
++  # files classified an empty set and passed the gate. The Grok twin has
++  # carried this flag since pair-rail R5 (S272); this copy did not, and the
++  # two gates disagreed about the one commit that has no parent.
++  git diff-tree --root --no-commit-id --name-only -r "$sha" 2>/dev/null | while IFS= read -r p; do
+     [ -n "$p" ] || continue
+@@ -136,3 +181,3 @@ _sidecar_has_approve() {
+   log="$(_review_log)"
+-  [ -f "$log" ] || return 1
++  [ -n "$log" ] && [ -f "$log" ] || return 1
+   # Match a JSON object line that is APPROVE AND carries this fingerprint.
+diff --git a/templates/compaction.md b/templates/compaction.md
+index d1017f0af75e..107f0d38aa3d 100644
+--- a/templates/compaction.md
++++ b/templates/compaction.md
+@@ -5,8 +5,7 @@
+   PURPOSE
+-    When a session approaches its context budget and must be compacted
+-    (manually via the compaction flow, or proactively by the D1 auto-compact
+-    policy in scripts/context-budget.py), the model is asked to rewrite the
+-    transcript-so-far into a single dense summary. An UNSTRUCTURED summary
+-    drops load-bearing state (open blockers, env flags, staged canonical
+-    edits). This template fixes the OUTPUT SHAPE so nothing critical is lost.
++    When a session approaches its context budget and must be compacted, the
++    model is asked to rewrite the transcript-so-far into a single dense
++    summary. An UNSTRUCTURED summary drops load-bearing state (open blockers,
++    env flags, staged canonical edits). This template fixes the OUTPUT SHAPE
++    so nothing critical is lost.
+ 
+@@ -15,6 +14,28 @@
+     Markdown — copy it into a target repo (or keep it here for the meta-repo),
+-    then trim/extend the sections for your domain. Feed the rendered template
+-    as the compaction instruction; the model fills each of the nine sections
+-    from the live transcript. Empty sections must be emitted as the literal
+-    "(none)" so a reader can tell "nothing here" from "the model forgot".
++    then EXTEND the sections for your domain (extend, never trim — see the
++    sharp edge in "How this template is actually used" below). Feed the
++    rendered template as the compaction instruction; the model fills each of
++    the nine sections from the live transcript. Empty sections must be emitted
++    as the literal "(none)" so a reader can tell "nothing here" from "the
++    model forgot".
++
++  DELIVERY CHANNEL — USE DOCTRINE (PLAN-179 W3 US10, declared S334)
++    The consumer of this template is the OPERATOR, through the interactive
++    `/compact <instructions>` command of the CLI, in long sessions that are
++    about to compact and carry load-bearing state. It is deliberately NOT
++    wired to the API `instructions` parameter of `compact_20260112`: that
++    parameter REPLACES the default compaction prompt wholesale
++    (PLAN-179/research-S309.md §1), so an incomplete rendering there is
++    strictly worse than the default — omission becomes recall loss. The
++    mechanical half of continuity does not live here at all: constraint
++    re-injection travels through its own channel (pinned constraints via
++    SessionStart(matcher=compact) + PostCompact, PLAN-179 W1-b), which does
++    not depend on the operator remembering this template.
++
++    WHO FEEDS IT: an operator, manually. Nothing in this framework feeds this
++    template automatically, and inside Claude Code nothing can — the routes
++    and the local evidence are evaluated in the first section of the body
++    (PLAN-179 W3 / US10). The earlier claim that the "D1 auto-compact policy
++    in scripts/context-budget.py" drives this template was never true: that
++    probe has no caller anywhere in the repo (see the same plan, US11).
+ 
+@@ -41,2 +62,83 @@
+ 
++## How this template is actually used
++
++> **Verdict (PLAN-179 W3 / US10, recorded 2026-08-18).** This template is
++> **not** wired to anything automatically, and — inside Claude Code — it
++> **cannot be**. It is fed by a human, on one route only. The two candidate
++> routes were evaluated against what this repository can actually verify
++> locally; the evidence for each is named below. Do not read this section as
++> a promise of wiring: it is the honest boundary.
++
++### Route (a) — `/compact <instructions>` in the CLI · **USABLE, MANUAL ONLY**
++
++Typing `/compact` followed by instruction text hands that text to the
++harness's summarizer. Local evidence that the harness carries such a field:
++the pinned hook schema `.claude/data/hook-schema-2.1.220.json` declares
++
++    "PreCompact": { "trigger": "enum[manual,auto]",
++                    "custom_instructions": "string|null" }
++
++so a manual compaction genuinely transports operator-authored instructions.
++
++Two consequences follow from the SAME schema file, and both are load-bearing:
++
++1. **No hook can supply this template.** The schema's `_absent_arms_note`
++   lists `PreCompact` among the events with **no `hookSpecificOutput` arm** —
++   there is no `additionalContext`, and no field a hook may return to SET
++   `custom_instructions`. A `PreCompact` hook may observe the compaction, and
++   may BLOCK it (exit 2), but it cannot author the instruction. Automation of
++   this route is therefore not available; the operator pastes the template.
++2. **Auto-compaction gets nothing.** On `trigger = auto`,
++   `custom_instructions` is `null` — nobody typed anything. The auto path is
++   the DOMINANT path for long sessions (the exact finding recorded against
++   ADR-153), so this template covers the case that happens least often.
++
++### Route (b) — the API `instructions` parameter · **ADOPTER-ONLY, UNVERIFIED HERE**
++
++The server-side compaction tool takes an `instructions` string that replaces
++the default summarization prompt. Inside this repository that route is
++**documented but not exercised**: the only local description lives in
++`.claude/plans/PLAN-179/research-S309.md §1.1` (a research note citing the
++vendor docs — external content, recorded as DATA), and a repo-wide grep for
++the tool identifier and for `context_management` finds **no caller** — only
++plan and research prose. This framework installs into a Claude Code harness;
++it does not own an API request loop, so it cannot exercise route (b) at all.
++
++Route (b) is real for an **adopter** who owns their own API loop. For them,
++rendering this template into `instructions` is the wiring. For this
++repository, treat it as unverified-locally: mark any claim about it
++`(unverified)` until a probe demonstrates it end-to-end.
++
++### THE SHARP EDGE — `instructions` REPLACES, it does not append
++
++On route (b) the `instructions` string **substitutes the default
++summarization prompt in its entirety**. Nothing is merged and nothing warns
++you. Any recall the default prompt would have produced, and that this
++template does not explicitly ask for, is **silently lost** — the summary
++looks complete and is not. The same hazard applies in spirit to route (a):
++whatever you type steers the summarizer away from its default behaviour.
++
++Therefore:
++
++- Send the template **whole**. Trimming a section for brevity is deleting a
++  recall requirement, not saving tokens.
++- When you add a domain section, **add** it — never replace one of the nine.
++- A section with nothing to report is emitted as the literal `(none)`. That
++  is what distinguishes "nothing here" from "the instruction did not ask".
++- After a compaction driven by this template, spot-check that all nine
++  headers came back. A missing header is evidence of instruction loss, not
++  of an empty session.
++
++### Status of the automatic route
++
++**BLOCKED ON A PROBE.** No automatic route exists today, and route (a) is
++structurally closed to automation for the reason given above. Any future
++claim that this template feeds compaction automatically must cite a probe
++that (i) emits a unique canary through the chosen channel and (ii) FAILS when
++the canary is withheld — a positive control. Until such a probe exists, the
++honest description of this file is: *a manual instruction the operator
++pastes, plus a shape contract the nine sections below define.*
++
++---
++
+ # Session Compaction Summary — `<project>` @ `<session-id>`
+diff --git a/templates/docs/BRANCH-PROTECTION.md b/templates/docs/BRANCH-PROTECTION.md
+index 0a26379adc38..0564185aeb32 100644
+--- a/templates/docs/BRANCH-PROTECTION.md
++++ b/templates/docs/BRANCH-PROTECTION.md
+@@ -172,4 +172,6 @@ R-DEV1): having separate exit codes for "CRITICAL" vs "absolute floor"
+ fragments CI error handling without buying clarity. Distinguish via
+-the `$GITHUB_STEP_SUMMARY` table rendered by
+-`.github/scripts/summarize-benchmarks.py`.
++the `$GITHUB_STEP_SUMMARY` table, which `benchmarks.yml` assembles from the
++per-benchmark Markdown that `.claude/scripts/run-skill-benchmark.py` emits
++with `--markdown`. (The framework's own `.github/scripts/` is not part of an
++install — see the header of `.github/workflows/benchmarks.yml.template`.)
+ 
+diff --git a/templates/grok/pre-push-review-gate.sh b/templates/grok/pre-push-review-gate.sh
+index 75b41446b483..07fae1708695 100755
+--- a/templates/grok/pre-push-review-gate.sh
++++ b/templates/grok/pre-push-review-gate.sh
+@@ -143,3 +143,21 @@ _state_dir() {
+   else
+-    printf '%s' "${HOME:-/tmp}/.claude/projects/ceo-orchestration/state"
++    # PLAN-182 OQ-6 (S326): the per-project runtime state dir comes from the
++    # framework single resolver -- never rebuilt here. Rebuilding the literal
++    # made every adopter under one $HOME share ONE review log, so an APPROVE
++    # recorded in one repository satisfied this gate in ANOTHER. Resolver
++    # missing (partial upgrade) or python3 absent => EMPTY: the sidecar
++    # acceptance path (b) is simply unavailable and only per-commit APPROVE
++    # trailers (path a) can clear the push -- the same degradation an oracle
++    # failure already takes. Never a literal fallback.
++    _rp="${_repo_top}/.claude/hooks/_lib/runtime_paths.py"
++    if [ -f "$_rp" ] && command -v python3 >/dev/null 2>&1; then
++      _base="$(CLAUDE_PROJECT_DIR="$_repo_top" python3 "$_rp" --state-dir 2>/dev/null || true)"
++      if [ -n "$_base" ]; then
++        printf '%s/state' "$_base"
++      else
++        echo "pre-push-review-gate: single resolver failed; sidecar APPROVE path unavailable (trailers still clear the push)" >&2
++      fi
++    else
++      echo "pre-push-review-gate: single resolver not found at $_rp; sidecar APPROVE path unavailable (run scripts/upgrade.sh)" >&2
++    fi
+   fi
+@@ -148,3 +166,7 @@ _state_dir() {
+ _review_log() {
+-  printf '%s/grok-review-log.jsonl' "$(_state_dir)"
++  local sd
++  sd="$(_state_dir)"
++  # Empty state dir (resolver unavailable) => no sidecar log at all.
++  [ -n "$sd" ] || return 0
++  printf '%s/grok-review-log.jsonl' "$sd"
+ }
+@@ -256,3 +278,3 @@ _sidecar_has_approve() {
+   log="$(_review_log)"
+-  [ -f "$log" ] || return 1
++  [ -n "$log" ] && [ -f "$log" ] || return 1
+   # Match a JSON object line that is APPROVE AND carries this fingerprint.
+diff --git a/templates/scripts/statusline-ceo.py b/templates/scripts/statusline-ceo.py
+index ca3fe3400ab1..5355aa64287d 100644
+--- a/templates/scripts/statusline-ceo.py
++++ b/templates/scripts/statusline-ceo.py
+@@ -51,3 +51,11 @@ Path resolution (mirror of ``_lib/audit_emit._audit_dir()``, ADR-001):
+     where <audit-dir> = $CEO_AUDIT_LOG_DIR
+-                        or ~/.claude/projects/ceo-orchestration
++                        or _lib.runtime_paths.runtime_state_dir()
++                           = $CLAUDE_PROJECT_DIR_NATIVE, else
++                             ~/.claude/projects/<native-slug>
++                           (the project's own path with `/` -> `-`)
++
++    On a partial upgrade where `_lib/runtime_paths` is absent, the resolution
++    degrades to the legacy `~/.claude/projects/ceo-orchestration` and says so
++    on stderr. Operators reading this contract to find a sidecar: on a normal
++    complete install it is under the NATIVE-SLUG dir, not the legacy one.
+ 
+@@ -99,2 +107,21 @@ from typing import Any, Dict, Optional
+ 
++# PLAN-182 (S325) — resolve runtime state through the SINGLE resolver
++# (ADR-001), never by rebuilding the slug here. This file runs in the
++# ADOPTER's tree, where `_lib` is installed under `.claude/hooks/`; a partial
++# install must degrade, not crash a statusline, so the import is guarded and
++# `_audit_dir()` keeps the documented legacy fallback below.
++import sys as _sys_rp
++from pathlib import Path as _Path_rp
++
++_HOOKS_RP = _Path_rp(__file__).resolve()
++for _anc in _HOOKS_RP.parents:
++    if (_anc / ".claude" / "hooks" / "_lib").is_dir():
++        if str(_anc / ".claude" / "hooks") not in _sys_rp.path:
++            _sys_rp.path.insert(0, str(_anc / ".claude" / "hooks"))
++        break
++try:
++    from _lib import runtime_paths as _rp  # noqa: E402  # single resolver
++except Exception:  # noqa: BLE001 — partial upgrade: degrade, never crash
++    _rp = None  # type: ignore[assignment]
++
+ SCHEMA = "statusline-sidecar/v1"
+@@ -122,2 +149,14 @@ _BUCKET_LABELS = (
+ def _audit_dir() -> Path:
++    """Per-PROJECT runtime state dir, resolved by the single resolver.
++
++    PLAN-182 (S325): this template used to rebuild
++    `$HOME/.claude/projects/ceo-orchestration` literally. Every adopter that
++    installed it therefore wrote into a directory named after THIS framework
++    instead of their own project, entangling their HMAC chain with every
++    other project under the same $HOME — the class PLAN-182 W1 closed for the
++    live tree and left open in this orphan.
++
++    Fallback shape mirrors `.claude/hooks/SessionEnd.py`: fail-OPEN with a
++    stderr breadcrumb, because a partial upgrade must not crash a statusline.
++    """
+     env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
+@@ -125,4 +164,9 @@ def _audit_dir() -> Path:
+         return Path(env_dir)
++    if _rp is not None:
++        return _rp.runtime_state_dir()
++    sys.stderr.write(
++        "# statusline: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n"
++    )
+     home = os.environ.get("HOME") or str(Path.home())
+-    return Path(home) / ".claude" / "projects" / "ceo-orchestration"
++    return Path(home) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
+ 
+diff --git a/templates/settings/settings.base.json b/templates/settings/settings.base.json
+index 9123b3f5f5c5..3f9a43f61ae4 100644
+--- a/templates/settings/settings.base.json
++++ b/templates/settings/settings.base.json
+@@ -208,2 +208,14 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-179 W2 US6 (ADR-195 work-boundary persistence) — ADVISORY ledger checkpoint, NEVER blocks. On a `git commit` that lands plan-scoped work (scope derived MECHANICALLY from the committed PATHS: any path under .claude/plans/PLAN-NNN/ or any path named in a plan AC — never from resolve_plan_id, whose session-coupling is the root cause PLAN-179 exists to fix), the hook reports whether that plan's LEDGER.md is in the SAME commit. PreToolUse is the only event where the omission is still curable (`git add <plan>/LEDGER.md` and re-issue) AND the only one whose output arm can carry `permissionDecision` — so the measure-first window and the FUTURE enforce flip measure the same code path. No branch in this module returns a decision today: there is no deny arm to disarm. Emits closed-enum ledger_checkpoint_recorded / ledger_checkpoint_skipped (SPEC v2.59) carrying identifiers and clamped counters only — never the commit message, the committed paths or the ledger content. Kill switches: CEO_LEDGER_CHECKPOINT=0 (rail off, and the skip is STILL measured so 'off' is observable), CEO_SOTA_DISABLE=1 (master precedence, fully silent).",
++        "matcher": "Bash",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_ledger_checkpoint.py",
++            "timeout": 5,
++            "statusMessage": "Checking work-boundary ledger checkpoint..."
++          }
++        ]
+       }
+@@ -420,2 +432,14 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-179 W1-b [amendment r1-C3]: Constraint Pinning PRIMARY channel. On a post-compaction session start (matcher 'compact' — the hook ALSO re-checks source == 'compact' in-process, never trusting the matcher alone), re-states the pinned governance constraints from the CODE constant _lib/pinned_constraints.PINNED_CONSTRAINTS (r1-C5 — never read from a .md at runtime, so it cannot be evicted by the summarizer) via additionalContext. RULES, not pointers: the PostCompact reinject hook is the REINFORCEMENT channel, this is the primary one, so pinning does not depend on the still-open W0-1 PostCompact channel verdict. ADVISORY, fail-OPEN, never blocks; emits NO audit event (the action is not yet in _KNOWN_ACTIONS — registration is a follow-up ceremony). Kill-switch: CEO_CONSTRAINT_PINNING=0 (deliberately NOT the shared CEO_COMPACTION_CONTINUITY — PLAN-179 §8.8: turning off the continuity snapshot must not silently disarm the governance floor).",
++        "matcher": "compact",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_compact_pinning.py",
++            "timeout": 5,
++            "statusMessage": "Pinning governance constraints after compaction..."
++          }
++        ]
+       }
+@@ -587,3 +611,4 @@
+     "claude-opus-5",
+-    "claude-sonnet-5"
++    "claude-sonnet-5",
++    "claude-fable-5-1"
+   ],
+@@ -627,4 +652,2 @@
+     "Fintech Frontend Data Layer & Real-Time": "name-only",
+-    "Kill Switches": "name-only",
+-    "Latency Budgets": "name-only",
+     "Order Routing": "name-only",
+@@ -661,3 +684,2 @@
+     "embedded-firmware": "name-only",
+-    "equity-research": "name-only",
+     "exchange-api-integration": "name-only",
+@@ -669,4 +691,2 @@
+     "financial-analyst": "name-only",
+-    "financial-correctness-and-math": "name-only",
+-    "financial-display": "name-only",
+     "fintech-frontend-patterns": "name-only",
+@@ -683,6 +703,4 @@
+     "instagram-curator": "name-only",
+-    "kill-switches": "name-only",
+     "korean-business": "name-only",
+     "language-translator": "name-only",
+-    "latency-budgets": "name-only",
+     "learning-analytics": "name-only",
+@@ -700,3 +718,2 @@
+     "ppc-strategist": "name-only",
+-    "prediction-markets": "name-only",
+     "programmatic-buyer": "name-only",
+@@ -726,3 +743,2 @@
+     "tracking-specialist": "name-only",
+-    "trading-execution": "name-only",
+     "twitter-engager": "name-only",
+diff --git a/templates/settings/settings.user.json b/templates/settings/settings.user.json
+index 67e09165ba15..e5c3fa0782fa 100644
+--- a/templates/settings/settings.user.json
++++ b/templates/settings/settings.user.json
+@@ -1,7 +1,240 @@
+ {
+-  "_comment": "CEO Orchestration — USER ceremony settings (PLAN-122 WS-4). Derived from settings.base.json by REMOVING exactly the 10 governance/sentinel/kernel hooks that block edits or require GPG/sentinel ceremony infra (check_plan_edit, check_arbitration_kernel, check_tier_policy, check_canonical_edit, check_protocol_semver_cascade, check_skill_patch_sentinel, check_scratchpad_access, check_skill_reference_read, check_skill_bootstrap_post, check_bash_canonical_forensic). Every RETAINED entry's BEHAVIORAL fields (matcher/command/timeout) are byte-identical to settings.base.json; some _comment annotations differ (the retained UserPromptSubmit entry carries an added PLAN-122 optimizer note). The advisory/safety scanners AND the UserPromptSubmit optimizer recommender (the whole point of the user profile) are KEPT — none of them block adopter code, and they never need a sentinel or GPG. All hook FILES are still copied to disk by install.sh so validate-governance.sh REQUIRED_FILES are satisfied; the governance subset is simply not registered, so it is dormant for the no-GPG user profile.",
++  "_comment": "CEO Orchestration - USER ceremony settings. GENERATED FILE, do not hand-edit: every hook registration, env key and top-level value below is DERIVED from templates/settings/settings.base.json by .claude/scripts/gen-settings-user-template.py, applying the subtraction declared in the `_derivation` key of this same file. To change what the user profile carries, edit `_derivation` and re-run the generator with --write; CI re-runs it with --check and reddens on any drift. The rule the exclusions follow is stated once, in `_derivation.criterion`, and every excluded hook carries its own class, reason and evidence. Retained entries are byte-identical to the base template, including their `_comment` annotations, except where `_derivation.matcher_overrides` or `_derivation.annotation_overrides` declares a difference and says why. All hook FILES are still copied to disk by install.sh, so validate-governance.sh REQUIRED_FILES stay satisfied; an omitted hook is simply never registered, and is therefore dormant for the no-GPG user profile.",
++  "_derivation": {
++    "_comment": "PLAN-169 wave-s330-F (OQ-E5). THE SUBTRACTION, AS DATA. This object is the only place that says what the USER ceremony profile removes from templates/settings/settings.base.json; .claude/scripts/gen-settings-user-template.py is the only mechanism that applies it, and its --check mode is re-run by the test suite. It replaces a prose claim that had rotted: the frozen copy said it removed \"exactly 10\" hooks and kept every retained entry byte-identical in its behavioural fields, while the S330 census measured 26 removed basenames, one hand-narrowed matcher, one silently dropped second registration, three hand-edited _comment annotations and one hand-edited statusMessage. The per-hook audit behind every verdict below is .claude/plans/PLAN-169/s330-ceremony-F/hook-classification-S330.md.",
++    "source": "settings.base.json",
++    "generator": ".claude/scripts/gen-settings-user-template.py",
++    "classification": ".claude/plans/PLAN-169/s330-ceremony-F/hook-classification-S330.md",
++    "provisional": false,
++    "criterion": "Regra de EXCLUSAO aplicada aos 26 hooks que a base registra e o perfil user nao registrava (classificacao S330). NAO e uma caracterizacao do perfil inteiro: o perfil registra hooks bloqueantes desde a v1.0.0 por decisoes anteriores a esta wave. Fica de fora todo hook que (a) bloqueia uma chamada de ferramenta sem deixar ao adopter uma rota praticavel — modo advisory, kill-switch, ou uma forma alternativa do proprio comando —, (b) exige infraestrutura de cerimonia que --ceremony user nao instala, ou (c) observa/reforca um rito de mantenedor cuja metade enforcing o perfil nao registra. Todo hook que esta wave ACRESCENTA e que ainda pode bloquear esta nomeado em blocking_inclusions, com a sua rota.",
++    "blocking_inclusions": [
++      {
++        "hook": "accel_dispatch.py",
++        "route": "CEO_TURBO=0 ou o arquivo <projeto>/.claude/turbo-off desliga a camada aceleradora inteira",
++        "evidence": ".claude/hooks/accel_dispatch.py:42 (master opt-out via turbo_profile); o bloco propaga so quando um sub-check vota block (:77-80)"
++      },
++      {
++        "hook": "check_config_change.py",
++        "route": "CEO_CONFIG_CHANGE_GUARD=0 (a chave entra em env_overrides com o valor 1 EXPLICITO, para que o default nao viva so em codigo)",
++        "evidence": ".claude/hooks/check_config_change.py:116 (le a chave; default '1'); bloqueia so achado de FORBIDDEN_KEYS em camada de settings (:245-249)"
++      },
++      {
++        "hook": "codex_review_user_code.py",
++        "route": "nao setar CEO_CODEX_USER_REVIEW_BLOCK=1 (default e DETECT-ONLY: mensagem, nunca bloqueio); CEO_CODEX_USER_REVIEW=0 desliga o hook",
++        "evidence": ".claude/hooks/codex_review_user_code.py:323-324 e :331-332 — os DOIS unicos sitios de block sao guardados pela mesma chave opt-in; :285 e o kill-switch"
++      },
++      {
++        "hook": "review_loop.py",
++        "route": "nao setar CEO_REVIEW_LOOP=1 — o hook inteiro retorna {} sem o opt-in; com ele, o cap e de 3 iteracoes",
++        "evidence": ".claude/hooks/review_loop.py:280-284 (o unico sitio de block) sob o opt-in default-OFF documentado no cabecalho do modulo"
++      }
++    ],
++    "literals": {
++      "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature."
++    },
++    "top_level_exclude": [
++      {
++        "name": "_model_pin_comment",
++        "reason": "prosa do pin do MANTENEDOR (fala de availableModels/enforceAvailableModels); o perfil advisory carrega _model_comment no lugar, que proibe exatamente essas duas chaves"
++      },
++      {
++        "name": "availableModels",
++        "reason": "o perfil user e advisory por desenho: nao restringe o conjunto de modelos. test_template_dogfood_parity.py reprova a presenca desta chave aqui"
++      },
++      {
++        "name": "fallbackModel",
++        "reason": "par de availableModels; sem allowlist nao ha para onde cair"
++      },
++      {
++        "name": "_posture_keys_comment",
++        "reason": "prosa que explica o bloco permissions acima"
++      },
++      {
++        "name": "_default_mode_arbitration_comment",
++        "reason": "prosa que explica permissions.defaultMode"
++      },
++      {
++        "name": "_night_mode_deny_surface_comment",
++        "reason": "prosa da superficie de deny do night-mode, que e rito do mantenedor"
++      },
++      {
++        "name": "permissions",
++        "reason": "deny/allow/defaultMode do MANTENEDOR. install.sh constroi a deny-baseline do adopter do zero na cerimonia user; test-install-deny-baseline.sh perna (D) exige que este template NAO traga bloco permissions"
++      },
++      {
++        "name": "cleanupPeriodDays",
++        "reason": "politica de retencao do checkout do mantenedor"
++      },
++      {
++        "name": "plansDirectory",
++        "reason": "aponta para .claude/plans/, que a cerimonia user nao instala"
++      },
++      {
++        "name": "attribution",
++        "reason": "atribuicao de commit do repo do framework"
++      },
++      {
++        "name": "_skill_budget_comment",
++        "reason": "prosa que explica skillListingBudgetFraction"
++      },
++      {
++        "name": "skillListingBudgetFraction",
++        "reason": "tuning do catalogo de skills do mantenedor"
++      },
++      {
++        "name": "skillOverrides",
++        "reason": "overrides por skill do mantenedor"
++      },
++      {
++        "name": "disableSkillShellExecution",
++        "reason": "postura de execucao de shell em skills, decidida pelo mantenedor"
++      },
++      {
++        "name": "statusLine",
++        "reason": "statusline do framework (statusline-ceo.py), ferramenta de mantenedor"
++      }
++    ],
++    "exclude_hooks": [
++      {
++        "name": "check_canonical_edit.py",
++        "class": "exige-gpg-sentinel",
++        "reason": "bloqueia toda edicao de path canonico sem approved.md assinado pelo Owner; o perfil user nao tem rito de sentinel nem GPG",
++        "evidence": ".claude/hooks/check_canonical_edit.py:686,3110"
++      },
++      {
++        "name": "check_skill_patch_sentinel.py",
++        "class": "exige-gpg-sentinel",
++        "reason": "bloqueia escrita de SKILL.md sem proposta SP-NNN em .claude/proposals/ (nao instalado) + CEO_SKILL_PATCH_SHA",
++        "evidence": ".claude/hooks/check_skill_patch_sentinel.py:81; scripts/install.sh nao instala .claude/proposals/"
++      },
++      {
++        "name": "check_tier_policy.py",
++        "class": "exige-gpg-sentinel",
++        "reason": "bloqueia edicao dos 2 agentes com VETO sem sentinel Approved-By",
++        "evidence": ".claude/hooks/check_tier_policy.py:80,84-88"
++      },
++      {
++        "name": "check_arbitration_kernel.py",
++        "class": "bloqueia-edicao",
++        "reason": "HARD-DENY do kernel de arbitragem; anti-sentinel por desenho, sem rota advisory",
++        "evidence": ".claude/hooks/check_arbitration_kernel.py:309, docstring :4-10"
++      },
++      {
++        "name": "check_plan_edit.py",
++        "class": "bloqueia-edicao",
++        "reason": "bloqueia transicoes ilegais de status: em arquivos de plano",
++        "evidence": ".claude/hooks/check_plan_edit.py:239,733"
++      },
++      {
++        "name": "check_adversary.py",
++        "class": "bloqueia-edicao",
++        "reason": "bloqueia comando Bash com credencial viva mesmo com CEO_ADVERSARY unset (ask tambem emite block); nao existe switch para esse caminho",
++        "evidence": ".claude/hooks/check_adversary.py:156-158,254-271; a mensagem :260 e falsa para o caminho de segredo"
++      },
++      {
++        "name": "check_scratchpad_access.py",
++        "class": "bloqueia-edicao",
++        "reason": "casa por SUFIXO qualquer caminho que termine em scratchpad.py (folga deliberada para fixtures de teste), entao um adopter que rode o PROPRIO script homonimo com --plan X leva bloqueio de um guard do CLI do framework, sem rota praticavel e sem saber por que; decisao do Owner de 2026-08-30 (rail-round-7 P2-a) revertendo o INCLUIR-NO-USER da classificacao S330 s1.1 pelo criterio (a) da propria regra",
++        "evidence": ".claude/hooks/check_scratchpad_access.py:96-120 (_tokens_target_scratchpad aceita qualquer dirname); .claude/plans/PLAN-169/s330-ceremony-F/rail-round-7.md"
++      },
++      {
++        "name": "check_pair_rail.py",
++        "class": "exige-infra-ausente-no-user",
++        "reason": "exige Codex CLI + .claude/governance/codex-cli-pin-manifest.json (nao instalado); 210s; os globs L3+ incluem .github/workflows/*.yml do proprio adopter",
++        "evidence": ".claude/hooks/check_pair_rail.py:157-169,1502-1511"
++      },
++      {
++        "name": "check_protocol_semver_cascade.py",
++        "class": "exige-infra-ausente-no-user",
++        "reason": "vigia PROTOCOL.md, que --ceremony user nao instala; advisory fail-OPEN sempre, entao o criterio antigo (bloqueia) era falso",
++        "evidence": ".claude/hooks/check_protocol_semver_cascade.py:14-15; scripts/install.sh:2655"
++      },
++      {
++        "name": "check_codex_filewrite.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "deny-list compartilhada com _CANONICAL_GUARDS contem paths que num adopter sao DELE (.github/workflows/*.yml, .github/CODEOWNERS, AGENTS.md, requirements.toml); fail-CLOSED por ADR-107",
++        "evidence": ".claude/hooks/check_codex_filewrite.py:24-25,275,294,356"
++      },
++      {
++        "name": "check_worktree_writer.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "policia o modo parallel-writer (ADR-049a AMEND-1) do mantenedor; inerte sem CEO_PARALLEL_WRITER, que nada no perfil user seta",
++        "evidence": ".claude/hooks/check_worktree_writer.py:31-33,665"
++      },
++      {
++        "name": "check_bash_canonical_forensic.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "metade forense E.4 de um par cuja metade E.3 (check_canonical_edit) o perfil nao registra; nunca bloqueia",
++        "evidence": ".claude/hooks/check_bash_canonical_forensic.py:4,8-9"
++      },
++      {
++        "name": "check_skill_bootstrap_post.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "audita o bypass _bootstrap_bypass_allows de check_skill_patch_sentinel, que o perfil nao registra; sem sujeito",
++        "evidence": ".claude/hooks/check_skill_bootstrap_post.py:7-14"
++      },
++      {
++        "name": "check_closeout_guard.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "lembra o rito de closeout do mantenedor (CLAUDE.md, CHANGELOG, finish-*.sh em staged/)",
++        "evidence": ".claude/hooks/check_closeout_guard.py:11,14"
++      },
++      {
++        "name": "check_ledger_checkpoint.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "checkpoint do ledger plan-scoped (ADR-195); sem .claude/plans/PLAN-NNN/ sai sempre por out_of_scope_paths pagando um cold-start por chamada Bash",
++        "evidence": ".claude/hooks/check_ledger_checkpoint.py:1235-1246"
++      },
++      {
++        "name": "check_compact_pinning.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "reinjeta PINNED_CONSTRAINTS cujas entradas 1 e 2 sao PROTOCOL.md/ADR-052 e o rito de sentinel ADR-031 - nenhum dos dois existe no perfil user",
++        "evidence": ".claude/hooks/check_compact_pinning.py:19-21; scripts/install.sh:2655"
++      },
++      {
++        "name": "check_postcompact_reinject.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "re-emite o mesmo bloco de check_compact_pinning; mesma razao, e depende do par PreCompact",
++        "evidence": ".claude/hooks/check_postcompact_reinject.py:1-11"
++      },
++      {
++        "name": "check_precompact_continuity.py",
++        "class": "maintainer-only-por-desenho",
++        "reason": "metade PreCompact do par acima; incluir uma sem a outra reproduz a assimetria que esta wave cura",
++        "evidence": ".claude/hooks/check_precompact_continuity.py:1-12; CLAUDE.md secao 5 (ADR-153 fires-proof NEGATIVO)"
++      }
++    ],
++    "exclude_hooks_pending": [],
++    "env_exclude": [],
++    "env_overrides": {
++      "CEO_CONFIG_PROTECTION_ADVISORY": "1",
++      "CEO_CONFIG_CHANGE_GUARD": "1"
++    },
++    "matcher_overrides": {
++      "PreToolUse/check_anti_ceo_overhead.py": {
++        "matcher": "Read|Edit|Write|MultiEdit|Bash",
++        "reason": "Escolha DELIBERADA de latencia do perfil advisory: 5 ferramentas em vez de 14 cold-starts por chamada. O hook e fail-OPEN, advisory, com budget <=20/dia. Antes da wave F esta divergencia era drift NAO-declarado e nenhum oraculo a via (o keyset dos testes colapsa o matcher).",
++        "evidence": "hook-classification-S330.md secao 1.2; scripts/tests/test-upgrade-lifecycle-hooks-derived.sh _keys_raw colapsa o matcher"
++      }
++    },
++    "annotation_overrides": {
++      "PreToolUse/check_anti_ceo_overhead.py": {
++        "_comment": "PLAN-083 Wave 0a sub-agent 0.5: anti-CEO-overhead detector. PreToolUse hook detecting CEO doing work a sub-agent could do equally well. Fail-OPEN. Emit budget ≤20/day. Override CEO_OVERHEAD_ACK=1. Kill-switch CEO_ANTI_OVERHEAD=0.",
++        "reason": "Acompanha o matcher_overrides acima: o texto da base explica o matcher LARGO (PLAN-125 WS-1, carimbo de ciclo de vida por tool-call), que este perfil deliberadamente nao usa."
++      },
++      "PreToolUse/check_config_protection.py": {
++        "_comment": "PLAN-124 WS-2 (ECC value-harvest) — adopter linter/formatter config protection, ADVISORY variant for the USER ceremony. Same hook as the maintainer ceremony but NON-BLOCKING: the top-level env sets CEO_CONFIG_PROTECTION_ADVISORY=1, so on an edit of an EXISTING adopter linter config the hook ALLOWS the tool call and attaches a systemMessage steer ('fix the code, not the config') instead of blocking. Per the user-ceremony doctrine this hook only ever reads/writes the adopter's own files and never blocks the session. Escape hatches still apply (CEO_CONFIG_PROTECTION=0 / <repo>/.claude/.config-protection-disable). To make it BLOCKING in a user install, remove CEO_CONFIG_PROTECTION_ADVISORY from env.",
++        "hook": {
++          "statusMessage": "Checking adopter config protection (advisory)..."
++        },
++        "reason": "O perfil user seta CEO_CONFIG_PROTECTION_ADVISORY=1, entao este hook PERMITE e orienta em vez de bloquear. O texto da base descreve a variante bloqueante do mantenedor."
++      },
++      "UserPromptSubmit/UserPromptSubmit.py": {
++        "_comment": "PLAN-028 / ADR-056 lifecycle hook. Fires pre-model-inference on each user prompt — redact-hit breadcrumb + 5-family injection smell-test + advisory banner on hit. Observer-only at State 0 (never blocks). Also carries the PLAN-122 optimizer recommender (advisory additionalContext; never dispatches). Kill-switches: CEO_EXTENDED_LIFECYCLE=0 (disables hook), CEO_PROMPT_INJECTION_SCAN=0 (disables only the scan), CEO_OPTIMIZER=0 (disables only the recommender).",
++        "reason": "A copia congelada documentava o recomendador PLAN-122, que e a razao de existir do perfil user. Preservado por ser exato para este perfil."
++      }
++    }
++  },
+   "_squad_allowlist_comment": "Sprint 11 CR2: empty default means nothing imports. Owners add entries via git; see ADR-039 + docs/squad-marketplace.md.",
+   "squad_allowlist": [],
+-  "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature.",
+-  "model": "claude-opus-5",
+   "hooks": {
+@@ -189,2 +422,40 @@
+         ]
++      },
++      {
++        "_comment": "Skill-reference Read scanner (Session 75 Codex Finding 2 mirror from dogfood): tracks Read tool calls against SKILL.md files to detect skill-bootstrap drift. Advisory only.",
++        "matcher": "Read",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_skill_reference_read.py",
++            "timeout": 5,
++            "statusMessage": "Tracking skill-reference Read..."
++          }
++        ]
++      },
++      {
++        "_comment": "PLAN-128 W1 #1+#4: after-edit verify dispatcher (advisory default-on; CEO_VERIFY_AFTER_EDIT=0 to disable). Runs syntax/lint on the changed file; surfaces findings as additionalContext for self-repair. Fail-OPEN.",
++        "matcher": "Edit|Write|MultiEdit",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" accel_dispatch.py",
++            "timeout": 20,
++            "statusMessage": "Verifying edit..."
++          }
++        ]
++      }
++    ],
++    "PostToolUseFailure": [
++      {
++        "_comment": "PLAN-125 WS-1 (kooky-harvest): per-tool-call lifecycle FAILURE coverage. Fires only on the rare tool-failure path (not the hot success path). Reuses check_output_secrets.py — it reads the native duration_ms + tool_use_id, pairs with the PreToolUse stamp, and emits tool_call_lifecycle_recorded with success=false (the PostToolUseFailure phase IS the success signal — no marker scan). Routes through the dedicated scrub-branch + allowlist (NEVER _EMIT_GENERIC_PASSTHROUGH, MF-SEC-2); raw mcp__* tool name → mcp_other (MF-SEC-1); duration_bucket only, never raw ms (MF-SEC-3). Advisory + fail-open. Kill-switch CEO_TOOL_LIFECYCLE=0.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_output_secrets.py",
++            "timeout": 5,
++            "statusMessage": "Recording tool-failure lifecycle..."
++          }
++        ]
+       }
+@@ -217,2 +488,14 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-128 W2: turbo what's-on line + first-run banner + (opt-in CEO_AUTO_BOOT=1) /ceo-boot nudge. Advisory additionalContext; fail-open. Kill: CEO_TURBO=0 / .claude/turbo-off.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" turbo_sessionstart.py",
++            "timeout": 5,
++            "statusMessage": "Turbo status..."
++          }
++        ]
+       }
+@@ -259,2 +542,68 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-128 W1 #3: cross-model review detector (detect-only default; CEO_CODEX_USER_REVIEW_AUTO=1 to auto-run codex; CEO_CODEX_USER_REVIEW=0 to disable). On a NEW risky diff advises `codex review --uncommitted`. Fail-OPEN.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" codex_review_user_code.py",
++            "timeout": 130,
++            "statusMessage": "Checking for risky diff..."
++          }
++        ]
++      },
++      {
++        "_comment": "PLAN-128 W2: auto review-loop. OPT-IN (CEO_REVIEW_LOOP=1; default OFF/no-op). On a risky+unreviewed uncommitted diff, BLOCKS Stop with a 'run codex review --uncommitted' nudge, bounded at 3 iters then fail-open. READ-ONLY. Kill: CEO_REVIEW_LOOP=0.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" review_loop.py",
++            "timeout": 15,
++            "statusMessage": "Checking review loop..."
++          }
++        ]
++      }
++    ],
++    "ConfigChange": [
++      {
++        "_comment": "PLAN-135 W2 H2: ConfigChange guard — ADVISORY audit + advisory-block of out-of-band settings.json tamper (the S197 class). Resolves multi-layer settings via _lib/effective_config (shared FORBIDDEN-KEYS source) + classifies tamper on the settings-FILE surfaces; emits config_change_observed (benign) / config_change_forbidden_key (advisory-block, ONE per tamper class). Fail-OPEN, never blocks on infra. Honest coverage boundary: disarmed by disableAllHooks + blind to outside-harness edits; compensators = /ceo-boot tripwires (S3) + W5 O10 OTEL witness (ADR-153 §H2). Kill: CEO_CONFIG_CHANGE_GUARD=0.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_config_change.py",
++            "timeout": 5,
++            "statusMessage": "Checking config change for tamper..."
++          }
++        ]
++      }
++    ],
++    "SubagentStart": [
++      {
++        "_comment": "PLAN-135 W2 H3: SubagentStart lifecycle recorder — records the spawn instant + spawn context (agent_type, session binding) into a local sidecar keyed by sha256(agent_id)[:16] (raw agent_id NEVER persisted). The SubagentStop half (check_fluency_nudge.py) consumes it + agent_transcript_path to emit ONE closed-enum subagent_lifecycle_observed bracket (per-agent wall-time + token + claim; feeds persona-ledger). ADVISORY, fail-OPEN, never blocks, NO audit action from this hook. Kill: CEO_SUBAGENT_LIFECYCLE=0.",
++        "matcher": "",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_subagent_start.py",
++            "timeout": 5,
++            "statusMessage": "Recording sub-agent spawn instant..."
++          }
++        ]
++      }
++    ],
++    "Setup": [
++      {
++        "_comment": "PLAN-135 W2 H8: Setup-event post-install self-verification (init matcher) — validate-governance --fast + verify-counts + hook exec-bits (the S228 exec-bit class) + CLAUDE_ENV_FILE allowlist persistence (explicit CEO_* include-list; every override/escape-hatch/kill-switch EXCLUDED, S185/S197 stale-override class). ADVISORY + fail-open; NEVER blocks. Kill-switch: CEO_SETUP_VERIFICATION=0.",
++        "matcher": "init",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_setup_verification.py",
++            "timeout": 15,
++            "statusMessage": "Post-install self-verification..."
++          }
++        ]
+       }
+@@ -264,4 +613,12 @@
+     "CEO_QUIET_MODE": "1",
+-    "CEO_CONFIG_PROTECTION_ADVISORY": "1"
+-  }
++    "CLAUDE_CODE_SUBAGENT_MODEL": "inherit",
++    "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": "1",
++    "BASH_MAX_TIMEOUT_MS": "600000",
++    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
++    "ENABLE_TOOL_SEARCH": "auto",
++    "CEO_CONFIG_PROTECTION_ADVISORY": "1",
++    "CEO_CONFIG_CHANGE_GUARD": "1"
++  },
++  "_model_comment": "PLAN-163 T1.1 / FXe (ADR-181 Contingency). Advisory session-default pin so a fresh `install --ceremony user` does NOT inherit the CC 2.1.220 sonnet-5 tier-default (the silent-flip that settings.base.json closes for the maintainer path). This is the MINIMUM pin for the advisory profile: it deliberately OMITS availableModels + enforceAvailableModels so the user path stays non-enforcing (advisory-only) by design. Do NOT add availableModels/enforceAvailableModels here — that would change the profile's advisory nature.",
++  "model": "claude-opus-5"
+ }

@@ -1,0 +1,43 @@
+Advisory evidence only; not an authorization. The conditions snapshot matches SHA-256 `41eeea4a19929242545f39fdd2b6d6b7d22c8fc41fb4835308531bfef334ba91`. I found no P0 and no false declared condition. The conditions are sufficient for rc.1 only with the annex below included in the signed material.
+
+Applicable declared conditions: **3, 4–5, 15–16, 26, 38, 42–43, 49–51, 55, 57, 63, 69, 77, 82 and 84**.
+
+Concrete v1.3.0 copy-mode blast radius:
+
+- Conditions 55/63 accurately describe the `user` upgrade failure: without the respective migration and merge opt-outs, maintainer settings and potentially blocking hooks are introduced.
+- Conditions 5/42 accurately cover adopter-authored files being claimed through equality with current or historical templates; subsequent doctor/uninstall operations can overwrite or delete them.
+- Conditions 15, 43, 49–51, 57 and 69 accurately describe the remaining doctor/uninstall/restore confinement, ownership and recovery hazards.
+- Condition 3 has no ordinary copy-mode effect because those manifests contain no `LINK` records.
+- Condition 38 correctly records the stale “45 registrations” claim; the base template now has 47.
+
+## NEW FINDINGS (annex)
+
+1. **P1 — `templates/codex/pre-push-review-gate.sh:36`, `:236`; `templates/grok/pre-push-review-gate.sh:59`, `:360`; `templates/.github/workflows/validate.yml.template:40`**
+
+   Concrete failure: both push gates claim that a `validate.yml` “review rider” rechecks `Pair-Rail-Reviewed: APPROVE` server-side. The delivered 11-step workflow contains no trailer or review-record check; repository search finds no such implementation. An adopter can bypass the client hook with `git push --no-verify` and still receive green CI without cross-vendor review. Conditions 26/82 do not disclose this nonexistent backstop.
+
+   Minimal fix: remove the header and runtime claims and explicitly state that no server-side trailer verification exists, or add a fail-closed CI check covering every canonical-touching pushed commit.
+
+2. **P1 — `templates/settings/settings.user.json:185`, `:216`; rule `AGENTS.md:9`**
+
+   Concrete failure: newly delivered derivation data describes matcher selection as a latency optimization and compares “5 ferramentas” against “14 cold-starts por chamada.” This is a performance claim in shipped template content, contrary to the repository’s explicit no-speed-claim rule. The generator preserves rather than rejects it. Condition 24 lists related claim violations but not these two.
+
+   Minimal fix: describe only the functional matcher scope—exactly which five tool classes are selected—without latency or cold-start assertions.
+
+## P2 follow-ups
+
+1. **P2 — `scripts/uninstall.sh:203`, `:209–212`**
+
+   Concrete failure: dry-run prints `would REMOVE the empty directory` without checking emptiness. If `docs/` contains an adopter-owned `keep.txt`, the preview claims removal while the real `rmdir` correctly preserves it.
+
+   Minimal fix: say `would TRY to remove if empty`, or calculate projected post-removal contents before claiming removal.
+
+2. **P2 — `templates/grok/pre-push-review-gate.sh:22`, `:166–171`, `:357`**
+
+   Concrete failure: the gate advertises a Grok recorder and reads `grok-review-log.jsonl`, but no Grok recorder ships; the only recorder, `.claude/hooks/check_codex_stop_review.py:135`, writes `codex-review-log.jsonl`. Recorded approval therefore cannot satisfy this route, forcing commit trailers. This fails closed, so it is a liveness/documentation defect rather than a bypass.
+
+   Minimal fix: ship the named Grok recorder or deliberately share the Codex recorder/log format, with a parity test.
+
+Validation evidence: doctor suite **44/44**, shared-route suite **113/113**, installer/doctor/uninstall write-safety E2E **325/325**, and focused template tests **178 passed, 2 skipped**. Bash syntax, ShellCheck, actionlint, JSON parsing, Python 3.9 parsing, generated-user-settings parity, contamination, count claims, AGENTS freshness and `git diff --check` all passed. The checkout remained unchanged.
+
+VERDICT: GO-WITH-CONDITIONS — Carry conditions 3, 4–5, 15–16, 26, 38, 42–43, 49–51, 55, 57, 63, 69, 77, 82 and 84 plus both P1 annex findings in the signed rc.1 material, with mandatory cure before GA.

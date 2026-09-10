@@ -1,0 +1,40 @@
+No P0 and no declared condition was false against the candidate. I found no undeclared P1.
+
+## Integration assessment
+
+The concrete v1.3.0 copy-mode blast radius is accurately represented:
+
+- Runtime relocation opens empty plan stores, resets cost accounting, and loses the legacy credential-rotation decision unless migrated: conditions 27, 39, and 40.
+- Delivery can claim or overwrite adopter-authored files and can report success after incomplete delivery: conditions 42, 45, 48, 59, 60, 64, 75, 76, and 81.
+- Backup, schema, hook, state, and harness paths still contain out-of-target-write surfaces: conditions 43, 47, 65, 69, and 82.
+- Settings posture changes for upgraded `user` installations: conditions 2, 55, 63, and 84.
+- Audit integrity has first-writer and concurrent-writer hazards: conditions 67 and 68.
+
+These conditions are sufficient for the narrowly stated rc.1 cohort only when its preflight procedure is followed. Conditions 3 and 7 are honest but inactive for copy-mode adopters. Conditions 14, 49–50, 61, 69, and 73–75 become applicable when reinstall, doctor, uninstall, restore, or custom profiles are used.
+
+The release notes now disclose the material ownership, partial-success, state-migration, ceremony, and harness limitations rather than promising their absence.
+
+## NEW FINDINGS (annex)
+
+None — no undeclared P1 finding.
+
+## P2 follow-ups
+
+1. **SEVERITY: P2 — smoke executor is absent from its workflow trigger filters.**  
+   **FILE:LINE:** [.github/workflows/smoke-install.yml:18](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.wjRlnr/wt/.github/workflows/smoke-install.yml:18), [.github/workflows/smoke-install.yml:135](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.wjRlnr/wt/.github/workflows/smoke-install.yml:135), [scripts/tests/smoke-install.sh:244](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.wjRlnr/wt/scripts/tests/smoke-install.sh:244).  
+   **Scenario:** A PR changes only `scripts/tests/run-activated-workflow.py`. Neither pull-request nor push filtering starts Smoke Install, although that file determines whether the delivered workflow is parsed and executed. This is an additional omission beyond condition 80.  
+   **Minimal fix:** Add that path to both filter lists and keep their existing equality check.
+
+2. **SEVERITY: P2 — the audit wire accepts non-ASCII plan identifiers forbidden by the SPEC.**  
+   **FILE:LINE:** [SPEC/v1/audit-log.schema.md:499](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.wjRlnr/wt/SPEC/v1/audit-log.schema.md:499), [.claude/hooks/_lib/audit_emit.py:8949](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.wjRlnr/wt/.claude/hooks/_lib/audit_emit.py:8949).  
+   **Scenario:** `_compaction_plan_id_ok("PLAN-１２３")` returns `True` because `str.isdigit()` accepts Unicode decimal digits. The value can therefore enter the signed audit wire although the new rows promise strict ASCII `PLAN-NNN`; ASCII-regex consumers disagree about its validity. Condition 70 names a neighboring validator but not this shared audit scrubber.  
+   **Minimal fix:** Require `value[5:].isascii() and value[5:].isdigit()`, with full-width and Arabic-digit controls.
+
+3. **SEVERITY: P2 — CHANGELOG overstates how much of the delivered workflow is executed.**  
+   **FILE:LINE:** [CHANGELOG.md:294](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.wjRlnr/wt/CHANGELOG.md:294), [scripts/tests/run-activated-workflow.py:348](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.wjRlnr/wt/scripts/tests/run-activated-workflow.py:348), [scripts/tests/run-activated-workflow.py:372](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.wjRlnr/wt/scripts/tests/run-activated-workflow.py:372).  
+   **Scenario:** The release note says the smoke “runs its steps,” but the runner executes only `run:` steps and explicitly skips `uses:` steps, including checkout. The current ten command steps are genuinely exercised, but the broader statement is false.  
+   **Minimal fix:** Say “executes every `run:` step”; optionally reject every `uses:` value except the exact pinned checkout action.
+
+Focused validation passed: conditions SHA-256, JSON parsing, settings-user byte derivation, gate-script checksums, audit-registry coverage, stdlib-only scan, AGENTS/CLAUDE count checks, `actionlint`, scoped `git diff --check`, 331 known actions, and all exact disk counts. Full pytest collection was not rerun because the read-only reviewer sandbox cannot create its required temporary directory.
+
+VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; rc.1 is supportable only for the stated copy-mode cohort under the named controls, with every P1 cure mandatory before GA.

@@ -1,0 +1,48 @@
+Evidência advisory para `ba6c1af70f0029773e3b061a1dca7e6106ee5cad`: não encontrei P0 nem condição declarada falsa. O envelope é suficiente para a rc.1 apenas no escopo copy-mode e com suas condições operacionais.
+
+### Blast radius confirmado
+
+O risco principal é mudança de posse, não apenas de bytes:
+
+- Um arquivo autoral pré-existente como `.claude/pitfalls-catalog.yaml`, pulado na instalação v1.3.0, pode ter sido enumerado e registrado com os bytes do adopter. No upgrade, ele vira `FRAMEWORK-CHANGED` e é sobrescrito mesmo com `--on-conflict=refuse` (`scripts/_framework_manifest_set.sh:158-196`; `scripts/upgrade.sh:1760-1785`). A condição 75 agora descreve corretamente esse caso e os quatro nomes avulsos.
+- Arquivos autorais em `docs/` ou `.github/` byte-iguais à geração atual ou histórica passam a ser registrados como framework-owned (`scripts/install.sh:1901-1926,2118-2131`). Upgrades futuros os reescrevem, `doctor --repair` os trata como drift e `uninstall` pode removê-los. Isso está honestamente declarado nas condições 5 e 42.
+- O confinamento novo protege os destinos das rotas, mas não todas as escritas do installer/upgrader. As exceções estão materialmente cobertas pelas condições 33, 43, 47, 48, 73 e 82.
+- Tabela inutilizável, fonte recusada ou fonte ausente ainda pode produzir instalação parcial com rc 0. As condições 8, 34 e 45 descrevem corretamente essa direção fail-open.
+
+### NEW FINDINGS (annex)
+
+**SEVERITY: P1 annex — cura obrigatória antes do GA**  
+**FILE:LINE:** `AGENTS.md:9-11`; `scripts/_framework_manifest_set.sh:995-997,1263-1266`; `CONDITIONS-rc1.md:530-535`
+
+**Cenário concreto:** o diff acrescenta uma alegação quantitativa de desempenho — aproximadamente 20 ms por leitura e “segundos” economizados — medida numa única máquina. Isso viola diretamente o contrato de “no speed claim”. A condição 24 declara outra ocorrência neste arquivo, em `:606-608`, mas não esta segunda ocorrência.
+
+**Correção mínima:** retirar números e linguagem de desempenho; justificar a memoização apenas como prevenção de releituras e diagnósticos repetidos.
+
+### P2 follow-ups
+
+**SEVERITY: P2**  
+**FILE:LINE:** `scripts/_framework_manifest_set.sh:1283-1287`; `scripts/install.sh:1930-1943,2056-2158`
+
+**Cenário concreto:** quando a tabela está ausente ou corrompida, o diagnóstico afirma que `docs/` e `.github/` “are NOT delivered”. No installer, os escritores codificados podem já ter copiado esses arquivos antes de o gate ser consultado. A condição 8 contém a verdade; a mensagem executável, não.
+
+**Correção mínima:** tornar a mensagem neutra ao chamador: os leitores enumeram zero rotas e nada é registrado/reparado; escritores codificados podem já ter entregue arquivos.
+
+**SEVERITY: P2**  
+**FILE:LINE:** `scripts/install.sh:241-252,936-948,1114-1123`
+
+**Cenário concreto:** o comentário diz que a ausência de `_framework_manifest_set.sh` apenas pula o manifesto e que o install não depende dele. O código novo recusa a instalação antes da primeira escrita porque o predicado de confinamento fica indisponível.
+
+**Correção mínima:** documentar `_hash_lib.sh` como auxiliar fail-open e `_framework_manifest_set.sh` como dependência obrigatória do preflight.
+
+**SEVERITY: P2**  
+**FILE:LINE:** `scripts/_framework_manifest_set.sh:895-900,923-932`
+
+**Cenário concreto:** o comentário diz que a função equivale a `^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$`, regex que aceita `owner-` e `a--b`; a implementação corretamente rejeita ambos. Um futuro consumidor que copie a regex reabre o defeito curado pela condição 9.
+
+**Correção mínima:** substituir pela gramática efetiva: `^[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}$`.
+
+As condições materialmente aplicáveis são 1, 5, 6, 8–12, 14, 24–26, 31, 33–35, 38, 42, 43, 45–48, 56, 59–64, 73–76, 81, 82 e 84. As condições 3 e 7 são verdadeiras, mas não afetam a coorte copy-mode.
+
+Verificação read-only: SHA das condições conferido; tabela com 6 rotas e 6 destinos únicos; cinco fontes distintas regulares e não-symlink; gramática do handle sondada; `bash -n`, ShellCheck, `git diff --check`, freshness, claims e contaminação passaram. Os E2E mutáveis não foram repetidos por causa do contrato read-only.
+
+VERDICT: GO-WITH-CONDITIONS — Nenhuma condição declarada é falsa e não há P0; o P1 do anexo deve integrar o material assinado e ser curado antes do GA.
