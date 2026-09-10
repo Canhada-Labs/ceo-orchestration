@@ -237,8 +237,23 @@ GPG_TTY="$(tty 2>/dev/null || true)"; export GPG_TTY
 
 # ===========================================================================
 if should 1; then
-  say "1/20 preflight (le tudo, escreve nada)"
-  bash "$RELEASE" preflight --rc "$RCN" --today "$TODAY" \
+  say "1/20 preflight (le tudo, escreve nada) — num clone descartavel de HEAD"
+  # S349 (10/09): `release.sh preflight` recusa QUALQUER `git status --porcelain`
+  # nao vazio, untracked incluido — e a arvore viva carrega, por desenho, a
+  # evidencia untracked do re-pass que o CEO rodou antes desta cerimonia. O
+  # preflight roda portanto num clone local de HEAD (o MESMO objeto), limpo por
+  # construcao — o molde do passo 2. O driver confere o CI de HEAD por `gh`, que
+  # exige um remoto do GitHub: o clone local aponta para a arvore viva, entao o
+  # remoto do CLONE (config propria; nao e worktree) recebe a URL do remoto vivo.
+  _pw="$(mktemp -d)" || die "mktemp falhou"
+  git clone --quiet --local --no-hardlinks "$ROOT" "$_pw/wt" \
+    || die "clone descartavel para o preflight falhou"
+  [ "$(git -C "$_pw/wt" rev-parse HEAD)" = "$(git rev-parse HEAD)" ] \
+    || die "o clone descartavel nao esta no HEAD vivo"
+  _origin="$(git remote get-url origin)" || die "remoto origin da arvore viva"
+  git -C "$_pw/wt" remote set-url origin "$_origin" \
+    || die "remoto do clone descartavel"
+  ( cd "$_pw/wt" && bash "$RELEASE" preflight --rc "$RCN" --today "$TODAY" ) \
     || die "preflight recusou — leia o motivo acima"
   mark_step 1
 fi

@@ -232,6 +232,29 @@ quarantine_raw() {
   mv "$1" "$RAW_QUARANTINE/$(basename "$1")" || return 1
   printf 'quarentena: %s -> %s/\n' "$(basename "$1")" "$RAW_QUARANTINE" >&2
 }
+# Cura 1 do gate de contaminacao (regra personal-path): o dono de `/Users/<dono>`,
+# `/home/<dono>` e da forma slug `-Users-<dono>` vira `<user>` — que comeca por um
+# delimitador da regra e por isso nunca casa. Aplicado ao DIFF antes de montar o
+# payload (o codex le o texto limpo) e a transcript + verdict depois do codex. O
+# padrao espelha `_PERSONAL_PATH_HOME_RE` + a forma slug de check_contamination.py.
+# Substituicao dentro da linha: contagem de linhas e hunks preservada.
+scrub_home_paths() {
+  [ -f "$1" ] || return 0
+  python3 - "$1" <<'PY' || return 1
+import re, sys
+p = sys.argv[1]
+D = r"""/\s"'`,;:)\]}<>|"""
+home = re.compile(r"(/(?<![\w.~]/)(?:[Uu][Ss][Ee][Rr][Ss]|[Hh][Oo][Mm][Ee])/+)([^" + D + "]+)")
+slug = re.compile(r"(-[Uu][Ss][Ee][Rr][Ss]-+)([^" + D + "-]+)")
+raw = open(p, "rb").read()
+t = raw.decode("utf-8", "surrogateescape")
+t2 = home.sub(lambda m: m.group(1) + "<user>", t)
+t2 = slug.sub(lambda m: m.group(1) + "<user>", t2)
+if t2 != t:
+    open(p, "wb").write(t2.encode("utf-8", "surrogateescape"))
+PY
+}
+
 _cleanup() {
   git worktree remove --force "$WT" >/dev/null 2>&1 || true
   for _raw in "$OUT"/payload-rc1-*.raw.txt; do
@@ -401,6 +424,7 @@ OVERALL=0
   echo "# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - $NPARTS partes"
   echo "- Base: $BASE_TAG ($BASE_TAG_OBJ -> $BASE_TAG_COMMIT) .. Candidato: $CANDIDATE_SHA (PRE-tag, doutrina r17)"
   echo "- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only"
+  echo "- Caminhos pessoais (/Users/<dono>, /home/<dono>, -Users-<dono>) substituidos por <user> no diff antes do payload e em transcript/verdict depois do codex (cura 1 do gate de contaminacao; rodada 17)"
   echo "- codex: $CODEX_CLI_VERSION / $CODEX_TRIPLE / payload $CODEX_PAYLOAD_SHA"
   echo "- modelo: $CODEX_MODEL (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)"
   echo "- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-rc1.reviewed.md sha256 $CONDITIONS_SHA"
@@ -441,6 +465,7 @@ for P in $PARTS; do
   # contexto do hunk nao decide nada. Orcamento medido: header + CONDITIONS + diff.
   git diff -U1 "$BASE_TAG_COMMIT".."$CANDIDATE_SHA" -- $_ps > "$DIFF" \
     || die "git diff da parte $P rc!=0"
+  scrub_home_paths "$DIFF" || die "scrub de caminhos pessoais no diff da parte $P"
   DL=$(wc -l < "$DIFF" | tr -d ' ')
   [ "$DL" -ge 50 ] || die "parte $P com so $DL linhas — manifesto errado?"
   RAW="$OUT/payload-rc1-$P.raw.txt"; RED="$OUT/payload-rc1-$P.redacted.txt"
@@ -514,6 +539,8 @@ for P in $PARTS; do
     || die "pin ausente para a parte $P — a fase A nao a completou"
   CRC="$(cat "$OUT/.codex-rc-$P" 2>/dev/null || echo 99)"
   rm -f "$OUT/.codex-rc-$P"
+  scrub_home_paths "$OUT/transcript-rc1-$P.log" || die "scrub do transcript da parte $P"
+  scrub_home_paths "$OUT/verdict-rc1-$P.txt" || die "scrub do verdict da parte $P"
   case "$CRC" in ''|*[!0-9]*) CRC=99 ;; esac
   # Exatamente UMA linha VERDICT (CM-03 do corpus S348): um arquivo com
   # GO seguido de NO-GO e ambiguo, nunca aprovacao.
