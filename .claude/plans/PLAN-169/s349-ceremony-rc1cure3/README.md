@@ -95,3 +95,32 @@ finalize (aplicação por item == patch, árvore restaurada), SIGN em auto-teste
 descartável em GNUPGHOME curto, LAND `--dry-run` com **DRY-RUN VERDE**, LAND real com commit e
 push ao bare do clone, e o controle de falha (patch adulterado ⇒ `MATERIALS.sha256 nao confere`,
 rc 1, árvore limpa). Harness: `<PK>/rc1-cure-3/ceremony/rehearse.sh <repo-vivo> <pack-dir>`.
+
+## Versão 3 do patch (09/09/2026, ~22:00) — revisão Codex dos bytes finais absorvida
+
+A revisão read-only do Codex sobre os bytes finais do patch v2 (21:24–21:34) devolveu
+NO-GO com 2 P1 + 2 P2, todos verificados no código: o helper de ancestral excluía
+symlinks (`SPEC -> arquivo` passava as duas preflights e o `mkdir` abortava depois das
+escritas); a preflight do `upgrade.sh` saía com `exit 3` antes de persistir
+`upgrade_succeeded: false` e do sumário `routes=0` — o e2e histórico no v2 reprovou
+EXATAMENTE H.15e4 e H.15f3 (controle positivo); `--skip 'SPEC/v1/*'` com `SPEC`
+arquivo (declarado no item 60); o kit escrevia no `~/.rc2-backup` real. A v3 cura os dois
+P1 no código, declara o P2 de skip e isola o HOME do kit; e2e R12 ganha as formas
+symlink-para-arquivo e pendente (rotas e `SPEC/v1`, nos dois scripts) e o controle positivo
+symlink-para-diretório; o baseline do censo write-safety (ratchet) é regenerado no mesmo
+pack. Segunda passagem do Codex sobre a v3: `NO-GO: 1 P1 (baseline do censo, regenerado no proprio pack) + 2 P2 de texto, absorvidos na v4` — a v4 (este patch, sha256
+`3e3ef2a807a968a4076109dbf4af620f40904db0758d07b98a6ad3d889ceeebc`) absorve os dois P2 de texto (47 e 18; `CONDITIONS-history.md` v54 e v55).
+Mesmos 19 caminhos, 7 canônicos. Provas nos bytes finais: e2e write-safety e e2e histórico
+(v3 de código = v4), ensaio da cerimônia num clone (12/13 — a única falha é do harness:
+o controle de falha re-binda num clone onde os materiais já são rastreados e o finalize
+recusa por «árvore suja» antes de ver o patch adulterado). O rebind repete o
+`bind-patch.sh` com `--today 2026-09-09`; `BASE-HEAD` passa a ser o commit dos materiais
+v2 (`8c05842`), o que finalize/SIGN/LAND toleram por desenho (os hashes PRE decidem).
+
+**Abreviação de hash pinada.** As linhas `index a..b` do `git diff` usam abreviação
+automática pelo número de objetos EMPACOTADOS e o repositório está na fronteira de 16.384
+(um clone `--no-hardlinks` já produz 8 hex; o vivo, 7) — o patch congelado deixaria de
+reproduzir byte a byte no V1 do finalize/LAND, e esse erro morre em silêncio (`diff|sed` sob
+`set -e -o pipefail` antes do `die`). Cura: `git config core.abbrev 12` no repositório
+vivo (feito em 09/09 22:04; só afeta exibição) e o patch gerado com o mesmo pino; o ensaio
+injeta o pino por `GIT_CONFIG_COUNT/KEY_0/VALUE_0`.

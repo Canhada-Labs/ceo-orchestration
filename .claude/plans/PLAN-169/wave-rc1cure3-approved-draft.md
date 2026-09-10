@@ -37,10 +37,20 @@ O escopo exato está no bloco `Scope:` abaixo, derivado do patch. O pacote foi
 escrito pelo Codex (autoria de outro fornecedor) sobre `7f7cda0`, revisado por
 três leitores independentes e pelo Fable, e corrigido antes desta cerimônia
 (`SPEC/v1` nos dois scripts, `--dry-run` diagnóstico, ancestral do leitor de
-`LEDGER.md`, frases absolutas): o pacote original está em
-`/private/tmp/ceo-rc1-cure-20260909-vo8m7frl/` (`FOR-FABLE.md`,
-`VALIDATION.md`) e a revisão em `<PK>/rc1-scratch-s348/REVIEW-FABLE-20260909.md`;
-os achados que o originaram estão em `repass-rc1-20260908-NOGO/r11` e `r12`.
+`LEDGER.md`, frases absolutas). Uma revisão read-only do Codex sobre os bytes
+FINAIS (09/09 21:34, NO-GO: 2 P1 + 2 P2, todos verificados no código e um deles
+reproduzido pelo e2e histórico) foi absorvida na versão 3 do patch — ancestral
+symlink que não resolve para diretório recusado na preflight dos dois scripts;
+tabela de rotas inutilizável delegada ao gate de entrega, que persiste
+`upgrade_succeeded: false`; dois limites declarados no item 60 do envelope;
+HOME isolado no kit — e a segunda passagem do Codex sobre a v3 devolveu
+`NO-GO: 1 P1 (baseline do censo, regenerado no proprio pack) + 2 P2 de texto, absorvidos na v4`; a versão 4 (a deste patch) absorve os dois P2 de texto dessa
+passagem (47: um `SPEC` symlink→diretório não é escrito através; 18: os
+ancestrais de `LEDGER.md` ficam curados). A revisão do Fable está em
+`<PK>/rc1-scratch-s348/REVIEW-FABLE-20260909.md` (o diretório temporário do
+pacote original não sobreviveu ao reboot de 09/09); os achados que o
+originaram estão em `repass-rc1-20260908-NOGO/r11` e `r12`, e a trilha das
+emendas em `repass-rc1/CONDITIONS-history.md` (v53 e v54).
 
 ## O que esta cerimônia prova antes de você assinar
 

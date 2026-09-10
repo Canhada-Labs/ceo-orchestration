@@ -1,4 +1,4 @@
-BASE-HEAD 7f7cda026b352ad5e1d80886bde69e49c4760480
+BASE-HEAD 8c05842162f20f2858523a44f125b21732b3a127
 PRE 6b63f53d66515140fd44125e183ff9612abdeb13 .claude/hooks/_lib/audit_emit.py
 PRE 724a6a919a78323884525508712870996419e257 .claude/hooks/_lib/ledger_provenance.py
 PRE 33c7fc26ddad21fa9eedd7f7a26da999a7d05455 .claude/hooks/_lib/spool_writer.py
@@ -18,7 +18,7 @@ PRE c55771aa5717611b5cf0a2ec9a12aebbcdfa6e19 scripts/_framework_manifest_set.sh
 PRE 66a05840be82fabff19dcd1d1828871a6e4ef330 scripts/install.sh
 PRE 0bc215359f3bccea42d0bdc905e14993e90287c7 scripts/tests/test-installer-write-safety-e2e.sh
 PRE c81b24278fae6492ad879d5d399654d62fd2b572 scripts/upgrade.sh
-PATCH-SHA256 c2d4779a54348d3ea3e08ea4ececd3126f490c5364a3bdca68031851fff72cf2
+PATCH-SHA256 3e3ef2a807a968a4076109dbf4af620f40904db0758d07b98a6ad3d889ceeebc
 SCOPE-COUNT 19
 CANONICAL-COUNT 7
 TODAY 2026-09-09
