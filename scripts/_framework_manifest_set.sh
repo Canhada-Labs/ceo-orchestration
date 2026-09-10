@@ -740,6 +740,39 @@ _wbm_nlink() {
 # The polarity is the one _install_src_refuses and _up_tpl_multilink_refuses
 # already use: the function is named for what a 0 MEANS.
 _WBM_DST_REFUSE_WHY=""
+# Structural check shared by the destination guard and the upgrader's early
+# delivery preflight. Callers validate the relative path first. Inspect only
+# STRICT ancestors: an absent directory can be created, but a regular file,
+# FIFO or other non-directory cannot be traversed by mkdir — and neither can
+# a symlink that does not RESOLVE to a directory (dangling, or pointing at a
+# file): `-e`/`-d` follow the link, so those two shapes are refused here too.
+# A symlink that resolves to a directory is NOT this helper's call — that
+# policy stays with each caller's existing confinement guard (the full
+# destination predicate refuses every symlink component; the forced SPEC/v1
+# route accepts a `--mode link` leaf). Pre-cure the `! -L` test skipped every
+# symlink, so `SPEC -> file` passed both preflights and the run aborted at
+# `mkdir` with the target already written (Codex review of the cure).
+_wbm_dst_non_directory_ancestor_refuses() {
+  local rel="$2" rest="$2" walk="$1" seg
+  _WBM_DST_REFUSE_WHY=""
+  while :; do
+    case "$rest" in
+      */*) seg="${rest%%/*}"; rest="${rest#*/}" ;;
+      *) break ;;
+    esac
+    walk="$walk/$seg"
+    if [ -L "$walk" ] && [ ! -e "$walk" ]; then
+      _WBM_DST_REFUSE_WHY="'$walk' is a DANGLING symlink — a non-directory ancestor of '$rel'; the destination cannot be created"
+      return 0
+    fi
+    if [ -e "$walk" ] && [ ! -d "$walk" ]; then
+      _WBM_DST_REFUSE_WHY="'$walk' is a non-directory ancestor of '$rel' — the destination cannot be created"
+      return 0
+    fi
+  done
+  return 1
+}
+
 _wbm_dst_refuses() {
   _WBM_DST_REFUSE_WHY=""
   _wbm_dr_root="${1:-}"
@@ -794,6 +827,9 @@ _wbm_dst_refuses() {
   _wbm_dr_phys="$( cd -P "$_wbm_dr_root" 2>/dev/null && pwd -P || true )"
   if [ -z "$_wbm_dr_phys" ]; then
     _WBM_DST_REFUSE_WHY="the target root '$_wbm_dr_root' exists but does not resolve to a directory"
+    return 0
+  fi
+  if _wbm_dst_non_directory_ancestor_refuses "$_wbm_dr_phys" "$_wbm_dr_rel"; then
     return 0
   fi
   _wbm_dr_walk="$_wbm_dr_phys"

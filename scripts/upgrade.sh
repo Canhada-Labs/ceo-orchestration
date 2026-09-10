@@ -31,11 +31,12 @@
 #   - (PLAN-135 W2 H8) Idempotent settings-merge step. install.sh EXISTS-SKIPs an
 #     existing .claude/settings.json, so a fresh-install-only hook registration
 #     never reaches the S217 population of existing adopters. This step registers
-#     the new framework lifecycle hooks (today: the `Setup`/`init` post-install
-#     self-verification hook check_setup_verification.py) into the adopter's
-#     existing settings.json via an idempotent `jq` merge — additive, never
-#     clobbers existing entries, re-applying is a no-op. Fail-open: missing jq /
-#     malformed settings / merge error => stderr NOTE + the upgrade proceeds.
+#     hook registrations from the shipped template for the selected ceremony
+#     and adds missing env defaults to the adopter's settings.json. Unknown
+#     ceremony applies only env values shared by both templates. The merge is
+#     additive and preserves existing entries; re-applying is a no-op.
+#     Fail-open: unavailable JSON tooling, malformed settings or merge error
+#     => stderr NOTE + the upgrade proceeds.
 #     Pass --no-settings-merge to opt out.
 #   - Owner-gated, no-silent-update: this script is NEVER auto-invoked. The Owner
 #     runs it explicitly after a deliberate `git pull`; the framework never
@@ -987,6 +988,218 @@ else
   _TEMPLATE_DELIVERY_SOURCE="ceremony=user (or a directory that never received an install) — install.sh writes no docs/ or .github/ for this population either"
 fi
 
+# F-CHAOS-3: match a relative path against the --skip globs list.
+# Returns 0 (true) if matched. Also used before the first delivery mutation.
+_path_is_skipped() {
+  local rel="$1"
+  local pattern
+  for pattern in "${SKIP_GLOBS[@]:-}"; do
+    [[ -n "$pattern" ]] || continue
+    # Intentional unquoted glob match (the whole point of --skip patterns).
+    # shellcheck disable=SC2053,SC2254
+    case "$rel" in
+      $pattern) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+# The GitHub handle a previous install recorded, or empty. Same trust class as
+# every other install-state read: target-side, UNSIGNED, advisory. STRICTLY
+# charset-validated before it is ever interpolated into a sed script —
+# PLAN-183 §9.2 reproduced install.sh:1508 aborting with a 0-byte CODEOWNERS
+# when the handle contained the sed delimiter, and that file then survives as
+# EXISTS-skipped forever. This reader refuses anything that is not a GitHub
+# handle, so upgrade.sh cannot reproduce that defect.
+#
+# PLAN-185 W2 — the GRAMMAR is now consumed, not re-stated. It moved verbatim
+# into scripts/_framework_manifest_set.sh as _wbm_github_handle_ok, and
+# install.sh — the script that PRODUCES the 0-byte defect, and which until this
+# wave accepted --github-owner raw — validates through that same function at its
+# flag parse, before persisting, and before each render. A grammar written twice
+# is a grammar that can answer differently on the two sides of one contract:
+# whatever the writer persists that the reader refuses does not fail loudly, it
+# exits 3 here and degrades the upgrade to an empty handle.
+#
+# python3 still does the JSON work (schema, types, presence); the CHARACTER SET
+# question is answered by the shared predicate. Missing predicate = broken
+# checkout = rc 3, never a local re-implementation.
+_read_install_state_github_owner() {
+  command -v python3 >/dev/null 2>&1 || return 3
+  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
+  command -v _wbm_github_handle_ok >/dev/null 2>&1 || return 3
+  _riso_h="$( PYTHONNOUSERSITE=1 python3 -I -c '
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        d = json.load(f)
+except (OSError, ValueError):
+    sys.exit(3)
+if not isinstance(d, dict) or d.get("schema_version") != 1:
+    sys.exit(3)
+req = d.get("request")
+if not isinstance(req, dict):
+    sys.exit(3)
+h = req.get("github_owner", "")
+if not isinstance(h, str) or not h:
+    sys.exit(3)
+# TRANSPORT INTEGRITY — not the grammar (rail round-4 P2). The value leaves
+# here through a command substitution, and that transport is LOSSY in two
+# specific ways: bash cannot hold a NUL in a variable at all, so it is dropped
+# silently, and `$( )` strips trailing newlines. Either one means the shell
+# validates a DIFFERENT string than the one recorded. MEASURED against this
+# reader before the check existed: "ali\x00ce" arrived as "alice" and PASSED,
+# and so did "alice\n\n".
+#
+# So the question that must be answered HERE, where the bytes are still intact,
+# is "does this value survive the transport unchanged?" — and only that. The
+# CHARACTER SET question stays with _wbm_github_handle_ok, which remains the
+# single owner of the grammar; restating the charset here would rebuild the
+# second copy round-1 deleted.
+if "\x00" in h or "\r" in h or "\n" in h:
+    sys.exit(3)
+sys.stdout.write(h)
+' "$_INSTALL_STATE_FILE" 2>/dev/null )" || return 3
+  _wbm_github_handle_ok "$_riso_h" || return 3
+  printf '%s\n' "$_riso_h"
+}
+
+# --- rail round-3 F5: "is a CODEOWNERS surface already at the target?" ------
+# ONE definition, consulted by BOTH mutually-exclusive branches. `-e` alone is
+# FALSE for a DANGLING symlink, so a target whose .github/CODEOWNERS is a link
+# to a not-yet-existing file read as ABSENT and the .template route installed
+# alongside it — two active surfaces the moment the link target appears, which
+# no install ever produces, and permanently (the next upgrade finds the
+# template IDENTICAL and never removes it).
+# A symlink of ANY kind counts as PRESENT: _up_tpl_symlink_refuses already
+# refuses to write through a link at this destination, so "occupied" and "not
+# ours to overwrite" are the same answer here. Two branches asking the same
+# question two different ways is how this class was born (rail round-1 F5), so
+# the question gets exactly one implementation.
+_up_codeowners_present() {
+  [ -e "$TARGET/.github/CODEOWNERS" ] || [ -L "$TARGET/.github/CODEOWNERS" ]
+}
+
+# rc.1 r12: a regular file or FIFO at docs/, .github/ or a deeper
+# destination ancestor used to pass confinement, then abort a late mkdir
+# under set -e after other upgrade writes. Answer for the validated delivery
+# destinations before even creating the backup directory. Refusal preserves
+# the previous manifest/install-state byte-for-byte; it records no new run.
+# Existing symlink and hard-link policies remain at their existing guards.
+# rc.1 r12: accumulator OUTSIDE the branch — the SPEC/v1 forced route below
+# shares this gate and is not gated on _TEMPLATE_DELIVERY.
+_up_ancestor_refused=0
+if [[ "$_TEMPLATE_DELIVERY" -eq 1 ]]; then
+  # The handle a previous install recorded. Empty => this run cannot render
+  # CODEOWNERS, which is the SAME state install.sh is in without
+  # --github-owner, so the exclusivity below resolves to the .template branch
+  # exactly as install.sh's else at :1563 does.
+  #
+  # rail round-7 F4 — `request.github_owner` is a RECORDED REQUEST field, the
+  # same class as request.profile / request.stack / request.harness, and
+  # --no-replay is the documented opt-out from replaying the recorded request
+  # (:44-48, :406). Pre-cure this read was unconditional, so `--no-replay` on a
+  # target with a recorded handle still rendered and refreshed
+  # .github/CODEOWNERS with it — the option contradicted by the one field that
+  # never learned about it.
+  # This is NOT the `_read_install_state_ceremony` case (:838-846): that reader
+  # runs independently of REPLAY on purpose, because its fail-safe direction is
+  # to write LESS (a missing ceremony means "user", which touches nothing). The
+  # fail-safe direction here is the same one an absent handle already has —
+  # empty => the .template branch, exactly install.sh's else at :1563 — so
+  # honouring the opt-out costs no safety and removes a contradiction.
+  # There is no `--github-owner` flag on upgrade.sh (measured: 0 occurrences
+  # outside this block), so with --no-replay the handle is simply unknown.
+  _UP_GH_OWNER=""
+  if [ "${REPLAY:-1}" -eq 1 ]; then
+    if _UP_GH_OWNER="$( _read_install_state_github_owner )"; then
+      _UP_GH_OWNER="$( printf '%s' "$_UP_GH_OWNER" | tr -d '\n' )"
+    else
+      _UP_GH_OWNER=""
+    fi
+  fi
+  if ! command -v _wbm_dst_non_directory_ancestor_refuses >/dev/null 2>&1; then
+    echo "    ERROR: REFUSED delivery preflight — the ancestor predicate is unavailable" >&2
+    _up_ancestor_refused=1
+  elif ! command -v _wbm_route_dests >/dev/null 2>&1; then
+    # rc.1 r12: a missing route READER refuses too — falling through in
+    # silence enumerated ZERO destinations, a fail-OPEN hole in this gate.
+    echo "    ERROR: REFUSED delivery preflight — the route reader is unavailable" >&2
+    _up_ancestor_refused=1
+  else
+    # rc.1 r12: the reader's rc IS the table gate (a corrupted header answers
+    # 2). Refusing HERE (Codex review of the cure) exited before the delivery
+    # gate persisted `upgrade_succeeded: false` and printed `routes=0`
+    # (H.15e4/H.15f3 went red), so an unusable table is only NAMED here and
+    # DECIDED by that gate, which refuses it with exit 3 and the record; no
+    # route is written on a refused table, so there is no ancestor to ask.
+    _up_ancestor_dests=""
+    if ! _up_ancestor_dests="$( _wbm_route_dests )"; then
+      echo "    NOTE: delivery preflight — the delivery-route table did not enumerate; the delivery gate decides below" >&2
+      _up_ancestor_dests=""
+    fi
+    while IFS= read -r _up_ancestor_rel; do
+      [[ -n "$_up_ancestor_rel" ]] || continue
+      _path_is_skipped "$_up_ancestor_rel" && continue
+      # Ask only about destinations this run can write. The two CODEOWNERS
+      # branches share the validated replay decision and presence predicate
+      # used by delivery below; a skipped/inactive route must not veto docs.
+      case "$_up_ancestor_rel" in
+        .github/CODEOWNERS)
+          [ -n "$_UP_GH_OWNER" ] || continue
+          ;;
+        .github/CODEOWNERS.template)
+          if [ -n "$_UP_GH_OWNER" ] || _up_codeowners_present; then continue; fi
+          ;;
+      esac
+      # A pinned source tree can legitimately predate a declared destination.
+      # Its absent/unconfined source cannot reach a writer; leave its existing
+      # late SKIPPED/PRESERVED verdict intact, using the shared route reader.
+      if ! _wbm_route_meta "$_up_ancestor_rel" >/dev/null \
+         || ! _wbm_source_confined "$SOURCE_DIR" "$_WBM_ROUTE_SRC" \
+         || [ ! -f "$SOURCE_DIR/$_WBM_ROUTE_SRC" ]; then
+        continue
+      fi
+      if _wbm_dst_non_directory_ancestor_refuses "$TARGET" "$_up_ancestor_rel"; then
+        echo "    ERROR: REFUSED (nothing written): $_up_ancestor_rel — $_WBM_DST_REFUSE_WHY" >&2
+        _up_ancestor_refused=1
+      fi
+    done <<< "$_up_ancestor_dests"
+  fi
+fi
+
+# rc.1 r12: non-directory ancestor. SPEC/v1 is a FORCED route (PLAN-166 F3),
+# not a delivery-routes.tsv row, so the loop above cannot see it; a regular
+# file at $TARGET/SPEC aborted its late mkdir under set -e with 1247 entries
+# already written. ANCESTOR-ONLY, never _wbm_dst_refuses: the LEAF policy is
+# _ownership_verdict's (PLAN-167) and the full predicate refuses a `--mode
+# link` SPEC/v1, the delivery _refresh_spec_contract SKIPs by design.
+if [[ "$CEREMONY_EFFECTIVE" != "user" ]] \
+   && [ -d "$SOURCE_DIR/SPEC/v1" ] \
+   && ! _path_is_skipped "SPEC/v1"; then
+  if ! command -v _wbm_dst_non_directory_ancestor_refuses >/dev/null 2>&1; then
+    echo "    ERROR: REFUSED SPEC/v1 preflight — the ancestor predicate is unavailable" >&2
+    _up_ancestor_refused=1
+  elif _wbm_dst_non_directory_ancestor_refuses "$TARGET" "SPEC/v1"; then
+    echo "    ERROR: REFUSED (nothing written): SPEC/v1 — $_WBM_DST_REFUSE_WHY" >&2
+    _up_ancestor_refused=1
+  fi
+fi
+
+# rc.1 r12: ONE gate for the preflights above. Under --dry-run the preview
+# KEEPS RUNNING and the refusal is deferred to the rc, as install.sh does at
+# its own dry-run branch; truncating collapsed the preview from 146 lines to 5.
+_UP_ANCESTOR_REFUSED_DRY=0
+if [[ "$_up_ancestor_refused" -ne 0 ]]; then
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "    (dry-run) PRE-FLIGHT: a real upgrade would REFUSE the destination(s) above and write NOTHING." >&2
+    _UP_ANCESTOR_REFUSED_DRY=1
+  else
+    echo "::error::upgrade REFUSED before its first target write — the target has NOT been touched." >&2
+    exit 3
+  fi
+fi
+
 TIMESTAMP="$( date +%Y%m%d-%H%M%S )"
 BAK_DIR="$TARGET/.claude.bak/$TIMESTAMP"
 
@@ -1309,22 +1522,6 @@ if [ -n "$_BASELINE_MANIFEST_FILE" ]; then
 else
   echo "==> Baseline manifest: none — fallback diff -q classification"
 fi
-
-# F-CHAOS-3: match a relative path against the --skip globs list.
-# Returns 0 (true) if matched.
-_path_is_skipped() {
-  local rel="$1"
-  local pattern
-  for pattern in "${SKIP_GLOBS[@]:-}"; do
-    [[ -n "$pattern" ]] || continue
-    # Intentional unquoted glob match (the whole point of --skip patterns).
-    # shellcheck disable=SC2053,SC2254
-    case "$rel" in
-      $pattern) return 0 ;;
-    esac
-  done
-  return 1
-}
 
 # F-CHAOS-3: emit a diff-q-style WARNING line for every adopter file
 # that differs from the source before we overwrite it. Recurses into
@@ -2310,6 +2507,20 @@ _refresh_spec_contract() {
         fi
       fi
 
+      # rc.1 r12: non-directory ancestor, LAST place before the write —
+      # reaching here means it changed after the preflight (TOCTOU). Refuse
+      # NAMED instead of letting mkdir abort under set -e. INV-3: no refresh
+      # happened, so the record must not advance to source hashes.
+      if command -v _wbm_dst_non_directory_ancestor_refuses >/dev/null 2>&1 \
+         && _wbm_dst_non_directory_ancestor_refuses "$TARGET" "SPEC/v1"; then
+        echo "    WARNING: PRESERVED SPEC/v1 — $_WBM_DST_REFUSE_WHY" >&2
+        _up_record_op "preserve_spec_v1_unconfined_ancestor" "SPEC/v1"
+        if [ "$_pr" = "hash" ]; then
+          _SPEC_DELIVERED=1
+          _SPEC_HASH_SOURCE="HASH_PRIOR_RECORD"
+        fi
+        return 0
+      fi
       mkdir -p "$( dirname "$ddir" )"
       cp -R "$sdir" "$ddir"
       _SPEC_DELIVERED=1
@@ -3814,6 +4025,14 @@ _refresh_schema_doc() {
     fi
     _rsd_walk="$(dirname "$_rsd_walk")"
   done
+  # rc.1 r12: the loop above answers only about SYMLINK ancestors. A regular
+  # file or FIFO at .claude/plans aborts the mkdir below under set -e,
+  # mid-upgrade. Same PRESERVED verdict, one shared predicate.
+  if command -v _wbm_dst_non_directory_ancestor_refuses >/dev/null 2>&1 \
+     && _wbm_dst_non_directory_ancestor_refuses "$TARGET" "$_rsd_rel"; then
+    echo "    WARNING: PRESERVED $_rsd_rel — $_WBM_DST_REFUSE_WHY" >&2
+    return 0
+  fi
   if [ ! -e "$_rsd_dst" ]; then
     mkdir -p "$(dirname "$_rsd_dst")"
     cp "$_rsd_src" "$_rsd_dst"
@@ -4221,66 +4440,6 @@ _up_route_unrenderable() {
   _UP_DELIVERY_PRECONDITION_REASON="unrenderable-transform"
 }
 
-# The GitHub handle a previous install recorded, or empty. Same trust class as
-# every other install-state read: target-side, UNSIGNED, advisory. STRICTLY
-# charset-validated before it is ever interpolated into a sed script —
-# PLAN-183 §9.2 reproduced install.sh:1508 aborting with a 0-byte CODEOWNERS
-# when the handle contained the sed delimiter, and that file then survives as
-# EXISTS-skipped forever. This reader refuses anything that is not a GitHub
-# handle, so upgrade.sh cannot reproduce that defect.
-#
-# PLAN-185 W2 — the GRAMMAR is now consumed, not re-stated. It moved verbatim
-# into scripts/_framework_manifest_set.sh as _wbm_github_handle_ok, and
-# install.sh — the script that PRODUCES the 0-byte defect, and which until this
-# wave accepted --github-owner raw — validates through that same function at its
-# flag parse, before persisting, and before each render. A grammar written twice
-# is a grammar that can answer differently on the two sides of one contract:
-# whatever the writer persists that the reader refuses does not fail loudly, it
-# exits 3 here and degrades the upgrade to an empty handle.
-#
-# python3 still does the JSON work (schema, types, presence); the CHARACTER SET
-# question is answered by the shared predicate. Missing predicate = broken
-# checkout = rc 3, never a local re-implementation.
-_read_install_state_github_owner() {
-  command -v python3 >/dev/null 2>&1 || return 3
-  [ -f "$_INSTALL_STATE_FILE" ] && [ -r "$_INSTALL_STATE_FILE" ] || return 3
-  command -v _wbm_github_handle_ok >/dev/null 2>&1 || return 3
-  _riso_h="$( PYTHONNOUSERSITE=1 python3 -I -c '
-import json, sys
-try:
-    with open(sys.argv[1], "r", encoding="utf-8") as f:
-        d = json.load(f)
-except (OSError, ValueError):
-    sys.exit(3)
-if not isinstance(d, dict) or d.get("schema_version") != 1:
-    sys.exit(3)
-req = d.get("request")
-if not isinstance(req, dict):
-    sys.exit(3)
-h = req.get("github_owner", "")
-if not isinstance(h, str) or not h:
-    sys.exit(3)
-# TRANSPORT INTEGRITY — not the grammar (rail round-4 P2). The value leaves
-# here through a command substitution, and that transport is LOSSY in two
-# specific ways: bash cannot hold a NUL in a variable at all, so it is dropped
-# silently, and `$( )` strips trailing newlines. Either one means the shell
-# validates a DIFFERENT string than the one recorded. MEASURED against this
-# reader before the check existed: "ali\x00ce" arrived as "alice" and PASSED,
-# and so did "alice\n\n".
-#
-# So the question that must be answered HERE, where the bytes are still intact,
-# is "does this value survive the transport unchanged?" — and only that. The
-# CHARACTER SET question stays with _wbm_github_handle_ok, which remains the
-# single owner of the grammar; restating the charset here would rebuild the
-# second copy round-1 deleted.
-if "\x00" in h or "\r" in h or "\n" in h:
-    sys.exit(3)
-sys.stdout.write(h)
-' "$_INSTALL_STATE_FILE" 2>/dev/null )" || return 3
-  _wbm_github_handle_ok "$_riso_h" || return 3
-  printf '%s\n' "$_riso_h"
-}
-
 # sha256 of every generation of a SOURCE relpath in $SOURCE_DIR's git history,
 # one per line, deduplicated. $2 (optional) is a validated OWNER_HANDLE: when
 # non-empty each generation is RENDERED through the same substitution
@@ -4549,22 +4708,6 @@ _up_tpl_normalize_mode() {
   return 0
 }
 
-# --- rail round-3 F5: "is a CODEOWNERS surface already at the target?" ------
-# ONE definition, consulted by BOTH mutually-exclusive branches. `-e` alone is
-# FALSE for a DANGLING symlink, so a target whose .github/CODEOWNERS is a link
-# to a not-yet-existing file read as ABSENT and the .template route installed
-# alongside it — two active surfaces the moment the link target appears, which
-# no install ever produces, and permanently (the next upgrade finds the
-# template IDENTICAL and never removes it).
-# A symlink of ANY kind counts as PRESENT: _up_tpl_symlink_refuses already
-# refuses to write through a link at this destination, so "occupied" and "not
-# ours to overwrite" are the same answer here. Two branches asking the same
-# question two different ways is how this class was born (rail round-1 F5), so
-# the question gets exactly one implementation.
-_up_codeowners_present() {
-  [ -e "$TARGET/.github/CODEOWNERS" ] || [ -L "$TARGET/.github/CODEOWNERS" ]
-}
-
 # --- rail round-1 F2: PHYSICAL confinement, belt and braces ----------------
 # The reader already refuses a row whose dest or src is not a confined relpath
 # (_wbm_route_relpath_ok), so nothing hostile should ever reach here. This
@@ -4625,6 +4768,10 @@ _up_tpl_confined_refuses() {
   _utc_tgt="$( cd -P "$TARGET" 2>/dev/null && pwd -P || true )"
   if [ -z "$_utc_tgt" ]; then
     echo "    ERROR: REFUSED $_utc_rel — the target directory does not resolve" >&2
+    return 0
+  fi
+  if _wbm_dst_non_directory_ancestor_refuses "$_utc_tgt" "$_utc_rel"; then
+    echo "    ERROR: REFUSED $_utc_rel — $_WBM_DST_REFUSE_WHY" >&2
     return 0
   fi
   _utc_walk="$( dirname "$TARGET/$_utc_rel" )"
@@ -4923,34 +5070,7 @@ elif [ "$_TEMPLATE_DELIVERY" -eq 1 ] && [ "$_UP_TPL_ROUTES" -ne "$_UP_TPL_ROWS" 
   _UP_DELIVERY_PRECONDITION_REASON="rejected-route-row"
   echo "    docs/.github delivery: routes=$_UP_TPL_ROUTES installed=0 refreshed=0 identical=0 preserved=0 skipped=0 precondition=FAILED — PRECONDITION FAILED (rejected route row)"
 elif [ "$_TEMPLATE_DELIVERY" -eq 1 ]; then
-  # The handle a previous install recorded. Empty => this run cannot render
-  # CODEOWNERS, which is the SAME state install.sh is in without
-  # --github-owner, so the exclusivity below resolves to the .template branch
-  # exactly as install.sh's else at :1563 does.
-  #
-  # rail round-7 F4 — `request.github_owner` is a RECORDED REQUEST field, the
-  # same class as request.profile / request.stack / request.harness, and
-  # --no-replay is the documented opt-out from replaying the recorded request
-  # (:44-48, :406). Pre-cure this read was unconditional, so `--no-replay` on a
-  # target with a recorded handle still rendered and refreshed
-  # .github/CODEOWNERS with it — the option contradicted by the one field that
-  # never learned about it.
-  # This is NOT the `_read_install_state_ceremony` case (:838-846): that reader
-  # runs independently of REPLAY on purpose, because its fail-safe direction is
-  # to write LESS (a missing ceremony means "user", which touches nothing). The
-  # fail-safe direction here is the same one an absent handle already has —
-  # empty => the .template branch, exactly install.sh's else at :1563 — so
-  # honouring the opt-out costs no safety and removes a contradiction.
-  # There is no `--github-owner` flag on upgrade.sh (measured: 0 occurrences
-  # outside this block), so with --no-replay the handle is simply unknown.
-  _UP_GH_OWNER=""
-  if [ "${REPLAY:-1}" -eq 1 ]; then
-    if _UP_GH_OWNER="$( _read_install_state_github_owner )"; then
-      _UP_GH_OWNER="$( printf '%s' "$_UP_GH_OWNER" | tr -d '\n' )"
-    else
-      _UP_GH_OWNER=""
-    fi
-  fi
+  # Owner selection was resolved once before the destination preflight.
   if [ -n "$_UP_GH_OWNER" ]; then
     echo "    CODEOWNERS handle: @$_UP_GH_OWNER (recorded install request)"
   elif [ "${REPLAY:-1}" -ne 1 ]; then
@@ -5665,6 +5785,16 @@ echo "    additive-only and stays so):"
 echo "      \"Write(PROTOCOL.md)\""
 echo "      \"Write(.claude/settings.json)\""
 echo "      \"Write(SPEC/**)\""
+
+# --- rc.1 r12: the deferred --dry-run preflight refusal --------------------
+# The preview ran to the end; the rc still says a real run would have refused,
+# so a caller reading only $? cannot mistake this preview for a clean one.
+if [ "${_UP_ANCESTOR_REFUSED_DRY:-0}" -eq 1 ]; then
+  echo "" >&2
+  echo "ERROR: a real upgrade would REFUSE before its first target write — see" >&2
+  echo "       the REFUSED line(s) above. Nothing was written (--dry-run)." >&2
+  exit 3
+fi
 
 # --- rail round-2 F2 (second half): the FAILED precondition reaches the rc ---
 # Deferred to here on purpose (see _UP_DELIVERY_PRECONDITION_FAILED above):

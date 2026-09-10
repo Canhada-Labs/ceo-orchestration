@@ -7,6 +7,7 @@ partir da evidencia CORRENTE em repass-rc1/. Fail-CLOSED em toda checagem
       --conditions-file <md>          # OBRIGATORIO se algum rail = GWC
   # -> Owner: gpg --detach-sign --armor verdict-fields-v1.4.0-rc.1.md
   python3 gen-envelope-rc1.py --stage envelope --sig <.asc>
+  python3 gen-envelope-rc1.py --stage verify --sig <.asc>  # retomada, sem escrita
 
 Clone do PLAN-177/gen-envelope-rc4.py com TAG, diretorio de plano e numero
 de rails novos, MAIS duas mudancas de desenho que o rc.4 nao podia ter:
@@ -25,8 +26,8 @@ de rails novos, MAIS duas mudancas de desenho que o rc.4 nao podia ter:
 
 Demais derivacoes, todas dos artefatos REAIS e nunca digitadas: inputs_hash
 pela funcao do proprio validador; MANIFEST-rc1 verificado; transcript_hash =
-sha256 da concatenacao ordenada dos 6 transcripts; parent VINCULADO ao
-candidato do runner/PROVENANCE; a DECISAO agregada e DERIVADA dos 6 rails;
+sha256 da concatenacao ordenada dos 7 transcripts; parent VINCULADO ao
+candidato do runner/PROVENANCE; a DECISAO agregada e DERIVADA dos 7 rails;
 as CONDICOES entram nos FIELDS (material assinado); assinatura VERIFICADA
 antes de embutir; escrita atomica sem seguir symlink. stdlib only, >= 3.9.
 """
@@ -44,7 +45,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 REPO = pathlib.Path(subprocess.check_output(
     ["git", "rev-parse", "--show-toplevel"], universal_newlines=True).strip())
@@ -59,7 +60,9 @@ SIGNERS = REPO / ".claude/sentinel-signers.txt"
 NPARTS = 7
 PARTS = list(range(1, NPARTS + 1))
 
-ARTIFACTS = ["MANIFEST-rc1.sha256", "PROVENANCE-rc1.md", "CANDIDATE.sha"]
+REVIEWED_CONDITIONS = "CONDITIONS-rc1.reviewed.md"
+ARTIFACTS = ["MANIFEST-rc1.sha256", "PROVENANCE-rc1.md", "CANDIDATE.sha",
+             REVIEWED_CONDITIONS]
 for _p in PARTS:
     ARTIFACTS += [
         "diff-rc1-%d.patch" % _p,
@@ -217,18 +220,59 @@ def rail_decisions() -> List[str]:
     for n in PARTS:
         v = (EV / ("verdict-rc1-%d.txt" % n)).read_text(encoding="utf-8")
         lines = [ln for ln in v.splitlines() if ln.startswith("VERDICT:")]
-        if not lines:
-            die("parte %d: nenhuma linha VERDICT" % n)
-        toks = set()
-        for ln in lines:
-            m = re.match(r"VERDICT:\s*(GO-WITH-CONDITIONS|GO|NO-GO)\b", ln)
-            if not m:
-                die("parte %d: VERDICT ilegivel: %r" % (n, ln))
-            toks.add(m.group(1))
-        if len(toks) != 1:
-            die("parte %d: decisoes divergentes na mesma saida: %r" % (n, toks))
-        out.append(toks.pop())
+        if len(lines) != 1:
+            die("parte %d: esperado exatamente um VERDICT, recebido %d" % (n, len(lines)))
+        m = re.fullmatch(r"VERDICT: (GO-WITH-CONDITIONS|GO|NO-GO)(?:\s.*)?", lines[0])
+        if not m:
+            die("parte %d: VERDICT ilegivel: %r" % (n, lines[0]))
+        out.append(m.group(1))
     return out
+
+
+def verify_manifest() -> None:
+    """Todos os artefatos da tentativa, exatamente uma vez e pelos bytes."""
+    for name in ARTIFACTS:
+        path = EV / name
+        if path.is_symlink() or not path.is_file():
+            die("artefato ausente ou nao-regular: %s" % name)
+    entries = {}
+    for line in (EV / "MANIFEST-rc1.sha256").read_text(encoding="ascii").splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  (.+)", line)
+        if not match or match.group(2) in entries:
+            die("MANIFEST-rc1 com registro malformado ou duplicado")
+        entries[match.group(2)] = match.group(1)
+    expected = set(ARTIFACTS) - {"MANIFEST-rc1.sha256"}
+    if set(entries) != expected:
+        die("MANIFEST-rc1 nao cobre exatamente os %d artefatos da tentativa" % len(expected))
+    for name, digest in entries.items():
+        if sha256_file(EV / name) != digest:
+            die("MANIFEST-rc1 nao verifica: %s" % name)
+
+
+def reviewed_conditions(prov: str, supplied: Optional[str] = None) -> str:
+    """O texto assinado deve ser o MESMO snapshot bruto fornecido ao revisor."""
+    path = EV / REVIEWED_CONDITIONS
+    if path.is_symlink() or not path.is_file():
+        die("snapshot de condicoes revisadas ausente ou nao-regular")
+    raw = path.read_bytes()
+    pins = re.findall(
+        r"^- condicoes declaradas no prompt \(DATA para o revisor\): "
+        r"CONDITIONS-rc1\.reviewed\.md sha256 ([0-9a-f]{64})$", prov, re.M)
+    if len(pins) != 1 or pins[0] != hashlib.sha256(raw).hexdigest():
+        die("condicoes revisadas divergem do hash da PROVENANCE — novo re-pass necessario")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeError:
+        die("condicoes revisadas nao sao UTF-8 valido")
+    if supplied is not None and supplied != text:
+        die("condicoes para assinatura diferem das revisadas — novo re-pass necessario")
+    source = EV / "CONDITIONS-rc1.md"
+    if source.is_symlink() or (source.exists() and not source.is_file()):
+        die("condicoes de entrada nao sao arquivo regular sem symlink")
+    current = source.read_bytes() if source.exists() else b""
+    if current != raw:
+        die("condicoes de entrada mudaram desde a revisao — novo re-pass necessario")
+    return text
 
 
 def runner_candidate(prov: str) -> str:
@@ -247,19 +291,11 @@ def runner_candidate(prov: str) -> str:
     return prov_sha
 
 
-def build_fields(parent: str, conditions_text: str) -> str:
+def build_fields(parent: str, conditions_text: str, generated_at: Optional[str] = None) -> str:
     if not re.fullmatch(r"[0-9a-f]{40}", parent or ""):
         die("--parent deve ser sha40")
-    for a in ARTIFACTS:
-        if not (EV / a).is_file():
-            die("artefato ausente: %s" % a)
-    rc = subprocess.call(["shasum", "-a", "256", "-c", "MANIFEST-rc1.sha256",
-                          "--status"], cwd=str(EV))
-    if rc != 0:
-        die("MANIFEST-rc1 nao verifica")
+    verify_manifest()
     prov = provenance_text()
-    if "RUNNER-OVERALL: rc=" not in prov:
-        die("PROVENANCE sem RUNNER-OVERALL")
     cand = runner_candidate(prov)
     if parent != cand:
         die("--parent %s != candidato revisado %s (a evidencia cobre OUTRA "
@@ -267,16 +303,15 @@ def build_fields(parent: str, conditions_text: str) -> str:
 
     decisions = rail_decisions()
     if "NO-GO" in decisions:
-        # Rota de fechamento ratificada pelo Owner: um rail NO-GO so viaja sob
-        # um texto de CONDICOES que o nomeie como residual declarado.
-        if not conditions_text or "RESIDUAL" not in conditions_text.upper():
-            die("rail NO-GO (%s) sem secao de condicoes declarando o RESIDUAL "
-                "ratificado pelo Owner" % ", ".join(decisions))
-        verdict = "GO-WITH-CONDITIONS"
+        die("rail NO-GO (%s): as sete partes devem aprovar; RESIDUAL nao autoriza o corte"
+            % ", ".join(decisions))
     elif "GO-WITH-CONDITIONS" in decisions:
         verdict = "GO-WITH-CONDITIONS"
     else:
         verdict = "GO"
+    if [ln for ln in prov.splitlines() if ln.startswith("RUNNER-OVERALL:")] != ["RUNNER-OVERALL: rc=0"]:
+        die("PROVENANCE exige exatamente um RUNNER-OVERALL: rc=0")
+    reviewed_conditions(prov, conditions_text)
     if verdict == "GO-WITH-CONDITIONS" and not conditions_text:
         die("GO-WITH-CONDITIONS exige --conditions-file (vai no material assinado)")
 
@@ -286,13 +321,13 @@ def build_fields(parent: str, conditions_text: str) -> str:
     manifest_sha = sha256_file(GOV / "pair-rail-inputs-hash-manifest.txt")
     delta_manifest_sha = sha256_file(EV / "MANIFEST-rc1.sha256")
     th = hashlib.sha256()
-    for n in PARTS:                      # ordem DECLARADA: 1..6
+    for n in PARTS:                      # ordem DECLARADA: 1..7
         th.update((EV / ("transcript-rc1-%d.log" % n)).read_bytes())
     transcript_hash = th.hexdigest()
 
     pin = pinned_codex(prov)
     py = "%d.%d.%d" % sys.version_info[:3]
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = generated_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     lines = [
         "verdict: %s" % verdict,
@@ -320,7 +355,7 @@ def build_fields(parent: str, conditions_text: str) -> str:
         "transcript_hash: %s" % transcript_hash,
         "rail_decisions: [%s]" % ", ".join(
             "part%d=%s" % (n, d) for n, d in zip(PARTS, decisions)),
-        "findings: [rc1-6-partes-por-risco-do-adotante, %s, "
+        "findings: [rc1-7-partes-por-risco-do-adotante, %s, "
         "cobertura-declarada-em-repass-rc1-README-rc1]"
         % ", ".join("p%d-%s" % (n, d.lower().replace("-", ""))
                     for n, d in zip(PARTS, decisions)),
@@ -337,6 +372,21 @@ def build_fields(parent: str, conditions_text: str) -> str:
             item = item.replace("#", "\u2116")  # nunca introduzir comentario YAML
             lines.append("  - %s" % item)
     return "\n".join(lines) + "\n"
+
+
+def verify_fields_evidence(fields_text: str) -> None:
+    """Reconstroi os fields contra a evidencia atual antes de embutir a assinatura.
+
+    So o timestamp assinado e conservado; todo o resto, incluindo o hash do
+    manifesto que fecha o snapshot bruto, deve permanecer byte-identico.
+    """
+    parents = re.findall(r"^parent_sha: ([0-9a-f]{40})$", fields_text, re.M)
+    dates = re.findall(r"^generated_at: (\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ)$", fields_text, re.M)
+    if len(parents) != 1 or len(dates) != 1:
+        die("fields sem parent_sha/generated_at unicos e canonicos")
+    expected = build_fields(parents[0], reviewed_conditions(provenance_text()), dates[0])
+    if fields_text != expected:
+        die("fields assinados divergem da evidencia atual — novo re-pass/assinatura necessario")
 
 
 def verify_sig(sig_path: pathlib.Path, fpr: str) -> None:
@@ -368,7 +418,7 @@ def build_envelope(fields_text: str, sig_b64: str, fpr: str) -> str:
         "",
         "- Contexto: primeiro rc do trem pos-GA v1.3.0 (17/08). O delta e de",
         "  1318 arquivos / ~470k linhas adicionadas; o re-pass cobre a",
-        "  superficie ENTREGUE ao adotante, em 7 partes ordenadas por raio de",
+        "  superficies do adotante e CI do framework, em 7 partes por raio de",
         "  dano, e o que fica de fora esta DECLARADO em",
         "  %s/repass-rc1/README-rc1.md §4 — nao omitido." % PLAN,
         "- Cada parte cita, dentro do proprio prompt, as rodadas de rail que",
@@ -394,7 +444,7 @@ def build_envelope(fields_text: str, sig_b64: str, fpr: str) -> str:
         "  `codex --version` da maquina, e e re-validado contra",
         "  codex-cli-pin.txt pela funcao do PROPRIO validador.",
         "- delta_manifest_sha256 pina MANIFEST-rc1.sha256 (%d entradas, runner"
-        % (NPARTS * 5 + 3),
+        % (NPARTS * 5 + 4),
         "  incluso). Payloads raw NAO commitados; pins em PROVENANCE-rc1.md.",
         "",
     ]
@@ -403,7 +453,7 @@ def build_envelope(fields_text: str, sig_b64: str, fpr: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", choices=("fields", "envelope"), required=True)
+    ap.add_argument("--stage", choices=("fields", "envelope", "verify"), required=True)
     ap.add_argument("--parent")
     ap.add_argument("--sig")
     ap.add_argument("--conditions-file")
@@ -412,25 +462,33 @@ def main() -> int:
     if a.stage == "fields":
         conds = ""
         if a.conditions_file:
-            conds = pathlib.Path(a.conditions_file).read_text(encoding="utf-8")
+            conds = pathlib.Path(a.conditions_file).read_bytes().decode("utf-8")
         write_atomic_regular(FIELDS, build_fields(a.parent, conds))
         print("wrote", FIELDS)
         return 0
     if not a.sig:
-        die("--stage envelope exige --sig")
+        die("--stage envelope/verify exige --sig")
     sig_path = pathlib.Path(a.sig)
+    fields_raw = FIELDS.read_bytes()
+    signature_raw = sig_path.read_bytes()
     verify_sig(sig_path, fpr)
-    fields_text = FIELDS.read_bytes().decode("utf-8")
+    if FIELDS.read_bytes() != fields_raw or sig_path.read_bytes() != signature_raw:
+        die("fields ou assinatura mudaram durante a verificacao")
+    fields_text = fields_raw.decode("utf-8")
+    verify_fields_evidence(fields_text)
     val = load_validator()
     # O material assinado precisa passar na PROPRIA gramatica dos twins.
     probe = "```yaml\n%s```\n" % fields_text
     bad = val.noncanonical_top_level_lines(probe)
     if bad:
         die("fields nao passam na gramatica canonica: %r" % bad)
+    if a.stage == "verify":
+        print("verified", FIELDS)
+        return 0
     write_atomic_regular(
         ENVELOPE,
         build_envelope(fields_text,
-                       base64.b64encode(sig_path.read_bytes()).decode("ascii"),
+                       base64.b64encode(signature_raw).decode("ascii"),
                        fpr))
     # Re-verificar: o base64 embutido decodifica para a MESMA assinatura.
     env = ENVELOPE.read_bytes().decode("utf-8")

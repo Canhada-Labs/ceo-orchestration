@@ -85,6 +85,8 @@ W1 US3) in the session scope.
 """
 from __future__ import annotations
 
+import contextlib
+import fnmatch
 import glob
 import json
 import os
@@ -93,7 +95,7 @@ import stat as stat_mod
 import subprocess
 import sys
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 # Make the local `_lib` importable (matches the pattern of existing hooks).
 from pathlib import Path
@@ -1192,6 +1194,78 @@ _LEDGER_GIT_PATHS_MAX = 2000
 _LEDGER_INDEX_MAX_SHARE_S = 1.0
 
 
+def _open_index_directory(path: str, parent_fd: Optional[int] = None) -> int:
+    """Open one real directory relative to an already validated parent.
+
+    The repository root is the trust anchor; components below it are opened
+    one at a time. Unsupported no-follow primitives make the optional index
+    unavailable rather than falling back to a pathname read.
+    """
+    if not all(hasattr(os, name) for name in ("O_DIRECTORY", "O_NOFOLLOW")):
+        raise OSError("no-follow directory reads unavailable")
+    before = os.stat(path, dir_fd=parent_fd, follow_symlinks=False)
+    if not stat_mod.S_ISDIR(before.st_mode):
+        raise OSError("index ancestor is not a real directory")
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                 dir_fd=parent_fd)
+    try:
+        after = os.fstat(fd)
+        if (not stat_mod.S_ISDIR(after.st_mode)
+                or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)):
+            raise OSError("index directory changed identity")
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+@contextlib.contextmanager
+def _plan_index_directory(cwd: str) -> Iterator[int]:
+    """Hold the repository/.claude/plans descriptor chain for the scan."""
+    descriptors: List[int] = []
+    try:
+        descriptors.append(_open_index_directory(os.path.abspath(cwd)))
+        for component in (".claude", "plans"):
+            descriptors.append(_open_index_directory(component, descriptors[-1]))
+        yield descriptors[-1]
+    finally:
+        for fd in reversed(descriptors):
+            os.close(fd)
+
+
+def _read_index_plan(
+    directory_fd: int, name: str,
+    limit: int = _LEDGER_AC_SCAN_MAX_BYTES + 1,
+) -> bytes:
+    """Read a bounded regular leaf; never follow a link or block on a FIFO.
+
+    ``limit`` is the byte cap of the CALLER, because the two call sites
+    promise different ceilings: the AC index reads cap+1 so it can DETECT
+    overflow, while the ledger reader keeps its own smaller 64 KiB cap.
+    """
+    if not all(hasattr(os, flag) for flag in ("O_NOFOLLOW", "O_NONBLOCK")):
+        raise OSError("no-follow nonblocking file reads unavailable")
+    before = os.stat(name, dir_fd=directory_fd, follow_symlinks=False)
+    if not stat_mod.S_ISREG(before.st_mode):
+        raise OSError("index plan is not a regular file")
+    # O_NONBLOCK covers a regular-to-FIFO swap between stat and open;
+    # fstat then refuses the changed type/identity before any read.
+    fd: Optional[int] = os.open(
+        name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory_fd,
+    )
+    try:
+        with os.fdopen(fd, "rb") as fh:
+            fd = None  # the file object now owns the descriptor
+            after = os.fstat(fh.fileno())
+            if (not stat_mod.S_ISREG(after.st_mode)
+                    or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)):
+                raise OSError("index plan changed type or identity")
+            return fh.read(limit)
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
 def _ac_path_index_mirror(
     cwd: str, deadline: float
 ) -> Tuple[Dict[str, str], bool]:
@@ -1201,80 +1275,69 @@ def _ac_path_index_mirror(
     compartilhado; em path repetido o MENOR plan id vence (determinismo).
     Nada aqui consulta session state, env ou audit log (emenda r1-C6).
 
-    Rail r15 P2-b: ``complete=False`` em QUALQUER corte — glob falho,
+    Rail r15 P2-b: ``complete=False`` em QUALQUER corte — enumeracao falha,
     >200 arquivos de plano (o slice esconderia planos), deadline no meio,
     arquivo ilegivel, ou AC alem do cap de 256 KiB de UM arquivo (lido
     cap+1 para detectar). Um mapeamento parcial elege plano ERRADO no
-    tie-break do chamador; o chamador recusa o indice inteiro."""
+    tie-break do chamador; o chamador recusa o indice inteiro. The AC grammar
+    and matching rules mirror the checkpoint; filesystem reads additionally
+    require a no-follow directory chain and a stable regular-file identity.
+    An unsafe candidate invalidates the whole index, including earlier ACs.
+    """
     index: Dict[str, str] = {}
-    complete = True
     try:
-        # Rail r24 P2-a: glob.iglob ENGOLE falha de enumeracao — um
-        # `.claude/plans` pesquisavel mas nao-listavel (0111/ACL/erro de
-        # I/O) renderia zero matches com complete=True, e o plan_dir
-        # direto elegeria SEM a perna AC (pointer errado). A sonda
-        # explicita de listabilidade converte a falha em incompleto.
-        _plans_dir = os.path.join(cwd, ".claude", "plans")
-        try:
-            with os.scandir(_plans_dir) as _probe:
-                next(_probe, None)
-        except OSError:
-            return index, False
-        pattern = os.path.join(
-            cwd, ".claude", "plans", _LEDGER_PLAN_FILE_GLOB
-        )
-        # Rail r23 P2-a: enumeracao LAZY com cap+1 e deadline por item —
-        # glob.glob materializava e ordenava o conjunto INTEIRO antes de
-        # qualquer check. Acima do cap o indice ja e recusado (r15),
-        # entao a ordem dos coletados nao importa nesse ramo; ate o cap,
-        # o sort mantem o determinismo de antes.
-        all_files: List[str] = []
-        for _pf in glob.iglob(pattern):
-            if time.monotonic() >= deadline:
-                return index, False
-            all_files.append(_pf)
-            if len(all_files) > _LEDGER_AC_SCAN_MAX_FILES:
-                complete = False
-                break
-        all_files.sort()
-    except Exception:
-        return index, False
-    files = all_files[:_LEDGER_AC_SCAN_MAX_FILES]
-    for plan_file in files:
         if time.monotonic() >= deadline:
-            complete = False
-            break
-        m = _LEDGER_PLAN_FILE_ID_RE.match(os.path.basename(plan_file))
-        if m is None:
-            continue
-        plan_id = m.group(1)
-        try:
-            # Rail r16 P2-a: leitura BINARIA — TextIO.read(n) conta
-            # CARACTERES, e 300 KiB de chars de 2 bytes passariam
-            # inteiros com complete=True alem do cap prometido em BYTES.
-            # O corte byte-a-byte pode partir um char multibyte na borda;
-            # errors="replace" o degrada em U+FFFD, inofensivo ao regex.
-            with open(plan_file, "rb") as fh:
-                raw_bytes = fh.read(_LEDGER_AC_SCAN_MAX_BYTES + 1)
-        except OSError:
-            complete = False
-            continue
-        if len(raw_bytes) > _LEDGER_AC_SCAN_MAX_BYTES:
-            complete = False
-            raw_bytes = raw_bytes[:_LEDGER_AC_SCAN_MAX_BYTES]
-        text = raw_bytes.decode("utf-8", "replace")
-        for ac_path in _LEDGER_AC_PATH_RE.findall(text):
-            candidate = ac_path.strip().strip("`").strip()
-            # "./" e PREFIXO, nao classe de caracteres (espelho fiel:
-            # lstrip("./") comeria o ponto de `.claude/...`).
-            while candidate.startswith("./"):
-                candidate = candidate[2:]
-            if not candidate or candidate.startswith("<"):
-                continue
-            current = index.get(candidate)
-            if current is None or plan_id < current:
-                index[candidate] = plan_id
-    return index, complete
+            return {}, False
+        with _plan_index_directory(cwd) as directory_fd:
+            # Scan the held descriptor itself: a second pathname-based glob
+            # could follow an ancestor replaced after the directory checks.
+            # scandir errors remain visible (glob otherwise swallows them).
+            all_files: List[str] = []
+            with os.scandir(directory_fd) as entries:
+                for entry in entries:
+                    if time.monotonic() >= deadline:
+                        return {}, False
+                    if not fnmatch.fnmatchcase(entry.name, _LEDGER_PLAN_FILE_GLOB):
+                        continue
+                    all_files.append(entry.name)
+                    if len(all_files) > _LEDGER_AC_SCAN_MAX_FILES:
+                        return {}, False
+            all_files.sort()
+            for plan_file in all_files:
+                if time.monotonic() >= deadline:
+                    return {}, False
+                m = _LEDGER_PLAN_FILE_ID_RE.match(plan_file)
+                if m is None:
+                    continue
+                plan_id = m.group(1)
+                raw_bytes = _read_index_plan(directory_fd, plan_file)
+                if len(raw_bytes) > _LEDGER_AC_SCAN_MAX_BYTES:
+                    return {}, False
+                text = raw_bytes.decode("utf-8", "replace")
+                for ac_path in _LEDGER_AC_PATH_RE.findall(text):
+                    candidate = ac_path.strip().strip("`").strip()
+                    # "./" is a PREFIX, not a character class: lstrip
+                    # would remove the leading dot from `.claude/...`.
+                    while candidate.startswith("./"):
+                        candidate = candidate[2:]
+                    if not candidate or candidate.startswith("<"):
+                        continue
+                    current = index.get(candidate)
+                    if current is None or plan_id < current:
+                        index[candidate] = plan_id
+            if time.monotonic() >= deadline:
+                return {}, False
+    except FileNotFoundError:
+        # ENOENT is ABSENCE, not unsafe input: an adopter with no
+        # `.claude/plans`, or a plan file that vanished mid-scan. The
+        # index is refused either way; staying silent keeps the
+        # breadcrumb below forensic instead of firing on every
+        # PreCompact of such a repo.
+        return {}, False
+    except Exception:
+        _breadcrumb("plan AC index unavailable or unsafe — refusing partial scope")
+        return {}, False
+    return index, True
 
 
 def _ledger_index(cwd: str, deadline: float) -> Dict[str, Any]:
@@ -1413,71 +1476,74 @@ def _ledger_index(cwd: str, deadline: float) -> Dict[str, Any]:
         "sections": [],
         "last_commit": "",
     }
-    ledger_abs = os.path.join(cwd, rel)
-    # rc.1 re-pass part 5 H3 — `os.path.isfile` follows symlinks, and so does
-    # the `open` below. A `.claude/plans/PLAN-NNN/LEDGER.md` symlinked OUTSIDE
-    # the repository made this reader copy up to 64 KiB of someone else's
-    # Markdown headings into the continuity snapshot (reproduced: an
-    # `## EXFIL-HEADING-OUTSIDE-REPO` heading landed in the blob). The library
-    # this hook is part of already refuses symlinks on confined-read surfaces
-    # (`scratchpad_lib._gc_write_cursor`, `runtime_paths`), and the table-read
-    # gate in the installer was cured of the identical `-f`-follows-links
-    # defect in this same re-pass. Fail-closed on INPUT is the house rule
-    # (CLAUDE.md §4): a ledger this reader cannot prove is a regular file
-    # inside the tree yields a DEGRADED index, never external content.
+    # rc.1 re-pass part 5 H3 — `os.path.isfile` follows symlinks, and so did
+    # the pathname `open` this block used. A `.claude/plans/PLAN-NNN/LEDGER.md`
+    # symlinked OUTSIDE the repository made this reader copy up to 64 KiB of
+    # Markdown headings from ANOTHER tree into the continuity snapshot
+    # (reproduced: an `## EXFIL-HEADING-OUTSIDE-REPO` heading landed in the
+    # blob). Leaf-only `O_NOFOLLOW` did NOT close the class: a symlinked
+    # `PLAN-NNN` ANCESTOR was still traversed and delivered the same external
+    # bytes (re-reproduced on the cured AC-index tree). The chain the AC index
+    # opens component by component is REUSED here, so neither an ancestor nor
+    # the leaf can be a link. Fail-closed on INPUT is the house rule
+    # (CLAUDE.md §4): a ledger this reader cannot prove is a regular
+    # file inside the tree yields a DEGRADED index, never external content.
+    # Fail-OPEN on infrastructure is unchanged — every refusal here returns
+    # the degraded pointer, never an exception into `gate()`.
     try:
-        _lst = os.lstat(ledger_abs)
-    except OSError:
-        # Absent, or a path we cannot stat: the honest "no ledger yet" answer.
-        return out
-    if stat_mod.S_ISLNK(_lst.st_mode):
-        _breadcrumb("ledger is a symlink — refusing to follow (index degraded)")
-        return out
-    if not stat_mod.S_ISREG(_lst.st_mode):
-        _breadcrumb("ledger is not a regular file — index degraded")
-        return out
-    out["present"] = True
-    # Rail r1 P2-5: the shared wall deadline is re-checked before EACH
-    # further step — on a slow repository the first `git log` can consume
-    # most of the budget, and an unconditional follow-up would run its own
-    # fixed 2s timeout PAST the deadline, delaying the compaction beyond
-    # the hook's stated budget. A degraded index (no sections / no sha) is
-    # honest; a late one is not.
-    if time.monotonic() > deadline:
+        with _plan_index_directory(cwd) as _plans_fd:
+            _plan_fd = _open_index_directory(best, _plans_fd)
+    except Exception:
+        # Absent, or an ancestor this reader cannot prove is a real directory:
+        # the honest "no ledger yet" answer.
         return out
     try:
-        # Rail r17 P2-d: leitura BINARIA — mesma classe r16 P2-a no 2o
-        # sitio (censo da classe varrido: era o ultimo read capado em
-        # modo texto dos dois hooks). read(n) de TextIO conta CHARS e um
-        # LEDGER multibyte estourava o teto declarado em BYTES.
-        # O_NOFOLLOW closes the TOCTOU window between the lstat above and
-        # this open (a link swapped in between the two would otherwise be
-        # followed); the fstat comparison is what makes the refusal provable
-        # rather than assumed. `getattr` because O_NOFOLLOW is POSIX and 0 is
-        # a safe no-op elsewhere — the fstat check still holds there.
-        _fd = os.open(
-            ledger_abs, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-        )
-        with os.fdopen(_fd, "rb") as fh:
-            _fst = os.fstat(fh.fileno())
-            if (_fst.st_dev, _fst.st_ino) != (_lst.st_dev, _lst.st_ino):
-                _breadcrumb("ledger changed identity between stat and open")
-                out["sections"] = []
-                return out
-            text = fh.read(_LEDGER_INDEX_MAX_BYTES).decode(
-                "utf-8", "replace"
-            )
-        sections: List[str] = []
-        for line in text.splitlines():
-            if time.monotonic() > deadline:
-                break
-            if line.startswith("## "):
-                sections.append(_sanitize_text(line[3:].strip(), _LABEL_CLAMP))
-                if len(sections) >= _LEDGER_INDEX_MAX_SECTIONS:
+        try:
+            _lst = os.stat("LEDGER.md", dir_fd=_plan_fd, follow_symlinks=False)
+        except OSError:
+            # Absent, or a leaf we cannot stat: the honest "no ledger yet".
+            return out
+        if stat_mod.S_ISLNK(_lst.st_mode):
+            _breadcrumb("ledger is a symlink — refusing to follow (degraded)")
+            return out
+        if not stat_mod.S_ISREG(_lst.st_mode):
+            _breadcrumb("ledger is not a regular file — index degraded")
+            return out
+        out["present"] = True
+        # Rail r1 P2-5: the shared wall deadline is re-checked before EACH
+        # further step — on a slow repository the first `git log` can consume
+        # most of the budget, and an unconditional follow-up would run its own
+        # fixed 2s timeout PAST the deadline, delaying the compaction beyond
+        # the hook's stated budget. A degraded index (no sections / no sha) is
+        # honest; a late one is not.
+        if time.monotonic() > deadline:
+            return out
+        try:
+            # Rail r17 P2-d: leitura BINARIA — read(n) de TextIO conta CHARS e
+            # um LEDGER multibyte estourava o teto declarado em BYTES. O helper
+            # confinado mantem o cap de 64 KiB, recusa link e folha nao-regular,
+            # nao bloqueia em FIFO e re-checa tipo+identidade por fstat DEPOIS
+            # do open, fechando a janela TOCTOU do stat acima.
+            text = _read_index_plan(
+                _plan_fd, "LEDGER.md", _LEDGER_INDEX_MAX_BYTES,
+            ).decode("utf-8", "replace")
+            sections: List[str] = []
+            for line in text.splitlines():
+                if time.monotonic() > deadline:
                     break
-        out["sections"] = sections
-    except OSError as exc:
-        _breadcrumb("ledger read failed (%s)" % str(exc)[:60])
+                if line.startswith("## "):
+                    sections.append(_sanitize_text(line[3:].strip(), _LABEL_CLAMP))
+                    if len(sections) >= _LEDGER_INDEX_MAX_SECTIONS:
+                        break
+            out["sections"] = sections
+        except OSError as exc:
+            # Covers the identity/type change the old inline fstat reported
+            # separately: the section list stays EMPTY on both paths. The only
+            # delta is that the repo-derived last_commit below still runs; no
+            # attacker-controlled byte reaches the snapshot through it.
+            _breadcrumb("ledger read failed (%s)" % str(exc)[:60])
+    finally:
+        os.close(_plan_fd)
     if time.monotonic() > deadline:
         return out  # rail r1 P2-5: no second git call past the deadline
     out["last_commit"] = _sanitize_text(

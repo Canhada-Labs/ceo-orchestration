@@ -173,15 +173,16 @@ def _reset_caches_for_test() -> None:
 
 
 def _project_dir_cache_key() -> Tuple[Optional[str], ...]:
-    """Cache key covering EVERY input that can move the resolved dir.
+    """Cache key for the declared environment and conditional cwd inputs.
 
     PLAN-182 W1 cure: the Wave-A key was (CEO_AUDIT_LOG_DIR, HOME) — a
     process that switched project mid-run (CLAUDE_PROJECT_DIR / cwd /
     CLAUDE_PROJECT_DIR_NATIVE changed) kept being served the PREVIOUS
     project's dir from cache, so the cross-project leak survived any
-    resolver cure. cwd participates ONLY when it is an actual input
-    (no CEO_AUDIT_LOG_DIR, no native override, no CLAUDE_PROJECT_DIR),
-    keeping the hot path at three getenv calls.
+    resolver cure. cwd participates when none of the directory candidates
+    is absolute. A lower-priority absolute candidate can still mask the
+    cwd dependency of a relative override; rc.1 condition 24 requires an
+    absolute CEO_AUDIT_LOG_DIR and records the remaining cache limitation.
     """
     env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
     env_home = os.environ.get("HOME")

@@ -158,7 +158,8 @@ resolver (`.claude/hooks/_lib/runtime_paths.py`) using Claude Code's own
 path-based project slug, instead of a literal `ceo-orchestration`
 directory shared by every project (`9de4efc`, `965fb13`, `3d16070`).
 
-- What this buys, measured: chains that no longer interleave, correct
+- For repositories with DISTINCT resolved runtime directories, this separates
+  their chains and keys and provides correct
   `project` attribution for the emitters that carry the field (a handful
   of newly specified actions still omit `project` or `session_id` and
   cannot be attributed in a shared `CEO_AUDIT_LOG_PATH` — rc.1 condition
@@ -167,8 +168,11 @@ directory shared by every project (`9de4efc`, `965fb13`, `3d16070`).
   the log lock is taken, so two parallel writers can chain to the same
   predecessor and a break is then reported that nobody caused (signed
   condition 67 of rc.1; same order as v1.3.0) — and a per-project HMAC key
-  and salt — so `prompt_sha256` stops correlating across your
-  repositories. The per-project key is minted on first use and that first
+  and salt, preventing correlation by `prompt_sha256` between those
+  repositories. The path-derived slug can collide: `/srv/a-b/c` and
+  `/srv/a/b-c` both yield `-srv-a-b-c`. Verify distinct resolved directories
+  before using multiple repositories (rc.1 condition 30); a collision shares
+  the log, key and salt. The per-project key is minted on first use and that first
   mint is not exclusive: create it with a single writer before the first
   session (signed condition 68 of rc.1; `docs/UPGRADE-PROCEDURE.md`,
   check 11).
@@ -183,9 +187,16 @@ directory shared by every project (`9de4efc`, `965fb13`, `3d16070`).
   missing state while the old SQLite files stay on disk under the
   legacy directory. Two documented routes: set `CEO_PROJECT_NAME` to
   the legacy slug (the explicit escape hatch in `state_store.py`) until
-  the plan closes, or copy `<legacy>/state/` into the new per-project
-  directory (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir`).
-  A migration is a signed condition of rc.1 (see the release envelope).
+  the plan closes, or copy ONLY `scratchpad/`, `skill_proposals/`,
+  `skill_index/` and `session_graph/` from `<legacy>/state/` into
+  `<new-runtime-root>/state/`. The CLI
+  `python3 .claude/hooks/_lib/runtime_paths.py --state-dir` prints
+  `<new-runtime-root>`; append `/state` for the store destination.
+  NEVER copy the whole legacy `state/` directory or its flat files:
+  its audit recovery spools can contaminate the new project's chain.
+  First drain or quarantine those spools in the legacy context; follow
+  `docs/UPGRADE-PROCEDURE.md` and rc.1 condition 27. Automatic migration
+  remains a pre-GA follow-up.
 - **The limit that does NOT go away:** under the same UID one project's
   process can still read another's `0700` directory and `0600` key. A
   real boundary needs a separate UID; that is out of scope by decision,

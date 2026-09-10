@@ -29,3 +29,133 @@ uma linha aqui; o texto abaixo é o bloco original, verbatim.
 - v50 (refutação pré-lançamento da rodada 12, leitores A e C): 74/INSTALL citam `EXISTS (skipping)` (~1210, ~1830) e `reference/*.md`; 80 diz que o mcp-smoke.yml é CI deste repositório, não entregue; 19 restringe o cenário a duas sessões do MESMO plano (lock por arquivo de store); 70 diz o que foi medido (`_read_snapshot('PLAN-123')` = None; fallback inalcançável por construção); 78 cita só «NOT env».
 - v51 (refutação pré-lançamento da rodada 12, leitor B, 9 erros): 77 diz o que o rail faz (analisa o PRIMEIRO `git commit` da chamada; `commit && push` dispara; linhas ~710/~715; a SPEC não traz a frase); CHANGELOG idem e a undemotion CHEGA ao install limpo; 27/guia: `CEO_AUDIT_LOG_DIR` = dir de auditoria sem `/state`, comando python do drain, `find` só sobre `audit-spool.*.jsonl`/`.draining.*`; 38 sem invocar AGENTS.md; parêntese da numeração removido (orçamento).
 - v52 (orçamento): três compressões de prosa sem mudança de claim (58, 77, 27) — a parte 1 do payload (upgrade.sh, 139.411 B de diff) estava a ~2,4 KB do teto bruto do runner.
+- v53 (revisão do pacote Codex, 09/09): 27 recupera o rótulo literal «Condição DURA:» antes da cópia seletiva (obrigação inalterada); 28 tem as OITO âncoras de `audit_emit.py` realinhadas ao código pós-patch (-2 no cursor de shard, -4 no sweep, no PostCompact e no contrato do marcador); 47 declara o TOCTOU residual da preflight nova do `upgrade.sh` (ancestral symlink pulado por desenho em `_framework_manifest_set.sh:757`, contido só em ~4828, janela até o `mkdir` de ~4844); `ledger_provenance.py` deixa de prometer `None` «só» sob enforcement — um input que não é `LedgerEntry` também volta `None`. ORÇAMENTO: 2.543 B de prosa HISTÓRICA cortados (47 narrativa de rodadas e justificativa do laço; 17 segunda rota já curada no mesmo pack; 16 defeito pré-cura do parser no Bash 3.2; 58 payloads das rodadas 6 a 8; parênteses «(rodada N, parte M)» redundantes), sem tocar em obrigações, curas, linhas citadas ou rótulos — 81 itens, numeração e ordem intactas; o arquivo sai 2.094 B MENOR que antes desta revisão. Depois, parênteses de proveniência removidos (history.md guarda a rodada/parte de cada emenda): 116 sítios, mais 2.510 B, sem tocar em obrigações, curas, linhas citadas, rótulos, numeração ou ordem.
+- v54 (revisão Codex read-only dos bytes finais da cura, 09/09 21:34 — NO-GO com 2 P1 + 2 P2, todos verificados no código): o helper de ancestral recusa symlink que NÃO resolve para diretório (pendente ou para arquivo) — `SPEC -> arquivo` passava as duas preflights e o `mkdir` abortava depois das escritas (P1, canônico); a preflight do `upgrade.sh` DELEGA a tabela inutilizável ao gate de entrega em vez de sair antes do registro (`upgrade_succeeded: false` + `routes=0`; H.15e4/H.15f3 do e2e histórico ficavam vermelhas — P1, canônico); 47 reescrita sem números de linha e sem chamar de TOCTOU o que era determinístico; 60 declara os dois limites da preflight (tabela inutilizável; `--skip` de descendentes de `SPEC/v1` — P2); `test-rc1-kit.sh` isola o HOME da quarentena (P2); e2e R12 ganha symlink-para-arquivo e pendente (rotas e `SPEC/v1`, install e upgrade) e o controle positivo symlink-para-diretório.
+- v55 (2.ª passagem Codex read-only sobre a v3, 09/09 22:04 — NO-GO: 1 P1 + 2 P2): o P1 era o baseline do censo write-safety não regenerado depois da emenda do helper (ratchet; regenerado no mesmo pack, censo bloqueante rc 0); 47 corrigida — um `SPEC` symlink→diretório NÃO é escrito através: o install recusa tarde (`_assert_no_symlink_parents` em `install_one`) e o upgrade preserva sem posse (`ancestor_symlink` ⇒ `SKIP`); 18 registra que os ancestrais de `LEDGER.md` ficam curados neste candidato (`_ledger_index` abre pelos descritores ancorados). Achados 1, 2 e 4 da 1.ª passagem confirmados fechados no código; o 3 (skip de descendentes de `SPEC/v1`) confirmado como declaração exata.
+
+## Rascunho de correção após r12 — ainda sem revisão de release ou assinatura
+
+Base de autoria: `7f7cda026b352ad5e1d80886bde69e49c4760480`. Correções propostas: ancestral não-diretório; leitor AC confinado; condições congeladas e sete vereditos sem conversão de NO-GO; preservação de tentativas parciais; migração seletiva para `<raiz-runtime>/state/`; comentários de privacidade, autoria, GC e ledger. Os residuais continuam explicitados no envelope. Este registro não é veredito de aprovação.
+
+Para reservar orçamento do payload sem perder os registros, os itens 1, 21, 31 e 69 foram resumidos no envelope. Abaixo fica o texto anterior, preservado literalmente a partir da base de autoria; os requisitos operacionais e residuais continuam nos respectivos itens.
+
+```text
+1. **Rota com transform sem renderer** — **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**: os quatro sítios da
+   classe em `scripts/upgrade.sh` marcam `unrenderable-transform` como falha de
+   pré-condição, persistem `upgrade_succeeded: false`, imprimem «Upgrade INCOMPLETE» e
+   saem 3 (controle positivo no harness e2e). O texto anterior desta condição e a
+   exceção que o CHANGELOG [1.4.0] nomeava descreviam o código PRÉ-cura e foram
+   removidos (rodada 3, parte 1).
+```
+
+```text
+21. **First-mint do salt por projeto não é exclusivo** (`injection_salt.py`): duas sessões
+    que enviam o PRIMEIRO prompt depois do upgrade podem cunhar salts diferentes e truncar
+    o mesmo arquivo; o `prompt_sha256` das perdedoras fica irreproduzível (reproduzido:
+    5/5 rodadas, 6/6 salts distintos); a cadeia HMAC segue íntegra. Pré-existente na
+    v1.3.0; o upgrade reabre UM momento de mint por projeto. Mitigação operacional: abra
+    a primeira sessão de cada repositório SOZINHA depois do upgrade (mitigação válida
+    para quem instala uma versão anterior). **CURADO em `5518888` (wave-rc1cure, assinada pelo Owner em 08/09)**: first-mint com
+    `O_CREAT|O_EXCL|O_NOFOLLOW`, a perdedora relê o salt do vencedor (classificação
+    DEPOIS do create exclusivo — a 1.ª versão da cura reintroduzia a corrida pelo
+    classificador e foi pega pelo próprio teste), e o marcador `salt-minted.json` é
+    escrito por tempfile `O_EXCL|O_NOFOLLOW` + `os.replace`, recusando symlink (classe
+    same-UID, fora do modelo de ameaça como ataque — `docs/threat-model.md` Tier-2).
+    **A cura do first-mint AINDA tem uma janela** (rodada 3, parte 6): o vencedor cria o
+    `.salt` final com `O_EXCL` mas só escreve os 32 bytes depois; um perdedor que receba
+    `EEXIST` nesse intervalo lê o arquivo VAZIO, classifica-o como malformado e o reabre
+    com `O_TRUNC` — os dois processos ficam com salts diferentes, contra a claim «exatamente
+    um processo vence» do docstring; o teste do pack pré-cria um vencedor já escrito e não
+    exercita essa janela. Cura antes do GA: publicar um inode temporário COMPLETAMENTE
+    escrito por operação atômica sem substituição (`link()`/`O_EXCL` no nome final), ou
+    serializar leitura/criação/reparo sob lock; teste que pausa o vencedor entre a criação e
+    a escrita. A mitigação operacional (primeira sessão SOZINHA) continua válida.
+    **Posse destrutiva sobre arquivos PRÉ-EXISTENTES no diretório nativo do projeto**
+    (rodada 6, parte 6, P1): a v1.3.0 nunca foi dona de `.salt` nem de `salt-minted.json`
+    em `$HOME/.claude/projects/<slug nativo>/`; depois do upgrade, um `.salt` SEU
+    pré-existente com tamanho ≠ 32 bytes é classificado como malformado e reaberto com
+    `O_TRUNC` (bytes destruídos, modo alterado) e um `salt-minted.json` regular
+    pré-existente é substituído sem condição — sem concorrência, symlink ou atacante.
+    Condição DURA: ANTES do primeiro prompt pós-upgrade, esses dois caminhos devem estar
+    AUSENTES no diretório nativo do projeto (`python3 .claude/hooks/_lib/runtime_paths.py
+    --state-dir` imprime o diretório; `docs/UPGRADE-PROCEDURE.md` diz isto). Cura antes do
+    GA: distinguir ausente de pré-existente/não-provado e nunca reparar in loco uma folha
+    não provada (preservar + breadcrumb, ou caminho com namespace do framework e evidência
+    de migração); criar o marcador sem substituição salvo se o existente for reconhecido
+    como do framework.
+```
+
+```text
+31. **Destinos DUPLICADOS na tabela de rotas** — **CURADO em `144b0ef` (wave-rc1cure2,
+    assinada pelo Owner em 08/09)**: `_wbm_route_table_ok` recusa por NOME um destino
+    declarado duas vezes, antes de qualquer leitor consumir a tabela (`upgrade.sh` ⇒ zero
+    rotas, `upgrade_succeeded: false`, rc 3 — pernas H.15f e S.10e, com controle de que a
+    tabela sem a duplicata continua aceita). Antes (rodada 3, parte 1): `_wbm_route_dests`
+    emitia as duas linhas, a conservation law passava (rotas == linhas) e `_wbm_route_src`
+    parava na primeira — a primeira rota executava DUAS vezes, a segunda era ignorada e o
+    run saía 0, enquanto o parser de paridade (`_parity_classify.py`) já recusava a tabela.
+```
+
+```text
+69. **`uninstall.sh` não checava UNICIDADE de relpath nem recusava manifesto symlink — CURADO
+    nesta rc** (rodada 9, parte 3, P1; arquivos livres): o parser do pack 2 validava cada linha
+    isoladamente e gravava no ledger TODA ocorrência sintaticamente válida; a varredura de
+    remoção processava o ledger linha a linha. Com `<sha-antigo>␠␠docs/x` seguido de
+    `<sha-atual>␠␠docs/x`, a primeira linha reportava o arquivo modificado pelo adopter como
+    PRESERVADO e a segunda o REMOVIA (`rm -f`, SEM `--force`); o `exit 5` chegava depois da
+    remoção. E `[ ! -f "$MANIFEST" ]` seguia symlink: um manifesto symlinkado era lido através
+    do link. A condição 61 dizia, até a rodada 9, que este sanitizador «já recusa» duplicados —
+    era FALSO; corrigido. Cura nesta rc (livre, mesmo commit do candidato): (a) `[ -L
+    "$MANIFEST" ]` ANTES do `-f` ⇒ `REFUSED` nomeado e `exit 6`, também em `--dry-run` (falha
+    de integridade do input, não preview); (b) segundo passe sobre o ledger sanitizado: TODA
+    ocorrência de um relpath registrado mais de uma vez é RECUSADA (contada em `Refused`,
+    nunca arquivada nem removida) ANTES do backup e da varredura — o mesmo tratamento em dois
+    passes do `doctor.sh`; a legenda de códigos e o sumário nomeiam a classe; e (c) — achado
+    do refutador da rodada 10 sobre a própria cura — a unicidade compara STRINGS, e `_rel_unsafe`
+    não recusava SEGMENTO VAZIO: `docs/x` e `docs//x` são duas linhas para UM inode, `uniq -d`
+    não as pareia e a varredura preservava na primeira e removia na segunda (reproduzido);
+    `_rel_unsafe` passa a recusar `//` e barra final (a cláusula que o predicado compartilhado
+    `_wbm_route_relpath_ok` já tinha), recusando o alias no PRIMEIRO passe; e, porque enumerar
+    grafias não converge (alias por caixa em sistema de arquivos sem distinção de maiúsculas,
+    normalização Unicode do APFS, hard link entre dois caminhos registrados), (d) um passe de
+    IDENTIDADE: todo relpath do ledger que exista é `lstat`-ado (leaf nunca seguido) e TODA
+    grafia cujo `(st_dev, st_ino)` apareça sob mais de um nome é recusada antes do backup e da
+    remoção — a classe fecha por construção, não por lista. O `doctor.sh` tem a brecha de
+    string no seu `_relpath_unsafe` (aceita `//` e `./docs/x`) e nenhum passe de identidade —
+    declarado, cura na rc.2. Evidência: e2e
+    `scripts/tests/test-installer-write-safety-e2e.sh` U.9a (arquivo modificado sobrevive byte
+    a byte a um relpath duplicado; recusa nomeada; rc 6; manifesto mantido) e U.9b (manifesto
+    symlink: rc 6 antes de qualquer leitura; arquivo do framework intacto; link e manifesto
+    externo intactos) e U.9c (alias `docs//x`: arquivo intacto; recusa nomeada como caminho
+    inseguro; rc 6) e U.9d (hard link `docs/alias` do mesmo inode, registrado com o sha atual:
+    os dois nomes sobrevivem; as duas linhas recusadas por identidade; rc 6 — portátil a
+    qualquer sistema de arquivos, ao contrário de uma fixture por caixa), com controle positivo
+    contra a árvore PRÉ-cura (`git archive` do candidato anterior: U.9a/U.9b vermelhas; U.9c
+    vermelha contra a cura só de unicidade; U.9d vermelha contra a cura sem identidade; resto
+    verde). O censo de escrita segura ganhou no
+    baseline os sítios dos `mv` entre ledgers próprios (`mktemp`, nunca um caminho do alvo). O
+    parser TOTAL da condição 61 continua útil ANTES de `uninstall.sh` para ver o que será
+    recusado; o `doctor.sh --repair` segue coberto pela 43. O QUE A CURA NÃO FECHA (rodada 10,
+    parte 3, P1): a recusa é do LEAF do manifesto; um ANCESTRAL symlinkado passa —
+    `<alvo>/.claude -> <diretório externo>` com um manifesto válido faz `uninstall.sh` ler a
+    proveniência EXTERNA (~371, ~396), remover os arquivos do alvo que ela nomeia e apagar o
+    manifesto EXTERNO no fim (~692) reportando sucesso; `doctor.sh` (~273, ~430) confia no mesmo
+    manifesto externo e pode «reparar» arquivos com a proveniência de OUTRO repositório. A perna
+    U.9b só cobre o leaf — e só o do `uninstall.sh`: na rodada 11 (parte 3, P1) o `doctor.sh`
+    ainda testava o manifesto só com `-f`, que SEGUE um symlink de leaf, e `--repair` recriava
+    arquivos e links ausentes com a proveniência de outro repositório, saindo 0. CURADO no
+    candidato da rodada 12 (script livre): o doctor recusa `[ -L ]` ANTES do `-f` (exit 2, a
+    classe dos erros de input do manifesto), pina a identidade `device:inode` (lstat) do arquivo
+    que o sanitizador leu e re-prova «não é symlink e é o mesmo inode» imediatamente antes de CADA
+    escrita do `--repair` (restore, backup+restore, re-link) — um leaf trocado a meio da execução
+    é recusado por nome e contado como não resolvido, nunca seguido; perna e2e U.9e (recusa
+    nomeada, nada recriado, link e manifesto externo intactos) com controle positivo (o mesmo
+    fixture com o manifesto real É reparado). O ANCESTRAL symlinkado continua aberto nos dois
+    scripts (condição abaixo). Condição DURA: antes de TODO `uninstall.sh` e `doctor.sh --repair`,
+    `<alvo>` e `<alvo>/.claude` têm de ser diretórios REAIS (não symlinks — `[ -L <alvo> ] ||
+    [ -L <alvo>/.claude ]` falso) e nenhum outro processo pode substituí-los durante a execução;
+    `docs/UPGRADE-PROCEDURE.md` diz isto (checagem 12). Cura na rc.2 (livre): recusar raiz ou
+    `.claude` symlinkados ANTES de ler o manifesto, re-verificar a cadeia de ancestrais e a
+    identidade do leaf antes de qualquer mutação, nos dois scripts, com controles e2e que provem
+    o alvo e o manifesto externo intactos.
+```

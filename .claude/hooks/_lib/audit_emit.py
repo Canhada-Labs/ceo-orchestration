@@ -1119,7 +1119,9 @@ _KNOWN_ACTIONS = {
     # — the ONE sanctioned salt-rotation register: minting a per-project
     # .salt is OBSERVABLE in the chain, never silent. Metadata-only wire
     # (`reason` closed enum + `salt_scope` fixed + `slug_sha256` 16-hex
-    # prefix); the slug/path text never reaches the log. Emitted lazily
+    # prefix); raw slug and salt-file path are excluded from the payload.
+    # The base `project` field still carries the absolute repository path.
+    # Emitted lazily
     # by _lib/injection_salt.py at mint time (marker sidecar is the
     # forensic ground truth when the emit path is unavailable).
     "salt_rotation_registered",
@@ -1157,13 +1159,14 @@ _KNOWN_ACTIONS = {
     "ledger_entry_rejected",
     # PLAN-179 W2 US8 (wave-179-close ceremony; SPEC v2.60) — SessionEnd
     # memory-delta observation: one emit per session, immediately before
-    # `session_end` — did THIS session modify any file under the native
-    # memory dir? Stat-only producer; closed enums + INT counters only.
+    # `session_end` — activity in the shared project memory directory during
+    # this session's window; it does not establish session authorship.
+    # Stat-only producer; closed enums + INT counters only.
     # DENIED on the wire: memory file names/basenames, file bodies, the
     # memory-dir absolute path and the $HOME-derived slug, the raw
     # session_start source line, any env value (LLM06 side-channel guard
-    # — the sanitized basenames travel ONLY on the systemMessage operator
-    # channel, never the signed chain).
+    # — the producer renders counts on the systemMessage operator channel,
+    # and never forwards basenames to the signed chain).
     "session_memory_delta_observed",
 }
 
@@ -4224,13 +4227,14 @@ def emit_session_memory_delta_observed(
     """Emit session_memory_delta_observed (PLAN-179 W2 US8, SPEC v2.60).
 
     One emit per session from ``SessionEnd.py``, immediately before the
-    ``session_end`` emit: the stat-only observation of whether THIS session
-    modified anything under the native memory dir. Deliberately NO ``int()``
+    ``session_end`` emit: a stat-only observation of activity in the shared
+    project memory directory during this session's window, without proof
+    of which session wrote it. Deliberately NO ``int()``
     coercion here: the scrub branch is TYPE-strict and a float must become
     0, not be rounded into the signed chain. The memory file NAMES are not
     a parameter of this function at all — the producer never forwards them
-    (they travel only on the ``systemMessage`` operator channel; the wire
-    denies basenames by contract).
+    (the producer renders counts on ``systemMessage``; the wire denies
+    basenames by contract).
     """
     emit_generic(
         "session_memory_delta_observed",
@@ -8643,8 +8647,9 @@ _CEREMONY_LINT_UNLOCK_USED_ALLOWLIST = frozenset({
 })
 
 # PLAN-182 W1 (ADR-079 S318 amendment §2) — Sec MF-3 field allowlist for
-# salt_rotation_registered. Deny-by-default; the slug/path TEXT never
-# reaches the wire (16-hex sha256 prefix only, mirroring file_sha256).
+# salt_rotation_registered. Deny-by-default; raw slug and salt-file path
+# are excluded (16-hex sha256 prefix only, mirroring file_sha256). The base
+# `project` field is allowed and carries the absolute repository path.
 _SALT_ROTATION_REGISTERED_ALLOWLIST = frozenset({
     "action", "session_id", "project",
     "reason", "salt_scope", "slug_sha256",
@@ -9062,12 +9067,10 @@ def _context_pressure_bucket_ok(value: Any) -> bool:
     return value in _CONTEXT_PRESSURE_USED_BUCKETS_PCT
 
 
-# PLAN-179 rail round-5 [P2] — cobertura GARANTIDA sem cursor persistido.
-# As quatro tentativas anteriores definiam a fatia do turno por POSICAO na
-# iteracao (prefixo, offset, deadline), e toda fatia por posicao deixa uma
-# cauda inalcancavel. Esta define por IDENTIDADE: o shard sai do nome do
-# arquivo. Em K turnos cada arquivo cai na sua fatia exatamente uma vez, e o
-# trabalho caro (stat) por turno e ~n/K. Ler nomes com scandir e barato.
+# PLAN-179 rail round-5 [P2] — rotating identity shards, best-effort sweep.
+# A shard selects eligible names; it does not preserve directory position.
+# Each sweep starts a fresh scandir and can hit its deadline before the
+# same tail, so expired markers there have no guaranteed reclamation.
 _GC_SHARDS = 8
 
 # Contador de VARREDURA (rail round-6 [P2]): o shard avanca por SWEEP, nunca
@@ -9084,20 +9087,15 @@ def _gc_shard_of_name(name):
 
 
 def _gc_next_shard(state_dir):
-    """Fatia desta VARREDURA, avancando uma por sweep (round-robin estrito).
+    """Select the next shard from a best-effort persisted counter.
 
-    PLAN-179 rail round-6 [P2]: derivar a fatia do RELOGIO
-    (``(time // 60) % K``) parece rotativo mas starva — se as varreduras caem
-    sempre no mesmo minuto modulo K (uma rotina diaria, por exemplo), a mesma
-    fatia sai toda vez e as outras K-1 nunca sao inspecionadas. O que precisa
-    avancar e o SWEEP, entao o contador vive em disco: um inteiro num arquivo
-    de poucos bytes, no mesmo state dir, escrito com o mesmo idioma atomico e
-    O_NOFOLLOW do marker (nao seguir symlink vale aqui pelo mesmo motivo).
-
-    Falha de leitura ou de escrita NAO cai para uma fatia fixa — isso seria a
-    starvation de volta pela porta dos fundos. Cai para uma fatia ALEATORIA,
-    que degrada de "cobertura garantida em K sweeps" para "cobertura
-    probabilistica", e nunca para "cobertura nenhuma"."""
+    A successful read/write advances the counter. A failed read seeds it
+    from randomness (zero if randomness also fails); a failed write can
+    leave the same counter for the next sweep. This selects eligible names,
+    without guaranteeing that the deadline-bounded scan reaches each name.
+    The counter read and ancestor paths retain the rc.1 condition 28 limits;
+    O_NOFOLLOW here protects only the temporary file used for the write.
+    """
     counter_path = Path(str(state_dir)) / _GC_SHARD_COUNTER_NAME
     current = None
     try:
@@ -9162,12 +9160,10 @@ def _gc_context_pressure_markers(
         # r2 removed the sort+materialise; r3 replaced it with a fixed prefix
         # window that STARVED the tail; r4 showed the rotating offset was still
         # `% _scan_cap`, so nothing past ~2x that was ever reachable.
-        # What was expensive was the SORT and the list, not the walk:
-        # `os.scandir()` is lazy and its DirEntry reuses the readdir stat. So
-        # walk EVERYTHING (no starvation, no cursor to get wrong), drop the
-        # sort (order is irrelevant to a TTL sweep), stop at `max_files`
-        # deletions, and bound the sweep with a wall-clock DEADLINE. Bounded by
-        # TIME, correct by coverage.
+        # Scan lazily without sorting, stopping at `max_files` deletions
+        # or the wall-clock deadline. The deadline can repeatedly leave
+        # the same tail unvisited: shard rotation alone does not guarantee
+        # coverage. A continuation mechanism remains an rc.1 P2 follow-up.
         _deadline = time.time() + _GC_MARKER_WALL_BUDGET_S
         _shard = _gc_next_shard(directory)
         _scanned = 0

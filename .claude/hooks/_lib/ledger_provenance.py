@@ -33,10 +33,12 @@ provenance of what enters it and the verifiability of what leaves it.*
          ``matched=False`` on its own internal failure, so the
          "did it actually look?" question is answered HERE, by
          :func:`_scanner_is_usable` and the ``bytes_scanned`` check.
-      2. *A rejected entry is DISCARDED, never redacted-and-kept.* There
-         is no "sanitize and store" path in this module by construction.
-         :func:`admit_entry` returns ``None`` for the body and a
-         :func:`rejection_marker` line for the ledger; the marker names
+      2. *An enforced rejection discards the entry, never redacts it.*
+         :func:`admit_entry` returns ``None`` when rejection binds, and
+         for any input that is not a ``LedgerEntry``. In the shipping
+         advisory posture a ``LedgerEntry`` comes back unchanged with
+         ``would_reject=True`` and ``ledger_entry_rejected`` is emitted.
+         :func:`rejection_marker` separately formats a marker naming
          the family that tripped and carries NO fragment of the rejected
          text (S172 doctrine — a rejected value is never echoed, and this
          repo is public).
@@ -334,7 +336,8 @@ MAX_ENTRY_BYTES = 8 * 1024
 
 #: Signal name that identifies this gate's rows in the audit log. The
 #: durable FPR series for the advisory window is
-#: ``prompt_injection_detected`` rows carrying this signal.
+#: ``ledger_entry_rejected`` rows carrying this signal. Advisory rows
+#: describe would-reject decisions; they are not evidence of a discard.
 LEDGER_GATE_SIGNAL = "ledger_write_gate"
 
 #: The env var that makes a reject BIND. Unset (the shipping default) =

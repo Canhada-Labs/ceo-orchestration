@@ -159,6 +159,310 @@ _pred_refuses() {
   )
 }
 
+# rc.1 r12: exercise both entrypoints against impossible ancestor types. The
+# optional second argument runs only this regression against $FRAMEWORK_ROOT,
+# including an unpatched disposable tree as the positive failure control:
+#   bash scripts/tests/test-installer-write-safety-e2e.sh <tree> --ancestor-preflight-only
+# The ANCESTOR-only predicate, in a sub-shell so the library never pollutes
+# this harness. Prints the reason; rc 0 = refuses. Mirrors _pred_refuses.
+_pred_ancestor_refuses() {
+  (
+    # shellcheck disable=SC1090
+    . "$1" >/dev/null 2>&1 || exit 2
+    command -v _wbm_dst_non_directory_ancestor_refuses >/dev/null 2>&1 || exit 2
+    if _wbm_dst_non_directory_ancestor_refuses "$2" "$3"; then
+      printf '%s\n' "${_WBM_DST_REFUSE_WHY:-}"
+      exit 0
+    fi
+    exit 1
+  )
+}
+
+_ancestor_tree_digest() {
+  python3 -I - "$1" <<'PY'
+import hashlib
+import os
+import stat
+import sys
+
+root = sys.argv[1]
+rows = []
+for directory, dirs, files in os.walk(root, followlinks=False):
+    for path in [directory] + [os.path.join(directory, x) for x in sorted(dirs + files)]:
+        info = os.lstat(path)
+        payload = ""
+        if stat.S_ISREG(info.st_mode):
+            with open(path, "rb") as stream:
+                payload = hashlib.sha256(stream.read()).hexdigest()
+        elif stat.S_ISLNK(info.st_mode):
+            payload = os.readlink(path)
+        rows.append((os.path.relpath(path, root), info.st_mode, info.st_ino,
+                     info.st_mtime_ns, payload))
+print(hashlib.sha256(repr(sorted(set(rows))).encode()).hexdigest())
+PY
+}
+
+_ancestor_preflight_tests() {
+  local tool shape mode rel reason before after expected marker
+  echo "==> R12 non-directory ancestors: named refusal before the first target write"
+  for tool in install upgrade; do
+    for shape in file fifo linkfile dangling; do
+      for mode in dry real; do
+        _mkcase "r12-$tool-$shape-$mode"
+        case "$shape" in
+          file)
+            rel="docs"
+            printf 'adopter-owned ordinary file\n' > "$TARGET/$rel" ;;
+          fifo)
+            rel=".github/workflows"
+            mkdir -p "$TARGET/.github"
+            mkfifo "$TARGET/$rel" || { scaffold "R12 $tool FIFO"; continue; } ;;
+          linkfile)
+            # Codex review of the cure: a symlink to a FILE passed the `! -L`
+            # test of the ancestor predicate, and the run then aborted at mkdir
+            # with the target already written.
+            rel="docs"
+            printf 'adopter notes kept outside\n' > "$OUTSIDE/notes"
+            ln -s "$OUTSIDE/notes" "$TARGET/$rel" || { scaffold "R12 $tool link"; continue; } ;;
+          dangling)
+            rel=".github/workflows"
+            mkdir -p "$TARGET/.github"
+            ln -s "$OUTSIDE/never-created" "$TARGET/$rel" || { scaffold "R12 $tool dangling"; continue; } ;;
+        esac
+        if [ "$tool" = upgrade ]; then
+          mkdir -p "$TARGET/.claude"
+          printf '1.3.0\n' > "$TARGET/.claude/.framework-version"
+          printf '{"schema_version":1,"request":{"profile":"core","stack":"general","ceremony":"maintainer"},"upgrade_succeeded":true}\n' \
+            > "$TARGET/.claude/.install-state.json"
+          printf '# prior manifest must remain unchanged\n' > "$TARGET/.claude/.install-manifest.sha256"
+          printf '{"hooks":{}}\n' > "$TARGET/.claude/settings.json"
+        fi
+        before="$( _ancestor_tree_digest "$TARGET" )" || { scaffold "R12 snapshot"; continue; }
+        if [ "$mode" = dry ]; then
+          CEO_RAG_INSTALL_PROMPT=0 bash "$FRAMEWORK_ROOT/scripts/$tool.sh" "$TARGET" \
+            --profile core --ceremony maintainer --dry-run > "$LOG" 2>&1
+        else
+          CEO_RAG_INSTALL_PROMPT=0 bash "$FRAMEWORK_ROOT/scripts/$tool.sh" "$TARGET" \
+            --profile core --ceremony maintainer > "$LOG" 2>&1
+        fi
+        RC=$?
+        expected=1; [ "$tool" = upgrade ] && expected=3
+        [ "$RC" -eq "$expected" ] \
+          && ok "R12 $tool $shape $mode — named-refusal exit $expected" \
+          || bad "R12 $tool $shape $mode — rc=$RC, expected $expected"
+        if grep -q 'non-directory ancestor' "$LOG" && grep -qF "$rel" "$LOG"; then
+          ok "R12 $tool $shape $mode — refusal identifies $rel and its type"
+        else
+          bad "R12 $tool $shape $mode — no named non-directory-ancestor refusal"
+        fi
+        # Round-12 REVIEW F2 — --dry-run is a DIAGNOSTIC mode: the rc still
+        # reports the refusal, but the preview must run to the END. The marker
+        # is deliberately a banner printed AFTER each script's pre-flight
+        # (install.sh :1292, upgrade.sh :1162); the top banner would be
+        # present even under truncation and would assert nothing. MEASURED
+        # pre-cure: the upgrade preview collapsed from 146 lines to 5.
+        if [ "$mode" = dry ]; then
+          if [ "$tool" = upgrade ]; then
+            marker='==> Upgrading ceo-orchestration'
+          else
+            marker='==> Installing core skills'
+          fi
+          if grep -qF "$marker" "$LOG"; then
+            ok "R12 $tool $shape dry — the preview survived the refusal"
+          else
+            bad "R12 $tool $shape dry — the preview was truncated at the refusal"
+          fi
+        fi
+        after="$( _ancestor_tree_digest "$TARGET" )" || { scaffold "R12 final snapshot"; continue; }
+        printf '    R12 %s %s %s target digest: %s -> %s\n' "$tool" "$shape" "$mode" "$before" "$after"
+        [ "$before" = "$after" ] \
+          && ok "R12 $tool $shape $mode — entire target and prior state unchanged" \
+          || bad "R12 $tool $shape $mode — target changed before refusal"
+      done
+    done
+  done
+
+  _mkcase r12-predicate-controls
+  mkdir -p "$TARGET/real/sub"
+  for rel in "absent/deeper/file.md" "real/sub/file.md"; do
+    if _pred_refuses "$LIB" "$TARGET" "$rel" >/dev/null; then
+      bad "R12 positive directory control — refused $rel"
+    else
+      ok "R12 positive directory control — accepts $rel"
+    fi
+  done
+  if _pred_refuses "$LIB" "$CASE/absent-target" "docs/file.md" >/dev/null; then
+    bad "R12 positive absent-root control — refused"
+  else
+    ok "R12 positive absent-root control — accepted"
+  fi
+  printf 'kept\n' > "$TARGET/regular"
+  mkfifo "$TARGET/fifo" || scaffold "R12 predicate FIFO"
+  ln -s "$TARGET/regular" "$TARGET/linkfile" || scaffold "R12 predicate link"
+  ln -s "$OUTSIDE/never-created" "$TARGET/dangling" || scaffold "R12 predicate dangling"
+  for rel in "regular/deeper/file.md" "fifo/deeper/file.md" \
+             "linkfile/deeper/file.md" "dangling/deeper/file.md"; do
+    reason="$( _pred_refuses "$LIB" "$TARGET" "$rel" )"
+    case "$reason" in
+      *'non-directory ancestor'*) ok "R12 predicate — refuses $rel" ;;
+      *) bad "R12 predicate — did not name the non-directory ancestor of $rel" ;;
+    esac
+  done
+}
+
+# Round-12 REVIEW F1 — SPEC/v1 is delivered by a FORCED route (PLAN-166 F3),
+# not by a row of scripts/delivery-routes.tsv, so the route-table pre-flight
+# cannot see it. MEASURED pre-cure on both tools: the run mutated the target
+# and THEN aborted at `mkdir` under set -e (upgrade: 1247 entries written, no
+# .install-manifest.sha256, .install-state.json still carrying the PREVIOUS
+# run's upgrade_succeeded:true; install: 387 lines in, .claude/ populated).
+# The refusal is ANCESTOR-only by design, so the two legitimate shapes of this
+# destination — a real directory and a `--mode link` symlink — are controls
+# here, not failures.
+_ancestor_spec_tests() {
+  local tool shape mode before after rc_want
+  echo "==> R12 SPEC/v1 forced route: refused before the first target write"
+  for tool in install upgrade; do
+  for shape in file linkfile dangling; do
+    for mode in dry real; do
+      _mkcase "r12-spec-$tool-$shape-$mode"
+      case "$shape" in
+        file) printf 'adopter-owned ordinary file\n' > "$TARGET/SPEC" ;;
+        linkfile)
+          # Codex review of the cure: SPEC -> file passed the ancestor
+          # predicate (`! -L`) on BOTH tools; the forced route then aborted
+          # at mkdir after the target had been written.
+          printf 'adopter spec kept outside\n' > "$OUTSIDE/spec-notes"
+          ln -s "$OUTSIDE/spec-notes" "$TARGET/SPEC" || { scaffold "R12 SPEC link"; continue; } ;;
+        dangling)
+          ln -s "$OUTSIDE/never-created" "$TARGET/SPEC" || { scaffold "R12 SPEC dangling"; continue; } ;;
+      esac
+      if [ "$tool" = upgrade ]; then
+        mkdir -p "$TARGET/.claude"
+        printf '1.3.0\n' > "$TARGET/.claude/.framework-version"
+        printf '{"schema_version":1,"request":{"profile":"core","stack":"general","ceremony":"maintainer"},"upgrade_succeeded":true}\n' \
+          > "$TARGET/.claude/.install-state.json"
+        printf '# prior manifest must remain unchanged\n' > "$TARGET/.claude/.install-manifest.sha256"
+        printf '{"hooks":{}}\n' > "$TARGET/.claude/settings.json"
+      fi
+      before="$( _ancestor_tree_digest "$TARGET" )" || { scaffold "R12 SPEC snapshot"; continue; }
+      if [ "$mode" = dry ]; then
+        CEO_RAG_INSTALL_PROMPT=0 bash "$FRAMEWORK_ROOT/scripts/$tool.sh" "$TARGET" \
+          --profile core --ceremony maintainer --dry-run > "$LOG" 2>&1
+      else
+        CEO_RAG_INSTALL_PROMPT=0 bash "$FRAMEWORK_ROOT/scripts/$tool.sh" "$TARGET" \
+          --profile core --ceremony maintainer > "$LOG" 2>&1
+      fi
+      RC=$?
+      rc_want=1; [ "$tool" = upgrade ] && rc_want=3
+      [ "$RC" -eq "$rc_want" ] \
+        && ok "R12 SPEC $tool $shape $mode — named-refusal exit $rc_want" \
+        || bad "R12 SPEC $tool $shape $mode — rc=$RC, expected $rc_want"
+      if grep -q 'non-directory ancestor' "$LOG" && grep -qF 'SPEC' "$LOG"; then
+        ok "R12 SPEC $tool $shape $mode — the refusal names SPEC and its type"
+      else
+        bad "R12 SPEC $tool $shape $mode — no named non-directory-ancestor refusal for SPEC"
+      fi
+      after="$( _ancestor_tree_digest "$TARGET" )" || { scaffold "R12 SPEC final snapshot"; continue; }
+      printf '    R12 SPEC %s %s %s target digest: %s -> %s\n' "$tool" "$shape" "$mode" "$before" "$after"
+      [ "$before" = "$after" ] \
+        && ok "R12 SPEC $tool $shape $mode — entire target and prior state unchanged" \
+        || bad "R12 SPEC $tool $shape $mode — target changed before refusal"
+    done
+  done
+  done
+
+  # POSITIVE CONTROLS — the two shapes an adopter legitimately has here must
+  # NOT be refused by the ancestor predicate. The `--mode link` leaf is the
+  # load-bearing one: the FULL destination predicate refuses it (measured), so
+  # a cure that reused _wbm_dst_refuses would break every link-mode run.
+  _mkcase r12-spec-controls
+  mkdir -p "$TARGET/SPEC/v1"
+  if _pred_ancestor_refuses "$LIB" "$TARGET" "SPEC/v1" >/dev/null; then
+    bad "R12 SPEC control — refused a real SPEC/v1 directory"
+  else
+    ok "R12 SPEC control — accepts a real SPEC/v1 directory"
+  fi
+  _mkcase r12-spec-link-control
+  mkdir -p "$TARGET/SPEC" "$OUTSIDE/v1"
+  ln -s "$OUTSIDE/v1" "$TARGET/SPEC/v1"
+  if _pred_ancestor_refuses "$LIB" "$TARGET" "SPEC/v1" >/dev/null; then
+    bad "R12 SPEC control — refused a --mode link SPEC/v1 symlink leaf"
+  else
+    ok "R12 SPEC control — accepts a --mode link SPEC/v1 symlink leaf"
+  fi
+  # Codex review of the cure: a symlink that RESOLVES to a directory is not
+  # this predicate's call (mkdir traverses it) — the caller's confinement
+  # guard owns that policy. Pinned so the cure cannot drift into refusing it.
+  _mkcase r12-spec-linkdir-control
+  mkdir -p "$OUTSIDE/spec/v1"
+  ln -s "$OUTSIDE/spec" "$TARGET/SPEC"
+  if _pred_ancestor_refuses "$LIB" "$TARGET" "SPEC/v1" >/dev/null; then
+    bad "R12 SPEC control — refused a SPEC ancestor that is a symlink to a directory"
+  else
+    ok "R12 SPEC control — accepts a SPEC ancestor that is a symlink to a directory"
+  fi
+}
+
+_ancestor_selection_tests() {
+  local branch mode owner before after
+  local -a args
+  echo "==> R12 selection: an inactive GitHub route must not veto docs delivery"
+  for branch in no-owner owner no-replay; do
+    for mode in dry real; do
+      _mkcase "r12-selection-$branch-$mode"
+      mkdir -p "$TARGET/.claude"
+      printf 'adopter-owned GitHub placeholder\n' > "$TARGET/.github"
+      printf '1.3.0\n' > "$TARGET/.claude/.framework-version"
+      owner='"github_owner":"fixture-owner",'
+      [ "$branch" = no-owner ] && owner=""
+      printf '{"schema_version":1,"request":{%s"profile":"core","stack":"general","ceremony":"maintainer"},"upgrade_succeeded":true}\n' "$owner" \
+        > "$TARGET/.claude/.install-state.json"
+      printf '{"hooks":{}}\n' > "$TARGET/.claude/settings.json"
+      args=(--profile core --ceremony maintainer)
+      if [ "$branch" = owner ]; then
+        args+=(--skip='.github/CODEOWNERS' --skip='.github/workflows/*')
+      else
+        args+=(--skip='.github/*.template')
+      fi
+      [ "$branch" = no-replay ] && args+=(--no-replay)
+      [ "$mode" = dry ] && args+=(--dry-run)
+      before="$( _ancestor_tree_digest "$TARGET" )" || { scaffold "R12 selection snapshot"; continue; }
+      CEO_RAG_INSTALL_PROMPT=0 bash "$FRAMEWORK_ROOT/scripts/upgrade.sh" "$TARGET" "${args[@]}" > "$LOG" 2>&1
+      RC=$?
+      [ "$RC" -eq 0 ] \
+        && ok "R12 selection $branch $mode — inactive GitHub routes do not refuse the upgrade" \
+        || bad "R12 selection $branch $mode — rc=$RC, expected 0"
+      if [ -f "$TARGET/.github" ] && [ "$( cat "$TARGET/.github" )" = 'adopter-owned GitHub placeholder' ]; then
+        ok "R12 selection $branch $mode — the GitHub placeholder is unchanged"
+      else
+        bad "R12 selection $branch $mode — the GitHub placeholder changed"
+      fi
+      if [ "$mode" = dry ]; then
+        after="$( _ancestor_tree_digest "$TARGET" )" || { scaffold "R12 selection final snapshot"; continue; }
+        [ "$before" = "$after" ] \
+          && ok "R12 selection $branch dry — the entire target is unchanged" \
+          || bad "R12 selection $branch dry — the target changed"
+      elif cmp -s "$TARGET/docs/rotation-log.md" "$FRAMEWORK_ROOT/templates/docs/rotation-log.md"; then
+        ok "R12 selection $branch real — the selected docs route was delivered"
+      else
+        bad "R12 selection $branch real — the selected docs route was not delivered"
+      fi
+    done
+  done
+}
+
+if [ "${2:-}" != "--ancestor-selection-only" ]; then
+  _ancestor_preflight_tests
+  _ancestor_spec_tests
+fi
+_ancestor_selection_tests
+if [ "${2:-}" = "--ancestor-preflight-only" ] || [ "${2:-}" = "--ancestor-selection-only" ]; then
+  echo "=== R12 ancestor preflight: $PASS passed, $FAIL failed ==="
+  [ "$FAIL" -eq 0 ]
+  exit $?
+fi
+
 # Writes a mutated copy of the library with ONE exact line replaced, or reports
 # that the anchor is gone. $1 = tag, $2 = anchor (exact), $3 = replacement.
 # The result lands in the GLOBAL _MUT_OUT rather than on stdout: called through a

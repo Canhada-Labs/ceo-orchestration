@@ -947,6 +947,27 @@ _dst_refuses() {
   return 0
 }
 
+# rc.1 r12: non-directory ancestor, ANCESTOR-ONLY, for a destination whose
+# LEAF policy is owned elsewhere. SPEC/v1 is that case: _ownership_verdict
+# decides replacement (PLAN-167) and a `--mode link` delivery leaves a SYMLINK
+# there, which _wbm_dst_refuses REFUSES — routing it through _dst_refuses
+# would break every link-mode install. An untraversable ancestor is not
+# negotiable: an adopter file named SPEC aborted this script at `mkdir` under
+# set -e, 387 lines in, with .claude/ already populated.
+_dst_ancestor_refuses() {
+  local dst_rel="$1"
+  local why=""
+  if ! command -v _wbm_dst_non_directory_ancestor_refuses >/dev/null 2>&1; then
+    why="destination-ancestor predicate unavailable (scripts/_framework_manifest_set.sh not sourced) — refusing rather than guessing"
+  elif _wbm_dst_non_directory_ancestor_refuses "$TARGET" "$dst_rel"; then
+    why="${_WBM_DST_REFUSE_WHY:-unknown reason}"
+  else
+    return 1
+  fi
+  _dst_record_refusal "$dst_rel" "$why"
+  return 0
+}
+
 # PLAN-185 W1 — per-GROUP pre-flight (OQ-4, Owner default). Every destination of
 # a delivery group is answered BEFORE that group's first write, so a refusal on
 # the SECOND destination cannot leave the FIRST one written.
@@ -1082,6 +1103,11 @@ PROTOCOL.md
     [[ -n "$rel" ]] || continue
     if _dst_refuses "$rel"; then rc=1; fi
   done <<< "$rels"
+  # SPEC/v1 is a DIRECTORY delivery under the same WS4 ceremony guard as the
+  # root surfaces; ancestor-only, per the note on _dst_ancestor_refuses.
+  if [[ "$CEREMONY" != "user" && -d "$SOURCE_DIR/SPEC/v1" ]]; then
+    if _dst_ancestor_refuses "SPEC/v1"; then rc=1; fi
+  fi
   return "$rc"
 }
 

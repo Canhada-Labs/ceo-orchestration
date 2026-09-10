@@ -76,8 +76,10 @@ the first session on the new version, pick one route:
   it as soon as the plan is done), or
 - copy ONLY the store subdirectories — `scratchpad/` (the `/resume` store),
   `skill_proposals/`, `skill_index/`, `session_graph/` — from
-  `$HOME/.claude/projects/ceo-orchestration/state/` into the new per-project
-  directory printed by `python3 .claude/hooks/_lib/runtime_paths.py --state-dir`.
+  `$HOME/.claude/projects/ceo-orchestration/state/` into
+  `<new-runtime-root>/state/`. The command
+  `python3 .claude/hooks/_lib/runtime_paths.py --state-dir` prints
+  `<new-runtime-root>`; append `/state` for the store destination.
   NEVER copy the flat files at the root of `state/`: they include the audit
   crash-recovery spools (`audit-spool.*`, `audit-pending.*`), and the drainer
   re-chains any spool it finds under the CURRENT project's key without
@@ -93,14 +95,24 @@ the first session on the new version, pick one route:
   design and are never copied), and move any remaining spool to a
   quarantine directory outside any `state/`.
 
-Two more per-project records move with v1.4.0 and are NOT migrated either
-(signed conditions of rc.1): the cost-envelope counters
-(`cost-envelope-*.json` — with them at zero, a swarm dispatch that your
-accumulated spend would have blocked is allowed; do not enable `CEO_SWARM`
-after the upgrade before copying them), and `credential-rotation.json`
-(a stale credential loses its rotation warning and the blocking decision
-until the record is copied). Copy both from the legacy directory into the
-new per-project directory before the first session, like `state/`.
+Before running multiple repositories, verify that their resolved runtime
+directories are distinct (rc.1 condition 30). The slug replaces `/` with
+`-`, so `/srv/a-b/c` and `/srv/a/b-c` both resolve to `-srv-a-b-c` and would
+share the log, key and salt. The resolver does not disambiguate collisions.
+
+Two other records need separate migration before their consumers run
+(rc.1 conditions 39 and 40). Their destinations differ:
+
+| Record | Source and destination | Requirement |
+|---|---|---|
+| `cost-envelope-*.json` | From `$HOME/.claude/projects/<v1.3-path-slug>/state/` to `$HOME/.claude/projects/<native-path-slug>/state/`. The old slug lacks the leading `-`; the native slug keeps it. | Copy the cost records, or prove them absent, before enabling `CEO_SWARM`; otherwise accumulated spending is lost to dispatch decisions. |
+| `credential-rotation.json` | From the legacy runtime root to `<new-runtime-root>/credential-rotation.json`. | Copy before running live adapters; otherwise a previously expired credential loses its age warning and blocking decision. |
+
+The cost consumer (`cost_envelope._state_dir`) constructs its own path and
+ignores `CLAUDE_PROJECT_DIR_NATIVE`; do not send its records to that override
+or to the runtime root without `/state`. The credential consumer uses
+`runtime_paths.runtime_state_dir()` and therefore does honor the override.
+Neither operation authorizes copying audit recovery spools.
 
 Three more things to check BEFORE running `scripts/upgrade.sh` (signed
 conditions of rc.1, all in the upgrader's delivery of `docs/` and

@@ -20,10 +20,11 @@ só acrescenta os sítios de versão):
 | arquivos alterados, excluindo testes | 1.178 |
 | commits na faixa | 436 |
 
-Com teto de 180 KB de payload redigido por parte e orçamento de **6
-invocações**, o máximo teórico revisável é ~1,08 MB de diff. Este kit cobre
-**848.309 bytes em 42 arquivos** — a superfície que o adotante realmente
-recebe e executa. O resto está declarado no §4, não escondido.
+O dimensionamento inicial tinha seis partes, teto de 180 KB por payload e
+**848.309 bytes em 42 arquivos**. Esses números são históricos. O runner
+atual usa sete partes e deriva caminhos e bytes do candidato: inclui
+runtime entregue ao adotante e CI do próprio framework. A evidência de
+cada execução é a fonte da cobertura atual; as omissões estão no §4.
 
 ## 2. As sete partes, na ordem de risco para o adotante
 
@@ -52,13 +53,15 @@ que instalou a v1.3.0 e roda o upgrade.
 | 6 | núcleo de cadeia e auditoria em `_lib/` (audit_emit, ledger_provenance, injection_salt, audit_hmac, spool_writer) | 5 | 139.149 |
 | 7 | PostCompact, `_lib/runtime_paths.py`, `_lib/state_store.py`, `_lib/test_isolation.py`, `.github/workflows/*` exceto smoke-install.yml | 11 | 148.254 - 31.449 |
 
-Todas abaixo de 150 KB de diff. Na rodada 10 a parte 4 era a de menor folga porque a
+Na medição da tabela, todas tinham menos de 150 KB de diff. Na rodada 10 a parte 4 era a de menor folga porque a
 seção `[1.4.0]` do CHANGELOG landou em `e242544`; o bump acrescenta a ela
 `VERSION`, `npm/package.json` e os dois manifestos de plugin, poucas linhas
 cada. O redator do ADR-114 preserva linhas e hunks (o
 runner **prova** isso por controle a cada parte), e o cabeçalho do prompt
-soma cerca de 3 KB. O teto duro do runner é 260.000 bytes de payload cru (o redator trunca a 256 KiB):
-acima disso ele recusa e manda re-particionar.
+soma alguns KB. O teto duro do runner é 260.000 bytes de payload cru (o redator trunca a 256 KiB):
+acima disso ele recusa antes das invocações. É preciso reduzir a prosa histórica
+do envelope, preservando requisitos e residuais, ou repartir o diff. O histórico
+retirado do payload fica em `CONDITIONS-history.md`.
 
 ### O manifesto é DERIVADO, nunca uma lista fixa
 
@@ -128,14 +131,19 @@ uma condição do veredito possa apontá-la.
 
 ## 5. Orçamento e critério de parada
 
-- **7 invocações de codex**, uma por parte (`RC1_CODEX_JOBS=7` corre-as em paralelo). O runner não repete parte.
+- **7 invocações de codex**, uma por parte. `RC1_CODEX_JOBS` limita a
+  concorrência; o padrão é 1. Não rodar o re-pass junto com suítes pesadas;
+  aumentar concorrência só dentro da memória disponível. O runner não repete parte.
 - Cada parte é julgada de forma independente; o `RUNNER-OVERALL` é 0 apenas
-  se as **seis** terminarem em `GO` ou `GO-WITH-CONDITIONS`.
+  se as **sete** terminarem em `GO` ou `GO-WITH-CONDITIONS`.
 - Exatamente **uma** linha `VERDICT:` por parte. Duas linhas é ambiguidade,
   não aprovação, e o runner a registra como tal (classe CM-03 do corpus de
   defeitos S348).
-- Evidência completa de tentativa anterior **aborta** o runner: um NO-GO
-  exige triagem e `mv` para `repass-rc1-<data>-NOGO/` antes de re-rodar.
+- Qualquer evidência de tentativa anterior, inclusive parcial, **aborta** o
+  runner. Preserve a tentativa em diretório próprio e faça a triagem antes
+  de outra execução. Não sobrescrever vereditos, transcritos ou payloads.
+- Um `NO-GO` nunca vira aprovação por conter a palavra `RESIDUAL` nas
+  condições. O gerador e o corte exigem aprovação das sete partes.
 
 ## 6. Condições-rascunho para o envelope
 
@@ -177,6 +185,17 @@ O gerador (`gen-envelope-rc1.py --stage fields --conditions-file`) exige o
 arquivo de condições sempre que o veredito agregado for
 `GO-WITH-CONDITIONS`, e as condições entram nos **fields**, isto é, no
 material que o Owner assina.
+
+Antes de preparar os payloads, o runner congela os bytes em
+`CONDITIONS-rc1.reviewed.md` (vazio quando não há condições) e registra seu
+SHA-256 na proveniência e no manifesto. As sete partes usam esse snapshot;
+os payloads redigidos também entram no manifesto. A lista deriva de sete
+conjuntos de cinco arquivos, mais candidato, proveniência, runner e snapshot:
+39 entradas em `MANIFEST-rc1.sha256` (o manifesto não lista a si próprio).
+O gerador recusa condições diferentes do snapshot e os fields são
+reconstruídos contra a evidência antes de incorporar a assinatura. Se a
+revisão pedir uma condição nova, edite o rascunho e faça outro re-pass;
+alterar condições depois da revisão não aproveita a aprovação anterior.
 
 ## 7. Codex pinado, sem tocar na máquina
 

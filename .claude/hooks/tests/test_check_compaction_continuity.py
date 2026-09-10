@@ -1511,6 +1511,229 @@ class TestLedgerIndexUS7(unittest.TestCase):
         )
 
 
+class TestAcIndexConfinedRead(TestEnvContext):
+    """rc.1 r12 part 5: AC inputs cannot escape the repository or elect partially."""
+
+    def setUp(self):
+        super().setUp()
+        self.plans_dir = self.project_dir / ".claude" / "plans"
+        self.plans_dir.mkdir()
+        self.outside_dir = self._tmp_root / "outside"
+        self.outside_dir.mkdir()
+
+    def _plan(self, name="PLAN-042-valid.md", path="src/impl.py", directory=None):
+        target = (directory or self.plans_dir) / name
+        target.write_text(
+            "# Plan\n\n- [ ] [P1][US7][%s] implement\n" % path,
+            encoding="utf-8",
+        )
+        return target
+
+    def _scan(self, root=None):
+        import time
+        return _pre_hook._ac_path_index_mirror(
+            str(root or self.project_dir), time.monotonic() + 5.0,
+        )
+
+    def test_regular_files_keep_complete_index_and_lowest_id(self):
+        self._plan()
+        self._plan("PLAN-010-other.md")
+        self._plan("PLAN-011-extra.md", "./.claude/hooks/example.py")
+        self.assertEqual(self._scan(), ({
+            "src/impl.py": "PLAN-010",
+            ".claude/hooks/example.py": "PLAN-011",
+        }, True))
+
+    def test_leaf_symlink_refuses_external_acs(self):
+        outside = self._plan("PLAN-001-external.md", directory=self.outside_dir)
+        (self.plans_dir / outside.name).symlink_to(outside)
+        self.assertEqual(self._scan(), ({}, False))
+
+    def test_dangling_leaf_symlink_makes_index_incomplete(self):
+        (self.plans_dir / "PLAN-001-missing.md").symlink_to(
+            self.outside_dir / "missing.md"
+        )
+        self.assertEqual(self._scan(), ({}, False))
+
+    def test_plans_directory_symlink_refuses_external_acs(self):
+        self._plan(directory=self.outside_dir)
+        self.plans_dir.rmdir()
+        self.plans_dir.symlink_to(self.outside_dir, target_is_directory=True)
+        self.assertEqual(self._scan(), ({}, False))
+
+    def test_claude_directory_symlink_refuses_external_acs(self):
+        outside_plans = self.outside_dir / "plans"
+        outside_plans.mkdir()
+        self._plan(directory=outside_plans)
+        self.plans_dir.rmdir()
+        claude_dir = self.project_dir / ".claude"
+        claude_dir.rename(self.project_dir / "original-claude")
+        claude_dir.symlink_to(self.outside_dir, target_is_directory=True)
+        self.assertEqual(self._scan(), ({}, False))
+
+    def test_symlinked_repository_root_is_not_a_new_trust_anchor(self):
+        self._plan()
+        alias = self._tmp_root / "alias"
+        alias.symlink_to(self.project_dir, target_is_directory=True)
+        self.assertEqual(self._scan(alias), ({}, False))
+
+    def test_fifo_is_rejected_before_any_open(self):
+        import builtins
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("mkfifo unavailable")
+        fifo = self.plans_dir / "PLAN-001-pipe.md"
+        os.mkfifo(str(fifo))
+        attempts = []
+        real_builtin_open = builtins.open
+        real_os_open = os.open
+
+        def guard(original):
+            def checked(path, *args, **kwargs):
+                if not isinstance(path, int) and Path(path).name == fifo.name:
+                    attempts.append(path)
+                    # This guard makes the pre-fix control fail without
+                    # hanging the test runner on its blocking open().
+                    raise OSError("test refused a blocking FIFO open")
+                return original(path, *args, **kwargs)
+            return checked
+
+        with mock.patch.object(builtins, "open", guard(real_builtin_open)), \
+                mock.patch.object(os, "open", guard(real_os_open)):
+            result = self._scan()
+        self.assertEqual(result, ({}, False))
+        self.assertEqual(attempts, [], "a known FIFO must be rejected by type")
+
+    def test_directory_leaf_is_not_a_plan(self):
+        (self.plans_dir / "PLAN-001-directory.md").mkdir()
+        self.assertEqual(self._scan(), ({}, False))
+
+    def test_regular_leaf_replaced_between_stat_and_open_is_refused(self):
+        plan = self._plan()
+        real_open = os.open
+        swapped = []
+
+        def swap_before_open(path, flags, *args, **kwargs):
+            if Path(path).name == plan.name and not swapped:
+                plan.rename(self.plans_dir / "old-plan")
+                self._plan(plan.name, "src/replacement.py")
+                swapped.append(True)
+            return real_open(path, flags, *args, **kwargs)
+
+        with mock.patch.object(os, "open", swap_before_open):
+            result = self._scan()
+        self.assertEqual(swapped, [True], "fixture must hit the stat/open window")
+        self.assertEqual(result, ({}, False))
+
+    def test_leaf_replaced_by_fifo_uses_nonblocking_open_and_refuses(self):
+        if not hasattr(os, "mkfifo"):
+            self.skipTest("mkfifo unavailable")
+        plan = self._plan()
+        real_open = os.open
+        opened_nonblocking = []
+
+        def swap_before_open(path, flags, *args, **kwargs):
+            if Path(path).name == plan.name and not opened_nonblocking:
+                plan.unlink()
+                os.mkfifo(str(plan))
+                nonblocking = bool(flags & getattr(os, "O_NONBLOCK", 0))
+                opened_nonblocking.append(nonblocking)
+                if not nonblocking:
+                    raise OSError("test refused a blocking swapped FIFO open")
+            return real_open(path, flags, *args, **kwargs)
+
+        with mock.patch.object(os, "open", swap_before_open):
+            result = self._scan()
+        self.assertEqual(opened_nonblocking, [True])
+        self.assertEqual(result, ({}, False))
+
+    def test_directory_replaced_between_stat_and_open_is_refused(self):
+        self._plan()
+        real_open = os.open
+        swapped = []
+
+        def swap_before_open(path, flags, *args, **kwargs):
+            if path == "plans" and not swapped:
+                self.plans_dir.rename(self.project_dir / "old-plans")
+                self.plans_dir.mkdir()
+                self._plan("PLAN-001-replacement.md")
+                swapped.append(True)
+            return real_open(path, flags, *args, **kwargs)
+
+        with mock.patch.object(os, "open", swap_before_open):
+            result = self._scan()
+        self.assertEqual(swapped, [True], "fixture must hit the stat/open window")
+        self.assertEqual(result, ({}, False))
+
+    def test_unsafe_candidate_discards_already_collected_acs(self):
+        self._plan("PLAN-001-safe.md")
+        outside = self._plan("PLAN-999-external.md", directory=self.outside_dir)
+        (self.plans_dir / outside.name).symlink_to(outside)
+        self.assertEqual(self._scan(), ({}, False))
+
+    def test_unsafe_ac_index_prevents_direct_path_election_too(self):
+        import time
+        self._plan("PLAN-042-safe.md")
+        outside = self._plan("PLAN-001-external.md", directory=self.outside_dir)
+        (self.plans_dir / outside.name).symlink_to(outside)
+        direct = self.plans_dir / "PLAN-042"
+        direct.mkdir()
+        (direct / "LEDGER.md").write_text("## Safe\n", encoding="utf-8")
+        foreign = self.plans_dir / "PLAN-001"
+        foreign.mkdir()
+        (foreign / "LEDGER.md").write_text("## Wrong\n", encoding="utf-8")
+        paths = ".claude/plans/PLAN-042/notes.md\0src/impl.py\0"
+        with mock.patch.object(_pre_hook, "_git", return_value=paths):
+            index = _pre_hook._ledger_index(str(self.project_dir), time.monotonic() + 5.0)
+        self.assertEqual(index, {}, "a direct-path match cannot rescue partial AC scope")
+
+
+class TestLedgerAncestorConfinedRead(TestEnvContext):
+    """Ancestor leg of the rc.1 part 5 H3 confined-read cure."""
+
+    def test_symlinked_plan_directory_yields_no_external_sections(self):
+        # NEGATIVE control: the elected `PLAN-NNN` is a symlink to a directory
+        # OUTSIDE the repository, so its LEDGER.md must never reach the
+        # snapshot. Leaf-only O_NOFOLLOW did not stop this: the ancestor was
+        # traversed. POSITIVE control, second half: a real local directory
+        # still renders its sections, so the refusal is not a blanket one.
+        import time
+        plans = self.project_dir / ".claude" / "plans"
+        plans.mkdir()
+        outside = self._tmp_root / "outside"
+        outside.mkdir()
+        (outside / "LEDGER.md").write_text(
+            '## EXFIL-HEADING-OUTSIDE-REPO\n', encoding="utf-8",
+        )
+        (plans / "PLAN-042").symlink_to(outside, target_is_directory=True)
+        paths = ".claude/plans/PLAN-042/notes.md\0"
+        with mock.patch.object(_pre_hook, "_git", return_value=paths):
+            index = _pre_hook._ledger_index(
+                str(self.project_dir), time.monotonic() + 5.0,
+            )
+        self.assertEqual(index.get("plan_id"), "PLAN-042")
+        self.assertFalse(
+            index.get("present"),
+            "a symlinked plan directory must not be reported as present",
+        )
+        self.assertEqual(
+            index.get("sections"), [],
+            "no heading from outside the repository may enter the snapshot",
+        )
+        (plans / "PLAN-042").unlink()
+        (plans / "PLAN-042").mkdir()
+        (plans / "PLAN-042" / "LEDGER.md").write_text(
+            '## LOCAL-SECTION\n', encoding="utf-8",
+        )
+        with mock.patch.object(_pre_hook, "_git", return_value=paths):
+            index = _pre_hook._ledger_index(
+                str(self.project_dir), time.monotonic() + 5.0,
+            )
+        self.assertTrue(
+            index.get("present"), "a real local ledger must still be read",
+        )
+        self.assertEqual(index.get("sections"), ["LOCAL-SECTION"])
+
+
 class TestEtaValveUS2b(unittest.TestCase):
     """PLAN-179 US2b-valve (ratified 2026-08-31) — eta advisory + doctrine."""
 

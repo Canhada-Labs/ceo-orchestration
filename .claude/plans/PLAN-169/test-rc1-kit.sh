@@ -6,6 +6,7 @@
 # invocacao de codex e sem tocar na arvore viva.
 #
 #   bash .claude/plans/PLAN-169/test-rc1-kit.sh
+#   bash .claude/plans/PLAN-169/test-rc1-kit.sh --evidence-only
 #
 # O que ele faz, em ordem:
 #   A. lint estatico: `bash -n` + `shellcheck -S warning` em todo shell do kit,
@@ -57,10 +58,241 @@ say()  { printf '\n===== %s\n' "$*"; }
 # File name too long".
 SCRATCH="$(mktemp -d "/tmp/rc1kit.XXXXXX")" || { echo "mktemp falhou" >&2; exit 2; }
 cleanup() {
+  if [ "$FAIL" -ne 0 ]; then
+    printf 'Harness incompleto/falho: fixtures e logs preservados em %s\n' "$SCRATCH" >&2
+    return
+  fi
   [ -n "${CLONE:-}" ] && [ -d "$CLONE" ] && chmod -R u+w "$CLONE" 2>/dev/null
   rm -rf -- "$SCRATCH" 2>/dev/null
 }
 trap cleanup EXIT
+
+# F roda sem GPG, provedores ou rede. Importa o gerador real e exercita os
+# guards reais do runner sobre fixtures locais; nenhuma aprovacao de teste
+# pode sair deste scratch ou ser tratada como evidencia de release.
+case "${1:-}" in
+  ""|--evidence-only) : ;;
+  *) echo "uso: $0 [--evidence-only]" >&2; exit 2 ;;
+esac
+say "F. sete partes estritas, condicoes congeladas e preservacao de tentativa"
+if python3 - "$ROOT" "$SCRATCH" <<'PY_EVIDENCE'
+from __future__ import annotations
+
+import contextlib
+import hashlib
+import importlib.util
+import io
+import json
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+from types import ModuleType, SimpleNamespace
+from unittest import mock
+
+root, scratch = map(Path, sys.argv[1:])
+plan = root / ".claude/plans/PLAN-169"
+spec = importlib.util.spec_from_file_location("rc1_generator", plan / "gen-envelope-rc1.py")
+gen = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gen)
+ev = scratch / "evidence-controls"
+ev.mkdir()
+gen.EV = ev
+runner = (plan / "repass-rc1/run-rc1-repass.sh").read_text(encoding="utf-8")
+candidate = "0123456789abcdef0123456789abcdef01234567"
+conditions = "- RESIDUAL e dado do stub; nunca autoriza NO-GO.\n"
+pin = json.loads((root / ".claude/governance/codex-cli-pin-manifest.json").read_text())
+digest = pin["payloads"]["aarch64-apple-darwin"]["sha256"]
+validator = SimpleNamespace(
+    compute_inputs_hash=lambda *args: "1" * 64,
+    parse_pin_range=lambda *args: ("0.128.0", "0.148.0"),
+    semver_in_range=lambda version, low, high: version == pin["package_version"],
+)
+
+
+def seal():
+    names = sorted(set(gen.ARTIFACTS) - {"MANIFEST-rc1.sha256"})
+    (ev / "MANIFEST-rc1.sha256").write_text("".join(
+        "%s  %s\n" % (hashlib.sha256((ev / name).read_bytes()).hexdigest(), name)
+        for name in names), encoding="ascii")
+
+
+def prepare():
+    for name in gen.ARTIFACTS:
+        (ev / name).write_text("fixture\n", encoding="utf-8")
+    (ev / "run-rc1-repass.sh").write_text(runner, encoding="utf-8")
+    (ev / "CANDIDATE.sha").write_text(candidate + "\n")
+    (ev / gen.REVIEWED_CONDITIONS).write_text(conditions, encoding="utf-8")
+    (ev / "CONDITIONS-rc1.md").write_text(conditions, encoding="utf-8")
+    cond_hash = hashlib.sha256(conditions.encode()).hexdigest()
+    (ev / "PROVENANCE-rc1.md").write_text(
+        "Candidato: %s\n- codex: %s / aarch64-apple-darwin / payload %s\n"
+        "- condicoes declaradas no prompt (DATA para o revisor): "
+        "CONDITIONS-rc1.reviewed.md sha256 %s\nRUNNER-OVERALL: rc=0\n"
+        % (candidate, pin["package_version"], digest, cond_hash), encoding="utf-8")
+    # Saida de um revisor stub local, nao de qualquer provedor.
+    for part in gen.PARTS:
+        (ev / ("verdict-rc1-%d.txt" % part)).write_text(
+            "STUB REVIEW\nVERDICT: %s explicacao do stub\n"
+            % ("GO" if part % 2 else "GO-WITH-CONDITIONS"), encoding="utf-8")
+    seal()
+
+
+checks = 0
+
+
+def refuses(label, action, reason):
+    global checks
+    error = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(error):
+            action()
+    except SystemExit as exc:
+        if exc.code != 2 or reason not in error.getvalue():
+            raise RuntimeError("%s: recusa errada: %s" % (label, error.getvalue()))
+        checks += 1
+        print("  CONTROL PASS: " + label)
+        return
+    raise RuntimeError("ACEITOU: " + label)
+
+
+with mock.patch.object(gen, "load_validator", return_value=validator):
+    prepare()
+    fields = gen.build_fields(candidate, conditions)
+    gen.verify_fields_evidence(fields)
+    if not fields.startswith("verdict: GO-WITH-CONDITIONS\n"):
+        raise RuntimeError("sete GO/GWC validos nao produziram GWC")
+    checks += 1
+    # Controle PRE-cura: o mesmo NO-GO com RESIDUAL era convertido em GWC.
+    # Carregar apenas o modulo historico por git-show nao altera checkout.
+    baseline_sha = os.environ.get("RC1_KIT_BASELINE_SHA", "")
+    if baseline_sha:
+        if not re.fullmatch(r"[0-9a-f]{40}", baseline_sha):
+            raise RuntimeError("RC1_KIT_BASELINE_SHA deve ser sha40")
+        baseline = ModuleType("rc1_generator_baseline")
+        baseline_source = subprocess.check_output([
+            "git", "show", baseline_sha + ":.claude/plans/PLAN-169/gen-envelope-rc1.py"], cwd=str(root))
+        exec(compile(baseline_source, "<rc1-generator-baseline>", "exec"), baseline.__dict__)
+        baseline.EV = ev
+        (ev / "verdict-rc1-7.txt").write_text("VERDICT: NO-GO\n")
+        seal()
+        with mock.patch.object(baseline, "load_validator", return_value=validator):
+            old_fields = baseline.build_fields(candidate, conditions)
+            if not old_fields.startswith("verdict: GO-WITH-CONDITIONS\n"):
+                raise RuntimeError("controle PRE-cura nao reproduziu NO-GO -> GWC")
+            changed_fields = baseline.build_fields(candidate, conditions + "condicao nunca revisada\n")
+            if "condicao nunca revisada" not in changed_fields:
+                raise RuntimeError("controle PRE-cura nao reproduziu condicao trocada")
+        print("  BASELINE REPRODUCED: NO-GO + RESIDUAL aceito e condicao nao revisada incorporada")
+        checks += 2
+    for part in gen.PARTS:
+        prepare()
+        (ev / ("verdict-rc1-%d.txt" % part)).write_text("VERDICT: NO-GO\n")
+        seal()
+        refuses("NO-GO + RESIDUAL na parte %d" % part,
+                lambda: gen.build_fields(candidate, conditions), "rail NO-GO")
+    for text in ("VERDICT: GO\nVERDICT: GO\n", "VERDICT: GO-WITH-CONDITIONS-extra\n", "sem veredito\n"):
+        prepare()
+        (ev / "verdict-rc1-7.txt").write_text(text)
+        seal()
+        refuses("veredito ambiguo/ilegivel", lambda: gen.build_fields(candidate, conditions), "VERDICT")
+    prepare()
+    (ev / "verdict-rc1-7.txt").unlink()
+    refuses("setima parte ausente", lambda: gen.build_fields(candidate, conditions), "artefato ausente")
+    prepare()
+    refuses("condicoes fornecidas alteradas", lambda: gen.build_fields(candidate, conditions + "novo\n"), "diferem das revisadas")
+    (ev / "CONDITIONS-rc1.md").write_text(conditions + "novo\n")
+    refuses("fonte alterada depois da revisao", lambda: gen.build_fields(candidate, conditions), "mudaram desde a revisao")
+    prepare()
+    (ev / gen.REVIEWED_CONDITIONS).write_text(conditions + "novo\n")
+    seal()
+    refuses("snapshot alterado com MANIFEST recalculado", lambda: gen.build_fields(candidate, conditions), "hash da PROVENANCE")
+    prepare()
+    fields = gen.build_fields(candidate, conditions)
+    refuses("fields alterados apos assinatura", lambda: gen.verify_fields_evidence(fields.replace("verdict: GO-WITH-CONDITIONS", "verdict: GO", 1)), "fields assinados divergem")
+    (ev / "diff-rc1-1.patch").write_text("outro diff\n")
+    seal()
+    refuses("evidencia alterada apos fields", lambda: gen.verify_fields_evidence(fields), "fields assinados divergem")
+    prepare()
+    manifest = ev / "MANIFEST-rc1.sha256"
+    manifest.write_text("\n".join(manifest.read_text().splitlines()[1:]) + "\n")
+    refuses("MANIFEST omite artefato", lambda: gen.build_fields(candidate, conditions), "exatamente os 39")
+    prepare()
+    prov = ev / "PROVENANCE-rc1.md"
+    prov.write_text(prov.read_text().replace("RUNNER-OVERALL: rc=0", "RUNNER-OVERALL: rc=1"))
+    seal()
+    refuses("runner incompleto com vereditos GO", lambda: gen.build_fields(candidate, conditions), "RUNNER-OVERALL")
+    prepare()
+    for part in gen.PARTS:
+        (ev / ("verdict-rc1-%d.txt" % part)).write_text("VERDICT: GO explicacao do stub\n")
+    seal()
+    if not gen.build_fields(candidate, conditions).startswith("verdict: GO\n"):
+        raise RuntimeError("sete GO validos nao produziram GO")
+    checks += 1
+
+# Executar os guards reais (sem base/GPG/provider/worktree), inclusive os
+# efeitos sobre o disco. Um arquivo parcial deve sobreviver byte a byte.
+start = runner.index("assert_attempt_absent() {")
+end = runner.index("\n}\n", start) + 3
+guard_function = runner[start:end]
+init = runner[runner.index('CONDITIONS_SOURCE="$OUT/CONDITIONS-rc1.md"'):runner.index("# --- 0.")]
+prefix = 'set -uo pipefail\ndie() { printf "FATAL: %s\\n" "$*" >&2; exit 1; }\n'
+for number, artifact in enumerate(("verdict-rc1-1.txt", "transcript-rc1-7.log", "payload-rc1-3.raw.txt", "MANIFEST-rc1.sha256.tmp", gen.REVIEWED_CONDITIONS)):
+    out = scratch / ("partial-%d" % number)
+    out.mkdir()
+    path = out / artifact
+    path.write_bytes(b"partial evidence\x00preserve\n")
+    result = subprocess.run(["bash", "-c", prefix + guard_function + "\nassert_attempt_absent\n"],
+                            env=dict(os.environ, OUT=str(out)), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode != 1 or path.read_bytes() != b"partial evidence\x00preserve\n":
+        raise RuntimeError("tentativa parcial nao preservada: " + artifact)
+    checks += 1
+for number, mutation in enumerate(("", 'printf novo >> "$CONDITIONS_SOURCE"', 'printf novo >> "$CONDITIONS_SNAPSHOT"', 'printf novo >> "$OUT/run-rc1-repass.sh"')):
+    out = scratch / ("freeze-%d" % number)
+    out.mkdir()
+    (out / "run-rc1-repass.sh").write_text(runner)
+    (out / "CONDITIONS-rc1.md").write_text(conditions)
+    result = subprocess.run(["bash", "-c", prefix + guard_function + init + "\n" + mutation + "\nassert_conditions_unchanged\n"],
+                            env=dict(os.environ, OUT=str(out)), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    expected = 0 if not mutation else 1
+    if result.returncode != expected:
+        raise RuntimeError("guard de congelamento: %s: %s" % (mutation, result.stderr.decode()))
+    checks += 1
+start = runner.index("quarantine_raw() {")
+end = runner.index("\n}\n", start) + 3
+quarantine_function = runner[start:end]
+quarantines = []
+# Codex review of the cure: quarantine_raw writes under $HOME/.rc2-backup; without an
+# isolated HOME this control left two fixture directories in the REAL home per run.
+home = scratch / "home"
+home.mkdir()
+for number in (1, 2):
+    out = scratch / ("quarantine-input-%d" % number)
+    out.mkdir()
+    raw = out / "payload-rc1-1.raw.txt"
+    raw.write_text("attempt %d\n" % number)
+    result = subprocess.run(["bash", "-c", prefix + quarantine_function +
+                             '\nRAW_QUARANTINE=""\nquarantine_raw "$RAW_INPUT"\nprintf "%s" "$RAW_QUARANTINE"\n'],
+                            env=dict(os.environ, RAW_INPUT=str(raw), HOME=str(home)), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    dest = Path(result.stdout.decode()) / raw.name
+    if result.returncode != 0 or dest.read_text() != "attempt %d\n" % number or raw.exists():
+        raise RuntimeError("quarentena nao preservou a tentativa")
+    if home not in dest.parents:
+        raise RuntimeError("quarentena fora do HOME do ensaio: %s" % dest)
+    quarantines.append(dest)
+if quarantines[0] == quarantines[1] or quarantines[0].read_text() != "attempt 1\n":
+    raise RuntimeError("nova quarentena sobrescreveu a anterior")
+checks += 1
+print("EVIDENCE CONTROLS: %d PASS, 0 FAIL (stubs locais; nenhuma assinatura/revisao real)" % checks)
+PY_EVIDENCE
+then ok "F: controles de evidencia passaram"
+else bad "F: controles de evidencia falharam"; fi
+if [ "${1:-}" = "--evidence-only" ]; then
+  printf '\n===== RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
+  [ "$FAIL" -eq 0 ] || exit 1
+  exit 0
+fi
 
 # ===========================================================================
 say "A. lint estatico"
@@ -100,31 +332,52 @@ else bad "ceremony-lint: $_nb achado(s) BLOCKING"; fi
 
 # ===========================================================================
 say "B. runner ponta a ponta num clone descartavel, com codex STUB"
+fixture_git_identity() {
+  git -C "$1" config --local user.name "rc1 kit fixture" \
+    && git -C "$1" config --local user.email "rc1-kit@invalid" \
+    && git -C "$1" config --local commit.gpgsign false
+}
+# A autoria tem de estar ANTES do candidato revisado. Copiar README/kit do
+# workingtree depois de fixar CAND fazia o ensaio publicar texto nao revisado
+# junto da evidencia; o guard recusava corretamente esse delta. Materializar
+# a delta rastreada inteira em um upstream LOCAL descartavel reproduz a
+# topologia real: autoria -> candidato -> revisao -> evidencia + assinatura.
+# ROOT e somente lido; nenhuma branch/index/config dele e alterada.
+UPSTREAM="$SCRATCH/upstream"
+_fixture_base="$(git rev-parse HEAD)"
+_fixture_patch="$SCRATCH/prepared.patch"
+_fixture_ok=1
+git diff --binary HEAD -- > "$_fixture_patch" || _fixture_ok=0
+git clone --quiet --local --shared --no-checkout "$ROOT" "$UPSTREAM" 2>/dev/null || _fixture_ok=0
+if [ "$_fixture_ok" -eq 1 ]; then
+  git -C "$UPSTREAM" checkout --quiet -B main "$_fixture_base" \
+    && fixture_git_identity "$UPSTREAM" || _fixture_ok=0
+fi
+if [ "$_fixture_ok" -eq 1 ] && [ -s "$_fixture_patch" ]; then
+  git -C "$UPSTREAM" apply --index --binary "$_fixture_patch" || _fixture_ok=0
+fi
+if [ "$_fixture_ok" -eq 1 ]; then
+  git -C "$UPSTREAM" commit --quiet --allow-empty -m "TEST ONLY: prepared candidate before stub review" \
+    || _fixture_ok=0
+fi
 CLONE="$SCRATCH/clone"
-if git clone --quiet --local --shared "$ROOT" "$CLONE" 2>/dev/null; then
-  ok "clone local criado"
+if [ "$_fixture_ok" -eq 1 ] \
+   && git clone --quiet --local --shared "$UPSTREAM" "$CLONE" 2>/dev/null; then
+  ok "candidato preparado em upstream local; clone de revisao criado"
 else
-  bad "git clone --local --shared falhou — pulando B e C"
+  bad "preparacao do candidato/clone local falhou — pulando B e C"
   CLONE=""
 fi
 
 if [ -n "$CLONE" ]; then
-  # O `origin` do clone e o repo VIVO; `origin/main` e o main vivo. O runner
-  # exige CANDIDATE.sha == origin/main, entao e esse o candidato do teste.
+  # O origin e exclusivamente o upstream da fixture, com a autoria ja
+  # commitada. Nenhum acesso remoto aponta para o repositorio ativo.
   CAND="$(git -C "$CLONE" ls-remote origin refs/heads/main | awk '{print $1}')"
   if [ -z "$CAND" ]; then
     bad "ls-remote de main no clone falhou"
   else
     git -C "$CLONE" checkout --quiet --detach "$CAND" 2>/dev/null \
       || bad "checkout do candidato no clone falhou"
-    mkdir -p "$CLONE/$EV" "$CLONE/$CDIR"
-    for f in $SHELLS $PYS "$EV/README-rc1.md"; do
-      [ -f "$f" ] && cp "$f" "$CLONE/$f"
-    done
-    for n in 1 2 3 4 5 6 7; do
-      cp "$EV/paths-rc1-$n.manifest.txt" "$CLONE/$EV/" 2>/dev/null \
-        || bad "manifesto da parte $n ausente"
-    done
     printf '%s\n' "$CAND" > "$CLONE/$EV/CANDIDATE.sha"
     # Stub do codex: le o payload da stdin, escreve o veredito no arquivo
     # apontado por --output-last-message. NAO e um plant de aprovacao: e o
@@ -146,20 +399,20 @@ printf 'stub: payload de %s bytes\n' "$bytes"
 STUBEOF
     chmod 0755 "$STUB"
     _run="$SCRATCH/runner.log"
-    # HOME desviado so para a quarentena dos payloads RAW. O GNUPGHOME
-    # segue o REAL: `git tag -v v1.3.0` precisa do chaveiro do Owner, e
-    # sem ele o runner recusaria por assinatura — um vermelho falso.
-    _real_gnupg="${GNUPGHOME:-$HOME/.gnupg}"
+    # O chamador fornece um GNUPGHOME ISOLADO com somente a chave PUBLICA
+    # do Owner para `git tag -v v1.3.0`. Nunca ler o chaveiro real.
+    _test_gnupg="${GNUPGHOME:-}"
+    [ -n "$_test_gnupg" ] || { bad "GNUPGHOME de teste nao foi fornecido"; exit 1; }
     if ( cd "$CLONE" && CODEX_BIN="$STUB" HOME="$SCRATCH/fakehome" \
-         GNUPGHOME="$_real_gnupg" \
+         GNUPGHOME="$_test_gnupg" \
          bash "$EV/run-rc1-repass.sh" ) > "$_run" 2>&1; then
       ok "runner completou as 7 partes (rc 0)"
     else
       bad "runner rc!=0"; sed -n '1,25p' "$_run"
     fi
     _ml="$(grep -c . "$CLONE/$EV/MANIFEST-rc1.sha256" 2>/dev/null || echo 0)"
-    if [ "$_ml" = "38" ]; then ok "MANIFEST-rc1 com 38 entradas"
-    else bad "MANIFEST-rc1 com $_ml entradas (esperado 38)"; fi
+    if [ "$_ml" = "39" ]; then ok "MANIFEST-rc1 com 39 entradas"
+    else bad "MANIFEST-rc1 com $_ml entradas (esperado 39)"; fi
     if ( cd "$CLONE/$EV" && shasum -a 256 -c MANIFEST-rc1.sha256 --status ); then
       ok "MANIFEST-rc1 verifica"
     else bad "MANIFEST-rc1 nao verifica"; fi
@@ -179,18 +432,18 @@ if [ -n "$CLONE" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]; then
   GH="$SCRATCH/gnupg"; mkdir -p "$GH"; chmod 700 "$GH"
   printf '%s\n' '%no-protection' 'Key-Type: eddsa' 'Key-Curve: Ed25519' \
     'Name-Real: rc1 kit selftest' 'Expire-Date: 0' '%commit' > "$GH/params"
-  if GNUPGHOME="$GH" gpg --batch --quiet --gen-key "$GH/params" >/dev/null 2>&1; then
+  if GNUPGHOME="$GH" gpg --batch --quiet --gen-key "$GH/params" > "$GH/keygen.log" 2>&1; then
     FPR="$(GNUPGHOME="$GH" gpg --batch --with-colons --list-secret-keys 2>/dev/null \
       | awk -F: '$1=="fpr"{print $10; exit}')"
     [ -n "$FPR" ] && ok "chave descartavel criada ($(printf '%s' "$FPR" | cut -c1-12))" \
       || bad "chave descartavel sem fingerprint"
   else
     FPR=""; bad "gpg --gen-key falhou no homedir temporario"
+    sed -n '1,12p' "$GH/keygen.log"
   fi
   if [ -n "${FPR:-}" ]; then
     VF="$CLONE/$PLAN_DIR/verdict-fields-v1.4.0-rc.1.md"
-    COND="$SCRATCH/CONDITIONS.md"
-    printf -- '- Cobertura declarada: 7 partes, o resto fora por orcamento.\n' > "$COND"
+    COND="$CLONE/$EV/CONDITIONS-rc1.reviewed.md"
     _gen="$SCRATCH/gen.log"
     # C1 — CONTROLE VERMELHO: evidencia de um run com STUB nao pode virar
     # envelope de release. O gerador tem de RECUSAR, nomeando o motivo.
@@ -206,7 +459,8 @@ if [ -n "$CLONE" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]; then
         bad "C1: recusou, mas sem nomear o stub"
       fi
     fi
-    # C2 — caminho REAL. A linha do codex na PROVENANCE e reescrita para os
+    # C2 — fixture da verificacao de pins, ainda com revisores STUB. A linha
+    # do codex na PROVENANCE e reescrita para os
     # valores PINADOS (0.147.0 / aarch64-apple-darwin / payload do manifesto)
     # e o MANIFEST e regenerado. Isto e PLUMBING: o veredito das 7 partes
     # continua vindo do stub-revisor; nenhuma aprovacao e plantada.
@@ -229,7 +483,7 @@ PYPROV
     done
     # shellcheck disable=SC2086
     ( cd "$CLONE/$EV" && shasum -a 256 $_mf PROVENANCE-rc1.md CANDIDATE.sha \
-        run-rc1-repass.sh > MANIFEST-rc1.sha256 ) || bad "C2: regeneracao do MANIFEST falhou"
+        run-rc1-repass.sh CONDITIONS-rc1.reviewed.md > MANIFEST-rc1.sha256 ) || bad "C2: regeneracao do MANIFEST falhou"
     if ( cd "$CLONE" && RC1_SELFTEST=1 RC1_SELFTEST_SCRATCH="$SCRATCH" \
          RC1_SELFTEST_SIGNER_FPR="$FPR" GNUPGHOME="$GH" \
          python3 "$PLAN_DIR/gen-envelope-rc1.py" --stage fields \
@@ -238,7 +492,7 @@ PYPROV
     else bad "C2: gen --stage fields"; sed -n '1,15p' "$_gen"; fi
     if [ -f "$VF" ]; then
       grep -q '^verdict: GO-WITH-CONDITIONS' "$VF" \
-        && ok "veredito agregado DERIVADO dos 6 rails = GO-WITH-CONDITIONS" \
+        && ok "veredito agregado DERIVADO dos 7 rails = GO-WITH-CONDITIONS" \
         || bad "veredito agregado inesperado: $(head -1 "$VF")"
       if grep -q "^  codex_cli: 0.147.0" "$VF"; then
         ok "C2: fields declaram codex_cli 0.147.0 (dentro da faixa do pin)"
@@ -310,6 +564,7 @@ if [ -n "$CLONE" ] && [ -f "$_envf" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]
   _e_prep() {  # $1 = dir: clone do CLONE no candidato, com a evidencia e o veredito copiados (untracked)
     git clone --quiet --local --shared --no-checkout "$CLONE" "$1" 2>/dev/null || return 1
     git -C "$1" checkout --quiet --detach "$CAND" 2>/dev/null || return 1
+    fixture_git_identity "$1" || return 1
     ( cd "$CLONE" && tar -cf - -T "$_e_list" ) | ( cd "$1" && tar -xf - ) || return 1
     return 0
   }
@@ -328,6 +583,21 @@ if [ -n "$CLONE" ] && [ -f "$_envf" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]
     if _e_bind "$_e1"; then ok "E1: bind do release.yml fecha (pai do commit do veredito == parent_sha)"
     else bad "E1: bind do release.yml NAO fecha"; fi
   else bad "E1: preparacao do clone falhou"; fi
+
+  # E1b — manter a recusa que revelou o erro do harness: README alterado
+  # DEPOIS do candidato revisado nunca entra pela allowlist de evidencia.
+  _e1b="$SCRATCH/e1b"
+  if _e_prep "$_e1b"; then
+    printf '\nTEST ONLY: texto nao revisado depois do candidato.\n' >> "$_e1b/$EV/README-rc1.md"
+    if ( cd "$_e1b" && xargs git add -- < "$_e_list" ) \
+       && _e_commit "$_e1b" "TEST ONLY: evidence plus unreviewed README"; then
+      if _e_guard "$_e1b" > "$SCRATCH/e1b.guard" 2>&1; then
+        bad "E1b: README nao revisado foi aceito pela allowlist"
+      elif grep -qF 'README-rc1.md' "$SCRATCH/e1b.guard"; then
+        ok "E1b: README alterado apos a revisao continua recusado por nome"
+      else bad "E1b: recusa sem identificar README-rc1.md"; fi
+    else bad "E1b: commit da fixture negativa falhou"; fi
+  else bad "E1b: preparacao do clone falhou"; fi
 
   # E2 — CONTROLE VERMELHO: a topologia do molde (evidencia num commit, veredito
   # no seguinte). O guard local passa; o bind do servidor tem de FALHAR.
@@ -360,12 +630,15 @@ if [ -n "$CLONE" ] && [ -f "$_envf" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]
       printf 'PLAN_DIR=%s; EV=%s; TAG=v1.4.0-rc.1\n' "$PLAN_DIR" "$EV"
       printf 'COND="$EV/CONDITIONS-rc1.md"; VF="$PLAN_DIR/verdict-fields-$TAG.md"\n'
       printf 'VD=".claude/governance/pair-rail-verdict-$TAG.md"; CAND=%s\n' "$CAND"
+      printf 'GEN=%s\n' "$PLAN_DIR/gen-envelope-rc1.py"
       awk '/^evidence_list\(\) \{$/,/^\}$/' "$_cut"
       awk '/^if should 11; then$/{f=1; next} /^  mark_step 11$/{f=0} f' "$_cut"
     } > "$SCRATCH/e3.sh"
     _e3_n="$(grep -c 'git commit -q -F -' "$SCRATCH/e3.sh" || true)"
     [ "$_e3_n" = "1" ] || bad "E3: o bloco extraido nao contem exatamente 1 commit (tem $_e3_n)"
-    if ( cd "$_e3" && HOME="$_e3home" GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign \
+    if ( cd "$_e3" && HOME="$_e3home" GNUPGHOME="$GH" RC1_SELFTEST=1 \
+         RC1_SELFTEST_SCRATCH="$SCRATCH" RC1_SELFTEST_SIGNER_FPR="$FPR" \
+         GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=commit.gpgsign \
          GIT_CONFIG_VALUE_0=false bash "$SCRATCH/e3.sh" ) > "$SCRATCH/e3.log" 2>&1; then
       ok "E3: o passo 11 verbatim corre limpo sobre o clone (rc 0)"
     else bad "E3: o passo 11 verbatim falhou"; sed -n '1,12p' "$SCRATCH/e3.log"; fi
@@ -390,11 +663,11 @@ if [ -n "$CLONE" ] && [ -f "$_envf" ] && [ -f "$CLONE/$EV/MANIFEST-rc1.sha256" ]
     else bad "E3: bind do release.yml NAO fecha"; fi
   else bad "E3: preparacao do clone (ou copia do .asc) falhou"; fi
 
-  # E4 — o passo 2: `release.sh bump` num clone local do HEAD (a forma que o
+  # E4 — o passo 2: `release.sh bump` num clone local do candidato (a forma que o
   # CUT usa porque o driver recusa porcelain nao vazio e a arvore viva carrega
   # a evidencia untracked). Esperado: no-op, rc 0, HEAD do clone inalterado.
   _e4="$SCRATCH/e4"
-  if git clone --quiet --local --no-hardlinks "$ROOT" "$_e4" 2>/dev/null; then
+  if git clone --quiet --local --no-hardlinks "$UPSTREAM" "$_e4" 2>/dev/null; then
     _e4_head="$(git -C "$_e4" rev-parse HEAD)"
     _e4_rc=0
     ( cd "$_e4" && bash .claude/scripts/local/release.sh bump --rc 1 \

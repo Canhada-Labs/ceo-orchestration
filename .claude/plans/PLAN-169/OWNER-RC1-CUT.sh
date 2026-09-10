@@ -168,7 +168,8 @@ evidence_list() {
 # Evidencia COMPLETA, verificada e GO para o candidato $1 — o que o CEO deixa
 # pronto quando roda o re-pass ANTES desta cerimonia. Quatro fontes concordam:
 # MANIFEST (shasum -c), RUNNER-OVERALL rc=0, o candidato da PROVENANCE e o
-# CANDIDATE.sha que o runner leu.
+# CANDIDATE.sha que o runner leu. O gerador revalida todos os sete vereditos
+# e os mesmos bytes de condicoes antes da assinatura e da montagem.
 evidence_complete_for() {
   [ -f "$EV/MANIFEST-rc1.sha256" ] || return 1
   ( cd "$EV" && shasum -a 256 -c MANIFEST-rc1.sha256 --status ) 2>/dev/null || return 1
@@ -317,14 +318,14 @@ if should 6; then
   if evidence_complete_for "$CAND"; then
     # S349: o CEO rodou o re-pass ANTES desta cerimonia, sobre este MESMO
     # candidato, e deixou a evidencia completa. O runner recusa rodar por cima
-    # de evidencia completa (triagem antes de re-rodar), e re-rodar seriam 6
+    # de evidencia anterior (completa OU parcial), e re-rodar seriam 7
     # sessoes de codex identicas.
     printf '   re-pass ja concluido (rc=0) para %s — nada a rodar\n' "$CAND"
   else
     printf 'O codex roda PINADO em 0.147.0 (npx, cache proprio). O binario\n'
     printf 'global desta maquina NAO e usado e NAO e alterado.\n'
     bash "$RUNNER" || die "o re-pass NAO terminou GO nas 7 partes.
-Leia $EV/PROVENANCE-rc1.md. Se for NO-GO: triagem, mv de $EV para
+Leia $EV/PROVENANCE-rc1.md. Toda tentativa, inclusive parcial: preserve e arquive $EV em
 repass-rc1-$(date +%Y%m%d)-NOGO/, cura, e me chame no Claude."
   fi
   bell "re-pass GO nas 7 partes"
@@ -339,9 +340,9 @@ if should 7; then
   done
   if [ "$_agg_gwc" -eq 1 ]; then
     [ -f "$COND" ] || die "algum rail deu GO-WITH-CONDITIONS e $COND nao existe.
-As condicoes entram no MATERIAL ASSINADO. Rascunho em
-$EV/README-rc1.md §6 — copie, ajuste ao que os rails disseram, salve em
-$COND e rode este script de novo."
+As condicoes entram no MATERIAL ASSINADO e devem ser identicas ao snapshot
+$EV/CONDITIONS-rc1.reviewed.md. Ajustar ou acrescentar condicoes exige
+arquivar a tentativa e obter os sete GO/GWC num NOVO re-pass."
     printf '   condicoes que entram no material assinado:\n'
     sed 's/^/     /' "$COND"
     printf '\nEnter para seguir (ctrl-C aborta): '; read -r _
@@ -417,6 +418,9 @@ fi
 
 if should 11; then
   say "11/20 commit do veredito + evidencia (o path canonico entra por ESTE caminho)"
+  # Uma retomada nao reutiliza a assinatura sobre evidencia/condicoes alteradas.
+  python3 "$GEN" --stage verify --sig "$VF.asc" \
+    || die "fields assinados nao correspondem mais a evidencia revisada"
   # `.claude/governance/pair-rail-verdict-*.md` e canonico. Ele nao passa pelo
   # hook de Edit/Write porque quem o ESCREVE e o gerador (python, escrita
   # atomica) e quem o COMMITA e o git — exatamente o mecanismo do
@@ -473,7 +477,7 @@ CACHED
   git commit -q -F - <<MSG || die "commit do veredito falhou"
 governance(PLAN-169): verdito pair-rail $TAG assinado + evidencia do re-pass
 
-Decisao agregada DERIVADA dos 6 rails; as condicoes, quando existem,
+Decisao agregada DERIVADA dos 7 rails; as condicoes, quando existem,
 fazem parte do material assinado (sub-mapa conditions: dos fields).
 tool_versions.codex_cli vem da PROVENANCE do run PINADO e e re-validado
 contra codex-cli-pin.txt pela funcao do proprio validador — nunca de
