@@ -1,0 +1,43 @@
+No P0 and no false declared condition surfaced. The envelope is sufficient for this narrowly defined copy-mode pre-release only; it is not sufficient for GA without the promised cures.
+
+### Adopter blast radius
+
+A v1.3.0 copy-mode upgrade can concretely:
+
+- Open empty plan-state stores, reset cost accounting, and stop observing an expired credential because three legacy state families are not migrated (conditions 27, 39, 40).
+- Claim or overwrite adopter-authored files through byte equality, historical-template equality, new-path collisions, or unconditional dispatcher/agent delivery; later upgrades, doctor, or uninstall then treat them as framework-owned (5, 42, 48, 61, 64, 75).
+- Write outside the target through remaining symlink/hardlink seams, especially backups, hook/schema refreshes, harness outputs, and unconfined auxiliary writes (43, 47, 50, 65, 69, 82).
+- Produce a partially changed tree while returning success—or abort after earlier mutations—on missing sources, renderer/writer failures, tracked sensitive paths, or unusable `TMPDIR` (45, 59, 60, 76).
+- Change the `user` posture through migration, additive hook merge, or Codex/Grok harness composition (55, 63, 84).
+- Produce false audit-chain failures or unverifiable first events under concurrent writers/key creation (67, 68).
+
+The CHANGELOG now discloses these limits rather than presenting destination confinement or upgrade completion as universal.
+
+### NEW FINDINGS (annex)
+
+None. I found no undeclared P1 requiring addition to the signed annex.
+
+### P2 follow-ups
+
+1. **SEVERITY: P2 follow-up**  
+   **FILE:LINE:** `.github/workflows/smoke-install.yml:18`, `.github/workflows/smoke-install.yml:135`; dependency at `scripts/tests/smoke-install.sh:244-255`.  
+   **Concrete failure scenario:** The diff wires the smoke driver into both path filters, but omits `scripts/tests/run-activated-workflow.py`, which is the component that parses and executes the delivered workflow. A PR changing only that runner does not trigger Smoke Install, so its end-to-end execution proof can regress without that gate running. This is another instance of declared condition 80’s trigger-gap class.  
+   **Minimal fix:** Add the runner path to both `pull_request.paths` and `push.paths`, with a parity assertion for the two lists.
+
+2. **SEVERITY: P2 follow-up**  
+   **FILE:LINE:** `SPEC/v1/audit-log.schema.md:499`, `SPEC/v1/audit-log.schema.md:502-503`, `SPEC/v1/audit-log.schema.md:530-531`; implementation at `.claude/hooks/_lib/audit_emit.py:8949-8961`.  
+   **Concrete failure scenario:** The new SPEC rows promise strict ASCII `PLAN-NNN` coercion, but `_compaction_plan_id_ok()` uses `str.isdigit()`. A targeted probe confirms `PLAN-１２３` is accepted and can enter the signed wire rather than becoming `unknown`; ASCII-contract consumers may reject or classify the same event differently. It is not an injection path, hence P2 rather than P1.  
+   **Minimal fix:** Require three ASCII characters from `0-9`, and add Unicode-digit controls across every scrub branch using the helper.
+
+3. **SEVERITY: P2 follow-up**  
+   **FILE:LINE:** `CHANGELOG.md:292-299`; implementation at `scripts/tests/run-activated-workflow.py:348-375`; skipped template step at `templates/.github/workflows/validate.yml.template:41-43`.  
+   **Concrete failure scenario:** The diff says the smoke test “runs its steps,” but the runner executes every `run:` step and explicitly skips `uses:` steps, including checkout. The 10/10 command-step evidence remains valid, but the wording overstates workflow-equivalent execution.  
+   **Minimal fix:** Say “executes every `run:` step in order; runner-provided `uses:` steps are validated, listed, and skipped.”
+
+### Declared-condition judgment
+
+The decision-driving conditions are 2, 27, 39, 40, 42, 43, 45, 47–50, 55, 59–61, 63–65, 67–70, 73–79, 81, 82, and 84. Condition 3 is honest but non-operative for the stated copy-mode cohort. The payload-specific declared P2s in 13, 36, 38, 41, 66, 77, and 80 also reproduce against the candidate.
+
+The reviewed conditions file matches the supplied SHA-256. JSON parsing, actionlint, scoped diff checks, stdlib-only validation, audit-registry coverage, settings-user byte derivation, and the independently recomputed counts all pass.
+
+VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; the signed conditions are adequate only for this copy-mode rc.1 hold, and their mandatory cures remain prerequisites for GA.

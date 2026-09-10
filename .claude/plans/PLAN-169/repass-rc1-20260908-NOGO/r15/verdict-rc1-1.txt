@@ -1,0 +1,45 @@
+Resultado: nenhuma condição declarada aplicável mostrou-se falsa e não encontrei P0 nem P1 novo.
+
+## NEW FINDINGS (annex)
+
+Nenhum P1 não declarado neste payload.
+
+## P2 follow-ups
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** `scripts/upgrade.sh:411-414,1083-1200,3943-3948`  
+  **Cenário:** o novo preflight de `docs/`, `.github/` e `SPEC/v1` executa antes de `--settings-migrate-only`. Reproduzi com `docs` como arquivo regular: o comando saiu 3 e não migrou `settings.json`, embora o help prometa executar somente T5.4 e sair 0. O controle com `docs/` como diretório saiu 0 e gravou `model=claude-opus-5`.  
+  **Correção mínima:** não executar esses preflights quando `SETTINGS_MIGRATE_ONLY=1`, ou mover o dispatch do seam antes deles; adicionar controles real/dry-run com ancestrais conflitantes e prova de que somente `settings.json` participa.
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** `scripts/upgrade.sh:4366-4370`  
+  **Cenário:** o comentário novo afirma que igualdade com geração histórica é evidência de que o framework entregou os bytes. Isso contradiz o próprio comportamento reconhecido pela condição 42: um arquivo autoral, sem registro anterior, pode coincidir com uma geração e ser assumido como framework-owned em `scripts/upgrade.sh:4955-4963`.  
+  **Correção mínima:** dizer que apenas o digest previamente registrado é proveniência; igualdade histórica é uma heurística de compatibilidade sujeita à condição 42. A cura comportamental continua sendo exigir registro anterior.
+
+## Condições declaradas
+
+Para o caminho copy-mode deste payload, confirmei como honestas e necessárias as condições **1, 2, 4–6, 8–12, 14, 25, 27, 31, 34, 39, 40, 42, 43, 44–47, 55, 59, 60, 62–64, 73, 76, 81, 82 e 84**. As condições 3 e 7 são corretamente não operacionais para a coorte copy-mode.
+
+Em particular:
+
+- Os quatro ramos de transform não renderizável chamam `_up_route_unrenderable` (`:5145,5153,5239,5251`); o estado persiste `upgrade_succeeded:false` (`:5645`), o banner diz `INCOMPLETE` (`:5755`) e o processo sai 3 (`:5805`).
+- Fonte ausente continua sendo `SKIPPED` com sucesso (`:4882-4894`), e falha do escritor continua virando `PRESERVED` sem marcar precondição (`:4913-4916`): condições 45 e 60 são exatas.
+- Posse por igualdade histórica, backup não confinado e escritas diretas fora do predicado permanecem reais: condições 42, 43 e 47.
+- A migração T5.4 continua desconhecendo a cerimônia, enquanto o merge derivado respeita `user`; portanto as condições 55 e 63 são necessárias.
+- Replay Grok, `FMS_*` herdadas, `TMPDIR` inutilizável e colisões em caminhos novos permanecem conforme 82, 81, 76 e 64.
+
+O blast radius medido para um adopter v1.3.0 foi: seis rotas `docs/.github` processadas, roster de 47 registros derivado por cerimônia, migração de settings, refresh de schemas, regravação do manifesto/estado e refresh opcional do harness. Ignorar as condições pode concretamente sobrescrever e assumir posse de arquivo autoral, escrever fora do alvo por link, deixar árvore parcialmente atualizada ou habilitar postura bloqueante no perfil `user`.
+
+Evidência executada no snapshot `c9c5e47c639205412ebf1296e2be9347961bbb75`, com condições SHA-256 `55252de53b76258030148db7fca89d7911baf8dbb001904571448d3ffc2d7b75`:
+
+- histórico v1.3.0 → candidato: 164/164;
+- roster derivado: 69/69;
+- migração de settings: 46/46;
+- segurança de escrita/preflight: 120/120;
+- posse de SPEC: 45/45;
+- exclusões: 52/52;
+- identidade do dry-run: 6/6;
+- paridade maintainer: zero `STALE`, `MISSING`, `UNCLASSIFIED` ou `MODE_DIFF`;
+- `bash -n`, ShellCheck e `git diff --check`: limpos.
+
+VERDICT: GO-WITH-CONDITIONS — A rc.1 pode avançar apenas com as condições aplicáveis acima no material assinado e o hold obrigatório, mantendo as curas declaradas como gate para o GA.

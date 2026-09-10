@@ -1,0 +1,32 @@
+Resultado: nenhuma condição aplicável é falsa e não encontrei P0. O rascunho, porém, precisa receber um P1 novo no anexo.
+
+### NEW FINDINGS (annex)
+
+- **P1 annex — snapshot por plano não é isolado por sessão.**  
+  **FILE:LINE:** [check_precompact_continuity.py:108](<WT>/.claude/hooks/check_precompact_continuity.py:108), [check_precompact_continuity.py:594](<WT>/.claude/hooks/check_precompact_continuity.py:594), [check_postcompact_reinject.py:397](<WT>/.claude/hooks/check_postcompact_reinject.py:397).  
+  **Cenário:** A e B resolvem o mesmo `PLAN-123`. A grava seu snapshot; B sobrescreve a única chave `compaction_continuity`; o PostCompact de A lê B e emite `snapshot_found=true` com o `execution_unit` e a âncora HMAC de B. Reproduzi a intercalação: ambas as gravações retornaram `written`, e `read_by_a` devolveu literalmente o `plan_path`/linha de B. A advertência só aparece quando o snapshot tem mais de 12 h, portanto a corrida imediata parece válida. Isso não é o timeout da condição 19 nem a troca de escopo da 70.  
+  **Fix mínimo:** chavear o snapshot por `session_id` validado — ou usar sempre o store de sessão —, vincular o ID dentro do blob e recusar mismatch. Adicionar controle `A write → B write → A read`. Para a rc.1, o anexo deve exigir que duas sessões no mesmo plano não sobreponham seus intervalos PreCompact→PostCompact; se ocorrer, os ponteiros devem ser ignorados e conferidos no disco.
+
+### P2 follow-ups
+
+- **P2 — FIFO de plano bloqueia antes do deadline.**  
+  **FILE:LINE:** [check_precompact_continuity.py:315](<WT>/.claude/hooks/check_precompact_continuity.py:315), [check_precompact_continuity.py:332](<WT>/.claude/hooks/check_precompact_continuity.py:332).  
+  Um FIFO chamado `PLAN-123-a.md` pode vencer o `sorted(glob)`; `open()` bloqueia antes da primeira checagem de prazo e o harness mata o hook, perdendo snapshot e evento. **Fix:** estender a cura da condição 18, usando o leitor por descritor com `O_NOFOLLOW|O_NONBLOCK` e `fstat(S_ISREG)`.
+
+- **P2 — contagem textual incorreta.**  
+  **FILE:LINE:** [SessionEnd.py:5](<WT>/.claude/hooks/SessionEnd.py:5).  
+  O cabeçalho ainda promete “Four responsibilities”, mas o diff acrescenta a quinta em [SessionEnd.py:20](<WT>/.claude/hooks/SessionEnd.py:20). **Fix:** “Five responsibilities”.
+
+- **P2 — docstring contradiz o resolvedor implementado.**  
+  **FILE:LINE:** [check_precompact_continuity.py:224](<WT>/.claude/hooks/check_precompact_continuity.py:224), [check_precompact_continuity.py:228](<WT>/.claude/hooks/check_precompact_continuity.py:228).  
+  A docstring chama o git toplevel de autoridade e o walk-up de fallback; o código e o PostCompact fazem o inverso, escolhendo primeiro o ancestral mais próximo com `.claude`. **Fix:** documentar a ordem real.
+
+### Condições declaradas
+
+Diretamente aplicáveis e confirmadas: **17, 18, 19, 20, 22, 23, 24 (subitens desta família), 27, 28, 29, 30, 38, 47, 53, 64, 65, 66, 67, 68, 70, 71, 72 e 78**.
+
+O blast radius concreto está descrito honestamente: stores antigos abrem vazios sem a migração da 27; o novo `check_compact_pinning.py` pode tomar posse de colisão autoral pela 64; e os caminhos runtime podem seguir/adotar objetos preexistentes conforme 28, 65 e 68. As limitações de fail-direction e claims — nomes reinjetados, locks maiores que o orçamento, falsos `absent`, emissores sem atribuição, modelo derivado de política e filelock errado — também conferem com o código.
+
+Verificação: hash das condições `55252de…7b75` confirmado; `git diff --check`, compatibilidade AST Python 3.9, stdlib-only e checkers de claims/frescor passaram; suíte focada terminou em **160 passed**. O worktree permaneceu limpo.
+
+VERDICT: GO-WITH-CONDITIONS — Nenhuma condição aplicável é falsa e não há P0, mas o P1 do anexo deve integrar o material assinado da rc.1 e ser curado antes do GA.

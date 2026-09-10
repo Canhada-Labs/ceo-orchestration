@@ -1,0 +1,33 @@
+Resultado da revisão: nenhuma condição aplicável mostrou-se falsa e não encontrei P0. As condições 17, 19, 23–24, 27–30, 32, 37–40, 52–53, 65–66, 70 e 78–80 são coerentes com o candidato.
+
+Achados declarados confirmados:
+
+- SEVERITY: P1 — condições 27, 39 e 40. [`state_store.py:126`](<WT>/.claude/hooks/_lib/state_store.py:126), [`cost_envelope.py:149`](<WT>/.claude/hooks/_lib/cost_envelope.py:149), [`claude.py:392`](<WT>/.claude/hooks/_lib/adapters/live/claude.py:392). Um upgrade v1.3.0 abre stores vazios no slug nativo; os contadores de custo voltam a zero e um registro legado de credencial vencida deixa de ser observado. Correção mínima: migração/dual-read explícito dos stores, arquivos de custo e `credential-rotation.json`.
+
+- SEVERITY: P1 — condição 17. [`check_postcompact_reinject.py:148`](<WT>/.claude/hooks/check_postcompact_reinject.py:148), [`check_postcompact_reinject.py:475`](<WT>/.claude/hooks/check_postcompact_reinject.py:475). A gramática aceita slugs de arquivo com aparência de instrução e reinjeta o caminho integral no contexto. Correção mínima: construir o texto a partir do `plan_id` validado, exigir basename estrito e conferir coerência entre plano resolvido e snapshot.
+
+- SEVERITY: P1 — condição 19. [`state_store.py:100`](<WT>/.claude/hooks/_lib/state_store.py:100), [`check_postcompact_reinject.py:717`](<WT>/.claude/hooks/check_postcompact_reinject.py:717), [`settings.json:684`](<WT>/.claude/settings.json:684). O read pode esperar cinco segundos dentro de um hook cujo timeout também é cinco segundos, antes de renderizar constraints e pointers; contenção pode eliminar toda a saída. Correção mínima: timeout de lock menor e explícito, emitindo as restrições duráveis mesmo quando o snapshot falha.
+
+- SEVERITY: P1 — condições 70 e 78. [`check_postcompact_reinject.py:299`](<WT>/.claude/hooks/check_postcompact_reinject.py:299), [`scratchpad_lib.py:206`](<WT>/.claude/hooks/_lib/scratchpad_lib.py:206), [`check_postcompact_reinject.py:397`](<WT>/.claude/hooks/check_postcompact_reinject.py:397). Payload sem sessão ainda pode herdar `CLAUDE_SESSION_ID`; além disso, um plano resolvido com store vazio não cai para o snapshot de sessão. Correção mínima: `allow_env=False` e fallback de sessão após miss no store do plano.
+
+- SEVERITY: P1 — condições 28 e 65. [`state_store.py:225`](<WT>/.claude/hooks/_lib/state_store.py:225), [`scratchpad_lib.py:592`](<WT>/.claude/hooks/_lib/scratchpad_lib.py:592), [`audit_emit.py:9189`](<WT>/.claude/hooks/_lib/audit_emit.py:9189). SQLite, GC e limpeza de markers seguem diretórios ou leaves symlinkados e podem escrever/apagar fora da raiz pretendida. Correção mínima: operações por `dir_fd`, `O_DIRECTORY|O_NOFOLLOW`, validação `lstat`/identidade e recusa de hard links.
+
+- SEVERITY: P1 — condição 79. [`test_isolation.py:197`](<WT>/.claude/hooks/_lib/test_isolation.py:197), [`state_store.py:126`](<WT>/.claude/hooks/_lib/state_store.py:126). O isolamento neutraliza `CLAUDE_PROJECT_DIR_NATIVE`, mas não `CEO_STATE_ROOT`; um pytest iniciado com essa variável exportada escreve SQLite no store real. Correção mínima: limpar/redirecionar essa variável em todas as janelas e subprocessos, com canário externo.
+
+- SEVERITY: P1 — condição 23. [`check_postcompact_reinject.py:688`](<WT>/.claude/hooks/check_postcompact_reinject.py:688). O evento de reinjeção omite `project` e `session_id`; em log compartilhado ele não é atribuível. Correção mínima: transportar os dois campos do payload/resolvedor e testar o wire exato.
+
+NEW FINDINGS (annex):
+
+- SEVERITY: P1 annex — [`runtime_paths.py:151`](<WT>/.claude/hooks/_lib/runtime_paths.py:151), [`runtime_paths.py:181`](<WT>/.claude/hooks/_lib/runtime_paths.py:181). O novo docstring afirma que o resolver custa “two `os.environ.get`” e chama a guarda de “cheap”; no caminho default são três leituras (`CLAUDE_PROJECT_DIR_NATIVE`, `HOME`, `CLAUDE_PROJECT_DIR`). Além de inexata, é uma alegação de desempenho proibida pelo contrato do `AGENTS.md`. Correção mínima: remover ambas as caracterizações de custo e justificar o não-cache apenas pela mutabilidade de env/cwd.
+
+P2 follow-ups confirmados:
+
+- SEVERITY: P2 — condição 30. [`runtime_paths.py:116`](<WT>/.claude/hooks/_lib/runtime_paths.py:116). Slugs não são injetivos; desambiguar sem quebrar a co-localização exige decisão de produto.
+- SEVERITY: P2 — condições 37 e 52. [`ceremony-lint.yml:3`](<WT>/.github/workflows/ceremony-lint.yml:3), [`check-ceremony-script.py:62`](<WT>/.claude/scripts/check-ceremony-script.py:62). O filtro não dispara para scripts históricos e o piso por contagem aceita substituição um-por-um. Correção: incluir a raiz histórica e pinar o conjunto exato.
+- SEVERITY: P2 — condição 80. [`mcp-smoke.yml:314`](<WT>/.github/workflows/mcp-smoke.yml:314), [`mcp-smoke.yml:321`](<WT>/.github/workflows/mcp-smoke.yml:321). O step chamado “integrity” só verifica JSON legível e o workflow não dispara numa alteração isolada do resolvedor. Correção: chamar `verify_chain()` e ampliar `paths:`.
+- SEVERITY: P2 — condições 53 e 83. [`check_postcompact_reinject.py:405`](<WT>/.claude/hooks/check_postcompact_reinject.py:405), [`test_isolation.py:296`](<WT>/.claude/hooks/_lib/test_isolation.py:296). Timestamp infinito elimina a reinjeção, e o isolamento rejeita caminhos legítimos por substring. Correção: exigir número finito/capturar `OverflowError` e usar containment real.
+- SEVERITY: P2 — condição 66. [`scratchpad.schema.md:13`](<WT>/SPEC/v1/scratchpad.schema.md:13). A SPEC continua cobrindo apenas o store por plano. Correção: versionar o store de sessão, TTL e GC.
+
+Verificação local: SHA das condições corresponde exatamente ao informado; 312 testes focados passaram, assim como `actionlint` nos sete workflows, `git diff --check`, stdlib-only, freshness/counts, integridade do manifesto de gate scripts e igualdade byte a byte dos marcadores de versão.
+
+VERDICT: GO-WITH-CONDITIONS — as condições declaradas são honestas para a rc.1 em copy mode, e o novo P1 do anexo deve integrar o material assinado e ser curado antes do GA.

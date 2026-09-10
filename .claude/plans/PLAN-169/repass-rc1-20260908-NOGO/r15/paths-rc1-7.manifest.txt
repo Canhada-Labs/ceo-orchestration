@@ -1,0 +1,11 @@
+.claude/hooks/_lib/runtime_paths.py
+.claude/hooks/_lib/state_store.py
+.claude/hooks/_lib/test_isolation.py
+.claude/hooks/check_postcompact_reinject.py
+.github/workflows/ceremony-lint.yml
+.github/workflows/mcp-smoke.yml
+.github/workflows/npm-publish.yml
+.github/workflows/ownership-nightly.yml
+.github/workflows/release.yml
+.github/workflows/supply-chain-watch.yml
+.github/workflows/validate.yml

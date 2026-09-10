@@ -117,9 +117,8 @@ cerimônia assinada, com controle positivo.
     symlink, hard link), com perna de sentinel externo intacto (rc.2). Idem `doctor.sh
     --repair` (P2; arquivo livre): o
     diretório de backup `.claude.bak/doctor-<timestamp UTC, segundos>` é previsível e criado
-    com `mkdir -p`; o predicado de confinamento recusa symlink e hard link, mas ACEITA um leaf
-    regular de link único já existente, que o `cp -p` seguinte sobrescreve — um arquivo seu
-    nesse caminho exato é destruído durante o repair. A condição de `.claude.bak` AUSENTE ou
+    com `mkdir -p`; o predicado recusa symlink e hard link mas ACEITA um leaf regular já
+    existente, que o `cp -p` sobrescreve — um arquivo seu nesse caminho é destruído no repair. A condição de `.claude.bak` AUSENTE ou
     VAZIO vale também antes de `doctor.sh --repair`. Cura antes do GA: reservar o diretório da
     execução exclusivamente (sem `-p`; sufixo único em colisão) e recusar leaf de backup
     pré-existente.
@@ -199,9 +198,9 @@ cerimônia assinada, com controle positivo.
     em `install_one`, `exit 1` com `.claude/` já entregue) e o upgrade PRESERVA sem posse
     (`ancestor_symlink` ⇒ `SKIP`). TOCTOU entre preflight e escrita permanece (classe do PLAN-185).
     Cura antes do GA (rc.2): `_wbm_dst_refuses` + recusa de `nlink > 1` antes de QUALQUER mutação
-    nesses caminhos (ponteiro `PROTOCOL.md` incluído), tempfile no diretório do destino + `mv`
-    atômico (deny-baseline por `mktemp` em `_ATOMIC_TMP_PENDING`); controle positivo com
-    `PLAN-SCHEMA.md` v1.3.0 hard-linked a um sentinel externo (bytes e modo intactos).
+    (ponteiro `PROTOCOL.md` incluído), tempfile no destino + `mv` atômico (deny-baseline por
+    `mktemp` em `_ATOMIC_TMP_PENDING`); controle com `PLAN-SCHEMA.md` v1.3.0 hard-linked a um
+    sentinel externo.
 48. **`install_dispatcher` copia incondicionalmente**: `install.sh`
     faz `mkdir -p .claude/dispatcher` e três `cp` sem consultar proveniência — um re-run
     SOBRESCREVE arquivos do dispatcher editados pelo adopter, ao contrário do que o
@@ -458,11 +457,10 @@ cerimônia assinada, com controle positivo.
     primeiro start); teste com o start original evictado. Numa cauda rara de 50 ms (dois scanners) um
     `written` real sai como `error`/UNAVAILABLE (contrato assinado; instrumento). O GC do scratchpad NUNCA apaga
     `.sqlite.lock` (declarado em `scratchpad_lib.py`): um inode de 0 bytes por sessão sem
-    plano resolvido. A claim de crescimento limitado NÃO vale nem para bytes: o GC pára nos primeiros 20.000 entries do diretório e aplica o cursor só
-    dentro desse prefixo; quando os `.sqlite.lock` permanentes ocupam o prefixo, arquivos
-    SQLite/WAL/SHM expirados além dele ficam inalcançáveis indefinidamente (starvation de
-    prefixo). Cura antes do GA: paginação justa pré-cap ou sharding, para todo escopo ser
-    varrido.
+    plano resolvido. A claim de crescimento limitado NÃO vale nem para bytes: o GC pára nos
+    primeiros 20.000 entries e aplica o cursor só nesse prefixo; `.sqlite.lock` permanentes no
+    prefixo deixam SQLite/WAL/SHM expirados além dele inalcançáveis (starvation). Cura antes
+    do GA: paginação justa pré-cap ou sharding.
 21. **Salt: first-mint e posse de arquivos pré-existentes.** `5518888` introduziu `O_CREAT|O_EXCL|O_NOFOLLOW`; a perdedora relê o
     salt da vencedora. O marker usa temporário exclusivo + `os.replace`, recusando
     symlink. Porém a publicação ainda tem uma JANELA: o arquivo final existe vazio antes
@@ -894,9 +892,8 @@ cerimônia assinada, com controle positivo.
     spawns em série e não abre duas sessões no mesmo repositório. A DETECÇÃO de quebra continua
     valendo (a cadeia acusa); o que NÃO vale é a ausência de falsos positivos sob escritores
     concorrentes. Cura antes do GA (canônico, rc.2): adquirir `paths["lock"]` ANTES da rotação,
-    da leitura do predecessor e do cálculo — rotação, leitura, cálculo, append e
-    `write_last_hmac()` na mesma seção crítica — com teste multiprocesso de barreira antes da
-    leitura exigindo cadeia íntegra pelo `verify_chain()`, não só linhas JSON distintas.
+    da leitura do predecessor e do cálculo (tudo na mesma seção crítica), com teste
+    multiprocesso de barreira exigindo cadeia íntegra pelo `verify_chain()`.
 68. **A criação da chave HMAC (`get_or_create_key`) não é exclusiva** (P1; `.claude/hooks/_lib/audit_hmac.py` ~406-429): o comentário diz «atomic»/«race-safe», mas o
     fluxo é `p.exists()` → tempfile PRÓPRIO por PID → `p.exists()` de novo → `os.replace()`; dois
     processos podem ver o segundo `exists()` falso e AMBOS publicar por `replace` — o primeiro lê
@@ -949,7 +946,7 @@ cerimônia assinada, com controle positivo.
     dry-run); recusa TODAS as ocorrências de relpath duplicado antes de backup/remoção;
     rejeita `//` e barra final; e recusa todos os nomes existentes com `(st_dev, st_ino)`
     repetido, obtido por `lstat`. Isso cobre aliases por hard link, caixa ou normalização
-    que identifiquem o mesmo inode (antes, uma linha preservava e outra removia sem `--force`).
+    que identifiquem o mesmo inode.
     Controles em `test-installer-write-safety-e2e.sh`: U.9a duplicata, U.9b manifesto
     symlink, U.9c `docs//x`, U.9d hard link; arquivos e manifesto preservados, recusa
     nominal e rc 6, com controles pré-cura. O censo inclui os `mv` entre ledgers
@@ -1059,21 +1056,28 @@ cerimônia assinada, com controle positivo.
 75. **O manifesto do installer percorre as árvores do ALVO e adota arquivos seus** (P1; canônico): `_framework_manifest_set.sh` expande os destinos de diretório —
     `.claude/hooks`, `.claude/scripts`, `.claude/commands` e os diretórios de skills do perfil —
     percorrendo o que existe no alvo (~178-190, ~251), não o conjunto entregue: um
-    `.claude/hooks/acme_local.py` seu, que a fonte nunca teve e o installer nunca escreveu, recebe
-    o próprio hash como baseline framework-owned; se ficar inalterado, `uninstall.sh` (~616-622) o
-    REMOVE, e `doctor.sh`/`upgrade.sh` o tratam como do framework. O comentário de `install.sh`
-    (~3103-3104: «a path install_one EXISTS-skipped stays out of the baseline») vale para arquivos
-    avulsos, não para entradas de diretório. As condições 5 e 64 cobrem igualdade com templates e
-    colisão em caminho novo, não arquivos autorais arbitrários nessas árvores. A varredura
+    `.claude/hooks/acme_local.py` seu, que o installer nunca escreveu, recebe o próprio hash como
+    baseline framework-owned; inalterado, `uninstall.sh` (~616-622) o REMOVE e `doctor.sh`/
+    `upgrade.sh` o tratam como do framework. O comentário de `install.sh`
+    (~3103-3104: «a path install_one EXISTS-skipped stays out of the baseline») vale SÓ para o trio
+    com sinal de entrega (`PROTOCOL.md`, `SPEC/v1`, `.framework-version`): os quatro arquivos de
+    raiz `.claude/team.md`, `.claude/frontend-team.md`, `.claude/pitfalls-catalog.yaml` e
+    `.claude/task-chains.yaml` são enumerados SEM condição (~159-162) e, EXISTS-skipped, entram
+    com o hash dos SEUS bytes (`FMS_HASH_ROOT` vazio no install ⇒ hash do alvo, ~1420); no
+    upgrade `H_dst == H_base` e `H_src != H_base` ⇒ `FRAMEWORK-CHANGED`, sobrescrito mesmo sob
+    `--on-conflict=refuse` (`upgrade.sh` ~1783-1785). As condições 5 e 64 cobrem igualdade com
+    templates e colisão em caminho novo, não arquivos autorais nessas árvores. A varredura
     PULA o que `_framework_path_excluded` (~95-105) exclui — `.claude/hooks/tests/`,
     `.claude/hooks/legacy/`, `.claude/scripts/tests/`, `.claude/hooks/_lib/tests/`,
     `.claude/hooks/_lib/test_isolation.py`, `.claude/hooks/_lib/testing.py`, `__pycache__`,
     `*.pyc` —, que nem entram no
-    manifesto nem são removidos (medido: `hooks/SessionEnd.py` = 1 registro, `hooks/tests/x.py`
-    = 0). Condição DURA: no momento do install (ou re-run), nenhum arquivo SEU pode estar sob
-    `.claude/hooks/`, `.claude/scripts/`, `.claude/commands/` ou `.claude/skills/<perfil>/` fora
-    dessas exclusões — o resto entra no manifesto como do framework; e antes de `uninstall.sh`
-    leia o `--dry-run` linha a linha. `INSTALL.md` diz isto. Cura antes do GA (canônico): gerar o manifesto a partir de um ledger de
+    manifesto nem são removidos. Condição DURA: no install (ou re-run), nenhum arquivo SEU sob
+    `.claude/hooks/`, `.claude/scripts/`, `.claude/commands/`, `.claude/skills/<perfil>/` (fora
+    dessas exclusões) nem nos quatro nomes de raiz — o resto entra no manifesto como do
+    framework; antes do upgrade v1.3.0→rc.1, `cmp` cada um dos quatro com a geração v1.3.0 do
+    checkout do framework: o que for SEU será sobrescrito — copie-o para fora e reaplique
+    depois; e antes de `uninstall.sh` leia o `--dry-run` linha a linha. `INSTALL.md` diz isto.
+    Cura antes do GA (canônico): gerar o manifesto a partir de um ledger de
     entregas REAIS (o que esta execução escreveu ou cuja continuidade foi validada), nunca
     expandindo diretórios do alvo como prova de posse.
 76. **`TMPDIR` inutilizável desliga a proveniência em silêncio e depois aborta o upgrade a meio**
@@ -1092,11 +1096,11 @@ cerimônia assinada, com controle positivo.
     tem de estar UNSET ou apontar para um diretório existente, gravável e fisicamente fora do alvo
     — `mktemp -d "${TMPDIR:-/tmp}/ceo.XXXXXX"` nessa shell tem de suceder (senão `env -u TMPDIR`)
     — e o `--dry-run` prévio tem de mostrar `PRESERVE`/`CONFLICT`, nunca `would BACKUP + UPDATE`,
-    nos seus arquivos customizados; `docs/UPGRADE-PROCEDURE.md` diz isto (checagem 13). Cura antes do GA (canônico): resolver e provar UM diretório scratch utilizável e
-    externo ao alvo antes de `mkdir -p "$BAK_DIR"` ou de qualquer mutação, recusar nomeado se não
-    houver, nunca converter a falha de sanitização de um manifesto PRESENTE em «sem baseline», e
-    tratar explicitamente o `mktemp` dos survivors; e2e com manifesto válido, roster customizado e
-    `TMPDIR` inexistente ou não gravável, verificando bytes e install-state intactos.
+    nos seus arquivos customizados; `docs/UPGRADE-PROCEDURE.md` diz isto (checagem 13). Cura antes
+    do GA (canônico): provar UM scratch utilizável e externo ao alvo antes de qualquer mutação
+    (recusa nomeada se não houver), nunca converter a falha de sanitização de um manifesto
+    PRESENTE em «sem baseline», guardar o `mktemp` dos survivors; e2e com roster customizado e
+    `TMPDIR` inexistente/não gravável, bytes e install-state intactos.
 77. **O rail de checkpoint do ledger só vê o commit ISOLADO** (P1; canônico):
     `check_ledger_checkpoint.py` (PreToolUse, matcher `Bash`) analisa só o PRIMEIRO `git commit` da
     chamada (o parser reconhece `&&`, ~374, e devolve no primeiro verbo) e deriva o escopo do

@@ -1,0 +1,41 @@
+Advisory evidence only; not an authorization. The conditions snapshot matches SHA-256 `55252de…7b75`. I found no P0 and no declared condition that is false. The conditions are sufficient for rc.1 only when the annex below is added to the signed material.
+
+The directly applicable conditions are 3, 4–5, 15–16, 26, 38, 42–43, 49–51, 55, 57, 63, 69, 77, 82 and 84. In particular:
+
+- Copy-mode v1.3 manifests contain no `LINK`, so condition 3 has no ordinary-upgrade effect.
+- Conditions 55 and 63 accurately describe the `user` upgrade blast radius: without both appropriate opt-outs, maintainer settings and potentially blocking hooks are introduced.
+- Conditions 5/42 accurately cover ownership capture of adopter-authored files equal to current or historical templates; later doctor/uninstall operations can overwrite or delete them.
+- Conditions 15, 43, 49–51, 57 and 69 accurately describe the remaining doctor/uninstall/restore hazards.
+- Condition 38 correctly records the stale “45 registrations” claim; the generated base currently has 47.
+
+## NEW FINDINGS (annex)
+
+1. **P1 — `templates/codex/pre-push-review-gate.sh:36`, `templates/codex/pre-push-review-gate.sh:236`, `templates/.github/workflows/validate.yml.template:40`**
+
+   Concrete failure: the gate’s header and runtime failure message say that `validate.yml` rechecks `Pair-Rail-Reviewed: APPROVE` server-side. The delivered 11-step workflow contains no trailer or review-record check—repository search finds zero `Pair-Rail-Reviewed` occurrences there. An adopter manually installing this gate can use `git push --no-verify`; CI may remain green despite the canonical commit having no cross-vendor review. CODEOWNERS and branch protection do not implement the claimed trailer check. Condition 26 correctly declares the gate undelivered and coarse, but does not disclose this nonexistent server-side backstop.
+
+   Minimal fix: remove both CI-rider claims and state explicitly that no server-side trailer verification exists, or add a fail-closed workflow step that checks every canonical-touching pushed commit.
+
+2. **P1 — `templates/settings/settings.user.json:185`, `templates/settings/settings.user.json:216`; rule: `AGENTS.md:9`**
+
+   Concrete failure: the newly delivered derivation data frames matcher selection as a “latency” optimization and compares “5 ferramentas” with “14 cold-starts por chamada.” That is a performance/speed claim in shipped template content, directly violating the reviewer contract’s prohibition on throughput or speedup claims. The generated-file check preserves this wording rather than rejecting it.
+
+   Minimal fix: replace the performance language with a functional scope statement—e.g. that the user profile intentionally matches exactly the five named tool classes—without latency or cold-start claims.
+
+## P2 follow-ups
+
+1. **P2 — `scripts/uninstall.sh:203`, `scripts/uninstall.sh:209`**
+
+   Concrete failure: dry-run prints `would REMOVE the empty directory` before checking emptiness. If `docs/` contains an adopter-owned `keep.txt`, dry-run claims `docs/` will be removed; the real run’s `rmdir` correctly fails because the directory remains non-empty.
+
+   Minimal fix: print `would TRY to remove if empty`, or evaluate the projected post-removal contents before claiming removal.
+
+2. **P2 — `templates/grok/pre-push-review-gate.sh:22`, `templates/grok/pre-push-review-gate.sh:171`, `templates/grok/pre-push-review-gate.sh:357`**
+
+   Concrete failure: the gate advertises sidecar acceptance through a Grok recorder and reads `grok-review-log.jsonl`, but the repository ships no Grok recorder; the only recorder writes `codex-review-log.jsonl`. A real recorded approval therefore cannot clear this path, forcing commit trailers. This fails closed, so it is a liveness/documentation defect, not a bypass.
+
+   Minimal fix: ship the named Grok recorder or intentionally share the existing recorder/log format and add a parity test.
+
+Validation evidence: `doctor.sh` suite 44/44; shared-route suite 113/113; installer/doctor/uninstall write-safety e2e 325/325; focused template tests 14/14. Bash syntax, ShellCheck, actionlint, JSON parsing, Python 3.9 compilation, generated-user-settings parity, contamination, count claims, AGENTS freshness and `git diff --check` passed. The checkout remained unchanged.
+
+VERDICT: GO-WITH-CONDITIONS — Carry conditions 3, 4–5, 15–16, 26, 38, 42–43, 49–51, 55, 57, 63, 69, 77, 82 and 84 plus both P1 annex findings in the signed rc.1 material, with mandatory cure before GA.

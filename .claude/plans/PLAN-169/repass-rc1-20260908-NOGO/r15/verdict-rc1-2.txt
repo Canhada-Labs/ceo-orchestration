@@ -1,0 +1,33 @@
+Evidência advisory; nenhum P0 encontrado. O SHA das condições e o commit candidato conferem.
+
+### Condição declarada falsa
+
+**SEVERITY: P1 — condição 75 falsa; gatilho de NO-GO**  
+**FILE:LINE:** `scripts/install.sh:1235-1237,3102-3106`; `scripts/_framework_manifest_set.sh:158-162,251-275,1357-1461`; `scripts/upgrade.sh:1484-1511,1760-1785`; `CONDITIONS-rc1.md:1059-1078`
+
+**Cenário concreto:** numa instalação v1.3.0 copy-mode, um `.claude/pitfalls-catalog.yaml` autoral e regular é reportado como `EXISTS (skipping)`. Mesmo assim, o gerador enumera incondicionalmente esse arquivo — junto com `team.md`, `frontend-team.md` e `task-chains.yaml` — e grava o hash dos bytes do adopter como baseline. No upgrade para rc.1, `H_dst == H_base` e `H_src != H_base`, portanto o arquivo é classificado `FRAMEWORK-CHANGED` e substituído mesmo com `--on-conflict=refuse`.
+
+O registro é sintaticamente válido, portanto passa a condição 14; o arquivo não é novo, não contém placeholders e não é link, portanto as condições 47, 64 e 74 também não o detectam. A condição 75 afirma expressamente que o problema vale apenas para entradas de diretório e que arquivos avulsos `EXISTS` ficam fora do manifesto — isso é falso. Uma sonda read-only com todos os sinais de entrega zerados emitiu os quatro caminhos.
+
+**Correção mínima:** para rc.1, ampliar a condição 75 e `INSTALL.md` para esses quatro caminhos e exigir que registros divergentes da geração v1.3.0 sejam movidos ou alterados antes do upgrade; recalcular o hash e repetir o re-pass. A cura de código é condicionar esses registros a entrega real ou continuidade de proveniência válida.
+
+### NEW FINDINGS (annex)
+
+**SEVERITY: P1 — cura obrigatória antes do GA**  
+**FILE:LINE:** `AGENTS.md:9-11`; `scripts/_framework_manifest_set.sh:995-997,1263-1266`
+
+**Cenário concreto:** o diff acrescenta a alegação específica de aproximadamente 20 ms por leitura e “segundos” economizados. É uma claim de desempenho baseada numa máquina, proibida expressamente pelo contrato do reviewer. A condição 24 já declara a claim semelhante em `:608`, mas não esta segunda ocorrência.
+
+**Correção mínima:** remover números e linguagem de desempenho; justificar a memoização apenas como prevenção de releituras e diagnósticos repetidos.
+
+### P2 follow-up
+
+**FILE:LINE:** `scripts/install.sh:241-251,880-895,1074-1125`
+
+**Cenário concreto:** o comentário afirma que a ausência de `_framework_manifest_set.sh` apenas pula o manifesto e que o install não depende dele. Agora `_dst_refuses` falha fechado sem o helper e a preflight termina antes da primeira escrita.
+
+**Correção mínima:** separar os contratos: `_hash_lib.sh` continua fail-open; `_framework_manifest_set.sh` é obrigatório para confinamento e sua ausência recusa a instalação.
+
+Os demais riscos principais deste payload estão nomeados nas condições 5, 8, 9, 14, 31, 33, 34, 42, 45, 47, 48, 56, 59–64, 73–76, 81, 82 e 84. A tabela atual tem seis rotas e seis destinos únicos; todas as fontes são arquivos regulares não-symlink. `git diff --check`, `bash -n`, ShellCheck em severidade error, freshness, claims e contaminação passaram. Os E2E mutáveis não foram reexecutados porque o contrato read-only proibiu fixtures temporárias.
+
+VERDICT: NO-GO — A condição 75 é falsa contra o código e permite que um upgrade v1.3.0→rc.1 compatível com as condições substitua conteúdo do adopter.

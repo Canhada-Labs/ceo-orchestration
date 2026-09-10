@@ -157,9 +157,15 @@ same repo produces:
 >    `.claude/hooks/`, `.claude/scripts/`, `.claude/commands/` and the profile's
 >    skills directories in the TARGET: any other file you placed there is
 >    recorded with its own hash, and `uninstall.sh` removes it while it stays
->    unchanged. Keep your own files out of those trees at install time, and read
->    `uninstall.sh --dry-run` line by line before a real uninstall (signed
->    condition 75).
+>    unchanged. The four root files `.claude/team.md`, `.claude/frontend-team.md`,
+>    `.claude/pitfalls-catalog.yaml` and `.claude/task-chains.yaml` are listed
+>    unconditionally too: one of YOURS that the installer skips as `EXISTS` is
+>    recorded with your bytes as the framework baseline, and the next upgrade
+>    classifies it FRAMEWORK-CHANGED and overwrites it even under
+>    `--on-conflict=refuse` — copy such files out before upgrading and re-apply
+>    your edits afterwards. Keep your own files out of those trees at install
+>    time, and read `uninstall.sh --dry-run` line by line before a real
+>    uninstall (signed condition 75).
 
 ## Option 1 — Bash script (recommended for most cases)
 

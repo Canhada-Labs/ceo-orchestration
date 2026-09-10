@@ -1,0 +1,22 @@
+# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - 7 partes
+- Base: v1.3.0 (ec0543b615c4621e259a409e9eace951539a6632 -> d789721c2fd4a11c36c87eda0e1118eab59092e4) .. Candidato: c9c5e47c639205412ebf1296e2be9347961bbb75 (PRE-tag, doutrina r17)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- codex: 0.147.0 / aarch64-apple-darwin / payload 19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+- modelo: gpt-5.6-sol (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-rc1.reviewed.md sha256 55252de53b76258030148db7fca89d7911baf8dbb001904571448d3ffc2d7b75
+- Data: 2026-09-10T12:02:03Z
+- parte 1 (upgrade.sh — o caminho que roda na arvore do adopter): VERDICT: GO-WITH-CONDITIONS — A rc.1 pode avançar apenas com as condições aplicáveis acima no material assinado e o hold obrigatório, mantendo as curas declaradas como gate para o GA. [codex rc=0]
+  - payload-rc1-1.raw.txt NAO commitado; pin sha256: c14d03f81a036948a0c6c381f571e8185aab562e6638a1c7c34296e85eb5f5c8
+- parte 2 (install.sh + o set de manifesto + a tabela de rotas de entrega): VERDICT: NO-GO — A condição 75 é falsa contra o código e permite que um upgrade v1.3.0→rc.1 compatível com as condições substitua conteúdo do adopter. [codex rc=0]
+  - payload-rc1-2.raw.txt NAO commitado; pin sha256: 525c7c864fddaf15d6b380a107f6b3f603c0e17689cdbc6347e5bbbd64196e19
+- parte 3 (doctor.sh + uninstall.sh + templates/** entregues): VERDICT: GO-WITH-CONDITIONS — Carry conditions 3, 4–5, 15–16, 26, 38, 42–43, 49–51, 55, 57, 63, 69, 77, 82 and 84 plus both P1 annex findings in the signed rc.1 material, with mandatory cure before GA. [codex rc=0]
+  - payload-rc1-3.raw.txt NAO commitado; pin sha256: ad1d4d94a80735340b6b8090c32b86d3fdcdc7ab21213ef79df0ec2a593b0d14
+- parte 4 (SPEC/** + npm README + CHANGELOG + settings.json + smoke-install.yml (CI do framework; demais workflows: parte 7)): VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; the signed conditions are adequate only for this copy-mode rc.1 hold, and their mandatory cures remain prerequisites for GA. [codex rc=0]
+  - payload-rc1-4.raw.txt NAO commitado; pin sha256: 98f75439de5ddd0ddfac3de9800ed72802ae6677060e39b28d94e096dd271638
+- parte 5 (hooks da familia de continuidade de compaction (PostCompact: parte 7)): VERDICT: GO-WITH-CONDITIONS — Nenhuma condição aplicável é falsa e não há P0, mas o P1 do anexo deve integrar o material assinado da rc.1 e ser curado antes do GA. [codex rc=0]
+  - payload-rc1-5.raw.txt NAO commitado; pin sha256: 2e87941a35b25a42235e0a265fc6f5b432a3599cb4b15cfa9e81bfc2067f1bc1
+- parte 6 (nucleo de cadeia e auditoria em _lib/ (resolvedor, store de estado e isolamento de teste: parte 7)): VERDICT: GO-WITH-CONDITIONS — O envelope descreve honestamente os riscos deste payload, não há P0 nem P1 novo, e as curas declaradas permanecem obrigatórias antes do GA. [codex rc=0]
+  - payload-rc1-6.raw.txt NAO commitado; pin sha256: 784eb8937ba4d3206d3f9c482d7ef06abb6842cbe4358354cda7f5d0e7a19f06
+- parte 7 (PostCompact + resolvedor por projeto + store de estado + isolamento de teste + CI do framework exceto smoke-install.yml (parte aberta na rodada 11; smoke-install.yml foi para a parte 4 na rodada 12 pelo teto do redator)): VERDICT: GO-WITH-CONDITIONS — as condições declaradas são honestas para a rc.1 em copy mode, e o novo P1 do anexo deve integrar o material assinado e ser curado antes do GA. [codex rc=0]
+  - payload-rc1-7.raw.txt NAO commitado; pin sha256: b76ada8534c48889111b37d0e2a514590daaeb9a21e54ba75239608b166dd081
+RUNNER-OVERALL: rc=1

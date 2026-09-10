@@ -1,0 +1,34 @@
+Nenhuma condição declarada aplicável se mostrou falsa e não encontrei P0. Para uma pré-release copy-mode, o envelope é suficiente apenas se as condições operacionais forem executadas; o hold de 24 horas, sozinho, não mitiga os riscos.
+
+### Impacto no adopter
+
+- O upgrade troca o diretório literal da v1.3.0 pelo slug nativo sem migração: `.claude/hooks/_lib/audit_emit.py:2353-2402`, `audit_hmac.py:165-285`, `injection_salt.py:96-122` e `spool_writer.py:175-310`. A cadeia, chave, salt e stores antigos permanecem no disco, mas a rc.1 começa vazia no namespace novo; um plano ativo aparenta perder scratchpad e histórico. Condição 27 confirmada.
+- Na primeira execução, a rc.1 passa a reivindicar nomes no diretório runtime fora do checkout. Arquivos pré-existentes podem ser adotados, truncados ou substituídos; as corridas de primeiro salt e primeira chave podem produzir hashes irreproduzíveis ou HMACs inválidos (`injection_salt.py:205-215,274-296`; `audit_hmac.py:406-429`). Condições 21 e 68 confirmadas.
+- Escritores concorrentes ainda podem produzir falso alarme de adulteração pelo predecessor calculado fora do lock (`.claude/hooks/audit_log.py:1258-1278`). Condição 67 confirmada.
+- A entrega do novo `ledger_provenance.py` pode sobrescrever um homônimo do adopter pelo fallback de caminho novo. Condição 64 é diretamente aplicável.
+
+As condições 23–24, 28–30, 41, 54, 65, 78–79 e 83 também descrevem fielmente o código. As condições transversais 45, 47, 76 e 81 continuam necessárias para entregar estes cinco arquivos com proveniência e confinamento válidos.
+
+### Fail direction, entrega e claims
+
+O gate do ledger rejeita scanner ausente, catálogo vazio, resultado ilegível e corpo oversized (`ledger_provenance.py:712-808`), portanto a direção principal é fail-closed. A aceitação de `bytes_scanned` parcial/booleano permanece exatamente como declarado na condição 54.
+
+Há escritas runtime fora do alvo por desenho, em `$HOME/.claude/projects/<slug>`. Não encontrei escape de entrega novo além dos já declarados; os casos de symlink, objetos sem autoria e GC externo estão cobertos pelas condições 21, 28, 47, 65 e 68.
+
+Os claims inexatos também estão corretamente confessados: eleição “exactly one process” (`injection_salt.py:44-47`), chave “atomic/race-safe” (`audit_hmac.py:378-429`), co-localização sob overrides e alegações de custo/velocidade (`injection_salt.py:383`; `ledger_provenance.py:926-928`). Pelas regras do repositório, essas alegações continuam sendo cura obrigatória antes do GA.
+
+### NEW FINDINGS (annex)
+
+Nenhum P1 não declarado.
+
+### P2 follow-ups
+
+- **SEVERITY P2 — `.claude/hooks/_lib/audit_emit.py:7259-7264,8766-8768`.** O uso de `re.match()` com `$` aceita `session_id="ok\n"` e até `project="\n"`, apesar do claim de identidade sem espaço. O JSON escapa a quebra de linha, mas grava uma identidade não canônica numa linha assinada. **Minimal fix:** usar `fullmatch()` ou `\Z` e testar LF/CRLF terminal.
+
+- **SEVERITY P2 — `.claude/hooks/_lib/ledger_provenance.py:960-1002`.** `Path.exists()` transforma um symlink em loop em “não existe”; `verify_entry_absent()` então certifica `verified=True` sem conseguir abrir a superfície. É uma nova aresta da classe já declarada na condição 24. **Minimal fix:** `lstat`, exigir arquivo regular, abrir com `O_NOFOLLOW|O_NONBLOCK` e confirmar tipo/identidade com `fstat`.
+
+- **SEVERITY P2 — `.claude/hooks/_lib/injection_salt.py:388-403`.** O evento único de mint ignora o `session_id` confiável do payload e usa `CLAUDE_SESSION_ID` ambiente. Cumprir a condição 78 evita atribuição falsa, mas deixa o evento sem sessão. **Minimal fix:** passar opcionalmente o ID derivado do hook até `_register_mint`; na ausência, gravar vazio sem consultar o ambiente.
+
+Verificação: hash das condições `55252de…2d7b75`; 369 testes focados passaram; gate stdlib passou para 449 arquivos; os cinco arquivos parsearam com Python 3.9; `diff --check`, freshness e claims-count passaram; worktree permaneceu limpo.
+
+VERDICT: GO-WITH-CONDITIONS — O envelope descreve honestamente os riscos deste payload, não há P0 nem P1 novo, e as curas declaradas permanecem obrigatórias antes do GA.
