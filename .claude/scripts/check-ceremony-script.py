@@ -102,7 +102,10 @@ DEFAULT_WAIVERS = os.path.join(
 # ENCOLHE — a pergunta "o guard vê o meu alvo?" respondida em toda
 # execução. Residual declarado (rc.1 condição 52): um piso por CONTAGEM
 # aceita «tira um, põe um»; a cura estrutural é pinar o CONJUNTO.
-DEFAULT_FLOOR = 124
+# RE-PINADO na rodada 13 (2026-09-10): 127 rastreados no candidato — tres
+# scripts de cerimonia entraram depois da rodada 6 e 124 deixava passar tres
+# remocoes sem inspecao. Cada script novo reabre a folga ate o re-pin seguinte.
+DEFAULT_FLOOR = 127
 
 
 def _sha256(path: str) -> str:

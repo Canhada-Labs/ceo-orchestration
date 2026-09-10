@@ -1,0 +1,22 @@
+# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - 7 partes
+- Base: v1.3.0 (ec0543b615c4621e259a409e9eace951539a6632 -> d789721c2fd4a11c36c87eda0e1118eab59092e4) .. Candidato: cbb27b633762893277eb8e46c87e6219fc1b7ad1 (PRE-tag, doutrina r17)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- codex: 0.147.0 / aarch64-apple-darwin / payload 19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+- modelo: gpt-5.6-sol (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-rc1.reviewed.md sha256 af6246f131ae40da7b3ec983775437772111e347df211fa1787020682ec32ed5
+- Data: 2026-09-10T07:50:45Z
+- parte 1 (upgrade.sh — o caminho que roda na arvore do adopter): VERDICT: NO-GO — O envelope congelado é insuficiente porque três P1 não condicionados afetam o caminho v1.3.0→rc.1 e exigem cura seguida de novo re-pass. [codex rc=0]
+  - payload-rc1-1.raw.txt NAO commitado; pin sha256: 5a16492938efb935ac82de76d95263285b4d39deb5cd441ae319fa1cfe13d513
+- parte 2 (install.sh + o set de manifesto + a tabela de rotas de entrega): VERDICT: NO-GO — A condição 75 e o aviso correspondente em INSTALL.md fazem uma afirmação universal refutada pelo próprio filtro do manifesto; o envelope precisa ser corrigido, re-hashado e submetido a novo re-pass antes da rc.1. [codex rc=0]
+  - payload-rc1-2.raw.txt NAO commitado; pin sha256: 3dce95adf63da21679464b4be573c69b362e0d86367206c5a1afee374367b3a4
+- parte 3 (doctor.sh + uninstall.sh + templates/** entregues): (VERDICT ambiguo:  linhas - inspecionar transcript; rc=99) [codex rc=99]
+  - payload-rc1-3.raw.txt NAO commitado; pin sha256: dedfc344aa7132db6fd5d77bfbc4f9e210d5ac1cb180c3642e15a6b2061e37c6
+- parte 4 (SPEC/** + npm README + CHANGELOG + settings.json + smoke-install.yml (CI do framework; demais workflows: parte 7)): VERDICT: GO-WITH-CONDITIONS — No new P0/P1 is missing from the frozen envelope; the declared conditions are honest and sufficient for the stated copy-mode rc.1 cohort, with the smoke-trigger gap retained as a P2 follow-up. [codex rc=0]
+  - payload-rc1-4.raw.txt NAO commitado; pin sha256: 90c439bf8fb99f6e4598ed6ff0f501f09a99fe77a7785d0e061a2b99fd0be322
+- parte 5 (hooks da familia de continuidade de compaction (PostCompact: parte 7)): VERDICT: NO-GO — As condições 19, 27 e 70 prometem uma recuperação por `/resume` que não existe, e o diff acrescenta uma garantia falsa de orçamento, exigindo correção e novo re-pass antes da rc.1. [codex rc=0]
+  - payload-rc1-5.raw.txt NAO commitado; pin sha256: b4d2623b845b96f60cd78b91617782586010b9a406825e2aa136ca2d471c693e
+- parte 6 (nucleo de cadeia e auditoria em _lib/ (resolvedor, store de estado e isolamento de teste: parte 7)): VERDICT: NO-GO — Condition 28 omits a reproducible adopter-file deletion path, so the frozen envelope is insufficient for rc.1. [codex rc=0]
+  - payload-rc1-6.raw.txt NAO commitado; pin sha256: 7c60ef8bd9ef8538c6cca17c6772023344c791b2e155b152e194adc158223adc
+- parte 7 (PostCompact + resolvedor por projeto + store de estado + isolamento de teste + CI do framework exceto smoke-install.yml (parte aberta na rodada 11; smoke-install.yml foi para a parte 4 na rodada 12 pelo teto do redator)): VERDICT: NO-GO — The frozen envelope is materially false about `/resume` recovery and ceremony-lint removal detection, so rc.1 requires correction and a new re-pass. [codex rc=0]
+  - payload-rc1-7.raw.txt NAO commitado; pin sha256: 772a01fe99da58b584623bf788f831adfd681b0d717fad2fb42124826f5e70c4
+RUNNER-OVERALL: rc=1

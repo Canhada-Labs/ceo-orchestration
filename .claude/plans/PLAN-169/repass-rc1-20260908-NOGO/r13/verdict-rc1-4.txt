@@ -1,0 +1,27 @@
+No new P0 or undeclared P1 was found in payload 4. The frozen conditions file matches the supplied SHA-256 exactly.
+
+SEVERITY: P2  
+FILE:LINE: `.github/workflows/smoke-install.yml:5-120`, `:124-186`, `:355-362`, `:548-549`  
+Concrete failure scenario: the new checksum step consumes `.claude/governance/gate-scripts-manifest.txt`, and the smoke later executes the installed `validate-governance.sh`, but neither source is in the workflow’s `pull_request.paths` or `push.paths`. A PR changing only either file skips Smoke Install, so installation-context breakage is not exercised. The unfiltered `validate.yml` and release checksum reduce this to P2; it does not invalidate the frozen candidate.  
+Minimal fix: add the manifest and all its members—at minimum `.claude/scripts/validate-governance.sh`—to both path filters, preferably with a parity check derived from the manifest.
+
+SEVERITY: P2  
+FILE:LINE: `SPEC/v1/state-stores.schema.md:9-22`  
+Concrete failure scenario: the normative schema still describes only `<store_name>/<plan_id>.sqlite`. The new dominant fallback uses `scratchpad-session/session-<uuid>.sqlite`; backup or migration tooling generated from this SPEC can omit live continuity state.  
+Minimal fix: version and document the session-scoped store, identifier grammar, TTL, GC, and persistent lock. This is already declared honestly as condition 66.
+
+SEVERITY: P2  
+FILE:LINE: `SPEC/v1/audit-log.schema.md:504`  
+Concrete failure scenario: `ledger_entry_rejected` permits `decision=accept` and `reason=ok`, but the scrubber and sole producer only produce rejection states. A generated consumer consequently accepts wire states that cannot occur.  
+Minimal fix: narrow the normative enums to the producible subset. This is already condition 36.
+
+The principal adopter failures are accurately disclosed and mitigated by frozen conditions:
+
+- The state-root change at `SPEC/v1/state-stores.schema.md:16` makes an active v1.3 plan appear empty after upgrade. `CHANGELOG.md:183-199` now gives the safe selective migration and forbids copying legacy spool files; conditions 27, 39, and 40 cover plan, cost, and credential state.
+- Delivery can still report success after missing/refused sources or writer failures, and several ownership/confinement paths remain unsafe. `CHANGELOG.md:46-80` and `:101-121` now distinguish these cases. Conditions 14, 33–34, 42–48, 59–61, 64, 73–76, and 81 are therefore release-critical.
+- `.claude/settings.json:349` overstates ledger-checkpoint coverage, but `CHANGELOG.md:247-255` and condition 77 correctly restrict observation to the first standalone commit with staging already complete.
+- Audit attribution, memory-window semantics, user-profile migration, and fresh-only VETO undemotion are accurately bounded by conditions 2, 20, 23, 55, 63, 67–71, 78, and 79.
+
+Validation evidence was clean: JSON parsing, `actionlint`, diff whitespace, exact non-test inventory counts, user-settings byte derivation, audit-registry coverage, Python 3.9/stdlib enforcement, SPEC drift, contamination, schema-generation pins, and the 131-case delivery-route oracle. I inspected the smoke execution wiring and relied on the supplied S337 Ubuntu 24.04 10/10 run for the full dynamic execution.
+
+VERDICT: GO-WITH-CONDITIONS — No new P0/P1 is missing from the frozen envelope; the declared conditions are honest and sufficient for the stated copy-mode rc.1 cohort, with the smoke-trigger gap retained as a P2 follow-up.

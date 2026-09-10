@@ -1,0 +1,22 @@
+REJECT — evidência advisory.
+
+### Achado
+
+**P1 — material assinado** — `.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:1014-1028`; `INSTALL.md:151-158`; `scripts/_framework_manifest_set.sh:95-105,251-289`.
+
+Cenário concreto: a condição 75 afirma que qualquer arquivo do adopter sob `.claude/hooks/`, `.claude/scripts/`, `.claude/commands/` ou skills entra no manifesto. Isso é falso. A enumeração percorre essas árvores, mas `_framework_path_excluded` remove, entre outros, `.claude/hooks/tests/**`, `.claude/hooks/legacy/**`, `.claude/scripts/tests/**`, `_lib/tests/**`, `test_isolation.py`, `testing.py`, `__pycache__` e `*.pyc`.
+
+Probe direto no candidato:
+
+- `.claude/hooks/SessionEnd.py` → 1 entrada no manifesto.
+- `.claude/hooks/tests/_agent_fixture.py` → 0 entradas.
+
+Assim, um arquivo autoral como `.claude/hooks/tests/acme_local.py` não é apropriado nem removido pelo uninstall orientado pelo manifesto, contrariando “o que estiver lá entra” e “Anything of yours… becomes framework-owned”. A mitigação é conservadora, mas o envelope não descreve honestamente o código; pelas regras desta rodada, condição errada exige NO-GO.
+
+Correção mínima: restringir a condição 75 e `INSTALL.md` aos caminhos não excluídos por `_framework_path_excluded`, enumerando as exceções; manter o caso verdadeiro de `.claude/hooks/acme_local.py`. Recalcular o SHA, reassinar e executar novo re-pass.
+
+### Evidência complementar
+
+O SHA recebido confere (`af6246f…32ed5`). A tabela contém 6 rotas, 6 destinos únicos e 5 fontes únicas; todas as fontes existem, são regulares e não são symlinks. `bash -n`, ShellCheck warning, `git diff --check`, stdlib, contagens, AGENTS e contaminação passaram. Os riscos comportamentais principais do upgrade estão nomeados nas condições 42, 45, 47, 48, 60, 61, 64, 73, 74, 76 e 81. Não encontrei P0 nem outro P1 não declarado neste payload. Nenhum novo P2 além dos já declarados, especialmente 35, 56 e 62.
+
+VERDICT: NO-GO — A condição 75 e o aviso correspondente em INSTALL.md fazem uma afirmação universal refutada pelo próprio filtro do manifesto; o envelope precisa ser corrigido, re-hashado e submetido a novo re-pass antes da rc.1.

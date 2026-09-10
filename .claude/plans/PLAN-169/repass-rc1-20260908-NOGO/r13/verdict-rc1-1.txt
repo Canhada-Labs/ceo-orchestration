@@ -1,0 +1,21 @@
+O SHA-256 das condições confere (`af6246…ed5`). `bash -n`, ShellCheck e `git diff --check` passaram, mas encontrei três P1 não cobertos pelo envelope.
+
+- **P1 — [scripts/upgrade.sh:821](<WT>/scripts/upgrade.sh:821), [scripts/upgrade.sh:835](<WT>/scripts/upgrade.sh:835), [scripts/upgrade.sh:5605](<WT>/scripts/upgrade.sh:5605) — replay de Grok é quebrado.**  
+  Cenário concreto: a v1.3.0 aceita e grava `request.harness="grok"`, mas o leitor aceita somente `claude|codex`, convertendo Grok em vazio. A serialização então produz `profile<TAB>stack<TAB><TAB>0`; como TAB é whitespace no `IFS`, o `read` desloca `0` para `_rp_harness`. O upgrade anuncia `REPLAY: --harness 0`, não executa o ramo Grok e ainda exclui Grok ao regravar o estado. Isso contradiz o help que promete usar `request.harness`. O teste chamado “round-trips … into upgrade replay” em [test-install-harness-grok.sh:206](<WT>/scripts/tests/test-install-harness-grok.sh:206) nunca executa o upgrader.  
+  Correção mínima: compartilhar o enum `claude|codex|grok` entre produtor, leitor e escritor; usar transporte que preserve campos vazios; revalidar após o parse; adicionar e2e v1.3.0 Grok → candidate.
+
+- **P1 — [scripts/upgrade.sh:5733](<WT>/scripts/upgrade.sh:5733), [scripts/upgrade.sh:5740](<WT>/scripts/upgrade.sh:5740), [scripts/_grok_harness.sh:196](<WT>/scripts/_grok_harness.sh:196) — nem `--harness grok` explícito entrega a correção do gate.**  
+  Cenário concreto: o template do gate mudou de `83ff8e9…` para `78e32dc…`, corrigindo o log global que permitia reutilizar uma aprovação entre repositórios ([pre-push-review-gate.sh:144](<WT>/templates/grok/pre-push-review-gate.sh:144)). O helper classifica o gate pristine da v1.3.0 como colisão simplesmente porque difere, retorna 2 sob o `--on-conflict=refuse` padrão, e o upgrader ignora o retorno, grava `upgrade_succeeded:true` e imprime “Upgrade complete”. Assim o defeito cross-project permanece.  
+  Correção mínima: reconhecer a geração renderizada da v1.3.0 por proveniência/hash e atualizá-la sob a política padrão; uma falha real do refresh deve persistir `false` e produzir rc não zero.
+
+- **P1 — [scripts/upgrade.sh:1091](<WT>/scripts/upgrade.sh:1091), [scripts/upgrade.sh:5685](<WT>/scripts/upgrade.sh:5685), [scripts/_codex_harness.sh:214](<WT>/scripts/_codex_harness.sh:214) — os writers de harness escapam do confinamento e da condição 47.**  
+  Cenário concreto: num adopter copy-mode Codex, `.codex` pode ter sido substituído por symlink para um diretório externo. O preflight novo cobre somente rotas `docs/.github` e `SPEC`; depois `codex_emit_bundle` usa `mkdir -p`, `cp` e redirecionamento direto, inclusive ao reescrever `.codex/.ceo-harness-manifest`. Ele cria ou trunca arquivos externos e o upgrade termina com sucesso. Grok tem a mesma classe em `.grok`, `.git/hooks` e seu manifesto. A condição 47 verifica apenas `.claude docs .github SPEC .gitignore PROTOCOL.md` ([CONDITIONS-rc1.md:170](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:170)), portanto não mitiga esses destinos.  
+  Correção mínima: preflight derivado do conjunto exato de outputs, manifestos e backups dos harnesses; recusar ancestrais/leaf symlinks e `nlink>1`; publicar por tempfile no diretório validado mais rename atômico.
+
+- **P2 — [scripts/_grok_harness.sh:138](<WT>/scripts/_grok_harness.sh:138), [scripts/_grok_harness.sh:235](<WT>/scripts/_grok_harness.sh:235) — rerun perde o ledger de posse.**  
+  Cenário concreto: seguindo o workaround `--on-conflict backup`, os três outputs Grok idênticos não entram em `_GROK_MANIFEST_EMITS`; o manifesto é então sobrescrito somente com o gate alterado e não carrega registros anteriores. Um uninstall posterior deixa `AGENTS.md` e os exemplos `.grok/` para trás e perde referências a backups antigos.  
+  Correção mínima: registrar também os skips idênticos e preservar/deduplicar linhas `emit` e `backup` anteriores, como faz o helper Codex.
+
+As condições 1, 42, 43, 45, 55, 59, 60, 64, 76 e 81 descrevem honestamente os ramos correspondentes deste payload. A condição 47 diagnostica a classe correta, mas sua mitigação é incompleta; nenhuma condição cobre os dois P1 de Grok.
+
+VERDICT: NO-GO — O envelope congelado é insuficiente porque três P1 não condicionados afetam o caminho v1.3.0→rc.1 e exigem cura seguida de novo re-pass.

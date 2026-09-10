@@ -74,10 +74,15 @@ the first session on the new version, pick one route:
   `CEO_PROJECT_NAME=ceo-orchestration` (the documented escape hatch in
   `state_store.py`; it re-creates the basename-collision hazard, so drop
   it as soon as the plan is done), or
-- copy ONLY the store subdirectories — `scratchpad/` (the `/resume` store),
-  `skill_proposals/`, `skill_index/`, `session_graph/` — from
+- copy ONLY the store subdirectories — `scratchpad/` (the inter-agent
+  handoff store), `skill_proposals/`, `skill_index/`, `session_graph/` — from
   `$HOME/.claude/projects/ceo-orchestration/state/` into
-  `<new-runtime-root>/state/`. The command
+  `<new-runtime-root>/state/`, plus the ROOT-level `session-graphs/` (the
+  cached graphs `/resume` reads; otherwise it rebuilds from the audit log, git
+  and the plan markdown — it never reads the SQLite stores or the compaction
+  snapshot; sessions and events recorded BEFORE the upgrade stay in the legacy
+  chain and do not appear in a graph rebuilt at the new root — `CEO_PROJECT_NAME`
+  is the way to read them). The command
   `python3 .claude/hooks/_lib/runtime_paths.py --state-dir` prints
   `<new-runtime-root>`; append `/state` for the store destination.
   NEVER copy the flat files at the root of `state/`: they include the audit
@@ -150,8 +155,8 @@ install never has are skipped; the symlinks the framework itself created in a
 with no such record is yours, not the framework's):
 
 ```bash
-for p in .claude docs .github SPEC .gitignore PROTOCOL.md; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type l; done | while IFS= read -r l; do r="${l#<target>/}"; grep -qF "LINK  $r  " "<target>/.claude/.install-manifest.sha256" 2>/dev/null || printf '%s\n' "$l"; done
-for p in .claude docs .github SPEC .gitignore PROTOCOL.md; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type f -links +1; done
+for p in .claude docs .github SPEC .gitignore PROTOCOL.md .codex .grok .git/hooks AGENTS.md; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type l; done | while IFS= read -r l; do r="${l#<target>/}"; grep -qF "LINK  $r  " "<target>/.claude/.install-manifest.sha256" 2>/dev/null || printf '%s\n' "$l"; done
+for p in .claude docs .github SPEC .gitignore PROTOCOL.md .codex .grok .git/hooks AGENTS.md; do [ -e "<target>/$p" ] || [ -L "<target>/$p" ] || continue; find "<target>/$p" -type f -links +1; done
 ```
 
 (5) v1.4.0 mints a per-project injection salt in the native Claude project
@@ -374,7 +379,8 @@ relative value is cached relative and, after a `chdir`, the invalidation
 flush writes the previous directory's journal under the NEW cwd (signed
 condition 24). And keep `.claude/state` a real directory holding only real
 files and directories — a symlink, FIFO or other object at
-`.gc-shard-cursor` or `context-pressure-last-bucket[.*]` is followed,
+`.gc-shard-cursor`, `context-pressure-last-bucket[.*]` or `.context-pressure-last-bucket*`
+(the GC strips one leading dot before matching, then deletes) is followed,
 replaced or blocks the hook (signed condition 28).
 
 The pre-v1.4.0 audit chain is likewise left in place (see `CHANGELOG.md`

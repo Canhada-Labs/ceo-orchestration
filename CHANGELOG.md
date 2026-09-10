@@ -183,13 +183,16 @@ directory shared by every project (`9de4efc`, `965fb13`, `3d16070`).
 - **Plan state and scratchpads move too, and are not migrated either.**
   `state_store.py` resolves through the same family resolver, so a
   repository with an ACTIVE plan on v1.3.0 opens a NEW, empty state
-  store after the upgrade — `/resume` and inter-agent handoffs report
-  missing state while the old SQLite files stay on disk under the
+  store after the upgrade — inter-agent handoffs report missing state,
+  `/resume` finds no cached graph, while the old SQLite files stay on disk under the
   legacy directory. Two documented routes: set `CEO_PROJECT_NAME` to
   the legacy slug (the explicit escape hatch in `state_store.py`) until
   the plan closes, or copy ONLY `scratchpad/`, `skill_proposals/`,
   `skill_index/` and `session_graph/` from `<legacy>/state/` into
-  `<new-runtime-root>/state/`. The CLI
+  `<new-runtime-root>/state/`, plus the root-level `session-graphs/` (the
+  cached `/resume` graphs; `/resume` otherwise rebuilds from the audit log,
+  git and the plan markdown and never reads the stores — sessions recorded
+  before the upgrade stay in the legacy chain). The CLI
   `python3 .claude/hooks/_lib/runtime_paths.py --state-dir` prints
   `<new-runtime-root>`; append `/state` for the store destination.
   NEVER copy the whole legacy `state/` directory or its flat files:

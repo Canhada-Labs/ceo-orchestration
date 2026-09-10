@@ -178,14 +178,18 @@ Trimming what Gate-1 loads is the highest-leverage change available to you.
 
 - **`CEO_COMPACTION_CONTINUITY=0`** — the real switch for this pair. Both
   hooks check it and return an empty result immediately. Cost: you lose the
-  snapshot and the reinjected pointer block, including the unconditional
-  Gate-1 reminder. Given §2, what you are giving up today is mostly that one
-  reminder — but it is the only automatic re-anchor you have.
+  snapshot, the reinjected pointer block (including the unconditional Gate-1
+  reminder) AND the PostCompact re-injection of pinned constraints — the hook
+  returns before rendering anything. The SessionStart pinning channel
+  (`check_compact_pinning.py`) stays on. Given §2, what you are giving up
+  today is mostly that one reminder — but it is the only automatic re-anchor
+  you have.
 - **`CEO_CONSTRAINT_PINNING=0`** — disarms constraint pinning (§7) on both its
   channels, and nothing else. It is deliberately **separate** from
-  `CEO_COMPACTION_CONTINUITY=0`: that switch is documented as turning off the
-  continuity *snapshot*, and letting it also silently drop the governance
-  floor would make one operational decision quietly into another.
+  `CEO_COMPACTION_CONTINUITY=0`: that switch silences the whole PostCompact
+  hook (snapshot, pointers and its constraint channel) but never the
+  SessionStart channel, so the governance floor survives it; only this
+  switch drops the floor, on purpose.
 - **`CEO_CONTEXT_PROGRESS_FLOOR_TOKENS`** — not an off switch but an arming
   one, and **unset by default**: the progress observer (§7) is a no-op until
   you give it a floor. There is no built-in default, because a floor that was

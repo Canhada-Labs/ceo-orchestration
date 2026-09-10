@@ -1,0 +1,25 @@
+Não encontrei P0. Há dois P1 que tornam o envelope congelado inexato.
+
+SEVERITY: P1  
+FILE:LINE: `.claude/hooks/_lib/state_store.py:126-133`; `.claude/scripts/session-graph-build.py:111-121`; `.claude/scripts/session-resume.py:75-92,144-163`; `.claude/commands/resume.md:11-19,70-79`; `docs/UPGRADE-PROCEDURE.md:64-82`; `CONDITIONS-rc1.md:34-41,419-420,938-956`  
+Concrete failure scenario: a v1.3.0 adopter follows condition 27 exactly and copies `state/scratchpad/`, `skill_proposals/`, `skill_index/` and `session_graph/`. `/resume PLAN-123` ignores all those stores: it searches `<runtime-root>/session-graphs/` and otherwise rebuilds from audit-log, git and plan markdown. Because the legacy audit log is intentionally left behind, the rebuilt graph silently loses the pre-upgrade session/event history. Likewise, conditions 19 and 70 falsely say `/resume` can read a missed PostCompact snapshot; `/resume` never reads `compaction_continuity` or any SQLite state store.  
+Minimal fix: remove the `/resume` claims from conditions 19/27/70 and document the actual loss, or implement and test dual-read/migration for `session-graphs/` plus legacy audit history. Amend the frozen envelope and rerun the re-pass.
+
+SEVERITY: P1  
+FILE:LINE: `.github/workflows/ceremony-lint.yml:35-38`; `.claude/scripts/check-ceremony-script.py:96-105,339-340,375`; `CONDITIONS-rc1.md:666-675`  
+Concrete failure scenario: the candidate reports `127 descobertos (127 rastreados; piso 124 OK)`. Three ceremony scripts were added after the floor was pinned. Deleting any current tracked script leaves 126 ≥ 124, so the supposedly fail-closed workflow exits 0. This directly falsifies condition 52’s statement that “qualquer remoção” fails.  
+Minimal fix: repin the rc.1 floor to 127 and update/re-review the envelope; the already-declared pre-GA cure remains an exact path manifest rather than a count.
+
+SEVERITY: P2  
+FILE:LINE: `.claude/hooks/check_postcompact_reinject.py:68-72,709-720`; `docs/CONTEXT-CONTINUITY-GUIDE.md:179-188`  
+Concrete failure scenario: with `CEO_COMPACTION_CONTINUITY=0`, `gate()` returns before `_render_constraints()`. The PostCompact constraint-reinforcement channel therefore disappears although the guide says this switch only disables snapshot/pointers and that pinning has an independent switch. The primary SessionStart pinning channel remains, so this is not P1.  
+Minimal fix: render constraints independently of the continuity switch, or narrow the documentation to disclose loss of the reinforcement channel.
+
+SEVERITY: P2  
+FILE:LINE: `.github/workflows/mcp-smoke.yml:314-338`  
+Concrete failure scenario: the “Audit-log integrity check” accepts malformed lines and never validates `prev` or HMAC. A broken chain passes while the step claims integrity. Declared condition 80 describes this honestly.  
+Minimal fix: invoke `audit_hmac.verify_chain()` or rename the step as JSON-readability-only.
+
+Scoped `diff --check`, Actionlint for all seven workflows, the gate-script checksum manifest, Python 3.9 grammar, stdlib-only, contamination, count, AGENTS and ADR checks passed. Conditions 17, 28, 30, 32, 37, 38, 53, 65, 68, 78, 79 and 80 were consistent with the inspected implementation; the defects above are specifically the false portions of 19/27/70 and the drifted condition 52.
+
+VERDICT: NO-GO — The frozen envelope is materially false about `/resume` recovery and ceremony-lint removal detection, so rc.1 requires correction and a new re-pass.

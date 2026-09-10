@@ -1,0 +1,33 @@
+Resultado advisory: há dois P1 que impedem a rc.1.
+
+1. **P1 — [CONDITIONS-rc1.md:34](<WT>/.claude/plans/PLAN-169/repass-rc1/CONDITIONS-rc1.md:34), também linhas 419 e 955; [UPGRADE-PROCEDURE.md:64](<WT>/docs/UPGRADE-PROCEDURE.md:64)** — As condições 19, 27 e 70 prometem recuperação do snapshot por `/resume`, mas esse consumidor não existe.
+
+   Cenário concreto: após um timeout do PostCompact ou a assimetria plan/session, o adopter copia `state/scratchpad` e `state/session_graph` e executa `/resume`. O comando declara usar apenas audit log, git e Markdown ([resume.md:11](<WT>/.claude/commands/resume.md:11)); seu cache real é `session-graphs/`, fora de `state/` ([session-graph-build.py:111](<WT>/.claude/scripts/session-graph-build.py:111)), e a reconstrução lê audit events/git/plano ([session-graph-build.py:433](<WT>/.claude/scripts/session-graph-build.py:433)). Ela nunca lê `compaction_continuity`. O snapshot fica inacessível ao mecanismo indicado e o histórico no slug novo pode aparecer vazio ou parcial.
+
+   Correção mínima: fazer `/resume` consumir os snapshots de plano e sessão, ou retirar essa promessa e declarar uma mitigação operacional real para 19/70, além de corrigir a migração de `session-graphs`/audit history. Como o envelope está congelado, isso exige nova redação assinada e novo re-pass.
+
+2. **P1 — [check_precompact_continuity.py:634](<WT>/.claude/hooks/check_precompact_continuity.py:634)** — O diff afirma que o GC é “Cheap and bounded” e honra o orçamento restante. Além de contrariar a regra explícita de não fazer alegações de velocidade em [AGENTS.md:9](<WT>/AGENTS.md:9), a implementação não sustenta a alegação.
+
+   Cenário concreto: `_gc_session_stores` apenas verifica o deadline antes da chamada; o helper percorre e dá `stat` em até 20.000 entradas sem verificar seu deadline durante essa primeira passagem ([scratchpad_lib.py:615](<WT>/.claude/hooks/_lib/scratchpad_lib.py:615)). Entrando com poucos milissegundos restantes ou num filesystem lento, o PreCompact ultrapassa seus 2,5 s e pode ser morto pelo harness.
+
+   Correção mínima: remover “Cheap” e a garantia de orçamento ou passar o deadline restante ao helper e verificá-lo dentro da enumeração e antes de cada `stat`.
+
+3. **P2 — [check_precompact_continuity.py:1162](<WT>/.claude/hooks/check_precompact_continuity.py:1162)** — O espelho de `derive_scope` usa `str.isdigit()`, embora o canônico aceite somente ASCII em [check_ledger_checkpoint.py:281](<WT>/.claude/hooks/check_ledger_checkpoint.py:281).
+
+   Cenário concreto: `.claude/plans/PLAN-１２３/x` é eleito pelo PreCompact, mas não pelo checkpoint; o PostCompact depois recusa o ponteiro. A direção final é segura, porém a instrumentação diverge silenciosamente.
+
+   Correção mínima: usar `re.fullmatch(r"PLAN-[0-9]{3}", ident)` ou espelhar a regex canônica inteira.
+
+4. **P2 — [audit_log.py:304](<WT>/.claude/hooks/audit_log.py:304)** — Com `CEO_AUDIT_LOG_PATH`, lock e errors seguem `family_dir`, mas o dicionário ainda retorna `"dir": audit_dir` na linha 325; `append_entry` valida e altera esse diretório alheio ao log ([audit_log.py:1225](<WT>/.claude/hooks/audit_log.py:1225)).
+
+   Cenário concreto: um override aponta para diretório seguro, mas o diretório nativo é symlink; o evento é recusado antes de usar o override. O ancestral real do override também não recebe a validação prometida.
+
+   Correção mínima: retornar, validar e criar `family_dir` como `"dir"` quando o caminho completo estiver configurado.
+
+5. **P2 — [SessionEnd.py:1114](<WT>/.claude/hooks/SessionEnd.py:1114)** — O comentário afirma que o memory-delta ainda lê o arquivo `tool_lifecycle`; a própria implementação declara essa perna aposentada e opera somente chain-or-none ([SessionEnd.py:646](<WT>/.claude/hooks/SessionEnd.py:646)).
+
+   Correção mínima: remover a falsa dependência de ordenação ou documentar a razão atualmente válida.
+
+O SHA-256 do envelope confere. As condições 17, 18, 20, 23, 28, 29, 47, 53, 64, 65, 67, 68, 71, 72, 78 e 79 são compatíveis com o código observado; 19 e 70 descrevem defeitos reais, mas sua mitigação por `/resume` é falsa, e 27 classifica/migra o store errado para esse comando. Os checks somente-leitura de stdlib, compatibilidade Python 3.9, whitespace do diff e frescor do `AGENTS.md` passaram; o worktree permaneceu intacto.
+
+VERDICT: NO-GO — As condições 19, 27 e 70 prometem uma recuperação por `/resume` que não existe, e o diff acrescenta uma garantia falsa de orçamento, exigindo correção e novo re-pass antes da rc.1.
