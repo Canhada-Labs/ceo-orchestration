@@ -144,6 +144,16 @@ uma condição do veredito possa apontá-la.
   de outra execução. Não sobrescrever vereditos, transcritos ou payloads.
 - Um `NO-GO` nunca vira aprovação por conter a palavra `RESIDUAL` nas
   condições. O gerador e o corte exigem aprovação das sete partes.
+- **Regra do corte da rc.1 (decisão do Owner, 2026-09-10 08:30, depois de 14
+  rodadas sem ponto fixo — r13 e r14 com 5 `NO-GO` cada, todos por P1 REAIS
+  novos num delta de 1,4 MB):** o revisor dá `NO-GO` só se uma condição
+  declarada for FALSA contra o código ou houver P0. Um P1 NÃO declarado é
+  listado no veredito sob «NEW FINDINGS (annex)» e vira ANEXO do material
+  assinado (os `verdict-rc1-N.txt` entram no commit de evidência e no manifesto
+  que o `gen-envelope-rc1.py` vincula aos fields) — cura obrigatória antes do
+  GA, que continua a exigir 7/7 `GO`. A regra anterior («P1 não declarado ⇒
+  NO-GO») não tinha rodada final: o texto da rodada N nunca cobre o que a N+1
+  descobre.
 
 ## 6. Condições-rascunho para o envelope
 

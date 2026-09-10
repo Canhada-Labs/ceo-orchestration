@@ -28,7 +28,9 @@ releases, and that every delivered-template destination is now confined
 to the directory you hand it (the seams that are not — backups, the
 schema-doc refresh, `.gitignore` appends, the dispatcher copies, the
 `state/` seed — are signed conditions of this rc, with the pre-upgrade
-checks in `docs/UPGRADE-PROCEDURE.md`). Two security fixes in the install path, one
+checks in `docs/UPGRADE-PROCEDURE.md`; the cross-model re-pass verdicts committed
+with the release evidence are an annex of this pre-release — every P1 they list
+is a mandatory cure before the GA). Two security fixes in the install path, one
 audit-log scope change adopters share a machine over, and the honest
 part: the compaction-continuity feature this train is named after
 shipped only after its first design was measured and found to deliver
@@ -58,7 +60,8 @@ and the two CI workflow templates forever, with no warning.
   still matches, or — the third route — when a pre-existing file's bytes
   equal the current or a historical generation of the source (naked byte
   equality; signed conditions 5 and 42). A delivery that
-  fails its PRECONDITION (route table, source, transform) exits 3 and
+  fails its PRECONDITION (route table, a table row whose source or
+  destination relpath is not confined, transform) exits 3 and
   persists `upgrade_succeeded: false` in the install-state rather than
   recording a full upgrade that did not happen (`6304f66`); a failure of
   the WRITER or the RENDERER after a route was selected (a read-only
@@ -110,9 +113,10 @@ and the two CI workflow templates forever, with no warning.
   a refused SOURCE template (symlink outside the checkout) that install
   reports as `SKIP` and upgrade as `PRESERVED` while still exiting 0; a
   source MISSING from the executing checkout (`SKIP`, exit 0, on both
-  install and upgrade); the `.gitignore`/`.claude/.gitignore` appends
-  and the `.claude/dispatcher/` copies, which test `-L` only, so a hard
-  link there is written through; and `install_dispatcher`, which
+  install and upgrade); the `.gitignore`/`.claude/.gitignore` appends,
+  which test `-L` only, so a hard link there is written through; the
+  `.claude/dispatcher/` copies, which run no check at all (a symlink or a
+  hard link there is written through); and `install_dispatcher`, which
   re-copies unconditionally on a rerun (edited dispatcher files are
   overwritten — back them up first); and the deny-baseline merge of
   `install.sh`, which writes a PID-named sibling of `.claude/settings.json`
@@ -125,8 +129,10 @@ and the two CI workflow templates forever, with no warning.
   and a truncated CODEOWNERS is recovered from delivery EVIDENCE
   (`cc00235`) — evidence meaning a manifest line that NAMES the path;
   the line's digest grammar is not validated, so keep the manifest
-  intact and delete (do not empty) a CODEOWNERS you switched off before
-  re-running the installer (signed condition of rc.1).
+  intact; a CODEOWNERS you switched off survives only a re-run WITHOUT
+  `--github-owner` — deleting the file makes the installer render it
+  again, and an emptied file with a manifest record is re-rendered too
+  (signed condition 61 of rc.1).
 - **`uninstall.sh` followed a crafted manifest out of the target.** The
   install manifest is a plain file in your repo and is NOT
   integrity-checked before the removal walk; pre-cure, a record naming
