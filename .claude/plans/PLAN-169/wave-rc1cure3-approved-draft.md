@@ -50,7 +50,7 @@ ancestrais de `LEDGER.md` ficam curados). A revisão do Fable está em
 `<PK>/rc1-scratch-s348/REVIEW-FABLE-20260909.md` (o diretório temporário do
 pacote original não sobreviveu ao reboot de 09/09); os achados que o
 originaram estão em `repass-rc1-20260908-NOGO/r11` e `r12`, e a trilha das
-emendas em `repass-rc1/CONDITIONS-history.md` (v53 e v54).
+emendas em `repass-rc1/CONDITIONS-history.md` (v53 a v55).
 
 ## O que esta cerimônia prova antes de você assinar
 
