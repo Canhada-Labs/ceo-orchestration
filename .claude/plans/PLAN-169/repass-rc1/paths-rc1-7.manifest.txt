@@ -7,6 +7,5 @@
 .github/workflows/npm-publish.yml
 .github/workflows/ownership-nightly.yml
 .github/workflows/release.yml
-.github/workflows/smoke-install.yml
 .github/workflows/supply-chain-watch.yml
 .github/workflows/validate.yml
