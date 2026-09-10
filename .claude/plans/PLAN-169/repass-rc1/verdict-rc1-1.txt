@@ -1,0 +1,38 @@
+Nenhuma condição declarada aplicável mostrou-se falsa; não encontrei P0 nem P1 novo. O envelope local corresponde ao SHA-256 informado (`41eeea…ba91`).
+
+## NEW FINDINGS (annex)
+
+Nenhum P1 não declarado neste payload.
+
+## P2 follow-ups
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:411](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/scripts/upgrade.sh:411), [scripts/upgrade.sh:1083](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/scripts/upgrade.sh:1083), [scripts/upgrade.sh:3943](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/scripts/upgrade.sh:3943)  
+  **Cenário:** `--settings-migrate-only` promete executar somente T5.4 e sair 0, mas os novos preflights de `docs/`, `.github/` e `SPEC/v1` executam antes do dispatch. Por exemplo, `docs` como arquivo regular causa rc 3 e impede a migração.  
+  **Correção mínima:** despachar `SETTINGS_MIGRATE_ONLY=1` antes desses preflights, ou ignorá-los nesse modo; testar real e dry-run com ancestrais conflitantes.
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:4366](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/scripts/upgrade.sh:4366), comportamento em [scripts/upgrade.sh:4955](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/scripts/upgrade.sh:4955)  
+  **Cenário:** o comentário do diff afirma que igualdade com uma geração histórica não é heurística e prova entrega pelo framework. A condição 42 corretamente reconhece o contrário: arquivo autoral sem registro anterior pode coincidir byte a byte, ser atualizado e registrado como framework-owned.  
+  **Correção mínima:** declarar que apenas o digest previamente registrado prova proveniência; tratar igualdade histórica como heurística condicionada. A cura comportamental continua sendo exigir registro anterior.
+
+## Condições aplicáveis
+
+Para o upgrade v1.3.0 em copy-mode, são honestas e necessárias as condições **1, 2, 4–6, 8–12, 14, 25, 27, 31, 34, 39, 40, 42–47, 55, 59, 60, 62–64, 73, 75, 76, 81, 82 e 84**. As condições 3 e 7 são corretamente não operacionais nessa coorte.
+
+Pontos centrais confirmados:
+
+- Os quatro ramos sem renderer marcam falha; estado, banner e rc convergem para `false`, `INCOMPLETE` e 3.
+- Fonte ausente continua virando sucesso parcial (`SKIPPED`), e falha de escrita continua virando `PRESERVED` sem falhar o run: condições 45 e 60 são exatas.
+- Posse por igualdade histórica, backups não confinados e escritores fora do predicado permanecem conforme 42, 43 e 47.
+- A condição 75, emendada neste envelope, está correta: os quatro arquivos-raiz são enumerados incondicionalmente no manifesto; um hash autoral herdado da v1.3.0 pode ser classificado `FRAMEWORK-CHANGED` e sobrescrito em [scripts/upgrade.sh:1782](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/scripts/upgrade.sh:1782).
+- Migração T5.4 ainda não respeita a cerimônia, enquanto o merge derivado respeita; 55 e 63 continuam necessárias.
+- `FMS_*` herdadas, `TMPDIR` inválido, colisões em caminhos novos e replay Grok permanecem conforme 81, 76, 64 e 82.
+
+O blast radius concreto é refresh de hooks/scripts/skills/agentes/schemas, merge de settings e `.env`, seis rotas `docs/.github`, regravação de manifesto/estado e possível refresh de harness. Sem as condições, o resultado pode ser posse indevida ou sobrescrita de arquivo autoral, escrita fora do alvo por links, árvore parcialmente atualizada ou postura bloqueante inesperada no perfil `user`.
+
+O ponto mais fácil de perder é a proveniência transgeracional: o manifesto v1.3.0 pode transformar bytes que o installer apenas encontrou no alvo em aparente evidência de posse para o classificador novo.
+
+O blob de `upgrade.sh` é `d19a5ada…d21`, idêntico ao já exercitado na rodada anterior. Nesta passagem, `bash -n`, ShellCheck, `git diff --check` e a checagem de freshness do `AGENTS.md` permaneceram limpos.
+
+VERDICT: GO-WITH-CONDITIONS — A rc.1 pode avançar somente com as condições aplicáveis incorporadas ao material assinado, o hold obrigatório e todas as curas P1 mantidas como gate do GA.

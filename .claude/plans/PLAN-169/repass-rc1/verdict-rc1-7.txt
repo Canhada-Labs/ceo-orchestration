@@ -1,0 +1,33 @@
+Nenhuma condição aplicável é falsa e não encontrei P0. As condições são suficientes para a rc.1 apenas no cenário declarado — upgrade copy-mode, preflights executados e hold de 24 h — mas não para o GA sem as curas e o anexo abaixo.
+
+### Condições declaradas confirmadas
+
+Aplicáveis e honestas: **17–24, 27–30, 32, 37–41, 52–53, 65–70, 78–80 e 83**.
+
+- **SEVERITY: P1 — condições 27, 39 e 40 —** `state_store.py:115-133`, `cost_envelope.py:142-156`, `_lib/adapters/live/claude.py:375-405`. O upgrade muda o namespace sem migração: planos ativos parecem vazios; custo acumulado volta a zero e pode permitir um swarm que deveria ser bloqueado; credencial vencida perde `CredentialExpired`. Correção mínima: migração/dual-read do estado antigo e do `credential-rotation.json`, usando uma única raiz resolvida.
+
+- **SEVERITY: P1 — condições 17, 70 e 78 —** `check_postcompact_reinject.py:148-153,290-300,371-402,474-477`. Um slug de plano instruction-like ainda chega ao contexto; `CLAUDE_SESSION_ID` pode influenciar a resolução quando falta ID no payload; e um plano resolvido com store vazio impede o fallback ao snapshot de sessão. Correção mínima: não renderizar o nome, proibir fallback ambiental e tentar o store de sessão após miss no store do plano.
+
+- **SEVERITY: P1 — condição 19 —** `state_store.py:100` e `check_postcompact_reinject.py:700-738`. O read pode consumir os mesmos cinco segundos concedidos ao hook; o processo é morto antes de emitir até as constraints fixas. Correção mínima: timeout de lock explicitamente menor e emissão de constraints/pointers mesmo quando o snapshot não puder ser lido.
+
+- **SEVERITY: P1 — condições 28, 65 e 79 —** `state_store.py:214-231` e `test_isolation.py:187-199,464-469`. SQLite, GC e markers ainda seguem caminhos de estado symlinkados; além disso, `CEO_STATE_ROOT` escapa do isolamento de testes. Isso permite escrita ou remoção fora da árvore pretendida. Correção mínima: travessia por descritores com `O_NOFOLLOW`, validação de tipo/identidade e neutralização de todos os overrides nos testes.
+
+- **SEVERITY: P1 — condições 21, 23, 29, 67 e 68 —** permanecem verdadeiras: primeira criação concorrente de salt/chave pode divergir; a matriz de overrides divide a família; emissores ficam sem atribuição; e o predecessor HMAC é lido fora do lock. As curas mínimas descritas no envelope — resolução única, publicação exclusiva e seção crítica integral — correspondem ao código observado.
+
+### NEW FINDINGS (annex)
+
+- **SEVERITY: P1 annex —** [`test_isolation.py:177`](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/.claude/hooks/_lib/test_isolation.py:177>), `:383-388`, `:462-469`; suporte em [`output_scan_dedup.py:155`](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/.claude/hooks/_lib/output_scan_dedup.py:155>) e `:362-367`. `CEO_OUTPUT_SCAN_DEDUP_STATE_DIR` não é neutralizada nem redirecionada. Com essa variável apontando para um canário externo, um teste básico passou verde enquanto alterava o arquivo externo de deduplicação. Correção mínima: limpar esse carrier antes da coleta e na fixture/TestEnvContext/subprocessos; testes específicos do override devem usar `mock.patch.dict`; adicionar canário externo obrigatório.
+
+- **SEVERITY: P1 annex —** [`runtime_paths.py:151`](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/.claude/hooks/_lib/runtime_paths.py:151>) e `:181`, contra [`AGENTS.md:9`](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.gGzWJY/wt/AGENTS.md:9>). O novo texto afirma “two `os.environ.get`” e chama a guarda de “cheap”; no caminho default há três leituras ambientais, e ambas são alegações de custo proibidas pelo contrato do repositório. Correção mínima: remover a contagem e “cheap”; justificar a ausência de cache apenas pela mutabilidade dos inputs.
+
+### P2 follow-ups
+
+- **SEVERITY: P2 —** `runtime_paths.py:158-160`. `CLAUDE_PROJECT_DIR_NATIVE` relativo permanece relativo; hooks iniciados com cwd distintos podem dividir a família de estado. Exigir caminho absoluto ou normalizá-lo uma vez.
+
+- **SEVERITY: P2 —** `check_postcompact_reinject.py:8-10`. O cabeçalho ainda descreve apenas scratchpad por plano, embora o diff acrescente o store de sessão. Atualizar a descrição para ambos os escopos.
+
+- Permanecem os P2 declarados de CI, especialmente condições 37 e 80: filtros incompletos no ceremony/mcp smoke e o passo “HMAC intacta” verificando apenas legibilidade JSON.
+
+Controles locais read-only: 185 testes direcionados passaram; validadores stdlib, claims, contaminação, ADR, ceremony e unsafe-write passaram; manifestos de gate conferiram; workflows passaram por actionlint/YAML; o canário de deduplicação reproduziu o escape acima.
+
+VERDICT: GO-WITH-CONDITIONS — Nenhuma condição declarada é falsa e nenhum P0 foi encontrado, mas os dois P1 do anexo exigem cura antes do GA.

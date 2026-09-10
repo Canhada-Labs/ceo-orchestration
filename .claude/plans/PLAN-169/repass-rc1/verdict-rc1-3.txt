@@ -1,0 +1,38 @@
+Advisory disposition: APPROVE for rc.1 under the stated cut rule, not for GA. The candidate and reviewed-conditions SHA match the supplied values. I found no P0 and no false declared condition. The envelope is sufficient only after the P1 annex below is added to the signed material.
+
+Applicable declared conditions: 3, 4–5, 15–16, 26, 38, 42–43, 49–51, 55, 57, 63, 69, 77, 82, and 84.
+
+The principal v1.3.0 adopter failures are honestly represented:
+
+- A `user` upgrade can add maintainer-only settings and blocking hooks unless conditions 55/63 are followed.
+- Equality-based ownership can turn adopter-authored files into framework-owned inputs for doctor and uninstall under conditions 5/42.
+- Uninstall refuses v1.3.0 `LINK` records, deletes unrelated empty directories below `.claude`, and retains the declared backup/restore confinement gaps.
+- Doctor now fails closed when the shared route reader/table is unavailable and refuses unconfined repair sources and destinations. Its option-like `LINK` target defect remains exactly as condition 69 describes at `scripts/doctor.sh:869` and `:908`.
+
+## NEW FINDINGS (annex)
+
+1. **P1 — `scripts/uninstall.sh:247`, `:249-250`, `:551`, `:553-554`**  
+   Concrete scenario: HMAC calculation embeds `key_path`, `RESTORE_PATH`, and `backup` directly inside Python source. A legitimate checkout/archive path containing `'` aborts the HMAC branch; a crafted path can terminate the literal and execute Python before the HMAC comparison. This requires a target-local backup key, but that is a supported branch. The defect is inherited from v1.3.0 and remains live in the modified uninstall flow.  
+   Minimal fix: pass every path as a separate `sys.argv` operand to a constant Python program; never interpolate filesystem names into `python3 -c` source.
+
+2. **P1 — `templates/codex/pre-push-review-gate.sh:8`**  
+   Concrete scenario: the newly added manual installation command uses unconditional `cp` to `.git/hooks/pre-push`. An adopter following it silently overwrites an existing security, lint, or deployment hook with no backup or chaining. Condition 26 discloses that the gate is manual, but not this ownership loss.  
+   Minimal fix: refuse when either a file or symlink already occupies `pre-push`, and document explicit chaining or installation under a distinct hook name.
+
+3. **P1 — `templates/codex/pre-push-review-gate.sh:36-38`, `:236-238`; `templates/grok/pre-push-review-gate.sh:360-362`; `templates/.github/workflows/validate.yml.template:40`**  
+   Concrete scenario: both gates claim a server-side `validate.yml` rider rechecks `Pair-Rail-Reviewed: APPROVE`. The delivered 251-line workflow contains no trailer or review-record check. `git push --no-verify` therefore bypasses the client gate, and this workflow can remain green without cross-vendor review. CODEOWNERS does not implement the claimed trailer check.  
+   Minimal fix: remove the rider/backstop claims, or add a fail-closed workflow step that checks every canonical-touching pushed commit.
+
+4. **P1 — `templates/settings/settings.user.json:185`, `:216`; rule at `AGENTS.md:9-11`**  
+   Concrete scenario: the new generated derivation asserts cold-start and latency advantages—“5 ferramentas em vez de 14 cold-starts”—despite the repository’s explicit prohibition on speed or throughput claims. Generator parity merely reproduces the prohibited claim.  
+   Minimal fix: describe only the functional matcher scope and exclusion rationale; remove the latency/cold-start language.
+
+## P2 follow-ups
+
+- **P2 — `scripts/uninstall.sh:211`**: dry-run says it “would REMOVE” a tracked parent directory before checking emptiness. If adopter files remain, the real `rmdir` preserves it. Change the preview to “would attempt to remove if empty,” or evaluate projected emptiness first.
+- **P2 — `templates/grok/pre-push-review-gate.sh:23`, `:171`, `:357`; `.claude/hooks/check_codex_stop_review.py:135`**: the Grok gate reads `grok-review-log.jsonl`, but the only shipped recorder writes `codex-review-log.jsonl`; the advertised sidecar route cannot clear the gate. Ship a Grok recorder or use one shared log contract.
+- **P2 — `templates/.github/workflows/benchmarks.yml.template:119-122`, `:127-133`**: output names use only the benchmark basename. Two skills containing `benchmarks/regression.yaml` overwrite each other’s JSON and Markdown, leaving misleading artifacts even though the aggregate failure flag survives. Derive a collision-free name from the relative path.
+
+Permitted static checks passed: Bash syntax and ShellCheck, Python AST/stdlib-only, JSON and generated-user-template parity, actionlint, diff whitespace, AGENTS freshness, count claims, and contamination. The mutating E2E harness was not rerun because this reviewer contract is read-only.
+
+VERDICT: GO-WITH-CONDITIONS — No P0 or false declared condition was found; rc.1 may proceed only with the declared conditions and this P1 annex signed, with every P1 cured before GA.

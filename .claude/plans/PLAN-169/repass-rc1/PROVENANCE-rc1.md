@@ -1,0 +1,23 @@
+# Proveniencia do re-pass do CANDIDATO v1.4.0-rc.1 - PLAN-169 - 7 partes
+- Base: v1.3.0 (ec0543b615c4621e259a409e9eace951539a6632 -> d789721c2fd4a11c36c87eda0e1118eab59092e4) .. Candidato: e0f7de916fb02516eb9d2673850b8b50fa8dca39 (PRE-tag, doutrina r17)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- Caminhos pessoais (/Users/<dono>, /home/<dono>, -Users-<dono>) substituidos por <user> no diff antes do payload e em transcript/verdict depois do codex (cura 1 do gate de contaminacao; rodada 17)
+- codex: 0.147.0 / aarch64-apple-darwin / payload 19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+- modelo: gpt-5.6-sol (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-rc1.reviewed.md sha256 41eeea4a19929242545f39fdd2b6d6b7d22c8fc41fb4835308531bfef334ba91
+- Data: 2026-09-10T17:29:59Z
+- parte 1 (upgrade.sh — o caminho que roda na arvore do adopter): VERDICT: GO-WITH-CONDITIONS — A rc.1 pode avançar somente com as condições aplicáveis incorporadas ao material assinado, o hold obrigatório e todas as curas P1 mantidas como gate do GA. [codex rc=0]
+  - payload-rc1-1.raw.txt NAO commitado; pin sha256: 9c7fcf8f2ca5feef6214b8956ae51c46bcd27dc209968fd16a96aa5b7cc91976
+- parte 2 (install.sh + o set de manifesto + a tabela de rotas de entrega): VERDICT: GO-WITH-CONDITIONS — The declared conditions are honest for the clean copy-mode snapshot, provided the three P1 annex items are signed into rc.1 and cured before GA. [codex rc=0]
+  - payload-rc1-2.raw.txt NAO commitado; pin sha256: ed8c73bb447efd3b84e4ba91285009bfcf1647c5cbf45ba2165cf4176bbc8a9b
+- parte 3 (doctor.sh + uninstall.sh + templates/** entregues): VERDICT: GO-WITH-CONDITIONS — No P0 or false declared condition was found; rc.1 may proceed only with the declared conditions and this P1 annex signed, with every P1 cured before GA. [codex rc=0]
+  - payload-rc1-3.raw.txt NAO commitado; pin sha256: 96c0e057131d72de12671f2e2f8729f47d3bc8e38655cdd66d476909d646ef37
+- parte 4 (SPEC/** + npm README + CHANGELOG + settings.json + smoke-install.yml (CI do framework; demais workflows: parte 7)): VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; the P1 annex above must enter the signed rc.1 evidence and be cured before GA. [codex rc=0]
+  - payload-rc1-4.raw.txt NAO commitado; pin sha256: d1e37b5a32af046e0a3fa091cabc6241c0f265ae0b8a464f853b0e2d25775c6e
+- parte 5 (hooks da familia de continuidade de compaction (PostCompact: parte 7)): VERDICT: GO-WITH-CONDITIONS — Nenhuma condição aplicável é falsa e não há P0, mas o P1 do anexo deve integrar o material assinado da rc.1 e ser curado antes do GA. [codex rc=0]
+  - payload-rc1-5.raw.txt NAO commitado; pin sha256: f2c6103be0ee97896b53fb507aaceda476f45f4ce6a5abffcebffddc59067aa5
+- parte 6 (nucleo de cadeia e auditoria em _lib/ (resolvedor, store de estado e isolamento de teste: parte 7)): VERDICT: GO-WITH-CONDITIONS — Nenhuma condição declarada é falsa e não há P0; o P1 de observabilidade do salt deve integrar o anexo assinado e ser curado antes do GA. [codex rc=0]
+  - payload-rc1-6.raw.txt NAO commitado; pin sha256: 730a79b5065f8a3cd9955bcfba1c41749055eb94bcca27a7d94a95f6aabf4fa4
+- parte 7 (PostCompact + resolvedor por projeto + store de estado + isolamento de teste + CI do framework exceto smoke-install.yml (parte aberta na rodada 11; smoke-install.yml foi para a parte 4 na rodada 12 pelo teto do redator)): VERDICT: GO-WITH-CONDITIONS — Nenhuma condição declarada é falsa e nenhum P0 foi encontrado, mas os dois P1 do anexo exigem cura antes do GA. [codex rc=0]
+  - payload-rc1-7.raw.txt NAO commitado; pin sha256: 9a15048126ea69a245349c12a12ce8823a94a751d6a8fc334165896ad10d86d9
+RUNNER-OVERALL: rc=0

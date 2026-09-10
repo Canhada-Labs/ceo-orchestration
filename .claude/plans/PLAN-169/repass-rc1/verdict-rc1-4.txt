@@ -1,0 +1,48 @@
+No P0 and no false declared condition surfaced. This remains advisory evidence, not authorization.
+
+### Adopter blast radius
+
+A v1.3.0 copy-mode upgrade can concretely:
+
+- Open empty plan-state stores, reset cost accounting, and stop detecting expired credentials because legacy state is not migrated (conditions 27, 39, 40).
+- Adopt or overwrite adopter-authored files through byte equality, new-path collisions, dispatcher/agent copies, or target-tree manifest enumeration (5, 42, 48, 61, 64, 75).
+- Write outside the target through remaining backup, hook/schema, harness, state-store, and restore symlink/hard-link seams (43, 47, 50, 65, 69, 82).
+- Return success after incomplete delivery, or abort after earlier mutations, on missing sources, writer failures, tracked sensitive paths, or unusable `TMPDIR` (45, 59, 60, 76).
+- Change the `user` posture through migration, additive hook registration, or unsupported Codex/Grok composition (55, 63, 84).
+- Produce false audit-chain breaks or unverifiable initial events under concurrent writers/key creation (67, 68).
+
+The conditions describe these failures honestly and are sufficient for this narrowly defined pre-release only when followed and included with the annex below.
+
+### NEW FINDINGS (annex)
+
+1. **SEVERITY: P1 annex — mandatory cure before GA**  
+   **FILE:LINE:** `.github/workflows/smoke-install.yml:231`, `:239-240`, `:284-285`, `:330`, `:411-412`, `:430-431`, `:488`.  
+   **Concrete failure scenario:** These diff-added canonical comments call work “cheap,” assert that operations take “seconds,” and claim “nothing” or “zero marginal cost.” That violates the explicit no-speed-claim rule at `AGENTS.md:9-11`. It is the same P1 class already recognized by conditions 19 and 24, but these workflow lines are not declared there. Release evidence would therefore claim compliance while shipping positive performance assertions that can become false as runners or workloads change.  
+   **Minimal fix:** Remove the qualitative guarantees. Retain only dated, instrumented observations and the operational timeout rationale, without generalizing them as cheap, costless, or seconds-fast.
+
+### P2 follow-ups
+
+1. **SEVERITY: P2 follow-up**  
+   **FILE:LINE:** `.github/workflows/smoke-install.yml:18`, `:135`; dependency at `scripts/tests/smoke-install.sh:244`.  
+   **Concrete failure scenario:** Both path filters include the smoke wrapper but omit `scripts/tests/run-activated-workflow.py`, which parses and executes the delivered workflow. A PR changing only that runner does not trigger Smoke Install, allowing its execution proof to regress unnoticed. This is an additional instance of condition 80’s trigger-gap class.  
+   **Minimal fix:** Add the runner to both `pull_request.paths` and `push.paths`, retaining the equality check for the two lists.
+
+2. **SEVERITY: P2 follow-up**  
+   **FILE:LINE:** `SPEC/v1/audit-log.schema.md:499`, `:502-503`, `:530-531`; implementation at `.claude/hooks/_lib/audit_emit.py:8949-8961`.  
+   **Concrete failure scenario:** The new SPEC rows promise strict ASCII `PLAN-NNN`, but `_compaction_plan_id_ok()` uses `str.isdigit()`. A live scrub probe preserved `PLAN-１２３` instead of coercing it to `unknown`; consumers enforcing the documented ASCII shape can disagree over the signed event.  
+   **Minimal fix:** Require exactly three ASCII digits and add Unicode-digit controls for every scrub branch using this helper.
+
+3. **SEVERITY: P2 follow-up**  
+   **FILE:LINE:** `CHANGELOG.md:292-299`; implementation at `scripts/tests/run-activated-workflow.py:348-375`; skipped step at `templates/.github/workflows/validate.yml.template:41-43`.  
+   **Concrete failure scenario:** The CHANGELOG says the delivered CI and “its steps” are executed, but the runner explicitly skips every `uses:` step, including checkout. The 10/10 command-step evidence remains valid; workflow-equivalent execution does not.  
+   **Minimal fix:** State that all `run:` steps execute in order while runner-provided `uses:` steps are validated, listed, and skipped.
+
+### Declared-condition judgment
+
+The principal decision-driving conditions are 2, 27, 39, 40, 42, 43, 45, 47–50, 55, 59–61, 63–65, 67–70, 73–79, 81, 82, and 84. Condition 3 is honest but non-operative for copy mode. Payload-specific residuals in 13, 19, 24, 36, 38, 41, 46, 52–54, 56, 62, 66, 70, 72, 77, 80, and 83 also remain consistent with the candidate.
+
+Conditions 33 and 47 are not contradictory in code: “delivered-template” denotes the route-table delivery class, while condition 47 identifies other copy/write paths outside that predicate.
+
+The conditions file matches SHA-256 `41eeea4a19929242545f39fdd2b6d6b7d22c8fc41fb4835308531bfef334ba91`. Scoped `diff --check`, actionlint, settings derivation, model-list generation, audit-registry coverage at 331 actions, count validation, and version/manifest parity passed.
+
+VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; the P1 annex above must enter the signed rc.1 evidence and be cured before GA.

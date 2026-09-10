@@ -1,0 +1,35 @@
+Resultado: nenhuma condição aplicável é falsa e não encontrei P0. O P1 abaixo deve permanecer no anexo assinado.
+
+### NEW FINDINGS (annex)
+
+- **SEVERITY: P1 annex — cura obrigatória antes do GA**
+- **FILE:LINE:** `.claude/hooks/check_precompact_continuity.py:108`, `:594-596`; `.claude/hooks/check_postcompact_reinject.py:397-402`.
+- **Cenário concreto:** sessões A e B resolvem o mesmo `PLAN-123`. A grava seu snapshot; B sobrescreve a única chave `compaction_continuity`; o PostCompact de A lê o snapshot de B e reinjeta `execution_unit` e âncora HMAC de B com `snapshot_found=true`. O blob não vincula `session_id`, e o aviso só aparece após 12 horas. Reproduzi a intercalação em memória: ambas as escritas retornaram `written`, e A leu o caminho/linha de B. Isso é distinto dos timeouts da condição 19 e da assimetria de escopo da 70.
+- **Fix mínimo:** chavear por `session_id` validado ou usar sempre o store de sessão; incluir esse ID no blob e recusar mismatch; testar `A write → B write → A read`. Para rc.1, proibir sobreposição PreCompact→PostCompact de duas sessões no mesmo plano e ignorar os ponteiros se ela ocorrer.
+
+### P2 follow-ups
+
+- **SEVERITY: P2**
+- **FILE:LINE:** `.claude/hooks/check_precompact_continuity.py:315`, `:332`.
+- **Cenário:** um FIFO chamado `PLAN-123-a.md` pode vencer o `sorted(glob)`; `open()` bloqueia antes da primeira verificação do prazo, e o harness mata o hook sem snapshot nem evento.
+- **Fix mínimo:** estender a cura da condição 18 ao leitor da unidade de execução: `O_NOFOLLOW|O_NONBLOCK`, descritor ancorado e `fstat(S_ISREG)`.
+
+- **SEVERITY: P2**
+- **FILE:LINE:** `.claude/hooks/SessionEnd.py:5`, `:20`.
+- **Cenário:** o cabeçalho promete “Four responsibilities”, mas o diff acrescenta uma quinta.
+- **Fix mínimo:** alterar para “Five responsibilities”.
+
+- **SEVERITY: P2**
+- **FILE:LINE:** `.claude/hooks/check_precompact_continuity.py:224-228`.
+- **Cenário:** a docstring chama o git toplevel de autoridade e o walk-up de fallback; o código faz o inverso, escolhendo primeiro o ancestral mais próximo com `.claude`.
+- **Fix mínimo:** documentar a ordem realmente implementada.
+
+### Condições declaradas
+
+Diretamente aplicáveis e confirmadas: **17, 18, 19, 20, 22, 23, 24, 27, 28, 29, 30, 38, 47, 53, 64, 65, 66, 67, 68, 70, 71, 72 e 78**.
+
+O blast radius está descrito honestamente: stores v1.3.0 podem abrir vazios após a mudança de raiz; o novo `check_compact_pinning.py` pode colidir com arquivo autoral; e os caminhos runtime podem seguir ou adotar objetos preexistentes. Também conferem as limitações de fail-direction relativas a locks, nomes reinjetados, falsos `absent`, emissores sem atribuição, modelo derivado de política e filelock incorreto.
+
+Para a pré-release copy-mode com hold de 24 horas, as condições são suficientes somente com o P1 acima incorporado ao material assinado; não são suficientes para GA sem as curas mandatórias. O hash fornecido das condições foi confirmado, os cinco arquivos passam parsing Python 3.9 e `git diff --check`, e o worktree permaneceu limpo.
+
+VERDICT: GO-WITH-CONDITIONS — Nenhuma condição aplicável é falsa e não há P0, mas o P1 do anexo deve integrar o material assinado da rc.1 e ser curado antes do GA.

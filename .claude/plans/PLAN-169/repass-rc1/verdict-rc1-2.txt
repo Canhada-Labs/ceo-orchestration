@@ -1,0 +1,19 @@
+No P0 and no declared condition is false. The reviewed conditions SHA-256 matches `41eeea4a…ba91`; the live table has 6 valid rows/6 destinations, both shell files parse, and `git diff --check` passes.
+
+The most directly applicable conditions—1, 5–14, 24, 31, 33–35, 42, 45, 47–48, 56, 60–64, 73–76, 81–82 and 84—accurately describe the candidate. Conditions 3 and 7 are link-mode residuals and do not trigger for the stated copy-mode cohort.
+
+For a v1.3.0 adopter, the concrete ownership failure is condition 42: `scripts/upgrade.sh:4951-4965` accepts byte equality with an unrecorded historical template as ownership, then replaces and registers the file at `scripts/upgrade.sh:4979-4992`. An adopter-authored `docs/rotation-log.md` matching that generation becomes framework-owned and can later be repaired or uninstalled. A collision on a new `.claude/` path similarly enters `FALLBACK` and is overwritten despite `--on-conflict=refuse` at `scripts/upgrade.sh:1620-1667` (condition 64).
+
+## NEW FINDINGS (annex)
+
+- **P1 — `scripts/_framework_manifest_set.sh:946-960`, `scripts/install.sh:1930-1943`, `scripts/install.sh:3634-3638`.** The shell row validator validates only destination and source; it ignores `transform`. A read-only probe confirmed `_wbm_route_row_ok ... bogus-transform` returns 0. With a valid destination/source but missing or unsupported transform, `install.sh` still performs its hardcoded copy, writes successful install-state, prints “Install complete,” and exits 0; the next upgrade rejects the same route as unrenderable at `scripts/upgrade.sh:5245-5252`. Condition 8’s clean-checkout rule mitigates this rc.1, but its proposed cure is incomplete. Minimal fix: before the first write, validate the exact route schema and allowed transform for every destination—or pin the release table digest—and make any mismatch a nonzero install with no success state.
+
+- **P1 — `scripts/install.sh:1052-1073`, `scripts/install.sh:1985-2012`, `scripts/install.sh:3619-3638`.** The global preflight proves path shape, not that same-directory staging is possible. On a fresh target with a real but non-writable `.github/` and pre-existing regular workflow-template files, preflight passes; `.claude/` and `docs/` are installed; the CODEOWNERS `mktemp` then fails. The final refusal occurs before manifest/install-state creation, while the failure trap has no fresh-target backup and restores only `.claude/`. The adopter receives a mixed, unowned installation—the exact partial-state class described at `scripts/install.sh:1055-1063`. Minimal fix: reserve every required staging destination before mutation or maintain a rollback ledger covering root, `docs/`, `.github/`, `SPEC/`, and harness outputs. Until cured, the annex should require discarding/restoring the entire target after any nonzero install.
+
+- **P1 — `scripts/_framework_manifest_set.sh:1263-1266`.** The new comment makes an explicit measured latency claim (“~20 ms” and “seconds”), violating `AGENTS.md:9-11`. Declared condition 24 already catches the separate “costs production nothing” claim at line 608 but not this occurrence. Minimal fix: remove the timing language and justify memoization only by avoiding repeated parsing and duplicate diagnostics.
+
+## P2 follow-up
+
+- **P2 — `scripts/install.sh:485-487`, `scripts/_framework_manifest_set.sh:902-910`.** The rejection message says `/` remains a substitution delimiter and would empty CODEOWNERS, but the new renderer at `scripts/install.sh:1950-1969` explicitly removed the substitution language. Username-only grammar is a valid product decision and condition 9 is true; the explanation is stale. Minimal fix: state that team handles are intentionally unsupported in rc.1 without claiming the current renderer would corrupt the file.
+
+VERDICT: GO-WITH-CONDITIONS — The declared conditions are honest for the clean copy-mode snapshot, provided the three P1 annex items are signed into rc.1 and cured before GA.
