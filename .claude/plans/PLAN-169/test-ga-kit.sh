@@ -316,7 +316,7 @@ import json, sys
 d = json.load(open(sys.argv[1], encoding="utf-8"))
 mine = [f for f in d["files"]
         if "PLAN-169/OWNER-GA" in f["file"] or "s349-ceremony" in f["file"]
-        or "repass-ga" in f["file"] or "test-ga-kit" in f["file"]]
+        or "PLAN-169/repass-ga" in f["file"] or "PLAN-169/test-ga-kit" in f["file"]]
 bl = [(f["file"], x) for f in mine for x in f["findings"] if x["sev"] == "BLOCKING"]
 for p, x in bl:
     print("BLOCKING %s %s L%s %s" % (p, x["rule"], x["line"], x["msg"]), file=sys.stderr)

@@ -589,7 +589,15 @@ def derive() -> dict:
     k = k.replace("v1.4.0-rc.1", "v1.4.0").replace("rc1kit", "gakit")
     if "CDIR" in k:
         die("harness ainda referencia CDIR depois da poda")
-    out["test-ga-kit.sh"] = generic(k)
+    kk = generic(k)
+    # O filtro do A2 casa por SUBSTRING: sem o prefixo do plano, `repass-ga` e
+    # `test-ga-kit` casariam tambem o kit do GA v1.3.0 (PLAN-166/repass-ga/,
+    # com BLOCKING waivados) — o harness reprovaria por achados de OUTRO plano.
+    kk = sub(kk, '"repass-ga" in f["file"]', '"PLAN-169/repass-ga" in f["file"]',
+             label="kit a2 repass prefix")
+    kk = sub(kk, '"test-ga-kit" in f["file"]', '"PLAN-169/test-ga-kit" in f["file"]',
+             label="kit a2 harness prefix")
+    out["test-ga-kit.sh"] = kk
 
     # --- orcamento de bytes (prompt + cabecalho entram em TODAS as partes) ---
     delta = (len(GA_PROMPT.encode()) + len(COND_HEADER_GA.encode())) \
