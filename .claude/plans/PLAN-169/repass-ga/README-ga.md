@@ -1,0 +1,263 @@
+---
+plan: PLAN-169
+release: v1.4.0
+status: kit
+---
+
+# Re-pass do GA v1.4.0 (promoção da rc.1) — escopo, orçamento e o que fica de fora
+
+## 0. O GA em relação à rc.1 (S351, 2026-09-13)
+
+- **Árvore.** O GA promove a `v1.4.0-rc.1` (`02ded1b`, 7/7 `GO-WITH-CONDITIONS` em 10/09) depois do
+  hold ADR-103 (publishedAt 2026-09-10T21:18:08Z). Entre a rc.1 e o candidato do GA há só commits de
+  `.claude/plans/`: a cura da bomba de calendário (`related_commits` em três frontmatters, `fd84566`) e
+  este kit. Nenhum byte entregue a adopters mudou; as sete pathspecs não tocam `.claude/plans/`, logo os
+  sete diffs revisados são idênticos em conteúdo aos da rc.1.
+- **Anexos da rc.1.** Os sete vereditos da rc.1 carregam anexos P1 «cura antes do GA». Não foram
+  curados (main congelado durante o hold; decisão do Owner em 13/09 de promover a árvore da rc.1). No GA
+  eles são **known-open**, cura na 1.4.1; o prompt e o cabeçalho de `CONDITIONS-ga.md` dizem isso ao
+  revisor com todas as letras.
+- **Kit.** `run-ga-repass.sh`, `CONDITIONS-ga.md`, este README, `gen-envelope-ga.py`, `OWNER-GA-CUT.sh`
+  e `test-ga-kit.sh` são DERIVADOS do kit da rc.1 por `derive-ga-kit.py` (âncoras exatas; `--check`
+  compara o disco com a derivação). O que muda é a moldura GA: prompt, cabeçalho das condições,
+  `--stable` no driver, hold da rc.1 nas pré-condições e o publish REAL no npm com o Release em draft
+  até o registro confirmar (molde do GA v1.3.0, PLAN-166).
+- **O que segue é o texto da rc.1**, mantido porque descreve o mesmo escopo e a mesma medição.
+
+## 1. O problema de tamanho, medido
+
+O delta da base GA v1.3.0 (cortada em 2026-08-17) até o candidato é grande
+demais para uma revisão exaustiva. Medido em `v1.3.0..e242544` (o proxy do
+candidato usado para dimensionar; o candidato REAL é o commit do bump, que
+só acrescenta os sítios de versão):
+
+| dimensão | valor |
+|---|---|
+| arquivos alterados, árvore inteira | 1.318 |
+| linhas adicionadas, árvore inteira | 470.864 |
+| arquivos alterados, excluindo testes | 1.178 |
+| commits na faixa | 436 |
+
+O dimensionamento inicial tinha seis partes, teto de 180 KB por payload e
+**848.309 bytes em 42 arquivos**. Esses números são históricos. O runner
+atual usa sete partes e deriva caminhos e bytes do candidato: inclui
+runtime entregue ao adotante e CI do próprio framework. A evidência de
+cada execução é a fonte da cobertura atual; as omissões estão no §4.
+
+## 2. As sete partes, na ordem de risco para o adotante
+
+> Rodada 11 (2026-09-09): a parte 7 foi aberta porque o envelope de condições (98 KB)
+> viaja dentro de toda parte e o redator trunca a 256 KiB — as partes 4, 5 e 6 passaram
+> o teto. Ela recebe `.github/workflows/*` (da 4), `check_postcompact_reinject.py` (da 5)
+> e `_lib/runtime_paths.py` + `_lib/state_store.py` + `_lib/test_isolation.py` (da 6).
+>
+> Rodada 12 (2026-09-09): `.github/workflows/smoke-install.yml` (31.449 B de diff) passa da
+> parte 7 para a parte 4. Aritmética: payload = diff + envelope + ~3,4 KB de cabeçalho, e o
+> runner recusa > 260.000 B brutos; com o envelope a ~110 KB a parte 7 (148.254 B de diff)
+> daria ~262 KB. A parte 4 (103.499 B) era a única com folga. A parte 1 (`upgrade.sh`, um só
+> arquivo, 139.411 B) fixa o teto do envelope em ~112 KB: acima disso é preciso ENCOLHER o
+> envelope, não reparticionar.
+
+A ordem não é arbitrária: é a ordem em que uma regressão machucaria alguém
+que instalou a v1.3.0 e roda o upgrade.
+
+| # | conteúdo | arquivos | bytes de diff (rodada 11, `d789721..6df13ce`) |
+|---|---|---|---|
+| 1 | `scripts/upgrade.sh` | 1 | 139.411 |
+| 2 | `install.sh`, `_framework_manifest_set.sh`, `delivery-routes.tsv` | 3 | 115.769 |
+| 3 | `doctor.sh`, `uninstall.sh`, `templates/**` | 11 | 132.343 |
+| 4 | `SPEC/**`, `npm/**`, `CHANGELOG.md`, `VERSION`, `.claude/settings.json`, `.claude-plugin/**`, `.github/workflows/smoke-install.yml` (desde a rodada 12) | 11 | 103.499 + 31.449 |
+| 5 | hooks da família de continuidade de compaction (PreCompact, SessionEnd, SessionStart, pinning, audit_log) | 5 | 138.251 |
+| 6 | núcleo de cadeia e auditoria em `_lib/` (audit_emit, ledger_provenance, injection_salt, audit_hmac, spool_writer) | 5 | 139.149 |
+| 7 | PostCompact, `_lib/runtime_paths.py`, `_lib/state_store.py`, `_lib/test_isolation.py`, `.github/workflows/*` exceto smoke-install.yml | 11 | 148.254 - 31.449 |
+
+Na medição da tabela, todas tinham menos de 150 KB de diff. Na rodada 10 a parte 4 era a de menor folga porque a
+seção `[1.4.0]` do CHANGELOG landou em `e242544`; o bump acrescenta a ela
+`VERSION`, `npm/package.json` e os dois manifestos de plugin, poucas linhas
+cada. O redator do ADR-114 preserva linhas e hunks (o
+runner **prova** isso por controle a cada parte), e o cabeçalho do prompt
+soma alguns KB. O teto duro do runner é 260.000 bytes de payload cru (o redator trunca a 256 KiB):
+acima disso ele recusa antes das invocações. É preciso reduzir a prosa histórica
+do envelope, preservando requisitos e residuais, ou repartir o diff. O histórico
+retirado do payload fica em `CONDITIONS-history.md`.
+
+### O manifesto é DERIVADO, nunca uma lista fixa
+
+Cada parte carrega uma **pathspec** — a intenção — e o runner deriva o
+manifesto com `git diff --name-only v1.3.0..CANDIDATO -- <pathspec>` no
+momento da execução. Isso não é elegância: uma lista fixa medida em
+`e242544` esqueceria os arquivos que **só mudam no commit do bump**
+(`VERSION`, `npm/package.json`, `.claude-plugin/plugin.json` e
+`marketplace.json`), e o re-pass reviraria uma árvore diferente da que vai
+ser taggeada. É a classe do instrumento verde cuja pergunta envelheceu.
+
+Os `paths-ga-N.manifest.txt` que viajam neste diretório são o **snapshot
+da medição** feita em `e242544`; o runner os reescreve com o que
+efetivamente revisou, e é essa versão que entra no `MANIFEST-ga.sha256`
+assinado. A receita `part_pathspec()` do regenerador do snapshot é
+byte-idêntica à do runner — verificado.
+
+`scripts/install-npm.sh` mudou **zero bytes** na faixa. Ele está na
+pathspec da parte 2 por completude de intenção, mas um arquivo sem mudança
+nunca aparece no manifesto derivado, e portanto não vira payload.
+
+## 3. Cobertura anterior citada no próprio prompt
+
+Cada parte carrega, dentro do prompt, as rodadas de rail que já revisaram
+aquele conteúdo quando ele landou. Isso existe para que o revisor possa dar
+**GO-WITH-CONDITIONS com a condição nomeando a cobertura**, em vez de tratar
+como inédito algo que já passou por rail cruzado.
+
+| parte | cobertura anterior citada |
+|---|---|
+| 1 | PLAN-183 W5 (D1, 8 rodadas); pacote E da S329 (7 rodadas sobre a sombra re-derivada, 4 P1 reais); PLAN-185 W1–W3 (5 rodadas) |
+| 2 | PLAN-185 W1–W3 (e2e 105/0 em bytes; controle 22/33 pré-cura); PLAN-183 W5 D3 |
+| 3 | PLAN-183 W5 (`doctor.sh` no mesmo leitor de rotas); wave-s330-F (11 rodadas, 15 defeitos reais) |
+| 4 | wave-s330-F (`settings.user.json` derivado, `--check` byte-a-byte no CI); S337 (Smoke Install executa o CI entregue; docker ubuntu 24.04, 10/10 steps verdes) |
+| 5 | PLAN-179 wave-179close (27 rodadas de pair-rail, 83 defeitos reais) |
+| 6 | PLAN-182 W1 (censo M4 16→7→0); S326 wave-cli (Axis 3, 9 rodadas) |
+
+O prompt diz explicitamente que a cobertura anterior **não é motivo para
+pular**: o que nenhuma rodada por wave teve é a visão de INTEGRAÇÃO — o
+delta inteiro de uma vez, contra uma tag que um adotante instalou de fato.
+
+## 4. O que fica FORA, e por quê
+
+Nada disto é "não importa". É orçamento, e a decisão está escrita para que
+uma condição do veredito possa apontá-la.
+
+**Fora por orçamento, com cobertura anterior:**
+
+- `.claude/hooks/check_ledger_checkpoint.py` (56.835 B) e
+  `check_arbitration_kernel.py` (11.822 B) — mesma família do PLAN-179 da
+  parte 5, revisados nas mesmas 27 rodadas. Ficaram de fora porque a parte 5
+  já está em 162 KB e admiti-los estouraria o teto.
+- `.claude/hooks/_lib/scratchpad_lib.py` (27.271 B) — mesma família do
+  PLAN-182 da parte 6.
+- Os 15 hooks e 12 módulos `_lib` restantes, todos abaixo de 12 KB de diff.
+- `.claude/scripts/**` (cerca de 1,85 MB de diff). É superfície entregue ao
+  adotante, e portanto uma omissão REAL, não uma isenção por natureza. Cabe
+  numa condição do veredito.
+
+**Fora por natureza (não entregue ao adotante):**
+
+- Toda a árvore de testes (`*/tests/*`, `test_*`): 140 arquivos, ~62 mil
+  linhas. O predicado de exclusão do próprio framework
+  (`_framework_path_excluded`) as mantém fora da entrega.
+- `.claude/plans/**`, `.claude/adr/**`, `docs/**` e o material de cerimônia:
+  são o registro da governança, não o produto instalado.
+
+## 5. Orçamento e critério de parada
+
+- **7 invocações de codex**, uma por parte. `GA_CODEX_JOBS` limita a
+  concorrência; o padrão é 1. Não rodar o re-pass junto com suítes pesadas;
+  aumentar concorrência só dentro da memória disponível. O runner não repete parte.
+- Cada parte é julgada de forma independente; o `RUNNER-OVERALL` é 0 apenas
+  se as **sete** terminarem em `GO` ou `GO-WITH-CONDITIONS`.
+- Exatamente **uma** linha `VERDICT:` por parte. Duas linhas é ambiguidade,
+  não aprovação, e o runner a registra como tal (classe CM-03 do corpus de
+  defeitos S348).
+- Qualquer evidência de tentativa anterior, inclusive parcial, **aborta** o
+  runner. Preserve a tentativa em diretório próprio e faça a triagem antes
+  de outra execução. Não sobrescrever vereditos, transcritos ou payloads.
+- Um `NO-GO` nunca vira aprovação por conter a palavra `RESIDUAL` nas
+  condições. O gerador e o corte exigem aprovação das sete partes.
+- **Regra do corte da rc.1 (decisão do Owner, 2026-09-10 08:30, depois de 14
+  rodadas sem ponto fixo — r13 e r14 com 5 `NO-GO` cada, todos por P1 REAIS
+  novos num delta de 1,4 MB):** o revisor dá `NO-GO` só se uma condição
+  declarada for FALSA contra o código ou houver P0. Um P1 NÃO declarado é
+  listado no veredito sob «NEW FINDINGS (annex)» e vira ANEXO do material
+  assinado (os `verdict-ga-N.txt` entram no commit de evidência e no manifesto
+  que o `gen-envelope-ga.py` vincula aos fields) — cura obrigatória antes do
+  GA, que continua a exigir 7/7 `GO`. A regra anterior («P1 não declarado ⇒
+  NO-GO») não tinha rodada final: o texto da rodada N nunca cobre o que a N+1
+  descobre.
+
+## 6. Condições-rascunho para o envelope
+
+Se o veredito agregado for `GO-WITH-CONDITIONS` — o desfecho esperado dado o
+tamanho do delta — estas são as condições que o material assinado deve
+carregar. Elas descrevem o que a revisão **não** cobriu, para que a
+assinatura não afirme mais do que aconteceu.
+
+> **Rodada 1 (2026-09-08, candidato `4a1b448`) terminou NO-GO em 3 das 6 partes.**
+> Cada achado foi verificado adversarialmente contra o código e os textos
+> ratificados (registros em `../repass-rc1-20260908-NOGO/`); o resultado é o
+> arquivo `CONDITIONS-ga.md` ao lado deste README — as condições REAIS do
+> envelope, que substituem o rascunho abaixo e que o runner passa ao revisor da
+> rodada seguinte como DATA a ser julgada (honestas e suficientes para uma
+> pré-release ⇒ GO-WITH-CONDITIONS; senão NO-GO). O rascunho fica como
+> registro do que se esperava antes da rodada 1.
+
+1. **Cobertura declarada.** O re-pass cobriu 42 arquivos e cerca de 848 mil
+   bytes de diff, escolhidos por risco ao adotante. `.claude/scripts/**` ficou fora
+   por orçamento e permanece coberto apenas pelas rodadas por wave.
+2. **Limite same-UID permanece.** A separação de cadeias HMAC por projeto é
+   por diretório e chave, não por privilégio: sob o mesmo UID um processo lê
+   o diretório e a chave do outro projeto. Está no CHANGELOG e no
+   `docs/threat-model.md`; nenhuma parte deste re-pass o fecha.
+3. **Checksums por tarball continuam não automatizados.** A honestidade da
+   `npm/INTEGRITY.md` foi a rota escolhida na v1.3.0-rc.4; a implementação
+   real segue como item nomeado, agora da v1.5.0.
+3-b. **O CHANGELOG `[1.4.0]` foi escrito por outro pacote** (`e242544`) e a
+   cerimônia `rel-meta` apenas o CONFERE. O texto entra no re-pass pela
+   parte 4, mas nenhuma etapa deste kit o produziu.
+4. **Fence-shadow variante 5** (bloco YAML escondido em comentário HTML cru
+   pelo PRÓPRIO signatário de um envelope assinado) permanece fora do modelo
+   de ameaça, com signatário igual ao Owner. Cura definitiva = envelope de
+   formato fixo nos dois twins.
+5. **Residuais herdados do trem** que o CHANGELOG [1.4.0] nomeia seguem
+   abertos por decisão registrada, não por omissão.
+
+O gerador (`gen-envelope-ga.py --stage fields --conditions-file`) exige o
+arquivo de condições sempre que o veredito agregado for
+`GO-WITH-CONDITIONS`, e as condições entram nos **fields**, isto é, no
+material que o Owner assina.
+
+Antes de preparar os payloads, o runner congela os bytes em
+`CONDITIONS-ga.reviewed.md` (vazio quando não há condições) e registra seu
+SHA-256 na proveniência e no manifesto. As sete partes usam esse snapshot;
+os payloads redigidos também entram no manifesto. A lista deriva de sete
+conjuntos de cinco arquivos, mais candidato, proveniência, runner e snapshot:
+39 entradas em `MANIFEST-ga.sha256` (o manifesto não lista a si próprio).
+O gerador recusa condições diferentes do snapshot e os fields são
+reconstruídos contra a evidência antes de incorporar a assinatura. Se a
+revisão pedir uma condição nova, edite o rascunho e faça outro re-pass;
+alterar condições depois da revisão não aproveita a aprovação anterior.
+
+## 7. Codex pinado, sem tocar na máquina
+
+`codex --version` na máquina do maintainer está em **0.153.4**.
+`.claude/governance/codex-cli-pin.txt` exige `>=0.128.0,<0.148.0` e
+`codex-cli-pin-manifest.json` pina o payload de **0.147.0**. Os dois são
+canônicos e este kit **não os edita**.
+
+O runner resolve a 0.147.0 por `npx` num cache próprio
+(`repass-ga/.npx-cache`), verifica o sha256 do payload nativo contra o
+manifesto pelo mesmo oráculo do `pair-rail-gate`
+(`check_pair_rail.py --verify-codex-pin <launcher>`, fail-closed) e põe um
+diretório-shim no início do `PATH` para que qualquer `codex` invocado durante
+o run seja o pinado. O `codex` global fica fora do `PATH` do processo.
+
+Medido em 2026-09-07, nesta máquina:
+
+```
+npx -y @openai/codex@0.147.0 --version   ->  codex-cli 0.147.0
+sha256 do payload nativo resolvido       ->  19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+sha256 no pin-manifest                   ->  19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+--verify-codex-pin <launcher do npx>     ->  {"status": "verified", "target_triple": "aarch64-apple-darwin"}
+--verify-codex-pin (codex GLOBAL)        ->  {"status": "mismatch", "sha256": "b973d440..."}
+```
+
+A última linha é o controle negativo, e ele é gratuito: o binário global
+falha o mesmo oráculo que o pinado passa.
+
+## 8. Onde o candidato entra
+
+O runner **não** carrega o SHA do candidato numa constante. Ele o lê de
+`repass-ga/CANDIDATE.sha`, que o `OWNER-GA-CUT.sh` escreve depois do
+`release.sh bump` e do push. O runner recusa se o arquivo estiver ausente,
+se o conteúdo não for um sha40 minúsculo, se o commit não existir, se a base
+não for ancestral dele, ou se `origin/main` tiver avançado para outro
+commit. O candidato real é o commit do bump: a tag rc.1 ainda não existe
+quando a revisão roda, e exigir um worktree da tag seria circular.
