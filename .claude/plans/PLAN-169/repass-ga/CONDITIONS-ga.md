@@ -7,7 +7,7 @@ FALSA contra o código ou por P0; um P1 não declarado vai ao veredito sob «NEW
 (annex)» como ANEXO assinado — known-open no GA, cura na 1.4.1.
 
 Texto = o envelope da rc.1 (7/7 `GO-WITH-CONDITIONS`, 10/09) sob este cabeçalho. A árvore do
-GA é a da rc.1 mais dois commits só de `.claude/plans/` (cura de calendário e kit do GA):
+GA é a da rc.1 mais commits só de `.claude/plans/` (cura de calendário e o kit do GA):
 nenhum byte entregue mudou. Os anexos P1 dos sete vereditos da rc.1 NÃO foram curados (main
 congelado no hold): onde um item diz «cura antes do GA», leia NÃO curado, known-open no GA,
 cura na 1.4.1. Adopters: os repositórios do maintainer, subindo da v1.3.0 em modo cópia.

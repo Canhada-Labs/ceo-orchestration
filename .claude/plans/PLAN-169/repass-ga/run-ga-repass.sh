@@ -358,8 +358,8 @@ CONTEXT
   Out-of-scope surfaces are DECLARED in
   .claude/plans/PLAN-169/repass-ga/README-ga.md.
 - The GA tree is the rc.1 tree (7/7 GO-WITH-CONDITIONS on 2026-09-10) plus
-  two plans-only commits (a calendar-bomb cure in three plan frontmatters
-  and this GA kit). No shipped byte changed since rc.1: this part's diff is
+  plans-only commits (a calendar-bomb cure in three plan frontmatters and
+  this GA kit). No shipped byte changed since rc.1: this part's diff is
   identical in content to the rc.1 one.
 - The rc.1 verdicts carried P1 ANNEXES marked "mandatory cure before the
   GA". They were NOT cured (main stayed frozen through the hold); the
