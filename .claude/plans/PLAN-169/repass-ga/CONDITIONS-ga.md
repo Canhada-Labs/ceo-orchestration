@@ -817,10 +817,10 @@ cura na 1.4.1. Adopters: os repositórios do maintainer, subindo da v1.3.0 em mo
     podem bloquear sob opt-in (`accel_dispatch.py`, `codex_review_user_code.py`,
     `review_loop.py`). O `--no-settings-migrate` da condição 55 NÃO evita isto (o merge
     aditivo continua). Deixaram de dizer «advisory hooks only» (arquivos livres): `README.md`,
-    `docs/FAQ.md`, `README.pt-BR.md`, `npm/README.md` e `INSTALL.md`. A classe foi procurada por grep em toda a árvore entregue
-    (`*.md`, `*.sh`, `*.json`, `*.template`): o ÚNICO texto que ainda diz «advisory hooks only»
-    é o cabeçalho canônico de `scripts/install.sh` (linha 11) — inexato até a próxima
-    cerimônia. Condição DURA: quem quer o comportamento advisory da v1.3.0
+    `docs/FAQ.md`, `README.pt-BR.md`, `npm/README.md` e `INSTALL.md`. Ainda prometem hooks «advisory» ao perfil `user` TRÊS textos
+    entregues (o pacote npm inclui `scripts/`): `scripts/install.sh` (linha 11, «advisory hooks
+    only») e `scripts/profiles/profiles.json` (linhas 13 e 30, «advisory-only hook surface») —
+    inexatos até a próxima cerimônia; a rc.1 declarou só o primeiro (re-pass r1 do GA, parte 3). Condição DURA: quem quer o comportamento advisory da v1.3.0
     intacto roda o upgrade também com `--no-settings-merge`; quem aceita o merge conhece as
     rotas de saída: `CEO_CONFIG_CHANGE_GUARD=0` (check_config_change), `CEO_TURBO=0` ou
     `.claude/turbo-off` (accel_dispatch), não setar `CEO_CODEX_USER_REVIEW_BLOCK=1`

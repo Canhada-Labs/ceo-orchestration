@@ -1,0 +1,41 @@
+Nenhuma condição aplicável mostrou-se falsa; não encontrei P0 nem P1 novo. O SHA-256 do envelope é exatamente `f1e217…9904`, e `upgrade.sh` é byte-idêntico à rc.1 (`b42977…1b5`). Isto é evidência advisory, não autorização.
+
+## NEW FINDINGS (annex)
+
+Nenhum P1 não declarado neste payload.
+
+## P2 follow-ups
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:411](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/upgrade.sh:411), [scripts/upgrade.sh:1193](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/upgrade.sh:1193), [scripts/upgrade.sh:3943](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/upgrade.sh:3943)  
+  **Cenário:** `--settings-migrate-only` promete executar somente T5.4 e sair 0, mas os preflights de `docs/`, `.github/` e `SPEC/v1` rodam antes do dispatch. Um `docs` regular no lugar do diretório produz rc 3 e impede a migração.  
+  **Correção mínima:** despachar esse modo antes dos preflights, ou desativá-los nele; cobrir execução real e dry-run com ancestrais conflitantes.
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:4366](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/upgrade.sh:4366), comportamento em [scripts/upgrade.sh:4955](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/upgrade.sh:4955)  
+  **Cenário:** o comentário chama igualdade com geração histórica de evidência de entrega. A condição 42 corretamente reconhece que é apenas igualdade de bytes: um arquivo autoral sem registro pode ser atualizado e adquirido pelo framework.  
+  **Correção mínima:** reservar “evidência” ao digest previamente registrado; a cura comportamental é exigir esse registro antes de refresh/claim.
+
+## Condições e blast radius
+
+Para v1.3.0 copy-mode, são aplicáveis e honestas as condições **1, 2, 4–6, 8–12, 14, 25, 27, 31, 34, 39, 40, 42–47, 55, 59, 60, 62–64, 73, 75, 76, 81, 82 e 84**. As condições 3 e 7 são corretamente não operacionais nessa coorte.
+
+O upgrade atualiza hooks, scripts, skills, agentes, schemas, settings/`.env`, seis rotas `docs/.github`, manifesto, install-state e eventualmente o harness. Sem o preflight integral do envelope, os cenários concretos incluem:
+
+- Stores vazios, custo zerado permitindo despacho que deveria ser bloqueado e perda do bloqueio de credencial vencida: condições 27, 39 e 40.
+- Apropriação ou sobrescrita de arquivos autoriais por igualdade histórica, caminho novo ou manifesto superabrangente: 42, 64 e 75.
+- Escrita fora do alvo por backup, symlink ou hard link: 43, 47 e 73.
+- Upgrade parcial reportado como sucesso quando falta fonte ou falha writer/renderer: [linhas 4882–4894 e 4912–4916](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/upgrade.sh:4882), condições 45 e 60.
+- Perda de proveniência, overwrite de customização ou árvore parcialmente mutada por manifesto inválido, caminho sensível rastreado, `TMPDIR` ruim ou `FMS_*` herdada: 14, 59, 76 e 81.
+- Perfil `user` alterado para postura potencialmente bloqueante: 55 e 63.
+- Replay Grok quebrado e composição `user`+Codex/Grok incompatível: 82 e 84.
+
+A condição 1 está efetivamente curada: os quatro ramos sem renderer convergem no flag `unrenderable-transform`, persistem `upgrade_succeeded:false`, imprimem `INCOMPLETE` e saem 3.
+
+## Publicação e verificação
+
+Não há divergência irreversível de versão no pacote: [VERSION:1](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/VERSION:1), [npm/package.json:3](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/npm/package.json:3), [pyproject.toml:3](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/pyproject.toml:3) e os dois manifests de plugin dizem `1.4.0`; o workflow copia `scripts/` para o pacote antes do publish em [npm-publish.yml:336](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/.github/workflows/npm-publish.yml:336). Num adopter maintainer, `VERSION` permanece intencionalmente como snapshot v1.3.0 e `.claude/.framework-version` vira a âncora v1.4.0; essa assimetria está explicitamente documentada em [upgrade.sh:371](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/upgrade.sh:371).
+
+Verificações concluídas: histórico v1.3.0 **164/164**, segurança de escrita **325/325**, replay de install-state **73/73**, merge derivado **69/69**, migração de settings **46/46** e paridade maintainer/user sem `STALE`, `MISSING`, `MODE_DIFF`, `UNCLASSIFIED` ou over-delivery fora de `.claude`. `bash -n`, ShellCheck, `git diff --check`, freshness do `AGENTS.md` e version drift também passaram.
+
+VERDICT: GO-WITH-CONDITIONS — As condições aplicáveis são verdadeiras e suficientes como barreiras operacionais sob a regra deste corte, mas esta GA publica os P1 conhecidos como dívida assinada para 1.4.1; isto é evidência advisory, não autorização.

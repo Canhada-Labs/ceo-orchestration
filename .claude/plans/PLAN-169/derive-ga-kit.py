@@ -170,6 +170,20 @@ congelado no hold): onde um item diz «cura antes do GA», leia NÃO curado, kno
 cura na 1.4.1. Adopters: os repositórios do maintainer, subindo da v1.3.0 em modo cópia."""
 
 COND_RC1_LINE1_PREFIX = "# Condições do envelope — v1.4.0-rc.1 (pré-release;"
+BUDGET_MAX_DELTA = 180   # parte 1 do r1: raw 261.739 B contra MAX_RAW_BYTES=262000
+
+COND63_RC1 = (
+    "A classe foi procurada por grep em toda a árvore entregue\n"
+    "    (`*.md`, `*.sh`, `*.json`, `*.template`): o ÚNICO texto que ainda diz «advisory hooks only»\n"
+    "    é o cabeçalho canônico de `scripts/install.sh` (linha 11) — inexato até a próxima\n"
+    "    cerimônia."
+)
+COND63_GA = (
+    "Ainda prometem hooks «advisory» ao perfil `user` TRÊS textos\n"
+    "    entregues (o pacote npm inclui `scripts/`): `scripts/install.sh` (linha 11, «advisory hooks\n"
+    "    only») e `scripts/profiles/profiles.json` (linhas 13 e 30, «advisory-only hook surface») —\n"
+    "    inexatos até a próxima cerimônia; a rc.1 declarou só o primeiro (re-pass r1 do GA, parte 3)."
+)
 COND_RC1_LINE14 = "cerimônia assinada, com controle positivo."
 
 # ---------------------------------------------------------------------------
@@ -524,7 +538,14 @@ def derive() -> dict:
     if lines[13] != COND_RC1_LINE14:
         die("CONDITIONS-rc1.md: linha 14 inesperada: %r" % lines[13][:80])
     old_header = "\n".join(lines[:14])
-    cond = COND_HEADER_GA + "\n" + "\n".join(lines[14:])
+    body = "\n".join(lines[14:])
+    # Re-pass r1 do GA (2026-09-13), parte 3, NO-GO: a condicao 63 dizia que o
+    # UNICO texto entregue que ainda promete hooks «advisory» ao perfil `user`
+    # era a linha 11 do install.sh — FALSO contra o codigo: profiles.json:13 e
+    # :30 («advisory-only hook surface») tambem, e `scripts/` viaja no pacote
+    # npm (`files`). O texto passa a declarar os TRES sitios.
+    body = sub(body, COND63_RC1, COND63_GA, label="condicao 63")
+    cond = COND_HEADER_GA + "\n" + body
     out["repass-ga/CONDITIONS-ga.md"] = cond
 
     # --- README ---
@@ -600,8 +621,9 @@ def derive() -> dict:
     out["test-ga-kit.sh"] = kk
 
     # --- orcamento de bytes (prompt + cabecalho entram em TODAS as partes) ---
-    delta = (len(GA_PROMPT.encode()) + len(COND_HEADER_GA.encode())) \
-        - (len(old_prompt.encode()) + len(old_header.encode()))
+    old_cond_full = rd(RC / "CONDITIONS-rc1.md")
+    delta = (len(GA_PROMPT.encode()) + len(cond.encode())) \
+        - (len(old_prompt.encode()) + len(old_cond_full.encode()))
     out["__delta__"] = delta
     return out
 
@@ -610,10 +632,11 @@ def main() -> int:
     check = "--check" in sys.argv[1:]
     out = derive()
     delta = out.pop("__delta__")
-    sys.stderr.write("derive-ga-kit: delta de bytes prompt+cabecalho vs rc.1 = %+d B "
-                     "(folga medida da parte 1: ~249 B; exigido <= 0)\n" % delta)
-    if delta > 0:
-        die("prompt+cabecalho do GA maiores que os da rc.1 em %d B — encurte" % delta)
+    sys.stderr.write("derive-ga-kit: delta de bytes prompt+condicoes vs rc.1 = %+d B "
+                     "(folga MEDIDA da parte 1 no r1: 261 B; teto 180)\n" % delta)
+    if delta > BUDGET_MAX_DELTA:
+        die("prompt+condicoes do GA excedem o orcamento em %d B (teto %d) — encurte"
+            % (delta, BUDGET_MAX_DELTA))
     rc = 0
     for rel, text in out.items():
         dst = P / rel

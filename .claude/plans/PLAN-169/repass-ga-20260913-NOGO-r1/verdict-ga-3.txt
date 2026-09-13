@@ -1,0 +1,29 @@
+NO-GO under the cut rule: no P0 or version disagreement was found, but declared condition 63 is false.
+
+### Finding
+
+**P1 — false declared condition 63; therefore a GA-blocking condition failure**
+
+**FILE:LINE:** [CONDITIONS-ga.md:819](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/.claude/plans/PLAN-169/repass-ga/CONDITIONS-ga.md:819>), [scripts/profiles/profiles.json:13](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/profiles/profiles.json:13>), [scripts/profiles/profiles.json:30](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/profiles/profiles.json:30>), [templates/settings/settings.user.json:9](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/templates/settings/settings.user.json:9>), [templates/settings/settings.user.json:569](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/templates/settings/settings.user.json:569>), [templates/settings/settings.user.json:620](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/templates/settings/settings.user.json:620>).
+
+Condition 63 says the delivered-tree search found only `scripts/install.sh` still claiming “advisory hooks only.” That is false: the shipped profile catalog twice describes `--ceremony user` as an “advisory-only hook surface.”
+
+The diff itself says the opposite: `settings.user.json` explicitly records blocking inclusions, registers `check_config_change.py`, and enables it by default. The hook returns `{"decision":"block"}` for forbidden settings changes at [check_config_change.py:297](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/.claude/hooks/check_config_change.py:297>). The default v1.3.0 user-profile upgrade selects this template at [upgrade.sh:2850](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/upgrade.sh:2850>) and additively appends missing registrations at [upgrade.sh:3118](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/scripts/upgrade.sh:3118>).
+
+Concrete failure: an adopter choosing or upgrading the advertised “advisory-only” user profile can have a legitimate settings edit blocked unless they knew to use `--no-settings-merge` or disable `CEO_CONFIG_CHANGE_GUARD`. This is reachable on the mainline copy-mode upgrade path.
+
+It is also irreversibly npm-facing: `scripts/` is in the package allowlist at [npm/package.json:9](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/npm/package.json:9>) and is copied into release staging at [npm-publish.yml:336](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.cZSoBN/wt/.github/workflows/npm-publish.yml:336>).
+
+Minimal fix: replace both `profiles.json` claims with a truthful “no-GPG user surface; some hooks can block” description tied to `blocking_inclusions`, and make `check-install-profiles.py` reject “advisory-only” whenever that list is non-empty. Then regenerate/re-pass the signed envelope.
+
+### Condition audit
+
+Conditions 3, 4–5, 15–16, 26, 38, 42–43, 49–51, 55, 57, 69, 77, 82, and 84 remain consistent with this payload. Condition 63 is false as written and therefore cannot be relegated to an annex.
+
+The new doctor/uninstall guards otherwise fail in the declared direction. I found no additional undeclared out-of-tree write or version-string disagreement. Static diff, shell syntax, JSON, actionlint, settings-template derivation, AGENTS freshness, and stdlib checks passed.
+
+**NEW FINDINGS (annex):** none separate from the condition-63 failure.
+
+**P2 follow-up:** none newly identified; unchanged rc.1 annex items were not duplicated.
+
+VERDICT: NO-GO — Declared condition 63 is false: the npm-shipped profile catalog still promises an advisory-only user hook surface while the default v1.3.0 user-upgrade path installs an enabled blocking hook.

@@ -1,0 +1,21 @@
+Resultado: nenhuma condição aplicável é falsa e não encontrei P0. Os cinco arquivos deste payload são byte-idênticos à rc.1; o hash das condições confere: `f1e217845289401ee520acb1e588d76a0e824b3092ab1069cacf543e20a49904`.
+
+### NEW FINDINGS (annex)
+
+Nenhum P1 novo. O P1 já anexado na rc.1 sobre sobrescrita entre snapshots de sessões concorrentes no mesmo plano permanece known-open para 1.4.1, sem piora neste candidato.
+
+### P2 follow-ups
+
+Nenhum P2 novo. Permanecem inalterados os três P2 da rc.1: leitura bloqueante de `PLAN-NNN-*.md` especial (`.claude/hooks/check_precompact_continuity.py:307-349`), cabeçalho “Four responsibilities” com cinco itens (`.claude/hooks/SessionEnd.py:5-29`) e documentação invertida da resolução do root (`.claude/hooks/check_precompact_continuity.py:218-244`).
+
+### Condições declaradas
+
+Diretamente aplicáveis e confirmadas: **17, 18, 19, 20, 22, 23, 24, 27, 28, 29, 30, 38, 47, 53, 64, 65, 66, 67, 68, 70, 71, 72 e 78**.
+
+- Blast radius: um plano ativo da v1.3.0 abre o store novo vazio sem a migração da condição 27; e um arquivo autoral no novo caminho `check_compact_pinning.py` cai no `FALLBACK` do upgrader e é sobrescrito mesmo sob conflito `refuse` (`scripts/upgrade.sh:1620-1667`). A condição 64 descreve corretamente essa mudança de posse.
+- Fail direction: permanecem declarados o nome de plano instruction-adjacent, os timeouts que eliminam toda a saída PostCompact, os falsos `ABSENT` — inclusive o deslocamento de um segundo em `.claude/hooks/SessionEnd.py:829` — e o fallback de `plan_id` para `CLAUDE_SESSION_ID`. O novo pinning só emite contexto advisory e seu fail-open está coerente com esse canal (`.claude/hooks/check_compact_pinning.py:82-110`).
+- Delivery: os stores e a família de auditoria passam a escrever fora do checkout, sob a raiz runtime; colisões, symlinks e objetos preexistentes estão descritos pelas condições 27, 28, 65 e 68. Não encontrei outra escrita ou reivindicação de posse neste payload.
+- Claims: as inexatidões existentes estão declaradas, incluindo “Cheap and bounded” (`check_precompact_continuity.py:634-641`), o modelo registrado como política em vez de observação (`audit_log.py:904-930`) e o filelock incorreto do SessionEnd (`SessionEnd.py:322-340`).
+- Publicação: `VERSION` e `npm/package.json` concordam em `1.4.0`; não há string rc/GA conflitante nas adições deste payload. Parsing Python 3.9, verificação stdlib-only e `git diff --check` passaram.
+
+VERDICT: GO-WITH-CONDITIONS — As condições aplicáveis descrevem honestamente o código e os riscos do upgrade copy-mode; não há P0 nem novo P1, mas os known-open assinados continuam exigindo as mitigações declaradas até a cura em 1.4.1.

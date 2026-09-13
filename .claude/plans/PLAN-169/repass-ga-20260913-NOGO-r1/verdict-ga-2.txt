@@ -1,0 +1,56 @@
+O limiar de NO-GO não foi atingido: não encontrei P0 nem condição declarada falsa. O SHA-256 das condições confere (`f1e21784…a49904`), e os três blobs deste payload são idênticos aos da rc.1.
+
+As condições aplicáveis — 1, 5–14, 24, 31, 33–35, 42, 45, 47–48, 56, 60–64, 73–76, 81–82 e 84 — descrevem honestamente o código. As condições 3 e 7 são específicas de link mode, fora da coorte copy-mode declarada.
+
+Evidência positiva:
+
+- A tabela contém seis rotas válidas em `scripts/delivery-routes.tsv:23-29`; todas as fontes existem como arquivos regulares.
+- Transform não renderizável agora propaga `upgrade_succeeded:false`, banner INCOMPLETE e rc 3 em `scripts/upgrade.sh:4438-4441`, `5142-5154`, `5755-5811` — condição 1 verdadeira.
+- Handle finalizado em hífen ou com hífens consecutivos é recusado por `scripts/_framework_manifest_set.sh:922-933` — condição 9 verdadeira.
+- Versões executáveis convergem em `1.4.0`; `npm/package.json:9-12` inclui todo `scripts/`, e o staging publica a tabela em `.github/workflows/npm-publish.yml:336-339`.
+- Validações: route/manifest 131/131; E2E de escrita 325/325; `bash -n`, `git diff --check`, version drift, claims e AGENTS freshness passaram.
+
+## Achados confirmados no envelope
+
+1. **SEVERITY: P1 annex — condições 42 e 64; known-open, cura em 1.4.1.**  
+   **FILE:LINE:** `scripts/upgrade.sh:4951-4992`, `scripts/upgrade.sh:1620-1667`.  
+   **Falha concreta:** um `docs/rotation-log.md` autoral, sem registro v1.3.0 mas byte-idêntico a uma geração histórica, é classificado como “pristine prior generation”, substituído e registrado como framework-owned. Da mesma forma, um arquivo autoral ocupando caminho novo da v1.4.0 entra em `FALLBACK` e é sobrescrito mesmo com `--on-conflict=refuse`. Doctor/uninstall passam a consumir essa posse fabricada.  
+   **Correção mínima:** exigir evidência anterior de entrega; caminho novo já ocupado e sem registro deve ser `CONFLICT`.
+
+2. **SEVERITY: P1 annex — condições 8, 34, 45 e 60; known-open, cura em 1.4.1.**  
+   **FILE:LINE:** `scripts/_framework_manifest_set.sh:1311-1338`, `scripts/install.sh:1804-1843`, `scripts/install.sh:3634-3697`.  
+   **Falha concreta:** tabela ausente/corrompida ou fonte recusada/ausente produz `SKIP`; o gerador recusa o manifesto mas retorna 0, e o install ainda grava sucesso, anuncia “Install complete” e sai 0. O alvo fica parcialmente entregue e sem proveniência; uninstall depois recusa ou não conhece os arquivos.  
+   **Correção mínima:** validar tabela, conjunto de rotas e fontes antes da primeira escrita; qualquer falha deve gravar `install_succeeded:false` e sair não zero.
+
+3. **SEVERITY: P1 annex — condições 33, 47, 48 e 73; known-open, cura em 1.4.1.**  
+   **FILE:LINE:** `scripts/install.sh:496-497`, `705-706`, `1334-1345`, `1453-1474`, `2401-2410`, `2463-2498`.  
+   **Falha concreta:** `.claude/dispatcher` symlinkado conduz os três `cp` para fora do alvo; `TARGET/state` symlinkado conduz `mkdir/chmod` de `mcp_client_secrets`; o tempfile previsível do deny-baseline pode escrever através de symlink; `--profile` com `..` permite travessia lexical. O dispatcher também sobrescreve edições do adopter em re-run.  
+   **Correção mínima:** validar cada segmento de profile e passar toda escrita por confinamento, `nlink`, staging exclusivo e rename atômico antes de qualquer mutação.
+
+4. **SEVERITY: P1 annex — condições 5, 61, 75 e 81; known-open, cura em 1.4.1.**  
+   **FILE:LINE:** `scripts/install.sh:1913-1925`, `2046-2053`, `3099-3101`, `3343-3346`; `scripts/_framework_manifest_set.sh:158-195`, `251-273`, `311-326`.  
+   **Falha concreta:** igualdade de bytes registra arquivo pré-existente como entrega; qualquer linha terminada em dois espaços mais `.github/CODEOWNERS` serve como proveniência, mesmo com digest inválido; a enumeração percorre árvores do alvo e adota arquivos autorais; `FMS_*` herdada pode gravar o hash errado e causar sobrescrita no upgrade seguinte.  
+   **Correção mínima:** manifesto derivado de ledger de escritas reais, validação total antes do uso e inicialização explícita de todos os `FMS_*`.
+
+5. **SEVERITY: P1 annex — condições 48, 63, 74 e 84; known-open, cura em 1.4.1.**  
+   **FILE:LINE:** `scripts/install.sh:11`, `163`, `1453-1474`, `2824-2906`, `3021-3059`, `3592-3617`; `templates/codex/hooks.json:5-24`.  
+   **Falha concreta:** “advisory hooks only” e “re-running won't clobber edited files” são falsos. `user` combinado com Codex instala guards ENFORCED depois da checagem de fronteira, e re-runs substituem dispatcher e placeholders em arquivos autorais.  
+   **Correção mínima:** recusar `user` com harness não-Claude antes da primeira escrita ou tornar os registros ceremony-aware; restringir substituição e refresh a posse comprovada e corrigir os textos.
+
+6. **SEVERITY: P1 annex rc.1 — alcançável no install principal; não é achado novo.**  
+   **FILE:LINE:** `scripts/install.sh:771-800`, `1074-1111`, `1985-2009`, `3619-3638`.  
+   **Falha concreta:** o preflight prova forma/confinamento, não capacidade de staging. Em alvo fresco com `.github/` real porém não gravável e templates já existentes, `.claude/` e `docs/` são instalados antes de o `mktemp` de CODEOWNERS falhar; não há manifesto e o rollback restaura somente `.claude/`.  
+   **Correção mínima:** reservar todos os destinos antes de mutar ou manter rollback de todo o alvo. Até 1.4.1, qualquer install não zero exige restaurar/descartar o alvo inteiro.
+
+## NEW FINDINGS (annex)
+
+Nenhum P1 novo. Os outros anexos da rc.1 permanecem byte-idênticos e não ficaram piores.
+
+## P2 follow-up
+
+- **P2 — condição 62, `scripts/_framework_manifest_set.sh:1161-1245`.** Remover semanticamente uma das seis rotas ainda deixa tabela válida e upgrade rc 0. Fix: pinar conjunto exato ou digest da tabela.
+- **P2 — condição 35, `scripts/install.sh:29-30`, `3630-3631`.** Dry-run promete rc 0, mas uma recusa de destino sai 1. Fix: documentar a exceção.
+- **P2 — condição 56, `scripts/_framework_manifest_set.sh:870-880`, `scripts/install.sh:1074-1105`.** Hard link em destino create-only é recusado embora o writer apenas o preservasse. Fix: preflight consciente da operação.
+- **P2 — residual rc.1, `scripts/install.sh:485-487`, `1950-1969`.** A mensagem ainda chama `/` de delimitador de substituição, embora o renderer atual não use linguagem de substituição. Fix: declarar apenas que team handles não são suportados.
+
+VERDICT: GO-WITH-CONDITIONS — As condições são verdadeiras e operacionalmente suficientes para a coorte maintainer copy-mode somente se aplicadas integralmente; os P1 conhecidos permanecem risco assinado para cura em 1.4.1.

@@ -1,0 +1,23 @@
+# Proveniencia do re-pass do GA v1.4.0 (promocao da v1.4.0-rc.1) - PLAN-169 - 7 partes
+- Base: v1.3.0 (ec0543b615c4621e259a409e9eace951539a6632 -> d789721c2fd4a11c36c87eda0e1118eab59092e4) .. Candidato: 0205020b6e0df12c268aef32a41431352675b27d (PRE-tag GA; arvore da rc.1 + cura de calendario + kit do GA)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- Caminhos pessoais (/Users/<dono>, /home/<dono>, -Users-<dono>) substituidos por <user> no diff antes do payload e em transcript/verdict depois do codex (cura 1 do gate de contaminacao; rodada 17)
+- codex: 0.147.0 / aarch64-apple-darwin / payload 19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+- modelo: gpt-5.6-sol (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-ga.reviewed.md sha256 f1e217845289401ee520acb1e588d76a0e824b3092ab1069cacf543e20a49904
+- Data: 2026-09-13T13:39:39Z
+- parte 1 (upgrade.sh — o caminho que roda na arvore do adopter): VERDICT: GO-WITH-CONDITIONS — As condições aplicáveis são verdadeiras e suficientes como barreiras operacionais sob a regra deste corte, mas esta GA publica os P1 conhecidos como dívida assinada para 1.4.1; isto é evidência advisory, não autorização. [codex rc=0]
+  - payload-ga-1.raw.txt NAO commitado; pin sha256: 2fff182e70a203347d2fa043ea8de56d7cd9d316997a1d4e4751982a4b383880
+- parte 2 (install.sh + o set de manifesto + a tabela de rotas de entrega): VERDICT: GO-WITH-CONDITIONS — As condições são verdadeiras e operacionalmente suficientes para a coorte maintainer copy-mode somente se aplicadas integralmente; os P1 conhecidos permanecem risco assinado para cura em 1.4.1. [codex rc=0]
+  - payload-ga-2.raw.txt NAO commitado; pin sha256: a394e8db5bb3b982a6bbfd236c419f6957b999d85832109e6c7c2c9f936d919f
+- parte 3 (doctor.sh + uninstall.sh + templates/** entregues): VERDICT: NO-GO — Declared condition 63 is false: the npm-shipped profile catalog still promises an advisory-only user hook surface while the default v1.3.0 user-upgrade path installs an enabled blocking hook. [codex rc=0]
+  - payload-ga-3.raw.txt NAO commitado; pin sha256: 073a294cd4c0ab4efb37b4c71639ecaa2dcff36703074f2122ba65131015bc25
+- parte 4 (SPEC/** + npm README + CHANGELOG + settings.json + smoke-install.yml (CI do framework; demais workflows: parte 7)): VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; the two new P1 findings and the carried rc.1 annex remain signed known-open work for 1.4.1. [codex rc=0]
+  - payload-ga-4.raw.txt NAO commitado; pin sha256: b48211afaba9f449aea6905f5303168e7f90b41a0ee9554ef4a4699b331921c3
+- parte 5 (hooks da familia de continuidade de compaction (PostCompact: parte 7)): VERDICT: GO-WITH-CONDITIONS — As condições aplicáveis descrevem honestamente o código e os riscos do upgrade copy-mode; não há P0 nem novo P1, mas os known-open assinados continuam exigindo as mitigações declaradas até a cura em 1.4.1. [codex rc=0]
+  - payload-ga-5.raw.txt NAO commitado; pin sha256: 3403484f70e88da7fb33e968f992aa48edb470b5d344bcde548ccad57fce63ca
+- parte 6 (nucleo de cadeia e auditoria em _lib/ (resolvedor, store de estado e isolamento de teste: parte 7)): VERDICT: GO-WITH-CONDITIONS [codex rc=0]
+  - payload-ga-6.raw.txt NAO commitado; pin sha256: 06e451344c384069fd7a410dbd8201fad967d5427793da5c3d0f9896dd649bb5
+- parte 7 (PostCompact + resolvedor por projeto + store de estado + isolamento de teste + CI do framework exceto smoke-install.yml (parte aberta na rodada 11; smoke-install.yml foi para a parte 4 na rodada 12 pelo teto do redator)): VERDICT: GO-WITH-CONDITIONS — Nenhuma condição declarada aplicável é falsa e nenhum P0 foi encontrado; a promoção só é coerente no escopo copy-mode com as condições nomeadas e os anexos assinados tratados como known-open para 1.4.1. [codex rc=0]
+  - payload-ga-7.raw.txt NAO commitado; pin sha256: 80ae14d6fcf123bda5d794f964b369f456809ba00f740ad02c5f2922007a6560
+RUNNER-OVERALL: rc=1

@@ -1,0 +1,36 @@
+Resultado consultivo: nenhuma condição declarada aplicável é falsa e nenhum P0 foi encontrado.
+
+### Condições e blast radius
+
+Aplicam-se diretamente as condições 19, 21, 23, 24, 27–30, 41, 54, 64–68, 70, 72, 78, 79 e 83; à entrega, também 45, 47, 76 e 81. Elas descrevem honestamente o código.
+
+- Após o upgrade, auditoria, chave e salt passam do diretório literal legado para o slug nativo, sem migração automática (`audit_emit.py:2353-2364`, `audit_hmac.py:247-252`, `injection_salt.py:113-122`, `spool_writer.py:204-231`). O resultado concreto é uma cadeia nova sem o histórico v1.3.0 e stores antigos invisíveis, conforme condição 27.
+
+- A primeira criação concorrente do salt ainda pode produzir valores divergentes (`injection_salt.py:203-215,275-293`), e a chave HMAC permanece sujeita ao duplo `exists()` seguido de `os.replace()` (`audit_hmac.py:406-429`). Condições 21 e 68 são necessárias e verdadeiras.
+
+- Overrides podem dividir log, sidecars, salt e spool (`audit_hmac.py:189-244`; `spool_writer.py:204-310`), conforme condições 24 e 29.
+
+- A nova `ledger_provenance.py` pode colidir com arquivo homônimo do adopter durante o upgrade, conforme condição 64. O gate principal falha fechado quando o scanner falta ou retorna resultado ilegível (`ledger_provenance.py:749-808`); a aceitação de varredura parcial permanece exatamente como condição 54.
+
+- Escritas fora do checkout ocorrem no diretório runtime por projeto por desenho. A posse de nomes preexistentes e travessia de symlinks permanecem condicionadas pelos itens 21, 28, 65 e 68. Não encontrei escape adicional não declarado.
+
+- Este payload não contém versão npm ou versão do framework. Os cinco arquivos são byte-idênticos à rc.1; portanto não há divergência de versão nem irreversibilidade de publicação específica desta parte.
+
+O P1 do anexo rc.1 sobre morte do processo entre a publicação do `.salt` e o marker/event continua conhecido, não curado e não piorou; permanece coberto pelo cabeçalho GA como known-open para 1.4.1.
+
+### NEW FINDINGS (annex)
+
+Nenhum P1 novo.
+
+### P2 follow-up
+
+SEVERITY: P2 follow-up  
+FILE:LINE: `.claude/hooks/_lib/audit_emit.py:8911-8914,8974-8977`  
+Concrete failure scenario: os comentários entregues apresentam SessionStart e UserPromptSubmit como produtores ativos de `context_pressure_observed`. O único produtor real é PreCompact (`.claude/hooks/check_precompact_continuity.py:1091-1095`); a própria SPEC declara os outros dois valores reservados (`SPEC/v1/audit-log.schema.md:499`). Um operador pode interpretar a ausência dessas linhas como ausência de pressão, quando não existe instrumento nesses canais.  
+Minimal fix: dizer nos dois comentários que apenas PreCompact possui produtor e que `sessionstart_compact`/`userpromptsubmit` são valores reservados.
+
+Verificação: hash do envelope confere (`f1e217…a49904`); HEAD é `0205020…75b27d`; checkout limpo; nenhuma diferença nesses arquivos contra `v1.4.0-rc.1`; gates de stdlib, claims, `AGENTS.md`, parse Python 3.9 e `diff --check` do payload passaram. Testes focados: 276 não-seriais e 8 seriais aprovados.
+
+Pela regra explícita deste corte, a promoção é aceitável somente com todas as condições operacionais e anexos known-open mantidos para cura em 1.4.1; esta conclusão é evidência consultiva, não autorização.
+
+VERDICT: GO-WITH-CONDITIONS

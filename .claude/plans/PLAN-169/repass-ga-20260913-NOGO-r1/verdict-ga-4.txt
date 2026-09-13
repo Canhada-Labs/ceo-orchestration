@@ -1,0 +1,43 @@
+No P0 and no declared condition is false. Under the cut rule, this is GO-WITH-CONDITIONS with two new P1 annex findings. This remains advisory evidence, not authorization.
+
+### Adopter blast radius
+
+A v1.3.0 copy-mode upgrade can still:
+
+- Open empty plan stores, reset cost accounting, and lose expired-credential warnings because legacy state is not migrated: conditions 27, 39, 40.
+- Claim or overwrite adopter-authored files through historical equality, new-path collisions, dispatcher/agent copying, or target-tree manifest enumeration: 42, 48, 61, 64, 75.
+- Write outside the target through backup, schema/hook, restore, state-store, profile, and harness seams: 43, 47, 50, 65, 69, 73, 82.
+- Report success after an incomplete delivery, or abort after earlier mutations: 45, 59, 60, 76.
+- Change the `user` posture by adding maintainer leaves or blocking hooks: 55, 63, 84.
+- Produce false audit-chain breaks or unverifiable initial events under concurrent writers: 67, 68.
+
+Condition 3 is honest but non-operative for copy mode. I found no additional undeclared fail-direction or delivery defect in this payload.
+
+### NEW FINDINGS (annex)
+
+1. **SEVERITY: P1 annex — signed known-open, cure in 1.4.1**  
+   **FILE:LINE:** `VERSION:1`; `npm/package.json:3,9-18`; `SPEC/v1/README.md:3,104-108`; `SPEC/v1/mcp-server.schema.md:388-392`; `SPEC/v1/soc2-control-map.schema.md:327-330`.  
+   **Concrete failure scenario:** The diff promotes the executable and npm package to `1.4.0`, and the package explicitly includes `SPEC/`. The published compliance contract nevertheless identifies itself as `v1.9.1`, while asserting that it is aligned with root `VERSION`; two other current-version references still say `1.4.0-rc.1`. An adopter or compatibility tool consuming the immutable 1.4.0 bundle receives three contradictory framework identities. This is a release-bump omission rather than a newly added SPEC line, but publication makes it a new irreversible 1.4.0 artifact. The executable/package/plugin identities themselves agree, so this is not a P0 binary-version split.  
+   **Minimal fix:** Change the public SPEC status and current-framework references to `1.4.0`, or remove volatile mirrors and point only to `VERSION`. Add these declaration sites to the release-bump and version-drift census.
+
+2. **SEVERITY: P1 annex — signed known-open, cure in 1.4.1**  
+   **FILE:LINE:** `CHANGELOG.md:30-33`, `CHANGELOG.md:110-111`, `CHANGELOG.md:207-208`, `CHANGELOG.md:326-331`; `npm/README.md:98-102`.  
+   **Concrete failure scenario:** Promotion changes the truth value of this unchanged rc.1 prose. The GA changelog still calls the artifact an rc/pre-release, says every P1 is a mandatory cure before GA, labels automatic migration a “pre-GA follow-up,” and explicitly says the seven-skill baseline migration “lands before GA.” It did not land. A v1.3.0 copy-mode adopter can therefore rely on the GA changelog, upgrade normally, and retain the seven VETO-bearing skills as `name-only`, exactly as condition 2 warns. The GA envelope correctly reinterprets these promises as known-open, but the shipped adopter-facing documents do not.  
+   **Minimal fix:** Replace every rc/pre-GA future-tense statement with “known-open in 1.4.0; planned for 1.4.1,” and state the required v1.4.0 operational mitigation directly in the npm README and changelog.
+
+The prior part-4 P1 annex concerning speed/cost guarantees in `smoke-install.yml` is unchanged, not worse, and is therefore carried without being re-reported.
+
+### P2 follow-up
+
+1. **SEVERITY: P2 follow-up**  
+   **FILE:LINE:** `CHANGELOG.md:18`.  
+   **Concrete failure scenario:** The GA entry is dated `2026-09-07`, although rc.1 was cut on September 10 and this GA candidate is dated September 13. Published release chronology would place GA before its mandatory RC hold.  
+   **Minimal fix:** Set the entry date to the actual GA publication date.
+
+### Declared-condition judgment
+
+The main decision-driving conditions remain 2, 27, 39, 40, 42, 43, 45, 47–50, 55, 59–61, 63–65, 67–70, 73–79, 81, 82, and 84. Payload-specific residuals 4, 5, 8, 13, 14, 17–24, 26, 28–30, 33–38, 41, 44, 46, 51–54, 56–58, 62, 66, 69–72, 77, 80, and 83 remain consistent with the candidate.
+
+The reviewed conditions match SHA-256 `f1e217845289401ee520acb1e588d76a0e824b3092ab1069cacf543e20a49904`. HEAD is the declared candidate, and the rc.1→GA delta contains only `.claude/plans/**`. AGENTS freshness, audit-registry parity, settings-user derivation, scoped diff checks, JSON/YAML parsing, documented counts, workflow wiring, and executable/package version parity passed.
+
+VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; the two new P1 findings and the carried rc.1 annex remain signed known-open work for 1.4.1.
