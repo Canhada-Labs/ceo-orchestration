@@ -8,6 +8,7 @@ reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]
+related_commits: [4c6888d14048, 1e2f657fe796, 184a1a2fe60f, 14892ab04be3, 00839a6505f2, 3b4300ab02fa, ef4c1b3b3c45, 690c3e2194c4, 45877e49d08a, d1598acfd4bf]
 budget_tokens: 400-700k (W0 censo = ~6 lotes de ~10 hooks ≈ metade do custo; firmado S302e)
 budget_sessions: 5-8 (W0 3-4; W1/W1b-d 1-2; W4-W5 1-2)
 context_risk: medium

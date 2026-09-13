@@ -8,6 +8,7 @@ reviewed_by: "Owner — autorizacao explicita em chat (S315, 2026-08-20): 'se ja
 created: 2026-08-20
 owner: CEO
 depends_on: [PLAN-167, PLAN-168]
+related_commits: [20ed8dd4dbd7, 4f750f07d0aa, ed4d1cf6f6d7, bc357070bc3f, b6de7cf36448, aaf32c750d51, 6304f6674a31, 738007ea47ab, 3bc36383714f, b7dad8363868, 6160578c0518, 5ceae291b74b]
 budget_tokens: 210-400k (W0 60-110k; W1 90-150k — re-orcado pela W0-US4 §7, cujo piso de re-baseline de ownership e 40-70k em 2-4 iteracoes; W2 40-90k; W3 20-40k; W4 piso nomeado ao fechar a W0)
 budget_sessions: 3-5
 context_risk: medium

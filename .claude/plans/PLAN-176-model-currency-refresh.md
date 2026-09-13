@@ -7,6 +7,7 @@ reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]
+related_commits: [72910e933bfb, a6629d0322f7, d414a6a18fb1, 5fcf8617a6f3, 7c331b4f77b8, 88a30b11fe33, c03b1eda6727]
 budget_tokens: 1.09-1.54M
 budget_sessions: 6-8
 budget_usd_estimate: "9.8-13.9 USD"
