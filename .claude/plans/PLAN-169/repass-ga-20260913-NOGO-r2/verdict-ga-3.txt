@@ -1,0 +1,57 @@
+Advisory disposition: **APPROVE under the stated cut rule**, not an authorization. HEAD matches `6344f6e45c2f5d1bd9c85f9740864ea78b000f1d`; the conditions hash matches `5fb2bc...ebe0`; payload bytes are unchanged from rc.1.
+
+No P0 and no false declared condition were found.
+
+### Adopter blast radius
+
+For a v1.3.0 copy-mode upgrade, the concrete mainline risks remain accurately declared:
+
+- Conditions 55 and 63: a `user` profile gains maintainer settings and potentially blocking hooks unless the documented `--no-settings-migrate` and, where required, `--no-settings-merge` controls are used.
+- Conditions 5, 42, 64 and 75: adopter-authored files can become framework-owned through equality, historical equality, new-path collision, or target-tree enumeration. Subsequent upgrades may overwrite them, `doctor --repair` treats them as drift, and uninstall may delete them.
+- Conditions 43, 49, 50, 57 and 69 accurately describe the remaining doctor/uninstall backup, empty-directory, restore and path-safety limitations.
+- Condition 3 is true: v1.3.0 `LINK` records are refused and the manifest retained; copy-mode records are unaffected.
+
+These conditions are sufficient only for the narrow declared maintainer/copy-mode cohort when its preflight procedure is followed exactly. They are not a general claim that arbitrary npm adopters can upgrade safely.
+
+No scoped release-version disagreement was found.
+
+## NEW FINDINGS (annex)
+
+### 1. P1 annex — APPROVE trailer matching accepts attacker-controlled prefixes
+
+**FILE:LINE:** [templates/codex/pre-push-review-gate.sh:169](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/templates/codex/pre-push-review-gate.sh:169>), [templates/grok/pre-push-review-gate.sh:266](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/templates/grok/pre-push-review-gate.sh:266>)
+
+**Concrete failure scenario:** Both gates run:
+
+```sh
+grep -Eiq '^Pair-Rail-Reviewed:[[:space:]]*APPROVE'
+```
+
+This accepts `Pair-Rail-Reviewed: APPROVED`, `Pair-Rail-Reviewed: APPROVE-WITHOUT-REVIEW`, mixed-case variants, and matching message-body lines. A canonical commit containing such text is treated as reviewed and clears the Grok enforcement gate without an exact `APPROVE` verdict. Direct probes confirmed all those prefixes are accepted.
+
+**Minimal fix:** Parse the trailer block with `git interpret-trailers --parse`; require exactly one case-sensitive `Pair-Rail-Reviewed` value equal to `APPROVE`, and reject duplicate or conflicting values. Add negative tests for prefixes, body lines, case changes and duplicate trailers.
+
+This does not falsify condition 26—Codex’s template is already declared a reminder rather than a security gate—or condition 82, which excludes Grok upgrades in this release. It remains a published-template P1.
+
+### 2. P1 annex — merge commits can carry canonical changes without review
+
+**FILE:LINE:** [templates/codex/pre-push-review-gate.sh:161](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/templates/codex/pre-push-review-gate.sh:161>), [templates/grok/pre-push-review-gate.sh:225](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/templates/grok/pre-push-review-gate.sh:225>), [templates/grok/pre-push-review-gate.sh:334](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/templates/grok/pre-push-review-gate.sh:334>)
+
+**Concrete failure scenario:** The diff adds `--root` to cure root-commit blindness but still calls `git diff-tree` without `-m`, `-c` or `--cc`. Plain `diff-tree` emits no paths for merge commits. If both parents are already remote-reachable and the new merge resolution changes a canonical file, the range can contain only that merge; both the aggregate classifier and per-commit check see zero canonical paths and allow the push without review.
+
+Measured against two merge commits in this candidate:
+
+- `d2d46f…`: plain command returned 0 paths; `-m` returned 121.
+- `120b70…`: plain command returned 0 paths; `-m` returned 3,286.
+
+**Minimal fix:** Enumerate merge diffs explicitly—safest minimal change is `git diff-tree -m --root ...` at every collector, followed by deduplication—and add a regression where a merge-only conflict resolution changes a canonical file.
+
+### P2 follow-up
+
+No new P2 was found. Previously signed rc.1 annex findings were neither worse nor newly reachable on the compliant mainline copy-mode upgrade path.
+
+Verification passed: `bash -n`, ShellCheck, actionlint, JSON/template derivation, diff/claims/contamination checks, 44/44 doctor tests, 113/113 route tests, 325/325 installer-write-safety cases and 11/11 existing gate parity cases. The latter suite lacks the malformed-trailer and merge-only cases above.
+
+The two undeclared P1s must be added to the signed GA annex as known-open items for 1.4.1.
+
+VERDICT: GO-WITH-CONDITIONS

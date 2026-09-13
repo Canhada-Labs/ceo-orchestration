@@ -1,0 +1,39 @@
+No P0 and no declared condition is false. This is advisory evidence, not authorization.
+
+The most directly applicable conditions—1, 5–14, 24, 31, 33–35, 42, 45, 47–48, 56, 60–64, 73–76, 81–82 and 84—accurately describe the candidate. Conditions 3 and 7 are link-mode residuals and do not trigger for the stated v1.3.0 copy-mode cohort. Taken literally as an operational runbook, the hard conditions are sufficient for that cohort; they are not guarantees enforced by the scripts.
+
+## Adopter-facing findings
+
+- **P1 signed known-open — condition 42 — [scripts/upgrade.sh:4951](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/upgrade.sh:4951).** A v1.3.0 adopter-authored `docs/rotation-log.md` byte-identical to a historical framework generation has no manifest provenance, but is classified as “pristine prior generation,” replaced, and registered as framework-owned at lines 4979–4992. A later repair can overwrite it and uninstall can delete it. Minimal fix: require prior delivery evidence, not historical byte equality, before changing ownership.
+
+- **P1 signed known-open — condition 64 — [scripts/upgrade.sh:1620](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/upgrade.sh:1620).** If an adopter already owns a path newly introduced by v1.4.0, the missing baseline produces `FALLBACK`; lines 1660–1667 overwrite it even under `--on-conflict=refuse`. Minimal fix: classify “new framework source + existing unrecorded target” as `CONFLICT`.
+
+- **P1 signed known-open — conditions 8, 34 and 45 — [scripts/_framework_manifest_set.sh:1333](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/_framework_manifest_set.sh:1333), [scripts/install.sh:3634](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/install.sh:3634).** An unusable route table makes the manifest writer report an error but return success; a missing/non-regular route source is skipped. The installer can then write successful install-state and print “Install complete” without a usable provenance manifest. Minimal fix: validate the table and every required source before the first target write, then persist failure and exit nonzero on any rejection.
+
+- **P1 signed known-open — condition 73 — [scripts/install.sh:496](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/install.sh:496), [scripts/install.sh:1334](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/install.sh:1334).** `--profile` is split without validating that each component is a single safe name. A value containing `..` can make `install_one` resolve a destination outside the target. Minimal fix: validate every component against a closed single-segment grammar before any mutation.
+
+- **P1 annex carried from rc.1; mainline-install reachable — [scripts/install.sh:771](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/install.sh:771), [scripts/install.sh:1994](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/install.sh:1994), [scripts/install.sh:3630](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/install.sh:3630).** Reproduced on a fresh target with an unwritable `.github/`: `.claude/` and `docs/BRANCH-PROTECTION.md` were installed before CODEOWNERS staging failed. The run exited 1, but left the partial tree with neither manifest nor install-state because rollback covers only a previously backed-up `.claude/`. Minimal fix for 1.4.1: reserve all staging destinations before mutation or maintain a rollback ledger covering every written surface. Operationally, any nonzero install must cause the whole target to be restored or discarded.
+
+The other two rc.1 P1 annexes—unsupported route transforms and the prohibited timing claim—are unchanged, not worse, and not reachable on the clean-checkout mainline assumed by the envelope, so they are not re-reported.
+
+## NEW FINDINGS (annex)
+
+None.
+
+## P2 follow-up
+
+- **P2 — [scripts/_framework_manifest_set.sh:895](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/_framework_manifest_set.sh:895).** The comment claims equivalence to a regex that accepts `owner-` and `a--b`, while the implementation at lines 923–933 correctly rejects both. A future reader porting the documented regex would recreate the cured grammar split. Minimal fix: document an actually equivalent expression, including the 39-character bound, terminal alphanumeric requirement and prohibition on consecutive hyphens.
+
+Declared P2 conditions 35, 56 and 62 also remain accurate and unchanged.
+
+## Verification evidence
+
+- Route/manifest tests: 131 passed, 0 failed.
+- Installer write-safety end-to-end: 325 passed, 0 failed.
+- Historical v1.3.0 adopter upgrade: 164 passed, 0 failed.
+- Baseline-manifest suite: 33 passed, one explicitly declared known-open C.6.2 failure.
+- Shell syntax, diff hygiene, AGENTS freshness and hardcoded-count checks passed.
+- `v1.4.0-rc.1..HEAD` changes only `.claude/plans/**`; all three reviewed shipped blobs are byte-identical to rc.1.
+- `VERSION`, Python package metadata and `npm/package.json` all say `1.4.0`. A reproduction of the publish workflow’s staging produced a 1,371-entry npm package containing `install.sh`, `_framework_manifest_set.sh` and `delivery-routes.tsv`; no irreversible version-string disagreement was found.
+
+VERDICT: GO-WITH-CONDITIONS — No P0 or false declared condition was found; promotion remains dependent on the stated copy-mode preflights and the retained rc.1 P1 annex as signed known-open work for 1.4.1.

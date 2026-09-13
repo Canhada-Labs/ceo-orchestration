@@ -1,0 +1,20 @@
+Resultado consultivo: não encontrei P0 nem condição declarada falsa neste payload.
+
+O impacto concreto no upgrade copy-mode v1.3.0 é corretamente declarado:
+
+- O estado ativo passa para o slug nativo, deixando stores antigos invisíveis sem a migração/escape da condição 27.
+- Um arquivo autoral chamado `.claude/hooks/check_compact_pinning.py` é sobrescrito e reclamado pelo framework pelo ramo `FALLBACK` em `scripts/upgrade.sh:1660-1667` — condição 64.
+- Sob contenção do store, o PostCompact pode expirar antes de renderizar constraints ou pointers (`check_postcompact_reinject.py:717-720`) — condição 19.
+- O ajuste `start_ts += 1.0` em `SessionEnd.py:828-829` pode produzir `ABSENT` falso no primeiro segundo — condição 20.
+- A falta de fallback plan-scope → session-scope em `check_postcompact_reinject.py:389-402` confirma a condição 70.
+- A computação HMAC anterior ao lock em `audit_log.py:1258-1278` confirma a condição 67.
+
+As condições aplicáveis — 17, 18, 19, 20, 22, 23, 24, 27, 28, 29, 30, 38, 47, 53, 64, 65, 66, 67, 68, 70, 71, 72 e 78 — descrevem fielmente o código e são suficientes apenas como GA condicional, com as mitigações operacionais cumpridas.
+
+NEW FINDINGS (annex): nenhum P1 novo. Nenhum anexo da rc.1 piorou ou passou a ser acionado incondicionalmente pelo upgrade principal.
+
+P2 follow-up: nenhum P2 novo.
+
+Verificações adicionais: condições com SHA-256 correto; cinco arquivos entregues idênticos à rc.1; nenhuma alteração entregue após o hold; `VERSION`, npm e manifests concordam em `1.4.0`; diff limpo; sintaxe Python 3.9 e gate stdlib-only aprovados.
+
+VERDICT: GO-WITH-CONDITIONS — Nenhuma condição aplicável é falsa e nenhum P0 foi encontrado; as condições enumeradas permanecem obrigatórias para o upgrade copy-mode.

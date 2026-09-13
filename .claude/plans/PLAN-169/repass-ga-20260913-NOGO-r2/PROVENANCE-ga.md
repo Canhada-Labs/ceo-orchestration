@@ -1,0 +1,23 @@
+# Proveniencia do re-pass do GA v1.4.0 (promocao da v1.4.0-rc.1) - PLAN-169 - 7 partes
+- Base: v1.3.0 (ec0543b615c4621e259a409e9eace951539a6632 -> d789721c2fd4a11c36c87eda0e1118eab59092e4) .. Candidato: 6344f6e45c2f5d1bd9c85f9740864ea78b000f1d (PRE-tag GA; arvore da rc.1 + cura de calendario + kit do GA)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- Caminhos pessoais (/Users/<dono>, /home/<dono>, -Users-<dono>) substituidos por <user> no diff antes do payload e em transcript/verdict depois do codex (cura 1 do gate de contaminacao; rodada 17)
+- codex: 0.147.0 / aarch64-apple-darwin / payload 19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37
+- modelo: gpt-5.6-sol (explicito via -m; a config global pede gpt-6-astra, fora do alcance da CLI pinada)
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-ga.reviewed.md sha256 5fb2bcda4ec6bdc208742f37f231b19695467cbcfa5c6bfdf6945aabcd5aebe0
+- Data: 2026-09-13T16:44:21Z
+- parte 1 (upgrade.sh — o caminho que roda na arvore do adopter): VERDICT: NO-GO — A condição declarada 63 é falsa contra o diff entregue; pela regra deste corte, o envelope precisa ser corrigido, re-hashado e submetido a novo re-pass antes da GA. [codex rc=0]
+  - payload-ga-1.raw.txt NAO commitado; pin sha256: 7db815c90da017f03dbd713d605264944f4262ffb633aeae1a364c88f40c1a9c
+- parte 2 (install.sh + o set de manifesto + a tabela de rotas de entrega): VERDICT: GO-WITH-CONDITIONS — No P0 or false declared condition was found; promotion remains dependent on the stated copy-mode preflights and the retained rc.1 P1 annex as signed known-open work for 1.4.1. [codex rc=0]
+  - payload-ga-2.raw.txt NAO commitado; pin sha256: a8a769de96e6d01355420a98d4d7e68b403d869d5aa98f722f0bcd0be6ec1096
+- parte 3 (doctor.sh + uninstall.sh + templates/** entregues): VERDICT: GO-WITH-CONDITIONS [codex rc=0]
+  - payload-ga-3.raw.txt NAO commitado; pin sha256: 4df2c9356f11ea1e499d912398bb71fe46ca7dfee466ab9ee4231d6b8a6b2133
+- parte 4 (SPEC/** + npm README + CHANGELOG + settings.json + smoke-install.yml (CI do framework; demais workflows: parte 7)): VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; add the two P1 findings to the signed 1.4.1 known-open annex. [codex rc=0]
+  - payload-ga-4.raw.txt NAO commitado; pin sha256: b3895f2ef7ae008649c0c335591a879c35c8ac7ae293a4fb145d0d29adf79369
+- parte 5 (hooks da familia de continuidade de compaction (PostCompact: parte 7)): VERDICT: GO-WITH-CONDITIONS — Nenhuma condição aplicável é falsa e nenhum P0 foi encontrado; as condições enumeradas permanecem obrigatórias para o upgrade copy-mode. [codex rc=0]
+  - payload-ga-5.raw.txt NAO commitado; pin sha256: f4a0ab95558b90d6056b6238ae4f842cc6375f7eb55cde54648d001ec78a8259
+- parte 6 (nucleo de cadeia e auditoria em _lib/ (resolvedor, store de estado e isolamento de teste: parte 7)): VERDICT: GO-WITH-CONDITIONS [codex rc=0]
+  - payload-ga-6.raw.txt NAO commitado; pin sha256: 3f151524fd360b23a3e2ab5850b3c0104242c3ceeaf9663752d32a98d30c7e5d
+- parte 7 (PostCompact + resolvedor por projeto + store de estado + isolamento de teste + CI do framework exceto smoke-install.yml (parte aberta na rodada 11; smoke-install.yml foi para a parte 4 na rodada 12 pelo teto do redator)): VERDICT: GO-WITH-CONDITIONS — Nenhuma condição declarada aplicável é falsa e nenhum P0 foi encontrado; a promoção é aceitável apenas para copy-mode com todas as condições e anexos tratados como known-open para 1.4.1. [codex rc=0]
+  - payload-ga-7.raw.txt NAO commitado; pin sha256: 6f62dd69a1980ce9b10dd86f6d39102ac80fd3161f407b5f9c3bc418f0277c28
+RUNNER-OVERALL: rc=1

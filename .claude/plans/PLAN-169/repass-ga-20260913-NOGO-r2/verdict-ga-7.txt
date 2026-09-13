@@ -1,0 +1,57 @@
+Resultado consultivo, não autorização: nenhum P0 e nenhuma condição aplicável falsa. As condições **17–24, 27–30, 32, 37–41, 52–53, 65–70, 78–80 e 83** descrevem honestamente o código e são suficientes somente para a coorte v1.3.0 copy-mode, se tratadas como precondições operacionais obrigatórias.
+
+### Condições declaradas confirmadas
+
+- **SEVERITY: P1 annex — condições 27, 39 e 40; known-open, cura em 1.4.1.**  
+  **FILE:LINE:** [state_store.py:115](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/state_store.py:115>), [cost_envelope.py:142](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/cost_envelope.py:142>), [claude.py:375](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/adapters/live/claude.py:375>).  
+  **Falha concreta:** o upgrade muda os namespaces sem migração: plano ativo abre store vazio, custo acumulado volta a zero e credencial anteriormente vencida deixa de bloquear.  
+  **Correção mínima:** migração ou dual-read explícito da raiz legada, dos arquivos de custo e de `credential-rotation.json`.
+
+- **SEVERITY: P1 annex — condições 17, 70 e 78; known-open.**  
+  **FILE:LINE:** [check_postcompact_reinject.py:148](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/check_postcompact_reinject.py:148>), [check_postcompact_reinject.py:290](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/check_postcompact_reinject.py:290>), [check_postcompact_reinject.py:371](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/check_postcompact_reinject.py:371>), [scratchpad_lib.py:205](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/scratchpad_lib.py:205>).  
+  **Falha concreta:** slug de plano instruction-like ainda pode entrar no contexto; payload sem ID permite fallback por `CLAUDE_SESSION_ID`; plano resolvido com store vazio impede leitura do snapshot existente no store da sessão.  
+  **Correção mínima:** não renderizar nomes, proibir resolução ambiental e consultar o store de sessão após miss no store do plano.
+
+- **SEVERITY: P1 annex — condição 19; known-open.**  
+  **FILE:LINE:** [state_store.py:99](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/state_store.py:99>), [check_postcompact_reinject.py:717](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/check_postcompact_reinject.py:717>), [.claude/settings.json:677](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/settings.json:677>).  
+  **Falha concreta:** o read do store pode consumir os mesmos cinco segundos do timeout total; o harness mata o PostCompact antes até das constraints fixas.  
+  **Correção mínima:** timeout interno com folga e emissão de constraints/pointers mesmo quando a leitura do snapshot expira.
+
+- **SEVERITY: P1 annex — condições 28, 65 e 79; known-open.**  
+  **FILE:LINE:** [state_store.py:214](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/state_store.py:214>), [audit_emit.py:9305](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/audit_emit.py:9305>), [test_isolation.py:197](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/test_isolation.py:197>).  
+  **Falha concreta:** SQLite, GC e markers seguem symlinks e podem escrever ou apagar fora da raiz; `CEO_STATE_ROOT` permanece capaz de escapar do isolamento de testes.  
+  **Correção mínima:** operações por descritores `O_NOFOLLOW`, validação de tipo/identidade e neutralização de `CEO_STATE_ROOT` em coleta, fixtures e subprocessos.
+
+- **SEVERITY: P1 annex — condições 21, 23, 29, 67 e 68; known-open.**  
+  **FILE:LINE:** [audit_log.py:1258](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/audit_log.py:1258>), [audit_hmac.py:406](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/audit_hmac.py:406>), [check_postcompact_reinject.py:664](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/check_postcompact_reinject.py:664>).  
+  **Falha concreta:** primeira criação concorrente de chave/salt pode divergir; o predecessor HMAC é calculado fora do lock; overrides dividem a família; eventos de compaction não carregam projeto/sessão.  
+  **Correção mínima:** publicação exclusiva, resolução única da família e seção crítica abrangendo predecessor, HMAC, rotação e append.
+
+### Anexo anterior alcançável
+
+- **SEVERITY: P1 annex já assinado na rc.1 — não é novo.**  
+  **FILE:LINE:** [runtime_paths.py:151](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/runtime_paths.py:151>), [runtime_paths.py:181](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/runtime_paths.py:181>).  
+  **Falha concreta:** o módulo entregue afirma duas leituras ambientais quando o caminho normal executa três e contém alegação de custo proibida pelo contrato do revisor.  
+  **Correção mínima:** remover a contagem e a linguagem de desempenho. O outro P1 anterior desta parte é exclusivo da infraestrutura de testes e não foi repetido.
+
+### NEW FINDINGS (annex)
+
+Nenhum P1 não declarado.
+
+### P2 follow-ups
+
+- **SEVERITY: P2 — condição 30.** [runtime_paths.py:116](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/runtime_paths.py:116>): `/srv/a-b/c` e `/srv/a/b-c` compartilham slug. **Correção:** desambiguar com hash ou validar unicidade.
+
+- **SEVERITY: P2 — condição 53.** [check_postcompact_reinject.py:405](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/check_postcompact_reinject.py:405>): `ts=1e309` causa `OverflowError` e elimina todo o PostCompact. **Correção:** `math.isfinite` e captura de `OverflowError`.
+
+- **SEVERITY: P2 — condições 37, 80 e 83.** [ceremony-lint.yml:6](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.github/workflows/ceremony-lint.yml:6>), [mcp-smoke.yml:56](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.github/workflows/mcp-smoke.yml:56>), [mcp-smoke.yml:314](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.github/workflows/mcp-smoke.yml:314>), [test_isolation.py:296](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/_lib/test_isolation.py:296>): filtros não disparam para históricos/`runtime_paths.py`, o “HMAC integrity” apenas conta JSON parseável, e o detector de isolamento usa substring. **Correção:** completar filtros, chamar `verify_chain()` e usar containment real.
+
+### Publicação e evidência
+
+As superfícies executáveis desta parte concordam em `1.4.0`: `VERSION`, `.framework-version`, `pyproject.toml`, pacote npm e ambos os manifests de plugin. [release.yml:87](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.github/workflows/release.yml:87>) e [npm-publish.yml:270](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.github/workflows/npm-publish.yml:270>) falham fechados em divergência antes da publicação. O P1 de identidade da SPEC já assinado na parte 4 permanece no anexo próprio e não foi duplicado aqui.
+
+O candidato difere da rc.1 em 22 arquivos, todos sob `.claude/plans/**`; o hold excede 24 h. O hash das condições confere com `5fb2bcda4ec6bdc208742f37f231b19695467cbcfa5c6bfdf6945aabcd5aebe0`.
+
+Passaram: 193 testes direcionados, `actionlint`, stdlib-only, contaminação, contagens, AGENTS freshness, ADR chain/index, derivação do template, checksums dos scripts de gate e `git diff --check` restrito ao payload.
+
+VERDICT: GO-WITH-CONDITIONS — Nenhuma condição declarada aplicável é falsa e nenhum P0 foi encontrado; a promoção é aceitável apenas para copy-mode com todas as condições e anexos tratados como known-open para 1.4.1.

@@ -173,16 +173,30 @@ COND_RC1_LINE1_PREFIX = "# Condições do envelope — v1.4.0-rc.1 (pré-release
 BUDGET_MAX_DELTA = 180   # parte 1 do r1: raw 261.739 B contra MAX_RAW_BYTES=262000
 
 COND63_RC1 = (
-    "A classe foi procurada por grep em toda a árvore entregue\n"
+    "Deixaram de dizer «advisory hooks only» (arquivos livres): `README.md`,\n"
+    "    `docs/FAQ.md`, `README.pt-BR.md`, `npm/README.md` e `INSTALL.md`. A classe foi procurada por grep em toda a árvore entregue\n"
     "    (`*.md`, `*.sh`, `*.json`, `*.template`): o ÚNICO texto que ainda diz «advisory hooks only»\n"
     "    é o cabeçalho canônico de `scripts/install.sh` (linha 11) — inexato até a próxima\n"
     "    cerimônia."
 )
+COND63_RC1_TAIL = (
+    " Cura antes do GA: registro não bloqueante no perfil\n"
+    "    `user`, ou o contrato «sem GPG» substituindo «advisory» em todos os textos entregues."
+)
+# r1 (parte 3) e r2 (parte 1) do GA derrubaram esta condicao por ENUMERACAO ("unico",
+# depois "tres"): declarar a CLASSE — a lista conhecida e medida, e qualquer outra
+# ocorrencia pertence a mesma classe e NAO falsifica a condicao.
 COND63_GA = (
-    "Ainda prometem hooks «advisory» ao perfil `user` TRÊS textos\n"
-    "    entregues (o pacote npm inclui `scripts/`): `scripts/install.sh` (linha 11, «advisory hooks\n"
-    "    only») e `scripts/profiles/profiles.json` (linhas 13 e 30, «advisory-only hook surface») —\n"
-    "    inexatos até a próxima cerimônia; a rc.1 declarou só o primeiro (re-pass r1 do GA, parte 3)."
+    "CLASSE inexata: TODO texto entregue que chame o perfil `user`\n"
+    "    de «advisory» (advisory-only, advisory hooks only, advisory user profile/switch). Sítios\n"
+    "    conhecidos (`grep -i` na árvore entregue, 13/09): `scripts/install.sh:11`,\n"
+    "    `scripts/profiles/profiles.json:13,30`, `scripts/upgrade.sh:2822,2838,2944`,\n"
+    "    `scripts/build-plugin.py:7`, `templates/settings/settings.user.json:42,230`, `README.md:144`.\n"
+    "    Qualquer outra ocorrência é da MESMA classe, igualmente inexata, e não é condição nova."
+)
+COND63_GA_TAIL = (
+    " Cura (1.4.1): contrato «sem GPG» no lugar de «advisory» em todos os\n"
+    "    textos entregues, ou registro não bloqueante no perfil `user`."
 )
 COND_RC1_LINE14 = "cerimônia assinada, com controle positivo."
 
@@ -545,6 +559,7 @@ def derive() -> dict:
     # :30 («advisory-only hook surface») tambem, e `scripts/` viaja no pacote
     # npm (`files`). O texto passa a declarar os TRES sitios.
     body = sub(body, COND63_RC1, COND63_GA, label="condicao 63")
+    body = sub(body, COND63_RC1_TAIL, COND63_GA_TAIL, label="condicao 63 cauda")
     cond = COND_HEADER_GA + "\n" + body
     out["repass-ga/CONDITIONS-ga.md"] = cond
 

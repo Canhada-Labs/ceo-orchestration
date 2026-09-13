@@ -1,0 +1,59 @@
+Resultado consultivo: não encontrei P0 nem condição declarada falsa. As condições são suficientes apenas como barreiras operacionais obrigatórias para a coorte maintainer/copy-mode; este não é um upgrade seguro para execução desacompanhada.
+
+### Condições e blast radius
+
+Aplicam-se diretamente as condições 19, 21, 23, 24, 27–30, 41, 54, 64–68, 70, 72, 78, 79 e 83; à entrega, também 45, 47, 76 e 81.
+
+- O upgrade troca o diretório literal legado pelo slug nativo sem migração automática (`audit_emit.py:2353-2364`, `audit_hmac.py:247-252`, `injection_salt.py:97-122`, `spool_writer.py:204-231`). Concretamente, a primeira sessão pós-upgrade abre cadeia, chave, salt e stores novos; o histórico v1.3.0 permanece invisível no diretório legado. A condição 27 descreve isso corretamente.
+- A criação concorrente do salt ainda pode divergir pela janela de arquivo vazio (`injection_salt.py:203-215,275-293`), e a chave HMAC mantém a corrida entre os dois `exists()` e `os.replace()` (`audit_hmac.py:406-429`). Condições 21 e 68 são verdadeiras.
+- Overrides ainda podem dividir log, chave, sidecars, salt e spool; condições 24 e 29 são necessárias.
+- `ledger_provenance.py` é caminho novo e pode substituir arquivo homônimo do adopter, conforme condição 64. Seu matcher rejeita corretamente scanner ausente ou ilegível; a aceitação de varredura parcial continua como condição 54.
+- Escritas runtime fora do checkout são deliberadas. Posse de nomes pré-existentes e travessia de symlinks permanecem limitadas pelas condições 21, 28, 65 e 68.
+- `VERSION`, `npm/package.json` e os manifests do plugin concordam em `1.4.0`. Os cinco arquivos deste payload são byte-idênticos à rc.1; não há divergência de versão específica desta parte.
+
+### Carry-forward da rc.1
+
+**SEVERITY:** P1 annex — known-open, cura em 1.4.1  
+**FILE:LINE:** `.claude/hooks/_lib/injection_salt.py:249-252,294-296`  
+**Concrete failure scenario:** após publicar os 32 bytes de `.salt`, o processo pode morrer antes de `_register_mint`. A execução seguinte encontra o salt válido e retorna imediatamente; `salt-minted.json` e o evento nunca são recuperados. Logo, ausência do marker não prova ausência de mint. Esse caminho é alcançável na primeira sessão normal após o upgrade.  
+**Minimal fix:** persistir um intent exclusivo antes da publicação e fazê-lo recuperável pela próxima execução, com teste que mate o processo exatamente nessa fronteira.
+
+### NEW FINDINGS (annex)
+
+**SEVERITY:** P1 annex — signed known-open, cura em 1.4.1  
+**FILE:LINE:** `.claude/hooks/_lib/ledger_provenance.py:73-80`; `.claude/hooks/_lib/audit_emit.py:9139-9146,9297-9301`  
+**Concrete failure scenario:** o diff introduz afirmações de desempenho — contador “cheap”, taxa “low” e transição “rare by construction” — proibidas pelo contrato de `AGENTS.md`. Não existe esse limite estrutural: a sequência válida `40→60→40→60` executa rearm e GC em cada chamada, e sessões distintas podem criar markers sem limite global.  
+**Minimal fix:** remover “cheap”, “low” e “rare”; documentar somente os limites verificáveis, como TTL, máximo de remoções e orçamento configurado.
+
+### P2 follow-ups
+
+**SEVERITY:** P2  
+**FILE:LINE:** `.claude/hooks/_lib/audit_emit.py:8911-8914,8974-8977,9308-9312`  
+**Concrete failure scenario:** dois comentários apresentam SessionStart e UserPromptSubmit como produtores ativos de `context_pressure_observed`, mas o próprio arquivo depois diz “PreCompact-only”; o único produtor está em `check_precompact_continuity.py:1091-1095`, e a SPEC marca os outros valores como reservados.  
+**Minimal fix:** declarar nos dois comentários que somente PreCompact possui produtor.
+
+**SEVERITY:** P2  
+**FILE:LINE:** `.claude/hooks/_lib/audit_emit.py:5238-5247,7094-7103`  
+**Concrete failure scenario:** `constraint_count=float("inf")` faz `int()` lançar `OverflowError`, não capturado, contrariando o contrato “Never raises”. O produtor atual fornece inteiro, portanto o alcance é um chamador direto ou futuro malformado.  
+**Minimal fix:** aplicar o mesmo validador type-strict de `_ledger_int_field`, ou capturar também `OverflowError`.
+
+**SEVERITY:** P2  
+**FILE:LINE:** `.claude/hooks/_lib/injection_salt.py:229-234`  
+**Concrete failure scenario:** a API ainda promete salt “per-installation”, embora o diff o resolva por projeto. Um consumidor pode esperar correlação entre projetos e obter hashes incompatíveis.  
+**Minimal fix:** trocar a docstring para “per-project salt”.
+
+**SEVERITY:** P2  
+**FILE:LINE:** `.claude/hooks/_lib/audit_emit.py:7259-7264,8766-8768`  
+**Concrete failure scenario:** `re.match` com `$` aceita uma identidade terminada em LF, embora o comentário prometa charset sem controles.  
+**Minimal fix:** usar `fullmatch` ou `\Z`, com testes LF/CRLF.
+
+**SEVERITY:** P2  
+**FILE:LINE:** `.claude/hooks/_lib/audit_emit.py:8949-8961`  
+**Concrete failure scenario:** `str.isdigit()` aceita dígitos Unicode; `PLAN-１２３` passa pelo validador que promete exatamente `PLAN-NNN`.  
+**Minimal fix:** exigir três dígitos ASCII.
+
+O hash das condições confere (`5fb2bcda…5aebe0`); `diff --check`, stdlib-only, Python 3.9, frescor de `AGENTS.md`, contaminação e claims passaram. Os 284 testes focados passaram: 276 não-seriais e 8 seriais.
+
+Pela regra deste corte, a promoção só é coerente com todas as condições e os anexos acima mantidos como known-open assinados para 1.4.1; isto é evidência consultiva, não autorização.
+
+VERDICT: GO-WITH-CONDITIONS

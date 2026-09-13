@@ -816,17 +816,18 @@ cura na 1.4.1. Adopters: os repositórios do maintainer, subindo da v1.3.0 em mo
     `blocking_inclusions` de `templates/settings/settings.user.json` nomeia mais três que
     podem bloquear sob opt-in (`accel_dispatch.py`, `codex_review_user_code.py`,
     `review_loop.py`). O `--no-settings-migrate` da condição 55 NÃO evita isto (o merge
-    aditivo continua). Deixaram de dizer «advisory hooks only» (arquivos livres): `README.md`,
-    `docs/FAQ.md`, `README.pt-BR.md`, `npm/README.md` e `INSTALL.md`. Ainda prometem hooks «advisory» ao perfil `user` TRÊS textos
-    entregues (o pacote npm inclui `scripts/`): `scripts/install.sh` (linha 11, «advisory hooks
-    only») e `scripts/profiles/profiles.json` (linhas 13 e 30, «advisory-only hook surface») —
-    inexatos até a próxima cerimônia; a rc.1 declarou só o primeiro (re-pass r1 do GA, parte 3). Condição DURA: quem quer o comportamento advisory da v1.3.0
+    aditivo continua). CLASSE inexata: TODO texto entregue que chame o perfil `user`
+    de «advisory» (advisory-only, advisory hooks only, advisory user profile/switch). Sítios
+    conhecidos (`grep -i` na árvore entregue, 13/09): `scripts/install.sh:11`,
+    `scripts/profiles/profiles.json:13,30`, `scripts/upgrade.sh:2822,2838,2944`,
+    `scripts/build-plugin.py:7`, `templates/settings/settings.user.json:42,230`, `README.md:144`.
+    Qualquer outra ocorrência é da MESMA classe, igualmente inexata, e não é condição nova. Condição DURA: quem quer o comportamento advisory da v1.3.0
     intacto roda o upgrade também com `--no-settings-merge`; quem aceita o merge conhece as
     rotas de saída: `CEO_CONFIG_CHANGE_GUARD=0` (check_config_change), `CEO_TURBO=0` ou
     `.claude/turbo-off` (accel_dispatch), não setar `CEO_CODEX_USER_REVIEW_BLOCK=1`
     (codex_review_user_code fica detect-only) e não setar `CEO_REVIEW_LOOP=1`
-    (review_loop fica desligado). Cura antes do GA: registro não bloqueante no perfil
-    `user`, ou o contrato «sem GPG» substituindo «advisory» em todos os textos entregues.
+    (review_loop fica desligado). Cura (1.4.1): contrato «sem GPG» no lugar de «advisory» em todos os
+    textos entregues, ou registro não bloqueante no perfil `user`.
 64. **Colisão de posse num caminho NOVO da v1.4.0** (P1): a atualização por
     arquivo do `scripts/upgrade.sh` (`_per_file_classified_update`, ~1591-1670, chamada
     por `backup_and_replace` para `.claude/hooks`, `.claude/scripts`, `.claude/commands`, os

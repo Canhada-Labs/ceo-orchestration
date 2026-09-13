@@ -1,0 +1,36 @@
+NO-GO advisory: não encontrei P0, mas a condição declarada 63 é factualmente falsa.
+
+## Condição declarada falsa
+
+- **SEVERITY:** P1 — bloqueia este corte porque falsifica a condição 63.
+- **FILE:LINE:** [CONDITIONS-ga.md:820](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/plans/PLAN-169/repass-ga/CONDITIONS-ga.md:820), [scripts/upgrade.sh:2819](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/upgrade.sh:2819), [scripts/upgrade.sh:2822](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/upgrade.sh:2822).
+- **Cenário concreto:** a condição afirma que restam exatamente três textos entregues que apresentam o perfil `user` como advisory. Porém, linhas adicionadas pelo diff dizem que esse perfil “OMITS the governance hooks that block edits” e o chamam de “the advisory user profile”. Isso é uma quarta alegação inexata: [settings.user.json:17](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/templates/settings/settings.user.json:17) declara `check_config_change.py` como inclusão bloqueante, ele é registrado em [settings.user.json:569](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/templates/settings/settings.user.json:569), fica habilitado por padrão e retorna `decision:block` em [check_config_change.py:280](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.claude/hooks/check_config_change.py:280). Um adopter v1.3.0 `user` que aceite o merge pode, portanto, receber bloqueio apesar do comentário. O texto é publicado: npm inclui `scripts/` e o workflow o copia em [npm-publish.yml:336](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/.github/workflows/npm-publish.yml:336).
+- **Correção mínima:** para manter a árvore congelada, alterar a condição 63 para “ao menos quatro”, nomear `upgrade.sh:2819-2822`, regenerar hashes/assinaturas e executar novo re-pass. A cura comportamental é trocar o comentário por “perfil reduzido/no-GPG, com bloqueadores nomeados e rotas de saída”.
+
+## NEW FINDINGS (annex)
+
+Nenhum outro P1 não declarado. O achado acima não pode ser absorvido como simples anexo: ele contradiz diretamente uma condição declarada.
+
+## P2 follow-ups
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:411](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/upgrade.sh:411), [scripts/upgrade.sh:1193](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/upgrade.sh:1193), [scripts/upgrade.sh:3943](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/upgrade.sh:3943)  
+  **Cenário:** `--settings-migrate-only` promete executar somente T5.4 e sair 0, mas os preflights de entrega rodam antes. Um `docs` regular no lugar do diretório produz rc 3 e impede a migração.  
+  **Correção mínima:** despachar esse modo antes dos preflights ou desativá-los nele; testar execução real e dry-run.
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:4366](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/upgrade.sh:4366), comportamento em [scripts/upgrade.sh:4955](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.nb1a8y/wt/scripts/upgrade.sh:4955)  
+  **Cenário:** o comentário chama igualdade com geração histórica de evidência de entrega. A condição 42 corretamente admite que é apenas igualdade de bytes: um arquivo autoral sem registro pode ser adquirido pelo framework.  
+  **Correção mínima:** reservar “evidência” ao digest previamente registrado; exigir esse registro antes de refresh/claim.
+
+## Demais condições, blast radius e publicação
+
+Para v1.3.0 copy-mode, são aplicáveis as condições **1, 2, 4–6, 8–12, 14, 25, 27, 31, 34, 39, 40, 42–47, 55, 59, 60, 62–64, 73, 75, 76, 81, 82 e 84**; 3 e 7 não são operacionais nessa coorte. Não encontrei outra condição falsa.
+
+Os riscos concretos continuam sendo os declarados: reset de stores/custo/credencial; aquisição ou sobrescrita de arquivos autoriais; escrita externa por backup/link; sucesso falso em entrega parcial; perda de proveniência por manifesto/TMPDIR/FMS; alteração bloqueante do perfil `user`; e harness Grok quebrado.
+
+Não há desacordo de versão irreversível: `VERSION`, package npm, pyproject, framework marker e manifests de plugin dizem `1.4.0`. `upgrade.sh` é byte-idêntico à rc.1, e o envelope atual tem o SHA informado.
+
+Verificações: histórico **164/164**, write-safety **325/325**, replay **73/73**, merge derivado **69/69**, migração **46/46**, schema/W3 **14/14** e paridade v1.3.0 maintainer/user sem `STALE`, `MISSING`, `MODE_DIFF`, `UNCLASSIFIED` ou escrita extra fora de `.claude`; checks estáticos e version drift passaram.
+
+VERDICT: NO-GO — A condição declarada 63 é falsa contra o diff entregue; pela regra deste corte, o envelope precisa ser corrigido, re-hashado e submetido a novo re-pass antes da GA.
