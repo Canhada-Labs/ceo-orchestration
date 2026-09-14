@@ -1,0 +1,60 @@
+Resultado consultivo: nenhum P0 e nenhuma condição aplicável falsa. As condições **17–24, 27–30, 32, 37–41, 52–53, 65–70, 78–80 e 83** são honestas e suficientes somente para a coorte declarada — upgrade v1.3.0 copy-mode, com todas as precondições operacionais cumpridas.
+
+### Condições confirmadas
+
+- **P1 annex — condições 27, 39 e 40; known-open, cura 1.4.1.**  
+  **FILE:LINE:** [state_store.py:115](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/state_store.py:115), [cost_envelope.py:142](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/cost_envelope.py:142), [claude.py:375](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/adapters/live/claude.py:375).  
+  **Falha concreta:** o upgrade muda namespaces sem migração: plano ativo abre store vazio, custos voltam a zero e credencial vencida deixa de bloquear.  
+  **Correção mínima:** migração ou dual-read da raiz legada, dos arquivos de custo e de `credential-rotation.json`.
+
+- **P1 annex — condições 17, 70 e 78.**  
+  **FILE:LINE:** [check_postcompact_reinject.py:148](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/check_postcompact_reinject.py:148), [:290](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/check_postcompact_reinject.py:290), [:371](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/check_postcompact_reinject.py:371), [scratchpad_lib.py:205](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/scratchpad_lib.py:205).  
+  **Falha concreta:** confirmei que `.claude/plans/PLAN-179-IGNORE-ALL-PREVIOUS-RULES.md` passa no predicado; payload sem ID ainda permite influência de `CLAUDE_SESSION_ID`; e store de plano vazio impede fallback para snapshot de sessão.  
+  **Correção mínima:** não reinjetar nomes, proibir resolução ambiental e consultar o store de sessão após miss no store do plano.
+
+- **P1 annex — condição 19.**  
+  **FILE:LINE:** [state_store.py:99](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/state_store.py:99), [check_postcompact_reinject.py:717](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/check_postcompact_reinject.py:717), [.claude/settings.json:677](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/settings.json:677).  
+  **Falha concreta:** o lock pode consumir os mesmos cinco segundos do timeout total, matando o PostCompact antes das constraints fixas.  
+  **Correção mínima:** timeout interno menor e renderização das constraints mesmo após falha do snapshot.
+
+- **P1 annex — condições 28, 65 e 79.**  
+  **FILE:LINE:** [state_store.py:214](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/state_store.py:214), [:225](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/state_store.py:225), [test_isolation.py:197](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/test_isolation.py:197).  
+  **Falha concreta:** SQLite/GC/markers seguem symlinks e podem escrever ou remover fora da raiz; `CEO_STATE_ROOT` não é neutralizada pela camada de isolamento.  
+  **Correção mínima:** operações por `dir_fd`/`O_NOFOLLOW`, validação de identidade e neutralização de `CEO_STATE_ROOT` em coleta, fixtures e subprocessos.
+
+- **P1 annex — condições 21, 23, 29, 67 e 68.**  
+  **FILE:LINE:** [audit_log.py:1258](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/audit_log.py:1258), [audit_hmac.py:406](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/audit_hmac.py:406), [check_postcompact_reinject.py:664](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/check_postcompact_reinject.py:664).  
+  **Falha concreta:** primeira criação concorrente de chave/salt pode divergir; o predecessor HMAC é lido fora do lock; overrides dividem a família; eventos de compaction ficam sem projeto/sessão.  
+  **Correção mínima:** publicação exclusiva, resolução única da família e lock envolvendo predecessor, HMAC, rotação e append.
+
+- **P1 annex — condição 52.**  
+  **FILE:LINE:** [check-ceremony-script.py:103](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/scripts/check-ceremony-script.py:103), [:108](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/scripts/check-ceremony-script.py:108).  
+  **Falha concreta:** remover um script conhecido e adicionar outro mantém o censo em 127 e deixa o gate verde.  
+  **Correção mínima:** pinar e comparar o conjunto exato de caminhos.
+
+### Anexo anterior alcançável
+
+- **P1 annex já assinado na rc.1 — não é novo.**  
+  **FILE:LINE:** [runtime_paths.py:151](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/runtime_paths.py:151), [:181](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/runtime_paths.py:181), [AGENTS.md:9](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/AGENTS.md:9).  
+  **Falha concreta:** o módulo entregue afirma duas leituras ambientais quando executa três no caminho normal e contém linguagem de desempenho proibida.  
+  **Correção mínima:** remover a contagem e “cheap”. O outro anexo rc.1 desta parte permanece restrito à infraestrutura de testes e não foi repetido.
+
+### NEW FINDINGS (annex)
+
+Nenhum P1 não declarado.
+
+### P2 follow-ups
+
+- **P2 — condição 30.** [runtime_paths.py:116](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/runtime_paths.py:116): confirmei que `/srv/a-b/c` e `/srv/a/b-c` geram o mesmo slug. **Correção:** desambiguar com hash ou validar unicidade.
+
+- **P2 — condição 53.** [check_postcompact_reinject.py:405](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/check_postcompact_reinject.py:405): `ts=1e309` reproduziu `OverflowError`, eliminando todo o PostCompact. **Correção:** `math.isfinite` e captura de `OverflowError`.
+
+- **P2 — condições 37, 80 e 83.** [ceremony-lint.yml:6](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.github/workflows/ceremony-lint.yml:6), [mcp-smoke.yml:56](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.github/workflows/mcp-smoke.yml:56), [:314](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.github/workflows/mcp-smoke.yml:314), [test_isolation.py:296](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/_lib/test_isolation.py:296): filtros incompletos, “HMAC integrity” verificando somente JSON legível e detecção de isolamento por substring. **Correção:** completar filtros, chamar `verify_chain()` e usar containment real.
+
+### Publicação
+
+Não há divergência irreversível de versão: `VERSION`, `.framework-version`, `pyproject.toml`, pacote npm e manifests dizem `1.4.0`; [release.yml:87](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.github/workflows/release.yml:87) e [npm-publish.yml:270](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.github/workflows/npm-publish.yml:270) falham fechados antes de `npm publish`. O hold observado foi superior a 72 horas, e o candidato difere da rc.1 somente sob `.claude/plans/**`.
+
+Passaram em modo read-only: `actionlint`, stdlib-only (449 arquivos), frescor do `AGENTS.md`, checksums dos scripts de gate, `git diff --check` e paridade dos marcadores de versão.
+
+VERDICT: GO-WITH-CONDITIONS — Nenhuma condição aplicável é falsa e nenhum P0 foi encontrado; a promoção é aceitável apenas para a coorte copy-mode com todas as condições e anexos tratados como known-open para 1.4.1.

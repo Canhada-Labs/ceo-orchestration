@@ -1,0 +1,34 @@
+Conclusão advisory: não encontrei P0 nem condição declarada falsa neste payload.
+
+### Publicação e raio de impacto
+
+- `VERSION`, `npm/package.json`, `.claude-plugin/plugin.json` e `.claude-plugin/marketplace.json` concordam em `1.4.0`; não há divergência de versão irreversível no pacote npm.
+- O HEAD é `3ba9993a87081921c3ed4e44fdd2dea3311e758a`; estes cinco arquivos são byte-idênticos à rc.1.
+- No primeiro uso após o upgrade, `.claude/hooks/_lib/audit_emit.py:2353-2371`, `audit_hmac.py:165-252`, `injection_salt.py:97-122` e `spool_writer.py:204-230` mudam o runtime do diretório literal legado para o slug nativo por projeto. O efeito concreto é um store aparentemente vazio e uma nova cadeia/chave/salt, enquanto histórico e estado v1.3.0 permanecem na raiz legada. A condição 27 descreve isso corretamente.
+- As condições 21, 23, 24, 27–30, 41, 54, 64, 65, 67, 68, 78, 79 e 83 são honestas contra o código. Nas bordas de compaction/entrega também permanecem necessárias 19, 45, 47, 70, 72, 76 e 81. Para copy-mode, são suficientes somente se tratadas como pré-condições operacionais, especialmente a limpeza dos namespaces runtime, ausência de overrides, criação exclusiva da chave e migração seletiva.
+
+### P1 herdado, alcançável no mainline
+
+- **P1 — `.claude/hooks/_lib/injection_salt.py:33-40,249-252,294-305`.** Cenário: o primeiro prompt publica `.salt`, grava o cache em memória e o processo morre antes de `_register_mint`. A próxima execução lê o salt válido e retorna antecipadamente; `salt-minted.json` e o evento podem nunca existir. Logo, “OBSERVABLE, never silent” e “forensic ground truth” não são garantias verdadeiras. Correção mínima: protocolo recuperável/idempotente com marcador pendente antes da publicação e reparo obrigatório quando um salt válido existir sem marcador. É anexo herdado da rc.1, não condição falsa.
+
+### NEW FINDINGS (annex)
+
+- **P1 annex — `.claude/hooks/_lib/ledger_provenance.py:73-80`.** O novo módulo chama o contador de “cheap” sem contrato ou medição. É uma alegação de desempenho em conteúdo entregue, proibida por `AGENTS.md`. Correção mínima: remover “cheap” e descrever apenas que o contador é local ao processo.
+
+- **P1 annex — `.claude/hooks/_lib/audit_emit.py:9139-9146,9297-9301`.** O texto promete taxa “low”, transição “rare by construction” e operação “bounded”. O código não impõe limite global de criação e executa GC em toda mudança válida de bucket; alternâncias podem torná-lo frequente. Correção mínima: substituir por limites verificáveis — prazo tentado de 250 ms, máximo de 32 remoções e ausência de garantia de frequência/cobertura.
+
+### P2 follow-up
+
+- **P2 — `.claude/hooks/_lib/audit_emit.py:8911-8914,8974-8977,9308-9312`.** Dois comentários afirmam produtores SessionStart/UserPromptSubmit, enquanto a árvore só contém o produtor PreCompact e outro comentário diz “PreCompact-only”. Correção mínima: chamar os demais valores de reservados ou implementar os produtores.
+
+- **P2 — `.claude/hooks/_lib/audit_emit.py:5238-5247,7094-7103`.** `constraint_count=float("inf")` levanta `OverflowError` em `int()`, contrariando “Never raises” e perdendo o evento. Correção mínima: aceitar somente `int` puro ou também capturar `OverflowError`.
+
+- **P2 — `.claude/hooks/_lib/audit_emit.py:7259-7264,8766-8768`.** O uso de `re.match` com `$` aceita uma identidade terminada em newline. Correção mínima: `fullmatch` ou `\Z`.
+
+- **P2 — `.claude/hooks/_lib/audit_emit.py:8949-8961`.** `str.isdigit()` aceita `PLAN-１２３`, embora a docstring prometa três dígitos ASCII. Correção mínima: validar cada caractere contra `0123456789`.
+
+- **P2 — `.claude/hooks/_lib/injection_salt.py:229-234`.** A API ainda documenta salt “per-installation”, mas a resolução agora é por projeto. Correção mínima: trocar para “per-project”.
+
+Os gates estáticos passaram: stdlib-only (449 arquivos), freshness de `AGENTS.md`, counts de `CLAUDE.md`, contaminação, parse Python 3.9 dos cinco arquivos e `git diff --check`. Nenhum arquivo foi alterado.
+
+VERDICT: GO-WITH-CONDITIONS — Não há P0 nem condição aplicável falsa, mas o P1 herdado e os dois P1 novos devem integrar o anexo assinado para cura em 1.4.1.

@@ -1,0 +1,42 @@
+No P0 and no declared condition is false. For the narrowly defined v1.3.0 maintainer/copy-mode cohort, the envelope is honest and operationally sufficient only if its preflights are followed literally; it does not make the installer or upgrader safe by default.
+
+Applicable conditions for this payload: 1, 5–14, 24, 31, 33–35, 42, 45, 47–48, 56, 60–64, 73–76, 81–82 and 84. Conditions 3 and 7 concern link-mode installs, outside the stated cohort.
+
+### Findings
+
+- P1 annex — declared condition 42. FILE:LINE: [scripts/upgrade.sh:4951](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:4951>), [scripts/upgrade.sh:4979](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:4979>). Concrete failure: a v1.3.0 adopter-authored `docs/` or `.github/` file that happens to equal a historical template is classified as “pristine prior generation,” overwritten and registered as framework-owned despite having no prior manifest record. Later upgrades rewrite it, doctor treats edits as drift, and uninstall may delete it. Minimal fix: require prior delivery evidence, not historical byte equality, before refresh and registration.
+
+- P1 annex — declared condition 64. FILE:LINE: [scripts/upgrade.sh:1620](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:1620>), [scripts/upgrade.sh:1660](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:1660>). Concrete failure: if the adopter already owns a path newly introduced by v1.4.0, such as `check_compact_pinning.py`, the lack of baseline produces `FALLBACK`; that branch overwrites even with `--on-conflict=refuse` and transfers ownership to the framework. Minimal fix: classify “new source + existing destination + no manifest record” as `CONFLICT` and preserve it under `refuse`.
+
+- P1 annex — declared conditions 8, 34 and 45. FILE:LINE: [scripts/_framework_manifest_set.sh:1333](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/_framework_manifest_set.sh:1333>), [scripts/install.sh:1804](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:1804>), [scripts/install.sh:1830](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:1830>), [scripts/install.sh:3556](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:3556>). Concrete failure: an unusable route table makes the manifest writer return success without writing provenance; a missing, non-regular or refused source is merely `SKIP`. With no destination refusal, install-state still records `install_succeeded:true`, “Install complete” is printed, and rc is 0. Minimal fix: validate the table and every declared source before the first target write, then persist failure and exit nonzero for any rejected or absent route.
+
+- P1 annex — declared condition 73. FILE:LINE: [scripts/install.sh:496](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:496>), [scripts/install.sh:705](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:705>), [scripts/install.sh:1334](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:1334>), [scripts/install.sh:1206](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:1206>). Concrete failure: `--profile` is split without grammar validation and interpolated into both source and destination paths; a traversal value whose computed source exists can make `install_one` copy outside the target. Minimal fix: accept only single-segment profile names matching the documented allowlist before any write, and run every derived destination through the confinement predicate.
+
+- P1 annex carried from rc.1; re-reported because it is reachable on the mainline fresh-install path. FILE:LINE: [scripts/install.sh:771](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:771>), [scripts/install.sh:1994](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:1994>), [scripts/install.sh:3619](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:3619>). Concrete failure: on a fresh install, a late CODEOWNERS staging failure—such as an unwritable `.github/`—is accumulated after `.claude/` and `docs/` have already been written. The final rc is nonzero, but rollback restores only a pre-existing `.claude` snapshot; a fresh target remains partially installed without manifest or install-state. Minimal fix: pre-stage/preflight all writes or maintain a complete mutation ledger capable of rolling back every created target path.
+
+### NEW FINDINGS (annex)
+
+None. I found no undeclared P1.
+
+### P2 follow-up
+
+- P2. FILE:LINE: [scripts/_framework_manifest_set.sh:895](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/_framework_manifest_set.sh:895>). The claimed equivalent Python regex accepts trailing and consecutive hyphens, while the implementation at lines 923–933 rejects both. Minimal fix: remove the equivalence claim or document a regex containing the same end-character and `--` constraints.
+
+- P2 — declared condition 35. FILE:LINE: [scripts/install.sh:29](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:29>), [scripts/install.sh:3630](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:3630>). A destination refusal makes dry-run exit 1 despite the help promising exit 0. Minimal fix: document the refusal exception.
+
+- P2 — declared condition 56. FILE:LINE: [scripts/install.sh:1074](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/install.sh:1074>). The global guard rejects a hard-linked create-only destination even when the actual writer would preserve it unchanged. Minimal fix: make leaf hard-link checks conditional on the planned operation.
+
+- P2 — declared condition 62. FILE:LINE: [scripts/_framework_manifest_set.sh:1161](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/_framework_manifest_set.sh:1161>), [scripts/_framework_manifest_set.sh:1240](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/_framework_manifest_set.sh:1240>). The table gate detects zero rows and duplicates but not omission of one valid required route. Minimal fix: pin the exact destination set or table digest per release.
+
+### Verification evidence
+
+- The reviewed-condition hash matches `80107f1354403823836df5f5e85d084c058d154c8f98bb5b1fa0cb9ff5b78e04`.
+- The three shipped payload files are byte-identical to `v1.4.0-rc.1`.
+- Route/manifest tests: 131/131 passed.
+- Installer write-safety e2e: 325/325 passed.
+- Historical-adopter upgrade tests: 164/164 passed.
+- Shell syntax, diff-whitespace, AGENTS freshness, count and release-version checks passed; the worktree remained clean.
+- Condition 1’s unrenderable-transform failure, condition 9’s tightened handle grammar, and condition 31’s duplicate-route refusal are implemented and tested.
+- No irreversible version disagreement was found: [VERSION:1](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/VERSION:1>), [npm/package.json:3](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/npm/package.json:3>), `pyproject.toml` and both plugin manifests say `1.4.0`; the npm whitelist includes `scripts/`, and the publish workflow stages it and verifies the tag/package versions at [.github/workflows/npm-publish.yml:270](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.github/workflows/npm-publish.yml:270>) and [.github/workflows/npm-publish.yml:336](</private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.github/workflows/npm-publish.yml:336>).
+
+VERDICT: GO-WITH-CONDITIONS — No P0 or false declared condition was found; promotion remains contingent on the stated copy-mode preflights and the signed P1 known-open list being cured in 1.4.1.

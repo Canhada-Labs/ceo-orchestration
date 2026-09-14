@@ -1,0 +1,47 @@
+Advisory evidence only: no P0 and no false declared condition found. HEAD is `3ba9993a87081921c3ed4e44fdd2dea3311e758a`; the conditions hash matches `80107f…78e04`, and all payload-3 bytes are identical to rc.1.
+
+### Adopter blast radius
+
+For v1.3.0 copy-mode upgrades:
+
+- Conditions 55/63 correctly disclose that `user` installs can gain maintainer settings and blocking hooks unless both relevant migration/merge opt-outs are followed.
+- Conditions 5/42/64/75 correctly disclose ownership capture: adopter-authored files can become framework-owned, then be overwritten by later upgrades, repaired as drift, or deleted by uninstall.
+- Conditions 3/43/49/50/57/69 accurately describe the remaining doctor/uninstall limitations, including `LINK` refusal, backup/restore confinement, archive-type validation, and empty `.claude/` directory deletion.
+- The new doctor guards fail closed as claimed: missing route infrastructure, malformed manifests, foreign sources, symlinks, hard links, and changed manifest identity all prevent repair.
+- No scoped release-version disagreement was found: `VERSION`, npm metadata, pyproject metadata, and the framework marker agree on `1.4.0`.
+
+Directly applicable conditions are 2–5, 15–16, 26, 38, 42–43, 49–51, 55, 57, 61, 63–64, 69, 74–75, 77, 82 and 84. They are sufficient only for the declared maintainer/copy-mode cohort following the upgrade preflight exactly—not for arbitrary npm adopters.
+
+## NEW FINDINGS (annex)
+
+1. **SEVERITY: P1 annex — non-exact trailer matching bypasses review**
+
+   **FILE:LINE:** [templates/codex/pre-push-review-gate.sh:173](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/templates/codex/pre-push-review-gate.sh:173), [templates/grok/pre-push-review-gate.sh:270](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/templates/grok/pre-push-review-gate.sh:270)
+
+   **Concrete failure scenario:** Both published gates grep the entire commit message with an unanchored-value, case-insensitive prefix match. Direct probes accepted `APPROVED`, `APPROVE-WITHOUT-REVIEW`, lowercase variants, and matching body lines. Such a commit clears the Grok enforcement gate without an exact pair-rail `APPROVE` trailer.
+
+   **Minimal fix:** Parse the trailer block with `git interpret-trailers --parse`; require exactly one case-sensitive `Pair-Rail-Reviewed: APPROVE`, rejecting prefixes, duplicates and conflicting values.
+
+2. **SEVERITY: P1 annex — merge-only canonical changes are invisible**
+
+   **FILE:LINE:** [templates/codex/pre-push-review-gate.sh:161](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/templates/codex/pre-push-review-gate.sh:161), [templates/grok/pre-push-review-gate.sh:225](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/templates/grok/pre-push-review-gate.sh:225), [templates/grok/pre-push-review-gate.sh:334](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/templates/grok/pre-push-review-gate.sh:334)
+
+   **Concrete failure scenario:** The diff adds `--root` but no merge-diff mode. Plain `git diff-tree` emits no paths for a merge commit. When both parents are already remote-reachable and the merge resolution alone changes a canonical file, the push is classified as touching no canonical paths and passes. Candidate merge `d2d46f…` yielded 0 paths normally versus 121 with `-m`, including canonical paths.
+
+   **Minimal fix:** Use `git diff-tree -m --root ...` at every collector, deduplicate paths, and add a merge-only conflict-resolution regression test.
+
+## P2 follow-up
+
+- **SEVERITY: P2 — NUL-manifest diagnostic performs a hidden stdin read**
+
+  **FILE:LINE:** [scripts/uninstall.sh:398](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/uninstall.sh:398)
+
+  **Concrete failure scenario:** The intended literal `` `read` `` occurs inside double quotes, so Bash executes the `read` builtin through command substitution. On a terminal, a NUL-bearing manifest makes uninstall appear to hang awaiting an unprompted line; with piped input it consumes the first line. The diagnostic prints `cannot  would...`. The safety result remains fail-closed and eventually exits 6, so condition 16 is not materially falsified.
+
+  **Minimal fix:** Single-quote that `_log` argument or escape both backticks; test that the NUL path leaves stdin untouched and prints the literal word `read`.
+
+Verification: 44/44 doctor, 113/113 route, 325/325 write-safety, and 208 focused Python tests passed with 2 skips. Bash syntax, actionlint, JSON derivation, AGENTS freshness, stdlib, count, and contamination checks passed; the checkout remained clean. The prior rc.1 annex findings were not repeated because none became worse or newly reachable on the compliant mainline copy-mode path.
+
+The two undeclared P1s must enter the signed GA annex as known-open 1.4.1 cures.
+
+VERDICT: GO-WITH-CONDITIONS

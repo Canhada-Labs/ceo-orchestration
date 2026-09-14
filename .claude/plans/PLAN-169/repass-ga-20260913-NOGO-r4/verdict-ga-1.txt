@@ -1,0 +1,23 @@
+NO-GO advisory: não encontrei P0 de runtime, mas a condição declarada 63 é factualmente falsa.
+
+### Condição declarada falsa
+
+- **SEVERITY:** P1 — bloqueia este corte porque falsifica uma condição declarada; não é elegível ao annex.
+- **FILE:LINE:** [CONDITIONS-ga.md:819](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/plans/PLAN-169/repass-ga/CONDITIONS-ga.md:819), [scripts/upgrade.sh:2838](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:2838), [scripts/upgrade.sh:2943](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:2943), [check_config_protection.py:322](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/.claude/hooks/check_config_protection.py:322).
+- **Cenário concreto:** a condição 63 afirma que TODO texto que descreva o perfil ou switch `user` como advisory é inexato e inclui expressamente `upgrade.sh:2838,2944`. Porém essas linhas dizem corretamente que o switch advisory do `check_config_protection` transforma o bloqueio em allow. A implementação confirma: quando `_advisory(src)` é verdadeiro, retorna `allow(system_message=...)`; sem ele, retorna `block`. O risco central da condição — outros hooks do perfil `user`, como `check_config_change.py`, poderem bloquear — é real, mas não torna falsas descrições locais de um switch efetivamente não bloqueante.
+- **Correção mínima:** estreitar a condição 63 para abranger apenas promessas globais falsas como “advisory hooks only/surface”, excluindo descrições qualificadas de hooks, switches ou políticas específicas. Regenerar o hash do envelope e executar novo re-pass.
+
+### NEW FINDINGS (annex)
+
+Nenhum P1 não declarado. O achado acima contradiz diretamente a condição assinável e não pode ser absorvido como annex.
+
+### P2 follow-ups
+
+- [scripts/upgrade.sh:411](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:411) promete que `--settings-migrate-only` executa somente a migração e sai 0, mas os preflights iniciados em [scripts/upgrade.sh:1091](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:1091) podem sair 3 antes do dispatch em [scripts/upgrade.sh:3943](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:3943). Correção: despachar esse modo antes dos preflights ou documentar a exceção.
+- [scripts/upgrade.sh:4366](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.Mxwo9C/wt/scripts/upgrade.sh:4366) chama igualdade histórica de evidência de entrega, embora a condição 42 reconheça corretamente que é igualdade nua capaz de adquirir arquivo autoral. Correção: reservar “evidência” para proveniência previamente registrada.
+
+O blast radius principal está corretamente declarado nas condições 27/39/40, 42/43/47, 45/59/60, 64/75/76/81 e 82/84. Não encontrei divergência irreversível de versão: VERSION, pyproject, npm e manifests dizem `1.4.0`; o blob de `upgrade.sh` é idêntico ao da rc.1.
+
+Verificações concluídas: histórico v1.3 **164/164**, merge derivado **69/69**, replay **73/73**, além de `bash -n`, diff-check, version-drift, freshness, counts e contamination sem falhas.
+
+VERDICT: NO-GO — A condição declarada 63 é falsa contra o diff entregue; o envelope precisa ser estreitado, re-hashado e submetido a novo re-pass antes da GA.

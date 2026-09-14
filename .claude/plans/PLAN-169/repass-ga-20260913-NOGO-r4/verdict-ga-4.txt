@@ -1,0 +1,57 @@
+No declared condition is false, and no P0 was found. This is advisory evidence, not authorization.
+
+### Adopter blast radius
+
+For a v1.3.0 copy-mode upgrade, the principal concrete risks are:
+
+- State/history appears reset or disappears: conditions 27, 39, 40.
+- Adopter files become framework-owned or are overwritten: 42, 48, 61, 64, 75.
+- Symlink/hard-link paths can cause writes outside the target: 43, 47, 50, 65, 69, 73, 82.
+- Partial delivery can still report success or leave stale success state: 45, 59, 60, 76.
+- The `user` posture can gain blocking behavior: 2, 55, 63, 84.
+- First-use/concurrent audit writers can produce unverifiable chains: 67, 68.
+
+Condition 3 is honest but does not affect the declared copy-mode cohort.
+
+### NEW FINDINGS (annex)
+
+1. **SEVERITY: P1 annex — contradictory identity in the published SPEC**
+
+   **FILE:LINE:** `VERSION:1`; `npm/package.json:3,9-18`; `SPEC/v1/README.md:3,104-108`; `SPEC/v1/adapters.schema.md:177-178`; `SPEC/v1/mcp-server.schema.md:388-392`; `SPEC/v1/soc2-control-map.schema.md:327-330`
+
+   **Concrete failure scenario:** The diff publishes `ceo-orchestration@1.4.0` and includes `SPEC/` in that immutable npm artifact, but the included contract identifies itself variously as `v1.9.1`, `1.3.0-rc.1`, and `1.4.0-rc.1`. The `SPEC/v1/README.md` also directs adopters to pin the version it declares; tag `v1.9.1` does not exist. An adopter following the published contract can therefore request a nonexistent pin or report conformance against the wrong release identity.
+
+   The stale SPEC literals predate this diff, but the cited `VERSION` and npm version bump republishes them as the 1.4.0 contract, making this a release-bump omission.
+
+   **Minimal fix:** In 1.4.1, align these declarations to `1.4.0`/`1.4.1`, or remove volatile mirrors and make root `VERSION` the sole identity source. Add every remaining version mirror to the release drift check.
+
+2. **SEVERITY: P1 annex — the GA still ships pre-release promises whose cures did not land**
+
+   **FILE:LINE:** `CHANGELOG.md:18,30-33,110-111,207-208,326-331`; `npm/README.md:98-102`
+
+   **Concrete failure scenario:** The 1.4.0 GA changelog still calls itself “this rc” and “this pre-release”, says every P1 is a mandatory cure “before the GA”, says automatic state migration remains a “pre-GA follow-up”, and says the seven VETO-skill migration “lands before GA”. The envelope explicitly confirms those cures did not land. A v1.3.0 copy-mode adopter trusting the shipped GA changelog can perform an ordinary upgrade and retain all seven VETO-bearing skills as `name-only`, contrary to the apparent promise. The npm README similarly describes the unsupported `user` plus Codex/Grok combination as limited to “this rc”, even though it remains unsupported in the GA.
+
+   **Minimal fix:** In 1.4.1, replace every rc/pre-GA statement with explicit “known-open in 1.4.0; planned for 1.4.1” language and place the corresponding operational mitigations directly beside each claim.
+
+### P2 follow-up
+
+1. **SEVERITY: P2 — impossible GA chronology**
+
+   **FILE:LINE:** `CHANGELOG.md:18`
+
+   **Concrete failure scenario:** The GA entry is dated `2026-09-07`, before the stated rc.1 review on September 10 and the mandatory hold ending September 13. Release tooling and consumers sorting by changelog date receive a chronology in which GA predates its release candidate.
+
+   **Minimal fix:** Use the actual GA publication date.
+
+### Verification evidence
+
+- Candidate shipped surfaces are byte-identical to rc.1; `v1.4.0-rc.1..HEAD` changes only `.claude/plans/**`.
+- The reviewed-conditions SHA-256 matches `80107f1354403823836df5f5e85d084c058d154c8f98bb5b1fa0cb9ff5b78e04`.
+- Executable/package markers consistently say `1.4.0`.
+- Disk counts match the edited claims: 166 skills, 59 hook scripts, 48 wired scripts/50 registrations, 71 `_lib` modules, 27 commands, 198 ADR files, and 32 SPEC files.
+- Settings derivation, audit-registry parity, model-registry generation, YAML parsing, `actionlint`, path-filter parity, and `git diff --check` passed.
+- No rc.1 annex item in this payload was found worse than declared or newly reachable on the mainline copy-mode upgrade path.
+
+The declared conditions are honest for the implemented behavior. They are sufficient under this cut’s rule only when the two P1 findings above are added to the signed known-open annex for 1.4.1.
+
+VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; add the two P1 findings above to the signed 1.4.1 known-open annex.

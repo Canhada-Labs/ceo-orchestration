@@ -816,12 +816,9 @@ cura na 1.4.1. Adopters: os repositórios do maintainer, subindo da v1.3.0 em mo
     `blocking_inclusions` de `templates/settings/settings.user.json` nomeia mais três que
     podem bloquear sob opt-in (`accel_dispatch.py`, `codex_review_user_code.py`,
     `review_loop.py`). O `--no-settings-migrate` da condição 55 NÃO evita isto (o merge
-    aditivo continua). CLASSE inexata: TODO texto entregue que chame o perfil `user`
-    de «advisory» (advisory-only, advisory hooks only, advisory user profile/switch). Sítios
-    conhecidos (`grep -i` na árvore entregue, 13/09): `scripts/install.sh:11`,
-    `scripts/profiles/profiles.json:13,30`, `scripts/upgrade.sh:2822,2838,2944`,
-    `scripts/build-plugin.py:7`, `templates/settings/settings.user.json:42,230`, `README.md:144`.
-    Qualquer outra ocorrência é da MESMA classe, igualmente inexata, e não é condição nova. Condição DURA: quem quer o comportamento advisory da v1.3.0
+    aditivo continua). Todo texto entregue que prometa a superfície de hooks do perfil `user`
+    como advisory-only é inexato até a próxima cerimônia; descrições de um hook, switch ou
+    política específica não estão em causa. Condição DURA: quem quer o comportamento advisory da v1.3.0
     intacto roda o upgrade também com `--no-settings-merge`; quem aceita o merge conhece as
     rotas de saída: `CEO_CONFIG_CHANGE_GUARD=0` (check_config_change), `CEO_TURBO=0` ou
     `.claude/turbo-off` (accel_dispatch), não setar `CEO_CODEX_USER_REVIEW_BLOCK=1`

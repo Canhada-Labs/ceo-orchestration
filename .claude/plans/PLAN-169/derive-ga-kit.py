@@ -187,12 +187,9 @@ COND63_RC1_TAIL = (
 # depois "tres"): declarar a CLASSE — a lista conhecida e medida, e qualquer outra
 # ocorrencia pertence a mesma classe e NAO falsifica a condicao.
 COND63_GA = (
-    "CLASSE inexata: TODO texto entregue que chame o perfil `user`\n"
-    "    de «advisory» (advisory-only, advisory hooks only, advisory user profile/switch). Sítios\n"
-    "    conhecidos (`grep -i` na árvore entregue, 13/09): `scripts/install.sh:11`,\n"
-    "    `scripts/profiles/profiles.json:13,30`, `scripts/upgrade.sh:2822,2838,2944`,\n"
-    "    `scripts/build-plugin.py:7`, `templates/settings/settings.user.json:42,230`, `README.md:144`.\n"
-    "    Qualquer outra ocorrência é da MESMA classe, igualmente inexata, e não é condição nova."
+    "Todo texto entregue que prometa a superfície de hooks do perfil `user`\n"
+    "    como advisory-only é inexato até a próxima cerimônia; descrições de um hook, switch ou\n"
+    "    política específica não estão em causa."
 )
 COND63_GA_TAIL = (
     " Cura (1.4.1): contrato «sem GPG» no lugar de «advisory» em todos os\n"
