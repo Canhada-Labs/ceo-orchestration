@@ -719,9 +719,10 @@ cura na 1.4.1. Adopters: os repositórios do maintainer, subindo da v1.3.0 em mo
     a descoberta chegou a 124 — apagar ou tornar invisível um script deixava 123 ≥ 41 e o
     gate saía 0 sem inspecioná-lo, embora o `ceremony-lint.yml` (canônico) o chame de
     fail-closed. Cura mínima LANDADA nesta rc (livre): o piso é re-pinado no CENSO do
-    candidato (127 neste; o piso 124 da rodada 6 deixava passar três remoções), de modo que
-    qualquer remoção falha o gate e uma remoção intencional exige re-pinar conscientemente;
-    cada script de cerimônia novo reabre a folga até o re-pin seguinte. Residual DECLARADO: um piso por CONTAGEM
+    candidato da rc.1 (127). O candidato do GA acrescenta ao censo os três scripts de
+    cerimônia do próprio kit do corte (`.claude/plans/PLAN-169/`):
+    130 rastreados contra piso 127, logo até três remoções passam pelo gate até o re-pin
+    seguinte — neste candidato o gate NÃO é fail-closed por contagem. Residual DECLARADO: um piso por CONTAGEM
     ainda aceita a substituição «tira um, põe um»; cura antes do GA: pinar o conjunto exato
     de caminhos rastreados (manifesto gerado, comparado por igualdade) com controle positivo
     de remoção de um membro conhecido.

@@ -1,0 +1,37 @@
+Conclusão advisory: não encontrei P0 nem condição declarada falsa neste payload.
+
+### Raio de impacto e condições
+
+Os cinco arquivos estão byte-idênticos à rc.1. Após um upgrade copy-mode, o runtime muda do diretório legado fixo para o slug nativo por projeto ([audit_emit.py:2353](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:2353), [audit_hmac.py:165](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_hmac.py:165), [spool_writer.py:204](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/spool_writer.py:204)). Falha concreta: estado e histórico v1.3.0 permanecem no legado, enquanto a primeira sessão v1.4.0 abre cadeia, chave e salt novos; reconstruções não recuperam os eventos antigos.
+
+Também há escritas runtime fora do target, em `$HOME/.claude/projects/<slug>`, com adoção/truncamento possível de nomes preexistentes. Isso está corretamente declarado nas condições 21, 27, 28, 29, 65 e 68. Na entrega, as condições 45, 47, 64, 76 e 81 cobrem fontes incompletas, symlinks/hard links, colisões em caminhos novos e contaminação por ambiente.
+
+Condições aplicáveis e honestas: 19, 21, 23, 24, 27–30, 41, 45, 47, 54, 64–68, 70, 72, 76, 78, 79, 81 e 83. Para a coorte copy-mode declarada, são suficientes apenas como pré-condições operacionais efetivamente cumpridas.
+
+As quatro autoridades de publicação — `VERSION`, `npm/package.json`, `plugin.json` e `marketplace.json` — concordam em `1.4.0`; não encontrei divergência irreversível de versão.
+
+### P1 herdado, alcançável no mainline
+
+- **SEVERITY: P1 annex, herdado. FILE:LINE:** [injection_salt.py:33](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/injection_salt.py:33), [injection_salt.py:249](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/injection_salt.py:249), [injection_salt.py:294](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/injection_salt.py:294). **Concrete failure:** o primeiro prompt publica `.salt` e o processo morre antes de `_register_mint`; a execução seguinte aceita o salt válido e retorna sem criar `salt-minted.json`. Reproduzido com saída forçada após a publicação: salt de 32 bytes, marcador ausente antes e depois do retry. Portanto, “OBSERVABLE, never silent” não é garantido. **Minimal fix:** protocolo idempotente com marcador pendente e finalização obrigatória quando existir salt válido sem registro.
+
+### NEW FINDINGS (annex)
+
+- **SEVERITY: P1 annex. FILE:LINE:** [ledger_provenance.py:73](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/ledger_provenance.py:73). **Concrete failure:** conteúdo entregue chama o contador de “cheap” sem medição ou contrato, violando a proibição de alegações de desempenho do `AGENTS.md`. **Minimal fix:** remover “cheap” e descrever somente que o contador é local ao processo.
+
+- **SEVERITY: P1 annex. FILE:LINE:** [audit_emit.py:9139](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:9139), [audit_emit.py:9163](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:9163), [audit_emit.py:9297](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:9297). **Concrete failure:** o texto promete taxa “low”, transições “rare by construction” e operação “bounded”; uma sequência alternada `80,90` produziu 16 transições e 16 GCs. `max_files` limita remoções, não a varredura, e o prazo só é consultado a cada 64 entradas. **Minimal fix:** declarar apenas os limites verificáveis — tentativa de 250 ms, máximo de 32 remoções, sem garantia de frequência, latência ou cobertura.
+
+### P2 follow-up
+
+- **SEVERITY: P2. FILE:LINE:** [audit_emit.py:8911](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:8911), [audit_emit.py:9308](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:9308). **Concrete failure:** comentários prometem produtores SessionStart/UserPromptSubmit, mas a árvore só possui PreCompact. **Minimal fix:** marcar os valores como reservados ou implementar os produtores.
+
+- **SEVERITY: P2. FILE:LINE:** [audit_emit.py:5238](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:5238), [audit_emit.py:7094](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:7094). **Concrete failure:** `constraint_count=float("inf")` levanta `OverflowError`, contrariando “Never raises” e perdendo o evento. **Minimal fix:** aceitar somente `int` puro ou capturar `OverflowError`.
+
+- **SEVERITY: P2. FILE:LINE:** [audit_emit.py:7259](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:7259), [audit_emit.py:8766](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:8766). **Concrete failure:** `re.match` com `$` aceita identidade terminada em newline. **Minimal fix:** usar `fullmatch` ou `\Z`.
+
+- **SEVERITY: P2. FILE:LINE:** [audit_emit.py:8949](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/audit_emit.py:8949). **Concrete failure:** `isdigit()` aceita `PLAN-１２３`, embora o contrato prometa dígitos ASCII. **Minimal fix:** validar contra `0123456789`.
+
+- **SEVERITY: P2. FILE:LINE:** [injection_salt.py:229](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/injection_salt.py:229). **Concrete failure:** a API ainda diz “per-installation”, enquanto o salt agora é por projeto. **Minimal fix:** trocar para “per-project”.
+
+Verificação: SHA-256 das condições confere; 182 testes direcionados passaram; stdlib-only, gramática Python 3.9, freshness, counts, contaminação, version drift e `git diff --check` passaram. Nenhum arquivo foi alterado.
+
+VERDICT: GO-WITH-CONDITIONS — Não há P0 nem condição aplicável falsa, mas o P1 herdado alcançável e os dois P1 novos devem integrar o anexo assinado para cura em 1.4.1.

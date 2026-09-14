@@ -1,0 +1,38 @@
+Nenhuma condição aplicável mostrou-se falsa; não encontrei P0 nem P1 novo. O envelope local corresponde ao SHA-256 informado, e `upgrade.sh` é byte-idêntico à rc.1.
+
+## NEW FINDINGS (annex)
+
+Nenhum P1 não declarado neste payload.
+
+## P2 follow-ups
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:411](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/scripts/upgrade.sh:411), [scripts/upgrade.sh:1091](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/scripts/upgrade.sh:1091), [scripts/upgrade.sh:1198](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/scripts/upgrade.sh:1198), [scripts/upgrade.sh:3943](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/scripts/upgrade.sh:3943)  
+  **Cenário concreto:** `--settings-migrate-only` promete executar somente T5.4 e sair 0, mas os preflights de entrega executam antes do dispatch. Num adopter histórico com `docs` como arquivo regular, o script sai 3 antes da migração.  
+  **Correção mínima:** despachar esse modo antes dos preflights, ou ignorá-los quando `SETTINGS_MIGRATE_ONLY=1`; testar execução real e dry-run com ancestrais conflitantes.
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:4366](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/scripts/upgrade.sh:4366), comportamento em [scripts/upgrade.sh:4955](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/scripts/upgrade.sh:4955)  
+  **Cenário concreto:** o comentário afirma que igualdade com geração histórica prova entrega pelo framework. Um arquivo autoral sem registro anterior, mas byte-idêntico a uma geração histórica, satisfaz `_up_tpl_generations`, é atualizado e passa a ser framework-owned. A condição 42 descreve corretamente esse risco; a documentação interna é que continua falsa.  
+  **Correção mínima:** dizer que igualdade histórica é apenas heurística. A cura comportamental é exigir registro anterior de entrega.
+
+## Integração e blast radius
+
+No upgrade v1.3.0 copy-mode, o delta atualiza hooks, scripts, commands, skills, agentes canônicos, schemas, `SPEC/v1`, marker e settings; entrega seis rotas em `docs/`/`.github/`; regrava manifesto/install-state; e pode atualizar o harness.
+
+As condições diretamente aplicáveis são **1, 2, 4–6, 8–12, 14, 25, 27, 31, 34, 38–40, 42–47, 55, 59, 60, 62–64, 73, 75, 76, 81, 82 e 84**. As condições 3 e 7 são corretamente não operacionais para copy-mode.
+
+Resultados centrais:
+
+- Transform sem renderer falha fechado: rc 3, banner `INCOMPLETE` e `upgrade_succeeded:false`.
+- Fonte ausente/symlinkada e falha do escritor ainda podem produzir sucesso parcial conforme 34, 45 e 60.
+- Escrita externa e aquisição indevida de posse permanecem alcançáveis sem as precauções 42, 43, 47, 64, 73 e 75.
+- O perfil `user` pode ganhar comportamento bloqueante; a condição 63 emendada agora é fiel e exige `--no-settings-merge` para preservar a postura v1.3.0.
+- `TMPDIR`, manifesto, caminhos rastreados e `FMS_*` podem causar perda de proveniência ou atualização parcial conforme 14, 59, 76 e 81.
+- Grok continua sem rota segura de upgrade; Codex requer seleção explícita conforme 82/84.
+
+Não há divergência de versão: `VERSION`, `npm/package.json`, `pyproject.toml` e os manifests de plugin dizem `1.4.0`. A publicação npm, portanto, não sofre split-brain de versão; ela apenas congela os defeitos conhecidos declarados até 1.4.1.
+
+Verificação executada: upgrade histórico **164/164**, merge derivado **69/69**, migração de settings **46/46**, além de `bash -n`, ShellCheck em severidade warning, `git diff --check` e version-drift, todos limpos. Git blob confirmado igual à rc.1: `d19a5ada5fdf2666bbbb3b59df9f6d1701504d21`.
+
+VERDICT: GO-WITH-CONDITIONS — O payload satisfaz a regra deste corte, mas somente com todas as condições aplicáveis incorporadas ao material assinado e tratadas como pré-requisitos operacionais do upgrade.

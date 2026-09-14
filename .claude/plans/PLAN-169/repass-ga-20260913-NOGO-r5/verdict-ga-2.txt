@@ -1,0 +1,39 @@
+No P0 and no declared condition is false. For the stated v1.3.0 maintainer/copy-mode cohort, the envelope is honest and sufficient only when its preflights are followed literally; the scripts are not safe by default.
+
+Applicable conditions: 1, 5–6, 8–14, 24, 31, 33–35, 42, 45, 47–48, 56, 60–64, 73–76, 81–82 and 84. Conditions 3 and 7 are link-mode-only.
+
+### Findings
+
+- SEVERITY: P1 annex — declared conditions 5 and 42. FILE:LINE: `scripts/install.sh:1913`, `scripts/install.sh:1923`, `scripts/upgrade.sh:4951`, `scripts/upgrade.sh:4979`. Concrete failure: an adopter-authored `docs/` or `.github/` file byte-equal to the current or a historical template is registered or refreshed as framework-owned without prior delivery evidence. Later upgrades rewrite it, doctor treats edits as drift, and uninstall may delete it. Minimal fix: require a prior valid delivery record; byte equality alone must never establish ownership.
+
+- SEVERITY: P1 annex — declared condition 64. FILE:LINE: `scripts/upgrade.sh:1620`, `scripts/upgrade.sh:1660`. Concrete failure: if an adopter owns a path newly introduced by v1.4.0, such as `check_compact_pinning.py`, missing baseline evidence produces `FALLBACK`, which overwrites even under `--on-conflict=refuse` and transfers ownership to the framework. Minimal fix: classify “new source + existing destination + no prior record” as `CONFLICT`.
+
+- SEVERITY: P1 annex — declared conditions 8, 34 and 45. FILE:LINE: `scripts/_framework_manifest_set.sh:1311`, `scripts/_framework_manifest_set.sh:1333`, `scripts/install.sh:1804`, `scripts/install.sh:1841`, `scripts/install.sh:3556`, `scripts/install.sh:3697`. Concrete failure: an unusable route table causes the manifest writer to return success without provenance; a missing, non-regular or refused source is only `SKIP`. The remaining install proceeds, records `install_succeeded:true`, prints “Install complete,” and exits 0. Minimal fix: validate the table and every route source before the first write; persist failure and return nonzero for any rejected or absent route.
+
+- SEVERITY: P1 annex — declared conditions 47 and 48. FILE:LINE: `scripts/install.sh:1453`, `scripts/install.sh:1470`, `scripts/install.sh:1473`, `scripts/install.sh:2401`. Concrete failure: `install_dispatcher` follows destination symlinks and unconditionally overwrites adopter-edited dispatcher files; the predictable deny-baseline tempfile can also redirect a write outside the target. Minimal fix: put these writes behind the shared confinement/provenance preflight and use exclusively created same-directory staging followed by atomic rename.
+
+- SEVERITY: P1 annex — declared condition 73. FILE:LINE: `scripts/install.sh:496`, `scripts/install.sh:705`, `scripts/install.sh:1206`, `scripts/install.sh:1334`. Concrete failure: `--profile` is split without grammar validation and interpolated into source and destination paths. A traversal value whose computed source exists can make `install_one` copy outside the target. Minimal fix: accept only documented single-segment profile names before any target mutation and confine every derived destination.
+
+- SEVERITY: P1 annex — declared condition 75. FILE:LINE: `scripts/_framework_manifest_set.sh:158`, `scripts/_framework_manifest_set.sh:178`, `scripts/_framework_manifest_set.sh:251`. Concrete failure: manifest generation walks target directories, so an adopter’s untouched `.claude/hooks/acme_local.py` can be recorded with its own hash as framework-owned and later removed by uninstall. Minimal fix: generate the manifest from an exact ledger of files actually delivered or whose ownership continuity was proven.
+
+### NEW FINDINGS (annex)
+
+No new undeclared P1.
+
+- SEVERITY: P1 annex carried from rc.1 and re-reported because it is reachable on the mainline fresh-install path. FILE:LINE: `scripts/install.sh:771`, `scripts/install.sh:792`, `scripts/install.sh:1994`, `scripts/install.sh:3619`. Concrete failure: an unwritable `.github/` can make CODEOWNERS staging fail after `.claude/` and `docs/` were written. The final status is nonzero, but rollback covers only a pre-existing `.claude`; a fresh target remains partially installed without manifest or install-state. Minimal fix: pre-stage all outputs before mutation or maintain a complete rollback ledger for every created path.
+
+The other rc.1 annex items are unchanged and not worse; per the requested rule, they are not re-reported.
+
+### P2 follow-up
+
+- SEVERITY: P2. FILE:LINE: `scripts/install.sh:241`, `scripts/install.sh:936`, `scripts/install.sh:1114`. The comment says absence of the manifest helper merely skips provenance and never affects installation, but the new global confinement preflight fails closed and exits 1. Minimal fix: distinguish the optional hash helper from the now-required confinement library.
+
+- SEVERITY: P2. FILE:LINE: `scripts/_framework_manifest_set.sh:895`, `scripts/_framework_manifest_set.sh:923`. The claimed equivalent Python regex accepts trailing and consecutive hyphens, while the implementation rejects both. Minimal fix: document the actual grammar.
+
+- SEVERITY: P2. FILE:LINE: `scripts/install.sh:486`, `scripts/install.sh:1963`. The error still says `/` is a substitution delimiter although CODEOWNERS now uses a literal Bash renderer. Minimal fix: describe `/` as unsupported team-handle syntax, not as the active implementation hazard.
+
+- SEVERITY: P2 — declared conditions 35, 56 and 62. FILE:LINE: `scripts/install.sh:29`, `scripts/install.sh:1074`, `scripts/install.sh:3630`, `scripts/_framework_manifest_set.sh:1161`. Dry-run can exit 1 despite promising 0; create-only destinations are refused solely for being hard-linked even when they would be preserved; and omission of one required route is not detected. Minimal fixes: document the dry-run exception, make hard-link checks operation-aware, and pin the exact route set or table digest.
+
+Verification evidence: the conditions hash matches `71bea5f07c7123b9759a660141f488154997c24defc81a85792d3422bb14b3d3`; the three payload files are byte-identical to rc.1; route/manifest tests passed 131/131; shell syntax, diff-whitespace, AGENTS freshness, count and version-drift checks passed. `VERSION`, npm, Python and both plugin manifests agree on `1.4.0`; npm packaging includes and stages `scripts/`, so no irreversible version or payload omission was found.
+
+VERDICT: GO-WITH-CONDITIONS — No P0 or false declared condition was found, but promotion remains contingent on the copy-mode preflights and the signed P1 known-open list being cured in 1.4.1.

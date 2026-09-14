@@ -1,0 +1,59 @@
+Resultado consultivo: a condição declarada 52 é falsa no snapshot GA. Pela regra deste corte, isso é NO-GO mesmo sendo um defeito P1 e não um P0.
+
+### Finding bloqueante
+
+**SEVERITY: P1 — condição declarada 52 falsa; bloqueia pela regra do corte.**
+
+**FILE:LINE:** [CONDITIONS-ga.md:721](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/plans/PLAN-169/repass-ga/CONDITIONS-ga.md:721), [check-ceremony-script.py:108](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/scripts/check-ceremony-script.py:108), [:342](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/scripts/check-ceremony-script.py:342), [:378](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/scripts/check-ceremony-script.py:378), [ceremony-lint.yml:36](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.github/workflows/ceremony-lint.yml:36).
+
+**Falha concreta:** a condição afirma que o censo do candidato é 127 e que qualquer remoção falha. O candidato GA tem 130 scripts rastreados, pois os commits pós-rc.1 adicionaram:
+
+- `.claude/plans/PLAN-169/OWNER-GA-CUT.sh`
+- `.claude/plans/PLAN-169/repass-ga/run-ga-repass.sh`
+- `.claude/plans/PLAN-169/test-ga-kit.sh`
+
+Os três são descobertos, não-waived e têm zero findings bloqueantes. O workflow chama o checker sem sobrescrever o piso. Remover qualquer um deixa `129 >= DEFAULT_FLOOR(127)` e `blocking_unwaived=0`; portanto o checker retorna 0. É um falso-verde concreto do CI chamado “fail-closed”. A ressalva genérica de que scripts novos reabrem folga não torna verdadeira a afirmação específica de que “qualquer remoção falha”.
+
+**Correção mínima:** repinar o piso em 130, adicionar controle positivo de remoção e atualizar o snapshot das condições antes de novo re-pass. A cura durável continua sendo comparar o conjunto exato de caminhos.
+
+### Blast radius confirmado
+
+**SEVERITY: P1 known-open — condições 27, 39 e 40.**
+
+**FILE:LINE:** [state_store.py:115](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/state_store.py:115), [cost_envelope.py:142](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/cost_envelope.py:142), [claude.py:375](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/adapters/live/claude.py:375).
+
+**Falha concreta:** no upgrade copy-mode, stores de plano abrem vazios no novo slug; custos acumulados podem voltar a zero e permitir um swarm que deveria ser bloqueado; uma credencial vencida pode perder `CredentialExpired`.
+
+**Correção mínima:** migração ou dual-read da raiz legada, dos registros de custo e de `credential-rotation.json`. As mitigações manuais do guia correspondem ao comportamento observado.
+
+### Fail direction e confinamento
+
+**SEVERITY: P1 known-open — condições 17, 19, 28, 65, 70, 78 e 79.**
+
+**FILE:LINE:** [check_postcompact_reinject.py:148](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/check_postcompact_reinject.py:148), [:371](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/check_postcompact_reinject.py:371), [:717](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/check_postcompact_reinject.py:717), [state_store.py:214](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/state_store.py:214), [test_isolation.py:197](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/test_isolation.py:197).
+
+**Falha concreta:** um nome de plano instruction-like ainda passa no ponteiro; um store de plano vazio impede fallback ao store de sessão; o read com timeout de cinco segundos pode consumir todo o orçamento do PostCompact antes das constraints; SQLite/GC/markers seguem caminhos symlinkados; e `CEO_STATE_ROOT` escapa do isolamento de testes.
+
+**Correção mínima:** nomes não reinjetados, fallback de sessão após miss, timeout interno menor, operações por descritores com `O_NOFOLLOW` e neutralização de `CEO_STATE_ROOT`.
+
+As demais condições aplicáveis — 17–24, 27–30, 32, 37–41, 53, 65–70 e 78–83 — permanecem coerentes com o código observado; não encontrei outro P0 ou outra condição falsa.
+
+### NEW FINDINGS (annex)
+
+Nenhum P1 não declarado. O finding acima não pode ser relegado ao anexo porque falsifica uma condição já declarada.
+
+### P2 follow-ups
+
+- **Condição 30:** [runtime_paths.py:116](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/_lib/runtime_paths.py:116) confirma a colisão entre `/srv/a-b/c` e `/srv/a/b-c`. Correção: desambiguador estável.
+
+- **Condição 53:** [check_postcompact_reinject.py:405](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.claude/hooks/check_postcompact_reinject.py:405) reproduz `OverflowError` para `ts=1e309`. Correção: `math.isfinite` e captura explícita.
+
+- **Condições 37, 80 e 83:** persistem filtros incompletos, o “HMAC integrity check” que só valida JSON e a identificação de isolamento por substring. Não encontrei P2 novo além dos já declarados.
+
+### Publicação
+
+Não encontrei divergência irreversível de versão: `VERSION`, `.claude/.framework-version`, `pyproject.toml`, `npm/package.json` e os dois manifests de plugin dizem `1.4.0`; o marcador é byte-idêntico a `VERSION`. [release.yml:127](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.github/workflows/release.yml:127) e [npm-publish.yml:270](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.phrC24/wt/.github/workflows/npm-publish.yml:270) falham fechados antes da publicação.
+
+Passaram localmente, em modo read-only: `actionlint`, stdlib-only (449 arquivos), AGENTS freshness, claims/counts, contaminação, ADR chain/index, derivação do template user, manifestos dos scripts de gate e o ratchet de unsafe writes.
+
+VERDICT: NO-GO — A condição declarada 52 é falsa no candidato GA, portanto a própria regra do corte impede a publicação.

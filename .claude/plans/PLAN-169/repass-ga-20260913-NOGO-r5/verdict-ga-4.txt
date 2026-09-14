@@ -1,0 +1,54 @@
+No P0 and no declared condition is false. This is advisory evidence, not authorization.
+
+### Adopter blast radius
+
+A v1.3.0 copy-mode upgrade can still:
+
+- Lose visible state/history or reset enforcement inputs: conditions 27, 39, 40.
+- Overwrite or claim adopter-authored files: 42, 48, 61, 64, 75.
+- Write outside the target through unconfined paths: 43, 47, 50, 65, 69, 73, 82.
+- Report success after incomplete delivery or abort after partial mutation: 45, 59, 60, 76.
+- Add blocking behavior to the `user` posture: 2, 55, 63, 84.
+- Produce unverifiable audit chains under concurrent first use/writers: 67, 68.
+
+Condition 3 is honest but does not affect copy mode.
+
+### NEW FINDINGS (annex)
+
+1. **SEVERITY: P1 annex — signed known-open, cure in 1.4.1**
+
+   **FILE:LINE:** `VERSION:1`; `npm/package.json:3,9-18`; `SPEC/v1/README.md:3,104-108`; `SPEC/v1/adapters.schema.md:177-178`; `SPEC/v1/mcp-server.schema.md:388-392`; `SPEC/v1/soc2-control-map.schema.md:327-330`.
+
+   **Concrete failure scenario:** The diff publishes version `1.4.0` and explicitly includes `SPEC/` in the immutable npm artifact. That contract identifies the current framework as `v1.9.1`, `1.3.0-rc.1`, and `1.4.0-rc.1` in different places. An adopter following `SPEC/v1/README.md:107-108` can attempt `upgrade.sh --pin v1.9.1`, but no such release tag exists. Compatibility tooling receives four contradictory identities from the 1.4.0 package.
+
+   The executable, package, plugin and framework markers all agree on `1.4.0`, so this is not a P0 binary-version split.
+
+   **Minimal fix:** Align current-framework declarations with `1.4.0`/`1.4.1`, or remove volatile mirrors and reference root `VERSION`. Add these sites to the release-version drift census.
+
+2. **SEVERITY: P1 annex — signed known-open, cure in 1.4.1**
+
+   **FILE:LINE:** `CHANGELOG.md:30-33,110-111,207-208,326-331`; `npm/README.md:98-102`.
+
+   **Concrete failure scenario:** The GA documentation still calls the artifact an rc/pre-release, says all P1s are mandatory cures before GA, calls migration a pre-GA follow-up, and says the seven-skill migration “lands before GA.” It did not. A v1.3.0 adopter trusting that promise can upgrade normally and retain all seven VETO-bearing skills as `name-only`, exactly as condition 2 warns. The npm README likewise limits the unsupported `user` plus Codex/Grok combination to “this rc,” although it remains unsupported in GA.
+
+   **Minimal fix:** Replace rc/pre-GA language with “known-open in 1.4.0; planned for 1.4.1” and place each operational mitigation directly beside the claim.
+
+The unchanged rc.1 annex findings were not worse or newly reachable on the copy-mode upgrade path, so they are not re-reported.
+
+### P2 follow-up
+
+1. **SEVERITY: P2 follow-up**
+
+   **FILE:LINE:** `CHANGELOG.md:18`.
+
+   **Concrete failure scenario:** The GA entry is dated September 7, before the rc.1 tag on September 10 and the mandatory hold ending September 13. Published release chronology therefore places GA before its release candidate.
+
+   **Minimal fix:** Use the actual GA publication date.
+
+### Verification
+
+The conditions hash matches `71bea5f07c7123b9759a660141f488154997c24defc81a85792d3422bb14b3d3`. Candidate `168d291…` differs from rc.1 only under `.claude/plans/**`. Count/version checks, plugin regeneration, settings derivation, model parity, the 331-action audit registry, JSON/YAML parsing, `actionlint`, path-filter symmetry, and scoped `diff --check` passed.
+
+The applicable decision-driving conditions are 2, 27, 39, 40, 42, 43, 45, 47–50, 55, 59–61, 63–65, 67–70, 73–79, 81, 82, and 84. They are honest and sufficient under the stated cut rule only with the two P1s above added to the signed known-open annex.
+
+VERDICT: GO-WITH-CONDITIONS — No declared condition is false and no P0 was found; add both P1 findings to the signed 1.4.1 known-open annex.

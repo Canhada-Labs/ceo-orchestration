@@ -1,0 +1,34 @@
+Resultado consultivo: não encontrei P0, condição declarada falsa, P1 novo ou P2 novo neste payload.
+
+### NEW FINDINGS (annex)
+
+Nenhum. O P1 da rc.1 sobre sobrescrita de snapshots entre sessões concorrentes no mesmo plano permanece inalterado e known-open para 1.4.1.
+
+### P2 follow-ups
+
+Nenhum novo. Permanecem os três P2 conhecidos:
+
+- Leitura bloqueante de arquivo especial em `.claude/hooks/check_precompact_continuity.py:307`.
+- Cabeçalho “Four responsibilities” com cinco itens em `.claude/hooks/SessionEnd.py:5`.
+- Documentação invertida da resolução do root em `.claude/hooks/check_precompact_continuity.py:218`.
+
+### Condições declaradas
+
+Aplicáveis e confirmadas: **17, 18, 19, 20, 22, 23, 24, 27, 28, 29, 30, 38, 47, 53, 64, 65, 66, 67, 68, 70, 71, 72 e 78**.
+
+Evidência concreta:
+
+- O upgrade muda a raiz dos stores, podendo abrir estado vazio, e o novo `check_compact_pinning.py` pode colidir com arquivo autoral — condições 27 e 64.
+- O PostCompact lê o store antes das constraints e não tenta o store de sessão após miss no store do plano (`.claude/hooks/check_postcompact_reinject.py:371`, `:717`) — condições 19 e 70.
+- `start_ts += 1.0` pode produzir falso `ABSENT` no primeiro segundo (`.claude/hooks/SessionEnd.py:829`) — condição 20.
+- O predecessor HMAC é lido antes do lock (`.claude/hooks/audit_log.py:1262`) — condição 67.
+- O modelo registrado cai para a tabela de política quando não observado (`.claude/hooks/audit_log.py:904`) — condição 71.
+- O SessionEnd usa `audit-log.jsonl.lock`, diferente do lock dos escritores (`.claude/hooks/SessionEnd.py:336`) — condição 72.
+- A resolução de plano ainda pode consumir `CLAUDE_SESSION_ID` quando falta ID no payload (`.claude/hooks/check_precompact_continuity.py:260`) — condição 78.
+- Os riscos de symlink, adoção de objetos preexistentes e escrita na raiz runtime estão honestamente delimitados pelas condições 28, 65 e 68.
+
+As condições são suficientes para esta GA somente se todas as mitigações operacionais forem cumpridas; sem elas, o upgrade copy-mode não é seguro por padrão.
+
+Verificações: SHA-256 das condições confirmado como `71bea5f07c7123b9759a660141f488154997c24defc81a85792d3422bb14b3d3`; payload byte-idêntico à rc.1; 409 testes focados aprovados; Python 3.9, stdlib-only, diff, freshness, contaminação e counts aprovados; checkout limpo; `VERSION`, `pyproject.toml`, npm e manifests concordam em `1.4.0`.
+
+VERDICT: GO-WITH-CONDITIONS — Nenhuma condição aplicável é falsa e nenhum P0 foi encontrado; as condições e os known-open assinados permanecem obrigatórios até a cura em 1.4.1.

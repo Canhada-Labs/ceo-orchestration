@@ -172,6 +172,18 @@ cura na 1.4.1. Adopters: os repositórios do maintainer, subindo da v1.3.0 em mo
 COND_RC1_LINE1_PREFIX = "# Condições do envelope — v1.4.0-rc.1 (pré-release;"
 BUDGET_MAX_DELTA = 180   # parte 1 do r1: raw 261.739 B contra MAX_RAW_BYTES=262000
 
+COND52_RC1 = (
+    "candidato (127 neste; o piso 124 da rodada 6 deixava passar três remoções), de modo que\n"
+    "    qualquer remoção falha o gate e uma remoção intencional exige re-pinar conscientemente;\n"
+    "    cada script de cerimônia novo reabre a folga até o re-pin seguinte."
+)
+COND52_GA = (
+    "candidato da rc.1 (127). O candidato do GA acrescenta ao censo os três scripts de\n"
+    "    cerimônia do próprio kit do corte (`.claude/plans/PLAN-169/`):\n"
+    "    130 rastreados contra piso 127, logo até três remoções passam pelo gate até o re-pin\n"
+    "    seguinte — neste candidato o gate NÃO é fail-closed por contagem."
+)
+
 COND63_RC1 = (
     "Deixaram de dizer «advisory hooks only» (arquivos livres): `README.md`,\n"
     "    `docs/FAQ.md`, `README.pt-BR.md`, `npm/README.md` e `INSTALL.md`. A classe foi procurada por grep em toda a árvore entregue\n"
@@ -557,6 +569,10 @@ def derive() -> dict:
     # npm (`files`). O texto passa a declarar os TRES sitios.
     body = sub(body, COND63_RC1, COND63_GA, label="condicao 63")
     body = sub(body, COND63_RC1_TAIL, COND63_GA_TAIL, label="condicao 63 cauda")
+    # r5 (parte 7): a condicao 52 herdava o CENSO da rc.1 (127) e a promessa «qualquer
+    # remocao falha o gate»; o kit do GA acrescenta 3 scripts de cerimonia ao censo
+    # (130 contra piso 127) — no candidato do GA ate 3 remocoes passam. Verdade declarada.
+    body = sub(body, COND52_RC1, COND52_GA, label="condicao 52")
     cond = COND_HEADER_GA + "\n" + body
     out["repass-ga/CONDITIONS-ga.md"] = cond
 
