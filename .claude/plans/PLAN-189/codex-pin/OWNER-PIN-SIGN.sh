@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# CEREMONY-LINT: handwritten-exception: cerimônia de UM uso (re-pin do codex
+# CLI), escrita à mão em vez de derivada — não há molde compartilhado hoje; o
+# toolkit do PLAN-188 é justamente o que elimina esta classe.
 # OWNER-PIN-SIGN.sh — cerimônia do re-pin codex-cli 0.147.0 -> 0.154.0.
 #
 # UM passo: preenche o Anchor-SHA, assina o sentinel, aplica os dois arquivos
@@ -26,8 +29,9 @@ BAK=$(mktemp -d /tmp/pinbak.XXXXXX)
 die() { printf '\nFAIL: %s\n' "$*" >&2; exit 1; }
 say() { printf '\n===== %s\n' "$*"; }
 restore() {
-  [ -f "$BAK/pin" ] && cp "$BAK/pin" "$DST_PIN" || true
-  [ -f "$BAK/man" ] && cp "$BAK/man" "$DST_MAN" || true
+  # restore best-effort num trap de saída: falha vira aviso, nunca silêncio
+  if [ -f "$BAK/pin" ]; then cp "$BAK/pin" "$DST_PIN" || printf "restore do pin falhou\n" >&2; fi
+  if [ -f "$BAK/man" ]; then cp "$BAK/man" "$DST_MAN" || printf "restore do manifesto falhou\n" >&2; fi
 }
 trap 'rc=$?; [ $rc -ne 0 ] && { restore; printf "\nárvore RESTAURADA. Backup em %s\n" "$BAK" >&2; }' EXIT
 
@@ -76,6 +80,7 @@ else
 fi
 
 say "3/6 aplicar os dois arquivos canônicos"
+for d in "$DST_PIN" "$DST_MAN"; do [ -L "$d" ] && die "destino é symlink: $d"; done
 cp "$SRC_PIN" "$DST_PIN"
 cp "$SRC_MAN" "$DST_MAN"
 grep -q '>=0.128.0,<0.155.0' "$DST_PIN" || die "range novo não aterrissou"
