@@ -1,13 +1,14 @@
 ---
 id: PLAN-169
 title: Fechamento total + evolução cross-session — publica v1.3.0 e v1.4.0
-status: executing
+status: done
 created: 2026-08-08
+completed_at: 2026-09-15
 reviewed_at: 2026-08-08
 reviewed_by: "Owner — ratificação explícita em chat (S298): 'ratifica tudo com as recomendações e commita o pack'. Cobre R-A (esta transição), R-B (gate de debate §12.4 aceito como design-coherent), R-C (deferral de higiene de registro), OQ-1..5 e W0.8 conforme as recomendações do checklist."
 owner: CEO
 depends_on: [PLAN-166, PLAN-167, PLAN-168]
-related_commits: ["875ac92f13783759eb2776eabcce82b43c734db8", "511fdc2a9f15265338a394b185afbd106eb5b018", "22755b12b2efeb9a4404aa1dbd821763b9f9f444", "43f51528e36ef690bec0665c143fc085a6050529"]
+related_commits: ["875ac92f13783759eb2776eabcce82b43c734db8", "511fdc2a9f15265338a394b185afbd106eb5b018", "22755b12b2efeb9a4404aa1dbd821763b9f9f444", "43f51528e36ef690bec0665c143fc085a6050529", "f9db82ecdfaa677e3eaa803743a35087dca227c8", "77af066c4207"]
 budget_tokens: 500-800k (fechamento + DOIS trens com rodadas de rail; bateria E1-E4 EXCLUÍDA — orçamento próprio no PLAN-170)
 budget_sessions: 11-14
 context_risk: high
@@ -1382,14 +1383,14 @@ pelo Owner; `OWNER-S329-E-LAND.sh` G-PRE..G5 + V1..V7 verdes; patch
       diz "rc.2 cortada" e o GA andou sobre a **rc.4** — a regra de
       ancestralidade funcionou no sentido caro (ver linha 1466).
       Objetivo cumprido; a letra virou título histórico.
-- [ ] AC-4 [P1] Quota-resume: probes W4.1.0 registrados; simulação
+- [>] AC-4 [P1] **MIGRADO para `PLAN-169-FOLLOWUP-quota-resume-and-probes`.** Quota-resume: probes W4.1.0 registrados; simulação
       (job ÚNICO no horário efetivo `resets_at+≥120s`, minuto ∉
       {:00,:30}) + live-fire real OU registro falsificável de por que
       não; kill-switches provados (`CEO_QUOTA_RESUME=0`,
       `CEO_SOTA_DISABLE=1`); gate de postura lê postura EFETIVA; doc
       promete exatamente o que o teste provou; envs novas em
       `env-inventory.json` no mesmo commit.
-- [ ] AC-5 [P1] Probes W4.2.0 (a-f) registrados com evidência; peer
+- [>] AC-5 [P1] **MIGRADO para `PLAN-169-FOLLOWUP-quota-resume-and-probes`.** Probes W4.2.0 (a-f) registrados com evidência; peer
       tenta induzir edit canônico via SendMessage ⇒ bloqueado + evento
       HMAC com campos whitelisted (checklist R-SEC9); com `refuse`:
       nenhum turno nasce (controle: com `accept`, nasce); doutrina em
@@ -1424,9 +1425,13 @@ pelo Owner; `OWNER-S329-E-LAND.sh` G-PRE..G5 + V1..V7 verdes; patch
       700k–1,2M + frota em orçamento SEPARADO, teto duro 14M) e gatilho
       nomeado (`external_wait`: corte da `v1.4.0-rc.1`). Sem cerimônia:
       arquivo de plano (oráculo `--is-canonical` = 0).
-- [ ] AC-7 [P1] Marcador 12º site: controle plantado vermelho + bump
+- [>] AC-7 [P1] **MIGRADO para `PLAN-169-FOLLOWUP-quota-resume-and-probes`.** Marcador 12º site: controle plantado vermelho + bump
       1.4.0 real verde (as duas evidências).
-- [ ] AC-8 [P1] v1.4.0 GA publicada (trem completo com hold).
+- [x] AC-8 [P1] v1.4.0 GA publicada (trem completo com hold). GA cortado
+      2026-09-15 17:22 UTC: tag `v1.4.0` = `23b79dda` assinada (Good
+      signature) sobre `f9db82ec` (pai = candidato `b113aec`), npm
+      `latest=1.4.0`, Release nao-draft/nao-prerelease; re-pass r6 = 7/7
+      GO-WITH-CONDITIONS, delta de 41 arquivos dentro da allowlist de 42.
 - [x] AC-9 [P2] As 4 dívidas C.* fechadas com evidência dinâmica
       (pair-rail-gate roda até o fim NESTA máquina; injector
       fail-closed testado; **overhead: P4 não bloqueia fan-out
