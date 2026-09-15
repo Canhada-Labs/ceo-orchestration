@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "package_version": "0.147.0",
-  "npm_integrity": "sha512-BEUVkiOW7kLcRyrMLfAr/h9wF8sRVJyZDy6OHtVn6QGDXiv3BvAZVTY1Pu9xF7KdIdkYXbp4uayN0aDQQaAUJw==",
+  "package_version": "0.154.0",
+  "npm_integrity": "sha512-FV/x1OHXYv/ifjf3mXj9ThTTAWcUZN6cGIRQRhRxkKNOPuImu1WW0c8ev1vUkE9XGH90dEnYG1tBjIkxRikg0w==",
   "payloads": {
     "aarch64-apple-darwin": {
       "path": "@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
-      "sha256": "19c4f144c5226a9f17c58e6f0fa854843b0f77a6eb420f40e2745a12f10f5d37"
+      "sha256": "4f85982624b3898c8991cb80c0981b2aa71070e3537046c9a95950318a95afcc"
     }
   }
 }

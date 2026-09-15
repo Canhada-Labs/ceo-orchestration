@@ -2,7 +2,7 @@
 
 Plan: PLAN-189
 Wave: re-pin codex-cli 0.147.0 → 0.154.0
-Anchor-SHA: <PREENCHER no SIGN com o HEAD real>
+Anchor-SHA: 58aad34dcab604f5a5e435af1d55990e67ca061a
 Data: 2026-09-15
 
 ## Ratificação (Owner, S352)
