@@ -134,6 +134,16 @@ cerimônia. W1 e W2 existem para tornar a regra durável e verificável.
 - **OQ-3.** W2 mexe em emissor de auditoria (hook). Vale o custo agora, ou
   esperamos W0/W1 mostrarem efeito primeiro?
 
+**Respostas do Owner (2026-09-15 (S353, 20:5x BRT; Owner presente; AskUserQuestion; rótulos VERBATIM); registro em `PLAN-186/debate/owner-decisions-S353.md`):**
+
+- OQ-1 — «W0 primeiro, sozinha (Recomendado)». W3 fica para uma assinatura posterior.
+- OQ-2 — «Propriedade OU superfície, julgado pelo autor (Recomendado)». Mesma
+  propriedade violada OU mesma superfície de entrada; quem cura julga e escreve a
+  classe no registro da rodada.
+- OQ-3 — «Fazer agora junto» (contra a recomendação). Leitura do CEO: a W2 entra no
+  programa agora e viaja com a W1 na assinatura seguinte à da W0 (a OQ-1 fixa a
+  W0 sozinha); se o Owner quiser a W2 na assinatura da W0, é decisão nova.
+
 ## How to continue
 
 > Ler `.claude/plans/PLAN-189-cure-quality-and-rail-instrumentation.md`, a
