@@ -1,0 +1,39 @@
+Nenhuma condição aplicável mostrou-se falsa; não encontrei P0 nem P1 novo. O envelope corresponde ao SHA-256 informado, e `upgrade.sh` é byte-idêntico à rc.1 (`d19a5ada5fdf2666bbbb3b59df9f6d1701504d21`).
+
+## NEW FINDINGS (annex)
+
+Nenhum P1 não declarado neste payload.
+
+## P2 follow-ups
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:411](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.rDJrtJ/wt/scripts/upgrade.sh:411), [scripts/upgrade.sh:1092](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.rDJrtJ/wt/scripts/upgrade.sh:1092), [scripts/upgrade.sh:1198](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.rDJrtJ/wt/scripts/upgrade.sh:1198), [scripts/upgrade.sh:3943](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.rDJrtJ/wt/scripts/upgrade.sh:3943)  
+  **Cenário concreto:** `--settings-migrate-only` promete executar somente T5.4 e sair 0, mas os preflights de entrega executam antes do dispatch. Num adopter histórico com `docs` como arquivo regular, o script sai 3 antes da migração.  
+  **Correção mínima:** despachar esse modo antes dos preflights ou ignorá-los quando `SETTINGS_MIGRATE_ONLY=1`; testar execução real e dry-run com ancestrais conflitantes.
+
+- **SEVERITY:** P2  
+  **FILE:LINE:** [scripts/upgrade.sh:4366](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.rDJrtJ/wt/scripts/upgrade.sh:4366), comportamento em [scripts/upgrade.sh:4955](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.rDJrtJ/wt/scripts/upgrade.sh:4955)  
+  **Cenário concreto:** o comentário afirma que igualdade com uma geração histórica prova entrega pelo framework. Um arquivo autoral sem registro anterior, mas byte-idêntico a essa geração, satisfaz `_up_tpl_generations`, é atualizado e passa a ser framework-owned. A condição 42 descreve corretamente o risco; o comentário é que permanece falso.  
+  **Correção mínima:** descrever a igualdade histórica como heurística. A cura comportamental é exigir registro anterior de entrega.
+
+## Integração e blast radius
+
+O upgrade copy-mode atualiza hooks, scripts, commands, skills, agentes, schemas, `SPEC/v1`, marker e settings; entrega seis rotas em `docs/`/`.github/`; regrava manifesto/install-state; e pode atualizar o harness.
+
+As condições diretamente aplicáveis são **1, 2, 4–6, 8–12, 14, 25, 27, 31, 34, 38–40, 42–47, 55, 59, 60, 62–64, 73, 75, 76, 81, 82 e 84**. As condições 3 e 7 são corretamente não operacionais para copy-mode.
+
+Os principais riscos do caminho normal estão honestamente declarados:
+
+- Fonte ausente/symlinkada ou falha do escritor pode deixar entrega parcial conforme 34, 45 e 60.
+- Backups e escritores fora do predicado ainda permitem escape por links conforme 43 e 47.
+- Igualdade histórica, colisões em caminhos novos e expansão do manifesto podem adquirir posse autoral conforme 42, 64 e 75.
+- Manifesto inválido, caminho sensível rastreado, `TMPDIR` ruim ou `FMS_*` herdada podem causar overwrite ou upgrade parcial conforme 14, 59, 76 e 81.
+- Perfil `user` e harnesses exigem as restrições 55, 63, 82 e 84.
+
+A condição 1 está implementada: transform não renderizável marca falha em [scripts/upgrade.sh:4438](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.rDJrtJ/wt/scripts/upgrade.sh:4438), persiste `upgrade_succeeded:false` em [scripts/upgrade.sh:5645](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.rDJrtJ/wt/scripts/upgrade.sh:5645) e sai 3 em [scripts/upgrade.sh:5805](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.rDJrtJ/wt/scripts/upgrade.sh:5805).
+
+Não há split-brain de publicação: `VERSION`, `pyproject.toml`, `npm/package.json` e os dois manifests de plugin dizem `1.4.0`.
+
+Verificação: **688 checks, zero falhas** — histórico 164/164, roster 69/69, migração 46/46, replay 73/73, W3 11/11 e write-safety 325/325. `bash -n`, ShellCheck, `git diff --check`, version-drift, claims, contaminação e worktree também ficaram limpos.
+
+VERDICT: GO-WITH-CONDITIONS — O payload satisfaz a regra deste corte somente com todas as condições aplicáveis incorporadas ao material assinado e tratadas como pré-requisitos obrigatórios do upgrade.

@@ -1,0 +1,11 @@
+.claude-plugin/marketplace.json
+.claude-plugin/plugin.json
+.claude/.framework-version
+.claude/settings.json
+.github/workflows/smoke-install.yml
+CHANGELOG.md
+SPEC/v1/audit-log.schema.md
+SPEC/v1/state-stores.schema.md
+VERSION
+npm/README.md
+npm/package.json

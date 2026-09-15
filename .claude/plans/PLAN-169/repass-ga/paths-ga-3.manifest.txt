@@ -1,0 +1,11 @@
+scripts/doctor.sh
+scripts/uninstall.sh
+templates/.github/workflows/benchmarks.yml.template
+templates/.github/workflows/validate.yml.template
+templates/codex/pre-push-review-gate.sh
+templates/compaction.md
+templates/docs/BRANCH-PROTECTION.md
+templates/grok/pre-push-review-gate.sh
+templates/scripts/statusline-ceo.py
+templates/settings/settings.base.json
+templates/settings/settings.user.json

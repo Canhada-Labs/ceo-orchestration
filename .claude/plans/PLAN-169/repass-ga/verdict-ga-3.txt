@@ -1,0 +1,25 @@
+Advisory disposition: no P0 and no declared condition proved false. The candidate remains acceptable only as a conditional GA; this is evidence, not authorization.
+
+The reviewed conditions file matches SHA-256 `8e011bd275fe68f460ceac02df76ccd13ccc79d4a39b4d29439ec2562867e50d`. HEAD differs from `v1.4.0-rc.1` only under `.claude/plans/`, and all checked release surfaces agree on version `1.4.0`.
+
+Applicable declared conditions: 3, 4–5, 15–16, 26–27, 38, 42–43, 47, 49–51, 55, 57, 63, 69, 75, 77, 82 and 84. Their descriptions are materially consistent with this payload.
+
+Adopter blast radius:
+
+- A v1.3.0 copy-mode `user` upgrade without `--no-settings-migrate --no-settings-merge` can acquire maintainer settings and blocking hooks, particularly `check_config_change.py` (`templates/settings/settings.user.json:10-30,569-580`). Conditions 55 and 63 accurately disclose this.
+- An adopter-authored file that matches a current or historical template can be claimed in the manifest, after which `doctor.sh --repair` can overwrite later edits and `uninstall.sh` can remove it. Conditions 5, 42 and 75 accurately disclose this ownership transition.
+- The new doctor guards fail closed on unusable route metadata, malformed provenance, source escape and unsafe repair destinations. The remaining backup, restore, LINK and ancestor hazards are disclosed by conditions 43, 50, 57 and 69.
+
+NEW FINDINGS (annex)
+
+None. The rc.1 P1 annex remains unchanged, was not observed to be worse, and gains no new mainline reachability for the stated v1.3.0 copy-mode upgrade.
+
+P2 follow-ups
+
+- P2 — `scripts/uninstall.sh:15,522,526-547,318-349` — The help and dry-run still describe a `.claude/`-only backup/restore, but the added implementation archives and may restore every valid manifest-listed delivery outside `.claude/`. An adopter expecting a governance-only restore can have absent `docs/`, `.github/`, `SPEC/` or root deliveries recreated without that scope appearing in the preview. Minimal fix: describe the complete archive scope in `--help` and print the affected member set during dry-run.
+
+- P2 — `templates/.github/workflows/validate.yml.template:124-128` — Once activated, the workflow installs a floating `PyYAML>=6.0,<7` package and imports it in the CI job. A subsequently compromised or behavior-changing 6.x release therefore executes in adopter CI despite the same workflow emphasizing immutable pins elsewhere. Minimal fix: install from an exact, hash-locked dependency set or use a pinned, vendored validator.
+
+Static verification passed: scoped diff integrity, shell syntax and ShellCheck, workflow actionlint, JSON parsing, generated `settings.user.json` parity, Python AST parsing, AGENTS freshness, claim counts, contamination and stdlib-only checks.
+
+VERDICT: GO-WITH-CONDITIONS — No P0 or false declared condition was found; promotion is supportable only with the declared conditions and the unchanged rc.1 annex carried as signed known-open work for 1.4.1.

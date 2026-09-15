@@ -1,0 +1,42 @@
+Resultado consultivo: não encontrei P0, condição declarada falsa, P1 novo ou P2 novo neste payload.
+
+### NEW FINDINGS (annex)
+
+Nenhum. O P1 da rc.1 sobre sessões concorrentes sobrescreverem o snapshot único do mesmo plano permanece inalterado, known-open e destinado à 1.4.1; não o re-reporto.
+
+### P2 follow-ups
+
+- **SEVERITY:** P2, já conhecido  
+  **FILE:LINE:** `.claude/hooks/check_precompact_continuity.py:307-347`  
+  **Cenário:** um FIFO ou symlink `PLAN-NNN-*.md` que vença o `sorted(glob)` é seguido por `open()` e pode bloquear até o harness matar o PreCompact.  
+  **Fix mínimo:** reutilizar o leitor por descritores da condição 18, com `O_NOFOLLOW|O_NONBLOCK` e `fstat(S_ISREG)`.
+
+- **SEVERITY:** P2, textual  
+  **FILE:LINE:** `.claude/hooks/SessionEnd.py:5`, `:20`  
+  **Cenário:** o cabeçalho anuncia quatro responsabilidades, mas enumera cinco.  
+  **Fix mínimo:** trocar para “Five responsibilities”.
+
+- **SEVERITY:** P2, textual  
+  **FILE:LINE:** `.claude/hooks/check_precompact_continuity.py:218-243`  
+  **Cenário:** a docstring declara git-toplevel como autoridade e walk-up como fallback; o código executa o inverso.  
+  **Fix mínimo:** documentar a ordem implementada.
+
+### Condições declaradas
+
+Aplicáveis e confirmadas: **17, 18, 19, 20, 22, 23, 24, 27, 28, 29, 30, 38, 47, 53, 64, 65, 66, 67, 68, 70, 71, 72 e 78**.
+
+O blast radius está descrito honestamente:
+
+- O upgrade muda a raiz dos stores e pode apresentar estado vazio (`state_store.py:115-133`); o novo `check_compact_pinning.py` também ocupa um caminho que pode ser autoral — condições 27 e 64.
+- O store de sessão cria SQLite por caminhos sem confinamento de symlink (`state_store.py:214-231`) — condição 65.
+- O PostCompact lê o store antes das constraints e não tenta o store de sessão após miss no store do plano (`check_postcompact_reinject.py:371-402`, `:717-720`) — condições 19 e 70.
+- `start_ts += 1.0` pode produzir falso `ABSENT` no primeiro segundo (`SessionEnd.py:820-829`) — condição 20.
+- O predecessor HMAC é lido antes do lock (`audit_log.py:1258-1278`) — condição 67.
+- O SessionEnd usa `audit-log.jsonl.lock`, diferente do lock dos escritores (`SessionEnd.py:334-338`) — condição 72.
+- Os riscos de nomes reinjetados, identidade de sessão via ambiente, roots runtime e objetos preexistentes estão explicitamente delimitados pelas condições 17, 28, 68 e 78.
+
+As condições são suficientes apenas como envelope operacional obrigatório; sem suas checagens e restrições, o upgrade copy-mode não é seguro por padrão.
+
+Verificação: hash das condições `8e011bd275fe68f460ceac02df76ccd13ccc79d4a39b4d29439ec2562867e50d`; payload byte-idêntico à rc.1; 414 testes focados aprovados e 1 ignorado; Python 3.9, stdlib-only, freshness, contaminação, counts e `git diff --check` aprovados; checkout limpo; `VERSION`, `pyproject.toml`, npm e manifests concordam em `1.4.0`.
+
+VERDICT: GO-WITH-CONDITIONS — As condições aplicáveis são verdadeiras e, junto do anexo known-open da rc.1, suficientes para esta coorte copy-mode; não encontrei P0 nem novo P1 que altere o corte.

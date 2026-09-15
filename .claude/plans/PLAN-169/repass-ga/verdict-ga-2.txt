@@ -1,0 +1,47 @@
+No P0 and no declared condition is false. For the stated v1.3.0 maintainer/copy-mode cohort, the envelope is honest and sufficient only when its operational preflights are followed literally; the scripts are not safe by default. This is advisory evidence, not authorization.
+
+Applicable conditions: 1, 5–14, 24, 31, 33–35, 42, 45, 47–48, 56, 60–64, 73–76, 81–82 and 84. Conditions 3 and 7 are link-mode-only.
+
+### Findings
+
+- SEVERITY: P1 annex — declared conditions 5 and 42. FILE:LINE: `scripts/install.sh:1913-1925`, `scripts/upgrade.sh:4951-4992`. Concrete failure scenario: an adopter-authored `docs/` or `.github/` file byte-equal to the current or a historical template is registered or refreshed as framework-owned without prior delivery evidence. Later upgrades rewrite it, doctor treats edits as drift, and uninstall may delete it. Minimal fix: require a prior valid delivery record; byte equality alone must not establish ownership.
+
+- SEVERITY: P1 annex — declared condition 64. FILE:LINE: `scripts/upgrade.sh:1620-1626`, `scripts/upgrade.sh:1660-1667`. Concrete failure scenario: if an adopter owns a path newly introduced by v1.4.0, such as `check_compact_pinning.py`, missing baseline evidence produces `FALLBACK`, which overwrites it even under `--on-conflict=refuse` and transfers ownership to the framework. Minimal fix: classify “new source + existing destination + no prior record” as `CONFLICT`.
+
+- SEVERITY: P1 annex — declared conditions 8, 34 and 45. FILE:LINE: `scripts/_framework_manifest_set.sh:1311-1338`, `scripts/install.sh:1804-1843`, `scripts/install.sh:3556-3557`, `scripts/install.sh:3697`. Concrete failure scenario: an unusable route table makes the manifest writer emit an error but return success; a missing, non-regular or refused route source is merely `SKIP`. Installation can then record `install_succeeded:true`, announce “Install complete,” and exit 0 without complete delivery or usable provenance. Minimal fix: validate the table and every required route source before the first target write, then persist failure and return nonzero on any rejection.
+
+- SEVERITY: P1 annex — declared conditions 33, 47 and 48. FILE:LINE: `scripts/install.sh:163`, `scripts/install.sh:1453-1474`, `scripts/install.sh:2401-2410`, `scripts/install.sh:2463-2499`. Concrete failure scenario: `install_dispatcher` follows destination symlinks and unconditionally overwrites adopter-edited files; the predictable deny-baseline tempfile can redirect output outside the target; and `state/mcp_client_secrets` follows a symlinked `state/`. This also contradicts the header’s idempotence promise. Minimal fix: route all writers through the shared confinement/provenance guard and use exclusively created same-directory staging plus atomic rename.
+
+- SEVERITY: P1 annex — declared condition 73. FILE:LINE: `scripts/install.sh:496-497`, `scripts/install.sh:705-706`, `scripts/install.sh:1206-1255`, `scripts/install.sh:1334-1345`. Concrete failure scenario: `--profile` is split without grammar validation and interpolated into source and destination paths. A traversal value whose resolved source exists can make `install_one` copy outside the target. Minimal fix: validate every profile as an allowed single path segment before any write and confine every derived destination.
+
+- SEVERITY: P1 annex — declared condition 61. FILE:LINE: `scripts/install.sh:2046-2053`. Concrete failure scenario: any manifest line ending in two spaces plus `.github/CODEOWNERS` counts as provenance, even with an invalid digest. On a rerun, a deliberately empty CODEOWNERS may be re-rendered, silently re-enabling review routing. Minimal fix: require a regular, canonical, uniquely parsed manifest containing exactly one valid HASH record for CODEOWNERS.
+
+- SEVERITY: P1 annex — declared condition 75. FILE:LINE: `scripts/_framework_manifest_set.sh:158-195`, `scripts/_framework_manifest_set.sh:251-291`. Concrete failure scenario: manifest generation walks target directories rather than an actual-delivery ledger. An untouched adopter file such as `.claude/hooks/acme_local.py` can therefore be recorded with its own hash as framework-owned and later removed by uninstall. Minimal fix: generate records solely from paths actually delivered or backed by valid ownership continuity.
+
+### NEW FINDINGS (annex)
+
+No new undeclared P1.
+
+- SEVERITY: P1 annex carried from rc.1 and re-reported because it is reachable on the mainline fresh-install path. FILE:LINE: `scripts/install.sh:771-800`, `scripts/install.sh:1985-2009`, `scripts/install.sh:3619-3631`. Concrete failure scenario: an unwritable `.github/` can make CODEOWNERS staging fail after `.claude/` and `docs/` were written. The process exits nonzero, but rollback covers only a pre-existing `.claude`; a fresh target remains partially installed without manifest or install-state. Minimal fix: pre-stage all outputs or maintain a complete rollback ledger for every created path.
+
+The other rc.1 annex items are unchanged and not worse, so they are not re-reported.
+
+### P2 follow-up
+
+- SEVERITY: P2. FILE:LINE: `scripts/install.sh:241-251`, `scripts/install.sh:936-946`, `scripts/install.sh:1114-1124`. Concrete failure scenario: the comment says the manifest helper is optional, but absence of `_framework_manifest_set.sh` now makes destination validation unavailable and refuses installation. Minimal fix: distinguish the optional hashing helper from the required confinement library.
+
+- SEVERITY: P2. FILE:LINE: `scripts/_framework_manifest_set.sh:895-933`. Concrete failure scenario: the documented “equivalent” Python regex permits trailing or consecutive hyphens while the implementation rejects them. Minimal fix: document the actual grammar.
+
+- SEVERITY: P2. FILE:LINE: `scripts/install.sh:486`, `scripts/install.sh:1963-1969`. Concrete failure scenario: the error still says `/` is the active substitution delimiter although CODEOWNERS now uses a literal Bash renderer. Minimal fix: describe team handles as intentionally unsupported, without claiming current rendering would corrupt the file.
+
+- SEVERITY: P2 — declared condition 35. FILE:LINE: `scripts/install.sh:29-30`, `scripts/install.sh:3630-3631`. Concrete failure scenario: `--dry-run` promises exit 0 but destination refusal exits 1. Minimal fix: document the nonzero refusal case.
+
+- SEVERITY: P2 — declared condition 56. FILE:LINE: `scripts/install.sh:1074-1105`, `scripts/_framework_manifest_set.sh:870-881`. Concrete failure scenario: a hard-linked create-only destination is refused during global preflight even when the installer would preserve it without writing. Minimal fix: apply leaf hard-link refusal only when the selected operation mutates that leaf.
+
+- SEVERITY: P2 — declared condition 62. FILE:LINE: `scripts/_framework_manifest_set.sh:1161-1245`, `scripts/delivery-routes.tsv:24-29`. Concrete failure scenario: deleting one required route still leaves a valid nonempty table, so semantic omission is not detected. Minimal fix: pin the exact destination set or release-table digest.
+
+Verification evidence: the reviewed conditions hash is `8e011bd275fe68f460ceac02df76ccd13ccc79d4a39b4d29439ec2562867e50d`; all three payload files are byte-identical to rc.1; the live table has six declared routes and six regular, non-symlink sources. Route/manifest tests passed 131/131, installer write-safety e2e passed 325/325, and the historical v1.3.0 adopter-upgrade suite passed 164/164. Bash 3.2 syntax, diff whitespace, stdlib-only, count, and version-drift checks passed.
+
+`VERSION`, Python metadata, `npm/package.json`, and both plugin manifests agree on `1.4.0`. `npm/package.json:9-18` includes `scripts/`, and `.github/workflows/npm-publish.yml:303-340` stages that directory, so the manifest library and route table will land in the tarball. No irreversible version-string disagreement or payload omission was found; the irreversible content is the known-open P1 behavior above, requiring 1.4.1.
+
+VERDICT: GO-WITH-CONDITIONS — No P0 or false declared condition was found, but promotion depends on the copy-mode preflights and on carrying the signed known-open list forward for cure in 1.4.1.

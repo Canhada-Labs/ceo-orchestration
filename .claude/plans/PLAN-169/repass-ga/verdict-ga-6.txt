@@ -1,0 +1,66 @@
+Resultado substantivo: nenhum P0 e nenhuma condição declarada falsa. O envelope é honesto, mas este não é um upgrade transparente: as condições operacionais são necessárias.
+
+### Impacto no adopter
+
+No upgrade v1.3.0 → v1.4.0 em copy mode, a resolução padrão abandona `$HOME/.claude/projects/ceo-orchestration/` e passa ao slug nativo do checkout. Sem migração:
+
+- um plano ativo abre scratchpad/store vazio;
+- o `/resume` não encontra os eventos da cadeia legada;
+- auditoria, chave HMAC e salt começam uma nova família no diretório nativo;
+- os bytes antigos permanecem no legado, mas ficam operacionalmente invisíveis.
+
+Isso corresponde às condições declaradas, especialmente 21, 27–30, 65, 67–68. As demais condições aplicáveis à integração e à entrega deste payload são 19, 23–24, 41, 45, 47, 54, 64–66, 70, 72, 76, 78–79, 81 e 83. Elas são suficientes somente como preflight obrigatório; não constituem cura no código.
+
+Não encontrei nova inversão de fail direction além das já declaradas: o matcher de ledger rejeita input não verificável; falhas de bookkeeping degradam abertas. Os riscos de symlink, namespace autoral e escrita fora da raiz efetiva permanecem os descritos nas condições 21, 28, 47, 65 e 68.
+
+As autoridades de versão examinadas concordam em `1.4.0` (`VERSION`, pacote npm e manifests do plugin); não há divergência irreversível de versão no tarball.
+
+### P1 herdado, alcançável no mainline
+
+SEVERITY: P1 annex — signed known-open, cure in 1.4.1  
+FILE:LINE: `.claude/hooks/_lib/injection_salt.py:33`, `.claude/hooks/_lib/injection_salt.py:249`, `.claude/hooks/_lib/injection_salt.py:294`  
+Concrete failure scenario: no primeiro prompt normal após o upgrade, o processo publica os 32 bytes de `.salt` e morre antes de `_register_mint()`. O processo seguinte encontra um salt válido e retorna imediatamente em 249–252; `salt-minted.json` e `salt_rotation_registered` nunca são recuperados. Portanto, a afirmação de que toda mintagem é observável continua falsa.  
+Minimal fix: registrar uma intenção durável antes da publicação e concluí-la idempotentemente, ou fazer o read de um salt válido sem marker recuperar marker/evento com prova de autoria.
+
+### NEW FINDINGS (annex)
+
+SEVERITY: P1 annex — signed known-open, cure in 1.4.1  
+FILE:LINE: `.claude/hooks/_lib/ledger_provenance.py:73-80`  
+Concrete failure scenario: o novo docstring publica o contador em processo como “cheap” sem medição ou limite verificável. Isso viola diretamente a regra do `AGENTS.md` que proíbe claims de velocidade/throughput no framework.  
+Minimal fix: substituir por descrição factual, por exemplo “process-local counter”, sem alegação de custo.
+
+SEVERITY: P1 annex — signed known-open, cure in 1.4.1  
+FILE:LINE: `.claude/hooks/_lib/audit_emit.py:9139-9146`, `.claude/hooks/_lib/audit_emit.py:9163-9177`, `.claude/hooks/_lib/audit_emit.py:9297-9301`  
+Concrete failure scenario: o diff promete taxa “low”, execução “rare by construction” e sweep “bounded”. O helper aceita transições em ambas as direções, portanto buckets válidos alternados invocam o GC repetidamente. `max_files` limita deleções, não entradas examinadas, e o deadline só é consultado a cada 64 entradas; chamadas de filesystem também não têm prazo rígido. As garantias publicadas não decorrem do código.  
+Minimal fix: remover as alegações de frequência/desempenho e documentar exatamente os limites best-effort; se “bounded” for requisito, impor também cap de entradas e operações com prazo efetivo.
+
+### P2 follow-ups
+
+SEVERITY: P2  
+FILE:LINE: `.claude/hooks/_lib/audit_emit.py:8911-8914`, `.claude/hooks/_lib/audit_emit.py:8974-8977`  
+Concrete failure scenario: os comentários dizem que SessionStart e UserPromptSubmit produzem `context_pressure_observed`, mas o censo de chamadas encontra apenas PreCompact. O operador pode interpretar uma cobertura de amostragem que não existe.  
+Minimal fix: implementar os dois produtores ou marcar os valores como reservados.
+
+SEVERITY: P2  
+FILE:LINE: `.claude/hooks/_lib/audit_emit.py:7094-7103`, `.claude/hooks/_lib/audit_emit.py:5238-5247`  
+Concrete failure scenario: `constraint_count=float("inf")` faz `int()` levantar `OverflowError`, não capturado, contrariando o contrato “Never raises” de `emit_generic`.  
+Minimal fix: usar validação type-strict de inteiro ou capturar também `OverflowError`.
+
+SEVERITY: P2  
+FILE:LINE: `.claude/hooks/_lib/audit_emit.py:7259-7264`, `.claude/hooks/_lib/audit_emit.py:8766-8768`  
+Concrete failure scenario: `re.match()` com `$` aceita uma newline final; um `session_id` ou `project` como `"abc\n"` entra na cadeia assinada apesar do charset declarado.  
+Minimal fix: usar `fullmatch()` ou âncora `\Z`.
+
+SEVERITY: P2  
+FILE:LINE: `.claude/hooks/_lib/audit_emit.py:8949-8961`  
+Concrete failure scenario: `str.isdigit()` aceita dígitos Unicode, logo `PLAN-１２３` passa por um validador documentado como `PLAN-NNN` ASCII e diverge dos consumidores estritos.  
+Minimal fix: exigir cada caractere em `"0123456789"`.
+
+SEVERITY: P2  
+FILE:LINE: `.claude/hooks/_lib/injection_salt.py:229-234`  
+Concrete failure scenario: a API ainda documenta “per-installation salt”, embora o diff tenha mudado a unidade para projeto. Ferramentas ou operadores derivados desse contrato podem procurar/copiar o salt errado.  
+Minimal fix: trocar para “per-project salt” e nomear a resolução efetiva.
+
+Verificação read-only: SHA-256 do envelope confere; HEAD é `b113aec9d586e1ae8a1cfcd070d57085a74c97a1`; não há diferença fora de `.claude/plans/` nem nestes cinco arquivos contra `v1.4.0-rc.1`; worktree permaneceu limpa; `diff --check`, stdlib-only, freshness do `AGENTS.md`, claims do `CLAUDE.md` e parse Python 3.9 passaram. Não alego nova execução de pytest porque o ambiente do reviewer impôs o contrato read-only.
+
+VERDICT: GO-WITH-CONDITIONS — As condições aplicáveis são verdadeiras, não há P0, e os P1 acima devem integrar o anexo assinado como known-open para cura na 1.4.1.
