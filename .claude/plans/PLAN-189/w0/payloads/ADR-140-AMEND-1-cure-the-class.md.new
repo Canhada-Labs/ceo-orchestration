@@ -1,0 +1,130 @@
+---
+adr_id: ADR-140-AMEND-1
+title: Cure discipline — cure the class, not the example (PROTOCOL.md §Cure discipline; PLAN-189 W0)
+status: ACCEPTED
+amends: ADR-140
+proposed_at: 2026-09-15
+proposed_by: CEO (S353 — PLAN-189 W0; Owner decisions 6, 7 and 8 of 2026-09-15, ledger `.claude/plans/PLAN-186/debate/owner-decisions-S353.md`)
+session_origin: 2026-09-15 (S353)
+accepted_at: 2026-09-16
+decided_by: Owner (the real ratification is the `.asc` committed over `.claude/plans/PLAN-189/w0/w0-class-rule-approved.md`; this file reaches the canonical tree ONLY through that signed ceremony, so ACCEPTED-at-land is the truthful status)
+authorization: PLAN-189 W0 ceremony — sentinel `.claude/plans/PLAN-189/w0/w0-class-rule-approved.md` + `.asc` (Owner GPG), applied by `OWNER-189-W0-SIGN.sh`
+risk_tier: B
+debate_required: true
+debate_record: .claude/plans/PLAN-189/debate/round-1/ (3 critics — VP Engineering, Staff Code Reviewer, Principal QA Architect — on the signed text itself; consensus in `round-1/consensus.md`)
+numbering_note: "AMEND-1 of ADR-140. ADR-140 ships the RECEIVING side of review (checklist-enforced, no blocking hook); this amendment adds the CURE side under the same enforcement model."
+related_plans: [PLAN-189, PLAN-179, PLAN-188]
+related_adrs: [ADR-140, ADR-058, ADR-081]
+---
+
+# ADR-140-AMEND-1 — Cure discipline: cure the class, not the example
+
+**Status:** ACCEPTED (lands only through the PLAN-189 W0 signed ceremony; the Owner's `.asc` on the W0 sentinel is the ratification)
+**Date:** 2026-09-15 (proposed) / 2026-09-16 (accepted at signature)
+**Enforcement commit:** n/a — doctrine clause in `PROTOCOL.md` §Cure discipline, checklist-enforced (the same enforcement model as ADR-140 §Receiving review and PROTOCOL.md §Honest limitation: no blocking hook). The mechanical companions are PLAN-189 W2 (rail telemetry) and W3 (record safeguard), each in its own signature.
+**Decision drivers:** ceremonies of 6, 11, 12 and 27 rounds; the measured cause is the SHAPE of the cure, not the reviewer; three cheaper hypotheses refuted by data.
+
+## §1 What this amendment changes
+
+ADR-140 governs how review is **received** (read whole, restate, verify
+against code, reasoned pushback, implement per item). It says nothing about
+what a valid **cure** is. This amendment adds one clause to `PROTOCOL.md`,
+§Cure discipline, immediately after §Receiving review:
+
+- every finding carries a **class** named by the author of the cure in the
+  round record (one `Class:` line per finding);
+- the **second occurrence** of the same class in the same ceremony forbids a
+  cure that is another example: either the surface is removed (architecture
+  change) or the record carries a written impossibility plus a **named risk
+  acceptance**;
+- a record showing a second occurrence with neither is a **visible
+  violation** of the clause — a blocking finding against the record itself.
+
+"Same class" is decided by the author against either test: same property
+violated, or same input surface (Owner decision 7, 2026-09-15). Nothing in
+ADR-140 is weakened or removed; the receiving discipline stands unchanged.
+
+## §2 Evidence — measured, sources on the record
+
+All figures below are read from `.claude/plans/PLAN-189-cure-quality-and-rail-instrumentation.md` §Context and the S352 measurements it cites; none is new here.
+
+1. **The cheap hypotheses died against data.** (a) "the rail produces noise" —
+   refuted: thematic class of a finding is not a false-positive rate, and
+   32.2 % of the census sat in "unclassified" (5.9 % or 38.1 % depending on
+   reclassification). (b) "a mechanical ceiling of 3 rounds" — refuted by the
+   corpus: validity does NOT decay with the round (r1-r3 93 %, r4-r7 93 %,
+   r8+ 91 %; 178 marks REAL/VERIFIED against 13 REFUTED/PUSHBACK). A ceiling
+   would cut mostly valid findings. (c) "stop when no new P0/P1" — refuted:
+   "none NEW" lets an OLD blocker stay open, and a round without detection
+   does not demonstrate absence.
+2. **Cure by enumeration.** In the PLAN-179 ceremony, `_sanitize_memory_basename`
+   was BYTE-IDENTICAL between the r6 and the r15 candidates: the "late" P1
+   had existed since r6. Round r22 records itself as the FIFTH round of the
+   same class (spaces, hyphens, concatenation, limits) and only then REMOVES
+   the surface. Each earlier cure closed the cited example and left the
+   class open; the reviewer found the next variant.
+3. **Regression by cure.** The cure of the r9 P2 introduced `-m`; the r26 P1
+   reports the union of the parents' diffs caused by that behaviour. The
+   test created in r9 stayed GREEN — a covered example does not cover the
+   class. (This is the evidence for PLAN-189 W1, which lands in its own
+   signature; it is cited here because the two mechanisms coexist.)
+4. **The lesson already existed as history, never as rule.** `CLAUDE.md` §4
+   records "cure a CLASSE, não o exemplo (S352)" and §5 records the r22
+   lesson ("enumerar não fecha canal instruction-adjacent, remover fecha").
+   Neither is process doctrine, which is why the cost kept being paid.
+
+## §3 Decision
+
+Adopt the clause as written in `PROTOCOL.md` §Cure discipline (the signed
+text is the source of truth; this ADR records WHY). Operating consequences:
+
+- The round record format gains a `Class:` line per finding. The author of
+  the cure writes it; the judgment is explicit, dated and auditable.
+- On the second occurrence of a class, the lander treats a record without a
+  structural cure or a declared acceptance as a blocking finding against the
+  record. This is a process rule today (the lander is a script outside the
+  canonical tree); W2 and W3 make it mechanical in their own signatures.
+- The rule applies from the first round of the next ceremony onward. It was
+  already followed in the S353 night packs before this text landed — the
+  plan states that following the rule does not require the canonical text.
+
+## §4 What this amendment does NOT do
+
+- **No reduction of detection.** No round ceiling, no filter, no severity
+  that waives review. A refuted hypothesis does not return without new data.
+- It does not change the receiving discipline of ADR-140, the VETO model,
+  the 3-strike policy, or the verification cascade (V0–V3). A
+  `design-coherent` debate outcome still authorizes nothing.
+- It does not touch the `receiving-review` skill (SP-NNN governance) — a
+  named follow-up: mirror the clause in
+  `.claude/skills/core/receiving-review/SKILL.md` through the skill-patch
+  route, so the checklist an agent loads carries the cure side too.
+- It does not update `PROTOCOL.pt-BR.md` (already out of sync since
+  2026-06-11 by its own header; `PROTOCOL.md` wins on divergence).
+
+## §5 Blast radius and Sync Impact Report (PROTOCOL semver: MINOR)
+
+Additive doctrine ⇒ MINOR bump under `docs/PROTOCOL-SEMVER.md`, paired with
+this ADR-AMEND. Dependent-set of the Sync Impact Report:
+
+| Dependent artifact | Impact |
+|---|---|
+| `CLAUDE.md` §Critical Rules | already carries the S352 line «Cure a CLASSE, não o exemplo»; it now points at a PROTOCOL clause instead of standing alone — no edit in this signature |
+| `.claude/team.md` / `frontend-team.md` | none (no archetype change) |
+| `.claude/skills/core/ceo-orchestration/SKILL.md` | none (no gate change) |
+| `PLAN-SCHEMA.md` / `DEBATE-SCHEMA.md` | none; the `Class:` line lives in rail-round records, not in debate critiques |
+| `.claude/skills/core/receiving-review/SKILL.md` | follow-up (SP-NNN route), declared in §4 |
+
+## §6 Follow-ups (each its own signature, per Owner decisions 6 and 8)
+
+- **W1** — controls proportional to the risk of the change (PROTOCOL.md).
+- **W2** — rail telemetry: one audit event per round that groups a ceremony;
+  unknown is ABSENT, never zero (`.claude/hooks/`, SPEC).
+- **W3** — safeguard against editing the record: original vs decided
+  severity as distinct fields; closure requires zero pending blockers.
+
+## §7 Reversion
+
+Revert path: remove `PROTOCOL.md` §Cure discipline and mark this file
+`Status: SUPERSEDED` with a `Superseded-By:` pointer, through a signed
+ceremony. No code depends on the clause.
