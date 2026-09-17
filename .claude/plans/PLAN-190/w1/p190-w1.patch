@@ -1,0 +1,2421 @@
+diff --git a/.claude/hooks/_lib/launch_ledger.py b/.claude/hooks/_lib/launch_ledger.py
+new file mode 100644
+index 000000000000..f7d4bb322685
+--- /dev/null
++++ b/.claude/hooks/_lib/launch_ledger.py
+@@ -0,0 +1,603 @@
++"""PLAN-190 W1 — Workflow launch ledger: persist BEFORE dispatch, guard resumes.
++
++Why this exists
++---------------
++The harness persists a Workflow run's ``args`` only when the run ENDS
++(``<session>/workflows/wf_<id>.json``, status completed/killed/failed), never
++its script hash, the code revision it ran against, nor anything at launch
++time. A run interrupted by a process death leaves no record of the exact call;
++an operator who re-issues the call from memory changes the runner's result
++cache key (prompt + opts) and re-executes finished phases. Measured on one
++consumer (S354): 15.5 % of phase starts never produced a result and 16 % of
++starts were re-executions; two incidents (17 slices re-implemented after a
++prompt edit in flight; 11 slices regressed after args rebuilt from memory)
++are exactly the class this module closes.
++
++What it records (one manifest per Workflow tool call)
++-----------------------------------------------------
++``launch_id``, instant, ``session_id``, ``tool_use_id``, ``cwd``; the script
++fingerprint (``sha256`` + size) AND a snapshot of the effective script bytes
++(``<launch_id>.script``) so the exact call is reproducible even when the
++harness never wrote its own copy (a run killed by a process death) or the
++file changed afterwards; the ``args`` as a LITERAL canonical JSON (an absent
++``args`` field is recorded as ABSENT, distinct from ``null``; never
++truncated — the hash is over the full content); ``resumeFromRunId``;
++``name``/``description``; the code revision of ``cwd`` — ENRICHED AFTER the
++manifest is on disk, with a git budget far below the hook's 5-second timeout
++(``--no-optional-locks``, unknown on failure); the ``run_id`` once the
++PostToolUse half binds it, with the ``bind_method`` recorded.
++
++Files live under the project's runtime state dir
++(``_lib.runtime_paths.runtime_state_dir()/launches``): one JSON per launch
++(atomic write, mode 0600), one ``.script`` snapshot, and an append-only
++``launches.jsonl`` index (``launch`` / ``bind`` / ``unbind`` / ``orphan``
++lines).
++
++The guard (debate r1 + pair-rail r1 shaped it)
++----------------------------------------------
++A call with ``resumeFromRunId`` is compared against the manifest BOUND to
++that run.
++* ``args`` differ (per top-level key) ⇒ **block** (the demonstrated loss).
++* script ``sha256`` differs ⇒ **advisory** by default (recorded as
++  ``mismatch_script_advisory``; the substrate re-executes only the phases
++  whose prompt changed, and resuming over a fixed script is a legitimate
++  route); ``CEO_WORKFLOW_SCRIPT_GUARD=enforce`` turns it into a block.
++* either hash unavailable ⇒ **inconclusive** (allowed, recorded) — an
++  unverifiable comparison is never turned into a block nor into a match.
++* no bound manifest ⇒ ``no_manifest`` (allowed, recorded).
++* ``CEO_WORKFLOW_RESUME_FORCE=1`` overrides an args block (recorded);
++  ``CEO_WORKFLOW_RESUME_GUARD=0`` puts the whole guard in advisory mode while
++  keeping the ledger; ``CEO_WORKFLOW_LEDGER=0`` disables the hook.
++
++The block reason is COUNTS-ONLY: it never carries operator text (arg key
++names, values, or an unvalidated run id) — the reason reaches the model and
++an instruction-adjacent channel is closed by removal, not by escaping
++(PLAN-179 r22). The detail (which keys) lives in the manifest.
++
++Binding (PostToolUse)
++---------------------
++By ``tool_use_id`` when the event carries one: found ⇒ bind (``by_tool_use``);
++not found ⇒ an ``orphan`` index line, NO bind. Without ``tool_use_id``: bind
++only when EXACTLY ONE unbound launch exists in the same session
++(``by_single_unbound``); otherwise ``orphan``. Never across sessions. The
++operator's ``ceo-launches.py bind`` closes an orphan by hand.
++
++Contract
++--------
++Stdlib only, Python >= 3.9. Never raises out of the public entry points used
++by the hook: infrastructure failures degrade to unknown fields / ``{}`` so the
++hook fails OPEN. Never reads or stores transcript content — only the tool
++call's own fields. Emits NO audit event (registering a new action in
++``audit_emit._KNOWN_ACTIONS`` is the audit owner's ceremony — PLAN-190
++follow-up; the ledger files are the evidence).
++"""
++from __future__ import annotations
++
++import hashlib
++import json
++import os
++import re
++import subprocess
++import tempfile
++import time
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, List, Optional, Tuple
++
++SCHEMA = "ceo.workflow-launch/v2"
++INDEX_NAME = "launches.jsonl"
++ABSENT = "<absent>"  # marker for a field that was NOT present in tool_input (≠ null)
++RUN_ID_RE = re.compile(r"\bwf_[0-9a-f]{8}(?:-[0-9a-f]{1,8})?\b")
++_PERSISTED_SCRIPT_RE = re.compile(r"(/[^\s\"'`]+/workflows/[^\s\"'`]+\.(?:js|mjs))")
++GIT_BUDGET_S = 1.2  # total wall budget for the optional git enrichment (hook timeout is 5 s)
++
++
++# --------------------------------------------------------------------------- paths
++def ledger_dir(state_dir: Optional[Path] = None) -> Path:
++    """``<runtime state dir>/launches`` (created 0700 on first use)."""
++    if state_dir is None:
++        from _lib import runtime_paths  # local import: keeps this module importable in tests
++
++        state_dir = runtime_paths.runtime_state_dir()
++    d = Path(state_dir) / "launches"
++    d.mkdir(mode=0o700, parents=True, exist_ok=True)
++    return d
++
++
++def _index_path(d: Path) -> Path:
++    return d / INDEX_NAME
++
++
++def _atomic_write(path: Path, data: bytes) -> None:
++    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=str(path.parent))
++    try:
++        with os.fdopen(fd, "wb") as fh:
++            fh.write(data)
++        os.chmod(tmp, 0o600)
++        os.replace(tmp, str(path))
++    except Exception:
++        try:
++            os.unlink(tmp)
++        except OSError:
++            pass
++        raise
++
++
++def _atomic_write_json(path: Path, obj: Dict[str, Any]) -> None:
++    _atomic_write(path, (json.dumps(obj, ensure_ascii=False, sort_keys=True, indent=1) + "\n").encode("utf-8"))
++
++
++def _append_index(d: Path, line: Dict[str, Any]) -> None:
++    """Append one index line under the repo's FileLock (a lock failure degrades
++    to an unlocked append rather than losing the record — recorded as such)."""
++    text = json.dumps(line, ensure_ascii=False, sort_keys=True) + "\n"
++    lock = None
++    try:
++        from _lib.filelock import FileLock  # noqa: E402
++
++        lock = FileLock(str(_index_path(d)) + ".lock", timeout=2.0)
++        lock.acquire()
++    except Exception:
++        lock = None
++    try:
++        with open(_index_path(d), "a", encoding="utf-8") as fh:
++            fh.write(text)
++    finally:
++        if lock is not None:
++            try:
++                lock.release()
++            except Exception:
++                pass
++
++
++# --------------------------------------------------------------------------- fingerprints
++def canonical_json(value: Any) -> str:
++    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
++
++
++def sha256_text(text: str) -> str:
++    return hashlib.sha256(text.encode("utf-8")).hexdigest()
++
++
++def is_run_id(value: Any) -> bool:
++    return isinstance(value, str) and RUN_ID_RE.fullmatch(value) is not None
++
++
++def args_record(tool_input: Dict[str, Any]) -> Dict[str, Any]:
++    """Literal record of ``args``: ABSENT when the key is missing, else the
++    canonical JSON of whatever was passed (``null`` stays ``null``). Never truncated."""
++    if "args" not in tool_input:
++        return {"present": False, "canonical": ABSENT, "sha256": sha256_text(ABSENT), "bytes": 0}
++    canon = canonical_json(tool_input.get("args"))
++    return {"present": True, "canonical": canon, "sha256": sha256_text(canon), "bytes": len(canon.encode("utf-8"))}
++
++
++def script_record(tool_input: Dict[str, Any], cwd: Optional[str]) -> Tuple[Dict[str, Any], Optional[bytes]]:
++    """Fingerprint of the script plus the effective bytes to snapshot. Inline
++    ``script`` text wins over ``scriptPath``; an unreadable ``scriptPath`` is
++    recorded (no hash, no snapshot) — the guard then reports INCONCLUSIVE."""
++    script = tool_input.get("script")
++    if isinstance(script, str) and script:
++        data = script.encode("utf-8")
++        return {"source": "inline", "path": None, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, data
++    sp = tool_input.get("scriptPath")
++    if isinstance(sp, str) and sp:
++        p = Path(sp)
++        if not p.is_absolute() and cwd:
++            p = Path(cwd) / p
++        try:
++            data = p.read_bytes()
++        except OSError:
++            return {"source": "path", "path": sp, "sha256": None, "bytes": None, "unreadable": True}, None
++        return {"source": "path", "path": sp, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, data
++    name = tool_input.get("name")
++    if isinstance(name, str) and name:
++        return {"source": "named", "path": None, "name": name, "sha256": None, "bytes": None}, None
++    return {"source": "absent", "path": None, "sha256": None, "bytes": None}, None
++
++
++def git_revision(cwd: Optional[str], budget_s: float = GIT_BUDGET_S) -> Dict[str, Any]:
++    """``HEAD`` and dirty flag of ``cwd`` inside a wall budget; unknown (``None``)
++    on any failure or timeout. ``--no-optional-locks`` keeps the hook from
++    taking the index lock under a pipeline's own git activity."""
++    if not cwd or not Path(cwd).is_dir():
++        return {"head": None, "dirty": None}
++    t0 = time.monotonic()
++    try:
++        head = subprocess.run(["git", "--no-optional-locks", "-C", cwd, "rev-parse", "HEAD"], capture_output=True, text=True, timeout=budget_s / 2)
++        if head.returncode != 0:
++            return {"head": None, "dirty": None}
++        remaining = budget_s - (time.monotonic() - t0)
++        if remaining <= 0.05:
++            return {"head": head.stdout.strip() or None, "dirty": None}
++        st = subprocess.run(["git", "--no-optional-locks", "-C", cwd, "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=remaining)
++        dirty = bool(st.stdout.strip()) if st.returncode == 0 else None
++        return {"head": head.stdout.strip() or None, "dirty": dirty}
++    except Exception:
++        return {"head": None, "dirty": None}
++
++
++def extract_run_id(tool_response: Any) -> Optional[str]:
++    """First ``wf_<hex8>[-<hex>]`` token in the tool response (dict or text)."""
++    if tool_response is None:
++        return None
++    if isinstance(tool_response, dict):
++        for key in ("runId", "run_id"):
++            v = tool_response.get(key)
++            if is_run_id(v):
++                return v
++        text = json.dumps(tool_response, ensure_ascii=False)
++    elif isinstance(tool_response, list):
++        text = json.dumps(tool_response, ensure_ascii=False)
++    else:
++        text = str(tool_response)
++    m = RUN_ID_RE.search(text)
++    return m.group(0) if m else None
++
++
++def extract_persisted_script_path(tool_response: Any) -> Optional[str]:
++    text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=False) if tool_response is not None else ""
++    m = _PERSISTED_SCRIPT_RE.search(text)
++    return m.group(1) if m else None
++
++
++# --------------------------------------------------------------------------- manifests
++def _now_iso(now: Optional[float] = None) -> str:
++    t = time.time() if now is None else now
++    return datetime.fromtimestamp(t, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
++
++
++def build_manifest(event: Dict[str, Any], now: Optional[float] = None) -> Tuple[Dict[str, Any], Optional[bytes]]:
++    tool_input = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
++    cwd = event.get("cwd") if isinstance(event.get("cwd"), str) else None
++    script, script_bytes = script_record(tool_input, cwd)
++    args = args_record(tool_input)
++    seed = "%s|%s|%s|%s|%s" % (_now_iso(now), event.get("session_id"), event.get("tool_use_id"), script.get("sha256"), args["sha256"])
++    launch_id = "L-%s-%s" % (datetime.fromtimestamp(time.time() if now is None else now, tz=timezone.utc).strftime("%Y%m%dT%H%M%S"), sha256_text(seed)[:8])
++    resume = tool_input.get("resumeFromRunId")
++    manifest = {
++        "schema": SCHEMA,
++        "launch_id": launch_id,
++        "recorded_at": _now_iso(now),
++        "session_id": event.get("session_id") if isinstance(event.get("session_id"), str) else None,
++        "tool_use_id": event.get("tool_use_id") if isinstance(event.get("tool_use_id"), str) else None,
++        "cwd": cwd,
++        "script": script,
++        "script_snapshot": None,
++        "args": args,
++        "resume_from_run_id": resume if isinstance(resume, str) and resume else None,
++        "resume_from_run_id_valid": is_run_id(resume) if isinstance(resume, str) and resume else None,
++        "name": tool_input.get("name") if isinstance(tool_input.get("name"), str) else None,
++        "description": tool_input.get("description") if isinstance(tool_input.get("description"), str) else None,
++        "code": {"head": None, "dirty": None, "status": "pending"},
++        "run_id": None,
++        "bound_at": None,
++        "bind_method": None,
++        "persisted_script_path": None,
++        "persisted_matches_snapshot": None,
++        "guard": {"result": "none", "diff": [], "counts": {}},
++    }
++    return manifest, script_bytes
++
++
++def manifest_path(d: Path, launch_id: str) -> Path:
++    return d / ("%s.json" % launch_id)
++
++
++def snapshot_path(d: Path, launch_id: str) -> Path:
++    return d / ("%s.script" % launch_id)
++
++
++def write_manifest(manifest: Dict[str, Any], d: Path, script_bytes: Optional[bytes] = None) -> Path:
++    """Manifest (and script snapshot) on disk FIRST; the index line after."""
++    if script_bytes is not None:
++        _atomic_write(snapshot_path(d, manifest["launch_id"]), script_bytes)
++        manifest["script_snapshot"] = snapshot_path(d, manifest["launch_id"]).name
++    path = manifest_path(d, manifest["launch_id"])
++    _atomic_write_json(path, manifest)
++    _append_index(d, {
++        "kind": "launch",
++        "launch_id": manifest["launch_id"],
++        "recorded_at": manifest["recorded_at"],
++        "session_id": manifest.get("session_id"),
++        "tool_use_id": manifest.get("tool_use_id"),
++        "resume_from_run_id": manifest.get("resume_from_run_id"),
++        "script_sha256": (manifest.get("script") or {}).get("sha256"),
++        "args_sha256": (manifest.get("args") or {}).get("sha256"),
++    })
++    return path
++
++
++def enrich_code_revision(manifest: Dict[str, Any], d: Path, budget_s: float = GIT_BUDGET_S) -> Dict[str, Any]:
++    """Second, optional write: code revision inside a strict budget."""
++    rev = git_revision(manifest.get("cwd"), budget_s=budget_s)
++    manifest = dict(manifest)
++    manifest["code"] = {"head": rev.get("head"), "dirty": rev.get("dirty"), "status": "known" if rev.get("head") else "unknown"}
++    try:
++        _atomic_write_json(manifest_path(d, manifest["launch_id"]), manifest)
++    except OSError:
++        pass
++    return manifest
++
++
++def load_manifest(d: Path, launch_id: str) -> Optional[Dict[str, Any]]:
++    try:
++        return json.loads(manifest_path(d, launch_id).read_text(encoding="utf-8"))
++    except (OSError, ValueError):
++        return None
++
++
++def load_snapshot(d: Path, manifest: Dict[str, Any]) -> Optional[bytes]:
++    name = manifest.get("script_snapshot")
++    if not isinstance(name, str) or not name:
++        return None
++    try:
++        return (d / name).read_bytes()
++    except OSError:
++        return None
++
++
++def iter_index(d: Path) -> List[Dict[str, Any]]:
++    out: List[Dict[str, Any]] = []
++    try:
++        with open(_index_path(d), encoding="utf-8") as fh:
++            for line in fh:
++                line = line.strip()
++                if not line:
++                    continue
++                try:
++                    out.append(json.loads(line))
++                except ValueError:
++                    continue
++    except OSError:
++        return out
++    return out
++
++
++def find_launch_for_run(d: Path, run_id: str) -> Optional[Dict[str, Any]]:
++    """The manifest CURRENTLY bound to ``run_id``: the latest bind line for that
++    run whose manifest still carries ``run_id`` (a later rebind to another run
++    unbinds it)."""
++    if not is_run_id(run_id):
++        return None
++    launch_id: Optional[str] = None
++    for line in iter_index(d):
++        if line.get("kind") == "bind" and line.get("run_id") == run_id:
++            launch_id = line.get("launch_id")
++        elif line.get("kind") == "unbind" and line.get("run_id") == run_id and line.get("launch_id") == launch_id:
++            launch_id = None
++    if launch_id is None:
++        return None
++    m = load_manifest(d, launch_id)
++    if m is None or m.get("run_id") != run_id:
++        return None
++    return m
++
++
++def find_launch_by_tool_use(d: Path, tool_use_id: str) -> Optional[Dict[str, Any]]:
++    for line in reversed(iter_index(d)):
++        if line.get("kind") == "launch" and line.get("tool_use_id") == tool_use_id:
++            return load_manifest(d, line["launch_id"])
++    return None
++
++
++def unbound_launches(d: Path, session_id: Optional[str]) -> List[str]:
++    """Launch ids of the session that never got a bind line (a later unbind reopens them)."""
++    bound: Dict[str, bool] = {}
++    launches: List[str] = []
++    for line in iter_index(d):
++        kind = line.get("kind")
++        if kind == "launch" and (session_id is None or line.get("session_id") == session_id):
++            launches.append(line["launch_id"])
++        elif kind == "bind":
++            bound[line.get("launch_id", "")] = True
++        elif kind == "unbind":
++            bound[line.get("launch_id", "")] = False
++    return [lid for lid in launches if not bound.get(lid)]
++
++
++FORCE_DIR = "force"
++
++
++def force_token_path(d: Path, run_id: str) -> Path:
++    return d / FORCE_DIR / ("%s.json" % run_id)
++
++
++def write_force_token(d: Path, run_id: str, reason: str, by: Optional[str] = None, now: Optional[float] = None) -> Path:
++    """One-shot, in-session override: ``ceo-launches.py force <run> --reason …`` writes it;
++    the next PreToolUse that would BLOCK a resume of ``run_id`` consumes it (unlink) and
++    records ``mismatch_forced`` with the reason. Visible in ``report``; never silent."""
++    if not is_run_id(run_id):
++        raise ValueError("run id has an unexpected shape")
++    reason = (reason or "").strip()
++    if not reason:
++        raise ValueError("a non-empty --reason is required")
++    p = force_token_path(d, run_id)
++    p.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
++    _atomic_write_json(p, {"run_id": run_id, "reason": reason[:500], "by": by, "created_at": _now_iso(now)})
++    _append_index(d, {"kind": "force_token", "run_id": run_id, "at": _now_iso(now)})
++    return p
++
++
++def consume_force_token(d: Path, run_id: str) -> Optional[Dict[str, Any]]:
++    p = force_token_path(d, run_id)
++    try:
++        data = json.loads(p.read_text(encoding="utf-8"))
++        p.unlink()
++        return data if isinstance(data, dict) else {"reason": "unreadable token"}
++    except (OSError, ValueError):
++        return None
++
++
++def bind_run(d: Path, manifest: Dict[str, Any], run_id: str, method: str, now: Optional[float] = None,
++             persisted_script_path: Optional[str] = None) -> Dict[str, Any]:
++    if not is_run_id(run_id):
++        raise ValueError("run id has an unexpected shape")
++    manifest = dict(manifest)
++    previous = manifest.get("run_id")
++    if isinstance(previous, str) and previous and previous != run_id:
++        _append_index(d, {"kind": "unbind", "launch_id": manifest["launch_id"], "run_id": previous, "at": _now_iso(now), "reason": "rebound"})
++    manifest["run_id"] = run_id
++    manifest["bound_at"] = _now_iso(now)
++    manifest["bind_method"] = method
++    if persisted_script_path:
++        manifest["persisted_script_path"] = persisted_script_path
++        snap = load_snapshot(d, manifest)
++        try:
++            persisted = Path(persisted_script_path).read_bytes()
++            manifest["persisted_matches_snapshot"] = (hashlib.sha256(persisted).hexdigest() == hashlib.sha256(snap).hexdigest()) if snap is not None else None
++        except OSError:
++            manifest["persisted_matches_snapshot"] = None
++    _atomic_write_json(manifest_path(d, manifest["launch_id"]), manifest)
++    _append_index(d, {"kind": "bind", "launch_id": manifest["launch_id"], "run_id": run_id, "bound_at": manifest["bound_at"], "method": method})
++    return manifest
++
++
++# --------------------------------------------------------------------------- the guard
++def _args_key_diff(recorded_canon: str, now_canon: str) -> List[Dict[str, Any]]:
++    """Top-level keys whose canonical values differ (or exist on one side only).
++    Non-object args are compared as whole values. Values never appear — short hashes do."""
++    diffs: List[Dict[str, Any]] = []
++    if recorded_canon == now_canon:
++        return diffs
++    if recorded_canon == ABSENT or now_canon == ABSENT:
++        return [{"key": "<args>", "recorded": recorded_canon if recorded_canon == ABSENT else "present", "now": now_canon if now_canon == ABSENT else "present"}]
++    try:
++        a = json.loads(recorded_canon)
++        b = json.loads(now_canon)
++    except ValueError:
++        return [{"key": "<args>", "recorded": "unparseable", "now": "unparseable"}]
++    if not isinstance(a, dict) or not isinstance(b, dict):
++        return [{"key": "<args>", "recorded": sha256_text(recorded_canon)[:12], "now": sha256_text(now_canon)[:12]}]
++    for k in sorted(set(a) | set(b)):
++        if k not in a:
++            diffs.append({"key": k, "recorded": ABSENT, "now": "present"})
++        elif k not in b:
++            diffs.append({"key": k, "recorded": "present", "now": ABSENT})
++        elif canonical_json(a[k]) != canonical_json(b[k]):
++            diffs.append({"key": k, "recorded": sha256_text(canonical_json(a[k]))[:12], "now": sha256_text(canonical_json(b[k]))[:12]})
++    return diffs
++
++
++def compare(recorded: Dict[str, Any], now: Dict[str, Any]) -> Dict[str, Any]:
++    """Structured comparison: ``script`` ∈ {same, differs, inconclusive}; ``args_diff`` list;
++    ``counts`` = {changed, only_recorded, only_now} — the counts are the only thing that may
++    reach the model."""
++    r_s = (recorded.get("script") or {}).get("sha256")
++    n_s = (now.get("script") or {}).get("sha256")
++    if r_s is None or n_s is None:
++        script = "inconclusive"
++    else:
++        script = "same" if r_s == n_s else "differs"
++    diffs = _args_key_diff((recorded.get("args") or {}).get("canonical", ABSENT), (now.get("args") or {}).get("canonical", ABSENT))
++    counts = {
++        "changed": sum(1 for d in diffs if d["recorded"] not in (ABSENT, "present") and d["now"] not in (ABSENT, "present")),
++        "only_recorded": sum(1 for d in diffs if d["now"] == ABSENT),
++        "only_now": sum(1 for d in diffs if d["recorded"] == ABSENT),
++        "total": len(diffs),
++    }
++    return {"script": script, "args_diff": diffs, "counts": counts}
++
++
++def format_block_reason(run_id: str, comparison: Dict[str, Any], launch_id: str) -> str:
++    """Counts-only, no operator text. ``run_id`` MUST have passed ``is_run_id``."""
++    c = comparison["counts"]
++    parts = []
++    if c["changed"]:
++        parts.append("%d key(s) changed" % c["changed"])
++    if c["only_recorded"]:
++        parts.append("%d key(s) only in the recorded call" % c["only_recorded"])
++    if c["only_now"]:
++        parts.append("%d key(s) only in this call" % c["only_now"])
++    if comparison["script"] == "differs":
++        parts.append("script hash differs")
++    return (
++        "WORKFLOW-RESUME-MISMATCH: the recorded launch of %s differs from this call (%s). "
++        "Resuming over different inputs re-keys the runner's result cache and re-executes finished phases. "
++        "Route in this session: run `python3 .claude/scripts/ceo-launches.py relaunch %s` and re-issue EXACTLY that call. "
++        "Deliberate override, recorded with its reason: `python3 .claude/scripts/ceo-launches.py force %s --reason \"<why>\"` then re-issue this call once "
++        "(or CEO_WORKFLOW_RESUME_FORCE=1 in the harness process environment). "
++        "Details (which keys) are in manifest %s, never in this message."
++        % (run_id, "; ".join(parts) or "see manifest", run_id, run_id, launch_id)
++    )
++
++
++def format_advisory(run_id: str, comparison: Dict[str, Any], launch_id: str) -> str:
++    return (
++        "WORKFLOW-RESUME-ADVISORY: the script of %s differs from the recorded launch (hash); args are identical. "
++        "Only the phases whose prompt changed will re-execute. Recorded in manifest %s. "
++        "Set CEO_WORKFLOW_SCRIPT_GUARD=enforce to block this case." % (run_id, launch_id)
++    )
++
++
++def decide_pre(event: Dict[str, Any], d: Path, env: Optional[Dict[str, str]] = None, now: Optional[float] = None,
++               git_budget_s: float = GIT_BUDGET_S) -> Tuple[Dict[str, Any], Dict[str, Any]]:
++    """PreToolUse: record the launch (manifest + snapshot on disk FIRST), guard a resume,
++    then enrich the code revision within budget. Returns (decision, manifest)."""
++    env = os.environ if env is None else env
++    manifest, script_bytes = build_manifest(event, now=now)
++    guard_mode = "advisory" if env.get("CEO_WORKFLOW_RESUME_GUARD") == "0" else "enforce"
++    script_guard = "enforce" if env.get("CEO_WORKFLOW_SCRIPT_GUARD") == "enforce" else "advisory"
++    decision: Dict[str, Any] = {}
++    resume = manifest.get("resume_from_run_id")
++    if resume:
++        if not is_run_id(resume):
++            manifest["guard"] = {"result": "resume_id_unrecognised", "diff": [], "counts": {}}
++        else:
++            recorded = find_launch_for_run(d, resume)
++            if recorded is None:
++                manifest["guard"] = {"result": "no_manifest", "diff": [], "counts": {}}
++            else:
++                cmp = compare(recorded, manifest)
++                base = {"diff": cmp["args_diff"], "counts": cmp["counts"], "script": cmp["script"], "against": recorded.get("launch_id"), "mode": guard_mode}
++                if cmp["counts"]["total"] == 0 and cmp["script"] == "same":
++                    manifest["guard"] = dict(base, result="match")
++                elif cmp["counts"]["total"] == 0 and cmp["script"] == "inconclusive":
++                    manifest["guard"] = dict(base, result="inconclusive")
++                elif cmp["counts"]["total"] == 0 and cmp["script"] == "differs":
++                    if script_guard == "enforce" and guard_mode == "enforce" and env.get("CEO_WORKFLOW_RESUME_FORCE") != "1":
++                        manifest["guard"] = dict(base, result="mismatch_script_blocked")
++                        decision = {"decision": "block", "reason": format_block_reason(resume, cmp, manifest["launch_id"])}
++                    else:
++                        manifest["guard"] = dict(base, result="mismatch_script_advisory")
++                        decision = {"systemMessage": format_advisory(resume, cmp, manifest["launch_id"])}
++                else:
++                    weak_bind = recorded.get("bind_method") not in ("by_tool_use", "manual")
++                    token = None if env.get("CEO_WORKFLOW_RESUME_FORCE") == "1" else consume_force_token(d, resume)
++                    if env.get("CEO_WORKFLOW_RESUME_FORCE") == "1" or token is not None:
++                        manifest["guard"] = dict(base, result="mismatch_forced", force_reason=(token or {}).get("reason") or "env:CEO_WORKFLOW_RESUME_FORCE=1")
++                        decision = {"systemMessage": "WORKFLOW-RESUME-FORCED: resuming %s over different inputs by explicit override (recorded in manifest %s)." % (resume, manifest["launch_id"])}
++                    elif guard_mode == "advisory" or weak_bind:
++                        manifest["guard"] = dict(base, result="mismatch_advisory_weak_bind" if weak_bind and guard_mode != "advisory" else "mismatch_advisory")
++                        decision = {"systemMessage": format_block_reason(resume, cmp, manifest["launch_id"]).replace("WORKFLOW-RESUME-MISMATCH", "WORKFLOW-RESUME-ADVISORY", 1)}
++                    else:
++                        manifest["guard"] = dict(base, result="mismatch_blocked")
++                        decision = {"decision": "block", "reason": format_block_reason(resume, cmp, manifest["launch_id"])}
++    write_manifest(manifest, d, script_bytes)          # on disk before anything slow
++    manifest = enrich_code_revision(manifest, d, budget_s=git_budget_s)
++    return decision, manifest
++
++
++def decide_post(event: Dict[str, Any], d: Path, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
++    """PostToolUse: bind the run id from the response — by tool_use_id, else by the single
++    unbound launch of the session; anything ambiguous becomes an ``orphan`` line."""
++    run_id = extract_run_id(event.get("tool_response"))
++    if run_id is None:
++        return None
++    session = event.get("session_id") if isinstance(event.get("session_id"), str) else None
++    tuid = event.get("tool_use_id") if isinstance(event.get("tool_use_id"), str) and event.get("tool_use_id") else None
++    persisted = extract_persisted_script_path(event.get("tool_response"))
++    if tuid:
++        m = find_launch_by_tool_use(d, tuid)
++        if m is None:
++            _append_index(d, {"kind": "orphan", "run_id": run_id, "session_id": session, "tool_use_id": tuid, "at": _now_iso(now), "reason": "tool_use_id_not_recorded"})
++            return None
++        return bind_run(d, m, run_id, "by_tool_use", now=now, persisted_script_path=persisted)
++    candidates = unbound_launches(d, session) if session else []
++    if len(candidates) == 1:
++        m = load_manifest(d, candidates[0])
++        if m is not None:
++            return bind_run(d, m, run_id, "by_single_unbound", now=now, persisted_script_path=persisted)
++    _append_index(d, {"kind": "orphan", "run_id": run_id, "session_id": session, "tool_use_id": None, "at": _now_iso(now),
++                      "reason": "no_tool_use_id_and_%d_unbound" % len(candidates)})
++    return None
+diff --git a/.claude/hooks/check_workflow_launch.py b/.claude/hooks/check_workflow_launch.py
+new file mode 100755
+index 000000000000..455a97965636
+--- /dev/null
++++ b/.claude/hooks/check_workflow_launch.py
+@@ -0,0 +1,97 @@
++#!/usr/bin/env python3
++"""PLAN-190 W1 — Workflow launch ledger + resume guard (PreToolUse/PostToolUse ``Workflow``).
++
++Records every ``Workflow`` tool call BEFORE it is dispatched (script sha256 +
++snapshot of the script bytes, literal ``args``, ``resumeFromRunId``, code
++revision of ``cwd`` enriched afterwards within a strict budget) and, on the
++PostToolUse half, binds the run id the runner returned. Library:
++``_lib/launch_ledger.py`` (the contract, the guard rules and the binding rules
++are documented there).
++
++Contract
++--------
++- Fires for ``tool_name == "Workflow"`` only; anything else ⇒ ``{}``.
++- PreToolUse: manifest + snapshot on disk FIRST. Then the guard on a resume:
++  args differ from the bound manifest ⇒ ``{"decision": "block", "reason": <counts-only>}``;
++  script differs, args same ⇒ ``{"systemMessage": <advisory>}`` unless
++  ``CEO_WORKFLOW_SCRIPT_GUARD=enforce``; unverifiable hash ⇒ inconclusive,
++  allowed; no bound manifest ⇒ allowed. ``CEO_WORKFLOW_RESUME_FORCE=1`` overrides
++  an args block (recorded); ``CEO_WORKFLOW_RESUME_GUARD=0`` = advisory mode.
++- PostToolUse: binds ``wf_<id>`` by ``tool_use_id``, else by the single unbound
++  launch of the session; anything ambiguous is an ``orphan`` line. Always ``{}``.
++- Fail-OPEN on infrastructure (unreadable stdin, import failure, unwritable
++  state dir): breadcrumb to stderr + ``{}``. This is a recovery instrument,
++  not a security matcher — it must never wedge a session.
++- Kill-switch: ``CEO_WORKFLOW_LEDGER=0``.
++- The block reason never carries operator text (arg keys, values, an
++  unvalidated run id): the channel to the model is counts-only by removal.
++- Emits NO audit event (registering an audit action is the audit owner's
++  ceremony — PLAN-190 follow-up); the ledger files are the record.
++- Stdlib only, Python >= 3.9.
++"""
++from __future__ import annotations
++
++import json
++import os
++import sys
++from pathlib import Path
++from typing import Any, Dict
++
++_HOOKS_DIR = Path(__file__).resolve().parent
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++
++
++def _breadcrumb(msg: str) -> None:
++    sys.stderr.write("# check_workflow_launch: %s\n" % msg[:200])
++
++
++def gate(event: Dict[str, Any]) -> Dict[str, Any]:
++    if os.environ.get("CEO_WORKFLOW_LEDGER", "1") == "0":
++        return {}
++    if event.get("tool_name") != "Workflow":
++        return {}
++    try:
++        from _lib import launch_ledger  # noqa: E402
++    except Exception as exc:  # pragma: no cover — import guard
++        _breadcrumb("launch_ledger import failed (%s)" % str(exc)[:100])
++        return {}
++    try:
++        d = launch_ledger.ledger_dir()
++    except Exception as exc:
++        _breadcrumb("ledger dir unavailable (%s)" % str(exc)[:100])
++        return {}
++    hook_event = event.get("hook_event_name")
++    if not isinstance(hook_event, str) and "tool_response" in event:
++        hook_event = "PostToolUse"  # older CLIs may omit the name; a response present means Post
++    try:
++        if hook_event == "PostToolUse":
++            launch_ledger.decide_post(event, d)
++            return {}
++        decision, _manifest = launch_ledger.decide_pre(event, d)
++        return decision
++    except Exception as exc:
++        _breadcrumb("ledger write/guard failed (%s)" % str(exc)[:100])
++        return {}
++
++
++def main() -> None:
++    try:
++        raw = sys.stdin.read()
++        event = json.loads(raw) if raw.strip() else {}
++        if not isinstance(event, dict):
++            event = {}
++    except Exception as exc:
++        _breadcrumb("unreadable stdin (%s)" % str(exc)[:80])
++        event = {}
++    try:
++        out = gate(event)
++    except Exception as exc:  # pragma: no cover — belt-and-suspenders
++        _breadcrumb("gate raised (%s)" % str(exc)[:80])
++        out = {}
++    sys.stdout.write(json.dumps(out) + "\n")
++
++
++if __name__ == "__main__":
++    main()
++    sys.exit(0)
+diff --git a/.claude/hooks/tests/test_check_workflow_launch.py b/.claude/hooks/tests/test_check_workflow_launch.py
+new file mode 100644
+index 000000000000..698e149743a0
+--- /dev/null
++++ b/.claude/hooks/tests/test_check_workflow_launch.py
+@@ -0,0 +1,325 @@
++#!/usr/bin/env python3
++"""End-to-end tests for ``check_workflow_launch.py`` (PLAN-190 W1, v2 after debate r1 + rail r1).
++
++Exercises the hook exactly the way ``settings.json`` invokes it: a fresh
++subprocess, JSON event on stdin, decision JSON on stdout. Every case isolates
++``CLAUDE_PROJECT_DIR``/``HOME``/audit env into a temp tree (TestEnvContext
++discipline — the live ~/.claude is never touched).
++
++What is proven: a manifest AND a script snapshot exist before dispatch;
++``args`` absent ≠ ``null``; a resume over different args is blocked with a
++COUNTS-ONLY reason (no key names, no values); a resume over a different script
++with the same args is ADVISORY (allowed, systemMessage) unless the script
++guard is set to enforce; an unverifiable script hash is INCONCLUSIVE (allowed,
++never blocked, never a match); ``CEO_WORKFLOW_RESUME_FORCE=1`` records and
++allows; ``CEO_WORKFLOW_RESUME_GUARD=0`` keeps the ledger but never blocks;
++no bound manifest ⇒ advisory; PostToolUse binds by ``tool_use_id`` and never
++guesses when the id is unknown (orphan); a rebind unbinds the previous run;
++the manifest is written even when git is slow; malformed stdin and a
++non-Workflow tool ⇒ ``{}``; the hook never exits non-zero.
++"""
++from __future__ import annotations
++
++import json
++import os
++import stat
++import subprocess
++import sys
++import tempfile
++import time
++import unittest
++from pathlib import Path
++
++_REPO = Path(__file__).resolve()
++while not (_REPO / ".claude").is_dir() or not (_REPO / "VERSION").is_file():
++    if _REPO.parent == _REPO:
++        raise RuntimeError("repo root not found")
++    _REPO = _REPO.parent
++HOOK = _REPO / ".claude" / "hooks" / "check_workflow_launch.py"
++sys.path.insert(0, str(_REPO / ".claude" / "hooks"))
++from _lib.testing import TestEnvContext  # noqa: E402
++
++SCRIPT_A = "export const meta = {name:'a', description:'a'}\nreturn {ok:1}\n"
++SCRIPT_B = "export const meta = {name:'a', description:'a'}\nreturn {ok:2}\n"
++RUN = "wf_0badf00d-1a"
++
++
++class CheckWorkflowLaunchE2E(TestEnvContext):
++    def setUp(self):
++        super().setUp()
++        self._tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self._tmp.cleanup)
++        self.proj = Path(self._tmp.name) / "proj"
++        (self.proj / ".claude").mkdir(parents=True)
++        self.home = Path(self._tmp.name) / "home"
++        (self.home / ".claude").mkdir(parents=True)
++
++    def _run(self, event: dict, extra_env: "dict | None" = None, path: "str | None" = None) -> dict:
++        env = {
++            "CLAUDE_PROJECT_DIR": str(self.proj),
++            "HOME": str(self.home),
++            "CEO_AUDIT_LOG_DIR": str(self.home / ".claude"),
++            "PATH": path or "/usr/bin:/bin",
++        }
++        env.update(extra_env or {})
++        t0 = time.monotonic()
++        proc = subprocess.run(
++            [sys.executable, str(HOOK)], input=json.dumps(event),
++            capture_output=True, text=True, timeout=30, cwd=str(self.proj), env=env,
++        )
++        self.last_elapsed = time.monotonic() - t0
++        self.assertEqual(proc.returncode, 0, "hook must NEVER exit non-zero (fail-open): " + proc.stderr)
++        out = proc.stdout.strip() or "{}"
++        return json.loads(out.splitlines()[-1])
++
++    def _manifests(self) -> list:
++        return sorted((self.home / ".claude" / "projects").glob("*/launches/L-*.json"))
++
++    def _load(self, path: Path) -> dict:
++        return json.loads(path.read_text(encoding="utf-8"))
++
++    def _by_tool_use(self, tuid: str) -> dict:
++        for p in self._manifests():
++            m = self._load(p)
++            if m["tool_use_id"] == tuid:
++                return m
++        raise AssertionError("no manifest for tool_use_id %s" % tuid)
++
++    @staticmethod
++    def _pre(tool_input: dict, tool_use_id: str = "tu-1", session: str = "s-1") -> dict:
++        return {"hook_event_name": "PreToolUse", "tool_name": "Workflow", "tool_input": tool_input,
++                "tool_use_id": tool_use_id, "session_id": session, "cwd": "."}
++
++    @staticmethod
++    def _post(tool_response, tool_use_id: "str | None" = "tu-1", session: str = "s-1") -> dict:
++        ev = {"hook_event_name": "PostToolUse", "tool_name": "Workflow", "tool_input": {},
++              "tool_response": tool_response, "session_id": session, "cwd": "."}
++        if tool_use_id is not None:
++            ev["tool_use_id"] = tool_use_id
++        return ev
++
++    def _launch_and_bind(self, tool_input: dict, run_id: str = RUN, tool_use_id: str = "tu-1") -> dict:
++        d = self._run(self._pre(tool_input, tool_use_id=tool_use_id))
++        self.assertEqual(d, {})
++        self._run(self._post("Workflow started: run %s task t-9" % run_id, tool_use_id=tool_use_id))
++        m = self._by_tool_use(tool_use_id)
++        self.assertEqual(m["run_id"], run_id, "PostToolUse must bind the run id")
++        self.assertEqual(m["bind_method"], "by_tool_use")
++        return m
++
++    # --- recording ---------------------------------------------------------
++    def test_manifest_and_snapshot_written_before_dispatch_with_literal_args(self):
++        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A01", "mutantes_min": 12, "continua": True}}))
++        ms = self._manifests()
++        self.assertEqual(len(ms), 1)
++        m = self._load(ms[0])
++        self.assertEqual(m["schema"], "ceo.workflow-launch/v2")
++        self.assertEqual(m["script"]["source"], "inline")
++        self.assertEqual(len(m["script"]["sha256"]), 64)
++        snap = ms[0].parent / m["script_snapshot"]
++        self.assertEqual(snap.read_text(encoding="utf-8"), SCRIPT_A, "the exact bytes are snapshotted")
++        self.assertEqual(stat.S_IMODE(snap.stat().st_mode), 0o600)
++        self.assertTrue(m["args"]["present"])
++        self.assertEqual(json.loads(m["args"]["canonical"]), {"slice": "A01", "mutantes_min": 12, "continua": True})
++        self.assertIsNone(m["run_id"])
++        self.assertEqual(m["guard"]["result"], "none")
++
++    def test_absent_args_is_not_null_args(self):
++        self._run(self._pre({"script": SCRIPT_A}, tool_use_id="tu-absent"))
++        self._run(self._pre({"script": SCRIPT_A, "args": None}, tool_use_id="tu-null"))
++        absent = self._by_tool_use("tu-absent")
++        null = self._by_tool_use("tu-null")
++        self.assertFalse(absent["args"]["present"])
++        self.assertEqual(absent["args"]["canonical"], "<absent>")
++        self.assertTrue(null["args"]["present"])
++        self.assertEqual(null["args"]["canonical"], "null")
++        self.assertNotEqual(absent["args"]["sha256"], null["args"]["sha256"])
++
++    def test_large_args_are_never_truncated(self):
++        big = {"blob": "x" * 5_000_000, "k": 1}
++        self._run(self._pre({"script": SCRIPT_A, "args": big}, tool_use_id="tu-big"))
++        m = self._by_tool_use("tu-big")
++        self.assertEqual(json.loads(m["args"]["canonical"])["k"], 1)
++        self.assertEqual(len(json.loads(m["args"]["canonical"])["blob"]), 5_000_000)
++
++    def test_script_path_is_hashed_and_snapshotted_from_disk(self):
++        sp = self.proj / "wf.js"
++        sp.write_text(SCRIPT_A, encoding="utf-8")
++        self._run(self._pre({"scriptPath": "wf.js", "args": {}}))
++        m = self._load(self._manifests()[0])
++        self.assertEqual(m["script"]["source"], "path")
++        self.assertEqual(m["script"]["bytes"], len(SCRIPT_A.encode("utf-8")))
++        self.assertTrue(m["script_snapshot"])
++
++    def test_manifest_written_even_when_git_is_slow(self):
++        fake_bin = Path(self._tmp.name) / "bin"
++        fake_bin.mkdir()
++        git = fake_bin / "git"
++        git.write_text("#!/bin/sh\nsleep 4\necho deadbeef\n", encoding="utf-8")
++        git.chmod(0o755)
++        d = self._run(self._pre({"script": SCRIPT_A, "args": {}}, tool_use_id="tu-slow"), path="%s:/usr/bin:/bin" % fake_bin)
++        self.assertEqual(d, {})
++        m = self._by_tool_use("tu-slow")
++        self.assertEqual(m["code"]["status"], "unknown", "a slow git must degrade to unknown, not block the record")
++        self.assertLess(self.last_elapsed, 4.0, "the hook must not wait for a slow git")
++
++    # --- the guard -----------------------------------------------------------
++    def test_resume_with_identical_inputs_is_allowed_and_marked_match(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertEqual(d, {})
++        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "match")
++
++    def test_resume_with_different_args_is_blocked_with_counts_only_reason(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01", "mutantes_min": 12, "continua": True, "we<ird key\n": 1}})
++        d = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A01", "mutantes_min": 10}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertEqual(d.get("decision"), "block")
++        reason = d.get("reason", "")
++        self.assertIn("WORKFLOW-RESUME-MISMATCH", reason)
++        self.assertIn("1 key(s) changed", reason)
++        self.assertIn("2 key(s) only in the recorded call", reason)
++        for forbidden in ("mutantes_min", "continua", "we<ird", "slice", "\n"):
++            self.assertNotIn(forbidden, reason, "the reason must not carry operator text: %r" % forbidden)
++        self.assertIn("relaunch %s" % RUN, reason)
++        m = self._by_tool_use("tu-2")
++        self.assertEqual(m["guard"]["result"], "mismatch_blocked")
++        self.assertEqual(sorted(df["key"] for df in m["guard"]["diff"]), ["continua", "mutantes_min", "we<ird key\n"], "the detail lives in the manifest")
++
++    def test_resume_with_different_script_same_args_is_advisory_by_default(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._run(self._pre({"script": SCRIPT_B, "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertNotIn("decision", d)
++        self.assertIn("WORKFLOW-RESUME-ADVISORY", d.get("systemMessage", ""))
++        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "mismatch_script_advisory")
++
++    def test_script_guard_enforce_blocks_script_change(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._run(self._pre({"script": SCRIPT_B, "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"),
++                      extra_env={"CEO_WORKFLOW_SCRIPT_GUARD": "enforce"})
++        self.assertEqual(d.get("decision"), "block")
++        self.assertIn("script hash differs", d["reason"])
++        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "mismatch_script_blocked")
++
++    def test_unreadable_script_on_resume_is_inconclusive_never_blocked(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._run(self._pre({"scriptPath": "missing.js", "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"),
++                      extra_env={"CEO_WORKFLOW_SCRIPT_GUARD": "enforce"})
++        self.assertEqual(d, {})
++        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "inconclusive")
++
++    def test_force_records_and_allows(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"),
++                      extra_env={"CEO_WORKFLOW_RESUME_FORCE": "1"})
++        self.assertNotIn("decision", d)
++        self.assertIn("WORKFLOW-RESUME-FORCED", d.get("systemMessage", ""), "a forced resume is announced, never silent")
++        forced = self._by_tool_use("tu-2")
++        self.assertEqual(forced["guard"]["result"], "mismatch_forced")
++        self.assertEqual(forced["guard"]["force_reason"], "env:CEO_WORKFLOW_RESUME_FORCE=1")
++        self.assertTrue(forced["guard"]["diff"])
++
++    def test_force_token_is_one_shot_recorded_and_announced(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._manifests()[0].parent
++        sys.path.insert(0, str(_REPO / ".claude" / "hooks"))
++        from _lib import launch_ledger as LL  # noqa: E402
++        LL.write_force_token(d, RUN, "operator decided: spec changed on purpose")
++        out = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertNotIn("decision", out)
++        self.assertIn("WORKFLOW-RESUME-FORCED", out.get("systemMessage", ""))
++        m = self._by_tool_use("tu-2")
++        self.assertEqual(m["guard"]["result"], "mismatch_forced")
++        self.assertIn("spec changed", m["guard"]["force_reason"])
++        self.assertFalse(LL.force_token_path(d, RUN).exists(), "the token is consumed")
++        again = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-3"))
++        self.assertEqual(again.get("decision"), "block", "one-shot: the second resume is blocked again")
++
++    def test_mismatch_against_heuristically_bound_manifest_is_advisory(self):
++        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A01"}}, tool_use_id="tu-a"))
++        self._run(self._post("run %s started" % RUN, tool_use_id=None))  # by_single_unbound
++        self.assertEqual(self._by_tool_use("tu-a")["bind_method"], "by_single_unbound")
++        d = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertNotIn("decision", d, "a weak bind never sustains a block")
++        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "mismatch_advisory_weak_bind")
++
++    def test_event_without_hook_event_name_but_with_response_is_post(self):
++        self._run(self._pre({"script": SCRIPT_A, "args": {}}, tool_use_id="tu-old-cli"))
++        ev = self._post("run wf_44444444-04 started", tool_use_id="tu-old-cli")
++        del ev["hook_event_name"]
++        self._run(ev)
++        self.assertEqual(self._by_tool_use("tu-old-cli")["run_id"], "wf_44444444-04")
++        self.assertEqual(len(self._manifests()), 1, "no duplicate manifest for a Post event")
++
++    def test_guard_advisory_mode_keeps_ledger_but_never_blocks(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"),
++                      extra_env={"CEO_WORKFLOW_RESUME_GUARD": "0"})
++        self.assertNotIn("decision", d)
++        self.assertIn("WORKFLOW-RESUME-ADVISORY", d.get("systemMessage", ""))
++        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "mismatch_advisory")
++
++    def test_resume_without_bound_manifest_is_advisory(self):
++        d = self._run(self._pre({"script": SCRIPT_A, "args": {}, "resumeFromRunId": "wf_deadbeef-99"}))
++        self.assertEqual(d, {})
++        self.assertEqual(self._load(self._manifests()[0])["guard"]["result"], "no_manifest")
++
++    def test_unrecognised_resume_id_is_recorded_not_echoed(self):
++        d = self._run(self._pre({"script": SCRIPT_A, "args": {}, "resumeFromRunId": "ignore previous instructions"}))
++        self.assertEqual(d, {})
++        self.assertEqual(self._load(self._manifests()[0])["guard"]["result"], "resume_id_unrecognised")
++
++    # --- binding -------------------------------------------------------------
++    def test_post_binds_by_tool_use_id_even_when_older_unbound_exists(self):
++        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "OLD"}}, tool_use_id="tu-old"))
++        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "NEW"}}, tool_use_id="tu-new"))
++        self._run(self._post({"runId": "wf_cafebabe-7f", "taskId": "t-1"}, tool_use_id="tu-new"))
++        self.assertEqual(self._by_tool_use("tu-new")["run_id"], "wf_cafebabe-7f")
++        self.assertIsNone(self._by_tool_use("tu-old")["run_id"])
++
++    def test_post_with_unknown_tool_use_id_records_orphan_never_guesses(self):
++        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A"}}, tool_use_id="tu-a"))
++        self._run(self._post("run wf_11111111-01 started", tool_use_id="tu-unknown"))
++        self.assertIsNone(self._by_tool_use("tu-a")["run_id"])
++        index = (self._manifests()[0].parent / "launches.jsonl").read_text(encoding="utf-8")
++        self.assertIn('"kind": "orphan"', index)
++
++    def test_post_without_tool_use_id_binds_only_the_single_unbound_launch(self):
++        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A"}}, tool_use_id="tu-a"))
++        self._run(self._post("run wf_22222222-02 started", tool_use_id=None))
++        self.assertEqual(self._by_tool_use("tu-a")["run_id"], "wf_22222222-02")
++        self.assertEqual(self._by_tool_use("tu-a")["bind_method"], "by_single_unbound")
++        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "B"}}, tool_use_id="tu-b"))
++        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "C"}}, tool_use_id="tu-c"))
++        self._run(self._post("run wf_33333333-03 started", tool_use_id=None))
++        self.assertIsNone(self._by_tool_use("tu-b")["run_id"])
++        self.assertIsNone(self._by_tool_use("tu-c")["run_id"])
++
++    def test_rebind_unbinds_the_previous_run(self):
++        m = self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}}, run_id="wf_aaaaaaaa-01")
++        sys.path.insert(0, str(_REPO / ".claude" / "hooks"))
++        from _lib import launch_ledger as LL  # noqa: E402
++        d = self._manifests()[0].parent
++        LL.bind_run(d, m, "wf_bbbbbbbb-02", "manual")
++        self.assertIsNone(LL.find_launch_for_run(d, "wf_aaaaaaaa-01"), "the old run must no longer resolve to this manifest")
++        self.assertEqual(LL.find_launch_for_run(d, "wf_bbbbbbbb-02")["launch_id"], m["launch_id"])
++
++    # --- fail-open / scope ---------------------------------------------------
++    def test_non_workflow_tool_is_noop(self):
++        d = self._run({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "ls"}})
++        self.assertEqual(d, {})
++        self.assertEqual(self._manifests(), [])
++
++    def test_malformed_stdin_is_noop(self):
++        env = {"CLAUDE_PROJECT_DIR": str(self.proj), "HOME": str(self.home), "PATH": "/usr/bin:/bin"}
++        proc = subprocess.run([sys.executable, str(HOOK)], input="{not json", capture_output=True, text=True, timeout=30, cwd=str(self.proj), env=env)
++        self.assertEqual(proc.returncode, 0)
++        self.assertEqual(json.loads(proc.stdout.strip().splitlines()[-1]), {})
++
++    def test_kill_switch_disables_recording(self):
++        d = self._run(self._pre({"script": SCRIPT_A, "args": {}}), extra_env={"CEO_WORKFLOW_LEDGER": "0"})
++        self.assertEqual(d, {})
++        self.assertEqual(self._manifests(), [])
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/.claude/hooks/tests/test_template_dogfood_parity.py b/.claude/hooks/tests/test_template_dogfood_parity.py
+index 5328a11c458f..415ff01af73e 100755
+--- a/.claude/hooks/tests/test_template_dogfood_parity.py
++++ b/.claude/hooks/tests/test_template_dogfood_parity.py
+@@ -99,8 +99,13 @@ DOGFOOD_ONLY_HOOKS: Set[Tuple[str, str, str]] = frozenset({
+ # version-floor probe: SessionStart + matcher are long-standing substrate),
+ # so it must NOT enter DOGFOOD_ONLY_HOOKS nor the gated set. The derived
+ # relationship below is the real oracle and is unchanged: 50 == 47 + 1 + 2.
+-T64_DOGFOOD_REGISTRATIONS = 50
+-T64_TEMPLATE_REGISTRATIONS = 47
++# PLAN-190 W1 REBASELINE (50->52 / 47->49): check_workflow_launch.py registers
++# on PreToolUse AND PostToolUse for the `Workflow` tool, in the dogfood
++# settings AND the base template (adopter-facing: the launch ledger + resume
++# guard protect the operator; the user profile keeps it — kill-switch and
++# route exist). Relationship unchanged: 52 == 49 + 1 + 2.
++T64_DOGFOOD_REGISTRATIONS = 52
++T64_TEMPLATE_REGISTRATIONS = 49
+ 
+ _BASELINES_CACHE: Optional[Dict] = None
+ 
+diff --git a/.claude/scripts/ceo-launches.py b/.claude/scripts/ceo-launches.py
+new file mode 100755
+index 000000000000..ce2c4f16da97
+--- /dev/null
++++ b/.claude/scripts/ceo-launches.py
+@@ -0,0 +1,234 @@
++#!/usr/bin/env python3
++"""ceo-launches.py — read and reuse the Workflow launch ledger (PLAN-190 W1).
++
++The ledger is written by ``.claude/hooks/check_workflow_launch.py`` before every
++``Workflow`` tool call; this CLI is how an operator (or a consumer's recovery
++rite) gets the EXACT recorded call back instead of rebuilding it from memory.
++
++Commands::
++
++    ceo-launches.py list [--limit N]            recent launches (id, run, resume, guard, bind method)
++    ceo-launches.py show <launch_id|run_id>     the full manifest (args printed as literal JSON)
++    ceo-launches.py relaunch <run_id> [--out FILE]
++                                                the exact call to re-issue: the script SNAPSHOT (bytes
++                                                recorded before dispatch — pass it as scriptPath) + args literal
++    ceo-launches.py check --run <run_id> [--script-file F | --script-text F] [--args-file F | --no-args]
++                                                the guard's comparison, standalone: rc 0 same, rc 3 args differ,
++                                                rc 5 script differs (args same), rc 6 inconclusive, rc 4 no manifest
++    ceo-launches.py bind <launch_id> <run_id>   manual binding of an orphan (run id validated by shape)
++    ceo-launches.py orphans                     run ids seen in responses that could not be bound
++    ceo-launches.py report                      counts by guard result, bind method, orphans (W0.2 groundwork)
++
++Stdlib only, Python >= 3.9. Read-only except ``bind`` and ``relaunch --out``.
++Never prints transcript content; ``args`` are the operator's own inputs.
++``--project-dir`` overrides the runtime state dir resolution (same resolver as the hooks).
++"""
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import os
++import sys
++from pathlib import Path
++from typing import Any, Dict, List, Optional
++
++_HERE = Path(__file__).resolve()
++_HOOKS_DIR = _HERE.parent.parent / "hooks"
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++
++from _lib import launch_ledger as LL  # noqa: E402
++
++
++def _dir(args: argparse.Namespace) -> Path:
++    if args.project_dir:
++        return LL.ledger_dir(Path(os.path.expanduser(args.project_dir)))
++    return LL.ledger_dir()
++
++
++def _resolve(d: Path, ident: str) -> Optional[Dict[str, Any]]:
++    if ident.startswith("L-"):
++        return LL.load_manifest(d, ident)
++    if not LL.is_run_id(ident):
++        return None
++    return LL.find_launch_for_run(d, ident)
++
++
++def cmd_list(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    lines = [ln for ln in LL.iter_index(d) if ln.get("kind") == "launch"]
++    print("%-28s %-18s %-18s %-26s %-16s %-12s %-12s" % ("launch_id", "run_id", "resume_from", "guard", "bind", "script", "args"))
++    for ln in lines[-args.limit:]:
++        m = LL.load_manifest(d, ln["launch_id"]) or {}
++        print("%-28s %-18s %-18s %-26s %-16s %-12s %-12s" % (
++            ln["launch_id"], m.get("run_id") or "-", ln.get("resume_from_run_id") or "-",
++            (m.get("guard") or {}).get("result", "?"), m.get("bind_method") or "-",
++            (ln.get("script_sha256") or "none")[:12], (ln.get("args_sha256") or "none")[:12]))
++    return 0
++
++
++def cmd_show(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    m = _resolve(d, args.ident)
++    if m is None:
++        print("no manifest for %s" % args.ident, file=sys.stderr)
++        return 4
++    print(json.dumps(m, ensure_ascii=False, indent=1, sort_keys=True))
++    return 0
++
++
++def cmd_relaunch(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    if not LL.is_run_id(args.run_id):
++        print("run id has an unexpected shape", file=sys.stderr)
++        return 2
++    m = LL.find_launch_for_run(d, args.run_id)
++    if m is None:
++        print("no manifest bound to run %s — nothing exact to relaunch from (bind an orphan with `bind`, or the run predates the ledger)" % args.run_id, file=sys.stderr)
++        return 4
++    script = m.get("script") or {}
++    a = m.get("args") or {}
++    snap = LL.load_snapshot(d, m)
++    print("# exact recorded call for run %s (launch %s, recorded %s)" % (args.run_id, m.get("launch_id"), m.get("recorded_at")))
++    if snap is not None:
++        sp = LL.snapshot_path(d, m["launch_id"])
++        print("scriptPath: %s   # SNAPSHOT of the bytes recorded before dispatch (sha256 %s, %d bytes)" % (sp, hashlib.sha256(snap).hexdigest(), len(snap)))
++        if args.out:
++            Path(args.out).write_bytes(snap)
++            print("snapshot copied to %s" % args.out)
++        if script.get("source") == "path" and script.get("path"):
++            p = Path(script["path"])
++            if not p.is_absolute() and m.get("cwd"):
++                p = Path(m["cwd"]) / p
++            try:
++                cur = hashlib.sha256(p.read_bytes()).hexdigest()
++                print("original file %s: %s" % (script["path"], "unchanged" if cur == script.get("sha256") else "CHANGED since launch — use the snapshot"))
++            except OSError:
++                print("original file %s: unreadable now — use the snapshot" % script["path"])
++    else:
++        print("script: %s — no snapshot recorded (sha256 %s)" % (script.get("source"), script.get("sha256")))
++    if m.get("persisted_script_path"):
++        print("harness copy: %s (matches snapshot: %s)" % (m["persisted_script_path"], m.get("persisted_matches_snapshot")))
++    print("resumeFromRunId: %s" % args.run_id)
++    if a.get("present"):
++        print("args (literal JSON, pass EXACTLY this):")
++        print(a.get("canonical"))
++    else:
++        print("args: ABSENT in the recorded call — do NOT pass an args field")
++    code = m.get("code") or {}
++    if code.get("head"):
++        print("code revision at launch: %s%s" % (code["head"], " (dirty)" if code.get("dirty") else ""))
++    return 0
++
++
++def cmd_check(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    if not LL.is_run_id(args.run_id):
++        print("run id has an unexpected shape", file=sys.stderr)
++        return 2
++    recorded = LL.find_launch_for_run(d, args.run_id)
++    if recorded is None:
++        print("NO-MANIFEST for run %s" % args.run_id)
++        return 4
++    tool_input: Dict[str, Any] = {"resumeFromRunId": args.run_id}
++    if args.script_file:
++        tool_input["scriptPath"] = args.script_file
++    elif args.script_text:
++        tool_input["script"] = Path(args.script_text).read_text(encoding="utf-8")
++    if args.args_file and not args.no_args:
++        tool_input["args"] = json.loads(Path(args.args_file).read_text(encoding="utf-8"))
++    now, _bytes = LL.build_manifest({"tool_input": tool_input, "cwd": os.getcwd()})
++    cmp = LL.compare(recorded, now)
++    if cmp["counts"]["total"]:
++        print("ARGS-DIFFER: run %s — %s" % (args.run_id, json.dumps(cmp["counts"])))
++        for df in cmp["args_diff"]:
++            print("  %-24s recorded=%s now=%s" % (df["key"], df["recorded"], df["now"]))
++        return 3
++    if cmp["script"] == "differs":
++        print("SCRIPT-DIFFERS (args same): run %s" % args.run_id)
++        return 5
++    if cmp["script"] == "inconclusive":
++        print("INCONCLUSIVE: one of the script hashes is unavailable (run %s)" % args.run_id)
++        return 6
++    print("SAME: run %s (launch %s)" % (args.run_id, recorded.get("launch_id")))
++    return 0
++
++
++def cmd_bind(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    if not LL.is_run_id(args.run_id):
++        print("run id has an unexpected shape (expected wf_<hex8>[-<hex>])", file=sys.stderr)
++        return 2
++    m = LL.load_manifest(d, args.launch_id)
++    if m is None:
++        print("no manifest %s" % args.launch_id, file=sys.stderr)
++        return 4
++    LL.bind_run(d, m, args.run_id, "manual")
++    print("bound %s → %s (manual)" % (args.launch_id, args.run_id))
++    return 0
++
++
++def cmd_force(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    try:
++        p = LL.write_force_token(d, args.run_id, args.reason, by=os.environ.get("USER") or None)
++    except ValueError as exc:
++        print("refused: %s" % exc, file=sys.stderr)
++        return 2
++    print("force token written for %s (one-shot; consumed by the next resume of that run; recorded with the reason): %s" % (args.run_id, p))
++    return 0
++
++
++def cmd_orphans(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    rows = [ln for ln in LL.iter_index(d) if ln.get("kind") == "orphan"]
++    for ln in rows[-args.limit:]:
++        print("%s  run=%s  session=%s  tool_use=%s  reason=%s" % (ln.get("at"), ln.get("run_id"), (ln.get("session_id") or "-")[:12], ln.get("tool_use_id") or "-", ln.get("reason")))
++    print("orphans: %d" % len(rows))
++    return 0
++
++
++def cmd_report(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    idx = LL.iter_index(d)
++    launches = [ln for ln in idx if ln.get("kind") == "launch"]
++    guard: Dict[str, int] = {}
++    methods: Dict[str, int] = {}
++    bound = 0
++    for ln in launches:
++        m = LL.load_manifest(d, ln["launch_id"]) or {}
++        g = (m.get("guard") or {}).get("result", "?")
++        guard[g] = guard.get(g, 0) + 1
++        if m.get("run_id"):
++            bound += 1
++            bm = m.get("bind_method") or "?"
++            methods[bm] = methods.get(bm, 0) + 1
++    orphans = sum(1 for ln in idx if ln.get("kind") == "orphan")
++    print("launches=%d bound=%d unbound=%d orphans=%d" % (len(launches), bound, len(launches) - bound, orphans))
++    print("guard results: %s" % json.dumps(guard, sort_keys=True))
++    print("bind methods:  %s" % json.dumps(methods, sort_keys=True))
++    print("ledger: %s" % d)
++    return 0
++
++
++def main(argv: Optional[List[str]] = None) -> int:
++    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
++    ap.add_argument("--project-dir", default=None, help="runtime state dir root to use instead of the resolver (tests / other projects)")
++    sub = ap.add_subparsers(dest="cmd", required=True)
++    p = sub.add_parser("list"); p.add_argument("--limit", type=int, default=20); p.set_defaults(fn=cmd_list)
++    p = sub.add_parser("show"); p.add_argument("ident"); p.set_defaults(fn=cmd_show)
++    p = sub.add_parser("relaunch"); p.add_argument("run_id"); p.add_argument("--out", default=None); p.set_defaults(fn=cmd_relaunch)
++    p = sub.add_parser("check"); p.add_argument("--run", dest="run_id", required=True)
++    p.add_argument("--script-file", default=None); p.add_argument("--script-text", default=None)
++    p.add_argument("--args-file", default=None); p.add_argument("--no-args", action="store_true"); p.set_defaults(fn=cmd_check)
++    p = sub.add_parser("bind"); p.add_argument("launch_id"); p.add_argument("run_id"); p.set_defaults(fn=cmd_bind)
++    p = sub.add_parser("force"); p.add_argument("run_id"); p.add_argument("--reason", required=True); p.set_defaults(fn=cmd_force)
++    p = sub.add_parser("orphans"); p.add_argument("--limit", type=int, default=50); p.set_defaults(fn=cmd_orphans)
++    p = sub.add_parser("report"); p.set_defaults(fn=cmd_report)
++    args = ap.parse_args(argv)
++    return int(args.fn(args))
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/.claude/scripts/env-inventory.json b/.claude/scripts/env-inventory.json
+index d2d23e5bf88b..7afd96f456de 100644
+--- a/.claude/scripts/env-inventory.json
++++ b/.claude/scripts/env-inventory.json
+@@ -2,7 +2,7 @@
+   "schema_version": "1.0",
+   "_comment": "Canonical inventory of CLAUDE_*/ANTHROPIC_*/CEO_* names referenced by framework code (PLAN-135 W5 O8 — the S218 footgun class). Token-level superset of strictly-consumed vars; see env-inventory-check.py docstring. Regenerate with --generate after any REVIEWED env-surface change.",
+   "generated_by": "env-inventory-check.py --generate",
+-  "generated_at": "2026-08-20",
++  "generated_at": "2026-09-17",
+   "scan_roots": [
+     ".claude/hooks",
+     ".claude/scripts",
+@@ -95,7 +95,7 @@
+         ".claude/hooks/_lib/audit_emit.py",
+         ".claude/hooks/check_adversary.py"
+       ],
+-      "sites": 6
++      "sites": 7
+     },
+     "CEO_ADVERSARY_MAX_PER_SESSION": {
+       "evidence": [
+@@ -187,13 +187,19 @@
+       ],
+       "sites": 2
+     },
++    "CEO_AUDIT_FAMILY_M4_REQUIRED": {
++      "evidence": [
++        ".claude/scripts/derive-audit-family.py"
++      ],
++      "sites": 1
++    },
+     "CEO_AUDIT_HMAC_DISABLE": {
+       "evidence": [
++        ".claude/hooks/SessionEnd.py",
+         ".claude/hooks/_lib/audit_hmac.py",
+-        ".claude/hooks/_lib/env_persist_allowlist.py",
+-        ".claude/hooks/_lib/test_isolation.py"
++        ".claude/hooks/_lib/env_persist_allowlist.py"
+       ],
+-      "sites": 5
++      "sites": 6
+     },
+     "CEO_AUDIT_KEY_PATH": {
+       "evidence": [
+@@ -221,11 +227,11 @@
+     },
+     "CEO_AUDIT_LOG_DIR": {
+       "evidence": [
++        ".claude/hooks/SessionEnd.py",
+         ".claude/hooks/_lib/advisory_dampen.py",
+-        ".claude/hooks/_lib/audit_emit.py",
+-        ".claude/hooks/_lib/audit_hmac.py"
++        ".claude/hooks/_lib/audit_emit.py"
+       ],
+-      "sites": 49
++      "sites": 55
+     },
+     "CEO_AUDIT_LOG_ERR": {
+       "evidence": [
+@@ -253,11 +259,11 @@
+     },
+     "CEO_AUDIT_LOG_PATH": {
+       "evidence": [
++        ".claude/hooks/SessionEnd.py",
+         ".claude/hooks/_lib/audit_emit.py",
+-        ".claude/hooks/_lib/audit_hmac.py",
+-        ".claude/hooks/_lib/federation/handlers/audit_event_push.py"
++        ".claude/hooks/_lib/audit_hmac.py"
+       ],
+-      "sites": 40
++      "sites": 48
+     },
+     "CEO_AUDIT_LOG_ROTATE_BYTES": {
+       "evidence": [
+@@ -311,7 +317,7 @@
+         ".claude/hooks/turbo_sessionstart.py",
+         ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 5
++      "sites": 6
+     },
+     "CEO_AUTO_COMPACT_COOLDOWN_TURNS": {
+       "evidence": [
+@@ -567,16 +573,18 @@
+     "CEO_CEREMONY_LINT_UNLOCK": {
+       "evidence": [
+         ".claude/hooks/_lib/audit_emit.py",
+-        ".claude/scripts/check-ceremony-script.py"
++        ".claude/scripts/check-ceremony-script.py",
++        ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 2
++      "sites": 3
+     },
+     "CEO_CEREMONY_LINT_UNLOCK_REASON": {
+       "evidence": [
+         ".claude/hooks/_lib/audit_emit.py",
+-        ".claude/scripts/check-ceremony-script.py"
++        ".claude/scripts/check-ceremony-script.py",
++        ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 2
++      "sites": 3
+     },
+     "CEO_CHAOS_ALLOWED": {
+       "evidence": [
+@@ -708,7 +716,7 @@
+         ".claude/hooks/turbo_profile.py",
+         ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 6
++      "sites": 7
+     },
+     "CEO_CODEX_USER_REVIEW_AUTO": {
+       "evidence": [
+@@ -716,14 +724,15 @@
+         ".claude/hooks/review_loop.py",
+         ".claude/hooks/turbo_profile.py"
+       ],
+-      "sites": 7
++      "sites": 8
+     },
+     "CEO_CODEX_USER_REVIEW_BLOCK": {
+       "evidence": [
+         ".claude/hooks/codex_review_user_code.py",
+-        ".claude/scripts/env-inventory.json"
++        ".claude/scripts/env-inventory.json",
++        "templates/settings/settings.user.json"
+       ],
+-      "sites": 2
++      "sites": 3
+     },
+     "CEO_COMPACTION_CONTINUITY": {
+       "evidence": [
+@@ -731,7 +740,7 @@
+         ".claude/hooks/check_postcompact_reinject.py",
+         ".claude/hooks/check_precompact_continuity.py"
+       ],
+-      "sites": 7
++      "sites": 6
+     },
+     "CEO_COMPACTION_PROBE_CANARY": {
+       "evidence": [
+@@ -822,7 +831,7 @@
+         ".claude/scripts/env-inventory.json",
+         ".claude/settings.json"
+       ],
+-      "sites": 5
++      "sites": 6
+     },
+     "CEO_CONFIRM_SKIP": {
+       "evidence": [
+@@ -837,7 +846,7 @@
+         ".claude/hooks/check_postcompact_reinject.py",
+         ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 6
++      "sites": 5
+     },
+     "CEO_CONTEXT_PROGRESS_FLOOR_TOKENS": {
+       "evidence": [
+@@ -876,6 +885,14 @@
+       ],
+       "sites": 2
+     },
++    "CEO_COST_TRANSCRIPTS_DIR": {
++      "evidence": [
++        ".claude/scripts/budget-summary.py",
++        ".claude/scripts/ceo-cost-transcripts.py",
++        ".claude/scripts/ceo-cost.py"
++      ],
++      "sites": 3
++    },
+     "CEO_COUNTRY": {
+       "evidence": [
+         ".claude/hooks/_lib/env_persist_allowlist.py",
+@@ -1462,6 +1479,26 @@
+       ],
+       "sites": 5
+     },
++    "CEO_LEDGER_CHECKPOINT": {
++      "evidence": [
++        ".claude/hooks/check_ledger_checkpoint.py",
++        ".claude/settings.json",
++        "templates/settings/settings.base.json"
++      ],
++      "sites": 3
++    },
++    "CEO_LEDGER_CHECKPOINT_REQUIRED": {
++      "evidence": [
++        ".claude/hooks/check_ledger_checkpoint.py"
++      ],
++      "sites": 1
++    },
++    "CEO_LEDGER_WRITE_GATE_ENFORCE": {
++      "evidence": [
++        ".claude/hooks/_lib/ledger_provenance.py"
++      ],
++      "sites": 1
++    },
+     "CEO_LEGAL_ID": {
+       "evidence": [
+         ".claude/scripts/env-inventory.json",
+@@ -2202,7 +2239,7 @@
+         ".claude/scripts/env-inventory.json",
+         ".claude/settings.json"
+       ],
+-      "sites": 4
++      "sites": 5
+     },
+     "CEO_PERSONA": {
+       "evidence": [
+@@ -2577,6 +2614,12 @@
+       ],
+       "sites": 2
+     },
++    "CEO_REPO": {
++      "evidence": [
++        ".claude/scripts/check_contamination.py"
++      ],
++      "sites": 1
++    },
+     "CEO_REQUIRE_REPO_PROFILE_FIXTURES": {
+       "evidence": [
+         ".claude/scripts/env-inventory.json",
+@@ -2598,7 +2641,7 @@
+         ".claude/hooks/review_loop.py",
+         ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 5
++      "sites": 6
+     },
+     "CEO_REVIEW_LOOP_STATE": {
+       "evidence": [
+@@ -2695,6 +2738,12 @@
+       ],
+       "sites": 5
+     },
++    "CEO_SESSION_MEMORY_DELTA": {
++      "evidence": [
++        ".claude/hooks/SessionEnd.py"
++      ],
++      "sites": 1
++    },
+     "CEO_SESSION_ROOTS_ALLOW": {
+       "evidence": [
+         ".claude/hooks/check_canonical_edit.py",
+@@ -2791,7 +2840,7 @@
+         ".claude/scripts/env-inventory.json",
+         ".claude/scripts/skill-patch-apply.py"
+       ],
+-      "sites": 3
++      "sites": 4
+     },
+     "CEO_SKILL_READ_STATE_DIR": {
+       "evidence": [
+@@ -2870,7 +2919,7 @@
+         ".claude/hooks/_lib/adapters/live/claude.py",
+         ".claude/hooks/_lib/adapters/live/gemini.py"
+       ],
+-      "sites": 52
++      "sites": 54
+     },
+     "CEO_SOURCE_FILE_COUNT": {
+       "evidence": [
+@@ -2903,11 +2952,11 @@
+     },
+     "CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED": {
+       "evidence": [
++        ".claude/hooks/_lib/ledger_provenance.py",
+         ".claude/hooks/check_agent_spawn.py",
+-        ".claude/scripts/env-inventory.json",
+-        ".claude/scripts/inject-agent-context.sh"
++        ".claude/hooks/check_ledger_checkpoint.py"
+       ],
+-      "sites": 3
++      "sites": 6
+     },
+     "CEO_SPAWN_OVERLAP_GUARD": {
+       "evidence": [
+@@ -3282,7 +3331,7 @@
+         ".claude/hooks/check_output_secrets.py",
+         ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 6
++      "sites": 7
+     },
+     "CEO_TOOL_LIFECYCLE_ORPHAN_TIMEOUT_S": {
+       "evidence": [
+@@ -3373,7 +3422,7 @@
+         ".claude/hooks/accel_dispatch.py",
+         ".claude/hooks/check_setup_verification.py"
+       ],
+-      "sites": 9
++      "sites": 10
+     },
+     "CEO_UI_LIBRARY": {
+       "evidence": [
+@@ -3423,7 +3472,7 @@
+         ".claude/hooks/verify_after_edit.py",
+         ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 6
++      "sites": 7
+     },
+     "CEO_VERIFY_AFTER_EDIT_BLOCK": {
+       "evidence": [
+@@ -3456,6 +3505,36 @@
+       ],
+       "sites": 5
+     },
++    "CEO_WORKFLOW_LEDGER": {
++      "evidence": [
++        ".claude/hooks/_lib/launch_ledger.py",
++        ".claude/hooks/check_workflow_launch.py",
++        ".claude/settings.json"
++      ],
++      "sites": 5
++    },
++    "CEO_WORKFLOW_RESUME_FORCE": {
++      "evidence": [
++        ".claude/hooks/_lib/launch_ledger.py",
++        ".claude/hooks/check_workflow_launch.py",
++        ".claude/settings.json"
++      ],
++      "sites": 5
++    },
++    "CEO_WORKFLOW_RESUME_GUARD": {
++      "evidence": [
++        ".claude/hooks/_lib/launch_ledger.py",
++        ".claude/hooks/check_workflow_launch.py"
++      ],
++      "sites": 2
++    },
++    "CEO_WORKFLOW_SCRIPT_GUARD": {
++      "evidence": [
++        ".claude/hooks/_lib/launch_ledger.py",
++        ".claude/hooks/check_workflow_launch.py"
++      ],
++      "sites": 2
++    },
+     "CEO_WS3_APPLY_OK": {
+       "evidence": [
+         ".claude/hooks/check_worktree_writer.py",
+@@ -3497,7 +3576,7 @@
+         ".claude/settings.json",
+         "templates/settings/settings.base.json"
+       ],
+-      "sites": 3
++      "sites": 4
+     },
+     "CLAUDE_CALL_INSERT": {
+       "evidence": [
+@@ -3533,7 +3612,7 @@
+         ".claude/hooks/turbo_profile.py",
+         ".claude/scripts/env-inventory-check.py"
+       ],
+-      "sites": 10
++      "sites": 11
+     },
+     "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": {
+       "evidence": [
+@@ -3541,7 +3620,7 @@
+         ".claude/settings.json",
+         "templates/settings/settings.base.json"
+       ],
+-      "sites": 3
++      "sites": 4
+     },
+     "CLAUDE_CONFIG_DIR": {
+       "evidence": [
+@@ -3656,15 +3735,15 @@
+         ".claude/hooks/SessionStart.py",
+         ".claude/hooks/Stop.py"
+       ],
+-      "sites": 131
++      "sites": 138
+     },
+     "CLAUDE_PROJECT_DIR_NATIVE": {
+       "evidence": [
+-        ".claude/hooks/_lib/runtime_paths.py",
+-        ".claude/hooks/_lib/spool_writer.py",
+-        ".claude/scripts/derive-audit-family.py"
++        ".claude/hooks/_lib/audit_hmac.py",
++        ".claude/hooks/_lib/injection_salt.py",
++        ".claude/hooks/_lib/runtime_paths.py"
+       ],
+-      "sites": 3
++      "sites": 10
+     },
+     "CLAUDE_PY": {
+       "evidence": [
+@@ -3699,7 +3778,7 @@
+         ".claude/hooks/SessionStart.py",
+         ".claude/hooks/Stop.py"
+       ],
+-      "sites": 32
++      "sites": 33
+     },
+     "CLAUDE_SIZE": {
+       "evidence": [
+diff --git a/.claude/settings.json b/.claude/settings.json
+index 05656781d746..8a0994e7fd99 100644
+--- a/.claude/settings.json
++++ b/.claude/settings.json
+@@ -356,6 +356,18 @@
+             "statusMessage": "Checking work-boundary ledger checkpoint..."
+           }
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: Workflow launch ledger + resume guard. Records script sha256 + LITERAL args + code revision under <state-dir>/launches/ BEFORE dispatch; blocks a resumeFromRunId whose script or args differ from the bound manifest (recovery: `ceo-launches.py relaunch <run>`; override CEO_WORKFLOW_RESUME_FORCE=1, recorded; kill-switch CEO_WORKFLOW_LEDGER=0). Fail-open on infrastructure.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Recording Workflow launch..."
++          }
++        ]
+       }
+     ],
+     "PostToolUse": [
+@@ -514,6 +526,18 @@
+             "statusMessage": "Verifying edit..."
+           }
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: binds the run id (wf_<id>) the runner returned to the pending launch manifest (by tool_use_id, else latest unbound in the session). Silent; fail-open.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Binding Workflow run id..."
++          }
++        ]
+       }
+     ],
+     "PostToolUseFailure": [
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 4503002a59c1..cf5bdaa5a374 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -9,12 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ > commands, schema/contract changes, and behavior an adopter would notice after
+ > installing or upgrading the framework. Internal refactors, test-only churn, and
+ > release-engineering bookkeeping are omitted. Counts cited below (as of
+-> v1.4.0: 166 skills, 27 slash commands, 198 ADRs, 71 `_lib` modules) are
++> v1.4.0: 166 skills, 27 slash commands, 198 ADRs, 72 `_lib` modules) are
+ > reproducible from the repository via
+ > `bash .claude/scripts/local/verify-counts.sh`.
+ 
+ ---
+ 
++## [Unreleased]
++
++### Added
++- **Workflow launch ledger + resume guard** (PLAN-190 W1). A new hook,
++  `check_workflow_launch.py`, registered on PreToolUse and PostToolUse for the
++  `Workflow` tool in the dogfood settings and in the base template (the `user`
++  profile keeps it), records every launch BEFORE dispatch — script sha256 plus a
++  snapshot of the script bytes, the literal `args` (absent ≠ null), the
++  `resumeFromRunId`, the code revision of the working directory — and binds the
++  run id the runner returns. A resume over DIFFERENT args is blocked with a
++  counts-only reason (the detail stays in the manifest); a resume over a
++  different script with the same args is advisory by default
++  (`CEO_WORKFLOW_SCRIPT_GUARD=enforce` to block). Overrides: in session,
++  `ceo-launches.py force <run> --reason …` (one-shot token, recorded with the
++  reason, announced); in the harness environment, `CEO_WORKFLOW_RESUME_FORCE=1`
++  (recorded), `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mode, ledger kept),
++  `CEO_WORKFLOW_LEDGER=0` (off). Fail-open on infrastructure. CLI
++  `ceo-launches.py` (`list · show · relaunch · check · force · bind · orphans ·
++  report`) and operator doc `docs/workflow-recovery.md`. Inventory:
++  60 hook scripts, 49 wired, 52 event registrations, 72 `_lib` modules.
++
+ ## [1.4.0] - 2026-09-07
+ 
+ Continuity, delivery and installer-safety train (PLAN-179 compaction
+diff --git a/CLAUDE.md b/CLAUDE.md
+index 3509864691b7..28ff3616fb0a 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -50,7 +50,7 @@ library — you install it *into* an existing repository with
+ - **A tamper-evident audit log** — every agent spawn, edit, and ceremony is appended to an HMAC-chained log; `verify_chain()` (`.claude/hooks/_lib/audit_hmac.py`) **detects** any break in the chain.
+ - **A cross-LLM pair-rail** — a second model (Codex) reviews canonical edits Claude proposes, so no single model is both author and sole reviewer.
+ - **A skill library** — **166 skills** ready-made (42 core + 8 frontend + 116 domain).
+-- **Governance hooks** — 59 Python hook scripts on disk (48 wired into `.claude/settings.json` (50 event registrations)), built on 71 stdlib-only `_lib/` modules.
++- **Governance hooks** — 60 Python hook scripts on disk (49 wired into `.claude/settings.json` (52 event registrations)), built on 72 stdlib-only `_lib/` modules.
+ - **198 ADRs** (architecture decision records, `.claude/adr/`) and **27 slash commands** (`.claude/commands/`).
+ 
+ A note this repo keeps deliberately: **there is no speed claim.** Six
+diff --git a/INSTALL.md b/INSTALL.md
+index d7fa81acc507..483ea30674d5 100644
+--- a/INSTALL.md
++++ b/INSTALL.md
+@@ -210,7 +210,7 @@ Always (regardless of profile):
+ - `.claude/hooks/check_agent_spawn.py` — the mechanical spawn enforcement (Python)
+ - `.claude/hooks/audit_log.py` — silent PostToolUse audit observer
+ - `.claude/hooks/_python-hook.sh` — Python 3.9+ version resolver shim
+-- `.claude/hooks/_lib/` — 71 shared modules, excluding the package `__init__.py` (payload, redact, filelock, team, testing, test_isolation, audit_emit, audit_hmac, policy, tool_lifecycle, advisory_dampen, codex_cli_shape, …)
++- `.claude/hooks/_lib/` — 72 shared modules, excluding the package `__init__.py` (payload, redact, filelock, team, testing, test_isolation, audit_emit, audit_hmac, policy, tool_lifecycle, advisory_dampen, codex_cli_shape, …)
+ - `.claude/scripts/` — validate-governance, inject-agent-context,
+   check-skill-health, check-pitfall-regression (universal)
+ - `.claude/commands/audit-page.md` — generic page audit
+@@ -519,11 +519,11 @@ your-project/
+ │   │       ├── commands/                # domain slash commands
+ │   │       └── scripts/                 # domain check scripts
+ │   ├── hooks/
+-│   │   ├── _lib/                        # 71 shared Python modules, excl. __init__.py (audit_emit, audit_hmac, policy, redact, tool_lifecycle, …)
++│   │   ├── _lib/                        # 72 shared Python modules, excl. __init__.py (audit_emit, audit_hmac, policy, redact, tool_lifecycle, …)
+ │   │   ├── _python-hook.sh              # Python version resolver + invoker
+ │   │   ├── check_agent_spawn.py         # mechanical enforcement of spawn protocol
+ │   │   ├── audit_log.py                 # silent PostToolUse audit observer
+-│   │   ├── ... (59 hooks total — see .claude/hooks/*.py)
++│   │   ├── ... (60 hooks total — see .claude/hooks/*.py)
+ │   │   └── tests/                       # 11000+ unit tests via `make test-collect`
+ │   ├── scripts/
+ │   │   ├── validate-governance.sh
+diff --git a/README.md b/README.md
+index 56a2b1f563a5..720c0ab9c4a6 100644
+--- a/README.md
++++ b/README.md
+@@ -52,14 +52,14 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Component | Count | Notes |
+ |---|---|---|
+ | Skill checklists | **166** | 42 core + 8 frontend + 116 domain |
+-| Hook scripts (on disk) | **59** | Python entrypoints under `.claude/hooks/` |
+-| Hooks wired in `settings.json` | **48** | distinct scripts, 50 event registrations |
+-| Shared library modules | **71** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
++| Hook scripts (on disk) | **60** | Python entrypoints under `.claude/hooks/` |
++| Hooks wired in `settings.json` | **49** | distinct scripts, 52 event registrations |
++| Shared library modules | **72** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+ | Slash commands | **27** | under `.claude/commands/` |
+ | Architecture decision records | **198** | under `.claude/adr/` |
+ | Tests | **~15,400 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+-The gap between **59 on disk** and **48 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
++The gap between **60 on disk** and **49 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+ 
+ **Runtime dependencies: none.** Hooks and scripts are Python ≥ 3.9, **standard library only** — zero third-party runtime packages. See [`SBOM.md`](SBOM.md). (Development and CI use third-party test tooling such as pytest; the installed runtime does not.)
+ 
+diff --git a/README.pt-BR.md b/README.pt-BR.md
+index bfb6bbf0fff6..1d18fbc58d1f 100644
+--- a/README.pt-BR.md
++++ b/README.pt-BR.md
+@@ -50,14 +50,14 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
+ | Componente | Contagem | Notas |
+ |---|---|---|
+ | Checklists de skills | **166** | 42 core + 8 frontend + 116 de domínio |
+-| Scripts de hook (em disco) | **59** | entrypoints Python em `.claude/hooks/` |
+-| Hooks ligados em `settings.json` | **48** | scripts distintos, 50 registros de evento |
+-| Módulos de biblioteca compartilhada | **71** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
++| Scripts de hook (em disco) | **60** | entrypoints Python em `.claude/hooks/` |
++| Hooks ligados em `settings.json` | **49** | scripts distintos, 52 registros de evento |
++| Módulos de biblioteca compartilhada | **72** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
+ | Slash commands | **27** | em `.claude/commands/` |
+ | Architecture decision records | **198** | em `.claude/adr/` |
+ | Testes | **~15.400 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
+ 
+-A diferença entre **59 em disco** e **48 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
++A diferença entre **60 em disco** e **49 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
+ 
+ **Dependências de runtime: nenhuma.** Hooks e scripts são Python ≥ 3.9, **apenas biblioteca padrão** — zero pacotes de terceiros em runtime. Veja [`SBOM.md`](SBOM.md). (Desenvolvimento e CI usam ferramentas de teste de terceiros, como o pytest; o runtime instalado não usa.)
+ 
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 855393727e1a..8968c63df770 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -44,8 +44,8 @@ ceo-orchestration/
+     ├── settings.json               # hook registrations for this repo (dogfood)
+     ├── hooks/
+     │   ├── _python-hook.sh         # resolves newest Python ≥ 3.9, fails with guidance
+-    │   ├── _lib/                   # 71 stdlib-only shared modules (144 recursive)
+-    │   ├── *.py                    # 59 hook scripts on disk
++    │   ├── _lib/                   # 72 stdlib-only shared modules (145 recursive)
++    │   ├── *.py                    # 60 hook scripts on disk
+     │   └── tests/                  # hook unit tests
+     ├── scripts/                    # protocol toolkit (validate, inject, audit-query, …)
+     ├── commands/                   # 27 slash commands (*.md)
+@@ -64,18 +64,18 @@ faith — run the commands:
+ |--------------------|------------------------------|-----------------------------------------------------------|
+ | Skills             | 166                          | `find .claude/skills -name SKILL.md \| wc -l`             |
+ | └ core / frontend / domain | 42 / 8 / 116         | `find .claude/skills/core -name SKILL.md \| wc -l` (etc.) |
+-| Hook scripts       | 59 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
+-| Hook registrations | 48 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
+-| `_lib` modules     | 71 top-level (144 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
++| Hook scripts       | 60 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
++| Hook registrations | 49 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
++| `_lib` modules     | 72 top-level (145 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+ | Slash commands     | 27                           | `ls .claude/commands/*.md \| wc -l`                       |
+ | ADRs               | 198                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
+ | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
+ | Test files         | ~810                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
+ | Collected cases    | ~15.4k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
+ 
+-> **On the "59 vs 48" hook gap.** 59 is the number of hook *scripts* present in
+-> `.claude/hooks/`. 48 is the number of those scripts *wired into* this repo's
+-> `.claude/settings.json` (across 50 event registrations — one script can fire on
++> **On the "60 vs 49" hook gap.** 60 is the number of hook *scripts* present in
++> `.claude/hooks/`. 49 is the number of those scripts *wired into* this repo's
++> `.claude/settings.json` (across 52 event registrations — one script can fire on
+ > more than one event). The difference is real and intentional: some scripts are
+ > opt-in, stack-specific, superseded, or invoked indirectly by other hooks. Both
+ > numbers are reported here rather than conflated into one impressive figure.
+diff --git a/docs/COMMAND-SKILL-HOOK-MAP.md b/docs/COMMAND-SKILL-HOOK-MAP.md
+index 7ddecc2a9c13..868e0ab582eb 100644
+--- a/docs/COMMAND-SKILL-HOOK-MAP.md
++++ b/docs/COMMAND-SKILL-HOOK-MAP.md
+@@ -82,6 +82,7 @@ Events sorted alphabetically; within an event, rows keep registration order (= r
+ | PostToolUse | `mcp__codex__codex\|mcp__codex__codex-reply` | `check_codex_response.py` | 5 |
+ | PostToolUse | `Bash` | `check_bash_canonical_forensic.py` | 5 |
+ | PostToolUse | `Edit\|Write\|MultiEdit` | `accel_dispatch.py` | 20 |
++| PostToolUse | `Workflow` | `check_workflow_launch.py` | 5 |
+ | PostToolUseFailure | `(all)` | `check_output_secrets.py` | 5 |
+ | PreCompact | `(all)` | `check_precompact_continuity.py` | 5 |
+ | PreToolUse | `Agent` | `check_agent_spawn.py` | 5 |
+@@ -103,6 +104,7 @@ Events sorted alphabetically; within an event, rows keep registration order (= r
+ | PreToolUse | `Bash\|Edit\|Write\|MultiEdit` | `check_worktree_writer.py` | 5 |
+ | PreToolUse | `Edit\|Write\|MultiEdit` | `check_config_protection.py` | 5 |
+ | PreToolUse | `Bash` | `check_ledger_checkpoint.py` | 5 |
++| PreToolUse | `Workflow` | `check_workflow_launch.py` | 5 |
+ | SessionEnd | `(all)` | `SessionEnd.py` | 5 |
+ | SessionStart | `(all)` | `SessionStart.py` | 5 |
+ | SessionStart | `(all)` | `turbo_sessionstart.py` | 5 |
+@@ -130,4 +132,4 @@ Derivation rule: a registered hook guards a surface iff its source file under `.
+ - Commands: 27
+ - Skills (SKILL.md-bearing dirs): 166 — core 42, frontend 8, domain 116 (across 32 domains)
+ - Skills with >=1 `activation_triggers` entry: 62
+-- Hook registrations: 50 across 15 events (49 unique hook labels)
++- Hook registrations: 52 across 15 events (50 unique hook labels)
+diff --git a/docs/CTO-GUIDE.md b/docs/CTO-GUIDE.md
+index 44a7198bfc80..b44257b03f1b 100644
+--- a/docs/CTO-GUIDE.md
++++ b/docs/CTO-GUIDE.md
+@@ -46,8 +46,8 @@ documentation bug.
+ | Workflows | 23 | `ls .github/workflows/*.yml \| wc -l` |
+ | GitHub Actions SHA-pinned refs | every `uses:` pinned | `grep -rEc 'uses: [^#]+@(v[0-9]+\|main\|master\|latest)[[:space:]]*$' .github/workflows/*` — must be 0 everywhere |
+ | Skills | 166 (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
+-| Hooks | 59 .py on disk; 48 wired into `settings.json` (50 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
+-| `_lib/` stdlib-only modules | 71 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
++| Hooks | 60 .py on disk; 49 wired into `settings.json` (52 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
++| `_lib/` stdlib-only modules | 72 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+ | Runtime 3rd-party deps | 0 | see `SBOM.md` §1 |
+ 
+ Secondary (not strictly reproducible via one-liner, but derivable):
+@@ -206,7 +206,7 @@ structural list.
+ 
+ ## 6. What it does well (backed by numbers, not adjectives)
+ 
+-- **Deterministic governance in-band with tool use.** 48 wired into
++- **Deterministic governance in-band with tool use.** 49 wired into
+   `.claude/settings.json` gate PreToolUse + PostToolUse. Denials are
+   structured JSON, not English.
+ - **Audit trail that survives restart.** Every governance decision
+diff --git a/docs/GUIA-COMPLETO.md b/docs/GUIA-COMPLETO.md
+index a3f7165d4e9f..02bbdf7cfab9 100644
+--- a/docs/GUIA-COMPLETO.md
++++ b/docs/GUIA-COMPLETO.md
+@@ -83,7 +83,7 @@ a dev to read the rest.
+    (`check_agent_spawn.py`) blocks spawns that do not follow the
+    format. Result: no more "generic agent with a pretty name".
+ 
+-3. **Mechanical Python hooks.** 48 hooks wired in `settings.json` run on
++3. **Mechanical Python hooks.** 49 hooks wired in `settings.json` run on
+    Claude Code's lifecycle events (`PreToolUse`, `PostToolUse`, `Stop`, …),
+    including:
+    - `check_agent_spawn` — persona+skill required
+diff --git a/docs/README.md b/docs/README.md
+index 3a85f8e6f0ca..95cd8f9e97bb 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -75,15 +75,15 @@ full set of commands; here is the summary you can spot-check in a minute.
+ | Thing | Count | How to verify |
+ |-------|-------|---------------|
+ | Skills | **166** (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
+-| Hook scripts on disk | **59** Python scripts | count `*.py` in `.claude/hooks/` |
+-| Hooks registered | **48** distinct scripts (50 event registrations) | inspect `.claude/settings.json` |
++| Hook scripts on disk | **60** Python scripts | count `*.py` in `.claude/hooks/` |
++| Hooks registered | **49** distinct scripts (52 event registrations) | inspect `.claude/settings.json` |
+ | Slash commands | **27** | count `*.md` in `.claude/commands/` |
+ | Architecture decision records | **198** | count `ADR-*.md` in `.claude/adr/` |
+-| Shared library modules | **71** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
++| Shared library modules | **72** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
+ | Tests | **~810 test files**; `make test-collect` (pytest `--collect-only`) reports **~15,400** collected cases | `make test-collect` |
+ 
+-Two of these are easy to misread, so we state them plainly: the **59** hook
+-scripts on disk are not all wired at once — **48** distinct scripts (across 50 event registrations) are registered in
++Two of these are easy to misread, so we state them plainly: the **60** hook
++scripts on disk are not all wired at once — **49** distinct scripts (across 52 event registrations) are registered in
+ `settings.json` for this repo's install. And the test figure is *collected
+ cases*, not hand-written functions; parametrization inflates the count, which is
+ why we cite `make test-collect` as the authority rather than a grep.
+diff --git a/docs/workflow-recovery.md b/docs/workflow-recovery.md
+new file mode 100644
+index 000000000000..a38983b6c6df
+--- /dev/null
++++ b/docs/workflow-recovery.md
+@@ -0,0 +1,120 @@
++# Workflow recovery — launch ledger and resume guard (PLAN-190 W1)
++
++> Audience: operators running autonomous Workflow pipelines in a consumer repository, and the
++> recovery rite after a quota death, a process death or a reboot. Framework ≥ the release that
++> ships `check_workflow_launch.py`; stdlib only.
++
++## The loss this closes
++
++A Workflow run's result cache is keyed by the exact `(prompt, opts)` of each `agent()` call. Anything
++that changes the prompt text — an edited rule in the script, a rebuilt `args` object with one
++field missing, a `continua` flag that was never there — changes the key and re-executes phases that
++had already finished. The harness persists a run's `args` only when the run ENDS
++(`<session>/workflows/wf_<id>.json`), never its script hash, the code revision, nor anything at
++launch time; a run killed by a process death leaves nothing. Measured on one consumer
++(2026-09-15→17): 15.5 % of phase starts never produced a result; 16 % of starts were
++re-executions; one prompt edit in flight re-implemented 17 slices; args rebuilt from memory
++regressed 11 slices; exact args resumed 12/12 in the right phase.
++
++## What is recorded, and when
++
++`check_workflow_launch.py` runs on **PreToolUse** and **PostToolUse** for the `Workflow` tool:
++
++| moment | what | where |
++|---|---|---|
++| before dispatch | `launch_id`, instant, `session_id`, `tool_use_id`, `cwd`; script fingerprint (`sha256` + bytes) **and a snapshot of the script bytes** (inline text, or the `scriptPath` file as read at that instant); **`args` as literal canonical JSON, never truncated** — an absent `args` field is recorded as `<absent>`, distinct from `null`; `resumeFromRunId`; `name` / `description` | `<state-dir>/launches/<launch_id>.json` (atomic, 0600) + `<launch_id>.script` + index `launches.jsonl` |
++| right after (same hook) | code revision of `cwd` (`git rev-parse HEAD`, dirty flag) inside a 1.2 s budget with `--no-optional-locks`; slow or absent git ⇒ `code.status: unknown` — the manifest is already on disk | same manifest (second atomic write) |
++| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. Anything ambiguous becomes an `orphan` index line (never a guess). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot` | manifest (`run_id`, `bound_at`, `bind_method`) + a `bind` line |
++
++`<state-dir>` is the project's runtime state dir (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir`),
++the same family as the audit log. Nothing from transcripts is stored; `args` are the operator's own inputs.
++
++## The guard
++
++A call with `resumeFromRunId` is compared with the manifest **currently bound to that run**:
++
++| comparison | result | what the hook returns |
++|---|---|---|
++| same script hash, same `args` | `match` | `{}` |
++| **`args` differ** (per top-level key) | `mismatch_blocked` | **block**, counts-only reason |
++| script hash differs, `args` same | `mismatch_script_advisory` | `systemMessage` (allowed) — `CEO_WORKFLOW_SCRIPT_GUARD=enforce` turns it into a block |
++| a script hash is unavailable (unreadable `scriptPath`) | `inconclusive` | `{}` — never a block, never a match |
++| no manifest bound to that run | `no_manifest` | `{}` |
++| `resumeFromRunId` not shaped like a run id | `resume_id_unrecognised` | `{}` (recorded, not echoed) |
++
++A manifest bound by heuristic (`by_single_unbound`, no `tool_use_id` in the event) never sustains
++a block: a mismatch against it is advisory (`mismatch_advisory_weak_bind`).
++
++Overrides, all recorded in the manifest:
++- **in session** — `python3 .claude/scripts/ceo-launches.py force wf_<id> --reason "<why>"` writes a
++  one-shot token; the next resume of that run proceeds, is marked `mismatch_forced` with the reason,
++  and is announced (`WORKFLOW-RESUME-FORCED`). The token is consumed: a second resume is blocked
++  again. `report` exposes the forced ratio — the stop rule's metric.
++- **process environment of the harness** (not a shell `export` inside the session):
++  `CEO_WORKFLOW_RESUME_FORCE=1` (proceed over any args mismatch), `CEO_WORKFLOW_RESUME_GUARD=0`
++  (advisory mode: the ledger keeps working, nothing blocks), `CEO_WORKFLOW_SCRIPT_GUARD=enforce`
++  (block script changes too), `CEO_WORKFLOW_LEDGER=0` (hook off).
++
++**The block reason is counts-only.** It says how many keys changed / are only in the recorded call /
++only in this call, whether the script hash differs, and the two routes — it never carries key names,
++values or an unvalidated run id (that text reaches the model; the channel is closed by removal). The
++detail is in the manifest: `ceo-launches.py show <launch_id>`.
++
++Infrastructure failures (unreadable stdin, unwritable state dir, import error) fail **open** with a
++stderr breadcrumb: this is a recovery instrument, not a security matcher.
++
++## The recovery rite (replaces "reconstruct the call from memory")
++
++```
++# 1. what was launched, what is bound, what the guard saw
++python3 .claude/scripts/ceo-launches.py list
++python3 .claude/scripts/ceo-launches.py show wf_<id>
++
++# 2. the EXACT call to re-issue: the script SNAPSHOT (pass it as scriptPath) + literal args
++python3 .claude/scripts/ceo-launches.py relaunch wf_<id> [--out /path/to/copy.js]
++
++# 3. before re-issuing from a rite that edits scripts: the guard's comparison, standalone
++python3 .claude/scripts/ceo-launches.py check --run wf_<id> --script-file <path> --args-file <json>
++#    rc 0 SAME · rc 3 ARGS-DIFFER (keys listed) · rc 5 SCRIPT-DIFFERS · rc 6 INCONCLUSIVE · rc 4 NO-MANIFEST
++
++# 4. runs the PostToolUse half could not bind (id not seen, or ambiguous): list and bind by hand
++python3 .claude/scripts/ceo-launches.py orphans
++python3 .claude/scripts/ceo-launches.py bind <launch_id> wf_<id>
++```
++
++Rules the ledger makes mechanical:
++- **Never edit the script of a run in flight.** A new rule means a NEW script file; a per-run
++  instruction goes through an `args` field the script already reads. Resuming over an edited script
++  is allowed but announced (advisory): only the phases whose prompt changed re-execute.
++- **Never rebuild `args` from memory.** `relaunch` prints them; `check` refuses a drift.
++- **Absent is not null.** If the recorded call had no `args`, do not pass one.
++
++## Measuring "quota per approved delivery" (W0.2 groundwork)
++
++`ceo-launches.py report` counts launches, bindings by method, guard results and orphans. Joined with
++the deduplicated token ledger (`ceo-cost-transcripts.py --by session` — the collector validated in
++`docs/research/s354-token-consumption-study/03-collector-audit.md`) and with the merges on `main`,
++it gives tokens per run and per approved delivery. "Approved delivery" is decided by code in
++`approval_gate.py` (PLAN-190 W3, `docs/approval-gate.md`).
++
++## Distribution (declared precondition)
++
++The hook file travels with `.claude/hooks/`; its two registrations travel in
++`templates/settings/settings.base.json` (the `user` profile is derived from it and keeps this hook).
++`upgrade.sh` merges registrations **per recorded ceremony** (`.claude/.install-state.json`): a target
++with no recorded ceremony and no `--ceremony` flag receives the shared settings only — no hooks.
++So "reaches consumers without a manual step" holds for consumers whose ceremony is recorded; the
++smoke-install exercises both legs (PLAN-190 W6).
++
++## Limitations (declared)
++
++- The guard sees the **`Workflow` tool call**; it cannot see `agent()` calls inside a run nor stop the
++  harness from re-keying its cache. It stops the OPERATOR from resuming over changed inputs without
++  knowing.
++- There is no checkpoint inside a single `agent()`: a phase that dies at 400k tokens restarts. PLAN-190
++  W2 adds a phase checkpoint file the phase prompt reads and writes; the runner itself is the limit.
++- The run id is extracted from the tool response by shape (`wf_<hex8>[-<hex>]`, 98.5 % of 329 real
++  responses in this repo's own transcripts); a harness version that changes the response leaves the
++  launch recorded and `bind` closes it by hand.
++- No audit event is emitted (registering a new action is the audit owner's ceremony); the manifests
++  are the record. Manifests are never pruned (a `gc --keep-days` is a follow-up).
+diff --git a/npm/README.md b/npm/README.md
+index 50888059bcd4..8c16bb864c48 100644
+--- a/npm/README.md
++++ b/npm/README.md
+@@ -52,14 +52,14 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Component | Count | Notes |
+ |---|---|---|
+ | Skill checklists | **166** | 42 core + 8 frontend + 116 domain |
+-| Hook scripts (on disk) | **59** | Python entrypoints under `.claude/hooks/` |
+-| Hooks wired in `settings.json` | **48** | distinct scripts, 50 event registrations |
+-| Shared library modules | **71** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
++| Hook scripts (on disk) | **60** | Python entrypoints under `.claude/hooks/` |
++| Hooks wired in `settings.json` | **49** | distinct scripts, 52 event registrations |
++| Shared library modules | **72** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+ | Slash commands | **27** | under `.claude/commands/` |
+ | Architecture decision records | **198** | under `.claude/adr/` |
+ | Tests | **~15,400 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+-The gap between **59 hook scripts** on disk and **48 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
++The gap between **60 hook scripts** on disk and **49 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+ 
+ **Runtime dependencies: none.** Hooks and scripts are Python ≥ 3.9, **standard library only** — zero third-party runtime packages. See [`SBOM.md`](SBOM.md). (Development and CI use third-party test tooling such as pytest; the installed runtime does not.)
+ 
+diff --git a/templates/settings/settings.base.json b/templates/settings/settings.base.json
+index 3f9a43f61ae4..74cbed5e0ae3 100644
+--- a/templates/settings/settings.base.json
++++ b/templates/settings/settings.base.json
+@@ -218,6 +218,18 @@
+             "statusMessage": "Checking work-boundary ledger checkpoint..."
+           }
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: Workflow launch ledger + resume guard. Records script sha256 + LITERAL args + code revision under <state-dir>/launches/ BEFORE dispatch; blocks a resumeFromRunId whose script or args differ from the bound manifest (recovery: `ceo-launches.py relaunch <run>`; override CEO_WORKFLOW_RESUME_FORCE=1, recorded; kill-switch CEO_WORKFLOW_LEDGER=0). Fail-open on infrastructure.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Recording Workflow launch..."
++          }
++        ]
+       }
+     ],
+     "PostToolUse": [
+@@ -376,6 +388,18 @@
+             "statusMessage": "Verifying edit..."
+           }
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: binds the run id (wf_<id>) the runner returned to the pending launch manifest (by tool_use_id, else latest unbound in the session). Silent; fail-open.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Binding Workflow run id..."
++          }
++        ]
+       }
+     ],
+     "PostToolUseFailure": [
+diff --git a/templates/settings/settings.user.json b/templates/settings/settings.user.json
+index e5c3fa0782fa..d872a65d44ad 100644
+--- a/templates/settings/settings.user.json
++++ b/templates/settings/settings.user.json
+@@ -27,6 +27,11 @@
+         "hook": "review_loop.py",
+         "route": "nao setar CEO_REVIEW_LOOP=1 — o hook inteiro retorna {} sem o opt-in; com ele, o cap e de 3 iteracoes",
+         "evidence": ".claude/hooks/review_loop.py:280-284 (o unico sitio de block) sob o opt-in default-OFF documentado no cabecalho do modulo"
++      },
++      {
++        "hook": "check_workflow_launch.py",
++        "route": "CEO_WORKFLOW_LEDGER=0 desliga o hook; CEO_WORKFLOW_RESUME_GUARD=0 poe o guard em advisory mantendo o ledger; em sessao, `ceo-launches.py force <run> --reason ...` (token one-shot, registrado) ou CEO_WORKFLOW_RESUME_FORCE=1 no ambiente do harness",
++        "evidence": ".claude/hooks/_lib/launch_ledger.py decide_pre — bloqueia SO retomada (resumeFromRunId) com args diferentes do manifesto vinculado por tool_use_id/manual; script diferente e advisory por padrao; hash indisponivel e inconclusivo (nunca bloqueia); falha de infraestrutura devolve {}"
+       }
+     ],
+     "literals": {
+@@ -310,6 +315,18 @@
+             "statusMessage": "Checking adopter config protection (advisory)..."
+           }
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: Workflow launch ledger + resume guard. Records script sha256 + LITERAL args + code revision under <state-dir>/launches/ BEFORE dispatch; blocks a resumeFromRunId whose script or args differ from the bound manifest (recovery: `ceo-launches.py relaunch <run>`; override CEO_WORKFLOW_RESUME_FORCE=1, recorded; kill-switch CEO_WORKFLOW_LEDGER=0). Fail-open on infrastructure.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Recording Workflow launch..."
++          }
++        ]
+       }
+     ],
+     "PostToolUse": [
+@@ -444,6 +461,18 @@
+             "statusMessage": "Verifying edit..."
+           }
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: binds the run id (wf_<id>) the runner returned to the pending launch manifest (by tool_use_id, else latest unbound in the session). Silent; fail-open.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Binding Workflow run id..."
++          }
++        ]
+       }
+     ],
+     "PostToolUseFailure": [
+diff --git a/tests/unit/test_launch_ledger.py b/tests/unit/test_launch_ledger.py
+new file mode 100644
+index 000000000000..03c8ae05100f
+--- /dev/null
++++ b/tests/unit/test_launch_ledger.py
+@@ -0,0 +1,170 @@
++"""Unit tests for ``_lib/launch_ledger.py`` (PLAN-190 W1, v2) — pure functions and
++the on-disk index, in a temp ledger dir (no resolver, no live ~/.claude)."""
++from __future__ import annotations
++
++import json
++import sys
++import tempfile
++from pathlib import Path
++
++_REPO = Path(__file__).resolve()
++while not (_REPO / ".claude").is_dir() or not (_REPO / "VERSION").is_file():
++    if _REPO.parent == _REPO:
++        raise RuntimeError("repo root not found")
++    _REPO = _REPO.parent
++sys.path.insert(0, str(_REPO / ".claude" / "hooks"))
++from _lib import launch_ledger as LL  # noqa: E402
++from _lib.testing import TestEnvContext  # noqa: E402
++
++
++class ArgsScriptAndIds(TestEnvContext):
++    def test_absent_null_and_empty_are_three_distinct_records(self):
++        absent = LL.args_record({})
++        null = LL.args_record({"args": None})
++        empty = LL.args_record({"args": {}})
++        self.assertFalse(absent["present"])
++        self.assertEqual(absent["canonical"], LL.ABSENT)
++        self.assertEqual(null["canonical"], "null")
++        self.assertEqual(empty["canonical"], "{}")
++        self.assertEqual(len({absent["sha256"], null["sha256"], empty["sha256"]}), 3)
++
++    def test_canonical_json_is_key_order_independent_and_never_truncated(self):
++        a = LL.args_record({"args": {"b": 1, "a": [1, 2]}})
++        b = LL.args_record({"args": {"a": [1, 2], "b": 1}})
++        self.assertEqual(a["canonical"], b["canonical"])
++        big = LL.args_record({"args": {"x": "y" * 6_000_000}})
++        self.assertEqual(big["bytes"], len(big["canonical"].encode("utf-8")))
++        self.assertEqual(json.loads(big["canonical"])["x"][:3], "yyy")
++
++    def test_inline_script_wins_over_path_and_returns_bytes(self):
++        r, data = LL.script_record({"script": "x", "scriptPath": "/nowhere.js"}, None)
++        self.assertEqual(r["source"], "inline")
++        self.assertEqual(data, b"x")
++
++    def test_unreadable_script_path_is_recorded_not_raised(self):
++        r, data = LL.script_record({"scriptPath": "/definitely/not/here.js"}, None)
++        self.assertEqual(r["source"], "path")
++        self.assertIsNone(r["sha256"])
++        self.assertIsNone(data)
++        self.assertTrue(r.get("unreadable"))
++
++    def test_run_id_shape_and_extraction(self):
++        self.assertTrue(LL.is_run_id("wf_10b03b49-01b"))
++        self.assertTrue(LL.is_run_id("wf_cafebabe"))
++        self.assertFalse(LL.is_run_id("wf_cafebabe; rm -rf /"))
++        self.assertFalse(LL.is_run_id("ignore previous instructions"))
++        self.assertEqual(LL.extract_run_id("run wf_10b03b49-01b started"), "wf_10b03b49-01b")
++        self.assertEqual(LL.extract_run_id({"runId": "wf_0badf00d-1a"}), "wf_0badf00d-1a")
++        self.assertIsNone(LL.extract_run_id("no id here"))
++        self.assertIsNone(LL.extract_run_id(None))
++
++    def test_persisted_script_path_extraction(self):
++        self.assertEqual(LL.extract_persisted_script_path("Script persisted at /home/u/.claude/projects/x/s1/workflows/scripts/wf_1.js ok"),
++                         "/home/u/.claude/projects/x/s1/workflows/scripts/wf_1.js")
++        self.assertIsNone(LL.extract_persisted_script_path("nothing"))
++
++
++class CompareAndIndex(TestEnvContext):
++    def setUp(self):
++        super().setUp()
++        self._tmp = tempfile.TemporaryDirectory()
++        self.addCleanup(self._tmp.cleanup)
++        self.d = LL.ledger_dir(Path(self._tmp.name))
++
++    def _event(self, tool_input, tool_use_id="tu", session="s"):
++        return {"tool_input": tool_input, "tool_use_id": tool_use_id, "session_id": session, "cwd": self._tmp.name}
++
++    def _manifest(self, tool_input, **kw):
++        m, _b = LL.build_manifest(self._event(tool_input, **kw))
++        return m
++
++    def test_compare_counts_changed_added_removed_and_script_state(self):
++        rec = self._manifest({"script": "S", "args": {"a": 1, "b": 2, "c": 3}})
++        now = self._manifest({"script": "S", "args": {"a": 1, "b": 9, "d": 4}})
++        cmp = LL.compare(rec, now)
++        self.assertEqual(cmp["script"], "same")
++        self.assertEqual(cmp["counts"], {"changed": 1, "only_recorded": 1, "only_now": 1, "total": 3})
++        self.assertEqual(sorted(df["key"] for df in cmp["args_diff"]), ["b", "c", "d"])
++
++    def test_compare_script_differs_and_inconclusive(self):
++        rec = self._manifest({"script": "S", "args": {}})
++        self.assertEqual(LL.compare(rec, self._manifest({"script": "T", "args": {}}))["script"], "differs")
++        self.assertEqual(LL.compare(rec, self._manifest({"scriptPath": "/nope.js", "args": {}}))["script"], "inconclusive")
++        self.assertEqual(LL.compare(self._manifest({"scriptPath": "/nope.js"}), self._manifest({"scriptPath": "/nope2.js"}))["script"], "inconclusive",
++                         "two unavailable hashes are NOT a match")
++
++    def test_compare_absent_vs_present_args(self):
++        cmp = LL.compare(self._manifest({"script": "S"}), self._manifest({"script": "S", "args": {}}))
++        self.assertEqual(cmp["counts"]["total"], 1)
++        self.assertEqual(cmp["args_diff"][0]["key"], "<args>")
++
++    def test_block_reason_is_counts_only(self):
++        rec = self._manifest({"script": "S", "args": {"secret-key-name": 1}})
++        now = self._manifest({"script": "T", "args": {"secret-key-name": 2}})
++        reason = LL.format_block_reason("wf_0badf00d-1a", LL.compare(rec, now), rec["launch_id"])
++        self.assertNotIn("secret-key-name", reason)
++        self.assertIn("1 key(s) changed", reason)
++        self.assertIn("script hash differs", reason)
++
++    def test_write_snapshot_bind_lookup_and_rebind(self):
++        m, data = LL.build_manifest(self._event({"script": "S", "args": {"x": 1}}, tool_use_id="tu-1"))
++        LL.write_manifest(m, self.d, data)
++        self.assertEqual(LL.load_snapshot(self.d, m), b"S")
++        self.assertIsNone(LL.find_launch_for_run(self.d, "wf_00000000-00"))
++        found = LL.find_launch_by_tool_use(self.d, "tu-1")
++        self.assertEqual(found["launch_id"], m["launch_id"])
++        LL.bind_run(self.d, found, "wf_00000000-00", "by_tool_use")
++        again = LL.find_launch_for_run(self.d, "wf_00000000-00")
++        self.assertEqual(again["run_id"], "wf_00000000-00")
++        LL.bind_run(self.d, again, "wf_11111111-11", "manual")
++        self.assertIsNone(LL.find_launch_for_run(self.d, "wf_00000000-00"))
++        self.assertEqual(LL.find_launch_for_run(self.d, "wf_11111111-11")["launch_id"], m["launch_id"])
++        kinds = [ln["kind"] for ln in LL.iter_index(self.d)]
++        self.assertEqual(kinds, ["launch", "bind", "unbind", "bind"])
++
++    def test_bind_refuses_malformed_run_id(self):
++        m, data = LL.build_manifest(self._event({"script": "S"}))
++        LL.write_manifest(m, self.d, data)
++        with self.assertRaises(ValueError):
++            LL.bind_run(self.d, m, "not a run id", "manual")
++
++    def test_decide_pre_records_every_call_and_blocks_only_verified_args_diff(self):
++        m, data = LL.build_manifest(self._event({"script": "S", "args": {"x": 1}}, tool_use_id="tu-1"))
++        LL.write_manifest(m, self.d, data)
++        LL.bind_run(self.d, m, "wf_11111111-11", "by_tool_use")
++        d_ok, m_ok = LL.decide_pre(self._event({"script": "S", "args": {"x": 1}, "resumeFromRunId": "wf_11111111-11"}, tool_use_id="tu-2"), self.d, env={}, git_budget_s=0.2)
++        self.assertEqual(d_ok, {})
++        self.assertEqual(m_ok["guard"]["result"], "match")
++        d_bad, m_bad = LL.decide_pre(self._event({"script": "S", "args": {"x": 2}, "resumeFromRunId": "wf_11111111-11"}, tool_use_id="tu-3"), self.d, env={}, git_budget_s=0.2)
++        self.assertEqual(d_bad.get("decision"), "block")
++        self.assertEqual(m_bad["guard"]["result"], "mismatch_blocked")
++        d_scr, m_scr = LL.decide_pre(self._event({"script": "T", "args": {"x": 1}, "resumeFromRunId": "wf_11111111-11"}, tool_use_id="tu-4"), self.d, env={}, git_budget_s=0.2)
++        self.assertNotIn("decision", d_scr)
++        self.assertEqual(m_scr["guard"]["result"], "mismatch_script_advisory")
++        d_inc, m_inc = LL.decide_pre(self._event({"scriptPath": "/nope.js", "args": {"x": 1}, "resumeFromRunId": "wf_11111111-11"}, tool_use_id="tu-5"), self.d, env={"CEO_WORKFLOW_SCRIPT_GUARD": "enforce"}, git_budget_s=0.2)
++        self.assertEqual(d_inc, {})
++        self.assertEqual(m_inc["guard"]["result"], "inconclusive")
++        launches = [ln for ln in LL.iter_index(self.d) if ln["kind"] == "launch"]
++        self.assertEqual(len(launches), 5, "every call is recorded, blocked or not")
++
++    def test_unbound_launches_honours_session_and_unbind(self):
++        a, da = LL.build_manifest(self._event({"script": "S"}, tool_use_id="tu-a", session="s-A"))
++        b, db = LL.build_manifest(self._event({"script": "S"}, tool_use_id="tu-b", session="s-B"))
++        LL.write_manifest(a, self.d, da)
++        LL.write_manifest(b, self.d, db)
++        self.assertEqual(LL.unbound_launches(self.d, "s-A"), [a["launch_id"]])
++        self.assertEqual(sorted(LL.unbound_launches(self.d, None)), sorted([a["launch_id"], b["launch_id"]]))
++        LL.bind_run(self.d, a, "wf_aaaaaaaa-01", "manual")
++        self.assertEqual(LL.unbound_launches(self.d, "s-A"), [])
++
++    def test_decide_post_orphans_instead_of_guessing(self):
++        a, da = LL.build_manifest(self._event({"script": "S"}, tool_use_id="tu-a", session="s"))
++        b, db = LL.build_manifest(self._event({"script": "S"}, tool_use_id="tu-b", session="s"))
++        LL.write_manifest(a, self.d, da)
++        LL.write_manifest(b, self.d, db)
++        out = LL.decide_post({"tool_response": "run wf_deadbeef-01 ok", "session_id": "s"}, self.d)
++        self.assertIsNone(out)
++        self.assertEqual([ln["kind"] for ln in LL.iter_index(self.d)][-1], "orphan")
++        out2 = LL.decide_post({"tool_response": "run wf_deadbeef-02 ok", "session_id": "s", "tool_use_id": "tu-b"}, self.d)
++        self.assertEqual(out2["run_id"], "wf_deadbeef-02")
++        self.assertEqual(out2["bind_method"], "by_tool_use")

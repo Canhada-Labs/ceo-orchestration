@@ -1,0 +1,76 @@
+---
+round: 1
+archetype: DevOps Engineer
+skill: devops-ci-cd
+agent_persona: DevOps Engineer (Principal)
+generated_at: 2026-09-17T14:42:56Z
+plan: PLAN-190
+subject: "W1 — ledger de lançamento de Workflow + guard de retomada"
+---
+
+## Verdict
+
+ADJUST
+
+## Summary (≤ 3 bullets)
+
+- **O que a W1 faz e por que é o menor conjunto:** registrar cada chamada da tool `Workflow` ANTES do despacho (hash do script + `args` literal), vincular o `wf_<id>` devolvido pelo `tool_use_id` e recusar um `resumeFromRunId` sobre entradas diferentes. Registrar → vincular → comparar é o mínimo que fecha a classe medida (15,5 % de fases perdidas, 16 % de reexecuções); a CLI `relaunch`/`check` é o que torna o rito do consumidor executável antes de o hook chegar lá. O único item NÃO portante para a classe é a revisão de código (`git`), e é exatamente ele que traz o risco operacional principal.
+- **Onde é forte (verificado no substrato real deste repo, não só na prosa):** 329 respostas reais da tool `Workflow` nos transcripts próprios; a regex `wf_<hex8>-<hex>` casa 324 (98,5 %); a resposta é texto «Workflow launched in background. Task ID: … Transcript dir: …» com o `wf_` no caminho; os campos reais de entrada são `args, description, resumeFromRunId, script, scriptPath` (não existe `name`). O vínculo é empiricamente sólido; os 5 sem id são a população que fica «não vinculada». O arquivo do hook e a `_lib` chegam ao consumidor (`.claude/hooks` é diretório enumerado, `scripts/_framework_manifest_set.sh:179`; `_lib` instalada inteira menos testes, `scripts/install.sh:1407-1428`).
+- **Onde é fraca:** (1) o manifesto pode NÃO ser escrito justamente no cenário de recuperação (8 s de orçamento de `git` dentro de um hook de 5 s); (2) o motivo de bloqueio ecoa nomes de chave crus — a proposta descreve uma truncagem que o código não faz; (3) o fallback de vínculo não é limitado nem medido; (4) o pacote nasce vermelho no gate de corpus e nos docs gerados; (5) o guard não tem botão de rollback separado do kill-switch; (6) «sem passo manual» depende de duas precondições no consumidor (cerimônia GRAVADA e `jq`) que nem o doc nem o smoke declaram.
+
+## Risks
+
+- R-DEV1 — Severity: HIGH — Manifesto perdido no cenário de recuperação: `git_revision` roda `rev-parse` (timeout 3 s) e `status --porcelain` (5 s) ANTES da escrita (`p190-w1.patch:174-177`, chamada em `:227`, escrita só em `:379`) dentro de um hook registrado com `"timeout": 5` (`:892`, `:911`). Após reboot, com cache frio numa árvore grande, o hook é morto e o harness segue (timeout = fail-open, `docs/adapters.md:89`): run sem manifesto e o critério «100 % dos lançamentos com manifesto» (plano `:220`) falha em silêncio. Mitigation: escrever primeiro, enriquecer depois, orçamento de `git` ≤ 1,5 s (Must-fix 1).
+- R-DEV2 — Severity: HIGH — Encadeamento com o fallback: sem manifesto para o `tool_use_id`, `decide_post` cai em `latest_unbound_launch` (`:391-393`) e vincula o run ao último lançamento não vinculado da sessão, tipicamente um dos 1,5 % que falharam ao iniciar; o guard passa a comparar contra o manifesto ERRADO (bloqueio falso ou passe falso, sem sinal). Mitigation: fallback limitado por sessão e recência, `bind_method` gravado (Must-fix 3).
+- R-DEV3 — Severity: MEDIUM — `git status` sem `--no-optional-locks` (`:177`) toma o lock do índice; num pipeline autônomo com worktrees e merges, um hook pode fazer um `git` do próprio pipeline falhar com `index.lock`. Mitigation: `--no-optional-locks --untracked-files=no` (Must-fix 1).
+- R-DEV4 — Severity: MEDIUM — Motivo de bloqueio como canal: `format_block_reason` interpola `d["key"]` cru (`:349`); `diffs[:8]` limita a LISTA, não o comprimento da chave; uma chave JSON aceita qualquer texto, inclusive quebras de linha e instruções; a proposta afirma «chaves truncadas a 8» (`proposal.md:89`), o que o código não faz. Mitigation: chave nomeada só se casar um alfabeto fechado, senão hash (Must-fix 2).
+- R-DEV5 — Severity: MEDIUM — Rollback acoplado: o único interruptor é `CEO_WORKFLOW_LEDGER=0` (`:449`), que desliga o REGISTRO junto com o guard; reverter um bloqueio falso em campo custa perder o ledger. Mitigation: interruptor advisory próprio (Must-fix 4).
+- R-DEV6 — Severity: MEDIUM — Gate de corpus vermelho: `verify-counts.sh` varre 11 docs (`.claude/scripts/local/verify-counts.sh:548-551`) e o patch bumpa 5; `CLAUDE.md:53`, `README.pt-BR.md:53-60`, `INSTALL.md:213,522,526` e `docs/GUIA-COMPLETO.md:86` seguem com 59/48/50/71; dentro do próprio patch `CTO-GUIDE` vai a 49/52 (`:969`) enquanto README (`:928`), `docs/README` (`:984`; prosa «**59** hook» em `:991`), `npm/README` (`:1094`) e o comentário da árvore em ARCHITECTURE (`:944`) ficam em 48/50/59. Mitigation: Must-fix 5.
+- R-DEV7 — Severity: MEDIUM — Docs gerados e inventários fora do patch: `docs/COMMAND-SKILL-HOOK-MAP.md` é gerado e tem teste (`.claude/scripts/tests/test_gen_command_skill_hook_map.py`); `CHANGELOG.md` sem entrada; `.claude/scripts/env-inventory.json` sem `CEO_WORKFLOW_LEDGER`/`CEO_WORKFLOW_RESUME_FORCE` (o checker é advisory em `validate.yml:180-198`, mas a higiene noturna apitará todas as noites — regra ruidosa ensina a ignorar o canal). Mitigation: Must-fix 5.
+- R-DEV8 — Severity: MEDIUM — Distribuição com precondições não declaradas: o merge de registrações é aditivo por cerimônia (`scripts/upgrade.sh:2856-2870`) — cerimônia desconhecida ⇒ posture `shared` ⇒ ZERO hooks; sem `jq` ⇒ merge pulado com NOTE «register manually» (`upgrade.sh:2915-2919`); o smoke tem lista manual de 4 hooks e nenhuma asserção de matcher (`scripts/tests/smoke-install.sh:158-163`). Mitigation: Must-fix 6.
+- R-DEV9 — Severity: LOW — FORCE alcançável pelo próprio modelo num consumidor de cerimônia `user` (proteção de config é advisory nesse perfil; um `env` em `settings.local.json` chega ao ambiente dos hooks). O registro `mismatch_forced` é o controle e a razão forçados÷bloqueados é a métrica. Mitigation: declarar como risco aceito no doc; a métrica entra na regra de parada (Must-fix 4).
+- R-DEV10 — Severity: LOW — Sonda de latência cega: evento sintético com `tool_name` ≠ `Workflow` cai no caminho rápido (`:451`) e o gate relativo nunca mede o caminho real com `git`. Mitigation: medir uma vez o caminho real no pack (número no material), sem tocar o gate.
+
+## Must-fix (blocking)
+
+1. **Escrever primeiro, enriquecer depois; orçamento de `git` ≤ 1,5 s (R-DEV1, R-DEV3).** Evidência: `p190-w1.patch:174-177`, `:227`, `:379`, `:892`, `:911`. Cura: `decide_pre` grava o manifesto com `code: {"head": null, "dirty": null, "reason": "pending"}` ANTES de qualquer subprocesso; depois roda `git --no-optional-locks rev-parse HEAD` e `git --no-optional-locks status --porcelain --untracked-files=no` com timeout TOTAL ≤ 1,5 s e reescreve atomicamente só o campo `code` (`reason: "timeout"` ao estourar). Teste de controle: `git` falso no `PATH` que dorme 6 s ⇒ manifesto existe, `code.reason == "timeout"`, hook termina < 5 s. Estimativa: 20k tokens, 0,2 sessão.
+2. **OQ-1 — motivo de bloqueio sem texto do operador (R-DEV4).** Evidência: `:348-357`; `proposal.md:88-89`. Cura: nomear a chave só se casar `^[A-Za-z0-9_.-]{1,32}$`, senão `key#<sha256[:8]>`; nunca quebra de linha; o diff completo fica em `guard.diff` no manifesto (o `show` da CLI já o exibe). Corrigir a proposta («truncadas a 8» é a lista, não a chave). Precedente do repo: S309 r22 — canal instruction-adjacent fecha por remoção, não por enumeração. Teste de controle: chave com `\n` e texto de instrução nunca aparece na `reason`. Estimativa: 10k tokens, 0,1 sessão.
+3. **OQ-2 — fallback limitado e MEDIDO (R-DEV2).** Evidência: `:293-299`, `:391-393`; `tool_use_id` é campo estabelecido no contrato de hooks deste repo (`_lib/payload.py`, `_lib/tool_lifecycle.py:1-15`, `SPEC/v1/normalized_envelope.schema.md`). Cura: manter o fallback como EXCEÇÃO — mesma sessão E `recorded_at` dentro de 5 min (a tool devolve em segundos); fora disso não vincula (fica para `bind` manual); gravar `bind_method ∈ {tool_use_id, latest_unbound, manual}` na linha `bind` e no manifesto, para que `report` produza a tabela would-mis-bind antes de qualquer decisão. Teste de controle: lançamento antigo não vinculado + PostToolUse sem `tool_use_id` ⇒ NÃO vincula. Estimativa: 15k tokens, 0,2 sessão.
+4. **OQ-4 — enforce por padrão, com botão de rollback próprio e regra de parada reconciliada (R-DEV5, R-DEV9).** Evidência: `proposal.md:97-98` contra plano `:231-233` (a regra de parada pressupõe uma janela advisory que a proposta não abre). Cura: `CEO_WORKFLOW_RESUME_GUARD=advisory` ⇒ permite e grava `mismatch_advisory` (guard desligado, ledger ligado); o kill-switch continua desligando tudo. Reescrever a regra de parada do plano: «se forçados ÷ (bloqueados + forçados) > 5 % em 2 semanas ⇒ voltar a advisory e rever o predicado (chaves ignoradas por política), nunca relaxar o registro» — `report` já dá os numeradores. As três env-vars entram no `env-inventory.json` (`--generate`). Estimativa: 10k tokens, 0,1 sessão.
+5. **Corpus e docs gerados no MESMO pacote (R-DEV6, R-DEV7).** Evidência: R-DEV6/R-DEV7; regra do repo «docs GERADOS entram na bateria de TODO land». Cura: bumpar os 11 docs do `verify-counts.sh` (49 wired / 52 registrações / 60 hooks / 72 módulos; a linha `CLAUDE.md:53` é edição de closeout — o LAND precisa prever isso), regenerar `COMMAND-SKILL-HOOK-MAP.md`, entrada no `CHANGELOG.md`, `env-inventory.json`; rodar `verify-counts.sh` sobre a árvore STAGEADA (CLAUDE.md §4). Estimativa: 20k tokens, 0,3 sessão.
+6. **Distribuição declarada e provada (R-DEV8).** Evidência: `scripts/upgrade.sh:2856-2870`, `:2915-2919`; `scripts/tests/smoke-install.sh:158-163`; plano `:117-119` e `:183-190` (W6 «acoplada a cada wave», mas a W1 não toca o smoke). Cura: (a) `docs/workflow-recovery.md` ganha a seção «Precondições no consumidor»: cerimônia gravada (`python3 -c 'import json;print(json.load(open(".claude/.install-state.json")).get("request",{}).get("ceremony"))'`), senão `upgrade.sh --ceremony <x>`; `jq` presente; `--no-settings-merge` ausente; `upgrade.sh --dry-run` anuncia as duas registrações; (b) `smoke-install.sh` (livre) afirma, após install E após upgrade, `matcher == "Workflow"` ×2 nas duas cerimônias e roda `ceo-launches.py report` no target. Estimativa: 25k tokens, 0,3 sessão.
+
+Total das curas: ≈ 100k tokens, ≤ 1 sessão — dentro do orçamento da W1 (150–300k). Nenhuma exige integração externa nem capacidade de fornecedor.
+
+## Nice-to-have (advisory)
+
+1. **OQ-3 — não comparar `code.head` na W1.** Concordo com a proposta: commitar WIP entre fases é o caminho NORMAL de retomada; bloquear por revisão diferente produziria bloqueio falso na maioria das retomadas reais e mataria o enforce pela própria regra de parada. Registrar, e deixar a invalidação por `rev` para o checkpoint da W2.
+2. `PostToolUseFailure`: registrar o mesmo hook (3.ª entrada; o evento já tem 2 registrações no `settings.json`) para marcar lançamentos falhos e excluí-los de `latest_unbound_launch` — é a cura de classe dos 1,5 %; muda contagens (53 registrações) e o derivador.
+3. Semântica «último vínculo vence» após `mismatch_forced` (`:275-283`): após um FORCE bem-sucedido a referência do run passa a ser o manifesto forçado e um resume com os `args` originais será bloqueado. Correto, mas nem documentado nem testado.
+4. `cmd_bind` aceita qualquer string como `run_id` (`:831-839`); validar com `_RUN_ID_RE.fullmatch` — é a única porta por onde um id não canônico entra na `reason`.
+5. `_ARGS_MAX_BYTES`: o corte é por caracteres depois de medir em bytes e produz JSON inválido (`:142-143`), que `_args_key_diff` reporta como `unparseable`; preferir recusar (`oversize: true`) a truncar.
+6. Registrar `description` (campo real da tool) e remover `name` (não existe na entrada real).
+7. Retenção: manifestos e índice nunca são podados; `ceo-launches.py gc --keep-days N` ou nota de crescimento no doc.
+8. Teste de que o `FileLock` é de fato adquirido em `_append_index` (`:109-115`): a degradação silenciosa para append sem lock esconderia uma mudança de assinatura para sempre (a assinatura atual `FileLock(path, timeout=)` confere).
+9. Reuso do idioma de pareamento de `_lib/tool_lifecycle.py` (arquivo por sessão, `_MaybeLock`, varredura de órfãos em 30 s), ou uma frase no docstring dizendo por que não (o contrato MF-SEC-1 daquele módulo proíbe guardar `tool_input` cru — razão suficiente, mas deve estar escrita).
+10. Derivador: `"settings" + ".json"` (`add-workflow-hook-registration.py:49-53`) esconde o alvo de oráculos textuais; escrever o nome inteiro — se um gate disparar, é o gate trabalhando.
+11. Reason do bloqueio: dizer ao modelo a rota que ELE tem em sessão (`relaunch` + reemitir a chamada exata) e ao operador a rota FORCE (ambiente do processo, não `export` no Bash).
+12. `relaunch` para script inline (`:792-793`) promete o texto em `<session>/workflows/<run>.json`, que o harness só escreve ao TÉRMINO (plano `:39`): num run morto por processo/reboot o texto não existe e o «exato» vira só o hash. Ou o manifesto guarda o inline (limitado, p.ex. 256 KB), ou o doc manda pipelines autônomos lançarem por `scriptPath`.
+
+## Unseen by the original plan
+
+1. Comportamento exato do harness em timeout de hook PreToolUse na versão da CLI do consumidor: o repo documenta fail-open (`docs/adapters.md:89`), mas a semântica é do fornecedor e deve ser re-verificada a cada geração (regra S352). O Must-fix 1 torna a questão irrelevante para o registro.
+2. Cerimônia gravada no `.install-state.json` do consumidor do incidente: o inventário do plano (`:38`) não diz; é a precondição que decide se a registração chega sem passo manual.
+3. «96 registrações» no consumidor (plano `:38`) contra 50 entradas de hook no `settings.json` deste repo: pode ser outra métrica ou duplicação acumulada por upgrades sucessivos. O merge aditivo é idempotente por identidade `.py`, mas a hipótese vale um `jq` no consumidor antes da adoção.
+4. Forma do id em outras versões da CLI: 98,5 % neste repo, CLI 2.1.27x; a resposta é texto livre e pode mudar sem aviso — o `bind_method` do Must-fix 3 é o instrumento que detecta.
+5. Bloqueio em cadeia: o motivo vai ao modelo, que em modo autônomo pode tentar `export CEO_WORKFLOW_RESUME_FORCE=1` no Bash (sem efeito nos hooks) e entrar em loop. Medir na janela: quantos bloqueios foram seguidos de `relaunch` contra quantos de lançamento fresco sem `resumeFromRunId`.
+
+## What I would NOT change
+
+- Persistir no hook, antes do despacho, com o `tool_input` inteiro — é o único ponto que vê a chamada; o script do consumidor não vê.
+- `args` literal com `<absent>` ≠ `null` e JSON canônico independente de ordem; hashes de valores (nunca valores) no motivo.
+- Bloquear SÓ sobre `resumeFromRunId` explícito com manifesto vinculado; sem manifesto ⇒ advisory; fail-open em infraestrutura; kill-switch.
+- Nenhum evento de auditoria nesta wave (cerimônia do dono do audit) — desde que o follow-up tenha dono e número.
+- Distribuição pelo template base + `user` derivado, com o hook DENTRO do perfil `user`: é proteção do operador e cumpre o critério de exclusão (a) do `_derivation` (tem kill-switch e rota).
+- A CLI `relaunch`/`check`/`bind` como rito do consumidor antes de o hook chegar; `report` como base do W0.2.
+- Enforce por padrão — com o botão de rollback do Must-fix 4.

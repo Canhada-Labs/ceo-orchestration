@@ -102,11 +102,22 @@ Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_w
   `FileLock`) + índice `launches.jsonl`. Evento de auditoria `workflow_launch_recorded`.
 - **Vincular ao run** (PostToolUse `Workflow`): extrai o `wf_<id>` da resposta e grava `run_id` no
   manifesto; se a resposta trouxer o `scriptPath` persistido pelo harness, grava também.
-- **Guard de retomada**: com `resumeFromRunId`, carrega o manifesto vinculado a esse run e compara
-  `sha256` do script e `args` literal; divergência ⇒ **bloqueia** nomeando as chaves diferentes e a
-  rota de recuperação (`CEO_WORKFLOW_RESUME_FORCE=1`, registrada no ledger com motivo). Sem manifesto
-  vinculado ⇒ registra e segue (advisory). Falha de infraestrutura ⇒ `{}` (fail-open); entrada
-  ilegível ⇒ registra `unparsed` e segue advisory (não é matcher de segurança).
+- **Guard de retomada** (forma final após debate r1 + rail r1, `PLAN-190/debate/round-1/consensus.md`):
+  com `resumeFromRunId`, carrega o manifesto vinculado a esse run e compara `sha256` do script e
+  `args` literal. `args` diferentes ⇒ **bloqueia** com motivo SÓ de contagens (a lista de chaves fica
+  no manifesto — canal instruction-adjacent fechado por remoção); script diferente com `args` iguais
+  ⇒ advisory (`systemMessage`; `CEO_WORKFLOW_SCRIPT_GUARD=enforce` bloqueia); hash indisponível ⇒
+  inconclusivo (nunca bloqueia, nunca é `match`); manifesto vinculado por heurística ⇒ advisory.
+  Rotas: `ceo-launches.py relaunch <run>` (chamada exata a partir do SNAPSHOT dos bytes do script),
+  `ceo-launches.py force <run> --reason …` (token one-shot em sessão, registrado e anunciado),
+  `CEO_WORKFLOW_RESUME_FORCE=1` / `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mantendo o ledger) /
+  `CEO_WORKFLOW_LEDGER=0` no ambiente do harness. Sem manifesto vinculado ⇒ registra e segue. Falha de
+  infraestrutura ⇒ `{}` (fail-open; não é matcher de segurança).
+- **Manifesto antes de qualquer coisa lenta**: escrita atômica do manifesto + snapshot PRIMEIRO; a
+  revisão git entra depois com orçamento de 1,2 s e `--no-optional-locks` (desconhecida em falha).
+- **Vínculo sem adivinhação**: por `tool_use_id` exato; sem `tool_use_id`, só quando há UM lançamento
+  pendente na sessão; o resto vira `orphan` (fechado à mão por `bind`); `bind_method` registrado;
+  rebind invalida a associação anterior.
 - **CLI** `ceo-launches.py list|show <run|launch>|relaunch <run>|check --script … --args … --resume <run>|report`:
   `relaunch` imprime a chamada EXATA (scriptPath + hash esperado + args literal) — nunca reconstruir de
   memória; `check` é o mesmo predicado do guard, utilizável pelo rito do consumidor mesmo antes de o hook
@@ -115,8 +126,14 @@ Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_w
   mudam ⇒ bloqueio nomeado; `FORCE` registra e libera; sem manifesto ⇒ advisory; `{}` em falha de infra;
   isolamento por `TestEnvContext`.
 - **Distribuição**: hook chega pela enumeração de `.claude/hooks/` no manifesto; registração pelo
-  template `settings.base.json` (o `upgrade.sh` mescla por cerimônia; o perfil `user` deriva por
-  subtração — o hook NÃO entra na lista de subtração); smoke-install verifica presença + registração.
+  template `settings.base.json` (o `upgrade.sh` mescla por cerimônia GRAVADA no install-state — alvo
+  sem cerimônia gravada não recebe hooks: precondição declarada em `docs/workflow-recovery.md`, as duas
+  pernas testadas em W6); o perfil `user` deriva por subtração, NÃO exclui este hook e o nomeia em
+  `_derivation.blocking_inclusions` com a rota; smoke-install verifica presença + registração.
+- **Paths reais do patch: 22** (5 canônicos: lib, hook, `settings.json`, `settings.base.json`,
+  `settings.user.json`; CLI; 2 testes novos + pinos do teste de paridade; doc do rito; 10 docs com
+  contagens; mapa comando→skill→hook e inventário de env regenerados; CHANGELOG). Os bumps são
+  mecânicos (derivadores em `PLAN-190/w1/`), mas a lista é a real.
 - **Limitação declarada**: o guard vê a CHAMADA da tool `Workflow`; não vê `agent()` interno nem consegue
   impedir que o harness recalcule a chave de cache — ele impede o OPERADOR de retomar sobre script/args
   diferentes sem saber. Checkpoint dentro de `agent()` continua limite do runner (W2 dá a alternativa).
@@ -201,12 +218,17 @@ Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_w
 ## Open questions
 - OQ-1: o evento PreToolUse dentro de subagente traz `agent_id`? (decide a identidade do lock em W2;
   o hook registra o que recebeu — measure-first.)
-- OQ-2: a resposta da tool `Workflow` traz o `run_id` de forma estável para o vínculo do PostToolUse?
-  (W1 trata ausência como advisory e o `bind` manual do CLI cobre.)
-- OQ-3: o perfil `user` derivado por subtração precisa do hook de lançamento? (padrão: sim — é
-  proteção do operador, não do mantenedor.)
+- OQ-2 — RESPONDIDA (S354): a resposta da tool `Workflow` chega 0,3 s após a chamada («Workflow
+  launched in background. Task ID …»; 281 pares reais medidos num consumidor) e carrega o `wf_<id>`
+  em 98,5 % dos casos (324/329 no próprio repo); ausência ⇒ `orphan` + `bind` manual.
+- OQ-3 — RESPONDIDA (debate r1): sim, o perfil `user` recebe o hook (proteção do operador), nomeado
+  em `blocking_inclusions` com rota (kill-switch, advisory, token de force).
 - OQ-4: `Workflow.totalTokens` = soma de picos vale em todas as versões da CLI vistas? (verificado em
   697 runs do consumidor, CLI 2.1.27x; re-verificar a cada geração.)
+- OQ-5 — decisão do debate r1: o override em sessão (`force` com motivo, one-shot, anunciado) é
+  visibilidade, não prevenção — o guard é instrumento de recuperação; a razão
+  `forced/(forced+blocked)` do `report` é a métrica da regra de parada. Registrar evento de auditoria
+  para bloqueio/override é `PLAN-190-FOLLOWUP-audit-actions` (cerimônia do dono do audit).
 
 ## How to continue
 1. Debate r1 (`/debate start PLAN-190 "W1 ledger de lançamento + guard de retomada"`) — L3.
