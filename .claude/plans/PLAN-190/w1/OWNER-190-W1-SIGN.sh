@@ -83,11 +83,12 @@ awk '/^## Scope/{s=1; next} /^## /{s=0} s && /^- `/{sub(/^- `/, ""); sub(/`.*/, 
 DIFF=$(comm -3 "$BAK/touched" "$BAK/scope")
 [ -z "$DIFF" ] || die "touched ≠ Scope do sentinel:$(printf '\n   %s' $DIFF)"
 # a linha de base das suítes vale para a árvore em que foi medida: entre a âncora dela e o HEAD
-# só podem ter mudado materiais deste pacote
+# só podem ter mudado materiais deste pacote — o diretório PLAN-190/ e os arquivos de plano
+# PLAN-190-*.md (texto de plano não mascara falha: qualquer efeito aparece como falha NOVA abaixo)
 B_ANCHOR=$(awk '/^# anchor: /{print $3; exit}' "$BASELINE")
 git cat-file -e "${B_ANCHOR}^{commit}" 2>/dev/null || die "linha de base sem âncora válida — remeça: bash $D/measure-suite-baseline.sh"
 git diff --name-only "$B_ANCHOR" HEAD > "$BAK/since-baseline"
-OUTSIDE=$(awk '!/^\.claude\/plans\/PLAN-190\//' "$BAK/since-baseline")
+OUTSIDE=$(awk '!/^\.claude\/plans\/PLAN-190\// && !/^\.claude\/plans\/PLAN-190-[^\/]*\.md$/' "$BAK/since-baseline")
 [ -z "$OUTSIDE" ] || die "o main mudou fora do pacote desde a linha de base ($B_ANCHOR) — remeça: bash $D/measure-suite-baseline.sh$(printf '\n   %s' $OUTSIDE)"
 awk '!/^#/ && NF' "$BASELINE" | sort -u > "$BAK/baseline-fails"
 PATCH_SHA=$(shasum -a 256 "$PATCH" | awk '{print $1}')
