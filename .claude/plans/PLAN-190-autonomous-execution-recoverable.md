@@ -89,6 +89,11 @@ isolado.
   `docs/workflow-recovery.md` + script `ceo-launches.py report`.
 
 ### W1 — Lançamentos e retomadas recuperáveis  [P0]  (pacote canônico: cerimônia)
+**Estado (S354, 17/09):** v3 construída na sombra `p190-w1` e provada (73 testes; todos os gates de
+corpus verdes); debate r1 = 3× ADJUST → consenso PROCEED (design-coherent); rail Codex r1 = NO-GO com
+7 achados, todos curados na v3; rail r2 sobre os bytes finais em `PLAN-190/w1/rail-round-2.md`;
+materiais landados em `d2886b2f`; sentinel-draft `w1-approved.md` + `OWNER-190-W1-SIGN.sh` (ensaiado)
+prontos — **falta só a assinatura do Owner** (`! bash .claude/plans/PLAN-190/w1/OWNER-190-W1-SIGN.sh`).
 Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_workflow_launch.py` (C),
 `.claude/settings.json` (C, matcher `Workflow` em PreToolUse e PostToolUse), `templates/settings/settings.base.json`
 (C, mesma registração — o `user` deriva por subtração), `.claude/scripts/ceo-launches.py` (livre),
@@ -139,6 +144,12 @@ Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_w
   diferentes sem saber. Checkpoint dentro de `agent()` continua limite do runner (W2 dá a alternativa).
 
 ### W2 — Mutações isoladas, escritor único, checkpoint por fase  [P0]  (CLIs livres + 1 hook canônico)
+**Estado (S354):** as três CLIs livres LANDARAM em `6fec455b` (`mutant_sandbox.py`,
+`worktree_lock.py`, `phase_checkpoint.py`, 10 testes em `tests/unit/test_w2_recovery_tools.py`:
+árvore intocada após interrupção, resultado reaproveitado só na mesma revisão, segundo escritor
+recusado, steal só quando vencido, retomada pula passos só na mesma revisão). Faltam o hook
+`check_writer_lock.py` + `_lib/writer_lock.py` (cerimônia, measure-first) e a adoção nos prompts de
+fase do consumidor.
 - `.claude/scripts/mutant_sandbox.py` (livre): `run --rev <sha> --repo <path> --mutant <patch> --cmd "<teste>"
   --ledger <jsonl>`: cria cópia DESCARTÁVEL da revisão identificada (`git worktree add --detach` em
   scratch, ou `git archive` quando não houver git), aplica o mutante, roda o comando, registra
@@ -163,6 +174,11 @@ Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_w
   mudar a revisão ⇒ zero pulados.
 
 ### W3 — Contratos de aprovação e evidência por código  [P0]  (livres + bloco COMMON documentado)
+**Estado (S354):** LANDADA em `6fec455b` — `approval_gate.py` (política fechada + evidência tipada ⇒
+APPROVED/REJECTED com motivos; 20 testes), `test_refs.py` (normalização por AST, ambíguo ⇒ erro;
+9 testes), `docs/approval-gate.md` com o bloco COMMON JS, fixtures neutras em
+`tests/fixtures/approval/`. Falta a adoção no script do consumidor (bloco COMMON no gate) — fora do
+repo público.
 - `.claude/scripts/approval_gate.py`: `decide --policy <json> --evidence <json>` ⇒ `{decision: APPROVED|REJECTED,
   reasons[]}`. Política: nota mínima do revisor cruzado, severidades impeditivas, exigência de revisão
   sobre a REVISÃO FINAL (`reviewed_rev == final_rev`), campos obrigatórios, enumerações fechadas
