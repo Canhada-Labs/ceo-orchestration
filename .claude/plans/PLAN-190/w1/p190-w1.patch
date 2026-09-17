@@ -1,9 +1,9 @@
 diff --git a/.claude/hooks/_lib/launch_ledger.py b/.claude/hooks/_lib/launch_ledger.py
 new file mode 100644
-index 000000000000..f7d4bb322685
+index 000000000000..cd1d4e4952a5
 --- /dev/null
 +++ b/.claude/hooks/_lib/launch_ledger.py
-@@ -0,0 +1,603 @@
+@@ -0,0 +1,640 @@
 +"""PLAN-190 W1 — Workflow launch ledger: persist BEFORE dispatch, guard resumes.
 +
 +Why this exists
@@ -96,6 +96,8 @@ index 000000000000..f7d4bb322685
 +RUN_ID_RE = re.compile(r"\bwf_[0-9a-f]{8}(?:-[0-9a-f]{1,8})?\b")
 +_PERSISTED_SCRIPT_RE = re.compile(r"(/[^\s\"'`]+/workflows/[^\s\"'`]+\.(?:js|mjs))")
 +GIT_BUDGET_S = 1.2  # total wall budget for the optional git enrichment (hook timeout is 5 s)
++BLOCKING_RESULTS = frozenset({"mismatch_blocked", "mismatch_script_blocked"})  # guard results that refused the call
++FORCE_TOKEN_TTL_S = 1800  # a force token is an in-session decision: older tokens are discarded, never honoured
 +
 +
 +# --------------------------------------------------------------------------- paths
@@ -310,6 +312,8 @@ index 000000000000..f7d4bb322685
 +        "resume_from_run_id": manifest.get("resume_from_run_id"),
 +        "script_sha256": (manifest.get("script") or {}).get("sha256"),
 +        "args_sha256": (manifest.get("args") or {}).get("sha256"),
++        "guard": (manifest.get("guard") or {}).get("result"),
++        "blocked": (manifest.get("guard") or {}).get("result") in BLOCKING_RESULTS,
 +    })
 +    return path
 +
@@ -388,12 +392,16 @@ index 000000000000..f7d4bb322685
 +
 +
 +def unbound_launches(d: Path, session_id: Optional[str]) -> List[str]:
-+    """Launch ids of the session that never got a bind line (a later unbind reopens them)."""
++    """Launch ids of the session that never got a bind line (a later unbind reopens them).
++    A launch the guard BLOCKED never ran, so it is never a candidate: it stays in the index
++    as history but must not poison the single-unbound binding of the corrected call."""
 +    bound: Dict[str, bool] = {}
 +    launches: List[str] = []
 +    for line in iter_index(d):
 +        kind = line.get("kind")
 +        if kind == "launch" and (session_id is None or line.get("session_id") == session_id):
++            if line.get("blocked"):
++                continue
 +            launches.append(line["launch_id"])
 +        elif kind == "bind":
 +            bound[line.get("launch_id", "")] = True
@@ -420,19 +428,31 @@ index 000000000000..f7d4bb322685
 +        raise ValueError("a non-empty --reason is required")
 +    p = force_token_path(d, run_id)
 +    p.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-+    _atomic_write_json(p, {"run_id": run_id, "reason": reason[:500], "by": by, "created_at": _now_iso(now)})
-+    _append_index(d, {"kind": "force_token", "run_id": run_id, "at": _now_iso(now)})
++    t = time.time() if now is None else now
++    _atomic_write_json(p, {"run_id": run_id, "reason": reason[:500], "by": by, "created_at": _now_iso(t), "created_epoch": t})
++    _append_index(d, {"kind": "force_token", "run_id": run_id, "at": _now_iso(t)})
 +    return p
 +
 +
-+def consume_force_token(d: Path, run_id: str) -> Optional[Dict[str, Any]]:
++def consume_force_token(d: Path, run_id: str, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
++    """Spend the token of ``run_id``. Called ONLY when a block is about to be released, so a
++    token written for a call that then passed on its own is not silently wasted. A garbled
++    token, or one older than ``FORCE_TOKEN_TTL_S``, is discarded (index line
++    ``force_token_unreadable`` / ``force_token_expired``) and releases nothing."""
 +    p = force_token_path(d, run_id)
 +    try:
 +        data = json.loads(p.read_text(encoding="utf-8"))
 +        p.unlink()
-+        return data if isinstance(data, dict) else {"reason": "unreadable token"}
 +    except (OSError, ValueError):
 +        return None
++    t = time.time() if now is None else now
++    if not isinstance(data, dict) or not isinstance(data.get("created_epoch"), (int, float)):
++        _append_index(d, {"kind": "force_token_unreadable", "run_id": run_id, "at": _now_iso(t)})
++        return None
++    if t - float(data["created_epoch"]) > FORCE_TOKEN_TTL_S:
++        _append_index(d, {"kind": "force_token_expired", "run_id": run_id, "at": _now_iso(t)})
++        return None
++    return data
 +
 +
 +def bind_run(d: Path, manifest: Dict[str, Any], run_id: str, method: str, now: Optional[float] = None,
@@ -528,11 +548,17 @@ index 000000000000..f7d4bb322685
 +    )
 +
 +
-+def format_advisory(run_id: str, comparison: Dict[str, Any], launch_id: str) -> str:
++def format_advisory(run_id: str, comparison: Dict[str, Any], launch_id: str, weak_bind: bool = False,
++                    against: Optional[str] = None) -> str:
++    """Script-only advisory. ``run_id`` MUST have passed ``is_run_id``; launch ids are generated here."""
++    if weak_bind:
++        tail = ("The recorded manifest %s was bound heuristically (no tool_use_id), and a heuristic bind never sustains a "
++                "block: `python3 .claude/scripts/ceo-launches.py bind %s %s` makes it enforceable." % (against or "?", against or "<launch_id>", run_id))
++    else:
++        tail = "Set CEO_WORKFLOW_SCRIPT_GUARD=enforce to block this case."
 +    return (
 +        "WORKFLOW-RESUME-ADVISORY: the script of %s differs from the recorded launch (hash); args are identical. "
-+        "Only the phases whose prompt changed will re-execute. Recorded in manifest %s. "
-+        "Set CEO_WORKFLOW_SCRIPT_GUARD=enforce to block this case." % (run_id, launch_id)
++        "Only the phases whose prompt changed will re-execute. Recorded in manifest %s. %s" % (run_id, launch_id, tail)
 +    )
 +
 +
@@ -555,30 +581,41 @@ index 000000000000..f7d4bb322685
 +                manifest["guard"] = {"result": "no_manifest", "diff": [], "counts": {}}
 +            else:
 +                cmp = compare(recorded, manifest)
-+                base = {"diff": cmp["args_diff"], "counts": cmp["counts"], "script": cmp["script"], "against": recorded.get("launch_id"), "mode": guard_mode}
-+                if cmp["counts"]["total"] == 0 and cmp["script"] == "same":
++                weak_bind = recorded.get("bind_method") not in ("by_tool_use", "manual")
++                base = {"diff": cmp["args_diff"], "counts": cmp["counts"], "script": cmp["script"],
++                        "against": recorded.get("launch_id"), "mode": guard_mode, "weak_bind": weak_bind}
++                args_differ = cmp["counts"]["total"] > 0
++                if not args_differ and cmp["script"] == "same":
 +                    manifest["guard"] = dict(base, result="match")
-+                elif cmp["counts"]["total"] == 0 and cmp["script"] == "inconclusive":
++                elif not args_differ and cmp["script"] == "inconclusive":
 +                    manifest["guard"] = dict(base, result="inconclusive")
-+                elif cmp["counts"]["total"] == 0 and cmp["script"] == "differs":
-+                    if script_guard == "enforce" and guard_mode == "enforce" and env.get("CEO_WORKFLOW_RESUME_FORCE") != "1":
-+                        manifest["guard"] = dict(base, result="mismatch_script_blocked")
-+                        decision = {"decision": "block", "reason": format_block_reason(resume, cmp, manifest["launch_id"])}
-+                    else:
-+                        manifest["guard"] = dict(base, result="mismatch_script_advisory")
-+                        decision = {"systemMessage": format_advisory(resume, cmp, manifest["launch_id"])}
 +                else:
-+                    weak_bind = recorded.get("bind_method") not in ("by_tool_use", "manual")
-+                    token = None if env.get("CEO_WORKFLOW_RESUME_FORCE") == "1" else consume_force_token(d, resume)
-+                    if env.get("CEO_WORKFLOW_RESUME_FORCE") == "1" or token is not None:
-+                        manifest["guard"] = dict(base, result="mismatch_forced", force_reason=(token or {}).get("reason") or "env:CEO_WORKFLOW_RESUME_FORCE=1")
++                    # A block needs ALL of: enforce mode, a STRONG bind (tool_use_id or manual — a
++                    # heuristic bind never sustains a block, args or script alike), and either an
++                    # args difference or a script difference under CEO_WORKFLOW_SCRIPT_GUARD=enforce.
++                    would_block = guard_mode == "enforce" and not weak_bind and (args_differ or script_guard == "enforce")
++                    forced_by: Optional[str] = None
++                    if would_block:
++                        # ONE override path for both kinds of block: the process environment, else
++                        # the one-shot token — spent here and only here, i.e. only when it releases.
++                        if env.get("CEO_WORKFLOW_RESUME_FORCE") == "1":
++                            forced_by = "env:CEO_WORKFLOW_RESUME_FORCE=1"
++                        else:
++                            token = consume_force_token(d, resume, now=now)
++                            if token is not None:
++                                forced_by = str(token.get("reason") or "")[:500] or "token without reason"
++                    if forced_by is not None:
++                        manifest["guard"] = dict(base, result="mismatch_forced", force_reason=forced_by)
 +                        decision = {"systemMessage": "WORKFLOW-RESUME-FORCED: resuming %s over different inputs by explicit override (recorded in manifest %s)." % (resume, manifest["launch_id"])}
-+                    elif guard_mode == "advisory" or weak_bind:
++                    elif would_block:
++                        manifest["guard"] = dict(base, result="mismatch_blocked" if args_differ else "mismatch_script_blocked")
++                        decision = {"decision": "block", "reason": format_block_reason(resume, cmp, manifest["launch_id"])}
++                    elif args_differ:
 +                        manifest["guard"] = dict(base, result="mismatch_advisory_weak_bind" if weak_bind and guard_mode != "advisory" else "mismatch_advisory")
 +                        decision = {"systemMessage": format_block_reason(resume, cmp, manifest["launch_id"]).replace("WORKFLOW-RESUME-MISMATCH", "WORKFLOW-RESUME-ADVISORY", 1)}
 +                    else:
-+                        manifest["guard"] = dict(base, result="mismatch_blocked")
-+                        decision = {"decision": "block", "reason": format_block_reason(resume, cmp, manifest["launch_id"])}
++                        manifest["guard"] = dict(base, result="mismatch_script_advisory")
++                        decision = {"systemMessage": format_advisory(resume, cmp, manifest["launch_id"], weak_bind=weak_bind, against=recorded.get("launch_id"))}
 +    write_manifest(manifest, d, script_bytes)          # on disk before anything slow
 +    manifest = enrich_code_revision(manifest, d, budget_s=git_budget_s)
 +    return decision, manifest
@@ -609,10 +646,10 @@ index 000000000000..f7d4bb322685
 +    return None
 diff --git a/.claude/hooks/check_workflow_launch.py b/.claude/hooks/check_workflow_launch.py
 new file mode 100755
-index 000000000000..455a97965636
+index 000000000000..f59e2560e548
 --- /dev/null
 +++ b/.claude/hooks/check_workflow_launch.py
-@@ -0,0 +1,97 @@
+@@ -0,0 +1,103 @@
 +#!/usr/bin/env python3
 +"""PLAN-190 W1 — Workflow launch ledger + resume guard (PreToolUse/PostToolUse ``Workflow``).
 +
@@ -630,10 +667,16 @@ index 000000000000..455a97965636
 +  args differ from the bound manifest ⇒ ``{"decision": "block", "reason": <counts-only>}``;
 +  script differs, args same ⇒ ``{"systemMessage": <advisory>}`` unless
 +  ``CEO_WORKFLOW_SCRIPT_GUARD=enforce``; unverifiable hash ⇒ inconclusive,
-+  allowed; no bound manifest ⇒ allowed. ``CEO_WORKFLOW_RESUME_FORCE=1`` overrides
-+  an args block (recorded); ``CEO_WORKFLOW_RESUME_GUARD=0`` = advisory mode.
++  allowed; no bound manifest ⇒ allowed. A block needs a STRONG bind (by
++  ``tool_use_id`` or manual): a heuristic bind never sustains one, args or
++  script alike. ONE override path for both kinds of block:
++  ``CEO_WORKFLOW_RESUME_FORCE=1`` in the process environment, else the one-shot
++  ``force`` token (spent only when it releases a block; 30-minute validity;
++  recorded as ``mismatch_forced`` and announced). ``CEO_WORKFLOW_RESUME_GUARD=0``
++  = advisory mode.
 +- PostToolUse: binds ``wf_<id>`` by ``tool_use_id``, else by the single unbound
-+  launch of the session; anything ambiguous is an ``orphan`` line. Always ``{}``.
++  launch of the session — a launch the guard blocked never ran and is never a
++  candidate; anything ambiguous is an ``orphan`` line. Always ``{}``.
 +- Fail-OPEN on infrastructure (unreadable stdin, import failure, unwritable
 +  state dir): breadcrumb to stderr + ``{}``. This is a recovery instrument,
 +  not a security matcher — it must never wedge a session.
@@ -712,10 +755,10 @@ index 000000000000..455a97965636
 +    sys.exit(0)
 diff --git a/.claude/hooks/tests/test_check_workflow_launch.py b/.claude/hooks/tests/test_check_workflow_launch.py
 new file mode 100644
-index 000000000000..698e149743a0
+index 000000000000..65e5f9142639
 --- /dev/null
 +++ b/.claude/hooks/tests/test_check_workflow_launch.py
-@@ -0,0 +1,325 @@
+@@ -0,0 +1,391 @@
 +#!/usr/bin/env python3
 +"""End-to-end tests for ``check_workflow_launch.py`` (PLAN-190 W1, v2 after debate r1 + rail r1).
 +
@@ -975,6 +1018,72 @@ index 000000000000..698e149743a0
 +        self.assertNotIn("decision", d)
 +        self.assertIn("WORKFLOW-RESUME-ADVISORY", d.get("systemMessage", ""))
 +        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "mismatch_advisory")
++
++    # --- rail r2 regressions: weak bind + script, ONE override path, blocked attempts -----
++    def test_script_enforce_never_blocks_over_a_weak_bind(self):
++        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A01"}}, tool_use_id="tu-a"))
++        self._run(self._post("run %s started" % RUN, tool_use_id=None))  # by_single_unbound
++        d = self._run(self._pre({"script": SCRIPT_B, "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"),
++                      extra_env={"CEO_WORKFLOW_SCRIPT_GUARD": "enforce"})
++        self.assertNotIn("decision", d, "a heuristic bind never sustains a block — script included")
++        self.assertIn("bound heuristically", d.get("systemMessage", ""), "the advisory names the route (manual bind), not a flag already set")
++        g = self._by_tool_use("tu-2")["guard"]
++        self.assertEqual(g["result"], "mismatch_script_advisory")
++        self.assertTrue(g["weak_bind"])
++
++    def test_force_token_releases_a_script_only_block_once(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._manifests()[0].parent
++        sys.path.insert(0, str(_REPO / ".claude" / "hooks"))
++        from _lib import launch_ledger as LL  # noqa: E402
++        env = {"CEO_WORKFLOW_SCRIPT_GUARD": "enforce"}
++
++        def attempt(tu):
++            return self._run(self._pre({"script": SCRIPT_B, "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id=tu), extra_env=env)
++
++        self.assertEqual(attempt("tu-2").get("decision"), "block")
++        LL.write_force_token(d, RUN, "spec changed on purpose")
++        out = attempt("tu-3")
++        self.assertNotIn("decision", out)
++        self.assertIn("WORKFLOW-RESUME-FORCED", out.get("systemMessage", ""))
++        m = self._by_tool_use("tu-3")
++        self.assertEqual(m["guard"]["result"], "mismatch_forced")
++        self.assertIn("spec changed", m["guard"]["force_reason"])
++        self.assertFalse(LL.force_token_path(d, RUN).exists(), "the token is consumed by the release")
++        self.assertEqual(attempt("tu-4").get("decision"), "block", "one-shot: the next attempt is blocked again")
++
++    def test_env_force_releases_a_script_block_and_records_forced(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._run(self._pre({"script": SCRIPT_B, "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"),
++                      extra_env={"CEO_WORKFLOW_SCRIPT_GUARD": "enforce", "CEO_WORKFLOW_RESUME_FORCE": "1"})
++        self.assertNotIn("decision", d)
++        self.assertIn("WORKFLOW-RESUME-FORCED", d.get("systemMessage", ""), "an env override is announced, never silent")
++        g = self._by_tool_use("tu-2")["guard"]
++        self.assertEqual(g["result"], "mismatch_forced")
++        self.assertEqual(g["force_reason"], "env:CEO_WORKFLOW_RESUME_FORCE=1")
++
++    def test_force_token_is_not_spent_on_an_advisory(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._manifests()[0].parent
++        sys.path.insert(0, str(_REPO / ".claude" / "hooks"))
++        from _lib import launch_ledger as LL  # noqa: E402
++        LL.write_force_token(d, RUN, "kept for the block it was written for")
++        out = self._run(self._pre({"script": SCRIPT_B, "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "mismatch_script_advisory")
++        self.assertNotIn("FORCED", out.get("systemMessage", ""))
++        self.assertTrue(LL.force_token_path(d, RUN).exists(), "a token is spent only when it releases a block")
++
++    def test_blocked_attempt_never_poisons_single_unbound_binding(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        refused = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertEqual(refused.get("decision"), "block")
++        self.assertEqual(self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-3")), {})
++        self._run(self._post("run wf_55555555-05 started", tool_use_id=None))  # older CLI: no tool_use_id in the event
++        self.assertEqual(self._by_tool_use("tu-3")["run_id"], "wf_55555555-05", "the corrected call is the ONLY candidate")
++        self.assertEqual(self._by_tool_use("tu-3")["bind_method"], "by_single_unbound")
++        self.assertIsNone(self._by_tool_use("tu-2")["run_id"], "the refused attempt stays in history, never a candidate")
++        lines = [json.loads(ln) for ln in (self._manifests()[0].parent / "launches.jsonl").read_text(encoding="utf-8").splitlines()]
++        self.assertEqual(sum(1 for ln in lines if ln.get("kind") == "launch" and ln.get("blocked")), 1)
 +
 +    def test_resume_without_bound_manifest_is_advisory(self):
 +        d = self._run(self._pre({"script": SCRIPT_A, "args": {}, "resumeFromRunId": "wf_deadbeef-99"}))
@@ -1746,10 +1855,10 @@ index 05656781d746..8a0994e7fd99 100644
      ],
      "PostToolUseFailure": [
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index 4503002a59c1..cf5bdaa5a374 100644
+index 4503002a59c1..be1c459f52b6 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -9,12 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+@@ -9,12 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  > commands, schema/contract changes, and behavior an adopter would notice after
  > installing or upgrading the framework. Internal refactors, test-only churn, and
  > release-engineering bookkeeping are omitted. Counts cited below (as of
@@ -1772,9 +1881,13 @@ index 4503002a59c1..cf5bdaa5a374 100644
 +  run id the runner returns. A resume over DIFFERENT args is blocked with a
 +  counts-only reason (the detail stays in the manifest); a resume over a
 +  different script with the same args is advisory by default
-+  (`CEO_WORKFLOW_SCRIPT_GUARD=enforce` to block). Overrides: in session,
-+  `ceo-launches.py force <run> --reason …` (one-shot token, recorded with the
-+  reason, announced); in the harness environment, `CEO_WORKFLOW_RESUME_FORCE=1`
++  (`CEO_WORKFLOW_SCRIPT_GUARD=enforce` to block). A block needs a strong bind
++  (by `tool_use_id` or manual): a heuristic bind never sustains one, args or
++  script alike; a blocked attempt is never a candidate for heuristic binding.
++  ONE override path for both kinds of block: in session,
++  `ceo-launches.py force <run> --reason …` (one-shot token spent only when it
++  releases a block, 30-minute validity, recorded with the reason, announced);
++  in the harness environment, `CEO_WORKFLOW_RESUME_FORCE=1`
 +  (recorded), `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mode, ledger kept),
 +  `CEO_WORKFLOW_LEDGER=0` (off). Fail-open on infrastructure. CLI
 +  `ceo-launches.py` (`list · show · relaunch · check · force · bind · orphans ·
@@ -2000,10 +2113,10 @@ index 3a85f8e6f0ca..95cd8f9e97bb 100644
  why we cite `make test-collect` as the authority rather than a grep.
 diff --git a/docs/workflow-recovery.md b/docs/workflow-recovery.md
 new file mode 100644
-index 000000000000..a38983b6c6df
+index 000000000000..5bd6ff3b3daa
 --- /dev/null
 +++ b/docs/workflow-recovery.md
-@@ -0,0 +1,120 @@
+@@ -0,0 +1,126 @@
 +# Workflow recovery — launch ledger and resume guard (PLAN-190 W1)
 +
 +> Audience: operators running autonomous Workflow pipelines in a consumer repository, and the
@@ -2043,21 +2156,27 @@ index 000000000000..a38983b6c6df
 +|---|---|---|
 +| same script hash, same `args` | `match` | `{}` |
 +| **`args` differ** (per top-level key) | `mismatch_blocked` | **block**, counts-only reason |
-+| script hash differs, `args` same | `mismatch_script_advisory` | `systemMessage` (allowed) — `CEO_WORKFLOW_SCRIPT_GUARD=enforce` turns it into a block |
++| script hash differs, `args` same | `mismatch_script_advisory` | `systemMessage` (allowed) — `CEO_WORKFLOW_SCRIPT_GUARD=enforce` turns it into a block (`mismatch_script_blocked`) when the bind is strong |
 +| a script hash is unavailable (unreadable `scriptPath`) | `inconclusive` | `{}` — never a block, never a match |
 +| no manifest bound to that run | `no_manifest` | `{}` |
 +| `resumeFromRunId` not shaped like a run id | `resume_id_unrecognised` | `{}` (recorded, not echoed) |
 +
 +A manifest bound by heuristic (`by_single_unbound`, no `tool_use_id` in the event) never sustains
-+a block: a mismatch against it is advisory (`mismatch_advisory_weak_bind`).
++a block, args or script alike: an args mismatch against it is `mismatch_advisory_weak_bind`, a
++script mismatch stays `mismatch_script_advisory` even under `CEO_WORKFLOW_SCRIPT_GUARD=enforce`
++(the advisory names the route: `ceo-launches.py bind <launch_id> wf_<id>` makes it enforceable).
++A launch the guard blocked never ran: it stays in the index (`blocked: true`) but is never a
++candidate for the single-unbound binding of the corrected call.
 +
-+Overrides, all recorded in the manifest:
++Overrides — ONE path for both kinds of block (args, and script under enforce), all recorded in the manifest:
 +- **in session** — `python3 .claude/scripts/ceo-launches.py force wf_<id> --reason "<why>"` writes a
-+  one-shot token; the next resume of that run proceeds, is marked `mismatch_forced` with the reason,
-+  and is announced (`WORKFLOW-RESUME-FORCED`). The token is consumed: a second resume is blocked
-+  again. `report` exposes the forced ratio — the stop rule's metric.
++  one-shot token; the next resume of that run that WOULD be blocked proceeds, is marked
++  `mismatch_forced` with the reason, and is announced (`WORKFLOW-RESUME-FORCED`). The token is spent
++  only when it releases a block (a call that passes on its own leaves it in place), is valid for
++  30 minutes, and the next blocked resume is blocked again. `report` exposes the forced ratio — the
++  stop rule's metric.
 +- **process environment of the harness** (not a shell `export` inside the session):
-+  `CEO_WORKFLOW_RESUME_FORCE=1` (proceed over any args mismatch), `CEO_WORKFLOW_RESUME_GUARD=0`
++  `CEO_WORKFLOW_RESUME_FORCE=1` (proceed over any block, recorded as `mismatch_forced`), `CEO_WORKFLOW_RESUME_GUARD=0`
 +  (advisory mode: the ledger keeps working, nothing blocks), `CEO_WORKFLOW_SCRIPT_GUARD=enforce`
 +  (block script changes too), `CEO_WORKFLOW_LEDGER=0` (hook off).
 +
@@ -2245,10 +2364,10 @@ index e5c3fa0782fa..d872a65d44ad 100644
      "PostToolUseFailure": [
 diff --git a/tests/unit/test_launch_ledger.py b/tests/unit/test_launch_ledger.py
 new file mode 100644
-index 000000000000..03c8ae05100f
+index 000000000000..5531c8673230
 --- /dev/null
 +++ b/tests/unit/test_launch_ledger.py
-@@ -0,0 +1,170 @@
+@@ -0,0 +1,198 @@
 +"""Unit tests for ``_lib/launch_ledger.py`` (PLAN-190 W1, v2) — pure functions and
 +the on-disk index, in a temp ledger dir (no resolver, no live ~/.claude)."""
 +from __future__ import annotations
@@ -2407,6 +2526,34 @@ index 000000000000..03c8ae05100f
 +        self.assertEqual(sorted(LL.unbound_launches(self.d, None)), sorted([a["launch_id"], b["launch_id"]]))
 +        LL.bind_run(self.d, a, "wf_aaaaaaaa-01", "manual")
 +        self.assertEqual(LL.unbound_launches(self.d, "s-A"), [])
++
++    def test_unbound_launches_excludes_attempts_the_guard_blocked(self):
++        m, data = LL.build_manifest(self._event({"script": "S", "args": {"x": 1}}, tool_use_id="tu-1"))
++        LL.write_manifest(m, self.d, data)
++        LL.bind_run(self.d, m, "wf_11111111-11", "by_tool_use")
++        d_bad, m_bad = LL.decide_pre(self._event({"script": "S", "args": {"x": 2}, "resumeFromRunId": "wf_11111111-11"}, tool_use_id="tu-2"), self.d, env={}, git_budget_s=0.2)
++        self.assertEqual(d_bad.get("decision"), "block")
++        _d_ok, m_ok = LL.decide_pre(self._event({"script": "S", "args": {"x": 1}, "resumeFromRunId": "wf_11111111-11"}, tool_use_id="tu-3"), self.d, env={}, git_budget_s=0.2)
++        self.assertEqual(LL.unbound_launches(self.d, "s"), [m_ok["launch_id"]], "a blocked attempt never ran: not a candidate")
++        lines = {ln["launch_id"]: ln for ln in LL.iter_index(self.d) if ln["kind"] == "launch"}
++        self.assertTrue(lines[m_bad["launch_id"]]["blocked"])
++        self.assertEqual(lines[m_bad["launch_id"]]["guard"], "mismatch_blocked")
++        self.assertFalse(lines[m_ok["launch_id"]]["blocked"])
++        self.assertEqual(lines[m["launch_id"]]["guard"], "none")
++
++    def test_force_token_expires_and_garbled_tokens_release_nothing(self):
++        LL.write_force_token(self.d, "wf_11111111-11", "old decision", now=1000.0)
++        self.assertIsNone(LL.consume_force_token(self.d, "wf_11111111-11", now=1000.0 + LL.FORCE_TOKEN_TTL_S + 1))
++        self.assertFalse(LL.force_token_path(self.d, "wf_11111111-11").exists())
++        self.assertEqual([ln["kind"] for ln in LL.iter_index(self.d)][-1], "force_token_expired")
++        LL.write_force_token(self.d, "wf_11111111-11", "fresh", now=2000.0)
++        self.assertEqual(LL.consume_force_token(self.d, "wf_11111111-11", now=2000.0 + 5)["reason"], "fresh")
++        p = LL.force_token_path(self.d, "wf_22222222-22")
++        p.parent.mkdir(parents=True, exist_ok=True)
++        p.write_text("[]", encoding="utf-8")
++        self.assertIsNone(LL.consume_force_token(self.d, "wf_22222222-22"), "a garbled token releases nothing")
++        self.assertFalse(p.exists())
++        self.assertEqual([ln["kind"] for ln in LL.iter_index(self.d)][-1], "force_token_unreadable")
 +
 +    def test_decide_post_orphans_instead_of_guessing(self):
 +        a, da = LL.build_manifest(self._event({"script": "S"}, tool_use_id="tu-a", session="s"))

@@ -89,9 +89,12 @@ isolado.
   `docs/workflow-recovery.md` + script `ceo-launches.py report`.
 
 ### W1 — Lançamentos e retomadas recuperáveis  [P0]  (pacote canônico: cerimônia)
-**Estado (S354, 17/09):** v3 construída na sombra `p190-w1` e provada (73 testes; todos os gates de
-corpus verdes); debate r1 = 3× ADJUST → consenso PROCEED (design-coherent); rail Codex r1 = NO-GO com
-7 achados, todos curados na v3; rail r2 sobre os bytes finais em `PLAN-190/w1/rail-round-2.md`;
+**Estado (S354, 17/09):** v4 construída na sombra `p190-w1` e provada (45 testes próprios: 30 e2e +
+15 unit, mais paridade e mapa; todos os gates de corpus verdes); debate r1 = 3× ADJUST → consenso
+PROCEED (design-coherent); rail Codex r1 = NO-GO com 7 achados e r2 = NO-GO com 3 (vínculo heurístico
+ainda sustentava bloqueio de script; `force` não liberava bloqueio só de script; tentativa bloqueada
+contaminava a seleção de pendentes), todos curados na v4 com regressões; rail r3 sobre os bytes finais
+em `PLAN-190/w1/rail-round-3.md`;
 materiais landados em `d2886b2f`; sentinel-draft `w1-approved.md` + `OWNER-190-W1-SIGN.sh` (ensaiado)
 prontos — **falta só a assinatura do Owner** (`! bash .claude/plans/PLAN-190/w1/OWNER-190-W1-SIGN.sh`).
 Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_workflow_launch.py` (C),
@@ -112,10 +115,14 @@ Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_w
   `args` literal. `args` diferentes ⇒ **bloqueia** com motivo SÓ de contagens (a lista de chaves fica
   no manifesto — canal instruction-adjacent fechado por remoção); script diferente com `args` iguais
   ⇒ advisory (`systemMessage`; `CEO_WORKFLOW_SCRIPT_GUARD=enforce` bloqueia); hash indisponível ⇒
-  inconclusivo (nunca bloqueia, nunca é `match`); manifesto vinculado por heurística ⇒ advisory.
+  inconclusivo (nunca bloqueia, nunca é `match`); manifesto vinculado por heurística ⇒ advisory, de
+  args OU de script (vínculo heurístico nunca sustenta bloqueio; a advisory nomeia a rota `bind`);
+  tentativa bloqueada fica no índice (`blocked: true`) e nunca é candidata ao vínculo por único pendente.
   Rotas: `ceo-launches.py relaunch <run>` (chamada exata a partir do SNAPSHOT dos bytes do script),
-  `ceo-launches.py force <run> --reason …` (token one-shot em sessão, registrado e anunciado),
-  `CEO_WORKFLOW_RESUME_FORCE=1` / `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mantendo o ledger) /
+  `ceo-launches.py force <run> --reason …` (token one-shot em sessão, gasto SÓ ao liberar um bloqueio
+  — de args ou de script —, validade 30 min, registrado e anunciado; `CEO_WORKFLOW_RESUME_FORCE=1`
+  libera pela MESMA rota, registrado como `mismatch_forced`),
+  `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mantendo o ledger) /
   `CEO_WORKFLOW_LEDGER=0` no ambiente do harness. Sem manifesto vinculado ⇒ registra e segue. Falha de
   infraestrutura ⇒ `{}` (fail-open; não é matcher de segurança).
 - **Manifesto antes de qualquer coisa lenta**: escrita atômica do manifesto + snapshot PRIMEIRO; a

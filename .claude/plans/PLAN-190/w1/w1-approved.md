@@ -23,19 +23,23 @@ O que esta wave entrega, e nada além: um hook na tool `Workflow` que grava o ma
 ANTES do despacho (sha256 + snapshot dos bytes do script, `args` literal com ausente ≠ null e sem
 truncamento, `resumeFromRunId`; a revisão git do `cwd` entra DEPOIS, com orçamento de 1,2 s) e
 vincula o run id devolvido (por `tool_use_id`, senão só quando há um único lançamento pendente na
-sessão; o resto vira `orphan`); um guard que BLOQUEIA a retomada de um run sobre `args` diferentes do
-manifesto vinculado, com motivo só de contagens (a lista de chaves fica no manifesto), trata script
-diferente como advisory por padrão e hash indisponível como inconclusivo; as rotas: `ceo-launches.py
-relaunch <run>` imprime a chamada exata a partir do snapshot, `ceo-launches.py force <run> --reason`
-libera UMA vez com o motivo registrado e anunciado, `CEO_WORKFLOW_RESUME_FORCE=1` /
+sessão — uma tentativa que o guard bloqueou nunca é candidata; o resto vira `orphan`); um guard que
+BLOQUEIA a retomada de um run sobre `args` diferentes do manifesto vinculado, com motivo só de
+contagens (a lista de chaves fica no manifesto), SÓ sobre vínculo forte (`tool_use_id` ou manual —
+vínculo heurístico nunca sustenta bloqueio, de args ou de script), trata script diferente como
+advisory por padrão e hash indisponível como inconclusivo; as rotas: `ceo-launches.py relaunch <run>`
+imprime a chamada exata a partir do snapshot, `ceo-launches.py force <run> --reason` libera UMA vez
+(token gasto só ao liberar um bloqueio, de args ou de script; validade 30 min) com o motivo
+registrado e anunciado, `CEO_WORKFLOW_RESUME_FORCE=1` (mesma rota, registrado como `mismatch_forced`) /
 `CEO_WORKFLOW_RESUME_GUARD=0` / `CEO_WORKFLOW_SCRIPT_GUARD=enforce` / `CEO_WORKFLOW_LEDGER=0` no
 ambiente do harness; a CLI de recuperação; testes; o documento do rito; as registrações no settings do
 framework e no template base entregue aos consumidores (o `user` deriva por subtração, NÃO exclui este
 hook e o nomeia em `blocking_inclusions` com a rota); os inventários derivados (mapa comando→skill→hook,
 inventário de variáveis de ambiente, pinos do teste de paridade 52/49) e os bumps de contagem que o
 `verify-counts.sh` exige (hooks 59→60, ligados 48→49, registrações 50→52, `_lib` 71→72). Debate r1
-(3 críticos, ADJUST ×3, consenso PROCEED como design-coherent) e rail Codex (r1 NO-GO com 7 achados,
-todos curados; r2 sobre os bytes finais) registrados em `PLAN-190/debate/round-1/` e `PLAN-190/w1/`.
+(3 críticos, ADJUST ×3, consenso PROCEED como design-coherent) e rail Codex (r1 NO-GO com 7 achados e
+r2 NO-GO com 3, todos curados na v4 com regressões; r3 sobre os bytes finais) registrados em
+`PLAN-190/debate/round-1/` e `PLAN-190/w1/`.
 
 ## Scope
 
@@ -46,9 +50,9 @@ todos curados; r2 sobre os bytes finais) registrados em `PLAN-190/debate/round-1
 - `templates/settings/settings.user.json` — regenerado por `gen-settings-user-template.py --write`, com o hook em `_derivation.blocking_inclusions` e sua rota (canônico, derivado)
 - `.claude/scripts/ceo-launches.py` — CLI `list · show · relaunch · check · force · bind · orphans · report` (novo)
 - `.claude/scripts/env-inventory.json` — regenerado por `env-inventory-check.py --generate` (4 variáveis novas + drift pré-existente)
-- `.claude/hooks/tests/test_check_workflow_launch.py` — 25 testes e2e (novo)
+- `.claude/hooks/tests/test_check_workflow_launch.py` — 30 testes e2e (novo)
 - `.claude/hooks/tests/test_template_dogfood_parity.py` — pinos 50/47 → 52/49 (relação 52 == 49 + 1 + 2)
-- `tests/unit/test_launch_ledger.py` — 13 testes unitários (novo)
+- `tests/unit/test_launch_ledger.py` — 15 testes unitários (novo)
 - `docs/workflow-recovery.md` — rito de recuperação, guard dividido, rotas e limitações declaradas (novo)
 - `docs/COMMAND-SKILL-HOOK-MAP.md` — regenerado por `gen-command-skill-hook-map.py --write`
 - `CHANGELOG.md` — cabeçalho de inventário (`_lib` 71→72)
