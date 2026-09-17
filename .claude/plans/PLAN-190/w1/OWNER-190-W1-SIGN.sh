@@ -212,10 +212,12 @@ ceremony(PLAN-190 W1): ledger de lançamento de Workflow + guard de retomada
 Hook PreToolUse/PostToolUse na tool Workflow grava o manifesto de cada
 chamada (sha256 e snapshot dos bytes do script, args literais com ausente
 != null e sem truncamento, resumeFromRunId; revisão git do cwd depois, com
-orçamento de 1,2 s) e vincula o run id devolvido (por tool_use_id; sem ele,
-só com um único lançamento pendente e não bloqueado na sessão; o resto vira
-orphan). Retomada sobre args diferentes do manifesto vinculado por
-tool_use_id ou manual, e validado, é BLOQUEADA com motivo só de contagens;
+orçamento de 1,2 s; args também na ordem original das chaves) e vincula o
+run id devolvido (rótulo Run ID do harness; por tool_use_id; sem ele, só com
+um único lançamento pendente e não bloqueado na sessão; o resto vira orphan).
+Retomada sobre args diferentes do manifesto vinculado por tool_use_id ou
+manual, e validado, é BLOQUEADA com motivo só de contagens que nomeia a rota
+da mudança deliberada;
 script diferente com args iguais é advisory (CEO_WORKFLOW_SCRIPT_GUARD=enforce
 bloqueia); com args iguais, hash indisponível é inconclusivo; registro
 inconsistente ou exceção no guard são inconclusivos registrados; vínculo
@@ -223,7 +225,7 @@ heurístico nunca sustenta bloqueio. Override numa rota só, carregada pela
 chamada ou pelo processo e nunca por estado em disco: description com o
 prefixo exato CEO_WORKFLOW_RESUME_FORCE: e um motivo, ou
 CEO_WORKFLOW_RESUME_FORCE=1 no ambiente; registrado como mismatch_forced e
-anunciado. CEO_WORKFLOW_RESUME_GUARD=0 põe o guard em advisory mantendo o
+anunciado ao modelo e ao usuário. CEO_WORKFLOW_RESUME_GUARD=0 põe o guard em advisory mantendo o
 ledger; CEO_WORKFLOW_LEDGER=0 desliga. Fail-open em infraestrutura.
 Registrações no settings do framework e no template base (user derivado, com
 o hook em blocking_inclusions e na lista ratificada do teste do template);
@@ -234,9 +236,10 @@ Baseline medida num consumidor (S354): 15,5 % das fases iniciadas sem
 resultado, 16 % dos starts reexecuções; a classe fechada é a retomada sobre
 entradas diferentes sem o operador saber (11 regressões por args de memória;
 12/12 retomadas com args exatos). Revisão: debate r1 (3x ADJUST, PROCEED);
-rail Codex r1-r4 NO-GO com 7, 3, 2 e 4 achados; troca de arquitetura do
+rail Codex r1-r5 NO-GO com 7, 3, 2, 4 e 3 achados; troca de arquitetura do
 override decidida pelo Owner após r4; revisão adversarial multi-lente com
-dupla refutação; r5 sobre os bytes finais.
+dupla refutação e crítico de completude; fatos do substrato sondados no
+harness; r6 sobre os bytes finais.
 
 Sentinel: $SENT (assinado, Anchor-SHA $HEAD_SHA, Patch-sha256 $PATCH_SHA)
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

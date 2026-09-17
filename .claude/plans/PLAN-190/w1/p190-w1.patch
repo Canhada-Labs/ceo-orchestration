@@ -1,9 +1,9 @@
 diff --git a/.claude/hooks/_lib/launch_ledger.py b/.claude/hooks/_lib/launch_ledger.py
 new file mode 100644
-index 000000000000..3e02cf42b5ef
+index 000000000000..f45bc767f412
 --- /dev/null
 +++ b/.claude/hooks/_lib/launch_ledger.py
-@@ -0,0 +1,785 @@
+@@ -0,0 +1,891 @@
 +"""PLAN-190 W1 — Workflow launch ledger: persist BEFORE dispatch, guard resumes.
 +
 +Why this exists
@@ -114,6 +114,7 @@ index 000000000000..3e02cf42b5ef
 +INDEX_NAME = "launches.jsonl"
 +ABSENT = "<absent>"  # marker for a field that was NOT present in tool_input (≠ null)
 +RUN_ID_RE = re.compile(r"\bwf_[0-9a-f]{8}(?:-[0-9a-f]{1,8})?\b")
++_RUN_ID_LABEL_RE = re.compile(r"Run ID:\s*(wf_[0-9a-f]{8}(?:-[0-9a-f]{1,8})?)\b")  # the harness labels the id it launched
 +_PERSISTED_SCRIPT_RE = re.compile(r"(/[^\s\"'`]+/workflows/[^\s\"'`]+\.(?:js|mjs))")
 +GIT_BUDGET_S = 1.2  # total wall budget for the optional git enrichment (hook timeout is 5 s)
 +BLOCKING_RESULTS = frozenset({"mismatch_blocked", "mismatch_script_blocked"})  # guard results that refused the call
@@ -208,12 +209,24 @@ index 000000000000..3e02cf42b5ef
 +
 +
 +def args_record(tool_input: Dict[str, Any]) -> Dict[str, Any]:
-+    """Literal record of ``args``: ABSENT when the key is missing, else the
-+    canonical JSON of whatever was passed (``null`` stays ``null``). Never truncated."""
++    """Record of ``args``: ABSENT when the key is missing, else two serialisations of what was
++    passed — ``literal`` in the ORIGINAL key order (the runner's script sees that order, so
++    ``relaunch`` reproduces it) and ``canonical`` with sorted keys (per-key comparison).
++    ``null`` stays ``null``; nothing is truncated. Total: a value that cannot be serialised
++    (a document nested past the interpreter's recursion limit) yields a record with
++    ``canonical``/``literal`` ``None`` and the error type — the guard is then inconclusive."""
 +    if "args" not in tool_input:
-+        return {"present": False, "canonical": ABSENT, "sha256": sha256_text(ABSENT), "bytes": 0}
-+    canon = canonical_json(tool_input.get("args"))
-+    return {"present": True, "canonical": canon, "sha256": sha256_text(canon), "bytes": len(canon.encode("utf-8"))}
++        return {"present": False, "canonical": ABSENT, "literal": ABSENT, "sha256": sha256_text(ABSENT),
++                "literal_sha256": sha256_text(ABSENT), "bytes": 0}
++    value = tool_input.get("args")
++    try:
++        canon = canonical_json(value)
++        literal = json.dumps(value, ensure_ascii=True, separators=(",", ":"))
++    except (RecursionError, ValueError, TypeError) as exc:
++        return {"present": True, "canonical": None, "literal": None, "sha256": None, "literal_sha256": None,
++                "bytes": None, "error": type(exc).__name__}
++    return {"present": True, "canonical": canon, "literal": literal, "sha256": sha256_text(canon),
++            "literal_sha256": sha256_text(literal), "bytes": len(literal)}
 +
 +
 +def _read_script_file(p: Path) -> Tuple[Optional[bytes], Optional[str]]:
@@ -248,6 +261,9 @@ index 000000000000..3e02cf42b5ef
 +        os.close(fd)
 +
 +
++read_script_file = _read_script_file  # public name for the CLI
++
++
 +def script_record(tool_input: Dict[str, Any], cwd: Optional[str]) -> Tuple[Dict[str, Any], Optional[bytes]]:
 +    """Fingerprint of the script plus the effective bytes to snapshot. Inline
 +    ``script`` text wins over ``scriptPath``; an unreadable ``scriptPath`` is
@@ -279,13 +295,13 @@ index 000000000000..3e02cf42b5ef
 +        return {"head": None, "dirty": None}
 +    t0 = time.monotonic()
 +    try:
-+        head = subprocess.run(["git", "--no-optional-locks", "-C", cwd, "rev-parse", "HEAD"], capture_output=True, text=True, timeout=budget_s / 2)
++        head = subprocess.run(["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", cwd, "rev-parse", "HEAD"], capture_output=True, text=True, timeout=budget_s / 2)
 +        if head.returncode != 0:
 +            return {"head": None, "dirty": None}
 +        remaining = budget_s - (time.monotonic() - t0)
 +        if remaining <= 0.05:
 +            return {"head": head.stdout.strip() or None, "dirty": None}
-+        st = subprocess.run(["git", "--no-optional-locks", "-C", cwd, "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=remaining)
++        st = subprocess.run(["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", cwd, "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=remaining)
 +        dirty = bool(st.stdout.strip()) if st.returncode == 0 else None
 +        return {"head": head.stdout.strip() or None, "dirty": dirty}
 +    except Exception:
@@ -293,7 +309,11 @@ index 000000000000..3e02cf42b5ef
 +
 +
 +def extract_run_id(tool_response: Any) -> Optional[str]:
-+    """First ``wf_<hex8>[-<hex>]`` token in the tool response (dict or text)."""
++    """The run id the harness launched: a ``runId``/``run_id`` key; else the id on the
++    ``Run ID:`` label (the harness prints it on launch AND on resume, where the id is the
++    same); else the only distinct ``wf_<hex8>[-<hex>]`` token in the response. Two different
++    labelled ids, or two different unlabelled ids, are ambiguous ⇒ ``None`` (an orphan line,
++    closed by ``bind``) — never the first one found."""
 +    if tool_response is None:
 +        return None
 +    if isinstance(tool_response, dict):
@@ -301,17 +321,24 @@ index 000000000000..3e02cf42b5ef
 +            v = tool_response.get(key)
 +            if is_run_id(v):
 +                return v
-+        text = json.dumps(tool_response, ensure_ascii=False)
-+    elif isinstance(tool_response, list):
-+        text = json.dumps(tool_response, ensure_ascii=False)
-+    else:
-+        text = str(tool_response)
-+    m = RUN_ID_RE.search(text)
-+    return m.group(0) if m else None
++    try:
++        text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=True)
++    except (RecursionError, ValueError, TypeError):
++        return None
++    labelled = set(_RUN_ID_LABEL_RE.findall(text))
++    if len(labelled) == 1:
++        return labelled.pop()
++    if len(labelled) > 1:
++        return None
++    ids = set(RUN_ID_RE.findall(text))
++    return ids.pop() if len(ids) == 1 else None
 +
 +
 +def extract_persisted_script_path(tool_response: Any) -> Optional[str]:
-+    text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=False) if tool_response is not None else ""
++    try:
++        text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=True) if tool_response is not None else ""
++    except (RecursionError, ValueError, TypeError):
++        return None
 +    m = _PERSISTED_SCRIPT_RE.search(text)
 +    return m.group(1) if m else None
 +
@@ -354,6 +381,34 @@ index 000000000000..3e02cf42b5ef
 +        "guard": {"result": "none", "diff": [], "counts": {}},
 +    }
 +    return manifest, script_bytes
++
++
++def fallback_manifest(event: Dict[str, Any], error: str, now: Optional[float] = None) -> Dict[str, Any]:
++    """The record written when ``build_manifest`` itself raised: the call is still recorded,
++    with its error, and the guard result is ``inconclusive`` (never a silent allow)."""
++    tool_input = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
++    t = time.time() if now is None else now
++    sid = event.get("session_id") if isinstance(event.get("session_id"), str) else None
++    tuid = event.get("tool_use_id") if isinstance(event.get("tool_use_id"), str) else None
++    seed = "%s|%s|%s|%s" % (_now_iso(t), sid, tuid, error)
++    resume = tool_input.get("resumeFromRunId")
++    resume = resume if isinstance(resume, str) and resume else None
++    return {
++        "schema": SCHEMA,
++        "launch_id": "L-%s-%s" % (datetime.fromtimestamp(t, tz=timezone.utc).strftime("%Y%m%dT%H%M%S"), sha256_text(seed)[:8]),
++        "recorded_at": _now_iso(t), "session_id": sid, "tool_use_id": tuid,
++        "cwd": event.get("cwd") if isinstance(event.get("cwd"), str) else None,
++        "script": {"source": "unknown", "path": None, "sha256": None, "bytes": None, "unreadable": True, "why": "build_failed"},
++        "script_snapshot": None,
++        "args": {"present": "args" in tool_input, "canonical": None, "literal": None, "sha256": None,
++                 "literal_sha256": None, "bytes": None, "error": error},
++        "resume_from_run_id": resume, "resume_from_run_id_valid": is_run_id(resume) if resume else None,
++        "name": None, "description": None, "force_declared": False,
++        "code": {"head": None, "dirty": None, "status": "pending"},
++        "run_id": None, "bound_at": None, "bind_method": None,
++        "persisted_script_path": None, "persisted_matches_snapshot": None,
++        "guard": {"result": "inconclusive", "error": "build:" + error, "diff": [], "counts": {}},
++    }
 +
 +
 +def manifest_path(d: Path, launch_id: str) -> Path:
@@ -412,12 +467,10 @@ index 000000000000..3e02cf42b5ef
 +
 +def load_snapshot(d: Path, manifest: Dict[str, Any]) -> Optional[bytes]:
 +    name = manifest.get("script_snapshot")
-+    if not isinstance(name, str) or not name:
++    if not isinstance(name, str) or not name or "/" in name or name.startswith("."):
 +        return None
-+    try:
-+        return (d / name).read_bytes()
-+    except OSError:
-+        return None
++    data, _why = _read_script_file(d / name)
++    return data
 +
 +
 +def iter_index(d: Path) -> List[Dict[str, Any]]:
@@ -477,22 +530,25 @@ index 000000000000..3e02cf42b5ef
 +
 +def unbound_launches(d: Path, session_id: Optional[str]) -> List[str]:
 +    """Launch ids of the session that never got a bind line (a later unbind reopens them).
-+    A launch the guard BLOCKED never ran, so it is never a candidate: it stays in the index
-+    as history but must not poison the single-unbound binding of the corrected call."""
++    Never candidates: a launch the guard BLOCKED (it never ran — history only), and a second
++    record of a ``tool_use_id`` another launch is already bound to (the same call recorded
++    twice, e.g. the hook registered by a plugin AND by the project)."""
 +    bound: Dict[str, bool] = {}
-+    launches: List[str] = []
++    launches: List[Tuple[str, Optional[str]]] = []
 +    for line in iter_index(d):
 +        kind = line.get("kind")
 +        if kind == "launch" and (session_id is None or line.get("session_id") == session_id):
 +            lid = line.get("launch_id")
 +            if line.get("blocked") is True or not isinstance(lid, str) or LAUNCH_ID_RE.fullmatch(lid) is None:
 +                continue
-+            launches.append(lid)
++            tuid = line.get("tool_use_id") if isinstance(line.get("tool_use_id"), str) and line.get("tool_use_id") else None
++            launches.append((lid, tuid))
 +        elif kind == "bind":
 +            bound[line.get("launch_id", "")] = True
 +        elif kind == "unbind":
 +            bound[line.get("launch_id", "")] = False
-+    return [lid for lid in launches if not bound.get(lid)]
++    bound_tuids = {tuid for lid, tuid in launches if tuid and bound.get(lid)}
++    return [lid for lid, tuid in launches if not bound.get(lid) and not (tuid and tuid in bound_tuids)]
 +
 +
 +def force_declaration(description: Any) -> Optional[str]:
@@ -509,10 +565,15 @@ index 000000000000..3e02cf42b5ef
 +def manifest_problem(m: Any, d: Path) -> Optional[str]:
 +    """The ONE validation of a manifest read back before it is used as evidence. ``None``
 +    when every field the guard and ``relaunch`` rely on is present and self-consistent;
-+    otherwise a short problem code. Checks: object; schema; launch id shape; run id shape;
-+    bind method in the known set; ``args`` = {present bool, canonical str, sha256 hex} with
-+    sha256(canonical) == sha256 and (present is False) == (canonical == ABSENT); ``script``
-+    sha256 either null or hex, and when hex the snapshot bytes exist and hash to it."""
++    otherwise a short problem code.
++
++    Checks: object; schema; launch id / run id shapes; bind method in the known set.
++    ``args``: keys present; ``canonical`` ``None`` only for a recorded serialisation error
++    (``args_uncanonicalized``); otherwise canonical and literal are strings whose sha256 match
++    their recorded hashes, the literal re-canonicalises to the canonical, and ``present`` is
++    False exactly when both are ABSENT. ``script``: the ``sha256`` key must exist and agree with
++    the SOURCE — inline, or a path read at launch ⇒ a hex hash whose snapshot bytes exist and
++    hash to it; a path unreadable at launch, a named workflow or no script ⇒ ``null``."""
 +    if not isinstance(m, dict):
 +        return "not_an_object"
 +    if m.get("schema") != SCHEMA:
@@ -524,27 +585,42 @@ index 000000000000..3e02cf42b5ef
 +    if m.get("bind_method") not in BIND_METHODS:
 +        return "bind_method"
 +    a = m.get("args")
-+    if not isinstance(a, dict) or not isinstance(a.get("present"), bool) or not isinstance(a.get("canonical"), str) \
-+            or not isinstance(a.get("sha256"), str) or SHA256_RE.fullmatch(a["sha256"]) is None:
++    if not isinstance(a, dict) or not isinstance(a.get("present"), bool) or not {"canonical", "literal", "sha256", "literal_sha256"} <= set(a):
 +        return "args_shape"
-+    if sha256_text(a["canonical"]) != a["sha256"] or (a["present"] is False) != (a["canonical"] == ABSENT):
++    if a["canonical"] is None:
++        return "args_uncanonicalized" if isinstance(a.get("error"), str) else "args_shape"
++    for text_key, hash_key in (("canonical", "sha256"), ("literal", "literal_sha256")):
++        if not isinstance(a[text_key], str) or not isinstance(a[hash_key], str) or SHA256_RE.fullmatch(a[hash_key]) is None:
++            return "args_shape"
++        if sha256_text(a[text_key]) != a[hash_key]:
++            return "args_inconsistent"
++    if (a["present"] is False) != (a["canonical"] == ABSENT) or (a["canonical"] == ABSENT) != (a["literal"] == ABSENT):
 +        return "args_inconsistent"
++    if a["canonical"] != ABSENT:
++        try:
++            if canonical_json(json.loads(a["literal"])) != a["canonical"]:
++                return "args_inconsistent"
++        except (ValueError, RecursionError, TypeError):
++            return "args_inconsistent"
 +    sc = m.get("script")
-+    if not isinstance(sc, dict):
++    if not isinstance(sc, dict) or "sha256" not in sc:
 +        return "script_shape"
-+    sh = sc.get("sha256")
-+    if sh is None:
++    source = sc.get("source")
++    sh = sc["sha256"]
++    if source == "inline" or (source == "path" and sc.get("unreadable") is not True):
++        if not isinstance(sh, str) or SHA256_RE.fullmatch(sh) is None:
++            return "script_shape"
++        if m.get("script_snapshot") != snapshot_path(d, m["launch_id"]).name:
++            return "script_snapshot_missing"
++        snap = load_snapshot(d, m)
++        if snap is None:
++            return "script_snapshot_missing"
++        if hashlib.sha256(snap).hexdigest() != sh:
++            return "script_snapshot_mismatch"
 +        return None
-+    if not isinstance(sh, str) or SHA256_RE.fullmatch(sh) is None:
-+        return "script_shape"
-+    if m.get("script_snapshot") != snapshot_path(d, m["launch_id"]).name:
-+        return "script_snapshot_missing"
-+    snap = load_snapshot(d, m)
-+    if snap is None:
-+        return "script_snapshot_missing"
-+    if hashlib.sha256(snap).hexdigest() != sh:
-+        return "script_snapshot_mismatch"
-+    return None
++    if source in ("path", "named", "absent"):
++        return None if sh is None else "script_shape"
++    return "script_shape"
 +
 +
 +def bind_run(d: Path, manifest: Dict[str, Any], run_id: str, method: str, now: Optional[float] = None,
@@ -561,11 +637,10 @@ index 000000000000..3e02cf42b5ef
 +    if persisted_script_path:
 +        manifest["persisted_script_path"] = persisted_script_path
 +        snap = load_snapshot(d, manifest)
-+        try:
-+            persisted = Path(persisted_script_path).read_bytes()
-+            manifest["persisted_matches_snapshot"] = (hashlib.sha256(persisted).hexdigest() == hashlib.sha256(snap).hexdigest()) if snap is not None else None
-+        except OSError:
-+            manifest["persisted_matches_snapshot"] = None
++        persisted, _why = _read_script_file(Path(persisted_script_path))  # bounded: the path came from response text
++        manifest["persisted_matches_snapshot"] = (
++            hashlib.sha256(persisted).hexdigest() == hashlib.sha256(snap).hexdigest()
++        ) if (snap is not None and persisted is not None) else None
 +    _atomic_write_json(manifest_path(d, manifest["launch_id"]), manifest)
 +    _append_index(d, {"kind": "bind", "launch_id": manifest["launch_id"], "run_id": run_id, "bound_at": manifest["bound_at"], "method": method})
 +    return manifest
@@ -583,7 +658,7 @@ index 000000000000..3e02cf42b5ef
 +    try:
 +        a = json.loads(recorded_canon)
 +        b = json.loads(now_canon)
-+    except ValueError:
++    except (ValueError, RecursionError):
 +        return [{"key": "<args>", "recorded": "unparseable", "now": "unparseable"}]
 +    if not isinstance(a, dict) or not isinstance(b, dict):
 +        return [{"key": "<args>", "recorded": sha256_text(recorded_canon)[:12], "now": sha256_text(now_canon)[:12]}]
@@ -598,23 +673,35 @@ index 000000000000..3e02cf42b5ef
 +
 +
 +def compare(recorded: Dict[str, Any], now: Dict[str, Any]) -> Dict[str, Any]:
-+    """Structured comparison: ``script`` ∈ {same, differs, inconclusive}; ``args_diff`` list;
-+    ``counts`` = {changed, only_recorded, only_now} — the counts are the only thing that may
-+    reach the model."""
++    """Structured comparison: ``script`` ∈ {same, differs, inconclusive}; ``args`` ∈ {same,
++    differ, inconclusive}; ``args_diff`` list; ``counts`` = {changed, only_recorded, only_now,
++    order, total} — the counts are the only thing that may reach the model. Equal canonical
++    forms with a different literal key order count as ONE difference (``order``): the script
++    sees the order, so a reordered call can re-key phases."""
 +    r_s = (recorded.get("script") or {}).get("sha256")
 +    n_s = (now.get("script") or {}).get("sha256")
 +    if r_s is None or n_s is None:
 +        script = "inconclusive"
 +    else:
 +        script = "same" if r_s == n_s else "differs"
-+    diffs = _args_key_diff((recorded.get("args") or {}).get("canonical", ABSENT), (now.get("args") or {}).get("canonical", ABSENT))
++    ra = recorded.get("args") or {}
++    na = now.get("args") or {}
++    empty = {"changed": 0, "only_recorded": 0, "only_now": 0, "order": 0, "total": 0}
++    if not isinstance(ra.get("canonical"), str) or not isinstance(na.get("canonical"), str):
++        return {"script": script, "args": "inconclusive", "args_diff": [], "counts": empty}
++    diffs = _args_key_diff(ra["canonical"], na["canonical"])
++    if ra["canonical"] != na["canonical"] and not diffs:
++        # defensive: canonical forms differ but no per-key difference was named — still ONE change
++        diffs = [{"key": "<args>", "recorded": sha256_text(ra["canonical"])[:12], "now": sha256_text(na["canonical"])[:12]}]
++    order = 1 if (ra["canonical"] == na["canonical"] and ra.get("literal") != na.get("literal")) else 0
 +    counts = {
 +        "changed": sum(1 for d in diffs if d["recorded"] not in (ABSENT, "present") and d["now"] not in (ABSENT, "present")),
 +        "only_recorded": sum(1 for d in diffs if d["now"] == ABSENT),
 +        "only_now": sum(1 for d in diffs if d["recorded"] == ABSENT),
-+        "total": len(diffs),
++        "order": order,
++        "total": len(diffs) + order,
 +    }
-+    return {"script": script, "args_diff": diffs, "counts": counts}
++    return {"script": script, "args": "differ" if counts["total"] else "same", "args_diff": diffs, "counts": counts}
 +
 +
 +def format_block_reason(run_id: str, comparison: Dict[str, Any], launch_id: str) -> str:
@@ -627,14 +714,18 @@ index 000000000000..3e02cf42b5ef
 +        parts.append("%d key(s) only in the recorded call" % c["only_recorded"])
 +    if c["only_now"]:
 +        parts.append("%d key(s) only in this call" % c["only_now"])
++    if c.get("order"):
++        parts.append("key order differs")
 +    if comparison["script"] == "differs":
 +        parts.append("script hash differs")
 +    return (
 +        "WORKFLOW-RESUME-MISMATCH: the recorded launch of %s differs from this call (%s). "
-+        "Resuming over different inputs re-keys the runner's result cache and re-executes finished phases. "
++        "Every phase whose prompt depends on what changed gets a new cache key and re-executes. "
++        "If this was NOT meant (inputs rebuilt from memory), use the recorded call. "
 +        "Route in this session: run `ceo-launches.py relaunch %s` (.claude/scripts/ in a framework install, the plugin's scripts/ otherwise) and re-issue EXACTLY that call. "
-+        "Deliberate override, recorded with its reason: re-issue this call once with a description that starts with "
-+        "'CEO_WORKFLOW_RESUME_FORCE: <why>' (or set CEO_WORKFLOW_RESUME_FORCE=1 in the harness process environment). "
++        "If it IS a deliberate change (for example args.resume or args.reverify to re-run chosen lanes), declare it: "
++        "re-issue this call once with a description that starts with 'CEO_WORKFLOW_RESUME_FORCE: <why>' "
++        "(or set CEO_WORKFLOW_RESUME_FORCE=1 in the harness process environment); it is recorded with its reason. "
 +        "Details (which keys) are in manifest %s, never in this message."
 +        % (run_id, "; ".join(parts) or "see manifest", run_id, launch_id)
 +    )
@@ -649,6 +740,8 @@ index 000000000000..3e02cf42b5ef
 +        parts.append("%d key(s) only in the recorded call" % c["only_recorded"])
 +    if c["only_now"]:
 +        parts.append("%d key(s) only in this call" % c["only_now"])
++    if c.get("order"):
++        parts.append("key order differs")
 +    if comparison["script"] == "differs":
 +        parts.append("script hash differs")
 +    return "; ".join(parts) or "see manifest"
@@ -685,6 +778,12 @@ index 000000000000..3e02cf42b5ef
 +    )
 +
 +
++def notice(text: str) -> Dict[str, Any]:
++    """An allowed call with something to say: the MODEL reads ``additionalContext`` (so it can
++    act on the route), the USER sees ``systemMessage``. Blocks use ``decision``/``reason``."""
++    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}, "systemMessage": text}
++
++
 +def _guard(manifest: Dict[str, Any], resume: str, d: Path, env: Dict[str, str]) -> Dict[str, Any]:
 +    """Sets ``manifest["guard"]`` and returns the hook decision for a call carrying
 +    ``resumeFromRunId``. Pure over (this call, the validated recorded manifest, env)."""
@@ -702,6 +801,10 @@ index 000000000000..3e02cf42b5ef
 +        manifest["guard"] = {"result": "inconclusive", "integrity": problem, "diff": [], "counts": {}}
 +        return {}
 +    cmp = compare(recorded, manifest)
++    if cmp["args"] == "inconclusive":
++        manifest["guard"] = {"result": "inconclusive", "integrity": "args_uncanonicalized", "diff": [], "counts": cmp["counts"],
++                             "against": recorded["launch_id"]}
++        return {}
 +    weak_bind = recorded["bind_method"] not in STRONG_BIND_METHODS
 +    base = {"diff": cmp["args_diff"], "counts": cmp["counts"], "script": cmp["script"],
 +            "against": recorded["launch_id"], "mode": guard_mode, "weak_bind": weak_bind}
@@ -729,14 +832,14 @@ index 000000000000..3e02cf42b5ef
 +        if source is not None:
 +            manifest["guard"] = dict(base, result="mismatch_forced", force_source=source, force_reason=reason)
 +            where = "in this call's description" if source == "call" else "in the harness environment"
-+            return {"systemMessage": "WORKFLOW-RESUME-FORCED: resuming %s over different inputs by an explicit override declared %s (recorded in manifest %s)." % (resume, where, manifest["launch_id"])}
++            return notice("WORKFLOW-RESUME-FORCED: resuming %s over different inputs by an explicit override declared %s (recorded in manifest %s)." % (resume, where, manifest["launch_id"]))
 +        manifest["guard"] = dict(base, result="mismatch_blocked" if args_differ else "mismatch_script_blocked")
 +        return {"decision": "block", "reason": format_block_reason(resume, cmp, manifest["launch_id"])}
 +    if args_differ:
 +        manifest["guard"] = dict(base, result="mismatch_advisory_weak_bind" if weak_bind and guard_mode != "advisory" else "mismatch_advisory")
-+        return {"systemMessage": format_mismatch_advisory(resume, cmp, manifest["launch_id"], weak_bind and guard_mode != "advisory", recorded["launch_id"])}
++        return notice(format_mismatch_advisory(resume, cmp, manifest["launch_id"], weak_bind and guard_mode != "advisory", recorded["launch_id"]))
 +    manifest["guard"] = dict(base, result="mismatch_script_advisory")
-+    return {"systemMessage": format_advisory(resume, cmp, manifest["launch_id"], weak_bind=weak_bind, against=recorded["launch_id"])}
++    return notice(format_advisory(resume, cmp, manifest["launch_id"], weak_bind=weak_bind, against=recorded["launch_id"]))
 +
 +
 +def decide_pre(event: Dict[str, Any], d: Path, env: Optional[Dict[str, str]] = None, now: Optional[float] = None,
@@ -748,9 +851,12 @@ index 000000000000..3e02cf42b5ef
 +    allow without a record); a failure to PERSIST this call's record does not undo a decision
 +    the guard already computed from valid evidence (breadcrumb in the manifest copy returned)."""
 +    env = os.environ if env is None else env
-+    manifest, script_bytes = build_manifest(event, now=now)
 +    decision: Dict[str, Any] = {}
-+    resume = manifest.get("resume_from_run_id")
++    try:
++        manifest, script_bytes = build_manifest(event, now=now)
++    except Exception as exc:  # noqa: BLE001 — the call is still recorded, inconclusive
++        manifest, script_bytes = fallback_manifest(event, type(exc).__name__, now=now), None
++    resume = manifest.get("resume_from_run_id") if manifest["guard"]["result"] == "none" else None
 +    if resume:
 +        try:
 +            decision = _guard(manifest, resume, d, env)
@@ -791,10 +897,10 @@ index 000000000000..3e02cf42b5ef
 +    return None
 diff --git a/.claude/hooks/check_workflow_launch.py b/.claude/hooks/check_workflow_launch.py
 new file mode 100755
-index 000000000000..274c7e0a7302
+index 000000000000..f0e5f876894f
 --- /dev/null
 +++ b/.claude/hooks/check_workflow_launch.py
-@@ -0,0 +1,108 @@
+@@ -0,0 +1,113 @@
 +#!/usr/bin/env python3
 +"""PLAN-190 W1 — Workflow launch ledger + resume guard (PreToolUse/PostToolUse ``Workflow``).
 +
@@ -876,7 +982,12 @@ index 000000000000..274c7e0a7302
 +        if hook_event == "PostToolUse":
 +            launch_ledger.decide_post(event, d)
 +            return {}
-+        decision, _manifest = launch_ledger.decide_pre(event, d)
++        decision, manifest = launch_ledger.decide_pre(event, d)
++        if manifest.get("write_error"):
++            _breadcrumb("ledger write failed (%s); decision kept" % str(manifest["write_error"])[:40])
++        guard_error = (manifest.get("guard") or {}).get("error")
++        if guard_error:
++            _breadcrumb("guard inconclusive after %s (recorded)" % str(guard_error)[:60])
 +        return decision
 +    except Exception as exc:
 +        _breadcrumb("ledger write/guard failed (%s)" % str(exc)[:100])
@@ -905,10 +1016,10 @@ index 000000000000..274c7e0a7302
 +    sys.exit(0)
 diff --git a/.claude/hooks/tests/test_check_workflow_launch.py b/.claude/hooks/tests/test_check_workflow_launch.py
 new file mode 100644
-index 000000000000..33af6e86e102
+index 000000000000..abf6c9c24eb6
 --- /dev/null
 +++ b/.claude/hooks/tests/test_check_workflow_launch.py
-@@ -0,0 +1,614 @@
+@@ -0,0 +1,734 @@
 +#!/usr/bin/env python3
 +"""End-to-end tests for ``check_workflow_launch.py`` (PLAN-190 W1, v2 after debate r1 + rail r1).
 +
@@ -1322,6 +1433,8 @@ index 000000000000..33af6e86e102
 +        self._launch_and_bind({"script": SCRIPT_A, "args": {"spec": "a" * 100000 + "1"}})
 +        out = self._run(self._pre({"script": SCRIPT_A, "args": {"spec": "a" * 100000 + "2"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
 +        self.assertEqual(out.get("decision"), "block")
++        self.assertIn("1 key(s) changed", out["reason"])
++        self.assertNotIn("key order differs", out["reason"], "a value change is never reported as a reorder")
 +
 +    def test_absent_and_null_args_are_different_inputs_for_the_guard(self):
 +        self._launch_and_bind({"script": SCRIPT_A})
@@ -1468,6 +1581,124 @@ index 000000000000..33af6e86e102
 +        cmp = {"counts": {"changed": 1, "only_recorded": 0, "only_now": 0, "total": 1}, "script": "same", "args_diff": []}
 +        self.assertIn(Path(src).name, LL.format_block_reason(RUN, cmp, "L-20260917T120000-deadbeef"))
 +
++    # --- v6.4: rail r5 + completeness critic ----------------------------------------------
++    def _run_raw(self, text: str, extra_env: "dict | None" = None):
++        env = {"CLAUDE_PROJECT_DIR": str(self.proj), "HOME": str(self.home), "CEO_AUDIT_LOG_DIR": str(self.home / ".claude"), "PATH": "/usr/bin:/bin"}
++        env.update(extra_env or {})
++        proc = subprocess.run([sys.executable, str(HOOK)], input=text, capture_output=True, text=True, timeout=30, cwd=str(self.proj), env=env)
++        self.assertEqual(proc.returncode, 0, proc.stderr)
++        return json.loads((proc.stdout.strip() or "{}").splitlines()[-1]), proc.stderr
++
++    def test_deeply_nested_args_are_never_a_silent_unrecorded_allow(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        for depth in (600, 900, 990, 1100, 3000):
++            tu = "tu-deep-%d" % depth
++            text = ('{"hook_event_name": "PreToolUse", "tool_name": "Workflow", "session_id": "s-1", "cwd": ".", '
++                    '"tool_use_id": "%s", "tool_input": {"script": %s, "resumeFromRunId": "%s", "args": %s%s}}'
++                    % (tu, json.dumps(SCRIPT_A), RUN, "[" * depth, "]" * depth))
++            out, err = self._run_raw(text)
++            recorded = [p for p in self._manifests() if self._load(p)["tool_use_id"] == tu]
++            self.assertTrue(recorded or "unreadable stdin" in err,
++                            "depth %d: either the call is recorded or the unreadable event left a breadcrumb" % depth)
++            if recorded:
++                g = self._load(recorded[0])["guard"]
++                self.assertIn(g["result"], ("mismatch_blocked", "inconclusive"), depth)
++                if g["result"] == "mismatch_blocked":
++                    self.assertEqual(out.get("decision"), "block")
++
++    def test_write_failure_keeps_the_block_and_leaves_a_breadcrumb(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._manifests()[0].parent
++        d.chmod(0o500)
++        self.addCleanup(d.chmod, 0o700)
++        out, err = self._run_raw(json.dumps(self._pre({"script": SCRIPT_A, "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-ro")))
++        self.assertEqual(out.get("decision"), "block", "a decision computed from valid evidence survives a write failure")
++        self.assertIn("ledger write failed", err)
++        allowed, err2 = self._run_raw(json.dumps(self._pre({"script": SCRIPT_A, "args": {"slice": "A09"}}, tool_use_id="tu-ro2")))
++        self.assertEqual(allowed, {})
++        self.assertIn("ledger write failed", err2, "an allowed call that could not be recorded is never silent")
++
++    def test_notices_reach_the_model_as_additional_context(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        forced = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A02"}, "resumeFromRunId": RUN,
++                                      "description": "CEO_WORKFLOW_RESUME_FORCE: lanes re-run on purpose"}, tool_use_id="tu-2"))
++        script_adv = self._run(self._pre({"script": SCRIPT_B, "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-3"))
++        for out in (forced, script_adv):
++            ctx = out.get("hookSpecificOutput", {})
++            self.assertEqual(ctx.get("hookEventName"), "PreToolUse")
++            self.assertTrue(ctx.get("additionalContext"))
++            self.assertEqual(ctx["additionalContext"], out.get("systemMessage"))
++            self.assertNotIn("decision", out)
++
++    def test_block_reason_names_the_deliberate_change_route_accurately(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        out = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A01", "resume": ["lane-3"]}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        reason = out["reason"]
++        self.assertIn("depends on what changed", reason)
++        self.assertNotIn("re-executes finished phases", reason, "not every finished phase re-executes")
++        self.assertIn("deliberate change", reason)
++        self.assertIn("CEO_WORKFLOW_RESUME_FORCE: <why>", reason)
++        self.assertNotIn("lane-3", reason)
++
++    def test_key_order_change_is_blocked_and_relaunch_prints_the_original_order(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"zeta": 1, "alpha": "first"}})
++        out = self._run(self._pre({"script": SCRIPT_A, "args": {"alpha": "first", "zeta": 1}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertEqual(out.get("decision"), "block")
++        self.assertIn("key order differs", out["reason"])
++        d = self._manifests()[0].parent
++        rc, stdout, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN)
++        self.assertEqual(rc, 0, err)
++        self.assertIn('{"zeta":1,"alpha":"first"}', stdout)
++        again = self._run(self._pre({"script": SCRIPT_A, "args": {"zeta": 1, "alpha": "first"}, "resumeFromRunId": RUN}, tool_use_id="tu-3"))
++        self.assertEqual(again, {}, "the call relaunch prints is a match")
++
++    def test_relaunch_out_never_overwrites_and_never_follows_a_symlink(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._manifests()[0].parent
++        victim = self.proj / "victim.txt"
++        victim.write_text("keep me", encoding="utf-8")
++        rc, _o, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(victim))
++        self.assertEqual(rc, 2)
++        self.assertIn("never overwrites", err)
++        self.assertEqual(victim.read_text(encoding="utf-8"), "keep me")
++        link = self.proj / "link.js"
++        link.symlink_to(self.proj / "elsewhere.js")
++        rc, _o, _e = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(link))
++        self.assertEqual(rc, 2)
++        self.assertFalse((self.proj / "elsewhere.js").exists(), "a symlink is never followed")
++
++    def test_relaunch_of_a_script_that_was_unreadable_is_not_announced_exact(self):
++        self._launch_and_bind({"scriptPath": "missing.js", "args": {"slice": "A01"}})
++        d = self._manifests()[0].parent
++        rc, stdout, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN)
++        self.assertEqual(rc, 7)
++        self.assertIn("NOT EXACT", err)
++        self.assertNotIn("exact recorded call", stdout)
++        self.assertIn('{"slice":"A01"}', stdout, "the args are still printed, exactly")
++
++    def test_manual_bind_refuses_a_record_that_carries_another_id(self):
++        m = self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._manifests()[0].parent
++        mp = d / ("%s.json" % m["launch_id"])
++        rec = json.loads(mp.read_text(encoding="utf-8"))
++        rec["launch_id"] = "L-20260101T000000-deadbeef"
++        mp.write_text(json.dumps(rec), encoding="utf-8")
++        rc, _o, err = self._cli("--project-dir", str(d.parent), "bind", m["launch_id"], "wf_99999999-09")
++        self.assertEqual(rc, 4)
++        self.assertFalse((d / "L-20260101T000000-deadbeef.json").exists(), "nothing is written under the id the record claims")
++
++    def test_persisted_script_path_from_the_response_is_read_bounded(self):
++        self._run(self._pre({"script": SCRIPT_A, "args": {}}, tool_use_id="tu-f"))
++        wf = self.proj / "x" / "workflows"
++        wf.mkdir(parents=True)
++        fifo = wf / "trap.js"
++        os.mkfifo(str(fifo))
++        self._run(self._post("Script file: %s\nRun ID: wf_12345678-9a" % fifo, tool_use_id="tu-f"))
++        self.assertLess(self.last_elapsed, 5.0)
++        m = self._by_tool_use("tu-f")
++        self.assertEqual(m["run_id"], "wf_12345678-9a")
++        self.assertIsNone(m["persisted_matches_snapshot"])
++
 +    # --- binding -------------------------------------------------------------
 +    def test_post_binds_by_tool_use_id_even_when_older_unbound_exists(self):
 +        self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "OLD"}}, tool_use_id="tu-old"))
@@ -1545,10 +1776,10 @@ index 5328a11c458f..415ff01af73e 100755
  
 diff --git a/.claude/scripts/ceo-launches.py b/.claude/scripts/ceo-launches.py
 new file mode 100755
-index 000000000000..4c0b522576e1
+index 000000000000..4740750ea280
 --- /dev/null
 +++ b/.claude/scripts/ceo-launches.py
-@@ -0,0 +1,260 @@
+@@ -0,0 +1,295 @@
 +#!/usr/bin/env python3
 +"""ceo-launches.py — read and reuse the Workflow launch ledger (PLAN-190 W1).
 +
@@ -1658,6 +1889,22 @@ index 000000000000..4c0b522576e1
 +    return 0
 +
 +
++def _write_new_file(path: str, data: bytes) -> Optional[str]:
++    """Create ``path`` with ``data``; never overwrite, never follow a symlink. Returns an error text or None."""
++    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
++    try:
++        fd = os.open(path, flags, 0o600)
++    except FileExistsError:
++        return "refused: %s already exists (relaunch --out never overwrites)" % path
++    except (OSError, ValueError) as exc:
++        return "refused: cannot create %s (%s)" % (path, type(exc).__name__)
++    try:
++        os.write(fd, data)
++    finally:
++        os.close(fd)
++    return None
++
++
 +def cmd_relaunch(args: argparse.Namespace) -> int:
 +    d = _dir(args)
 +    if not LL.is_run_id(args.run_id):
@@ -1674,37 +1921,47 @@ index 000000000000..4c0b522576e1
 +        return 7
 +    script = m.get("script") or {}
 +    a = m.get("args") or {}
-+    snap = LL.load_snapshot(d, m)
-+    print("# exact recorded call for run %s (launch %s, recorded %s)" % (args.run_id, m.get("launch_id"), m.get("recorded_at")))
-+    if snap is not None:
-+        sp = LL.snapshot_path(d, m["launch_id"])
-+        print("scriptPath: %s   # SNAPSHOT of the bytes recorded before dispatch (sha256 %s, %d bytes)" % (sp, hashlib.sha256(snap).hexdigest(), len(snap)))
-+        if args.out:
-+            Path(args.out).write_bytes(snap)
-+            print("snapshot copied to %s" % args.out)
-+        if script.get("source") == "path" and script.get("path"):
-+            p = Path(script["path"])
-+            if not p.is_absolute() and m.get("cwd"):
-+                p = Path(m["cwd"]) / p
-+            try:
-+                cur = hashlib.sha256(p.read_bytes()).hexdigest()
-+                print("original file %s: %s" % (script["path"], "unchanged" if cur == script.get("sha256") else "CHANGED since launch — use the snapshot"))
-+            except OSError:
-+                print("original file %s: unreadable now — use the snapshot" % script["path"])
++    source = script.get("source")
++    exact_script = source in ("inline", "named") or (source == "path" and script.get("unreadable") is not True)
++    if not exact_script:
++        print("NOT EXACT: the script of run %s was not recorded at launch (%s) — the args below are exact, the script is not"
++              % (args.run_id, script.get("why") or source), file=sys.stderr)
 +    else:
-+        print("script: %s — no snapshot recorded (sha256 %s)" % (script.get("source"), script.get("sha256")))
++        print("# exact recorded call for run %s (launch %s, recorded %s)" % (args.run_id, m.get("launch_id"), m.get("recorded_at")))
++    if source == "named":
++        print("name: %s" % m.get("name"))
++    else:
++        snap = LL.load_snapshot(d, m)
++        if snap is not None:
++            sp = LL.snapshot_path(d, m["launch_id"])
++            print("scriptPath: %s   # SNAPSHOT of the bytes recorded before dispatch (sha256 %s, %d bytes)" % (sp, hashlib.sha256(snap).hexdigest(), len(snap)))
++            if args.out:
++                err = _write_new_file(args.out, snap)
++                if err:
++                    print(err, file=sys.stderr)
++                    return 2
++                print("snapshot copied to %s" % args.out)
++            if source == "path" and script.get("path"):
++                p = Path(script["path"])
++                if not p.is_absolute() and m.get("cwd"):
++                    p = Path(m["cwd"]) / p
++                cur, why = LL.read_script_file(p)
++                if cur is None:
++                    print("original file %s: unreadable now (%s) — use the snapshot" % (script["path"], why))
++                else:
++                    print("original file %s: %s" % (script["path"], "unchanged" if hashlib.sha256(cur).hexdigest() == script.get("sha256") else "CHANGED since launch — use the snapshot"))
 +    if m.get("persisted_script_path"):
 +        print("harness copy: %s (matches snapshot: %s)" % (m["persisted_script_path"], m.get("persisted_matches_snapshot")))
 +    print("resumeFromRunId: %s" % args.run_id)
 +    if a.get("present"):
-+        print("args (literal JSON, pass EXACTLY this):")
-+        print(a.get("canonical"))
++        print("args (literal JSON in the ORIGINAL key order, pass EXACTLY this):")
++        print(a.get("literal"))
 +    else:
 +        print("args: ABSENT in the recorded call — do NOT pass an args field")
 +    code = m.get("code") or {}
 +    if code.get("head"):
 +        print("code revision at launch: %s%s" % (code["head"], " (dirty)" if code.get("dirty") else ""))
-+    return 0
++    return 0 if exact_script else 7
 +
 +
 +def cmd_check(args: argparse.Namespace) -> int:
@@ -1724,15 +1981,24 @@ index 000000000000..4c0b522576e1
 +    if args.script_file:
 +        tool_input["scriptPath"] = args.script_file
 +    elif args.script_text:
-+        tool_input["script"] = Path(args.script_text).read_text(encoding="utf-8")
++        data, why = LL.read_script_file(Path(args.script_text))
++        if data is None:
++            print("cannot read %s (%s)" % (args.script_text, why), file=sys.stderr)
++            return 2
++        tool_input["script"] = data.decode("utf-8", "surrogateescape")
 +    if args.args_file and not args.no_args:
 +        tool_input["args"] = json.loads(Path(args.args_file).read_text(encoding="utf-8"))
 +    now, _bytes = LL.build_manifest({"tool_input": tool_input, "cwd": os.getcwd()})
 +    cmp = LL.compare(recorded, now)
++    if cmp["args"] == "inconclusive":
++        print("INCONCLUSIVE: args could not be serialised on one side (run %s)" % args.run_id)
++        return 6
 +    if cmp["counts"]["total"]:
 +        print("ARGS-DIFFER: run %s — %s" % (args.run_id, json.dumps(cmp["counts"])))
 +        for df in cmp["args_diff"]:
 +            print("  %-24s recorded=%s now=%s" % (df["key"], df["recorded"], df["now"]))
++        if cmp["counts"].get("order"):
++            print("  <key order>              the same keys and values in a different order")
 +        return 3
 +    if cmp["script"] == "differs":
 +        print("SCRIPT-DIFFERS (args same): run %s" % args.run_id)
@@ -1750,8 +2016,8 @@ index 000000000000..4c0b522576e1
 +        print("run id has an unexpected shape (expected wf_<hex8>[-<hex>])", file=sys.stderr)
 +        return 2
 +    m = LL.load_manifest(d, args.launch_id)
-+    if m is None:
-+        print("no manifest %s" % args.launch_id, file=sys.stderr)
++    if m is None or m.get("launch_id") != args.launch_id:
++        print("no manifest %s (or its record carries another id)" % args.launch_id, file=sys.stderr)
 +        return 4
 +    LL.bind_run(d, m, args.run_id, "manual")
 +    print("bound %s → %s (manual)" % (args.launch_id, args.run_id))
@@ -2285,10 +2551,10 @@ index 05656781d746..f8cd6becdb8e 100644
      ],
      "PostToolUseFailure": [
 diff --git a/CHANGELOG.md b/CHANGELOG.md
-index 4503002a59c1..8cb17c88cd28 100644
+index 4503002a59c1..c3fe0bf2c8b4 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
-@@ -9,12 +9,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+@@ -9,12 +9,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
  > commands, schema/contract changes, and behavior an adopter would notice after
  > installing or upgrading the framework. Internal refactors, test-only churn, and
  > release-engineering bookkeeping are omitted. Counts cited below (as of
@@ -2326,7 +2592,14 @@ index 4503002a59c1..8cb17c88cd28 100644
 +  file or NUL byte ⇒ recorded unreadable, args still compared); a torn
 +  index line never swallows the next record; the CLI finds the hook's
 +  ledger from any subdirectory of the project; the plugin build ships the
-+  recovery CLI with the guard.
++  recovery CLI with the guard. `args` are recorded in their original key
++  order too (`relaunch` prints that order; a reordered resume counts as a
++  difference); notices for allowed calls reach the model as
++  `additionalContext`; the block reason names the deliberate-change route
++  (`args.resume` style resumes declare themselves); the run id is taken from
++  the harness `Run ID:` label, never guessed between ids; a record whose
++  construction or write fails is still inconclusive-recorded or
++  breadcrumbed; `relaunch --out` never overwrites.
 +  `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mode, ledger kept),
 +  `CEO_WORKFLOW_LEDGER=0` (off). Fail-open on infrastructure. CLI
 +  `ceo-launches.py` (`list · show · relaunch · check · bind · orphans ·
@@ -2552,10 +2825,10 @@ index 3a85f8e6f0ca..95cd8f9e97bb 100644
  why we cite `make test-collect` as the authority rather than a grep.
 diff --git a/docs/workflow-recovery.md b/docs/workflow-recovery.md
 new file mode 100644
-index 000000000000..fe1b84b6d6c5
+index 000000000000..0b69ac10c1a2
 --- /dev/null
 +++ b/docs/workflow-recovery.md
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,190 @@
 +# Workflow recovery — launch ledger and resume guard (PLAN-190 W1)
 +
 +> Audience: operators running autonomous Workflow pipelines in a consumer repository, and the
@@ -2594,7 +2867,7 @@ index 000000000000..fe1b84b6d6c5
 +| comparison | result | what the hook returns |
 +|---|---|---|
 +| same script hash, same `args` | `match` | `{}` |
-+| **`args` differ** (per top-level key) | `mismatch_blocked` | **block**, counts-only reason |
++| **`args` differ** (per top-level key, or the same keys in another order — the script sees the order) | `mismatch_blocked` | **block**, counts-only reason |
 +| script hash differs, `args` same | `mismatch_script_advisory` | `systemMessage` (allowed) — `CEO_WORKFLOW_SCRIPT_GUARD=enforce` turns it into a block (`mismatch_script_blocked`) when the bind is strong |
 +| `args` identical, but a script hash is unavailable (unreadable `scriptPath`, a `name`d workflow) | `inconclusive` | `{}` — never a block, never a match; different `args` still block |
 +| the recorded manifest fails its integrity check (below) | `inconclusive` (`integrity: <code>`) | `{}` — an inconsistent record is evidence of nothing |
@@ -2608,6 +2881,11 @@ index 000000000000..fe1b84b6d6c5
 +(the advisory names the route: `ceo-launches.py bind <launch_id> wf_<id>` makes it enforceable).
 +A launch the guard blocked never ran: it stays in the index (`blocked: true`) but is never a
 +candidate for the single-unbound binding of the corrected call.
++
++A resume with DELIBERATELY changed `args` is legitimate — for example `args.resume` or `args.reverify`
++naming the lanes to re-run, which only re-keys the phases whose prompt reads them. The guard cannot
++tell deliberate from rebuilt-from-memory, so it asks the call to say which: declare it (below). Only
++the phases whose prompt depends on what changed re-execute; the reason says exactly that.
 +
 +Overrides — ONE path for every block (args, and script under enforce). It is carried by the call or
 +by the process, **never by stored state**, so there is nothing to read back, replay or race:
@@ -2625,13 +2903,23 @@ index 000000000000..fe1b84b6d6c5
 +  (advisory mode: the ledger keeps working, nothing blocks), `CEO_WORKFLOW_SCRIPT_GUARD=enforce`
 +  (block script changes too), `CEO_WORKFLOW_LEDGER=0` (hook off).
 +
-+`report` exposes the forced ratio — the stop rule's metric.
++`report` exposes the forced ratio — the stop rule's metric. Deliberate-change declarations count in it,
++so read the ratio together with the reasons recorded in the manifests.
++
++**Who reads what.** A block returns `decision: block` with a counts-only `reason` the model reads. An
++allowed call with something to say (forced, or an advisory) returns the same text twice:
++`hookSpecificOutput.additionalContext` for the model, `systemMessage` for the user.
 +
 +**Records are validated before they are evidence.** The manifest bound to a run is checked before any
 +comparison and before `relaunch`/`check` use it: schema; launch id, run id and bind method shapes;
 +`args` present/canonical/sha256 mutually consistent; the script sha256 equal to the hash of its
 +snapshot bytes. Any inconsistency is `inconclusive` for the guard, `rc 6` for `check`, and `rc 7`
-+(nothing printed or copied as exact) for `relaunch`. Index lines that are not JSON objects with a
++(nothing printed or copied as exact) for `relaunch`. A missing script hash is not an
++unavailable one: the `sha256` field must agree with the recorded source (inline or a path read at
++launch ⇒ a hash that its snapshot bytes reproduce; a path unreadable at launch, a named workflow or no
++script ⇒ `null`). If the construction of the record itself fails (for example `args` nested past the
++interpreter's recursion limit), the call is still recorded with the error and the guard result is
++`inconclusive`; a write failure leaves a stderr breadcrumb. Index lines that are not JSON objects with a
 +string `kind`, or that carry an ill-shaped launch id, are skipped. Records are written ASCII-escaped,
 +so no input (a lone surrogate included) can make a record unwritable; a failure to persist a call's
 +record does not undo a block the guard already computed. A `scriptPath` is read only when it is a
@@ -2660,7 +2948,9 @@ index 000000000000..fe1b84b6d6c5
 +python3 .claude/scripts/ceo-launches.py show wf_<id>
 +
 +# 2. the EXACT call to re-issue: the script SNAPSHOT (pass it as scriptPath) + literal args
-+#    (rc 7 and nothing printed as exact when the record fails its integrity check)
++#    args are printed in the ORIGINAL key order; rc 7 and nothing announced as exact when the record
++#    fails its integrity check or its script was unreadable at launch; --out creates a NEW file only
++#    (never overwrites, never follows a symlink)
 +python3 .claude/scripts/ceo-launches.py relaunch wf_<id> [--out /path/to/copy.js]
 +
 +# 3. before re-issuing from a rite that edits scripts: the guard's comparison, standalone
@@ -2714,6 +3004,21 @@ index 000000000000..fe1b84b6d6c5
 +  launch recorded and `bind` closes it by hand.
 +- No audit event is emitted (registering a new action is the audit owner's ceremony); the manifests
 +  are the record. Manifests are never pruned (a `gc --keep-days` is a follow-up).
++- **Retention and privacy.** The ledger keeps the literal `args` and a snapshot of every script
++  indefinitely, under the per-project state dir (files 0600, dir 0700) — the same material the harness
++  itself keeps for finished runs. `show` and `relaunch` print the `args` back, so whatever a caller put
++  in them (issue text, a token) reaches the reader's context again. Backups of the state dir include
++  the ledger.
++- **One project context.** The ledger is per project dir: a launch recorded under one project dir and a
++  resume issued from a session whose project dir is a different worktree of the same repo find no
++  manifest (`no_manifest`, allowed and recorded).
++- **Git in the session cwd.** The revision enrichment runs `git rev-parse` and `git status` in the call's
++  `cwd` with `core.fsmonitor=false`; `git status` may still run filters that repository configures.
++- **Worst-case hook time.** One locked index append (lock wait up to 2 s) plus the 1.2 s git budget stays
++  under the 5 s registration timeout; the CI hook-latency gate does not profile this hook yet.
++- **Resume response.** The harness prints `Run ID: wf_<id>` on launch and on resume, and a resume keeps
++  the same id (probed on CLI 2.1.274 with a `.script` scriptPath, which the tool accepts); the id is
++  taken from that label, else from the only distinct id in the response, never guessed.
 diff --git a/npm/README.md b/npm/README.md
 index 50888059bcd4..8c16bb864c48 100644
 --- a/npm/README.md
@@ -2850,10 +3155,10 @@ index e5c3fa0782fa..6644b79f1170 100644
      "PostToolUseFailure": [
 diff --git a/tests/unit/test_launch_ledger.py b/tests/unit/test_launch_ledger.py
 new file mode 100644
-index 000000000000..7e01e2d00d54
+index 000000000000..cb5e651874cb
 --- /dev/null
 +++ b/tests/unit/test_launch_ledger.py
-@@ -0,0 +1,310 @@
+@@ -0,0 +1,408 @@
 +"""Unit tests for ``_lib/launch_ledger.py`` (PLAN-190 W1, v6) — pure functions and
 +the on-disk index, in a temp ledger dir (no resolver, no live ~/.claude)."""
 +from __future__ import annotations
@@ -2939,7 +3244,8 @@ index 000000000000..7e01e2d00d54
 +        now = self._manifest({"script": "S", "args": {"a": 1, "b": 9, "d": 4}})
 +        cmp = LL.compare(rec, now)
 +        self.assertEqual(cmp["script"], "same")
-+        self.assertEqual(cmp["counts"], {"changed": 1, "only_recorded": 1, "only_now": 1, "total": 3})
++        self.assertEqual(cmp["counts"], {"changed": 1, "only_recorded": 1, "only_now": 1, "order": 0, "total": 3})
++        self.assertEqual(cmp["args"], "differ")
 +        self.assertEqual(sorted(df["key"] for df in cmp["args_diff"]), ["b", "c", "d"])
 +
 +    def test_compare_script_differs_and_inconclusive(self):
@@ -3152,6 +3458,103 @@ index 000000000000..7e01e2d00d54
 +        LL.manifest_path(self.d, b["launch_id"]).write_text("{torn", encoding="utf-8")
 +        self.assertIsNone(LL.find_launch_for_run(self.d, "wf_11111111-11"),
 +                          "the latest binding's record is unreadable: no evidence, not the older launch's inputs")
++
++    def test_key_order_is_one_difference_and_the_literal_keeps_the_original_order(self):
++        rec = self._manifest({"script": "S", "args": {"zeta": 1, "alpha": "first"}})
++        now = self._manifest({"script": "S", "args": {"alpha": "first", "zeta": 1}})
++        self.assertEqual(rec["args"]["literal"], '{"zeta":1,"alpha":"first"}')
++        self.assertEqual(rec["args"]["canonical"], now["args"]["canonical"])
++        cmp = LL.compare(rec, now)
++        self.assertEqual((cmp["args"], cmp["counts"]["order"], cmp["counts"]["total"]), ("differ", 1, 1))
++        self.assertIn("key order differs", LL.format_block_reason("wf_0badf00d-1a", cmp, rec["launch_id"]))
++
++    def test_uncanonicalisable_args_are_recorded_and_the_guard_is_inconclusive(self):
++        original = LL.canonical_json
++
++        def deep(_value):
++            raise RecursionError("synthetic")
++
++        LL.canonical_json = deep
++        try:
++            rec = LL.args_record({"args": {"x": 2}})
++        finally:
++            LL.canonical_json = original
++        self.assertEqual((rec["canonical"], rec["literal"], rec["error"]), (None, None, "RecursionError"), "args_record is total")
++        self._bound({"script": "S", "args": {"x": 1}})
++        original_record = LL.args_record
++        LL.args_record = lambda _ti: dict(rec)
++        try:
++            dec, m = LL.decide_pre(self._event({"script": "S", "args": {"x": 2}, "resumeFromRunId": "wf_11111111-11"}, tool_use_id="tu-deep"),
++                                   self.d, env={}, git_budget_s=0.2)
++        finally:
++            LL.args_record = original_record
++        self.assertEqual(dec, {}, "an unverifiable comparison never blocks")
++        self.assertEqual((m["guard"]["result"], m["guard"]["integrity"]), ("inconclusive", "args_uncanonicalized"))
++        self.assertIsNotNone(LL.load_manifest(self.d, m["launch_id"]), "the call is recorded")
++
++    def test_construction_failure_is_recorded_inconclusive(self):
++        original = LL.build_manifest
++
++        def boom(*_a, **_k):
++            raise MemoryError("synthetic")
++
++        LL.build_manifest = boom
++        try:
++            dec, m = LL.decide_pre(self._event({"script": "S", "args": {"x": 2}, "resumeFromRunId": "wf_11111111-11"}, tool_use_id="tu-b"),
++                                   self.d, env={}, git_budget_s=0.2)
++        finally:
++            LL.build_manifest = original
++        self.assertEqual(dec, {})
++        self.assertEqual(m["guard"], {"result": "inconclusive", "error": "build:MemoryError", "diff": [], "counts": {}})
++        on_disk = LL.load_manifest(self.d, m["launch_id"])
++        self.assertEqual(on_disk["tool_use_id"], "tu-b")
++        self.assertEqual(LL.manifest_problem(dict(on_disk, run_id="wf_11111111-11", bind_method="manual"), self.d), "args_uncanonicalized")
++
++    def test_script_fields_must_agree_with_their_source(self):
++        good = self._bound({"script": "S", "args": {"x": 1}})
++        self.assertIsNone(LL.manifest_problem(good, self.d))
++
++        def variant(fn):
++            m = json.loads(json.dumps(good))
++            fn(m)
++            return LL.manifest_problem(m, self.d)
++
++        self.assertEqual(variant(lambda m: m["script"].pop("sha256")), "script_shape", "a missing hash is not an unavailable one")
++        self.assertEqual(variant(lambda m: m["script"].update(sha256=None)), "script_shape", "an inline script always has a hash")
++        self.assertEqual(variant(lambda m: m["script"].update(source="named")), "script_shape")
++        self.assertEqual(variant(lambda m: m["script"].update(source="mystery")), "script_shape")
++        self.assertEqual(variant(lambda m: m["args"].update(literal='{"x":2}')), "args_inconsistent")
++        self.assertEqual(variant(lambda m: m["args"].pop("literal")), "args_shape")
++        self.assertEqual(variant(lambda m: m["args"].update(canonical='{"x":2}', literal='{"x":2}')), "args_inconsistent",
++                         "texts rewritten consistently but the recorded hashes are the old ones")
++        unreadable, _b = LL.build_manifest(self._event({"scriptPath": "/nope/missing.js", "args": {"x": 1}}, tool_use_id="tu-u"))
++        LL.write_manifest(unreadable, self.d, None)
++        unreadable = LL.bind_run(self.d, unreadable, "wf_44444444-44", "manual")
++        self.assertIsNone(LL.manifest_problem(unreadable, self.d))
++        forged = json.loads(json.dumps(unreadable))
++        forged["script"]["sha256"] = "a" * 64
++        self.assertEqual(LL.manifest_problem(forged, self.d), "script_shape", "an unreadable script cannot carry a hash")
++
++    def test_run_id_extraction_uses_the_label_and_never_guesses(self):
++        real = ("Workflow launched in background. Task ID: wclla6jmn\n"
++                "Transcript dir: /h/.claude/projects/x/s/subagents/workflows/wf_a773a8fa-6f7\n"
++                "Script file: /tmp/probe.script\nRun ID: wf_a773a8fa-6f7\n"
++                "To resume after editing the script: Workflow({scriptPath: \"/tmp/probe.script\", resumeFromRunId: \"wf_a773a8fa-6f7\"})")
++        self.assertEqual(LL.extract_run_id(real), "wf_a773a8fa-6f7")
++        self.assertEqual(LL.extract_run_id("output quoting wf_11111111-01 first\nRun ID: wf_22222222-02"), "wf_22222222-02")
++        self.assertIsNone(LL.extract_run_id("Run ID: wf_11111111-01\nRun ID: wf_22222222-02"), "two labelled ids: ambiguous")
++        self.assertIsNone(LL.extract_run_id("resumed wf_11111111-01 into wf_22222222-02"), "two unlabelled ids: ambiguous")
++        self.assertEqual(LL.extract_run_id("started wf_33333333-03, see wf_33333333-03"), "wf_33333333-03")
++        self.assertEqual(LL.extract_run_id({"runId": "wf_44444444-04", "text": "wf_55555555-05"}), "wf_44444444-04")
++
++    def test_a_second_record_of_a_bound_tool_use_is_never_a_candidate(self):
++        first, d1 = LL.build_manifest(self._event({"script": "S"}, tool_use_id="tu-dup", session="s"))
++        LL.write_manifest(first, self.d, d1)
++        second, d2 = LL.build_manifest(self._event({"script": "S"}, tool_use_id="tu-dup", session="s"), now=1.0e9)
++        LL.write_manifest(second, self.d, d2)
++        bound = LL.decide_post({"tool_response": "Run ID: wf_66666666-06", "session_id": "s", "tool_use_id": "tu-dup"}, self.d)
++        self.assertIsNotNone(bound)
++        self.assertEqual(LL.unbound_launches(self.d, "s"), [], "the other record of the same call is not pending work")
 +
 +    def test_decide_post_orphans_instead_of_guessing(self):
 +        a, da = LL.build_manifest(self._event({"script": "S"}, tool_use_id="tu-a", session="s"))

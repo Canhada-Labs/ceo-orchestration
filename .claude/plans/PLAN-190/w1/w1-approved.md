@@ -30,22 +30,31 @@ a partir desta chamada e do manifesto vinculado e grava o manifesto da chamada (
 bytes do script — um `scriptPath` só é lido se for arquivo regular de até 8 MiB —, `args` literal com
 ausente ≠ null e sem truncamento, `resumeFromRunId`; a revisão git do `cwd` entra DEPOIS, com orçamento
 de 1,2 s) e, no PostToolUse, vincula o run id devolvido (por `tool_use_id`; sem ele, só quando há um
-único lançamento pendente e não bloqueado na mesma sessão; o resto vira `orphan`). O guard BLOQUEIA a
-retomada de um run sobre `args` diferentes do manifesto vinculado por `tool_use_id` ou manual, com
-motivo só de contagens (as chaves ficam no manifesto); o manifesto lido de volta é VALIDADO antes de
+único lançamento pendente e não bloqueado na mesma sessão, e nunca um segundo registro da mesma
+chamada; o run id vem do rótulo `Run ID:` que o harness imprime no lançamento e na retomada, senão do
+único id distinto da resposta — ids diferentes viram `orphan`, nunca palpite). Os `args` são gravados
+também na ordem ORIGINAL das chaves (o script vê essa ordem; o `relaunch` a reproduz). O guard
+BLOQUEIA a retomada de um run sobre `args` diferentes do manifesto vinculado por `tool_use_id` ou
+manual — por chave, ou as mesmas chaves em outra ordem —, com motivo só de contagens (as chaves ficam
+no manifesto) que diz exatamente quais fases reexecutam e nomeia a rota da mudança deliberada; o manifesto lido de volta é VALIDADO antes de
 virar evidência (`manifest_problem`: esquema, formas de ids, consistência entre `present`/`canonical`/
-`sha256` dos args, hash do script contra os bytes do snapshot) e um registro inconsistente é
-inconclusivo; vínculo heurístico nunca sustenta bloqueio, de args ou de script; script diferente com
+`literal` e seus hashes, e o `sha256` do script concordando com a ORIGEM — inline ou caminho lido ⇒
+hash que os bytes do snapshot reproduzem; caminho ilegível, workflow nomeado ou sem script ⇒ `null`) e
+um registro inconsistente é inconclusivo; vínculo heurístico nunca sustenta bloqueio, de args ou de script; script diferente com
 `args` iguais é advisory (`CEO_WORKFLOW_SCRIPT_GUARD=enforce` bloqueia); com `args` iguais, hash de
-script indisponível é inconclusivo; uma exceção dentro do guard é inconclusivo registrado e o
-manifesto da chamada ainda é gravado; falha ao gravar não desfaz um bloqueio já decidido. Override
+script indisponível é inconclusivo; uma exceção dentro do guard, `args` que não se deixam serializar ou uma falha na
+própria construção do registro dão inconclusivo registrado, e a chamada ainda é gravada; falha ao
+gravar não desfaz um bloqueio já decidido e deixa breadcrumb. Override
 numa rota só, carregada pela chamada ou pelo processo e NUNCA por estado em disco: `description` com o
 prefixo exato `CEO_WORKFLOW_RESUME_FORCE:` seguido de motivo não vazio libera AQUELA chamada, ou
 `CEO_WORKFLOW_RESUME_FORCE=1` no ambiente do harness; registrado como `mismatch_forced` com origem e
-motivo, anunciado sem ecoar o motivo. `CEO_WORKFLOW_RESUME_GUARD=0` põe o guard em advisory mantendo o
+motivo, anunciado sem ecoar o motivo — avisos de chamadas permitidas chegam ao modelo como
+`additionalContext` e ao usuário como `systemMessage`. `CEO_WORKFLOW_RESUME_GUARD=0` põe o guard em advisory mantendo o
 ledger; `CEO_WORKFLOW_LEDGER=0` desliga. Registros gravados em ASCII escapado; índice com reparo de
 fronteira de linha. A CLI de recuperação (`list · show · relaunch · check · bind · orphans · report`;
-`relaunch` e `check` recusam registro inconsistente; acha o ledger do hook a partir de subdiretório);
+`relaunch` imprime os args na ordem original, recusa registro inconsistente e não anuncia como exata
+uma chamada cujo script não foi gravado; `--out` só cria arquivo novo; `bind` confere o id do registro;
+acha o ledger do hook a partir de subdiretório);
 testes; o documento do rito; as registrações no settings do framework e no template base entregue aos
 consumidores (o `user` deriva por subtração, NÃO exclui este hook e o nomeia em `blocking_inclusions`
 com a rota); a lista ratificada do teste do template `user` (+2 registrações); o build do plugin
@@ -59,7 +68,12 @@ consenso PROCEED como design-coherent); rail Codex r1 NO-GO com 7 achados, r2 NO
 com 2, r4 NO-GO com 4 (terceira rodada na classe «estado em disco lido de volta» ⇒ troca de
 arquitetura decidida pelo Owner); revisão adversarial multi-lente (5 lentes, 2 refutadores por
 achado, crítico de completude) sobre a v5, cujos achados confirmados que sobrevivem à v6 foram curados
-na v6.1–v6.3 com regressões e prova por mutação; rail r5 sobre os bytes finais.
+na v6.1–v6.3; rail r5 NO-GO com 3 (totalidade da construção, hash ausente, breadcrumb) e as lacunas
+do crítico de completude (ordem das chaves, retomada deliberada, contexto do modelo, extração do run
+id, leituras e escritas do CLI) curados na v6.4, com fatos do substrato sondados no harness; regressões
+e prova por mutação em todas as curas; rail r6 sobre os bytes finais como RODADA FINAL: reprova só
+por P0 ou por afirmação falsa neste texto; P1/P2 novos viram anexo declarado e W1.1 (regra «rodada
+final com anexo» do Owner, 10/09/2026, aplicada por decisão registrada no plano).
 
 ## Scope
 
@@ -70,10 +84,10 @@ na v6.1–v6.3 com regressões e prova por mutação; rail r5 sobre os bytes fin
 - `templates/settings/settings.user.json` — regenerado por `gen-settings-user-template.py --write`, com o hook em `_derivation.blocking_inclusions` e sua rota (canônico, derivado)
 - `.claude/scripts/ceo-launches.py` — CLI `list · show · relaunch · check · bind · orphans · report` (novo)
 - `.claude/scripts/env-inventory.json` — regenerado por `env-inventory-check.py --generate` (4 variáveis novas + drift pré-existente)
-- `.claude/hooks/tests/test_check_workflow_launch.py` — 46 testes e2e (novo)
+- `.claude/hooks/tests/test_check_workflow_launch.py` — 55 testes e2e (novo)
 - `.claude/hooks/tests/test_template_dogfood_parity.py` — pinos 50/47 → 52/49 (relação 52 == 49 + 1 + 2)
 - `.claude/scripts/tests/test_gen_settings_user_template.py` — lista ratificada: `RULED_IN` +2 registrações do hook, `EXPECTED_MISSING` 17 → 19
-- `tests/unit/test_launch_ledger.py` — 23 testes unitários (novo)
+- `tests/unit/test_launch_ledger.py` — 29 testes unitários (novo)
 - `scripts/build-plugin.py` — `GUARDED_CLIS` leva `ceo-launches.py` quando o guard é registrado
 - `docs/workflow-recovery.md` — rito de recuperação, guard, override na chamada, validação de registros, precondições de distribuição e limitações declaradas (novo)
 - `docs/COMMAND-SKILL-HOOK-MAP.md` — regenerado por `gen-command-skill-hook-map.py --write`
@@ -93,12 +107,19 @@ na v6.1–v6.3 com regressões e prova por mutação; rail r5 sobre os bytes fin
     python3 -m pytest .claude/hooks/tests/test_check_workflow_launch.py tests/unit/test_launch_ledger.py \
       .claude/hooks/tests/test_template_dogfood_parity.py .claude/scripts/tests/test_gen_command_skill_hook_map.py \
       .claude/scripts/tests/test_gen_settings_user_template.py -q
-      -> verde (46 e2e + 23 unit + 14 paridade + 20 mapa + 122 template user)
-    prova por mutação (cópia descartável): 31 mutantes, um por proteção -> todos mortos, exceto 1
-      equivalente declarado (limite de tamanho duplicado no fstat e no laço de leitura)
-    suítes do pytest.ini como o CI (paralela e serial), antes da cura do teste do template user
-      -> 3 falhas: as 2 do template user (curadas na v6.3) e 1 instável conhecida sob xdist
-         (test_verify_counts_remediation, passa isolada)
+      -> verde (55 e2e + 29 unit + 14 paridade + 20 mapa + 122 template user)
+    prova por mutação (cópias descartáveis): 47 mutantes, um por proteção; todos mortos, exceto 5
+      equivalentes declarados — tamanho limitado no fstat E no laço de leitura; proteção contra
+      surrogate no hash e no literal (não na forma canônica); comparação por chave coberta pela
+      camada defensiva de diferença canônica (e a própria camada, inalcançável com o diff correto);
+      contagem de ordem equivalente com o diff correto
+    suítes do pytest.ini como o CI (paralela e serial) sobre a v6.4
+      -> 2 falhas: test_npm_docs_carry_no_bare_version_literal (na linha de base do main) e um teste
+         de latência do planejador na passada serial sob contenção de CPU (passa isolado); nenhuma falha
+         nova
+    sonda do substrato (CLI 2.1.274): scriptPath com extensão .script aceito; ordem das chaves dos args
+      preservada até o script; resposta de lançamento e de retomada com a linha `Run ID: wf_<id>`,
+      e a retomada mantém o mesmo id
     python3 .claude/scripts/env-inventory-check.py --check                -> ENV-DRIFT: 0
     python3 .claude/scripts/gen-command-skill-hook-map.py --check        -> in sync
     python3 .claude/scripts/check-test-env-hygiene.py            -> OK (337 arquivos sinalizados, todos na allowlist)
@@ -134,3 +155,8 @@ O run id é extraído da resposta por forma (`wf_<hex8>[-<hex>]`); outra versão
 Adulteração deliberada do diretório de estado pelo mesmo usuário está fora do modelo de ameaça. Um
 `scriptPath` num ponto de montagem travado pode segurar o hook até o timeout do harness. O CLI chamado
 fora de qualquer projeto, sem `CLAUDE_PROJECT_DIR`, cai no resolvedor padrão pelo diretório corrente.
+Declarados em `docs/workflow-recovery.md`: o ledger guarda `args` e snapshots sem poda e o `show`/
+`relaunch` os imprimem de volta; lançamento e retomada precisam do mesmo diretório de projeto (outro
+worktree ⇒ `no_manifest`); `git status` no `cwd` ainda pode rodar filtros configurados pelo
+repositório; o gate de latência de hooks do CI ainda não perfila este hook; a retomada DELIBERADA de
+`args` (estilo `args.resume`) exige a declaração na chamada e entra na razão de forçados.

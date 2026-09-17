@@ -1,0 +1,7 @@
+# anchor: 1b520c26fff7579fdea5f71c39f26307b27ad50f
+# measured: 2026-09-17T17:02:39 (UTC) on a detached worktree of the anchor, python 3.9.6
+# command: pytest -n auto -m "not serial" | pytest -m serial  (pytest.ini testpaths, --strict-markers, -rfE)
+# parallel: 2 failed, 14956 passed, 149 skipped, 9 xfailed, 1 xpassed, 40 warnings in 495.86s (0:08:15)
+# serial: 1011 passed, 9 skipped, 15116 deselected, 1 xfailed, 5 xpassed in 204.78s (0:03:24)
+.claude/scripts/tests/test_release_bump_sites.py::test_npm_docs_carry_no_bare_version_literal
+.claude/scripts/tests/test_verify_counts_remediation.py::TestE9F10RecurrenceGuards::test_real_repo_passes_new_gates

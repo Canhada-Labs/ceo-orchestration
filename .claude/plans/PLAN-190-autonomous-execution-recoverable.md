@@ -108,8 +108,20 @@ lacunas de teste. Todos curados na v6.1–v6.3 com regressões; prova por mutaç
 equivalente declarado). O script de cerimônia foi reordenado (nada assinado antes da bateria; sentinel
 restaurado e `.asc` removida em qualquer falha) e a bateria passou a rodar as suítes do `pytest.ini`
 como o CI, comparando o conjunto exato de falhas contra `suite-baseline.txt` medido no main por
-`measure-suite-baseline.sh`, com uma nova tentativa isolada para instabilidade conhecida. Rail r5 sobre
-os bytes finais em `PLAN-190/w1/rail-round-5.md`. **Falta a assinatura do Owner**
+`measure-suite-baseline.sh`, com uma nova tentativa isolada para instabilidade conhecida. Rail r5 =
+NO-GO com 3 (construção fora da totalidade, hash ausente aceito, breadcrumb perdido); o crítico de
+completude do workflow achou lacunas de desenho que nenhuma lente cobriu — ordem das chaves dos args
+perdida na forma canônica (o `relaunch` imprimia outra ordem), retomada DELIBERADA (`args.resume`)
+tratada como perda e motivo que exagerava a reexecução, avisos que não chegavam ao modelo, run id por
+primeira ocorrência, leituras e escritas do CLI sem limite — e a sonda real do harness confirmou os
+fatos do substrato (`.script` aceito, ordem preservada, `Run ID:` no lançamento e na retomada, mesmo id).
+Curados na v6.4–v6.5 com regressões e mutação (47 mutantes, 5 equivalentes declarados). **Regra de
+parada aplicada (17/09, após o Owner perguntar se a sessão estava em loop):** o rail r6 é a RODADA FINAL
+— reprova só por P0 ou por afirmação falsa no texto assinado; P1/P2 novos viram anexo declarado e
+W1.1 depois da assinatura (a regra «rodada final com anexo» que o Owner ratificou para o corte da rc.1
+em 10/09). Motivo: r4 e r5 acharam P2 cada vez mais estreitos, o padrão de retorno decrescente já
+registrado, e a revisão adversarial custou ≈ 12,5 M de tokens de subagentes. Rail r6 em
+`PLAN-190/w1/rail-round-6.md`. **Falta a assinatura do Owner**
 (`! bash .claude/plans/PLAN-190/w1/OWNER-190-W1-SIGN.sh`).
 Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_workflow_launch.py` (C),
 `.claude/settings.json` (C, matcher `Workflow` em PreToolUse e PostToolUse), `templates/settings/settings.base.json`
