@@ -29,7 +29,7 @@ contagens (a lista de chaves fica no manifesto), SÓ sobre vínculo forte (`tool
 vínculo heurístico nunca sustenta bloqueio, de args ou de script), trata script diferente como
 advisory por padrão e hash indisponível como inconclusivo; as rotas: `ceo-launches.py relaunch <run>`
 imprime a chamada exata a partir do snapshot, `ceo-launches.py force <run> --reason` libera UMA vez
-(token gasto só ao liberar um bloqueio, de args ou de script; validade 30 min) com o motivo
+(token gasto só ao liberar um bloqueio, de args ou de script; validado por UM esquema — run id igual, motivo não vazio, instante finito, não futuro, até 30 min —; token inválido é removido, registrado e não libera nada) com o motivo
 registrado e anunciado, `CEO_WORKFLOW_RESUME_FORCE=1` (mesma rota, registrado como `mismatch_forced`) /
 `CEO_WORKFLOW_RESUME_GUARD=0` / `CEO_WORKFLOW_SCRIPT_GUARD=enforce` / `CEO_WORKFLOW_LEDGER=0` no
 ambiente do harness; a CLI de recuperação; testes; o documento do rito; as registrações no settings do
@@ -38,7 +38,7 @@ hook e o nomeia em `blocking_inclusions` com a rota); os inventários derivados 
 inventário de variáveis de ambiente, pinos do teste de paridade 52/49) e os bumps de contagem que o
 `verify-counts.sh` exige (hooks 59→60, ligados 48→49, registrações 50→52, `_lib` 71→72). Debate r1
 (3 críticos, ADJUST ×3, consenso PROCEED como design-coherent) e rail Codex (r1 NO-GO com 7 achados e
-r2 NO-GO com 3, todos curados na v4 com regressões; r3 sobre os bytes finais) registrados em
+r2 NO-GO com 3 e r3 NO-GO com 2, todos curados com regressões — a classe do token de override curada por UM validador de esquema na v5; r4 sobre os bytes finais) registrados em
 `PLAN-190/debate/round-1/` e `PLAN-190/w1/`.
 
 ## Scope
@@ -52,7 +52,7 @@ r2 NO-GO com 3, todos curados na v4 com regressões; r3 sobre os bytes finais) r
 - `.claude/scripts/env-inventory.json` — regenerado por `env-inventory-check.py --generate` (4 variáveis novas + drift pré-existente)
 - `.claude/hooks/tests/test_check_workflow_launch.py` — 30 testes e2e (novo)
 - `.claude/hooks/tests/test_template_dogfood_parity.py` — pinos 50/47 → 52/49 (relação 52 == 49 + 1 + 2)
-- `tests/unit/test_launch_ledger.py` — 15 testes unitários (novo)
+- `tests/unit/test_launch_ledger.py` — 18 testes unitários (novo)
 - `docs/workflow-recovery.md` — rito de recuperação, guard dividido, rotas e limitações declaradas (novo)
 - `docs/COMMAND-SKILL-HOOK-MAP.md` — regenerado por `gen-command-skill-hook-map.py --write`
 - `CHANGELOG.md` — cabeçalho de inventário (`_lib` 71→72)
@@ -70,15 +70,15 @@ r2 NO-GO com 3, todos curados na v4 com regressões; r3 sobre os bytes finais) r
 
     python3 -m pytest .claude/hooks/tests/test_check_workflow_launch.py tests/unit/test_launch_ledger.py \
       .claude/hooks/tests/test_template_dogfood_parity.py .claude/scripts/tests/test_gen_command_skill_hook_map.py -q
-      -> 73 passed
+      -> 82 passed (30 e2e + 18 unit + 14 paridade + 20 mapa)
     python3 .claude/scripts/env-inventory-check.py --check                -> ENV-DRIFT: 0
     python3 .claude/scripts/gen-command-skill-hook-map.py --check        -> in sync
-    python3 .claude/scripts/check-test-env-hygiene.py            -> OK (0 violações novas)
+    python3 .claude/scripts/check-test-env-hygiene.py            -> OK (337 arquivos sinalizados, todos na allowlist)
     python3 .claude/scripts/gen-settings-user-template.py --check -> OK (template user bate com a derivação)
     python3 .claude/scripts/check-active-hooks-executable.py     -> OK: 95 referências presentes e executáveis
     bash .claude/scripts/local/verify-counts.sh                  -> no drift detected
-    bash .claude/scripts/check-contamination.sh                  -> ✓ (2 regras)
-    git diff --numstat -- .claude/settings.json templates/settings/  -> só adições (24 linhas em cada)
+    bash .claude/scripts/check-contamination.sh                  -> ✓ contamination, ✓ personal-path
+    git diff --numstat -- .claude/settings.json templates/settings/  -> só adições (24 / 24 / 29 linhas: settings.json, base, user — o user leva também a entrada de blocking_inclusions)
 
 Registrações geradas pelo derivador idempotente `add-workflow-hook-registration.py`; contagens pelo
 derivador `bump-counts.py` (mesmas regexes do gate). Debate r1 e rail Codex registrados em

@@ -89,12 +89,16 @@ isolado.
   `docs/workflow-recovery.md` + script `ceo-launches.py report`.
 
 ### W1 — Lançamentos e retomadas recuperáveis  [P0]  (pacote canônico: cerimônia)
-**Estado (S354, 17/09):** v4 construída na sombra `p190-w1` e provada (45 testes próprios: 30 e2e +
-15 unit, mais paridade e mapa; todos os gates de corpus verdes); debate r1 = 3× ADJUST → consenso
-PROCEED (design-coherent); rail Codex r1 = NO-GO com 7 achados e r2 = NO-GO com 3 (vínculo heurístico
-ainda sustentava bloqueio de script; `force` não liberava bloqueio só de script; tentativa bloqueada
-contaminava a seleção de pendentes), todos curados na v4 com regressões; rail r3 sobre os bytes finais
-em `PLAN-190/w1/rail-round-3.md`;
+**Estado (S354, 17/09):** v5 construída na sombra `p190-w1` e provada (82 testes: 30 e2e + 18 unit +
+14 paridade + 20 mapa; todos os gates de corpus verdes); debate r1 = 3× ADJUST → consenso PROCEED
+(design-coherent); rail Codex r1 = NO-GO com 7 achados, r2 = NO-GO com 3 (vínculo heurístico ainda
+sustentava bloqueio de script; `force` não liberava bloqueio só de script; tentativa bloqueada
+contaminava a seleção de pendentes) e r3 = NO-GO com 2 (token com instante não finito liberava;
+token ilegível ficava sem registro) — 2.ª ocorrência da classe «token de override», curada por UM
+validador de esquema (`force_token_problem`) na v5; o ensaio do Owner pegou a contagem de
+registrações por `grep -c` no script de cerimônia (o template `user` nomeia o hook também em
+`blocking_inclusions`), trocada por contagem das entradas Pre/Post; rail r4 sobre os bytes finais
+em `PLAN-190/w1/rail-round-4.md`;
 materiais landados em `d2886b2f`; sentinel-draft `w1-approved.md` + `OWNER-190-W1-SIGN.sh` (ensaiado)
 prontos — **falta só a assinatura do Owner** (`! bash .claude/plans/PLAN-190/w1/OWNER-190-W1-SIGN.sh`).
 Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_workflow_launch.py` (C),

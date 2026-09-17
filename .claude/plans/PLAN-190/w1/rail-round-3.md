@@ -1,0 +1,9 @@
+Patch `f33f2ea79f25fff3…` conferido. As três correções da rodada 2 estão confirmadas. Encontrei dois problemas novos no tratamento dos tokens:
+
+1. **P2 — Timestamp inválido autoriza override.** [.claude/hooks/_lib/launch_ledger.py:443](<repo>/.claude/plans/PLAN-190/w1/p190-w1.patch:449). Reproduzi `created_epoch` com `NaN`, `Infinity` e `1e999`: todos produzem `mismatch_forced`. São aceitos como números, mas a comparação de expiração nunca os rejeita. Isso viola o requisito de que token inválido não libera bloqueio. **Cura:** validar timestamp finito e idade válida antes de autorizar; descartar e registrar tokens inválidos. Acrescentar regressões dessas entradas.
+
+2. **P2 — Token ilegível permanece sem registro do descarte.** [.claude/hooks/_lib/launch_ledger.py:438](<repo>/.claude/plans/PLAN-190/w1/p190-w1.patch:444). JSON malformado e bytes não UTF-8 retornam pelo `except` antes do `unlink` e do registro `force_token_unreadable`. Reproduzi ambos: o bloqueio permanece, mas o token também, sem evidência da falha. O teste com `[]` não cobre esse ramo. **Cura:** distinguir ausência de token de falha de leitura/decodificação; nestas, tentar removê-lo e registrar o descarte, sem autorizar override.
+
+Na reconstrução em memória passaram as sondas das três correções, 17 asserções unitárias, 14 de paridade, derivação do template, executabilidade, inventário de ambiente e núcleo de `verify-counts --no-tests`. Python 3.9, stdlib, isolamento e distribuição conferidos. Não reexecutei os e2e em disco; não alterei arquivos nem acessei a rede.
+
+VERDICT: NO-GO — corrigir os dois casos de tokens inválidos e acrescentar as regressões correspondentes.

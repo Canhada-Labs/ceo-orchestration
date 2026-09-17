@@ -1,9 +1,9 @@
 diff --git a/.claude/hooks/_lib/launch_ledger.py b/.claude/hooks/_lib/launch_ledger.py
 new file mode 100644
-index 000000000000..cd1d4e4952a5
+index 000000000000..139f9b848410
 --- /dev/null
 +++ b/.claude/hooks/_lib/launch_ledger.py
-@@ -0,0 +1,640 @@
+@@ -0,0 +1,688 @@
 +"""PLAN-190 W1 — Workflow launch ledger: persist BEFORE dispatch, guard resumes.
 +
 +Why this exists
@@ -51,9 +51,18 @@ index 000000000000..cd1d4e4952a5
 +* either hash unavailable ⇒ **inconclusive** (allowed, recorded) — an
 +  unverifiable comparison is never turned into a block nor into a match.
 +* no bound manifest ⇒ ``no_manifest`` (allowed, recorded).
-+* ``CEO_WORKFLOW_RESUME_FORCE=1`` overrides an args block (recorded);
-+  ``CEO_WORKFLOW_RESUME_GUARD=0`` puts the whole guard in advisory mode while
++* a manifest bound heuristically (``by_single_unbound``) never sustains a
++  block, args or script alike (``weak_bind`` recorded; advisory instead).
++* ONE override path for every block: ``CEO_WORKFLOW_RESUME_FORCE=1`` in the
++  process environment, else the one-shot token written by
++  ``ceo-launches.py force <run> --reason`` — spent only when it releases a
++  block, validated by ``force_token_problem`` (fail-closed: a malformed,
++  foreign, reasonless, non-finite, future or expired token is removed,
++  recorded and releases nothing). Result ``mismatch_forced``, announced.
++* ``CEO_WORKFLOW_RESUME_GUARD=0`` puts the whole guard in advisory mode while
 +  keeping the ledger; ``CEO_WORKFLOW_LEDGER=0`` disables the hook.
++* a launch the guard blocked stays in the index (``blocked: true``) and is
++  never a candidate for heuristic binding.
 +
 +The block reason is COUNTS-ONLY: it never carries operator text (arg key
 +names, values, or an unvalidated run id) — the reason reaches the model and
@@ -81,6 +90,7 @@ index 000000000000..cd1d4e4952a5
 +
 +import hashlib
 +import json
++import math
 +import os
 +import re
 +import subprocess
@@ -434,23 +444,61 @@ index 000000000000..cd1d4e4952a5
 +    return p
 +
 +
++def force_token_problem(data: Any, run_id: str, now: float) -> Optional[str]:
++    """The ONE schema check of a force token (the class, not the example). ``None`` when the
++    token may release a block; otherwise the index kind of the discard. A token releases only
++    when ALL hold: a JSON object; ``run_id`` equal to the run being resumed; ``reason`` a
++    non-empty string; ``created_epoch`` a real finite number (not bool — ``json.loads``
++    accepts ``NaN``/``Infinity``/``1e999``), not in the future, and at most
++    ``FORCE_TOKEN_TTL_S`` old."""
++    if not isinstance(data, dict):
++        return "force_token_unreadable"
++    if data.get("run_id") != run_id:
++        return "force_token_unreadable"
++    reason = data.get("reason")
++    if not isinstance(reason, str) or not reason.strip():
++        return "force_token_unreadable"
++    created = data.get("created_epoch")
++    if isinstance(created, bool) or not isinstance(created, (int, float)) or not math.isfinite(created):
++        return "force_token_unreadable"
++    age = now - float(created)
++    if age < 0:
++        return "force_token_unreadable"
++    if age > FORCE_TOKEN_TTL_S:
++        return "force_token_expired"
++    return None
++
++
 +def consume_force_token(d: Path, run_id: str, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
 +    """Spend the token of ``run_id``. Called ONLY when a block is about to be released, so a
-+    token written for a call that then passed on its own is not silently wasted. A garbled
-+    token, or one older than ``FORCE_TOKEN_TTL_S``, is discarded (index line
-+    ``force_token_unreadable`` / ``force_token_expired``) and releases nothing."""
++    token written for a call that then passed on its own is not silently wasted.
++
++    Fail-CLOSED on input: NO token ⇒ ``None`` silently. Any token file that exists is removed
++    first; then an unreadable file (I/O error, undecodable bytes, malformed JSON) or a token
++    that fails ``force_token_problem`` is recorded (``force_token_unreadable`` /
++    ``force_token_expired``) and releases nothing."""
 +    p = force_token_path(d, run_id)
-+    try:
-+        data = json.loads(p.read_text(encoding="utf-8"))
-+        p.unlink()
-+    except (OSError, ValueError):
-+        return None
 +    t = time.time() if now is None else now
-+    if not isinstance(data, dict) or not isinstance(data.get("created_epoch"), (int, float)):
-+        _append_index(d, {"kind": "force_token_unreadable", "run_id": run_id, "at": _now_iso(t)})
++    try:
++        raw: Optional[bytes] = p.read_bytes()
++    except FileNotFoundError:
 +        return None
-+    if t - float(data["created_epoch"]) > FORCE_TOKEN_TTL_S:
-+        _append_index(d, {"kind": "force_token_expired", "run_id": run_id, "at": _now_iso(t)})
++    except OSError:
++        raw = None
++    try:
++        p.unlink()
++    except OSError:
++        pass
++    data: Any = None
++    problem: Optional[str] = "force_token_unreadable"
++    if raw is not None:
++        try:
++            data = json.loads(raw.decode("utf-8"))
++            problem = force_token_problem(data, run_id, t)
++        except (ValueError, UnicodeDecodeError):
++            problem = "force_token_unreadable"
++    if problem is not None:
++        _append_index(d, {"kind": problem, "run_id": run_id, "at": _now_iso(t)})
 +        return None
 +    return data
 +
@@ -603,7 +651,7 @@ index 000000000000..cd1d4e4952a5
 +                        else:
 +                            token = consume_force_token(d, resume, now=now)
 +                            if token is not None:
-+                                forced_by = str(token.get("reason") or "")[:500] or "token without reason"
++                                forced_by = token["reason"][:500]  # force_token_problem guarantees a non-empty str
 +                    if forced_by is not None:
 +                        manifest["guard"] = dict(base, result="mismatch_forced", force_reason=forced_by)
 +                        decision = {"systemMessage": "WORKFLOW-RESUME-FORCED: resuming %s over different inputs by explicit override (recorded in manifest %s)." % (resume, manifest["launch_id"])}
@@ -755,10 +803,10 @@ index 000000000000..f59e2560e548
 +    sys.exit(0)
 diff --git a/.claude/hooks/tests/test_check_workflow_launch.py b/.claude/hooks/tests/test_check_workflow_launch.py
 new file mode 100644
-index 000000000000..65e5f9142639
+index 000000000000..7aa338bc2980
 --- /dev/null
 +++ b/.claude/hooks/tests/test_check_workflow_launch.py
-@@ -0,0 +1,391 @@
+@@ -0,0 +1,406 @@
 +#!/usr/bin/env python3
 +"""End-to-end tests for ``check_workflow_launch.py`` (PLAN-190 W1, v2 after debate r1 + rail r1).
 +
@@ -1085,6 +1133,21 @@ index 000000000000..65e5f9142639
 +        lines = [json.loads(ln) for ln in (self._manifests()[0].parent / "launches.jsonl").read_text(encoding="utf-8").splitlines()]
 +        self.assertEqual(sum(1 for ln in lines if ln.get("kind") == "launch" and ln.get("blocked")), 1)
 +
++    def test_garbled_force_token_never_releases_a_block(self):
++        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
++        d = self._manifests()[0].parent
++        sys.path.insert(0, str(_REPO / ".claude" / "hooks"))
++        from _lib import launch_ledger as LL  # noqa: E402
++        p = LL.force_token_path(d, RUN)
++        p.parent.mkdir(parents=True, exist_ok=True)
++        p.write_text('{"created_epoch": NaN, "reason": "forged"}', encoding="utf-8")
++        out = self._run(self._pre({"script": SCRIPT_A, "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertEqual(out.get("decision"), "block", "fail-closed on a malformed token")
++        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "mismatch_blocked")
++        self.assertFalse(p.exists(), "the malformed token is removed, with its discard recorded")
++        kinds = [json.loads(ln)["kind"] for ln in (d / "launches.jsonl").read_text(encoding="utf-8").splitlines()]
++        self.assertIn("force_token_unreadable", kinds)
++
 +    def test_resume_without_bound_manifest_is_advisory(self):
 +        d = self._run(self._pre({"script": SCRIPT_A, "args": {}, "resumeFromRunId": "wf_deadbeef-99"}))
 +        self.assertEqual(d, {})
@@ -1172,7 +1235,7 @@ index 5328a11c458f..415ff01af73e 100755
  
 diff --git a/.claude/scripts/ceo-launches.py b/.claude/scripts/ceo-launches.py
 new file mode 100755
-index 000000000000..ce2c4f16da97
+index 000000000000..b94cc54d5235
 --- /dev/null
 +++ b/.claude/scripts/ceo-launches.py
 @@ -0,0 +1,234 @@
@@ -1354,7 +1417,7 @@ index 000000000000..ce2c4f16da97
 +    except ValueError as exc:
 +        print("refused: %s" % exc, file=sys.stderr)
 +        return 2
-+    print("force token written for %s (one-shot; consumed by the next resume of that run; recorded with the reason): %s" % (args.run_id, p))
++    print("force token written for %s (one-shot; spent only by the next resume of that run that would be BLOCKED, within %d min; recorded with the reason): %s" % (args.run_id, LL.FORCE_TOKEN_TTL_S // 60, p))
 +    return 0
 +
 +
@@ -2364,10 +2427,10 @@ index e5c3fa0782fa..d872a65d44ad 100644
      "PostToolUseFailure": [
 diff --git a/tests/unit/test_launch_ledger.py b/tests/unit/test_launch_ledger.py
 new file mode 100644
-index 000000000000..5531c8673230
+index 000000000000..9844cc28d653
 --- /dev/null
 +++ b/tests/unit/test_launch_ledger.py
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,229 @@
 +"""Unit tests for ``_lib/launch_ledger.py`` (PLAN-190 W1, v2) — pure functions and
 +the on-disk index, in a temp ledger dir (no resolver, no live ~/.claude)."""
 +from __future__ import annotations
@@ -2554,6 +2617,37 @@ index 000000000000..5531c8673230
 +        self.assertIsNone(LL.consume_force_token(self.d, "wf_22222222-22"), "a garbled token releases nothing")
 +        self.assertFalse(p.exists())
 +        self.assertEqual([ln["kind"] for ln in LL.iter_index(self.d)][-1], "force_token_unreadable")
++
++    def test_force_token_invalid_timestamps_and_undecodable_bytes_release_nothing(self):
++        run = "wf_33333333-33"
++        p = LL.force_token_path(self.d, run)
++        p.parent.mkdir(parents=True, exist_ok=True)
++        ok = '"run_id": "wf_33333333-33", '
++        bad_texts = ['{' + ok + '"created_epoch": NaN, "reason": "x"}', '{' + ok + '"created_epoch": Infinity, "reason": "x"}',
++                     '{' + ok + '"created_epoch": -Infinity, "reason": "x"}', '{' + ok + '"created_epoch": 1e999, "reason": "x"}',
++                     '{' + ok + '"created_epoch": true, "reason": "x"}', '{' + ok + '"created_epoch": "1000", "reason": "x"}',
++                     '{' + ok + '"reason": "x"}', '{' + ok + '"created_epoch": 999999999999, "reason": "from the future"}',
++                     '{' + ok + '"created_epoch": 999.0}', '{' + ok + '"created_epoch": 999.0, "reason": "   "}',
++                     '{' + ok + '"created_epoch": 999.0, "reason": 7}',
++                     '{"run_id": "wf_44444444-44", "created_epoch": 999.0, "reason": "token of another run"}',
++                     '{"created_epoch": 999.0, "reason": "no run id"}',
++                     '{not json', '[]', '"str"', '']
++        for bad in bad_texts:
++            p.write_text(bad, encoding="utf-8")
++            self.assertIsNone(LL.consume_force_token(self.d, run, now=1000.0), bad)
++            self.assertFalse(p.exists(), "an invalid token is removed: " + bad)
++            self.assertEqual([ln["kind"] for ln in LL.iter_index(self.d)][-1], "force_token_unreadable", bad)
++        p.write_bytes(b"\xff\xfe{")
++        self.assertIsNone(LL.consume_force_token(self.d, run, now=1000.0), "undecodable bytes")
++        self.assertFalse(p.exists())
++        self.assertEqual([ln["kind"] for ln in LL.iter_index(self.d)][-1], "force_token_unreadable")
++        before = len(LL.iter_index(self.d))
++        self.assertIsNone(LL.consume_force_token(self.d, run, now=1000.0), "no token at all: silently None")
++        self.assertEqual(len(LL.iter_index(self.d)), before, "absence is not a discard, nothing is recorded")
++        LL.write_force_token(self.d, run, "well-formed", now=1000.0)
++        self.assertEqual(LL.consume_force_token(self.d, run, now=1000.0 + 1)["reason"], "well-formed")
++        self.assertIsNone(LL.force_token_problem({"run_id": run, "reason": "r", "created_epoch": 1000.0}, run, 1000.0 + LL.FORCE_TOKEN_TTL_S))
++        self.assertEqual(LL.force_token_problem({"run_id": run, "reason": "r", "created_epoch": 1000.0}, run, 1000.0 + LL.FORCE_TOKEN_TTL_S + 0.001), "force_token_expired")
 +
 +    def test_decide_post_orphans_instead_of_guessing(self):
 +        a, da = LL.build_manifest(self._event({"script": "S"}, tool_use_id="tu-a", session="s"))

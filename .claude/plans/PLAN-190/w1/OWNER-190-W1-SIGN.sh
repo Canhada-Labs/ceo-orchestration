@@ -93,14 +93,26 @@ git apply "$PATCH" || die "git apply falhou"
 APPLIED=1
 [ -x .claude/hooks/check_workflow_launch.py ] || die "hook não é executável após o apply"
 for f in .claude/settings.json templates/settings/settings.base.json templates/settings/settings.user.json; do
-  n=$(grep -c 'check_workflow_launch.py' "$f")
-  [ "$n" = "2" ] || die "$f: esperava 2 registrações do hook, achei $n"
+  # conta REGISTRAÇÕES (entradas Pre/Post na tool Workflow cujo comando termina no hook), não
+  # ocorrências do nome: o template `user` também nomeia o hook em `_derivation.blocking_inclusions`
+  n=$(python3 - "$f" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+n = 0
+for ev in ("PreToolUse", "PostToolUse"):
+    for e in d.get("hooks", {}).get(ev, []):
+        if e.get("matcher") == "Workflow":
+            n += sum(1 for h in e.get("hooks", []) if str(h.get("command", "")).endswith("check_workflow_launch.py"))
+print(n)
+PY
+)
+  [ "$n" = "2" ] || die "$f: esperava 2 registrações do hook (Pre+Post na tool Workflow), achei $n"
 done
 printf '   aplicado: hook executável, 2 registrações em cada um dos 3 settings\n'
 
 say "4/6 bateria"
 python3 -m py_compile .claude/hooks/_lib/launch_ledger.py .claude/hooks/check_workflow_launch.py .claude/scripts/ceo-launches.py || die "py_compile"
-python3 -m pytest .claude/hooks/tests/test_check_workflow_launch.py tests/unit/test_launch_ledger.py -q -p no:cacheprovider >/tmp/p190-tests.out 2>&1 || { tail -20 /tmp/p190-tests.out >&2; die "testes da W1 reprovaram"; }
+python3 -m pytest .claude/hooks/tests/test_check_workflow_launch.py tests/unit/test_launch_ledger.py .claude/hooks/tests/test_template_dogfood_parity.py .claude/scripts/tests/test_gen_command_skill_hook_map.py -q -p no:cacheprovider >/tmp/p190-tests.out 2>&1 || { tail -20 /tmp/p190-tests.out >&2; die "testes da W1 reprovaram"; }
 python3 .claude/scripts/check-test-env-hygiene.py >/dev/null 2>&1 || die "test-env-hygiene reprovou"
 python3 .claude/scripts/gen-settings-user-template.py --check >/dev/null 2>&1 || die "template user diverge da derivação"
 python3 .claude/scripts/check-active-hooks-executable.py >/dev/null 2>&1 || die "hook ativo não executável"
@@ -109,7 +121,8 @@ bash .claude/scripts/local/verify-counts.sh --quiet --no-tests >/dev/null 2>&1 |
 python3 .claude/scripts/check-ceremony-script.py >/tmp/p190-lint.out 2>&1 || { tail -12 /tmp/p190-lint.out >&2; die "ceremony-lint reprovou"; }
 bash .claude/scripts/validate-governance.sh >/tmp/p190-gov.out 2>&1 || { tail -30 /tmp/p190-gov.out >&2; die "validate-governance reprovou (log: /tmp/p190-gov.out)"; }
 grep -q 'Errors:   0' /tmp/p190-gov.out || die "governance com erros"
-printf '   testes 23/23, higiene, template user, hooks executáveis, contamination, counts, ceremony-lint, governance 0 erros\n'
+PASSED=$(awk 'match($0, /[0-9]+ passed/) { v = substr($0, RSTART, RLENGTH) } END { print v }' /tmp/p190-tests.out)
+printf '   testes (%s: e2e, unit, paridade, mapa), higiene, template user, hooks executáveis, contamination, counts, ceremony-lint, governance 0 erros\n' "$PASSED"
 
 say "5/6 stage EXATO + conferência touched ∪ {sentinel, .asc}"
 xargs git add -- < "$BAK/touched"
@@ -130,19 +143,31 @@ say "6/6 commit (nunca abre editor)"
 git commit -q -F - <<MSG
 ceremony(PLAN-190 W1): ledger de lançamento de Workflow + guard de retomada
 Hook PreToolUse/PostToolUse na tool Workflow grava o manifesto ANTES do
-despacho (sha256 do script, args literais com ausente != null, resumeFromRunId,
-revisão git do cwd) e vincula o run id devolvido; retomada sobre script/args
-diferentes do manifesto vinculado é BLOQUEADA nomeando as chaves (rota:
-ceo-launches.py relaunch <run>; CEO_WORKFLOW_RESUME_FORCE=1 registrado;
-CEO_WORKFLOW_LEDGER=0 desliga). Fail-open em infraestrutura. Registrações no
-settings do framework e no template base (user derivado). Contagens 59->60
-hooks, 48->49 ligados, 50->52 registrações, 71->72 _lib em 10 docs.
+despacho (sha256 e snapshot dos bytes do script, args literais com ausente
+!= null e sem truncamento, resumeFromRunId; revisão git do cwd depois, com
+orçamento de 1,2 s) e vincula o run id devolvido (por tool_use_id; sem ele,
+só com um único lançamento pendente na sessão, nunca uma tentativa
+bloqueada; o resto vira orphan). Retomada sobre args diferentes do manifesto
+vinculado por tool_use_id ou manual é BLOQUEADA com motivo só de contagens
+(as chaves ficam no manifesto); script diferente com args iguais é advisory
+(CEO_WORKFLOW_SCRIPT_GUARD=enforce bloqueia); hash indisponível é
+inconclusivo; vínculo heurístico nunca sustenta bloqueio. Uma rota de
+override para todo bloqueio: CEO_WORKFLOW_RESUME_FORCE=1 no ambiente, ou o
+token one-shot de ceo-launches.py force com motivo (validado por um esquema,
+até 30 min, gasto só ao liberar), registrado como mismatch_forced e
+anunciado. CEO_WORKFLOW_RESUME_GUARD=0 põe o guard em advisory mantendo o
+ledger; CEO_WORKFLOW_LEDGER=0 desliga. Fail-open em infraestrutura.
+Registrações no settings do framework e no template base (user derivado,
+com o hook em blocking_inclusions). Contagens 59->60 hooks, 48->49 ligados,
+50->52 registrações, 71->72 _lib em 10 docs.
 Baseline medida num consumidor (S354): 15,5 % das fases iniciadas sem
 resultado, 16 % dos starts reexecuções; a classe fechada é a retomada sobre
-entradas diferentes (17 fatias reimplementadas por prompt editado em voo; 11
-regressões por args de memória; 12/12 retomadas com args exatos).
+entradas diferentes sem o operador saber (11 regressões por args de memória;
+12/12 retomadas com args exatos).
+Revisão: debate r1 (3x ADJUST, PROCEED); rail Codex r1-r3 NO-GO com 7, 3 e
+2 achados, todos curados com regressões; r4 sobre os bytes finais.
 Sentinel: $SENT (assinado, Anchor-SHA $HEAD_SHA, Patch-sha256 $PATCH_SHA)
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 MSG
 APPLIED=0
 trap - EXIT
