@@ -99,8 +99,13 @@ DOGFOOD_ONLY_HOOKS: Set[Tuple[str, str, str]] = frozenset({
 # version-floor probe: SessionStart + matcher are long-standing substrate),
 # so it must NOT enter DOGFOOD_ONLY_HOOKS nor the gated set. The derived
 # relationship below is the real oracle and is unchanged: 50 == 47 + 1 + 2.
-T64_DOGFOOD_REGISTRATIONS = 50
-T64_TEMPLATE_REGISTRATIONS = 47
+# PLAN-190 W1 REBASELINE (50->52 / 47->49): check_workflow_launch.py registers
+# on PreToolUse AND PostToolUse for the `Workflow` tool, in the dogfood
+# settings AND the base template (adopter-facing: the launch ledger + resume
+# guard protect the operator; the user profile keeps it — kill-switch and
+# route exist). Relationship unchanged: 52 == 49 + 1 + 2.
+T64_DOGFOOD_REGISTRATIONS = 52
+T64_TEMPLATE_REGISTRATIONS = 49
 
 _BASELINES_CACHE: Optional[Dict] = None
 

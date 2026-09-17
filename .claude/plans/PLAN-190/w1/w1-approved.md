@@ -8,9 +8,9 @@
 Plan: PLAN-190
 Wave: W1 — ledger de lançamento de Workflow + guard de retomada
 Patch: .claude/plans/PLAN-190/w1/p190-w1.patch
-Patch-sha256: <PREENCHIDO-PELO-SIGN>
-Anchor-SHA: <HEAD-NO-MOMENTO-DA-ASSINATURA>
-Data: <AAAA-MM-DD>
+Patch-sha256: 02e8831fa5c0526f80931da85a974cdf7c7987ee2b736ccbfdaa2855c732b3eb
+Anchor-SHA: 440a5306ee93b2fbf6fd021151faa2b3395ebcb1
+Data: 2026-09-17
 
 ## Ratificação (Owner, S354)
 

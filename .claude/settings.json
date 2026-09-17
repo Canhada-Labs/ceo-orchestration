@@ -356,6 +356,18 @@
             "statusMessage": "Checking work-boundary ledger checkpoint..."
           }
         ]
+      },
+      {
+        "_comment": "PLAN-190 W1: Workflow launch ledger + resume guard. Records script sha256 + snapshot, LITERAL args and code revision under <state-dir>/launches/ BEFORE dispatch; blocks a resumeFromRunId whose args differ from the strongly bound, validated manifest (script change: advisory unless CEO_WORKFLOW_SCRIPT_GUARD=enforce). Recovery: `ceo-launches.py relaunch <run>`. Override, recorded: a call description starting with 'CEO_WORKFLOW_RESUME_FORCE: <why>' or CEO_WORKFLOW_RESUME_FORCE=1; advisory CEO_WORKFLOW_RESUME_GUARD=0; off CEO_WORKFLOW_LEDGER=0. Fail-open on infrastructure.",
+        "matcher": "Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
+            "timeout": 5,
+            "statusMessage": "Recording Workflow launch..."
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -512,6 +524,18 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" accel_dispatch.py",
             "timeout": 20,
             "statusMessage": "Verifying edit..."
+          }
+        ]
+      },
+      {
+        "_comment": "PLAN-190 W1: binds the run id (wf_<id>) the runner returned to its launch manifest (by tool_use_id; without one, only when exactly one non-blocked unbound launch exists in the session; anything else is an orphan line). Silent; fail-open.",
+        "matcher": "Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
+            "timeout": 5,
+            "statusMessage": "Binding Workflow run id..."
           }
         ]
       }

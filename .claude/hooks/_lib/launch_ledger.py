@@ -1,0 +1,893 @@
+"""PLAN-190 W1 — Workflow launch ledger: persist BEFORE dispatch, guard resumes.
+
+Why this exists
+---------------
+The harness persists a Workflow run's ``args`` only when the run ENDS
+(``<session>/workflows/wf_<id>.json``, status completed/killed/failed), never
+its script hash, the code revision it ran against, nor anything at launch
+time. A run interrupted by a process death leaves no record of the exact call;
+an operator who re-issues the call from memory changes the runner's result
+cache key (prompt + opts) and re-executes finished phases. Measured on one
+consumer (S354): 15.5 % of phase starts never produced a result and 16 % of
+starts were re-executions; two incidents (17 slices re-implemented after a
+prompt edit in flight; 11 slices regressed after args rebuilt from memory)
+are exactly the class this module closes.
+
+What it records (one manifest per Workflow tool call)
+-----------------------------------------------------
+``launch_id``, instant, ``session_id``, ``tool_use_id``, ``cwd``; the script
+fingerprint (``sha256`` + size) AND a snapshot of the effective script bytes
+(``<launch_id>.script``) so the exact call is reproducible even when the
+harness never wrote its own copy (a run killed by a process death) or the
+file changed afterwards; the ``args`` as a LITERAL canonical JSON (an absent
+``args`` field is recorded as ABSENT, distinct from ``null``; never
+truncated — the hash is over the full content); ``resumeFromRunId``;
+``name``/``description``; the code revision of ``cwd`` — ENRICHED AFTER the
+manifest is on disk, with a git budget far below the hook's 5-second timeout
+(``--no-optional-locks``, unknown on failure); the ``run_id`` once the
+PostToolUse half binds it, with the ``bind_method`` recorded.
+
+Files live under the project's runtime state dir
+(``_lib.runtime_paths.runtime_state_dir()/launches``): one JSON per launch
+(atomic write, mode 0600), one ``.script`` snapshot, and an append-only
+``launches.jsonl`` index (``launch`` / ``bind`` / ``unbind`` / ``orphan``
+lines).
+
+The guard (debate r1 + pair-rail r1 shaped it)
+----------------------------------------------
+A call with ``resumeFromRunId`` is compared against the manifest BOUND to
+that run.
+* ``args`` differ (per top-level key) ⇒ **block** (the demonstrated loss).
+* script ``sha256`` differs ⇒ **advisory** by default (recorded as
+  ``mismatch_script_advisory``; the substrate re-executes only the phases
+  whose prompt changed, and resuming over a fixed script is a legitimate
+  route); ``CEO_WORKFLOW_SCRIPT_GUARD=enforce`` turns it into a block.
+* args identical but either script hash unavailable ⇒ **inconclusive**
+  (allowed, recorded) — an unverifiable script comparison is never turned into
+  a block nor into a match; different args still block on their own.
+* no bound manifest ⇒ ``no_manifest`` (allowed, recorded).
+* a manifest bound heuristically (``by_single_unbound``) never sustains a
+  block, args or script alike (``weak_bind`` recorded; advisory instead).
+* ONE override path for every block, and it lives in the CALL, never on
+  disk: ``CEO_WORKFLOW_RESUME_FORCE=1`` in the process environment, or the
+  call itself declaring it — ``description`` starting with the exact prefix
+  ``CEO_WORKFLOW_RESUME_FORCE:`` followed by a non-empty reason. The
+  declaration is visible in the transcript, applies to that one call and
+  nothing else, and leaves no state behind to read back (so no race and no
+  parse of stored override state). Result ``mismatch_forced``, announced;
+  the reason is recorded in the manifest, never echoed.
+* the recorded manifest is VALIDATED before it is compared
+  (``manifest_problem``: schema, args canonical/hash/presence consistency,
+  script hash against its snapshot bytes, run id and bind method shapes);
+  an inconsistent record is ``inconclusive`` — never evidence of a match
+  nor of a mismatch. Any exception inside the guard is also recorded as
+  ``inconclusive`` with the manifest still written.
+* ``CEO_WORKFLOW_RESUME_GUARD=0`` puts the whole guard in advisory mode while
+  keeping the ledger; ``CEO_WORKFLOW_LEDGER=0`` disables the hook.
+* a launch the guard blocked stays in the index (``blocked: true``) and is
+  never a candidate for heuristic binding.
+
+The block reason is COUNTS-ONLY: it never carries operator text (arg key
+names, values, or an unvalidated run id) — the reason reaches the model and
+an instruction-adjacent channel is closed by removal, not by escaping
+(PLAN-179 r22). The detail (which keys) lives in the manifest.
+
+Binding (PostToolUse)
+---------------------
+By ``tool_use_id`` when the event carries one: found ⇒ bind (``by_tool_use``);
+not found ⇒ an ``orphan`` index line, NO bind. Without ``tool_use_id``: bind
+only when EXACTLY ONE unbound launch exists in the same session
+(``by_single_unbound``); otherwise ``orphan``. Never across sessions. The
+operator's ``ceo-launches.py bind`` closes an orphan by hand.
+
+Contract
+--------
+Stdlib only, Python >= 3.9. Never raises out of the public entry points used
+by the hook: infrastructure failures degrade to unknown fields / ``{}`` so the
+hook fails OPEN. Never reads or stores transcript content — only the tool
+call's own fields. Emits NO audit event (registering a new action in
+``audit_emit._KNOWN_ACTIONS`` is the audit owner's ceremony — PLAN-190
+follow-up; the ledger files are the evidence).
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+import re
+import stat
+import subprocess
+import tempfile
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+SCHEMA = "ceo.workflow-launch/v2"
+INDEX_NAME = "launches.jsonl"
+ABSENT = "<absent>"  # marker for a field that was NOT present in tool_input (≠ null)
+RUN_ID_RE = re.compile(r"\bwf_[0-9a-f]{8}(?:-[0-9a-f]{1,8})?\b")
+_RUN_ID_LABEL_RE = re.compile(r"Run ID:\s*(wf_[0-9a-f]{8}(?:-[0-9a-f]{1,8})?)\b")  # the harness labels the id it launched
+_PERSISTED_SCRIPT_RE = re.compile(r"(/[^\s\"'`]+/workflows/[^\s\"'`]+\.(?:js|mjs))")
+GIT_BUDGET_S = 1.2  # total wall budget for the optional git enrichment (hook timeout is 5 s)
+BLOCKING_RESULTS = frozenset({"mismatch_blocked", "mismatch_script_blocked"})  # guard results that refused the call
+LAUNCH_ID_RE = re.compile(r"L-[0-9]{8}T[0-9]{6}-[0-9a-f]{8}")
+SHA256_RE = re.compile(r"[0-9a-f]{64}")
+STRONG_BIND_METHODS = ("by_tool_use", "manual")
+BIND_METHODS = STRONG_BIND_METHODS + ("by_single_unbound",)
+FORCE_MARKER = "CEO_WORKFLOW_RESUME_FORCE:"  # a call declares its own override: description starts with this
+FORCE_REASON_MAX = 500
+SCRIPT_MAX_BYTES = 8 * 1024 * 1024  # a Workflow script larger than this is recorded unreadable (inconclusive)
+
+
+# --------------------------------------------------------------------------- paths
+def ledger_dir(state_dir: Optional[Path] = None) -> Path:
+    """``<runtime state dir>/launches`` (created 0700 on first use)."""
+    if state_dir is None:
+        from _lib import runtime_paths  # local import: keeps this module importable in tests
+
+        state_dir = runtime_paths.runtime_state_dir()
+    d = Path(state_dir) / "launches"
+    d.mkdir(mode=0o700, parents=True, exist_ok=True)
+    return d
+
+
+def _index_path(d: Path) -> Path:
+    return d / INDEX_NAME
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(data)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, str(path))
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _atomic_write_json(path: Path, obj: Dict[str, Any]) -> None:
+    _atomic_write(path, (json.dumps(obj, ensure_ascii=True, sort_keys=True, indent=1) + "\n").encode("ascii"))
+
+
+def _append_index(d: Path, line: Dict[str, Any]) -> None:
+    """Append one index line under the repo's FileLock (a lock failure degrades to an
+    unlocked append rather than losing the record). Record boundary repair: when the file
+    does not end in a newline (a writer died mid-line), a newline is written first, so the
+    torn line stays isolated and THIS record stays parseable."""
+    data = (json.dumps(line, ensure_ascii=True, sort_keys=True) + "\n").encode("ascii")
+    lock = None
+    try:
+        from _lib.filelock import FileLock  # noqa: E402
+
+        lock = FileLock(str(_index_path(d)) + ".lock", timeout=2.0)
+        lock.acquire()
+    except Exception:
+        lock = None
+    try:
+        with open(_index_path(d), "a+b") as fh:
+            fh.seek(0, os.SEEK_END)
+            if fh.tell() > 0:
+                fh.seek(-1, os.SEEK_END)
+                if fh.read(1) != b"\n":
+                    data = b"\n" + data
+            fh.seek(0, os.SEEK_END)
+            fh.write(data)
+    finally:
+        if lock is not None:
+            try:
+                lock.release()
+            except Exception:
+                pass
+
+
+# --------------------------------------------------------------------------- fingerprints
+def canonical_json(value: Any) -> str:
+    # ASCII-escaped: total over every str Python can hold (a lone surrogate included), so hashing
+    # and writing a record can never raise on operator input.
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def is_run_id(value: Any) -> bool:
+    return isinstance(value, str) and RUN_ID_RE.fullmatch(value) is not None
+
+
+def args_record(tool_input: Dict[str, Any]) -> Dict[str, Any]:
+    """Record of ``args``: ABSENT when the key is missing, else two serialisations of what was
+    passed — ``literal`` in the ORIGINAL key order (the runner's script sees that order, so
+    ``relaunch`` reproduces it) and ``canonical`` with sorted keys (per-key comparison).
+    ``null`` stays ``null``; nothing is truncated. Total: a value that cannot be serialised
+    (a document nested past the interpreter's recursion limit) yields a record with
+    ``canonical``/``literal`` ``None`` and the error type — the guard is then inconclusive."""
+    if "args" not in tool_input:
+        return {"present": False, "canonical": ABSENT, "literal": ABSENT, "sha256": sha256_text(ABSENT),
+                "literal_sha256": sha256_text(ABSENT), "bytes": 0}
+    value = tool_input.get("args")
+    try:
+        canon = canonical_json(value)
+        literal = json.dumps(value, ensure_ascii=True, separators=(",", ":"))
+    except (RecursionError, ValueError, TypeError) as exc:
+        return {"present": True, "canonical": None, "literal": None, "sha256": None, "literal_sha256": None,
+                "bytes": None, "error": type(exc).__name__}
+    return {"present": True, "canonical": canon, "literal": literal, "sha256": sha256_text(canon),
+            "literal_sha256": sha256_text(literal), "bytes": len(literal)}
+
+
+def _read_script_file(p: Path) -> Tuple[Optional[bytes], Optional[str]]:
+    """Bytes of a REGULAR file of at most ``SCRIPT_MAX_BYTES``, or ``(None, why)``. Opened
+    non-blocking and type-checked on the open descriptor, so a FIFO or device path never
+    stalls the hook and cannot be swapped in between the check and the read; a path with a
+    NUL byte (``ValueError``) is unreadable, not an exception."""
+    try:
+        fd = os.open(str(p), os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+    except (OSError, ValueError):
+        return None, "open_failed"
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode):
+            return None, "not_a_regular_file"
+        if st.st_size > SCRIPT_MAX_BYTES:
+            return None, "too_large"
+        chunks = []
+        total = 0
+        while True:
+            chunk = os.read(fd, 1024 * 1024)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > SCRIPT_MAX_BYTES:
+                return None, "too_large"
+            chunks.append(chunk)
+        return b"".join(chunks), None
+    except OSError:
+        return None, "read_failed"
+    finally:
+        os.close(fd)
+
+
+read_script_file = _read_script_file  # public name for the CLI
+
+
+def script_record(tool_input: Dict[str, Any], cwd: Optional[str]) -> Tuple[Dict[str, Any], Optional[bytes]]:
+    """Fingerprint of the script plus the effective bytes to snapshot. Inline
+    ``script`` text wins over ``scriptPath``; an unreadable ``scriptPath`` is
+    recorded (no hash, no snapshot) — the guard then reports INCONCLUSIVE."""
+    script = tool_input.get("script")
+    if isinstance(script, str) and script:
+        data = script.encode("utf-8", "surrogatepass")
+        return {"source": "inline", "path": None, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, data
+    sp = tool_input.get("scriptPath")
+    if isinstance(sp, str) and sp:
+        p = Path(sp)
+        if not p.is_absolute() and cwd:
+            p = Path(cwd) / p
+        data, why = _read_script_file(p)
+        if data is None:
+            return {"source": "path", "path": sp, "sha256": None, "bytes": None, "unreadable": True, "why": why}, None
+        return {"source": "path", "path": sp, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, data
+    name = tool_input.get("name")
+    if isinstance(name, str) and name:
+        return {"source": "named", "path": None, "name": name, "sha256": None, "bytes": None}, None
+    return {"source": "absent", "path": None, "sha256": None, "bytes": None}, None
+
+
+def git_revision(cwd: Optional[str], budget_s: float = GIT_BUDGET_S) -> Dict[str, Any]:
+    """``HEAD`` and dirty flag of ``cwd`` inside a wall budget; unknown (``None``)
+    on any failure or timeout. ``--no-optional-locks`` keeps the hook from
+    taking the index lock under a pipeline's own git activity."""
+    if not cwd or not Path(cwd).is_dir():
+        return {"head": None, "dirty": None}
+    t0 = time.monotonic()
+    try:
+        head = subprocess.run(["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", cwd, "rev-parse", "HEAD"], capture_output=True, text=True, timeout=budget_s / 2)
+        if head.returncode != 0:
+            return {"head": None, "dirty": None}
+        remaining = budget_s - (time.monotonic() - t0)
+        if remaining <= 0.05:
+            return {"head": head.stdout.strip() or None, "dirty": None}
+        st = subprocess.run(["git", "--no-optional-locks", "-c", "core.fsmonitor=false", "-C", cwd, "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True, timeout=remaining)
+        dirty = bool(st.stdout.strip()) if st.returncode == 0 else None
+        return {"head": head.stdout.strip() or None, "dirty": dirty}
+    except Exception:
+        return {"head": None, "dirty": None}
+
+
+def extract_run_id(tool_response: Any) -> Optional[str]:
+    """The run id the harness launched: a ``runId``/``run_id`` key; else the id on the
+    ``Run ID:`` label (the harness prints it on launch AND on resume, where the id is the
+    same); else the only distinct ``wf_<hex8>[-<hex>]`` token in the response. Two different
+    labelled ids, or two different unlabelled ids, are ambiguous ⇒ ``None`` — never the first
+    one found. With ``None``, ``decide_post`` records NOTHING: the launch stays unbound (visible in
+    ``ceo-launches.py list``) and ``bind`` closes it by hand."""
+    if tool_response is None:
+        return None
+    if isinstance(tool_response, dict):
+        for key in ("runId", "run_id"):
+            v = tool_response.get(key)
+            if is_run_id(v):
+                return v
+    try:
+        text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=True)
+    except (RecursionError, ValueError, TypeError):
+        return None
+    labelled = set(_RUN_ID_LABEL_RE.findall(text))
+    if len(labelled) == 1:
+        return labelled.pop()
+    if len(labelled) > 1:
+        return None
+    ids = set(RUN_ID_RE.findall(text))
+    return ids.pop() if len(ids) == 1 else None
+
+
+def extract_persisted_script_path(tool_response: Any) -> Optional[str]:
+    try:
+        text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=True) if tool_response is not None else ""
+    except (RecursionError, ValueError, TypeError):
+        return None
+    m = _PERSISTED_SCRIPT_RE.search(text)
+    return m.group(1) if m else None
+
+
+# --------------------------------------------------------------------------- manifests
+def _now_iso(now: Optional[float] = None) -> str:
+    t = time.time() if now is None else now
+    return datetime.fromtimestamp(t, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def build_manifest(event: Dict[str, Any], now: Optional[float] = None) -> Tuple[Dict[str, Any], Optional[bytes]]:
+    tool_input = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
+    cwd = event.get("cwd") if isinstance(event.get("cwd"), str) else None
+    script, script_bytes = script_record(tool_input, cwd)
+    args = args_record(tool_input)
+    seed = "%s|%s|%s|%s|%s" % (_now_iso(now), event.get("session_id"), event.get("tool_use_id"), script.get("sha256"), args["sha256"])
+    launch_id = "L-%s-%s" % (datetime.fromtimestamp(time.time() if now is None else now, tz=timezone.utc).strftime("%Y%m%dT%H%M%S"), sha256_text(seed)[:8])
+    resume = tool_input.get("resumeFromRunId")
+    manifest = {
+        "schema": SCHEMA,
+        "launch_id": launch_id,
+        "recorded_at": _now_iso(now),
+        "session_id": event.get("session_id") if isinstance(event.get("session_id"), str) else None,
+        "tool_use_id": event.get("tool_use_id") if isinstance(event.get("tool_use_id"), str) else None,
+        "cwd": cwd,
+        "script": script,
+        "script_snapshot": None,
+        "args": args,
+        "resume_from_run_id": resume if isinstance(resume, str) and resume else None,
+        "resume_from_run_id_valid": is_run_id(resume) if isinstance(resume, str) and resume else None,
+        "name": tool_input.get("name") if isinstance(tool_input.get("name"), str) else None,
+        "description": tool_input.get("description") if isinstance(tool_input.get("description"), str) else None,
+        "force_declared": force_declaration(tool_input.get("description")) is not None,
+        "code": {"head": None, "dirty": None, "status": "pending"},
+        "run_id": None,
+        "bound_at": None,
+        "bind_method": None,
+        "persisted_script_path": None,
+        "persisted_matches_snapshot": None,
+        "guard": {"result": "none", "diff": [], "counts": {}},
+    }
+    return manifest, script_bytes
+
+
+def fallback_manifest(event: Dict[str, Any], error: str, now: Optional[float] = None) -> Dict[str, Any]:
+    """The record written when ``build_manifest`` itself raised: the call is still recorded,
+    with its error, and the guard result is ``inconclusive`` (never a silent allow)."""
+    tool_input = event.get("tool_input") if isinstance(event.get("tool_input"), dict) else {}
+    t = time.time() if now is None else now
+    sid = event.get("session_id") if isinstance(event.get("session_id"), str) else None
+    tuid = event.get("tool_use_id") if isinstance(event.get("tool_use_id"), str) else None
+    seed = "%s|%s|%s|%s" % (_now_iso(t), sid, tuid, error)
+    resume = tool_input.get("resumeFromRunId")
+    resume = resume if isinstance(resume, str) and resume else None
+    return {
+        "schema": SCHEMA,
+        "launch_id": "L-%s-%s" % (datetime.fromtimestamp(t, tz=timezone.utc).strftime("%Y%m%dT%H%M%S"), sha256_text(seed)[:8]),
+        "recorded_at": _now_iso(t), "session_id": sid, "tool_use_id": tuid,
+        "cwd": event.get("cwd") if isinstance(event.get("cwd"), str) else None,
+        "script": {"source": "unknown", "path": None, "sha256": None, "bytes": None, "unreadable": True, "why": "build_failed"},
+        "script_snapshot": None,
+        "args": {"present": "args" in tool_input, "canonical": None, "literal": None, "sha256": None,
+                 "literal_sha256": None, "bytes": None, "error": error},
+        "resume_from_run_id": resume, "resume_from_run_id_valid": is_run_id(resume) if resume else None,
+        "name": None, "description": None, "force_declared": False,
+        "code": {"head": None, "dirty": None, "status": "pending"},
+        "run_id": None, "bound_at": None, "bind_method": None,
+        "persisted_script_path": None, "persisted_matches_snapshot": None,
+        "guard": {"result": "inconclusive", "error": "build:" + error, "diff": [], "counts": {}},
+    }
+
+
+def manifest_path(d: Path, launch_id: str) -> Path:
+    return d / ("%s.json" % launch_id)
+
+
+def snapshot_path(d: Path, launch_id: str) -> Path:
+    return d / ("%s.script" % launch_id)
+
+
+def write_manifest(manifest: Dict[str, Any], d: Path, script_bytes: Optional[bytes] = None) -> Path:
+    """Manifest (and script snapshot) on disk FIRST; the index line after."""
+    if script_bytes is not None:
+        _atomic_write(snapshot_path(d, manifest["launch_id"]), script_bytes)
+        manifest["script_snapshot"] = snapshot_path(d, manifest["launch_id"]).name
+    path = manifest_path(d, manifest["launch_id"])
+    _atomic_write_json(path, manifest)
+    _append_index(d, {
+        "kind": "launch",
+        "launch_id": manifest["launch_id"],
+        "recorded_at": manifest["recorded_at"],
+        "session_id": manifest.get("session_id"),
+        "tool_use_id": manifest.get("tool_use_id"),
+        "resume_from_run_id": manifest.get("resume_from_run_id"),
+        "script_sha256": (manifest.get("script") or {}).get("sha256"),
+        "args_sha256": (manifest.get("args") or {}).get("sha256"),
+        "guard": (manifest.get("guard") or {}).get("result"),
+        "blocked": (manifest.get("guard") or {}).get("result") in BLOCKING_RESULTS,
+    })
+    return path
+
+
+def enrich_code_revision(manifest: Dict[str, Any], d: Path, budget_s: float = GIT_BUDGET_S) -> Dict[str, Any]:
+    """Second, optional write: code revision inside a strict budget."""
+    rev = git_revision(manifest.get("cwd"), budget_s=budget_s)
+    manifest = dict(manifest)
+    manifest["code"] = {"head": rev.get("head"), "dirty": rev.get("dirty"), "status": "known" if rev.get("head") else "unknown"}
+    try:
+        _atomic_write_json(manifest_path(d, manifest["launch_id"]), manifest)
+    except OSError:
+        pass
+    return manifest
+
+
+def load_manifest(d: Path, launch_id: Any) -> Optional[Dict[str, Any]]:
+    """A manifest by id. Ids read back from the index are validated by shape first (no
+    path escapes); unreadable/undecodable/too-deep/non-object content ⇒ ``None``."""
+    if not isinstance(launch_id, str) or LAUNCH_ID_RE.fullmatch(launch_id) is None:
+        return None
+    try:
+        data = json.loads(manifest_path(d, launch_id).read_text(encoding="utf-8"))
+    except (OSError, ValueError, RecursionError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def load_snapshot(d: Path, manifest: Dict[str, Any]) -> Optional[bytes]:
+    name = manifest.get("script_snapshot")
+    if not isinstance(name, str) or not name or "/" in name or name.startswith("."):
+        return None
+    data, _why = _read_script_file(d / name)
+    return data
+
+
+def iter_index(d: Path) -> List[Dict[str, Any]]:
+    """Index lines that are JSON objects with a string ``kind``; anything else (a torn
+    line, garbage, a too-deep document) is skipped, never raised."""
+    out: List[Dict[str, Any]] = []
+    try:
+        with open(_index_path(d), encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except (ValueError, RecursionError):
+                    continue
+                if isinstance(obj, dict) and isinstance(obj.get("kind"), str):
+                    out.append(obj)
+    except OSError:
+        return out
+    return out
+
+
+def find_launch_for_run(d: Path, run_id: str) -> Optional[Dict[str, Any]]:
+    """The manifest CURRENTLY bound to ``run_id``: the most recent binding of that run that
+    was not later unbound. Explicit unbinds (a rebind to another run) pop it, so the lookup
+    returns to the previous surviving binding. The top binding's record must still carry
+    ``run_id``; if it is unreadable or does not, the answer is ``None`` — an OLDER launch is
+    never substituted for an unreadable newer one (its inputs may be stale)."""
+    if not is_run_id(run_id):
+        return None
+    stack: List[str] = []
+    for line in iter_index(d):
+        lid = line.get("launch_id")
+        if not isinstance(lid, str) or line.get("run_id") != run_id:
+            continue
+        if line.get("kind") == "bind":
+            if lid in stack:
+                stack.remove(lid)
+            stack.append(lid)
+        elif line.get("kind") == "unbind" and lid in stack:
+            stack.remove(lid)
+    if not stack:
+        return None
+    m = load_manifest(d, stack[-1])
+    if m is None or m.get("run_id") != run_id:
+        return None
+    return m
+
+
+def find_launch_by_tool_use(d: Path, tool_use_id: str) -> Optional[Dict[str, Any]]:
+    for line in reversed(iter_index(d)):
+        if line.get("kind") == "launch" and line.get("tool_use_id") == tool_use_id:
+            return load_manifest(d, line.get("launch_id"))
+    return None
+
+
+def unbound_launches(d: Path, session_id: Optional[str]) -> List[str]:
+    """Launch ids of the session that never got a bind line (a later unbind reopens them).
+    Never candidates: a launch the guard BLOCKED (it never ran — history only), and a second
+    record of a ``tool_use_id`` another launch is already bound to (the same call recorded
+    twice, e.g. the hook registered by a plugin AND by the project)."""
+    bound: Dict[str, bool] = {}
+    launches: List[Tuple[str, Optional[str]]] = []
+    for line in iter_index(d):
+        kind = line.get("kind")
+        if kind == "launch" and (session_id is None or line.get("session_id") == session_id):
+            lid = line.get("launch_id")
+            if line.get("blocked") is True or not isinstance(lid, str) or LAUNCH_ID_RE.fullmatch(lid) is None:
+                continue
+            tuid = line.get("tool_use_id") if isinstance(line.get("tool_use_id"), str) and line.get("tool_use_id") else None
+            launches.append((lid, tuid))
+        elif kind == "bind":
+            bound[line.get("launch_id", "")] = True
+        elif kind == "unbind":
+            bound[line.get("launch_id", "")] = False
+    bound_tuids = {tuid for lid, tuid in launches if tuid and bound.get(lid)}
+    return [lid for lid, tuid in launches if not bound.get(lid) and not (tuid and tuid in bound_tuids)]
+
+
+def force_declaration(description: Any) -> Optional[str]:
+    """The override a CALL declares for itself: ``description`` that starts with the exact
+    ``FORCE_MARKER`` followed by a non-empty reason. Returns the reason (capped) or ``None``.
+    Pure string inspection of the call being decided — nothing is stored, nothing is read
+    back, nothing can be spent twice."""
+    if not isinstance(description, str) or not description.startswith(FORCE_MARKER):
+        return None
+    reason = description[len(FORCE_MARKER):].strip()
+    return reason[:FORCE_REASON_MAX] if reason else None
+
+
+def manifest_problem(m: Any, d: Path) -> Optional[str]:
+    """The ONE validation of a manifest read back before it is used as evidence. ``None``
+    when every field the guard and ``relaunch`` rely on is present and self-consistent;
+    otherwise a short problem code.
+
+    Checks: object; schema; launch id / run id shapes; bind method in the known set.
+    ``args``: keys present; ``canonical`` ``None`` only for a recorded serialisation error
+    (``args_uncanonicalized``); otherwise canonical and literal are strings whose sha256 match
+    their recorded hashes, the literal re-canonicalises to the canonical, and ``present`` is
+    False exactly when both are ABSENT. ``script``: the ``sha256`` key must exist and agree with
+    the SOURCE — inline, or a path read at launch ⇒ a hex hash whose snapshot bytes exist and
+    hash to it; a path unreadable at launch, a named workflow or no script ⇒ ``null``."""
+    if not isinstance(m, dict):
+        return "not_an_object"
+    if m.get("schema") != SCHEMA:
+        return "schema"
+    if not isinstance(m.get("launch_id"), str) or LAUNCH_ID_RE.fullmatch(m["launch_id"]) is None:
+        return "launch_id"
+    if not is_run_id(m.get("run_id")):
+        return "run_id"
+    if m.get("bind_method") not in BIND_METHODS:
+        return "bind_method"
+    a = m.get("args")
+    if not isinstance(a, dict) or not isinstance(a.get("present"), bool) or not {"canonical", "literal", "sha256", "literal_sha256"} <= set(a):
+        return "args_shape"
+    if a["canonical"] is None:
+        return "args_uncanonicalized" if isinstance(a.get("error"), str) else "args_shape"
+    for text_key, hash_key in (("canonical", "sha256"), ("literal", "literal_sha256")):
+        if not isinstance(a[text_key], str) or not isinstance(a[hash_key], str) or SHA256_RE.fullmatch(a[hash_key]) is None:
+            return "args_shape"
+        if sha256_text(a[text_key]) != a[hash_key]:
+            return "args_inconsistent"
+    if (a["present"] is False) != (a["canonical"] == ABSENT) or (a["canonical"] == ABSENT) != (a["literal"] == ABSENT):
+        return "args_inconsistent"
+    if a["canonical"] != ABSENT:
+        try:
+            if canonical_json(json.loads(a["literal"])) != a["canonical"]:
+                return "args_inconsistent"
+        except (ValueError, RecursionError, TypeError):
+            return "args_inconsistent"
+    sc = m.get("script")
+    if not isinstance(sc, dict) or "sha256" not in sc:
+        return "script_shape"
+    source = sc.get("source")
+    sh = sc["sha256"]
+    if source == "inline" or (source == "path" and sc.get("unreadable") is not True):
+        if not isinstance(sh, str) or SHA256_RE.fullmatch(sh) is None:
+            return "script_shape"
+        if m.get("script_snapshot") != snapshot_path(d, m["launch_id"]).name:
+            return "script_snapshot_missing"
+        snap = load_snapshot(d, m)
+        if snap is None:
+            return "script_snapshot_missing"
+        if hashlib.sha256(snap).hexdigest() != sh:
+            return "script_snapshot_mismatch"
+        return None
+    if source in ("path", "named", "absent"):
+        return None if sh is None else "script_shape"
+    return "script_shape"
+
+
+def bind_run(d: Path, manifest: Dict[str, Any], run_id: str, method: str, now: Optional[float] = None,
+             persisted_script_path: Optional[str] = None) -> Dict[str, Any]:
+    if not is_run_id(run_id):
+        raise ValueError("run id has an unexpected shape")
+    manifest = dict(manifest)
+    previous = manifest.get("run_id")
+    if isinstance(previous, str) and previous and previous != run_id:
+        _append_index(d, {"kind": "unbind", "launch_id": manifest["launch_id"], "run_id": previous, "at": _now_iso(now), "reason": "rebound"})
+    manifest["run_id"] = run_id
+    manifest["bound_at"] = _now_iso(now)
+    manifest["bind_method"] = method
+    if persisted_script_path:
+        manifest["persisted_script_path"] = persisted_script_path
+        snap = load_snapshot(d, manifest)
+        persisted, _why = _read_script_file(Path(persisted_script_path))  # bounded: the path came from response text
+        manifest["persisted_matches_snapshot"] = (
+            hashlib.sha256(persisted).hexdigest() == hashlib.sha256(snap).hexdigest()
+        ) if (snap is not None and persisted is not None) else None
+    _atomic_write_json(manifest_path(d, manifest["launch_id"]), manifest)
+    _append_index(d, {"kind": "bind", "launch_id": manifest["launch_id"], "run_id": run_id, "bound_at": manifest["bound_at"], "method": method})
+    return manifest
+
+
+# --------------------------------------------------------------------------- the guard
+def _args_key_diff(recorded_canon: str, now_canon: str) -> List[Dict[str, Any]]:
+    """Top-level keys whose canonical values differ (or exist on one side only).
+    Non-object args are compared as whole values. Values never appear — short hashes do."""
+    diffs: List[Dict[str, Any]] = []
+    if recorded_canon == now_canon:
+        return diffs
+    if recorded_canon == ABSENT or now_canon == ABSENT:
+        return [{"key": "<args>", "recorded": recorded_canon if recorded_canon == ABSENT else "present", "now": now_canon if now_canon == ABSENT else "present"}]
+    try:
+        a = json.loads(recorded_canon)
+        b = json.loads(now_canon)
+    except (ValueError, RecursionError):
+        return [{"key": "<args>", "recorded": "unparseable", "now": "unparseable"}]
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return [{"key": "<args>", "recorded": sha256_text(recorded_canon)[:12], "now": sha256_text(now_canon)[:12]}]
+    for k in sorted(set(a) | set(b)):
+        if k not in a:
+            diffs.append({"key": k, "recorded": ABSENT, "now": "present"})
+        elif k not in b:
+            diffs.append({"key": k, "recorded": "present", "now": ABSENT})
+        elif canonical_json(a[k]) != canonical_json(b[k]):
+            diffs.append({"key": k, "recorded": sha256_text(canonical_json(a[k]))[:12], "now": sha256_text(canonical_json(b[k]))[:12]})
+    return diffs
+
+
+def compare(recorded: Dict[str, Any], now: Dict[str, Any]) -> Dict[str, Any]:
+    """Structured comparison: ``script`` ∈ {same, differs, inconclusive}; ``args`` ∈ {same,
+    differ, inconclusive}; ``args_diff`` list; ``counts`` = {changed, only_recorded, only_now,
+    order, total} — the counts are the only thing that may reach the model. Equal canonical
+    forms with a different literal key order count as ONE difference (``order``): the script
+    sees the order, so a reordered call can re-key phases."""
+    r_s = (recorded.get("script") or {}).get("sha256")
+    n_s = (now.get("script") or {}).get("sha256")
+    if r_s is None or n_s is None:
+        script = "inconclusive"
+    else:
+        script = "same" if r_s == n_s else "differs"
+    ra = recorded.get("args") or {}
+    na = now.get("args") or {}
+    empty = {"changed": 0, "only_recorded": 0, "only_now": 0, "order": 0, "total": 0}
+    if not isinstance(ra.get("canonical"), str) or not isinstance(na.get("canonical"), str):
+        return {"script": script, "args": "inconclusive", "args_diff": [], "counts": empty}
+    diffs = _args_key_diff(ra["canonical"], na["canonical"])
+    if ra["canonical"] != na["canonical"] and not diffs:
+        # defensive: canonical forms differ but no per-key difference was named — still ONE change
+        diffs = [{"key": "<args>", "recorded": sha256_text(ra["canonical"])[:12], "now": sha256_text(na["canonical"])[:12]}]
+    order = 1 if (ra["canonical"] == na["canonical"] and ra.get("literal") != na.get("literal")) else 0
+    counts = {
+        "changed": sum(1 for d in diffs if d["recorded"] not in (ABSENT, "present") and d["now"] not in (ABSENT, "present")),
+        "only_recorded": sum(1 for d in diffs if d["now"] == ABSENT),
+        "only_now": sum(1 for d in diffs if d["recorded"] == ABSENT),
+        "order": order,
+        "total": len(diffs) + order,
+    }
+    return {"script": script, "args": "differ" if counts["total"] else "same", "args_diff": diffs, "counts": counts}
+
+
+def format_block_reason(run_id: str, comparison: Dict[str, Any], launch_id: str) -> str:
+    """Counts-only, no operator text. ``run_id`` MUST have passed ``is_run_id``."""
+    c = comparison["counts"]
+    parts = []
+    if c["changed"]:
+        parts.append("%d key(s) changed" % c["changed"])
+    if c["only_recorded"]:
+        parts.append("%d key(s) only in the recorded call" % c["only_recorded"])
+    if c["only_now"]:
+        parts.append("%d key(s) only in this call" % c["only_now"])
+    if c.get("order"):
+        parts.append("key order differs")
+    if comparison["script"] == "differs":
+        parts.append("script hash differs")
+    return (
+        "WORKFLOW-RESUME-MISMATCH: the recorded launch of %s differs from this call (%s). "
+        "Every phase whose prompt depends on what changed gets a new cache key and re-executes. "
+        "If this was NOT meant (inputs rebuilt from memory), use the recorded call. "
+        "Route in this session: run `ceo-launches.py relaunch %s` (.claude/scripts/ in a framework install, the plugin's scripts/ otherwise) and re-issue EXACTLY that call. "
+        "If it IS a deliberate change (for example args.resume or args.reverify to re-run chosen lanes), declare it: "
+        "re-issue this call once with a description that starts with 'CEO_WORKFLOW_RESUME_FORCE: <why>' "
+        "(or set CEO_WORKFLOW_RESUME_FORCE=1 in the harness process environment); it is recorded with its reason. "
+        "Details (which keys) are in manifest %s, never in this message."
+        % (run_id, "; ".join(parts) or "see manifest", run_id, launch_id)
+    )
+
+
+def _count_parts(comparison: Dict[str, Any]) -> str:
+    c = comparison["counts"]
+    parts = []
+    if c["changed"]:
+        parts.append("%d key(s) changed" % c["changed"])
+    if c["only_recorded"]:
+        parts.append("%d key(s) only in the recorded call" % c["only_recorded"])
+    if c["only_now"]:
+        parts.append("%d key(s) only in this call" % c["only_now"])
+    if c.get("order"):
+        parts.append("key order differs")
+    if comparison["script"] == "differs":
+        parts.append("script hash differs")
+    return "; ".join(parts) or "see manifest"
+
+
+def format_mismatch_advisory(run_id: str, comparison: Dict[str, Any], launch_id: str, weak_bind: bool,
+                             against: str) -> str:
+    """For an args mismatch that is NOT blocked (heuristic bind, or advisory mode). The call
+    PROCEEDS, so this never tells the reader to re-issue it (that would launch it twice)."""
+    if weak_bind:
+        why = ("the recorded launch %s was bound heuristically (no tool_use_id), and a heuristic bind never "
+               "sustains a block; `ceo-launches.py bind %s %s` makes future resumes enforceable" % (against, against, run_id))
+    else:
+        why = "the guard is in advisory mode (CEO_WORKFLOW_RESUME_GUARD=0)"
+    return (
+        "WORKFLOW-RESUME-ADVISORY: this resume of %s PROCEEDS although its inputs differ from the recorded launch (%s). "
+        "It is not blocked because %s. Phases whose prompt depends on the changed inputs will re-execute. "
+        "If that is not intended, stop the run; the recorded call is in manifest %s (`ceo-launches.py relaunch %s` prints it). "
+        "Do not re-issue this call." % (run_id, _count_parts(comparison), why, launch_id, run_id)
+    )
+
+
+def format_advisory(run_id: str, comparison: Dict[str, Any], launch_id: str, weak_bind: bool = False,
+                    against: Optional[str] = None) -> str:
+    """Script-only advisory. ``run_id`` MUST have passed ``is_run_id``; launch ids are generated here."""
+    if weak_bind:
+        tail = ("The recorded manifest %s was bound heuristically (no tool_use_id), and a heuristic bind never sustains a "
+                "block: `python3 .claude/scripts/ceo-launches.py bind %s %s` makes it enforceable." % (against or "?", against or "<launch_id>", run_id))
+    else:
+        tail = "Set CEO_WORKFLOW_SCRIPT_GUARD=enforce to block this case."
+    return (
+        "WORKFLOW-RESUME-ADVISORY: the script of %s differs from the recorded launch (hash); args are identical. "
+        "Only the phases whose prompt changed will re-execute. Recorded in manifest %s. %s" % (run_id, launch_id, tail)
+    )
+
+
+def notice(text: str) -> Dict[str, Any]:
+    """An allowed call with something to say: the MODEL reads ``additionalContext`` (so it can
+    act on the route), the USER sees ``systemMessage``. Blocks use ``decision``/``reason``."""
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}, "systemMessage": text}
+
+
+def _guard(manifest: Dict[str, Any], resume: str, d: Path, env: Dict[str, str]) -> Dict[str, Any]:
+    """Sets ``manifest["guard"]`` and returns the hook decision for a call carrying
+    ``resumeFromRunId``. Pure over (this call, the validated recorded manifest, env)."""
+    guard_mode = "advisory" if env.get("CEO_WORKFLOW_RESUME_GUARD") == "0" else "enforce"
+    script_guard = "enforce" if env.get("CEO_WORKFLOW_SCRIPT_GUARD") == "enforce" else "advisory"
+    if not is_run_id(resume):
+        manifest["guard"] = {"result": "resume_id_unrecognised", "diff": [], "counts": {}}
+        return {}
+    recorded = find_launch_for_run(d, resume)
+    if recorded is None:
+        manifest["guard"] = {"result": "no_manifest", "diff": [], "counts": {}}
+        return {}
+    problem = manifest_problem(recorded, d)
+    if problem is not None:
+        manifest["guard"] = {"result": "inconclusive", "integrity": problem, "diff": [], "counts": {}}
+        return {}
+    cmp = compare(recorded, manifest)
+    if cmp["args"] == "inconclusive":
+        manifest["guard"] = {"result": "inconclusive", "integrity": "args_uncanonicalized", "diff": [], "counts": cmp["counts"],
+                             "against": recorded["launch_id"]}
+        return {}
+    weak_bind = recorded["bind_method"] not in STRONG_BIND_METHODS
+    base = {"diff": cmp["args_diff"], "counts": cmp["counts"], "script": cmp["script"],
+            "against": recorded["launch_id"], "mode": guard_mode, "weak_bind": weak_bind}
+    args_differ = cmp["counts"]["total"] > 0
+    if not args_differ and cmp["script"] == "same":
+        manifest["guard"] = dict(base, result="match")
+        return {}
+    if not args_differ and cmp["script"] == "inconclusive":
+        manifest["guard"] = dict(base, result="inconclusive")
+        return {}
+    # A block needs ALL of: enforce mode, a STRONG bind (tool_use_id or manual — a heuristic
+    # bind never sustains a block, args or script alike), and either an args difference or a
+    # script difference under CEO_WORKFLOW_SCRIPT_GUARD=enforce.
+    would_block = guard_mode == "enforce" and not weak_bind and (args_differ or script_guard == "enforce")
+    if would_block:
+        # ONE override path for every block, carried by the call or the process — never by state.
+        source: Optional[str] = None
+        reason: Optional[str] = None
+        if env.get("CEO_WORKFLOW_RESUME_FORCE") == "1":
+            source, reason = "env", "CEO_WORKFLOW_RESUME_FORCE=1"
+        else:
+            declared = force_declaration(manifest.get("description"))
+            if declared is not None:
+                source, reason = "call", declared
+        if source is not None:
+            manifest["guard"] = dict(base, result="mismatch_forced", force_source=source, force_reason=reason)
+            where = "in this call's description" if source == "call" else "in the harness environment"
+            return notice("WORKFLOW-RESUME-FORCED: resuming %s over different inputs by an explicit override declared %s (recorded in manifest %s)." % (resume, where, manifest["launch_id"]))
+        manifest["guard"] = dict(base, result="mismatch_blocked" if args_differ else "mismatch_script_blocked")
+        return {"decision": "block", "reason": format_block_reason(resume, cmp, manifest["launch_id"])}
+    if args_differ:
+        manifest["guard"] = dict(base, result="mismatch_advisory_weak_bind" if weak_bind and guard_mode != "advisory" else "mismatch_advisory")
+        return notice(format_mismatch_advisory(resume, cmp, manifest["launch_id"], weak_bind and guard_mode != "advisory", recorded["launch_id"]))
+    manifest["guard"] = dict(base, result="mismatch_script_advisory")
+    return notice(format_advisory(resume, cmp, manifest["launch_id"], weak_bind=weak_bind, against=recorded["launch_id"]))
+
+
+def decide_pre(event: Dict[str, Any], d: Path, env: Optional[Dict[str, str]] = None, now: Optional[float] = None,
+               git_budget_s: float = GIT_BUDGET_S) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """PreToolUse: guard a resume, record the launch (manifest + snapshot + index line), then
+    enrich the code revision within budget. Returns (decision, manifest).
+
+    Totality: an exception INSIDE the guard is recorded as ``inconclusive`` (never a silent
+    allow without a record); a failure to PERSIST this call's record does not undo a decision
+    the guard already computed from valid evidence (breadcrumb in the manifest copy returned)."""
+    env = os.environ if env is None else env
+    decision: Dict[str, Any] = {}
+    try:
+        manifest, script_bytes = build_manifest(event, now=now)
+    except Exception as exc:  # noqa: BLE001 — the call is still recorded, inconclusive
+        manifest, script_bytes = fallback_manifest(event, type(exc).__name__, now=now), None
+    resume = manifest.get("resume_from_run_id") if manifest["guard"]["result"] == "none" else None
+    if resume:
+        try:
+            decision = _guard(manifest, resume, d, env)
+        except Exception as exc:  # noqa: BLE001 — recorded, never silent
+            manifest["guard"] = {"result": "inconclusive", "error": type(exc).__name__, "diff": [], "counts": {}}
+            decision = {}
+    try:
+        write_manifest(manifest, d, script_bytes)          # before anything slow
+    except Exception as exc:  # noqa: BLE001
+        manifest["write_error"] = type(exc).__name__
+        return decision, manifest
+    manifest = enrich_code_revision(manifest, d, budget_s=git_budget_s)
+    return decision, manifest
+
+
+def decide_post(event: Dict[str, Any], d: Path, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
+    """PostToolUse: bind the run id from the response — by tool_use_id, else by the single
+    unbound launch of the session. An unknown tool_use_id, or zero/several candidates, becomes an
+    ``orphan`` line; a response with no run id, or with ambiguous ids, records nothing."""
+    run_id = extract_run_id(event.get("tool_response"))
+    if run_id is None:
+        return None
+    session = event.get("session_id") if isinstance(event.get("session_id"), str) else None
+    tuid = event.get("tool_use_id") if isinstance(event.get("tool_use_id"), str) and event.get("tool_use_id") else None
+    persisted = extract_persisted_script_path(event.get("tool_response"))
+    if tuid:
+        m = find_launch_by_tool_use(d, tuid)
+        if m is None:
+            _append_index(d, {"kind": "orphan", "run_id": run_id, "session_id": session, "tool_use_id": tuid, "at": _now_iso(now), "reason": "tool_use_id_not_recorded"})
+            return None
+        return bind_run(d, m, run_id, "by_tool_use", now=now, persisted_script_path=persisted)
+    candidates = unbound_launches(d, session) if session else []
+    if len(candidates) == 1:
+        m = load_manifest(d, candidates[0])
+        if m is not None:
+            return bind_run(d, m, run_id, "by_single_unbound", now=now, persisted_script_path=persisted)
+    _append_index(d, {"kind": "orphan", "run_id": run_id, "session_id": session, "tool_use_id": None, "at": _now_iso(now),
+                      "reason": "no_tool_use_id_and_%d_unbound" % len(candidates)})
+    return None

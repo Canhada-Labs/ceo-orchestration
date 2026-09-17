@@ -286,6 +286,10 @@ def dump_manifest_hooks(hooks: dict) -> str:
 #: from the template alone; this pairs a hook with the file it exists to guard.
 GUARDED_CLIS = (
     ("check_scratchpad_access.py", ".claude/scripts/scratchpad.py", "scripts"),
+    # PLAN-190 W1: the Workflow resume guard names `ceo-launches.py relaunch` as the
+    # recovery route in every block reason; a plugin that registered the guard without
+    # it would point the operator at a CLI it never shipped.
+    ("check_workflow_launch.py", ".claude/scripts/ceo-launches.py", "scripts"),
 )
 
 

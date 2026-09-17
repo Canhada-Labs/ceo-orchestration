@@ -9,11 +9,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> v1.4.0: 166 skills, 27 slash commands, 198 ADRs, 71 `_lib` modules) are
+> main after v1.4.0: 166 skills, 27 slash commands, 198 ADRs, 72 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
 
 ---
+
+## [Unreleased]
+
+### Added
+- **Workflow launch ledger + resume guard** (PLAN-190 W1). A new hook,
+  `check_workflow_launch.py`, registered on PreToolUse and PostToolUse for the
+  `Workflow` tool in the dogfood settings and in the base template (the `user`
+  profile keeps it), records every launch BEFORE dispatch — script sha256 plus a
+  snapshot of the script bytes, the literal `args` (absent ≠ null), the
+  `resumeFromRunId`, the code revision of the working directory — and binds the
+  run id the runner returns. A resume over DIFFERENT args is blocked with a
+  counts-only reason (the detail stays in the manifest); a resume over a
+  different script with the same args is advisory by default
+  (`CEO_WORKFLOW_SCRIPT_GUARD=enforce` to block). A block needs a strong bind
+  (by `tool_use_id` or manual): a heuristic bind never sustains one, args or
+  script alike; a blocked attempt is never a candidate for heuristic binding.
+  The recorded manifest is validated before it is evidence (args
+  canonical/hash consistency, script hash against its snapshot bytes, id
+  shapes): an inconsistent record is inconclusive for the guard and refused
+  as "exact" by `relaunch`. ONE override path for every block, carried by the
+  call or the process and never by stored state: a `description` starting
+  with `CEO_WORKFLOW_RESUME_FORCE: <why>` on the call itself, or
+  `CEO_WORKFLOW_RESUME_FORCE=1` in the harness environment — recorded as
+  `mismatch_forced` with its source and reason, announced. A `scriptPath`
+  is read only as a regular file of at most 8 MiB (FIFO, device, larger
+  file or NUL byte ⇒ recorded unreadable, args still compared); a torn
+  index line never swallows the next record; the CLI finds the hook's
+  ledger from any subdirectory of the project; the plugin build ships the
+  recovery CLI with the guard. `args` are recorded in their original key
+  order too (`relaunch` prints that order; a reordered resume counts as a
+  difference); notices for allowed calls reach the model as
+  `additionalContext`; the block reason names the deliberate-change route
+  (`args.resume` style resumes declare themselves); the run id is taken from
+  the harness `Run ID:` label, never guessed between ids; a record whose
+  construction or write fails is still inconclusive-recorded or
+  breadcrumbed; `relaunch --out` never overwrites.
+  `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mode, ledger kept),
+  `CEO_WORKFLOW_LEDGER=0` (off). Fail-open on infrastructure. CLI
+  `ceo-launches.py` (`list · show · relaunch · check · bind · orphans ·
+  report`) and operator doc `docs/workflow-recovery.md`. Inventory:
+  60 hook scripts, 49 wired, 52 event registrations, 72 `_lib` modules.
 
 ## [1.4.0] - 2026-09-07
 

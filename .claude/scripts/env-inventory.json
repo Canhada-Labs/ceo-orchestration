@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "_comment": "Canonical inventory of CLAUDE_*/ANTHROPIC_*/CEO_* names referenced by framework code (PLAN-135 W5 O8 — the S218 footgun class). Token-level superset of strictly-consumed vars; see env-inventory-check.py docstring. Regenerate with --generate after any REVIEWED env-surface change.",
   "generated_by": "env-inventory-check.py --generate",
-  "generated_at": "2026-08-20",
+  "generated_at": "2026-09-17",
   "scan_roots": [
     ".claude/hooks",
     ".claude/scripts",
@@ -95,7 +95,7 @@
         ".claude/hooks/_lib/audit_emit.py",
         ".claude/hooks/check_adversary.py"
       ],
-      "sites": 6
+      "sites": 7
     },
     "CEO_ADVERSARY_MAX_PER_SESSION": {
       "evidence": [
@@ -187,13 +187,19 @@
       ],
       "sites": 2
     },
+    "CEO_AUDIT_FAMILY_M4_REQUIRED": {
+      "evidence": [
+        ".claude/scripts/derive-audit-family.py"
+      ],
+      "sites": 1
+    },
     "CEO_AUDIT_HMAC_DISABLE": {
       "evidence": [
+        ".claude/hooks/SessionEnd.py",
         ".claude/hooks/_lib/audit_hmac.py",
-        ".claude/hooks/_lib/env_persist_allowlist.py",
-        ".claude/hooks/_lib/test_isolation.py"
+        ".claude/hooks/_lib/env_persist_allowlist.py"
       ],
-      "sites": 5
+      "sites": 6
     },
     "CEO_AUDIT_KEY_PATH": {
       "evidence": [
@@ -221,11 +227,11 @@
     },
     "CEO_AUDIT_LOG_DIR": {
       "evidence": [
+        ".claude/hooks/SessionEnd.py",
         ".claude/hooks/_lib/advisory_dampen.py",
-        ".claude/hooks/_lib/audit_emit.py",
-        ".claude/hooks/_lib/audit_hmac.py"
+        ".claude/hooks/_lib/audit_emit.py"
       ],
-      "sites": 49
+      "sites": 55
     },
     "CEO_AUDIT_LOG_ERR": {
       "evidence": [
@@ -253,11 +259,11 @@
     },
     "CEO_AUDIT_LOG_PATH": {
       "evidence": [
+        ".claude/hooks/SessionEnd.py",
         ".claude/hooks/_lib/audit_emit.py",
-        ".claude/hooks/_lib/audit_hmac.py",
-        ".claude/hooks/_lib/federation/handlers/audit_event_push.py"
+        ".claude/hooks/_lib/audit_hmac.py"
       ],
-      "sites": 40
+      "sites": 48
     },
     "CEO_AUDIT_LOG_ROTATE_BYTES": {
       "evidence": [
@@ -311,7 +317,7 @@
         ".claude/hooks/turbo_sessionstart.py",
         ".claude/scripts/env-inventory.json"
       ],
-      "sites": 5
+      "sites": 6
     },
     "CEO_AUTO_COMPACT_COOLDOWN_TURNS": {
       "evidence": [
@@ -567,16 +573,18 @@
     "CEO_CEREMONY_LINT_UNLOCK": {
       "evidence": [
         ".claude/hooks/_lib/audit_emit.py",
-        ".claude/scripts/check-ceremony-script.py"
+        ".claude/scripts/check-ceremony-script.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_CEREMONY_LINT_UNLOCK_REASON": {
       "evidence": [
         ".claude/hooks/_lib/audit_emit.py",
-        ".claude/scripts/check-ceremony-script.py"
+        ".claude/scripts/check-ceremony-script.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_CHAOS_ALLOWED": {
       "evidence": [
@@ -708,7 +716,7 @@
         ".claude/hooks/turbo_profile.py",
         ".claude/scripts/env-inventory.json"
       ],
-      "sites": 6
+      "sites": 7
     },
     "CEO_CODEX_USER_REVIEW_AUTO": {
       "evidence": [
@@ -716,14 +724,15 @@
         ".claude/hooks/review_loop.py",
         ".claude/hooks/turbo_profile.py"
       ],
-      "sites": 7
+      "sites": 8
     },
     "CEO_CODEX_USER_REVIEW_BLOCK": {
       "evidence": [
         ".claude/hooks/codex_review_user_code.py",
-        ".claude/scripts/env-inventory.json"
+        ".claude/scripts/env-inventory.json",
+        "templates/settings/settings.user.json"
       ],
-      "sites": 2
+      "sites": 3
     },
     "CEO_COMPACTION_CONTINUITY": {
       "evidence": [
@@ -731,7 +740,7 @@
         ".claude/hooks/check_postcompact_reinject.py",
         ".claude/hooks/check_precompact_continuity.py"
       ],
-      "sites": 7
+      "sites": 6
     },
     "CEO_COMPACTION_PROBE_CANARY": {
       "evidence": [
@@ -822,7 +831,7 @@
         ".claude/scripts/env-inventory.json",
         ".claude/settings.json"
       ],
-      "sites": 5
+      "sites": 6
     },
     "CEO_CONFIRM_SKIP": {
       "evidence": [
@@ -837,7 +846,7 @@
         ".claude/hooks/check_postcompact_reinject.py",
         ".claude/scripts/env-inventory.json"
       ],
-      "sites": 6
+      "sites": 5
     },
     "CEO_CONTEXT_PROGRESS_FLOOR_TOKENS": {
       "evidence": [
@@ -875,6 +884,14 @@
         ".claude/scripts/env-inventory.json"
       ],
       "sites": 2
+    },
+    "CEO_COST_TRANSCRIPTS_DIR": {
+      "evidence": [
+        ".claude/scripts/budget-summary.py",
+        ".claude/scripts/ceo-cost-transcripts.py",
+        ".claude/scripts/ceo-cost.py"
+      ],
+      "sites": 3
     },
     "CEO_COUNTRY": {
       "evidence": [
@@ -1461,6 +1478,26 @@
         ".claude/scripts/distill-lessons.py"
       ],
       "sites": 5
+    },
+    "CEO_LEDGER_CHECKPOINT": {
+      "evidence": [
+        ".claude/hooks/check_ledger_checkpoint.py",
+        ".claude/settings.json",
+        "templates/settings/settings.base.json"
+      ],
+      "sites": 3
+    },
+    "CEO_LEDGER_CHECKPOINT_REQUIRED": {
+      "evidence": [
+        ".claude/hooks/check_ledger_checkpoint.py"
+      ],
+      "sites": 1
+    },
+    "CEO_LEDGER_WRITE_GATE_ENFORCE": {
+      "evidence": [
+        ".claude/hooks/_lib/ledger_provenance.py"
+      ],
+      "sites": 1
     },
     "CEO_LEGAL_ID": {
       "evidence": [
@@ -2202,7 +2239,7 @@
         ".claude/scripts/env-inventory.json",
         ".claude/settings.json"
       ],
-      "sites": 4
+      "sites": 5
     },
     "CEO_PERSONA": {
       "evidence": [
@@ -2577,6 +2614,12 @@
       ],
       "sites": 2
     },
+    "CEO_REPO": {
+      "evidence": [
+        ".claude/scripts/check_contamination.py"
+      ],
+      "sites": 1
+    },
     "CEO_REQUIRE_REPO_PROFILE_FIXTURES": {
       "evidence": [
         ".claude/scripts/env-inventory.json",
@@ -2598,7 +2641,7 @@
         ".claude/hooks/review_loop.py",
         ".claude/scripts/env-inventory.json"
       ],
-      "sites": 5
+      "sites": 6
     },
     "CEO_REVIEW_LOOP_STATE": {
       "evidence": [
@@ -2694,6 +2737,12 @@
         ".claude/scripts/env-inventory.json"
       ],
       "sites": 5
+    },
+    "CEO_SESSION_MEMORY_DELTA": {
+      "evidence": [
+        ".claude/hooks/SessionEnd.py"
+      ],
+      "sites": 1
     },
     "CEO_SESSION_ROOTS_ALLOW": {
       "evidence": [
@@ -2791,7 +2840,7 @@
         ".claude/scripts/env-inventory.json",
         ".claude/scripts/skill-patch-apply.py"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CEO_SKILL_READ_STATE_DIR": {
       "evidence": [
@@ -2870,7 +2919,7 @@
         ".claude/hooks/_lib/adapters/live/claude.py",
         ".claude/hooks/_lib/adapters/live/gemini.py"
       ],
-      "sites": 52
+      "sites": 54
     },
     "CEO_SOURCE_FILE_COUNT": {
       "evidence": [
@@ -2903,11 +2952,11 @@
     },
     "CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED": {
       "evidence": [
+        ".claude/hooks/_lib/ledger_provenance.py",
         ".claude/hooks/check_agent_spawn.py",
-        ".claude/scripts/env-inventory.json",
-        ".claude/scripts/inject-agent-context.sh"
+        ".claude/hooks/check_ledger_checkpoint.py"
       ],
-      "sites": 3
+      "sites": 6
     },
     "CEO_SPAWN_OVERLAP_GUARD": {
       "evidence": [
@@ -3282,7 +3331,7 @@
         ".claude/hooks/check_output_secrets.py",
         ".claude/scripts/env-inventory.json"
       ],
-      "sites": 6
+      "sites": 7
     },
     "CEO_TOOL_LIFECYCLE_ORPHAN_TIMEOUT_S": {
       "evidence": [
@@ -3373,7 +3422,7 @@
         ".claude/hooks/accel_dispatch.py",
         ".claude/hooks/check_setup_verification.py"
       ],
-      "sites": 9
+      "sites": 10
     },
     "CEO_UI_LIBRARY": {
       "evidence": [
@@ -3423,7 +3472,7 @@
         ".claude/hooks/verify_after_edit.py",
         ".claude/scripts/env-inventory.json"
       ],
-      "sites": 6
+      "sites": 7
     },
     "CEO_VERIFY_AFTER_EDIT_BLOCK": {
       "evidence": [
@@ -3455,6 +3504,36 @@
         ".claude/settings.json"
       ],
       "sites": 5
+    },
+    "CEO_WORKFLOW_LEDGER": {
+      "evidence": [
+        ".claude/hooks/_lib/launch_ledger.py",
+        ".claude/hooks/check_workflow_launch.py",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_WORKFLOW_RESUME_FORCE": {
+      "evidence": [
+        ".claude/hooks/_lib/launch_ledger.py",
+        ".claude/hooks/check_workflow_launch.py",
+        ".claude/settings.json"
+      ],
+      "sites": 5
+    },
+    "CEO_WORKFLOW_RESUME_GUARD": {
+      "evidence": [
+        ".claude/hooks/_lib/launch_ledger.py",
+        ".claude/hooks/check_workflow_launch.py"
+      ],
+      "sites": 2
+    },
+    "CEO_WORKFLOW_SCRIPT_GUARD": {
+      "evidence": [
+        ".claude/hooks/_lib/launch_ledger.py",
+        ".claude/hooks/check_workflow_launch.py"
+      ],
+      "sites": 2
     },
     "CEO_WS3_APPLY_OK": {
       "evidence": [
@@ -3497,7 +3576,7 @@
         ".claude/settings.json",
         "templates/settings/settings.base.json"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CLAUDE_CALL_INSERT": {
       "evidence": [
@@ -3533,7 +3612,7 @@
         ".claude/hooks/turbo_profile.py",
         ".claude/scripts/env-inventory-check.py"
       ],
-      "sites": 10
+      "sites": 11
     },
     "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": {
       "evidence": [
@@ -3541,7 +3620,7 @@
         ".claude/settings.json",
         "templates/settings/settings.base.json"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CLAUDE_CONFIG_DIR": {
       "evidence": [
@@ -3656,15 +3735,15 @@
         ".claude/hooks/SessionStart.py",
         ".claude/hooks/Stop.py"
       ],
-      "sites": 131
+      "sites": 138
     },
     "CLAUDE_PROJECT_DIR_NATIVE": {
       "evidence": [
-        ".claude/hooks/_lib/runtime_paths.py",
-        ".claude/hooks/_lib/spool_writer.py",
-        ".claude/scripts/derive-audit-family.py"
+        ".claude/hooks/_lib/audit_hmac.py",
+        ".claude/hooks/_lib/injection_salt.py",
+        ".claude/hooks/_lib/runtime_paths.py"
       ],
-      "sites": 3
+      "sites": 10
     },
     "CLAUDE_PY": {
       "evidence": [
@@ -3699,7 +3778,7 @@
         ".claude/hooks/SessionStart.py",
         ".claude/hooks/Stop.py"
       ],
-      "sites": 32
+      "sites": 33
     },
     "CLAUDE_SIZE": {
       "evidence": [

@@ -392,8 +392,12 @@ class FrozenCopyFailsItsOwnClaim(TestEnvContext):
     #: Declared with its source (S330 census, hook-classification-S330.md §0
     #: and §1.1: 26 base-only basenames = 10 claimed + 16 never received, plus
     #: the second check_output_secrets registration). Updated CONSCIOUSLY, and
-    #: never relaxed.
-    EXPECTED_MISSING = 17
+    #: never relaxed. PLAN-190 W1 (Owner-signed ceremony, 2026-09): +2 — the
+    #: Workflow launch ledger + resume guard registers PreToolUse and PostToolUse
+    #: in the base template, is ruled INTO the user profile (it protects the
+    #: operator; route in ``_derivation.blocking_inclusions``) and did not exist
+    #: when the copy was frozen.
+    EXPECTED_MISSING = 19
 
     def setUp(self) -> None:
         super().setUp()
@@ -500,6 +504,11 @@ class FrozenCopyFailsItsOwnClaim(TestEnvContext):
         ("Stop", "codex_review_user_code.py"),
         ("Stop", "review_loop.py"),
         ("SubagentStart", "check_subagent_start.py"),
+        # PLAN-190 W1 (Owner-signed ceremony, 2026-09): the Workflow launch ledger
+        # + resume guard, ruled IN — it protects the operator from resuming over
+        # changed inputs; its route is in _derivation.blocking_inclusions.
+        ("PreToolUse", "check_workflow_launch.py"),
+        ("PostToolUse", "check_workflow_launch.py"),
     )
 
     def test_the_shipped_roster_loses_nothing_the_frozen_copy_had(self) -> None:

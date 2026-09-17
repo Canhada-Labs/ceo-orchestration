@@ -50,14 +50,14 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
 | Componente | Contagem | Notas |
 |---|---|---|
 | Checklists de skills | **166** | 42 core + 8 frontend + 116 de domínio |
-| Scripts de hook (em disco) | **59** | entrypoints Python em `.claude/hooks/` |
-| Hooks ligados em `settings.json` | **48** | scripts distintos, 50 registros de evento |
-| Módulos de biblioteca compartilhada | **71** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
+| Scripts de hook (em disco) | **60** | entrypoints Python em `.claude/hooks/` |
+| Hooks ligados em `settings.json` | **49** | scripts distintos, 52 registros de evento |
+| Módulos de biblioteca compartilhada | **72** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
 | Slash commands | **27** | em `.claude/commands/` |
 | Architecture decision records | **198** | em `.claude/adr/` |
 | Testes | **~15.400 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
 
-A diferença entre **59 em disco** e **48 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
+A diferença entre **60 em disco** e **49 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
 
 **Dependências de runtime: nenhuma.** Hooks e scripts são Python ≥ 3.9, **apenas biblioteca padrão** — zero pacotes de terceiros em runtime. Veja [`SBOM.md`](SBOM.md). (Desenvolvimento e CI usam ferramentas de teste de terceiros, como o pytest; o runtime instalado não usa.)
 
