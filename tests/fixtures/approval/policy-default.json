@@ -1,0 +1,8 @@
+{
+  "schema": "ceo.approval-policy/v1",
+  "score": {"min": 7, "max": 10},
+  "severities": {"enum": ["P0", "P1", "P2"], "blocking": ["P0"], "max_open": {"P1": 0}},
+  "require_reviewed_equals_final": true,
+  "require_gate_green": true,
+  "require_review_ran": true
+}

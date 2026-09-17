@@ -1,0 +1,15 @@
+{
+  "schema": "ceo.approval-evidence/v1",
+  "final_rev": "0123456789abcdef0123456789abcdef01234567",
+  "review": {
+    "ran": true,
+    "reviewed_rev": "0123456789abcdef0123456789abcdef01234567",
+    "score": 8,
+    "findings": [
+      {"severity": "P2", "where": "src/example.py:12", "text": "nit: naming"}
+    ]
+  },
+  "gate": [
+    {"cmd": "python3 -m pytest tests/unit -q", "rc": 0, "failed": 0, "passed": 42}
+  ]
+}
