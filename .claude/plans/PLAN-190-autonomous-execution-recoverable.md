@@ -89,18 +89,28 @@ isolado.
   `docs/workflow-recovery.md` + script `ceo-launches.py report`.
 
 ### W1 — Lançamentos e retomadas recuperáveis  [P0]  (pacote canônico: cerimônia)
-**Estado (S354, 17/09):** v5 construída na sombra `p190-w1` e provada (82 testes: 30 e2e + 18 unit +
-14 paridade + 20 mapa; todos os gates de corpus verdes); debate r1 = 3× ADJUST → consenso PROCEED
-(design-coherent); rail Codex r1 = NO-GO com 7 achados, r2 = NO-GO com 3 (vínculo heurístico ainda
-sustentava bloqueio de script; `force` não liberava bloqueio só de script; tentativa bloqueada
-contaminava a seleção de pendentes) e r3 = NO-GO com 2 (token com instante não finito liberava;
-token ilegível ficava sem registro) — 2.ª ocorrência da classe «token de override», curada por UM
-validador de esquema (`force_token_problem`) na v5; o ensaio do Owner pegou a contagem de
-registrações por `grep -c` no script de cerimônia (o template `user` nomeia o hook também em
-`blocking_inclusions`), trocada por contagem das entradas Pre/Post; rail r4 sobre os bytes finais
-em `PLAN-190/w1/rail-round-4.md`;
-materiais landados em `d2886b2f`; sentinel-draft `w1-approved.md` + `OWNER-190-W1-SIGN.sh` (ensaiado)
-prontos — **falta só a assinatura do Owner** (`! bash .claude/plans/PLAN-190/w1/OWNER-190-W1-SIGN.sh`).
+**Estado (S354, 17/09):** v6.3 construída na sombra `p190-w1-v6` e provada; patch de 24 paths em
+`PLAN-190/w1/p190-w1.patch`. Histórico de revisão: debate r1 = 3× ADJUST → PROCEED (design-coherent);
+rail Codex r1 NO-GO 7, r2 NO-GO 3, r3 NO-GO 2, r4 NO-GO 4 — a terceira rodada seguida na classe
+«estado em disco lido de volta para dentro da decisão» (token de override: rota, parse, corrida,
+exceções; manifesto sem validação; snapshot sem conferência de hash). Pela regra de teto por classe a
+decisão foi ao Owner, que escolheu trocar a arquitetura (registro em OQ-6). A v6 remove o token do
+disco (override declarado na própria chamada ou no ambiente), valida o manifesto lido de volta
+(`manifest_problem`), torna o guard total (exceção = inconclusivo registrado; falha de escrita não
+desfaz bloqueio) e serializa em ASCII. Uma revisão adversarial multi-lente (workflow `wf_bf51d949-ac2`:
+5 lentes Opus, 2 refutadores por achado, crítico de completude) sobre a v5 achou, entre os que
+sobrevivem à v6: um P0 de CI vermelho pós-land (a lista ratificada do teste do template `user` não
+incluía o hook — a bateria da cerimônia não rodava as suítes do CI), leitura de `scriptPath` sem
+limite de tipo e tamanho, índice sem reparo de fronteira, advisory que mandava re-emitir uma chamada
+que prossegue, CLI que não achava o ledger a partir de subdiretório, plugin que registraria o guard
+sem o CLI de recuperação, texto do sentinel e da mensagem de commit maiores que a entrega, e oito
+lacunas de teste. Todos curados na v6.1–v6.3 com regressões; prova por mutação com 31 mutantes (um
+equivalente declarado). O script de cerimônia foi reordenado (nada assinado antes da bateria; sentinel
+restaurado e `.asc` removida em qualquer falha) e a bateria passou a rodar as suítes do `pytest.ini`
+como o CI, comparando o conjunto exato de falhas contra `suite-baseline.txt` medido no main por
+`measure-suite-baseline.sh`, com uma nova tentativa isolada para instabilidade conhecida. Rail r5 sobre
+os bytes finais em `PLAN-190/w1/rail-round-5.md`. **Falta a assinatura do Owner**
+(`! bash .claude/plans/PLAN-190/w1/OWNER-190-W1-SIGN.sh`).
 Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_workflow_launch.py` (C),
 `.claude/settings.json` (C, matcher `Workflow` em PreToolUse e PostToolUse), `templates/settings/settings.base.json`
 (C, mesma registração — o `user` deriva por subtração), `.claude/scripts/ceo-launches.py` (livre),
@@ -118,14 +128,16 @@ Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_w
   com `resumeFromRunId`, carrega o manifesto vinculado a esse run e compara `sha256` do script e
   `args` literal. `args` diferentes ⇒ **bloqueia** com motivo SÓ de contagens (a lista de chaves fica
   no manifesto — canal instruction-adjacent fechado por remoção); script diferente com `args` iguais
-  ⇒ advisory (`systemMessage`; `CEO_WORKFLOW_SCRIPT_GUARD=enforce` bloqueia); hash indisponível ⇒
-  inconclusivo (nunca bloqueia, nunca é `match`); manifesto vinculado por heurística ⇒ advisory, de
+  ⇒ advisory (`systemMessage`; `CEO_WORKFLOW_SCRIPT_GUARD=enforce` bloqueia); com `args` iguais, hash
+  indisponível ⇒ inconclusivo (nunca bloqueia, nunca é `match`); manifesto lido de volta que falha na
+  validação ⇒ inconclusivo; exceção no guard ⇒ inconclusivo registrado; manifesto vinculado por heurística ⇒ advisory, de
   args OU de script (vínculo heurístico nunca sustenta bloqueio; a advisory nomeia a rota `bind`);
   tentativa bloqueada fica no índice (`blocked: true`) e nunca é candidata ao vínculo por único pendente.
-  Rotas: `ceo-launches.py relaunch <run>` (chamada exata a partir do SNAPSHOT dos bytes do script),
-  `ceo-launches.py force <run> --reason …` (token one-shot em sessão, gasto SÓ ao liberar um bloqueio
-  — de args ou de script —, validade 30 min, registrado e anunciado; `CEO_WORKFLOW_RESUME_FORCE=1`
-  libera pela MESMA rota, registrado como `mismatch_forced`),
+  Rotas: `ceo-launches.py relaunch <run>` (chamada exata a partir do SNAPSHOT dos bytes do script,
+  recusada com rc 7 se o registro falhar na validação); override numa rota só e NUNCA em estado no
+  disco (OQ-6): `description` da própria chamada com o prefixo exato `CEO_WORKFLOW_RESUME_FORCE:` e
+  motivo, ou `CEO_WORKFLOW_RESUME_FORCE=1` no ambiente — registrado como `mismatch_forced` com origem e
+  motivo, anunciado;
   `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mantendo o ledger) /
   `CEO_WORKFLOW_LEDGER=0` no ambiente do harness. Sem manifesto vinculado ⇒ registra e segue. Falha de
   infraestrutura ⇒ `{}` (fail-open; não é matcher de segurança).
@@ -146,9 +158,10 @@ Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_w
   sem cerimônia gravada não recebe hooks: precondição declarada em `docs/workflow-recovery.md`, as duas
   pernas testadas em W6); o perfil `user` deriva por subtração, NÃO exclui este hook e o nomeia em
   `_derivation.blocking_inclusions` com a rota; smoke-install verifica presença + registração.
-- **Paths reais do patch: 22** (5 canônicos: lib, hook, `settings.json`, `settings.base.json`,
-  `settings.user.json`; CLI; 2 testes novos + pinos do teste de paridade; doc do rito; 10 docs com
-  contagens; mapa comando→skill→hook e inventário de env regenerados; CHANGELOG). Os bumps são
+- **Paths reais do patch: 24** (5 canônicos: lib, hook, `settings.json`, `settings.base.json`,
+  `settings.user.json`; CLI; 2 testes novos + pinos do teste de paridade + lista ratificada do teste do
+  template `user`; `scripts/build-plugin.py`; doc do rito; 10 docs com contagens; mapa
+  comando→skill→hook e inventário de env regenerados; CHANGELOG). Os bumps são
   mecânicos (derivadores em `PLAN-190/w1/`), mas a lista é a real.
 - **Limitação declarada**: o guard vê a CHAMADA da tool `Workflow`; não vê `agent()` interno nem consegue
   impedir que o harness recalcule a chave de cache — ele impede o OPERADOR de retomar sobre script/args
@@ -256,6 +269,15 @@ repo público.
   visibilidade, não prevenção — o guard é instrumento de recuperação; a razão
   `forced/(forced+blocked)` do `report` é a métrica da regra de parada. Registrar evento de auditoria
   para bloqueio/override é `PLAN-190-FOLLOWUP-audit-actions` (cerimônia do dono do audit).
+- OQ-6 — DECIDIDA pelo Owner (2026-09-17, após o rail r4, escolha estruturada entre três opções).
+  Pergunta: «A rodada 4 do Codex deu NO-GO com 4 achados P2 (nenhum grave), terceira rodada seguida na
+  mesma classe: estado gravado em disco que volta para a decisão do guard. Como seguimos?» Opção
+  escolhida, verbatim: «Trocar a arquitetura (Recomendado)» — «Tiro o token de override do disco: o
+  override passa a ser declarado na própria chamada (campo description) ou no ambiente. Some a corrida
+  e a leitura de token por construção. Qualquer exceção dentro do guard vira resultado inconclusivo
+  registrado. Um validador único confere manifesto lido de volta. O relaunch confere o hash do
+  snapshot.» Opções não escolhidas: assinar a v5 com os 4 achados como residual; tirar o override em
+  sessão sem substituto.
 
 ## How to continue
 1. Debate r1 (`/debate start PLAN-190 "W1 ledger de lançamento + guard de retomada"`) — L3.

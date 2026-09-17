@@ -1,8 +1,9 @@
 # w1-approved — sentinel da W1 do PLAN-190 (DRAFT — assinar como w1-approved.md)
 
 > Assinatura em um passo: `! bash .claude/plans/PLAN-190/w1/OWNER-190-W1-SIGN.sh`
-> (preenche Anchor-SHA, Patch-sha256 e Data, assina, aplica o patch, roda a bateria, stageia o
-> conjunto EXATO e commita; `--dry-run` ensaia sem assinar nem commitar). Push é decisão sua.
+> (aplica o patch, roda a bateria com as suítes do CI, preenche Anchor-SHA, Patch-sha256 e Data,
+> assina, stageia o conjunto EXATO e commita; `--dry-run` ensaia sem assinar nem commitar). Push é
+> decisão sua.
 
 Plan: PLAN-190
 Wave: W1 — ledger de lançamento de Workflow + guard de retomada
@@ -19,27 +20,46 @@ antes do despacho: identificação da execução e da fase; versão/hash do scri
 preservando inclusive campos ausentes; opções efetivas relevantes; revisões de código/spec […]. Não
 reconstruir argumentos de memória.»
 
-O que esta wave entrega, e nada além: um hook na tool `Workflow` que grava o manifesto do lançamento
-ANTES do despacho (sha256 + snapshot dos bytes do script, `args` literal com ausente ≠ null e sem
-truncamento, `resumeFromRunId`; a revisão git do `cwd` entra DEPOIS, com orçamento de 1,2 s) e
-vincula o run id devolvido (por `tool_use_id`, senão só quando há um único lançamento pendente na
-sessão — uma tentativa que o guard bloqueou nunca é candidata; o resto vira `orphan`); um guard que
-BLOQUEIA a retomada de um run sobre `args` diferentes do manifesto vinculado, com motivo só de
-contagens (a lista de chaves fica no manifesto), SÓ sobre vínculo forte (`tool_use_id` ou manual —
-vínculo heurístico nunca sustenta bloqueio, de args ou de script), trata script diferente como
-advisory por padrão e hash indisponível como inconclusivo; as rotas: `ceo-launches.py relaunch <run>`
-imprime a chamada exata a partir do snapshot, `ceo-launches.py force <run> --reason` libera UMA vez
-(token gasto só ao liberar um bloqueio, de args ou de script; validado por UM esquema — run id igual, motivo não vazio, instante finito, não futuro, até 30 min —; token inválido é removido, registrado e não libera nada) com o motivo
-registrado e anunciado, `CEO_WORKFLOW_RESUME_FORCE=1` (mesma rota, registrado como `mismatch_forced`) /
-`CEO_WORKFLOW_RESUME_GUARD=0` / `CEO_WORKFLOW_SCRIPT_GUARD=enforce` / `CEO_WORKFLOW_LEDGER=0` no
-ambiente do harness; a CLI de recuperação; testes; o documento do rito; as registrações no settings do
-framework e no template base entregue aos consumidores (o `user` deriva por subtração, NÃO exclui este
-hook e o nomeia em `blocking_inclusions` com a rota); os inventários derivados (mapa comando→skill→hook,
-inventário de variáveis de ambiente, pinos do teste de paridade 52/49) e os bumps de contagem que o
-`verify-counts.sh` exige (hooks 59→60, ligados 48→49, registrações 50→52, `_lib` 71→72). Debate r1
-(3 críticos, ADJUST ×3, consenso PROCEED como design-coherent) e rail Codex (r1 NO-GO com 7 achados e
-r2 NO-GO com 3 e r3 NO-GO com 2, todos curados com regressões — a classe do token de override curada por UM validador de esquema na v5; r4 sobre os bytes finais) registrados em
-`PLAN-190/debate/round-1/` e `PLAN-190/w1/`.
+Decisão do Owner após o rail r4 (17/09/2026, escolha estruturada): «Trocar a arquitetura
+(Recomendado)» — o override deixa de ser estado em disco e passa a ser declarado na própria chamada
+ou no ambiente; exceção no guard vira inconclusivo registrado; um validador único para o manifesto
+lido de volta; o `relaunch` confere o hash do snapshot.
+
+O que esta wave entrega, e nada além: um hook na tool `Workflow` que, no PreToolUse, decide a retomada
+a partir desta chamada e do manifesto vinculado e grava o manifesto da chamada (sha256 + snapshot dos
+bytes do script — um `scriptPath` só é lido se for arquivo regular de até 8 MiB —, `args` literal com
+ausente ≠ null e sem truncamento, `resumeFromRunId`; a revisão git do `cwd` entra DEPOIS, com orçamento
+de 1,2 s) e, no PostToolUse, vincula o run id devolvido (por `tool_use_id`; sem ele, só quando há um
+único lançamento pendente e não bloqueado na mesma sessão; o resto vira `orphan`). O guard BLOQUEIA a
+retomada de um run sobre `args` diferentes do manifesto vinculado por `tool_use_id` ou manual, com
+motivo só de contagens (as chaves ficam no manifesto); o manifesto lido de volta é VALIDADO antes de
+virar evidência (`manifest_problem`: esquema, formas de ids, consistência entre `present`/`canonical`/
+`sha256` dos args, hash do script contra os bytes do snapshot) e um registro inconsistente é
+inconclusivo; vínculo heurístico nunca sustenta bloqueio, de args ou de script; script diferente com
+`args` iguais é advisory (`CEO_WORKFLOW_SCRIPT_GUARD=enforce` bloqueia); com `args` iguais, hash de
+script indisponível é inconclusivo; uma exceção dentro do guard é inconclusivo registrado e o
+manifesto da chamada ainda é gravado; falha ao gravar não desfaz um bloqueio já decidido. Override
+numa rota só, carregada pela chamada ou pelo processo e NUNCA por estado em disco: `description` com o
+prefixo exato `CEO_WORKFLOW_RESUME_FORCE:` seguido de motivo não vazio libera AQUELA chamada, ou
+`CEO_WORKFLOW_RESUME_FORCE=1` no ambiente do harness; registrado como `mismatch_forced` com origem e
+motivo, anunciado sem ecoar o motivo. `CEO_WORKFLOW_RESUME_GUARD=0` põe o guard em advisory mantendo o
+ledger; `CEO_WORKFLOW_LEDGER=0` desliga. Registros gravados em ASCII escapado; índice com reparo de
+fronteira de linha. A CLI de recuperação (`list · show · relaunch · check · bind · orphans · report`;
+`relaunch` e `check` recusam registro inconsistente; acha o ledger do hook a partir de subdiretório);
+testes; o documento do rito; as registrações no settings do framework e no template base entregue aos
+consumidores (o `user` deriva por subtração, NÃO exclui este hook e o nomeia em `blocking_inclusions`
+com a rota); a lista ratificada do teste do template `user` (+2 registrações); o build do plugin
+passando a levar o CLI de recuperação junto com o guard; os inventários derivados (mapa
+comando→skill→hook, inventário de variáveis de ambiente, pinos do teste de paridade 52/49) e os bumps
+de contagem que o `verify-counts.sh` exige (hooks 59→60, ligados 48→49, registrações 50→52, `_lib`
+71→72), mais a entrada `[Unreleased]` do CHANGELOG.
+
+Revisão registrada em `PLAN-190/debate/round-1/` e `PLAN-190/w1/`: debate r1 (3 críticos, ADJUST ×3,
+consenso PROCEED como design-coherent); rail Codex r1 NO-GO com 7 achados, r2 NO-GO com 3, r3 NO-GO
+com 2, r4 NO-GO com 4 (terceira rodada na classe «estado em disco lido de volta» ⇒ troca de
+arquitetura decidida pelo Owner); revisão adversarial multi-lente (5 lentes, 2 refutadores por
+achado, crítico de completude) sobre a v5, cujos achados confirmados que sobrevivem à v6 foram curados
+na v6.1–v6.3 com regressões e prova por mutação; rail r5 sobre os bytes finais.
 
 ## Scope
 
@@ -48,14 +68,16 @@ r2 NO-GO com 3 e r3 NO-GO com 2, todos curados com regressões — a classe do t
 - `.claude/settings.json` — 2 registrações `matcher: "Workflow"` (canônico)
 - `templates/settings/settings.base.json` — as mesmas 2 registrações (canônico)
 - `templates/settings/settings.user.json` — regenerado por `gen-settings-user-template.py --write`, com o hook em `_derivation.blocking_inclusions` e sua rota (canônico, derivado)
-- `.claude/scripts/ceo-launches.py` — CLI `list · show · relaunch · check · force · bind · orphans · report` (novo)
+- `.claude/scripts/ceo-launches.py` — CLI `list · show · relaunch · check · bind · orphans · report` (novo)
 - `.claude/scripts/env-inventory.json` — regenerado por `env-inventory-check.py --generate` (4 variáveis novas + drift pré-existente)
-- `.claude/hooks/tests/test_check_workflow_launch.py` — 30 testes e2e (novo)
+- `.claude/hooks/tests/test_check_workflow_launch.py` — 46 testes e2e (novo)
 - `.claude/hooks/tests/test_template_dogfood_parity.py` — pinos 50/47 → 52/49 (relação 52 == 49 + 1 + 2)
-- `tests/unit/test_launch_ledger.py` — 18 testes unitários (novo)
-- `docs/workflow-recovery.md` — rito de recuperação, guard dividido, rotas e limitações declaradas (novo)
+- `.claude/scripts/tests/test_gen_settings_user_template.py` — lista ratificada: `RULED_IN` +2 registrações do hook, `EXPECTED_MISSING` 17 → 19
+- `tests/unit/test_launch_ledger.py` — 23 testes unitários (novo)
+- `scripts/build-plugin.py` — `GUARDED_CLIS` leva `ceo-launches.py` quando o guard é registrado
+- `docs/workflow-recovery.md` — rito de recuperação, guard, override na chamada, validação de registros, precondições de distribuição e limitações declaradas (novo)
 - `docs/COMMAND-SKILL-HOOK-MAP.md` — regenerado por `gen-command-skill-hook-map.py --write`
-- `CHANGELOG.md` — cabeçalho de inventário (`_lib` 71→72)
+- `CHANGELOG.md` — cabeçalho de inventário rotulado «main after v1.4.0» (`_lib` 71→72) e entrada `[Unreleased]` da W1
 - `CLAUDE.md` — §1 contagens (60 hooks / 49 ligados / 52 registrações / 72 `_lib`)
 - `INSTALL.md` — contagens
 - `README.md` — contagens
@@ -66,30 +88,42 @@ r2 NO-GO com 3 e r3 NO-GO com 2, todos curados com regressões — a classe do t
 - `docs/CTO-GUIDE.md` — contagens
 - `npm/README.md` — contagens
 
-## Evidência (sombra `wt-p190-w1`, branch `p190-w1`, CLI 2.1.274)
+## Evidência (sombra `wt-p190-w1v6`, branch `p190-w1-v6`, CLI 2.1.274, 17/09/2026)
 
     python3 -m pytest .claude/hooks/tests/test_check_workflow_launch.py tests/unit/test_launch_ledger.py \
-      .claude/hooks/tests/test_template_dogfood_parity.py .claude/scripts/tests/test_gen_command_skill_hook_map.py -q
-      -> 82 passed (30 e2e + 18 unit + 14 paridade + 20 mapa)
+      .claude/hooks/tests/test_template_dogfood_parity.py .claude/scripts/tests/test_gen_command_skill_hook_map.py \
+      .claude/scripts/tests/test_gen_settings_user_template.py -q
+      -> verde (46 e2e + 23 unit + 14 paridade + 20 mapa + 122 template user)
+    prova por mutação (cópia descartável): 31 mutantes, um por proteção -> todos mortos, exceto 1
+      equivalente declarado (limite de tamanho duplicado no fstat e no laço de leitura)
+    suítes do pytest.ini como o CI (paralela e serial), antes da cura do teste do template user
+      -> 3 falhas: as 2 do template user (curadas na v6.3) e 1 instável conhecida sob xdist
+         (test_verify_counts_remediation, passa isolada)
     python3 .claude/scripts/env-inventory-check.py --check                -> ENV-DRIFT: 0
     python3 .claude/scripts/gen-command-skill-hook-map.py --check        -> in sync
     python3 .claude/scripts/check-test-env-hygiene.py            -> OK (337 arquivos sinalizados, todos na allowlist)
     python3 .claude/scripts/gen-settings-user-template.py --check -> OK (template user bate com a derivação)
     python3 .claude/scripts/check-active-hooks-executable.py     -> OK: 95 referências presentes e executáveis
+    python3 scripts/build-plugin.py --check                      -> manifestos em sincronia
     bash .claude/scripts/local/verify-counts.sh                  -> no drift detected
     bash .claude/scripts/check-contamination.sh                  -> ✓ contamination, ✓ personal-path
     git diff --numstat -- .claude/settings.json templates/settings/  -> só adições (24 / 24 / 29 linhas: settings.json, base, user — o user leva também a entrada de blocking_inclusions)
+    add-workflow-hook-registration.py numa árvore fresca do main -> os 3 settings byte a byte iguais aos da sombra
 
-Registrações geradas pelo derivador idempotente `add-workflow-hook-registration.py`; contagens pelo
-derivador `bump-counts.py` (mesmas regexes do gate). Debate r1 e rail Codex registrados em
-`.claude/plans/PLAN-190/debate/round-1/` e `.claude/plans/PLAN-190/w1/rail-round-*.md`.
+Na cerimônia, a bateria roda as mesmas suítes do CI e compara o CONJUNTO EXATO de falhas contra
+`suite-baseline.txt` (medido no main por `measure-suite-baseline.sh`); uma falha nova é rerrodada
+isolada uma vez e só reprova se falhar de novo.
 
 ## Consequência DECLARADA
 
-A partir deste commit, TODO lançamento da tool `Workflow` neste repo e nos consumidores que fizerem
-`upgrade.sh` deixa um manifesto em `<state-dir>/launches/` e uma retomada sobre entradas diferentes é
-recusada por padrão. O hook não emite evento de auditoria (registrar a ação em `_KNOWN_ACTIONS` +
-SPEC é cerimônia do dono do audit — follow-up nomeado no plano); os manifestos são o registro.
+A partir deste commit, neste repositório, todo lançamento da tool `Workflow` deixa um manifesto em
+`<state-dir>/launches/` e uma retomada sobre `args` diferentes do manifesto vinculado por `tool_use_id`
+ou manual é recusada por padrão. Nos consumidores, isso vale só depois de um `upgrade.sh` para uma
+versão que contenha este commit, e só quando a cerimônia estiver gravada no install-state ou for
+passada no upgrade, com `jq` disponível e sem `--no-settings-merge`; sem isso o arquivo do hook chega
+sem registração e nada muda. Essa perna ainda não é exercitada pelo smoke-install (PLAN-190 W6,
+pendente). O hook não emite evento de auditoria (registrar a ação em `_KNOWN_ACTIONS` + SPEC é
+cerimônia do dono do audit — `PLAN-190-FOLLOWUP-audit-actions`); os manifestos são o registro.
 
 ## Residual
 
@@ -97,3 +131,6 @@ O guard vê a chamada da tool `Workflow`, não os `agent()` internos, e não imp
 re-chavear o cache de resultados — impede o OPERADOR de retomar sobre entradas diferentes sem saber.
 Não há checkpoint dentro de um `agent()` (limite do runner; W2 dá o checkpoint por fase em arquivo).
 O run id é extraído da resposta por forma (`wf_<hex8>[-<hex>]`); outra versão da CLI ⇒ `bind` manual.
+Adulteração deliberada do diretório de estado pelo mesmo usuário está fora do modelo de ameaça. Um
+`scriptPath` num ponto de montagem travado pode segurar o hook até o timeout do harness. O CLI chamado
+fora de qualquer projeto, sem `CLAUDE_PROJECT_DIR`, cai no resolvedor padrão pelo diretório corrente.
