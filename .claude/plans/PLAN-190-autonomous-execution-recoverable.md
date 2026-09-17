@@ -1,9 +1,13 @@
 ---
 id: PLAN-190
 title: Execução autônoma utilizável nos consumidores — preservar trabalho pago, recuperar progresso, aprovar por código
-status: draft
+status: executing
 created: 2026-09-17
 owner: CEO
+reviewed_at: 2026-09-17
+reviewed_by: "Owner (assinatura GPG do sentinel da W1, chave AE9B236F)"
+related_commits:
+  - 075beed9d5f3e729b3abd5b7a7140dc16e214249
 depends_on: []
 level: L3
 budget_tokens: "W0 feito (S354, ~0 pago: instrumentos stdlib); W1 150-300k + debate r1; W2 200-400k; W3 150-250k; W4 100-200k; W5 100-200k; W6 e2e no smoke (CI). Teto do plano: 1,5 M de agente + cerimônias."
@@ -124,8 +128,13 @@ registrado, e a revisão adversarial custou ≈ 12,5 M de tokens de subagentes. 
 nenhum P0**; quatro frases do texto assinável contradiziam o código e foram corrigidas NO TEXTO, sem
 mudança de comportamento; um P2 de implementação (`relaunch --out` sem conferir escrita parcial) vai
 para a **W1.1**, declarado no anexo do sentinel. Ensaio completo da cerimônia (clone separado, suítes do
-CI contra a linha de base) verde sobre a v6.5 e repetido sobre o patch com as correções de texto. **Falta a assinatura do Owner**
-(`! bash .claude/plans/PLAN-190/w1/OWNER-190-W1-SIGN.sh`).
+CI contra a linha de base) verde sobre a v6.5 e repetido sobre o patch com as correções de texto. **LANDADA em `075beed9` (17/09/2026, assinatura GPG do Owner sobre a âncora `440a5306`, patch
+`02e8831f…`).** A cerimônia exercitou a própria cura de recuperação: a primeira execução falhou no GPG
+(trava velha do chaveiro deixada por um processo morto em 09/09) e desfez tudo — patch revertido,
+sentinel restaurado, nenhuma assinatura pela metade; removidas as travas órfãs, a segunda execução
+passou. Duas instabilidades apareceram sob execução paralela e passaram na nova tentativa isolada que a
+bateria faz (o mecanismo funcionou em campo). Push e adoção nos consumidores seguem como decisão do
+Owner. Segue a **W1.1** (`PLAN-190-FOLLOWUP-relaunch-out-partial-write`).
 Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_workflow_launch.py` (C),
 `.claude/settings.json` (C, matcher `Workflow` em PreToolUse e PostToolUse), `templates/settings/settings.base.json`
 (C, mesma registração — o `user` deriva por subtração), `.claude/scripts/ceo-launches.py` (livre),
@@ -305,7 +314,7 @@ repo público.
    do §Goal por 2 semanas antes de qualquer flip para enforce.
 
 ## Success criteria
-- [ ] W1: 100 % dos lançamentos de Workflow com manifesto ANTES do despacho; retomada sobre hash/args
+- [x] W1 LANDADA (`075beed9`): 100 % dos lançamentos de Workflow com manifesto ANTES do despacho; retomada sobre hash/args
   diferentes bloqueada com chaves nomeadas; `relaunch` reproduz a chamada exata; testes verdes.
 - [ ] W2: zero mutante na árvore de implementação após N interrupções (teste); zero segundo escritor
   (teste); fase interrompida retoma pulando passos registrados (teste).
