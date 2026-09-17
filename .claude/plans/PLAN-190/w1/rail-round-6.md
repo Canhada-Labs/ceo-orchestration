@@ -1,0 +1,15 @@
+Hash `a9b950d6c5a85185…` conferido. **Nenhum P0 identificado.** Os itens 1–4 contradizem afirmações nos textos assináveis ou commitáveis, acionando a regra **(b)** desta rodada.
+
+1. **P2 — Workflow nomeado é anunciado como recuperação exata sem snapshot.** [`.claude/scripts/ceo-launches.py:143`](<repo>/.claude/plans/PLAN-190/w1/p190-w1.patch:1925). Reproduzi `name: saved-flow`, hash e snapshot `null`, retornando **rc 0 e “exact recorded call”**. Contradiz [w1-approved.md:55](<repo>/.claude/plans/PLAN-190/w1/w1-approved.md:55). **Cura:** excluir `named` de `exact_script`, anunciando script não verificável e rc 7; alternativamente, declarar expressamente essa exceção no texto assinável e limitar a promessa à reprodução do nome e dos args.
+
+2. **P2 — IDs ambíguos não produzem o `orphan` prometido.** [`.claude/hooks/_lib/launch_ledger.py:873`](<repo>/.claude/plans/PLAN-190/w1/p190-w1.patch:879). Dois rótulos `Run ID:` distintos resultam em retorno imediato, **sem nenhuma linha no índice**. Contradiz a docstring, [workflow-recovery.md:27](<repo>/.claude/plans/PLAN-190/w1/p190-w1.patch:2858) e o sentinel. **Cura:** registrar `orphan` com motivo de ambiguidade e `run_id: null`, sem copiar a resposta; ou declarar corretamente que esse caso permanece apenas sem vínculo.
+
+3. **P2 — A próxima chamada sem declaração não necessariamente bloqueia.** [`docs/workflow-recovery.md:66`](<repo>/.claude/plans/PLAN-190/w1/p190-w1.patch:2897). Reproduzi: args A → force com B → PostToolUse vinculando B ao mesmo run → nova chamada B sem force retorna **`match`**. O teste existente omite esse PostToolUse. **Cura:** documentar que o override vale naquela chamada, mas o novo vínculo passa a ser a referência; somente nova divergência exige override. Acrescentar regressão do ciclo completo.
+
+4. **P2 — `report` não apresenta a razão anunciada.** [`docs/workflow-recovery.md:75`](<repo>/.claude/plans/PLAN-190/w1/p190-w1.patch:2906). `cmd_report()` imprime contagens por resultado, vínculos e órfãos, sem calcular a razão de forçados. **Cura:** documentar que fornece as contagens para cálculo externo, ou implementar a razão com denominador incluindo ambos os resultados de bloqueio e tratamento explícito de denominador zero.
+
+5. **P2 — `relaunch --out` aceita escrita parcial como sucesso.** [`.claude/scripts/ceo-launches.py:120`](<repo>/.claude/plans/PLAN-190/w1/p190-w1.patch:1902). Injetando retorno de **2 para 11 bytes** em `os.write`, o helper retorna sucesso. Uma escrita parcial pode entregar cópia truncada. **Cura:** confirmar a escrita integral, tratar falhas e remover o arquivo incompleto criado pela operação. Pode seguir como anexo + W1.1.
+
+Verifiquei em memória 360 combinações do guard, as correções da rodada 5, Python 3.9/stdlib, template/paridade, executabilidade, mapa, inventário e núcleo de `verify-counts --no-tests`. Não reexecutei os e2e em disco, a suíte completa ou os mutantes. Nenhum arquivo foi alterado; nenhum acesso à rede.
+
+VERDICT: NO-GO — corrigir as afirmações falsas dos itens 1–4 antes da assinatura; os P2 de implementação podem seguir declarados no anexo + W1.1.

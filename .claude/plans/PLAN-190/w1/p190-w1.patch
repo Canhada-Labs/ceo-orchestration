@@ -1,9 +1,9 @@
 diff --git a/.claude/hooks/_lib/launch_ledger.py b/.claude/hooks/_lib/launch_ledger.py
 new file mode 100644
-index 000000000000..f45bc767f412
+index 000000000000..8cb99cc9aa47
 --- /dev/null
 +++ b/.claude/hooks/_lib/launch_ledger.py
-@@ -0,0 +1,891 @@
+@@ -0,0 +1,893 @@
 +"""PLAN-190 W1 — Workflow launch ledger: persist BEFORE dispatch, guard resumes.
 +
 +Why this exists
@@ -312,8 +312,9 @@ index 000000000000..f45bc767f412
 +    """The run id the harness launched: a ``runId``/``run_id`` key; else the id on the
 +    ``Run ID:`` label (the harness prints it on launch AND on resume, where the id is the
 +    same); else the only distinct ``wf_<hex8>[-<hex>]`` token in the response. Two different
-+    labelled ids, or two different unlabelled ids, are ambiguous ⇒ ``None`` (an orphan line,
-+    closed by ``bind``) — never the first one found."""
++    labelled ids, or two different unlabelled ids, are ambiguous ⇒ ``None`` — never the first
++    one found. With ``None``, ``decide_post`` records NOTHING: the launch stays unbound (visible in
++    ``ceo-launches.py list``) and ``bind`` closes it by hand."""
 +    if tool_response is None:
 +        return None
 +    if isinstance(tool_response, dict):
@@ -874,7 +875,8 @@ index 000000000000..f45bc767f412
 +
 +def decide_post(event: Dict[str, Any], d: Path, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
 +    """PostToolUse: bind the run id from the response — by tool_use_id, else by the single
-+    unbound launch of the session; anything ambiguous becomes an ``orphan`` line."""
++    unbound launch of the session. An unknown tool_use_id, or zero/several candidates, becomes an
++    ``orphan`` line; a response with no run id, or with ambiguous ids, records nothing."""
 +    run_id = extract_run_id(event.get("tool_response"))
 +    if run_id is None:
 +        return None
@@ -897,10 +899,10 @@ index 000000000000..f45bc767f412
 +    return None
 diff --git a/.claude/hooks/check_workflow_launch.py b/.claude/hooks/check_workflow_launch.py
 new file mode 100755
-index 000000000000..f0e5f876894f
+index 000000000000..c9b1a393f299
 --- /dev/null
 +++ b/.claude/hooks/check_workflow_launch.py
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,115 @@
 +#!/usr/bin/env python3
 +"""PLAN-190 W1 — Workflow launch ledger + resume guard (PreToolUse/PostToolUse ``Workflow``).
 +
@@ -932,7 +934,9 @@ index 000000000000..f0e5f876894f
 +  guard is recorded as inconclusive (never a silent allow without a record).
 +- PostToolUse: binds ``wf_<id>`` by ``tool_use_id``, else by the single unbound
 +  launch of the session — a launch the guard blocked never ran and is never a
-+  candidate; anything ambiguous is an ``orphan`` line. Always ``{}``.
++  candidate; an unknown tool_use_id or zero/several candidates is an ``orphan``
++  line; a response with no run id, or with ambiguous ids, records nothing.
++  Always ``{}``.
 +- Fail-OPEN on infrastructure (unreadable stdin, import failure, unwritable
 +  state dir): breadcrumb to stderr + ``{}``. This is a recovery instrument,
 +  not a security matcher — it must never wedge a session.
@@ -2825,10 +2829,10 @@ index 3a85f8e6f0ca..95cd8f9e97bb 100644
  why we cite `make test-collect` as the authority rather than a grep.
 diff --git a/docs/workflow-recovery.md b/docs/workflow-recovery.md
 new file mode 100644
-index 000000000000..0b69ac10c1a2
+index 000000000000..a731ee94ce6d
 --- /dev/null
 +++ b/docs/workflow-recovery.md
-@@ -0,0 +1,190 @@
+@@ -0,0 +1,197 @@
 +# Workflow recovery — launch ledger and resume guard (PLAN-190 W1)
 +
 +> Audience: operators running autonomous Workflow pipelines in a consumer repository, and the
@@ -2855,7 +2859,7 @@ index 000000000000..0b69ac10c1a2
 +|---|---|---|
 +| before dispatch | `launch_id`, instant, `session_id`, `tool_use_id`, `cwd`; script fingerprint (`sha256` + bytes) **and a snapshot of the script bytes** (inline text, or the `scriptPath` file as read at that instant); **`args` as literal canonical JSON, never truncated** — an absent `args` field is recorded as `<absent>`, distinct from `null`; `resumeFromRunId`; `name` / `description` | `<state-dir>/launches/<launch_id>.json` (atomic, 0600) + `<launch_id>.script` + index `launches.jsonl` |
 +| right after (same hook) | code revision of `cwd` (`git rev-parse HEAD`, dirty flag) inside a 1.2 s budget with `--no-optional-locks`; slow or absent git ⇒ `code.status: unknown` — the manifest is already on disk | same manifest (second atomic write) |
-+| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. Anything ambiguous becomes an `orphan` index line (never a guess). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot` | manifest (`run_id`, `bound_at`, `bind_method`) + a `bind` line |
++| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. An unknown `tool_use_id`, or zero or several candidates, becomes an `orphan` index line; a response with no run id, or with two different ids, records nothing and the launch stays unbound (never a guess). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot` | manifest (`run_id`, `bound_at`, `bind_method`) + a `bind` line |
 +
 +`<state-dir>` is the project's runtime state dir (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir`),
 +the same family as the audit log. Nothing from transcripts is stored; `args` are the operator's own inputs.
@@ -2894,7 +2898,9 @@ index 000000000000..0b69ac10c1a2
 +  `description: "CEO_WORKFLOW_RESUME_FORCE: slice A02 args fixed on purpose"`. If that call would be
 +  blocked it proceeds, is marked `mismatch_forced` with `force_source: call` and the reason, and is
 +  announced (`WORKFLOW-RESUME-FORCED`; the reason is recorded, never echoed). The declaration covers
-+  that one call: the next call without it is blocked again. A declaration on a call that would not
++  that one call and is never stored. Once that call is bound to the run, it becomes the run's recorded
++  reference: a later resume with those same inputs is a `match`, and only a NEW divergence needs a new
++  declaration. A declaration on a call that would not
 +  be blocked changes nothing (`force_declared: true` is recorded). The prefix is exact: leading text,
 +  another case or a missing reason is not a declaration. `description` is not part of the runner's
 +  cache key, so declaring it does not re-key the run.
@@ -2903,8 +2909,10 @@ index 000000000000..0b69ac10c1a2
 +  (advisory mode: the ledger keeps working, nothing blocks), `CEO_WORKFLOW_SCRIPT_GUARD=enforce`
 +  (block script changes too), `CEO_WORKFLOW_LEDGER=0` (hook off).
 +
-+`report` exposes the forced ratio — the stop rule's metric. Deliberate-change declarations count in it,
-+so read the ratio together with the reasons recorded in the manifests.
++`report` prints the counts by guard result (`mismatch_forced`, `mismatch_blocked` and
++`mismatch_script_blocked` among them); the stop rule's ratio, forced ÷ (forced + both blocked results),
++is computed from those counts. Deliberate-change declarations count as forced, so read the ratio
++together with the reasons recorded in the manifests.
 +
 +**Who reads what.** A block returns `decision: block` with a counts-only `reason` the model reads. An
 +allowed call with something to say (forced, or an advisory) returns the same text twice:
@@ -2949,8 +2957,9 @@ index 000000000000..0b69ac10c1a2
 +
 +# 2. the EXACT call to re-issue: the script SNAPSHOT (pass it as scriptPath) + literal args
 +#    args are printed in the ORIGINAL key order; rc 7 and nothing announced as exact when the record
-+#    fails its integrity check or its script was unreadable at launch; --out creates a NEW file only
-+#    (never overwrites, never follows a symlink)
++#    fails its integrity check or its script was unreadable at launch; for a NAMED workflow it prints
++#    the name and the args — the content saved under that name is not verified; --out creates a NEW
++#    file only (never overwrites, never follows a symlink)
 +python3 .claude/scripts/ceo-launches.py relaunch wf_<id> [--out /path/to/copy.js]
 +
 +# 3. before re-issuing from a rite that edits scripts: the guard's comparison, standalone
@@ -2958,7 +2967,9 @@ index 000000000000..0b69ac10c1a2
 +#    rc 0 SAME · rc 3 ARGS-DIFFER (keys listed) · rc 5 SCRIPT-DIFFERS · rc 6 INCONCLUSIVE (hash unavailable
 +#    or record inconsistent) · rc 4 NO-MANIFEST
 +
-+# 4. runs the PostToolUse half could not bind (id not seen, or ambiguous): list and bind by hand
++# 4. runs the PostToolUse half could not bind: `orphans` lists the orphan lines (unknown tool_use_id,
++#    zero or several candidates); a launch whose response carried no or ambiguous run ids has no line
++#    at all and shows in `list` with no run — bind either by hand
 +python3 .claude/scripts/ceo-launches.py orphans
 +python3 .claude/scripts/ceo-launches.py bind <launch_id> wf_<id>
 +```

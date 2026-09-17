@@ -120,8 +120,11 @@ parada aplicada (17/09, após o Owner perguntar se a sessão estava em loop):** 
 — reprova só por P0 ou por afirmação falsa no texto assinado; P1/P2 novos viram anexo declarado e
 W1.1 depois da assinatura (a regra «rodada final com anexo» que o Owner ratificou para o corte da rc.1
 em 10/09). Motivo: r4 e r5 acharam P2 cada vez mais estreitos, o padrão de retorno decrescente já
-registrado, e a revisão adversarial custou ≈ 12,5 M de tokens de subagentes. Rail r6 em
-`PLAN-190/w1/rail-round-6.md`. **Falta a assinatura do Owner**
+registrado, e a revisão adversarial custou ≈ 12,5 M de tokens de subagentes. **Rail r6 (final):
+nenhum P0**; quatro frases do texto assinável contradiziam o código e foram corrigidas NO TEXTO, sem
+mudança de comportamento; um P2 de implementação (`relaunch --out` sem conferir escrita parcial) vai
+para a **W1.1**, declarado no anexo do sentinel. Ensaio completo da cerimônia (clone separado, suítes do
+CI contra a linha de base) verde sobre a v6.5 e repetido sobre o patch com as correções de texto. **Falta a assinatura do Owner**
 (`! bash .claude/plans/PLAN-190/w1/OWNER-190-W1-SIGN.sh`).
 Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_workflow_launch.py` (C),
 `.claude/settings.json` (C, matcher `Workflow` em PreToolUse e PostToolUse), `templates/settings/settings.base.json`
@@ -272,14 +275,16 @@ repo público.
   o hook registra o que recebeu — measure-first.)
 - OQ-2 — RESPONDIDA (S354): a resposta da tool `Workflow` chega 0,3 s após a chamada («Workflow
   launched in background. Task ID …»; 281 pares reais medidos num consumidor) e carrega o `wf_<id>`
-  em 98,5 % dos casos (324/329 no próprio repo); ausência ⇒ `orphan` + `bind` manual.
+  em 98,5 % dos casos (324/329 no próprio repo); ausência ou ambiguidade de id ⇒ nada é vinculado nem
+  registrado (o lançamento fica sem vínculo) + `bind` manual.
 - OQ-3 — RESPONDIDA (debate r1): sim, o perfil `user` recebe o hook (proteção do operador), nomeado
   em `blocking_inclusions` com rota (kill-switch, advisory, token de force).
 - OQ-4: `Workflow.totalTokens` = soma de picos vale em todas as versões da CLI vistas? (verificado em
   697 runs do consumidor, CLI 2.1.27x; re-verificar a cada geração.)
 - OQ-5 — decisão do debate r1: o override em sessão (`force` com motivo, one-shot, anunciado) é
   visibilidade, não prevenção — o guard é instrumento de recuperação; a razão
-  `forced/(forced+blocked)` do `report` é a métrica da regra de parada. Registrar evento de auditoria
+  `forced/(forced+blocked)`, calculada das contagens que o `report` imprime, é a métrica da regra de
+  parada. Registrar evento de auditoria
   para bloqueio/override é `PLAN-190-FOLLOWUP-audit-actions` (cerimônia do dono do audit).
 - OQ-6 — DECIDIDA pelo Owner (2026-09-17, após o rail r4, escolha estruturada entre três opções).
   Pergunta: «A rodada 4 do Codex deu NO-GO com 4 achados P2 (nenhum grave), terceira rodada seguida na

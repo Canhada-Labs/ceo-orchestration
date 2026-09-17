@@ -240,7 +240,9 @@ entradas diferentes sem o operador saber (11 regressões por args de memória;
 rail Codex r1-r5 NO-GO com 7, 3, 2, 4 e 3 achados; troca de arquitetura do
 override decidida pelo Owner após r4; revisão adversarial multi-lente com
 dupla refutação e crítico de completude; fatos do substrato sondados no
-harness; r6 sobre os bytes finais.
+harness; r6 como rodada final sem P0, com quatro frases do texto corrigidas e
+um P2 de implementação (relaunch --out sem conferir escrita parcial)
+declarado para a W1.1.
 
 Sentinel: $SENT (assinado, Anchor-SHA $HEAD_SHA, Patch-sha256 $PATCH_SHA)
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>

@@ -32,7 +32,9 @@ ausente ≠ null e sem truncamento, `resumeFromRunId`; a revisão git do `cwd` e
 de 1,2 s) e, no PostToolUse, vincula o run id devolvido (por `tool_use_id`; sem ele, só quando há um
 único lançamento pendente e não bloqueado na mesma sessão, e nunca um segundo registro da mesma
 chamada; o run id vem do rótulo `Run ID:` que o harness imprime no lançamento e na retomada, senão do
-único id distinto da resposta — ids diferentes viram `orphan`, nunca palpite). Os `args` são gravados
+único id distinto da resposta; ids ambíguos ou ausentes não vinculam nem registram nada — o
+lançamento fica sem vínculo, visível no `list`, e `bind` fecha à mão; um `tool_use_id` desconhecido ou
+zero/vários candidatos viram linha `orphan`; nunca palpite). Os `args` são gravados
 também na ordem ORIGINAL das chaves (o script vê essa ordem; o `relaunch` a reproduz). O guard
 BLOQUEIA a retomada de um run sobre `args` diferentes do manifesto vinculado por `tool_use_id` ou
 manual — por chave, ou as mesmas chaves em outra ordem —, com motivo só de contagens (as chaves ficam
@@ -46,14 +48,17 @@ script indisponível é inconclusivo; uma exceção dentro do guard, `args` que 
 própria construção do registro dão inconclusivo registrado, e a chamada ainda é gravada; falha ao
 gravar não desfaz um bloqueio já decidido e deixa breadcrumb. Override
 numa rota só, carregada pela chamada ou pelo processo e NUNCA por estado em disco: `description` com o
-prefixo exato `CEO_WORKFLOW_RESUME_FORCE:` seguido de motivo não vazio libera AQUELA chamada, ou
+prefixo exato `CEO_WORKFLOW_RESUME_FORCE:` seguido de motivo não vazio libera AQUELA chamada (a
+declaração não é guardada; depois de vinculada, a chamada forçada passa a ser a referência do run:
+retomar com as mesmas entradas dá `match` e só uma nova divergência pede nova declaração), ou
 `CEO_WORKFLOW_RESUME_FORCE=1` no ambiente do harness; registrado como `mismatch_forced` com origem e
 motivo, anunciado sem ecoar o motivo — avisos de chamadas permitidas chegam ao modelo como
 `additionalContext` e ao usuário como `systemMessage`. `CEO_WORKFLOW_RESUME_GUARD=0` põe o guard em advisory mantendo o
 ledger; `CEO_WORKFLOW_LEDGER=0` desliga. Registros gravados em ASCII escapado; índice com reparo de
 fronteira de linha. A CLI de recuperação (`list · show · relaunch · check · bind · orphans · report`;
 `relaunch` imprime os args na ordem original, recusa registro inconsistente e não anuncia como exata
-uma chamada cujo script não foi gravado; `--out` só cria arquivo novo; `bind` confere o id do registro;
+uma chamada cujo script era ilegível no lançamento; para um workflow NOMEADO reproduz o nome e os args,
+sem verificar o conteúdo salvo sob esse nome; `--out` só cria arquivo novo; `bind` confere o id do registro;
 acha o ledger do hook a partir de subdiretório);
 testes; o documento do rito; as registrações no settings do framework e no template base entregue aos
 consumidores (o `user` deriva por subtração, NÃO exclui este hook e o nomeia em `blocking_inclusions`
@@ -135,6 +140,20 @@ Na cerimônia, a bateria roda as mesmas suítes do CI e compara o CONJUNTO EXATO
 `suite-baseline.txt` (medido no main por `measure-suite-baseline.sh`); uma falha nova é rerrodada
 isolada uma vez e só reprova se falhar de novo.
 
+## Anexo — rail r6 (rodada final, regra «rodada final com anexo»)
+
+O r6 não achou P0. Pela regra (b) apontou quatro frases do texto assinável que o código contradizia;
+foram CORRIGIDAS NO TEXTO, sem mudança de comportamento, antes desta assinatura (docstrings de
+`launch_ledger.py` e `check_workflow_launch.py`, `docs/workflow-recovery.md`, este sentinel e o plano):
+(1) workflow nomeado — `relaunch` reproduz nome e args sem verificar o conteúdo salvo;
+(2) ids ambíguos ou ausentes na resposta não geram linha `orphan` — o lançamento fica sem vínculo;
+(3) depois de vinculada, a chamada forçada vira a referência do run — retomar com as mesmas entradas dá
+`match`; (4) o `report` imprime contagens e a razão da regra de parada é calculada delas.
+
+Declarado para a W1.1 (P2 de implementação, não bloqueia): `relaunch --out` usa um único `os.write` e
+não confere escrita parcial — uma escrita curta entregaria cópia truncada com sucesso; cura: laço até
+escrever tudo, e em falha remover o arquivo criado pela operação, com regressão.
+
 ## Consequência DECLARADA
 
 A partir deste commit, neste repositório, todo lançamento da tool `Workflow` deixa um manifesto em
@@ -159,4 +178,5 @@ Declarados em `docs/workflow-recovery.md`: o ledger guarda `args` e snapshots se
 `relaunch` os imprimem de volta; lançamento e retomada precisam do mesmo diretório de projeto (outro
 worktree ⇒ `no_manifest`); `git status` no `cwd` ainda pode rodar filtros configurados pelo
 repositório; o gate de latência de hooks do CI ainda não perfila este hook; a retomada DELIBERADA de
-`args` (estilo `args.resume`) exige a declaração na chamada e entra na razão de forçados.
+`args` (estilo `args.resume`) exige a declaração na chamada e entra na contagem de forçados; o
+`report` imprime as contagens por resultado e a razão da regra de parada é calculada a partir delas.
