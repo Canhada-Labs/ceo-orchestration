@@ -1,6 +1,6 @@
 # ceo-orchestration
 
-<!-- last-reviewed: 2026-09-08 v1.4.0 -->
+<!-- last-reviewed: 2026-09-18 v1.4.1 -->
 
 > **Português:** [`README.pt-BR.md`](README.pt-BR.md)
 
