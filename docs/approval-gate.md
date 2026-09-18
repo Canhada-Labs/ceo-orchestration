@@ -19,7 +19,8 @@ python3 .claude/scripts/approval_gate.py decide --policy policy.json --evidence 
   rc 0 APPROVED · rc 3 REJECTED (reasons listed) · rc 2 unreadable input (a rejection)
 ```
 
-Policy (closed schema, `tests/fixtures/approval/policy-default.json` is the shipped default):
+Policy (`tests/fixtures/approval/policy-default.json` is the shipped default; the fields below are
+validated, but an UNKNOWN key is ignored rather than rejected — see Limitations):
 
 | field | meaning |
 |---|---|
@@ -28,15 +29,17 @@ Policy (closed schema, `tests/fixtures/approval/policy-default.json` is the ship
 | `severities.blocking` | any finding with one of these ⇒ REJECTED |
 | `severities.max_open` | per-severity cap on open findings (`{"P1": 0}` = no open P1) |
 | `require_reviewed_equals_final` | the reviewer must have seen the FINAL revision (`review.reviewed_rev == final_rev`); a fix after the review needs a new review of the delta |
-| `require_gate_green` | every `gate[]` command must have `rc == 0` and `failed == 0` |
+| `require_gate_green` | `gate[]` must be a non-empty list; every entry needs an int `rc == 0`, and a `failed` that is present must be an int that is not `> 0` (an entry with no `failed`, or no `cmd`, is accepted today — see Limitations) |
 | `require_review_ran` | `review.ran` must be `true` |
 
 Evidence (`ceo.approval-evidence/v1`): `final_rev`, `review{ran, reviewed_rev, score, findings[{severity, where, text}]}`,
 `gate[{cmd, rc, failed, passed}]`. `findings` must be present even when empty — absence is not "none".
 
-**Rules that make the decision safe:** there is no default-green path; every failed rule is named
-in `reasons`; the decision carries `policy_sha256` and `evidence_sha256` so a later reader can bind
-it to the exact inputs. Missing, prose, out-of-enum, wrong-scale, wrong-revision ⇒ REJECTED.
+**Rules the decision follows:** every failed rule is named in `reasons`; the decision carries
+`policy_sha256` and `evidence_sha256` so a later reader can bind it to the exact inputs. Under the
+shipped default policy a missing score, findings list, reviewed revision or gate list, a prose
+score, an out-of-enum severity, a wrong scale and a wrong revision ⇒ REJECTED. The inputs that
+still come out APPROVED are listed under Limitations.
 
 ### COMMON block for Workflow scripts
 
@@ -82,4 +85,14 @@ compared paths" cannot happen again: both sides become node ids first.
   or that `final_rev` is the revision on disk. The gate agent's prompt (above) and the launch ledger
   (W1) bind the evidence to the run; W2's checkpoint binds phases to revisions.
 - `test_refs.py` recognises pytest/unittest shapes (module-level `test*` functions, `test*`
-  methods in classes); parametrised ids (`test_x[case]`) are matched by their base name.
+  methods in classes). Parametrised ids (`test_x[case]`) are NOT normalised: the suffix is compared
+  literally and the reference comes back `node-not-found`.
+- Known-open, found by the cross-review of the v1.4.1-rc.1 candidate (2026-09-18) and not cured in
+  v1.4.1:
+  - `approval_gate.py` still APPROVES a non-finite score (`"NaN"`, `"nan/10"`); a `gate[]` entry
+    with no `failed` count or no `cmd`, or with a negative `failed`; and a policy whose restriction
+    key is misspelled (`max_opne` for `max_open`): unknown keys are ignored, so the restriction
+    silently disappears.
+  - `test_refs.py`: a node id whose CLASS does not exist (`file.py::Missing::test_x`) resolves to
+    the only test named `test_x` in that file instead of failing, so `match` can accept proof for
+    a different class.

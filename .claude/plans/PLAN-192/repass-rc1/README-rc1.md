@@ -16,6 +16,12 @@ o `verify-counts` completo do preflight acusava drift: 16.231 coletados, fora da
 toca 9 arquivos de uma ou duas linhas; `docs/FAQ.md` e `docs/WHAT-WE-ARE.md` entraram na parte 2 por
 causa dela, e `CLAUDE.md` segue fora (§4).
 
+**Rodada 2.** A rodada 1 (candidato `9e9840b2`, o commit do bump) devolveu `NO-GO` nas três partes por
+cinco condições declaradas falsas contra o código — 7, 10, 12, 14 e 15 —, sem P0. Está arquivada em
+`.claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r1/`, com a triagem em `record.md`. O candidato da
+rodada 2 corrige TEXTO e nenhum código: as condições, o `CHANGELOG.md`, os dois docs de operador e este
+README. Os achados de código da rodada 1 seguem abertos e declarados (seção D das condições).
+
 ## 2. As três partes, na ordem de risco para o adopter
 
 | parte | o que é | por que nesta ordem |
@@ -38,8 +44,9 @@ do bump, que é o candidato: uma lista medida antes esqueceria exatamente eles.
   neste delta com prova por mutação.
 - Parte 2: a registração nos templates viajou no mesmo patch assinado da W1; os sítios de versão são
   escritos pelo `release.sh bump` e não têm rail próprio.
-- Parte 3, as cinco CLIs de W2/W3: landaram LIVRES, com testes e SEM rodada de pair-rail. **Este re-pass
-  é a primeira revisão cruzada delas** — é onde um achado novo é mais provável.
+- Parte 3, as cinco CLIs de W2/W3: landaram LIVRES, com testes e SEM rodada de pair-rail. **A rodada 1
+  deste re-pass foi a primeira revisão cruzada delas** e achou pelo menos um P1 ou P2 em cada uma das
+  cinco — abertos, listados no `CHANGELOG.md` `[1.4.1]` e nos vereditos arquivados.
 
 ## 4. O que fica FORA, e por quê
 
@@ -49,9 +56,11 @@ do bump, que é o candidato: uma lista medida antes esqueceria exatamente eles.
 | `.claude/plans/**`, `docs/research/**` | registro de trabalho; não são entregues |
 | `CLAUDE.md` | contrato de operação DESTE repositório; o adopter recebe `templates/CLAUDE.md`, que não mudou |
 | `.claude/governance/codex-cli-pin.txt` e `codex-cli-pin-manifest.json` | re-pin do codex sob cerimônia assinada própria (`PLAN-189/codex-pin*/`); `.claude/governance/` não é entregue a adopters |
-| `.claude/scripts/local/release.sh`, `.claude/governance/gate-scripts-manifest.txt`, `.claude/scripts/tests/test_release_bump_sites.py` | a relmeta-141, sob cerimônia assinada própria (`PLAN-192/relmeta/`); engenharia de release, não entregue |
+| `.claude/scripts/local/release.sh`, `.claude/governance/gate-scripts-manifest.txt`, `.claude/scripts/tests/test_release_bump_sites.py` | a relmeta-141, sob cerimônia assinada própria (`PLAN-192/relmeta/`); engenharia de release. O manifesto e o teste não são entregues. O `release.sh` É entregue, só pelo `upgrade.sh` (ele enumera `.claude/scripts/` recursivamente e o predicado de exclusão não exclui `.claude/scripts/local/`; a instalação fresca copia só o nível de cima) — a rodada 1 corrigiu esta linha, que dizia «não entregue» |
 
-Nada do que está fora muda o que roda na árvore de um adopter.
+Do que está fora, só o `release.sh` chega à árvore de um adopter, e nenhum hook, comando, settings,
+template, skill ou script de nível de cima entregue o referencia. A divergência instalação × upgrade
+sobre `.claude/scripts/local/` é achado aberto da rodada 1.
 
 ## 5. Critério de parada (fixado ANTES da 1.ª rodada — PLAN-192 §Approach)
 
@@ -81,6 +90,9 @@ fail-CLOSED) e põe um shim no início do PATH. O modelo vai por `-m`, lido da t
 
 ## 8. Onde o candidato entra
 
-O candidato é o commit do bump (`release: v1.4.1`), escrito em `CANDIDATE.sha` pelo passo 5 do
-`OWNER-RC1-CUT.sh` depois do CI verde. O runner nunca lê o candidato de uma constante, e o commit do
-veredito senta DIRETAMENTE sobre ele: `parent_sha` == pai do commit que introduz o veredito.
+O candidato é o HEAD de `origin/main` gravado em `CANDIDATE.sha` depois do CI verde — pelo passo 5 do
+`OWNER-RC1-CUT.sh`, ou pelo CEO quando ele roda o re-pass antes da cerimônia (o passo 6 reconhece a
+evidência completa e não re-roda). Na rodada 1 era o commit do bump (`release: v1.4.1`, `9e9840b2`); na
+rodada 2 é o commit de correção de texto que senta sobre ele. O runner nunca lê o candidato de uma
+constante, e o commit do veredito senta DIRETAMENTE sobre o candidato: `parent_sha` == pai do commit
+que introduz o veredito.

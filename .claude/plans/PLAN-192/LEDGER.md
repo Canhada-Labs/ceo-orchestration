@@ -3,7 +3,15 @@
 > Só identificadores verbatim (paths, SHAs, ids) — nunca corpo de transcript
 > (repo público). Escrito em fronteira de unidade. Teto ≤ 2k tokens.
 
-## Unidade corrente — as duas cerimônias ASSINADAS; corte em curso, preflight curado (S356, 2026-09-18)
+## Unidade corrente — rodada 1 do re-pass `NO-GO`; candidato da rodada 2 = só texto (S356, 2026-09-18)
+
+- Rodada 1: candidato `9e9840b2fc6c033498a0c12c65178a5254d0b04e` (bump, CI verde), `NO-GO` nas 3 partes, sem P0; condições falsas 7, 10, 12, 14, 15. Arquivada em `PLAN-192/repass-rc1-20260918-NOGO-r1/` (`record.md`; vereditos sha256 `f46ebb9e…`, `13716c56…`, `a4d9c157…`).
+- Candidato da rodada 2: `CONDITIONS-rc1.md` (seção D nova), `README-rc1.md`, `run-rc1-repass.sh` (via `derive-kit-141.py`: contexto «ROUND 2» no prompt), `CHANGELOG.md`, `docs/workflow-recovery.md`, `docs/approval-gate.md`. Nenhum arquivo sob `.claude/hooks/`, `.claude/scripts/`, `scripts/`, `templates/`.
+- Regra de parada: esta é a ÚLTIMA rodada. 2.ª `NO-GO` ⇒ parar e levar as duas ao Owner.
+- Próxima unidade: CI verde no candidato → CEO grava `repass-rc1/CANDIDATE.sha` e roda `repass-rc1/run-rc1-repass.sh` → se GO/GWC ×3, Owner roda `PLAN-192/OWNER-RC1-CUT.sh` do passo 1 (`.cut-state` zerado; o passo 6 reconhece a evidência completa).
+- Residual para o Owner: `RELEASE_HEADLINE` do `release.sh` diz «o arquivo inteiro ou nenhum arquivo» (condição 14 declara o limite).
+
+## Unidade anterior — as duas cerimônias ASSINADAS; corte em curso, preflight curado (S356, 2026-09-18)
 
 - Assinados pelo Owner: `7d807f4c` (re-pin codex 0.155.0) e `83fa5b64` (relmeta-141; `TARGET_BASE="1.4.1"`).
 - Tentativas do `OWNER-RC1-CUT.sh`: 1.ª morreu no passo 1 por carga de CPU (`TestOutputScanPerfRigorous::test_p99_{1kb,5kb,10kb}` sob saturação); 2.ª morreu no passo 1 em `verify-counts.sh` completo (cifra `~15,400` × 16.231 coletados). Cura: esta unidade (16 sítios em 9 docs → `~16,200`; `docs/FAQ.md` e `docs/WHAT-WE-ARE.md` na parte 2 do runner).

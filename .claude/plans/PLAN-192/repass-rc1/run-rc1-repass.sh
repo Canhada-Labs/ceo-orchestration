@@ -331,7 +331,7 @@ part_coverage() {
   case "$1" in
     1) echo "PLAN-190 W1 (debate r1 com 3 criticos -> consenso PROCEED; SEIS rodadas de pair-rail r1-r6, as cinco primeiras NO-GO com cura de classe a cada uma: vinculo fraco que bloqueava, token de override, estado em disco lido de volta, totalidade e validacao do manifesto; r6 = rodada final sem P0; assinado pelo Owner em 075beed9)" ;;
     2) echo "PLAN-190 W1 (a registracao nos templates viajou no mesmo patch assinado de 24 paths; o perfil user e DERIVADO da base com --check byte a byte no validate.yml desde a wave-s330-F); os sitios de versao sao escritos pelo release.sh bump e NAO passaram por rail proprio" ;;
-    3) echo "PLAN-190 W1 para ceo-launches.py (mesmas seis rodadas; o achado P2 da r6 sobre relaunch --out virou a W1.1, curada neste delta com prova por mutacao); as cinco CLIs de W2/W3 landaram LIVRES, com 39 testes e SEM rodada de pair-rail propria — esta e a primeira revisao cruzada delas" ;;
+    3) echo "PLAN-190 W1 para ceo-launches.py (mesmas seis rodadas; o achado P2 da r6 sobre relaunch --out virou a W1.1, curada neste delta com prova por mutacao); as cinco CLIs de W2/W3 landaram LIVRES, com 39 testes e SEM rodada de pair-rail propria — a primeira revisao cruzada delas foi a rodada 1 deste re-pass (ver ROUND 2 no contexto)" ;;
   esac
 }
 
@@ -352,6 +352,17 @@ CONTEXT
   codex pin files and the release driver, the last two under their own
   signed ceremonies) is DECLARED out of scope in
   .claude/plans/PLAN-192/repass-rc1/README-rc1.md, with the reason.
+- THIS IS ROUND 2. Round 1 (candidate 9e9840b2, archived with its three
+  verdicts under .claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r1/)
+  returned NO-GO on all three parts: five declared conditions were FALSE
+  against the code (7, 10, 12, 14, 15); no P0. Since then NO framework code
+  changed: the delta 9e9840b2..candidate touches only CHANGELOG.md, the two
+  operator docs and files under .claude/plans/. The conditions were
+  rewritten to say what the code does, and every code finding of round 1
+  is DECLARED still open (section D of the conditions, and the CHANGELOG).
+  A round-1 finding that is now declared is not a new finding: judge
+  whether the declaration is HONEST, and report what is still false or
+  still undeclared.
 - Prior cross-model coverage of THIS part (not a reason to skip; yours is
   the INTEGRATION view against a tag an adopter actually installed): $3
 - Python is stdlib-only and must stay Python >= 3.9 compatible (no runtime

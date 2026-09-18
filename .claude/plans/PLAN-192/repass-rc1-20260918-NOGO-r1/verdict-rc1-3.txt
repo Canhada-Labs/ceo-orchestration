@@ -1,0 +1,39 @@
+Reviewed candidate `9e9840b2` against `v1.4.0`; the conditions hash matches. Validation used Python 3.9.6, read-only CLI execution, and in-memory fault/concurrency probes. The checkout remains unchanged.
+
+A5 correctly limits automatic blast radius: these helpers run only when invoked. B8/B9/B11/B12 and C16 describe the reviewed recovery paths. **B14 is false.** No P0 found.
+
+**Declared-condition failure**
+
+- **P2 — B14 FALSE:** [.claude/scripts/ceo-launches.py:137](.claude/scripts/ceo-launches.py#L137), [.claude/scripts/ceo-launches.py:149](.claude/scripts/ceo-launches.py#L149), [docs/workflow-recovery.md:127](docs/workflow-recovery.md#L127). After a short write, `KeyboardInterrupt` bypasses both close and cleanup. The probe left 2 of 11 bytes at the destination. Handled write errors also leave partial files when unlink fails, as line 157 explicitly acknowledges. This contradicts “whole file or no file.” **Minimal fix:** write into an exclusively created temporary file, then publish the completed destination atomically without replacement; put cleanup in `finally`. Its P2 severity does not override the cut rule for a false declared condition.
+
+**NEW FINDINGS (annex)**
+
+1. **P1 — Invalid scores become approval.** [.claude/scripts/approval_gate.py:149](.claude/scripts/approval_gate.py#L149). With the supplied policy and otherwise valid evidence, both `"NaN"` and `"nan/10"` produce `APPROVED`, with no reasons: neither comparison against the minimum/maximum rejects NaN. **Minimal fix:** require `math.isfinite()` after numeric conversion, including fraction components.
+
+2. **P1 — Misspelled policy restrictions silently disappear.** [.claude/scripts/approval_gate.py:103](.claude/scripts/approval_gate.py#L103). Changing `max_open` to `max_opne` makes evidence containing an otherwise prohibited P1 pass. Unknown fields are accepted and the missing restriction defaults to `{}`, despite the advertised closed schema. **Minimal fix:** validate required and allowed keys at every policy level before applying defaults.
+
+3. **P1 — Incomplete gate evidence becomes green.** [.claude/scripts/approval_gate.py:202](.claude/scripts/approval_gate.py#L202), [docs/approval-gate.md:31](docs/approval-gate.md#L31). `gate: [{"rc": 0}]`, `failed: null`, and `failed: -1` all produce `APPROVED`. The documented requirement is `failed == 0`. **Minimal fix:** require a nonempty command identifier and a present, non-boolean integer failure count equal to zero.
+
+4. **P1 — Explicit test identities silently resolve to different tests.** [.claude/scripts/test_refs.py:107](.claude/scripts/test_refs.py#L107). The actual CLI accepted `tests/unit/test_test_refs.py::NonexistentClass::test_file_path_expands_to_all_nodes`, resolving it to `TestRefsNormalize` with rc 0. `match` can therefore accept proof for a different class. **Minimal fix:** require exact matching when a class is explicitly supplied; restrict shorthand resolution to genuinely unqualified references.
+
+5. **P1 — Cooperative takeover permits two successful writers.** [.claude/scripts/worktree_lock.py:151](.claude/scripts/worktree_lock.py#L151), [.claude/scripts/worktree_lock.py:161](.claude/scripts/worktree_lock.py#L161). Two `steal` calls read the same stale holder; one completes, then the other unconditionally replaces its fresh lock. Both return rc 0. The interleaving probe reproduced this without bypassing cooperation. **Minimal fix:** serialize ownership checks and mutations across acquire, heartbeat, release, and steal using a separate stable lock.
+
+6. **P1 — Mutation evidence can name bytes that were never tested.** [.claude/scripts/mutant_sandbox.py:107](.claude/scripts/mutant_sandbox.py#L107), [.claude/scripts/mutant_sandbox.py:128](.claude/scripts/mutant_sandbox.py#L128). The helper hashes the patch, creates the worktree, then asks Git to reread the patch pathname. A parallel producer replacing that file in between causes patch B’s result to be stored under patch A’s hash. The probe recorded exactly that mismatch. **Minimal fix:** feed the already hashed `mutant_bytes` directly to `git apply` through stdin.
+
+7. **P1 — GC removes active sandboxes.** [.claude/scripts/mutant_sandbox.py:116](.claude/scripts/mutant_sandbox.py#L116), [.claude/scripts/mutant_sandbox.py:169](.claude/scripts/mutant_sandbox.py#L169). A running sandbox remains `creating` until cleanup. Concurrent `gc` treats that state as abandoned and invokes `worktree remove --force`, deleting files beneath an active test process. **Minimal fix:** hold a per-sandbox lock throughout execution and make GC skip live ownership.
+
+8. **P1 — Runner failures become reusable mutation “kills.”** [.claude/scripts/mutant_sandbox.py:141](.claude/scripts/mutant_sandbox.py#L141). Every nonzero command result is `killed`, including a missing Python test module, collection failure, or signal termination. Probes with return codes `2`, `5`, and `-9` all became `killed`; the CLI consequently reports success. **Minimal fix:** establish a passing baseline and distinguish accepted test-failure outcomes from runner/infrastructure errors before caching a kill.
+
+**P2 follow-ups**
+
+- **Mutable checkpoint revisions:** [.claude/scripts/phase_checkpoint.py:120](.claude/scripts/phase_checkpoint.py#L120). `--rev HEAD` is accepted and stored literally; after HEAD moves, status still returns the previous completed phase. **Minimal fix:** reject symbolic revisions or resolve them to immutable commit IDs before recording/comparing.
+
+- **Parameterized-reference claim is unimplemented:** [docs/approval-gate.md:85](docs/approval-gate.md#L85), [.claude/scripts/test_refs.py:104](.claude/scripts/test_refs.py#L104). `test_x[case]` is compared literally and returns `node-not-found`; no parameter suffix is removed. **Minimal fix:** implement the documented normalization or explicitly declare parameterized references unsupported.
+
+- **Predictable temporary file follows symlinks:** [.claude/scripts/worktree_lock.py:98](.claude/scripts/worktree_lock.py#L98). A pre-existing `writer.lock.tmp` symlink makes heartbeat/steal truncate and chmod its target, potentially outside the worktree. **Minimal fix:** create a unique temporary file exclusively and operate through its descriptor.
+
+- **Forced recovery can omit its audit record:** [.claude/scripts/worktree_lock.py:135](.claude/scripts/worktree_lock.py#L135). `release --force` on an unreadable lock unlinks it and returns without `_log`, contradicting the promised recording of every transition. **Minimal fix:** append a forced-release record with the caller and unreadable-lock status.
+
+- **A torn checkpoint append consumes the next record:** [.claude/scripts/phase_checkpoint.py:56](.claude/scripts/phase_checkpoint.py#L56). Following a crash without a trailing newline, the next successful append joins onto the torn JSON; `_read` discards both, despite `mark` reporting success. **Minimal fix:** serialize appends and repair the trailing record boundary before writing.
+
+VERDICT: NO-GO — Declared condition B14 is false because `relaunch --out` can leave a partial destination file.

@@ -1,0 +1,9 @@
+# Rodada NO-GO arquivada: no git ficam os vereditos, a PROVENANCE, o MANIFEST, o
+# candidato, as condicoes julgadas e o record.md (a convencao dos NO-GO arquivados
+# da v1.4.0). O resto e reproduzivel a partir do candidato e fica so no disco.
+transcript-rc1-*.log
+diff-rc1-*.patch
+payload-rc1-*.redacted.txt
+paths-rc1-*.manifest.txt
+run-rc1-repass.sh
+cut-state.txt

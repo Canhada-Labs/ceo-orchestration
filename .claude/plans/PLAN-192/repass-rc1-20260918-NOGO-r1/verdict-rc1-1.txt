@@ -1,0 +1,20 @@
+Advisory review of `9e9840b2`, payload 1/3: **conditions 7, 10 and 12 are false against the code.** No P0 found.
+
+1. **P1 — Condition 10 false: incomplete index reads can block legitimate resumes.** [`.claude/hooks/_lib/launch_ledger.py:487`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.Eh6UQ9/wt/.claude/hooks/_lib/launch_ledger.py:487) returns the accumulated prefix after an `OSError`. Suppose a run launched with args A, then deliberately resumed and bound with args B. If the next index read fails before B’s binding, a legitimate resume with B is compared against A and blocked. I reproduced `mismatch_blocked`; a torn newest binding produces the same stale comparison. **Minimal fix:** expose index-read integrity to guard lookup; incomplete history must produce `inconclusive` and a breadcrumb, never authoritative older evidence.
+
+2. **P1 — Condition 7 false: ambiguous response IDs receive strong bindings.** [`.claude/hooks/_lib/launch_ledger.py:315`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.Eh6UQ9/wt/.claude/hooks/_lib/launch_ledger.py:315) immediately accepts the first structured key. For `{"runId":"wf_11111111-aa","run_id":"wf_22222222-bb"}`, PostToolUse binds the first ID as `by_tool_use`, despite the ambiguity. Separately, the regex at [line 110](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.Eh6UQ9/wt/.claude/hooks/_lib/launch_ledger.py:110) extracts `wf_12345678` from `Run ID: wf_12345678-123456789`, inventing a shortened identity. Either can associate subsequent comparisons with the wrong run. **Minimal fix:** require agreement between structured ID fields and validate complete tokens without accepting malformed prefixes.
+
+3. **P1 — Condition 12 false: `no_manifest` is silent.** [`.claude/hooks/_lib/launch_ledger.py:791`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.Eh6UQ9/wt/.claude/hooks/_lib/launch_ledger.py:791) records `no_manifest` and returns `{}`; the wrapper emits no warning for it. Resuming from another worktree—or resuming a run launched before upgrading from v1.4.0—therefore proceeds without the promised “só aviso.” **Minimal fix:** return an explicit notice that the call proceeds without a recorded baseline.
+
+**NEW FINDINGS (annex)**
+
+4. **P1 — The advisory recovery route returns the changed inputs.** [`.claude/hooks/_lib/launch_ledger.py:757`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.Eh6UQ9/wt/.claude/hooks/_lib/launch_ledger.py:757) identifies the current launch as the recorded call and recommends `relaunch <run-id>`. Reproduction: launch A; allow accidental args B in advisory mode; PostToolUse binds B; follow the recovery command. It prints **B**, with an “exact recorded call” heading. This is particularly easy to miss when reviewing PreToolUse and PostToolUse separately. **Minimal fix:** reference the immutable `against` launch ID and the existing `show <against>` command; any relaunch recovery route must likewise select that specific launch.
+
+**P2 follow-up**
+
+5. **Ledger writes are not confined against symlinks.** [`.claude/hooks/_lib/launch_ledger.py:132`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.Eh6UQ9/wt/.claude/hooks/_lib/launch_ledger.py:132) accepts a symlinked `launches` directory, and [line 174](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.Eh6UQ9/wt/.claude/hooks/_lib/launch_ledger.py:174) follows a symlinked `launches.jsonl`, appending into its target outside the state directory. Condition 9 excludes deliberate same-user planting, so this is a follow-up under that threat model. **Minimal fix:** anchor writes to a verified directory and reject symlink/nonregular index destinations.
+
+The candidate and conditions digest matched. Read-only, in-memory probes reproduced the failures, including the recovery sequence on Python 3.9.6; no real-harness or upgrade end-to-end test was run.
+
+Conditions 7, 10 and 12 require correction and re-review under the stated cut rule; the annex finding independently remains advisory.
+VERDICT: NO-GO

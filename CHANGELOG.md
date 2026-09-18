@@ -53,11 +53,14 @@ than rebuilt from memory. Both kill-switches are named below. No speed claim.
   difference); notices for allowed calls reach the model as
   `additionalContext`; the block reason names the deliberate-change route
   (`args.resume` style resumes declare themselves); the run id is taken from
-  the harness `Run ID:` label, never guessed between ids; a record whose
-  construction or write fails is still inconclusive-recorded or
+  a top-level `runId`/`run_id` key of the response, else from the harness
+  `Run ID:` label, else from the only id-shaped token (two different
+  labelled ids, or two different unlabelled ones, bind nothing); a record
+  whose construction or write fails is still inconclusive-recorded or
   breadcrumbed; `relaunch --out` never overwrites.
   `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mode, ledger kept),
-  `CEO_WORKFLOW_LEDGER=0` (off). Fail-open on infrastructure. CLI
+  `CEO_WORKFLOW_LEDGER=0` (off). Fail-open on infrastructure, with the gaps
+  listed under Known-open below. CLI
   `ceo-launches.py` (`list · show · relaunch · check · bind · orphans ·
   report`) and operator doc `docs/workflow-recovery.md`. Inventory:
   60 hook scripts, 49 wired, 52 event registrations, 72 `_lib` modules.
@@ -65,22 +68,27 @@ than rebuilt from memory. Both kill-switches are named below. No speed claim.
   Five stdlib-only CLIs under `.claude/scripts/`, called by a workflow phase,
   a recovery rite or a human — NO hook enforces any of them yet (the
   single-writer hook and quota admission are future ceremonies).
-  `approval_gate.py` decides APPROVED/REJECTED by code from a closed policy
+  `approval_gate.py` decides APPROVED/REJECTED by code from a policy file
   (minimum score, a closed severity enum, blocking severities, a cap per
-  severity, reviewed revision == final revision, green gate): missing,
-  ambiguous or invalid input is REJECTED with the rule named, and there is
-  no default-green path (doc: `docs/approval-gate.md`). `test_refs.py`
+  severity, reviewed revision == final revision, green gate): under the
+  shipped default policy a missing score, findings list, reviewed revision
+  or gate list, a prose score, an out-of-enum severity and a wrong scale are
+  REJECTED with the rule named (doc: `docs/approval-gate.md`); the inputs
+  that still come out APPROVED are listed under Known-open below.
+  `test_refs.py`
   normalises test references — file path, node id, bare function,
   `Class.method` — to pytest node ids by static `ast` (tests are never
-  executed); an ambiguous name is an error that lists the candidates, never a
-  silent match. `mutant_sandbox.py` runs a mutant inside a disposable detached
+  executed); an ambiguous BARE name is an error that lists the candidates.
+  `mutant_sandbox.py` runs a mutant inside a disposable detached
   worktree of an identified revision, records the outcome per (revision,
   mutant, command) so a valid verification can be reused, removes the copy in
   `finally`, and reports an ERROR outcome if `git status` of the
   implementation tree differs before and after. `worktree_lock.py` gives one
-  writer per worktree (`O_EXCL` lock file, heartbeat, `steal` only when the
-  holder's heartbeat is past its TTL, `release` by the owner or a recorded
-  `--force`). `phase_checkpoint.py` keeps an append-only ledger of steps
+  writer per worktree among callers that use it (`O_EXCL` lock file,
+  heartbeat, `steal` when the holder's heartbeat is older than the
+  `--stale-minutes` the CALLER passes — the holder's own TTL is not
+  consulted — and `release` by the owner or with `--force`).
+  `phase_checkpoint.py` keeps an append-only ledger of steps
   completed inside a phase, bound to the code revision: steps recorded under
   another revision are listed as stale and never count.
 
@@ -94,7 +102,52 @@ than rebuilt from memory. Both kill-switches are named below. No speed claim.
   returns rc 2 naming the incomplete write and removes the partial file —
   only the inode this call created (`O_EXCL` at open, inode comparison before
   the unlink), never a file that is not its own; if the partial file cannot
-  be removed the message says so.
+  be removed it STAYS at the destination and the message says so. Not
+  handled: an interruption that is not an `OSError` (Ctrl-C, a signal) in the
+  middle of the write can still leave a partial file, with no message — so
+  this is not yet "the whole file or no file" (known-open below).
+
+### Known-open (found by this release's cross-review)
+Cross-review round 1 of the rc.1 candidate (2026-09-18) returned NO-GO on
+five declared conditions that were false against the code; no P0. Round 2
+is over the same code, with the text corrected. Every CODE finding of
+round 1 is still open in this release; the verdicts are under
+`.claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r1/`. By class:
+- **Workflow guard** (`launch_ledger.py`). An incomplete read of the index
+  (an I/O error midway, or a torn newest line) is not signalled: the guard
+  then compares against the previous surviving binding and can BLOCK a
+  legitimate resume (exit: the `CEO_WORKFLOW_RESUME_FORCE` declaration). A
+  resume from another worktree, or of a run launched before the hook
+  existed, finds no manifest and proceeds with NO notice. When both `runId`
+  and `run_id` are present and differ, the first wins; an id whose tail is
+  too long is bound by its prefix instead of being rejected. When a
+  mismatch is NOT blocked (advisory mode, or a heuristic bind) the notice
+  names the CURRENT call's manifest as "the recorded call", and once that
+  call is bound `relaunch <run-id>` prints the changed inputs. Ledger writes
+  follow a symlinked `launches/` directory or
+  index file (same-user tampering is outside the threat model).
+- **`relaunch --out`**: the two partial-file cases named under Fixed above.
+- **`approval_gate.py`** still APPROVES a non-finite score (`"NaN"`,
+  `"nan/10"`), a gate entry with no `failed` count or no `cmd` (or a negative
+  `failed`), and a policy whose restriction key is misspelled (unknown keys
+  are ignored, so the restriction silently disappears).
+- **`test_refs.py`**: a node id whose class does not exist resolves to the
+  only test with that function name in the file; parametrised ids
+  (`test_x[case]`) are not normalised and come back `node-not-found`.
+- **`worktree_lock.py`**: `steal` trusts the caller's `--stale-minutes`, not
+  the holder's TTL; two concurrent `steal` calls can both succeed; the fixed
+  `writer.lock.tmp` name follows a symlink; `release --force` on an
+  unreadable lock is not logged.
+- **`mutant_sandbox.py`**: the patch is hashed and then re-read by path
+  (another producer can swap it in between); `gc` removes a sandbox that is
+  still running (its state stays `creating` until the end); every non-zero
+  exit code is recorded as `killed`, including a runner or collection error.
+- **`phase_checkpoint.py`**: `--rev HEAD` is stored literally; an append
+  after a torn line loses both records.
+- **Delivery**: `upgrade.sh` delivers `.claude/scripts/local/` (maintainer
+  tooling, the release driver `release.sh` included) to adopters, while a
+  fresh install does not; no delivered hook, command, settings file,
+  template, skill or top-level script references `release.sh`.
 
 ### Known-open (carried from v1.4.0 — NOT cured by this release)
 - The signed v1.4.0 verdict carries an annex of P1 findings and declared

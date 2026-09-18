@@ -183,6 +183,38 @@ Check: npm view ceo-orchestration version
   `docs/WHAT-WE-ARE.md` na parte 2 do re-pass. Lição para o molde de corte: rodar o `preflight` inteiro
   num clone descartável ANTES de chamar o Owner (menos o probe de assinatura, que usa a chave dele).
 
+- **S356, terceira e quarta tentativas; rodada 1 do re-pass `NO-GO` (2026-09-18).** (3) Preflight verde,
+  bump `9e9840b2` commitado e pushado; o passo 4 morreu em «CI nao terminou em 90 min» — o Smoke Install
+  levou 1h51 e o teto do molde é 90 min (defeito do molde, a subir no kit do GA; a rota foi re-rodar, o
+  script é resumível). (4) Passos 4–5 verdes; o passo 6 — codex 0.155.0, `gpt-6-astra`, 3 partes —
+  devolveu `NO-GO` nas TRÊS partes, sem P0: cinco condições declaradas eram falsas contra o código (7,
+  10, 12, 14, 15). Conferi cada uma por leitura ou sonda antes de decidir — todas confirmadas, e também
+  TODOS os P1/P2 do anexo (triagem em `PLAN-192/repass-rc1-20260918-NOGO-r1/record.md`). Duas frases do
+  CHANGELOG escritas nesta sessão caíram junto (TTL do `steal`; «invalid input is REJECTED»).
+  **Decisão para a rodada 2 (a última que a regra de parada permite): corrigir TEXTO, nenhum código.** O
+  código da parte 1 é canônico (cerimônia + ~1h50 de Smoke Install por candidato) e código novo abre
+  superfície nova na última rodada. As condições 5, 7, 9, 10, 12, 14 e 15 dizem agora o que o código
+  faz; a seção D declara todos os achados de código abertos, com o sha256 dos três vereditos dentro do
+  material assinado; CHANGELOG e os dois docs de operador corrigidos; o prompt do runner diz que é a
+  rodada 2. Residual que o texto não alcança: o `RELEASE_HEADLINE` do `release.sh` (canônico, assinado)
+  resume a W1.1 como «o arquivo inteiro ou nenhum arquivo» — a condição 14 declara o limite; mudar a
+  frase é nova cerimônia, decisão do Owner. Lição para o molde: condição declarada é afirmação sobre
+  CÓDIGO e pede a mesma sonda que o revisor vai fazer ANTES da rodada; escrevi 16 de cabeça e 5 caíram.
+
+- **Follow-ups de código que este corte deixa DECLARADOS (alvo 1.4.2, ou rc.2 se o Owner preferir).**
+  Do re-pass (todos conferidos contra o código em 2026-09-18): leitura incompleta do índice não
+  sinalizada ⇒ falso bloqueio (`launch_ledger.iter_index`); `no_manifest` sem aviso; `extract_run_id`
+  (duas chaves divergentes; token truncado pelo prefixo); aviso de mismatch não bloqueado aponta o
+  manifesto ERRADO e `relaunch` passa a imprimir as entradas mudadas; escritas do ledger sem confinamento
+  de symlink; `relaunch --out` por temporário + publicação atômica sem substituição + `finally`;
+  `approval_gate.py` (score não finito, chave de política desconhecida, evidência de gate incompleta);
+  `test_refs.py` (classe inexistente casa outra; ids parametrizados); `worktree_lock.py` (TTL do detentor,
+  dois `steal` concorrentes, temporário previsível, `release --force` sem log); `mutant_sandbox.py` (TOCTOU
+  do patch, `gc` de sandbox ativo, rc≠0 ⇒ `killed`); `phase_checkpoint.py` (`--rev` simbólico, append após
+  linha rasgada); `_framework_path_excluded` sem `.claude/scripts/local/` (upgrade entrega o que a
+  instalação fresca exclui). Do molde: teto de 90 min do passo 4; orçamento ABSOLUTO dos testes de tempo;
+  probe GPG do preflight.
+
 ## How to continue
 
 Primeira mensagem de uma sessão nova: «Retomar o PLAN-192 (corte da v1.4.1). Ler este plano e

@@ -7,6 +7,8 @@ condição declarada FALSA contra o código ou por P0; um P1 não declarado vai 
 «NEW FINDINGS (annex)» como ANEXO assinado. O envelope do GA dirá, item a item, o que foi
 curado e o que fica known-open — este texto NÃO promete uma versão para a cura.
 Adopters: os repositórios do maintainer, subindo da v1.4.0 (ou da v1.3.0) por `upgrade.sh`.
+Esta é a RODADA 2. A rodada 1 devolveu `NO-GO` nas três partes por cinco condições falsas
+(7, 10, 12, 14 e 15); a seção D diz o que mudou desde então — texto, nenhum código.
 
 ## A. Condições DURAS (o texto da release foi escrito para dizer isto)
 
@@ -41,44 +43,100 @@ Adopters: os repositórios do maintainer, subindo da v1.4.0 (ou da v1.3.0) por `
    `approval_gate.py`, `test_refs.py`, `mutant_sandbox.py`, `worktree_lock.py` e
    `phase_checkpoint.py` são chamadas por uma fase de workflow, por um rito de recuperação ou
    por uma pessoa. `worktree_lock.py` é um lock COOPERATIVO: um escritor que não o chama não é
-   impedido. Elas landaram como scripts livres, com testes, e este re-pass é a primeira
-   revisão cruzada delas.
+   impedido. Elas landaram como scripts livres, com testes e sem rodada de pair-rail; a
+   primeira revisão cruzada delas foi a rodada 1 deste re-pass, e os achados dela sobre as
+   cinco seguem abertos — ver a seção D.
 
 ## B. Limites declarados do guard (residual do texto assinado da W1, `075beed9`)
 
 6. O guard vê a chamada da tool `Workflow`, não os `agent()` internos, e não impede o harness
    de re-chavear o cache de resultados: impede o OPERADOR de retomar sobre entradas diferentes
    sem saber. Não há checkpoint dentro de um `agent()` (limite do runner).
-7. O run id é extraído da resposta por forma (`wf_<hex8>[-<hex>]`, a partir do rótulo
-   `Run ID:`); outra versão da CLI pode exigir `ceo-launches.py bind` manual. Ids ambíguos ou
-   ausentes na resposta deixam o lançamento sem vínculo, e sem vínculo forte não há bloqueio.
+7. O run id é extraído da resposta por forma (`wf_<hex8>`, com um sufixo opcional `-<hex>` de
+   1 a 8 dígitos), nesta ordem: uma chave `runId` ou `run_id` no nível de cima da resposta — a
+   primeira das duas cujo valor tiver a forma vence, e NÃO há checagem de acordo entre elas; senão o id no rótulo
+   `Run ID:`; senão o único token com a forma no texto. Dois ids ROTULADOS diferentes, ou dois
+   tokens não rotulados diferentes, são ambíguos e não vinculam nada; id ausente, idem. Um token
+   cuja cauda não cabe na forma (`wf_12345678-123456789`) NÃO é rejeitado: é lido pelo prefixo
+   que cabe (`wf_12345678`), e esse prefixo é o que se vincula. Outra versão da CLI pode exigir
+   `ceo-launches.py bind` manual. Sem vínculo forte (por `tool_use_id` ou manual) não há
+   bloqueio.
 8. Um resume sobre um SCRIPT diferente com os mesmos `args` é só aviso por padrão
    (`CEO_WORKFLOW_SCRIPT_GUARD=enforce` para bloquear). Para um workflow NOMEADO, `relaunch`
    reproduz o nome e os `args` sem verificar o conteúdo salvo sob aquele nome.
 9. Adulteração deliberada do diretório de estado pelo mesmo usuário está fora do modelo de
-   ameaça. Um registro inconsistente (hash dos args, hash do script contra o snapshot, forma
+   ameaça. Um MANIFESTO inconsistente (hash dos args, hash do script contra o snapshot, forma
    dos ids) é INCONCLUSIVO para o guard — nunca match, nunca bloqueio — e recusado como
-   «exato» pelo `relaunch` (rc 7).
+   «exato» pelo `relaunch` (rc 7). O ÍNDICE `launches.jsonl` não tem verificação de integridade
+   própria — as linhas são validadas só pela forma: ver a condição 10.
 10. Um `scriptPath` é lido só como arquivo regular de até 8 MiB; num ponto de montagem travado
-    a leitura pode segurar o hook até o timeout do harness. Falha de infraestrutura (arquivo
-    ausente, import, timeout) é fail-OPEN: breadcrumb e `{}`.
+    a leitura pode segurar o hook até o timeout do harness. No wrapper, um import do
+    `launch_ledger` que falha, um diretório de estado indisponível, um stdin ilegível ou uma
+    exceção que escape de `decide_pre`/`decide_post` terminam em breadcrumb no stderr e `{}` (a
+    chamada segue); uma falha ao GRAVAR o registro não desfaz uma decisão que o guard já tinha
+    computado. Isso NÃO cobre uma leitura INCOMPLETA do índice: `iter_index` devolve as linhas
+    já lidas quando um `OSError` interrompe a leitura, e pula uma linha rasgada, sem sinalizar
+    nenhum dos dois casos. Se a linha de vínculo mais recente de um run se perde assim, o guard
+    compara contra o vínculo anterior que sobreviveu e pode BLOQUEAR uma retomada legítima; a
+    saída é a declaração `CEO_WORKFLOW_RESUME_FORCE`. Achado P1 da rodada 1, aberto.
 11. O ledger guarda `args` e snapshots de script SEM poda, e `show`/`relaunch` os imprimem de
     volta: o que o operador passou em `args` fica em disco no diretório de estado do projeto.
-12. Lançamento e retomada precisam do MESMO diretório de projeto (outro worktree ⇒
-    `no_manifest`, só aviso); o CLI sem `CLAUDE_PROJECT_DIR` sobe do diretório corrente até o
-    projeto que contém `.claude/`, excluindo o `$HOME`.
+12. Lançamento e retomada precisam do MESMO diretório de projeto. De outro worktree, ou para um
+    run lançado antes de o hook existir, o guard não acha manifesto: grava `no_manifest` no
+    manifesto da chamada nova e a chamada segue SEM aviso e sem bloqueio (achado P1 da rodada 1,
+    aberto). O CLI sem `CLAUDE_PROJECT_DIR` sobe do diretório corrente até o projeto que contém
+    `.claude/`, excluindo o `$HOME`.
 13. `git status` no `cwd`, usado para registrar a revisão do código, ainda pode rodar filtros
     configurados pelo repositório; o gate de latência de hooks do CI não perfila este hook.
-14. `relaunch --out` cria sempre um arquivo NOVO (`O_EXCL`, nunca segue symlink) e, a partir
-    desta release, entrega o arquivo inteiro ou nenhum arquivo (PLAN-190 W1.1).
+14. `relaunch --out` cria sempre um arquivo NOVO (`O_EXCL`; um symlink no destino é recusado,
+    nunca seguido) e, a partir desta release, continua a escrita até o último byte (PLAN-190
+    W1.1). Numa falha TRATADA — erro de I/O, escrita sem progresso, erro no `close` — devolve
+    rc 2 e remove o parcial, só o inode que esta chamada criou; se a remoção falha, o parcial
+    FICA no destino e a mensagem o diz. Uma interrupção que não é `OSError` (Ctrl-C, um sinal)
+    no meio da escrita não é tratada e pode deixar um parcial no destino, sem mensagem. Logo
+    «o arquivo inteiro ou nenhum arquivo» NÃO vale nesses dois casos (achado da rodada 1,
+    aberto). A anotação da tag — o bloco `RELEASE_HEADLINE` de `.claude/scripts/local/release.sh`,
+    canônico e assinado na relmeta-141 — resume a correção com essa frase; ela deve ser lida com
+    este limite.
 
 ## C. Escopo deste re-pass
 
 15. Três partes, por raio de dano ao adopter, sobre o delta `v1.4.0..candidato`; o que fica de
     fora está declarado, com o motivo, em `.claude/plans/PLAN-192/repass-rc1/README-rc1.md`:
     testes e fixtures; `.claude/plans/**` e `docs/research/**`; `CLAUDE.md`; os dois arquivos
-    de pin do codex e o par `release.sh` + manifesto ADR-192 (cada um sob a sua própria
-    cerimônia assinada; nenhum dos quatro é entregue a adopters).
+    de pin do codex e o par `release.sh` + manifesto ADR-192 (cada par sob a sua própria
+    cerimônia assinada). Desses quatro, os três de `.claude/governance/` não são entregues a
+    adopters. O `.claude/scripts/local/release.sh` É entregue, e só pelo `upgrade.sh`: ele
+    enumera `.claude/scripts/` recursivamente e o predicado `_framework_path_excluded`
+    (`scripts/_framework_manifest_set.sh`) não exclui `.claude/scripts/local/`, enquanto a
+    instalação fresca copia só o nível de cima de `.claude/scripts/`. Ele fica fora deste
+    re-pass porque a mudança dele nesta faixa é a relmeta-141 — o bloco POR-RELEASE
+    (`TARGET_BASE`, título, escopo, headline) e o comentário que aponta o derivador —, assinada
+    pelo Owner em cerimônia própria (`.claude/plans/PLAN-192/relmeta/`). A divergência
+    instalação × upgrade sobre `.claude/scripts/local/` é achado da rodada 1, aberto.
 16. `docs/workflow-recovery.md` e `docs/approval-gate.md` NÃO são entregues a adopters (só
     `templates/docs/*` vira `docs/` no alvo). A rota que a mensagem de bloqueio nomeia é
     `ceo-launches.py relaunch`, que É entregue em `.claude/scripts/` e no build do plugin.
+
+## D. O que a rodada 1 achou, e o que mudou desde então
+
+17. A rodada 1 rodou sobre o candidato `9e9840b2fc6c033498a0c12c65178a5254d0b04e` e está
+    arquivada em `.claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r1/`, com a triagem em
+    `record.md`. Os três vereditos dela entram neste material assinado pelo sha256:
+    `verdict-rc1-1.txt` f46ebb9e8e7d33a2e9a0295a4daccc4e2c07214cf9497b4922a4734ffae12e6a,
+    `verdict-rc1-2.txt` 13716c568ddd997d2d5832d7f943b739e12dd6ab1a06b68bd6a4e8cee274b85e,
+    `verdict-rc1-3.txt` a4d9c15739622c8585c56bdef53df35ea31e0c5087dd0a55b684235cac06af49.
+18. O delta `9e9840b2..candidato` toca só `CHANGELOG.md`, `docs/workflow-recovery.md`,
+    `docs/approval-gate.md` e arquivos sob `.claude/plans/` (o kit do re-pass, o plano e a
+    rodada 1 arquivada): nenhum arquivo sob `.claude/hooks/`, `.claude/scripts/`, `scripts/` ou
+    `templates/` mudou. As cinco condições falsas (7, 10, 12, 14, 15) foram reescritas para
+    dizer o que o código faz, e as condições 5 e 9 foram ajustadas com elas. As frases que a
+    rodada 1 contestou por arquivo e linha — `CHANGELOG.md:68` e `:81`,
+    `docs/workflow-recovery.md:127`, `docs/approval-gate.md:31` e `:85` — foram reescritas, e
+    os três arquivos ganharam a lista dos achados abertos; isto não afirma que não reste
+    nenhuma outra frase imprecisa neles.
+19. Todos os achados de CÓDIGO da rodada 1 seguem ABERTOS neste candidato: os P1 sob «NEW
+    FINDINGS (annex)» e os P2 dos três vereditos do item 17, inclusive os que as condições 10,
+    12, 14 e 15 citam; o que mudou foi o texto que os contradizia. Nenhum é P0 segundo aqueles
+    vereditos. A entrada `[1.4.1]` do CHANGELOG os resume sob «Known-open (found by this
+    release's cross-review)».

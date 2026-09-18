@@ -24,7 +24,7 @@ regressed 11 slices; exact args resumed 12/12 in the right phase.
 |---|---|---|
 | before dispatch | `launch_id`, instant, `session_id`, `tool_use_id`, `cwd`; script fingerprint (`sha256` + bytes) **and a snapshot of the script bytes** (inline text, or the `scriptPath` file as read at that instant); **`args` as literal canonical JSON, never truncated** — an absent `args` field is recorded as `<absent>`, distinct from `null`; `resumeFromRunId`; `name` / `description` | `<state-dir>/launches/<launch_id>.json` (atomic, 0600) + `<launch_id>.script` + index `launches.jsonl` |
 | right after (same hook) | code revision of `cwd` (`git rev-parse HEAD`, dirty flag) inside a 1.2 s budget with `--no-optional-locks`; slow or absent git ⇒ `code.status: unknown` — the manifest is already on disk | same manifest (second atomic write) |
-| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. An unknown `tool_use_id`, or zero or several candidates, becomes an `orphan` index line; a response with no run id, or with two different ids, records nothing and the launch stays unbound (never a guess). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot` | manifest (`run_id`, `bound_at`, `bind_method`) + a `bind` line |
+| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. An unknown `tool_use_id`, or zero or several candidates, becomes an `orphan` index line; a response with no run id, with two different labelled ids, or with two different unlabelled ids, records nothing and the launch stays unbound. Two cases are NOT treated as ambiguous (known-open, see Limitations): a top-level `runId` and `run_id` that differ (the first wins), and an id whose tail is too long (its prefix is bound). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot` | manifest (`run_id`, `bound_at`, `bind_method`) + a `bind` line |
 
 `<state-dir>` is the project's runtime state dir (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir`),
 the same family as the audit log. Nothing from transcripts is stored; `args` are the operator's own inputs.
@@ -101,7 +101,10 @@ path with a NUL byte is recorded `unreadable` with its reason — the script com
 inconclusive, `args` are still compared). An index line torn by a crash never swallows the next
 record: a writer that finds the file not ending in a newline starts a new line first. The lookup of
 the manifest bound to a run takes the most recent binding not explicitly unbound; if that record is
-unreadable, the answer is "no manifest", never an older launch's inputs.
+unreadable, the answer is "no manifest", never an older launch's inputs. A binding LINE that is lost
+from the index is a different case and is NOT detected (known-open, see Limitations): when an I/O
+error stops the index read midway, or the newest binding line is torn, the lookup sees the previous
+binding and the guard compares against that older launch.
 
 **The block reason is counts-only.** It says how many keys changed / are only in the recorded call /
 only in this call, whether the script hash differs, and the two routes — it never carries key names,
@@ -124,9 +127,11 @@ python3 .claude/scripts/ceo-launches.py show wf_<id>
 #    args are printed in the ORIGINAL key order; rc 7 and nothing announced as exact when the record
 #    fails its integrity check or its script was unreadable at launch; for a NAMED workflow it prints
 #    the name and the args — the content saved under that name is not verified; --out creates a NEW
-#    file only (never overwrites, never follows a symlink) and writes it WHOLE or not at all: a failed
-#    or incomplete write is rc 2 and the partial file is removed — never pass a copy from a run that
-#    did not print "snapshot copied to"
+#    file only (never overwrites, never follows a symlink) and keeps writing until the last byte: a
+#    HANDLED failure (I/O error, no progress, error at close) is rc 2 and the partial file is removed —
+#    if the removal itself fails, the partial file STAYS and the message says so; a Ctrl-C or a signal
+#    in the middle of the write is not handled and can leave a partial file. So never pass a copy
+#    from a run that did not print "snapshot copied to"
 python3 .claude/scripts/ceo-launches.py relaunch wf_<id> [--out /path/to/copy.js]
 
 # 3. before re-issuing from a rite that edits scripts: the guard's comparison, standalone
@@ -196,4 +201,22 @@ is PLAN-190 W6.
   under the 5 s registration timeout; the CI hook-latency gate does not profile this hook yet.
 - **Resume response.** The harness prints `Run ID: wf_<id>` on launch and on resume, and a resume keeps
   the same id (probed on CLI 2.1.274 with a `.script` scriptPath, which the tool accepts); the id is
-  taken from that label, else from the only distinct id in the response, never guessed.
+  taken from a top-level `runId`/`run_id` key, else from that label, else from the only distinct
+  id-shaped token in the response.
+- **Known-open, found by the cross-review of the v1.4.1-rc.1 candidate (2026-09-18), not cured in
+  v1.4.1:**
+  - an incomplete read of the index (an I/O error midway, or a torn newest line) is not signalled;
+    the guard then compares against the previous surviving binding and can BLOCK a legitimate
+    resume — the exit is the `CEO_WORKFLOW_RESUME_FORCE` declaration;
+  - `no_manifest` (another worktree, or a run launched before the hook existed) proceeds with no
+    notice at all;
+  - a top-level `runId` and `run_id` that differ are not treated as ambiguous (the first wins), and
+    an id whose tail is too long (`wf_12345678-123456789`) is bound by its prefix (`wf_12345678`)
+    instead of being rejected;
+  - when a mismatch is NOT blocked (advisory mode, or a heuristic bind), the notice names the
+    CURRENT call's manifest as "the recorded call"; once that call is bound, `relaunch wf_<id>`
+    prints the changed inputs — read the original with `show <launch_id>` of the launch the notice
+    was compared against (`guard.against` in the current manifest);
+  - ledger writes follow a symlinked `launches/` directory or index file (deliberate same-user
+    tampering is outside the threat model);
+  - `relaunch --out`: the two partial-file cases named in the recovery rite above.

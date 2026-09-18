@@ -1,0 +1,36 @@
+No P0 found. **Declared condition 15 is false**, which requires NO-GO under the supplied cut rule. This is advisory evidence, not authorization.
+
+**P1 — declared-condition failure: the excluded release driver reaches adopters.**  
+**FILE:LINE:** `.claude/plans/PLAN-192/repass-rc1/CONDITIONS-rc1.md:81`; `scripts/upgrade.sh:1598`, `:1621`, `:3974`; changed upgrade instruction at `INSTALL.md:660`.
+
+A fresh v1.4.0 installation excludes `.claude/scripts/local/`, but upgrading recursively enumerates `.claude/scripts/`. The exclusion predicate at `scripts/_framework_manifest_set.sh:95` does not exclude `local/`. Consequently, the candidate’s `.claude/scripts/local/release.sh` is copied into the adopter, contradicting “none of the four is delivered.”
+
+I confirmed this using the actual enumeration function with copying replaced by a reporting stub. It selected `local/release.sh` and 22 other local scripts.
+
+**Minimal fix:** Correct condition 15 and the scope README to acknowledge upgrade delivery and identify the separate ceremony covering it; regenerate the reviewed conditions snapshot. Alternatively, implement the claimed delivery exclusion. The easily missed distinction is **fresh-install selection versus recursive upgrade selection**.
+
+**NEW FINDINGS (annex)**
+
+1. **P1 — approval accepts an invalid score despite the CHANGELOG guarantee.**  
+   **FILE:LINE:** `CHANGELOG.md:68`; `.claude/scripts/approval_gate.py:85`, `:149`.
+
+   With the documented policy—minimum 7, maximum 10—and otherwise valid evidence, `"score": "NaN"` returns `APPROVED` with no reasons. `"nan/10"` also passes. Both numeric comparisons against NaN are false, bypassing the score requirement. This contradicts the added claim that invalid or ambiguous input is rejected.
+
+   **Minimal fix:** Reject non-finite parsed scores with `math.isfinite()` before comparisons, including fraction-form scores.
+
+2. **P1 — lock takeover can precede the holder’s TTL.**  
+   **FILE:LINE:** `CHANGELOG.md:81`; `.claude/scripts/worktree_lock.py:157`.
+
+   A holder with a 30-minute TTL and a heartbeat two minutes old is reported as non-stale. Nevertheless, another cooperative caller using `steal --stale-minutes 1` receives success and replaces it. I reproduced both results without filesystem writes. The implementation checks the caller’s threshold, not the holder’s TTL, contradicting the added release claim.
+
+   **Minimal fix:** Require the recorded TTL to have elapsed before takeover, or explicitly document that the caller-selected threshold overrides that protection.
+
+**P2 follow-up**
+
+- **FILE:LINE:** `INSTALL.md:660`. During the rc.1 hold, the new example requests `--pin v1.4.1`, whose stable tag is not yet available; the upgrader aborts with `unknown --pin ref`. Add an rc-specific example using `v1.4.1-rc.1`.
+
+The remaining registration/delivery evidence supports applicable conditions **1–5 and 16**: both profiles retain the blocking guard, the five helpers remain unenforced, and the plugin includes the recovery CLI. Applying the actual upgrade merge to both v1.4.0 templates added exactly the two Workflow registrations, preserved other fields, and was idempotent.
+
+The conditions hash matched. Template derivation, environment-name inventory, structural counts, plugin manifests, version parity, Python 3.9 syntax, and stdlib checks passed. Verification remained read-only; no full install or filesystem-writing suite was run.
+
+VERDICT: NO-GO — Condition 15 falsely excludes a release driver that the supported upgrade path delivers to adopters.
