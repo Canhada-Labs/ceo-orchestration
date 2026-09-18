@@ -1255,6 +1255,10 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
     CONSCIENTE do trem a cada corte — foi assim que a rc.1-era stale string
     foi pega (repass-r2 part-d P1).
 
+    Trem 1.4.1 (re-pinado na cerimonia relmeta-141, PLAN-192): derivado por
+    apply-relmeta141-edits.py de `git log v1.4.0..HEAD`; um conjunto VAZIO de
+    ADRs tocados e escrito como «nenhum», nunca omitido.
+
     Trem 1.4.0 (re-pinado na cerimonia rel-meta-2): o escopo passou a ser
     DERIVADO por apply-relmeta-edits.py de `git log v1.3.0..HEAD` mais os ADRs
     tocados na faixa, LISTADOS e nunca como intervalo. A linha de titulo,
@@ -1264,13 +1268,11 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
     proc = driver(synth, "tag", "--stable", "--dry-run")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert (
-        "PLAN-119 / PLAN-169 / PLAN-170 / PLAN-171 / PLAN-172 / PLAN-173 / "
-        "PLAN-174 / PLAN-175 / PLAN-176 / PLAN-177 / PLAN-178 / PLAN-179 / "
-        "PLAN-180 / PLAN-181 / PLAN-182 / PLAN-183 / PLAN-184 / PLAN-185 / "
-        "PLAN-186 / PLAN-187 / PLAN-188 / PLAN-189 (ADRs tocados: ADR-001 "
-        "ADR-079 ADR-081 ADR-144 ADR-149 ADR-153 ADR-163 ADR-186 ADR-192 "
-        "ADR-193 ADR-194 ADR-195 ADR-196 ADR-197)" in proc.stdout
+        "PLAN-169 / PLAN-189 / PLAN-190 / PLAN-191 / PLAN-192 (ADRs "
+        "tocados: nenhum)" in proc.stdout
     )
+    # o trem da release ANTERIOR nao pode ter sobrevivido na anotacao
+    assert "PLAN-119 / PLAN-169 / PLAN-170" not in proc.stdout
     # nenhuma string de release ANTERIOR pode ter sobrevivido na anotacao
     assert "PLAN-162 / PLAN-165" not in proc.stdout
     assert "%s —" % TAG_STABLE in proc.stdout

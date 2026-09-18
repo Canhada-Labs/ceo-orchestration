@@ -2,7 +2,7 @@
 
 Plan: PLAN-192
 Wave: W2 — relmeta-141
-Anchor-SHA: (preenchido pelo OWNER-RELMETA141-SIGN.sh no momento da assinatura)
+Anchor-SHA: 7d807f4ccaa43b8d046f06eea97a0a14685d03d5
 Patch-SHA256: edba3bb889ffd2c7ffde2c56c5ce474581e829a55b8f2b06db9992dfe7766dae
 Data: 2026-09-18
 

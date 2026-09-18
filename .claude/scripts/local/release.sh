@@ -71,41 +71,36 @@ set -euo pipefail
 # The tag stands for the WHOLE release train in CHANGELOG.md, never just the
 # newest plan: list every plan of the train and the full ADR range.
 # ---------------------------------------------------------------------------
-TARGET_BASE="1.4.0"
-RELEASE_TITLE="per-project audit family + compaction continuity + installer write-safety"
+TARGET_BASE="1.4.1"
+RELEASE_TITLE="Workflow launch ledger + resume guard (out-of-order patch)"
 # O tag vale pelo TREM INTEIRO da entrada do CHANGELOG desta versao,
 # nunca pelo plano
 # mais novo. Este bloco e DERIVADO por
-# .claude/plans/PLAN-169/s349-ceremony-relmeta/apply-relmeta-edits.py
-# a partir de `git log v1.3.0..HEAD` (planos CITADOS nos assuntos de
+# .claude/plans/PLAN-192/relmeta/apply-relmeta141-edits.py
+# a partir de `git log v1.4.0..HEAD` (planos CITADOS nos assuntos de
 # commit da faixa) e do conjunto de ADRs tocados na mesma faixa —
 # nao digite nada aqui a mao.
-RELEASE_SCOPE="PLAN-119 / PLAN-169 / PLAN-170 / PLAN-171 / PLAN-172 / PLAN-173 / PLAN-174 / PLAN-175 / PLAN-176 / PLAN-177 / PLAN-178 / PLAN-179 / PLAN-180 / PLAN-181 / PLAN-182 / PLAN-183 / PLAN-184 / PLAN-185 / PLAN-186 / PLAN-187 / PLAN-188 / PLAN-189 (ADRs tocados: ADR-001 ADR-079 ADR-081 ADR-144 ADR-149 ADR-153 ADR-163 ADR-186 ADR-192 ADR-193 ADR-194 ADR-195 ADR-196 ADR-197)"
-RELEASE_HEADLINE="A correcao que mais importa para quem ja instalou:
-da v1.0.0 ate a v1.3.0 o upgrade NUNCA entregou as arvores docs/ e
-.github/ que a instalacao entrega. Quem instalou uma vez e so
-atualizou depois ficou com os arquivos originais para sempre, sem
-aviso. Agora as duas arvores sao entregues com hash-gate contra as
-geracoes git da FONTE: uma copia intacta de geracao anterior e
-substituida, e qualquer coisa que voce editou e PRESERVADA em voz
-alta. Uma tabela de rotas, tres leitores.
+RELEASE_SCOPE="PLAN-169 / PLAN-189 / PLAN-190 / PLAN-191 / PLAN-192 (ADRs tocados: nenhum)"
+RELEASE_HEADLINE="Patch fora de ordem para quem roda pipelines autonomos longos com a
+tool Workflow. Todo lancamento passa a ser registrado ANTES do
+despacho (sha256 e copia dos bytes do script, args literais, o run de
+retomada, a revisao do codigo), e uma retomada sobre args DIFERENTES
+do lancamento registrado e recusada em vez de seguir. A chamada exata
+volta do ledger por ceo-launches.py relaunch, em vez de ser
+reconstruida de memoria. O guard pode BLOQUEAR e o perfil user o
+mantem; as saidas sao CEO_WORKFLOW_RESUME_GUARD=0 (so aviso),
+CEO_WORKFLOW_LEDGER=0 (desligado) e a declaracao na propria chamada.
 
-Seguranca: o instalador nao escreve mais fora do diretorio que voce
-entrega a ele (destino que era symlink ou hardlink pendente), e um
-handle de GitHub com barra nao deixa mais o CODEOWNERS com zero
-bytes para sempre. Um predicado de confinamento, produtor e
-consumidor na mesma gramatica.
+Correcao: relaunch --out entregava uma copia truncada com sucesso numa
+escrita curta; agora entrega o arquivo inteiro ou nenhum arquivo.
 
-Auditoria: sob o mesmo HOME, cadeias HMAC de projetos diferentes
-deixam de se entrelacar — cada projeto tem diretorio de estado,
-chave e salt proprios. O limite fica declarado, nao escondido: sob
-o mesmo UID um processo ainda le o diretorio e a chave do outro, e
-fechar isso exigiria UID separado.
+Cinco CLIs de recuperacao e aprovacao chegam sem hook que as imponha.
 
-E a parte honesta: a continuidade de compaction que da nome a este
-trem so shipou depois de o primeiro desenho ser MEDIDO e nao
-entregar nada. Sem afirmacao de velocidade — governanca e
-auditabilidade, como sempre."
+A parte honesta: o envelope assinado da v1.4.0 prometia curar NESTA
+versao os achados P1 do seu anexo. Esta release NAO os cura: e um
+patch urgente, por decisao do Owner, e o anexo segue aberto, sem
+mudanca, com a cura re-alvejada para a v1.4.2. Sem afirmacao de
+velocidade — governanca e auditabilidade, como sempre."
 RC_NUM="1"
 STABLE=0
 DRY_RUN=0
