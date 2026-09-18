@@ -52,9 +52,11 @@ Reusar a mecânica que cortou a v1.4.0 (`PLAN-169/OWNER-RC1-CUT.sh`, `run-rc1-re
 
 - **Base do re-pass = `v1.4.0`**, e o delta é pequeno: 3 partes por raio de dano ao adopter (o hook e o
   ledger; registração + entrega + sítios de versão; as CLIs e os dois docs de operador), não 7.
-- **Codex pinado = o que o manifesto ADR-182 pinar no momento do corte.** O runner resolve a versão do
-  manifesto por `npx` em cache próprio e verifica o payload pelo oráculo do pair-rail; nada de constante
-  de versão digitada no runner.
+- **Codex pinado = o que o manifesto ADR-182 pinar no momento do corte.** O runner lê a versão do
+  manifesto e tem DUAS rotas: o binário global, quando ele é a versão pinada e o payload confere (o
+  oráculo do pair-rail o hasheia ANTES de executá-lo); senão `npx` em cache próprio. Nada de constante
+  de versão digitada no runner. A segunda rota sozinha morreria aqui: medido, o `npx` não materializa
+  cópia de uma versão que já está instalada globalmente.
 - **relmeta em UM script** (a forma do re-pin: assinar sentinel → aplicar patch de sha pinado no
   sentinel → verificar → bateria → commit), em vez do par SIGN/LAND de ~750 linhas da 1.4.0: o patch
   aqui são 3 arquivos.
@@ -91,7 +93,7 @@ Check: python3 -m pytest .claude/hooks/tests/test_check_workflow_launch.py tests
 
 ### W1 — re-pin do codex CLI 0.154.0 → 0.155.0 (cerimônia; 1 pinentry)
 Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
-- [ ] Materiais em `.claude/plans/PLAN-189/codex-pin-0155/` no HEAD de `origin/main`.
+- [x] Materiais em `.claude/plans/PLAN-189/codex-pin-0155/` no HEAD de `origin/main` (`38eb917c`).
 - [ ] Owner roda `bash .claude/plans/PLAN-189/codex-pin-0155/OWNER-PIN-SIGN.sh` e dá push.
   Ensaiado em clone descartável: dry-run verde; modo real com pseudo-TTY e chave descartável = commit
   de exatamente 4 paths, assinatura verifica, `verified`; controle vermelho (codex falso no PATH) =
@@ -99,7 +101,8 @@ Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v
 
 ### W2 — relmeta-141 (cerimônia; 1 pinentry)
 Check: python3 -m pytest .claude/scripts/tests/test_release_bump_sites.py -q
-- [ ] Bloco por-release do `release.sh` (`TARGET_BASE="1.4.1"`, título, escopo DERIVADO de
+- [ ] (materiais prontos em `PLAN-192/relmeta/`; falta a assinatura) Bloco por-release do `release.sh`
+  (`TARGET_BASE="1.4.1"`, título, escopo DERIVADO de
   `git log v1.4.0..HEAD` + ADRs tocados, headline) + sha do `release.sh` no `gate-scripts-manifest.txt`
   + re-pin CONSCIENTE de `test_tag_annotation_carries_the_whole_train_and_no_stale_release`.
 - [ ] O bloco é inerte em aspas duplas de bash (sem crase, sem `$` não escapado) e nenhum semver nu além
@@ -108,13 +111,18 @@ Check: python3 -m pytest .claude/scripts/tests/test_release_bump_sites.py -q
 
 ### W3 — kit da rc.1 em `.claude/plans/PLAN-192/`
 Check: bash .claude/plans/PLAN-192/test-rc1-kit.sh
-- [ ] `repass-rc1/run-rc1-repass.sh` (3 partes, base `v1.4.0` pinada por objeto e commit, codex resolvido
+- [x] `repass-rc1/run-rc1-repass.sh` (3 partes, base `v1.4.0` pinada por objeto e commit, codex resolvido
   do manifesto), `repass-rc1/README-rc1.md` (escopo e o que fica de fora, com o motivo),
   `repass-rc1/CONDITIONS-rc1.md` (as condições declaradas: OQ-1, o hook que pode bloquear no perfil
   `user`, as CLIs sem hook, os limites assinados da W1).
-- [ ] `gen-envelope-rc1.py` (precedente = `pair-rail-verdict-v1.4.0.md`; prosa do review record verdadeira
+- [x] `gen-envelope-rc1.py` (precedente = `pair-rail-verdict-v1.4.0.md`; prosa do review record verdadeira
   para a 1.4.1) e `OWNER-RC1-CUT.sh` (20 passos resumíveis).
-- [ ] Ensaio do kit com `CODEX_BIN` stub e chave descartável, em clone descartável.
+- [x] Ensaio do kit com `CODEX_BIN` stub e chave descartável, em clone descartável: 66 PASS / 0 FAIL,
+  antes E depois da relmeta aplicada (com ela, o bump é REAL: um commit `release: v1.4.1` e a segunda
+  corrida no-op). O kit inteiro é DERIVADO por `derive-kit-141.py` do kit da v1.4.0, por âncora exata
+  (`--check` compara byte a byte). Fora do stub: as duas rotas do codex pinado (pin 0.155 → binário
+  global; pin 0.154 → `npx` materializa) e uma fumaça REAL de `codex exec` num worktree temporário, sem
+  TTY, na 0.155.0 com `gpt-6-astra`: rc 0 em 6 s.
 
 ### W4 — corte da rc.1 (Owner no terminal)
 Check: python3 .claude/scripts/local/_release_tag_guard.py delta --repo . --tag v1.4.1-rc.1
@@ -150,6 +158,17 @@ Check: npm view ceo-orchestration version
   PLATAFORMA; o re-pin de 0.154.0 gravou o do pacote principal sem declarar. O pack 0.155 volta ao ADR e
   declara o desvio no sentinel (o campo não tem leitor mecânico). O Owner ratifica ao assinar; trocar é
   uma linha no `.new` antes da assinatura.
+
+## Session history
+
+- **S356, 2026-09-18.** Boot com Validate verde em `107a5bda`. Landados: `38eb917c` (pack do re-pin),
+  `47870320` (W1.1), `737814a5` (este plano + CHANGELOG `[1.4.1]`), e o commit do kit. Achado que mudou
+  o desenho: a promessa «cura na 1.4.1» no envelope assinado da v1.4.0 (OQ-1). Achado que mudou o kit:
+  o `npx` não materializa uma versão já instalada globalmente — o runner da v1.4.0, só com essa rota,
+  morreria em «0 launchers» no passo 6, na frente do Owner, assim que o re-pin igualasse global e pinado.
+  Relógio medido: o Smoke Install leva 1h40–1h55, e o preflight exige TODOS os workflows do HEAD verdes
+  ⇒ cada push em `main` custa quase 2 h; o corte inteiro são ~5–6 h de relógio, quase todas de espera.
+  Por isso: as duas cerimônias (re-pin, relmeta) são assinadas EM SEQUÊNCIA, antes de esperar o CI.
 
 ## How to continue
 
