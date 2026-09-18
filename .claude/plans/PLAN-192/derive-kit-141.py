@@ -222,7 +222,7 @@ RUNNER_PARTS = r'''part_pathspec() {
          "README.md" "README.pt-BR.md" "npm/" "VERSION" ".claude/.framework-version" \
          ".claude-plugin/" "pyproject.toml" "SBOM.md" "SECURITY.md" "VERSIONING.md" \
          "docs/ARCHITECTURE.md" "docs/COMMAND-SKILL-HOOK-MAP.md" "docs/CTO-GUIDE.md" \
-         "docs/GUIA-COMPLETO.md" "docs/README.md" ;;
+         "docs/GUIA-COMPLETO.md" "docs/README.md" "docs/FAQ.md" "docs/WHAT-WE-ARE.md" ;;
     3) printf '%s\n' \
          ".claude/scripts/ceo-launches.py" ".claude/scripts/approval_gate.py" \
          ".claude/scripts/test_refs.py" ".claude/scripts/mutant_sandbox.py" \

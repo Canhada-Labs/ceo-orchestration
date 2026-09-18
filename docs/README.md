@@ -80,7 +80,7 @@ full set of commands; here is the summary you can spot-check in a minute.
 | Slash commands | **27** | count `*.md` in `.claude/commands/` |
 | Architecture decision records | **198** | count `ADR-*.md` in `.claude/adr/` |
 | Shared library modules | **72** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
-| Tests | **~810 test files**; `make test-collect` (pytest `--collect-only`) reports **~15,400** collected cases | `make test-collect` |
+| Tests | **~810 test files**; `make test-collect` (pytest `--collect-only`) reports **~16,200** collected cases | `make test-collect` |
 
 Two of these are easy to misread, so we state them plainly: the **60** hook
 scripts on disk are not all wired at once — **49** distinct scripts (across 52 event registrations) are registered in

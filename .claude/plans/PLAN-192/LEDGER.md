@@ -3,7 +3,13 @@
 > Só identificadores verbatim (paths, SHAs, ids) — nunca corpo de transcript
 > (repo público). Escrito em fronteira de unidade. Teto ≤ 2k tokens.
 
-## Unidade corrente — materiais prontos e ensaiados; aguardando as duas assinaturas do Owner (S356, 2026-09-18)
+## Unidade corrente — as duas cerimônias ASSINADAS; corte em curso, preflight curado (S356, 2026-09-18)
+
+- Assinados pelo Owner: `7d807f4c` (re-pin codex 0.155.0) e `83fa5b64` (relmeta-141; `TARGET_BASE="1.4.1"`).
+- Tentativas do `OWNER-RC1-CUT.sh`: 1.ª morreu no passo 1 por carga de CPU (`TestOutputScanPerfRigorous::test_p99_{1kb,5kb,10kb}` sob saturação); 2.ª morreu no passo 1 em `verify-counts.sh` completo (cifra `~15,400` × 16.231 coletados). Cura: esta unidade (16 sítios em 9 docs → `~16,200`; `docs/FAQ.md` e `docs/WHAT-WE-ARE.md` na parte 2 do runner).
+- Próxima unidade: Validate verde no HEAD novo → Owner roda `PLAN-192/OWNER-RC1-CUT.sh` de novo (retoma do passo 1).
+
+## Unidade anterior — materiais prontos e ensaiados; aguardando as duas assinaturas do Owner (S356, 2026-09-18)
 
 - Status do plano: `draft` (`.claude/plans/PLAN-192-release-v1-4-1.md`); OQ-1 e OQ-2 RESOLVIDAS (verbatim no plano).
 - Lands, em ordem: `38eb917c` (pack `PLAN-189/codex-pin-0155/`), `47870320` (PLAN-190 W1.1), `737814a5` (plano + CHANGELOG `[1.4.1]`), `c782cbea` (kit de corte + materiais da relmeta-141), esta unidade (este LEDGER).

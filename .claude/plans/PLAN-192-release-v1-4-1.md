@@ -94,20 +94,20 @@ Check: python3 -m pytest .claude/hooks/tests/test_check_workflow_launch.py tests
 ### W1 — re-pin do codex CLI 0.154.0 → 0.155.0 (cerimônia; 1 pinentry)
 Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
 - [x] Materiais em `.claude/plans/PLAN-189/codex-pin-0155/` no HEAD de `origin/main` (`38eb917c`).
-- [ ] Owner roda `bash .claude/plans/PLAN-189/codex-pin-0155/OWNER-PIN-SIGN.sh` e dá push.
+- [x] Owner roda `bash .claude/plans/PLAN-189/codex-pin-0155/OWNER-PIN-SIGN.sh` e dá push (`7d807f4c`, 2026-09-18).
   Ensaiado em clone descartável: dry-run verde; modo real com pseudo-TTY e chave descartável = commit
   de exatamente 4 paths, assinatura verifica, `verified`; controle vermelho (codex falso no PATH) =
   aborta no passo 4, HEAD inalterado, `.asc` removido, árvore limpa.
 
 ### W2 — relmeta-141 (cerimônia; 1 pinentry)
 Check: python3 -m pytest .claude/scripts/tests/test_release_bump_sites.py -q
-- [ ] (materiais prontos em `PLAN-192/relmeta/`; falta a assinatura) Bloco por-release do `release.sh`
+- [x] (assinado em `83fa5b64`, 2026-09-18) Bloco por-release do `release.sh`
   (`TARGET_BASE="1.4.1"`, título, escopo DERIVADO de
   `git log v1.4.0..HEAD` + ADRs tocados, headline) + sha do `release.sh` no `gate-scripts-manifest.txt`
   + re-pin CONSCIENTE de `test_tag_annotation_carries_the_whole_train_and_no_stale_release`.
-- [ ] O bloco é inerte em aspas duplas de bash (sem crase, sem `$` não escapado) e nenhum semver nu além
+- [x] O bloco é inerte em aspas duplas de bash (sem crase, sem `$` não escapado) e nenhum semver nu além
   de `TARGET_BASE` (o teste `test_driver_derives_every_version_string_from_target_base` é o oráculo).
-- [ ] Materiais de cerimônia são o ÚLTIMO land livre antes da assinatura (o escopo é derivado do log).
+- [x] Materiais de cerimônia são o ÚLTIMO land livre antes da assinatura (o escopo é derivado do log).
 
 ### W3 — kit da rc.1 em `.claude/plans/PLAN-192/`
 Check: bash .claude/plans/PLAN-192/test-rc1-kit.sh
@@ -169,6 +169,19 @@ Check: npm view ceo-orchestration version
   Relógio medido: o Smoke Install leva 1h40–1h55, e o preflight exige TODOS os workflows do HEAD verdes
   ⇒ cada push em `main` custa quase 2 h; o corte inteiro são ~5–6 h de relógio, quase todas de espera.
   Por isso: as duas cerimônias (re-pin, relmeta) são assinadas EM SEQUÊNCIA, antes de esperar o CI.
+
+- **S356, as duas primeiras tentativas do corte (2026-09-18).** (1) O passo 1 morreu em «hooks test suite
+  failed (serial)»: carga de CPU. A suíte serial são os testes de tempo; no mesmo HEAD, em clone
+  descartável, passou 5 vezes, e com 20 laços ocupados de propósito caem exatamente três —
+  `test_lifecycle_edge_cases.py::TestOutputScanPerfRigorous::test_p99_{1kb,5kb,10kb}` — o orçamento
+  ABSOLUTO de p99 do mesmo hook que o gate de latência do CI acusa em runner lento (o Validate de
+  `83fa5b64` precisou de dois re-runs só por ele). (2) Na segunda, os testes passaram e o passo 1 morreu em
+  «verify-counts.sh reports drift»: os docs citavam `~15,400` testes coletados e o vivo é 16.231, fora da
+  banda de ±5 % por 21. O estouro vem dos testes que landaram com a W1 e com W2/W3 em 17/09; ninguém viu
+  porque as cerimônias rodam `verify-counts --no-tests` e só o preflight roda a versão completa. Cura:
+  `~16,200` nos 16 sítios de 9 docs (a regra exige a MESMA cifra em todos), `docs/FAQ.md` e
+  `docs/WHAT-WE-ARE.md` na parte 2 do re-pass. Lição para o molde de corte: rodar o `preflight` inteiro
+  num clone descartável ANTES de chamar o Owner (menos o probe de assinatura, que usa a chave dele).
 
 ## How to continue
 

@@ -11,12 +11,17 @@ Patch FORA DE ORDEM sobre o GA v1.4.0 (tag `23b79dda` → commit `f9db82ec`, 202
 «fora». Os três diffs das partes abaixo têm 54 / 34 / 82 KB a `-U1`, muito abaixo do teto do redator
 (262.144 bytes sobre o INPUT); o bump acrescenta 12 arquivos de uma linha à parte 2.
 
+Depois dessa medição landou a correção da cifra aproximada de testes nos docs (`~15,400` → `~16,200`;
+o `verify-counts` completo do preflight acusava drift: 16.231 coletados, fora da banda de ±5 %). Ela
+toca 9 arquivos de uma ou duas linhas; `docs/FAQ.md` e `docs/WHAT-WE-ARE.md` entraram na parte 2 por
+causa dela, e `CLAUDE.md` segue fora (§4).
+
 ## 2. As três partes, na ordem de risco para o adopter
 
 | parte | o que é | por que nesta ordem |
 |---|---|---|
 | 1 | `.claude/hooks/check_workflow_launch.py` + `.claude/hooks/_lib/launch_ledger.py` | é o código que RODA na sessão do adopter, antes e depois de toda chamada da tool `Workflow`, e é o único que pode BLOQUEAR |
-| 2 | `.claude/settings.json`, `templates/settings/**`, `scripts/build-plugin.py`, `.claude/scripts/env-inventory.json`, `CHANGELOG.md`, `INSTALL.md`, `README.md`, `README.pt-BR.md`, `npm/**`, os sítios de versão do bump (`VERSION`, `.claude/.framework-version`, `.claude-plugin/**`, `pyproject.toml`, `SBOM.md`, `SECURITY.md`, `VERSIONING.md`, `docs/ARCHITECTURE.md`) e os docs de inventário (`docs/COMMAND-SKILL-HOOK-MAP.md`, `docs/CTO-GUIDE.md`, `docs/GUIA-COMPLETO.md`, `docs/README.md`) | é por onde o hook CHEGA (ou não chega) registrado, e é onde a release afirma coisas ao adopter |
+| 2 | `.claude/settings.json`, `templates/settings/**`, `scripts/build-plugin.py`, `.claude/scripts/env-inventory.json`, `CHANGELOG.md`, `INSTALL.md`, `README.md`, `README.pt-BR.md`, `npm/**`, os sítios de versão do bump (`VERSION`, `.claude/.framework-version`, `.claude-plugin/**`, `pyproject.toml`, `SBOM.md`, `SECURITY.md`, `VERSIONING.md`, `docs/ARCHITECTURE.md`) e os docs de inventário (`docs/COMMAND-SKILL-HOOK-MAP.md`, `docs/CTO-GUIDE.md`, `docs/GUIA-COMPLETO.md`, `docs/README.md`, `docs/FAQ.md`, `docs/WHAT-WE-ARE.md`) | é por onde o hook CHEGA (ou não chega) registrado, e é onde a release afirma coisas ao adopter |
 | 3 | `.claude/scripts/ceo-launches.py`, `approval_gate.py`, `test_refs.py`, `mutant_sandbox.py`, `worktree_lock.py`, `phase_checkpoint.py`, `docs/workflow-recovery.md`, `docs/approval-gate.md` | são chamadas por vontade do operador; nenhuma roda sozinha |
 
 ### O manifesto de cada parte é DERIVADO, nunca uma lista fixa
