@@ -63,4 +63,24 @@
 # and after this commit are NOT comparable (S352 rule: re-test on a new
 # generation, instrument intact). The 93/93/91 validity series measured in
 # S352 was taken under 0.147.0.
->=0.128.0,<0.155.0
+
+# PLAN-189 update (S356 2026-09-18, pack codex-pin-0155): widened upper bound
+# to <0.156.0 so the Owner's installed codex-cli 0.155.0 is in-range. 0.155.0
+# was published to npm on 2026-09-17; with the ADR-182 exact-version payload
+# manifest the pair-rail went fail-CLOSED in this repo (`--verify-codex-pin`
+# -> mismatch payload_sha256_mismatch) until this re-pin. LOWER BOUND
+# UNCHANGED at >=0.128.0 (widen-upper-only, the only safe shape), executed
+# OUTSIDE any open release window: GA v1.4.0 was cut 2026-09-15 and
+# v1.4.1-rc.1 is cut only AFTER this commit. Per ADR-111
+# §pin-update-protocol this widening does NOT trigger a Phase 4-bis re-run:
+# no new locked-corpus measurement has been taken. DECLARED CONSEQUENCE
+# (same as S352): this changes the INSTRUMENT — rail measurements taken
+# before and after this commit are NOT comparable. The payload manifest
+# (re-pinned in this same pack: payload sha256 b0b14f9c... for
+# 0.155.0/aarch64-apple-darwin, npm_integrity recorded from the PLATFORM
+# artifact per ADR-182 §5 step 2) remains the real supply-chain gate; this
+# semver range stays the pair-rail-gate.sh pre-flight message.
+# Doctrine (S355): the Codex CLI is a SHA-pinned substrate — every Codex
+# upgrade requires this re-pin BEFORE any release cut; never a casual
+# `npm update -g`.
+>=0.128.0,<0.156.0
