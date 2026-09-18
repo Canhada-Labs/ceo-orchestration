@@ -9,13 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> main after v1.4.0: 166 skills, 27 slash commands, 198 ADRs, 72 `_lib` modules) are
+> v1.4.1: 166 skills, 27 slash commands, 198 ADRs, 72 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
 
 ---
 
-## [Unreleased]
+## [1.4.1] - 2026-09-18
+
+Patch release for adopters who run long autonomous `Workflow` pipelines
+(PLAN-190). Every `Workflow` launch is now recorded BEFORE dispatch, a resume
+whose `args` differ from the recorded launch is blocked instead of going
+through, and the exact recorded call can be read back from the ledger rather
+than rebuilt from memory. Both kill-switches are named below. No speed claim.
 
 ### Added
 - **Workflow launch ledger + resume guard** (PLAN-190 W1). A new hook,
@@ -55,6 +61,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ceo-launches.py` (`list · show · relaunch · check · bind · orphans ·
   report`) and operator doc `docs/workflow-recovery.md`. Inventory:
   60 hook scripts, 49 wired, 52 event registrations, 72 `_lib` modules.
+- **Recovery and approval tools for autonomous pipelines** (PLAN-190 W2/W3).
+  Five stdlib-only CLIs under `.claude/scripts/`, called by a workflow phase,
+  a recovery rite or a human — NO hook enforces any of them yet (the
+  single-writer hook and quota admission are future ceremonies).
+  `approval_gate.py` decides APPROVED/REJECTED by code from a closed policy
+  (minimum score, a closed severity enum, blocking severities, a cap per
+  severity, reviewed revision == final revision, green gate): missing,
+  ambiguous or invalid input is REJECTED with the rule named, and there is
+  no default-green path (doc: `docs/approval-gate.md`). `test_refs.py`
+  normalises test references — file path, node id, bare function,
+  `Class.method` — to pytest node ids by static `ast` (tests are never
+  executed); an ambiguous name is an error that lists the candidates, never a
+  silent match. `mutant_sandbox.py` runs a mutant inside a disposable detached
+  worktree of an identified revision, records the outcome per (revision,
+  mutant, command) so a valid verification can be reused, removes the copy in
+  `finally`, and reports an ERROR outcome if `git status` of the
+  implementation tree differs before and after. `worktree_lock.py` gives one
+  writer per worktree (`O_EXCL` lock file, heartbeat, `steal` only when the
+  holder's heartbeat is past its TTL, `release` by the owner or a recorded
+  `--force`). `phase_checkpoint.py` keeps an append-only ledger of steps
+  completed inside a phase, bound to the code revision: steps recorded under
+  another revision are listed as stale and never count.
+
+### Fixed
+- **`ceo-launches.py relaunch --out` could leave a truncated copy and report
+  success** (PLAN-190 W1.1). The snapshot copy was written with a single
+  `os.write`, which may write fewer bytes than asked — and the truncated file
+  is exactly what the recovery rite passes back as `scriptPath`. The write
+  now continues until every byte is down; on any failure (an I/O error, a
+  write that makes no progress, an error surfacing at `close`) the command
+  returns rc 2 naming the incomplete write and removes the partial file —
+  only the inode this call created (`O_EXCL` at open, inode comparison before
+  the unlink), never a file that is not its own; if the partial file cannot
+  be removed the message says so.
+
+### Known-open (carried from v1.4.0 — NOT cured by this release)
+- The signed v1.4.0 verdict carries an annex of P1 findings and declared
+  conditions marked "cure in 1.4.1". **This release does not cure them.**
+  1.4.1 is an out-of-order patch that ships the Workflow guard to adopters
+  now, by Owner decision (2026-09-18); none of those findings is addressed by
+  the changes in this release. The annex stays known-open, unchanged, and
+  its cure is re-targeted to 1.4.2. The list is the `NEW FINDINGS (annex)`
+  sections of the rc.1 and GA verdicts under
+  `.claude/plans/PLAN-169/repass-rc1/` and `.claude/plans/PLAN-169/repass-ga/`,
+  plus the `conditions:` of `.claude/governance/pair-rail-verdict-v1.4.0.md`.
+- What an adopter should know before upgrading: the new guard CAN BLOCK (a
+  resume over different `args`) and the `user` profile keeps it — this
+  extends condition 63 of the v1.4.0 verdict (the `user` profile is not
+  advisory-only). On an adopter it takes effect only after an `upgrade.sh`
+  to a version that contains it, with the install ceremony recorded in the
+  install-state or passed to the upgrade, `jq` available, and without
+  `--no-settings-merge`; otherwise the hook file arrives unregistered and
+  nothing changes. Exit routes: `CEO_WORKFLOW_RESUME_GUARD=0` (advisory,
+  ledger kept), `CEO_WORKFLOW_LEDGER=0` (off), or the per-call
+  `CEO_WORKFLOW_RESUME_FORCE: <why>` declaration.
 
 ## [1.4.0] - 2026-09-07
 
