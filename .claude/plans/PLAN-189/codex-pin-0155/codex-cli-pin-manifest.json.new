@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "package_version": "0.155.0",
+  "npm_integrity": "sha512-c0vbt2ZS6XiXq9gQkNictu7PH0deMyq/bw4Ia9bdihU1iJHuGuwC5vD4swU4xhLUKoTs4tMOHwYWKaofFZcVRg==",
+  "payloads": {
+    "aarch64-apple-darwin": {
+      "path": "@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex",
+      "sha256": "b0b14f9c1901c1ec44671094b2dc18b39e4bd8d36a6dc2302cc9d961a7e2a197"
+    }
+  }
+}
