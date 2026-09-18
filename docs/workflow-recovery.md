@@ -124,7 +124,9 @@ python3 .claude/scripts/ceo-launches.py show wf_<id>
 #    args are printed in the ORIGINAL key order; rc 7 and nothing announced as exact when the record
 #    fails its integrity check or its script was unreadable at launch; for a NAMED workflow it prints
 #    the name and the args — the content saved under that name is not verified; --out creates a NEW
-#    file only (never overwrites, never follows a symlink)
+#    file only (never overwrites, never follows a symlink) and writes it WHOLE or not at all: a failed
+#    or incomplete write is rc 2 and the partial file is removed — never pass a copy from a run that
+#    did not print "snapshot copied to"
 python3 .claude/scripts/ceo-launches.py relaunch wf_<id> [--out /path/to/copy.js]
 
 # 3. before re-issuing from a rite that edits scripts: the guard's comparison, standalone

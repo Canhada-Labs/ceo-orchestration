@@ -116,11 +116,45 @@ def _write_new_file(path: str, data: bytes) -> Optional[str]:
         return "refused: %s already exists (relaunch --out never overwrites)" % path
     except (OSError, ValueError) as exc:
         return "refused: cannot create %s (%s)" % (path, type(exc).__name__)
+    # ``os.write`` may write FEWER bytes than asked: loop until every byte is down.
+    # A truncated copy here is the exact material the recovery rite passes back as
+    # ``scriptPath`` — so it is the whole file or no file (PLAN-190 W1.1).
+    written = 0
+    failure: Optional[str] = None
+    ours = None
     try:
-        os.write(fd, data)
-    finally:
+        ours = os.fstat(fd)
+        view = memoryview(data)
+        while written < len(data):
+            try:
+                n = os.write(fd, view[written:])
+            except InterruptedError:
+                continue
+            if n <= 0:
+                failure = "no progress"
+                break
+            written += n
+    except OSError as exc:
+        failure = type(exc).__name__
+    try:
         os.close(fd)
-    return None
+    except OSError as exc:  # a deferred write error surfaces at close: still not a whole file
+        failure = failure or ("close %s" % type(exc).__name__)
+    if failure is None:
+        return None
+    # Remove ONLY the file this call created: O_EXCL proved it was ours at open, and the
+    # inode comparison proves the name still points at it now.
+    removed = False
+    try:
+        now = os.lstat(path)
+        if ours is not None and (ours.st_dev, ours.st_ino) == (now.st_dev, now.st_ino):
+            os.unlink(path)
+            removed = True
+    except OSError:
+        removed = False
+    return "refused: incomplete write to %s (%d of %d bytes, %s) — %s" % (
+        path, written, len(data), failure,
+        "the partial file was removed" if removed else "the partial file could NOT be removed: delete it before use")
 
 
 def cmd_relaunch(args: argparse.Namespace) -> int:

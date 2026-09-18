@@ -729,6 +729,131 @@ class CheckWorkflowLaunchE2E(TestEnvContext):
         self.assertEqual(d, {})
         self.assertEqual(self._manifests(), [])
 
+    def test_relaunch_out_delivers_the_snapshot_bytes(self):
+        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
+        d = self._manifests()[0].parent
+        copy = self.proj / "copy.js"
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(copy))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("snapshot copied to", out)
+        self.assertEqual(copy.read_bytes(), SCRIPT_A.encode("utf-8"), "the copy is the recorded bytes, whole")
+        self.assertEqual(stat.S_IMODE(copy.stat().st_mode), 0o600)
+
+    def test_relaunch_out_write_failure_is_rc_2_and_leaves_no_file(self):
+        import contextlib
+        import errno
+        import io
+        from unittest import mock
+
+        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
+        d = self._manifests()[0].parent
+        copy = self.proj / "copy.js"
+        cli = _load_launches_cli()
+
+        def disk_full(fd, buf):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        stderr = io.StringIO()
+        with mock.patch.object(cli.os, "write", disk_full), contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
+            rc = cli.main(["--project-dir", str(d.parent), "relaunch", RUN, "--out", str(copy)])
+        self.assertEqual(rc, 2)
+        self.assertIn("incomplete write", stderr.getvalue())
+        self.assertFalse(copy.exists(), "rc 2 and no truncated copy on disk")
+
+
+def _load_launches_cli():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("ceo_launches_for_p190_w11", str(_REPO / ".claude" / "scripts" / "ceo-launches.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class RelaunchOutWholeFileOrNoFile(TestEnvContext):
+    """PLAN-190 W1.1 — ``relaunch --out`` delivers every byte or leaves no file behind.
+
+    ``os.write`` may write fewer bytes than asked. The fakes below are HONEST short
+    writes (they really write what they report), so the file on disk is what the
+    function under test produced. Mutation proof: a single un-looped ``os.write``
+    turns ``test_short_writes_still_deliver_every_byte`` red (truncated copy, rc 0).
+    """
+
+    DATA = b"0123456789A"  # 11 bytes — the size the rail round reproduced with
+
+    def setUp(self):
+        super().setUp()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.dir = Path(self._tmp.name)
+        self.cli = _load_launches_cli()
+        self._real_write = os.write
+
+    def _patched(self, fake):
+        from unittest import mock
+
+        return mock.patch.object(self.cli.os, "write", fake)
+
+    def test_short_writes_still_deliver_every_byte(self):
+        calls = []
+
+        def two_bytes_at_a_time(fd, buf):
+            calls.append(len(buf))
+            return self._real_write(fd, bytes(buf[:2]))
+
+        out = self.dir / "copy.js"
+        with self._patched(two_bytes_at_a_time):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNone(err)
+        self.assertEqual(out.read_bytes(), self.DATA, "a short write is continued, never reported as success on a truncated file")
+        self.assertEqual(calls, [11, 9, 7, 5, 3, 1], "each call resumes where the previous one stopped")
+
+    def test_failure_midway_removes_the_partial_file(self):
+        import errno
+
+        state = {"n": 0}
+
+        def two_bytes_then_disk_full(fd, buf):
+            state["n"] += 1
+            if state["n"] == 1:
+                return self._real_write(fd, bytes(buf[:2]))
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        out = self.dir / "copy.js"
+        with self._patched(two_bytes_then_disk_full):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err)
+        self.assertIn("incomplete write", err)
+        self.assertIn("2 of 11 bytes", err)
+        self.assertIn("the partial file was removed", err)
+        self.assertFalse(out.exists(), "no truncated copy may be left where the recovery rite would pick it up")
+
+    def test_zero_progress_is_a_failure_not_a_spin(self):
+        out = self.dir / "copy.js"
+        with self._patched(lambda fd, buf: 0):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err)
+        self.assertIn("0 of 11 bytes", err)
+        self.assertIn("no progress", err)
+        self.assertFalse(out.exists())
+
+    def test_cleanup_never_removes_a_file_that_is_not_ours(self):
+        import errno
+
+        out = self.dir / "copy.js"
+        other = self.dir / "other.js"
+        other.write_bytes(b"someone else's file")
+
+        def swap_the_name_then_fail(fd, buf):
+            os.replace(str(other), str(out))  # the name now points at ANOTHER inode
+            raise OSError(errno.EIO, "Input/output error")
+
+        with self._patched(swap_the_name_then_fail):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err)
+        self.assertIn("could NOT be removed", err)
+        self.assertEqual(out.read_bytes(), b"someone else's file", "cleanup removes only the inode this call created")
+
 
 if __name__ == "__main__":
     unittest.main()
