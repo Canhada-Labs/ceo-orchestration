@@ -1,0 +1,11 @@
+Advisory review of `7602fbe4`, payload 1/3: **no P0 or false applicable declared condition found**. Conditions **2–4, 6–13 and 16–22**, as applicable here, remain honest; earlier findings remain open.
+
+**NEW FINDINGS (annex)**
+
+- **P1 annex — Failed binding publication leaves stale inputs authoritative.** [`.claude/hooks/_lib/launch_ledger.py:640`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.FGmdD8/wt/.claude/hooks/_lib/launch_ledger.py:640), added by this diff. Launch with args A, then deliberately force a resume with B. If PostToolUse updates B’s manifest successfully but appending its `bind` line fails, lookup continues using A. I reproduced both consequences: another B resume returns `mismatch_blocked`, while reverting to A returns `match`. Both manifests validate, and the index is completely readable and parseable. Condition **10** declares incomplete reads and torn lines; this separate write-side failure survives fixing those reads. **Minimal fix:** detect a newer allowed resume whose binding has not committed and treat its baseline as inconclusive; add a regression injecting failure between the manifest update and index append.
+
+**P2 follow-up:** No additional P2 identified; previously declared P2 findings remain open.
+
+Verified the candidate blobs, conditions digest, archived verdict hashes and text-only changes since prior rounds. Python 3.9.6 checks, 324 in-memory guard combinations and targeted fault probes passed or reproduced the reported behavior. No live-harness or upgrade end-to-end test was run; no files were changed or network accessed.
+
+VERDICT: GO-WITH-CONDITIONS — This payload satisfies the stated cut rule with the applicable declared conditions, the additional P1 in the signed annex, and the mandatory 24-hour hold.

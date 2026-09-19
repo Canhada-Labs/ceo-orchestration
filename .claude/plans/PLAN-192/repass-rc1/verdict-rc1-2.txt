@@ -1,0 +1,21 @@
+Advisory review of `7602fbe4`, payload 2/3: **no P0, false applicable condition, or undeclared P1 found.**
+
+Applicable conditions **1–5, 7–16 and 17–22** honestly disclose the reviewed behavior:
+
+- The actual upgrade merge adds exactly two Workflow registrations to both v1.4.0 profiles, preserves supplied adopter fields, and is idempotent. The derived `user` profile retains blocking behavior.
+- Plugin composition registers both events and includes `ceo-launches.py` with the required library layout.
+- The principal automatic adopter risk remains **condition 10**: incomplete index history can block a legitimate resume against an older binding. Condition 12 correctly discloses silent continuation without a manifest.
+- **Condition 14 now accurately describes the cleanup race.** Read-only fault probes reproduced short-write recovery, interrupted partial files, failed cleanup, deletion of a concurrent replacement, and success without a copy after the second snapshot read fails.
+- The easily missed delivery asymmetry remains declared under **condition 15**: upgrade ships `.claude/scripts/local/`, while fresh installation does not.
+
+**NEW FINDINGS (annex)**
+
+None.
+
+**P2 follow-up — carried from earlier rounds**
+
+- **FILE:LINE:** [INSTALL.md:660](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.FGmdD8/wt/INSTALL.md:660). The changed example uses `--pin v1.4.1`. During the rc.1 hold, before that GA tag exists, the upgrader rejects it as `unknown --pin ref`. **Minimal fix:** add an rc-specific example using `v1.4.1-rc.1`.
+
+The conditions digest and all six archived verdict hashes matched. Template derivation, environment-name inventory, structural counts, version parity, plugin manifests, Python 3.9 parsing, stdlib checks, and scoped whitespace checks passed. Verification remained read-only; no full installation, npm package build, or live-harness test was run.
+
+VERDICT: GO-WITH-CONDITIONS — The applicable disclosures are honest and sufficient under the stated rc.1 rule, with the mandatory 24-hour hold and known-open findings retained in the signed material.

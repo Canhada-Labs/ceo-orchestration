@@ -1,0 +1,17 @@
+Reviewed `7602fbe46318a77f1f8740f81d5b08ef5080df94` against `v1.4.0`. The conditions digest and six archived verdict hashes match. **No P0 or false applicable envelope condition established.**
+
+Conditions **5, 8–14 and 16–22** remain applicable. Condition 14 now honestly describes the partial-file and cleanup failures. Earlier code findings remain declared, not cured. The principal automatic adopter risk remains condition 10’s legitimate-resume false block; these six CLIs execute only when invoked.
+
+**NEW FINDINGS (annex)**
+
+- **P1 annex — Symbolic revision names can satisfy final-review coverage.** [.claude/scripts/approval_gate.py:183](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.FGmdD8/wt/.claude/scripts/approval_gate.py:183), with validation at [line 124](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.FGmdD8/wt/.claude/scripts/approval_gate.py:124). With the supplied default policy, setting both `final_rev` and `review.reviewed_rev` to `"HEAD"` produces **rc 0, APPROVED, empty reasons**; `"unknown"` also passes. If HEAD moves after review, the unchanged symbolic strings still satisfy the comparison without identifying the reviewed commit. The declared checkpoint revision defect concerns another CLI. **Minimal fix:** require full immutable commit IDs captured when the evidence is produced; reject symbolic or malformed identifiers before comparing them.
+
+**P2 follow-ups**
+
+- **Malformed policy crashes instead of returning a structured rejection.** [.claude/scripts/approval_gate.py:104](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.FGmdD8/wt/.claude/scripts/approval_gate.py:104). A valid JSON policy containing `"blocking":[{}]` raises `TypeError` during `set(blocking)`, before decision output. This fails closed, but breaks the documented decision/exit-code contract. **Minimal fix:** validate each blocking-list element as a string before constructing the set.
+
+- **The revised operator table still misdescribes `failed: null`.** [docs/approval-gate.md:33](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.FGmdD8/wt/docs/approval-gate.md:33) says a present `failed` must be an integer. [approval_gate.py:202](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.FGmdD8/wt/.claude/scripts/approval_gate.py:202) treats explicit `null` like absence; the probe returned `APPROVED`. The code defect was already reported in round 1 and is covered by condition 19; this is a remaining documentation error. **Minimal fix:** explicitly state that absent **or null** counts bypass validation.
+
+Validation used Python 3.9.6, source inspection and in-memory input/fault probes. The checkout remains unchanged. No complete upgrade, live Workflow or mutation-worktree integration test ran.
+
+VERDICT: GO-WITH-CONDITIONS — Retain the applicable conditions and this annex in the signed prerelease material, with the mandatory 24-hour hold; this review is advisory evidence only.

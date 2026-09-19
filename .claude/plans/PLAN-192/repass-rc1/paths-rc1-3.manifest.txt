@@ -1,0 +1,8 @@
+.claude/scripts/approval_gate.py
+.claude/scripts/ceo-launches.py
+.claude/scripts/mutant_sandbox.py
+.claude/scripts/phase_checkpoint.py
+.claude/scripts/test_refs.py
+.claude/scripts/worktree_lock.py
+docs/approval-gate.md
+docs/workflow-recovery.md
