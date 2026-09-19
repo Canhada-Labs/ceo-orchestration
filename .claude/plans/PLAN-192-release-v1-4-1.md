@@ -201,6 +201,26 @@ Check: npm view ceo-orchestration version
   frase é nova cerimônia, decisão do Owner. Lição para o molde: condição declarada é afirmação sobre
   CÓDIGO e pede a mesma sonda que o revisor vai fazer ANTES da rodada; escrevi 16 de cabeça e 5 caíram.
 
+- **S356, rodada 2 do re-pass e a decisão do Owner (2026-09-18, ~20:30–20:50).** Candidato `3ed81cf6`
+  (só texto), CI verde sem Smoke Install. Em ~10 min: parte 1 `GO-WITH-CONDITIONS` («conditions 7, 10 and
+  12 now honestly describe round 1's failures»), parte 3 `GO-WITH-CONDITIONS`, parte 2 `NO-GO` — por UMA
+  frase da condição 14, repetida no `### Fixed` do CHANGELOG: «remove o parcial, só o inode que esta
+  chamada criou». Conferido: `_write_new_file` faz `os.lstat` → compara → `os.unlink`, dois passos; um
+  escritor concorrente que substitua o destino no meio perde o arquivo dele. A frase vinha do texto
+  ORIGINAL da W1.1 (`47870320`), que a rodada 1 não contestou — e a parte 3, olhando o mesmo código na
+  mesma rodada, a aceitou. Parei pela regra de parada e levei as duas rodadas ao Owner com duas opções:
+  A = 3.ª rodada só de texto; B = cura estrutural (temporário exclusivo + `os.link` + `finally`, nenhum
+  `unlink` no destino), ~3 h porque muda `.claude/hooks/tests/` e dispara o Smoke Install.
+  **Decisão do Owner (verbatim): «beleza faz isso A agora depois que lancar a gente faz o B salva na
+  memoria e claude pra nao esquecer».** Critério de parada da rodada 3, fixado ANTES de rodar: é a
+  última desta via; outra `NO-GO` ⇒ parar e voltar ao Owner. B é o 1.º item depois do lançamento
+  (memória `project-relaunch-out-structural-cure-after-v141`); a linha no `CLAUDE.md` entra no closeout,
+  depois da tag — no meio do corte o CUT recusa modificação rastreada e a condição 18 fixa o delta.
+  Achados novos da rodada 2 (anexo, abertos): P1 chave JSON duplicada aprova (`approval_gate.py`); P1
+  arquivo de teste ilegível vira ausência (`test_refs.py`); P1 timeout deixa descendentes vivos
+  (`mutant_sandbox.py`); P2 script inline > 8 MiB fica inconclusivo; P2 `relaunch --out` rc 0 sem cópia
+  quando a 2.ª leitura do snapshot falha; P2 a política «default» é fixture de `tests/`, não entregue.
+
 - **Follow-ups de código que este corte deixa DECLARADOS (alvo 1.4.2, ou rc.2 se o Owner preferir).**
   Do re-pass (todos conferidos contra o código em 2026-09-18): leitura incompleta do índice não
   sinalizada ⇒ falso bloqueio (`launch_ledger.iter_index`); `no_manifest` sem aviso; `extract_run_id`

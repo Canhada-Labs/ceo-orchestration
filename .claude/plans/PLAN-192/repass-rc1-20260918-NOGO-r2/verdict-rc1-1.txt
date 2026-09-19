@@ -1,0 +1,17 @@
+Advisory review of `3ed81cf6`, payload 1/3: **no P0 or newly false applicable condition found**.
+
+Conditions **2–4, 6–13 and 16–19** adequately disclose this payload’s behavior under the stated pre-release rule. In particular, conditions **7, 10 and 12** now honestly describe round 1’s failures. The principal adopter risk remains condition 10: incomplete index history can make a legitimate resume compare against an older binding and block. The advisory recovery error and symlink writes also remain declared through condition 19.
+
+**NEW FINDINGS (annex)**
+
+No undeclared P1 identified.
+
+**P2 follow-up**
+
+- **P2 — Inline scripts can exceed their snapshot reader’s limit.** `.claude/hooks/_lib/launch_ledger.py:267`, `:239`, `:467`, `:610` — all added by this diff. Recording accepts an inline script larger than 8 MiB, but subsequent snapshot validation rejects it through `_read_script_file`. An in-memory reproduction saved **8,388,610 bytes**, bound the launch by `tool_use_id`, then resumed with different args: the guard returned `{}` with `inconclusive / script_snapshot_missing`, despite the snapshot existing intact. **Minimal fix:** align recording and validation limits; if oversized inline scripts remain supported, validate their snapshots separately from the `scriptPath` read cap.
+
+The candidate blobs, conditions digest and archived verdict hashes matched. Python 3.9.6 checks and **324 in-memory guard combinations** passed; fault probes confirmed the declared behavior. No files were changed, and no live-harness or installation test was run.
+
+This payload can proceed under the named conditions and mandatory 24-hour hold; this verdict is advisory evidence only.
+
+VERDICT: GO-WITH-CONDITIONS

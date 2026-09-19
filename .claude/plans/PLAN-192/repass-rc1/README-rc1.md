@@ -22,6 +22,13 @@ cinco condições declaradas falsas contra o código — 7, 10, 12, 14 e 15 —,
 rodada 2 corrige TEXTO e nenhum código: as condições, o `CHANGELOG.md`, os dois docs de operador e este
 README. Os achados de código da rodada 1 seguem abertos e declarados (seção D das condições).
 
+**Rodada 3.** A rodada 2 (candidato `3ed81cf6`) devolveu `GO-WITH-CONDITIONS` nas partes 1 e 3 e `NO-GO`
+na parte 2, por UMA frase da condição 14 repetida no `### Fixed` do CHANGELOG: a limpeza do
+`relaunch --out` era descrita como «só o inode que esta chamada criou», e ela é um `lstat` seguido de
+um `unlink` — dois passos, não uma operação atômica. Está arquivada em
+`.claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r2/`. O candidato da rodada 3 corrige de novo só
+TEXTO; a cura estrutural do `relaunch --out` fica para depois desta release, por decisão do Owner.
+
 ## 2. As três partes, na ordem de risco para o adopter
 
 | parte | o que é | por que nesta ordem |
@@ -68,6 +75,9 @@ sobre `.claude/scripts/local/` é achado aberto da rodada 1.
   «NEW FINDINGS (annex)» e entra no material assinado.
 - No máximo DUAS rodadas de re-pass. Se a 2.ª ainda der `NO-GO`, PARAR e levar as duas ao Owner. Não há
   3.ª rodada por conta própria.
+- Foi o que aconteceu: a 2.ª deu `NO-GO` numa parte, o CEO parou e levou as duas ao Owner, e o Owner
+  decidiu (2026-09-18) por uma 3.ª rodada só de texto. Critério fixado ANTES de ela rodar: é a última
+  desta via — outra `NO-GO` ⇒ parar de novo e voltar ao Owner.
 - Uma parte morta por capacidade do modelo (sem veredito, com a assinatura do servidor no transcript)
   NÃO é uma rodada: o runner a re-tenta até 2 vezes e a PROVENANCE declara quantas mortes houve.
 - Toda tentativa, completa ou parcial, é preservada: o runner recusa rodar por cima de evidência
@@ -82,17 +92,18 @@ v1.4.0 (PLAN-192 OQ-1).
 
 ## 7. Codex pinado, sem tocar na máquina
 
-O runner lê a versão de `.claude/governance/codex-cli-pin-manifest.json`, resolve `@openai/codex@<versão>`
-por `npx` num cache próprio (`.npx-cache/`, ignorado pelo git), verifica o sha256 do payload nativo
-contra o manifesto pelo mesmo oráculo do pair-rail-gate (`check_pair_rail.py --verify-codex-pin`,
-fail-CLOSED) e põe um shim no início do PATH. O modelo vai por `-m`, lido da tabela raiz de
+O runner lê a versão de `.claude/governance/codex-cli-pin-manifest.json` e tem duas rotas: o binário
+global, quando ele é a versão pinada; senão `@openai/codex@<versão>` resolvido por `npx` num cache
+próprio (`.npx-cache/`, ignorado pelo git). Nas duas o sha256 do payload nativo é verificado contra o
+manifesto pelo mesmo oráculo do pair-rail-gate (`check_pair_rail.py --verify-codex-pin`, fail-CLOSED)
+ANTES de executar, e um shim vai no início do PATH. A PROVENANCE registra a rota usada. O modelo vai por `-m`, lido da tabela raiz de
 `~/.codex/config.toml` ou de `CODEX_MODEL`, e a PROVENANCE registra o valor e a origem.
 
 ## 8. Onde o candidato entra
 
 O candidato é o HEAD de `origin/main` gravado em `CANDIDATE.sha` depois do CI verde — pelo passo 5 do
 `OWNER-RC1-CUT.sh`, ou pelo CEO quando ele roda o re-pass antes da cerimônia (o passo 6 reconhece a
-evidência completa e não re-roda). Na rodada 1 era o commit do bump (`release: v1.4.1`, `9e9840b2`); na
-rodada 2 é o commit de correção de texto que senta sobre ele. O runner nunca lê o candidato de uma
+evidência completa e não re-roda). Na rodada 1 era o commit do bump (`release: v1.4.1`, `9e9840b2`); nas
+rodadas 2 e 3 é o último commit de correção de texto sobre ele. O runner nunca lê o candidato de uma
 constante, e o commit do veredito senta DIRETAMENTE sobre o candidato: `parent_sha` == pai do commit
 que introduz o veredito.

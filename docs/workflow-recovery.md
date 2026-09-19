@@ -128,10 +128,11 @@ python3 .claude/scripts/ceo-launches.py show wf_<id>
 #    fails its integrity check or its script was unreadable at launch; for a NAMED workflow it prints
 #    the name and the args — the content saved under that name is not verified; --out creates a NEW
 #    file only (never overwrites, never follows a symlink) and keeps writing until the last byte: a
-#    HANDLED failure (I/O error, no progress, error at close) is rc 2 and the partial file is removed —
-#    if the removal itself fails, the partial file STAYS and the message says so; a Ctrl-C or a signal
-#    in the middle of the write is not handled and can leave a partial file. So never pass a copy
-#    from a run that did not print "snapshot copied to"
+#    HANDLED failure (I/O error, no progress, error at close) is rc 2 and the command TRIES to remove
+#    the partial file (inode check, then unlink by name — two steps, not atomic: do not point --out at
+#    a path another process writes to); if the removal itself fails, the partial file STAYS and the
+#    message says so; a Ctrl-C or a signal in the middle of the write is not handled and can leave a
+#    partial file. So never pass a copy from a run that did not print "snapshot copied to"
 python3 .claude/scripts/ceo-launches.py relaunch wf_<id> [--out /path/to/copy.js]
 
 # 3. before re-issuing from a rite that edits scripts: the guard's comparison, standalone
@@ -203,8 +204,8 @@ is PLAN-190 W6.
   the same id (probed on CLI 2.1.274 with a `.script` scriptPath, which the tool accepts); the id is
   taken from a top-level `runId`/`run_id` key, else from that label, else from the only distinct
   id-shaped token in the response.
-- **Known-open, found by the cross-review of the v1.4.1-rc.1 candidate (2026-09-18), not cured in
-  v1.4.1:**
+- **Known-open, found by the cross-review rounds of the v1.4.1-rc.1 candidate (2026-09-18), not
+  cured in v1.4.1:**
   - an incomplete read of the index (an I/O error midway, or a torn newest line) is not signalled;
     the guard then compares against the previous surviving binding and can BLOCK a legitimate
     resume — the exit is the `CEO_WORKFLOW_RESUME_FORCE` declaration;
@@ -219,4 +220,11 @@ is PLAN-190 W6.
     was compared against (`guard.against` in the current manifest);
   - ledger writes follow a symlinked `launches/` directory or index file (deliberate same-user
     tampering is outside the threat model);
-  - `relaunch --out`: the two partial-file cases named in the recovery rite above.
+  - an INLINE script larger than 8 MiB is recorded, but its snapshot is read back through the 8 MiB
+    reader: the record is then inconclusive for the guard (`script_snapshot_missing`);
+  - `relaunch --out`: the partial-file cases named in the recovery rite above; the cleanup after a
+    handled failure is an inode check followed by an unlink by name, so a concurrent writer that
+    replaces the destination in between loses its file while the message says the partial file was
+    removed; and when the second read of the snapshot fails, the command prints the "exact recorded
+    call" heading, creates no file and exits rc 0. The structural cure (exclusive temporary file,
+    publish by no-replace `link`, never unlink the destination) comes after v1.4.1.

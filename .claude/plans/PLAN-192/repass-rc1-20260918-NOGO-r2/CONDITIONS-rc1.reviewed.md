@@ -7,10 +7,8 @@ condição declarada FALSA contra o código ou por P0; um P1 não declarado vai 
 «NEW FINDINGS (annex)» como ANEXO assinado. O envelope do GA dirá, item a item, o que foi
 curado e o que fica known-open — este texto NÃO promete uma versão para a cura.
 Adopters: os repositórios do maintainer, subindo da v1.4.0 (ou da v1.3.0) por `upgrade.sh`.
-Esta é a RODADA 3. A rodada 1 devolveu `NO-GO` nas três partes por cinco condições falsas
-(7, 10, 12, 14 e 15). A rodada 2, sobre o texto corrigido, devolveu `GO-WITH-CONDITIONS` nas
-partes 1 e 3 e `NO-GO` na parte 2, por UMA frase da condição 14. A seção D diz o que mudou
-a cada rodada — texto, nenhum código. A 3.ª rodada roda por decisão do Owner (2026-09-18).
+Esta é a RODADA 2. A rodada 1 devolveu `NO-GO` nas três partes por cinco condições falsas
+(7, 10, 12, 14 e 15); a seção D diz o que mudou desde então — texto, nenhum código.
 
 ## A. Condições DURAS (o texto da release foi escrito para dizer isto)
 
@@ -56,11 +54,9 @@ a cada rodada — texto, nenhum código. A 3.ª rodada roda por decisão do Owne
    sem saber. Não há checkpoint dentro de um `agent()` (limite do runner).
 7. O run id é extraído da resposta por forma (`wf_<hex8>`, com um sufixo opcional `-<hex>` de
    1 a 8 dígitos), nesta ordem: uma chave `runId` ou `run_id` no nível de cima da resposta — a
-   primeira das duas cujo valor tiver a forma vence, e NÃO há checagem de acordo entre elas nem
-   com o texto; senão o id no rótulo `Run ID:`; senão o único token com a forma no texto. Só
-   quando nenhuma das duas chaves tem a forma é que a ambiguidade conta: dois ids ROTULADOS
-   diferentes não vinculam nada, e, sem nenhum rotulado, dois tokens diferentes também não;
-   id ausente, idem. Um token
+   primeira das duas cujo valor tiver a forma vence, e NÃO há checagem de acordo entre elas; senão o id no rótulo
+   `Run ID:`; senão o único token com a forma no texto. Dois ids ROTULADOS diferentes, ou dois
+   tokens não rotulados diferentes, são ambíguos e não vinculam nada; id ausente, idem. Um token
    cuja cauda não cabe na forma (`wf_12345678-123456789`) NÃO é rejeitado: é lido pelo prefixo
    que cabe (`wf_12345678`), e esse prefixo é o que se vincula. Outra versão da CLI pode exigir
    `ceo-launches.py bind` manual. Sem vínculo forte (por `tool_use_id` ou manual) não há
@@ -92,25 +88,16 @@ a cada rodada — texto, nenhum código. A 3.ª rodada roda por decisão do Owne
     `.claude/`, excluindo o `$HOME`.
 13. `git status` no `cwd`, usado para registrar a revisão do código, ainda pode rodar filtros
     configurados pelo repositório; o gate de latência de hooks do CI não perfila este hook.
-14. `relaunch --out` abre o destino com `O_CREAT|O_EXCL` (não abre arquivo que já existe; um
-    symlink no destino é recusado, nunca seguido) e, a partir desta release, escreve em laço
-    até o último byte (PLAN-190 W1.1). Isso NÃO é «o arquivo inteiro ou nenhum arquivo», e a
-    limpeza NÃO é garantida como «só o arquivo desta chamada». Quatro casos, todos abertos:
-    (a) uma interrupção que não é `OSError` (Ctrl-C, um sinal) no meio da escrita não é
-    tratada e pode deixar um parcial no destino, sem mensagem; (b) numa falha TRATADA — erro
-    de I/O, escrita sem progresso, erro no `close` — o comando devolve rc 2 e TENTA remover o
-    parcial em DOIS passos, `lstat` do destino comparado ao inode que criou e depois `unlink`
-    pelo nome: se o `lstat` ou o `unlink` falha, o parcial FICA e a mensagem o diz; (c) esses
-    dois passos não são uma operação atômica: um escritor concorrente que substitua o destino
-    entre o `lstat` e o `unlink` PERDE o arquivo dele, e a mensagem ainda diz que o parcial
-    foi removido (achado da rodada 2); (d) se a segunda leitura do snapshot falha, o comando
-    imprime o cabeçalho «exact recorded call», não cria arquivo nenhum e sai rc 0 (achado P2
-    da rodada 2) — a cópia só existe quando a saída diz «snapshot copied to». A anotação da
-    tag — o bloco `RELEASE_HEADLINE` de `.claude/scripts/local/release.sh`, canônico e
-    assinado na relmeta-141 — resume a correção como «o arquivo inteiro ou nenhum arquivo»;
-    ela deve ser lida com estes limites. A cura estrutural (temporário exclusivo, publicação
-    por `link` sem substituição, nenhum `unlink` no destino) fica para depois desta release,
-    por decisão do Owner (2026-09-18).
+14. `relaunch --out` cria sempre um arquivo NOVO (`O_EXCL`; um symlink no destino é recusado,
+    nunca seguido) e, a partir desta release, continua a escrita até o último byte (PLAN-190
+    W1.1). Numa falha TRATADA — erro de I/O, escrita sem progresso, erro no `close` — devolve
+    rc 2 e remove o parcial, só o inode que esta chamada criou; se a remoção falha, o parcial
+    FICA no destino e a mensagem o diz. Uma interrupção que não é `OSError` (Ctrl-C, um sinal)
+    no meio da escrita não é tratada e pode deixar um parcial no destino, sem mensagem. Logo
+    «o arquivo inteiro ou nenhum arquivo» NÃO vale nesses dois casos (achado da rodada 1,
+    aberto). A anotação da tag — o bloco `RELEASE_HEADLINE` de `.claude/scripts/local/release.sh`,
+    canônico e assinado na relmeta-141 — resume a correção com essa frase; ela deve ser lida com
+    este limite.
 
 ## C. Escopo deste re-pass
 
@@ -131,7 +118,7 @@ a cada rodada — texto, nenhum código. A 3.ª rodada roda por decisão do Owne
     `templates/docs/*` vira `docs/` no alvo). A rota que a mensagem de bloqueio nomeia é
     `ceo-launches.py relaunch`, que É entregue em `.claude/scripts/` e no build do plugin.
 
-## D. O que as rodadas 1 e 2 acharam, e o que mudou desde então
+## D. O que a rodada 1 achou, e o que mudou desde então
 
 17. A rodada 1 rodou sobre o candidato `9e9840b2fc6c033498a0c12c65178a5254d0b04e` e está
     arquivada em `.claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r1/`, com a triagem em
@@ -140,8 +127,8 @@ a cada rodada — texto, nenhum código. A 3.ª rodada roda por decisão do Owne
     `verdict-rc1-2.txt` 13716c568ddd997d2d5832d7f943b739e12dd6ab1a06b68bd6a4e8cee274b85e,
     `verdict-rc1-3.txt` a4d9c15739622c8585c56bdef53df35ea31e0c5087dd0a55b684235cac06af49.
 18. O delta `9e9840b2..candidato` toca só `CHANGELOG.md`, `docs/workflow-recovery.md`,
-    `docs/approval-gate.md` e arquivos sob `.claude/plans/` (o kit do re-pass, o plano e as
-    rodadas 1 e 2 arquivadas): nenhum arquivo sob `.claude/hooks/`, `.claude/scripts/`, `scripts/` ou
+    `docs/approval-gate.md` e arquivos sob `.claude/plans/` (o kit do re-pass, o plano e a
+    rodada 1 arquivada): nenhum arquivo sob `.claude/hooks/`, `.claude/scripts/`, `scripts/` ou
     `templates/` mudou. As cinco condições falsas (7, 10, 12, 14, 15) foram reescritas para
     dizer o que o código faz, e as condições 5 e 9 foram ajustadas com elas. As frases que a
     rodada 1 contestou por arquivo e linha — `CHANGELOG.md:68` e `:81`,
@@ -153,23 +140,3 @@ a cada rodada — texto, nenhum código. A 3.ª rodada roda por decisão do Owne
     12, 14 e 15 citam; o que mudou foi o texto que os contradizia. Nenhum é P0 segundo aqueles
     vereditos. A entrada `[1.4.1]` do CHANGELOG os resume sob «Known-open (found by this
     release's cross-review)».
-20. A rodada 2 rodou sobre o candidato `3ed81cf657b3d22d012b1e32269671e86f3e4030` e está
-    arquivada em `.claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r2/`, com a triagem em
-    `record.md`. Os três vereditos dela entram neste material assinado pelo sha256:
-    `verdict-rc1-1.txt` ec86430e8fa41f919a896ef2ce9d947efb382168edd826a7d0c61cdbd9e36f70,
-    `verdict-rc1-2.txt` 023d8f12495eea0e4dc7811267eef23ba45ead3703d37e598697c92c6dde57af,
-    `verdict-rc1-3.txt` 762f0cf19311247f537a4dde9afd0d1ff2afff25c682212ff225e670a8d7f468.
-    As partes 1 e 3 deram `GO-WITH-CONDITIONS`; a parte 2 deu `NO-GO` por uma frase da
-    condição 14 — «remove o parcial, só o inode que esta chamada criou» —, repetida no
-    `### Fixed` do CHANGELOG: a limpeza é um `lstat` seguido de um `unlink`, não uma operação
-    atômica. Conferido contra o código: o revisor tem razão.
-21. Desde a rodada 2 mudou só texto, nos mesmos arquivos do item 18: a condição 14 foi
-    reescrita e a 7 ganhou uma precisão de ordem; o `### Fixed` e o «Known-open» do CHANGELOG
-    e as listas de abertos dos dois docs de operador declaram a corrida da limpeza e os
-    achados novos da rodada 2; `docs/approval-gate.md` deixou de chamar de «shipped default»
-    uma política que é fixture de `tests/` e não é entregue a adopters.
-22. Todos os achados de CÓDIGO da rodada 2 seguem ABERTOS neste candidato: os três P1 sob
-    «NEW FINDINGS (annex)» da parte 3 (chave JSON duplicada em `approval_gate.py`; arquivo
-    ilegível tratado como ausência em `test_refs.py`; descendentes vivos depois de um timeout
-    em `mutant_sandbox.py`), o P1 da parte 2 (a corrida da condição 14) e os P2 dos três
-    vereditos do item 20. Nenhum é P0 segundo aqueles vereditos.

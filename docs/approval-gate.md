@@ -19,8 +19,9 @@ python3 .claude/scripts/approval_gate.py decide --policy policy.json --evidence 
   rc 0 APPROVED · rc 3 REJECTED (reasons listed) · rc 2 unreadable input (a rejection)
 ```
 
-Policy (`tests/fixtures/approval/policy-default.json` is the shipped default; the fields below are
-validated, but an UNKNOWN key is ignored rather than rejected — see Limitations):
+Policy (the default lives at `tests/fixtures/approval/policy-default.json` in the framework's SOURCE
+repository; it is NOT delivered to a consumer repository by install or upgrade — copy it from there.
+The fields below are validated, but an UNKNOWN key is ignored rather than rejected — see Limitations):
 
 | field | meaning |
 |---|---|
@@ -37,7 +38,7 @@ Evidence (`ceo.approval-evidence/v1`): `final_rev`, `review{ran, reviewed_rev, s
 
 **Rules the decision follows:** every failed rule is named in `reasons`; the decision carries
 `policy_sha256` and `evidence_sha256` so a later reader can bind it to the exact inputs. Under the
-shipped default policy a missing score, findings list, reviewed revision or gate list, a prose
+default policy named above a missing score, findings list, reviewed revision or gate list, a prose
 score, an out-of-enum severity, a wrong scale and a wrong revision ⇒ REJECTED. The inputs that
 still come out APPROVED are listed under Limitations.
 
@@ -87,12 +88,14 @@ compared paths" cannot happen again: both sides become node ids first.
 - `test_refs.py` recognises pytest/unittest shapes (module-level `test*` functions, `test*`
   methods in classes). Parametrised ids (`test_x[case]`) are NOT normalised: the suffix is compared
   literally and the reference comes back `node-not-found`.
-- Known-open, found by the cross-review of the v1.4.1-rc.1 candidate (2026-09-18) and not cured in
-  v1.4.1:
+- Known-open, found by the cross-review rounds of the v1.4.1-rc.1 candidate (2026-09-18) and not
+  cured in v1.4.1:
   - `approval_gate.py` still APPROVES a non-finite score (`"NaN"`, `"nan/10"`); a `gate[]` entry
     with no `failed` count or no `cmd`, or with a negative `failed`; and a policy whose restriction
     key is misspelled (`max_opne` for `max_open`): unknown keys are ignored, so the restriction
-    silently disappears.
+    silently disappears. A DUPLICATE JSON key in the evidence keeps the LAST value, so
+    `"findings":[{"severity":"P0"}],"findings":[]` is APPROVED.
   - `test_refs.py`: a node id whose CLASS does not exist (`file.py::Missing::test_x`) resolves to
     the only test named `test_x` in that file instead of failing, so `match` can accept proof for
-    a different class.
+    a different class. A test file that cannot be read or parsed is treated as having no tests, so
+    a bare name that is really ambiguous can resolve to the readable file.

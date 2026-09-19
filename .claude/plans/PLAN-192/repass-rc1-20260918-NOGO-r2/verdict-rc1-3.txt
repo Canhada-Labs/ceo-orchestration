@@ -1,0 +1,27 @@
+Reviewed `3ed81cf657b3d22d012b1e32269671e86f3e4030` against `v1.4.0`. The conditions hash and archived verdict hashes match; the six CLIs are unchanged from round 1. **No P0 or false applicable declared condition established.**
+
+Conditions **5, 8–14, 16–19** remain applicable. Revised condition 14 honestly describes the partial-file cases. The principal automatic failure remains condition 10’s acknowledged stale-index false block; these helper CLIs run only when invoked.
+
+**NEW FINDINGS (annex)**
+
+1. **P1 annex — Duplicate JSON keys can discard blocking findings.**  
+   [`.claude/scripts/approval_gate.py:215`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.3JOeTU/wt/.claude/scripts/approval_gate.py:215). Evidence containing `"findings":[{"severity":"P0"}],"findings":[]` passes: `json.load` silently retains the second value. With otherwise valid evidence, the CLI returned **rc 0, APPROVED, empty reasons**. This differs from the declared NaN and unknown-policy-key defects.  
+   **Minimal fix:** reject duplicate object keys, including nested keys, through an `object_pairs_hook`; return the existing input-rejection result.
+
+2. **P1 annex — An incomplete test scan turns ambiguity into accepted proof.**  
+   [`.claude/scripts/test_refs.py:59`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.3JOeTU/wt/.claude/scripts/test_refs.py:59). Two files defining `test_shared` correctly produce rc 3. Injecting `PermissionError` when reading one file instead makes `match` accept the bare declaration against the other file’s explicit node, returning **rc 0 with no errors**. Unreadability is silently treated as absence.  
+   **Minimal fix:** preserve scan failures and refuse resolution requiring repository-wide uniqueness when the scan is incomplete.
+
+3. **P1 annex — Mutation-command timeouts leave descendants running.**  
+   [`.claude/scripts/mutant_sandbox.py:133`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.3JOeTU/wt/.claude/scripts/mutant_sandbox.py:133), [cleanup at :147](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.3JOeTU/wt/.claude/scripts/mutant_sandbox.py:147). When a test command launches workers, `subprocess.run(timeout=…)` kills its direct child without terminating the descendants. A read-only process probe reproduced a surviving descendant after timeout. The helper then removes the worktree beneath those processes; repeated retries can accumulate workers and interfere with subsequent verification.  
+   **Minimal fix:** isolate command execution in a process group and terminate/wait for its descendants before removing the sandbox.
+
+**P2 follow-ups**
+
+- **Successful `relaunch --out` without a copy.** [`.claude/scripts/ceo-launches.py:186`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.3JOeTU/wt/.claude/scripts/ceo-launches.py:186). After the initial integrity check succeeds, the snapshot is read again. Making this second read unavailable produced **rc 0**, an “exact recorded call” heading, and no output file. **Minimal fix:** validate and consume one snapshot buffer; otherwise return nonzero before announcing an exact call.
+
+- **The documented default policy is not delivered to adopters.** [`docs/approval-gate.md:22`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.3JOeTU/wt/docs/approval-gate.md:22) calls `tests/fixtures/approval/policy-default.json` the “shipped default,” but installation/upgrade does not deliver that fixture. Following this reference in an upgraded repository fails with unreadable input. **Minimal fix:** describe it as a source-repository example and include a copyable policy, or deliver it through an established distribution path.
+
+Validation used Python 3.9.6, source inspection, in-memory fault probes, and a read-only subprocess probe. The checkout remains unchanged; no complete upgrade or live Workflow smoke test ran.
+
+VERDICT: GO-WITH-CONDITIONS — Under the stated cut rule, retain the applicable declared conditions and these new findings in the signed advisory material.

@@ -3,7 +3,16 @@
 > Só identificadores verbatim (paths, SHAs, ids) — nunca corpo de transcript
 > (repo público). Escrito em fronteira de unidade. Teto ≤ 2k tokens.
 
-## Unidade corrente — rodada 1 do re-pass `NO-GO`; candidato da rodada 2 = só texto (S356, 2026-09-18)
+## Unidade corrente — rodada 2 = GWC / `NO-GO` / GWC; Owner decidiu «A agora, B depois»; candidato da rodada 3 = só texto (S356, 2026-09-18)
+
+- Rodada 2: candidato `3ed81cf657b3d22d012b1e32269671e86f3e4030`; só a condição 14 caiu (limpeza `lstat`→`unlink` não atômica). Arquivada em `PLAN-192/repass-rc1-20260918-NOGO-r2/` (`record.md`; vereditos sha256 `ec86430e…`, `023d8f12…`, `762f0cf1…`).
+- Decisão do Owner (verbatim em `PLAN-192-release-v1-4-1.md` §Session history e no `record.md` da r2): opção A agora; opção B (cura estrutural do `relaunch --out`) depois do lançamento.
+- Candidato da rodada 3: mesmos arquivos da rodada 2 (condições 7 e 14 + itens 20–22 da seção D; `### Fixed` e «Known-open» do CHANGELOG; os dois docs; README; prompt «ROUND 3» via `derive-kit-141.py`). Nenhum arquivo sob `.claude/hooks/`, `.claude/scripts/`, `scripts/`, `templates/`.
+- Regra de parada da rodada 3 (fixada antes): última desta via; outra `NO-GO` ⇒ parar, Owner.
+- Próxima unidade: CI verde → CEO grava `repass-rc1/CANDIDATE.sha` e roda o runner → GO/GWC ×3 ⇒ Owner roda `PLAN-192/OWNER-RC1-CUT.sh` do passo 1.
+- PENDENTE no closeout (depois da tag): linha no `CLAUDE.md` sobre a opção B.
+
+## Unidade anterior — rodada 1 do re-pass `NO-GO`; candidato da rodada 2 = só texto (S356, 2026-09-18)
 
 - Rodada 1: candidato `9e9840b2fc6c033498a0c12c65178a5254d0b04e` (bump, CI verde), `NO-GO` nas 3 partes, sem P0; condições falsas 7, 10, 12, 14, 15. Arquivada em `PLAN-192/repass-rc1-20260918-NOGO-r1/` (`record.md`; vereditos sha256 `f46ebb9e…`, `13716c56…`, `a4d9c157…`).
 - Candidato da rodada 2: `CONDITIONS-rc1.md` (seção D nova), `README-rc1.md`, `run-rc1-repass.sh` (via `derive-kit-141.py`: contexto «ROUND 2» no prompt), `CHANGELOG.md`, `docs/workflow-recovery.md`, `docs/approval-gate.md`. Nenhum arquivo sob `.claude/hooks/`, `.claude/scripts/`, `scripts/`, `templates/`.

@@ -71,10 +71,12 @@ than rebuilt from memory. Both kill-switches are named below. No speed claim.
   `approval_gate.py` decides APPROVED/REJECTED by code from a policy file
   (minimum score, a closed severity enum, blocking severities, a cap per
   severity, reviewed revision == final revision, green gate): under the
-  shipped default policy a missing score, findings list, reviewed revision
-  or gate list, a prose score, an out-of-enum severity and a wrong scale are
-  REJECTED with the rule named (doc: `docs/approval-gate.md`); the inputs
-  that still come out APPROVED are listed under Known-open below.
+  source repository's default policy
+  (`tests/fixtures/approval/policy-default.json`) a missing score, findings
+  list, reviewed revision or gate list, a prose score, an out-of-enum
+  severity and a wrong scale are REJECTED with the rule named (doc:
+  `docs/approval-gate.md`); the inputs that still come out APPROVED are
+  listed under Known-open below.
   `test_refs.py`
   normalises test references — file path, node id, bare function,
   `Class.method` — to pytest node ids by static `ast` (tests are never
@@ -97,22 +99,30 @@ than rebuilt from memory. Both kill-switches are named below. No speed claim.
   success** (PLAN-190 W1.1). The snapshot copy was written with a single
   `os.write`, which may write fewer bytes than asked — and the truncated file
   is exactly what the recovery rite passes back as `scriptPath`. The write
-  now continues until every byte is down; on any failure (an I/O error, a
-  write that makes no progress, an error surfacing at `close`) the command
-  returns rc 2 naming the incomplete write and removes the partial file —
-  only the inode this call created (`O_EXCL` at open, inode comparison before
-  the unlink), never a file that is not its own; if the partial file cannot
-  be removed it STAYS at the destination and the message says so. Not
-  handled: an interruption that is not an `OSError` (Ctrl-C, a signal) in the
-  middle of the write can still leave a partial file, with no message — so
-  this is not yet "the whole file or no file" (known-open below).
+  now continues until every byte is down; on a HANDLED failure (an I/O error,
+  a write that makes no progress, an error surfacing at `close`) the command
+  returns rc 2 naming the incomplete write and TRIES to remove the partial
+  file: it compares the destination's inode with the one it created (`lstat`)
+  and then unlinks by name. Those are two steps, not one atomic operation: a
+  concurrent writer that replaces the destination in between loses ITS file,
+  and the message still says the partial file was removed. If the `lstat` or
+  the `unlink` fails, the partial file STAYS and the message says so. Not
+  handled at all: an interruption that is not an `OSError` (Ctrl-C, a signal)
+  in the middle of the write can leave a partial file, with no message. So
+  this is NOT yet "the whole file or no file", and the cleanup is NOT
+  guaranteed to touch only this call's file (known-open below; the structural
+  cure — exclusive temporary file, publish by no-replace `link`, never unlink
+  the destination — comes after this release).
 
 ### Known-open (found by this release's cross-review)
 Cross-review round 1 of the rc.1 candidate (2026-09-18) returned NO-GO on
-five declared conditions that were false against the code; no P0. Round 2
-is over the same code, with the text corrected. Every CODE finding of
-round 1 is still open in this release; the verdicts are under
-`.claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r1/`. By class:
+five declared conditions that were false against the code; no P0. Round 2,
+over the same code with the text corrected, returned GO-WITH-CONDITIONS on
+two parts and NO-GO on one sentence (the cleanup promise of `relaunch
+--out`, above); no P0. Round 3 is again over the same code. Every CODE
+finding of rounds 1 and 2 is still open in this release; the verdicts are
+under `.claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r1/` and `-r2/`. By
+class:
 - **Workflow guard** (`launch_ledger.py`). An incomplete read of the index
   (an I/O error midway, or a torn newest line) is not signalled: the guard
   then compares against the previous surviving binding and can BLOCK a
@@ -125,15 +135,25 @@ round 1 is still open in this release; the verdicts are under
   names the CURRENT call's manifest as "the recorded call", and once that
   call is bound `relaunch <run-id>` prints the changed inputs. Ledger writes
   follow a symlinked `launches/` directory or
-  index file (same-user tampering is outside the threat model).
-- **`relaunch --out`**: the two partial-file cases named under Fixed above.
+  index file (same-user tampering is outside the threat model). An INLINE
+  script larger than 8 MiB is recorded, but its snapshot is read back through
+  the 8 MiB reader, so the record is inconclusive for the guard.
+- **`relaunch --out`**: the partial-file cases and the non-atomic cleanup
+  named under Fixed above; and when the second read of the snapshot fails the
+  command prints the "exact recorded call" heading, creates no file and exits
+  rc 0 — the copy exists only when the output says "snapshot copied to".
 - **`approval_gate.py`** still APPROVES a non-finite score (`"NaN"`,
   `"nan/10"`), a gate entry with no `failed` count or no `cmd` (or a negative
   `failed`), and a policy whose restriction key is misspelled (unknown keys
-  are ignored, so the restriction silently disappears).
+  are ignored, so the restriction silently disappears). A DUPLICATE JSON key
+  in the evidence keeps the last value (`"findings":[…P0…],"findings":[]`
+  approves). No default policy file is delivered to adopters: the one the doc
+  names is a fixture under `tests/` in the source repository.
 - **`test_refs.py`**: a node id whose class does not exist resolves to the
   only test with that function name in the file; parametrised ids
-  (`test_x[case]`) are not normalised and come back `node-not-found`.
+  (`test_x[case]`) are not normalised and come back `node-not-found`; a test
+  file that cannot be read or parsed is treated as having no tests, so a name
+  that is really ambiguous can resolve.
 - **`worktree_lock.py`**: `steal` trusts the caller's `--stale-minutes`, not
   the holder's TTL; two concurrent `steal` calls can both succeed; the fixed
   `writer.lock.tmp` name follows a symlink; `release --force` on an
@@ -141,7 +161,9 @@ round 1 is still open in this release; the verdicts are under
 - **`mutant_sandbox.py`**: the patch is hashed and then re-read by path
   (another producer can swap it in between); `gc` removes a sandbox that is
   still running (its state stays `creating` until the end); every non-zero
-  exit code is recorded as `killed`, including a runner or collection error.
+  exit code is recorded as `killed`, including a runner or collection error;
+  a command that times out has its direct child killed, but descendants it
+  started keep running while the sandbox is removed under them.
 - **`phase_checkpoint.py`**: `--rev HEAD` is stored literally; an append
   after a torn line loses both records.
 - **Delivery**: `upgrade.sh` delivers `.claude/scripts/local/` (maintainer

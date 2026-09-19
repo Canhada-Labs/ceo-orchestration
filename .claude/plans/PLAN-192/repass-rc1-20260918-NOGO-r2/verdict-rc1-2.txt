@@ -1,0 +1,27 @@
+No P0 found. **Declared condition 14 remains false**, requiring NO-GO under the supplied cut rule. This is advisory evidence, not authorization.
+
+**NEW FINDINGS (annex)**
+
+**P1 — Cleanup can delete another writer’s replacement file.**
+
+**FILE:LINE:** `CHANGELOG.md:103–104` (added release claim); `.claude/plans/PLAN-192/repass-rc1/CONDITIONS-rc1.md:94`; implementation `.claude/scripts/ceo-launches.py:149`, `:151`.
+
+After a handled write failure, cleanup checks the destination with `lstat`, then separately calls `unlink`. Another process can atomically replace the destination between those operations. Cleanup then deletes that replacement, contradicting “only the inode this call created” and “never a file that is not its own.”
+
+A read-only, in-memory interleaving probe reproduced this: the CLI created inode 101, observed it during cleanup, then deleted replacement inode 202 while reporting “the partial file was removed.” A control replacing the file **before** `lstat` correctly preserved it.
+
+This requires neither symlinks nor deliberate ledger tampering: an ordinary concurrent writer to the user-selected `--out` path suffices. Condition 9’s state-tampering exclusion does not cover it. Round one’s disclosed interruption and failed-unlink cases do not declare this deletion race.
+
+**Minimal fix:** Complete and close an exclusive temporary file before publishing through a no-replace operation; never unlink the public destination during failure cleanup. If deferred, explicitly disclose the replacement-deletion race in condition 14 and the CHANGELOG.
+
+**P2 follow-up — carried from round one**
+
+`INSTALL.md:660` recommends `--pin v1.4.1` during the rc.1 hold. Before that GA tag exists, the command fails with `unknown --pin ref`. Add an rc-specific example using `v1.4.1-rc.1`.
+
+The remaining registration/delivery checks support conditions **1–5 and 15–19**. Applying the actual upgrade merge to both v1.4.0 templates added exactly two Workflow registrations, preserved supplied adopter fields, and was idempotent. The plugin includes the recovery CLI. Condition 15 now honestly acknowledges upgrade delivery of `scripts/local/`.
+
+The leading automatic adopter risk remains the **declared condition-10 failure**: incomplete index history can block a legitimate resume. Condition 12 correctly discloses silent continuation without a manifest.
+
+Candidate and conditions hashes matched; archived verdict hashes, template derivation, environment-name inventory, structural counts, version parity, Python 3.9 parsing and stdlib checks passed. No files changed; no full install or live-harness test was run.
+
+VERDICT: NO-GO — Condition 14 still promises inode-safe cleanup that the check-then-unlink implementation does not guarantee.
