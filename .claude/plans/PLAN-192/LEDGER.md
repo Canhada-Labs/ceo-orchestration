@@ -3,6 +3,15 @@
 > Só identificadores verbatim (paths, SHAs, ids) — nunca corpo de transcript
 > (repo público). Escrito em fronteira de unidade. Teto ≤ 2k tokens.
 
+## Unidade corrente — v1.4.1-rc.1 CORTADA; hold até 2026-09-20T02:28:57Z; main CONGELADO (S356, 2026-09-19)
+
+- Rodada 3 (candidato `7602fbe46318a77f1f8740f81d5b08ef5080df94`): `GO-WITH-CONDITIONS` nas 3 partes, sem P0, nenhuma condição falsa. Evidência em `repass-rc1/` (MANIFEST 19/19, `RUNNER-OVERALL: rc=0`), commitada pelo passo 11.
+- `OWNER-RC1-CUT.sh` 20/20 sem abort: bump no-op; passo 6 pulou por `evidence_complete_for`; veredito assinado `51bd2345cab15f182a5c6ff42f329d0e21829172` (pai = o candidato; 21 paths na allowlist fechada de 22); guard de delta verde nos passos 12, 15 e 16; **tag `v1.4.1-rc.1` assinada e verificada**; `release.yml` success; `await-release-gate` success; GitHub Release pre-release não-draft; `npm view` = 1.4.0.
+- Hold ADR-103: `publishedAt = 2026-09-19T02:28:57Z` ⇒ GA só depois de `2026-09-20T02:28:57Z`. O `.tag-push-epoch` (1789783876 = 02:11:16Z) está commitado.
+- **Main CONGELADO até o GA.** O único commit posterior à tag é o closeout `4606c3df7162` (CLAUDE.md + `.tag-push-epoch`), ambos FORA do escopo do re-pass (condição 15; README-rc1 §4) e não entregues a adopters.
+- W5 (adopters) ADIADO por decisão do Owner (2026-09-19 ~05:05): os três ficam fora. Levantamento medido, para não refazer: memória `project-adopters-w5-survey-s356`.
+- Próxima unidade: passado o hold, derivar o kit do GA deste (subir o teto de 90 min do passo 4 — o Smoke Install levou 1h51), re-pass sobre a árvore da rc.1, `release.sh bump --stable` + `tag --stable`. Depois: adopters, a opção B (`project-relaunch-out-structural-cure-after-v141`), `PLAN-190-FOLLOWUP-relaunch-out-partial-write` → `done`, e o OK do Owner para o status deste plano (segue `draft`).
+
 ## Unidade corrente — rodada 2 = GWC / `NO-GO` / GWC; Owner decidiu «A agora, B depois»; candidato da rodada 3 = só texto (S356, 2026-09-18)
 
 - Rodada 2: candidato `3ed81cf657b3d22d012b1e32269671e86f3e4030`; só a condição 14 caiu (limpeza `lstat`→`unlink` não atômica). Arquivada em `PLAN-192/repass-rc1-20260918-NOGO-r2/` (`record.md`; vereditos sha256 `ec86430e…`, `023d8f12…`, `762f0cf1…`).
