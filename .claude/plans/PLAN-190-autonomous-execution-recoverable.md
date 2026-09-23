@@ -6,8 +6,7 @@ created: 2026-09-17
 owner: CEO
 reviewed_at: 2026-09-17
 reviewed_by: "Owner (assinatura GPG do sentinel da W1, chave AE9B236F)"
-related_commits:
-  - 075beed9d5f3e729b3abd5b7a7140dc16e214249
+related_commits: [075beed9d5f3e729b3abd5b7a7140dc16e214249, 6fec455b39df, 478703208efe, 3ff00dfdd156]
 depends_on: []
 level: L3
 budget_tokens: "W0 feito (S354, ~0 pago: instrumentos stdlib); W1 150-300k + debate r1; W2 200-400k; W3 150-250k; W4 100-200k; W5 100-200k; W6 e2e no smoke (CI). Teto do plano: 1,5 M de agente + cerimônias."
