@@ -1,0 +1,213 @@
+ceremony(PLAN-193 wave-opus55): adopt-opus-5.5 — claude-opus-5-5 entra no working set e no piso de VETO do ADR-149 e vira o pin de sessao (Amendment 3); fallback intacto; upgrade.sh com ramo ESCALAR generico (superseded, opt-in, on_migrate_of, notice, REVERT); piso Claude Code 2.1.280 checado no install.sh e no upgrade.sh; adapter live com default adaptive invertido; [1m] dobrado no tamper check; effortLevel xhigh em instalacao nova
+
+A fonte: ADR-149 ganha `claude-opus-5-5` APPENDED AT END no
+AVAILABLE_MODELS_WORKING_SET e no bloco VETO_FLOOR_ALLOWED + Amendment 3
+(id dateless, $4/$20, cache hits 0.05x = $0.20/MTok, 1M ctx a preco
+padrao, adaptive thinking sempre ligado, esforco padrao medium, Claude Code
+>= 2.1.280; decisao do Owner na S357: «Padrao + piso VETO»). O
+FALLBACK_MODEL_CHAIN nao muda (claude-opus-5); nenhum arquivo de agente
+com veto_floor: true migra (seguem em claude-fable-5). O
+agent_frontmatter.VETO_FLOOR_ALLOWED acompanha o bloco do ADR (igualdade de
+conjunto por teste). A Amendment 3 declara por forma os residuais: o pin do
+arquivo de agente vale so quando a chamada nao passa model (e o gate de
+spawn so o confere quando o slug do papel de VETO aparece no texto do
+spawn, nao pelo subagent_type), e o VETO
+mitigado/Workflow roda no modelo em que a sessao esta (o pin por padrao,
+ou o que /model, --model ou um fallback de conteudo escolheu), o esforco de
+subagente herdado da sessao e nao pinado, pin diferente do fallback (a
+troca por disponibilidade dura um turno; custo de cache da troca na parte
+do contexto sem cache vivo no modelo que assume; um erro
+de limite de taxa nao dispara a troca; limite de taxa proprio do Opus 5.5
+na API), o effortLevel que a migracao do pin grava e uma chave de projeto
+(vale para todo modelo e passa por cima do nivel salvo com /effort no
+usuario), batch NATIVO opt-in do adapter que repassa o thinking de quem
+chama, tamper check degradado nos adopters, cerimonia user, downgrade que
+nao desfaz o pin (e o rollback revert-e-depois---pin, rodado de um checkout
+mais novo, que migra de novo para a frente), /effort off que nao desliga o
+thinking onde ele e padrao, a checagem de piso que le o claude do PATH,
+piso que so cresce.
+
+Os settings: pin `model` -> claude-opus-5-5 nos tres (dogfood, base e o
+user DERIVADO); availableModels regenerado do ADR nos dois que o carregam
+(generator --check: MATCH, 8 ids, ordem preservada); effortLevel "xhigh" no
+topo dos tres (Owner OQ-1 «xhigh», instalacao NOVA; no dogfood, decisao da
+lane autora que o sentinel pede ao Owner para ratificar); nenhum settings
+commitado carrega ultracode (Owner OQ-6 «So no override local»; teste de
+guarda); os comentarios do pin e do enforceAvailableModels passam a dizer o
+que o Claude Code 2.1.280 faz (availableModels casa por PREFIXO de segmento;
+um pin que a lista nao admite e trocado na partida pelo modelo padrao,
+com aviso; a ressalva do enforceAvailableModels no dogfood e a
+documentada);
+o comentario do effortLevel diz a precedencia documentada (no projeto a
+chave passa por cima do nivel salvo com /effort no usuario; o
+settings.local.json passa por cima do projeto; o esforco padrao da
+organizacao substitui o padrao do modelo quando a sessao roda o modelo
+padrao da organizacao; um maxEffortLevel limita qualquer nivel), o que o
+upgrade grava (OQ-7, OQ-8) e, no dogfood, atribui a chave a lane.
+
+O upgrade (cura da classe, 2.a ocorrencia de «baseline ENVIADO lido como
+ADOPTER-CUSTOMIZED»): a tabela T5.4 ganha em availableModels.superseded a
+lista de 7 ids que toda release de v1.4.0-rc.1 ate a ultima anterior a
+esta wave enviou, e new com 8;
+o passo das folhas ARRAY percorre a tabela (toda entrada de topo cujo new
+e lista), sem codigo por chave, e
+as folhas ESCALARES de TOPO passam por UM ramo generico com atributos de
+dado: superseded, requires_member_of (a guarda C6, por pertenca EXATA ao
+valor efetivo de qualquer folha-array da tabela, mais estrita que o
+prefixo do harness), opt_in + cost_note (Owner
+OQ-7 «Instalacao nova + opt-in»: a folha so entra numa instalacao
+existente com --adopt-setting <chave>, nunca sobrescreve valor presente),
+on_migrate_of (Owner OQ-8 «Migrar gravando 'high'»: quando o pin migra de
+claude-opus-5 e o arquivo nao tem effortLevel, a migracao grava high, o
+padrao do Opus 5, com linha MIGRATE, REVERT e NOTICE; sem pin no arquivo
+(SET) nao grava; a flag vence) e notice (o model avisa o piso Claude Code
+2.1.280); um valor presente numa folha opt-in e preservado e nomeado sem
+aviso; um --adopt-setting sob --no-settings-migrate e nomeado e ignorado.
+Todo MIGRATE, tambem
+em dry-run, imprime uma linha REVERT; o backup pre-migracao e
+pre-condicao da escrita (sem ele a migracao e pulada, nomeada, e o
+arquivo fica como estava); a
+escrita usa ensure_ascii=False (num arquivo no formato dos templates so
+mudam as folhas migradas e, antes de uma chave que a migracao
+ACRESCENTA no fim do seu objeto, a linha anterior, que ganha a virgula
+- provado no template que a v1.4.1-rc.1 enviou) e volta a
+forma escapada quando um valor nao codifica em UTF-8 (surrogate
+solitario), para que o arquivo ainda migre; um arquivo que a migracao de
+uma release anterior escreveu (escapado) e reescrito uma vez sem escape.
+O baseline do censo installer-write-safety e REGENERADO pelo derivador com
+o proprio censo (so a linha da chamada da migracao muda de impressao
+digital; as do install.sh so mudam de numero de linha; o derivador recusa
+outra diferenca e o LAND prova a regeneracao byte a byte). O inventario de
+nomes de env (env-inventory.json) ganha, REGISTRADO pelo derivador, o
+unico nome novo — a variavel de esforco do Claude Code que a nota de custo
+do effortLevel cita —, e o LAND prova env-inventory-check --check verde
+(V9g).
+
+O piso do Claude Code (Owner OQ-9 «Exigir CC >= 2.1.280»): a 1.4.2
+declara 2.1.280 como minimo (SUPPORT.md); install.sh e upgrade.sh leem
+`claude --version` antes de escrever: abaixo do piso recusam (exit 6),
+salvo --allow-old-claude-code (aviso nomeado); sem claude no PATH (CI,
+headless) ou versao ilegivel, aviso nomeado e seguem; o dry-run nomeia a
+recusa e segue. A versao vem so da primeira linha que nomeia (Claude
+Code), e uma versao com qualquer coisa depois dos tres numeros (um
+pre-lancamento) conta como abaixo do piso; a sonda roda com stdin de
+/dev/null, em segundo plano, e e parada (o grupo de processos inteiro)
+no limite de 10 segundos - versao ilegivel, aviso, segue. O que sai
+antes da checagem, pela forma: todo modo que nao entrega arquivo do
+framework (--help, --print-settings-baselines, --arming-check e
+--uninstall do revisor codex ou grok) e toda recusa de argumento, de
+alvo ausente ou de pre-condicao. O motivo, pela forma: os settings enviados carregam
+valores que um CLI mais antigo pode nao aceitar, e um valor de settings que um
+CLI nao aceita pode fazer ele pular o arquivo INTEIRO, hooks incluidos
+(CHANGELOG do Claude Code: valores de enum legados invalidos faziam isso
+ate a 2.1.121; xhigh existe desde a 2.1.111). A checagem e UM bloco,
+byte a byte igual nos dois scripts (teste de paridade).
+
+O adapter live (cura da classe, 2.a ocorrencia): a lista de ids
+adaptive-only nunca ganhou claude-opus-5 nem claude-sonnet-5, e
+CEO_EFFORT_OVERRIDE mandava para eles o formato legado budget_tokens (HTTP
+400 no Claude 4.7 e posteriores). O default e invertido: a lista FECHADA
+agora e a dos ids pre-4.6; uma entrada casa o id EXATO, seguido
+opcionalmente de UM segmento de data (-AAAAMMDD, ou @AAAAMMDD do Vertex) e
+de um sufixo de versao do Bedrock; outro segmento qualquer e OUTRO id (o
+achado P0 da rodada 3 do rail: `<id listado>-<segmento>` herdava a
+classe); a unica familia e a geracao Claude 3 (claude-3-*); todo o resto e
+adaptive-only. Um {type: disabled}
+de quem chama so e descartado nos ids que o adapter lista como sempre
+ligados (Fable 5 e 5.1, Mythos 5 e 5.1, Mythos Preview e Opus 5.5), pela
+mesma regra; nos demais segue como veio (no Sonnet 5 e no Opus 5, este
+com esforco high ou abaixo, descartar ligaria o thinking em silencio).
+
+O tamper check do canal env (effective_config) dobra UMA tag final [1m]
+antes do teste de pertinencia: claude-opus-5-5[1m] e o membro
+claude-opus-5-5; qualquer outro sufixo segue comparado como esta.
+
+Espelhos no mesmo patch: case-arm do validate-governance.sh (membro ADR-192
+-> sha re-derivado no manifesto), MODEL_ID/VALID_MODEL_IDS do
+tier_policy_cli (7->8), learn._tier_rank (Opus 5 < Opus 5.5 < Fable 5, sem
+empate), smoke-install-parity.sh (lista, pin, effortLevel, sem ultracode),
+linha general-purpose do _ADR_052_ROLE_TO_MODEL (valor de politica, nao
+observacao). Custo/telemetria: o cost-table.yaml e toda tabela de rollup
+que o test_model_fleet_presence amarra ao working set do ADR ganham a
+linha a $4/$20; as duas tabelas de multiplicador de cache-read que esse
+teste mantem iguais ganham 0.05x; os detectores enxergam o id;
+model_normalize ganha o alias e a dobra generica do [1m]; a reconciliacao
+do build-canonical-models ganha a faixa propria do Opus 5.5. Tabelas de
+preco fora desse oraculo (snapshots de proveniencia, fixtures de deriva,
+instrumentos de pesquisa e de torneio, gate de custo do tier-policy) nao
+mudam; os rollups que procuram o modelo pela grafia exata nao precificam
+a grafia com [1m]. Docs: SUPPORT.md (piso Claude Code >= 2.1.280 a partir
+da v1.4.2; 2.0 a 2.1.279 so ate a v1.4.1), provider-pricing,
+cost-of-operation, CEO-MODEL-ROUTING, ACCELERATORS (fast mode do Opus 5.5
+a $8/$40, sem linha -fast).
+
+O owner-sign do tier_policy_cli (rodada 1 do rail codex, P2): grava no
+sigchain a acao que o learn._direction calcula, na mesma escada do
+learn._tier_rank; antes rotulava pela ordem do VALID_MODEL_IDS, um
+allowlist na ordem do ADR que nao e ordem de tier (na base, 20 dos 42
+pares ordenados saiam com o rotulo contrario ao do learner, entre eles
+fable-5 -> opus-5 como promote; com o id novo seriam 24 dos 56, entre
+eles fable-5-1 -> opus-5-5 como promote). Um id sem rank na escada ou o
+mesmo modelo nos dois lados e recusado (exit 2) antes de assinar; o
+caminho de assinatura e testado (test_cli.py).
+
+Nenhum teste nem harness le o claude do host ao rodar um instalador
+(rodada 2 do rail codex, P2; cura da classe, nunca no piso de producao):
+todo teste ou harness shell que roda install.sh/upgrade.sh herdava o PATH
+do host, e um claude abaixo do piso o fazia sair 6 antes de exercitar
+qualquer coisa (medido com um claude FALSO 2.1.279: 18 testes pytest em
+12 arquivos). O Eixo 4 de _lib/test_isolation.py poe, na sessao pytest,
+um claude FALSO que responde so --version com o piso do install.sh
+primeiro no PATH (dentro da arvore da sessao; PATH restaurado no fim) e
+descarta uma funcao claude exportada herdada; cada harness shell sob um
+diretorio tests ou sob scripts/local/ que nomeia um instalador traz o
+bloco harness-claude-stub, byte a byte igual, logo depois da primeira
+linha set -: exporta uma FUNCAO claude com a mesma resposta, que o bash
+roda antes de qualquer entrada do PATH (os dois smokes trocam por ele o
+stub por diretorio da r13). TestNoHarnessReadsTheHostCli guarda os dois
+pontos, com o censo dos harnesses re-derivado do disco e o bloco provado
+em execucao contra um claude 2.1.279 (o mesmo harness sem o bloco sai 6).
+
+Toda saida de falha da migracao T5.4 da o «rode de novo» com as flags do
+operador (rodada 3 do rail codex, P2; decisao do Owner OQ-10 «Corrigir +
+rodada 4 final c/ anexo (Recomendado)»; cura da classe): a saida de falha
+do helper (JSON ilegivel, escrita atomica que falha) imprimia a
+re-execucao sem as flags, e segui-la depois de reparar o JSON gravava
+high onde --adopt-setting effortLevel pedia xhigh. UMA rotina,
+_t54_rerun_cmd, monta o comando com os --adopt-setting, o
+--allow-old-claude-code, o --pin e o --dry-run (o alvo e o valor do --pin
+citados para o shell), e
+toda saida que deixa o settings.json sem migrar o imprime: o backup
+impossivel, o python3 ausente (que antes nao dava comando) e a falha do
+helper (saida 3 ou qualquer outra nao-zero); o backup so e nomeado quando
+existe. TestEveryFailureExitKeepsTheOperatorFlags forca cada saida (JSON
+ilegivel ou uma falha plantada numa copia descartavel do upgrade.sh) e
+rele o comando impresso como o shell o leria.
+
+Tudo DERIVADO de um unico material versionado
+(PLAN-193/wave-opus55/apply-opus55-edits.py + edits_core.py +
+edits_pricing.py, path-disjuntos — 207 edicoes com ancora exata e contagem
+declarada, mais o baseline do ratchet regenerado pelo censo e o inventario
+de nomes de env registrado); o SIGN re-derivou o patch do HEAD byte a byte antes de assinar
+(P1-b) e o LAND prova HEAD + derivador == patch em todo path tocado (V3) e o
+nao-vacuo nomeado (V6: id ausente em HEAD, ULTIMO nos dois availableModels,
+pin de HEAD superseded, piso +1 contra o HEAD, fallback igual ao HEAD,
+nenhum agente migrado, folhas model/effortLevel da tabela T5.4).
+
+Excecao declarada a regra de <= 8 paths (PLAN-193 OQ-2, decisao do Owner
+«Excecao declarada»): 76 paths, 12 canonicos, amarrados por testes de
+paridade no MESMO commit. Regra de parada do rail pre-registrada: no maximo
+3 rodadas por familia; P1 so em material vira anexo; a clausula que conta
+so registros rastreados foi acrescentada na r11 (nao estava na regra
+pre-registrada). Emenda da decisao do Owner OQ-10 depois de tres rodadas
+REJECT com um P2 cada: UMA rodada 4, a ultima — limpa => APPROVE; so P2 =>
+APPROVE-WITH-ANNEX com rail-round-4-annex.md rastreado; P0/P1 => REJECT e
+volta ao Owner; nao ha rodada 5 (o SIGN a recusa pelo nome). A consequencia que as OQs nao cobriram (effortLevel xhigh
+no dogfood) esta no sentinel, ratificada pela assinatura.
+
+Sentinel: .claude/plans/PLAN-193/wave-opus55-approved.md (+ .asc).
+Bateria V1-V9 do OWNER-OPUS55-LAND.sh verde contra EXPECTED-BASELINE.txt.
+
+Pair-Rail-Reviewed: codex-cli 0.156.1 (gpt-6-astra, esforço max) — 4 rodadas na sombra 19771fa1 + WOPUS55.patch (r1 1P2; r2 1P2; r3 1P2 — cada um curado pela classe; r4 LIMPA, APPROVE, sem anexo — decisão do Owner OQ-10); registros em .claude/plans/PLAN-193/wave-opus55/rail-round-{1..4}.md
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>

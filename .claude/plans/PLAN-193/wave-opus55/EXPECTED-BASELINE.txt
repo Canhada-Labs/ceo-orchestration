@@ -1,0 +1,97 @@
+# EXPECTED-BASELINE — wave-opus55 (PLAN-193, S357 — adopt-opus-5.5, ADR-149 Amendment 3)
+# Fonte UNICA dos valores que OWNER-OPUS55-LAND.sh compara (o SIGN le, antes
+# do pinentry, EXPECTED_PATCH_PATHS e EXPECTED_ADR_COUNT no P1-d e
+# EXPECTED_UNIT_TESTS / EXPECTED_UNIT_PYTEST_* no P1-e).
+# Leitor fail-CLOSED (chave ausente ABORTA). Atualizar um
+# valor e decisao CONSCIENTE com fonte — nunca relaxamento.
+#
+# Medidos em 2026-09-24/25 (S357, fix round r16 — o P2 da rodada 3 do rail
+# codex, decisao do Owner OQ-10: UMA rotina monta o «rode de novo» de toda
+# saida de falha da migracao T5.4 com as flags do operador; sobre o fix
+# round r15 — o P2 da rodada 2 do rail
+# codex: nenhum teste nem harness le o claude do host ao rodar um
+# instalador — o Eixo 4 de _lib/test_isolation.py e o bloco
+# harness-claude-stub em cada harness shell que nomeia um instalador;
+# sobre o fix round r14 — o P2 da rodada 1 do rail
+# codex: o owner-sign do tier_policy_cli assina a direcao do learner,
+# cli.py e test_cli.py entram; sobre o fix round r13 — a verificacao vX
+# sobre a r12: frase do ADR A3.2 item 6, leitor e sonda do piso do
+# Claude Code, isolamento dos testes e dos smokes, dica de re-execucao;
+# Claude Code 2.1.281 no host, NUNCA lido pelos testes nem pelos harnesses;
+# Python 3.9.6; macOS) na worktree da lane
+# (19771fa18257 + estes materiais, com o WOPUS55.patch aplicado pelo
+# derivador) — a forma da arvore do Owner depois do land livre dos
+# materiais. O harness (T15c) re-mede o V-block num clone descartavel.
+#   - 76 paths = 12 canonicos (ADR-149, gate-scripts-manifest.txt, adapter
+#     live claude.py, agent_frontmatter.py, effective_config.py,
+#     audit_log.py, settings.json — KERNEL —, install.sh, upgrade.sh,
+#     settings.base.json, settings.user.json, e — r15 —
+#     _lib/test_isolation.py) + 64 livres (r15: + 24 harnesses shell);
+#     validate-governance.sh e MEMBRO do
+#     manifesto ADR-192 (1) e o sha da linha dele e re-derivado pelo
+#     apply-opus55-edits.py;
+#   - 33 .py e 29 .sh (install.sh, upgrade.sh, validate-governance.sh e
+#     os 26 harnesses que nomeiam um instalador — r15: o bloco
+#     harness-claude-stub, byte a byte igual em todos; eram 5 .sh na
+#     r14); o baseline do ratchet installer-write-safety
+#     e a REGENERACAO do censo pelo derivador (uma linha muda de impressao
+#     digital: a chamada da migracao T5.4; as linhas do install.sh so mudam
+#     de NUMERO de linha) e o ratchet sai 0; o inventario
+#     de nomes de env ganha, REGISTRADO pelo derivador, o nome que a nota
+#     de custo do effortLevel cita, e o env-inventory-check --check sai 0;
+#   - suite V2 (a lista EXPECTED_UNIT_TESTS abaixo) 809 passed / 2 skipped
+#     (r16: 805 + os 4 do TestEveryFailureExitKeepsTheOperatorFlags, no
+#     test_upgrade_settings_migration.py; nenhum path novo — os 76 sao os
+#     da r15)
+#     (r15: 799 + os 6 do TestNoHarnessReadsTheHostCli, no
+#     test_upgrade_settings_migration.py)
+#     (r14: 773 + os 26 do test_cli.py, 5 deles novos — o caminho de
+#     assinatura do owner-sign)
+#     (o passeio pelas tags v1.* alcancaveis do HEAD e o teste do template
+#     que a v1.4.1-rc.1 enviou RODAM: a arvore do Owner e o clone do
+#     harness trazem as tags; sem tags os dois PULAM e a contagem muda —
+#     medir numa arvore com tags) — os 2
+#     skips sao pre-existentes em test_gen_settings_user_template (OQ-E5
+#     resolvida; `match` em py3.9);
+#   - gerador --check: 8 ids, ordem do ADR; availableModels[-1] e o id novo
+#     nos DOIS settings; pin claude-opus-5-5 nos TRES settings (o de HEAD e
+#     claude-opus-5, membro de model.superseded); fallback ["claude-opus-5"]
+#     igual ao de HEAD; effortLevel xhigh nos tres; ultracode em NENHUM;
+#     VETO_FLOOR_ALLOWED 3 (HEAD) -> 4; superseded = 2 listas (6 ids de
+#     v1.2.0..v1.3.0, 7 ids das releases de v1.4.0-rc.1 ate a ultima antes
+#     desta wave); nenhum arquivo de
+#     agente com model: claude-opus-5-5;
+#   - o id novo aparece 0 vezes nos 76 paths em HEAD (nao-vacuo da wave).
+EXPECTED_PATCH_PATHS=".claude/adr/ADR-149-model-id-allowlist.md .claude/data/model-currency-expected-reds.txt .claude/governance/gate-scripts-manifest.txt .claude/hooks/_lib/adapters/live/claude.py .claude/hooks/_lib/agent_frontmatter.py .claude/hooks/_lib/effective_config.py .claude/hooks/_lib/test_isolation.py .claude/hooks/audit_log.py .claude/hooks/tests/test_adr149_validator_parity.py .claude/hooks/tests/test_claude_adapter_thinking.py .claude/hooks/tests/test_effective_config.py .claude/hooks/tests/test_model_routing.py .claude/hooks/tests/test_template_dogfood_parity.py .claude/scripts/audit-telemetry.py .claude/scripts/budget-summary.py .claude/scripts/build-canonical-models.py .claude/scripts/ceo-cost-transcripts.py .claude/scripts/ceo-cost.py .claude/scripts/cost-table.yaml .claude/scripts/data/installer-write-safety-baseline.txt .claude/scripts/detectors/overpowered.py .claude/scripts/detectors/wasteful_thinking.py .claude/scripts/env-inventory.json .claude/scripts/optimizer/model_normalize.py .claude/scripts/optimizer/tests/test_optimizer_model_normalize.py .claude/scripts/success-receipt.py .claude/scripts/tests/test_a4_pricing_doctrine.py .claude/scripts/tests/test_build_canonical_models.py .claude/scripts/tests/test_gen_settings_user_template.py .claude/scripts/tests/test_generate_available_models.py .claude/scripts/tests/test_model_fleet_presence.py .claude/scripts/tests/test_upgrade_settings_migration.py .claude/scripts/tier_policy_cli/_types.py .claude/scripts/tier_policy_cli/cli.py .claude/scripts/tier_policy_cli/learn.py .claude/scripts/tier_policy_cli/tests/test_cli.py .claude/scripts/tier_policy_cli/tests/test_learn_mutation.py .claude/scripts/tier_policy_cli/tests/test_types.py .claude/scripts/validate-governance.sh .claude/scripts/value-dashboard.py .claude/settings.json SUPPORT.md docs/ACCELERATORS.md docs/CEO-MODEL-ROUTING.md docs/cost-of-operation.md docs/provider-pricing.md scripts/install.sh scripts/local/smoke-install-parity.sh scripts/tests/smoke-install.sh scripts/tests/test-doctor-delivery-route.sh scripts/tests/test-doctor.sh scripts/tests/test-install-deny-baseline.sh scripts/tests/test-install-harness-codex.sh scripts/tests/test-install-harness-grok.sh scripts/tests/test-install-sandbox-merge.sh scripts/tests/test-install-upgrade-parity-e2e.sh scripts/tests/test-installer-write-safety-e2e.sh scripts/tests/test-manifest-delivery-route.sh scripts/tests/test-night-mode-ignore-effect.sh scripts/tests/test-ownership-table.sh scripts/tests/test-parity-stale-planted.sh scripts/tests/test-protocol-pointer-inv4.sh scripts/tests/test-protocol-pointer-render.sh scripts/tests/test-schema-generation-pins-unit.sh scripts/tests/test-two-adopter-isolation-e2e.sh scripts/tests/test-upgrade-dryrun-identity.sh scripts/tests/test-upgrade-exclusions.sh scripts/tests/test-upgrade-historical-adopter.sh scripts/tests/test-upgrade-lifecycle-hooks-derived.sh scripts/tests/test-upgrade-spec-ownership.sh scripts/tests/test-w3-vcures.sh scripts/tests/test_install_baseline_manifest.sh scripts/tests/test_install_state_replay.sh scripts/upgrade.sh templates/settings/settings.base.json templates/settings/settings.user.json"
+EXPECTED_PATCH_CANONICAL_PATHS=12
+EXPECTED_MANIFEST_MEMBERS_TOUCHED=1
+EXPECTED_PATCH_PY_FILES=33
+EXPECTED_PATCH_SH_FILES=29
+EXPECTED_UNIT_TESTS=".claude/hooks/tests/test_adr149_validator_parity.py .claude/hooks/tests/test_available_models_mirror.py .claude/hooks/tests/test_veto_floor_bijection.py .claude/hooks/tests/test_adr_052_role_to_model_coverage.py .claude/hooks/tests/test_template_dogfood_parity.py .claude/hooks/tests/test_claude_adapter_thinking.py .claude/hooks/tests/test_effective_config.py .claude/hooks/tests/test_model_routing.py .claude/scripts/tests/test_generate_available_models.py .claude/scripts/tests/test_model_fleet_presence.py .claude/scripts/tests/test_a4_pricing_doctrine.py .claude/scripts/tests/test_gen_settings_user_template.py .claude/scripts/tests/test_check_model_currency.py .claude/scripts/tier_policy_cli/tests/test_types.py .claude/scripts/tier_policy_cli/tests/test_learn_mutation.py .claude/scripts/tier_policy_cli/tests/test_cli.py .claude/scripts/optimizer/tests/test_optimizer_model_normalize.py .claude/scripts/detectors/tests/test_overpowered.py .claude/scripts/detectors/tests/test_wasteful_thinking.py .claude/scripts/tests/test_build_canonical_models.py .claude/scripts/tests/test_upgrade_settings_migration.py .claude/scripts/tests/test_budget_summary.py .claude/scripts/tests/test_ceo_cost_transcripts.py .claude/scripts/tests/test_success_receipt.py .claude/scripts/tests/test_ceo_cost.py .claude/scripts/tests/test_audit_telemetry.py .claude/scripts/tests/test_value_dashboard.py"
+EXPECTED_UNIT_PYTEST_PASSED=809
+EXPECTED_UNIT_PYTEST_SKIPPED=2
+EXPECTED_GENERATOR_CHECK_LINE="CHECK availableModels: MATCH (8 ids, ADR order preserved)"
+EXPECTED_AVAILABLE_MODELS_COUNT=8
+EXPECTED_NEW_MODEL_ID=claude-opus-5-5
+EXPECTED_NEW_ID_REFS_HEAD=0
+EXPECTED_MODEL_PIN=claude-opus-5-5
+EXPECTED_HEAD_MODEL_PIN=claude-opus-5
+EXPECTED_FALLBACK_JSON=["claude-opus-5"]
+EXPECTED_EFFORT_LEVEL=xhigh
+EXPECTED_ULTRACODE_FILES=0
+EXPECTED_VETO_FLOOR_COUNT=4
+EXPECTED_SUPERSEDED_COUNT=2
+EXPECTED_BASELINE_MODEL_LEAF_JSON={"old":null,"superseded":["claude-opus-5"],"new":"claude-opus-5-5","requires_member_of":"availableModels","notice":"needs Claude Code 2.1.280 or later (SUPPORT.md, which says what to edit on an older CLI)"}
+EXPECTED_BASELINE_EFFORT_LEAF_JSON={"old":null,"new":"xhigh","opt_in":true,"cost_note":"xhigh applies to every model of the session and typically spends more tokens (cost and latency) than the default effort; in project settings it also outranks a level a developer saved with /effort in user settings (a personal level belongs in .claude/settings.local.json), and a maxEffortLevel caps it; where no other source sets a level (CLAUDE_CODE_EFFORT_LEVEL, --effort, /effort, a level saved for the model, an effortLevel in local or managed settings, ultracode) a claude-opus-5-5 session runs at its default medium effort (claude-opus-5 defaults to high), which an organization default effort replaces when the session runs the organization default model","on_migrate_of":{"model":{"claude-opus-5":"high"}},"on_migrate_note":"is the default effort of claude-opus-5 (claude-opus-5-5 defaults to medium). New installs ship xhigh; --adopt-setting never overwrites a value present in the file, so set xhigh by hand to use it here"}
+EXPECTED_AGENT_FILES_ON_NEW_ID=0
+EXPECTED_HARNESS_CONFIG_RC=0
+EXPECTED_USER_TEMPLATE_CHECK_RC=0
+EXPECTED_PARITY_SMOKE_RC=0
+EXPECTED_ADR_COUNT=198
+EXPECTED_CLAUDE_MD_CLAIMS_RC=0
+EXPECTED_VERIFY_COUNTS_RC=0
+EXPECTED_CEREMONY_LINT_BLOCKING=0
+EXPECTED_GOVERNANCE_ERRORS=0
+EXPECTED_RATCHET_RC=0
+EXPECTED_BUILD_PLUGIN_CHECK_RC=0
+EXPECTED_ENV_INVENTORY_RC=0
