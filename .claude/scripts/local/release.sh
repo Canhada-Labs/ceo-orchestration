@@ -71,36 +71,66 @@ set -euo pipefail
 # The tag stands for the WHOLE release train in CHANGELOG.md, never just the
 # newest plan: list every plan of the train and the full ADR range.
 # ---------------------------------------------------------------------------
-TARGET_BASE="1.4.1"
-RELEASE_TITLE="Workflow launch ledger + resume guard (out-of-order patch)"
+TARGET_BASE="1.4.2"
+RELEASE_TITLE="Opus 5.5 as session default + Codex CLI re-pin + Workflow ledger fixes (express release)"
 # O tag vale pelo TREM INTEIRO da entrada do CHANGELOG desta versao,
 # nunca pelo plano
 # mais novo. Este bloco e DERIVADO por
-# .claude/plans/PLAN-192/relmeta/apply-relmeta141-edits.py
-# a partir de `git log v1.4.0..HEAD` (planos CITADOS nos assuntos de
-# commit da faixa) e do conjunto de ADRs tocados na mesma faixa —
-# nao digite nada aqui a mao.
-RELEASE_SCOPE="PLAN-169 / PLAN-189 / PLAN-190 / PLAN-191 / PLAN-192 (ADRs tocados: nenhum)"
-RELEASE_HEADLINE="Patch fora de ordem para quem roda pipelines autonomos longos com a
-tool Workflow. Todo lancamento passa a ser registrado ANTES do
-despacho (sha256 e copia dos bytes do script, args literais, o run de
-retomada, a revisao do codigo), e uma retomada sobre args DIFERENTES
-do lancamento registrado e recusada em vez de seguir. A chamada exata
-volta do ledger por ceo-launches.py relaunch, em vez de ser
-reconstruida de memoria. O guard pode BLOQUEAR e o perfil user o
-mantem; as saidas sao CEO_WORKFLOW_RESUME_GUARD=0 (so aviso),
-CEO_WORKFLOW_LEDGER=0 (desligado) e a declaracao na propria chamada.
+# .claude/plans/PLAN-193/relmeta/apply-relmeta142-edits.py
+# a partir de `git log v1.4.1..HEAD` (planos CITADOS nos assuntos de
+# commit da faixa, DEPOIS de todos os lands da release) e do conjunto
+# de ADRs tocados na mesma faixa — nao digite nada aqui a mao.
+RELEASE_SCOPE="PLAN-190 / PLAN-193 (ADRs tocados: ADR-149)"
+RELEASE_HEADLINE="Release expressa. O Opus 5.5 vira o modelo padrao: claude-opus-5-5
+entra na lista de modelos do ADR-149, fica elegivel ao piso de VETO
+e vira o pin de sessao dos settings enviados; no template base o
+fallback segue claude-opus-5. Nenhum arquivo de agente muda de
+modelo: os agentes de veto seguem no pin deles. Um despacho sem
+modelo proprio que nao le o pin de um arquivo de agente (o
+general-purpose mitigado, os agentes de Workflow) roda no modelo da
+sessao, cujo pin passa a ser claude-opus-5-5.
 
-Correcao: relaunch --out entregava uma copia truncada com sucesso numa
-escrita curta; agora entrega o arquivo inteiro ou nenhum arquivo.
+Esta release exige Claude Code v2.1.280 ou mais novo, qualquer que
+seja o modelo: install.sh e upgrade.sh recusam, com saida 6, um
+claude mais antigo no PATH, salvo com --allow-old-claude-code (num
+dry-run so nomeiam a recusa); uma versao com sufixo colado aos tres
+numeros (um pre-release, por exemplo) conta como abaixo do piso. Sem
+claude no PATH, ou sem versao legivel, so avisam. Instalacao nova
+sai com esforco xhigh. Numa instalacao existente o upgrade troca por
+claude-opus-5-5 o pin claude-opus-5 de uma release anterior, ou poe
+o pin onde nao havia, se a lista de modelos efetiva o nomeia; quando
+troca a partir do claude-opus-5 e o arquivo nao define esforco,
+grava high, que passa a valer sobre o nivel salvo com /effort. Um
+esforco ja definido nunca e sobrescrito; xhigh numa instalacao
+existente so por opt-in (--adopt-setting effortLevel) ou a mao.
 
-Cinco CLIs de recuperacao e aprovacao chegam sem hook que as imponha.
+Pair-rail: o pin do Codex CLI avanca para v0.156.1, um binario por
+versao exata, conferido por sha256.
 
-A parte honesta: o envelope assinado da v1.4.0 prometia curar NESTA
-versao os achados P1 do seu anexo. Esta release NAO os cura: e um
-patch urgente, por decisao do Owner, e o anexo segue aberto, sem
-mudanca, com a cura re-alvejada para a v1.4.2. Sem afirmacao de
-velocidade — governanca e auditabilidade, como sempre."
+Correcoes: no PreToolUse, o hook do Workflow nao grava mais os bytes
+do arquivo que um scriptPath nomeia; dele, antes da decisao de
+permissao do harness, ficam gravados so o caminho, o sha256 e o
+tamanho. Isto cura o caso do Workflow na classe declarada no
+material do GA da v1.4.1; a classe nao se esgota nesse hook. A copia
+de um scriptPath passa a ser tirada so pelo PostToolUse da mesma
+chamada; sem ela, relaunch sai com codigo 7 e relaunch --out nao
+cria arquivo. As copias que a v1.4.1 ja gravou ficam em launches/.
+E relaunch --out publica por link um temporario
+ja completo e nunca apaga nem substitui o destino: um arquivo
+parcial nunca aparece sob o nome pedido, nos limites declarados em
+docs/workflow-recovery.md.
+
+Via expressa: tres ferramentas de operador, sem hook que as imponha,
+geram o pacote de re-pin do Codex, apontam deriva entre o Codex, o
+Claude Code e os modelos instalados e o que o framework registra, e
+derivam das tags GA os baselines de migracao do upgrade.
+
+A parte honesta: a cura dos achados P1 do anexo do envelope assinado
+da v1.4.0 nao faz parte desta release; o anexo segue aberto, sem
+release atribuida. E esta release declara que a limpeza do Claude
+Code (cleanupPeriodDays, 30 dias por padrao) pode apagar o log de
+auditoria e os arquivos dele; nenhum plano carrega a cura. Sem
+afirmacao de velocidade — governanca e auditabilidade, como sempre."
 RC_NUM="1"
 STABLE=0
 DRY_RUN=0
@@ -412,9 +442,12 @@ if not any(r.get("conclusion") == "success" for r in val):
   gpg --list-secret-keys "$SIGN_KEY" >/dev/null 2>&1 \
     || die "no secret key $SIGN_KEY in the keyring"
   ok "secret key $SIGN_KEY present"
+  # --yes: mktemp has just CREATED this file, and gpg --output over an
+  # existing file asks "Overwrite? (y/N)" on /dev/tty; the default answer
+  # made this probe report a working key as unable to sign (PLAN-193 W6).
   sig_probe="$(mktemp)"
   if printf 'release-preflight-probe' \
-      | gpg --local-user "$SIGN_KEY" --armor --detach-sign --output "$sig_probe" \
+      | gpg --yes --local-user "$SIGN_KEY" --armor --detach-sign --output "$sig_probe" \
         >/dev/null 2>&1; then
     ok "inline signature probe succeeded (pinentry works)"
   else

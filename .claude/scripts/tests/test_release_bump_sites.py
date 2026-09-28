@@ -1255,6 +1255,10 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
     CONSCIENTE do trem a cada corte — foi assim que a rc.1-era stale string
     foi pega (repass-r2 part-d P1).
 
+    Trem 1.4.2 (re-pinado na cerimonia relmeta-142, PLAN-193): derivado por
+    apply-relmeta142-edits.py de `git log v1.4.1..HEAD` DEPOIS de todos os
+    lands da release; o trem da 1.4.1 vira assercao negativa.
+
     Trem 1.4.1 (re-pinado na cerimonia relmeta-141, PLAN-192): derivado por
     apply-relmeta141-edits.py de `git log v1.4.0..HEAD`; um conjunto VAZIO de
     ADRs tocados e escrito como «nenhum», nunca omitido.
@@ -1268,10 +1272,10 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
     proc = driver(synth, "tag", "--stable", "--dry-run")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert (
-        "PLAN-169 / PLAN-189 / PLAN-190 / PLAN-191 / PLAN-192 (ADRs "
-        "tocados: nenhum)" in proc.stdout
+        "PLAN-190 / PLAN-193 (ADRs tocados: ADR-149)" in proc.stdout
     )
     # o trem da release ANTERIOR nao pode ter sobrevivido na anotacao
+    assert "PLAN-169 / PLAN-189 / PLAN-190" not in proc.stdout
     assert "PLAN-119 / PLAN-169 / PLAN-170" not in proc.stdout
     # nenhuma string de release ANTERIOR pode ter sobrevivido na anotacao
     assert "PLAN-162 / PLAN-165" not in proc.stdout
@@ -1365,6 +1369,103 @@ def test_driver_derives_every_version_string_from_target_base():
     assert not offenders, "version literals not derived from TARGET_BASE:\n%s" % (
         "\n".join(offenders)
     )
+
+
+_GPGPROBE_HEREDOC_RX = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
+_GPGPROBE_SPLIT_RX = re.compile(r"\|\||&&|[;|&(){}`]")
+
+
+def _gpgprobe_strip_comment(line):
+    """Tira o comentario de UMA linha fisica: um # que comeca palavra, fora de
+    aspas. No bash o comentario acaba na quebra de linha: uma barra no fim
+    dele nao continua o comando."""
+    quote = None
+    for i, ch in enumerate(line):
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "#" and (i == 0 or line[i - 1] in " \t"):
+            return line[:i]
+    return line
+
+
+def _gpgprobe_output_commands(text):
+    """Os comandos gpg que escrevem com --output, pela forma do shell: corpo
+    de heredoc e dado; ; && || | & ( ) { } e crase separam comandos; um
+    comando gpg tem gpg (ou um caminho que termina em /gpg) como primeira
+    palavra depois de atribuicoes VAR=valor."""
+    logical, cur, end_word = [], "", None
+    for raw in text.splitlines():
+        if end_word is not None:
+            if raw.strip() == end_word:
+                end_word = None
+            continue
+        line = _gpgprobe_strip_comment(raw)
+        found = list(_GPGPROBE_HEREDOC_RX.finditer(line.replace("<<<", "   ")))
+        if found:
+            end_word = found[-1].group(3)
+        if line.rstrip().endswith("\\"):
+            cur += line.rstrip()[:-1] + " "
+            continue
+        logical.append(cur + line)
+        cur = ""
+    if cur:
+        logical.append(cur)
+    commands = []
+    for ln in logical:
+        for seg in _GPGPROBE_SPLIT_RX.split(ln):
+            words = seg.split()
+            while words and re.match(r"[A-Za-z_][A-Za-z0-9_]*=", words[0]):
+                words.pop(0)
+            if words and words[0] in ("!", "command", "exec"):
+                words.pop(0)
+            if not words or not re.fullmatch(r"(?:\S*/)?gpg2?", words[0]):
+                continue
+            if "--output" in words or "-o" in words or any(
+                    w.startswith("--output=") for w in words):
+                commands.append(" ".join(words))
+    return commands
+
+
+def _gpgprobe_missing_yes(commands):
+    return [c for c in commands if "--yes" not in c.split()]
+
+
+@pytest.mark.parametrize("src, found, missing", [
+    ("gpg --detach-sign --output sig # --yes\n", 1, 1),
+    ("gpg --yes --output good ; gpg --output bad\n", 2, 1),
+    ("cat <<EOF\ngpg --yes --output ignored\nEOF\n", 0, 0),
+    ("cat <<'EOF'\ngpg --output ignored\nEOF\ngpg --yes --output real\n", 1, 0),
+    ("# a comment \\\ngpg --output x\n", 1, 1),
+    ("/usr/bin/gpg --output x\n", 1, 1),
+    ("X=1 gpg -o x --armor\n", 1, 1),
+    ("printf x \\\n  | gpg --yes --local-user K --output \"$f\" \\\n  >/dev/null 2>&1\n", 1, 0),
+], ids=["trailing-comment", "two-commands", "heredoc-only", "heredoc-then-real",
+        "comment-backslash", "absolute-path", "assignment-and-short-flag", "continued-probe"])
+def test_gpg_output_scanner_reads_commands_not_lines(src, found, missing):
+    """Controle do instrumento do teste seguinte (rail relmeta-142): cada
+    forma que um scanner POR LINHA errava tem o resultado certo aqui."""
+    commands = _gpgprobe_output_commands(src)
+    assert len(commands) == found, commands
+    assert len(_gpgprobe_missing_yes(commands)) == missing, commands
+
+
+def test_preflight_signature_probe_answers_its_own_overwrite_question():
+    """PLAN-193 W6 (relmeta-142). O probe de assinatura do preflight escreve
+    num arquivo que o proprio ``mktemp`` acabou de CRIAR. ``gpg --output``
+    sobre um arquivo existente, sem ``--yes``, pergunta ``Overwrite? (y/N)``
+    direto no /dev/tty (o ``>/dev/null 2>&1`` do driver nao a esconde) e, com
+    a resposta padrao, o preflight morria dizendo que a chave nao conseguia
+    assinar -- uma chave integra. Todo comando gpg do driver que escreve com
+    ``--output`` (lido por comando, nao por linha: o instrumento tem controle
+    proprio acima) carrega ``--yes``; o controle exige ter achado ao menos
+    um, para nunca passar vazio."""
+    commands = _gpgprobe_output_commands(DRIVER_SRC.read_text(encoding="utf-8"))
+    assert commands, "no gpg --output command found in the driver: control is blind"
+    missing = _gpgprobe_missing_yes(commands)
+    assert not missing, "gpg --output without --yes:\n%s" % "\n".join(missing)
 
 
 @pytest.mark.parametrize(
