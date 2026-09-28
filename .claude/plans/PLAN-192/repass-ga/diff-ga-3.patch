@@ -1,0 +1,1699 @@
+diff --git a/.claude/scripts/approval_gate.py b/.claude/scripts/approval_gate.py
+new file mode 100755
+index 000000000000..f1740a1b16da
+--- /dev/null
++++ b/.claude/scripts/approval_gate.py
+@@ -0,0 +1,247 @@
++#!/usr/bin/env python3
++"""approval_gate.py — compute an approval decision BY CODE from typed evidence (PLAN-190 W3).
++
++Why
++---
++A consumer's pipeline declared three slices "green" while the cross-model
++reviewer had scored them below the bar, because the script only looked at
++P0/P1 findings; a severity written in prose ("alta, mas aceitável") fabricated
++a wrong verdict; nine false "proofs incomplete" came from comparing function
++names with file paths. The order (2026-09-17) requires: "O estado de aprovação
++deve ser calculado por código conforme a política vigente, incluindo nota
++mínima, severidades impeditivas e cobertura da versão final. Resposta ausente,
++ambígua ou inválida não pode virar verde."
++
++Contract
++--------
++``decide(policy, evidence)`` returns ``{"decision": "APPROVED"|"REJECTED",
++"reasons": [...]}``. It is APPROVED only when EVERY rule passes; anything
++missing, ambiguous (a severity outside the closed enum, a score that is not
++a number), or inconsistent (review of a revision that is not the final one,
++a failing gate command) is REJECTED with the rule named. There is no third
++state and no default-green path.
++
++Policy (JSON, closed schema ``ceo.approval-policy/v1``)::
++
++    {"schema": "ceo.approval-policy/v1",
++     "score": {"min": 7, "max": 10},
++     "severities": {"enum": ["P0", "P1", "P2"], "blocking": ["P0"], "max_open": {"P1": 0}},
++     "require_reviewed_equals_final": true,
++     "require_gate_green": true,
++     "require_review_ran": true}
++
++Evidence (JSON, ``ceo.approval-evidence/v1``)::
++
++    {"schema": "ceo.approval-evidence/v1",
++     "final_rev": "<git sha of the bytes being approved>",
++     "review": {"ran": true, "reviewed_rev": "<sha the reviewer saw>", "score": 8,
++                "findings": [{"severity": "P1", "where": "file:line", "text": "..."}]},
++     "gate": [{"cmd": "pytest ...", "rc": 0, "failed": 0}]}
++
++CLI::
++
++    approval_gate.py decide --policy policy.json --evidence evidence.json [--json]
++      rc 0 APPROVED · rc 3 REJECTED · rc 2 unreadable input (also a rejection)
++
++Stdlib only, Python >= 3.9. Pure: no I/O besides the two files.
++"""
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import sys
++from pathlib import Path
++from typing import Any, Dict, List, Optional
++
++POLICY_SCHEMA = "ceo.approval-policy/v1"
++EVIDENCE_SCHEMA = "ceo.approval-evidence/v1"
++
++
++def _sha(obj: Any) -> str:
++    return hashlib.sha256(json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
++
++
++def _is_int_like(v: Any) -> bool:
++    return isinstance(v, int) and not isinstance(v, bool)
++
++
++def _number(v: Any) -> Optional[float]:
++    if isinstance(v, bool):
++        return None
++    if isinstance(v, (int, float)):
++        return float(v)
++    if isinstance(v, str):
++        s = v.strip().replace(",", ".")
++        # accept "8/10" and "8" — nothing else; prose is ambiguous by definition
++        if "/" in s:
++            a, b = s.split("/", 1)
++            try:
++                num, den = float(a), float(b)
++            except ValueError:
++                return None
++            return num if den == 0 else num  # the denominator is validated against policy.max by the caller
++        try:
++            return float(s)
++        except ValueError:
++            return None
++    return None
++
++
++def validate_policy(policy: Dict[str, Any]) -> List[str]:
++    errs: List[str] = []
++    if policy.get("schema") != POLICY_SCHEMA:
++        errs.append("policy.schema must be %s" % POLICY_SCHEMA)
++    sc = policy.get("score")
++    if not isinstance(sc, dict) or not _is_int_like(sc.get("min")) or not _is_int_like(sc.get("max")) or sc["min"] > sc["max"]:
++        errs.append("policy.score must be {min:int, max:int} with min <= max")
++    sv = policy.get("severities")
++    if not isinstance(sv, dict) or not isinstance(sv.get("enum"), list) or not sv["enum"] or not all(isinstance(x, str) for x in sv["enum"]):
++        errs.append("policy.severities.enum must be a non-empty list of strings")
++    else:
++        enum = set(sv["enum"])
++        blocking = sv.get("blocking", [])
++        if not isinstance(blocking, list) or not set(blocking) <= enum:
++            errs.append("policy.severities.blocking must be a subset of enum")
++        max_open = sv.get("max_open", {})
++        if not isinstance(max_open, dict) or not set(max_open) <= enum or not all(_is_int_like(v) and v >= 0 for v in max_open.values()):
++            errs.append("policy.severities.max_open must map enum members to non-negative ints")
++    for flag in ("require_reviewed_equals_final", "require_gate_green", "require_review_ran"):
++        if not isinstance(policy.get(flag), bool):
++            errs.append("policy.%s must be a boolean" % flag)
++    return errs
++
++
++def decide(policy: Dict[str, Any], evidence: Dict[str, Any]) -> Dict[str, Any]:
++    reasons: List[str] = []
++    perr = validate_policy(policy)
++    if perr:
++        return {"decision": "REJECTED", "reasons": ["invalid policy: " + e for e in perr], "policy_sha256": _sha(policy), "evidence_sha256": _sha(evidence)}
++    if evidence.get("schema") != EVIDENCE_SCHEMA:
++        reasons.append("evidence.schema must be %s" % EVIDENCE_SCHEMA)
++
++    final_rev = evidence.get("final_rev")
++    if not isinstance(final_rev, str) or not final_rev.strip():
++        reasons.append("evidence.final_rev missing")
++
++    review = evidence.get("review")
++    if not isinstance(review, dict):
++        reasons.append("evidence.review missing")
++        review = {}
++
++    if policy["require_review_ran"] and review.get("ran") is not True:
++        reasons.append("review did not run (review.ran != true)")
++
++    # score: numeric, on the policy scale, at or above the minimum
++    smin, smax = policy["score"]["min"], policy["score"]["max"]
++    raw_score = review.get("score")
++    score = _number(raw_score)
++    if score is None:
++        reasons.append("review.score missing or not numeric (%r)" % (raw_score,))
++    else:
++        if isinstance(raw_score, str) and "/" in raw_score:
++            try:
++                den = float(raw_score.split("/", 1)[1])
++                if den != smax:
++                    reasons.append("review.score denominator %s != policy scale %d" % (den, smax))
++            except ValueError:
++                reasons.append("review.score malformed (%r)" % (raw_score,))
++        if score < smin:
++            reasons.append("review.score %s below minimum %d" % (score, smin))
++        if score > smax:
++            reasons.append("review.score %s above scale %d (ambiguous)" % (score, smax))
++
++    # findings: closed enum, blocking severities, per-severity caps
++    enum = policy["severities"]["enum"]
++    blocking = set(policy["severities"].get("blocking", []))
++    max_open = policy["severities"].get("max_open", {})
++    findings = review.get("findings")
++    if findings is None:
++        reasons.append("review.findings missing (an empty list is required to mean 'none')")
++        findings = []
++    elif not isinstance(findings, list):
++        reasons.append("review.findings must be a list")
++        findings = []
++    counts: Dict[str, int] = {}
++    for i, f in enumerate(findings):
++        sev = f.get("severity") if isinstance(f, dict) else None
++        if not isinstance(sev, str) or sev not in enum:
++            reasons.append("finding[%d].severity %r not in enum %s (ambiguous)" % (i, sev, enum))
++            continue
++        counts[sev] = counts.get(sev, 0) + 1
++        if sev in blocking:
++            reasons.append("finding[%d] has blocking severity %s: %s" % (i, sev, str(f.get("where", ""))[:80]))
++    for sev, cap in max_open.items():
++        if counts.get(sev, 0) > cap:
++            reasons.append("%d finding(s) of severity %s exceed max_open %d" % (counts[sev], sev, cap))
++
++    # coverage of the final revision
++    if policy["require_reviewed_equals_final"]:
++        rr = review.get("reviewed_rev")
++        if not isinstance(rr, str) or not rr.strip():
++            reasons.append("review.reviewed_rev missing")
++        elif isinstance(final_rev, str) and rr.strip() != final_rev.strip():
++            reasons.append("review covered %s but the final revision is %s" % (rr[:12], final_rev[:12]))
++
++    # gate
++    if policy["require_gate_green"]:
++        gate = evidence.get("gate")
++        if not isinstance(gate, list) or not gate:
++            reasons.append("evidence.gate missing or empty")
++        else:
++            for i, g in enumerate(gate):
++                if not isinstance(g, dict):
++                    reasons.append("gate[%d] not an object" % i)
++                    continue
++                rc = g.get("rc")
++                failed = g.get("failed")
++                if not _is_int_like(rc):
++                    reasons.append("gate[%d].rc missing or not int" % i)
++                elif rc != 0:
++                    reasons.append("gate[%d] rc=%d (%s)" % (i, rc, str(g.get("cmd", ""))[:60]))
++                if failed is not None and (not _is_int_like(failed) or failed > 0):
++                    reasons.append("gate[%d] failed=%r (%s)" % (i, failed, str(g.get("cmd", ""))[:60]))
++
++    return {
++        "decision": "APPROVED" if not reasons else "REJECTED",
++        "reasons": reasons,
++        "policy_sha256": _sha(policy),
++        "evidence_sha256": _sha(evidence),
++    }
++
++
++def _load(path: str) -> Any:
++    with open(Path(path).expanduser(), encoding="utf-8") as fh:
++        return json.load(fh)
++
++
++def main(argv: Optional[List[str]] = None) -> int:
++    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
++    sub = ap.add_subparsers(dest="cmd", required=True)
++    p = sub.add_parser("decide")
++    p.add_argument("--policy", required=True)
++    p.add_argument("--evidence", required=True)
++    p.add_argument("--json", action="store_true")
++    args = ap.parse_args(argv)
++    try:
++        policy = _load(args.policy)
++        evidence = _load(args.evidence)
++    except (OSError, ValueError) as exc:
++        out = {"decision": "REJECTED", "reasons": ["unreadable input: %s" % exc]}
++        print(json.dumps(out, ensure_ascii=False) if args.json else "REJECTED: unreadable input: %s" % exc)
++        return 2
++    if not isinstance(policy, dict) or not isinstance(evidence, dict):
++        print("REJECTED: policy and evidence must be JSON objects")
++        return 2
++    out = decide(policy, evidence)
++    if args.json:
++        print(json.dumps(out, ensure_ascii=False, indent=1))
++    else:
++        print(out["decision"])
++        for r in out["reasons"]:
++            print("  - " + r)
++    return 0 if out["decision"] == "APPROVED" else 3
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/.claude/scripts/ceo-launches.py b/.claude/scripts/ceo-launches.py
+new file mode 100755
+index 000000000000..653a1ec78f14
+--- /dev/null
++++ b/.claude/scripts/ceo-launches.py
+@@ -0,0 +1,329 @@
++#!/usr/bin/env python3
++"""ceo-launches.py — read and reuse the Workflow launch ledger (PLAN-190 W1).
++
++The ledger is written by ``.claude/hooks/check_workflow_launch.py`` before every
++``Workflow`` tool call; this CLI is how an operator (or a consumer's recovery
++rite) gets the EXACT recorded call back instead of rebuilding it from memory.
++
++Commands::
++
++    ceo-launches.py list [--limit N]            recent launches (id, run, resume, guard, bind method)
++    ceo-launches.py show <launch_id|run_id>     the full manifest (args printed as literal JSON)
++    ceo-launches.py relaunch <run_id> [--out FILE]
++                                                the exact call to re-issue: the script SNAPSHOT (bytes
++                                                recorded before dispatch — pass it as scriptPath) + args literal;
++                                                rc 7 and NOTHING printed as exact when the record fails its
++                                                integrity check (snapshot hash, args canonical/hash)
++    ceo-launches.py check --run <run_id> [--script-file F | --script-text F] [--args-file F | --no-args]
++                                                the guard's comparison, standalone: rc 0 same, rc 3 args differ,
++                                                rc 5 script differs (args same), rc 6 inconclusive (unavailable hash
++                                                or a record that fails its integrity check), rc 4 no manifest
++    ceo-launches.py bind <launch_id> <run_id>   manual binding of an orphan (run id validated by shape)
++    ceo-launches.py orphans                     run ids seen in responses that could not be bound
++    ceo-launches.py report                      counts by guard result, bind method, orphans (W0.2 groundwork)
++
++A deliberate resume over different inputs is declared IN THE CALL, not with this CLI: a
++``description`` that starts with ``CEO_WORKFLOW_RESUME_FORCE: <why>`` (see
++docs/workflow-recovery.md). Nothing is stored for it, so nothing can be replayed.
++
++Stdlib only, Python >= 3.9. Read-only except ``bind`` and ``relaunch --out``.
++Never prints transcript content; ``args`` are the operator's own inputs.
++``--project-dir`` overrides the runtime state dir resolution (same resolver as the hooks).
++"""
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import os
++import sys
++from pathlib import Path
++from typing import Any, Dict, List, Optional
++
++_HERE = Path(__file__).resolve()
++_HOOKS_DIR = _HERE.parent.parent / "hooks"
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++
++from _lib import launch_ledger as LL  # noqa: E402
++
++
++def _project_root_from_cwd() -> Optional[Path]:
++    """Nearest ancestor of cwd (cwd included) holding a ``.claude/`` directory, excluding
++    ``$HOME`` itself (``~/.claude`` is the global config, not a project). Absolutized, not
++    realpath'd — the same symlink honesty as ``runtime_paths.project_dir``."""
++    home = os.path.abspath(os.environ.get("HOME") or os.path.expanduser("~"))
++    start = Path(os.path.abspath(os.getcwd()))
++    for p in (start,) + tuple(start.parents):
++        if str(p) == home:
++            continue
++        if (p / ".claude").is_dir():
++            return p
++    return None
++
++
++def _dir(args: argparse.Namespace) -> Path:
++    """``--project-dir`` (a state dir root) wins; else the resolver the hooks use —
++    ``CLAUDE_PROJECT_DIR`` when the harness set it, otherwise the project found by walking
++    up from cwd, so the CLI run from a subdirectory reads the ledger the hook wrote."""
++    if args.project_dir:
++        return LL.ledger_dir(Path(os.path.expanduser(args.project_dir)))
++    if os.environ.get("CLAUDE_PROJECT_DIR") or os.environ.get("CLAUDE_PROJECT_DIR_NATIVE"):
++        return LL.ledger_dir()
++    from _lib import runtime_paths  # noqa: E402
++
++    root = _project_root_from_cwd()
++    return LL.ledger_dir(runtime_paths.runtime_state_dir(root) if root is not None else None)
++
++
++def _resolve(d: Path, ident: str) -> Optional[Dict[str, Any]]:
++    if ident.startswith("L-"):
++        return LL.load_manifest(d, ident)
++    if not LL.is_run_id(ident):
++        return None
++    return LL.find_launch_for_run(d, ident)
++
++
++def cmd_list(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    lines = [ln for ln in LL.iter_index(d) if ln.get("kind") == "launch"]
++    print("%-28s %-18s %-18s %-26s %-16s %-12s %-12s" % ("launch_id", "run_id", "resume_from", "guard", "bind", "script", "args"))
++    for ln in lines[-args.limit:]:
++        m = LL.load_manifest(d, ln["launch_id"]) or {}
++        print("%-28s %-18s %-18s %-26s %-16s %-12s %-12s" % (
++            ln["launch_id"], m.get("run_id") or "-", ln.get("resume_from_run_id") or "-",
++            (m.get("guard") or {}).get("result", "?"), m.get("bind_method") or "-",
++            (ln.get("script_sha256") or "none")[:12], (ln.get("args_sha256") or "none")[:12]))
++    return 0
++
++
++def cmd_show(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    m = _resolve(d, args.ident)
++    if m is None:
++        print("no manifest for %s" % args.ident, file=sys.stderr)
++        return 4
++    print(json.dumps(m, ensure_ascii=False, indent=1, sort_keys=True))
++    return 0
++
++
++def _write_new_file(path: str, data: bytes) -> Optional[str]:
++    """Create ``path`` with ``data``; never overwrite, never follow a symlink. Returns an error text or None."""
++    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
++    try:
++        fd = os.open(path, flags, 0o600)
++    except FileExistsError:
++        return "refused: %s already exists (relaunch --out never overwrites)" % path
++    except (OSError, ValueError) as exc:
++        return "refused: cannot create %s (%s)" % (path, type(exc).__name__)
++    # ``os.write`` may write FEWER bytes than asked: loop until every byte is down.
++    # A truncated copy here is the exact material the recovery rite passes back as
++    # ``scriptPath`` — so it is the whole file or no file (PLAN-190 W1.1).
++    written = 0
++    failure: Optional[str] = None
++    ours = None
++    try:
++        ours = os.fstat(fd)
++        view = memoryview(data)
++        while written < len(data):
++            try:
++                n = os.write(fd, view[written:])
++            except InterruptedError:
++                continue
++            if n <= 0:
++                failure = "no progress"
++                break
++            written += n
++    except OSError as exc:
++        failure = type(exc).__name__
++    try:
++        os.close(fd)
++    except OSError as exc:  # a deferred write error surfaces at close: still not a whole file
++        failure = failure or ("close %s" % type(exc).__name__)
++    if failure is None:
++        return None
++    # Remove ONLY the file this call created: O_EXCL proved it was ours at open, and the
++    # inode comparison proves the name still points at it now.
++    removed = False
++    try:
++        now = os.lstat(path)
++        if ours is not None and (ours.st_dev, ours.st_ino) == (now.st_dev, now.st_ino):
++            os.unlink(path)
++            removed = True
++    except OSError:
++        removed = False
++    return "refused: incomplete write to %s (%d of %d bytes, %s) — %s" % (
++        path, written, len(data), failure,
++        "the partial file was removed" if removed else "the partial file could NOT be removed: delete it before use")
++
++
++def cmd_relaunch(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    if not LL.is_run_id(args.run_id):
++        print("run id has an unexpected shape", file=sys.stderr)
++        return 2
++    m = LL.find_launch_for_run(d, args.run_id)
++    if m is None:
++        print("no manifest bound to run %s — nothing exact to relaunch from (bind an orphan with `bind`, or the run predates the ledger)" % args.run_id, file=sys.stderr)
++        return 4
++    problem = LL.manifest_problem(m, d)
++    if problem is not None:
++        print("NOT EXACT: the record bound to run %s fails its integrity check (%s) — do not relaunch from it; "
++              "rebuild the call from the script and args you can verify" % (args.run_id, problem), file=sys.stderr)
++        return 7
++    script = m.get("script") or {}
++    a = m.get("args") or {}
++    source = script.get("source")
++    exact_script = source in ("inline", "named") or (source == "path" and script.get("unreadable") is not True)
++    if not exact_script:
++        print("NOT EXACT: the script of run %s was not recorded at launch (%s) — the args below are exact, the script is not"
++              % (args.run_id, script.get("why") or source), file=sys.stderr)
++    else:
++        print("# exact recorded call for run %s (launch %s, recorded %s)" % (args.run_id, m.get("launch_id"), m.get("recorded_at")))
++    if source == "named":
++        print("name: %s" % m.get("name"))
++    else:
++        snap = LL.load_snapshot(d, m)
++        if snap is not None:
++            sp = LL.snapshot_path(d, m["launch_id"])
++            print("scriptPath: %s   # SNAPSHOT of the bytes recorded before dispatch (sha256 %s, %d bytes)" % (sp, hashlib.sha256(snap).hexdigest(), len(snap)))
++            if args.out:
++                err = _write_new_file(args.out, snap)
++                if err:
++                    print(err, file=sys.stderr)
++                    return 2
++                print("snapshot copied to %s" % args.out)
++            if source == "path" and script.get("path"):
++                p = Path(script["path"])
++                if not p.is_absolute() and m.get("cwd"):
++                    p = Path(m["cwd"]) / p
++                cur, why = LL.read_script_file(p)
++                if cur is None:
++                    print("original file %s: unreadable now (%s) — use the snapshot" % (script["path"], why))
++                else:
++                    print("original file %s: %s" % (script["path"], "unchanged" if hashlib.sha256(cur).hexdigest() == script.get("sha256") else "CHANGED since launch — use the snapshot"))
++    if m.get("persisted_script_path"):
++        print("harness copy: %s (matches snapshot: %s)" % (m["persisted_script_path"], m.get("persisted_matches_snapshot")))
++    print("resumeFromRunId: %s" % args.run_id)
++    if a.get("present"):
++        print("args (literal JSON in the ORIGINAL key order, pass EXACTLY this):")
++        print(a.get("literal"))
++    else:
++        print("args: ABSENT in the recorded call — do NOT pass an args field")
++    code = m.get("code") or {}
++    if code.get("head"):
++        print("code revision at launch: %s%s" % (code["head"], " (dirty)" if code.get("dirty") else ""))
++    return 0 if exact_script else 7
++
++
++def cmd_check(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    if not LL.is_run_id(args.run_id):
++        print("run id has an unexpected shape", file=sys.stderr)
++        return 2
++    recorded = LL.find_launch_for_run(d, args.run_id)
++    if recorded is None:
++        print("NO-MANIFEST for run %s" % args.run_id)
++        return 4
++    problem = LL.manifest_problem(recorded, d)
++    if problem is not None:
++        print("INCONCLUSIVE: the record bound to run %s fails its integrity check (%s)" % (args.run_id, problem))
++        return 6
++    tool_input: Dict[str, Any] = {"resumeFromRunId": args.run_id}
++    if args.script_file:
++        tool_input["scriptPath"] = args.script_file
++    elif args.script_text:
++        data, why = LL.read_script_file(Path(args.script_text))
++        if data is None:
++            print("cannot read %s (%s)" % (args.script_text, why), file=sys.stderr)
++            return 2
++        tool_input["script"] = data.decode("utf-8", "surrogateescape")
++    if args.args_file and not args.no_args:
++        tool_input["args"] = json.loads(Path(args.args_file).read_text(encoding="utf-8"))
++    now, _bytes = LL.build_manifest({"tool_input": tool_input, "cwd": os.getcwd()})
++    cmp = LL.compare(recorded, now)
++    if cmp["args"] == "inconclusive":
++        print("INCONCLUSIVE: args could not be serialised on one side (run %s)" % args.run_id)
++        return 6
++    if cmp["counts"]["total"]:
++        print("ARGS-DIFFER: run %s — %s" % (args.run_id, json.dumps(cmp["counts"])))
++        for df in cmp["args_diff"]:
++            print("  %-24s recorded=%s now=%s" % (df["key"], df["recorded"], df["now"]))
++        if cmp["counts"].get("order"):
++            print("  <key order>              the same keys and values in a different order")
++        return 3
++    if cmp["script"] == "differs":
++        print("SCRIPT-DIFFERS (args same): run %s" % args.run_id)
++        return 5
++    if cmp["script"] == "inconclusive":
++        print("INCONCLUSIVE: one of the script hashes is unavailable (run %s)" % args.run_id)
++        return 6
++    print("SAME: run %s (launch %s)" % (args.run_id, recorded.get("launch_id")))
++    return 0
++
++
++def cmd_bind(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    if not LL.is_run_id(args.run_id):
++        print("run id has an unexpected shape (expected wf_<hex8>[-<hex>])", file=sys.stderr)
++        return 2
++    m = LL.load_manifest(d, args.launch_id)
++    if m is None or m.get("launch_id") != args.launch_id:
++        print("no manifest %s (or its record carries another id)" % args.launch_id, file=sys.stderr)
++        return 4
++    LL.bind_run(d, m, args.run_id, "manual")
++    print("bound %s → %s (manual)" % (args.launch_id, args.run_id))
++    return 0
++
++
++def cmd_orphans(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    rows = [ln for ln in LL.iter_index(d) if ln.get("kind") == "orphan"]
++    for ln in rows[-args.limit:]:
++        print("%s  run=%s  session=%s  tool_use=%s  reason=%s" % (ln.get("at"), ln.get("run_id"), (ln.get("session_id") or "-")[:12], ln.get("tool_use_id") or "-", ln.get("reason")))
++    print("orphans: %d" % len(rows))
++    return 0
++
++
++def cmd_report(args: argparse.Namespace) -> int:
++    d = _dir(args)
++    idx = LL.iter_index(d)
++    launches = [ln for ln in idx if ln.get("kind") == "launch"]
++    guard: Dict[str, int] = {}
++    methods: Dict[str, int] = {}
++    bound = 0
++    for ln in launches:
++        m = LL.load_manifest(d, ln["launch_id"]) or {}
++        g = (m.get("guard") or {}).get("result", "?")
++        guard[g] = guard.get(g, 0) + 1
++        if m.get("run_id"):
++            bound += 1
++            bm = m.get("bind_method") or "?"
++            methods[bm] = methods.get(bm, 0) + 1
++    orphans = sum(1 for ln in idx if ln.get("kind") == "orphan")
++    print("launches=%d bound=%d unbound=%d orphans=%d" % (len(launches), bound, len(launches) - bound, orphans))
++    print("guard results: %s" % json.dumps(guard, sort_keys=True))
++    print("bind methods:  %s" % json.dumps(methods, sort_keys=True))
++    print("ledger: %s" % d)
++    return 0
++
++
++def main(argv: Optional[List[str]] = None) -> int:
++    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
++    ap.add_argument("--project-dir", default=None, help="runtime state dir root to use instead of the resolver (tests / other projects)")
++    sub = ap.add_subparsers(dest="cmd", required=True)
++    p = sub.add_parser("list"); p.add_argument("--limit", type=int, default=20); p.set_defaults(fn=cmd_list)
++    p = sub.add_parser("show"); p.add_argument("ident"); p.set_defaults(fn=cmd_show)
++    p = sub.add_parser("relaunch"); p.add_argument("run_id"); p.add_argument("--out", default=None); p.set_defaults(fn=cmd_relaunch)
++    p = sub.add_parser("check"); p.add_argument("--run", dest="run_id", required=True)
++    p.add_argument("--script-file", default=None); p.add_argument("--script-text", default=None)
++    p.add_argument("--args-file", default=None); p.add_argument("--no-args", action="store_true"); p.set_defaults(fn=cmd_check)
++    p = sub.add_parser("bind"); p.add_argument("launch_id"); p.add_argument("run_id"); p.set_defaults(fn=cmd_bind)
++    p = sub.add_parser("orphans"); p.add_argument("--limit", type=int, default=50); p.set_defaults(fn=cmd_orphans)
++    p = sub.add_parser("report"); p.set_defaults(fn=cmd_report)
++    args = ap.parse_args(argv)
++    return int(args.fn(args))
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/.claude/scripts/mutant_sandbox.py b/.claude/scripts/mutant_sandbox.py
+new file mode 100755
+index 000000000000..c4369ffb121b
+--- /dev/null
++++ b/.claude/scripts/mutant_sandbox.py
+@@ -0,0 +1,224 @@
++#!/usr/bin/env python3
++"""mutant_sandbox.py — run a mutant against a DISPOSABLE copy of an identified revision (PLAN-190 W2).
++
++Why
++---
++A consumer's skeptic/recheck phases planted mutants IN the implementation
++worktree and restored them by copying a backup; a quota death or a pause in
++the middle left 13 live mutants in the tree, and one restore reintroduced
++old code because the backup predated a fix. The order (2026-09-17): "Mutantes
++devem ser executados em cópias descartáveis de uma revisão identificada.
++Interrupção não pode deixar mutação na árvore de implementação. Registrar
++resultados por mutante para reaproveitar verificações válidas."
++
++What it does
++------------
++``run``: ``git worktree add --detach`` a scratch copy of ``--rev`` (default
++``HEAD``) of ``--repo``; ``git apply`` the mutant (a unified diff) INSIDE the
++copy; run ``--cmd`` there with a timeout; record ONE JSONL line in
++``--ledger`` keyed by ``(rev, mutant_sha256, cmd)``; remove the copy in
++``finally`` (also on KeyboardInterrupt / timeout). The implementation tree is
++never written to; ``git status --porcelain`` of ``--repo`` is captured before
++and after and any difference is reported as an ERROR outcome.
++
++Outcomes: ``killed`` (the command failed under the mutant — the tests caught
++it), ``survived`` (the command passed — the mutant was NOT caught), ``error``
++(patch did not apply / timeout / command missing / tree changed).
++
++``query``: print the recorded outcome for the same key (reuse a valid
++verification instead of re-running); rc 0 found, rc 4 not found.
++``gc``: remove sandbox copies left by a crashed run (listed in
++``<ledger>.sandboxes.jsonl``).
++
++Stdlib only, Python >= 3.9. Requires ``git``.
++"""
++from __future__ import annotations
++
++import argparse
++import hashlib
++import json
++import os
++import shlex
++import subprocess
++import sys
++import tempfile
++import time
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, List, Optional
++
++
++def _now() -> str:
++    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
++
++
++def _git(repo: Path, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess:
++    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=timeout)
++
++
++def _append(path: Path, obj: Dict[str, Any]) -> None:
++    path.parent.mkdir(parents=True, exist_ok=True)
++    with open(path, "a", encoding="utf-8") as fh:
++        fh.write(json.dumps(obj, ensure_ascii=False, sort_keys=True) + "\n")
++
++
++def _read(path: Path) -> List[Dict[str, Any]]:
++    out: List[Dict[str, Any]] = []
++    try:
++        with open(path, encoding="utf-8") as fh:
++            for line in fh:
++                line = line.strip()
++                if line:
++                    try:
++                        out.append(json.loads(line))
++                    except ValueError:
++                        continue
++    except OSError:
++        pass
++    return out
++
++
++def key_of(rev: str, mutant_sha: str, cmd: str) -> str:
++    return hashlib.sha256(("%s|%s|%s" % (rev, mutant_sha, cmd)).encode("utf-8")).hexdigest()
++
++
++def resolve_rev(repo: Path, rev: str) -> str:
++    r = _git(repo, "rev-parse", "--verify", rev + "^{commit}")
++    if r.returncode != 0:
++        raise SystemExit("cannot resolve rev %r in %s: %s" % (rev, repo, r.stderr.strip()[:120]))
++    return r.stdout.strip()
++
++
++def tree_state(repo: Path) -> str:
++    r = _git(repo, "status", "--porcelain")
++    return r.stdout if r.returncode == 0 else "<unavailable>"
++
++
++def query(ledger: Path, rev: str, mutant_sha: str, cmd: str) -> Optional[Dict[str, Any]]:
++    k = key_of(rev, mutant_sha, cmd)
++    for rec in reversed(_read(ledger)):
++        if rec.get("key") == k and rec.get("outcome") in ("killed", "survived"):
++            return rec
++    return None
++
++
++def run(repo: Path, rev: str, mutant: Path, cmd: str, ledger: Path, timeout: float, keep: bool, scratch_root: Optional[Path]) -> Dict[str, Any]:
++    full_rev = resolve_rev(repo, rev)
++    mutant_bytes = mutant.read_bytes()
++    mutant_sha = hashlib.sha256(mutant_bytes).hexdigest()
++    before = tree_state(repo)
++    sandboxes = Path(str(ledger) + ".sandboxes.jsonl")
++    root = scratch_root or Path(tempfile.gettempdir()) / "ceo-mutants"
++    root.mkdir(parents=True, exist_ok=True)
++    sandbox = Path(tempfile.mkdtemp(prefix="mut-%s-" % mutant_sha[:8], dir=str(root)))
++    # mkdtemp created the dir; git worktree add wants a non-existing path
++    os.rmdir(sandbox)
++    _append(sandboxes, {"ts": _now(), "sandbox": str(sandbox), "repo": str(repo), "state": "creating"})
++    rec: Dict[str, Any] = {
++        "ts": _now(), "key": key_of(full_rev, mutant_sha, cmd), "repo": str(repo), "rev": full_rev,
++        "mutant_sha256": mutant_sha, "mutant_file": str(mutant), "cmd": cmd, "outcome": "error", "rc": None,
++        "duration_ms": None, "sandbox": str(sandbox), "detail": "",
++    }
++    t0 = time.time()
++    try:
++        wt = _git(repo, "worktree", "add", "--detach", str(sandbox), full_rev, timeout=120)
++        if wt.returncode != 0:
++            rec["detail"] = "worktree add failed: " + wt.stderr.strip()[:200]
++            return rec
++        ap = subprocess.run(["git", "apply", "--whitespace=nowarn", str(mutant.resolve())], cwd=str(sandbox), capture_output=True, text=True, timeout=60)
++        if ap.returncode != 0:
++            rec["detail"] = "mutant does not apply: " + (ap.stderr or ap.stdout).strip()[:200]
++            return rec
++        try:
++            proc = subprocess.run(shlex.split(cmd), cwd=str(sandbox), capture_output=True, text=True, timeout=timeout)
++        except subprocess.TimeoutExpired:
++            rec["detail"] = "command timed out after %ss" % timeout
++            return rec
++        except FileNotFoundError as exc:
++            rec["detail"] = "command not found: %s" % exc
++            return rec
++        rec["rc"] = proc.returncode
++        rec["outcome"] = "killed" if proc.returncode != 0 else "survived"
++        rec["detail"] = (proc.stdout + proc.stderr)[-400:].strip()
++        return rec
++    finally:
++        rec["duration_ms"] = int((time.time() - t0) * 1000)
++        if not keep:
++            rm = _git(repo, "worktree", "remove", "--force", str(sandbox), timeout=120)
++            if rm.returncode != 0 or sandbox.exists():
++                _append(sandboxes, {"ts": _now(), "sandbox": str(sandbox), "repo": str(repo), "state": "orphan", "detail": rm.stderr.strip()[:200]})
++            else:
++                _append(sandboxes, {"ts": _now(), "sandbox": str(sandbox), "repo": str(repo), "state": "removed"})
++            _git(repo, "worktree", "prune")
++        after = tree_state(repo)
++        if after != before:
++            rec["outcome"] = "error"
++            rec["detail"] = ("IMPLEMENTATION TREE CHANGED during the run — investigate; " + rec["detail"])[:400]
++        _append(ledger, rec)
++
++
++def gc(ledger: Path, repo: Optional[Path]) -> int:
++    sandboxes = Path(str(ledger) + ".sandboxes.jsonl")
++    state: Dict[str, str] = {}
++    repos: Dict[str, str] = {}
++    for rec in _read(sandboxes):
++        state[rec.get("sandbox", "")] = rec.get("state", "")
++        repos[rec.get("sandbox", "")] = rec.get("repo", "")
++    removed = 0
++    for sb, st in state.items():
++        if st in ("creating", "orphan") and sb and Path(sb).exists():
++            r = repo or Path(repos.get(sb) or ".")
++            _git(r, "worktree", "remove", "--force", sb, timeout=120)
++            if not Path(sb).exists():
++                removed += 1
++                _append(sandboxes, {"ts": _now(), "sandbox": sb, "repo": str(r), "state": "removed"})
++            _git(r, "worktree", "prune")
++    print("gc: %d sandbox(es) removed" % removed)
++    return 0
++
++
++def main(argv: Optional[List[str]] = None) -> int:
++    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
++    sub = ap.add_subparsers(dest="sub", required=True)  # not "cmd": --cmd is the test command
++    r = sub.add_parser("run")
++    r.add_argument("--repo", required=True)
++    r.add_argument("--rev", default="HEAD")
++    r.add_argument("--mutant", required=True, help="unified diff to apply inside the copy")
++    r.add_argument("--cmd", required=True, help="test command (shlex-split, run inside the copy)")
++    r.add_argument("--ledger", required=True)
++    r.add_argument("--timeout", type=float, default=600.0)
++    r.add_argument("--keep", action="store_true", help="keep the sandbox (debugging); it is then listed as orphan for gc")
++    r.add_argument("--scratch-root", default=None)
++    r.add_argument("--json", action="store_true")
++    q = sub.add_parser("query")
++    q.add_argument("--repo", required=True)
++    q.add_argument("--rev", default="HEAD")
++    q.add_argument("--mutant", required=True)
++    q.add_argument("--cmd", required=True)
++    q.add_argument("--ledger", required=True)
++    g = sub.add_parser("gc")
++    g.add_argument("--ledger", required=True)
++    g.add_argument("--repo", default=None)
++    args = ap.parse_args(argv)
++    if args.sub == "gc":
++        return gc(Path(args.ledger), Path(args.repo) if args.repo else None)
++    repo = Path(os.path.expanduser(args.repo)).resolve()
++    ledger = Path(os.path.expanduser(args.ledger))
++    mutant = Path(os.path.expanduser(args.mutant))
++    if args.sub == "query":
++        rec = query(ledger, resolve_rev(repo, args.rev), hashlib.sha256(mutant.read_bytes()).hexdigest(), args.cmd)
++        if rec is None:
++            print("NOT-RECORDED")
++            return 4
++        print(json.dumps(rec, ensure_ascii=False))
++        return 0
++    rec = run(repo, args.rev, mutant, args.cmd, ledger, args.timeout, args.keep, Path(args.scratch_root) if args.scratch_root else None)
++    if args.json:
++        print(json.dumps(rec, ensure_ascii=False, indent=1))
++    else:
++        print("%s rc=%s %sms %s" % (rec["outcome"].upper(), rec["rc"], rec["duration_ms"], rec["detail"][:120]))
++    return {"killed": 0, "survived": 1, "error": 2}[rec["outcome"]]
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/.claude/scripts/phase_checkpoint.py b/.claude/scripts/phase_checkpoint.py
+new file mode 100755
+index 000000000000..db08787c8b29
+--- /dev/null
++++ b/.claude/scripts/phase_checkpoint.py
+@@ -0,0 +1,131 @@
++#!/usr/bin/env python3
++"""phase_checkpoint.py — verifiable checkpoints INSIDE a long phase (PLAN-190 W2).
++
++Why
++---
++The runner caches a whole ``agent()`` result; a phase that dies at 400k of
++500k tokens restarts from zero — nine phases were lost that way in one night
++on a consumer. There is no checkpoint inside ``agent()`` (substrate limit).
++The alternative the framework can offer: an append-only ledger the PHASE
++PROMPT tells the agent to read before starting and to write after each
++completed step, bound to the code revision, so a re-run of the same phase
++skips the steps already proven for that revision.
++
++Contract
++--------
++``mark``:   append ``{run, phase, step, rev, evidence, ts}`` (idempotent per (run, phase, step, rev)).
++``status``: print the steps DONE for ``(run, phase)`` at ``rev``; steps recorded under
++            another revision are listed as ``stale`` and never count ("prompt idêntico com
++            arquivos modificados não torna um resultado antigo válido").
++``done``:   append a phase-complete marker for ``(run, phase, rev)``.
++Exit codes: 0 ok · 4 nothing recorded (status) · 2 bad input.
++
++Stdlib only, Python >= 3.9. Never edits or deletes records.
++"""
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import sys
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, List, Optional
++
++
++def _now() -> str:
++    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
++
++
++def _read(path: Path) -> List[Dict[str, Any]]:
++    out: List[Dict[str, Any]] = []
++    try:
++        with open(path, encoding="utf-8") as fh:
++            for line in fh:
++                line = line.strip()
++                if line:
++                    try:
++                        out.append(json.loads(line))
++                    except ValueError:
++                        continue
++    except OSError:
++        pass
++    return out
++
++
++def _append(path: Path, rec: Dict[str, Any]) -> None:
++    path.parent.mkdir(parents=True, exist_ok=True)
++    with open(path, "a", encoding="utf-8") as fh:
++        fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
++
++
++def mark(ledger: Path, run: str, phase: str, step: str, rev: str, evidence: str) -> int:
++    for rec in _read(ledger):
++        if rec.get("kind") == "step" and (rec.get("run"), rec.get("phase"), rec.get("step"), rec.get("rev")) == (run, phase, step, rev):
++            print("already recorded: %s/%s/%s @ %s" % (run, phase, step, rev[:12]))
++            return 0
++    _append(ledger, {"kind": "step", "run": run, "phase": phase, "step": step, "rev": rev, "evidence": evidence, "ts": _now()})
++    print("recorded: %s/%s/%s @ %s" % (run, phase, step, rev[:12]))
++    return 0
++
++
++def done(ledger: Path, run: str, phase: str, rev: str) -> int:
++    _append(ledger, {"kind": "phase_done", "run": run, "phase": phase, "rev": rev, "ts": _now()})
++    print("phase done: %s/%s @ %s" % (run, phase, rev[:12]))
++    return 0
++
++
++def status(ledger: Path, run: str, phase: str, rev: str, as_json: bool) -> int:
++    recs = [r for r in _read(ledger) if r.get("run") == run and r.get("phase") == phase]
++    valid: List[Dict[str, Any]] = []
++    stale: List[Dict[str, Any]] = []
++    complete = False
++    for r in recs:
++        if r.get("kind") == "step":
++            (valid if r.get("rev") == rev else stale).append(r)
++        elif r.get("kind") == "phase_done" and r.get("rev") == rev:
++            complete = True
++    seen = set()
++    steps = []
++    for r in valid:
++        if r["step"] not in seen:
++            seen.add(r["step"])
++            steps.append({"step": r["step"], "evidence": r.get("evidence"), "ts": r.get("ts")})
++    out = {"run": run, "phase": phase, "rev": rev, "done_steps": steps, "phase_complete": complete, "stale_steps_other_rev": len(stale)}
++    if as_json:
++        print(json.dumps(out, ensure_ascii=False, indent=1))
++    else:
++        print("phase %s/%s @ %s: %d step(s) done%s; %d stale (other rev, ignored)" % (run, phase, rev[:12], len(steps), " — COMPLETE" if complete else "", len(stale)))
++        for s in steps:
++            print("  done: %s (%s)" % (s["step"], (s.get("evidence") or "")[:60]))
++    return 0 if (steps or complete) else 4
++
++
++def main(argv: Optional[List[str]] = None) -> int:
++    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
++    sub = ap.add_subparsers(dest="cmd", required=True)
++    for name in ("mark", "status", "done"):
++        p = sub.add_parser(name)
++        p.add_argument("--ledger", required=True)
++        p.add_argument("--run", required=True)
++        p.add_argument("--phase", required=True)
++        p.add_argument("--rev", required=True, help="git sha of the tree the step was proven on")
++        if name == "mark":
++            p.add_argument("--step", required=True)
++            p.add_argument("--evidence", default="", help="short binding: test node id, mutant key, sha of an artifact")
++        if name == "status":
++            p.add_argument("--json", action="store_true")
++    args = ap.parse_args(argv)
++    ledger = Path(os.path.expanduser(args.ledger))
++    if not args.rev.strip():
++        print("--rev must be a non-empty git sha", file=sys.stderr)
++        return 2
++    if args.cmd == "mark":
++        return mark(ledger, args.run, args.phase, args.step, args.rev, args.evidence)
++    if args.cmd == "done":
++        return done(ledger, args.run, args.phase, args.rev)
++    return status(ledger, args.run, args.phase, args.rev, args.json)
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/.claude/scripts/test_refs.py b/.claude/scripts/test_refs.py
+new file mode 100755
+index 000000000000..a4b6564a736c
+--- /dev/null
++++ b/.claude/scripts/test_refs.py
+@@ -0,0 +1,183 @@
++#!/usr/bin/env python3
++"""test_refs.py — normalise test references to canonical pytest node ids (PLAN-190 W3).
++
++Why
++---
++A consumer's pipeline produced nine false "PROVAS-INCOMPLETAS" because the
++implementer listed FUNCTION NAMES under ``testes_novos`` while the matcher
++compared FILE PATHS. The order (2026-09-17): "Padronizar enumerações e
++referências de testes; nomes ambíguos não devem ser aceitos silenciosamente."
++
++What it accepts (one reference per line / argument)
++---------------------------------------------------
++* a file path: ``tests/unit/test_x.py``                      → every test node in it
++* a node id:  ``tests/unit/test_x.py::test_a`` or ``::Cls::test_a``
++* a bare function: ``test_a`` — resolved by scanning the tree; AMBIGUOUS if it
++  is defined in more than one file (rc 3, candidates listed), NOT FOUND if none
++* ``Cls.test_a`` / ``Cls::test_a`` — a method inside a class
++
++Resolution is static (``ast``), never executes tests. Output is a JSON object
++``{"resolved": {ref: [nodeid, ...]}, "errors": [{"ref", "kind", "candidates"}]}``.
++
++Commands::
++
++    test_refs.py normalize --repo . REF [REF ...]        rc 0 all resolved · rc 3 any error
++    test_refs.py match --repo . --declared FILE --proved FILE
++        compares two reference lists AFTER normalisation; prints missing / extra
++        node ids; rc 0 when every declared test is proved · rc 3 otherwise
++
++Stdlib only, Python >= 3.9. Read-only.
++"""
++from __future__ import annotations
++
++import argparse
++import ast
++import json
++import os
++import sys
++from pathlib import Path
++from typing import Dict, List, Optional, Tuple
++
++TEST_FILE_GLOBS = ("**/test_*.py", "**/*_test.py")
++SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv", "dist", "build"}
++
++
++def _iter_test_files(repo: Path) -> List[Path]:
++    out: List[Path] = []
++    for pattern in TEST_FILE_GLOBS:
++        for p in repo.glob(pattern):
++            if any(part in SKIP_DIRS for part in p.relative_to(repo).parts):
++                continue
++            out.append(p)
++    return sorted(set(out))
++
++
++def _nodes_in_file(path: Path) -> List[Tuple[Optional[str], str]]:
++    """(class_name or None, function_name) for every test function/method."""
++    try:
++        tree = ast.parse(path.read_text(encoding="utf-8"))
++    except (OSError, SyntaxError, UnicodeDecodeError):
++        return []
++    nodes: List[Tuple[Optional[str], str]] = []
++    for n in tree.body:
++        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test"):
++            nodes.append((None, n.name))
++        elif isinstance(n, ast.ClassDef) and n.name.startswith("Test"):
++            for m in n.body:
++                if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test"):
++                    nodes.append((n.name, m.name))
++        elif isinstance(n, ast.ClassDef):
++            # unittest.TestCase subclasses without the Test prefix still hold tests
++            for m in n.body:
++                if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test"):
++                    nodes.append((n.name, m.name))
++    return nodes
++
++
++class Index:
++    def __init__(self, repo: Path) -> None:
++        self.repo = repo
++        self.by_file: Dict[str, List[str]] = {}
++        self.by_func: Dict[str, List[str]] = {}
++        for f in _iter_test_files(repo):
++            rel = f.relative_to(repo).as_posix()
++            ids: List[str] = []
++            for cls, fn in _nodes_in_file(f):
++                nid = "%s::%s::%s" % (rel, cls, fn) if cls else "%s::%s" % (rel, fn)
++                ids.append(nid)
++                self.by_func.setdefault(fn, []).append(nid)
++                if cls:
++                    self.by_func.setdefault("%s.%s" % (cls, fn), []).append(nid)
++                    self.by_func.setdefault("%s::%s" % (cls, fn), []).append(nid)
++            self.by_file[rel] = ids
++
++    def resolve(self, ref: str) -> Tuple[List[str], Optional[Dict[str, object]]]:
++        ref = ref.strip()
++        if not ref:
++            return [], {"ref": ref, "kind": "empty", "candidates": []}
++        if "::" in ref and ("/" in ref.split("::", 1)[0] or ref.split("::", 1)[0].endswith(".py")):
++            path, rest = ref.split("::", 1)
++            rel = Path(path).as_posix()
++            ids = self.by_file.get(rel)
++            if ids is None:
++                return [], {"ref": ref, "kind": "file-not-found", "candidates": []}
++            exact = [i for i in ids if i == "%s::%s" % (rel, rest)]
++            if exact:
++                return exact, None
++            tail = [i for i in ids if i.endswith("::" + rest.split("::")[-1])]
++            if len(tail) == 1:
++                return tail, None
++            return [], {"ref": ref, "kind": "node-not-found" if not tail else "ambiguous", "candidates": tail}
++        if ref.endswith(".py") or "/" in ref:
++            rel = Path(ref).as_posix()
++            ids = self.by_file.get(rel)
++            if ids is None:
++                return [], {"ref": ref, "kind": "file-not-found", "candidates": []}
++            if not ids:
++                return [], {"ref": ref, "kind": "file-has-no-tests", "candidates": []}
++            return list(ids), None
++        cands = self.by_func.get(ref, [])
++        if not cands:
++            return [], {"ref": ref, "kind": "not-found", "candidates": []}
++        if len(set(cands)) > 1:
++            return [], {"ref": ref, "kind": "ambiguous", "candidates": sorted(set(cands))}
++        return [cands[0]], None
++
++
++def normalize(repo: Path, refs: List[str]) -> Dict[str, object]:
++    idx = Index(repo)
++    resolved: Dict[str, List[str]] = {}
++    errors: List[Dict[str, object]] = []
++    for r in refs:
++        ids, err = idx.resolve(r)
++        if err:
++            errors.append(err)
++        else:
++            resolved[r] = ids
++    return {"resolved": resolved, "errors": errors}
++
++
++def _read_refs(path: str) -> List[str]:
++    p = Path(path).expanduser()
++    text = p.read_text(encoding="utf-8")
++    if text.lstrip().startswith("["):
++        data = json.loads(text)
++        return [str(x) for x in data]
++    return [ln.strip() for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
++
++
++def main(argv: Optional[List[str]] = None) -> int:
++    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
++    sub = ap.add_subparsers(dest="cmd", required=True)
++    p = sub.add_parser("normalize")
++    p.add_argument("--repo", default=".")
++    p.add_argument("refs", nargs="+")
++    q = sub.add_parser("match")
++    q.add_argument("--repo", default=".")
++    q.add_argument("--declared", required=True, help="file: one ref per line, or a JSON list")
++    q.add_argument("--proved", required=True, help="file: one ref per line, or a JSON list")
++    args = ap.parse_args(argv)
++    repo = Path(os.path.expanduser(args.repo)).resolve()
++    if args.cmd == "normalize":
++        out = normalize(repo, args.refs)
++        print(json.dumps(out, ensure_ascii=False, indent=1))
++        return 3 if out["errors"] else 0
++    declared = normalize(repo, _read_refs(args.declared))
++    proved = normalize(repo, _read_refs(args.proved))
++    d_ids = {i for ids in declared["resolved"].values() for i in ids}  # type: ignore[union-attr]
++    p_ids = {i for ids in proved["resolved"].values() for i in ids}  # type: ignore[union-attr]
++    out = {
++        "declared_errors": declared["errors"],
++        "proved_errors": proved["errors"],
++        "missing_proof": sorted(d_ids - p_ids),
++        "proved_but_not_declared": sorted(p_ids - d_ids),
++        "declared": len(d_ids),
++        "proved": len(p_ids),
++    }
++    print(json.dumps(out, ensure_ascii=False, indent=1))
++    ok = not out["missing_proof"] and not declared["errors"] and not proved["errors"]
++    return 0 if ok else 3
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/.claude/scripts/worktree_lock.py b/.claude/scripts/worktree_lock.py
+new file mode 100755
+index 000000000000..8bdfc146982d
+--- /dev/null
++++ b/.claude/scripts/worktree_lock.py
+@@ -0,0 +1,206 @@
++#!/usr/bin/env python3
++"""worktree_lock.py — one writer per worktree (PLAN-190 W2, CLI half).
++
++Why
++---
++A consumer observed two agent instances writing the same worktree (a
++``SendMessage`` to a Workflow agent forked a copy outside the runner) and
++recovery rites that could not tell who owned a tree. The order (2026-09-17):
++"Garantir exclusividade de escrita por worktree durante execução e recuperação."
++
++Model
++-----
++Lock file ``<worktree>/.claude/state/writer.lock`` (JSON: ``owner``, ``kind``,
++``pid``, ``host``, ``since``, ``heartbeat``, ``ttl_minutes``), created with
++``O_EXCL`` (atomic). ``acquire`` by the same owner refreshes the heartbeat;
++by a different owner it fails (rc 3) naming the holder — unless the holder's
++heartbeat is older than its ``ttl_minutes`` (stale), in which case ``steal``
++may take it (never ``acquire``). ``release`` only by the owner (``--force``
++for the recovery rite, recorded). Every transition is appended to
++``writer.lock.log`` next to the lock.
++
++The enforcing hook (PreToolUse Edit/Write in the worktree) is the canonical
++half of this wave; this CLI is what a workflow phase, a recovery rite or a
++human calls. Stdlib only, Python >= 3.9.
++"""
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import socket
++import sys
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, List, Optional
++
++LOCK_REL = Path(".claude") / "state" / "writer.lock"
++
++
++def _now() -> datetime:
++    return datetime.now(timezone.utc)
++
++
++def _iso(dt: datetime) -> str:
++    return dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
++
++
++def _parse(s: str) -> Optional[datetime]:
++    try:
++        return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc)
++    except (ValueError, AttributeError):
++        return None
++
++
++def lock_path(worktree: Path) -> Path:
++    return worktree / LOCK_REL
++
++
++def read_lock(worktree: Path) -> Optional[Dict[str, Any]]:
++    p = lock_path(worktree)
++    try:
++        return json.loads(p.read_text(encoding="utf-8"))
++    except (OSError, ValueError):
++        return None
++
++
++def is_stale(lock: Dict[str, Any], now: Optional[datetime] = None) -> bool:
++    now = now or _now()
++    hb = _parse(str(lock.get("heartbeat") or lock.get("since") or ""))
++    ttl = lock.get("ttl_minutes")
++    if hb is None or not isinstance(ttl, (int, float)):
++        return True
++    return (now - hb).total_seconds() > float(ttl) * 60.0
++
++
++def _log(worktree: Path, event: str, lock: Dict[str, Any], extra: Optional[Dict[str, Any]] = None) -> None:
++    p = Path(str(lock_path(worktree)) + ".log")
++    rec = {"ts": _iso(_now()), "event": event, "owner": lock.get("owner"), "kind": lock.get("kind")}
++    if extra:
++        rec.update(extra)
++    with open(p, "a", encoding="utf-8") as fh:
++        fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
++
++
++def _write_new(p: Path, lock: Dict[str, Any]) -> bool:
++    p.parent.mkdir(parents=True, exist_ok=True)
++    try:
++        fd = os.open(str(p), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
++    except FileExistsError:
++        return False
++    with os.fdopen(fd, "w", encoding="utf-8") as fh:
++        fh.write(json.dumps(lock, ensure_ascii=False, sort_keys=True, indent=1) + "\n")
++    return True
++
++
++def _rewrite(p: Path, lock: Dict[str, Any]) -> None:
++    tmp = Path(str(p) + ".tmp")
++    tmp.write_text(json.dumps(lock, ensure_ascii=False, sort_keys=True, indent=1) + "\n", encoding="utf-8")
++    os.chmod(tmp, 0o600)
++    os.replace(tmp, p)
++
++
++def acquire(worktree: Path, owner: str, kind: str, ttl_minutes: int) -> int:
++    p = lock_path(worktree)
++    now = _now()
++    fresh = {"owner": owner, "kind": kind, "pid": os.getpid(), "host": socket.gethostname(), "since": _iso(now), "heartbeat": _iso(now), "ttl_minutes": ttl_minutes}
++    if _write_new(p, fresh):
++        _log(worktree, "acquired", fresh)
++        print("ACQUIRED %s by %s" % (worktree, owner))
++        return 0
++    cur = read_lock(worktree)
++    if cur is None:
++        print("HELD by an unreadable lock at %s — run `status`/`steal --stale-minutes`" % p, file=sys.stderr)
++        return 3
++    if cur.get("owner") == owner:
++        cur["heartbeat"] = _iso(now)
++        cur["pid"] = os.getpid()
++        _rewrite(p, cur)
++        _log(worktree, "heartbeat", cur)
++        print("HELD (refreshed) %s by %s" % (worktree, owner))
++        return 0
++    print("HELD by %s (%s) since %s%s — a second writer is refused; release or steal when stale" % (
++        cur.get("owner"), cur.get("kind"), cur.get("since"), " [STALE]" if is_stale(cur, now) else ""), file=sys.stderr)
++    return 3
++
++
++def release(worktree: Path, owner: str, force: bool) -> int:
++    p = lock_path(worktree)
++    cur = read_lock(worktree)
++    if cur is None:
++        if p.exists():
++            if not force:
++                print("unreadable lock; use --force", file=sys.stderr)
++                return 3
++            p.unlink()
++            print("RELEASED (forced, unreadable)")
++            return 0
++        print("no lock")
++        return 0
++    if cur.get("owner") != owner and not force:
++        print("HELD by %s — not yours; use --force only in the recovery rite" % cur.get("owner"), file=sys.stderr)
++        return 3
++    p.unlink()
++    _log(worktree, "released" if cur.get("owner") == owner else "force-released", cur, {"by": owner})
++    print("RELEASED %s (%s)" % (worktree, "forced by %s" % owner if cur.get("owner") != owner else owner))
++    return 0
++
++
++def steal(worktree: Path, owner: str, kind: str, stale_minutes: float, ttl_minutes: int) -> int:
++    p = lock_path(worktree)
++    cur = read_lock(worktree)
++    now = _now()
++    if cur is None and not p.exists():
++        return acquire(worktree, owner, kind, ttl_minutes)
++    hb = _parse(str((cur or {}).get("heartbeat") or (cur or {}).get("since") or ""))
++    age_min = (now - hb).total_seconds() / 60.0 if hb else float("inf")
++    if age_min < stale_minutes:
++        print("REFUSED: holder %s heartbeat is %.1f min old (< %.1f)" % ((cur or {}).get("owner"), age_min, stale_minutes), file=sys.stderr)
++        return 3
++    fresh = {"owner": owner, "kind": kind, "pid": os.getpid(), "host": socket.gethostname(), "since": _iso(now), "heartbeat": _iso(now), "ttl_minutes": ttl_minutes, "stolen_from": (cur or {}).get("owner")}
++    _rewrite(p, fresh)
++    _log(worktree, "stolen", fresh, {"from": (cur or {}).get("owner"), "age_min": round(age_min, 1)})
++    print("STOLEN %s from %s (heartbeat %.1f min old)" % (worktree, (cur or {}).get("owner"), age_min))
++    return 0
++
++
++def status(worktree: Path) -> int:
++    cur = read_lock(worktree)
++    if cur is None:
++        print("FREE" if not lock_path(worktree).exists() else "UNREADABLE")
++        return 0
++    print(json.dumps({"held_by": cur.get("owner"), "kind": cur.get("kind"), "since": cur.get("since"), "heartbeat": cur.get("heartbeat"), "stale": is_stale(cur)}, ensure_ascii=False))
++    return 0
++
++
++def main(argv: Optional[List[str]] = None) -> int:
++    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
++    sub = ap.add_subparsers(dest="cmd", required=True)
++    for name in ("acquire", "release", "steal", "status"):
++        p = sub.add_parser(name)
++        p.add_argument("--worktree", required=True)
++        if name != "status":
++            p.add_argument("--owner", required=True, help="stable identity: agent id, run id, or a human handle")
++        if name in ("acquire", "steal"):
++            p.add_argument("--kind", default="agent", choices=["agent", "human", "runner"])
++            p.add_argument("--ttl-minutes", type=int, default=30)
++        if name == "release":
++            p.add_argument("--force", action="store_true")
++        if name == "steal":
++            p.add_argument("--stale-minutes", type=float, required=True)
++    args = ap.parse_args(argv)
++    wt = Path(os.path.expanduser(args.worktree)).resolve()
++    if not wt.is_dir():
++        print("worktree not found: %s" % wt, file=sys.stderr)
++        return 2
++    if args.cmd == "acquire":
++        return acquire(wt, args.owner, args.kind, args.ttl_minutes)
++    if args.cmd == "release":
++        return release(wt, args.owner, args.force)
++    if args.cmd == "steal":
++        return steal(wt, args.owner, args.kind, args.stale_minutes, args.ttl_minutes)
++    return status(wt)
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/docs/approval-gate.md b/docs/approval-gate.md
+new file mode 100644
+index 000000000000..fd6dbdf5b669
+--- /dev/null
++++ b/docs/approval-gate.md
+@@ -0,0 +1,101 @@
++# Approval by code — `approval_gate.py` and `test_refs.py` (PLAN-190 W3)
++
++> Audience: authors of Workflow scripts and autonomous pipelines in a consumer repository. Both
++> tools are stdlib Python ≥ 3.9, read-only, and ship with the framework under `.claude/scripts/`.
++
++## The loss this closes
++
++Measured on one consumer (2026-09-15→17): three slices were declared green by the pipeline script
++while the cross-model reviewer had scored them below the bar (the script only looked at P0/P1
++findings); a severity written in prose fabricated a wrong verdict; nine false "proofs incomplete"
++came from comparing function NAMES with file PATHS. The order of 2026-09-17: *"O estado de aprovação
++deve ser calculado por código conforme a política vigente […]. Resposta ausente, ambígua ou inválida
++não pode virar verde."*
++
++## `approval_gate.py decide`
++
++```
++python3 .claude/scripts/approval_gate.py decide --policy policy.json --evidence evidence.json [--json]
++  rc 0 APPROVED · rc 3 REJECTED (reasons listed) · rc 2 unreadable input (a rejection)
++```
++
++Policy (the default lives at `tests/fixtures/approval/policy-default.json` in the framework's SOURCE
++repository; it is NOT delivered to a consumer repository by install or upgrade — copy it from there.
++The fields below are validated, but an UNKNOWN key is ignored rather than rejected — see Limitations):
++
++| field | meaning |
++|---|---|
++| `score.min` / `score.max` | minimum reviewer score and the scale; `"8/10"` is accepted, `"4/5"` (wrong scale) and prose are rejected |
++| `severities.enum` | the ONLY severities accepted; anything else is ambiguous ⇒ REJECTED |
++| `severities.blocking` | any finding with one of these ⇒ REJECTED |
++| `severities.max_open` | per-severity cap on open findings (`{"P1": 0}` = no open P1) |
++| `require_reviewed_equals_final` | the reviewer must have seen the FINAL revision (`review.reviewed_rev == final_rev`); a fix after the review needs a new review of the delta |
++| `require_gate_green` | `gate[]` must be a non-empty list; every entry needs an int `rc == 0`, and a `failed` that is present must be an int that is not `> 0` (an entry with no `failed`, or no `cmd`, is accepted today — see Limitations) |
++| `require_review_ran` | `review.ran` must be `true` |
++
++Evidence (`ceo.approval-evidence/v1`): `final_rev`, `review{ran, reviewed_rev, score, findings[{severity, where, text}]}`,
++`gate[{cmd, rc, failed, passed}]`. `findings` must be present even when empty — absence is not "none".
++
++**Rules the decision follows:** every failed rule is named in `reasons`; the decision carries
++`policy_sha256` and `evidence_sha256` so a later reader can bind it to the exact inputs. Under the
++default policy named above a missing score, findings list, reviewed revision or gate list, a prose
++score, an out-of-enum severity, a wrong scale and a wrong revision ⇒ REJECTED. The inputs that
++still come out APPROVED are listed under Limitations.
++
++### COMMON block for Workflow scripts
++
++Paste this into a workflow script and never declare green without it. The gate agent (or the
++script, if it can shell out) produces `evidence.json`; the decision is the ONLY thing the script
++reads to decide `VERDE`:
++
++```js
++// COMMON: approval by code (PLAN-190 W3). `decision` comes from
++//   python3 .claude/scripts/approval_gate.py decide --policy <policy> --evidence <evidence> --json
++// run by the gate agent and returned VERBATIM in its result under `approval`.
++function approved(result) {
++  const a = result && result.approval
++  if (!a || a.decision !== 'APPROVED') return false            // absent or ambiguous ⇒ not green
++  if (!Array.isArray(a.reasons) || a.reasons.length !== 0) return false
++  if (typeof a.evidence_sha256 !== 'string' || a.evidence_sha256.length !== 64) return false
++  return true
++}
++// usage: if (!approved(gate)) { log('[' + ID + '] NÃO VERDE: ' + JSON.stringify((gate.approval || {}).reasons || 'sem decisão')); return {ok:false, ...} }
++```
++
++The gate agent's prompt must say: *write `evidence.json` with the FINAL revision sha, the reviewer's
++score and findings as returned (no paraphrase), and the gate commands' `rc`/`failed`; run
++`approval_gate.py decide --json`; return its output verbatim under `approval`.*
++
++## `test_refs.py`
++
++```
++python3 .claude/scripts/test_refs.py normalize --repo . REF [REF ...]
++python3 .claude/scripts/test_refs.py match --repo . --declared declared.txt --proved proved.json
++  rc 0 all resolved / all declared proved · rc 3 any ambiguous, unknown or missing proof
++```
++
++Accepts file paths, pytest node ids, bare function names and `Class.test_x`; resolves them by a
++static AST scan of `test_*.py` / `*_test.py` (never executes tests). A bare name defined in two
++files is **ambiguous** (candidates listed); an unknown name or path is an **error**. `match`
++compares two lists AFTER normalisation, so "the implementer wrote function names and the matcher
++compared paths" cannot happen again: both sides become node ids first.
++
++## Limitations (declared)
++
++- `approval_gate.py` decides on evidence it is GIVEN; it cannot verify that the reviewer really ran
++  or that `final_rev` is the revision on disk. The gate agent's prompt (above) and the launch ledger
++  (W1) bind the evidence to the run; W2's checkpoint binds phases to revisions.
++- `test_refs.py` recognises pytest/unittest shapes (module-level `test*` functions, `test*`
++  methods in classes). Parametrised ids (`test_x[case]`) are NOT normalised: the suffix is compared
++  literally and the reference comes back `node-not-found`.
++- Known-open, found by the cross-review rounds of the v1.4.1-rc.1 candidate (2026-09-18) and not
++  cured in v1.4.1:
++  - `approval_gate.py` still APPROVES a non-finite score (`"NaN"`, `"nan/10"`); a `gate[]` entry
++    with no `failed` count or no `cmd`, or with a negative `failed`; and a policy whose restriction
++    key is misspelled (`max_opne` for `max_open`): unknown keys are ignored, so the restriction
++    silently disappears. A DUPLICATE JSON key in the evidence keeps the LAST value, so
++    `"findings":[{"severity":"P0"}],"findings":[]` is APPROVED.
++  - `test_refs.py`: a node id whose CLASS does not exist (`file.py::Missing::test_x`) resolves to
++    the only test named `test_x` in that file instead of failing, so `match` can accept proof for
++    a different class. A test file that cannot be read or parsed is treated as having no tests, so
++    a bare name that is really ambiguous can resolve to the readable file.
+diff --git a/docs/workflow-recovery.md b/docs/workflow-recovery.md
+new file mode 100644
+index 000000000000..a2c45d102de7
+--- /dev/null
++++ b/docs/workflow-recovery.md
+@@ -0,0 +1,230 @@
++# Workflow recovery — launch ledger and resume guard (PLAN-190 W1)
++
++> Audience: operators running autonomous Workflow pipelines in a consumer repository, and the
++> recovery rite after a quota death, a process death or a reboot. Framework ≥ the release that
++> ships `check_workflow_launch.py`; stdlib only.
++
++## The loss this closes
++
++A Workflow run's result cache is keyed by the exact `(prompt, opts)` of each `agent()` call. Anything
++that changes the prompt text — an edited rule in the script, a rebuilt `args` object with one
++field missing, a `continua` flag that was never there — changes the key and re-executes phases that
++had already finished. The harness persists a run's `args` only when the run ENDS
++(`<session>/workflows/wf_<id>.json`), never its script hash, the code revision, nor anything at
++launch time; a run killed by a process death leaves nothing. Measured on one consumer
++(2026-09-15→17): 15.5 % of phase starts never produced a result; 16 % of starts were
++re-executions; one prompt edit in flight re-implemented 17 slices; args rebuilt from memory
++regressed 11 slices; exact args resumed 12/12 in the right phase.
++
++## What is recorded, and when
++
++`check_workflow_launch.py` runs on **PreToolUse** and **PostToolUse** for the `Workflow` tool:
++
++| moment | what | where |
++|---|---|---|
++| before dispatch | `launch_id`, instant, `session_id`, `tool_use_id`, `cwd`; script fingerprint (`sha256` + bytes) **and a snapshot of the script bytes** (inline text, or the `scriptPath` file as read at that instant); **`args` as literal canonical JSON, never truncated** — an absent `args` field is recorded as `<absent>`, distinct from `null`; `resumeFromRunId`; `name` / `description` | `<state-dir>/launches/<launch_id>.json` (atomic, 0600) + `<launch_id>.script` + index `launches.jsonl` |
++| right after (same hook) | code revision of `cwd` (`git rev-parse HEAD`, dirty flag) inside a 1.2 s budget with `--no-optional-locks`; slow or absent git ⇒ `code.status: unknown` — the manifest is already on disk | same manifest (second atomic write) |
++| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. An unknown `tool_use_id`, or zero or several candidates, becomes an `orphan` index line; a response with no run id, with two different labelled ids, or with two different unlabelled ids, records nothing and the launch stays unbound. Two cases are NOT treated as ambiguous (known-open, see Limitations): a top-level `runId` and `run_id` that differ (the first wins), and an id whose tail is too long (its prefix is bound). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot` | manifest (`run_id`, `bound_at`, `bind_method`) + a `bind` line |
++
++`<state-dir>` is the project's runtime state dir (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir`),
++the same family as the audit log. Nothing from transcripts is stored; `args` are the operator's own inputs.
++
++## The guard
++
++A call with `resumeFromRunId` is compared with the manifest **currently bound to that run**:
++
++| comparison | result | what the hook returns |
++|---|---|---|
++| same script hash, same `args` | `match` | `{}` |
++| **`args` differ** (per top-level key, or the same keys in another order — the script sees the order) | `mismatch_blocked` | **block**, counts-only reason |
++| script hash differs, `args` same | `mismatch_script_advisory` | `systemMessage` (allowed) — `CEO_WORKFLOW_SCRIPT_GUARD=enforce` turns it into a block (`mismatch_script_blocked`) when the bind is strong |
++| `args` identical, but a script hash is unavailable (unreadable `scriptPath`, a `name`d workflow) | `inconclusive` | `{}` — never a block, never a match; different `args` still block |
++| the recorded manifest fails its integrity check (below) | `inconclusive` (`integrity: <code>`) | `{}` — an inconsistent record is evidence of nothing |
++| the guard itself raised | `inconclusive` (`error: <type>`) | `{}` — recorded, the call's manifest still written |
++| no manifest bound to that run | `no_manifest` | `{}` |
++| `resumeFromRunId` not shaped like a run id | `resume_id_unrecognised` | `{}` (recorded, not echoed) |
++
++A manifest bound by heuristic (`by_single_unbound`, no `tool_use_id` in the event) never sustains
++a block, args or script alike: an args mismatch against it is `mismatch_advisory_weak_bind`, a
++script mismatch stays `mismatch_script_advisory` even under `CEO_WORKFLOW_SCRIPT_GUARD=enforce`
++(the advisory names the route: `ceo-launches.py bind <launch_id> wf_<id>` makes it enforceable).
++A launch the guard blocked never ran: it stays in the index (`blocked: true`) but is never a
++candidate for the single-unbound binding of the corrected call.
++
++A resume with DELIBERATELY changed `args` is legitimate — for example `args.resume` or `args.reverify`
++naming the lanes to re-run, which only re-keys the phases whose prompt reads them. The guard cannot
++tell deliberate from rebuilt-from-memory, so it asks the call to say which: declare it (below). Only
++the phases whose prompt depends on what changed re-execute; the reason says exactly that.
++
++Overrides — ONE path for every block (args, and script under enforce). It is carried by the call or
++by the process, **never by stored state**, so there is nothing to read back, replay or race:
++- **in the call** — re-issue the call with a `description` that starts with the exact prefix
++  `CEO_WORKFLOW_RESUME_FORCE:` followed by a non-empty reason, for example
++  `description: "CEO_WORKFLOW_RESUME_FORCE: slice A02 args fixed on purpose"`. If that call would be
++  blocked it proceeds, is marked `mismatch_forced` with `force_source: call` and the reason, and is
++  announced (`WORKFLOW-RESUME-FORCED`; the reason is recorded, never echoed). The declaration covers
++  that one call and is never stored. Once that call is bound to the run, it becomes the run's recorded
++  reference: a later resume with those same inputs is a `match`, and only a NEW divergence needs a new
++  declaration. A declaration on a call that would not
++  be blocked changes nothing (`force_declared: true` is recorded). The prefix is exact: leading text,
++  another case or a missing reason is not a declaration. `description` is not part of the runner's
++  cache key, so declaring it does not re-key the run.
++- **process environment of the harness** (not a shell `export` inside the session):
++  `CEO_WORKFLOW_RESUME_FORCE=1` (proceed over any block, `force_source: env`), `CEO_WORKFLOW_RESUME_GUARD=0`
++  (advisory mode: the ledger keeps working, nothing blocks), `CEO_WORKFLOW_SCRIPT_GUARD=enforce`
++  (block script changes too), `CEO_WORKFLOW_LEDGER=0` (hook off).
++
++`report` prints the counts by guard result (`mismatch_forced`, `mismatch_blocked` and
++`mismatch_script_blocked` among them); the stop rule's ratio, forced ÷ (forced + both blocked results),
++is computed from those counts. Deliberate-change declarations count as forced, so read the ratio
++together with the reasons recorded in the manifests.
++
++**Who reads what.** A block returns `decision: block` with a counts-only `reason` the model reads. An
++allowed call with something to say (forced, or an advisory) returns the same text twice:
++`hookSpecificOutput.additionalContext` for the model, `systemMessage` for the user.
++
++**Records are validated before they are evidence.** The manifest bound to a run is checked before any
++comparison and before `relaunch`/`check` use it: schema; launch id, run id and bind method shapes;
++`args` present/canonical/sha256 mutually consistent; the script sha256 equal to the hash of its
++snapshot bytes. Any inconsistency is `inconclusive` for the guard, `rc 6` for `check`, and `rc 7`
++(nothing printed or copied as exact) for `relaunch`. A missing script hash is not an
++unavailable one: the `sha256` field must agree with the recorded source (inline or a path read at
++launch ⇒ a hash that its snapshot bytes reproduce; a path unreadable at launch, a named workflow or no
++script ⇒ `null`). If the construction of the record itself fails (for example `args` nested past the
++interpreter's recursion limit), the call is still recorded with the error and the guard result is
++`inconclusive`; a write failure leaves a stderr breadcrumb. Index lines that are not JSON objects with a
++string `kind`, or that carry an ill-shaped launch id, are skipped. Records are written ASCII-escaped,
++so no input (a lone surrogate included) can make a record unwritable; a failure to persist a call's
++record does not undo a block the guard already computed. A `scriptPath` is read only when it is a
++regular file of at most 8 MiB, opened non-blocking (a FIFO, a device, a directory, a larger file or a
++path with a NUL byte is recorded `unreadable` with its reason — the script comparison is then
++inconclusive, `args` are still compared). An index line torn by a crash never swallows the next
++record: a writer that finds the file not ending in a newline starts a new line first. The lookup of
++the manifest bound to a run takes the most recent binding not explicitly unbound; if that record is
++unreadable, the answer is "no manifest", never an older launch's inputs. A binding LINE that is lost
++from the index is a different case and is NOT detected (known-open, see Limitations): when an I/O
++error stops the index read midway, or the newest binding line is torn, the lookup sees the previous
++binding and the guard compares against that older launch.
++
++**The block reason is counts-only.** It says how many keys changed / are only in the recorded call /
++only in this call, whether the script hash differs, and the two routes — it never carries key names,
++values or an unvalidated run id (that text reaches the model; the channel is closed by removal). The
++detail is in the manifest: `ceo-launches.py show <launch_id>`.
++
++Infrastructure failures (unreadable stdin, unwritable state dir, import error) fail **open** with a
++stderr breadcrumb: this is a recovery instrument, not a security matcher.
++
++## The recovery rite (replaces "reconstruct the call from memory")
++
++```
++# 1. what was launched, what is bound, what the guard saw
++#    (from anywhere inside the project: without CLAUDE_PROJECT_DIR the CLI walks up from the
++#     current directory to the project that holds .claude/, the ledger the hook writes)
++python3 .claude/scripts/ceo-launches.py list
++python3 .claude/scripts/ceo-launches.py show wf_<id>
++
++# 2. the EXACT call to re-issue: the script SNAPSHOT (pass it as scriptPath) + literal args
++#    args are printed in the ORIGINAL key order; rc 7 and nothing announced as exact when the record
++#    fails its integrity check or its script was unreadable at launch; for a NAMED workflow it prints
++#    the name and the args — the content saved under that name is not verified; --out creates a NEW
++#    file only (never overwrites, never follows a symlink) and keeps writing until the last byte: a
++#    HANDLED failure (I/O error, no progress, error at close) is rc 2 and the command TRIES to remove
++#    the partial file (inode check, then unlink by name — two steps, not atomic: do not point --out at
++#    a path another process writes to); if the removal itself fails, the partial file STAYS and the
++#    message says so; a Ctrl-C or a signal in the middle of the write is not handled and can leave a
++#    partial file. So never pass a copy from a run that did not print "snapshot copied to"
++python3 .claude/scripts/ceo-launches.py relaunch wf_<id> [--out /path/to/copy.js]
++
++# 3. before re-issuing from a rite that edits scripts: the guard's comparison, standalone
++python3 .claude/scripts/ceo-launches.py check --run wf_<id> --script-file <path> --args-file <json>
++#    rc 0 SAME · rc 3 ARGS-DIFFER (keys listed) · rc 5 SCRIPT-DIFFERS · rc 6 INCONCLUSIVE (hash unavailable
++#    or record inconsistent) · rc 4 NO-MANIFEST
++
++# 4. runs the PostToolUse half could not bind: `orphans` lists the orphan lines (unknown tool_use_id,
++#    zero or several candidates); a launch whose response carried no or ambiguous run ids has no line
++#    at all and shows in `list` with no run — bind either by hand
++python3 .claude/scripts/ceo-launches.py orphans
++python3 .claude/scripts/ceo-launches.py bind <launch_id> wf_<id>
++```
++
++Rules the ledger makes mechanical:
++- **Never edit the script of a run in flight.** A new rule means a NEW script file; a per-run
++  instruction goes through an `args` field the script already reads. Resuming over an edited script
++  is allowed but announced (advisory): only the phases whose prompt changed re-execute.
++- **Never rebuild `args` from memory.** `relaunch` prints them; `check` refuses a drift.
++- **Absent is not null.** If the recorded call had no `args`, do not pass one.
++
++## Measuring "quota per approved delivery" (W0.2 groundwork)
++
++`ceo-launches.py report` counts launches, bindings by method, guard results and orphans. Joined with
++the deduplicated token ledger (`ceo-cost-transcripts.py --by session` — the collector validated in
++`docs/research/s354-token-consumption-study/03-collector-audit.md`) and with the merges on `main`,
++it gives tokens per run and per approved delivery. "Approved delivery" is decided by code in
++`approval_gate.py` (PLAN-190 W3, `docs/approval-gate.md`).
++
++## Distribution (declared precondition)
++
++The hook file travels with `.claude/hooks/`; its two registrations travel in
++`templates/settings/settings.base.json` (the `user` profile is derived from it and keeps this hook).
++`upgrade.sh` merges registrations **per recorded ceremony** (`.claude/.install-state.json`): a target
++with no recorded ceremony and no `--ceremony` flag receives the shared settings only — no hooks.
++The merge also needs `jq` on the machine running `upgrade.sh`; without it the merge is skipped with a
++`settings-merge skipped (jq not found)` note and the hook file arrives unregistered. So "reaches
++consumers without a manual step" holds for consumers whose ceremony is recorded and that have `jq`,
++and it does not hold with `--no-settings-merge`. The plugin build ships `ceo-launches.py` in the
++plugin's `scripts/` whenever it registers this guard.
++This precondition is DECLARED here, not yet exercised by the smoke-install: adding one leg per case
++is PLAN-190 W6.
++
++## Limitations (declared)
++
++- The guard sees the **`Workflow` tool call**; it cannot see `agent()` calls inside a run nor stop the
++  harness from re-keying its cache. It stops the OPERATOR from resuming over changed inputs without
++  knowing.
++- There is no checkpoint inside a single `agent()`: a phase that dies at 400k tokens restarts. PLAN-190
++  W2 adds a phase checkpoint file the phase prompt reads and writes; the runner itself is the limit.
++- The run id is extracted from the tool response by shape (`wf_<hex8>[-<hex>]`, 98.5 % of 329 real
++  responses in this repo's own transcripts); a harness version that changes the response leaves the
++  launch recorded and `bind` closes it by hand.
++- No audit event is emitted (registering a new action is the audit owner's ceremony); the manifests
++  are the record. Manifests are never pruned (a `gc --keep-days` is a follow-up).
++- **Retention and privacy.** The ledger keeps the literal `args` and a snapshot of every script
++  indefinitely, under the per-project state dir (files 0600, dir 0700) — the same material the harness
++  itself keeps for finished runs. `show` and `relaunch` print the `args` back, so whatever a caller put
++  in them (issue text, a token) reaches the reader's context again. Backups of the state dir include
++  the ledger.
++- **One project context.** The ledger is per project dir: a launch recorded under one project dir and a
++  resume issued from a session whose project dir is a different worktree of the same repo find no
++  manifest (`no_manifest`, allowed and recorded).
++- **Git in the session cwd.** The revision enrichment runs `git rev-parse` and `git status` in the call's
++  `cwd` with `core.fsmonitor=false`; `git status` may still run filters that repository configures.
++- **Worst-case hook time.** One locked index append (lock wait up to 2 s) plus the 1.2 s git budget stays
++  under the 5 s registration timeout; the CI hook-latency gate does not profile this hook yet.
++- **Resume response.** The harness prints `Run ID: wf_<id>` on launch and on resume, and a resume keeps
++  the same id (probed on CLI 2.1.274 with a `.script` scriptPath, which the tool accepts); the id is
++  taken from a top-level `runId`/`run_id` key, else from that label, else from the only distinct
++  id-shaped token in the response.
++- **Known-open, found by the cross-review rounds of the v1.4.1-rc.1 candidate (2026-09-18), not
++  cured in v1.4.1:**
++  - an incomplete read of the index (an I/O error midway, or a torn newest line) is not signalled;
++    the guard then compares against the previous surviving binding and can BLOCK a legitimate
++    resume — the exit is the `CEO_WORKFLOW_RESUME_FORCE` declaration;
++  - `no_manifest` (another worktree, or a run launched before the hook existed) proceeds with no
++    notice at all;
++  - a top-level `runId` and `run_id` that differ are not treated as ambiguous (the first wins), and
++    an id whose tail is too long (`wf_12345678-123456789`) is bound by its prefix (`wf_12345678`)
++    instead of being rejected;
++  - when a mismatch is NOT blocked (advisory mode, or a heuristic bind), the notice names the
++    CURRENT call's manifest as "the recorded call"; once that call is bound, `relaunch wf_<id>`
++    prints the changed inputs — read the original with `show <launch_id>` of the launch the notice
++    was compared against (`guard.against` in the current manifest);
++  - ledger writes follow a symlinked `launches/` directory or index file (deliberate same-user
++    tampering is outside the threat model);
++  - an INLINE script larger than 8 MiB is recorded, but its snapshot is read back through the 8 MiB
++    reader: the record is then inconclusive for the guard (`script_snapshot_missing`);
++  - `relaunch --out`: the partial-file cases named in the recovery rite above; the cleanup after a
++    handled failure is an inode check followed by an unlink by name, so a concurrent writer that
++    replaces the destination in between loses its file while the message says the partial file was
++    removed; and when the second read of the snapshot fails, the command prints the "exact recorded
++    call" heading, creates no file and exits rc 0. The structural cure (exclusive temporary file,
++    publish by no-replace `link`, never unlink the destination) comes after v1.4.1.

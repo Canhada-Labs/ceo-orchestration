@@ -1,0 +1,16 @@
+Advisory review of `3b1419b9`, payload 2/3: **no P0, false applicable declared condition, or undeclared P1 found.** This is evidence, not authorization.
+
+Applicable conditions **1–5 and 7–23**, within this payload’s scope, remain honest and sufficient under the stated cut rule.
+
+- **Registration — conditions 2/3:** The added registrations in `templates/settings/settings.base.json:228` and `templates/settings/settings.user.json:325` retain blocking behavior. Executing the actual upgrade merge against both v1.4.0 profiles added exactly two Workflow registrations, preserved supplied adopter settings, and was idempotent. All three fresh-install stack merges retained both hooks.
+- **Automatic adopter risks — conditions 9–13/23 and the carried annex:** Stale bindings can still block legitimate resumes; pre-upgrade runs proceed silently without a baseline. Condition 23 accurately discloses the pre-permission script copy. `CEO_WORKFLOW_RESUME_GUARD=0` leaves that copying active; `CEO_WORKFLOW_LEDGER=0` disables it.
+- **Delivery — conditions 15/16:** `scripts/build-plugin.py:292` selects the recovery CLI with the required library layout. npm staging includes the hook, libraries, templates and CLI. The disclosed upgrade-only delivery of `scripts/local/` remains.
+- **Publication identity — condition 1:** The changed release/package version fields agree on `1.4.1`. The existing SPEC identity contradiction remains declared; version parity elsewhere does not cure it. The conditions also explicitly supersede the CHANGELOG’s obsolete promise of a v1.4.2 cure.
+
+**NEW FINDINGS (annex):** None.
+
+**P2 follow-ups:** None newly identified. The earlier `INSTALL.md:660` concern about referencing the not-yet-created GA tag expires with the GA cut.
+
+Verification included 216 in-memory guard cases, focused infrastructure probes, template derivation, environment-name inventory, structural counts, Python 3.9 parsing, stdlib checks, and conditions/archive hashes. This payload matches the rc.1 candidate. Review remained offline and read-only; no complete installation, npm package build, or live-harness test ran.
+
+VERDICT: GO-WITH-CONDITIONS — The applicable disclosures satisfy the stated GA cut rule, with all declared and carried findings remaining known-open.

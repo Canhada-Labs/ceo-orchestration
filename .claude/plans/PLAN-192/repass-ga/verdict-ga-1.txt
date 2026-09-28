@@ -1,0 +1,19 @@
+Advisory review of `3b1419b9`, payload 1/3: **no P0, false applicable condition, or undeclared P1 found**. Both files match `7602fbe4`; the conditions digest matches the supplied SHA-256.
+
+Applicable conditions **2–4, 6–13, 16 and 23**, together with the inherited findings declared in the GA header and **19/22**, honestly describe this payload.
+
+Fresh installs that create settings activate the hook immediately; qualifying upgrades register it through settings merge. Existing settings survive a fresh installation unchanged. Runs launched before upgrading have no baseline and resume silently, as condition **12** declares.
+
+Two declared P1 risks deserve emphasis because they are reachable on these installation paths. All cited lines are additions in the supplied diff:
+
+- **P1 — Signed known-open: stale bindings can block legitimate resumes.** [`.claude/hooks/_lib/launch_ledger.py:487`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.fxIjzL/wt/.claude/hooks/_lib/launch_ledger.py:487) and [line 640](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.fxIjzL/wt/.claude/hooks/_lib/launch_ledger.py:640). After intentionally changing A → B, a torn latest binding or failed binding append leaves A authoritative. Probes reproduced B being blocked; the append-failure probe also accepted A as `match`. Declared by condition **10** and the incorporated round-3 annex. **Minimal fix:** make incomplete history and uncommitted newer resumes inconclusive instead of trusting the older baseline.
+
+- **P1 — Signed known-open: script copying precedes permission approval.** [`.claude/hooks/_lib/launch_ledger.py:274`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.fxIjzL/wt/.claude/hooks/_lib/launch_ledger.py:274) and [line 420](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.fxIjzL/wt/.claude/hooks/_lib/launch_ledger.py:420). A denied source can acquire a readable copy in project state; copying occurs even when this guard itself blocks. Condition **23** accurately discloses this. Advisory mode retains the copying. **Minimal fix:** defer dereferencing and snapshotting until authorization is established.
+
+**NEW FINDINGS (annex):** None.
+
+**P2 follow-up:** No additional P2 identified.
+
+Python 3.9.6 compatibility, stdlib imports, template registrations, guard cases and targeted fault probes checked. Wrapper infrastructure failures returned `{}` with breadcrumbs. Persistence probes used memory; no live-harness or installation test ran. No files changed or network accessed.
+
+VERDICT: GO-WITH-CONDITIONS — This payload satisfies the stated cut rule with the named conditions and inherited findings remaining open.

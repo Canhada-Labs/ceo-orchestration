@@ -1,0 +1,915 @@
+diff --git a/.claude-plugin/marketplace.json b/.claude-plugin/marketplace.json
+index 67c42319ed82..070b8927d96f 100644
+--- a/.claude-plugin/marketplace.json
++++ b/.claude-plugin/marketplace.json
+@@ -10,3 +10,3 @@
+       "source": "./ceo-plugin",
+-      "version": "1.4.0"
++      "version": "1.4.1"
+     }
+diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
+index 799446c515e0..7b0034bf2248 100644
+--- a/.claude-plugin/plugin.json
++++ b/.claude-plugin/plugin.json
+@@ -15,3 +15,3 @@
+   "name": "ceo",
+-  "version": "1.4.0"
++  "version": "1.4.1"
+ }
+diff --git a/.claude/.framework-version b/.claude/.framework-version
+index 88c5fb891dcf..347f5833ee6d 100644
+--- a/.claude/.framework-version
++++ b/.claude/.framework-version
+@@ -1 +1 @@
+-1.4.0
++1.4.1
+diff --git a/.claude/scripts/env-inventory.json b/.claude/scripts/env-inventory.json
+index d2d23e5bf88b..7afd96f456de 100644
+--- a/.claude/scripts/env-inventory.json
++++ b/.claude/scripts/env-inventory.json
+@@ -4,3 +4,3 @@
+   "generated_by": "env-inventory-check.py --generate",
+-  "generated_at": "2026-08-20",
++  "generated_at": "2026-09-17",
+   "scan_roots": [
+@@ -97,3 +97,3 @@
+       ],
+-      "sites": 6
++      "sites": 7
+     },
+@@ -189,9 +189,15 @@
+     },
++    "CEO_AUDIT_FAMILY_M4_REQUIRED": {
++      "evidence": [
++        ".claude/scripts/derive-audit-family.py"
++      ],
++      "sites": 1
++    },
+     "CEO_AUDIT_HMAC_DISABLE": {
+       "evidence": [
++        ".claude/hooks/SessionEnd.py",
+         ".claude/hooks/_lib/audit_hmac.py",
+-        ".claude/hooks/_lib/env_persist_allowlist.py",
+-        ".claude/hooks/_lib/test_isolation.py"
++        ".claude/hooks/_lib/env_persist_allowlist.py"
+       ],
+-      "sites": 5
++      "sites": 6
+     },
+@@ -223,7 +229,7 @@
+       "evidence": [
++        ".claude/hooks/SessionEnd.py",
+         ".claude/hooks/_lib/advisory_dampen.py",
+-        ".claude/hooks/_lib/audit_emit.py",
+-        ".claude/hooks/_lib/audit_hmac.py"
++        ".claude/hooks/_lib/audit_emit.py"
+       ],
+-      "sites": 49
++      "sites": 55
+     },
+@@ -255,7 +261,7 @@
+       "evidence": [
++        ".claude/hooks/SessionEnd.py",
+         ".claude/hooks/_lib/audit_emit.py",
+-        ".claude/hooks/_lib/audit_hmac.py",
+-        ".claude/hooks/_lib/federation/handlers/audit_event_push.py"
++        ".claude/hooks/_lib/audit_hmac.py"
+       ],
+-      "sites": 40
++      "sites": 48
+     },
+@@ -313,3 +319,3 @@
+       ],
+-      "sites": 5
++      "sites": 6
+     },
+@@ -569,5 +575,6 @@
+         ".claude/hooks/_lib/audit_emit.py",
+-        ".claude/scripts/check-ceremony-script.py"
++        ".claude/scripts/check-ceremony-script.py",
++        ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 2
++      "sites": 3
+     },
+@@ -576,5 +583,6 @@
+         ".claude/hooks/_lib/audit_emit.py",
+-        ".claude/scripts/check-ceremony-script.py"
++        ".claude/scripts/check-ceremony-script.py",
++        ".claude/scripts/env-inventory.json"
+       ],
+-      "sites": 2
++      "sites": 3
+     },
+@@ -710,3 +718,3 @@
+       ],
+-      "sites": 6
++      "sites": 7
+     },
+@@ -718,3 +726,3 @@
+       ],
+-      "sites": 7
++      "sites": 8
+     },
+@@ -723,5 +731,6 @@
+         ".claude/hooks/codex_review_user_code.py",
+-        ".claude/scripts/env-inventory.json"
++        ".claude/scripts/env-inventory.json",
++        "templates/settings/settings.user.json"
+       ],
+-      "sites": 2
++      "sites": 3
+     },
+@@ -733,3 +742,3 @@
+       ],
+-      "sites": 7
++      "sites": 6
+     },
+@@ -824,3 +833,3 @@
+       ],
+-      "sites": 5
++      "sites": 6
+     },
+@@ -839,3 +848,3 @@
+       ],
+-      "sites": 6
++      "sites": 5
+     },
+@@ -878,2 +887,10 @@
+     },
++    "CEO_COST_TRANSCRIPTS_DIR": {
++      "evidence": [
++        ".claude/scripts/budget-summary.py",
++        ".claude/scripts/ceo-cost-transcripts.py",
++        ".claude/scripts/ceo-cost.py"
++      ],
++      "sites": 3
++    },
+     "CEO_COUNTRY": {
+@@ -1464,2 +1481,22 @@
+     },
++    "CEO_LEDGER_CHECKPOINT": {
++      "evidence": [
++        ".claude/hooks/check_ledger_checkpoint.py",
++        ".claude/settings.json",
++        "templates/settings/settings.base.json"
++      ],
++      "sites": 3
++    },
++    "CEO_LEDGER_CHECKPOINT_REQUIRED": {
++      "evidence": [
++        ".claude/hooks/check_ledger_checkpoint.py"
++      ],
++      "sites": 1
++    },
++    "CEO_LEDGER_WRITE_GATE_ENFORCE": {
++      "evidence": [
++        ".claude/hooks/_lib/ledger_provenance.py"
++      ],
++      "sites": 1
++    },
+     "CEO_LEGAL_ID": {
+@@ -2204,3 +2241,3 @@
+       ],
+-      "sites": 4
++      "sites": 5
+     },
+@@ -2579,2 +2616,8 @@
+     },
++    "CEO_REPO": {
++      "evidence": [
++        ".claude/scripts/check_contamination.py"
++      ],
++      "sites": 1
++    },
+     "CEO_REQUIRE_REPO_PROFILE_FIXTURES": {
+@@ -2600,3 +2643,3 @@
+       ],
+-      "sites": 5
++      "sites": 6
+     },
+@@ -2697,2 +2740,8 @@
+     },
++    "CEO_SESSION_MEMORY_DELTA": {
++      "evidence": [
++        ".claude/hooks/SessionEnd.py"
++      ],
++      "sites": 1
++    },
+     "CEO_SESSION_ROOTS_ALLOW": {
+@@ -2793,3 +2842,3 @@
+       ],
+-      "sites": 3
++      "sites": 4
+     },
+@@ -2872,3 +2921,3 @@
+       ],
+-      "sites": 52
++      "sites": 54
+     },
+@@ -2905,7 +2954,7 @@
+       "evidence": [
++        ".claude/hooks/_lib/ledger_provenance.py",
+         ".claude/hooks/check_agent_spawn.py",
+-        ".claude/scripts/env-inventory.json",
+-        ".claude/scripts/inject-agent-context.sh"
++        ".claude/hooks/check_ledger_checkpoint.py"
+       ],
+-      "sites": 3
++      "sites": 6
+     },
+@@ -3284,3 +3333,3 @@
+       ],
+-      "sites": 6
++      "sites": 7
+     },
+@@ -3375,3 +3424,3 @@
+       ],
+-      "sites": 9
++      "sites": 10
+     },
+@@ -3425,3 +3474,3 @@
+       ],
+-      "sites": 6
++      "sites": 7
+     },
+@@ -3458,2 +3507,32 @@
+     },
++    "CEO_WORKFLOW_LEDGER": {
++      "evidence": [
++        ".claude/hooks/_lib/launch_ledger.py",
++        ".claude/hooks/check_workflow_launch.py",
++        ".claude/settings.json"
++      ],
++      "sites": 5
++    },
++    "CEO_WORKFLOW_RESUME_FORCE": {
++      "evidence": [
++        ".claude/hooks/_lib/launch_ledger.py",
++        ".claude/hooks/check_workflow_launch.py",
++        ".claude/settings.json"
++      ],
++      "sites": 5
++    },
++    "CEO_WORKFLOW_RESUME_GUARD": {
++      "evidence": [
++        ".claude/hooks/_lib/launch_ledger.py",
++        ".claude/hooks/check_workflow_launch.py"
++      ],
++      "sites": 2
++    },
++    "CEO_WORKFLOW_SCRIPT_GUARD": {
++      "evidence": [
++        ".claude/hooks/_lib/launch_ledger.py",
++        ".claude/hooks/check_workflow_launch.py"
++      ],
++      "sites": 2
++    },
+     "CEO_WS3_APPLY_OK": {
+@@ -3499,3 +3578,3 @@
+       ],
+-      "sites": 3
++      "sites": 4
+     },
+@@ -3535,3 +3614,3 @@
+       ],
+-      "sites": 10
++      "sites": 11
+     },
+@@ -3543,3 +3622,3 @@
+       ],
+-      "sites": 3
++      "sites": 4
+     },
+@@ -3658,3 +3737,3 @@
+       ],
+-      "sites": 131
++      "sites": 138
+     },
+@@ -3662,7 +3741,7 @@
+       "evidence": [
+-        ".claude/hooks/_lib/runtime_paths.py",
+-        ".claude/hooks/_lib/spool_writer.py",
+-        ".claude/scripts/derive-audit-family.py"
++        ".claude/hooks/_lib/audit_hmac.py",
++        ".claude/hooks/_lib/injection_salt.py",
++        ".claude/hooks/_lib/runtime_paths.py"
+       ],
+-      "sites": 3
++      "sites": 10
+     },
+@@ -3701,3 +3780,3 @@
+       ],
+-      "sites": 32
++      "sites": 33
+     },
+diff --git a/.claude/settings.json b/.claude/settings.json
+index 05656781d746..f8cd6becdb8e 100644
+--- a/.claude/settings.json
++++ b/.claude/settings.json
+@@ -358,2 +358,14 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: Workflow launch ledger + resume guard. Records script sha256 + snapshot, LITERAL args and code revision under <state-dir>/launches/ BEFORE dispatch; blocks a resumeFromRunId whose args differ from the strongly bound, validated manifest (script change: advisory unless CEO_WORKFLOW_SCRIPT_GUARD=enforce). Recovery: `ceo-launches.py relaunch <run>`. Override, recorded: a call description starting with 'CEO_WORKFLOW_RESUME_FORCE: <why>' or CEO_WORKFLOW_RESUME_FORCE=1; advisory CEO_WORKFLOW_RESUME_GUARD=0; off CEO_WORKFLOW_LEDGER=0. Fail-open on infrastructure.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Recording Workflow launch..."
++          }
++        ]
+       }
+@@ -516,2 +528,14 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: binds the run id (wf_<id>) the runner returned to its launch manifest (by tool_use_id; without one, only when exactly one non-blocked unbound launch exists in the session; anything else is an orphan line). Silent; fail-open.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Binding Workflow run id..."
++          }
++        ]
+       }
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 4503002a59c1..96d8f2e0d839 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -11,3 +11,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ > release-engineering bookkeeping are omitted. Counts cited below (as of
+-> v1.4.0: 166 skills, 27 slash commands, 198 ADRs, 71 `_lib` modules) are
++> v1.4.1: 166 skills, 27 slash commands, 198 ADRs, 72 `_lib` modules) are
+ > reproducible from the repository via
+@@ -17,2 +17,179 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ 
++## [1.4.1] - 2026-09-18
++
++Patch release for adopters who run long autonomous `Workflow` pipelines
++(PLAN-190). Every `Workflow` launch is now recorded BEFORE dispatch, a resume
++whose `args` differ from the recorded launch is blocked instead of going
++through, and the exact recorded call can be read back from the ledger rather
++than rebuilt from memory. Both kill-switches are named below. No speed claim.
++
++### Added
++- **Workflow launch ledger + resume guard** (PLAN-190 W1). A new hook,
++  `check_workflow_launch.py`, registered on PreToolUse and PostToolUse for the
++  `Workflow` tool in the dogfood settings and in the base template (the `user`
++  profile keeps it), records every launch BEFORE dispatch — script sha256 plus a
++  snapshot of the script bytes, the literal `args` (absent ≠ null), the
++  `resumeFromRunId`, the code revision of the working directory — and binds the
++  run id the runner returns. A resume over DIFFERENT args is blocked with a
++  counts-only reason (the detail stays in the manifest); a resume over a
++  different script with the same args is advisory by default
++  (`CEO_WORKFLOW_SCRIPT_GUARD=enforce` to block). A block needs a strong bind
++  (by `tool_use_id` or manual): a heuristic bind never sustains one, args or
++  script alike; a blocked attempt is never a candidate for heuristic binding.
++  The recorded manifest is validated before it is evidence (args
++  canonical/hash consistency, script hash against its snapshot bytes, id
++  shapes): an inconsistent record is inconclusive for the guard and refused
++  as "exact" by `relaunch`. ONE override path for every block, carried by the
++  call or the process and never by stored state: a `description` starting
++  with `CEO_WORKFLOW_RESUME_FORCE: <why>` on the call itself, or
++  `CEO_WORKFLOW_RESUME_FORCE=1` in the harness environment — recorded as
++  `mismatch_forced` with its source and reason, announced. A `scriptPath`
++  is read only as a regular file of at most 8 MiB (FIFO, device, larger
++  file or NUL byte ⇒ recorded unreadable, args still compared); a torn
++  index line never swallows the next record; the CLI finds the hook's
++  ledger from any subdirectory of the project; the plugin build ships the
++  recovery CLI with the guard. `args` are recorded in their original key
++  order too (`relaunch` prints that order; a reordered resume counts as a
++  difference); notices for allowed calls reach the model as
++  `additionalContext`; the block reason names the deliberate-change route
++  (`args.resume` style resumes declare themselves); the run id is taken from
++  a top-level `runId`/`run_id` key of the response, else from the harness
++  `Run ID:` label, else from the only id-shaped token (two different
++  labelled ids, or two different unlabelled ones, bind nothing); a record
++  whose construction or write fails is still inconclusive-recorded or
++  breadcrumbed; `relaunch --out` never overwrites.
++  `CEO_WORKFLOW_RESUME_GUARD=0` (advisory mode, ledger kept),
++  `CEO_WORKFLOW_LEDGER=0` (off). Fail-open on infrastructure, with the gaps
++  listed under Known-open below. CLI
++  `ceo-launches.py` (`list · show · relaunch · check · bind · orphans ·
++  report`) and operator doc `docs/workflow-recovery.md`. Inventory:
++  60 hook scripts, 49 wired, 52 event registrations, 72 `_lib` modules.
++- **Recovery and approval tools for autonomous pipelines** (PLAN-190 W2/W3).
++  Five stdlib-only CLIs under `.claude/scripts/`, called by a workflow phase,
++  a recovery rite or a human — NO hook enforces any of them yet (the
++  single-writer hook and quota admission are future ceremonies).
++  `approval_gate.py` decides APPROVED/REJECTED by code from a policy file
++  (minimum score, a closed severity enum, blocking severities, a cap per
++  severity, reviewed revision == final revision, green gate): under the
++  source repository's default policy
++  (`tests/fixtures/approval/policy-default.json`) a missing score, findings
++  list, reviewed revision or gate list, a prose score, an out-of-enum
++  severity and a wrong scale are REJECTED with the rule named (doc:
++  `docs/approval-gate.md`); the inputs that still come out APPROVED are
++  listed under Known-open below.
++  `test_refs.py`
++  normalises test references — file path, node id, bare function,
++  `Class.method` — to pytest node ids by static `ast` (tests are never
++  executed); an ambiguous BARE name is an error that lists the candidates.
++  `mutant_sandbox.py` runs a mutant inside a disposable detached
++  worktree of an identified revision, records the outcome per (revision,
++  mutant, command) so a valid verification can be reused, removes the copy in
++  `finally`, and reports an ERROR outcome if `git status` of the
++  implementation tree differs before and after. `worktree_lock.py` gives one
++  writer per worktree among callers that use it (`O_EXCL` lock file,
++  heartbeat, `steal` when the holder's heartbeat is older than the
++  `--stale-minutes` the CALLER passes — the holder's own TTL is not
++  consulted — and `release` by the owner or with `--force`).
++  `phase_checkpoint.py` keeps an append-only ledger of steps
++  completed inside a phase, bound to the code revision: steps recorded under
++  another revision are listed as stale and never count.
++
++### Fixed
++- **`ceo-launches.py relaunch --out` could leave a truncated copy and report
++  success** (PLAN-190 W1.1). The snapshot copy was written with a single
++  `os.write`, which may write fewer bytes than asked — and the truncated file
++  is exactly what the recovery rite passes back as `scriptPath`. The write
++  now continues until every byte is down; on a HANDLED failure (an I/O error,
++  a write that makes no progress, an error surfacing at `close`) the command
++  returns rc 2 naming the incomplete write and TRIES to remove the partial
++  file: it compares the destination's inode with the one it created (`lstat`)
++  and then unlinks by name. Those are two steps, not one atomic operation: a
++  concurrent writer that replaces the destination in between loses ITS file,
++  and the message still says the partial file was removed. If the `lstat` or
++  the `unlink` fails, the partial file STAYS and the message says so. Not
++  handled at all: an interruption that is not an `OSError` (Ctrl-C, a signal)
++  in the middle of the write can leave a partial file, with no message. So
++  this is NOT yet "the whole file or no file", and the cleanup is NOT
++  guaranteed to touch only this call's file (known-open below; the structural
++  cure — exclusive temporary file, publish by no-replace `link`, never unlink
++  the destination — comes after this release).
++
++### Known-open (found by this release's cross-review)
++Cross-review round 1 of the rc.1 candidate (2026-09-18) returned NO-GO on
++five declared conditions that were false against the code; no P0. Round 2,
++over the same code with the text corrected, returned GO-WITH-CONDITIONS on
++two parts and NO-GO on one sentence (the cleanup promise of `relaunch
++--out`, above); no P0. Round 3 is again over the same code. Every CODE
++finding of rounds 1 and 2 is still open in this release; the verdicts are
++under `.claude/plans/PLAN-192/repass-rc1-20260918-NOGO-r1/` and `-r2/`. By
++class:
++- **Workflow guard** (`launch_ledger.py`). An incomplete read of the index
++  (an I/O error midway, or a torn newest line) is not signalled: the guard
++  then compares against the previous surviving binding and can BLOCK a
++  legitimate resume (exit: the `CEO_WORKFLOW_RESUME_FORCE` declaration). A
++  resume from another worktree, or of a run launched before the hook
++  existed, finds no manifest and proceeds with NO notice. When both `runId`
++  and `run_id` are present and differ, the first wins; an id whose tail is
++  too long is bound by its prefix instead of being rejected. When a
++  mismatch is NOT blocked (advisory mode, or a heuristic bind) the notice
++  names the CURRENT call's manifest as "the recorded call", and once that
++  call is bound `relaunch <run-id>` prints the changed inputs. Ledger writes
++  follow a symlinked `launches/` directory or
++  index file (same-user tampering is outside the threat model). An INLINE
++  script larger than 8 MiB is recorded, but its snapshot is read back through
++  the 8 MiB reader, so the record is inconclusive for the guard.
++- **`relaunch --out`**: the partial-file cases and the non-atomic cleanup
++  named under Fixed above; and when the second read of the snapshot fails the
++  command prints the "exact recorded call" heading, creates no file and exits
++  rc 0 — the copy exists only when the output says "snapshot copied to".
++- **`approval_gate.py`** still APPROVES a non-finite score (`"NaN"`,
++  `"nan/10"`), a gate entry with no `failed` count or no `cmd` (or a negative
++  `failed`), and a policy whose restriction key is misspelled (unknown keys
++  are ignored, so the restriction silently disappears). A DUPLICATE JSON key
++  in the evidence keeps the last value (`"findings":[…P0…],"findings":[]`
++  approves). No default policy file is delivered to adopters: the one the doc
++  names is a fixture under `tests/` in the source repository.
++- **`test_refs.py`**: a node id whose class does not exist resolves to the
++  only test with that function name in the file; parametrised ids
++  (`test_x[case]`) are not normalised and come back `node-not-found`; a test
++  file that cannot be read or parsed is treated as having no tests, so a name
++  that is really ambiguous can resolve.
++- **`worktree_lock.py`**: `steal` trusts the caller's `--stale-minutes`, not
++  the holder's TTL; two concurrent `steal` calls can both succeed; the fixed
++  `writer.lock.tmp` name follows a symlink; `release --force` on an
++  unreadable lock is not logged.
++- **`mutant_sandbox.py`**: the patch is hashed and then re-read by path
++  (another producer can swap it in between); `gc` removes a sandbox that is
++  still running (its state stays `creating` until the end); every non-zero
++  exit code is recorded as `killed`, including a runner or collection error;
++  a command that times out has its direct child killed, but descendants it
++  started keep running while the sandbox is removed under them.
++- **`phase_checkpoint.py`**: `--rev HEAD` is stored literally; an append
++  after a torn line loses both records.
++- **Delivery**: `upgrade.sh` delivers `.claude/scripts/local/` (maintainer
++  tooling, the release driver `release.sh` included) to adopters, while a
++  fresh install does not; no delivered hook, command, settings file,
++  template, skill or top-level script references `release.sh`.
++
++### Known-open (carried from v1.4.0 — NOT cured by this release)
++- The signed v1.4.0 verdict carries an annex of P1 findings and declared
++  conditions marked "cure in 1.4.1". **This release does not cure them.**
++  1.4.1 is an out-of-order patch that ships the Workflow guard to adopters
++  now, by Owner decision (2026-09-18); none of those findings is addressed by
++  the changes in this release. The annex stays known-open, unchanged, and
++  its cure is re-targeted to 1.4.2. The list is the `NEW FINDINGS (annex)`
++  sections of the rc.1 and GA verdicts under
++  `.claude/plans/PLAN-169/repass-rc1/` and `.claude/plans/PLAN-169/repass-ga/`,
++  plus the `conditions:` of `.claude/governance/pair-rail-verdict-v1.4.0.md`.
++- What an adopter should know before upgrading: the new guard CAN BLOCK (a
++  resume over different `args`) and the `user` profile keeps it — this
++  extends condition 63 of the v1.4.0 verdict (the `user` profile is not
++  advisory-only). On an adopter it takes effect only after an `upgrade.sh`
++  to a version that contains it, with the install ceremony recorded in the
++  install-state or passed to the upgrade, `jq` available, and without
++  `--no-settings-merge`; otherwise the hook file arrives unregistered and
++  nothing changes. Exit routes: `CEO_WORKFLOW_RESUME_GUARD=0` (advisory,
++  ledger kept), `CEO_WORKFLOW_LEDGER=0` (off), or the per-call
++  `CEO_WORKFLOW_RESUME_FORCE: <why>` declaration.
++
+ ## [1.4.0] - 2026-09-07
+diff --git a/INSTALL.md b/INSTALL.md
+index d7fa81acc507..dcdae01719c0 100644
+--- a/INSTALL.md
++++ b/INSTALL.md
+@@ -212,3 +212,3 @@ Always (regardless of profile):
+ - `.claude/hooks/_python-hook.sh` — Python 3.9+ version resolver shim
+-- `.claude/hooks/_lib/` — 71 shared modules, excluding the package `__init__.py` (payload, redact, filelock, team, testing, test_isolation, audit_emit, audit_hmac, policy, tool_lifecycle, advisory_dampen, codex_cli_shape, …)
++- `.claude/hooks/_lib/` — 72 shared modules, excluding the package `__init__.py` (payload, redact, filelock, team, testing, test_isolation, audit_emit, audit_hmac, policy, tool_lifecycle, advisory_dampen, codex_cli_shape, …)
+ - `.claude/scripts/` — validate-governance, inject-agent-context,
+@@ -521,3 +521,3 @@ your-project/
+ │   ├── hooks/
+-│   │   ├── _lib/                        # 71 shared Python modules, excl. __init__.py (audit_emit, audit_hmac, policy, redact, tool_lifecycle, …)
++│   │   ├── _lib/                        # 72 shared Python modules, excl. __init__.py (audit_emit, audit_hmac, policy, redact, tool_lifecycle, …)
+ │   │   ├── _python-hook.sh              # Python version resolver + invoker
+@@ -525,3 +525,3 @@ your-project/
+ │   │   ├── audit_log.py                 # silent PostToolUse audit observer
+-│   │   ├── ... (59 hooks total — see .claude/hooks/*.py)
++│   │   ├── ... (60 hooks total — see .claude/hooks/*.py)
+ │   │   └── tests/                       # 11000+ unit tests via `make test-collect`
+@@ -659,3 +659,3 @@ cd /path/to/ceo-orchestration   # source framework checkout
+ git pull                         # get the latest framework
+-bash scripts/upgrade.sh /path/to/your/project --pin v1.4.0
++bash scripts/upgrade.sh /path/to/your/project --pin v1.4.1
+ ```
+diff --git a/README.md b/README.md
+index 56a2b1f563a5..72ea2f416f85 100644
+--- a/README.md
++++ b/README.md
+@@ -54,10 +54,10 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Skill checklists | **166** | 42 core + 8 frontend + 116 domain |
+-| Hook scripts (on disk) | **59** | Python entrypoints under `.claude/hooks/` |
+-| Hooks wired in `settings.json` | **48** | distinct scripts, 50 event registrations |
+-| Shared library modules | **71** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
++| Hook scripts (on disk) | **60** | Python entrypoints under `.claude/hooks/` |
++| Hooks wired in `settings.json` | **49** | distinct scripts, 52 event registrations |
++| Shared library modules | **72** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+ | Slash commands | **27** | under `.claude/commands/` |
+ | Architecture decision records | **198** | under `.claude/adr/` |
+-| Tests | **~15,400 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
++| Tests | **~16,200 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+-The gap between **59 on disk** and **48 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
++The gap between **60 on disk** and **49 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+ 
+@@ -188,3 +188,3 @@ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+ ls .claude/adr | grep -c '^ADR-'                  # 198 ADRs
+-python3 -m pytest --collect-only -q | tail -1     # ~15,400 collected cases
++python3 -m pytest --collect-only -q | tail -1     # ~16,200 collected cases
+ ```
+diff --git a/README.pt-BR.md b/README.pt-BR.md
+index bfb6bbf0fff6..2f4d96cfbdec 100644
+--- a/README.pt-BR.md
++++ b/README.pt-BR.md
+@@ -52,10 +52,10 @@ Todas as contagens abaixo são verificáveis a partir de um checkout limpo (veja
+ | Checklists de skills | **166** | 42 core + 8 frontend + 116 de domínio |
+-| Scripts de hook (em disco) | **59** | entrypoints Python em `.claude/hooks/` |
+-| Hooks ligados em `settings.json` | **48** | scripts distintos, 50 registros de evento |
+-| Módulos de biblioteca compartilhada | **71** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
++| Scripts de hook (em disco) | **60** | entrypoints Python em `.claude/hooks/` |
++| Hooks ligados em `settings.json` | **49** | scripts distintos, 52 registros de evento |
++| Módulos de biblioteca compartilhada | **72** | apenas stdlib, em `.claude/hooks/_lib/` (excluindo o `__init__.py` do pacote) |
+ | Slash commands | **27** | em `.claude/commands/` |
+ | Architecture decision records | **198** | em `.claude/adr/` |
+-| Testes | **~15.400 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
++| Testes | **~16.200 casos** | reportados por `pytest --collect-only` nas suítes de hook, script e conformidade |
+ 
+-A diferença entre **59 em disco** e **48 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
++A diferença entre **60 em disco** e **49 ligados** é benigna: vários módulos que não respondem a eventos são ativados via dispatch in-process (invocados por outros hooks), e não por um registro de evento direto em `settings.json`.
+ 
+@@ -168,3 +168,3 @@ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+ ls .claude/adr | grep -c '^ADR-'                  # 198 ADRs
+-python3 -m pytest --collect-only -q | tail -1     # ~15.400 casos coletados
++python3 -m pytest --collect-only -q | tail -1     # ~16.200 casos coletados
+ ```
+diff --git a/SBOM.md b/SBOM.md
+index f336d96f26db..ec7df020fab2 100644
+--- a/SBOM.md
++++ b/SBOM.md
+@@ -2,5 +2,5 @@
+ 
+-<!-- last-reviewed: 2026-09-08 v1.4.0 -->
++<!-- last-reviewed: 2026-09-18 v1.4.1 -->
+ 
+-**Version:** `1.4.0` (tracks repo-root `VERSION`)
++**Version:** `1.4.1` (tracks repo-root `VERSION`)
+ **Format:** manual markdown (CycloneDX-minimal; no tooling runtime dependency).
+diff --git a/SECURITY.md b/SECURITY.md
+index 0866c3cb04f1..6faff30e1bad 100644
+--- a/SECURITY.md
++++ b/SECURITY.md
+@@ -2,3 +2,3 @@
+ 
+-<!-- last-reviewed: 2026-09-08 v1.4.0 -->
++<!-- last-reviewed: 2026-09-18 v1.4.1 -->
+ 
+diff --git a/VERSION b/VERSION
+index 88c5fb891dcf..347f5833ee6d 100644
+--- a/VERSION
++++ b/VERSION
+@@ -1 +1 @@
+-1.4.0
++1.4.1
+diff --git a/VERSIONING.md b/VERSIONING.md
+index 2a23b27eafd9..4281fcfc48b4 100644
+--- a/VERSIONING.md
++++ b/VERSIONING.md
+@@ -2,3 +2,3 @@
+ 
+-<!-- last-reviewed: 2026-09-08 v1.4.0 -->
++<!-- last-reviewed: 2026-09-18 v1.4.1 -->
+ 
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index 855393727e1a..ae8383080648 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -46,4 +46,4 @@ ceo-orchestration/
+     │   ├── _python-hook.sh         # resolves newest Python ≥ 3.9, fails with guidance
+-    │   ├── _lib/                   # 71 stdlib-only shared modules (144 recursive)
+-    │   ├── *.py                    # 59 hook scripts on disk
++    │   ├── _lib/                   # 72 stdlib-only shared modules (145 recursive)
++    │   ├── *.py                    # 60 hook scripts on disk
+     │   └── tests/                  # hook unit tests
+@@ -66,5 +66,5 @@ faith — run the commands:
+ | └ core / frontend / domain | 42 / 8 / 116         | `find .claude/skills/core -name SKILL.md \| wc -l` (etc.) |
+-| Hook scripts       | 59 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
+-| Hook registrations | 48 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
+-| `_lib` modules     | 71 top-level (144 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
++| Hook scripts       | 60 on disk                   | `ls .claude/hooks/*.py \| wc -l`                          |
++| Hook registrations | 49 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
++| `_lib` modules     | 72 top-level (145 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+ | Slash commands     | 27                           | `ls .claude/commands/*.md \| wc -l`                       |
+@@ -73,7 +73,7 @@ faith — run the commands:
+ | Test files         | ~810                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
+-| Collected cases    | ~15.4k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
++| Collected cases    | ~16.2k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
+ 
+-> **On the "59 vs 48" hook gap.** 59 is the number of hook *scripts* present in
+-> `.claude/hooks/`. 48 is the number of those scripts *wired into* this repo's
+-> `.claude/settings.json` (across 50 event registrations — one script can fire on
++> **On the "60 vs 49" hook gap.** 60 is the number of hook *scripts* present in
++> `.claude/hooks/`. 49 is the number of those scripts *wired into* this repo's
++> `.claude/settings.json` (across 52 event registrations — one script can fire on
+ > more than one event). The difference is real and intentional: some scripts are
+@@ -82,5 +82,5 @@ faith — run the commands:
+ 
+-> **On "~15.4k tests."** That is the count of *collected, parametrized* cases
++> **On "~16.2k tests."** That is the count of *collected, parametrized* cases
+ > reported by `pytest --collect-only`, spread across ~810 test files. It is
+-> not ~15,400 hand-written cases — many are the
++> not ~16,200 hand-written cases — many are the
+ > same logic exercised over a table of inputs. We report the collector's number
+@@ -225,3 +225,3 @@ the honest *Risks / Not-For* caveat in the [README](../README.md).
+ `SPEC/v1/` is the published, versioned compliance contract (SemVer; currently
+-v1.4.0, aligned with the repo `VERSION`). It contains 28 schema files defining
++v1.4.1, aligned with the repo `VERSION`). It contains 28 schema files defining
+ the stable interfaces an adopter can pin to — among them `audit-log.schema.md`,
+diff --git a/docs/COMMAND-SKILL-HOOK-MAP.md b/docs/COMMAND-SKILL-HOOK-MAP.md
+index 7ddecc2a9c13..868e0ab582eb 100644
+--- a/docs/COMMAND-SKILL-HOOK-MAP.md
++++ b/docs/COMMAND-SKILL-HOOK-MAP.md
+@@ -84,2 +84,3 @@ Events sorted alphabetically; within an event, rows keep registration order (= r
+ | PostToolUse | `Edit\|Write\|MultiEdit` | `accel_dispatch.py` | 20 |
++| PostToolUse | `Workflow` | `check_workflow_launch.py` | 5 |
+ | PostToolUseFailure | `(all)` | `check_output_secrets.py` | 5 |
+@@ -105,2 +106,3 @@ Events sorted alphabetically; within an event, rows keep registration order (= r
+ | PreToolUse | `Bash` | `check_ledger_checkpoint.py` | 5 |
++| PreToolUse | `Workflow` | `check_workflow_launch.py` | 5 |
+ | SessionEnd | `(all)` | `SessionEnd.py` | 5 |
+@@ -132,2 +134,2 @@ Derivation rule: a registered hook guards a surface iff its source file under `.
+ - Skills with >=1 `activation_triggers` entry: 62
+-- Hook registrations: 50 across 15 events (49 unique hook labels)
++- Hook registrations: 52 across 15 events (50 unique hook labels)
+diff --git a/docs/CTO-GUIDE.md b/docs/CTO-GUIDE.md
+index 44a7198bfc80..dc5c4276c8bc 100644
+--- a/docs/CTO-GUIDE.md
++++ b/docs/CTO-GUIDE.md
+@@ -41,3 +41,3 @@ documentation bug.
+ |---|---|---|
+-| Python tests collected | ~15,400 | `make test-collect` (or `python3 -m pytest --collect-only -q \| tail -1` — pytest.ini pins the testpath roots) |
++| Python tests collected | ~16,200 | `make test-collect` (or `python3 -m pytest --collect-only -q \| tail -1` — pytest.ini pins the testpath roots) |
+ | Test files | ~810 | `git ls-files '*test_*.py' '*_test.py' \| wc -l` |
+@@ -48,4 +48,4 @@ documentation bug.
+ | Skills | 166 (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
+-| Hooks | 59 .py on disk; 48 wired into `settings.json` (50 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
+-| `_lib/` stdlib-only modules | 71 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
++| Hooks | 60 .py on disk; 49 wired into `settings.json` (52 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
++| `_lib/` stdlib-only modules | 72 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+ | Runtime 3rd-party deps | 0 | see `SBOM.md` §1 |
+@@ -85,3 +85,3 @@ python3 -m pytest -q \
+ # Expect: 0 failures, ≤ handful of skipped (live-adapter gated).
+-# Full collection across ALL testpath roots = ~15,400 collected cases
++# Full collection across ALL testpath roots = ~16,200 collected cases
+ # (run `make test-collect`).
+@@ -208,3 +208,3 @@ structural list.
+ 
+-- **Deterministic governance in-band with tool use.** 48 wired into
++- **Deterministic governance in-band with tool use.** 49 wired into
+   `.claude/settings.json` gate PreToolUse + PostToolUse. Denials are
+diff --git a/docs/FAQ.md b/docs/FAQ.md
+index 27e308635212..72434a32bae2 100644
+--- a/docs/FAQ.md
++++ b/docs/FAQ.md
+@@ -108,3 +108,3 @@ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+ ls .claude/adr | grep -c '^ADR-'                  # 198 ADRs
+-python3 -m pytest --collect-only -q | tail -1     # ~15,400 collected cases
++python3 -m pytest --collect-only -q | tail -1     # ~16,200 collected cases
+ ```
+diff --git a/docs/GUIA-COMPLETO.md b/docs/GUIA-COMPLETO.md
+index a3f7165d4e9f..02bbdf7cfab9 100644
+--- a/docs/GUIA-COMPLETO.md
++++ b/docs/GUIA-COMPLETO.md
+@@ -85,3 +85,3 @@ a dev to read the rest.
+ 
+-3. **Mechanical Python hooks.** 48 hooks wired in `settings.json` run on
++3. **Mechanical Python hooks.** 49 hooks wired in `settings.json` run on
+    Claude Code's lifecycle events (`PreToolUse`, `PostToolUse`, `Stop`, …),
+diff --git a/docs/README.md b/docs/README.md
+index 3a85f8e6f0ca..a118af101828 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -77,11 +77,11 @@ full set of commands; here is the summary you can spot-check in a minute.
+ | Skills | **166** (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
+-| Hook scripts on disk | **59** Python scripts | count `*.py` in `.claude/hooks/` |
+-| Hooks registered | **48** distinct scripts (50 event registrations) | inspect `.claude/settings.json` |
++| Hook scripts on disk | **60** Python scripts | count `*.py` in `.claude/hooks/` |
++| Hooks registered | **49** distinct scripts (52 event registrations) | inspect `.claude/settings.json` |
+ | Slash commands | **27** | count `*.md` in `.claude/commands/` |
+ | Architecture decision records | **198** | count `ADR-*.md` in `.claude/adr/` |
+-| Shared library modules | **71** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
+-| Tests | **~810 test files**; `make test-collect` (pytest `--collect-only`) reports **~15,400** collected cases | `make test-collect` |
++| Shared library modules | **72** stdlib-only (top-level `_lib/`) | count `*.py` in `.claude/hooks/_lib/` |
++| Tests | **~810 test files**; `make test-collect` (pytest `--collect-only`) reports **~16,200** collected cases | `make test-collect` |
+ 
+-Two of these are easy to misread, so we state them plainly: the **59** hook
+-scripts on disk are not all wired at once — **48** distinct scripts (across 50 event registrations) are registered in
++Two of these are easy to misread, so we state them plainly: the **60** hook
++scripts on disk are not all wired at once — **49** distinct scripts (across 52 event registrations) are registered in
+ `settings.json` for this repo's install. And the test figure is *collected
+diff --git a/docs/WHAT-WE-ARE.md b/docs/WHAT-WE-ARE.md
+index d34194145dd0..3264a4777115 100644
+--- a/docs/WHAT-WE-ARE.md
++++ b/docs/WHAT-WE-ARE.md
+@@ -57,3 +57,3 @@ Anthropic's (which Claude Code already needs).
+ Zero third-party runtime dependencies. All GitHub Actions SHA-pinned.
+-~15,400 test cases (by `pytest --collect-only`) across hooks + scripts +
++~16,200 test cases (by `pytest --collect-only`) across hooks + scripts +
+ formal + integration with tiered coverage (Tier-1 security-critical hooks
+@@ -127,3 +127,3 @@ ceremony unavoidable.
+ > L3+ mistakes before they ship. What you get is governance-as-code:
+-> ~15,400 test cases, an inspectable HMAC-chained log, and a cross-LLM
++> ~16,200 test cases, an inspectable HMAC-chained log, and a cross-LLM
+ > rail. We make no speed claim — six experiments found no general
+diff --git a/npm/README.md b/npm/README.md
+index 50888059bcd4..33a5e7a41462 100644
+--- a/npm/README.md
++++ b/npm/README.md
+@@ -2,3 +2,3 @@
+ 
+-<!-- last-reviewed: 2026-09-08 v1.4.0 -->
++<!-- last-reviewed: 2026-09-18 v1.4.1 -->
+ 
+@@ -54,10 +54,10 @@ All counts below are verifiable from a clean checkout (see *Verifying the number
+ | Skill checklists | **166** | 42 core + 8 frontend + 116 domain |
+-| Hook scripts (on disk) | **59** | Python entrypoints under `.claude/hooks/` |
+-| Hooks wired in `settings.json` | **48** | distinct scripts, 50 event registrations |
+-| Shared library modules | **71** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
++| Hook scripts (on disk) | **60** | Python entrypoints under `.claude/hooks/` |
++| Hooks wired in `settings.json` | **49** | distinct scripts, 52 event registrations |
++| Shared library modules | **72** | stdlib-only, under `.claude/hooks/_lib/` (excluding the package `__init__.py`) |
+ | Slash commands | **27** | under `.claude/commands/` |
+ | Architecture decision records | **198** | under `.claude/adr/` |
+-| Tests | **~15,400 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
++| Tests | **~16,200 cases** | reported by `pytest --collect-only` across the hook, script, and conformance suites |
+ 
+-The gap between **59 hook scripts** on disk and **48 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
++The gap between **60 hook scripts** on disk and **49 wired** is benign: several non-event modules are activated through in-process dispatch (invoked by other hooks) rather than by a direct `settings.json` event registration.
+ 
+@@ -126,3 +126,3 @@ ls .claude/commands/*.md | wc -l                  # 27 slash commands
+ ls .claude/adr | grep -c '^ADR-'                  # 198 ADRs
+-python3 -m pytest --collect-only -q | tail -1     # ~15,400 collected cases
++python3 -m pytest --collect-only -q | tail -1     # ~16,200 collected cases
+ ```
+diff --git a/npm/package.json b/npm/package.json
+index fa02668634dd..e09049f585e7 100644
+--- a/npm/package.json
++++ b/npm/package.json
+@@ -2,3 +2,3 @@
+   "name": "ceo-orchestration",
+-  "version": "1.4.0",
++  "version": "1.4.1",
+   "description": "NPM shim that runs the ceo-orchestration install.sh inside a published bundle.",
+diff --git a/pyproject.toml b/pyproject.toml
+index 448951bfe4a1..bc3a45b800d2 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -2,3 +2,3 @@
+ name = "ceo-orchestration"
+-version = "1.4.0"
++version = "1.4.1"
+ description = "Portable framework for operating Claude Code as a structured team of specialist agents under a CEO protocol."
+diff --git a/scripts/build-plugin.py b/scripts/build-plugin.py
+index 1b1b8cc0925d..4cc29d14711a 100644
+--- a/scripts/build-plugin.py
++++ b/scripts/build-plugin.py
+@@ -288,2 +288,6 @@ GUARDED_CLIS = (
+     ("check_scratchpad_access.py", ".claude/scripts/scratchpad.py", "scripts"),
++    # PLAN-190 W1: the Workflow resume guard names `ceo-launches.py relaunch` as the
++    # recovery route in every block reason; a plugin that registered the guard without
++    # it would point the operator at a CLI it never shipped.
++    ("check_workflow_launch.py", ".claude/scripts/ceo-launches.py", "scripts"),
+ )
+diff --git a/templates/settings/settings.base.json b/templates/settings/settings.base.json
+index 3f9a43f61ae4..354fb4effd9b 100644
+--- a/templates/settings/settings.base.json
++++ b/templates/settings/settings.base.json
+@@ -220,2 +220,14 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: Workflow launch ledger + resume guard. Records script sha256 + snapshot, LITERAL args and code revision under <state-dir>/launches/ BEFORE dispatch; blocks a resumeFromRunId whose args differ from the strongly bound, validated manifest (script change: advisory unless CEO_WORKFLOW_SCRIPT_GUARD=enforce). Recovery: `ceo-launches.py relaunch <run>`. Override, recorded: a call description starting with 'CEO_WORKFLOW_RESUME_FORCE: <why>' or CEO_WORKFLOW_RESUME_FORCE=1; advisory CEO_WORKFLOW_RESUME_GUARD=0; off CEO_WORKFLOW_LEDGER=0. Fail-open on infrastructure.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Recording Workflow launch..."
++          }
++        ]
+       }
+@@ -378,2 +390,14 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: binds the run id (wf_<id>) the runner returned to its launch manifest (by tool_use_id; without one, only when exactly one non-blocked unbound launch exists in the session; anything else is an orphan line). Silent; fail-open.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Binding Workflow run id..."
++          }
++        ]
+       }
+diff --git a/templates/settings/settings.user.json b/templates/settings/settings.user.json
+index e5c3fa0782fa..6644b79f1170 100644
+--- a/templates/settings/settings.user.json
++++ b/templates/settings/settings.user.json
+@@ -29,2 +29,7 @@
+         "evidence": ".claude/hooks/review_loop.py:280-284 (o unico sitio de block) sob o opt-in default-OFF documentado no cabecalho do modulo"
++      },
++      {
++        "hook": "check_workflow_launch.py",
++        "route": "CEO_WORKFLOW_LEDGER=0 desliga o hook; CEO_WORKFLOW_RESUME_GUARD=0 poe o guard em advisory mantendo o ledger; na propria chamada, description comecando com 'CEO_WORKFLOW_RESUME_FORCE: <motivo>' libera aquela chamada (registrado e anunciado); ou CEO_WORKFLOW_RESUME_FORCE=1 no ambiente do harness",
++        "evidence": ".claude/hooks/_lib/launch_ledger.py _guard - bloqueia SO retomada (resumeFromRunId) com args diferentes do manifesto vinculado por tool_use_id/manual e VALIDADO (manifest_problem); script diferente e advisory por padrao; com args iguais, hash indisponivel e inconclusivo; registro inconsistente ou excecao no guard sao inconclusivos (nunca bloqueiam); args diferentes seguem bloqueando; falha de infraestrutura devolve {}"
+       }
+@@ -312,2 +317,14 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: Workflow launch ledger + resume guard. Records script sha256 + snapshot, LITERAL args and code revision under <state-dir>/launches/ BEFORE dispatch; blocks a resumeFromRunId whose args differ from the strongly bound, validated manifest (script change: advisory unless CEO_WORKFLOW_SCRIPT_GUARD=enforce). Recovery: `ceo-launches.py relaunch <run>`. Override, recorded: a call description starting with 'CEO_WORKFLOW_RESUME_FORCE: <why>' or CEO_WORKFLOW_RESUME_FORCE=1; advisory CEO_WORKFLOW_RESUME_GUARD=0; off CEO_WORKFLOW_LEDGER=0. Fail-open on infrastructure.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Recording Workflow launch..."
++          }
++        ]
+       }
+@@ -446,2 +463,14 @@
+         ]
++      },
++      {
++        "_comment": "PLAN-190 W1: binds the run id (wf_<id>) the runner returned to its launch manifest (by tool_use_id; without one, only when exactly one non-blocked unbound launch exists in the session; anything else is an orphan line). Silent; fail-open.",
++        "matcher": "Workflow",
++        "hooks": [
++          {
++            "type": "command",
++            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/_python-hook.sh\" check_workflow_launch.py",
++            "timeout": 5,
++            "statusMessage": "Binding Workflow run id..."
++          }
++        ]
+       }

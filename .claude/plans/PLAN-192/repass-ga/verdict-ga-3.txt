@@ -1,0 +1,19 @@
+Reviewed payload 3/3 at `3b1419b94ccf21da25be87cf0a8c9994429ee52b` against `v1.4.0`. **No P0 or false applicable declared condition found; one new P1 below.** All eight scoped files match the rc.1-reviewed content, and the conditions SHA-256 matches.
+
+Applicable conditions **2–3, 5, 8–14, 16–23**, together with the GA header’s retained annex, remain honest under the stated cut rule. Fresh installs register the guard when creating settings; upgrades require condition 3’s prerequisites. The recovery CLI ships with its library; the operator docs do not. The five helpers execute only when invoked. Conditions 10 and 23 retain the automatic adopter risks: stale-history false blocks and copying `scriptPath` bytes before permission approval.
+
+**NEW FINDINGS (annex)**
+
+- **P1 annex — Uncollected methods count as proved tests.** [`.claude/scripts/test_refs.py:69`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.fxIjzL/wt/.claude/scripts/test_refs.py:69), with insertion at line 73. The added branch indexes `test*` methods in **every** class without checking pytest eligibility or `unittest.TestCase` inheritance.
+
+  **Scenario:** `tests/test_recovery.py` contains a passing `test_smoke` and `RecoveryCases.test_resume_mismatch`, whose body fails. `RecoveryCases` neither matches default pytest class naming nor inherits `TestCase`, so pytest skips it. Supplying that exact method as declared and the successfully tested file as proved makes `match` return **rc 0, declared=1, proved=2, missing_proof=[]**. The required regression test never ran.
+
+  An in-memory CLI probe and the installed pytest collector rules confirmed this. It uses exact node matching, independently of the already-declared wrong-class fallback.
+
+  **Minimal fix:** establish class collection eligibility before indexing methods; reject unsupported class shapes instead of crediting their methods as proof.
+
+**P2 follow-ups:** No new findings; previously declared P2s remain open.
+
+Validation included Python 3.9.6 parsing, stdlib import inspection, digest/version checks, and in-memory recovery, integrity, short-write and interruption probes. The checkout remains unchanged. No full installation, npm build or live Workflow test ran.
+
+VERDICT: GO-WITH-CONDITIONS — Under the stated cut rule, retain the applicable conditions and this new P1 annex in the signed advisory evidence; this verdict is not authorization.
