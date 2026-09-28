@@ -15,6 +15,491 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.2] - 2026-09-25
+
+Express release (PLAN-193). Claude Opus 5.5 (`claude-opus-5-5`) becomes the
+session-default model the settings templates ship, and joins the model
+allowlist and the VETO floor. New installs ship at `xhigh` effort; an
+upgraded install whose shipped Opus 5 pin moves to Opus 5.5, and whose
+`.claude/settings.json` sets no `effortLevel`, gets `high`, the Opus 5
+default, instead of medium, the Opus 5.5 one. **Claude Code 2.1.280 or later
+is required**: the installer and the upgrader refuse an older `claude` on
+`PATH` unless you pass `--allow-old-claude-code` (below). The pair-rail
+reviewer is pinned to Codex CLI 0.156.1. The Workflow launch ledger stops
+persisting the bytes of a `scriptPath` file before the harness has decided
+whether the call may run: that is the case v1.4.1 GA condition 23 declared
+known-open, with its cure targeted to this release. The class that
+condition names by shape is declared here, not cured, and the copies v1.4.1
+wrote are not removed (below). `relaunch --out` gets the structural cure
+that v1.4.1 deferred. The honest part: the `[1.4.1]` entry and the v1.4.1
+tag annotation re-targeted the cure of the v1.4.0 annex to this version.
+**This release does not carry it**, and no release is assigned to it
+(Known-open below). No speed claim.
+
+### Changed — Claude Opus 5.5 is the session default and joins the VETO floor (PLAN-193, ADR-149 Amendment 3)
+
+- `claude-opus-5-5` is appended at the END of the ADR-149 working set, and so
+  of `availableModels` in the base (maintainer) settings template. It
+  becomes the top-level `model` pin in both settings templates (`base`, and
+  the `user` profile derived from it). `fallbackModel` stays `claude-opus-5`
+  in the base template (the `user` template sets none), and `claude-opus-5`
+  stays allowlisted: the change is additive. No shipped settings file sets
+  `ultracode`.
+- **VETO floor.** `claude-opus-5-5` joins the ids an agent file with
+  `veto_floor: true` may declare (the ADR-149 block and
+  `agent_frontmatter.VETO_FLOOR_ALLOWED`, kept equal by test). That makes it
+  ELIGIBLE; it moves no agent: every shipped VETO-bearing agent file keeps
+  its `claude-fable-5` pin. The amendment declares by shape where a pin does
+  not hold — among them a per-call `model`, which outranks the agent file
+  with no gate observing it; mitigated and Workflow spawns passed no model,
+  which run on whatever model the session runs at that moment; and subagent
+  effort, which is inherited from the session, not pinned.
+- **Prices.** $4 / $20 per MTok input/output, with cache reads at **0.05×**
+  the input price ($0.20/MTok), not the usual 0.1×. The cost table and the
+  cost rollups bound to the working set carry that row; a rollup that looks
+  a model up by its exact spelling does not price the `claude-opus-5-5[1m]`
+  spelling.
+- **The live Claude adapter sent a thinking shape current models reject.** It
+  kept a hand-maintained list of adaptive-only ids and sent the legacy
+  `budget_tokens` shape to every other id; `claude-opus-5` and
+  `claude-sonnet-5` were never added, so an effort override
+  (`CEO_EFFORT_OVERRIDE`, set by `/effort`) on them was an HTTP 400. The
+  default is inverted: the adapter now keeps the CLOSED list of pre-4.6 ids
+  whose only thinking mode is the legacy shape, and sends adaptive thinking
+  to ids outside it, so a newly released model gets the adaptive shape with
+  no edit there. An entry of that list matches its exact id, optionally
+  followed by one date segment (`-YYYYMMDD`, or the Vertex `@YYYYMMDD`) and
+  a Bedrock version suffix; an id that adds any other segment is another id
+  and gets the adaptive default (one entry is a family, every `claude-3-`
+  id, and the bare 4.0 ids match only with their date). The list of
+  always-on models stays hand-maintained and matches the same way: a
+  caller's `{"type": "disabled"}` is dropped only on the models it names
+  (where it is an HTTP 400) and is sent as given elsewhere, so an always-on
+  model it does not name still answers that request with an HTTP 400
+  (Known-open below). On a model whose thinking is on by default, an effort
+  of `off` does not turn thinking off.
+- The env-channel tamper check (`effective_config`) reads a model-remap value
+  of `claude-opus-5-5[1m]` as the allowlisted `claude-opus-5-5`: one trailing
+  `[1m]` tag is folded before the membership test, and any other suffix is
+  compared as written.
+
+### Changed — effort: `xhigh` on new installs; `high` when an upgrade moves the Opus 5 pin (PLAN-193 OQ-1, OQ-7, OQ-8, OQ-10)
+
+- **New installs** ship a top-level `effortLevel: "xhigh"` in both settings
+  templates. In project settings that key applies to every model of the
+  session and outranks a level a developer saved with `/effort` (Claude Code
+  keeps those per model, in user settings); a level in
+  `.claude/settings.local.json` outranks the project file. `xhigh` typically
+  spends more tokens — cost and latency — than the default: lower or delete
+  the key to trade depth for cost. The key takes `low`, `medium`, `high` or
+  `xhigh`; `max` is not one of its values.
+- **Existing installs** (`upgrade.sh`, unless `--no-settings-migrate`):
+  `availableModels` is written with the list that has `claude-opus-5-5`
+  (appended last) when the file has none or has a list an earlier release
+  shipped; a list you customized is preserved with a named warning. The
+  `model` pin moves to `claude-opus-5-5` when it is absent or is the
+  `claude-opus-5` an earlier release shipped, and only when your effective
+  `availableModels` names `claude-opus-5-5` exactly (Claude Code admits an
+  id by segment prefix; the upgrade is stricter) — otherwise it stays as it
+  is, with a named warning; a pin you chose is preserved with a named
+  warning. Opus 5.5 runs at MEDIUM effort when nothing sets a level, where
+  Opus 5 ran at high; so when the upgrade moves the pin from `claude-opus-5`
+  and `.claude/settings.json` carries no `effortLevel`, it writes
+  `"effortLevel": "high"` — the Opus 5 default, not the new-install
+  `xhigh`. Like any top-level `effortLevel` in project settings, that value
+  then outranks a level saved with `/effort`, and a top-level `effortLevel`
+  in user settings, which applied to Opus 5, does not apply to Opus 5.5. A
+  settings file with no pin receives the pin and no `effortLevel`: where
+  nothing else sets a level, Opus 5.5 then runs at its default, medium. An
+  `effortLevel` you set is never overwritten, with or without the flag
+  below. `xhigh` reaches an existing install only through `--adopt-setting
+  effortLevel`, on an upgrade that finds no `effortLevel` in the file (on
+  the upgrade that moves the pin, the flag writes `xhigh` instead of
+  `high`); once the file has one — the `high` above included — `xhigh` is an
+  edit by hand. Every MIGRATE line, in a dry run too, is followed by a
+  REVERT line (for the pin, the `.claude/settings.local.json` entry that
+  keeps the previous value; for the written `high`, deleting the key), and
+  the migration does not write without its pre-migration backup.
+- **Every exit that leaves the file unmigrated names the re-run with your
+  flags.** The backup that cannot be written, `python3` not found and a
+  failed migration helper (an unparseable file, a failed write) each print
+  one command, built in one place, that re-runs only the migration
+  (`--settings-migrate-only`) with the `--adopt-setting`,
+  `--allow-old-claude-code`, `--pin` and `--dry-run` you passed, the target
+  and the `--pin` value quoted for the shell. In v1.4.1 the one hint (after
+  a failed helper) carried no flag, and a missing `python3` gave none.
+
+### Changed — Claude Code 2.1.280 or later is required (PLAN-193 OQ-9)
+
+- Claude Code added Claude Opus 5.5 in 2.1.280, and 2.1.280 is the minimum
+  CLI documented for it. `SUPPORT.md` carries the row, and what to edit on
+  an older CLI.
+- The shipped `effortLevel: "xhigh"` is the second reason. Claude Code added
+  the `xhigh` level in 2.1.111, and its changelog records under 2.1.121 a fix
+  for "invalid legacy enum values in `settings.json` invalidating the entire
+  settings file": a settings value a CLI does not accept can make it skip
+  the WHOLE project settings file — the framework's hooks and permission
+  rules in it included — with no framework-side signal. Whether a CLI
+  before 2.1.111 does so with `xhigh` was not measured.
+- `install.sh` and `upgrade.sh` read `claude --version` before an install or
+  an upgrade writes anything. Below 2.1.280 they refuse by name and exit 6,
+  unless you pass `--allow-old-claude-code`, which continues with a named
+  warning; a dry run names the refusal and goes on previewing. With no
+  `claude` on `PATH` (CI, a headless runner), or a version they cannot read
+  — no output line that names `(Claude Code)` with a version, or no answer
+  within 10 seconds — they warn by name and continue. A version with
+  anything after its three numbers (a pre-release such as `2.1.280-beta.1`)
+  counts as below the floor. The modes that deliver no framework file exit
+  before the check — `--help`, `--print-settings-baselines` (`upgrade.sh`),
+  and `--arming-check` and `--uninstall` (`install.sh`). Some argument and
+  target refusals run before the check and some after it (for example an
+  unknown `--pin` ref in `upgrade.sh`), so a run can stop on the floor
+  before it reports an argument error.
+- Claude Code's npm `stable` dist-tag is behind 2.1.280 (2.1.274, measured
+  2026-09-25): move to a version, not to a channel.
+- In the framework repository, the test suite and the installer harnesses
+  do not read the host's `claude`: under pytest, `_lib/test_isolation.py`
+  puts first on `PATH` a stand-in `claude` that answers `--version` with
+  the floor, and every shell harness under a `tests` directory or
+  `scripts/local/` that names `install.sh` or `upgrade.sh` exports a
+  `claude` function with the same answer. Limits, by shape: a test that
+  builds its own `PATH` decides which `claude` it brings, a suite run with
+  `python -m unittest` directly skips the isolation layer, and a child
+  started with `env -i` loses the function.
+
+### Changed — pair-rail reviewer pinned to Codex CLI 0.156.1 (PLAN-193, ADR-182)
+
+- The payload manifest (`.claude/governance/codex-cli-pin-manifest.json`)
+  pins the 0.156.1 binary by sha256 for one platform, `aarch64-apple-darwin`
+  (Apple Silicon macOS), and the accepted range
+  (`.claude/governance/codex-cli-pin.txt`) becomes `>=0.128.0,<0.157.0`. In
+  the framework checkout, `check_pair_rail.py --verify-codex-pin` fails
+  CLOSED on any other binary and on any other platform: run the rail from a
+  1.4.2 checkout on that platform, with Codex 0.156.1 installed. Rail
+  measurements taken before and after the re-pin are not comparable — the
+  instrument changed.
+- Installs do not receive `.claude/governance/`. There the gate finds no
+  manifest, and a missing or mismatched Codex fails open, recorded as
+  `pair_rail_codex_unavailable` — unchanged by this release.
+- With `--harness codex`, the installer's version-skew warning reads the same
+  range from the checkout you install from, so a Codex 0.156.x counts as in
+  range for Codex as a hook host while the Codex hook fixtures are still the
+  0.139.0 recordings (declared in the pin file itself).
+
+### Fixed — the Workflow ledger persisted a `scriptPath` file before the permission decision (PLAN-193 W4b; v1.4.1 GA condition 23)
+
+- In v1.4.1, on PreToolUse of the `Workflow` tool, `check_workflow_launch.py`
+  read the regular file (up to 8 MiB) that `tool_input.scriptPath` names —
+  when the call carries no inline `script` —, by absolute path or relative
+  to the call's `cwd`, inside or outside the project, and wrote a copy
+  (`<launch_id>.script`, mode 0600) into `launches/` in the project's state
+  directory, BEFORE the harness decided whether the call may run. The copy
+  was written even when a read-deny rule covered that path, and the rule did
+  not cover the copy, which sits at another path; `ceo-launches.py relaunch`
+  printed where the copy was, and `relaunch --out` copied it to a new file.
+  The class, by shape: a hook that runs before the permission decision and
+  persists the bytes of a path the harness can deny. In v1.4.1 the declared
+  exit was `CEO_WORKFLOW_LEDGER=0`, which turns the whole hook off.
+- **This release cures that case — the Workflow launch ledger — and no other
+  hook of the class** (Known-open below). From this release the PreToolUse
+  half persists no bytes of that file: it records the path, the sha256 and
+  the size. A copy is taken, if at all, by the PostToolUse half of the same
+  call — bound by the call's `tool_use_id`, with a run id its response
+  reports — and only when the file still hashes to the sha256 recorded
+  before dispatch. A script passed inline in `script` is recorded before
+  dispatch, as before.
+- **Exit code changed.** `ceo-launches.py relaunch` of a `scriptPath` launch
+  that has a recorded sha256 and no copy — for example one bound by the
+  heuristic or by hand instead of by its own call, or one whose file changed
+  between the two reads — exits rc 7: it prints the exact `args`, the
+  recorded sha256 and whether the original file still hashes to it, and
+  nothing as the exact script; `relaunch --out` refuses, rc 7, and creates
+  no file. In v1.4.1 every readable `scriptPath` launch had a copy.
+- **Resume guard.** For a `scriptPath` launch recorded without a copy, the
+  sha256 recorded before dispatch was not corroborated after it, so the
+  guard's script comparison is inconclusive, as for an unreadable script:
+  never a match, never a script advisory or block, whatever
+  `CEO_WORKFLOW_SCRIPT_GUARD` says. `args` are compared, and a difference
+  under a strong bind is blocked, as before.
+- The limits of this cure, the class it leaves open, and the copies v1.4.1
+  left behind are declared below (Known-open).
+
+### Changed — `relaunch --out` publishes the whole copy or no copy (PLAN-190-FOLLOWUP, option B)
+
+- v1.4.1 wrote the destination in place (an exclusive create and a write
+  loop; on a handled failure, an `lstat` and then an `unlink` of the
+  destination — two steps, not one atomic operation) and declared the
+  partial-file and cleanup cases known-open. `ceo-launches.py relaunch --out
+  FILE` now writes the copy to an exclusive temporary inside a private
+  directory (`.ceo-launches-out-<hex>`, requested mode 0700) that it creates
+  in FILE's directory, `fsync`s the temporary, and publishes it with a hard
+  link that never replaces an existing entry. The name FILE is never passed
+  to unlink, rmdir, rename or replace; the cleanup removes, by name, only
+  the two names the call created — the temporary and the private directory
+  — so it acts on whatever those names hold at that moment. A FILE present
+  at the start, or one that appears during the write, is refused (rc 2) and
+  left as it is.
+- **"The whole file or no file" holds while the machine stays up and while,
+  during the call, nothing else writes FILE's directory as the command
+  opened it, changes what a directory on the path to FILE resolves to (a
+  rename, a re-pointed symlink, a mount), or writes what the command
+  creates.** After a power loss nothing is claimed: no directory is
+  `fsync`ed and `F_FULLFSYNC` is not used. Use a copy only from a run that
+  printed "snapshot copied to".
+- A run that ends without its cleanup — a signal still at its default
+  action (SIGTERM, SIGHUP, SIGQUIT and SIGKILL among them), a power loss, a
+  failed removal — can leave a `.ceo-launches-out-<hex>` directory, possibly
+  holding the temporary, never a partial file under FILE. It is never the
+  copy: delete it, never edit it (after the link, a temporary left there is a
+  second name of FILE).
+- **Exit codes changed** — the class "an `--out` that creates no file never
+  exits 0": `--out` for a NAMED workflow was ignored with rc 0 and is now
+  refused, rc 2; `--out ""` was taken as omitted and is now refused, rc 2; a
+  second read of the snapshot that failed (rc 0, no file) or that differed
+  from the recorded sha256 (printed and copied, rc 0) now exits rc 7 with
+  nothing printed as exact. For a record whose script was not recorded at
+  launch, an `--out` refusal is rc 7.
+- **Environments where v1.4.1 published the copy and this release refuses**,
+  rc 2 (rc 7 for a record whose script was not recorded at launch), by shape:
+  wherever a plain exclusive create of FILE would succeed but an operation
+  of the new shape is refused or fails — examples, not the list: a
+  directory-relative call, creating or opening the private directory, a
+  second inode, `fsync`, the hard link. Measured on macOS: a FAT (msdos)
+  volume (`link` answers `ENOTSUP`), an ACL entry denying
+  `add_subdirectory`, and a process umask that clears the owner's write or
+  search bit of the requested 0700 (0177, for example — the umask case was
+  measured on Linux too). The full list of limits, and the tampering that
+  stays outside the threat model, is in `docs/workflow-recovery.md`
+  (framework repository; not delivered to installs).
+
+### Added — tools for the next model or Codex release (PLAN-193 W5; maintainer tooling)
+
+- `.claude/scripts/re-pin-codex.py <version>` resolves the `@openai/codex`
+  package and its platform artifact on the public npm registry, checks the
+  platform tarball's sha512 against the registry integrity, hashes the
+  payload member in memory (one tar header shape is accepted; any other is
+  refused by name), and EMITS a new re-pin pack: the pin and manifest as
+  `.new` files, the ceremony script, and a sentinel draft whose human
+  sections are `TODO(owner)`. It never applies a pack, installs a CLI, signs
+  or commits.
+- `.claude/scripts/check-substrate-drift.py`, offline unless `--fetch`,
+  reports whether the installed Codex is the version the payload manifest
+  pins (a version comparison, not the payload hash:
+  `check_pair_rail.py --verify-codex-pin` stays the gate), whether npm
+  `latest` moved past the pin (only from a cache an explicit `--fetch` left),
+  whether `claude --version` differs from the substrate ledger, and which
+  model ids the installed Claude Code knows that ADR-149 does not cover (read
+  from the binary; a format it cannot read is a named `unknown`). Report mode
+  exits 0; `--strict` exits 1 on drift.
+- `.claude/scripts/derive-settings-baselines.py` derives the per-key part of
+  `upgrade.sh`'s settings-migration table (old, new and superseded values)
+  from the templates the GA tags shipped. `--check scripts/upgrade.sh`
+  compares it with the table in `upgrade.sh`: rc 0 on a match, rc 1 with
+  every difference named, rc 2 when it cannot derive (no GA tags, as in a
+  shallow clone) or meets a shape it does not model.
+- No hook or shipped settings file runs the three tools, and no CI workflow
+  step invokes them directly: their tests do. The tests live in
+  `.claude/scripts/tests/`, which the CI test jobs, `release.sh preflight`
+  and the release workflow run. One of them runs
+  `derive-settings-baselines.py --check scripts/upgrade.sh` against the GA
+  tags of the checkout it runs in and fails unless that answers rc 0; a
+  checkout without the GA tags (a shallow clone) skips it, visibly.
+  `release.sh preflight` runs in the maintainer's checkout and the release
+  workflow clones the full history, so both run that check on the tree they
+  release. `install.sh` copies every top-level `.claude/scripts/*.py`, so
+  the tools reach installs, where they answer only "not applicable" or
+  refuse (exit 2): they need the framework checkout.
+- New framework-repository document (not delivered to installs):
+  `docs/adopter-new-model-fast-access.md`, the per-machine route
+  (`.claude/settings.local.json`) to use a newly released Claude model before
+  a framework release adopts it.
+
+### Fixed — maintenance sweep (S357)
+
+- **`templates/.mcp.json` registered a Codex MCP server that can no longer
+  start.** It ran `codex mcp-server`, a subcommand codex-cli 0.154.0 removed;
+  measured on codex-cli 0.155.0, the entry can never complete an MCP
+  handshake. The template now ships an empty `mcpServers`. The pair-rail
+  gate does not use it (it runs `codex exec`); the hooks on the
+  `mcp__codex__*` tools (`check_codex_filewrite.py`, `check_codex_response.py`
+  and its `codex_review_invoked` event) stay idle while no server named
+  `codex` is registered. `install.sh` never overwrites an existing
+  `.mcp.json` and `upgrade.sh` does not touch it, so an install made from an
+  earlier release keeps the dead entry until you remove it:
+  `claude mcp remove codex -s project`, or delete the `codex` key under
+  `mcpServers` by hand (on Claude Code 2.1.280 `claude mcp remove` also
+  dropped the file's `_comment` key).
+- **`/ceo-boot` assumed task tools that current models do not get.** Claude
+  Code offers the task-tracking tools (`TaskCreate`, `TaskList` and the rest)
+  by default only on older models: by default a session on Opus 4.8,
+  Opus 5 / 5.5, Sonnet 5 or Fable 5.x has none of them
+  (`.claude/commands/ceo-boot.md` lists what still turns them on).
+  `/ceo-boot` now checks what the session offers and, without them, renders
+  its follow-up candidates inline instead of creating tasks. `/ceo-boot` and
+  `/debate` no longer list task tools in `allowed-tools`.
+- **`CLAUDE_CODE_SUBAGENT_MODEL_FORCE` flattens the model tiering.** Since
+  Claude Code 2.1.257, when it is on, every subagent runs on the subagent
+  model (or the main model) and `model:` frontmatter and per-spawn models are
+  ignored — a VETO rite can fall below its floor tier. A test now asserts
+  that neither the framework's own settings nor any settings template nor
+  the `SETTINGS_DELTA` documented in `.claude/hooks/route.py` sets it, and
+  `scripts/install-accelerators.sh` warns — never writes — when it is on in
+  the shell, in user settings, or in the app's project or local settings.
+  The same script now says that `CLAUDE_CODE_SUBAGENT_MODEL` is only the
+  default subagent model since Claude Code 2.1.251.
+- **The audit-retention claim was false.** `docs/soc2-audit-mapping.md` said
+  the audit log stays "90 days live on disk". By default the framework keeps
+  its audit log in `~/.claude/projects/<slug>/`, and size-based rotation
+  renames it to archives in the same directory. Claude Code's own cleanup
+  sweep (read in the 2.1.280 binary) walks every project directory under
+  the `projects/` directory of its config home and unlinks each top-level
+  `*.jsonl` older than the `cleanupPeriodDays` of the session that runs the
+  sweep (default 30), with no name filter — so the live `audit-log.jsonl`
+  and its rotated `audit-log-YYYY-MM[-N].jsonl` archives are deleted like
+  aged transcripts.
+  The retention you can count on is the smallest `cleanupPeriodDays` any
+  sweeping session on the machine resolves. The document now says so, and
+  `INSTALL.md` §Audit-log retention gives the mitigation: a large
+  `cleanupPeriodDays` at user scope (for example 3650 in
+  `~/.claude/settings.json`), scheduled backups with
+  `.claude/scripts/ceo-backup.sh`, and never `touch` an audit file (it
+  rewrites the times forensic review relies on).
+- **Settings guard loadability, pinned by test.** Claude Code drops a WHOLE
+  settings file — every hook and every deny rule in it — when a `PreToolUse`
+  or `PermissionRequest` hook entry in it cannot be loaded. A new test
+  replicates that rule (read in the Claude Code 2.1.277, 2.1.278 and 2.1.280
+  binaries) and asserts that no shipped settings surface trips it; it turns
+  red when the substrate ledger moves to a newer Claude Code, until the rule
+  is re-derived. It does not replicate the full settings schema, which is
+  where the `effortLevel` reason above lives.
+- `.claude/scripts/run-skill-benchmark.py` sent `temperature=0` and
+  `top_p=1`, which the anthropic Python SDK 1.x does not accept and current
+  Claude models reject; it now sends no sampling parameters, and its
+  documentation now says model output is not deterministic.
+- **Codex as a hook host.** A Codex upgrade can re-key every hook's trust
+  while `.codex/hooks.json` stays byte-identical (measured on nine of the
+  twelve shipped entries: trust hashes recorded under codex-cli 0.139.0
+  list as `modified` under 0.155.0), and
+  the arming check's `ARMED` reads project trust only: after upgrading Codex,
+  re-check `/hooks` (`INSTALL.md`, the Codex templates,
+  `docs/degradation-outside-claude-code.md`). Under Codex, leave
+  `CEO_BASH_FORCE_PUSH_REWRITE` unset: with it set, the Codex adapter answers
+  a force-push with a plain `allow`.
+- The substrate ledger (`.claude/scripts/substrate-watch.json`) records Claude
+  Code 2.1.280 as the version it was reconciled against; the components it
+  holds back, and why, are in `docs/substrate-adopt-2026-09.md`.
+
+### Known-open (declared by this release)
+
+- **Audit files can be deleted by Claude Code** (above). No plan carries a
+  structural cure; `verify_chain()` checks only what is still on disk.
+- **Model pins.** The limits the amendment declares by shape (above) stay.
+  The pin (`claude-opus-5-5`) and `fallbackModel` (`claude-opus-5`) are now
+  different models: an availability fallback changes the serving model for
+  the turn in which it fires, pays cache writes on the fallback model for
+  the context it holds no live cache for (and on the pin, on the return,
+  for what its cache lost meanwhile), runs without the Opus 5.5 thinking
+  blocks, and no hook records it. Going back to an older release does not
+  move the pin back: restore the pre-migration backup, revert the committed
+  upgrade, or override the value in `.claude/settings.local.json` as the
+  REVERT line shows.
+- **Thinking on always-on models.** The adapter's list of always-on models is
+  kept by hand: an always-on model it does not list answers a caller's
+  `{"type": "disabled"}` with an HTTP 400.
+- **The Claude Code version check reads one CLI**: the `claude` found on
+  `PATH` when the script runs. The CLI that later opens the project can be
+  another one, and with no `claude` on `PATH` the scripts only warn.
+  `SPEC/v1/install-cli.md` lists neither `--allow-old-claude-code`,
+  `--adopt-setting` nor exit 6 (its exit-code table already stopped at 3).
+- **The class of v1.4.1 GA condition 23 is declared, not cured.** This
+  release cures the case that condition describes, the Workflow launch
+  ledger. It does not establish that no other hook has the shape of the
+  class: a hook that runs before the permission decision and writes into
+  the project's state directory bytes of a file the call names — for
+  example, an excerpt of its content in an audit event — is not touched by
+  this release and stays as it is.
+- **The `scriptPath` cure (above) has declared limits.** Before the
+  permission decision the PreToolUse half still opens and reads the file,
+  and records its sha256 and size whether or not the call is then allowed:
+  whoever can read the state directory can test a guess of the content
+  against that hash. The copy the PostToolUse half takes re-reads the PATH,
+  so it is not a copy of what the harness ran — only bytes that hash to the
+  value recorded before dispatch — and, like any copy in `launches/`, it is
+  not covered by a read-deny rule on the original path. The cure relies on
+  the harness firing PostToolUse, with the call's `tool_use_id` and a run id
+  in its response, only for a call it allowed and ran. The PostToolUse half
+  does not serialize its re-read, its copy and its manifest rewrite: two
+  PostToolUse events of one call, with the file changing between them, can
+  leave the record naming no copy (rc 7), and a failed manifest rewrite
+  after the copy leaves the run unbound and the copy named by no record. The
+  `_comment` of the hook's registration in the settings files still says the
+  snapshot is recorded before dispatch.
+- **The copies earlier releases wrote before the permission decision stay
+  in `launches/`**: this release removes none. While one exists,
+  `relaunch` of the record that names it still prints it as the exact
+  script and `relaunch --out` still copies it; deleting one makes that
+  record fail its integrity check (inconclusive for the guard, rc 7 for
+  `relaunch`).
+- **`relaunch --out`**: the leftover private directory and the trust in the
+  destination's directory described above.
+- **The three fast-lane tools** run when someone runs them. The one
+  automatic check is the test that runs the `--check` of
+  `derive-settings-baselines.py` in a checkout with the GA tags (above); a
+  checkout without them skips it.
+- **Codex as a hook host**: the range admits 0.156.x while the hook fixtures
+  stay at 0.139.0 (above).
+
+### Known-open (carried — NOT cured by this release)
+
+- **The v1.4.0 annex.** The signed v1.4.0 verdict carries an annex of P1
+  findings and declared conditions marked "cure in 1.4.1"; the `[1.4.1]`
+  entry and the v1.4.1 tag annotation re-targeted that cure to 1.4.2. **This
+  release does not cure them, and no release is assigned to their cure**
+  (Owner decision, 2026-09-22, PLAN-193 OQ-3). The list is the
+  `NEW FINDINGS (annex)` sections of the verdicts under
+  `.claude/plans/PLAN-169/repass-rc1/` and `.claude/plans/PLAN-169/repass-ga/`,
+  plus the `conditions:` of `.claude/governance/pair-rail-verdict-v1.4.0.md`.
+- **What v1.4.1 left open**, with two exceptions cured above: the
+  `relaunch --out` item of the `[1.4.1]` entry's Known-open (within the
+  limits stated above) and the case of v1.4.1 GA condition 23, the Workflow
+  launch ledger (within its declared limits; the class that condition names
+  stays open, above). Everything else stays open, by source: the Known-open
+  of the `[1.4.1]` entry; the open findings the conditions of the v1.4.1 GA
+  declare (`.claude/plans/PLAN-192/repass-ga/CONDITIONS-ga.md`); and the
+  `NEW FINDINGS (annex)` and P2 findings of the v1.4.1 cross-review
+  verdicts — the rc.1 rounds under `.claude/plans/PLAN-192/repass-rc1*/` and
+  the GA re-pass under `.claude/plans/PLAN-192/repass-ga/`, bound by the
+  signed `.claude/governance/pair-rail-verdict-v1.4.1-rc.1.md` and
+  `.claude/governance/pair-rail-verdict-v1.4.1.md`. Among them are findings
+  in the Workflow guard and ledger, in `approval_gate.py` and the other
+  PLAN-190 recovery tools, and in delivery (`upgrade.sh` delivers
+  `.claude/scripts/local/` while a fresh install does not). No release is
+  assigned to their cure.
+
+### What an adopter should know before installing or upgrading
+
+- Update Claude Code to 2.1.280 or later first: the installer and the
+  upgrader refuse an older `claude` they find on `PATH` (exit 6).
+  `--allow-old-claude-code` continues past that refusal, and `SUPPORT.md`
+  says what to edit in `.claude/settings.json` for an older CLI.
+- After `upgrade.sh`, a pin the framework shipped moves to `claude-opus-5-5`
+  when your `availableModels` lists it, and a file with no `effortLevel`
+  gets `high` with it; read the MIGRATE and REVERT lines. For `xhigh`, pass
+  `--adopt-setting effortLevel` on that upgrade; once the file has an
+  `effortLevel`, the flag keeps it, and `xhigh` is an edit by hand.
+- Scripts that call `ceo-launches.py relaunch --out FILE` must use FILE as
+  the copy only after a run that printed "snapshot copied to" — never after
+  rc 2 or rc 7 — and never use a `.ceo-launches-out-<hex>` directory. A
+  `relaunch` of a `scriptPath` launch recorded without a copy exits rc 7
+  (above).
+- The `<launch_id>.script` copies v1.4.1 wrote before the permission
+  decision stay in `launches/`, in the project's state directory, after the
+  upgrade. Deleting one removes those bytes and makes the record that names
+  it inconclusive (rc 7 for `relaunch`).
+- Remove the dead `codex` entry from `.mcp.json` if your install has one.
+- Raise `cleanupPeriodDays` at user scope and back up the audit files if you
+  rely on the audit trail for longer than 30 days.
+
 ## [1.4.1] - 2026-09-18
 
 Patch release for adopters who run long autonomous `Workflow` pipelines
