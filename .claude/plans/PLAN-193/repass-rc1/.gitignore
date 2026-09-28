@@ -1,0 +1,8 @@
+# Arquivos de TRABALHO do runner do re-pass (nunca evidencia): o passo 11 do
+# OWNER-RC1-CUT.sh stageia so uma lista literal (o MANIFEST-rc1.sha256 e o que
+# ele lista, o README, as condicoes, os fields e o envelope), mas um
+# `git add -A` de qualquer outra mao levaria o cache do npx junto.
+.npx-cache/
+.codex-shim/
+.cut-state
+*.raw.txt
