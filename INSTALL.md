@@ -247,8 +247,12 @@ squad-bundle scaffolding is tracked in PLAN-080 (post-v1.15.0).
 The framework runs its **same** enforcement hooks under OpenAI Codex CLI.
 `--harness codex` does not fork any hook — it emits a Codex-side
 registration that invokes the shared Python hooks with
-`CEO_HOOK_ADAPTER=codex`. **Verified against codex-cli 0.139.0** (pin
-`.claude/governance/codex-cli-pin.txt` = `>=0.128.0,<0.140.0`).
+`CEO_HOOK_ADAPTER=codex`. **Verified against codex-cli 0.139.0**: the
+harness fixtures were recorded on that version. The arming check reads
+the Codex version range it accepts from
+`.claude/governance/codex-cli-pin.txt` in the framework checkout you
+install from. A newer Codex inside that range has not had the harness
+fixtures re-recorded.
 
 ```bash
 ./scripts/install.sh /path/to/your-app --harness codex
@@ -289,31 +293,86 @@ asks you to confirm:
 1. **Project trust** — `projects."<path>".trust_level = "trusted"` in your
    Codex user config.
 2. **Per-hook trust** — the `/hooks` review flow (or the headless
-   `[hooks.state]` entries), keyed to the hook **registration** hash.
+   `[hooks.state]` entries), keyed to a hash of each hook's
+   **registration entry**. Which fields feed that hash depends on the
+   Codex version (see the next section).
 
 An installed-but-untrusted hook is a **silent no-op**, indistinguishable
 from healthy at runtime. The installer's final line is a post-install
 arming check that reports **ARMED / NOT-ARMED-(untrusted) / BROKEN** — read
-it. `BROKEN` also flags the two known 0.139 substrate gaps: hook discovery
-returns zero hooks inside a **git worktree** (use a plain clone), and a
-Codex version outside the pin range.
+it. `BROKEN` flags the known 0.139 substrate gap where hook discovery
+returns zero hooks inside a **git worktree** (use a plain clone). A Codex
+version outside the pin range is printed as a `VERSION SKEW` warning, not
+as `BROKEN`. **`ARMED` means the project is trusted — nothing more.** The
+check reads project trust from your Codex config and does not read
+per-hook trust, so it still prints `ARMED` while individual hooks are
+untrusted or `modified`. Inspect per-hook trust in `/hooks` (on codex-cli
+0.155.0, `codex app-server` `hooks/list` also returns each hook's trust
+status).
 
 #### Trust-rekeying friction (know this before upgrading)
 
-Codex `/hooks` trust is keyed to the hook **registration** (the command
-string), **not** the hook program body:
+Codex `/hooks` trust is keyed to a hash of each hook's **registration
+entry**, **not** to the hook program body. On codex-cli 0.139.0 the hash
+covered five fields: event, matcher, command string, timeout and status
+message. That is no longer the whole input on newer Codex versions (see
+the Codex-upgrade bullet below), so treat the exact field set as a fact
+about one Codex version, not a framework guarantee:
 
 - A framework upgrade that changes only hook `.py` bodies does **not**
   re-prompt for trust — low friction (the "every upgrade re-prompts" fear
   is wrong for body-only upgrades).
-- Any change to a hook's **registration command string** (e.g. the
+- Any change to a hook's **registration entry** (e.g. the
   `.codex/hooks.json` command bytes) flips that hook to `modified` and it
-  **silently stops firing** until you re-trust it. Re-run the arming check
-  after any upgrade that touches the bundle.
+  **silently stops firing** until you re-trust it. After any upgrade that
+  touches the bundle, open `/hooks` and re-trust the flagged entries.
+- **A Codex upgrade can re-key every hook while `.codex/hooks.json` stays
+  byte-identical.** Measured 2026-09-22 (UTC-3) with `codex app-server`
+  (`hooks/list`) against the shipped `templates/codex/hooks.json`,
+  rendered with the project path of the codex-cli 0.139.0 recording: nine
+  of the twelve shipped hook entries have the same five fields as an entry
+  of that recording, and codex-cli 0.155.0 computes a different trust hash
+  for every one of those nine. A Codex config holding the 0.139-era
+  trusted hashes therefore lists all nine as `modified`. (Controls on
+  0.155.0: the same config with the 0.155.0 hashes lists them as
+  `trusted`; and with the rendered commands held fixed, moving
+  `hooks.json` to another directory does not change the hash.)
+  codex-cli 0.155.0 also reports two registration fields that 0.139.0 did
+  not, `async` and `additionalContextLimit`, and its hash covers the whole
+  normalized entry, the command string and `additionalContextLimit`
+  included (`hook_hash()` in upstream
+  `codex-rs/hooks/src/engine/discovery.rs` at `rust-v0.155.0`, read
+  2026-09-22, UTC-3). **After you upgrade Codex, re-check `/hooks`** and re-trust
+  the entries it shows as `modified`. The arming check does not detect
+  this.
+- **Every install hashes on its own path.** The installer renders the
+  project's absolute path into every shipped hook command, and the command
+  string is part of the hash. A fresh install or re-install at another
+  path therefore renders new commands, so every hook gets a new hash and
+  stays untrusted until you trust it in `/hooks`. A repository that is
+  moved (or re-cloned with `.codex/hooks.json` committed) without
+  re-running the installer keeps the commands rendered for the old path:
+  their hashes do not change, but they point at the old path. Re-run the
+  installer there, then re-trust the hooks.
 - Because Codex keys the *registration* but not the *body*, hook-**body**
   integrity is the framework's responsibility: the `.codex` kill-switch
   surface is canonical-guarded and boot-re-hash-tripwired, and
   `.claude/hooks/**` stays under the canonical-edit guard.
+
+#### Leave `CEO_BASH_FORCE_PUSH_REWRITE` unset under Codex
+
+`CEO_BASH_FORCE_PUSH_REWRITE=1` is an opt-in pilot (off by default).
+Under Claude Code it turns the force-push block into "ask before running
+this `--force-with-lease` rewrite". The Codex adapter does not carry the
+rewrite. Measured 2026-09-22 (UTC-3) by running `check_bash_safety.py` with
+`CEO_HOOK_ADAPTER=codex` on a recorded Codex `PreToolUse` payload for
+`git push origin main --force`: with the variable unset the hook answers
+`deny`; with it set to `1` the hook answers a plain `allow` with no
+rewritten command, so Codex would run the original `--force` command.
+The `.codex/rules/ceo.rules` backstop does not catch it either, because
+it matches prefixes only: on codex-cli 0.155.0, `codex execpolicy check`
+finds no matching rule for `git push origin main --force`, while
+`git push --force origin main` is `forbidden`.
 
 #### `--managed-hooks` (enterprise posture, opt-in)
 
@@ -798,6 +857,68 @@ no env-var overrides them.
 
 ---
 
+## Audit-log retention — Claude Code can delete audit files
+
+The framework keeps its HMAC audit chain in a per-project state
+directory, by default `~/.claude/projects/<slug>/`: the live
+`audit-log.jsonl`, plus the archives that size-based rotation renames to
+`audit-log-YYYY-MM[-N].jsonl` in the same directory. Claude Code's own
+session-cleanup sweep deletes files of that shape. Read in the Claude
+Code 2.1.280 binary (2026-09-22, UTC-3): at most once every 24 hours, the
+background housekeeping of a running session starts the sweep. It walks
+every project directory under the `projects/` directory of Claude Code's
+config home (`~/.claude` unless `CLAUDE_CONFIG_DIR` is set). In each one
+it unlinks every top-level `*.jsonl` whose modification time is older
+than the `cleanupPeriodDays` of the session that runs the sweep (default
+30). It applies no name filter. The only content it reads is a marker
+that exempts transcripts of Claude desktop-app sessions, and audit
+records do not carry that marker, so audit files are deleted like any
+aged transcript.
+
+What that means for the audit trail:
+
+- **The session that runs the sweep sets the retention, not this
+  project.** That session applies the value resolved where *it* was
+  launched to every project directory. One session started in a
+  directory with no `cleanupPeriodDays` setting, and none at user scope,
+  can delete audit archives older than 30 days from every project on the
+  machine. The maintainer settings template sets 90 at project scope, so
+  a sweep run by a session launched in a maintainer install that keeps
+  that value deletes at 90 days. The user-ceremony settings template does
+  not set it.
+- A rotated archive stops changing when it is rotated, so its age counts
+  from its last append. The live `audit-log.jsonl` is exposed the same
+  way once the project has gone unused for longer than the period.
+- Records that existed only in a deleted file cannot be verified again:
+  `verify_chain()` checks what is still on disk.
+
+Mitigation (no structural cure exists yet; see the end of this section):
+
+1. Set a large `cleanupPeriodDays` at user scope, for example
+   `"cleanupPeriodDays": 3650` in `~/.claude/settings.json` (in
+   `$CLAUDE_CONFIG_DIR/settings.json` when that variable is set). That covers
+   sessions launched in any directory that does not set its own value. A
+   project that sets a smaller value still applies it to sessions
+   launched there. Claude Code ranks local project settings
+   (`.claude/settings.local.json`) above shared project settings, so you
+   can raise the value there, per machine.
+2. Back up the audit files on a schedule with
+   `.claude/scripts/ceo-backup.sh`. It copies `audit-log.jsonl` and the
+   rotated `audit-log-*.jsonl` archives into a tarball under
+   `~/.ceo-backups/<slug>/`, outside the swept tree (cron entry in
+   [`docs/DISASTER-RECOVERY.md`](docs/DISASTER-RECOVERY.md)). Its own
+   rotation keeps 7 daily, 4 weekly and 3 monthly tarballs by default:
+   raise `--keep-monthly`, or copy the tarballs elsewhere, if you need a
+   longer window.
+3. Do not `touch` audit files to postpone deletion. That rewrites the
+   modification times that forensic review relies on.
+
+As of 2026-09-23 no plan carries a structural cure (rotating archives
+out of the file shape the sweep deletes). The gap is recorded as row G1
+of [`docs/substrate-adopt-2026-09.md`](docs/substrate-adopt-2026-09.md).
+
+---
+
 ## Uninstall
 
 The recommended approach uses the manifest-aware uninstall script:
@@ -878,47 +999,60 @@ created by `scripts/install.sh` step P2-SEC-H; permissions `0700`).
 
 ## Troubleshooting
 
-### MCP servers — Codex pair-rail (`--mcp-debug`)
+### MCP servers — the retired Codex `.mcp.json` entry
 
-The Codex pair-rail registers as a **project-scope MCP server** via a
-`.mcp.json` file at the target repo root. The framework ships the
-template at `templates/.mcp.json` (server name `codex`, official
-`codex mcp-server` stdio invocation, credentials via `${ENV}` expansion
-only — never a literal key). The install step is idempotent
-EXISTS→SKIP: an adopter's own `.mcp.json` is never overwritten; if the
-file is missing, copy the template to `<target>/.mcp.json` manually.
+Earlier framework releases shipped `templates/.mcp.json` with a
+project-scope MCP server named `codex` that ran `codex mcp-server`.
+codex-cli 0.154.0 removed that deprecated subcommand (release note
+#42993, 2026-09-09). The framework checkout pins Codex in
+`.claude/governance/codex-cli-pin.txt` (the accepted version range) and
+`.claude/governance/codex-cli-pin-manifest.json` (the exact binary). At
+tag `v1.4.1-rc.1` those files pinned codex-cli 0.155.0, inside a range
+that still admitted older versions carrying the subcommand. Installs do
+not receive `.claude/governance/`. Measured 2026-09-22 (UTC-3) on
+codex-cli 0.155.0: `codex mcp-server --help` prints the top-level
+`codex --help`, and `codex mcp-server`, sent an MCP `initialize` request
+on a stdin pipe, exits 1 with `stdin is not a terminal` and writes
+nothing to stdout. On codex-cli 0.155.0 the entry can never complete an
+MCP handshake, so the template now ships an empty `mcpServers` object.
+`install.sh` still delivers the file to maintainer-ceremony targets,
+EXISTS→SKIP as before.
 
-If the `mcp__codex__codex` / `mcp__codex__codex-reply` tools are absent
-from a session, the pair-rail hooks **fail OPEN (silently)** — diagnose
-instead of assuming the rail is active:
+**The pair-rail gate does not use this server.** `check_pair_rail.py`
+runs Codex as a subprocess through `codex exec`, so removing the entry
+changes nothing in that gate. When the Codex binary cannot be found or
+started, the gate fails open and records `pair_rail_codex_unavailable` in
+the audit log. In the framework's own checkout, a binary whose payload
+does not match `.claude/governance/codex-cli-pin-manifest.json` blocks
+instead (ADR-182, fail-closed). Installs do not receive
+`.claude/governance/`, so in an install the gate finds no manifest, and a
+mismatched binary fails open like a missing one and records
+`pair_rail_codex_unavailable`.
+
+**One review path does depend on it.** The server provided the
+`mcp__codex__codex` and `mcp__codex__codex-reply` tools that the settings
+hook matchers govern: `check_codex_filewrite.py` before each call, and
+`check_codex_response.py` after it, whose review-shaped branch emits the
+`codex_review_invoked` event that ADR-145 counts. On Codex 0.154.0 or
+later, and on any Codex version where no MCP server named `codex` is
+registered (this template registers none), no such tool exists, so those
+two hooks never fire.
+
+**Existing maintainer installs keep the old entry.** `install.sh` never
+overwrites an existing `.mcp.json`, and `upgrade.sh` does not touch it. An
+install made from an earlier release therefore keeps the dead `codex`
+entry until you remove it:
 
 ```bash
-# 1. Is the server registered + healthy? (run from the target repo root)
-claude mcp list
-
-# 2. Launch with MCP debug output to see connection/handshake errors
-claude --mcp-debug
-# NOTE: --mcp-debug is a DEPRECATED alias on current CLI versions —
-# prefer:  claude --debug   (optionally filtered: claude --debug mcp)
-
-# 3. Codex CLI present and in the pinned range?
-command -v codex && codex --version
-# install: npm install -g @openai/codex
-# pin range: .claude/governance/codex-cli-pin.txt
-
-# 4. Credentials: set OPENAI_API_KEY in the LAUNCHING shell —
-#    .mcp.json forwards it via ${ENV} expansion, never a literal
-echo "${OPENAI_API_KEY:+set}"
+# from the target repo root
+claude mcp list                     # a line starting "codex: codex mcp-server" is the retired entry
+claude mcp remove codex -s project  # removes it from .mcp.json
 ```
 
-Common failure modes:
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `codex` missing from `claude mcp list` | no `.mcp.json` at repo root | copy `templates/.mcp.json` to `<target>/.mcp.json` |
-| server listed, tools absent in-session | project-scope server not approved | approve when prompted, or `claude mcp reset-project-choices` and restart |
-| handshake/timeout errors under `--mcp-debug` | slow server start | raise `MCP_TIMEOUT` (ms) in the launching env |
-| pair-rail silent (no Codex review on L3+ edits) | any of the above — the rail fails OPEN when Codex is unavailable | run the pre-flight: `.claude/scripts/local/pair-rail-gate.sh` |
+`claude mcp remove` rewrites `.mcp.json`. On Claude Code 2.1.280
+(2026-09-22, UTC-3) it also dropped the file's top-level `_comment` key. If you
+keep notes in that file, delete the `codex` key under `mcpServers` by hand
+instead. To debug any other MCP server, start `claude --debug`.
 
 ---
 

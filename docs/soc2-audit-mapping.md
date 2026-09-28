@@ -277,7 +277,7 @@ baked into current ADRs; actual retention is Owner policy.
 
 | Surface | Retention | Rationale | ADR reference |
 |---|---|---|---|
-| `audit-log.jsonl` (active) | 90 days live on disk | Balance forensic utility vs disk budget; rotation creates `audit-log-YYYY-MM.jsonl` archives | ADR-001 + AUDIT-LOG-SCHEMA.md §6 |
+| `audit-log.jsonl` (active) and its rotated `audit-log-YYYY-MM[-N].jsonl` archives | **Not guaranteed on disk.** 30 days by default; see [Audit-log deletion by Claude Code](#audit-log-deletion-by-claude-code) below | Rotation writes the archives next to the live log, which is exactly the file shape Claude Code's cleanup sweep deletes | ADR-001 + AUDIT-LOG-SCHEMA.md §6; `INSTALL.md` §Audit-log retention |
 | Audit log (cold storage) | 1 year | Compliance investigation window typical for SOC2 scope | ADR-001 (recommendation; Owner sets bucket+lifecycle) |
 | State store (per-plan sqlite) | 30 days default TTL | Scratchpad lifetime ≥ any active plan phase; pruned on plan rollback | ADR-027 §Retention + ADR-034 |
 | Session graph snapshots | 30 days | Derived view; expiration does not lose primary data | ADR-038 |
@@ -286,6 +286,62 @@ baked into current ADRs; actual retention is Owner policy.
 | GPG signing keys (Owner) | 1 year, rotated on Sprint boundary | Key freshness ≤ annual per industry practice | `docs/rotation-log.md` + Owner policy |
 | Squad revocation ledger | Indefinite (append-only) | Revocation is permanent for trust integrity | ADR-039 |
 | OTEL exported spans (third-party collector) | Per-collector policy | Framework emits host-only endpoint; collector retention is operator-chosen | ADR-035 (framework does not enforce) |
+
+### Audit-log deletion by Claude Code
+
+An earlier version of this table claimed "90 days live on disk" for the
+audit log. That claim was false, and an auditor must not rely on it.
+
+The audit log lives in a per-project state directory, by default
+`~/.claude/projects/<slug>/`. Size-based rotation renames the live
+`audit-log.jsonl` to `audit-log-YYYY-MM[-N].jsonl` in that same
+directory. Read in the Claude Code 2.1.280 binary (2026-09-22, UTC-3): at most
+once every 24 hours, a running session's background housekeeping starts
+a cleanup sweep. The sweep walks every project directory under the
+`projects/` directory of Claude Code's config home (`~/.claude` unless
+`CLAUDE_CONFIG_DIR` is set) and unlinks every top-level `*.jsonl` whose
+modification time is older than the `cleanupPeriodDays` of the session
+that runs the sweep. The default is 30 days. The sweep applies no name
+filter. The only content it reads is a marker that exempts transcripts
+of Claude desktop-app sessions, and audit records do not carry that
+marker, so rotated HMAC audit archives are deleted like chat transcripts.
+
+An audit file can therefore be deleted as soon as the time since its last
+write exceeds the `cleanupPeriodDays` of any session that runs the sweep
+on that machine. **The retention you can count on is the smallest
+`cleanupPeriodDays` that any sweeping session resolves (30 days for a
+session that sets none; the schema minimum is 1).**
+
+- That value comes from wherever the sweeping session was launched, not
+  from the project that owns the audit log. A single session started in a
+  directory with no setting, and no user-scope setting, applies 30 days
+  to every project.
+- The framework's maintainer settings template sets `cleanupPeriodDays:
+  90` at project scope. That only bounds sweeps run by sessions launched
+  in that project. The user-ceremony settings template does not set it.
+- A rotated archive stops changing when it is rotated. The live
+  `audit-log.jsonl` falls under the same rule once its project has gone
+  unused for longer than the period.
+- Records that existed only in a deleted file cannot be verified again.
+  `verify_chain()` checks what is still on disk.
+
+Mitigation (no structural cure exists; see the end of this section):
+
+1. Set a large `cleanupPeriodDays` at user scope (for example 3650 in
+   `~/.claude/settings.json`, or in `$CLAUDE_CONFIG_DIR/settings.json` when
+   that variable is set). That covers sessions launched anywhere that
+   does not set its own value. A project that sets a smaller value still
+   applies it to sessions launched there.
+2. Run `.claude/scripts/ceo-backup.sh` on a schedule. It copies the live
+   log and the rotated archives into tarballs under `~/.ceo-backups/<slug>/`,
+   outside the swept tree. Its own rotation keeps 7 daily, 4 weekly and 3
+   monthly tarballs by default, so the cold-storage row above still needs
+   the tarballs copied to storage the Owner controls.
+
+As of 2026-09-23 no plan carries a structural cure (rotating the archives
+out of the file shape the sweep deletes). The gap is recorded as row G1
+of [`docs/substrate-adopt-2026-09.md`](substrate-adopt-2026-09.md). Cite
+the bound above, not a fixed number of days.
 
 ---
 

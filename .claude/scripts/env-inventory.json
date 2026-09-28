@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "_comment": "Canonical inventory of CLAUDE_*/ANTHROPIC_*/CEO_* names referenced by framework code (PLAN-135 W5 O8 — the S218 footgun class). Token-level superset of strictly-consumed vars; see env-inventory-check.py docstring. Regenerate with --generate after any REVIEWED env-surface change.",
   "generated_by": "env-inventory-check.py --generate",
-  "generated_at": "2026-09-17",
+  "generated_at": "2026-09-28",
   "scan_roots": [
     ".claude/hooks",
     ".claude/scripts",
@@ -189,9 +189,10 @@
     },
     "CEO_AUDIT_FAMILY_M4_REQUIRED": {
       "evidence": [
-        ".claude/scripts/derive-audit-family.py"
+        ".claude/scripts/derive-audit-family.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_AUDIT_HMAC_DISABLE": {
       "evidence": [
@@ -891,7 +892,7 @@
         ".claude/scripts/ceo-cost-transcripts.py",
         ".claude/scripts/ceo-cost.py"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CEO_COUNTRY": {
       "evidence": [
@@ -1482,22 +1483,24 @@
     "CEO_LEDGER_CHECKPOINT": {
       "evidence": [
         ".claude/hooks/check_ledger_checkpoint.py",
-        ".claude/settings.json",
-        "templates/settings/settings.base.json"
+        ".claude/scripts/env-inventory.json",
+        ".claude/settings.json"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CEO_LEDGER_CHECKPOINT_REQUIRED": {
       "evidence": [
-        ".claude/hooks/check_ledger_checkpoint.py"
+        ".claude/hooks/check_ledger_checkpoint.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_LEDGER_WRITE_GATE_ENFORCE": {
       "evidence": [
-        ".claude/hooks/_lib/ledger_provenance.py"
+        ".claude/hooks/_lib/ledger_provenance.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_LEGAL_ID": {
       "evidence": [
@@ -2616,9 +2619,10 @@
     },
     "CEO_REPO": {
       "evidence": [
-        ".claude/scripts/check_contamination.py"
+        ".claude/scripts/check_contamination.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_REQUIRE_REPO_PROFILE_FIXTURES": {
       "evidence": [
@@ -2740,9 +2744,10 @@
     },
     "CEO_SESSION_MEMORY_DELTA": {
       "evidence": [
-        ".claude/hooks/SessionEnd.py"
+        ".claude/hooks/SessionEnd.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 1
+      "sites": 2
     },
     "CEO_SESSION_ROOTS_ALLOW": {
       "evidence": [
@@ -3509,31 +3514,33 @@
       "evidence": [
         ".claude/hooks/_lib/launch_ledger.py",
         ".claude/hooks/check_workflow_launch.py",
-        ".claude/settings.json"
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 5
+      "sites": 7
     },
     "CEO_WORKFLOW_RESUME_FORCE": {
       "evidence": [
         ".claude/hooks/_lib/launch_ledger.py",
         ".claude/hooks/check_workflow_launch.py",
-        ".claude/settings.json"
+        ".claude/scripts/ceo-launches.py"
       ],
-      "sites": 5
+      "sites": 7
     },
     "CEO_WORKFLOW_RESUME_GUARD": {
       "evidence": [
         ".claude/hooks/_lib/launch_ledger.py",
-        ".claude/hooks/check_workflow_launch.py"
+        ".claude/hooks/check_workflow_launch.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 2
+      "sites": 7
     },
     "CEO_WORKFLOW_SCRIPT_GUARD": {
       "evidence": [
         ".claude/hooks/_lib/launch_ledger.py",
-        ".claude/hooks/check_workflow_launch.py"
+        ".claude/hooks/check_workflow_launch.py",
+        ".claude/scripts/env-inventory.json"
       ],
-      "sites": 2
+      "sites": 6
     },
     "CEO_WS3_APPLY_OK": {
       "evidence": [
@@ -3593,7 +3600,14 @@
     },
     "CLAUDE_CODE_EFFORT_LEVEL": {
       "evidence": [
+        ".claude/scripts/env-inventory.json",
         "scripts/upgrade.sh"
+      ],
+      "sites": 2
+    },
+    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": {
+      "evidence": [
+        ".claude/scripts/substrate-watch.json"
       ],
       "sites": 1
     },
@@ -3618,7 +3632,14 @@
         ".claude/hooks/turbo_profile.py",
         ".claude/scripts/env-inventory-check.py"
       ],
-      "sites": 11
+      "sites": 12
+    },
+    "CLAUDE_CODE_SUBAGENT_MODEL_FORCE": {
+      "evidence": [
+        ".claude/scripts/substrate-watch.json",
+        "scripts/install-accelerators.sh"
+      ],
+      "sites": 2
     },
     "CLAUDE_CODE_SUBPROCESS_ENV_SCRUB": {
       "evidence": [
@@ -3634,7 +3655,7 @@
         ".claude/settings.json",
         ".claude/workflows/eval-baseline-n20.js"
       ],
-      "sites": 3
+      "sites": 4
     },
     "CLAUDE_DIR": {
       "evidence": [
@@ -3741,7 +3762,7 @@
         ".claude/hooks/SessionStart.py",
         ".claude/hooks/Stop.py"
       ],
-      "sites": 138
+      "sites": 140
     },
     "CLAUDE_PROJECT_DIR_NATIVE": {
       "evidence": [
@@ -3749,7 +3770,7 @@
         ".claude/hooks/_lib/injection_salt.py",
         ".claude/hooks/_lib/runtime_paths.py"
       ],
-      "sites": 10
+      "sites": 11
     },
     "CLAUDE_PY": {
       "evidence": [

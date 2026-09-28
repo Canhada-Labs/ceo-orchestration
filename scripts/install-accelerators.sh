@@ -19,8 +19,17 @@
 #   - Stop                              -> codex_review_user_code.py
 #   - SessionStart                      -> turbo_sessionstart.py  (turbo banner)
 #   - env CLAUDE_CODE_SUBAGENT_MODEL=inherit (normal model resolution; per-agent
-#     `model:` frontmatter governs — NEVER a global override, which is documented to
-#     beat the adopter's explicit model: declarations — S218/PLAN-128-FOLLOWUP)
+#     `model:` frontmatter governs). Since Claude Code 2.1.251 that var is only the
+#     DEFAULT subagent model: an agent definition's `model:` and a per-spawn model
+#     win over it. Before 2.1.251 it overrode both (the S218/PLAN-128-FOLLOWUP
+#     incident). A global value is still never propagated: it would become the
+#     model of every agent that declares none.
+#   - a WARNING (never a write) when CLAUDE_CODE_SUBAGENT_MODEL_FORCE is on in this
+#     shell, in the user settings env ($CLAUDE_CONFIG_DIR/settings.json when that is
+#     set, and ~/.claude/settings.json), or in the app's project/local settings env.
+#     Since Claude Code 2.1.257 it applies the subagent model (or the main model) to
+#     EVERY subagent and ignores `model:` frontmatter and per-spawn models, which
+#     flattens the tiering.
 #   - env CEO_AUDIT_LOG_DIR=<audit-dir>     (CRITICAL: emit lands in the APP's log,
 #         not the framework's per-project ~/.claude/projects/<native-slug> default)
 #
@@ -77,7 +86,7 @@ echo "→ import smoke (from $DST)"
 
 echo "→ merging accelerator entries into $APP/.claude/settings.json"
 FRAMEWORK="$FRAMEWORK" APP="$APP" AUDIT_DIR="$AUDIT_DIR" python3 - <<'PY'
-import json, os, shutil, time
+import json, os, shutil, sys, time
 
 fw = os.environ["FRAMEWORK"]; app = os.environ["APP"]; audit = os.environ["AUDIT_DIR"]
 fw_s = json.load(open(os.path.join(fw, ".claude", "settings.json")))
@@ -121,18 +130,74 @@ for evt in ("PostToolUse", "Stop", "SessionStart", "UserPromptSubmit"):
         print(f"   {evt}: + {cmds}")
 
 env = app_s.setdefault("env", {})
-# S218/PLAN-128-FOLLOWUP: NEVER propagate a global subagent-model override into an
-# app. CLAUDE_CODE_SUBAGENT_MODEL is documented to BEAT per-agent `model:` frontmatter
-# AND per-invocation model params, so a global "haiku" silently downgrades the
-# adopter's deliberately-declared sonnet/opus subagents (confirmed in 3 lab repos).
-# Force "inherit" (normal resolution) — this is also CORRECTIVE: re-running on a
-# previously poisoned app resets it. Announce the reset so a deliberate adopter
-# override is never clobbered silently.
+# S218/PLAN-128-FOLLOWUP: NEVER propagate a global subagent model into an app.
+# Before Claude Code 2.1.251, CLAUDE_CODE_SUBAGENT_MODEL overrode per-agent `model:`
+# frontmatter AND per-invocation model params, so a global "haiku" silently
+# downgraded the adopter's deliberately-declared sonnet/opus subagents (confirmed in
+# 3 lab repos). Since 2.1.251 it is only the DEFAULT, but a global "haiku" still
+# becomes the model of every agent that declares none. Force "inherit" (normal
+# resolution) — this is also CORRECTIVE: re-running on a previously poisoned app
+# resets it. Announce the reset so a deliberate adopter value is never clobbered
+# silently.
 prev = env.get("CLAUDE_CODE_SUBAGENT_MODEL")
 env["CLAUDE_CODE_SUBAGENT_MODEL"] = "inherit"
 if prev not in (None, "inherit"):
     print(f"   reset: CLAUDE_CODE_SUBAGENT_MODEL {prev!r} -> 'inherit' "
-          f"(global override removed; per-agent model: frontmatter governs)")
+          f"(global subagent-model default removed; per-agent model: frontmatter governs)")
+
+# The override role moved to CLAUDE_CODE_SUBAGENT_MODEL_FORCE (Claude Code 2.1.257+):
+# when on, EVERY subagent runs on CLAUDE_CODE_SUBAGENT_MODEL (or the main model) and
+# agent `model:` frontmatter and per-spawn models are ignored (the 2.1.280 binary
+# also ignores a Workflow agent() model under it), which flattens the tiering in
+# either direction. This installer WARNS and never writes it: the realistic carriers
+# are the operator's shell and user settings, outside the reviewed settings files,
+# and an adopter's own settings value is theirs to keep. Checked: this shell's
+# environment, the user settings file, and the app's project and local settings.
+# Not read: managed/policy settings. Claude Code reads user settings from its config
+# home, which is $CLAUDE_CONFIG_DIR when that variable is set and ~/.claude
+# otherwise (read from the 2.1.280 binary on 2026-09-22). A session started from
+# another shell can resolve the other one, so both settings.json files are checked
+# when this shell sets a non-empty CLAUDE_CONFIG_DIR. An unreadable or malformed
+# file is skipped, never fatal: the check is advisory. "On" mirrors Claude Code's
+# env boolean parser (value in 1/true/yes/on after strip + lower; read from the
+# 2.1.280 binary on 2026-09-22).
+FORCE = "CLAUDE_CODE_SUBAGENT_MODEL_FORCE"
+
+def _force_on(value):
+    return value is not None and str(value).strip().lower() in ("1", "true", "yes", "on")
+
+def _settings_env(path):
+    try:
+        with open(path) as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    block = data.get("env") if isinstance(data, dict) else None
+    return block if isinstance(block, dict) else {}
+
+user_paths = []
+for home_dir in (os.environ.get("CLAUDE_CONFIG_DIR"),
+                 os.path.join(os.path.expanduser("~"), ".claude")):
+    if home_dir:
+        candidate = os.path.normpath(os.path.join(home_dir, "settings.json"))
+        if candidate not in user_paths:
+            user_paths.append(candidate)
+local_path = os.path.join(app, ".claude", "settings.local.json")
+carriers = (
+    (("this shell's environment", os.environ.get(FORCE)),)
+    + tuple((p + " env", _settings_env(p).get(FORCE)) for p in user_paths)
+    + ((app_path + " env", env.get(FORCE)),
+       (local_path + " env", _settings_env(local_path).get(FORCE)))
+)
+for where, value in carriers:
+    if _force_on(value):
+        print(f"   WARNING: {FORCE}={value!r} is ON in {where}.\n"
+              f"            Claude Code then runs EVERY subagent on CLAUDE_CODE_SUBAGENT_MODEL\n"
+              f"            (or the main model) and ignores agent model: frontmatter and\n"
+              f"            per-spawn models: the tiering is flattened (a VETO rite can fall\n"
+              f"            below its floor tier, and a cheap rite can run on the main model).\n"
+              f"            This installer does not change it. Unset it unless that is deliberate.",
+              file=sys.stderr)
 env["CEO_AUDIT_LOG_DIR"] = audit
 
 with open(app_path, "w") as f:

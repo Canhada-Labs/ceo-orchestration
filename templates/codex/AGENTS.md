@@ -13,10 +13,11 @@
 1. **NOTHING is enforced until `/hooks` trust is granted.** On codex
    0.139 an untrusted or modified hook is a **silent no-op** — no
    execution, no warning, exit 0. "Installed but untrusted" is
-   indistinguishable from healthy at runtime. After install or ANY change
-   to `.codex/hooks.json`, re-grant trust and run the post-install arming
-   check (`ARMED / NOT-ARMED-(untrusted) / BROKEN` — shipped with the
-   installer, PLAN-155 Wave 5).
+   indistinguishable from healthy at runtime. After install, ANY change
+   to `.codex/hooks.json`, or a Codex upgrade, re-check each hook in
+   `/hooks` and run the post-install arming check
+   (`ARMED / NOT-ARMED-(untrusted) / BROKEN` — shipped with the
+   installer, PLAN-155 Wave 5; `ARMED` covers project trust only).
 2. **Kill-switch surface protection is ABSENT until PLAN-155 Wave 3b
    lands.** The rail's own registration surface — `.codex/hooks.json`,
    `.codex/config.toml`, `.codex/rules/ceo.rules`, `requirements.toml`,
@@ -56,13 +57,24 @@ PLAN-155 / ADR-161.
 - Two gates must BOTH hold before a project hook fires:
   `projects."<absolute project path>".trust_level = "trusted"` in
   `$CODEX_HOME/config.toml`, **and** per-hook trust.
-- The trust hash covers **only the registration entry** (event, matcher,
-  command line, timeout, statusMessage) — **not the hook program's
-  code**. Editing a hook `.py` body does not re-prompt trust; editing one
-  byte of a registered command string flips the hook to `modified` and it
-  silently stops firing. Registration integrity is codex's;
-  hook-BODY integrity is the framework's (canonical-edit guard over
-  `.claude/hooks/**` + the Wave 3b boot re-hash once landed).
+- The trust hash covers **only the registration entry** — **not the hook
+  program's code**. On codex 0.139 that meant event, matcher, command
+  line, timeout and statusMessage; codex 0.155 hashes the whole
+  normalized entry, which has more fields than those five (e.g. a
+  handler's `additionalContextLimit`; `hook_hash()` in upstream
+  `codex-rs/hooks/src/engine/discovery.rs` at `rust-v0.155.0`, read
+  2026-09-22, UTC-3), so the exact
+  field set is a fact about one Codex version. Editing a hook `.py` body does not
+  re-prompt trust; editing one byte of a registered command string flips
+  the hook to `modified` and it silently stops firing. Registration
+  integrity is codex's; hook-BODY integrity is the framework's
+  (canonical-edit guard over `.claude/hooks/**` + the Wave 3b boot
+  re-hash once landed).
+- **A Codex upgrade can re-key every hook** while `.codex/hooks.json`
+  stays unchanged: a config holding hashes trusted under the old version
+  then lists the hooks as `modified`. After upgrading Codex, re-check
+  `/hooks`. The arming check reads project trust only and still prints
+  `ARMED` in that state.
 - Headless trust (`[hooks.state]` entries) is scriptable. Any tool that
   writes trust entries for you MUST print them and get your confirmation
   first — trust is consent, not a config bit.

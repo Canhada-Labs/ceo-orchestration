@@ -24,9 +24,22 @@ Options:
 
 ## Determinism + variance
 
-Per PLAN-002 §15 debate finding #2: `temperature=0`, `top_p=1`, fixed
-model ID (not `latest`), N runs per scenario. Raw per-run scores are
-stored in `raw_scores:` so variance can be tracked historically.
+Model output is NOT deterministic, and the runner does not try to make
+it so: it sends no sampling parameters (`temperature` / `top_p` /
+`top_k`). The PLAN-002 §15 debate finding #2 recipe (`temperature=0`
+plus `top_p=1`) cannot run on the current stack. The anthropic Python
+SDK 1.x no longer accepts those keyword arguments on `messages.create`
+(passing one is a `TypeError`). Claude 4+ models, the default Haiku 4.5
+included, reject a request that carries both `temperature` and `top_p`
+(HTTP 400). Opus 4.7 and later (Opus 4.8, Opus 5, Opus 5.5, Fable 5 /
+5.1) reject any one of them, the default value included, and Sonnet 5
+rejects non-default values. Source: the claude-api reference bundled
+with Claude Code 2.1.280, read 2026-09-22; the same reference notes
+that `temperature=0` never guaranteed identical outputs. Variance is
+contained and made visible instead: a fixed model ID (not `latest`), N
+runs per scenario, the worst-of-N aggregation and the `flaky` flag
+below. Raw per-run scores are stored in `raw_scores:` so variance can
+be tracked historically.
 
 ### Aggregation (PLAN-133 C1 — worst-of-N + flaky)
 
@@ -466,12 +479,12 @@ async def call_api(
     last_error = None
     for attempt in range(3):
         try:
+            # No sampling parameters: see "Determinism + variance" in the
+            # module docstring (SDK 1.x TypeError; HTTP 400 on current models).
             resp = await asyncio.to_thread(
                 client.messages.create,
                 model=model,
                 max_tokens=max_tokens,
-                temperature=0,
-                top_p=1,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_prompt}],
             )

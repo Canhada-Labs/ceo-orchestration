@@ -3883,8 +3883,11 @@ def _emit_ceo_boot_check_skipped_safe(
 # marker block per top-3 high/medium recommendation when gate_pass=False,
 # dedup'd by 12-hex subject_hash via a 24h TTL state file under
 # `_lib/filelock`. The Claude orchestrator running /ceo-boot reads the
-# marker blocks and invokes TaskCreate; this script never touches the
-# TaskCreate harness primitive directly. Audit emit goes through
+# marker blocks and invokes TaskCreate when the session offers it, or
+# renders the candidates inline when it does not (the task tools are
+# model-dependent since Claude Code 2.1.233 — commands/ceo-boot.md
+# Step 4.5); this script never touches the TaskCreate harness primitive
+# directly, so the marker format is the same either way. Audit emit goes through
 # `audit_emit.emit_ceo_boot_task_candidate_emitted` (hasattr-guarded
 # pre-canonical-ceremony per the W5 staging→canonical model).
 

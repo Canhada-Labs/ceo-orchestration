@@ -1,6 +1,6 @@
 ---
 description: Run or advance a structured multi-round debate on a plan — /debate start|round2|round3|status PLAN-NNN
-allowed-tools: Read, Write, Edit, Bash, Glob, Grep, TaskCreate, TaskUpdate, TaskList, Agent
+allowed-tools: Read, Write, Edit, Bash, Glob, Grep, Agent
 ---
 
 # /debate — Multi-round plan debate orchestration

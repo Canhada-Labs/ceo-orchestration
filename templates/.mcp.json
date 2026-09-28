@@ -1,13 +1,4 @@
 {
-  "_comment": "ceo-orchestration — project-scope MCP registration for the Codex pair-rail (PLAN-135 W1 S5-lite). scripts/install.sh copies this file to the target repo root as .mcp.json (idempotent EXISTS->SKIP — an adopter's own .mcp.json is never overwritten; maintainer ceremony only). The 'codex' server name yields the mcp__codex__codex / mcp__codex__codex-reply tools that the settings.json hook matchers govern (check_codex_filewrite PreToolUse, check_codex_response PostToolUse, check_pair_rail). Credentials travel via ${ENV} expansion ONLY — never hardcode a key in this file. The codex binary is resolved from PATH (pre-flight: .claude/scripts/local/pair-rail-gate.sh asserts presence + the version pin in .claude/governance/codex-cli-pin.txt). OPENAI_API_KEY uses the :-empty default so adopters authenticated via ChatGPT login (~/.codex) are not hard-failed by an unset var. Troubleshooting: claude --mcp-debug (deprecated alias of claude --debug) — see INSTALL.md §Troubleshooting.",
-  "mcpServers": {
-    "codex": {
-      "type": "stdio",
-      "command": "codex",
-      "args": ["mcp-server"],
-      "env": {
-        "OPENAI_API_KEY": "${OPENAI_API_KEY:-}"
-      }
-    }
-  }
+  "_comment": "ceo-orchestration — project-scope MCP registration template (PLAN-135 W1 S5-lite). INTENTIONALLY EMPTY. Earlier framework versions registered a 'codex' server here that ran `codex mcp-server`. codex-cli 0.154.0 removed that deprecated subcommand (#42993). On codex-cli 0.155.0 (measured 2026-09-22, UTC-3) `codex mcp-server --help` prints the top-level `codex --help`, and `codex mcp-server` is taken as a prompt for the interactive CLI: sent an MCP initialize request on a stdin pipe, it exits 1 with 'stdin is not a terminal' and writes nothing to stdout. An approved entry could therefore never complete an MCP handshake. The pair-rail gate (check_pair_rail.py) does not depend on it: it runs Codex as a subprocess through `codex exec`. The mcp__codex__codex / mcp__codex__codex-reply hooks (check_codex_filewrite.py, check_codex_response.py and its ADR-145 codex_review_invoked event) fire only when a server named 'codex' provides those tools, so they stay idle while none is registered. scripts/install.sh still copies this file to the target repo root as .mcp.json (idempotent EXISTS->SKIP — an adopter's own .mcp.json is never overwritten; maintainer ceremony only). Add your own servers under mcpServers, and pass credentials by ${ENV} expansion only — never hardcode a key in this file. An install that already carries the old 'codex' entry keeps it until you remove it — see §Troubleshooting in the ceo-orchestration framework's INSTALL.md (install.sh does not copy INSTALL.md into the target).",
+  "mcpServers": {}
 }

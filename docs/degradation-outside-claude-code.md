@@ -32,7 +32,17 @@ carried into every ENFORCED cell:
   installed-but-untrusted hook is a silent no-op in both, indistinguishable
   from healthy at runtime; the installer's arming check
   (`ARMED / NOT-ARMED-(untrusted) / BROKEN`, and `grok inspect` for grok)
-  is the only local detector.
+  is the framework's only local detector. Under Codex it has a gap:
+  `ARMED` reads project trust only, so per-hook trust state has to be read
+  from Codex itself: the `/hooks` view, or (on codex-cli 0.155.0)
+  `codex app-server` `hooks/list`. Codex keys per-hook trust to a hash of each
+  registration entry, and a Codex upgrade can change that hash for every
+  hook while `.codex/hooks.json` stays byte-identical. Measured 2026-09-22
+  (UTC-3) with `codex app-server` `hooks/list`: the nine of the twelve shipped
+  entries whose fields match the codex-cli 0.139.0 recording all hash
+  differently under codex-cli 0.155.0, and a Codex config holding the
+  0.139-era hashes lists every one of them as `modified`. **After a Codex
+  upgrade, re-check `/hooks`.**
 - **Fail-open is the default failure mode in both.** A hook that times out
   (grok default 5s), crashes, or emits malformed/foreign JSON waves the
   tool call through with no model-visible signal
@@ -64,7 +74,7 @@ with the residual in the claim.
 |------|----------------|----------------------------------------|-----------------------------------------|------------|
 | Canonical-edit guard (`check_canonical_edit.py`) | PreToolUse blocks `Edit`/`Write`/`MultiEdit` and write-shaped `mcp__*` against canonical paths unless an Owner-signed GPG sentinel exists | **ENFORCED** (edit-time) — PreToolUse `apply_patch\|Edit\|Write\|mcp__.*` → deny; every path in a multi-file patch gated. Residual: complex-shell smuggle + `apply_patch` Update-hunk content (path gate still fires); backstop `^Bash$` + CODEOWNERS | **ENFORCED** (edit-time) — `pre_tool_use` `search_replace\|run_terminal_command\|mcp__.*` → deny (grok's native tool names); every path in a multi-file edit gated. Same complex-shell residual; backstop `run_terminal_command` rail + CODEOWNERS | Nothing intercepts. Any editor writes `team.md`, hooks, or skills freely. Backstops are server-side: CODEOWNERS + branch protection |
 | Arbitration-kernel hard-deny (`check_arbitration_kernel.py`) | The guard hooks and `_lib` primitives *themselves* cannot be edited even with a sentinel (only an explicit audited override) | **ENFORCED** (edit-time) — unconditional deny on kernel paths, any kernel path in a multi-file patch | **ENFORCED** (edit-time) — unconditional deny on kernel paths, same as Codex | Those files are editable like any others |
-| Bash safety (`check_bash_safety.py`) | Destructive commands (`rm -rf` flag combos, `git reset --hard`, force-push) blocked before execution | **ENFORCED** — `^Bash$` runs our parser + `.codex/rules/ceo.rules` coarse `prefix_rule` backstop. Residual: Codex "doesn't intercept all shell calls yet, only the simple ones"; the hook applies our own parser on every event that fires | **ENFORCED** — `pre_tool_use` on `run_terminal_command` (grok's native name for `Bash`) runs our parser. Residual: the hook fires only on the events grok surfaces; the `_e3` whole-command gate stays fail-closed on input | No pre-execution gate; your shell runs whatever is typed |
+| Bash safety (`check_bash_safety.py`) | Destructive commands (`rm -rf` flag combos, `git reset --hard`, force-push) blocked before execution | **ENFORCED** — `^Bash$` runs our parser + `.codex/rules/ceo.rules` coarse `prefix_rule` backstop. Residual: Codex "doesn't intercept all shell calls yet, only the simple ones"; the hook applies our own parser on every event that fires. Leave the opt-in `CEO_BASH_FORCE_PUSH_REWRITE` unset under Codex: with it set, the Codex adapter answers a force-push with a plain `allow` and drops the `--force-with-lease` rewrite, and `git push origin main --force` matches no `ceo.rules` prefix (measured 2026-09-22, UTC-3; [INSTALL.md](../INSTALL.md)) | **ENFORCED** — `pre_tool_use` on `run_terminal_command` (grok's native name for `Bash`) runs our parser. Residual: the hook fires only on the events grok surfaces; the `_e3` whole-command gate stays fail-closed on input | No pre-execution gate; your shell runs whatever is typed |
 | Spawn governance (`check_agent_spawn.py`) | Agent spawns without the required profile/skill/file-assignment sections are blocked | **ADVISORY** — SubagentStart `continue:false` is parsed but does NOT stop the subagent (verified 0.139). `additionalContext` injects the requirement; Bash-routed spawns re-gain the ENFORCED gate; Wave 6 chain scan is the backstop. Never enforced | **ADVISORY** — the `Task`→`spawn_subagent` alias exists but SubagentStart is passive and cannot deny. `additionalContext` injects the requirement; spawns routed via `run_terminal_command` re-gain the ENFORCED gate; pre-push/CI scan is the backstop. Never enforced | No `Agent` tool at all; the spawn protocol is prose in `.claude/team.md` |
 | Plan lifecycle (`check_plan_edit.py`) | Illegal plan-status transitions blocked at edit time | **ENFORCED** (edit-time) — PreToolUse on `.claude/plans/**`; Add-op content reconstructed per-op. Residual: Update-hunk content gap (path gate fires); CI schema checks at push | **ENFORCED** (edit-time) — `pre_tool_use` on `.claude/plans/**`. Residual: CI schema checks at push | Convention only at edit time; some drift caught later by CI schema checks, at push |
 | Skill-patch + VETO-floor sentinels (`check_skill_patch_sentinel.py`, `check_tier_policy.py`) | `SKILL.md` edits require a signed SP-NNN proposal; reviewer-agent `model:` changes require a dedicated sentinel | **ENFORCED** (edit-time) via the same canonical/PreToolUse rail | **ENFORCED** (edit-time) via the same canonical/`pre_tool_use` rail | Gone at edit time; CI + CODEOWNERS partially compensate at push |
@@ -152,7 +162,8 @@ rely on the push-time gates, and run `audit-verify-chain.py` plus
 additionally confirm the arming check reports **ARMED** (Codex) or that
 `grok inspect` shows the hooks armed and the version/SHA on-pin (Grok) —
 installed is not armed, and a trusted folder is not trusted-forever (Codex
-trust re-keys when a hook registration string changes; Grok folder-trust
-must survive an un-drifted binary). CI certifies fixture-replay against a
-recorded wire; only local live-fire certifies the real binary, per pinned
-version. See also [HONEST-LIMITATIONS.md](HONEST-LIMITATIONS.md).
+trust re-keys when a hook registration entry changes, and when a Codex
+upgrade changes how that entry is hashed — `ARMED` does not see either,
+so open `/hooks`; Grok folder-trust must survive an un-drifted binary).
+CI certifies fixture-replay against a recorded wire; only local live-fire
+certifies the real binary, per pinned version. See also [HONEST-LIMITATIONS.md](HONEST-LIMITATIONS.md).
