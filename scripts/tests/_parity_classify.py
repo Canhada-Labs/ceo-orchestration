@@ -141,6 +141,23 @@ ACCEPTED: List[Tuple[str, Optional[str], str]] = [
         "FU-ADR-README-SEED, not this gate's business",
     ),
     (
+        r"^\.mcp\.json$",
+        "maintainer",
+        "seed-once project-root template, same family as CLAUDE.md/MEMORY.md "
+        "above, and the authority is STRUCTURAL: install.sh writes it from "
+        "the `_FIXED_TEMPLATES_MAINTAINER` rows (install_template, "
+        "EXISTS->SKIP, maintainer ceremony only), `.mcp.json` is absent from "
+        "`_framework_target_entries` (scripts/_framework_manifest_set.sh) and "
+        "upgrade.sh never writes it — the adopter owns its MCP servers. The "
+        "divergence stayed invisible until S357 only because the template had "
+        "not changed since v1.2.0: PLAN-193 emptied `mcpServers` (the old "
+        "'codex' entry runs `codex mcp-server`, which codex-cli 0.154.0 "
+        "removed), and an install made from an older release keeps that entry "
+        "until the adopter removes it (CHANGELOG [1.4.2]). Every row of that "
+        "list must be declared here: "
+        ".claude/scripts/tests/test_parity_seed_once_declared.py",
+    ),
+    (
         r"^PROTOCOL\.md$",
         "maintainer",
         "generated pointer. install.sh substitutes the resolved SOURCE_DIR; "
