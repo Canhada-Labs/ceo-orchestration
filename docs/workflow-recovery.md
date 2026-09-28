@@ -22,9 +22,9 @@ regressed 11 slices; exact args resumed 12/12 in the right phase.
 
 | moment | what | where |
 |---|---|---|
-| before dispatch | `launch_id`, instant, `session_id`, `tool_use_id`, `cwd`; script fingerprint (`sha256` + bytes) **and a snapshot of the script bytes** (inline text, or the `scriptPath` file as read at that instant); **`args` as literal canonical JSON, never truncated** — an absent `args` field is recorded as `<absent>`, distinct from `null`; `resumeFromRunId`; `name` / `description` | `<state-dir>/launches/<launch_id>.json` (atomic, 0600) + `<launch_id>.script` + index `launches.jsonl` |
+| before dispatch | `launch_id`, instant, `session_id`, `tool_use_id`, `cwd`; script fingerprint (`sha256` + size); **a snapshot of an INLINE script's text**; for a `scriptPath`, the path, `sha256` and size only — the file is read to hash it and its bytes are NOT written (`script_snapshot_why: awaiting_post_tool_use`): this half runs before the harness's permission decision (FN-04, below); **`args` as literal canonical JSON, never truncated** — an absent `args` field is recorded as `<absent>`, distinct from `null`; `resumeFromRunId`; `name` / `description` | `<state-dir>/launches/<launch_id>.json` (atomic, 0600) + `<launch_id>.script` (inline scripts) + index `launches.jsonl` |
 | right after (same hook) | code revision of `cwd` (`git rev-parse HEAD`, dirty flag) inside a 1.2 s budget with `--no-optional-locks`; slow or absent git ⇒ `code.status: unknown` — the manifest is already on disk | same manifest (second atomic write) |
-| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. An unknown `tool_use_id`, or zero or several candidates, becomes an `orphan` index line; a response with no run id, with two different labelled ids, or with two different unlabelled ids, records nothing and the launch stays unbound. Two cases are NOT treated as ambiguous (known-open, see Limitations): a top-level `runId` and `run_id` that differ (the first wins), and an id whose tail is too long (its prefix is bound). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot` | manifest (`run_id`, `bound_at`, `bind_method`) + a `bind` line |
+| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. An unknown `tool_use_id`, or zero or several candidates, becomes an `orphan` index line; a response with no run id, with two different labelled ids, or with two different unlabelled ids, records nothing and the launch stays unbound. Two cases are NOT treated as ambiguous (known-open, see Limitations): a top-level `runId` and `run_id` that differ (the first wins), and an id whose tail is too long (its prefix is bound). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot`. **The `scriptPath` snapshot is taken here, and only by the bind by `tool_use_id`** — the PostToolUse of that same call, which the harness fires after it allowed and ran the call — and only when the response reports the id as the run it launched (the `Run ID:` label or a top-level `runId`/`run_id` key; a bare id token is `run_id_not_labelled`): the file is read again (same bounded reader, relative to the `cwd` recorded before dispatch) and written as `<launch_id>.script` only when its bytes hash to the `sha256` recorded before dispatch; otherwise nothing is written and `script_snapshot_why` says why (`changed_after_dispatch`, `unreadable_after_dispatch:<why>`, `write_failed:<type>`, `error:<type>`). The heuristic bind (that PostToolUse may belong to another call) and a manual `bind` never take a snapshot (`not_bound_by_tool_use`) and read no file outside the ledger's own index and manifests; only the bind by `tool_use_id` reads — the `scriptPath` file to take the snapshot, and the harness copy named in the response only to compare it with a snapshot the record holds. A `scriptPath` unreadable before dispatch has no hash and is never read afterwards | manifest (`run_id`, `bound_at`, `bind_method`, `script_snapshot`) + `<launch_id>.script` (`scriptPath`) + a `bind` line |
 
 `<state-dir>` is the project's runtime state dir (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir`),
 the same family as the audit log. Nothing from transcripts is stored; `args` are the operator's own inputs.
@@ -38,7 +38,7 @@ A call with `resumeFromRunId` is compared with the manifest **currently bound to
 | same script hash, same `args` | `match` | `{}` |
 | **`args` differ** (per top-level key, or the same keys in another order — the script sees the order) | `mismatch_blocked` | **block**, counts-only reason |
 | script hash differs, `args` same | `mismatch_script_advisory` | `systemMessage` (allowed) — `CEO_WORKFLOW_SCRIPT_GUARD=enforce` turns it into a block (`mismatch_script_blocked`) when the bind is strong |
-| `args` identical, but a script hash is unavailable (unreadable `scriptPath`, a `name`d workflow) | `inconclusive` | `{}` — never a block, never a match; different `args` still block |
+| `args` identical, but a script hash is unavailable (unreadable `scriptPath`, a `name`d workflow, or a `scriptPath` record without a snapshot — its hash was never corroborated after dispatch) | `inconclusive` | `{}` — never a block, never a match; different `args` still block |
 | the recorded manifest fails its integrity check (below) | `inconclusive` (`integrity: <code>`) | `{}` — an inconsistent record is evidence of nothing |
 | the guard itself raised | `inconclusive` (`error: <type>`) | `{}` — recorded, the call's manifest still written |
 | no manifest bound to that run | `no_manifest` | `{}` |
@@ -86,13 +86,16 @@ allowed call with something to say (forced, or an advisory) returns the same tex
 **Records are validated before they are evidence.** The manifest bound to a run is checked before any
 comparison and before `relaunch`/`check` use it: schema; launch id, run id and bind method shapes;
 `args` present/canonical/sha256 mutually consistent; the script sha256 equal to the hash of its
-snapshot bytes. Any inconsistency is `inconclusive` for the guard, `rc 6` for `check`, and `rc 7`
+snapshot bytes whenever the record names a snapshot (an inline record must name one; a `scriptPath`
+record without one is valid, but its hash — never corroborated after dispatch — makes the script
+comparison inconclusive, while `args` are still compared). Any inconsistency is
+`inconclusive` for the guard, `rc 6` for `check`, and `rc 7`
 (nothing printed or copied as exact) for `relaunch`. `relaunch` holds the snapshot bytes it is about
 to print and copy — a second read — to the same recorded hash: bytes that cannot be read back, or
 that no longer hash to the record, are `rc 7` too. A missing script hash is not an
-unavailable one: the `sha256` field must agree with the recorded source (inline or a path read at
-launch ⇒ a hash that its snapshot bytes reproduce; a path unreadable at launch, a named workflow or no
-script ⇒ `null`). If the construction of the record itself fails (for example `args` nested past the
+unavailable one: the `sha256` field must agree with the recorded source (inline ⇒ a hash that its
+snapshot bytes reproduce; a path read at launch ⇒ a hash, reproduced by its snapshot bytes when there
+is a snapshot; a path unreadable at launch, a named workflow or no script ⇒ `null`). If the construction of the record itself fails (for example `args` nested past the
 interpreter's recursion limit), the call is still recorded with the error and the guard result is
 `inconclusive`; a write failure leaves a stderr breadcrumb. Index lines that are not JSON objects with a
 string `kind`, or that carry an ill-shaped launch id, are skipped. Records are written ASCII-escaped,
@@ -129,7 +132,11 @@ python3 .claude/scripts/ceo-launches.py show wf_<id>
 #    args are printed in the ORIGINAL key order; rc 7 and nothing announced as exact when the record
 #    fails its integrity check, when the snapshot about to be printed cannot be read back unchanged,
 #    or when its script was unreadable at launch; for a NAMED workflow it prints the name and the
-#    args — the content saved under that name is not verified.
+#    args — the content saved under that name is not verified. A scriptPath launch has a snapshot
+#    only when the PostToolUse half of the same call took it (see "What is recorded"); without one,
+#    relaunch is rc 7: the args are exact, the recorded sha256 and size are printed, and the
+#    original file is reported against that sha256 (unchanged / CHANGED / unreadable) — nothing
+#    is printed or copied as the exact script, and --out refuses, naming why (rc 7).
 #    --out FILE publishes a copy of the snapshot as a NEW file. The command creates a private
 #    directory (.ceo-launches-out-<hex>, mode 0700 requested) inside FILE's directory, so on the
 #    same filesystem, and writes the bytes to an exclusive temporary inside it (created
@@ -171,8 +178,8 @@ python3 .claude/scripts/ceo-launches.py show wf_<id>
 #    names the leftover directory. A FILE whose last component names no file (empty, ".", "..",
 #    or a path ending in /) is refused, rc 2.
 #    --out with nothing to copy (a named workflow, also with --out ""; a script not recorded at
-#    launch, for a record the hook wrote) creates no file and never exits 0: rc 2 for a named
-#    workflow, rc 7 for an unrecorded script, the reason on stderr. Every rc 2 of --out above is
+#    launch, for a record the hook wrote; a scriptPath launch without a snapshot) creates no file
+#    and never exits 0: rc 2 for a named workflow, rc 7 for the other two, the reason on stderr. Every rc 2 of --out above is
 #    rc 7 instead when the record's script was not recorded at launch: the hook never writes a
 #    snapshot for such a record, so only a hand-edited manifest that carries one reaches the copy,
 #    and a refusal of that copy stays rc 7 (v1.4.1 answered 2). Use a copy only from a run that
@@ -237,11 +244,24 @@ is PLAN-190 W6.
   launch recorded and `bind` closes it by hand.
 - No audit event is emitted (registering a new action is the audit owner's ceremony); the manifests
   are the record. Manifests are never pruned (a `gc --keep-days` is a follow-up).
-- **Retention and privacy.** The ledger keeps the literal `args` and a snapshot of every script
-  indefinitely, under the per-project state dir (files 0600, dir 0700) — the same material the harness
+- **Retention and privacy.** The ledger keeps the literal `args` indefinitely, and the snapshot of
+  every inline script and of every `scriptPath` file that the PostToolUse half of its own call found
+  unchanged, under the per-project state dir (files 0600, dir 0700) — the same material the harness
   itself keeps for finished runs. `show` and `relaunch` print the `args` back, so whatever a caller put
   in them (issue text, a token) reaches the reader's context again. Backups of the state dir include
   the ledger.
+- **Before the permission decision (FN-04).** The PreToolUse half runs before the harness decides
+  the call. It writes no byte of the file a `scriptPath` names — but it still OPENS and READS that
+  file (the same bounded reader) to compute its `sha256` and size, and records both in the manifest
+  (the `sha256` also in the index line), whether or not the harness then allows the call: whoever can read the state
+  dir can test a guess of that file's content against the hash, and on a resume the guard's result
+  depends on those bytes. The snapshot after dispatch re-reads the PATH; it is not a copy of what
+  the harness ran: if what that path resolves to changes between the PreToolUse read, the harness's
+  own check and the PostToolUse read, the snapshot can hold bytes other than the ones the harness
+  checked — never bytes that fail to hash to the value recorded before dispatch. The cure relies on
+  the harness firing PostToolUse only for a call it allowed and ran. Snapshots that earlier versions
+  of this hook wrote at PreToolUse stay in `launches/`: this version removes none, and deleting one
+  makes its record fail the integrity check (`inconclusive` for the guard, rc 7 for `relaunch`).
 - **One project context.** The ledger is per project dir: a launch recorded under one project dir and a
   resume issued from a session whose project dir is a different worktree of the same repo find no
   manifest (`no_manifest`, allowed and recorded).

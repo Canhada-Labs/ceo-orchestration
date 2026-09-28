@@ -6,7 +6,11 @@ subprocess, JSON event on stdin, decision JSON on stdout. Every case isolates
 ``CLAUDE_PROJECT_DIR``/``HOME``/audit env into a temp tree (TestEnvContext
 discipline — the live ~/.claude is never touched).
 
-What is proven: a manifest AND a script snapshot exist before dispatch;
+What is proven: a manifest exists before dispatch, with a snapshot of an
+INLINE script; a file named by ``scriptPath`` is recorded before dispatch by
+path, sha256 and size only, and its bytes are snapshotted by the PostToolUse
+half of the same call (bound by ``tool_use_id``) when they still hash to that
+value — never before the permission decision (FN-04, PLAN-193 W4b);
 ``args`` absent ≠ ``null``; a resume over different args is blocked with a
 COUNTS-ONLY reason (no key names, no values); a resume over a different script
 with the same args is ADVISORY (allowed, systemMessage) unless the script
@@ -20,6 +24,7 @@ non-Workflow tool ⇒ ``{}``; the hook never exits non-zero.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -142,14 +147,26 @@ class CheckWorkflowLaunchE2E(TestEnvContext):
         self.assertEqual(json.loads(m["args"]["canonical"])["k"], 1)
         self.assertEqual(len(json.loads(m["args"]["canonical"])["blob"]), 5_000_000)
 
-    def test_script_path_is_hashed_and_snapshotted_from_disk(self):
+    def test_script_path_is_hashed_before_dispatch_and_snapshotted_after(self):
+        # FN-04 (PLAN-193 W4b): before dispatch, a scriptPath is recorded by path, sha256 and size
+        # only; its bytes are snapshotted by the PostToolUse half of the SAME call (tool_use_id).
         sp = self.proj / "wf.js"
         sp.write_text(SCRIPT_A, encoding="utf-8")
         self._run(self._pre({"scriptPath": "wf.js", "args": {}}))
         m = self._load(self._manifests()[0])
         self.assertEqual(m["script"]["source"], "path")
         self.assertEqual(m["script"]["bytes"], len(SCRIPT_A.encode("utf-8")))
-        self.assertTrue(m["script_snapshot"])
+        self.assertEqual(m["script"]["sha256"], hashlib.sha256(SCRIPT_A.encode("utf-8")).hexdigest())
+        self.assertIsNone(m["script_snapshot"], "no bytes of a scriptPath file before the permission decision")
+        self.assertEqual(m["script_snapshot_why"], "awaiting_post_tool_use")
+        self.assertEqual(sorted(p.name for p in self._manifests()[0].parent.glob("*.script")), [])
+        self._run(self._post("Run ID: %s" % RUN, tool_use_id="tu-1"))
+        m = self._by_tool_use("tu-1")
+        self.assertEqual((m["run_id"], m["bind_method"]), (RUN, "by_tool_use"))
+        snap = self._manifests()[0].parent / m["script_snapshot"]
+        self.assertEqual(snap.read_bytes(), SCRIPT_A.encode("utf-8"), "the snapshot taken after dispatch is the hashed bytes")
+        self.assertEqual(stat.S_IMODE(snap.stat().st_mode), 0o600)
+        self.assertIsNone(m["script_snapshot_why"])
 
     def test_manifest_written_even_when_git_is_slow(self):
         fake_bin = Path(self._tmp.name) / "bin"
@@ -925,6 +942,226 @@ class CheckWorkflowLaunchE2E(TestEnvContext):
         self.assertEqual(os.readlink(str(copy)), str(elsewhere))
         self.assertFalse(os.path.lexists(str(elsewhere)), "a symlink is never followed")
         self.assertEqual(set(os.listdir(str(self.proj))), (before - {"link.staged"}) | {"copy.js"}, "no temporary left behind")
+
+    # --- FN-04 (PLAN-193 W4b, v1.4.2): no bytes of a scriptPath file before the permission decision ---
+    # The PreToolUse half runs BEFORE the harness decides the call; a read-deny rule on the file a
+    # scriptPath names does not cover a copy written elsewhere. The tests marked RED fail on
+    # 1c94a19c, whose PreToolUse wrote that file's bytes to launches/<launch_id>.script.
+    def _canary(self, directory: Path, name: str = "secret.env") -> "tuple[Path, bytes]":
+        token = ("S357-CANARY-%s" % os.urandom(8).hex()).encode("ascii")
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / name
+        path.write_bytes(b"API_KEY=" + token + b"\n")
+        return path, token
+
+    def _state_files_holding(self, token: bytes) -> list:
+        hits = []
+        for p in sorted((self.home / ".claude" / "projects").rglob("*")):
+            if p.is_file() and not p.is_symlink() and token in p.read_bytes():
+                hits.append(str(p))
+        return hits
+
+    def test_red_pre_tool_use_never_writes_the_bytes_of_the_file_a_script_path_names(self):
+        # The S357 canary: the harness is about to DENY this call (no PostToolUse follows). Inside
+        # the project (a relative .env) and outside it (an absolute path), nothing of the file's
+        # CONTENT may reach the project state dir; only its path, sha256 and size are recorded.
+        inside, token_in = self._canary(self.proj, ".env")
+        outside, token_out = self._canary(Path(self._tmp.name) / "elsewhere")
+        for tu, sp, token, path in (("tu-in", ".env", token_in, inside), ("tu-out", str(outside), token_out, outside)):
+            out = self._run(self._pre({"scriptPath": sp, "args": {"k": 1}}, tool_use_id=tu))
+            self.assertEqual(out, {})
+            self.assertEqual(self._state_files_holding(token), [], "bytes of %s landed in the state dir before the permission decision" % sp)
+            m = self._by_tool_use(tu)
+            self.assertEqual((m["script"]["source"], m["script"]["path"]), ("path", sp))
+            self.assertEqual(m["script"]["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
+            self.assertEqual(m["script"]["bytes"], len(path.read_bytes()))
+            self.assertIsNone(m["script_snapshot"])
+        self.assertEqual(sorted(self._manifests()[0].parent.glob("*.script")), [], "no snapshot file exists at all")
+
+    def test_red_a_call_that_never_reached_its_post_tool_use_is_never_snapshotted_by_a_heuristic_bind(self):
+        # A denied call leaves an unbound launch; an older CLI's PostToolUse without tool_use_id then
+        # binds it heuristically (the single unbound launch of the session). That PostToolUse belongs to
+        # ANOTHER call, so it proves nothing about this one: the file is never read for a snapshot.
+        secret, token = self._canary(Path(self._tmp.name) / "elsewhere")
+        self._run(self._pre({"scriptPath": str(secret), "args": {"k": 1}}, tool_use_id="tu-denied"))
+        self._run(self._post("Run ID: %s" % RUN, tool_use_id=None))
+        m = self._by_tool_use("tu-denied")
+        self.assertEqual(m["bind_method"], "by_single_unbound")
+        self.assertIsNone(m["script_snapshot"])
+        self.assertEqual(m["script_snapshot_why"], "not_bound_by_tool_use")
+        self.assertEqual(self._state_files_holding(token), [])
+        d = self._manifests()[0].parent
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(self.proj / "copy.js"))
+        self.assertEqual(rc, 7, out + err)
+        self.assertIn("no snapshot", err)
+        self.assertIn("not_bound_by_tool_use", err)
+        self.assertNotIn("exact recorded call", out)
+        self.assertNotIn("snapshot copied to", out)
+        self.assertFalse(os.path.lexists(str(self.proj / "copy.js")))
+
+    def test_red_the_snapshot_after_dispatch_holds_only_bytes_that_hash_to_the_value_recorded_before(self):
+        # Between the PreToolUse read and the PostToolUse read the path changed: the second read is
+        # not the bytes the record describes, so nothing is written and the record says why.
+        sp = self.proj / "wf.js"
+        sp.write_text(SCRIPT_A, encoding="utf-8")
+        self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}}))
+        secret, token = self._canary(Path(self._tmp.name) / "elsewhere")
+        sp.unlink()
+        sp.symlink_to(secret)
+        self._run(self._post("Run ID: %s" % RUN, tool_use_id="tu-1"))
+        m = self._by_tool_use("tu-1")
+        self.assertEqual((m["run_id"], m["bind_method"]), (RUN, "by_tool_use"))
+        self.assertIsNone(m["script_snapshot"])
+        self.assertEqual(m["script_snapshot_why"], "changed_after_dispatch")
+        self.assertEqual(self._state_files_holding(token), [])
+        self.assertEqual(self._state_files_holding(b"return {ok:1}"), [], "and the Pre-time bytes were never written either")
+        d = self._manifests()[0].parent
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN)
+        self.assertEqual(rc, 7, out + err)
+        self.assertIn("changed_after_dispatch", err)
+        self.assertIn('{"slice":"A01"}', out, "the args are still printed, exactly")
+        self.assertIn("CHANGED since launch", out)
+
+    def test_a_relative_script_path_is_read_after_dispatch_against_the_cwd_recorded_before(self):
+        sub = self.proj / "sub"
+        sub.mkdir()
+        (sub / "wf.js").write_text(SCRIPT_A, encoding="utf-8")
+        ev = self._pre({"scriptPath": "wf.js", "args": {}}, tool_use_id="tu-cwd")
+        ev["cwd"] = str(sub)  # the call's cwd; the hook process itself runs in the project root
+        self._run(ev)
+        self._run(self._post("Run ID: %s" % RUN, tool_use_id="tu-cwd"))
+        m = self._by_tool_use("tu-cwd")
+        self.assertTrue(m["script_snapshot"], m.get("script_snapshot_why"))
+        self.assertEqual((self._manifests()[0].parent / m["script_snapshot"]).read_bytes(), SCRIPT_A.encode("utf-8"))
+
+    def test_heuristic_and_manual_binds_read_no_file(self):
+        # Rail r1 (P1): the harness-copy comparison of bind_run read the path the response named —
+        # which can be the scriptPath itself — on a heuristic bind, with no snapshot to compare to.
+        # Rail r2 (P2): also over a record that already HAS a snapshot (one written by an earlier
+        # version of this hook at PreToolUse): a heuristic or manual bind reads no file at all.
+        from unittest import mock
+
+        from _lib import launch_ledger as LL  # noqa: E402
+
+        d = Path(self._tmp.name) / "ledger"
+        d.mkdir()
+        wf = Path(self._tmp.name) / "x" / "workflows"
+        wf.mkdir(parents=True)
+        secret = wf / "secret.js"
+        secret.write_text(SCRIPT_A, encoding="utf-8")
+        m, data = LL.build_manifest({"tool_input": {"scriptPath": str(secret), "args": {}}, "session_id": "s",
+                                     "tool_use_id": "tu-h", "cwd": "."})
+        LL.write_manifest(m, d, data)
+        real = LL._read_script_file
+        seen = []
+
+        def spy(p):
+            seen.append(str(p))
+            return real(p)
+
+        with mock.patch.object(LL, "_read_script_file", spy):
+            bound = LL.decide_post({"tool_response": "Script file: %s\nRun ID: %s" % (secret, RUN), "session_id": "s"}, d)
+            self.assertEqual((bound["bind_method"], bound["persisted_script_path"]), ("by_single_unbound", str(secret)))
+            self.assertIsNone(bound["persisted_matches_snapshot"])
+            LL.bind_run(d, bound, "wf_12121212-12", "manual", persisted_script_path=str(secret))
+        self.assertEqual(seen, [], "a bind with no snapshot to compare reads no file")
+        legacy, _none = LL.build_manifest({"tool_input": {"scriptPath": str(secret), "args": {"k": 2}}, "session_id": "s2",
+                                           "tool_use_id": "tu-legacy", "cwd": "."})
+        LL.write_manifest(legacy, d, secret.read_bytes())  # the pre-cure shape: bytes snapshotted at PreToolUse
+        self.assertTrue(legacy["script_snapshot"])
+        with mock.patch.object(LL, "_read_script_file", spy):
+            bound = LL.decide_post({"tool_response": "Script file: %s\nRun ID: wf_34343434-34" % secret, "session_id": "s2"}, d)
+            self.assertEqual((bound["bind_method"], bound["launch_id"]), ("by_single_unbound", legacy["launch_id"]))
+            self.assertIsNone(bound["persisted_matches_snapshot"])
+            LL.bind_run(d, bound, "wf_56565656-56", "manual", persisted_script_path=str(secret))
+        self.assertEqual(seen, [], "a heuristic or manual bind reads no file, snapshot or not")
+
+    def test_a_file_unreadable_after_dispatch_is_named_and_never_snapshotted(self):
+        sp = self.proj / "wf.js"
+        sp.write_text(SCRIPT_A, encoding="utf-8")
+        self._run(self._pre({"scriptPath": "wf.js", "args": {}}))
+        sp.unlink()
+        self._run(self._post("Run ID: %s" % RUN, tool_use_id="tu-1"))
+        m = self._by_tool_use("tu-1")
+        self.assertIsNone(m["script_snapshot"])
+        self.assertEqual(m["script_snapshot_why"], "unreadable_after_dispatch:open_failed")
+
+    def test_a_run_id_the_response_does_not_label_as_launched_never_triggers_a_snapshot(self):
+        # A bare id token is not the harness's report of a launch: an error text that echoes the
+        # resumeFromRunId would carry one. The bind still happens (by tool_use_id); the read does not.
+        secret, token = self._canary(Path(self._tmp.name) / "elsewhere")
+        self._run(self._pre({"scriptPath": str(secret), "args": {}, "resumeFromRunId": RUN}, tool_use_id="tu-e"))
+        self._run(self._post("Error: cannot resume %s with this scriptPath" % RUN, tool_use_id="tu-e"))
+        m = self._by_tool_use("tu-e")
+        self.assertEqual((m["run_id"], m["bind_method"]), (RUN, "by_tool_use"))
+        self.assertIsNone(m["script_snapshot"])
+        self.assertEqual(m["script_snapshot_why"], "run_id_not_labelled")
+        self.assertEqual(self._state_files_holding(token), [])
+        self._run(self._pre({"scriptPath": str(secret), "args": {}}, tool_use_id="tu-k"))
+        self._run(self._post({"runId": "wf_abcdef01-02", "text": "started"}, tool_use_id="tu-k"))
+        self.assertTrue(self._by_tool_use("tu-k")["script_snapshot"], "a top-level runId key is the harness's report")
+
+    def test_relaunch_out_delivers_the_snapshot_taken_after_dispatch(self):
+        sp = self.proj / "wf.js"
+        sp.write_text(SCRIPT_A, encoding="utf-8")
+        self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}}, tool_use_id="tu-1"))
+        self._run(self._post("Script file: %s\nRun ID: %s" % (sp, RUN), tool_use_id="tu-1"))
+        sp.write_text(SCRIPT_B, encoding="utf-8")  # edited after the run started: the snapshot still holds the run's bytes
+        d = self._manifests()[0].parent
+        copy = self.proj / "copy.js"
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(copy))
+        self.assertEqual(rc, 0, err)
+        self.assertIn("exact recorded call", out)
+        self.assertIn("snapshot copied to", out)
+        self.assertIn("CHANGED since launch", out)
+        self.assertEqual(copy.read_bytes(), SCRIPT_A.encode("utf-8"))
+
+    def test_relaunch_without_a_snapshot_reports_the_original_file_and_refuses_out_by_name(self):
+        sp = self.proj / "wf.js"
+        sp.write_text(SCRIPT_A, encoding="utf-8")
+        self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}}, tool_use_id="tu-a"))
+        self._run(self._post("run %s started" % RUN, tool_use_id=None))  # heuristic bind: no snapshot
+        d = self._manifests()[0].parent
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN)
+        self.assertEqual(rc, 7, out + err)
+        self.assertIn("NOT EXACT", err)
+        self.assertIn("unchanged since launch", out)
+        self.assertIn(hashlib.sha256(SCRIPT_A.encode("utf-8")).hexdigest(), out)
+        copy = self.proj / "copy.js"
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(copy))
+        self.assertEqual(rc, 7, out + err)
+        self.assertIn("nothing to copy", err)
+        self.assertIn("no snapshot", err)
+        self.assertFalse(os.path.lexists(str(copy)))
+
+    def test_a_script_path_record_without_a_snapshot_keeps_the_args_guard_and_no_script_verdict(self):
+        # Rail r2 (P1): a record with no snapshot is valid for the ARGS comparison — a strong bind
+        # (manual) over it still BLOCKS different args — but its hash, read before dispatch and never
+        # corroborated after it, is no script evidence: never `match`, never a script advisory.
+        sp = self.proj / "wf.js"
+        sp.write_text(SCRIPT_A, encoding="utf-8")
+        self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}}, tool_use_id="tu-a"))
+        d = self._manifests()[0].parent
+        rc, _o, err = self._cli("--project-dir", str(d.parent), "bind", self._by_tool_use("tu-a")["launch_id"], RUN)
+        self.assertEqual(rc, 0, err)
+        self.assertIsNone(self._by_tool_use("tu-a")["script_snapshot"])
+        self.assertEqual(self._by_tool_use("tu-a")["script_snapshot_why"], "not_bound_by_tool_use")
+        out = self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
+        self.assertEqual(out.get("decision"), "block")
+        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "mismatch_blocked")
+        self.assertEqual(self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-3")), {})
+        self.assertEqual(self._by_tool_use("tu-3")["guard"]["result"], "inconclusive", "an uncorroborated hash is never a match")
+        sp.write_text(SCRIPT_B, encoding="utf-8")
+        env = {"CEO_WORKFLOW_SCRIPT_GUARD": "enforce"}
+        out = self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-4"), extra_env=env)
+        self.assertEqual(out, {}, "nor evidence of a script change: no advisory, no block even under enforce")
+        self.assertEqual(self._by_tool_use("tu-4")["guard"]["result"], "inconclusive")
+        d = self._manifests()[0].parent
+        (self.proj / "args.json").write_text('{"slice": "A01"}', encoding="utf-8")
+        rc, out_text, _e = self._cli("--project-dir", str(d.parent), "check", "--run", RUN, "--script-file", str(sp),
+                                     "--args-file", str(self.proj / "args.json"))
+        self.assertEqual(rc, 6, out_text)
+        self.assertIn("INCONCLUSIVE", out_text)
 
 
 def _load_launches_cli():

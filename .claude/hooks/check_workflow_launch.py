@@ -2,9 +2,13 @@
 """PLAN-190 W1 — Workflow launch ledger + resume guard (PreToolUse/PostToolUse ``Workflow``).
 
 Records every ``Workflow`` tool call BEFORE it is dispatched (script sha256 +
-snapshot of the script bytes, literal ``args``, ``resumeFromRunId``, code
-revision of ``cwd`` enriched afterwards within a strict budget) and, on the
-PostToolUse half, binds the run id the runner returned. Library:
+size, a snapshot of an INLINE script's text, literal ``args``,
+``resumeFromRunId``, code revision of ``cwd`` enriched afterwards within a
+strict budget) and, on the PostToolUse half, binds the run id the runner
+returned. A file named by ``scriptPath`` is only hashed before dispatch — this
+half runs before the harness's permission decision, so its bytes are never
+written here (FN-04); the PostToolUse half of the same call (bound by
+``tool_use_id``) snapshots them when they still hash to that value. Library:
 ``_lib/launch_ledger.py`` (the contract, the guard rules and the binding rules
 are documented there).
 
@@ -12,12 +16,12 @@ Contract
 --------
 - Fires for ``tool_name == "Workflow"`` only; anything else ⇒ ``{}``.
 - PreToolUse: the guard decides a resume from this call and the recorded manifest,
-  then this call's manifest + snapshot + index line are written (before any git
-  enrichment). On a resume:
+  then this call's manifest + index line (+ the snapshot of an inline script) are
+  written (before any git enrichment). On a resume:
   args differ from the bound manifest ⇒ ``{"decision": "block", "reason": <counts-only>}``;
   script differs, args same ⇒ ``{"systemMessage": <advisory>}`` unless
-  ``CEO_WORKFLOW_SCRIPT_GUARD=enforce``; args identical but a script hash unavailable ⇒ inconclusive,
-  allowed; no bound manifest ⇒ allowed; a recorded manifest that fails its
+  ``CEO_WORKFLOW_SCRIPT_GUARD=enforce``; args identical but a script hash unavailable (or a
+  ``scriptPath`` record without a snapshot) ⇒ inconclusive, allowed; no bound manifest ⇒ allowed; a recorded manifest that fails its
   integrity check (``manifest_problem``) ⇒ inconclusive, allowed. A block
   needs a STRONG bind (by ``tool_use_id`` or manual): a heuristic bind never
   sustains one, args or script alike. ONE override path for every block, and
@@ -30,8 +34,10 @@ Contract
 - PostToolUse: binds ``wf_<id>`` by ``tool_use_id``, else by the single unbound
   launch of the session — a launch the guard blocked never ran and is never a
   candidate; an unknown tool_use_id or zero/several candidates is an ``orphan``
-  line; a response with no run id, or with ambiguous ids, records nothing.
-  Always ``{}``.
+  line; a response with no run id, or with ambiguous ids, records nothing. Only
+  the bind by ``tool_use_id`` snapshots a ``scriptPath`` file, when the response
+  labels the run id as the one launched (re-read, written only when it hashes to
+  the value recorded before dispatch). Always ``{}``.
 - Fail-OPEN on infrastructure (unreadable stdin, import failure, unwritable
   state dir): breadcrumb to stderr + ``{}``. This is a recovery instrument,
   not a security matcher — it must never wedge a session.

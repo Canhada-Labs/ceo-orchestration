@@ -16,10 +16,19 @@ are exactly the class this module closes.
 What it records (one manifest per Workflow tool call)
 -----------------------------------------------------
 ``launch_id``, instant, ``session_id``, ``tool_use_id``, ``cwd``; the script
-fingerprint (``sha256`` + size) AND a snapshot of the effective script bytes
+fingerprint (``sha256`` + size) and a snapshot of the script bytes
 (``<launch_id>.script``) so the exact call is reproducible even when the
 harness never wrote its own copy (a run killed by a process death) or the
-file changed afterwards; the ``args`` as a LITERAL canonical JSON (an absent
+file changed afterwards. WHEN the snapshot is written depends on where the
+bytes come from (FN-04, PLAN-193 W4b): the call's own inline ``script`` text is
+snapshotted by the PreToolUse half; a file named by ``scriptPath`` is read
+there only to hash it — path, ``sha256`` and size are recorded, its bytes are
+NOT written — and its snapshot is taken by the PostToolUse half of the SAME
+call (bound by ``tool_use_id``), after the harness decided and ran the call,
+and only when the bytes read again hash to the value recorded before dispatch
+(``snapshot_after_dispatch``). The PreToolUse half runs before the harness's
+permission decision: a read-deny rule on the original path would not cover a
+copy written elsewhere. The ``args`` as a LITERAL canonical JSON (an absent
 ``args`` field is recorded as ABSENT, distinct from ``null``; never
 truncated — the hash is over the full content); ``resumeFromRunId``;
 ``name``/``description``; the code revision of ``cwd`` — ENRICHED AFTER the
@@ -44,7 +53,9 @@ that run.
   route); ``CEO_WORKFLOW_SCRIPT_GUARD=enforce`` turns it into a block.
 * args identical but either script hash unavailable ⇒ **inconclusive**
   (allowed, recorded) — an unverifiable script comparison is never turned into
-  a block nor into a match; different args still block on their own.
+  a block nor into a match; different args still block on their own. A
+  ``scriptPath`` record without a snapshot counts as unavailable: its hash was
+  read before dispatch and never corroborated after it (FN-04, ``compare``).
 * no bound manifest ⇒ ``no_manifest`` (allowed, recorded).
 * a manifest bound heuristically (``by_single_unbound``) never sustains a
   block, args or script alike (``weak_bind`` recorded; advisory instead).
@@ -78,7 +89,16 @@ By ``tool_use_id`` when the event carries one: found ⇒ bind (``by_tool_use``);
 not found ⇒ an ``orphan`` index line, NO bind. Without ``tool_use_id``: bind
 only when EXACTLY ONE unbound launch exists in the same session
 (``by_single_unbound``); otherwise ``orphan``. Never across sessions. The
-operator's ``ceo-launches.py bind`` closes an orphan by hand.
+operator's ``ceo-launches.py bind`` closes an orphan by hand. Only the
+``by_tool_use`` bind snapshots a ``scriptPath`` file, and only when the
+response reports that run id as the one the harness launched (the ``Run ID:``
+label or a ``runId``/``run_id`` key, not a bare token): a heuristic or manual
+bind proves nothing about which call the harness allowed, so the record then
+keeps its hash and no bytes (``script_snapshot_why`` says why). A heuristic
+or manual bind reads no file outside the ledger's own records (index and
+manifests); the ``by_tool_use`` bind reads the
+``scriptPath`` file (to take the snapshot) and the harness copy a response
+names (only to compare it with a snapshot the record holds).
 
 Contract
 --------
@@ -259,9 +279,15 @@ read_script_file = _read_script_file  # public name for the CLI
 
 
 def script_record(tool_input: Dict[str, Any], cwd: Optional[str]) -> Tuple[Dict[str, Any], Optional[bytes]]:
-    """Fingerprint of the script plus the effective bytes to snapshot. Inline
+    """Fingerprint of the script plus the bytes to snapshot NOW (PreToolUse). Inline
     ``script`` text wins over ``scriptPath``; an unreadable ``scriptPath`` is
-    recorded (no hash, no snapshot) — the guard then reports INCONCLUSIVE."""
+    recorded (no hash, no snapshot) — the guard then reports INCONCLUSIVE.
+
+    Only the call's own inline text is returned for a snapshot. A file named by
+    ``scriptPath`` is read to compute its ``sha256`` and size and its bytes are then
+    dropped (``None``): this runs before the harness's permission decision, and a
+    copy written here would escape a read-deny rule on that path (FN-04). Its
+    snapshot is ``snapshot_after_dispatch``'s, on the PostToolUse half."""
     script = tool_input.get("script")
     if isinstance(script, str) and script:
         data = script.encode("utf-8", "surrogatepass")
@@ -274,7 +300,7 @@ def script_record(tool_input: Dict[str, Any], cwd: Optional[str]) -> Tuple[Dict[
         data, why = _read_script_file(p)
         if data is None:
             return {"source": "path", "path": sp, "sha256": None, "bytes": None, "unreadable": True, "why": why}, None
-        return {"source": "path", "path": sp, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, data
+        return {"source": "path", "path": sp, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, None
     name = tool_input.get("name")
     if isinstance(name, str) and name:
         return {"source": "named", "path": None, "name": name, "sha256": None, "bytes": None}, None
@@ -329,6 +355,22 @@ def extract_run_id(tool_response: Any) -> Optional[str]:
     return ids.pop() if len(ids) == 1 else None
 
 
+def run_id_is_labelled(tool_response: Any, run_id: str) -> bool:
+    """True when the harness itself reported ``run_id`` as the run it launched: a top-level
+    ``runId``/``run_id`` key equal to it, or it is the id on the ``Run ID:`` label. An id found
+    only as a bare token (the fallback of ``extract_run_id``) is not such a report — an error text
+    that merely echoes a ``resumeFromRunId`` would carry one."""
+    if not is_run_id(run_id) or tool_response is None:
+        return False
+    if isinstance(tool_response, dict) and any(tool_response.get(k) == run_id for k in ("runId", "run_id")):
+        return True
+    try:
+        text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=True)
+    except (RecursionError, ValueError, TypeError):
+        return False
+    return run_id in set(_RUN_ID_LABEL_RE.findall(text))
+
+
 def extract_persisted_script_path(tool_response: Any) -> Optional[str]:
     try:
         text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=True) if tool_response is not None else ""
@@ -361,6 +403,8 @@ def build_manifest(event: Dict[str, Any], now: Optional[float] = None) -> Tuple[
         "cwd": cwd,
         "script": script,
         "script_snapshot": None,
+        # FN-04: a scriptPath file's bytes wait for the PostToolUse half of this same call.
+        "script_snapshot_why": "awaiting_post_tool_use" if (script.get("source") == "path" and script.get("sha256")) else None,
         "args": args,
         "resume_from_run_id": resume if isinstance(resume, str) and resume else None,
         "resume_from_run_id_valid": is_run_id(resume) if isinstance(resume, str) and resume else None,
@@ -394,7 +438,7 @@ def fallback_manifest(event: Dict[str, Any], error: str, now: Optional[float] = 
         "recorded_at": _now_iso(t), "session_id": sid, "tool_use_id": tuid,
         "cwd": event.get("cwd") if isinstance(event.get("cwd"), str) else None,
         "script": {"source": "unknown", "path": None, "sha256": None, "bytes": None, "unreadable": True, "why": "build_failed"},
-        "script_snapshot": None,
+        "script_snapshot": None, "script_snapshot_why": None,
         "args": {"present": "args" in tool_input, "canonical": None, "literal": None, "sha256": None,
                  "literal_sha256": None, "bytes": None, "error": error},
         "resume_from_run_id": resume, "resume_from_run_id_valid": is_run_id(resume) if resume else None,
@@ -415,7 +459,8 @@ def snapshot_path(d: Path, launch_id: str) -> Path:
 
 
 def write_manifest(manifest: Dict[str, Any], d: Path, script_bytes: Optional[bytes] = None) -> Path:
-    """Manifest (and script snapshot) on disk FIRST; the index line after."""
+    """Manifest (and the snapshot of ``script_bytes``, when given — at PreToolUse only an
+    inline script's text) on disk FIRST; the index line after."""
     if script_bytes is not None:
         _atomic_write(snapshot_path(d, manifest["launch_id"]), script_bytes)
         manifest["script_snapshot"] = snapshot_path(d, manifest["launch_id"]).name
@@ -567,8 +612,12 @@ def manifest_problem(m: Any, d: Path) -> Optional[str]:
     (``args_uncanonicalized``); otherwise canonical and literal are strings whose sha256 match
     their recorded hashes, the literal re-canonicalises to the canonical, and ``present`` is
     False exactly when both are ABSENT. ``script``: the ``sha256`` key must exist and agree with
-    the SOURCE — inline, or a path read at launch ⇒ a hex hash whose snapshot bytes exist and
-    hash to it; a path unreadable at launch, a named workflow or no script ⇒ ``null``."""
+    the SOURCE — inline ⇒ a hex hash whose snapshot bytes exist and hash to it; a path read at
+    launch ⇒ a hex hash, and, when the record names a snapshot, bytes that exist and hash to it
+    (a scriptPath record with NO snapshot is valid — its bytes are written only by the
+    PostToolUse half of the same call, FN-04 — and ``compare`` then treats its script hash,
+    never corroborated after dispatch, as unavailable); a path
+    unreadable at launch, a named workflow or no script ⇒ ``null``."""
     if not isinstance(m, dict):
         return "not_an_object"
     if m.get("schema") != SCHEMA:
@@ -605,6 +654,8 @@ def manifest_problem(m: Any, d: Path) -> Optional[str]:
     if source == "inline" or (source == "path" and sc.get("unreadable") is not True):
         if not isinstance(sh, str) or SHA256_RE.fullmatch(sh) is None:
             return "script_shape"
+        if source == "path" and m.get("script_snapshot") is None:
+            return None
         if m.get("script_snapshot") != snapshot_path(d, m["launch_id"]).name:
             return "script_snapshot_missing"
         snap = load_snapshot(d, m)
@@ -618,6 +669,52 @@ def manifest_problem(m: Any, d: Path) -> Optional[str]:
     return "script_shape"
 
 
+def snapshot_after_dispatch(d: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
+    """The PostToolUse half of a ``scriptPath`` record (FN-04). The caller passes ONLY the
+    manifest that the event's own ``tool_use_id`` names — the PostToolUse of that same call,
+    which the harness fires after it decided and ran the call — and only when the response
+    labels the run id as the run it launched (``run_id_is_labelled``). The file is read again through
+    the same bounded reader, relative to the cwd recorded before dispatch, and its bytes become
+    the snapshot only when they hash to the ``sha256`` recorded before dispatch. Otherwise
+    nothing is written and ``script_snapshot_why`` says why: ``unreadable_after_dispatch:<why>``,
+    ``changed_after_dispatch``, ``write_failed:<type>`` or ``error:<type>``. A record that is not
+    a hashed ``scriptPath`` one, that already names a snapshot, or whose launch id is ill-shaped
+    is returned unchanged. Returns a copy; never raises (the caller binds the run either way)."""
+    try:
+        sc = manifest.get("script")
+        if not isinstance(sc, dict) or sc.get("source") != "path" or sc.get("unreadable") is True:
+            return manifest
+        if manifest.get("script_snapshot") is not None:
+            return manifest
+        sh, sp, lid = sc.get("sha256"), sc.get("path"), manifest.get("launch_id")
+        if (not isinstance(sh, str) or SHA256_RE.fullmatch(sh) is None or not isinstance(sp, str) or not sp
+                or not isinstance(lid, str) or LAUNCH_ID_RE.fullmatch(lid) is None):
+            return manifest
+        out = dict(manifest)
+        p = Path(sp)
+        cwd = manifest.get("cwd")
+        if not p.is_absolute() and isinstance(cwd, str) and cwd:
+            p = Path(cwd) / p
+        data, why = _read_script_file(p)
+        if data is None:
+            out["script_snapshot_why"] = "unreadable_after_dispatch:%s" % why
+        elif hashlib.sha256(data).hexdigest() != sh:
+            out["script_snapshot_why"] = "changed_after_dispatch"
+        else:
+            try:
+                _atomic_write(snapshot_path(d, lid), data)
+            except Exception as exc:  # noqa: BLE001 — recorded; the bind still happens
+                out["script_snapshot_why"] = "write_failed:%s" % type(exc).__name__
+            else:
+                out["script_snapshot"] = snapshot_path(d, lid).name
+                out["script_snapshot_why"] = None
+        return out
+    except Exception as exc:  # noqa: BLE001
+        out = dict(manifest)
+        out["script_snapshot_why"] = "error:%s" % type(exc).__name__
+        return out
+
+
 def bind_run(d: Path, manifest: Dict[str, Any], run_id: str, method: str, now: Optional[float] = None,
              persisted_script_path: Optional[str] = None) -> Dict[str, Any]:
     if not is_run_id(run_id):
@@ -629,10 +726,18 @@ def bind_run(d: Path, manifest: Dict[str, Any], run_id: str, method: str, now: O
     manifest["run_id"] = run_id
     manifest["bound_at"] = _now_iso(now)
     manifest["bind_method"] = method
+    if method != "by_tool_use" and manifest.get("script_snapshot_why") == "awaiting_post_tool_use":
+        # FN-04: a heuristic or manual bind never snapshots a scriptPath file — say so in the record.
+        manifest["script_snapshot_why"] = "not_bound_by_tool_use"
     if persisted_script_path:
         manifest["persisted_script_path"] = persisted_script_path
-        snap = load_snapshot(d, manifest)
-        persisted, _why = _read_script_file(Path(persisted_script_path))  # bounded: the path came from response text
+        # FN-04: the path named in the response is read ONLY on the bind by tool_use_id (the
+        # PostToolUse of the call itself) and ONLY to compare it with a snapshot this record
+        # already holds. A heuristic or manual bind reads neither it nor the snapshot.
+        snap = load_snapshot(d, manifest) if method == "by_tool_use" else None
+        persisted = None
+        if snap is not None:
+            persisted, _why = _read_script_file(Path(persisted_script_path))  # bounded: the path came from response text
         manifest["persisted_matches_snapshot"] = (
             hashlib.sha256(persisted).hexdigest() == hashlib.sha256(snap).hexdigest()
         ) if (snap is not None and persisted is not None) else None
@@ -672,8 +777,13 @@ def compare(recorded: Dict[str, Any], now: Dict[str, Any]) -> Dict[str, Any]:
     differ, inconclusive}; ``args_diff`` list; ``counts`` = {changed, only_recorded, only_now,
     order, total} — the counts are the only thing that may reach the model. Equal canonical
     forms with a different literal key order count as ONE difference (``order``): the script
-    sees the order, so a reordered call can re-key phases."""
+    sees the order, so a reordered call can re-key phases. The RECORDED script hash counts only
+    when snapshot bytes reproduce it (``manifest_problem`` checks them): a ``scriptPath`` record
+    without a snapshot carries a hash read before dispatch and never corroborated after it
+    (FN-04), so its script comparison is ``inconclusive`` — never ``same`` nor ``differs``."""
     r_s = (recorded.get("script") or {}).get("sha256")
+    if (recorded.get("script") or {}).get("source") == "path" and recorded.get("script_snapshot") is None:
+        r_s = None
     n_s = (now.get("script") or {}).get("sha256")
     if r_s is None or n_s is None:
         script = "inconclusive"
@@ -839,8 +949,9 @@ def _guard(manifest: Dict[str, Any], resume: str, d: Path, env: Dict[str, str]) 
 
 def decide_pre(event: Dict[str, Any], d: Path, env: Optional[Dict[str, str]] = None, now: Optional[float] = None,
                git_budget_s: float = GIT_BUDGET_S) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """PreToolUse: guard a resume, record the launch (manifest + snapshot + index line), then
-    enrich the code revision within budget. Returns (decision, manifest).
+    """PreToolUse: guard a resume, record the launch (manifest + index line, and the snapshot of
+    an INLINE script — never bytes of a ``scriptPath`` file, which runs before the harness's
+    permission decision), then enrich the code revision within budget. Returns (decision, manifest).
 
     Totality: an exception INSIDE the guard is recorded as ``inconclusive`` (never a silent
     allow without a record); a failure to PERSIST this call's record does not undo a decision
@@ -870,7 +981,12 @@ def decide_pre(event: Dict[str, Any], d: Path, env: Optional[Dict[str, str]] = N
 def decide_post(event: Dict[str, Any], d: Path, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
     """PostToolUse: bind the run id from the response — by tool_use_id, else by the single
     unbound launch of the session. An unknown tool_use_id, or zero/several candidates, becomes an
-    ``orphan`` line; a response with no run id, or with ambiguous ids, records nothing."""
+    ``orphan`` line; a response with no run id, or with ambiguous ids, records nothing. The
+    ``by_tool_use`` bind first takes the snapshot of a ``scriptPath`` file
+    (``snapshot_after_dispatch``) — only when the harness reported that id as the run it launched
+    (``run_id_is_labelled``), else ``script_snapshot_why: run_id_not_labelled``; the heuristic
+    bind never reads that file — this PostToolUse may belong to another call — and ``bind_run``
+    records ``script_snapshot_why: not_bound_by_tool_use`` (as for a manual bind)."""
     run_id = extract_run_id(event.get("tool_response"))
     if run_id is None:
         return None
@@ -882,6 +998,10 @@ def decide_post(event: Dict[str, Any], d: Path, now: Optional[float] = None) -> 
         if m is None:
             _append_index(d, {"kind": "orphan", "run_id": run_id, "session_id": session, "tool_use_id": tuid, "at": _now_iso(now), "reason": "tool_use_id_not_recorded"})
             return None
+        if run_id_is_labelled(event.get("tool_response"), run_id):
+            m = snapshot_after_dispatch(d, m)
+        elif m.get("script_snapshot_why") == "awaiting_post_tool_use":
+            m = dict(m, script_snapshot_why="run_id_not_labelled")
         return bind_run(d, m, run_id, "by_tool_use", now=now, persisted_script_path=persisted)
     candidates = unbound_launches(d, session) if session else []
     if len(candidates) == 1:

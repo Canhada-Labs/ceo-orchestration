@@ -10,10 +10,10 @@
 Plan: PLAN-193
 Wave: W4b — cura do FN-04 (ledger de Workflow: bytes de scriptPath antes da decisão de permissão)
 Patch: .claude/plans/PLAN-193/wave-fn04/fn04.patch
-Patch-sha256: TO-FILL-BY-SIGN
-Rail-Record-sha256: TO-FILL-BY-SIGN
-Anchor-SHA: TO-FILL-BY-SIGN
-Data: TO-FILL-BY-SIGN
+Patch-sha256: cd31657ca2fd3aea59aa7eb9dee691af830ca9065a7562b56eebd1abaa966819
+Rail-Record-sha256: a68f6e8de9c73fee982142a525215ac566c8c53cb42944713d555730e399cf75
+Anchor-SHA: 3c2fb8e9868fd75eda5505de00871adceacb8ce9
+Data: 2026-09-28
 
 ## Ratificação (Owner)
 

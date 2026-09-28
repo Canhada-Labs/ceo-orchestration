@@ -10,8 +10,14 @@ Commands::
     ceo-launches.py list [--limit N]            recent launches (id, run, resume, guard, bind method)
     ceo-launches.py show <launch_id|run_id>     the full manifest (args printed as literal JSON)
     ceo-launches.py relaunch <run_id> [--out FILE]
-                                                the exact call to re-issue: the script SNAPSHOT (bytes
-                                                recorded before dispatch — pass it as scriptPath) + args literal;
+                                                the exact call to re-issue: the script SNAPSHOT (pass it as
+                                                scriptPath) + args literal. The snapshot of an inline script is
+                                                written before dispatch; that of a file named by scriptPath only
+                                                by the PostToolUse half of the same call, when the file still
+                                                hashes to the value recorded before dispatch (FN-04) — a scriptPath
+                                                record with no snapshot is rc 7: the args exact, the recorded
+                                                sha256 and the original file's status against it printed, and
+                                                --out refused by name;
                                                 rc 7 and NOTHING printed as exact when the record fails its
                                                 integrity check (snapshot hash, args canonical/hash) or its
                                                 snapshot cannot be read back unchanged. --out FILE publishes a NEW file:
@@ -414,6 +420,13 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
     a = m.get("args") or {}
     source = script.get("source")
     exact_script = source in ("inline", "named") or (source == "path" and script.get("unreadable") is not True)
+    # FN-04: the bytes of a file named by scriptPath are snapshotted only by the PostToolUse half of
+    # the call that launched it; a record without that snapshot keeps its hash and no bytes, so there
+    # is nothing exact to print as the script nor to copy.
+    unsnapshotted = source == "path" and exact_script and m.get("script_snapshot") is None
+    no_snapshot_why = m.get("script_snapshot_why") if isinstance(m.get("script_snapshot_why"), str) else "none recorded"
+    if unsnapshotted:
+        exact_script = False
     snap: Optional[bytes] = None
     if source != "named":
         snap = LL.load_snapshot(d, m)
@@ -424,7 +437,13 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
                   "rebuild the call from the script and args you can verify"
                   % (args.run_id, "could not be read back" if snap is None else "changed when read back"), file=sys.stderr)
             return 7
-    if not exact_script:
+    if unsnapshotted:
+        print("NOT EXACT: no snapshot of the script of run %s was recorded (%s) — only the PostToolUse half of the "
+              "call that launched it writes one; the args below are exact, the script is known only by the sha256 "
+              "recorded before dispatch" % (args.run_id, no_snapshot_why), file=sys.stderr)
+        print("# recorded call for run %s (launch %s, recorded %s) — the script is NOT exact: no snapshot"
+              % (args.run_id, m.get("launch_id"), m.get("recorded_at")))
+    elif not exact_script:
         print("NOT EXACT: the script of run %s was not recorded at launch (%s) — the args below are exact, the script is not"
               % (args.run_id, script.get("why") or source), file=sys.stderr)
     else:
@@ -434,7 +453,7 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
     else:
         if snap is not None:
             sp = LL.snapshot_path(d, m["launch_id"])
-            print("scriptPath: %s   # SNAPSHOT of the bytes recorded before dispatch (sha256 %s, %d bytes)" % (sp, hashlib.sha256(snap).hexdigest(), len(snap)))
+            print("scriptPath: %s   # SNAPSHOT of the recorded script bytes (sha256 %s, %d bytes)" % (sp, hashlib.sha256(snap).hexdigest(), len(snap)))
             if args.out is not None:  # an explicit ``--out ""`` is a request too — refused, never ignored
                 err = _write_new_file(args.out, snap)
                 if err:
@@ -442,14 +461,23 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
                     return 2 if exact_script else 7  # a script not recorded at launch stays rc 7
                 print("snapshot copied to %s" % args.out)
             if source == "path" and script.get("path"):
-                p = Path(script["path"])
-                if not p.is_absolute() and m.get("cwd"):
-                    p = Path(m["cwd"]) / p
-                cur, why = LL.read_script_file(p)
+                cur, why = _read_original(m, script)
                 if cur is None:
                     print("original file %s: unreadable now (%s) — use the snapshot" % (script["path"], why))
                 else:
                     print("original file %s: %s" % (script["path"], "unchanged" if hashlib.sha256(cur).hexdigest() == script.get("sha256") else "CHANGED since launch — use the snapshot"))
+        elif unsnapshotted and script.get("path"):
+            print("script (NOT a snapshot): the call named scriptPath %s; sha256 recorded before dispatch %s (%s bytes)"
+                  % (script["path"], script.get("sha256"), script.get("bytes")))
+            cur, why = _read_original(m, script)
+            if cur is None:
+                print("original file %s: unreadable now (%s)" % (script["path"], why))
+            elif hashlib.sha256(cur).hexdigest() == script.get("sha256"):
+                print("original file %s: unchanged since launch (it hashes to the recorded sha256 now; with no snapshot "
+                      "the resume guard cannot compare scripts for this run — its script comparison is inconclusive)"
+                      % script["path"])
+            else:
+                print("original file %s: CHANGED since launch (it no longer hashes to the recorded sha256)" % script["path"])
     if m.get("persisted_script_path"):
         print("harness copy: %s (matches snapshot: %s)" % (m["persisted_script_path"], m.get("persisted_matches_snapshot")))
     print("resumeFromRunId: %s" % args.run_id)
@@ -464,13 +492,26 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
     rc = 0 if exact_script else 7
     if args.out is not None and snap is None:
         # An --out that creates no file never exits 0 and is never silent.
+        if source == "named":
+            what = "it was launched by name (the harness resolves the script by that name; no bytes were recorded)"
+        elif unsnapshotted:
+            what = ("no snapshot of its script was recorded (%s): only the PostToolUse half of the call that "
+                    "launched it writes one" % no_snapshot_why)
+        else:
+            what = "its script was not recorded at launch"
         print("refused: --out has nothing to copy for run %s: %s — no file was created at %s" % (
-            args.run_id,
-            "it was launched by name (the harness resolves the script by that name; no bytes were recorded)"
-            if source == "named" else "its script was not recorded at launch",
-            args.out), file=sys.stderr)
+            args.run_id, what, args.out), file=sys.stderr)
         return rc or 2
     return rc
+
+
+def _read_original(m: Dict[str, Any], script: Dict[str, Any]) -> Tuple[Optional[bytes], Optional[str]]:
+    """The file the recorded call named, read NOW through the ledger's bounded reader, relative to
+    the cwd recorded at launch."""
+    p = Path(script["path"])
+    if not p.is_absolute() and m.get("cwd"):
+        p = Path(m["cwd"]) / p
+    return LL.read_script_file(p)
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -513,7 +554,8 @@ def cmd_check(args: argparse.Namespace) -> int:
         print("SCRIPT-DIFFERS (args same): run %s" % args.run_id)
         return 5
     if cmp["script"] == "inconclusive":
-        print("INCONCLUSIVE: one of the script hashes is unavailable (run %s)" % args.run_id)
+        print("INCONCLUSIVE: a script hash is unavailable — unreadable, a named workflow, or a scriptPath record "
+              "without a snapshot (run %s)" % args.run_id)
         return 6
     print("SAME: run %s (launch %s)" % (args.run_id, recorded.get("launch_id")))
     return 0
