@@ -2,8 +2,8 @@
 
 Plan: PLAN-193
 Wave: W2 — re-pin codex-cli 0.155.0 → 0.156.1
-Anchor-SHA: (preenchido pelo OWNER-PIN-SIGN.sh no momento da assinatura)
-Data: (preenchida pelo OWNER-PIN-SIGN.sh no momento da assinatura)
+Anchor-SHA: 7e1bed690555b56018e224330ef273dbd2cbed19
+Data: 2026-09-28
 
 ## Ratificação (Owner, 2026-09-22 e 2026-09-23)
 

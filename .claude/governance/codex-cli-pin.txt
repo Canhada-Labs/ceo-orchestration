@@ -83,4 +83,65 @@
 # Doctrine (S355): the Codex CLI is a SHA-pinned substrate — every Codex
 # upgrade requires this re-pin BEFORE any release cut; never a casual
 # `npm update -g`.
->=0.128.0,<0.156.0
+
+# PLAN-193 update (S357 2026-09-23, pack codex-pin-0156): widened upper bound
+# to <0.157.0 so the Owner's installed codex-cli 0.156.1 is in-range. 0.156.1
+# was published to npm on 2026-09-23 as a hotfix of 0.156.0 (never pinned
+# here). With the ADR-182 exact-version payload manifest, installing it before
+# this re-pin closes the pair-rail (measured 2026-09-23 against the Owner's
+# installed 0.156.1: `--verify-codex-pin` -> mismatch payload_sha256_mismatch),
+# so the ceremony refuses to sign unless the installed payload already hashes
+# to the sha256 pinned below. LOWER BOUND UNCHANGED at >=0.128.0
+# (widen-upper-only; raising it past 0.139.0 would put the Codex host-adapter
+# fixtures, recorded under codex-cli 0.139.0, out of range). Landed only AFTER
+# the v1.4.1 GA tag (the ceremony refuses otherwise): release.yml step 15
+# checks the GA verdict's codex_cli against this range and its
+# codex_payload_sha256 against the manifest of the TAGGED tree, and this file
+# is hashed into the verdict's inputs_hash. DECLARED EXCEPTION to the S355
+# doctrine above: the Owner installed 0.156.1 globally on 2026-09-23, before
+# the v1.4.1 GA cut, so for that one cut the letter of "every Codex upgrade
+# requires this re-pin BEFORE any release cut" is not met. What still holds:
+# the validator that step 15 runs accepts the GA verdict only if the
+# verdict DECLARES a codex_cli inside the tagged range and the payload sha256
+# of the tagged manifest (0.155.0) — a check of the declaration, not a hash of
+# the binary that produced the verdict — so before these bytes land no verdict
+# declaring 0.156.1 validates; step 15's optional mode
+# (CEO_PAIR_RAIL_VERDICT_OPTIONAL=1, a repository variable unset on
+# 2026-09-23) goes beyond tolerating a failed validation: it also skips a
+# missing verdict file and drops the parent-SHA bind; the delta+ancestry
+# gate that follows it fails closed in that mode. Landing
+# these bytes before the tag would instead break the GA's own step 15
+# (inputs_hash and payload pin both change under a verdict produced on
+# 0.155.0). Corpus rule: ADR-111 §2, restated as ADR-182 §5 step 5 (the
+# `§pin-update-protocol` label above names no heading in ADR-111) — a CLI
+# bump reopens the corpus only on a MEASURED catch_rate shift >5pp. No
+# locked-corpus run was taken for this bump (the runner's default corpus path
+# is absent from this repository and its per-fixture review is still a stub),
+# so the trigger is unevaluated, not passed. The ADR-161 per-bump checklist is
+# deferred to the substrate wave, as declared in S356 (which recorded the S352
+# re-pin as the same posture): it re-certifies Codex as a HOOK HOST, while
+# what forces this re-pin is Codex as the rail REVIEWER. DECLARED CONSEQUENCE
+# of that deferral: the installer's Codex-harness version-skew warning
+# (scripts/_codex_harness.sh) reads this same range, so widening it admits
+# 0.156.x as in-range for Codex as a hook host while the hook evidence stays
+# at 0.139.0 — a re-certification this deferral knowingly waives (every
+# widening since that reader landed, on 2026-07-10, had the same effect).
+# From 0.155.0 to 0.156.0 the exec crate's output-shape change is confined to
+# web-search items of the `codex exec --json` stream, which has no reader in
+# live code (the live rail runs `exec -o` without `--json`, and the one parser
+# of that stream in the tracked tree outside .claude/plans/ has no caller
+# outside tests; the ADR-161 live-fire procedures under .claude/plans/PLAN-155/
+# do read that stream, but items other than web search — the only kind the
+# change touches — and stay deferred with the checklist); from 0.156.0 to
+# 0.156.1 the exec crate is unchanged (same git tree at both tags)
+# and, outside tests, only the workspace version, the bundled model catalog
+# and two TUI source files change — upstream says that catalog also feeds the
+# sub-agent tool descriptions sent to the model.
+# DECLARED CONSEQUENCE (same as S352/S356): this changes the INSTRUMENT —
+# rail measurements taken before and after this commit are NOT comparable.
+# The payload manifest (re-pinned in this same pack: payload sha256
+# 0196e89f... for 0.156.1/aarch64-apple-darwin, npm_integrity recorded from
+# the PLATFORM artifact per ADR-182 §5 step 2) remains the real supply-chain
+# gate; this range is a version gate (the release.yml step-15 validator reads
+# it, among others), not a supply-chain gate.
+>=0.128.0,<0.157.0
