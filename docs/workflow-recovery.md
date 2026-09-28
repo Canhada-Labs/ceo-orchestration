@@ -87,7 +87,9 @@ allowed call with something to say (forced, or an advisory) returns the same tex
 comparison and before `relaunch`/`check` use it: schema; launch id, run id and bind method shapes;
 `args` present/canonical/sha256 mutually consistent; the script sha256 equal to the hash of its
 snapshot bytes. Any inconsistency is `inconclusive` for the guard, `rc 6` for `check`, and `rc 7`
-(nothing printed or copied as exact) for `relaunch`. A missing script hash is not an
+(nothing printed or copied as exact) for `relaunch`. `relaunch` holds the snapshot bytes it is about
+to print and copy — a second read — to the same recorded hash: bytes that cannot be read back, or
+that no longer hash to the record, are `rc 7` too. A missing script hash is not an
 unavailable one: the `sha256` field must agree with the recorded source (inline or a path read at
 launch ⇒ a hash that its snapshot bytes reproduce; a path unreadable at launch, a named workflow or no
 script ⇒ `null`). If the construction of the record itself fails (for example `args` nested past the
@@ -125,14 +127,61 @@ python3 .claude/scripts/ceo-launches.py show wf_<id>
 
 # 2. the EXACT call to re-issue: the script SNAPSHOT (pass it as scriptPath) + literal args
 #    args are printed in the ORIGINAL key order; rc 7 and nothing announced as exact when the record
-#    fails its integrity check or its script was unreadable at launch; for a NAMED workflow it prints
-#    the name and the args — the content saved under that name is not verified; --out creates a NEW
-#    file only (never overwrites, never follows a symlink) and keeps writing until the last byte: a
-#    HANDLED failure (I/O error, no progress, error at close) is rc 2 and the command TRIES to remove
-#    the partial file (inode check, then unlink by name — two steps, not atomic: do not point --out at
-#    a path another process writes to); if the removal itself fails, the partial file STAYS and the
-#    message says so; a Ctrl-C or a signal in the middle of the write is not handled and can leave a
-#    partial file. So never pass a copy from a run that did not print "snapshot copied to"
+#    fails its integrity check, when the snapshot about to be printed cannot be read back unchanged,
+#    or when its script was unreadable at launch; for a NAMED workflow it prints the name and the
+#    args — the content saved under that name is not verified.
+#    --out FILE publishes a copy of the snapshot as a NEW file. The command creates a private
+#    directory (.ceo-launches-out-<hex>, mode 0700 requested) inside FILE's directory, so on the
+#    same filesystem, and writes the bytes to an exclusive temporary inside it (created
+#    O_EXCL|O_NOFOLLOW, mode 0600 requested), to the last byte, then fsync'ed. The umask applies
+#    to both requested modes, and mode bits are not the only access control (ACL entries: see
+#    the limitations below). Only then does FILE receive them, through link(2), which never
+#    replaces an entry: anything at FILE that the command did not create (a file, a symlink, a
+#    directory), whether there from the start or appearing meanwhile, is a refusal (rc 2) and is
+#    left as it is. The command itself only ever writes partial bytes inside the private
+#    directory, so FILE never names a file holding part of the copy while the machine stays up and,
+#    during the call, nothing else writes FILE's directory as the command opened it, changes what a
+#    directory on the path to FILE resolves to (a rename, a re-pointed symlink, a mount), or writes
+#    what the command creates (the limitations below). That includes a FILE that the filesystem
+#    treats as the same name as the private directory (for example a spelling that differs only
+#    by case): FILE then names that directory while the command runs, and the command refuses,
+#    rc 2 (it tells this case from a FILE that appeared meanwhile by comparing identities, not
+#    spellings). The cleanup removes, by name, only the two names the command created: the
+#    temporary (only once the command has recorded that its exclusive create succeeded), then the
+#    private directory. FILE is
+#    never passed to unlink, rmdir, rename or replace (removal BY NAME has a declared limit when
+#    someone else writes FILE's directory: see the limitations below). A failure before the link
+#    (the private directory cannot be created or opened, the temporary cannot be created, an I/O
+#    error, no progress, fsync,
+#    fstat, close) is rc 2 with nothing published at FILE. After link, whatever it answered, what
+#    FILE then names decides, by identity (device, inode) against the identity fstat took from
+#    the temporary's descriptor: the temporary itself is a publication, rc 0 — also when link
+#    answered an error after creating the name (a retransmitted LINK on NFS can answer EEXIST).
+#    When link answered an error, anything else that can be read is rc 2 with nothing published at
+#    FILE by the command. When link succeeded, anything else (for example another object put under
+#    the
+#    temporary's name before link ran, or FILE replaced right after it) is rc 2 saying FILE is
+#    not the temporary the command wrote; what FILE names is left as it is — do not use it. In
+#    both cases, when what FILE names cannot be read, rc 2 says it cannot tell whether FILE holds
+#    the copy. When link fails for a reason other than an existing entry, the message names the
+#    errno the error carries and adds that the filesystem may lack hard links when it is EPERM,
+#    ENOTSUP/EOPNOTSUPP, EXDEV or EMLINK. A failure to remove the temporary or
+#    the private directory AFTER a link whose identity check passed is not a failure of the
+#    copy: FILE is whole, "snapshot copied to" is printed, the exit code is unchanged and stderr
+#    names the leftover directory. A FILE whose last component names no file (empty, ".", "..",
+#    or a path ending in /) is refused, rc 2.
+#    --out with nothing to copy (a named workflow, also with --out ""; a script not recorded at
+#    launch, for a record the hook wrote) creates no file and never exits 0: rc 2 for a named
+#    workflow, rc 7 for an unrecorded script, the reason on stderr. Every rc 2 of --out above is
+#    rc 7 instead when the record's script was not recorded at launch: the hook never writes a
+#    snapshot for such a record, so only a hand-edited manifest that carries one reaches the copy,
+#    and a refusal of that copy stays rc 7 (v1.4.1 answered 2). Use a copy only from a run that
+#    printed "snapshot copied to FILE": after a refusal, do not use a file at FILE as this
+#    command's copy, and a leftover .ceo-launches-out-<hex> directory is never the copy to use.
+#    That line is only as good as the trust the limitations below place in FILE's directory and
+#    the path to it: anyone who, during the call, writes that directory, changes what a directory
+#    on the path to FILE resolves to, or writes the objects the command creates can make it print
+#    that line while FILE names bytes that are not the snapshot.
 python3 .claude/scripts/ceo-launches.py relaunch wf_<id> [--out /path/to/copy.js]
 
 # 3. before re-issuing from a rite that edits scripts: the guard's comparison, standalone
@@ -221,10 +270,92 @@ is PLAN-190 W6.
   - ledger writes follow a symlinked `launches/` directory or index file (deliberate same-user
     tampering is outside the threat model);
   - an INLINE script larger than 8 MiB is recorded, but its snapshot is read back through the 8 MiB
-    reader: the record is then inconclusive for the guard (`script_snapshot_missing`);
-  - `relaunch --out`: the partial-file cases named in the recovery rite above; the cleanup after a
-    handled failure is an inode check followed by an unlink by name, so a concurrent writer that
-    replaces the destination in between loses its file while the message says the partial file was
-    removed; and when the second read of the snapshot fails, the command prints the "exact recorded
-    call" heading, creates no file and exits rc 0. The structural cure (exclusive temporary file,
-    publish by no-replace `link`, never unlink the destination) comes after v1.4.1.
+    reader: the record is then inconclusive for the guard (`script_snapshot_missing`).
+- **`relaunch --out` (declared).** The v1.4.1 cases declared for it (a partial file left under the
+  destination name, a cleanup that was an `lstat` of the destination followed by an `unlink` of it,
+  rc 0 when the second read of the snapshot failed), and cases it did not declare (`--out` ignored
+  for a named workflow; `--out ""` taken as omitted; a second read of the snapshot that changed,
+  printed and copied — all rc 0), are replaced by the publication described in the recovery rite
+  (PLAN-190-FOLLOWUP). What that publication does not cover:
+  - a process that ends without running its cleanup (a signal still at its default action when
+    that action ends the process — SIGTERM, SIGHUP, SIGQUIT and SIGKILL among them; the command
+    installs no signal handler — or a power loss), an interruption that lands before the command
+    has recorded what it just created (between a creation — the private directory, the
+    temporary — and the moment the command records it) or inside the cleanup itself, or a failed
+    removal leaves a `.ceo-launches-out-<hex>` directory in the destination's directory, possibly
+    holding the temporary. Signals whose disposition
+    Python itself sets at startup are not in that class: SIGINT (Ctrl-C) becomes an exception,
+    unless the parent process left it ignored, so the cleanup runs (the unhandled-exception case
+    below); SIGPIPE and SIGXFSZ are ignored, so a write past the file-size limit fails with an
+    error instead (measured: `EFBIG`, rc 2, nothing left) and SIGPIPE never ends the copy. When the
+    removal fails on a path the command handles (a refusal, a
+    handled write failure, or after the link) the message names the directory; when an exception
+    the command does not handle (Ctrl-C included) propagates out of it, a failed removal is
+    reported by nothing — look for the directory by its prefix. While the machine stays up, and
+    within the trust the next bullets declare, it never leaves a file holding part of the copy
+    under the destination name (after a power loss nothing is claimed: see the "whole file or no
+    file" bullet below). A leftover directory is never the copy to use: delete
+    it, never edit what it holds — a temporary left there after the link is a second name of FILE
+    (the same inode), so editing it changes FILE;
+  - the destination's directory is trusted like the ledger directory. Anyone who can write it —
+    another process of the same user, or another user where that directory is writable to others
+    without the sticky bit — can rename entries in it while `--out` runs: put something else under
+    the private directory's name between its creation and its opening (a symlink there is refused,
+    never followed; a directory there that the command can open receives the temporary, and
+    whoever can write that directory can then put another object under the temporary's name —
+    refused after the link, rc 2, what FILE names left as it is — or alter the temporary in
+    place, which no check sees), put an EMPTY directory under that name before the cleanup, which
+    then removes that one (the cleanup goes by name, for the temporary as for the directory, and
+    `rmdir` removes only an empty directory; the command's own directory is then left under
+    whatever name they gave it, and nothing reports it), or replace FILE after its identity check.
+    Mode bits do not bound who else can act: anyone the permissions of the private directory and
+    the temporary admit — the same user, and on macOS whoever an inheritable ACL entry on FILE's
+    directory grants the rights to — can alter the temporary in place, and write FILE after it is
+    published. Such an entry is inherited by the private directory, the temporary and FILE (seen
+    with `ls -le`, also for an entry that does not apply to FILE's directory itself,
+    `only_inherit`), and an ACL allow entry grants what it names over the mode bits (measured:
+    mode 000 plus an allow entry admits the create and the open for writing it names). In those
+    cases the command can print "snapshot copied to" over bytes that are not the snapshot. That
+    tampering is outside the threat model;
+  - only the last component of FILE is never followed; the directory part is resolved as given (a
+    symlinked directory is followed) and once, when the command opens it: every later step acts on
+    that open directory, while the printed path is resolved again by whoever uses it, so a
+    directory on the path to FILE renamed or re-pointed during the call makes that path name an
+    entry of another directory;
+  - where the v1.4.1 shape (a plain exclusive create of FILE, written and closed) would succeed
+    but any operation this shape performs beyond it is refused or fails — examples, not the
+    list: a directory-relative call, creating or opening the private directory, creating the
+    temporary inside it, a second inode, `fsync`, `fstat`, the hard link, reading what FILE names
+    after it — `--out` refuses, rc 2 (rc 7 for a record whose script was not recorded at launch),
+    instead of falling back to writing FILE in place (the v1.4.1 shape, which could leave part of
+    the copy under FILE). What refuses can be FILE's directory, its filesystem or platform, or
+    the process's umask. Measured on macOS, where a plain exclusive create of FILE in the same
+    directory succeeds: an ACL entry denying `add_subdirectory`; a umask that clears the owner's
+    write or search bit of the private directory's requested 0700 (0177, 0100, 0200 — a umask
+    that clears only the owner's read bit, such as 0400, still publishes, there and wherever
+    `O_PATH` or `O_SEARCH` exists; where neither exists it refuses too — pinned by a test that
+    forces that fallback open flag, no such platform measured); and a FAT (msdos)
+    volume, where `link` answers `ENOTSUP` while the v1.4.1 shape published. Which call names
+    the umask refusal depends on the platform: on macOS (`O_SEARCH`) opening the private
+    directory refuses when the search bit is cleared; on Linux (`O_PATH`, measured in a
+    container) that open checks no permission on the directory itself and creating the
+    temporary refuses. A platform without
+    the directory-relative calls refuses the same way. The destination's directory and the
+    private directory are opened for search only where Python exposes `O_PATH` (Linux) or
+    `O_SEARCH` (macOS), so a directory you
+    can write and search but not read (a drop directory, mode 0300) is accepted there; where
+    neither flag exists it is opened for reading and such a directory is refused, rc 2. A
+    filesystem that reported one file's identity differently through FILE than through the
+    temporary's descriptor would refuse every copy, rc 2 (the command compares identities; no such
+    filesystem was measured);
+  - "the whole file or no file" holds while the machine stays up and while, during the call,
+    nothing else writes FILE's directory as the command opened it, changes what a directory on the
+    path to FILE resolves to (a rename, a re-pointed symlink, a mount), or writes what the command
+    creates (previous bullets); every other statement of it in this document and in the command
+    carries these same limits. The
+    bytes are fsync'ed before the name exists, but no directory is fsync'ed and `fsync(2)` on macOS
+    does not flush the drive's cache (`F_FULLFSYNC` is not used): after a power loss nothing is
+    claimed about FILE, neither the name nor the bytes under it;
+  - a FILE present when the command starts is refused by a check made before anything is created;
+    one that appears after that check is refused by `link` itself (`EEXIST`) — the check alone would
+    not hold under a race.

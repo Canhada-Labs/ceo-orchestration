@@ -13,7 +13,19 @@ Commands::
                                                 the exact call to re-issue: the script SNAPSHOT (bytes
                                                 recorded before dispatch — pass it as scriptPath) + args literal;
                                                 rc 7 and NOTHING printed as exact when the record fails its
-                                                integrity check (snapshot hash, args canonical/hash)
+                                                integrity check (snapshot hash, args canonical/hash) or its
+                                                snapshot cannot be read back unchanged. --out FILE publishes a NEW file:
+                                                an exclusive temporary inside a private directory created in
+                                                FILE's directory, written, fsync'ed, then linked to FILE (never
+                                                replaces; the cleanup removes, by name, only the two names this call
+                                                created — the temporary only once this call has recorded that its
+                                                exclusive create succeeded) —
+                                                rc 2 when FILE is refused or the copy fails, and for a named workflow
+                                                (no recorded bytes to copy); a script not recorded at launch stays rc 7.
+                                                After rc 2 do not use a file at FILE: a refusal made after the link
+                                                that says it cannot tell whether FILE holds the copy, or that FILE is
+                                                not the temporary this call wrote, can leave at FILE what the link
+                                                published; every other refusal leaves nothing this call published there
     ceo-launches.py check --run <run_id> [--script-file F | --script-text F] [--args-file F | --no-args]
                                                 the guard's comparison, standalone: rc 0 same, rc 3 args differ,
                                                 rc 5 script differs (args same), rc 6 inconclusive (unavailable hash
@@ -33,12 +45,14 @@ Never prints transcript content; ``args`` are the operator's own inputs.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
+import secrets
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 _HERE = Path(__file__).resolve()
 _HOOKS_DIR = _HERE.parent.parent / "hooks"
@@ -107,54 +121,279 @@ def cmd_show(args: argparse.Namespace) -> int:
     return 0
 
 
+# ``relaunch --out`` acts on open directory descriptors (openat / mkdirat / linkat /
+# unlinkat / fstatat): the private directory is created INSIDE the destination's
+# directory, so the temporary and the destination are on the same filesystem and
+# ``link`` can join them.
+_DIR_FD_OK = ({os.open, os.link, os.unlink, os.stat, os.mkdir, os.rmdir} <= os.supports_dir_fd
+              and {os.link, os.stat} <= os.supports_follow_symlinks)
+# What ``--out`` creates, named so a leftover is recognisable: the private directory
+# ``<prefix><16 hex>`` in the destination's directory, and the temporary inside it.
+_TMP_PREFIX = ".ceo-launches-out-"
+_TMP_NAME = "snapshot.part"
+# The destination's directory, and the private directory created in it, are only searched through,
+# never listed: both are opened for search only where Python exposes such a flag (O_PATH on
+# Linux, O_SEARCH on macOS), so a directory the user can write and search but not read (a drop
+# directory, mode 0300; a private directory whose owner read bit the umask cleared) is accepted;
+# elsewhere they are opened O_RDONLY and such a directory is refused.
+_DEST_DIR_FLAGS = ((getattr(os, "O_PATH", 0) or getattr(os, "O_SEARCH", 0) or os.O_RDONLY)
+                   | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0))
+_TMP_FLAGS = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+# What ``link`` answers on a filesystem without hard links (FAT/exFAT volumes, some network shares).
+_NO_HARDLINK_ERRNOS = frozenset(getattr(errno, n) for n in ("EPERM", "ENOTSUP", "EOPNOTSUPP", "EXDEV", "EMLINK")
+                                if hasattr(errno, n))
+
+
+def _why(exc: BaseException) -> str:
+    """The exception's type and, when it carries one, its errno name (``PermissionError EACCES``)."""
+    code = getattr(exc, "errno", None)
+    name = errno.errorcode.get(code) if isinstance(code, int) else None
+    return "%s %s" % (type(exc).__name__, name) if name else type(exc).__name__
+
+
 def _write_new_file(path: str, data: bytes) -> Optional[str]:
-    """Create ``path`` with ``data``; never overwrite, never follow a symlink. Returns an error text or None."""
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    """Publish ``data`` as a NEW file at ``path``: every byte under that name, or none of them
+    under it — while the machine stays up (after a power loss nothing is claimed: no directory
+    is fsync'ed, and ``fsync`` on macOS does not flush the drive's cache) and while, during the
+    call, nothing else writes the destination's directory as this call opened it, changes what a
+    directory on the path to ``path`` resolves to (a rename, a re-pointed symlink, a mount), or
+    writes what this call creates (the limits declared in docs/workflow-recovery.md, "relaunch
+    --out (declared)"; see the tampering limit below). Returns ``None`` only once the
+    destination is, by (device, inode), the
+    temporary this call wrote; an error text otherwise — one that says it cannot tell, or that
+    the destination is not that temporary, can come with what ``link`` published at the
+    destination.
+
+    Shape (PLAN-190-FOLLOWUP; Owner decision 2026-09-18, private directory added after the
+    S357 rail round 2): the bytes go to an exclusive temporary (``O_CREAT|O_EXCL|O_NOFOLLOW``,
+    mode 0600 requested) inside a directory this call creates for them, mode 0700 requested, in
+    the destination's directory — the same filesystem by construction. "Private" names that
+    directory's role, not an access guarantee: the umask applies to both requested modes, and
+    access the filesystem grants beyond mode bits (inheritable ACL entries on macOS) reaches the
+    directory, the temporary and the published file for whoever those entries name. The bytes
+    are written to the last byte and ``fsync``'ed, and only then receive the destination name
+    through ``link``, which never replaces an existing entry: a file, symlink or directory
+    already there is ``EEXIST``, a named refusal. Partial bytes are therefore never an entry of
+    the destination's directory; they sit only inside the private directory: a destination that
+    the filesystem treats as the same name as the private directory (by case, by folding) can
+    only name that directory, and ``link`` then refuses. After ``link``, success or error, what
+    the destination names is compared by (device, inode) with the identity ``fstat`` took from
+    the temporary's descriptor; only that identity is announced as the copy (on a filesystem
+    that reported one file's identity differently through the destination name than through
+    that descriptor, every copy would be refused — no such filesystem was measured). The
+    ``finally`` removes, by name, the two names this call created:
+    the temporary (only once this call has recorded that its exclusive create succeeded — an
+    interruption between that create and the record leaves it, with the directory), then the
+    private directory. The
+    destination name itself is never passed to unlink, rmdir, rename or replace. Removal by
+    name trusts the destination's directory the way the ledger's is trusted: someone who can
+    write it can put another EMPTY directory under the private directory's name while this
+    runs, and that one is then removed (declared in docs/workflow-recovery.md). A copy
+    truncated here would be exactly the material the recovery rite passes back as
+    ``scriptPath`` (PLAN-190 W1.1)."""
+    parent, name = os.path.split(path)
+    if not name or name in (".", ".."):
+        return "refused: %s does not name a file (relaunch --out needs a file path)" % path
+    if not _DIR_FD_OK:
+        return "refused: cannot create %s: this platform lacks the directory-relative calls relaunch --out needs" % path
     try:
-        fd = os.open(path, flags, 0o600)
-    except FileExistsError:
-        return "refused: %s already exists (relaunch --out never overwrites)" % path
+        dfd = os.open(parent or ".", _DEST_DIR_FLAGS)
     except (OSError, ValueError) as exc:
-        return "refused: cannot create %s (%s)" % (path, type(exc).__name__)
-    # ``os.write`` may write FEWER bytes than asked: loop until every byte is down.
-    # A truncated copy here is the exact material the recovery rite passes back as
-    # ``scriptPath`` — so it is the whole file or no file (PLAN-190 W1.1).
+        return "refused: cannot open the directory of %s (%s)" % (path, _why(exc))
+    try:
+        return _publish_new_file(dfd, path, name, data)
+    finally:
+        try:
+            os.close(dfd)
+        except OSError:
+            pass
+
+
+def _publish_new_file(dfd: int, path: str, name: str, data: bytes) -> Optional[str]:
+    # Fast path only: a name that exists now is refused before anything is created.
+    # The refusal that holds under a race is the one ``link`` itself returns below.
+    try:
+        os.stat(name, dir_fd=dfd, follow_symlinks=False)
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError) as exc:
+        return "refused: cannot inspect %s (%s)" % (path, _why(exc))
+    else:
+        return "refused: %s already exists (relaunch --out never overwrites)" % path
+    priv = "%s%s" % (_TMP_PREFIX, secrets.token_hex(8))
+    priv_shown = os.path.join(os.path.dirname(path), priv)
+    try:
+        os.mkdir(priv, 0o700, dir_fd=dfd)
+    except (OSError, ValueError) as exc:
+        return "refused: cannot create a private directory next to %s (%s) — nothing was published" % (path, _why(exc))
+    pfd: Optional[int] = None
+    tmp_made = False  # True only once THIS call's exclusive create succeeded: an entry it did not create is never removed
+    tmp_id: Optional[Tuple[int, int]] = None
     written = 0
     failure: Optional[str] = None
-    ours = None
+    refusal: Optional[str] = None
     try:
-        ours = os.fstat(fd)
-        view = memoryview(data)
-        while written < len(data):
+        try:
+            # Opened like the destination's directory (search only where Python exposes the flag).
+            # Where O_PATH or O_SEARCH exists, only the owner's write and search bits of the private
+            # directory decide: O_PATH (Linux) checks no permission on the directory itself, so a
+            # missing bit refuses at the create below; O_SEARCH (macOS) checks search here. Where
+            # the flag falls back to O_RDONLY, this open also needs the owner's read bit.
+            pfd = os.open(priv, _DEST_DIR_FLAGS | getattr(os, "O_NOFOLLOW", 0), dir_fd=dfd)
+        except (OSError, ValueError) as exc:
+            failure = "opening the private directory: %s" % _why(exc)
+        else:
             try:
-                n = os.write(fd, view[written:])
-            except InterruptedError:
-                continue
-            if n <= 0:
-                failure = "no progress"
-                break
-            written += n
-    except OSError as exc:
-        failure = type(exc).__name__
+                fd = os.open(_TMP_NAME, _TMP_FLAGS, 0o600, dir_fd=pfd)
+            except (OSError, ValueError) as exc:
+                failure = "creating the temporary: %s" % _why(exc)
+        if failure is None:
+            tmp_made = True
+            try:
+                # ``os.write`` may write FEWER bytes than asked: loop until every byte is down.
+                view = memoryview(data)
+                while written < len(data):
+                    try:
+                        n = os.write(fd, view[written:])
+                    except InterruptedError:
+                        continue
+                    if n <= 0:
+                        failure = "no progress"
+                        break
+                    written += n
+                if failure is None:
+                    try:
+                        os.fsync(fd)
+                    except OSError as exc:
+                        failure = "fsync %s" % _why(exc)
+                if failure is None:
+                    try:  # the temporary's identity is what decides, after the link, whether FILE is the copy
+                        tst = os.fstat(fd)
+                        tmp_id = (tst.st_dev, tst.st_ino)
+                    except OSError as exc:
+                        failure = "fstat %s" % _why(exc)
+            except OSError as exc:
+                failure = failure or _why(exc)
+            finally:
+                try:
+                    os.close(fd)
+                except OSError as exc:  # a deferred write error surfaces at close: still not a whole file
+                    failure = failure or ("close %s" % _why(exc))
+            if failure is None:
+                try:
+                    os.link(_TMP_NAME, name, src_dir_fd=pfd, dst_dir_fd=dfd, follow_symlinks=False)
+                except (OSError, NotImplementedError) as exc:
+                    # Decided by identity (device, inode), never by spelling. Whatever ``link``
+                    # answered, the temporary itself at the destination name means it created the
+                    # name (a retransmitted LINK on NFS answers EEXIST): the whole copy is published.
+                    try:
+                        at = _entry_id(dfd, name)
+                    except (OSError, ValueError) as sexc:
+                        refusal = "unknown"
+                        failure = "link %s, then reading what that name holds: %s" % (_why(exc), _why(sexc))
+                    else:
+                        if at != tmp_id:
+                            if isinstance(exc, FileExistsError):
+                                refusal = "alias" if at is not None and at == _fd_id(pfd) else "taken"
+                            else:
+                                failure = "link %s" % _why(exc)
+                                if getattr(exc, "errno", None) in _NO_HARDLINK_ERRNOS:
+                                    failure += ": this filesystem may not support hard links, which " \
+                                               "relaunch --out needs — choose a FILE on one that does"
+                else:
+                    # ``link`` publishes whatever the temporary's NAME held at that instant. The same
+                    # identity test as above: FILE is announced as the copy only when it is, by
+                    # (device, inode), the object ``fstat`` identified through the descriptor the
+                    # bytes were written and fsync'ed through — never by the temporary's name.
+                    try:
+                        at = _entry_id(dfd, name)
+                    except (OSError, ValueError) as sexc:
+                        refusal = "unknown"
+                        failure = "link succeeded, then reading what that name holds: %s" % _why(sexc)
+                    else:
+                        if at != tmp_id:
+                            refusal = "foreign"
+    finally:
+        left = _remove_created(dfd, priv, pfd, tmp_made)
+    if left is None:
+        if refusal == "foreign":  # the entry under the temporary's name may not be the object this call wrote
+            fate = "the private directory and what was under the temporary's name were removed"
+        else:
+            fate = "the temporary and its private directory were removed" if tmp_made else "its private directory was removed"
+    else:
+        fate = "the private directory %s could NOT be removed (%s): delete it — nothing in it is a verified copy" % (
+            priv_shown, left)
+    if refusal == "alias":
+        return "refused: on this filesystem %s is the same name as the private directory relaunch --out created " \
+               "for the copy (%s: the two spellings are equivalent here, for example by case) — nothing was " \
+               "published at %s; %s" % (path, priv_shown, path, fate)
+    if refusal == "taken":
+        return "refused: %s already exists — the name was taken while the copy was being written; " \
+               "relaunch --out never overwrites, nothing was replaced; %s" % (path, fate)
+    if refusal == "unknown":
+        return "refused: cannot tell whether %s holds the copy (%s) — do not use a file at %s; %s" % (
+            path, failure, path, fate)
+    if refusal == "foreign":
+        return "refused: after the link, %s is not the temporary this call wrote (compared by device and inode) " \
+               "— do not use a file at %s, which is left as it is; %s" % (path, path, fate)
+    if failure is not None and failure.startswith(("opening ", "creating ", "link ")):
+        return "refused: cannot create %s (%s) — nothing was published at %s; %s" % (path, failure, path, fate)
+    if failure is not None:
+        return "refused: incomplete write for %s (%d of %d bytes, %s) — nothing was published at %s; %s" % (
+            path, written, len(data), failure, path, fate)
+    if left is not None:
+        print("note: %s holds the whole copy; the private directory %s could not be removed (%s) and may hold a "
+              "second name of the copy — delete that directory" % (path, priv_shown, left), file=sys.stderr)
+    return None
+
+
+def _entry_id(dfd: int, name: str) -> Optional[Tuple[int, int]]:
+    """(device, inode) of the entry ``name`` in ``dfd``, never following a symlink; ``None`` when
+    there is no such entry. Any other error propagates: an entry that cannot be read is not an
+    absent one. Identity, never spelling: the filesystem's name rules decide."""
     try:
-        os.close(fd)
-    except OSError as exc:  # a deferred write error surfaces at close: still not a whole file
-        failure = failure or ("close %s" % type(exc).__name__)
-    if failure is None:
+        st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+    except FileNotFoundError:
         return None
-    # Remove ONLY the file this call created: O_EXCL proved it was ours at open, and the
-    # inode comparison proves the name still points at it now.
-    removed = False
+    return (st.st_dev, st.st_ino)
+
+
+def _fd_id(fd: int) -> Optional[Tuple[int, int]]:
+    """(device, inode) of the object open as ``fd``; ``None`` if it cannot be read."""
     try:
-        now = os.lstat(path)
-        if ours is not None and (ours.st_dev, ours.st_ino) == (now.st_dev, now.st_ino):
-            os.unlink(path)
-            removed = True
+        st = os.fstat(fd)
     except OSError:
-        removed = False
-    return "refused: incomplete write to %s (%d of %d bytes, %s) — %s" % (
-        path, written, len(data), failure,
-        "the partial file was removed" if removed else "the partial file could NOT be removed: delete it before use")
+        return None
+    return (st.st_dev, st.st_ino)
+
+
+def _remove_created(dfd: int, priv: str, pfd: Optional[int], tmp_made: bool) -> Optional[str]:
+    """Remove, by name, the two names this call created: the temporary inside the private
+    directory, only when this call's exclusive create of it succeeded, then the private
+    directory. No other name is removed. A removal by name is not the removal of an object:
+    someone who can write the destination's directory can put another EMPTY directory under
+    the private directory's name meanwhile, and ``rmdir`` then removes that one (declared in
+    docs/workflow-recovery.md). ``None`` once both names are gone."""
+    problem: Optional[str] = None
+    if pfd is not None:
+        if tmp_made:
+            try:
+                os.unlink(_TMP_NAME, dir_fd=pfd)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                problem = _why(exc)
+        try:
+            os.close(pfd)
+        except OSError:
+            pass
+    try:
+        os.rmdir(priv, dir_fd=dfd)
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        problem = problem or _why(exc)
+    return problem
 
 
 def cmd_relaunch(args: argparse.Namespace) -> int:
@@ -175,6 +414,16 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
     a = m.get("args") or {}
     source = script.get("source")
     exact_script = source in ("inline", "named") or (source == "path" and script.get("unreadable") is not True)
+    snap: Optional[bytes] = None
+    if source != "named":
+        snap = LL.load_snapshot(d, m)
+        if exact_script and (snap is None or hashlib.sha256(snap).hexdigest() != script.get("sha256")):
+            # The integrity check above verified ITS read; these are the bytes printed and copied,
+            # so they are held to the same recorded hash — else the same verdict (rc 7, nothing exact).
+            print("NOT EXACT: the script snapshot of run %s %s after its integrity check — do not relaunch from it; "
+                  "rebuild the call from the script and args you can verify"
+                  % (args.run_id, "could not be read back" if snap is None else "changed when read back"), file=sys.stderr)
+            return 7
     if not exact_script:
         print("NOT EXACT: the script of run %s was not recorded at launch (%s) — the args below are exact, the script is not"
               % (args.run_id, script.get("why") or source), file=sys.stderr)
@@ -183,15 +432,14 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
     if source == "named":
         print("name: %s" % m.get("name"))
     else:
-        snap = LL.load_snapshot(d, m)
         if snap is not None:
             sp = LL.snapshot_path(d, m["launch_id"])
             print("scriptPath: %s   # SNAPSHOT of the bytes recorded before dispatch (sha256 %s, %d bytes)" % (sp, hashlib.sha256(snap).hexdigest(), len(snap)))
-            if args.out:
+            if args.out is not None:  # an explicit ``--out ""`` is a request too — refused, never ignored
                 err = _write_new_file(args.out, snap)
                 if err:
                     print(err, file=sys.stderr)
-                    return 2
+                    return 2 if exact_script else 7  # a script not recorded at launch stays rc 7
                 print("snapshot copied to %s" % args.out)
             if source == "path" and script.get("path"):
                 p = Path(script["path"])
@@ -213,7 +461,16 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
     code = m.get("code") or {}
     if code.get("head"):
         print("code revision at launch: %s%s" % (code["head"], " (dirty)" if code.get("dirty") else ""))
-    return 0 if exact_script else 7
+    rc = 0 if exact_script else 7
+    if args.out is not None and snap is None:
+        # An --out that creates no file never exits 0 and is never silent.
+        print("refused: --out has nothing to copy for run %s: %s — no file was created at %s" % (
+            args.run_id,
+            "it was launched by name (the harness resolves the script by that name; no bytes were recorded)"
+            if source == "named" else "its script was not recorded at launch",
+            args.out), file=sys.stderr)
+        return rc or 2
+    return rc
 
 
 def cmd_check(args: argparse.Namespace) -> int:

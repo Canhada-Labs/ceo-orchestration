@@ -760,6 +760,172 @@ class CheckWorkflowLaunchE2E(TestEnvContext):
         self.assertIn("incomplete write", stderr.getvalue())
         self.assertFalse(copy.exists(), "rc 2 and no truncated copy on disk")
 
+    # --- relaunch --out: the structural cure (PLAN-190-FOLLOWUP, v1.4.2) -------
+    # Each test below fails on 19771fa1 (destination opened O_EXCL and written in
+    # place, cleanup by lstat + unlink of the destination, `--out` ignored for a
+    # named workflow and for a snapshot that cannot be read back).
+    def _relaunch_in_process(self, d: Path, *extra: str, write=None, load_snapshot=None):
+        """``relaunch`` through ``main()`` in this process, with ``os.write`` and/or
+        ``LL.load_snapshot`` replaced when given. Returns ``(rc, stdout, stderr)``."""
+        import contextlib
+        import io
+        from unittest import mock
+
+        cli = _load_launches_cli()
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.ExitStack() as stack:
+            if write is not None:
+                stack.enter_context(mock.patch.object(cli.os, "write", write))
+            if load_snapshot is not None:
+                stack.enter_context(mock.patch.object(cli.LL, "load_snapshot", load_snapshot))
+            stack.enter_context(contextlib.redirect_stdout(out))
+            stack.enter_context(contextlib.redirect_stderr(err))
+            rc = cli.main(["--project-dir", str(d.parent), "relaunch", RUN] + list(extra))
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_relaunch_out_of_a_named_workflow_is_an_error_not_a_silent_rc_0(self):
+        self._launch_and_bind({"name": "saved-flow", "args": {"s": 1}})
+        d = self._manifests()[0].parent
+        copy = self.proj / "copy.js"
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(copy))
+        self.assertNotEqual(rc, 0, "an --out that copies nothing never exits 0")
+        self.assertEqual(rc, 2, err)
+        self.assertIn("nothing to copy", err)
+        self.assertIn("launched by name", err)
+        self.assertNotIn("snapshot copied to", out)
+        self.assertFalse(os.path.lexists(str(copy)))
+        # An explicit ``--out ""`` is a request too, for a named workflow as for an inline script.
+        before = set(os.listdir(str(self.proj)))
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", "")
+        self.assertEqual(rc, 2, "a named workflow with --out '' never exits 0: " + out + err)
+        self.assertIn("nothing to copy", err)
+        self.assertNotIn("snapshot copied to", out)
+        self.assertEqual(set(os.listdir(str(self.proj))), before)
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN)
+        self.assertEqual(rc, 0, "without --out the named recipe is unchanged: " + err)
+        self.assertIn("name: saved-flow", out)
+
+    def test_relaunch_out_with_an_empty_path_is_refused_not_taken_as_omitted(self):
+        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
+        d = self._manifests()[0].parent
+        before = set(os.listdir(str(self.proj)))
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", "")
+        self.assertEqual(rc, 2, "an explicit --out '' is a request that cannot be honoured: " + out + err)
+        self.assertIn("does not name a file", err)
+        self.assertNotIn("snapshot copied to", out)
+        self.assertEqual(set(os.listdir(str(self.proj))), before)
+
+    def test_relaunch_out_of_a_script_unrecorded_at_launch_says_nothing_was_copied(self):
+        self._launch_and_bind({"scriptPath": "missing.js", "args": {"slice": "A01"}})
+        d = self._manifests()[0].parent
+        copy = self.proj / "copy.js"
+        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(copy))
+        self.assertEqual(rc, 7, "still NOT EXACT: " + err)
+        self.assertIn("nothing to copy", err, "the ignored --out is named, not silent")
+        self.assertNotIn("snapshot copied to", out)
+        self.assertFalse(os.path.lexists(str(copy)))
+
+    def test_relaunch_out_that_fails_for_a_script_unrecorded_at_launch_stays_rc_7(self):
+        # B-R2-MECH-5: only a hand-edited or foreign manifest carries a snapshot for a script
+        # not recorded at launch; a failed --out then keeps the NOT EXACT verdict, rc 7.
+        self._launch_and_bind({"scriptPath": "missing.js", "args": {"slice": "A01"}})
+        d = self._manifests()[0].parent
+        taken = self.proj / "taken.js"
+        taken.write_bytes(b"theirs")
+        rc, out, err = self._relaunch_in_process(d, "--out", str(taken), load_snapshot=lambda dd, m: b"bytes")
+        self.assertEqual(rc, 7, out + err)
+        self.assertIn("already exists", err)
+        self.assertNotIn("snapshot copied to", out)
+        self.assertEqual(taken.read_bytes(), b"theirs")
+
+    def test_relaunch_when_the_snapshot_cannot_be_read_back_is_not_exact(self):
+        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
+        d = self._manifests()[0].parent
+        from _lib import launch_ledger as LL  # noqa: E402
+
+        real_load = LL.load_snapshot
+        for extra in ((), ("--out", str(self.proj / "copy.js"))):
+            calls = {"n": 0}
+
+            def first_read_only(dd, m, _calls=calls):
+                _calls["n"] += 1  # the integrity check reads it; the second read "loses" it
+                return real_load(dd, m) if _calls["n"] == 1 else None
+
+            rc, out, err = self._relaunch_in_process(d, *extra, load_snapshot=first_read_only)
+            self.assertEqual(rc, 7, "a snapshot that vanished after the integrity check is NOT EXACT: %r" % (extra,))
+            self.assertIn("could not be read back", err)
+            self.assertNotIn("exact recorded call", out)
+            self.assertNotIn("snapshot copied to", out)
+            self.assertFalse(os.path.lexists(str(self.proj / "copy.js")))
+
+    def test_relaunch_when_the_snapshot_changes_between_reads_is_not_exact(self):
+        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
+        d = self._manifests()[0].parent
+        from _lib import launch_ledger as LL  # noqa: E402
+
+        real_load = LL.load_snapshot
+        copy = self.proj / "copy.js"
+        calls = {"n": 0}
+
+        def changed_on_the_second_read(dd, m):
+            calls["n"] += 1
+            return real_load(dd, m) if calls["n"] == 1 else SCRIPT_B.encode("utf-8")
+
+        rc, out, err = self._relaunch_in_process(d, "--out", str(copy), load_snapshot=changed_on_the_second_read)
+        self.assertEqual(rc, 7, "bytes that no longer hash to the record are never copied or printed as exact")
+        self.assertIn("changed when read back", err)
+        self.assertNotIn("exact recorded call", out)
+        self.assertFalse(os.path.lexists(str(copy)))
+
+    def test_relaunch_out_is_a_named_refusal_when_the_destination_appears_during_the_write(self):
+        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
+        d = self._manifests()[0].parent
+        copy = self.proj / "copy.js"
+        staged = self.proj / "theirs.staged"
+        staged.write_bytes(b"another process's file")
+        before = set(os.listdir(str(self.proj)))
+        real_write = os.write
+        state = {"n": 0}
+
+        def another_process_takes_the_name(fd, buf):
+            state["n"] += 1
+            if state["n"] == 1:
+                os.replace(str(staged), str(copy))
+            return real_write(fd, buf)
+
+        rc, out, err = self._relaunch_in_process(d, "--out", str(copy), write=another_process_takes_the_name)
+        self.assertEqual(rc, 2, "the name was taken mid-copy: refused, never reported as copied\n" + out + err)
+        self.assertIn("already exists", err)
+        self.assertIn("nothing was replaced", err)
+        self.assertNotIn("snapshot copied to", out)
+        self.assertEqual(copy.read_bytes(), b"another process's file", "the file that appeared is never replaced")
+        self.assertEqual(set(os.listdir(str(self.proj))), (before - {"theirs.staged"}) | {"copy.js"}, "no temporary left behind")
+
+    def test_relaunch_out_refuses_a_symlink_that_appears_during_the_write(self):
+        self._launch_and_bind({"script": SCRIPT_A, "args": {"slice": "A01"}})
+        d = self._manifests()[0].parent
+        copy = self.proj / "copy.js"
+        elsewhere = self.proj / "elsewhere.js"
+        staged = self.proj / "link.staged"
+        os.symlink(str(elsewhere), str(staged))
+        before = set(os.listdir(str(self.proj)))
+        real_write = os.write
+        state = {"n": 0}
+
+        def a_symlink_takes_the_name(fd, buf):
+            state["n"] += 1
+            if state["n"] == 1:
+                os.replace(str(staged), str(copy))
+            return real_write(fd, buf)
+
+        rc, out, err = self._relaunch_in_process(d, "--out", str(copy), write=a_symlink_takes_the_name)
+        self.assertEqual(rc, 2, out + err)
+        self.assertNotIn("snapshot copied to", out)
+        self.assertTrue(os.path.islink(str(copy)), "the symlink is left as it was, never replaced")
+        self.assertEqual(os.readlink(str(copy)), str(elsewhere))
+        self.assertFalse(os.path.lexists(str(elsewhere)), "a symlink is never followed")
+        self.assertEqual(set(os.listdir(str(self.proj))), (before - {"link.staged"}) | {"copy.js"}, "no temporary left behind")
+
 
 def _load_launches_cli():
     import importlib.util
@@ -771,12 +937,23 @@ def _load_launches_cli():
 
 
 class RelaunchOutWholeFileOrNoFile(TestEnvContext):
-    """PLAN-190 W1.1 — ``relaunch --out`` delivers every byte or leaves no file behind.
+    """PLAN-190 W1.1 + PLAN-190-FOLLOWUP (v1.4.2) — ``relaunch --out`` publishes the
+    whole file under the destination name or nothing, and never removes, renames or
+    replaces anything at the destination name that the call did not create — while the
+    machine stays up and while, during the call, nothing else writes the destination's
+    directory as the call opened it, changes what a directory on the path to the
+    destination resolves to, or writes what the call creates (the limits declared in
+    docs/workflow-recovery.md, "relaunch --out (declared)").
 
     ``os.write`` may write fewer bytes than asked. The fakes below are HONEST short
     writes (they really write what they report), so the file on disk is what the
     function under test produced. Mutation proof: a single un-looped ``os.write``
     turns ``test_short_writes_still_deliver_every_byte`` red (truncated copy, rc 0).
+    The structural cure writes an exclusive temporary inside a private directory it
+    creates in the destination's directory and publishes it with ``link`` (no
+    replace); the tests marked "structural" below fail on 19771fa1, which wrote the
+    destination in place and cleaned up with an ``lstat`` of the destination
+    followed by an ``unlink`` of it.
     """
 
     DATA = b"0123456789A"  # 11 bytes — the size the rail round reproduced with
@@ -808,7 +985,10 @@ class RelaunchOutWholeFileOrNoFile(TestEnvContext):
         self.assertEqual(out.read_bytes(), self.DATA, "a short write is continued, never reported as success on a truncated file")
         self.assertEqual(calls, [11, 9, 7, 5, 3, 1], "each call resumes where the previous one stopped")
 
-    def test_failure_midway_removes_the_partial_file(self):
+    def _names(self) -> set:
+        return set(os.listdir(str(self.dir)))
+
+    def test_failure_midway_publishes_nothing_and_removes_the_temporary(self):
         import errno
 
         state = {"n": 0}
@@ -825,8 +1005,11 @@ class RelaunchOutWholeFileOrNoFile(TestEnvContext):
         self.assertIsNotNone(err)
         self.assertIn("incomplete write", err)
         self.assertIn("2 of 11 bytes", err)
-        self.assertIn("the partial file was removed", err)
-        self.assertFalse(out.exists(), "no truncated copy may be left where the recovery rite would pick it up")
+        self.assertIn("OSError ENOSPC", err, "a write error names its errno, like every other refusal (B-R2-MECH-4)")
+        self.assertIn("nothing was published at", err)
+        self.assertIn("the temporary and its private directory were removed", err)
+        self.assertFalse(os.path.lexists(str(out)), "no truncated copy may be left where the recovery rite would pick it up")
+        self.assertEqual(self._names(), set(), "and no temporary either")
 
     def test_zero_progress_is_a_failure_not_a_spin(self):
         out = self.dir / "copy.js"
@@ -835,7 +1018,8 @@ class RelaunchOutWholeFileOrNoFile(TestEnvContext):
         self.assertIsNotNone(err)
         self.assertIn("0 of 11 bytes", err)
         self.assertIn("no progress", err)
-        self.assertFalse(out.exists())
+        self.assertFalse(os.path.lexists(str(out)))
+        self.assertEqual(self._names(), set())
 
     def test_cleanup_never_removes_a_file_that_is_not_ours(self):
         import errno
@@ -844,15 +1028,743 @@ class RelaunchOutWholeFileOrNoFile(TestEnvContext):
         other = self.dir / "other.js"
         other.write_bytes(b"someone else's file")
 
-        def swap_the_name_then_fail(fd, buf):
-            os.replace(str(other), str(out))  # the name now points at ANOTHER inode
+        def another_file_takes_the_name_then_fail(fd, buf):
+            os.replace(str(other), str(out))
             raise OSError(errno.EIO, "Input/output error")
 
-        with self._patched(swap_the_name_then_fail):
+        with self._patched(another_file_takes_the_name_then_fail):
             err = self.cli._write_new_file(str(out), self.DATA)
         self.assertIsNotNone(err)
+        self.assertIn("nothing was published at", err)
+        self.assertEqual(out.read_bytes(), b"someone else's file", "the file at the destination name is never touched")
+        self.assertEqual(self._names(), {"copy.js"}, "the temporary is gone")
+
+    # --- structural (each fails on 19771fa1) ---------------------------------
+    def test_structural_the_destination_name_never_exists_before_every_byte_is_down(self):
+        out = self.dir / "copy.js"
+        seen = []
+
+        def observing_two_bytes_at_a_time(fd, buf):
+            seen.append(os.path.lexists(str(out)))
+            return self._real_write(fd, bytes(buf[:2]))
+
+        with self._patched(observing_two_bytes_at_a_time):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNone(err)
+        self.assertTrue(seen)
+        self.assertEqual(set(seen), {False}, "no reader can open a partial copy under the destination name")
+        self.assertEqual(out.read_bytes(), self.DATA)
+        self.assertEqual(stat.S_IMODE(out.lstat().st_mode), 0o600)
+        self.assertEqual(out.lstat().st_nlink, 1, "the temporary name is gone: the copy has exactly one name")
+        self.assertEqual(self._names(), {"copy.js"})
+
+    def test_structural_the_temporary_is_exclusive_nofollow_0600_in_a_private_directory_on_the_same_filesystem(self):
+        from unittest import mock
+
+        out = self.dir / "copy.js"
+        creates, mkdirs, relative_opens = [], [], []
+        real_open, real_mkdir = os.open, os.mkdir
+
+        def spy_open(path, flags, mode=0o777, *, dir_fd=None):
+            if dir_fd is not None:
+                relative_opens.append((os.path.basename(os.fsdecode(path)), flags))
+            if flags & os.O_CREAT:
+                where = os.fstat(dir_fd) if dir_fd is not None else os.stat(os.path.dirname(os.fsdecode(path)) or ".")
+                creates.append((os.path.basename(os.fsdecode(path)), flags, mode, (where.st_dev, where.st_ino)))
+            return real_open(path, flags, mode, dir_fd=dir_fd)
+
+        def spy_mkdir(path, mode=0o777, *, dir_fd=None):
+            real_mkdir(path, mode, dir_fd=dir_fd)
+            parent = os.fstat(dir_fd) if dir_fd is not None else os.stat(os.path.dirname(os.fsdecode(path)) or ".")
+            made = os.stat(path, dir_fd=dir_fd, follow_symlinks=False)
+            mkdirs.append((mode, (parent.st_dev, parent.st_ino), (made.st_dev, made.st_ino), stat.S_IMODE(made.st_mode)))
+
+        with mock.patch.object(self.cli.os, "open", spy_open), mock.patch.object(self.cli.os, "mkdir", spy_mkdir):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNone(err)
+        here = os.stat(str(self.dir))
+        self.assertEqual(len(mkdirs), 1, "one private directory, created by this call: %r" % (mkdirs,))
+        dmode, parent, made, made_mode = mkdirs[0]
+        self.assertEqual(parent, (here.st_dev, here.st_ino), "the private directory is created in the destination's directory")
+        self.assertEqual(made[0], here.st_dev, "same filesystem as the destination, so link can join them")
+        self.assertEqual(dmode, 0o700)
+        self.assertEqual(made_mode & 0o077, 0, "no group or other MODE bits (mode bits only: ACL entries are not checked)")
+        priv_opens = [f for n, f in relative_opens if n.startswith(self.cli._TMP_PREFIX)]
+        self.assertEqual(len(priv_opens), 1, relative_opens)
+        for flag in ("O_NOFOLLOW", "O_DIRECTORY"):
+            self.assertTrue(priv_opens[0] & getattr(os, flag, 0) or not hasattr(os, flag),
+                            "the private directory is opened %s" % flag)
+        self.assertEqual(len(creates), 1, creates)
+        name, flags, mode, where = creates[0]
+        self.assertNotEqual(name, "copy.js", "the bytes are written under ANOTHER name, never the destination's")
+        self.assertEqual(where, made, "the temporary lives in the private directory, never in the destination's")
+        self.assertTrue(flags & os.O_EXCL)
+        self.assertTrue(flags & getattr(os, "O_NOFOLLOW", 0) or not hasattr(os, "O_NOFOLLOW"))
+        self.assertEqual(mode, 0o600)
+        self.assertEqual(self._names(), {"copy.js"}, "the private directory is removed once the copy is published")
+
+    def _kind_at(self, p: Path):
+        try:
+            st = os.lstat(str(p))
+        except FileNotFoundError:
+            return None
+        if stat.S_ISREG(st.st_mode):
+            return "file:%d" % st.st_size
+        return "dir" if stat.S_ISDIR(st.st_mode) else "other"
+
+    def _write_observing(self, out: Path):
+        """``_write_new_file`` with two-byte writes, recording what ``out`` names before each write."""
+        seen = []
+
+        def observing(fd, buf):
+            seen.append(self._kind_at(out))
+            return self._real_write(fd, bytes(buf[:2]))
+
+        with self._patched(observing):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        return err, seen
+
+    _PRIV = ".ceo-launches-out-0123456789abcdef"  # the private directory's name once the random part is forced
+
+    def _forced_token(self):
+        from unittest import mock
+
+        return mock.patch("secrets.token_hex", lambda n=None: "0123456789abcdef")
+
+    def test_structural_a_destination_spelled_as_the_private_directory_never_names_a_partial_file(self):
+        # The random part is forced so the destination IS the private directory's name, on any filesystem.
+        out = self.dir / self._PRIV
+        with self._forced_token():
+            err, seen = self._write_observing(out)
+        self.assertTrue(seen, "the copy was written")
+        self.assertEqual([k for k in seen if k and k.startswith("file")], [], "partial bytes under the destination name: %r" % seen)
+        self.assertIsNotNone(err)
+        self.assertIn("same name as the private directory", err)
+        self.assertIn("nothing was published at", err)
+        self.assertFalse(os.path.lexists(str(out)))
+        self.assertEqual(self._names(), set())
+
+    def test_structural_an_equivalent_spelling_of_a_created_name_never_exposes_a_partial_file(self):
+        # S357 rail round 2 (R1-2): on a case-insensitive volume a spelling that differs by case, or by a
+        # character that folds to an ASCII letter (U+017F folds to "s"), names the SAME entry as a name
+        # this call creates. Whether it does is asked of the filesystem, never decided by spelling.
+        for spelling in (self._PRIV.upper(), self._PRIV.replace("launches", "launcheſ")):
+            os.mkdir(str(self.dir / self._PRIV))
+            aliases = os.path.lexists(str(self.dir / spelling))
+            os.rmdir(str(self.dir / self._PRIV))
+            with self.subTest(spelling=spelling, same_entry_on_this_volume=aliases):
+                out = self.dir / spelling
+                with self._forced_token():
+                    err, seen = self._write_observing(out)
+                self.assertTrue(seen)
+                self.assertEqual([k for k in seen if k and k.startswith("file")], [], "partial bytes under the destination name: %r" % seen)
+                if aliases:
+                    self.assertIsNotNone(err)
+                    self.assertIn("same name as the private directory", err)
+                    self.assertFalse(os.path.lexists(str(out)))
+                else:
+                    self.assertIsNone(err, "a spelling the filesystem keeps distinct is an ordinary destination")
+                    self.assertEqual(out.read_bytes(), self.DATA)
+                    os.unlink(str(out))
+                self.assertEqual(self._names(), set(), "nothing is left behind")
+
+    def test_structural_without_its_private_directory_it_refuses_never_writes_in_place(self):
+        import errno
+        from unittest import mock
+
+        def eacces(*a, **kw):
+            raise OSError(errno.EACCES, "Permission denied")
+
+        out = self.dir / "copy.js"
+        with mock.patch.object(self.cli.os, "mkdir", eacces):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err, "no fallback to writing the destination in place")
+        self.assertIn("cannot create a private directory", err)
+        self.assertIn("nothing was published", err)
+        self.assertFalse(os.path.lexists(str(out)))
+        self.assertEqual(self._names(), set())
+
+    def test_structural_a_temporary_that_cannot_be_removed_is_named(self):
+        import contextlib
+        import errno
+        import io
+        from unittest import mock
+
+        def refuse_unlink(path, *a, **kw):
+            raise OSError(errno.EACCES, "Permission denied")
+
+        # After the link: the copy is whole, the call succeeds, stderr names the second name left behind.
+        out = self.dir / "copy.js"
+        stderr = io.StringIO()
+        with mock.patch.object(self.cli.os, "unlink", refuse_unlink), contextlib.redirect_stderr(stderr):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNone(err)
+        self.assertEqual(out.read_bytes(), self.DATA)
+        leftovers = sorted(self._names() - {"copy.js"})
+        self.assertEqual(len(leftovers), 1, self._names())
+        self.assertTrue(leftovers[0].startswith(".ceo-launches-out-"))
+        self.assertTrue((self.dir / leftovers[0]).is_dir(), "the leftover is the private directory")
+        self.assertIn(leftovers[0], stderr.getvalue())
+        self.assertIn("could not be removed", stderr.getvalue())
+        import shutil
+
+        shutil.rmtree(str(self.dir / leftovers[0]))
+
+        # Before the link (write failed): nothing published, the refusal names the leftover.
+        failed = self.dir / "failed.js"
+        with self._patched(lambda fd, buf: 0), mock.patch.object(self.cli.os, "unlink", refuse_unlink):
+            err = self.cli._write_new_file(str(failed), self.DATA)
+        self.assertIn("nothing was published at", err)
         self.assertIn("could NOT be removed", err)
-        self.assertEqual(out.read_bytes(), b"someone else's file", "cleanup removes only the inode this call created")
+        self.assertFalse(os.path.lexists(str(failed)))
+        leftovers = sorted(self._names() - {"copy.js"})
+        self.assertEqual(len(leftovers), 1, self._names())
+        self.assertIn(leftovers[0], err)
+
+    def test_structural_a_failed_fsync_publishes_nothing(self):
+        import errno
+        from unittest import mock
+
+        def eio(fd):
+            raise OSError(errno.EIO, "Input/output error")
+
+        out = self.dir / "copy.js"
+        with mock.patch.object(self.cli.os, "fsync", eio):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err, "the bytes are flushed before the name is published")
+        self.assertIn("nothing was published at", err)
+        self.assertFalse(os.path.lexists(str(out)))
+        self.assertEqual(self._names(), set())
+
+    def test_structural_an_interrupted_write_leaves_neither_a_destination_nor_a_temporary(self):
+        state = {"n": 0}
+
+        def two_bytes_then_ctrl_c(fd, buf):
+            state["n"] += 1
+            if state["n"] == 1:
+                return self._real_write(fd, bytes(buf[:2]))
+            raise KeyboardInterrupt
+
+        out = self.dir / "copy.js"
+        with self._patched(two_bytes_then_ctrl_c):
+            with self.assertRaises(KeyboardInterrupt):
+                self.cli._write_new_file(str(out), self.DATA)
+        self.assertFalse(os.path.lexists(str(out)), "a Ctrl-C mid-write never leaves a partial destination")
+        self.assertEqual(self._names(), set(), "and the temporary is removed on the way out")
+
+    def test_structural_the_destination_name_is_never_unlinked_renamed_or_replaced(self):
+        import contextlib
+        import errno
+        from unittest import mock
+
+        calls = []
+
+        def spying(fname):
+            real = getattr(os, fname)
+
+            def spy(*a, **kw):
+                calls.append((fname, [os.path.basename(os.fsdecode(x)) for x in a if isinstance(x, (str, bytes, os.PathLike))]))
+                return real(*a, **kw)
+            return spy
+
+        state = {"n": 0}
+
+        def two_bytes_then_disk_full(fd, buf):
+            state["n"] += 1
+            if state["n"] == 1:
+                return self._real_write(fd, bytes(buf[:2]))
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        kept = self.dir / "kept.js"
+        kept.write_bytes(b"pre-existing")
+        with contextlib.ExitStack() as stack:
+            for fname in ("unlink", "remove", "rename", "replace", "rmdir"):
+                stack.enter_context(mock.patch.object(self.cli.os, fname, spying(fname)))
+            self.assertIsNone(self.cli._write_new_file(str(self.dir / "ok.js"), self.DATA))
+            with self._patched(two_bytes_then_disk_full):
+                self.assertIsNotNone(self.cli._write_new_file(str(self.dir / "failed.js"), self.DATA))
+            refused = self.cli._write_new_file(str(kept), self.DATA)
+        self.assertIn("already exists", refused)
+        self.assertEqual(kept.read_bytes(), b"pre-existing")
+        touched = [c for c in calls if {"ok.js", "failed.js", "kept.js"} & set(c[1])]
+        self.assertEqual(touched, [], "only the temporary is ever removed, by its own name")
+        self.assertEqual(self._names(), {"ok.js", "kept.js"})
+
+    def test_structural_a_file_another_process_puts_at_the_destination_survives_a_failed_write(self):
+        import errno
+        from unittest import mock
+
+        out = self.dir / "copy.js"
+        theirs = self.dir / "theirs.staged"
+        theirs.write_bytes(b"theirs")
+        state = {"n": 0}
+
+        def they_take_the_name():
+            if theirs.exists():
+                os.replace(str(theirs), str(out))
+
+        def two_bytes_then_disk_full(fd, buf):
+            state["n"] += 1
+            if state["n"] == 1:
+                return self._real_write(fd, bytes(buf[:2]))
+            if not os.path.lexists(str(out)):
+                they_take_the_name()  # the name is free while the copy is written: another process takes it
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        real_unlink = os.unlink
+
+        def unlink_racing(path, *a, **kw):
+            if os.fsdecode(path) == str(out):
+                they_take_the_name()  # the window between an identity check and an unlink by name
+            return real_unlink(path, *a, **kw)
+
+        with self._patched(two_bytes_then_disk_full), mock.patch.object(self.cli.os, "unlink", unlink_racing):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err)
+        self.assertTrue(os.path.lexists(str(out)), "the other process's file was removed by --out's cleanup")
+        self.assertEqual(out.read_bytes(), b"theirs")
+        self.assertEqual(self._names(), {"copy.js"})
+
+    # --- v1.4.2 build review, round 1 ------------------------------------------
+    # Each test below pins one claim of the cure. Which of them fail on 19771fa1, and
+    # which on the lane before this round, is recorded in the PLAN-190-FOLLOWUP evidence.
+    def test_a_symlink_at_the_destination_at_start_is_refused_before_anything_is_created(self):
+        from unittest import mock
+
+        out = self.dir / "copy.js"
+        target = self.dir / "elsewhere.js"
+        os.symlink(str(target), str(out))  # dangling: following it would say "no such file"
+        mkdirs, writes = [], []
+        real_mkdir = os.mkdir
+
+        def spy_mkdir(path, mode=0o777, *, dir_fd=None):
+            mkdirs.append(os.fsdecode(path))
+            return real_mkdir(path, mode, dir_fd=dir_fd)
+
+        def spy_write(fd, buf):
+            writes.append(len(buf))
+            return self._real_write(fd, buf)
+
+        with mock.patch.object(self.cli.os, "mkdir", spy_mkdir), self._patched(spy_write):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err)
+        self.assertIn("already exists (relaunch --out never overwrites)", err)
+        self.assertNotIn("while the copy was being written", err, "refused by the check made before anything is created")
+        self.assertEqual(mkdirs, [], "no private directory is created for a destination that exists at start")
+        self.assertEqual(writes, [], "and no byte is written")
+        self.assertEqual(os.readlink(str(out)), str(target), "the symlink is left as it is")
+        self.assertFalse(os.path.lexists(str(target)), "and never followed")
+        self.assertEqual(self._names(), {"copy.js"})
+
+    def test_a_symlink_swapped_in_for_the_private_directory_is_never_followed(self):
+        from unittest import mock
+
+        out = self.dir / "copy.js"
+        target = self.dir / "elsewhere"
+        target.mkdir(mode=0o700)
+        real_mkdir = os.mkdir
+        swapped = []
+
+        def mkdir_then_swap_for_a_symlink(path, mode=0o777, *, dir_fd=None):
+            real_mkdir(path, mode, dir_fd=dir_fd)
+            if dir_fd is not None and os.fsdecode(path).startswith(self.cli._TMP_PREFIX):
+                # another process renames the new directory away and puts a symlink under its name
+                os.rename(path, os.fsdecode(path) + ".moved", src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+                os.symlink(str(target), path, dir_fd=dir_fd)
+                swapped.append(os.fsdecode(path))
+
+        with mock.patch.object(self.cli.os, "mkdir", mkdir_then_swap_for_a_symlink):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertEqual(len(swapped), 1)
+        self.assertIsNotNone(err, "a symlink under the private directory's name is refused, never followed")
+        self.assertIn("opening the private directory", err, "the open of the private directory refuses the symlink (O_NOFOLLOW)")
+        self.assertFalse(os.path.lexists(str(out)))
+        self.assertEqual(os.listdir(str(target)), [], "nothing is written through the symlink")
+
+    def test_an_entry_at_the_temporary_name_that_this_call_did_not_create_is_never_removed(self):
+        from unittest import mock
+
+        out = self.dir / "copy.js"
+        real_open = os.open
+        planted = []
+
+        def plant_then_open(path, flags, mode=0o777, *, dir_fd=None):
+            if dir_fd is not None and os.fsdecode(path) == self.cli._TMP_NAME and not planted:
+                os.symlink("/nonexistent/planted", path, dir_fd=dir_fd)  # put there by another process
+                planted.append(path)
+            return real_open(path, flags, mode, dir_fd=dir_fd)
+
+        with mock.patch.object(self.cli.os, "open", plant_then_open):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertEqual(len(planted), 1)
+        self.assertIsNotNone(err)
+        self.assertIn("creating the temporary", err)
+        self.assertIn("nothing was published at", err)
+        self.assertFalse(os.path.lexists(str(out)))
+        leftovers = sorted(self._names())
+        self.assertEqual(len(leftovers), 1, leftovers)
+        self.assertIn(leftovers[0], err, "the private directory still holds that entry, so it stays and is named")
+        self.assertIn("could NOT be removed", err)
+        self.assertTrue(os.path.islink(str(self.dir / leftovers[0] / self.cli._TMP_NAME)),
+                        "the exclusive create failed, so the entry at the temporary's name is not this call's: kept")
+
+    def test_a_link_that_reports_an_error_after_creating_the_name_publishes_the_copy(self):
+        import errno
+        from unittest import mock
+
+        real_link = os.link
+        # EEXIST is what a retransmitted LINK on NFS answers; EIO stands for any other error
+        # reported after the name was created. Decided by identity, whatever the error.
+        for exc in (FileExistsError(errno.EEXIST, "File exists"), OSError(errno.EIO, "Input/output error")):
+            def link_then_report(*a, _exc=exc, **kw):
+                real_link(*a, **kw)
+                raise _exc
+
+            out = self.dir / ("copy-%s.js" % errno.errorcode[exc.errno])
+            with self.subTest(errno=errno.errorcode[exc.errno]):
+                with mock.patch.object(self.cli.os, "link", link_then_report):
+                    err = self.cli._write_new_file(str(out), self.DATA)
+                self.assertIsNone(err, "the destination is this call's temporary, whole: a publication, not a refusal")
+                self.assertEqual(out.read_bytes(), self.DATA)
+                self.assertEqual(out.lstat().st_nlink, 1, "the temporary's own name is gone")
+                self.assertEqual(self._names(), {out.name})
+                os.unlink(str(out))
+
+    def test_after_a_link_error_a_destination_that_cannot_be_read_is_not_taken_for_an_absent_one(self):
+        import errno
+        from unittest import mock
+
+        real_link, real_stat = os.link, os.stat
+        linked = []
+
+        def link_then_eio(*a, **kw):
+            real_link(*a, **kw)
+            linked.append(1)
+            raise OSError(errno.EIO, "Input/output error")
+
+        def stat_fails_after_the_link(path, *a, **kw):
+            if linked and os.fsdecode(path) == "copy.js":
+                raise OSError(errno.EIO, "Input/output error")
+            return real_stat(path, *a, **kw)
+
+        out = self.dir / "copy.js"
+        with mock.patch.object(self.cli.os, "link", link_then_eio), \
+                mock.patch.object(self.cli.os, "stat", stat_fails_after_the_link):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertEqual(linked, [1])
+        self.assertIsNotNone(err)
+        self.assertIn("cannot tell whether", err)
+        self.assertIn("do not use a file at", err)
+        self.assertNotIn("nothing was published", err, "an entry that cannot be read is not an absent one")
+        self.assertEqual(out.read_bytes(), self.DATA, "whatever the message says, FILE holds the whole copy or nothing")
+
+    def test_a_filesystem_without_hard_links_is_named_in_the_refusal(self):
+        import errno
+        from unittest import mock
+
+        out = self.dir / "copy.js"
+        for code, hinted in ((errno.EPERM, True), (errno.ENOTSUP, True), (errno.EXDEV, True),
+                             (errno.EMLINK, True), (errno.EIO, False)):
+            def link_fails(*a, _c=code, **kw):
+                raise OSError(_c, os.strerror(_c))
+
+            with self.subTest(errno=errno.errorcode[code]):
+                with mock.patch.object(self.cli.os, "link", link_fails):
+                    err = self.cli._write_new_file(str(out), self.DATA)
+                self.assertIsNotNone(err)
+                self.assertIn(errno.errorcode[code], err, "the refusal names the errno, not only the exception type")
+                self.assertEqual("may not support hard links" in err, hinted, err)
+                self.assertIn("nothing was published at", err)
+                self.assertEqual(self._names(), set())
+
+    def test_a_destination_directory_that_can_be_written_and_searched_but_not_read(self):
+        drop = self.dir / "drop"
+        drop.mkdir()
+        os.chmod(str(drop), 0o300)
+        self.addCleanup(os.chmod, str(drop), 0o700)
+        out = drop / "copy.js"
+        err = self.cli._write_new_file(str(out), self.DATA)
+        os.chmod(str(drop), 0o700)
+        if getattr(os, "O_PATH", 0) or getattr(os, "O_SEARCH", 0) or os.geteuid() == 0:
+            self.assertIsNone(err, "the directory is only searched through: reading it is never needed")
+            self.assertEqual(out.read_bytes(), self.DATA)
+            self.assertEqual(os.listdir(str(drop)), ["copy.js"])
+        else:
+            self.assertIn("cannot open the directory", err, "without a search-only open it is refused, as declared")
+            self.assertEqual(os.listdir(str(drop)), [])
+
+    # --- v1.4.2 build review, fix round 2 ------------------------------------
+    # B-R2c-CL-1: the private directory is opened like the destination's (search only), so the
+    # umask members of the rc 0 -> rc 2 class are exactly "clears the owner's write or search bit"
+    # where O_PATH or O_SEARCH exists. WHICH call refuses is per platform (review of 6b46e92a,
+    # B-R2-MECH-L1 / B-RV2-CL-2, measured red on Linux): O_PATH checks no permission on the
+    # directory itself, so the create inside it refuses; O_SEARCH checks the owner's search bit
+    # at the open; the O_RDONLY fallback checks the owner's read bit at the open.
+    def test_the_umask_bits_that_decide_are_the_owners_write_and_search_bits(self):
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses the permission checks this pins")
+        if getattr(os, "O_PATH", 0):
+            refused_at_open = ()  # Linux: the open of the private directory checks no permission on it
+        elif getattr(os, "O_SEARCH", 0):
+            refused_at_open = (0o177, 0o100)  # macOS: the open checks the owner's search bit
+        else:
+            refused_at_open = (0o400, 0o477)  # O_RDONLY fallback: the open checks the owner's read bit
+        # Clearing the owner's write or search bit refuses on every platform; the create inside
+        # the private directory needs both, so every such mask the open let through refuses there.
+        refused_at_create = tuple(m for m in (0o177, 0o100, 0o200) if m not in refused_at_open)
+        for mask in (0o077, 0o177, 0o400, 0o477, 0o200, 0o100):
+            with self.subTest(umask=oct(mask)):
+                out = self.dir / ("copy-%o.js" % mask)
+                old = os.umask(mask)
+                try:
+                    err = self.cli._write_new_file(str(out), self.DATA)
+                finally:
+                    os.umask(old)
+                left = sorted(n for n in self._names() if n.startswith(self.cli._TMP_PREFIX))
+                self.assertEqual(left, [], "no private directory is left behind")
+                if mask not in refused_at_open + refused_at_create:
+                    self.assertIsNone(err)
+                    os.chmod(str(out), 0o600)
+                    self.assertEqual(out.read_bytes(), self.DATA)
+                else:
+                    self.assertIsNotNone(err)
+                    self.assertIn("nothing was published at", err)
+                    self.assertIn("opening the private directory" if mask in refused_at_open else "creating the temporary",
+                                  err, "the refusal names the call that failed on this platform")
+                    self.assertFalse(os.path.lexists(str(out)))
+
+    def test_where_no_search_only_flag_exists_the_owners_read_bit_decides_too(self):
+        # The O_RDONLY fallback (no O_PATH, no O_SEARCH) exists on no CI platform, so it is pinned
+        # here by forcing the flag: opening the private directory then needs the owner's read bit.
+        from unittest import mock
+
+        if os.geteuid() == 0:
+            self.skipTest("root bypasses the permission checks this pins")
+        fallback = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_CLOEXEC", 0)
+        cases = [(0o077, None), (0o400, "opening the private directory"), (0o477, "opening the private directory"),
+                 (0o177, "creating the temporary"), (0o100, "creating the temporary"), (0o200, "creating the temporary")]
+        with mock.patch.object(self.cli, "_DEST_DIR_FLAGS", fallback):
+            for mask, step in cases:
+                with self.subTest(umask=oct(mask)):
+                    out = self.dir / ("fallback-%o.js" % mask)
+                    old = os.umask(mask)
+                    try:
+                        err = self.cli._write_new_file(str(out), self.DATA)
+                    finally:
+                        os.umask(old)
+                    self.assertEqual(sorted(n for n in self._names() if n.startswith(self.cli._TMP_PREFIX)), [],
+                                     "no private directory is left behind")
+                    if step is None:
+                        self.assertIsNone(err)
+                        os.chmod(str(out), 0o600)
+                        self.assertEqual(out.read_bytes(), self.DATA)
+                    else:
+                        self.assertIsNotNone(err)
+                        self.assertIn(step, err)
+                        self.assertIn("nothing was published at", err)
+                        self.assertFalse(os.path.lexists(str(out)))
+
+    def test_an_unreadable_destination_name_is_refused_before_anything_is_created(self):
+        import errno
+        from unittest import mock
+
+        real_stat = os.stat
+
+        def stat_denied(name, *a, **kw):
+            if kw.get("dir_fd") is not None and name == "copy.js":
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real_stat(name, *a, **kw)
+
+        out = self.dir / "copy.js"
+        with mock.patch.object(self.cli.os, "stat", stat_denied):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err)
+        self.assertIn("cannot inspect", err, "an entry that cannot be read is not an absent one (B-R2-MECH-3)")
+        self.assertIn("PermissionError EACCES", err, "the errno is named (B-R2-MECH-4)")
+        self.assertEqual(self._names(), set(), "nothing was created")
+
+    def test_no_descriptor_is_left_open(self):
+        import errno
+        from unittest import mock
+
+        if not os.path.isdir("/dev/fd"):
+            self.skipTest("no /dev/fd to count descriptors with")
+        before = len(os.listdir("/dev/fd"))
+        self.assertIsNone(self.cli._write_new_file(str(self.dir / "copy.js"), self.DATA))
+        self.assertIsNotNone(self.cli._write_new_file(str(self.dir / "copy.js"), self.DATA))  # already exists
+        with mock.patch.object(self.cli.os, "link", mock.Mock(side_effect=FileExistsError(errno.EEXIST, "exists"))):
+            self.assertIsNotNone(self.cli._write_new_file(str(self.dir / "late.js"), self.DATA))
+        self.assertEqual(len(os.listdir("/dev/fd")), before, "every descriptor the call opened is closed (B-R2-MECH-3)")
+
+    # --- v1.4.2 build review, round 2 ------------------------------------------
+    # B-R2-M1: what FILE names after a SUCCESSFUL link is checked by identity too. B-R2-M3:
+    # each element of the shape the docstring claims is pinned by behaviour or by a spy.
+    def _swap_the_temporary(self, pdir: str, bytes_: bytes = b"THEIR BYTES"):
+        """Another process renames this call's temporary out of ``pdir`` and puts its own file
+        under the temporary's name (``pdir`` is a path or a directory descriptor)."""
+        kw = {"dir_fd": pdir} if isinstance(pdir, int) else {}
+        src = self.cli._TMP_NAME if kw else os.path.join(pdir, self.cli._TMP_NAME)
+        os.rename(src, str(self.dir / "ours.moved"), **({"src_dir_fd": pdir} if kw else {}))
+        fd = os.open(src, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600, **kw)
+        try:
+            self._real_write(fd, bytes_)
+        finally:
+            os.close(fd)
+
+    def test_a_temporary_replaced_before_a_successful_link_is_never_announced_as_the_copy(self):
+        from unittest import mock
+
+        real_link = os.link
+
+        def swap_then_link(*a, **kw):
+            self._swap_the_temporary(kw["src_dir_fd"])
+            return real_link(*a, **kw)
+
+        out = self.dir / "copy.js"
+        with mock.patch.object(self.cli.os, "link", swap_then_link):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err, "rc 0 would announce bytes this call did not write as the copy")
+        self.assertIn("is not the temporary this call wrote", err)
+        self.assertIn("do not use a file at", err)
+        self.assertEqual(out.read_bytes(), b"THEIR BYTES", "what the link published is left as it is, never unlinked")
+        self.assertEqual((self.dir / "ours.moved").read_bytes(), self.DATA)
+        self.assertEqual(self._names(), {"copy.js", "ours.moved"}, "the private directory is removed")
+
+    def test_the_temporarys_identity_comes_from_its_descriptor_not_its_name(self):
+        from unittest import mock
+
+        real_fsync = os.fsync
+        swapped = []
+
+        def fsync_then_swap(fd):
+            real_fsync(fd)
+            if not swapped:  # after the bytes are flushed, before the identity is taken
+                self._swap_the_temporary(str(self.dir / self._PRIV))
+                swapped.append(1)
+
+        out = self.dir / "copy.js"
+        with self._forced_token(), mock.patch.object(self.cli.os, "fsync", fsync_then_swap):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertEqual(swapped, [1])
+        self.assertIsNotNone(err, "an identity read through the name would be the substitute's, and match")
+        self.assertIn("is not the temporary this call wrote", err)
+        self.assertEqual(out.read_bytes(), b"THEIR BYTES")
+
+    def test_after_a_successful_link_a_destination_that_cannot_be_read_is_not_announced(self):
+        import errno
+        from unittest import mock
+
+        real_link, real_stat = os.link, os.stat
+        linked = []
+
+        def link_ok(*a, **kw):
+            linked.append(1)
+            return real_link(*a, **kw)
+
+        def stat_fails_after_the_link(path, *a, **kw):
+            if linked and os.fsdecode(path) == "copy.js":
+                raise OSError(errno.EIO, "Input/output error")
+            return real_stat(path, *a, **kw)
+
+        out = self.dir / "copy.js"
+        with mock.patch.object(self.cli.os, "link", link_ok), \
+                mock.patch.object(self.cli.os, "stat", stat_fails_after_the_link):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertEqual(linked, [1])
+        self.assertIsNotNone(err)
+        self.assertIn("cannot tell whether", err)
+        self.assertIn("link succeeded", err)
+        self.assertNotIn("nothing was published", err)
+        self.assertEqual(out.read_bytes(), self.DATA, "the name the link created is left as it is")
+
+    def test_the_fsync_is_of_the_temporary_that_becomes_the_destination(self):
+        from unittest import mock
+
+        real_fsync = os.fsync
+        synced = []
+
+        def spy_fsync(fd):
+            st = os.fstat(fd)
+            synced.append((st.st_dev, st.st_ino))
+            return real_fsync(fd)
+
+        out = self.dir / "copy.js"
+        with mock.patch.object(self.cli.os, "fsync", spy_fsync):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNone(err)
+        st = out.lstat()
+        self.assertEqual(synced, [(st.st_dev, st.st_ino)], "the object flushed is the object published, and nothing else")
+
+    def test_link_joins_the_two_names_through_their_directory_descriptors_never_following(self):
+        from unittest import mock
+
+        real_link = os.link
+        calls = []
+
+        def spy_link(*a, **kw):
+            src_dir = os.fstat(kw["src_dir_fd"]) if "src_dir_fd" in kw else None
+            dst_dir = os.fstat(kw["dst_dir_fd"]) if "dst_dir_fd" in kw else None
+            priv = os.lstat(str(self.dir / self._PRIV))
+            calls.append((a, kw.get("follow_symlinks"),
+                          src_dir and (src_dir.st_dev, src_dir.st_ino), (priv.st_dev, priv.st_ino),
+                          dst_dir and (dst_dir.st_dev, dst_dir.st_ino)))
+            return real_link(*a, **kw)
+
+        out = self.dir / "copy.js"
+        with self._forced_token(), mock.patch.object(self.cli.os, "link", spy_link):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNone(err)
+        here = os.stat(str(self.dir))
+        self.assertEqual(len(calls), 1, calls)
+        names, follow, src_dir, priv, dst_dir = calls[0]
+        self.assertEqual(names, (self.cli._TMP_NAME, "copy.js"), "bare names, resolved only through the descriptors")
+        self.assertIs(follow, False, "a symlink under the temporary's name is never followed")
+        self.assertEqual(src_dir, priv, "the source is resolved in the private directory this call opened")
+        self.assertEqual(dst_dir, (here.st_dev, here.st_ino), "the destination is resolved in FILE's directory")
+
+    def test_an_error_at_close_of_the_temporary_publishes_nothing(self):
+        import errno
+        from unittest import mock
+
+        real_open, real_close = os.open, os.close
+        tmp_fds = []
+
+        def spy_open(path, flags, mode=0o777, *, dir_fd=None):
+            fd = real_open(path, flags, mode, dir_fd=dir_fd)
+            if flags & os.O_CREAT:
+                tmp_fds.append(fd)
+            return fd
+
+        def close_reports_eio(fd):
+            real_close(fd)
+            if fd in tmp_fds:  # a deferred write error reported at close
+                tmp_fds.remove(fd)
+                raise OSError(errno.EIO, "Input/output error")
+
+        out = self.dir / "copy.js"
+        with mock.patch.object(self.cli.os, "open", spy_open), mock.patch.object(self.cli.os, "close", close_reports_eio):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err, "bytes whose close failed are not a whole copy")
+        self.assertIn("close", err)
+        self.assertIn("nothing was published at", err)
+        self.assertFalse(os.path.lexists(str(out)))
+        self.assertEqual(self._names(), set())
+
+    def test_after_a_link_error_a_symlink_to_the_temporary_is_not_the_copy(self):
+        import errno
+        from unittest import mock
+
+        def a_symlink_to_the_temporary_takes_the_name(src, dst, *, src_dir_fd=None, dst_dir_fd=None, follow_symlinks=True):
+            os.symlink(os.path.join(self._PRIV, self.cli._TMP_NAME), dst, dir_fd=dst_dir_fd)
+            raise FileExistsError(errno.EEXIST, "File exists")
+
+        out = self.dir / "copy.js"
+        with self._forced_token(), mock.patch.object(self.cli.os, "link", a_symlink_to_the_temporary_takes_the_name):
+            err = self.cli._write_new_file(str(out), self.DATA)
+        self.assertIsNotNone(err, "following the symlink would find the temporary and announce a copy that dangles")
+        self.assertIn("already exists", err)
+        self.assertTrue(os.path.islink(str(out)), "the symlink is left as it is")
+        self.assertEqual(self._names(), {"copy.js"})
 
 
 if __name__ == "__main__":
