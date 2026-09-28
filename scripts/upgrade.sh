@@ -131,23 +131,48 @@ fi
 # hardcoding the literals — keep the table and the migration in lockstep.
 # Order is NORMATIVE: new model ids are APPENDED AT THE END (the arrays are
 # byte-compared and the first entry participates in default resolution —
-# ADR-149:95-102; mirror test :127-149,193-200); any other order needs an
-# ADR-181 justification. permissions.defaultMode follows the exact read
-# contract of _lib/effective_config.py:178-180,534-542 (stripped string).
-# The top-level scalar "model" leaf (the CC 2.1.220 session-default pin,
-# ADR-181 T1.1) has NO old-baseline value — old installs carry NO top-level
-# "model" key at all ("old": null documents that ABSENCE). Absence therefore
-# IS the old baseline: it is migrated to the new pin (claude-opus-5), closing
-# the T1.1 silent-flip (adding claude-sonnet-5 to availableModels must not
-# re-flip the session default) — BUT ONLY when claude-opus-5 is actually in
-# the resulting effective availableModels. C6 (codex R4): if an adopter has
-# CUSTOMIZED availableModels to a set that EXCLUDES claude-opus-5, setting the
-# pin would place it outside the allowlist and enforceAvailableModels would
-# reject it, so in that case the pin is NOT set and a named warning is emitted
-# (session default left to the adopter/harness). In the normal migrated case
-# claude-opus-5 IS present, so the pin is set and enforceAvailableModels
-# accepts it. Any PRESENT model value != the new pin is adopter-custom and
-# PRESERVED with a named warning (never re-flipped).
+# the ADR-149 A1.1 order rule; mirror test :127-149,193-200); any other
+# order needs an ADR-181 justification. permissions.defaultMode follows
+# the exact read contract of _lib/effective_config.py (the
+# permissions.defaultMode row of its tamper table and
+# _check_settings_layer (d)): a stripped string.
+# The top-level SCALAR leaves ("model", the CC 2.1.220 session-default pin
+# of ADR-181 T1.1, and "effortLevel", ADR-149 Amendment 3) walk ONE generic
+# branch. "old": null documents that old installs carry NO such key:
+# absence (or an explicit null) IS the old baseline and is SET to "new".
+# "superseded" lists every previously SHIPPED value (frozen literals, exact
+# string equality) and migrates like the old baseline: every release from
+# v1.2.0-rc.1 to the last one before ADR-149 Amendment 3 (S357) shipped the
+# pin claude-opus-5, which that amendment moved to claude-opus-5-5; without
+# the list every such adopter would be read as ADOPTER-CUSTOMIZED and keep
+# the old pin behind a warning.
+# "requires_member_of" names an ARRAY leaf whose EFFECTIVE value (resolved
+# earlier in the same pass) must contain the new value EXACTLY before a SET
+# or MIGRATE happens. C6 (codex R4): an adopter who CUSTOMIZED
+# availableModels could otherwise get a pin the allowlist does not admit,
+# which Claude Code replaces at startup with the default model (with a
+# warning). The check is deliberately STRICTER
+# than Claude Code, which admits an id that extends an allowed entry by a
+# - segment: a new value the array does not list exactly leaves the leaf
+# untouched with a named warning. Any other PRESENT value is adopter-custom
+# and PRESERVED with a named warning (never re-flipped).
+# "opt_in": true (ADR-149 Amendment 3, Owner OQ-7) marks a leaf that an
+# EXISTING install receives only when the operator passes
+# --adopt-setting <key>: a new install gets it from the template; without
+# the flag the leaf is never written, and a named warning carries its
+# "cost_note" and the flag instead. An adopter value is never overwritten,
+# flag or not. effortLevel is the first opt-in leaf.
+# "on_migrate_of" (ADR-149 Amendment 3, Owner OQ-8) on an opt-in leaf:
+# {<scalar leaf>: {<value it migrates off>: <value for this leaf>}}. When
+# that leaf, walked EARLIER in the same pass, MIGRATEs off the named value
+# while this leaf is absent (or null) and not opted in, this leaf takes
+# the mapped value: a MIGRATE line, its REVERT line and the leaf
+# "on_migrate_note". effortLevel keeps high, the claude-opus-5 default,
+# when the pin migrates off claude-opus-5 (claude-opus-5-5 defaults to
+# medium). A rule naming a leaf walked later is a named WARNING.
+# "notice" (ADR-149 Amendment 3) is a line printed whenever the leaf is
+# written (SET or MIGRATE): the model leaf carries the Claude Code floor
+# of its new pin. Every MIGRATE line is followed by a REVERT line.
 # ADR-149 Amendment 2 (S338): an ARRAY leaf may also carry "superseded" —
 # EVERY previously SHIPPED value that is neither the original OLD baseline
 # nor the NEW one, as frozen historical literals (the same doctrine as
@@ -159,14 +184,18 @@ fi
 # (keys, not bytes), so CI would not notice. The match is
 # byte-exact (values AND order): a genuinely customized array still lands
 # in the PRESERVED branch.
+# ADR-149 Amendment 3 (S357): every release from v1.4.0-rc.1 to the last
+# one before that amendment shipped the 7-id availableModels (the "new"
+# of Amendment 2); it joins "superseded", and "new" appends
+# claude-opus-5-5 at the END.
 # Each registration carries a "match" filename used for the idempotent
 # append (mirrors the H8 jq `_reg` semantics: an event entry whose
 # hooks[].command references the filename counts as already registered).
 _T54_BASELINES_JSON='{
   "availableModels": {
     "old": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5"],
-    "superseded": [["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"]],
-    "new": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5","claude-fable-5-1"]
+    "superseded": [["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5"],["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5","claude-fable-5-1"]],
+    "new": ["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5","claude-fable-5-1","claude-opus-5-5"]
   },
   "fallbackModel": {
     "old": ["claude-opus-4-8"],
@@ -174,7 +203,18 @@ _T54_BASELINES_JSON='{
   },
   "model": {
     "old": null,
-    "new": "claude-opus-5"
+    "superseded": ["claude-opus-5"],
+    "new": "claude-opus-5-5",
+    "requires_member_of": "availableModels",
+    "notice": "needs Claude Code 2.1.280 or later (SUPPORT.md, which says what to edit on an older CLI)"
+  },
+  "effortLevel": {
+    "old": null,
+    "new": "xhigh",
+    "opt_in": true,
+    "cost_note": "xhigh applies to every model of the session and typically spends more tokens (cost and latency) than the default effort; in project settings it also outranks a level a developer saved with /effort in user settings (a personal level belongs in .claude/settings.local.json), and a maxEffortLevel caps it; where no other source sets a level (CLAUDE_CODE_EFFORT_LEVEL, --effort, /effort, a level saved for the model, an effortLevel in local or managed settings, ultracode) a claude-opus-5-5 session runs at its default medium effort (claude-opus-5 defaults to high), which an organization default effort replaces when the session runs the organization default model",
+    "on_migrate_of": {"model": {"claude-opus-5": "high"}},
+    "on_migrate_note": "is the default effort of claude-opus-5 (claude-opus-5-5 defaults to medium). New installs ship xhigh; --adopt-setting never overwrites a value present in the file, so set xhigh by hand to use it here"
   },
   "permissions.defaultMode": {
     "old": "default",
@@ -201,7 +241,9 @@ _T54_BASELINES_JSON='{
 }'
 
 # PLAN-163 T3.4 FEATURE GATE — new-event registrations (DirectoryAdded,
-# Notification). SUPPORT.md declares the adopter floor >=2.0; until the
+# Notification). SUPPORT.md declared the adopter floor >=2.0 when this
+# gate was written (from v1.4.2 it is 2.1.280, ADR-149 Amendment 3, which
+# leaves this gate OFF); until the
 # T3.4 version-floor probe (unknown-event-key tolerance on the floor
 # version) is recorded — or the floor is explicitly raised with
 # SUPPORT/install/upgrade kept coherent — emitting the new event keys into
@@ -209,8 +251,8 @@ _T54_BASELINES_JSON='{
 # the SAME change that records the probe verdict
 # ({{FILL-FROM-PROBES}}: T3.4 version-floor probe — pending at authoring
 # time). Env override CEO_T34_NEW_EVENT_REGISTRATIONS={1|0} always wins
-# (test seam + operator escape hatch). The gate NEVER affects the three
-# model/permission leaf keys — those migrate regardless.
+# (test seam + operator escape hatch). The gate NEVER affects the leaf
+# keys of the table above — those migrate regardless.
 _T34_VERSION_FLOOR_PROBE_PASSED=0
 _t34_new_event_registrations_enabled() {
   case "${CEO_T34_NEW_EVENT_REGISTRATIONS:-}" in
@@ -235,6 +277,8 @@ DEPRECATION_WARN=1
 SETTINGS_MERGE=1
 SETTINGS_MIGRATE=1       # PLAN-163 T5.4: baseline-aware settings migration (opt out: --no-settings-migrate)
 SETTINGS_MIGRATE_ONLY=0  # PLAN-163 T5.4: run ONLY the settings migration (test/ops seam)
+ADOPT_SETTINGS=""        # ADR-149 A3 (OQ-7): comma list of opted-in T5.4 leaves (--adopt-setting)
+ALLOW_OLD_CLAUDE_CODE=0  # ADR-149 A3 (OQ-9): --allow-old-claude-code continues below the floor
 ON_CONFLICT="refuse"   # PLAN-138 Wave C (ADR-155): {refuse|theirs|backup}; default refuse (OQ2)
 REPLAY=1               # PLAN-153 Wave B item B2: replay the recorded install request (opt out: --no-replay)
 HARNESS=""             # PLAN-155 Wave 5: "" = infer from recorded request.harness (B2 mirror)
@@ -308,6 +352,26 @@ while [[ $# -gt 0 ]]; do
       SETTINGS_MIGRATE_ONLY=1
       shift
       ;;
+    --allow-old-claude-code)
+      # ADR-149 Amendment 3 (S357, Owner OQ-9): continue although the
+      # claude CLI on PATH is older than the Claude Code floor of this
+      # release (a named WARNING instead of the refusal).
+      ALLOW_OLD_CLAUDE_CODE=1
+      shift
+      ;;
+    --adopt-setting)
+      # ADR-149 Amendment 3 (S357, Owner OQ-7): opt in to ONE top-level
+      # T5.4 leaf the table marks "opt_in" (effortLevel). Without it an
+      # EXISTING install never receives an opt-in leaf. Repeatable; the
+      # migration names (and ignores) a key the table does not mark.
+      _adopt_key="${2:-}"
+      if [[ ! "$_adopt_key" =~ ^[A-Za-z][A-Za-z0-9]*$ ]]; then
+        echo "ERROR: --adopt-setting needs a top-level settings key such as effortLevel (got '$_adopt_key')" >&2
+        exit 2
+      fi
+      ADOPT_SETTINGS="${ADOPT_SETTINGS:+$ADOPT_SETTINGS,}$_adopt_key"
+      shift 2
+      ;;
     --print-settings-baselines)
       # PLAN-163 T5.4: introspection for oracles — the normative baseline
       # table IS the artifact; tests parse this output (never hardcode).
@@ -371,8 +435,11 @@ What it does:
   .claude/agent-metrics.md) are NOT touched, and the root VERSION file
   is NEVER touched (install-time snapshot — ADR-155-AMEND-1; read
   .claude/.framework-version for the installed framework version). NOTE: .claude/settings.json IS
-  updated in place by the default-on baseline migration (the model/permission
-  leaf keys: model, availableModels, fallbackModel, permissions.defaultMode)
+  updated in place by the default-on baseline migration (the leaf keys of
+  its table: model, availableModels, fallbackModel,
+  permissions.defaultMode; the opt-in effortLevel as xhigh only with
+  --adopt-setting effortLevel, or as high when the pin migrates off
+  claude-opus-5 in a file that sets no level)
   and the idempotent settings-merge (new lifecycle-hook registrations) —
   adopter-CUSTOMIZED values are always preserved with a named warning, and a
   pre-migration backup is written to .claude.bak/. Opt out with
@@ -416,6 +483,25 @@ Options:
                         Print the normative T5.4 baseline table (JSON) and
                         exit 0. Oracles derive their expectations from this
                         output instead of hardcoding the literals.
+  --adopt-setting <key>
+                        ADR-149 Amendment 3 (opt-in; repeatable): let the
+                        T5.4 migration write a leaf the table marks opt_in
+                        into THIS existing install. Today: effortLevel
+                        (new installs ship xhigh; it applies to every model
+                        of the session and typically costs more tokens).
+                        Without the flag the leaf is left absent and a
+                        named warning shows its cost note; a value you set
+                        is never overwritten, flag or not. When the pin
+                        migrates off claude-opus-5 in a file with no
+                        effortLevel, the migration writes high instead
+                        (the Opus 5 default) unless you pass this flag.
+  --allow-old-claude-code
+                        ADR-149 Amendment 3: continue although the claude
+                        CLI on PATH is older than the Claude Code floor of
+                        this release (2.1.280, SUPPORT.md). Without it such
+                        an upgrade is REFUSED (exit 6) before anything is
+                        written; with no claude on PATH the upgrade warns
+                        and goes on.
   --no-replay           PLAN-153 Wave B (B2): do NOT replay the recorded
                         install request from .claude/.install-state.json.
                         By default, when that file exists and validates,
@@ -479,6 +565,9 @@ Exit codes:
   3 — every other upgrade step completed, but the docs/ + .github/ delivery
       FAILED its precondition (unreadable or poisoned delivery-route table).
       See the 'PRECONDITION FAILED' line in the output for which one.
+  6 — the claude CLI on PATH is older than the Claude Code floor of this
+      release (SUPPORT.md) and --allow-old-claude-code was not passed;
+      nothing was written.
 
 Notes:
   Run after `git pull` in the source ceo-orchestration repo. The upgrade
@@ -505,6 +594,113 @@ done
 if [[ -z "$TARGET" || ! -d "$TARGET" ]]; then
   echo "Usage: $0 <target-repo-path> [--profile <list>] [--stack <name>] [--pin <tag>] [--dry-run] [--ceremony <maintainer|user>]" >&2
   exit 1
+fi
+
+# >>> claude-code-floor (ADR-149 Amendment 3, Owner OQ-9) >>>
+# This release needs Claude Code >= CC_FLOOR_VERSION (SUPPORT.md). The
+# settings it ships carry values an older CLI may not accept: the
+# claude-opus-5-5 pin (Anthropic documents 2.1.280 as its minimum) and
+# effortLevel xhigh (not an effort level before 2.1.111). A settings value
+# a CLI does not accept can make it skip the WHOLE project settings file,
+# every hook registration in it included (Claude Code CHANGELOG: invalid
+# legacy enum values did so until 2.1.121; CLIs before 2.1.281 skip a
+# file holding the new attribution false). The check reads the claude
+# found on PATH: below the floor it REFUSES (the caller exits 6) unless
+# --allow-old-claude-code was passed; no claude on PATH (CI, headless),
+# or a version it cannot read, is a named WARNING and the run goes on; a
+# dry run names the refusal and goes on previewing. The probe runs
+# claude --version in the background with stdin from /dev/null and polls
+# it; after CC_FLOOR_PROBE_SECONDS it stops the process group of the
+# probe and the version is unreadable (macOS ships no timeout command).
+# The version is read only from the first output line that names
+# (Claude Code); a version with anything after its three numbers (a
+# pre-release such as 2.1.280-beta.1) counts as below the floor. This
+# block is byte-identical in scripts/install.sh and scripts/upgrade.sh (a
+# test holds the two copies equal).
+CC_FLOOR_VERSION="2.1.280"
+CC_FLOOR_PROBE_SECONDS=10
+_claude_code_floor_check() {
+  # $1 = 1 when --allow-old-claude-code was passed; $2 = 1 on a dry run.
+  # Returns 1 only for a refusal; a pass prints on stdout, the rest on stderr.
+  local _ccf_allow="${1:-0}" _ccf_dry="${2:-0}" _ccf_out _ccf_line _ccf_tok _ccf_ver
+  local _ccf_a _ccf_b _ccf_x _ccf_y _ccf_i _ccf_lt=0 _ccf_why=""
+  if ! command -v claude >/dev/null 2>&1; then
+    echo "WARNING: Claude Code CLI not found on PATH (claude): its version is not checked; this release needs Claude Code >= $CC_FLOOR_VERSION (SUPPORT.md)" >&2
+    return 0
+  fi
+  # The probe, in the capture's own subshell: the shell's notices go to
+  # /dev/null (the probe's output, stderr included, to the capture);
+  # disown -a empties the job table the subshell inherits, so %1 is the
+  # probe; set -m starts it in a process group of its own, so kill %1
+  # signals the whole group (a child it starts that still holds the
+  # output open is stopped with it); set +m keeps the polling sleeps off
+  # job control.
+  if ! _ccf_out="$(
+    exec 2>/dev/null
+    disown -a
+    set -m
+    claude --version </dev/null 2>&1 &
+    set +m
+    # SECONDS counts whole seconds: + 1 so the stop never comes early.
+    _ccf_end=$(( SECONDS + CC_FLOOR_PROBE_SECONDS + 1 ))
+    while kill -0 %1; do
+      if [ "$SECONDS" -ge "$_ccf_end" ]; then
+        kill -TERM %1 || true
+        sleep 1
+        kill -KILL %1 || true
+        exit 124
+      fi
+      sleep 0.1 || sleep 1
+    done
+    wait %1 || true
+  )"; then
+    echo "WARNING: Claude Code version unreadable: 'claude --version' did not finish within ${CC_FLOOR_PROBE_SECONDS}s and was stopped; it is not checked; this release needs Claude Code >= $CC_FLOOR_VERSION (SUPPORT.md)" >&2
+    return 0
+  fi
+  _ccf_line="$( printf '%s\n' "$_ccf_out" | grep -F '(Claude Code)' | head -n 1 || true )"
+  _ccf_tok="$( printf '%s\n' "$_ccf_line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[^[:space:](]*' | head -n 1 || true )"
+  _ccf_ver="$( printf '%s\n' "$_ccf_tok" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true )"
+  if [ -z "$_ccf_ver" ]; then
+    echo "WARNING: Claude Code version unreadable: no line of 'claude --version' names (Claude Code) with a version; it is not checked; this release needs Claude Code >= $CC_FLOOR_VERSION (SUPPORT.md)" >&2
+    return 0
+  fi
+  _ccf_a="$_ccf_ver"
+  _ccf_b="$CC_FLOOR_VERSION"
+  for _ccf_i in 1 2 3; do
+    _ccf_x="${_ccf_a%%.*}"
+    _ccf_y="${_ccf_b%%.*}"
+    if [ "$(( 10#$_ccf_x ))" -lt "$(( 10#$_ccf_y ))" ]; then _ccf_lt=1; break; fi
+    if [ "$(( 10#$_ccf_x ))" -gt "$(( 10#$_ccf_y ))" ]; then break; fi
+    _ccf_a="${_ccf_a#*.}"
+    _ccf_b="${_ccf_b#*.}"
+  done
+  if [ "$_ccf_lt" -eq 0 ] && [ "$_ccf_tok" != "$_ccf_ver" ]; then
+    _ccf_lt=1
+    _ccf_why=" (a version with anything after its three numbers counts as below it)"
+  fi
+  if [ "$_ccf_lt" -eq 0 ]; then
+    echo "    Claude Code:  $_ccf_ver (floor $CC_FLOOR_VERSION: OK)"
+    return 0
+  fi
+  if [ "$_ccf_allow" = "1" ]; then
+    echo "WARNING: Claude Code $_ccf_tok is below $CC_FLOOR_VERSION$_ccf_why, the minimum of this release; continuing because --allow-old-claude-code was passed. The settings it writes may not load on that CLI: see SUPPORT.md (Claude Code CLI) for what to edit" >&2
+    return 0
+  fi
+  if [ "$_ccf_dry" = "1" ]; then
+    echo "(dry-run) would REFUSE: Claude Code $_ccf_tok is below $CC_FLOOR_VERSION$_ccf_why, the minimum of this release; an apply run stops here (exit 6) unless you pass --allow-old-claude-code" >&2
+    return 0
+  fi
+  echo "ERROR: Claude Code $_ccf_tok is below $CC_FLOOR_VERSION$_ccf_why, the minimum of this release (SUPPORT.md): nothing was written. Update Claude Code, or pass --allow-old-claude-code to continue anyway (the settings it writes may not load on that CLI)" >&2
+  return 1
+}
+# <<< claude-code-floor <<<
+if ! _claude_code_floor_check "$ALLOW_OLD_CLAUDE_CODE" "$DRY_RUN"; then
+  exit 6
+fi
+# ADR-149 Amendment 3: --adopt-setting feeds ONLY the T5.4 migration;
+# under --no-settings-migrate it would otherwise be dropped in silence.
+if [[ -n "$ADOPT_SETTINGS" && "$SETTINGS_MIGRATE" -eq 0 ]]; then
+  echo "WARNING: --adopt-setting $ADOPT_SETTINGS ignored: --no-settings-migrate skips the T5.4 settings migration; set it by hand in .claude/settings.json" >&2
 fi
 
 # ---------------------------------------------------------------------------
@@ -3366,6 +3562,35 @@ def _disp:
 # proceeds; a backup always lands under $BAK_DIR first on non-dry runs.
 # Opt out: --no-settings-migrate. --dry-run previews every verdict.
 # ===========================================================================
+# ADR-149 Amendment 3 (S357; rail round 3 of the wave, P2): the ONE
+# builder of the "re-run the migration alone" command that every exit of
+# the migration below which leaves settings.json unmigrated prints. It
+# carries every operator flag that decides what this migration reads or
+# writes, or whether it runs: --adopt-setting (the opt-in leaves it may
+# write), --allow-old-claude-code (whether it runs on a Claude Code below
+# the floor), --pin (the source checkout whose settings template it
+# reads) and --dry-run (whether it writes at all). Every value the
+# operator supplied (the target, the --pin ref) is quoted for the shell
+# with printf %q. No exit builds the command by hand: a flag the
+# migration starts to honour is added HERE.
+_t54_rerun_cmd() {
+  local _rr_cmd _rr_key
+  _rr_cmd="scripts/upgrade.sh $(printf '%q' "$TARGET") --settings-migrate-only"
+  for _rr_key in ${ADOPT_SETTINGS//,/ }; do
+    _rr_cmd="$_rr_cmd --adopt-setting $_rr_key"
+  done
+  if [[ "$ALLOW_OLD_CLAUDE_CODE" -eq 1 ]]; then
+    _rr_cmd="$_rr_cmd --allow-old-claude-code"
+  fi
+  if [[ -n "$PIN_REF" ]]; then
+    _rr_cmd="$_rr_cmd --pin $(printf '%q' "$PIN_REF")"
+  fi
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    _rr_cmd="$_rr_cmd --dry-run"
+  fi
+  printf '%s\n' "$_rr_cmd"
+}
+
 _migrate_settings_baseline() {
   [[ "$SETTINGS_MIGRATE" -eq 1 ]] || return 0
   local settings="$TARGET/.claude/settings.json"
@@ -3375,6 +3600,8 @@ _migrate_settings_baseline() {
   fi
   if ! command -v python3 >/dev/null 2>&1; then
     echo "    NOTE: settings baseline migration skipped (python3 not found) — advisory only" >&2
+    echo "          ACTION: install python3, then re-run the migration alone:" >&2
+    echo "              $(_t54_rerun_cmd)" >&2
     return 0
   fi
 
@@ -3396,7 +3623,18 @@ _migrate_settings_baseline() {
   if [[ "$_mig_mode" == "apply" ]]; then
     _up_record_op "migrate_settings_baseline" "3-state per-leaf-key settings migration (T5.4)"
     mkdir -p "$BAK_DIR/.claude" 2>/dev/null || true
-    cp "$settings" "$BAK_DIR/.claude/settings.json.pre-t54-migration" 2>/dev/null || true
+    # ADR-149 Amendment 3 (S357): every array and hook MIGRATE line prints
+    # a REVERT line that names this backup, so the backup is a PRECONDITION
+    # of the write: when it cannot be written the migration is SKIPPED
+    # (named) and settings.json stays as it was — never migrated without
+    # the way back that the REVERT line promises.
+    if ! cp "$settings" "$BAK_DIR/.claude/settings.json.pre-t54-migration" 2>/dev/null; then
+      echo "    NOTE: settings baseline migration SKIPPED — the pre-migration backup could" >&2
+      echo "          not be written under $BAK_DIR/.claude/ (settings.json is UNCHANGED)." >&2
+      echo "          ACTION: make that directory writable (or free space), then re-run the" >&2
+      echo "          migration alone:  $(_t54_rerun_cmd)" >&2
+      return 0
+    fi
     echo "    BACKED UP: .claude/settings.json -> $BAK_DIR/.claude/settings.json.pre-t54-migration"
   fi
 
@@ -3429,6 +3667,36 @@ def act(msg):
         out(msg)
 
 
+# ADR-149 Amendment 3 (S357): every MIGRATE line, in a dry run too, is
+# followed by a REVERT line. A scalar value is overridden by
+# .claude/settings.local.json (local settings beat this file, and
+# upgrade.sh never writes that file), so revert_local prints the entry
+# that keeps the previous value; that value is always a FRAMEWORK literal
+# (an old or superseded baseline), never an adopter value. The ARRAY
+# leaves and the hook registration name the pre-migration backup instead
+# (revert_backup): availableModels and hook registrations merge across
+# settings scopes, so a local entry cannot take a migrated value back
+# out; fallbackModel is replaced wholesale by a higher scope, and the
+# backup is the route that restores the project file itself. A dry run
+# writes no backup, and its REVERT line says so.
+def revert_local(keys, previous):
+    node = previous
+    for k in reversed(keys):
+        node = {k: node}
+    out("  REVERT: to keep the previous value, merge "
+        + json.dumps(node, ensure_ascii=False)
+        + " into .claude/settings.local.json")
+
+
+def revert_backup():
+    if dry:
+        out("  REVERT: an apply run backs up .claude/settings.json "
+            "first and names the backup; copying it back undoes this")
+    else:
+        out("  REVERT: copy the pre-migration backup named above back "
+            "over .claude/settings.json")
+
+
 try:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -3441,15 +3709,21 @@ changed = [False]
 
 # --- 3-state policy, top-level ARRAY leaf keys (byte-compared: exact
 # --- values in exact order; a re-ordered array counts as CUSTOMIZED).
-# --- eff_available_models captures the EFFECTIVE availableModels value AFTER
-# --- this loop resolves its branch (SET/MIGRATE => new baseline; already-new
-# --- or CUSTOMIZED => the current value PRESERVED). It is computed
-# --- independently of the `if not dry` write guard so it holds in BOTH apply
-# --- and dry-run modes, and it is the allowlist the model-pin SET below must
-# --- respect (this loop runs BEFORE the model leaf — order is normative).
-eff_available_models = MISSING
-for key in ("availableModels", "fallbackModel"):
-    spec = baselines[key]
+# --- effective_arrays[key] captures the EFFECTIVE value of EVERY array leaf
+# --- AFTER this loop resolves its branch (SET/MIGRATE => new baseline;
+# --- already-new or CUSTOMIZED => the current value PRESERVED). It is
+# --- computed independently of the `if not dry` write guard so it holds in
+# --- BOTH apply and dry-run modes, and the scalar leaves below read it
+# --- through "requires_member_of" (this loop runs BEFORE them - order is
+# --- normative).
+effective_arrays = {}
+# --- An ARRAY leaf is every top-level table entry whose "new" is a JSON
+# --- list: the loop walks the table, so a new array leaf needs no code.
+for key, spec in baselines.items():
+    if "." in key or not isinstance(spec, dict):
+        continue
+    if not isinstance(spec.get("new"), list):
+        continue
     cur = data.get(key, MISSING)
     resolved = cur  # the effective value the key WILL carry post-migration
     if cur is MISSING:
@@ -3460,12 +3734,13 @@ for key in ("availableModels", "fallbackModel"):
         act("SET (absent -> new baseline): " + key)
     elif cur == spec["new"]:
         out("OK (already at new baseline): " + key)
-    elif cur == spec["old"]:
+    elif spec.get("old") is not None and cur == spec["old"]:
         if not dry:
             data[key] = list(spec["new"])
         resolved = list(spec["new"])
         changed[0] = True
         act("MIGRATE (matched OLD baseline -> new baseline): " + key)
+        revert_backup()
     elif cur in spec.get("superseded", []):
         # ADR-149 Amendment 2 (S338): a previously SHIPPED baseline
         # (frozen literal, byte-exact incl. order) migrates like OLD.
@@ -3474,51 +3749,138 @@ for key in ("availableModels", "fallbackModel"):
         resolved = list(spec["new"])
         changed[0] = True
         act("MIGRATE (matched SUPERSEDED shipped baseline -> new baseline): " + key)
+        revert_backup()
     else:
         warn("WARNING: " + key + " is ADOPTER-CUSTOMIZED - PRESERVED "
              "(not migrated to the new baseline)")
-    if key == "availableModels":
-        eff_available_models = resolved
+    effective_arrays[key] = resolved
 
-# --- model (top-level SCALAR session-default pin; ADR-181 T1.1 anti-silent-
-# --- flip). The OLD baseline has NO top-level "model" leaf, so ABSENCE == the
-# --- old baseline: SET the new pin. An EXPLICIT null is treated as ABSENT for
-# --- the SET decision (null is not a deliberate model choice — no session-
-# --- default pin), NOT as a customized value. The SET is CONDITIONAL on the
-# --- pin being a member of the EFFECTIVE availableModels resolved above (C6):
-# --- an adopter who customized availableModels to EXCLUDE claude-opus-5 would
-# --- otherwise get a session-default pin OUTSIDE their own allowlist, which
-# --- enforceAvailableModels rejects. If the pin is not provably in the
-# --- effective allowlist (excluded, or the allowlist is not a JSON list we can
-# --- test) we do NOT pin and emit a NAMED warn, leaving the session default to
-# --- the harness/adopter. Any PRESENT non-null value != the new pin is adopter-
-# --- custom -> PRESERVED with a named WARN (never re-flipped); no-value-echo
-# --- (the adopter value is not printed, only the key name).
-spec = baselines["model"]
-pin = spec["new"]
-cur = data.get("model", MISSING)
-absent_or_null = cur is MISSING or cur is None
-pin_in_effective_allowlist = (
-    isinstance(eff_available_models, list) and pin in eff_available_models
-)
-if absent_or_null:
-    if pin_in_effective_allowlist:
-        if not dry:
-            data["model"] = pin
-        changed[0] = True
-        act("SET (absent [== old baseline] -> new baseline): model")
+# --- Top-level SCALAR leaves: the session-default pin model (ADR-181
+# --- T1.1 anti-silent-flip) and effortLevel (ADR-149 Amendment 3, S357).
+# --- A scalar leaf is every top-level table entry whose "new" is a JSON
+# --- string, and every one of them walks THIS branch - there is no per-key
+# --- code (cure the class: the 2nd occurrence of a SHIPPED baseline read
+# --- as ADOPTER-CUSTOMIZED; Amendment 2 cured the ARRAY occurrence above).
+# --- Per leaf:
+# ---   absent, or an EXPLICIT null (not a deliberate choice) -> SET new
+# ---   equal to new -> no-op
+# ---   equal to a non-null "old", or a member of "superseded" (frozen
+# ---   shipped literals, exact equality) -> MIGRATE to new
+# ---   anything else -> ADOPTER-CUSTOMIZED, PRESERVED + named WARN
+# --- "requires_member_of" (C6 as data): the SET/MIGRATE happens ONLY when
+# --- the new value is an EXACT member of the EFFECTIVE value that array
+# --- leaf resolved to above (Claude Code replaces a pin the adopter
+# --- allowlist does not admit with the default model at startup;
+# --- exact is stricter than its segment-prefix admission); any array
+# --- leaf of the table may be named. Otherwise the leaf is left
+# --- untouched with a named WARN. No-value-echo: an adopter value is
+# --- never printed - only key names and framework values.
+# --- "opt_in": true (Owner OQ-7): the SET/MIGRATE happens ONLY when the
+# --- operator passed --adopt-setting <key> (argv 6, a comma list whose
+# --- charset bash already checked); otherwise the leaf is not written and
+# --- a named WARN carries its "cost_note" and the flag. The flag never
+# --- overrides a PRESENT value: a value already in an opt-in leaf lands
+# --- in the preserved branch, which names it on stdout without a warning
+# --- (an opt-in leaf has no baseline an adopter could drift from).
+# --- "on_migrate_of" (Owner OQ-8): an absent opt-in leaf the operator did
+# --- not adopt takes the mapped value when the named scalar leaf, walked
+# --- EARLIER in this pass, MIGRATEd off the named value (migrated_from);
+# --- a rule naming a leaf not walked yet is a named WARN, never applied.
+# --- A MIGRATE prints its REVERT line (revert_local: the value it
+# --- replaced is a framework literal, never an adopter value), and a
+# --- leaf "notice" is printed whenever the leaf is written.
+adopted = set(k for k in sys.argv[6].split(",") if k)
+opt_in_leaves = sorted(k for k, s in baselines.items()
+                       if isinstance(s, dict) and s.get("opt_in") is True)
+for k in sorted(adopted - set(opt_in_leaves)):
+    warn("WARNING: --adopt-setting " + k + " ignored - not an opt-in leaf "
+         "of the T5.4 table (opt-in leaves: " + ", ".join(opt_in_leaves)
+         + ")")
+walked = set()
+migrated_from = {}
+for key, spec in baselines.items():
+    if "." in key or not isinstance(spec, dict):
+        continue
+    new_value = spec.get("new")
+    if not isinstance(new_value, str):
+        continue
+    walked.add(key)
+    cur = data.get(key, MISSING)
+    if cur is MISSING or cur is None:
+        verdict = "SET (absent [== old baseline] -> new baseline): " + key
+    elif cur == new_value:
+        out("OK (already at new baseline): " + key)
+        continue
+    elif spec.get("old") is not None and cur == spec["old"]:
+        verdict = "MIGRATE (matched OLD baseline -> new baseline): " + key
+    elif cur in spec.get("superseded", []):
+        verdict = ("MIGRATE (matched SUPERSEDED shipped baseline -> "
+                   "new baseline): " + key)
+    elif spec.get("opt_in") is True:
+        out("OK (present - PRESERVED; opt-in leaf): " + key)
+        continue
     else:
-        warn("WARNING: model pin NOT applied: adopter availableModels "
-             "excludes claude-opus-5 (session default left to "
-             "harness/adopter)")
-elif cur == pin:
-    out("OK (already at new baseline): model")
-else:
-    warn("WARNING: model is ADOPTER-CUSTOMIZED - PRESERVED "
-         "(not migrated to the new baseline)")
+        warn("WARNING: " + key + " is ADOPTER-CUSTOMIZED - PRESERVED "
+             "(not migrated to the new baseline)")
+        continue
+    if spec.get("opt_in") is True and key not in adopted:
+        kept = None
+        rule = spec.get("on_migrate_of")
+        if isinstance(rule, dict):
+            for dep in sorted(rule):
+                if dep not in walked:
+                    warn("WARNING: " + key + " on_migrate_of names " + dep
+                         + ", which the T5.4 table does not walk before "
+                         + key + " - rule not applied")
+                    continue
+                prev = migrated_from.get(dep, MISSING)
+                by_prev = rule[dep]
+                if (isinstance(prev, str) and isinstance(by_prev, dict)
+                        and isinstance(by_prev.get(prev), str)):
+                    kept = (dep, prev, by_prev[prev])
+                    break
+        if kept is not None:
+            dep, prev, value = kept
+            if not dry:
+                data[key] = value
+            changed[0] = True
+            act("MIGRATE (" + dep + " migrated off " + prev + " and " + key
+                + " was absent -> " + value + "): " + key)
+            out("  REVERT: to drop it, delete " + key + " from "
+                ".claude/settings.json (a level set in "
+                ".claude/settings.local.json also outranks it)")
+            note = spec.get("on_migrate_note")
+            if isinstance(note, str) and note:
+                out("  NOTICE: " + key + " = " + value + " " + note)
+            continue
+        warn("WARNING: " + key + " NOT written (opt-in leaf): new installs "
+             "ship " + key + " = " + new_value + "; "
+             + str(spec.get("cost_note", "")) + ". To write it into this "
+             "install, re-run with --adopt-setting " + key)
+        continue
+    gate = spec.get("requires_member_of")
+    if gate is not None:
+        eff = effective_arrays.get(gate, MISSING)
+        if not (isinstance(eff, list) and new_value in eff):
+            warn("WARNING: " + key + " NOT migrated: " + new_value
+                 + " is not an exact entry of the adopter " + str(gate)
+                 + " (the harness may still admit it by prefix) - "
+                 + key + " left untouched")
+            continue
+    if not dry:
+        data[key] = new_value
+    changed[0] = True
+    act(verdict)
+    if verdict.startswith("MIGRATE"):
+        revert_local([key], cur)
+        migrated_from[key] = cur
+    notice = spec.get("notice")
+    if isinstance(notice, str) and notice:
+        out("  NOTICE: " + key + " = " + new_value + " " + notice)
 
-# --- permissions.defaultMode (read contract: effective_config.py
-# --- :178-180,534-542 - a stripped string under the permissions object).
+# --- permissions.defaultMode (read contract: effective_config.py, its
+# --- permissions.defaultMode row and _check_settings_layer (d) - a
+# --- stripped string under the permissions object).
 spec = baselines["permissions.defaultMode"]
 perms = data.get("permissions", MISSING)
 if perms is MISSING:
@@ -3545,6 +3907,7 @@ else:
         changed[0] = True
         act("MIGRATE (matched OLD baseline -> new baseline): "
             "permissions.defaultMode")
+        revert_local(["permissions", "defaultMode"], spec["old"])
     else:
         extra = ""
         if curs == "bypassPermissions":
@@ -3698,6 +4061,7 @@ else:
             act("MIGRATE (matched OLD pair-rail cap -> template cap"
                 " + statusMessage if absent): "
                 "hooks.PreToolUse[check_pair_rail.py].timeout")
+            revert_backup()
         else:
             warn("WARNING: pair-rail registration timeout is "
                  "ADOPTER-CUSTOMIZED - PRESERVED (not migrated)")
@@ -3711,9 +4075,21 @@ d = os.path.dirname(path) or "."
 fd, tmp = tempfile.mkstemp(prefix=".settings-t54-migrate.", suffix=".tmp",
                            dir=d)
 try:
+    # ADR-149 Amendment 3 (S357): ensure_ascii=False keeps every
+    # character outside ASCII as written (the templates carry many); the
+    # default escaped them all, so a one-leaf migration rewrote every such
+    # line. A string UTF-8 cannot encode (a lone surrogate, which
+    # json.load accepts in its escaped form) falls back to the escaped
+    # writer of earlier releases, so such a file still migrates. A file
+    # that an earlier release migrated holds those characters ESCAPED:
+    # its first migration here rewrites each such line once, unescaped.
+    body = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    try:
+        body.encode("utf-8")
+    except UnicodeEncodeError:
+        body = json.dumps(data, indent=2) + "\n"
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
+        f.write(body)
     os.replace(tmp, path)
 except BaseException:
     try:
@@ -3721,8 +4097,9 @@ except BaseException:
     except OSError:
         pass
     sys.exit(3)
-out("WROTE: .claude/settings.json (atomic; only migrated leaf keys changed)")
-' "$_mig_mode" "$settings" "$_T54_BASELINES_JSON" "$_mig_gate" "$_mig_template"; then
+out("WROTE: .claude/settings.json (atomic; only the migrated leaf values "
+    "changed; the JSON is re-serialized)")
+' "$_mig_mode" "$settings" "$_T54_BASELINES_JSON" "$_mig_gate" "$_mig_template" "$ADOPT_SETTINGS"; then
     # NAMED skip (not a silent one): the helper exits 3 on an unparseable /
     # unreadable settings.json (json.load failed) OR on an atomic-write
     # failure. Either way the leaf keys were NOT migrated. Preservation is
@@ -3733,8 +4110,11 @@ out("WROTE: .claude/settings.json (atomic; only migrated leaf keys changed)")
     echo "          atomic write failed). settings.json is UNCHANGED (fail-open; the write is" >&2
     echo "          atomic, a partial write never lands). Model/permission baselines were NOT" >&2
     echo "          applied — ACTION: fix/validate the JSON, then re-run the migration alone:" >&2
-    echo "              scripts/upgrade.sh \"$TARGET\" --settings-migrate-only" >&2
-    echo "          Pre-migration backup: $BAK_DIR/.claude/settings.json.pre-t54-migration" >&2
+    echo "              $(_t54_rerun_cmd)" >&2
+    # A dry run writes no backup (see above): name one only when it exists.
+    if [[ "$_mig_mode" == "apply" ]]; then
+      echo "          Pre-migration backup: $BAK_DIR/.claude/settings.json.pre-t54-migration" >&2
+    fi
   fi
   return 0
 }

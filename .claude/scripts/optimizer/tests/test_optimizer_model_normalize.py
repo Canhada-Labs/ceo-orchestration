@@ -119,6 +119,24 @@ def test_one_m_packaging_tag_folded():
     assert normalize_model_name("claude-opus-4-1") == "claude-opus-4-1"
 
 
+def test_one_m_tag_folds_on_every_generation():
+    # ADR-149 Amendment 3 (S357): the harness reports ``claude-opus-5-5[1m]``
+    # as the live id (Claude Code 2.1.280) — gen 5 carries the tag too, so
+    # the fold is generic, never a per-row alias.
+    for canonical in ("claude-opus-5-5", "claude-opus-5", "claude-fable-5-1",
+                      "claude-fable-5", "claude-sonnet-5"):
+        assert normalize_model_name(canonical + "[1m]") == canonical
+    assert normalize_model_name("Some-Future-Model-9-9[1M]") == "some-future-model-9-9"
+    # the bare tag is not an id — it is returned as-is, never emptied.
+    assert normalize_model_name("[1m]") == "[1m]"
+
+
+def test_opus_5_5_is_a_distinct_minor_never_folded_into_opus_5():
+    assert normalize_model_name("opus-5-5") == "claude-opus-5-5"
+    assert normalize_model_name("opus-5") == "claude-opus-5"
+    assert normalize_model_name("claude-opus-5-5[1m]") != "claude-opus-5"
+
+
 # ---------------------------------------------------------------------------
 # Unknown / passthrough — never guess, never raise.
 # ---------------------------------------------------------------------------

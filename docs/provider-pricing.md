@@ -63,6 +63,7 @@ would require a fresh Owner check before billing).
 |------------|-------------------------|------------|-------------|
 | Anthropic  | claude-fable-5          | 0.010      | 0.050       |
 | Anthropic  | claude-fable-5-1        | 0.010      | 0.050       |
+| Anthropic  | claude-opus-5-5         | 0.004      | 0.020       |
 | Anthropic  | claude-opus-4-8         | 0.005      | 0.025       |
 | Anthropic  | claude-opus-4-7         | 0.005      | 0.025       |
 | Anthropic  | claude-opus-4-6         | 0.005      | 0.025       |
@@ -106,6 +107,7 @@ standard rates across the full window.
 | claude-sonnet-4-6 | Y (1M) | **No** | 2026-06-15 |
 | claude-fable-5 | Y (1M) | **No** | 2026-06-15 |
 | claude-fable-5-1 | Y (1M) | **No** — documentary: the pricing page (fetched 2026-09-01) §Long context pricing states that Claude 4.6 and later models include the full 1M window at STANDARD pricing; the PLAN-137 live probe was not re-run for 5.1 (ADR-149 Amendment 2, S338) | 2026-09-01 |
+| claude-opus-5-5 | Y (1M) | **No** — documentary: the pricing page (fetched 2026-09-22) lists Opus 5.5 with the 1M window at standard pricing; the PLAN-137 live probe was not re-run for 5.5 (ADR-149 Amendment 3, S357) | 2026-09-22 |
 | claude-haiku-4-5 | **N — 200K only** | n/a (window caps at 200K) | 2026-06-15 |
 
 **Three non-classic spend multipliers the doctrine MUST still account for** (none is
@@ -144,10 +146,14 @@ on the flat-rate assumption, conditional on the three multipliers above.
 | output                     | 1.00x           | `output_tokens`                |
 
 Source: Anthropic prompt-caching docs (write 1.25× at the 5-minute TTL, 2.0× at
-the 1-hour TTL; read 0.10× regardless of tier — EXCEPT Claude Fable 5.1 /
-Mythos 5.1, whose cache hits are 0.025× base = $0.25/MTok: pricing page
-2026-09-01, ADR-149 Amendment 2; `budget-summary.py` carries the per-model
-multiplier). Last verified 2026-06-02 for
+the 1-hour TTL; read 0.10× regardless of tier — EXCEPT the models the
+pricing page prices at a per-model cache-hit rate: Claude Fable 5.1 and
+Mythos 5.1 at 0.025× base, Claude Opus 5.5 at 0.05× base (re-read
+2026-09-24). `budget-summary.py` and `ceo-cost-transcripts.py` carry the
+working-set ones in `_CACHE_READ_MULTIPLIER_OVERRIDES`: `claude-fable-5-1`
+at $0.25/MTok (ADR-149 Amendment 2) and `claude-opus-5-5` at $0.20/MTok
+(ADR-149 Amendment 3; its cache WRITES follow the standard 1.25× / 2.0×
+= $5 / $8 per MTok)). Last verified 2026-06-02 for
 PLAN-123. Mirrors `freeze/pricing.py` `CACHE_WRITE_MULT` / `CACHE_READ_MULT`; a
 cache read billed at the full input rate (the gate-0b accounting) over-bills ~10×.
 
@@ -219,7 +225,8 @@ cache read billed at the full input rate (the gate-0b accounting) over-bills ~10
 | Slug                    | Per-1M in | Per-1M out | Last verified | Confidence | Source                                                                                         |
 |-------------------------|-----------|------------|---------------|------------|------------------------------------------------------------------------------------------------|
 | claude-fable-5          | 10.00     | 50.00      | 2026-06-10    | high       | https://models.dev/api.json (Owner fetch sha a6f5cb21; live-confirmed 2026-06-11 by GATE-W0b reconciliation, 20/20 calls drift~0.0000 — docs/fable-5-baseline.md) |
-| claude-fable-5-1        | 10.00     | 50.00      | 2026-09-01    | medium     | https://platform.claude.com/docs/en/about-claude/models/overview (Fable 5.1 launch 2026-09-01; base rate equals Fable 5; cache hits 0.025x base = $0.25/MTok per the pricing page fetched 2026-09-01 — the ONLY model off the standard 0.1x; ADR-149 Amendment 2, S338) |
+| claude-fable-5-1        | 10.00     | 50.00      | 2026-09-01    | medium     | https://platform.claude.com/docs/en/about-claude/models/overview (Fable 5.1 launch 2026-09-01; base rate equals Fable 5; cache hits 0.025x base = $0.25/MTok per the pricing page fetched 2026-09-01 — a per-model exception to the standard 0.1x, see §Cache-tier multipliers; ADR-149 Amendment 2, S338) |
+| claude-opus-5-5         | 4.00      | 20.00      | 2026-09-22    | medium     | https://platform.claude.com/docs/en/about-claude/pricing (Opus 5.5; $4/$20; cache hits 0.05x base = $0.20/MTok, cache writes 1.25x/2.0x = $5/$8; batch $2/$10; 1M context at standard pricing; pricing page fetched 2026-09-22; ADR-149 Amendment 3, S357) |
 | claude-opus-4-8         | 5.00      | 25.00      | 2026-06-10    | high       | https://models.dev/api.json (Owner fetch sha a6f5cb21; live-confirmed 2026-06-11 by GATE-W0b reconciliation; was live-confirmed 2026-05-29 via PLAN-120 WS-C) |
 | claude-opus-4-7         | 5.00      | 25.00      | 2026-06-10    | high       | https://models.dev/api.json (Owner fetch sha a6f5cb21; live-confirmed 2026-06-11 by GATE-W0b reconciliation 20/20. NOTE: billed $15/$75 until the 4.8 launch price cut — pre-4.8 log replay must use the era rate, see git history of this row) |
 | claude-opus-4-6         | 5.00      | 25.00      | 2026-06-15    | high       | https://platform.claude.com/docs/en/about-claude/pricing (Opus 4.6 rebased to $5/$25 at the post-4.8 Opus rate-card cut — the prior $15/$75 was the pre-4.8 Opus rate, now retired; PLAN-137 A4 live-verified 2026-06-15) |

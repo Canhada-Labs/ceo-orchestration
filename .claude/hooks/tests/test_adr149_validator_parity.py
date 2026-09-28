@@ -144,7 +144,14 @@ class TestAdrBlocksPresent(TestEnvContext):
             "claude-fable-5-1", ws,
             "ADR-149 Amendment 2 (S338) id missing from the working set",
         )
-        self.assertEqual(ws[-1], "claude-fable-5-1", "A2 append must be LAST")
+        self.assertIn(
+            "claude-opus-5-5", ws,
+            "ADR-149 Amendment 3 (S357) id missing from the working set",
+        )
+        self.assertEqual(
+            ws[-2:], ["claude-fable-5-1", "claude-opus-5-5"],
+            "the A2 then A3 appends must be the LAST two, in that order",
+        )
         self.assertNotIn(RETIRED_ID, ws)
 
     def test_floor_is_subset_of_working_set(self) -> None:
@@ -152,6 +159,10 @@ class TestAdrBlocksPresent(TestEnvContext):
         self.assertTrue(floor, "VETO_FLOOR_ALLOWED block missing")
         for member in floor:
             self.assertIn(member, ws)
+
+    def test_floor_carries_opus55(self) -> None:
+        """ADR-149 Amendment 3 (S357): Opus 5.5 joins the VETO floor."""
+        self.assertIn("claude-opus-5-5", _adr_floor())
 
     def test_fallback_chain_inside_floor(self) -> None:
         chain = _block_ids(_adr_text(), "FALLBACK_MODEL_CHAIN")

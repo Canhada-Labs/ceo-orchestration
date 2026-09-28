@@ -30,6 +30,7 @@ _TARGET_MODELS = frozenset({
     "claude-opus-5",
     "claude-fable-5",
     "claude-fable-5-1",  # ADR-149 Amendment 2 (S338)
+    "claude-opus-5-5",  # ADR-149 Amendment 3 (S357)
     "claude-opus-4-8",
     "claude-opus-4-7",
 })

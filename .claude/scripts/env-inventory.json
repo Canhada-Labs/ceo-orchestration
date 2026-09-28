@@ -3591,6 +3591,12 @@
       ],
       "sites": 2
     },
+    "CLAUDE_CODE_EFFORT_LEVEL": {
+      "evidence": [
+        "scripts/upgrade.sh"
+      ],
+      "sites": 1
+    },
     "CLAUDE_CODE_ENABLE_TELEMETRY": {
       "evidence": [
         ".claude/scripts/env-inventory.json",

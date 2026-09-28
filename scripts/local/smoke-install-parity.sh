@@ -24,7 +24,8 @@
 #      fallback chain must be exactly ["claude-opus-5"] (ADR-181/OQ1=b).
 #      ALLOWED_MODELS membership alone is NOT evidence — this step
 #      byte-compares the arrays. It ALSO asserts the installed top-level
-#      default `model` == claude-opus-5 (PLAN-163 T1.1 pin; R2-B3): a
+#      default `model` == claude-opus-5-5 (PLAN-163 T1.1 pin, moved by
+#      ADR-149 Amendment 3; R2-B3): a
 #      stale default can regress post-install WITHOUT touching the arrays
 #      above, so array parity alone does not prove the default pin. The
 #      default must additionally be a member of the installed
@@ -36,6 +37,40 @@
 #   bash scripts/local/smoke-install-parity.sh
 
 set -euo pipefail
+# >>> harness-claude-stub (ADR-149 Amendment 3) >>>
+# scripts/install.sh and scripts/upgrade.sh read `claude --version` against the
+# Claude Code floor (CC_FLOOR_VERSION) and refuse below it (exit 6). A harness
+# never reads the host CLI: this block exports a claude FUNCTION that answers
+# --version with the floor of the scripts/install.sh of its own checkout, and
+# every bash the harness starts with this environment runs it before any
+# claude on PATH, whatever PATH that bash is given (a bash started with an
+# emptied environment, env -i, does not get it). Any other call exits 127. A
+# case that needs another CLI runs `unset -f claude` first. The block is
+# byte-identical in every
+# harness that names an installer (TestNoHarnessReadsTheHostCli, in
+# .claude/scripts/tests/test_upgrade_settings_migration.py, holds the copies
+# equal and finds a harness without it).
+_cc_stub_root="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+while [ ! -f "$_cc_stub_root/scripts/install.sh" ] && [ "$_cc_stub_root" != "/" ]; do
+  _cc_stub_root="$(dirname "$_cc_stub_root")"
+done
+CC_STUB_FLOOR="$(sed -n 's/^CC_FLOOR_VERSION="\([0-9][0-9.]*\)"$/\1/p' "$_cc_stub_root/scripts/install.sh" 2>/dev/null || true)"
+case "$CC_STUB_FLOOR" in
+  ''|*[!0-9.]*)
+    echo "ERROR: $_cc_stub_root/scripts/install.sh carries no single CC_FLOOR_VERSION line: the claude stub has no version to report" >&2
+    exit 1 ;;
+esac
+export CC_STUB_FLOOR
+claude() {
+  if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+    printf '%s (Claude Code)\n' "$CC_STUB_FLOOR"
+    return 0
+  fi
+  echo "claude: the harness stub answers only --version" >&2
+  return 127
+}
+export -f claude
+# <<< harness-claude-stub <<<
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
@@ -56,7 +91,8 @@ FAIL=0
 # Claude 5 refresh working-set members (additive; membership here is a
 # frontmatter/env lint only, NOT the availableModels evidence — see [6/6]).
 # ADR-149 Amendment 2 (S338): claude-fable-5-1 appended (working set only).
-ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 claude-opus-5 claude-sonnet-5 claude-fable-5-1 haiku sonnet opus inherit"
+# ADR-149 Amendment 3 (S357): claude-opus-5-5 appended (working set + floor).
+ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 claude-opus-5 claude-sonnet-5 claude-fable-5-1 claude-opus-5-5 haiku sonnet opus inherit"
 
 is_allowed_model() {
   # $1 = candidate value (already trimmed). Empty == inherit == allowed.
@@ -193,7 +229,7 @@ scan_settings_env "$REPO_ROOT/templates" "templates"
 echo "    settings scan done"
 
 # ---------------------------------------------------------------------------
-echo "==> [6/6] installed model pin + availableModels order + fallbackModel assert"
+echo "==> [6/6] installed model pin + availableModels order + fallbackModel + effortLevel assert"
 INSTALLED_SETTINGS="$TARGET/.claude/settings.json"
 if [ ! -f "$INSTALLED_SETTINGS" ]; then
   echo "OFFENDER(models): installed .claude/settings.json missing" >&2
@@ -212,14 +248,20 @@ EXPECTED_AVAILABLE = [
     "claude-opus-5",
     "claude-sonnet-5",
     "claude-fable-5-1",  # ADR-149 Amendment 2 (S338) — appended at the end
+    "claude-opus-5-5",  # ADR-149 Amendment 3 (S357) — appended at the end
 ]
 # ADR-149 FALLBACK_MODEL_CHAIN (ADR-181 / PLAN-163 OQ1=b).
 EXPECTED_FALLBACK = ["claude-opus-5"]
 # PLAN-163 T1.1 (ADR-181) — the installed top-level default `model` pin.
 # This is the value the harness resolves to when no per-turn override is
 # given; a stale default can regress post-install WITHOUT perturbing the
-# arrays above, so it is asserted independently (R2-B3).
-EXPECTED_MODEL = "claude-opus-5"
+# arrays above, so it is asserted independently (R2-B3). ADR-149
+# Amendment 3 (S357) moved the pin to claude-opus-5-5.
+EXPECTED_MODEL = "claude-opus-5-5"
+# ADR-149 Amendment 3 (S357; Owner OQ-1 and OQ-7): a NEW install ships the
+# top-level effortLevel; no installed settings file carries ultracode
+# (OQ-6: it lives only in an operator local overlay).
+EXPECTED_EFFORT = "xhigh"
 
 try:
     data = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -263,12 +305,22 @@ if isinstance(avail, list) and model is not None and model not in avail:
         "installed availableModels %s\n" % (model, avail)
     )
     rc = 1
+effort = data.get("effortLevel")
+if effort != EXPECTED_EFFORT:
+    sys.stderr.write(
+        "OFFENDER(models): installed effortLevel != %r (actual: %r)\n"
+        % (EXPECTED_EFFORT, effort)
+    )
+    rc = 1
+if "ultracode" in data:
+    sys.stderr.write("OFFENDER(models): installed settings carries ultracode\n")
+    rc = 1
 sys.exit(rc)
 PY
 then
   FAIL=1
 fi
-echo "    model/availableModels/fallbackModel assert done"
+echo "    model/availableModels/fallbackModel/effortLevel assert done"
 
 # ---------------------------------------------------------------------------
 if [ "$FAIL" -ne 0 ]; then

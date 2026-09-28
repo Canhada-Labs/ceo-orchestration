@@ -511,6 +511,21 @@ class DirectionMutationTests(LearnMutationTestBase):
             learn._direction("claude-fable-5", "claude-fable-5-1"), "promote"
         )
 
+    def test_kill_opus55_ranks_between_opus5_and_fable5(self):
+        """ADR-149 Amendment 3 (S357): Opus 5.5 is above Opus 5 and strictly
+        BELOW Fable 5 — Fable 5 -> Opus 5.5 is a demote (needs a signature),
+        Opus 5 -> Opus 5.5 a promote."""
+        self.assertGreater(learn._tier_rank("claude-opus-5-5"),
+                           learn._tier_rank("claude-opus-5"))
+        self.assertGreater(learn._tier_rank("claude-fable-5"),
+                           learn._tier_rank("claude-opus-5-5"))
+        self.assertEqual(
+            learn._direction("claude-fable-5", "claude-opus-5-5"), "demote"
+        )
+        self.assertEqual(
+            learn._direction("claude-opus-5", "claude-opus-5-5"), "promote"
+        )
+
     def test_kill_direction_promote_vs_demote(self):
         """Kill ``_direction`` comparison flip.
 

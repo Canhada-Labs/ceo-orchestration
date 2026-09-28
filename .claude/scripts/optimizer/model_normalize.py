@@ -73,13 +73,17 @@ _RAW_ALIASES = {
     "claude-opus-4-8[1m]": "claude-opus-4-8",
     # PLAN-169 W2.10 F10: gen-5 fleet aliases (bare-family forms were
     # undefined -> normalization fell through to the raw string). No [1m]
-    # rows for gen 5: 1M context is the default there, the suffix does not
-    # exist in that generation.
+    # rows are needed for gen 5: the ``[1m]`` tag DOES exist there (a
+    # Claude Code 2.1.280 session that selected the 1M variant reports
+    # ``claude-opus-5-5[1m]`` as its model id, observed S357) and
+    # normalize_model_name folds it generically for every id — ADR-149
+    # Amendment 3.
     "opus-5": "claude-opus-5",
     "fable-5": "claude-fable-5",
     "fable-5-1": "claude-fable-5-1",  # ADR-149 Amendment 2 (S338): a distinct minor, never folded into fable-5
     "sonnet-5": "claude-sonnet-5",
     "opus-5-fast": "claude-opus-5-fast",
+    "opus-5-5": "claude-opus-5-5",  # ADR-149 Amendment 3 (S357): a distinct minor, never folded into opus-5
 }
 
 # A purely-cosmetic vendor namespace prefix that some ids carry. Stripped ONLY when
@@ -88,6 +92,9 @@ _VENDOR_PREFIX_RX = re.compile(r"^anthropic/")
 
 # Whitespace run collapser (after strip).
 _WS_RX = re.compile(r"\s+")
+
+# The context-window packaging tag the harness appends to a live model id.
+_ONE_M_TAG = "[1m]"
 
 
 def normalize_model_name(model: str) -> str:
@@ -98,10 +105,12 @@ def normalize_model_name(model: str) -> str:
       2. drop a cosmetic ``anthropic/`` vendor prefix.
       3. map a known raw alias (incl. a date-stamp or ``[1m]`` packaging tag) onto
          its dateless canonical slug.
+      4. otherwise fold a trailing ``[1m]`` packaging tag on ANY id and retry
+         step 3 (ADR-149 Amendment 3, S357).
     The ``major.minor`` version token is NEVER altered: ``opus-4-1`` and
     ``opus-4-8`` return DISTINCT ids. An unrecognized id is returned in its
-    case/whitespace-normalized form (callers flag-and-zero-price it; we never
-    guess). Never raises.
+    case/whitespace-normalized form, minus a ``[1m]`` tag (callers
+    flag-and-zero-price it; we never guess). Never raises.
 
     Examples:
         ``"  Claude-Opus-4-8  "`` -> ``"claude-opus-4-8"``
@@ -120,6 +129,12 @@ def normalize_model_name(model: str) -> str:
         # Exact alias fold (date-stamp / bare-family / ``[1m]`` tag). NEVER fuzzy.
         if m in _RAW_ALIASES:
             return _RAW_ALIASES[m]
+        # ADR-149 Amendment 3 (S357): the ``[1m]`` tag is packaging on every
+        # generation, not only on the rows above — strip the literal tag
+        # (never a version token) and retry the exact map.
+        if m.endswith(_ONE_M_TAG) and len(m) > len(_ONE_M_TAG):
+            base = m[: -len(_ONE_M_TAG)]
+            return _RAW_ALIASES.get(base, base)
         return m
     except Exception:
         # Total + deterministic; the only way here is a pathological ``__str__``.

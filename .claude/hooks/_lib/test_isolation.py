@@ -106,12 +106,37 @@ teardown-window escape (a late emit after the restore used to reach the live
 log). ``HOME`` is deliberately NOT touched here — it steers user-site package
 resolution for subprocesses, and the session fixture owns that dance. Guard:
 ``.claude/hooks/tests/test_collect_only_audit_isolation.py``.
+
+## Axis 4 — the host Claude Code CLI (ADR-149 Amendment 3, S357)
+
+``scripts/install.sh`` and ``scripts/upgrade.sh`` read ``claude --version``
+from the claude found on PATH against ``CC_FLOOR_VERSION`` and REFUSE below it
+(exit 6) before any write. A test that spawns either one inherited the suite's
+PATH, so it read the OPERATOR's CLI: on a host whose claude is below the floor
+every such test failed with exit 6 before it exercised anything (reproduced
+S357 with a fake 2.1.279 first on PATH), and the host version decided what
+the scripts printed.
+
+Cure (``_activate_redirect``, session scope like Axis 1): a FAKE ``claude``
+that reports the floor of ``scripts/install.sh`` goes FIRST on PATH, inside the
+session tree (removed with it; PATH comes back with the restore snapshot). It
+answers only ``--version``; any other call exits 127, so no test reaches a real
+CLI through it. A test that needs another CLI puts its own first on the PATH it
+hands the spawn (``TestClaudeCodeFloor`` does); a test that builds a PATH of its
+own decides which claude it holds. The shell harnesses that name an installer
+carry the ``harness-claude-stub`` block instead, which exports a ``claude``
+FUNCTION with the same answer; bash runs a function before any PATH entry, so
+one inherited here would shadow every PATH fake a test puts first, and the
+session drops it. No single floor line in ``scripts/install.sh`` means no stub
+(nothing reads the CLI then). Guard: ``TestNoHarnessReadsTheHostCli`` in
+``.claude/scripts/tests/test_upgrade_settings_migration.py``.
 """
 
 from __future__ import annotations
 
 import atexit
 import os
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -394,6 +419,55 @@ def _redirect_collection_window() -> Dict[str, Optional[str]]:
 COLLECTION_WINDOW_PREVIOUS: Dict[str, Optional[str]] = _redirect_collection_window()
 
 
+# --- Axis 4 — the host Claude Code CLI (module docstring) ------------------------
+#: The directory of the FAKE claude inside the session tree.
+CC_STUB_DIRNAME = "claude-code-stub"
+#: How bash hands an exported function named ``claude`` to its children: the
+#: upstream form, and the one some vendor fixes of 2014 used.
+CC_FUNCTION_CARRIERS = ("BASH_FUNC_claude%%", "BASH_FUNC_claude()")
+#: What the session snapshots and restores for Axis 4.
+CC_CLI_CARRIERS = ("PATH",) + CC_FUNCTION_CARRIERS
+_INSTALL_SH = Path(__file__).resolve().parents[3] / "scripts" / "install.sh"
+_CC_FLOOR_RE = re.compile(r'^CC_FLOOR_VERSION="([0-9]+\.[0-9]+\.[0-9]+)"$', re.M)
+
+
+def claude_code_floor(install_sh: Optional[Path] = None) -> Optional[str]:
+    """The Claude Code floor of ``scripts/install.sh`` (its ONE
+    ``CC_FLOOR_VERSION="x.y.z"`` line), or None when the file is unreadable or
+    holds no such line, or more than one."""
+    try:
+        text = (install_sh or _INSTALL_SH).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    found = _CC_FLOOR_RE.findall(text)
+    return found[0] if len(found) == 1 else None
+
+
+def _install_claude_code_stub(root: Path) -> Optional[str]:
+    """Write the FAKE claude under ``root`` and return its directory; None
+    when there is no floor to report."""
+    floor = claude_code_floor()
+    if floor is None:
+        return None
+    stub_dir = root / CC_STUB_DIRNAME
+    stub_dir.mkdir(parents=True, exist_ok=True)
+    exe = stub_dir / "claude"
+    exe.write_text(
+        "#!/bin/sh\n"
+        "# FAKE Claude Code CLI of the pytest session (_lib/test_isolation.py,\n"
+        "# Axis 4): it answers only --version, with the floor of scripts/install.sh.\n"
+        'if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then\n'
+        '  echo "%s (Claude Code)"\n'
+        "  exit 0\n"
+        "fi\n"
+        'echo "claude: the test-suite stub answers only --version" >&2\n'
+        "exit 127\n" % floor,
+        encoding="utf-8",
+    )
+    exe.chmod(0o755)
+    return str(stub_dir)
+
+
 # --- Idempotent redirect state -------------------------------------------------
 # Holds the restore snapshot for the ONE fixture instance that performed the
 # real redirect. None ⇒ no active redirect (next session fixture will activate).
@@ -437,7 +511,8 @@ def _activate_redirect() -> Optional[Dict[str, object]]:
         tooling_overrides["PYTHONUSERBASE"] = _real_userbase
 
     # 3) Snapshot every carrier + the sticky signals + the snapshot var + the
-    #    tooling vars for exact restore at session end.
+    #    tooling vars + the Axis 4 CLI carriers for exact restore at session
+    #    end.
     #    WHOLE_DIR_OVERRIDE_CARRIERS is ABSENT from this tuple on purpose: it
     #    is the one carrier set that must NOT come back before the interpreter
     #    exits (module docstring, Axis 2, measurement 2).
@@ -446,6 +521,7 @@ def _activate_redirect() -> Optional[Dict[str, object]]:
         + (TEST_HARNESS_VAR, SYNC_MODE_VAR, LIVE_LOG_SNAPSHOT_VAR)
         + TOOLING_PRESERVE_VARS
         + TOOLING_CLEAR_VARS
+        + CC_CLI_CARRIERS
     )
     env_snapshot: Dict[str, Optional[str]] = {
         k: os.environ.get(k) for k in snapshot_keys
@@ -479,6 +555,19 @@ def _activate_redirect() -> Optional[Dict[str, object]]:
     # inherit it). Only set when we actually resolved one.
     if live_log_snapshot is not None:
         os.environ[LIVE_LOG_SNAPSHOT_VAR] = live_log_snapshot
+
+    # Axis 4 (module docstring): an inherited exported claude FUNCTION would
+    # shadow every PATH fake, so it goes; then the FAKE claude at the floor
+    # goes FIRST on PATH, inside the session tree.
+    for key in CC_FUNCTION_CARRIERS:
+        os.environ.pop(key, None)
+    claude_stub = _install_claude_code_stub(tmp_root)
+    if claude_stub is not None:
+        inherited_path = os.environ.get("PATH")
+        # No empty entry when PATH was unset or empty: an empty entry is
+        # the current directory.
+        os.environ["PATH"] = claude_stub + (
+            os.pathsep + inherited_path if inherited_path else "")
 
     # 4) Reset spool_writer dir caches so the new env resolves immediately.
     try:

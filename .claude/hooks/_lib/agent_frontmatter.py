@@ -138,6 +138,9 @@ VETO_FLOOR_ALLOWED: FrozenSet[str] = frozenset({
     "claude-opus-5",   # ADR-181 (PLAN-163 T1.3, OQ1=b): Claude 5 Opus joins
                        # the floor; claude-fable-5 remains the preferred
                        # ceiling pin for VETO personas (frontmatter unchanged).
+    "claude-opus-5-5",  # ADR-149 Amendment 3 (S357, PLAN-193): Opus 5.5 joins
+                        # the floor as an ELIGIBLE id; no agent file migrates
+                        # (the veto_floor agents keep claude-fable-5).
 })
 
 

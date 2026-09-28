@@ -48,6 +48,10 @@ _EXPECTED_RATES = {
     # live probe — pricing page (2026-09-01) §Long context: 4.6+ models
     # carry the full 1M window at standard pricing (provider-pricing.md row).
     "claude-fable-5-1": (10.00, 50.00),
+    # ADR-149 Amendment 3 (S357): DOCUMENTARY evidence, not the PLAN-137
+    # live probe — pricing page (2026-09-22): Opus 5.5 carries the 1M
+    # window at standard pricing (provider-pricing.md row).
+    "claude-opus-5-5": (4.00, 20.00),
     "claude-haiku-4-5": (1.00, 5.00),
 }
 

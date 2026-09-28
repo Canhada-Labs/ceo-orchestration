@@ -323,17 +323,19 @@ class SessionDefaultPinTest(TestEnvContext):
     tier-default that appending claude-sonnet-5 to availableModels would
     otherwise unmask (enforceAvailableModels stops redirecting once the tier
     default is an allowed model). The pinned value MUST remain a member of
-    availableModels or enforceAvailableModels rejects it.
+    availableModels: Claude Code replaces a pin its allowlist does not
+    admit with the default model at startup (with a warning).
     """
 
-    EXPECTED_PIN = "claude-opus-5"
+    EXPECTED_PIN = "claude-opus-5-5"  # ADR-149 Amendment 3 (S357)
 
     def test_dogfood_pins_session_default(self) -> None:
         data = json.loads(DOGFOOD_SETTINGS.read_text(encoding="utf-8"))
         self.assertEqual(
             data.get("model"), self.EXPECTED_PIN,
             "dogfood .claude/settings.json must pin top-level "
-            "'model' to claude-opus-5 (ADR-181 T1.1 contingency)",
+            "'model' to EXPECTED_PIN (ADR-181 T1.1; moved by ADR-149 "
+            "Amendment 3)",
         )
 
     def test_template_pins_session_default(self) -> None:
@@ -341,7 +343,7 @@ class SessionDefaultPinTest(TestEnvContext):
         self.assertEqual(
             data.get("model"), self.EXPECTED_PIN,
             "template settings.base.json must pin top-level "
-            "'model' to claude-opus-5 (adopters inherit the pin)",
+            "'model' to EXPECTED_PIN (adopters inherit the pin)",
         )
 
     def test_pin_is_member_of_available_models_in_both_mirrors(self) -> None:
@@ -356,7 +358,8 @@ class SessionDefaultPinTest(TestEnvContext):
             self.assertIn(
                 pin, available,
                 f"{path.name}: session-default pin '{pin}' is NOT in "
-                "availableModels — enforceAvailableModels would reject it. "
+                "availableModels — Claude Code replaces a pin its allowlist "
+                "does not admit with the default model at startup. "
                 "Update the pin and the allowlist together.",
             )
 
@@ -368,6 +371,29 @@ class SessionDefaultPinTest(TestEnvContext):
             "session-default pin drifted between dogfood and template "
             "(the two mirrors must carry an identical 'model' pin)",
         )
+
+    def test_pin_is_a_veto_floor_member_in_both_mirrors(self) -> None:
+        """ADR-149 Amendment 3 (S357): a mitigated spawn (subagent_type
+        general-purpose) or a Workflow agent that is passed no model runs
+        on the main conversation model (Claude Code sub-agents page), and
+        the spawn gate never sees it. Both mirrors set
+        CLAUDE_CODE_SUBAGENT_MODEL=inherit, which is the same as unset, so
+        no env default replaces that model; the session pin itself
+        therefore has to be a VETO-floor member."""
+        from _lib.agent_frontmatter import VETO_FLOOR_ALLOWED
+        for path in (DOGFOOD_SETTINGS, TEMPLATE_SETTINGS):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                (data.get("env") or {}).get("CLAUDE_CODE_SUBAGENT_MODEL"),
+                "inherit",
+                f"{path.name}: the premise changed (subagents no longer "
+                "inherit the session model) — revisit this test",
+            )
+            self.assertIn(
+                data.get("model"), VETO_FLOOR_ALLOWED,
+                f"{path.name}: the session pin is not a VETO_FLOOR_ALLOWED "
+                "member (ADR-149 Amendment 3 A3.3)",
+            )
 
 
 class UserTemplateSessionDefaultPinTest(TestEnvContext):
@@ -388,7 +414,7 @@ class UserTemplateSessionDefaultPinTest(TestEnvContext):
     (which would change the profile's nature).
     """
 
-    EXPECTED_PIN = "claude-opus-5"
+    EXPECTED_PIN = "claude-opus-5-5"  # ADR-149 Amendment 3 (S357)
     USER_TEMPLATE = REPO_ROOT / "templates" / "settings" / "settings.user.json"
 
     def test_user_template_pins_session_default(self) -> None:
@@ -396,7 +422,7 @@ class UserTemplateSessionDefaultPinTest(TestEnvContext):
         self.assertEqual(
             data.get("model"), self.EXPECTED_PIN,
             "templates/settings/settings.user.json must pin top-level 'model' "
-            "to claude-opus-5 so a fresh `install --ceremony user` does not "
+            "to EXPECTED_PIN so a fresh `install --ceremony user` does not "
             "inherit the CC 2.1.220 sonnet-5 tier-default (PLAN-163 FXe).",
         )
 
@@ -426,6 +452,25 @@ class UserTemplateSessionDefaultPinTest(TestEnvContext):
             "session-default pin drifted between the user template and the "
             "base template — the two adopter-facing mirrors must agree.",
         )
+
+    def test_user_template_agrees_with_base_effort_level(self) -> None:
+        """ADR-149 Amendment 3 (S357, Owner OQ-1): both adopter-facing
+        templates carry the same top-level effortLevel."""
+        user = json.loads(self.USER_TEMPLATE.read_text(encoding="utf-8"))
+        base = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
+        self.assertIn("effortLevel", base)
+        self.assertEqual(
+            user.get("effortLevel"), base.get("effortLevel"),
+            "effortLevel drifted between the user and the base template",
+        )
+
+    def test_no_committed_settings_file_carries_ultracode(self) -> None:
+        """ADR-149 Amendment 3 (S357, Owner OQ-6 «Só no override local»):
+        ultracode belongs to an operator's local overlay; the dogfood
+        settings and both adopter templates never carry the key."""
+        for path in (DOGFOOD_SETTINGS, TEMPLATE_SETTINGS, self.USER_TEMPLATE):
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertNotIn("ultracode", data, f"{path.name} carries ultracode")
 
 
 if __name__ == "__main__":

@@ -83,6 +83,15 @@ subscription quota**: every fast-mode token is real money even on Pro/Max.
   `budget-summary.py`, and `audit-telemetry.py`, so any fast-mode spend
   shows up (at the premium rate) in every cost rollup instead of pricing
   at $0. Visibility is not authorization.
+- **Opus 5.5 fast mode is NOT covered.** The pricing page (fetched
+  2026-09-23) lists fast mode for Claude Opus 5.5 at $8 / $40 per MTok
+  (research preview, Claude API only). ADR-149 Amendment 3 (S357)
+  prices `claude-opus-5-5` at its standard $4 / $20 only; no
+  `claude-opus-5-5-fast` row exists on any rollup surface — a deliberate
+  choice of that pack; in `cost-table.yaml` such a row would also be a
+  new `check-model-currency.py` red, because the id is outside the
+  signed working set. Fast-mode spend on Opus 5.5 therefore does not get
+  the premium-rate visibility described above.
 
 ## Prompt caching (1h TTL) — already optimal on a subscription, NOT a framework default
 

@@ -33,9 +33,10 @@ Default pricing is an EMBEDDED table (``_EMBEDDED_PRICING`` below),
 sourced from the S339 report §1.2/§1.4, itself derived from
 ``docs/provider-pricing.md`` (primary table + cache-tier multipliers,
 lines ~130-153) and ``budget-summary.py``'s
-``_CACHE_READ_MULTIPLIER_OVERRIDES`` (Fable 5.1 cache-read at 0.025x
-base, all other models at 0.10x; cache WRITE is 1.25x base at the
-5-minute TTL and 2.00x base at the 1-hour TTL — these multipliers are a
+``_CACHE_READ_MULTIPLIER_OVERRIDES`` (the per-model cache-read
+exceptions, mirrored below; every other model at 0.10x base; cache
+WRITE is 1.25x base at the 5-minute TTL and 2.00x base at the 1-hour
+TTL — these multipliers are a
 structural constant, not something ``cost-table.yaml`` carries).
 
 ``--pricing PATH`` (default ``cost-table.yaml`` next to this script)
@@ -64,8 +65,8 @@ that file's mini-YAML ``models:`` block. Two cases:
   pricing config on purpose.
 
 Cache-read/write multipliers are ALWAYS the structural constants above,
-regardless of which base table is in play, applied per-model (Fable 5.1
-override on cache read only).
+regardless of which base table is in play, applied per-model (the
+``_CACHE_READ_MULTIPLIER_OVERRIDES`` exceptions act on cache read only).
 
 ## Corpus contract
 
@@ -136,9 +137,12 @@ except Exception:  # pragma: no cover - resolver import must never crash the CLI
 #: Embedded fallback / correction source. Report 05-finops-routing.md §1.2 +
 #: §1.4 (S339, measured 2026-08-03..2026-09-02). Sonnet 5 at the
 #: Owner-ratified 2026-09-01 intro rate (CLAUDE.md commit e47bf5d).
+#: ADR-149 Amendment 3 (S357): claude-opus-5-5 at $4/$20 (pricing page
+#: fetched 2026-09-22).
 _EMBEDDED_PRICING: Dict[str, Dict[str, float]] = {
     "claude-fable-5-1": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
     "claude-fable-5": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
+    "claude-opus-5-5": {"input_per_mtok": 4.00, "output_per_mtok": 20.00},
     "claude-opus-5": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
     "claude-opus-4-8": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
     "claude-sonnet-5": {"input_per_mtok": 2.00, "output_per_mtok": 10.00},
@@ -157,12 +161,18 @@ _RATIFIED_OVERRIDES_FOR_DEFAULT_TABLE: Dict[str, Dict[str, float]] = {
 
 #: docs/provider-pricing.md lines ~130-153 ("Cache-tier multipliers"):
 #: fresh input 1.00x, cache write 5m 1.25x, cache write 1h 2.00x, cache
-#: read 0.10x (base input rate) — EXCEPT Fable 5.1 / Mythos 5.1 at 0.025x
-#: (pricing page 2026-09-01, ADR-149 Amendment 2). Mirrors
-#: budget-summary.py's _CACHE_READ_MULTIPLIER_OVERRIDES exactly.
+#: read 0.10x (base input rate) — EXCEPT the per-model entries below:
+#: claude-fable-5-1 at 0.025x (pricing page 2026-09-01, ADR-149
+#: Amendment 2) and claude-opus-5-5 at 0.05x (pricing page 2026-09-22,
+#: ADR-149 Amendment 3). The pricing page also prices Mythos 5.1 cache
+#: hits at 0.025x; that model is outside the ADR-149 working set and
+#: carries no entry. Mirrors budget-summary.py's
+#: _CACHE_READ_MULTIPLIER_OVERRIDES exactly (bound by
+#: test_model_fleet_presence.py since S357).
 _CACHE_READ_MULTIPLIER_DEFAULT: float = 0.10
 _CACHE_READ_MULTIPLIER_OVERRIDES: Dict[str, float] = {
     "claude-fable-5-1": 0.025,
+    "claude-opus-5-5": 0.05,
 }
 _CACHE_WRITE_5M_MULTIPLIER: float = 1.25
 _CACHE_WRITE_1H_MULTIPLIER: float = 2.00
@@ -172,6 +182,15 @@ _MODEL_SUFFIX_RE = re.compile(r"\[[^\[\]]*\]$")
 
 def _cache_read_multiplier(model_id: str) -> float:
     return _CACHE_READ_MULTIPLIER_OVERRIDES.get(model_id, _CACHE_READ_MULTIPLIER_DEFAULT)
+
+
+def _cache_read_exceptions_text() -> str:
+    """Per-model cache-read exceptions rendered FROM the override table
+    (ADR-149 Amendment 3, S357: the help text is derived, never re-listed)."""
+    return ", ".join(
+        "%gx for %s" % (mult, model_id)
+        for model_id, mult in sorted(_CACHE_READ_MULTIPLIER_OVERRIDES.items())
+    )
 
 
 def normalize_model_id(raw: Optional[str]) -> Optional[str]:
@@ -1106,7 +1125,7 @@ def build_parser() -> argparse.ArgumentParser:
             "says so. Pass --pricing "
             "explicitly to use a different file's rates as-is (no "
             "correction applied). Cache-read multiplier: 0.10x base "
-            "(0.025x for claude-fable-5-1). Cache-write multiplier: 1.25x "
+            "(" + _cache_read_exceptions_text() + "). Cache-write multiplier: 1.25x "
             "base at the 5-minute TTL, 2.00x at the 1-hour TTL. "
             "WINDOW: the LOWER bound is either --since (a span measured "
             "back from now) or --since-at <ISO-8601> (an absolute "

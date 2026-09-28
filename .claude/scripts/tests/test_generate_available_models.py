@@ -41,6 +41,7 @@ WORKING_SET = [
     "claude-opus-5",
     "claude-sonnet-5",
     "claude-fable-5-1",  # ADR-149 Amendment 2, S338
+    "claude-opus-5-5",  # ADR-149 Amendment 3, S357
 ]
 
 AMENDED_ADR = """# ADR-149 fixture (amended)
@@ -63,6 +64,7 @@ AVAILABLE_MODELS_WORKING_SET: tuple = (
     "claude-opus-5",      # ADR-181 refresh
     "claude-sonnet-5",    # ADR-181 refresh
     "claude-fable-5-1",   # ADR-149 Amendment 2, S338
+    "claude-opus-5-5",    # ADR-149 Amendment 3, S357
 )
 ```
 """

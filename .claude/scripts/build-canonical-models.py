@@ -344,6 +344,14 @@ def _load_cost_table_models(path: Optional[Path] = None) -> Dict[str, Dict[str, 
 _MM_TIERS: List[Tuple[str, Tuple[float, float, float, float, float]]] = [
     (r"opus-4-[01](?:\D|$)", (15.0, 18.75, 30.0, 1.50, 75.0)),
     (r"opus-4-(?:[2-9]|1\d)", (5.0, 6.25, 10.0, 0.50, 25.0)),
+    # ADR-149 Amendment 3 (S357): claude-opus-5-5 is $4/$20 with cache
+    # writes at the standard 1.25x / 2x ($5 / $8) and cache READS at
+    # 0.05x ($0.20; pricing page fetched 2026-09-22) — its own tier.
+    # MUST precede the generic opus-5+ tier below, which would otherwise
+    # price it at $5/$25 and raise five false divergences the day an
+    # Owner refresh adds the row (the Sonnet 5 class further down,
+    # second occurrence).
+    (r"opus-5-5(?:\D|$)", (4.0, 5.0, 8.0, 0.20, 20.0)),
     (r"opus-(?:[5-9]|\d\d)", (5.0, 6.25, 10.0, 0.50, 25.0)),
     # PLAN-169 S338 follow-up: Sonnet 5 is $2/$10 — the launch intro price
     # became the STANDARD price (official pricing page fetched 2026-09-01; the

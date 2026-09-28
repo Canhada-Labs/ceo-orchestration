@@ -39,7 +39,8 @@ class TestValidModelIds(unittest.TestCase):
         # ADR-149 (PLAN-134 W0): claude-fable-5 added — 4 legal IDs.
         # ADR-181 (PLAN-163 T1.2d): opus-5 + sonnet-5 added — 6 legal IDs.
         # ADR-149 Amendment 2 (S338): fable-5-1 added — 7 legal IDs.
-        self.assertEqual(len(VALID_MODEL_IDS), 7)
+        # ADR-149 Amendment 3 (S357): opus-5-5 added — 8 legal IDs.
+        self.assertEqual(len(VALID_MODEL_IDS), 8)
 
     def test_includes_all_three_tiers(self):
         self.assertIn("claude-fable-5", VALID_MODEL_IDS)
@@ -49,6 +50,7 @@ class TestValidModelIds(unittest.TestCase):
         self.assertIn("claude-opus-5", VALID_MODEL_IDS)
         self.assertIn("claude-sonnet-5", VALID_MODEL_IDS)
         self.assertIn("claude-fable-5-1", VALID_MODEL_IDS)
+        self.assertIn("claude-opus-5-5", VALID_MODEL_IDS)
 
     def test_retired_generation_not_valid(self):
         # Non-vacuity guard: a known-retired id must NOT be accepted

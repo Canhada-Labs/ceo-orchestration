@@ -440,6 +440,20 @@ def _finding(tamper_class: str, layer: str, detail: str) -> Dict[str, str]:
 
 _MODEL_REMAP_EXACT_KEYS = ("ANTHROPIC_MODEL", "ANTHROPIC_SMALL_FAST_MODEL")
 _MODEL_REMAP_PREFIX = "ANTHROPIC_DEFAULT_"
+#: ADR-149 Amendment 3 (S357): the trailing ``[1m]`` tag selects the 1M
+#: context window of a model; it is not part of the model id. ONE such
+#: tag is folded before the allowlist membership test, so
+#: ``claude-opus-5-5[1m]`` is the floor member ``claude-opus-5-5``. Only
+#: this exact tag folds: any other suffix is compared as written, and a
+#: value the check cannot classify stays flagged (fail-closed on input).
+_ONE_M_CONTEXT_TAG = "[1m]"
+
+
+def _fold_one_m_tag(model_id: str) -> str:
+    """Strip ONE trailing ``[1m]`` context tag (ADR-149 Amendment 3)."""
+    if model_id.endswith(_ONE_M_CONTEXT_TAG):
+        return model_id[: -len(_ONE_M_CONTEXT_TAG)]
+    return model_id
 
 
 def _check_env_mapping(
@@ -469,7 +483,7 @@ def _check_env_mapping(
             continue
         if key in _MODEL_REMAP_EXACT_KEYS or key.startswith(_MODEL_REMAP_PREFIX):
             if allow_set:
-                if stripped not in allow_set:
+                if _fold_one_m_tag(stripped) not in allow_set:
                     findings.append(_finding(
                         TAMPER_MODEL_REMAP, layer_name,
                         f"{key}={stripped} outside model allowlist "

@@ -80,26 +80,119 @@ _OVERRIDE_TICKET_RE = re.compile(r"^[A-Z][A-Z0-9]*-\d+$")
 
 
 # PLAN-134 W0 E6-F2 — extended-thinking request-surface generation gate.
-# The current API generation accepts ONLY adaptive thinking: the legacy
-# ``{"type": "enabled", "budget_tokens": N}`` shape is REMOVED (HTTP 400) on
-# Opus 4.7 / Opus 4.8 / Fable 5 and deprecated on the 4.6 family. The 4.6
-# family is deliberately included here so the deprecated shape is retired
-# everywhere; only pre-4.6 ids keep the legacy enabled/budget path.
-# Allowlist-prefix semantics (ADR-149 spirit): prefix match keeps
-# date-suffixed ids covered without pinning exact strings.
-_ADAPTIVE_ONLY_MODELS = (
-    "claude-opus-4-6",
-    "claude-sonnet-4-6",
-    "claude-opus-4-7",
-    "claude-opus-4-8",
+# Every id outside the closed legacy list below is sent adaptive thinking,
+# never the legacy ``{"type": "enabled", "budget_tokens": N}`` shape. The
+# thinking troubleshooting page (re-read 2026-09-24) lists adaptive as a
+# mode of every model after Claude 4.5; the legacy shape is an HTTP 400 on
+# Claude 4.7 and later (Claude Mythos Preview, which supports both modes,
+# excepted) and deprecated on the 4.6 models, deliberately treated as
+# adaptive-only too.
+#
+# ADR-149 Amendment 3 (S357) — CLASS CURE, inverted default. Until S357
+# this module listed the ADAPTIVE ids and fell back to the legacy shape
+# for every other id, so each new generation had to be added by hand;
+# claude-opus-5 and claude-sonnet-5 never were (second occurrence). The
+# list is now the other one: the CLOSED set of pre-4.6 ids, whose only
+# thinking mode is the legacy enabled/budget shape, kept as before. No
+# model will ever join it, and every id outside it is adaptive-only — a
+# new model id is safe by default.
+# Match (this list and the always-on list below): an entry matches its
+# EXACT id, optionally followed by ONE dated snapshot segment "-YYYYMMDD"
+# (a Vertex "@YYYYMMDD" reads as that segment) and then by a Bedrock
+# version suffix "-vN" or "-vN:M". Nothing else extends an entry: an id
+# that adds any other "-" segment is a DIFFERENT id and takes the default
+# class. The one family is the Claude 3 generation
+# (_LEGACY_BUDGET_FAMILIES): every id that starts with "claude-3-". The
+# 4.0 generation also ships as a bare dated id (claude-opus-4-YYYYMMDD),
+# matched through _LEGACY_BUDGET_DATED_BASES only WITH its date, so
+# claude-opus-4-6 can never match. A provider prefix before "claude-" and
+# a trailing "[...]" packaging tag are ignored.
+_LEGACY_BUDGET_FAMILIES = ("claude-3",)  # every Claude 3.x id (pre-adaptive)
+_LEGACY_BUDGET_MODELS = (
+    "claude-haiku-4-5",
+    "claude-sonnet-4-5",
+    "claude-opus-4-5",
+    "claude-opus-4-1",
+    "claude-opus-4-0",
+    "claude-sonnet-4-0",
+)
+_LEGACY_BUDGET_DATED_BASES = ("claude-opus-4", "claude-sonnet-4")
+_PACKAGING_TAG_RE = re.compile(r"\[[^\]]*\]$")
+_VERTEX_DATE_SUFFIX_RE = re.compile(r"@(\d{8})$")
+_BEDROCK_VERSION_SUFFIX_RE = re.compile(r"-v\d+(?::\d+)?$")
+_DATE_SUFFIX_RE = re.compile(r"-\d{8}$")
+
+# ADR-149 Amendment 3 (S357): the ids this adapter knows to be ALWAYS ON
+# (thinking cannot be turned off; ``{"type": "disabled"}`` is an HTTP 400):
+# the models the Anthropic thinking troubleshooting page (re-read
+# 2026-09-24) lists as always on — Fable 5 and 5.1, Mythos 5 and 5.1,
+# Mythos Preview and Opus 5.5 — by their API ids, matched by the rule
+# above. Only on these is a caller's disabled dict dropped: elsewhere it
+# is sent as given, because a model whose thinking defaults ON accepts it
+# (Sonnet 5; Opus 5 at effort high or below, the page says) and dropping
+# it would switch thinking on in silence; an always-on id missing here
+# answers with a loud 400, never with silent thinking.
+_ALWAYS_ON_THINKING_MODELS = (
     "claude-fable-5",
+    "claude-fable-5-1",
+    "claude-mythos-5",
+    "claude-mythos-5-1",
+    "claude-mythos-preview",
+    "claude-opus-5-5",
 )
 
 
+def _normalized_model_id(model: str) -> str:
+    """Lower-case ``model`` from ``claude-`` on, without a trailing
+    ``[...]`` tag and with a Vertex ``@YYYYMMDD`` read as ``-YYYYMMDD``
+    ("" when no ``claude-`` id is present)."""
+    norm = _PACKAGING_TAG_RE.sub("", model.strip().lower())
+    norm = _VERTEX_DATE_SUFFIX_RE.sub(r"-\1", norm)
+    start = norm.find("claude-")
+    return norm[start:] if start >= 0 else ""
+
+
+def _base_model_id(norm: str) -> tuple:
+    """``(base, dated)``: ``norm`` without ONE trailing Bedrock version
+    suffix and then without ONE trailing ``-YYYYMMDD`` date segment;
+    ``dated`` says whether a date segment was removed."""
+    stem = _BEDROCK_VERSION_SUFFIX_RE.sub("", norm)
+    base = _DATE_SUFFIX_RE.sub("", stem)
+    return base, base != stem
+
+
+def _uses_legacy_budget(model: str) -> bool:
+    """True when ``model`` is one of the closed pre-4.6 legacy ids."""
+    norm = _normalized_model_id(model)
+    if not norm:
+        return False
+    if any(norm.startswith(family + "-") for family in _LEGACY_BUDGET_FAMILIES):
+        return True
+    base, dated = _base_model_id(norm)
+    return base in _LEGACY_BUDGET_MODELS or (
+        dated and base in _LEGACY_BUDGET_DATED_BASES
+    )
+
+
+def _rejects_disabled_thinking(model: str) -> bool:
+    """True when ``model`` is a known always-on id (ADR-149 A3)."""
+    if not isinstance(model, str):
+        return False
+    norm = _normalized_model_id(model)
+    return bool(norm) and _base_model_id(norm)[0] in _ALWAYS_ON_THINKING_MODELS
+
+
 def _is_adaptive_only(model: str) -> bool:
-    """Return True when ``model`` accepts only adaptive thinking."""
-    return isinstance(model, str) and any(
-        model.startswith(prefix) for prefix in _ADAPTIVE_ONLY_MODELS
+    """Return True when ``model`` accepts only adaptive thinking.
+
+    Every non-empty id outside the closed legacy list is adaptive-only
+    (ADR-149 Amendment 3 inverted default); a non-str or empty value is
+    not a model and stays False.
+    """
+    return (
+        isinstance(model, str)
+        and bool(model.strip())
+        and not _uses_legacy_budget(model)
     )
 
 
@@ -112,11 +205,14 @@ def _resolve_effort_config(
     command and translates it to the Anthropic Messages API surface valid
     for ``model``:
 
-    - Adaptive-only generation (``_ADAPTIVE_ONLY_MODELS``): returns
+    - Adaptive-only ids (every id outside the closed legacy list that
+      ``_uses_legacy_budget`` matches): returns
       ``({"type": "adaptive"}, {"effort": <level>})`` via the canonical
       ``_SLASH_EFFORT_TABLE`` from ``_lib.model_routing``. ``off`` resolves
       to ``(None, None)`` — the thinking param is OMITTED entirely (an
-      explicit ``{"type": "disabled"}`` is an HTTP 400 on Fable 5).
+      explicit ``{"type": "disabled"}`` is an HTTP 400 on Fable 5). On
+      an id whose thinking defaults on, omitting it leaves thinking ON:
+      ``off`` does not turn thinking off there (ADR-149 A3.4).
     - Legacy (pre-4.6) ids: returns
       ``({"type": "enabled", "budget_tokens": N}, None)`` via the kept
       ``_SLASH_BUDGET_TABLE`` (single source of truth for budgets).
@@ -698,9 +794,13 @@ class ClaudeLiveAdapter:
         #   - {"type": "enabled", ...}  → {"type": "adaptive"} (the legacy
         #     enabled/budget shape is REMOVED there — HTTP 400 on
         #     Opus 4.7/4.8 and Fable 5);
-        #   - {"type": "disabled"}      → REMOVE the thinking key entirely
-        #     (an explicit disabled is an HTTP 400 on Fable 5; omitting the
-        #     param is the only safe spelling across the generation);
+        #   - {"type": "disabled"}      → REMOVE the thinking key entirely,
+        #     ONLY on a known always-on id (_ALWAYS_ON_THINKING_MODELS:
+        #     there an explicit disabled is an HTTP 400 and omitting the
+        #     param is the only valid spelling). Elsewhere it is sent as
+        #     given: Sonnet 5 and Opus 5 default to thinking ON and accept
+        #     it (Opus 5 at effort high or below), so dropping it would
+        #     switch thinking on in silence (ADR-149 Amendment 3);
         #   - any remaining dict        → strip "budget_tokens" if present
         #     (e.g. {"type": "adaptive", "budget_tokens": N} → adaptive
         #     only — budget_tokens is rejected on these ids).
@@ -712,7 +812,7 @@ class ClaudeLiveAdapter:
             _t_type = body["thinking"].get("type")
             if _t_type == "enabled":
                 body["thinking"] = {"type": "adaptive"}
-            elif _t_type == "disabled":
+            elif _t_type == "disabled" and _rejects_disabled_thinking(model):
                 body.pop("thinking", None)
             elif "budget_tokens" in body["thinking"]:
                 _t_norm = dict(body["thinking"])

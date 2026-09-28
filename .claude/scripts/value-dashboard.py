@@ -279,6 +279,7 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-fable-5-1":            {"in": 0.010, "out": 0.050},  # ADR-149 Amendment 2 (S338)
     "claude-opus-5":               {"in": 0.005, "out": 0.025},
     "claude-opus-5-fast":          {"in": 0.010, "out": 0.050},
+    "claude-opus-5-5":             {"in": 0.004, "out": 0.020},  # ADR-149 Amendment 3 (S357)
     # NOTE (repass-r2 part-c P2, superseded by the PLAN-169 S338 follow-up):
     # $2/$10 was the INTRO rate through 2026-08-31 with a $3/$15 sticker
     # after; the official pricing page (fetched 2026-09-01) made $2/$10 the

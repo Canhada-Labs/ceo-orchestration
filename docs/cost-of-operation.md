@@ -22,7 +22,11 @@ Computed at **Opus 4.8 ($5/$25 per Mtok)** — the default-CEO/VETO model
 AT THE TIME OF THIS COMPUTATION (2026-06; the current fleet runs the
 VETO holders on `claude-fable-5` — see the Gen-5 pricing table above;
 opus-5 shares the $5/$25 rate, so the arithmetic below holds for an
-opus-5 session). Note the "Mitigated rail default-on" row lands at
+opus-5 session; the session `model` pin is `claude-opus-5-5` since ADR-149
+Amendment 3 ($4/$20, cache reads $0.20/MTok) and these figures are NOT
+recomputed for it — at the same token volume its Opus-billed share prices
+lower than shown). Note the
+"Mitigated rail default-on" row lands at
 **≈ the all-Opus baseline**: under ADR-082, 4 of the 5 canonical archetypes
 inherit the Opus CEO model, so the genuine per-role split (~$1.06) is
 only realised if you disable mitigation. Numbers are rough. Real usage
@@ -48,11 +52,14 @@ injected via `## SKILL CONTENT`.
 
 **Cost consequence:** the `general-purpose` sub-agent **inherits
 the CEO model** — Opus 4.8 at the time of this computation; on the
-current fleet, whatever Gen-5 model the session runs (Fable 5/Opus 5,
-same $5-$25+/Mtok tier) — (not the
+current fleet, whatever Gen-5 model the session runs (the `model` pin
+`claude-opus-5-5` at $4/$20 since ADR-149 Amendment 3; Opus 5 at $5/$25;
+Fable 5 at $10/$50) — (not the
 Sonnet/Haiku that ADR-052 maps these roles to). Every
 `qa-architect / performance-engineer / security-engineer / devops`
-spawn therefore bills at **Opus rates ($5/$25 per Mtok)**, not
+spawn therefore bills at **the session model's rates** (Opus 4.8's
+$5/$25 per Mtok in this computation; $4/$20 on the `claude-opus-5-5`
+pin), not
 the **$3/$15 Sonnet rates** suggested by the ADR-052 policy table.
 
 A representative session that would cost ~$1.06 under genuine per-role
@@ -104,6 +111,7 @@ inheritance surprise.
 |-------|--------------------|----------------------|-------------|
 | `claude-fable-5` (current — Mythos-class flagship) | $10.00 | $50.00 | 2.0× |
 | `claude-fable-5-1` (current — Mythos-class flagship 5.1; ADR-149 Amendment 2, S338 — selectable, not the pin) | $10.00 | $50.00 | 2.0× |
+| `claude-opus-5-5` (current — the session `model` pin; ADR-149 Amendment 3, S357; cache reads 0.05× base) | $4.00 | $20.00 | 0.8× |
 | `claude-opus-5` (current) | $5.00 | $25.00 | 1.0× |
 | `claude-sonnet-5` (current; $2/$10 is the standard rate — the launch intro price became permanent, pricing page fetched 2026-09-01) | $2.00 | $10.00 | 0.4× |
 | `claude-haiku-4-5` (current) | $1.00 | $5.00 | 0.2× |
@@ -113,6 +121,7 @@ inheritance surprise.
 | `claude-haiku-4-5-20251001` (dated pin of haiku-4-5) | $1.00 | $5.00 | 0.2× |
 
 Gen-5 rows added 2026-08-09 (PLAN-169 W2.10 D7, mirroring `ceo-cost.py`).
+Opus 5.5 row added 2026-09-22 (ADR-149 Amendment 3, S357; pricing page https://platform.claude.com/docs/en/about-claude/pricing): $4/$20, cache reads 0.05× base ($0.20/MTok) instead of the standard 0.10× — the per-model cache-read exceptions are listed in `docs/provider-pricing.md` §Cache-tier multipliers.
 Sonnet 5 row re-verified 2026-09-01 (PLAN-169 S338 follow-up): the official pricing page (https://platform.claude.com/docs/en/about-claude/pricing) states the $2/$10 launch intro price is now the standard price and the previously scheduled 2026-09-01 increase to $3/$15 will not occur — the dated $3/$15 flip was retired from every rollup surface (`audit-telemetry.py`, `ceo-cost.py`, `budget-summary.py`) and from the `cost-table.yaml` sticker.
 Live-confirmed 2026-05-29 from https://www.anthropic.com/api (Opus 4.8 = $5/$25, Sonnet 4.6 = $3/$15, Haiku 4.5 = $1/$5). The prior Haiku row ($0.25/$1.25) propagated a stale rate from ADR-052 §Cost magnitude and underpriced Haiku 4x. Adopters with their own contractual
 pricing should override the table via `CEO_PRICING_PATH=<json>` —
@@ -122,7 +131,7 @@ the `_lib/adapters/live/_cost.py` resolver picks it up.
 
 | Agent | Model (at computation; current fleet in parens) | Why |
 |-------|-------|-----|
-| **CEO orchestrator** (you, the chat session) | Opus 4.8 (now the session model — Fable 5/Opus 5) | Long context, L3+ decisions, debate synthesis |
+| **CEO orchestrator** (you, the chat session) | Opus 4.8 (now the session `model` pin — `claude-opus-5-5` since ADR-149 Amendment 3) | Long context, L3+ decisions, debate synthesis |
 | **code-reviewer** | Opus 4.8 (now `claude-fable-5`) | Merge VETO — false negative ships a bug |
 | **security-engineer** | Opus 4.8 (now `claude-fable-5`) | Auth/crypto VETO — missed attack surface = incident |
 | **qa-architect** | Sonnet 4.6 | Edge-case enumeration; bounded work; cost 0.6× vs Opus 4.8 |

@@ -543,7 +543,11 @@ class FrozenCopyFailsItsOwnClaim(TestEnvContext):
                 "env key %s changed or vanished — the advisory switch the "
                 "profile depends on must survive the derivation" % key,
             )
-        self.assertEqual(shipped["model"], self.fixture["model"])
+        # ADR-149 Amendment 3 (S357) moved the session pin on purpose; the
+        # frozen pre-F copy keeps the pin the releases before it shipped.
+        # The user profile has no pin source of its own: what must survive
+        # the derivation is the BASE template pin.
+        self.assertEqual(shipped["model"], _read(BASE_TEMPLATE)["model"])
 
 
 # ---------------------------------------------------------------------------

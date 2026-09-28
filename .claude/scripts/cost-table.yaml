@@ -92,6 +92,11 @@ models:
     output_per_mtok: 50.00
     tier: opus
     source_url: "https://docs.anthropic.com/en/docs/about-claude/pricing"  # PLAN-163 T1.5b: fast-mode premium row (Opus 5/4.8 only; removed from 4.7) — cost/latency trade-off, see docs/ACCELERATORS.md
+  claude-opus-5-5:
+    input_per_mtok: 4.00
+    output_per_mtok: 20.00
+    tier: opus
+    source_url: "https://platform.claude.com/docs/en/about-claude/pricing"  # ADR-149 Amendment 3 (S357, fetched 2026-09-22): Opus 5.5 at $4/$20; 1M ctx at standard price / 128K out; cache hits 0.05x base ($0.20/MTok) — this table has no cache field, budget-summary.py and ceo-cost-transcripts.py carry the per-model multiplier; NO claude-opus-5-5-fast row (outside the signed working set: check-model-currency.py would report it red)
   claude-opus-4-7:
     input_per_mtok: 5.00
     output_per_mtok: 25.00

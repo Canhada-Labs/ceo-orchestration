@@ -126,6 +126,9 @@ _DEDUP_STRIP_FIELDS: Tuple[str, ...] = ("hmac", "hmac_error", "hook_duration_ms"
 #: became the STANDARD price (official pricing page fetched 2026-09-01: the
 #: scheduled 2026-09-01 increase to $3/$15 "will not occur"; PLAN-169 S338
 #: follow-up).
+#: ADR-149 Amendment 3 (S357): claude-opus-5-5 $4/$20 (pricing page fetched
+#: 2026-09-22); its 0.05x cache-read rate lives in
+#: _CACHE_READ_MULTIPLIER_OVERRIDES below.
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-opus-4-8":             {"in": 0.005, "out": 0.025},
     "claude-opus-4-8-fast":       {"in": 0.010, "out": 0.050},
@@ -133,6 +136,7 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-fable-5-1":           {"in": 0.010, "out": 0.050},  # ADR-149 Amendment 2 (S338)
     "claude-opus-5":              {"in": 0.005, "out": 0.025},
     "claude-opus-5-fast":         {"in": 0.010, "out": 0.050},
+    "claude-opus-5-5":            {"in": 0.004, "out": 0.020},  # ADR-149 Amendment 3 (S357)
     "claude-sonnet-5":            {"in": 0.002, "out": 0.010},
     "claude-opus-4-7":            {"in": 0.015, "out": 0.075},
     "claude-opus-4":              {"in": 0.015, "out": 0.075},
@@ -982,11 +986,18 @@ _NATIVE_USAGE_KEYS: Tuple[str, ...] = (
 #: ADR-149 Amendment 2 (S338, codex rail r1 P2): the cache-read multiplier
 #: is PER MODEL. The pricing page (fetched 2026-09-01) prices cache hits on
 #: Claude Fable 5.1 / Mythos 5.1 at 0.025x the base input price
-#: ($0.25/MTok); every other model keeps the standard 0.10x. A flat 0.10x
-#: would OVERSTATE Fable 5.1 cache reads 4x. Keys are canonical ids.
+#: ($0.25/MTok). A flat 0.10x would OVERSTATE Fable 5.1 cache reads 4x.
+#: ADR-149 Amendment 3 (S357): Claude Opus 5.5 cache hits are 0.05x its $4
+#: base ($0.20/MTok, pricing page fetched 2026-09-22) — a flat 0.10x would
+#: overstate them 2x. Every other model of the ADR-149 working set keeps
+#: the standard 0.10x; Mythos 5.1 (0.025x on the same page) is outside
+#: the working set and carries no entry. Keys are canonical ids.
+#: ceo-cost-transcripts.py mirrors this table exactly;
+#: test_model_fleet_presence.py binds the two.
 _CACHE_READ_MULTIPLIER_DEFAULT: float = 0.10
 _CACHE_READ_MULTIPLIER_OVERRIDES: Dict[str, float] = {
     "claude-fable-5-1": 0.025,
+    "claude-opus-5-5": 0.05,
 }
 
 
@@ -994,6 +1005,19 @@ def _cache_read_multiplier(model_id: str) -> float:
     """Cache-read multiplier for ``model_id`` (0.10x unless overridden)."""
     return _CACHE_READ_MULTIPLIER_OVERRIDES.get(
         model_id, _CACHE_READ_MULTIPLIER_DEFAULT
+    )
+
+
+def _cache_read_exceptions_text() -> str:
+    """The per-model cache-read exceptions, rendered FROM the table above.
+
+    ADR-149 Amendment 3 (S357): the report text is DERIVED, never
+    re-listed by hand — the hand-written "0.025x on Fable 5.1" went stale
+    on the next model with its own cache-read rate.
+    """
+    return ", ".join(
+        "%gx on %s" % (mult, model_id)
+        for model_id, mult in sorted(_CACHE_READ_MULTIPLIER_OVERRIDES.items())
     )
 
 
@@ -1136,7 +1160,7 @@ def _read_native_spawn(
     t_in = sums["input_tokens"]
     t_out = sums["output_tokens"]
     # Cache classes are BILLABLE (docs/provider-pricing.md: read @0.10x
-    # input — 0.025x on Fable 5.1, see _CACHE_READ_MULTIPLIER_OVERRIDES —,
+    # input — per-model exceptions in _CACHE_READ_MULTIPLIER_OVERRIDES —,
     # write @1.25x on the 5m TTL and @2.00x on the 1h TTL). When the
     # transcript carries the nested ``usage.cache_creation`` split, each
     # tier gets its own multiplier (codex S306 r3 P2 cure); writes NOT
@@ -1684,7 +1708,7 @@ def _format_native_block(native: Dict[str, Any]) -> List[str]:
     lines.append(f"  Native cost     : {cost_col}")
     lines.append(
         "                    (cache priced as input-equivalents: read @0.10x"
-        " — 0.025x on Fable 5.1 —,"
+        " — " + _cache_read_exceptions_text() + " —,"
         " write @1.25x — 5m-TTL assumption, docs/provider-pricing.md)"
     )
     unreadable = int(native.get("native_transcripts_unreadable", 0) or 0)

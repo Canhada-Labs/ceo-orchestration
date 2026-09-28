@@ -57,7 +57,7 @@ switch is a no-op — the upgraded path doesn't exist.**
 **Working set (`availableModels`, order is normative — new ids appended):**
 
 ```
-["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5","claude-fable-5-1"]
+["claude-opus-4-8","claude-fable-5","claude-sonnet-4-6","claude-haiku-4-5","claude-opus-5","claude-sonnet-5","claude-fable-5-1","claude-opus-5-5"]
 ```
 
 > **UPDATED S338 (ADR-149 Amendment 2, 2026-09-01):** `claude-fable-5-1`
@@ -65,10 +65,27 @@ switch is a no-op — the upgraded path doesn't exist.**
 > only. The VETO floor, the fallback chain, the session pin and every row
 > of the table below are unchanged; 5.1 is selectable, not routed to.
 
+> **UPDATED S357 (ADR-149 Amendment 3, 2026-09-22):** `claude-opus-5-5`
+> (Opus 5.5 — $4/$20 per MTok, cache reads 0.05× = $0.20/MTok, 1M ctx,
+> API default effort `medium`) is appended to the working set, joins
+> `VETO_FLOOR_ALLOWED`, and becomes the session-default `model` pin. The
+> fallback chain stays `["claude-opus-5"]` and every `veto_floor: true`
+> agent file in `.claude/agents/` keeps its `claude-fable-5` pin, which
+> binds agent-definition dispatch when the invocation passes no `model`
+> (a per-invocation model outranks the file, and no gate observes it).
+> A mitigated `general-purpose` spawn passed no model runs on the model
+> the session runs at that moment: the pin by default, or whatever a
+> `/model`, `--model` or `ANTHROPIC_MODEL` choice, or a content fallback
+> that persists for the session, selected (ADR-149 A3.3).
+> On the API, Opus 5.5 has its own rate limit, separate from Opus 5
+> (rate-limits page, fetched 2026-09-23). This note re-routes no row of
+> the table below; its first row states the session pin.
+
 **Fallback (`fallbackModel`, OQ1=b — full refresh, no soak):** `["claude-opus-5"]`
 
 | Role / surface | Model (post-PLAN-163) | Notes |
 |---|---|---|
+| CEO orchestrator (session-default `model` pin) | `claude-opus-5-5` | ADR-149 Amendment 3 (S357); was `claude-opus-5`, which stays the `fallbackModel` |
 | VETO roles (`code-reviewer`, `security-engineer`) | **`claude-fable-5` remains the ceiling** | `VETO_FLOOR_ALLOWED` += `claude-opus-5` (ADR-149 amendment) — opus-5 becomes an allowed floor member, Fable 5 stays the top of the VETO family |
 | Debate / arch task classes (`model_routing.py`) | `claude-opus-5` | was `claude-opus-4-8`; $5/$25 drop-in rate, 1M ctx default |
 | Advisory tier (qa / perf / non-VETO staff, `code_gen`/`finops`) | `claude-sonnet-5` | OQ2 = migrate now; $2/$10 per MTok is the STANDARD price — the launch intro rate became permanent and the scheduled 2026-09-01 increase to $3/$15 will not occur (pricing page fetched 2026-09-01, PLAN-169 S338 follow-up; `docs/substrate-adopt-2026-08.md` is a DATED adoption record — its G2 row still shows the pre-cancellation $3/$15 flip and is superseded by this row); tokenizer ~+30% tokens — shipped budgets NOT re-baselined yet (follow-up plan, see `docs/substrate-adopt-2026-08.md` §Tokenizer note) |

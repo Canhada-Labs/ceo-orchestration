@@ -29,6 +29,13 @@
 #   --dry-run                      Print what WOULD be done (mkdir, cp, sed) without
 #                                    touching $TARGET. Exit 0 after preview.
 #
+#   --allow-old-claude-code        Install although the claude CLI on PATH is older
+#                                    than the Claude Code floor of this release
+#                                    (2.1.280, SUPPORT.md; ADR-149 Amendment 3).
+#                                    Without it such an install is REFUSED (exit 6)
+#                                    before anything is written; with no claude on
+#                                    PATH (CI, headless) the install warns and goes on.
+#
 #   --harness <claude|codex>       Target harness (default: claude). PLAN-155 Wave 5.
 #                                    claude (default) is BYTE-IDENTICAL to the flag
 #                                    being absent. codex ALSO emits the .codex/
@@ -371,6 +378,7 @@ STACK_EXPLICIT=0
 GITHUB_OWNER=""
 WITH_REFERENCE_PERSONAS=0
 DRY_RUN=0
+ALLOW_OLD_CLAUDE_CODE=0  # ADR-149 A3 (OQ-9): --allow-old-claude-code continues below the floor
 STRICT_PLACEHOLDERS=0
 # V5: acumulador dos links criados NESTA run — inicializado VAZIO aqui
 # (pair-rail S300 r16: um _CREATED_LINK_RELPATHS herdado do ambiente
@@ -515,6 +523,9 @@ while [[ $# -gt 0 ]]; do
       WITH_REFERENCE_PERSONAS=1; shift ;;
     --dry-run)
       DRY_RUN=1; shift ;;
+    --allow-old-claude-code)
+      # ADR-149 Amendment 3 (Owner OQ-9): continue below the floor.
+      ALLOW_OLD_CLAUDE_CODE=1; shift ;;
     --strict-placeholders)
       # Session 75 Codex Finding 5: was advertised in docs/READINESS-STATUS.md
       # but the parser rejected it. Now wired — mirrors CEO_INSTALL_STRICT_PH=1
@@ -746,6 +757,108 @@ echo "    Stack:        $STACK"
 echo "    GitHub owner: ${GITHUB_OWNER:-<unset — placeholder kept>}"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "    Dry-run:      YES (no files will be written)"
+fi
+
+# >>> claude-code-floor (ADR-149 Amendment 3, Owner OQ-9) >>>
+# This release needs Claude Code >= CC_FLOOR_VERSION (SUPPORT.md). The
+# settings it ships carry values an older CLI may not accept: the
+# claude-opus-5-5 pin (Anthropic documents 2.1.280 as its minimum) and
+# effortLevel xhigh (not an effort level before 2.1.111). A settings value
+# a CLI does not accept can make it skip the WHOLE project settings file,
+# every hook registration in it included (Claude Code CHANGELOG: invalid
+# legacy enum values did so until 2.1.121; CLIs before 2.1.281 skip a
+# file holding the new attribution false). The check reads the claude
+# found on PATH: below the floor it REFUSES (the caller exits 6) unless
+# --allow-old-claude-code was passed; no claude on PATH (CI, headless),
+# or a version it cannot read, is a named WARNING and the run goes on; a
+# dry run names the refusal and goes on previewing. The probe runs
+# claude --version in the background with stdin from /dev/null and polls
+# it; after CC_FLOOR_PROBE_SECONDS it stops the process group of the
+# probe and the version is unreadable (macOS ships no timeout command).
+# The version is read only from the first output line that names
+# (Claude Code); a version with anything after its three numbers (a
+# pre-release such as 2.1.280-beta.1) counts as below the floor. This
+# block is byte-identical in scripts/install.sh and scripts/upgrade.sh (a
+# test holds the two copies equal).
+CC_FLOOR_VERSION="2.1.280"
+CC_FLOOR_PROBE_SECONDS=10
+_claude_code_floor_check() {
+  # $1 = 1 when --allow-old-claude-code was passed; $2 = 1 on a dry run.
+  # Returns 1 only for a refusal; a pass prints on stdout, the rest on stderr.
+  local _ccf_allow="${1:-0}" _ccf_dry="${2:-0}" _ccf_out _ccf_line _ccf_tok _ccf_ver
+  local _ccf_a _ccf_b _ccf_x _ccf_y _ccf_i _ccf_lt=0 _ccf_why=""
+  if ! command -v claude >/dev/null 2>&1; then
+    echo "WARNING: Claude Code CLI not found on PATH (claude): its version is not checked; this release needs Claude Code >= $CC_FLOOR_VERSION (SUPPORT.md)" >&2
+    return 0
+  fi
+  # The probe, in the capture's own subshell: the shell's notices go to
+  # /dev/null (the probe's output, stderr included, to the capture);
+  # disown -a empties the job table the subshell inherits, so %1 is the
+  # probe; set -m starts it in a process group of its own, so kill %1
+  # signals the whole group (a child it starts that still holds the
+  # output open is stopped with it); set +m keeps the polling sleeps off
+  # job control.
+  if ! _ccf_out="$(
+    exec 2>/dev/null
+    disown -a
+    set -m
+    claude --version </dev/null 2>&1 &
+    set +m
+    # SECONDS counts whole seconds: + 1 so the stop never comes early.
+    _ccf_end=$(( SECONDS + CC_FLOOR_PROBE_SECONDS + 1 ))
+    while kill -0 %1; do
+      if [ "$SECONDS" -ge "$_ccf_end" ]; then
+        kill -TERM %1 || true
+        sleep 1
+        kill -KILL %1 || true
+        exit 124
+      fi
+      sleep 0.1 || sleep 1
+    done
+    wait %1 || true
+  )"; then
+    echo "WARNING: Claude Code version unreadable: 'claude --version' did not finish within ${CC_FLOOR_PROBE_SECONDS}s and was stopped; it is not checked; this release needs Claude Code >= $CC_FLOOR_VERSION (SUPPORT.md)" >&2
+    return 0
+  fi
+  _ccf_line="$( printf '%s\n' "$_ccf_out" | grep -F '(Claude Code)' | head -n 1 || true )"
+  _ccf_tok="$( printf '%s\n' "$_ccf_line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+[^[:space:](]*' | head -n 1 || true )"
+  _ccf_ver="$( printf '%s\n' "$_ccf_tok" | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' || true )"
+  if [ -z "$_ccf_ver" ]; then
+    echo "WARNING: Claude Code version unreadable: no line of 'claude --version' names (Claude Code) with a version; it is not checked; this release needs Claude Code >= $CC_FLOOR_VERSION (SUPPORT.md)" >&2
+    return 0
+  fi
+  _ccf_a="$_ccf_ver"
+  _ccf_b="$CC_FLOOR_VERSION"
+  for _ccf_i in 1 2 3; do
+    _ccf_x="${_ccf_a%%.*}"
+    _ccf_y="${_ccf_b%%.*}"
+    if [ "$(( 10#$_ccf_x ))" -lt "$(( 10#$_ccf_y ))" ]; then _ccf_lt=1; break; fi
+    if [ "$(( 10#$_ccf_x ))" -gt "$(( 10#$_ccf_y ))" ]; then break; fi
+    _ccf_a="${_ccf_a#*.}"
+    _ccf_b="${_ccf_b#*.}"
+  done
+  if [ "$_ccf_lt" -eq 0 ] && [ "$_ccf_tok" != "$_ccf_ver" ]; then
+    _ccf_lt=1
+    _ccf_why=" (a version with anything after its three numbers counts as below it)"
+  fi
+  if [ "$_ccf_lt" -eq 0 ]; then
+    echo "    Claude Code:  $_ccf_ver (floor $CC_FLOOR_VERSION: OK)"
+    return 0
+  fi
+  if [ "$_ccf_allow" = "1" ]; then
+    echo "WARNING: Claude Code $_ccf_tok is below $CC_FLOOR_VERSION$_ccf_why, the minimum of this release; continuing because --allow-old-claude-code was passed. The settings it writes may not load on that CLI: see SUPPORT.md (Claude Code CLI) for what to edit" >&2
+    return 0
+  fi
+  if [ "$_ccf_dry" = "1" ]; then
+    echo "(dry-run) would REFUSE: Claude Code $_ccf_tok is below $CC_FLOOR_VERSION$_ccf_why, the minimum of this release; an apply run stops here (exit 6) unless you pass --allow-old-claude-code" >&2
+    return 0
+  fi
+  echo "ERROR: Claude Code $_ccf_tok is below $CC_FLOOR_VERSION$_ccf_why, the minimum of this release (SUPPORT.md): nothing was written. Update Claude Code, or pass --allow-old-claude-code to continue anyway (the settings it writes may not load on that CLI)" >&2
+  return 1
+}
+# <<< claude-code-floor <<<
+if ! _claude_code_floor_check "$ALLOW_OLD_CLAUDE_CODE" "$DRY_RUN"; then
+  exit 6
 fi
 echo ""
 

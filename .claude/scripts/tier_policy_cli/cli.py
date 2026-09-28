@@ -344,6 +344,28 @@ def cmd_owner_sign(args) -> int:
             "owner-sign: agent must be one of canonical-5\n"
         )
         return 2
+    # ADR-149 Amendment 3 (S357): the action this entry signs is the one
+    # the learner computes — learn._direction over learn._tier_rank, ONE
+    # authority. VALID_MODEL_IDS is an allowlist in ADR order, not a tier
+    # order (claude-fable-5 is its first entry): its index signed
+    # fable-5 -> opus-5, and fable-5-1 -> opus-5-5, as "promote". An id
+    # the ladder does not rank, or the same model on both sides, is
+    # refused before anything is signed.
+    if (
+        learn_mod._tier_rank(args.from_tier) < 0
+        or learn_mod._tier_rank(args.to_tier) < 0
+    ):
+        sys.stderr.write(
+            "owner-sign: model ID has no tier rank; aborting\n"
+        )
+        return 2
+    action = learn_mod._direction(args.from_tier, args.to_tier)
+    if action not in ("promote", "demote"):
+        sys.stderr.write(
+            "owner-sign: from_tier and to_tier are the same model; "
+            "nothing to sign\n"
+        )
+        return 2
     sigchain_path = (
         Path(args.sigchain) if args.sigchain else DEFAULT_SIGCHAIN_PATH
     )
@@ -354,10 +376,6 @@ def cmd_owner_sign(args) -> int:
             "owner-sign: _lib/audit_hmac unavailable; aborting\n"
         )
         return 3
-    action = "promote" if (
-        VALID_MODEL_IDS.index(args.to_tier)
-        > VALID_MODEL_IDS.index(args.from_tier)
-    ) else "demote"
     prior_tip = _read_sigchain_tip_length(sigchain_path)
     entry = {
         "timestamp": datetime.now(timezone.utc).strftime(

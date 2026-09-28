@@ -50,6 +50,40 @@
 #
 # Run:  bash scripts/tests/test-upgrade-historical-adopter.sh ; echo rc=$?
 set -uo pipefail   # NOT -e: every failure is asserted, never fatal-by-default.
+# >>> harness-claude-stub (ADR-149 Amendment 3) >>>
+# scripts/install.sh and scripts/upgrade.sh read `claude --version` against the
+# Claude Code floor (CC_FLOOR_VERSION) and refuse below it (exit 6). A harness
+# never reads the host CLI: this block exports a claude FUNCTION that answers
+# --version with the floor of the scripts/install.sh of its own checkout, and
+# every bash the harness starts with this environment runs it before any
+# claude on PATH, whatever PATH that bash is given (a bash started with an
+# emptied environment, env -i, does not get it). Any other call exits 127. A
+# case that needs another CLI runs `unset -f claude` first. The block is
+# byte-identical in every
+# harness that names an installer (TestNoHarnessReadsTheHostCli, in
+# .claude/scripts/tests/test_upgrade_settings_migration.py, holds the copies
+# equal and finds a harness without it).
+_cc_stub_root="$(CDPATH='' cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+while [ ! -f "$_cc_stub_root/scripts/install.sh" ] && [ "$_cc_stub_root" != "/" ]; do
+  _cc_stub_root="$(dirname "$_cc_stub_root")"
+done
+CC_STUB_FLOOR="$(sed -n 's/^CC_FLOOR_VERSION="\([0-9][0-9.]*\)"$/\1/p' "$_cc_stub_root/scripts/install.sh" 2>/dev/null || true)"
+case "$CC_STUB_FLOOR" in
+  ''|*[!0-9.]*)
+    echo "ERROR: $_cc_stub_root/scripts/install.sh carries no single CC_FLOOR_VERSION line: the claude stub has no version to report" >&2
+    exit 1 ;;
+esac
+export CC_STUB_FLOOR
+claude() {
+  if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then
+    printf '%s (Claude Code)\n' "$CC_STUB_FLOOR"
+    return 0
+  fi
+  echo "claude: the harness stub answers only --version" >&2
+  return 127
+}
+export -f claude
+# <<< harness-claude-stub <<<
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"

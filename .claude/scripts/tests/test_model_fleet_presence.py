@@ -19,6 +19,10 @@ Pricing pins asserted here (public rates, per MTok):
                                       cost-table.yaml / rate-card fixtures)
   - claude-opus-5         $5 / $25   (drop-in at the 4.8 rate)
   - claude-opus-5-fast    $10 / $50  (fast-mode premium row)
+  - claude-opus-5-5       $4 / $20   (ADR-149 Amendment 3, S357 — the session
+                                      pin; cache reads 0.05x base, asserted
+                                      below together with the class cure that
+                                      reads the fleet FROM ADR-149)
   - claude-sonnet-5       $2 / $10   STANDARD rate on BOTH sides of 2026-09-01
                           (PLAN-169 S338 follow-up): the launch intro price
                           became permanent — the official pricing page
@@ -55,6 +59,7 @@ for _p in (str(_HOOKS_DIR), str(_SCRIPTS_DIR)):
 from _lib.testing import TestEnvContext  # noqa: E402
 
 _COST_TABLE = _SCRIPTS_DIR / "cost-table.yaml"
+_ADR_149 = _REPO_ROOT / ".claude" / "adr" / "ADR-149-model-id-allowlist.md"
 
 #: Fleet ids that every rollup surface must recognize after PLAN-163 T1.5.
 #: claude-opus-4-8-fast added by W2 P2b — it is the live replacement id in
@@ -62,6 +67,9 @@ _COST_TABLE = _SCRIPTS_DIR / "cost-table.yaml"
 #: silently priced $0/unknown by every surface.
 #: claude-fable-5-1 added by ADR-149 Amendment 2 (S338) — Fable 5.1 at the
 #: Fable 5 rate; the same silent-$0 class this file exists to keep honest.
+#: claude-opus-5-5 added by ADR-149 Amendment 3 (S357) — Opus 5.5 at $4/$20.
+#: Since S357 this hand list is NOT the only guard: the working-set class
+#: cure below reads the fleet from ADR-149 itself.
 _NEW_FLEET = (
     "claude-opus-4-8",
     "claude-opus-4-8-fast",
@@ -69,6 +77,7 @@ _NEW_FLEET = (
     "claude-fable-5-1",
     "claude-opus-5",
     "claude-opus-5-fast",
+    "claude-opus-5-5",
     "claude-sonnet-5",
 )
 
@@ -87,6 +96,20 @@ def _load_hyphenated(module_name: str, file_name: str):
         module_name, str(_SCRIPTS_DIR / file_name)
     )
     mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _load_registered(module_name: str, file_name: str):
+    """Like ``_load_hyphenated`` but registers the module in ``sys.modules``
+    BEFORE executing it: ceo-cost-transcripts.py declares dataclasses, which
+    resolve their module through ``sys.modules`` at class-definition time.
+    """
+    spec = importlib.util.spec_from_file_location(
+        module_name, str(_SCRIPTS_DIR / file_name)
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -117,6 +140,7 @@ class TestAuditTelemetryFleetPresence(TestEnvContext):
             "claude-fable-5-1": (10.00, 50.00),  # ADR-149 A2 (S338)
             "claude-opus-5": (5.00, 25.00),
             "claude-opus-5-fast": (10.00, 50.00),
+            "claude-opus-5-5": (4.00, 20.00),  # ADR-149 A3 (S357)
             # Base-row intro rate; the 2026-08-31 flip is event-date-aware
             # via _DATED_PRICING_PER_MTOK (W2 P2a, asserted below).
             "claude-sonnet-5": (2.00, 10.00),
@@ -202,7 +226,8 @@ class TestDetectorFleetPresence(TestEnvContext):
 
     def test_overpowered_large_models(self) -> None:
         from detectors import overpowered
-        for model in ("claude-fable-5", "claude-fable-5-1", "claude-opus-5"):
+        for model in ("claude-fable-5", "claude-fable-5-1", "claude-opus-5",
+                      "claude-opus-5-5"):
             self.assertIn(
                 model, overpowered._LARGE_MODELS,
                 "%s missing from overpowered._LARGE_MODELS" % model,
@@ -213,7 +238,8 @@ class TestDetectorFleetPresence(TestEnvContext):
 
     def test_wasteful_thinking_target_models(self) -> None:
         from detectors import wasteful_thinking
-        for model in ("claude-fable-5", "claude-fable-5-1", "claude-opus-5"):
+        for model in ("claude-fable-5", "claude-fable-5-1", "claude-opus-5",
+                      "claude-opus-5-5"):
             self.assertIn(
                 model, wasteful_thinking._TARGET_MODELS,
                 "%s missing from wasteful_thinking._TARGET_MODELS" % model,
@@ -335,6 +361,7 @@ class TestBudgetSummaryFleetPresence(TestEnvContext):
             "claude-opus-5-fast": (0.010, 0.050),
             "claude-fable-5": (0.010, 0.050),
             "claude-fable-5-1": (0.010, 0.050),  # ADR-149 A2 (S338)
+            "claude-opus-5-5": (0.004, 0.020),  # ADR-149 A3 (S357)
             "claude-sonnet-5": (0.002, 0.010),  # base row; dated flip below
         }
         for model, (inp, out) in expected.items():
@@ -350,6 +377,45 @@ class TestBudgetSummaryFleetPresence(TestEnvContext):
         for model in ("claude-fable-5", "claude-opus-5", "claude-sonnet-5",
                       "some-unknown-model"):
             self.assertAlmostEqual(self.mod._cache_read_multiplier(model), 0.10)
+
+    def test_opus55_cache_read_multiplier(self) -> None:
+        """ADR-149 A3 (S357): Opus 5.5 cache hits are 0.05x base input
+        ($0.20 on the $4 base — pricing page 2026-09-22), NOT the standard
+        0.10x; claude-opus-5 keeps 0.10x (a distinct minor)."""
+        self.assertAlmostEqual(
+            self.mod._cache_read_multiplier("claude-opus-5-5"), 0.05)
+        self.assertAlmostEqual(
+            self.mod._cache_read_multiplier("claude-opus-5"), 0.10)
+        text = self.mod._cache_read_exceptions_text()
+        self.assertIn("0.05x on claude-opus-5-5", text)
+        self.assertIn("0.025x on claude-fable-5-1", text)
+
+    def test_native_spawn_opus55_one_m_tag_priced_with_its_cache_rate(self) -> None:
+        """ADR-149 A3 (S357): a session that selected the 1M variant
+        reports the id WITH the ``[1m]`` tag (``claude-opus-5-5[1m]``,
+        observed S357 on Claude Code 2.1.280); a bare
+        ``opus`` meta alias is ambiguous, so the transcript model decides —
+        and the spawn is priced at $4 input + 0.05x cache reads."""
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as td:
+            tr = Path(td) / "agent-y.jsonl"
+            tr.write_text(
+                '{"timestamp": "2026-09-22T00:00:00Z", "message": '
+                '{"model": "claude-opus-5-5[1m]", "usage": {"input_tokens": 1000000, '
+                '"output_tokens": 0, "cache_read_input_tokens": 1000000}}}\n',
+                encoding="utf-8",
+            )
+            (Path(td) / "agent-y.meta.json").write_text(
+                '{"agentType": "t", "spawnDepth": 1, "model": "opus"}',
+                encoding="utf-8",
+            )
+            rec = self.mod._read_native_spawn(tr, "native", "sess")
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec["model_id"], "claude-opus-5-5")
+        self.assertFalse(rec["cost_tbd"])
+        # 1M fresh input at $4 + 1M cache reads at 0.05x ($0.20) == $4.20
+        self.assertAlmostEqual(rec["cost_usd"], 4.20, places=6)
 
     def test_bare_fable_alias_is_ambiguous_and_versioned_alias_resolves(self) -> None:
         """ADR-149 A2 (S338, codex r2 P2): with two Fable ids in the
@@ -484,6 +550,104 @@ class TestSuccessReceiptFleetPresence(TestEnvContext):
         self.assertAlmostEqual(section["cost_usd"], 10.003, places=4)
 
 
+class TestWorkingSetPricedOnEverySurface(TestEnvContext):
+    """ADR-149 Amendment 3 (S357) — the CLASS cure for "a new model id
+    prices at $0 / TBD on some rollup surface".
+
+    A recurring class (PLAN-163 T1.5, PLAN-169 W2.10 F3, the Fable 5.1
+    codex rail r3 P1), and Opus 5.5 needed the same hand edits again: the
+    hand-kept ``_NEW_FLEET`` tuple only guards the ids someone remembered
+    to add. Here the fleet is READ from the signed
+    authority — ADR-149 ``AVAILABLE_MODELS_WORKING_SET``, through the same
+    parser the model-currency gate uses — so the NEXT working-set append
+    fails this test until every rollup surface prices it at the
+    cost-table.yaml rate.
+    """
+
+    #: (script, table attribute, input key, output key, factor to per-MTok)
+    _SURFACES = (
+        ("audit-telemetry.py", "_PRICING_PER_MTOK", "input", "output", 1.0),
+        ("ceo-cost.py", "_DEFAULT_PRICING", "input_per_mtok", "output_per_mtok", 1.0),
+        ("budget-summary.py", "_DEFAULT_PRICING", "in", "out", 1000.0),
+        ("success-receipt.py", "_DEFAULT_PRICING", "in", "out", 1000.0),
+        ("value-dashboard.py", "_DEFAULT_PRICING", "in", "out", 1000.0),
+        ("ceo-cost-transcripts.py", "_EMBEDDED_PRICING", "input_per_mtok",
+         "output_per_mtok", 1.0),
+    )
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        currency = _load_registered(
+            "fleet_ws_currency", "check-model-currency.py")
+        cls.working_set = list(
+            currency.read_adr_blocks(_ADR_149)["AVAILABLE_MODELS_WORKING_SET"])
+        cls.cct = _load_registered(
+            "fleet_ws_transcripts", "ceo-cost-transcripts.py")
+        cls.cost_table = cls.cct._parse_cost_table_yaml(
+            _COST_TABLE.read_text(encoding="utf-8"))
+        cls.tables = {}
+        for idx, (script, attr, k_in, k_out, factor) in enumerate(cls._SURFACES):
+            if script == "ceo-cost-transcripts.py":
+                mod = cls.cct
+            else:
+                mod = _load_registered("fleet_ws_surface_%d" % idx, script)
+            cls.tables[script] = (getattr(mod, attr), k_in, k_out, factor)
+
+    def test_working_set_read_from_the_adr(self) -> None:
+        """Non-vacuity: the fleet came from the ADR, and this pack's id is
+        in it (the ADR append and these price rows land together)."""
+        self.assertGreaterEqual(len(self.working_set), 8)
+        self.assertIn("claude-opus-5-5", self.working_set)
+
+    def test_every_working_set_id_priced_on_every_surface(self) -> None:
+        for model in self.working_set:
+            ref = self.cost_table.get(model)
+            self.assertIsNotNone(ref, "%s has no cost-table.yaml row" % model)
+            for script, (table, k_in, k_out, factor) in self.tables.items():
+                with self.subTest(model=model, surface=script):
+                    row = table.get(model)
+                    self.assertIsNotNone(
+                        row, "%s missing from %s — prices at $0/TBD" % (model, script))
+                    self.assertAlmostEqual(
+                        row[k_in] * factor, ref["input_per_mtok"], places=6,
+                        msg="%s input rate on %s" % (model, script))
+                    self.assertAlmostEqual(
+                        row[k_out] * factor, ref["output_per_mtok"], places=6,
+                        msg="%s output rate on %s" % (model, script))
+
+
+class TestCacheReadMultiplierMirror(TestEnvContext):
+    """ADR-149 Amendment 3 (S357): the per-model cache-read rate is now a
+    CLASS (Fable 5.1 0.025x, then Opus 5.5 0.05x) that lives in TWO scripts.
+    ceo-cost-transcripts.py declares it "mirrors budget-summary.py's
+    _CACHE_READ_MULTIPLIER_OVERRIDES exactly" — this makes that mechanical.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.bs = _load_hyphenated("budget_summary_cache_mirror", "budget-summary.py")
+        cls.cct = _load_registered(
+            "transcripts_cache_mirror", "ceo-cost-transcripts.py")
+
+    def test_transcripts_mirror_budget_summary_exactly(self) -> None:
+        self.assertEqual(self.cct._CACHE_READ_MULTIPLIER_OVERRIDES,
+                         self.bs._CACHE_READ_MULTIPLIER_OVERRIDES)
+        self.assertEqual(self.cct._CACHE_READ_MULTIPLIER_DEFAULT,
+                         self.bs._CACHE_READ_MULTIPLIER_DEFAULT)
+
+    def test_opus55_is_005_on_both(self) -> None:
+        for mod in (self.bs, self.cct):
+            self.assertAlmostEqual(mod._cache_read_multiplier("claude-opus-5-5"), 0.05)
+            self.assertAlmostEqual(mod._cache_read_multiplier("claude-opus-5"), 0.10)
+
+    def test_every_override_is_a_priced_id(self) -> None:
+        for model in self.bs._CACHE_READ_MULTIPLIER_OVERRIDES:
+            self.assertIn(model, self.bs._DEFAULT_PRICING)
+            self.assertIn(model, self.cct._EMBEDDED_PRICING)
+
+
 class TestCostTableFleetPresence(TestEnvContext):
     """cost-table.yaml carries the NEW ids (opus-5 + fast row).
 
@@ -523,6 +687,16 @@ class TestCostTableFleetPresence(TestEnvContext):
         text = self._block("claude-fable-5-1")
         self.assertIn("input_per_mtok: 10.00", text)
         self.assertIn("output_per_mtok: 50.00", text)
+
+    def test_opus55_row(self) -> None:
+        """ADR-149 Amendment 3 (S357): Opus 5.5 at $4/$20 — and NO fast
+        row: ``claude-opus-5-5-fast`` is outside the signed working set, so
+        check-model-currency.py would report it as a new red."""
+        text = self._block("claude-opus-5-5")
+        self.assertIn("input_per_mtok: 4.00", text)
+        self.assertIn("output_per_mtok: 20.00", text)
+        self.assertIsNone(
+            re.search(r"^  claude-opus-5-5-fast:", self.cost_table, re.MULTILINE))
 
     def test_opus48_fast_row(self) -> None:
         """W2 P2b: 4-8-fast is a live replacement id and must be priced."""

@@ -285,6 +285,34 @@ class TestModelRemap(_EffectiveConfigBase):
         self.assertEqual(self.classes_of(findings), [ec.TAMPER_MODEL_REMAP])
         self.assertEqual(findings[0]["layer"], "project")
 
+    def test_one_m_context_tag_on_a_member_is_not_flagged(self) -> None:
+        """ADR-149 Amendment 3 (S357): ``[1m]`` selects the 1M context
+        window, not a model. RED on 19771fa1: the exact comparison flagged
+        the floor member written with the tag as a remap."""
+        self.write_adr149(members=("claude-opus-4-8", "claude-opus-5-5"))
+        self.write_settings(
+            "project",
+            {"env": {"ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5[1m]"}},
+        )
+        self.assertEqual(
+            self.classify({"ANTHROPIC_MODEL": "claude-opus-5-5[1m]"}), []
+        )
+
+    def test_one_m_fold_never_launders_another_value(self) -> None:
+        """Only ONE exact trailing ``[1m]`` folds; the base must still be a
+        member, and any other suffix is compared as written."""
+        self.write_adr149(members=("claude-opus-4-8", "claude-opus-5-5"))
+        for value in (
+            "gpt-5o[1m]", "[1m]", "claude-opus-5-5[2m]",
+            "claude-opus-5-5[1m][1m]", "claude-opus-5-5[1M]",
+            "claude-opus-5-5 [1m]",
+        ):
+            with self.subTest(value=value):
+                findings = self.classify({"ANTHROPIC_MODEL": value})
+                self.assertEqual(
+                    self.classes_of(findings), [ec.TAMPER_MODEL_REMAP]
+                )
+
     def test_allowlist_unavailable_degrades_fail_open(self) -> None:
         # No ADR-149 in this project: membership unknown → no finding.
         findings = self.classify({"ANTHROPIC_MODEL": "gpt-5o"})

@@ -75,7 +75,8 @@ only.
 
 | Version | Status |
 |---------|--------|
-| Claude Code ≥ 2.0 | ✅ Required — needs `Task` tool, slash commands, hooks, native subagents |
+| Claude Code ≥ 2.1.280 | ✅ Required from v1.4.2 — needs `Task` tool, slash commands, hooks, native subagents; the shipped settings pin `claude-opus-5-5` (Anthropic documents 2.1.280 as its minimum) and set `effortLevel: xhigh` (an effort level from 2.1.111). `scripts/install.sh` and `scripts/upgrade.sh` refuse a `claude` on PATH older than 2.1.280 (exit 6) unless you pass `--allow-old-claude-code`; with no `claude` on PATH (CI, headless), or a version they cannot read (no `(Claude Code)` line with a version, or no answer to `claude --version` within 10 seconds), they warn and continue; a version with anything after its three numbers (a pre-release) counts as below the floor |
+| Claude Code 2.0 to 2.1.279 | ⚠️ v1.4.1 and earlier only. A settings value a CLI does not accept can make it skip the whole `.claude/settings.json`, hooks included (Claude Code changelog: invalid legacy enum values did so until 2.1.121). If you install v1.4.2 on one with `--allow-old-claude-code`, edit `.claude/settings.json`: set `model` to an id your CLI knows (for example `claude-opus-5`, the pin v1.4.2 replaced) and delete `effortLevel` |
 | Claude Code 1.x | ❌ Not supported — missing native subagent dispatch + hook events used by `policy_dispatch.py` |
 | Claude Code Web (claude.ai/code) | ⚠️ Partial — slash commands work, hooks do not (no local FS) |
 
@@ -85,15 +86,38 @@ Per ADR-052 multi-model dispatch:
 
 The allowlist below is `availableModels` in `.claude/settings.json`, and
 the "used by" column is the `model:` field of the matching
-`.claude/agents/*.md`. `enforceAvailableModels` is `true`, so a model
-outside this list cannot be selected. The session default is pinned to
-`claude-opus-5` (top-level `model` key), and `fallbackModel` is
-`claude-opus-5`.
+`.claude/agents/*.md`. `availableModels` limits the models a session
+can name (`/model`, `--model`, the `model` key, subagent models):
+Claude Code merges it with the entries of user and local settings, a
+managed-settings list replaces it, and an entry admits every id that
+extends it by a `-` segment (Claude Code 2.1.280), so an id that
+extends a listed one counts as listed. The framework's own
+`.claude/settings.json` also sets `enforceAvailableModels: true`,
+which makes the Default model option obey the list as well (Claude
+Code reads that key from managed settings alone when an organization
+deploys any); the adopter templates do not set it. The session
+default is pinned to `claude-opus-5-5` (top-level `model` key) and
+`fallbackModel` is `claude-opus-5`. A new install ships
+`effortLevel: xhigh`. On an existing install `scripts/upgrade.sh`
+writes `xhigh` only with `--adopt-setting effortLevel`; when it moves
+the shipped pin `claude-opus-5` to `claude-opus-5-5` in a file that
+sets no level, it writes `effortLevel: high`, the Opus 5 default; it
+never overwrites a value you set. Without the key, and with no other
+source setting a level (`CLAUDE_CODE_EFFORT_LEVEL`, `--effort`,
+`/effort`, a level saved for the model, `ultracode`), Opus 5.5 runs at
+its default medium effort (Opus 5 defaults to high), a default that an
+organization default effort replaces when the session runs the
+organization default model; a `maxEffortLevel` caps any level. In the
+project file the key applies to every model and outranks a level a
+developer saved with `/effort` (kept per model under `modelSettings` in
+user settings); a personal level belongs in
+`.claude/settings.local.json`, which outranks the project file.
 
 | Model | Used by | Status |
 |-------|---------|--------|
-| Opus 5 (`claude-opus-5`) | CEO orchestrator — session default pin + fallback | ✅ Required |
-| Opus 5 1M context (`claude-opus-5[1m]`) | CEO orchestrator (long sessions) | ✅ Supported |
+| Opus 5.5 (`claude-opus-5-5`) | CEO orchestrator — session default pin (v1.4.2+) | ✅ Required (Claude Code ≥ 2.1.280) |
+| Opus 5 (`claude-opus-5`) | Fallback (`fallbackModel`) | ✅ Required |
+| Opus 5.5 / Opus 5 with the `[1m]` tag (`claude-opus-5-5[1m]`, `claude-opus-5[1m]`) | CEO orchestrator, when a session selects the tag (on the Anthropic API, Opus 4.7 and later run with the 1M window without it) | ✅ Supported |
 | Fable 5.1 (`claude-fable-5-1`) | Verification lanes | ✅ Supported (added v1.4.0) |
 | Fable 5 (`claude-fable-5`) | code-reviewer, security-engineer, identity-trust-architect, incident-commander, threat-detection-engineer | ✅ Required (or override) |
 | Sonnet 5 (`claude-sonnet-5`) | Allowlisted; documentation lanes | ✅ Supported |
@@ -101,7 +125,7 @@ outside this list cannot be selected. The session default is pinned to
 | Haiku 4.5 (`claude-haiku-4-5`) | Speed lanes | ✅ Supported |
 | Opus 4.8 (`claude-opus-4-8`) | Allowlisted for continuity | ⚠️ Works but no longer the default |
 | "Fast mode" | CEO orchestrator (faster output, higher cost) | ✅ Supported via the native Claude Code `/fast` toggle on Opus |
-| Older Claude 4.x (Opus 4.0–4.5, Sonnet 4.0–4.5, Haiku 4.0–4.4) | Fallback if newer unavailable | ⚠️ Works but not allowlisted — `enforceAvailableModels` blocks selection |
+| Older Claude 4.x (Opus 4.0–4.5, Sonnet 4.0–4.5, Haiku 4.0–4.4) | Fallback if newer unavailable | ⚠️ Works but not allowlisted — outside `availableModels`, so a session cannot select them unless a user or local settings file adds them |
 | Claude 3.x or earlier | Anything | ❌ Not supported — context window too small for the governance boot |
 
 **Adopting a new model is never automatic.** ADR-149 is the single source

@@ -73,6 +73,147 @@ class TestIsAdaptiveOnly(TestEnvContext):
         self.assertFalse(claude_live._is_adaptive_only(None))
 
 
+class TestAdaptiveIsTheDefault(TestEnvContext):
+    """ADR-149 Amendment 3 (S357) — class cure, inverted default.
+
+    RED on 19771fa1: the adaptive-only list was an allowlist that never
+    gained claude-opus-5 / claude-sonnet-5, so ``CEO_EFFORT_OVERRIDE``
+    sent them (and would send claude-opus-5-5, or any next id) the legacy
+    ``budget_tokens`` shape. The closed list is now the LEGACY one.
+    """
+
+    _CURRENT = (
+        "claude-opus-5", "claude-sonnet-5", "claude-opus-5-5",
+        "claude-fable-5-1", "claude-opus-5-5[1m]",
+    )
+    _FUTURE = (
+        "claude-opus-6", "claude-sonnet-5-1", "claude-some-future-model-9",
+        "claude-zeta-9",
+    )
+
+    def test_claude5_generation_is_adaptive_only(self):
+        for model in self._CURRENT:
+            self.assertTrue(claude_live._is_adaptive_only(model), model)
+
+    def test_unknown_future_id_is_adaptive_by_default(self):
+        for model in self._FUTURE:
+            self.assertTrue(claude_live._is_adaptive_only(model), model)
+
+    def test_every_legacy_id_keeps_the_budget_shape(self):
+        for model in (
+            "claude-sonnet-4-5", "claude-sonnet-4-5-20250929",
+            "claude-sonnet-4-5[1m]", "claude-opus-4-5",
+            "claude-opus-4-5-20251101", "claude-opus-4-1",
+            "claude-opus-4-1-20250805", "claude-opus-4-0",
+            "claude-opus-4-20250514", "claude-sonnet-4-0",
+            "claude-sonnet-4-20250514", "claude-haiku-4-5",
+            "claude-haiku-4-5-20251001", "claude-3-7-sonnet-20250219",
+            "claude-3-5-haiku-20241022",
+            "anthropic.claude-opus-4-5-20251101-v1:0",
+        ):
+            self.assertFalse(claude_live._is_adaptive_only(model), model)
+
+    def test_legacy_list_never_swallows_a_4_6_plus_id(self):
+        for model in (
+            "claude-opus-4-6", "claude-sonnet-4-6", "claude-opus-4-7",
+            "claude-opus-4-8", "claude-opus-4-8-20260301",
+        ):
+            self.assertTrue(claude_live._is_adaptive_only(model), model)
+
+    def test_legacy_match_stops_at_a_segment_boundary(self):
+        # "claude-opus-4-1" is legacy; "claude-opus-4-10" shares a string
+        # prefix with it but not a segment, so it is NOT legacy. Same for
+        # a longer version number or a "claude-3" look-alike.
+        for model in (
+            "claude-opus-4-10", "claude-haiku-4-50", "claude-sonnet-4-5x",
+            "claude-30-opus", "claude-opus-4-2025",
+        ):
+            self.assertTrue(claude_live._is_adaptive_only(model), model)
+
+    def test_vertex_dated_legacy_ids_keep_the_budget_shape(self):
+        # Vertex spells a dated id "<id>@YYYYMMDD" (models overview:
+        # claude-haiku-4-5@20251001). RED on the r8 derivation of this
+        # wave, which matched only a "-" boundary (codex rail r1 P1).
+        for model in (
+            "claude-sonnet-4@20250514", "claude-opus-4@20250514",
+            "claude-opus-4-1@20250805", "claude-sonnet-4-5@20250929",
+            "claude-haiku-4-5@20251001", "claude-opus-4-5@20251101",
+            "claude-3-7-sonnet@20250219", "claude-3-5-sonnet-v2@20241022",
+            "claude-sonnet-4-5@20250929[1m]",
+        ):
+            self.assertFalse(claude_live._is_adaptive_only(model), model)
+
+    def test_vertex_suffix_never_moves_a_4_6_plus_id_to_legacy(self):
+        # Shape controls (the date is synthetic): the @-date reads as a
+        # date segment, so it can only ever match a DATED legacy base.
+        for model in (
+            "claude-opus-4-8@20260101", "claude-sonnet-4-6@20260101",
+            "claude-opus-4-6@20260101", "claude-opus-5-5@20260101",
+            "claude-opus-4-10@20260101",
+        ):
+            self.assertTrue(claude_live._is_adaptive_only(model), model)
+
+    def test_only_known_always_on_ids_reject_disabled(self):
+        for model in (
+            "claude-fable-5", "claude-fable-5-1", "claude-opus-5-5",
+            "claude-opus-5-5[1m]", "anthropic.claude-opus-5-5",
+            "claude-mythos-5", "claude-mythos-5-1", "claude-mythos-preview",
+        ):
+            self.assertTrue(claude_live._rejects_disabled_thinking(model), model)
+        for model in (
+            "claude-opus-5", "claude-sonnet-5", "claude-opus-4-8",
+            "claude-sonnet-4-6", "claude-zeta-9", "claude-fable-50",
+            "claude-opus-5-50", "claude-mythos-50", "", None,
+        ):
+            self.assertFalse(claude_live._rejects_disabled_thinking(model), model)
+
+    def test_a_listed_id_extended_by_another_segment_is_a_different_id(self):
+        # A-R3CX-01 (codex lens, rail round 3): the matcher put "<listed
+        # id>-<any segment>" in the listed class. RED on the r11 derivation
+        # of this wave: claude-haiku-4-5-2 read as legacy and
+        # claude-opus-5-5-next as always on.
+        for model in (
+            "claude-haiku-4-5-2", "claude-opus-4-5-next",
+            "claude-sonnet-4-5-lite", "claude-opus-4-1-20250805-next",
+        ):
+            self.assertTrue(claude_live._is_adaptive_only(model), model)
+        for model in (
+            "claude-opus-5-5-next", "claude-fable-5-lite",
+            "claude-mythos-5-1-mini", "claude-opus-5-5-fast",
+        ):
+            self.assertFalse(claude_live._rejects_disabled_thinking(model), model)
+
+    def test_dated_and_bedrock_spellings_keep_their_class(self):
+        # Shape controls (synthetic dates and versions where no such id is
+        # published): ONE date segment, then ONE Bedrock version suffix.
+        for model in (
+            "anthropic.claude-haiku-4-5-20251001-v1:0",
+            "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            "anthropic.claude-opus-4-20250514-v1:0", "claude-opus-4-1-v1",
+        ):
+            self.assertFalse(claude_live._is_adaptive_only(model), model)
+        for model in (
+            "claude-opus-5-5-20260101", "anthropic.claude-opus-5-5-v1:0",
+            "claude-fable-5-1@20260101", "claude-mythos-preview-20260101",
+        ):
+            self.assertTrue(claude_live._rejects_disabled_thinking(model), model)
+        # the 4.0 dated bases match only WITH a date
+        for model in ("claude-opus-4", "claude-sonnet-4-v1:0"):
+            self.assertTrue(claude_live._is_adaptive_only(model), model)
+
+    def test_empty_model_is_not_adaptive(self):
+        self.assertFalse(claude_live._is_adaptive_only(""))
+        self.assertFalse(claude_live._is_adaptive_only("   "))
+        self.assertFalse(claude_live._is_adaptive_only(None))
+
+    def test_effort_override_never_emits_budget_on_current_ids(self):
+        os.environ["CEO_EFFORT_OVERRIDE"] = "high"
+        for model in self._CURRENT + self._FUTURE:
+            thinking, output_config = claude_live._resolve_effort_config(model)
+            self.assertEqual(thinking, {"type": "adaptive"}, model)
+            self.assertEqual(output_config, {"effort": "high"}, model)
+
+
 class TestResolveEffortConfig(TestEnvContext):
     """`_resolve_effort_config()` env-var → (thinking, output_config)."""
 
@@ -241,6 +382,37 @@ class TestAdapterCallIntegration(TestEnvContext):
         self.assertIsNotNone(t.captured_body)
         self.assertNotIn("thinking", t.captured_body)
         self.assertNotIn("disabled", _json.dumps(t.captured_body))
+
+    def test_caller_disabled_dict_follows_the_documented_default(self):
+        """ADR-149 Amendment 3 (S357): a caller's {"type": "disabled"} is
+        dropped only on a known always-on id (the API rejects it there);
+        on an id whose thinking defaults on or off it is sent as given —
+        dropping it would switch thinking on in silence on Opus 5 and
+        Sonnet 5. RED on the r8 derivation of this wave, which dropped
+        it on every adaptive-only id."""
+        self._enable_live()
+        os.environ.pop("CEO_EFFORT_OVERRIDE", None)
+        os.environ.pop("CEO_THINKING_AUTO_DISABLE", None)
+        for model, kept in (
+            ("claude-opus-5", True), ("claude-sonnet-5", True),
+            ("claude-opus-4-8", True), ("claude-zeta-9", True),
+            ("claude-opus-5-5", False), ("claude-fable-5-1", False),
+            ("claude-opus-5-5[1m]", False), ("claude-opus-5-5-next", True),
+        ):
+            with self.subTest(model=model):
+                t = _FakeTransport()
+                self._make_adapter(t).call(
+                    messages=[{"role": "user", "content": "hi"}],
+                    model=model,
+                    thinking={"type": "disabled"},
+                )
+                self.assertIsNotNone(t.captured_body)
+                if kept:
+                    self.assertEqual(
+                        t.captured_body.get("thinking"), {"type": "disabled"}
+                    )
+                else:
+                    self.assertNotIn("thinking", t.captured_body)
 
     def test_caller_adaptive_with_budget_tokens_stripped_on_adaptive_only(self):
         """{"type": "adaptive", "budget_tokens": N} on Fable 5 → budget stripped."""

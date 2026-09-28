@@ -182,6 +182,20 @@ class TestReconcile(TestEnvContext):
         self.assertEqual(bcm._mm_tier_for("claude-sonnet-4-6"),
                          (3.0, 3.75, 6.00, 0.30, 15.0))
 
+    def test_mm_tier_opus55_is_its_own_tier_and_opus5_keeps_generic(self):
+        """ADR-149 Amendment 3 (S357): Opus 5.5 resolves to its own $4/$20
+        tier (cache writes 1.25x/2x = $5/$8, cache reads 0.05x = $0.20);
+        Opus 5 keeps the generic $5/$25 tier. Dated and ``[1m]`` forms
+        resolve like the bare id; a longer minor token does not match the
+        5.5 tier (the regex ends on a non-digit or the end of the id)."""
+        opus55 = (4.0, 5.0, 8.0, 0.20, 20.0)
+        for mid in ("claude-opus-5-5", "claude-opus-5-5-20260922",
+                    "claude-opus-5-5[1m]"):
+            self.assertEqual(bcm._mm_tier_for(mid), opus55, mid)
+        opus5 = (5.0, 6.25, 10.0, 0.50, 25.0)
+        for mid in ("claude-opus-5", "claude-opus-5[1m]", "claude-opus-5-50"):
+            self.assertEqual(bcm._mm_tier_for(mid), opus5, mid)
+
     def test_reconcile_sonnet5_row_at_standard_rate_is_clean(self):
         """A canonical Sonnet 5 row at the standard $2/$10 (+ standard cache
         multipliers) reconciles with ZERO findings against BOTH the
@@ -191,6 +205,20 @@ class TestReconcile(TestEnvContext):
             "input_per_mtok": 2.0, "cache_write_5m_per_mtok": 2.5,
             "cache_write_1h_per_mtok": 4.0, "cache_read_per_mtok": 0.2,
             "output_per_mtok": 10.0}}
+        data = _sample_data(models=models)
+        findings = bcm.reconcile(data, cost_table_path=_COST_TABLE_PATH)
+        self.assertEqual(findings, [])
+
+    def test_reconcile_opus55_row_at_its_rate_is_clean(self):
+        """ADR-149 Amendment 3 (S357): a canonical Opus 5.5 row at $4/$20
+        with its own cache rates ($5 / $8 writes, $0.20 reads) reconciles
+        with ZERO findings against BOTH the cost-table.yaml row and the
+        tier table; under the generic opus-5+ tier alone the same row
+        raised five false divergences (all five price fields differ)."""
+        models = {"claude-opus-5-5": {
+            "input_per_mtok": 4.0, "cache_write_5m_per_mtok": 5.0,
+            "cache_write_1h_per_mtok": 8.0, "cache_read_per_mtok": 0.2,
+            "output_per_mtok": 20.0}}
         data = _sample_data(models=models)
         findings = bcm.reconcile(data, cost_table_path=_COST_TABLE_PATH)
         self.assertEqual(findings, [])

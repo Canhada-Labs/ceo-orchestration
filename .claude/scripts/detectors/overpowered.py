@@ -31,11 +31,13 @@ _DETECTOR = "overpowered"
 # but omitted the advisory (sonnet) tier, blinding the detector to short
 # devops spawns on the new-generation Sonnet.
 # ADR-149 Amendment 2 (S338): += claude-fable-5-1 (Fable 5.1 flagship).
+# ADR-149 Amendment 3 (S357): += claude-opus-5-5 (Opus 5.5, the session pin).
 # historical ids retained for audit-log replay (ADR-142).
 _LARGE_MODELS = frozenset({
     "claude-opus-5",
     "claude-fable-5",
     "claude-fable-5-1",
+    "claude-opus-5-5",
     "claude-sonnet-5",
     "claude-opus-4-8",
     "claude-opus-4-7",

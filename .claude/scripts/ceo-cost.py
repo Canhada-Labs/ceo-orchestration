@@ -81,6 +81,8 @@ from _lib import runtime_paths as _rp  # noqa: E402  # PLAN-182 W1 single resolv
 # price (official pricing page fetched 2026-09-01: the scheduled 2026-09-01
 # increase to $3/$15 "will not occur"; PLAN-169 S338 follow-up), so no bump
 # is due and cost-table.yaml now carries the same $2/$10.
+# ADR-149 Amendment 3 (S357): claude-opus-5-5 $4/$20 (pricing page fetched
+# 2026-09-22).
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-opus-4-8": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
     "claude-opus-4-8[1m]": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
@@ -89,6 +91,7 @@ _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-fable-5-1": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},  # ADR-149 Amendment 2 (S338)
     "claude-opus-5": {"input_per_mtok": 5.00, "output_per_mtok": 25.00},
     "claude-opus-5-fast": {"input_per_mtok": 10.00, "output_per_mtok": 50.00},
+    "claude-opus-5-5": {"input_per_mtok": 4.00, "output_per_mtok": 20.00},  # ADR-149 Amendment 3 (S357)
     "claude-sonnet-5": {"input_per_mtok": 2.00, "output_per_mtok": 10.00},
     "claude-opus-4-7": {"input_per_mtok": 15.00, "output_per_mtok": 75.00},
     "claude-opus-4-7[1m]": {"input_per_mtok": 15.00, "output_per_mtok": 75.00},

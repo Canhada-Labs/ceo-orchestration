@@ -60,6 +60,7 @@ _PRICING_PER_MTOK: Dict[str, Dict[str, float]] = {
     "claude-fable-5-1": {"input": 10.00, "output": 50.00},  # ADR-149 Amendment 2 (S338): Fable 5.1 at the Fable 5 rate
     "claude-opus-5": {"input": 5.00, "output": 25.00},  # drop-in at 4.8 rate; 1M ctx default
     "claude-opus-5-fast": {"input": 10.00, "output": 50.00},  # fast-mode premium row
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00},  # ADR-149 Amendment 3 (S357): Opus 5.5 at $4/$20
     # Sonnet 5: $2/$10 is the STANDARD rate. The launch-time intro price
     # became permanent — the official pricing page (fetched 2026-09-01,
     # platform.claude.com/docs/en/about-claude/pricing) states the scheduled

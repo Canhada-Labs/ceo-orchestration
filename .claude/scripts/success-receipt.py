@@ -113,11 +113,14 @@ _DEDUP_STRIP_FIELDS: Tuple[str, ...] = (
 #: rows added at the budget-summary per-1k rates (fable 5.1 == fable 5
 #: base rate; sonnet-5 $2/$10 is the standard price per the 2026-09-01
 #: pricing page); historical rows retained (ADR-142 replay).
+#: ADR-149 Amendment 3 (S357): claude-opus-5-5 at the budget-summary
+#: per-1k rate ($4/$20 per MTok).
 _DEFAULT_PRICING: Dict[str, Dict[str, float]] = {
     "claude-fable-5-1":   {"in": 0.010, "out": 0.050},
     "claude-fable-5":     {"in": 0.010, "out": 0.050},
     "claude-opus-5":      {"in": 0.005, "out": 0.025},
     "claude-opus-5-fast": {"in": 0.010, "out": 0.050},
+    "claude-opus-5-5":    {"in": 0.004, "out": 0.020},  # ADR-149 Amendment 3 (S357)
     "claude-sonnet-5":    {"in": 0.002, "out": 0.010},
     "claude-opus-4-8":    {"in": 0.005, "out": 0.025},
     "claude-opus-4-8-fast": {"in": 0.010, "out": 0.050},

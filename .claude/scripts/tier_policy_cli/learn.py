@@ -552,8 +552,14 @@ def _tier_rank(model_id: str) -> int:
         "claude-opus-4-8": 4,
         "claude-opus-5": 5,
         "claude-opus-5-fast": 5,  # fast mode: same model, premium rate
-        "claude-fable-5": 6,  # ADR-149 flagship (Mythos-class, above Opus)
-        "claude-fable-5-1": 7,  # ADR-149 Amendment 2 (S338): Fable 5.1, above Fable 5
+        # ADR-149 Amendment 3 (S357): Opus 5.5 sits strictly between Opus 5
+        # and Fable 5 (tier-major ladder, renumbered, never tied: a tie with
+        # Opus 5 would sign opus-5 -> opus-5-5 as "demote", a tie with
+        # Fable 5 would sign opus-5-5 -> fable-5 as "demote", and a rank
+        # above Fable would sign fable-5 -> opus-5-5 as "promote").
+        "claude-opus-5-5": 6,
+        "claude-fable-5": 7,  # ADR-149 flagship (Mythos-class, above Opus)
+        "claude-fable-5-1": 8,  # ADR-149 Amendment 2 (S338): Fable 5.1, above Fable 5
     }
     return order.get(model_id, -1)
 

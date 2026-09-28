@@ -23,6 +23,8 @@ if str(_SCRIPTS) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS))
 
 from tier_policy_cli import cli  # noqa: E402
+from tier_policy_cli import learn  # noqa: E402
+from tier_policy_cli._types import VALID_MODEL_IDS  # noqa: E402
 
 
 _OPUS = "claude-opus-4-8"
@@ -321,6 +323,136 @@ class OwnerAllowlistTests(CliTestBase):
             ])
         self.assertNotEqual(rc, 0)
         self.assertIn("git user.email unset", self._stderr.getvalue())
+
+
+# ---------------------------------------------------------------------
+# Group F2 — owner-sign signs the learner's direction (ADR-149 A3)
+# ---------------------------------------------------------------------
+
+class _FakeAuditHmac(object):
+    """Stand-in for ``_lib/audit_hmac``: no key file, no ``$HOME``."""
+
+    @staticmethod
+    def get_or_create_key():
+        return b"k" * 32
+
+    @staticmethod
+    def compute_entry_hmac(key, prev, entry):
+        return bytes(32)
+
+    @staticmethod
+    def hex_digest(digest):
+        return digest.hex()
+
+
+class OwnerSignDirectionTests(CliTestBase):
+    """ADR-149 Amendment 3 (S357, rail round 1): the action owner-sign
+    writes into the sigchain is ``learn._direction``, the ladder the
+    learner signs with, never the position of an id in
+    ``VALID_MODEL_IDS`` (an allowlist in ADR order whose first entry is
+    ``claude-fable-5``)."""
+
+    def setUp(self):
+        super().setUp()
+        self.owners_file.write_text(
+            "owner@example.com\n", encoding="utf-8"
+        )
+        self.git_calls = []
+
+    def _fake_run(self, cmd, *args, **kwargs):
+        self.git_calls.append(list(cmd))
+        return mock.Mock(returncode=0, stdout="", stderr="")
+
+    def _sign(self, from_tier, to_tier, sigchain):
+        with mock.patch.object(
+            cli, "_git_config_email", return_value="owner@example.com"
+        ), mock.patch.object(
+            cli, "_git_head_sha", return_value="a" * 40
+        ), mock.patch.object(
+            cli, "_load_audit_hmac_module", return_value=_FakeAuditHmac
+        ), mock.patch.object(
+            cli.subprocess, "run", side_effect=self._fake_run
+        ):
+            return cli.main([
+                "owner-sign",
+                "--agent", "performance-engineer",
+                "--from-tier", from_tier,
+                "--to-tier", to_tier,
+                "--sp-chain-id", "SP-100-12345678",
+                "--owners-file", str(self.owners_file),
+                "--sigchain", str(sigchain),
+                "--skip-commit",
+            ])
+
+    @staticmethod
+    def _actions(sigchain):
+        return [
+            json.loads(line)["action"]
+            for line in sigchain.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+    def test_every_valid_model_id_has_a_distinct_tier_rank(self):
+        ranks = {m: learn._tier_rank(m) for m in VALID_MODEL_IDS}
+        self.assertTrue(all(r >= 0 for r in ranks.values()), ranks)
+        self.assertEqual(len(set(ranks.values())), len(ranks), ranks)
+
+    def test_signed_action_is_the_learner_direction_for_every_pair(self):
+        pairs = [
+            (a, b) for a in VALID_MODEL_IDS for b in VALID_MODEL_IDS
+            if a != b
+        ]
+        self.assertEqual(
+            len(pairs), len(VALID_MODEL_IDS) * (len(VALID_MODEL_IDS) - 1)
+        )
+        for i, (from_tier, to_tier) in enumerate(pairs):
+            sigchain = self.tmp / "sigchain-{i}".format(i=i)
+            with self.subTest(from_tier=from_tier, to_tier=to_tier):
+                rc = self._sign(from_tier, to_tier, sigchain)
+                self.assertEqual(rc, 0, self._stderr.getvalue())
+                self.assertEqual(
+                    self._actions(sigchain),
+                    [learn._direction(from_tier, to_tier)],
+                )
+
+    def test_fable_to_opus_signs_demote_and_back_promote(self):
+        # Literal expectations, independent of the learner's table: the
+        # new pair and its reverse, and the pair that already signed
+        # inverted before Opus 5.5 existed (claude-fable-5 is index 0).
+        cases = (
+            ("claude-fable-5-1", "claude-opus-5-5", "demote"),
+            ("claude-opus-5-5", "claude-fable-5-1", "promote"),
+            ("claude-fable-5", "claude-opus-5-5", "demote"),
+            ("claude-opus-5", "claude-opus-5-5", "promote"),
+            ("claude-fable-5", "claude-opus-5", "demote"),
+        )
+        for i, (from_tier, to_tier, expected) in enumerate(cases):
+            sigchain = self.tmp / "sigchain-pin-{i}".format(i=i)
+            with self.subTest(from_tier=from_tier, to_tier=to_tier):
+                rc = self._sign(from_tier, to_tier, sigchain)
+                self.assertEqual(rc, 0, self._stderr.getvalue())
+                self.assertEqual(self._actions(sigchain), [expected])
+
+    def test_same_model_on_both_sides_is_refused_unsigned(self):
+        rc = self._sign(
+            "claude-opus-5-5", "claude-opus-5-5", self.sigchain_path
+        )
+        self.assertEqual(rc, 2)
+        self.assertIn("same model", self._stderr.getvalue())
+        self.assertFalse(self.sigchain_path.exists())
+        self.assertEqual(self.git_calls, [])
+
+    def test_model_id_without_a_tier_rank_is_refused_unsigned(self):
+        with mock.patch.object(
+            cli.learn_mod, "_tier_rank", return_value=-1
+        ):
+            rc = self._sign(
+                "claude-opus-5", "claude-opus-5-5", self.sigchain_path
+            )
+        self.assertEqual(rc, 2)
+        self.assertIn("no tier rank", self._stderr.getvalue())
+        self.assertFalse(self.sigchain_path.exists())
+        self.assertEqual(self.git_calls, [])
 
 
 # ---------------------------------------------------------------------

@@ -165,7 +165,7 @@ class TestEffortAdapterPassThroughXhigh(TestEnvContext):
     def test_effort_xhigh_legacy_model_emits_budget(self) -> None:
         from _lib.adapters.live.claude import _resolve_effort_config
         os.environ["CEO_EFFORT_OVERRIDE"] = "xhigh"
-        # claude-opus-4-5 is outside _ADAPTIVE_ONLY_MODELS → legacy shape.
+        # claude-opus-4-5 is in the closed _LEGACY_BUDGET_MODELS → legacy shape.
         thinking, output_config = _resolve_effort_config("claude-opus-4-5")
         self.assertEqual(thinking, {"type": "enabled", "budget_tokens": 24576})
         self.assertIsNone(output_config)

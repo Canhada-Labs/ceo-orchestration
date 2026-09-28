@@ -930,7 +930,12 @@ _ADR_052_ROLE_TO_MODEL: Dict[str, str] = {
     "devops": "claude-haiku-4-5",
     # Mitigated rail — general-purpose dispatch inherits CEO model.
     # Default-CEO is Opus-tier unless CEO_MODEL_DOWNSHIFT is honored.
-    "general-purpose": "claude-opus-5",
+    # ADR-149 Amendment 3 (S357): follows the session-default pin, now
+    # claude-opus-5-5. A POLICY value, not an observation: when the Task
+    # response carries no model (the common case, see _extract_model) the
+    # audit log records this row even if a per-call model or alias served
+    # the spawn.
+    "general-purpose": "claude-opus-5-5",
     # Probe / specialty archetypes
     "growth-engineer": "claude-sonnet-5",
     "billing-engineer": "claude-sonnet-5",

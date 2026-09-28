@@ -17,8 +17,8 @@ Wave: wave-opus55 (PLAN-193 W3 + W4 — cerimônia `adopt-opus-5.5`, ADR-149 Ame
 Patch: .claude/plans/PLAN-193/wave-opus55/WOPUS55.patch
 Patch-sha256: ed3dd91435608e54b6dd88396f4b16071bab3f81b0dff2c107df4797597cb6df
 Patch-base: 19771fa182574ce3e98685708687dcbf90c3795d
-Anchor-SHA: ANCHOR-PLACEHOLDER
-Data: DATA-PLACEHOLDER
+Anchor-SHA: 80ca380e51b48f11afa984cf5a811b95b5359e79
+Data: 2026-09-28
 
 ## O que esta wave entrega
 
@@ -459,7 +459,7 @@ recusa pelo nome, e não conta o anexo como registro.
   roda depois do push; o LAND roda os gates de corpus e o parity smoke.
 
 <!-- BEGIN SIGNED SCOPE -->
-Approved-By: APPROVED-BY-PLACEHOLDER
+Approved-By: @Canhada-Labs AE9B236FDAF0462874060C6BCFCFACF00335DC74
 Plans: PLAN-193
 Scope:
   - .claude/adr/ADR-149-model-id-allowlist.md
