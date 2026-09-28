@@ -953,7 +953,8 @@ def scan_catalog(path: Optional[str]) -> Dict[str, Any]:
 
 
 def model_family_gen(model_id: str) -> Tuple[str, Tuple[int, ...]]:
-    """('opus', (5, 5)) for claude-opus-5-5; legacy claude-3-5-haiku -> ('haiku', (3, 5)).
+    """('opus', (5, 5)) for claude-opus-5-5; a legacy id with the generation first
+    (claude-<major>-<minor>-<family>) gives ('<family>', (<major>, <minor>)).
 
     Numeric tokens of >= 6 digits are snapshot dates and do not order generations.
     """
