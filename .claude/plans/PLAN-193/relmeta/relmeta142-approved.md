@@ -4,10 +4,10 @@ Plan: PLAN-193
 Wave: W6 — relmeta-142
 Anchor-SHA: ANCHOR-PLACEHOLDER
 Data: DATA-PLACEHOLDER
-Patch-SHA256: DERIVE-PLACEHOLDER
-Derivator-SHA256: DERIVE-PLACEHOLDER
-Derived-From: DERIVE-PLACEHOLDER
-Scope-Derived: DERIVE-PLACEHOLDER
+Patch-SHA256: a5941b4b90651a3878fd9c4914c8adc094039019793bb129850f5e8258bbb9bb
+Derivator-SHA256: f1dcb806b04a8410d02ceb9285998d6a35729076932bce5783688cf415762ecb
+Derived-From: f0e219c23a5a0578a36fdaa965ea3a03e1222d6a
+Scope-Derived: PLAN-190 / PLAN-193 (ADRs tocados: ADR-149)
 
 > `Patch-SHA256`, `Derivator-SHA256`, `Derived-From` e `Scope-Derived` são escritas pelo
 > `derive-relmeta142.sh` sobre o HEAD depois de TODOS os lands da 1.4.2; `Anchor-SHA` e `Data`, pelo

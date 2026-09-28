@@ -1,0 +1,256 @@
+diff --git a/.claude/governance/gate-scripts-manifest.txt b/.claude/governance/gate-scripts-manifest.txt
+index 1e892ac98cd81d4ec81bfb0cfeb9e35a0c0e74d9..a9fc65497bbb5ff83dac4e4a6fbd78cf35d9d546 100644
+--- a/.claude/governance/gate-scripts-manifest.txt
++++ b/.claude/governance/gate-scripts-manifest.txt
+@@ -4,6 +4,6 @@ db8eea5b66e7e144135396a14029fd7511857a3cf42c9e5116e57000dd4ffd62  .claude/script
+ fe72ecce835780e2515842bd2d05ee46b063b0ed00d564da75424089efeb67dc  .claude/scripts/check-canonical-doc-freshness.py
+ 2f06780eab259db9f0178befb625b0b0501f7ca726e256b31278c748d6af6340  scripts/tests/ownership-nightly-gate.sh
+ 2c61b558af9ad3b27d3193dadde3fb815f28a8c9070105698397d2813129ebbc  scripts/tests/ownership-expected-reds.txt
+-beefef64827855e6227dd55bcfb8d4857773e28919b2731863d3cc2daaff771d  .claude/scripts/local/release.sh
++c653f64fa9eb180a421fb77dccca1eaebc15b1a6dffd865c58272f602dddce8e  .claude/scripts/local/release.sh
+ c947bbd9032432c9b26f6caae06a7d7fb803cb33918d76e7186775a456b8e8b5  .github/scripts/validate-pair-rail-verdict.py
+ a8c6eecc5c1fbb211ec18498443618632a0376964d5a6709f336afd26dfa1322  .claude/scripts/await_release_gate.py
+diff --git a/.claude/scripts/local/release.sh b/.claude/scripts/local/release.sh
+index f8081a455a5224941c4fe41d95cbb7600e8fa391..e66d6b59c13b51c20817c874878981671f5b913a 100755
+--- a/.claude/scripts/local/release.sh
++++ b/.claude/scripts/local/release.sh
+@@ -71,36 +71,66 @@ set -euo pipefail
+ # The tag stands for the WHOLE release train in CHANGELOG.md, never just the
+ # newest plan: list every plan of the train and the full ADR range.
+ # ---------------------------------------------------------------------------
+-TARGET_BASE="1.4.1"
+-RELEASE_TITLE="Workflow launch ledger + resume guard (out-of-order patch)"
++TARGET_BASE="1.4.2"
++RELEASE_TITLE="Opus 5.5 as session default + Codex CLI re-pin + Workflow ledger fixes (express release)"
+ # O tag vale pelo TREM INTEIRO da entrada do CHANGELOG desta versao,
+ # nunca pelo plano
+ # mais novo. Este bloco e DERIVADO por
+-# .claude/plans/PLAN-192/relmeta/apply-relmeta141-edits.py
+-# a partir de `git log v1.4.0..HEAD` (planos CITADOS nos assuntos de
+-# commit da faixa) e do conjunto de ADRs tocados na mesma faixa —
+-# nao digite nada aqui a mao.
+-RELEASE_SCOPE="PLAN-169 / PLAN-189 / PLAN-190 / PLAN-191 / PLAN-192 (ADRs tocados: nenhum)"
+-RELEASE_HEADLINE="Patch fora de ordem para quem roda pipelines autonomos longos com a
+-tool Workflow. Todo lancamento passa a ser registrado ANTES do
+-despacho (sha256 e copia dos bytes do script, args literais, o run de
+-retomada, a revisao do codigo), e uma retomada sobre args DIFERENTES
+-do lancamento registrado e recusada em vez de seguir. A chamada exata
+-volta do ledger por ceo-launches.py relaunch, em vez de ser
+-reconstruida de memoria. O guard pode BLOQUEAR e o perfil user o
+-mantem; as saidas sao CEO_WORKFLOW_RESUME_GUARD=0 (so aviso),
+-CEO_WORKFLOW_LEDGER=0 (desligado) e a declaracao na propria chamada.
+-
+-Correcao: relaunch --out entregava uma copia truncada com sucesso numa
+-escrita curta; agora entrega o arquivo inteiro ou nenhum arquivo.
+-
+-Cinco CLIs de recuperacao e aprovacao chegam sem hook que as imponha.
+-
+-A parte honesta: o envelope assinado da v1.4.0 prometia curar NESTA
+-versao os achados P1 do seu anexo. Esta release NAO os cura: e um
+-patch urgente, por decisao do Owner, e o anexo segue aberto, sem
+-mudanca, com a cura re-alvejada para a v1.4.2. Sem afirmacao de
+-velocidade — governanca e auditabilidade, como sempre."
++# .claude/plans/PLAN-193/relmeta/apply-relmeta142-edits.py
++# a partir de `git log v1.4.1..HEAD` (planos CITADOS nos assuntos de
++# commit da faixa, DEPOIS de todos os lands da release) e do conjunto
++# de ADRs tocados na mesma faixa — nao digite nada aqui a mao.
++RELEASE_SCOPE="PLAN-190 / PLAN-193 (ADRs tocados: ADR-149)"
++RELEASE_HEADLINE="Release expressa. O Opus 5.5 vira o modelo padrao: claude-opus-5-5
++entra na lista de modelos do ADR-149, fica elegivel ao piso de VETO
++e vira o pin de sessao dos settings enviados; no template base o
++fallback segue claude-opus-5. Nenhum arquivo de agente muda de
++modelo: os agentes de veto seguem no pin deles. Um despacho sem
++modelo proprio que nao le o pin de um arquivo de agente (o
++general-purpose mitigado, os agentes de Workflow) roda no modelo da
++sessao, cujo pin passa a ser claude-opus-5-5.
++
++Esta release exige Claude Code v2.1.280 ou mais novo, qualquer que
++seja o modelo: install.sh e upgrade.sh recusam, com saida 6, um
++claude mais antigo no PATH, salvo com --allow-old-claude-code (num
++dry-run so nomeiam a recusa); uma versao com sufixo colado aos tres
++numeros (um pre-release, por exemplo) conta como abaixo do piso. Sem
++claude no PATH, ou sem versao legivel, so avisam. Instalacao nova
++sai com esforco xhigh. Numa instalacao existente o upgrade troca por
++claude-opus-5-5 o pin claude-opus-5 de uma release anterior, ou poe
++o pin onde nao havia, se a lista de modelos efetiva o nomeia; quando
++troca a partir do claude-opus-5 e o arquivo nao define esforco,
++grava high, que passa a valer sobre o nivel salvo com /effort. Um
++esforco ja definido nunca e sobrescrito; xhigh numa instalacao
++existente so por opt-in (--adopt-setting effortLevel) ou a mao.
++
++Pair-rail: o pin do Codex CLI avanca para v0.156.1, um binario por
++versao exata, conferido por sha256.
++
++Correcoes: no PreToolUse, o hook do Workflow nao grava mais os bytes
++do arquivo que um scriptPath nomeia; dele, antes da decisao de
++permissao do harness, ficam gravados so o caminho, o sha256 e o
++tamanho. Isto cura o caso do Workflow na classe declarada no
++material do GA da v1.4.1; a classe nao se esgota nesse hook. A copia
++de um scriptPath passa a ser tirada so pelo PostToolUse da mesma
++chamada; sem ela, relaunch sai com codigo 7 e relaunch --out nao
++cria arquivo. As copias que a v1.4.1 ja gravou ficam em launches/.
++E relaunch --out publica por link um temporario
++ja completo e nunca apaga nem substitui o destino: um arquivo
++parcial nunca aparece sob o nome pedido, nos limites declarados em
++docs/workflow-recovery.md.
++
++Via expressa: tres ferramentas de operador, sem hook que as imponha,
++geram o pacote de re-pin do Codex, apontam deriva entre o Codex, o
++Claude Code e os modelos instalados e o que o framework registra, e
++derivam das tags GA os baselines de migracao do upgrade.
++
++A parte honesta: a cura dos achados P1 do anexo do envelope assinado
++da v1.4.0 nao faz parte desta release; o anexo segue aberto, sem
++release atribuida. E esta release declara que a limpeza do Claude
++Code (cleanupPeriodDays, 30 dias por padrao) pode apagar o log de
++auditoria e os arquivos dele; nenhum plano carrega a cura. Sem
++afirmacao de velocidade — governanca e auditabilidade, como sempre."
+ RC_NUM="1"
+ STABLE=0
+ DRY_RUN=0
+@@ -412,9 +442,12 @@ if not any(r.get("conclusion") == "success" for r in val):
+   gpg --list-secret-keys "$SIGN_KEY" >/dev/null 2>&1 \
+     || die "no secret key $SIGN_KEY in the keyring"
+   ok "secret key $SIGN_KEY present"
++  # --yes: mktemp has just CREATED this file, and gpg --output over an
++  # existing file asks "Overwrite? (y/N)" on /dev/tty; the default answer
++  # made this probe report a working key as unable to sign (PLAN-193 W6).
+   sig_probe="$(mktemp)"
+   if printf 'release-preflight-probe' \
+-      | gpg --local-user "$SIGN_KEY" --armor --detach-sign --output "$sig_probe" \
++      | gpg --yes --local-user "$SIGN_KEY" --armor --detach-sign --output "$sig_probe" \
+         >/dev/null 2>&1; then
+     ok "inline signature probe succeeded (pinentry works)"
+   else
+diff --git a/.claude/scripts/tests/test_release_bump_sites.py b/.claude/scripts/tests/test_release_bump_sites.py
+index 6e10e80367e3f76448802bbb381adbae65b2f8fb..c7baddf2cb33123dab7aa17bcc60fbed2c75baed 100644
+--- a/.claude/scripts/tests/test_release_bump_sites.py
++++ b/.claude/scripts/tests/test_release_bump_sites.py
+@@ -1255,6 +1255,10 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
+     CONSCIENTE do trem a cada corte — foi assim que a rc.1-era stale string
+     foi pega (repass-r2 part-d P1).
+ 
++    Trem 1.4.2 (re-pinado na cerimonia relmeta-142, PLAN-193): derivado por
++    apply-relmeta142-edits.py de `git log v1.4.1..HEAD` DEPOIS de todos os
++    lands da release; o trem da 1.4.1 vira assercao negativa.
++
+     Trem 1.4.1 (re-pinado na cerimonia relmeta-141, PLAN-192): derivado por
+     apply-relmeta141-edits.py de `git log v1.4.0..HEAD`; um conjunto VAZIO de
+     ADRs tocados e escrito como «nenhum», nunca omitido.
+@@ -1268,10 +1272,10 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
+     proc = driver(synth, "tag", "--stable", "--dry-run")
+     assert proc.returncode == 0, proc.stdout + proc.stderr
+     assert (
+-        "PLAN-169 / PLAN-189 / PLAN-190 / PLAN-191 / PLAN-192 (ADRs "
+-        "tocados: nenhum)" in proc.stdout
++        "PLAN-190 / PLAN-193 (ADRs tocados: ADR-149)" in proc.stdout
+     )
+     # o trem da release ANTERIOR nao pode ter sobrevivido na anotacao
++    assert "PLAN-169 / PLAN-189 / PLAN-190" not in proc.stdout
+     assert "PLAN-119 / PLAN-169 / PLAN-170" not in proc.stdout
+     # nenhuma string de release ANTERIOR pode ter sobrevivido na anotacao
+     assert "PLAN-162 / PLAN-165" not in proc.stdout
+@@ -1367,6 +1371,103 @@ def test_driver_derives_every_version_string_from_target_base():
+     )
+ 
+ 
++_GPGPROBE_HEREDOC_RX = re.compile(r"<<(-?)[ \t]*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
++_GPGPROBE_SPLIT_RX = re.compile(r"\|\||&&|[;|&(){}`]")
++
++
++def _gpgprobe_strip_comment(line):
++    """Tira o comentario de UMA linha fisica: um # que comeca palavra, fora de
++    aspas. No bash o comentario acaba na quebra de linha: uma barra no fim
++    dele nao continua o comando."""
++    quote = None
++    for i, ch in enumerate(line):
++        if quote:
++            if ch == quote:
++                quote = None
++        elif ch in "'\"":
++            quote = ch
++        elif ch == "#" and (i == 0 or line[i - 1] in " \t"):
++            return line[:i]
++    return line
++
++
++def _gpgprobe_output_commands(text):
++    """Os comandos gpg que escrevem com --output, pela forma do shell: corpo
++    de heredoc e dado; ; && || | & ( ) { } e crase separam comandos; um
++    comando gpg tem gpg (ou um caminho que termina em /gpg) como primeira
++    palavra depois de atribuicoes VAR=valor."""
++    logical, cur, end_word = [], "", None
++    for raw in text.splitlines():
++        if end_word is not None:
++            if raw.strip() == end_word:
++                end_word = None
++            continue
++        line = _gpgprobe_strip_comment(raw)
++        found = list(_GPGPROBE_HEREDOC_RX.finditer(line.replace("<<<", "   ")))
++        if found:
++            end_word = found[-1].group(3)
++        if line.rstrip().endswith("\\"):
++            cur += line.rstrip()[:-1] + " "
++            continue
++        logical.append(cur + line)
++        cur = ""
++    if cur:
++        logical.append(cur)
++    commands = []
++    for ln in logical:
++        for seg in _GPGPROBE_SPLIT_RX.split(ln):
++            words = seg.split()
++            while words and re.match(r"[A-Za-z_][A-Za-z0-9_]*=", words[0]):
++                words.pop(0)
++            if words and words[0] in ("!", "command", "exec"):
++                words.pop(0)
++            if not words or not re.fullmatch(r"(?:\S*/)?gpg2?", words[0]):
++                continue
++            if "--output" in words or "-o" in words or any(
++                    w.startswith("--output=") for w in words):
++                commands.append(" ".join(words))
++    return commands
++
++
++def _gpgprobe_missing_yes(commands):
++    return [c for c in commands if "--yes" not in c.split()]
++
++
++@pytest.mark.parametrize("src, found, missing", [
++    ("gpg --detach-sign --output sig # --yes\n", 1, 1),
++    ("gpg --yes --output good ; gpg --output bad\n", 2, 1),
++    ("cat <<EOF\ngpg --yes --output ignored\nEOF\n", 0, 0),
++    ("cat <<'EOF'\ngpg --output ignored\nEOF\ngpg --yes --output real\n", 1, 0),
++    ("# a comment \\\ngpg --output x\n", 1, 1),
++    ("/usr/bin/gpg --output x\n", 1, 1),
++    ("X=1 gpg -o x --armor\n", 1, 1),
++    ("printf x \\\n  | gpg --yes --local-user K --output \"$f\" \\\n  >/dev/null 2>&1\n", 1, 0),
++], ids=["trailing-comment", "two-commands", "heredoc-only", "heredoc-then-real",
++        "comment-backslash", "absolute-path", "assignment-and-short-flag", "continued-probe"])
++def test_gpg_output_scanner_reads_commands_not_lines(src, found, missing):
++    """Controle do instrumento do teste seguinte (rail relmeta-142): cada
++    forma que um scanner POR LINHA errava tem o resultado certo aqui."""
++    commands = _gpgprobe_output_commands(src)
++    assert len(commands) == found, commands
++    assert len(_gpgprobe_missing_yes(commands)) == missing, commands
++
++
++def test_preflight_signature_probe_answers_its_own_overwrite_question():
++    """PLAN-193 W6 (relmeta-142). O probe de assinatura do preflight escreve
++    num arquivo que o proprio ``mktemp`` acabou de CRIAR. ``gpg --output``
++    sobre um arquivo existente, sem ``--yes``, pergunta ``Overwrite? (y/N)``
++    direto no /dev/tty (o ``>/dev/null 2>&1`` do driver nao a esconde) e, com
++    a resposta padrao, o preflight morria dizendo que a chave nao conseguia
++    assinar -- uma chave integra. Todo comando gpg do driver que escreve com
++    ``--output`` (lido por comando, nao por linha: o instrumento tem controle
++    proprio acima) carrega ``--yes``; o controle exige ter achado ao menos
++    um, para nunca passar vazio."""
++    commands = _gpgprobe_output_commands(DRIVER_SRC.read_text(encoding="utf-8"))
++    assert commands, "no gpg --output command found in the driver: control is blind"
++    missing = _gpgprobe_missing_yes(commands)
++    assert not missing, "gpg --output without --yes:\n%s" % "\n".join(missing)
++
++
+ @pytest.mark.parametrize(
+     "src", [DRIVER_SRC, SITES_SRC], ids=["driver", "site-module"]
+ )
