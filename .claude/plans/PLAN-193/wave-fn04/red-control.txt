@@ -1,0 +1,15 @@
+# FN-04 red control — the final tests of this pack run against the code BEFORE the patch
+# base: the code files at the pre-image blobs the index lines of fn04.patch name; swapped in:
+#   .claude/hooks/_lib/launch_ledger.py, .claude/hooks/check_workflow_launch.py, .claude/scripts/ceo-launches.py
+# test file: the patched .claude/hooks/tests/test_check_workflow_launch.py (tests only)
+# summary: 9 failed, 4 passed, 94 deselected in 2.78s
+
+FAILED .claude/hooks/tests/test_check_workflow_launch.py::CheckWorkflowLaunchE2E::test_a_file_unreadable_after_dispatch_is_named_and_never_snapshotted
+FAILED .claude/hooks/tests/test_check_workflow_launch.py::CheckWorkflowLaunchE2E::test_a_run_id_the_response_does_not_label_as_launched_never_triggers_a_snapshot
+FAILED .claude/hooks/tests/test_check_workflow_launch.py::CheckWorkflowLaunchE2E::test_a_script_path_record_without_a_snapshot_keeps_the_args_guard_and_no_script_verdict
+FAILED .claude/hooks/tests/test_check_workflow_launch.py::CheckWorkflowLaunchE2E::test_heuristic_and_manual_binds_read_no_file
+FAILED .claude/hooks/tests/test_check_workflow_launch.py::CheckWorkflowLaunchE2E::test_red_a_call_that_never_reached_its_post_tool_use_is_never_snapshotted_by_a_heuristic_bind
+FAILED .claude/hooks/tests/test_check_workflow_launch.py::CheckWorkflowLaunchE2E::test_red_pre_tool_use_never_writes_the_bytes_of_the_file_a_script_path_names
+FAILED .claude/hooks/tests/test_check_workflow_launch.py::CheckWorkflowLaunchE2E::test_red_the_snapshot_after_dispatch_holds_only_bytes_that_hash_to_the_value_recorded_before
+FAILED .claude/hooks/tests/test_check_workflow_launch.py::CheckWorkflowLaunchE2E::test_relaunch_without_a_snapshot_reports_the_original_file_and_refuses_out_by_name
+FAILED .claude/hooks/tests/test_check_workflow_launch.py::CheckWorkflowLaunchE2E::test_script_path_is_hashed_before_dispatch_and_snapshotted_after

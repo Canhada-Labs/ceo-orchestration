@@ -1,0 +1,11 @@
+M1 pre snapshot of scriptPath bytes              KILLED — 1 failed, 106 deselected in 0.28s
+M2 heuristic bind snapshots                      KILLED — 1 failed, 106 deselected in 0.32s
+M2b manual/heuristic bind keeps awaiting_post_tool_use KILLED — 1 failed, 106 deselected in 0.35s
+M3 no hash check after dispatch                  KILLED — 1 failed, 106 deselected in 0.32s
+M5 relaunch treats a missing snapshot as exact   KILLED — 1 failed, 106 deselected in 0.35s
+M6 no snapshot after dispatch at all             KILLED — 2 failed, 105 deselected in 0.56s
+M7 a bare id token triggers the snapshot         KILLED — 1 failed, 106 deselected in 0.30s
+M8 relative scriptPath resolved against the Post cwd KILLED — 1 failed, 106 deselected in 0.32s
+M9 heuristic/manual bind reads the snapshot and the harness copy KILLED — 1 failed, 106 deselected in 0.13s
+M10 an uncorroborated scriptPath hash counts as script evidence KILLED — 1 failed, 106 deselected in 0.44s
+M4 (args guard needs the relaxed validator)      KILLED — 1 failed, 106 deselected in 0.36s

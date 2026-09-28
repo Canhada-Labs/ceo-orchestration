@@ -1,0 +1,842 @@
+diff --git a/.claude/hooks/_lib/launch_ledger.py b/.claude/hooks/_lib/launch_ledger.py
+index 8cb99cc9aa474599ad2e3dea5f4435a27d754576..74b55cc5ab0d952d9a6cec29f3d0945adefee789 100644
+--- a/.claude/hooks/_lib/launch_ledger.py
++++ b/.claude/hooks/_lib/launch_ledger.py
+@@ -16,10 +16,19 @@ are exactly the class this module closes.
+ What it records (one manifest per Workflow tool call)
+ -----------------------------------------------------
+ ``launch_id``, instant, ``session_id``, ``tool_use_id``, ``cwd``; the script
+-fingerprint (``sha256`` + size) AND a snapshot of the effective script bytes
++fingerprint (``sha256`` + size) and a snapshot of the script bytes
+ (``<launch_id>.script``) so the exact call is reproducible even when the
+ harness never wrote its own copy (a run killed by a process death) or the
+-file changed afterwards; the ``args`` as a LITERAL canonical JSON (an absent
++file changed afterwards. WHEN the snapshot is written depends on where the
++bytes come from (FN-04, PLAN-193 W4b): the call's own inline ``script`` text is
++snapshotted by the PreToolUse half; a file named by ``scriptPath`` is read
++there only to hash it — path, ``sha256`` and size are recorded, its bytes are
++NOT written — and its snapshot is taken by the PostToolUse half of the SAME
++call (bound by ``tool_use_id``), after the harness decided and ran the call,
++and only when the bytes read again hash to the value recorded before dispatch
++(``snapshot_after_dispatch``). The PreToolUse half runs before the harness's
++permission decision: a read-deny rule on the original path would not cover a
++copy written elsewhere. The ``args`` as a LITERAL canonical JSON (an absent
+ ``args`` field is recorded as ABSENT, distinct from ``null``; never
+ truncated — the hash is over the full content); ``resumeFromRunId``;
+ ``name``/``description``; the code revision of ``cwd`` — ENRICHED AFTER the
+@@ -44,7 +53,9 @@ that run.
+   route); ``CEO_WORKFLOW_SCRIPT_GUARD=enforce`` turns it into a block.
+ * args identical but either script hash unavailable ⇒ **inconclusive**
+   (allowed, recorded) — an unverifiable script comparison is never turned into
+-  a block nor into a match; different args still block on their own.
++  a block nor into a match; different args still block on their own. A
++  ``scriptPath`` record without a snapshot counts as unavailable: its hash was
++  read before dispatch and never corroborated after it (FN-04, ``compare``).
+ * no bound manifest ⇒ ``no_manifest`` (allowed, recorded).
+ * a manifest bound heuristically (``by_single_unbound``) never sustains a
+   block, args or script alike (``weak_bind`` recorded; advisory instead).
+@@ -78,7 +89,16 @@ By ``tool_use_id`` when the event carries one: found ⇒ bind (``by_tool_use``);
+ not found ⇒ an ``orphan`` index line, NO bind. Without ``tool_use_id``: bind
+ only when EXACTLY ONE unbound launch exists in the same session
+ (``by_single_unbound``); otherwise ``orphan``. Never across sessions. The
+-operator's ``ceo-launches.py bind`` closes an orphan by hand.
++operator's ``ceo-launches.py bind`` closes an orphan by hand. Only the
++``by_tool_use`` bind snapshots a ``scriptPath`` file, and only when the
++response reports that run id as the one the harness launched (the ``Run ID:``
++label or a ``runId``/``run_id`` key, not a bare token): a heuristic or manual
++bind proves nothing about which call the harness allowed, so the record then
++keeps its hash and no bytes (``script_snapshot_why`` says why). A heuristic
++or manual bind reads no file outside the ledger's own records (index and
++manifests); the ``by_tool_use`` bind reads the
++``scriptPath`` file (to take the snapshot) and the harness copy a response
++names (only to compare it with a snapshot the record holds).
+ 
+ Contract
+ --------
+@@ -259,9 +279,15 @@ read_script_file = _read_script_file  # public name for the CLI
+ 
+ 
+ def script_record(tool_input: Dict[str, Any], cwd: Optional[str]) -> Tuple[Dict[str, Any], Optional[bytes]]:
+-    """Fingerprint of the script plus the effective bytes to snapshot. Inline
++    """Fingerprint of the script plus the bytes to snapshot NOW (PreToolUse). Inline
+     ``script`` text wins over ``scriptPath``; an unreadable ``scriptPath`` is
+-    recorded (no hash, no snapshot) — the guard then reports INCONCLUSIVE."""
++    recorded (no hash, no snapshot) — the guard then reports INCONCLUSIVE.
++
++    Only the call's own inline text is returned for a snapshot. A file named by
++    ``scriptPath`` is read to compute its ``sha256`` and size and its bytes are then
++    dropped (``None``): this runs before the harness's permission decision, and a
++    copy written here would escape a read-deny rule on that path (FN-04). Its
++    snapshot is ``snapshot_after_dispatch``'s, on the PostToolUse half."""
+     script = tool_input.get("script")
+     if isinstance(script, str) and script:
+         data = script.encode("utf-8", "surrogatepass")
+@@ -274,7 +300,7 @@ def script_record(tool_input: Dict[str, Any], cwd: Optional[str]) -> Tuple[Dict[
+         data, why = _read_script_file(p)
+         if data is None:
+             return {"source": "path", "path": sp, "sha256": None, "bytes": None, "unreadable": True, "why": why}, None
+-        return {"source": "path", "path": sp, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, data
++        return {"source": "path", "path": sp, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, None
+     name = tool_input.get("name")
+     if isinstance(name, str) and name:
+         return {"source": "named", "path": None, "name": name, "sha256": None, "bytes": None}, None
+@@ -329,6 +355,22 @@ def extract_run_id(tool_response: Any) -> Optional[str]:
+     return ids.pop() if len(ids) == 1 else None
+ 
+ 
++def run_id_is_labelled(tool_response: Any, run_id: str) -> bool:
++    """True when the harness itself reported ``run_id`` as the run it launched: a top-level
++    ``runId``/``run_id`` key equal to it, or it is the id on the ``Run ID:`` label. An id found
++    only as a bare token (the fallback of ``extract_run_id``) is not such a report — an error text
++    that merely echoes a ``resumeFromRunId`` would carry one."""
++    if not is_run_id(run_id) or tool_response is None:
++        return False
++    if isinstance(tool_response, dict) and any(tool_response.get(k) == run_id for k in ("runId", "run_id")):
++        return True
++    try:
++        text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=True)
++    except (RecursionError, ValueError, TypeError):
++        return False
++    return run_id in set(_RUN_ID_LABEL_RE.findall(text))
++
++
+ def extract_persisted_script_path(tool_response: Any) -> Optional[str]:
+     try:
+         text = tool_response if isinstance(tool_response, str) else json.dumps(tool_response, ensure_ascii=True) if tool_response is not None else ""
+@@ -361,6 +403,8 @@ def build_manifest(event: Dict[str, Any], now: Optional[float] = None) -> Tuple[
+         "cwd": cwd,
+         "script": script,
+         "script_snapshot": None,
++        # FN-04: a scriptPath file's bytes wait for the PostToolUse half of this same call.
++        "script_snapshot_why": "awaiting_post_tool_use" if (script.get("source") == "path" and script.get("sha256")) else None,
+         "args": args,
+         "resume_from_run_id": resume if isinstance(resume, str) and resume else None,
+         "resume_from_run_id_valid": is_run_id(resume) if isinstance(resume, str) and resume else None,
+@@ -394,7 +438,7 @@ def fallback_manifest(event: Dict[str, Any], error: str, now: Optional[float] =
+         "recorded_at": _now_iso(t), "session_id": sid, "tool_use_id": tuid,
+         "cwd": event.get("cwd") if isinstance(event.get("cwd"), str) else None,
+         "script": {"source": "unknown", "path": None, "sha256": None, "bytes": None, "unreadable": True, "why": "build_failed"},
+-        "script_snapshot": None,
++        "script_snapshot": None, "script_snapshot_why": None,
+         "args": {"present": "args" in tool_input, "canonical": None, "literal": None, "sha256": None,
+                  "literal_sha256": None, "bytes": None, "error": error},
+         "resume_from_run_id": resume, "resume_from_run_id_valid": is_run_id(resume) if resume else None,
+@@ -415,7 +459,8 @@ def snapshot_path(d: Path, launch_id: str) -> Path:
+ 
+ 
+ def write_manifest(manifest: Dict[str, Any], d: Path, script_bytes: Optional[bytes] = None) -> Path:
+-    """Manifest (and script snapshot) on disk FIRST; the index line after."""
++    """Manifest (and the snapshot of ``script_bytes``, when given — at PreToolUse only an
++    inline script's text) on disk FIRST; the index line after."""
+     if script_bytes is not None:
+         _atomic_write(snapshot_path(d, manifest["launch_id"]), script_bytes)
+         manifest["script_snapshot"] = snapshot_path(d, manifest["launch_id"]).name
+@@ -567,8 +612,12 @@ def manifest_problem(m: Any, d: Path) -> Optional[str]:
+     (``args_uncanonicalized``); otherwise canonical and literal are strings whose sha256 match
+     their recorded hashes, the literal re-canonicalises to the canonical, and ``present`` is
+     False exactly when both are ABSENT. ``script``: the ``sha256`` key must exist and agree with
+-    the SOURCE — inline, or a path read at launch ⇒ a hex hash whose snapshot bytes exist and
+-    hash to it; a path unreadable at launch, a named workflow or no script ⇒ ``null``."""
++    the SOURCE — inline ⇒ a hex hash whose snapshot bytes exist and hash to it; a path read at
++    launch ⇒ a hex hash, and, when the record names a snapshot, bytes that exist and hash to it
++    (a scriptPath record with NO snapshot is valid — its bytes are written only by the
++    PostToolUse half of the same call, FN-04 — and ``compare`` then treats its script hash,
++    never corroborated after dispatch, as unavailable); a path
++    unreadable at launch, a named workflow or no script ⇒ ``null``."""
+     if not isinstance(m, dict):
+         return "not_an_object"
+     if m.get("schema") != SCHEMA:
+@@ -605,6 +654,8 @@ def manifest_problem(m: Any, d: Path) -> Optional[str]:
+     if source == "inline" or (source == "path" and sc.get("unreadable") is not True):
+         if not isinstance(sh, str) or SHA256_RE.fullmatch(sh) is None:
+             return "script_shape"
++        if source == "path" and m.get("script_snapshot") is None:
++            return None
+         if m.get("script_snapshot") != snapshot_path(d, m["launch_id"]).name:
+             return "script_snapshot_missing"
+         snap = load_snapshot(d, m)
+@@ -618,6 +669,52 @@ def manifest_problem(m: Any, d: Path) -> Optional[str]:
+     return "script_shape"
+ 
+ 
++def snapshot_after_dispatch(d: Path, manifest: Dict[str, Any]) -> Dict[str, Any]:
++    """The PostToolUse half of a ``scriptPath`` record (FN-04). The caller passes ONLY the
++    manifest that the event's own ``tool_use_id`` names — the PostToolUse of that same call,
++    which the harness fires after it decided and ran the call — and only when the response
++    labels the run id as the run it launched (``run_id_is_labelled``). The file is read again through
++    the same bounded reader, relative to the cwd recorded before dispatch, and its bytes become
++    the snapshot only when they hash to the ``sha256`` recorded before dispatch. Otherwise
++    nothing is written and ``script_snapshot_why`` says why: ``unreadable_after_dispatch:<why>``,
++    ``changed_after_dispatch``, ``write_failed:<type>`` or ``error:<type>``. A record that is not
++    a hashed ``scriptPath`` one, that already names a snapshot, or whose launch id is ill-shaped
++    is returned unchanged. Returns a copy; never raises (the caller binds the run either way)."""
++    try:
++        sc = manifest.get("script")
++        if not isinstance(sc, dict) or sc.get("source") != "path" or sc.get("unreadable") is True:
++            return manifest
++        if manifest.get("script_snapshot") is not None:
++            return manifest
++        sh, sp, lid = sc.get("sha256"), sc.get("path"), manifest.get("launch_id")
++        if (not isinstance(sh, str) or SHA256_RE.fullmatch(sh) is None or not isinstance(sp, str) or not sp
++                or not isinstance(lid, str) or LAUNCH_ID_RE.fullmatch(lid) is None):
++            return manifest
++        out = dict(manifest)
++        p = Path(sp)
++        cwd = manifest.get("cwd")
++        if not p.is_absolute() and isinstance(cwd, str) and cwd:
++            p = Path(cwd) / p
++        data, why = _read_script_file(p)
++        if data is None:
++            out["script_snapshot_why"] = "unreadable_after_dispatch:%s" % why
++        elif hashlib.sha256(data).hexdigest() != sh:
++            out["script_snapshot_why"] = "changed_after_dispatch"
++        else:
++            try:
++                _atomic_write(snapshot_path(d, lid), data)
++            except Exception as exc:  # noqa: BLE001 — recorded; the bind still happens
++                out["script_snapshot_why"] = "write_failed:%s" % type(exc).__name__
++            else:
++                out["script_snapshot"] = snapshot_path(d, lid).name
++                out["script_snapshot_why"] = None
++        return out
++    except Exception as exc:  # noqa: BLE001
++        out = dict(manifest)
++        out["script_snapshot_why"] = "error:%s" % type(exc).__name__
++        return out
++
++
+ def bind_run(d: Path, manifest: Dict[str, Any], run_id: str, method: str, now: Optional[float] = None,
+              persisted_script_path: Optional[str] = None) -> Dict[str, Any]:
+     if not is_run_id(run_id):
+@@ -629,10 +726,18 @@ def bind_run(d: Path, manifest: Dict[str, Any], run_id: str, method: str, now: O
+     manifest["run_id"] = run_id
+     manifest["bound_at"] = _now_iso(now)
+     manifest["bind_method"] = method
++    if method != "by_tool_use" and manifest.get("script_snapshot_why") == "awaiting_post_tool_use":
++        # FN-04: a heuristic or manual bind never snapshots a scriptPath file — say so in the record.
++        manifest["script_snapshot_why"] = "not_bound_by_tool_use"
+     if persisted_script_path:
+         manifest["persisted_script_path"] = persisted_script_path
+-        snap = load_snapshot(d, manifest)
+-        persisted, _why = _read_script_file(Path(persisted_script_path))  # bounded: the path came from response text
++        # FN-04: the path named in the response is read ONLY on the bind by tool_use_id (the
++        # PostToolUse of the call itself) and ONLY to compare it with a snapshot this record
++        # already holds. A heuristic or manual bind reads neither it nor the snapshot.
++        snap = load_snapshot(d, manifest) if method == "by_tool_use" else None
++        persisted = None
++        if snap is not None:
++            persisted, _why = _read_script_file(Path(persisted_script_path))  # bounded: the path came from response text
+         manifest["persisted_matches_snapshot"] = (
+             hashlib.sha256(persisted).hexdigest() == hashlib.sha256(snap).hexdigest()
+         ) if (snap is not None and persisted is not None) else None
+@@ -672,8 +777,13 @@ def compare(recorded: Dict[str, Any], now: Dict[str, Any]) -> Dict[str, Any]:
+     differ, inconclusive}; ``args_diff`` list; ``counts`` = {changed, only_recorded, only_now,
+     order, total} — the counts are the only thing that may reach the model. Equal canonical
+     forms with a different literal key order count as ONE difference (``order``): the script
+-    sees the order, so a reordered call can re-key phases."""
++    sees the order, so a reordered call can re-key phases. The RECORDED script hash counts only
++    when snapshot bytes reproduce it (``manifest_problem`` checks them): a ``scriptPath`` record
++    without a snapshot carries a hash read before dispatch and never corroborated after it
++    (FN-04), so its script comparison is ``inconclusive`` — never ``same`` nor ``differs``."""
+     r_s = (recorded.get("script") or {}).get("sha256")
++    if (recorded.get("script") or {}).get("source") == "path" and recorded.get("script_snapshot") is None:
++        r_s = None
+     n_s = (now.get("script") or {}).get("sha256")
+     if r_s is None or n_s is None:
+         script = "inconclusive"
+@@ -839,8 +949,9 @@ def _guard(manifest: Dict[str, Any], resume: str, d: Path, env: Dict[str, str])
+ 
+ def decide_pre(event: Dict[str, Any], d: Path, env: Optional[Dict[str, str]] = None, now: Optional[float] = None,
+                git_budget_s: float = GIT_BUDGET_S) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+-    """PreToolUse: guard a resume, record the launch (manifest + snapshot + index line), then
+-    enrich the code revision within budget. Returns (decision, manifest).
++    """PreToolUse: guard a resume, record the launch (manifest + index line, and the snapshot of
++    an INLINE script — never bytes of a ``scriptPath`` file, which runs before the harness's
++    permission decision), then enrich the code revision within budget. Returns (decision, manifest).
+ 
+     Totality: an exception INSIDE the guard is recorded as ``inconclusive`` (never a silent
+     allow without a record); a failure to PERSIST this call's record does not undo a decision
+@@ -870,7 +981,12 @@ def decide_pre(event: Dict[str, Any], d: Path, env: Optional[Dict[str, str]] = N
+ def decide_post(event: Dict[str, Any], d: Path, now: Optional[float] = None) -> Optional[Dict[str, Any]]:
+     """PostToolUse: bind the run id from the response — by tool_use_id, else by the single
+     unbound launch of the session. An unknown tool_use_id, or zero/several candidates, becomes an
+-    ``orphan`` line; a response with no run id, or with ambiguous ids, records nothing."""
++    ``orphan`` line; a response with no run id, or with ambiguous ids, records nothing. The
++    ``by_tool_use`` bind first takes the snapshot of a ``scriptPath`` file
++    (``snapshot_after_dispatch``) — only when the harness reported that id as the run it launched
++    (``run_id_is_labelled``), else ``script_snapshot_why: run_id_not_labelled``; the heuristic
++    bind never reads that file — this PostToolUse may belong to another call — and ``bind_run``
++    records ``script_snapshot_why: not_bound_by_tool_use`` (as for a manual bind)."""
+     run_id = extract_run_id(event.get("tool_response"))
+     if run_id is None:
+         return None
+@@ -882,6 +998,10 @@ def decide_post(event: Dict[str, Any], d: Path, now: Optional[float] = None) ->
+         if m is None:
+             _append_index(d, {"kind": "orphan", "run_id": run_id, "session_id": session, "tool_use_id": tuid, "at": _now_iso(now), "reason": "tool_use_id_not_recorded"})
+             return None
++        if run_id_is_labelled(event.get("tool_response"), run_id):
++            m = snapshot_after_dispatch(d, m)
++        elif m.get("script_snapshot_why") == "awaiting_post_tool_use":
++            m = dict(m, script_snapshot_why="run_id_not_labelled")
+         return bind_run(d, m, run_id, "by_tool_use", now=now, persisted_script_path=persisted)
+     candidates = unbound_launches(d, session) if session else []
+     if len(candidates) == 1:
+diff --git a/.claude/hooks/check_workflow_launch.py b/.claude/hooks/check_workflow_launch.py
+index c9b1a393f29907f707a971b05ba7467e659fcfb3..c64620f5a0482cd5d5f119b0d5dc54cb8f702e0e 100755
+--- a/.claude/hooks/check_workflow_launch.py
++++ b/.claude/hooks/check_workflow_launch.py
+@@ -2,9 +2,13 @@
+ """PLAN-190 W1 — Workflow launch ledger + resume guard (PreToolUse/PostToolUse ``Workflow``).
+ 
+ Records every ``Workflow`` tool call BEFORE it is dispatched (script sha256 +
+-snapshot of the script bytes, literal ``args``, ``resumeFromRunId``, code
+-revision of ``cwd`` enriched afterwards within a strict budget) and, on the
+-PostToolUse half, binds the run id the runner returned. Library:
++size, a snapshot of an INLINE script's text, literal ``args``,
++``resumeFromRunId``, code revision of ``cwd`` enriched afterwards within a
++strict budget) and, on the PostToolUse half, binds the run id the runner
++returned. A file named by ``scriptPath`` is only hashed before dispatch — this
++half runs before the harness's permission decision, so its bytes are never
++written here (FN-04); the PostToolUse half of the same call (bound by
++``tool_use_id``) snapshots them when they still hash to that value. Library:
+ ``_lib/launch_ledger.py`` (the contract, the guard rules and the binding rules
+ are documented there).
+ 
+@@ -12,12 +16,12 @@ Contract
+ --------
+ - Fires for ``tool_name == "Workflow"`` only; anything else ⇒ ``{}``.
+ - PreToolUse: the guard decides a resume from this call and the recorded manifest,
+-  then this call's manifest + snapshot + index line are written (before any git
+-  enrichment). On a resume:
++  then this call's manifest + index line (+ the snapshot of an inline script) are
++  written (before any git enrichment). On a resume:
+   args differ from the bound manifest ⇒ ``{"decision": "block", "reason": <counts-only>}``;
+   script differs, args same ⇒ ``{"systemMessage": <advisory>}`` unless
+-  ``CEO_WORKFLOW_SCRIPT_GUARD=enforce``; args identical but a script hash unavailable ⇒ inconclusive,
+-  allowed; no bound manifest ⇒ allowed; a recorded manifest that fails its
++  ``CEO_WORKFLOW_SCRIPT_GUARD=enforce``; args identical but a script hash unavailable (or a
++  ``scriptPath`` record without a snapshot) ⇒ inconclusive, allowed; no bound manifest ⇒ allowed; a recorded manifest that fails its
+   integrity check (``manifest_problem``) ⇒ inconclusive, allowed. A block
+   needs a STRONG bind (by ``tool_use_id`` or manual): a heuristic bind never
+   sustains one, args or script alike. ONE override path for every block, and
+@@ -30,8 +34,10 @@ Contract
+ - PostToolUse: binds ``wf_<id>`` by ``tool_use_id``, else by the single unbound
+   launch of the session — a launch the guard blocked never ran and is never a
+   candidate; an unknown tool_use_id or zero/several candidates is an ``orphan``
+-  line; a response with no run id, or with ambiguous ids, records nothing.
+-  Always ``{}``.
++  line; a response with no run id, or with ambiguous ids, records nothing. Only
++  the bind by ``tool_use_id`` snapshots a ``scriptPath`` file, when the response
++  labels the run id as the one launched (re-read, written only when it hashes to
++  the value recorded before dispatch). Always ``{}``.
+ - Fail-OPEN on infrastructure (unreadable stdin, import failure, unwritable
+   state dir): breadcrumb to stderr + ``{}``. This is a recovery instrument,
+   not a security matcher — it must never wedge a session.
+diff --git a/.claude/hooks/tests/test_check_workflow_launch.py b/.claude/hooks/tests/test_check_workflow_launch.py
+index 1cf3186ecefaaee327c957e4345c658837bd335c..5d270a89a86ba8fb03b5f549b446117afe428716 100644
+--- a/.claude/hooks/tests/test_check_workflow_launch.py
++++ b/.claude/hooks/tests/test_check_workflow_launch.py
+@@ -6,7 +6,11 @@ subprocess, JSON event on stdin, decision JSON on stdout. Every case isolates
+ ``CLAUDE_PROJECT_DIR``/``HOME``/audit env into a temp tree (TestEnvContext
+ discipline — the live ~/.claude is never touched).
+ 
+-What is proven: a manifest AND a script snapshot exist before dispatch;
++What is proven: a manifest exists before dispatch, with a snapshot of an
++INLINE script; a file named by ``scriptPath`` is recorded before dispatch by
++path, sha256 and size only, and its bytes are snapshotted by the PostToolUse
++half of the same call (bound by ``tool_use_id``) when they still hash to that
++value — never before the permission decision (FN-04, PLAN-193 W4b);
+ ``args`` absent ≠ ``null``; a resume over different args is blocked with a
+ COUNTS-ONLY reason (no key names, no values); a resume over a different script
+ with the same args is ADVISORY (allowed, systemMessage) unless the script
+@@ -20,6 +24,7 @@ non-Workflow tool ⇒ ``{}``; the hook never exits non-zero.
+ """
+ from __future__ import annotations
+ 
++import hashlib
+ import json
+ import os
+ import stat
+@@ -142,14 +147,26 @@ class CheckWorkflowLaunchE2E(TestEnvContext):
+         self.assertEqual(json.loads(m["args"]["canonical"])["k"], 1)
+         self.assertEqual(len(json.loads(m["args"]["canonical"])["blob"]), 5_000_000)
+ 
+-    def test_script_path_is_hashed_and_snapshotted_from_disk(self):
++    def test_script_path_is_hashed_before_dispatch_and_snapshotted_after(self):
++        # FN-04 (PLAN-193 W4b): before dispatch, a scriptPath is recorded by path, sha256 and size
++        # only; its bytes are snapshotted by the PostToolUse half of the SAME call (tool_use_id).
+         sp = self.proj / "wf.js"
+         sp.write_text(SCRIPT_A, encoding="utf-8")
+         self._run(self._pre({"scriptPath": "wf.js", "args": {}}))
+         m = self._load(self._manifests()[0])
+         self.assertEqual(m["script"]["source"], "path")
+         self.assertEqual(m["script"]["bytes"], len(SCRIPT_A.encode("utf-8")))
+-        self.assertTrue(m["script_snapshot"])
++        self.assertEqual(m["script"]["sha256"], hashlib.sha256(SCRIPT_A.encode("utf-8")).hexdigest())
++        self.assertIsNone(m["script_snapshot"], "no bytes of a scriptPath file before the permission decision")
++        self.assertEqual(m["script_snapshot_why"], "awaiting_post_tool_use")
++        self.assertEqual(sorted(p.name for p in self._manifests()[0].parent.glob("*.script")), [])
++        self._run(self._post("Run ID: %s" % RUN, tool_use_id="tu-1"))
++        m = self._by_tool_use("tu-1")
++        self.assertEqual((m["run_id"], m["bind_method"]), (RUN, "by_tool_use"))
++        snap = self._manifests()[0].parent / m["script_snapshot"]
++        self.assertEqual(snap.read_bytes(), SCRIPT_A.encode("utf-8"), "the snapshot taken after dispatch is the hashed bytes")
++        self.assertEqual(stat.S_IMODE(snap.stat().st_mode), 0o600)
++        self.assertIsNone(m["script_snapshot_why"])
+ 
+     def test_manifest_written_even_when_git_is_slow(self):
+         fake_bin = Path(self._tmp.name) / "bin"
+@@ -926,6 +943,226 @@ class CheckWorkflowLaunchE2E(TestEnvContext):
+         self.assertFalse(os.path.lexists(str(elsewhere)), "a symlink is never followed")
+         self.assertEqual(set(os.listdir(str(self.proj))), (before - {"link.staged"}) | {"copy.js"}, "no temporary left behind")
+ 
++    # --- FN-04 (PLAN-193 W4b, v1.4.2): no bytes of a scriptPath file before the permission decision ---
++    # The PreToolUse half runs BEFORE the harness decides the call; a read-deny rule on the file a
++    # scriptPath names does not cover a copy written elsewhere. The tests marked RED fail on
++    # 1c94a19c, whose PreToolUse wrote that file's bytes to launches/<launch_id>.script.
++    def _canary(self, directory: Path, name: str = "secret.env") -> "tuple[Path, bytes]":
++        token = ("S357-CANARY-%s" % os.urandom(8).hex()).encode("ascii")
++        directory.mkdir(parents=True, exist_ok=True)
++        path = directory / name
++        path.write_bytes(b"API_KEY=" + token + b"\n")
++        return path, token
++
++    def _state_files_holding(self, token: bytes) -> list:
++        hits = []
++        for p in sorted((self.home / ".claude" / "projects").rglob("*")):
++            if p.is_file() and not p.is_symlink() and token in p.read_bytes():
++                hits.append(str(p))
++        return hits
++
++    def test_red_pre_tool_use_never_writes_the_bytes_of_the_file_a_script_path_names(self):
++        # The S357 canary: the harness is about to DENY this call (no PostToolUse follows). Inside
++        # the project (a relative .env) and outside it (an absolute path), nothing of the file's
++        # CONTENT may reach the project state dir; only its path, sha256 and size are recorded.
++        inside, token_in = self._canary(self.proj, ".env")
++        outside, token_out = self._canary(Path(self._tmp.name) / "elsewhere")
++        for tu, sp, token, path in (("tu-in", ".env", token_in, inside), ("tu-out", str(outside), token_out, outside)):
++            out = self._run(self._pre({"scriptPath": sp, "args": {"k": 1}}, tool_use_id=tu))
++            self.assertEqual(out, {})
++            self.assertEqual(self._state_files_holding(token), [], "bytes of %s landed in the state dir before the permission decision" % sp)
++            m = self._by_tool_use(tu)
++            self.assertEqual((m["script"]["source"], m["script"]["path"]), ("path", sp))
++            self.assertEqual(m["script"]["sha256"], hashlib.sha256(path.read_bytes()).hexdigest())
++            self.assertEqual(m["script"]["bytes"], len(path.read_bytes()))
++            self.assertIsNone(m["script_snapshot"])
++        self.assertEqual(sorted(self._manifests()[0].parent.glob("*.script")), [], "no snapshot file exists at all")
++
++    def test_red_a_call_that_never_reached_its_post_tool_use_is_never_snapshotted_by_a_heuristic_bind(self):
++        # A denied call leaves an unbound launch; an older CLI's PostToolUse without tool_use_id then
++        # binds it heuristically (the single unbound launch of the session). That PostToolUse belongs to
++        # ANOTHER call, so it proves nothing about this one: the file is never read for a snapshot.
++        secret, token = self._canary(Path(self._tmp.name) / "elsewhere")
++        self._run(self._pre({"scriptPath": str(secret), "args": {"k": 1}}, tool_use_id="tu-denied"))
++        self._run(self._post("Run ID: %s" % RUN, tool_use_id=None))
++        m = self._by_tool_use("tu-denied")
++        self.assertEqual(m["bind_method"], "by_single_unbound")
++        self.assertIsNone(m["script_snapshot"])
++        self.assertEqual(m["script_snapshot_why"], "not_bound_by_tool_use")
++        self.assertEqual(self._state_files_holding(token), [])
++        d = self._manifests()[0].parent
++        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(self.proj / "copy.js"))
++        self.assertEqual(rc, 7, out + err)
++        self.assertIn("no snapshot", err)
++        self.assertIn("not_bound_by_tool_use", err)
++        self.assertNotIn("exact recorded call", out)
++        self.assertNotIn("snapshot copied to", out)
++        self.assertFalse(os.path.lexists(str(self.proj / "copy.js")))
++
++    def test_red_the_snapshot_after_dispatch_holds_only_bytes_that_hash_to_the_value_recorded_before(self):
++        # Between the PreToolUse read and the PostToolUse read the path changed: the second read is
++        # not the bytes the record describes, so nothing is written and the record says why.
++        sp = self.proj / "wf.js"
++        sp.write_text(SCRIPT_A, encoding="utf-8")
++        self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}}))
++        secret, token = self._canary(Path(self._tmp.name) / "elsewhere")
++        sp.unlink()
++        sp.symlink_to(secret)
++        self._run(self._post("Run ID: %s" % RUN, tool_use_id="tu-1"))
++        m = self._by_tool_use("tu-1")
++        self.assertEqual((m["run_id"], m["bind_method"]), (RUN, "by_tool_use"))
++        self.assertIsNone(m["script_snapshot"])
++        self.assertEqual(m["script_snapshot_why"], "changed_after_dispatch")
++        self.assertEqual(self._state_files_holding(token), [])
++        self.assertEqual(self._state_files_holding(b"return {ok:1}"), [], "and the Pre-time bytes were never written either")
++        d = self._manifests()[0].parent
++        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN)
++        self.assertEqual(rc, 7, out + err)
++        self.assertIn("changed_after_dispatch", err)
++        self.assertIn('{"slice":"A01"}', out, "the args are still printed, exactly")
++        self.assertIn("CHANGED since launch", out)
++
++    def test_a_relative_script_path_is_read_after_dispatch_against_the_cwd_recorded_before(self):
++        sub = self.proj / "sub"
++        sub.mkdir()
++        (sub / "wf.js").write_text(SCRIPT_A, encoding="utf-8")
++        ev = self._pre({"scriptPath": "wf.js", "args": {}}, tool_use_id="tu-cwd")
++        ev["cwd"] = str(sub)  # the call's cwd; the hook process itself runs in the project root
++        self._run(ev)
++        self._run(self._post("Run ID: %s" % RUN, tool_use_id="tu-cwd"))
++        m = self._by_tool_use("tu-cwd")
++        self.assertTrue(m["script_snapshot"], m.get("script_snapshot_why"))
++        self.assertEqual((self._manifests()[0].parent / m["script_snapshot"]).read_bytes(), SCRIPT_A.encode("utf-8"))
++
++    def test_heuristic_and_manual_binds_read_no_file(self):
++        # Rail r1 (P1): the harness-copy comparison of bind_run read the path the response named —
++        # which can be the scriptPath itself — on a heuristic bind, with no snapshot to compare to.
++        # Rail r2 (P2): also over a record that already HAS a snapshot (one written by an earlier
++        # version of this hook at PreToolUse): a heuristic or manual bind reads no file at all.
++        from unittest import mock
++
++        from _lib import launch_ledger as LL  # noqa: E402
++
++        d = Path(self._tmp.name) / "ledger"
++        d.mkdir()
++        wf = Path(self._tmp.name) / "x" / "workflows"
++        wf.mkdir(parents=True)
++        secret = wf / "secret.js"
++        secret.write_text(SCRIPT_A, encoding="utf-8")
++        m, data = LL.build_manifest({"tool_input": {"scriptPath": str(secret), "args": {}}, "session_id": "s",
++                                     "tool_use_id": "tu-h", "cwd": "."})
++        LL.write_manifest(m, d, data)
++        real = LL._read_script_file
++        seen = []
++
++        def spy(p):
++            seen.append(str(p))
++            return real(p)
++
++        with mock.patch.object(LL, "_read_script_file", spy):
++            bound = LL.decide_post({"tool_response": "Script file: %s\nRun ID: %s" % (secret, RUN), "session_id": "s"}, d)
++            self.assertEqual((bound["bind_method"], bound["persisted_script_path"]), ("by_single_unbound", str(secret)))
++            self.assertIsNone(bound["persisted_matches_snapshot"])
++            LL.bind_run(d, bound, "wf_12121212-12", "manual", persisted_script_path=str(secret))
++        self.assertEqual(seen, [], "a bind with no snapshot to compare reads no file")
++        legacy, _none = LL.build_manifest({"tool_input": {"scriptPath": str(secret), "args": {"k": 2}}, "session_id": "s2",
++                                           "tool_use_id": "tu-legacy", "cwd": "."})
++        LL.write_manifest(legacy, d, secret.read_bytes())  # the pre-cure shape: bytes snapshotted at PreToolUse
++        self.assertTrue(legacy["script_snapshot"])
++        with mock.patch.object(LL, "_read_script_file", spy):
++            bound = LL.decide_post({"tool_response": "Script file: %s\nRun ID: wf_34343434-34" % secret, "session_id": "s2"}, d)
++            self.assertEqual((bound["bind_method"], bound["launch_id"]), ("by_single_unbound", legacy["launch_id"]))
++            self.assertIsNone(bound["persisted_matches_snapshot"])
++            LL.bind_run(d, bound, "wf_56565656-56", "manual", persisted_script_path=str(secret))
++        self.assertEqual(seen, [], "a heuristic or manual bind reads no file, snapshot or not")
++
++    def test_a_file_unreadable_after_dispatch_is_named_and_never_snapshotted(self):
++        sp = self.proj / "wf.js"
++        sp.write_text(SCRIPT_A, encoding="utf-8")
++        self._run(self._pre({"scriptPath": "wf.js", "args": {}}))
++        sp.unlink()
++        self._run(self._post("Run ID: %s" % RUN, tool_use_id="tu-1"))
++        m = self._by_tool_use("tu-1")
++        self.assertIsNone(m["script_snapshot"])
++        self.assertEqual(m["script_snapshot_why"], "unreadable_after_dispatch:open_failed")
++
++    def test_a_run_id_the_response_does_not_label_as_launched_never_triggers_a_snapshot(self):
++        # A bare id token is not the harness's report of a launch: an error text that echoes the
++        # resumeFromRunId would carry one. The bind still happens (by tool_use_id); the read does not.
++        secret, token = self._canary(Path(self._tmp.name) / "elsewhere")
++        self._run(self._pre({"scriptPath": str(secret), "args": {}, "resumeFromRunId": RUN}, tool_use_id="tu-e"))
++        self._run(self._post("Error: cannot resume %s with this scriptPath" % RUN, tool_use_id="tu-e"))
++        m = self._by_tool_use("tu-e")
++        self.assertEqual((m["run_id"], m["bind_method"]), (RUN, "by_tool_use"))
++        self.assertIsNone(m["script_snapshot"])
++        self.assertEqual(m["script_snapshot_why"], "run_id_not_labelled")
++        self.assertEqual(self._state_files_holding(token), [])
++        self._run(self._pre({"scriptPath": str(secret), "args": {}}, tool_use_id="tu-k"))
++        self._run(self._post({"runId": "wf_abcdef01-02", "text": "started"}, tool_use_id="tu-k"))
++        self.assertTrue(self._by_tool_use("tu-k")["script_snapshot"], "a top-level runId key is the harness's report")
++
++    def test_relaunch_out_delivers_the_snapshot_taken_after_dispatch(self):
++        sp = self.proj / "wf.js"
++        sp.write_text(SCRIPT_A, encoding="utf-8")
++        self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}}, tool_use_id="tu-1"))
++        self._run(self._post("Script file: %s\nRun ID: %s" % (sp, RUN), tool_use_id="tu-1"))
++        sp.write_text(SCRIPT_B, encoding="utf-8")  # edited after the run started: the snapshot still holds the run's bytes
++        d = self._manifests()[0].parent
++        copy = self.proj / "copy.js"
++        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(copy))
++        self.assertEqual(rc, 0, err)
++        self.assertIn("exact recorded call", out)
++        self.assertIn("snapshot copied to", out)
++        self.assertIn("CHANGED since launch", out)
++        self.assertEqual(copy.read_bytes(), SCRIPT_A.encode("utf-8"))
++
++    def test_relaunch_without_a_snapshot_reports_the_original_file_and_refuses_out_by_name(self):
++        sp = self.proj / "wf.js"
++        sp.write_text(SCRIPT_A, encoding="utf-8")
++        self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}}, tool_use_id="tu-a"))
++        self._run(self._post("run %s started" % RUN, tool_use_id=None))  # heuristic bind: no snapshot
++        d = self._manifests()[0].parent
++        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN)
++        self.assertEqual(rc, 7, out + err)
++        self.assertIn("NOT EXACT", err)
++        self.assertIn("unchanged since launch", out)
++        self.assertIn(hashlib.sha256(SCRIPT_A.encode("utf-8")).hexdigest(), out)
++        copy = self.proj / "copy.js"
++        rc, out, err = self._cli("--project-dir", str(d.parent), "relaunch", RUN, "--out", str(copy))
++        self.assertEqual(rc, 7, out + err)
++        self.assertIn("nothing to copy", err)
++        self.assertIn("no snapshot", err)
++        self.assertFalse(os.path.lexists(str(copy)))
++
++    def test_a_script_path_record_without_a_snapshot_keeps_the_args_guard_and_no_script_verdict(self):
++        # Rail r2 (P1): a record with no snapshot is valid for the ARGS comparison — a strong bind
++        # (manual) over it still BLOCKS different args — but its hash, read before dispatch and never
++        # corroborated after it, is no script evidence: never `match`, never a script advisory.
++        sp = self.proj / "wf.js"
++        sp.write_text(SCRIPT_A, encoding="utf-8")
++        self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}}, tool_use_id="tu-a"))
++        d = self._manifests()[0].parent
++        rc, _o, err = self._cli("--project-dir", str(d.parent), "bind", self._by_tool_use("tu-a")["launch_id"], RUN)
++        self.assertEqual(rc, 0, err)
++        self.assertIsNone(self._by_tool_use("tu-a")["script_snapshot"])
++        self.assertEqual(self._by_tool_use("tu-a")["script_snapshot_why"], "not_bound_by_tool_use")
++        out = self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A02"}, "resumeFromRunId": RUN}, tool_use_id="tu-2"))
++        self.assertEqual(out.get("decision"), "block")
++        self.assertEqual(self._by_tool_use("tu-2")["guard"]["result"], "mismatch_blocked")
++        self.assertEqual(self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-3")), {})
++        self.assertEqual(self._by_tool_use("tu-3")["guard"]["result"], "inconclusive", "an uncorroborated hash is never a match")
++        sp.write_text(SCRIPT_B, encoding="utf-8")
++        env = {"CEO_WORKFLOW_SCRIPT_GUARD": "enforce"}
++        out = self._run(self._pre({"scriptPath": "wf.js", "args": {"slice": "A01"}, "resumeFromRunId": RUN}, tool_use_id="tu-4"), extra_env=env)
++        self.assertEqual(out, {}, "nor evidence of a script change: no advisory, no block even under enforce")
++        self.assertEqual(self._by_tool_use("tu-4")["guard"]["result"], "inconclusive")
++        d = self._manifests()[0].parent
++        (self.proj / "args.json").write_text('{"slice": "A01"}', encoding="utf-8")
++        rc, out_text, _e = self._cli("--project-dir", str(d.parent), "check", "--run", RUN, "--script-file", str(sp),
++                                     "--args-file", str(self.proj / "args.json"))
++        self.assertEqual(rc, 6, out_text)
++        self.assertIn("INCONCLUSIVE", out_text)
++
+ 
+ def _load_launches_cli():
+     import importlib.util
+diff --git a/.claude/scripts/ceo-launches.py b/.claude/scripts/ceo-launches.py
+index 8c52f9c1b12c056efc578436a6c244e2fa682554..716ded977b67842201a906edd4879df3dced9430 100755
+--- a/.claude/scripts/ceo-launches.py
++++ b/.claude/scripts/ceo-launches.py
+@@ -10,8 +10,14 @@ Commands::
+     ceo-launches.py list [--limit N]            recent launches (id, run, resume, guard, bind method)
+     ceo-launches.py show <launch_id|run_id>     the full manifest (args printed as literal JSON)
+     ceo-launches.py relaunch <run_id> [--out FILE]
+-                                                the exact call to re-issue: the script SNAPSHOT (bytes
+-                                                recorded before dispatch — pass it as scriptPath) + args literal;
++                                                the exact call to re-issue: the script SNAPSHOT (pass it as
++                                                scriptPath) + args literal. The snapshot of an inline script is
++                                                written before dispatch; that of a file named by scriptPath only
++                                                by the PostToolUse half of the same call, when the file still
++                                                hashes to the value recorded before dispatch (FN-04) — a scriptPath
++                                                record with no snapshot is rc 7: the args exact, the recorded
++                                                sha256 and the original file's status against it printed, and
++                                                --out refused by name;
+                                                 rc 7 and NOTHING printed as exact when the record fails its
+                                                 integrity check (snapshot hash, args canonical/hash) or its
+                                                 snapshot cannot be read back unchanged. --out FILE publishes a NEW file:
+@@ -414,6 +420,13 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
+     a = m.get("args") or {}
+     source = script.get("source")
+     exact_script = source in ("inline", "named") or (source == "path" and script.get("unreadable") is not True)
++    # FN-04: the bytes of a file named by scriptPath are snapshotted only by the PostToolUse half of
++    # the call that launched it; a record without that snapshot keeps its hash and no bytes, so there
++    # is nothing exact to print as the script nor to copy.
++    unsnapshotted = source == "path" and exact_script and m.get("script_snapshot") is None
++    no_snapshot_why = m.get("script_snapshot_why") if isinstance(m.get("script_snapshot_why"), str) else "none recorded"
++    if unsnapshotted:
++        exact_script = False
+     snap: Optional[bytes] = None
+     if source != "named":
+         snap = LL.load_snapshot(d, m)
+@@ -424,7 +437,13 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
+                   "rebuild the call from the script and args you can verify"
+                   % (args.run_id, "could not be read back" if snap is None else "changed when read back"), file=sys.stderr)
+             return 7
+-    if not exact_script:
++    if unsnapshotted:
++        print("NOT EXACT: no snapshot of the script of run %s was recorded (%s) — only the PostToolUse half of the "
++              "call that launched it writes one; the args below are exact, the script is known only by the sha256 "
++              "recorded before dispatch" % (args.run_id, no_snapshot_why), file=sys.stderr)
++        print("# recorded call for run %s (launch %s, recorded %s) — the script is NOT exact: no snapshot"
++              % (args.run_id, m.get("launch_id"), m.get("recorded_at")))
++    elif not exact_script:
+         print("NOT EXACT: the script of run %s was not recorded at launch (%s) — the args below are exact, the script is not"
+               % (args.run_id, script.get("why") or source), file=sys.stderr)
+     else:
+@@ -434,7 +453,7 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
+     else:
+         if snap is not None:
+             sp = LL.snapshot_path(d, m["launch_id"])
+-            print("scriptPath: %s   # SNAPSHOT of the bytes recorded before dispatch (sha256 %s, %d bytes)" % (sp, hashlib.sha256(snap).hexdigest(), len(snap)))
++            print("scriptPath: %s   # SNAPSHOT of the recorded script bytes (sha256 %s, %d bytes)" % (sp, hashlib.sha256(snap).hexdigest(), len(snap)))
+             if args.out is not None:  # an explicit ``--out ""`` is a request too — refused, never ignored
+                 err = _write_new_file(args.out, snap)
+                 if err:
+@@ -442,14 +461,23 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
+                     return 2 if exact_script else 7  # a script not recorded at launch stays rc 7
+                 print("snapshot copied to %s" % args.out)
+             if source == "path" and script.get("path"):
+-                p = Path(script["path"])
+-                if not p.is_absolute() and m.get("cwd"):
+-                    p = Path(m["cwd"]) / p
+-                cur, why = LL.read_script_file(p)
++                cur, why = _read_original(m, script)
+                 if cur is None:
+                     print("original file %s: unreadable now (%s) — use the snapshot" % (script["path"], why))
+                 else:
+                     print("original file %s: %s" % (script["path"], "unchanged" if hashlib.sha256(cur).hexdigest() == script.get("sha256") else "CHANGED since launch — use the snapshot"))
++        elif unsnapshotted and script.get("path"):
++            print("script (NOT a snapshot): the call named scriptPath %s; sha256 recorded before dispatch %s (%s bytes)"
++                  % (script["path"], script.get("sha256"), script.get("bytes")))
++            cur, why = _read_original(m, script)
++            if cur is None:
++                print("original file %s: unreadable now (%s)" % (script["path"], why))
++            elif hashlib.sha256(cur).hexdigest() == script.get("sha256"):
++                print("original file %s: unchanged since launch (it hashes to the recorded sha256 now; with no snapshot "
++                      "the resume guard cannot compare scripts for this run — its script comparison is inconclusive)"
++                      % script["path"])
++            else:
++                print("original file %s: CHANGED since launch (it no longer hashes to the recorded sha256)" % script["path"])
+     if m.get("persisted_script_path"):
+         print("harness copy: %s (matches snapshot: %s)" % (m["persisted_script_path"], m.get("persisted_matches_snapshot")))
+     print("resumeFromRunId: %s" % args.run_id)
+@@ -464,15 +492,28 @@ def cmd_relaunch(args: argparse.Namespace) -> int:
+     rc = 0 if exact_script else 7
+     if args.out is not None and snap is None:
+         # An --out that creates no file never exits 0 and is never silent.
++        if source == "named":
++            what = "it was launched by name (the harness resolves the script by that name; no bytes were recorded)"
++        elif unsnapshotted:
++            what = ("no snapshot of its script was recorded (%s): only the PostToolUse half of the call that "
++                    "launched it writes one" % no_snapshot_why)
++        else:
++            what = "its script was not recorded at launch"
+         print("refused: --out has nothing to copy for run %s: %s — no file was created at %s" % (
+-            args.run_id,
+-            "it was launched by name (the harness resolves the script by that name; no bytes were recorded)"
+-            if source == "named" else "its script was not recorded at launch",
+-            args.out), file=sys.stderr)
++            args.run_id, what, args.out), file=sys.stderr)
+         return rc or 2
+     return rc
+ 
+ 
++def _read_original(m: Dict[str, Any], script: Dict[str, Any]) -> Tuple[Optional[bytes], Optional[str]]:
++    """The file the recorded call named, read NOW through the ledger's bounded reader, relative to
++    the cwd recorded at launch."""
++    p = Path(script["path"])
++    if not p.is_absolute() and m.get("cwd"):
++        p = Path(m["cwd"]) / p
++    return LL.read_script_file(p)
++
++
+ def cmd_check(args: argparse.Namespace) -> int:
+     d = _dir(args)
+     if not LL.is_run_id(args.run_id):
+@@ -513,7 +554,8 @@ def cmd_check(args: argparse.Namespace) -> int:
+         print("SCRIPT-DIFFERS (args same): run %s" % args.run_id)
+         return 5
+     if cmp["script"] == "inconclusive":
+-        print("INCONCLUSIVE: one of the script hashes is unavailable (run %s)" % args.run_id)
++        print("INCONCLUSIVE: a script hash is unavailable — unreadable, a named workflow, or a scriptPath record "
++              "without a snapshot (run %s)" % args.run_id)
+         return 6
+     print("SAME: run %s (launch %s)" % (args.run_id, recorded.get("launch_id")))
+     return 0
+diff --git a/docs/workflow-recovery.md b/docs/workflow-recovery.md
+index eb71bf1159342c1fae059cf322808baada374d1b..4392b48d0458fceb88e79b661323a6027bf69235 100644
+--- a/docs/workflow-recovery.md
++++ b/docs/workflow-recovery.md
+@@ -22,9 +22,9 @@ regressed 11 slices; exact args resumed 12/12 in the right phase.
+ 
+ | moment | what | where |
+ |---|---|---|
+-| before dispatch | `launch_id`, instant, `session_id`, `tool_use_id`, `cwd`; script fingerprint (`sha256` + bytes) **and a snapshot of the script bytes** (inline text, or the `scriptPath` file as read at that instant); **`args` as literal canonical JSON, never truncated** — an absent `args` field is recorded as `<absent>`, distinct from `null`; `resumeFromRunId`; `name` / `description` | `<state-dir>/launches/<launch_id>.json` (atomic, 0600) + `<launch_id>.script` + index `launches.jsonl` |
++| before dispatch | `launch_id`, instant, `session_id`, `tool_use_id`, `cwd`; script fingerprint (`sha256` + size); **a snapshot of an INLINE script's text**; for a `scriptPath`, the path, `sha256` and size only — the file is read to hash it and its bytes are NOT written (`script_snapshot_why: awaiting_post_tool_use`): this half runs before the harness's permission decision (FN-04, below); **`args` as literal canonical JSON, never truncated** — an absent `args` field is recorded as `<absent>`, distinct from `null`; `resumeFromRunId`; `name` / `description` | `<state-dir>/launches/<launch_id>.json` (atomic, 0600) + `<launch_id>.script` (inline scripts) + index `launches.jsonl` |
+ | right after (same hook) | code revision of `cwd` (`git rev-parse HEAD`, dirty flag) inside a 1.2 s budget with `--no-optional-locks`; slow or absent git ⇒ `code.status: unknown` — the manifest is already on disk | same manifest (second atomic write) |
+-| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. An unknown `tool_use_id`, or zero or several candidates, becomes an `orphan` index line; a response with no run id, with two different labelled ids, or with two different unlabelled ids, records nothing and the launch stays unbound. Two cases are NOT treated as ambiguous (known-open, see Limitations): a top-level `runId` and `run_id` that differ (the first wins), and an id whose tail is too long (its prefix is bound). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot` | manifest (`run_id`, `bound_at`, `bind_method`) + a `bind` line |
++| after the tool returns | the `wf_<id>` run id found in the response is **bound**: by `tool_use_id` when the event carries one; otherwise only when EXACTLY ONE unbound launch exists in the session. An unknown `tool_use_id`, or zero or several candidates, becomes an `orphan` index line; a response with no run id, with two different labelled ids, or with two different unlabelled ids, records nothing and the launch stays unbound. Two cases are NOT treated as ambiguous (known-open, see Limitations): a top-level `runId` and `run_id` that differ (the first wins), and an id whose tail is too long (its prefix is bound). The harness-persisted script path, when visible in the response, is recorded with `persisted_matches_snapshot`. **The `scriptPath` snapshot is taken here, and only by the bind by `tool_use_id`** — the PostToolUse of that same call, which the harness fires after it allowed and ran the call — and only when the response reports the id as the run it launched (the `Run ID:` label or a top-level `runId`/`run_id` key; a bare id token is `run_id_not_labelled`): the file is read again (same bounded reader, relative to the `cwd` recorded before dispatch) and written as `<launch_id>.script` only when its bytes hash to the `sha256` recorded before dispatch; otherwise nothing is written and `script_snapshot_why` says why (`changed_after_dispatch`, `unreadable_after_dispatch:<why>`, `write_failed:<type>`, `error:<type>`). The heuristic bind (that PostToolUse may belong to another call) and a manual `bind` never take a snapshot (`not_bound_by_tool_use`) and read no file outside the ledger's own index and manifests; only the bind by `tool_use_id` reads — the `scriptPath` file to take the snapshot, and the harness copy named in the response only to compare it with a snapshot the record holds. A `scriptPath` unreadable before dispatch has no hash and is never read afterwards | manifest (`run_id`, `bound_at`, `bind_method`, `script_snapshot`) + `<launch_id>.script` (`scriptPath`) + a `bind` line |
+ 
+ `<state-dir>` is the project's runtime state dir (`python3 .claude/hooks/_lib/runtime_paths.py --state-dir`),
+ the same family as the audit log. Nothing from transcripts is stored; `args` are the operator's own inputs.
+@@ -38,7 +38,7 @@ A call with `resumeFromRunId` is compared with the manifest **currently bound to
+ | same script hash, same `args` | `match` | `{}` |
+ | **`args` differ** (per top-level key, or the same keys in another order — the script sees the order) | `mismatch_blocked` | **block**, counts-only reason |
+ | script hash differs, `args` same | `mismatch_script_advisory` | `systemMessage` (allowed) — `CEO_WORKFLOW_SCRIPT_GUARD=enforce` turns it into a block (`mismatch_script_blocked`) when the bind is strong |
+-| `args` identical, but a script hash is unavailable (unreadable `scriptPath`, a `name`d workflow) | `inconclusive` | `{}` — never a block, never a match; different `args` still block |
++| `args` identical, but a script hash is unavailable (unreadable `scriptPath`, a `name`d workflow, or a `scriptPath` record without a snapshot — its hash was never corroborated after dispatch) | `inconclusive` | `{}` — never a block, never a match; different `args` still block |
+ | the recorded manifest fails its integrity check (below) | `inconclusive` (`integrity: <code>`) | `{}` — an inconsistent record is evidence of nothing |
+ | the guard itself raised | `inconclusive` (`error: <type>`) | `{}` — recorded, the call's manifest still written |
+ | no manifest bound to that run | `no_manifest` | `{}` |
+@@ -86,13 +86,16 @@ allowed call with something to say (forced, or an advisory) returns the same tex
+ **Records are validated before they are evidence.** The manifest bound to a run is checked before any
+ comparison and before `relaunch`/`check` use it: schema; launch id, run id and bind method shapes;
+ `args` present/canonical/sha256 mutually consistent; the script sha256 equal to the hash of its
+-snapshot bytes. Any inconsistency is `inconclusive` for the guard, `rc 6` for `check`, and `rc 7`
++snapshot bytes whenever the record names a snapshot (an inline record must name one; a `scriptPath`
++record without one is valid, but its hash — never corroborated after dispatch — makes the script
++comparison inconclusive, while `args` are still compared). Any inconsistency is
++`inconclusive` for the guard, `rc 6` for `check`, and `rc 7`
+ (nothing printed or copied as exact) for `relaunch`. `relaunch` holds the snapshot bytes it is about
+ to print and copy — a second read — to the same recorded hash: bytes that cannot be read back, or
+ that no longer hash to the record, are `rc 7` too. A missing script hash is not an
+-unavailable one: the `sha256` field must agree with the recorded source (inline or a path read at
+-launch ⇒ a hash that its snapshot bytes reproduce; a path unreadable at launch, a named workflow or no
+-script ⇒ `null`). If the construction of the record itself fails (for example `args` nested past the
++unavailable one: the `sha256` field must agree with the recorded source (inline ⇒ a hash that its
++snapshot bytes reproduce; a path read at launch ⇒ a hash, reproduced by its snapshot bytes when there
++is a snapshot; a path unreadable at launch, a named workflow or no script ⇒ `null`). If the construction of the record itself fails (for example `args` nested past the
+ interpreter's recursion limit), the call is still recorded with the error and the guard result is
+ `inconclusive`; a write failure leaves a stderr breadcrumb. Index lines that are not JSON objects with a
+ string `kind`, or that carry an ill-shaped launch id, are skipped. Records are written ASCII-escaped,
+@@ -129,7 +132,11 @@ python3 .claude/scripts/ceo-launches.py show wf_<id>
+ #    args are printed in the ORIGINAL key order; rc 7 and nothing announced as exact when the record
+ #    fails its integrity check, when the snapshot about to be printed cannot be read back unchanged,
+ #    or when its script was unreadable at launch; for a NAMED workflow it prints the name and the
+-#    args — the content saved under that name is not verified.
++#    args — the content saved under that name is not verified. A scriptPath launch has a snapshot
++#    only when the PostToolUse half of the same call took it (see "What is recorded"); without one,
++#    relaunch is rc 7: the args are exact, the recorded sha256 and size are printed, and the
++#    original file is reported against that sha256 (unchanged / CHANGED / unreadable) — nothing
++#    is printed or copied as the exact script, and --out refuses, naming why (rc 7).
+ #    --out FILE publishes a copy of the snapshot as a NEW file. The command creates a private
+ #    directory (.ceo-launches-out-<hex>, mode 0700 requested) inside FILE's directory, so on the
+ #    same filesystem, and writes the bytes to an exclusive temporary inside it (created
+@@ -171,8 +178,8 @@ python3 .claude/scripts/ceo-launches.py show wf_<id>
+ #    names the leftover directory. A FILE whose last component names no file (empty, ".", "..",
+ #    or a path ending in /) is refused, rc 2.
+ #    --out with nothing to copy (a named workflow, also with --out ""; a script not recorded at
+-#    launch, for a record the hook wrote) creates no file and never exits 0: rc 2 for a named
+-#    workflow, rc 7 for an unrecorded script, the reason on stderr. Every rc 2 of --out above is
++#    launch, for a record the hook wrote; a scriptPath launch without a snapshot) creates no file
++#    and never exits 0: rc 2 for a named workflow, rc 7 for the other two, the reason on stderr. Every rc 2 of --out above is
+ #    rc 7 instead when the record's script was not recorded at launch: the hook never writes a
+ #    snapshot for such a record, so only a hand-edited manifest that carries one reaches the copy,
+ #    and a refusal of that copy stays rc 7 (v1.4.1 answered 2). Use a copy only from a run that
+@@ -237,11 +244,24 @@ is PLAN-190 W6.
+   launch recorded and `bind` closes it by hand.
+ - No audit event is emitted (registering a new action is the audit owner's ceremony); the manifests
+   are the record. Manifests are never pruned (a `gc --keep-days` is a follow-up).
+-- **Retention and privacy.** The ledger keeps the literal `args` and a snapshot of every script
+-  indefinitely, under the per-project state dir (files 0600, dir 0700) — the same material the harness
++- **Retention and privacy.** The ledger keeps the literal `args` indefinitely, and the snapshot of
++  every inline script and of every `scriptPath` file that the PostToolUse half of its own call found
++  unchanged, under the per-project state dir (files 0600, dir 0700) — the same material the harness
+   itself keeps for finished runs. `show` and `relaunch` print the `args` back, so whatever a caller put
+   in them (issue text, a token) reaches the reader's context again. Backups of the state dir include
+   the ledger.
++- **Before the permission decision (FN-04).** The PreToolUse half runs before the harness decides
++  the call. It writes no byte of the file a `scriptPath` names — but it still OPENS and READS that
++  file (the same bounded reader) to compute its `sha256` and size, and records both in the manifest
++  (the `sha256` also in the index line), whether or not the harness then allows the call: whoever can read the state
++  dir can test a guess of that file's content against the hash, and on a resume the guard's result
++  depends on those bytes. The snapshot after dispatch re-reads the PATH; it is not a copy of what
++  the harness ran: if what that path resolves to changes between the PreToolUse read, the harness's
++  own check and the PostToolUse read, the snapshot can hold bytes other than the ones the harness
++  checked — never bytes that fail to hash to the value recorded before dispatch. The cure relies on
++  the harness firing PostToolUse only for a call it allowed and ran. Snapshots that earlier versions
++  of this hook wrote at PreToolUse stay in `launches/`: this version removes none, and deleting one
++  makes its record fail the integrity check (`inconclusive` for the guard, rc 7 for `relaunch`).
+ - **One project context.** The ledger is per project dir: a launch recorded under one project dir and a
+   resume issued from a session whose project dir is a different worktree of the same repo find no
+   manifest (`no_manifest`, allowed and recorded).
