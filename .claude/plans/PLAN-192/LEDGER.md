@@ -3,7 +3,14 @@
 > Só identificadores verbatim (paths, SHAs, ids) — nunca corpo de transcript
 > (repo público). Escrito em fronteira de unidade. Teto ≤ 2k tokens.
 
-## Unidade corrente — v1.4.1-rc.1 CORTADA; hold até 2026-09-20T02:28:57Z; main CONGELADO (S356, 2026-09-19)
+## Unidade corrente — GA v1.4.1 PUBLICADO (S357, 2026-09-28)
+
+- Re-pass do GA sobre o candidato `3b1419b94ccf21da25be87cf0a8c9994429ee52b` (codex 0.155.0 pinado): `GO-WITH-CONDITIONS` nas 3 partes; evidência em `repass-ga/`, commitada pelo passo 11 no veredito `50fab7556961950967668f3af8e3ca6f7a0cf474` (pai = candidato; 21 paths na allowlist fechada de 22).
+- `OWNER-GA-CUT.sh` 20/20, chamado pela esteira `OWNER-S357-MORNING.sh` (fora do repo): tag `v1.4.1` assinada sobre `50fab755`; `release.yml` success; `npm-publish.yml` publicou por OIDC com provenance, `latest=1.4.1` (shasum `d3b16d90…`); GitHub Release público, não pre-release (`publishedAt 2026-09-28T20:14:15Z`). Única parada: `connection reset` no `gh release edit --draft` do passo 18 (o PATCH chegou); retomada pelo mesmo comando.
+- Tentativa arquivada FORA do repo: `$HOME/.ceo-ga-archive/repass-ga-20260925T0436Z-capacidade/` — pré-run de 2026-09-25 morto pelo limite de uso da CONTA Codex (não capacidade do modelo), sem veredito; nada dela entra no envelope.
+- `.tag-push-epoch` do GA commitado em `df4ba9dd6e29`. A opção B do `relaunch --out` landou na 1.4.2 (`7bbf24705300`, ratificada pelo Owner em 2026-09-28). Plano segue `draft` (flip de status = OK do Owner).
+
+## Unidade anterior — v1.4.1-rc.1 CORTADA; hold até 2026-09-20T02:28:57Z; main CONGELADO (S356, 2026-09-19)
 
 - Rodada 3 (candidato `7602fbe46318a77f1f8740f81d5b08ef5080df94`): `GO-WITH-CONDITIONS` nas 3 partes, sem P0, nenhuma condição falsa. Evidência em `repass-rc1/` (MANIFEST 19/19, `RUNNER-OVERALL: rc=0`), commitada pelo passo 11.
 - `OWNER-RC1-CUT.sh` 20/20 sem abort: bump no-op; passo 6 pulou por `evidence_complete_for`; veredito assinado `51bd2345cab15f182a5c6ff42f329d0e21829172` (pai = o candidato; 21 paths na allowlist fechada de 22); guard de delta verde nos passos 12, 15 e 16; **tag `v1.4.1-rc.1` assinada e verificada**; `release.yml` success; `await-release-gate` success; GitHub Release pre-release não-draft; `npm view` = 1.4.0.
