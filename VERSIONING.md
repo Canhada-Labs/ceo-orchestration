@@ -1,6 +1,6 @@
 # Versioning Policy
 
-<!-- last-reviewed: 2026-09-18 v1.4.1 -->
+<!-- last-reviewed: 2026-09-29 v1.4.2 -->
 
 > **TL;DR** — SemVer at the **Compliance SPEC level** (`SPEC/v1/`),
 > not at every internal symbol. Tagged releases mark SPEC-level
