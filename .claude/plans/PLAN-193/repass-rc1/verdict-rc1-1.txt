@@ -1,0 +1,15 @@
+Payload 1 advisory review: **no P0, false applicable declared condition, or undeclared P1 found**. Conditions **1–2 and 5–7** remain honest; condition **10** holds for hook/settings non-registration, within scope **11–12**.
+
+Fresh templates pin Opus 5.5 with `xhigh`. The shipped v1.4.1 base settings migrate to Opus 5.5 with `high`; explicit effort values survive, and customized allowlists excluding the new pin prevent its migration.
+
+**NEW FINDINGS (annex):** None.
+
+- **P1 annex — already declared, not new.** [`scripts/upgrade.sh:3729`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/scripts/upgrade.sh:3729), [`scripts/upgrade.sh:3886`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/scripts/upgrade.sh:3886): the migration still ignores ceremony. A `user` installation acquires model restrictions and `permissions.defaultMode=manual`. This easily missed integration risk is carried by condition **1**, incorporating v1.4.0 condition **55**. **Minimal fix:** derive migratable keys from the selected ceremony; meanwhile retain the declared `--no-settings-migrate` requirement.
+
+**P2 follow-up:**
+
+- [`INSTALL.md:719`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/INSTALL.md:719): the changed example requests `--pin v1.4.2`. During the mandatory rc.1 hold, before that GA tag exists, it fails with `unknown --pin ref`. This repeats the previous release’s documentation issue. **Minimal fix:** add the pre-release command using `--pin v1.4.2-rc.1`.
+
+Read-only verification passed migration and failure-path probes, version-floor boundary/timeout probes, template derivation, model parity, version consistency, Python 3.9 parsing, shell syntax and ShellCheck. The conditions digest matches. Filesystem writes were mocked; no full installation or live session was exercised. The worktree remains unchanged.
+
+VERDICT: GO-WITH-CONDITIONS — Payload 1 satisfies the stated cut rule with the applicable declared conditions, carried debt, and mandatory 24-hour hold; this is advisory evidence, not authorization.

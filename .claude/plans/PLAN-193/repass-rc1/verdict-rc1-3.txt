@@ -1,0 +1,26 @@
+Two new P1 findings and one P2 follow-up. No P0 or false applicable declared condition found in payload 3. This is advisory evidence, not authorization.
+
+**NEW FINDINGS (annex)**
+
+- **P1 annex — Inspecting another repository executes its Python code.**  
+  **FILE:LINE:** [.claude/scripts/check-substrate-drift.py:597](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/.claude/scripts/check-substrate-drift.py:597), added by this diff.  
+  **Scenario:** Run the trusted detector with `--repo-root <untrusted-checkout> --no-probe --skip-catalog`. It prepends that checkout’s `.claude/hooks` to `sys.path`, then imports `_lib.runtime_paths`. Import-time code in its `_lib/__init__.py` or `runtime_paths.py` executes with the caller’s privileges before comparisons, without `--fetch`. An in-memory probe confirmed execution and a subsequent `CURRENT`, rc 0 report.  
+  **Minimal fix:** Load the resolver exclusively from the trusted script’s sibling library; treat `--repo-root` only as data. Report unavailable infrastructure if that resolver cannot load.
+
+- **P1 annex — Recommended ceremony commands permit shell injection through filenames.**  
+  **FILE:LINE:** [.claude/scripts/check-substrate-drift.py:464](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/.claude/scripts/check-substrate-drift.py:464), with selection at line 517 and another unquoted command at line 493; all added by this diff.  
+  **Scenario:** A contributor supplies a pack under `PLAN-999/codex-pin-$(printf PROOF)/`, with a manifest naming the observed newer version. The detector selects it even when inventory marks its ceremony incompatible, then recommends `bash <unquoted-path> --dry-run`. Copying that command executes the substitution before the ceremony starts; `--dry-run` offers no protection. A mocked-filesystem probe reproduced selection, and a harmless shell stub confirmed substitution.  
+  **Minimal fix:** Shell-quote every generated path argument and route invalid or unverified pack shapes to manual inspection rather than an executable recommendation.
+
+**P2 follow-up**
+
+- **P2 — Partial catalog parsing can silently lose coverage.**  
+  **FILE:LINE:** [.claude/scripts/check-substrate-drift.py:1119](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/.claude/scripts/check-substrate-drift.py:1119), added by this diff.  
+  **Scenario:** Records and `latest_per_family` parse, but alias syntax changes—or the reverse. `CATALOG_PARTIAL` requires **both** blocks to be empty, so one missing comparison produces no warning. Both cases reproduced with empty findings.  
+  **Minimal fix:** Track each block’s parsing status separately and emit a named unknown for either missing comparison.
+
+Conditions **1–2** remain carried debt; **10** honestly describes optional CLIs, so these defects require invocation rather than occurring automatically after installation or upgrade. Conditions **11–12** bound this review. The changed integrations supporting **5–6** passed model-list parity and baseline derivation checks.
+
+Read-only validation also passed Python 3.9 syntax for all 17 changed Python files, the stdlib checker, Bash syntax, and scoped whitespace checks. The supplied conditions hash matched; the checkout remained clean. No live installer, harness, or network tests were run.
+
+VERDICT: GO-WITH-CONDITIONS — Under the stated cut rule, retain the applicable declared conditions, include both P1 findings in the signed annex, and preserve the mandatory 24-hour hold.

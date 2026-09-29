@@ -1,0 +1,3 @@
+.claude/scripts/re-pin-codex.py
+docs/adopter-new-model-fast-access.md
+docs/substrate-adopt-2026-09.md

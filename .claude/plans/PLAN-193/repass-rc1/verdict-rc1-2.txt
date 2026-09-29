@@ -1,0 +1,22 @@
+Advisory review of `9b5b1b40078c`, payload 2/4: **no P0, false applicable declared condition, or undeclared P1 found.**
+
+Conditions **1–4, 8 and 12**, within this payload, honestly describe the implementation:
+
+- **Condition 3:** [`launch_ledger.py:303`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/.claude/hooks/_lib/launch_ledger.py:303) stops returning `scriptPath` bytes to the PreToolUse writer. PostToolUse requires the matching tool-use binding, a labelled run ID, and matching hash. Without a snapshot, recovery returns rc 7 and script comparison is inconclusive; argument differences remain enforceable. Existing snapshots survive upgrades.
+- **Condition 4:** [`ceo-launches.py:290`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/.claude/scripts/ceo-launches.py:290) publishes through a no-replace hard link after complete writing and `fsync`. The second snapshot read is verified before the exact-call heading. Directory trust, cleanup leftovers, filesystem refusals and power-loss limits are disclosed.
+- **Condition 8:** The closed legacy classification and single-call normalization match the declaration, including dated/provider spellings and unknown IDs. Native batch requests retain caller-supplied thinking.
+- **Conditions 1/2/12:** Stale ledger bindings can still block legitimate resumes, and audit model attribution remains policy-based—both carried debt. The pytest stub is excluded from adopter delivery; its activation removes exported `claude` functions, and teardown restores PATH and those carriers.
+
+**NEW FINDINGS (annex)**
+
+None.
+
+**P2 follow-up — already declared in the FN-04 ceremony**
+
+**FILE:LINE:** `templates/settings/settings.base.json:223`, `templates/settings/settings.user.json:320`, `.claude/settings.json:361`; behavioral change in this diff at `launch_ledger.py:303`.
+
+The registration comments still promise a script snapshot before dispatch. An adopter investigating a `scriptPath` call interrupted before PostToolUse instead finds no snapshot and receives rc 7 from recovery. This documentation drift is explicitly acknowledged in [`wave-fn04-approved.md:104`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/.claude/plans/PLAN-193/wave-fn04-approved.md:104). **Minimal fix:** update the base and repository comments to distinguish inline PreToolUse snapshots from conditional `scriptPath` PostToolUse snapshots, then regenerate the user template.
+
+Verification passed: conditions hash, Python 3.9 parsing, scoped stdlib and whitespace checks, 715 in-memory behavior/fault checks, and pytest stub activation/restoration. No files changed; no live-harness or real filesystem publication test ran.
+
+VERDICT: GO-WITH-CONDITIONS — Applicable conditions are honest and sufficient under the stated rc.1 rule, with the mandatory 24-hour hold and declared debt retained.

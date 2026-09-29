@@ -1,0 +1,19 @@
+OK   C0-tree: arvore == 9b5b1b40078c; base ancestral
+OK   C0-npm: a rc nao publica no npm (npm-publish.yml pula -rc.)
+OK   C1-annex-v1.4.0: anexo da v1.4.0 re-declarado (OQ-3 + envelope do GA); 10 citado(s) mudam, todos nas classes
+OK   C2-carried-1.4.1: 12 veredito(s) pinado(s), todos presentes com o sha256 pinado (pair-rail-verdict-v1.4.1.md: 3 pelo MANIFEST + 6 por condicao; pair-rail-verdict-v1.4.1-rc.1.md: 3 pelo MANIFEST + 6 por condicao); GA: 14 e 23
+OK   C3-fn04: canario: o PreToolUse nao grava os bytes do scriptPath e registra caminho, sha256 e tamanho; PostToolUse por tool_use_id grava o snapshot; sem snapshot: heuristic=not_bound_by_tool_use, unlabelled=run_id_not_labelled, changed=changed_after_dispatch; o sentinel do FN-04 declara a classe nao esgotada (cerimonia landada)
+OK   C4-relaunch-out: relaunch --out: link sem substituir; nome do destino nunca removido; 4 casos de comportamento
+OK   C5-pin: pin claude-opus-5-5 nos 3 settings, claude-opus-5 em availableModels/fallback, sem ultracode; piso VETO; agentes intactos
+OK   C6-effort: templates e .claude/settings.json xhigh; upgrade dos settings da v1.4.1: pin -> claude-opus-5-5 e high quando ausente, xhigh so com --adopt-setting, valor do adopter mantido; re-execucao com o alvo e as flags (3 saidas pela rotina unica)
+OK   C7-cc-floor: bloco igual nos dois scripts; 10 casos do piso 2.1.280: old --settings-migrate-only; old (upgrade completo); beta --settings-migrate-only; other-first --settings-migrate-only; old --settings-migrate-only --allow-old-claude-code; old --settings-migrate-only --dry-run; floor --settings-migrate-only; unreadable --settings-migrate-only; sem claude --settings-migrate-only; install.sh old
+OK   C8-adapter: adapter: ids novos, futuros e com outro segmento adaptativos; legados (id, datado, Vertex, Bedrock, Claude 3) com budget no /effort; call() normaliza; o batch nativo leva o thinking como veio
+OK   C9-codex-pin: manifesto ADR-182 pina 0.156.1; cerimonia do re-pin landada
+OK   C10-tools: as 3 ferramentas existem; nenhum settings entregue nem hook as chama
+OK   C11-scope: 177 caminhos: 25+7+29+3 dentro das partes, 113 fora (declarado); governance e local no declarado
+OK   C12-plan-decisions: as condicoes citam OQ-1, OQ-3, OQ-6, OQ-7, OQ-8, OQ-9, OQ-10; todas RESOLVIDAS no plano commitado; a OQ-7 nao contradiz a condicao 6
+OK   SIZE parte 1: ~153251 B (teto 245616 = MAX_RAW_BYTES - 16384), 25 arquivo(s), 2107 linhas de diff
+OK   SIZE parte 2: ~104569 B (teto 245616 = MAX_RAW_BYTES - 16384), 7 arquivo(s), 1227 linhas de diff
+OK   SIZE parte 3: ~175911 B (teto 245616 = MAX_RAW_BYTES - 16384), 29 arquivo(s), 2616 linhas de diff
+OK   SIZE parte 4: ~203382 B (teto 245616 = MAX_RAW_BYTES - 16384), 3 arquivo(s), 3051 linhas de diff
+SONDA: 0 FALSA(S), 0 sem medida

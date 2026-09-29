@@ -1,0 +1,17 @@
+Reviewed payload 4/4 at `9b5b1b40078c20e6de4806d89cabd5776a7d33df`. The conditions digest matches. **No P0 or false applicable envelope condition found; one new P1 and two P2 follow-ups.**
+
+For fresh installs and upgrades, the generator is delivered but no hook invokes it. Without the maintainer manifest, it refuses with exit 2 before contacting npm. The two docs are repository documentation; their historical observations are explicitly dated.
+
+**NEW FINDINGS (annex)**
+
+- **P1 annex — Payload collision escapes the extractor model.** [`.claude/scripts/re-pin-codex.py:692`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/.claude/scripts/re-pin-codex.py:692). A valid ustar archive containing `package/vendor/aarch64-apple-darwin/bin/codex` with bytes A, followed by `package/C:/vendor/aarch64-apple-darwin/bin/codex` with bytes B, passes `hash_member()` and pins A. I reproduced that node-tar **7.5.15** strips the drive root after `strip:1`, mapping both members to the same destination—even on macOS. `package/C:vendor/...` also escapes detection. Header/member-list parity therefore does not establish extraction-path parity. The resulting pack measures the wrong installed bytes; the ceremony’s installed-binary check subsequently refuses it. **Minimal fix:** reject unmodelled drive prefixes and backslash forms, and regression-test destination collisions against node-tar’s actual normalization. This is separate from the declared launcher-path residual.
+
+**P2 follow-ups**
+
+- **P2 — Completed human sections still leave the ceremony blocked.** [`.claude/scripts/re-pin-codex.py:1549`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/.claude/scripts/re-pin-codex.py:1549). Constants-block generation inserts the literal `TODO(owner)` into explanatory prose appended to the sentinel. After supplying `--pin-note` and completing both human sections, that explanatory occurrence remains and satisfies the guard’s grep, preventing a real run. Reproduced using the candidate’s newest mold. **Minimal fix:** reserve the marker for unfinished sections; remove it from explanatory sentinel prose.
+
+- **P2 — Output-parent symlinks are followed.** [`.claude/scripts/re-pin-codex.py:1814`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.jJzf7b/wt/.claude/scripts/re-pin-codex.py:1814). With a valid plan document and its `PLAN-NNN/` directory symlinked outside the checkout, ordinary generation follows that parent and creates the pack externally. Only the output leaf is checked for existence; `is_dir()` accepts symlinked parents. Existing files remain protected, limiting the damage. **Minimal fix:** reject symlink components beneath the resolved repository root and perform publication through a validated parent directory.
+
+Validation used Python **3.9.6**, in-memory archive/rendering probes, the installed node-tar path checker, and `bash -n`. No files were changed and no network calls were made.
+
+VERDICT: GO-WITH-CONDITIONS — Retain conditions 1–2 and 9–12, include the new P1 in the signed annex, and observe the mandatory 24-hour hold; this review is advisory evidence, not authorization.

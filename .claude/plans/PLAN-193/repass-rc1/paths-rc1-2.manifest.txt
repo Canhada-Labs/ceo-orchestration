@@ -1,0 +1,7 @@
+.claude/hooks/_lib/adapters/live/claude.py
+.claude/hooks/_lib/launch_ledger.py
+.claude/hooks/_lib/test_isolation.py
+.claude/hooks/audit_log.py
+.claude/hooks/check_workflow_launch.py
+.claude/scripts/ceo-launches.py
+docs/workflow-recovery.md
