@@ -1,7 +1,10 @@
 ---
 id: PLAN-193
 title: v1.4.2 expressa — Opus 5.5 padrão, Codex 0.156.1 e via expressa de adoção
-status: draft
+status: done
+reviewed_at: 2026-09-30
+completed_at: 2026-09-30
+related_commits: [67b844b609e1, 778acf27d1db, b4033b2e3527, a12a32aee2ad, 1c480b442f0b, 36bbe90c370b, 9a486d29a842, fadb5f972387, b55084da6dd8, 80eb46d8f372]
 created: 2026-09-22
 owner: CEO
 depends_on: [PLAN-192]
@@ -190,3 +193,14 @@ Conferir: `git log --oneline -5`, `gh run list --limit 5`, `npm view @openai/cod
   Codex 0.156.0 estável publicado durante a sessão (pego pelo verificador). Plano aberto em `draft`.
 - S357 (2026-09-23): Codex 0.156.1 (hotfix) publicado e instalado globalmente pelo Owner; o pack do
   re-pin (W2) foi remontado para o 0.156.1 — nenhum reinstall antes do SIGN.
+- S358 (2026-09-29/30): kit do GA derivado (`fadb5f972387`), 3 rodadas de revisão (a 3.ª limpa, 12 P2
+  abertos), re-pass GO-WITH-CONDITIONS nas 4 partes; GA v1.4.2 cortado pelo Owner (veredito
+  `b55084da6dd8`, tag `v1.4.2` publicada 2026-09-30T14:26:34Z, npm `latest=1.4.2`); closeout `80eb46d8f372`.
+- S359 (2026-09-30): plano levado a `done` (draft → reviewed → executing → done, transições do
+  PLAN-SCHEMA §4). Conferido: `git tag -v` Good signature em `v1.4.1`, `v1.4.2-rc.1` e `v1.4.2`;
+  Releases publicados; npm `latest=1.4.2`; re-pin 0.155.0 → 0.156.1 em `778acf27d1db`; wave-opus55 em
+  `b4033b2e3527`. As caixas de Success criteria ficaram sem marcar durante a execução; a evidência está
+  nos commits de `related_commits`. Sobras herdadas pelo PLAN-194 (trem de manutenção até a 1.4.3):
+  re-pin do Codex para a estável do dia (0.159.2 em 30/09), `adopt-model.py` inexistente, detector de
+  drift fora do `/ceo-boot`, os 12 P2 da rodada 3 do kit + o P2 do re-pass (ledger malformado descarta
+  drift do Codex), espera do registry no passo 18 curta demais.

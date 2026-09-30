@@ -1,7 +1,7 @@
 ---
 id: PLAN-170
 title: Bateria E7 — execução de E4 (fidelidade de handoff) e E3 (paralelismo só na verificação)
-status: draft
+status: abandoned
 created: 2026-08-18
 owner: CEO
 depends_on: [PLAN-169]
@@ -418,3 +418,16 @@ Check: none (doc-only)
       segue vazio hoje. Gatilho já executável (linha acima desta
       seção); nenhuma mudança de `status`, nenhuma wave iniciada.
       Fonte: `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.
+- [x] 2026-09-30 (S359) — plano ABANDONADO (ver `## Abandonment reason`).
+
+## Abandonment reason
+
+Decisão do Owner registrada na ordem de trabalho da S355 (2026-09-18, memória
+`project-s355-next-terminal-work-order`: «fechar PLAN-170 (superseded pela bateria nativa)») e
+reafirmada na triagem de portfólio da S359 (2026-09-30). O gatilho escrito (tag `v1.4.0-rc.1`) passou
+a existir em 2026-09-10 (Release pre-release publicado nessa data), mas o plano não foi aberto: a
+revisão de portfólio da S348 já o mantinha adiado e, oito dias depois, o Owner decidiu fechá-lo. A
+pergunta que ele respondia (fidelidade de handoff e paralelismo só na verificação) ficou com a bateria
+nativa do harness e com os instrumentos do PLAN-186/PLAN-190. Nada deste plano foi executado; o
+pré-registro não foi assinado. Status
+`abandoned` (não `superseded`) porque não há um plano único que absorva o escopo.

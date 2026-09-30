@@ -1,7 +1,10 @@
 ---
 id: PLAN-192
 title: Corte da v1.4.1 — patch fora de ordem que entrega o guard de Workflow aos adopters
-status: draft
+status: done
+reviewed_at: 2026-09-30
+completed_at: 2026-09-28
+related_commits: [737814a56084, c782cbea8e37, 83fa5b64f605, 51bd2345cab1, 19771fa18257, 5c6ab5f6dd01, 50fab7556961]
 created: 2026-09-18
 owner: CEO
 depends_on: [PLAN-190]
@@ -250,3 +253,18 @@ não concluído.
 - [ ] npm `latest=1.4.1`.
 - [ ] Os três adopters com o marcador `1.4.1`, `check_workflow_launch.py` registrado e o upgrade commitado.
 - [ ] Memória e `CLAUDE.md` atualizados no closeout; PLAN-190-FOLLOWUP-relaunch-out-partial-write em `done`.
+
+## Fechamento (S359, 2026-09-30)
+
+Plano levado a `done` na S359 (a entrega já tinha acontecido; o status ficou em `draft` por esquecimento
+do closeout da S357). Conferido nesta data:
+- `git tag -v v1.4.1-rc.1` e `git tag -v v1.4.1` = Good signature da chave do Owner; Releases publicados
+  (rc.1 em 2026-09-19T02:28:57Z, pre-release; GA em 2026-09-28T20:14:15Z, tag sobre `50fab7556961`).
+- npm: o `latest=1.4.1` valeu de 28/09 até o GA da 1.4.2 (hoje `latest=1.4.2`).
+- Critério dos três adopters no marcador `1.4.1`: SUPERADO — os adopters pularam direto para a 1.4.2
+  (arbitrage-monitor e foxbit em 30/09; 42ledger-core pela sessão própria dele).
+- PLAN-190-FOLLOWUP-relaunch-out-partial-write: landado e entregue na 1.4.2, mas o arquivo segue em
+  `draft` porque a regra §1.4 do PLAN-SCHEMA prende o follow-up ao pai (PLAN-190, ainda `executing`) —
+  decisão pendente do Owner, registrada no PLAN-194.
+- Resíduos (P2 do kit, orçamento de tempo absoluto nos testes, probe GPG do preflight) herdados pelo
+  PLAN-194 (trem de manutenção até a 1.4.3).
