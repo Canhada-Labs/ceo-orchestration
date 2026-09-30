@@ -221,9 +221,9 @@ S326); a coluna «manifesto» foi conferida por `grep -F` no manifesto.
 | `.claude/hooks/_lib/codex_cli_shape.py` | 1 | — | W3b |
 | `.claude/hooks/tests/test_codex_cli_shape.py` | 0 | não | W3b |
 | `.claude/scripts/optimizer/codex_phase_gate.py` | 0 | não | W3b (se o conjunto derivado atingir) |
-| `.claude/scripts/check-model-deprecations.py` | 0 | não | W3b (só executa) |
+| `.claude/scripts/check-model-deprecations.py` | 0 | não | W3b.0 (cura da precisão do matcher — revisão Codex S359) |
 | `.claude/scripts/model-deprecations.json` | 0 | não | backlog (refresh do ledger) |
-| `.claude/scripts/tests/test_check_model_deprecations.py` | 0 | não | W3b (regressão) |
+| `.claude/scripts/tests/test_check_model_deprecations.py` | 0 | não | W3b.0 (controles negativos/positivos do matcher) |
 | `.claude/scripts/check-model-currency.py` | 0 | não | W3b/W5c (só executa) |
 | `.claude/data/model-currency-expected-reds.txt` | 0 | não | W3b/W5c |
 | `.claude/scripts/tests/test_check_model_currency.py` | 0 | não | W5c |
@@ -481,12 +481,34 @@ Check: python3 .claude/scripts/check-model-deprecations.py --check --today 2026-
 `gpt-5`/`o3` com aposentadoria 2026-12-11 — lane `CC285-08`). Medido 2026-09-30: `--check --today 2026-10-13`
 sai 1; sem `--today`, 0. Nenhum workflow de CI chama o `--check` (grep em `.github/`); quem passa a
 mostrar WARN é o nightly-hygiene e o pré-voo não-fatal do `upgrade.sh` no adopter
-(`scripts/upgrade.sh:2867`). **Paths:** `codex_cli_shape.py` (1); `test_codex_cli_shape.py` (0);
+(`scripts/upgrade.sh:2867`).
+
+**O instrumento ainda não é preciso — os acertos crus NÃO são o conjunto de remoção** (revisão Codex
+S359, P2; medido 2026-09-30). `build_matcher` (`check-model-deprecations.py:99-130`) só tem guarda à
+DIREITA (`(?![A-Za-z0-9.])`): `gpt-5` casa dentro de `gpt-5-mini`/`gpt-5-codex` (o `-` passa) e `o3`
+casa dentro de `o3-mini` e até de `lib2to3`. Os 28 WARN de `--today 2026-10-13` são 7× `gpt-5` e 2× `o3`
+em `codex_cli_shape.py`, 1× `o3` em `check-model-currency.py`, 1× `o3` em `check-stdlib-only.py:63`
+(`lib2to3` — fora do escopo desta onda), 1× `gpt-5` em `codex_invoke.py`, 2× em
+`optimizer/codex_phase_gate.py` — e a outra metade (14) é o espelho NÃO rastreado `npm/.claude/`, que o
+detector também varre. Logo: seguir os acertos crus removeria ids que o ledger não aposenta, e o
+`--check` nunca chegaria a 0 dentro deste escopo. A W3b.0 cura o INSTRUMENTO antes de derivar.
+
+**Paths:** `check-model-deprecations.py` (0) e `test_check_model_deprecations.py` (0) na W3b.0;
+`codex_cli_shape.py` (1); `test_codex_cli_shape.py` (0);
 `codex_invoke.py` e `optimizer/codex_phase_gate.py` (0) só se o conjunto derivado atingir o padrão ou
 o exemplo deles; `model-currency-expected-reds.txt` (0) se o `check-model-currency.py` (autoridade A2 =
-`_VALID_MODELS`) mudar o conjunto de vermelhos. **Estimativa:** 30-60 linhas, 2-5 paths. **Debate:** não.
+`_VALID_MODELS`) mudar o conjunto de vermelhos. **Estimativa:** 60-110 linhas, 4-7 paths. **Debate:** não.
 
-- [ ] W3b.1 remover da lista os ids que o instrumento marca; ajustar os testes. — Check: python3 -m pytest .claude/hooks/tests/test_codex_cli_shape.py -q
+- [ ] W3b.0 precisão do detector ANTES de derivar: guarda também à ESQUERDA (id não pode ser continuação
+  de identificador — `lib2to3` deixa de casar `o3`) e um id aposentado não casa como PREFIXO de outro id
+  (`gpt-5` ≠ `gpt-5-mini`/`gpt-5-codex`; variantes só entram se o ledger as listar como `model_id` ou
+  alias); decidir e declarar o tratamento do espelho `npm/` (gitignorado, `.gitignore:47`; fora do scan
+  ou classificado INERT); classificar também o acerto de `check-model-currency.py:64`, que é uma tupla
+  de PREFIXOS de família (`"gpt-", "o3", "o4"`), não um id de modelo nem um dos três falsos positivos. Controles de regressão com os três falsos positivos medidos (NEGATIVOS) e com `gpt-5`/`o3`
+  soltos em lista de modelos (POSITIVOS), provados vermelhos antes da cura. Critério: re-medir o
+  `--check --today 2026-10-13` e registrar o conjunto restante — ele, e não a lista crua acima, é a
+  entrada da W3b.1. — Check: python3 -m pytest .claude/scripts/tests/test_check_model_deprecations.py -q
+- [ ] W3b.1 remover da lista os ids que o instrumento CURADO marca; ajustar os testes. — Check: python3 -m pytest .claude/hooks/tests/test_codex_cli_shape.py -q
 - [ ] W3b.2 `check-model-currency.py` com o conjunto de vermelhos esperado atualizado conscientemente. — Check: python3 .claude/scripts/check-model-currency.py --expected-reds .claude/data/model-currency-expected-reds.txt
 
 **Controle:** `--check --today 2026-10-13` = 1 hoje (vermelho, medido) → 0 depois (verde).

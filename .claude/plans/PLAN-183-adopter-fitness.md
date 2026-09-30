@@ -2132,10 +2132,15 @@ mexe.
 4. Tocou `.claude/scripts/validate-governance.sh` ⇒ bump do sha em
    `.claude/governance/gate-scripts-manifest.txt` no mesmo patch
    (manifesto ADR-192; a linha `:2` pina o validador; lição S326).
-5. Tocou hook ⇒ `python3 scripts/build-plugin.py` para os espelhos
-   `dist/ceo-plugin/hooks/` e `npm/.claude/hooks/`. Medido nesta edição:
-   os espelhos não são rastreados (`git ls-files` = 0), logo não contam
-   como path do pacote.
+5. Tocou hook ⇒ `python3 scripts/build-plugin.py` (espelho
+   `dist/ceo-plugin/hooks/`) **e** `bash scripts/npm-rebuild.sh` (espelho
+   `npm/.claude/hooks/` — o `build-plugin.py` NÃO o atualiza; é o rsync de
+   `scripts/npm-rebuild.sh:87-88`; revisão Codex S359, P3), antes da
+   bateria, com a identidade provada por `cmp` — como o PLAN-195 já faz.
+   Sem isso a instalação npm local segue com os hooks antigos e, na W7a,
+   sem as fixtures de replay realocadas; o rebuild separado da CI não
+   valida o espelho local. Medido nesta edição: os espelhos não são
+   rastreados (`git ls-files` = 0), logo não contam como path do pacote.
 6. **Os pacotes NÃO editam este arquivo.** O CEO marca as caixas num
    commit livre depois de cada land. Motivo: a W1 também toca o PLAN-183
    (é um dos 16 paths do pacote `p183-w1-pointer`; fonte na seção
