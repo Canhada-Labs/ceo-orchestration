@@ -3,7 +3,23 @@
 > Só identificadores verbatim (paths, SHAs, branches, ids) — nunca corpo de
 > transcript (repo público). Escrito em fronteira de unidade. Teto ≤ 2k tokens.
 
-## Unidade corrente — kit do corte do GA v1.4.2 derivado e ensaiado (S358, 2026-09-29)
+## Unidade corrente — GA v1.4.2 PUBLICADO (S358, 2026-09-30)
+
+- Pré-run do re-pass do GA sobre o candidato `6f7fcd4f85a05897c083084b080304cd54913ea6` (codex
+  0.156.1 pinado): `GO-WITH-CONDITIONS` nas 4 partes, nenhum P0, nenhuma condição falsa, nenhum P1
+  novo (anexo vazio); 1 P2 novo na parte 3. `OWNER-GA-CUT.sh` 20/20: passo 6 reconheceu a evidência;
+  veredito `b55084da6dd8` (pai = candidato; 27 paths na allowlist fechada de 28); tag `v1.4.2`
+  assinada sobre `b55084da`; `release.yml` success; `npm-publish.yml` run `36719886734` com o step de
+  publish OIDC success; `latest=1.4.2`; GitHub Release público, não pre-release (`publishedAt
+  2026-09-30T14:26:34Z`). Única parada: passo 18, o registry levou mais que 5×30 s para mostrar a
+  1.4.2 (o publish já tinha acontecido); retomada pelo mesmo comando. Nenhuma tentativa arquivada.
+- Abertos, sem versão prometida (P2): os 12 da rodada 3 da revisão do kit (resumo na memória
+  `project-s358-ga142-kit-build`), o P2 novo do re-pass (parte 3) e a espera do registry no passo 18
+  (5×30 s é curta para o CDN do npm). `.tag-push-epoch` do GA commitado neste closeout.
+- Próxima unidade: re-pin do codex 0.158.0 pela via expressa; adopters (`upgrade.sh --pin v1.4.2`,
+  Claude Code ≥ 2.1.280); cura da classe «orçamento de tempo absoluto»; FN-04 além do caso do ledger.
+
+## Unidade anterior — kit do corte do GA v1.4.2 derivado e ensaiado (S358, 2026-09-29)
 
 - `derive-ga-kit-142.py` deriva do kit da `v1.4.2-rc.1` (saídas de `derive-kit-142.py`, sha256
   pinados) as 8 saídas: `repass-ga/{run-ga-repass.sh,probe-conditions-ga.py,CONDITIONS-ga.md,
