@@ -1,0 +1,17 @@
+Revisão consultiva do candidato `6f7fcd4f85a05897c083084b080304cd54913ea6`, payload 2/4: **nenhum P0, condição aplicável falsa ou P1 não declarado encontrado.**
+
+As condições **1–4, 8, 11, 12 e 14**, no alcance desta parte, descrevem honestamente o código:
+
+- **Condição 3 — FN-04:** [`launch_ledger.py:303`](.claude/hooks/_lib/launch_ledger.py#L303) retorna apenas metadados do `scriptPath` ao escritor PreToolUse. A gravação posterior exige vínculo por `tool_use_id`, resposta com run rotulado e releitura com hash igual (`:1001`, `:672`). Sem snapshot, a comparação do script é inconclusiva; diferenças nos argumentos continuam verificáveis. **O upgrade preserva snapshots antigos**, inclusive os produzidos antes da permissão.
+- **Condição 4 — recuperação:** [`ceo-launches.py:290`](.claude/scripts/ceo-launches.py#L290) publica por hard link após escrita completa, `fsync` e fechamento. A limpeza opera sobre os nomes temporários. A segunda leitura do snapshot é conferida antes do cabeçalho de chamada exata (`:433`). Confiança no diretório, symlinks nos componentes pais, sobras temporárias, restrições do filesystem e ausência de garantia após queda de energia estão declaradas.
+- **Condição 8 — adapter:** a classificação fechada em [`claude.py:164`](.claude/hooks/_lib/adapters/live/claude.py#L164) e a normalização em `:811` correspondem à declaração. IDs novos recebem a classificação adaptativa. O batch nativo continua preservando o `thinking` recebido. `/effort off` continua sem garantir que thinking seja desligado.
+- **Condições 11/12 — isolamento e entrega:** os sete arquivos desta parte não diferem do candidato rc.1. O stub em [`test_isolation.py:559`](.claude/hooks/_lib/test_isolation.py#L559) remove funções `claude` exportadas, precede o PATH e restaura os valores ao terminar. Está excluído de instalação, upgrade e staging npm; não identifiquei caminho novo que o introduza na sessão do adopter.
+- **Condições 1/2/14 — dívida:** permanecem a atribuição de modelo por política no audit log, os riscos declarados de vínculos antigos do ledger e o comentário incorreto dos settings sobre snapshots antes do despacho. Não encontrei agravamento não declarado neste delta.
+
+**NEW FINDINGS (annex):** nenhum P1 novo.
+
+**P2 follow-ups novos:** nenhum; o comentário dos settings permanece coberto pela condição 14.
+
+Validação: hash das condições, identidade com rc.1, whitespace, parsing Python 3.9, 108 variantes de classificação, 54 chamadas com transporte simulado, 17 cenários de publicação/falha em memória, recuperação e restauração do ambiente. Sem alterações ou rede. Não executei a suíte completa, o harness real ou publicação em filesystem real.
+
+VERDICT: GO-WITH-CONDITIONS — As condições aplicáveis são honestas e suficientes para este payload sob a regra do corte, mantendo a dívida declarada aberta.

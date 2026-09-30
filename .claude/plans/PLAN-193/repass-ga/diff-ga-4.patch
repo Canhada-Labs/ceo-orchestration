@@ -1,0 +1,3051 @@
+diff --git a/.claude/scripts/re-pin-codex.py b/.claude/scripts/re-pin-codex.py
+new file mode 100644
+index 000000000000..6ff8f96ff809
+--- /dev/null
++++ b/.claude/scripts/re-pin-codex.py
+@@ -0,0 +1,2260 @@
++#!/usr/bin/env python3
++"""re-pin-codex.py — generate the Codex CLI re-pin pack (ADR-182 §5).
++
++It EMITS a pack; it never applies one.
++
++Given a target ``@openai/codex`` version, the tool:
++
++1. resolves the main package and its platform artifact through ``npm view``
++   against the public registry named explicitly (``--registry`` and
++   ``--@openai:registry`` = ``https://registry.npmjs.org/``, whatever an
++   ``.npmrc`` says; the sentinel records it and ``dist.tarball``). The platform
++   artifact is the optional-dependency alias
++   ``npm:@openai/codex@<ver>-<platform>`` (ADR-182 §5 step 2), and the alias
++   must name exactly the requested version;
++2. downloads the platform tarball with ``npm pack`` into a private temporary
++   directory, or takes a local tarball with ``--offline-from`` (``npm view``
++   still runs: the registry integrity is the thing the tarball is checked
++   against). npm's own cache and logs point into that temporary directory,
++   which is removed on return. The tarball is read ONCE, into memory, from one
++   descriptor opened without following a symlink and checked to be a regular
++   file; steps 3 and 4 both run on those bytes, so a file swapped or rewritten
++   on disk afterwards cannot split what is checked from what is pinned;
++3. checks the tarball's sha512 against the registry ``dist.integrity``. On a
++   mismatch it stops before anything is written;
++4. streams the single payload member at the manifest's recorded relative path
++   out of the tarball (never written to disk) and sha256s it. Members are
++   keyed where npm's extractor puts them (npm 11: pacote extracts with
++   node-tar ``strip: 1``): the first raw path segment is dropped whatever it
++   is (``package``, ``other``, or the ``.`` of ``./package/…``), then ``./``,
++   repeated ``/`` and letter case are normalised. An absolute or ``..``
++   member name anywhere, a second member that lands on the payload path, a
++   payload that is not a regular file, and a link that lands on the payload
++   path or one of its parent directories, or points at the payload path, are
++   all refused. The two readers (Python's ``tarfile`` and npm's node-tar)
++   must see the SAME member list, so the list is accepted only in the one
++   header shape whose decoding the tool models for both: the tarball is
++   decompressed once (bounded, single gzip member, nothing after the gzip
++   stream); every 512-byte header is plain POSIX ustar (magic
++   ``ustar\\0`` + ``00``), with a checksum both readers parse to the same
++   value and that matches the unsigned sum, an octal size field, printable
++   ASCII names (name, prefix, link name), and a type among regular file,
++   directory, hard link and symlink (only a regular file has a size or a
++   body; only a link has a link name; only a directory name ends in
++   ``/``); the member list ends at the first all-zero block and every byte
++   after it is zero; and Python's
++   ``tarfile`` must list exactly the members that header walk lists. Any
++   other header (an extension header of any kind, another type, another
++   magic, a malformed field) is refused by name. The registry artifact
++   (0.156.1, measured) uses regular files only;
++5. writes a NEW pack directory (an existing path is refused) holding:
++
++   - ``codex-cli-pin-manifest.json.new``: schema 1 with ``package_version``,
++     the PLATFORM ``npm_integrity`` and the per-triple ``sha256``;
++   - ``codex-cli-pin.txt.new``: the live pin's lines before the range,
++     unchanged, plus a dated paragraph and the range. The range is widened
++     upper-only, and only when the version
++     falls outside it. The human rationale comes from ``--pin-note FILE``;
++     without it the paragraph carries a ``TODO(owner)``;
++   - ``<mold basename>``: the ceremony script. The mold's body is copied
++     verbatim except the regions the generator owns (per grammar, below). A
++     guard is added after the mold's EXIT trap that refuses a real run while
++     a ``TODO(owner)`` remains in the sentinel or in the pin;
++   - ``pin-<tag>-approved.md``: the sentinel draft. The measured digests, the
++     new range and the sha256 of the live canonicals and of the two ``.new``
++     files are filled in; the human sections are ``TODO(owner)``;
++   - constants-block grammar only, when the mold's ``PACK_FILES`` lists them:
++     ``rehearse-pin-<tag>.sh`` (the mold's rehearsal, body verbatim, header
++     regenerated) and ``README.md`` (provenance, measured values, file list).
++
++It never touches ``.claude/governance/``, never installs a CLI, never signs and
++never commits. Applying the pack is the Owner's ceremony (the emitted script).
++
++Two mold grammars are modelled, chosen by shape and parsed fail-closed; any
++other shape is refused BY NAME (that pack is then cloned by hand):
++
++- heredoc grammar (the ``PLAN-189/codex-pin-0155`` generation): five value
++  lines ``D``/``SENT_LIVE``/``NEW_RANGE``/``NEW_VERSION``/``NEW_SHA``, each
++  exactly once in the expected shape, and a ``git commit ... <<DELIM``
++  message. The generator owns those lines, the commit heredoc and the header.
++  The mold must run the ADR-182 §5 step-4 verification AFTER it applies the
++  manifest and before it commits: ``check_pair_rail.py --verify-codex-pin``
++  against the installed binary, then a check for ``"status": "verified"``;
++- constants-block grammar (modelled on the hand-built PLAN-193 pack,
++  ``codex-pin-0156``, which this tree may not carry yet): ONE block from
++  ``# --- constantes`` to ``# --- fim constantes`` of ``KEY=VALUE`` lines
++  holding exactly the keys of ``_CONST_RENDERED`` (values the
++  generator renders: plan, tag, versions, range bounds, publication date,
++  triple, digests, ``BASE_*_SHA256`` = sha256 of the live canonicals,
++  ``SRC_*_SHA256`` = sha256 of the rendered ``.new`` files, ``GA_TAG`` from
++  ``--ga-tag``, ``D`` fixed to ``.claude/plans/$PLAN/codex-pin-$PACK_TAG``)
++  and of ``_CONST_PASSTHROUGH`` (copied verbatim), none assigned again outside
++  the block. ``PACK_FILES`` may list only files this tool emits. The body must
++  check the frozen ``.new`` copies against ``SRC_PIN_SHA256`` and
++  ``SRC_MAN_SHA256``, apply the manifest, run ``verify_pin`` (whose body calls
++  ``--verify-codex-pin``), die unless it exits 0 and require ``verified`` with
++  the pinned sha256, in that order, before the plumbing commit. The mold must
++  sit at ``.claude/plans/<PLAN>/codex-pin-<PACK_TAG>/``. Its rehearsal must
++  read the constants from its pack's ``OWNER-PIN-SIGN.sh`` and name no npm
++  platform other than the one of the mold's ``TRIPLE``. The generator owns
++  the block's values, the header and the guard; the generated header carries
++  no version, digest or tag literal, because the rehearsal refuses one
++  outside the block.
++
++In both grammars the files the mold reads (``SRC_PIN``/``SRC_MAN``) and writes
++(``DST_PIN``/``DST_MAN``) must be the ones this tool emits and targets, and no
++version, digest or pack-path literal may survive outside the regions the
++generator owns: a mold that carries version-specific text in its body is
++refused rather than copied stale. ``DRY`` (the switch the guard reads) is set
++by ONE ``DRY=...`` line at column 0, or by ONE ``case ... in`` / ``esac``
++block at column 0 with one ``<pattern>) DRY=0 ;;`` arm and one
++``<pattern>) DRY=1 ;;`` arm whose pattern names ``--dry-run``; no other line
++assigns it. A single-command step anchor (the manifest apply, the
++``verify_pin`` run, the plumbing commit) may end in one
++``|| die "<message>"`` whose message runs no command; ``|| true`` or any
++other suffix is not the anchor.
++
++The mold is never older than the newest pack. Packs are ranked by the
++``package_version`` of the ``codex-cli-pin-manifest.json.new`` beside each
++``.claude/plans/PLAN-*/codex-pin*/OWNER-PIN-SIGN.sh`` (grammar-independent).
++``--mold`` must pin the newest version, and every other mold at that version
++must parse too; otherwise the run is refused and names the newest mold.
++Building from an older mold would silently drop whatever the newer pack
++hardened. ``newest_mold()`` is the one predicate; ``check-substrate-drift.py``
++calls it for its recommendation.
++
++The pack's plan is named, never inherited from the mold: ``--plan PLAN-NNN``
++(or ``--pack-dir``) is required, and ``.claude/plans/PLAN-NNN-*.md`` must
++exist (an orphan ``PLAN-NNN/`` subdirectory fails the plan schema,
++``PLAN-SCHEMA.md``); a missing ``PLAN-NNN/`` is created with the pack (and
++removed again if the write fails). A constants-block pack must go to
++``.claude/plans/PLAN-NNN/codex-pin-<tag>`` (its script derives that dir). The
++tag is THIS TOOL's rule, not a repo convention: ``X.Y.0`` -> ``XY``,
++``X.Y.Z`` -> ``XY-Z`` (``0156``, ``0156-1``). A hand-built pack may differ:
++the PLAN-193 pack pins 0.156.1 under the tag ``0156``. A tag already
++used under ``.claude/plans`` (a ``codex-pin-<tag>`` directory or a
++``pin-<tag>-approved.md``) is refused, which also catches two versions that
++share a tag (``1.23.0`` and ``12.3.0``); so is an existing pack that already
++pins the target version. A ``--dry-run`` writes nothing and skips these two
++checks, so it can re-measure an existing pack.
++
++Maintainer-only. ``scripts/install.sh`` copies every ``.claude/scripts/*.py``
++into an adopter repository, so this file reaches adopters; there it refuses
++(exit 2) because neither ``install.sh`` nor ``upgrade.sh`` delivers
++``.claude/governance/`` or the pack molds.
++
++Declared residual: the payload path is copied from the pinned manifest, and
++the tool checks only that the new tarball holds one regular member there.
++Whether the new version's launcher (``bin/codex.js`` of the main package)
++still runs that path is NOT checked; ``--verify-codex-pin`` hashes the same
++manifest path, so the blind spot is shared. The generated sentinel says so.
++
++Usage (``X.Y.Z`` = the target release; ``<newest mold>`` = the
++``OWNER-PIN-SIGN.sh`` of the newest pack, which ``check-substrate-drift.py``
++names)::
++
++    python3 .claude/scripts/re-pin-codex.py X.Y.Z --plan PLAN-NNN --mold <newest mold>
++    python3 .claude/scripts/re-pin-codex.py X.Y.Z --plan PLAN-NNN --mold <newest mold> \\
++        --ga-tag vA.B.C          # constants-block mold: the tag the re-pin follows
++    python3 .claude/scripts/re-pin-codex.py X.Y.Z --plan PLAN-NNN --mold <...> --dry-run
++    python3 .claude/scripts/re-pin-codex.py X.Y.Z --plan PLAN-NNN --mold <...> \\
++        --offline-from ./openai-codex-X.Y.Z-<platform>.tgz --pin-note ./why.txt
++
++Exit codes: 0 emitted (or dry-run computed); 2 input refused (version,
++manifest, pin, mold, ``--offline-from``, output path — including one that
++cannot be written); 3 verification failed (registry or tarball data
++inconsistent); 4 infrastructure (npm absent or failing, timeout, any other
++filesystem error). No other exit code is used: a filesystem error that no
++step names is reported as 4, never as a traceback.
++
++Stdlib only, Python >= 3.9.
++"""
++from __future__ import annotations
++
++import argparse
++import base64
++import datetime
++import errno
++import hashlib
++import io
++import json
++import os
++import posixpath
++import re
++import shutil
++import stat
++import subprocess
++import sys
++import tarfile
++import tempfile
++import textwrap
++import zlib
++from pathlib import Path
++from typing import Any, Dict, List, Optional, Set, Tuple
++
++REPO_ROOT = Path(__file__).resolve().parents[2]
++PACKAGE = "@openai/codex"
++GENERATOR = ".claude/scripts/re-pin-codex.py"
++MANIFEST_REL = ".claude/governance/codex-cli-pin-manifest.json"
++PIN_REL = ".claude/governance/codex-cli-pin.txt"
++MANIFEST_OUT = "codex-cli-pin-manifest.json.new"
++PIN_OUT = "codex-cli-pin.txt.new"
++TODO_MARK = "TODO(owner)"
++
++EXIT_INPUT = 2
++EXIT_VERIFY = 3
++EXIT_INFRA = 4
++
++#: The registry every npm call names explicitly (never ~/.npmrc's choice):
++#: the sentinel records it, so the signed reproduction runs against the
++#: registry that was measured.
++NPM_REGISTRY = "https://registry.npmjs.org/"
++#: Both flags: a ``@openai:registry`` line in an .npmrc outranks ``registry``
++#: for this scoped package, so the scope is pinned too.
++NPM_REGISTRY_ARGS = ("--registry=" + NPM_REGISTRY, "--@openai:registry=" + NPM_REGISTRY)
++#: Pack molds, relative to ``.claude/plans`` (the same glob the drift
++#: detector used to walk).
++MOLD_GLOB = "PLAN-*/codex-pin*/OWNER-PIN-SIGN.sh"
++NPM_VIEW_TIMEOUT = 120
++NPM_PACK_TIMEOUT = 1800
++# Cap on the tarball read into memory. The 0.156.0 darwin-arm64 platform
++# tarball measured 131,567,699 bytes (2026-09-22).
++TARBALL_MAX_BYTES = 1 << 30
++# Decompressed-size cap (a gzip bomb stops here). Measured: the real 0.156.1
++# darwin-arm64 platform tarball is 131,652,985 bytes gzipped and 326,415,360
++# bytes of tar (2026-09-23).
++UNPACKED_MAX_BYTES = 1 << 30
++
++# npm platform suffix -> launcher targetTriple. Mirror of
++# check_pair_rail._codex_target_triple (the host -> triple map).
++PLATFORM_TRIPLE: Dict[str, str] = {
++    "darwin-arm64": "aarch64-apple-darwin",
++    "darwin-x64": "x86_64-apple-darwin",
++    "linux-x64": "x86_64-unknown-linux-musl",
++    "linux-arm64": "aarch64-unknown-linux-musl",
++    "win32-x64": "x86_64-pc-windows-msvc",
++    "win32-arm64": "aarch64-pc-windows-msvc",
++}
++
++_MANIFEST_KEYS = frozenset({"schema", "package_version", "npm_integrity", "payloads"})
++_SEMVER_RE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
++_RANGE_RE = re.compile(r">=([0-9]+\.[0-9]+\.[0-9]+),<([0-9]+\.[0-9]+\.[0-9]+)")
++_SHA256_RE = re.compile(r"[0-9a-f]{64}")
++_SRI512_RE = re.compile(r"sha512-[A-Za-z0-9+/]{86}==")
++_PACK_DIR_RE = re.compile(r"\.claude/plans/(PLAN-[0-9]{3})/[a-z0-9][a-z0-9._-]*")
++_PLAN_RE = re.compile(r"PLAN-[0-9]{3}")
++_DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
++# Registry data is untrusted: only a plain https tarball URL reaches the sentinel.
++_TARBALL_URL_RE = re.compile(r"https://[A-Za-z0-9.-]+/[A-Za-z0-9._~@%+/-]+\.tgz")
++
++# Mold grammar (the value lines the generator owns, each exactly once).
++_OWNED_SHAPES: Dict[str, "re.Pattern[str]"] = {
++    "D": re.compile(r"\.claude/plans/[A-Za-z0-9._/-]+"),
++    "SENT_LIVE": re.compile(r'"\$D/pin-[a-z0-9-]+-approved\.md"'),
++    "NEW_RANGE": re.compile(r"'>=[0-9]+\.[0-9]+\.[0-9]+,<[0-9]+\.[0-9]+\.[0-9]+'"),
++    "NEW_VERSION": re.compile(r"""'"package_version": "[0-9]+\.[0-9]+\.[0-9]+"'"""),
++    "NEW_SHA": re.compile(r"'[0-9a-f]{64}'"),
++}
++# Lines the mold must carry verbatim: what it reads is what this tool emits,
++# what it writes is what this tool targets.
++_REQUIRED_LINES = (
++    'SRC_PIN="$D/' + PIN_OUT + '"',
++    'SRC_MAN="$D/' + MANIFEST_OUT + '"',
++    "DST_PIN=" + PIN_REL,
++    "DST_MAN=" + MANIFEST_REL,
++)
++# Names the injected guard and the generated commit message rely on (``DRY``
++# is checked by ``_dry_definition``: it has two accepted shapes).
++_REQUIRED_DEFS = (
++    re.compile(r"^SENT="), re.compile(r"^die\(\) *\{"), re.compile(r"^HEAD_SHA="),
++)
++# ``DRY``, the switch the injected guard reads, in one of two shapes: ONE
++# ``DRY=...`` line at column 0, or ONE ``case ... in`` / ``esac`` block at
++# column 0 (no other column-0 code line inside it) whose arms
++# ``<pattern>) DRY=0 ;;`` and ``<pattern>) DRY=1 ;;`` each appear once, the
++# ``DRY=1`` arm's pattern naming ``--dry-run`` and the ``DRY=0`` arm's not.
++# No other code line may assign ``DRY``. The shape is textual: what the
++# other arms do (the PLAN-193 mold's ``*)`` arm exits) is not checked; an
++# unset ``DRY`` makes the guard's ``"$DRY"`` abort under ``set -u``.
++_DRY_LINE_RE = re.compile(r"DRY=.*")
++_CASE_OPEN_RE = re.compile(r"case .+ in")
++_CASE_CLOSE_RE = re.compile(r"esac")
++_DRY_ARM_RE = re.compile(r" +([^ ()][^()]*)\) DRY=([01]) ;;")
++# A single-command step anchor may carry ONE trailing failure handler that
++# dies: ``<command> || die "<message>"``. The message may expand ``$NAME`` or
++# ``${NAME}`` but runs no command (no backquote, no ``$(``). Any other suffix
++# (``|| true``, a second command) is not the anchor and is refused.
++_OR_DIE = r'(?: \|\| die "(?:[^"`$\\]|\$[A-Za-z_{])*")?'
++# ADR-182 §5 step 4, in this order (code lines, stripped): apply the new
++# manifest, verify the INSTALLED binary against it, require "verified".
++_APPLY_MAN_RE = re.compile(r'cp "\$SRC_MAN" "\$DST_MAN"' + _OR_DIE)
++_VERIFY_PIN_RE = re.compile(
++    r'python3 \.claude/hooks/check_pair_rail\.py --verify-codex-pin '
++    r'"\$\(command -v codex\)"(?: .*)?')
++_VERIFIED_RE = re.compile(r"""grep -q '"status": "verified"' .+\|\|.*\bdie\b.*""")
++GRAMMAR_HEREDOC = "heredoc grammar"
++GRAMMAR_CONSTANTS = "constants-block grammar"
++_SET_E_RE = re.compile(r"set -euo pipefail\s*")
++_HEREDOC_RE = re.compile(r"git commit\b.*<<\s*([A-Za-z_][A-Za-z0-9_]*)\s*")
++_TRAP_RE = re.compile(r"trap '.*' EXIT\s*")
++_SAY_RE = re.compile(r'^say "([^"$`\\]*)"')
++_ANY_VERSION_RE = re.compile(r"(?<![0-9.])[0-9]+\.[0-9]+\.[0-9]+(?![0-9])")
++_HEX64_RE = re.compile(r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])")
++_SRI_LITERAL_RE = re.compile(r"sha512-[A-Za-z0-9+/]{20,}")
++_GA_TAG_RE = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
++
++# ---- The constants-block grammar (the PLAN-193 W2 generation) --------------
++# Every version, digest and path the ceremony uses is a KEY=VALUE line of ONE
++# delimited block; the body reads them as variables. The generator renders
++# the values of _CONST_RENDERED, copies _CONST_PASSTHROUGH verbatim, and
++# refuses any other key, a missing key, a key assigned twice or assigned
++# again outside the block.
++_CONSTANTS_BLOCK_RE = re.compile(r"# -{3,} *constantes *")
++_CONSTANTS_END_RE = re.compile(r"# -{3,} *fim constantes *")
++_CONST_LINE_RE = re.compile(r"([A-Z][A-Z0-9_]*)=(.*)")
++_SEMVER_SHAPE = r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
++_SHA_SHAPE = re.compile(r"[0-9a-f]{64}")
++_CONST_D_TEMPLATE = ".claude/plans/$PLAN/codex-pin-$PACK_TAG"
++_CONST_RENDERED: Dict[str, "re.Pattern[str]"] = {
++    "PLAN": _PLAN_RE,
++    "PACK_TAG": re.compile(r"[a-z0-9][a-z0-9-]*"),
++    "OLD_VER": re.compile(_SEMVER_SHAPE),
++    "NEW_VER": re.compile(_SEMVER_SHAPE),
++    "LOWER": re.compile(_SEMVER_SHAPE),
++    "OLD_UPPER": re.compile(_SEMVER_SHAPE),
++    "NEW_UPPER": re.compile(_SEMVER_SHAPE),
++    "NEW_PUBLISHED": _DATE_RE,
++    "TRIPLE": re.compile(r"[a-z0-9_]+(?:-[a-z0-9_]+)+"),
++    "OLD_SHA": _SHA_SHAPE,
++    "NEW_SHA": _SHA_SHAPE,
++    "NEW_INTEGRITY": re.compile(r"'sha512-[A-Za-z0-9+/]{86}=='"),
++    "BASE_PIN_SHA256": _SHA_SHAPE,
++    "BASE_MAN_SHA256": _SHA_SHAPE,
++    "SRC_PIN_SHA256": _SHA_SHAPE,
++    "SRC_MAN_SHA256": _SHA_SHAPE,
++    "GA_TAG": re.compile("v" + _SEMVER_SHAPE),
++    "D": re.compile(re.escape(_CONST_D_TEMPLATE)),
++}
++_CONST_REPO_PATH = re.compile(r"\.claude/[A-Za-z0-9._/-]+")
++_CONST_PASSTHROUGH: Dict[str, "re.Pattern[str]"] = {
++    "COAUTHOR": re.compile(r"'[^'$`\\]*'"),
++    "REMOTE_SLUG": re.compile(r"'[A-Za-z0-9._-]+/[A-Za-z0-9._-]+'"),
++    "T2_NODE": re.compile(r"'[A-Za-z0-9._/:\[\]-]+'"),
++    "SIGNERS": _CONST_REPO_PATH,
++    "SIGNER_REGISTRY": _CONST_REPO_PATH,
++    "GPG_VERIFY_LIB": _CONST_REPO_PATH,
++    "SIGNER_REGISTRY_LIB": _CONST_REPO_PATH,
++}
++# Derived lines the body must carry verbatim (after the block).
++_CONST_REQUIRED_LINES = (
++    'SENT_LIVE="$D/pin-$PACK_TAG-approved.md"',
++    'NEW_RANGE=">=$LOWER,<$NEW_UPPER"',
++)
++_PACK_FILES_RE = re.compile(r'PACK_FILES="([^"`\\]*)"')
++# PACK_FILES token -> the role of the file the generator emits for it.
++_PACK_FILE_ROLES: Dict[str, str] = {
++    "$SENT_LIVE": "sentinel", "$SRC_PIN": "pin", "$SRC_MAN": "manifest",
++    "$D/OWNER-PIN-SIGN.sh": "script", "$D/rehearse-pin-$PACK_TAG.sh": "rehearsal",
++    "$D/README.md": "readme",
++}
++_PACK_FILES_REQUIRED = ("sentinel", "pin", "manifest", "script")
++# The frozen-copy checks and ADR-182 §5 step 4 in this grammar: code lines
++# (stripped), in this order, after the EXIT trap and before the plumbing
++# commit. The two sha256 checks are what make a hand edit of a .new fail.
++_CONST_STEP4: Tuple[Tuple["re.Pattern[str]", str], ...] = (
++    (re.compile(r'\[ "\$\(sha256f "\$FZ/pin"\)" = "\$SRC_PIN_SHA256" \] \|\| die .+'),
++     "check the frozen pin copy against $SRC_PIN_SHA256"),
++    (re.compile(r'\[ "\$\(sha256f "\$FZ/man"\)" = "\$SRC_MAN_SHA256" \] \|\| die .+'),
++     "check the frozen manifest copy against $SRC_MAN_SHA256"),
++    (re.compile(r'cp "\$FZ/man" "\$DST_MAN"' + _OR_DIE),
++     "apply the frozen manifest (cp \"$FZ/man\" \"$DST_MAN\")"),
++    (re.compile(r'vrc=\$\(verify_pin "[^"]+"\)' + _OR_DIE), "run verify_pin after the apply"),
++    (re.compile(r'\[ "\$vrc" = "0" \] \|\| \{.*\bdie\b.*\}'),
++     "die unless verify_pin exits 0"),
++    (re.compile(r'VERIFIED_PAYLOAD=\$\(check_verify_json "[^"]+" verified ok '
++                r'"\$NEW_SHA" "\$NEW_SHA"\) \\'),
++     "require status verified with the pinned sha256 (check_verify_json ... verified ok)"),
++)
++_CONST_DIES_RE = re.compile(r"\|\| \{.*\bdie\b.*\}")
++_CONST_COMMIT_RE = re.compile(r'NEWC=\$\(git commit-tree "\$TREE" -p "\$HEAD_SHA" -F "\$MSG"\)'
++                              + _OR_DIE)
++_CONST_VERIFY_CALL_RE = re.compile(
++    r'python3 \.claude/hooks/check_pair_rail\.py --verify-codex-pin '
++    r'"\$\(command -v codex\)"(?: \\)?')
++# The rehearsal reads its constants from the ceremony script of its own pack.
++_REHEARSAL_SIGN_LINE = 'SIGN_SRC="$PACK_DIR/OWNER-PIN-SIGN.sh"'
++
++
++class RePinError(Exception):
++    """A refusal with its exit code (2 input, 3 verification, 4 infra)."""
++
++    def __init__(self, rc: int, msg: str) -> None:
++        super().__init__(msg)
++        self.rc = rc
++
++
++# ---------------------------------------------------------------------------
++# Version, manifest and pin parsing (pure; fail-closed on input)
++# ---------------------------------------------------------------------------
++
++
++def parse_version(text: Any) -> Tuple[int, int, int]:
++    """Parse a plain ``X.Y.Z`` release; pre-releases and ranges are refused."""
++    m = _SEMVER_RE.fullmatch(text) if isinstance(text, str) else None
++    if m is None:
++        raise RePinError(
++            EXIT_INPUT,
++            f"version {text!r} is not a plain X.Y.Z release "
++            "(pre-releases, tags and ranges are refused)",
++        )
++    return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
++
++
++def pack_tag(version: Tuple[int, int, int]) -> str:
++    """This tool's rule: ``0.156.0`` -> ``0156``; ``0.156.2`` -> ``0156-2`` (slug ``[a-z0-9-]``)."""
++    tag = f"{version[0]}{version[1]}"
++    return tag if version[2] == 0 else f"{tag}-{version[2]}"
++
++
++def load_manifest(path: Path) -> Dict[str, Any]:
++    """Read the live ADR-182 manifest; refuse any shape the tool does not know."""
++    return read_manifest(path)[0]
++
++
++def read_manifest(path: Path) -> Tuple[Dict[str, Any], bytes]:
++    """(parsed manifest, the raw bytes it was parsed from: ONE read)."""
++    if not path.exists():
++        raise RePinError(EXIT_INPUT, f"no {MANIFEST_REL}: the Codex re-pin is maintainer-only "
++                                     "(install.sh and upgrade.sh deliver no .claude/governance/ "
++                                     "to an adopter), run it in the framework checkout")
++    try:
++        raw = path.read_bytes()
++        data = json.loads(raw.decode("utf-8"))
++    except OSError as exc:
++        raise RePinError(EXIT_INPUT, f"manifest unreadable: {MANIFEST_REL} "
++                                     f"({type(exc).__name__})") from None
++    except ValueError:
++        raise RePinError(EXIT_INPUT, f"manifest is not JSON: {MANIFEST_REL}") from None
++    return _check_manifest(data), raw
++
++
++def _check_manifest(data: Any) -> Dict[str, Any]:
++    if not isinstance(data, dict) or data.get("schema") != 1:
++        raise RePinError(EXIT_INPUT, "manifest is not a schema-1 object")
++    if set(data) != _MANIFEST_KEYS:
++        raise RePinError(EXIT_INPUT, "manifest keys differ from the schema-1 set "
++                                     f"{sorted(_MANIFEST_KEYS)}: {sorted(data)}")
++    parse_version(data.get("package_version"))
++    payloads = data.get("payloads")
++    if not isinstance(payloads, dict) or not payloads:
++        raise RePinError(EXIT_INPUT, "manifest 'payloads' is empty or not an object")
++    for triple, entry in payloads.items():
++        ok = (isinstance(entry, dict) and set(entry) == {"path", "sha256"}
++              and isinstance(entry.get("path"), str) and entry["path"]
++              and isinstance(entry.get("sha256"), str)
++              and _SHA256_RE.fullmatch(entry["sha256"]) is not None)
++        if not ok:
++            raise RePinError(EXIT_INPUT, f"manifest entry for {triple!r} is malformed")
++    return data
++
++
++def parse_pin(text: str) -> Tuple[List[str], str, str]:
++    """Split the pin file into (comment prefix, lower, upper).
++
++    The range must be the only non-comment line, and the last one.
++    """
++    lines = text.splitlines()
++    while lines and not lines[-1].strip():
++        lines.pop()
++    if not lines:
++        raise RePinError(EXIT_INPUT, f"{PIN_REL} is empty")
++    for n, line in enumerate(lines[:-1], 1):
++        if line.strip() and not line.lstrip().startswith("#"):
++            raise RePinError(EXIT_INPUT, f"{PIN_REL} line {n} is neither a comment "
++                                         "nor blank; the range must be the only "
++                                         "non-comment line, and the last")
++    m = _RANGE_RE.fullmatch(lines[-1])
++    if m is None:
++        raise RePinError(EXIT_INPUT, f"{PIN_REL} last line {lines[-1]!r} is not "
++                                     "'>=X.Y.Z,<X.Y.Z'")
++    return lines[:-1], m.group(1), m.group(2)
++
++
++def plan_range(lower: str, upper: str,
++               target: Tuple[int, int, int]) -> Tuple[str, bool]:
++    """Return (new range, widened?). Widen-upper-only; the lower bound is fixed."""
++    if target < parse_version(lower):
++        raise RePinError(EXIT_INPUT, f"target is below the lower bound >={lower}; "
++                                     "widen-upper-only cannot express it")
++    if target < parse_version(upper):
++        return f">={lower},<{upper}", False
++    return f">={lower},<{target[0]}.{target[1] + 1}.0", True
++
++
++def payload_member(manifest_rel_path: str, alias_key: str) -> str:
++    """Map the manifest's node_modules-relative path to the tarball member.
++
++    ``@openai/codex-darwin-arm64/vendor/<triple>/bin/codex`` installs from the
++    platform tarball's ``package/vendor/<triple>/bin/codex``.
++    """
++    prefix = alias_key + "/"
++    if not manifest_rel_path.startswith(prefix):
++        raise RePinError(EXIT_INPUT, f"manifest path {manifest_rel_path!r} is not "
++                                     f"under the platform package {alias_key!r}")
++    inner = manifest_rel_path[len(prefix):]
++    if not inner or any(p in ("", ".", "..") for p in inner.split("/")):
++        raise RePinError(EXIT_INPUT, f"manifest path {manifest_rel_path!r} has an "
++                                     "empty or relative segment")
++    return "package/" + inner
++
++
++# ---------------------------------------------------------------------------
++# Registry and tarball (the only side-effecting reads)
++# ---------------------------------------------------------------------------
++
++
++def _npm_env(scratch: Path) -> Dict[str, str]:
++    """npm's own state (cache, logs, update notifier) confined to ``scratch``.
++
++    ``scratch`` lives inside the run's temporary directory, removed on return:
++    a run (``--dry-run`` included) leaves no tarball in the user's npm cache.
++    """
++    env = dict(os.environ)
++    env.update({"npm_config_cache": str(scratch / "npm-cache"),
++                "npm_config_logs_dir": str(scratch / "npm-logs"),
++                "npm_config_logs_max": "0",
++                "npm_config_update_notifier": "false",
++                "npm_config_fund": "false", "npm_config_audit": "false"})
++    return env
++
++
++def run_npm(npm: str, args: List[str], cwd: Path,
++            timeout: int) -> "subprocess.CompletedProcess[str]":
++    """Run npm with a fixed argv (never a shell) against ``NPM_REGISTRY``;
++    timeouts are infrastructure. ``cwd`` is the run's temporary directory."""
++    try:
++        return subprocess.run(
++            [npm] + args + list(NPM_REGISTRY_ARGS), cwd=str(cwd),
++            env=_npm_env(cwd), capture_output=True,
++            text=True, timeout=timeout, check=False,
++        )
++    except subprocess.TimeoutExpired:
++        raise RePinError(EXIT_INFRA, f"npm {args[0]} timed out after {timeout}s") from None
++    except OSError as exc:
++        raise RePinError(EXIT_INFRA, f"npm could not run ({type(exc).__name__})") from None
++
++
++def npm_view(npm: str, spec: str, cwd: Path) -> Dict[str, Any]:
++    """``npm view <spec> --json`` resolved to exactly one version document."""
++    proc = run_npm(npm, ["view", spec, "--json"], cwd, NPM_VIEW_TIMEOUT)
++    out = (proc.stdout or "").strip()
++    if proc.returncode != 0:
++        code = ""
++        try:
++            code = str(_obj(_obj(json.loads(out)).get("error")).get("code", ""))
++        except (ValueError, AttributeError):
++            pass
++        if code == "E404":
++            raise RePinError(EXIT_INPUT, f"{spec} is not published in the registry")
++        first = ((proc.stderr or "").strip().splitlines() or [""])[0][:200]
++        raise RePinError(EXIT_INFRA, f"npm view {spec} failed rc={proc.returncode}: {first}")
++    if not out:
++        raise RePinError(EXIT_INPUT, f"npm view {spec} returned nothing (not published?)")
++    try:
++        doc = json.loads(out)
++    except ValueError:
++        raise RePinError(EXIT_INFRA, f"npm view {spec} returned non-JSON output") from None
++    if not isinstance(doc, dict):
++        raise RePinError(EXIT_VERIFY, f"npm view {spec} did not resolve to exactly one version")
++    return doc
++
++
++def _obj(value: Any) -> Dict[str, Any]:
++    """A registry field as a dict; any other shape reads as empty."""
++    return value if isinstance(value, dict) else {}
++
++
++def resolve_registry(npm: str, version: str, platform: str,
++                     cwd: Path) -> Dict[str, str]:
++    """Resolve the main document and the platform artifact's integrity."""
++    main = npm_view(npm, f"{PACKAGE}@{version}", cwd)
++    if main.get("version") != version:
++        raise RePinError(EXIT_VERIFY, f"registry answered version {main.get('version')!r} "
++                                      f"for {PACKAGE}@{version}")
++    alias_key = f"{PACKAGE}-{platform}"
++    expected_alias = f"npm:{PACKAGE}@{version}-{platform}"
++    alias = _obj(main.get("optionalDependencies")).get(alias_key)
++    if alias != expected_alias:
++        raise RePinError(EXIT_VERIFY, f"optionalDependencies[{alias_key!r}] = {alias!r}; "
++                                      f"expected {expected_alias!r}")
++    platform_spec = expected_alias[len("npm:"):]
++    plat = npm_view(npm, platform_spec, cwd)
++    if plat.get("name") != PACKAGE or plat.get("version") != f"{version}-{platform}":
++        raise RePinError(EXIT_VERIFY, f"registry answered {plat.get('name')!r}@"
++                                      f"{plat.get('version')!r} for {platform_spec}")
++    integrity = _obj(plat.get("dist")).get("integrity")
++    if not isinstance(integrity, str) or _SRI512_RE.fullmatch(integrity) is None:
++        raise RePinError(EXIT_VERIFY, f"{platform_spec} dist.integrity is not a single "
++                                      f"sha512 SRI: {integrity!r}")
++    main_integrity = _obj(main.get("dist")).get("integrity")
++    published = _obj(main.get("time")).get(version)
++    latest = _obj(main.get("dist-tags")).get("latest")
++    tarball_url = _obj(plat.get("dist")).get("tarball")
++    return {
++        "alias_key": alias_key,
++        "platform_spec": platform_spec,
++        "integrity": integrity,
++        "main_integrity": main_integrity if isinstance(main_integrity, str) else "",
++        "published": published if isinstance(published, str) else "",
++        "registry_latest": latest if isinstance(latest, str) else "",
++        "tarball_url": (tarball_url if isinstance(tarball_url, str)
++                        and _TARBALL_URL_RE.fullmatch(tarball_url) else ""),
++    }
++
++
++def fetch_tarball(npm: str, spec: str, work: Path, dest: Path) -> Path:
++    """``npm pack <spec>`` into ``dest`` (scripts ignored); exactly one tarball.
++
++    npm runs in ``work`` (its cache and logs live there, see ``_npm_env``).
++    """
++    proc = run_npm(npm, ["pack", spec, "--pack-destination", str(dest), "--json",
++                         "--ignore-scripts"], work, NPM_PACK_TIMEOUT)
++    if proc.returncode != 0:
++        first = ((proc.stderr or "").strip().splitlines() or [""])[0][:200]
++        raise RePinError(EXIT_INFRA, f"npm pack {spec} failed rc={proc.returncode}: {first}")
++    tarballs = sorted(p for p in dest.iterdir() if p.name.endswith(".tgz"))
++    if len(tarballs) != 1:
++        raise RePinError(EXIT_INFRA, f"npm pack left {len(tarballs)} tarballs, expected 1")
++    return tarballs[0]
++
++
++def read_tarball(path: Path, rc: int, what: str) -> bytes:
++    """The tarball's bytes, read ONCE from ONE descriptor.
++
++    Opened with ``O_NOFOLLOW`` (a symlink is refused) and ``O_NONBLOCK`` (a
++    FIFO cannot hang the open); ``fstat`` on that same descriptor must say
++    regular file. The integrity check and the member hash both run on the
++    returned bytes, never on the path again. ``rc`` is the exit code of a
++    refusal: input for ``--offline-from``, infrastructure for npm's own
++    download.
++    """
++    flags = (os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
++             | getattr(os, "O_BINARY", 0))
++    try:
++        fd = os.open(str(path), flags)
++    except OSError as exc:
++        if exc.errno == errno.ELOOP:
++            raise RePinError(rc, f"{what} is a symlink; refused") from None
++        raise RePinError(rc, f"{what} unreadable ({type(exc).__name__})") from None
++    try:
++        with os.fdopen(fd, "rb", buffering=0) as fh:
++            st = os.fstat(fh.fileno())
++            if not stat.S_ISREG(st.st_mode):
++                raise RePinError(rc, f"{what} is not a regular file")
++            if st.st_size > TARBALL_MAX_BYTES:
++                raise RePinError(EXIT_VERIFY, f"{what} is larger than {TARBALL_MAX_BYTES} bytes")
++            data = fh.readall()
++    except OSError as exc:
++        raise RePinError(rc, f"{what} unreadable ({type(exc).__name__})") from None
++    if len(data) > TARBALL_MAX_BYTES:
++        raise RePinError(EXIT_VERIFY, f"{what} grew past {TARBALL_MAX_BYTES} bytes while read")
++    return data
++
++
++def sri_sha512(data: bytes) -> str:
++    """``sha512-<base64>`` of the tarball bytes."""
++    return "sha512-" + base64.b64encode(hashlib.sha512(data).digest()).decode("ascii")
++
++
++def _refused_name(name: str) -> bool:
++    """An absolute name or one with a ``..`` segment: refused outright (npm's
++    extractor refuses a ``..`` path too; this tool is stricter on absolute)."""
++    return name.startswith("/") or ".." in name.split("/")
++
++
++def _member_key(raw: str) -> Optional[str]:
++    """Where npm's extractor installs a member, case-folded; None = nowhere.
++
++    Modelled on npm 11's pacote (``strip: 1``) and node-tar: the FIRST RAW
++    ``/``-segment is dropped whatever it is (``package``, ``other``, even
++    ``.`` in ``./package/x``, which therefore lands under ``package/``), the
++    rest loses a leading ``/`` and is resolved (``./``, repeated ``/``). So
++    ``other/x`` and ``package/x`` land on the same file. A name with nothing
++    below its first segment is not extracted (None). Case-folded on every
++    host: the pinned payload installs onto a case-insensitive filesystem by
++    default (APFS), where two names that differ only in case land on ONE
++    path; refusing that everywhere keeps the verdict independent of the host
++    that generates the pack.
++    """
++    parts = raw.split("/")
++    if len(parts) < 2:
++        return None
++    rest = "/".join(parts[1:]).lstrip("/")
++    if not rest:
++        return None
++    norm = posixpath.normpath(rest)
++    return None if norm in (".", "") else norm.casefold()
++
++
++def _check_member(info: tarfile.TarInfo, target: str, parents: Set[str]) -> bool:
++    """True when ``info`` lands on the payload path; raises on a refused shape."""
++    if _refused_name(info.name):
++        raise RePinError(EXIT_VERIFY, f"tarball member {info.name!r} is absolute or has a "
++                                      "'..' segment; refused")
++    key = _member_key(info.name)
++    if key is None:
++        return False
++    if key == target:
++        return True
++    if not (info.islnk() or info.issym()):
++        return False
++    if key in parents:
++        raise RePinError(EXIT_VERIFY, f"tarball link {info.name!r} sits on a parent "
++                                      "directory of the payload path; refused")
++    if info.islnk():
++        # A hard link's target is another member name (its first segment is
++        # stripped too, as the extractor does).
++        if _refused_name(info.linkname) or _member_key(info.linkname) == target:
++            raise RePinError(EXIT_VERIFY, f"tarball hard link {info.name!r} points at the "
++                                          "payload path or out of the archive; refused")
++    elif not info.linkname.startswith("/"):
++        # A symlink's target is relative to the link's own installed directory.
++        dest = posixpath.normpath(posixpath.join(posixpath.dirname(key), info.linkname))
++        if dest.casefold() == target:
++            raise RePinError(EXIT_VERIFY, f"tarball symlink {info.name!r} points at the "
++                                          "payload path; refused")
++    return False
++
++
++def _gunzip_single(data: bytes) -> io.BytesIO:
++    """The tarball's tar bytes: ONE gzip member, decompressed once, bounded
++    by ``UNPACKED_MAX_BYTES``. A second gzip member or any byte after the
++    gzip stream is refused (rc 3): the registry artifact has neither
++    (measured on 0.156.1), and each is a place where two readers can
++    disagree about what the archive holds."""
++    d = zlib.decompressobj(16 + zlib.MAX_WBITS)
++    out = io.BytesIO()
++    buf = data
++    try:
++        while not d.eof:
++            chunk = d.decompress(buf, 1 << 24)
++            buf = d.unconsumed_tail
++            if not chunk and not buf:
++                break
++            out.write(chunk)
++            if out.tell() > UNPACKED_MAX_BYTES:
++                raise RePinError(EXIT_VERIFY, f"tarball unpacks past {UNPACKED_MAX_BYTES} "
++                                              "bytes; refused")
++    except zlib.error:
++        raise RePinError(EXIT_VERIFY, "tarball unreadable (gzip stream corrupt)") from None
++    if not d.eof:
++        raise RePinError(EXIT_VERIFY, "tarball unreadable (gzip stream truncated)")
++    if d.unused_data:
++        raise RePinError(EXIT_VERIFY, "tarball carries bytes after its gzip stream (a "
++                                      "second gzip member or trailing data); refused")
++    out.seek(0)
++    return out
++
++
++#: The one tar header shape the tool accepts (C-R3M-01, closed by
++#: construction rather than by listing divergences). For this shape the
++#: node-tar bundled with npm 11.16 (7.5.15 ``header.js``/``parse.js``, read
++#: 2026-09-23) and Python's ``tarfile`` decode every field that decides
++#: WHERE bytes land identically: path (ustar prefix + name), type, size,
++#: link name and checksum.
++_TAR_BLOCK = 512
++_TAR_MAGIC = b"ustar\x0000"
++_TAR_TYPES = {b"0": "regular file", b"1": "hard link", b"2": "symlink", b"5": "directory"}
++_TAR_LINK_TYPES = (b"1", b"2")
++#: Octal digits, then only spaces or NULs. node-tar parses the checksum out
++#: of 12 bytes (the field, the type byte and the start of the link name), so
++#: a field whose digits run to its last byte parses differently there.
++_TAR_OCTAL_RE = re.compile(rb"[0-7]+[ \x00]+")
++
++
++def _tar_refuse(off: int, why: str) -> RePinError:
++    return RePinError(EXIT_VERIFY, f"tar header at offset {off}: {why}; only plain POSIX ustar "
++                                   "headers of a regular file, directory or link are accepted, "
++                                   "the one shape both tar readers list identically — refused")
++
++
++def _tar_octal(block: bytes, start: int, width: int, what: str, off: int) -> int:
++    field = block[start:start + width]
++    if not _TAR_OCTAL_RE.fullmatch(field):
++        raise _tar_refuse(off, f"{what} field {field!r} is not octal digits followed by a "
++                               "terminator")
++    return int(field.rstrip(b" \x00"), 8)
++
++
++def _tar_text(block: bytes, start: int, width: int, what: str, off: int) -> str:
++    """The field up to its first NUL (both readers stop there), refused
++    unless printable ASCII: one decoding, and no Unicode name that a
++    normalising filesystem folds onto another."""
++    text = block[start:start + width].split(b"\0", 1)[0]
++    if any(b < 0x20 or b > 0x7E for b in text):
++        raise _tar_refuse(off, f"{what} is not printable ASCII")
++    return text.decode("ascii")
++
++
++def _tar_header(block: bytes, off: int) -> Tuple[str, bytes, int, str]:
++    """(path, type, size, link name) of ONE header, in the accepted shape."""
++    if block[257:265] != _TAR_MAGIC:
++        raise _tar_refuse(off, f"magic {block[257:265]!r} is not POSIX ustar")
++    kind = block[156:157]
++    if kind not in _TAR_TYPES:
++        raise _tar_refuse(off, f"type {kind!r} (an extension header, or a member type the "
++                               "tool does not model)")
++    stored = _tar_octal(block, 148, 8, "checksum", off)
++    if stored != 8 * 0x20 + sum(block[:148]) + sum(block[156:]):
++        raise _tar_refuse(off, "checksum does not match the unsigned header sum")
++    size = _tar_octal(block, 124, 12, "size", off)
++    name = _tar_text(block, 0, 100, "name", off)
++    # node-tar reads a 155-byte prefix when byte 475 is set, else 130 bytes;
++    # tarfile reads up to the first NUL of 155, which then falls at <= 475.
++    prefix = _tar_text(block, 345, 155 if block[475] else 130, "prefix", off)
++    link = _tar_text(block, 157, 100, "link name", off)
++    what = _TAR_TYPES[kind]
++    if not name:
++        raise _tar_refuse(off, "empty name")
++    if kind != b"0" and size:
++        raise _tar_refuse(off, f"a {what} with a size (only a regular file has a body)")
++    if (kind in _TAR_LINK_TYPES) != bool(link):
++        raise _tar_refuse(off, f"a {what} with{'out' if kind in _TAR_LINK_TYPES else ''} "
++                               "a link name")
++    path = f"{prefix}/{name}" if prefix else name
++    if kind != b"5" and path.endswith("/"):
++        raise _tar_refuse(off, f"a {what} whose name ends in '/'")
++    return path, kind, size, link
++
++
++def _walk_tar(raw: io.BytesIO) -> List[Tuple[int, str, bytes, int, str]]:
++    """Every member header, walked block by block in the accepted shape. The
++    list ends at the first all-zero block and every byte after it must be
++    zero: ``tarfile`` stops listing there, while npm's extractor (node-tar,
++    non-strict) skips a null or invalid block and installs what follows
++    (C-R2M-04)."""
++    end = raw.seek(0, io.SEEK_END)
++    entries: List[Tuple[int, str, bytes, int, str]] = []
++    off = 0
++    while off < end:
++        raw.seek(off)
++        block = raw.read(_TAR_BLOCK)
++        if len(block) < _TAR_BLOCK or block.count(0) == _TAR_BLOCK:
++            raw.seek(off)
++            nonzero = 0
++            for chunk in iter(lambda: raw.read(1 << 20), b""):
++                nonzero += len(chunk) - chunk.count(0)
++            if nonzero:
++                raise RePinError(EXIT_VERIFY, f"tarball carries {nonzero} non-zero byte(s) "
++                                              f"after its member list (offset {off}): a member "
++                                              "npm's extractor would install past a null or "
++                                              "invalid block; refused")
++            break
++        path, kind, size, link = _tar_header(block, off)
++        entries.append((off, path, kind, size, link))
++        off += _TAR_BLOCK + -(-size // _TAR_BLOCK) * _TAR_BLOCK
++        if off > end:
++            raise RePinError(EXIT_VERIFY, f"tar member {path!r} runs past the end of the "
++                                          "archive; refused")
++    raw.seek(0)
++    return entries
++
++
++def _require_reader_parity(entries: List[Tuple[int, str, bytes, int, str]],
++                           members: List[tarfile.TarInfo]) -> None:
++    """Python's ``tarfile`` must list exactly the members the header walk
++    lists (offset, path, type, size, link name); ``tarfile`` drops a
++    directory's trailing ``/``."""
++    walked = [(off, path.rstrip("/") if kind == b"5" else path, kind, size, link)
++              for off, path, kind, size, link in entries]
++    listed = [(m.offset, m.name, m.type, m.size, m.linkname) for m in members]
++    if walked != listed:
++        raise RePinError(EXIT_VERIFY, f"Python's tarfile lists {len(listed)} member(s) and the "
++                                      f"header walk {len(walked)}, or the two differ in a "
++                                      "path, type, size or link name: the tar readers would "
++                                      "not see the same member list; refused")
++
++
++def hash_member(data: bytes, member: str) -> Tuple[str, int]:
++    """sha256 + size of ONE regular member, streamed; never written to disk."""
++    target = _member_key(member)
++    if target is None:
++        raise RePinError(EXIT_INPUT, f"payload member {member!r} has no path below its "
++                                     "top-level directory")
++    parents: Set[str] = set()
++    parent = posixpath.dirname(target)
++    while parent:
++        parents.add(parent)
++        parent = posixpath.dirname(parent)
++    raw = _gunzip_single(data)
++    entries = _walk_tar(raw)
++    try:
++        with tarfile.open(fileobj=raw, mode="r:") as tf:
++            members = tf.getmembers()
++            _require_reader_parity(entries, members)
++            matches = [m for m in members if _check_member(m, target, parents)]
++            if len(matches) != 1:
++                raise RePinError(EXIT_VERIFY, f"tarball holds {len(matches)} members that "
++                                              f"land on {member!r} (first path segment "
++                                              "dropped as npm extracts, './', repeated '/' "
++                                              "and letter case normalised), expected exactly 1")
++            info = matches[0]
++            fh = tf.extractfile(info) if info.isreg() else None
++            if fh is None:
++                raise RePinError(EXIT_VERIFY, f"{member!r} is not a regular file in the "
++                                              "tarball (link, directory or device)")
++            h = hashlib.sha256()
++            size = 0
++            for chunk in iter(lambda: fh.read(1 << 20), b""):
++                h.update(chunk)
++                size += len(chunk)
++            return h.hexdigest(), size
++    except (tarfile.TarError, OSError, EOFError, zlib.error) as exc:
++        raise RePinError(EXIT_VERIFY, f"tarball unreadable ({type(exc).__name__})") from None
++
++
++# ---------------------------------------------------------------------------
++# Mold parsing (fail-closed) and rendering
++# ---------------------------------------------------------------------------
++
++
++# The guard injected right after the mold's trap line. A mold that is itself
++# a generated script carries it already: the parser recognises it (exact
++# lines) as an owned region, so it is regenerated, never duplicated.
++_GUARD = [
++    f"# [{GENERATOR}] a justificativa humana do pack fica em {TODO_MARK}:",
++    "# o run real recusa assinar enquanto restar um; o ensaio só avisa.",
++    f"if grep -n '{TODO_MARK}' \"$SENT\" \"$SRC_PIN\" 2>/dev/null; then",
++    f"  [ \"$DRY\" = \"1\" ] || die \"{TODO_MARK} pendente nos materiais (linhas acima)"
++    " — escreva a justificativa antes de assinar\"",
++    f"  printf '   AVISO: {TODO_MARK} pendente — o run real vai recusar\\n'",
++    "fi",
++]
++
++
++def _find_one(body: List[str], pattern: "re.Pattern[str]", what: str,
++              label: str = "mold") -> int:
++    hits = [i for i, line in enumerate(body) if pattern.fullmatch(line)]
++    if len(hits) != 1:
++        raise RePinError(EXIT_INPUT, f"{label}: {what} appears {len(hits)} times, expected 1")
++    return hits[0]
++
++
++def _split_script(text: str, what: str) -> Tuple[List[str], int]:
++    """(lines, index of 'set -euo pipefail'); only comments may precede it
++    (the generator owns that header and regenerates it)."""
++    lines = text.split("\n")
++    if not lines[0].startswith("#!") or "bash" not in lines[0]:
++        raise RePinError(EXIT_INPUT, f"{what}: first line is not a bash shebang")
++    set_e = [i for i, line in enumerate(lines) if _SET_E_RE.fullmatch(line)]
++    if not set_e:
++        raise RePinError(EXIT_INPUT, f"{what}: no 'set -euo pipefail' line")
++    start = set_e[0]
++    for n in range(1, start):
++        if lines[n].strip() and not lines[n].startswith("#"):
++            raise RePinError(EXIT_INPUT, f"{what} line {n + 1}: code before 'set -euo "
++                                         "pipefail' (the generator owns only comments there)")
++    return lines, start
++
++
++def parse_mold(text: str) -> Dict[str, Any]:
++    """Split and validate the mold; returns the parts the renderer needs.
++
++    The grammar is chosen by shape: a ``# --- constantes`` line selects the
++    constants-block grammar, otherwise the heredoc grammar applies. Either
++    way every rule is fail-closed.
++    """
++    lines, start = _split_script(text, "mold")
++    if any(_CONSTANTS_BLOCK_RE.fullmatch(line) for line in lines):
++        return _parse_constants_mold(lines, start)
++    return _parse_heredoc_mold(lines, start)
++
++
++def _parse_heredoc_mold(lines: List[str], start: int) -> Dict[str, Any]:
++    body = lines[start:]
++    owned: Dict[str, int] = {}
++    for name, shape in _OWNED_SHAPES.items():
++        idx = _find_one(body, re.compile(re.escape(name) + r"=.*"), f"{name}=")
++        if shape.fullmatch(body[idx][len(name) + 1:]) is None:
++            raise RePinError(EXIT_INPUT, f"mold line {start + idx + 1}: {name}= value "
++                                         "has an unexpected shape")
++        owned[name] = idx
++    for required in _REQUIRED_LINES:
++        if required not in body:
++            raise RePinError(EXIT_INPUT, f"mold does not carry the line {required!r}")
++    for pattern in _REQUIRED_DEFS:
++        if not any(pattern.match(line) for line in body):
++            raise RePinError(EXIT_INPUT, f"mold does not define {pattern.pattern!r}")
++    _dry_definition(body, "mold")
++    commit = _find_one(body, _HEREDOC_RE, "the 'git commit ... <<DELIM' line")
++    delim = _HEREDOC_RE.fullmatch(body[commit]).group(1)
++    ends = [j for j in range(commit + 1, len(body)) if body[j] == delim]
++    if not ends:
++        raise RePinError(EXIT_INPUT, f"mold: commit heredoc {delim!r} is never closed")
++    trap = _find_one(body, _TRAP_RE, "the \"trap '...' EXIT\" line")
++    guard_len = _previous_guard(body, trap)
++    if not (max(owned.values()) < trap and trap + guard_len < commit):
++        raise RePinError(EXIT_INPUT, "mold: expected value lines < trap < commit")
++    _check_step4(body, commit)
++    parts = {"grammar": GRAMMAR_HEREDOC, "shebang": lines[0], "start": start,
++             "body": body, "owned": owned, "commit": commit, "commit_end": ends[0],
++             "trap": trap, "guard_len": guard_len,
++             "mold_version": body[owned["NEW_VERSION"]].split('"')[3]}
++    _scan_stale(parts)
++    return parts
++
++
++def _const_refuse(msg: str) -> RePinError:
++    return RePinError(EXIT_INPUT, f"mold ({GRAMMAR_CONSTANTS}): {msg}")
++
++
++def _parse_constants_block(body: List[str], start: int
++                           ) -> Tuple[int, int, Dict[str, Tuple[int, str]]]:
++    """(block open index, block close index, KEY -> (index, value))."""
++    opens = [i for i, line in enumerate(body) if _CONSTANTS_BLOCK_RE.fullmatch(line)]
++    closes = [i for i, line in enumerate(body) if _CONSTANTS_END_RE.fullmatch(line)]
++    if len(opens) != 1 or len(closes) != 1 or closes[0] < opens[0]:
++        raise _const_refuse(f"the block must open once ('# --- constantes', found "
++                            f"{len(opens)}) and close once after it ('# --- fim "
++                            f"constantes', found {len(closes)})")
++    known = dict(_CONST_RENDERED)
++    known.update(_CONST_PASSTHROUGH)
++    consts: Dict[str, Tuple[int, str]] = {}
++    for i in range(opens[0] + 1, closes[0]):
++        line = body[i]
++        if not line.strip() or line.startswith("#"):
++            continue
++        m = _CONST_LINE_RE.fullmatch(line)
++        if m is None:
++            raise _const_refuse(f"line {start + i + 1} of the block is not KEY=VALUE")
++        key, value = m.group(1), m.group(2)
++        if key not in known:
++            raise _const_refuse(f"unknown key {key} (line {start + i + 1}): this generator "
++                                "models only " + ", ".join(sorted(known)))
++        if key in consts:
++            raise _const_refuse(f"{key} is assigned twice in the block")
++        if known[key].fullmatch(value) is None:
++            raise _const_refuse(f"line {start + i + 1}: {key}= value has an unexpected shape")
++        consts[key] = (i, value)
++    missing = sorted(set(known) - set(consts))
++    if missing:
++        raise _const_refuse("the block lacks " + ", ".join(missing))
++    return opens[0], closes[0], consts
++
++
++def _assigns(line: str, key: str) -> bool:
++    """A code line that (re)assigns ``key``: ``KEY=``, ``KEY+=``, ``${KEY:=…}``,
++    ``export/local/declare/readonly KEY=``, ``read``/``unset``/``printf -v KEY``."""
++    if re.search(r"(?<![A-Za-z0-9_$])" + key + r"(?:\+|:)?=", line):
++        return True
++    return re.search(r"\b(?:read|unset|printf -v)\b[^#]*(?<![A-Za-z0-9_$])" + key
++                     + r"(?![A-Za-z0-9_])", line) is not None
++
++
++def _dry_definition(body: List[str], what: str) -> int:
++    """Index of the line that completes the ``DRY`` definition, in one of the
++    two shapes of ``_DRY_LINE_RE`` / ``_DRY_ARM_RE`` (see there); any other
++    shape is refused by name (``what`` prefixes the message)."""
++    def refuse(msg: str) -> RePinError:
++        return RePinError(EXIT_INPUT, f"{what}: {msg}")
++
++    code = [(i, line) for i, line in enumerate(body) if not line.lstrip().startswith("#")]
++    assigning = [i for i, line in code if _assigns(line, "DRY")]
++    if not assigning:
++        raise refuse("no line defines DRY (the dry-run switch the guard reads)")
++    top = [i for i in assigning if _DRY_LINE_RE.fullmatch(body[i])]
++    if top:
++        if top != assigning or len(top) != 1:
++            raise refuse(f"DRY must be defined by ONE 'DRY=' line at column 0 and assigned "
++                         f"nowhere else (lines {', '.join(str(i + 1) for i in assigning)} "
++                         "of the body)")
++        return top[0]
++    arms = [i for i in assigning if _DRY_ARM_RE.fullmatch(body[i])]
++    if arms != assigning or len(arms) != 2:
++        raise refuse("DRY is assigned outside the two accepted shapes (one column-0 "
++                     "'DRY=' line, or one case block with ONE '<pattern>) DRY=0 ;;' and "
++                     "ONE '<pattern>) DRY=1 ;;' arm)")
++    by_value = {_DRY_ARM_RE.fullmatch(body[i]).group(2): i for i in arms}
++    if set(by_value) != {"0", "1"}:
++        raise refuse("the case block must set DRY=0 in one arm and DRY=1 in the other")
++    pat_dry = _DRY_ARM_RE.fullmatch(body[by_value["1"]]).group(1)
++    pat_real = _DRY_ARM_RE.fullmatch(body[by_value["0"]]).group(1)
++    if "--dry-run" not in pat_dry or "--dry-run" in pat_real:
++        raise refuse("the DRY=1 arm's pattern must name --dry-run and the DRY=0 arm's "
++                     "must not")
++    opens = [i for i, line in code if _CASE_OPEN_RE.fullmatch(line) and i < min(arms)]
++    if not opens:
++        raise refuse("the DRY arms are not inside a 'case ... in' block at column 0")
++    closes = [i for i, line in code if _CASE_CLOSE_RE.fullmatch(line) and i > opens[-1]]
++    if not closes or max(arms) > closes[0] or any(
++            line and not line[0].isspace() for i, line in code
++            if opens[-1] < i < closes[0]):
++        raise refuse("the DRY arms are not inside ONE 'case ... in' / 'esac' block at "
++                     "column 0")
++    return closes[0]
++
++
++def _fn_body(body: List[str], name: str) -> List[str]:
++    """Lines of the shell function ``name() {`` up to its closing ``}`` line."""
++    heads = [i for i, line in enumerate(body) if re.match(re.escape(name) + r"\(\) *\{", line)]
++    if len(heads) != 1:
++        raise _const_refuse(f"function {name}() is defined {len(heads)} times, expected 1")
++    for j in range(heads[0] + 1, len(body)):
++        if body[j] == "}":
++            return body[heads[0] + 1:j]
++    raise _const_refuse(f"function {name}() never closes")
++
++
++def _parse_constants_mold(lines: List[str], start: int) -> Dict[str, Any]:
++    """The constants-block grammar: see the module docstring."""
++    body = lines[start:]
++    b_open, b_close, consts = _parse_constants_block(body, start)
++    for required in _REQUIRED_LINES + _CONST_REQUIRED_LINES:
++        if required not in body[b_close + 1:]:
++            raise _const_refuse(f"the body does not carry the line {required!r}")
++    for pattern in _REQUIRED_DEFS:
++        if not any(pattern.match(line) for line in body):
++            raise _const_refuse(f"no line defines {pattern.pattern!r}")
++    code = [(i, line) for i, line in enumerate(body)
++            if not (b_open <= i <= b_close) and not line.lstrip().startswith("#")]
++    for key in consts:
++        again = [i for i, line in code if _assigns(line, key)]
++        if again:
++            raise _const_refuse(f"{key} is assigned again outside the block (line "
++                                f"{start + again[0] + 1}): the rendered value would not "
++                                "be the one the script uses")
++    pack_files = [i for i, line in enumerate(body) if _PACK_FILES_RE.fullmatch(line)]
++    if len(pack_files) != 1:
++        raise _const_refuse(f"PACK_FILES=\"...\" appears {len(pack_files)} times, expected 1")
++    tokens = _PACK_FILES_RE.fullmatch(body[pack_files[0]]).group(1).split()
++    unknown = [t for t in tokens if t not in _PACK_FILE_ROLES]
++    if unknown or len(set(tokens)) != len(tokens):
++        raise _const_refuse(f"PACK_FILES lists {unknown or 'a duplicate'}: the generator "
++                            "emits only " + ", ".join(_PACK_FILE_ROLES))
++    roles = {_PACK_FILE_ROLES[t] for t in tokens}
++    absent = [r for r in _PACK_FILES_REQUIRED if r not in roles]
++    if absent:
++        raise _const_refuse(f"PACK_FILES does not list the {', '.join(absent)}")
++    label = f"mold ({GRAMMAR_CONSTANTS})"
++    trap = _find_one(body, _TRAP_RE, "the \"trap '...' EXIT\" line", label)
++    guard_len = _previous_guard(body, trap)
++    guard_uses = [_dry_definition(body, label)]
++    guard_uses += [_find_one(body, re.compile(p), what, label) for p, what in (
++        (r'SENT="\$SENT_LIVE"', 'SENT="$SENT_LIVE"'),
++        (r'SRC_PIN="\$D/' + re.escape(PIN_OUT) + '"', "SRC_PIN="),
++        (r"die\(\) *\{.*", "die() {"))]
++    if not (b_close < trap and max(guard_uses) < trap):
++        raise _const_refuse("expected constants block < DRY/SENT/SRC_PIN/die() < the EXIT trap")
++    commit = _find_one(body, _CONST_COMMIT_RE,
++                       "the plumbing commit (NEWC=$(git commit-tree ...) [|| die \"...\"])",
++                       label)
++    _check_const_step4(body, trap + 1 + guard_len, commit)
++    if not any(_CONST_VERIFY_CALL_RE.fullmatch(line.strip())
++               for line in _fn_body(body, "verify_pin")
++               if not line.lstrip().startswith("#")):
++        raise _const_refuse("verify_pin() does not run check_pair_rail.py "
++                            "--verify-codex-pin \"$(command -v codex)\" (ADR-182 §5 step 4)")
++    parts = {"grammar": GRAMMAR_CONSTANTS, "shebang": lines[0], "start": start,
++             "body": body, "block": (b_open, b_close), "consts": consts,
++             "roles": roles, "trap": trap, "guard_len": guard_len,
++             "mold_version": consts["NEW_VER"][1]}
++    _scan_stale_constants(parts)
++    return parts
++
++
++def _check_const_step4(body: List[str], begin: int, commit: int) -> None:
++    """ADR-182 §5 step 4 in the constants-block grammar (see _CONST_STEP4)."""
++    pos = begin
++    for pattern, what in _CONST_STEP4:
++        hit = next((i for i in range(pos, commit)
++                    if not body[i].lstrip().startswith("#")
++                    and pattern.fullmatch(body[i].strip())), None)
++        if hit is None:
++            raise _const_refuse(f"does not {what} after the previous step and before the "
++                                "commit (ADR-182 §5 step 4)")
++        pos = hit + 1
++    if pos >= commit or _CONST_DIES_RE.fullmatch(body[pos].strip()) is None:
++        raise _const_refuse("the check_verify_json line is not followed by '|| { ... die ... }'")
++
++
++def _const_tokens(consts: Dict[str, Tuple[int, str]]) -> List[str]:
++    """Literals of the mold's own values that must not survive outside the block."""
++    val = {k: v for k, (_i, v) in consts.items()}
++    tag = val["PACK_TAG"]
++    tokens = [val["PLAN"], f"codex-pin-{tag}", f"pin-{tag}-", f"rehearse-pin-{tag}",
++              val["GA_TAG"], val["NEW_INTEGRITY"].strip("'")]
++    tokens += [v for k, v in val.items() if _SHA_SHAPE.fullmatch(v)]
++    return tokens
++
++
++def _stale_hits(lines: List[Tuple[int, str]], tokens: List[str], offset: int) -> List[str]:
++    bad: List[str] = []
++    for i, line in lines:
++        hit = (_ANY_VERSION_RE.search(line) or _HEX64_RE.search(line)
++               or _SRI_LITERAL_RE.search(line))
++        stale = next((t for t in tokens if t in line), None)
++        if hit or stale:
++            bad.append(f"line {offset + i + 1}: {(hit.group(0) if hit else stale)!r}")
++    return bad
++
++
++def _scan_stale_constants(parts: Dict[str, Any]) -> None:
++    """Outside the KEY=VALUE lines of the block and the guard, no version,
++    digest, tag or path literal of any pack may survive (the block's own
++    comment lines are copied, so they are scanned too)."""
++    body = parts["body"]
++    value_lines = {i for i, _v in parts["consts"].values()}
++    guard = set(range(parts["trap"] + 1, parts["trap"] + 1 + parts["guard_len"]))
++    scan = [(i, line) for i, line in enumerate(body)
++            if i not in value_lines and i not in guard]
++    bad = _stale_hits(scan, _const_tokens(parts["consts"]), parts["start"])
++    if bad:
++        raise _const_refuse("version-specific text outside the block's values (it would "
++                            "be copied stale): " + "; ".join(bad[:5]))
++
++
++def parse_rehearsal(text: str, consts: Dict[str, Tuple[int, str]]) -> Dict[str, Any]:
++    """The pack's rehearsal script: header regenerated, body copied verbatim.
++
++    The body must read its constants from its own pack's ceremony script
++    (``SIGN_SRC``) and carry no literal of the pack; every npm platform
++    suffix it names must be the platform of the mold's ``TRIPLE``.
++    """
++    lines, start = _split_script(text, "rehearsal")
++    body = lines[start:]
++    if _REHEARSAL_SIGN_LINE not in body:
++        raise _const_refuse(f"the rehearsal does not carry the line {_REHEARSAL_SIGN_LINE!r}")
++    bad = _stale_hits(list(enumerate(body)), _const_tokens(consts), start)
++    if bad:
++        raise _const_refuse("the rehearsal carries version-specific text (it would be "
++                            "copied stale): " + "; ".join(bad[:5]))
++    triple = consts["TRIPLE"][1]
++    platforms = {p for p in PLATFORM_TRIPLE if any(p in line for line in body)}
++    by_triple = {t: p for p, t in PLATFORM_TRIPLE.items()}
++    if platforms - {by_triple.get(triple)}:
++        raise _const_refuse(f"the rehearsal names npm platform(s) {sorted(platforms)} but "
++                            f"the mold pins {triple}")
++    return {"shebang": lines[0], "body": body,
++            "platform": by_triple.get(triple) if platforms else None}
++
++
++def load_mold_siblings(parts: Dict[str, Any], mold: Path) -> None:
++    """Constants-block grammar: the mold's place and its rehearsal sibling.
++
++    The block derives the pack dir (``D``) from ``PLAN`` and ``PACK_TAG``, so
++    the mold must live at ``.claude/plans/<PLAN>/codex-pin-<PACK_TAG>/``;
++    the rehearsal (when ``PACK_FILES`` lists one) is its
++    ``rehearse-pin-<PACK_TAG>.sh`` and must parse (``parse_rehearsal``).
++    """
++    if parts["grammar"] != GRAMMAR_CONSTANTS:
++        return
++    plan, tag = parts["consts"]["PLAN"][1], parts["consts"]["PACK_TAG"][1]
++    if (mold.parent.name, mold.parent.parent.name) != (f"codex-pin-{tag}", plan):
++        raise _const_refuse(f"the mold sits in {mold.parent.parent.name}/{mold.parent.name}, "
++                            f"not in {plan}/codex-pin-{tag} as its PLAN and PACK_TAG say")
++    parts["rehearsal"] = None
++    if "rehearsal" in parts["roles"]:
++        sibling = mold.parent / f"rehearse-pin-{tag}.sh"
++        if sibling.is_symlink() or not sibling.is_file():
++            raise _const_refuse(f"PACK_FILES lists the rehearsal but {sibling.name} is not a "
++                                "regular file beside the mold")
++        raw = sibling.read_bytes()
++        parts["rehearsal"] = parse_rehearsal(_mold_text(raw, sibling.name), parts["consts"])
++        parts["rehearsal"].update({"name": sibling.name,
++                                   "sha": hashlib.sha256(raw).hexdigest()})
++    readme = mold.parent / "README.md"
++    parts["mold_readme"] = readme.is_file() and not readme.is_symlink()
++
++
++def _check_step4(body: List[str], commit: int) -> None:
++    """The mold must verify the installed binary AFTER applying the manifest.
++
++    ADR-182 §5 step 4 is what catches a wrong pin against the binary that
++    will actually run; a mold without it would sign whatever was measured.
++    Code lines only, in this order before the commit: the manifest apply,
++    then a ``--verify-codex-pin`` run, then a ``"status": "verified"`` check
++    that dies (a verification BEFORE the apply does not count).
++    """
++    def after(start: int, pattern: "re.Pattern[str]", what: str) -> int:
++        for i in range(start, commit):
++            line = body[i]
++            if not line.lstrip().startswith("#") and pattern.fullmatch(line.strip()):
++                return i
++        raise RePinError(EXIT_INPUT, f"mold does not {what} (ADR-182 §5 step 4: apply "
++                                     "the manifest, then --verify-codex-pin, then require "
++                                     "'\"status\": \"verified\"', all before the commit)")
++    apply = after(0, _APPLY_MAN_RE, "apply the new manifest (cp \"$SRC_MAN\" \"$DST_MAN\")")
++    verify = after(apply + 1, _VERIFY_PIN_RE, "run check_pair_rail.py --verify-codex-pin "
++                                              "\"$(command -v codex)\" after the apply")
++    after(verify + 1, _VERIFIED_RE, "require '\"status\": \"verified\"' (grep ... || die) "
++                                    "after that verification")
++
++
++def _previous_guard(body: List[str], trap: int) -> int:
++    """Length of a previous generation's guard right after the trap, else 0.
++
++    The guard's first line anywhere else, or a guard whose lines differ, is
++    refused: a hand-modified generator region is not silently re-owned.
++    """
++    marks = [i for i, line in enumerate(body) if line == _GUARD[0]]
++    if not marks:
++        return 0
++    if marks != [trap + 1] or body[trap + 1:trap + 1 + len(_GUARD)] != _GUARD:
++        raise RePinError(EXIT_INPUT, "mold carries a moved or modified generator "
++                                     "guard; regenerate from an unmodified pack")
++    return len(_GUARD)
++
++
++def _old_tokens(parts: Dict[str, Any]) -> List[str]:
++    body, owned = parts["body"], parts["owned"]
++    d_value = body[owned["D"]][2:]
++    tag = re.search(r"/pin-([a-z0-9-]+)-approved", body[owned["SENT_LIVE"]]).group(1)
++    sha = body[owned["NEW_SHA"]].split("=", 1)[1].strip("'")
++    return [d_value, "pin-" + tag + "-", sha]
++
++
++def _scan_stale(parts: Dict[str, Any]) -> None:
++    """Refuse a mold whose body keeps version-specific text outside owned lines."""
++    body = parts["body"]
++    skip = set(parts["owned"].values())
++    skip.update(range(parts["trap"] + 1, parts["trap"] + 1 + parts["guard_len"]))
++    skip.update(range(parts["commit"] + 1, parts["commit_end"]))
++    tokens = _old_tokens(parts)
++    bad: List[str] = []
++    for i, line in enumerate(body):
++        if i in skip:
++            continue
++        hit = _ANY_VERSION_RE.search(line)
++        stale = next((t for t in tokens if t in line), None)
++        if hit or stale:
++            bad.append(f"line {parts['start'] + i + 1}: {(hit.group(0) if hit else stale)!r}")
++    if bad:
++        raise RePinError(EXIT_INPUT, "mold carries version-specific text outside the "
++                                     "regions the generator owns (it would be copied "
++                                     "stale): " + "; ".join(bad[:5]))
++
++
++def _code_lines(body: List[str]) -> List[str]:
++    return [line for line in body if not line.lstrip().startswith("#")]
++
++
++def _wrap(text: str, width: int = 78) -> List[str]:
++    return textwrap.wrap(text, width=width, break_on_hyphens=False,
++                         break_long_words=False)
++
++
++def _wrap_comment(text: str, width: int = 76) -> List[str]:
++    return ["# " + w for w in _wrap(text, width - 2)]
++
++
++def _render_header(parts: Dict[str, Any], ctx: Dict[str, Any]) -> List[str]:
++    body = parts["body"]
++    steps = [m.group(1) for m in (_SAY_RE.match(line) for line in body) if m]
++    script = f"{ctx['pack_dir']}/{ctx['script_name']}"
++    head = [
++        f"# AUTO-GENERATED por {GENERATOR} em {ctx['date']} a partir do molde",
++        f"# {ctx['mold_rel']} (sha256 {ctx['mold_sha']}).",
++    ]
++    head += _wrap_comment(
++        "Não edite valores à mão: regenere o pack. O corpo é o do molde, byte a "
++        "byte, fora das linhas de valor (" + ", ".join(_OWNED_SHAPES) + "), do "
++        f"guard {TODO_MARK} e da mensagem de commit.")
++    head += ["#", f"# {ctx['script_name']} — cerimônia do re-pin codex-cli "
++                  f"{ctx['from_version']} -> {ctx['version']}."]
++    if steps:
++        head += _wrap_comment("Passos (lidos do molde): " + " · ".join(steps) + ".")
++    head += ["#", f"#   bash {script}            # real"]
++    if '[ "${1:-}" = "--dry-run" ]' in " ".join(_code_lines(body)):
++        head.append(f"#   bash {script} --dry-run  # ensaio")
++    head += ["#", "# Se o GPG reclamar de pinentry:", "#   export GPG_TTY=$(tty)"]
++    return head
++
++
++
++
++def _render_commit_message(parts: Dict[str, Any], ctx: Dict[str, Any]) -> List[str]:
++    code = " ".join(_code_lines(parts["body"]))
++    source = ("fornecido localmente (--offline-from)" if ctx["offline"]
++              else "baixado com npm pack")
++    msg = [f"ceremony({ctx['plan_id']}): re-pin codex-cli {ctx['from_version']} -> "
++           f"{ctx['version']}", ""]
++    msg += _wrap(
++        f"Digests medidos por {GENERATOR} em {ctx['date']}: tarball de plataforma "
++        f"{ctx['platform_spec']} {source}; sha512 do tarball == dist.integrity do "
++        f"registry; sha256 do payload {ctx['member']} dentro dele. Motivo, "
++        "protocolo, consequência e comandos de reprodução: no sentinel "
++        "assinado.") + [""]
++    if ctx["widened"]:
++        rng = (f"Widen-upper-only (<{ctx['old_upper']} -> <{ctx['new_upper']}); "
++               f"limite inferior inalterado em >={ctx['lower']}.")
++    else:
++        rng = f"Range inalterado ({ctx['new_range']}): {ctx['version']} já está dentro dele."
++    msg += _wrap(rng) + [""]
++    # parse_mold already required the step-4 verification (_check_step4).
++    checks = ["--verify-codex-pin = verified"]
++    if "--phase 6" in code:
++        checks.append("pair-rail-gate.sh --phase 6 OK")
++    msg += _wrap("Verificado na cerimônia, depois de aplicar: "
++                 + "; ".join(checks) + ".") + [""]
++    msg.append("Sentinel: $SENT (assinado, Anchor-SHA $HEAD_SHA)")
++    residue = re.sub(r"\$(SENT|HEAD_SHA)\b", "", "\n".join(msg))
++    if any(c in residue for c in "$`\\"):
++        raise RePinError(EXIT_INPUT, "generated commit message would expand in the "
++                                     "unquoted heredoc")
++    return msg
++
++
++def render_mold(parts: Dict[str, Any], ctx: Dict[str, Any]) -> str:
++    """The filled ceremony script: owned regions regenerated, body verbatim."""
++    if parts["grammar"] == GRAMMAR_CONSTANTS:
++        return _render_constants_mold(parts, ctx)
++    body = list(parts["body"])
++    owned = parts["owned"]
++    values = {
++        "D": ctx["pack_dir"],
++        "SENT_LIVE": f'"$D/{ctx["sentinel_name"]}"',
++        "NEW_RANGE": f"'{ctx['new_range']}'",
++        "NEW_VERSION": f"'\"package_version\": \"{ctx['version']}\"'",
++        "NEW_SHA": f"'{ctx['sha256']}'",
++    }
++    for name, idx in owned.items():
++        body[idx] = f"{name}={values[name]}"
++    message = _render_commit_message(parts, ctx)
++    after_guard = parts["trap"] + 1 + parts["guard_len"]
++    out = (body[:parts["trap"] + 1] + _GUARD
++           + body[after_guard:parts["commit"] + 1] + message
++           + body[parts["commit_end"]:])
++    return "\n".join([parts["shebang"]] + _render_header(parts, ctx) + out)
++
++
++def constants_values(ctx: Dict[str, Any]) -> Dict[str, str]:
++    """The rendered value of every _CONST_RENDERED key, each re-checked
++    against the shape the parser demands of a mold (the output is a mold)."""
++    values = {
++        "PLAN": ctx["plan_id"], "PACK_TAG": ctx["tag"], "OLD_VER": ctx["from_version"],
++        "NEW_VER": ctx["version"], "LOWER": ctx["lower"], "OLD_UPPER": ctx["old_upper"],
++        "NEW_UPPER": ctx["new_upper"], "NEW_PUBLISHED": ctx["published_date"],
++        "TRIPLE": ctx["triple"], "OLD_SHA": ctx["old_sha"], "NEW_SHA": ctx["sha256"],
++        "NEW_INTEGRITY": f"'{ctx['integrity']}'",
++        "BASE_PIN_SHA256": ctx["base_pin_sha256"], "BASE_MAN_SHA256": ctx["base_man_sha256"],
++        "SRC_PIN_SHA256": ctx["src_pin_sha256"], "SRC_MAN_SHA256": ctx["src_man_sha256"],
++        "GA_TAG": ctx["ga_tag"], "D": _CONST_D_TEMPLATE,
++    }
++    for key, value in values.items():
++        if _CONST_RENDERED[key].fullmatch(value or "") is None:
++            raise RePinError(EXIT_VERIFY, f"rendered {key}={value!r} has an unexpected shape")
++    return values
++
++
++def _generated_notice(ctx: Dict[str, Any], source_rel: str, source_sha: str,
++                      owned: str) -> List[str]:
++    """Provenance lines for the constants-block generation. No version,
++    digest or tag literal: the pack's rehearsal refuses one outside the block
++    (the source sha256 is cut to 16 hex digits for that reason)."""
++    head = [f"# AUTO-GENERATED por {GENERATOR} em {ctx['date']} a partir de",
++            f"# {source_rel} (sha256 {source_sha[:16]}...)."]
++    return head + _wrap_comment(f"Não edite à mão: regenere o pack. O corpo é o da "
++                                f"fonte, byte a byte, exceto {owned}.")
++
++
++def _render_constants_mold(parts: Dict[str, Any], ctx: Dict[str, Any]) -> str:
++    body = list(parts["body"])
++    values = constants_values(ctx)
++    for key, (idx, _old) in parts["consts"].items():
++        if key in values:
++            body[idx] = f"{key}={values[key]}"
++    trap = parts["trap"]
++    out = body[:trap + 1] + _GUARD + body[trap + 1 + parts["guard_len"]:]
++    script = f"{ctx['pack_dir']}/{ctx['script_name']}"
++    head = _generated_notice(ctx, ctx["mold_rel"], ctx["mold_sha"],
++                             f"este cabeçalho, os valores do bloco de constantes e o "
++                             f"guard {TODO_MARK}")
++    head += ["#"] + _wrap_comment(
++        f"{ctx['script_name']} — cerimônia do re-pin do codex-cli ({ctx['plan_id']}). "
++        "As versões, os digests e os caminhos estão todos no bloco de constantes abaixo.")
++    steps = [m.group(1) for m in (_SAY_RE.match(line) for line in parts["body"]) if m]
++    if steps:
++        head += _wrap_comment("Passos (lidos do molde): " + " · ".join(steps) + ".")
++    head += ["#", f"#   bash {script}            # real",
++             f"#   bash {script} --dry-run  # ensaio"]
++    if parts.get("rehearsal") is not None:
++        head.append(f"#   bash {ctx['pack_dir']}/rehearse-pin-{ctx['tag']}.sh  # ensaio ponta a "
++                    "ponta (cópia descartável)")
++        head += ["#"] + _wrap_comment(_rehearsal_order_note(ctx))
++    head.append("#")
++    if parts.get("mold_readme"):
++        head += _wrap_comment("O que cada guard confere e por quê: o README do pack do molde "
++                              f"({posixpath.dirname(ctx['mold_rel'])}/README.md).")
++    head += ["# Se o GPG reclamar de pinentry:", "#   export GPG_TTY=$(tty)"]
++    return "\n".join([parts["shebang"]] + head + out)
++
++
++def render_rehearsal(parts: Dict[str, Any], ctx: Dict[str, Any]) -> str:
++    """The rehearsal: a regenerated header over the mold rehearsal's body."""
++    reh = parts["rehearsal"]
++    src = f"{posixpath.dirname(ctx['mold_rel'])}/{reh['name']}"
++    head = _generated_notice(ctx, src, reh["sha"], "este cabeçalho")
++    head += ["#"] + _wrap_comment(
++        f"rehearse-pin-{ctx['tag']}.sh — ensaio ponta a ponta da cerimônia do re-pin, "
++        "numa cópia descartável; as constantes vêm do OWNER-PIN-SIGN.sh deste diretório. "
++        f"O que o ensaio faz, passo a passo: o cabeçalho de {src}.")
++    head += ["#", f"#   bash {ctx['pack_dir']}/rehearse-pin-{ctx['tag']}.sh"]
++    return "\n".join([reh["shebang"]] + head + reh["body"])
++
++
++def _rehearsal_order_note(ctx: Dict[str, Any]) -> str:
++    """C-R2M-05: the rehearsal clones ``main`` and runs this script for REAL
++    in its negative controls and in p2; the injected guard dies in every
++    real run while a ``TODO(owner)`` remains, so each of those cases would
++    abort on the guard instead of the pattern it expects."""
++    return (f"O ensaio (`rehearse-pin-{ctx['tag']}.sh`) clona o `main` e roda o script de "
++            f"verdade nos controles negativos e no p2: com {TODO_MARK} pendente cada caso "
++            f"aborta no guard {TODO_MARK}, não no padrão que espera. Antes do ensaio: gere "
++            "com `--pin-note`, escreva as seções humanas do sentinel e commite o pack.")
++
++
++def _inherited_prose_flags(parts: Dict[str, Any], ctx: Dict[str, Any]) -> List[str]:
++    """Named contradictions between this run and the mold's inherited prose
++    that the generator CAN see, in the mold's ``printf`` lines: under
++    ``--offline-from``, a line naming ``npm pack`` states a measurement this
++    run did not make; when the version already sits inside the range
++    (nothing widened), a line saying ``Widen-upper-only`` states a widening
++    this run did not make (C-R3M-02)."""
++    printfs = [ln for ln in parts["body"] if ln.lstrip().startswith("printf ")]
++    flags = []
++    if ctx["offline"] and any("npm pack" in ln for ln in printfs):
++        flags.append("a mensagem de commit herdada do molde diz que os digests saíram de "
++                     "`npm pack`; esta geração usou `--offline-from` (tarball fornecido "
++                     "localmente, conferido contra o `dist.integrity`) — corrija a frase "
++                     "antes de assinar")
++    if not ctx["widened"] and any("Widen-upper-only" in ln for ln in printfs):
++        flags.append("a mensagem de commit herdada do molde diz `Widen-upper-only`; nesta "
++                     f"geração o range fica inalterado (`{ctx['new_range']}`: "
++                     f"{ctx['version']} já está dentro dele) — corrija a frase antes de "
++                     "assinar")
++    return flags
++
++
++def _inherited_prose_notes(parts: Dict[str, Any], ctx: Dict[str, Any]) -> List[str]:
++    """C-R2M-06, declared by SHAPE: in the constants-block grammar every line
++    of the mold body outside the constants block, the guard and the header
++    is copied verbatim, including the commit message's ``printf`` prose. The
++    generator's only check on that text is the stale-literal scan (version,
++    hex and SRI tokens); a sentence that is true only of the mold's own
++    re-pin passes it unchanged."""
++    if parts["grammar"] != GRAMMAR_CONSTANTS:
++        return []
++    lines = _wrap(
++        "Texto herdado sem conferência: fora do bloco de constantes, do guard "
++        f"{TODO_MARK} e do cabeçalho, o corpo do script é o do molde, byte a byte — "
++        "inclusive a prosa da mensagem de commit (as linhas `printf`). O gerador só "
++        "confere nela os literais de versão, hex e SRI; uma frase verdadeira apenas "
++        "para o re-pin do molde passa inalterada. Leia a mensagem de commit do "
++        "script contra ESTE re-pin antes de assinar.")
++    for flag in ctx.get("inherited_flags") or []:
++        lines += [""] + _wrap("Contradição detectada nesta geração: " + flag + ".")
++    return lines
++
++
++def render_readme(parts: Dict[str, Any], ctx: Dict[str, Any], files: List[str]) -> str:
++    """The pack's README: provenance, the measured values and the files."""
++    rng = (f"`<{ctx['old_upper']}` → `<{ctx['new_upper']}` (inferior inalterado em "
++           f"`>={ctx['lower']}`)" if ctx["widened"] else f"inalterado (`{ctx['new_range']}`)")
++    lines = [
++        f"# {ctx['pack_name']} — re-pin do Codex CLI {ctx['from_version']} → "
++        f"{ctx['version']} ({ctx['plan_id']})",
++        "",
++        f"Gerado por `{GENERATOR}` em {ctx['date']} a partir do molde `{ctx['mold_rel']}`",
++        f"(sha256 `{ctx['mold_sha']}`). Não edite à mão: regenere o pack.",
++        "",
++        "| valor | medido |",
++        "|---|---|",
++        f"| versão | `{ctx['version']}` (publicada em {ctx['published_date']}) |",
++        f"| range | {rng} |",
++        f"| `npm_integrity` (plataforma `{ctx['platform_spec']}`) | `{ctx['integrity']}` |",
++        f"| `sha256` do payload `{ctx['triple']}` | `{ctx['sha256']}` |",
++        f"| `sha256` dos canônicos vivos (pin, manifesto) | `{ctx['base_pin_sha256']}`, "
++        f"`{ctx['base_man_sha256']}` |",
++        f"| `sha256` dos `.new` (pin, manifesto) | `{ctx['src_pin_sha256']}`, "
++        f"`{ctx['src_man_sha256']}` |",
++        f"| tag que o re-pin segue | `{ctx['ga_tag']}` |",
++        "",
++        "Arquivos: " + ", ".join(f"`{f}`" for f in files) + ".",
++        "",
++        f"O `{ctx['script_name']}` recusa a execução real enquanto houver `{TODO_MARK}` "
++        "no sentinel ou no",
++        f"`{PIN_OUT}`. Os dois `.new` são conferidos por sha256 (`SRC_PIN_SHA256`,",
++        "`SRC_MAN_SHA256`): editar um deles à mão faz o script recusar. Para escrever a",
++        "justificativa no pin, regenere o pack (num diretório novo, ou depois de",
++        "removê-lo) com `--pin-note <arquivo>`.",
++    ]
++    if parts.get("rehearsal") is not None:
++        lines += [""] + _wrap(_rehearsal_order_note(ctx))
++    notes = _inherited_prose_notes(parts, ctx)
++    if notes:
++        lines += [""] + notes
++    if parts.get("mold_readme"):
++        lines += ["", "O que cada passo e cada guard da cerimônia conferem, e por quê: o README "
++                  f"do pack do molde, `{posixpath.dirname(ctx['mold_rel'])}/README.md` (o "
++                  "corpo do script é o do molde)."]
++    return "\n".join(lines) + "\n"
++
++
++# ---------------------------------------------------------------------------
++# Rendering of the pin paragraph, the manifest and the sentinel draft
++# ---------------------------------------------------------------------------
++
++
++def render_manifest(old: Dict[str, Any], ctx: Dict[str, Any]) -> str:
++    entry_path = old["payloads"][ctx["triple"]]["path"]
++    new = {
++        "schema": 1,
++        "package_version": ctx["version"],
++        "npm_integrity": ctx["integrity"],
++        "payloads": {ctx["triple"]: {"path": entry_path, "sha256": ctx["sha256"]}},
++    }
++    return json.dumps(new, indent=2, ensure_ascii=False) + "\n"
++
++
++def render_pin(prefix: List[str], ctx: Dict[str, Any]) -> str:
++    """The live pin's lines before the range, unchanged, then a blank line
++    (unless they already end in one), the dated paragraph and the range."""
++    lines = list(prefix)
++    if lines and lines[-1].strip():
++        lines.append("")
++    if ctx["widened"]:
++        rng = (f"Upper bound widened <{ctx['old_upper']} -> <{ctx['new_upper']}; "
++               f"LOWER BOUND UNCHANGED at >={ctx['lower']} (widen-upper-only).")
++    else:
++        rng = (f"Range UNCHANGED ({ctx['new_range']}): {ctx['version']} already "
++               "sits inside it.")
++    para = (f"re-pin update ({ctx['date']}, pack {ctx['pack_name']}; generated by "
++            f"{GENERATOR}): package_version {ctx['from_version']} -> "
++            f"{ctx['version']}. {rng} The payload manifest is re-pinned in this "
++            f"same pack: payload sha256 {ctx['sha256'][:8]}... for "
++            f"{ctx['version']}/{ctx['triple']}, npm_integrity from the PLATFORM "
++            f"artifact {ctx['platform_spec']} (ADR-182 §5 step 2).")
++    lines += _wrap_comment(para)
++    note = ctx.get("pin_note")
++    if note:
++        for paragraph in note:
++            lines += _wrap_comment(paragraph)
++    else:
++        lines += _wrap_comment(
++            f"{TODO_MARK}: why this re-pin now; whether it runs outside any open "
++            "release window; whether ADR-111 §pin-update-protocol asks for a "
++            "Phase 4-bis re-run; and the declared consequence (rail measurements "
++            "taken before and after this commit are NOT comparable).")
++    lines.append(ctx["new_range"])
++    return "\n".join(lines) + "\n"
++
++
++def read_pin_note(path: str) -> List[str]:
++    """``--pin-note``: the Owner's rationale, as paragraphs (split on blank
++    lines, each re-wrapped as ``# `` comment lines by ``render_pin``)."""
++    try:
++        raw = Path(path).read_bytes()
++    except OSError as exc:
++        raise RePinError(EXIT_INPUT, f"--pin-note unreadable ({type(exc).__name__})") from None
++    text = _mold_text(raw, "--pin-note")
++    if TODO_MARK in text:
++        raise RePinError(EXIT_INPUT, f"--pin-note still carries {TODO_MARK}")
++    paragraphs = [" ".join(p.split()) for p in re.split(r"\n[ \t]*\n", text)]
++    paragraphs = [p for p in paragraphs if p]
++    if not paragraphs:
++        raise RePinError(EXIT_INPUT, "--pin-note is empty")
++    if any(not c.isprintable() for p in paragraphs for c in p):
++        raise RePinError(EXIT_INPUT, "--pin-note carries a control character")
++    return paragraphs
++
++
++def _sentinel_data_line(ctx: Dict[str, Any]) -> str:
++    """The sentinel's ``Data:`` header line.
++
++    A constants-block mold's step 1 rewrites BOTH ``Anchor-SHA:`` and
++    ``Data:`` with the signing day, and its rehearsal (copied verbatim into
++    the pack) requires exactly those two lines to change in the ceremony
++    commit (4 delta lines). A ``Data:`` already equal to the signing day
++    would change nothing and a same-day rehearsal would go red, so there
++    the line is a PLACEHOLDER, never the generation date. A heredoc-grammar
++    mold's step 1 rewrites only ``Anchor-SHA:``; there the line keeps the
++    generation date, as the hand-built sentinel of that grammar did.
++    """
++    if ctx["grammar"] == GRAMMAR_CONSTANTS:
++        return "Data: (preenchida pelo passo 1 do script de cerimônia)"
++    return f"Data: {ctx['date']}"
++
++
++def render_sentinel(ctx: Dict[str, Any]) -> str:
++    # justified: one literal template; splitting it would scatter the
++    # sentinel's section order across helpers.
++    source =("fornecido por --offline-from (não baixado nesta execução)"
++              if ctx["offline"] else "baixado com npm pack num diretório temporário")
++    published = ctx["published"] or "ausente no documento do registry"
++    rng = (f"`<{ctx['old_upper']}` → `<{ctx['new_upper']}` (limite inferior "
++           f"INALTERADO em `>={ctx['lower']}`)" if ctx["widened"]
++           else f"range INALTERADO (`{ctx['new_range']}`)")
++    tgz, member = ctx["tarball_name"], ctx["member"]
++    reg = " ".join(NPM_REGISTRY_ARGS)
++    url = ctx["tarball_url"] or "ausente ou fora do formato https://…/*.tgz"
++    return "\n".join([
++        f"# {ctx['sentinel_stem']} — sentinel do re-pin do codex CLI "
++        f"{ctx['from_version']} → {ctx['version']}",
++        "",
++        f"Plan: {ctx['plan_id']}",
++        f"Wave: re-pin codex-cli {ctx['from_version']} → {ctx['version']}",
++        "Anchor-SHA: (preenchido pelo passo 1 do script de cerimônia)",
++        _sentinel_data_line(ctx),
++        "",
++        "## Ratificação",
++        "",
++        f"{TODO_MARK}: o mandato do Owner (verbatim, com data) e por que este",
++        "re-pin entra agora.",
++        "",
++        "## Scope",
++        "",
++        f"- `{PIN_REL}` — {rng}, com o parágrafo datado do cabeçalho.",
++        f"- `{MANIFEST_REL}` — `package_version` {ctx['version']}, `npm_integrity` "
++        f"do artefato de PLATAFORMA e `sha256` do payload `{ctx['triple']}`.",
++        "",
++        "Nada além desses dois arquivos canônicos, deste sentinel e da sua",
++        "assinatura entra no commit da cerimônia.",
++        "",
++        "## Bytes que esta assinatura cobre",
++        "",
++        f"    range novo                         {ctx['new_range']}",
++        f"    {PIN_REL} vivo (sha256)   {ctx['base_pin_sha256']}",
++        f"    {MANIFEST_REL} vivo (sha256)",
++        f"                                       {ctx['base_man_sha256']}",
++        f"    {PIN_OUT} (sha256)          {ctx['src_pin_sha256']}",
++        f"    {MANIFEST_OUT} (sha256)",
++        f"                                       {ctx['src_man_sha256']}",
++        f"    payload {ctx['triple']} (sha256)  {ctx['sha256']}",
++        f"    npm_integrity (plataforma)         {ctx['integrity']}",
++        "",
++        "Os dois `vivo` são os canônicos de quando o pack foi gerado; os dois `.new`",
++        "são os bytes que a cerimônia aplica.",
++        "",
++        f"## Evidência dos digests (medida por `{GENERATOR}` em {ctx['date']})",
++        "",
++        f"Registry: `{NPM_REGISTRY}`, passado explicitamente a toda chamada do npm",
++        "(`--registry` e `--@openai:registry`: nenhum `.npmrc` escolhe outro).",
++        "",
++        f"    npm view {PACKAGE}@{ctx['version']} --json {reg}",
++        f"      -> time[\"{ctx['version']}\"] = {published}",
++        f"      -> optionalDependencies[\"{ctx['alias_key']}\"] = npm:{ctx['platform_spec']}",
++        f"    npm view {ctx['platform_spec']} --json {reg}",
++        f"      -> dist.integrity = {ctx['integrity']}",
++        f"      -> dist.tarball = {url}",
++        f"    tarball {tgz} ({ctx['tarball_size']} bytes), {source}",
++        f"      -> sha512 = {ctx['integrity']}  (confere com o dist.integrity)",
++        f"    membro {member} ({ctx['payload_size']} bytes)",
++        f"      -> sha256 = {ctx['sha256']}",
++        "",
++        "Reprodução manual:",
++        "",
++        f"    npm pack {ctx['platform_spec']} {reg}",
++        f"    openssl dgst -sha512 -binary {tgz} | base64",
++        f"    tar xzf {tgz} {member}",
++        f"    shasum -a 256 {member}",
++        "",
++        f"Para registro, o `dist.integrity` do pacote PRINCIPAL {PACKAGE}@"
++        f"{ctx['version']} é `{ctx['main_integrity'] or 'ausente'}` — não é o",
++        "que se grava (ADR-182 §5 passo 2).",
++        "",
++        "Conferência opcional antes da cerimônia, com a versão já instalada:",
++        "`python3 .claude/hooks/check_pair_rail.py --verify-codex-pin \"$(command -v codex)\"`",
++        f"deve trazer `\"sha256\": \"{ctx['sha256']}\"` (o `status` ainda é `mismatch`",
++        "contra o pin vigente).",
++        "",
++        "## Protocolo, consequência e residual",
++        "",
++        f"{TODO_MARK}: janela de release aberta ou não; ADR-111",
++        "§pin-update-protocol (Phase 4-bis); a consequência declarada (medições do",
++        "rail antes e depois deste commit não são comparáveis); o residual (só o",
++        f"payload `{ctx['triple']}` é pinado).",
++        "",
++        f"Residual declarado pelo gerador: o caminho do payload (`{ctx['entry_path']}`)",
++        "é COPIADO do manifesto vivo; o gerador só confere que o tarball novo tem",
++        "um membro regular ali. Que o launcher da versão nova (`bin/codex.js` do",
++        "pacote principal) ainda execute esse caminho NÃO é conferido — ponto",
++        "cego compartilhado com `--verify-codex-pin`, que faz hash do mesmo",
++        "caminho do manifesto.",
++        "",
++    ] + ([*ctx["inherited_notes"], ""] if ctx.get("inherited_notes") else []))
++
++
++# ---------------------------------------------------------------------------
++# Emission and orchestration
++# ---------------------------------------------------------------------------
++
++
++def emit_pack(out: Path, files: Dict[str, str], make_parent: bool = False) -> None:
++    """Write the pack into a sibling temp dir, then rename it into place.
++
++    A path that exists at either check is refused. Between the last check and
++    the rename, ``rename(2)`` refuses a non-empty directory or a non-directory
++    at ``out``; only an EMPTY directory created in that window would be
++    replaced (nothing is lost). A filesystem error (an unwritable parent, for
++    instance) is an input refusal of ``out``, never a traceback.
++    ``make_parent`` creates a missing parent (ONE level: the plan's
++    ``PLAN-NNN/`` subdirectory) and removes it again if the write fails.
++    """
++    if os.path.lexists(out):
++        raise RePinError(EXIT_INPUT, f"output path already exists: {out}")
++    parent = out.parent
++    made_parent = False
++    if make_parent and not os.path.lexists(parent):
++        try:
++            os.mkdir(parent, 0o755)
++            made_parent = True
++        except OSError as exc:
++            raise RePinError(EXIT_INPUT, f"cannot create {parent} "
++                                         f"({type(exc).__name__})") from None
++    if not parent.is_dir():
++        raise RePinError(EXIT_INPUT, f"output parent is not a directory: {parent}")
++    try:
++        _write_pack(out, parent, files)
++    except BaseException:
++        if made_parent:
++            try:
++                os.rmdir(parent)
++            except OSError:
++                pass
++        raise
++
++
++def _write_pack(out: Path, parent: Path, files: Dict[str, str]) -> None:
++    try:
++        tmp = Path(tempfile.mkdtemp(prefix=".re-pin-codex-", dir=str(parent)))
++    except OSError as exc:
++        raise RePinError(EXIT_INPUT, f"cannot write under {parent} "
++                                     f"({type(exc).__name__})") from None
++    try:
++        for name, content in files.items():
++            with open(tmp / name, "x", encoding="utf-8", newline="\n") as fh:
++                fh.write(content)
++            os.chmod(tmp / name, 0o644)
++        os.chmod(tmp, 0o755)
++        if os.path.lexists(out):
++            raise RePinError(EXIT_INPUT, f"output path appeared meanwhile: {out}")
++        os.rename(tmp, out)
++    except OSError as exc:
++        shutil.rmtree(tmp, ignore_errors=True)
++        raise RePinError(EXIT_INPUT, f"cannot write the pack at {out} "
++                                     f"({type(exc).__name__})") from None
++    except BaseException:
++        shutil.rmtree(tmp, ignore_errors=True)
++        raise
++
++
++def _mold_text(raw: bytes, what: str) -> str:
++    """The mold's text; CR bytes and non-UTF-8 are input refusals."""
++    if b"\r" in raw:
++        raise RePinError(EXIT_INPUT, f"{what} carries CR bytes (CRLF); refused")
++    try:
++        return raw.decode("utf-8")
++    except UnicodeDecodeError:
++        raise RePinError(EXIT_INPUT, f"{what} is not UTF-8") from None
++
++
++def _resolve_mold(mold_arg: str, repo: Path) -> Tuple[Path, str, str, str]:
++    mold = Path(mold_arg)
++    if not mold.is_absolute():
++        mold = Path.cwd() / mold
++    try:
++        rel = mold.resolve().relative_to(repo)
++    except ValueError:
++        raise RePinError(EXIT_INPUT, "--mold must live inside the repository "
++                                     "(its path is recorded in the pack)") from None
++    try:
++        raw = mold.read_bytes()
++    except OSError as exc:
++        raise RePinError(EXIT_INPUT, f"--mold unreadable ({type(exc).__name__})") from None
++    text = _mold_text(raw, "--mold")
++    return mold, rel.as_posix(), text, hashlib.sha256(raw).hexdigest()
++
++
++def mold_target(mold: Path) -> Tuple[Optional[Tuple[int, int, int]], str]:
++    """The version a pack pins: ``package_version`` of the manifest ``.new``
++    beside its ceremony script. Grammar-independent: every pack generation
++    carries that file. ``(None, why)`` when it cannot be read."""
++    try:
++        data = json.loads((mold.parent / MANIFEST_OUT).read_text(encoding="utf-8"))
++    except (OSError, UnicodeDecodeError, ValueError) as exc:
++        return None, f"no readable {MANIFEST_OUT} beside it ({type(exc).__name__})"
++    ver = data.get("package_version") if isinstance(data, dict) else None
++    try:
++        return parse_version(ver), ""
++    except RePinError:
++        return None, f"its {MANIFEST_OUT} package_version is not X.Y.Z"
++
++
++def mold_inventory(repo: Path) -> List[Dict[str, Any]]:
++    """Every pack mold under ``.claude/plans``: the version its pack pins and
++    whether THIS generator parses it (``reason`` names the refusal)."""
++    rows: List[Dict[str, Any]] = []
++    for path in sorted((repo / ".claude" / "plans").glob(MOLD_GLOB)):
++        target, target_note = mold_target(path)
++        grammar = ""
++        try:
++            parts = parse_mold(_mold_text(path.read_bytes(), "mold"))
++            grammar = parts["grammar"]
++            load_mold_siblings(parts, path)
++            compatible, reason = True, ""
++        except RePinError as exc:
++            compatible, reason = False, str(exc)
++        except OSError as exc:
++            compatible, reason = False, f"mold unreadable ({type(exc).__name__})"
++        rows.append({"rel": path.relative_to(repo).as_posix(), "target": target,
++                     "target_note": target_note, "compatible": compatible,
++                     "reason": reason, "grammar": grammar})
++    return rows
++
++
++def _fmt_version(v: Tuple[int, int, int]) -> str:
++    return ".".join(str(n) for n in v)
++
++
++def newest_molds(repo: Path) -> List[Dict[str, Any]]:
++    """The molds of the pack(s) that pin the NEWEST version ([] = no pack).
++
++    Raises (input) when some pack's version cannot be read: the newest pack
++    cannot be established, and guessing could pick an older mold.
++    """
++    rows = mold_inventory(repo)
++    unranked = [r for r in rows if r["target"] is None]
++    if unranked:
++        raise RePinError(EXIT_INPUT, f"pack mold {unranked[0]['rel']} has "
++                                     f"{unranked[0]['target_note']}: the newest pack "
++                                     "cannot be established")
++    if not rows:
++        return []
++    top = max(r["target"] for r in rows)
++    return [r for r in rows if r["target"] == top]
++
++
++def newest_mold(repo: Path) -> Optional[Dict[str, Any]]:
++    """THE mold a re-pin is built from, or None when no pack mold exists.
++
++    When a mold of the newest pack is not generator-compatible, that row is
++    returned (``compatible`` False, ``reason`` set): the answer is then
++    "clone it by hand", never an older mold that would drop what the newer
++    pack hardened. The drift detector's recommendation reads this function.
++    """
++    top = newest_molds(repo)
++    if not top:
++        return None
++    blocked = [r for r in top if not r["compatible"]]
++    return blocked[0] if blocked else top[-1]
++
++
++def _refuse_older_mold(repo: Path, mold_rel: str, mold_version: str) -> None:
++    """``--mold`` must be a mold of the newest pack, and every mold of that
++    pack must be generator-compatible (no silent downgrade)."""
++    top = newest_molds(repo)
++    rels = [r["rel"] for r in top]
++    newest = _fmt_version(top[0]["target"]) if top else ""
++    if mold_rel not in rels:
++        mine = next((r for r in mold_inventory(repo) if r["rel"] == mold_rel), None)
++        if mine is None:
++            raise RePinError(EXIT_INPUT, f"--mold {mold_rel} is not a pack mold "
++                                         f"(.claude/plans/{MOLD_GLOB})")
++        raise RePinError(EXIT_INPUT, f"--mold {mold_rel} pins "
++                                     f"{_fmt_version(mine['target'])}, but the newest pack "
++                                     f"pins {newest} ({', '.join(rels)}): building from an "
++                                     "older mold would drop what the newer pack hardened")
++    blocked = [r for r in top if not r["compatible"]]
++    if blocked:
++        raise RePinError(EXIT_INPUT, f"the newest pack mold {blocked[0]['rel']} (pins "
++                                     f"{newest}) is not generator-compatible: "
++                                     f"{blocked[0]['reason']}")
++    if mold_version != newest:
++        raise RePinError(EXIT_INPUT, f"--mold declares NEW_VERSION {mold_version} but its "
++                                     f"pack's {MANIFEST_OUT} pins {newest}")
++
++
++def _pack_location(args: argparse.Namespace, repo: Path, target: Tuple[int, int, int],
++                   tag: str, grammar: str = GRAMMAR_HEREDOC) -> Tuple[str, str, Path]:
++    """Pack dir from ``--pack-dir`` or ``--plan`` (never from the mold's plan);
++    the plan file must exist; tag and version collisions are refused (a
++    ``--dry-run`` writes nothing, so it may re-measure an existing pack).
++    In the constants-block grammar the script derives its own dir from
++    ``PLAN`` and ``PACK_TAG``, so the dir must be ``codex-pin-<tag>``."""
++    if args.pack_dir:
++        pack_dir = args.pack_dir
++    elif args.plan:
++        if _PLAN_RE.fullmatch(args.plan) is None:
++            raise RePinError(EXIT_INPUT, f"--plan {args.plan!r} is not PLAN- plus three "
++                                         "digits (name the plan that carries this re-pin)")
++        pack_dir = f".claude/plans/{args.plan}/codex-pin-{tag}"
++    else:
++        raise RePinError(EXIT_INPUT, "name the plan that carries this re-pin: --plan "
++                                     "PLAN-NNN (or --pack-dir); it is never inherited "
++                                     "from the mold")
++    m = _PACK_DIR_RE.fullmatch(pack_dir)
++    if m is None:
++        raise RePinError(EXIT_INPUT, f"pack dir {pack_dir!r} is not "
++                                     "'.claude/plans/PLAN-NNN/<slug>'")
++    if grammar == GRAMMAR_CONSTANTS and posixpath.basename(pack_dir) != f"codex-pin-{tag}":
++        raise RePinError(EXIT_INPUT, f"pack dir {pack_dir!r}: a {GRAMMAR_CONSTANTS} pack "
++                                     f"derives its dir from PLAN and PACK_TAG, so it must be "
++                                     f"'.claude/plans/PLAN-NNN/codex-pin-{tag}'")
++    plans = repo / ".claude" / "plans"
++    if not list(plans.glob(f"{m.group(1)}-*.md")):
++        raise RePinError(EXIT_INPUT, f"no plan file .claude/plans/{m.group(1)}-*.md: a "
++                                     f"{m.group(1)}/ subdirectory without its plan fails "
++                                     "the plan schema (PLAN-SCHEMA.md)")
++    out = Path(args.out) if args.out else repo / pack_dir
++    if args.dry_run:
++        return pack_dir, m.group(1), out
++    if os.path.lexists(out):
++        raise RePinError(EXIT_INPUT, f"output path already exists: {out}")
++    used = sorted(p.relative_to(repo).as_posix() for p in
++                  list(plans.glob(f"PLAN-*/codex-pin-{tag}"))
++                  + list(plans.glob(f"PLAN-*/*/pin-{tag}-approved.md")))
++    if used:
++        raise RePinError(EXIT_INPUT, f"pack tag {tag!r} is already used under "
++                                     f".claude/plans: {', '.join(used)}")
++    same = [r["rel"] for r in mold_inventory(repo) if r["target"] == target]
++    if same:
++        raise RePinError(EXIT_INPUT, f"a pack for {_fmt_version(target)} already exists: "
++                                     f"{', '.join(same)}")
++    return pack_dir, m.group(1), out
++
++
++def _measure(args: argparse.Namespace, manifest: Dict[str, Any],
++             triple: str, platform: str) -> Dict[str, Any]:
++    """Registry resolution + tarball verification; returns the measured facts."""
++    npm = shutil.which("npm")
++    if npm is None:
++        raise RePinError(EXIT_INFRA, "npm is not on PATH")
++    try:
++        with tempfile.TemporaryDirectory(prefix="re-pin-codex-") as tmp:
++            work = Path(tmp)
++            reg = resolve_registry(npm, args.version, platform, work)
++            member = payload_member(manifest["payloads"][triple]["path"], reg["alias_key"])
++            if args.offline_from:
++                tarball = Path(args.offline_from)
++                data = read_tarball(tarball, EXIT_INPUT, "--offline-from")
++            else:
++                dest = work / "pack"
++                dest.mkdir()
++                tarball = fetch_tarball(npm, reg["platform_spec"], work, dest)
++                data = read_tarball(tarball, EXIT_INFRA, "the npm pack tarball")
++    except OSError as exc:
++        raise RePinError(EXIT_INFRA, f"temporary work dir ({type(exc).__name__})") from None
++    # From here on only ``data`` is read: the bytes checked against the
++    # registry are the bytes the payload is hashed from.
++    actual = sri_sha512(data)
++    if actual != reg["integrity"]:
++        raise RePinError(EXIT_VERIFY, f"tarball sha512 {actual} != registry "
++                                      f"dist.integrity {reg['integrity']}")
++    sha, size = hash_member(data, member)
++    reg.update({"member": member, "sha256": sha, "payload_size": size,
++                "tarball_name": tarball.name, "tarball_size": len(data)})
++    return reg
++
++
++def _platform_for(manifest: Dict[str, Any], requested: Optional[str]) -> Tuple[str, str]:
++    """(platform, triple): ``--platform`` or, by default, the platform of the
++    manifest's single pinned triple (never the generating host's)."""
++    if requested is None:
++        (pinned,) = manifest["payloads"]
++        by_triple = {t: p for p, t in PLATFORM_TRIPLE.items()}
++        if pinned not in by_triple:
++            raise RePinError(EXIT_INPUT, f"manifest pins triple {pinned!r}, which maps to "
++                                         "no known npm platform; pass --platform")
++        return by_triple[pinned], pinned
++    triple = PLATFORM_TRIPLE.get(requested)
++    if triple is None:
++        raise RePinError(EXIT_INPUT, f"unknown --platform {requested!r}")
++    if set(manifest["payloads"]) != {triple}:
++        raise RePinError(EXIT_INPUT, f"manifest pins {sorted(manifest['payloads'])}; this "
++                                     f"tool re-pins exactly one triple per run ({triple}) "
++                                     "and refuses to emit stale digests for others")
++    return requested, triple
++
++
++def run(args: argparse.Namespace) -> Dict[str, Any]:
++    # justified: linear orchestration of already-factored steps; splitting it
++    # further would only thread the same context dict through more calls.
++    target = parse_version(args.version)
++    date = args.date or datetime.date.today().isoformat()
++    if _DATE_RE.fullmatch(date) is None:
++        raise RePinError(EXIT_INPUT, f"--date {date!r} is not YYYY-MM-DD")
++    if args.platform is not None and args.platform not in PLATFORM_TRIPLE:
++        raise RePinError(EXIT_INPUT, f"unknown --platform {args.platform!r}")
++    repo = Path(args.repo_root).resolve()
++    manifest, manifest_raw = read_manifest(repo / MANIFEST_REL)
++    if len(manifest["payloads"]) != 1:
++        raise RePinError(EXIT_INPUT, f"manifest pins {sorted(manifest['payloads'])}; this "
++                                     "tool re-pins exactly one triple per run and refuses "
++                                     "to emit stale digests for others")
++    platform, triple = _platform_for(manifest, args.platform)
++    from_version = manifest["package_version"]
++    if target <= parse_version(from_version):
++        raise RePinError(EXIT_INPUT, f"{args.version} is not newer than the pinned "
++                                     f"{from_version}")
++    try:
++        pin_raw = (repo / PIN_REL).read_bytes()
++        pin_text = pin_raw.decode("utf-8")
++    except (OSError, UnicodeDecodeError) as exc:
++        raise RePinError(EXIT_INPUT, f"{PIN_REL} unreadable ({type(exc).__name__})") from None
++    prefix, lower, upper = parse_pin(pin_text)
++    new_range, widened = plan_range(lower, upper, target)
++    mold, mold_rel, mold_text, mold_sha = _resolve_mold(args.mold, repo)
++    parts = parse_mold(mold_text)
++    load_mold_siblings(parts, mold)
++    _check_grammar_args(parts, args, platform, triple)
++    _refuse_older_mold(repo, mold_rel, parts["mold_version"])
++    pin_note = read_pin_note(args.pin_note) if args.pin_note else None
++    tag = pack_tag(target)
++    pack_dir, plan_id, out = _pack_location(args, repo, target, tag, parts["grammar"])
++    ctx = _measure(args, manifest, triple, platform)
++    sentinel_stem = f"pin-{tag}-approved"
++    ctx.update({
++        "version": args.version, "from_version": from_version, "triple": triple,
++        "platform": platform, "entry_path": manifest["payloads"][triple]["path"],
++        "old_sha": manifest["payloads"][triple]["sha256"],
++        "date": date, "offline": bool(args.offline_from), "lower": lower,
++        "old_upper": upper, "new_upper": new_range.rsplit("<", 1)[1],
++        "new_range": new_range, "widened": widened, "pack_dir": pack_dir,
++        "pack_name": Path(pack_dir).name, "plan_id": plan_id, "tag": tag,
++        "sentinel_stem": sentinel_stem, "sentinel_name": sentinel_stem + ".md",
++        "script_name": mold.name, "mold_rel": mold_rel,
++        "mold_sha": mold_sha, "ga_tag": args.ga_tag, "pin_note": pin_note,
++        "base_pin_sha256": hashlib.sha256(pin_raw).hexdigest(),
++        "base_man_sha256": hashlib.sha256(manifest_raw).hexdigest(),
++        "published_date": _published_date(ctx["published"], parts["grammar"]),
++        "grammar": parts["grammar"],
++    })
++    files = render_pack(parts, manifest, prefix, ctx)
++    if not args.dry_run:
++        emit_pack(out, files, make_parent=not args.out)
++    keys = ("version", "from_version", "triple", "platform", "platform_spec", "integrity",
++            "main_integrity", "published", "registry_latest", "tarball_url", "member",
++            "sha256", "payload_size", "tarball_name", "tarball_size", "new_range",
++            "widened", "pack_dir", "plan_id", "mold_rel", "ga_tag", "base_pin_sha256",
++            "base_man_sha256", "src_pin_sha256", "src_man_sha256")
++    summary: Dict[str, Any] = {"status": "dry-run" if args.dry_run else "emitted",
++                               "grammar": parts["grammar"]}
++    summary.update({k: ctx[k] for k in keys})
++    summary.update({"registry": NPM_REGISTRY, "range": f">={lower},<{upper}",
++                    "inherited_prose_flags": ctx["inherited_flags"],
++                    "out": str(out), "files": sorted(files),
++                    # the two files the emitted guard greps (sentinel, pin)
++                    "todo_owner": sorted(n for n in (ctx["sentinel_name"], PIN_OUT)
++                                         if TODO_MARK in files[n])})
++    return summary
++
++
++def _published_date(published: str, grammar: str) -> str:
++    """``YYYY-MM-DD`` of the registry's ``time[<version>]``. The constants-block
++    mold states it in its commit message, so there a missing date refuses."""
++    day = published[:10] if isinstance(published, str) else ""
++    if _DATE_RE.fullmatch(day):
++        return day
++    if grammar == GRAMMAR_CONSTANTS:
++        raise RePinError(EXIT_VERIFY, "the registry document carries no publication time for "
++                                      "this version (the constants-block mold states it)")
++    return ""
++
++
++def _check_grammar_args(parts: Dict[str, Any], args: argparse.Namespace,
++                        platform: str, triple: str) -> None:
++    """Grammar-specific inputs, refused before any registry call."""
++    if parts["grammar"] != GRAMMAR_CONSTANTS:
++        if args.ga_tag is not None:
++            raise RePinError(EXIT_INPUT, f"--ga-tag applies only to a {GRAMMAR_CONSTANTS} "
++                                         "mold (GA_TAG constant); this mold has none")
++        return
++    if args.ga_tag is None or _GA_TAG_RE.fullmatch(args.ga_tag) is None:
++        raise RePinError(EXIT_INPUT, f"a {GRAMMAR_CONSTANTS} mold needs --ga-tag vX.Y.Z: the "
++                                     "release tag the re-pin ceremony must follow (its GA_TAG "
++                                     "constant; the ceremony refuses to run before that tag)")
++    reh = parts.get("rehearsal")
++    if reh is not None and reh["platform"] not in (None, platform):
++        raise RePinError(EXIT_INPUT, f"the mold's rehearsal is tied to npm platform "
++                                     f"{reh['platform']}, but this re-pin pins {triple}")
++
++
++def render_pack(parts: Dict[str, Any], manifest: Dict[str, Any], prefix: List[str],
++                ctx: Dict[str, Any]) -> Dict[str, str]:
++    """Every file of the pack, name -> text. The two ``.new`` files are
++    rendered first: their sha256 is part of what the sentinel and a
++    constants-block script declare."""
++    files = {MANIFEST_OUT: render_manifest(manifest, ctx), PIN_OUT: render_pin(prefix, ctx)}
++    ctx["src_man_sha256"] = hashlib.sha256(files[MANIFEST_OUT].encode("utf-8")).hexdigest()
++    ctx["src_pin_sha256"] = hashlib.sha256(files[PIN_OUT].encode("utf-8")).hexdigest()
++    files[ctx["script_name"]] = render_mold(parts, ctx)
++    ctx["inherited_flags"] = _inherited_prose_flags(parts, ctx)
++    ctx["inherited_notes"] = _inherited_prose_notes(parts, ctx)
++    files[ctx["sentinel_name"]] = render_sentinel(ctx)
++    if parts["grammar"] == GRAMMAR_CONSTANTS:
++        if parts.get("rehearsal") is not None:
++            files[f"rehearse-pin-{ctx['tag']}.sh"] = render_rehearsal(parts, ctx)
++        if "readme" in parts["roles"]:
++            files["README.md"] = render_readme(parts, ctx, sorted(files) + ["README.md"])
++    return files
++
++
++def _parse_args(argv: Optional[List[str]]) -> argparse.Namespace:
++    ap = argparse.ArgumentParser(
++        prog="re-pin-codex.py",
++        description="Generate (never apply) the Codex CLI re-pin pack (ADR-182 §5) from "
++                    "the ceremony script of the newest pack. Two mold grammars are "
++                    "modelled (heredoc; constants-block); a mold in any other shape is "
++                    "refused by name, and so is an older mold. Maintainer-only: it needs "
++                    ".claude/governance/, which adopters do not receive.")
++    ap.add_argument("version", help="target @openai/codex release, X.Y.Z")
++    ap.add_argument("--mold", required=True,
++                    help="ceremony script of the NEWEST pack (inside the repo). An older "
++                         "mold, or one whose grammar this tool does not model, is refused "
++                         "by name")
++    ap.add_argument("--ga-tag", default=None,
++                    help="constants-block molds only (required there): the release tag "
++                         "vX.Y.Z the re-pin ceremony must follow (its GA_TAG constant)")
++    ap.add_argument("--pin-note", default=None,
++                    help="UTF-8 text file with the human rationale for the pin paragraph; "
++                         "without it the pin carries a TODO(owner) the emitted script "
++                         "refuses to sign over")
++    ap.add_argument("--plan", default=None,
++                    help="PLAN-NNN that carries this re-pin; the pack goes to "
++                         ".claude/plans/PLAN-NNN/codex-pin-<tag> (required unless "
++                         "--pack-dir is given)")
++    ap.add_argument("--platform", default=None,
++                    help="npm platform suffix whose payload is pinned (default: the "
++                         "platform of the manifest's single pinned triple)")
++    ap.add_argument("--pack-dir", default=None,
++                    help="repo-relative pack dir '.claude/plans/PLAN-NNN/<slug>' "
++                         "(instead of --plan)")
++    ap.add_argument("--out", default=None,
++                    help="filesystem dir to write (default: <repo>/<pack-dir>)")
++    ap.add_argument("--repo-root", default=str(REPO_ROOT), help=argparse.SUPPRESS)
++    ap.add_argument("--date", default=None, help="date stamped into the pack (YYYY-MM-DD)")
++    ap.add_argument("--dry-run", action="store_true",
++                    help="resolve, download and verify; write no pack (npm's cache and "
++                         "logs live in a temporary directory removed on exit)")
++    ap.add_argument("--offline-from", default=None,
++                    help="use this local platform tarball instead of npm pack")
++    return ap.parse_args(argv)
++
++
++def main(argv: Optional[List[str]] = None) -> int:
++    args = _parse_args(argv)
++    try:
++        summary = run(args)
++    except RePinError as exc:
++        print(f"re-pin-codex: ERROR: {exc}", file=sys.stderr)
++        return exc.rc
++    except OSError as exc:
++        # Backstop of the exit contract: a filesystem error no step names.
++        print(f"re-pin-codex: ERROR: filesystem ({type(exc).__name__})", file=sys.stderr)
++        return EXIT_INFRA
++    print(json.dumps(summary, indent=2, ensure_ascii=False))
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/docs/adopter-new-model-fast-access.md b/docs/adopter-new-model-fast-access.md
+new file mode 100644
+index 000000000000..fe1fd0f36a5b
+--- /dev/null
++++ b/docs/adopter-new-model-fast-access.md
+@@ -0,0 +1,528 @@
++# Using a new Claude model before a framework release
++
++> A per-machine route for adopters who want a newly released Claude model
++> **today**, without waiting for the framework to adopt it in a release. It
++> changes one per-machine file, `.claude/settings.local.json`. It does not
++> change what the framework ships or what it enforces.
++
++**Evidence and substrate.** The harness behaviour described here was checked
++on **2026-09-22 and 2026-09-23 against Claude Code 2.1.280** (the darwin-arm64
++build), on the **Anthropic API** (first-party login, no third-party provider
++configured), from the 2.1.280 binary, the Claude Code docs as published on
++2026-09-22 (the model-configuration, subagents, hooks and workflows pages
++and the changelog re-read on 2026-09-23), and three sets of `claude -p`
++probes run in throwaway directories around Claude Opus 5.5
++(`claude-opus-5-5`, the newest model those days):
++
++- **R1–R4** (model selection, 2026-09-22) read the model actually served from
++  `modelUsage`. All four set `"enforceAvailableModels": true`: R2 and R3
++  with the maintainer allowlist (the seven ids the maintainer template ships
++  in v1.4.0 and v1.4.1-rc.1), R1 and R4 with a one-model allowlist. They ran
++  without `--setting-sources`, so the operator's own user settings were in
++  scope too (an `availableModels` list there would have been concatenated).
++  No shipped template sets `enforceAvailableModels`. Per the Claude Code docs the
++  key decides what the default resolves to wherever the default is reached:
++  session startup, Default in `/model`, the `default` keyword in fallback
++  chains, and the replacement for a selection the allowlist excludes. The
++  admit function read in the 2.1.280 binary checks `availableModels` without
++  consulting it.
++- **E1–E8** (effort and `ultracode`) ran `claude -p --input-format
++  stream-json --model claude-opus-5-5` and read the applied model, effort
++  and `ultracode` from a `get_settings` control request; E6–E8 also read the
++  effort level of every tool call (main session, subagent, workflow agents)
++  from a PreToolUse hook. They excluded user settings (`--setting-sources project`).
++- **2026-09-23 re-runs**, with user settings excluded (`--setting-sources
++  project,local`): the recipe end to end, R4's merge, and the ConfigChange
++  behaviour described [below](#use-the-model-key-not-anthropic_model).
++
++Where a statement rests on the docs alone, or on one probe, it says so. The
++raw probe outputs are not kept in this repository. These are harness
++semantics, not framework semantics, and they can change in any Claude Code
++release: re-check them when you update Claude Code.
++
++The framework-side statements (which guard reads what, what a template
++ships) were checked against this repository's code, its GA tags v1.0.0 to
++v1.4.0 and v1.4.1-rc.1, the newest tag on 2026-09-23; each names the file,
++and the release it holds from where that differs. A later release can change them, for example
++by adopting the model this page uses as its example: re-check them against
++the release you run. The recipe writes the model as `claude-<new-model-id>`.
++
++**Provider scope.** The recipe uses Anthropic API model ids. Per the docs, on
++Amazon Bedrock the `model` value is an inference profile ARN, on Google
++Cloud's Agent Platform a version name and on Microsoft Foundry a deployment
++name: use your provider's own id form there. Nothing below was measured on a
++third-party provider; the allowlist matching, the substitution and the probe
++results are Anthropic API measurements.
++
++## Why this route exists
++
++The framework adopts a model explicitly, in a release. An Owner-signed
++ADR-149 amendment adds the id to the working set, and the maintainer
++template's `availableModels`, the price rows and the upgrade baselines follow
++it. That path is slow by design. Claude Fable 5.1 launched on 2026-09-01. The
++adoption commit (`ab56e76`, 2026-09-02) added `claude-fable-5-1` to the working
++set, the maintainer template and the price table, and left the VETO floor, the
++fallback chain and the session-default pin unchanged. Adopters received it
++with v1.4.0 on 2026-09-15, 14 days after launch.
++
++Those 14 days measure the framework's explicit adoption. On Claude Code
++2.1.280, under the segment-prefix matching described
++[below](#why-availablemodels-usually-needs-no-change), the `claude-fable-5`
++entry that the maintainer template has shipped in every GA release since
++v1.0.0 admits `claude-fable-5-1`. Whether the Claude Code versions in use
++between 2026-09-01 and 2026-09-15 did the same was not measured. ADR-149
++itself is not installed in adopter repositories.
++
++Your own sessions do not have to wait for a release. Claude Code reads a
++per-machine settings file that outranks the project's settings, and that
++file is enough to run the main session on the new model. Measured on
++2026-09-23 with user settings excluded: with the v1.4.0 maintainer template's
++`model`, `availableModels` and `fallbackModel` in `.claude/settings.json` and
++only `{"model": "claude-opus-5-5"}` in `.claude/settings.local.json`, a
++session started without `--model` served `claude-opus-5-5`; without the
++local file it served `claude-opus-5`.
++
++Two Claude Enterprise organization controls can overrule the local file on
++the Anthropic API (docs, model configuration): an organization default model
++that the admin has set to override user selection takes precedence over the
++`model` value in user, project and local settings, and a model the
++organization restricts is replaced at startup by an allowed one, whatever
++`availableModels` says. The [Verify](#verify-the-substitution-risk) step
++shows which model you got.
++
++## The recipe
++
++1. **Update Claude Code** to a version that knows the model. Claude Opus 5.5,
++   for example, needs Claude Code 2.1.280 or later (docs). The framework's
++   v1.4.2 release (planned; not tagged on 2026-09-24) makes 2.1.280 its
++   minimum Claude Code, both for that model and for the
++   `effortLevel: "xhigh"` its fresh-install settings carry
++   ([Effort](#effort)). Check with `claude --version`. If your framework
++   release already PINS the model (`jq .model .claude/settings.json` shows
++   it), you do not need this route. A model the release only lists in
++   `availableModels` is not the session model: a `/model` choice loses to
++   the project pin at the next launch
++   ([below](#use-the-model-key-not-anthropic_model)), so it still needs the
++   local `model` key.
++
++2. **Edit `.claude/settings.local.json` yourself**, from your own editor or
++   terminal. Do not ask the agent to do it. What stops an agent write
++   depends on the install profile and on the release you installed. Since
++   v1.3.0:
++
++   - **maintainer** profile: both write rails
++     (`.claude/hooks/check_canonical_edit.py` and
++     `.claude/hooks/check_arbitration_kernel.py`) and the
++     `Edit(.claude/settings.local.json)` deny rule of the maintainer template
++     (`templates/settings/settings.base.json`, rendered into your
++     `.claude/settings.json`) refuse it;
++   - **user** profile (`--ceremony user`): neither rail is registered and the
++     template carries no `permissions` block, so nothing in the framework
++     refuses an Edit/Write of this file. Only a Bash write of a shape
++     `.claude/hooks/check_bash_safety.py` recognises (a redirect, `tee`,
++     `sed -i`, ...) is refused; that hook reuses the canonical path list.
++
++   Before v1.3.0 the file is on neither rail's list (so not on the list
++   `check_bash_safety.py` reuses either) and in no deny rule, so none of
++   these refuses an agent write of it under either profile.
++
++   If the file already exists (for example `/night-mode on` wrote
++   `permissions.defaultMode` into it), add the keys; do not replace the file,
++   and keep it valid JSON.
++
++   ```json
++   {
++     "model": "claude-<new-model-id>"
++   }
++   ```
++
++   Prefer the explicit model id to an alias. Aliases are resolved by the
++   harness and differ per provider. Measured on the Anthropic API (probe R3),
++   `opus[1m]` served `claude-opus-5-5[1m]`. On the Anthropic API the `[1m]`
++   suffix does not change the window of Opus 4.7 and later, which run with
++   the 1M context window anyway (docs): probe R2, with the plain
++   `claude-opus-5-5`, reported a 1,000,000-token `contextWindow` as R3 did,
++   so there the suffix changes only the id `modelUsage` reports. On Amazon
++   Bedrock, Google Cloud's Agent Platform and Microsoft Foundry, per the
++   docs, Opus 4.8 and later run with a 200K context window unless the model
++   id carries `[1m]`, which selects the 1M window there (append it only when
++   the model supports 1M context). Nothing here was measured on those
++   providers. Per the docs, `opus` resolves to Opus 5.5 on the Anthropic API,
++   Claude Platform on AWS, Amazon Bedrock and Google Cloud's Agent Platform,
++   and to Opus 4.6 on Microsoft Foundry.
++
++3. **Optional: `ultracode`.** To get xhigh effort plus dynamic workflow
++   orchestration by default, add `"ultracode": true` next to `model`. The
++   settings reference gives the key the scope "Any file", and a probe on
++   2026-09-22 with user settings excluded read it applied from the local file
++   alone (`get_settings`: `ultracode` true, effort `xhigh`, source
++   `localSettings`); so there it applies to every session of this project on
++   this machine. It changes more than effort. Per the Claude Code docs, while
++   `ultracode` is active the session is not held to the Agent tool's
++   concurrent-subagent limit (20 by default,
++   `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`; Claude Code 2.1.217 or later; the
++   2.1.280 binary's limit check reads the same flag), and in **Auto**
++   permission mode the first-launch Workflow consent prompt is skipped. In
++   manual and accept-edits modes each workflow run still asks for approval,
++   unless you chose **Yes, and don't ask again** for that workflow in this
++   project, an option Claude Code offers only when a bundled, saved or
++   plugin workflow is run by name (docs, the workflows page and its
++   permission-mode table); the maintainer template
++   ships `permissions.defaultMode` `"manual"` from v1.2.0 on. Read [Effort](#effort) and
++   [What the local override reaches](#what-the-local-override-reaches)
++   before turning it on.
++
++4. **Start a new session.** The model is resolved when a session starts. A
++   resumed session (`claude --resume`, `--continue` or the `/resume`
++   picker) keeps the model it was using when its transcript was saved,
++   whatever the `model` setting says (docs; on Amazon Bedrock, Google
++   Cloud's Agent Platform and Microsoft Foundry the saved model is not
++   restored), so resuming a session saved before this change does not pick
++   up the new model.
++
++5. **Verify what is served** (next section). Do not skip this step.
++
++To roll back, delete the keys you added and start a new session. A session
++started under the override and resumed after the rollback stays on the new
++model; start a new one instead.
++
++## Verify: the substitution risk
++
++Claude Code treats a model outside the allowlist differently depending on how
++you asked for it:
++
++- `/model` in an interactive session **refuses** it with an error (docs);
++- a model named with `--model` is **replaced at startup**: probe R1 asked for
++  `claude-opus-5-5` under a one-model allowlist and was served
++  `claude-haiku-4-5`, the replacement that `enforceAvailableModels: true`
++  selected (the first allowed entry). No shipped template sets that key;
++  without it the docs say the session starts on the default model instead,
++  which these probes did not measure. Per the docs, the `ANTHROPIC_MODEL` environment
++  variable and the `model` settings key are replaced the same way (the
++  probes did not exercise those two), and an interactive session shows a
++  warning naming both the requested and the substituted model. In
++  `claude -p --output-format json` probe R1 saw no warning at all: stderr
++  stayed empty.
++
++So never infer the model from what you asked for. Check what was served:
++
++- interactively, `/status` (or the status line, if you configured one) shows
++  the model the session is running;
++- in scripts and CI, run `claude -p --output-format json "reply ok"` and read
++  the keys of `modelUsage` in the result. That is the served model id.
++
++## Why `availableModels` usually needs no change
++
++Claude Code 2.1.280 matches `availableModels` entries **by segment prefix**
++(binary, and probe R2: the maintainer allowlist admitted `claude-opus-5-5`):
++an entry admits every id that starts with it and continues with `-` or ends
++there. The maintainer profile's allowlist includes `claude-opus-5` from
++v1.2.0 on (checked at every GA tag through v1.4.0 and at v1.4.1-rc.1), so it
++already admits `claude-opus-5-5` and `claude-opus-5-5[1m]`. A new
++**sub-version** of a listed family needs no
++allowlist change. The releases before v1.2.0 (v1.0.0 to v1.1.0) do not list
++`claude-opus-5`, so there `claude-opus-5-5` counts as a new family (below).
++Check what your install lists, for example with
++`jq .availableModels .claude/settings.json`.
++
++A new **family** (an id no entry is a prefix of) does need a change. Add it in
++the same local file:
++
++```json
++{
++  "model": "claude-<new-family-id>",
++  "availableModels": ["claude-<new-family-id>"]
++}
++```
++
++`availableModels` arrays from user, project, local and `--settings` sources
++are **concatenated**, so this adds to the project's list instead of replacing
++it (binary; probe R4 merged a `--settings` list with a local-file list). Two
++exceptions, per the binary and the docs: a list in a **managed** policy
++replaces all others, and `fallbackModel` never merges (the highest-precedence
++file supplies the whole chain).
++
++The `user` install profile (`templates/settings/settings.user.json`) ships no
++`availableModels` at all, on purpose. There, nothing in the project filters
++the id; a list in your user settings or in a managed policy still would, and
++so would an organization model restriction (above). With no list in effect,
++do not add the new-family entry there: a list that holds only the new id
++blocks every id that entry is not a prefix of, the VETO agents' own included
++([below](#what-the-local-override-reaches)).
++
++## Use the `model` key, not `ANTHROPIC_MODEL`
++
++Model selection, highest first (docs): `/model` in the session, `--model`,
++`ANTHROPIC_MODEL`, the `model` settings key, then `ANTHROPIC_DEFAULT_MODEL`.
++The `model` key itself resolves by file precedence, highest first: managed
++policy, `--settings`, `.claude/settings.local.json`, `.claude/settings.json`,
++`~/.claude/settings.json` (an Enterprise organization default with override
++on sits above the last three; see above). Since v1.2.0 both install profiles pin a
++top-level `model` in `.claude/settings.json`, so a model saved with `/model`
++into your user settings loses to that pin at the next launch; that is why the
++recipe uses the local file. On an older install there is no project pin.
++
++In the framework's own repository there is a second reason. Two readers
++apply the same classifier (`.claude/hooks/_lib/effective_config.py`) to
++`ANTHROPIC_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL` and `ANTHROPIC_DEFAULT_*`
++(so `ANTHROPIC_DEFAULT_MODEL` too). Up to v1.4.1-rc.1 it flags the value
++whenever it is not an **exact** member of the first `frozenset` in ADR-149.
++That is the VETO-floor list (`VETO_FLOOR_ALLOWED`), not the working set, so
++even some working-set ids are flagged there. The two readers see different
++things:
++
++- the `/ceo-boot` tamper tripwire, at the next boot, checks those keys in
++  the process environment and in every settings file's `env` block;
++- the ConfigChange hook (`.claude/hooks/check_config_change.py`) checks the
++  settings layers, their `env` blocks included; it filters
++  process-environment findings out. On Claude Code 2.1.280 the ConfigChange
++  event also fires for a settings-file change made outside the harness
++  during a running session (measured 2026-09-23 in a headless
++  `claude -p --input-format stream-json` session: a
++  `.claude/settings.local.json` rewritten in place by another process
++  mid-session fired it with `source` `local_settings`; no edit, no event).
++  An interactive session, and a save that replaces the file by rename, as
++  some editors do, were not measured.
++  When ANY settings layer carries a finding, not only the file you edited,
++  the hook returns a block decision, and Claude Code enforces it silently:
++  the edited settings do not reach the running session and no message says
++  so (measured the same day, in the same kind of headless session: a deny
++  rule added mid-session applied without the block and did not apply with
++  it; the docs describe the silence in general). So make the edit between
++  sessions, or start a new session after it, as step 4 of the recipe
++  requires; a new session reads the file at startup.
++
++The top-level `model` key is not one of the keys the classifier inspects.
++Adopter installs do not receive ADR-149, so in an adopter repository the
++tripwire does not check the model value at all: it writes a stderr
++breadcrumb and emits no finding.
++
++The silent block itself is not limited to the framework's own repository.
++The ConfigChange hook is registered in the maintainer template at every GA
++release and in the user template from v1.4.0, and most of the classifier's
++finding classes do not depend on ADR-149: a hook disarm, a credential or
++endpoint re-routing, a permission bypass, a redirect of the status-line
++sidecar. In an adopter install where any settings layer carries one of
++those (for example a non-default `ANTHROPIC_BASE_URL` for an LLM gateway,
++or an `apiKeyHelper`, in your user settings), every settings change made
++during a session is dropped with no message, and so is a skill-file change
++(a managed-policy change cannot be blocked; docs). The cure is the same:
++start a new session after the edit.
++
++## Effort
++
++Levels and defaults depend on the model: see the effort table in the Claude
++Code model-configuration docs (some models have no `xhigh`, and a model
++missing from that table does not support effort at all).
++
++- **Claude Opus 5.5 defaults to `medium`**; the other models that support
++  effort default to `high`, except Opus 4.7 (`xhigh`) and, for your
++  organization's default model, the effort level your organization sets
++  (docs, read 2026-09-22). Probe E5, with no effort set anywhere, read
++  `medium` applied to `claude-opus-5-5`. If you relied on the old default,
++  set it explicitly.
++- The `effortLevel` settings key (top level, or per model under
++  `modelSettings.<model>.effortLevel`) accepts only `low` to `xhigh`; a `max`
++  value there is dropped.
++- **An `xhigh` in a settings file needs a Claude Code that accepts it.** The
++  changelog (read 2026-09-23) adds the `xhigh` level in 2.1.111. Two later
++  entries show one failure shape, a single value a build does not accept
++  costing the whole file: 2.1.121 fixes "invalid legacy enum values in
++  `settings.json` invalidating the entire settings file", and 2.1.281 notes
++  that older CLI versions skip a settings file holding
++  `"attribution": false`. A skipped `.claude/settings.json` takes every
++  hook it registers with it, the framework's governance hooks included.
++  Neither entry names `effortLevel` and no older build was run for this
++  page, so which builds skip a file for `effortLevel: "xhigh"` is not
++  measured; builds before 2.1.111 do not have the level at all. The framework's
++  v1.4.2 release (planned; not tagged on 2026-09-24) ships
++  `effortLevel: "xhigh"` in a fresh install's settings and names Claude
++  Code 2.1.280, the Opus 5.5 floor, as its minimum. Run `claude --version`
++  before you set `xhigh` in any settings file yourself.
++- A top-level `effortLevel` in your **user** settings is ignored for Opus 5.5
++  and models released after it.
++  In project, local or `--settings` sources it applies to every model.
++- `max` persists only through the `CLAUDE_CODE_EFFORT_LEVEL` environment
++  variable, which takes precedence over `--effort`, `/effort` and the effort
++  settings, `ultracode` included; a `maxEffortLevel` cap still applies
++  (docs). Probe E7
++  (`CLAUDE_CODE_EFFORT_LEVEL=max` plus `ultracode: true`) saw every tool call
++  run at `max`, including one from a workflow agent started with
++  `{effort: 'low'}`.
++
++**`ultracode` and `max` do not combine.** `ultracode: true` makes the default
++effort `xhigh` and enables dynamic workflow orchestration. The Claude Code
++docs (model configuration, read 2026-09-22) name three conditions under which
++it is not available: workflows are turned off, the model does not support
++`xhigh`, or an effort cap below `xhigh` applies to the model. That cap is an
++organization limit or a `maxEffortLevel` in any settings file; when several
++set one, the lowest applies (settings reference). The 2.1.280 binary's own
++description of the key calls it session-scoped, "typically provided via
++--settings or the apply_flag_settings control request"; the published
++settings reference gives it the scope "Any file", and the local-file probe in
++step 3 applied it. When the resolved effort is not `xhigh`, the flag stays
++set but has no effect. Probes E3, E4, E7 and E8 (`ultracode: true` through
++`--settings`, with `CLAUDE_CODE_EFFORT_LEVEL=max` or `--effort max`) read
++`ultracode` set in the settings but not applied (`get_settings`
++`applied.ultracode` false), while E1 and E6 (without `max`) read it applied.
++`/effort max` was not probed. The lifted subagent limit and the Auto-mode
++consent skip belong to an applied `ultracode` (docs); neither was probed on
++its own.
++
++The combination recommended here is `ultracode: true` for the main session,
++with `max` requested per agent inside workflow scripts
++(`agent(prompt, {effort: 'max'})`). Probe E6 measured it with `ultracode`
++passed through `--settings`: `ultracode` applied, the main session and a
++subagent ran at `xhigh`, and a workflow agent started with
++`{effort: 'max'}` ran at `max` (one started with `{effort: 'low'}` ran at
++`low`). A local-file `ultracode` was probed only for the applied setting
++(step 3), not for per-agent effort.
++
++## What the local override reaches
++
++It reaches:
++
++- **Subagents that have no model of their own.** Per the docs (*Create custom
++  subagents*, "Choose a model", read 2026-09-22), Claude Code 2.1.280 resolves
++  a subagent's model in this order: the model Claude passes for that
++  invocation, the definition's `model:` frontmatter (where `inherit` means the
++  main session's model), `CLAUDE_CODE_SUBAGENT_MODEL`, then the main
++  session's model. Setting that variable to `inherit` is the same as leaving
++  it unset. Both hold from a floor (same docs page): this order from Claude
++  Code 2.1.251 (before it, `CLAUDE_CODE_SUBAGENT_MODEL` came first and
++  overrode the invocation's model and the frontmatter), and `inherit` as
++  unset from 2.1.196 (before it, `inherit` forced every subagent onto the
++  main session's model). The shipped settings set it to `inherit` (the maintainer
++  profile in every GA release, the user profile since v1.4.0). So a
++  general-purpose spawn that is not assigned a model runs on the new model;
++  per the docs' environment-variable reference the same default covers
++  workflow agents that are not assigned a model. The built-in Explore agent
++  inherits it too (capped at Opus on the Claude API), from Claude Code
++  2.1.198; before it Explore always ran on Haiku (same docs page). A
++  definition whose frontmatter pins an exact id runs on that id only when
++  resolution reaches the frontmatter and admits the id. A model Claude
++  passes for that invocation, `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`, and an
++  allowlist that blocks the id are examples of what moves it off, not a
++  complete list; the VETO floor item below states the class. The
++  per-invocation model comes first in the order above; the Agent
++  tool takes `sonnet`, `opus`, `haiku` or `fable` there, and the 2.1.280
++  binary describes the parameter as taking precedence over the definition's
++  frontmatter (the changelog records it restored in 2.1.72). A family alias
++  passed there resolves to the main session's exact model when that model
++  is of the same family (docs). `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is a
++  variable of Claude Code 2.1.257 or later: per the same docs page, while it
++  is on Claude Code ignores the `model` field of every subagent definition
++  and Claude cannot pass a model. List your pinned definitions with
++  `grep -l '^model:' .claude/agents/*.md`.
++- **Workflow orchestration, with `ultracode`.** Agents that a Workflow script
++  starts do not pass through the spawn gate
++  (`.claude/hooks/check_agent_spawn.py`), with or without `ultracode`: a
++  Claude Code limit recorded in the framework repository (`CLAUDE.md`, probe
++  `wf_d7af49d9`, PLAN-178) and seen again on 2.1.280 in probe E6, where a
++  PreToolUse hook matching every tool recorded no Agent event for the three
++  `agent()` starts of a workflow while the main session's own Agent call did
++  fire one. The workflow agents' own tool calls do fire PreToolUse (measured
++  for Bash in E6–E8), so the framework's PreToolUse guards on those tools
++  still see them. `ultracode` turns on dynamic workflow orchestration (the
++  harness's own description) and, in Auto mode, skips the first-launch
++  Workflow consent prompt; the agents those workflows start are agents the
++  spawn gate does not see.
++
++It does not change:
++
++- **The VETO floor check, though not the model of every VETO spawn.** The
++  spawn gate (`.claude/hooks/check_agent_spawn.py`) checks the VETO-role
++  agent files' own `model:` frontmatter against `VETO_FLOOR_ALLOWED`
++  (`.claude/hooks/_lib/agent_frontmatter.py`, exact membership). It does not
++  read the session model, so the override neither trips that check nor
++  satisfies it. It does not read the model Claude passes for the invocation
++  either, although the PreToolUse input of an Agent call carries it as
++  `tool_input.model` (docs, hooks reference), and it does not see the model
++  Claude Code finally serves. The check vouches for the frontmatter only,
++  and the frontmatter decides a VETO agent's model only when resolution
++  reaches it and admits it. Anything that settles the model before the
++  frontmatter is consulted, or that rejects the frontmatter's id once it
++  is, runs a VETO agent on another model while the check still passes.
++  Those mechanisms belong to Claude Code and change between its releases:
++  the *Create custom subagents* docs page, sections "Choose a model" and
++  "Run every subagent on one model" (read 2026-09-23), describes them for
++  the current release. The three below are examples from that reading, not
++  a complete list:
++
++  - **A per-invocation model.** It outranks the frontmatter (the
++    resolution order above). An alias that resolves outside
++    `VETO_FLOOR_ALLOWED` (`sonnet` or `haiku`, for example) runs the VETO
++    agent off the floor with or without this override. `opus` resolves to
++    the main session's exact model when that model is an Opus: without the
++    override that is the shipped pin `claude-opus-5`, which the floor lists;
++    under the override it is the new model, and `claude-opus-5-5`, this
++    page's example, is not in `VETO_FLOOR_ALLOWED` as of v1.4.1-rc.1. When
++    the main session's model is not an Opus, `opus` resolves to the version
++    the alias points to, which on the Anthropic API is Opus 5.5 from Claude
++    Code 2.1.280 unless `ANTHROPIC_DEFAULT_OPUS_MODEL` is set (docs, model
++    configuration): outside the floor as well.
++  - **A variable that comes before the frontmatter or replaces it.** On
++    Claude Code older than 2.1.196 the shipped
++    `CLAUDE_CODE_SUBAGENT_MODEL=inherit` forced every subagent onto the main
++    session's model, so there the override changes the model every VETO
++    agent is served; from 2.1.196 `inherit` counts as unset. Before 2.1.251
++    a model set in `CLAUDE_CODE_SUBAGENT_MODEL` came first in the order and
++    overrode the frontmatter. On 2.1.257 or later (that variable's floor),
++    while `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is on, Claude Code ignores the
++    `model` field of every definition. No shipped template sets that
++    variable; leave it unset, or the VETO floor model is lost.
++  - **An allowlist that blocks the frontmatter's id.** Claude Code checks
++    the frontmatter value against the `availableModels` list in effect. For
++    a blocked full id it runs the subagent on the inherited model instead,
++    trying `CLAUDE_CODE_SUBAGENT_MODEL` first when that names a model; under
++    this override the inherited model is the new model. At every GA tag
++    from v1.0.0 through v1.4.1-rc.1 the VETO-role files (`VETO_FLOOR_ROLES`
++    in the same module) pin `claude-fable-5`, and the maintainer
++    template's list admits that id. Lists from user, project and local
++    settings are concatenated, so in a maintainer install a list you add
++    there cannot remove it. A list in a managed policy replaces all the
++    others (docs, model configuration, "Merge behavior"), so under either
++    profile it blocks the id unless it admits it. A `user` profile install
++    ships no list, so there any list in effect blocks the id unless it
++    admits `claude-fable-5`: one in your user or local settings, for
++    example, the new-family entry
++    [above](#why-availablemodels-usually-needs-no-change) included. Check
++    with `grep '^model:' .claude/agents/*.md` which ids your definitions
++    pin, and keep each one in any list you add.
++- **The prices.** `python3 .claude/scripts/ceo-cost.py` (no slash command
++  ships for it) has printed two blocks by default (`--source both`) since
++  v1.4.0. The transcripts block (primary,
++  `.claude/scripts/ceo-cost-transcripts.py`) reads the model recorded on each
++  transcript turn, so the new id does appear there, but until a release adds
++  its price row it is named in a warning and priced at $0, never guessed; its
++  prices come from `.claude/scripts/cost-table.yaml`, or from a table
++  embedded in that script when the file does not parse. The
++  audit block (secondary) prices each spawn by the model id
++  `.claude/hooks/audit_log.py` records for it. In the PLAN-044 audit the
++  spawn's tool response carried no model on 199 of 199 spawns (an older
++  Claude Code; not re-measured on 2.1.280), so that id is the ADR-052 policy
++  id for the agent's role (for `general-purpose`, `claude-opus-5` from
++  v1.2.0 through v1.4.1-rc.1 and `claude-opus-4-8` from v1.0.0 through
++  v1.1.0), or nothing, which the audit block reports as `unknown_model` at
++  $0. The `CEO_COST_PRICING_JSON` override **replaces**
++  the audit block's price table rather than extending it: a custom file must
++  carry every row you want priced.
++- **Your teammates.** The file is per machine and must stay out of git.
++  Since v1.3.0, `scripts/install.sh` and `scripts/upgrade.sh` put
++  `/settings.local.json` in `.claude/.gitignore` under **every** install
++  profile (creating the file, or appending the entry when it is missing).
++  They also add `.claude/settings.local.json` to the repository's root
++  `.gitignore` unless the profile is `user`. `install.sh` defaults to
++  `maintainer`, so it writes the root entry unless run with
++  `--ceremony user`. `upgrade.sh` takes the profile from the recorded
++  `.claude/.install-state.json` first, then `--ceremony`, then the
++  `CEO_UPGRADE_CEREMONY` environment variable; with none of these it treats
++  the install as `user` and skips the root file. On an older
++  install, or if you edited those ignore files, check with
++  `git check-ignore .claude/settings.local.json`: if it prints nothing, add
++  the path to `.gitignore` yourself before committing anything.
++
++When the framework release that adopts the model arrives, upgrade as usual
++([UPGRADE-PROCEDURE.md](UPGRADE-PROCEDURE.md)). If the release pins the same model, you can
++remove the keys from the local file; if it pins another one, the local file
++keeps winning on your machine until you remove them.
+diff --git a/docs/substrate-adopt-2026-09.md b/docs/substrate-adopt-2026-09.md
+new file mode 100644
+index 000000000000..dbbf23c9b2de
+--- /dev/null
++++ b/docs/substrate-adopt-2026-09.md
+@@ -0,0 +1,245 @@
++# Substrate adoption record — sweep 2026-09 (CC 2.1.221 → 2.1.280, API/SDK, Codex 0.145 → 0.155)
++
++> **Status: RECORD (S357, 2026-09-22).** Every row below carries a
++> disposition. §Routing names the items this change set carries and the
++> ones it leaves to later work. A disposition that says only "later"
++> names no plan, follow-up id or owner. The change set that carries this
++> record also carries the free cures that §Routing marks **yes** under "In
++> this change set", plus the ledger bump in `.claude/scripts/substrate-watch.json`
++> (§Ledger). Nothing canonical travels with it. **Land order:** after the
++> v1.4.1 GA tag. Until then the GA cut keeps the tree frozen since the rc
++> tag: only `CLAUDE.md` and numbered plan files may change. The GA cut
++> script that enforces this is not in the tree at `19771fa1`.
++> **NO-SPEED-CLAIM:** nothing here claims framework throughput or speed;
++> fast-mode rows carry prices only.
++
++**Evidence convention.** Repo pointers are at tree `19771fa1` (main at record
++time). "Bundle" means the Claude Code 2.1.280 install (npm publish
++2026-09-22T15:44Z), read as bytes, not as docs. Rows marked **[sweep]** repeat
++a fact the verified S357 sweep measured that this record did not re-probe;
++everything else was re-checked on 2026-09-22 (UTC 2026-09-23) against the
++bundle, the upstream pages, or the tree. Every row describes the tree
++`19771fa1`, before any cure. §Routing says which cures this change set
++carries. "The v1.4.2 plan" below means the v1.4.2 release plan drafted on
++2026-09-22, which is not in the tree at `19771fa1`; its waves are named by
++purpose (Codex re-pin wave, Opus 5.5 wave, adaptive-only wave). Facts
++corrected or re-checked after review on 2026-09-23 carry that date.
++
++Substrate at record time:
++
++| Component | State (2026-09-22) |
++|---|---|
++| Claude Code | 2.1.280 installed (`claude --version`); npm dist-tags `latest` = 2.1.280, `stable` = 2.1.267 |
++| Codex CLI | 0.155.0 installed and pinned (`codex-cli-pin-manifest.json` `package_version`); npm `latest` = 0.156.0 (2026-09-22T19:55Z) — the re-pin belongs to the v1.4.2 plan's Codex re-pin wave, not this record |
++| Agent SDK | TypeScript 0.3.280 (npm, 2026-09-22T15:51Z); Python 0.2.158 (PyPI `latest`, uploaded 2026-09-23T01:39Z; also the changelog head) |
++| Grok Build CLI | 1.0.13 `[stable]` installed against the exact pin 0.2.93 — not reconciled here |
++| Ledger | `claude_code` still read 2.1.198: the 2026-08 G17 refresh (sdk-ts 0.3.220, sdk-py 0.2.128, claude_code 2.1.220) never reached the file |
++
++**Codex moved after the record (re-checked 2026-09-23).** npm `latest`
++became 0.156.1 (published 2026-09-23T02:45Z), and this machine's global
++Codex was replaced by 0.156.1: the installed package's files carry mtime
++2026-09-23T04:01Z (01:01 at -03). What ran the upgrade is not recorded.
++That binary is outside both pins, the semver range `>=0.128.0,<0.156.0`
++and the 0.155.0 payload manifest. `check_pair_rail.py --verify-codex-pin`
++returns `mismatch` / `payload_sha256_mismatch` (exit 1), and
++`check-substrate-watch.py --probe-installed` reports `codex_cli` and
++`codex_harness` as drift. Until the Codex re-pin wave lands or 0.155.0 is
++reinstalled, the pair-rail hook blocks every edit it would send to review
++(ADR-182, fail-closed).
++
++## Operator action: rotated audit archives vs the transcript sweep
++
++**Mechanism (bundle 2.1.280).** The transcript-retention sweep walks
++`<config dir>/projects`, visits **every** project subdirectory, treats any
++top-level file whose name ends in `.jsonl` as a candidate (no name filter —
++the UUID check only gates sidecar cleanup), and unlinks it when its mtime is
++older than `now − cleanupPeriodDays`. The cutoff comes from the merged
++settings of the session that **runs** the sweep (schema default 30), so a
++session launched in any directory without a larger value sweeps this
++project's state dir at 30 days. The 2.1.228 fix covered only the memory
++folder. Rotated audit archives are `audit-log-YYYY-MM[-N].jsonl` in that same
++top level (`.claude/hooks/_lib/audit_rotation.py`) — exactly the candidate
++shape. The dogfood `.claude/settings.json` sets 90, which binds only sessions
++launched in this repo; `templates/settings/settings.user.json` deliberately
++does not ship the key.
++
++**How a loss shows.** A rotation normally writes a `chain_reset_marker` as
++the first line of the new live log, and its `previous_archive_path` names
++the archive it closed (`_lib/audit_emit.py`; when a sidecar write fails,
++the rotation proceeds without a marker). An archive that the sweep deleted
++leaves that marker pointing at a file that no longer exists. The marker
++proves the file existed; it does not prove what deleted it, so attribute a
++loss to the sweep from mechanism and age, not from an observed deletion
++event.
++
++**Mitigation (operator, outside the tree):** run `.claude/scripts/ceo-backup.sh`
++(it tars `audit-log-*.jsonl` to `~/.ceo-backups/<slug>/`), once more with
++`--audit-dir` for any pre-PLAN-182 basename-slug state dir; set a large
++user-scope `cleanupPeriodDays`; never `touch` archives to postpone deletion —
++it falsifies the mtime evidence. The structural cure (rotate out of the
++swept top level) is canonical and cross-cutting — G1. The retention row
++"90 days live on disk" in `docs/soc2-audit-mapping.md` does not hold for
++archives under this mechanism; this change set replaces it with the bound
++above and the same mitigation (`docs/soc2-audit-mapping.md`, `INSTALL.md`
++§Audit-log retention).
++
++## Gap-matrix dispositions (G1–G33)
++
++| # | Substrate change | Disposition | Evidence / record |
++|---|---|---|---|
++| G1 | Transcript sweep deletes aged top-level `*.jsonl` in every project dir (above) | ADAPT — structural cure later (canonical: `audit_rotation.py`, `runtime_paths.py`, ADR-001, archive readers, `verify_chain` across the move, red-first test) + operator mitigation NOW | §Operator action |
++| G2 | Harness slug maps every `[^A-Za-z0-9]` to `-`, caps at 200 chars and appends a base36 hash (CHANGELOG 2.1.224 long-path fix, 2.1.239 paths differing only by `_`/`-`/`.`) | ADAPT later (canonical resolver + ADR-001 amendment) | Bundle sanitizer `replace(/[^a-zA-Z0-9]/g,"-")` + 200 cap. `runtime_paths.project_slug` maps only `/`, `test_runtime_paths.py` pins dots/underscores as preserved, and the ADR-001 amendment calls the derivation the harness's own. Broken shape: readers of HARNESS-owned dirs (`cc-native-usage-pull.py`, `memory-prioritize.py`) for project paths holding `.`, `_` or spaces. The dogfood path holds none, so both derivations agree there. The framework's own state slug must not change (adopter dir migration) |
++| G3 | `CLAUDE_CODE_PROJECT_DIR_NAME` (2.1.234) | DOC | Bundle: honoured only when `CLAUDE_CONFIG_DIR` is set, which project `env` can no longer set (2.1.251, §No impact). No code reader (`git grep`: research docs and plan files only). Answers open probe 5 of `docs/research/orchestrator-operating-model-S339.md`: host-level carrier, not a repo-settable one |
++| G4 | Task-tracking tools withheld from Opus 4.8, Sonnet 5, Fable 5, Mythos 5 and newer (2.1.233), then offered only to an older-model allowlist (2.1.268; opt-in `CLAUDE_CODE_ENABLE_TODO_TOOLS=1`); TaskOutput removed (2.1.277) | ADAPT (text, free land) | `.claude/commands/ceo-boot.md` and `debate.md` still list TaskCreate/TaskList in `allowed-tools`, and `/ceo-boot` assumes the tools exist; the dogfood session model (`claude-opus-5`) and the new Opus default are outside the 2.1.268 allowlist. Bundle: the gate also opens for background/job sessions, a launch-option opt-in, model ids it cannot resolve and Bedrock application inference profiles, and none of the task tools carries a permission check of its own, so the `allowed-tools` entries pre-approved nothing |
++| G5 | Workflow stops reading an out-of-scope `scriptPath` before the permission check (2.1.251) | ADAPT (canonical; v1.4.2 candidate with its own rail round; the tracked `CHANGELOG.md` at `19771fa1` does not list it under Known-open) | Our PreToolUse launch ledger (`_lib/launch_ledger.py` `script_record`) reads and snapshots any regular file named by `scriptPath` — size-capped, no path confinement — before the harness permission check, and `ceo-launches.py` can write the snapshot out again: the shape the harness closed, re-opened by our hook. Canary probe reproduced twice **[sweep]** |
++| G6 | Thinking modes: Opus 5.5 returns 400 for `thinking` `disabled` and manual `enabled`; Fable 5 / Mythos 5 are adaptive-only; Opus 5 allows `disabled` only at effort ≤ `high` | ADAPT → v1.4.2 plan, adaptive-only wave | API release notes (2026-09-22, 2026-07-24, Fable 5 launch). `_ADAPTIVE_ONLY_MODELS` in `adapters/live/claude.py` has no Opus 5.5 entry. Latent: the live adapter is opt-in with no production instance **[sweep]** |
++| G7 | `CLAUDE_CODE_SUBAGENT_MODEL` becomes a default that definition `model:` and per-spawn models beat (2.1.251); `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` overrides both (2.1.257) | ADAPT (free guard) + DOC (ADR-144 amendment, canonical); re-verify the Workflow leg at each bump | `git grep SUBAGENT_MODEL_FORCE` = 0. FORCE reaches Workflow `agent()` model pins: the 2.1.280 bundle (read 2026-09-22) drops an `agent()` model under it with the warning `Workflow agent model "…" ignored: CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set`. Existing guards key only on the old variable (`test_subagent_model_override_removed.py`, `scripts/install-accelerators.sh`); the rationale "documented to beat per-agent `model:`" in that script and in ADR-144 is false since 2.1.251. The prohibited carrier moves to `_FORCE`: FORCE + a cheap model drops VETO roles below the floor. Class, by shape: text stating that `CLAUDE_CODE_SUBAGENT_MODEL` overrides per-agent `model:` (true only before 2.1.251). This change set rewords it in the installer and its test; free docs and generated text outside this change set, and canonical doctrine text (the routing hook's settings doctrine, ADR-144), still carry it. One reword by shape: the variable is the default for agents that declare no `model:`, and FORCE is the carrier that overrides |
++| G8 | `PreModelSwitch` / `PostModelSwitch` hook events (2.1.251) | ADOPT as observer later (canonical hook + settings + T3.4 feature gate; emit `{}` on infra error, since a failing switch hook can block switching) | Bundle enum = 33, diffed against `.claude/data/hook-schema-2.1.220.json` (31): exactly these two added, none removed. Unregistered today; already flagged in `docs/research/s339-orchestrator-study/03-claude-code-substrate.md`. Trips the `cc_workflow_rail` enum drift probe (§Ledger) |
++| G9 | Claude Opus 5.5 (`claude-opus-5-5`), default Opus since CC 2.1.280: $4/$20 per MTok, cache hits 0.05× ($0.20), fast mode $8/$40, batch $2/$10 | ADAPT — price mirrors ride the v1.4.2 Opus 5.5 wave | Pricing page (fetched 2026-09-22). `git grep claude-opus-5-5` = 0: no price row, and the per-model cache-read override holds only `claude-fable-5-1` (`budget-summary.py`, `ceo-cost-transcripts.py`), so the 0.10× default prices Opus 5.5 cache reads at 2×. Class, by shape: every per-model mirror keyed by model id (price, alias, tier order, fleet oracle, model-currency expected reds) — one census, one patch |
++| G10 | `availableModels` accepts family aliases, version prefixes and full ids | VERIFY (recorded in the v1.4.2 plan draft) | The dogfood list holds `claude-opus-5`, not `claude-opus-5-5`. The schema text does not settle whether that entry admits `claude-opus-5-5`; segment-prefix admission was read from the minified matcher **[sweep]**. Settle with a `/model claude-opus-5-5` probe under the dogfood settings before the Opus 5.5 wave relies on it |
++| G11 | Effort per model (2.1.251); a level saved before that no longer applies to newly released models such as Opus 5.5 (2.1.280); `maxEffortLevel`/`modelSettings` (2.1.267); `effort:` frontmatter honoured on pinned-default models (2.1.267); Opus 4.7/4.8/Fable 5 stop holding launch-default effort over explicit levels (2.1.280) | ADAPT — operator setting now; `effort:` frontmatter on Owner-signed agents later (measure first) | Bundle: a top-level user `effortLevel` resolves as `legacyUserEffort`, which the 2.1.280 CHANGELOG limits to models that predate per-model effort; a newer model with no `modelSettings[<id>].effortLevel` (Opus 5.5) starts at its default. Operator action: a per-model entry for `claude-opus-5-5` |
++| G12 | A PreToolUse/PermissionRequest hook entry the loader cannot read is `severity: fatal`, and a fatal error loads that whole settings file as `null` (every registration and deny rule in it dropped) | ADOPT (free test; land before the v1.4.2 Opus 5.5 wave edits settings; pin CC version + bundle sha, since the replica derives from minified text) | `unloadableGuard` present in the 2.1.277/2.1.278/2.1.280 bundles; absent from 2.1.220 **[sweep]** (no 2.1.220 build on the record machine); fatal → `{settings: null}` read in the 2.1.280 loader. Runtime spot-check on 2026-09-23 (UTC), `claude doctor` on 2.1.280 in a scratch project with scratch `HOME` and `CLAUDE_CONFIG_DIR`, no model call: a PreToolUse entry of unknown `type` printed the fatal reason ("…so nothing it sits in is applied until the entry is fixed or removed"), and the same entry under PostToolUse printed "entry ignored". 0 findings in today's settings; planted controls go FATAL while `check_harness_config.py --static` stays green **[sweep]**. The test ties its pin to the ledger: moving `claude_code.last_seen` turns it red until the rule is re-derived from the new bundle |
++| G13 | Hook input `mcp_server {name, source}` on PreToolUse, PermissionRequest, PostToolUse, PostToolUseFailure (first version 2.1.274 **[sweep]**) | ADAPT later (canonical guards; fallback below the first version) | Bundle schema; `source` is an open set (sdk, plugin, user, project, local, dynamic, managed, enterprise, claudeai, agent). The Codex MCP guards identify the server by the `mcp__codex__` name prefix (`check_codex_filewrite.py`, `check_mcp_response.py`, settings matchers). Limited value: a project-scoped impostor also reports `source=project`, as our own template does **[sweep]** |
++| G14 | SessionStart on resume receives staleness and estimated re-cache cost (2.1.251) | ADOPT later (free measured data for PLAN-190/191/179; canonical SessionStart + SPEC action) | Bundle fields `seconds_since_last_response`, `context_tokens`, `prompt_cache_likely_expired`, `estimated_cache_write_usd`; `git grep seconds_since_last_response` = 0 |
++| G15 | API: forced `tool_choice` (`any`/`tool`) returns 400 on Opus 5.5, Fable 5.1 and Mythos 5.1 | ADAPT later (ride the v1.4.2 adaptive-only wave only if the live adapter is already in that pack) | Release notes. `adapters/live/claude.py` documents and forwards forced `tool_choice`, `claude_batch.py` forwards it, and `docs/cookbook-patterns.md` teaches `{"type": "tool"}`. Latent: no production caller **[sweep]** |
++| G16 | Python `anthropic` 1.0 (2026-08-20) removes `temperature`/`top_p`/`top_k` from Messages methods; the API already rejects non-default sampling values on Opus 4.7 and later | ADOPT (free land, independent of the v1.4.2 ceremony) | `.claude/scripts/run-skill-benchmark.py` passes `temperature=0, top_p=1` on every call, and its per-scenario `except Exception` turns the failure into a silent `score: 0.0, skipped: true` — the run does not abort. `benchmarks.yml` and its template install `anthropic` unpinned. Class, by shape: text that states the benchmark runner's sampling settings ("at temperature 0", "temp=0") or passes the runner a `--temperature` flag, which its argument parser does not define. This cure makes that text false. The class has free and canonical members, and this change set edits none of them. No test pins the absence of sampling parameters yet |
++| G17 | Fast mode: Opus 5.5 $8/$40; Opus 5 and 4.8 $10/$50; Opus 4.7 fast returns an error; Opus 4.6 fast runs at standard rates | DOC (free; the doctrine test pin changes consciously with the doc) | Pricing page (2026-09-22). `docs/provider-pricing.md` still quotes Opus 4.6/4.7 fast at $30/$150 and `test_a4_pricing_doctrine.py` asserts that string; `docs/ACCELERATORS.md` §Fast mode names only Opus 5/4.8 |
++| G18 | Model-deprecations page: newest history entry still 2026-06-05; the page moved (the old URL 307-redirects) | DOC (Owner-run refresh recipe) | Page fetched 2026-09-22. `.claude/scripts/model-deprecations.json` `_meta`: `fetched` 2026-06-12, `source` still the old `/docs/en/docs/…` URL; its entries already hold `claude-mythos-preview` |
++| G19 | Codex 0.154.0 removed the deprecated `codex mcp-server` entry point (#42993) | ADAPT — template now (free), matchers later (canonical) | Pinned 0.155.0: `codex --help` lists no `mcp-server` and the string is absent from the native binary. The pin's semver range still admits the older versions that carried it. At `19771fa1`, `templates/.mcp.json` registers `codex` with `args: ["mcp-server"]`, `scripts/install.sh` ships it in the maintainer ceremony, `INSTALL.md` documents it, and the dogfood matchers `mcp__codex__codex\|…-reply` guard a tool family the pinned Codex can no longer serve. The pair-rail gate does not use the server: `check_pair_rail.py` runs `codex exec` as a subprocess. The `mcp__codex__*` hooks do (`check_codex_filewrite.py`, and `check_codex_response.py`, whose review-shaped branch emits the ADR-145 `codex_review_invoked` event); they stay idle on Codex ≥ 0.154.0 and wherever no `codex` server is registered. Classes left after the template cure, by shape: Codex-harness installer output that says a Claude-host `.mcp.json` registers the codex reviewer (free, not in this change set); comments and docstrings that call the Codex MCP server the pair-rail transport, and the `mcp__codex__*` matchers (canonical) |
++| G20 | Codex per-hook trust hash changed between 0.139 and 0.155 | DOC now; ADR-161 §6a amendment later | Probe: 9 of the 12 shipped entries match an entry of the 0.139 recording on the five fields, and all 9 hash differently under 0.155; the 0.139 hashes read `modified` **[sweep]**. Codex hooks docs (2026-09-22): trust is recorded against the hook's current hash; new or changed hooks are skipped until trusted. Upstream `hook_hash()` in `codex-rs/hooks/src/engine/discovery.rs` at `rust-v0.155.0` hashes the whole normalized entry, more than the five 0.139 fields (a test asserts that `additionalContextLimit` changes the hash). The command string is part of it, and every shipped command embeds the install's absolute path, so an install at another path hashes separately. `INSTALL.md` and `templates/codex/AGENTS.md` describe what the hash covers — re-check after the re-pin. Class, by shape: Codex-harness installer output that still says trust is keyed to the command line and omits the upgrade re-key (free, not in this change set) |
++| G21 | `codex app-server` exposes `hooks/list` with per-hook `currentHash`/`trustStatus` | ADAPT later | Strings present in the 0.155.0 native binary. The arming check in `scripts/_codex_harness.sh` declares ARMED from project trust only, with a reminder about per-hook trust |
++| G22 | Codex PreToolUse: `permissionDecision: "ask"` is parsed but unsupported — the hook run is marked failed and the tool call continues; `updatedInput` is honoured only with `allow` | ADAPT (canonical) later + DOC now | Codex hooks docs (2026-09-22). `_write_decision_host` in `_lib/adapters/codex.py` emits only allow/deny and never forwards `updatedInput`, so the opt-in force-push rewrite (`CEO_BASH_FORCE_PUSH_REWRITE=1`, default off; `ask` + `updatedInput` on Claude Code) degrades to a plain allow on the Codex host. Re-measured 2026-09-22 from the worktree hooks on a recorded Codex PreToolUse payload for `git push origin main --force` under `CEO_HOOK_ADAPTER=codex`: flag unset, `deny`; flag `1`, a plain `allow` with no rewritten command. Documentation in this change set warns; it does not cure the gap, and nothing may call it mitigated. Canonical follow-up: when the active adapter cannot express `ask` with `updatedInput`, the rewrite branch returns `deny` (fail closed), with a red-first test under `CEO_HOOK_ADAPTER=codex` that fails when the flag yields `allow` |
++| G23 | Codex hook events: SessionEnd (0.145.0, #33895), Interrupt (0.150.0, #40511), SessionStart tells forked sessions apart (0.155.0, #44349) | ADOPT later | Codex release notes. `templates/codex/hooks.json` registers 6 events (PreToolUse, PostToolUse, SessionStart, Stop, SubagentStart, UserPromptSubmit) |
++| G24 | "Function hooks" (plugin hook modules), early access | SKIP (watch) | The 2.1.277, 2.1.278 and 2.1.280 bundles carry `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS`, `$.model.classify`, `$.session.usage`, `session.compact`; the 2.1.220 bundle carries none **[sweep]**; no CHANGELOG line through 2.1.280. The 2.1.276 CHANGELOG is one advisor-tag fix, so an earlier attribution of the feature to 2.1.276 is refuted; `claude plugin eval` is 2.1.269 |
++| G25 | 200-subagent-per-session spawn cap removed (2.1.224); concurrency and depth limits still apply | DOC | The 2026-08 record's G5 row ("200 per session") is stale |
++| G26 | `/code-review` runs in a background agent at every level (2.1.232); leaner inline prompts instead of many review subagents on models without tuned settings (2.1.274) | DOC | The 2026-08 G10 doctrine stands: same-vendor advisory, never discharges the cross-vendor VETO |
++| G27 | Workflow size guideline `medium` now means fewer than 10 agents (was 15); Pro plans default to `small` (2.1.271); advisory only | VERIFY | Dogfood sets `workflowSizeGuideline: "medium"` and its `_posture_comment` still says "fewer than 15"; the audit-fanout workflow runs 8 finders plus per-finding refuters |
++| G28 | Subagent results reach the main agent under a header marking them as subagent output (2.1.277) | DOC | Reinforces PROMPT DEFENSE — subagent text cannot pass as the session's own instructions; nothing to change |
++| G29 | Token-cost knobs: `/skill-doctor` (2.1.261), `bashOutputMaxChars` (2.1.261), `promptCacheTtl`/`subagentPromptCacheTtl` (2.1.243), agent `experimental.cacheTtl` (2.1.248), agent `omitClaudeMd` (2.1.271), `CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS` (2.1.269), same-prefix sibling stagger (2.1.229), workflows pause at the usage limit (2.1.271) | DOC → PLAN-190/191 | `docs/research/s354-token-consumption-study/` covers `bashOutputMaxChars`, the prompt-cache TTL settings and `omitClaudeMd`; the other five are not in it (`git grep`) |
++| G30 | Without `CLAUDE.md`, Claude Code reads `AGENTS.md` as project instructions (2.1.277; not yet on Bedrock/Vertex/Foundry) | VERIFY | `scripts/install.sh` ships `CLAUDE.md` only in the maintainer ceremony, while the Codex and Grok harness installers emit an operator `AGENTS.md` at the target root: a user-ceremony adopter with either harness and no `CLAUDE.md` of its own now loads that file into Claude Code sessions |
++| G31 | Agent SDK: TypeScript to 0.3.280 (type removals `MonitorInput.persistent` and the never-emitted `ExitReason` `bypass_permissions_disabled`); Python to changelog head 0.2.158 (only breaking change since 0.2.128 is skill-name validation, 0.2.129; 0.2.158 adds `verbatim_prompts`) | SKIP + ledger | No repo consumer: `git grep claude-agent-sdk` hits only the ledger and its checker |
++| G32 | Grok 1.0.13 `[stable]` installed against the exact pin 0.2.93 | VERIFY (PLAN-156 re-characterization + pin ceremony) | `grok --version` (2026-09-22); `.claude/governance/grok-cli-pin.txt` |
++| G33 | npm `stable` is 2.1.267 (2026-09-09), below 2.1.280, the first release with Opus 5.5 | DOC / gate → v1.4.2 Opus 5.5 wave | `npm view @anthropic-ai/claude-code dist-tags` (2026-09-22). `SUPPORT.md` still says "Claude Code ≥ 2.0" and the repo sets no `autoUpdatesChannel`/`minimumVersion`. A 2.1.267 client handed `claude-opus-5-5` is UNMEASURED (2.1.223 holds unrecognized ids to an assumed context window; 2.1.233 logs `unrecognized_model` in print mode) |
++
++## No impact (with evidence)
++
++| Change | Evidence (tree `19771fa1`) |
++|---|---|
++| PermissionRequest no longer runs agent-type hooks (2.1.280) | No PermissionRequest hook in the dogfood, base or user settings |
++| `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` now also extends SessionEnd hooks that have no per-hook `timeout`, whose default cut is 1.5 s (2.1.268 fix) | `timeout: 5` on the SessionEnd hook in all three settings files |
++| Project `env` can no longer set `CLAUDE_CONFIG_DIR`, `CLAUDE_CODE_TMPDIR`, `TMPDIR`/`TMP`/`TEMP` (2.1.251) | None of them in any settings `env` |
++| `defaultMode: "bypassPermissions"` in project settings is ignored (2.1.257) | Dogfood and base use `manual`; the user template sets none |
++| Permission rules with text after the closing parenthesis become invalid settings (2.1.260) | 0 of 52 rules across the three files |
++| Frontmatter `model:` on commands and skills now takes effect (2.1.259) | 0 occurrences |
++| Deny/ask rules starting with `!` apply only within their own source (2.1.269) | 0 such rules |
++| Monitor loses the `persistent` option (2.1.271) | 0 uses |
++| `.md` files starting with a UTF-8 BOM were silently ignored (2.1.239) | 0 tracked `.md` files with a BOM |
++| `statusLine.refreshInterval` | Confirmed in the 2.1.280 schema (seconds, minimum 1) — the ledger's "unverified" note is dropped |
++
++## Routing (all after the v1.4.1 GA tag)
++
++"In this change set" is **yes** when the cure ships with this record,
++**no** when it is routed to later work.
++
++| Item | Rows | Class | Size | In this change set |
++|---|---|---|---|---|
++| Audit-archive mitigation + retention caveat | G1 | operator + free doc | XS | **yes** for the docs (`INSTALL.md`, `docs/soc2-audit-mapping.md`); the operator steps run outside the tree |
++| Settings guard-loadability test | G12 | free test (before the Opus 5.5 wave) | S | **yes** |
++| Opus 5.5 price-mirror census | G9 | rides the v1.4.2 Opus 5.5 wave | S | no |
++| `scriptPath` snapshot confinement | G5 | canonical, own rail round | S | no |
++| Opus 5.5 effort at user scope | G11 | operator | XS | no |
++| Adaptive-only class | G6, G15 | v1.4.2 adaptive-only wave | — | no |
++| `.mcp.json` template + INSTALL note | G19 | free | S | **yes**; the installer-output class in G19 is not |
++| `/ceo-boot` and `/debate` tool lists | G4 | free | XS | **yes** |
++| `SUBAGENT_MODEL_FORCE` guard + stale wording | G7 | free (ADR-144 text is canonical, later) | XS | **yes** for the installer and its test; the wording class in G7 is not |
++| Codex host docs (trust re-check, no rewrite under `--harness codex`) | G20, G22 | free | XS | **yes**; the installer-output class in G20 and the G22 code cure are not |
++| Pricing docs (fast-mode rows, cache exceptions) | G17 | free | S | no |
++| `run-skill-benchmark.py` sampling params | G16 | free | XS | **yes** for the code; the docs class and a test are not |
++| Adopter client floor (`SUPPORT.md`/`INSTALL.md`; optional version gate in `upgrade.sh`) | G33 | free / Opus 5.5 wave | XS | no |
++| Machine signal for the `cc_workflow_rail` trip (§Ledger) | G8 | free (checker code) | XS | no |
++| This record + ledger bump | all | free | S | **yes** |
++
++Canonical and later: G1 cure, G2, G8, G13, G14, G21, the G22 fail-closed
++rewrite branch and its red-first test, G22 matcher/serializer work, G23,
++the canonical halves of the G7, G16 and G19 classes, and the ADR-144 and
++ADR-161 §6a amendments.
++
++## Ledger (`.claude/scripts/substrate-watch.json`)
++
++**Bumped in the same change as this record** (`_meta.fetched` =
++2026-09-23, the UTC date of the last fetch; the PyPI read below is from
++2026-09-23T01:39Z or later). Dates are UTC: the release date for a
++released component, the probe date for `cc_native_usage`.
++
++| Key | last_seen | Basis |
++|---|---|---|
++| `claude_code` | 2.1.280 (2026-09-22) | Installed; CHANGELOG 2.1.221–2.1.280 read in full (11 version numbers in the range carry no entry). `watch_for` drops the `refreshInterval` "unverified" note and adds the items of G1, G4, G7, G8, G11, G12, G13, G24 and G30, the `syncClaudeAiSkills`/`syncClaudeAiPlugins` settings, and the `stable` dist-tag |
++| `cc_native_usage` | 2.1.280 (2026-09-23) | Re-fingerprint on 2.1.280 by the recipe in `.claude/plans/PLAN-178/w12-native-cost-probe.md` §2, read-only, 2026-09-23T01:53Z: both hard meta invariants (`agentType`, `spawnDepth`) held on every workflow meta, no `message.usage` row lacked `input_tokens`/`output_tokens`, and no new path level appeared; additive meta keys `requestNonInteractive`, `requestShape`, `workflowPhase` (absent from the 2.1.232 census). The session probed dispatched through Workflow only, so the task-glob leg was not re-exercised |
++| `agent_sdk_ts` | 0.3.280 (2026-09-22) | npm `latest`, publish 2026-09-22T15:51Z; changelog head 0.3.280 |
++| `agent_sdk_py` | 0.2.158 (2026-09-23) | PyPI `latest`, uploaded 2026-09-23T01:39Z; also the changelog head. 0.2.157 (PyPI 2026-09-18) has no changelog entry of its own |
++| `codex_cli` | 0.155.0 (2026-09-17) | Pinned; installed on 2026-09-22 (the machine moved to 0.156.1 on 2026-09-23, above). Release 0.155.0 published 2026-09-17. `last_seen` is the version the framework was reconciled against, so it stays 0.155.0 until the v1.4.2 Codex re-pin wave, which bumps it to the Codex head at re-pin time after reading every release note from 0.155.1 on (npm: 0.155.1, 0.156.0 and 0.156.1 by 2026-09-23) |
++
++**Held:**
++
++- `cc_workflow_rail` stays 2.1.237 (2026-08-20). Its "hook-event enum
++  changed" drift probe is **tripped** (31 → 33, G8). The only evidence on
++  2.1.280 is observational: in one session that dispatched through Workflow
++  only, the audit log recorded subagent lifecycle events and no spawn-gate
++  events, while earlier Agent-tool spawns did record them. No Agent-tool
++  spawn fell inside the 2.1.280 window as a same-substrate control, so this
++  is weaker than the planted live-fire the ledger asks for: re-run
++  `wf_d7af49d9`, or have the Owner accept the observation, before bumping.
++  The ADR-191 red branch stands either way. **No machine signal carries
++  the trip: a declared prose-only residual.** `check-substrate-watch.py`
++  registers no version probe for this key, so it reports the component
++  `ok`, and the JSON that nightly-hygiene dimension vii reads (it runs
++  `--json --probe-installed`) shows `drift: false`. The trip lives only in
++  this record and in the component's `watch_for` text. The cure is checker
++  code (register a probe for this key, like `cc_native_usage`): the
++  §Routing item "Machine signal for the `cc_workflow_rail` trip", not in
++  this change set.
++- `codex_harness` stays 0.139.0: the drift runbook requires the ADR-182 pin
++  ceremony first, then the Wave-1 fixture re-record; G20 means ADR-161 §6a is
++  stale.
++- `grok_cli` stays 0.2.93: 1.0.13 is installed but uncharacterized (G32).
++  The checker registers no probe for this key either, so it too reports
++  `ok` in every mode.
++
++**What the checker shows for the held rows (run 2026-09-23 from the
++change-set tree).** Without `--probe-installed` (how `validate.yml` runs
++it, as `--check`), the checker compares no installed version, yet prints
++`current — substrate reconciled — installed matches last_seen for all
++components` and exits 0. With `--probe-installed`, `codex_harness` (and,
++since the 2026-09-23 upgrade, `codex_cli`) shows `DRIFT`, while `grok_cli`
++and `cc_workflow_rail` show `ok` with "no probe registered". The summary
++line's wording is checker code, not in this change set.
++
++## Limits of this record
++
++- The six sweep lanes reached the synthesis truncated at the ingest cap; the
++  synthesis compensated by reading the Claude Code CHANGELOG 2.1.221–2.1.280
++  in full and checking the critical points in the bundle and on disk. This
++  record re-verified every row not marked **[sweep]**, including the Codex
++  release notes 0.145–0.155 and hooks docs, which the synthesis had not
++  re-read.
++- Bundle reads are of minified code: the loader, sweep and effort claims are
++  pinned to 2.1.280 and must be re-derived at the next sweep, never carried
++  forward by text. For the loader rule (G12) a runtime oracle exists that
++  makes no model call: `claude doctor`, run in a scratch project, prints
++  the loader's verdict for each settings file. This record ran it on three
++  planted documents (G12: the two bad entries, and a clean control that
++  printed no settings finding); the other loader shapes in the test rest on the
++  text read.
++- The API facts come from the platform release notes, pricing and
++  deprecations pages as fetched on 2026-09-22; none was exercised with a paid
++  request.
++
++## Provenance
++
++- Plan: the v1.4.2 release plan (drafted 2026-09-22, not in the tree at
++  `19771fa1`) — Codex re-pin wave, Opus 5.5 wave, adaptive-only wave.
++- Previous records: `docs/substrate-adopt-2026-07.md`,
++  `docs/substrate-adopt-2026-08.md`.
++- Sweep lanes S1–S6 (CC 2.1.221–2.1.280 in three ranges, schema diff
++  2.1.220 → 2.1.280, API/SDK, Codex/host) and their verifiers ran in session
++  scratch space; their artifacts are not retained in the tree.

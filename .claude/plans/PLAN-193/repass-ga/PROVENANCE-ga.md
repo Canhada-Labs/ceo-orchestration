@@ -1,0 +1,30 @@
+# Proveniencia do re-pass do GA v1.4.2 (promocao da v1.4.2-rc.1) - PLAN-193 - 4 partes
+- Base: v1.4.1 (36da3e77181a0676b433d8364ca68c68f739d9f3 -> 50fab7556961950967668f3af8e3ca6f7a0cf474) .. Candidato: 6f7fcd4f85a05897c083084b080304cd54913ea6 (PRE-tag GA; arvore da rc.1 promovida; base resolvida no run)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- Caminhos pessoais (/Users/<dono>, /home/<dono>, -Users-<dono>) substituidos por <user> no diff antes do payload e em transcript/verdict depois do codex (cura 1 do gate de contaminacao; rodada 17)
+- codex: 0.156.1 / aarch64-apple-darwin / payload 0196e89fe5a7598f816ee54232c3d7c26d75e502ab5cfe2c9240e81d90f7255a
+- rota do codex: binario global (versao pinada, payload verificado)
+- modelo: gpt-6-astra (explicito via -m; origem: config.toml do codex (tabela raiz))
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-ga.reviewed.md sha256 d439ce46b8025e95207f9e384b083113016089ef4df88093a52fc072313ce76e
+- sonda das condicoes: verde (27 linhas OK, nenhuma FALSA; probe-ga.txt)
+- base assinada por: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+- GA: arvore da rc.1 promovida - base = o commit contra o qual a rc.1 foi revisada (50fab7556961950967668f3af8e3ca6f7a0cf474); desde o candidato da rc.1 (9b5b1b40078c20e6de4806d89cabd5776a7d33df) so CLAUDE.md, planos numerados e o envelope da rc.1; nenhuma pathspec de parte mudou (3c/3d) e cada diff e o da rc.1 fora as linhas index (recusas nomeadas antes de qualquer payload)
+- classes de morte do codex (so das linhas ERROR: do proprio codex nas ultimas 40 linhas do transcript): capacidade do modelo = re-tentada ate 2 vezes; LIMITE DE USO/quota da CONTA Codex = sem re-tentativa, nenhuma parte nova lancada, recusa nomeada
+- Data: 2026-09-29T20:10:37Z
+- parte 1 (instalacao, upgrade e settings entregues: templates/** (settings base e user, .mcp.json, codex/), .claude/settings.json, scripts/ (install.sh, upgrade.sh, install-accelerators.sh e o resto do instalador), o piso VETO e o pin efetivo (_lib/agent_frontmatter.py, _lib/effective_config.py), env-inventory, CHANGELOG/INSTALL/SUPPORT/README, npm/ e os sitios de versao do bump): VERDICT: GO-WITH-CONDITIONS — Payload 1 satisfies the prescribed cut rule with the applicable conditions and carried upgrade restrictions; this is advisory evidence, not authorization. [codex rc=0]
+  - payload-ga-1.raw.txt NAO commitado; pin sha256: 24b311a1b1a63c3ee5562103ef844dac1bd1df2cdba65579b80c075bcde7e00e
+  - diff-ga-1.patch: sem mudanca na pathspec desde o candidato da rc.1 (9b5b1b40)
+  - diff-ga-1.patch == repass-rc1/diff-rc1-1.patch (o que a rc.1 revisou), fora as linhas index: conferido em bytes antes do payload
+- parte 2 (os hooks que rodam na sessao do adopter - o adapter live, o audit_log, o hook PreToolUse/PostToolUse da tool Workflow e o ledger que ele grava - e a recuperacao que eles nomeiam: ceo-launches.py (relaunch --out) e docs/workflow-recovery.md; e a camada de isolamento da suite pytest (_lib/test_isolation.py, cujo Eixo 4 poe um claude FALSO no PATH da suite)): VERDICT: GO-WITH-CONDITIONS — As condições aplicáveis são honestas e suficientes para este payload sob a regra do corte, mantendo a dívida declarada aberta. [codex rc=0]
+  - payload-ga-2.raw.txt NAO commitado; pin sha256: 8efd0db2be770897f60d0c9da778f1257495988b0df891b54d9234c68c7c4030
+  - diff-ga-2.patch: sem mudanca na pathspec desde o candidato da rc.1 (9b5b1b40)
+  - diff-ga-2.patch == repass-rc1/diff-rc1-2.patch (o que a rc.1 revisou), fora as linhas index: conferido em bytes antes do payload
+- parte 3 (as CLIs e a documentacao: .claude/scripts/** (precos e telemetria, tier-policy, otimizador, detectores, ceo-boot, benchmark de skills, o validate-governance.sh, check-substrate-drift.py, derive-settings-baselines.py), .claude/commands/**, .claude/skills/** e docs/**): VERDICT: GO-WITH-CONDITIONS — Under the stated cut rule, retain the applicable signed conditions and record the P2 follow-up; this review does not authorize the GA. [codex rc=0]
+  - payload-ga-3.raw.txt NAO commitado; pin sha256: 48d04d6430c59c46a49f2611d8cfcc4843d0228e5c6f989455709f53314e206b
+  - diff-ga-3.patch: sem mudanca na pathspec desde o candidato da rc.1 (9b5b1b40)
+  - diff-ga-3.patch == repass-rc1/diff-rc1-3.patch (o que a rc.1 revisou), fora as linhas index: conferido em bytes antes do payload
+- parte 4 (re-pin-codex.py - o gerador do pack de re-pin do Codex CLI (ADR-182) - e os dois docs da adocao de substrato e de modelo novo (docs/adopter-new-model-fast-access.md, docs/substrate-adopt-2026-09.md)): VERDICT: GO-WITH-CONDITIONS — Conditions 1–2 and 9–14 remain applicable and sufficient for this payload under the stated cut rule; this review is advisory evidence, not release authorization. [codex rc=0]
+  - payload-ga-4.raw.txt NAO commitado; pin sha256: a2bb067fa4324504f5103e2221eaa7e06b0cfc62a5851c9ff8868eaf6f1c9508
+  - diff-ga-4.patch: sem mudanca na pathspec desde o candidato da rc.1 (9b5b1b40)
+  - diff-ga-4.patch == repass-rc1/diff-rc1-4.patch (o que a rc.1 revisou), fora as linhas index: conferido em bytes antes do payload
+RUNNER-OVERALL: rc=0

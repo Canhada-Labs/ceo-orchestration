@@ -1,0 +1,29 @@
+OK   C0-tree: arvore == 6f7fcd4f85a0; base ancestral
+OK   C0-base: base = a tag anotada v1.4.1 em 50fab7556961, o commit contra o qual a rc.1 fez o diff
+OK   C0-npm: o GA publica no npm: npm-publish.yml dispara na tag v1.4.2, o job publish pula so -rc., espera o await-release-gate e o ambiente production-npm e roda npm publish sem --tag (sem publishConfig.tag: dist-tag latest); npx ceo-orchestration roda o shim, que roda o install.sh empacotado; VERSION, .claude/.framework-version e npm/package.json = 1.4.2
+OK   C0-rc: tag v1.4.2-rc.1 -> 9a486d29 (pai 9b5b1b40, o candidato da rc.1, que CANDIDATE.sha registra), ancestral do commit; envelope .claude/governance/pair-rail-verdict-v1.4.2-rc.1.md no commit, byte a byte o da tag, pinando pelo MANIFEST os 4 vereditos, todos GO-WITH-CONDITIONS
+OK   C0-frozen: desde o candidato da rc.1 (9b5b1b40): 40 caminho(s), todos o envelope da rc.1, CLAUDE.md ou planos numerados
+OK   C0-cut-gates: OWNER-GA-CUT.sh: assert_rc_hold (24 h do publishedAt da v1.4.2-rc.1) definido e chamado; assert_rc_tree_frozen (so CLAUDE.md e planos numerados desde o commit da tag) definido e chamado contra o HEAD e contra o candidato
+OK   C1-annex-v1.4.0: anexo da v1.4.0 re-declarado (OQ-3 + envelope do GA v1.4.1 + condicao 1 do envelope da rc.1); 11 citado(s) mudam, todos nas classes; os 6 sitios de versao reescritos para 1.4.2 pelo bump da rc.1 (9b5b1b40)
+OK   C2-carried-1.4.1: 12 veredito(s) pinado(s), todos presentes com o sha256 pinado (pair-rail-verdict-v1.4.1.md: 3 pelo MANIFEST + 6 por condicao; pair-rail-verdict-v1.4.1-rc.1.md: 3 pelo MANIFEST + 6 por condicao); GA: 14 e 23
+OK   C3-fn04: canario: o PreToolUse nao grava os bytes do scriptPath e registra caminho, sha256 e tamanho; PostToolUse por tool_use_id grava o snapshot; sem snapshot: heuristic=not_bound_by_tool_use, unlabelled=run_id_not_labelled, changed=changed_after_dispatch; o sentinel do FN-04 declara a classe nao esgotada (cerimonia landada)
+OK   C4-relaunch-out: relaunch --out: link sem substituir; nome do destino nunca removido; 4 casos de comportamento
+OK   C5-pin: pin claude-opus-5-5 nos 3 settings, claude-opus-5 em availableModels/fallback, sem ultracode; piso VETO; agentes intactos
+OK   C6-effort: templates e .claude/settings.json xhigh; upgrade dos settings da v1.4.1: pin -> claude-opus-5-5 e high quando ausente, xhigh so com --adopt-setting, valor do adopter mantido; re-execucao com o alvo e as flags (3 saidas pela rotina unica)
+OK   C7-cc-floor: bloco igual nos dois scripts; 10 casos do piso 2.1.280: old --settings-migrate-only; old (upgrade completo); beta --settings-migrate-only; other-first --settings-migrate-only; old --settings-migrate-only --allow-old-claude-code; old --settings-migrate-only --dry-run; floor --settings-migrate-only; unreadable --settings-migrate-only; sem claude --settings-migrate-only; install.sh old
+OK   C8-adapter: adapter: ids novos, futuros e com outro segmento adaptativos; legados (id, datado, Vertex, Bedrock, Claude 3) com budget no /effort; call() normaliza; o batch nativo leva o thinking como veio
+OK   C9-codex-pin: manifesto ADR-182 pina 0.156.1; cerimonia do re-pin landada
+OK   C10-tools: as 3 ferramentas existem; nenhum settings entregue nem hook as chama
+OK   C11-scope: 216 caminhos: 25+7+29+3 dentro das partes, 152 fora (declarado); governance e local no declarado
+OK   C11-parts-rc: o runner do GA tem as pathspecs das 4 partes do runner da rc.1 (o que o MANIFEST dela pina); nenhum arquivo delas mudou desde o candidato da rc.1 (9b5b1b40)
+OK   C12-delivery: instalacao nova pelo install.sh: sem .claude/governance/ no alvo; o plano do upgrade.sh sobre ela (--dry-run, 15 linhas «would») nao a nomeia; o «Stage bundle» do npm-publish.yml empacota .claude/ sem excluir .claude/governance/; README-ga §0 e §4
+OK   C12-plan-decisions: as condicoes citam OQ-1, OQ-3, OQ-6, OQ-7, OQ-8, OQ-9, OQ-10; todas RESOLVIDAS no plano commitado; a OQ-7 nao contradiz a condicao 6
+OK   C13-rc-annex: vereditos da rc.1 pinados: P1 novos 0/0/2/1 (partes 1-4; o da parte 1 ja declarado, condicao 55 da v1.4.0); (a) check-substrate-drift.py --repo-root executa o codigo do checkout inspecionado (rc 0, substrate-drift: CURRENT (0 drift, 1 info, 0 unknown)); (b) comando recomendado com caminho sem aspas; (c) re-pin-codex.py aceita dois membros no mesmo destino do node-tar; as duas CLIs copiadas pela instalacao nova; CHANGELOG [1.4.2] do candidato da rc.1, sem os tres no Known-open
+OK   C14-rc-p2: _comment da registracao do hook da tool Workflow nos 3 settings (declarado no sentinel do FN-04 e no CHANGELOG); CATALOG_PARTIAL so sem os dois blocos; TODO(owner) na prosa herdada do sentinel com o molde mais novo (.claude/plans/PLAN-193/codex-pin-0156/OWNER-PIN-SIGN.sh) e o guard que o grepa; emit_pack segue o pai symlink
+OK   C15-install-pin: INSTALL.md pede bash scripts/upgrade.sh ... --pin v1.4.2; o upgrade.sh resolve o --pin no checkout-fonte: v1.4.2 ausente -> rc 2; v1.4.2-rc.1 presente -> rc 0
+OK   SIZE parte 1: ~162908 B (teto 245616 = MAX_RAW_BYTES - 16384), 25 arquivo(s), 2107 linhas de diff
+OK   SIZE parte 2: ~114226 B (teto 245616 = MAX_RAW_BYTES - 16384), 7 arquivo(s), 1227 linhas de diff
+OK   SIZE parte 3: ~185571 B (teto 245616 = MAX_RAW_BYTES - 16384), 29 arquivo(s), 2616 linhas de diff
+OK   SIZE parte 4: ~213039 B (teto 245616 = MAX_RAW_BYTES - 16384), 3 arquivo(s), 3051 linhas de diff
+MAPA condicao -> ids: cabecalho: C0-tree C0-base C0-npm C0-rc C0-frozen C0-cut-gates; 1: C1-annex-v1.4.0 C12-plan-decisions; 2: C2-carried-1.4.1; 3: C3-fn04; 4: C4-relaunch-out; 5: C5-pin C12-plan-decisions; 6: C6-effort C12-plan-decisions; 7: C7-cc-floor C12-plan-decisions; 8: C8-adapter; 9: C9-codex-pin; 10: C10-tools; 11: C11-scope C11-parts-rc SIZE; 12: C11-scope C12-delivery; 13: C13-rc-annex; 14: C14-rc-p2; 15: C15-install-pin
+SONDA: 0 FALSA(S), 0 sem medida

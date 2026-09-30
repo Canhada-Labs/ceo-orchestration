@@ -1,0 +1,20 @@
+No P0, false applicable declared condition, or undeclared P1 found in payload 1.
+
+Conditions **1–2 and 5–7** remain honest. Condition **10** holds for hook/settings non-registration; **11–12** describe the reviewed delivery scope. Conditions **13–14** carry the rc.1 debt without claiming a cure. Condition **15** correctly requires the GA tag to exist in the source checkout.
+
+The adopter paths match the declarations:
+
+- Fresh templates ship Opus 5.5 with `xhigh`.
+- Base settings from v1.2.0 through v1.4.1 migrate to Opus 5.5 with `high`. Explicit effort values survive; customized allowlists lacking the exact new ID prevent pin migration.
+- Hook registrations, permissions and environment settings are unchanged in the three settings surfaces.
+- Checked version surfaces agree on `1.4.2`. The npm shim forwards installer arguments and exit status.
+
+**NEW FINDINGS (annex):** None.
+
+**P1 — already declared, reachable on the mainline upgrade:** [scripts/upgrade.sh:3729](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.TOVy5x/wt/scripts/upgrade.sh:3729), [scripts/upgrade.sh:3886](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.TOVy5x/wt/scripts/upgrade.sh:3886). A v1.4.1 `user` installation upgraded without `--no-settings-migrate` acquires `availableModels`, `fallbackModel` and `permissions.defaultMode=manual`, changing its advisory posture. This is condition **1**, incorporating v1.4.0 condition **55**, and explicitly carried by condition **13**. **Minimal fix:** derive migratable leaves from the selected ceremony. Until then, the declared opt-out remains necessary.
+
+**P2 follow-ups:** No new finding. The stale Workflow snapshot comments remain declared under condition **14**.
+
+Read-only probes passed migration branches, preservation, write-failure handling, recovery-command quoting, version-floor boundaries and timeouts. Template derivation, model parity, env inventory, Python 3.9 parsing and shell syntax passed. ShellCheck reported informational diagnostics only. The conditions digest matches; the worktree is unchanged. Filesystem writes were mocked; no full installation or live harness session was exercised.
+
+VERDICT: GO-WITH-CONDITIONS — Payload 1 satisfies the prescribed cut rule with the applicable conditions and carried upgrade restrictions; this is advisory evidence, not authorization.

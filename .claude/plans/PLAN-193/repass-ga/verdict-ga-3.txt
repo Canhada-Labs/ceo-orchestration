@@ -1,0 +1,15 @@
+No P0 or false applicable declared condition found in payload 3. One new P2 follow-up. This is advisory evidence, not authorization.
+
+Conditions **1–2, 10–12**, and this payload’s portions of **13–14** remain honest. The new CLIs require invocation; installation and upgrade copy them without executing them. The changed model integrations support conditions **5–6**. I found no escalation of the previously declared rc.1 findings.
+
+**NEW FINDINGS (annex):** No new P1.
+
+**P2 follow-up — Malformed ledger discards already-detected Codex drift.**
+
+- **FILE:LINE:** [`.claude/scripts/check-substrate-drift.py:782`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-ga.TOVy5x/wt/.claude/scripts/check-substrate-drift.py:782), added by this diff; the outer exception handler at line 1228 resets the report.
+- **Scenario:** The detector finds installed Codex `0.155.0` against pin `0.156.1`, then reads valid ledger JSON containing `"last_seen":"2.1.280"` instead of an object. Calling `.get("version")` raises `AttributeError`. The previously detected drift disappears, and `--strict` exits **0** with only `DETECTOR_ERROR`. An in-memory probe reproduced this; the correctly shaped ledger retained the drift and exited **1**.
+- **Minimal fix:** Validate ledger container types and return a component-specific unknown; preserve findings from other components when one comparison fails.
+
+Validation confirmed all **29 scoped files** match the rc.1 candidate and the supplied conditions hash matches. Baseline derivation, model-list parity, pricing/cache multipliers, alias normalization, tier ordering, Python 3.9 parsing, stdlib checking, and Bash syntax passed. The checkout remains unchanged; no network, installation, npm publication, or live harness tests ran.
+
+VERDICT: GO-WITH-CONDITIONS — Under the stated cut rule, retain the applicable signed conditions and record the P2 follow-up; this review does not authorize the GA.

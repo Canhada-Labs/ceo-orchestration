@@ -1,0 +1,15 @@
+Reviewed payload 4/4 at `6f7fcd4f85a05897c083084b080304cd54913ea6`. The conditions digest matches, and these three files are unchanged from the rc.1 candidate.
+
+**No P0, false applicable condition, or additional P1/P2 found.**
+
+- **Adopter impact:** install and upgrade deliver the generator but do not invoke it. Neither settings nor hooks call it. In an ordinary copied adopter tree, the missing governance manifest causes exit 2 before npm or pack emission. Publishing the npm bundle introduces no automatic re-pin execution.
+- **Declared debt:** condition **13(c)** accurately describes the extraction-path collision. Condition **14** accurately preserves the stray TODO marker and symlinked-parent defects. I found no escalation of these findings onto the mainline install/upgrade path.
+- **Documentation:** both documents explicitly bound their observations by date, substrate and repository version. The historical Codex 0.155.0 references do not contradict the current 0.156.1 pin. Their stated limits include unretained probe evidence, provider differences and incomplete enforcement of the served VETO model; those external measurements were not independently repeated here.
+
+Validation used Python **3.9.6**, in-memory archive controls and generation from the newest real mold. Generated scripts passed `bash -n`, re-parsed successfully, and carried matching rendered-file hashes. The collision and stray TODO were reproduced. No network calls or file changes were made; the worktree remains clean.
+
+**NEW FINDINGS (annex):** None.
+
+**P2 follow-ups:** No additional findings; retain condition 14.
+
+VERDICT: GO-WITH-CONDITIONS — Conditions 1–2 and 9–14 remain applicable and sufficient for this payload under the stated cut rule; this review is advisory evidence, not release authorization.
