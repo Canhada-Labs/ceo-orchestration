@@ -6,8 +6,8 @@ created: 2026-09-30
 owner: CEO
 depends_on: []
 level: L3
-budget_tokens: "estimado — W0 (doc-only) ~60-120k; W1 (cura A + rail) ~300-600k; W2 (cura B + rail) ~300-600k; W3 (medição do sandbox, sem código) ~40-80k"
-budget_sessions: "estimado 2-3 (W0 e a medição do sandbox cabem numa; cada cura canônica pede a sua cerimônia)"
+budget_tokens: "estimado (refeito no debate r1, S360) — W0 (doc-only) ~60-120k; instrumento de replay de falso-positivo ~60-120k; parte A = W1-ADR ~80-150k + W1a ~350-650k + W1b ~300-600k (total ~0,8-1,5 M, rail com teto de 4 rodadas por pacote); W2 (cura B + mensagem A3 + argv + rail) ~350-700k; W3 (medição do sandbox, sem código) ~40-80k; debate L3 ~0,5-1 M"
+budget_sessions: "estimado 5-7 (W0 e a medição do sandbox cabem numa; parte A 3-4 sessões em 3 pacotes na mesma vaga; W2 1-2; cada pacote canônico pede a sua cerimônia)"
 context_risk: medium
 external_wait: "Owner: assinatura GPG de cada wave canônica (W1, W2); decisão de ligar ou não o sandbox do SO DEPOIS da medição (W3 — «Medir antes de ligar» já decidido na S359). Debate L3 antes de W1/W2 (Security Engineer tem VETO). Vaga canônica: parte A na 2.ª vaga; parte B e sandbox sem vaga reservada (ver «Regra de WIP»)."
 eta_calendar: "mesmo-dia a D+1 por wave (CEO-only fora das assinaturas e do debate); calendário estica só pelas cerimônias do Owner"
@@ -87,8 +87,17 @@ CANÔNICO dentro do corpo de interpretadores/indireção. Os matchers DESTRUTIVO
    alcançado por variável, glob, `cd` relativo ou posição `argv` em vez de literal, o
    `_scan_blob` não casa a referência ⇒ **ALLOW**.
 
-As formas DIRETAS correspondentes seguem **BLOQUEADAS** — a assimetria é exatamente
-entre a forma literal e a forma computada/indireta. A matriz concreta (esperado ×
+As formas DIRETAS correspondentes seguem **BLOQUEADAS só na grafia canônica** — verbo no
+início de um pedaço delimitado por `&&`, `||`, `;` ou `|`. **Correção do debate r1 (S360,
+conferida no código):** a raiz não é só a indireção; o trio decide sobre `tokens[0]`
+(`check_bash_safety.py:378`, `:433-437`, `:456`) de pedaços de um fatiamento que só conhece
+esses quatro operadores (`:275`, `:526-584`), sem caixa baixa e com o `git` casado por posição
+fixa. Por isso também passam formas DIRETAS irmãs, sem nenhuma indireção: separadores e
+agrupadores que o fatiamento não modela, palavras reservadas do shell, lançadores fora dos
+quatro prefixos normalizados (`:107`), grafia em outra caixa, opção global do `git` antes do
+subcomando, e a divergência da regra de comentário entre o tokenizador do E3 e o dos pedaços
+do trio combinada com o `continue` fail-open de `_recheck_whole_command` (`:597-600`). A
+matriz concreta (esperado ×
 observado, strings de comando e método de sonda) fica **FORA do repo público**, na
 evidência privada do Owner, fora do repositório (decisão de divulgação do Owner, S359: o
 repo é público; aqui descreve-se a CLASSE pela FORMA, nunca receitas que funcionem).
@@ -126,26 +135,63 @@ lacuna argv). Síntese: §U2 e §6.
 
 ## Goal
 
-O `check_bash_safety.py` recusa (ou pede confirmação) comandos destrutivos e escritas em
-caminho canônico **pela FORMA** — inclusive quando o verbo ou o alvo chegam por
-interpretador aninhado, avaliação dinâmica, encadeador, cano para interpretador ou
-expansão/glob/`cd` relativo/`argv` — sem virar um lockout do uso legítimo; e a
-documentação de ameaças descreve a cobertura REAL.
+O `check_bash_safety.py` **eleva o custo** de chegar a um comando destrutivo ou a uma escrita
+em caminho canônico por forma não literal — formas diretas irmãs, interpretador aninhado,
+avaliação dinâmica, encadeador, alimentador opaco, expansão/glob no verbo ou no alvo, `cd`
+relativo, `argv` — recusando **pela FORMA**, sem virar um lockout do uso legítimo; o que segue
+aberto fica como **residual declarado pela forma** (análise estática de shell é incompleta por
+construção — molde do E4, `check_bash_safety.py:2468-2478`); e a documentação de ameaças
+descreve a cobertura REAL.
 
 ## Thesis
 
 Curar a CLASSE pela FORMA, não por lista de exemplos (CLAUDE.md §4; regra "cure a
-classe, não o exemplo"). O substrato JÁ tem o instrumento certo: o E4
-(`_e4_globify_expansions` / `_e4_expansion_replacement`, `check_bash_safety.py:3442`,
-`:3377`) constrói um "esqueleto de expansão" com **piso de literais** (`_E4_GLOB_MIN_LITERALS`)
-que evita o lockout (`python3 $SCRIPT` → `python3 *` = casa tudo, logo casa nada, ALLOW)
-e foi provado contra bypass real (rounds Codex S292, com controle vermelho→verde). A
-cura reusa esse esqueleto e a doutrina **fail-CLOSED em entrada não parseável**
-(precedente `_recheck_whole_command`, PLAN-152 debate C4): (1) recursar os matchers
-destrutivos nos corpos de `-c`/`eval`/`xargs`/`find -exec` e no cano-para-interpretador,
-reusando o `_scan_blob`; (2) resolver expansão/glob/`cd` relativo no ALVO antes de casar
-o caminho canônico, com o esqueleto do E4 e o piso de literais para não bloquear o uso
-normal. Prova obrigatória vermelho→verde com a sonda (payload no `stdin`, sem executar).
+classe, não o exemplo"). **Tese revista no debate r1 (S360; `PLAN-195/debate/round-1/consensus.md`,
+afirmações conferidas no código pelo `wf_430c1885-742`):**
+
+1. **Raiz.** O trio destrutivo decide sobre `tokens[0]` de pedaços de um fatiamento ingênuo.
+   Esta é a 4.ª ocorrência histórica da classe «o trio não vê o verbo» (PLAN-019 P0-02,
+   PLAN-153.E5, PLAN-152 rawscan, agora) ⇒ cura estrutural.
+2. **Mecanismo da parte A: UMA passada nova e aditiva** — uma chamada só, na cauda de
+   `decide_command` (depois do laço legado, antes do `return` de ALLOW), que anda pelas
+   POSIÇÕES DE PALAVRA DE COMANDO de tudo o que o bash executaria e que está estaticamente
+   visível, sobre o MESMO léxico do E3 (`shlex` com `punctuation_chars`, `:2190`), e roda o trio
+   sobre cada comando simples achado. O laço legado e `_recheck_whole_command` ficam
+   byte-idênticos (a passada nova cobre o escopo dos dois sítios porque anda no comando
+   inteiro); E3 e E4 ficam byte-idênticos na W1.
+3. **Reuso por leitura, não por refatoração.** `_scan_blob` é closure dentro do laço do E3 e
+   devolve caminho (`:2245`, `:2304`) — não é peça reutilizável. Reusam-se, por chamada ou
+   leitura, as tabelas e funções do E4: `_E4_PREFIX_RUNNERS` (`:2652`),
+   `_E4_PREFIX_RUNNER_FLAGS` (`:2699`), `_e4_classify_prefix_flag` (`:3154`), o padrão de
+   atribuição no mesmo comando (`assigned_toggle`, `:3680-3685`, `:3740-3743`), o de substituição
+   em posição de comando (`:2888`) e a decodificação de aspas estáticas (`:3377`).
+4. **Verbo computado SEM piso de literais.** O piso do E4 (`_E4_GLOB_MIN_LITERALS = 4`,
+   `:2569`, `:2935`) foi desenhado para a posição de OPERANDO (`:3461-3466`); na posição do
+   verbo as grafias comuns de nomes de 2 e 3 letras ficam abaixo dele e viram ALLOW. Regra do
+   verbo computado, em ordem: (a) propagar atribuições literais feitas no MESMO comando; (b) se o
+   verbo continua computado E o segmento traz marcadores destrutivos LITERAIS do trio, BLOCK;
+   (c) senão ALLOW, e a forma entra na lista de residuais. O piso continua sendo a ferramenta
+   da W2 (alvo de caminho).
+5. **Invariante (ADR-201):** nenhuma forma que a passada reconhece recebe veredito mais
+   permissivo que a sua forma direta.
+6. **Fail-closed de parse:** o léxico do topo já bloqueia a montante se falhar (`:2193-2208`).
+   Corpo de SHELL reconhecido pela passada (shell `-c` em qualquer grafia reconhecida, inclusive
+   aglomerado de opções; argumentos do `eval` concatenados; here-doc/here-string consumidos por
+   shell; corpo de função) que não tokeniza ⇒ **BLOCK, com ou sem assinatura do trio** — é o
+   que o E3 já faz para o `-c` exato (`:2307-2315`), e fazer menos para a grafia nova violaria o
+   invariante do item 5 (correção da revisão Codex da rodada 1, P2). A assinatura do trio na
+   forma achatada (precedente E4, `:3644-3665`) serve só para escolher o `reason_code` e a
+   mensagem (destrutivo × corpo não analisável). Teto iterativo de profundidade e tamanho ⇒
+   BLOCK acima do teto (crash em matcher é fail-open, `:4227-4233`). Corpo NÃO-shell
+   (python/node/perl) nunca recebe fail-closed cego desta passada — a W1 não estende a ele o
+   ruído da A3.
+7. **Decisão = BLOCK** com mensagem acionável («escreva o comando na forma direta; ela é julgada
+   pelo próprio mérito»), `destructive=True` (paridade com a forma direta) e `reason_code`
+   próprio por classe (K1 do debate trata os alimentadores opacos — OQ-9).
+
+A parte B (W2) resolve expansão/glob/`cd` relativo/`argv` no ALVO antes de casar o caminho
+canônico, com o esqueleto do E4 e o piso de literais, que ali é a ferramenta certa. Prova
+obrigatória vermelho→verde em árvore descartável, sem executar nenhum comando da classe.
 
 **Alternativas descartadas (registradas nas frentes, não repetir o trabalho):**
 - Fail-closed CEGO em toda expansão em posição de comando/alvo — o próprio arquivo
@@ -159,6 +205,16 @@ normal. Prova obrigatória vermelho→verde com a sonda (payload no `stdin`, sem
 - Ligar o sandbox como substituto da cura do hook — cobre exfiltração e alvos fora da
   árvore, mas não `rm -rf` DENTRO do repo nem escrita canônica dentro da árvore; é
   decisão ORTOGONAL do Owner (W3), não substitui o matcher.
+- (debate r1) Reusar o esqueleto do E4 COM o piso de literais na posição do VERBO — o piso
+  foi feito para operando; no verbo, as grafias comuns de nomes curtos ficam abaixo dele e
+  viram ALLOW por aritmética. Rejeitado (Thesis item 4).
+- (debate r1) Recursão em dois sítios (ou helper chamado pelos dois) — duas segmentações é a
+  forma de defeito que o próprio arquivo registra (`check_bash_safety.py:3249-3251`) e que o
+  achado C16 reproduz. Rejeitado em favor da passada única (Thesis item 2).
+- (debate r1) ASK puro — o hook não tem esse canal: `Decision` só tem allow/block/rewrite-ask
+  e o `ask` só sai com `updatedInput` (`:299-322`, `:3947-3963`); sem humano (subagente,
+  night-run) uma permissão pendente é silêncio, não recusa. Rejeitado (OQ-9 trata o
+  falso-positivo dos alimentadores opacos por outro caminho).
 
 ## Oráculo canônico (rodado em 30/09, HEAD 429a5b39; re-rodado na revisão S359 para o ADR-201 e o `test_check_harness_config.py`; registrar de novo antes de editar)
 
@@ -176,6 +232,13 @@ Owner). `python3 .claude/hooks/check_canonical_edit.py --is-canonical <path>` �
 | `.claude/hooks/tests/test_check_bash_safety_canonical_matrix.py` | 0 | W2 |
 | `.claude/hooks/tests/test_check_bash_safety.py` | 0 | W1 (só se um teste existente precisar de ajuste) |
 | `.claude/hooks/tests/test_check_harness_config.py` | 0 | nenhuma como path — só a bateria de W1/W2 (ver W1) |
+| `.claude/hooks/tests/test_bash_posture_toggle_invocation.py` | 0 | nenhuma como path — bateria de W1a/W1b/W2 (debate r1) |
+| `.claude/hooks/tests/test_check_bash_safety_cp_chaining.py` | 0 | nenhuma como path — bateria de W1a/W1b/W2 (debate r1) |
+| `.claude/hooks/tests/test_check_bash_safety_h5_rewrite.py` | 0 | nenhuma como path — bateria de W1a/W1b/W2 (debate r1) |
+| `.claude/hooks/tests/test_byte_identity_fuzzer.py` | 0 | W1a/W1b só se a relação hook × gêmeo YAML virar asserção de mão única (ADR-201); senão só bateria |
+| `.claude/hooks/tests/test_byte_identity_harness.py` | 0 | bateria de W1a/W1b/W2 (paridade com o gêmeo YAML) |
+| `.claude/policies/bash-safety.policy.yaml` | **1 (canônico)** | nenhuma — gêmeo declarativo do trio; a W1 NÃO o toca (relação decidida na ADR-201) |
+| `.claude/hooks/_lib/policy_preprocessors.py` | **1 (canônico)** | nenhuma — espelho do trio para o gêmeo YAML; a W1 NÃO o toca |
 | `docs/security-bash-canonical-guards.md` | **0** (não canônico; não entregue a adopter) | W0 |
 | `docs/threat-model.md` | **0** | W0 |
 | `SECURITY.md` | **0** | W0 (se atualizar a linha da classe) |
@@ -251,64 +314,162 @@ antigo já casava hoje o título da §1.2, `:53`, e por isso não provava nada.)
   contagem real. **CUIDADO:** `check-threat-model-freshness.py` ESCREVE esse arquivo
   (flip `accepted→stale`) como efeito colateral — rodar por último e commitar o flip
   conscientemente (lição S328), no mesmo commit da W0 e fora de janela de SIGN.
+- [ ] (debate r1) No mesmo texto da W0: (a) não afirmar que as formas DIRETAS seguem
+  bloqueadas sem qualificar — só a grafia canônica; as formas diretas irmãs entram na §6.6 pela
+  forma; (b) registrar que, para as classes A e B, o `PreToolUse` é a ÚNICA detecção — o
+  forense pós-fato só casa quatro formas literais de escrita canônica
+  (`check_bash_canonical_forensic.py`) e não vê destrutivo indireto nem alvo computado; (c)
+  §6.6 traz a lista de residuais pela forma (a mesma da ADR-201). — Check: none (doc-only;
+  coberto pelo Check da W0)
 - [ ] `SECURITY.md`: confirmar que a linha 23 (classe já em escopo) permanece honesta;
   ajustar só se necessário — Check: none (doc-only)
 
-### W1 — cura parte A: execução indireta de comando destrutivo (canônica, L3)
-Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py .claude/hooks/tests/test_check_bash_safety.py .claude/hooks/tests/test_check_harness_config.py -q && python3 scripts/build-plugin.py --check && cmp .claude/hooks/check_bash_safety.py dist/ceo-plugin/hooks/check_bash_safety.py && cmp .claude/hooks/check_bash_safety.py npm/.claude/hooks/check_bash_safety.py
+### W1 — cura parte A: execução indireta e formas diretas irmãs (canônica, L3) — dividida no debate r1 em W1-ADR → W1a → W1b
+Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py .claude/hooks/tests/test_check_bash_safety.py .claude/hooks/tests/test_check_harness_config.py .claude/hooks/tests/test_bash_posture_toggle_invocation.py .claude/hooks/tests/test_check_bash_safety_cp_chaining.py .claude/hooks/tests/test_check_bash_safety_h5_rewrite.py .claude/hooks/tests/test_byte_identity_fuzzer.py .claude/hooks/tests/test_byte_identity_harness.py -q && python3 scripts/build-plugin.py --check && cmp .claude/hooks/check_bash_safety.py dist/ceo-plugin/hooks/check_bash_safety.py && cmp .claude/hooks/check_bash_safety.py npm/.claude/hooks/check_bash_safety.py
 
-**Vaga:** 2.ª vaga canônica (ver «Regra de WIP»).
+**Vaga:** 2.ª vaga canônica (ver «Regra de WIP»). W1-ADR, W1a e W1b usam a MESMA vaga, uma
+depois da outra: W1a e W1b tocam o mesmo arquivo do hook; a ADR é arquivo distinto, mas
+precede o código.
 
-Testes novos que provam a cura (arquivo novo
-`.claude/hooks/tests/test_check_bash_safety_indirect_exec.py`, oráculo 0):
-`TestIndirectDestructiveBlocks` (uma linha por forma da classe A da matriz privada,
-ids A-1..A-9 ⇒ BLOCK/ASK), `TestIndirectLegitAllow` (controles legítimos ⇒ ALLOW,
-inclusive o texto destrutivo entre aspas num `echo`) e `TestReadRefusalMessage` (texto
-da recusa de leitura). **Controle negativo obrigatório:** em árvore descartável, com o
-arquivo de teste novo e o hook do HEAD SEM a cura,
-`python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py -k TestIndirectDestructiveBlocks -q`
-tem de sair com **exit 1** (falha real). Exit 5 ("nenhum teste coletado") NÃO vale
-como controle. Depois da cura: exit 0, e `TestIndirectLegitAllow` verde nos dois lados.
-(O pytest da matriz canônica sozinho NÃO prova nada: hoje ele já passa, porque as linhas
-17/18/34 são `xfail`, `_ADVISORY_ROWS`, `test_check_bash_safety_canonical_matrix.py:122`.)
-**Divulgação:** o arquivo de teste novo carrega strings concretas; ele só entra no repo
-público NO MESMO commit da cura, nunca antes.
+**Pré-requisitos comuns:** debate L3 fechado com PROCEED; instrumento de replay de
+falso-positivo pronto e medido sobre o HEAD (OQ-1) — fora do repo ou em teste não canônico;
+só contagens entram no pacote.
 
-**Bateria do land (além dos testes novos):** `test_check_harness_config.py` entra na
-bateria (já no Check acima). Motivo: o gate do harness (`check_harness_config.py:151`)
-re-executa a fixture `bash_safety_destructive.json` contra este hook, e a W7a do PLAN-183
-move essa fixture de pasta — as duas ondas não têm arquivo em comum, mas uma pode quebrar o
-teste da outra. O inverso (testes do `check_bash_safety` na bateria da W7a) é do PLAN-183.
+#### W1-ADR — ADR-201 (`PROPOSED`)
+Conteúdo mínimo: a tese (raiz, passada única aditiva, reuso por leitura); o invariante de
+não-permissividade; a taxonomia de contêineres — RUNNERS (operando é argv: a tabela do E4),
+TOMADORES DE CORPO (operando é texto de shell: shell `-c`, avaliação com todos os argumentos,
+here-doc consumido por shell), ALIMENTADORES OPACOS (cano, substituição de processo ou leitura
+de texto não estático entregue a interpretador), VERBO INDECIDÍVEL (expansão na palavra de
+comando); o escopo de recursão pela forma; a regra do verbo computado (Thesis item 4); o
+fail-closed de parse de corpo de shell reconhecido (BLOCK com ou sem assinatura do trio; a
+assinatura só escolhe `reason_code` e mensagem — Thesis item 6); a decisão BLOCK +
+`destructive=True` + `reason_code` por classe,
+com técnica mapeada (paridade com o forense); a regra dos alimentadores opacos (OQ-9); o
+vocabulário destrutivo (A-9 dentro; A-8 conforme a OQ-8); a relação com o gêmeo YAML (hook ⊇
+YAML; a W1 não toca os arquivos canônicos do gêmeo); a rota de limpeza sancionada (lição S358:
+agente apaga o próprio clone por helper confinado invocado por caminho) fixada como ALLOW; o
+risco latente do piloto de citação (busca por substring sem filtro de papel — armar só com
+filtro por papel `user`, FU); e os residuais pela forma (lista do Goal e da W0). Landa
+`PROPOSED`; o flip para `ACCEPTED` vai no pacote de código que entrega o comportamento (W1b).
+Paths: 1. Estimativa: 100-150 linhas.
 
-Tamanho (estimado): fonte do hook ~80-150 linhas + testes ~100-150 + ADR-201 ~80-120 =
-~260-420 linhas revisáveis. Paths: até 4 (hook, teste novo, `test_check_bash_safety.py` se
-preciso, ADR-201) ≤ 8; os espelhos `dist/` e `npm/` não são paths do pacote (ignorados pelo
-git — nota do oráculo). Se, ao montar o pacote, a estimativa passar de 400, a ADR-201 sai
-num pacote canônico PRÓPRIO (W1-ADR, arquivo distinto — não viola "nunca dois pacotes no
-mesmo arquivo"), landado antes do código, NA MESMA vaga (ver «Regra de WIP»).
+#### W1a — passada aditiva: segmentação, lançadores, corpos de shell
+Escopo: a chamada única na cauda de `decide_command`; o caminhador de posições de palavra de
+comando sobre o léxico do E3 (corridas de pontuação que contêm terminador; palavras reservadas
+do shell em lista fechada; abertura de contexto em parêntese, substituição de comando, crase e
+substituição de processo); o normalizador de palavra de comando (lançadores pela tabela do E4,
+com flag desconhecida tratada como ambígua; `env` com divisão de string tratado como corpo;
+caixa baixa com `str.lower`; nome-base; aspas estáticas); a gramática do `git` (opção global
+antes do subcomando; opção destrutiva depois de operando); a recursão em corpo de shell `-c`
+(inclusive aglomerado de opções curtas que contém `c`), em todos os argumentos do `eval`, no
+argv depois das flags do `xargs`, no verbo de busca com `-exec`/`-execdir`/`-ok`/`-okdir` e em
+here-doc/here-string consumidos por shell (here-doc para arquivo é DADO); o teto iterativo; o
+`reason_code` próprio, emitido uma vez por comando; o kill-switch próprio da passada (lido do
+snapshot `trusted_env`, ligado por padrão), separado do `CEO_BASH_RAWSCAN`. Linhas da matriz:
+A-4, A-5 e a família de formas diretas irmãs (inclusive a divergência de comentário entre
+tokenizadores). Paths: hook, teste novo, `test_check_bash_safety.py` se preciso (≤ 3).
+Estimativa: 300-400 linhas.
 
-- [ ] Debate L3 `/debate start PLAN-195` fechado com PROCEED (Security Engineer tem VETO)
-  antes de qualquer edição do hook — Check: none (debate gate)
-- [ ] Recursar `_check_rm_rf`/`_check_git_reset_hard`/`_check_git_push_force` nos corpos de
-  `-c`/`eval`/`xargs`/`find -exec` reusando o `_scan_blob` do E3 e o esqueleto do E4 (piso
-  de literais), e recusar/pedir confirmação no cano-para-interpretador — CURA PELA FORMA,
-  nunca por lista de exemplos. Cobrir os DOIS sítios do trio (`decide_command`
-  `:3891-3896` e `_recheck_whole_command` `:601`). Controle vermelho→verde pela sonda e
-  pelo `-k TestIndirectDestructiveBlocks` acima (RED primeiro, em árvore descartável).
-- [ ] Corrigir SÓ a mensagem da recusa de LEITURA por `python3 -c` (A3-1/A3-3): apontar
-  Read/`cat`/`grep` para leitura e separar o ramo fail-closed de parse (dizer "corpo não
-  tokenizável/grande; nenhum caminho canônico identificado"), sem criar allowlist de
-  leitura. Fixar o texto em `TestReadRefusalMessage`.
+#### W1b — verbo computado, alimentadores opacos, vocabulário
+Escopo: a regra do verbo computado (Thesis item 4; A-1/A-2/A-3); os alimentadores opacos
+(A-6/A-7) com a decisão da OQ-9; corpo de função e valor de alias definidos no mesmo comando;
+a extensão de vocabulário — A-9 com controle ALLOW para arquivo comum, A-8 conforme a OQ-8; o
+flip da ADR-201 para `ACCEPTED`. Paths: hook, teste novo, ADR-201 (≤ 3). Estimativa: 250-400
+linhas.
+
+#### Prova (W1a e W1b)
+Testes no arquivo novo `.claude/hooks/tests/test_check_bash_safety_indirect_exec.py` (oráculo 0):
+`TestIndirectDestructiveBlocks`, `TestIndirectLegitAllow` e a bateria combinatória.
+
+- (a) **Controle negativo POR PACOTE** em árvore descartável, com o teste do pacote e o hook
+  do HEAD de ANTES do pacote (para a W1a, o HEAD sem a W1a; para a W1b, o HEAD com a W1a já
+  landada): CADA linha NOVA deste pacote em `TestIndirectDestructiveBlocks` falha — contagem N
+  de N das linhas novas, registrada no pacote, não só «exit 1» —, e as linhas que vieram de
+  pacotes anteriores seguem VERDES (regressão). Exit 5 ("nenhum teste coletado") NÃO vale.
+  Depois da cura: todas verdes. (Correção da revisão Codex da rodada 1, P2: a W1b não pode
+  exigir N de N vermelho sobre linhas da W1a que o HEAD dela já cura.)
+- (b) Cada linha afirma a CLASSE do motivo (`reason_code` ou prefixo estável do ramo novo), não
+  só `allow=False` — mata o falso-verde do fail-closed cego do `_scan_blob`
+  (`check_bash_safety.py:2307-2315`).
+- (c) Bateria combinatória gerada de verbo × invólucro × grafia × separador × lançador da
+  tabela do E4, com a matriz privada como semente, não como universo.
+- (d) Aninhamento até o teto e acima dele; p95 do `test_perf_p95_under_50ms_advisory`
+  (`test_check_bash_safety_canonical_matrix.py:300`, que é `assert` duro) antes e depois.
+- (e) `TestIndirectLegitAllow`: corpus sintético representativo (interpretador dirigido por
+  variável, `xargs` e busca de arquivos não destrutivos, shell `-c` com verbo legítimo, texto
+  destrutivo citado — inclusive o controle do `echo` —, here-doc para arquivo), verde antes e
+  depois.
+- (f) Mutação por sub-regra: desligar cada regra nova deixa ao menos uma linha vermelha.
+- (g) Força-push dentro de contêiner nunca vira reescrita nem `ask`.
+- (h) A rota de limpeza sancionada segue ALLOW.
+- (i) Replay offline (OQ-1): contagens HEAD × cura registradas no pacote; o delta é
+  classificado à mão na evidência privada do Owner.
+- (j) Paridade com o gêmeo YAML: `test_byte_identity_fuzzer.py` e `test_byte_identity_harness.py`
+  verdes, com a relação declarada na ADR-201.
+
+O pytest da matriz canônica sozinho NÃO prova nada (as linhas 17/18/34 são `xfail`,
+`_ADVISORY_ROWS`, `test_check_bash_safety_canonical_matrix.py:122`). **Divulgação:** o arquivo
+de teste novo carrega strings concretas; ele só entra no repo público NO MESMO commit da cura
+(de W1a e de W1b), nunca antes.
+
+**Bateria do land:** as 9 suítes do Check acima. `test_check_harness_config.py` entra porque
+o gate do harness (`check_harness_config.py:151`) re-executa a fixture
+`bash_safety_destructive.json` contra este hook, e a W7a do PLAN-183 move essa fixture de pasta
+— quem landar por SEGUNDO roda a bateria do outro sobre a árvore composta. As 3 suítes do hook
+e as 2 de paridade entraram no debate r1 (nenhuma estava no plano).
+
+**Regra de parada do rail (pré-registrada no debate r1):** no máximo 4 rodadas por pacote;
+NO-GO só por P0 ou por afirmação falsa; achado que é nova grafia de um residual já declarado
+pela forma vai para o anexo da rodada final e não bloqueia; P1 da mesma subclasse em duas
+rodadas seguidas ⇒ parar e estreitar a afirmação (troca de arquitetura), não remendar.
+
+**Fora da W1 (vai para a W2):** a mensagem da recusa de leitura por `python3 -c` (A3), porque
+toca o E3 e a W1 deixa o E3 byte-idêntico. Custo aceito: entre W1 e W2, um corpo destrutivo
+malformado segue BLOQUEADO pelo E3, mas com a mensagem de caminho canônico.
+
+**Tamanho:** cada pacote ≤ 400 linhas e ≤ 8 paths; os espelhos `dist/` e `npm/` não são paths
+do pacote (ignorados pelo git — nota do oráculo).
+
+- [ ] Debate L3 `/debate start PLAN-195` fechado com PROCEED (Security Engineer e Threat
+  Detection Engineer com VETO) antes de qualquer edição do hook — Check: none (debate gate)
+- [ ] Instrumento de replay de falso-positivo (OQ-1) pronto e medido sobre o HEAD
+  — Check: none (instrumento fora do repo; contagens registradas no pacote)
+- [ ] W1-ADR: ADR-201 `PROPOSED` com o conteúdo mínimo acima; cerimônia — Check: test -f .claude/adr/ADR-201-bash-guard-indirect-execution.md
+- [ ] W1a: passada aditiva, caminhador, normalizador, gramática do `git`, recursão nos corpos,
+  teto, `reason_code` e kill-switch próprios; prova (a)-(j) — Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py -q
+- [ ] W1b: verbo computado, alimentadores opacos (OQ-9), função/alias do mesmo comando,
+  vocabulário (A-9; A-8 conforme OQ-8), flip da ADR-201; prova (a)-(j) — Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py -q
 - [ ] Regenerar os espelhos LOCAIS (`python3 scripts/build-plugin.py` e
-  `bash scripts/npm-rebuild.sh`) antes da bateria e provar a identidade por `cmp`; eles não
-  entram no commit nem no Scope do sentinel (ignorados pelo git).
-- [ ] Rail codex nas duas lanes até rodada limpa; sentinel; SIGN/LAND (GPG do Owner).
+  `bash scripts/npm-rebuild.sh`) antes da bateria de cada pacote e provar a identidade por
+  `cmp`; eles não entram no commit nem no Scope do sentinel (ignorados pelo git) — Check: cmp .claude/hooks/check_bash_safety.py npm/.claude/hooks/check_bash_safety.py
+- [ ] Rail codex nas duas lanes com a regra de parada acima; sentinel; SIGN/LAND (GPG do
+  Owner) por pacote — Check: none (ceremony record)
 
 ### W2 — cura parte B: escrita em caminho protegido com alvo computado (canônica, L3)
-Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py .claude/hooks/tests/test_check_harness_config.py -q && python3 scripts/build-plugin.py --check && cmp .claude/hooks/check_bash_safety.py dist/ceo-plugin/hooks/check_bash_safety.py && cmp .claude/hooks/check_bash_safety.py npm/.claude/hooks/check_bash_safety.py
+Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py .claude/hooks/tests/test_check_bash_safety_indirect_exec.py .claude/hooks/tests/test_check_bash_safety.py .claude/hooks/tests/test_check_harness_config.py .claude/hooks/tests/test_bash_posture_toggle_invocation.py .claude/hooks/tests/test_check_bash_safety_cp_chaining.py .claude/hooks/tests/test_check_bash_safety_h5_rewrite.py .claude/hooks/tests/test_byte_identity_fuzzer.py .claude/hooks/tests/test_byte_identity_harness.py -q && python3 scripts/build-plugin.py --check && cmp .claude/hooks/check_bash_safety.py dist/ceo-plugin/hooks/check_bash_safety.py && cmp .claude/hooks/check_bash_safety.py npm/.claude/hooks/check_bash_safety.py
 
 **Vaga:** sem vaga reservada — entra quando uma vaga liberar, na fila da OQ-11 do PLAN-194,
 e nunca antes do land da parte A (mesmo arquivo).
+
+**Herdado no debate r1 (a W2 é a onda que toca o E3):** (1) a mensagem da recusa de leitura
+por `python3 -c` (A3), que saiu da W1 — a regra de argv torna essa recusa MAIS frequente, então
+a mensagem certa chega no mesmo land ou antes; (2) a lacuna argv (OQ-4: o ramo `-c` de
+interpretador faz `break` depois do corpo, `check_bash_safety.py:2335-2345`); (3) o ramo do
+verbo de busca de arquivos no E3 varre TODOS os tokens restantes do comando e dispara também
+quando o nome do verbo aparece como argumento (`:2430-2432`, `:2247`) — falso-positivo A3-5,
+**observado duas vezes ao vivo**: na rodada 1 do debate, um comando composto só de leitura de
+um crítico; e na S360 um comando do CEO que gravava texto de plano por here-doc, sem executar o
+verbo de busca, mas citando o nome dele como texto e um caminho de ADR adiante — os dois foram
+recusados com a mensagem de edição por `-exec sed`, que não se aplicava; a varredura fica
+limitada ao segmento, como já são `tee`/`sed`/`cp`; (4) o contrato de `cwd`:
+`NormalizedEvent` não carrega `cwd` (`_lib/contract.py:50-85`) e `decide_command(command)` não o
+recebe (`:3818`) ⇒ a W2 declara que fecha só o `cd` DENTRO do mesmo comando, ou passa a ler o
+`cwd` do stdin (como o citation-gate já lê o `transcript_path`) com teste; (5) a parte B usa o
+MESMO caminhador e o mesmo localizador de corpo da W1 (aglomerado de opções, corpo que não vem
+logo depois do `-c`); (6) `reason_code` próprio para o bloqueio de escrita canônica com alvo
+computado — hoje o bloqueio canônico do E3 não emite NENHUM evento (`:3838-3841` sem
+`destructive`; o fact-gate só roda sob `destructive`, `:4166-4180`).
 
 Testes novos que provam a cura: classe `TestComputedCanonicalTarget` em
 `.claude/hooks/tests/test_check_bash_safety_canonical_matrix.py` (uma linha por forma da
@@ -318,14 +479,27 @@ novos e o hook SEM a cura,
 `python3 -m pytest .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py -k TestComputedCanonicalTarget -q`
 sai com exit 1 (não 5); depois da cura, exit 0. Mesma regra de divulgação da W1; mesma
 bateria do harness da W1 (`test_check_harness_config.py`, já no Check acima).
-Tamanho (estimado): hook ~80-150 + testes ~60-120 = ~140-270 linhas revisáveis; paths: 2
-(hook, matriz) ≤ 8 — os espelhos não são paths do pacote.
+Prova com as mesmas regras (a), (b), (e) e (f) da W1 (N de N vermelho no HEAD; classe do
+motivo afirmada; controles legítimos; mutação por sub-regra) e o replay offline (OQ-1).
+Tamanho (estimado, refeito no debate r1): hook ~150-250 + testes ~100-150 = ~250-400 linhas
+revisáveis; paths: 2-3 (hook, matriz, `test_check_bash_safety.py` se preciso) ≤ 8 — os
+espelhos não são paths do pacote. Se passar de 400, dividir em W2a (alvo computado + argv) e
+W2b (mensagem A3 + segmento do verbo de busca), na mesma vaga, com a mensagem A3 nunca
+depois da regra de argv.
 
 - [ ] Resolver expansão (variável/substituição), glob e `cd` relativo no ALVO de escrita
   (redirect/`tee`/`sed -i`/`dd of=`/interpretador) antes de casar o caminho canônico,
-  reusando o esqueleto do E4 com piso de literais — sem fail-closed cego. Decidir a
-  lacuna argv (A3-4: caminho canônico passado como `argv` a `python3 -c`) aqui ou em W1
-  (OQ-4). Controle vermelho→verde pela sonda e pelo `-k TestComputedCanonicalTarget` acima.
+  reusando o esqueleto do E4 com piso de literais — sem fail-closed cego. Lacuna argv aqui
+  (OQ-4, decidida 3/3 no debate r1): caminho canônico entre os operandos posicionais depois
+  de um corpo `-c`/`-e` de interpretador ⇒ BLOCK, sem tentar provar se o corpo lê ou escreve.
+  Controle vermelho→verde pelo `-k TestComputedCanonicalTarget` acima. — Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py -q -k TestComputedCanonicalTarget
+- [ ] Mensagem da recusa de LEITURA por `python3 -c` (A3-1/A3-3): apontar Read/`cat`/`grep`
+  para leitura e separar o ramo de parse falho («corpo não tokenizável/grande; nenhum caminho
+  canônico identificado»), sem allowlist de leitura; texto fixado em `TestReadRefusalMessage`.
+  — Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py -q -k TestReadRefusalMessage
+- [ ] Limitar ao segmento a varredura do verbo de busca de arquivos no E3 (A3-5), com controle
+  ALLOW para o comando composto só de leitura e controle BLOCK para a edição real.
+  — Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py -q
 - [ ] Regenerar os espelhos LOCAIS e provar a identidade por `cmp` (como na W1); fora do
   commit e do Scope.
 - [ ] Rail codex nas duas lanes; sentinel; SIGN/LAND. Sequencial DEPOIS da W1 (mesmo
@@ -364,20 +538,48 @@ antiga **OQ-7** (se os espelhos `dist/`/`npm/` contavam no limite do pacote) per
 objeto: os espelhos são ignorados pelo git e não entram no pacote. Os números das outras
 ficam iguais, para não quebrar referências.
 
-- OQ-1 (debate/Owner): nível de fail-closed aceitável sem travar o uso normal. O
-  audit-log só registra BLOQUEIOS do hook (corpus de comandos PERMITIDOS não existe), logo
-  o FPR (taxa de falso-positivo) da regra proposta **não é medível** do log — decidir o
-  orçamento de FPR (§4.4 do guards doc, ≤3/7d) por outro caminho (dogfood observado).
-- OQ-2 (debate): tratamento de heredoc e de aspas — o E3 já é fail-CLOSED em `shlex`
-  malformado; confirmar que a recursão destrutiva herda o mesmo fail-closed sem regressão
-  nos controles negativos existentes (`echo "…rm -rf…"` deve continuar ALLOW). O trio
-  destrutivo roda em DOIS sítios (`decide_command` `:3891-3896` e, no ramo de `shlex`
-  rejeitado, `_recheck_whole_command` `:601`): decidir se a recursão nova entra nos dois
-  ou num helper único chamado pelos dois — um sítio só deixaria o ramo de parse sem a cura.
-- OQ-3 (debate): `.mcp.json` e `CLAUDE.md` entram no conjunto de caminhos protegidos da
-  parte B? (Hoje não são `_CANONICAL_GUARDS`.)
-- OQ-4 (Owner): a lacuna argv (A3-4) fecha na W1 (é indireção de execução) ou na W2 (é
-  alvo de escrita computado)? Padrão do CEO: W2, com uma linha na matriz.
+- OQ-1 (debate r1 — direção acordada 3/3; confirmar na r2): nível de fail-closed aceitável
+  sem travar o uso normal. **Premissa corrigida:** o «≤ 3 em 7 dias» do §4.4 do guards doc
+  é o orçamento de USO do kill-switch de bypass, não de falso-positivo de regra
+  (`docs/security-bash-canonical-guards.md:162-168`, conferido). E o log não serve de corpus
+  nem de bloqueios: o bloqueio de escrita canônica não emite nada e o destrutivo só aparece
+  via shadow do fact-gate; os 685 eventos retidos do hook têm `session_id` vazio. **Direção:**
+  (a) corpus sintético versionado de controles legítimos (`TestIndirectLegitAllow`); (b) replay
+  offline dos comandos Bash dos transcripts locais contra `decide_command` HEAD × cura, com
+  `HOME`/`CLAUDE_PROJECT_DIR` isolados e sem executar nada — só contagens no repo, delta
+  classificado à mão na evidência privada; meta: as regras de EQUIVALÊNCIA com a forma direta
+  não geram nenhum bloqueio novo legítimo, e as regras heurísticas ficam abaixo de um limite
+  pré-registrado na ADR-201; (c) `reason_code` por classe + contagem por 7 dias por PROJETO
+  para ver a regra disparar depois do land.
+- OQ-2 (debate r1 — direção acordada; Critic-C confirma na r2): heredoc, aspas e os dois
+  sítios. **Direção:** nem recursão nos dois sítios nem helper chamado pelos dois — UMA passada
+  aditiva na cauda de `decide_command` sobre o léxico do E3 (Thesis item 2), que cobre o
+  escopo dos dois sítios legados, tem um só ponto de evento e uma só segmentação nova (o
+  achado C16 mostra o custo de duas). Here-doc é DADO, salvo quando o consumidor é shell ou
+  avaliação; substituição de comando em here-doc de delimitador não citado e dentro de aspas
+  duplas é PROGRAMA; o controle do `echo` com texto destrutivo citado segue ALLOW.
+- OQ-3 (RESOLVIDA no debate r1, 3/3): `.mcp.json` e `CLAUDE.md` **fora** do PLAN-195. O
+  oráculo dá 0 para os dois e o `CLAUDE.md` foi excluído de propósito
+  (`check_canonical_edit.py:200-204`, editado a cada closeout); bloquear só no Bash criaria
+  assimetria (Bash bloqueado, Write livre). A W2 consome `_CANONICAL_GUARDS` como está;
+  ampliar o conjunto é decisão do guarda de edição canônica em plano próprio (FU
+  `PLAN-195-FOLLOWUP-canonical-guards-set`), com a recomendação registrada de medir antes o
+  custo de cerimônia do `CLAUDE.md`.
+- OQ-4 (RESOLVIDA no debate r1, 3/3): a lacuna argv fecha na **W2** — é alvo de escrita
+  computado, não verbo destrutivo; uma linha na matriz e o controle ALLOW correspondente
+  (operando não canônico).
+- OQ-8 (nova, debate r1 — decidir na r2 ou pelo Owner): **A-8** (remoção por predicado de
+  busca de arquivos) é uso legítimo frequente (limpeza de cache e de scratch). Opções: (a)
+  entra na W1b com regra de forma — remoção por busca SEM predicado filtrante equivale a
+  remoção recursiva — e controles ALLOW para a busca filtrada; (b) sai da W1 e da prova, como
+  residual declarado pela forma.
+- OQ-9 (nova, debate r1 — conflito K1, decidir na r2): **alimentadores opacos** (cano para
+  interpretador, decodificação, substituição de processo como script). Um crítico com VETO
+  pediu ASK; os outros dois pediram BLOCK (ASK puro não existe no hook). Proposta do CEO:
+  BLOCK com mensagem acionável + `reason_code` próprio + kill-switch próprio + replay offline
+  antes do land; regra de rebaixamento PRÉ-REGISTRADA por sub-forma — se o replay mostrar
+  bloqueio legítimo acima do limite fixado na ADR-201, aquela sub-forma sai como advisory (só
+  evento, ALLOW), nunca como ASK.
 - OQ-6 (Owner, W3) — só o que resta: **ligar ou não o sandbox depois da medição.** (Medir
   antes de ligar já está decidido.)
 
@@ -386,22 +588,29 @@ ficam iguais, para não quebrar referências.
 Ler este plano, a evidência privada do Owner fora do repositório (matriz concreta + método
 de sonda; síntese §U2/§6) e a memória `project-s359-urgency-triage`. **W0:** executar já
 (decisão do Owner S359), fora de qualquer janela de SIGN, depois do flip `draft → reviewed`
-feito pelo CEO com base na aprovação em chat. **W1 (parte A):** na 2.ª vaga, depois da W1 do
-PLAN-194 ocupar a 1.ª (ver «Regra de WIP»); `/debate start PLAN-195 "<proposta>"` ANTES de
-tocar o hook (L3, Security Engineer com VETO); rodar o oráculo `--is-canonical` de novo em
-cada path; provar vermelho→verde com a sonda e com o `-k` nomeado de cada wave (exit 1
-antes, exit 0 depois) em árvore descartável; regenerar os espelhos LOCAIS e provar por
-`cmp` (fora do commit); bateria com `test_check_harness_config.py`; rail nas duas lanes;
-SIGN/LAND do Owner. **W2 (parte B):** sem vaga reservada, depois do land da W1. **W3:**
-medir; o Owner decide ligar ou não; se ligar, na ordem da colisão com a W6 do PLAN-194.
+feito pelo CEO com base na aprovação em chat. **Debate L3 em curso:** rodada 1 fechada
+(S360) com RUN-ANOTHER-ROUND — ler `PLAN-195/debate/round-1/consensus.md`; a rodada 2 confirma
+os dois VETOs condicionais e fecha OQ-8/OQ-9 (no máximo 3 rodadas). **W1 (parte A):** na 2.ª
+vaga, depois da W1 do PLAN-194 ocupar a 1.ª (ver «Regra de WIP»), em três pacotes na mesma
+vaga — W1-ADR (`PROPOSED`) → W1a → W1b; antes, o instrumento de replay de falso-positivo
+(OQ-1); rodar o oráculo `--is-canonical` de novo em cada path; provar N de N vermelho→verde
+em árvore descartável, sem executar nenhum comando da classe; regenerar os espelhos LOCAIS e
+provar por `cmp` (fora do commit); bateria com as 9 suítes do Check da W1; rail nas duas
+lanes com teto de 4 rodadas por pacote; SIGN/LAND do Owner. **W2 (parte B):** sem vaga
+reservada, depois do land da W1b; herda a mensagem A3, a argv, o segmento do verbo de busca
+de arquivos e o contrato de `cwd`. **W3:** medir; o Owner decide ligar ou não; se ligar, na
+ordem da colisão com a W6 do PLAN-194.
 
 ## Success criteria
 
 - [ ] `docs/security-bash-canonical-guards.md` §6 e `docs/threat-model.md` vetor 2
   descrevem a cobertura REAL (classe indireta/computada declarada não-coberta ou curada) —
   Check: grep -n '^### §6.6 ' docs/security-bash-canonical-guards.md && ! grep -nF -e 'hits the PreToolUse matcher AGAIN' -e 'before sending tokens to Claude' -e 'Five vector classes remain advisory' docs/security-bash-canonical-guards.md
-- [ ] O hook recusa/pergunta nas formas indiretas de destrutivo e de escrita canônica com
-  alvo computado, e os controles negativos legítimos seguem ALLOW (sem lockout) — Check:
+- [ ] O hook recusa as formas da classe que a ADR-201 declara cobertas (formas diretas
+  irmãs, indireção de destrutivo, verbo computado com marcador destrutivo literal, escrita
+  canônica com alvo computado), nenhuma forma reconhecida recebe veredito mais permissivo que
+  a sua forma direta, os controles legítimos seguem ALLOW (sem lockout) e o resto da classe
+  fica como residual declarado pela forma na ADR-201 e na §6.6 — Check:
   python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py -q -k 'TestIndirectDestructiveBlocks or TestIndirectLegitAllow or TestComputedCanonicalTarget'
 - [ ] Espelhos LOCAIS `dist/` e `npm/` idênticos ao hook depois de regenerados (saída de
   build ignorada pelo git) — Check: cmp .claude/hooks/check_bash_safety.py dist/ceo-plugin/hooks/check_bash_safety.py && cmp .claude/hooks/check_bash_safety.py npm/.claude/hooks/check_bash_safety.py
@@ -441,3 +650,19 @@ medir; o Owner decide ligar ou não; se ligar, na ordem da colisão com a W6 do 
   Owner, fora do repositório». Bateria de W1/W2 com `test_check_harness_config.py` (a W7a do
   PLAN-183 move a fixture que esse gate re-executa). W0 fora de qualquer janela de SIGN.
   Status inalterado (`draft`); nada executado.
+- S360 (2026-10-01, debate L3 rodada 1): proposta em `PLAN-195/debate/round-1/proposal.md`;
+  três críticos (Opus, só leitura, proibidos de executar formas da classe): 3× ADJUST, dois
+  VETOs condicionais a TEXTO (um de escopo estreito — cobertura/FPR/operabilidade; outro sobre
+  a W1 como especificada). Revisão Codex `--uncommitted` da proposta e das críticas: APPROVE.
+  Seis verificadores read-only conferiram 36 afirmações das críticas no código
+  (`wf_430c1885-742`): 28 TRUE, 8 PARTIAL, 0 FALSE, mais um achado novo (divergência da regra
+  de comentário entre tokenizadores, descrito pela forma; detalhe na evidência privada).
+  Ajustes aplicados neste plano (índice em `round-1/consensus.md` §Plan adjustments): raiz =
+  decisão posicional sobre fatiamento ingênuo; passada aditiva única; piso de literais fora da
+  posição do verbo; ASK puro rejeitado; W1 → W1-ADR (`PROPOSED`) → W1a → W1b; prova N de N com
+  classe do motivo; bateria de 9 suítes; observabilidade; regra de parada do rail; W2 herda a
+  mensagem A3, a argv, o segmento do verbo de busca de arquivos e o `cwd`; OQ-1 corrigida
+  (premissa do §4.4 era falsa); OQ-3/OQ-4 resolvidas 3/3; OQ-8/OQ-9 novas; orçamento refeito
+  (parte A ~0,8-1,5 M, 3-4 sessões). Veredito da rodada: RUN-ANOTHER-ROUND. O falso-positivo
+  A3-5 bloqueou ao vivo um comando do próprio CEO durante a edição (registrado na W2).
+  Status inalterado (`draft`).
