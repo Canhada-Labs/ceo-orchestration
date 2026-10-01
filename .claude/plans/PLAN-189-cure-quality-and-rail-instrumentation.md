@@ -7,6 +7,28 @@ owner: CEO
 depends_on: []
 ---
 
+> **CONGELADO desde 2026-10-01 (S361), por decisão do Owner: aceite em bloco das
+> recomendações no chat, Q13 alínea (c), até o núcleo da v1.4.3.** O plano
+> continua `draft`. Ele reabre quando o núcleo do trem estiver fechado. O núcleo
+> é o fixado na seção «Escopo do núcleo da 1.4.3» do `## Goal` de
+> `.claude/plans/PLAN-194-maintenance-train-v1-4-3.md` (decisão do Owner, Q7,
+> S361). Como a W3 entra sem bloquear o corte e a W5c pode sair, o gatilho
+> verificável é o corte GA da W7 desse plano publicado, com a versão que o diff do
+> `SPEC/v1` decidir (1.4.3 ou 1.5.0).
+>
+> - **Estado congelado.** A W0 NÃO landou: `PROTOCOL.md` ainda não traz a regra
+>   (a busca por «mesma classe», «cura estrutural» e «segunda ocorrência» nesse
+>   arquivo devolve zero). Os materiais do pacote W0
+>   (`.claude/plans/PLAN-189/w0/`) e a rodada 1 parcial do debate
+>   (`.claude/plans/PLAN-189/debate/round-1/`) ficam parados. As respostas do
+>   Owner a OQ-1..OQ-3 (2026-09-15) continuam valendo para o dia do descongelamento.
+> - **O que o congelamento NÃO atinge.** A regra de classe segue valendo na
+>   prática, escrita em `CLAUDE.md` §4 («Cure a CLASSE, não o exemplo (S352)»),
+>   como a seção `## How to continue` já permite. Os materiais de re-pin do Codex
+>   em `.claude/plans/PLAN-189/codex-pin/` (o molde que o `CLAUDE.md` §4 cita para re-pin)
+>   e `.claude/plans/PLAN-189/codex-pin-0155/` ficam fora: o congelamento vale para as
+>   waves W0–W3 e não os afeta.
+
 ## Context
 
 Cerimônias de 6, 11, 12 e 27 rodadas consumindo dezenas de horas do Owner. Três
@@ -146,9 +168,14 @@ cerimônia. W1 e W2 existem para tornar a regra durável e verificável.
 
 ## How to continue
 
+**Plano CONGELADO (Q13-c, 2026-10-01), até o núcleo da v1.4.3.** Os passos abaixo
+descrevem a retomada no descongelamento; hoje nenhuma wave executa. Veja o aviso
+no topo do arquivo.
+
 > Ler `.claude/plans/PLAN-189-cure-quality-and-rail-instrumentation.md`, a
 > memória `feedback-thematic-class-is-not-false-positive` e
-> `reference-rail-configuration-evidence-s352`. Responder OQ-1..OQ-3. W0 e W1
+> `reference-rail-configuration-evidence-s352`. OQ-1..OQ-3 já respondidas pelo
+> Owner em 2026-09-15 (ver `## Open questions`). W0 e W1
 > valem na PRÓXIMA cerimônia mesmo antes da cerimônia assinada — a regra pode ser
 > seguida antes de estar escrita no arquivo canônico.
 
@@ -171,3 +198,10 @@ ninguém revisita.
 Se as quatro waves não fecharem em duas sessões, entrega-se W0+W1 (que já cortam
 horas) e o resto vira follow-up. Discussão sobre a redação deste plano não é
 trabalho.
+
+## Progress log
+
+- 2026-10-01 (S361): decisão do Owner Q13 alínea (c), aceite em bloco das
+  recomendações no chat. O plano é CONGELADO até o núcleo da v1.4.3 e segue
+  `draft`. Nenhum trabalho de wave segue a partir desta data; o aviso com o que o
+  congelamento atinge e o que não atinge está no topo do arquivo.

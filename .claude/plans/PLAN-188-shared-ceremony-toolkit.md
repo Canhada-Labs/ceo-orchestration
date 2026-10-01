@@ -28,6 +28,23 @@ tags: [cerimonia, assinatura, land, manifesto, rail, governanca]
 > correção — o ADR-031 é «Self-improving skills» e está FORA do escopo deste
 > toolkit),
 > ADR-192 (manifesto de scripts de gate).
+>
+> **CONGELADO desde 2026-10-01 (S361), por decisão do Owner: aceite em bloco das
+> recomendações no chat, Q13 alínea (c).** O plano continua `draft`. Enquanto o
+> Owner não descongelar, nenhuma wave abre, a W0a não executa e nenhuma nova
+> rodada de debate roda (`.claude/scripts/ceremony/` não existe no HEAD de
+> 2026-10-01). A Q13-c não registrou condição automática de reabertura:
+> descongelar é uma decisão nova do Owner. **Os dependentes seguem pelos moldes
+> por onda** (os scripts de cerimônia clonados por pacote, que este plano
+> pretendia substituir) e deixam de esperar o toolkit: PLAN-171 W1 («W1 continua
+> esperando o PLAN-188», entrada de 2026-09-15 em
+> `.claude/plans/PLAN-171-governance-imports-provenance.md`); PLAN-186 W6a
+> («(b) Esperar o toolkit do PLAN-188 (Recomendado)») e W4b sucessora
+> `w4b-gates-v2` («Sim: 2 rodadas no sujeito hoje, materiais esperam o toolkit
+> (Recomendado)»), ambas na entrada de 2026-09-07 em
+> `.claude/plans/PLAN-186-orchestrator-operating-model.md`. Cada um desses dois
+> planos recebeu, em 2026-10-01, uma nota datada que registra a liberação; a
+> entrada original, que diz «esperar», fica como histórico.
 
 ## Context
 
@@ -1460,6 +1477,10 @@ wave é livre. O restante do file assignment não muda em nenhuma das duas.
 
 ## How to continue
 
+**Plano CONGELADO (Q13-c, 2026-10-01).** Os passos abaixo descrevem a retomada
+SE o Owner descongelar; hoje a primeira mensagem de uma sessão futura não os
+executa. Veja o aviso no topo do arquivo.
+
 **O ponteiro deste plano, escrito uma vez (round 2, K12):** o arquivo é
 `.claude/plans/PLAN-188-shared-ceremony-toolkit.md`. **`.claude/plans/PLAN-188.md`
 NÃO existe no HEAD** (`git ls-files .claude/plans/PLAN-188.md` não devolve nada;
@@ -1600,3 +1621,4 @@ escolher) viajam no MESMO patch da W0a. Só então proponha a W1.»
 - OQ-9 (executor dos controles + 4.º sítio): «(ii) Workflow próprio e barato, disparado pelos paths do toolkit (Recomendado)» — replica o step de integridade (aditivo; o do `smoke` nunca sai), roda os controles vermelhos, semeia chaveiro GPG descartável. O arquivo de workflow é canônico (oráculo 1): nasce no pack da W0 e é assinado com ela.
 - Corpus de defeitos do molde para a W0: `PLAN-188/ceremony-defect-corpus-S348.md` (17 classes; §3 propõe a invariante 11 «o leitor falha para cima», CM-09 na W1, controle de CM-10 do lado do SIGN, nuance de CM-12).
 - **2026-09-15 (S353, 20:5x BRT; Owner presente; AskUserQuestion; rótulos VERBATIM):** ordem das assinaturas da manhã de 16/09 (W0a deste plano × W1 do PLAN-183) — Owner: «As duas na mesma manhã». A noite prepara os dois blocos SIGN; a W0b (7 paths livres) landa só depois da W0a assinada. Ledger: `PLAN-186/debate/owner-decisions-S353.md`.
+- **2026-10-01 (S361; Owner por aceite em bloco das recomendações no chat, Q13 alínea (c)):** o plano é CONGELADO e segue `draft`. Os dependentes que esperavam o toolkit (PLAN-171 W1; PLAN-186 W6a e W4b sucessora) seguem pelos moldes por onda. A decisão não registrou condição automática de reabertura; o aviso fica no topo do arquivo e na seção `## How to continue`. Nenhuma OQ nem decisão anterior DESTE plano foi revertida: as respostas do Owner de 2026-09-07 e 2026-09-15 acima continuam valendo para o dia em que o plano for descongelado. A Q13-c supera apenas a decisão de espera registrada nos planos dependentes (PLAN-171 W1; PLAN-186 W6a e W4b sucessora), que receberam a nota de liberação datada de 2026-10-01.

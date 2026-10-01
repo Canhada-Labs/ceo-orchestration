@@ -1,7 +1,8 @@
 ---
 id: PLAN-173
 title: CEO cockpit — estudo Warp (MCP primeiro, fork AGPL adiado), memória única e multi-model como geradores de input não-confiável
-status: reviewed
+status: abandoned
+abandoned_at: 2026-10-01
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
@@ -10,11 +11,45 @@ depends_on: [PLAN-171, PLAN-172]
 budget_tokens: 250-400k (estudo completo; spike W1 ≤200k dentro disso; firmado S302e). Build FORA deste plano (L3+ com ADR e budget próprios)
 budget_sessions: 3-4 (spike ≤2 por AC; W2-W4 1-2)
 context_risk: medium
-external_wait: "gated: resultados do PLAN-172 (E0b/E5/E6) + gate retrospectivo dos NO-GOs para best-of-N. Verificável por comando: `grep -m1 '^status:' .claude/plans/PLAN-172-honest-speed-e0b-e5-e6.md` (hoje 'reviewed', nenhuma wave iniciada) — reabre quando o PLAN-172 publicar o relatório do E0b (seu §5) ou mudar de status. Revisão de portfólio S348 (2026-09-06, veredito 3/3 'adiar'): dependência de segunda ordem — o 172 nem rodou."
+external_wait: "nenhuma — plano ABANDONADO em 2026-10-01 (Q13-a, S361), junto com o PLAN-172, de que dependia. `grep -m1 '^status:' .claude/plans/PLAN-172-honest-speed-e0b-e5-e6.md` lê 'abandoned'; nenhum E0b será publicado. Ver ## Abandonment reason."
 tags: [cockpit, warp, mcp, vision, seed]
 ---
 
 # PLAN-173 — CEO cockpit: o terminal como superfície, não como produto
+
+> **ABANDONADO em 2026-10-01 (S361), por decisão do Owner: aceite em bloco das
+> recomendações no chat, Q13 alínea (a), junto com o PLAN-172.** Os três
+> entregáveis já produzidos continuam no disco (ver a seção seguinte). O corpo
+> abaixo fica como histórico, sem reescrita.
+
+## Abandonment reason
+
+O plano é dependente de segunda ordem do PLAN-172, e o PLAN-172 foi abandonado
+na mesma decisão. Três fatos, conferidos no disco em 2026-10-01:
+
+1. **A condição de entrada nunca será satisfeita.** O frontmatter declara
+   `depends_on: [PLAN-171, PLAN-172]`, os «Gates de entrada» da §5 exigem «E0b
+   respondido» mais o substrato do E5, e o kill da §4 manda descartar o plano se
+   o E0b mostrar quota dominante. O PLAN-172 não vai publicar E0b nenhum: o
+   gatilho dele ficou inalcançável (`PLAN-172-honest-speed-e0b-e5-e6.md`,
+   `## Abandonment reason`). A cláusula «ou mudar de status» do `external_wait`
+   disparou, em letra, com o abandono do 172, mas reabrir não adianta: o dado que
+   decidiria o plano não existirá.
+2. **Nenhum outro plano absorve o escopo.** Entre os planos de topo de
+   `.claude/plans/`, só este trata do cockpit. Por isso o status é `abandoned` e
+   não `superseded` (`PLAN-SCHEMA.md` §11).
+3. **O que já foi entregue permanece válido e rastreado:** o censo do servidor
+   MCP existente (`.claude/plans/PLAN-173/w1-mcp-census.md`, 2026-08-14), a
+   decisão «fork do Warp: viável mas adiado»
+   (`.claude/plans/PLAN-173/w2-fork-agpl-decision.md`, 2026-08-14, que declara
+   valer mesmo se o plano morrer) e o pré-gate da W4 (§5 abaixo, S325, veredito
+   «W4 VIVE» com a ressalva sobre o cluster de resume/remote-state).
+
+Não foram executados: o spike da W1 (servidor MCP read-only respondendo 3 queries
+em demo local), a W3 (cockpit lendo living-docs) e o piloto da W4 (variantes de
+cura com oráculo executável). Quem os quiser de volta abre plano novo, porque
+`abandoned` é terminal. A ressalva e os cinco limites do pré-gate da W4 estão
+escritos na §5 e valem para esse plano novo.
 
 > **SEMENTE (S302, 2026-08-11).** Visão de longo prazo pedida pelo
 > Owner; deliberadamente a ÚLTIMA do trio 171→172→173 e gated nos
@@ -210,3 +245,10 @@ início da execução (Gate 3).
   §8. Nenhuma mudança de `status:` (permanece `reviewed`) nem de
   `external_wait` — o gatilho de reabertura já escrito no frontmatter
   continua sendo a condição válida.
+- 2026-10-01 (S361): plano ABANDONADO por decisão do Owner (Q13 alínea (a),
+  aceite em bloco das recomendações no chat), junto com o PLAN-172.
+  `status: reviewed → abandoned`, `abandoned_at: 2026-10-01`; o `external_wait`
+  foi reescrito para não contradizer o novo status. Razões em
+  `## Abandonment reason`. As linhas de 2026-09-06 acima dizem «nenhuma wave
+  iniciada além do pré-gate da W4», mas os registros W1-A e W2-A de 2026-08-14
+  (commit `9f84e342`) existem em `.claude/plans/PLAN-173/` e valem.

@@ -15,7 +15,7 @@ tier_mix_estimate: "sonnet ~90% / opus ~10% (opus só nos debates L3)"
 tier_mix_rationale: "tick mecânico é sonnet; Haiku proibido sem torneio (ADR-052); opus reservado ao debate, que é onde a decisão mora"
 budget_sessions: 2-3
 context_risk: low
-external_wait: "BLOQUEADO por AUSÊNCIA de hold RC→GA ativo — não mais por GA v1.3.0 (que já saiu em 2026-08-17; a redação anterior deste campo ficou stale, corrigida pela revisão de portfólio S348, 2026-09-06, veredito 3/3 'adiar'). W0 (piloto) só existe DURANTE um hold RC→GA ativo, nunca fora dele. Verificável por comando: `git tag --list 'v1.4.0-rc*'` não-vazio E o step \"Assert 24h Codex re-pass window\" da release ainda correndo para essa tag (ADR-103) — só nessa janela W0 pode rodar, em CLONE com tag falsa (nunca no hold real, emenda r1-C3). W1 não depende do hold. W3 exige /debate (L3) + 1 GPG do Owner."
+external_wait: "BLOQUEADO por AUSÊNCIA de hold RC→GA ativo — não mais por GA v1.3.0 (que já saiu em 2026-08-17; a redação anterior deste campo ficou stale, corrigida pela revisão de portfólio S348, 2026-09-06, veredito 3/3 'adiar'). W0 (piloto) só existe DURANTE um hold RC→GA ativo, nunca fora dele. Gatilho GENÉRICO (Q13-b, 2026-10-01; o anterior citava `v1.4.0-rc*`, versão que já tem GA: a metade «a tag existe» ficava sempre verdadeira, mas a condição inteira, presa à 1.4.0, nunca mais dispararia num trem novo e não teria sinalizado os holds da 1.4.1 e da 1.4.2): vale a tag rc MAIS RECENTE do trem corrente, seja qual for a versão. Hold ativo = essa tag rc existe, a GA da mesma versão ainda NÃO existe e a tag rc tem menos de 24 h (o piso de 24 h até a GA é o step 'Assert 24h Codex re-pass window (GA tags only, waiver-aware)' de `.github/workflows/release.yml`, ADR-103). Verificável por comando, sem versão fixa: `rc=$(git tag --list 'v*-rc.*' --sort=-version:refname | head -1); [ -z $(git tag --list ${rc%-rc.*}) ] && [ $(( $(date +%s) - $(git for-each-ref --format='%(creatordate:unix)' refs/tags/$rc) )) -lt 86400 ] && echo HOLD-ATIVO` — imprime HOLD-ATIVO só dentro da janela; em 2026-10-01 não imprime nada (a GA v1.4.2 existe). Só nessa janela W0 pode rodar, em CLONE com tag falsa (nunca no hold real, emenda r1-C3). W1 não depende do hold. W3 exige /debate (L3) + 1 GPG do Owner."
 eta_calendar: "W0 = dentro do próximo hold 24h pós-tag; W1 = mesmo-dia pós-GA; W2-W3 = mesmo-dia a D+1 após debate. Sem hold ativo, W0 espera o próximo trem."
 ---
 
@@ -207,3 +207,8 @@ Senão: W1 → W2 → W3. Commits `feat(PLAN-181 W<n>): ...`.
   real é a ausência de um hold RC→GA ativo). Campo ganha a condição
   executável de reabertura. Nenhuma wave iniciada. Fonte:
   `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.
+- 2026-10-01 (S361): decisão do Owner Q13 alínea (b), aceite em bloco das
+  recomendações no chat. O plano continua `reviewed` e CONGELADO. O gatilho de
+  reabertura preso a `v1.4.0-rc*` virou GENÉRICO (a tag rc mais recente do
+  trem corrente, com o hold de 24 h ativo), com comando verificável no campo
+  `external_wait`; o resto do campo não mudou. Nenhuma wave iniciada.

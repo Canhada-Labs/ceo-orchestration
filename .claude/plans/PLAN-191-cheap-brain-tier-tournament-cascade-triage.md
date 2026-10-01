@@ -1,16 +1,18 @@
 ---
 id: PLAN-191
 title: "Cérebro barato — torneio de tiers, cascata com verificador e triagem; Jev como lane opcional"
-status: draft
+status: reviewed
+reviewed_at: 2026-10-01
+reviewed_by: "Owner - Q13 alínea (d), aceite em bloco das recomendações no chat da S361 (2026-10-01): passa a revisado; a pré-condição t09 vira item livre (W0-pre); o torneio roda numa noite própria, fora do trabalho longo"
 created: 2026-09-18
 owner: CEO
 depends_on: []
 level: L2
-budget_tokens: "W0 torneio: 0 de CEO, QUOTA de 60-90 tentativas de orquestração (eval/runner, ~100-200k cada); W1 cascata: mesma ordem, 3 braços; W2 roteador: <50k + centavos de API externa; W3 triagem: <100k + 1 lane Codex + ~2 h do Owner rotulando; W4 compactação: instrumento só. Teto: 1,5 M de agente + quota de duas noites."
+budget_tokens: "W0 torneio: 0 de CEO, QUOTA de 60-90 tentativas de orquestração (eval/runner, ~100-200k cada); W1 cascata: mesma ordem, 3 braços; W2 roteador: <50k + centavos de API externa; W3 triagem: <100k + 1 lane Codex + ~2 h do Owner rotulando; W4 compactação: instrumento só. Teto: 1,5 M de agente + quota de duas noites. O W0-pre (tokens de agente, sem quota) e o W0.b (financiado desde já, OQ-4; até 10 × 3 × 3 = 90 tentativas de quota se a grade for a do W0) não têm estimativa própria neste campo: o `PLAN-191/PREREG.md` declara o número e a noite antes de rodar."
 budget_sessions: "W0 1 noite; W1 1 noite; W2 1; W3 1-2; W4 1"
 context_risk: medium
 external_wait: "Nenhuma assinatura para EXECUTAR (tudo é experimento, leitura, opt-in). Assinatura só se um resultado virar mudança de política de roteamento (PLAN-186 W-ROTA) ou lane nova de fornecedor (L3 próprio). Egresso para api.typesafe.ai é OPT-IN do Owner por flag; sem a flag, os braços Jev são PULADOS e o plano fecha com os braços locais."
-eta_calendar: "W0+W1 em duas noites autônomas; W2 condicionada ao W0; W3 no ritmo do rotulamento do Owner; W4 quando houver uma compactação real para medir"
+eta_calendar: "W0-pre livre, sem espera; W0+W1 em duas noites autônomas PRÓPRIAS, fora do trabalho longo da S361 (Q13-d); W2 condicionada ao W0; W3 no ritmo do rotulamento do Owner; W4 quando houver uma compactação real para medir"
 tags: [finops, roteamento, cascata, torneio, triagem, jev, experimento, opcional]
 ---
 
@@ -25,6 +27,13 @@ tags: [finops, roteamento, cascata, torneio, triagem, jev, experimento, opcional
 > decisão do Owner de 18/09: *egresso é decisão de quem usa — declarar riscos, nunca remover a opção*.
 > Memórias: `project-jev-typesafe-evaluation-s355`, `project-fast-jev-compaction-evaluation-s355`,
 > `project-inert-mechanisms-s355`, `reference-jev-literature-s355`, `feedback-egresso-e-decisao-do-adopter`.
+>
+> **Revisado em 2026-10-01 (S361): `draft → reviewed`, por decisão do Owner (Q13
+> alínea (d), aceite em bloco das recomendações no chat).** As quatro OQs já tinham
+> resposta de 2026-09-18 (`.claude/plans/PLAN-191/owner-decisions-S355.md`) e estão
+> dobradas neste texto. O torneio (W0 + W1) roda numa noite própria, FORA do
+> trabalho longo da S361. A pré-condição `t09` virou o item livre W0-pre. Não havia
+> marcador de esclarecimento vivo (busca no arquivo antes do flip: zero ocorrências).
 
 ## Context — o que já está medido (não re-medir)
 
@@ -74,6 +83,27 @@ reduz F sem subir re-execuções? (W4)
 
 ## Items
 
+### W0-pre — Pré-condição dos verificadores: `t09` e «resposta mínima»  [P0]  (item LIVRE; sem quota)
+Pré-condição do W0 (decisão do Owner de 2026-09-18 em `.claude/plans/PLAN-191/owner-decisions-S355.md`),
+promovida a item próprio na revisão de 2026-10-01 (Q13-d) para rodar sem esperar a noite do torneio.
+- **Livre:** toca `.claude/eval/tasks/` (e, se o conserto pedir, o teste
+  `.claude/scripts/tests/test_eval_c3.py`, que guarda a solução de referência `GOLDEN` de cada tarefa)
+  e grava a nota em `.claude/plans/PLAN-191/w0/`; nenhuma entrada de `_CANONICAL_GUARDS`
+  (`.claude/hooks/check_canonical_edit.py`) casa esses paths — conferido na leitura da lista em
+  2026-10-01; confirme com o oráculo `--is-canonical` em cada path antes de editar.
+- Consertar `t09_readme_doc.verify` OU excluir a tarefa do W0/W1. O defeito está no código: o `verify`
+  soma 0,2 pelo título, 0,2 por cada uma de `add`, `subtract`, `multiply` e 0,2 se aparecer «usage»,
+  «example» ou uma cerca de código (três crases), então um README só com
+  `# add subtract multiply usage` (ou com «example») devolve 1,0. Excluir a tarefa apagando o módulo
+  derruba `test_at_least_ten_tasks_discovered` (`.claude/scripts/tests/test_eval_c3.py`): o diretório
+  tem exatamente dez tarefas e o teste exige ≥ 10. A exclusão se faz na seleção do W0/W1.
+- Testar «resposta mínima» — a saída mais vazia que ainda tem a forma esperada — nos outros nove
+  `verify` (`t01`–`t08` e `t10`). Para cada um que a aceitar, consertar ou excluir a tarefa.
+- Saída: uma nota curta em `.claude/plans/PLAN-191/w0/` com o resultado por tarefa (aceita resposta
+  mínima: sim ou não; ação tomada).
+- **Gate do W0:** o torneio não roda enquanto este item não estiver fechado (critério já escrito em
+  «Success criteria»: `t09` consertado ou excluído ANTES da primeira tentativa).
+
 ### W0 — PILOTO do torneio de tiers  [P0]  (livre; quota de 1 noite)
 **É piloto, não a evidência do PLAN-186:29.** A régua que o `:29` invoca é `ADR-064:108-109` — n ≥ 30
 por célula **(papel × tipo de tarefa)** E gap ≥ 25 pp — e 10 tarefas × 3 repetições dão 30 tentativas
@@ -84,7 +114,10 @@ O piloto decide se vale FINANCIAR o torneio completo (W0.c), não substitui ele.
   célula. `--allow-expensive` sob cap declarado; **serial**, como o README manda.
 - **Verificadores fracos saem ANTES de rodar:** `t09_readme_doc.verify` devolve 1,0 para um README só
   com título (`# add subtract multiply usage`, medido no rail r1). Consertar o verificador ou excluir
-  a tarefa do W0/W1 — nunca contar um pass que o verificador não sabe negar.
+  a tarefa do W0/W1 — nunca contar um pass que o verificador não sabe negar. Esse trabalho é o item
+  W0-pre acima (livre; roda antes e separado da noite do torneio).
+- **Quando roda (Q13-d, 2026-10-01):** numa noite PRÓPRIA, fora do trabalho longo da S361, e só com o
+  W0-pre fechado. O W1 é a segunda noite (OQ-2).
 - W0.c [P1] — torneio COMPLETO que satisfaz ADR-064: células por tipo de tarefa (as 10 tarefas
   classificadas em ≤ 4 tipos), n ≥ 30 por célula×modelo. Só é financiado se o piloto mostrar variância
   entre tiers em algum tipo; custo de quota estimado e aprovado pelo Owner antes (OQ-2).
@@ -96,13 +129,17 @@ O piloto decide se vale FINANCIAR o torneio completo (W0.c), não substitui ele.
   - **0 qualificadas** ⇒ **W2 morre** (não há sinal para rotear) e o resultado vira ADENDO ao
     PLAN-186: para esta classe de tarefa a política «Opus executa» não tem evidência — a economia
     vem de POLÍTICA, não de roteador. W1 segue.
-  - **1-2 qualificadas** ⇒ W2 NÃO abre ainda; roda-se W0.b para ampliar a amostra e a MESMA regra é
-    reaplicada ao conjunto W0 ∪ W0.b: ≥ 3 qualificadas abre, < 3 mata. Sem terceira chance.
+  - **1-2 qualificadas** ⇒ W2 NÃO abre ainda; a MESMA regra é reaplicada ao conjunto W0 ∪ W0.b (o
+    W0.b já roda, financiado desde já pela OQ-4): ≥ 3 qualificadas abre, < 3 mata. Sem terceira chance.
   - **≥ 3 qualificadas** ⇒ W2 abre com esses rótulos.
 - W0.b [P1] — as 10 tarefas são pequenas (fizzbuzz, busca binária). Derivar 10 tarefas DURAS do
   histórico real: commits «controle vermelho→verde» (teste + cura no mesmo land) viram tarefa
   «faça este teste passar», verificador = o próprio teste. Mini-SWE-bench do repo, sem rótulo manual.
-  Dispara com 0-2 qualificadas no W0 (no caso 0, só para informar o adendo; não reabre o W2).
+  **Financiado desde já** (OQ-4, 2026-09-18: «Financiar W0.b (tarefas duras)»): entra no orçamento desde
+  já, não só no caso 0-2 qualificadas. A cota de uma noite (~60-90 tentativas, OQ-2) já é ocupada pelo
+  W0 (10 × 3 × 3 = 90); por isso a noite e o cap do W0.b são declarados no pré-registro
+  (`PLAN-191/PREREG.md`), depois de derivar as 10 tarefas duras, que são pré-requisito dele. A regra de
+  partição do W0 continua valendo sobre W0 ∪ W0.b; no caso 0, o W0.b só informa o adendo e não reabre o W2.
 
 ### W1 — Cascata com verificador (execução)  [P0]  (livre; quota de 1 noite)
 - Braços, sobre as mesmas tarefas do W0: **A** Opus direto (política atual, controle);
@@ -186,12 +223,14 @@ O piloto decide se vale FINANCIAR o torneio completo (W0.c), não substitui ele.
   EXECUTAM: `.claude/scripts/optimizer/fanout.py:72` (`choose(context_size=)` sem arquétipo/complexidade),
   `_lib/model_routing.py::resolve_full()` sem call-site, `check_agent_spawn.py:321` `classify(desc, [])`
   com hints sempre vazios ⇒ ramo VETO do `task-route.py` inerte. Consertar antes de qualquer roteador.
-- **PLAN-189** (draft, W0 em voo — não tocar o arquivo agora): a recidiva do W3 daqui é instrumento
-  OPCIONAL da regra de classe (OQ-2), com SBERT local como baseline; sugestão, nunca fusão.
+- **PLAN-189** (draft, CONGELADO desde 2026-10-01 pela Q13-c até o núcleo da v1.4.3 — não tocar o
+  arquivo; o adendo espera o descongelamento e o land do W0 dele): a recidiva do W3 daqui é
+  instrumento OPCIONAL da regra de classe (OQ-2), com SBERT local como baseline; sugestão, nunca fusão.
 - **PLAN-190** (executing): JEV continua FORA (`:25`, `:274`) — este plano não muda isso. O W4 daqui
   é a medição que o W5 («recomendação no template SÓ após medir») pede para `bashOutputMaxChars`/poda.
-- **PLAN-172** (reviewed): E6 (cascata de FILTROS pré-review) fica intacto; registrar em nota que a
-  cascata de EXECUÇÃO (W1 daqui) tem evidência de campo (C3) e não compete com E6.
+- **PLAN-172** (ABANDONADO em 2026-10-01, Q13-a): o adendo perde o destinatário, porque o E6 deixou
+  de ter plano (seção «Abandonment reason» de `PLAN-172-honest-speed-e0b-e5-e6.md`). Fica só o registro: a
+  cascata de EXECUÇÃO (W1 daqui) tem evidência de campo (C3) e não competia com o E6.
 - **`check_pair_rail.py:1917`**: `_compute_jaccard_bucket` só é chamado por testes e o bucket é sempre
   `""` — o Caso E nunca discrimina; `docs/PAIR-RAIL-VERDICT-MATRIX.md` §2 promete «semantic similarity».
   Decisão do Owner: religar ou apagar junto com a promessa (cerimônia: hook canônico).
@@ -225,12 +264,27 @@ honesto para o outro repo, pelo mesmo padrão C7:
 - **OQ-3** Os cinco adendos acima: aplicar como está, ou só os de PLAN-186 (inertes)?
 - **OQ-4** W0.b (tarefas duras do histórico): financiar agora ou só se W0 sair sem variância?
 
+**Respostas do Owner (2026-09-18, S355; AskUserQuestion; rótulos VERBATIM; registro em
+`.claude/plans/PLAN-191/owner-decisions-S355.md`; dobradas neste texto em 2026-10-01, S361, na revisão
+da Q13-d):**
+
+- OQ-1 — «Sim, aqui pode (Recomendado)». `CEO_JEV_LANE=1` pode ser ligado neste repositório público;
+  nos adopters privados fica OFF por padrão.
+- OQ-2 — «Duas noites (Recomendado)». W0 (piloto) com Haiku/Sonnet/Opus numa noite; W1 com os três
+  braços na outra; ~60-90 tentativas por noite, `--allow-expensive` sob cap declarado, serial.
+- OQ-3 — «Aplicar os 5 adendos». Só texto nos planos. O do PLAN-189 espera o land do W0 dele (hoje
+  congelado, Q13-c); o do PLAN-172 ficou sem destinatário (plano abandonado em 2026-10-01, Q13-a); a
+  decisão sobre o Jaccard morto continua do Owner, na cerimônia que tocar o hook.
+- OQ-4 — «Financiar W0.b (tarefas duras)». O W0.b entra no orçamento desde já.
+
 ## How to continue
-1. Owner responde OQ-1..4 (AskUserQuestion, rótulos verbatim → `PLAN-191/owner-decisions-S355.md`).
-2. Pré-registrar W0/W1 (`PLAN-191/PREREG.md`, molde `PLAN-134/w0b/W0B-PREREG.md` do repo antigo).
-3. Rodar W0 numa noite; publicar `tournament.tsv`; decidir W2 pela regra.
-4. Rodar W1; publicar custo/quota/pass/escapes por braço; veredito contra o pré-registro.
-5. W3 no ritmo do Owner; W4 na próxima compactação real medida.
+1. OQ-1..4 respondidas em 2026-09-18 (acima); plano revisado em 2026-10-01 (Q13-d).
+2. W0-pre (livre): consertar ou excluir `t09` e testar «resposta mínima» nos outros nove `verify`.
+3. Pré-registrar W0/W1 (`PLAN-191/PREREG.md`, molde `PLAN-134/w0b/W0B-PREREG.md` do repo antigo).
+4. Rodar W0 numa noite PRÓPRIA, fora do trabalho longo da S361 (Q13-d); publicar `tournament.tsv`;
+   decidir W2 pela regra.
+5. Rodar W1 na segunda noite; publicar custo/quota/pass/escapes por braço; veredito contra o pré-registro.
+6. W3 no ritmo do Owner; W4 na próxima compactação real medida.
 
 ## Success criteria
 - [ ] W0 (piloto): tabela tarefa×modelo×repetição com tokens, custo e quota; `t09` consertado ou
@@ -244,8 +298,8 @@ honesto para o outro repo, pelo mesmo padrão C7:
 - [ ] Nenhum item deste plano editou arquivo canônico; nenhum byte saiu sem a flag.
 
 ## Regra de parada (pré-registrada)
-- W0: 0 qualificadas ⇒ W2 cancelada, W1 segue, adendo ao PLAN-186; 1-2 ⇒ W0.b e reaplicação única
-  da regra (≥ 3 abre, < 3 mata); ≥ 3 ⇒ W2 abre. W0 é piloto: a evidência do PLAN-186:29 só existe com
+- W0: 0 qualificadas ⇒ W2 cancelada, W1 segue, adendo ao PLAN-186; 1-2 ⇒ reaplicação única
+  da regra a W0 ∪ W0.b (o W0.b já roda, OQ-4; ≥ 3 abre, < 3 mata); ≥ 3 ⇒ W2 abre. W0 é piloto: a evidência do PLAN-186:29 só existe com
   W0.c (n ≥ 30 por célula tipo-de-tarefa×modelo).
 - W1: escalada > 50 % ou escapes > A (escapes pelo juiz CEGO, nunca pelo `verify`) ⇒ cascata morta;
   «custo ≤ 0,67 × A» sem «tokens ≤ 0,67 × A» NÃO é sucesso do Goal 1.
@@ -256,3 +310,11 @@ honesto para o outro repo, pelo mesmo padrão C7:
   comparável — F é diagnóstico, nunca o gate (rail r2).
 - Owner recusa OQ-1 ⇒ todos os braços Jev pulados; o plano segue inteiro com braços locais.
 - Qualquer wave que precise editar canônico para MEDIR ⇒ parar e abrir wave própria com cerimônia.
+
+## Progress log
+
+- 2026-10-01 (S361): `status: draft → reviewed` por decisão do Owner (Q13 alínea (d), aceite em
+  bloco das recomendações no chat). As respostas de 2026-09-18 às OQ-1..4 foram dobradas no texto
+  (W0.b financiado desde já; adendos do PLAN-172 e do PLAN-189 atualizados); a pré-condição `t09`
+  virou o item livre W0-pre; o torneio fica para uma noite própria, fora do trabalho longo da S361.
+  Nenhuma wave iniciada.

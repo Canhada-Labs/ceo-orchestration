@@ -9,8 +9,8 @@ created: 2026-08-20
 owner: CEO
 depends_on: [PLAN-167, PLAN-168]
 related_commits: [20ed8dd4dbd7, 4f750f07d0aa, ed4d1cf6f6d7, bc357070bc3f, b6de7cf36448, aaf32c750d51, 6304f6674a31, 738007ea47ab, 3bc36383714f, b7dad8363868, 6160578c0518, 5ceae291b74b]
-budget_tokens: 210-400k (W0 60-110k; W1 90-150k — re-orcado pela W0-US4 §7, cujo piso de re-baseline de ownership e 40-70k em 2-4 iteracoes; W2 40-90k; W3 20-40k; W4 piso nomeado ao fechar a W0)
-budget_sessions: 3-5
+budget_tokens: 710-1200k, estimado em 2026-10-01 (S361) = 210-400k das waves W0-W4 (W0 60-110k; W1 90-150k — re-orcado pela W0-US4 §7, cujo piso de re-baseline de ownership e 40-70k em 2-4 iteracoes; W2 40-90k; W3 20-40k; W4 piso nomeado ao fechar a W0) + 500-800k das ondas S359 (W7a, W7b, W8, W9 e W10 a 100-160k cada, a referência de custo da W5-b; W7a e W10, as menores, tendem ao piso da faixa, que segue conservadora). Ficam fora da soma a re-derivação da W1 em W1a/W1b (re-estimar na abertura), as waves W5 e W5-b já landadas e os resíduos de W2, W3-P1, W4 e W5-b, que orçam nos seus FOLLOWUPs (ver «Critério de done»)
+budget_sessions: 8-11 (3-5 das waves W0-W4 + 5-6 das ondas S359, uma sessão de construção por pacote canônico; a 6.ª é o pacote separado da emenda do ADR-158, se o debate confirmar a divisão da W7a; estimado em 2026-10-01)
 context_risk: medium
 external_wait: "nenhum — DECISAO do CEO registrada (§6, ajuste r1-25): o AC-2 aceita prova em repositorio DESCARTAVEL NOSSO, nao um PR em repo de terceiro. Manter dependencia de PR externo tornaria o plano refem de CI que nao e deste projeto; a evidencia que o AC precisa (template ativado sai verde) e integralmente reproduzivel localmente."
 tags: [adopter, install, ci, templates, portability, contamination, field-report]
@@ -2076,6 +2076,32 @@ mexe.
 > Com ela, o PLAN-183 só vai a `done` quando o AC-1 (W1) **e** os
 > AC-11..AC-15 abaixo fecharem (o AC-16 é não-bloqueante).
 >
+> **Critério de done, completado em 2026-10-01 (S361, aceite em bloco do
+> Owner às recomendações do CEO, no chat).** Além do AC-1 e dos
+> AC-11..AC-15, cada resíduo aberto das waves anteriores tem de estar
+> FECHADO ou levado, pelo nome, a um `PLAN-183-FOLLOWUP-<slug>` em
+> `draft` (PLAN-SCHEMA §1.4: o `id:` do rascunho leva slug único). O
+> `done` exige o fechamento OU o encaminhamento, não o fechamento de
+> todos. Os resíduos já identificados, lidos no texto atual deste plano e do
+> rascunho `PLAN-183/w5-draft-s323.md`, formam uma lista de PARTIDA, não
+> exaustiva: antes do flip `executing → done`, um censo das caixas `[ ]` e das
+> perguntas abertas sem resposta, nos dois arquivos, confere que nenhum item
+> ficou de fora.
+>
+> | wave | item (caixa `[ ]`) | estado lido no texto | o que vai ao FOLLOWUP |
+> |---|---|---|---|
+> | W2 | «Vínculo template contra vivo, antes de qualquer patch» | ✅ S334 no próprio texto (Ramo B escolhido e registrado, com `test_validate_template_frozen_subset.py`), mas a caixa segue `[ ]` | nada: fecha por bookkeeping (o CEO marca `[x]` num commit livre, com a evidência que o texto já registra) |
+> | W2 | «Após a W1, re-rodar o `Contamination check` no adopter» | ⛔ S328: bloqueado na W1. A W0-US3 (S337) registrou, como evidência antecipada, o check pós-A7 VERDE no adopter sem tocar a allowlist | a re-execução depois da W1 landada, com o diff da allowlist medido contra a baseline pós-A7 |
+> | W3 (P1) | «Origem do resíduo: o mapa de 104 overrides é embarcado no `settings.base.json`» | aberto, sem execução | a cura (o template deixa de embarcar, ou o install regenera a partir do inventário instalado) com o Check «instalação com subconjunto de perfis não escreve override de domínio ausente» |
+> | W4 | «Conteúdo definido pelo resultado da W0-US1 e W0-US2» | a W0 fechou (US1 a US4 `[x]`) e a W4 segue sem conteúdo executável: o escopo foi reescrito pela W0-US1 (o A5 é dos hooks DESTE repositório, 70 dos 71 breaches; o alvo é o teto de 5 s) e o Check é «none» | a definição do conteúdo da W4 sobre o escopo reescrito |
+> | W5-b | «`uninstall.sh` exercitado com as duas árvores no manifesto» e o AC-10 (em `PLAN-183/w5-draft-s323.md`) | o item do `uninstall.sh` registra ✅ S337 no próprio texto, mas a caixa segue `[ ]`; o AC-10 [P0] segue `[ ]` com ◐ S328 (falta a não-vacuidade: nenhum teste planta um marcador em `templates/docs/rotation-log.md`) | a não-vacuidade do AC-10 e o fora-de-escopo registrado no item do `uninstall.sh`: ~30 arquivos de `.claude/` que o install entrega fora do manifesto (classe «semeado fora do walk») |
+> | W5-b | itens 6 a 11 de «Open questions» (registrados na S328): F4 (`.github/` fora dos scanners de placeholder; conferido em `install.sh`, 2026-10-01: segue fora de `explicit_files` e de `scan_roots`), par install-side do CODEOWNERS, literal de fonte em `_register_delivered_template`, rota renderizada que o `_parity_classify.py` resolve para `None`, F9 (`docs/deny-baseline.md` órfão: o `install.sh` o cita 9 vezes e `templates/docs/` só tem `BRANCH-PROTECTION.md` e `rotation-log.md`, conferido em 2026-10-01) e STALE ×2 do `SPEC/` | PERGUNTAS ao Owner, sem resposta registrada neste plano; o material assinado `PLAN-183/wave-s328-A-approved.md:77-82` as mantém abertas. F4 e F9 trazem disposição «W2» nas §9.4 e §9.6, e a W2 landou sem curá-los. O item 11 exige disposição (fazer agora, ou registrar como W5-c) ANTES de a W5-b ser declarada fechada | a pergunta de cada item, com as opções do próprio item e sem resposta do CEO. O FOLLOWUP só conta como encaminhamento do item 11 se o Owner escolher registrá-lo como W5-c |
+> | W5-b | as outras 15 caixas `[ ]` de `PLAN-183/w5-draft-s323.md` (linhas 161, 178, 195, 232, 261, 283, 329, 352, 374, 384, 424, 428, 442, 447 e 461; o AC-10, linha 551, está na linha acima) | todas com nota ◐ ou ⛔ da S328, algumas com ✅ parcial; cada nota diz o que falta; não triadas desde então | triagem item a item na criação dos FOLLOWUPs: uma caixa só vira `[x]` com a evidência do próprio Check, nunca por semelhança; o que não fechar vai, pelo nome, ao FOLLOWUP |
+>
+> A criação dos rascunhos é commit livre do CEO e é anterior ao flip
+> `executing → done`. Os orçamentos desses resíduos moram nos FOLLOWUPs,
+> não no frontmatter deste plano.
+>
 > **Numeração.** As ondas novas começam em **W7**: o rótulo "W6" já foi
 > usado dentro da cerimônia da W5 (`PLAN-183/w5-ceremony/DESIGN-NOTE-DOCTOR.md:1`,
 > o `doctor.sh` como 4º consumidor do leitor de rotas), e dois W6
@@ -2157,6 +2183,54 @@ mexe.
    em diretório próprio, com limpeza confinada e piso de `df`
    (`CLAUDE.md` §4, S358).
 10. Tamanhos são **estimados**, não medidos.
+11. **O debate das ondas W7–W10 vai para
+    `.claude/plans/PLAN-183/debate/w7-round-1/`, nunca para `round-1/`**
+    (decisão de 2026-10-01, S361). O `/debate start PLAN-183` cria
+    `debate/round-1/` e grava `round-1/proposal.md`
+    (`.claude/commands/debate.md:46-47`), e esse diretório já guarda o
+    debate da S315 (proposta, consenso e mapa de anonimização). O
+    precedente de diretório com nome próprio é `debate/w5-round-1/`.
+    Como o comando fixa `round-1/`, a rodada é conduzida com o diretório
+    nomeado; as rodadas seguintes, se houver, vão para `w7-round-2/`,
+    `w7-round-3/`, …, também conduzidas com o diretório nomeado, sem
+    `/debate round2` nem `round3` (o `round2` gravaria
+    `round-1/anonymization-map.md` e `round-1/consensus.md` por cima dos da
+    S315, `.claude/commands/debate.md:92-95`). As OQ-13 a OQ-17 seguem para
+    esse debate (ver «Perguntas abertas das ondas S359»).
+12. **O e2e `scripts/tests/test-upgrade-historical-adopter.sh` leva ~34
+    min** — o step «Upgrade historical-adopter delivery (D1 + OQ-5
+    amendment)» do `smoke-install.yml` durou 33 min 40 s no run
+    `36502140251` (Smoke Install, push de 29/09/2026), dentro de um run de
+    1 h 36 min contra o `timeout-minutes: 150` do job `smoke`. É o e2e que
+    a W7b e a W8 estendem (Checks e AC-12, AC-13). Roda local **destacado**
+    (processo desligado do terminal, saída num arquivo de log), com
+    timeout EXPLÍCITO de até 2 h e polling desse log — nunca em primeiro
+    plano, nem sob o limite padrão da ferramenta, nem dentro de agente de
+    Workflow, cujo watchdog reinicia agente sem progresso (`CLAUDE.md` §4,
+    S358). O diretório de trabalho e o piso de `df` seguem a regra 9. Cada
+    perna nova soma tempo a esses ~34 min: medir o total na abertura da
+    onda e conferir contra o teto do job.
+13. **Pacote que CRIA arquivo de ADR ou de emenda** (hoje: a W7b, o
+    ADR-201 do PLAN-195 e, provavelmente, a W2 e a W3 do PLAN-194) mexe no
+    índice protegido `.claude/adr/README.md`, nos documentos de contagem
+    (os 8 que citam a contagem de ADR e o preâmbulo do `CHANGELOG.md`,
+    conferido com contagem exata pela «CHANGELOG HEADER RULE» do
+    `verify-counts.sh`; lista completa na linha «leque de ADR» do mapa de
+    colisões do PLAN-194) e no `CLAUDE.md:54`; o CI confere esse último com
+    `check-claude-md-claims.py`. Decisão do Owner (S361, 2026-10-01, aceite
+    em bloco da recomendação): o índice e os documentos de contagem ficam
+    FORA da conta do teto de 8 paths — a 4.ª exceção da «Regra de WIP» do
+    PLAN-194, que hoje lista as quatro — e são re-derivados no LAND; o
+    `CLAUDE.md:54` viaja no pacote (o PLAN-194 o deixava fora, só no
+    closeout; corrigido na S361 no próprio PLAN-194, seção «Paths ×
+    oráculo» e linha «leque de ADR» do mapa de colisões de lá). Trocar 198
+    por 199 não muda o tamanho do `CLAUDE.md`, mas cabem no máximo 87 bytes
+    de crescimento (39.912 de 40.000, `wc -c` em 2026-10-01; o gate reprova
+    em 40.000 ou mais). Um pacote de ADR por vez,
+    landado junto de um fechamento de sessão. Emenda ADITIVA fica DENTRO
+    do ADR existente e não cria arquivo: é o caso da W7a sobre o ADR-158,
+    como a Amendment 3 do ADR-149. Mudança semântica ganha arquivo de
+    emenda, pela doutrina anti-churn (`.claude/adr/README.md:59-64`).
 
 ### W7 — Gate entregue lê só o que é entregue; UM predicado de "repo-fonte" (A1, P1)
 
@@ -2214,20 +2288,59 @@ W7b é só atrás da W7a.
 
 | path | oráculo (30/09) | papel |
 |---|---|---|
-| `.claude/hooks/check_harness_config.py` | 1 | `REPLAY_FIXTURES_REL` passa ao caminho novo |
-| `.claude/hooks/tests/fixtures/harness-config/replay/canonical_edit_unauthorized.json` → `.claude/hooks/_lib/harness_replay/canonical_edit_unauthorized.json` | 0 → 0 | rename |
-| `.claude/hooks/tests/fixtures/harness-config/replay/bash_safety_destructive.json` → `.claude/hooks/_lib/harness_replay/bash_safety_destructive.json` | 0 → 0 | rename |
-| `.claude/hooks/tests/fixtures/harness-config/replay/agent_spawn_named_no_skill_content.json` → `.claude/hooks/_lib/harness_replay/agent_spawn_named_no_skill_content.json` | 0 → 0 | rename |
-| `.claude/hooks/tests/test_check_harness_config.py` | 0 | caminho novo + asserção estrutural |
-| `.claude/adr/ADR-158-AMEND-1-<slug>.md` (novo) | 1 | registra a pasta nova |
-| `.claude/hooks/_lib/harness_replay/__init__.py` | 1 | **NÃO criado** (OQ-12): a pasta é de dados, não pacote Python. Se algum teste exigir o arquivo, ele entra como 7.º path e 3.º canônico, no Scope do sentinel |
+| `.claude/hooks/check_harness_config.py` | 1 | `REPLAY_FIXTURES_REL` passa ao caminho novo; `FIXTURE_PROJECT_PLACEHOLDER` (`:165`) passa à forma recodificada do marcador (item do marcador abaixo) |
+| `.claude/hooks/tests/fixtures/harness-config/replay/canonical_edit_unauthorized.json` | 0 | **delete** (origem) |
+| `.claude/hooks/tests/fixtures/harness-config/replay/bash_safety_destructive.json` | 0 | **delete** (origem) |
+| `.claude/hooks/tests/fixtures/harness-config/replay/agent_spawn_named_no_skill_content.json` | 0 | **delete** (origem) |
+| `.claude/hooks/_lib/harness_replay/canonical_edit_unauthorized.json` | 0 | **add** (destino), com o marcador recodificado |
+| `.claude/hooks/_lib/harness_replay/bash_safety_destructive.json` | 0 | **add** (destino) |
+| `.claude/hooks/_lib/harness_replay/agent_spawn_named_no_skill_content.json` | 0 | **add** (destino) |
+| `.claude/hooks/tests/test_check_harness_config.py` | 0 | caminho novo + asserção estrutural + o teste do marcador (`:231`) com a forma nova |
+| `.claude/adr/ADR-158-harness-config-gate.md` | 1 (pelo padrão `.claude/adr/ADR-*.md`; re-medir na abertura) | emenda ADITIVA **por dentro** do próprio ADR (seção `## Amendment`, como a de PLAN-161 C1 que o arquivo já tem): registra a pasta nova. **NÃO cria arquivo de emenda** (decisão do Owner de 2026-10-01; regra comum 13) |
+| `.claude/hooks/_lib/harness_replay/__init__.py` | 1 | **NÃO criado** (OQ-12, respondida em 2026-10-01): a pasta é de dados, não pacote Python. Se algum teste exigir o arquivo, ele entra como 10.º path da tabela e 3.º canônico. No pacote de código seria o 9.º path, acima do teto de 8, e por isso vai para o pacote de materiais separado do ADR-158 (ver «Tamanho»), cujo sentinel o lista no Scope |
 
-- **Tamanho:** ~120–200 linhas, estimado; **6 paths** se cada rename conta
-  1 entrada, 2 deles canônicos. Se o G4 contar origem e destino (medir na
-  abertura), são 9 — aí a emenda do ADR sai para um pacote de materiais
-  separado.
+- **Tamanho:** ~120–200 linhas, estimado (o conteúdo das 3 fixtures só
+  muda no marcador de uma delas). **9 paths, 2 canônicos** (o hook e o
+  ADR-158). O patch NÃO usa rename: é gerado com `git diff --no-renames`,
+  isto é, com delete + add explícitos, porque o `git apply --numstat` dos
+  moldes de LAND (`.claude/plans/PLAN-182/OWNER-S326-LAND.sh:86,191`)
+  lista só o DESTINO de um rename, e a remoção da origem escaparia do
+  COLLIDE, do G4 e do staging. Com delete + add, o G4 conta DUAS entradas
+  por fixture (medido em 2026-10-01, num repositório descartável, com as 3
+  fixtures reais). **Delete + add, porém, NÃO basta no passo S dos
+  moldes**: ele compara o conjunto esperado com
+  `git diff --cached --name-only` (`OWNER-S326-LAND.sh:286-300`, a
+  listagem em `:292`; no molde
+  `.claude/plans/PLAN-193/wave-opus55/OWNER-OPUS55-LAND.sh:1104`), e essa
+  listagem detecta rename por padrão (`diff.renames` não está definido
+  neste repositório). Medido nas 3 fixtures reais, em staging, com um
+  substituto qualquer no lugar do marcador: duas saem `R100` e a que muda o
+  marcador sai `R089`; só os destinos aparecem, e o LAND aborta com as 3
+  origens em «só no esperado». **Exigência:** o LAND
+  da W7a enumera SEM detecção de rename em TODA listagem de staged ou de
+  diff que compara conjuntos (`git diff --cached --no-renames --name-only`,
+  ou `-c diff.renames=false`), como já fazem
+  `.claude/plans/PLAN-193/OWNER-GA-CUT.sh:1577` e
+  `.claude/plans/PLAN-193/OWNER-RC1-CUT.sh:1140`. Controle VERMELHO: o
+  passo S do molde inalterado aborta com as 3 origens em «só no esperado»;
+  com a flag, passa. O ensaio roda o LAND completo em árvore descartável,
+  não o `--dry-run`, que sai antes do passo S (`OWNER-S326-LAND.sh:214-217`;
+  `OWNER-OPUS55-LAND.sh:934`). O `OWNER-S326-LAND.sh:65-82` é outra
+  checagem (G0): aborta rename ou cópia já presente no `git status` da
+  árvore suja antes do apply, e por isso o move nunca pode estar staged
+  antes do LAND. Nove passa do teto de 8 do modelo v2, e vale a saída já
+  prevista: a emenda do ADR sai para um pacote de materiais separado, e o
+  pacote do código fica com 8 paths. Esse pacote separado é canônico (o
+  ADR-158 dá oráculo 1) e leva rail e GPG próprios: conta como um pacote a
+  mais nas vagas e no orçamento (ver «Ordem das vagas» e o parágrafo de
+  orçamento), e a divisão é a confirmar no debate. A emenda continua
+  DENTRO do ADR-158, sem arquivo novo e, pela decisão do Owner de
+  2026-10-01 (regra comum 13), sem tocar o índice dos ADR, os documentos de
+  contagem nem o `CLAUDE.md:54`. O debate confirma essa divisão na
+  abertura.
 - **Nível:** L3 (hook canônico de segurança + emenda de ADR) ⇒ debate
-  curto (1 rodada) + rail + GPG.
+  curto (1 rodada, registrada em `debate/w7-round-1/`, regra comum 11) +
+  rail + GPG.
 - **Por que `_lib/harness_replay/` chega ao adopter sem mexer no
   instalador — LIDO no código, não executado:** `install_lib_selective`
   (`scripts/install.sh:1520-1550`) copia cada entrada de topo de `_lib/`
@@ -2252,10 +2365,51 @@ W7b é só atrás da W7a.
   momento do land (que pode já ser o hook da parte A do PLAN-195). A
   recíproca — `test_check_harness_config.py` na bateria da W1 do
   PLAN-195 — é item daquele plano.
+- **O marcador de runtime `{{PROJECT_DIR}}` é recodificado (emenda de
+  2026-10-01, S361).** A fixture `canonical_edit_unauthorized.json`
+  carrega o marcador literal no `file_path` (`:9`), e o hook o troca pela
+  raiz do repositório em tempo de replay
+  (`check_harness_config.py:674`). No caminho antigo, que o instalador
+  não entrega, isso nunca importou. No caminho novo, que o instalador
+  ENTREGA, o literal casa o padrão de placeholder de instalação
+  `\{\{[A-Z_][A-Z0-9_]*\}\}` em dois lugares. (i) O `grep -RIl` do fim do
+  `install.sh` (`:3818-3846`) não tem isenção: o arquivo entraria na lista
+  «Placeholders remaining (fill in manually)» e no contador do aviso
+  final, como um placeholder a preencher à mão que não é. (ii) O teste
+  `test_install_sh_all_placeholders_substituted`
+  (`.claude/scripts/tests/test_install_sh_placeholders.py:83,106,154-172`)
+  só isenta `scripts/` (`:158-161`) e reprovaria
+  `hooks/_lib/harness_replay/`. O hook já monta o literal em fragmentos
+  por causa desse scan (`:158-165`); a fixture não. **Cura: recodificar o
+  marcador na fixture E no hook para uma forma que NÃO case o padrão**,
+  em vez de isentar o caminho no teste — a isenção calaria o teste, não a
+  lista do install, e a recodificação vence a isenção. Nenhum path é
+  acrescentado: a fixture, o hook e `test_check_harness_config.py` (o
+  teste de substituição, `:231`, usa o literal) já estão na tabela. O
+  local da recodificação é o da OQ-12, respondida:
+  `.claude/hooks/_lib/harness_replay/`. A forma nova é escolhida na
+  abertura e registrada no material da cerimônia; o critério é só não
+  casar o padrão e ser lida de volta pelo hook e pelo teste do hook.
+- **A bateria inclui o teste de placeholders do install.** Além do Check
+  abaixo, roda `python3 -m pytest .claude/scripts/tests/test_install_sh_placeholders.py -q`
+  (instala de verdade em tmp) com CONTROLE VERMELHO: o mesmo teste sobre a
+  árvore com as fixtures já no caminho novo e o marcador ainda literal
+  deve reprovar em `test_install_sh_all_placeholders_substituted` (previsto
+  pela leitura do teste, a demonstrar) e passar depois da recodificação. O
+  vermelho→verde fica registrado no material da cerimônia.
+- **Referências textuais ao caminho antigo, fora desta tabela (lidas em
+  2026-10-01):** `.claude/hooks/tests/fixtures/harness-config/README.md`
+  descreve `replay/` e o marcador (`:19`) e fica desatualizado depois do
+  move; o comentário de `.github/workflows/validate.yml:1117` cita o
+  caminho velho (arquivo canônico, só comentário). Nenhum dos dois entra
+  no pacote: o CEO decide na abertura entre commit livre depois do land
+  (o README, se o oráculo der 0) e deixar o comentário como está, com o
+  resíduo declarado.
 
-- [ ] `[P1][US1]` Fixtures movidas para `.claude/hooks/_lib/harness_replay/`
-      e `REPLAY_FIXTURES_REL` apontando para lá; o fail-closed do ADR-158
-      continua (fixture ausente ⇒ RED).
+- [ ] `[P1][US1]` Fixtures movidas (delete + add explícitos, sem rename)
+      para `.claude/hooks/_lib/harness_replay/` e `REPLAY_FIXTURES_REL`
+      apontando para lá; o fail-closed do ADR-158 continua (fixture
+      ausente ⇒ RED).
       Check: `python3 -m pytest .claude/hooks/tests/test_check_harness_config.py -q` verde; na bateria do land, `python3 .claude/hooks/check_harness_config.py --repo-root <alvo instalado do zero em tmp> --replay --no-exec-bit` sai rc 0 com os 3 controles exercitados; controle VERMELHO = o mesmo comando contra um alvo instalado da árvore pré-cura, que sai `FAIL: 3 RED finding(s)`
 - [ ] `[P1][US1]` O install do zero entrega a pasta nova inteira, sem
       `__init__.py`.
@@ -2264,10 +2418,16 @@ W7b é só atrás da W7a.
       entregue NÃO é excluído por `_framework_path_excluded` — chamada
       REAL ao bash, nunca cópia do padrão `case`.
       Check: o teste falha quando `REPLAY_FIXTURES_REL` volta a `.claude/hooks/tests/...` (controle plantado; vermelho→verde registrado no material da cerimônia)
+- [ ] `[P2][US1]` O marcador de runtime da fixture e do hook não casa
+      `\{\{[A-Z_][A-Z0-9_]*\}\}`, e o replay continua exercitando os 3
+      controles.
+      Check: `python3 -m pytest .claude/scripts/tests/test_install_sh_placeholders.py -q` verde sobre a árvore da W7a; no alvo instalado do zero em tmp, `grep -RIl '{{[A-Z_][A-Z0-9_]*}}' <alvo>/.claude/hooks/_lib/harness_replay` não devolve arquivo; `python3 -m pytest .claude/hooks/tests/test_check_harness_config.py -q` verde com o teste de substituição na forma nova; controle VERMELHO = o `test_install_sh_all_placeholders_substituted` sobre as fixtures no caminho novo com o marcador ainda literal reprova (registrado no material da cerimônia)
 - [ ] `[P1]` Emenda do ADR-158 registra a pasta nova e declara, pela
       FORMA, que um gate entregue só lê por padrão caminho do conjunto
-      entregue.
-      Check: oráculo = 1 na emenda e o sentinel da W7a a lista no Scope
+      entregue. A emenda é ADITIVA e fica DENTRO do próprio
+      `ADR-158-harness-config-gate.md`: não cria arquivo de ADR nem de
+      emenda (regra comum 13).
+      Check: oráculo = 1 em `.claude/adr/ADR-158-harness-config-gate.md`; o número de arquivos `.claude/adr/ADR-*.md` não muda (198 em 2026-10-01); o sentinel que carrega a emenda (o da W7a ou o do pacote de materiais separado, ver o bullet «Tamanho» acima) lista o arquivo no Scope
 
 #### W7b — UM predicado de repo-fonte + e2e a partir de versão antiga (forma 2)
 
@@ -2281,7 +2441,12 @@ W7b é só atrás da W7a.
 | `scripts/tests/test-upgrade-historical-adopter.sh` | 0 | perna nova: instalado na v1.4.2 → upgrade → gate do harness rc 0 (fica em `scripts/tests/`, fora do censo do PLAN-185 ⇒ o baseline NÃO entra neste pacote) |
 | `.claude/adr/ADR-<NNN>-<slug>.md` (novo; número na abertura: o próximo livre, pulando o **ADR-201, reservado ao PLAN-195**, e todo número já mencionado no repositório (198–200 já têm dono em outros planos; medido por busca na abertura)) | 1 | "UM predicado de repo-fonte" como decisão transversal |
 
-- **Tamanho:** ~200–300 linhas, estimado; 5–7 paths.
+- **Tamanho:** ~200–300 linhas, estimado; 5–7 paths. Como CRIA um arquivo
+  de ADR, o pacote leva também o índice dos ADR, os documentos de contagem
+  (incluído o preâmbulo do `CHANGELOG.md`) e o `CLAUDE.md:54`; esses ficam
+  FORA da conta do teto de 8 paths (4.ª
+  exceção, decisão do Owner na S361) e são re-derivados no LAND — regra
+  comum 13.
 - **Nível:** L3 (decisão transversal + manifesto canônico) ⇒ debate + ADR
   + rail + GPG.
 - **Desenho do predicado:** marcador ADR-001, direção do CEO na S359. Ele
@@ -2500,8 +2665,10 @@ PLAN-195.
 ### Relação com a W1 pendente (AC-1)
 
 - O pacote `p183-w1-pointer` (ponteiro `PROTOCOL.md` portátil) foi
-  construído sobre a base `25512df`, hoje **127 commits** atrás
-  (`git rev-list --count 25512df..HEAD`, medido nesta edição). Desde então
+  construído sobre a base `25512df`, hoje **134 commits** atrás
+  (`git rev-list --count 25512df..HEAD`, re-medido em 2026-10-01 no HEAD
+  `e2e6bd1b`; eram 127 em 30/09 no HEAD `429a5b39` e 133 no `4f0b9c0c`.
+  O número cresce a cada commit: re-medir na abertura da W1). Desde então
   `install.sh`, `upgrade.sh` e `_framework_manifest_set.sh` mudaram
   +1008/−210 linhas (frente plans-active). Não assina como está:
   **re-derivar no HEAD**.
@@ -2525,8 +2692,9 @@ PLAN-195.
   acima do modelo v2 ⇒ **dividir em 2**
   (W1a/W1b) na re-derivação. Recomendação: tirar do pacote o toque neste
   arquivo (regra comum 6) e deixar a frase do `CLAUDE.md` (tabela de 65
-  para 68 células) para o closeout — o `CLAUDE.md` está a ~200 bytes do
-  teto de 40.000 (síntese, U3).
+  para 68 células) para o closeout — o `CLAUDE.md` está a 88 bytes do
+  teto de 40.000 (39.912 bytes, `wc -c` no `e2e6bd1b`, 2026-10-01; a
+  síntese U3 de 30/09 dizia ~200).
 - Defeito vivo hoje em arbitrage-monitor e 42ledger-core (4 linhas com
   caminho de home no `PROTOCOL.md`, frente plans-active) ⇒ a cura tem de
   ser retroativa via upgrade, como a W1 já exige.
@@ -2555,8 +2723,9 @@ revisão deles).
 | `.github/workflows/smoke-install.yml`, `.github/workflows/ownership-nightly.yml` | W1a/W1b deste plano × W1.5 do PLAN-194 (só se o censo W0.1 de lá marcar esses workflows) | W1.5 do PLAN-194 primeiro (prazo 19/10) → W1 deste plano re-derivada depois |
 | `INSTALL.md` | W8 deste plano × W6 do PLAN-194 («Retenção do log de auditoria») | W6 do PLAN-194 primeiro (data de risco por volta de 21/11) → W8 |
 | `.claude/governance/gate-scripts-manifest.txt` | W7b e W10 deste plano × W7 do PLAN-194 («Corte da v1.4.3»), só se o corte mudar o `release.sh` (membro do manifesto ADR-192, conferido em 30/09) | em fila, nunca em paralelo; a posição do corte fica no mapa de colisões do PLAN-194 |
-| nenhum arquivo em comum, mas teste cruzado | W7a deste plano × parte A do PLAN-195 (guarda de Bash) | podem andar juntas; a bateria da W7a roda os testes do `check_bash_safety.py` (ver W7a) |
+| ADR (corrigido em 2026-10-01, S361: a linha anterior dizia «nenhum arquivo em comum»), mais teste cruzado | W7a deste plano × parte A do PLAN-195 (guarda de Bash) | as duas mexem em ADR, mas em arquivos distintos: a W7a emenda o `ADR-158-harness-config-gate.md` POR DENTRO (aditiva, regra comum 13) e NÃO cria arquivo de ADR; a parte A cria o ADR-201. Por isso o índice dos ADR, os documentos de contagem e o `CLAUDE.md:54` viajam só no pacote da parte A (regra comum 13); a W7a não os toca. Podem andar juntas; a bateria da W7a roda os testes do `check_bash_safety.py` (ver W7a). Se o debate mandar a emenda da W7a para arquivo próprio (mudança semântica), as duas passam a dividir esses arquivos e entram em fila, uma por vez |
 | número de ADR | W7b deste plano × PLAN-195 | ADR-201 fica com o PLAN-195; a W7b pega, na abertura, o próximo número sem menção no repositório |
+| índice dos ADR (`.claude/adr/README.md`), documentos de contagem (incluído o preâmbulo do `CHANGELOG.md`, regra comum 13) e `CLAUDE.md:54` (adicionado em 2026-10-01, S361, decisão do Owner sobre arquivos de ADR) | todo pacote que CRIA arquivo de ADR ou de emenda: a W7b deste plano, a parte A do PLAN-195 (ADR-201) e, provavelmente, a W2 e a W3 do PLAN-194; e, por causa do `CHANGELOG.md`, a W7 do PLAN-194 (corte), que o tem como path | um pacote de ADR por vez, cada um landado junto de um fechamento de sessão; esses arquivos ficam fora da conta do teto de 8 paths e são re-derivados no LAND. Um pacote de ADR e a W7 do PLAN-194 nunca em voo juntos (mapa de colisões do PLAN-194, linha do `CHANGELOG.md`). O `CLAUDE.md:54` viaja no pacote porque o CI o confere com `check-claude-md-claims.py`; o PLAN-194 o deixava fora do pacote, só no closeout, e foi corrigido na S361 no próprio PLAN-194 (seção «Paths × oráculo», linha do `CLAUDE.md`) |
 
 ### Ordem das vagas (decidida pelo Owner em 30/09/2026 — OQ-20 resolvida)
 
@@ -2584,15 +2753,27 @@ A tabela abaixo é a ordem INTERNA deste plano:
 
 | fase | pacotes | por quê |
 |---|---|---|
-| 1 | **W7a**, na vaga que a W1 do PLAN-194 liberar ao landar | o A1 é o único P1 dos adopters; nenhum arquivo em comum com outra onda (a parte A do PLAN-195 só cruza por teste — ver o mapa de colisões) |
+| 1 | **W7a** (o pacote do código e, se o debate confirmar a divisão, o pacote separado da emenda do ADR-158 na MESMA vaga, um depois do outro, na ordem que o debate confirmar), na vaga que a W1 do PLAN-194 liberar ao landar | o A1 é o único P1 dos adopters; nenhum arquivo em comum com outra onda (a parte A do PLAN-195 cruza por teste e pela superfície de ADR, em arquivos distintos — ver o mapa de colisões) |
 | 2 | **W7b** logo depois da W7a | precisa só das fixtures da W7a; não toca o baseline nem path da W1 |
 | 3 | **W1a**, **W1b** e **W9**, nas vagas seguintes | W1 re-derivada no HEAD — depois da W5b do PLAN-194 e, se ela tocar os mesmos workflows, da W1.5 do PLAN-194 — e dividida em dois; W9 não colide com nada |
 | 4 | **W8**, depois **W10** | W8 depois da W1 (`upgrade.sh` + baseline), da W7b (e2e), da W5b do PLAN-194 (baseline) e da W6 do PLAN-194 (`INSTALL.md`); W10 depois da W7b (validador), nunca em paralelo com a W7 do PLAN-194 se o `release.sh` mudar |
 
-Orçamento das ondas S359 (estimado, sem medição; NÃO somado ao
-frontmatter, como na W5): cada onda canônica ≈ 1 sessão de construção +
-rail com parada pré-registrada; referência de custo, a W5-b orçada em
-100–160k tokens. W7a e W10 são as menores.
+Orçamento das ondas S359 (estimado, sem medição): cada onda canônica ≈ 1
+sessão de construção + rail com parada pré-registrada; referência de
+custo, a W5-b orçada em 100–160k tokens. W7a e W10 são as menores e
+tendem ao piso da faixa, mas a conta abaixo usa 100–160k para as cinco
+(faixa conservadora).
+**Somado ao frontmatter em 2026-10-01 (S361)** — antes ficava de fora,
+como a W5: as cinco ondas (W7a, W7b, W8, W9, W10) a 100–160k tokens cada
+dão 500–800k, que, sobre os 210–400k das waves W0–W4, fecham o
+`budget_tokens` em 710–1200k; e 5 sessões (6, se o debate confirmar o
+pacote separado da emenda do ADR-158, canônico e com rail e GPG próprios)
+somam-se às 3–5 de antes, no `budget_sessions` de 8–11. A faixa de tokens
+da W7a não foi re-estimada para os dois pacotes: a confirmar no debate.
+A faixa é estimativa derivada da referência da
+W5-b, não medida (regra comum 10; tokens do contexto do CEO, sem os
+subagentes). A re-derivação da W1 em W1a/W1b e os resíduos de W2, W3-P1, W4
+e W5-b (ver «Critério de done») ficam fora da soma.
 
 ### Fora destas ondas (registrado, sem pacote)
 
@@ -2645,44 +2826,69 @@ rail com parada pré-registrada; referência de custo, a W5-b orçada em
 
 ### Perguntas abertas das ondas S359 (para o Owner, com a recomendação do CEO)
 
-- **OQ-12 (W7a)** — Onde moram as fixtures entregues? (a) pasta de dados
+> **Estado em 2026-10-01 (S361).** O Owner aceitou em bloco, no chat, a
+> recomendação do CEO para estas perguntas: responder agora só a OQ-12 e
+> levar as demais ao debate, com a OQ-18 a critério dele. **OQ-12 está
+> RESPONDIDA** (a W7a segue o que ela decide). **OQ-13 a OQ-17 vão para o
+> debate das ondas W7–W10, registrado em
+> `.claude/plans/PLAN-183/debate/w7-round-1/` (fora do corpo deste plano;
+> regra comum 11)**: a recomendação do CEO entra no debate como PROPOSTA de
+> partida, não como decisão do Owner; o debate a confirma ou a contesta com
+> razão escrita, e o resultado volta a este plano depois dele. **OQ-18 fica
+> a critério do Owner**, que, se decidir purgar, a executa numa sessão do
+> repositório do adopter.
+
+- **OQ-12 (W7a) — RESPONDIDA em 2026-10-01 (S361).** Onde moram as fixtures entregues? (a) pasta de dados
   `.claude/hooks/_lib/harness_replay/`; (b) os 3 conteúdos embutidos no
-  próprio hook. **Recomendação: (a), SEM `__init__.py`** — muda menos o
+  próprio hook. **Resposta do Owner (aceite em bloco da recomendação do
+  CEO): (a), SEM `__init__.py`.** As fixtures da W7a moram na pasta de
+  dados `.claude/hooks/_lib/harness_replay/`, que não é pacote Python. É
+  ali, e não no caminho antigo, que o marcador de runtime `{{PROJECT_DIR}}`
+  precisa ser recodificado (item do marcador na W7a).
+  Fundamento: muda menos o
   ADR-158, e o instalador já entrega subpastas de `_lib/` inteiras, sem
   exigir `__init__.py` (lido no código, `scripts/install.sh:1364-1368`;
   a W7a prova no install do zero e a W7b no upgrade). Fato medido em
   30/09: hoje toda subpasta de `_lib/` fora `tests/` (adapters,
   estimation, federation, mcp, otel, tier_policy) tem `__init__.py`, e o
   oráculo dá 1 para `.claude/hooks/_lib/harness_replay/__init__.py` —
-  criá-lo somaria um 7.º path e um 3.º canônico. Uma busca por
+  criá-lo somaria um 10.º path à tabela da W7a (o 9.º do pacote de código,
+  acima do teto de 8) e um 3.º canônico. Uma busca por
   `__init__.py` nos testes (grep, 30/09) não achou teste que exija o
   arquivo em toda subpasta de `_lib/`; a suíte de hooks inteira no Check
   da W7a confirma. Se algum teste exigir, o path entra na W7a com oráculo
-  = 1.
-- **OQ-13 (W8, A7)** — O upgrade TROCA sozinho um `.mcp.json` idêntico
+  = 1 (como 10.º path, depois da conta de delete + add) e segue a saída
+  declarada na linha dele da tabela: o pacote de materiais separado do
+  ADR-158, a confirmar no debate; nenhuma das 4 exceções da «Regra de WIP»
+  do PLAN-194 cobre um 9.º path no pacote de código.
+- **OQ-13 (W8, A7) — ao debate `w7-round-1/`.** O upgrade TROCA sozinho um `.mcp.json` idêntico
   ao template antigo (com backup) ou só AVISA? **Recomendação: trocar**
   quando o hash for exatamente o de um template que o framework
   entregou (prova de origem); qualquer outro só recebe aviso.
-- **OQ-14 (W8, A6-3)** — O `_dispatch.md` gerado entra no manifesto de
+- **OQ-14 (W8, A6-3) — ao debate `w7-round-1/`.** O `_dispatch.md` gerado entra no manifesto de
   instalação? E a instalação NOVA passa a entregar os 5 agentes (hoje só
   o upgrade entrega)? **Recomendação:** gerar sim; manifesto e agentes no
   install ficam para onda própria (tocam `_framework_manifest_set.sh` e
   `install.sh`, que a W1 também toca).
-- **OQ-15 (W8, A2)** — Parar de semear `VERSION` em instalação nova
+- **OQ-15 (W8, A2) — ao debate `w7-round-1/`.** Parar de semear `VERSION` em instalação nova
   (exige emendar o ADR-155-AMEND-1) ou só o aviso? **Recomendação: só o
   aviso agora.**
-- **OQ-16 (W9, A4)** — O P4 vira só aviso no Bash? **Recomendação: sim**
+- **OQ-16 (W9, A4) — ao debate `w7-round-1/`.** O P4 vira só aviso no Bash? **Recomendação: sim**
   — bloquear por "independência" exigiria saber se um grep depende do
   outro, e o hook não sabe.
-- **OQ-17 (W9, A5)** — Tirar do escopo do RISKY DIFF o que o framework
+- **OQ-17 (W9, A5) — ao debate `w7-round-1/`.** Tirar do escopo do RISKY DIFF o que o framework
   entregou? **Recomendação: não nesta onda** — teto + chave completa +
   delta já resolvem o custo; a exclusão precisa de um registro de
   entrega que hoje não cobre tudo (A5-3).
-- **OQ-18 (interino, no adopter)** — No arbitrage-monitor, até a W7
+- **OQ-18 (interino, no adopter) — a critério do Owner.** No arbitrage-monitor, até a W7
   landar: rodar `upgrade.sh --purge-misinstalled` (fica só o aviso
   vermelho do `/ceo-boot`, como em todo adopter) ou manter as fixtures do
   contorno (validador completo vermelho, que esconde FAIL real)?
-  **Recomendação: purgar** — é o estado em que o 42ledger-core já está.
+  **Recomendação: purgar** — é o estado em que o 42ledger-core já está;
+  purgar acaba com o vermelho do validador completo, que hoje esconde FAIL
+  real. A decisão fica a critério do Owner (S361, 2026-10-01); se decidir
+  purgar, é ELE quem executa, numa sessão do repositório do adopter: este
+  plano não escreve nada nesse repositório.
 - **OQ-19, OQ-20 e OQ-21 — RESOLVIDAS pelo Owner em 30/09/2026 (S359);
   saíram desta lista.** OQ-19 (A1–A7 como ondas do PLAN-183, e não um
   plano novo): «ok salva memory e claude e segue como vc sugeriu».
@@ -2705,3 +2911,5 @@ rail com parada pré-registrada; referência de custo, a W5-b orçada em
 - **2026-09-30 (S359, HEAD `429a5b39`):** seção «Waves S359» acrescentada — ondas W7 (A1, em dois pacotes W7a/W7b), W8 (A7 + A2 + `_dispatch.md`), W9 (A4 + A5) e W10 (validador de skills), AC-11..AC-16 e OQ-12..OQ-18, a partir da triagem read-only da S359 (evidência privada do Owner, fora do repositório); A3 vinculado ao PLAN-195. Oráculo `--is-canonical` rodado em cada path nomeado. Nada executado, nenhum status mudou; a W1 segue pendente de re-derivação (base `25512df`, 127 commits atrás) e divisão em dois pacotes.
 - **2026-09-30 (S359, revisão da seção pelos revisores):** (1) regra comum 3 corrigida — o censo do PLAN-185 exclui `scripts/tests/` (`check-installer-write-safety.py:129`), então a W7b sai do baseline (5–7 paths), não colide com a W1 e anda logo depois da W7a; (2) a autorização das ondas passa a PROVISÓRIA, com fonte na memória `project-s359-urgency-triage.md:23`, até o ledger `PLAN-183/owner-decisions-S359.md` (OQ-19); (3) a «Ordem proposta» declara que as 3 vagas já têm dono pelo PLAN-194 e que a W7a precisa de vaga cedida (OQ-20, OQ-21); (4) OQ-12 passa a recomendar «sem `__init__.py`» (oráculo = 1 nele; a tabela da W7a registra o path como não criado) e a W7a ganha um Check de entrega; (5) o pacote da W1 localizado fora do repo e os 16 paths re-conferidos pelo oráculo. Nada executado; status inalterado.
 - **2026-09-30 (S359, decisões do Owner aplicadas + checagem cruzada com PLAN-194/PLAN-195):** as 9 decisões do Owner entram, com a frase exata, no bloco «Decisões do Owner (S359, 30/09/2026)» do topo da seção «Waves S359»; a autorização das ondas W7–W10 deixa de ser provisória (OQ-19 resolvida por «ok salva memory e claude e segue como vc sugeriu»; o ledger separado deixa de ser pré-condição). «Ordem proposta» vira «Ordem das vagas» pela decisão 7, «Codex automático, depois adopter (Recomendado)» (OQ-20 resolvida: a W7a pega a vaga que a W1 do PLAN-194 liberar; depois, a W2 do PLAN-194); OQ-21 resolvida pela decisão 1. Nova subseção «Mapa de colisões com o PLAN-194 e o PLAN-195»: W5b do PLAN-194 → W1a/W1b → W8 (`install.sh` + baseline); W1.5 do PLAN-194 → W1 (`smoke-install.yml`, `ownership-nightly.yml`); W6 do PLAN-194 → W8 (`INSTALL.md`); W7b/W10 × W7 do PLAN-194 (manifesto ADR-192, se o `release.sh` mudar); ADR-201 reservado ao PLAN-195. A bateria da W7a passa a rodar os testes do `check_bash_safety.py` (a fixture `bash_safety_destructive.json` é reexecutada contra o hook que a parte A do PLAN-195 muda). Citações do PLAN-194/PLAN-195 por nome de seção, não por linha; caminhos da evidência privada do Owner trocados por «fora do repositório». Nada executado; `status: executing` inalterado.
+
+- **2026-10-01 (S361, aceite em bloco do Owner às recomendações do CEO, no chat; edição de texto, sem sentinel, `status: executing` inalterado):** (1) **W7a** — o marcador de runtime `{{PROJECT_DIR}}` é recodificado na fixture e no hook (não casa `\{\{[A-Z_][A-Z0-9_]*\}\}`), porque o caminho novo é entregue ao adopter e o `grep` do `install.sh` e o `test_install_sh_placeholders.py` o acusariam; `test_install_sh_placeholders.py` entra na bateria, com controle vermelho; o patch usa delete + add explícitos, sem rename, o que fixa a conta em 9 paths (com delete + add o G4 conta origem e destino; o passo S do LAND derivado enumera com `--no-renames`, porque a listagem padrão do staged esconderia as origens). (2) **Arquivos de ADR** — a emenda do ADR-158 pela W7a é ADITIVA e fica DENTRO do `ADR-158-harness-config-gate.md`: a linha do arquivo novo `ADR-158-AMEND-1-<slug>.md` sai da tabela; regra comum 13 e linhas novas do mapa de colisões (W7a × parte A do PLAN-195: as duas mexem em ADR, mas a W7a não cria arquivo; índice dos ADR, documentos de contagem e `CLAUDE.md:54` só no pacote que cria arquivo, 4.ª exceção ao teto de 8 paths). (3) **Perguntas abertas** — OQ-12 RESPONDIDA: pasta de dados `.claude/hooks/_lib/harness_replay/`, sem `__init__.py`; OQ-13 a OQ-17 encaminhadas ao debate das ondas W7–W10 em `.claude/plans/PLAN-183/debate/w7-round-1/` (regra comum 11); OQ-18 (purga no arbitrage-monitor) a critério do Owner, que a executa numa sessão do adopter. (4) **Fechamento do plano** — critério de done completado com os resíduos de W2, W3-P1, W4 e W5-b, levados a `PLAN-183-FOLLOWUP-<slug>` em `draft` (os arquivos ainda não existem); regra comum 12 (e2e de ~34 min: 33 min 40 s no run `36502140251`; roda destacado, timeout explícito de até 2 h, polling); `budget_tokens` e `budget_sessions` atualizados (710–1200k, 8–11 sessões, estimativa); a contagem da base da W1 re-medida em 134 commits (HEAD `e2e6bd1b`). A entrada de 30/09 acima, que cita 127 commits, é registro datado e fica como está.

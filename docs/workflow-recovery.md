@@ -239,6 +239,38 @@ is PLAN-190 W6.
   knowing.
 - There is no checkpoint inside a single `agent()`: a phase that dies at 400k tokens restarts. PLAN-190
   W2 adds a phase checkpoint file the phase prompt reads and writes; the runner itself is the limit.
+- **How an agent is stopped: the runner's stall watchdog, by substrate (read from the installed
+  Claude Code binaries, 2026-10-01).** The runner restarts an `agent()` that makes no progress. The
+  stream's byte watchdog is a different mechanism that shares the 180 s default. Both belong to the
+  harness. The guard does not see either of them.
+  - **In every version read.** The runner's stall timer is suspended while a tool call is in flight.
+    The code clears it when an assistant message carries a tool call and re-arms it only when no tool
+    call is in flight. A long tool call by itself therefore does not fire this watchdog. This was read
+    from the code in the 2.1.285, 2.1.286 and 2.1.287 binaries on 2026-10-01 (2.1.284: the S360
+    planning verification) and was not measured at run time.
+  - **Up to Claude Code 2.1.285.** The default stall window of an `agent()` is a fixed 180 s, with up
+    to 5 retries (1 + 5 attempts).
+  - **Claude Code 2.1.286.** The default is derived and equals 600 s unless an override is set:
+    `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` when set, a fixed 600 s when `CLAUDE_ENABLE_STREAM_WATCHDOG`
+    is off, otherwise `max(CLAUDE_STREAM_IDLE_TIMEOUT_MS, 300000) + 300000` ms. The retry count is
+    still 5. A per-agent
+    `opts.stallMs` overrides the default; the same field already overrode the fixed 180 s in 2.1.285.
+    After the last attempt the runner reports
+    `agent stalled on all N attempts (no progress for X ms each)`.
+  - **Stream byte watchdog (2.1.286 binary).** The default window is 180 s on the `firstParty`
+    provider and 300 s on other providers. With neither environment variable set, the server-side flag
+    `tengu_byte_stream_idle_timeout_ms` can replace that default without a new Claude Code version; its
+    cached value was 180000 when the S360 planning verification read it (2026-10-01).
+    `CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS` overrides the window. `CLAUDE_STREAM_IDLE_TIMEOUT_MS` also
+    overrides it, with a 300 s floor, so a lower value yields 300 s. The result is clamped to 10 s
+    through 30 min.
+  - **Not measured.** The effect at run time. The 2.1.286 changelog lists a fix for Workflow
+    subagents restarted from their original prompt when a connection stalled for a few minutes
+    mid-response; whether a stalled agent now resumes its partial reply or restarts was not tested.
+    The 2.1.287 binary installed when this was written has the same derived-default function; its
+    constants were not read.
+  - **Practice, unchanged.** Run a long job in the background and poll it. A script that needs a
+    different window can set `opts.stallMs` per agent.
 - The run id is extracted from the tool response by shape (`wf_<hex8>[-<hex>]`, 98.5 % of 329 real
   responses in this repo's own transcripts); a harness version that changes the response leaves the
   launch recorded and `bind` closes it by hand.

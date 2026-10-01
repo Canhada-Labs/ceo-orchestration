@@ -1,7 +1,8 @@
 ---
 id: PLAN-172
 title: Velocidade honesta — E0b (decomposição do tempo-morto) como gate, E5 (pipelining WIP=2), E6 (filter-cascade no review) + políticas observacionais
-status: reviewed
+status: abandoned
+abandoned_at: 2026-10-01
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
@@ -10,11 +11,75 @@ depends_on: [PLAN-169, PLAN-171]
 budget_tokens: "firmado S302e — W-IM 150-300k; E0b 50-100k; replay M3 80-150k; W-DH (2 emendas + cerimônia) 150-250k; E6 30k telemetria + 100-200k experimento; E5 2-4M SÓ se E0b liberar. Total sem E5: ~0,6-1,1M"
 budget_sessions: "W-IM 2-3; E0b 1-2; M3 1; W-DH 2; E6 passivo + 1-2; E5 6-9 pós-gate"
 context_risk: high
-external_wait: "gatilho: pós-GA v1.3.0 (satisfeito, 2026-08-17) + PLAN-169 W4 fechada + PLAN-171 W5 fechada; E5 adicionalmente pós-PLAN-171 W5 (log único de worktree). Verificável por comando: `grep -m1 '^status:' .claude/plans/PLAN-169-closure-and-cross-session-evolution.md` (hoje 'executing') e `grep -m1 '^status:' .claude/plans/PLAN-171-governance-imports-provenance.md` (hoje 'executing') — reabre quando os dois lerem 'done'. Revisão de portfólio S348 (2026-09-06, veredito 3/3 'adiar'): nenhuma das duas fechou ainda."
+external_wait: "nenhuma — plano ABANDONADO em 2026-10-01 (Q13-a, S361). O gatilho anterior (PLAN-169 W4 + PLAN-171 W5 fechadas; E5 pós-PLAN-171 W5) ficou inalcançável: a W5 do PLAN-171 foi CORTADA pelo Owner em 2026-09-06. Ver ## Abandonment reason."
 tags: [experiments, speed, pipelining, review, seed, pre-registration]
 ---
 
 # PLAN-172 — Velocidade honesta: atacar as frações medidas, não a autoria
+
+> **ABANDONADO em 2026-10-01 (S361), por decisão do Owner: aceite em bloco das
+> recomendações no chat, Q13 alínea (a) — «abandonar o PLAN-172 e o PLAN-173 (o
+> gatilho ficou inalcançável)».** Nenhum braço de experimento rodou e nenhum dado
+> de braço foi coletado; a única execução registrada é a varredura W-IM#4 (§5,
+> S316). O corpo abaixo fica como histórico, sem reescrita; leia a §0 com a
+> ressalva do ponto 2 da seção seguinte.
+
+## Abandonment reason
+
+Duas razões, ambas conferidas no disco em 2026-10-01.
+
+1. **O gatilho de reabertura ficou inalcançável.** O `external_wait` condicionava
+   o plano a «PLAN-169 W4 fechada + PLAN-171 W5 fechada», e o E5 tinha como
+   pré-requisito a W5 do PLAN-171 (log único de worktree; §1, «Pré-requisito»).
+   A metade do PLAN-169 está cumprida: `PLAN-169-closure-and-cross-session-evolution.md`
+   lê `status: done`. A metade do PLAN-171 não pode ser cumprida: o Owner CORTOU a
+   W5 em 2026-09-06 (S348), porque ela «servia ao E5 do PLAN-172, que está
+   congelado — sem comprador enquanto o PLAN-172 não reabrir»
+   (`PLAN-171-governance-imports-provenance.md`, seção W5; decisão Q3 do bloco B,
+   `PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §8). Os dois planos
+   esperavam um pelo outro: o 172 pela W5 do 171, e a W5 do 171 caiu por causa do
+   172 congelado. O texto da própria W5 diz «Sem isso, E5 não roda». O PLAN-171
+   segue `executing`, re-escopado para W0 + W1 + W2; a W5 não volta por ele.
+2. **O E0 que desfinanciou E1/E2 era tautológico.**
+   `.claude/plans/PLAN-169/e0-serial-fraction.py:315-319` calcula
+   `grand = tot_m + tot_h + tot_d` e depois `S = (tot_h + tot_d + tot_m) / grand`:
+   o numerador é a mesma soma do denominador, então S vale 1,000 para QUALQUER
+   log. A regra pré-registrada («S ≥ 0,40 ⇒ E1/E2 NÃO financiados»,
+   `PLAN-169/W5-preregistration.md:52-55`) decide sobre esse S conservador e, por
+   isso, nunca poderia liberar nada. O «otimista 0,785» é outra grandeza
+   (`(tot_h + tot_d) / grand`, `e0-serial-fraction.py:329`), descritiva, e o
+   próprio pré-registro não decide com ela (`PLAN-169/E0-EVIDENCE.md` §4). A §0
+   deste plano continua citando S = 1,000 como foi registrado em 2026-08-11. O
+   mesmo run mediu 59 % de tempo-morto (429,6 h de 723 h); esse número não
+   depende da fórmula de S e é a premissa do E0b e do E5.
+
+**O que sai com o plano.** Não há registro de execução de E0b, E5, E6, M3 nem
+W-DH: o `## Progress log` não cita nenhuma wave iniciada e o diretório
+`.claude/plans/PLAN-172/` guarda só os dois arquivos do pré-registro. Dos
+sub-itens da W-IM, só a W-IM#4 tem execução registrada (§5, S316, varredura
+read-only já publicada). Nenhum item tem dono depois desta data. Cada um que o
+Owner quiser de volta nasce como plano novo, porque `abandoned` é terminal
+(`PLAN-SCHEMA.md` §4). O PLAN-173 depende deste plano e foi abandonado na mesma
+decisão.
+
+Uma delegação de entrada fica órfã. O passo 4 do PLAN-175 (`reviewed`) declara o
+sweep de atualidade das skills «EXECUTA no PLAN-172 (dono único)»
+(`.claude/plans/PLAN-175-skills-pruning-discovery.md`, passo 4), e esse sub-item da
+W-IM (§4) não tem execução registrada. A regra permanente continua no PLAN-175. O
+novo executor é decisão à parte, e o texto do PLAN-175 precisa de emenda própria,
+fora desta decisão.
+
+### A ideia do E0b, preservada como nota
+
+A pergunta do E0b continua sendo a certa antes de gastar em qualquer pipelining:
+das 429,6 h de tempo-morto do E0, que fração é `{ci-wait, hold-24h, quota,
+lag-de-retomada, outro}`. Consertar o E0 devolve a pergunta ao estado «não
+sabemos»; não prova ganho nem o contrário. O método, a regra de precedência das
+etiquetas e a tabela de decisão estão na §1 e no pré-registro do Estágio A
+(`.claude/plans/PLAN-172/preregistration-e0b-e6-draft.md`, assinatura em
+`.claude/plans/PLAN-172/preregistration-e0b-e6-stageA.asc`, S302f). Ambos
+ficam no disco sem edição: o Estágio A está congelado pela assinatura, então um
+desenho diferente do E0b precisa de pré-registro novo.
 
 > **SEMENTE (S302, 2026-08-11).** Registrada após segunda rodada de
 > pesquisa (workflow speed-research-r2: lanes academia, indústria,
@@ -335,3 +400,8 @@ fundamentação e prioridade relativa.
   plano (PLAN-169 + PLAN-171 W5) segue aberta; `external_wait` ganha
   a condição executável de reabertura. Nenhuma wave iniciada. Fonte:
   `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.
+- 2026-10-01 (S361): plano ABANDONADO por decisão do Owner (Q13 alínea (a),
+  aceite em bloco das recomendações no chat). `status: reviewed → abandoned`,
+  `abandoned_at: 2026-10-01`. Razões e a nota sobre o E0b em
+  `## Abandonment reason`. O `external_wait` foi reescrito para não contradizer
+  o novo status.
