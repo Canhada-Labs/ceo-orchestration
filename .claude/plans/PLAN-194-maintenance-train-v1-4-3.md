@@ -9,10 +9,10 @@ reviewed_by: "Owner — aceite em bloco das recomendações do planejamento S360
 owner: CEO
 depends_on: [PLAN-193]
 level: L3
-budget_tokens: "estimado (contexto do CEO; subagentes à parte): W0 medições 150-300k (sem cota paga); W1 150-300k; W2 0,8-1,5 M com rail (debate único do plano, com a W3 e a W5c); W3 (pin automático verificado, L3) 0,8-1,5 M com debate + rail; W3b 100-200k; W4 150-300k; W5a/W5b 300-600k + cota paga da W5.0; W5c (adoção do Sonnet 5.5, L3 — decisão do Owner S359) 2-4 M com debate + rail + cota paga do re-teste na vez (precedente wave-opus55); W6 100-200k + isca paga mínima da W6.0; W7 1-2 M (kit + re-pass + cortes); W8 50-150k; livres L1-L4 300-600k; L5 (medição do ADR-191) 50-150k"
-budget_sessions: "4-8 (estimado; cada assinatura do Owner é uma parada; W2 e W7 podem precisar de sessão própria)"
+budget_tokens: "estimado (contexto do CEO; subagentes à parte): W0 medições 150-300k (sem cota paga); W1 150-300k; W2 0,9-1,7 M com rail (prazo na saída + provas; debate único do plano, com a W3 e a W5c); cura do `agent_spawn` (pacote canônico próprio, pré-condição do SIGN da W2) 150-300k + ~50k do censo AST; W3 (pin automático verificado, L3) 1,3-2,5 M em 2 a 3 sessões, em 2 pacotes de ≤ 8 paths, com debate + rail, mais o pacote de kernel de registro de ações (100-200k + 1 cerimônia de kernel) e a W0.6 (medição do verificador do npm, sem cota paga); W3b 100-200k; W4 150-300k; W5a/W5b 300-600k + cota paga da W5.0; W5c (adoção do Sonnet 5.5, L3 — decisão do Owner S359) 2-4 M com debate + rail + cota paga do re-teste na vez (precedente wave-opus55), mais 100-200k do censo contra o precedente; W6 100-200k + isca paga mínima da W6.0; W7 1-2 M (kit + re-pass + cortes); W8 50-150k; livres L1-L4 300-600k; L5 (medição do ADR-191) 50-150k"
+budget_sessions: "5-11 (estimado; eram 4-8 antes da rodada 1 do debate, e os acréscimos da rodada 1 são a W3 em 2 a 3 sessões, a cura do `agent_spawn` em 0 a 1 e o pacote de kernel de registro de ações em 1 cerimônia — soma aritmética dos acréscimos; cada assinatura do Owner é uma parada; W2 e W7 podem precisar de sessão própria)"
 context_risk: high
-external_wait: "GitHub: ubuntu-latest vira Ubuntu 26.04 de 2026-10-19 a 2026-11-19 (actions/runner-images#14748). Owner: fixar a imagem do runner Ceo em Ubuntu 24.04 nas configurações da organização (OQ-2, decidida na S361); agendar o `ceo-backup.sh` (W6.1); congelar o Claude Code durante cada onda com `DISABLE_AUTOUPDATER=1` no `env` do settings do USUÁRIO (S361, Q14); medições pagas só na vez de cada onda (W5.0, W6.0 e o re-teste da W5c — decisão S359); rodar o script de limpeza única da W2.6 com todas as sessões do Claude fechadas (decisão S359); decidir as OQs que restam (OQ-11 — o resto da ordem (a)–(f) e o empate W2 × W7b — e OQ-12); assinar W1, W2, W3, W3b, W4, W5 (inclusive a W5c), W6, W8 e os cortes rc.1/GA; hold de 24 h entre rc e GA (ADR-103). Codex: ficar no 0.156.1 sem npm update -g até a W3 landar (decisão S359) e, mesmo com a W3 landada, até o fim do corte W7 (rc.1 e GA) — salvo re-pin do manifesto dentro do kit (pergunta 7 da W3, S361). Retenção: arquivo rotacionado mais antigo da cadeia completa 90 dias por volta de 2026-11-21. OpenAI: gpt-5/o3 aposentam em 2026-12-11."
+external_wait: "GitHub: ubuntu-latest vira Ubuntu 26.04 de 2026-10-19 a 2026-11-19 (actions/runner-images#14748). Owner: fixar a imagem do runner Ceo em Ubuntu 24.04 nas configurações da organização (OQ-2, decidida na S361); agendar o `ceo-backup.sh` (W6.1); congelar o Claude Code durante cada onda com `DISABLE_AUTOUPDATER=1` no `env` do settings do USUÁRIO (S361, Q14); medições pagas só na vez de cada onda (W5.0, W6.0 e o re-teste da W5c — decisão S359); rodar o script de limpeza única da W2.6 com todas as sessões do Claude fechadas (decisão S359; recomendação da rodada 1 do debate, pendente de decisão do Owner (S361): basta fechar as sessões DESTE projeto, e rodar já); decidir as OQs que restam (OQ-11 — o resto da ordem (a)–(f) e o empate W2 × W7b — e OQ-12) e as decisões pendentes da rodada 1 do debate (seção «Decisões pendentes do Owner — S361 (rodada 1 do debate)»); carência de 48 h, no relógio do npm, entre a publicação de uma versão do Codex e a elegibilidade dela para o pin automático (W3); assinar W1, W2, W3, W3b, W4, W5 (inclusive a W5c), W6, W8 e os cortes rc.1/GA; hold de 24 h entre rc e GA (ADR-103). Codex: ficar no 0.156.1 sem npm update -g até o LAND da W3 (decisão S359); depois do LAND, só pelo procedimento da W3.6 (instalar a versão ELEGÍVEL, nunca a `latest` crua), que roda logo depois do LAND da W3 — o corte W7 independe do Codex global (rota 2 do runner do re-pass; rodada 1 do debate, pergunta 7 da W3). Retenção: arquivo rotacionado mais antigo da cadeia completa 90 dias por volta de 2026-11-21. OpenAI: gpt-5/o3 aposentam em 2026-12-11."
 eta_calendar: "W1 antes de 2026-10-19 (prazo externo); backup agendado e W6 antes de ~2026-11-21; W3b antes de 2026-12-11; GA v1.4.3 = max(assinaturas do Owner, hold de 24 h rc→GA) — sem data prometida"
 tags: [maintenance, release, ci, ubuntu-26-04, audit-spool, codex-pin, npm, claude-code-substrate, retention]
 ---
@@ -31,7 +31,9 @@ tags: [maintenance, release, ci, ubuntu-26-04, audit-spool, codex-pin, npm, clau
 > paths e são re-derivados no LAND; só **UM pacote de ADR em voo por vez**, landado junto de um
 > fechamento de sessão. Emenda DENTRO do ADR existente só quando for aditiva (precedente: ADR-149 A3);
 > mudança semântica ganha arquivo de emenda (doutrina anti-churn, README dos ADR:59-64) — o caso
-> provável da W2 (contra o ADR-055-AMEND-3) e da W3 (contra o ADR-182); o debate confirma.
+> da W2 (contra o ADR-055-AMEND-3) e da W3 (contra o ADR-182), confirmado pela rodada 1 do debate:
+> arquivo de emenda próprio nos dois (`ADR-055-AMEND-4` e `ADR-182-AMEND-1`), com rascunhos PROPOSED
+> em `.claude/plans/PLAN-194/debate/round-2/` antes do pacote de ADR.
 > **Nunca dois pacotes tocando o mesmo arquivo** (mapa de colisões em «Approach»).
 > Canônico = arquivo que só muda por cerimônia (pacote revisado + sentinel assinado por GPG do Owner).
 >
@@ -49,6 +51,14 @@ tags: [maintenance, release, ci, ubuntu-26-04, audit-spool, codex-pin, npm, clau
 > antes (decisão do Owner, «Adotar»). O resto: **OQ-11** (inclui a parte B e a W3 do PLAN-195 em
 > posição explícita). A limpeza única dos órfãos (W2.6) é operação do Owner e não ocupa vaga.
 > Medições (W0, W5.0, W6.0), debates e lands livres (L1–L5 e a W3b.0) também não ocupam vaga canônica.
+>
+> **Emenda da rodada 1 do debate (S361).** Dois pacotes canônicos novos entram na conta de vagas, ambos
+> sob a regra de ≤ 3 em voo, ≤ 400 linhas e ≤ 8 paths. (1) A **cura da corrida do `agent_spawn`**
+> (`audit_log.py` e testes; pré-condição do SIGN da W2): vaga e orçamento são decisão do Owner —
+> recomendação do CEO, **pendente de decisão do Owner (S361)**: pacote próprio, o primeiro na vaga da W2
+> ou na primeira vaga que abrir antes. (2) O **pacote de kernel de registro de ações** (`audit_emit.py`;
+> o evento durável da aceitação do pin automático): vai em série com a W1a do PLAN-195, que pode tocar o
+> mesmo arquivo (colisão do mapa), e landa ANTES da W3.6.
 
 ## Context
 
@@ -113,14 +123,16 @@ só com a ADR da parte A do PLAN-195, se ela for separada do código.
 
 Cortar a **v1.4.3** com o CI verde no Ubuntu 26.04, o estado da auditoria sem acúmulo por PID, o rail
 do Codex com pin automático verificado (procedência conferida e hash registrado sem assinatura manual a
-cada versão no hook do rail; nos cortes de release, a definir — pergunta 7 da W3), o publish do npm num
+cada versão no hook do rail; nos cortes de release o manifesto assinado segue como âncora — pergunta 7
+da W3, respondida na rodada 1 do debate), o publish do npm num
 Node suportado e a documentação alinhada ao Claude Code 2.1.286 ou posterior (o instalado em
 2026-10-01 é o 2.1.287) — cada mudança com controle vermelho→verde registrado.
 
 **Escopo do núcleo da 1.4.3 — decisão do Owner (S361, 2026-10-01, Q7: «Núcleo, ~12–13 assinaturas»).**
 Entram: **W1, W4, W3b e W6** deste plano; a parte A do PLAN-195; a W7a do PLAN-183; a **W2**; a **W5c**
-na posição da OQ-11 (depois da W2), se o debate único fechar a tempo; a **W3**, se o debate fechar, SEM
-bloquear o corte; e a **rc.1 + GA** (W7). A escolha entre 1.4.3 e 1.5.0 sai do diff do `SPEC/v1` na
+na posição da OQ-11 (depois da W2), se a vez dela chegar a tempo (o debate da W5c já fechou com PROCEED
+na rodada 1); a **W3**, se o debate fechar (a rodada 2 a julga), SEM bloquear o corte; e a **rc.1 + GA**
+(W7). A escolha entre 1.4.3 e 1.5.0 sai do diff do `SPEC/v1` na
 abertura do corte. Custo declarado da W5c: 2–4 M de tokens, ~40 espelhos e o manifesto ADR-192, sem
 redução de preço. Se a cota apertar, a **W5c é a primeira a sair** (o CEO avisa antes); deixá-la fora
 ADIA a adoção do Sonnet 5.5 que o Owner escolheu na S359, e não impede o uso do 5.5 (o
@@ -159,10 +171,27 @@ dela, quatro reordenações que a evidência justifica:
    redação) entra nele; se as três propostas não couberem em 300 linhas, a W5c sai com crítica própria
    registrada no documento de desenho da onda, como a wave-opus55 fez (PLAN-193, W3; seção «Debate»
    do `DESIGN-OPUS55-S357.md`). Debater não ocupa vaga; a execução segue a ordem do topo.
-**Cláusula de bloqueio (decisão do Owner S361, Q3 opção 1):** o plano está `reviewed` pela revisão
-no chat (PLAN-SCHEMA §4), mas **W2, W3 e W5c ficam BLOQUEADAS até o PROCEED deste debate único**, e os
-must-fix dele valem por onda — nenhum pacote canônico dessas três ondas começa antes. As demais ondas
-(W1, W3b, W4, W5a/W5b, W6, W7, W8 e os itens livres) não dependem do debate.
+   **Rodada 1 FEITA (S361; consenso em `.claude/plans/PLAN-194/debate/round-1/consensus.md`; três
+   críticos — Segurança, QA e DevOps — e cada crítica registra o id SERVIDO do modelo; crítica com VETO
+   cujo modelo servido esteja fora do piso VETO não conta).** Vereditos por onda: **W5c PROCEED**
+   (`design-coherent`; o VETO de Segurança foi RETIRADO, com condições); **W2 RUN-ANOTHER-ROUND** (VETO
+   de integridade do log de auditoria, ADR-052, LEVANTADO); **W3 RUN-ANOTHER-ROUND** (VETO de cadeia de
+   suprimento, T-8, LEVANTADO). Veredito da rodada: RUN-ANOTHER-ROUND, e a rodada 2 reúne os mesmos três
+   críticos e julga só a W2 e a W3 (a W5c só se um crítico mostrar que os ajustes dela foram aplicados de
+   forma diferente do texto do consenso). Entrada da rodada 2: o consenso, este plano com os ajustes
+   aplicados, os rascunhos PROPOSED do `ADR-055-AMEND-4` e do `ADR-182-AMEND-1` (em
+   `.claude/plans/PLAN-194/debate/round-2/`) e as decisões do Owner que já tiverem saído.
+   **Regra de parada do debate, pré-registrada:** no máximo 3 rodadas; NO-GO só por P0 ou por afirmação
+   FALSA no plano; impasse depois da 3.ª rodada vai ao Owner por múltipla escolha; nenhuma rodada do
+   Codex acima de 80% do semanal (Q2). Uma onda que volta não segura as outras.
+**Cláusula de bloqueio (decisão do Owner S361, Q3 opção 1; liberação POR ONDA desde a rodada 1):** o
+plano foi revisado pela revisão no chat (PLAN-SCHEMA §4) e hoje está `executing`; **W2, W3 e W5c ficam
+BLOQUEADAS até o PROCEED da onda no debate único**, e os must-fix dele valem por onda — nenhum pacote
+canônico de onda bloqueada começa antes. Estado depois da rodada 1: a **W5c está LIBERADA** pelo PROCEED
+(os must-fix MF-W5c-1 e MF-W5c-2 e os ajustes 35 a 40 do consenso valem para ela como pré-requisitos de
+execução; a posição dela na fila não muda — depois da W2, e a primeira a sair se a cota apertar); a **W2
+e a W3 seguem BLOQUEADAS até a rodada 2**. As demais ondas (W1, W3b, W4, W5a/W5b, W6, W7, W8 e os itens
+livres) não dependem do debate.
 
 **Correção de premissa (W4).** O pedido prevê «rc de controle antes do próximo GA». Uma rc **não
 prova o publish**: o job de publish pula tags rc por desenho (`npm-publish.yml:29-30`, `:227`), e o
@@ -194,20 +223,27 @@ vagas (este, o PLAN-195 e o PLAN-183); as ondas de outro plano são citadas pelo
 | `.claude/adr/ADR-149-model-id-allowlist.md` | W5a (texto do Ultracode, A3.1); W5c (emenda 4) | um pacote só: a correção da W5a vai dentro da emenda 4 da W5c (o Owner decidiu adotar) |
 | `.claude/hooks/_lib/codex_cli_shape.py` | W3b; W3 (o argv com modelo e esforço fixos TOCA o arquivo — S361: hoje o padrão omite `--model` e o `_VALID_MODELS` não tem `gpt-6*`) | sequenciais, e a ordem está DECIDIDA (Q8, S361): a **W3b landa ANTES da W3**, na 3.ª vaga enquanto a W3 espera o debate; se o debate puser o arquivo no pacote da W3, a W3b entra no MESMO pacote só se couber no teto (prazo duro 2026-12-11, pacote pequeno), senão landa antes |
 | `.claude/scripts/codex_invoke.py` | W3 (argv com modelo e esforço fixos); W3b (só se o conjunto derivado atingir o exemplo dele) | sequenciais, na mesma ordem da linha acima |
-| `.claude/scripts/substrate-watch.json` | W5.1 (e a W3, se o desenho gravar o `codex_cli` ali) | UM refresh só, depois do land da W3 — ou com o Codex ainda no 0.156.1, se o corte W7 vier antes ou se a W3.6 só rodar depois do corte (pergunta 7 da W3) |
-| `scripts/install.sh` e `.claude/scripts/data/installer-write-safety-baseline.txt` | W5b; W1a/W1b do PLAN-183 (re-derivação do pacote do ponteiro `PROTOCOL.md`, que toca os dois); W8 do PLAN-183 (baseline, via `upgrade.sh`) | **W5b primeiro** (pequena, 3 paths); depois a W1a/W1b do PLAN-183, re-derivadas sobre ela; por fim a W8 do PLAN-183. Toda onda que toca `scripts/**/*.sh` fora de `scripts/tests/` regenera o baseline do censo no MESMO patch (CLAUDE.md §5, PLAN-185) |
+| `.claude/scripts/substrate-watch.json` | W5.1 (e a W3, se o desenho gravar o `codex_cli` ali) | UM refresh só, depois do land da W3: se a W3.6 já rodou antes do corte, o `codex_cli` do refresh é a versão global auto-pinada, e não o 0.156.1; com o Codex ainda no 0.156.1 (corte W7 antes do land da W3), grava o 0.156.1 |
+| `scripts/install.sh` e `.claude/scripts/data/installer-write-safety-baseline.txt` | W5b; W1a/W1b do PLAN-183 (re-derivação do pacote do ponteiro `PROTOCOL.md`, que toca os dois); W8 do PLAN-183 (baseline, via `upgrade.sh`); **W5c** (pegada real: o `WOPUS55.patch` do precedente toca os dois) | **W5b primeiro** (pequena, 3 paths); depois a W1a/W1b do PLAN-183, re-derivadas sobre ela; por fim a W8 do PLAN-183; a **W5c** entra na fila depois da W5b e da W1a/W1b do PLAN-183, re-derivada sobre o HEAD do land anterior. Toda onda que toca `scripts/**/*.sh` fora de `scripts/tests/` regenera o baseline do censo no MESMO patch (CLAUDE.md §5, PLAN-185) |
 | `.github/workflows/smoke-install.yml` e `.github/workflows/ownership-nightly.yml` (os dois rodam `runs-on: ubuntu-latest`: `smoke-install.yml:196`, `ownership-nightly.yml:34`) | W1.5 (só se o censo W0.1 os marcar); W1a/W1b do PLAN-183 (estão entre os 16 paths do pacote do ponteiro) | **W1.5 primeiro** (prazo 2026-10-19); a W1 do PLAN-183 é re-derivada no HEAD depois dela |
 | `.github/workflows/validate.yml` | W1 | nenhuma onda dos outros dois planos o toca hoje (conferido 2026-09-30 nas seções S359 do PLAN-183 e no PLAN-195) |
 | `.claude/governance/gate-scripts-manifest.txt` (manifesto ADR-192) | W7 (só se o `release.sh`, membro do manifesto, mudar); W7b e W10 do PLAN-183 (sha do `validate-governance.sh`); **W5c** (S361: a pegada real inclui o `validate-governance.sh`) | **nunca em paralelo**: a mudança do `release.sh` na W7 landa ANTES da W7b/W10 ou DEPOIS do land delas; a W5c (pegada real, linha própria abaixo) segue a mesma regra |
 | `INSTALL.md` | W6 (mitigação da retenção); W8 do PLAN-183 (linha sobre o `VERSION` semeado) | **W6 primeiro** (data de risco ~2026-11-21); a W8 do PLAN-183 depois — ou a linha do `VERSION` entra no mesmo patch de documentação da W6 |
-| `.claude/scripts/ceo-boot.py` | L2 (disco + deriva + cura de classe do `scheduled_workflows_red` + cura do check de «stranded» — S361) | um pacote só |
+| `.claude/scripts/ceo-boot.py` | L2 (disco + deriva + cura de classe do `scheduled_workflows_red` + cura do check de «stranded» — S361); **W2** (check advisory de observabilidade do estado da auditoria — rodada 1) | um pacote só: o da L2; se a L2 já tiver landado quando a W2 chegar, a extensão vai num land livre seguinte — nunca dois pacotes em paralelo |
+| `.claude/hooks/_lib/audit_emit.py` (kernel) | **pacote de kernel de registro de ações da W3** (`_KNOWN_ACTIONS`; promove também o `pair_rail_codex_pin_mismatch`); W1a do PLAN-195 | hoje CERTA para a W3 (rodada 1): **em série**, um pacote de cada vez; o de registro de ações landa ANTES da W3.6 |
+| `.claude/hooks/audit_log.py` | cura do `agent_spawn` (condição 67; pré-condição do SIGN da W2); W5c (o precedente wave-opus55 o tocou) | **a cura primeiro**; a W5c re-deriva sobre o HEAD do land da cura |
+| `templates/settings/settings.user.json` | W6 (só se mudar a subtração da chave); W5c (pegada real do precedente) | W6 primeiro; a W5c depois — ou um pacote só, se ficarem prontos juntos (OQ-14) |
+| `.claude/hooks/_lib/test_isolation.py` | W5c (pegada real do precedente) | nenhuma outra onda dos três planos o cita hoje; a W5c re-deriva sobre o HEAD |
+| `docs/CROSS-LLM-THREAT-MODEL.md` | W3, pacote 1 (o T-8, `:328`, muda no MESMO pacote que muda a âncora de confiança do hook) | nenhuma outra onda dos três planos o cita hoje (conferido na S361). O consenso da rodada 1 listou também a W0 do PLAN-195, por vizinhança com `docs/threat-model.md` — outro arquivo, que o `check-threat-model-freshness.py` escreve: vale a regra do risco 9 (árvore limpa no SIGN); re-conferir na abertura do pacote |
+| `.claude/scripts/check-substrate-drift.py` | L1 (tipo do container do ledger); W3 (o detector de deriva passa a ler o registro do pin automático) | L1 primeiro; a leitura do registro entra DENTRO da L1 ou logo depois dela, antes da W3.6 |
+| `.claude/hooks/_lib/filelock.py` (kernel) | só a opção T2 das travas da W2 (re-checagem de inode) | condicional: pacote de kernel PRÓPRIO, só se a W0.5 depois da cura mostrar que a listagem das travas ainda estoura o prazo do drain forçado |
 | guarda de Bash (hook, testes) e docs de ameaça | W0–W2 do PLAN-195 | nenhuma onda deste plano toca esses arquivos; o `settings.json` do sandbox (W3 do PLAN-195) está na 1.ª linha; a W0 do PLAN-195 edita `docs/threat-model.md` em land livre — ver risco 9 (árvore limpa no SIGN) |
 | espelhos gerados (`npm/templates/`, `npm/.claude/`, `dist/`) | W1.4 (se mexer no template do adopter); W5c; ondas que tocam hook | **não são path de pacote**: saída de build ignorada pelo git (`.gitignore:47` `npm/.claude/`, `:50` `npm/templates/`, `:198` `dist/`; `git ls-files npm/templates` = 0, medido 2026-09-30). Não entram em commit nem no Scope do sentinel; `scripts/npm-rebuild.sh` e `scripts/build-plugin.py --check` ficam como passos da bateria, sobre saídas locais |
-| **leque de ADR** (acrescentado na S361: o achado da revisão do planejamento S360 sobre a colisão dos pacotes que criam arquivo de ADR foi confirmado e rebaixado para P2): `.claude/adr/README.md` (canônico, oráculo 1; índice regenerado por `generate-adr-index.py --write` e conferido por `--check`, `validate.yml:134-137`); os 8 documentos que citam a contagem de ADR (`README.md`, `README.pt-BR.md`, `npm/README.md`, `docs/ARCHITECTURE.md`, `docs/CTO-GUIDE.md`, `docs/FAQ.md`, `docs/GUIA-COMPLETO.md`, `docs/README.md`; `test_verify_counts.py::_EXPECTED_SITES`, `verify-counts.sh` em `validate.yml:163-166`); o preâmbulo do `CHANGELOG.md` (regra «CHANGELOG HEADER RULE» do mesmo script, `verify-counts.sh:841`, contagem exata); e o `CLAUDE.md:54` (conferido por `check-claude-md-claims.py`, `validate.yml:82-85`) | todo pacote que cria arquivo de ADR ou de emenda em arquivo próprio: a ADR-201 (parte A do PLAN-195), a W7b do PLAN-183 e — provavelmente — a W2 (`ADR-055-AMEND-4`) e a W3 (`ADR-182-AMEND-1`) daqui | **LAND em série**: UM pacote de ADR por vez, landado junto de um fechamento de sessão. O índice e os documentos de contagem ficam FORA da conta de ≤ 8 paths e são re-derivados no LAND (4.ª exceção da «Regra de WIP»; decisão Q5 do Owner, S361) |
-| a contagem de ADR (**198** em 2026-10-01: `ls .claude/adr/ADR-*.md` contado por `wc -l`) INCLUI as **22** emendas em arquivo próprio (`ADR-*AMEND*.md`, medido na S361) | W2 e W3, se a emenda for em arquivo próprio em vez de dentro do ADR existente (só emenda aditiva fica dentro — Q5) | entram no leque da linha acima; 198 → 199 não muda o tamanho do `CLAUDE.md`, mas a folga útil é de 87 bytes (máximo 39.999, porque o gate reprova a partir de 40.000 — risco 9) |
+| **leque de ADR** (acrescentado na S361: o achado da revisão do planejamento S360 sobre a colisão dos pacotes que criam arquivo de ADR foi confirmado e rebaixado para P2): `.claude/adr/README.md` (canônico, oráculo 1; índice regenerado por `generate-adr-index.py --write` e conferido por `--check`, `validate.yml:134-137`); os 8 documentos que citam a contagem de ADR (`README.md`, `README.pt-BR.md`, `npm/README.md`, `docs/ARCHITECTURE.md`, `docs/CTO-GUIDE.md`, `docs/FAQ.md`, `docs/GUIA-COMPLETO.md`, `docs/README.md`; `test_verify_counts.py::_EXPECTED_SITES`, `verify-counts.sh` em `validate.yml:163-166`); o preâmbulo do `CHANGELOG.md` (regra «CHANGELOG HEADER RULE» do mesmo script, `verify-counts.sh:841`, contagem exata); e o `CLAUDE.md:54` (conferido por `check-claude-md-claims.py`, `validate.yml:82-85`) | todo pacote que cria arquivo de ADR ou de emenda em arquivo próprio: a ADR-201 (parte A do PLAN-195), a W7b do PLAN-183 e — confirmado pela rodada 1 do debate — a W2 (`ADR-055-AMEND-4`) e a W3 (`ADR-182-AMEND-1`) daqui | **LAND em série**: UM pacote de ADR por vez, landado junto de um fechamento de sessão. O índice e os documentos de contagem ficam FORA da conta de ≤ 8 paths e são re-derivados no LAND (4.ª exceção da «Regra de WIP»; decisão Q5 do Owner, S361) |
+| a contagem de ADR (**198** em 2026-10-01: `ls .claude/adr/ADR-*.md` contado por `wc -l`) INCLUI as **22** emendas em arquivo próprio (`ADR-*AMEND*.md`, medido na S361) | W2 e W3 (emenda em arquivo próprio nos dois, confirmado pela rodada 1; só emenda aditiva fica dentro do ADR existente — Q5) | entram no leque da linha acima; 198 → 199 não muda o tamanho do `CLAUDE.md`, mas a folga útil é de 87 bytes (máximo 39.999, porque o gate reprova a partir de 40.000 — risco 9) |
 | `CHANGELOG.md` (colisão CONDICIONAL) | pacote que cria arquivo de ADR (o preâmbulo carrega a contagem) × **W7** (o `CHANGELOG.md` é path do corte) | **não podem estar em voo juntos**: o pacote de ADR landa ANTES de a W7 tocar o `CHANGELOG.md`, ou DEPOIS do corte |
-| pegada real da **W5c** além dos paths candidatos (S361, a partir do precedente da wave-opus55; o censo da abertura da W5c fecha a lista): `.claude/scripts/validate-governance.sh` (oráculo 0, MEMBRO do manifesto ADR-192), `.claude/governance/gate-scripts-manifest.txt` (1), `scripts/upgrade.sh` (1), `scripts/local/smoke-install-parity.sh` (0) e `.claude/scripts/tier_policy_cli` (0) | W5c; o manifesto e o `upgrade.sh` também são tocados por outras ondas (linhas acima: manifesto — W7, W7b, W10; `upgrade.sh` — W5b só mede, W8 do PLAN-183 via baseline) | uma de cada vez; a W5c re-deriva sobre o HEAD do land anterior, e o manifesto segue a regra «nunca em paralelo» da linha própria |
-| colisões CONDICIONAIS (S361; só valem se o outro pacote tocar o arquivo): `.claude/hooks/_lib/audit_emit.py` — W2 (só se o debate exigir) × W1a do PLAN-195 (só se a ADR-201 estender `_LEARNING_RAIL_ENUM`/`_LEARNING_SWITCH_ENUM`); `.github/workflows/npm-publish.yml` — W1.5 (só se o censo W0.1 o marcar) × W4; `.github/workflows/formal-verify.yml` — W1.5 (idem; está na lista `WORKFLOWS` do gate semanal, `release.yml:550`) × W8; `.claude/data/model-currency-expected-reds.txt` — W3b × W5c; `codex_cli_shape.py` — W3b × W3 (hoje CERTA, linha própria acima) | os pares citados | em cada par, um pacote por vez; o segundo re-deriva sobre o HEAD do land do primeiro. Ordem padrão: W1.5 antes de W4 e de W8 (prazo 2026-10-19); W3b antes de W5c e da W3 |
+| pegada real da **W5c** além dos paths candidatos (S361, a partir do precedente da wave-opus55; o censo da abertura da W5c fecha a lista): `.claude/scripts/validate-governance.sh` (oráculo 0, MEMBRO do manifesto ADR-192), `.claude/governance/gate-scripts-manifest.txt` (1), `scripts/upgrade.sh` (1), `scripts/local/smoke-install-parity.sh` (0) e `.claude/scripts/tier_policy_cli` (0); mais, nas linhas próprias acima, `scripts/install.sh` com o baseline do censo do instalador, `.claude/hooks/audit_log.py`, `.claude/hooks/_lib/test_isolation.py` e `templates/settings/settings.user.json`; o censo da abertura roda contra o `WOPUS55.patch` do precedente (76 paths, conferidos na S361) | W5c; o manifesto e o `upgrade.sh` também são tocados por outras ondas (linhas acima: manifesto — W7, W7b, W10; `upgrade.sh` — W5b só mede, W8 do PLAN-183 via baseline) | uma de cada vez; a W5c re-deriva sobre o HEAD do land anterior, e o manifesto segue a regra «nunca em paralelo» da linha própria |
+| colisões CONDICIONAIS (S361; só valem se o outro pacote tocar o arquivo): `.claude/hooks/_lib/audit_emit.py` — a W2 NÃO o toca mais (rodada 1: sem evento por arquivo; a colisão agora é a CERTA, em linha própria acima: pacote de kernel de registro de ações da W3 × W1a do PLAN-195, que só toca o arquivo se a ADR-201 estender `_LEARNING_RAIL_ENUM`/`_LEARNING_SWITCH_ENUM`); `.github/workflows/npm-publish.yml` — W1.5 (só se o censo W0.1 o marcar) × W4; `.github/workflows/formal-verify.yml` — W1.5 (idem; está na lista `WORKFLOWS` do gate semanal, `release.yml:550`) × W8; `.claude/data/model-currency-expected-reds.txt` — W3b × W5c; `codex_cli_shape.py` — W3b × W3 (hoje CERTA, linha própria acima) | os pares citados | em cada par, um pacote por vez; o segundo re-deriva sobre o HEAD do land do primeiro. Ordem padrão: W1.5 antes de W4 e de W8 (prazo 2026-10-19); W3b antes de W5c e da W3 |
 
 ## Paths × oráculo
 
@@ -231,40 +267,46 @@ S326); a coluna «manifesto» foi conferida por `grep -F` no manifesto.
 | `templates/.github/workflows/benchmarks.yml.template`, `npm/templates/.github/workflows/benchmarks.yml.template` | 0 | não | backlog |
 | `.github/workflows/shadow-ci.yml` | 1 | — | backlog |
 | `.claude/hooks/_lib/spool_writer.py` | 1 | — | W2 |
-| `.claude/hooks/_lib/audit_emit.py` | 1 | — | W2 (só se o debate exigir) |
-| `.claude/hooks/SessionStart.py` | 1 | — | W2 (só se o GC entrar no início de sessão) |
-| `.claude/adr/ADR-055-AMEND-4-spool-state-gc.md` (novo) | 1 | — | W2 |
+| `.claude/hooks/_lib/audit_emit.py` | 1 | — | pacote de kernel de registro de ações da W3 (em série com a W1a do PLAN-195); a W2 NÃO o toca (rodada 1) |
+| `.claude/hooks/SessionStart.py` | 1 | — | fora da W2 (rodada 1: não há drain nem reconciliação nele; retirado dos paths) |
+| `.claude/adr/ADR-055-AMEND-4-spool-state-gc.md` (novo) | 1 | — | W2 (rascunho PROPOSED em `.claude/plans/PLAN-194/debate/round-2/` primeiro; o arquivo canônico nasce no pacote de ADR — Q5) |
 | `.claude/adr/ADR-055-AMEND-3-opportunistic-drain-nonblocking.md` | 1 | — | referência |
 | `.claude/hooks/tests/test_spool_state_gc.py` (novo) | 0 | não | W2 |
 | `.claude/hooks/tests/test_spool_drain_contended_skip.py` | 0 | não | W2 |
 | `.claude/hooks/tests/test_spool_writer_cache.py` | 0 | não | W2 (regressão) |
 | `.claude/hooks/tests/conftest.py` | 1 | — | fora de L4 |
 | `.claude/hooks/_lib/audit_hmac.py` | 1 | — | W2 (só executa `verify_chain()`) |
+| `.claude/hooks/audit_log.py` | 1 | não | cura do `agent_spawn` (W2.0; pré-condição do SIGN da W2); W5c (só re-deriva sobre o HEAD — mapa de colisões) |
+| `.claude/hooks/tests/test_two_writer_chain.py` | 0 | não | W2.0 (docstring corrigida + teste de barreira multiprocesso, vermelho no HEAD) |
+| `.claude/hooks/_lib/filelock.py` | 1 | não | W2, SÓ a opção T2 das travas (kernel; pacote próprio e condicional) |
 | `.claude/hooks/check_plan_edit.py` | 1 | — | backlog (regex de follow-up) |
-| `.claude/plans/PLAN-194/debate/round-1` (novo) | 0 | não | W2 + W3 (debate único) |
+| `.claude/plans/PLAN-194/debate/round-1` (novo) | 0 | não | W2 + W3 + W5c (debate único; rodada 1 feita) |
+| `.claude/plans/PLAN-194/debate/round-2` (novo) | 0 | não | W2 + W3 (rodada 2; rascunhos PROPOSED do `ADR-055-AMEND-4` e do `ADR-182-AMEND-1`) |
 | `.claude/plans/PLAN-193/repass-ga/verdict-ga-3.txt` | 0 | não | L1 (evidência, só leitura) |
-| `.claude/adr/ADR-182-AMEND-1-codex-auto-pin-provenance.md` (novo; nome proposto) | 1 | — | W3 |
-| `.claude/hooks/check_pair_rail.py` | 1 | — | W3 (cura: pin automático) |
+| `.claude/adr/ADR-182-AMEND-1-codex-auto-pin-provenance.md` (novo; nome proposto) | 1 | — | W3, pacote 1 (rascunho PROPOSED em `.claude/plans/PLAN-194/debate/round-2/` primeiro; o arquivo canônico nasce no pacote de ADR — Q5) |
+| `.claude/hooks/check_pair_rail.py` | 1 | — | W3, pacote 1 (cura: pin automático; o hook só faz hash e consulta local, nunca usa rede) |
+| `.claude/scripts/codex-auto-pin-verify.py` (novo; nome proposto) | 0 | não | W3, pacote 1 (verificador em processo próprio, fora de qualquer guard; livre — rodar o oráculo na abertura do pacote) |
+| `docs/CROSS-LLM-THREAT-MODEL.md` | 0 | não | W3, pacote 1 (o T-8, `:328`, muda no MESMO pacote — a âncora de confiança do hook muda) |
 | `.claude/hooks/tests/test_check_pair_rail_auto_pin.py` (novo) | 0 | não | W3 |
-| `.claude/governance/codex-cli-pin.txt` | 1 | — | W3 (só se a faixa mudar — pergunta 3 do debate); plano B |
+| `.claude/governance/codex-cli-pin.txt` | 1 | — | FORA da W3 (rodada 1: a faixa fica intocada); só o plano B o toca |
 | `.claude/governance/codex-cli-pin-manifest.json` | 1 | — | plano B da W3 (no pin automático não recebe o sha — pergunta 1 do debate) |
 | `.claude/governance/codex-cli-binary-sha256.txt` | 1 | — | plano B da W3 (conferir se o molde o toca) |
 | `.claude/plans/PLAN-194/codex-pin-0159-3/` (OWNER-PIN-SIGN.sh, rehearse-pin-0159-3.sh, pin-0159-3-approved.md, codex-cli-pin.txt.new, codex-cli-pin-manifest.json.new) | 0 | não | plano B da W3 (gerado; nomes de exemplo para a 0.159.3 — a etiqueta segue a versão do dia, `0160` para a 0.160.0; era `codex-pin-0159-2` na versão anterior do plano) |
 | `.claude/plans/PLAN-193/codex-pin-0156/OWNER-PIN-SIGN.sh` | 0 | não | plano B da W3 (molde, só leitura) |
 | `.claude/scripts/re-pin-codex.py` | 0 | não | plano B da W3 (só executa) |
-| `.github/scripts/validate-pair-rail-verdict.py` | 0 | **sim** | W3 (não editar; lê a faixa do pin — controle W3.4 d) |
+| `.github/scripts/validate-pair-rail-verdict.py` | 0 | **sim** | W3 (não editar; lê a faixa do pin — controle W3.4 d; o limite do `parse_semver`, `:355-359`, é declarado no AMEND-1) |
 | `.github/workflows/release.yml` | 1 | — | referência (`:550-557`, `:760`) |
 | `.claude/adr/ADR-182-codex-payload-pin-enforcement.md` | 1 | — | referência (emendado pela W3) |
-| `.claude/scripts/codex_invoke.py` | 0 | não | W3 (argv com modelo e esforço fixos) / W3b (conferir) |
-| `.claude/workflows/council-audit.js` | 1 | — | W3 (pergunta 6 do debate; se ficar fora, backlog) |
+| `.claude/scripts/codex_invoke.py` | 0 | não | W3, pacote 2 (argv com modelo e esforço fixos, pelo núcleo de verificação) / W3b (conferir) |
+| `.claude/workflows/council-audit.js` | 1 | — | FORA da W3 (rodada 1: declarado no material assinado, não convertido); backlog |
 | `.claude/scripts/substrate-watch.json` | 0 | não | W5.1 |
 | `.claude/hooks/_lib/codex_cli_shape.py` | 1 | — | W3b (landa ANTES da W3 — Q8, S361); W3 (argv com modelo e esforço fixos) |
-| `.claude/hooks/codex_review_user_code.py` | 1 | — | W3 (pergunta 6 do debate: chama `codex exec` em `:131` sem conferir o pin; se ficar fora, backlog) |
-| `.claude/scripts/run-promotion-gate.py` | 0 | não | W3 (pergunta 6: só `codex --version`, `:198`/`:212`; se ficar fora, backlog) |
+| `.claude/hooks/codex_review_user_code.py` | 1 | — | FORA da W3 (rodada 1: chama `codex exec` em `:131` sem conferir o pin; hook `Stop` AUTOMÁTICO no opt-in — declarado no material assinado, com o estado do opt-in); backlog |
+| `.claude/scripts/run-promotion-gate.py` | 0 | não | W3, pacote 2 (pelo núcleo de verificação; só `codex --version`, `:198`/`:212`) |
 | `.claude/hooks/tests/test_codex_cli_shape.py` | 0 | não | W3b |
 | `.claude/scripts/optimizer/codex_phase_gate.py` | 0 | não | W3b (se o conjunto derivado atingir) |
 | `.claude/scripts/check-model-deprecations.py` | 0 | não | W3b.0 (cura da precisão do matcher — revisão Codex S359) |
-| `.claude/scripts/model-deprecations.json` | 0 | não | W3b.3 (linha do `gpt-5.5`, SE a aposentadoria de 2026-10-14 se confirmar em fonte primária — land livre); fora isso, backlog (refresh do ledger) |
+| `.claude/scripts/model-deprecations.json` | 0 | não | W3b.3 (linha do `gpt-5.5`, SE a aposentadoria de 2026-10-14 se confirmar em fonte primária — land livre); W3 (o id fixado no argv do rail entra aqui — land livre ligado ao pacote 2); fora isso, backlog (refresh do ledger) |
 | `.claude/scripts/tests/test_check_model_deprecations.py` | 0 | não | W3b.0 (controles negativos/positivos do matcher) |
 | `.claude/scripts/check-model-currency.py` | 0 | não | W3b/W5c (só executa) |
 | `.claude/data/model-currency-expected-reds.txt` | 0 | não | W3b/W5c |
@@ -280,7 +322,7 @@ S326); a coluna «manifesto» foi conferida por `grep -F` no manifesto.
 | `.claude/scripts/cost-table.yaml` | 0 | não | W5c (linha `claude-sonnet-5-5`) |
 | `.claude/scripts/budget-summary.py`, `.claude/scripts/ceo-cost-transcripts.py`, `.claude/scripts/success-receipt.py` | 0 | não | W5c (preço e multiplicador de cache — lista de tabelas da wave-opus55) |
 | `.claude/scripts/generate-available-models.py` | 0 | não | W5c (só executa) |
-| `.claude/skills/core/llm-routing-and-finops/SKILL.md` | 1 | — | W5c (alias `sonnet` × id exato — decisão do debate) |
+| `.claude/skills/core/llm-routing-and-finops/SKILL.md` | 1 | — | W5c (alias `sonnet` mantido nos exemplos; a tabela de roteamento, `:109-123`, que cita `claude-sonnet-4-6`, é corrigida — critério pré-registrado, W5c.2 (b)) |
 | `.claude/hooks/_lib/adapters/live/claude.py` | 1 | — | W5c (HTTP 400 com `thinking` desligado e `tool_choice` forçado — lane `ANT-02`) |
 | `.claude/hooks/_lib/model_routing.py` | 1 | — | W5.1 (vigia do Haiku 4.5, só leitura: `:62-71` o usa em `file_read`, `line_audit` e `digest`); edição só se a aposentadoria ganhar data |
 | `.claude/workflows/eval-baseline-n20.js` | 1 | — | W5.0 (sonda (d): só leitura de `:3` e `:547` — veredito W0a do PLAN-134 de que o `opts.model` do `agent()` é INERTE) |
@@ -290,16 +332,18 @@ S326); a coluna «manifesto» foi conferida por `grep -F` no manifesto.
 | `scripts/upgrade.sh` | 1 | — | W5b (só medir `:219`, `:3881-3884`); W5c (pegada real, mapa de colisões; precedente wave-opus55) |
 | `scripts/tests/test-install-deny-baseline.sh` | 0 | não | W5b |
 | `.claude/scripts/data/installer-write-safety-baseline.txt` | 0 | não | W5b (regenerado no mesmo patch) |
-| `.claude/scripts/check-installer-write-safety.py` | 0 | não | W5b (só executa) |
+| `.claude/scripts/check-installer-write-safety.py` | 0 | não | W5b (só executa); W5c (bateria; só executa) |
+| `.claude/scripts/derive-settings-baselines.py` | 0 | não | W5c (bateria: `--check` num clone com TODAS as tags GA; só executa) |
+| `.claude/hooks/_lib/test_isolation.py` | 1 | não | W5c (pegada real do precedente wave-opus55; censo da abertura) |
 | `.claude/settings.json` | 1 | — | W6 primeiro; depois W5c (`availableModels` gerado) e a W3 do PLAN-195, se o Owner ligar o sandbox (OQ-14) |
 | `templates/settings/settings.base.json` | 1 | — | W6 (só se mudar o padrão dos adopters); W5c |
-| `templates/settings/settings.user.json` | 1 | — | W6 (subtrai a chave; sem mudança esperada) |
+| `templates/settings/settings.user.json` | 1 | — | W6 (subtrai a chave; sem mudança esperada); W5c (pegada real do precedente) |
 | `.claude/scripts/ceo-backup.sh` | 0 | não | W6 (só executa) |
 | `.claude/scripts/backup-audit.py` | 0 | não | referência |
 | `.github/workflows/formal-verify.yml` | 1 | — | W8 |
-| `.claude/scripts/check-substrate-drift.py` | 0 | não | L1 |
+| `.claude/scripts/check-substrate-drift.py` | 0 | não | L1; W3 (o detector de deriva lê o registro do pin automático — dentro da L1 ou logo depois, antes da W3.6) |
 | `.claude/scripts/tests/test_check_substrate_drift.py` | 0 | não | L1 |
-| `.claude/scripts/ceo-boot.py` | 0 | não | L2 |
+| `.claude/scripts/ceo-boot.py` | 0 | não | L2; W2 (check advisory de observabilidade, no pacote da L2 — mapa de colisões) |
 | `.claude/scripts/tests/test_ceo_boot.py`, `.claude/scripts/tests/test_ceo_boot_enhanced.py` | 0 | não | L2 / L4 |
 | `.claude/scripts/tests/test_ceo_boot_sched_red.py` | 0 | não | L2 (caso novo de página velha, com controle vermelho→verde) |
 | `npm/.claude/scripts/ceo-boot.py` (espelho local) | 0 | não | L2: NÃO é path do pacote — saída de build ignorada pelo git (`.gitignore:47`), regenerada por `scripts/npm-rebuild.sh` como passo da bateria |
@@ -352,10 +396,28 @@ a W0 agora não gasta cota paga.
   (`actions/python-versions`, `versions-manifest.json`) e registrar com data: 3.9 sem build para
   26.04; 3.10+ com build. **MEDIDA em 2026-10-01 (S361)**, no `versions-manifest.json` do ramo `main` de
   `actions/python-versions`: o 3.9 NÃO tem nenhum build linux para 26.04 (só até 24.04); o 3.10 e o
-  3.14 têm. Falta gravar no LEDGER, que só nasce no 1.º commit de trabalho. — Check: none (medição)
-- [ ] **W0.5 (controle vermelho da W2)** — em árvore descartável: latência de saída de um hook e
-  contagem de `drain canonical lock timeout` com state dir de ~220 mil entradas contra vazio, com 9 ou
-  mais saídas concorrentes (limiar estimado na lane `H-02`). — Check: none (medição)
+  3.14 têm. **Gravada no `PLAN-194/LEDGER.md` em 2026-10-01 (S361).** — Check: none (medição)
+- [ ] **W0.5 (controle vermelho da W2; PRÉ-REGISTRADA — rodada 1 do debate)** — em árvore descartável,
+  com o pré-registro gravado no LEDGER ANTES de rodar: as 8 células (2^3) {saída sem spool próprio, com
+  spool próprio} × {dir vazio, ~220 mil entradas} × {1 saída, ≥ 9 concorrentes} (limiar de 9 estimado na
+  lane `H-02`), mais uma célula «estoque só de travas (~150 mil)». Métricas: p50 e p95 da latência de
+  saída, a ENTREGA DE DECISÃO de um guard que decide BLOCK (com várias saídas concorrentes e o diretório
+  cheio) e as linhas `drain canonical lock timeout`. Substrato congelado e registrado em toda entrada
+  (versão do CC, o `python3` que o `_python-hook.sh` usa, sha do instrumento). Critério de vermelho
+  escrito antes: ≥ 1 timeout em {~220 mil, ≥ 9} e 0 em {vazio, ≥ 9}, e decisão perdida
+  no braço cheio. Vermelho NÃO reproduzido ⇒ o LEDGER registra «controle vermelho não
+  reproduzido» e a prova da W2 passa a ser só estrutural, declarada como tal. Depois da cura, a mesma
+  matriz com tolerância de RAZÃO pré-registrada (p95 cheio/vazio ≤ 1,2 com N ≥ 30) e o
+  `SPOOL_LOCK_TIMEOUT` (2,5 s, `spool_writer.py:66`) re-medido — medição fora do CI, nunca asserção de
+  tempo absoluto em teste. — Check: none (medição; comandos, datas e resultados no LEDGER)
+- [ ] **W0.6 (para a W3; NOVA na rodada 1 do debate; sem cota paga)** — o verificador de assinaturas do
+  PRÓPRIO npm (sigstore) num projeto-rascunho: `npm i --prefix <dir descartável>`, NUNCA `-g` (o
+  `npm audit signatures` não aceita pacote global — `EAUDITGLOBAL`, medido na S361), com registro fixo,
+  sem `.npmrc` do usuário e com as variáveis `npm_config_*` limpas (elas podem redirecionar a raiz de
+  confiança). Vermelho = tarball adulterado reprovado; verde = pacote de plataforma íntegro aprovado.
+  Diretório próprio, piso de `df`, ~331 MB e limpeza confinada (regras da W0). Se o mecanismo servir, o
+  AMEND-1 o usa; senão, a «confiança no registro» vai como decisão escrita do Owner (decisão pendente 3).
+  — Check: none (medição; resultado no LEDGER)
 
 ### W1 — CI pronto para Ubuntu 26.04 (PRAZO 2026-10-19)
 Check: gh run list --workflow validate.yml --commit "$(git rev-parse HEAD)" --json conclusion
@@ -396,59 +458,204 @@ na S361; a lista também tem a 4951 «Ubuntu 26.04») — e a W1 segue como plan
 ### W2 — Estado da auditoria: arquivos por PID e drain forçado (L3, debate)
 Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py .claude/hooks/tests/test_spool_drain_contended_skip.py .claude/hooks/tests/test_spool_writer_cache.py -q
 
-**Objetivo:** a saída de um hook sem spool próprio não toma o lock canônico nem varre o diretório; os
-arquivos vazios por PID deixam de se acumular; os órfãos atuais somem (219.301 arquivos de 0 byte em 2026-09-30; 222.872 na re-medição da S361). **Por que importa:**
-com o dir cheio, cada drain forçado lista e ordena ~219 mil nomes sob o lock canônico (~0,24-0,30 s
-por drain, lane `H-02`); com saídas concorrentes o lock de 2,5 s estoura e guards PreToolUse passaram
-do timeout de 5 s — e um guard que estoura o timeout deixa a ação passar sem decisão (lane
-`CC285-05`). **Paths:** `.claude/hooks/_lib/spool_writer.py` (1); `.claude/adr/ADR-055-AMEND-4-spool-state-gc.md`
-(1, novo, PROPOSED); `.claude/hooks/SessionStart.py` (1) só se o GC entrar na reconciliação de início
-de sessão; `.claude/hooks/tests/test_spool_state_gc.py` (0, novo); `test_spool_drain_contended_skip.py`
-(0). `audit_emit.py` (1) fica fora, salvo se o debate mostrar necessidade. **Estimativa:** 200-300
-linhas, 3-5 paths (estimado). **Debate:** SIM — núcleo da cadeia de auditoria, e a cura emenda a
-premissa do ADR-055-AMEND-3 de que o timeout do drain forçado é «genuinamente anômalo». `needs_debate=true`
-(o mesmo que «Debate: SIM» acima).
-**BLOQUEADA — decisão do Owner S361 (2026-10-01, Q3):** nenhum pacote da W2 começa antes do PROCEED do
-debate único (W2.1), e os must-fix dele valem para esta onda. **Emenda de ADR (Q5, S361):** a cura
+**Objetivo (rodada 1 do debate):** sem acúmulo de journals e sem decisão perdida; travas limitadas e
+limpas pela W2.6 (salvo a opção T2 das travas, abaixo). Em concreto: a saída de um hook sem spool
+próprio não toma o lock canônico nem varre o diretório; o journal vazio é removido na origem; os
+órfãos atuais somem (219.301 arquivos de 0 byte em 2026-09-30; 222.872 na re-medição da S361).
+**Por que importa:** o risco de segurança é a DECISÃO DE GUARD PERDIDA por latência de saída; a
+contagem de arquivos é higiene. Com o dir cheio, cada drain forçado lista e ordena ~219 mil nomes sob
+o lock canônico (~0,24-0,30 s por drain, lane `H-02`); com saídas concorrentes o lock de 2,5 s estoura
+e guards PreToolUse passaram do timeout de 5 s — e um guard que estoura o timeout deixa a ação passar
+sem decisão (lane `CC285-05`). **Paths:** `.claude/hooks/_lib/spool_writer.py` (1);
+`.claude/adr/ADR-055-AMEND-4-spool-state-gc.md` (1, novo, PROPOSED — rascunho em
+`.claude/plans/PLAN-194/debate/round-2/` como entrada da rodada 2; o arquivo canônico nasce só no pacote
+de ADR, Q5); `.claude/hooks/tests/test_spool_state_gc.py` (0, novo); `test_spool_drain_contended_skip.py`
+(0, o teste 4 fica intacto) e `test_spool_writer_cache.py` (0, regressão). **Pré-condição do SIGN da
+W2:** a cura da corrida do `agent_spawn` (W2.0) — `.claude/hooks/audit_log.py` (1) e
+`.claude/hooks/tests/test_two_writer_chain.py` (0) —, em pacote canônico próprio (recomendado) ou
+dentro da W2 com +2 paths: vaga e orçamento são decisão pendente 1. **Observabilidade (W2.4-bis):**
+`.claude/scripts/ceo-boot.py` (0), no pacote da L2. **Condicional (opção T2 das travas):**
+`.claude/hooks/_lib/filelock.py` (1, kernel), em pacote próprio. **Fora da W2:** `SessionStart.py` (não
+há drain nem reconciliação nele — `grep -c 'drain\|spool' .claude/hooks/SessionStart.py` = 0; a
+reconciliação de início de sessão, `reconcile_journal_at_session_start`, `spool_writer.py:2467`, não tem
+chamador em produção) e `audit_emit.py` (sem evento por arquivo). **Estimativa:** 0,9-1,7 M tokens com
+rail (prazo na saída + provas); 200-300 linhas e 3-5 paths estimados antes da rodada 1 — o CEO
+re-estima ao abrir o pacote, com o teto de 400 linhas e ≤ 8 paths, e divide em dois pacotes se passar.
+**Debate:** SIM — núcleo da cadeia de auditoria, e a cura emenda a premissa do ADR-055-AMEND-3 de que o
+timeout do drain forçado é «genuinamente anômalo». `needs_debate=true` (o mesmo que «Debate: SIM»
+acima).
+**BLOQUEADA — decisão do Owner S361 (2026-10-01, Q3) e rodada 1 do debate:** nenhum pacote da W2
+começa antes do PROCEED da W2 no debate único. A rodada 1 deu **RUN-ANOTHER-ROUND** para a W2 (o VETO
+de integridade do log de auditoria, ADR-052, segue LEVANTADO): o desenho mudou de forma — a antiga
+W2.3 (relocação) saiu, entrou o prazo na saída (W2.2-bis) e vale a regra de travas abaixo —, o
+`ADR-055-AMEND-4` ainda não existe nem em rascunho, e a cura do `agent_spawn` espera a vaga. Retirada do
+VETO na rodada 2: MF-W2-1 a MF-W2-6 (definidos na crítica de segurança da rodada 1,
+`.claude/plans/PLAN-194/debate/round-1/security-engineer.md`) no AMEND-4 e no plano, com a cura do
+`agent_spawn` landada antes do SIGN ou dentro do pacote. **Emenda de ADR (Q5, S361):** a cura
 contradiz uma premissa do ADR-055-AMEND-3 — mudança SEMÂNTICA ⇒ arquivo de emenda próprio
-(`ADR-055-AMEND-4`), que entra no leque de ADR do mapa de colisões (LAND em série; 4.ª exceção ao teto
-de paths). O debate confirma se a emenda cabe dentro do ADR existente (só se for aditiva).
+(`ADR-055-AMEND-4`), confirmado pela rodada 1 (a premissa «anômalo» muda); ele entra no leque de ADR do
+mapa de colisões (LAND em série; 4.ª exceção ao teto de paths).
 
-- [ ] W2.1 `/debate start PLAN-194` com as propostas da W2, da W3 e da W5c no mesmo `proposal.md`
-  (debate único — Approach, item 4; críticos sugeridos: Segurança, SRE, QA); ADR-055-AMEND-4 em
-  PROPOSED com os invariantes abaixo. — Check: ls .claude/plans/PLAN-194/debate/round-1
-- [ ] W2.2 caminho rápido no `_atexit_drain` (`spool_writer.py:2573`): sem spool próprio não vazio e
-  sem `.draining`, não tomar o lock canônico. — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q
-- [ ] W2.3 journals e locks por PID fora do diretório que o drain varre (ex.: subdiretório próprio), para
-  a listagem ver só spools. — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q
-- [ ] W2.4 GC de arquivos de 0 bytes de PIDs mortos, FORA do lock canônico, com predicado conservador:
-  0 bytes + nome num dos 3 padrões + trava obtida sem bloquear; journal com conteúdo NUNCA é apagado;
-  PID reusado não basta para apagar. — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q
-- [ ] W2.5 invariantes provados em teste de estresse: nenhum evento perdido (contagem igual antes e
-  depois; `verify_chain()` íntegro, `.claude/hooks/_lib/audit_hmac.py`). — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q -k invariant
+**Regra de travas (rodada 1; o portador do VETO prevalece no domínio dele).** Na W2, NENHUM hook faz
+`unlink` de caminho `*.lock`: o `FileLock.acquire` (`.claude/hooks/_lib/filelock.py:144-149`) abre com
+`O_CREAT` e faz `flock` sem comparar o inode, então apagar o caminho de uma trava quebra a exclusão
+mútua (e a premissa «enquanto o PID vive, nenhum drainer toca os arquivos dele» é FALSA: a fase 1 do
+drain recupera `.draining.*` «owned by a dead PID (or even a live one)», `spool_writer.py:1277-1316`).
+(i) **Journals:** cura na origem — o journal vazio é removido sob a PRÓPRIA trava do journal, pela
+compactação (que hoje o reescreve com 0 byte e nunca o remove, `spool_writer.py:2276-2297`) ou pelo dono
+na saída, quando o spool está todo drenado, o journal tem 0 byte e o buffer está vazio; é seguro para o
+ARQUIVO do journal porque o flush reabre pelo caminho, sob a mesma trava, com `O_CREAT`
+(`spool_writer.py:956-962`). (ii) **Travas:** a opção **T1** é o padrão — as travas ficam, o estoque é
+limpo pela W2.6 (com todas as sessões do projeto fechadas não existe adquirente vivo), a contagem é
+reportada à parte e fica limitada pelo espaço de PIDs. A proposta de o dono apagar as próprias travas na
+saída vai à rodada 2 só com quatro coisas: o censo mecânico dos 4 abridores dos caminhos de trava por
+PID (`spool_writer.py:958`, `:1002`, `:1374`, `:2276`) como guarda; o sinalizador em processo do próprio
+`.draining`; o controle de intercalação determinística (vermelho com remoção ingênua, verde com a cura);
+e novo julgamento do portador do VETO. A opção **T2** (re-checagem de inode no `filelock.py`, kernel)
+só entra como pacote de kernel PRÓPRIO e condicional: se a W0.5 depois da cura mostrar que só a
+listagem das travas ainda estoura o prazo do drain forçado. A opção **T3** (relocar as travas) SAI.
+(T1 a T3 são as opções L1 a L3 do consenso, renomeadas aqui para não colidir com os itens livres L1 a
+L5.)
+
+**Conteúdo exigido do `ADR-055-AMEND-4` (rodada 1; ele nasce em arquivo próprio):**
+
+- a união de não-perda reescrita: a perna 2 vale só para quem tem spool; a perna 3 é o drain do próximo
+  emissor que ganhar a trava (a varredura de órfãos roda também no drain oportunista,
+  `spool_writer.py:2366-2371`); NÃO existe perna de `SessionStart`;
+- o prazo da drenagem forçada de saída (W2.2-bis): estourado o prazo, o spool fica para a perna 3, e isso
+  deixa de ser «anômalo»;
+- a regra de versões mistas: LAND com as sessões do projeto fechadas, declarado no material assinado, e
+  adopter via `upgrade.sh` com sessão aberta declarado;
+- expressões regulares ANCORADAS, com PID só de dígitos;
+- a lista do que NUNCA se apaga: `.draining.*`, `.malformed.*`, `.quarantined.*`, `.test-origin.*`,
+  `.tmp.*`, `*.compact.tmp`, journal com conteúdo, o journal agregado e a trava dele;
+- o caminho de reversão;
+- os gatilhos de reversão, em instrumentos LIGADOS e com controle positivo de perda sintética: resíduo
+  acima do limiar em 3 medições diárias; linha de timeout depois do LAND sob a carga da W0.5;
+  `.draining.*` com mais de 24 h; decisão perdida no controle; quebra de cadeia atribuível à W2 depois
+  da cura;
+- declarado: o gatilho `revert_trigger_truly_lost_7d` do AMEND-3 está MORTO (`truly_lost` nunca é
+  incrementado — só `spool_writer.py:136`, o valor padrão, e `:2562`, a leitura), a reconciliação do
+  journal não roda em produção e os journals com conteúdo (215 na releitura do redator, 2026-10-02; o
+  consenso contou 214) ficam forense-only — ligar a reconciliação abriria ~76 mil journals sob o
+  timeout de 5 s do `SessionStart`: fora da W2.
+
+- [ ] W2.0 **pré-condição do SIGN da W2 — cura da corrida do `agent_spawn`** (condição 67 assinada na
+  v1.4.0-rc.1; MF-W2-1; vaga: decisão pendente 1). `audit_log.py` lê o elo anterior e calcula o HMAC
+  FORA da trava (`.claude/hooks/audit_log.py:1265-1276`; a trava, `FileLock`, só cobre o append e o
+  `write_last_hmac`, `:1283`): mover chave, elo anterior e HMAC para dentro do `with FileLock(...)`,
+  DEPOIS do `rotate_if_needed`. Teste de barreira multiprocesso com N escritores `agent_spawn` em
+  paralelo e escritores `audit_emit` (vermelho no HEAD; verde com a cura — a docstring de
+  `test_two_writer_chain.py:13-16` diz que ele «pertence à cura da rc.2», que nunca landou); censo AST:
+  toda chamada a `read_prev_hmac()` fora de teste fica dentro de `with FileLock(`, com controle
+  positivo («cure a classe»); a docstring do `test_two_writer_chain.py` é corrigida. A linha que
+  aposenta a condição 67 vai no `CHANGELOG.md` do corte W7, NÃO no pacote da cura. Landa ANTES do SIGN da
+  W2 (pacote canônico próprio, recomendado) ou dentro dela (+2 paths). Estimativa: 150-300k tokens + ~50k
+  do censo AST, 0 a 1 sessão, com rail. — Check: python3 -m pytest .claude/hooks/tests/test_two_writer_chain.py -q
+- [ ] W2.1 `/debate start PLAN-194` — **rodada 1 FEITA (S361)**, consenso em
+  `.claude/plans/PLAN-194/debate/round-1/consensus.md`, com as propostas da W2, da W3 e da W5c no mesmo
+  `proposal.md` (debate único — Approach, item 4; críticos: Segurança, QA e DevOps). Falta o rascunho do ADR-055-AMEND-4 em PROPOSED, com o conteúdo
+  exigido acima, em `.claude/plans/PLAN-194/debate/round-2/` (oráculo 0; o arquivo canônico nasce só no
+  pacote de ADR — Q5), como entrada da rodada 2 (só W2 e W3, os mesmos três críticos). — Check: ls .claude/plans/PLAN-194/debate/round-2
+- [ ] W2.2 caminho rápido no `_atexit_drain` (`spool_writer.py:2573`): sem spool próprio e sem
+  `.draining` próprio, não tomar o lock canônico — basta um `stat` do próprio spool e um sinalizador em
+  processo (o próprio `.draining` ou um drain falho), com ZERO `listdir`/`scandir`, contados por
+  envoltório e não por tempo; o flush do buffer do journal continua. Os órfãos de outros PIDs ficam com a
+  perna 3 (o drain do próximo emissor que ganhar a trava). Cinco células: (a) sem spool próprio e com
+  envelopes de journal no buffer, o `_flush_journal_buffer` ainda roda na saída; (b) `.draining` próprio
+  deixado por exceção no meio do drain: a saída AINDA força o drain (sinalizador em processo — listar o
+  diretório não serve, é o que se quer evitar); (c) o caminho rápido mora no `_atexit_drain`, não no
+  `drain_now(force=True)` (um teste falha se for movido); (d) zero chamadas a `os.listdir`/`os.scandir`;
+  (e) o teste 4 de `test_spool_drain_contended_skip.py` (`:220-231`: drain forçado com spool próprio sob
+  trava externa ⇒ `ok=False` + breadcrumb) fica intacto. Mais a recuperação de órfão de PID morto pelo
+  drain OPORTUNISTA (`force=False`) do próximo emissor (o teste 3 atual usa `force=True`, `:213-217`). —
+  Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q -k fast_path
+- [ ] W2.2-bis **(nova, rodada 1; MF-W2-3)** prazo na drenagem forçada de saída, derivado do orçamento
+  do hook (o timeout de 5 s dos guards PreToolUse menos uma margem). Estourado o prazo, o spool fica para
+  a perna 3 — e isso deixa de ser «genuinamente anômalo» (premissa do ADR-055-AMEND-3; é a emenda
+  semântica do AMEND-4). É a cura da CLASSE «trabalho longo dentro de guard vira allow»: vale para
+  qualquer causa de lentidão. Controle de ENTREGA DE DECISÃO: um guard que decide BLOCK, com várias
+  saídas concorrentes e o diretório cheio, perde a decisão (vermelho, na W0.5) e passa a entregá-la
+  (verde, depois da cura). — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q -k deadline
+- [ ] W2.3 **(a antiga W2.3, relocação dos journals e travas por PID para um subdiretório, SAIU na
+  rodada 1: criava «duas travas para o mesmo recurso» durante a convivência de versões do
+  framework)** No lugar: **journal vazio removido NA ORIGEM, sob a PRÓPRIA trava do journal** — pela
+  compactação (remove em vez de reescrever 0 byte, `spool_writer.py:2276-2297`) ou pelo dono na saída
+  (spool todo drenado, journal com 0 byte, buffer vazio) —, mais a regra de travas acima (nenhum `unlink`
+  de `*.lock` em hook; opção T1 por padrão; a remoção pelo dono das próprias travas só passa à rodada 2
+  com as quatro garantias da regra). Controle de intercalação determinística por barreira, sem `sleep`
+  (molde de `test_spool_drain_contended_skip.py`): vermelho com a remoção ingênua plantada, verde com a
+  cura. — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q -k origin
+- [ ] W2.4 **nenhum `unlink` de `*.lock` em hook e nenhuma varredura própria do diretório inteiro no
+  hook** (o custo é proporcional ao estoque, ~228 mil nomes). O GC que sobrar é só de journal de PID
+  morto, de carona na listagem da fase 2, DEPOIS de soltar a trava canônica, com teto (≤ 200 arquivos e
+  ≤ 50 ms, a confirmar na W0.5), regex ANCORADA (PID só de dígitos), a lista do que NUNCA se apaga
+  (`.draining.*`, `.malformed.*`, `.quarantined.*`, `.test-origin.*`, `.tmp.*`, `*.compact.tmp`,
+  journal com conteúdo, o journal agregado e a trava dele) e reexame sob trava; PID reusado não basta
+  para apagar. A tabela do predicado é PRÉ-REGISTRADA, com quase-acertos tirados do censo vivo (travas de
+  outros módulos, `*.compact.tmp`, journal agregado) e os journals com conteúdo como controle, e traz o
+  porquê de cada diferença em relação ao predicado da W2.6. — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q -k gc
+- [ ] W2.4-bis **(nova, rodada 1; W2-7)** a W2 se observa pelo RESULTADO, sem evento por arquivo e sem
+  tocar o `audit_emit.py` (um evento emitido por processo sem spool recriaria os 3 arquivos que a W2
+  quer deixar de criar): check advisory no `/ceo-boot` — contagem de arquivos de 0 byte nos 3 padrões e
+  idade do `.draining.*` mais velho —, dentro do pacote do item livre L2 (mesmo arquivo,
+  `ceo-boot.py`; mapa de colisões); breadcrumb com taxa limitada só quando o teto estourar; contagens
+  da W2.6 no LEDGER; e um teste que afirma contagem registrada = arquivos apagados. — Check: python3 -m pytest .claude/scripts/tests/test_ceo_boot.py .claude/scripts/tests/test_ceo_boot_enhanced.py -q
+- [ ] W2.5 invariantes provados em teste de estresse: (i) invariante por CONJUNTO — todo `record_id`
+  emitido aparece exatamente UMA vez no log canônico («contagem igual» esconde perda somada a
+  duplicata); (ii) `verify_chain()` (`.claude/hooks/_lib/audit_hmac.py`) íntegro sobre ≥ N elos (cadeia
+  vazia ou curta é verde por vácuo); (iii) escritores mistos em paralelo: `agent_spawn` (depois da cura
+  W2.0), `audit_emit`, drainers oportunistas e forçados, saídas pelo caminho rápido, kill -9 no meio do
+  drain e reuso de PID; (iv) 3 a 5 mutantes plantados à mão, cada um reprovando o teste — por exemplo: o
+  GC apaga journal com conteúdo; o caminho rápido pula a varredura de órfãos de quem TEM spool; o GC
+  ignora PID vivo. — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q -k invariant
 - [ ] W2.6 limpeza única dos órfãos do state dir VIVO. **Decisão do Owner (S359, 2026-09-30):
   «Script pronto, você roda depois (Recomendado)»** (antiga OQ-9, resolvida). Script confinado
   entregue ao Owner, fora do repositório, confinado ao state dir, com predicado próprio (diferente da
-  W2.4, que adquire a trava sem bloquear dentro do hook): nome casando exatamente um dos 3 padrões,
-  arquivo comum de 0 byte (sem symlink nem hardlink), mtime > 10 min, PID morto, família sem conteúdo,
-  re-exame antes de apagar, simulação por padrão (só apaga com `--apply`) e recusa com sessão do
-  Claude viva; journal com conteúdo NUNCA; o Owner
-  roda com TODAS as sessões do Claude fechadas; contagem antes/depois no LEDGER pelo mesmo método do
-  critério de sucesso. **Pode rodar antes do resto da W2** (é operação do Owner fora do repositório,
+  W2.4, que adquire a trava sem bloquear dentro do hook): nome casando exatamente um dos 3 padrões
+  (regex ancorada, PID só de dígitos), arquivo comum de 0 byte (sem symlink nem hardlink), mtime > 10
+  min, PID morto, família sem conteúdo, re-exame antes de apagar, simulação por padrão (só apaga com
+  `--apply`) e recusa com sessão do Claude viva; journal com conteúdo NUNCA. **Endurecimento da rodada 1
+  (MF-W2-6):** resolve o state dir pelo resolvedor `_lib/runtime_paths.py`, nunca por slug derivado à
+  mão (ADR-001, marcador M4); recusa diretório ou alvo que seja symlink; remove RELATIVO ao descritor do
+  diretório, sem seguir link; reexamina tamanho, tipo, contagem de links e família imediatamente antes
+  de cada remoção; a simulação conta POR CÉLULA (cada um dos 3 padrões); manifesto de hash dos journals
+  com conteúdo antes e depois (qualquer diferença reprova); re-contagem pelo mesmo método do critério
+  de sucesso. Com todas as sessões fechadas não há adquirente vivo, então a W2.6 PODE apagar travas.
+  **Pré-condição — recomendação da rodada 1, pendente de decisão do Owner (S361; decisão pendente 2):**
+  trocar «todas as sessões do Claude fechadas» por «todas as sessões DESTE projeto fechadas» (o state dir
+  é por projeto desde a W1 do PLAN-182), com o script recusando se achar arquivo da família com PID vivo
+  ou mtime < 10 min; a decisão vigente (S359) segue valendo até o Owner decidir. O Owner roda;
+  contagem antes/depois no LEDGER pelo mesmo método do critério de sucesso. **Pode rodar antes do resto
+  da W2** (é operação do Owner fora do repositório,
   não ocupa vaga): alivia o sintoma — o drain forçado deixa de listar os ~222 mil nomes (re-medido na S361; o número cresce) — até o acúmulo
   voltar (ritmo não medido; teto estimado de ~300 mil pelo espaço de PIDs do macOS, lane `H-02`). A
   cura para os arquivos não voltarem é o resto da W2. — Check: none (operação do Owner; contagem no LEDGER)
 - [ ] W2.7 rail nos bytes canônicos até rodada limpa (regra de parada pré-registrada antes da 1.ª
   rodada: ≤ 3 rodadas; NO-GO só por P0 ou afirmação falsa); SIGN/LAND. — Check: python3 .claude/scripts/check-ceremony-script.py
 
-**Controle vermelho→verde:** W0.5 reproduz os timeouts com ~220 mil entradas (vermelho); depois da
-cura, a mesma carga não gera `drain canonical lock timeout` e a latência de saída fica igual à do dir
-vazio (verde). No vivo, o critério de sucesso conta os arquivos de 0 bytes no state dir INTEIRO
-(inclusive o subdiretório novo da W2.3 — mudar de lugar não é curar). **Dependências:** W0.5; debate
-único do plano; vaga: a seguinte à que a W7a do PLAN-183 ocupar (a da W1) — ordem decidida pelo
-Owner, «Regra de WIP» no topo. **Prazo:** sem data externa;
-recomendado antes do corte W7. **Fora (follow-up):** breadcrumb com taxa limitada, rotação do `audit-log.errors` e
-contagem por classe no boot (lane `H-03`). **Estado medido na S361 (2026-10-01, ~20:08Z):** o
+**Seletores dos Checks (rodada 1).** Cada item da W2 usa um seletor `-k` DISTINTO — `fast_path` (W2.2),
+`deadline` (W2.2-bis), `origin` (W2.3), `gc` (W2.4) e `invariant` (W2.5) —, com guarda de seletor que
+casa zero: o `pytest` sai 5 quando o seletor não coleta teste algum, e o Check não pode mascarar esse
+código (um Check verde por seletor vazio não prova nada).
+
+**Controle vermelho→verde (rodada 1):** a W0.5 pré-registrada reproduz os timeouts com ~220 mil
+entradas e a decisão de guard perdida (vermelho); depois da cura, o controle de ENTREGA DE DECISÃO
+(W2.2-bis) fica verde e a mesma matriz, medida FORA do CI, dá a razão p95 cheio/vazio ≤ 1,2 com N ≥ 30
+(a razão medida e o controle de entrega de decisão substituem o antigo «latência igual à do dir vazio»;
+nenhuma asserção de tempo absoluto em teste do CI). Os critérios que BARRAM o SIGN são os de SEGURANÇA
+(MF-W2-3 e MF-W2-5): o controle de entrega de decisão passa de vermelho a verde; o invariante por
+conjunto fica verde; `verify_chain()` fica íntegro sob estresse com escritores `agent_spawn`, depois da
+cura da W2.0. `truly_lost` não serve de gatilho: está morto. A contagem de arquivos é higiene: o critério
+primário é o FLUXO (artefatos de PID morto por PID emissor distinto na janela), que não fica verde por
+vácuo num dia leve nem envelhece com o estoque; o teto absoluto vira limite secundário de sanidade;
+denominador zero reprova (ver «Success criteria»). No vivo, a contagem é dos arquivos de 0 bytes no
+state dir INTEIRO. **Dependências:** W0.5 pré-registrada; debate único do plano (rodada 2); a cura do
+`agent_spawn` (W2.0) landada antes do SIGN ou dentro do pacote; `ADR-055-AMEND-4` em rascunho PROPOSED;
+vaga: a seguinte à que a W7a do PLAN-183 ocupar (a da W1) — ordem decidida pelo Owner, «Regra de WIP» no
+topo. **Prazo:** sem data externa; recomendado antes do corte W7. **Fora (follow-up):** rotação do
+`audit-log.errors` e contagem por classe no boot (lane `H-03`); ligar a reconciliação de início de
+sessão (rodada 1). **Estado medido na S361 (2026-10-01, ~20:08Z):** o
 `audit-log.errors` tem 25.589 linhas (25.393 na medição anterior do mesmo dia); o log foi rotado em
 2026-10-01T17:23:56Z (`audit-log.rotation-manifest.json`: arquivo anterior `audit-log-2026-10.jsonl`).
 
@@ -462,20 +669,35 @@ em 2026-10-01T20:26Z, a 8.ª**). Fonte: memória `project-s359-urgency-triage` (
 decisão do Owner»). **Substitui** o re-pin manual (que a versão anterior desta onda descrevia para a
 0.159.2; hoje seria para a 0.160.0) — ele fica como **plano B** (fim da seção).
 
-**BLOQUEADA — decisão do Owner S361 (2026-10-01, Q3):** nenhum pacote da W3 começa antes do PROCEED do
-debate único (W2.1/W3.2), e os must-fix dele valem para esta onda. `needs_debate=true` (o mesmo que
-«Debate: SIM» abaixo). Enquanto isso, a 3.ª vaga inicial é ocupada pela W3b (Q8, S361).
+**BLOQUEADA — decisão do Owner S361 (2026-10-01, Q3) e rodada 1 do debate:** nenhum pacote da W3 começa
+antes do PROCEED da W3 no debate único. A rodada 1 deu **RUN-ANOTHER-ROUND** para a W3 (o VETO de cadeia
+de suprimento, T-8, segue LEVANTADO): faltam a matriz de recusa no `ADR-182-AMEND-1` (rascunho PROPOSED,
+entrada da rodada 2, em `.claude/plans/PLAN-194/debate/round-2/`) e o verificador fora do hook, e as
+decisões condicionais do Owner (3 a 6, em «Decisões pendentes do Owner — S361 (rodada 1 do debate)»)
+entram por escrito no AMEND-1. Retirada do VETO na rodada 2: MF-W3-1 a MF-W3-11 (definidos na crítica de
+segurança da rodada 1, `.claude/plans/PLAN-194/debate/round-1/security-engineer.md`) no AMEND-1, já com
+as correções do consenso (carência de 48 h; W3.6 logo depois do LAND da W3), e as decisões 3 a 6
+escritas. `needs_debate=true` (o mesmo que «Debate: SIM» abaixo). Enquanto isso, a 3.ª vaga inicial é
+ocupada pela W3b (Q8, S361).
 
 **Objetivo:** uma versão nova do Codex passa a valer para o rail sem cerimônia por versão, desde que a
 procedência seja conferida automaticamente; o Owner deixa de assinar a cada atualização **no hook do
-rail; nos cortes de release, a definir (pergunta 7)**.
-**Desenho decidido (mesma fonte):** (a) na 1.ª vez que o rail vê uma versão nova, confere sozinho a
-procedência no npm (atestado SLSA v1 do CI da OpenAI — conferido presente em 0.156.1, 0.159.2,
-0.159.3 e 0.160.0) e registra o sha256 verificado, sem assinatura do Owner; (b) sentinela automática com corpus
-fixo de defeitos avisa se o revisor piorar, **sem travar**; (c) modelo e esforço fixos no argv do rail
-(cura a lane `CX-07`, antes no backlog); (d) cada veredito registra versão, modelo e esforço. **Custo
-declarado na fonte:** emenda do ADR-182 + debate de segurança + 1 cerimônia. **Até landar** (e, nos cortes de
-release, até o fim do corte W7 — pergunta 7): ficar no 0.156.1, **sem `npm update -g`** — o MANIFESTO
+rail; os cortes de release seguem ancorados no manifesto assinado (pergunta 7, respondida na rodada 1)**.
+**Desenho decidido (mesma fonte; (a) reescrito na rodada 1):** (a) o **verificador roda em processo
+PRÓPRIO, fora de qualquer guard**, em duas fases — staging em prefixo próprio → procedência (atestado
+SLSA v1 do CI da OpenAI, conferido presente em 0.156.1, 0.159.2, 0.159.3 e 0.160.0) → sonda + canário
+(W3.3) → registro do sha256 verificado → promoção ao global com a MESMA versão e o MESMO sha, sem
+assinatura do Owner; o **hook só faz hash e consulta local, nunca usa rede**, e sha fora do manifesto e
+do registro ⇒ bloqueio, nomeando o verificador. Motivo: a verificação de procedência DENTRO do hook
+PreToolUse viraria fail-OPEN por timeout (o hook tem timeout de registro de 210 s, `.claude/settings.json:285`, e a
+verificação baixa ~331 MB); (b) sentinela automática com corpus fixo de defeitos que avisa se o revisor
+piorar, **sem travar** — **pendente de decisão do Owner (S361; decisão pendente 4):** o corpus travado do
+ADR-111 não está no repositório, e a recomendação é a W3 landar SEM sentinela, declarada; (c) modelo e
+esforço fixos no argv do rail (cura a lane `CX-07`, antes no backlog) — dois eixos, conforme «Base do
+argv fixo», **pendente de decisão do Owner (S361; decisão pendente 5)**; (d) cada veredito registra
+versão, modelo e esforço. **Custo declarado na fonte:** emenda do ADR-182 + debate de segurança + 1
+cerimônia — e, desde a rodada 1, o pacote de kernel de registro de ações e a W0.6. **Até o LAND da W3**
+(a regra termina nele; depois, só pelo procedimento da W3.6): ficar no 0.156.1, **sem `npm update -g`** — o MANIFESTO
 por sha exato (`codex-cli-pin-manifest.json`) recusaria o binário novo e fecharia o rail: o hook
 bloqueia as escritas L3+ (`check_pair_rail.py:1488-1510`, núcleo de verificação em `:589-747`); o
 pré-voo `pair-rail-gate.sh` só confere o pin na fase 6 (`:182-220`) e aborta ali; as rodadas manuais
@@ -501,85 +723,220 @@ Pela Q11, o `gpt-6-astra` é tratado como MODELO NOVO e re-testado no 1.º pacot
 modelo, o esforço e `memories` — se mudou, é «instrumento mudou» e a rodada não conta (regras de
 operação em «How to continue»).
 
-**Perguntas de desenho que o debate precisa fechar (não decididas aqui):**
-1. Onde o sha verificado fica gravado — não pode ser o manifesto (`codex-cli-pin-manifest.json`,
-   oráculo 1), que só muda por cerimônia.
-2. Como conferir a assinatura do atestado num framework só-stdlib (CLAUDE.md §4). **O candidato da
-   primeira redação não serve:** o `npm audit signatures` não aceita pacote global (`EAUDITGLOBAL`,
-   medido na S361 com `npm audit signatures -g`). **Desenho sugerido para o debate (a medir):** o
-   `subject.sha512` do atestado igual ao `dist.integrity` (sha512 do `npm pack`) e, daí, o sha256 do
-   payload lido do tarball. A procedência vale para o artefato de PLATAFORMA
-   (`@openai/codex@<v>-darwin-arm64`, 44 arquivos e ~331 MB na 0.159.3), que é onde está o payload — o
-   pacote `@openai/codex@<v>` é só o lançador (3 arquivos); os dois têm atestado SLSA v1 na 0.159.3.
-3. O que a faixa do `codex-cli-pin.txt` passa a dizer: o validador do veredito
-   (`validate-pair-rail-verdict.py`, membro do manifesto ADR-192) lê a faixa desse arquivo
-   (`--codex-cli-pin-file`, `release.yml:760`).
-4. Só versões estáveis (dist-tag `latest`), nunca alpha (era a recomendação da antiga OQ-3). Desenho
-   sugerido na S361: semver SEM pré-release E dist-tag `latest`, com carência de 24–48 h entre a
-   publicação e a aceitação (em 2026-10-01, lido às ~21:30Z, `latest` = 0.160.0 e a tag `alpha` = 0.161.0-alpha.13; até ~20:08Z a `latest` era a 0.159.3).
-5. Sem rede ou sem atestado: recusa (fail-closed na entrada, CLAUDE.md §4) e o rail segue na última
-   versão verificada.
-6. Rodadas manuais e o daemon: `codex_invoke.py:193`, `council-audit.js:325` e o `codex exec review`
-   manual não conferem o pin (lane `CX-04`); o daemon `app-server` se atualiza sozinho fora do pin
-   (lane `CX-06`) — entram no desenho ou ficam declarados. **Inventário completo (S361)** de quem chama
-   o `codex` sem conferir o pin: `.claude/hooks/codex_review_user_code.py:131` (`codex exec --sandbox
-   read-only`), `.claude/scripts/run-promotion-gate.py` (só `codex --version`, `:198` e `:212`),
-   `.claude/scripts/codex_invoke.py:193` e `.claude/workflows/council-audit.js:325`.
+**Base do argv fixo — decisão de desenho da rodada 1 (C6).** O binário é automático; modelo e esforço
+são DOIS eixos distintos e ficam em constante canônica, e uma cerimônia por GERAÇÃO de modelo é aceitável
+e desejável. `--ignore-user-config` entra se a sonda da W3.3 confirmar a flag na versão, com uma medição
+de que `memories` não carrega com ela. Cada rodada registra versão, sha do payload, modelo pedido e
+modelo servido (se o `session_meta` o expuser) e esforço; o id fixado entra no
+`.claude/scripts/model-deprecations.json` (oráculo 0), e id indisponível ⇒ contagem diária no boot,
+nunca silêncio. **Recomendação do CEO, pendente de decisão do Owner (S361; decisão pendente 5):**
+`gpt-6-astra` + `xhigh`, o par em uso de fato, condicionado ao re-teste da Q11; o id entra em
+`_VALID_MODELS` no pacote 2 da W3, depois da W3b; trocar de modelo passa a ser cerimônia por GERAÇÃO.
+
+**Perguntas de desenho — respostas da rodada 1 do debate** (consenso §6; valem como desenho de entrada da
+rodada 2, não como veredito do AMEND-1; as perguntas 8 a 10 são novas):
+1. **Onde o sha verificado fica gravado** — não pode ser o manifesto (`codex-cli-pin-manifest.json`,
+   oráculo 1), que só muda por cerimônia. **Resposta:** num registro em diretório resolvido por
+   `runtime_paths` (`.claude/hooks/_lib/runtime_paths.py`), FORA de `state/` (alcance do GC da W2) e da
+   árvore git, com modos 0700/0600, só-acréscimo e a evidência completa. Leitores: SÓ o núcleo do hook
+   e a CLI `--verify-codex-pin`; o passo 15 do release (o validador do veredito), o `gen-envelope-ga.py`
+   e o kit NUNCA o leem. Vale só para este repositório (adopters seguem em INFRA aberto: sem
+   `.claude/governance/` neles, o pin resolve como `infra`). Resíduo de mesmo UID declarado
+   (CLAUDE.md §5). O registro nunca vira atalho por mtime ou tamanho que dispense o hash a cada
+   invocação.
+2. **Como conferir a assinatura do atestado num framework só-stdlib (CLAUDE.md §4).** O `npm audit
+   signatures` não aceita pacote global (`EAUDITGLOBAL`, medido na S361 com `npm audit signatures -g`).
+   **Resposta:** inviável só com stdlib — nada de criptografia de assinatura escrita à mão, e a
+   coerência de digests (o `subject.sha512` do atestado igual ao `dist.integrity`) NÃO é autenticidade e
+   não se chama «assinatura conferida». Medir o verificador de assinaturas do próprio npm num
+   projeto-rascunho (W0.6); se não servir, a «confiança no registro» (TLS verificado + vínculo de
+   digests + identidade do construtor fixada) vai como decisão escrita do Owner (decisão pendente 3),
+   resíduo NOMEADO no AMEND-1 e no material assinado. O vínculo atestado → tarball → payload sai da
+   stdlib (`urllib` com TLS verificado, `tarfile` em fluxo, `hashlib`); o download NUNCA roda no hook. A
+   procedência vale para o artefato de PLATAFORMA (`@openai/codex@<v>-darwin-arm64`, 44 arquivos e ~331
+   MB na 0.159.3), que é onde está o payload — o pacote `@openai/codex@<v>` é só o lançador (3
+   arquivos); os dois têm atestado SLSA v1 na 0.159.3.
+3. **O que a faixa do `codex-cli-pin.txt` passa a dizer** (o validador do veredito,
+   `validate-pair-rail-verdict.py`, membro do manifesto ADR-192, lê a faixa desse arquivo —
+   `--codex-cli-pin-file`, `release.yml:760`). **Resposta:** a faixa fica `>=0.128.0,<0.157.0`, INTOCADA
+   na W3, e os cortes seguem ancorados no manifesto; o corte declara o 0.156.1. O limite do
+   `parse_semver` do validador é declarado no AMEND-1: ele casa por prefixo (`re.match`,
+   `.github/scripts/validate-pair-rail-verdict.py:355-359`), então o passo 15 NÃO garante «só estável» —
+   quem garante é o sha do manifesto.
+4. **Só versões estáveis, nunca alpha** (era a recomendação da antiga OQ-3). **Resposta — carência de 48
+   h** contada do horário de publicação NO REGISTRO (não do 1.º avistamento local), em constante
+   canônica com teste. A candidata é a estável mais nova com idade ≥ 48 h, ≤ `latest`, sem `deprecated`
+   e ≥ piso do manifesto — NUNCA «== `latest`» (pela cadência medida, «== `latest` + 48 h» deixaria o pin
+   parado na maior parte dos dias). A `latest` fica como teto e como condição necessária («a `latest`
+   atual é estável e ≥ candidata»), nunca como prova de estabilidade; `deprecated` é recusada; nunca abaixo
+   do piso. **Gramática estrita (MF-W3-4):** base estável `X.Y.Z` mais o sufixo EXATO do triple da
+   plataforma; qualquer outro pré-release é recusado (as dist-tags trazem alpha com sufixo de
+   plataforma, como `0.159.0-alpha.12.1-darwin-arm64`). Efeito: sempre existe versão elegível e o pin
+   anda uns 2 dias atrás da `latest`, sem cerimônia; a adoção roda sob demanda ou no máximo 1× por
+   semana, sob o freio Q2. Medido pelo sintetizador do consenso em 2026-10-02T00:20Z: 23 estáveis desde
+   2026-08-25, mediana de 22,0 h entre estáveis; `latest` = 0.160.0 (~4 h) e a 0.159.3 (~25 h) ainda NÃO
+   elegíveis; a 0.159.2 (~48,3 h) elegível. A espera de 48 h é `external_wait` (relógio do npm).
+5. **Sem rede ou sem atestado.** **Resposta:** TODO «binário presente, mas não verificado» — sem rede,
+   sem atestado, atestado inválido, identidade divergente, carência não cumprida, sonda reprovada,
+   registro ausente ou corrompido — é SECURITY, fail-CLOSED: saída 1 e bloqueio. INFRA (3) só no que já
+   era INFRA no ADR-182 §2: no hook, INFRA não executa o binário e tira a revisão em silêncio
+   (`check_pair_rail.py:783-786` e `:1512-1524`, «fail-OPEN advisory»). Falha de rede é falha do
+   VERIFICADOR (versão não registrada), nunca INFRA do hook. O texto antigo «o rail segue na última
+   versão verificada» só vale com cópia retida (a promoção em duas fases): fora dela, vira «**bloqueia
+   até verificar ou reinstalar a versão verificada**».
+6. **Rodadas manuais e o daemon.** **Resposta:** os chamadores LIVRES (`codex_invoke.py:193`,
+   `run-promotion-gate.py`) passam pelo núcleo de verificação; os CANÔNICOS e o daemon ficam
+   DECLARADOS no material assinado, com o estado do opt-in: `.claude/hooks/codex_review_user_code.py:131`
+   (`codex exec --sandbox read-only`; hook `Stop` AUTOMÁTICO sob o opt-in, registrado em
+   `.claude/settings.json:636-645`), `.claude/workflows/council-audit.js:325`, o `codex exec review`
+   manual e o daemon `app-server` (que se atualiza sozinho fora do pin — lanes `CX-04` e `CX-06`).
+   `run-promotion-gate.py` só chama `codex --version` (`:198` e `:212`).
 7. **Cortes de release (acrescentada na S361).** O passo 15 do `release.yml` (`:754-763`) passa o
    manifesto assinado ao validador do veredito, que exige `codex_payload_sha256` IGUAL à entrada do
    manifesto da ÁRVORE TAGUEADA (`validate-pair-rail-verdict.py:745-763`), e o `gen-envelope-ga.py` do
    kit recusa sha ou versão diferentes do manifesto (`pinned_codex`, `PLAN-193/gen-envelope-ga.py:213-243`).
-   Logo o pin automático NÃO cobre os cortes: um veredito de re-pass com o Codex novo sairia INVALID e o
-   corte da 1.4.3 travaria. Decidir: a W3.6 (atualizar o Codex) vai para DEPOIS do corte W7, ou junto com
-   um re-pin do manifesto dentro do kit.
+   **Resposta (a evidência no disco refutou a premissa «a W3.6 só depois da W7»):** o corte já é
+   independente do Codex GLOBAL. O runner do re-pass (`PLAN-193/repass-ga/run-ga-repass.sh:242-306`) usa a
+   rota 1 só se o payload global confere E a versão é a pinada; senão, a rota 2 — `npx` em cache próprio,
+   que morre se a versão do npx ≠ o manifesto, verifica pelo mesmo oráculo e põe um shim no PATH (foi a
+   rota do GA 1.4.1: `PLAN-192/repass-ga/PROVENANCE-ga.md:6`, «rota do codex: npx (cache proprio)»); e o
+   envelope lê o Codex da PROVENANCE, nunca da máquina (`gen-envelope-ga.py:213-243`). A âncora segue
+   intacta: manifesto assinado da árvore tagueada, validador e faixa sem mudança. **Decisão:** a W3.6
+   roda LOGO DEPOIS do LAND da W3, não depois da W7; as condições estão na W3.6. Resíduo declarado: o
+   corte depende da rede e de a 0.156.1 seguir baixável no registro.
+8. **A sonda vira automática?** **Resposta:** sim — automática, dentro do verificador, DEPOIS da
+   procedência e ANTES do registro; bloqueante; cobre os subcomandos e as FLAGS dos chamadores e inclui o
+   canário funcional (W3.3).
+9. **A sentinela de qualidade** (desenho (b)). **Resposta:** o gatilho do ADR-111 §2 (governança do
+   corpus travado do pair-rail) fica PRESERVADO e declarado NÃO AVALIÁVEL até existir corpus com sha e
+   linha de base (m ≥ 3, variância medida com o mesmo binário): o corpus travado do ADR-111 NÃO está no
+   repositório (`git ls-files | grep -c corpus/locked` = 0; `.claude/plans/PLAN-081/corpus` não existe).
+   Vai ao Owner (decisão pendente 4).
+10. **Modelo e esforço no argv.** **Resposta:** dois eixos; constante canônica; `--ignore-user-config`
+    se a sonda confirmar; o id fixado entra no `model-deprecations.json` (ver «Base do argv fixo»;
+    decisão pendente 5).
 
-**Paths (candidatos; o debate fecha a lista; oráculo rodado em todos):**
-`.claude/adr/ADR-182-AMEND-1-codex-auto-pin-provenance.md` (1, novo, PROPOSED; nome proposto);
-`.claude/hooks/check_pair_rail.py` (1); `.claude/governance/codex-cli-pin.txt` (1, só se a faixa
-mudar); `.claude/hooks/tests/test_check_pair_rail_auto_pin.py` (0, novo); `.claude/scripts/codex_invoke.py`
-(0; argv com modelo e esforço fixos); `.claude/hooks/_lib/codex_cli_shape.py` (1; o argv fixo — a W3b
-landa antes, Q8); `.claude/hooks/codex_review_user_code.py` (1), `.claude/scripts/run-promotion-gate.py`
-(0) e `.claude/workflows/council-audit.js` (1), só se a pergunta 6 os incluir; corpus da sentinela (path
-a definir no debate). **Estimativa:**
-300-400 linhas por pacote, 4-8 paths (estimado); se o debate pedir mais, dividir em pacotes de ≤ 8
-paths — a exceção (4) da «Regra de WIP» cobre só o índice dos ADR e os documentos de contagem que o
-arquivo de emenda `ADR-182-AMEND-1` arrasta (mudança semântica contra o ADR-182; o debate confirma), e
-não os paths de código. **Debate:** SIM, o debate único do plano (W2, W3 e W5c — Approach,
-item 4); `needs_debate=true`. **Cerimônia:** sim. **Vaga:** 3.ª das 3 iniciais (ordem decidida pelo
-Owner); **ocupada pela W3b até o debate fechar** (Q8, S361).
+**Identidade do construtor e chave de aceitação (MF-W3-4; constantes canônicas no verificador, com
+teste).** Repositório-fonte, caminho do workflow, ref de tag amarrada à versão, `predicateType` SLSA v1
+e `subject` igual ao purl do pacote de PLATAFORMA, com digest igual ao `dist.integrity`. A chave de
+aceitação é o sha256 do payload LOCAL igual ao sha256 do ÚNICO membro regular no caminho exato do
+tarball atestado, lido em fluxo: sem extrair para disco, sem symlink nem hardlink, sem nome duplicado; o
+metadado local (versão do lançador) é só dica de busca. O `.npmrc` e as variáveis `npm_config_*` podem
+redirecionar a raiz de confiança do npm: o verificador roda com registro fixo, sem `.npmrc` do usuário
+e com essas variáveis limpas, e falha de TLS é fail-CLOSED.
 
-- [ ] W3.1 regra operacional até o land e até o fim do corte W7 (pergunta 7; ver W3.6): Codex no
-  0.156.1, sem `npm update -g`; nenhuma rodada de rail com outro binário. — Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
-- [ ] W3.2 debate único do plano (ver W2.1) e ADR-182-AMEND-1 em PROPOSED com as respostas às 7
-  perguntas acima. — Check: ls .claude/plans/PLAN-194/debate/round-1
-- [ ] W3.3 antes de aceitar qualquer versão nova: ler as notas desde a 0.157.0 procurando
-  subcomandos removidos que o framework chama (`exec`, `review`, `app-server`) e sondar
-  `codex <sub> --help` no binário candidato (a remoção do `mcp-server` na 0.154.0 quebrou em
-  silêncio — achado A7 do PLAN-183); o debate decide se essa sonda vira automática. — Check: none (leitura; resultado no LEDGER)
-- [ ] W3.4 controles vermelho→verde em árvore descartável: (a) versão nova COM atestado válido ⇒
-  aceita e sha registrado; (b) SEM atestado, ou com atestado de outro pacote ⇒ recusada; (c) sem
-  rede ⇒ recusada, rail segue no último verificado; (d) se a faixa mudar: veredito sintético com a
-  versão nova INVALID antes e válido depois no validador do veredito (flags como em
-  `release.yml:755-763`). — Check: python3 -m pytest .claude/hooks/tests/test_check_pair_rail_auto_pin.py -q
-- [ ] W3.5 rail nas duas lanes nos bytes canônicos (regra de parada pré-registrada antes da 1.ª
-  rodada: ≤ 3 rodadas; NO-GO só por P0 ou afirmação falsa); `check-ceremony-script.py` na bateria;
-  materiais commitados como ÚLTIMO land antes da assinatura; SIGN/LAND. — Check: python3 .claude/scripts/check-ceremony-script.py
-- [ ] W3.6 depois do LAND **e DEPOIS do corte W7** (pergunta 7: atualizar o Codex antes do corte trava o
-  veredito do re-pass; a alternativa é fazer esta etapa junto com um re-pin do manifesto dentro do kit —
-  o debate decide): Owner atualiza o Codex para a estável do dia; na 1.ª rodada real, o
-  `--verify-codex-pin` dá `verified` sem assinatura nova, e o `session_meta` mostra a versão, o
-  originador `codex_exec` e 0 sessões «guardian» (lanes `CX-06`, `CX-12`). — Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
+**CLI e consumidores do registro (C5).** O registro é uma 2.ª fonte de verdade fora da árvore git:
+`--verify-codex-pin` fica SÓ-MANIFESTO por padrão (o campo `pin_source` do JSON distingue manifesto de
+registro); a aceitação pelo registro (`verified_auto`, `pin_source = registro`) só com flag explícita. O kit com binário só
+auto-registrado FALHA no pré-voo, antes de qualquer rodada paga. O contrato de cada consumidor (hook,
+Gate 4 do `pair-rail-gate.sh`, `run-ga-repass.sh`, release) fica escrito no AMEND-1.
+
+**Evidência da aceitação: evento durável na cadeia HMAC (consenso §2(e); decisão pendente 6).** Cada
+aceitação automática SUBSTITUI uma assinatura humana, então vira evento na cadeia como ação registrada
+em `_KNOWN_ACTIONS`, com versão, triple, sha256 do payload, `integrity`, digest do atestado e
+identidade. Hoje uma ação fora de `_KNOWN_ACTIONS` vira breadcrumb (`audit_emit.py:5260-5262`) e o
+`pair_rail_codex_pin_mismatch` (`check_pair_rail.py:1204`) tem 0 ocorrências no `audit_emit.py`.
+Veículo: UM pacote de kernel de registro de ações (`audit_emit.py`, canônico), que também promove o
+`pair_rail_codex_pin_mismatch`; vai em série com a W1a do PLAN-195 e landa ANTES da W3.6. O precedente do
+AMEND-3, de preferir breadcrumb para não tocar o kernel, não se aplica: ali não se substituía assinatura.
+A alternativa (evidência só no registro) exige decisão ESCRITA do Owner e o resíduo no AMEND-1.
+
+**Paths — dois pacotes (rodada 1; ≤ 8 paths cada; oráculo rodado em todos):** **(1)**
+`.claude/adr/ADR-182-AMEND-1-codex-auto-pin-provenance.md` (1, novo, PROPOSED; nome proposto — rascunho
+em `.claude/plans/PLAN-194/debate/round-2/` primeiro; o arquivo canônico nasce no pacote de ADR, Q5);
+`.claude/hooks/check_pair_rail.py` (1); o verificador novo, proposto como
+`.claude/scripts/codex-auto-pin-verify.py` (0, livre — rodar o oráculo na abertura do pacote);
+`.claude/hooks/tests/test_check_pair_rail_auto_pin.py` (0, novo) e os testes do verificador (nomes a
+fixar na abertura); `docs/CROSS-LLM-THREAT-MODEL.md` (0): o T-8 (`:328`) é atualizado no MESMO pacote,
+porque a âncora de confiança do hook muda de «Owner + kernel» para «registro + verificação do npm (ou só
+registro, se a decisão 3 for por ela) + identidade fixada». **(2)** `.claude/hooks/_lib/codex_cli_shape.py`
+(1; o argv fixo e o id em `_VALID_MODELS`, DEPOIS da W3b — Q8); `.claude/scripts/codex_invoke.py` (0) e
+`.claude/scripts/run-promotion-gate.py` (0), pelo núcleo de verificação. **Fora:**
+`.claude/governance/codex-cli-pin.txt` (a faixa fica intocada; só o plano B o toca) e os chamadores
+canônicos `codex_review_user_code.py` e `council-audit.js` (declarados no material assinado, não
+convertidos). **À parte:** o pacote de kernel de registro de ações (`audit_emit.py`, 1; em série com a
+W1a do PLAN-195). Sentinela: sem corpus no repositório; o path só existe se a decisão pendente 4 for
+(i). **Estimativa:** 1,3-2,5 M tokens em 2 a 3 sessões, 300-400 linhas por pacote e 4-8 paths
+(estimado); o pacote de kernel de registro de ações, 100-200k tokens + 1 cerimônia de kernel; se o
+debate pedir mais, dividir em pacotes de ≤ 8 paths — a exceção (4) da «Regra de WIP» cobre só o índice
+dos ADR e os documentos de contagem que o arquivo de emenda `ADR-182-AMEND-1` arrasta (mudança
+semântica contra o ADR-182, confirmada pela rodada 1), e não os paths de código. **Debate:** SIM, o
+debate único do plano (W2, W3 e W5c — Approach, item 4); `needs_debate=true`. **Cerimônia:** sim.
+**Vaga:** 3.ª das 3 iniciais (ordem decidida pelo Owner); **ocupada pela W3b até o debate fechar** (Q8,
+S361).
+
+- [ ] W3.1 regra operacional até o LAND da W3 (ver W3.6): Codex no 0.156.1, sem `npm update -g`;
+  nenhuma rodada de rail com outro binário; depois do LAND, só pelo procedimento da W3.6 (instalar a
+  versão ELEGÍVEL, nunca a `latest` crua). — Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
+- [ ] W3.2 debate único do plano (ver W2.1; rodada 1 FEITA) e rascunho do ADR-182-AMEND-1 em PROPOSED,
+  em `.claude/plans/PLAN-194/debate/round-2/` (oráculo 0; o arquivo canônico nasce só no pacote de ADR —
+  Q5), com as respostas às 10 perguntas acima, a matriz de recusa (W3.4), as constantes (carência de
+  48 h, identidade do construtor), o contrato de cada consumidor do registro, os resíduos declarados e,
+  se já tiverem saído, as decisões do Owner 3 a 6 escritas. — Check: ls .claude/plans/PLAN-194/debate/round-2
+- [ ] W3.3 **sonda e canário, AUTOMÁTICOS e BLOQUEANTES**, na ordem verificar → sondar → aceitar (a
+  sonda só executa binário já verificado): (i) sonda — `codex <sub> --help` no binário candidato para os
+  subcomandos que o framework chama (`exec`, `review`, `app-server`; a remoção do `mcp-server` na 0.154.0
+  quebrou em silêncio — achado A7 do PLAN-183) e a UNIÃO das FLAGS dos chamadores (o argv obrigatório:
+  `exec`, `--sandbox`, `-o`, `--output-schema` e `--ignore-user-config`, se adotado, mais `--model` e o
+  ajuste de esforço) × {presente, ausente}; (ii) canário funcional — `exec` mínimo com o argv REAL sobre
+  um diff fixo, devolvendo o JSON de veredito. Argv obrigatório reprovado impede a aceitação e o hook
+  bloqueia: nunca «aceita e cai em INFRA». Testes com um `codex` stub num PATH temporário e um espião
+  que prova ZERO execução de payload não verificado. — Check: python3 -m pytest .claude/hooks/tests/test_check_pair_rail_auto_pin.py -q
+- [ ] W3.4 controles vermelho→verde em árvore descartável, TODOS sem rede real (guarda de socket com
+  controle positivo; registro falso só sob `CEO_PAIR_RAIL_TEST_MODE=1`; tarball sintético e UM atestado
+  real de poucos KB só para o formato; resposta acima do teto ⇒ recusa; o `npm i -g` modelado no MESMO
+  caminho de produção): a matriz {rede ok / falha} × {atestado válido / ausente / de outro pacote /
+  identidade inválida com digests coerentes} × {versão já registrada / nova}, com status e código de
+  saída (0/1/3) por célula. Resumo pré-registrado (a tabela completa entra no AMEND-1): (ok, válido,
+  nova) ⇒ `verified`, saída 0, registra; (ok, ausente ou de outro pacote, nova) ⇒ `mismatch`, saída 1;
+  (ok, assinatura ou identidade inválida com digests coerentes, nova) ⇒ `mismatch`, saída 1 **se** houver
+  verificação criptográfica, senão ACEITA e DECLARADA (decisão pendente 3); (falha, —, nova) ⇒
+  `mismatch`, saída 1 (nunca 3); (falha, —, já registrada) ⇒ `verified`, saída 0, sem rede; (qualquer,
+  payload no disco ≠ sha registrado) ⇒ `mismatch`, saída 1. Mais: quarentena ⇒ `mismatch`; reinstalar a
+  versão anterior ⇒ `verified` offline (rollback e quarentena nomeados e testados), com contagem diária
+  de `pair_rail_codex_unavailable` por versão no boot; CLI sem flag ⇒ só-manifesto; e a célula (d) da
+  faixa vira «o validador do veredito segue INVALID para versão só auto-pinada» (veredito sintético; flags
+  como em `release.yml:755-763`). — Check: python3 -m pytest .claude/hooks/tests/test_check_pair_rail_auto_pin.py -q
+- [ ] W3.5 rail nas duas lanes nos bytes canônicos, em cada um dos dois pacotes (o de kernel, à parte)
+  (regra de parada pré-registrada antes da 1.ª rodada: ≤ 3 rodadas; NO-GO só por P0 ou afirmação falsa);
+  `check-ceremony-script.py` na bateria; materiais commitados como ÚLTIMO land antes da assinatura;
+  SIGN/LAND. — Check: python3 .claude/scripts/check-ceremony-script.py
+- [ ] W3.6 **logo depois do LAND da W3** (rodada 1: não mais depois da W7 — o corte já é independente do
+  Codex global, pergunta 7). **Antes dela:** (1) os derivadores do kit da W7 (`derive-kit-143.py` e
+  `derive-ga-kit-143.py`) herdam a rota 2, a igualdade de versão, a verificação pelo manifesto e o shim —
+  controle: kit com Codex global ≠ manifesto ⇒ a PROVENANCE registra a versão do manifesto e a rota 2;
+  (2) a CLI `--verify-codex-pin` fica só-manifesto por padrão e o registro só vale com flag explícita;
+  (3) o registro nunca é lido pelo validador, pelo `gen-envelope-ga.py` nem pelo kit; (4) o pré-voo do
+  corte declara a rede, os ~331 MB, o piso de `df` e a limpeza confinada do `.npx-cache`; (5) o argv do
+  runner fica alinhado à base da W3 e o pré-voo da Q11 vale também no re-pass da rc e do GA; (6) o pacote
+  de kernel do evento de aceitação (ou a decisão escrita do Owner, decisão pendente 6) e o detector de
+  deriva lendo o registro (L1) já landaram. **Então** o Owner atualiza o Codex pela rota do verificador
+  (staging → procedência → sonda e canário → registro → promoção) para a estável ELEGÍVEL, nunca a
+  `latest` crua; na 1.ª rodada real, o `--verify-codex-pin` dá `verified_auto`, a cadeia HMAC recebe o
+  evento de aceitação, e o `session_meta` mostra a versão, o originador `codex_exec` e 0 sessões
+  «guardian» (lanes `CX-06`, `CX-12`). Resíduo declarado: o corte depende da rede e de a 0.156.1 seguir
+  baixável no registro. — Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
 
 **Declarar no material assinado** (o que o desenho não cobrir): (a) o daemon `app-server` roda fora do
 pin (lane `CX-06`); (b) o `~/.codex/config.toml` global muda o comportamento do rail (esforço passou de
 max para xhigh em 29/09 sem re-pin — lane `CX-07`; em 2026-10-01 o app regravou o arquivo com modelo
 `gpt-6-astra`, esforço xhigh e `memories = true` — Q11) — o argv fixo fecha isto para o rail; (c)
-rodadas manuais que não conferem o pin; (d) o pin automático NÃO cobre os cortes de release
-(pergunta 7). **Controle vermelho→verde:** W3.4. **Dependências:** debate (PROCEED — a onda está
-BLOQUEADA até lá); L1 (recomendado); 3.ª vaga inicial (decidida; ocupada pela W3b até o debate
-fechar); a W3b landada antes; árvore sem modificação rastreada no SIGN. **Prazo:** sem data externa;
-não é pré-condição do corte W7 (o 0.156.1 está dentro da faixa pinada e o manifesto atual é o do
-0.156.1).
+rodadas manuais que não conferem o pin; (d) o pin automático NÃO muda os cortes de release: eles seguem
+ancorados no manifesto assinado (pergunta 7; a faixa do `codex-cli-pin.txt` fica intocada) — e o limite
+do `parse_semver` (casa por prefixo; quem garante «só estável» é o sha do manifesto); **(e)** o resíduo
+de mesmo UID do registro (um processo do mesmo usuário lê o diretório 0700 e o arquivo 0600); **(f)** o
+escopo: o pin protege a identidade e a integridade do REVISOR cujo veredito o framework registra, NÃO a
+máquina; **(g)** a «confiança no registro», se a decisão pendente 3 for por ela; **(h)** a sentinela
+não implementada, se a decisão pendente 4 for a opção (ii); **(i)** o hook `Stop` automático no opt-in
+(`codex_review_user_code.py`, canônico) e o `council-audit.js`, fora do núcleo de verificação; **(j)**
+adopters seguem em INFRA aberto (ADR-182: sem `.claude/governance/` neles, o pin resolve como `infra`).
+**Controle vermelho→verde:** W3.4. **Dependências:** debate (PROCEED na rodada 2 — a onda está BLOQUEADA
+até lá); W0.6 (medição do verificador do npm); o pacote de kernel de registro de ações (landa antes da
+W3.6); L1 (recomendado — é onde o detector de deriva passa a ler o registro); 3.ª vaga inicial
+(decidida; ocupada pela W3b até o debate fechar); a W3b landada antes; a poda do `CLAUDE.md` num
+fechamento antes do land da W3 (risco 9); árvore sem modificação rastreada no SIGN. **Prazo:** sem data
+externa; não é pré-condição do corte W7 (o 0.156.1 está dentro da faixa pinada, o manifesto atual é o do
+0.156.1 e o corte independe do Codex global — rota 2).
 
 **Plano B — re-pin manual pelo molde (ADR-182 §5; precedentes 0155 e 0156).** Só se o debate recusar
 o pin automático ou o 0.156.1 parar de funcionar antes do land. Passos: pré-condições do molde (árvore
@@ -632,7 +989,10 @@ o exemplo deles; `model-currency-expected-reds.txt` (0) se o `check-model-curren
   entrada da W3b.1. — Check: python3 -m pytest .claude/scripts/tests/test_check_model_deprecations.py -q
 - [ ] W3b.1 remover da lista os ids que o instrumento CURADO marca; ajustar os testes. — Check: python3 -m pytest .claude/hooks/tests/test_codex_cli_shape.py -q
 - [ ] W3b.2 `check-model-currency.py` com o conjunto de vermelhos esperado atualizado conscientemente. — Check: python3 .claude/scripts/check-model-currency.py --expected-reds .claude/data/model-currency-expected-reds.txt
-- [ ] W3b.3 **a verificar em fonte primária (S361), ANTES da re-medição da W3b.0 e da W3b.1** (a linha
+- [x] W3b.3 **FECHADA em 2026-10-02 (S361): NÃO confirmada na fonte primária (`PLAN-194/LEDGER.md`,
+  seção «W3b.3»); fecha sem a linha do `gpt-5.5`. O refresh dos ids desligados em 2026-07-23 e dos
+  snapshots de 2026-12-11 entrou junto da W3b.0 (commit `a9924eb1`).** Texto original: a verificar em
+  fonte primária (S361), ANTES da re-medição da W3b.0 e da W3b.1 (a linha
   nova entra no conjunto que o detector deriva): a aposentadoria do `gpt-5.5` em 2026-10-14. NÃO
   confirmada: o cache de modelos do Codex (`~/.codex/models_cache.json`, relido em 2026-10-01T20:06Z) só
   traz «Legacy coding model», sem data; mas o `gpt-5.5` está em `_VALID_MODELS` (`codex_cli_shape.py:98`)
@@ -730,9 +1090,11 @@ muda entre ondas, com `claude update`, relendo a seção nova do CHANGELOG.
   meta de custo; ela vale pela coerência com o substrato — no CC 2.1.284 o 5.5 virou o Sonnet padrão e
   o prefixo `claude-sonnet-5` já o admite sem ratificação). **Molde:** wave-opus55 do PLAN-193 (W3 de
   lá; ADR-149 Amendment 3). **Vaga:** na fila depois da W2, salvo se o debate pedir antes (decisão do
-  Owner); no núcleo da 1.4.3 só «se o debate único fechar a tempo», e é a primeira a sair se a cota
-  apertar (Q7, S361). **BLOQUEADA — decisão do Owner S361 (2026-10-01, Q3):** nenhum pacote da W5c começa
-  antes do PROCEED do debate único (W5c.2), e os must-fix dele valem para esta onda. **Registro no
+  Owner); no núcleo da 1.4.3 só «se o debate único fechar a tempo» (o da W5c já fechou: PROCEED na
+  rodada 1), e é a primeira a sair se a cota apertar (Q7, S361); landa por ÚLTIMO no núcleo, re-derivada
+  sobre o HEAD. **LIBERADA pelo PROCEED da rodada 1 do debate (S361; `design-coherent`) — liberação por
+  onda, decisão do Owner S361, Q3:** os must-fix MF-W5c-1 e MF-W5c-2 e os ajustes 35 a 40 do consenso
+  valem como pré-requisitos de execução (o VETO de Segurança foi retirado com essas condições). **Registro no
   LEDGER (S361):** o CC troca de modelo em silêncio quando a API recusa um — a W5c grava o id SERVIDO de
   cada agente da onda (o `ceo-cost-transcripts.py` já mostra o servido: hoje avisa «1 modelo não
   resolvido na tabela de preços» e reporta US$ 0 para `claude-sonnet-5-5`, lido na S361; a linha de
@@ -743,40 +1105,85 @@ muda entre ondas, com `claude update`, relendo a seção nova do CHANGELOG.
   `ceo-cost-transcripts.py`, `success-receipt.py` (0 — as tabelas de preço da wave-opus55);
   `.claude/settings.json` e `templates/settings/settings.base.json` (1, gerados do ADR-149); skill
   `llm-routing-and-finops` (1; `SKILL.md:387-500`); adapter live `claude.py` (1);
-  `model-currency-expected-reds.txt` e testes (0). — Check: python3 .claude/scripts/generate-available-models.py --check && python3 .claude/scripts/check-model-currency.py --expected-reds .claude/data/model-currency-expected-reds.txt
+  `model-currency-expected-reds.txt` e testes (0). **Censo da abertura (rodada 1):** contra o
+  `WOPUS55.patch` do precedente (76 paths, conferidos na S361, inclusive `scripts/install.sh`, o baseline
+  do censo do instalador, `audit_log.py`, `settings.user.json`, `_lib/test_isolation.py`, `upgrade.sh`,
+  `validate-governance.sh` e o manifesto ADR-192), com as linhas novas no mapa de colisões;
+  `check-installer-write-safety.py` na bateria; custo do censo: +100-200k tokens. — Check: python3 .claude/scripts/generate-available-models.py --check && python3 .claude/scripts/check-model-currency.py --expected-reds .claude/data/model-currency-expected-reds.txt
 - [ ] W5c.1 **re-teste pago, só na vez da W5c** («Só quando chegar a vez (Recomendado)»), com os
   MESMOS testes das adoções anteriores e o instrumento intacto (regra «modelo novo ⇒ re-testar»,
   CLAUDE.md §4); o conjunto exato de testes é fixado no LEDGER ANTES de rodar (pré-registro), junto do
-  resultado da W5.0 sobre o alias `sonnet`. Regras de medição da W0. — Check: none (medição paga; resultado no LEDGER)
-- [ ] W5c.2 debate L3 dentro do debate único do plano (Approach, item 4; críticos da wave-opus55:
-  segurança, QA/upgrade e FinOps). Perguntas: (a) o 5.5 entra só no conjunto de trabalho, com piso
-  VETO, fallback e pin inalterados (formato do Amendment 2, o do Fable 5.1 — proposta do CEO), ou mais
-  que isso; (b) a skill `llm-routing-and-finops` passa a citar o id exato em vez do alias `sonnet`;
-  (c) a cura da classe adaptive-only (PLAN-193, W4) já cobre o 5.5 pelo ADR-149, ou o adapter live
-  precisa de ajuste para os dois HTTP 400 (`thinking` desligado e `tool_choice` forçado — lane
-  `ANT-02`); (d) a W5c anda antes da posição dela na fila. — Check: ls .claude/plans/PLAN-194/debate/round-1
-- [ ] W5c.3 pacote derivado por script: emenda 4 do ADR-149 (com a correção de texto do Ultracode da
-  W5a dentro — mapa de colisões); linha `claude-sonnet-5-5` no `cost-table.yaml` com US$ 2 de entrada
-  e US$ 10 de saída por milhão de tokens e leitura de cache a US$ 0,20 (fonte: CHANGELOG do Claude
-  Code 2.1.284; conferir na página de preços no dia do pacote, como fazem os `source_url` das linhas
-  vizinhas). A tabela não tem coluna de cache: o multiplicador vai nos scripts de custo, como na linha
-  do Opus 5.5 (comentário em `cost-table.yaml:99`). `availableModels` regenerado pelo
-  `generate-available-models.py`. — Check: python3 .claude/scripts/generate-available-models.py --check && python3 -m pytest .claude/hooks/tests/test_adr149_validator_parity.py .claude/scripts/tests/test_check_model_currency.py -q
+  resultado da W5.0 sobre o alias `sonnet`. **Pré-registro da rodada 1:** instrumento com sha (copiar o
+  da S357 para dentro da pasta do plano, ou pinar o sha); braços `claude-sonnet-5` EXATO ×
+  `claude-sonnet-5-5`, mesmo esforço, `claude -p` hermético; n, métrica (defeitos achados, correção
+  cega), δ de não-inferioridade e regra de custo fixados antes; **a validade vem antes das células** —
+  execução com id SERVIDO ≠ pedido, ou com sha do instrumento ou versão do CC diferentes, é INVÁLIDA (não
+  FAIL), refaz e não conta; efeito teto declarado (na S357 o instrumento achou 19 de 20 defeitos:
+  detecta regressão, não melhora). Células (2^3, enumeradas ANTES; valores propostos, o CEO ajusta no
+  LEDGER sem remover célula): defeitos {não-inferior, inferior por δ} × custo por revisão {≤ 1,2×, >
+  1,2× o Sonnet 5} × os dois HTTP 400 da `ANT-02` {confirmados, não confirmados}. Ação por célula:
+  não-inferior e custo ≤ 1,2× ⇒ PASS (com os 400 confirmados o adapter ganha a proteção; não confirmados,
+  o adapter segue sem mudança e a `ANT-02` é registrada como refutada); não-inferior e custo > 1,2× ⇒
+  PASS com o custo declarado no material assinado; inferior ⇒ FAIL — pára antes do SIGN e o Owner decide
+  por múltipla escolha (o debate NÃO desfaz o «Adotar»). **Sondas do adapter (W5c-3):** duas sondas
+  pagas pré-registradas, na W5.0 ou aqui — `thinking` `disabled`, e `tool_choice` forçado com `thinking`
+  ligado. Regras de medição da W0. — Check: none (medição paga; resultado no LEDGER)
+- [ ] W5c.2 debate L3 dentro do debate único do plano — **FEITO: rodada 1, PROCEED (`design-coherent`,
+  S361)**; críticos: Segurança, QA e DevOps. Respostas (consenso §6, W5c-1 a W5c-6): (a) **formato da
+  Amendment 2, só ele** — o 5.5 entra só no conjunto de trabalho, com piso VETO, fallback e pin
+  inalterados e `_ROUTING_TABLE` intocado; a emenda 4 diz que `claude-sonnet-5-5` fica fora do piso VETO,
+  do pin de sessão e de `.claude/agents/*.md` (A1.1 reafirmada), com controle de igualdade de bytes do
+  conjunto elegível a VETO antes e depois do pacote derivado (MF-W5c-1); (b) **decidido pelo CEO, com
+  critério pré-registrado:** os exemplos da skill `llm-routing-and-finops` seguem com o alias `sonnet`
+  (fixar o id recria churn a cada geração); a tabela de roteamento (`SKILL.md:109-123`, que cita
+  `claude-sonnet-4-6`) é corrigida no pacote — se a W5.0 medir alias → `claude-sonnet-5-5` em 3 de 3
+  sondas (id servido conferido, CC congelado), a tabela cita «alias `sonnet` = `claude-sonnet-5-5` no CC
+  ≥ 2.1.284, medido em <data>»; senão, cita só o alias e declara; (c) **medir primeiro** (as duas
+  sondas pagas da W5c.1): o teste do adapter codifica a resposta MEDIDA, com data e substrato, e a
+  proteção vale para a CLASSE `_ALWAYS_ON_THINKING_MODELS` (`.claude/hooks/_lib/adapters/live/claude.py:135-142`,
+  `claude-opus-5-5` incluído), parametrizada; (d) **nenhum fato antecipa a W5c:** ela landa por ÚLTIMO
+  no núcleo, re-derivada sobre o HEAD; se não estiver landada quando começar a derivação do kit da W7,
+  vai para depois do GA (linha de corte). A rodada 2 só reabre a W5c se um crítico mostrar que os
+  ajustes 35 a 40 do consenso foram aplicados de forma diferente do texto. — Check: ls .claude/plans/PLAN-194/debate/round-1/consensus.md
+- [ ] W5c.3 pacote derivado por script: emenda 4 do ADR-149 (**formato da Amendment 2**, texto conforme
+  a W5c.2 (a): fora do piso VETO, do pin de sessão e de `.claude/agents/*.md`, com o controle de igualdade
+  de bytes do conjunto elegível a VETO antes e depois; com a correção de texto do Ultracode da W5a
+  dentro — mapa de colisões); linha `claude-sonnet-5-5` no `cost-table.yaml`
+  com US$ 2 de entrada e US$ 10 de saída por milhão de tokens e leitura de cache a US$ 0,20 (fonte:
+  CHANGELOG do Claude Code 2.1.284; conferir na página de preços no dia do pacote, como fazem os
+  `source_url` das linhas vizinhas). A tabela não tem coluna de cache: o multiplicador vai nos scripts de
+  custo, como na linha do Opus 5.5 (comentário em `cost-table.yaml:99`). `availableModels` regenerado
+  pelo `generate-available-models.py`. **Entrega ao adopter (rodada 1, W5c-6):** as duas cláusulas da
+  A2.2 (itens 5 e 6) repetidas; o array de 8 ids da 1.4.2 (o `new` atual do `upgrade.sh`, `:198`) vai
+  para `superseded`, e o `new` acrescenta o 5.5 no FIM (9 ids), com casamento byte a byte; o `upgrade.sh`
+  nunca alarga nem estreita em silêncio uma allowlist customizada. Quatro células: o array exato de 8
+  ids ⇒ MIGRATE; o customizado ⇒ PRESERVED com WARN nomeado; o de 7 ids ⇒ MIGRATE; a 2.ª execução ⇒
+  nada muda. `derive-settings-baselines.py --check` na bateria, num clone com TODAS as tags GA, e SKIP
+  conta como falha (a guarda da migração do adopter PULA em clone raso —
+  `test_derive_settings_baselines.py:664` e `:672`, `skipTest` — e o `validate.yml` não tem
+  `fetch-depth` nem chama o `derive-settings-baselines`). **`_tier_rank`** (`tier_policy_cli/learn.py:535-563`):
+  hoje `claude-sonnet-5` = 3 e `claude-opus-4-8` = 4, então `claude-sonnet-5-5` rank -1 (desconhecido) e
+  não há inteiro livre entre 3 e 4 — renumerar, com as direções `sonnet-5→sonnet-5-5` = promote,
+  `sonnet-5-5→opus-4-8` = promote e `sonnet-5-5→sonnet-4-6` = demote, e uma guarda de classe: todo id do
+  bloco `AVAILABLE_MODELS_WORKING_SET` do ADR-149 tem posto ≥ 0. — Check: python3 .claude/scripts/generate-available-models.py --check && python3 -m pytest .claude/hooks/tests/test_adr149_validator_parity.py .claude/scripts/tests/test_check_model_currency.py -q
 - [ ] W5c.4 controle vermelho→verde em árvore descartável: só a linha de preço, sem a emenda ⇒ o
-  `check-model-currency.py` acusa o id sem autoridade A1 (vermelho — alternativa (c) do «Approach»);
+  `check-model-currency.py` acusa o id sem autoridade A1 (vermelho — alternativa (c) do «Approach»); o
+  braço vermelho afirma a DIFERENÇA EXATA (`+claude-sonnet-5-5` na superfície S1), não só «há achado»;
   com a emenda 4 ⇒ o conjunto de vermelhos esperado fica igual (verde). — Check: python3 .claude/scripts/check-model-currency.py --expected-reds .claude/data/model-currency-expected-reds.txt
 - [ ] W5c.5 rail nas duas lanes nos bytes canônicos (regra de parada pré-registrada antes da 1.ª
   rodada: ≤ 3 rodadas; NO-GO só por P0 ou afirmação falsa); exceção de tamanho declarada no material
-  assinado; `check-ceremony-script.py` na bateria; no `.claude/settings.json`, só depois do land da W6
-  ou no mesmo pacote dela (mapa de colisões, OQ-14); SIGN/LAND. — Check: python3 .claude/scripts/check-ceremony-script.py
-- [ ] **W5.1 — refresh do ledger de substrato, UMA vez, depois do land da W3 (ou com o Codex ainda no
-  0.156.1, se o corte W7 vier antes ou se a W3.6 só rodar depois do corte — pergunta 7 da W3)** (codex_cli,
+  assinado; `check-ceremony-script.py` na bateria; censo da abertura contra o `WOPUS55.patch` e
+  `check-installer-write-safety.py` na bateria (ver o item da W5c); no `.claude/settings.json`, só depois
+  do land da W6 ou no mesmo pacote dela (mapa de colisões, OQ-14); SIGN/LAND. — Check: python3 .claude/scripts/check-ceremony-script.py
+- [ ] **W5.1 — refresh do ledger de substrato, UMA vez, depois do land da W3** (se a W3.6 rodou antes do
+  corte, o `codex_cli` do refresh é a versão global auto-pinada, e NÃO o 0.156.1; com o Codex ainda no
+  0.156.1, por exemplo se o corte W7 vier antes do land da W3, grava o 0.156.1) (codex_cli,
   claude_code, cc_native_usage e, desde a S361, grok_cli — o ledger tem 0.2.93 de 2026-07-12), com a réplica do loader re-derivada no MESMO patch
   (`test_settings_guard_loadability.py:138` fixa `2.1.280`; o teste de `:522` fica vermelho quando o
   ledger sobe, por desenho). O Owner roda `check-substrate-watch.py --refresh`. **Valores a gravar no
   refresh (S361):** `claude_code` = a versão instalada na hora (2.1.287 em 2026-10-01 — as medições da
   S360 são do 2.1.286, e o ledger tem hoje 2.1.280, de 2026-09-22); `codex_cli` 0.156.1 (instalado e
-  pinado); `grok_cli` 1.0.13 (instalado, `grok --version` em 2026-10-01). **Vigia do Haiku 4.5, com
+  pinado hoje; se a W3.6 já rodou, a versão global auto-pinada); `grok_cli` 1.0.13 (instalado, `grok --version` em 2026-10-01). **Vigia do Haiku 4.5, com
   data:** piso de aposentadoria em 2026-10-15 («Not sooner than October 15, 2026» na página de
   deprecações da Anthropic, lida em 2026-10-01; o modelo segue «Active», sem aviso formal);
   `model_routing.py:62-71` o usa em `file_read`, `line_audit` e `digest`. A estimativa de aposentadoria
@@ -795,12 +1202,15 @@ muda entre ondas, com `claude update`, relendo a seção nova do CHANGELOG.
 
 **Estimativa:** W5a ~100-150 linhas, 3 paths; W5b 60-120 linhas, 2 paths; W5c (adoção) = exceção (2)
 da regra de WIP do topo (~40 espelhos num pacote atômico; precedente OQ-2 do PLAN-193), 2-4 M tokens
-com debate e rail + a cota paga do re-teste. **Debate:** só a W5c (no debate único do plano).
-**Dependências:** W5.0 (paga, na vez da W5); PROCEED do debate único (a W5c está BLOQUEADA até lá — Q3,
-S361); W5c.1 (paga, na vez da W5c); W6 antes da W5c no
-`.claude/settings.json`, ou no mesmo pacote pela OQ-14; W3 para a W5.1 (se landar antes do corte). **Prazo:** antes do corte W7; se
-a W5c não chegar a tempo, o corte declara no material assinado que o prefixo `claude-sonnet-5` admite
-o 5.5 sem a emenda.
+com debate e rail + 100-200k do censo contra o precedente + a cota paga do re-teste. **Debate:** só a
+W5c (no debate único do plano; rodada 1 FEITA: PROCEED).
+**Dependências:** W5.0 (paga, na vez da W5); PROCEED do debate único (**dado na rodada 1** — a W5c está
+LIBERADA, com os must-fix e os ajustes 35 a 40 do consenso como pré-requisitos — Q3, S361); W5c.1 (paga,
+na vez da W5c); W6 antes da W5c no `.claude/settings.json`, ou no mesmo pacote pela OQ-14; W3 para a
+W5.1 (se landar antes do corte); a W5c landa DEPOIS da W2 e por ÚLTIMO no núcleo (a cura do
+`agent_spawn` antes dela em `audit_log.py`; a W5b e a W1a/W1b do PLAN-183 antes dela em `install.sh`).
+**Prazo:** antes do corte W7; se a W5c não chegar a tempo, o corte declara no material assinado que o
+prefixo `claude-sonnet-5` admite o 5.5 sem a emenda.
 
 ### W6 — Retenção do log de auditoria
 Check: python3 -c "import json;print(json.load(open('.claude/settings.json'))['cleanupPeriodDays'])"
@@ -905,10 +1315,19 @@ espera do registry no passo 18 (5×30 s curta para o CDN do npm); passo 5 sobres
 **Pré-condições do corte:** W4 landada (senão a rc não prova o toolchain); o veredito do re-pass
 precisa de `codex_cli` dentro da faixa pinada E de `codex_payload_sha256` IGUAL ao do MANIFESTO assinado
 da árvore tagueada (`release.yml:754-763`; `validate-pair-rail-verdict.py:745-763`; o
-`gen-envelope-ga.py` do kit recusa sha ou versão diferentes) — cumprido com o Codex no 0.156.1 e o
-manifesto atual; a W3 NÃO muda isso (pergunta 7 da W3: o pin automático não cobre os cortes), então o
-Codex só sobe DEPOIS do corte, ou junto com um re-pin do manifesto dentro do kit; W1 obrigatória se o
-corte for depois de 2026-10-19; W2 recomendada. **Escopo do corte (Q7, S361):** o núcleo descrito no Goal;
+`gen-envelope-ga.py` do kit recusa sha ou versão diferentes) — cumprido com o manifesto atual (o do
+0.156.1); a W3 NÃO muda isso (pergunta 7 da W3: o pin automático não muda os cortes). **Rodada 1 do
+debate:** o **Codex global pode diferir do manifesto**, porque o runner do re-pass resolve o Codex do
+MANIFESTO pela rota 2 (`npx` em cache próprio) e o envelope lê a PROVENANCE, nunca a máquina; por isso a
+W3.6 roda logo depois do LAND da W3, sem esperar o corte. Pré-condições dessa independência: (i) os
+derivadores do kit (`derive-kit-143.py` e `derive-ga-kit-143.py`) herdam a rota 2 COM controle — kit com
+Codex global ≠ manifesto ⇒ a PROVENANCE registra a versão do manifesto e a rota 2; (ii) o pré-voo
+declara a rede, os ~331 MB e o piso de `df`; (iii) o argv do runner fica alinhado à base da W3 (ou a
+divergência é declarada no material assinado); (iv) o pré-voo da Q11 vale no re-pass da rc e do GA; (v)
+linha de corte da W5c: se ela não estiver landada quando começar a derivação do kit, vai para depois do
+GA; (vi) nenhum pacote de ADR em voo durante o kit (primeiro pronto, primeiro a landar; um por
+fechamento; nenhum pacote de ADR em voo entre o início da derivação do kit e a publicação do GA). W1
+obrigatória se o corte for depois de 2026-10-19; W2 recomendada. **Escopo do corte (Q7, S361):** o núcleo descrito no Goal;
 a escolha entre 1.4.3 e 1.5.0 sai do diff do `SPEC/v1` na abertura do corte. **Colisão com o leque de
 ADR:** o `CHANGELOG.md` é path desta onda e carrega a contagem de ADR no preâmbulo — um pacote que cria
 arquivo de ADR e a W7 não podem estar em voo juntos (mapa de colisões). **Prazo:** sem data prometida
@@ -996,12 +1415,14 @@ Check: python3 .claude/scripts/validate_governance_fast.py
 |---|---|---|---|---|
 | W0 | 150-300k (sem cota paga) | 1 | não | — |
 | W1 | 150-300k | 1 | sim (1.ª) | assinatura; prazo 19/10 |
-| W2 | 0,8-1,5 M | 1-2 | sim (a vaga seguinte à da W7a do PLAN-183 — ordem decidida) | debate único (PROCEED — onda BLOQUEADA até lá, Q3) + assinatura; limpeza W2.6 rodada pelo Owner (script entregue, fora do repositório) |
-| W3 | 0,8-1,5 M | 1-2 | sim (3.ª vaga inicial — ordem decidida; ocupada pela W3b até o debate fechar, Q8) | debate único (PROCEED — onda BLOQUEADA até lá, Q3) + assinatura; Codex parado no 0.156.1 até o land e até o fim do corte W7 (pergunta 7) |
+| W2 | 0,9-1,7 M (prazo na saída + provas) | 1-2 | sim (a vaga seguinte à da W7a do PLAN-183 — ordem decidida) | debate único (rodada 2; onda BLOQUEADA até o PROCEED, Q3) + cura do `agent_spawn` antes do SIGN + assinatura; limpeza W2.6 rodada pelo Owner (script entregue, fora do repositório; pré-condição: decisão pendente 2) |
+| cura do `agent_spawn` (W2.0; condição 67) | 150-300k + ~50k do censo AST | 0-1 | sim, pacote canônico próprio (vaga e orçamento: decisão pendente 1) — ou dentro da W2, com +2 paths | assinatura; landa ANTES do SIGN da W2 |
+| W3 | 1,3-2,5 M, em 2 pacotes de ≤ 8 paths (+ a W0.6, sem cota paga) | 2-3 | sim (3.ª vaga inicial — ordem decidida; ocupada pela W3b até o debate fechar, Q8) | debate único (rodada 2; onda BLOQUEADA até o PROCEED, Q3) + assinatura; Codex parado no 0.156.1 até o LAND da W3 (depois, só pela W3.6, que roda logo depois do LAND) |
+| W3: pacote de kernel de registro de ações (`audit_emit.py`) | 100-200k + 1 cerimônia de kernel | com a W3 | sim, em série com a W1a do PLAN-195 | assinatura; landa ANTES da W3.6 |
 | W3b | 100-200k | 1 | sim (3.ª vaga inicial enquanto a W3 espera — Q8, S361; landa antes da W3) | assinatura; prazo 2026-12-11 |
 | W4 | 150-300k | 1 | sim | assinatura; antes da rc.1 |
 | W5a/W5b | 300-600k + cota paga da W5.0 | 1 | sim (install.sh; o texto do ADR-149 vai na W5c) | W5.0 na vez da W5 (OQ-7 respondida, Q9: gravar `manual`) |
-| W5c (adoção do Sonnet 5.5) | 2-4 M + cota paga do re-teste | 1-2 | sim (depois da W2, salvo se o debate pedir antes; exceção de tamanho declarada) | debate único (PROCEED — onda BLOQUEADA até lá, Q3) + re-teste pago na vez + W6 landada antes, ou no mesmo pacote pela OQ-14 (`settings.json`) + assinatura |
+| W5c (adoção do Sonnet 5.5) | 2-4 M + 100-200k do censo contra o precedente + cota paga do re-teste | 1-2 | sim (depois da W2, salvo se o debate pedir antes; exceção de tamanho declarada) | debate único (PROCEED dado na rodada 1 — onda LIBERADA, Q3; must-fix valem) + re-teste pago na vez + W6 landada antes, ou no mesmo pacote pela OQ-14 (`settings.json`) + assinatura |
 | W6 | 100-200k + isca paga mínima da W6.0 | 1 | sim (antes da W5c e da W3 do PLAN-195 no `settings.json`) | agendamento do backup pelo Owner (W6.1; a 1.ª cópia já foi feita na S361) + ensaio de restaurar e verificar (W6.3) + isca W6.0 antes da W6.2; OQ-8 e OQ-14 respondidas (Q9) — a W6 não espera o sandbox nem a W5c |
 | W7 | 1-2 M | 1-2 | sim (cortes) | hold de 24 h + assinaturas + npm |
 | W8 | 50-150k | com outra | sim | OK do download |
@@ -1015,18 +1436,30 @@ Check: python3 .claude/scripts/validate_governance_fast.py
    como rede sem código.
 2. **O censo W0.1 acha muitos workflows quebrando** ⇒ passa de 8 paths. Mitigação: dividir por
    criticidade (gates do release primeiro); a mitigação oficial `ubuntu-24.04` é por arquivo.
-3. **W2 mexe no núcleo da cadeia de auditoria** ⇒ risco de perder evento. Mitigação: debate, invariantes
-   em teste de estresse, `verify_chain()`, rail, predicado conservador de GC.
+3. **W2 mexe no núcleo da cadeia de auditoria** ⇒ risco de perder evento. Mitigação: debate (rodada 2),
+   invariantes em teste de estresse (por conjunto, escritores mistos, mutantes plantados),
+   `verify_chain()`, rail, predicado conservador de GC, nenhum `unlink` de `*.lock` em hook, prazo na
+   saída com controle de entrega de decisão e a cura do `agent_spawn` antes do SIGN.
 4. **Pin automático aceita uma versão ruim com procedência válida** (o atestado prova a ORIGEM, não a
-   QUALIDADE do revisor). Mitigação: sentinela de corpus fixo (avisa, não trava — decisão do Owner),
-   versão/modelo/esforço registrados em cada veredito, debate de segurança. **Até a W3 landar** (e, nos cortes de
-   release, até o fim do corte W7 — pergunta 7): um `npm update -g` fecha o rail (o MANIFESTO por sha
-   exato recusa o binário novo — não a faixa: o hook bloqueia as escritas L3+ e o pré-voo de fase 6
-   aborta; as rodadas manuais não conferem o pin e rodariam o binário novo sem verificação); mitigação:
-   Codex no 0.156.1
-   (decisão do Owner, W3.1). **E no corte** (S361): o pin automático não cobre o passo 15 do release —
-   um veredito com o Codex novo sai INVALID (pergunta 7 da W3). No plano B volta a janela entre `npm i -g` e o SIGN: mesma sentada + rodadas
-   manuais congeladas.
+   QUALIDADE do revisor). **Mitigações reescritas na rodada 1:** o verificador roda FORA do hook (a
+   verificação dentro do hook PreToolUse viraria fail-OPEN por timeout); sonda e canário funcional
+   BLOQUEANTES, na ordem verificar → sondar → aceitar (cobrem a classe A7: subcomando ou flag removidos em
+   silêncio); carência de 48 h contada no relógio do registro, com a estável elegível mais nova (nunca
+   «== `latest`») e gramática estrita de versão; identidade do construtor fixada em constantes
+   canônicas; quarentena e rollback nomeados e testados; evento durável na cadeia HMAC a cada aceitação
+   (pacote de kernel de registro de ações); versão, modelo e esforço registrados em cada veredito. A
+   **sentinela de corpus fixo** (avisa, não trava) está **pendente de decisão do Owner (S361; decisão
+   pendente 4)**: o corpus travado do ADR-111 não está no repositório, e a recomendação é a W3 landar sem
+   sentinela, declarada — o gatilho do ADR-111 §2 fica preservado e NÃO AVALIÁVEL até haver corpus com sha
+   e linha de base. **Até o LAND da W3:** um `npm update -g` fecha o rail (o MANIFESTO por sha exato
+   recusa o binário novo — não a faixa: o hook bloqueia as escritas L3+ e o pré-voo de fase 6 aborta; as
+   rodadas manuais não conferem o pin e rodariam o binário novo sem verificação); mitigação: Codex no
+   0.156.1 (decisão do Owner, W3.1). **E no corte** (S361, respondido na rodada 1): o pin automático não
+   muda o passo 15 do release (um veredito com o Codex novo e fora do manifesto sai INVALID), mas o corte
+   é independente do Codex global — o runner do re-pass resolve o Codex do MANIFESTO pela rota 2 (`npx`
+   em cache próprio) e o envelope lê a PROVENANCE —, então a W3.6 roda logo depois do LAND da W3 e o corte
+   segue pela rota 2 (resíduo: depende da rede e de o 0.156.1 seguir baixável no registro). No plano B
+   volta a janela entre `npm i -g` e o SIGN: mesma sentada + rodadas manuais congeladas.
 5. **Publish do GA falha com o Node novo** (a rc não prova a troca OIDC) ⇒ rollback + re-tag.
    Mitigação: W4.3 prova o toolchain na rc; playbook do PLAN-158; W4 fora de janela de release.
 6. **Edição da configuração do publicador confiável** ⇒ nasce só com «stage» e o passo 18 falha.
@@ -1087,7 +1520,16 @@ Check: python3 .claude/scripts/validate_governance_fast.py
     (N gravadores em paralelo ⇒ `verify_chain` íntegro) e controle vermelho no código atual. O arquivo é
     canônico (oráculo = 1) ⇒ pacote com cerimônia; o Owner decide a vaga (candidato natural: junto da W2,
     que já mexe no estado da auditoria). Até a cura, toda quebra num `agent_spawn` é presumida desta classe
-    e conferida pela recomputação contra os elos anteriores.** Mitigação: re-medir no início de cada onda.
+    e conferida pela recomputação contra os elos anteriores.** **Números relidos no consenso da rodada 1
+    (2026-10-02T00:25Z):** `audit-log.errors` com 30.258 linhas, 30.068 delas `drain canonical lock
+    timeout` (eram 25.589 às ~20:08Z, cerca de 1.100 por hora); o state dir tinha 226.831 e 226.811
+    entradas às 23:55Z e às 00:00Z (contagem dos críticos); relido pelo redator às 00:39Z: 30.823 linhas,
+    30.631 timeouts e ~227,9 mil entradas — o acúmulo segue. **O gatilho de reversão do ADR-055-AMEND-3
+    (`revert_trigger_truly_lost_7d`) está MORTO:** `truly_lost` nunca é incrementado (só
+    `spool_writer.py:136`, o valor padrão, e `:2562`, a leitura) e a reconciliação do journal
+    (`spool_writer.py:2467`) não tem chamador em produção; o AMEND-4 não herda o `truly_lost` e põe os
+    gatilhos em instrumentos LIGADOS, com controle positivo. **A cura da condição 67 é a W2.0,
+    pré-condição do SIGN da W2** (vaga: decisão pendente 1). Mitigação: re-medir no início de cada onda.
 12. **Evidência de CI some:** runs passam a ser apagados após 90 dias a partir de 2026-10-01 (lane
     `DEP-07`). Mitigação: copiar para o LEDGER o que for evidência (ids, conclusão, datas).
 13. **Instrumento vs. modo auto do CC 2.1.281+:** `rm` com alvo em variável é negado em 2 min sem
@@ -1108,6 +1550,13 @@ Check: python3 .claude/scripts/validate_governance_fast.py
     derivado por script (L3 `adopt-model.py`), exceção de tamanho declarada, controle vermelho→verde
     (W5c.4), re-teste pago com os mesmos testes antes do SIGN, debate com crítico de FinOps; a W6 vai
     antes no `settings.json`.
+17. **Trabalho longo dentro de guard vira allow por timeout** (acrescentado na rodada 1 do debate). Uma
+    ação passa sem decisão quando o hook estoura o timeout; é a classe comum à W2 (a listagem de ~228 mil
+    nomes sob o lock canônico na saída do hook, contra o timeout de 5 s dos guards PreToolUse) e à W3 (o
+    download de ~331 MB dentro do hook do rail, contra o timeout de registro de 210 s). Mitigação: na W2,
+    o prazo na drenagem forçada de saída com controle de ENTREGA DE DECISÃO (W2.2-bis) e nenhuma varredura
+    própria no hook; na W3, o verificador em processo próprio, fora de qualquer guard — o hook só faz hash
+    e consulta local, nunca usa rede, e sha desconhecido ⇒ bloqueio.
 
 ## Fora do escopo (dono em outro lugar)
 
@@ -1120,8 +1569,9 @@ Check: python3 .claude/scripts/validate_governance_fast.py
   (o lado do framework é a L2).
 - Backlog sem onda (candidatos a follow-up): 190-FU audit-actions; inventário da dívida «known-open»
   com dono (lane `F-DEBT`); regex de `-FOLLOWUP-` no `check_plan_edit.py:136`; classe FN-04 além do
-  ledger (lane `F13`); `codex_invoke.py`/`council-audit.js` passando pela conferência do pin (lane
-  `CX-04`), salvo se o debate da W3 os incluir (pergunta 6); [fixar modelo e esforço no argv do rail
+  ledger (lane `F13`); `council-audit.js` e `codex_review_user_code.py` passando pela conferência do pin
+  (lane `CX-04`; o `codex_invoke.py` e o `run-promotion-gate.py` entraram na W3, pacote 2 — pergunta 6,
+  rodada 1); [fixar modelo e esforço no argv do rail
   (lane `CX-07`) saiu daqui: entrou na W3, desenho do pin automático]; refresh do `model-deprecations.json`
   (parado desde 2026-06-12, lane `ANT-05`; a linha do `gpt-5.5` virou a W3b.3 — S361); vigia do Haiku
   4.5 (piso 2026-10-15; `model_routing.py:64-70`, lane `ANT-04` — passou para a W5.1 na S361); pins node20 e `ubuntu-22.04` (`tier-policy.yml`, `mutation-gate.yml`,
@@ -1129,6 +1579,13 @@ Check: python3 .claude/scripts/validate_governance_fast.py
   de temporários dos testes do framework (lane `H-06`); `shadow-ci.yml` que nunca rodou (lane `H-12`);
   pilha OTEL inerte (lane `CC-03`); métrica da ordem de −1/3 (custo por tarefa com cache separado —
   agora com dono: este plano, decisão Q13-h da S361, abaixo).
+- **Adiados pela rodada 1 do debate (follow-ups, fora da 1.4.3):** (1) o kit re-pinar o manifesto por
+  script nos cortes futuros; (2) lista de revogação assinada de versões do Codex; (3) cópia endereçada
+  por conteúdo do último payload verificado (pede ADR próprio); (4) pin automático para adopters; ligar
+  a reconciliação de início de sessão (`reconcile_journal_at_session_start`, hoje sem chamador em
+  produção: abriria ~76 mil journals sob o timeout de 5 s do `SessionStart`); a opção T2 das travas da W2
+  (re-checagem de inode no `filelock.py`, kernel), se não for escolhida; a sentinela de qualidade da W3,
+  se a decisão pendente 4 for a opção (ii).
 
 **Unidades que ganharam dono neste plano na S361** — sem dono elas não entravam em onda nenhuma:
 
@@ -1149,8 +1606,11 @@ Check: python3 .claude/scripts/validate_governance_fast.py
 4. **Cura da corrida no gravador do `agent_spawn`** (`.claude/hooks/audit_log.py`, oráculo = 1): ler o elo
    anterior e calcular o HMAC DENTRO da trava, com teste de N gravadores em paralelo e controle vermelho no
    código atual (diagnóstico no risco 11). **Dono: este plano**; pacote canônico com cerimônia, vaga e
-   orçamento decididos pelo Owner (candidato natural: junto da W2, que já mexe no estado da auditoria;
-   estimativa a firmar na abertura, ordem de 150-300k tokens com rail).
+   orçamento decididos pelo Owner. **Rodada 1 do debate:** ela é PRÉ-CONDIÇÃO do SIGN da W2 (item W2.0).
+   **Recomendação do CEO, pendente de decisão do Owner (S361; decisão pendente 1):** pacote canônico
+   PRÓPRIO, landado ANTES do SIGN da W2 — o primeiro pacote na vaga da W2, ou a primeira vaga que abrir
+   antes (alternativa: dentro da W2, com +2 paths); 150-300k tokens + ~50k do censo AST, 0 a 1 sessão,
+   com rail. A linha que aposenta a condição 67 vai no `CHANGELOG.md` do corte W7.
 
 ## Decisões do Owner — S361 (2026-10-01)
 
@@ -1216,6 +1676,47 @@ RESPONDIDA») no lugar delas, em «Open questions».
   US$ 162,64 (medido pelo CEO; a janela fechada 15:00Z–19:00Z, relida na S361, dá US$ 166,77 — a
   janela exata do planejamento não foi reconstruída). Até a W5c, o `ceo-cost-transcripts.py` reporta
   US$ 0 para o `claude-sonnet-5-5` (modelo sem linha de preço). → «Fora do escopo» (backlog com dono) e «How to continue».
+
+## Decisões pendentes do Owner — S361 (rodada 1 do debate)
+
+Saíram do consenso da rodada 1 (`.claude/plans/PLAN-194/debate/round-1/consensus.md`, §8). Cada uma traz
+a RECOMENDAÇÃO do CEO, em linguagem simples, e está **pendente de decisão do Owner (S361)** — nenhuma é
+decisão tomada. Enquanto não houver resposta, o plano segue a recomendação só como desenho de entrada da
+rodada 2 (rascunhos PROPOSED), nunca como cerimônia. A **regra de parada do debate** está em «Approach»,
+item 4: no máximo 3 rodadas; NO-GO só por P0 ou afirmação FALSA no plano; impasse depois da 3.ª rodada
+vai ao Owner por múltipla escolha.
+
+1. **Vaga da cura da corrida do `agent_spawn` (condição 67; risco 11, unidade 4, item W2.0).** O VETO da
+   W2 fica levantado até ela landar. **Recomendação, pendente de decisão do Owner (S361):** pacote
+   canônico PRÓPRIO, landado ANTES do SIGN da W2 — o primeiro pacote na vaga da W2, ou a primeira vaga
+   que abrir antes. Raio menor e rail independente; 150 a 300k tokens + ~50k do censo AST, 0 a 1
+   sessão. A aposentadoria da condição 67 vai no `CHANGELOG.md` do corte. Alternativa: dentro da W2, com
+   +2 paths.
+2. **Pré-condição da limpeza única W2.6.** **Recomendação, pendente de decisão do Owner (S361):** trocar
+   «todas as sessões do Claude fechadas» por «todas as sessões DESTE projeto fechadas», porque o state
+   dir é por projeto desde a W1 do PLAN-182. O script recusa se achar arquivo da família com PID vivo ou
+   mtime < 10 min. E rodar já: o `audit-log.errors` subiu de 25.589 para 30.258 linhas entre ~20:08Z e
+   00:25Z, com 30.068 timeouts.
+3. **Assinatura do atestado (W3, pergunta 2), só se a medição W0.6 reprovar o verificador do npm.**
+   **Recomendação, pendente de decisão do Owner (S361):** aceitar por escrito «confiança no registro via
+   TLS + vínculo de digests + identidade do construtor fixada», como resíduo NOMEADO no AMEND-1 e no
+   material assinado. Recusar devolve o plano B (re-pin manual), que o Owner já recusou.
+4. **Sentinela de qualidade (desenho (b) da W3).** O corpus travado do ADR-111 não está no repositório.
+   **Recomendação, pendente de decisão do Owner (S361):** opção (ii) — a W3 landa SEM sentinela,
+   declarada, e a sonda e o canário bloqueantes cobrem a classe A7; a sentinela vira follow-up quando
+   houver corpus com sha e linha de base (m ≥ 3) sob o freio Q2. Alternativa (i): construir o corpus e a
+   linha de base antes da W3 (cota do Codex m × N revisões + ~100k tokens).
+5. **Modelo e esforço fixos no argv do rail (W3, pergunta 10).** **Recomendação, pendente de decisão do
+   Owner (S361):** `gpt-6-astra` + `xhigh`, o par em uso de fato, condicionado ao re-teste da Q11. O id
+   entra em `_VALID_MODELS` no pacote 2 da W3, depois da W3b. Trocar de modelo passa a ser cerimônia por
+   GERAÇÃO.
+6. **Evidência da aceitação automática (só se o Owner quiser evitar o pacote de kernel).** O padrão do
+   debate é o evento na cadeia HMAC (consenso §2(e)). **Recomendação, pendente de decisão do Owner
+   (S361):** manter o evento. A alternativa (evidência só no registro) exige o resíduo escrito no
+   AMEND-1.
+7. **Para ciência, sem decisão:** a carência é de 48 h, então o pin anda ~2 dias atrás da `latest`, sem
+   cerimônia; a W3.6 roda logo depois do LAND da W3, e o corte segue pela rota 2, como o Owner pediu; a
+   W5c saiu do portão do debate, mas a posição na fila não muda.
 
 ## Open questions
 
@@ -1289,20 +1790,28 @@ exceção da W3b) — (a lista das decisões está em «Decisões do Owner — S
 
 ## Blockers
 
-- **Cláusula do Owner (S361, Q3): W2, W3 e W5c estão BLOQUEADAS até o PROCEED do debate único; os
-  must-fix dele valem por onda.** As demais ondas não dependem do debate.
+- **Cláusula do Owner (S361, Q3), com a liberação POR ONDA da rodada 1 do debate: W2, W3 e W5c ficam
+  BLOQUEADAS até o PROCEED da onda no debate único; os must-fix dele valem por onda.** Depois da rodada
+  1: **W5c LIBERADA (PROCEED)**; **W2 e W3 seguem BLOQUEADAS até a rodada 2** (RUN-ANOTHER-ROUND, VETO
+  levantado nas duas). As demais ondas não dependem do debate.
 - W1: medição W0.1/W0.2 (OQ-2 respondida na S361: o Owner fixa a imagem do runner). Prazo externo
   2026-10-19.
-- W2: **BLOQUEADA** — debate único do plano (PROCEED); vaga seguinte à da W7a do PLAN-183 (ordem
-  decidida); a limpeza W2.6 é alívio rodado pelo Owner, não bloqueia.
-- W3: **BLOQUEADA** — debate único do plano (PROCEED) e ADR-182-AMEND-1; 3.ª vaga inicial (decidida;
-  ocupada pela W3b até o debate fechar — Q8); a W3b landada antes (mesmo `codex_cli_shape.py`); árvore
-  sem modificação rastreada no SIGN (na abertura da S361 a árvore estava limpa; a poda do `CLAUDE.md`
-  num fechamento vem ANTES do land da W3 — risco 9); L1 recomendado.
-- W5c: **BLOQUEADA** — debate único do plano (PROCEED); re-teste pago na vez; W6 landada
-  antes (`.claude/settings.json`) — ou no MESMO pacote, se a OQ-14 se aplicar (prontos juntos antes de
-  ~21/11); vaga depois da W2.
-- W7: W4 landada; pacote de ADR e W7 nunca em voo juntos (`CHANGELOG.md`).
+- W2: **BLOQUEADA** — debate único do plano (rodada 2: PROCEED); cura do `agent_spawn` (W2.0) landada
+  antes do SIGN ou dentro do pacote (vaga: decisão pendente 1); rascunho do `ADR-055-AMEND-4`; vaga
+  seguinte à da W7a do PLAN-183 (ordem decidida); a limpeza W2.6 é alívio rodado pelo Owner, não
+  bloqueia (pré-condição: decisão pendente 2).
+- W3: **BLOQUEADA** — debate único do plano (rodada 2: PROCEED) e rascunho do ADR-182-AMEND-1; W0.6
+  medida (ou a decisão pendente 3); pacote de kernel de registro de ações landado antes da W3.6 (ou a
+  decisão pendente 6); 3.ª vaga inicial (decidida; ocupada pela W3b até o debate fechar — Q8); a W3b
+  landada antes (mesmo `codex_cli_shape.py`); árvore sem modificação rastreada no SIGN (na abertura da
+  S361 a árvore estava limpa; a poda do `CLAUDE.md` num fechamento vem ANTES do land da W3 — risco 9); L1
+  recomendado.
+- W5c: **LIBERADA** pela rodada 1 (must-fix MF-W5c-1 e MF-W5c-2 e ajustes 35 a 40 do consenso como
+  pré-requisitos); re-teste pago na vez; W6 landada antes (`.claude/settings.json`) — ou no MESMO
+  pacote, se a OQ-14 se aplicar (prontos juntos antes de ~21/11); vaga depois da W2, landando por
+  ÚLTIMO no núcleo.
+- W7: W4 landada; pacote de ADR e W7 nunca em voo juntos (`CHANGELOG.md`); os derivadores do kit
+  herdam a rota 2 do runner do re-pass, com controle (rodada 1; ver «Pré-condições do corte»).
 
 ## Next
 
@@ -1312,17 +1821,20 @@ exceção da W3b) — (a lista das decisões está em «Decisões do Owner — S
 2. L1 (livre) — antes da W3; **W3b.0** (livre) — antes da W3b.
 3. Pacote da W1 para cerimônia (W1 primeiro — Q1).
 4. **W3b** na 3.ª vaga (Q8) — pode correr em paralelo, dentro da regra de WIP, mas a W1 tem precedência.
-5. Proposta do debate único W2 + W3 + W5c (não ocupa vaga; é o portão das três ondas bloqueadas — Q3);
-   limpeza única W2.6 quando o Owner rodar o script entregue (fora do repositório, todas as sessões do
-   Claude fechadas).
+5. Debate único W2 + W3 + W5c (não ocupa vaga; é o portão das três ondas bloqueadas — Q3): **rodada 1
+   FEITA** (consenso em `.claude/plans/PLAN-194/debate/round-1/consensus.md`; W5c PROCEED, W2 e W3
+   RUN-ANOTHER-ROUND). Próximo: rascunhos PROPOSED do `ADR-055-AMEND-4` e do `ADR-182-AMEND-1` em
+   `.claude/plans/PLAN-194/debate/round-2/`, decisões pendentes do Owner (seção própria) e a rodada 2
+   (só W2 e W3); limpeza única W2.6 quando o Owner rodar o script entregue (fora do repositório; sessões
+   fechadas conforme a decisão pendente 2).
 
 ## How to continue
 
 Primeira mensagem de uma sessão nova: «Ler o PLAN-194 e o `.claude/plans/PLAN-194/LEDGER.md` (a pasta
 `PLAN-194/` e o LEDGER só existem depois do 1.º commit de trabalho); conferir
 `git log --oneline -5`, `gh run list --limit 5`, `npm view @openai/codex dist-tags` (a `latest` era a 0.160.0 em 2026-10-01 às ~21:30Z; muda com
-frequência, com várias estáveis por semana — conferir), `codex --version` (deve seguir 0.156.1 até o fim
-do corte W7, mesmo com a W3 landada, salvo re-pin do manifesto no kit — pergunta 7 da W3),
+frequência, com várias estáveis por semana — conferir), `codex --version` (0.156.1 até o LAND da W3;
+depois, a versão elegível registrada pela W3.6 — pergunta 7 da W3),
 `claude --version` (2.1.287 em 2026-10-01; congelado durante cada onda — Q14), `df -h /System/Volumes/Data`
 (o volume de dados, onde ficam o `$TMPDIR` e os clones — risco 13); ver quais vagas canônicas estão em voo
 (PLAN-194, PLAN-195, PLAN-183) e seguir a ordem da regra de WIP do topo. Se hoje ≥ 2026-10-19 e a W1 não
@@ -1367,13 +1879,19 @@ landou: parar tudo e fazer a W1.»
 
 ## Success criteria
 
+**Regra da rodada 1 do debate:** todo Check deve ficar VERMELHO antes e VERDE depois, com a afirmação
+dentro do código de saída — um Check verde por construção não prova nada. Os critérios da W2, da W3 e
+da W5c abaixo foram reescritos na rodada 1 para cumprir a regra (e o braço vermelho da W5c.4 afirma a
+DIFERENÇA EXATA, `+claude-sonnet-5-5` na superfície S1); o executor confere a mesma propriedade nos
+demais ao abri-los.
+
 - [ ] Validate verde em push e no nightly depois de 2026-10-19, com a perna 3.9 viva. — Check: gh run list --workflow validate.yml --limit 5 --json conclusion
-- [ ] State dir sem acúmulo por PID depois de um dia de uso normal, sem `drain canonical lock timeout` sob a carga da W0.5. O teste unitário não basta: a prova é no VIVO, com as sessões do Claude paradas (evita corrida com arquivo sendo apagado) — (1) arquivos de 0 bytes nos 3 padrões no state dir INTEIRO, inclusive o subdiretório novo da W2.3, abaixo do limiar fixado no ADR-055-AMEND-4 (proposta para o debate: ≤ 1% do medido hoje); (2) 0 linhas `drain canonical lock timeout` no `audit-log.errors` com carimbo depois do LAND (o arquivo não rotaciona — lane `H-03` —, por isso a janela). **Medido 2026-09-30 (vermelho):** 219.468 arquivos de 0 bytes nos 3 padrões, de 219.839 entradas; 19.568 linhas da classe no total, 2.980 só em 2026-09-30 (UTC). Números antes/depois no LEDGER. — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q && python3 -c "import os,re,subprocess as s;d=s.check_output(['python3','.claude/hooks/_lib/runtime_paths.py','--state-dir'],text=True).strip();p=re.compile(r'^audit-(pending\.\d+\.journal(\.lock)?|spool\.\d+\.jsonl\.lock)$');print(sum(1 for r,_,fs in os.walk(os.path.join(d,'state')) for f in fs if p.match(f) and os.path.getsize(os.path.join(r,f))==0))" && awk -v t="<ISO do LAND, ex. 2026-11-01T00:00:00Z>" '$1 >= t && /drain canonical lock timeout/' "$(python3 .claude/hooks/_lib/runtime_paths.py --state-dir)/audit-log.errors" | wc -l
-- [ ] Rail com pin automático verificado (no hook do rail; os cortes de release são a pergunta 7 da W3): versão nova COM procedência ⇒ `verified` sem assinatura nova do Owner; SEM procedência ⇒ recusada (W3.4). — Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
+- [ ] State dir sem acúmulo por PID e SEM decisão de guard perdida, depois de um dia de uso normal e sem `drain canonical lock timeout` sob a carga da W0.5 (rodada 1: o critério de SEGURANÇA barra; a contagem é higiene). **Critérios que BARRAM o SIGN:** (a) o controle de entrega de decisão (W2.2-bis) passa de vermelho a verde; (b) o invariante por conjunto fica verde (todo `record_id` exatamente uma vez); (c) `verify_chain()` íntegro sob estresse com escritores `agent_spawn`, depois da cura da W2.0. **Higiene — a prova é no VIVO, com as sessões do projeto paradas** (evita corrida com arquivo sendo apagado; o teste unitário não basta): o critério primário é o FLUXO (artefatos de PID morto por PID emissor distinto na janela, que não fica verde por vácuo num dia leve nem envelhece com o estoque; o instrumento é definido no rascunho do ADR-055-AMEND-4 e entra neste Check quando existir); o teto absoluto — no máximo 1.000 arquivos de 0 bytes nos 3 padrões, no state dir INTEIRO, depois de 24 h — é limite SECUNDÁRIO de sanidade; denominador zero reprova; e 0 linhas `drain canonical lock timeout` no `audit-log.errors` com carimbo depois do LAND (o arquivo não rotaciona — lane `H-03` —, por isso a janela). **O Check sai ≠ 0** acima do limiar, com timeout ou decisão perdida na janela, ou com denominador zero. **Medido 2026-09-30 (vermelho):** 219.468 arquivos de 0 bytes nos 3 padrões, de 219.839 entradas; 19.568 linhas da classe no total, 2.980 só em 2026-09-30 (UTC). Números antes/depois no LEDGER. — Check: python3 -m pytest .claude/hooks/tests/test_spool_state_gc.py -q -k "fast_path or deadline or origin or gc or invariant" && python3 -c "import os,re,subprocess as s,sys;d=s.check_output(['python3','.claude/hooks/_lib/runtime_paths.py','--state-dir'],text=True).strip();p=re.compile(r'^audit-(pending\.\d+\.journal(\.lock)?|spool\.\d+\.jsonl\.lock)$');n=sum(1 for r,_,fs in os.walk(os.path.join(d,'state')) for f in fs if p.match(f) and os.path.getsize(os.path.join(r,f))==0);print(n);sys.exit(0 if n<=1000 else 1)" && test "$(awk -v t="<ISO do LAND, ex. 2026-11-01T00:00:00Z>" '$1 >= t && /drain canonical lock timeout/' "$(python3 .claude/hooks/_lib/runtime_paths.py --state-dir)/audit-log.errors" | wc -l | tr -d ' ')" = 0
+- [ ] Rail com pin automático verificado (no hook do rail; os cortes de release seguem ancorados no manifesto — pergunta 7 da W3): versão nova COM procedência e FORA do manifesto ⇒ `verified_auto` com `pin_source = registro`, sem assinatura nova do Owner; SEM procedência ⇒ recusada, fail-CLOSED (W3.4). O teste afirma, no código de saída, `pin_source = registro` para uma versão FORA do manifesto (o flag exato fica no AMEND-1). — Check: python3 -m pytest .claude/hooks/tests/test_check_pair_rail_auto_pin.py -q && python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
 - [ ] `check-model-deprecations.py --check --today 2026-10-13` = 0. — Check: python3 .claude/scripts/check-model-deprecations.py --check --today 2026-10-13
 - [ ] Publish do GA 1.4.3 com Node ≥ 22.14 e npm exato. — Check: npm view ceo-orchestration version
 - [ ] Textos do ADR-149/SUPPORT/doc de adopter alinhados ao CC ≥ 2.1.286 (instalado em 2026-10-01: 2.1.287), com data e substrato. — Check: python3 .claude/scripts/generate-available-models.py --check
-- [ ] Sonnet 5.5 adotado pela emenda 4 do ADR-149 (W5c), com a linha de preço e o conjunto de vermelhos esperado sem achado novo, e o re-teste pago registrado no LEDGER. — Check: python3 .claude/scripts/generate-available-models.py --check && python3 .claude/scripts/check-model-currency.py --expected-reds .claude/data/model-currency-expected-reds.txt
+- [ ] Sonnet 5.5 adotado pela emenda 4 do ADR-149 (W5c), com a linha de preço e o conjunto de vermelhos esperado sem achado novo, e o re-teste pago registrado no LEDGER. O Check afirma `claude-sonnet-5-5` no bloco do ADR-149, no `availableModels`, no `cost-table.yaml` e na entrada do re-teste no LEDGER (hoje nenhum dos quatro tem o id, então fica vermelho antes). — Check: python3 .claude/scripts/generate-available-models.py --check && python3 .claude/scripts/check-model-currency.py --expected-reds .claude/data/model-currency-expected-reds.txt && grep -q 'claude-sonnet-5-5' .claude/adr/ADR-149-model-id-allowlist.md && grep -q 'claude-sonnet-5-5' .claude/settings.json && grep -q 'claude-sonnet-5-5' .claude/scripts/cost-table.yaml && grep -q '^## W5c.1' .claude/plans/PLAN-194/LEDGER.md
 - [ ] Backup agendado e ensaio de restaurar e verificar (W6.3) registrado no LEDGER, com paridade por arquivo e a decisão do Owner sobre a chave HMAC, antes de ~2026-11-21; `cleanupPeriodDays` decidido como complemento (o `--dry-run` abaixo não prova nem o agendamento nem o ensaio). — Check: bash .claude/scripts/ceo-backup.sh --dry-run
 - [ ] GA v1.4.3 publicado (tag assinada, npm `latest=1.4.3`). — Check: npm view ceo-orchestration dist-tags
 
@@ -1407,12 +1925,26 @@ landou: parar tudo e fazer a W1.»
   S361»). Cláusula de bloqueio: W2, W3 e W5c BLOQUEADAS até o PROCEED do debate único, com os must-fix
   valendo por onda. Emendas de texto do planejamento aplicadas depois de conferir cada fato no disco:
   substrato do Codex (0.159.3 e, desde as 20:26Z, 0.160.0; o manifesto por sha exato, e não a faixa, fecha o rail), perguntas 2, 6 e
-  7 da W3 (o pin automático não cobre os cortes), W3b.3 (gpt-5.5, a verificar), W5.0/W5.1 com o CC
+  7 da W3 (o pin automático não cobre os cortes), W3b.3 (gpt-5.5 NÃO confirmado na fonte primária — LEDGER, S361; refresh dos ids de julho/dezembro feito no commit a9924eb1), W5.0/W5.1 com o CC
   2.1.286/2.1.287, W6 redesenhada (backup como proteção principal), mapa de colisões com o leque de ADR
   e a 4.ª exceção ao teto, exceção da OQ-11 para a W3b, L2 estendida, L5 nova, backlog com dono e números
   de estado. OQ-2, OQ-5, OQ-7, OQ-8, OQ-10 e OQ-14 marcadas RESPONDIDA; OQ-11 PARCIALMENTE RESPONDIDA (só a exceção da Q8; a ordem (a)–(f) e o empate seguem abertos). Nenhum marcador de
   esclarecimento vivo (PLAN-SCHEMA §14) no texto. A passagem a `executing` fica para o 1.º commit de
   trabalho.
+- S361 (2026-10-01, rodada 1 do debate L3; consenso em `.claude/plans/PLAN-194/debate/round-1/consensus.md`):
+  três críticos (Segurança, QA e DevOps, todos em `claude-opus-5-5`, id servido informado por cada um).
+  Vereditos por onda: **W5c PROCEED** (`design-coherent`; VETO de Segurança retirado com condições),
+  **W2 e W3 RUN-ANOTHER-ROUND** (VETO levantado nas duas); a rodada 2 julga só a W2 e a W3. Ajustes do
+  consenso aplicados a este plano: W2 sem a relocação (a antiga W2.3 saiu), com a cura do `agent_spawn`
+  como pré-condição do SIGN (W2.0), o prazo na drenagem forçada de saída (W2.2-bis), a regra de travas
+  (nenhum `unlink` de `*.lock` em hook; opção T1 por padrão) e o conteúdo exigido do
+  `ADR-055-AMEND-4`; W3 com o verificador FORA do hook, todo «presente, mas não verificado» fail-CLOSED,
+  carência de 48 h no relógio do registro, identidade do construtor fixada, evento durável na cadeia
+  HMAC (pacote de kernel de registro de ações), W0.6 e a W3.6 logo depois do LAND da W3 (o corte
+  independe do Codex global — rota 2); W5c no formato da Amendment 2, com a entrega ao adopter, o
+  `_tier_rank` e o pré-registro do re-teste; W0.5 pré-registrada; Success criteria reescritos; mapa de
+  colisões e paths com as linhas novas; riscos 3, 4, 11 e 17; decisões pendentes do Owner registradas em
+  seção própria; regra de parada do debate registrada. Status inalterado (`executing`).
 
 ## Reference links
 
@@ -1426,5 +1958,10 @@ landou: parar tudo e fazer a W1.»
   proposta pela W5c); ADR-163;
   ADR-182 §5 (e a emenda proposta pela W3); ADR-192.
 - Layout do debate: `.claude/commands/debate.md:46`; `.claude/plans/DEBATE-SCHEMA.md`.
+- Debate único, rodada 1: `.claude/plans/PLAN-194/debate/round-1/consensus.md` (vereditos por onda,
+  divergências resolvidas, ajustes e decisões pendentes); rodada 2: `.claude/plans/PLAN-194/debate/round-2/`
+  (rascunhos PROPOSED do `ADR-055-AMEND-4` e do `ADR-182-AMEND-1`). Também: ADR-055-AMEND-3 (premissa
+  «anômalo» emendada pela W2); ADR-111 (corpus travado do pair-rail); `docs/CROSS-LLM-THREAT-MODEL.md`
+  (T-8, atualizado pela W3).
 - Externo: actions/runner-images#14748 (Ubuntu 26.04); docs.npmjs.com/trusted-publishers; changelog do
   GitHub de 2026-09-03 (várias configurações de publicador confiável).
