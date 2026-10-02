@@ -142,6 +142,19 @@ ainda; os resultados entram em entradas datadas abaixo dela.
   relatório do FD-07; script do F1, ainda na sombra do FD-07, commits `ff843289` + `0f0a7b1a`), no state
   dir VIVO, SÓ LEITURA (`sandbox-exec` negando `file-write*` + audit hook do Python): **|D| = 14.572,
   F = 0,9947 ⇒ H1 VERMELHO no HEAD**, como esperado antes da cura da W2 (journals vazios de PID morto).
+- 2026-10-02 (S362), `audit-log.errors` vivo, só leitura: contagens que o `ADR-055-AMEND-4` condensado
+  cita e que sumiriam na rotação do arquivo (lane `H-03`); conferidas também pelo refutador do AMEND-4.
+- STARVED do dreno oportunista (`drain canonical lock STARVED: … opportunistic drain yielded`): 0 às
+  03:40Z (contagem do rascunho); 2 às 08:36Z (08:35:20Z e 08:36:23Z; registro do workflow do CEO, fora do
+  repositório); 6 às 20:57Z. «STARVED (exit)»: 0.
+- `would-log=` (linha que um `FileLockTimeout` do `audit_log.py` manda só para o breadcrumb; G7): 15, a
+  1.ª em 2026-10-01T23:48:41Z e a última em 2026-10-02T20:49:53Z; 3 antes de 12:18:02Z (carimbo do commit
+  `65cd50d7`, a W2.0) e 12 depois. Correlação, não causa provada: olhar antes do SIGN do U2-A.
+- `drain canonical lock timeout`: 37.715 linhas às 20:57Z.
+- Re-medido às 23:55Z (`grep -c` dos mesmos padrões; o verificador do F1 ainda não está no `main`):
+  STARVED oportunista 6 (08:35:20Z, 08:36:23Z, 20:07:54Z, 20:14:27Z, 20:20:13Z, 20:29:48Z); «STARVED
+  (exit)» 0; `would-log=` 15, nenhum novo desde 20:49:53Z, todos de `agent_spawn`; `drain canonical lock
+  timeout` 38.054 (o arquivo tem 38.303 linhas).
 
 ## W4 — linha de base do publish (2026-10-02, S362; base da D-12)
 
