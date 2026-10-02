@@ -33,8 +33,142 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   (criada em 2026-09-12T10:26:00Z); `/etc/os-release` = «Ubuntu 26.04.1 LTS (Resolute Raccoon)»;
   depois de `apt-get update`, `apt-cache policy python3` ⇒ candidato `3.14.3-0ubuntu2`, nada
   instalado; `apt-cache search --names-only '^python3\.[0-9]+$'` ⇒ só `python3.14`.
-- Itens (a)–(d) da W0.1 (template ativado, passos de governança com o `python3` do sistema, suíte de
-  hooks em 3.14, censo dos workflows): em medição pelo builder da W1; resultado a acrescentar aqui.
+- Itens (a)–(d) da W0.1: MEDIDOS pelo builder da W1 (S361, 2026-10-01T23:35Z–2026-10-02T03:30Z);
+  resultado abaixo. Conclusão: nenhuma quebra atribuível ao Ubuntu 26.04 nem ao Python 3.14; W1.4 e
+  W1.5 sem pacote.
+
+### Substrato
+
+- 2026-10-01T23:35Z–2026-10-02T03:30Z (S361), colima `default` aarch64, 4 CPU / 6 GiB, docker 29.2.1
+  (linux/arm64). Binários x86-64 rodam nessa VM (o `actionlint_1.7.7_linux_amd64` executou; não
+  conferi se é Rosetta ou qemu — não mexi na configuração).
+- Imagens (já presentes; nada baixado além das camadas que existiam): `ubuntu:26.04` =
+  `sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78` («Ubuntu 26.04.1 LTS»);
+  `ubuntu:24.04` = `sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517`
+  («Ubuntu 24.04.4 LTS»), como linha de base.
+- Preparo «parecido com o runner» (`setup-runner-like.sh`, um contêiner por imagem, removidos no
+  fim): `apt-get update` + `python3 python3-pip python3-venv git jq shellcheck curl ca-certificates
+  sudo xz-utils file` e usuário NÃO-root `runner` com sudo sem senha (o runner hospedado roda assim).
+  NÃO instalei `python3-yaml`. Versões instaladas:
+  - 26.04: `python3` **3.14.4** (o candidato que o CEO leu às 20:41Z era 3.14.3: o arquivo da distro
+    atualizou nas ~3 h seguintes), pip 25.1.1, git 2.53.0, jq 1.8.1, shellcheck 0.11.0,
+    bash 5.3.9(1); **PyYAML do sistema: AUSENTE**; `/usr/lib/python3.14/EXTERNALLY-MANAGED` presente
+    (`python3 -m pip install PyYAML` no sistema ⇒ rc 1, PEP 668).
+  - 24.04: `python3` 3.12.3, pip 24.0, git 2.43.0, jq 1.7, shellcheck 0.9.0, bash 5.2.21(1);
+    PyYAML do sistema AUSENTE na imagem docker — **mas presente na imagem do runner 24.04**, porque o
+    step `Validate settings.json and YAML catalogs` do `validate.yml` passa hoje no `Ceo`: o docker não
+    reproduz esse detalhe da imagem do runner.
+- Imagem do RUNNER (leitura dos READMEs de `actions/runner-images`, 2026-10-02, por WebFetch):
+  Ubuntu 26.04 `20260920.143.1` — Python padrão 3.14.4; toolcache 3.10.21, 3.11.16, 3.12.14, 3.13.15,
+  3.14.7; shellcheck 0.11.0-2; jq 1.8.1; git 2.55.0; bash 5.3.9. Ubuntu 24.04 `20260920.314.1` —
+  Python padrão 3.12.3; toolcache 3.10–3.14 (sem 3.9); shellcheck 0.9.0; jq 1.7. Nenhum dos dois
+  README lista PyYAML/`python3-yaml`. O issue actions/runner-images#14748 dá o 26.04 como GA desde
+  2026-09-17 e a migração do `ubuntu-latest` de 2026-10-19 a 2026-11-19; mitigação oficial: rótulo
+  `ubuntu-24.04`, e `ubuntu-26.04` para testar explicitamente.
+
+### (a) Template do adopter ativado e EXECUTADO
+
+- Comando (no contêiner, como `runner`, na árvore `6a9abb10`):
+  `CEO_SMOKE_EXECUTE_CI=1 bash scripts/tests/smoke-install.sh /home/runner/smoke-target`
+  (instala, ativa `validate.yml.template`, commita a árvore e roda os `run:` com
+  `scripts/tests/run-activated-workflow.py`).
+- 26.04, 2026-10-02T00:05:19Z: **10/10 steps `run:` verdes**, 1 `uses:` pulado por nome,
+  «smoke install OK», rc 0. 24.04 (mesma hora): 10/10 verdes, rc 0.
+- Ressalva do step 7 (catálogos YAML): passou no 26.04 pelo FALLBACK do próprio template — o
+  `pip install` no `python3` do sistema é recusado (PEP 668) e o `sudo apt-get install -y -qq
+  python3-yaml` funcionou porque o contêiner tinha listas do apt (o preparo rodou `apt-get update`).
+  No runner real o step depende de a imagem trazer PyYAML OU de esse `apt-get install` sem `update`
+  funcionar; se nenhum dos dois, o step falha FECHADO (mensagem própria), nunca verde-vácuo. Não
+  medível sem um run do GitHub.
+- Ressalva do step 10 (actionlint): o asset `linux_amd64` rodou na VM arm64 (emulação da VM).
+- Conclusão para a W1.4: **sem mudança** no template (verde no 26.04, com a ressalva acima).
+
+### (b) Steps do job `validate` que usam o `python3` do sistema (antes do `setup-python`)
+
+- Extraídos VERBATIM do `validate.yml` (`6a9abb10`): os 20 `run:` antes do `actions/setup-python`;
+  cada um rodado como o runner (`bash --noprofile --norc -eo pipefail`, cwd = clone, `CI=true`), SEM
+  parar no primeiro vermelho.
+- 26.04 (`python3` 3.14.4) e 24.04 (3.12.3): **mesmo resultado nas duas imagens** — 18 rc 0;
+  step 15 «Validate settings.json and YAML catalogs» rc 1 (`ModuleNotFoundError: No module named
+  'yaml'`, nos dois — o docker não tem PyYAML no sistema); step 20 `check-installer-write-safety.py
+  --strict` rc 1 (advisory, `continue-on-error`, rc 1 por desenho). `validate-governance.sh`
+  «Errors: 0» nos dois; shellcheck 0.11.0 limpo nos 26 scripts; `SyntaxWarning` de escape inválido
+  em `_lib/team.py:5`, `architect-bundle-validate.py:23` e um script de plano — os mesmos três no
+  3.12 (só o texto da mensagem muda no 3.14).
+- Conclusão para a W1.2: o único step do job que depende de algo que o 26.04 pode não ter é o dos
+  `import yaml` — confirmado (o resto passa no `python3` 3.14 do sistema).
+
+### (c) Suíte do job `hook-tests-python-matrix` no `python3` da imagem
+
+- Comandos do job (iguais, com `PYTHONPATH=.`), num venv criado do `python3` do sistema com
+  `pytest 8.4.2`, `PyYAML 6.0.3`, `pytest-xdist`:
+  `python3 -m pytest .claude/hooks/tests/ .claude/scripts/tests/ .claude/scripts/optimizer/tests/
+  -n auto -m 'not serial' --strict-markers --tb=no -q` e a passada `-m 'serial'`.
+- 26.04 / **3.14.4**, 2026-10-01T23:42:24Z–23:51:44Z: paralela **13.398 passed, 89 skipped,
+  4 xfailed** (rc 0, 269 s); serial **1 failed, 936 passed**, 11 skipped (rc 1, 291 s).
+- 24.04 / 3.12.3 (linha de base), 2026-10-01T23:52:03Z–2026-10-02T00:04:13Z: paralela 13.398 passed,
+  89 skipped (rc 0, 450 s); serial **3 failed**, 934 passed (rc 1, 280 s).
+- As falhas são todas da classe «orçamento de tempo absoluto» (CLAUDE.md, S357):
+  - 3.14: `test_check_pair_rail_matrix.py::TestDecideWithMatrixPerformance::test_case_a_p99_under_5ms`
+    (p99 15,8 ms > 5 ms; falha também isolado 3/3);
+  - 3.12: o MESMO teste (p99 59,7 ms) + `test_lifecycle_edge_cases.py::TestOutputScanPerfRigorous::
+    test_p99_10kb` + `perf/test_optimizer_complexity_gate_p99.py::...::test_classify_latency_under_ceiling_per_probe`;
+  - o mesmo `test_case_a_p99_under_5ms` falha também no Mac (python 3.9.6) na árvore `6a9abb10`.
+  Conjunto de falhas do 3.14 ⊂ conjunto da linha de base ⇒ **nenhuma quebra atribuível ao 3.14 /
+  26.04**. Os 89 skipped (contra 62–64 no CI) são ferramentas ausentes no contêiner.
+- Referência no CI real (`Ceo`, 2026-10-01): perna 3.9 paralela 430–646 s + serial 211–232 s (runs
+  36932014761, 36832647294); perna 3.12 paralela 260–529 s + serial 130–208 s.
+
+### (d) Censo: jobs em `ubuntu-latest` e `Ceo`, e o que usam do sistema
+
+- Censo por YAML (PyYAML no Mac) dos 23 workflows de `.github/workflows/`: **21 workflows com
+  `ubuntu-latest` (28 jobs)** e **6 jobs `Ceo`** (`coverage.yml:coverage` e, no `validate.yml`,
+  `validate`, `integration-tests`, `formal-verification-mutation-harness`, `hook-tests-dual-rail`,
+  `hook-tests-python-matrix`); `tier-policy.yml` em `ubuntu-22.04`. Tabela completa em `census.md`
+  (este diretório).
+- Python dos jobs com `setup-python`: só 3.11 e 3.12 (fora a matriz) — todos têm build para 26.04. A
+  única versão sem build para 26.04 (3.9) só aparece na matriz do `validate.yml` (`Ceo`).
+- Jobs em `ubuntu-latest` que usam o `python3`, o `shellcheck` ou o `jq` do SISTEMA (sem
+  `setup-python`, direto ou por script `.sh`) — e o que rodou no 26.04:
+  - `ceremony-lint.yml:ceremony-lint` (`check-ceremony-script.py` + `--list`): **verde** no 26.04 e
+    no 24.04 (0 blocking; mesmos números advisory).
+  - `ceremony-lint.yml:shellcheck-ceremony` (shellcheck do sistema, advisory): roda no 26.04 com o
+    0.11.0 (157 arquivos; mesma contagem de linhas de saída que o 0.9.0 do 24.04).
+  - `translations-drift.yml:drift-check` (bash): **verde** nos dois.
+  - `ownership-nightly.yml:ownership-e2e` (o `python3` do sistema pelo `install.sh`/`upgrade.sh`;
+    `jq`; `shasum` — presente, do pacote `perl`): ver o resultado abaixo.
+  - `npm-publish.yml:await-release-gate` (`shasum`, `gh`, `jq`) e `npm-publish.yml:publish` (o
+    `python3` do sistema num trecho só com `json`/`re`/`sys`, Node do `setup-node`): **não
+    executados** (precisam de tag/API do GitHub; o `publish` é território da W4).
+  - `mutation-gate.yml:aggregate`, `tournament.yml:notify-on-regression`: só bash/echo.
+  - `formal-verify.yml:tlc-model-check`: Java do `setup-java` + `curl`; sem Python (W8).
+  - `actionlint.yml:actionlint`: binário próprio; `validate.yml:opus-4-7-profiler-smoke` e
+    `validate.yml:hook-stdout-schema-oracle`: `setup-python` 3.11 (tem build 26.04).
+- `ownership-nightly.yml`, os 9 `run:` VERBATIM no 26.04 (`run-steps.sh`, árvore `6a9abb10`,
+  2026-10-02T00:14Z–01:29:52Z), com o 24.04 em paralelo até o step 06 (parado depois para liberar a VM):
+  - steps 01–08 **verdes nas duas imagens** (gate-scripts `shasum -c`, tag `legacy_pristine`, `jq`,
+    oráculo unitário, replay do install-state 1041 s, baseline-manifest 1024 s, INV-4 396 s,
+    controle positivo do gate);
+  - step 09 (e2e completo, 2085 s): `GREEN=54 RED=11`, gate vermelho por **8 células TIMEOUT**
+    (`OWN-0021`, `0022`, `0023`, `0030`, `0031`, `0070`, `0073`, `0080`; `CELL_TIMEOUT` padrão 60 s)
+    + os 3 vermelhos por desenho (`OWN-0016`, `0024`, `0027` = `ownership-expected-reds.txt`);
+  - as 8 células rerrodadas UMA A UMA no mesmo contêiner 26.04, sem disputa de CPU
+    (`CELL_TIMEOUT=300 test-ownership-table.sh --only <id>`, terminado em 2026-10-02T03:29:05Z): **as 8 GREEN**, em
+    33–52 s cada ⇒ os TIMEOUT eram a VM disputada (2 contêineres + o ensaio no Mac), não o 26.04.
+    Conjunto vermelho efetivo no 26.04 = o esperado por desenho.
+  - Ressalva: no runner real a margem dessas células contra os 60 s não foi medida (aqui, isoladas,
+    ficaram em 55–87 % do timeout).
+- Conclusão para a W1.5: **nenhum workflow marcado como quebrando** no 26.04 pelo que é medível fora
+  do GitHub ⇒ a W1.5 não abre pacote (sem `ubuntu-24.04` em outros workflows). Não medidos: os dois
+  jobs do `npm-publish.yml` (tag + API) e o TLC do `formal-verify.yml` (Java; W8).
+
+### Ferramenta e limpeza
+
+- Scripts do builder (fora do repositório): `census.py`, `extract-steps.py`, `run-steps.sh`,
+  `run-matrix-suite.sh`, `setup-runner-like.sh`, `lint-copies.sh` — cópias neste diretório.
+- Contêineres `b1w1-u2604` e `b1w1-u2404` removidos no fim; nenhuma imagem nova; nenhuma configuração
+  do docker/colima alterada.
+
 
 ## W3b.3 — verificação em fonte primária (ids da OpenAI)
 

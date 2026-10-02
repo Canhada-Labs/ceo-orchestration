@@ -1,85 +1,93 @@
 ---
 id: ADR-055-AMEND-4
-title: "ADR-055 §Components — estado da auditoria sem acúmulo: caminho rápido de saída, prazo na drenagem forçada de saída, journal vazio removido na origem e invariante de não-perda reescrito"
+title: "ADR-055 §Components — estado da auditoria sem acúmulo: caminho rápido de saída, prazo na drenagem forçada de saída, trava presa vira sinal, journal vazio removido na origem e invariante de não-perda reescrito"
 status: PROPOSED
 draft: true
-draft_for: "entrada da rodada 2 do debate do PLAN-194 (só W2). O arquivo canônico `.claude/adr/ADR-055-AMEND-4-spool-state-gc.md` nasce só no pacote de ADR (decisão Q5 do Owner, S361), no leque de ADR em série."
+revision: "r2 — aplica a lista §3(a) do consenso da rodada 2 (MF-R2-W2-1..4 e os must-fix de execução 5..16)"
+draft_for: "texto do pacote de ADR da W2 do PLAN-194. O arquivo canônico `.claude/adr/ADR-055-AMEND-4-spool-state-gc.md` nasce só no pacote de ADR (decisão Q5 do Owner, S361), no leque de ADR em série. O slug fica (R2-7, anti-churn)."
 proposed_at: 2026-10-02
 proposed_by: "CEO (S361, PLAN-194 W2.1); redação delegada ao arquétipo VP Engineering"
 amendment_of: "ADR-055 (Audit-log HMAC chain for tamper detection — 2026-04-18 via PLAN-023)"
 amends_section: "§Components §3 — drenagem forçada de SAÍDA e contabilidade de não-perda (refina ADR-055-AMEND-1 §4 Fase 1, §4 «Loss accounting» e §5; refina ADR-055-AMEND-3 §3, §4 e §5)"
 veto_floor: "ADR-052 (security-engineer VETO — integridade do log de auditoria; herdado do ADR-055-AMEND-3)"
-codex_pair_rail: "required per ADR-107 — pendente; a 1.ª rodada só depois do PROCEED da W2 na rodada 2 do debate"
+debate_status: "W2 `design-coherent` na rodada 2 (PROCEED dos três críticos). VETO de Segurança RETIRADO, condicionado a MF-R2-W2-1..4 no texto deste ADR e do plano antes do pacote de ADR, e à W2.0 landada antes do SIGN. Sem nova rodada de debate: o rail V2 do pacote confere a aplicação."
+debate_record: ".claude/plans/PLAN-194/debate/round-1/consensus.md; .claude/plans/PLAN-194/debate/round-2/consensus.md"
+codex_pair_rail: "required per ADR-107 — pendente; roda nos bytes canônicos do pacote da W2"
 risk_tier: A
 debate_required: true
-debate_record: ".claude/plans/PLAN-194/debate/round-1/consensus.md (W2: RUN-ANOTHER-ROUND; VETO de Segurança LEVANTADO; retirada condicionada a MF-W2-1..6)"
-sign_precondition: "cura da corrida do `agent_spawn` (condição 67 assinada da v1.4.0-rc.1) landada ANTES do SIGN da W2 — a vaga é DECISÃO PENDENTE 1 do Owner (§13)"
+sign_precondition: "cura da corrida do `agent_spawn` (condição 67 assinada da v1.4.0-rc.1) landada ANTES do SIGN da W2 — a vaga é a DECISÃO PENDENTE 1 do Owner (§13), hoje o ÚNICO pré-requisito do Owner para o SIGN"
 related_plans: [PLAN-194, PLAN-094, PLAN-182]
 related_adrs: [ADR-055, ADR-055-AMEND-1, ADR-055-AMEND-2, ADR-055-AMEND-3, ADR-052, ADR-001, ADR-081, ADR-107, ADR-115, ADR-124, ADR-125, ADR-186]
 supersedes: []
 amends:
   - target: "ADR-055-AMEND-3 frontmatter `amends[0].amended_clause` e §4 (drain FORÇADO)"
     original_clause: "A FORCED drain (force=True — recovery / exit-handler / session-start) blocks up to SPOOL_LOCK_TIMEOUT (a timeout there is anomalous: ok=False + error='canonical_lock_timeout' + breadcrumb, unchanged)."
-    amended_clause: "Os únicos chamadores `force=True` VIVOS são as duas rotas de SAÍDA (atexit e sinal); não existe perna de recuperação nem de session-start em produção. A drenagem de saída passa por um auxiliar de saída com (a) caminho rápido — sem conteúdo próprio, não toma a trava canônica nem lista o diretório — e (b) prazo derivado do menor timeout de hook registrado. Estourado o prazo, o spool fica no disco para a perna 3 e isso NÃO é anômalo (`DrainStats.exit_deadline_skip=True`, `ok=True`, nenhum breadcrumb). `drain_now(force=True)` chamado SEM prazo mantém a semântica do AMEND-3 byte a byte."
+    amended_clause: "Os únicos chamadores `force=True` VIVOS são as duas rotas de SAÍDA (atexit e sinal); não existe perna de recuperação nem de session-start em produção. A saída passa por um auxiliar de saída, chamado nas DUAS rotas: (a) esvazia os buffers de stdout e stderr ANTES de qualquer drenagem; (b) caminho rápido — sem conteúdo próprio, não toma a trava canônica nem lista o diretório; (c) em processo de HOOK, prazo contado da âncora `min(import, início do processo lido do kernel)` e derivado do menor timeout de hook registrado; (d) no máximo UMA tentativa de drenagem. Esperar a trava canônica e não obtê-la deixa o spool no disco para a perna 3 e NÃO é anômalo (`DrainStats.exit_deadline_skip=True`, `ok=True`, sem o breadcrumb `drain canonical lock timeout`). A trava presa vira sinal pelo portão STARVED de saída (§4.3). `drain_now(force=True)` chamado SEM prazo mantém a semântica do AMEND-3 byte a byte."
   - target: "ADR-055-AMEND-3 §3, «No-loss invariant (corrected by debate R-QA1)»"
     original_clause: "No-loss is the UNION of (loser's own size/staleness re-drain) ∪ (loser's atexit/signal force-drain) ∪ (next drainer's dead-PID orphan sweep once `_is_alive_pid` flips False)."
     amended_clause: "Invariante INV-NP por CONJUNTO de `record_id` (cada um no log canônico exatamente uma vez), com três pernas: perna 1 = drain oportunista do próprio dono; perna 2 = drenagem de saída do próprio dono, SÓ para quem tem conteúdo próprio, com prazo; perna 3 = a varredura global da fase 2 de QUALQUER drainer seguinte deste projeto que ganhe a trava canônica (oportunista ou de saída), que recolhe spools de PID morto e todo `.draining.*`. Sem perna de `SessionStart` (§3)."
   - target: "ADR-055-AMEND-1 §4 «Loss accounting» (journal por PID) — o destino do journal compactado, que o ADR não fixava e o código reescreve com 0 byte"
     original_clause: "Per-PID journal `state/audit-pending.<pid>.journal` with buffered appends [...] drain Phase 5 appends `op:\"drained\"`."
-    amended_clause: "A compactação pós-drain, sob a trava do PRÓPRIO journal, REMOVE o journal quando o resultado ficaria vazio, em vez de reescrevê-lo com 0 byte. Nenhum hook remove arquivo `*.lock` (§4.4)."
+    amended_clause: "A compactação pós-drain, sob a trava do PRÓPRIO journal, REMOVE o journal quando o resultado ficaria vazio, em vez de reescrevê-lo com 0 byte. É o ÚNICO sítio de remoção de journal em hook. Nenhum hook remove arquivo `*.lock` (§4.5)."
 retires_revert_triggers:
-  - "ADR-055-AMEND-3 frontmatter `revert_trigger_truly_lost_7d: 1` e §5 «`truly_lost > 0` over 7-day window» — morto por construção (`truly_lost` nunca é incrementado; §2.4)"
+  - "ADR-055-AMEND-3 frontmatter `revert_trigger_truly_lost_7d: 1` e §5 «`truly_lost > 0` over 7-day window» — morto por construção (`truly_lost` nunca é incrementado; §2.4); substituído pelo G6 (perda real, ATIVO) e pelo G7 (§8.2)"
   - "ADR-055-AMEND-1 §5 gatilho 3 (`truly_lost > 0` em 7 dias) — idem"
-  - "ADR-055-AMEND-1 §5 gatilho 1 e ADR-055-AMEND-3 §5 (taxa de quebra de cadeia > 0,1% em 30 dias) — não avaliável enquanto a condição 67 existir; substituído pelo gatilho G5 (§8.2)"
+  - "ADR-055-AMEND-1 §5 gatilho 1 e ADR-055-AMEND-3 §5 (taxa de quebra de cadeia > 0,1% em 30 dias) — não avaliável enquanto a condição 67 existir; substituído pelo G5 (§8.2)"
 target_telemetry_window_days: 30
-tags: [governance, audit-log, spool-writer, async-drain, amendment, hook-exit-latency, decision-delivery, no-loss-invariant, anti-accumulation, plan-194-w2]
+tags: [governance, audit-log, spool-writer, async-drain, amendment, hook-exit-latency, decision-delivery, no-loss-invariant, anti-accumulation, starvation-signal, plan-194-w2]
 enforcement_commit: "n/a (rascunho; o runtime nasce no pacote da W2)"
 ---
 
 # ADR-055-AMEND-4 — Estado da auditoria sem acúmulo (W2 do PLAN-194)
 
-**Status:** PROPOSED — rascunho da rodada 2 do debate; não é o arquivo canônico.
+**Status:** PROPOSED — texto revisado (r2) para o pacote de ADR. A W2 saiu `design-coherent` na rodada 2
+(PROCEED dos três críticos); o VETO de Segurança foi RETIRADO com condições (MF-R2-W2-1..4, aplicadas nesta
+revisão — tabela em §15.2). Não há nova rodada de debate: quem confere a aplicação é o rail V2 do pacote.
 **Data:** 2026-10-02 (UTC)
 **Enforcement commit:** n/a (rascunho)
 **Decision drivers:** decisão de guard perdida por latência de saída; ~3 arquivos acumulados por PID; o
-gatilho de reversão do AMEND-3 está morto; a corrida da condição 67 contamina a régua com que a W2 se prova.
+gatilho de reversão do AMEND-3 está morto; a corrida da condição 67 contamina a régua; a trava canônica presa
+ficaria invisível depois da cura.
 
-> **Legenda de evidência.** **[disco]**: conferido por este redator no HEAD `a9924eb1` (árvore da S361).
-> **[consenso]**: conferido pelo sintetizador da rodada 1 (`consensus.md` §0). **[medido: X]**: número
-> medido por X, só leitura, não refeito aqui. **[plano]**: o plano afirma. **[inferência]**: dedução
-> deste redator, a conferir na abertura do pacote.
+> **Legenda de evidência.** **[disco]**: conferido por este redator no HEAD `48f03b3a` (árvore da S361;
+> `spool_writer.py`, `audit_log.py`, `filelock.py`, os settings e o `_python-hook.sh` estão inalterados desde
+> `a9924eb1`). **[medido: redator]**: medido por este redator, só leitura, na data indicada. **[consenso]**:
+> conferido pelo sintetizador da rodada indicada. **[medido: X]**: medido por X, não refeito aqui.
+> **[plano]**: o plano afirma. **[inferência]**: dedução a conferir no pacote.
 >
-> **O que este rascunho é.** Entrada da rodada 2, para os mesmos três críticos julgarem só a W2. Ele não
-> autoriza nada: o flip para ACCEPTED só acontece no pacote da W2 (§1). Repositório público: classes de
-> defeito e invariantes, nenhuma receita de contorno de guarda.
+> **Regra de prevalência.** Onde o plano e este texto divergirem na W2, vale este texto (MF-R2-W2-4). O
+> plano é reconciliado pelo CEO antes do pacote de ADR. Repositório público: classes de defeito e
+> invariantes, nenhuma receita de contorno de guarda.
 
 ---
 
 ## §0 Sumário da decisão
 
 1. **Invariante de não-perda por CONJUNTO** (INV-NP, §3): todo `record_id` aceito pelo spool aparece no log
-   canônico exatamente uma vez. Três pernas, nenhuma de `SessionStart`. O gatilho `truly_lost` do AMEND-3
-   é declarado **MORTO** e aposentado (§2.4, §8.3).
-2. **Caminho rápido de saída** (§4.1): um `stat` do próprio spool e um sinalizador em processo; o flush do
-   buffer do journal continua; **zero** `listdir`/`scandir`; sem conteúdo próprio, a saída não toma a trava
-   canônica.
-3. **Prazo na drenagem forçada de saída** (§4.2), derivado do menor timeout de hook registrado. Estourado o
-   prazo, o spool fica no disco para a perna 3 — e isso deixa de ser «anômalo». Controle de **entrega da
-   decisão BLOCK** sob contenção, vermelho antes e verde depois.
-4. **Journal vazio removido NA ORIGEM**, pela compactação, sob a trava do próprio journal (§4.3).
-5. **Nenhum hook apaga `*.lock`** (§4.4): opção T1 por padrão; T2 (re-checagem de inode no `filelock.py`,
-   kernel) só em pacote próprio e condicional; T3 (relocação) fora.
-6. **Versões mistas** (§4.6): seguras porque nenhum caminho de trava muda; LAND com as sessões do projeto
-   fechadas; efeitos da convivência declarados.
-7. **Regex ancoradas** com `fullmatch` e PID só de dígitos ASCII (§4.7); **lista do que nunca se apaga**
-   (§4.8).
-8. **W2.6 endurecida** (§5): resolvedor `runtime_paths`, `unlink` relativo ao descritor do diretório, reexame
-   imediato, simulação por padrão, manifesto de hash dos journals com conteúdo.
-9. **Limiar** (§6): os critérios de SEGURANÇA barram; o FLUXO com denominador é o critério primário de
-   higiene; o teto de 1.000 é secundário e, sob T1, vale só para journals.
-10. **Gatilhos de reversão em instrumentos LIGADOS**, cada um com controle positivo (§8).
-11. **Observabilidade pelo resultado** no `/ceo-boot`, sem tocar o `audit_emit.py` (§9).
-12. **Pré-condição do SIGN**: a cura da condição 67. A vaga é decisão pendente do Owner (§7, §13).
+   canônico exatamente uma vez. Três pernas, nenhuma de `SessionStart`. O gatilho `truly_lost` do AMEND-3 é
+   declarado **MORTO** e aposentado (§2.4, §8.3).
+2. **Auxiliar de saída único**, chamado no atexit E no sinal (§4.1): esvazia stdout e stderr ANTES de tudo;
+   caminho rápido com um `stat` do próprio spool e um sinalizador em processo à prova de falha; zero
+   `listdir`/`scandir`; no máximo uma tentativa de drenagem.
+3. **Prazo na drenagem de saída de HOOK** (§4.2): âncora `min(import, início do processo lido do kernel)`,
+   com o import como recurso declarado; prazo = `T_min − margem`, com `T_min` = 3 s hoje e teste de deriva.
+   Estourar o prazo deixa o spool para a perna 3, e isso não é «anômalo». Controle de **entrega da decisão
+   BLOCK** com guard sintético de IMPORT TARDIO e calibração contra o harness REAL.
+4. **Trava canônica presa vira sinal em ≤ 1 h** (§4.3), sem volume por saída, com controle positivo de
+   portador externo.
+5. **Journal vazio removido NA ORIGEM**, só pela compactação, sob a trava do próprio journal (§4.4).
+6. **Nenhum hook apaga `*.lock`** (§4.5): T1 por padrão, com limiar OPERACIONAL e W2.6 RECORRENTE; T2
+   (re-checagem de inode no `filelock.py`, kernel) condicional, com gatilho numérico pré-registrado; T3 fora.
+7. **GC em hook fora do pacote base** (§4.6, W2.4 CONDICIONAL).
+8. **Versões mistas** seguras porque nenhum caminho muda, provado por teste dourado dos construtores (§4.7).
+9. **Regex ancoradas** com `fullmatch` + `re.ASCII` (§4.8) e **lista do que nunca se apaga** (§4.9).
+10. **W2.6 endurecida e RECORRENTE** (§5), com recusa por spool ou `.draining.*` de PID vivo.
+11. **Critérios** (§6): a SEGURANÇA barra; o FLUXO H1 com `|D|_min` ≥ 200 é o critério primário de higiene
+    (vermelho MEDIDO no HEAD: F = 0,999); o teto de 1.000 vale só para journals.
+12. **Gatilhos em instrumentos LIGADOS** (§8), cada um com controle positivo; **G6 (perda real) e G7
+    (`would-log` datado) ATIVOS na W2**.
+13. **Observabilidade pelo resultado** no `/ceo-boot` e no nightly, sem tocar o `audit_emit.py` (§9).
+14. **Pré-condição do SIGN**: a cura da condição 67 (W2.0). A vaga é decisão pendente do Owner (§7, §13).
 
 ---
 
@@ -87,15 +95,14 @@ gatilho de reversão do AMEND-3 está morto; a corrida da condição 67 contamin
 
 PROPOSED. O flip para ACCEPTED acontece SÓ no commit de cerimônia do pacote da W2, e exige:
 
-1. PROCEED da W2 na rodada 2 do debate, com o VETO de Segurança (ADR-052) retirado: MF-W2-1 a MF-W2-6
-   endereçados aqui e no plano (tabela em §15.1).
-2. A cura da condição 67 landada ANTES do SIGN da W2 (§7), ou dentro do pacote, conforme a decisão
-   pendente 1 (§13).
-3. A W0.5 pré-registrada no LEDGER e rodada ANTES do patch (§6.4).
-4. Rail do Codex (ADR-107) até rodada limpa, com a regra de parada pré-registrada (≤ 3 rodadas; NO-GO só por
-   P0 ou afirmação FALSA).
-5. Assinatura GPG do Owner. O apêndice `## Amended-by` do ADR-055 landa no MESMO commit; o arquivo de
-   emenda entra no leque de ADR em série (índice e documentos de contagem re-derivados no LAND).
+1. ~~PROCEED da W2 no debate~~ — **feito** (rodada 2, `design-coherent`; VETO retirado com condições). As
+   condições MF-R2-W2-1..4 estão neste texto (§15.2); a reconciliação do plano é do CEO, antes do pacote de ADR.
+2. A W2.0 (cura da condição 67) landada ANTES do SIGN da W2 (§7), na vaga da decisão pendente 1 (§13).
+3. A W0.5 pré-registrada no LEDGER e rodada ANTES do patch, com a calibração contra o harness real (§6.4).
+4. Rail do Codex (ADR-107) nos bytes canônicos até rodada limpa, com a regra de parada pré-registrada (≤ 3
+   rodadas; NO-GO só por P0 ou afirmação FALSA). O rail confere também que este texto e o plano dizem o mesmo.
+5. Assinatura GPG do Owner. O apêndice `## Amended-by` do ADR-055 landa no MESMO commit; o arquivo de emenda
+   entra no leque de ADR em série (índice e documentos de contagem re-derivados no LAND).
 
 ---
 
@@ -104,48 +111,57 @@ PROPOSED. O flip para ACCEPTED acontece SÓ no commit de cerimônia do pacote da
 ### 2.1 O sintoma e o risco real
 
 - **Sintoma.** O state dir deste projeto tinha ~226,8 mil entradas às 23:55Z–00:00Z de 2026-10-01/02
-  **[medido: críticos da rodada 1]**. O `audit-log.errors` tinha 30.258 linhas às 00:25Z, 30.068 delas
-  `drain canonical lock timeout`, num ritmo de ~1.100 por hora **[consenso]**.
-- **Risco real.** O risco de SEGURANÇA não é o disco: o crescimento é limitado pelo espaço de PIDs. É a
-  **decisão de guard perdida**: um guard que já decidiu BLOCK e passa do timeout na SAÍDA é morto pelo
-  harness, e a ação passa sem decisão (lane `CC285-05` **[plano]**). Qualquer coisa que atrase a saída
-  (diretório grande, contenção, disco lento) converte decisão em allow. A contagem de arquivos é higiene.
-- **Premissa que muda.** O AMEND-3 tratava o timeout do drain forçado como «genuinamente anômalo». Com a
-  saída sujeita a prazo, estourar o prazo passa a ser um desvio ESPERADO, coberto pela perna 3. Mudança
-  semântica ⇒ arquivo de emenda próprio (Q5; C16 do consenso).
+  **[medido: críticos da rodada 1]**. O `audit-log.errors` tem **31.683 linhas, 31.485 delas
+  `drain canonical lock timeout`** em 2026-10-02T03:40Z **[medido: redator]** (30.068 às 00:25Z
+  **[consenso r1]**: ~1.100 por hora).
+- **Perda REAL já acontecendo.** No mesmo arquivo há **3 linhas `would-log=`** — `agent_spawn` descartado
+  por trava canônica ocupada (`audit_log.py:1325-1329`) — datadas 2026-10-01T23:48:41Z, 2026-10-02T00:44:25Z
+  e 00:52:00Z **[medido: redator]**. Nenhum instrumento as acusava.
+- **Risco de segurança.** Não é o disco (o crescimento é limitado pelo espaço de PIDs). É a **decisão de
+  guard perdida**: um guard que já decidiu BLOCK e passa do timeout na SAÍDA é morto pelo harness, e a ação
+  passa sem decisão (lane `CC285-05` **[plano]**). E a decisão só sai DEPOIS da drenagem de saída: com stdout
+  em pipe, um processo que imprime o JSON e tem um `atexit` de 1,5 s entrega o 1.º byte em **1,54 s**; com
+  `flush` no início do `atexit`, em **0,03 s** **[medido: redator, CPython 3.9.6 do sistema; o consenso r2
+  mediu 1,52 s]**.
+- **Premissa que muda.** O AMEND-3 tratava o timeout do drain forçado como «genuinamente anômalo». Com a saída
+  sujeita a prazo, não obter a trava a tempo vira desvio ESPERADO, coberto pela perna 3. Mudança semântica ⇒
+  arquivo de emenda próprio (Q5; C16 do consenso r1).
 
 ### 2.2 De onde vêm os ~3 arquivos por PID
 
-Cada processo que emite cria quatro arquivos: o spool `audit-spool.<pid>.jsonl`, a trava dele
-`audit-spool.<pid>.jsonl.lock` (`spool_writer.py:465-467`, aberta em `:1001-1002`), o journal
-`audit-pending.<pid>.journal` e a trava dele `audit-pending.<pid>.journal.lock` (`:450-472`; o flush abre
-o journal com `O_CREAT` sob a trava, `:958-961`) **[disco]**. O drain renomeia o spool para `.draining.*` e
-o apaga quando ele é todo consumido. A compactação reescreve o journal sem os triplos drenados e termina com
-0 byte, sem nunca removê-lo (`:2276-2297`) **[disco]**. Sobram três: as duas travas e o journal vazio.
-Censo: 75.587 travas de spool, 75.609 travas de journal e 75.609 journals, 75.396 deles com 0 byte, e
-~214 journals com conteúdo (213 a 215, conforme a leitura) **[medido: QA, 23:55Z; consenso; plano]**.
+Cada processo que emite cria o spool `audit-spool.<pid>.jsonl`, a trava dele `audit-spool.<pid>.jsonl.lock`
+(`spool_writer.py:465-467`, aberta em `:1001-1002`), o journal `audit-pending.<pid>.journal` e a trava dele
+`audit-pending.<pid>.journal.lock` (`:450-472`; o flush abre o journal com `O_CREAT` sob a trava,
+`:958-961`) **[disco]**. O drain renomeia o spool para `.draining.*` e o apaga quando todo consumido; a
+compactação reescreve o journal sem os triplos drenados e termina com 0 byte, sem nunca removê-lo
+(`:2276-2297`) **[disco]**. Sobram três: as duas travas e o journal vazio. Censo: 75.587 travas de spool,
+75.609 travas de journal e 75.609 journals, 75.396 deles com 0 byte, e ~214 journals com conteúdo (213 a 215,
+conforme a leitura) **[medido: QA r1; consenso; plano]**.
 
 ### 2.3 Por que a saída é lenta
 
 - Todo processo que importa o `audit_emit` registra o drain de saída no próprio import
-  (`audit_emit.py:13336-13348` chama `install_exit_handlers`) **[disco]**. Por isso até um hook que nunca
-  emitiu toma a trava canônica na saída (`_atexit_drain` → `drain_now(force=True)`,
-  `spool_writer.py:2573-2587`), com espera de até 2,5 s (`SPOOL_LOCK_TIMEOUT`, `:66`).
-- Dentro da trava, a fase 2 lista e ordena o diretório inteiro (`os.listdir`, `:1273`), ~0,24–0,30 s com
-  ~219 mil nomes (lane `H-02` **[plano]**).
-- As esperas se somam: o flush do journal (até 2,5 s, `:958`), a trava canônica (até 2,5 s, `:2366-2368`),
-  a compactação de cada PID drenado (até 2,5 s, `:2276`) e o trabalho do próprio hook.
+  (`audit_emit.py:13336-13348`) **[disco]**; até um hook que nunca emitiu toma a trava canônica na saída
+  (`_atexit_drain` → `drain_now(force=True)`, `spool_writer.py:2573-2587`), com espera de até 2,5 s
+  (`SPOOL_LOCK_TIMEOUT`, `:66`).
+- Dentro da trava, a fase 2 lista e ordena o diretório inteiro (`os.listdir`, `:1273`), ~0,24–0,30 s com ~219
+  mil nomes (lane `H-02` **[plano]**).
+- As esperas se somam: flush do journal (até 2,5 s, `:958`), trava canônica (até 2,5 s, `:2366-2368`),
+  compactação de cada PID drenado (até 2,5 s, `:2276`) e o trabalho do próprio hook.
 
-### 2.4 Premissas do AMEND-1 e do AMEND-3 que o disco refuta
+### 2.4 Premissas do AMEND-1, do AMEND-3 e do rascunho r1 que o disco refuta
 
-| premissa | onde estava | o que o disco mostra | efeito neste rascunho |
+| premissa | onde estava | o que o disco mostra | efeito neste texto |
 |---|---|---|---|
-| «`truly_lost > 0` em 7 dias» é gatilho de reversão | AMEND-1 §5 (gatilho 3); AMEND-3 frontmatter e §5 | `truly_lost` só aparece no valor padrão (`spool_writer.py:136`) e na leitura (`:2562`); nenhum caminho o incrementa **[disco]** | gatilho MORTO por construção; aposentado (§8.3) |
-| a reconciliação de início de sessão roda | AMEND-1 «Loss accounting» | `reconcile_journal_at_session_start` (`:2467`) não tem chamador em produção: só a definição, um teste e cópias em sombra **[disco; consenso]**; 0 eventos `audit_flush_dropped_count` em 16 logs **[medido: DevOps]** | declarada fora de produção; ligá-la fica FORA da W2 (abriria ~76 mil journals sob o timeout de 5 s do `SessionStart`) |
-| existe drain forçado de «recovery» e de «session-start» | AMEND-3 frontmatter (`:19`) | os únicos `drain_now(force=True)` vivos são o atexit (`:2581`) e o sinal (`:2610`); o de `:2539` está dentro da reconciliação morta; `SessionStart.py` não tem drain nem spool **[disco; consenso]** | não existe perna de `SessionStart` |
-| «enquanto o PID vive, nenhum drainer toca os arquivos dele» | premissa de uma crítica da rodada 1 | a fase 2 recupera `.draining.*` «owned by a dead PID (or even a live one)» (`:1277-1317`), e a compactação do PID drenado trava o journal DELE (`:2276`) **[disco]** | só a remoção sob a trava do próprio journal é segura (§4.3); nenhuma trava se apaga (§4.4) |
-| o `FileLock` garante exclusão mesmo se o caminho for apagado | implícita em todo GC de trava | `acquire` abre o caminho com `O_CREAT` e faz `flock` sem comparar inode (`filelock.py:144`, `:149`) **[disco]** | nenhum hook apaga `*.lock` (§4.4) |
-| a taxa de quebra de cadeia mede a saúde do drain | AMEND-1 §5 (gatilho 1); AMEND-3 §5 | `audit_log.py` lê o elo anterior e calcula o HMAC FORA da trava (`:1262-1278`; trava em `:1283`), contra o contrato «MUST be called WITH the audit-log FileLock held» (`_lib/audit_hmac.py:482`) **[disco]**: condição 67 assinada (`CHANGELOG.md`, seção 1.4.0; `test_two_writer_chain.py:13-16`) | gatilho inavaliável até a cura (§7); substituído pelo G5 (§8.2) |
+| «`truly_lost > 0` em 7 dias» é gatilho de reversão | AMEND-1 §5 (gatilho 3); AMEND-3 frontmatter e §5 | `truly_lost` só aparece no padrão (`spool_writer.py:136`) e na leitura (`:2562`) **[disco]** | MORTO; aposentado; G6/G7 no lugar (§8) |
+| a reconciliação de início de sessão roda | AMEND-1 «Loss accounting» | `reconcile_journal_at_session_start` (`:2467`) sem chamador em produção **[disco; consenso r1]**; 0 eventos `audit_flush_dropped_count` em 16 logs **[medido: DevOps r1]** | fora de produção; ligá-la fica FORA da W2 |
+| existe drain forçado de «recovery» e de «session-start» | AMEND-3 frontmatter | os únicos `force=True` vivos são o atexit (`:2581`) e o sinal (`:2610`); `:2539` está na reconciliação morta; `SessionStart.py` sem drain nem spool **[disco; consenso r1]** | sem perna de `SessionStart` |
+| «enquanto o PID vive, nenhum drainer toca os arquivos dele» | crítica r1 (retirada pelo autor na r2) | a fase 2 recupera `.draining.*` «owned by a dead PID (or even a live one)» (`:1277-1317`); a compactação trava o journal do PID drenado (`:2276`) **[disco]** | só a remoção sob a trava do próprio journal é segura (§4.4); nenhuma trava se apaga (§4.5) |
+| o `FileLock` garante exclusão mesmo com o caminho apagado | implícita em todo GC de trava | `acquire` abre com `O_CREAT` e faz `flock` sem comparar inode (`filelock.py:144`, `:149`) **[disco]** | nenhum hook apaga `*.lock` |
+| a taxa de quebra de cadeia mede a saúde do drain | AMEND-1 §5 (gatilho 1); AMEND-3 §5 | `audit_log.py` lê o elo anterior e calcula o HMAC FORA da trava (`:1262-1278`; trava em `:1283`), contra «MUST be called WITH the audit-log FileLock held» (`_lib/audit_hmac.py:482`) **[disco]**: condição 67 | inavaliável até a cura (§7); G5 no lugar |
+| a âncora do prazo no import do `spool_writer` basta | rascunho r1 §4.2 | os guards importam o `audit_emit` DENTRO de função: `check_canonical_edit.py:658`, `:725`, `:1429`; `check_skill_reference_read.py:155`, `:311` — e este é o hook de timeout 3 s; `check_agent_spawn.py:73` usa um shim de importação PREGUIÇOSA (`audit_emit_dispatch`) **[disco]** | âncora = `min(import, início do processo no kernel)` (§4.2) |
+| o breadcrumb `STARVED` do AMEND-3 mantém o travamento observável | AMEND-3 §4 (MF-1) | **0 linhas `STARVED`** no `audit-log.errors` vivo **[medido: redator]**: hooks curtos raramente disparam o drain oportunista, único que o emite | portão STARVED também na SAÍDA (§4.3) |
+| os detectores por contagem de linhas acusam um travamento novo | AMEND-3 §4 | `ceo-diagnose.py:371-373`/`:417` e `status.py:290` contam o TOTAL de linhas, sem janela; com 31.683 linhas eles estão SATURADOS **[disco; medido: redator]** | o sinal é distinto pelo TEXTO e datado; consumidores com janela (§9); saturação declarada |
 
 ---
 
@@ -155,253 +171,325 @@ Censo: 75.587 travas de spool, 75.609 travas de journal e 75.609 journals, 75.39
 
 Seja **R** o conjunto dos `record_id` cujo `spool_append` terminou com sucesso (`last_append_succeeded()`
 verdadeiro: linha escrita e com `fsync` no spool do PID). O `record_id` é carimbado em cada linha do spool
-(`spool_writer.py:1026`) e sobrevive no log canônico: a fase 4 só tira os campos `_drain_*`, `hmac` e
-`hmac_error` (`:1896-1900`) **[disco]**. Para todo r ∈ R:
+(`spool_writer.py:1026`) e sobrevive no log canônico: a fase 4 só tira `_drain_*`, `hmac` e `hmac_error`
+(`:1896-1900`) **[disco]**; `pid` e `wall_ns` também sobrevivem (2.614 de 2.615 entradas do log vivo os
+trazem; a exceção é o marcador de reinício) **[medido: redator]**. Para todo r ∈ R:
 
 - **(a) Segurança — nunca some.** Nenhum código apaga um arquivo que contenha r antes de r estar no log
-  canônico (na família de rotação). A fase 5 só apaga `.draining.*` com TODAS as linhas consumidas; o
-  restante vira um `.draining.*` novo (divisão atômica, AMEND-1 §4 Fase 5).
-- **(b) Unicidade — nunca duplica.** r aparece no máximo UMA vez no log canônico (guarda de idempotência
-  `_drain_sha256` na janela `K_TAIL_WINDOW`, mais a rejeição de 4-tupla duplicada).
+  canônico (na família de rotação). A fase 5 só apaga `.draining.*` com TODAS as linhas consumidas; o restante
+  vira um `.draining.*` novo (divisão atômica, AMEND-1 §4 Fase 5).
+- **(b) Unicidade — nunca duplica.** r aparece no máximo UMA vez no log canônico (guarda `_drain_sha256` na
+  janela `K_TAIL_WINDOW`, mais a rejeição de 4-tupla duplicada).
 - **(c) Vivacidade condicionada.** Se existir um drainer futuro deste projeto que ganhe a trava canônica, r
   chega ao log canônico exatamente uma vez. A exceção é r em quarentena (`.malformed.*`, `.quarantined.*`,
-  `.test-origin.*`, `.corrupt-header.*`): fica no disco, contado, e nunca é apagado.
+  `.test-origin.*`, `.corrupt-header.*`): fica no disco, contado como QUARENTENADO, nunca apagado e nunca
+  contado como perdido.
 
 **Na prova (W2.5):** depois de um drain final até ponto fixo na árvore descartável, todo r ∈ R aparece no log
-exatamente uma vez. A exceção são as células de quarentena plantadas, em que r aparece zero vezes e o arquivo
-está no disco. «Contagem igual antes e depois» NÃO serve: esconde perda somada a duplicata.
+exatamente uma vez, salvo as células de quarentena plantadas. «Contagem igual antes e depois» NÃO serve.
+**Em produção:** o G6 (§8.2) mede a violação de (a)–(c) que deixou rastro no journal.
 
-**O journal NÃO entra no INV-NP.** Ele é contabilidade forense de melhor esforço, que não sustenta a
-correção (AMEND-1 «Loss accounting»). Remover um journal vazio não toca nenhum r.
+**O journal NÃO entra no INV-NP.** É contabilidade forense de melhor esforço (AMEND-1 «Loss accounting»).
 
 ### 3.2 As três pernas
 
 | perna | quem | quando | o que recolhe | código |
 |---|---|---|---|---|
 | **1** | o próprio dono, durante a vida | a emissão vê `should_drain()` verdadeiro (spool próprio com ≥ 100 linhas, ou idade > 100 ms) e ganha a trava canônica SEM bloquear (AMEND-3) | o próprio spool e, como a fase 2 é global, os órfãos | `audit_emit.py:2790-2791`; `spool_writer.py:1082-1119`, `:2366-2371` **[disco]** |
-| **2** | o próprio dono, na saída | SÓ se houver conteúdo próprio: spool próprio não vazio (um `stat`) OU o sinalizador em processo ligado (§4.1). Com prazo (§4.2) | o próprio spool e os órfãos | auxiliar de saída chamado por `_atexit_drain` (`:2573`) e `_signal_drain_handler` (`:2590`) |
-| **3** | QUALQUER drainer seguinte deste projeto que ganhe a trava canônica, seja a perna 1 ou a perna 2 de outro processo | a próxima drenagem de outro emissor | spools de PID morto (`:1343`) e TODO `.draining.*`, inclusive de PID vivo (`:1277-1317`) | `_phase2_sweep_and_rename` dentro do `with FileLock` de `drain_now` (`:2366-2371`) **[disco; consenso]** |
+| **2** | o próprio dono, na saída | SÓ se houver conteúdo próprio: spool próprio não vazio (um `stat`) OU o sinalizador `_OWN_DRAIN_PENDING` ligado (§4.1); em hook, com prazo (§4.2) | o próprio spool e os órfãos | auxiliar de saída chamado por `_atexit_drain` (`:2573`) e por `_signal_drain_handler` (`:2590`) |
+| **3** | QUALQUER drainer seguinte deste projeto que ganhe a trava canônica (perna 1 ou 2 de outro processo) | a próxima drenagem de outro emissor | spools de PID morto (`:1343`) e TODO `.draining.*`, inclusive de PID vivo (`:1277-1317`) | `_phase2_sweep_and_rename` dentro do `with FileLock` de `drain_now` (`:2366-2371`) **[disco; consenso r1]** |
 
-**Não existe perna de `SessionStart`** (§2.4). A perna 3 depende de haver um emissor seguinte neste projeto;
-o «próximo `SessionStart`» que uma crítica da rodada 1 citou não drena nada.
+**Não existe perna de `SessionStart`** (§2.4).
 
-### 3.3 Quem cumpre a perna 2 quando o caminho rápido a pula (MF-W2-4)
+### 3.3 Quem cumpre a perna 2 quando o caminho rápido a pula
 
-Ninguém precisa cumpri-la. O caminho rápido só é tomado quando a perna 2 seria VÁCUA: spool próprio ausente
-ou vazio, sinalizador desligado (nenhum `.draining` próprio pendente, nenhum drain próprio falho). Os órfãos
-dos OUTROS PIDs nunca foram responsabilidade da perna 2 de quem não tem conteúdo; eles ficam com a perna 3.
-Quando é o PRAZO que corta a perna 2 de quem tem conteúdo, o spool fica intacto no disco. Depois que o
-processo sai, o PID está morto, e a perna 3 recolhe o spool (`:1343`).
+Ninguém precisa: o caminho rápido só é tomado quando a perna 2 seria VÁCUA (spool próprio ausente ou vazio, e
+sinalizador desligado). Os órfãos dos outros PIDs nunca foram da perna 2 de quem não tem conteúdo; ficam com a
+perna 3. Quando é o PRAZO (ou a trava não obtida) que corta a perna 2 de quem tem conteúdo, o spool fica intacto
+no disco e, morto o PID, a perna 3 o recolhe (`:1343`).
 
 ### 3.4 Vivacidade, reuso de PID e limites
 
-- **Reuso de PID por processo alheio.** `_is_alive_pid` diz «vivo» (`:1233-1245`), e a perna 3 pula o spool
-  órfão até o processo alheio morrer: ATRASO, não perda.
-- **Reuso de PID por outro hook deste projeto.** O processo novo adota o cabeçalho do spool existente e
-  recupera o ordinal (`_ensure_spool_header`, `:746-775`) **[disco]**, então drena o spool nas próprias pernas
-  1 e 2.
-- **Ninguém mais emite neste projeto.** Os órfãos ficam no disco, duráveis e não perdidos. O check do
-  `/ceo-boot` os torna visíveis (§9).
-- **Lote limitado.** Cada drain processa ≤ `K_MAX` = 100 entradas (`:53`); o restante fica num `.draining.*`
-  para a próxima drenagem.
+- **Reuso de PID por processo alheio:** `_is_alive_pid` diz «vivo» (`:1233-1245`), e a perna 3 pula o spool
+  órfão até ele morrer — ATRASO, não perda.
+- **Reuso de PID por outro hook deste projeto:** o processo novo adota o cabeçalho do spool existente e
+  recupera o ordinal (`_ensure_spool_header`, `:746-775`) **[disco]**, e drena nas próprias pernas 1 e 2.
+- **Ninguém mais emite:** os órfãos ficam no disco, duráveis; o check do `/ceo-boot` os mostra (§9).
+- **Lote limitado:** cada drain processa ≤ `K_MAX` = 100 entradas (`:53`). A W0.5 mede se a perna 3 alcança
+  a fila sob rajada (§6.4).
+- **Residência fora da cadeia.** O spool é PRÉ-cadeia (sem HMAC): quanto mais tempo um evento fica no spool,
+  maior a janela em que adulteração ou remoção não deixam elo quebrado. Por isso o travamento tem sinal em
+  ≤ 1 h (§4.3), e os spools órfãos aparecem como taxa no boot (§9).
 
 ### 3.5 O escritor direto `agent_spawn`
 
 O `audit_log.append_entry` escreve no log canônico sem spool e sem `record_id` (`audit_log.py:667-700`,
-`:1280-1296`) **[disco]**. No estresse da W2.5, cada linha `agent_spawn` é identificada por um `desc_hash`
-único que o teste controla, e o INV-NP vale também para ela: cada gravação bem-sucedida aparece exatamente
-uma vez. Há um caminho de PERDA pré-existente, fora do spool: com a trava canônica ocupada por mais de 2,5 s,
-o `append_entry` grava só um breadcrumb `lock timeout (stale?) would-log=…` truncado em 200 caracteres
-(`audit_log.py:1325-1329`) **[disco]**. A W2 REDUZ esse caminho, porque as saídas sem conteúdo deixam de
-tomar a trava canônica. Ela não o elimina, e isso fica declarado (§11). No estresse, qualquer breadcrumb
-`would-log`, `spool append failed` ou `journal flush failed` conta como reprovação.
+`:1280-1296`) **[disco]**. No estresse, cada linha `agent_spawn` é identificada por um `desc_hash` único que o
+teste controla, e o INV-NP vale também para ela. Há dois caminhos de PERDA pré-existentes, fora do spool: com
+a trava canônica ocupada por mais de 2,5 s, o `append_entry` grava só o breadcrumb
+`lock timeout (stale?)  would-log=…` truncado em 200 caracteres (`audit_log.py:1325-1329`); e com `OSError`
+no append, só `append failed: …` (`:1323-1324`) **[disco]**. Os dois já têm ocorrência real (§2.1). A W2 REDUZ
+o primeiro (as saídas sem conteúdo deixam de tomar a trava canônica) e passa a MEDIR os dois (G7, §8.2). Não
+os elimina — fica declarado (§11). No estresse, qualquer breadcrumb `would-log`, `append failed`,
+`spool append failed` ou `journal flush failed` reprova.
 
 ---
 
 ## §4 Decisão
 
-### 4.1 Caminho rápido de saída (W2.2)
+### 4.1 Auxiliar de saída e caminho rápido (W2.2)
 
-Um **auxiliar de saída** único, chamado por `_atexit_drain` e por `_signal_drain_handler`, e NUNCA por
-`drain_now(force=True)`:
+Um **auxiliar de saída** único, chamado por `_atexit_drain` E por `_signal_drain_handler`, e NUNCA por
+`drain_now(force=True)`. Em ordem:
 
-1. **Flush do buffer do journal do próprio PID**, sempre que o buffer não estiver vazio. A trava do journal
-   espera no máximo o orçamento restante (§4.2); com o prazo já vencido, faz uma única tentativa sem
-   bloquear (a semântica `timeout=0` do AMEND-3). Perder envelopes de journal não fere o INV-NP (§3.1).
-2. **Decisão do caminho rápido**, com UM `stat` do próprio spool (`_spool_path(os.getpid())`) e o
-   **sinalizador em processo** `_OWN_DRAIN_PENDING`. O sinalizador LIGA quando a fase 2 renomeia o spool do
-   próprio PID para `.draining.*` (`:1398-1405`), ou quando um `drain_now` deste processo termina com
-   `ok=False`. Ele DESLIGA só quando a fase 5 consome por inteiro e remove o `.draining` próprio; uma divisão
-   com restante o mantém ligado.
-3. **Spool próprio ausente ou com 0 byte, e sinalizador desligado ⇒ sai.** Sem trava canônica, sem
-   `listdir`/`scandir`, sem `glob`, sem `iterdir`.
-4. **Caso contrário** ⇒ drenagem com prazo (§4.2).
+1. **`sys.stdout.flush()` e `sys.stderr.flush()`**, cada um em `try` próprio (fluxo fechado ou pipe quebrado
+   é ignorado). Com isso a decisão do hook sai ANTES de qualquer espera (§2.1). É barato e NÃO substitui o
+   prazo: se o harness só consome a decisão na saída do processo, quem a protege é o prazo (calibração, §6.4).
+2. **Flush do buffer do journal do próprio PID**, se não estiver vazio. A trava do journal espera no máximo o
+   orçamento restante (§4.2); com o prazo vencido, uma única tentativa sem bloquear (`timeout=0`, AMEND-3).
+   Perder envelopes de journal não fere o INV-NP (§3.1).
+3. **Decisão do caminho rápido:** UM `stat` do próprio spool (`_spool_path(os.getpid())`) e o sinalizador
+   em processo `_OWN_DRAIN_PENDING`, **à prova de falha**:
+   - LIGA imediatamente ANTES do `os.rename` do spool do próprio PID na fase 2 (`:1383-1384`, quando
+     `pid == our_pid`) — se o rename falhar, fica ligado (custa uma drenagem a mais, nunca perda);
+   - LIGA quando um `drain_now` deste processo termina com `ok=False`;
+   - DESLIGA só depois de a fase 5 consumir por inteiro o `.draining` próprio E a remoção dele ser
+     CONFIRMADA (o `unlink` retornou sem erro); divisão com restante o mantém ligado;
+   - DESLIGA também quando o `.draining` próprio vai para quarentena (estado terminal; nada pendente).
+4. **Spool próprio ausente ou com 0 byte, e sinalizador desligado ⇒ sai.** Sem trava canônica, sem
+   `listdir`/`scandir`/`glob`/`iterdir`.
+5. **Caso contrário ⇒ UMA tentativa de drenagem** (§4.2), nunca laço.
 
-O caminho rápido mora no auxiliar de saída. Mover a lógica para dentro de `drain_now(force=True)` reprova um
-teste (célula (c) do QA). O teste 4 de `test_spool_drain_contended_skip.py` (`:220-231`: `drain_now(force=True)`
-direto, com spool próprio sob trava externa ⇒ `ok=False`, `error="canonical_lock_timeout"` e breadcrumb) fica
-**intacto** **[disco]**.
+**Células obrigatórias (`-k fast_path` e `-k flag`; nenhum seletor é substring do nome do módulo, §6.5):**
 
-**Células obrigatórias (`-k fast_path`):**
-
-- (a) sem spool próprio, com envelopes no buffer do journal ⇒ o flush roda;
-- (b) `.draining` próprio deixado por exceção no meio do drain ⇒ o sinalizador força a drenagem;
-- (c) a lógica fica no auxiliar de saída, não em `drain_now(force=True)`;
+- (a) sem spool próprio, com envelopes no buffer do journal ⇒ o flush do journal roda;
+- (b) `.draining` próprio deixado por exceção injetada ENTRE o rename e a fase 5 ⇒ o sinalizador está ligado e
+  a saída força a drenagem;
+- (c) **o auxiliar de saída é chamado no atexit E no sinal**; a lógica não está em `drain_now(force=True)`
+  (um teste falha se for movida);
 - (d) zero chamadas a `os.listdir`, `os.scandir`, `glob` e `Path.iterdir` no caminho rápido, contadas por
   envoltório e nunca por tempo;
-- (e) o teste 4 intacto;
+- (e) o teste 4 de `test_spool_drain_contended_skip.py` (`:220-231`: `drain_now(force=True)` direto, sob trava
+  externa ⇒ `ok=False`, `error="canonical_lock_timeout"` e o breadcrumb) fica **intacto** **[disco]**;
 - (f) um órfão de PID morto é recuperado pelo drain OPORTUNISTA (`force=False`) do próximo emissor (o teste 3
-  atual usa `force=True`, `:195-217`).
+  atual usa `force=True`, `:195-217`);
+- (g) o `.draining` próprio consumido por OUTRO drainer ⇒ o sinalizador segue ligado, a saída faz a drenagem
+  completa, sem erro nem perda;
+- (h) spool próprio em quarentena (`.malformed`) ⇒ uma tentativa só, sem laço;
+- (i) SIGTERM honra o caminho rápido e o prazo;
+- (j) o `flush` de stdout e stderr acontece ANTES de qualquer aquisição de trava (espião na ordem das chamadas).
 
-### 4.2 Prazo na drenagem forçada de saída e entrega da decisão BLOCK (W2.2-bis; MF-W2-3)
+### 4.2 Prazo na drenagem de saída de hook e entrega da decisão BLOCK (W2.2-bis; MF-W2-3, MF-R2-W2-2)
 
-**Âncora.** `_PROCESS_ANCHOR = time.monotonic()`, gravada no import do `spool_writer` (o `audit_emit` o
-importa no próprio import). A margem absorve o intervalo entre o início do interpretador e a âncora. Ver o
-resíduo da importação tardia em §11 e a pergunta R2-1 em §14.
+**Escopo: processo de HOOK.** O prazo vale quando o processo foi lançado como hook: `Path(sys.argv[0])`
+resolvido mora no diretório de hooks do próprio módulo (`_HOOKS_DIR`, `spool_writer.py:29`). O wrapper lança
+exatamente esse caminho (`HOOK_SCRIPT="$HOOKS_DIR/$1"`, `_python-hook.sh:304`; `exec` em `:413`) **[disco]**.
+Processos que NÃO são hook (scripts de `.claude/scripts/`, `pytest`, Workflows) não têm timeout do harness: na
+saída eles esperam a trava canônica por `SPOOL_LOCK_TIMEOUT`, como hoje, mas com o mesmo caminho rápido, a
+mesma classificação silenciosa (`exit_deadline_skip`) e o mesmo portão STARVED (§4.3). Sem esse escopo, todo
+processo longo cairia SEMPRE no salto e deixaria o spool para a perna 3, aumentando a residência fora da
+cadeia sem ganho nenhum.
 
-**Prazo.** `EXIT_DEADLINE_S = T_min − EXIT_MARGIN_S`, constante canônica.
+**Âncora** (MF-R2-W2-2): `âncora = min(_IMPORT_ANCHOR, monotonic_agora − idade_do_processo)`.
 
-- `T_min` é o MENOR `timeout` entre as registrações de hook do `.claude/settings.json` e dos perfis
-  shipados em `templates/settings/`. Hoje é 3 s: a registração PostToolUse de `check_skill_reference_read.py`
-  no settings deste repositório. Nos perfis shipados, o mínimo é 5 s **[disco]**.
-- Proposta inicial: `EXIT_MARGIN_S` = 1,0 s ⇒ prazo de 2,0 s contados da âncora. Os dois valores são
-  re-medidos na W0.5 (p95 do encerramento do interpretador depois do atexit e intervalo até a âncora) e
-  pré-registrados ANTES de rodar.
-- Um teste recalcula `T_min` dos arquivos e reprova se `EXIT_DEADLINE_S + EXIT_MARGIN_S > T_min`. Uma
-  registração nova com timeout menor deixa o teste VERMELHO no mesmo patch.
-- Usa-se o mínimo global, e não o timeout de cada hook: o processo não sabe por qual registração foi
-  chamado, e mapear por nome de script é frágil. O custo é só deixar mais spools para a perna 3, nunca perda.
+- `_IMPORT_ANCHOR = time.monotonic()`, gravada no import do `spool_writer`.
+- `idade_do_processo` lida do KERNEL, só na saída e só no caminho lento (o caminho rápido não paga nada):
+  - **macOS:** `sysctl({CTL_KERN=1, KERN_PROC=14, KERN_PROC_PID=1, pid})` via `ctypes.CDLL(None)`; os 16
+    primeiros bytes da `struct kinfo_proc` são o `struct timeval p_starttime`; idade = `time.time() − início`.
+    **Medido nesta máquina:** retorno 0, `kinfo_proc` de 648 bytes, custo de 2,6–3,3 ms com o import do
+    `ctypes` **[medido: redator, macOS 27.0, CPython 3.9.6]**.
+  - **Linux:** o campo 22 (`starttime`, em ticks desde o boot) de `/proc/self/stat`, lido DEPOIS do último
+    `)` (o `comm` pode conter espaços e parênteses); idade = `time.clock_gettime(time.CLOCK_BOOTTIME) −
+    starttime / os.sysconf("SC_CLK_TCK")` **[inferência; NÃO medido — o host é macOS, onde
+    `time.CLOCK_BOOTTIME` não existe]**.
+  - **Recurso declarado:** qualquer falha (plataforma sem leitura, erro do `ctypes`, tamanho inesperado,
+    parse inválido, idade negativa, não finita ou no futuro) ⇒ vale `_IMPORT_ANCHOR`. O resíduo da âncora
+    tardia fica só nesse caso (§11).
+- **Direção do erro:** o `min` só pode ADIANTAR a âncora (menos tempo, lado seguro). Um relógio de parede que
+  salta para trás subestima a idade, mas o `min` limita o erro ao da âncora no import.
+- O início lido do kernel INCLUI o tempo do wrapper, porque o `exec` mantém o PID (`_python-hook.sh:413`)
+  **[disco; consenso r2]**. Exceção: no caminho bloqueante do adaptador grok o Python roda como FILHO
+  (`_CEO_HOOK_STDOUT="$(...)"`, `:420`), e o tempo do wrapper antes dele fica de fora (declarado, §11).
 
-**Aplicação.** `restante = EXIT_DEADLINE_S − (monotonic() − _PROCESS_ANCHOR)`.
+**Prazo.** `EXIT_DEADLINE_S = T_min − EXIT_MARGIN_S`, constantes canônicas.
 
-1. `restante ≤ 0` ⇒ nenhuma tentativa na trava canônica. O spool fica no disco: `exit_deadline_skip=True`.
+- `T_min` = o MENOR `timeout` entre as registrações de hook do `.claude/settings.json` e dos perfis em
+  `templates/settings/`. **Hoje: 3 s** — a registração PostToolUse de `check_skill_reference_read.py`
+  (`.claude/settings.json:440-441`); nos perfis shipados o mínimo é 5 s **[disco]**.
+- **Teste de deriva:** recalcula `T_min` dos arquivos e reprova se `EXIT_DEADLINE_S + EXIT_MARGIN_S > T_min`.
+- **Valores INICIAIS** (pré-registrados, R2-5): `EXIT_MARGIN_S` = 1,0 s ⇒ prazo de 2,0 s contados da âncora.
+- **Regra da margem:** margem ≥ p99 medido do encerramento depois do auxiliar de saída (interpretador + leitura
+  do harness) × 1,5. Se não couber, encolhe o PRAZO, nunca a margem. Se a margem ≥ `T_min`, a W2 PÁRA e vai ao
+  Owner (parada pré-registrada). A medição é declarada como da máquina do Owner: a casa já mediu 77 ms local
+  contra 209–435 ms na CI para os mesmos hooks (CLAUDE.md §5).
+- Mínimo global, e não o timeout de cada hook: o processo não sabe por qual registração foi chamado.
+
+**Aplicação** (`restante = EXIT_DEADLINE_S − (monotonic() − âncora)`):
+
+1. `restante ≤ 0` ⇒ nenhuma tentativa na trava canônica; o spool fica no disco (`exit_deadline_skip=True`).
 2. A trava canônica espera `min(SPOOL_LOCK_TIMEOUT, restante)`. `drain_now` ganha um parâmetro nomeado
-   opcional com o instante-limite absoluto. Sem ele, o comportamento é o de hoje.
-3. Depois de obter a trava, o prazo é conferido de novo, IMEDIATAMENTE antes da fase 2. Se tiver vencido, a
-   trava é solta sem listar.
-4. Dentro da seção crítica, as esperas por trava por PID (o rename da fase 2, `:1374`; a compactação,
-   `:2276`) usam `min(timeout atual, restante)`. Estourar uma delas segue os desvios que JÁ existem (pular o
-   PID neste ciclo; pular a compactação), nunca um caminho novo de erro.
-5. **Estouro no caminho de saída** ⇒ `DrainStats.exit_deadline_skip=True`, `ok=True`, **sem** o breadcrumb
-   `drain canonical lock timeout`. O campo existe só em processo e nunca é serializado (mesmo regime do
-   `contended_skip` do AMEND-3).
-6. **Parte não preemptível:** uma listagem, ≤ `K_MAX` entradas, um append com `fsync` e as compactações
-   dos PIDs drenados. Ela é limitada pelo tamanho do diretório e por `K_MAX`, e a W0.5 a mede (§6.4).
+   opcional com o instante-limite absoluto; sem ele, o comportamento é o de hoje (teste 4).
+3. Obtida a trava, o prazo é conferido de novo IMEDIATAMENTE antes da fase 2; vencido, solta sem listar.
+4. Na seção crítica, as esperas por trava por PID (rename da fase 2, `:1374`; compactação, `:2276`) usam
+   `min(timeout atual, restante)`; o estouro segue os desvios que JÁ existem (pular o PID; pular a compactação).
+5. **Não obter a trava na saída** ⇒ `DrainStats.exit_deadline_skip=True`, `ok=True`, SEM o breadcrumb
+   `drain canonical lock timeout`, e passa pelo portão STARVED (§4.3). O campo existe só em processo, nunca é
+   serializado (mesmo regime do `contended_skip` do AMEND-3).
+6. **Parte não preemptível:** uma listagem, ≤ `K_MAX` entradas, um append com `fsync` e as compactações dos
+   PIDs drenados — limitada pelo tamanho do diretório e por `K_MAX`; a W0.5 a mede.
 
-**Por que não é «anômalo».** O trabalho cortado é durabilidade POSTERIOR à decisão, com a perna 3 como
-garantia. Não se corta verificação de segurança, por isso não há conflito com o ADR-186: lá o prazo
-fail-CLOSED vale para a verificação INCOMPLETA do matcher canônico. Aqui o prazo protege a ENTREGA de uma
-decisão já tomada. É a cura da CLASSE «trabalho longo dentro de guard vira allow»: vale para qualquer causa
-de lentidão, inclusive uma induzida.
+**Drain oportunista ANTES da decisão** (§2(f) do consenso r2). É a mesma classe, antes do stdout: o
+`audit_emit` drena em linha quando o spool próprio passa de 100 ms (`audit_emit.py:2790-2791`), e esse drain lista
+o diretório e pode esperar nas travas por PID. Regra pré-registrada: se a célula da W0.5 (§6.4) medir o
+intervalo «decisão tomada → stdout escrito» acima da margem, a MESMA regra de prazo (âncora, `restante`,
+esperas limitadas, salto silencioso) passa a valer para o drain oportunista DENTRO do pacote da W2.
 
-**Controle de ENTREGA DE DECISÃO (o critério que barra, §6.1):**
+**Por que não é «anômalo» e não fere o ADR-186.** O trabalho cortado é durabilidade POSTERIOR à decisão, com
+a perna 3 como garantia. O ADR-186 manda prazo fail-CLOSED para verificação INCOMPLETA do matcher canônico;
+aqui o prazo protege a ENTREGA de uma decisão já tomada. É a cura da CLASSE «trabalho longo dentro de guard
+vira allow».
 
-- **Medição (W0.5, fora do CI).** Um guard sintético que decide BLOCK, com ≥ 9 saídas concorrentes, o
-  diretório com ~220 mil entradas e um portador externo da trava canônica. O driver reproduz a regra do
-  harness: processo que passa do timeout registrado é morto, e a decisão é descartada. **Vermelho no HEAD**
-  (pré-registrado): ≥ 1 processo com a decisão BLOCK descartada. **Verde depois da cura:** 0 em N ≥ 30
-  execuções da célula de carga máxima. Se o vermelho não reproduzir, o LEDGER registra «prova só
-  estrutural», declarada no material assinado.
-- **Prova estrutural (CI, `-k deadline`).** Relógio falso injetado e espião no `FileLock`; nenhuma
-  asserção de tempo absoluto. Afirma que:
+**Controle de ENTREGA DE DECISÃO (S1, §6.1):**
+
+- **Guard sintético de IMPORT TARDIO** (MF-R2-W2-2): imprime BLOCK depois de trabalho simulado e só ENTÃO
+  importa o `audit_emit` e emite, no molde do `check_canonical_edit.py`. É ele que roda nas células de entrega;
+  um guard que importa cedo seria verde pela razão errada.
+- **Medição (W0.5, fora do CI):** ≥ 9 saídas concorrentes, diretório com ~220 mil entradas, portador externo da
+  trava canônica; o driver aplica a regra do harness (processo que passa do timeout é morto e a decisão,
+  descartada). Vermelho no HEAD pré-registrado; verde com a estatística de §6.4.
+- **Calibração contra o harness REAL** (§6.4): sem ela, S1 é declarado no material assinado como prova contra
+  um MODELO do harness.
+- **Prova estrutural (CI, `-k deadline` e `-k anchor`),** com relógio falso e leitor do kernel falso injetados,
+  e espião no `FileLock`; nenhuma asserção de tempo absoluto:
   - `restante ≤ 0` ⇒ zero aquisições da trava canônica e zero listagens;
-  - o timeout passado à trava = `min(SPOOL_LOCK_TIMEOUT, restante)`;
-  - o estouro ⇒ `exit_deadline_skip`, com o spool próprio intacto no disco (nem renomeado nem apagado) e
-    sem o breadcrumb `drain canonical lock timeout`;
-  - o drain oportunista seguinte de OUTRO processo recolhe esse spool (perna 3);
-  - o teste da constante contra os settings (acima).
+  - timeout passado à trava = `min(SPOOL_LOCK_TIMEOUT, restante)`;
+  - âncora = `min(import, kernel)`; leitor do kernel que falha, devolve idade negativa ou no futuro ⇒ âncora do
+    import;
+  - processo NÃO-hook (argv fora de `_HOOKS_DIR`) ⇒ espera `SPOOL_LOCK_TIMEOUT`, sem prazo de processo;
+  - não obter a trava ⇒ `exit_deadline_skip`, spool próprio intacto (nem renomeado nem apagado), sem o
+    breadcrumb `drain canonical lock timeout`; o drain oportunista seguinte de OUTRO processo o recolhe;
+  - teste de deriva da constante contra os settings.
 
-### 4.3 Journal vazio removido na origem, sob a própria trava (W2.3)
+### 4.3 Trava canônica presa vira sinal em ≤ 1 h (MF-R2-W2-1)
+
+**Requisito.** Uma trava canônica presa vira sinal em ≤ T, com **T = 1 h** (`STARVED_LOG_IDLE_S = 3600`,
+pré-registrado), SEM volume por saída. O AMEND-3 só aceitou silenciar a contenção benigna com a condição de
+manter observável um portador travado (MF-1); o salto silencioso da §4.2 não pode regredir isso. O motivo é de
+segurança, não de operação: enquanto a trava está presa, os eventos ficam no spool, PRÉ-cadeia (§3.4).
+
+**Mecanismo de referência** (o builder pode trocar por equivalente que preserve o requisito e os controles):
+
+- **Portão** — todos verdadeiros:
+  1. caminho LENTO de saída (há conteúdo próprio);
+  2. houve tentativa real na trava canônica, com espera > 0, e ela terminou em `FileLockTimeout` (uma saída que
+     nem tentou, por `restante ≤ 0`, NÃO passa — isso evita o falso positivo de projeto ocioso + guard lento);
+  3. UM `os.stat` do log canônico (`_canonical_log_path()`) mostra `agora − st_mtime > T`. Quem segura a trava
+     e trabalha anexa e faz o log avançar; depois da cura, só processos com conteúdo tomam a trava (o caminho
+     rápido não a toca), então trava ocupada com log parado há mais de 1 h é patologia. Log ausente ⇒ não
+     dispara.
+- **Taxa limitada:** um carimbo `audit-log.starved-stamp`, no MESMO diretório do `audit-log.errors`
+  (`_log_family_dir()`), modo 0600, aberto com `O_NOFOLLOW`. Só escreve se o carimbo estiver ausente ou com mtime
+  mais velho que T; atualiza o carimbo e grava UMA linha. Corridas entre saídas no mesmo instante produzem, no
+  máximo, uma linha por saída concorrente naquele instante — limite pequeno e declarado.
+- **Texto distinto e datado:** `{ts} spool_writer: drain canonical lock STARVED (exit): canonical log idle >
+  3600s while exit drain timed out on the lock`. Contém «STARVED», como o do AMEND-3, e se distingue dele por
+  «(exit)».
+- **Custo:** zero no caminho rápido; nas saídas lentas que não obtiveram a trava, um `stat` do log e, só com o
+  log parado, um `stat` do carimbo.
+
+**Prazo efetivo.** O sinal sai na 1.ª saída com conteúdo que não obtém a trava DEPOIS de T. Num projeto em uso,
+isso é T mais o intervalo até a próxima emissão. Sem nenhum emissor, nada novo entra no spool, e o G3 do boot
+cobre os órfãos antigos (declarado, §11).
+
+**Controles (`-k starved`), em árvore descartável, com `os.utime` para simular T (sem espera real):**
+
+- **positivo:** portador externo segura a trava canônica; o mtime do log é posto em `agora − T − 1`; uma saída
+  com conteúdo e `restante > 0` ⇒ exatamente UMA linha STARVED (exit);
+- **taxa:** 2.ª saída na mesma janela ⇒ nenhuma linha nova; carimbo envelhecido além de T ⇒ uma linha nova;
+- **vermelho que prova que o G3 sozinho não basta:** o mesmo cenário com o comportamento do rascunho r1
+  (salto silencioso, sem portão) ⇒ nenhum sinal antes de 24 h ⇒ o teste do sinal em ≤ T REPROVA (mutante
+  «sem portão STARVED na saída»);
+- **negativos:** portador presente com o log fresco ⇒ nenhuma linha; log parado sem portador (a trava é obtida)
+  ⇒ nenhuma linha; `restante ≤ 0` com o log parado ⇒ nenhuma linha; caminho rápido ⇒ nenhum `stat` do log.
+
+### 4.4 Journal vazio removido na origem, só pela compactação (W2.3)
 
 Em `_journal_compact_drained` (`:2248-2301`), sob a trava do PRÓPRIO journal (`_journal_flock_path(pid)`):
 
-1. reexaminar a existência do journal SOB a trava; ausente ⇒ retorno silencioso, sem breadcrumb. Hoje o
-   `exists()` vem antes da trava (`:2265`);
+1. reexaminar a existência do journal SOB a trava; ausente ⇒ retorno silencioso (hoje o `exists()` vem antes
+   da trava, `:2265`);
 2. ler e filtrar como hoje (`:2277-2291`; linhas que não decodificam ficam);
-3. **resultado vazio ⇒ `os.unlink(journal)` sob a trava**, sem escrever `.compact.tmp`. `FileNotFoundError`
+3. **resultado vazio ⇒ `os.unlink(journal)` sob a trava**, sem escrever `.compact.tmp`; `FileNotFoundError`
    é retorno silencioso;
 4. resultado não vazio ⇒ o caminho atual (`.compact.tmp`, `fsync`, `os.replace`), sem mudança.
 
 **Por que é seguro.** Os únicos abridores do ARQUIVO do journal são o flush (`:950-966`, `O_CREAT|O_APPEND`
-pelo caminho, sob a mesma trava), a compactação (sob a mesma trava) e a reconciliação morta. Nenhum outro
-módulo abre `audit-pending.*` **[disco: censo por `grep`]**. Um flush posterior do dono vivo reabre pelo
-caminho e cria o arquivo de novo, sem envelope perdido. A TRAVA do journal nunca é apagada, então a exclusão
-mútua entre flush e compactação fica intacta.
+pelo caminho, sob a mesma trava), a compactação (sob a mesma trava) e a reconciliação morta; nenhum outro
+módulo abre `audit-pending.*` **[disco: censo por `grep`; vira teste, §6.2]**. Um flush posterior do dono vivo
+reabre pelo caminho e recria o arquivo. A TRAVA do journal nunca é apagada.
 
-**Por que só a compactação, e não também o dono na saída.** A compactação é o ÚNICO produtor de journal com
-0 byte: o flush só cria o arquivo com conteúdo não vazio (`:947-949`, `:959-963`) **[disco]**. Remover na
-compactação cobre todos os casos, inclusive o journal de PID morto drenado por outro processo. A remoção pelo
-dono na saída, que o consenso admitia como alternativa, fica redundante e não entra. Ela fica declarada como
-alternativa caso a rodada 2 mostre um produtor que este rascunho não viu. Um resíduo raro: `O_CREAT` seguido
-de falha no `write` (disco cheio) deixa um journal com 0 byte. A W2.6 cuida dele (§11).
+**Só a compactação** (MF-R2-W2-4). Ela é o ÚNICO produtor de journal com 0 byte: o flush só cria o arquivo com
+conteúdo não vazio (`:947-949`, `:959-963`) **[disco]**. A remoção pelo dono na saída SAI do desenho e do plano.
+Resíduo raro: `O_CREAT` seguido de falha no `write` (disco cheio) deixa um journal com 0 byte; a W2.6 cuida
+dele (§11).
 
-**Controle de intercalação (`-k origin`), por barreira determinística, sem `sleep`** (molde
-`test_spool_drain_contended_skip.py`):
+**Controle de intercalação (`-k origin`), por barreira determinística, sem `sleep`**:
 
 - o dono abre o journal para flush e pára na barreira; o compactador decide remover; libera;
 - **mutante 1**, remoção FORA da trava: o envelope do dono vai para um inode desligado ⇒ VERMELHO;
 - **mutante 2**, remoção com restante não vazio: o manifesto de hash do conteúdo forense acusa ⇒ VERMELHO;
-- a cura ⇒ VERDE: o envelope está no journal recriado, e nenhum journal com conteúdo foi removido.
+- a cura ⇒ VERDE.
 
-### 4.4 Regra de travas: nenhum hook apaga `*.lock` (MF-W2-2)
+### 4.5 Regra de travas: nenhum hook apaga `*.lock` (MF-W2-2)
 
-- **Nenhum hook faz `unlink` de caminho `*.lock`**, de nenhum módulo e por nenhum motivo. A razão está em §2.4:
-  sem re-checagem de inode, apagar o caminho de uma trava cria dois «donos» para o mesmo recurso
-  (R-SEC5/R-QA1).
-- **T1 (padrão).** As travas ficam. O estoque é limpo pela W2.6 (sem adquirente vivo, §5). A contagem é
-  reportada à parte (§6.3, §9), sem limiar de reprovação. O teto teórico é ~2 × o espaço de PIDs.
+- **Nenhum hook faz `unlink` de caminho `*.lock`**, de nenhum módulo e por nenhum motivo (§2.4).
+- **T1 (padrão).** As travas ficam. O estoque é limpo pela W2.6, que passa a ser **RECORRENTE** (§5). Limiar
+  OPERACIONAL, não de segurança: com **≥ 100 mil travas**, o check do `/ceo-boot` recomenda rodar a W2.6 (§9).
+  No ritmo medido, o estoque volta a essa faixa em ~2 a 4 semanas de uso intenso **[inferência: rascunho r1 e
+  DevOps r2]**.
 - **T2 (condicional).** Re-checagem de inode no `_lib/filelock.py` (kernel, `check_arbitration_kernel.py:173`):
-  depois do `flock`, `fstat(fd).st_ino == stat(path).st_ino`, senão nova tentativa. Só entra em pacote de
-  kernel PRÓPRIO, e só se a W0.5 DEPOIS da cura mostrar que a listagem das travas, sozinha, ainda estoura o
-  prazo da drenagem de saída. Mesmo com a T2, a remoção de travas em hook volta a debate com o portador do
-  VETO.
-- **T3 (relocação).** FORA: duas travas para o mesmo recurso durante a convivência de versões (C14).
-- **«O dono apaga as próprias travas na saída».** NÃO entra neste rascunho. Só volta com as quatro coisas da
-  §2(b) do consenso: o censo mecânico dos 4 abridores de caminho de trava por PID (`:958`, `:1002`, `:1374`,
-  `:2276`) como guarda; o sinalizador em processo do próprio `.draining`; o controle de intercalação
-  (vermelho com a remoção ingênua, verde com a cura); e novo julgamento do portador do VETO.
+  depois do `flock`, `fstat(fd).st_ino == stat(path).st_ino`, senão nova tentativa. Pacote de kernel PRÓPRIO.
+  **Gatilho numérico pré-registrado** (qualquer um): na célula «~150 mil travas» da W0.5, com ≥ 9 saídas
+  concorrentes de processos com conteúdo, `exit_deadline_skip` > 0 OU p95 da saída acima do orçamento; OU a
+  W2.6 precisar rodar mais de 1× por mês; OU o projeto rodar num Linux de vida longa (§6.3, H3). Mesmo com a
+  T2, a remoção de travas em hook volta a debate com o portador do VETO.
+- **T3 (relocação).** FORA (C14 do consenso r1).
+- **«O dono apaga as próprias travas na saída»:** fora deste ADR; só volta com as quatro garantias da §2(b) do
+  consenso r1 e novo julgamento do portador do VETO.
 
-### 4.5 GC dentro do hook: fora do pacote base (W2.4 condicional)
+### 4.6 GC dentro do hook: fora do pacote base (W2.4 CONDICIONAL)
 
-Com §4.3, deixa de existir produtor de journal vazio, e com §4.4 nenhuma trava se apaga em hook. **O pacote
-base da W2 não leva GC no hook.** O estoque é da W2.6 (§5), e o resíduo é medido pelo fluxo (§6.3). Isso
-diverge do texto atual da W2.4 do plano (pergunta R2-2). Se o fluxo, medido depois do LAND, ficar acima do
-limiar, o GC de journal de PID morto volta como pacote próprio, com as condições já fixadas pelo consenso:
+Com §4.4 não há produtor de journal vazio; com §4.5 nenhuma trava se apaga em hook. **O pacote base da W2 não
+leva GC no hook**, e o Check `-k gc` SAI da lista de Checks da W2. Se o fluxo H1 (§6.3), medido depois do LAND,
+ficar acima do limiar, o GC de journal de PID morto volta como pacote PRÓPRIO, com as condições já fixadas: de
+carona na listagem da fase 2, DEPOIS de soltar a trava canônica; teto de ≤ 200 arquivos e ≤ 50 ms por execução
+(a confirmar na W0.5); só o padrão de journal (§4.8), só 0 byte, PID morto; reexame sob a trava do journal;
+nenhum `*.lock`; a lista de §4.9; a tabela de §5.2, com o porquê de cada diferença.
 
-- de carona na listagem da fase 2, DEPOIS de soltar a trava canônica;
-- teto de ≤ 200 arquivos e ≤ 50 ms por execução, a confirmar na W0.5;
-- só o padrão de journal (§4.7), só 0 byte, PID morto;
-- reexame sob a trava do journal;
-- nenhum `*.lock`;
-- a lista de §4.8;
-- a tabela de predicado de §5.2, com o porquê de cada diferença.
+### 4.7 Regra de versões mistas (MF-W2-4)
 
-### 4.6 Regra de versões mistas (MF-W2-4)
-
-- **Invariante estrutural:** nenhum caminho de trava e nenhum caminho de journal mudam. A emenda não cria
-  layout novo. Por isso o código velho e o novo serializam pelas MESMAS travas, e a leitura dupla de layout
-  pedida para a relocação não se aplica (a relocação saiu).
-- **Regra para emendas futuras:** mudar o caminho de uma trava ou de um journal exige transição explícita,
-  com dupla trava ou janela sem adquirentes. É a classe da antiga W2.3, registrada aqui para não reabrir.
-- **LAND** com as sessões DESTE projeto fechadas, declarado no material assinado. Cada hook é um processo
-  novo que carrega o código do disco, então a convivência dura só a vida dos processos em voo no instante
-  do LAND **[inferência]**.
+- **Invariante estrutural:** nenhum caminho de trava e nenhum caminho de journal mudam. **Prova mecânica:**
+  teste dourado dos construtores de caminho, byte a byte contra o HEAD `48f03b3a`, para um PID de amostra
+  (`-k golden_paths`): `_spool_path` → `audit-spool.<pid>.jsonl`; `_journal_path` → `audit-pending.<pid>.journal`;
+  `_spool_flock_path` → `audit-spool.<pid>.jsonl.lock`; `_journal_flock_path` → `audit-pending.<pid>.journal.lock`;
+  `_draining_path` → `audit-spool.<pid>.draining.<epoch>`; `_aggregate_journal_path` → `audit-pending.journal`;
+  `_aggregate_journal_lock_path` → `audit-pending.journal.aggregation.lock`; `_canonical_log_lock` →
+  `audit-log.lock` (`spool_writer.py:429-481`) **[disco]**.
+- **Regra para emendas futuras:** mudar o caminho de uma trava ou de um journal exige transição explícita, com
+  dupla trava ou janela sem adquirentes (a classe da antiga W2.3).
+- **LAND** com as sessões DESTE projeto fechadas, declarado no material assinado.
 - **Efeitos declarados da convivência** (LAND com sessão aberta, ou adopter via `upgrade.sh` com sessão
-  aberta):
-  - um compactador velho que encontre o journal removido por um novo grava o breadcrumb
-    `journal compact failed: FileNotFoundError`. É ruído transitório, não perda: os registros já estão no
-    log;
-  - processos velhos seguem sem caminho rápido e sem prazo até sair;
-  - um compactador velho ainda reescreve journal com 0 byte, e o novo o remove na próxima compactação
-    daquele PID;
-  - nenhuma combinação cria dois donos para uma trava.
-- **Adopters:** o estoque dos adopters não é limpo pela W2, porque a W2.6 é operação do Owner, fora do
-  repositório. A decisão BLOCK deles fica protegida pelo prazo. A limpeza do estoque do adopter é follow-up
-  (§13, para ciência).
+  aberta): o compactador velho que encontre o journal removido grava `journal compact failed:
+  FileNotFoundError` (ruído transitório, não perda); processos velhos seguem sem caminho rápido, sem prazo e
+  sem portão STARVED até sair; o compactador velho ainda reescreve journal com 0 byte, e o novo o remove na
+  próxima compactação daquele PID; nenhuma combinação cria dois donos para uma trava.
+- **Adopters:** o estoque deles não é limpo pela W2 (a W2.6 é operação do Owner, fora do repositório); a
+  decisão BLOCK fica protegida pelo prazo; a limpeza do estoque do adopter é follow-up (§13, para ciência).
 
-### 4.7 Nomes: expressões regulares ancoradas
+### 4.8 Nomes: expressões regulares ancoradas
 
-Usadas pela W2.6, pelo check do `/ceo-boot` e pelo critério de sucesso (o MESMO texto nos três):
+Usadas pela W2.6, pelo check do `/ceo-boot`, pelos scripts G6/G7 e pelo Check de sucesso (o MESMO texto em
+todos):
 
 ```
 RE_SPOOL_LOCK   = r"audit-spool\.([1-9][0-9]{0,9})\.jsonl\.lock"
@@ -411,86 +499,96 @@ RE_DRAINING     = r"audit-spool\.([1-9][0-9]{0,9})\.draining\.([0-9a-f]{8})"
 RE_ACTIVE_SPOOL = r"audit-spool\.([1-9][0-9]{0,9})\.jsonl"
 ```
 
-- **Só com `re.fullmatch` e a flag `re.ASCII`.** Nunca `match`, `search` nem `$`, porque o `$` do Python
-  aceita um `\n` final, e nome de arquivo pode conter `\n`.
+- **Só com `re.fullmatch` e `re.ASCII`.** Nunca `match`, `search` nem `^…$` (o `$` do Python aceita um `\n`
+  final); nunca `\d` (casa dígitos Unicode).
 - PID só de dígitos ASCII, sem zero à esquerda, de 1 a 10 dígitos.
-- **Proibido reusar `_parse_spool_pid`** (`:1248-1257`) para decidir remoção: ele usa `int()`, que aceita `_`,
-  espaços, `+` e dígitos Unicode **[disco + semântica do `int()` da stdlib]**.
-- O journal agregado (`audit-pending.journal`) e a trava de agregação
-  (`audit-pending.journal.aggregation.lock`) NÃO casam (`:455-462`).
-- A compactação do hook (§4.3) não usa regex: o caminho é construído a partir do próprio PID.
+- **Proibido reusar `_parse_spool_pid`** (`:1248-1257`) para decidir remoção: usa `int()`, que aceita `_`,
+  espaços, `+` e dígitos Unicode.
+- O journal agregado e a trava de agregação NÃO casam (`:455-462`).
+- **Linhas do `audit-log.errors`** (G2, G7, STARVED): o arquivo mistura dois formatos de carimbo — o do
+  `spool_writer` (`AAAA-MM-DDTHH:MM:SSZ spool_writer: …`, `:611-613`) e o do `audit_log`
+  (`[AAAA-MM-DDTHH:MM:SSZ] …`, `audit_log.py:1122-1124`) **[disco; medido: 31.680 e 3 linhas]**. As regex de
+  linha casam os dois, ancoradas no início, e a comparação de tempo é entre DATETIMES em UTC, nunca entre
+  textos.
 
-### 4.8 O que nunca se apaga
+### 4.9 O que nunca se apaga
 
 Nem em hook, nem na W2.6:
 
 - `.draining.*`, `.malformed.*`, `.quarantined.*`, `.test-origin.*`, `.corrupt-header.*` (`:581-582`),
   `.tmp.*` e `*.compact.tmp`;
 - spool ativo `audit-spool.<pid>.jsonl`, de qualquer tamanho;
-- journal com conteúdo (> 0 byte) e TODA a família dele (as duas travas do mesmo PID);
-- o journal agregado e a trava de agregação dele;
-- a família do log: `audit-log.jsonl`, `audit-log.lock`, `audit-log.errors`, a chave, o sal, os sidecars
-  (`last-hmac`, `chain-length`, `rotation-manifest`) e os arquivos rotacionados;
+- journal com conteúdo (> 0 byte) e TODA a família dele;
+- o journal agregado e a trava de agregação;
+- a família do log: `audit-log.jsonl`, `audit-log.lock`, `audit-log.errors`, **`audit-log.starved-stamp`
+  (novo, §4.3)**, a chave, o sal, os sidecars e os arquivos rotacionados. O `audit-log-retain.py` casa só
+  `audit-log-AAAA-MM(-N)?.jsonl` (`:27-28`) e não toca o carimbo **[disco]**;
 - travas e temporários de outros módulos no mesmo diretório (`ceo-overhead-window*.json.lock`,
   `subagent-lifecycle.json.lock`, `output-scan-dedup.lock`, `ceo-boot-tasks-emitted.json.lock`,
-  `statusline-snapshot.json.tmp.N`) **[medido: QA]**;
-- tudo que não for arquivo comum (symlink, diretório) ou que tenha `st_nlink > 1`;
+  `statusline-snapshot.json.tmp.N`) **[medido: QA r1]**;
+- tudo que não for arquivo comum ou que tenha `st_nlink > 1`;
 - qualquer coisa fora do state dir resolvido;
-- **em hook:** qualquer `*.lock`, sem exceção (§4.4).
+- **em hook:** qualquer `*.lock`, sem exceção.
 
-### 4.9 O que NÃO muda
+### 4.10 O que NÃO muda
 
-- As fases 2 a 5, a ordem da cadeia HMAC, a reconstrução do `prev_hmac` pela cauda e a guarda `_drain_sha256`.
-- `_lib/audit_hmac.py`, `_lib/canonical_json.py` e `audit-verify-chain.py`.
-- O caminho oportunista do AMEND-3: `timeout=0`, `contended_skip` e o breadcrumb `STARVED` com gate.
-- `drain_now(force=True)` sem prazo: o teste 4.
-- O kill-switch `CEO_AUDIT_SYNC_MODE=1`.
-- Nenhuma ação nova em `_KNOWN_ACTIONS` e nenhum toque no `audit_emit.py` (§9).
+As fases 2 a 5, a ordem da cadeia HMAC, a reconstrução do `prev_hmac` pela cauda e a guarda `_drain_sha256`;
+`_lib/audit_hmac.py`, `_lib/canonical_json.py` e `audit-verify-chain.py`; o caminho oportunista do AMEND-3
+(`timeout=0`, `contended_skip`, `STARVED` com gate), salvo a regra condicional da §4.2; `drain_now(force=True)`
+sem prazo (teste 4); o kill-switch `CEO_AUDIT_SYNC_MODE=1`; nenhuma ação nova em `_KNOWN_ACTIONS`; nenhum toque
+no `audit_emit.py`.
 
 ---
 
-## §5 W2.6 — limpeza única do estoque, endurecida (MF-W2-6)
+## §5 W2.6 — limpeza do estoque, endurecida e RECORRENTE (MF-W2-6)
 
-O script fica fora do repositório, é rodado pelo Owner e é confinado ao state dir.
+O script fica fora do repositório, é rodado pelo Owner e é confinado ao state dir. **Sob T1 ele é RECORRENTE**:
+roda de novo quando o `/ceo-boot` acusar ≥ 100 mil travas (§9), a cada ~2 a 4 semanas de uso intenso
+**[inferência]**. Rodar mais de 1× por mês é gatilho da T2 (§4.5). A 1.ª execução pode ser já.
 
 ### 5.1 Resolução e confinamento
 
-- O state dir vem do resolvedor `_lib/runtime_paths.py` (`--state-dir`) + `/state`, NUNCA de slug derivado à
-  mão (ADR-001, marcador M4). Com `CEO_AUDIT_LOG_DIR` ou `CEO_AUDIT_LOG_PATH` definidos, o script recusa:
-  com eles, o state dir dos hooks diverge do resolvedor (`spool_writer.py:265-266`, `:407-412`).
-- O diretório é aberto com `O_RDONLY | O_DIRECTORY | O_NOFOLLOW`. Recusa se for symlink, se o dono não for
-  o UID corrente ou se o modo não for 0700.
-- Cada remoção é `os.unlink(nome, dir_fd=dfd)`, relativo ao descritor do diretório, sem seguir link.
-- **Reexame imediatamente antes de cada `unlink`:** `os.stat(nome, dir_fd=dfd, follow_symlinks=False)`, com
+- State dir pelo resolvedor `_lib/runtime_paths.py` (`--state-dir`) + `/state`, NUNCA por slug derivado à mão
+  (ADR-001, marcador M4). Com `CEO_AUDIT_LOG_DIR` ou `CEO_AUDIT_LOG_PATH` definidos, recusa (o state dir dos
+  hooks diverge do resolvedor, `spool_writer.py:265-266`, `:407-412`).
+- Diretório aberto com `O_RDONLY | O_DIRECTORY | O_NOFOLLOW`; recusa se for symlink, de outro dono ou com modo
+  ≠ 0700.
+- Cada remoção é `os.unlink(nome, dir_fd=dfd)`.
+- **Reexame imediatamente antes de cada `unlink`:** `os.stat(nome, dir_fd=dfd, follow_symlinks=False)` com
   `S_ISREG`, `st_size == 0`, `st_nlink == 1`, o mesmo `(st_dev, st_ino)` da listagem e a família ainda sem
   conteúdo.
 - **Simulação por padrão;** só remove com `--apply`.
-- **Resíduo declarado:** entre o reexame e o `unlink` há uma janela, porque não existe «unlink se o inode for
-  X». Com as sessões do projeto fechadas, não há adquirente vivo para explorá-la.
+- **Resíduo declarado:** a janela entre o reexame e o `unlink` (não existe «unlink se o inode for X»); com as
+  sessões do projeto fechadas, não há adquirente vivo para explorá-la.
 
-### 5.2 Predicado pré-registrado (uma ação por célula; QA MF-6)
+### 5.2 Predicado pré-registrado (uma ação por célula)
 
 | célula | ação |
 |---|---|
-| nome casa um dos 3 padrões (§4.7); arquivo comum; 0 byte; `st_nlink == 1`; PID morto; família sem conteúdo (journal ausente ou com 0 byte, sem spool ativo com conteúdo, sem `.draining.*` do PID); mtime ≥ 10 min | **APAGA** (a simulação conta; `--apply` apaga) |
-| mesma célula, com PID vivo (inclusive PID reusado por processo alheio) | **MANTÉM** a família inteira; contada como «pulada: PID vivo» |
-| qualquer arquivo da família com mtime < 10 min | **RECUSA a execução inteira** (sinal de sessão viva deste projeto) — ver a decisão pendente 2 |
+| **spool ativo ou `.draining.*` com PID VIVO** (prova positiva de emissor vivo; trava aberta e `flock` não mudam o mtime) | **RECUSA a execução inteira**, nomeando o PID |
+| qualquer arquivo da família com mtime < 10 min | **RECUSA a execução inteira** (sinal de sessão viva deste projeto) |
+| nome casa um dos 3 padrões (§4.8); arquivo comum; 0 byte; `st_nlink == 1`; PID morto; família sem conteúdo (journal ausente ou com 0 byte, sem spool ativo, sem `.draining.*` do PID); mtime ≥ 10 min | **APAGA** (a simulação conta; `--apply` apaga) |
+| mesma célula, com PID vivo nas TRAVAS ou no journal (inclusive PID reusado por processo alheio) | **MANTÉM** a família inteira; contada como «pulada: PID vivo» |
 | journal com conteúdo | **MANTÉM** a família inteira; o journal entra no manifesto de hash |
 | symlink, hardlink (`st_nlink > 1`), diretório ou outro tipo | **MANTÉM** + aviso |
-| quase-acertos: travas de outros módulos, `statusline-snapshot.json.tmp.N`, `audit-pending.journal`, a trava de agregação, `*.compact.tmp`, `audit-pending.0123.journal` (zero à esquerda), `audit-pending.12a.journal`, PID com dígitos não ASCII, `audit-pending.1_0.journal`, nome com `\n` final | **MANTÉM** (não casa) |
-| spool ativo, `.draining.*` e todo sufixo de §4.8 | **MANTÉM** |
+| quase-acertos (travas de outros módulos, `statusline-snapshot.json.tmp.N`, journal agregado, trava de agregação, `*.compact.tmp`, `audit-pending.0123.journal`, `audit-pending.12a.journal`, dígitos não ASCII, `audit-pending.1_0.journal`, nome com `\n` final) | **MANTÉM** (não casa) |
+| spool ativo de PID morto, `.draining.*` de PID morto e todo sufixo de §4.9 | **MANTÉM** (a perna 3 os recolhe) |
 | state dir symlink, de outro dono ou com modo ≠ 0700 | **RECUSA a execução** |
 
-Diferença em relação ao hook: o hook só remove o journal do PID que está compactando, sob a trava dele e
-sem regex (§4.3). A W2.6 é a ÚNICA que remove travas, e pode fazê-lo porque roda sem adquirente vivo.
+**Por que «PID vivo nas travas ⇒ pula a família», e não recusa total:** os 75.609 PIDs distintos ocupam ~76%
+do espaço de PIDs do macOS **[medido: QA r1]**; recusar por qualquer PID vivo faria o script nunca rodar. A
+recusa total fica para a prova positiva (spool ou `.draining.*` de PID vivo) e para o mtime recente.
+**Resíduo:** um spool órfão cujo PID foi reusado por processo alheio provoca recusa FALSA (estimativa grosseira
+de ~0,6% por spool órfão **[inferência: ~600 processos ÷ ~10⁵ PIDs]**); o script nomeia o PID, e o Owner
+confere por `lsof`/`ps` sobre o caminho, nunca `pgrep -f`.
 
 ### 5.3 Execução e prova
 
-1. **Simulação.** Contagem POR CÉLULA da §5.2, gravada no LEDGER com data e substrato (versão do CC, o
-   `python3` dos hooks e o sha do script).
-2. **Manifesto de hash** dos journals com conteúdo (~214), antes e depois. Qualquer diferença reprova.
-3. **Contagem antes e depois** pelo MESMO método do critério (§6.3). Um teste afirma: contagem registrada =
-   arquivos de fato removidos.
+1. **Simulação** com contagem POR CÉLULA, gravada no LEDGER com data e substrato (versão do CC, `python3` dos
+   hooks, sha do script).
+2. **Manifesto de hash** dos journals com conteúdo, antes e depois; qualquer diferença reprova.
+3. **Contagem antes e depois** pelo MESMO método do critério (§6.3); um teste afirma contagem registrada =
+   arquivos removidos.
 
 ---
 
@@ -498,116 +596,145 @@ sem regex (§4.3). A W2.6 é a ÚNICA que remove travas, e pode fazê-lo porque 
 
 ### 6.1 Critérios que BARRAM o SIGN (segurança; domínio do VETO)
 
-- **S1 — entrega de decisão (MF-W2-3).** O controle de §4.2 passa de VERMELHO (W0.5 no HEAD) a VERDE (W0.5
-  depois da cura), e a prova estrutural `-k deadline` fica verde.
-- **S2 — INV-NP por conjunto.** Verde no estresse da W2.5 (§6.2), com cada mutante reprovando.
-- **S3 — cadeia.** `verify_chain()` íntegro sobre ≥ N elos sob estresse com escritores `agent_spawn`
-  misturados, DEPOIS da cura da condição 67 (§7). N é pré-registrado; proposta: ≥ 1.000. Cadeia vazia ou
-  curta é verde por vácuo.
+- **S1 — entrega de decisão** (MF-W2-3, MF-R2-W2-2): a célula de entrega da W0.5, com o guard sintético de
+  IMPORT TARDIO, passa de VERMELHO (HEAD) a VERDE (cura) pela estatística da §6.4; a prova estrutural
+  `-k deadline`/`-k anchor` fica verde; a calibração contra o harness real é feita ou a limitação é declarada.
+- **S2 — INV-NP por conjunto:** verde no estresse (§6.2), cada mutante reprovando.
+- **S3 — cadeia:** `verify_chain()` íntegro sobre a cadeia composta da §6.2, DEPOIS da W2.0 (§7).
+- **S4 — trava presa vira sinal** (MF-R2-W2-1): os controles da §4.3 verdes, inclusive o vermelho do mutante
+  «sem portão».
+- **S5 — perda real medida** (MF-R2-W2-3): G6 e G7 implementados, com controle positivo verde (§8.2).
 
-`truly_lost` NÃO é critério: está morto (§2.4).
+`truly_lost` NÃO é critério: está morto.
 
 ### 6.2 Estresse W2.5 (`-k invariant`; MF-W2-5)
 
-- **Escritores em paralelo:**
-  - `agent_spawn` (`audit_log.append_entry`, depois da cura W2.0, com `desc_hash` único por gravação);
-  - `audit_emit` pelo spool;
-  - drainers oportunistas e drenagens de saída;
-  - saídas pelo caminho rápido;
-  - saídas cortadas pelo prazo;
-  - `kill -9` no meio do drain;
-  - reuso de PID, simulado pela adoção de cabeçalho (§3.4).
-- **Recuperação de órfãos:** todo spool e todo `.draining.*` deixados por processos mortos são recolhidos
-  pelo drain do próximo emissor, oportunista ou de saída, MESMO com todas as outras saídas pelo caminho
-  rápido. A premissa «pelo próximo `SessionStart`» foi refutada.
-- **Afirmações:**
-  - INV-NP por conjunto;
-  - `verify_chain()` sobre ≥ N elos;
-  - zero breadcrumb de perda (`would-log`, `spool append failed`, `journal flush failed`);
-  - ao final, nenhum `.draining.*` nem spool órfão com conteúdo.
-- **Mutantes plantados, cada um tem de reprovar:**
+- **Escritores em paralelo:** `agent_spawn` (`audit_log.append_entry`, depois da W2.0, `desc_hash` único);
+  `audit_emit` pelo spool; drainers oportunistas e drenagens de saída; saídas pelo caminho rápido; saídas
+  cortadas pelo prazo; `kill -9` no meio do drain; reuso de PID (adoção de cabeçalho, §3.4).
+- **Recuperação de órfãos** pelo drain do próximo emissor, oportunista ou de saída, MESMO com todas as outras
+  saídas pelo caminho rápido.
+- **Composição da cadeia** (não só tamanho): N ≥ 1.000 elos, com ≥ 100 `agent_spawn`, ≥ 100 lotes de drain
+  (linhas com `_drain_epoch`, que sobrevive no canônico, `spool_writer.py:1938-1942` **[disco]**), ≥ 50
+  transições ADJACENTES entre as duas classes e ≥ 1 rotação no meio. Mil elos de um escritor só seria verde por
+  vácuo para a condição 67.
+- **Afirmações:** INV-NP por conjunto; `verify_chain()` sobre a cadeia composta; zero breadcrumb de perda;
+  ao final, nenhum `.draining.*` nem spool órfão com conteúdo; **journals COM conteúdo foram produzidos antes
+  do drain** (o H1 não pode ficar verde porque o journaling quebrou).
+- **Guardas mecânicas** (`-k inode`, `-k openers`): o inode `(st_dev, st_ino)` de cada caminho `*.lock` fica
+  ESTÁVEL do 1.º ao último uso (inode trocado = alguém apagou e recriou); o censo dos abridores de
+  `audit-pending.*` é TESTE (só o `spool_writer.py`, e só flush, compactação e reconciliação), com módulo
+  sintético que abre `audit-pending.1.journal` como controle positivo.
+- **Mutantes da W2.5 = M-a..M-d**, cada um reprovando:
   - M-a: a fase 5 apaga um `.draining` parcialmente consumido (perda);
   - M-b: a guarda `_drain_sha256` desligada na recuperação (duplicata);
-  - M-c: o estouro do prazo apaga ou renomeia o próprio spool (perda);
+  - M-c: o salto por prazo apaga ou renomeia o próprio spool (perda);
   - M-d: a fase 2 renomeia o spool de um PID vivo sem a trava do spool (append em voo roubado, com barreira).
-- Os mutantes da W2.4 original (GC que apaga journal com conteúdo; caminho rápido que pula quem tem spool) vivem
-  nos testes `-k origin` e `-k fast_path`.
 
-### 6.3 Higiene: fluxo (primário) e teto (secundário)
+### 6.3 Higiene: fluxo (primário), teto (secundário) e travas (operacional)
 
-**Método único de contagem** (W2.6, check do `/ceo-boot` e critério): uma listagem do state dir, `fullmatch`
-das regex de §4.7 e `lstat` só onde a categoria exige.
+**Método único de contagem:** uma listagem do state dir, `fullmatch` das regex de §4.8, `lstat` só onde a
+categoria exige.
 
 - **H1 — fluxo (primário).** `F = |{p ∈ D : p morto ∧ audit-pending.<p>.journal existe com 0 byte ∧ mtime ≥
-  início da janela}| / |D|`.
-  - D é o conjunto dos `pid` distintos carimbados nas entradas da era-spool do log canônico (e dos arquivos
-    rotacionados), com `wall_ns` na janela de 24 h.
-  - Limiar proposto: **F ≤ 0,01**. Antes da cura, F ≈ 1 por construção: todo PID emissor drenado deixa um
-    journal com 0 byte **[inferência a partir de `:2276-2297`]**. Por isso o critério não fica verde por
-    vácuo num dia leve e não envelhece com o estoque.
-  - **|D| = 0 ⇒ reprova.** Medido depois da W2.6, ou com o filtro de mtime, para que o estoque não contamine.
-- **H2 — teto (secundário, sanidade).** ≤ 1.000 journals com 0 byte no state dir INTEIRO depois de 24 h de uso
-  normal, medidos com as sessões do projeto paradas. **Sob T1, o teto NÃO vale para as travas:** elas crescem
-  2 por PID novo, ~15,8 mil por dia no ritmo medido (+3.731 entradas em ~3h47 ⇒ ~330 PIDs por hora
-  **[inferência a partir de: medido QA + plano]**). Aplicar o teto às travas reprovaria por construção.
-- **H3 — travas.** Reportadas à parte (contagem por nome), sem limiar. Teto teórico: 2 × o espaço de PIDs. No
-  macOS, ~10⁵ PIDs (a lane `H-02` estima ~300 mil arquivos nos 3 padrões); no Linux, depende de
-  `kernel.pid_max`, que pode chegar a 4.194.304 **[inferência; conhecimento do SO]**. Num Linux de vida longa,
-  T1 não tem teto prático, e esse é um gatilho candidato da T2 (pergunta R2-5).
+  início da janela}| / |D|`, com D = os `pid` distintos das entradas da era-spool do log canônico (e dos
+  arquivos rotacionados) com `wall_ns` na janela de 24 h, lidos por SCRIPT (não por `grep`).
+  - **`|D|_min` ≥ 200** pré-registrado; abaixo dele, reprova (sem carga, nada fica provado).
+  - **Vermelho MEDIDO no HEAD:** **|D| = 1.049, F = 0,999** (1.048 PIDs mortos com journal de 0 byte e mtime
+    na janela; 0 com conteúdo), sobre o log corrente desde a rotação de 2026-10-01T17:23:56Z
+    **[medido: redator, 2026-10-02T03:40Z]**. O esperado era F ≥ 0,9.
+  - **Limiar: F ≤ 0,01** (ε pré-registrado, R2-5).
+- **H2 — teto (secundário).** ≤ 1.000 journals com 0 byte no state dir INTEIRO depois de 24 h de uso normal, com
+  as sessões do projeto paradas. **Só journals:** sob T1 as travas crescem ~15,8 mil por dia **[inferência]**,
+  e aplicar o teto a elas reprovaria por construção.
+- **H3 — travas (operacional).** Reportadas à parte, por nome; **≥ 100 mil ⇒ o `/ceo-boot` recomenda a
+  W2.6**; não é limiar de segurança. Teto teórico: 2 × o espaço de PIDs — ~10⁵ PIDs no macOS; no Linux depende
+  de `kernel.pid_max`, que pode chegar a 4.194.304 **[inferência; conhecimento do SO]**, por isso o Linux de
+  vida longa é gatilho da T2.
 
-### 6.4 W0.5 pré-registrada (QA MF-2; DevOps MF-7)
+### 6.4 W0.5 pré-registrada (QA MF-2/5/6; DevOps MF-3/7)
 
-O pré-registro vai no LEDGER ANTES de rodar, em árvore descartável, com piso de `df` e limpeza confinada.
+Pré-registro no LEDGER ANTES de rodar, em árvore descartável, com piso de `df` e limpeza confinada. Substrato
+congelado: versão do CC (Q14), `python3` dos hooks, SO, sha do instrumento.
 
-- **Células 2³:** {saída sem spool próprio, com spool próprio} × {diretório vazio, ~220 mil entradas} × {1
-  saída, ≥ 9 concorrentes}, mais quatro células extras:
-  - entrega de decisão BLOCK com portador externo da trava (§4.2);
-  - estoque só de travas (~150 mil, a situação depois da cura sob T1, que decide a T2);
-  - encerramento do interpretador depois do atexit (calibra `EXIT_MARGIN_S`);
-  - intervalo entre o início do interpretador e a âncora.
-- **Métricas:** p50/p95 da latência de saída; linhas `drain canonical lock timeout`; decisões descartadas.
-- **Vermelho pré-registrado:** ≥ 1 timeout em {220k, ≥ 9} e 0 em {vazio, ≥ 9}; ≥ 1 decisão descartada na
-  célula de entrega.
-- **Depois da cura:** a mesma matriz, com razão p95 cheio/vazio ≤ 1,2 em N ≥ 30, e `SPOOL_LOCK_TIMEOUT`
-  re-medido.
-- **Substrato congelado:** versão do CC (Q14), `python3` dos hooks, SO e sha do instrumento.
+- **Matriz base 2³:** {saída sem spool próprio, com spool próprio} × {diretório vazio, ~220 mil entradas} ×
+  {1 saída, ≥ 9 concorrentes}. Métricas: latência de saída, linhas `drain canonical lock timeout`, decisões
+  descartadas, taxa de `exit_deadline_skip`.
+- **Células extras:**
+  1. **entrega de decisão** com o guard sintético de import tardio e portador externo da trava (§4.2);
+  2. **estoque só de travas (~150 mil)** — o REGIME PERMANENTE sob T1, que decide a T2;
+  3. **encerramento depois do auxiliar de saída** (calibra `EXIT_MARGIN_S` pela regra da §4.2);
+  4. **intervalo desde o INÍCIO DO WRAPPER até a âncora** (o `_python-hook.sh` procura o Python e pode lançar
+     subprocessos antes do `exec`); com a âncora pelo kernel, mede o resíduo do recurso no import;
+  5. **drain oportunista ANTES da decisão**, com ~150 mil travas e ≥ 9 concorrentes: intervalo «decisão tomada
+     → stdout escrito»; acima da margem ⇒ vale a regra condicional da §4.2;
+  6. **vivacidade da perna 3 sob rajada:** contagem e idade dos spools órfãos com conteúdo ao fim da carga e
+     depois de N emissores seguintes (`K_MAX` = 100);
+  7. **calibração contra o harness REAL:** projeto descartável, CC congelado, **2 chamadas `claude -p`** (freio
+     Q1): (C1) hook PreToolUse sintético que imprime BLOCK, faz o `flush` e atrasa a SAÍDA além do timeout
+     registrado; (C2) o mesmo hook saindo rápido, como controle de que o hook bloqueia. O braço «sem `flush`» não
+     gasta chamada: sem `flush`, os bytes não deixam o processo antes do fim dos `atexit` (§2.1), então um
+     processo morto antes disso nunca entrega. Resultado de C1: bloqueou ⇒ o harness consome a decisão antes da
+     saída, e o `flush` a protege; passou ⇒ o harness exige a saída dentro do timeout, e o prazo é a defesa (o
+     modelo do driver fica calibrado). Sem a calibração, S1 é declarado como prova contra um MODELO.
+- **Estatística:**
+  - medir PRIMEIRO a taxa p̂ de decisão perdida no HEAD (célula 1);
+  - o verde é 0 perdas em N, com N tal que o limite superior de 95% (regra do três, ≈ 3/N) ≤ p̂/10;
+  - p̂ = 0 (vermelho não reproduzido) ⇒ «prova só estrutural», declarada no material assinado;
+  - p95 só com N ≥ 100; abaixo disso, p90.
+- **Esperado por célula depois da cura** (pré-registrado para não «relaxar» depois):
+  - sem spool: razão p95 cheio/vazio ≤ 1,2;
+  - com spool e ~150 mil travas: decisão entregue e prazo respeitado; razão NÃO exigida (sob T1, essa razão é
+    vermelha por construção — a fase 2 de quem tem conteúdo ainda lista o diretório);
+  - gatilho da T2 conforme §4.5.
+- **`SPOOL_LOCK_TIMEOUT` re-medido** depois da cura.
 - **Nada disso vira asserção de tempo no CI.**
 
-### 6.5 Checks com a afirmação no código de saída (QA MF-17)
+### 6.5 Checks com a afirmação no código de saída (QA MF-17; consenso r2 §3(a) itens 5–7)
 
-- Todo Check fica vermelho antes e verde depois, e sai ≠ 0 quando:
-  - H1 > 0,01;
-  - H2 > 1.000;
-  - |D| = 0;
-  - há linha `drain canonical lock timeout` datada depois do LAND + janela de convivência (G2, §8.2);
-  - há decisão descartada na W0.5.
-- **Seletores distintos:** `-k fast_path`, `-k deadline`, `-k origin`, `-k invariant` e `-k gc` (só se o GC
-  voltar), com guarda de seletor que casa zero teste (molde `SupersededSelectorTest`).
+- **Módulo de teste renomeado** para `.claude/hooks/tests/test_spool_state_amend4.py` (oráculo = 0
+  **[medido: redator]**). O nome não contém nenhum seletor.
+- **Seletores:** `fast_path`, `flag`, `deadline`, `anchor`, `starved`, `origin`, `golden_paths`, `inode`,
+  `openers`, `invariant` (e `gc` só se o GC voltar). Nenhum é substring de `test_spool_state_amend4`. A
+  **guarda de seletor** afirma que cada `-k` casa EXATAMENTE os testes declarados do próprio item (igualdade de
+  conjunto, não «≥ 1»).
+- **Check da W2.4-bis** ganha um seletor dos testes NOVOS do check do boot (os 120 existentes de
+  `test_ceo_boot*.py` são verdes hoje).
+- **Check de sucesso da W2** — sai ≠ 0 quando:
+  1. qualquer seletor falha ou casa conjunto diferente do declarado;
+  2. **H1:** `|D|` < 200 ou F > 0,01 (script que lê `pid`/`wall_ns`);
+  3. **H2:** mais de 1.000 journals com 0 byte (só journals; travas reportadas à parte, sem limiar);
+  4. **guarda de regressão (G2):** linha `drain canonical lock timeout` datada depois do LAND + a janela de
+     convivência — nunca prova de ausência de contenção;
+  5. **G7** > 0 depois do LAND; **G6** com perda > 0;
+  6. **decisão perdida:** lê o veredito que a W0.5 grava (caminho fixado no pré-registro); veredito ausente ⇒
+     ≠ 0.
+  - **O carimbo do LAND sai do commit do LAND** (`git log -1 --format=%cI <sha>`), validado como ISO e
+    convertido para UTC; marcador literal ou formato inválido ⇒ saída ≠ 0. Comparação entre datetimes, nunca
+    entre textos (o `'2' < '<'` do `awk` tornava o braço vácuo).
+  - As regex são as de §4.8.
+- **Check da W2.0** — §7.
 
 ---
 
 ## §7 Pré-condição do SIGN da W2: cura da condição 67 (MF-W2-1)
 
 - **O defeito.** `audit_log.append_entry` lê a chave, o elo anterior e calcula o HMAC ANTES de tomar a trava
-  canônica (`audit_log.py:1262-1278`; a trava em `:1283`) **[disco]**. Dois gravadores em paralelo encadeiam
-  no mesmo antecessor, e a quebra resultante não tem autor. É a condição 67 assinada da v1.4.0-rc.1.
-- **Por que barra a W2.** Sem a cura, S3 (§6.1) só se prova EXCLUINDO o `agent_spawn`, uma propriedade mais
-  fraca que a afirmada, e o portador do VETO recusou declarar a exclusão (C9).
-- **A cura:**
-  - mover a chave, o elo anterior e o HMAC para DENTRO do `with FileLock(...)`, DEPOIS de `rotate_if_needed`
-    (`:1285`), para que uma rotação na mesma seção crítica ancore o elo no arquivo novo. O pacote da cura
-    confere esse ponto contra o contrato do AMEND-2;
-  - um teste de barreira multiprocesso com N gravadores `agent_spawn` e gravadores `audit_emit`: um envoltório
-    sobre `read_prev_hmac` sinaliza e espera (barreira menor que os 2,5 s da trava). VERMELHO no HEAD, VERDE
-    com a cura;
-  - um censo AST: toda chamada a `read_prev_hmac()` fora de teste fica lexicamente dentro de `with FileLock(`,
-    com um módulo sintético como controle positivo (cure a classe);
-  - a docstring do `test_two_writer_chain.py` corrigida.
-- **Custo de cerimônia.** O `audit_log.py` está na lista de kernel (`check_arbitration_kernel.py:217`)
-  **[disco]**, então a cura é cerimônia de KERNEL. A estimativa do plano é de 150–300 mil tokens + ~50 mil do
-  censo, em 0 a 1 sessão.
-- **A linha que aposenta a condição 67** vai no `CHANGELOG.md` do corte W7, NÃO no pacote da cura.
-- **A vaga é DECISÃO PENDENTE 1 do Owner (§13).** O VETO da W2 segue levantado até a cura landar.
+  canônica (`audit_log.py:1262-1278`; trava em `:1283`) **[disco]**: dois gravadores em paralelo encadeiam no
+  mesmo antecessor. É a condição 67 assinada da v1.4.0-rc.1 (`test_two_writer_chain.py:13-16`).
+- **Por que barra a W2.** Sem a cura, S3 só se prova EXCLUINDO o `agent_spawn`.
+- **A cura:** chave, elo anterior e HMAC DENTRO do `with FileLock(...)`, DEPOIS de `rotate_if_needed`
+  (`:1285`), conferido contra o contrato do AMEND-2; teste de barreira multiprocesso (envoltório sobre
+  `read_prev_hmac` que sinaliza e espera, barreira < 2,5 s), VERMELHO no HEAD e VERDE com a cura; censo AST
+  (toda chamada a `read_prev_hmac()` fora de teste fica dentro de `with FileLock(`), com módulo sintético como
+  controle positivo; a docstring do `test_two_writer_chain.py` corrigida.
+- **Check da W2.0** (consenso r2 §3(a) item 7): o **node id** do teste de barreira e o **node id** do censo
+  AST — nunca o módulo inteiro, que tem 6 testes sequenciais verdes HOJE **[disco: docstring `:3-10`]**. O
+  LEDGER guarda a execução VERMELHA no HEAD ANTES do patch, com o comando e o sha.
+- **Custo:** `audit_log.py` é kernel (`check_arbitration_kernel.py:217`) ⇒ cerimônia de KERNEL; 150–300 mil
+  tokens + ~50 mil do censo, 0 a 1 sessão **[plano]**.
+- **A linha que aposenta a condição 67** vai no `CHANGELOG.md` do corte W7.
+- **A vaga é a DECISÃO PENDENTE 1 do Owner (§13)** — o único pré-requisito do Owner para o SIGN da W2.
 
 ---
 
@@ -615,64 +742,76 @@ O pré-registro vai no LEDGER ANTES de rodar, em árvore descartável, com piso 
 
 ### 8.1 Caminho de reversão (por PEÇA)
 
-As três peças são separáveis e se revertem uma a uma: (a) o caminho rápido, (b) o prazo de saída e (c) a remoção
-do journal na origem.
+As peças são separáveis e se revertem uma a uma: (a) auxiliar de saída e caminho rápido, (b) prazo de saída,
+(c) remoção do journal na origem, (d) portão STARVED de saída.
 
 - **Imediato, sem cerimônia:** `CEO_AUDIT_SYNC_MODE=1`. O escritor deixa de usar o spool; na saída, sem spool
-  próprio, o caminho rápido torna as três peças inertes. É mudança de COMPORTAMENTO, não reversão byte a byte:
-  o modo síncrono tem o próprio perfil de latência (AMEND-1 §5).
-- **Definitivo:** `git revert` da peça, em cerimônia canônica (o `spool_writer.py` é canônico e não é kernel).
-  O status da emenda passa a `SUPERSEDED-BY-REVERT`, sem ADR novo.
-- **Reverter o prazo (b) REABRE a classe da decisão perdida.** Só com decisão escrita do Owner, mesmo que um
-  gatilho de higiene dispare. Gatilhos de higiene (G1, G3) revertem (c) ou (a), nunca (b) sozinhos.
-- **Sem chave de ambiente nova.** O `CEO_AUDIT_SYNC_MODE=1` já cobre a emergência, e uma variável nova é
-  deriva do inventário de ambiente (anti-churn).
+  próprio, o caminho rápido torna as peças inertes. É mudança de COMPORTAMENTO (AMEND-1 §5).
+- **Definitivo:** `git revert` da peça, em cerimônia canônica (`spool_writer.py` é canônico, não kernel);
+  status `SUPERSEDED-BY-REVERT`, sem ADR novo.
+- **Reverter (b) REABRE a classe da decisão perdida; reverter (d) REABRE o travamento silencioso.** As duas só
+  com decisão escrita do Owner. Gatilhos de higiene (G1, G3) revertem (c) ou (a), nunca (b) ou (d) sozinhos.
+- **Sem chave de ambiente nova** (anti-churn).
 
 ### 8.2 Gatilhos (instrumentos LIGADOS, cada um com controle positivo)
 
-| id | gatilho | instrumento (onde roda) | controle positivo | reverte |
+| id | gatilho | instrumento (onde roda) | controle positivo | ação |
 |---|---|---|---|---|
-| **G1** | resíduo acima do limiar (H1 > 0,01 OU H2 > 1.000) em 3 medições diárias seguidas | check do `/ceo-boot` (§9) + script do critério (§6.3), mesmo método | árvore descartável com 1.001 journals sintéticos com 0 byte de PIDs mortos ⇒ o check sai ≠ 0 | (c), depois investigar |
-| **G2** | linha `drain canonical lock timeout` datada depois do LAND + janela de convivência (até todas as sessões do projeto reiniciarem) — depois da cura, NENHUM chamador vivo a produz | contagem por data no `audit-log.errors` (o breadcrumb traz carimbo UTC, `:611-613`) + a W0.5 re-rodada depois do LAND | no HEAD a taxa é ~1.100/h **[consenso]**; em teste, o `drain_now(force=True)` direto sob trava externa a produz (teste 4) | investigar o chamador; (a)/(b) se a origem for a emenda |
-| **G3** | `.draining.*` OU spool órfão com conteúdo (PID morto) com mais de 24 h | check do `/ceo-boot` (§9) | arquivo plantado com mtime de 25 h numa árvore descartável ⇒ o check sinaliza | (a), depois investigar a perna 3 |
-| **G4** | decisão BLOCK descartada no controle de entrega | célula de entrega da W0.5, re-rodada depois do LAND e a cada mudança de substrato (versão do CC) | o vermelho do HEAD, ou o mutante «auxiliar ignora o prazo» | (a)/(c) sob decisão do Owner; (b) nunca sem decisão escrita |
-| **G5** | quebra de cadeia ATRIBUÍVEL à W2 depois da cura da condição 67: o elo quebrado, ou o antecessor, é linha anexada pelo drain (`_drain_epoch` presente) na janela pós-LAND | `audit-verify-chain.py` / `verify_chain()` sobre o log vivo e os arquivos rotacionados da janela | cópia descartável com um byte alterado numa linha anexada pelo drain ⇒ o verificador acusa e a atribuição aponta a W2 | a peça envolvida; ADR-052 avisado |
-| **G6** *(proposta; ver R2-3)* | perda REAL: `record_id` com `commit` num journal de PID morto, ausente do log canônico (e dos arquivos rotacionados) e de todo spool ou `.draining.*` | verificador SÓ-LEITURA, fora de hook (sem custo no `SessionStart`) | cópia descartável com uma linha canônica removida ⇒ o verificador conta 1 | investigar; ADR-052 avisado |
+| **G1** | H1 > 0,01 (com `|D|` ≥ 200) OU H2 > 1.000, em **3 execuções do check em dias DISTINTOS e consecutivos de uso** | check do `/ceo-boot` + script do critério, mesmo método | (i) log sintético com D ≥ 200 PIDs mortos e journals de 0 byte ⇒ F > ε ⇒ ≠ 0; (ii) 1.001 journals sintéticos ⇒ ≠ 0 | reverter (c); investigar |
+| **G2** *(guarda de regressão)* | linha `drain canonical lock timeout` datada depois do LAND + convivência; depois da cura, NENHUMA rota de saída a produz | contagem datada no `audit-log.errors` (§4.8) + a W0.5 re-rodada depois do LAND | no HEAD: 31.485 linhas **[medido: redator]**; em teste, o `drain_now(force=True)` direto sob trava externa a produz (teste 4) | achar o chamador; (a)/(b) se for da emenda |
+| **G3** | `.draining.*` OU spool órfão com conteúdo (PID morto) com mais de 24 h | check do `/ceo-boot` (§9) | arquivo plantado com mtime de 25 h ⇒ sinaliza | reverter (a); investigar a perna 3 |
+| **G4** | decisão BLOCK descartada | célula de entrega da W0.5, re-rodada depois do LAND e a cada versão nova do CC | o vermelho do HEAD, ou o mutante «auxiliar ignora o prazo» | (a)/(c) sob decisão do Owner; (b) nunca sem decisão escrita |
+| **G5** | quebra de cadeia ATRIBUÍVEL à W2 depois da W2.0 (o elo quebrado, ou o antecessor, é linha anexada pelo drain, com `_drain_epoch`) | `audit-verify-chain.py` / `verify_chain()` sobre o log vivo e os rotacionados da janela | cópia descartável com um byte alterado numa linha anexada pelo drain ⇒ acusa e atribui à W2 | a peça envolvida; ADR-052 avisado |
+| **G6** *(ATIVO na W2)* | **perda REAL:** `record_id` com envelope `commit` num journal, com `wall_ns` ≥ LAND, ausente do log canônico e dos rotacionados E de todo spool ativo ou `.draining.*` | script SÓ-LEITURA, fora de hook: `.claude/scripts/check-audit-real-loss.py` (nome proposto; oráculo = 0 **[medido: redator]**) | cópia descartável: uma linha canônica removida cujo `record_id` tem `commit` no journal ⇒ perda = 1, saída ≠ 0; o mesmo `record_id` em `.malformed.*` ⇒ QUARENTENADO, saída 0; em spool ⇒ PENDENTE, saída 0 | investigar; ADR-052 avisado; reverter a peça se for da emenda |
+| **G7** *(novo)* | **perda real do escritor direto:** linha `lock timeout (stale?)  would-log=` ou `append failed:` do `audit_log` datada depois do LAND | contagem datada no `audit-log.errors` (formato `[ts]`, §4.8), pelo mesmo método do G2 | natural: 3 linhas `would-log=` reais em 2026-10-01/02 **[medido: redator]**; em teste: `append_entry` com a trava canônica segura por > 2,5 s numa árvore descartável ⇒ 1 linha ⇒ G7 = 1 | investigar a contenção; reverter a peça se a emenda a aumentou |
+| **G8** | sinal STARVED (exit) (§4.3) | o próprio breadcrumb datado, lido pelo check do boot e pelo nightly | os controles `-k starved` | investigar o portador da trava; reverter (a)/(b) só se o portador for código da emenda |
 | — | diretiva do Owner | — | — | qualquer peça |
 
-### 8.3 Gatilhos herdados que este rascunho aposenta
+**G6 em detalhe** (consenso r2 §2(c)):
 
-- **`truly_lost > 0` em 7 dias** (AMEND-1 §5, gatilho 3; AMEND-3 frontmatter e §5): MORTO, porque nenhum
-  caminho incrementa o campo. O MF-W2-4 pedia mantê-lo («`truly_lost_7d ≥ 1`»), mas como gatilho literal ele
-  nunca dispara. Este rascunho o substitui pelo INV-NP nas provas, pelo G3 em produção e, se a rodada 2
-  aceitar, pelo G6, que é a medida HONESTA de «perdido de fato». Pede novo julgamento do portador do VETO.
-- **Taxa de quebra > 0,1% em 30 dias** (AMEND-1 §5, gatilho 1; AMEND-3 §5): inavaliável enquanto a condição 67
-  existir. O plano cita 4 quebras em ~461 elos (≈ 0,9%) **[plano, risco 11]**. Este rascunho o substitui pelo G5.
-- **«Drain lock contention caused production tool-call timeout»** (AMEND-1 §5, gatilho 2): fica, reescrito
-  como G2 + G4, os instrumentos que o tornam observável.
+- **Ordem de leitura**, para não acusar perda falsa em trânsito: (1) spools ativos, `.draining.*` e arquivos de
+  quarentena; (2) o log canônico corrente, por um descritor aberto; (3) a lista e o conteúdo dos rotacionados,
+  listados DEPOIS. Pelo INV-NP (a), um registro está sempre num spool ou no log, e a transição é só spool → log
+  (append antes do `unlink`); a rotação renomeia o log, por isso os rotacionados são listados por último. Todo
+  candidato a perda é reconferido numa 2.ª passada antes de ser reportado.
+- **Quarentenado ≠ perdido:** `record_id` em `.malformed.*`, `.quarantined.*`, `.test-origin.*` ou
+  `.corrupt-header.*` é contado à parte.
+- **Limite inferior declarado:** o journal é de melhor esforço (buffer de até 10 envelopes); um registro cujo
+  `commit` nunca chegou ao disco é invisível ao G6.
+- **Onde roda:** no V-block do LAND (pós-LAND) e no nightly. O `nightly-hygiene.js` é canônico (oráculo = 1
+  **[medido: redator]**): a dimensão nova do G6 e a classe G7/STARVED na dimensão (i) entram no pacote da W2 se
+  couberem no teto de 8 paths; senão, no pacote canônico seguinte. Até a fiação do nightly landar, o check do
+  `/ceo-boot` roda o G6 e o G7 a cada execução, com orçamento medido na W0.5.
+
+### 8.3 Gatilhos herdados que este texto aposenta
+
+- **`truly_lost > 0` em 7 dias:** MORTO; substituído pelo INV-NP nas provas, pelo G3 em vivacidade e pelo **G6
+  e G7 em perda real** — o que o portador do VETO pediu na rodada 1, agora com instrumentos que ligam.
+- **Taxa de quebra > 0,1% em 30 dias:** inavaliável enquanto a condição 67 existir (4 quebras em ~461 elos ≈
+  0,9% **[plano, risco 11]**); substituído pelo G5.
+- **«Drain lock contention caused production tool-call timeout»** (AMEND-1 §5, gatilho 2): fica, como G2 + G4 +
+  G8.
 
 ---
 
 ## §9 Observabilidade pelo resultado, sem tocar o `audit_emit.py`
 
-- **Nenhum evento por arquivo e nenhuma ação nova em `_KNOWN_ACTIONS`.** Um evento emitido por um processo sem
-  spool recriaria os 3 arquivos que a W2 quer deixar de criar (R-DO15), e o `audit_emit.py` é kernel. Os três
-  críticos concordaram (C17).
-- **Check advisory no `/ceo-boot`** (`ceo-boot.py`, oráculo 0, no pacote do item livre L2; mapa de
-  colisões). Ele mostra:
-  - a contagem POR NOME dos 3 padrões, numa listagem sem `stat` por entrada;
-  - os journals com 0 byte, com `stat` limitado aos primeiros 2.000 journals por nome e «≥ 2.000» quando o
-    limite estoura (suficiente para decidir H2 ≤ 1.000);
-  - a idade do `.draining.*` mais velho;
-  - **a contagem e a idade do spool órfão com conteúdo mais velho (PID morto)** — o resíduo visível de
-    `exit_deadline_skip`; acréscimo deste rascunho, pergunta R2-4.
-
-  O check roda na skill, nunca em hook. Uma varredura com `stat` por entrada levou 50,7 s **[medido:
-  DevOps]**. O orçamento de tempo do check é medido na W0.5.
-- **O estouro do prazo é silencioso em hook.** O artefato que ele deixa, o spool órfão com conteúdo, É o sinal,
-  visto pelo check. Se a rodada 2 exigir linha no `audit-log.errors` para os detectores por contagem
-  (`ceo-diagnose.py:343-420`, `status.py`), ela sai do CHECK do boot quando um gatilho dispara, no máximo uma
-  por execução, nunca de hook (pergunta R2-4).
+- **Nenhum evento por arquivo e nenhuma ação nova em `_KNOWN_ACTIONS`** (C17 do consenso r1). O sinal de
+  travamento é BREADCRUMB datado (§4.3), não evento — não contradiz o C17.
+- **Check advisory no `/ceo-boot`** (`ceo-boot.py`, oráculo = 0 **[medido: redator]**, no pacote do item livre
+  L2; mapa de colisões), roda na skill, nunca em hook:
+  - **travas** por NOME, numa listagem sem `stat` por entrada; **≥ 100 mil ⇒ recomenda a W2.6**;
+  - **journals com 0 byte**, com `stat` limitado aos primeiros 2.000 journals por nome («≥ 2.000» quando o
+    limite estoura — basta para decidir H2 ≤ 1.000);
+  - **idade do `.draining.*` mais velho**;
+  - **spools órfãos com conteúdo (PID morto) de QUALQUER idade, como TAXA** (contagem ÷ `|D|` das últimas 24 h)
+    e a idade do mais velho — o resíduo visível do `exit_deadline_skip`;
+  - **linhas STARVED (exit) e G7 datadas** na janela;
+  - **no máximo UMA linha por execução** no `audit-log.errors` quando um gatilho (G1, G3, G6, G7, G8) dispara.
+  - Orçamento de tempo medido na W0.5; uma varredura com `stat` por entrada levou 50,7 s **[medido: DevOps r1]**.
+- **Os detectores por contagem TOTAL estão saturados** (`ceo-diagnose.py:371-373`/`:417`, `status.py:290`;
+  31.683 linhas, sem rotação) **[disco; medido: redator]**. O sinal novo é distinto pelo TEXTO e lido com janela
+  pelo boot e pelo nightly; a rotação do `audit-log.errors` (lane `H-03`) segue follow-up.
 - **Contagens da W2.6 no LEDGER** (§5.3).
 
 ---
@@ -681,16 +820,21 @@ do journal na origem.
 
 | opção | decisão | por quê |
 |---|---|---|
-| A. Relocar journals e travas para um subdiretório (antiga W2.3) | **rejeitada** | duas travas para o mesmo recurso durante a convivência de versões (C14); journal velho órfão com conteúdo para sempre (R-DO5) |
-| B. GC de travas de PID morto dentro do hook | **rejeitada** | VETO (§2(b) do consenso); sem re-checagem de inode, quebra a exclusão mútua (R-SEC5, R-QA1) |
-| C. O dono apaga as próprias travas na saída | **adiada** | premissa falsa no caso `.draining` (§2.4); só volta com as quatro garantias (§4.4) |
-| D. T2: re-checagem de inode no `filelock.py` | **condicional** | pacote de kernel próprio, se a W0.5 depois da cura o exigir (§4.4) |
-| E. Ligar a reconciliação de início de sessão | **rejeitada na W2** | abriria ~76 mil journals sob o timeout de 5 s do `SessionStart`; follow-up |
-| F. Evento por arquivo / ação nova no kernel | **rejeitada** | recria os arquivos; toca o kernel sem necessidade (§9) |
-| G. Drenagem de saída SÓ do próprio spool, sem listagem | **não adotada** | a perna 3 depende da varredura global de OUTROS emissores. Hooks curtos raramente disparam o drain oportunista (`should_drain` exige spool próprio com idade > 100 ms ou ≥ 100 linhas, `:1098-1119`), então a varredura da saída é o veículo principal da perna 3 **[inferência]**. Tirá-la enfraquece a vivacidade. Concorre com a T2 se a W0.5 mostrar que a listagem sozinha estoura o prazo |
-| H. Fechar o stdout antes do drain, para entregar a decisão antes | **não adotada** | depende de o harness esperar a saída do processo ou o EOF, semântica do substrato que não foi medida. O prazo funciona nos dois casos. Pode virar célula da W0.5 |
-| I. Chave de ambiente nova para as peças da emenda | **não adotada** | o `CEO_AUDIT_SYNC_MODE=1` já cobre; anti-churn (§8.1) |
-| J. Prazo por hook (timeout da própria registração) | **não adotada** | o processo não sabe por qual registração foi chamado; usa-se o mínimo global, com teste de deriva (§4.2) |
+| A. Relocar journals e travas (antiga W2.3) | rejeitada | duas travas para o mesmo recurso na convivência (C14) |
+| B. GC de travas de PID morto em hook | rejeitada | VETO; sem re-checagem de inode, quebra a exclusão mútua |
+| C. O dono apaga as próprias travas na saída | adiada | premissa falsa no caso `.draining` (§2.4); quatro garantias |
+| D. T2: re-checagem de inode no `filelock.py` | condicional | pacote de kernel próprio, com gatilho numérico (§4.5) |
+| E. Ligar a reconciliação de início de sessão | rejeitada na W2 | ~76 mil journals sob o timeout de 5 s do `SessionStart` |
+| F. Evento por arquivo / ação nova no kernel | rejeitada | recria os arquivos; toca o kernel sem necessidade |
+| G. Drenagem de saída só do próprio spool | não adotada | a varredura da saída é o veículo principal da perna 3 em hooks curtos **[inferência]** |
+| H. `flush` de stdout e stderr antes da drenagem | **adotada** (§4.1) | medida: 1,54 s → 0,03 s até o 1.º byte; não substitui o prazo |
+| H'. Fechar o stdout antes da drenagem | não adotada | depende da semântica do harness; a calibração (§6.4) informa se vale um follow-up |
+| I. Chave de ambiente nova | não adotada | `CEO_AUDIT_SYNC_MODE=1` já cobre; anti-churn |
+| J. Prazo por hook (timeout da própria registração) | não adotada | o processo não sabe sua registração; mínimo global + teste de deriva |
+| K. Âncora só no import | **rejeitada** | tardia nos guards reais (§2.4); o VETO prevalece (consenso r2 §2(a)) |
+| L. Censo AST + «armar o prazo no `main`» | reserva | só se a leitura do kernel se mostrar inviável; toca hooks canônicos e pesa no teto de paths |
+| M. Prazo em TODO processo (não só hook) | rejeitada | processos longos sempre saltariam a drenagem, aumentando a residência fora da cadeia sem ganho (§4.2) |
+| N. Sinal de travamento só pelo G3 de 24 h ou por linha do check do boot | rejeitada | latência de até 24 h; controle vermelho da §4.3 (MF-R2-W2-1) |
 
 ---
 
@@ -698,192 +842,197 @@ do journal na origem.
 
 **Positivas (+)**
 
-- A decisão BLOCK deixa de depender do tamanho do diretório e da contenção, por qualquer causa de lentidão.
-- As saídas sem conteúdo próprio, a maioria dos hooks **[inferência; a W0.5 mede]**, deixam de tomar a trava
-  canônica: menos contenção para todos, inclusive para o `agent_spawn` (§3.5).
+- A decisão BLOCK sai antes de qualquer espera (`flush`) e deixa de depender do tamanho do diretório e da
+  contenção (prazo), por qualquer causa de lentidão.
+- As saídas sem conteúdo deixam de tomar a trava canônica: menos contenção para todos, inclusive para o
+  `agent_spawn`.
 - Os journals vazios deixam de se acumular (1/3 do estoque).
-- Os gatilhos de reversão passam a disparar de fato.
+- A trava presa vira sinal em ≤ 1 h; a perda real passa a ser medida (G6, G7).
 
 **Negativas (−)**
 
-- Sob T1, as travas seguem crescendo, 2 por PID novo, até o teto do espaço de PIDs. Num Linux de vida longa
-  esse teto é grande (§6.3 H3).
-- O estouro do prazo adia o spool para a perna 3. Sem novo emissor no projeto, ele espera no disco: durável,
-  mas sem vivacidade.
-- A frequência de `exit_deadline_skip` em produção não é observável diretamente; o proxy é o spool órfão com
-  conteúdo (§9).
-- `DrainStats` ganha um campo em processo, e `drain_now` ganha um parâmetro opcional.
+- Sob T1, as travas seguem crescendo; a W2.6 é manutenção RECORRENTE (fechar as sessões deste projeto a cada ~2
+  a 4 semanas de uso intenso).
+- O salto adia o spool para a perna 3 (residência PRÉ-cadeia maior durante o salto; sinal em ≤ 1 h se for
+  travamento).
+- Arquivo novo na família do log (`audit-log.starved-stamp`); `DrainStats` ganha um campo em processo e
+  `drain_now`, um parâmetro opcional.
 
-**Neutras (~)**
-
-- Uncontended, o caminho com conteúdo próprio é idêntico ao de hoje.
-- O ganho de latência vem das saídas sem conteúdo e da cauda contendida.
+**Neutras (~)** — sem contenção, o caminho com conteúdo é idêntico ao de hoje.
 
 **Resíduos declarados (vão para o material assinado)**
 
-1. **Âncora tardia:** o prazo conta da importação do `spool_writer`. Um hook que importa o `audit_emit` tarde,
-   depois de trabalho pesado, subestima o tempo decorrido e pode passar do timeout (pergunta R2-1).
-2. **Timeout de adopter:** um adopter que reduza um timeout de hook abaixo de `EXIT_DEADLINE_S + EXIT_MARGIN_S`
-   quebra a garantia sem que o teste do repositório o veja.
-3. **Parte não preemptível** da drenagem (§4.2, item 6), proporcional ao estoque de travas sob T1.
-4. **Journal com 0 byte** por falha de `write` depois do `O_CREAT`: raro, fica para a W2.6.
-5. **~214 journals com conteúdo forense-only;** sem leitor em produção (a reconciliação está morta).
-6. **Perda pré-existente** do `agent_spawn` por trava canônica ocupada (`would-log`): reduzida, não eliminada
-   (§3.5).
-7. **Janela TOCTOU da W2.6** entre o reexame e o `unlink` (§5.1).
-8. **Mesmo UID:** um processo do mesmo usuário pode apagar ou forjar arquivos do state dir. A fronteira é a
-   mesma de `CLAUDE.md` §5.
+1. **Âncora pelo recurso do import:** só quando a leitura do kernel falha (ou no Linux, se o método não se
+   confirmar no pacote); e no caminho bloqueante do adaptador grok, em que o tempo do wrapper antes do filho
+   fica de fora.
+2. **Semântica do harness:** sem a calibração da W0.5, S1 é prova contra um modelo.
+3. **Timeout de adopter** abaixo de `EXIT_DEADLINE_S + EXIT_MARGIN_S` quebra a garantia sem que o teste do
+   repositório veja.
+4. **Parte não preemptível** da drenagem, proporcional ao estoque de travas sob T1.
+5. **Journal com 0 byte** por falha de `write` depois do `O_CREAT`: raro, fica para a W2.6.
+6. **~214 journals com conteúdo forense-only.**
+7. **Perda pré-existente do `agent_spawn`** (`would-log`, `append failed`): reduzida, não eliminada, agora
+   MEDIDA pelo G7.
+8. **G6 é limite inferior:** não vê registro cujo `commit` nunca chegou ao disco.
+9. **Sinal STARVED** depende de haver uma saída com conteúdo depois de T; detectores por contagem total
+   saturados até a rotação do `audit-log.errors` (`H-03`).
+10. **Recusa falsa da W2.6** por PID de spool órfão reusado por processo alheio (§5.2).
+11. **Janela TOCTOU da W2.6** entre o reexame e o `unlink`.
+12. **Mesmo UID:** um processo do mesmo usuário pode apagar ou forjar arquivos do state dir (fronteira de
+    `CLAUDE.md` §5).
+13. **Testes que leem o log canônico depois de rodar um hook em subprocesso** deixam de poder contar com o drain
+    de saída do filho (o prazo vale também ali). Há 20 módulos de teste que rodam subprocesso e citam o log
+    canônico; 8 deles já citam `drain_now` ou o modo síncrono **[medido: redator, `grep`]**. O pacote faz o
+    censo e cada teste drena explicitamente no pai, ou fixa `CEO_AUDIT_SYNC_MODE=1` no filho, antes de afirmar.
 
 ---
 
 ## §12 Raio de explosão, regra 10×, paths e anti-churn
 
-- **Módulos.**
-  - `.claude/hooks/_lib/spool_writer.py`: canônico, NÃO kernel; mesma via do AMEND-3, sentinela padrão.
-  - `.claude/hooks/tests/test_spool_state_gc.py` (novo) e `test_spool_drain_contended_skip.py` (teste 4 intacto).
-  - `.claude/scripts/ceo-boot.py`: livre, no pacote da L2.
-  - O arquivo de emenda.
-  - **W2.0 à parte:** `audit_log.py` (kernel) e `test_two_writer_chain.py`.
-  - **T2, condicional:** `_lib/filelock.py` (kernel).
-- **Fora:** `audit_emit.py`, `SessionStart.py`, `audit_hmac.py`, `canonical_json.py` e `audit-verify-chain.py`.
-- **Reversibilidade:** ALTA para (a) e (c) (§8.1); para (b) é técnica, mas reabre a classe da decisão perdida.
-- **Regra 10×.** Com 10× mais hooks por dia, o estoque de travas sob T1 satura o espaço de PIDs em dias, e não em
-  semanas. A listagem atinge o custo máximo mais cedo, e o prazo continua protegendo a decisão; o gatilho da T2
-  (§4.4) e o H3 tornam isso visível. Os journals não escalam com o volume, porque a cura é na origem. O prazo não
-  depende do volume.
-- **Anti-churn (ADR-115/ADR-124).** A emenda refina mecanismos do AMEND-1 e do AMEND-3 por arquivo próprio, sem
-  ABI nova de spool, sem layout novo, sem ação nova de auditoria e sem variável de ambiente nova.
+- **Paths da W2** (oráculo medido nesta revisão **[medido: redator]**):
+  - `.claude/hooks/_lib/spool_writer.py` (1; canônico, NÃO kernel);
+  - `.claude/hooks/tests/test_spool_state_amend4.py` (0, novo) e `test_spool_drain_contended_skip.py` (0, teste
+    4 intacto);
+  - `.claude/scripts/check-audit-real-loss.py` (0, novo; G6 e G7, se o pacote não os separar);
+  - `.claude/scripts/ceo-boot.py` (0; no pacote da L2);
+  - `.claude/workflows/nightly-hygiene.js` (1) — só se couber no teto (§8.2);
+  - o arquivo de emenda (1).
+  - **W2.0 à parte:** `audit_log.py` (1, kernel) e `test_two_writer_chain.py` (0).
+  - **T2, condicional:** `_lib/filelock.py` (1, kernel).
+- **Fora:** `audit_emit.py`, `SessionStart.py`, `audit_hmac.py`, `canonical_json.py`, `audit-verify-chain.py`,
+  `_python-hook.sh` e os hooks de guarda (a âncora pelo kernel dispensa tocá-los).
+- **Reversibilidade:** ALTA para (a) e (c); (b) e (d) são reversíveis tecnicamente, mas reabrem classes de
+  segurança (§8.1).
+- **Regra 10×.** Com 10× mais hooks por dia, o estoque de travas sob T1 satura o espaço de PIDs em dias; a
+  listagem atinge o custo máximo mais cedo; o prazo continua protegendo a decisão; o gatilho da T2 e o H3 o
+  tornam visível; a W2.6 fica mais frequente, o que é por si gatilho da T2. Journals não escalam (cura na
+  origem). Prazo, portão STARVED e `flush` não dependem do volume.
+- **Anti-churn (ADR-115/ADR-124):** arquivo de emenda próprio, sem ABI nova de spool, sem layout novo, sem ação
+  nova de auditoria, sem variável de ambiente nova; slug mantido (R2-7).
 
 ---
 
 ## §13 Decisões pendentes do Owner (escritas como tais)
 
-1. **Vaga da cura da condição 67 (decisão pendente 1 do consenso).**
-   - **Recomendação do CEO:** pacote PRÓPRIO, landado ANTES do SIGN da W2, o primeiro na vaga da W2 ou a
-     primeira vaga que abrir antes.
-   - **Alternativa:** dentro do pacote da W2, com +2 paths.
-   - **Custo:** é cerimônia de KERNEL (`audit_log.py`, §7).
-   - **Efeito:** o VETO da W2 fica LEVANTADO até a cura landar. **PENDENTE.**
-2. **Pré-condição da W2.6 (decisão pendente 2 do consenso).**
-   - **Recomendação do CEO:** trocar «todas as sessões do Claude fechadas» por «todas as sessões DESTE projeto
-     fechadas», porque o state dir é por projeto desde a W1 do PLAN-182; e rodar já.
-   - **Refinamento deste rascunho, para o Owner decidir junto:** o texto do consenso fala em «recusar se achar
-     arquivo da família com PID vivo». Lido como recusa da EXECUÇÃO INTEIRA, isso faria o script nunca rodar:
-     os 75.609 PIDs distintos ocupam ~76% do espaço de PIDs do macOS **[medido: QA]**, então algum PID de
-     família quase certamente pertence hoje a um processo alheio vivo. Proposta: PID vivo ⇒ a FAMÍLIA é
-     pulada e contada; mtime < 10 min em qualquer arquivo da família ⇒ a execução inteira recusa (§5.2).
-   - A decisão vigente (S359) vale até o Owner decidir. **PENDENTE.**
-3. **Para ciência, sem decisão agora:**
-   - o estoque dos adopters não é limpo pela W2; a recomendação é um follow-up fora da 1.4.3 (script
-     entregável), declarado no material assinado;
-   - reverter o prazo de saída exige decisão escrita do Owner (§8.1).
+1. **Vaga da W2.0 (cura da condição 67).** É hoje o ÚNICO pré-requisito do Owner para o SIGN da W2.
+   **Recomendação do CEO:** pacote canônico PRÓPRIO (cerimônia de KERNEL), landado antes do SIGN da W2, como
+   1.º pacote na vaga da W2 ou na primeira vaga que abrir antes. **PENDENTE.**
+2. **Pré-condição e RECORRÊNCIA da W2.6.** **Recomendação:**
+   - trocar «todas as sessões do Claude fechadas» por «todas as sessões DESTE projeto fechadas»;
+   - predicado da §5.2: PID vivo nas travas ⇒ pula a família; mtime < 10 min ⇒ recusa a execução; spool ativo
+     ou `.draining.*` com PID vivo ⇒ recusa a execução;
+   - aceitar que, sob T1, a W2.6 é manutenção RECORRENTE (quando o `/ceo-boot` acusar ≥ 100 mil travas);
+     mais de 1× por mês ⇒ gatilho da T2;
+   - rodar a 1.ª já.
+   A decisão vigente (S359) vale até o Owner decidir. **PENDENTE.**
+3. **Para ciência, sem decisão:** a calibração da W2 custa 2 chamadas `claude -p` na vez da W2 (freio Q1); o
+   estoque dos adopters não é limpo pela W2 (follow-up recomendado, fora da 1.4.3); reverter o prazo de saída ou
+   o portão STARVED exige decisão escrita do Owner.
 
 ---
 
-## §14 Perguntas para a rodada 2 (o que este rascunho propõe além do consenso)
+## §14 Perguntas da rodada 2 — respondidas e fechadas
 
-- **R2-1 — âncora do prazo.** A âncora é a importação do `spool_writer`. Basta, com o resíduo declarado? Ou
-  entra um censo AST que exija importar o `audit_emit` antes do trabalho principal, ou uma função de armar o
-  prazo no início do `main` (precedente: `_start_wall_budget` de `check_canonical_edit.py:1165-1175`)?
-- **R2-2 — W2.4 vira condicional.** O rascunho tira o GC em hook do pacote base, porque a compactação é o único
-  produtor de journal com 0 byte (§4.3, §4.5). Isso diverge do texto atual da W2.4 do plano.
-- **R2-3 — G6.** Um verificador de perda real SÓ-LEITURA, fora de hook, reabilita de forma honesta o
-  «`truly_lost`» que o MF-W2-4 pedia. Entra na W2 ou vira follow-up?
-- **R2-4 — sinais do check.** O spool órfão com conteúdo entra no check do boot, e o check do boot escreve no
-  máximo uma linha no `audit-log.errors` quando um gatilho dispara?
-- **R2-5 — valores para pré-registrar.**
-  - ε = 0,01 (H1);
-  - `EXIT_MARGIN_S` = 1,0 s e prazo de 2,0 s;
-  - N ≥ 1.000 elos;
-  - limite de 2.000 `stat` no check;
-  - o teto de 1.000 só para journals sob T1;
-  - o Linux de vida longa (H3) como gatilho adicional da T2.
-- **R2-6 — sinalizador próprio.** A janela de vida do `_OWN_DRAIN_PENDING` (§4.1, item 2) cobre todos os
-  caminhos em que o próprio processo deixa um `.draining`?
-- **R2-7 — slug do arquivo.** O plano fixa `ADR-055-AMEND-4-spool-state-gc.md`. Sem GC em hook, «gc» descreve
-  mal a emenda; trocar o slug custa mexer no mapa de colisões. O rascunho mantém o slug do plano.
+| id | decisão | onde |
+|---|---|---|
+| R2-1 âncora | `min(import, início do processo no kernel)`, import como recurso declarado; S1 com guard de import tardio; censo AST só como reserva | §4.2; §10 K/L |
+| R2-2 W2.4 | CONDICIONAL, fora do pacote base; Check `-k gc` sai | §4.6 |
+| R2-3 G6 | ATIVO na W2, com o G7 junto | §8.2 |
+| R2-4 sinais do check | spool órfão de qualquer idade como taxa; ≤ 1 linha por execução; o travamento NÃO depende do check (portão STARVED na saída) | §9; §4.3 |
+| R2-5 valores | ε = 0,01 com `|D|_min` ≥ 200 e o vermelho medido (F = 0,999); margem 1,0 s e prazo 2,0 s INICIAIS, com a regra «encolhe o prazo, nunca a margem»; N ≥ 1.000 elos com composição; 2.000 `stat`; teto 1.000 só para journals; Linux de vida longa como gatilho da T2 | §4.2; §6.2; §6.3; §4.5 |
+| R2-6 sinalizador | à prova de falha: liga ANTES do rename, desliga só com a remoção confirmada; células (b), (g), (h), (i) | §4.1 |
+| R2-7 slug | mantido (anti-churn); teste dourado dos construtores de caminho | frontmatter; §4.7 |
 
 ---
 
-## §15 Rastreabilidade dos must-fix
+## §15 Rastreabilidade
 
-### 15.1 Segurança — condição do VETO da W2
+### 15.1 Must-fix da rodada 1 (Segurança, condição do VETO da r1 — julgados «atendidos» na r2)
 
-| MF | pedido (resumo) | onde este rascunho o endereça | estado |
+| MF | seção |
+|---|---|
+| MF-W2-1 cura da condição 67 antes do SIGN | §7; §1 portão 2; §13 decisão 1 |
+| MF-W2-2 nenhuma trava em hook; cura na origem | §4.4; §4.5; §4.6; §5 |
+| MF-W2-3 prazo de saída + entrega de decisão | §4.2; §6.1 S1; §6.4 |
+| MF-W2-4 arquivo próprio, pernas, versões mistas, regex, lista, gatilhos | §3; §4.7; §4.8; §4.9; §8 (`truly_lost` → G6/G7, aceito pelo portador na r2) |
+| MF-W2-5 estresse com todos os gravadores | §6.2 |
+| MF-W2-6 endurecimento da W2.6 | §5 |
+
+### 15.2 Condições do VETO da rodada 2 (MF-R2-W2-1..4)
+
+| MF | pedido | onde | estado |
 |---|---|---|---|
-| **MF-W2-1** | cura da corrida do `audit_log.py` antes do SIGN, com teste vermelho→verde e `verify_chain()` íntegro | §7; §1 portão 2; §6.1 S3; §13 decisão 1; frontmatter `sign_precondition` | desenho completo; **vaga pendente do Owner** |
-| **MF-W2-2** | nenhum hook apaga `*.lock`; cura na origem; GC de travas só na W2.6 | §4.4 (T1/T2/T3, «dono apaga as próprias travas» adiada); §4.3 (journal na origem, sob a própria trava); §4.5 (sem GC em hook); §5 (W2.6 é a única que remove travas) | endereçado |
-| **MF-W2-3** | prazo na drenagem forçada de saída, derivado do orçamento do hook; controle de ENTREGA DE DECISÃO vermelho→verde | §4.2 (âncora, prazo, aplicação, «não anômalo», controle W0.5 + prova estrutural); §6.1 S1; §6.4; G4 em §8.2 | endereçado (valores a pré-registrar, R2-5) |
-| **MF-W2-4** | arquivo próprio com: invariante de três pernas e quem cumpre a perna 2 quando o caminho rápido a pula; regra de versões mistas; regex ancoradas; lista do que nunca se apaga; reversão e gatilhos | arquivo próprio (frontmatter, §2.1); §3.1–3.3 (INV-NP e a resposta sobre a perna 2); §4.6 (versões mistas: nenhum caminho muda, logo a leitura dupla e a dupla trava não se aplicam); §4.7; §4.8 (lista ampliada com `.corrupt-header.*`, spool ativo e a família do log); §8 | endereçado. **Divergência declarada:** o gatilho `truly_lost_7d ≥ 1` pedido é inavaliável (§8.3); a substituição (G3 + INV-NP + G6 proposto) pede novo julgamento do portador do VETO |
-| **MF-W2-5** | estresse com todos os gravadores; recuperação de órfão «pelo próximo `SessionStart`»; `truly_lost = 0` | §6.2 (todos os gravadores, `kill -9`, reuso de PID, mutantes); recuperação pelo drain do PRÓXIMO EMISSOR (§3.2) | endereçado com a premissa corrigida: não há drain no `SessionStart`, e `truly_lost` está morto (o INV-NP o substitui) |
-| **MF-W2-6** | script da W2.6: resolvedor, recusa de symlink, `unlink` relativo ao descritor, reexame, simulação, recusa com sessão viva, contagem pelo mesmo método | §5.1–5.3 (mais o manifesto de hash e a tabela de predicado) | endereçado; a pré-condição de sessão é a **decisão pendente 2** |
+| **MF-R2-W2-1** | trava presa vira sinal em ≤ T (≤ 1 h), sem volume por saída; controle positivo de portador externo; vermelho provando que o G3 sozinho não basta | §4.3 (portão, taxa, texto, controles); §6.1 S4; G8 em §8.2; §2.4 (0 linhas STARVED medidas) | aplicado |
+| **MF-R2-W2-2** | âncora = mais cedo entre import e início do processo; fallback; S1 com guard de import tardio | §4.2 (âncora `min`, leitura do kernel medida no macOS, recurso, direção do erro, escopo de hook); §6.1 S1; §6.4 célula 1 | aplicado; Linux não medido (§11, resíduo 1) |
+| **MF-R2-W2-3** | G6 (perda real, só-leitura, fora de hook, pós-LAND e nightly, quarentenado ≠ perdido) e G7 (`would-log` datado), com controle positivo, NA W2 | §8.2 (G6 em detalhe; G7 com controle natural medido); §6.1 S5; §9 | aplicado; fiação no nightly condicionada ao teto de paths |
+| **MF-R2-W2-4** | reconciliar o plano com este texto | prevalência declarada no cabeçalho; §4.2 (`T_min` = 3 s, teste de deriva); §4.4 (só compactação); §4.6 (W2.4 condicional, `-k gc` fora); §6.2 (M-a..M-d); §5.2 (predicado + recusa por spool/`.draining.*` de PID vivo); §4.1 célula (c) (atexit E sinal) | aplicado neste texto; **o plano é do CEO** |
 
-### 15.2 QA Architect (must-fix da W2 e o transversal)
+### 15.3 Lista §3(a) do consenso r2, itens 5–16
 
-| MF | onde |
+| item | onde |
 |---|---|
-| 1 — prova de exclusão mútua para qualquer `unlink` de caminho de trava | opção (b) adotada: nenhum `unlink` de `*.lock` em hook (§4.4); o controle de intercalação vale para a remoção do JOURNAL (§4.3) e é exigido se a remoção de travas pelo dono voltar (§4.4) |
-| 2 — W0.5 pré-registrada (células 2³, substrato, vermelho, razão) | §6.4 |
-| 3 — limiar por FLUXO com denominador; gatilho que dispara, com controle positivo; não herdar `truly_lost` | §6.3 H1; §8.2 (todos com controle positivo); §8.3 |
-| 4 — invariante por CONJUNTO, ≥ N elos, escritores mistos, mutantes | §3.1; §6.1 S2/S3; §6.2 |
-| 5 — células do caminho rápido (a)–(e) + órfão pelo drain oportunista | §4.1 (células (a)–(f)) |
-| 6 — tabela de predicado pré-registrada com quase-acertos e journals com conteúdo como controle | §5.2; §5.3 (manifesto de hash) |
-| 7 — convivência da relocação | prejudicado (a relocação saiu); fica a regra de versões mistas (§4.6) |
-| 8 — condição 67: cura, barreira, censo AST, docstring | §7 |
-| 17 (transversal) — Checks vermelho→verde com a afirmação no código de saída | §6.5 |
+| 5 seletores e módulo renomeado | §6.5 |
+| 6 Check de sucesso reescrito | §6.5 |
+| 7 Check da W2.0 por node id; vermelho no LEDGER | §7 |
+| 8 `flush` e calibração com o harness real | §4.1 passo 1, célula (j); §6.4 célula 7; §10 H |
+| 9 estatística e esperado por célula sob T1; gatilho da T2 | §6.4; §4.5 |
+| 10 drain oportunista antes da decisão | §4.2; §6.4 célula 5 |
+| 11 intervalo do wrapper; vivacidade da perna 3 | §6.4 células 4 e 6 |
+| 12 composição da cadeia | §6.2 |
+| 13 inode estável, censo dos abridores, células do sinalizador, sinalizador à prova de falha | §6.2; §4.1 |
+| 14 T1 operacional (≥ 100 mil, taxa de órfãos, ≤ 1 linha, W2.6 recorrente, G1 com H1 e dias distintos) | §4.5; §5; §9; §8.2 G1 |
+| 15 valores R2-5 com as condições | §4.2; §6.3; §14 |
+| 16 slug mantido; teste dourado; journals com conteúdo antes do drain | §4.7; §6.2 |
 
-### 15.3 DevOps Engineer (must-fix da W2)
+### 15.4 Must-fix da W2 de QA e DevOps (rodada 2)
 
-| MF | onde |
-|---|---|
-| 1 — cura na origem no lugar da relocação | adotada para os JOURNALS (§4.3); a parte das travas foi recusada pelo VETO (§4.4) |
-| 2 — o caminho rápido confere só o próprio spool; união de não-perda reescrita | §4.1; §3.2–3.3 |
-| 3 — transição sem perda, se a relocação ficasse | prejudicado (a relocação saiu); §4.6 |
-| 4 — GC de carona na fase 2, depois de soltar a trava, com teto | condicional (§4.5), com as condições preservadas |
-| 5 — observabilidade pelo resultado no `/ceo-boot`; sem evento por arquivo; `audit_emit.py` fora | §9 |
-| 6 — AMEND-4 em arquivo próprio; limiar absoluto; gatilhos (a)–(c) ligados; `truly_lost` declarado morto | arquivo próprio; o limiar absoluto vira teto secundário (§6.3 H2, consenso §2(d)); gatilhos G1–G3 (§8.2); §2.4 e §8.3 |
-| 7 — W0.5 mede latência p50/p95 em 4 células, antes e depois | §6.4 (2³ + células extras) |
-| 8 — corrida do `audit_log.py` antes ou junto; estresse com `agent_spawn` | §7; §6.2 |
+| crítico | MF | onde |
+|---|---|---|
+| QA | 1 reconciliação e seletores | §4.4; §4.6; §4.1 (c); §6.5 |
+| QA | 2 Check de sucesso | §6.5 |
+| QA | 3 Check da W2.0 | §7 |
+| QA | 4 calibração contra o harness real | §6.4 célula 7 |
+| QA | 5 estatística e esperado por célula | §6.4 |
+| QA | 6 atraso antes da decisão | §4.2; §6.4 célula 5 |
+| QA | 7 composição da cadeia | §6.2 |
+| QA | 8 observabilidade que dispara (G6, órfãos de qualquer idade, taxa de salto, G1 com H1) | §8.2; §9; §6.4 |
+| QA | 9 guardas mecânicas e células do sinalizador | §6.2; §4.1 |
+| DevOps | 1 alinhar o plano | §15.2 MF-R2-W2-4 |
+| DevOps | 2 âncora pelo início do processo; S1 com import tardio | §4.2 |
+| DevOps | 3 intervalo do wrapper; vivacidade da perna 3 | §6.4 |
+| DevOps | 4 T1 operacional, W2.6 recorrente, gatilho da T2 | §4.5; §5; §9 |
 
 ---
 
-## §16 Evidência lida (HEAD `a9924eb1`)
+## §16 Evidência lida (HEAD `48f03b3a`)
 
-- `.claude/hooks/_lib/spool_writer.py`:
-  - `:53`, `:63-66`: constantes;
-  - `:70-79`: sufixos;
-  - `:98-127`: `DrainStats`;
-  - `:130-138`: `JournalReconciliation`;
-  - `:265-266`: state dir;
-  - `:445-481`: nomes;
-  - `:581-582`: `.corrupt-header`;
-  - `:606-615`: breadcrumb com carimbo UTC;
-  - `:731-775`: adoção de cabeçalho;
-  - `:940-973`: flush;
-  - `:976-1074`: `spool_append` e `record_id`;
-  - `:1082-1121`: `should_drain`;
-  - `:1233-1257`: PID vivo e `int()`;
-  - `:1260-1407`: fase 2;
-  - `:1892-1900`: `record_id` no canônico;
-  - `:2248-2301`: compactação;
-  - `:2309-2326`: estagnação;
-  - `:2329-2459`: `drain_now`;
-  - `:2467-2565`: reconciliação morta e `truly_lost`;
-  - `:2573-2682`: saída e sinal.
-- `.claude/hooks/_lib/filelock.py:128-164`: `O_CREAT` + `flock`, sem inode.
-- `.claude/hooks/_lib/audit_emit.py`: `:2778-2799` (spool e drain oportunista); `:13330-13348` (instalação dos
-  handlers no import).
-- `.claude/hooks/audit_log.py`: `:667-700` (entrada `agent_spawn`); `:1256-1331` (HMAC fora da trava; perda
-  `would-log`).
-- `.claude/hooks/_lib/audit_hmac.py:476-482`: contrato «MUST be called WITH the audit-log FileLock held».
-- `.claude/hooks/check_arbitration_kernel.py`: `:99`, `:137`, `:173`, `:217` (kernel).
-- `.claude/hooks/check_canonical_edit.py:1165-1175`: precedente de prazo de parede.
-- `.claude/hooks/tests/test_spool_drain_contended_skip.py`: `:195-231` (testes 3 e 4).
-- `.claude/hooks/tests/test_two_writer_chain.py:1-17`.
-- `.claude/settings.json` e `templates/settings/*.json`: timeouts das registrações de hook (mínimo de 3 s no
-  repositório e de 5 s nos perfis).
-- `.claude/adr/ADR-055*.md` (base e AMEND-1..3); `ADR-186-hook-deadline-policy.md`; `.claude/adr/README.md`.
-- `.claude/plans/PLAN-194/debate/round-1/` (consenso e as três críticas); seção W2 do plano (árvore de
-  trabalho da S361, com os ajustes da rodada 1 aplicados).
+- `.claude/hooks/_lib/spool_writer.py`: `:29` (`_HOOKS_DIR`); `:53`, `:63-66`; `:98-138`; `:265-266`;
+  `:407-481`; `:581-582`; `:606-615`; `:731-775`; `:940-973`; `:976-1074` (`:1026`); `:1082-1121`;
+  `:1233-1257`; `:1260-1407` (`:1273`, `:1277-1317`, `:1343`, `:1374`, `:1383-1384`, `:1398-1405`);
+  `:1892-1900`; `:1938-1942`; `:2248-2301`; `:2309-2326`; `:2329-2459`; `:2467-2565`; `:2573-2682`.
+- `.claude/hooks/_lib/filelock.py:128-164`.
+- `.claude/hooks/_lib/audit_emit.py`: `:2778-2799`; `:13330-13348`.
+- `.claude/hooks/audit_log.py`: `:564-566`; `:667-700`; `:1118-1130`; `:1256-1331` (`:1323-1324`, `:1325-1329`).
+- `.claude/hooks/_lib/audit_hmac.py:473-482`.
+- `.claude/hooks/check_arbitration_kernel.py`: `:99`, `:137`, `:173`, `:217`.
+- `.claude/hooks/check_canonical_edit.py`: `:658`, `:725`, `:1429` (imports tardios); `:1165-1175`;
+  `:3127` (oráculo `--is-canonical`, consultado só para leitura).
+- `.claude/hooks/check_skill_reference_read.py`: `:155`, `:311`. `.claude/hooks/check_agent_spawn.py:73`.
+- `.claude/hooks/_python-hook.sh`: `:304`, `:413`, `:420`.
+- `.claude/settings.json:440-441` e `templates/settings/*.json` (timeouts).
+- `.claude/scripts/ceo-diagnose.py:364-373`, `:417`; `.claude/scripts/status.py:290`;
+  `.claude/scripts/audit-log-retain.py:27-28`; `.claude/scripts/ceo-backup.sh:203-233`.
+- `.claude/hooks/tests/test_spool_drain_contended_skip.py:195-231`; `.claude/hooks/tests/test_two_writer_chain.py:1-17`.
+- `.claude/adr/ADR-055*.md`; `ADR-186-hook-deadline-policy.md`; `.claude/adr/README.md`.
+- `.claude/plans/PLAN-194/debate/round-1/` e `round-2/` (consensos e críticas).
+- **Medições do redator** (2026-10-02, só leitura; nada gravado no repositório nem no state dir):
+  - `audit-log.errors` vivo: 31.683 linhas; 31.485 timeouts; 3 `would-log=`; 0 `STARVED`; formatos de carimbo
+    31.680 + 3;
+  - H1 no log corrente: |D| = 1.049, F = 0,999;
+  - leitura do início do processo pelo `sysctl` no macOS: retorno 0, 648 bytes, 2,6–3,3 ms;
+  - ordem stdout × `atexit`: 1,54 s sem `flush`, 0,03 s com;
+  - oráculo `--is-canonical`: `spool_writer.py` 1, `audit_log.py` 1, `nightly-hygiene.js` 1, `ceo-boot.py` 0,
+    `test_spool_state_amend4.py` 0, `check-audit-real-loss.py` 0;
+  - censo `grep`: 20 módulos de teste com subprocesso + log canônico, 8 com drain ou modo síncrono.
 
 Nenhum conteúdo lido trouxe instrução dirigida a este redator. Não houve injeção a relatar.
