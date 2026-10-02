@@ -59,3 +59,25 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   `gpt-5-codex` aparece em `codex_invoke.py` e `codex_phase_gate.py`). Entra no refresh do ledger
   junto da W3b.3 (mesmo arquivo; a regra INERT do `check-model-currency.py:64`, opção A do builder,
   vai no mesmo land).
+
+## W0.6 — verificador de procedência do Codex (S361, 2026-10-02)
+
+- Medição completa (comandos, versões, células, saídas): fora do repositório, no checkpoint
+  `s361-packs/b11-w06/W0.6-medicao.md` da sessão S361 (npm 11.16.0; `sigstore` 4.1.1 interno do npm;
+  versões 0.160.0 e 0.156.1 do Codex; registro oficial e CDN do TUF do Sigstore).
+- `npm audit signatures` NÃO serve para a W3: verifica só o que o REGISTRO declara (assinatura do
+  registro e bundle do atestado), não os bytes locais, não fixa identidade, não exige o atestado e fica
+  verde sem rede com cache quente. Células medidas: payload adulterado instalado ⇒ exit 0 «verified»;
+  atestado removido ⇒ exit 0; atestado de outro repositório ⇒ verde.
+- O `sigstore` interno do npm chamado com política de identidade (`certificateIdentityURI` +
+  `certificateIssuer`) + vínculo em stdlib (sha512 do tarball = `subject` do atestado; sha256 do
+  `bin/codex` lido em fluxo) dá verde no íntegro e vermelho em toda adulteração e identidade divergente.
+  Decisão de desenho pendente do Owner: módulo interno do npm vs. `sigstore` fixado no staging.
+- Identidade literal do construtor (0.160.0 e 0.156.1): repositório `https://github.com/openai/codex`,
+  workflow `.github/workflows/rust-release.yml`, ref `refs/tags/rust-v<X.Y.Z>`, emissor OIDC
+  `https://token.actions.githubusercontent.com`, `predicateType` `https://slsa.dev/provenance/v1`,
+  purl de plataforma `pkg:npm/%40openai/codex@<X.Y.Z>-darwin-arm64`.
+- Tamanhos 0.160.0: tarball de plataforma 134.311.083 bytes (332.972.398 descomprimido; `bin/codex`
+  241.555.024). O pacote de plataforma traz outros executáveis fora do sha256 pinado (`rg`, `zsh`,
+  `codex-voice-host`, dylibs) — entra no «escopo honesto» do ADR-182-AMEND-1.
+- Controle: o sha256 do `bin/codex` da 0.156.1 lido do tarball = o do manifesto assinado (`0196e89f…`).
