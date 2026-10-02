@@ -338,9 +338,13 @@ def copy_hooks() -> None:
     # _lib (runtime only; skip tests/ AND fixtures/ — the latter ships attack
     # samples (yaml_bomb, prototype_pollution) + a 64KiB padding file that trips
     # Claude Code's zip-bomb/compression-ratio heuristic on install. No runtime
-    # _lib code reads fixtures/, so excluding it is safe.)
+    # _lib code reads fixtures/, so excluding it is safe.) harness_replay/ is
+    # the same kind of data (PLAN-183 W7a, C8): the harness-config gate's replay
+    # fixtures, a destructive-command sample among them, with no consumer in the
+    # plugin — the gate reads them from the adopter's own .claude/, not from here.
     shutil.copytree(src / "_lib", dst / "_lib",
                     ignore=shutil.ignore_patterns("tests", "fixtures", "__pycache__",
+                                                  "harness_replay",
                                                   "test_*.py", "*_test.py", "conftest.py",
                                                   "test_isolation.py", "testing.py"))
     log(f"copied {npy} hook .py + _lib + shim")
