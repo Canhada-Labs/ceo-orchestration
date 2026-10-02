@@ -56,6 +56,7 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   prefixo no `PATH`; canários reais servidos em `gpt-6-astra`/`xhigh`. A 0.160.0 anexa stdin em pipe
   como bloco `<stdin>` (o hook passa entrada vazia). O prefixo fica em `work/fd02/prefix`, no scratchpad
   da sessão, para o ensaio do pacote do RP.
+- 2026-10-02 (S362): o rail do RP (rodada 1, lente de afirmações) deu P1 — o sentinel do pacote 0160 dizia «reportado para cura no gerador» sem registro rastreável; registro em `.claude/plans/PLAN-194-FOLLOWUP-repin-generator-hardening.md` (`draft`). Medido no mesmo dia: o endpoint de atestados do npm para `@openai/codex@0.160.0-darwin-arm64` responde HTTP 200 com o atestado de publicação e o SLSA `provenance/v1`; o gerador não o confere.
 
 ## Unidade atual — S362 (2026-10-02; `main` = `97a78fce`)
 

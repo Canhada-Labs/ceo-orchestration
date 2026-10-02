@@ -1994,6 +1994,7 @@ demais linhas estão feitas ou fora da 1.4.3.
   produção: abriria ~76 mil journals sob o timeout de 5 s do `SessionStart`); a opção T2 das travas da W2
   (re-checagem de inode no `filelock.py`, kernel), se não for escolhida; a sentinela de qualidade da W3,
   se a decisão pendente 4 for a opção (ii).
+- **Gerador do re-pin (P1 do rail do RP, S362; fora da 1.4.3):** `PLAN-194-FOLLOWUP-repin-generator-hardening.md` (`draft`) — sentinel sem o marcador que o guard recusa, procedência fora do registry (espera a decisão 3) e a janela hash→exec registrada.
 
 **Unidades que ganharam dono neste plano na S361** — sem dono elas não entravam em onda nenhuma:
 
