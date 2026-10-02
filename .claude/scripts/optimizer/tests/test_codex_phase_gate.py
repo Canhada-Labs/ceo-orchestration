@@ -52,7 +52,7 @@ def test_passed_parse_path(monkeypatch):
     assert r.review_status == PG.REVIEW_PASSED
     assert r.violations_found_count == 0
     assert r.phase_number == 1
-    assert r.codex_model == "gpt-5-codex"
+    assert r.codex_model == "gpt-5.6-sol"
     assert r.review_disabled_signal is False
     assert r.duration_ms >= 0
 

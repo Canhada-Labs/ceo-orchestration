@@ -23,7 +23,7 @@ redacts it, and parses the verdict from that content. stdin is closed
 CLI invocation (Phase 4 promotion gate, manual debug):
 
     python3 .claude/scripts/codex_invoke.py \\
-        --model gpt-5-codex \\
+        --model gpt-5.6-sol \\
         --sandbox read-only \\
         "review file foo.py for hardcoded secrets"
 

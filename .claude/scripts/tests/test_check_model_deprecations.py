@@ -459,6 +459,10 @@ W3B0_TODAY = "2026-10-13"
 #: Never widen it without a primary source (PLAN-194/LEDGER.md §W3b.3).
 #: Widened ONCE, with a primary source: the 2026-10-02 re-check of the page
 #: (LEDGER §W3b.3, raw HTML) gave `o3-mini`/`o4-mini` rows (2026-10-23).
+#: Shrunk by the free half of W3b.1 (the non-canonical `codex_invoke.py`
+#: docstring and `optimizer/codex_phase_gate.py` label: 3 hits); what is
+#: left lives in the canonical `codex_cli_shape.py` and goes with its
+#: ceremony.
 W3B1_DECLARED_DEBT = {
     (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5-codex", "BREAK"): 4,
     (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5.1-codex", "BREAK"): 1,
@@ -467,9 +471,6 @@ W3B1_DECLARED_DEBT = {
     (".claude/hooks/_lib/codex_cli_shape.py", "o3", "WARN"): 1,
     (".claude/hooks/_lib/codex_cli_shape.py", "o3-mini", "WARN"): 1,
     (".claude/hooks/_lib/codex_cli_shape.py", "o4-mini", "WARN"): 1,
-    (".claude/scripts/codex_invoke.py", "gpt-5-codex", "BREAK"): 1,
-    (".claude/scripts/optimizer/codex_phase_gate.py", "gpt-5-codex",
-     "BREAK"): 2,
 }
 
 # The exact line shapes measured on 2026-09-30 (check-stdlib-only.py:63 and

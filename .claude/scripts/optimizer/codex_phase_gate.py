@@ -45,7 +45,10 @@ _VALID_STATUSES = frozenset({REVIEW_PASSED, REVIEW_FAILED, REVIEW_DEFERRED})
 
 # Default model slug for the Codex reviewer. A string label only — this driver
 # never selects or invokes a model; the slug is forwarded for telemetry parity.
-DEFAULT_CODEX_MODEL: str = "gpt-5-codex"
+# It is NOT the model a review ran on (the live rail omits --model, so the
+# Codex account's own default answers). PLAN-194 W3b.1: the retired slug of
+# PLAN-122 gave way to the migration target the deprecation ledger names.
+DEFAULT_CODEX_MODEL: str = "gpt-5.6-sol"
 
 # SAFETY kill-switch (os.environ ONLY). Default posture: review ENABLED.
 _CODEX_REVIEW_SWITCH: str = "CEO_CODEX_REVIEW"
@@ -80,7 +83,7 @@ class PhaseReview(NamedTuple):
     thread_id_redacted: str          # stable short hash, never the raw id
     violations_found_count: int      # 0.._MAX_VIOLATIONS
     summary_hash: str                # stable hex hash, never the raw summary
-    codex_model: str                 # forwarded slug, e.g. "gpt-5-codex"
+    codex_model: str                 # forwarded slug, e.g. "gpt-5.6-sol"
     duration_ms: int                 # wall-clock of the invoke, >= 0
     review_disabled_signal: bool     # True iff CEO_CODEX_REVIEW is OFF
 
