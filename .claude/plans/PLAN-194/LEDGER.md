@@ -193,6 +193,31 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   `gpt-5-codex` aparece em `codex_invoke.py` e `codex_phase_gate.py`). Entra no refresh do ledger
   junto da W3b.3 (mesmo arquivo; a regra INERT do `check-model-currency.py:64`, opção A do builder,
   vai no mesmo land).
+- 2026-10-02T00:55Z (S361), re-conferência pedida acima («re-conferir à mão antes da W3b.1»), feita
+  pelo builder da W3b.1 sobre o HTML CRU da mesma página (`curl -sSL
+  https://developers.openai.com/api/docs/deprecations`, 482.750 bytes, sha256
+  `d7f797e77e57c9b05c6b2e569499a60ece6a6917c934cdb779c4149a631d552d`; texto extraído por script,
+  sem modelo auxiliar). A página tem DUAS seções com data 2026-04-22: a de julho (lida acima) e
+  «2026-04-22: Legacy GPT model snapshots», SEM o parêntese, cujas linhas têm desligamento em
+  **October 23, 2026** — 12 snapshots na tabela principal e 5 modelos com ajuste fino. Entre elas:
+  - `o3-mini-2025-01-31 | o3-mini`, substituto `gpt-5.6-sol` ⇒ `o3-mini` CONFIRMADO (supera a linha
+    «NÃO confirmado» acima; a primeira extração resumida acertou a data);
+  - `o4-mini-2025-04-16 | o4-mini`, substituto `gpt-5.6-terra` ⇒ `o4-mini` também se aposenta (não
+    estava na leitura de 2026-10-02 ~00:30Z).
+  - `gpt-5.5` segue AUSENTE da página (0 ocorrências no HTML cru).
+- Consequência (land livre, antes do SIGN da W3b.1): `o3-mini` e `o4-mini` ganham linha no
+  `model-deprecations.json` (substituto `gpt-5.6-sol` pela política de alvo único do `_meta`; a
+  página dá `gpt-5.6-terra` para o `o4-mini`, registrado na nota da linha), e o mapa de dívida
+  `W3B1_DECLARED_DEBT` cresce de 12 para 14 acertos (os dois em `codex_cli_shape.py`). As outras 15
+  linhas da seção de outubro (`gpt-3.5-turbo*`, `gpt-4*`, `o1*`, `gpt-image-1`, ajuste fino) e as 6
+  linhas da seção de julho que o ledger não tem (`computer-use-preview*`, as duas `*-search-preview`,
+  `gpt-audio-mini-*`, `gpt-realtime-mini-*`, `o4-mini-deep-research*`) NÃO entram: medido com um
+  ledger de sonda contendo todas elas, nenhuma tem referência viva (não-INERT) nesta árvore
+  (`check-model-deprecations.py --ledger <sonda> --json --today 2026-10-13` = só os 14 acertos acima).
+  Ficam como backlog declarado (refresh completo do ledger da OpenAI, com substitutos por faixa
+  depois que a W3b.1 põe a família `gpt-5.6-*` em `_VALID_MODELS`). A linha `o3-deep-research-2025-06-26`
+  do ledger diz que nenhum alias sem data foi inferido, mas a página lista `o3-deep-research` como
+  alias — mesmo backlog.
 
 ## W0.6 — verificador de procedência do Codex (S361, 2026-10-02)
 

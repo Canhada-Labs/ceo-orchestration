@@ -457,12 +457,16 @@ W3B0_TODAY = "2026-10-13"
 #: does not churn it. W3b.1 removes these ids and SHRINKS this map in the
 #: same patch, down to EMPTY (then --check at the control date exits 0).
 #: Never widen it without a primary source (PLAN-194/LEDGER.md §W3b.3).
+#: Widened ONCE, with a primary source: the 2026-10-02 re-check of the page
+#: (LEDGER §W3b.3, raw HTML) gave `o3-mini`/`o4-mini` rows (2026-10-23).
 W3B1_DECLARED_DEBT = {
     (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5-codex", "BREAK"): 4,
     (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5.1-codex", "BREAK"): 1,
     (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5", "WARN"): 2,
     (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5-mini", "WARN"): 1,
     (".claude/hooks/_lib/codex_cli_shape.py", "o3", "WARN"): 1,
+    (".claude/hooks/_lib/codex_cli_shape.py", "o3-mini", "WARN"): 1,
+    (".claude/hooks/_lib/codex_cli_shape.py", "o4-mini", "WARN"): 1,
     (".claude/scripts/codex_invoke.py", "gpt-5-codex", "BREAK"): 1,
     (".claude/scripts/optimizer/codex_phase_gate.py", "gpt-5-codex",
      "BREAK"): 2,
@@ -718,10 +722,27 @@ class TestOpenAILedgerRefreshW3b3(_CheckerTestBase):
             for n, lit in enumerate(ids)])
 
     def test_unconfirmed_ids_have_no_row(self):
-        """Declared decisions (LEDGER §W3b.3): `gpt-5.5` is NOT on the page
-        and `o3-mini` is NOT confirmed — neither gets a row (a future row
-        needs a primary source and must update this test on purpose)."""
-        self.assertEqual(self._scan_ids(("gpt-5.5", "o3-mini")), [])
+        """Declared decision (LEDGER §W3b.3): `gpt-5.5` is NOT on the page —
+        no row (a future row needs a primary source and must update this
+        test on purpose)."""
+        self.assertEqual(self._scan_ids(("gpt-5.5",)), [])
+
+    def test_october_shutdown_reviewer_ids_warn(self):
+        """Re-check 2026-10-02 (LEDGER §W3b.3, raw HTML of the page): the
+        2026-04-22 section without the July parenthetical shuts
+        `o3-mini-2025-01-31 | o3-mini` and `o4-mini-2025-04-16 | o4-mini`
+        down on 2026-10-23 — the two reviewer ids `_VALID_MODELS` carried.
+        RED before the rows: none of the four literals matched."""
+        ids = ("o3-mini", "o3-mini-2025-01-31", "o4-mini",
+               "o4-mini-2025-04-16")
+        want = {"o3-mini": "o3-mini", "o3-mini-2025-01-31": "o3-mini",
+                "o4-mini": "o4-mini", "o4-mini-2025-04-16": "o4-mini"}
+        hits = self._scan_ids(ids)
+        got = sorted((h["line"], h["matched"], h["model_id"],
+                      h["retirement"], h["severity"]) for h in hits)
+        self.assertEqual(got, [
+            (n + 1, lit, want[lit], "2026-10-23", "WARN")
+            for n, lit in enumerate(ids)])
 
     def test_openai_replacement_stays_inside_one_target(self):
         """Every OpenAI row names gpt-5.6-sol, so the refresh adds NO new id
