@@ -151,7 +151,8 @@ também para depois do GA a W8, a L2 restante e a L3 a L5. **Versão:** com o PL
 do núcleo toca o `SPEC/v1` (`git diff v1.4.2..HEAD -- SPEC/` vazio, medido em 2026-10-02), então o corte é
 **1.4.3**; se algum pacote passar a tocar o `SPEC/v1`, o CEO para e leva ao Owner. **Linha de corte:** o
 que não estiver landado quando a derivação do kit começar (no máximo domingo 2026-10-11) sai do GA, com o
-resíduo declarado. Custo declarado da W5c: 2–4 M de tokens, ~40 espelhos e o manifesto ADR-192, sem
+resíduo declarado. Custo declarado da W5c: 1,5–3,0 M de tokens (estimativa da S362; o custo declarado na
+Q7/S361 era 2–4 M), ~40 espelhos e o manifesto ADR-192, sem
 redução de preço. Se a cota apertar, a **W5c é a primeira a sair** (o CEO avisa antes); deixá-la fora
 ADIA a adoção do Sonnet 5.5 que o Owner escolheu na S359, e não impede o uso do 5.5 (o
 `claude-sonnet-5` do `availableModels` já o admite por prefixo, e o alias `sonnet` resolve para ele:
@@ -450,7 +451,7 @@ a W0 agora não gasta cota paga.
   descartável, com o pré-registro gravado no LEDGER ANTES de rodar (**gravado em 2026-10-02, S362, na
   seção «W0.5-pré-registro» do LEDGER**; a árvore sintética passa a ~233 mil entradas, o tamanho do state
   dir vivo medido pelo CEO nesse dia; margem medida ≥ 3 s ⇒ a W2 PARA e vai ao Owner). **Células:** as 8 (2^3) {saída sem
-  spool próprio, com spool próprio} × {dir vazio, ~220 mil entradas} × {1 saída, ≥ 9 concorrentes} (limiar
+  spool próprio, com spool próprio} × {dir vazio, ~233 mil entradas} × {1 saída, ≥ 9 concorrentes} (limiar
   de 9 estimado na lane `H-02`), mais as extras: (1) «estoque só de travas (~150 mil)» — a situação
   PERMANENTE sob a regra de travas T1, que decide a T2; (2) ENTREGA DE DECISÃO de um guard que decide BLOCK,
   com ≥ 9 saídas concorrentes, o diretório cheio e um portador externo da trava canônica; (3)
@@ -468,7 +469,7 @@ a W0 agora não gasta cota paga.
   `exit_deadline_skip`. **Estatística pré-registrada:** medir primeiro a taxa p̂ de perda de decisão no
   HEAD e escolher N com 3/N ≤ p̂/10; p95 só com N ≥ 100 (senão p90); substrato congelado e registrado em
   toda entrada (versão do CC, o `python3` que o `_python-hook.sh` usa, SO, sha do instrumento).
-  **Critério de vermelho escrito antes:** ≥ 1 timeout em {~220 mil, ≥ 9}, 0 em {vazio, ≥ 9}, decisão
+  **Critério de vermelho escrito antes:** ≥ 1 timeout em {~233 mil, ≥ 9}, 0 em {vazio, ≥ 9}, decisão
   perdida no braço de entrega e o H1 vermelho no HEAD (esperado F ≥ 0,9). Vermelho NÃO reproduzido ⇒ o
   LEDGER registra «controle vermelho não reproduzido» e a prova da W2 passa a ser só estrutural, declarada
   como tal. **Esperado depois da cura:** sem spool próprio, razão p95 cheio/vazio ≤ 1,2; com spool próprio e
@@ -871,6 +872,11 @@ sessão (rodada 1). **Estado medido na S361 (2026-10-01, ~20:08Z):** o
 
 ### W3 — Pin automático verificado do Codex CLI (L3, debate; decisão do Owner S359)
 Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
+
+**Emenda S362 (2026-10-02; D-2 e D-4):** a W3 saiu da 1.4.3 — a decisão 3 não foi tomada e o VETO de
+Segurança segue levantado. O texto desta seção vale como registro para a 1.4.4, inclusive o que cita a
+1.4.3 (a rota 2 INVERTIDA no kit, a W3.6 antes do corte, o prazo). Na 1.4.3, o kit corre só pela rota 1 e
+a rota 2 é recusa nomeada. Valem para a 1.4.3 só a W3.1 e o plano B (re-pin manual), reescritos na S362.
 
 **Decisão do Owner (S359, 2026-09-30):** «Pin automático verificado (Recomendado)». Motivo dado por
 ele: não ter de mexer nisso de novo a cada versão (na triagem da S359 o Codex tinha soltado 18 estáveis
@@ -1547,8 +1553,8 @@ muda entre ondas, com `claude update`, relendo a seção nova do CHANGELOG.
   Check: python3 -m pytest .claude/scripts/tests/test_settings_guard_loadability.py -q
 
 **Estimativa:** W5a ~100-150 linhas, 3 paths; W5b 60-120 linhas, 2 paths; W5c (adoção) = exceção (2)
-da regra de WIP do topo (~40 espelhos num pacote atômico; precedente OQ-2 do PLAN-193), 2-4 M tokens
-com debate e rail + 100-200k do censo contra o precedente + a cota paga do re-teste. **Debate:** só a
+da regra de WIP do topo (~40 espelhos num pacote atômico; precedente OQ-2 do PLAN-193), 1,5-3,0 M tokens
+(S362; antes, 2-4 M com debate e rail + 100-200k do censo) + a cota paga do re-teste. **Debate:** só a
 W5c (no debate único do plano; rodada 1 FEITA: PROCEED).
 **Dependências:** W5.0 (paga, na vez da W5); PROCEED do debate único (**dado na rodada 1** — a W5c está
 LIBERADA, com os must-fix e os ajustes 35 a 40 do consenso como pré-requisitos — Q3, S361); W5c.1 (paga,
@@ -1629,6 +1635,10 @@ primeiro, ou a linha entra no mesmo patch de documentação.
 
 ### W7 — Corte da v1.4.3 (rc.1 → hold de 24 h → GA)
 Check: bash .claude/scripts/local/release.sh preflight
+
+**Emenda S362 (D-4):** na 1.4.3 o kit corre só pela rota 1 do runner do re-pass, e a rota 2 é recusa
+nomeada. A W7.1 e as «Pré-condições do corte», abaixo, ainda descrevem a INVERSÃO da rota 2: esse trecho
+vale como registro para a 1.4.4 e é reescrito junto com os derivadores do kit da 1.4.3.
 
 **Objetivo:** publicar a 1.4.3 com o que landou neste trem, com o kit derivado do kit do GA 1.4.2 e os
 P2 herdados curados no DERIVADOR. **Paths:** `.claude/plans/PLAN-194/derive-kit-143.py` e
@@ -1781,21 +1791,27 @@ com pelo menos 3 sessões por causa de dois fechamentos obrigatórios (W2.6 e U2
 | onda | tokens (estimado) | sessões | vaga canônica | quem espera |
 |---|---|---|---|---|
 | re-pin manual do Codex 0.160.0 (RP; S362) | 300-600k (sonda, texto, pacote gerado, ensaio, rail no 0.156.1) | 1 | sim (vaga 1; exceção (3) da regra de WIP; o pin é KERNEL e o molde 0156 já lidou com isso) | assinatura do Owner (sábado 2026-10-03) |
-| W0 | 150-300k (sem cota paga) | 1 | não | — |
-| W1 | 150-300k | 1 | sim (1.ª) | assinatura; prazo 19/10 |
+| W0 | 150-300k (sem cota paga) — FEITA; fora da conta do trem | 1 | não | — |
+| W1 | 150-300k — LANDADA (`c54934d8`); fora da conta do trem | 1 | sim (1.ª) | assinatura; prazo 19/10 |
 | W2 | 1,8-3,2 M (S362: U2-A a U2-D, verificadores do spool e H1, estresse, W0.5, script da W2.6 e AMEND-4 condensado; era 1,0-1,8 M) | 3-4 | sim (vaga 2, em série: U2-A → U2-B → U2-C → U2-D) | debate único (PROCEED na rodada 2; MF-R2-W2-1..4 valem) + 4 assinaturas; a W2.6 roda depois do LAND do U2-B, com as sessões deste projeto fechadas (decisão 2 aceita), e é RECORRENTE sob T1 |
 | cura do `agent_spawn` (W2.0; condição 67) | FEITA (landada em `65cd50d7`) | — | — | — |
 | W3 — **fora da 1.4.3 (S362; vai para a 1.4.4)** | 1,6-2,8 M, em pacotes [1c →] 1b → 1a → 2 de ≤ 8 paths em série (a W0.6 já feita, sem cota paga) + a rodada 3 do debate (150-300k, feita); as condições 1-23 cabem nesta faixa (estimativa dos críticos: 50k a 220k; a cerimônia de kernel da condição 6, se por `_CANONICAL_GUARDS`, é custo marginal sobre o 1b ou o 1c) | 3-4 (inclui o pacote de kernel) | sim (3.ª vaga inicial — ordem decidida; ocupada pela W3b até a decisão 3, Q8) | decisão pendente 3 ESCRITA (retira o VETO; «confiança no registro» ⇒ ESCALATE; debate FECHADO, PROCEED na rodada 3) + assinatura; Codex parado na versão pinada (0.160.0 depois do RP) até o LAND da W3 (depois, só pela W3.6, que roda logo depois do LAND) |
 | W3: pacote de kernel de registro de ações (`audit_emit.py`) — **fora da 1.4.3 (S362)** | 100-200k + 1 cerimônia de kernel | com a W3 | sim, em série com a W1a do PLAN-195 | assinatura; landa ANTES da W3.6 |
-| W3b | 100-200k | 1 | sim (3.ª vaga inicial enquanto a W3 espera — Q8, S361; landa antes da W3) | assinatura; prazo 2026-12-11 |
-| W4 | 150-300k | 1 | sim | assinatura; antes da rc.1 |
-| W5a/W5b | 300-600k + cota paga da W5.0 | 1 | sim (install.sh; o texto do ADR-149 vai na W5c) | W5.0 na vez da W5 (OQ-7 respondida, Q9: gravar `manual`) |
-| W5c (adoção do Sonnet 5.5) | 2-4 M + 100-200k do censo contra o precedente + cota paga do re-teste | 1-2 | sim (depois da W2, salvo se o debate pedir antes; exceção de tamanho declarada) | debate único (PROCEED dado na rodada 1 — onda LIBERADA, Q3; must-fix valem) + re-teste pago na vez + W6 landada antes, ou no mesmo pacote pela OQ-14 (`settings.json`) + assinatura |
-| W6 | 100-200k + isca paga mínima da W6.0 | 1 | sim (antes da W5c e da W3 do PLAN-195 no `settings.json`) | agendamento do backup pelo Owner (W6.1; a 1.ª cópia já foi feita na S361) + ensaio de restaurar e verificar (W6.3) + isca W6.0 antes da W6.2; OQ-8 e OQ-14 respondidas (Q9) — a W6 não espera o sandbox nem a W5c |
-| W7 | 1-2 M (S362: a rota 2 vira recusa nomeada — os 100-150k da inversão saíram) | 1-2 | sim (cortes) | hold de 24 h + assinaturas + npm |
-| W8 | 50-150k | com outra | sim | OK do download |
-| L1-L4 | 300-600k | espalhadas | não | — |
-| L5 (medição do ADR-191) | 50-150k (estimado; só leitura do log, mais a amostra de verdadeiros e falsos positivos) | com outra | não | — |
+| W3b | 100-200k — LANDADA (`a0a6df06`); fora da conta do trem | 1 | sim (3.ª vaga inicial enquanto a W3 espera — Q8, S361; landa antes da W3) | assinatura; prazo 2026-12-11 |
+| W4 | **0,8-1,5 M para W4 + W5.0/W5a/W5b/W5.1 + W6, agrupados na S362** (antes: W4 150-300k) | 1 | sim | assinatura; antes da rc.1 |
+| W5.0/W5a/W5b/W5.1 | na linha da W4 (agrupados na S362; antes: W5a/W5b 300-600k) + cota paga da W5.0 | 1 | sim (install.sh; o texto do ADR-149 vai na W5c) | W5.0 na vez da W5 (OQ-7 respondida, Q9: gravar `manual`) |
+| W5c (adoção do Sonnet 5.5) | 1,5-3,0 M (S362; o custo declarado na Q7/S361 era 2-4 M, com mais 100-200k do censo) + cota paga do re-teste (~US$ 15-30) | 1-2 | sim (vaga 4, depois da W6.2, da W5a, da W5b e do U2-C — D-8; exceção de tamanho declarada) | debate único (PROCEED dado na rodada 1 — onda LIBERADA, Q3; must-fix valem) + re-teste pago na vez + W6 landada antes, ou no mesmo pacote pela OQ-14 (`settings.json`) + assinatura |
+| W6 | na linha da W4 (agrupado na S362; antes: 100-200k) + isca paga mínima da W6.0 | 1 | sim (antes da W5c e da W3 do PLAN-195 no `settings.json`) | agendamento do backup pelo Owner (W6.1; a 1.ª cópia já foi feita na S361) + ensaio de restaurar e verificar (W6.3) + isca W6.0 antes da W6.2; OQ-8 e OQ-14 respondidas (Q9) — a W6 não espera o sandbox nem a W5c |
+| W7 | 0,9-1,9 M (S362: derivadores do kit, metadados do release, CHANGELOG, kit, rc.1, kit do GA e GA; a rota 2 vira recusa nomeada, e os 100-150k da inversão saíram; antes: 1-2 M) | 1-2 | sim (cortes) | hold de 24 h + assinaturas + npm |
+| W8 | 50-150k — depois do GA (S362); fora da conta do trem | com outra | sim | OK do download |
+| L1-L4 | 300-600k — L1 e L2 LANDADAS; L3 e L4 depois do GA; fora da conta do trem | espalhadas | não | — |
+| L5 (medição do ADR-191) | 50-150k (estimado; só leitura do log, mais a amostra de verdadeiros e falsos positivos) — depois do GA; fora da conta do trem | com outra | não | — |
+| W7a do PLAN-183 (só na conta do trem; o plano dela é o PLAN-183) | 0,3-0,7 M (código, emenda do ADR-158, FOLLOWUPs e pernas do upgrade) | 1 | sim (vagas 1 e 4) | 2 assinaturas |
+| livres do trem (cura do teste instável, textos, LEDGER) | 0,1-0,2 M | — | não | — |
+
+**Conta S362 (só as linhas que contam):** RP 0,3-0,6 + W2 1,8-3,2 + W4/W5/W6 0,8-1,5 + W5c 1,5-3,0 +
+W7 0,9-1,9 + W7a do PLAN-183 0,3-0,7 + livres 0,1-0,2 = **5,7-11,1 M**, o total declarado acima. As
+demais linhas estão feitas ou fora da 1.4.3.
 
 ## Riscos
 
@@ -1809,7 +1825,10 @@ com pelo menos 3 sessões por causa de dois fechamentos obrigatórios (W2.6 e U2
    `verify_chain()`, rail, predicado conservador de GC, nenhum `unlink` de `*.lock` em hook, prazo na
    saída com controle de entrega de decisão e a cura do `agent_spawn` antes do SIGN.
 4. **Pin automático aceita uma versão ruim com procedência válida** (o atestado prova a ORIGEM, não a
-   QUALIDADE do revisor). **Mitigações reescritas na rodada 1:** o verificador roda FORA do hook (a
+   QUALIDADE do revisor). **Emenda S362 (D-2 e D-4):** risco da W3, que saiu da 1.4.3. O que o texto abaixo
+   diz do pin automático, da W3.6 e da rota 2 vale como registro para a 1.4.4; na 1.4.3, o corte não segue
+   pela rota 2 (recusa nomeada), e o Codex é o do re-pin manual. O trecho do `npm update -g` e a mitigação
+   da W3.1 valem também na 1.4.3. **Mitigações reescritas na rodada 1:** o verificador roda FORA do hook (a
    verificação dentro do hook PreToolUse viraria fail-OPEN por timeout); sonda e canário funcional
    BLOQUEANTES, na ordem verificar → sondar → aceitar (cobrem a classe A7: subcomando ou flag removidos em
    silêncio); carência de 48 h contada no relógio do registro, com a estável elegível mais nova (nunca
@@ -2463,7 +2482,9 @@ demais ao abri-los.
   reais; W2.6 depois do LAND do U2-B (decisão 2 aceita); W5.1 ancorada no LAND do RP; mapa de colisões da
   W5c pela pegada `WFABLE51` (30 paths, medidos), com o A3.1 do ADR-149 dentro da W5c; «Decisões
   pendentes», «Blockers», «Next» e «How to continue» atualizados. LEDGER: entrada do RP, pré-registro da
-  W0.5 e arquivamento do T0, da W0.1 e da W0.2 com âncoras estáveis. Status inalterado (`executing`).
+  W0.5 e arquivamento do T0, da W0.1 e da W0.2 com âncoras estáveis. Commit 4 (2 P1 do rail de texto):
+  molduras de historicidade na abertura da W3, na abertura da W7 e no risco 4 (D-2 e D-4); W5c com
+  1,5-3,0 M no Goal, na W5 e no «Orçamento», cuja conta fecha em 5,7-11,1 M. Status inalterado (`executing`).
 
 ## Reference links
 
