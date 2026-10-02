@@ -1,0 +1,46 @@
+# Suítes do job hook-tests-python-matrix do validate.yml, base x árvore landada pelo ensaio (PLAN-194, w-auditrace)
+# comando (o mesmo do CI, PYTHONPATH=.): pytest .claude/hooks/tests/ .claude/scripts/tests/ .claude/scripts/optimizer/tests/
+#   -n auto -m "not serial" --strict-markers --tb=no -q   e depois   -m "serial" --strict-markers --tb=no -q
+# macOS 27, Python 3.9.6, pytest 7.3.0 + xdist (o CI usa pytest 8.* e 3.9/3.12); máquina compartilhada
+
+## FINAL — S362, 2026-10-02 UTC: base = clone descartável em main 48f03b3a; patched = clone c-real do
+## ensaio da rodada 2, depois do land real do ensaio (os 3 caminhos do patch final, sha256 e8d231e8...)
+base    paralela: 13473 passed, 58 skipped, 4 xfailed, 38 warnings in 390.69s (0:06:30)
+base    serial:   3 failed, 943 passed, 4 skipped, 13534 deselected, 5 xfailed, 1 xpassed in 242.22s (0:04:02)
+patched paralela: 13479 passed, 58 skipped, 4 xfailed, 42 warnings in 352.65s (0:05:52)
+patched serial:   1 failed, 948 passed, 4 skipped, 13540 deselected, 4 xfailed, 2 xpassed in 210.90s (0:03:30)
+falhas da base:
+  FAILED .claude/hooks/tests/test_check_pair_rail_matrix.py::TestDecideWithMatrixPerformance::test_case_a_p99_under_5ms
+  FAILED .claude/hooks/tests/test_lifecycle_edge_cases.py::TestOutputScanPerfRigorous::test_p99_10kb
+  FAILED .claude/hooks/tests/test_lifecycle_edge_cases.py::TestOutputScanPerfRigorous::test_p99_5kb
+falhas do patched:
+  FAILED .claude/hooks/tests/test_check_pair_rail_matrix.py::TestDecideWithMatrixPerformance::test_case_a_p99_under_5ms
+Conjunto de falhas do patched CONTIDO no da base (orçamentos de p99 absolutos sob carga):
+  nenhuma falha nova. Contagem: +9 testes (+6 na passada paralela, +3 na serial): os 9 casos
+  novos do test_two_writer_chain.py (os 2 da corrida entre processos são serial por marcador; o do
+  estouro de trava, pelo nome, no conftest raiz).
+
+## Anterior — S361: base = main 6a9abb10; patched = land do ensaio B (patch da rodada 1)
+base    paralela: 13429 passed, 58 skipped, 4 xfailed, 39 warnings in 409.91s (0:06:49)
+base    serial:   1 failed, 943 passed, 4 skipped, 13490 deselected, 3 xfailed, 3 xpassed in 264.75s (0:04:24)
+patched paralela: 13434 passed, 58 skipped, 4 xfailed, 43 warnings in 388.49s (0:06:28)
+patched serial:   3 failed, 944 passed, 4 skipped, 13495 deselected, 5 xfailed, 1 xpassed in 244.11s (0:04:04)
+
+falhas da base:
+  FAILED .claude/scripts/tests/perf/test_optimizer_complexity_gate_p99.py::TestComplexityGateP99::test_classify_latency_under_ceiling_per_probe
+falhas do patched:
+  FAILED .claude/hooks/tests/test_check_pair_rail_matrix.py::TestDecideWithMatrixPerformance::test_case_a_p99_under_5ms
+  FAILED .claude/hooks/tests/test_lifecycle_edge_cases.py::TestOutputScanPerfRigorous::test_p99_10kb
+  FAILED .claude/hooks/tests/test_lifecycle_edge_cases.py::TestOutputScanPerfRigorous::test_p99_5kb
+
+Julgamento de cada falha que difere (até 3 reruns ISOLADOS em cada árvore):
+  todas as 4 passaram na 1.a tentativa isolada nas DUAS árvores — orçamentos de p99 absolutos
+  (pair-rail matrix < 5 ms, output_scan p99, optimizer p99) sob carga: classe flake de runner,
+  nenhuma toca audit_log.py.
+Conjunto exato de falhas depois do julgamento: base = {} ; patched = {}  =>  nenhuma falha nova.
+Contagem: base 13429+943 passaram (+1 falha); patched 13434+944 passaram (+3 falhas) => +8 testes,
+  os 8 casos novos do test_two_writer_chain.py: 5 na passada paralela e 3 na serial (os 2 da corrida
+  entre processos, marcados serial, e o do estouro de trava, que o conftest raiz marca serial pelo nome).
+
+A bateria do próprio SIGN com as testpaths INTEIRAS do pytest.ini (superconjunto deste job) rodou no
+ensaio B (patch da rodada 1): nenhuma falha nova; as instáveis foram julgadas pelo rerun.

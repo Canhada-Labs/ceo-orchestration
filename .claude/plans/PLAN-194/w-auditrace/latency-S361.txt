@@ -1,0 +1,41 @@
+# Latência do audit_log.py antes x depois (PLAN-194, cura auditrace) — medido na S361, 2026-10-02 UTC
+# substrato: macOS 27, Python 3.9.6, 16 CPUs, máquina COMPARTILHADA e carregada (load average no intervalo)
+# instrumento: latency.py do builder, guardado no checkpoint do pacote (sandbox: HOME, CEO_AUDIT_LOG_* e fallback num diretório descartável;
+# env -i; a cadeia viva nunca é tocada). Variantes: base = blob 5ab3cb9a (main 6a9abb10);
+# patched = a pós-imagem do patch no momento de cada medição (rodada 1 do rail); as versões medidas diferem
+# da final só em comentários, na forma do bloco do HMAC (função auxiliar ou em linha) e no ramo de rotação
+# da rodada 2, que estas medidas não exercitam. Intercalação ABAB em todas as medidas.
+#  (1) subprocess: o hook inteiro (interpretador novo, payload Agent no stdin), N=200 por variante, ms;
+#  (2) append_entry em processo, N=2000 por variante (10 blocos), microssegundos;
+#  (3) contenção: 4 processos x 40 append_entry no MESMO log, 6 repetições por variante, segundos de parede,
+#      com verify_chain() no fim de cada repetição.
+# O gate de latência do CI (profile-opus-4-7.py --hook-latency) NÃO mede o audit_log.py: o corpus dele é
+# check_agent_spawn, check_anti_ceo_overhead e check_output_secrets.
+
+## medição 1 (código intermediário, mesma lógica: helper em função) — 2026-10-02T00:04:30Z, load [77.1, 63.5, 43.8] -> [57.0, 59.8, 43.7]
+subprocess_ms      base     n=200   p50=59.755     p95=96.513     p99=191.943    mean=67.379 ms
+subprocess_ms      patched  n=200   p50=60.093     p95=92.78      p99=143.64     mean=66.156 ms
+append_entry_us    base     n=2000  p50=1175.541   p95=8946.125   p99=47253.333  mean=3127.493 us
+append_entry_us    patched  n=2000  p50=1212.959   p95=10675.708  p99=41793.791  mean=3127.52 us
+contention_wall_s  base     n=6     p50=0.865      p95=0.924      p99=0.924      mean=0.855 s
+contention_wall_s  patched  n=6     p50=0.926      p95=1.096      p99=1.096      mean=0.965 s
+contenção base     verify_chain: tamper(linha 2), tamper(linha 53), tamper(linha 19), tamper(linha 21), tamper(linha 32), tamper(linha 43); linhas [160]; estouros de trava 0
+contenção patched  verify_chain: intact, intact, intact, intact, intact, intact; linhas [160]; estouros de trava 0
+
+## medição 2 (código FINAL do patch) — 2026-10-02T00:16:37Z, load [41.2, 47.9, 47.6] -> [55.8, 50.6, 48.6]
+subprocess_ms      base     n=200   p50=58.605     p95=136.435    p99=172.533    mean=72.887 ms
+subprocess_ms      patched  n=200   p50=61.862     p95=119.485    p99=150.5      mean=71.266 ms
+append_entry_us    base     n=2000  p50=929.25     p95=4848.958   p99=10239.625  mean=1682.421 us
+append_entry_us    patched  n=2000  p50=928.541    p95=4134.958   p99=9791.459   mean=1610.509 us
+contention_wall_s  base     n=6     p50=0.493      p95=0.508      p99=0.508      mean=0.504 s
+contention_wall_s  patched  n=6     p50=0.473      p95=0.535      p99=0.535      mean=0.496 s
+contenção base     verify_chain: tamper(linha 41), tamper(linha 38), tamper(linha 42), tamper(linha 41), tamper(linha 43), tamper(linha 41); linhas [160]; estouros de trava 0
+contenção patched  verify_chain: intact, intact, intact, intact, intact, intact; linhas [160]; estouros de trava 0
+
+# Leitura: no caminho de um hook, nenhuma diferença acima do ruído (p50 do subprocess dentro de +3,5 ms nas
+# duas medições, com p95 e média menores na variante nova; p50 do append_entry igual na medição final). Sob
+# contenção sintética a parede subiu 13% na média na medição 1 (0,855 -> 0,965 s, load 57-77) e ficou igual
+# na medição 2 (0,504 -> 0,496 s): dentro do ruído desta máquina. A seção crítica passou a incluir a leitura
+# da chave e do elo e o cálculo do HMAC (estimativa, não medida à parte: dezenas de µs por linha); quem espera a trava faz
+# polling de 50 ms, ordem de grandeza acima. A pré-imagem quebrou a cadeia em 12/12 repetições de contenção;
+# a cura, em 0/12.

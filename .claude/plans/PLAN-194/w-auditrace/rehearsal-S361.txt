@@ -1,0 +1,431 @@
+# Ensaio do OWNER-AUDITRACE-SIGN.sh (test-ceremony-auditrace.sh), S361→S362, 2026-10-02 UTC, macOS 27, /bin/bash 3.2,
+# Python 3.9.6, pytest 7.3.0 + xdist, máquina compartilhada; chave GPG e clones descartáveis;
+# registro de rail SINTÉTICO (o rail é do CEO): refazer com o rail-round-N.md real commitado.
+# Caminhos locais redigidos para <scratch>.
+#
+# Ensaio F (FINAL) — fachada, materiais do ANEXO da rodada 3 (mesmo patch, sha256
+#   c864ff693b1b57cc7e664342030355aa1e9a190b9c5bcb9f9b1997879876b21b; SIGN que assina o HEAD:<sentinel>),
+#   sobre main f829b29a: 195 PASS / 0 FAIL, inclusive os cenários novos T21 e T22 (abaixo).
+# Ensaio E — fachada, materiais da rodada 3 do rail, sobre main 399efbaa: 178 PASS / 0 FAIL, com
+#   T6-text, T18, T19 e T20 (log no checkpoint).
+# Ensaio E1 — a 1.ª passada dos mesmos materiais deu 151 PASS / 29 FAIL, todos de UMA causa: a frase nova
+#   do sentinel sobre o Rail-Text-sha256 citava o marcador literal dos campos a preencher, e o SIGN (passo
+#   4/7) recusa um sentinel em que ele sobra depois do preenchimento; o desfazer restaurou a árvore em
+#   todos os casos. Curado reescrevendo a frase; o E é a passada depois da cura (log do E1 no checkpoint).
+# As suítes inteiras do job do CI sobre a árvore landada estão em suite-compare-S361.txt, medidas com o
+#   patch da rodada 2: a rodada 3 mudou só os dois arquivos de teste da cura (rodados inteiros e de
+#   verdade no T1/T2 deste ensaio, também na fachada) e uma docstring do audit_log.py.
+# Ensaio D — fachada, materiais da rodada 2 do rail (patch e8d231e8…), sobre main 48f03b3a: 152 PASS / 0 FAIL.
+# Ensaio C — fachada, materiais da rodada 1 com o molde de kernel: 152 PASS / 0 FAIL (log no checkpoint).
+# Ensaio B — --full-suite (T1 e T2 com as suítes INTEIRAS do pytest.ini), patch da rodada 1, SIGN ainda
+#   sem o molde de kernel: 77 PASS / 0 FAIL (abaixo).
+# Ensaio A — fachada, materiais v1: 141 PASS / 0 FAIL (log no checkpoint).
+
+######## Ensaio F (final)
+
+
+== montagem
+  origem <scratch>/wt @ 77fe592411765e08f69cd6f8355fb30630882847
+  área <scratch>/rehearsal-7
+  chave descartável 1A94CCF9CA8E84A1CFFA438BE90BE22BE075A8F5 (no allowlist do remote: 8a4d096f)
+  suítes: fachada (só as duas passadas inteiras)
+  registro de rail: SINTÉTICO (a origem ainda não tem rail-round-*.md)
+
+== T0 ceremony-lint e bits de execução no índice
+  PASS T0: ceremony-lint 0 BLOCKING
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/OWNER-AUDITRACE-SIGN.sh modo 100644 no índice
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/OWNER-AUDITRACE-SIGN.sh sem variável colada a caractere não-ASCII
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/test-ceremony-auditrace.sh modo 100644 no índice
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/test-ceremony-auditrace.sh sem variável colada a caractere não-ASCII
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/derive-auditrace-patch.sh modo 100644 no índice
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/derive-auditrace-patch.sh sem variável colada a caractere não-ASCII
+
+== T1 --dry-run no caminho feliz
+  PASS T1: rc 0
+  PASS T1: ensaio concluído
+  PASS T1: pós-imagem conferida
+  PASS T1: os testes da cura rodaram de verdade
+  PASS T1: o par do override de kernel foi validado vivo no hook
+  PASS T1: o override de kernel foi armado e desarmado em volta do apply
+  PASS T1: HEAD inalterado
+  PASS T1: árvore rastreada limpa
+  PASS T1: sem .asc
+  PASS T1: sentinel intacto
+  PASS T1: nenhum worktree da base sobrou
+
+== T2 modo REAL sob pseudo-TTY, chave descartável, uma falha instável injetada
+  PASS T2: rc 0
+  PASS T2: landou
+  PASS T2: a falha injetada foi julgada instável pelo rerun isolado
+  PASS T2: exatamente um commit novo sobre o HEAD
+  PASS T2: o commit tem exatamente os 3 caminhos + sentinel + .asc
+  PASS T2: a assinatura verifica
+  PASS T2: assinada pela chave descartável
+  PASS T2: os 3 blobs landados são os do index pós-imagem do patch
+  PASS T2: o hook landou com modo 100755
+  PASS T2: sentinel tem «Anchor-SHA: 8a4d096fa3ee19414d27e49409e21125cb9b167c»
+  PASS T2: sentinel tem «Patch-sha256: c864ff693b1b57cc7e664342030355aa1e9a190b9c5bcb9f9b1997879876b21b»
+  PASS T2: sentinel tem «Rail-Record-sha256: 1edf3ef479a9fd77cf280ff50007c22fe8b3f39d1adb77896cecfb7d225a9785»
+  PASS T2: sentinel tem «Data: 2026-10-02»
+  PASS T2: nenhum TO-FILL-BY-SIGN no sentinel assinado
+  PASS T2: mensagem de commit completa (trailer presente)
+  PASS T2: o SIGN conferiu o signatário contra o allowlist
+  PASS T2: a mensagem nomeia o signatário
+  PASS T2: a mensagem declara o CASO
+  PASS T2: a mensagem registra o override de kernel
+  PASS T2: o override de kernel foi armado e desarmado em volta do apply
+  PASS T2: árvore limpa depois do land
+  PASS T2: nenhum worktree da base sobrou
+  PASS T2: os testes da cura passam na árvore landada (censo por AST incluído)
+
+== T3 falha NOVA (passa sem o patch, falha com ele) aborta e restaura
+  PASS T3: rc 1
+  PASS T3: a falha nova foi nomeada
+  PASS T3: o desfazer reverteu o patch
+  PASS T3: HEAD inalterado
+  PASS T3: árvore rastreada limpa
+  PASS T3: sem .asc
+  PASS T3: sentinel intacto
+  PASS T3: nenhum worktree da base sobrou
+
+== T4 falha PRÉ-EXISTENTE (falha com e sem o patch) é nota, não bloqueio
+  PASS T4: rc 0
+  PASS T4: nomeada como pré-existente
+  PASS T4: resumo final avisa
+  PASS T4: árvore rastreada limpa
+  PASS T4: sem .asc
+  PASS T4: sentinel intacto
+  PASS T4: nenhum worktree da base sobrou
+
+== T5 base derivada (um caminho do patch mudou fora dos hunks) recusa no P0
+  PASS T5: rc 1
+  PASS T5: a deriva é nomeada pelo caminho
+  PASS T5: nada foi aplicado
+  PASS T5: árvore rastreada limpa
+  PASS T5: sem .asc
+  PASS T5: sentinel intacto
+  PASS T5: nenhum worktree da base sobrou
+
+== T6 registro de rail de OUTRO patch, e veredito não aceito, recusam no P0
+  PASS T6-subject: rc 1
+  PASS T6-subject: recusa nomeada
+  PASS T6-subject: árvore rastreada limpa
+  PASS T6-subject: sem .asc
+  PASS T6-subject: sentinel intacto
+  PASS T6-subject: nenhum worktree da base sobrou
+  PASS T6-verdict: rc 1
+  PASS T6-verdict: recusa nomeada
+  PASS T6-verdict: árvore rastreada limpa
+  PASS T6-verdict: sem .asc
+  PASS T6-verdict: sentinel intacto
+  PASS T6-verdict: nenhum worktree da base sobrou
+  PASS T6-text: rc 1
+  PASS T6-text: recusa nomeada
+  PASS T6-text: árvore rastreada limpa
+  PASS T6-text: sem .asc
+  PASS T6-text: sentinel intacto
+  PASS T6-text: nenhum worktree da base sobrou
+
+== T7 modo real SEM TTY recusa antes de tudo
+  PASS T7: rc 1
+  PASS T7: recusa nomeada
+  PASS T7: árvore rastreada limpa
+  PASS T7: sem .asc
+  PASS T7: sentinel intacto
+  PASS T7: nenhum worktree da base sobrou
+
+== T8 SIGTERM durante a bateria: o desfazer roda e a árvore volta
+  PASS T8: rc 143 (TERM)
+  PASS T8: o desfazer reverteu o patch
+  PASS T8: árvore rastreada limpa
+  PASS T8: sem .asc
+  PASS T8: sentinel intacto
+  PASS T8: nenhum worktree da base sobrou
+
+== T9 SIGKILL deixa sobra; a nova execução a nomeia e a receita impressa a desfaz
+  PASS T9: o SIGN chegou à passada paralela
+  PASS T9: o kill -9 deixou o patch aplicado (sem desfazer)
+  PASS T9: worktree da base órfão plantado
+  PASS T9: a nova execução recusa (rc 1)
+  PASS T9: o P0 removeu o worktree órfão antes de tudo
+  PASS T9: a recusa imprime a receita de recuperação
+  PASS T9: a receita impressa desfaz a sobra
+  PASS T9: depois da receita o ensaio passa (rc 0)
+  PASS T9: árvore rastreada limpa
+  PASS T9: sem .asc
+  PASS T9: sentinel intacto
+  PASS T9: nenhum worktree da base sobrou
+
+== T17 override de kernel que já vem do ambiente recusa no P0, antes de aplicar
+  PASS T17: rc 1
+  PASS T17: recusa nomeada
+  PASS T17: nada foi aplicado
+  PASS T17: árvore rastreada limpa
+  PASS T17: sem .asc
+  PASS T17: sentinel intacto
+  PASS T17: nenhum worktree da base sobrou
+
+== T18 a falha de um teste da CURA reprova sem rerun (tolerância zero) e desfaz
+  PASS T18: rc 1
+  PASS T18: recusa nomeada pelo id
+  PASS T18: o desfazer reverteu o patch
+  PASS T18: nenhum rerun de «instável»
+  PASS T18: HEAD inalterado
+  PASS T18: árvore rastreada limpa
+  PASS T18: sem .asc
+  PASS T18: sentinel intacto
+  PASS T18: nenhum worktree da base sobrou
+
+== T19 patch com cabeçalho estrutural recusa no P0, pelo nome, antes de aplicar
+  PASS T19: rc 1
+  PASS T19: recusa nomeada
+  PASS T19: nada foi aplicado
+  PASS T19: o kernel não foi armado
+  PASS T19: árvore rastreada limpa
+  PASS T19: sem .asc
+  PASS T19: sentinel intacto
+  PASS T19: nenhum worktree da base sobrou
+
+== T20 evidência citada pelo sentinel fora do git recusa no P0
+  PASS T20: rc 1
+  PASS T20: recusa nomeada
+  PASS T20: nada foi aplicado
+
+== T22 o sentinel cita o marcador dos campos fora das 4 linhas de campo: recusa no P0
+  PASS T22: rc 1
+  PASS T22: recusa nomeada
+  PASS T22: nada foi aplicado
+  PASS T22: árvore rastreada limpa
+  PASS T22: sem .asc
+  PASS T22: sentinel intacto
+  PASS T22: nenhum worktree da base sobrou
+
+== T10 chave de assinatura fora do allowlist recusa no P0, antes de aplicar
+  PASS T10: rc 1
+  PASS T10: recusa nomeada
+  PASS T10: nada foi aplicado
+  PASS T10: árvore rastreada limpa
+  PASS T10: sem .asc
+  PASS T10: sentinel intacto
+  PASS T10: nenhum worktree da base sobrou
+
+== T15 --check-base: só leitura; nomeia o caminho cuja base difere
+  PASS T15: base = HEAD, rc 0
+  PASS T15: OK nomeado
+  PASS T15: base derivada, rc 1
+  PASS T15: o caminho derivado é nomeado
+  PASS T15: a revisão anterior à deriva, rc 0
+  PASS T15: árvore rastreada limpa
+  PASS T15: sem .asc
+  PASS T15: sentinel intacto
+  PASS T15: nenhum worktree da base sobrou
+
+== T11 id parametrizado com « - » no parâmetro é rerrodado pelo id inteiro
+  PASS T11: rc 0
+  PASS T11: rerrodado pelo id inteiro (com « - »)
+  PASS T11: árvore rastreada limpa
+  PASS T11: sem .asc
+  PASS T11: sentinel intacto
+  PASS T11: nenhum worktree da base sobrou
+
+== T12 o HEAD muda durante a bateria: recusa antes do sentinel e desfaz
+  PASS T12: rc 1
+  PASS T12: recusa nomeada
+  PASS T12: o desfazer reverteu o patch
+  PASS T12: só o commit plantado a mais
+  PASS T12: árvore rastreada limpa
+  PASS T12: sem .asc
+  PASS T12: sentinel intacto
+  PASS T12: nenhum worktree da base sobrou
+
+== T13 um caminho do patch muda durante a bateria: recusa; a receita impressa restaura
+  PASS T13: rc 1
+  PASS T13: recusa nomeada pelo caminho
+  PASS T13: o desfazer diz que um caminho do patch ficou sujo
+  PASS T13: a receita é impressa
+  PASS T13: a receita restaura
+  PASS T13: árvore rastreada limpa
+  PASS T13: sem .asc
+  PASS T13: sentinel intacto
+  PASS T13: nenhum worktree da base sobrou
+
+== T21 o sentinel vivo muda durante a bateria: recusa antes do passo 4; a receita restaura
+  PASS T21: rc 1
+  PASS T21: recusa nomeada
+  PASS T21: a receita é impressa
+  PASS T21: o desfazer reverteu o patch
+  PASS T21: não chegou ao passo 4
+  PASS T21: a receita restaura
+  PASS T21: árvore rastreada limpa
+  PASS T21: sem .asc
+  PASS T21: sentinel intacto
+  PASS T21: nenhum worktree da base sobrou
+
+== T14 modo REAL: um arquivo rastreado FORA do patch sujo pela bateria — commit exato, aviso nomeado
+  PASS T14: rc 0
+  PASS T14: landou
+  PASS T14: aviso depois da bateria
+  PASS T14: aviso depois do commit
+  PASS T14: exatamente um commit novo
+  PASS T14: o commit NÃO inclui o arquivo de fora
+  PASS T14: só o arquivo de fora ficou sujo
+
+== RESUMO
+  195 PASS / 0 FAIL (logs em <scratch>/rehearsal-7/logs)
+  ATENÇÃO: registro de rail SINTÉTICO — refaça o ensaio com o rail-round-N.md real commitado
+
+(área do ensaio preservada para inspeção: <scratch>/rehearsal-7)
+rc=0
+
+######## Ensaio B (suítes inteiras)
+
+
+== montagem
+  origem <scratch>/wt @ 7417740e6445455767ef6e7eff4cf50595438c12
+  área <scratch>/rehearsal-2
+  chave descartável DF2974E9850C0D5766FDA84E62F43FF680C63F35 (no allowlist do remote: 73cc5497)
+  suítes: INTEIRAS
+  registro de rail: SINTÉTICO (a origem ainda não tem rail-round-*.md)
+
+== T0 ceremony-lint e bits de execução no índice
+  PASS T0: ceremony-lint 0 BLOCKING
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/OWNER-AUDITRACE-SIGN.sh modo 100644 no índice
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/OWNER-AUDITRACE-SIGN.sh sem variável colada a caractere não-ASCII
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/test-ceremony-auditrace.sh modo 100644 no índice
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/test-ceremony-auditrace.sh sem variável colada a caractere não-ASCII
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/derive-auditrace-patch.sh modo 100644 no índice
+  PASS T0: .claude/plans/PLAN-194/w-auditrace/derive-auditrace-patch.sh sem variável colada a caractere não-ASCII
+
+== T1 --dry-run no caminho feliz
+  PASS T1: rc 0
+  PASS T1: ensaio concluído
+  PASS T1: pós-imagem conferida
+  PASS T1: os testes da cura rodaram de verdade
+  PASS T1: HEAD inalterado
+  PASS T1: árvore rastreada limpa
+  PASS T1: sem .asc
+  PASS T1: sentinel intacto
+  PASS T1: nenhum worktree da base sobrou
+
+== T2 modo REAL sob pseudo-TTY, chave descartável, uma falha instável injetada
+  PASS T2: rc 0
+  PASS T2: landou
+  PASS T2: exatamente um commit novo sobre o HEAD
+  PASS T2: o commit tem exatamente os 3 caminhos + sentinel + .asc
+  PASS T2: a assinatura verifica
+  PASS T2: assinada pela chave descartável
+  PASS T2: os 3 blobs landados são os do index pós-imagem do patch
+  PASS T2: o hook landou com modo 100755
+  PASS T2: sentinel tem «Anchor-SHA: 73cc54970f0a3d9dbfd551f13f0ea78e88a00973»
+  PASS T2: sentinel tem «Patch-sha256: 51d4f8138b31d42009c8fda4e36ef0ba50bb8f12aa6213ae61358976cbd89a40»
+  PASS T2: sentinel tem «Rail-Record-sha256: c0191ad885446a99445eb58882c88a8936b1ff30fd4d92c745c51e0d269a155b»
+  PASS T2: sentinel tem «Data: 2026-10-02»
+  PASS T2: nenhum TO-FILL-BY-SIGN no sentinel assinado
+  PASS T2: mensagem de commit completa (trailer presente)
+  PASS T2: o SIGN conferiu o signatário contra o allowlist
+  PASS T2: a mensagem nomeia o signatário
+  PASS T2: a mensagem declara o CASO
+  PASS T2: árvore limpa depois do land
+  PASS T2: nenhum worktree da base sobrou
+  PASS T2: os testes da cura passam na árvore landada (censo por AST incluído)
+
+== T5 base derivada (um caminho do patch mudou fora dos hunks) recusa no P0
+  PASS T5: rc 1
+  PASS T5: a deriva é nomeada pelo caminho
+  PASS T5: nada foi aplicado
+  PASS T5: árvore rastreada limpa
+  PASS T5: sem .asc
+  PASS T5: sentinel intacto
+  PASS T5: nenhum worktree da base sobrou
+
+== T6 registro de rail de OUTRO patch, e veredito não aceito, recusam no P0
+  PASS T6-subject: rc 1
+  PASS T6-subject: recusa nomeada
+  PASS T6-subject: árvore rastreada limpa
+  PASS T6-subject: sem .asc
+  PASS T6-subject: sentinel intacto
+  PASS T6-subject: nenhum worktree da base sobrou
+  PASS T6-verdict: rc 1
+  PASS T6-verdict: recusa nomeada
+  PASS T6-verdict: árvore rastreada limpa
+  PASS T6-verdict: sem .asc
+  PASS T6-verdict: sentinel intacto
+  PASS T6-verdict: nenhum worktree da base sobrou
+
+== T7 modo real SEM TTY recusa antes de tudo
+  PASS T7: rc 1
+  PASS T7: recusa nomeada
+  PASS T7: árvore rastreada limpa
+  PASS T7: sem .asc
+  PASS T7: sentinel intacto
+  PASS T7: nenhum worktree da base sobrou
+
+== T10 chave de assinatura fora do allowlist recusa no P0, antes de aplicar
+  PASS T10: rc 1
+  PASS T10: recusa nomeada
+  PASS T10: nada foi aplicado
+  PASS T10: árvore rastreada limpa
+  PASS T10: sem .asc
+  PASS T10: sentinel intacto
+  PASS T10: nenhum worktree da base sobrou
+
+== T15 --check-base: só leitura; nomeia o caminho cuja base difere
+  PASS T15: base = HEAD, rc 0
+  PASS T15: OK nomeado
+  PASS T15: base derivada, rc 1
+  PASS T15: o caminho derivado é nomeado
+  PASS T15: a revisão anterior à deriva, rc 0
+  PASS T15: árvore rastreada limpa
+  PASS T15: sem .asc
+  PASS T15: sentinel intacto
+  PASS T15: nenhum worktree da base sobrou
+
+== RESUMO
+  77 PASS / 0 FAIL (logs em <scratch>/rehearsal-2/logs)
+  ATENÇÃO: registro de rail SINTÉTICO — refaça o ensaio com o rail-round-N.md real commitado
+
+(área do ensaio preservada para inspeção: <scratch>/rehearsal-2)
+rc=0
+
+# Ensaio B, bateria do T1 (dry-run) e do T2 (modo real), copiada dos logs do SIGN:
+# --- t1
+# ===== 3/7 bateria (gates de corpus + testes da cura + suítes do pytest.ini, julgados contra a árvore sem o patch)
+#    ok: test-env-hygiene
+#    ok: inventário de variáveis de ambiente
+#    ok: hooks ativos executáveis
+#    ok: contamination
+#    ok: build-plugin --check
+#    ok: mapa comando→skill→hook
+#    ok: docs-freshness
+#    ok: verify-counts
+#    ok: ceremony-lint
+#    ok: validate-governance (Errors: 0)
+#    testes da cura: 30 passed in 7.00s
+#    suítes do pytest.ini com a divisão de marcadores do CI (paralela e serial)
+#    passada paralela: 1 failed, 15418 passed, 148 skipped, 9 xfailed, 1 xpassed, 38 warnings in 413.56s (0:06:53)
+#    passada serial: 5 failed, 1015 passed, 9 skipped, 15576 deselected, 6 xfailed in 291.65s (0:04:51)
+#    instável (passou isolada, com o patch, na tentativa 1 de 3): .claude/hooks/tests/test_lifecycle_edge_cases.py::TestLargePayloads::test_output_scan_1mb_completes
+#    instável (passou isolada, com o patch, na tentativa 1 de 3): .claude/hooks/tests/test_lifecycle_edge_cases.py::TestLargePayloads::test_prompt_submit_1mb_completes
+#    instável (passou isolada, com o patch, na tentativa 1 de 3): .claude/hooks/tests/test_lifecycle_edge_cases.py::TestOutputScanPerfRigorous::test_p99_10kb
+#    instável (passou isolada, com o patch, na tentativa 1 de 3): .claude/hooks/tests/test_lifecycle_edge_cases.py::TestOutputScanPerfRigorous::test_p99_1kb
+#    instável (passou isolada, com o patch, na tentativa 1 de 3): .claude/hooks/tests/test_lifecycle_edge_cases.py::TestOutputScanPerfRigorous::test_p99_5kb
+#    instável (passou isolada, com o patch, na tentativa 1 de 3): .claude/scripts/tests/test_release_bump_sites.py::test_npm_docs_carry_no_bare_version_literal
+#    bateria: nenhuma falha nova em relação à árvore sem o patch
+# --- t2
+# ===== 3/7 bateria (gates de corpus + testes da cura + suítes do pytest.ini, julgados contra a árvore sem o patch)
+#    ok: test-env-hygiene
+#    ok: inventário de variáveis de ambiente
+#    ok: hooks ativos executáveis
+#    ok: contamination
+#    ok: build-plugin --check
+#    ok: mapa comando→skill→hook
+#    ok: docs-freshness
+#    ok: verify-counts
+#    ok: ceremony-lint
+#    ok: validate-governance (Errors: 0)
+#    testes da cura: 30 passed in 6.19s
+#    suítes do pytest.ini com a divisão de marcadores do CI (paralela e serial)
+#    passada paralela: 1 failed, 15418 passed, 148 skipped, 9 xfailed, 1 xpassed, 39 warnings in 361.88s (0:06:01)
+#    passada serial: 1020 passed, 9 skipped, 15576 deselected, 1 xfailed, 5 xpassed in 222.19s (0:03:42)
+#    instável (passou isolada, com o patch, na tentativa 1 de 3): .claude/scripts/tests/test_release_bump_sites.py::test_npm_docs_carry_no_bare_version_literal
+#    bateria: nenhuma falha nova em relação à árvore sem o patch

@@ -1,0 +1,62 @@
+# Frequência do descarte por estouro da trava (FileLockTimeout, 2,5 s) do append_entry, antes x depois
+# (PLAN-194, cura auditrace) — pedido do CEO a partir do rascunho do ADR-055-AMEND-4, §7; alimenta o G7 da W2
+# (contagem datada dos breadcrumbs would-log do agent_spawn).
+# Substrato: macOS 27, Python 3.9.6, 16 CPUs, máquina compartilhada (load no intervalo, abaixo).
+# Instrumento: lockstress.py do builder (no checkpoint do pacote): P interpretadores carregam a cópia do
+# audit_log.py, esperam um arquivo 'go' e chamam append_entry N vezes SEGUIDAS (sem pausa) no MESMO log de
+# sandbox; contados por repetição: linhas gravadas, breadcrumbs 'lock timeout' (o descarte documentado do
+# fail-open, would-log) e verify_chain(). Variantes intercaladas ABAB. A chave é cunhada uma vez antes
+# (condição 68 fora do sujeito). O timeout de 2,5 s NÃO foi mudado.
+# base = blob 5ab3cb9a (igual em main 6a9abb10, 11c71a42 e 48f03b3a).
+
+## Medição FINAL — S362, 2026-10-02 UTC
+# patched = a pós-imagem da rodada 2 do rail (blob f66cb3d8). A pós-imagem final (rodada 3, blob 4af77462)
+# difere dela só na docstring de _emit_rotation_marker_under_lock: o código medido é o mesmo.
+  8 gravadores x 30 anexos, 6 repetições — 2026-10-02T04:07:36Z, load [24.3, 28.8, 38.9]
+    base     descartes    0 de   1440 linhas; cadeia íntegra em 0/6; parede média 0.423 s
+    patched  descartes    0 de   1440 linhas; cadeia íntegra em 6/6; parede média 0.460 s
+  16 gravadores x 30 anexos, 4 repetições — 2026-10-02T04:08:01Z, load [24.5, 28.5, 38.5]
+    base     descartes    0 de   1920 linhas; cadeia íntegra em 0/4; parede média 0.751 s
+    patched  descartes    0 de   1920 linhas; cadeia íntegra em 4/4; parede média 0.830 s
+  48 gravadores x 20 anexos, 4 repetições — 2026-10-02T04:08:21Z, load [21.3, 27.5, 37.9]
+    base     descartes    0 de   3840 linhas; cadeia íntegra em 0/4; parede média 1.401 s
+    patched  descartes    0 de   3840 linhas; cadeia íntegra em 4/4; parede média 1.588 s
+  32 gravadores x 150 anexos, 6 repetições — 2026-10-02T04:08:48Z, load [19.3, 26.4, 37.1]
+    base     descartes    0 de  28800 linhas; cadeia íntegra em 0/6; parede média 3.811 s
+    patched  descartes   17 de  28800 linhas; cadeia íntegra em 6/6; parede média 3.947 s
+  32 gravadores x 150 anexos, 6 repetições — 2026-10-02T04:09:58Z, load [24.0, 26.3, 36.2]
+    base     descartes    0 de  28800 linhas; cadeia íntegra em 0/6; parede média 4.883 s
+    patched  descartes   12 de  28800 linhas; cadeia íntegra em 6/6; parede média 4.319 s
+  total base     descartes 0 de 64800 (0.000%); cadeia íntegra em 0/26 repetições
+  total patched  descartes 29 de 64800 (0.045%); cadeia íntegra em 26/26 repetições
+
+## Medição anterior — S361, 2026-10-02 UTC
+# patched = a pós-imagem da rodada 1 (mesmo caminho sem rotação; difere só em comentários e no ramo de rotação).
+  8 gravadores x 30 anexos, 6 repetições — 2026-10-02T01:14:41Z, load [30.0, 51.0, 53.9]
+    base     descartes    0 de   1440 linhas; cadeia íntegra em 0/6; parede média 0.404 s
+    patched  descartes    0 de   1440 linhas; cadeia íntegra em 6/6; parede média 0.429 s
+  16 gravadores x 30 anexos, 4 repetições — 2026-10-02T01:15:06Z, load [24.7, 48.0, 52.7]
+    base     descartes    0 de   1920 linhas; cadeia íntegra em 0/4; parede média 0.701 s
+    patched  descartes    0 de   1920 linhas; cadeia íntegra em 4/4; parede média 0.749 s
+  48 gravadores x 20 anexos, 4 repetições — 2026-10-02T01:17:25Z, load [9.4, 33.2, 46.0]
+    base     descartes    0 de   3840 linhas; cadeia íntegra em 0/4; parede média 1.290 s
+    patched  descartes    0 de   3840 linhas; cadeia íntegra em 4/4; parede média 1.390 s
+  32 gravadores x 150 anexos, 4 repetições — 2026-10-02T01:18:02Z, load [10.0, 30.8, 44.6]
+    base     descartes    0 de  19200 linhas; cadeia íntegra em 0/4; parede média 5.038 s
+    patched  descartes   12 de  19200 linhas; cadeia íntegra em 4/4; parede média 5.236 s
+  32 gravadores x 150 anexos, 6 repetições — 2026-10-02T01:19:21Z, load [35.7, 33.3, 44.3]
+    base     descartes    0 de  28800 linhas; cadeia íntegra em 0/6; parede média 5.986 s
+    patched  descartes   39 de  28800 linhas; cadeia íntegra em 6/6; parede média 6.294 s
+  total base     descartes 0 de 55200 (0.000%); cadeia íntegra em 0/24 repetições
+  total patched  descartes 51 de 55200 (0.092%); cadeia íntegra em 24/24 repetições
+
+# Leitura: até 48 gravadores em paralelo com <= 30 anexos cada, ZERO descartes nas duas variantes, nas duas
+# medições. Na saturação sintética (32 gravadores x 150 anexos seguidos), a cura descartou 29 de 57.600
+# linhas (0,05%) na medição final e 51 de 48.000 (0,11%) na anterior; a pré-imagem, 0 — mas quebrou a
+# cadeia em TODAS as repetições. Causa provável (inferência, não medida à parte): a seção crítica passou a
+# conter a leitura da chave e do elo, o cálculo do HMAC e a serialização (parede média de +4% a +13% nas
+# mesmas cargas; numa das baterias de 32 x 150 a cura foi 12% mais rápida), e quem espera a trava faz polling de 50 ms com prazo
+# absoluto de 2,5 s. O descarte é o caminho fail-open documentado (breadcrumb would-log, sessão nunca
+# bloqueada), mas é um registro de auditoria perdido: o audit_emit roteia o mesmo estouro para o arquivo de
+# fallback (cura M9) e o append_entry só deixa o breadcrumb — assimetria anterior a esta cerimônia, não
+# mudada aqui. Prazo e rota do estouro ficam para decisão (W2 / ADR-055-AMEND-4).

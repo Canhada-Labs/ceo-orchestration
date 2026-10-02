@@ -1,0 +1,44 @@
+# Controle vermelho da cura auditrace (PLAN-194) — os testes FINAIS (rodada 3 do rail) contra o código ANTERIOR
+# medido em 2026-10-02 (S362), macOS 27, Python 3.9.6, pytest 7.3.0, máquina compartilhada
+# base: main 399efbaa (audit_log.py blob 5ab3cb9a = pré-imagem do patch); testes: os da pós-imagem
+# comando: PYTHONPATH=. python3 -m pytest .claude/hooks/tests/test_two_writer_chain.py .claude/hooks/tests/test_audit_log.py -q --tb=line -rfE
+# caminhos locais redigidos para <ensaio>
+
+<ensaio>/.claude/hooks/tests/test_two_writer_chain.py:309: AssertionError: Lists differ: ['.claude/hooks/audit_log.py:1267'] != []
+<ensaio>/.claude/hooks/tests/test_two_writer_chain.py:358: AssertionError: Lists differ: [(True, True)] != [(True, False)]
+<ensaio>/.claude/hooks/tests/test_two_writer_chain.py:417: AssertionError: Lists differ: [('9680635ee64ed5bee8cc23aba56abfd3da6af98c949d821224c3f84181c2ad6a', None)] != [(None, 'chain_reset_marker_missing')]
+<ensaio>/.claude/hooks/tests/test_two_writer_chain.py:400: AssertionError: Lists differ: ['agent_spawn'] != ['chain_reset_marker', 'agent_spawn']
+<ensaio>/.claude/hooks/tests/test_two_writer_chain.py:291: AssertionError: False is not true : chain broken: tamper hmac_mismatch line=15
+<ensaio>/.claude/hooks/tests/test_two_writer_chain.py:291: AssertionError: False is not true : chain broken: tamper hmac_mismatch line=12
+<ensaio>/.claude/hooks/tests/test_audit_log.py:198: AssertionError: Lists differ: ['agent_spawn'] != ['chain_reset_marker', 'agent_spawn']
+=========================== short test summary info ============================
+FAILED .claude/hooks/tests/test_two_writer_chain.py::TestPrevHmacReadCensus::test_every_chain_writer_reads_the_predecessor_under_the_lock
+FAILED .claude/hooks/tests/test_two_writer_chain.py::TestReadToAppendWindow::test_no_foreign_append_between_prev_read_and_append
+FAILED .claude/hooks/tests/test_two_writer_chain.py::TestRotationByThisWriter::test_marker_append_failure_leaves_this_line_unchained
+FAILED .claude/hooks/tests/test_two_writer_chain.py::TestRotationByThisWriter::test_rotation_starts_fresh_log_with_marker_and_both_files_verify
+FAILED .claude/hooks/tests/test_two_writer_chain.py::TestParallelWritersChain::test_parallel_spawn_and_spool_emit_writers_keep_the_chain
+FAILED .claude/hooks/tests/test_two_writer_chain.py::TestParallelWritersChain::test_parallel_spawn_and_sync_emit_writers_keep_the_chain
+FAILED .claude/hooks/tests/test_audit_log.py::TestAppendEntryIntegration::test_rotates_when_over_size_threshold
+7 failed, 24 passed in 3.22s
+
+# Pelos marcadores do CI, mesma base, mesmos dois arquivos:
+#   -n auto -m 'not serial': 4 failed, 22 passed — censo, rotação com marcador (x2 em test_two_writer_chain)
+#     e test_rotates_when_over_size_threshold
+#   -m serial: 3 failed, 2 passed, 26 deselected — a janela leitura→anexo e as duas corridas
+
+# Falha do anexo do marcador (achado P1 da rodada 1 do rail), unittest com a cópia carregada de um diretório
+# fora da árvore (sem escrever o canônico):
+#   pós-imagem da rodada 1 (blob fa9cb9f8): test_marker_append_failure_leaves_this_line_unchained REPROVA —
+#     a linha do agent_spawn sai ASSINADA sobre o marcador ausente (hmac de 64 hex, hmac_error nulo)
+#   pós-imagem final: o mesmo teste PASSA (hmac nulo, hmac_error chain_reset_marker_missing)
+
+# Repetição (unittest, 10 rodadas cada; TestParallelWritersChain x2 + TestReadToAppendWindow da rodada 3 —
+# janela de 1,0 s contada do sinal «o filho vai tomar a trava»):
+#   código anterior: 10/10 rodadas FAILED (failures=3); a janela acusa (True, True): o filho chegou à trava
+#     e a linha dele entrou entre a leitura do elo e o anexo
+#   código novo: 10/10 OK
+# O censo por AST lê o arquivo do disco: sobre a pré-imagem nomeia .claude/hooks/audit_log.py:1267;
+# sobre a pós-imagem devolve (1 leitura, 0 fora da trava); audit_emit.py (1, 0). spool_writer.py grava
+# a cadeia mas não chama read_prev_hmac (lê o elo da cauda do log, sob a trava); check_precompact_continuity.py
+# não nomeia primitiva de escrita: os dois ficam fora do censo.
+# O verde do arquivo inteiro (censo incluído) na árvore landada é o T2 do ensaio (rehearsal-S361.txt).
