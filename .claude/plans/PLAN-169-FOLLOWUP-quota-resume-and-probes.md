@@ -1,8 +1,9 @@
 ---
 id: PLAN-169-FOLLOWUP-quota-resume-and-probes
 title: Quota-resume, probes W4.2.0 e marcador do 12º site
-status: reviewed
+status: executing
 reviewed_at: 2026-10-01
+executing_at: 2026-10-02
 reviewed_by: "Owner - Q13 alínea (e), aceite em bloco das recomendações no chat da S361 (2026-10-01): OQ-1 e OQ-2 respondidas como no texto"
 created: 2026-09-15
 owner: CEO
@@ -135,11 +136,21 @@ exige.
 
 - [ ] AC-4 fechado com evidência ou impossibilidade registrada de forma falsificável
 - [ ] AC-5 fechado com controle positivo e negativo
-- [ ] AC-7 fechado com as duas evidências (perna verde resolvida pela OQ-1 com os
-      bumps 1.4.1/1.4.2; falta o controle vermelho persistido, um teste livre)
+- [x] AC-7 fechado com as duas evidências: perna verde = os bumps reais 1.4.1/1.4.2
+      (OQ-1); perna vermelha persistida em
+      `.claude/scripts/tests/test_verify_counts_framework_marker.py` (S361, 2026-10-02:
+      4 testes; o `verify-counts.sh` real numa árvore descartável; dessincronizar o
+      marcador ⇒ rc 1 nomeando o site; mutação com a entrada de `VERSION_SITES` apagada ⇒
+      4/4 vermelhos; tripwire por bytes do marcador vivo)
 
 ## Progress log
 
 - 2026-10-01 (S361): `status: draft → reviewed` por decisão do Owner (Q13 alínea
   (e), aceite em bloco das recomendações no chat). OQ-1 e OQ-2 respondidas e
   dobradas nos itens AC-4 e AC-7. Nenhum item executado ainda.
+- 2026-10-02 (S361, noite): AC-7 FECHADO — perna vermelha persistida em
+  `.claude/scripts/tests/test_verify_counts_framework_marker.py` (4 testes; mutação morde 4/4).
+  Achado lateral, sem dono ainda: o oráculo fica VERDE com o `.claude/.framework-version`
+  AUSENTE (o site é pulado quando o arquivo não existe, por desenho, para fixtures
+  sintéticas); `verify-counts.sh` é membro do manifesto ADR-192 ⇒ mexer nisso pede cerimônia
+  (decisão do Owner). Não fixado no teste para não cimentar o comportamento.
