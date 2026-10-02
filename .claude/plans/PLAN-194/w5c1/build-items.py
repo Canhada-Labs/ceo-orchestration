@@ -1231,7 +1231,7 @@ def score(out: str, salt: str, allow_selftest: bool = False) -> Tuple[int, Dict[
                 grades[(iid, e["label"])] = g
     control_fail: List[str] = []
     per_arm: Dict[str, Dict[str, Any]] = {m: {"n_valid": 0, "found_yes": 0, "partial": 0, "fp": 0,
-                                              "refusals": 0, "costs": [], "out_tokens": [],
+                                              "refusals": 0, "cost_pairs": [], "out_tokens": [],
                                               "wall_s": []} for m in ARMS}
     per_item: List[Dict[str, Any]] = []
     for item in ITEMS:
@@ -1260,11 +1260,7 @@ def score(out: str, salt: str, allow_selftest: bool = False) -> Tuple[int, Dict[
             fp = g.get("false_positives")
             arm["fp"] += fp if isinstance(fp, int) and not isinstance(fp, bool) else 0
             arm["refusals"] += 1 if rec.get("refusal") else 0
-            cost = rec.get("cost_tok_usd")
-            if not isinstance(cost, (int, float)):
-                cost = rec.get("cost_cc_usd")
-            if isinstance(cost, (int, float)):
-                arm["costs"].append(float(cost))
+            arm["cost_pairs"].append((rec.get("cost_tok_usd"), rec.get("cost_cc_usd")))
             tok = (rec.get("tokens") or {}).get("output")
             if isinstance(tok, int):
                 arm["out_tokens"].append(tok)
@@ -1278,7 +1274,7 @@ def score(out: str, salt: str, allow_selftest: bool = False) -> Tuple[int, Dict[
         arms_out[m] = {"n_valid": a["n_valid"], "void": n_planned - a["n_valid"],
                        "found_yes": a["found_yes"], "partial": a["partial"],
                        "false_positives": a["fp"], "refusals": a["refusals"],
-                       "median_cost_usd": _median(a["costs"]),
+                       "median_cost_usd": None,
                        "median_output_tokens": _median([float(x) for x in a["out_tokens"]]),
                        "median_wall_s": _median(a["wall_s"])}
     result["arms"] = arms_out
@@ -1293,11 +1289,25 @@ def score(out: str, salt: str, allow_selftest: bool = False) -> Tuple[int, Dict[
         result["verdict"] = "INCONCLUSIVO"
         result["reason"] = "vazios >= %d num braço" % VOID_LIMIT
         return 2, result
-    med_ref, med_sub = arms_out[ref]["median_cost_usd"], arms_out[sub]["median_cost_usd"]
-    if not med_ref or med_sub is None:
+    # Custo: UMA fonte para TODOS os ensaios válidos dos dois braços — tokens x
+    # tabela fixa; senão total_cost_usd; valor ausente, zero ou fonte mista =
+    # custo não medido (um zero faria o braço parecer "barato" por engano).
+    pairs = per_arm[ref]["cost_pairs"] + per_arm[sub]["cost_pairs"]
+
+    def _usable(idx: int) -> bool:
+        return bool(pairs) and all(isinstance(p[idx], (int, float)) and not isinstance(p[idx], bool)
+                                   and p[idx] > 0 for p in pairs)
+
+    source = "tokens" if _usable(0) else ("total_cost_usd" if _usable(1) else None)
+    if source is None:
         result["verdict"] = "INCONCLUSIVO"
-        result["reason"] = "custo não medido num braço"
+        result["reason"] = "custo não medido (sem fonte única e positiva para todos os ensaios válidos)"
         return 2, result
+    idx = 0 if source == "tokens" else 1
+    for m in ARMS:
+        arms_out[m]["median_cost_usd"] = _median([float(p[idx]) for p in per_arm[m]["cost_pairs"]])
+    result["cost_source"] = source
+    med_ref, med_sub = arms_out[ref]["median_cost_usd"], arms_out[sub]["median_cost_usd"]
     d_ref, n_ref = arms_out[ref]["found_yes"], arms_out[ref]["n_valid"]
     d_sub, n_sub = arms_out[sub]["found_yes"], arms_out[sub]["n_valid"]
     # não-inferior  <=>  d_sub/n_sub >= d_ref/n_ref - DELTA_PP/100 (aritmética inteira)
@@ -1339,6 +1349,8 @@ usage = {served + ("[1m]" if mode == "1m" else ""): {
     "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0}}
 if mode == "extra":
     usage["claude-haiku-4-5"] = {"inputTokens": 10, "outputTokens": 10}
+if mode == "notokens":
+    usage = {served: {"costUSD": 0.3}}
 doc = {"type": "result", "subtype": "success", "is_error": False, "result":
        "As Claude Sonnet 5.5 I found: line 1 is wrong.", "modelUsage": usage,
        "total_cost_usd": float(os.environ.get("W5C1_STUB_COST", "0.3")), "duration_ms": 1000,
@@ -1453,6 +1465,23 @@ def _selftest(repo: str) -> List[str]:
         grade_all(out, 20, 20)
         rc, res = score(out, salt, allow_selftest=True)
         expect("void-arm-inconclusive", rc == 2 and res.get("verdict") == "INCONCLUSIVO")
+
+        # (b2) sem tokens no CLI: cai para total_cost_usd em TODOS; custo zero -> INCONCLUSIVO.
+        os.environ["W5C1_STUB_MODE"] = "notokens"
+        out = fresh("notok")
+        run_all(out)
+        blind(out, salt)
+        grade_all(out, 18, 18)
+        rc, res = score(out, salt, allow_selftest=True)
+        expect("cost-fallback-total", rc == 0 and res.get("cost_source") == "total_cost_usd")
+        os.environ["W5C1_STUB_COST"] = "0"
+        out = fresh("zerocost")
+        run_all(out)
+        blind(out, salt)
+        grade_all(out, 18, 18)
+        rc, res = score(out, salt, allow_selftest=True)
+        expect("zero-cost-inconclusive", rc == 2 and res.get("verdict") == "INCONCLUSIVO")
+        os.environ["W5C1_STUB_COST"] = "0.3"
 
         # (c2) limite de vazios: 5 vazios num braço -> INCONCLUSIVO; 4 -> decide.
         for swap_first, want_rc, name in ((9, 2, "void-limit-5-inconclusive"), (8, 0, "void-4-decides")):
@@ -1583,8 +1612,8 @@ def check(repo: str) -> int:
         problems.append("plan: tags are not t01..t40")
     try:
         st = _selftest(repo)
-    except InstrumentError as exc:
-        st = ["aborted (%s)" % exc]
+    except Exception as exc:  # um autoteste que explode é vermelho NOMEADO, nunca traceback mudo
+        st = ["aborted (%s: %s)" % (type(exc).__name__, exc)]
     problems.extend("selftest: %s" % f for f in st)
     for p in problems:
         print("FAIL " + p)

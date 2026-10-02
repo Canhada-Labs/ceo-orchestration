@@ -109,7 +109,7 @@ descartável fora do repositório e «nunca repetir um ensaio pago válido».
 
 | arquivo | sha256 |
 |---|---|
-| `build-items.py` | `0904879abe42ef07a44de2af4311a342333777518ae1472edb0c6422756f09a7` |
+| `build-items.py` | `edd38a4503c4b46013863bf6616309bf2f8fb26c2d23dbcf069b3acc4f7cd63d` |
 | `wf-model-ab.js` | `a67e84bea7a52f26801ce9e97f466b9b853c7e6006fc77c6701f800f71bde7d1` |
 
 ---
@@ -231,9 +231,12 @@ positivos e as recusas). Sem vazios, `válidos = 20`.
 **Regra de custo = 1,2×.** `C = mediana(custo por revisão válida do 5.5) /
 mediana(custo por revisão válida do 5)`. Custo = tokens do `modelUsage` × tabela
 FIXA igual nos dois braços (US$ 2 entrada, 10 saída, 0,20 leitura de cache, 2,50
-escrita de cache, por milhão de tokens; preço público dos dois modelos); se o CLI
-não trouxer tokens, usa `total_cost_usd`. Como o preço por token é o mesmo, `C`
-mede a diferença de consumo. Barato ⇔ `C ≤ 1,2`.
+escrita de cache, por milhão de tokens; preço público dos dois modelos). UMA fonte
+para TODOS os ensaios válidos dos dois braços: tokens, se todos os trouxerem; senão
+`total_cost_usd`, se todos forem positivos; valor ausente, zero ou fonte mista ⇒
+INCONCLUSIVO (um zero faria um braço parecer barato por engano). A fonte usada sai
+em `score.json` (`cost_source`). Como o preço por token é o mesmo, `C` mede a
+diferença de consumo. Barato ⇔ `C ≤ 1,2`.
 
 **`ANT-02`.** Os dois HTTP 400 do adapter (`thinking` `disabled`; `tool_choice`
 forçado com `thinking` ligado) NÃO são medidos neste run (D-10: fora da 1.4.3). A
@@ -263,7 +266,7 @@ uma medição futura:
 | **C4** | inferior | > 1,2× | **não medida** | **FAIL** — idem C3 |
 
 Fora das células (vêm ANTES delas): **INVÁLIDO** (V0, V1) e **INCONCLUSIVO** (V4,
-V5, custo não medido num braço). Nenhum dos dois é verde: a W5c não segue para o
+V5, custo sem fonte única e positiva). Nenhum dos dois é verde: a W5c não segue para o
 SIGN sem PASS; o CEO refaz (mesmo pré-registro) ou leva ao Owner.
 
 **Critério de vermelho.** O resultado é VERMELHO (FAIL) se, e só se, a validade está
@@ -285,7 +288,8 @@ inválido; variante `[1m]` ⇒ válido; 3 tentativas e esgota; estouro de orçam
 vazio; teto do run ⇒ recusa sem chamar o CLI; versão do CC diferente ⇒ recusa sem
 chamar; prompt adulterado ⇒ recusa; resposta adulterada ⇒ o cegamento recusa;
 ensaio válido nunca é repetido; respostas cegas sem nome de modelo; 18 × 16 ⇒ C1;
-18 × 15 ⇒ C3; custo 1,3× ⇒ C2; controle do avaliador errado ⇒ INCONCLUSIVO; 5
+18 × 15 ⇒ C3; custo 1,3× ⇒ C2; sem tokens ⇒ custo por `total_cost_usd` em todos;
+custo zero ⇒ INCONCLUSIVO; controle do avaliador errado ⇒ INCONCLUSIVO; 5
 vazios num braço ⇒ INCONCLUSIVO e 4 ⇒ decide; registro de autoteste num run real ⇒
 INVÁLIDO. Cada uma dessas afirmações foi provada vermelha por mutação do código
 (o mutante correspondente faz o `--check` falhar) — registro no retorno da FD-08.
