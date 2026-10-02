@@ -416,3 +416,15 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
 - **2026-09-07 (S348, madrugada autônoma) — W1d METADE LIVRE feita:** `.claude/commands/spawn.md` deixa de descrever o scaffold padrão como `## SKILL CONTENT` (o injetor emite `## SKILL REFERENCE` por padrão desde o ADR-090; `## SKILL CONTENT` só sob `--mode=inline` ou `CEO_SOTA_DISABLE=1`) — 5 passagens corrigidas (dispatch mitigado, Step 6, Step 7, duas regras «NEVER»), mais a instrução de cortar os blocos `## DISPATCH MITIGATION`/`## DISPATCH MODEL` antes de passar o prompt ao Agent (spawn aninhado bloqueado pelo classificador, medido na S348). Verificação: `grep -c 'injected via .## SKILL CONTENT' .claude/commands/spawn.md` = 0. **Metade CANÔNICA pendente:** a propagação do teto G12 (6 → 8 read-only) vive em `.claude/skills/core/parallelization-by-default/SKILL.md` §«Ceiling enforcement» (oráculo `--is-canonical` = 1) — cerimônia própria, com a medição PLAN-083 P0-1 re-lida antes de mudar o número.
 - **2026-09-15 (S353, 20:5x BRT; Owner presente; AskUserQuestion; rótulos VERBATIM):** proposta do CEO de re-escopo para fechar (W1 entregue pelo toolkit do PLAN-188, W2 → follow-up) — Owner: «Manter como está». O plano segue `executing` com W0 + W1 + W2; W1 continua esperando o PLAN-188; o item do censo que falta (controle do caminho de bloqueio de `check_cost_envelope.py`) segue livre. Ledger: `PLAN-186/debate/owner-decisions-S353.md`.
 - **2026-10-01 (S361; Owner por aceite em bloco das recomendações no chat, Q13 alínea (c)):** o PLAN-188 foi CONGELADO por decisão do Owner. A W1 deixa de esperar o toolkit e segue pelo molde por onda. Isso supera a frase «W1 continua esperando o PLAN-188» da entrada de 2026-09-15.
+- **2026-10-02 (S361, noite) — W0 FECHADA:** a única linha «sem controle» da consolidação S348
+  (`check_cost_envelope.py`, caminho de bloqueio) ganhou controle positivo —
+  `.claude/hooks/tests/test_check_cost_envelope_block.py` (8 testes, hook em subprocesso). Três
+  metades: verde como está; vermelho com o bloqueio removido (8/8; mais 5 mutações medidas, cada uma
+  com o seu teste vermelho); verde de novo após `git restore`. Roda nos jobs de hook (matriz, dual-rail,
+  coverage, release). Suítes do CI com o mesmo conjunto de falhas da base (∅), +8 testes; AC do §7
+  passa a 52/52. **Defeito achado, canônico, NÃO curado aqui:** `_safe_emit_capped`
+  (`check_cost_envelope.py:198`) chama `emit_generic("cost_envelope_capped", action=...)` — o
+  `action` vai duas vezes, levanta `TypeError`, o fail-open engole e o evento `cost_envelope_capped`
+  NUNCA é gravado num bloqueio. Varredura AST: único exemplar da classe. Cura = tirar o `action=`
+  (oráculo 1, cerimônia) + teste da emissão; candidato a `PLAN-171-FOLLOWUP-cost-envelope-emit`. O
+  teste novo declara isso e não afirma a emissão (para não travar o defeito como contrato).
