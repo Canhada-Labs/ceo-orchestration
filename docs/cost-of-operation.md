@@ -302,6 +302,55 @@ instrument's `cost-table.yaml` loader). The transcripts block is priced by
 the instrument and says so in its `pricing:` line; unifying the three is a
 separate wave, deliberately out of scope here.
 
+### The routing invariant (PLAN-186 AC-13)
+
+The same instrument that prices the transcripts also asserts, on every
+execution, that **the model a spawn was served equals the model its call
+site declared** (`ceo-cost-transcripts.py`, and therefore the transcripts
+block of `ceo-cost.py` and `budget-summary.py`). The harness's own routing
+of `agent(..., {model})` was measured once, on one build (ADR-144); this is
+the check that does not expire with that build.
+
+- *Declared* is the `model` key of the spawn's `agent-<id>.meta.json`
+  sidecar (what the call passed); absent or `inherit` is no claim and is
+  counted, never a violation. *Served* is `message.model` of the paired
+  transcript, never the agent's self-report.
+- An alias (`opus`, `sonnet`, `haiku`, `fable`) is matched by **family**, a
+  full id exactly. A pinned alias-to-id table was refused on evidence: the
+  same `sonnet` was served as `claude-sonnet-5` and later as
+  `claude-sonnet-5-5` on one harness. The alias-to-served pairs actually
+  observed are printed, never judged.
+- A second predicate covers the VETO floor: a spawn of a VETO archetype
+  must be served inside `VETO_FLOOR_ALLOWED` whatever it declared, because
+  `model: sonnet` served as Sonnet *matches itself* and is still a breach.
+- Verdicts, worst first: `RED` (a violation: `MISMATCH`, `MIXED`,
+  `FLOOR_BREACH`), `INCONCLUSIVE` (something unreadable or unclassified,
+  named), `VACUOUS` (nothing was compared; a vacuous GREEN is refused),
+  `GREEN`.
+- The served model is read from **every** assistant turn, including one the
+  cost report drops for want of `usage`; a turn that cannot be read at all
+  makes the verdict `INCONCLUSIVE`, and so does a message whose chunks
+  disagree about the model when one of them has no `usage` (the terminal
+  chunk cannot be proven; that group is excluded from the comparison, so it
+  can neither raise a violation nor vouch for the routing). A spawn, or a single unreadable record with a
+  valid timestamp, outside the window never gates it, and every string taken
+  from a transcript or sidecar is made printable where it enters the
+  instrument, so none can forge a verdict line.
+
+```bash
+# the verdict is printed on every run; the exit code stays 0 ...
+python3 .claude/scripts/ceo-cost-transcripts.py --since 7d
+# ... unless you ask for the gate: 0 GREEN, 1 RED, 3 not proven
+python3 .claude/scripts/ceo-cost-transcripts.py --since 7d --assert-routing
+```
+
+Out of scope, by design: the seat (it has no sidecar), a spawn that declares
+nothing, the persona-injected `general-purpose` rail (the sidecar does not
+record the archetype), and whether a site's `model:` is the *right* one for
+its task. The detector's own death criteria are pre-registered in the
+module docstring of `ceo-cost-transcripts.py` (K-A1..K-A3, K-B1..K-B2) and
+are pinned by a test.
+
 ## Measuring cost
 
 ### Real-time per-session check

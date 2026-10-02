@@ -97,6 +97,114 @@ regardless of which base table is in play, applied per-model (the
   silently priced at $0 as if it were a genuine zero-cost turn, and never
   guessed.
 
+## Routing invariant (PLAN-186 AC-13, S361)
+
+EVERY execution of this instrument also ASSERTS, from runtime data only,
+that the model a spawn was SERVED equals the model its call site DECLARED
+(``transcript_rollup()['routing']``: the CLI report, the ``--json`` payload,
+and ``collect()``/``render_block()`` for ``ceo-cost.py`` and
+``budget-summary.py``). ADR-144:140 measured ``agent(..., {model})`` routing
+on ONE harness build (n=2) and carries no forward guarantee; a proof taken
+once at land time cannot see the harness going back to ``inherit`` later.
+
+- DECLARED is the ``model`` key of the spawn's ``agent-<id>.meta.json``
+  sidecar: what the call actually passed. It is never read from the text of
+  a script (an instrument that predicts code from text does not converge).
+  Absent or ``inherit`` means NO claim at the site: counted, never a
+  violation.
+- SERVED is ``message.model`` of the paired ``agent-<id>.jsonl``, never the
+  agent's self-report, read through the SAME ``scan_files()``/``dedup()`` as
+  the cost report -- with ONE difference: the served model is a fact of the
+  TURN, not of its bill, so the routing read lifts the ``usage``
+  requirement. A turn the cost report drops for want of ``usage`` (null,
+  absent, empty) is still read here, and an assistant record that cannot be
+  read at all is counted (INCONCLUSIVE), never silently skipped. Chunks of
+  one message resolve to the TERMINAL chunk (highest ``output_tokens``; on a
+  tie the LATER line in file order). A message whose chunks disagree about
+  the model is counted in ``chunk_model_splits`` (informational) when the
+  terminal chunk can be elected from complete information; if one of those
+  chunks has NO ``output_tokens`` the terminal cannot be proven, it is
+  counted in ``chunk_terminal_unprovable``, the group is EXCLUDED from the
+  comparison (its guessed terminal can neither raise a violation nor vouch
+  for the routing) and the verdict is INCONCLUSIVE -- never GREEN, and never
+  RED on that group's account; a RED can only come from another group whose
+  terminal is proven. ``<synthetic>`` is a harness pseudo-model and is
+  ignored.
+- EVERY string taken from a transcript or a sidecar is made printable where
+  it enters the instrument (non-printable characters become ``?``): a model
+  id, a session id, a label or an archetype name cannot forge a verdict line
+  or drive a terminal in ANY renderer.
+- A WINDOW decides first. A sidecar the check cannot trust (unreadable,
+  refused, or a declaration it cannot classify) gates a window only if its
+  spawn has a turn inside it; one from outside is counted as
+  ``out_of_window`` and never reaches the verdict. The same holds record by
+  record: an unreadable assistant record with a valid timestamp OUTSIDE the
+  window leaves before it is counted; only what has no temporal position at
+  all (a torn line, no timestamp) or sits inside the window can make the
+  verdict INCONCLUSIVE, and where that makes a spawn's placement unprovable
+  the check fails closed. The ``declared`` / ``undeclared`` counters stay
+  corpus-wide.
+- LABEL is the sidecar ``description`` (the Workflow ``label``; the native
+  spawn's ``description``).
+- ALIAS -> FAMILY, not alias -> id. ``opus|sonnet|haiku|fable`` are matched
+  by FAMILY, derived from the fleet tables and never retyped; a full id is
+  matched EXACTLY (a ``-YYYYMMDD`` date suffix is tolerated). A pinned
+  alias -> id table was refused on evidence: on one harness the same
+  ``sonnet`` was served as ``claude-sonnet-5`` and later as
+  ``claude-sonnet-5-5``, so such a table is red the day the substrate
+  re-points the alias and green over the very hole it has to see. The
+  alias -> served pairs actually observed are PRINTED, never judged.
+- SECOND PREDICATE (the AC-10 requirement named for whoever closes AC-13):
+  a spawn whose archetype (``customAgentType``, else ``agentType``) is in
+  ``VETO_FLOOR_ROLES`` must be served inside ``VETO_FLOOR_ALLOWED`` --
+  MEMBERSHIP, never a family prefix -- declared or not. Both sets are
+  imported from ``_lib.agent_frontmatter``, never retyped. Declared ==
+  served is silent about the floor (``model: sonnet`` on a VETO spawn
+  matches itself and is still a breach), which is why this is a second
+  predicate and not a corollary of the first.
+- Verdicts, worst first: RED (a violation), INCONCLUSIVE (something the
+  check could not read or classify, named), VACUOUS (nothing was compared:
+  a vacuous GREEN is refused), GREEN. The exit code stays 0 so the cost
+  report is never broken by a routing finding; ``--assert-routing`` turns
+  the verdict into a gate: 0 GREEN, 1 RED, 3 not proven (INCONCLUSIVE or
+  VACUOUS). Out of scope, declared: the seat (no sidecar), spawns that
+  declare nothing, an archetype that the sidecar does not record (the
+  persona-injected ``general-purpose`` rail), and whether a site's
+  ``model:`` is the RIGHT one for its task class (AC-3a / W1).
+
+PRE-REGISTERED DEATH CRITERIA -- fixed here before the first real run;
+changing any number is a plan amendment, never an edit in passing.
+
+  K-A (the detector dies: rebuild or retire it, never tune around it)
+    K-A1 positive control: the synthetic pair in
+         ``test_ceo_cost_transcripts.py`` (declared ``sonnet`` and served
+         an Opus id is RED; declared == served is GREEN) must hold on every
+         CI run. A control that stops biting kills the detector.
+    K-A2 blindness: an execution over a window with >= 20 spawn sidecars
+         and ``declared == 0``, in a window the operator knows contained
+         spawns that passed ``model:``, means the sidecar schema drifted
+         under the detector. It is blind until rebuilt against the new
+         schema. (The ``sidecars`` / ``declared`` / ``undeclared`` counters
+         are printed on every run so this is checkable from the output.)
+    K-A3 noise: three DISTINCT violations (three different sidecars) each
+         judged a FALSE POSITIVE of the predicate IN WRITING means the
+         predicate that fired is re-scoped by an ADR or deleted. A TRUE
+         positive is not noise: a deliberate below-floor probe, or a
+         harness fallback that really served another model, stays RED for
+         as long as its spawn is inside the window. There is deliberately
+         no suppression list in this file.
+  K-B (what a RED means: the lever, not the detector)
+    K-B1 a MISMATCH (no served turn on the declared model) on a site that
+         declares ``model:``, reproduced by ONE control spawn with the same
+         declaration on the same harness build, means ``model:`` does not
+         route on that build: the explicit sites of W1/AC-3a are inert
+         there, ADR-144's measurement is amended, and the premise "route
+         builders by ``model:``" is suspended until a build whose control
+         passes.
+    K-B2 one FLOOR_BREACH restarts, from zero, the PLAN-186 W3
+         end-of-transition clock ("one full wave with no floor violation
+         registered by the permanent detector").
+
 Stdlib-only, Python >= 3.9. Read-only: this script writes nothing.
 """
 from __future__ import annotations
@@ -108,7 +216,7 @@ import os
 import re
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -198,6 +306,21 @@ def normalize_model_id(raw: Optional[str]) -> Optional[str]:
     if not isinstance(raw, str) or not raw.strip():
         return None
     return _MODEL_SUFFIX_RE.sub("", raw.strip())
+
+
+def _safe_text(value: Any, limit: int = 80) -> str:
+    """Untrusted text (a transcript or sidecar field) made safe to PRINT.
+
+    Every non-printable character -- an ESC, a newline, a bidi override --
+    becomes ``?``, so a forged ``ROUTING INVARIANT ... GREEN`` line or a
+    terminal escape cannot ride in on a model id, a session id, a label or
+    an archetype name. It is applied where the text ENTERS the instrument
+    (``_extract_record`` for every transcript-derived string, the routing
+    reader for every sidecar-derived one), so every renderer downstream --
+    the CLI table, the JSON report, the two callers' blocks -- inherits it
+    and a new print site cannot forget it.
+    """
+    return "".join(c if c.isprintable() else "?" for c in str(value))[:limit]
 
 
 def _parse_cost_table_yaml(text: str) -> Dict[str, Dict[str, float]]:
@@ -386,6 +509,12 @@ class UsageRecord:
     cache_read_tokens: int = 0
     cache_write_5m: int = 0
     cache_write_1h: int = 0
+    #: False when the line carried no usable ``output_tokens`` (a
+    #: ``usage_optional`` read of a turn whose ``usage`` is null, absent or
+    #: partial). ``dedup()`` elects the terminal chunk by ``output_tokens``,
+    #: so a record without them cannot be ranked: the routing reader must
+    #: not pretend it was.
+    has_usage: bool = True
 
 
 @dataclass
@@ -400,22 +529,47 @@ class ScanCounters:
     sidechain_in_toplevel_skipped: int = 0
     unreadable_files: int = 0
     deduped_records: int = 0
+    #: ``usage_optional`` reads only (the routing reader): one entry per
+    #: assistant record with no ``message`` object -- nothing, not even a
+    #: model id, can be read from it. Each entry is the record's own
+    #: timestamp (``None`` when it has no valid one), so the caller can keep
+    #: a record that is PROVABLY outside the window out of the verdict.
+    unreadable_assistant_ts: List[Optional[datetime]] = field(default_factory=list)
 
 
 def _extract_record(
-    obj: Dict[str, Any], role: str, fallback_session_id: str, counters: ScanCounters
+    obj: Dict[str, Any],
+    role: str,
+    fallback_session_id: str,
+    counters: ScanCounters,
+    usage_optional: bool = False,
 ) -> Optional[UsageRecord]:
+    """One assistant line -> ``UsageRecord`` (or ``None``).
+
+    ``usage_optional`` is the ROUTING reader's switch (PLAN-186 AC-13): the
+    served model is a fact of the turn, not of its token bill, so a turn
+    whose ``usage`` is ``null``, absent or empty is still READ (zero
+    tokens) instead of vanishing. The cost reader keeps the default
+    ``False`` and is unchanged: it drops such a turn exactly as before.
+    """
     if obj.get("type") != "assistant":
         return None
     msg = obj.get("message")
     if not isinstance(msg, dict):
+        if usage_optional:
+            counters.unreadable_assistant_ts.append(_parse_ts(obj.get("timestamp")))
         return None
     usage = msg.get("usage")
     if not isinstance(usage, dict):
-        return None
-    if ("input_tokens" not in usage) and ("output_tokens" not in usage):
-        counters.missing_usage_keys += 1
-        return None
+        if not usage_optional:
+            return None
+        usage = {}
+    elif ("input_tokens" not in usage) and ("output_tokens" not in usage):
+        if not usage_optional:
+            counters.missing_usage_keys += 1
+            return None
+    out_tokens = usage.get("output_tokens")
+    has_usage = isinstance(out_tokens, int) and not isinstance(out_tokens, bool)
     if role == "assento" and obj.get("isSidechain") is True:
         counters.sidechain_in_toplevel_skipped += 1
         return None
@@ -425,15 +579,21 @@ def _extract_record(
         counters.missing_timestamp += 1
         return None
 
+    # Every string below is DATA written by the harness (or by whoever can
+    # write the transcript) and is later PRINTED by four renderers: it is
+    # made printable HERE, once, at the door (``_safe_text``).
     model_raw = msg.get("model")
-    model_norm = normalize_model_id(model_raw) or "(unresolved:%r)" % (model_raw,)
+    model_norm = _safe_text(
+        normalize_model_id(model_raw) or "(unresolved:%r)" % (model_raw,), 120
+    )
 
     session_id = obj.get("sessionId")
     if not isinstance(session_id, str) or not session_id:
         session_id = fallback_session_id
+    session_id = _safe_text(session_id, 200)
 
     effort = obj.get("effort")
-    effort_val = effort if isinstance(effort, str) and effort else None
+    effort_val = _safe_text(effort, 40) if isinstance(effort, str) and effort else None
 
     msg_id = msg.get("id")
     if isinstance(msg_id, str) and msg_id:
@@ -470,12 +630,21 @@ def _extract_record(
         cache_read_tokens=cache_read,
         cache_write_5m=c_5m,
         cache_write_1h=c_1h,
+        has_usage=has_usage,
     )
 
 
 def scan_files(
-    files: List[Path], role: str, project_dir: Path, counters: ScanCounters
+    files: List[Path],
+    role: str,
+    project_dir: Path,
+    counters: ScanCounters,
+    usage_optional: bool = False,
 ) -> List[UsageRecord]:
+    """Read assistant turns from `files`. ``usage_optional`` is the routing
+    reader's switch (see ``_extract_record``): turns without a usable
+    ``usage`` are read, not dropped; the default leaves the cost reader as
+    it always was."""
     out: List[UsageRecord] = []
     for path in files:
         counters.files_scanned += 1
@@ -498,7 +667,7 @@ def scan_files(
                     # live corpus, 640MB scanned in ~2.8s).
                     if b'"assistant"' not in raw:
                         continue
-                    if b'"usage"' not in raw:
+                    if b'"usage"' not in raw and not usage_optional:
                         # Rail r3 P1-2: an assistant-shaped line with no
                         # usage substring is either a renamed/removed
                         # field or a torn write - a DROPPED turn, not a
@@ -518,7 +687,9 @@ def scan_files(
                     if not isinstance(obj, dict):
                         counters.corrupted_lines += 1
                         continue
-                    rec = _extract_record(obj, role, fallback_session_id, counters)
+                    rec = _extract_record(
+                        obj, role, fallback_session_id, counters, usage_optional
+                    )
                     if rec is not None:
                         out.append(rec)
         except OSError:
@@ -552,7 +723,8 @@ def dedup(records: List[UsageRecord]) -> Tuple[List[UsageRecord], int]:
     LOWER than any single observed snapshot — the failure mode this
     replaces. Metadata (model, effort, session_id, role) is taken from
     whichever line in the group has the highest ``output_tokens`` (the
-    most-complete/terminal snapshot); the merged timestamp is the
+    most-complete/terminal snapshot; on a tie, the LATER line in file
+    order); the merged timestamp is the
     EARLIEST line in the group (the turn's start, matching what a plain
     first-write-wins dedup would already have reported for ``--by day``
     bucketing).
@@ -575,7 +747,13 @@ def dedup(records: List[UsageRecord]) -> Tuple[List[UsageRecord], int]:
         if len(group) == 1:
             out.append(group[0])
             continue
-        terminal = max(group, key=lambda r: r.output_tokens)
+        # TERMINAL chunk = the highest ``output_tokens``; on a TIE the LATER
+        # line in file order (the one the harness streamed last). `max`
+        # keeps the FIRST maximum it meets, so the group is walked in
+        # reverse: without this, equal counts left the earlier chunk's
+        # model/effort/session as the group's, and file order silently
+        # decided between two verdicts.
+        terminal = max(reversed(group), key=lambda r: r.output_tokens)
         out.append(
             UsageRecord(
                 key=key,
@@ -740,6 +918,599 @@ def aggregate(priced: List[Priced], by: str) -> Tuple[Dict[str, float], Dict[str
 
 
 # ---------------------------------------------------------------------------
+# Routing invariant (PLAN-186 AC-13) -- contract in the module docstring
+# ---------------------------------------------------------------------------
+
+#: Verdicts, worst first. The order IS the precedence: a violation is never
+#: masked by an incomplete read, and an incomplete read is never reported
+#: as "nothing to compare".
+ROUTING_VERDICTS = ("RED", "INCONCLUSIVE", "VACUOUS", "GREEN")
+
+#: `--assert-routing` exit codes (rc 2 stays the argument-error code).
+ROUTING_RC_GREEN = 0
+ROUTING_RC_RED = 1
+ROUTING_RC_NOT_PROVEN = 3
+
+#: Declarations that make NO routing claim at the call site.
+_NO_CLAIM_DECLARATIONS = frozenset({"", "inherit"})
+
+#: A spawn sidecar is a few hundred bytes. Anything bigger is not one, and
+#: is refused rather than parsed.
+_SIDECAR_MAX_BYTES = 65536
+
+#: The harness pseudo-model stamped on turns that never reached a model
+#: (errors, rate-limit walls). Zero tokens by construction.
+_SYNTHETIC_MODEL = "<synthetic>"
+
+_FAMILY_RE = re.compile(r"^claude-(?:\d+-)*([a-z]+)(?:-|$)")
+_DATED_SUFFIX_RE = re.compile(r"-\d{8}")
+_DECLARED_ID_RE = re.compile(r"^claude-[a-z0-9][a-z0-9._-]*$")
+
+#: What the human/JSON report cites so the pre-registration cannot drift
+#: away from the code that enforces it.
+ROUTING_PREREG_POINTER = (
+    "death criteria K-A1..K-A3 and K-B1..K-B2 are pre-registered in the "
+    "module docstring of ceo-cost-transcripts.py"
+)
+
+
+def model_family(model_id: Any) -> Optional[str]:
+    """Family token of a model id: ``claude-opus-5-5`` -> ``opus``,
+    ``claude-haiku-4-5-20251001`` -> ``haiku``, ``claude-3-5-haiku-x`` ->
+    ``haiku``. ``None`` when the id does not parse."""
+    if not isinstance(model_id, str):
+        return None
+    m = _FAMILY_RE.match(model_id.strip().lower())
+    return m.group(1) if m else None
+
+
+def _floor_source() -> Optional[Tuple[frozenset, frozenset]]:
+    """(VETO_FLOOR_ROLES, VETO_FLOOR_ALLOWED), imported at CALL time from
+    the repo's own ``_lib.agent_frontmatter`` -- the Owner-signed source,
+    never a copy. ``None`` (and the verdict says so) when it cannot be
+    read: a floor predicate that silently skipped itself would be a
+    vacuous GREEN."""
+    try:
+        from _lib import agent_frontmatter as _af
+
+        roles = frozenset(str(r) for r in _af.VETO_FLOOR_ROLES)
+        allowed = frozenset(str(m).strip().lower() for m in _af.VETO_FLOOR_ALLOWED)
+    except Exception:
+        return None
+    if not roles or not allowed:
+        return None
+    return roles, allowed
+
+
+def known_families(floor: Optional[Tuple[frozenset, frozenset]] = None) -> frozenset:
+    """The alias vocabulary, DERIVED from the fleet tables (the pricing
+    table and the floor allowlist): a family the fleet does not name is an
+    unclassified declaration, not a guess."""
+    out = set()
+    sources: List[str] = list(_EMBEDDED_PRICING)
+    if floor is not None:
+        sources.extend(floor[1])
+    for mid in sources:
+        fam = model_family(mid)
+        if fam:
+            out.add(fam)
+    return frozenset(out)
+
+
+def classify_declared(raw: Any, families: frozenset) -> Tuple[str, str]:
+    """(kind, value) for a sidecar ``model`` value.
+
+    kind is ``none`` (no claim), ``alias`` (a family token), ``id`` (a full
+    model id, compared exactly) or ``unclassified`` (cannot be compared;
+    named, never guessed). A trailing context-window suffix (``[1m]``) is
+    stripped exactly as it is for served ids.
+    """
+    if raw is None:
+        return "none", ""
+    if not isinstance(raw, str):
+        return "unclassified", repr(raw)[:40]
+    d = _MODEL_SUFFIX_RE.sub("", raw.strip()).strip().lower()
+    if d in _NO_CLAIM_DECLARATIONS:
+        return "none", d
+    if d in families:
+        return "alias", d
+    if _DECLARED_ID_RE.match(d):
+        return "id", d
+    return "unclassified", d[:40]
+
+
+def declaration_matches(kind: str, declared: str, served: str) -> bool:
+    """One served model id against one classified declaration."""
+    s = served.strip().lower()
+    if kind == "alias":
+        return model_family(s) == declared
+    if kind == "id":
+        if s == declared:
+            return True
+        return s.startswith(declared) and _DATED_SUFFIX_RE.fullmatch(
+            s[len(declared):]
+        ) is not None
+    return False
+
+
+def _discover_sidecars(project_dir: Path) -> List[str]:
+    return sorted(
+        glob.glob(
+            str(project_dir / "*" / "subagents" / "**" / "agent-*.meta.json"),
+            recursive=True,
+        )
+    )
+
+
+def _inside(path: str, root_real: str) -> bool:
+    """True when `path` is a regular, non-symlink file whose real location
+    stays inside the corpus root. A link inside the corpus that points at
+    another agent's transcript would mis-attribute a model; one that points
+    outside would read a file the corpus never owned."""
+    if os.path.islink(path):
+        return False
+    real = os.path.realpath(path)
+    return real == root_real or real.startswith(root_real + os.sep)
+
+
+def _read_sidecar(path: str) -> Optional[Dict[str, Any]]:
+    try:
+        if os.stat(path).st_size > _SIDECAR_MAX_BYTES:
+            return None
+        with open(path, "rb") as f:
+            obj = json.loads(f.read())
+    except (OSError, ValueError, RecursionError):
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
+def _archetype(side: Dict[str, Any]) -> str:
+    for key in ("customAgentType", "agentType"):
+        v = side.get(key)
+        if isinstance(v, str) and v:
+            return v
+    return ""
+
+
+def _label(side: Dict[str, Any], sidecar_path: str) -> str:
+    for key in ("description", "name"):
+        v = side.get(key)
+        if isinstance(v, str) and v.strip():
+            return _safe_text(" ".join(v.split()))
+    return _safe_text(os.path.basename(sidecar_path)[: -len(".meta.json")])
+
+
+def _in_window(
+    ts: datetime, cutoff: Optional[datetime], until: Optional[datetime]
+) -> bool:
+    return (cutoff is None or ts >= cutoff) and (until is None or ts <= until)
+
+
+def _unplaced_or_inside(
+    stamps: List[Optional[datetime]],
+    cutoff: Optional[datetime],
+    until: Optional[datetime],
+) -> int:
+    """How many of these record timestamps can still matter to the window:
+    those with no valid timestamp (no temporal position at all) and those
+    inside it. A record with a valid timestamp OUTSIDE the window leaves
+    before it can count as anything."""
+    return sum(1 for t in stamps if t is None or _in_window(t, cutoff, until))
+
+
+def _served_models(
+    transcript: str,
+    project_dir: Path,
+    cutoff: Optional[datetime],
+    until: Optional[datetime],
+    tally: Dict[str, int],
+) -> Optional[Dict[str, int]]:
+    """{served model id: turns} for ONE spawn transcript.
+
+    ``{}`` means no REAL served turn exists (no assistant turn at all, or
+    only ``<synthetic>`` ones); ``None`` means assistant turns exist but
+    every one is outside the window.
+
+    Goes through ``scan_files()`` and ``dedup()`` -- the cost report's own
+    reader -- so a message whose streamed chunks disagree about the model
+    resolves to the TERMINAL chunk's model exactly as it does for cost, and
+    there is no second grafia of either. The served model is a fact of the
+    TURN, not of its token bill, so the read is ``usage_optional``: a turn
+    the cost report drops (``usage`` null, absent or empty) is still read
+    here, and one that cannot be read at all is counted, never silent --
+    but only if it can matter to THIS window: a record with a valid
+    timestamp outside it leaves before anything about it is counted.
+    ``tally`` accumulates the reader's incompleteness counters and the
+    message groups whose chunks disagree about the model. A disagreeing
+    group whose terminal chunk can be elected from complete information
+    (every chunk carries ``output_tokens``) is only counted
+    (``chunk_model_splits``, informational); one that has a chunk WITHOUT
+    ``output_tokens`` cannot be elected: it is counted in
+    ``chunk_terminal_unprovable`` (the verdict is INCONCLUSIVE) and EXCLUDED
+    from the returned models, so its guessed terminal can never produce a
+    violation.
+    """
+    counters = ScanCounters()
+    recs = scan_files(
+        [Path(transcript)], "subagent", project_dir, counters, usage_optional=True
+    )
+    tally["incomplete_reads"] += (
+        counters.corrupted_lines
+        + counters.missing_timestamp
+        + counters.unreadable_files
+        + counters.missing_usage_keys
+        + counters.assistant_without_usage
+        + _unplaced_or_inside(counters.unreadable_assistant_ts, cutoff, until)
+    )
+    if not recs:
+        return {}
+    if cutoff is not None:
+        recs = [r for r in recs if r.ts >= cutoff]
+    if until is not None:
+        recs = [r for r in recs if r.ts <= until]
+    groups: Dict[str, List[UsageRecord]] = {}
+    for r in recs:
+        groups.setdefault(r.key, []).append(r)
+    unprovable = set()
+    for key, chunks in groups.items():
+        if len({c.model for c in chunks}) > 1:
+            tally["chunk_model_splits"] += 1
+            if not all(c.has_usage for c in chunks):
+                tally["chunk_terminal_unprovable"] += 1
+                unprovable.add(key)
+    if unprovable:
+        # A group whose terminal chunk cannot be proven is NOT evidence: the
+        # model `dedup()` would elect for it is a guess, so it may neither
+        # raise a violation (a MISMATCH, a FLOOR_BREACH) nor vouch for the
+        # routing. It leaves the comparison and the verdict is INCONCLUSIVE
+        # (``chunk_terminal_unprovable``); a violation can still win, but
+        # only from ANOTHER group whose terminal is proven.
+        recs = [r for r in recs if r.key not in unprovable]
+        if not recs:
+            return {}
+    deduped, _dropped = dedup(recs)
+    if not deduped:
+        return None
+    served: Dict[str, int] = {}
+    for r in deduped:
+        if r.model == _SYNTHETIC_MODEL:
+            tally["synthetic_turns_ignored"] += 1
+            continue
+        if r.model.startswith("(unresolved:"):
+            tally["served_unresolved"] += 1
+            continue
+        served[r.model.lower()] = served.get(r.model.lower(), 0) + 1
+    return served
+
+
+def _placement(
+    transcript: str,
+    project_dir: Path,
+    cutoff: Optional[datetime],
+    until: Optional[datetime],
+) -> str:
+    """Where a spawn sits relative to the window, from its transcript alone:
+    ``in`` (some assistant turn is inside), ``out`` (turns exist, none
+    inside), ``none`` (no assistant turn at all) or ``unplaceable`` (nothing
+    inside AND the read was incomplete, so a torn line may be the in-window
+    turn -- fail closed). Read with throwaway counters: whether the spawn
+    matters to this window is decided here, before anything about it can
+    gate the verdict."""
+    counters = ScanCounters()
+    recs = scan_files(
+        [Path(transcript)], "subagent", project_dir, counters, usage_optional=True
+    )
+    for r in recs:
+        if _in_window(r.ts, cutoff, until):
+            return "in"
+    stamped = [t for t in counters.unreadable_assistant_ts if t is not None]
+    if any(_in_window(t, cutoff, until) for t in stamped):
+        return "in"
+    dirty = (
+        counters.corrupted_lines
+        + counters.missing_timestamp
+        + counters.unreadable_files
+        + (len(counters.unreadable_assistant_ts) - len(stamped))
+    )
+    if dirty:
+        return "unplaceable"
+    return "out" if (recs or stamped) else "none"
+
+
+def routing_invariant(
+    project_dir: Any,
+    cutoff: Optional[datetime] = None,
+    until: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Assert, over the spawn sidecars + transcripts under `project_dir`,
+    that served == declared and that VETO archetypes were served inside the
+    floor. Pure read; returns the verdict as JSON-safe data."""
+    project_dir = Path(project_dir)
+    root_real = os.path.realpath(str(project_dir))
+    floor = _floor_source()
+    families = known_families(floor)
+    veto_roles = floor[0] if floor else frozenset()
+    veto_allowed = floor[1] if floor else frozenset()
+
+    counts: Dict[str, int] = {
+        "sidecars": 0,
+        "declared": 0,
+        "undeclared": 0,
+        "unclassified": 0,
+        "compared_spawns": 0,
+        "declared_compared": 0,
+        "floor_checked": 0,
+        "no_served": 0,
+        "out_of_window": 0,
+        "unreadable_sidecars": 0,
+        "refused_paths": 0,
+        "incomplete_reads": 0,
+        "served_unresolved": 0,
+        "synthetic_turns_ignored": 0,
+        "chunk_model_splits": 0,
+        "chunk_terminal_unprovable": 0,
+    }
+    violations: List[Dict[str, Any]] = []
+    alias_resolutions: Dict[str, Dict[str, int]] = {}
+    unclassified_samples: List[str] = []
+
+    def gates_the_window(transcript: str) -> bool:
+        """A sidecar the check cannot trust (unreadable, refused, or a
+        declaration it cannot classify) may gate THIS window only if its
+        spawn has a turn in it. A stale one from outside the window is
+        counted where it belongs and never reaches the verdict."""
+        if not os.path.exists(transcript):
+            counts["no_served"] += 1
+            return False
+        if not _inside(transcript, root_real):
+            return True
+        where = _placement(transcript, project_dir, cutoff, until)
+        if where == "out":
+            counts["out_of_window"] += 1
+            return False
+        if where == "none":
+            counts["no_served"] += 1
+            return False
+        return True
+
+    for sc in _discover_sidecars(project_dir):
+        counts["sidecars"] += 1
+        transcript = sc[: -len(".meta.json")] + ".jsonl"
+        sidecar_inside = _inside(sc, root_real)
+        side = _read_sidecar(sc) if sidecar_inside else None
+        if side is None:
+            if gates_the_window(transcript):
+                counts["unreadable_sidecars" if sidecar_inside else "refused_paths"] += 1
+            continue
+        kind, declared = classify_declared(side.get("model"), families)
+        archetype = _archetype(side)
+        is_veto = archetype in veto_roles
+        if kind == "none":
+            counts["undeclared"] += 1
+        elif kind == "unclassified":
+            if not gates_the_window(transcript):
+                continue
+            counts["unclassified"] += 1
+            if len(unclassified_samples) < 5:
+                unclassified_samples.append(_safe_text(declared, 40))
+        else:
+            counts["declared"] += 1
+        needs_served = kind in ("alias", "id") or is_veto
+        if not needs_served:
+            continue
+
+        if not os.path.exists(transcript):
+            counts["no_served"] += 1
+            continue
+        if not _inside(transcript, root_real):
+            counts["refused_paths"] += 1
+            continue
+        served = _served_models(transcript, project_dir, cutoff, until, counts)
+        if served is None:
+            counts["out_of_window"] += 1
+            continue
+        if not served:
+            counts["no_served"] += 1
+            continue
+
+        # ONE count per spawn that reached a comparison, whatever number of
+        # predicates it fed (a declared VETO spawn feeds both).
+        counts["compared_spawns"] += 1
+        kinds: List[str] = []
+        if kind in ("alias", "id"):
+            counts["declared_compared"] += 1
+            ok = [m for m in served if declaration_matches(kind, declared, m)]
+            if not ok:
+                kinds.append("MISMATCH")
+            elif len(ok) != len(served):
+                kinds.append("MIXED")
+            if kind == "alias":
+                bucket = alias_resolutions.setdefault(declared, {})
+                for m in served:
+                    shown = _safe_text(m)
+                    bucket[shown] = bucket.get(shown, 0) + 1
+        if is_veto:
+            counts["floor_checked"] += 1
+            if any(m not in veto_allowed for m in served):
+                kinds.append("FLOOR_BREACH")
+        if kinds:
+            rel = os.path.relpath(sc, str(project_dir))
+            violations.append(
+                {
+                    "label": _label(side, sc),
+                    "rail": "workflow" if "workflows" in Path(rel).parts else "native",
+                    "archetype": _safe_text(archetype),
+                    "declared": declared if kind in ("alias", "id") else "",
+                    "kinds": kinds,
+                    "served": dict(
+                        sorted((_safe_text(m), n) for m, n in served.items())
+                    ),
+                    "sidecar": _safe_text(rel, 300),
+                }
+            )
+
+    incomplete: List[str] = []
+    for key, text in (
+        ("unclassified", "unclassified declaration(s)"),
+        ("unreadable_sidecars", "unreadable sidecar(s)"),
+        ("refused_paths", "path(s) refused (symlink or outside the corpus)"),
+        ("incomplete_reads", "transcript line(s) torn, undated or unreadable"),
+        ("served_unresolved", "served turn(s) without a model id"),
+        (
+            "chunk_terminal_unprovable",
+            "message group(s) whose chunks disagree about the model and whose "
+            "terminal chunk cannot be proven (a chunk without usage)",
+        ),
+    ):
+        if counts[key]:
+            incomplete.append("%d %s" % (counts[key], text))
+    if floor is None:
+        incomplete.append("VETO floor source unreadable (floor predicate not evaluated)")
+
+    comparable = counts["compared_spawns"]
+    if violations:
+        verdict = "RED"
+        by_kind: Dict[str, int] = {}
+        for v in violations:
+            for k in v["kinds"]:
+                by_kind[k] = by_kind.get(k, 0) + 1
+        reason = "%d spawn(s) violate the invariant (%s) of %d compared" % (
+            len(violations),
+            ", ".join("%d %s" % (n, k) for k, n in sorted(by_kind.items())),
+            comparable,
+        )
+    elif incomplete:
+        verdict = "INCONCLUSIVE"
+        reason = "the check is incomplete: " + "; ".join(incomplete)
+    elif comparable == 0:
+        verdict = "VACUOUS"
+        reason = (
+            "nothing was compared: no spawn with a declared model (or VETO "
+            "archetype) and a served model in the window"
+        )
+    else:
+        verdict = "GREEN"
+        reason = (
+            "%d spawn(s) compared: %d declared spawn(s) served == declared, "
+            "%d VETO spawn(s) served inside the floor"
+            % (comparable, counts["declared_compared"], counts["floor_checked"])
+        )
+
+    return {
+        "verdict": verdict,
+        "reason": reason,
+        "counts": counts,
+        "violations": violations[:200],
+        "violations_omitted": max(0, len(violations) - 200),
+        "alias_resolutions": {
+            a: dict(sorted(r.items())) for a, r in sorted(alias_resolutions.items())
+        },
+        "unclassified_samples": unclassified_samples,
+        "floor": (
+            {"roles": sorted(veto_roles), "allowed": sorted(veto_allowed)}
+            if floor
+            else None
+        ),
+        "prereg": ROUTING_PREREG_POINTER,
+    }
+
+
+def routing_invariant_safe(
+    project_dir: Any,
+    cutoff: Optional[datetime] = None,
+    until: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """`routing_invariant()` that can never break the cost report AND can
+    never turn its own failure into a pass: an internal error is an
+    INCONCLUSIVE verdict that names the exception class."""
+    try:
+        return routing_invariant(project_dir, cutoff=cutoff, until=until)
+    except Exception as exc:  # pragma: no cover - fail-soft envelope
+        return {
+            "verdict": "INCONCLUSIVE",
+            "reason": "routing check failed: %s" % type(exc).__name__,
+            "counts": {},
+            "violations": [],
+            "violations_omitted": 0,
+            "alias_resolutions": {},
+            "unclassified_samples": [],
+            "floor": None,
+            "prereg": ROUTING_PREREG_POINTER,
+        }
+
+
+def routing_rc(routing: Dict[str, Any]) -> int:
+    """`--assert-routing` exit code for a verdict."""
+    verdict = routing.get("verdict")
+    if verdict == "GREEN":
+        return ROUTING_RC_GREEN
+    if verdict == "RED":
+        return ROUTING_RC_RED
+    return ROUTING_RC_NOT_PROVEN
+
+
+def _routing_lines(routing: Optional[Dict[str, Any]], limit: int = 20) -> List[str]:
+    """The routing verdict as report lines (ASCII), shared by every
+    renderer so the CLI and the two callers' blocks cannot disagree."""
+    if not routing:
+        return []
+    c = routing.get("counts") or {}
+    out: List[str] = [
+        "ROUTING INVARIANT (PLAN-186 AC-13): %s - %s"
+        % (routing.get("verdict"), routing.get("reason"))
+    ]
+    out.append(
+        "  sidecars=%d declared=%d undeclared=%d unclassified=%d | compared=%d "
+        "(declared=%d floor=%d) | no_served=%d out_of_window=%d "
+        "synthetic_turns_ignored=%d chunk_model_splits=%d "
+        "chunk_terminal_unprovable=%d"
+        % (
+            c.get("sidecars", 0),
+            c.get("declared", 0),
+            c.get("undeclared", 0),
+            c.get("unclassified", 0),
+            c.get("compared_spawns", 0),
+            c.get("declared_compared", 0),
+            c.get("floor_checked", 0),
+            c.get("no_served", 0),
+            c.get("out_of_window", 0),
+            c.get("synthetic_turns_ignored", 0),
+            c.get("chunk_model_splits", 0),
+            c.get("chunk_terminal_unprovable", 0),
+        )
+    )
+    viol = routing.get("violations") or []
+    for v in viol[:limit]:
+        out.append(
+            "  VIOLATION [%s] %s label=%r archetype=%s declared=%s served=%s"
+            % (
+                "+".join(v.get("kinds", [])),
+                v.get("rail"),
+                v.get("label"),
+                v.get("archetype") or "-",
+                v.get("declared") or "-",
+                ",".join(
+                    "%s x%d" % (m, n) for m, n in sorted((v.get("served") or {}).items())
+                ),
+            )
+        )
+    hidden = max(0, len(viol) - limit) + int(routing.get("violations_omitted") or 0)
+    if hidden:
+        out.append("  ... (+%d violation(s) omitted; --json lists them)" % hidden)
+    res = routing.get("alias_resolutions") or {}
+    if res:
+        out.append(
+            "  alias -> served (observed, informational, never judged): "
+            + "; ".join(
+                "%s: %s"
+                % (a, ", ".join("%s x%d" % (m, n) for m, n in sorted(r.items())))
+                for a, r in sorted(res.items())
+            )
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Programmatic API (PLAN-186 W0, AC-1b)
 # ---------------------------------------------------------------------------
 #
@@ -810,6 +1581,10 @@ def transcript_rollup(
                 d[cls] += getattr(p.rec, cls)
 
     grand, role_totals, group_totals = aggregate(priced, by)
+    # AC-13: the routing invariant is asserted by the SAME pipeline the
+    # report and both callers run, over the SAME window, so no renderer can
+    # print a total without the verdict that travels with it.
+    routing = routing_invariant_safe(project_dir, cutoff=cutoff, until=until)
     return {
         "project_dir": str(project_dir),
         "pricing_result": pricing_result,
@@ -823,6 +1598,7 @@ def transcript_rollup(
         "grand_total": grand,
         "by_role": role_totals,
         "by_dimension": group_totals,
+        "routing": routing,
     }
 
 
@@ -934,6 +1710,7 @@ def collect(
         "by_role": res["by_role"],
         "by_dimension": res["by_dimension"],
         "unresolved_models": res["unresolved_models"],
+        "routing": res["routing"],
         "scan": {
             "files_scanned": c.files_scanned,
             "lines_seen": c.lines_seen,
@@ -1056,6 +1833,7 @@ def render_block(collected: Optional[Dict[str, Any]]) -> List[str]:
             _fmt_usd(g["usd"]),
         )
     )
+    out.extend(_routing_lines(collected.get("routing")))
     return out
 
 
@@ -1224,6 +2002,18 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="YAML",
         help="cost-table.yaml-shaped file; default: cost-table.yaml next to this script (see epilog)",
     )
+    p.add_argument(
+        "--assert-routing",
+        action="store_true",
+        help=(
+            "turn the ROUTING INVARIANT verdict (PLAN-186 AC-13: served "
+            "model == declared model, VETO archetypes served inside the "
+            "floor) into the exit code: 0 GREEN, 1 RED, 3 not proven "
+            "(INCONCLUSIVE or VACUOUS). The verdict is evaluated and "
+            "printed on EVERY run; without this flag the exit code stays "
+            "0 so a cost report is never broken by a routing finding."
+        ),
+    )
     return p
 
 
@@ -1270,6 +2060,7 @@ def _human_report(
     group_totals: Dict[str, Dict[str, float]],
     unresolved: Dict[str, Dict[str, float]],
     elapsed_s: float,
+    routing: Optional[Dict[str, Any]] = None,
 ) -> str:
     lines: List[str] = []
     lines.append("ceo-cost-transcripts — janela: %s" % _window_label(args))
@@ -1345,6 +2136,10 @@ def _human_report(
     if len(rows) > 40:
         lines.append("... (+%d linhas omitidas)" % (len(rows) - 40))
     lines.append("")
+    routing_lines = _routing_lines(routing)
+    if routing_lines:
+        lines.extend(routing_lines)
+        lines.append("")
     lines.append("tempo de execucao: %.2fs" % elapsed_s)
     return "\n".join(lines)
 
@@ -1359,6 +2154,7 @@ def _json_report(
     group_totals: Dict[str, Dict[str, float]],
     unresolved: Dict[str, Dict[str, float]],
     elapsed_s: float,
+    routing: Optional[Dict[str, Any]] = None,
 ) -> str:
     payload = {
         # Exactly ONE of `since` / `since_at` is non-null: the bound the
@@ -1388,6 +2184,7 @@ def _json_report(
         "grand_total": grand,
         "by_role": role_totals,
         "by_" + args.by: group_totals,
+        "routing": routing,
         "elapsed_s": elapsed_s,
     }
     return json.dumps(payload, indent=2, sort_keys=True)
@@ -1510,19 +2307,22 @@ def main(argv: Optional[List[str]] = None) -> int:
     grand = rolled["grand_total"]
     role_totals = rolled["by_role"]
     group_totals = rolled["by_dimension"]
+    routing = rolled["routing"]
 
     elapsed_s = time.time() - t0
 
     if args.json:
         out = _json_report(
-            args, project_dir, pricing_result, counters, grand, role_totals, group_totals, unresolved_by_model, elapsed_s
+            args, project_dir, pricing_result, counters, grand, role_totals, group_totals, unresolved_by_model, elapsed_s, routing
         )
     else:
         out = _human_report(
-            args, project_dir, pricing_result, counters, grand, role_totals, group_totals, unresolved_by_model, elapsed_s
+            args, project_dir, pricing_result, counters, grand, role_totals, group_totals, unresolved_by_model, elapsed_s, routing
         )
     print(out)
-    return 0
+    # AC-13: the verdict was evaluated and printed above on EVERY run; it
+    # only becomes the exit code when the caller asks for the gate.
+    return routing_rc(routing) if args.assert_routing else 0
 
 
 if __name__ == "__main__":

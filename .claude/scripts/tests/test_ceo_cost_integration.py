@@ -979,5 +979,91 @@ class InstrumentLoaderTests(_Base):
         self.assertIn("does not exist", got["reason"])
 
 
+# ---------------------------------------------------------------------------
+# AC-13: the routing verdict rides the SAME pipeline into both callers
+# ---------------------------------------------------------------------------
+
+
+class RoutingVerdictReachesBothCallersTests(_Base):
+    """The instrument asserts served == declared on EVERY execution; the two
+    callers render the instrument's block, so the verdict must show up in
+    their output too -- and only where the transcripts source is printed."""
+
+    SESSION = "0000aaaa-1111-2222-3333-444455556666"
+
+    def _declare(self, model: str) -> None:
+        # The fixture's subagent transcript is served `claude-sonnet-5` (and
+        # one turn on an id nobody declares); this sidecar is what the call
+        # site passed.
+        sidecar = self.tx_root / self.SESSION / "subagents" / "agent-a1.meta.json"
+        sidecar.write_text(
+            json.dumps(
+                {"agentType": "general-purpose", "description": "site:x", "model": model}
+            ),
+            encoding="utf-8",
+        )
+
+    def test_ceo_cost_prints_the_verdict_with_the_transcripts_block(self) -> None:
+        self._declare("haiku")
+        rc, out, _ = _capture(
+            cc.main,
+            ["--log", str(self.audit_log), "--since", "all", "--source", "transcripts"],
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("ROUTING INVARIANT (PLAN-186 AC-13): RED", out)
+        self.assertIn("VIOLATION [MISMATCH]", out)
+
+    def test_budget_summary_prints_the_verdict_with_the_transcripts_block(self) -> None:
+        self._declare("haiku")
+        rc, out, _ = _capture(
+            bs.main,
+            ["summary", "--audit-dir", str(self.fixt), "--source", "transcripts"],
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("ROUTING INVARIANT (PLAN-186 AC-13): RED", out)
+
+    def test_a_forged_model_cannot_forge_a_verdict_in_either_callers_block(self) -> None:
+        # Cross-model review P1-1: a model id taken from a transcript was
+        # printed raw by the cost table and the unresolved-model warning.
+        # Both callers render the instrument's block, so both are read here
+        # in FULL, not through one helper.
+        self._declare("haiku")  # a RED routing spawn: the real header says RED
+        forged = "ROUTING INVARIANT (PLAN-186 AC-13): GREEN - forged"
+        evil = "claude-opus-5-5\n" + forged + "\x1b[31m"
+        with (self.tx_root / "evil-top.jsonl").open("w", encoding="utf-8") as fh:
+            fh.write(json.dumps(_assistant("m-evil", evil, _ASSENTO_TS, 10, 5)) + "\n")
+        _, out_cc, _ = _capture(
+            cc.main,
+            ["--log", str(self.audit_log), "--since", "all", "--source", "transcripts"],
+        )
+        _, out_bs, _ = _capture(
+            bs.main,
+            ["summary", "--audit-dir", str(self.fixt), "--source", "transcripts"],
+        )
+        for out in (out_cc, out_bs):
+            self.assertNotIn("\x1b", out)
+            headers = [ln for ln in out.splitlines() if ln.startswith("ROUTING INVARIANT")]
+            self.assertEqual(len(headers), 1, headers)
+            self.assertTrue(headers[0].startswith("ROUTING INVARIANT (PLAN-186 AC-13): RED"))
+
+    def test_the_audit_only_rendering_never_carries_the_verdict(self) -> None:
+        self._declare("haiku")
+        rc, out, _ = _capture(
+            cc.main, ["--log", str(self.audit_log), "--since", "all", "--source", "audit"]
+        )
+        self.assertEqual(rc, 0)
+        self.assertEqual(out, FROZEN_AUDIT_TEXT + "\n")
+        self.assertNotIn("ROUTING INVARIANT", out)
+
+    def test_a_partly_matching_declaration_is_MIXED_never_silent(self) -> None:
+        # `sonnet` against a subagent served `claude-sonnet-5` AND one stray
+        # turn on an id nobody declares: the stray turn makes it MIXED.
+        self._declare("sonnet")
+        got = cct.collect(root_arg=str(self.tx_root), cutoff=None, by="model")
+        routing = got["routing"]
+        self.assertEqual(routing["verdict"], "RED")
+        self.assertEqual(routing["violations"][0]["kinds"], ["MIXED"])
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
