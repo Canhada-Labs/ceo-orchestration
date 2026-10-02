@@ -11,7 +11,7 @@ level: L3
 budget_tokens: "estimado (refeito no debate r1, S360) — W0 (doc-only) ~60-120k; instrumento de replay de falso-positivo ~60-120k; parte A = W1-ADR ~80-150k + W1a ~350-650k + W1b ~300-600k (total ~0,8-1,5 M, rail com teto de 4 rodadas por pacote); W2 (cura B + mensagem A3 + argv + rail) ~350-700k; W3 (medição do sandbox, sem código) ~40-80k; debate L3 ~0,5-1 M"
 budget_sessions: "estimado 5-7 (W0 e a medição do sandbox cabem numa; parte A 3-4 sessões em 3 pacotes na mesma vaga; W2 1-2; cada pacote canônico pede a sua cerimônia)"
 context_risk: medium
-external_wait: "Owner: assinatura GPG de cada wave canônica (W1, W2); decisão de ligar ou não o sandbox do SO DEPOIS da medição (W3 — «Medir antes de ligar» já decidido na S359). Debate L3 antes de W1/W2 (Security Engineer tem VETO; a reconfirmação dos dois VETOs sobre o sha novo do plano segue PENDENTE — item C11). Vaga canônica: parte A na 2.ª vaga; parte B e sandbox sem vaga reservada (ver «Regra de WIP»)."
+external_wait: "Owner: assinatura GPG de cada wave canônica (W1, W2); decisão de ligar ou não o sandbox do SO DEPOIS da medição (W3 — «Medir antes de ligar» já decidido na S359). Debate L3 antes de W1/W2 (Security Engineer tem VETO; a reconfirmação dos dois VETOs sobre o sha novo do plano foi REGISTRADA em 2026-10-01 — item C11; o SIGN do ADR-201 espera o replay da OQ-1 medido e as decisões do Owner P-1..P-5). Vaga canônica: parte A na 2.ª vaga; parte B e sandbox sem vaga reservada (ver «Regra de WIP»)."
 eta_calendar: "mesmo-dia a D+1 por wave (CEO-only fora das assinaturas e do debate); calendário estica só pelas cerimônias do Owner"
 tags: [security, bash-guard, canonical-edit, threat-model, guardfall, fail-closed]
 ---
@@ -847,8 +847,8 @@ ordem da colisão com a W6 do PLAN-194.
   cabeçalho (`reviewed_at`, `reviewed_by`). Além do cabeçalho e desta entrada, o corpo mudou
   por remissões «→ item Cn» nos pontos principais que o apêndice corrige (guias de leitura, não
   exaustivas; algumas trazem tetos de paths ajustados); as correções C1 a C11 estão no fim do
-  arquivo. A reconfirmação dos dois VETOs sobre o novo sha está pendente
-  (item C11). Nada executado; a transição `reviewed → executing` é do CEO e ocorre no commit da
+  arquivo. A reconfirmação dos dois VETOs sobre o novo sha ficou pendente nesta data e foi
+  REGISTRADA em 2026-10-01 (item C11; `debate/reconfirm-s361/`). Nada executado; a transição `reviewed → executing` é do CEO e ocorre no commit da
   W0.
 
 ## Correções pós-debate S360 (aceitas pelo Owner na S361, 2026-10-01)
