@@ -44,11 +44,11 @@ claude-haiku-4-5-20251001
 # available, has no price row, and is not in the working set.
 # Surface: deprecation ledger. Authority: ADR-149 working set.
 claude-mythos-5
-# OpenAI-family replacement of 4 rows (gpt-5, gpt-5.2, gpt-5.3-codex, o3),
-# checked against codex_cli_shape.py `_VALID_MODELS`, whose newest member is
-# gpt-5.5. This is the live defect already inventoried in PLAN-176 §8: the
-# reviewer allowlist rejects the migration target the deprecation ledger itself
-# recommends. Its lane (openai) is INERT — zero priced rows — so the finding is
-# reported without opening a lane.
-# Surface: deprecation ledger. Authority: codex_cli_shape `_VALID_MODELS`.
-gpt-5.6-sol
+#
+# NO OpenAI-family red. Until PLAN-194 W3b.1 this file carried gpt-5.6-sol:
+# the replacement of every OpenAI deprecation row, checked against
+# codex_cli_shape.py `_VALID_MODELS`, whose newest member was gpt-5.5 (the
+# live defect inventoried in PLAN-176 §8 — the reviewer allowlist rejected the
+# migration target the deprecation ledger recommends). W3b.1 put the gpt-5.6
+# family in `_VALID_MODELS` and took the retired ids out, so that red
+# disappears ON PURPOSE (seven reds -> six); the shrinkage is this paragraph.

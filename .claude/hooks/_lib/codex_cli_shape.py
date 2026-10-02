@@ -83,25 +83,30 @@ CODEX_CLI_TARGET_VERSION: str = "0.139.0"
 #
 # PLAN-142 D5 / OQ1 resolution (smoke-resolved at execution, S246): a hands-on
 # 0.139 probe against the Owner's Codex account showed that account serves ONLY
-# its own default (`gpt-5.5`); forcing ANY catalog id (`gpt-5-codex`, `gpt-5`,
-# `gpt-5.1-codex`, ...) returns HTTP 400 "model not supported when using Codex
-# with a ChatGPT account". The historical `gpt-5.5` default that S120 silently
-# coerced to `gpt-5-codex` was therefore the ONLY id that actually works. The
-# portable resolution: DEFAULT is to OMIT `--model` entirely so each account
+# its own default (`gpt-5.5`); forcing ANY id of the API-key catalog of that
+# time returned HTTP 400 "model not supported when using Codex with a ChatGPT
+# account". The historical `gpt-5.5` default that S120 silently coerced to the
+# catalog default of that time was therefore the ONLY id that actually worked.
+# The portable resolution: DEFAULT is to OMIT `--model` entirely so each account
 # uses the model it can serve. `_VALID_MODELS` is a NAME-allowlist for an
 # EXPLICIT override (rejects typos LOUDLY) — NOT an availability guarantee; a
 # named-but-unavailable id degrades to a 400 -> ADVISORY at runtime (fail-open).
+#
+# PLAN-194 W3b.1: an id the OpenAI deprecation ledger retires
+# (`.claude/scripts/model-deprecations.json` — `model_id` or alias) is NOT
+# kept here; the ids retired in 2026 left this tuple and the `gpt-5.6-*`
+# family entered it (the substitutes the OpenAI deprecation page names; the
+# ledger's single migration target is `gpt-5.6-sol`). A test cross-checks
+# this tuple against the ledger, so a future ledger row for a member turns
+# that test red.
 
-#: Known reviewer model ids accepted for an EXPLICIT override. Includes
-#: `gpt-5.5` (the Owner account's default) plus the API-key-account catalog.
+#: Known reviewer model ids accepted for an EXPLICIT override: `gpt-5.5` (the
+#: account default measured at S246) plus the `gpt-5.6-*` family.
 _VALID_MODELS: Tuple[str, ...] = (
     "gpt-5.5",
-    "gpt-5",
-    "gpt-5-mini",
-    "gpt-5-codex",
-    "o3",
-    "o3-mini",
-    "o4-mini",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna",
 )
 
 #: Default reviewer model: None means "do NOT emit --model" → the Codex
@@ -212,7 +217,7 @@ class UnknownCodexModel(ValueError):
     """Raised when a caller requests a model id not in ``_VALID_MODELS``.
 
     PLAN-142 C3 / D5: the pre-migration code SILENTLY coerced an unknown
-    model (e.g. the wrapper default ``gpt-5.5``) to ``gpt-5-codex``,
+    model (e.g. the wrapper default ``gpt-5.5``) to a fixed catalog id,
     masking a real misconfiguration. The migration makes this LOUD:
     ``build_exec_argv`` raises this so the argv NEVER carries a model the
     caller did not intend.

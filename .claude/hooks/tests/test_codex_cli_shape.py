@@ -65,9 +65,9 @@ class TestBuildExecArgv(TestEnvContext):
 
     def test_explicit_model_emitted(self):
         # An explicit, allowlisted override IS emitted.
-        argv = shape.build_verdict_argv("p", output_file=self._OUT, model="o3")
+        argv = shape.build_verdict_argv("p", output_file=self._OUT, model="gpt-5.6-sol")
         self.assertIn("--model", argv)
-        self.assertEqual(argv[argv.index("--model") + 1], "o3")
+        self.assertEqual(argv[argv.index("--model") + 1], "gpt-5.6-sol")
 
     def test_usage_mode_adds_json(self):
         argv = shape.build_verdict_usage_argv("p", output_file=self._OUT)
@@ -101,7 +101,7 @@ class TestCoercion(TestEnvContext):
         self.assertIsNone(shape.DEFAULT_MODEL)
 
     def test_model_valid_passthrough(self):
-        self.assertEqual(shape.coerce_model("o3"), "o3")
+        self.assertEqual(shape.coerce_model("gpt-5.6-sol"), "gpt-5.6-sol")
         # gpt-5.5 (the Owner account default) is an allowlisted explicit id.
         self.assertEqual(shape.coerce_model("gpt-5.5"), "gpt-5.5")
 
@@ -115,6 +115,53 @@ class TestCoercion(TestEnvContext):
 
     def test_sandbox_valid_passthrough(self):
         self.assertEqual(shape.coerce_sandbox_mode("workspace-write"), "workspace-write")
+
+
+class TestAllowlistAgainstDeprecationLedger(TestEnvContext):
+    """PLAN-194 W3b.1 — `_VALID_MODELS` accepts no id the deprecation ledger
+    retires. The ledger (`.claude/scripts/model-deprecations.json`) is the
+    source of the retired set (every `model_id` and alias), so a future row
+    for a member turns this red instead of a hand-kept list drifting. RED on
+    the pre-W3b.1 tuple (`gpt-5`, `gpt-5-mini`, `gpt-5-codex`, `o3`,
+    `o3-mini`, `o4-mini` all have rows)."""
+
+    _LEDGER = Path(__file__).resolve().parents[2] / "scripts" / "model-deprecations.json"
+    _RETIRED_BY_W3B1 = ("gpt-5", "gpt-5-mini", "gpt-5-codex", "o3", "o3-mini", "o4-mini")
+    _GPT56_FAMILY = ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
+
+    def _retired_ids(self):
+        self.assertTrue(self._LEDGER.is_file(), "deprecation ledger missing: %s" % self._LEDGER)
+        data = json.loads(self._LEDGER.read_text(encoding="utf-8"))
+        retired = set()
+        for row in data["models"]:
+            retired.add(row["model_id"])
+            retired.update(row.get("aliases") or [])
+        return retired
+
+    def test_no_member_is_retired_by_the_ledger(self):
+        retired = self._retired_ids()
+        self.assertIn("gpt-5-codex", retired)  # the ledger really carries the OpenAI rows
+        self.assertEqual(sorted(set(shape._VALID_MODELS) & retired), [])
+
+    def test_ids_retired_by_w3b1_are_loud_unknowns(self):
+        for model in self._RETIRED_BY_W3B1:
+            with self.subTest(model=model):
+                with self.assertRaises(shape.UnknownCodexModel):
+                    shape.coerce_model(model)
+
+    def test_gpt56_family_is_accepted_and_emitted(self):
+        for model in self._GPT56_FAMILY:
+            with self.subTest(model=model):
+                self.assertEqual(shape.coerce_model(model), model)
+                argv = shape.build_verdict_argv("p", output_file="/tmp/ceo_out.json", model=model)
+                self.assertEqual(argv[argv.index("--model") + 1], model)
+
+    def test_default_still_omits_model(self):
+        # The W3b.1 swap changes the explicit-override allowlist only; the
+        # default argv (both modes) still carries no --model (PLAN-142 D5).
+        self.assertIsNone(shape.DEFAULT_MODEL)
+        self.assertNotIn("--model", shape.build_verdict_argv("p", output_file="/tmp/ceo_out.json"))
+        self.assertNotIn("--model", shape.build_verdict_usage_argv("p", output_file="/tmp/ceo_out.json"))
 
 
 class TestLegacyAdapter(TestEnvContext):

@@ -524,7 +524,10 @@ class TestExpectedReds(_Fixture):
         self.assertEqual(report["expected_reds"]["unexpected"], [])
         self.assertEqual(report["expected_reds"]["missing"], [])
         observed = list(report["red_ids"])
-        self.assertEqual(len(observed), 7, observed)
+        # 7 -> 6 at PLAN-194 W3b.1: gpt-5.6-sol left the set on purpose (the
+        # gpt-5.6 family entered codex_cli_shape._VALID_MODELS; the cause is
+        # the closing paragraph of the expected-reds file).
+        self.assertEqual(len(observed), 6, observed)
 
         tmp = Path(tempfile.mkdtemp(prefix="p176w0a-exact-"))
         self.addCleanup(__import__("shutil").rmtree, tmp, True)

@@ -11,10 +11,10 @@
 Plan: PLAN-194
 Wave: W3b.1 e W3b.2 — metade canônica (ids da OpenAI que se aposentam, fora de `_VALID_MODELS`)
 Patch: .claude/plans/PLAN-194/w3b1/w3b1.patch
-Patch-sha256: TO-FILL-BY-SIGN
-Rail-Record-sha256: TO-FILL-BY-SIGN
-Anchor-SHA: TO-FILL-BY-SIGN
-Data: TO-FILL-BY-SIGN
+Patch-sha256: 7dccad8354cc4fe0b59abf545893f6e923f19d07a08c7c5bbedad7cbe1f09773
+Rail-Record-sha256: 6101d5727241db5426d2b8614a82f7659956ca1fd09713613adc6acd0da24a30
+Anchor-SHA: 65cd50d7df6868ea66e9320d1e355c1f907c3748
+Data: 2026-10-02
 
 ## Ratificação (Owner)
 

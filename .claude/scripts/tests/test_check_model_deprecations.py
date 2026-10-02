@@ -278,10 +278,11 @@ class TestNegativeFixtureInertness(_CheckerTestBase):
 
         Was `--check --today 2026-06-12` exits 0. PLAN-194 W3b.3 refreshed
         the OpenAI rows from the primary source, and ids retired on
-        2026-07-23 (or retiring 2026-12-11) still sit in live code until
-        W3b.1 removes them. The probe date moved to the W3b control date
-        (2026-10-13), which sees every id the old date saw (each one that
-        warned on 2026-06-12 is BREAK by then) plus the December fuse.
+        2026-07-23 (or retiring 2026-10-23 / 2026-12-11) sat in live code
+        until W3b.1 removed them (the map is empty since). The probe date
+        moved to the W3b control date (2026-10-13), which sees every id the
+        old date saw (each one that warned on 2026-06-12 is BREAK by then)
+        plus the October and December fuses.
         """
         rc, out, _ = self.run_main(["--json", "--today", W3B0_TODAY])
         self.assertEqual(rc, 0)
@@ -460,18 +461,12 @@ W3B0_TODAY = "2026-10-13"
 #: Widened ONCE, with a primary source: the 2026-10-02 re-check of the page
 #: (LEDGER §W3b.3, raw HTML) gave `o3-mini`/`o4-mini` rows (2026-10-23).
 #: Shrunk by the free half of W3b.1 (the non-canonical `codex_invoke.py`
-#: docstring and `optimizer/codex_phase_gate.py` label: 3 hits); what is
-#: left lives in the canonical `codex_cli_shape.py` and goes with its
-#: ceremony.
-W3B1_DECLARED_DEBT = {
-    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5-codex", "BREAK"): 4,
-    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5.1-codex", "BREAK"): 1,
-    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5", "WARN"): 2,
-    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5-mini", "WARN"): 1,
-    (".claude/hooks/_lib/codex_cli_shape.py", "o3", "WARN"): 1,
-    (".claude/hooks/_lib/codex_cli_shape.py", "o3-mini", "WARN"): 1,
-    (".claude/hooks/_lib/codex_cli_shape.py", "o4-mini", "WARN"): 1,
-}
+#: docstring and `optimizer/codex_phase_gate.py` label: 3 hits) and EMPTY
+#: since the canonical half (the 11 hits of `codex_cli_shape.py`, removed in
+#: the ceremony's own patch), so `--check --today 2026-10-13` exits 0 on the
+#: shipped tree. A new entry here is new debt and needs the same
+#: primary-source discipline.
+W3B1_DECLARED_DEBT: dict = {}
 
 # The exact line shapes measured on 2026-09-30 (check-stdlib-only.py:63 and
 # the `_VALID_MODELS` / docstring / default-slug shapes of codex_cli_shape.py,

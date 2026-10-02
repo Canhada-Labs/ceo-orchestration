@@ -347,12 +347,13 @@ class TestMakeInvokeCommand(TestEnvContext):
         with self.assertRaises(UnknownCodexModel):
             codex.make_invoke_command("Review.", model="gpt-99-super", output_last_message_path=self._OUT)
 
-    def test_valid_model_o3_accepted(self):
-        """o3 model passes through without coercion."""
+    def test_valid_model_accepted(self):
+        """An allowlisted model passes through without coercion (PLAN-194
+        W3b.1: the retired `o3` left the allowlist; `gpt-5.6-sol` is in)."""
         codex = self._adapter()
-        argv = codex.make_invoke_command("Audit.", model="o3", output_last_message_path=self._OUT)
+        argv = codex.make_invoke_command("Audit.", model="gpt-5.6-sol", output_last_message_path=self._OUT)
         m_idx = argv.index("--model")
-        self.assertEqual(argv[m_idx + 1], "o3")
+        self.assertEqual(argv[m_idx + 1], "gpt-5.6-sol")
 
     def test_color_never_and_json_opt_in(self):
         """PLAN-142 — 0.139 uses --color never; usage stream is opt-in via json_events."""

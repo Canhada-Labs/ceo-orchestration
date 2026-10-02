@@ -128,9 +128,11 @@ class TestMakeInvokeCommandRedacted(TestEnvContext):
             # make_invoke_command_redacted requires output_last_message_path
             # (build_exec_argv rejects an empty output file). The stale test
             # omitted it and never ran in CI.
+            # PLAN-194 W3b.1: the explicit override is an allowlisted id
+            # (the retired one left codex_cli_shape._VALID_MODELS).
             argv = codex.make_invoke_command_redacted(
                 "review file with AKIAIOSFODNN7EXAMPLE leaked",
-                model="gpt-5-codex",
+                model="gpt-5.6-sol",
                 sandbox_mode="read-only",
                 timeout_s=75,
                 output_last_message_path="/tmp/codex-last-message.txt",
@@ -144,7 +146,7 @@ class TestMakeInvokeCommandRedacted(TestEnvContext):
         # separate docs-wave finding, not this callsite-coverage test's job).
         self.assertEqual(argv[0], "exec")
         self.assertIn("--model", argv)
-        self.assertIn("gpt-5-codex", argv)
+        self.assertIn("gpt-5.6-sol", argv)
         self.assertIn("--", argv)
         # The PROMPT is the LAST argv element (after the `--` end-of-opts).
         # It MUST carry the redacted replacement, NOT the raw secret —
