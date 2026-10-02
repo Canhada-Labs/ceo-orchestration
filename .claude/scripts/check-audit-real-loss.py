@@ -15,7 +15,9 @@ rotated archives, listed after it. A record only moves spool -> log (append
 before unlink) and rotation renames the log. Log lines count by their TOP-LEVEL
 ``record_id``; a spool-side line that is not JSON (quarantine) is searched with
 ``_RID_RX``. Lower bound: a ``commit`` that never left the in-memory journal
-buffer, or whose journal compaction removed, is invisible.
+buffer, one whose journal compaction removed, or one TRUNCATED on disk (it is a
+line that does not parse: only ``journal_malformed_lines`` sees it) is invisible.
+Hence ``attention`` (below).
 
 A pass of (1)-(3) is STABLE only if every listed spool-side file and archive was
 read (none vanished between the listing and the read — a drain renames active
@@ -39,7 +41,12 @@ keyed on the WRITER too) and also reports, never as G7, the ``STARVED`` lines (G
 The ``STARVED (exit)`` text is the W2 form pinned by §4.3; until the W2 lands it
 exists only in the amendment and in the test fixture, so G8 reads 0 by design.
 
-Names, resolver, refusal and read-only discipline come from
+``attention`` lists what the caller (``/ceo-boot``, nightly) must surface even
+though the exit code ignores it: ``g6_journal_malformed_lines`` — at least one
+journal line that does not parse, e.g. a truncated ``commit``, whose record G6
+cannot follow.
+
+Names, resolver, refusal, streaming and read-only discipline come from
 ``audit_spool_state.py``. Exit: 0 clean; 1 G6 loss > 0 or G7 > 0; 2 usage,
 refusal, unreadable input, or G6 inconclusive with nothing red. Stdlib only,
 Python >= 3.9.
@@ -50,11 +57,10 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import stat
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -74,6 +80,8 @@ _ERR_LINE_RX = re.compile(RE_ERR_LINE, re.ASCII)
 ERR_CLASSES = (
     ("g7_would_log", "audit_log", "lock timeout (stale?)  would-log="),
     ("g7_append_failed", "audit_log", "append failed:"),
+    # PLAN-194 W2.1: this text exists only in ADR-055-AMEND-4 §4.3 until W2.1 ships
+    # its producer; then the G7 control drops the typed line for the real producer.
     ("g8_starved_exit", "spool_writer", "drain canonical lock STARVED (exit)"),
     ("starved_opportunistic", "spool_writer", "drain canonical lock STARVED:"),
     ("g2_canonical_lock_timeout", "spool_writer", "drain canonical lock timeout"),
@@ -84,25 +92,20 @@ def _is_int(v: object) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
 
 
-def _plain(d: ss.ReadOnlyDir, name: str) -> Optional[bytes]:
-    s = d.lstat(name)
-    if s is None or not stat.S_ISREG(s.st_mode) or s.st_size == 0:
-        return None
-    return d.read(name)
-
-
-def record_ids(data: bytes, top_level_only: bool) -> Set[str]:
+def record_ids(lines: Iterable[bytes], top_level_only: bool, wanted: Set[str]) -> Set[str]:
+    """The ``wanted`` ids among ``lines`` (memory follows the candidates, not the log)."""
     out: Set[str] = set()
-    for line in data.split(b"\n"):
+    for line in lines:
         if b'"record_id"' not in line:
             continue
         try:
             e = json.loads(line)
         except ValueError:
             if not top_level_only:
-                out.update(m.decode("ascii") for m in _RID_RX.findall(line))
+                out.update(r for r in (m.decode("ascii") for m in _RID_RX.findall(line))
+                           if r in wanted)
             continue
-        if isinstance(e, dict) and isinstance(e.get("record_id"), str):
+        if isinstance(e, dict) and e.get("record_id") in wanted:
             out.add(e["record_id"])
     return out
 
@@ -114,7 +117,7 @@ def journal_commits(st: ss.ReadOnlyDir, since_ns: int) -> Tuple[Set[str], int, i
     for name in st.names():
         if name != AGGREGATE_JOURNAL and not ss.NAME_PATTERNS["journal"].fullmatch(name):
             continue
-        for line in ss.read_listed(st, name, vanished).split(b"\n"):
+        for line in ss.listed_lines(st, name, vanished):
             if not line.strip():
                 continue
             try:
@@ -136,16 +139,17 @@ def _spool_side(name: str) -> Optional[str]:
     return "quarantined" if _QUARANTINE_RX.fullmatch(name) else None
 
 
-def snapshot(fam: ss.ReadOnlyDir, st: ss.ReadOnlyDir, since_ns: int) -> Dict[str, Set[str]]:
+def snapshot(fam: ss.ReadOnlyDir, st: ss.ReadOnlyDir, since_ns: int,
+             wanted: Set[str]) -> Dict[str, Set[str]]:
     """Steps (1)-(3) of the reading order, from fresh listings; ``unstable`` names
     the files that vanished before their read and the rename targets that appeared."""
     snap: Dict[str, Set[str]] = {"pending": set(), "quarantined": set(), "logged": set()}
     vanished: List[str] = []
     listed = {n: k for n, k in ((n, _spool_side(n)) for n in st.names()) if k}
     for name in sorted(listed):
-        snap[listed[name]] |= record_ids(ss.read_listed(st, name, vanished), top_level_only=False)
-    for _name, data in ss.read_logs(fam, since_ns, vanished):
-        snap["logged"] |= record_ids(data, top_level_only=True)
+        snap[listed[name]] |= record_ids(ss.listed_lines(st, name, vanished), False, wanted)
+    for _name, lines in ss.read_logs(fam, since_ns, vanished):
+        snap["logged"] |= record_ids(lines, True, wanted)
     appeared = [n for n in st.names() if n not in listed and _spool_side(n)
                 and ss.classify(n)[0] != "active_spool"]  # never a rename target
     snap["unstable"] = set(vanished) | set(appeared)
@@ -161,7 +165,7 @@ def g6(fam: ss.ReadOnlyDir, st: ss.ReadOnlyDir, since_ns: int) -> Dict[str, obje
     passes = stable = 0
     while lost and stable < 2 and passes < MAX_PASSES:
         passes += 1
-        snap = snapshot(fam, st, since_ns)
+        snap = snapshot(fam, st, since_ns, lost)
         lost -= snap["logged"]
         quarantined |= lost & snap["quarantined"]
         lost -= snap["quarantined"]
@@ -184,8 +188,8 @@ def g6(fam: ss.ReadOnlyDir, st: ss.ReadOnlyDir, since_ns: int) -> Dict[str, obje
 def g7(fam: ss.ReadOnlyDir, since: datetime) -> Dict[str, object]:
     counts = {cls: 0 for cls, _, _ in ERR_CLASSES}
     counts.update(lines_in_window=0, unparsed=0)
-    data = _plain(fam, ERRORS_FILE) or b""
-    for raw in data.decode("utf-8", errors="replace").split("\n"):
+    for line in ss.listed_lines(fam, ERRORS_FILE, []):
+        raw = line.decode("utf-8", errors="replace").rstrip("\n")
         m = _ERR_LINE_RX.fullmatch(raw)
         try:
             ts = datetime.strptime(m.group(1) or m.group(2), "%Y-%m-%dT%H:%M:%SZ") if m else None
@@ -236,6 +240,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     rep.update(since=since.isoformat(), state_dir=str(state))
     red = bool(rep.get("g6", {}).get("lost")) or bool(rep.get("g7", {}).get("G7"))
     rep["red"] = red
+    rep["attention"] = (["g6_journal_malformed_lines"]
+                        if rep.get("g6", {}).get("journal_malformed_lines") else [])
     print(json.dumps(rep, indent=1, sort_keys=True))
     return 1 if red else (2 if rep.get("g6", {}).get("inconclusive") else 0)
 

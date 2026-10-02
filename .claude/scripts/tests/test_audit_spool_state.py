@@ -127,6 +127,31 @@ class _Vanishing(ss.ReadOnlyDir):
         return out
 
 
+class _LinesOnly:
+    """A file object with no ``read``: whoever wants its bytes must stream lines."""
+
+    def __init__(self, fh) -> None:
+        self._fh = fh
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._fh.close()
+
+    def __iter__(self):
+        return (line for line in self._fh)
+
+
+class _StreamOnly(ss.ReadOnlyDir):
+    opened = 0
+
+    def open(self, name):
+        fh = super().open(name)
+        _StreamOnly.opened += fh is not None
+        return None if fh is None else _LinesOnly(fh)
+
+
 class TestSpoolResidueNames(TestEnvContext):
     def test_spool_residue_regex_block_is_the_amendment_text(self) -> None:
         block = "\n".join(ln for ln in SCRIPT.read_text(encoding="utf-8").splitlines()
@@ -225,6 +250,18 @@ class TestFluxH1(_Tree):
         res = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=120)
         self.assertEqual((res.returncode, res.stdout), (2, ""), msg=res.stderr)
 
+
+    def test_flux_streams_lines_and_never_reads_a_whole_log(self) -> None:
+        self.log([self.era(DEAD + i) for i in range(3)])
+        self.log([self.era(DEAD + 9)], "audit-log-2026-10-3.jsonl")
+        _StreamOnly.opened = 0
+        fam, st = _StreamOnly(self.fam), ss.ReadOnlyDir(self.state)
+        try:
+            rep = ss.flux(fam, st, self.now_ns - 3600 * NS, self.now_ns + NS, 1, 0.01)
+        finally:
+            fam.close()
+            st.close()
+        self.assertEqual((rep["D"], rep["logs"]["files_read"], _StreamOnly.opened), (4, 2, 2))
 
     def test_flux_vanished_journal_and_archive_are_handled_not_silent(self) -> None:
         self.log([self.era(DEAD + 1), self.era(DEAD + 2)])

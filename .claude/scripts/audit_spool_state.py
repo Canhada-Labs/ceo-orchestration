@@ -37,7 +37,8 @@ only together with them. ``_parse_spool_pid`` is never reused (``int()`` takes
 
 Read-only by construction: the dirs are opened ``O_RDONLY|O_DIRECTORY|O_NOFOLLOW``,
 every file ``O_RDONLY|O_NOFOLLOW`` relative to them; nothing is created, renamed
-or removed. The state dir comes ONLY from ``_lib/runtime_paths`` (ADR-001): with
+or removed. Files are streamed line by line from that one descriptor, so memory
+follows the longest line, never the size of a log. The state dir comes ONLY from ``_lib/runtime_paths`` (ADR-001): with
 ``CEO_AUDIT_LOG_DIR``/``_PATH``/``_ERR`` set the hooks write elsewhere, so the
 script refuses. Exit: 0 green, 1 red, 2 usage / refusal / unreadable input.
 Datetimes are compared as UTC instants, never as text. Stdlib only, Python >= 3.9.
@@ -54,7 +55,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Dict, Iterator, List, Optional, Set, Tuple
+from typing import BinaryIO, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
 for _anc in Path(__file__).resolve().parents:
     if (_anc / ".claude" / "hooks" / "_lib").is_dir():
@@ -146,13 +147,12 @@ class ReadOnlyDir:
         except FileNotFoundError:
             return None
 
-    def read(self, name: str) -> Optional[bytes]:
+    def open(self, name: str) -> Optional[BinaryIO]:
         try:
             fd = os.open(name, _FILE_FLAGS, dir_fd=self.fd)
         except FileNotFoundError:
             return None
-        with os.fdopen(fd, "rb") as fh:
-            return fh.read()
+        return os.fdopen(fd, "rb")
 
 
 def resolve_dirs(project: Optional[str] = None) -> Tuple[Path, Path]:
@@ -164,30 +164,34 @@ def resolve_dirs(project: Optional[str] = None) -> Tuple[Path, Path]:
     return family, family / "state"
 
 
-def read_listed(d: ReadOnlyDir, name: str, vanished: List[str]) -> bytes:
-    """Content of a LISTED regular file; a name gone before lstat or read is
-    appended to ``vanished`` (the caller decides what that means)."""
+def listed_lines(d: ReadOnlyDir, name: str, vanished: List[str]) -> Iterator[bytes]:
+    """Lines of a LISTED regular file, streamed from one descriptor; a name gone
+    before its lstat or open is appended to ``vanished`` (the caller decides what
+    that means)."""
     s = d.lstat(name)
     if s is None:
         vanished.append(name)
-        return b""
+        return
     if not stat.S_ISREG(s.st_mode) or s.st_size == 0:
-        return b""
-    data = d.read(name)
-    if data is None:
+        return
+    fh = d.open(name)
+    if fh is None:
         vanished.append(name)
-        return b""
-    return data
+        return
+    with fh:
+        yield from fh
 
 
-def read_logs(fam: ReadOnlyDir, since_ns: int, vanished: List[str]) -> Iterator[Tuple[str, bytes]]:
+def read_logs(fam: ReadOnlyDir, since_ns: int,
+              vanished: List[str]) -> Iterator[Tuple[str, Iterator[bytes]]]:
     """Canonical log first (one descriptor; absent while a rotation renames it, and
     then its lines are in the archive listed next), then the rotated archives
-    listed AFTER it was read (§8.2). A listed archive that vanishes goes to
-    ``vanished``."""
-    data = fam.read(CANONICAL_LOG)
-    if data:
-        yield CANONICAL_LOG, data
+    listed AFTER it was read (§8.2). Each line iterator must be drained before the
+    next item is asked for. A listed archive that vanishes goes to ``vanished``."""
+    fh = fam.open(CANONICAL_LOG)
+    if fh is not None:
+        with fh:
+            yield CANONICAL_LOG, iter(fh)
     for name in sorted(fam.names()):
         if not _ROTATED_RX.fullmatch(name):
             continue
@@ -195,7 +199,7 @@ def read_logs(fam: ReadOnlyDir, since_ns: int, vanished: List[str]) -> Iterator[
         if s is None:
             vanished.append(name)
         elif stat.S_ISREG(s.st_mode) and s.st_mtime_ns >= since_ns - _ROTATED_SLACK_NS:
-            yield name, read_listed(fam, name, vanished)
+            yield name, listed_lines(fam, name, vanished)
 
 
 def _is_int(v: object) -> bool:
@@ -206,9 +210,9 @@ def spool_era_pids(fam: ReadOnlyDir, since_ns: int, until_ns: int) -> Tuple[Set[
     pids: Set[int] = set()
     seen = {"files_read": 0, "malformed_lines": 0}
     vanished: List[str] = []
-    for _name, data in read_logs(fam, since_ns, vanished):
+    for _name, lines in read_logs(fam, since_ns, vanished):
         seen["files_read"] += 1
-        for line in data.split(b"\n"):
+        for line in lines:
             if b'"_drain_epoch"' not in line:
                 continue
             try:

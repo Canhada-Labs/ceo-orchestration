@@ -7,8 +7,10 @@ is a disposable tmp dir. The G7 positive control drives the REAL producers: the
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import importlib.util
+import io
 import json
 import os
 import subprocess
@@ -38,6 +40,7 @@ rl = _load("check_audit_real_loss", SCRIPT)
 ss = rl.ss
 _shared = _load("_audit_spool_state_tests", Path(__file__).resolve().parent / "test_audit_spool_state.py")
 RO_WRAPPER, _Tree, _Vanishing = _shared.RO_WRAPPER, _shared._Tree, _shared._Vanishing
+_StreamOnly = _shared._StreamOnly
 PID = 2_100_000_000
 
 
@@ -136,6 +139,36 @@ class TestLossVerifierG6(_Tree):
         self.assertEqual((rep["lost"], rep["inconclusive"], rep["passes"], rep["stable_passes"]),
                          (0, False, 3, 1))
 
+    def test_loss_verifier_truncated_commit_raises_attention_not_the_exit(self) -> None:
+        ok = _rid()
+        self.journal([self.commit(ok)])
+        self.touch("audit-pending.%d.journal" % (PID + 1),
+                   json.dumps(self.commit(_rid())).encode()[:-9])  # cut mid-envelope, no newline
+        self.log([{"record_id": ok}])
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.home_dir),
+               "CLAUDE_PROJECT_DIR_NATIVE": str(self.fam)}
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(out):
+            rc = rl.main(["--g6", "--since", "2026-10-01T00:00:00Z"])
+        rep = json.loads(out.getvalue())
+        self.assertEqual((rc, rep["g6"]["lost"], rep["g6"]["journal_malformed_lines"]), (0, 0, 1))
+        self.assertEqual(rep["attention"], ["g6_journal_malformed_lines"])
+
+    def test_loss_verifier_streams_lines_and_never_reads_a_whole_file(self) -> None:
+        a, b = _rid(), _rid()
+        self.journal([self.commit(a), self.commit(b)])
+        self.touch("audit-spool.%d.malformed.0a1b2c3d" % PID, b'{"record_id":"%s", BROKEN\n' % b.encode())
+        self.log([{"record_id": _rid()}, {"record_id": a}])
+        _StreamOnly.opened = 0
+        fam, st = _StreamOnly(self.fam), _StreamOnly(self.state)
+        try:
+            rep = rl.g6(fam, st, self.now_ns - 3600 * 10 ** 9)
+        finally:
+            fam.close()
+            st.close()
+        self.assertEqual((rep["lost"], rep["quarantined"], rep["commits"]), (0, 1, 2))
+        self.assertGreaterEqual(_StreamOnly.opened, 3)  # journal + quarantine + log
+
     def test_loss_verifier_inconclusive_exits_2_and_a_real_red_wins(self) -> None:
         env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.home_dir),
                "CLAUDE_PROJECT_DIR_NATIVE": str(self.fam)}
@@ -201,7 +234,7 @@ class TestLossVerifierRealRenames(TestEnvContext):
 
 class TestWouldLogCountG7(TestEnvContext):
     def count(self, since: datetime):
-        d = ss.ReadOnlyDir(self.audit_dir)
+        d = _StreamOnly(self.audit_dir)  # the errors file is streamed too
         try:
             return rl.g7(d, since)
         finally:
@@ -213,6 +246,7 @@ class TestWouldLogCountG7(TestEnvContext):
         self.assertEqual(Path(paths["err"]), self.audit_dir / rl.ERRORS_FILE)
         since = datetime.now(timezone.utc) - timedelta(seconds=5)
 
+        # type-ignore: audit_log is imported by name at run time, so a checker sees no FileLock.
         class _TimesOut(audit_log.FileLock):  # type: ignore[misc, name-defined]
             def __enter__(self):
                 raise audit_log.FileLockTimeout("held past 2.5 s (test)")
@@ -227,6 +261,8 @@ class TestWouldLogCountG7(TestEnvContext):
 
     def test_would_log_count_both_stamps_and_starved_are_not_g7(self) -> None:
         from _lib import spool_writer
+        # PLAN-194 W2.1: typed text of ADR-055-AMEND-4 §4.3; W2.1 ships the producer and
+        # this line then drives it instead of typing the message.
         spool_writer._breadcrumb("drain canonical lock STARVED (exit): canonical log idle > "
                                  "3600s while exit drain timed out on the lock")
         spool_writer._breadcrumb("drain canonical lock STARVED: own spool stale past trigger")
