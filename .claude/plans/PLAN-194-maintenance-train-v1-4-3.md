@@ -1,9 +1,10 @@
 ---
 id: PLAN-194
 title: Trem de manutenção pós-GA 1.4.2 até a v1.4.3
-status: reviewed
+status: executing
 created: 2026-09-30
 reviewed_at: 2026-10-01
+executing_at: 2026-10-02
 reviewed_by: "Owner — aceite em bloco das recomendações do planejamento S360 no chat da S361 (2026-10-01); Q3 opção 1: W2, W3 e W5c BLOQUEADAS até o PROCEED do debate único, com os must-fix valendo por onda"
 owner: CEO
 depends_on: [PLAN-193]
@@ -1074,7 +1075,12 @@ Check: python3 .claude/scripts/validate_governance_fast.py
     `agent_spawn` quebrados do vivo (linhas 441, 442, 446 e 461) verificam contra um elo ANTERIOR ao
     imediato; os 3 de `audit-log-2026-10.jsonl` (a linha 7726 é um deles) e 1 de `audit-log-2026-09-7.jsonl`
     também. A quebra da linha 7726 que a S360 rotulou como «classe HMAC-483» é ESTA classe (2.ª+
-    ocorrência ⇒ cura estrutural). Censo dos leitores de `read_prev_hmac()` fora de testes: o
+    ocorrência ⇒ cura estrutural). **Não é classe nova:** é a «condição 67» assinada na v1.4.0-rc.1
+    (`CHANGELOG.md:833-838`: o HMAC anterior é lido antes da trava do log, dois gravadores em paralelo
+    encadeiam no mesmo predecessor e aparece uma quebra que ninguém causou); a docstring de
+    `.claude/hooks/tests/test_two_writer_chain.py:13-16` diz que o teste de barreira multiprocesso
+    «pertence à cura da rc.2», que nunca landou (achado do QA Architect, debate da W2, rodada 1). A
+    cura aposenta a condição 67. Censo dos leitores de `read_prev_hmac()` fora de testes: o
     `audit_emit.py:2850` lê DENTRO da trava; o `check_precompact_continuity.py:432` só lê para um
     instantâneo; o `audit_log.py` é o ÚNICO gravador com a leitura fora da trava. Cura proposta: mover a
     leitura do elo e o cálculo do HMAC para dentro do `with FileLock(...)`, com teste de concorrência

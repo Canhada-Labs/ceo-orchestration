@@ -543,7 +543,7 @@ re-derivados no LAND).**
 - [ ] Debate L3 `/debate start PLAN-195` fechado com PROCEED (Security Engineer e Threat
   Detection Engineer com VETO) antes de qualquer edição do hook (**→ item C11:** inclui a
   reconfirmação dos dois VETOs sobre o sha do plano que contém o apêndice, registrada em
-  `PLAN-195/debate/`; PENDENTE até esse registro) — Check: none (debate gate)
+  `PLAN-195/debate/`; REGISTRADA em 2026-10-01 em `PLAN-195/debate/reconfirm-s361/`) — Check: none (debate gate)
 - [ ] Instrumento de replay de falso-positivo (OQ-1) pronto e medido sobre o HEAD
   — Check: none (instrumento fora do repo; contagens registradas no pacote)
 - [ ] W1-ADR: ADR-201 `PROPOSED` com o conteúdo mínimo acima; cerimônia — Check: test -f .claude/adr/ADR-201-bash-guard-indirect-execution.md
@@ -748,7 +748,7 @@ registra**). **Debate L3:** rodadas 1 e 2 (S360) — ler
 abriu a OQ-10 (Owner, depois do replay) e reduziu os dois VETOs a texto, aplicado neste plano;
 os portadores confirmam a retirada no próprio arquivo da rodada 2 (sobre o sha `9894151f…`;
 **→ item C11:** a reconfirmação sobre o sha que contém o apêndice é pré-requisito da W1 e da
-edição do hook, e segue PENDENTE até ser registrada em `PLAN-195/debate/`). O flip
+edição do hook; REGISTRADA em 2026-10-01 em `PLAN-195/debate/reconfirm-s361/`). O flip
 `draft → reviewed` é do Owner (portão humano, PLAN-SCHEMA §4), sobre o plano revisto (feito em
 2026-10-01). **W1 (parte A):** na 2.ª
 vaga, depois da W1 do PLAN-194 ocupar a 1.ª (ver «Regra de WIP»; **→ item C2:** a W1-ADR landa
@@ -1030,7 +1030,17 @@ se o comando não fizer edição canônica no PRÓPRIO segmento (o limite está 
 disso, é defeito. Registre contagem e denominador no pacote, e mantenha as strings fora do
 repositório (item C5).
 
-**C11 — Reconfirmação dos VETOs: PENDENTE.** A retirada dos VETOs da rodada 2 está presa ao
+**C11 — Reconfirmação dos VETOs: REGISTRADA (2026-10-01, S361).** Os dois portadores reviram o diff
+integral contra o sha `9894151f…0406` e RETIRARAM o VETO sobre o sha256 `c8cec366…a1ff` (commit
+`6a9abb10`), com condições: `PLAN-195/debate/reconfirm-s361/security-engineer.md` e
+`PLAN-195/debate/reconfirm-s361/threat-detection-engineer.md`. As condições desses dois arquivos
+valem para todos os pacotes deste plano como se estivessem escritas aqui (inclusive a do Security
+Engineer que torna P0, na regra de parada do rail, uma transição BLOCK→ALLOW fora da exceção
+declarada da W2 ou uma regressão de fail-closed para fail-open). Segundo os próprios registros,
+marcar caixa, mudar status ou histórico e incorporar as condições não reabrem a reconfirmação;
+outra edição na Thesis, no Goal, nos escopos das ondas, nas OQ-8/9/10, na Prova, na Divulgação
+ou na regra de parada exige nova reconfirmação por diff. O texto abaixo é o registro original da
+pendência. A retirada dos VETOs da rodada 2 está presa ao
 sha256 `9894151f…0406` do plano (`round-2/consensus.md:8-9` e `:151-167`), e o Threat Detection
 Engineer declarou que a confirmação não se estende a outro texto. O novo cabeçalho, as
 remissões «→ item Cn» no corpo, a entrada S361 do histórico e este apêndice mudam os bytes do
