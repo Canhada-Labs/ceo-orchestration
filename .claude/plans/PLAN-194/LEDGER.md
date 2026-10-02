@@ -45,6 +45,17 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
 - Detector do ensaio (`rehearse-pin-0156.sh:236-249`, com `NEW_VER=0.160.0`) sobre
   `PLAN-194-*.md`: no `97a78fce` acusava 1 linha (o passo do Owner com `<versão exata>`); com o texto do
   re-pin, saída vazia.
+- Sonda da 0.160.0 (2026-10-02, S362; prefixo npm descartável, `--ignore-scripts`, registro fixo;
+  `CODEX_HOME` temporário com cópia do config e da credencial, apagado no fim — D-20): **VERDE**.
+  Payload `aarch64-apple-darwin`, lido ANTES de executar: sha256
+  `112fae7a5a1223e673c8a1791d32338f37df8b527ff1159bb8adac6c4dbf1b4b`, 241.555.024 bytes;
+  `--verify-codex-pin <prefixo>/bin/codex` ⇒ rc 1, `mismatch`/`payload_sha256_mismatch` (o rail fecha,
+  como deve); `--version` = `codex-cli 0.160.0` (< 2 s); argv do hook (`build_verdict_argv`, com e sem
+  `--json`) e argv do CEO aceitos (rc 0, nenhuma linha unexpected/unrecognized; controles negativos rc 2);
+  `exec review`, `app-server` e `execpolicy check` vivos; `test_live_execpolicy_check` PASSED com o
+  prefixo no `PATH`; canários reais servidos em `gpt-6-astra`/`xhigh`. A 0.160.0 anexa stdin em pipe
+  como bloco `<stdin>` (o hook passa entrada vazia). O prefixo fica em `work/fd02/prefix`, no scratchpad
+  da sessão, para o ensaio do pacote do RP.
 
 ## Unidade atual — S362 (2026-10-02; `main` = `97a78fce`)
 
@@ -62,7 +73,8 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   `codex-pin-0160` gerado, ensaio verde e rail no 0.156.1.
 - Decisão 3 do Owner (empacotamento do verificador de procedência) NÃO tomada ⇒ W3 adiada para a
   1.4.4, VETO de Segurança levantado; seção W0.6, abaixo.
-- Antes do SIGN do U2-A: a W0.5 no HEAD (pré-registro abaixo) e o H1 vivo registrados neste LEDGER.
+- Antes do SIGN do U2-A: a W0.5 no HEAD (pré-registro abaixo). O H1 vivo já está registrado (seção
+  «W2 — H1 vivo»), antes do LAND do U2-A.
 - Backlog declarado: refresh completo do ledger da OpenAI; seção W3b.3, abaixo.
 
 ## W0.5-pré-registro (gravado em 2026-10-02, S362, ANTES de qualquer execução)
@@ -122,6 +134,72 @@ ainda; os resultados entram em entradas datadas abaixo dela.
   campos `decisoes_descartadas` e `N`; a do braço depois da cura é a que o Check de sucesso da W2 lê. O
   mesmo instrumento roda o braço depois da cura NA SOMBRA do U2-C, antes do SIGN dele.
 - Medição fora do CI; nenhuma asserção de tempo absoluto em teste.
+
+## W2 — H1 vivo, antes da cura (2026-10-02, S362)
+
+- `python3 .claude/scripts/audit_spool_state.py --flux --d-min 200 --since <ISO>` (`--since` conforme o
+  relatório do FD-07; script do F1, ainda na sombra do FD-07, commits `ff843289` + `0f0a7b1a`), no state
+  dir VIVO, SÓ LEITURA (`sandbox-exec` negando `file-write*` + audit hook do Python): **|D| = 14.572,
+  F = 0,9947 ⇒ H1 VERMELHO no HEAD**, como esperado antes da cura da W2 (journals vazios de PID morto).
+
+## W4 — linha de base do publish (2026-10-02, S362; base da D-12)
+
+- `gh run view 36719886734 --log` (NPM Publish do GA v1.4.2, `b55084da`, 2026-09-30, success; log de
+  2.839 linhas, sha256 `4bfff28334cacd4faf0336e574070bc471bf4211c97dcf7d075b20d9cce39285`): job `publish`
+  com `actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e` ⇒ `node: v20.20.2`, npm embutido
+  10.8.2, passo do npm ⇒ `OK: npm 11.20.0`; `ceo-orchestration@1.4.2` publicado com proveniência.
+
+## W6.0 — `cleanupPeriodDays` no binário do CC 2.1.287 (2026-10-02, S362; leitura, sem isca paga)
+
+- Binário `versions/2.1.287`, sha256 `6eab8333fe2121553100d8f40bfada384a3e989b94f947e18ba6677a6fcb41ea`;
+  leitura de código minificado (resíduo: não é execução). Os 5 pontos fecharam; a isca paga não foi
+  necessária.
+- A varredura apaga arquivos de topo `.jsonl` (inclusive `audit-log-*.jsonl`) de TODOS os diretórios de
+  `~/.claude/projects/` com mtime mais velho que N dias; N = `cleanupPeriodDays` dos settings MESCLADOS
+  da sessão que varre (padrão 30; inteiro ≥ 1). Não toca `audit-key`, `.salt`, `salt-minted.json`, os
+  sidecars, `.lock` nem `.errors`. Todo processo que vive ~10 min varre (`.last-cleanup` < 24 h só adia).
+- Precedência usuário → projeto → local → `--settings` → policy (a última vence): aqui vale 90
+  (`.claude/settings.json:861`) sobre 3650 (usuário). Logo, 3650 aqui só protege das sessões DESTE
+  repositório; o backup segue como proteção principal.
+- W6.2: o binário diz `"medium" fewer than 10`; o `_posture_comment` (`.claude/settings.json:815`) diz 15.
+
+## W6.3 — restaurar e verificar (2026-10-02, S362)
+
+- Decisão do CEO, registrada antes de executar: aceitar as 2 escritas temporárias do `ceo-restore.sh`
+  fora do `--dest` (listagem em `/tmp`, `:194-196`; extração inteira em `mktemp -d -t`, que no macOS
+  ignora `TMPDIR`, `:230-233`); parada se algo fosse ao state dir vivo ou ao repositório.
+- `bash .claude/scripts/ceo-restore.sh ~/.ceo-backups/<slug>/ceo-backup-2026-10-01T195004Z.tar.gz --dest
+  <dir descartável>/restore --apply --force` ⇒ rc 0, `sha256: verified` (2026-10-02T20:08:00Z); nada
+  sobrou em `/tmp` nem em `/var/folders/…/T`; state dir vivo e repositório intocados.
+- `audit-verify-chain.py --log-file <arquivo> --key-file <state dir vivo>/audit-key --json`, cópia ×
+  original: **paridade 15/15**, saída e stderr byte-idênticos. Exit 0: `08-1`, `09-3`, `09-4`, `09-5`,
+  `09-8`, `09-9` e o `audit-log.jsonl` da cópia × o prefixo de 231.305 bytes (302 linhas) do vivo
+  `audit-log-2026-10-1.jsonl`. Exit 1 (`hmac_mismatch`), mesma 1.ª linha nos dois: `08-2`:9729,
+  `09`:13945, `09-1`:790, `09-2`:2582, `09-6`:5142, `09-7`:2849, `09-10`:12723, `10`:7726.
+- Fora do backup de 2026-10-01: o resto do `10-1`, o `10-2`, o `10-3` e o `audit-log.jsonl` atual; por
+  desenho, `audit-key`, `.salt`, `salt-minted.json` e os sidecars do log. Sem a chave original, a cópia
+  é inverificável (D-13).
+- Leitura (FD-09, sem patch): o log vivo nasce 0644 quando a rotação vem do dreno do spool
+  (`audit_emit.py:2721`, `open("a")` sem `chmod`; a fase 5 do `spool_writer.py` não corrige); o
+  `audit-log.errors` nasce 0644 por `open("a")` sem modo. Cura fora da 1.4.3 (D-11).
+- **Achado ABERTO, sem patch — defeitos do `.claude/scripts/ceo-restore.sh`** (13 no relatório): listagem
+  em caminho fixo de `/tmp`, fora do `trap` (`:194-196`, classe CWE-377); SIGPIPE sob `pipefail` aborta
+  a partir de ~2.000 entradas (`:194`); `mktemp -t` ignora `TMPDIR` e `--dest` (`:230`); extração
+  integral em claro, limpa só por `trap EXIT` (`:231-233`); destino 0755 e modos 0644 preservados
+  (`:227`, `:239`, `:247`); o prompt anuncia `$DEST/audit/`, mas a cópia vai flat (`:211` × `:239`); o
+  cabeçalho diz exit 1 no SHA divergente e o código sai 2 (`:15` × `:184`); sem `.sha256` o `--apply`
+  segue (fail-open, `:177-189`); sem `--dest`, sobrescreve o `audit-log.jsonl` ativo sem tratar os
+  sidecars (`:239`); `--restore-*` escrevem no CWD (`:253-265`); `--dest` sem valor ⇒ `unbound variable`
+  (`:64`); aviso de listagem sempre impresso (cosmético). No backup: tarball 0644 em diretórios 0755,
+  legível pelo grupo.
+
+## Operação S362 — limites e cadeia (2026-10-02)
+
+- Medido pelo CEO, 19:45Z–19:51Z: 7 agentes Opus 5.5 em xhigh ≈ 3–4 %/min da janela de 5 h e
+  ≈ 0,6 %/min da semanal; o «101 %» do sidecar não parou os agentes; cadeia HMAC viva intacta com até 11
+  agentes simultâneos (`audit-verify-chain.py`, ~6 mil elos). Reconfirmado às 20:24Z:
+  `audit-verify-chain.py --log-file <state dir>/audit-log.jsonl --key-file <state dir>/audit-key --json`
+  ⇒ `intact`, 10.887 elos.
 
 ## W0.2 — manifesto do setup-python (controle vermelho da W1)
 
