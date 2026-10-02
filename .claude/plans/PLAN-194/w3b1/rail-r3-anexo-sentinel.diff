@@ -1,0 +1,53 @@
+--- a/.claude/plans/PLAN-194/w3b1-approved.md (rodada 3)
++++ b/.claude/plans/PLAN-194/w3b1-approved.md (anexo da rodada 3)
+@@ -96,11 +96,20 @@
+   id já desligado (prosa, sem chamador); a troca é backlog livre. Também fora: a nota
+   `_meta.openai_rows_refreshed` do `.claude/scripts/model-deprecations.json` diz que um alvo por faixa
+   (`-terra`/`-luna`) acrescentaria vermelhos ao `check-model-currency.py`; com a família na tupla isso
+-  deixa de valer (backlog livre, junto do refresh por faixa da W3b.2/W5c).
+-- O parágrafo novo do módulo diz que os ids «retired in 2026» saíram da tupla; em 2026-10-02 só o
+-  desligamento de 2026-07-23 já passou, e os outros estão marcados para 2026-10-23 e 2026-12-11. É
+-  imprecisão de tempo verbal num comentário, sem efeito no código, mantida porque o patch está congelado
+-  desde a rodada 1; a correção vai na próxima edição do módulo (pacote 2 da W3).
++  deixa de valer (vai junto do refresh do ledger da OpenAI com substitutos por faixa — backlog no
++  `PLAN-194/LEDGER.md`, seção W3b.3).
++- Pela forma: o texto novo do patch chama de «retired» (no passado) ids que, em 2026-10-02, só se
++  aposentam em 2026-10-23 ou 2026-12-11 (só o desligamento de 2026-07-23 já passou). A forma aparece em
++  três sítios: o parágrafo novo de `codex_cli_shape.py`, a docstring do teste do adapter
++  (`test_codex_adapter.py`, sobre o `o3`) e o parágrafo final de
++  `.claude/data/model-currency-expected-reds.txt`. É imprecisão de tempo verbal em comentário e
++  docstring, sem efeito no código, mantida porque o patch está congelado desde a rodada 1; cada sítio é
++  corrigido na próxima edição do seu arquivo — o módulo no pacote 2 da W3; o teste do adapter e o
++  arquivo de vermelhos esperados na próxima onda que tocar cada um (para o de vermelhos esperados, o
++  mapa de colisões do plano aponta a W5c).
++- Com a base vermelha no `validate-governance`, um detalhe que traga o caminho absoluto da árvore
++  difere entre a árvore viva e o worktree da base e reprova por ruído (falha FECHADA): a comparação não
++  normaliza caminhos.
+ 
+ ## Bateria e revisão
+ 
+@@ -112,17 +121,19 @@
+   exceção, que também sai rc 1, não conta). Aplica o patch e confere que o blob de cada caminho tocado é o `index` pós-imagem do
+   patch — depois de aplicar, de novo depois da bateria e, no índice, depois de stagear, junto do estado
+   (cada caminho do patch e o sentinel como modificação, a `.asc` como arquivo novo, sem detecção de
+-  rename) e do modo, que segue o do HEAD e é 100644 para tudo o que entra. Depois do commit, o conjunto,
+-  o pai e os blobs commitados são conferidos de novo; se um hook mudou o commit, ele é desfeito com
+-  `reset --soft` e o SIGN aborta. A pré-imagem pinada exige a metade livre no HEAD.
++  rename) e do modo, que segue o do HEAD e é 100644 para tudo o que entra. A árvore desse índice
++  conferido é gravada (`git write-tree`) logo antes do commit; depois dele, a árvore commitada
++  (`HEAD^{tree}`) tem de ser ela e o pai, o Anchor-SHA — o que cobre a `.asc`, os modos e todo caminho;
++  se um hook mudou o commit, ele é desfeito com `reset --soft` para o Anchor-SHA e o SIGN aborta. A
++  pré-imagem pinada exige a metade livre no HEAD.
+ - Bateria: `py_compile`; três passadas DURAS, que reprovam o SIGN em qualquer rc ≠ 0 com o patch, sem
+   julgamento de pré-existente — o controle acima (com o patch: rc 0, `SUMMARY: breaks=0 warns=0` e
+   `LIVE-BREAKS-REMAINING: 0` na última linha; o rc 0 sozinho também é o caminho fail-open do script),
+   `check-model-currency.py --expected-reds` e os cinco arquivos de teste do pacote; os gates de corpus
+   (o `validate-governance` julgado pela saída inteira — cabeçalho, detalhe de cada violação e contagem,
+   fora as linhas de aviso, reconhecidas pelo prefixo com que o próprio script as emite e nunca por
+-  substring, e com a raiz de cada árvore normalizada — com e sem o patch, e uma execução sem o resumo
+-  `Errors:` reprova); e as suítes do `pytest.ini` (os `testpaths`) com a divisão de marcadores
++  substring, e fora a linha `Repo:`, com espaços normalizados — com e sem o patch, e uma execução sem o
++  resumo `Errors:` reprova); e as suítes do `pytest.ini` (os `testpaths`) com a divisão de marcadores
+   do CI (`-n auto -m 'not serial'` e `-m serial`). Essas suítes contêm as três raízes que coletam os
+   caminhos do pacote (`.claude/hooks/tests`, `.claude/scripts/tests` e `tests/unit`); o CI roda ainda
+   raízes que os `testpaths` não contêm, que a bateria não roda e que não referenciam esses caminhos.

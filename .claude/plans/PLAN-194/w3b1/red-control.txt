@@ -1,0 +1,20 @@
+# W3b.1 (metade canônica) — controle vermelho: os testes e dados FINAIS deste pacote contra o canônico ANTERIOR
+# base: a metade livre (medido sobre o commit d74b0bf3 da sombra, sobre main 11c71a42; no main ela landou
+# como 399efbaa, com os mesmos bytes nos caminhos do patch); aplicado só o que NÃO é canônico do w3b1.patch
+# (git apply --exclude=.claude/hooks/_lib/codex_cli_shape.py); codex_cli_shape.py no blob pré-imagem 5d012fb7cce6eab517b0d39f257814f3b13ea191
+# medido em 2026-10-02 numa árvore descartável (clone local), Python 3.9 da máquina, pytest 7.3
+# verde depois do apply completo (canônico incluso): os 5 arquivos de teste 148 passed; os dois gates rc 0
+
+FAILED .claude/hooks/tests/test_codex_cli_shape.py::TestBuildExecArgv::test_explicit_model_emitted
+FAILED .claude/hooks/tests/test_codex_cli_shape.py::TestCoercion::test_model_valid_passthrough
+FAILED .claude/hooks/tests/test_codex_cli_shape.py::TestAllowlistAgainstDeprecationLedger::test_gpt56_family_is_accepted_and_emitted
+FAILED .claude/hooks/tests/test_codex_cli_shape.py::TestAllowlistAgainstDeprecationLedger::test_ids_retired_by_w3b1_are_loud_unknowns
+FAILED .claude/hooks/tests/test_codex_cli_shape.py::TestAllowlistAgainstDeprecationLedger::test_no_member_is_retired_by_the_ledger
+FAILED .claude/hooks/tests/test_codex_adapter.py::TestMakeInvokeCommand::test_valid_model_accepted
+FAILED .claude/scripts/tests/test_check_model_deprecations.py::TestNegativeFixtureInertness::test_repo_default_scan_matches_declared_w3b1_debt
+FAILED .claude/scripts/tests/test_check_model_currency.py::TestInjectedModel::test_injected_model_turns_red
+FAILED .claude/scripts/tests/test_check_model_currency.py::TestExpectedReds::test_expected_reds_exact_set_with_shrinkage_control
+FAILED tests/unit/test_codex_token_telemetry.py::TestMakeInvokeCommandRedacted::test_make_invoke_command_redacted_applies_redact_before_argv
+10 failed, 138 passed in 23.76s
+check-model-deprecations --check --today 2026-10-13 rc=1  SUMMARY: breaks=5 warns=6 info=0 inert=793 total=804 (today=2026-10-13, warn_days=60, source_stale=false)
+check-model-currency --expected-reds rc=1  RED-IDS: 7

@@ -1,0 +1,270 @@
+diff --git a/.claude/data/model-currency-expected-reds.txt b/.claude/data/model-currency-expected-reds.txt
+index d0f3119239c1288ef7d400151e5ff19c1c60dd0e..fa380e97f54d926825cdbaee3b327c2ed7fc1f6b 100644
+--- a/.claude/data/model-currency-expected-reds.txt
++++ b/.claude/data/model-currency-expected-reds.txt
+@@ -44,11 +44,11 @@ claude-haiku-4-5-20251001
+ # available, has no price row, and is not in the working set.
+ # Surface: deprecation ledger. Authority: ADR-149 working set.
+ claude-mythos-5
+-# OpenAI-family replacement of 4 rows (gpt-5, gpt-5.2, gpt-5.3-codex, o3),
+-# checked against codex_cli_shape.py `_VALID_MODELS`, whose newest member is
+-# gpt-5.5. This is the live defect already inventoried in PLAN-176 §8: the
+-# reviewer allowlist rejects the migration target the deprecation ledger itself
+-# recommends. Its lane (openai) is INERT — zero priced rows — so the finding is
+-# reported without opening a lane.
+-# Surface: deprecation ledger. Authority: codex_cli_shape `_VALID_MODELS`.
+-gpt-5.6-sol
++#
++# NO OpenAI-family red. Until PLAN-194 W3b.1 this file carried gpt-5.6-sol:
++# the replacement of every OpenAI deprecation row, checked against
++# codex_cli_shape.py `_VALID_MODELS`, whose newest member was gpt-5.5 (the
++# live defect inventoried in PLAN-176 §8 — the reviewer allowlist rejected the
++# migration target the deprecation ledger recommends). W3b.1 put the gpt-5.6
++# family in `_VALID_MODELS` and took the retired ids out, so that red
++# disappears ON PURPOSE (seven reds -> six); the shrinkage is this paragraph.
+diff --git a/.claude/hooks/_lib/codex_cli_shape.py b/.claude/hooks/_lib/codex_cli_shape.py
+index 5d012fb7cce6eab517b0d39f257814f3b13ea191..fffa02980607f7eadf186081e9e186c738ac64a2 100644
+--- a/.claude/hooks/_lib/codex_cli_shape.py
++++ b/.claude/hooks/_lib/codex_cli_shape.py
+@@ -83,25 +83,30 @@ CODEX_CLI_TARGET_VERSION: str = "0.139.0"
+ #
+ # PLAN-142 D5 / OQ1 resolution (smoke-resolved at execution, S246): a hands-on
+ # 0.139 probe against the Owner's Codex account showed that account serves ONLY
+-# its own default (`gpt-5.5`); forcing ANY catalog id (`gpt-5-codex`, `gpt-5`,
+-# `gpt-5.1-codex`, ...) returns HTTP 400 "model not supported when using Codex
+-# with a ChatGPT account". The historical `gpt-5.5` default that S120 silently
+-# coerced to `gpt-5-codex` was therefore the ONLY id that actually works. The
+-# portable resolution: DEFAULT is to OMIT `--model` entirely so each account
++# its own default (`gpt-5.5`); forcing ANY id of the API-key catalog of that
++# time returned HTTP 400 "model not supported when using Codex with a ChatGPT
++# account". The historical `gpt-5.5` default that S120 silently coerced to the
++# catalog default of that time was therefore the ONLY id that actually worked.
++# The portable resolution: DEFAULT is to OMIT `--model` entirely so each account
+ # uses the model it can serve. `_VALID_MODELS` is a NAME-allowlist for an
+ # EXPLICIT override (rejects typos LOUDLY) — NOT an availability guarantee; a
+ # named-but-unavailable id degrades to a 400 -> ADVISORY at runtime (fail-open).
+-
+-#: Known reviewer model ids accepted for an EXPLICIT override. Includes
+-#: `gpt-5.5` (the Owner account's default) plus the API-key-account catalog.
++#
++# PLAN-194 W3b.1: an id the OpenAI deprecation ledger retires
++# (`.claude/scripts/model-deprecations.json` — `model_id` or alias) is NOT
++# kept here; the ids retired in 2026 left this tuple and the `gpt-5.6-*`
++# family entered it (the substitutes the OpenAI deprecation page names; the
++# ledger's single migration target is `gpt-5.6-sol`). A test cross-checks
++# this tuple against the ledger, so a future ledger row for a member turns
++# that test red.
++
++#: Known reviewer model ids accepted for an EXPLICIT override: `gpt-5.5` (the
++#: account default measured at S246) plus the `gpt-5.6-*` family.
+ _VALID_MODELS: Tuple[str, ...] = (
+     "gpt-5.5",
+-    "gpt-5",
+-    "gpt-5-mini",
+-    "gpt-5-codex",
+-    "o3",
+-    "o3-mini",
+-    "o4-mini",
++    "gpt-5.6-sol",
++    "gpt-5.6-terra",
++    "gpt-5.6-luna",
+ )
+ 
+ #: Default reviewer model: None means "do NOT emit --model" → the Codex
+@@ -212,7 +217,7 @@ class UnknownCodexModel(ValueError):
+     """Raised when a caller requests a model id not in ``_VALID_MODELS``.
+ 
+     PLAN-142 C3 / D5: the pre-migration code SILENTLY coerced an unknown
+-    model (e.g. the wrapper default ``gpt-5.5``) to ``gpt-5-codex``,
++    model (e.g. the wrapper default ``gpt-5.5``) to a fixed catalog id,
+     masking a real misconfiguration. The migration makes this LOUD:
+     ``build_exec_argv`` raises this so the argv NEVER carries a model the
+     caller did not intend.
+diff --git a/.claude/hooks/tests/test_codex_adapter.py b/.claude/hooks/tests/test_codex_adapter.py
+index 7ddd458ab34fb70475e7cc95f8bbaabbc25a7525..8ead5e11810dfea2185d0dbe817a1de1363b9e68 100644
+--- a/.claude/hooks/tests/test_codex_adapter.py
++++ b/.claude/hooks/tests/test_codex_adapter.py
+@@ -347,12 +347,13 @@ class TestMakeInvokeCommand(TestEnvContext):
+         with self.assertRaises(UnknownCodexModel):
+             codex.make_invoke_command("Review.", model="gpt-99-super", output_last_message_path=self._OUT)
+ 
+-    def test_valid_model_o3_accepted(self):
+-        """o3 model passes through without coercion."""
++    def test_valid_model_accepted(self):
++        """An allowlisted model passes through without coercion (PLAN-194
++        W3b.1: the retired `o3` left the allowlist; `gpt-5.6-sol` is in)."""
+         codex = self._adapter()
+-        argv = codex.make_invoke_command("Audit.", model="o3", output_last_message_path=self._OUT)
++        argv = codex.make_invoke_command("Audit.", model="gpt-5.6-sol", output_last_message_path=self._OUT)
+         m_idx = argv.index("--model")
+-        self.assertEqual(argv[m_idx + 1], "o3")
++        self.assertEqual(argv[m_idx + 1], "gpt-5.6-sol")
+ 
+     def test_color_never_and_json_opt_in(self):
+         """PLAN-142 — 0.139 uses --color never; usage stream is opt-in via json_events."""
+diff --git a/.claude/hooks/tests/test_codex_cli_shape.py b/.claude/hooks/tests/test_codex_cli_shape.py
+index 2650235db7c179c5772311b00e38ff3007b6a4ab..51b3c2261560a5f38cf2cca931b7746cf8f31895 100644
+--- a/.claude/hooks/tests/test_codex_cli_shape.py
++++ b/.claude/hooks/tests/test_codex_cli_shape.py
+@@ -65,9 +65,9 @@ class TestBuildExecArgv(TestEnvContext):
+ 
+     def test_explicit_model_emitted(self):
+         # An explicit, allowlisted override IS emitted.
+-        argv = shape.build_verdict_argv("p", output_file=self._OUT, model="o3")
++        argv = shape.build_verdict_argv("p", output_file=self._OUT, model="gpt-5.6-sol")
+         self.assertIn("--model", argv)
+-        self.assertEqual(argv[argv.index("--model") + 1], "o3")
++        self.assertEqual(argv[argv.index("--model") + 1], "gpt-5.6-sol")
+ 
+     def test_usage_mode_adds_json(self):
+         argv = shape.build_verdict_usage_argv("p", output_file=self._OUT)
+@@ -101,7 +101,7 @@ class TestCoercion(TestEnvContext):
+         self.assertIsNone(shape.DEFAULT_MODEL)
+ 
+     def test_model_valid_passthrough(self):
+-        self.assertEqual(shape.coerce_model("o3"), "o3")
++        self.assertEqual(shape.coerce_model("gpt-5.6-sol"), "gpt-5.6-sol")
+         # gpt-5.5 (the Owner account default) is an allowlisted explicit id.
+         self.assertEqual(shape.coerce_model("gpt-5.5"), "gpt-5.5")
+ 
+@@ -117,6 +117,53 @@ class TestCoercion(TestEnvContext):
+         self.assertEqual(shape.coerce_sandbox_mode("workspace-write"), "workspace-write")
+ 
+ 
++class TestAllowlistAgainstDeprecationLedger(TestEnvContext):
++    """PLAN-194 W3b.1 — `_VALID_MODELS` accepts no id the deprecation ledger
++    retires. The ledger (`.claude/scripts/model-deprecations.json`) is the
++    source of the retired set (every `model_id` and alias), so a future row
++    for a member turns this red instead of a hand-kept list drifting. RED on
++    the pre-W3b.1 tuple (`gpt-5`, `gpt-5-mini`, `gpt-5-codex`, `o3`,
++    `o3-mini`, `o4-mini` all have rows)."""
++
++    _LEDGER = Path(__file__).resolve().parents[2] / "scripts" / "model-deprecations.json"
++    _RETIRED_BY_W3B1 = ("gpt-5", "gpt-5-mini", "gpt-5-codex", "o3", "o3-mini", "o4-mini")
++    _GPT56_FAMILY = ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna")
++
++    def _retired_ids(self):
++        self.assertTrue(self._LEDGER.is_file(), "deprecation ledger missing: %s" % self._LEDGER)
++        data = json.loads(self._LEDGER.read_text(encoding="utf-8"))
++        retired = set()
++        for row in data["models"]:
++            retired.add(row["model_id"])
++            retired.update(row.get("aliases") or [])
++        return retired
++
++    def test_no_member_is_retired_by_the_ledger(self):
++        retired = self._retired_ids()
++        self.assertIn("gpt-5-codex", retired)  # the ledger really carries the OpenAI rows
++        self.assertEqual(sorted(set(shape._VALID_MODELS) & retired), [])
++
++    def test_ids_retired_by_w3b1_are_loud_unknowns(self):
++        for model in self._RETIRED_BY_W3B1:
++            with self.subTest(model=model):
++                with self.assertRaises(shape.UnknownCodexModel):
++                    shape.coerce_model(model)
++
++    def test_gpt56_family_is_accepted_and_emitted(self):
++        for model in self._GPT56_FAMILY:
++            with self.subTest(model=model):
++                self.assertEqual(shape.coerce_model(model), model)
++                argv = shape.build_verdict_argv("p", output_file="/tmp/ceo_out.json", model=model)
++                self.assertEqual(argv[argv.index("--model") + 1], model)
++
++    def test_default_still_omits_model(self):
++        # The W3b.1 swap changes the explicit-override allowlist only; the
++        # default argv (both modes) still carries no --model (PLAN-142 D5).
++        self.assertIsNone(shape.DEFAULT_MODEL)
++        self.assertNotIn("--model", shape.build_verdict_argv("p", output_file="/tmp/ceo_out.json"))
++        self.assertNotIn("--model", shape.build_verdict_usage_argv("p", output_file="/tmp/ceo_out.json"))
++
++
+ class TestLegacyAdapter(TestEnvContext):
+     """make_invoke_command adapter: json_events, resume retirement, output path."""
+ 
+diff --git a/.claude/scripts/tests/test_check_model_currency.py b/.claude/scripts/tests/test_check_model_currency.py
+index f5e9b4ca6f9ad29e466319992bbc7c0caa5b6f58..e4cbcb5d163f1ff461dbe7f54eae6f3eef03286e 100644
+--- a/.claude/scripts/tests/test_check_model_currency.py
++++ b/.claude/scripts/tests/test_check_model_currency.py
+@@ -524,7 +524,10 @@ class TestExpectedReds(_Fixture):
+         self.assertEqual(report["expected_reds"]["unexpected"], [])
+         self.assertEqual(report["expected_reds"]["missing"], [])
+         observed = list(report["red_ids"])
+-        self.assertEqual(len(observed), 7, observed)
++        # 7 -> 6 at PLAN-194 W3b.1: gpt-5.6-sol left the set on purpose (the
++        # gpt-5.6 family entered codex_cli_shape._VALID_MODELS; the cause is
++        # the closing paragraph of the expected-reds file).
++        self.assertEqual(len(observed), 6, observed)
+ 
+         tmp = Path(tempfile.mkdtemp(prefix="p176w0a-exact-"))
+         self.addCleanup(__import__("shutil").rmtree, tmp, True)
+diff --git a/.claude/scripts/tests/test_check_model_deprecations.py b/.claude/scripts/tests/test_check_model_deprecations.py
+index fddc6efddc45ef43bc69d2cf6ff7a7321cf4f2b0..f445fec1eb832c88dcaec4fc3c8d4956b23f65e3 100644
+--- a/.claude/scripts/tests/test_check_model_deprecations.py
++++ b/.claude/scripts/tests/test_check_model_deprecations.py
+@@ -278,10 +278,11 @@ class TestNegativeFixtureInertness(_CheckerTestBase):
+ 
+         Was `--check --today 2026-06-12` exits 0. PLAN-194 W3b.3 refreshed
+         the OpenAI rows from the primary source, and ids retired on
+-        2026-07-23 (or retiring 2026-12-11) still sit in live code until
+-        W3b.1 removes them. The probe date moved to the W3b control date
+-        (2026-10-13), which sees every id the old date saw (each one that
+-        warned on 2026-06-12 is BREAK by then) plus the December fuse.
++        2026-07-23 (or retiring 2026-10-23 / 2026-12-11) sat in live code
++        until W3b.1 removed them (the map is empty since). The probe date
++        moved to the W3b control date (2026-10-13), which sees every id the
++        old date saw (each one that warned on 2026-06-12 is BREAK by then)
++        plus the October and December fuses.
+         """
+         rc, out, _ = self.run_main(["--json", "--today", W3B0_TODAY])
+         self.assertEqual(rc, 0)
+@@ -460,18 +461,12 @@ W3B0_TODAY = "2026-10-13"
+ #: Widened ONCE, with a primary source: the 2026-10-02 re-check of the page
+ #: (LEDGER §W3b.3, raw HTML) gave `o3-mini`/`o4-mini` rows (2026-10-23).
+ #: Shrunk by the free half of W3b.1 (the non-canonical `codex_invoke.py`
+-#: docstring and `optimizer/codex_phase_gate.py` label: 3 hits); what is
+-#: left lives in the canonical `codex_cli_shape.py` and goes with its
+-#: ceremony.
+-W3B1_DECLARED_DEBT = {
+-    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5-codex", "BREAK"): 4,
+-    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5.1-codex", "BREAK"): 1,
+-    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5", "WARN"): 2,
+-    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5-mini", "WARN"): 1,
+-    (".claude/hooks/_lib/codex_cli_shape.py", "o3", "WARN"): 1,
+-    (".claude/hooks/_lib/codex_cli_shape.py", "o3-mini", "WARN"): 1,
+-    (".claude/hooks/_lib/codex_cli_shape.py", "o4-mini", "WARN"): 1,
+-}
++#: docstring and `optimizer/codex_phase_gate.py` label: 3 hits) and EMPTY
++#: since the canonical half (the 11 hits of `codex_cli_shape.py`, removed in
++#: the ceremony's own patch), so `--check --today 2026-10-13` exits 0 on the
++#: shipped tree. A new entry here is new debt and needs the same
++#: primary-source discipline.
++W3B1_DECLARED_DEBT: dict = {}
+ 
+ # The exact line shapes measured on 2026-09-30 (check-stdlib-only.py:63 and
+ # the `_VALID_MODELS` / docstring / default-slug shapes of codex_cli_shape.py,
+diff --git a/tests/unit/test_codex_token_telemetry.py b/tests/unit/test_codex_token_telemetry.py
+index cd012ee38d179500ce72438fcf593eb018279cc8..9c60b3d7914f8d6eada734c753b84800c0e81cf2 100644
+--- a/tests/unit/test_codex_token_telemetry.py
++++ b/tests/unit/test_codex_token_telemetry.py
+@@ -128,9 +128,11 @@ class TestMakeInvokeCommandRedacted(TestEnvContext):
+             # make_invoke_command_redacted requires output_last_message_path
+             # (build_exec_argv rejects an empty output file). The stale test
+             # omitted it and never ran in CI.
++            # PLAN-194 W3b.1: the explicit override is an allowlisted id
++            # (the retired one left codex_cli_shape._VALID_MODELS).
+             argv = codex.make_invoke_command_redacted(
+                 "review file with AKIAIOSFODNN7EXAMPLE leaked",
+-                model="gpt-5-codex",
++                model="gpt-5.6-sol",
+                 sandbox_mode="read-only",
+                 timeout_s=75,
+                 output_last_message_path="/tmp/codex-last-message.txt",
+@@ -144,7 +146,7 @@ class TestMakeInvokeCommandRedacted(TestEnvContext):
+         # separate docs-wave finding, not this callsite-coverage test's job).
+         self.assertEqual(argv[0], "exec")
+         self.assertIn("--model", argv)
+-        self.assertIn("gpt-5-codex", argv)
++        self.assertIn("gpt-5.6-sol", argv)
+         self.assertIn("--", argv)
+         # The PROMPT is the LAST argv element (after the `--` end-of-opts).
+         # It MUST carry the redacted replacement, NOT the raw secret —
