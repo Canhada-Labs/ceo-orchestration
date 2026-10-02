@@ -47,8 +47,9 @@ enforcement_commit: "n/a (texto PROPOSED; o runtime nasce nos pacotes U2-A a U2-
 > **Prevalência.** Normativas: §3 a §9, §11 e §12; as demais são status, contexto e índice. O rascunho guarda o detalhe
 > (células de teste, opções, rastreabilidade, evidência). Onde divergir deste texto, vale este texto SÓ nos pontos
 > do §0; no resto, o rascunho. Entre plano e AMEND-4, vale o AMEND-4 (MF-R2-W2-4). Seções numeradas como no
-> rascunho. **[disco]** = conferido no HEAD `9a458f19`, igual ao HEAD `48f03b3a` do rascunho salvo o `audit_log.py`
-> (mudado em `65cd50d7`); **[medido: X]** = medido por X, só leitura, com data.
+> rascunho. **[disco]** = conferido no HEAD `9a458f19`; o código citado é igual ao do HEAD `48f03b3a` do rascunho,
+> salvo o `audit_log.py` e o `test_two_writer_chain.py` (mudados em `65cd50d7`); **[medido: X]** = medido por X, só
+> leitura, com data.
 
 ## §0 Atualizações sobre o rascunho (FD-16, S362)
 
