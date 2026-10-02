@@ -21,6 +21,29 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   (15 arquivos `.jsonl` + `audit-log.errors` + `memory/`; sem `audit-key`, `.salt`,
   `audit-log.rotation-manifest.json`, `audit-log.last-hmac` e `audit-log.chain-length`).
 
+## Unidade atual — S361 (2026-10-02; HEAD `f49bb6e7`)
+
+- w-auditrace (W2.0, KERNEL): materiais landados em `26362b53`; aguardam o SIGN do Owner.
+  verifier: `git merge-base --is-ancestor 26362b53 HEAD && test ! -e .claude/plans/PLAN-194/wave-auditrace-approved.md.asc` exit=0
+- W1 (CI para o Ubuntu 26.04): materiais landados em `80e95fa7`; aguardam o SIGN do Owner.
+  verifier: `git merge-base --is-ancestor 80e95fa7 HEAD && test ! -e .claude/plans/PLAN-194/wave-w1-approved.md.asc` exit=0
+- W3b.1, metades livres: `803d7b5e` (assunto: W3b.3, linhas `o3-mini`/`o4-mini`) e `399efbaa`.
+  verifier: `git merge-base --is-ancestor 803d7b5e HEAD && git merge-base --is-ancestor 399efbaa HEAD` exit=0
+- W3b.1, metade canônica: em rail final (declarado pelo CEO em 2026-10-02; SEM verificador, estado
+  não conferido neste registro).
+- Debate L3 do PLAN-194: encerrado em `304ec478`; ajustes do consenso final em `f829b29a`.
+  verifier: `git merge-base --is-ancestor 304ec478 HEAD && git merge-base --is-ancestor f829b29a HEAD` exit=0
+
+## Bloqueios em aberto
+
+- SIGN do Owner pendente: w-auditrace (`26362b53`) e W1 (`80e95fa7`).
+- Arquivar T0/W0.1/W0.2 depois do SIGN da W1 (o sentinel cita o LEDGER); exige atualizar as citações
+  em `debate/round-1/security-engineer.md:263` e `qa-architect.md:40`. Até lá o teto de 8.000 bytes
+  segue estourado (aviso do hook PLAN-179 W2, não bloqueio).
+- Decisão 3 do Owner (verificador de procedência: módulo interno do npm vs. `sigstore` fixado)
+  condiciona o início da W3; pendente segundo o assunto de `f829b29a`; seção W0.6, abaixo.
+- Backlog declarado: refresh completo do ledger da OpenAI; seção W3b.3, abaixo.
+
 ## W0.2 — manifesto do setup-python (controle vermelho da W1)
 
 - 2026-10-01 (S361): no `versions-manifest.json` do ramo `main` de `actions/python-versions`, o
@@ -125,7 +148,7 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   `ubuntu-latest` (28 jobs)** e **6 jobs `Ceo`** (`coverage.yml:coverage` e, no `validate.yml`,
   `validate`, `integration-tests`, `formal-verification-mutation-harness`, `hook-tests-dual-rail`,
   `hook-tests-python-matrix`); `tier-policy.yml` em `ubuntu-22.04`. Tabela completa em `census.md`
-  (este diretório).
+  fora do repositório (checkpoint da sessão S361).
 - Python dos jobs com `setup-python`: só 3.11 e 3.12 (fora a matriz) — todos têm build para 26.04. A
   única versão sem build para 26.04 (3.9) só aparece na matriz do `validate.yml` (`Ceo`).
 - Jobs em `ubuntu-latest` que usam o `python3`, o `shellcheck` ou o `jq` do SISTEMA (sem
@@ -142,11 +165,16 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
     executados** (precisam de tag/API do GitHub; o `publish` é território da W4).
   - `mutation-gate.yml:aggregate`, `tournament.yml:notify-on-regression`: só bash/echo.
   - `formal-verify.yml:tlc-model-check`: Java do `setup-java` + `curl`; sem Python (W8).
-  - `actionlint.yml:actionlint`: binário próprio; `validate.yml:opus-4-7-profiler-smoke` e
+  - `actionlint.yml:actionlint`: o binário do actionlint é vendorado (sha256 fixado), mas o job roda
+    `actionlint -color .github/workflows/*.yml` SEM `-shellcheck` e usa o shellcheck da IMAGEM (0.11.0
+    no 26.04). Medido (S361, 2026-10-02): actionlint 1.7.12 com shellcheck 0.11.0 sobre os 23
+    workflows ⇒ rc 0; reconferido ao registrar, no macOS:
+    verifier: `actionlint .github/workflows/*.yml` exit=0
+    `validate.yml:opus-4-7-profiler-smoke` e
     `validate.yml:hook-stdout-schema-oracle`: `setup-python` 3.11 (tem build 26.04).
 - `ownership-nightly.yml`, os 9 `run:` VERBATIM no 26.04 (`run-steps.sh`, árvore `6a9abb10`,
   2026-10-02T00:14Z–01:29:52Z), com o 24.04 em paralelo até o step 06 (parado depois para liberar a VM):
-  - steps 01–08 **verdes nas duas imagens** (gate-scripts `shasum -c`, tag `legacy_pristine`, `jq`,
+  - steps 01–08 **verdes no 26.04 (01–06 também no 24.04)** (gate-scripts `shasum -c`, tag `legacy_pristine`, `jq`,
     oráculo unitário, replay do install-state 1041 s, baseline-manifest 1024 s, INV-4 396 s,
     controle positivo do gate);
   - step 09 (e2e completo, 2085 s): `GREEN=54 RED=11`, gate vermelho por **8 células TIMEOUT**
@@ -165,7 +193,7 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
 ### Ferramenta e limpeza
 
 - Scripts do builder (fora do repositório): `census.py`, `extract-steps.py`, `run-steps.sh`,
-  `run-matrix-suite.sh`, `setup-runner-like.sh`, `lint-copies.sh` — cópias neste diretório.
+  `run-matrix-suite.sh`, `setup-runner-like.sh`, `lint-copies.sh` — cópias fora do repositório (checkpoint da sessão S361).
 - Contêineres `b1w1-u2604` e `b1w1-u2404` removidos no fim; nenhuma imagem nova; nenhuma configuração
   do docker/colima alterada.
 
