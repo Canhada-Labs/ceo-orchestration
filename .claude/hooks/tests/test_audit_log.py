@@ -194,7 +194,11 @@ class TestAppendEntryIntegration(TestEnvContext):
         self.assertTrue(rotated, "rotation should have produced a monthly file")
         fresh = self.read_audit_log()
         fresh_lines = [ln for ln in fresh.split("\n") if ln]
-        self.assertEqual(len(fresh_lines), 1)
+        # PLAN-194: ADR-055-AMEND-2 marker as line 1, then our entry, chain intact.
+        self.assertEqual([json.loads(ln)["action"] for ln in fresh_lines],
+                         ["chain_reset_marker", "agent_spawn"])
+        from _lib import audit_hmac
+        self.assertEqual(audit_hmac.verify_chain(log_path).verified_count, 2)
 
     def test_non_agent_tool_name_is_noop(self):
         rc, out = self._run_main_with({

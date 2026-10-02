@@ -14,10 +14,10 @@
 Plan: PLAN-194
 Wave: unidade 4 de «Unidades que ganharam dono» — cura da corrida no gravador do `agent_spawn` (risco 11)
 Patch: .claude/plans/PLAN-194/w-auditrace/auditrace.patch
-Patch-sha256: TO-FILL-BY-SIGN
-Rail-Record-sha256: TO-FILL-BY-SIGN
-Anchor-SHA: TO-FILL-BY-SIGN
-Data: TO-FILL-BY-SIGN
+Patch-sha256: c864ff693b1b57cc7e664342030355aa1e9a190b9c5bcb9f9b1997879876b21b
+Rail-Record-sha256: 1f5b96d6ca2a3889d2a3095264962bf74fb6b9cf3acec4254610a45e85de4f5b
+Anchor-SHA: 70a1292e67d6a64de4df6627bdcb2fb8b4ebc2fa
+Data: 2026-10-02
 
 ## Ratificação (Owner)
 

@@ -1257,32 +1257,49 @@ def append_entry(
     # chain gap (F-C1-001 / T0-line-168 transition_violation root cause).
     # 100% of agent_spawn events now carry hmac field per ADR-055.
     # Reuses _lib/audit_hmac primitives; fail-OPEN per CLAUDE.md §5.
+    # PLAN-194 (rc.1 condition 67): key, predecessor, HMAC, append and sidecar
+    # share ONE FileLock (as in audit_emit/drain); read before it, a writer in
+    # between forked the chain. Only the stateless import stays outside.
     entry.setdefault("hmac", None)
     entry.setdefault("hmac_error", None)
-    _b3_hmac_digest_bytes = None
+    _audit_hmac = None
     try:
         from _lib import audit_hmac as _audit_hmac
-        if not _audit_hmac.is_disabled():
-            _b3_key = _audit_hmac.get_or_create_key()
-            _b3_prev = _audit_hmac.read_prev_hmac()
-            _b3_entry_sans = {
-                k: v for k, v in entry.items()
-                if k not in ("hmac", "hmac_error")
-            }
-            _b3_hmac_digest_bytes = _audit_hmac.compute_entry_hmac(
-                _b3_key, _b3_prev, _b3_entry_sans
-            )
-            entry["hmac"] = _audit_hmac.hex_digest(_b3_hmac_digest_bytes)
-    except Exception as _b3_he:
+    except Exception as _b3_ie:
         entry["hmac"] = None
-        entry["hmac_error"] = type(_b3_he).__name__
+        entry["hmac_error"] = type(_b3_ie).__name__
 
-    line = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+    line = ""
 
     try:
         with FileLock(paths["lock"], timeout=2.5):
             # Rotate inside the lock so writers can't race past a rename
-            rotate_if_needed(paths["log"], threshold_bytes)
+            rotated_to = rotate_if_needed(paths["log"], threshold_bytes)
+            # ADR-055-AMEND-2 marker as line 1 BEFORE our HMAC reads the predecessor;
+            # no marker on disk => never sign over a last-hmac that may name it.
+            marker_ok = rotated_to is None or _emit_rotation_marker_under_lock(
+                paths["log"], rotated_to, paths["err"])
+            _b3_hmac_digest_bytes = None
+            if _audit_hmac is not None and not marker_ok:
+                entry["hmac"] = None
+                entry["hmac_error"] = "chain_reset_marker_missing"
+            elif _audit_hmac is not None:
+                try:
+                    if not _audit_hmac.is_disabled():
+                        _b3_key = _audit_hmac.get_or_create_key()
+                        _b3_prev = _audit_hmac.read_prev_hmac()  # WITH the lock held
+                        _b3_hmac_digest_bytes = _audit_hmac.compute_entry_hmac(
+                            _b3_key, _b3_prev,
+                            {k: v for k, v in entry.items()
+                             if k not in ("hmac", "hmac_error")},
+                        )
+                        entry["hmac"] = _audit_hmac.hex_digest(_b3_hmac_digest_bytes)
+                except Exception as _b3_he:
+                    _b3_hmac_digest_bytes = None
+                    entry["hmac"] = None
+                    entry["hmac_error"] = type(_b3_he).__name__
+            # Serialize AFTER the hmac field is final (still under the lock).
+            line = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
             try:
                 # PLAN-024 F-sec-002 P1 fix: os.open with mode=0o600 sets perms
                 # at create-time, closing the default-umask window between
@@ -1314,21 +1331,46 @@ def append_entry(
                     pass
                 # PLAN-085 Wave B.3 — update last-hmac sidecar within lock
                 # so the next writer reads the correct prev_hmac. Best-effort.
-                if _b3_hmac_digest_bytes is not None:
+                if _b3_hmac_digest_bytes is not None and _audit_hmac is not None:
                     try:
-                        from _lib import audit_hmac as _audit_hmac_tail
-                        _audit_hmac_tail.write_last_hmac(_b3_hmac_digest_bytes)
+                        _audit_hmac.write_last_hmac(_b3_hmac_digest_bytes)
                     except Exception:
                         pass
             except OSError as e:
                 write_breadcrumb(paths["err"], f"append failed: {e}  line={line[:200]}")
     except FileLockTimeout:
+        # Fail-open: entry dropped (never chained), session never blocked;
+        # the HMAC only exists under the lock, so the breadcrumb lacks it.
+        line = line or json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
         write_breadcrumb(
             paths["err"],
             f"lock timeout (stale?)  would-log={line[:200]}",
         )
     except Exception as e:  # pragma: no cover
         write_breadcrumb(paths["err"], f"unexpected error: {e}")
+
+
+def _emit_rotation_marker_under_lock(
+    log_path: Path, rotated_to: Path, err_path: Path
+) -> bool:
+    """ADR-055-AMEND-2 marker (emitter/drain helper) after OUR rotation, lock held. True =
+    marker on disk or chain off; False = no marker on disk (when its append failed, last-hmac
+    already names it), so the caller signs nothing over it."""
+    try:
+        from _lib import audit_hmac as _ah
+        if _ah.is_disabled():
+            return True
+        from _lib import audit_emit as _ae
+        if _ae._emit_chain_reset_marker_under_lock(
+                log=log_path, previous_archive_path=str(rotated_to),
+                rotation_trigger="size_threshold") is not None:
+            return True
+        why = "helper returned None"
+    except Exception as e:
+        why = f"{type(e).__name__}: {e}"
+    write_breadcrumb(err_path, f"chain_reset_marker not written ({why}); "
+                     "this agent_spawn line is left unchained")
+    return False
 
 
 # -----------------------------------------------------------------------------
