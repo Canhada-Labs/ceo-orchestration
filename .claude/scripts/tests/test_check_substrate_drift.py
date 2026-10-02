@@ -22,6 +22,10 @@ Covered:
 - the Claude Code version vs the substrate ledger — compared in the framework
   checkout only (an upgraded adopter's ledger is the maintainer's), unless
   --ledger names one;
+- a ledger whose container has the wrong TYPE (``last_seen`` a string, ``components``
+  a number, JSON nested past the recursion limit) is a named claude_code unknown, and
+  an exception that escapes ANY one component's check is that component's named
+  unknown — the other components' findings (a codex drift, --strict's exit 1) survive;
 - NEW model ids / aliases outside the working set / working-set ids the
   harness does not know / unadopted families (info only) / legacy ids (silent);
 - the catalog scan fails OPEN with a named unknown when no record matches,
@@ -37,6 +41,7 @@ Covered:
 """
 from __future__ import annotations
 
+import argparse
 import datetime as _dt
 import hashlib
 import importlib.util
@@ -49,6 +54,7 @@ import sys
 import unittest
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / ".claude" / "scripts" / "check-substrate-drift.py"
@@ -743,6 +749,90 @@ class ClaudeCodeTest(_DriftCase):
         self.assertEqual(self.finding(self.report(), "CC_LEDGER_NOT_APPLICABLE")["severity"], "info")
         ledger.write_text("{not json", encoding="utf-8")
         self.assertEqual(self.finding(self.report(), "CC_LEDGER_UNREADABLE")["severity"], "unknown")
+
+    def test_malformed_ledger_container_is_a_claude_code_unknown_and_keeps_codex_drift(self) -> None:
+        # P2 of the GA re-pass (part 3): valid JSON with ``"last_seen": "2.1.280"``
+        # (a string, not the {version} object) raised AttributeError, the outer
+        # handler replaced the WHOLE report with DETECTOR_ERROR, and --strict exited
+        # 0 over a codex drift the detector had already found.
+        self.fake_codex("0.156.0")  # installed 0.156.0 vs pin 0.155.0 -> drift
+        ledger = self.repo / ".claude" / "scripts" / "substrate-watch.json"
+
+        def cc(**fields: Any) -> Dict[str, Any]:
+            return {"components": [dict({"key": "claude_code"}, **fields)]}
+
+        shapes = {
+            "last_seen string": cc(last_seen="2.1.280"),
+            "last_seen list": cc(last_seen=["2.1.280"]),
+            "last_seen number": cc(last_seen=2),
+            "last_seen null": cc(last_seen=None),
+            "last_seen absent": cc(),
+            "version number": cc(last_seen={"version": 2}),
+            "components object": {"components": {"claude_code": {"last_seen": {"version": "2.1.280"}}}},
+            "components number": {"components": 5},
+            "components string": {"components": "claude_code"},
+            "document is a list": [cc(last_seen="2.1.280")],
+        }
+        for label, doc in shapes.items():
+            with self.subTest(label):
+                ledger.write_text(json.dumps(doc), encoding="utf-8")
+                rep = self.report()
+                self.assertNotIn("DETECTOR_ERROR", self.kinds(rep), rep["findings"])
+                self.assertEqual(rep["status"], "drift", rep["findings"])
+                self.assertIn("CODEX_INSTALLED_NOT_PINNED", self.kinds(rep, "drift"))
+                row = self.finding(rep, "CC_LEDGER_UNREADABLE")
+                self.assertEqual((row["component"], row["severity"]), ("claude_code", "unknown"))
+                self.assertNotIn("2.1.280", row["claim"], "ledger values are never echoed")
+                self.assertEqual(self.run_cli("--strict").returncode, 1)
+
+    def test_ledger_json_nested_past_the_recursion_limit_is_an_unknown_not_a_zeroed_report(self) -> None:
+        self.fake_codex("0.156.0")
+        (self.repo / ".claude" / "scripts" / "substrate-watch.json").write_text(
+            "[" * 200000, encoding="utf-8")
+        rep = self.report()
+        self.assertNotIn("DETECTOR_ERROR", self.kinds(rep), rep["findings"])
+        self.assertEqual(self.finding(rep, "CC_LEDGER_UNREADABLE")["severity"], "unknown")
+        self.assertIn("CODEX_INSTALLED_NOT_PINNED", self.kinds(rep, "drift"))
+
+
+class ComponentIsolationTest(_DriftCase):
+    """A check that raises is THAT component's unknown; the others keep reporting."""
+
+    def _args(self) -> argparse.Namespace:
+        return argparse.Namespace(
+            repo_root=str(self.repo), fetch=False, no_probe=False, skip_catalog=False,
+            codex_bin=str(self.bin / "codex"), claude_bin=str(self.bin / "claude"),
+            npm_bin=str(self.bin / "npm"), catalog_file=None, ledger=None,
+            cache_dir=str(self.cache), max_cache_age_days=7)
+
+    @staticmethod
+    def _now() -> _dt.datetime:
+        return _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None, microsecond=0)
+
+    @staticmethod
+    def _pairs(rep: Dict[str, Any]) -> set:
+        return {(f["component"], f["kind"]) for f in rep["findings"]}
+
+    def test_an_escaping_exception_costs_only_its_own_component(self) -> None:
+        self.write_repo(ledger="2.1.198", ws=WS[:-1])  # claude_code drift + a catalog finding
+        self.fake_codex("0.156.0")                      # codex drift
+        base = MOD.build_report(self._args(), self._now())
+        self.assertTrue({("codex", "CODEX_INSTALLED_NOT_PINNED"), ("claude_code", "CC_LEDGER_DRIFT")}
+                        <= self._pairs(base), base["findings"])
+        self.assertTrue(any(c == "catalog" for c, _ in self._pairs(base)), base["findings"])
+        for name, target in (("codex", "check_codex"), ("claude_code", "check_claude_code"),
+                             ("catalog", "check_catalog")):
+            with self.subTest(name):
+                with mock.patch.object(MOD, target, side_effect=RuntimeError("boom")):
+                    rep = MOD.build_report(self._args(), self._now())
+                self.assertEqual(self._pairs(rep),
+                                 {p for p in self._pairs(base) if p[0] != name}
+                                 | {(name, "COMPONENT_CHECK_ERROR")})
+                row = [f for f in rep["findings"] if f["kind"] == "COMPONENT_CHECK_ERROR"][0]
+                self.assertEqual(row["severity"], "unknown")
+                self.assertIn("RuntimeError: boom", row["claim"])
+                self.assertEqual(rep["status"], "drift")
+                self.assertIn("COMPONENT_CHECK_ERROR", MOD.render_text(rep))
 
 
 class AdopterShapeTest(_DriftCase):

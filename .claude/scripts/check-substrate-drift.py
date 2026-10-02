@@ -49,7 +49,9 @@ binary format change degrades to "unknown", never to a silent "current".
 Findings are NAMED (component, kind, severity, claim, next commands):
   severity ``drift``   — actionable divergence (``--strict`` exits 1 on these)
   severity ``info``    — context worth seeing, never a failure
-  severity ``unknown`` — an input could not be observed (infra fail-open)
+  severity ``unknown`` — an input could not be observed (infra fail-open), or one
+                         component's check raised (``COMPONENT_CHECK_ERROR``): that
+                         component is unknown, the others' findings are kept
 
 Adopter shape: an input FILE that is absent makes its comparison NOT
 APPLICABLE (``info``); a file that is present but unreadable or unparseable
@@ -125,7 +127,7 @@ import subprocess  # nosec B404 — code-defined read-only probes, fail-soft
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_REPO_ROOT = SCRIPT_DIR.parents[1]
@@ -770,16 +772,28 @@ def check_codex(repo: Path, codex_bin: Optional[str], probe: bool,
 # --------------------------------------------------------------------------
 
 def ledger_last_seen(ledger_path: Path, key: str = "claude_code") -> Tuple[Optional[str], str]:
-    """(version, note); note ``absent`` = no ledger file at all (adopter shape)."""
+    """(version, note); note ``absent`` = no ledger file at all (adopter shape).
+
+    Every container is TYPE-checked: valid JSON of the wrong shape (``last_seen``
+    a string, ``components`` a number) is a named unknown here — it used to raise
+    out of the whole detector and discard the other components' findings. Only
+    the JSON type NAME is echoed, never a ledger value."""
     if not ledger_path.is_file():
         return None, "absent"
     try:
         data = json.loads(ledger_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RecursionError) as exc:  # RecursionError: deeply nested JSON
         return None, "ledger unreadable: {}".format(exc)
-    for comp in (data.get("components") or []) if isinstance(data, dict) else []:
+    comps = data.get("components") if isinstance(data, dict) else None
+    if comps is not None and not isinstance(comps, list):
+        return None, "ledger components is {}, not a list".format(type(comps).__name__)
+    for comp in comps or []:
         if isinstance(comp, dict) and comp.get("key") == key:
-            ver = (comp.get("last_seen") or {}).get("version")
+            seen = comp.get("last_seen")
+            if not isinstance(seen, dict):
+                return None, "ledger {} last_seen is {}, not an object".format(
+                    key, type(seen).__name__)
+            ver = seen.get("version")
             if isinstance(ver, str) and _SEMVER_FULL_RE.match(ver):
                 return ver, "ok"
             return None, "ledger {} last_seen.version is not semver".format(key)
@@ -1131,6 +1145,20 @@ def check_catalog(repo: Path, catalog_path: Optional[str],
 # report
 # --------------------------------------------------------------------------
 
+def _isolated(component: str, check: Callable[..., Tuple[Dict[str, Any], List[Dict[str, Any]]]],
+              *args: Any) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """One component's check, fail-open PER COMPONENT: an exception that escapes
+    it is that component's named ``unknown`` and nothing else — a drift another
+    component already found (and ``--strict``'s exit 1) survives (GA re-pass part
+    3, P2: a malformed ledger used to replace the whole report with DETECTOR_ERROR)."""
+    try:
+        return check(*args)
+    except Exception as exc:  # noqa: BLE001 — infra fail-open, named, per component
+        return ({"status": "check-error"}, [_finding(
+            component, "COMPONENT_CHECK_ERROR", "unknown",
+            "{} check failed: {}: {}".format(component, type(exc).__name__, exc))])
+
+
 def build_report(args: argparse.Namespace, now: _dt.datetime) -> Dict[str, Any]:
     explicit = args.repo_root is not None
     repo = Path(os.path.abspath(args.repo_root)) if explicit else DEFAULT_REPO_ROOT
@@ -1147,8 +1175,8 @@ def build_report(args: argparse.Namespace, now: _dt.datetime) -> Dict[str, Any]:
         if not ok:
             fetch_findings.append(_finding("codex", "CODEX_FETCH_FAILED", "unknown", fetch_note))
     cache, cache_note = load_cache(cache_path)
-    codex_comp, codex_f = check_codex(repo, _resolve_bin(args.codex_bin, "codex"), probe,
-                                      cache, cache_note, now, args.max_cache_age_days)
+    codex_comp, codex_f = _isolated("codex", check_codex, repo, _resolve_bin(args.codex_bin, "codex"),
+                                    probe, cache, cache_note, now, args.max_cache_age_days)
     codex_comp["cache"] = {"path": str(cache_path) if cache_path else None,
                            "note": cache_note, "fetch": fetch_note}
     claude_bin = _resolve_bin(args.claude_bin, "claude")
@@ -1156,13 +1184,14 @@ def build_report(args: argparse.Namespace, now: _dt.datetime) -> Dict[str, Any]:
         applicable = bool(args.ledger) or is_framework_checkout(repo)
         cc_ver, cc_note = (probe_version(claude_bin, "claude") if applicable
                            else (None, "not probed (ledger comparison not applicable)"))
-        cc_comp, cc_f = check_claude_code(
-            cc_ver, cc_note,
+        cc_comp, cc_f = _isolated(
+            "claude_code", check_claude_code, cc_ver, cc_note,
             Path(args.ledger) if args.ledger else repo / ".claude" / "scripts" / "substrate-watch.json",
-            applicable=applicable)
+            applicable)
     else:
         cc_comp, cc_f = {"installed": None, "probe_note": "not probed (--no-probe)"}, []
-    cat_comp, cat_f = check_catalog(repo, args.catalog_file or claude_bin, args.skip_catalog)
+    cat_comp, cat_f = _isolated("catalog", check_catalog, repo, args.catalog_file or claude_bin,
+                                args.skip_catalog)
     findings = fetch_findings + codex_f + cc_f + cat_f
     sev = [f["severity"] for f in findings]
     status = "drift" if "drift" in sev else ("unknown" if "unknown" in sev else "current")

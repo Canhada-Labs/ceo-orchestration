@@ -359,8 +359,96 @@ def check_plans_stranded_executing() -> Tuple[str, str, Any]:
         prefix = m.group(1) if m else plan
         return any(plan in t or prefix in t for t in touched)
 
-    stranded = [plan for plan in executing_list if not _saw_activity(plan)]
-    return ("red" if stranded else "green", f"{len(stranded)} stranded", stranded)
+    # S361 (PLAN-194 L2-g): a plan with no commit in 24 h that DECLARES what it
+    # is waiting for (`external_wait`, or the `## Blockers` leaf of
+    # PLAN-SCHEMA §12) is waiting, not stranded — it was red on every boot.
+    # Detail stays the list of STRANDED stems (the recommendations contract).
+    by_stem = {p.stem: p for p in _get_plan_paths()}
+    stranded: List[str] = []
+    waiting: List[str] = []
+    for plan in executing_list:
+        if _saw_activity(plan):
+            continue
+        (waiting if _plan_declares_wait(by_stem.get(plan)) else stranded).append(plan)
+    note = (
+        f"; {len(waiting)} waiting on a declared wait "
+        f"(external_wait / ## Blockers): {', '.join(waiting)}"
+        if waiting else ""
+    )
+    summary = _sanitize_for_recs(f"{len(stranded)} stranded{note}")[:200]
+    if stranded:
+        return "red", summary, stranded
+    return ("yellow" if waiting else "green"), summary, stranded
+
+
+# Values that DECLARE no wait. Anything else counts as a declared wait; a
+# misread therefore keeps the plan red (the pre-S361 behaviour), never hides it.
+_NO_WAIT_TOKENS = frozenset({
+    "", "none", "nenhum", "nenhuma", "nada", "n/a", "na", "null", "~", "-",
+    "—", "no", "não", "nao", "[]",
+})
+
+
+def _declares_wait(value: str) -> bool:
+    """True when one `external_wait` value / Blockers line names a wait."""
+    v = value.strip().strip("\"'").strip()
+    v = re.sub(r"^[-*+]\s+", "", v).strip().strip("\"'").strip()
+    first = re.split(r"[\s,;:.()]+", v.lower(), maxsplit=1)[0] if v else ""
+    return first not in _NO_WAIT_TOKENS
+
+
+def _plan_declares_wait(path: Optional[Path]) -> bool:
+    """`external_wait` (frontmatter) or a `## Blockers` body section declares
+    a wait (PLAN-SCHEMA §3 / §12). Unreadable plan ⇒ False (stays red)."""
+    if path is None:
+        return False
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    fm = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
+    if fm:
+        lines = fm.group(1).splitlines()
+        for i, line in enumerate(lines):
+            m = re.match(r"^external_wait\s*:\s*(.*)$", line)
+            if not m:
+                continue
+            rest = m.group(1).strip()
+            if rest and rest not in ("|", ">", "|-", ">-"):
+                if rest.startswith("[") and rest.endswith("]"):
+                    values = rest[1:-1].split(",")
+                else:
+                    values = [rest]
+            else:  # block list / block scalar on the following lines
+                values = []
+                for nxt in lines[i + 1:]:
+                    if nxt.strip() and not (nxt[:1].isspace() or nxt.startswith("-")):
+                        break
+                    values.append(nxt)
+            if any(_declares_wait(v) for v in values if v.strip()):
+                return True
+            break
+    body = text[fm.end():] if fm else text
+    in_fence = False
+    in_section = False
+    for line in body.splitlines():
+        if re.match(r"^\s*(```|~~~)", line):
+            in_fence = not in_fence
+            continue
+        if in_fence and not in_section:
+            continue
+        heading = re.match(r"^(#{1,6})\s+(.*)$", line)
+        if heading and not in_fence:
+            if in_section and len(heading.group(1)) <= 2:
+                break
+            if len(heading.group(1)) == 2 and re.match(
+                r"(?i)blockers\b", heading.group(2).strip()
+            ):
+                in_section = True
+            continue
+        if in_section and line.strip() and _declares_wait(line):
+            return True
+    return False
 
 
 # CEO-INFORMATIONAL-ONLY: contador de drafts sem limiar de acao (PLAN-178 C3)

@@ -19,11 +19,14 @@ import importlib.util
 import io
 import json
 import os
+import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 # TestEnvContext (S79 hygiene lesson — every test uses isolated env)
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "hooks"))
@@ -851,3 +854,103 @@ class TestHarnessProbeFilter(TestEnvContext):
             self.assertEqual((detail["unknown"], detail["total"]), (2, 2))
         finally:
             _mod._iter_audit_events_since = original
+
+
+# S361 (PLAN-194 L2-g) — plans_stranded_executing consults the declared wait.
+_EXEC_FM = "---\nid: {pid}\nstatus: executing\n{extra}---\n\n# t\n\n{body}"
+
+
+class TestStrandedConsultsDeclaredWait(TestEnvContext):
+    """A plan `executing` with no commit in 24 h that DECLARES what it waits
+    for (`external_wait` or a `## Blockers` leaf, PLAN-SCHEMA §12) is not
+    stranded. Red→green control: under the pre-S361 check every such plan
+    came out RED on every boot."""
+
+    def _plans(self, plans):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        pdir = root / ".claude" / "plans"
+        pdir.mkdir(parents=True)
+        for stem, (extra, body) in plans.items():
+            (pdir / (stem + ".md")).write_text(
+                _EXEC_FM.format(pid=stem[:8], extra=extra, body=body),
+                encoding="utf-8",
+            )
+        patch = mock.patch.object(_mod, "REPO_ROOT", root)
+        patch.start()
+        self.addCleanup(patch.stop)
+        _mod._reset_plan_glob_cache()
+        self.addCleanup(_mod._reset_plan_glob_cache)
+
+    def _run(self, git_stdout=""):
+        with mock.patch.object(
+            _mod.subprocess, "run",
+            return_value=subprocess.CompletedProcess(
+                args=["git"], returncode=0, stdout=git_stdout, stderr=""),
+        ):
+            return _mod.check_plans_stranded_executing()
+
+    def test_declared_external_wait_is_not_red(self):
+        self._plans({"PLAN-902-wait": (
+            'external_wait: "assinatura GPG do Owner na W1"\n', "")})
+        status, summary, detail = self._run()
+        self.assertNotEqual(status, "red", summary)
+        self.assertEqual(status, "yellow")
+        self.assertEqual(detail, [])
+        self.assertIn("PLAN-902-wait", summary)
+
+    def test_blockers_leaf_is_not_red(self):
+        self._plans({"PLAN-903-blk": (
+            "external_wait: none\n",
+            "## Blockers\n\n- **Leaf:** PLAN-164 precisa chegar a done.\n")})
+        status, _, detail = self._run()
+        self.assertEqual(status, "yellow")
+        self.assertEqual(detail, [])
+
+    def test_block_list_external_wait_is_a_wait(self):
+        self._plans({"PLAN-907-list": (
+            "external_wait:\n  - external-event-x\nowner: CEO\n", "")})
+        status, _, _ = self._run()
+        self.assertEqual(status, "yellow")
+
+    def test_no_declared_wait_stays_red(self):
+        self._plans({
+            "PLAN-901-none": ("external_wait: none\n", ""),
+            "PLAN-904-nenhum": (
+                'external_wait: "nenhum \u2014 decis\u00e3o do CEO"\n', ""),
+            "PLAN-905-blk-none": ("", "## Blockers\n\n- nenhum\n"),
+            "PLAN-906-fenced": (
+                "", "```\n## Blockers\nPLAN-064 gate\n```\n"),
+            "PLAN-908-empty": ("external_wait: []\n", ""),
+            "PLAN-909-other": (
+                "", "## Owners / Next\n\nVP Eng\n\n## Blockers\n\n"
+                    "## Next\n\n- W2\n"),
+            "PLAN-910-wait": ('external_wait: "hold de 24 h"\n', ""),
+        })
+        status, summary, detail = self._run()
+        self.assertEqual(status, "red", summary)
+        self.assertEqual(detail, [
+            "PLAN-901-none", "PLAN-904-nenhum", "PLAN-905-blk-none",
+            "PLAN-906-fenced", "PLAN-908-empty", "PLAN-909-other",
+        ])
+        self.assertTrue(summary.startswith("6 stranded"), summary)
+        self.assertIn("1 waiting", summary)
+        # The recommendation still names only the truly stranded plans.
+        recs = _mod._make_recommendations([_mod.CheckResult(
+            "plans_stranded_executing", status, summary, 1.0, detail)])
+        self.assertTrue(any("PLAN-901-none" in r for r in recs))
+        self.assertFalse(any("PLAN-910-wait" in r for r in recs))
+
+    def test_activity_still_green(self):
+        self._plans({"PLAN-911-busy": ("external_wait: none\n", "")})
+        status, summary, detail = self._run(
+            git_stdout="feat(PLAN-911): avanço\n.claude/plans/x.md\n")
+        self.assertEqual((status, summary, detail), ("green", "0 stranded", []))
+
+    def test_waiting_only_fires_no_stranded_rec(self):
+        self._plans({"PLAN-902-wait": ('external_wait: "CI do runner"\n', "")})
+        status, summary, detail = self._run()
+        triples = _mod._recommendations_with_severity([_mod.CheckResult(
+            "plans_stranded_executing", status, summary, 1.0, detail)])
+        self.assertFalse(any(t[0] == "02-stranded-plans" for t in triples))
