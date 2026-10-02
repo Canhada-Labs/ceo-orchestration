@@ -13,10 +13,10 @@ Plan: PLAN-194
 Wave: W1 — CI pronto para o Ubuntu 26.04 (prazo externo: 2026-10-19)
 Patch: .claude/plans/PLAN-194/wave-w1/w1.patch
 Staged: .claude/plans/PLAN-194/wave-w1/staged-w1/.github/workflows/validate.yml
-Patch-sha256: TO-FILL-BY-SIGN
-Rail-Record-sha256: TO-FILL-BY-SIGN
-Anchor-SHA: TO-FILL-BY-SIGN
-Data: TO-FILL-BY-SIGN
+Patch-sha256: f7416c71cd2876a82372125e80b3fbfe202484578f7fa01cab218ee66482762b
+Rail-Record-sha256: 6394bf5ac5485a29326888276c5fa5b209a4491bf8db3da2c16dc5d101c3d551
+Anchor-SHA: a0a6df06144391067e9261f4fc04e3677a7c22b7
+Data: 2026-10-02
 
 ## Ratificação (Owner)
 

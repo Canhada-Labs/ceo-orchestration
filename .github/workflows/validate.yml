@@ -283,26 +283,10 @@ jobs:
             --threshold 50 \
             --limit 15 || true
 
-      # -----------------------------------------------------------------
-      # Step: JSON/YAML syntax check for governance files
-      # -----------------------------------------------------------------
-
       - name: SDK compat advisory (PLAN-056 Phase 2 / ADR-094)
         continue-on-error: true
         run: |
           bash .claude/scripts/check-sdk-compat.sh
-      - name: Validate settings.json and YAML catalogs
-        run: |
-          set -euo pipefail
-          jq empty .claude/settings.json
-          echo "✓ .claude/settings.json is valid JSON"
-          for t in templates/settings/*.json; do
-            [ -f "$t" ] || continue
-            jq empty "$t"
-            echo "✓ $t is valid JSON"
-          done
-          python3 -c 'import yaml; yaml.safe_load(open(".claude/pitfalls-catalog.yaml")); print("✓ pitfalls-catalog.yaml is valid YAML")'
-          python3 -c 'import yaml; yaml.safe_load(open(".claude/task-chains.yaml")); print("✓ task-chains.yaml is valid YAML")'
 
       # -----------------------------------------------------------------
       # Step: SBOM ⇆ sidecar-manifest sync gate (ADR-126 / PLAN-112-FOLLOWUP
@@ -455,12 +439,8 @@ jobs:
       # interpreter but NOT pytest. So: Python 3.12 from setup-python
       # (audit-v2 hot-fix: the ubuntu-24.04 default python3 ships
       # without pytest) plus pytest itself.
-      # NOT verified by this wave: whether anything still standing in
-      # this job needs PyYAML. The install below keeps bringing it, and
-      # its own comment names two tests that now run in the matrix; no
-      # later pytest ROOT imports yaml, and the two `import yaml`
-      # one-liners in this job run BEFORE this step. Dropping it is a
-      # functional change, so it is FLAGGED here, not guessed at.
+      # PyYAML IS needed: since PLAN-194 W1.2 the YAML catalog step runs
+      # right after the install below and imports it.
       # -----------------------------------------------------------------
       - name: Set up Python for hook tests
         # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
@@ -469,9 +449,29 @@ jobs:
           python-version: '3.12'
 
       - name: Install pytest + PyYAML (dev deps, not shipped)
-        # PyYAML used by `test_run_benchmark.py` + `test_squad_import.py`
-        # in .claude/scripts/tests/; pytest used by all hook tests.
+        # PyYAML used by the YAML catalog step right below (PLAN-194 W1.2);
+        # pytest used by the pytest steps of this job.
         run: python3 -m pip install --quiet --no-cache-dir "pytest==8.*" "PyYAML>=6.0" pytest-xdist
+
+      # -----------------------------------------------------------------
+      # Step: JSON/YAML syntax check for governance files. PLAN-194 W1.2:
+      # moved below the pip install, unchanged, so `import yaml` uses the
+      # PyYAML installed above, not the runner image's (measured
+      # 2026-10-01 in docker ubuntu:26.04, 26.04.1 LTS: python3 3.14.4, no
+      # system PyYAML; the runner image itself was not measured).
+      # -----------------------------------------------------------------
+      - name: Validate settings.json and YAML catalogs
+        run: |
+          set -euo pipefail
+          jq empty .claude/settings.json
+          echo "✓ .claude/settings.json is valid JSON"
+          for t in templates/settings/*.json; do
+            [ -f "$t" ] || continue
+            jq empty "$t"
+            echo "✓ $t is valid JSON"
+          done
+          python3 -c 'import yaml; yaml.safe_load(open(".claude/pitfalls-catalog.yaml")); print("✓ pitfalls-catalog.yaml is valid YAML")'
+          python3 -c 'import yaml; yaml.safe_load(open(".claude/task-chains.yaml")); print("✓ task-chains.yaml is valid YAML")'
 
       # -----------------------------------------------------------------
       # Step: Installer --harness codex matrix (PLAN-155 Wave 5, debate A11)
@@ -1609,22 +1609,39 @@ jobs:
   # =========================================================================
   hook-tests-python-matrix:
     if: vars.CEO_SOTA_DISABLE != '1'
-    runs-on: Ceo
-    timeout-minutes: 25
+    # PLAN-194 W1 — runner por versao: `ubuntu-latest` vira 26.04 de
+    # 2026-10-19 a 2026-11-19 (actions/runner-images#14748) e o setup-python
+    # nao tem 3.9 para 26.04 (medido 2026-10-01). 3.9 (o piso) roda no
+    # rotulo FIXO `ubuntu-24.04` (W1.1); 3.14 em `ubuntu-26.04`, so no
+    # `schedule` (W1.3, canario); 3.10-3.12 seguem no `Ceo`. O actionlint
+    # 1.7.7 nao conhece `ubuntu-26.04` e nao confere rotulo dentro de
+    # expressao (medido): a validade vem do issue acima.
+    runs-on: >-
+      ${{ matrix.python-version == '3.9' && 'ubuntu-24.04'
+          || (matrix.python-version == '3.14' && 'ubuntu-26.04' || 'Ceo') }}
+    # Runner padrao (4 vCPU) = 45 min; `Ceo` (8 nucleos) segue 25. Medido
+    # no `Ceo` (runs 36932014761, 36832647294): perna 3.9 = 430-646 s
+    # paralela + 211-232 s serial; com metade dos nucleos encosta nos 25
+    # (estimativa: nenhuma perna rodou num runner padrao).
+    timeout-minutes: ${{ (matrix.python-version == '3.9' || matrix.python-version == '3.14') && 45 || 25 }}
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
         # PLAN-184 A0 — no `push`, so as versoes de FRONTEIRA (3.9 e
-        # 3.12); no `pull_request` e no `schedule` acima, as QUATRO.
+        # 3.12); no `pull_request`, as QUATRO; no `schedule` acima, as
+        # QUATRO mais a 3.14 (PLAN-194 W1.3).
         # Troca latencia de deteccao por dinheiro (~US$3,15/dia de um
-        # teto de ~US$4,04) sem abrir janela de falso-verde, porque o
-        # nightly cobre 3.10/3.11 todos os dias.
+        # teto de ~US$4,04, contados ANTES da W1, com a 3.9 no `Ceo`) sem
+        # abrir janela de falso-verde, porque o nightly cobre 3.10/3.11
+        # todos os dias.
         python-version: >-
           ${{ fromJSON(github.event_name == 'push'
               && '["3.9","3.12"]'
-              || '["3.9","3.10","3.11","3.12"]') }}
+              || (github.event_name == 'schedule'
+                  && '["3.9","3.10","3.11","3.12","3.14"]'
+                  || '["3.9","3.10","3.11","3.12"]')) }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
