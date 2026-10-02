@@ -21,6 +21,31 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   (15 arquivos `.jsonl` + `audit-log.errors` + `memory/`; sem `audit-key`, `.salt`,
   `audit-log.rotation-manifest.json`, `audit-log.last-hmac` e `audit-log.chain-length`).
 
+## RP — re-pin manual do Codex 0.156.1 → 0.160.0: decisão e pré-voo (2026-10-02, S362)
+
+- Decisão do Owner (2026-10-02): re-pin MANUAL 0.156.1 → 0.160.0 como 1.ª tarefa do trem da 1.4.3,
+  pelo molde `.claude/plans/PLAN-193/codex-pin-0156/OWNER-PIN-SIGN.sh` com `--ga-tag v1.4.2`; pacote em
+  `.claude/plans/PLAN-194/codex-pin-0160/`; SIGN do Owner previsto para sábado 2026-10-03. A decisão 3
+  NÃO foi tomada ⇒ a W3 (pin automático) fica para depois da 1.4.3 e o VETO de Segurança segue levantado.
+  Esta entrada supera a última frase do T0 («atualizar pela W3, sem re-pin manual»).
+- Pré-voo medido em 2026-10-02 ~19:43Z, macOS 27.0.1, Claude Code 2.1.287 (`claude --version`):
+  - `npm view @openai/codex dist-tags --json`: `latest` = 0.160.0, `alpha` = 0.162.0-alpha.7;
+    `npm view @openai/codex versions --json`: nenhuma 0.160.x além da 0.160.0 (depois dela, só alphas).
+  - Codex global: `codex --version` = `codex-cli 0.156.1`; `check_pair_rail.py --verify-codex-pin
+    "$(command -v codex)"` = `verified`, payload sha256
+    `0196e89fe5a7598f816ee54232c3d7c26d75e502ab5cfe2c9240e81d90f7255a` = o do manifesto
+    (`package_version` 0.156.1).
+  - `main` = `origin/main` = `97a78fce` (`git ls-remote origin refs/heads/main`).
+  - Validate do `97a78fce`: verde (run 37038462492). Validate do `5c52998b`: vermelho (run
+    37032883788) só no job `hook-tests-python-matrix (3.12)`, por 1 teste:
+    `test_two_writer_chain.py::TestParallelWritersChain::test_parallel_spawn_and_sync_emit_writers_keep_the_chain`
+    («writer kinds not interleaved»), o teste instável conhecido da guarda anti-vácuo; a cura de classe
+    é um land livre próprio (FX).
+  verifier: `gh run view 37038462492 --json conclusion --jq .conclusion` = `success`
+- Detector do ensaio (`rehearse-pin-0156.sh:236-249`, com `NEW_VER=0.160.0`) sobre
+  `PLAN-194-*.md`: no `97a78fce` acusava 1 linha (o passo do Owner com `<versão exata>`); com o texto do
+  re-pin, saída vazia.
+
 ## Unidade atual — S361 (2026-10-02; HEAD `f49bb6e7`)
 
 - w-auditrace (W2.0, KERNEL): materiais landados em `26362b53`; aguardam o SIGN do Owner.

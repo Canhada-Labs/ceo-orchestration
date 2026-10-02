@@ -12,7 +12,7 @@ level: L3
 budget_tokens: "estimado (contexto do CEO; subagentes à parte): W0 medições 150-300k (sem cota paga); W1 150-300k; W2 1,0-1,8 M com rail (prazo na saída + provas + calibração com o harness real; debate único do plano, com a W3 e a W5c); cura do `agent_spawn` (pacote canônico próprio, pré-condição do SIGN da W2) 150-300k + ~50k do censo AST; W3 (pin automático verificado, L3) 1,6-2,8 M em 3 a 4 sessões (pacotes 1b, 1a e 2, mais o pacote de kernel de registro de ações de 100-200k + 1 cerimônia de kernel), com debate + rail, mais a rodada 3 do debate (150-300k) e a W0.6 (medição do verificador do npm, feita, sem cota paga); W3b 100-200k; W4 150-300k; W5a/W5b 300-600k + cota paga da W5.0; W5c (adoção do Sonnet 5.5, L3 — decisão do Owner S359) 2-4 M com debate + rail + cota paga do re-teste na vez (precedente wave-opus55), mais 100-200k do censo contra o precedente; W6 100-200k + isca paga mínima da W6.0; W7 1-2 M, mais 100-150k pela rota 2 invertida nos derivadores do kit (kit + re-pass + cortes); W8 50-150k; livres L1-L4 300-600k; L5 (medição do ADR-191) 50-150k"
 budget_sessions: "6-11 (estimado; eram 4-8 antes do debate, e os acréscimos do debate são a W3 em 3 a 4 sessões — pacotes 1b, 1a e 2 mais o de kernel de registro de ações, a rodada 2 — e a cura do `agent_spawn` em 0 a 1 — soma aritmética dos acréscimos, sem contar a rodada 3; cada assinatura do Owner é uma parada; W2 e W7 podem precisar de sessão própria)"
 context_risk: high
-external_wait: "GitHub: ubuntu-latest vira Ubuntu 26.04 de 2026-10-19 a 2026-11-19 (actions/runner-images#14748). Owner: fixar a imagem do runner Ceo em Ubuntu 24.04 nas configurações da organização (OQ-2, decidida na S361); agendar o `ceo-backup.sh` (W6.1); congelar o Claude Code durante cada onda com `DISABLE_AUTOUPDATER=1` no `env` do settings do USUÁRIO (S361, Q14); medições pagas só na vez de cada onda (W5.0, W6.0 e o re-teste da W5c — decisão S359); rodar o script de limpeza única da W2.6 com todas as sessões do Claude fechadas (decisão S359; recomendação das rodadas 1 e 2 do debate, pendente de decisão do Owner (S361): basta fechar as sessões DESTE projeto, e rodar já); **a W2.6 é RECORRENTE sob a regra de travas T1** (a cada ~2 a 4 semanas de uso intenso, quando o `/ceo-boot` acusar ≥ 100 mil travas — operação do Owner); decidir as OQs que restam (OQ-11 — o resto da ordem (a)–(f) e o empate W2 × W7b — e OQ-12) e as decisões pendentes do debate (seção «Decisões pendentes do Owner — S361 (rodada 1 do debate)», atualizada pela rodada 2); carência de 48 h, no relógio do npm, entre a publicação de uma versão do Codex e a elegibilidade dela para o pin automático (W3); **janela curta de manutenção em cada promoção do Codex da W3, com as rodadas de rail paradas (quiesce)**; assinar W1, W2, W3, W3b, W4, W5 (inclusive a W5c), W6, W8 e os cortes rc.1/GA; hold de 24 h entre rc e GA (ADR-103). Codex: ficar no 0.156.1 sem npm update -g até o LAND da W3 (decisão S359); depois do LAND, só pelo procedimento da W3.6 (instalar a versão ELEGÍVEL, nunca a `latest` crua), que roda logo depois do LAND da W3 — o corte W7 independe do Codex global pela rota 2 do runner do re-pass, INVERTIDA no kit (materializar sem executar, verificar, só então executar; rodada 2 do debate, pergunta 7 da W3). Retenção: arquivo rotacionado mais antigo da cadeia completa 90 dias por volta de 2026-11-21. OpenAI: gpt-5/o3 aposentam em 2026-12-11."
+external_wait: "GitHub: ubuntu-latest vira Ubuntu 26.04 de 2026-10-19 a 2026-11-19 (actions/runner-images#14748). Owner: fixar a imagem do runner Ceo em Ubuntu 24.04 nas configurações da organização (OQ-2, decidida na S361); agendar o `ceo-backup.sh` (W6.1); congelar o Claude Code durante cada onda com `DISABLE_AUTOUPDATER=1` no `env` do settings do USUÁRIO (S361, Q14); medições pagas só na vez de cada onda (W5.0, W6.0 e o re-teste da W5c — decisão S359); rodar o script de limpeza única da W2.6 com todas as sessões do Claude fechadas (decisão S359; recomendação das rodadas 1 e 2 do debate, pendente de decisão do Owner (S361): basta fechar as sessões DESTE projeto, e rodar já); **a W2.6 é RECORRENTE sob a regra de travas T1** (a cada ~2 a 4 semanas de uso intenso, quando o `/ceo-boot` acusar ≥ 100 mil travas — operação do Owner); decidir as OQs que restam (OQ-11 — o resto da ordem (a)–(f) e o empate W2 × W7b — e OQ-12) e as decisões pendentes do debate (seção «Decisões pendentes do Owner — S361 (rodada 1 do debate)», atualizada pela rodada 2); carência de 48 h, no relógio do npm, entre a publicação de uma versão do Codex e a elegibilidade dela para o pin automático (W3, depois da 1.4.3); **janela curta de manutenção em cada promoção do Codex da W3, com as rodadas de rail paradas (quiesce)**; assinar o re-pin manual do Codex (RP), W1, W2, W3b, W4, W5 (inclusive a W5c), W6, W8 e os cortes rc.1/GA; hold de 24 h entre rc e GA (ADR-103). Codex — decisão do Owner S362 (2026-10-02): re-pin MANUAL 0.156.1 → 0.160.0 como 1.ª tarefa do trem (o plano B da W3, pelo molde `.claude/plans/PLAN-193/codex-pin-0156/OWNER-PIN-SIGN.sh` com `--ga-tag v1.4.2`); o Owner instala a 0.160.0 e assina o pacote na MESMA sentada (sábado 2026-10-03); antes dela, 0.156.1; depois dela, 0.160.0; nunca npm update -g. A W3 (pin automático) fica para DEPOIS da 1.4.3: a decisão 3 não foi tomada, e o VETO de Segurança segue levantado. O kit da 1.4.3 corre só pela rota 1 do runner do re-pass; a rota 2 vira recusa nomeada. Retenção: arquivo rotacionado mais antigo da cadeia completa 90 dias por volta de 2026-11-21. OpenAI: gpt-5/o3 aposentam em 2026-12-11."
 eta_calendar: "W1 antes de 2026-10-19 (prazo externo); backup agendado e W6 antes de ~2026-11-21; W3b antes de 2026-12-11; GA v1.4.3 = max(assinaturas do Owner, hold de 24 h rc→GA) — sem data prometida"
 tags: [maintenance, release, ci, ubuntu-26-04, audit-spool, codex-pin, npm, claude-code-substrate, retention]
 ---
@@ -86,7 +86,7 @@ abertas.** Texto exato da opção escolhida no chat, entre aspas:
 | publicação: «Commit e push no main (Recomendado)» | este plano é commitado e publicado no `main` (repositório público): cita só CLASSES de defeito, nenhum caminho da pasta privada do Owner e nenhuma receita de contorno do guarda de Bash |
 | sandbox do sistema: «Medir antes de ligar (Recomendado)» (W3 do PLAN-195; OQ-6 de lá resolvida) | só entra aqui pelo mapa de colisões (`.claude/settings.json`, OQ-14); segue aberto lá só «ligar ou não depois da medição» |
 | medições pagas: «Só quando chegar a vez (Recomendado)» (antiga OQ-4) | as sondas pagas saíram da W0: a antiga W0.3 virou **W5.0**; a antiga W0.4 (isca da varredura, paga mínima, mesma regra) virou **W6.0**; o re-teste pago da W5c também espera a vez dela |
-| Codex: «Pin automático verificado (Recomendado)» (torna sem sentido a antiga OQ-3) | **W3 reescrita**: substitui o re-pin manual (que fica só como plano B); até landar, Codex no 0.156.1 sem `npm update -g` |
+| Codex: «Pin automático verificado (Recomendado)» (torna sem sentido a antiga OQ-3) | **W3 reescrita**: substitui o re-pin manual, que ficou como plano B. **S362 (2026-10-02):** o Owner ativou o plano B como 1.ª tarefa do trem — re-pin manual 0.156.1 → 0.160.0 — e a W3 foi para depois da 1.4.3 (a decisão 3 não foi tomada; o VETO de Segurança segue levantado). Em nenhum momento `npm update -g` |
 | ordem das vagas: «Codex automático, depois adopter (Recomendado)» (antiga OQ-13; resolve também a OQ-20 do PLAN-183) | W1 → parte A do PLAN-195 → W3; a vaga da W1 vai para a W7a do PLAN-183; a seguinte, para a W2; a W7b do PLAN-183 logo depois da W7a — ver «Regra de WIP» no topo |
 | limpeza dos ~219 mil arquivos vazios: «Script pronto, você roda depois (Recomendado)» (antiga OQ-9) | W2.6: script confinado entregue ao Owner, fora do repositório; o Owner roda com todas as sessões do Claude fechadas |
 | Sonnet 5.5: «Adotar» — o Owner **não** seguiu a recomendação anterior do CEO («recusar por ora»; antiga OQ-6) | **W5c reescrita como ADOÇÃO**: emenda 4 do ADR-149 (molde da wave-opus55), linha de preço, re-teste pago com os MESMOS testes na vez da W5c, debate L3, cerimônia com exceção de tamanho declarada; na fila depois da W2, salvo se o debate pedir antes |
@@ -119,7 +119,7 @@ só com a ADR da parte A do PLAN-195, se ela for separada do código.
 | W2 | state dir com **219.527** entradas, **219.301** com 0 bytes (73.177 `audit-pending.N.journal.lock`, 73.176 `audit-pending.N.journal`, 73.153 `audit-spool.N.jsonl.lock`) | medido 2026-09-30 (`os.scandir`, só leitura) em `~/.claude/projects/<slug>/state`; re-medido na S361 (2026-10-01, ~20:08Z, mesmo método): **223.100** entradas, **222.872** com 0 bytes — o acúmulo segue |
 | W2 | todo processo que importa `audit_emit` registra um drain FORÇADO no `atexit`; o forçado espera até 2,5 s pelo lock canônico e lista o dir ordenado | `audit_emit.py:13344`; `spool_writer.py:66`, `:2366`, `:2436`, `:2480`, `:2573`, `:2665` |
 | W2 | guards PreToolUse estouraram o timeout de 5 s sob concorrência (ação passa sem decisão) | lane `CC285-05`; `.claude/settings.json` (43 registrações com `"timeout": 5`) |
-| W3 | Codex pinado 0.156.1; estável do npm: a **0.159.3** (publicada em 2026-09-30T23:02Z) era a `latest` na medição de ~20:08Z de 2026-10-01, e a **0.160.0 saiu em 2026-10-01T20:26:19Z e virou `latest`** (relido às ~21:30Z; a 0.159.2 da triagem S359 já não era a última); quem fecha o rail é o MANIFESTO por sha exato (`codex-cli-pin-manifest.json`), não a faixa `>=0.128.0,<0.157.0` do `codex-cli-pin.txt` (a faixa não fecha o rail em execução — o pré-voo, só na fase 6, apenas exige que o arquivo exista —, é gate de versão do validador do veredito de release) ⇒ atualizar o CLI antes de re-pinar FECHA o rail; **19 versões estáveis em setembro, 7 depois da 0.156.1 até a 0.159.3; a 0.160.0, de outubro, é a 8.ª** (a tag `alpha` está em 0.161.0-alpha.13); atestado SLSA v1 presente em 0.156.1, 0.159.2, **0.159.3** e **0.160.0** (conferido também nos pacotes da plataforma `@openai/codex@0.159.3-darwin-arm64` e `@openai/codex@0.160.0-darwin-arm64`) | `.claude/governance/codex-cli-pin.txt:147`; `check_pair_rail.py:589-747`, `:1488-1510`; `pair-rail-gate.sh:182-220` (Gate 4, só na fase 6); `npm view @openai/codex time` e `dist` (S361); lanes `CX-01`, `CX-03`; memória `project-s359-urgency-triage` |
+| W3 e re-pin manual | Codex pinado 0.156.1; estável do npm: a **0.159.3** (publicada em 2026-09-30T23:02Z) era a `latest` na medição de ~20:08Z de 2026-10-01, e a **0.160.0 saiu em 2026-10-01T20:26:19Z e virou `latest`** (relido às ~21:30Z; a 0.159.2 da triagem S359 já não era a última); quem fecha o rail é o MANIFESTO por sha exato (`codex-cli-pin-manifest.json`), não a faixa `>=0.128.0,<0.157.0` do `codex-cli-pin.txt` (a faixa não fecha o rail em execução — o pré-voo, só na fase 6, apenas exige que o arquivo exista —, é gate de versão do validador do veredito de release) ⇒ atualizar o CLI antes de re-pinar FECHA o rail; **19 versões estáveis em setembro, 7 depois da 0.156.1 até a 0.159.3; a 0.160.0, de outubro, é a 8.ª** (a tag `alpha` estava em 0.161.0-alpha.13 na S361); **re-medido em 2026-10-02 ~19:43Z (S362):** `latest` = 0.160.0, nenhuma 0.160.x posterior, `alpha` = 0.162.0-alpha.7 ⇒ o re-pin manual da 1.4.3 é para a 0.160.0; atestado SLSA v1 presente em 0.156.1, 0.159.2, **0.159.3** e **0.160.0** (conferido também nos pacotes da plataforma `@openai/codex@0.159.3-darwin-arm64` e `@openai/codex@0.160.0-darwin-arm64`) | `.claude/governance/codex-cli-pin.txt:147`; `check_pair_rail.py:589-747`, `:1488-1510`; `pair-rail-gate.sh:182-220` (Gate 4, só na fase 6); `npm view @openai/codex time` e `dist` (S361); `npm view @openai/codex dist-tags` e `versions` (S362); lanes `CX-01`, `CX-03`; memória `project-s359-urgency-triage` |
 | W3b | `check-model-deprecations.py --check` sai **1** na árvore viva a partir de 2026-10-12/13 (gpt-5/o3 aposentam em 2026-12-11) | medido 2026-09-30 com `--today 2026-10-13` (rc 1) e sem `--today` (rc 0); lane `CC285-08` |
 | W4 | publish com Node 20 e npm em faixa flutuante; a doc do npm exige Node ≥ 22.14 para publicação sem token | `.github/workflows/npm-publish.yml:245-250`, `:260`; lane `DEP-02` |
 | W4 | tags rc **pulam** o job de publish (regra que sustenta carga, fixada por teste) | `npm-publish.yml:29-30`, `:227`; `.claude/governance/npm-trusted-publisher.txt:5-7` |
@@ -220,8 +220,9 @@ Sonnet 5.5 no `cost-table.yaml` como land livre: cria um achado novo no `check-m
 1-40) — a linha anda DENTRO do pacote da W5c, junto com a emenda 4 do ADR-149 (o Owner decidiu
 adotar). Esse mesmo achado é o controle vermelho da W5c. (d) Re-pin manual da estável do dia (a
 versão anterior desta W3 citava a 0.159.2; em 2026-10-01 a estável era a 0.159.3 até as 20:26Z, quando
-saiu a 0.160.0): descartado pelo Owner na S359 em favor do pin automático; fica como **plano B** da W3
-(`codex-pin-<etiqueta do dia>`, ex.: `codex-pin-0159-3` para a 0.159.3; para a 0.160.0 seria `codex-pin-0160`). (e) Recusar o Sonnet 5.5 por ora (a recomendação anterior do CEO): descartada pelo Owner na
+saiu a 0.160.0): descartado pelo Owner na S359 em favor do pin automático e mantido como **plano B** da W3
+(`codex-pin-<etiqueta do dia>`). **REATIVADO pelo Owner na S362 (2026-10-02)** como 1.ª tarefa do trem, para a
+0.160.0, no pacote `codex-pin-0160` (fim da seção W3): a decisão 3 não foi tomada e a W3 saiu da 1.4.3. (e) Recusar o Sonnet 5.5 por ora (a recomendação anterior do CEO): descartada pelo Owner na
 S359 («Adotar»).
 
 **Mapa de colisões (nunca dois pacotes no mesmo arquivo).** Vale para os três planos que dividem as
@@ -310,12 +311,12 @@ S326); a coluna «manifesto» foi conferida por `grep -F` no manifesto.
 | `SBOM.md` | 0 | não | W3, pacote 1a (declara `node` + sigstore-js como ferramenta de mantenedor; escopa o «stdlib-only» ao runtime dos hooks) |
 | `docs/CROSS-LLM-THREAT-MODEL.md` | 0 | não | W3, pacote 1b (o T-8, `:328`, muda no MESMO pacote — a âncora de confiança do hook muda) |
 | `.claude/hooks/tests/test_check_pair_rail_auto_pin.py` (novo) | 0 | não | W3, pacote 1b (testes do hook: células H-xx, C-xx e R-xx do AMEND-1) |
-| `.claude/governance/codex-cli-pin.txt` | 1 | — | FORA da W3 (rodada 1: a faixa fica intocada); só o plano B o toca |
-| `.claude/governance/codex-cli-pin-manifest.json` | 1 | — | plano B da W3 (no pin automático não recebe o sha — pergunta 1 do debate) |
-| `.claude/governance/codex-cli-binary-sha256.txt` | 1 | — | plano B da W3 (conferir se o molde o toca) |
-| `.claude/plans/PLAN-194/codex-pin-0159-3/` (OWNER-PIN-SIGN.sh, rehearse-pin-0159-3.sh, pin-0159-3-approved.md, codex-cli-pin.txt.new, codex-cli-pin-manifest.json.new) | 0 | não | plano B da W3 (gerado; nomes de exemplo para a 0.159.3 — a etiqueta segue a versão do dia, `0160` para a 0.160.0; era `codex-pin-0159-2` na versão anterior do plano) |
-| `.claude/plans/PLAN-193/codex-pin-0156/OWNER-PIN-SIGN.sh` | 0 | não | plano B da W3 (molde, só leitura) |
-| `.claude/scripts/re-pin-codex.py` | 0 | não | plano B da W3 (só executa) |
+| `.claude/governance/codex-cli-pin.txt` | 1 | — | re-pin manual 0.160.0 (RP, decisão S362): só o teto da faixa alarga, para `>=0.128.0,<0.161.0` (esperado; o `--dry-run` do gerador confere); a W3 não o toca (rodada 1: a faixa fica intocada) |
+| `.claude/governance/codex-cli-pin-manifest.json` | 1 | — | re-pin manual 0.160.0 (RP): recebe o sha do payload da 0.160.0 (no pin automático da W3 não receberia — pergunta 1 do debate) |
+| `.claude/governance/codex-cli-binary-sha256.txt` | 1 | — | fora do RP: o molde 0156 e o `re-pin-codex.py` não o citam (`grep`, 2026-10-02; o `PACK_FILES` do molde, `OWNER-PIN-SIGN.sh:134`, lista o sentinel, os 2 arquivos do pin, o script, o ensaio e o README) |
+| `.claude/plans/PLAN-194/codex-pin-0160/` (OWNER-PIN-SIGN.sh, rehearse-pin-0160.sh, README.md, pin-0160-approved.md, codex-cli-pin.txt.new, codex-cli-pin-manifest.json.new) | 0 | não | re-pin manual 0.160.0 (RP; gerado pelo `re-pin-codex.py`, etiqueta `0160` pela `pack_tag()`; oráculo 0 medido em 2026-10-02 no script e no sentinel) |
+| `.claude/plans/PLAN-193/codex-pin-0156/OWNER-PIN-SIGN.sh` | 0 | não | RP (molde, só leitura; é o molde do pack mais novo — o gerador recusa molde mais velho, `re-pin-codex.py:1952-1974`) |
+| `.claude/scripts/re-pin-codex.py` | 0 | não | RP (só executa) |
 | `.github/scripts/validate-pair-rail-verdict.py` | 0 | **sim** | W3 (não editar; lê a faixa do pin — controle W3.4 d; o limite do `parse_semver`, `:355-359`, é declarado no AMEND-1) |
 | `.github/workflows/release.yml` | 1 | — | referência (`:550-557`, `:760`) |
 | `.claude/adr/ADR-182-codex-payload-pin-enforcement.md` | 1 | — | referência (emendado pela W3) |
@@ -864,9 +865,11 @@ esforço fixos no argv do rail (cura a lane `CX-07`, antes no backlog) — dois 
 argv fixo», **pendente de decisão do Owner (S361; decisão pendente 5)**; (d) cada veredito registra
 versão, modelo e esforço. **Custo declarado na fonte:** emenda do ADR-182 + debate de segurança + 1
 cerimônia — e, desde a rodada 1, o pacote de kernel de registro de ações e a W0.6 (feita) e, desde a rodada
-2, a dependência de `node` + `sigstore` e os pacotes 1b, 1a e 2 em série. **Até o LAND da W3**
-(a regra termina nele; depois, só pelo procedimento da W3.6): ficar no 0.156.1, **sem `npm update -g`** — o MANIFESTO
-por sha exato (`codex-cli-pin-manifest.json`) recusaria o binário novo e fecharia o rail: o hook
+2, a dependência de `node` + `sigstore` e os pacotes 1b, 1a e 2 em série. **Binário global do Codex
+(decisão do Owner S362, 2026-10-02):** 0.156.1 até a sentada do re-pin manual (RP, plano B no fim desta
+seção); nessa sentada o Owner instala a 0.160.0 e assina o pacote; dali até o LAND da W3 (depois da 1.4.3;
+a regra termina nele e segue pelo procedimento da W3.6), 0.160.0. **Nunca `npm update -g`**: fora da sentada
+do RP, o MANIFESTO por sha exato (`codex-cli-pin-manifest.json`) recusaria o binário novo e fecharia o rail: o hook
 bloqueia as escritas L3+ (`check_pair_rail.py:1488-1510`, núcleo de verificação em `:589-747`); o
 pré-voo `pair-rail-gate.sh` só confere o pin na fase 6 (`:182-220`) e aborta ali; as rodadas manuais
 (`codex exec review`, `codex_invoke.py:193`, `council-audit.js:325`) NÃO conferem o pin e rodariam o
@@ -1084,11 +1087,15 @@ cerimônia de kernel; a exceção (4) da «Regra de WIP» cobre só o índice do
 não os paths de código. **Debate:** SIM, o debate único (FECHADO); `needs_debate=true`. **Cerimônia:** sim.
 **Vaga:** 3.ª das 3 iniciais (ordem decidida pelo Owner); ocupada pela W3b até a decisão 3 (Q8, S361).
 
-- [ ] W3.1 regra operacional **até o LAND da W3** (ver W3.6): Codex no 0.156.1, sem `npm update -g`;
-  nenhuma rodada de rail com outro binário; depois do LAND, só pelo procedimento da W3.6 (instalar a
-  versão ELEGÍVEL, nunca a `latest` crua). **Escopo do Check: SÓ o período até o LAND** (0.156.1, só-manifesto,
-  por isso sem flag); depois do LAND ele reprovaria um global auto-pinado, e o Check de sucesso e o da W3.6
-  usam `--allow-auto-pin`. — Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
+- [ ] W3.1 regra operacional **até o LAND da W3** (ver W3.6), **reescrita pela decisão do Owner S362
+  (2026-10-02)**: Codex no 0.156.1 até a sentada do re-pin manual (RP, plano B no fim desta seção); nela o
+  Owner instala a 0.160.0 e assina o pacote, na MESMA sentada; daí até o LAND da W3 (depois da 1.4.3),
+  0.160.0. Nunca `npm update -g`; nenhuma rodada de rail com outro binário; a série de rail do próprio RP
+  roda no 0.156.1 e termina inteira antes da instalação da 0.160.0. Depois do LAND da W3, só pelo
+  procedimento da W3.6 (instalar a versão ELEGÍVEL, nunca a `latest` crua). **Escopo do Check: SÓ o período
+  até o LAND da W3** (só-manifesto, por isso sem flag): `verified` com o 0.156.1 antes do RP e com o 0.160.0
+  depois do SIGN do RP; `mismatch` só na janela entre a instalação e o SIGN. Depois do LAND da W3 ele
+  reprovaria um global auto-pinado, e o Check de sucesso e o da W3.6 usam `--allow-auto-pin`. — Check: python3 .claude/hooks/check_pair_rail.py --verify-codex-pin "$(command -v codex)"
 - [ ] W3.2 debate único do plano — **FECHADO** (ver «Approach», item 4). O ADR-182-AMEND-1 REVISADO (rascunho em
   `.claude/plans/PLAN-194/debate/round-3/ADR-182-AMEND-1-draft.md`, a partir do de `round-2/`) vira o texto do
   pacote de ADR (1b) com os ajustes 18 a 32 do consenso r3 aplicados pelo CEO, sem nova rodada; as decisões do
@@ -1209,19 +1216,37 @@ modificação rastreada no SIGN. **Prazo:** sem data externa; não é pré-condi
 dentro da faixa pinada, o manifesto atual é o do 0.156.1 e o corte independe do Codex global — rota 2,
 invertida).
 
-**Plano B — re-pin manual pelo molde (ADR-182 §5; precedentes 0155 e 0156).** Só se o debate recusar
-o pin automático ou o 0.156.1 parar de funcionar antes do land. Passos: pré-condições do molde (árvore
-sem modificação rastreada — o SIGN aborta, `OWNER-PIN-SIGN.sh:330` do molde, lane `CX-13`; L1
-landado; este plano commitado, porque o `re-pin-codex.py` exige `--plan`; tag `v1.4.2` ancestral do
-HEAD); `python3 .claude/scripts/re-pin-codex.py <versão> --plan PLAN-194 --mold
-.claude/plans/PLAN-193/codex-pin-0156/OWNER-PIN-SIGN.sh --ga-tag v1.4.2 --dry-run` e depois sem
-`--dry-run` (baixa ~331 MB: diretório próprio, piso de `df`, limpeza confinada); ensaio com prefixos
-npm descartáveis (`$REHEARSE_CODEX_PREFIX`, `$REHEARSE_OLD_CODEX_PREFIX`); rodadas manuais
-congeladas entre o `npm i -g` e o SIGN; Owner faz `npm i -g @openai/codex@<versão exata>` e o SIGN na
-mesma sentada. Pacote em `.claude/plans/PLAN-194/codex-pin-<etiqueta>/` (regra do `re-pin-codex.py`,
-`pack_tag()`: `0.Y.Z` → `0Y-Z`, e só `0Y` se Z = 0 — `0159-3` para a 0.159.3, `0160` para a 0.160.0; o plano B
-para a 0.159.3 se chamaria `codex-pin-0159-3`). Controle: `--verify-codex-pin` = `mismatch` logo após o `npm i -g`
-→ `verified` depois do SIGN.
+**Plano B — re-pin manual pelo molde (ADR-182 §5; precedentes 0155 e 0156) — ATIVADO para a 0.160.0
+(decisão do Owner S362, 2026-10-02).** O gatilho previsto era o debate recusar o pin automático ou o 0.156.1
+parar de funcionar antes do land. Na S362 o Owner ativou o plano B como 1.ª tarefa do trem (RP): a decisão 3
+não foi tomada, a W3 fica para depois da 1.4.3 e o VETO de Segurança segue levantado. Pacote em
+`.claude/plans/PLAN-194/codex-pin-0160/` (regra do `re-pin-codex.py`, `pack_tag()`: `0.Y.Z` → `0Y-Z`, e só
+`0Y` se Z = 0). Passos:
+
+1. Pré-condições do molde: árvore sem modificação rastreada (o SIGN aborta, `OWNER-PIN-SIGN.sh:330` do
+   molde, lane `CX-13`); L1 landado; este plano commitado com o texto do re-pin, porque o `re-pin-codex.py`
+   exige `--plan` e o ensaio recusa plano com linha de instalação global de outra versão
+   (`rehearse-pin-0156.sh:236-249`, clonado no pacote); tag `v1.4.2` ancestral do HEAD.
+2. Sonda da 0.160.0 num prefixo npm descartável, ANTES de executar qualquer binário dele: sha256 do payload
+   e `--verify-codex-pin` = `mismatch`; depois `--version`, o argv do hook, o argv do CEO e o teste vivo do
+   `execpolicy`. Resultado e sha256 no LEDGER antes do passo 3.
+3. `python3 .claude/scripts/re-pin-codex.py 0.160.0 --plan PLAN-194 --mold
+   .claude/plans/PLAN-193/codex-pin-0156/OWNER-PIN-SIGN.sh --ga-tag v1.4.2 --pin-note <arquivo> --dry-run`;
+   depois o mesmo comando sem `--dry-run` (baixa ~331 MB: diretório próprio, piso de `df`, limpeza
+   confinada). O `--pin-note` recebe o CAMINHO de um arquivo UTF-8 com a justificativa, sem marcador de pendência
+   (o gerador recusa a nota que ainda o tenha).
+4. Ensaio com prefixos npm descartáveis (`$REHEARSE_CODEX_PREFIX`, `$REHEARSE_OLD_CODEX_PREFIX`), placar
+   todo verde.
+5. Rail do pacote no 0.156.1 verificado, terminado inteiro antes da instalação da 0.160.0.
+6. Sentada do Owner (sábado 2026-10-03), com as rodadas de rail paradas:
+   `npm i -g @openai/codex@0.160.0`; `--verify-codex-pin` = `mismatch`; SIGN; push; `--verify-codex-pin` =
+   `verified`. Se o SIGN abortar, reinstalar a 0.156.1 (o manifesto ainda é o dela) e conferir `verified`.
+
+**Versão nova antes do SIGN:** se sair uma 0.160.x antes do SIGN, a ferramenta regenera o pacote em quatro
+passos: (1) land de texto trocando a versão do passo 6, porque o detector do ensaio recusa outra versão neste
+plano; (2) sonda nova, porque o sha do payload muda; (3) pasta nova pela `pack_tag()`; (4) comandos novos
+para o Owner. Controle do RP: `--verify-codex-pin` = `mismatch` logo depois da instalação → `verified` depois
+do SIGN.
 
 ### W3b — Ids OpenAI que se aposentam fora da lista de revisores
 Check: python3 .claude/scripts/check-model-deprecations.py --check --today 2026-10-13
@@ -1739,8 +1764,8 @@ Check: python3 .claude/scripts/validate_governance_fast.py
    sentinela, declarada — o gatilho do ADR-111 §2 fica preservado e NÃO AVALIÁVEL até haver corpus com sha
    e linha de base. **Até o LAND da W3:** um `npm update -g` fecha o rail (o MANIFESTO por sha exato
    recusa o binário novo — não a faixa: o hook bloqueia as escritas L3+ e o pré-voo de fase 6 aborta; as
-   rodadas manuais não conferem o pin e rodariam o binário novo sem verificação); mitigação: Codex no
-   0.156.1 (decisão do Owner, W3.1). **E no corte** (S361, respondido na rodada 1): o pin automático não
+   rodadas manuais não conferem o pin e rodariam o binário novo sem verificação); mitigação: a regra da
+   W3.1 (0.156.1 até a sentada do re-pin manual, 0.160.0 depois dela; decisão do Owner S362). **E no corte** (S361, respondido na rodada 1): o pin automático não
    muda o passo 15 do release (um veredito com o Codex novo e fora do manifesto sai INVALID), mas o corte
    é independente do Codex global — o runner do re-pass resolve o Codex do MANIFESTO pela rota 2 (`npx`
    em cache próprio) e o envelope lê a PROVENANCE —, então a W3.6 roda logo depois do LAND da W3 e o corte
@@ -1749,8 +1774,9 @@ Check: python3 .claude/scripts/validate_governance_fast.py
    e o shim executa o lançador, não o payload verificado) **até a inversão no kit da 1.4.3** (pré-condição
    da W3.6); **os executáveis irmãos do pacote de plataforma ficam FORA do pin** (sha só do `bin/codex`:
    conferidos na promoção, e a troca em tempo de execução é resíduo de mesmo UID); a «confiança no
-   registro» deixou de ser resíduo aceitável (ESCALATE); e o rollback exige rede (R-16). No plano B volta
-   a janela entre `npm i -g` e o SIGN: mesma sentada + rodadas manuais congeladas.
+   registro» deixou de ser resíduo aceitável (ESCALATE); e o rollback exige rede (R-16). No re-pin manual
+   (plano B, ativado na S362) volta a janela entre `npm i -g` e o SIGN: mesma sentada + rodadas manuais
+   congeladas.
    **Rodada 3:** o **I8 do rascunho sobre-afirmava** — o hook confia em linhas que DECLARAM shas listados no
    manifesto ADR-192, e o escritor do registro é editável pelo agente (oráculo 0 nas fontes; nenhum hook lê o
    ADR-192 — `grep gate-scripts-manifest .claude/hooks/` não acha nada, conferido na S361), então a guarda das
@@ -2164,9 +2190,10 @@ exceção da W3b) — (a lista das decisões está em «Decisões do Owner — S
 
 Primeira mensagem de uma sessão nova: «Ler o PLAN-194 e o `.claude/plans/PLAN-194/LEDGER.md` (a pasta
 `PLAN-194/` e o LEDGER só existem depois do 1.º commit de trabalho); conferir
-`git log --oneline -5`, `gh run list --limit 5`, `npm view @openai/codex dist-tags` (a `latest` era a 0.160.0 em 2026-10-01 às ~21:30Z; muda com
-frequência, com várias estáveis por semana — conferir), `codex --version` (0.156.1 até o LAND da W3;
-depois, a versão elegível registrada pela W3.6 — pergunta 7 da W3),
+`git log --oneline -5`, `gh run list --limit 5`, `npm view @openai/codex dist-tags` (a `latest` era a 0.160.0 em 2026-10-01 às ~21:30Z e
+seguia a 0.160.0 em 2026-10-02 às ~19:43Z; muda com frequência, com várias estáveis por semana — conferir; uma
+0.160.x antes do SIGN do RP regenera o pacote, ver o plano B da W3), `codex --version` (0.156.1 até a sentada do
+re-pin manual, RP; 0.160.0 depois dela, até o LAND da W3, que fica para depois da 1.4.3),
 `claude --version` (2.1.287 em 2026-10-01; congelado durante cada onda — Q14), `df -h /System/Volumes/Data`
 (o volume de dados, onde ficam o `$TMPDIR` e os clones — risco 13); ver quais vagas canônicas estão em voo
 (PLAN-194, PLAN-195, PLAN-183) e seguir a ordem da regra de WIP do topo. Se hoje ≥ 2026-10-19 e a W1 não
