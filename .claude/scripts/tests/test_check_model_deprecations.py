@@ -11,7 +11,11 @@ Covers the permanent model-deprecation checker
 - fail-open (missing/corrupt ledger -> advisory + exit 0, with or without
   --check; bad --today falls back to the real date)
 - alias longest-first matching (no double count of full id vs bare alias)
-- repo-default --check runs clean against the CURRENT tree (dogfood probe)
+- repo-default scan of the CURRENT tree: its non-inert BREAK/WARN set equals
+  the DECLARED W3b.1 debt exactly (dogfood probe; PLAN-194 W3b.0+W3b.3)
+- matcher precision (left guard, no prefix match), npm stage out of scan,
+  check-model-currency family-prefix table INERT (PLAN-194 W3b.0)
+- OpenAI ledger refresh from the primary source (PLAN-194 W3b.3)
 """
 from __future__ import annotations
 
@@ -21,6 +25,7 @@ import json
 import os
 import sys
 import unittest
+from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
@@ -267,11 +272,26 @@ class TestNegativeFixtureInertness(_CheckerTestBase):
         for hit in tier_hits:
             self.assertEqual(hit["severity"], "INERT", hit)
 
-    def test_repo_default_check_is_clean(self):
-        """Dogfood probe: --check against the CURRENT tree exits 0."""
-        rc, out, _ = self.run_main(["--check", "--today", "2026-06-12"])
+    def test_repo_default_scan_matches_declared_w3b1_debt(self):
+        """Dogfood probe: the CURRENT tree's non-inert BREAK/WARN set is
+        EXACTLY the declared debt (empty means `--check` exits 0).
+
+        Was `--check --today 2026-06-12` exits 0. PLAN-194 W3b.3 refreshed
+        the OpenAI rows from the primary source, and ids retired on
+        2026-07-23 (or retiring 2026-12-11) still sit in live code until
+        W3b.1 removes them. The probe date moved to the W3b control date
+        (2026-10-13), which sees every id the old date saw (each one that
+        warned on 2026-06-12 is BREAK by then) plus the December fuse.
+        """
+        rc, out, _ = self.run_main(["--json", "--today", W3B0_TODAY])
         self.assertEqual(rc, 0)
-        self.assertIn("LIVE-BREAKS-REMAINING: 0", out)
+        report = json.loads(out)
+        observed = Counter(
+            (h["path"], h["matched"], h["severity"])
+            for h in report["hits"] if h["severity"] in ("BREAK", "WARN"))
+        self.assertEqual(dict(observed), W3B1_DECLARED_DEBT)
+        rc, _, _ = self.run_main(["--check", "--today", W3B0_TODAY])
+        self.assertEqual(rc, 1 if W3B1_DECLARED_DEBT else 0)
 
 
 class TestCheckExitCodes(_CheckerTestBase):
@@ -397,6 +417,320 @@ class TestMatcher(_CheckerTestBase):
         for key in ("root", "path", "line", "matched", "model_id",
                     "retirement", "label", "severity"):
             self.assertIn(key, hit)
+
+
+# ---------------------------------------------------------------------------
+# PLAN-194 W3b.0 — matcher precision (Codex review S359, P2; measured
+# 2026-09-30). The matcher had a RIGHT guard only, so `gpt-5` matched inside
+# `gpt-5-mini`/`gpt-5-codex`, `o3` inside `o3-mini` and even inside
+# `lib2to3`: of the 28 WARNs of `--check --today 2026-10-13`, most were not
+# ids the ledger retires. NEGATIVE controls pin the three measured
+# false-positive classes; POSITIVE controls pin `gpt-5`/`o3` loose in a model
+# list, which MUST keep matching. Every control below was run RED against the
+# pre-cure matcher before the cure landed (positive ones that are behaviour
+# the cure must PRESERVE are marked as such).
+# ---------------------------------------------------------------------------
+
+# Same dates as the real ledger's gpt-5/o3 entries (retire 2026-12-11, so
+# --today 2026-10-13 is inside the 60-day WARN window).
+OPENAI_LEDGER = {
+    "_meta": {"schema": 1, "fetched": "2026-06-12", "source_stale": False},
+    "models": [
+        {"model_id": "gpt-5", "aliases": [], "deprecated": "2026-12-11",
+         "retirement": "2026-12-11", "replacement": "gpt-5.6-sol"},
+        {"model_id": "o3", "aliases": ["o3-2025-04-16"],
+         "deprecated": "2026-12-11", "retirement": "2026-12-11",
+         "replacement": "gpt-5.6-sol"},
+        {"model_id": "claude-test-old-1-20240101",
+         "aliases": ["claude-test-old-1"], "deprecated": "2025-01-01",
+         "retirement": "2026-01-01", "replacement": "claude-test-new"},
+    ],
+    "inert_path_rules": [],
+}
+
+W3B0_TODAY = "2026-10-13"
+
+#: PLAN-194 — DECLARED DEBT, the input of W3b.1: the exact non-inert
+#: BREAK/WARN hits of the CURRENT tree at --today 2026-10-13 with the
+#: refreshed ledger (measured 2026-10-02 on main 6a9abb10), keyed by
+#: (path, matched literal, severity) -> count; line-free so an unrelated edit
+#: does not churn it. W3b.1 removes these ids and SHRINKS this map in the
+#: same patch, down to EMPTY (then --check at the control date exits 0).
+#: Never widen it without a primary source (PLAN-194/LEDGER.md §W3b.3).
+W3B1_DECLARED_DEBT = {
+    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5-codex", "BREAK"): 4,
+    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5.1-codex", "BREAK"): 1,
+    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5", "WARN"): 2,
+    (".claude/hooks/_lib/codex_cli_shape.py", "gpt-5-mini", "WARN"): 1,
+    (".claude/hooks/_lib/codex_cli_shape.py", "o3", "WARN"): 1,
+    (".claude/scripts/codex_invoke.py", "gpt-5-codex", "BREAK"): 1,
+    (".claude/scripts/optimizer/codex_phase_gate.py", "gpt-5-codex",
+     "BREAK"): 2,
+}
+
+# The exact line shapes measured on 2026-09-30 (check-stdlib-only.py:63 and
+# the `_VALID_MODELS` / docstring / default-slug shapes of codex_cli_shape.py,
+# codex_invoke.py and optimizer/codex_phase_gate.py).
+NEG_LEFT_GUARD = (
+    '        "inspect", "io", "ipaddress", "itertools", "json", '
+    '"keyword", "lib2to3",\n'
+    "use_o3 = False\n"
+)
+NEG_PREFIX = (
+    '    "gpt-5-mini",\n'
+    '    "gpt-5-codex",\n'
+    '    "o3-mini",\n'
+    "        --model gpt-5-codex \\\n"
+    'DEFAULT_CODEX_MODEL: str = "gpt-5-codex"\n'
+    "    # coerced to `gpt-5-codex`\n"
+)
+POS_MODEL_LIST = (
+    "_VALID_MODELS = (\n"
+    '    "gpt-5.5",\n'
+    '    "gpt-5",\n'
+    '    "gpt-5-mini",\n'
+    '    "gpt-5-codex",\n'
+    '    "o3",\n'
+    '    "o3-mini",\n'
+    '    "o4-mini",\n'
+    ")\n"
+)
+
+
+class TestMatcherPrecisionW3b0(_CheckerTestBase):
+    """PLAN-194 W3b.0: left guard + a retired id is never a PREFIX match."""
+
+    def _scan(self, files, ledger_data=OPENAI_LEDGER, extra=()):
+        ledger = self.write_ledger(ledger_data)
+        root = self.make_root("w3b0", files)
+        rc, out, _ = self.run_main(
+            ["--ledger", ledger, "--json", "--today", W3B0_TODAY]
+            + list(extra) + [root])
+        return rc, json.loads(out)
+
+    def _pairs(self, report):
+        return sorted((h["path"], h["line"], h["matched"])
+                      for h in report["hits"])
+
+    # -- NEGATIVE controls (RED before the cure) ----------------------------
+
+    def test_left_guard_lib2to3_is_not_o3(self):
+        rc, report = self._scan({"stdlib.py": NEG_LEFT_GUARD})
+        self.assertEqual(rc, 0)
+        self.assertEqual(self._pairs(report), [],
+                         "an id inside a longer identifier must not match")
+
+    def test_retired_id_is_not_a_prefix_of_another_id(self):
+        rc, report = self._scan({"shape.py": NEG_PREFIX})
+        self.assertEqual(rc, 0)
+        self.assertEqual(self._pairs(report), [],
+                         "gpt-5/o3 must not match inside gpt-5-mini/"
+                         "gpt-5-codex/o3-mini")
+
+    def test_negatives_alone_keep_check_green(self):
+        ledger = self.write_ledger(OPENAI_LEDGER)
+        root = self.make_root("w3b0neg", {
+            "stdlib.py": NEG_LEFT_GUARD, "shape.py": NEG_PREFIX})
+        rc, out, _ = self.run_main(
+            ["--ledger", ledger, "--check", "--today", W3B0_TODAY, root])
+        self.assertEqual(rc, 0, out)
+
+    def test_unlisted_variant_does_not_match(self):
+        rc, report = self._scan({"v.py": 'M = "o3-pro"\nN = "gpt-5-nano"\n'})
+        self.assertEqual(self._pairs(report), [])
+
+    # -- POSITIVE controls ---------------------------------------------------
+
+    def test_loose_ids_in_a_model_list_still_match(self):
+        """PRESERVED behaviour: exactly the two loose ids, nothing else."""
+        rc, report = self._scan({"shape.py": POS_MODEL_LIST})
+        self.assertEqual(self._pairs(report), [
+            ("shape.py", 3, "gpt-5"), ("shape.py", 6, "o3")])
+        for hit in report["hits"]:
+            self.assertEqual(hit["severity"], "WARN", hit)
+
+    def test_loose_ids_in_a_model_list_fail_the_check(self):
+        """PRESERVED behaviour: the cure must not silence the real WARN."""
+        ledger = self.write_ledger(OPENAI_LEDGER)
+        root = self.make_root("w3b0pos", {"shape.py": POS_MODEL_LIST})
+        rc, out, _ = self.run_main(
+            ["--ledger", ledger, "--check", "--today", W3B0_TODAY, root])
+        self.assertEqual(rc, 1, out)
+
+    def test_listed_variant_matches_as_its_entry(self):
+        """A variant enters only when the ledger lists it (here an alias)."""
+        rc, report = self._scan({"v.py": 'M = "o3-2025-04-16"\n'})
+        self.assertEqual(self._pairs(report), [("v.py", 1, "o3-2025-04-16")])
+        self.assertEqual(report["hits"][0]["model_id"], "o3")
+
+    def test_qualified_and_delimited_ids_still_match(self):
+        """PRESERVED behaviour: separators that are not id continuations."""
+        text = (
+            "--model gpt-5\n"                       # line start / space
+            "MODEL=o3\n"                            # '='
+            "route = 'openai/gpt-5'\n"              # '/' qualifier
+            "id = 'anthropic.claude-test-old-1'\n"  # dotted qualifier
+            "pick(o3, gpt-5)\n"                     # '(' ',' ')'
+            "tail gpt-5-\n"                          # '-' that opens nothing
+            "o3:latest\n"                           # ':' tag
+        )
+        rc, report = self._scan({"q.py": text})
+        self.assertEqual(self._pairs(report), [
+            ("q.py", 1, "gpt-5"), ("q.py", 2, "o3"), ("q.py", 3, "gpt-5"),
+            ("q.py", 4, "claude-test-old-1"), ("q.py", 5, "gpt-5"),
+            ("q.py", 5, "o3"), ("q.py", 6, "gpt-5"), ("q.py", 7, "o3")])
+
+    def test_claude_full_id_still_wins_and_suffix_variant_drops(self):
+        """Longest-first is unchanged; an unlisted `-<x>` variant no longer
+        rides on the bare alias (variants enter only via the ledger)."""
+        rc, report = self._scan({"c.py": (
+            "a = 'claude-test-old-1-20240101'\n"
+            "b = 'claude-test-old-1-latest'\n")})
+        self.assertEqual(self._pairs(report), [
+            ("c.py", 1, "claude-test-old-1-20240101")])
+
+    def test_real_ledger_openai_entries_get_the_cure(self):
+        """The shipped ledger's gpt-5/o3 rows: negatives silent, positives
+        WARN. Filtered to those two ids so a future ledger row (e.g. a
+        gpt-5.5 retirement) does not turn this into a ledger snapshot."""
+        root = self.make_root("w3b0real", {
+            "stdlib.py": NEG_LEFT_GUARD, "shape.py": NEG_PREFIX,
+            "list.py": POS_MODEL_LIST})
+        rc, out, _ = self.run_main(
+            ["--json", "--today", W3B0_TODAY, root])
+        self.assertEqual(rc, 0)
+        report = json.loads(out)
+        mine = sorted((h["path"], h["line"], h["matched"], h["severity"])
+                      for h in report["hits"]
+                      if h["model_id"] in ("gpt-5", "o3"))
+        self.assertEqual(mine, [
+            ("list.py", 3, "gpt-5", "WARN"), ("list.py", 6, "o3", "WARN")])
+
+
+class TestNpmStageMirrorOutOfScan(_CheckerTestBase):
+    """PLAN-194 W3b.0 decision: the npm stage mirror is OUT of the scan.
+
+    `npm/.claude/`, `npm/SPEC/`, `npm/scripts/` and `npm/templates/` at the
+    scan ROOT are the gitignored stage of the npm tarball (.gitignore:47-50,
+    written by scripts/install-npm.sh / scripts/npm-rebuild.sh): byte copies
+    of trees already scanned at their source, which doubled every WARN.
+    Tracked files under `npm/` and any `npm/` dir that is NOT at the root
+    stay in scope.
+    """
+
+    def test_stage_subtrees_at_root_are_pruned(self):
+        ledger = self.write_ledger(OPENAI_LEDGER)
+        root = self.make_root("npmroot", {
+            "npm/.claude/hooks/_lib/shape.py": '"o3",\n',
+            "npm/SPEC/v1/x.py": '"o3",\n',
+            "npm/scripts/y.py": '"o3",\n',
+            "npm/templates/z.py": '"o3",\n',
+            "npm/bin/init.js": '"o3",\n',
+            "pkg/npm/.claude/w.py": '"o3",\n',
+            ".claude/hooks/_lib/shape.py": '"o3",\n',
+        })
+        rc, out, _ = self.run_main(
+            ["--ledger", ledger, "--json", "--today", W3B0_TODAY, root])
+        report = json.loads(out)
+        self.assertEqual(sorted(h["path"] for h in report["hits"]), [
+            ".claude/hooks/_lib/shape.py", "npm/bin/init.js",
+            "pkg/npm/.claude/w.py"])
+
+
+class TestModelCurrencyFamilyPrefixesInert(_CheckerTestBase):
+    """PLAN-194 W3b.0: `check-model-currency.py`'s `_FAMILIES` table holds
+    vendor id PREFIXES (`"gpt-", "o3", "o4"`), not model ids — no matcher
+    rule can tell that `"o3"` from a loose `"o3"` in a model list, so the
+    shipped ledger classifies the file INERT (rule
+    `model-currency-family-prefixes`). A loose `"o3"` anywhere else stays
+    WARN (positive control)."""
+
+    def test_family_prefix_table_is_inert_with_real_ledger(self):
+        root = self.make_root("mc", {
+            ".claude/scripts/check-model-currency.py":
+                '    ("openai", ("gpt-", "o3", "o4"), '
+                '"codex_cli_shape:_VALID_MODELS"),\n',
+            ".claude/hooks/_lib/codex_cli_shape.py": '    "o3",\n',
+        })
+        rc, out, _ = self.run_main(
+            ["--json", "--today", W3B0_TODAY, root])
+        self.assertEqual(rc, 0)
+        report = json.loads(out)
+        by_path = {h["path"]: h for h in report["hits"]
+                   if h["model_id"] == "o3"}
+        table = by_path[".claude/scripts/check-model-currency.py"]
+        self.assertEqual(table["severity"], "INERT", table)
+        self.assertEqual(table["inert_rule"],
+                         "model-currency-family-prefixes")
+        self.assertEqual(
+            by_path[".claude/hooks/_lib/codex_cli_shape.py"]["severity"],
+            "WARN")
+
+
+# PLAN-194 W3b.3 — OpenAI rows refreshed from the primary source (the
+# deprecations page read on 2026-10-02 and recorded in
+# .claude/plans/PLAN-194/LEDGER.md §W3b.3). With the precise matcher a variant
+# is seen ONLY when the ledger lists it, so every id the page retires must be
+# a model_id or alias. RED before the refresh: none of the July ids and none
+# of the dated/undated December variants below matched.
+JULY_2026_SHUTDOWN = (
+    "gpt-5-codex", "gpt-5-chat-latest", "gpt-5.1-codex",
+    "gpt-5.1-codex-max", "gpt-5.1-codex-mini", "gpt-5.2-codex",
+    "gpt-5.1-chat-latest", "o3-deep-research-2025-06-26",
+)
+#: literal -> ledger model_id (dated snapshots from the page + the undated
+#: ids that ride them, as the pre-existing gpt-5/o3 rows already did).
+DECEMBER_2026_SHUTDOWN = {
+    "gpt-5-2025-08-07": "gpt-5", "gpt-5": "gpt-5",
+    "gpt-5-mini-2025-08-07": "gpt-5-mini", "gpt-5-mini": "gpt-5-mini",
+    "gpt-5-nano-2025-08-07": "gpt-5-nano", "gpt-5-nano": "gpt-5-nano",
+    "gpt-5-pro-2025-10-06": "gpt-5-pro", "gpt-5-pro": "gpt-5-pro",
+    "o3-2025-04-16": "o3", "o3": "o3",
+    "o3-pro-2025-06-10": "o3-pro", "o3-pro": "o3-pro",
+}
+
+
+class TestOpenAILedgerRefreshW3b3(_CheckerTestBase):
+    """The shipped ledger sees every id the primary source retires."""
+
+    def _scan_ids(self, ids):
+        root = self.make_root("w3b3", {
+            "ids.py": "".join('M = "%s"\n' % i for i in ids)})
+        rc, out, _ = self.run_main(["--json", "--today", W3B0_TODAY, root])
+        self.assertEqual(rc, 0)
+        return json.loads(out)["hits"]
+
+    def test_july_shutdown_ids_are_break(self):
+        hits = self._scan_ids(JULY_2026_SHUTDOWN)
+        got = sorted((h["line"], h["matched"], h["model_id"],
+                      h["retirement"], h["severity"]) for h in hits)
+        self.assertEqual(got, [
+            (n + 1, mid, mid, "2026-07-23", "BREAK")
+            for n, mid in enumerate(JULY_2026_SHUTDOWN)])
+
+    def test_december_snapshots_and_undated_ids_warn(self):
+        ids = list(DECEMBER_2026_SHUTDOWN)
+        hits = self._scan_ids(ids)
+        got = sorted((h["line"], h["matched"], h["model_id"],
+                      h["retirement"], h["severity"]) for h in hits)
+        self.assertEqual(got, [
+            (n + 1, lit, DECEMBER_2026_SHUTDOWN[lit], "2026-12-11", "WARN")
+            for n, lit in enumerate(ids)])
+
+    def test_unconfirmed_ids_have_no_row(self):
+        """Declared decisions (LEDGER §W3b.3): `gpt-5.5` is NOT on the page
+        and `o3-mini` is NOT confirmed — neither gets a row (a future row
+        needs a primary source and must update this test on purpose)."""
+        self.assertEqual(self._scan_ids(("gpt-5.5", "o3-mini")), [])
+
+    def test_openai_replacement_stays_inside_one_target(self):
+        """Every OpenAI row names gpt-5.6-sol, so the refresh adds NO new id
+        to check-model-currency.py's red set (expected-reds unchanged; a
+        per-tier target is a W3b.2/W5c decision)."""
+        ledger = _mod.load_ledger(str(REAL_LEDGER))
+        targets = {m["replacement"] for m in ledger["models"]
+                   if not m["model_id"].startswith("claude-")}
+        self.assertEqual(targets, {"gpt-5.6-sol"})
 
 
 if __name__ == "__main__":

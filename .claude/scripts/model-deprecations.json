@@ -7,7 +7,8 @@
     "source_stale": false,
     "provenance": "PLAN-135 W0/W1 unit w0r — consumed by .claude/scripts/check-model-deprecations.py; refresh by re-fetching the source page and bumping `fetched` (set source_stale=true if populated from fallback data instead of the live page)",
     "notes": "Dates apply to Anthropic-operated platforms (Claude API / Claude Platform on AWS / Microsoft Foundry). Bedrock + Vertex set their own schedules. Aliases are short ids the official page or the S230 sweep treats as the same fuse.",
-    "replacements_refreshed": "2026-08-09 PLAN-169 W2.10 F9: migration targets bumped to the current fleet (opus-5/sonnet-5) per the ADR-149 working-set authority; the deprecation dates themselves are unchanged from the fetched source."
+    "replacements_refreshed": "2026-08-09 PLAN-169 W2.10 F9: migration targets bumped to the current fleet (opus-5/sonnet-5) per the ADR-149 working-set authority; the deprecation dates themselves are unchanged from the fetched source.",
+    "openai_rows_refreshed": "2026-10-02 PLAN-194 W3b.3: OpenAI rows re-read from https://developers.openai.com/api/docs/deprecations (301 from https://platform.openai.com/docs/deprecations), result recorded in .claude/plans/PLAN-194/LEDGER.md section W3b.3. Added the July 2026 shutdown (2026-07-23) and the 2026-12-11 snapshots; gpt-5.5 is NOT on the page (no row); o3-mini is NOT confirmed (no row). Every OpenAI replacement stays gpt-5.6-sol: a per-tier -terra/-luna target would add reds to check-model-currency.py (a W3b.2/W5c decision)."
   },
   "models": [
     {
@@ -172,19 +173,127 @@
     },
     {
       "model_id": "gpt-5",
-      "aliases": [],
-      "deprecated": "2026-12-11",
+      "aliases": [
+        "gpt-5-2025-08-07"
+      ],
+      "deprecated": "2026-06-11",
       "retirement": "2026-12-11",
       "replacement": "gpt-5.6-sol",
-      "note": "PLAN-156 Wave 1: gpt-5 snapshots retire 2026-12-11."
+      "note": "PLAN-156 Wave 1: gpt-5 snapshots retire 2026-12-11. PLAN-194 W3b.3: the page lists the dated snapshot (now an alias, so the precise matcher still sees it); `deprecated` corrected to the announcement date (section 2026-06-11)."
     },
     {
       "model_id": "o3",
-      "aliases": [],
-      "deprecated": "2026-12-11",
+      "aliases": [
+        "o3-2025-04-16"
+      ],
+      "deprecated": "2026-06-11",
       "retirement": "2026-12-11",
       "replacement": "gpt-5.6-sol",
-      "note": "PLAN-156 Wave 1: o3 snapshots retire 2026-12-11."
+      "note": "PLAN-156 Wave 1: o3 snapshots retire 2026-12-11. PLAN-194 W3b.3: dated snapshot added as alias; `deprecated` corrected to the announcement date (section 2026-06-11). `o3-mini` is NOT confirmed by the page read (no row)."
+    },
+    {
+      "model_id": "gpt-5-mini",
+      "aliases": [
+        "gpt-5-mini-2025-08-07"
+      ],
+      "deprecated": "2026-06-11",
+      "retirement": "2026-12-11",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: the page lists the dated snapshot; the undated id rides it (same inference as the gpt-5 row)."
+    },
+    {
+      "model_id": "gpt-5-nano",
+      "aliases": [
+        "gpt-5-nano-2025-08-07"
+      ],
+      "deprecated": "2026-06-11",
+      "retirement": "2026-12-11",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: the page lists the dated snapshot; the undated id rides it (same inference as the gpt-5 row)."
+    },
+    {
+      "model_id": "gpt-5-pro",
+      "aliases": [
+        "gpt-5-pro-2025-10-06"
+      ],
+      "deprecated": "2026-06-11",
+      "retirement": "2026-12-11",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: the page lists the dated snapshot; the undated id rides it (same inference as the gpt-5 row)."
+    },
+    {
+      "model_id": "o3-pro",
+      "aliases": [
+        "o3-pro-2025-06-10"
+      ],
+      "deprecated": "2026-06-11",
+      "retirement": "2026-12-11",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: the page lists the dated snapshot; the undated id rides it (same inference as the o3 row)."
+    },
+    {
+      "model_id": "gpt-5-codex",
+      "aliases": [],
+      "deprecated": "2026-04-22",
+      "retirement": "2026-07-23",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: legacy GPT snapshots, July 2026 shutdown (section 2026-04-22)."
+    },
+    {
+      "model_id": "gpt-5-chat-latest",
+      "aliases": [],
+      "deprecated": "2026-04-22",
+      "retirement": "2026-07-23",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: legacy GPT snapshots, July 2026 shutdown (section 2026-04-22)."
+    },
+    {
+      "model_id": "gpt-5.1-codex",
+      "aliases": [],
+      "deprecated": "2026-04-22",
+      "retirement": "2026-07-23",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: legacy GPT snapshots, July 2026 shutdown (section 2026-04-22)."
+    },
+    {
+      "model_id": "gpt-5.1-codex-max",
+      "aliases": [],
+      "deprecated": "2026-04-22",
+      "retirement": "2026-07-23",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: legacy GPT snapshots, July 2026 shutdown (section 2026-04-22)."
+    },
+    {
+      "model_id": "gpt-5.1-codex-mini",
+      "aliases": [],
+      "deprecated": "2026-04-22",
+      "retirement": "2026-07-23",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: legacy GPT snapshots, July 2026 shutdown (section 2026-04-22)."
+    },
+    {
+      "model_id": "gpt-5.2-codex",
+      "aliases": [],
+      "deprecated": "2026-04-22",
+      "retirement": "2026-07-23",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: legacy GPT snapshots, July 2026 shutdown (section 2026-04-22)."
+    },
+    {
+      "model_id": "gpt-5.1-chat-latest",
+      "aliases": [],
+      "deprecated": "2026-04-22",
+      "retirement": "2026-07-23",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: legacy GPT snapshots, July 2026 shutdown (section 2026-04-22)."
+    },
+    {
+      "model_id": "o3-deep-research-2025-06-26",
+      "aliases": [],
+      "deprecated": "2026-04-22",
+      "retirement": "2026-07-23",
+      "replacement": "gpt-5.6-sol",
+      "note": "PLAN-194 W3b.3: legacy snapshots, July 2026 shutdown (section 2026-04-22). Only the dated id is listed; no undated alias is inferred."
     }
   ],
   "inert_path_rules": [
@@ -232,6 +341,11 @@
       "rule_id": "plan-artifacts",
       "pattern": "(^|/)\\.claude/plans/",
       "reason": "plan/research/staged-bundle records — historical evidence reviewed at ceremony, not live call sites"
+    },
+    {
+      "rule_id": "model-currency-family-prefixes",
+      "pattern": "(^|/)\\.claude/scripts/check-model-currency\\.py$",
+      "reason": "PLAN-194 W3b.0 — the `_FAMILIES` table carries vendor id PREFIXES (\"gpt-\", \"o3\", \"o4\"), not model ids; the live ids come from the authorities it reads (ADR-149 working set, codex_cli_shape._VALID_MODELS), which are scanned at their source"
     }
   ]
 }

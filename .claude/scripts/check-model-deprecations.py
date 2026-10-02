@@ -18,7 +18,10 @@ Scan targets (precedence): argv roots > CEO_DEPRECATION_SCAN_ROOTS
 the S230 sweep (.claude/plans/PLAN-135/research/sweep_deprecated_models.py):
 os.walk with SKIP_DIRS pruning, 2MB cap, binary sniff, utf-8/ignore decode,
 finditer with line numbers — but with ledger-driven patterns instead of
-hardcoded ones and WITHOUT the hardcoded Owner-machine repo list.
+hardcoded ones and WITHOUT the hardcoded Owner-machine repo list. PLAN-194
+W3b.0 made the match precise (an id never matches inside a longer
+identifier nor as the prefix of another id) and took the gitignored npm
+stage mirror at the scan root out of the walk (NPM_STAGE_REL).
 
 Exit codes:
   0 — report mode (always), or --check with no BREAK/WARN, or infra
@@ -64,6 +67,17 @@ SKIP_DIRS = {
 }
 MAX_BYTES = 2_000_000
 
+#: PLAN-194 W3b.0 decision — the npm stage mirror is OUT of the scan. These
+#: ROOT-relative directories are the gitignored stage of the npm tarball
+#: (.gitignore:47-50, written by scripts/install-npm.sh and
+#: scripts/npm-rebuild.sh): byte copies of trees already scanned at their
+#: source, so each of their hits was a duplicate (14 of the 28 WARNs measured
+#: 2026-09-30). Anchored at the scan root only: an `npm/` dir deeper in a
+#: tree, and the tracked files of `npm/` itself (bin/, package.json,
+#: README.md), stay in scope.
+NPM_STAGE_REL = frozenset(
+    ("npm/.claude", "npm/SPEC", "npm/scripts", "npm/templates"))
+
 SEV_BREAK = "BREAK"
 SEV_WARN = "WARN"
 SEV_INFO = "INFO"
@@ -96,6 +110,22 @@ def load_ledger(path: str) -> Optional[Dict]:
     return data
 
 
+#: PLAN-194 W3b.0 — LEFT guard: a literal preceded by an identifier
+#: character is the tail of a longer identifier, not an id (`lib2to3` is
+#: not `o3`, `use_o3` is not `o3`). '.', '/', '-' and the rest stay allowed
+#: on the left: they qualify an id (`openai/gpt-5`,
+#: `anthropic.claude-...`) without continuing it.
+_LEFT_GUARD = r"(?<![A-Za-z0-9_])"
+#: RIGHT guard: the id must not continue — no alphanumeric or '.' after it
+#: (`claude-opus-4-10`, `gpt-5.5`) and, since PLAN-194 W3b.0, no '-' that
+#: opens another segment: a retired id never matches as the PREFIX of
+#: another id (`gpt-5` is not `gpt-5-mini`/`gpt-5-codex`, `o3` is not
+#: `o3-mini`). A variant (dated snapshot, `-latest`, provider suffix)
+#: enters only when the ledger lists it as a model_id or alias. Every other
+#: character (including '_', ':', '@', '/') still ends an id, as before.
+_RIGHT_GUARD = r"(?![A-Za-z0-9.]|-[A-Za-z0-9])"
+
+
 def build_matcher(
     ledger: Dict,
 ) -> Tuple[Optional["re.Pattern[str]"], Dict[str, Dict]]:
@@ -104,8 +134,10 @@ def build_matcher(
     Longest-first alternation guarantees `claude-opus-4-1-20250805` wins
     over its bare alias `claude-opus-4-1` at the same position (no double
     count, sweep-pattern fidelity). The trailing guard refuses to match
-    when the id continues with an alphanumeric or '.', so e.g.
-    `claude-opus-4-10` or `claude-2.10` never false-hit.
+    when the id continues with an alphanumeric, a '.' or a '-' segment, so
+    e.g. `claude-opus-4-10`, `claude-2.10` or `gpt-5-mini` never false-hit;
+    the leading guard refuses an id glued to a preceding identifier
+    character (`lib2to3`). See _LEFT_GUARD / _RIGHT_GUARD (PLAN-194 W3b.0).
     """
     literal_map: Dict[str, Dict] = {}
     for entry in ledger.get("models", []):
@@ -126,7 +158,8 @@ def build_matcher(
         re.escape(lit)
         for lit in sorted(literal_map, key=len, reverse=True)
     )
-    pattern = re.compile("(?:%s)(?![A-Za-z0-9.])" % alternation)
+    pattern = re.compile(
+        "%s(?:%s)%s" % (_LEFT_GUARD, alternation, _RIGHT_GUARD))
     return pattern, literal_map
 
 
@@ -200,7 +233,11 @@ def scan_root(
     """S230 sweep walk, ledger-driven; returns one dict per hit."""
     hits: List[Dict] = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
+        rel_prefix = "" if rel_dir == "." else rel_dir + "/"
+        dirnames[:] = [d for d in dirnames
+                       if d not in SKIP_DIRS
+                       and rel_prefix + d not in NPM_STAGE_REL]
         for fn in filenames:
             path = os.path.join(dirpath, fn)
             try:
