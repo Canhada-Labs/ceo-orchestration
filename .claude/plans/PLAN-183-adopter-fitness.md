@@ -2236,34 +2236,41 @@ mexe.
     como a Amendment 3 do ADR-149. Mudança semântica ganha arquivo de
     emenda, pela doutrina anti-churn (`.claude/adr/README.md:59-64`).
 
-### Resultado do debate L3, rodada 1 (S361, 2026-10-02) — W7a a W10
+### Resultado do debate L3, rodadas 1 e 2 (S361, 2026-10-02) — W7a a W10
 
-Fonte: `.claude/plans/PLAN-183/debate/w7-round-1/consensus.md`.
+Fontes: `.claude/plans/PLAN-183/debate/w7-round-1/consensus.md` (W7a, W8,
+W9, W10), `.claude/plans/PLAN-183/debate/w7-round-2/consensus.md` (W7b) e
+o Red Team em `.claude/plans/PLAN-183/debate/w7-round-3/red-team.md`.
 `design-coherent` certifica só a coerência do desenho entre perspectivas
 do MESMO modelo e não autoriza publicar: cada pacote segue a cascata V0 a
-V3. **C<n>** é a condição de execução nº n da §2 do consenso; este plano
-cita pelo número e não copia o texto. Condição não cumprida reprova o SIGN
-do pacote dela. Nenhum VETO foi levantado na rodada.
+V3. **C<n>** é a condição de execução nº n da §2 do consenso da rodada 1
+(C1 a C38) ou da §3 do da rodada 2 (C39 a C61); este plano cita pelo
+número e não copia o texto. Condição não cumprida reprova o SIGN do pacote
+dela. Nenhum VETO foi levantado na rodada 1; o da rodada 2 foi retirado.
 
 | onda | veredito | condições | VETO de segurança, condicional a |
 |---|---|---|---|
 | W7a | PROCEED | C1–C10 | sem VETO |
-| W7b | RUN-ANOTHER-ROUND | C11–C14 valem; abertos R2-1 a R2-4 | local do predicado (R2-1) |
+| W7b | RUN-ANOTHER-ROUND na rodada 1; **PROCEED** na rodada 2 (`design-coherent`) | C11–C14 e C38 refinadas; C39–C61 | RETIRADO para R2-1 = (a); volta a LEVANTADO no rail se (1) o `check-rule-invariants.py` ficar fora do manifesto ADR-192 no pacote (C39) ou (2) uma classe de falha pular o bloco sem linha nomeada (C41 a C48) |
 | W8 | PROCEED | C15–C22 | C16 e C19 cumpridas |
 | W9 | PROCEED, em W9a e W9b | C23–C32 | C25 (decisão do Owner abaixo) |
 | W10 | PROCEED, L2 | C33–C36 | nenhum |
 
-- **W7b vai à rodada 2**, em `.claude/plans/PLAN-183/debate/w7-round-2/`,
-  com o diretório nomeado (regra comum 11) e os mesmos três arquétipos.
-  Escopo: R2-1 a R2-4, confirmar C11 a C14 e o texto corrigido do A1.
-  Entradas: o consenso, as três críticas da rodada 1 e este plano com os
-  ajustes 1, 11 e 12 da §4 do consenso. Fora do caminho crítico: a W7b
-  depende da W7a landada. **Regra de parada (C37):** sem PROCEED na `w7-round-2/` ⇒
-  ESCALATE-TO-OWNER (`AskUserQuestion`, uma opção «(Recomendado)»), mesmo
-  com um só crítico ou o VETO abertos. Red Team obrigatório se o Jaccard
-  entre `w7-round-1` e `w7-round-2` for ≥ 0,7 (`DEBATE-SCHEMA.md` §12.3).
-- **Nenhum `approved.md` foi gravado.** A rodada 1 não é terminal: ele só
-  nasce quando a W7b fechar, com a ratificação do Owner. A W7a não o espera.
+- **O debate W7 está FECHADO.** Rodada 1: W7a, W8, W9 e W10 PROCEED, W7b
+  RUN-ANOTHER-ROUND. Rodada 2 (`w7-round-2/`, só a W7b): PROCEED, 3 de 3,
+  com as decisões R2-1 a R2-4 na seção da W7b; a regra de parada (C37) foi
+  cumprida, sem rodada 3 de críticos. O Red Team (`w7-round-3/red-team.md`,
+  leitura conservadora do `DEBATE-SCHEMA.md` §12.3; a medida M1 não roda
+  nestes diretórios) sobreviveu: `consensus_survives: true`, RT-1 a RT-10
+  absorvidas, nenhum P0.
+- **`approved.md` das cinco ondas: PENDENTE da ratificação do Owner.**
+  Nenhum foi gravado. Ele nasce só depois dela, em
+  `.claude/plans/PLAN-183/debate/w7-round-2/approved.md` (nunca sob
+  `architect/`; não é sentinela de edição canônica). Antes: a ratificação
+  escrita do veredito das cinco ondas, a decisão do Owner abaixo escrita ou
+  adiada por ele até o SIGN da W9a, e os ajustes dos dois consensos
+  aplicados. A W7a e a W7b não o esperam; a W7b espera a W7a landada e a
+  perna livre da C9 (C56).
 - **Decisão do Owner PENDENTE — trilha forense do P4 (W9a).** Só ela libera
   o VETO condicional da W9 (C25); prazo: antes do SIGN da W9a. Opção (i),
   **Recomendado pelo consenso**: ação auditada de aviso, no Bash e no
@@ -2271,10 +2278,14 @@ do pacote dela. Nenhum VETO foi levantado na rodada.
   ocorrência; +1 sessão e ~100–160k tokens na W9a, estimativa de um
   crítico). Opção (ii): aceitar a perda forense por escrito no material
   assinado, aposentando por texto a métrica «P4 fire count» do
-  `ADR-127:158`. Sem resposta registrada neste plano.
+  `ADR-127:158`. Sem resposta registrada neste plano; a rodada 2 não
+  acrescentou decisão do Owner.
 - **Para ciência, sem decisão:** a 1.4.3 leva a W7a sem a W7b
   (PLAN-194), e a cura via upgrade só sai do corte com a prova da C9. O
   destino das fixtures no plugin é do CEO (C8); a OQ-18 segue com o Owner.
+  A R2-1 = (a) troca prevenção na sessão por detecção no nightly e no
+  release para o membro novo do manifesto; o FU do filtro de PR fecha essa
+  janela.
 - **OQ-13 a OQ-17** foram debatidas (Q8.1 a Q8.3 e Q9.1, Q9.2 da
   proposta). O desenho resultante vive nas condições C15–C22 e C23–C32;
   nenhuma recomendação do CEO vira por isso decisão do Owner.
@@ -2501,37 +2512,47 @@ W7b é só atrás da W7a.
 
 | path | oráculo (30/09) | papel |
 |---|---|---|
-| `.claude/scripts/validate-governance.sh` | 0 (membro do manifesto ADR-192) | PLAN-119 arma pelo predicado único. Passar só as raízes ao WS-C NÃO cura o `check-test-audit-isolation.py:610` (essa opção pura sai): a cura do cwd cobre `:600` E `:610` (C11, R2-3) |
-| `.claude/governance/gate-scripts-manifest.txt` | 1 | bump do sha do validador |
-| `.claude/scripts/check-test-audit-isolation.py` | 0 | só se a cura do cwd morar nele (pendente da rodada 2, R2-3) |
-| `.claude/scripts/check-rule-invariants.py` | 0 | só se o predicado único for exposto por ele (já o implementa, `:163`), e então entra no manifesto ADR-192 no MESMO pacote (pendente da rodada 2, R2-1) |
-| `.claude/scripts/tests/test_adopter_dogfood_boundary.py` (novo) | 0 | install limpo + resíduo plantado não arma o PLAN-119; o marcador arma |
-| `scripts/tests/test-upgrade-historical-adopter.sh` | 0 | perna nova: instalado na v1.4.2 → upgrade → gate do harness rc 0 (fica em `scripts/tests/`, fora do censo do PLAN-185 ⇒ o baseline NÃO entra neste pacote) |
+| `.claude/scripts/validate-governance.sh` | 0 (membro do manifesto ADR-192) | PLAN-119 arma pelo CLI do `check-rule-invariants.py` (C41); os blocos PLAN-119 e de invariantes chamam por `python3` com `[ -f ]`, nunca `[ -x ]` (C42); passa `--repo-root "$REPO_ROOT"` ao checker (C49); checker ausente com o predicado verdadeiro vira FAIL, não WARN (C50) |
+| `.claude/governance/gate-scripts-manifest.txt` | 1 | bump do sha do validador E entrada nova do `check-rule-invariants.py` (C39) |
+| `.claude/scripts/check-test-audit-isolation.py` | 0 | `--repo-root` reconhecido pelo argparse, nunca caído no argv posicional; as TRÊS leituras do cwd (`:575`/`:591`/`:603`, `:600` e `:610`) usam a raiz; sem a flag, a raiz vem do caminho do script; FAIL no vácuo (C49, C50) |
+| `.claude/scripts/check-rule-invariants.py` | 0 | modo predicado com `--repo` obrigatório, com `_is_framework_repo` (`:212-217`) como a ÚNICA implementação; entra no manifesto ADR-192 no MESMO pacote (C39, C41; R2-1 = (a)) |
+| `.claude/scripts/tests/test_adopter_dogfood_boundary.py` (novo) | 0 | abriga TODO teste novo (C40): o CLI, o censo (C52), o vácuo (C50) e os controles das C11 a C13 (C53); install limpo + resíduo plantado não arma o PLAN-119. A perna com marcador plantado em tmp é EXTRA permitida, nunca substituto do controle no checkout REAL (C53) |
+| `.claude/scripts/tests/test_plan_schema_enforcement.py` | 0 (2026-10-02; re-rodar na abertura) | o construtor da árvore-fixture copia o CLI do predicado (C47) |
+| `scripts/tests/test-upgrade-historical-adopter.sh` | 0 | pernas E2, E3 e E4 (C57 a C59); a E1, instalado na v1.4.2 → upgrade → gate do harness rc 0, é a perna livre da C9 (C56) (fica em `scripts/tests/`, fora do censo do PLAN-185 ⇒ o baseline NÃO entra neste pacote) |
 | `.claude/adr/ADR-<NNN>-<slug>.md` (novo; número na abertura: o próximo livre, pulando o **ADR-201, reservado ao PLAN-195**, e todo número já mencionado no repositório (198–200 já têm dono em outros planos; medido por busca na abertura)) | 1 | "UM predicado de repo-fonte" como decisão transversal |
 
-- **Tamanho:** ~200–300 linhas, estimado; 5–7 paths. Como CRIA um arquivo
-  de ADR, o pacote leva também o índice dos ADR, os documentos de contagem
+- **Tamanho:** ~200–300 linhas, estimado (a re-estimar na abertura); 8
+  paths, os da tabela acima (C40); um 9.º path inevitável ⇒ divisão pelo
+  modelo v2, nunca exceção nova. Como CRIA um arquivo de ADR, o pacote leva também o índice dos ADR, os documentos de contagem
   (incluído o preâmbulo do `CHANGELOG.md`) e o `CLAUDE.md:54`; esses ficam
   FORA da conta do teto de 8 paths (4.ª
   exceção, decisão do Owner na S361) e são re-derivados no LAND — regra
   comum 13.
 - **Nível:** L3 (decisão transversal + manifesto canônico) ⇒ debate + ADR
-  + rail + GPG. Debate: rodada 1 = RUN-ANOTHER-ROUND; rodada 2 e parada em
-  C37 (ver «Resultado do debate»).
+  + rail + GPG. Debate FECHADO: rodada 1 = RUN-ANOTHER-ROUND; rodada 2 =
+  PROCEED (`design-coherent`), com Red Team (ver «Resultado do debate»).
 - **Desenho do predicado:** marcador ADR-001, direção do CEO na S359. Ele
   já é usado por `check-rule-invariants.py:163,212-217`, e o adopter só
-  recebe `.claude/adr/README.md`, logo o marcador nunca chega a ele. A
-  rodada 2 decide (R2-1) ONDE o predicado mora (candidatos:
-  `check-rule-invariants.py`, oráculo 0; ou módulo novo em
-  `.claude/hooks/_lib/`, oráculo 1, que somaria 1 path) e só troca o
-  marcador com a razão escrita.
-- **Rodada 2 (`w7-round-2/`).** C11 a C14 convergem e valem nela. Abertos:
-  **R2-1** local do predicado, `check-rule-invariants.py` ou módulo em
-  `_lib/` (o portador de VETO prefere `_lib/`); **R2-2** falha ao avaliar o
-  predicado (teste de arquivo em bash como fallback, ou ARMAR o bloco / FAIL
-  nomeado, nunca pular); **R2-3** cura do cwd (raiz explícita no `.py` com
-  FAIL no vácuo, ou subshell com cwd = `REPO_ROOT`); **R2-4** matriz do e2e.
-- **Depende de:** W7a landada (o e2e prova as fixtures novas); fila com a
+  recebe `.claude/adr/README.md`, logo o marcador nunca chega a ele.
+  **R2-1 = (a):** o predicado fica no `check-rule-invariants.py` (oráculo
+  0), que entra no manifesto ADR-192 no MESMO pacote (C39). O módulo em
+  `_lib/` saiu: somaria ao menos 2 paths contados (o módulo e o consumidor
+  da C12) mais o `INSTALL.md`, pela contagem exata de `_lib`
+  (`.claude/scripts/local/verify-counts.sh:202`, regra `lib` em `:674-678`).
+  Custos registrados: o `check-rule-invariants.py` não é coberto pelo guard
+  canônico (`check_canonical_edit.py:142` cobre `_lib/*.py`), logo a guarda
+  na sessão fica só por detecção; e a deriva do membro em `.claude/scripts/`
+  só aparece no nightly e no release (FU, ver «Fora destas ondas»).
+- **Rodada 2 FECHADA (`w7-round-2/`): W7b PROCEED.** **R2-2:** FAIL nomeado
+  sob contrato de token, nunca pula nem arma, sem literal do marcador (C41 a
+  C48). **R2-3:** `--repo-root` no `.py`, padrão = raiz do script, FAIL no
+  vácuo (C49 a C51). **R2-4:** quatro pernas E1 a E4, tag pelo predicado de
+  ENTREGA da própria tag (C55 a C60). C11 a C14 e C38 seguem valendo,
+  refinadas (C52 a C54, C61). O Red Team (`w7-round-3/red-team.md`)
+  sobreviveu: RT-1 a RT-10 absorvidas, nenhum P0; neutralizou a afirmação
+  «(b) cabe em 8», falsa (≥ 10 paths).
+- **Depende de:** W7a landada (o e2e prova as fixtures novas) e a perna
+  livre da C9 (E1, C56) landada ANTES de a W7b derivar o material; fila com a
   W8 só pelo `scripts/tests/test-upgrade-historical-adopter.sh`. **Não
   depende da W1:** nenhum dos 16 paths do pacote da W1 está nesta tabela
   (conferido contra a lista da seção «Relação com a W1 pendente»), e o
@@ -2542,20 +2563,23 @@ W7b é só atrás da W7a.
   (ver «Mapa de colisões com o PLAN-194 e o PLAN-195»).
 
 - [ ] `[P1][US2]` O gate PLAN-119 do `validate-governance.sh` arma pelo
-      predicado único do repo-fonte, nunca pela existência de
-      `.claude/hooks/tests`, e o WS-C recebe as raízes a partir do
-      `REPO_ROOT`.
-      Check: `python3 -m pytest .claude/scripts/tests/test_adopter_dogfood_boundary.py -q` — alvo instalado do zero em tmp (`TestEnvContext`) com resíduo plantado (a árvore de fixtures + um `tests/test_x.py` "de negócio") dá 0 linhas PLAN-119 no validador COMPLETO; controle VERMELHO = a árvore pré-cura no mesmo alvo dá FAIL do PLAN-119; controle POSITIVO = o repo-fonte (marcador presente) arma o bloco e passa; rodar o validador de outro cwd dá o mesmo resultado; mais os controles das C11 a C13 (no checkout REAL, nunca com marcador plantado)
-- [ ] `[P1][US2]` e2e a partir de versão antiga: instalado na `v1.4.2`
-      (que não entrega fixtures) → `upgrade.sh` para o HEAD curado →
-      `check_harness_config.py` rc 0 com replay; o caminho do
-      `--purge-misinstalled` (o do 42ledger-core) também sai verde.
-      Check: `bash scripts/tests/test-upgrade-historical-adopter.sh` verde com as pernas novas; controle VERMELHO = a mesma perna contra o HEAD pré-cura sai `FAIL: 3 RED`. Matriz das pernas PENDENTE da R2-4 (tempo somado contra os 150 min do job, C38). Fica registrada a população de upgraders da `v1.1.0`: árvore de 549 arquivos, `conftest.py` incluído, que o `upgrade.sh` entregava até `e718cd89`; o resíduo plantado do teste de fronteira (a árvore de fixtures + um teste de negócio) não a cobre
+      predicado único do repo-fonte (o CLI da C41), nunca pela existência
+      de `.claude/hooks/tests`, e o checker resolve as três leituras pela
+      raiz explícita (C49).
+      Check: `python3 -m pytest .claude/scripts/tests/test_adopter_dogfood_boundary.py -q` — alvo instalado do zero em tmp (`TestEnvContext`) com resíduo plantado (a árvore de fixtures + um `tests/test_x.py` "de negócio") dá 0 linhas PLAN-119 no validador COMPLETO; controle VERMELHO = a árvore pré-cura no mesmo alvo dá FAIL do PLAN-119; controle POSITIVO = o repo-fonte (marcador presente) arma o bloco e passa; rodar o validador de outro cwd dá o mesmo resultado; mais as C41 a C54 (a perna com marcador plantado em tmp é EXTRA, nunca substituto do controle no checkout REAL, C53)
+- [ ] `[P1][US2]` e2e a partir de versão antiga, matriz E1 a E4 (C55 a
+      C59): instalado na `v1.4.2` (que não entrega fixtures) → `upgrade.sh`
+      para o HEAD curado → `check_harness_config.py` rc 0 com replay; o
+      caminho do `--purge-misinstalled` também sai verde.
+      Check: `bash scripts/tests/test-upgrade-historical-adopter.sh` verde com as pernas novas. E1 = a perna livre da C9 (C56), vermelho com base pré-W7a ⇒ `FAIL: 3 RED`; E2 = resíduo herdado sem purge (C57), vermelho com base pré-W7b ⇒ o PLAN-119 arma e dá FAIL; E3 = o plantio da E2 sob `--purge-misinstalled` (C58), PURGED/KEPT derivado por hash, com controle POSITIVO de byte igual; E4 = sem baseline (C59). A tag vem do predicado de entrega da própria tag (C55; hoje a `v1.1.0`, lida por `git show`, que funciona com depth 1; a `v1.4.2` daria purge no vácuo). Medido em 2026-10-02, a árvore `.claude/hooks/tests` da `v1.1.0` tem 549 arquivos, 496 idênticos ao HEAD no mesmo relpath e 53 diferentes (KEPT esperado); a da `v1.4.2`, 578 de 578. A população de upgraders da `v1.1.0` (árvore de 549 arquivos, `conftest.py` incluído, entregue pelo `upgrade.sh` até `e718cd89`) fica COBERTA pela E2 e pela E3. Tempo: E2 a E4 reaproveitam o alvo E1 (`cp -a`); o total é medido na abertura contra os 150 min do job, e p95 previsto acima de 120 min ⇒ job próprio já na W7b (C60, C38)
 - [ ] `[P1]` ADR novo registra o predicado único e declara o residual
       pela FORMA ("componente entregue que lê por padrão um caminho
       excluído"), sem enumerar sítios, e o uso MONÓTONO do predicado: só
-      ARMA verificações (C13). `check-claude-md-claims.py` entra na
-      bateria (C14).
+      ARMA verificações (C13). Declara também (C61) que toda árvore que
+      roda o validador carrega o CLI, as duas combinações de skew de versão,
+      a forma «decisão framework × adopter por existência de arquivo» (com o
+      FU) e o KEPT do purge, pela forma. `check-claude-md-claims.py` entra
+      na bateria (C14).
       Check: oráculo = 1 no ADR; sentinel da W7b com todos os paths no Scope; `bash .claude/scripts/validate-governance.sh` completo com `Errors: 0` sobre a árvore staged
 - [ ] `[P3]` Fechamento, fora da cerimônia (commit livre do CEO depois do
       land): o bug report
@@ -2864,7 +2888,7 @@ A tabela abaixo é a ordem INTERNA deste plano:
 | fase | pacotes | por quê |
 |---|---|---|
 | 1 | **W7a** (o pacote do código e, depois dele, o pacote separado da emenda do ADR-158, na MESMA vaga; divisão e ordem confirmadas no debate, C1), na vaga que a W1 do PLAN-194 liberar ao landar | o A1 é o único P1 dos adopters; nenhum arquivo em comum com outra onda (a parte A do PLAN-195 cruza por teste e pela superfície de ADR, em arquivos distintos — ver o mapa de colisões) |
-| 2 | **W7b** logo depois da W7a | precisa só das fixtures da W7a; não toca o baseline nem path da W1 |
+| 2 | **W7b** logo depois da W7a | precisa das fixtures da W7a e da perna livre da C9 (C56); não toca o baseline nem path da W1 |
 | 3 | **W1a**, **W1b** e **W9**, nas vagas seguintes | W1 re-derivada no HEAD — depois da W5b do PLAN-194 e, se ela tocar os mesmos workflows, da W1.5 do PLAN-194 — e dividida em dois; W9 não colide com nada |
 | 4 | **W8**, depois **W10** | W8 depois da W1 (`upgrade.sh` + baseline), da W7b (e2e), da W5b do PLAN-194 (baseline) e da W6 do PLAN-194 (`INSTALL.md`); W10 depois da W7b (validador), nunca em paralelo com a W7 do PLAN-194 se o `release.sh` mudar |
 
@@ -2884,7 +2908,10 @@ hoje CONFIRMADO) somam-se às 3–5 de antes, no `budget_sessions` de 8–11.
 onda). W7a em 2 pacotes, A: 140–240k tokens e 1–2 sessões; B: +40–80k no
 pacote do código e 40–80k no do ADR, +1 sessão. W9 dividida: +1 rail e +1
 GPG; C: W9a +1 sessão e ~100–160k tokens se a ação auditada for
-construída. Rodada 2 da W7b, B: 60–100k tokens e até 1 sessão.
+construída. Rodada 2 da W7b (FECHADA), B: 60–100k tokens e até 1 sessão. **W7b com as
+condições C39 a C61:** ~120–280k tokens e 1–2 sessões (faixas dos três
+críticos), com o Red Team (~25–45k) dentro do pacote; espera externa: a do
+e2e (C60).
 A faixa é estimativa derivada da referência da
 W5-b, não medida (regra comum 10; tokens do contexto do CEO, sem os
 subagentes). A re-derivação da W1 em W1a/W1b e os resíduos de W2, W3-P1, W4
@@ -2915,8 +2942,14 @@ e W5-b (ver «Critério de done») ficam fora da soma.
   SIGN da W7a); (2) asserção permanente de PRESENÇA no packlist do
   `npm-publish.yml` (C8); (3) redação (ADR-114) e `lstat` no egresso do
   modo AUTO do `codex_review_user_code.py`, pré-existente (C32, antes do
-  SIGN da W9b). Nenhum bloqueia a onda; bloqueia ficar sem dono. O
-  residual da W7 segue declarado pela FORMA no ADR, sem enumerar sítios.
+  SIGN da W9b); (4) o 2.º predicado «repo-fonte» de
+  `check-substrate-drift.py:803-808`, que decide por OUTRO marcador (RT-5,
+  C52); (5) o filtro de PR do `smoke-install.yml` sobre
+  `.claude/scripts/**`, para o `shasum -c` do manifesto (custo da R2-1 =
+  (a)); (6) o instrumento de convergência do debate, L1 a L4 (a medida M1
+  não roda em `w7-round-N/`); (7) o purge ciente das gerações históricas.
+  Nenhum bloqueia a onda; bloqueia ficar sem dono. O residual da W7 segue
+  declarado pela FORMA no ADR, sem enumerar sítios.
 
 ### Critérios de aceite das ondas S359
 
@@ -2927,7 +2960,7 @@ e W5-b (ver «Critério de done») ficam fora da soma.
 - [ ] AC-12 [P1] **W7b:** UM predicado de repo-fonte (marcador ADR-001);
       o gate PLAN-119 não arma no adopter nem varre os testes dele; o
       upgrade a partir da v1.4.2 deixa o gate do harness verde.
-      Check: `python3 -m pytest .claude/scripts/tests/test_adopter_dogfood_boundary.py -q` + `bash scripts/tests/test-upgrade-historical-adopter.sh`, com os controles vermelho e positivo da W7b
+      Check: `python3 -m pytest .claude/scripts/tests/test_adopter_dogfood_boundary.py -q` + `bash scripts/tests/test-upgrade-historical-adopter.sh` (pernas E1 a E4, C55 a C59), com os controles vermelho e positivo da W7b (C41 a C54)
 - [ ] AC-13 [P2] **W8:** o upgrade cura o `.mcp.json` byte-igual a um
       template entregue (com backup), avisa pelo nome nos demais, avisa o
       `VERSION` divergente sem escrever e gera `_dispatch.md`.
@@ -3037,3 +3070,4 @@ e W5-b (ver «Critério de done») ficam fora da soma.
 
 - **2026-10-01 (S361, aceite em bloco do Owner às recomendações do CEO, no chat; edição de texto, sem sentinel, `status: executing` inalterado):** (1) **W7a** — o marcador de runtime `{{PROJECT_DIR}}` é recodificado na fixture e no hook (não casa `\{\{[A-Z_][A-Z0-9_]*\}\}`), porque o caminho novo é entregue ao adopter e o `grep` do `install.sh` e o `test_install_sh_placeholders.py` o acusariam; `test_install_sh_placeholders.py` entra na bateria, com controle vermelho; o patch usa delete + add explícitos, sem rename, o que fixa a conta em 9 paths (com delete + add o G4 conta origem e destino; o passo S do LAND derivado enumera com `--no-renames`, porque a listagem padrão do staged esconderia as origens). (2) **Arquivos de ADR** — a emenda do ADR-158 pela W7a é ADITIVA e fica DENTRO do `ADR-158-harness-config-gate.md`: a linha do arquivo novo `ADR-158-AMEND-1-<slug>.md` sai da tabela; regra comum 13 e linhas novas do mapa de colisões (W7a × parte A do PLAN-195: as duas mexem em ADR, mas a W7a não cria arquivo; índice dos ADR, documentos de contagem e `CLAUDE.md:54` só no pacote que cria arquivo, 4.ª exceção ao teto de 8 paths). (3) **Perguntas abertas** — OQ-12 RESPONDIDA: pasta de dados `.claude/hooks/_lib/harness_replay/`, sem `__init__.py`; OQ-13 a OQ-17 encaminhadas ao debate das ondas W7–W10 em `.claude/plans/PLAN-183/debate/w7-round-1/` (regra comum 11); OQ-18 (purga no arbitrage-monitor) a critério do Owner, que a executa numa sessão do adopter. (4) **Fechamento do plano** — critério de done completado com os resíduos de W2, W3-P1, W4 e W5-b, levados a `PLAN-183-FOLLOWUP-<slug>` em `draft` (os arquivos ainda não existem); regra comum 12 (e2e de ~34 min: 33 min 40 s no run `36502140251`; roda destacado, timeout explícito de até 2 h, polling); `budget_tokens` e `budget_sessions` atualizados (710–1200k, 8–11 sessões, estimativa); a contagem da base da W1 re-medida em 134 commits (HEAD `e2e6bd1b`). A entrada de 30/09 acima, que cita 127 commits, é registro datado e fica como está.
 - **2026-10-02 (S361, debate L3 das ondas W7a–W10, rodada 1; edição de texto, sem sentinel, `status: executing` inalterado):** consenso em `.claude/plans/PLAN-183/debate/w7-round-1/consensus.md` (HEAD `36de68be`). W7a, W8, W9 (em W9a e W9b) e W10 PROCEED, `design-coherent`; W7b RUN-ANOTHER-ROUND, com rodada 2 em `w7-round-2/` e parada em C37. 38 condições, nenhum VETO levantado, VETO condicional em W7b, W8 e W9. A decisão do Owner sobre a trilha forense do P4 (W9a) segue PENDENTE, com a opção (i) recomendada pelo consenso. Os 24 ajustes da §4 do consenso aplicados neste arquivo, entre eles a correção do A1 (nenhuma INSTALAÇÃO nova entregou as fixtures; o `upgrade.sh` da `v1.1.0` copiava `.claude/hooks` inteiro até `e718cd89`) e a divisão 8+1 da W7a. Nenhum `approved.md` gravado.
+- **2026-10-02 (S361, debate L3 da W7b, rodada 2, final pela C37; edição de texto, sem sentinel, `status: executing` inalterado):** consenso em `.claude/plans/PLAN-183/debate/w7-round-2/consensus.md` (HEAD `42326c86`) e Red Team em `.claude/plans/PLAN-183/debate/w7-round-3/red-team.md`. W7b PROCEED (`design-coherent`, 3 de 3; `consensus_survives: true`, RT-1 a RT-10 absorvidas, nenhum P0); VETO de segurança retirado, com dois gatilhos que o devolvem no rail. R2-1 = (a), predicado no `check-rule-invariants.py` com entrada no manifesto ADR-192 no mesmo pacote; R2-2 FAIL nomeado; R2-3 `--repo-root` no `.py`; R2-4 quatro pernas E1 a E4. 23 condições novas (C39 a C61); os 18 ajustes da §4 do consenso aplicados na W7b e em «Resultado do debate»; tabela da W7b em 8 paths. Debate W7 FECHADO: o `approved.md` das cinco ondas aguarda a ratificação do Owner (nada gravado) e a decisão do Owner sobre a trilha forense do P4 (W9a) segue PENDENTE. Medido em 2026-10-02: a árvore `.claude/hooks/tests` da `v1.1.0` tem 496 de 549 arquivos idênticos ao HEAD (53 KEPT esperados no purge); a da `v1.4.2`, 578 de 578.
