@@ -12,11 +12,21 @@ spool side — active spools and ``.draining.*`` (PENDING) and the quarantine
 files ``.malformed.*``/``.quarantined.*``/``.test-origin.*``/``.corrupt-header.*``
 (QUARANTINED, never lost); (2) the canonical log through one descriptor; (3) the
 rotated archives, listed after it. A record only moves spool -> log (append
-before unlink) and rotation renames the log. Every loss candidate is re-checked
-by a second full pass of (1)-(3) before it is reported. Lower bound: a ``commit``
-that never left the in-memory journal buffer is invisible. Log lines count by
-their TOP-LEVEL ``record_id``; a spool-side line that is not JSON (quarantine)
-is searched with ``_RID_RX``.
+before unlink) and rotation renames the log. Log lines count by their TOP-LEVEL
+``record_id``; a spool-side line that is not JSON (quarantine) is searched with
+``_RID_RX``. Lower bound: a ``commit`` that never left the in-memory journal
+buffer, or whose journal compaction removed, is invisible.
+
+A pass of (1)-(3) is STABLE only if every listed spool-side file and archive was
+read (none vanished between the listing and the read — a drain renames active
+-> ``.draining``, a quarantine ``.draining`` -> ``.malformed``, a split writes a
+new ``.draining``) AND no ``.draining``/quarantine name shows up in a re-listing
+that the first listing missed (a rename caught mid-``readdir``). Where a record
+IS seen counts in any pass; its ABSENCE counts only in stable passes. A loss is
+reported only after TWO stable passes; if ``MAX_PASSES`` run out first the
+candidates are ``unresolved`` and G6 is ``inconclusive`` (exit 2, never "lost").
+A journal that vanishes is counted apart (``journals_vanished``): it can only
+shrink the commit set, never create a loss.
 
 **G7.** ``audit_log`` lines (``[ts]`` stamp) ``lock timeout (stale?)  would-log=``
 or ``append failed:`` in ``audit-log.errors`` stamped at or after ``since``. The
@@ -26,10 +36,13 @@ shared by ``spool_writer``, ``audit_emit`` and ``check_budget``, so a class is
 keyed on the WRITER too) and also reports, never as G7, the ``STARVED`` lines (G8
 ``(exit)`` and the AMEND-3 opportunistic one) and ``drain canonical lock timeout``
 (G2). A line with no stamp, or an impossible date, is counted as ``unparsed``.
+The ``STARVED (exit)`` text is the W2 form pinned by §4.3; until the W2 lands it
+exists only in the amendment and in the test fixture, so G8 reads 0 by design.
 
 Names, resolver, refusal and read-only discipline come from
 ``audit_spool_state.py``. Exit: 0 clean; 1 G6 loss > 0 or G7 > 0; 2 usage,
-refusal or unreadable input. Stdlib only, Python >= 3.9.
+refusal, unreadable input, or G6 inconclusive with nothing red. Stdlib only,
+Python >= 3.9.
 """
 
 from __future__ import annotations
@@ -52,6 +65,7 @@ RE_QUARANTINE = (r"audit-spool\.([1-9][0-9]{0,9})"
 _QUARANTINE_RX = re.compile(RE_QUARANTINE, re.ASCII)
 AGGREGATE_JOURNAL = "audit-pending.journal"
 ERRORS_FILE = "audit-log.errors"
+MAX_PASSES = 8
 _RID_RX = re.compile(rb'"record_id"\s*:\s*"([0-9a-f]{32})"')
 _STAMP = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z"
 RE_ERR_LINE = r"(?:\[(%s)\] |(%s) ([A-Za-z_][A-Za-z0-9_]*): )(.*)" % (_STAMP, _STAMP)
@@ -93,13 +107,14 @@ def record_ids(data: bytes, top_level_only: bool) -> Set[str]:
     return out
 
 
-def journal_commits(st: ss.ReadOnlyDir, since_ns: int) -> Tuple[Set[str], int]:
+def journal_commits(st: ss.ReadOnlyDir, since_ns: int) -> Tuple[Set[str], int, int]:
     commits: Set[str] = set()
     malformed = 0
+    vanished: List[str] = []
     for name in st.names():
         if name != AGGREGATE_JOURNAL and not ss.NAME_PATTERNS["journal"].fullmatch(name):
             continue
-        for line in (_plain(st, name) or b"").split(b"\n"):
+        for line in ss.read_listed(st, name, vanished).split(b"\n"):
             if not line.strip():
                 continue
             try:
@@ -111,43 +126,59 @@ def journal_commits(st: ss.ReadOnlyDir, since_ns: int) -> Tuple[Set[str], int]:
                     and isinstance(env.get("record_id"), str)
                     and _is_int(env.get("wall_ns")) and env["wall_ns"] >= since_ns):
                 commits.add(env["record_id"])
-    return commits, malformed
+    return commits, malformed, len(vanished)
+
+
+def _spool_side(name: str) -> Optional[str]:
+    kind, _ = ss.classify(name)
+    if kind in ("active_spool", "draining"):
+        return "pending"
+    return "quarantined" if _QUARANTINE_RX.fullmatch(name) else None
 
 
 def snapshot(fam: ss.ReadOnlyDir, st: ss.ReadOnlyDir, since_ns: int) -> Dict[str, Set[str]]:
-    """Steps (1)-(3) of the reading order, from fresh listings."""
+    """Steps (1)-(3) of the reading order, from fresh listings; ``unstable`` names
+    the files that vanished before their read and the rename targets that appeared."""
     snap: Dict[str, Set[str]] = {"pending": set(), "quarantined": set(), "logged": set()}
-    for name in st.names():
-        kind, _ = ss.classify(name)
-        if kind in ("active_spool", "draining"):
-            key = "pending"
-        elif _QUARANTINE_RX.fullmatch(name):
-            key = "quarantined"
-        else:
-            continue
-        snap[key] |= record_ids(_plain(st, name) or b"", top_level_only=False)
-    for name in ss.log_names(fam, since_ns):
-        snap["logged"] |= record_ids(_plain(fam, name) or b"", top_level_only=True)
+    vanished: List[str] = []
+    listed = {n: k for n, k in ((n, _spool_side(n)) for n in st.names()) if k}
+    for name in sorted(listed):
+        snap[listed[name]] |= record_ids(ss.read_listed(st, name, vanished), top_level_only=False)
+    for _name, data in ss.read_logs(fam, since_ns, vanished):
+        snap["logged"] |= record_ids(data, top_level_only=True)
+    appeared = [n for n in st.names() if n not in listed and _spool_side(n)
+                and ss.classify(n)[0] != "active_spool"]  # never a rename target
+    snap["unstable"] = set(vanished) | set(appeared)
     return snap
 
 
 def g6(fam: ss.ReadOnlyDir, st: ss.ReadOnlyDir, since_ns: int) -> Dict[str, object]:
-    commits, malformed = journal_commits(st, since_ns)
+    commits, malformed, journals_vanished = journal_commits(st, since_ns)
     lost = set(commits)
     pending: Set[str] = set()
     quarantined: Set[str] = set()
-    for _ in range(2):  # the second pass re-checks every candidate
-        if not lost:
-            break
+    unstable: List[str] = []
+    passes = stable = 0
+    while lost and stable < 2 and passes < MAX_PASSES:
+        passes += 1
         snap = snapshot(fam, st, since_ns)
         lost -= snap["logged"]
         quarantined |= lost & snap["quarantined"]
         lost -= snap["quarantined"]
         pending |= lost & snap["pending"]
         lost -= snap["pending"]
+        if snap["unstable"]:
+            unstable = sorted(snap["unstable"])
+        else:
+            stable += 1
+    inconclusive = bool(lost) and stable < 2
+    ids = sorted(lost)[:50]
     return {"commits": len(commits), "pending": len(pending), "quarantined": len(quarantined),
-            "lost": len(lost), "lost_record_ids": sorted(lost)[:50],
-            "journal_malformed_lines": malformed}
+            "lost": 0 if inconclusive else len(lost), "lost_record_ids": [] if inconclusive else ids,
+            "inconclusive": inconclusive, "unresolved": len(lost) if inconclusive else 0,
+            "unresolved_record_ids": ids if inconclusive else [], "passes": passes,
+            "stable_passes": stable, "last_unstable": unstable[:20],
+            "journals_vanished": journals_vanished, "journal_malformed_lines": malformed}
 
 
 def g7(fam: ss.ReadOnlyDir, since: datetime) -> Dict[str, object]:
@@ -206,7 +237,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     red = bool(rep.get("g6", {}).get("lost")) or bool(rep.get("g7", {}).get("G7"))
     rep["red"] = red
     print(json.dumps(rep, indent=1, sort_keys=True))
-    return 1 if red else 0
+    return 1 if red else (2 if rep.get("g6", {}).get("inconclusive") else 0)
 
 
 if __name__ == "__main__":

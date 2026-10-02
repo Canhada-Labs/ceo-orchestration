@@ -19,7 +19,16 @@ Modes (exactly one):
     H2: 0-byte journals in the WHOLE state dir (exit 1 above ``--h2-max``).
     H3: lock files counted by NAME, no ``stat`` (``>= --h3-recommend`` only sets
     ``recommend_w2_6``; never the exit). G3: a ``.draining.*``, or an active spool
-    with content of a dead PID, older than ``--g3-hours`` (exit 1).
+    with content of a dead PID, older than ``--g3-hours`` (exit 1). A regular file
+    counts whatever its ``st_nlink`` (§4.9 forbids DELETING a hardlink, not seeing
+    it); hardlinks and non-regular entries are reported apart.
+
+A listed name can vanish or be renamed before it is read (drain, quarantine,
+compaction, retention). Every such point is handled, never silent: a rotated
+archive that vanishes makes the H1 pass unstable — it is retried up to
+``MAX_ATTEMPTS`` and then reported ``inconclusive`` (exit 2); a journal or
+a G3 file that vanishes no longer exists, so it is counted in its own cell
+(``dead_journal_vanished``, ``vanished``) and not as a residue.
 
 The ``RE_*`` block below is THE name contract shared, byte for byte, with the
 amendment text, the W2.6 cleanup script and the ``/ceo-boot`` check: change it
@@ -72,6 +81,7 @@ LOCK_KINDS = ("spool_lock", "journal_lock")
 CANONICAL_LOG = "audit-log.jsonl"
 _ROTATED_RX = re.compile(r"audit-log-[0-9]{4}-[0-9]{2}(?:-[1-9][0-9]*)?\.jsonl", re.ASCII)
 _ROTATED_SLACK_NS = 3600 * 10 ** 9
+MAX_ATTEMPTS = 3
 _REFUSED_ENV = ("CEO_AUDIT_LOG_DIR", "CEO_AUDIT_LOG_PATH", "CEO_AUDIT_LOG_ERR")
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
 _FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
@@ -154,16 +164,38 @@ def resolve_dirs(project: Optional[str] = None) -> Tuple[Path, Path]:
     return family, family / "state"
 
 
-def log_names(fam: ReadOnlyDir, since_ns: int) -> Iterator[str]:
-    """Canonical log first, then the rotated archives listed AFTER it was read
-    (rotation renames the log: listing last never misses a line, §8.2)."""
-    yield CANONICAL_LOG
+def read_listed(d: ReadOnlyDir, name: str, vanished: List[str]) -> bytes:
+    """Content of a LISTED regular file; a name gone before lstat or read is
+    appended to ``vanished`` (the caller decides what that means)."""
+    s = d.lstat(name)
+    if s is None:
+        vanished.append(name)
+        return b""
+    if not stat.S_ISREG(s.st_mode) or s.st_size == 0:
+        return b""
+    data = d.read(name)
+    if data is None:
+        vanished.append(name)
+        return b""
+    return data
+
+
+def read_logs(fam: ReadOnlyDir, since_ns: int, vanished: List[str]) -> Iterator[Tuple[str, bytes]]:
+    """Canonical log first (one descriptor; absent while a rotation renames it, and
+    then its lines are in the archive listed next), then the rotated archives
+    listed AFTER it was read (§8.2). A listed archive that vanishes goes to
+    ``vanished``."""
+    data = fam.read(CANONICAL_LOG)
+    if data:
+        yield CANONICAL_LOG, data
     for name in sorted(fam.names()):
-        if _ROTATED_RX.fullmatch(name):
-            st = fam.lstat(name)
-            if st is not None and stat.S_ISREG(st.st_mode) and (
-                    st.st_mtime_ns >= since_ns - _ROTATED_SLACK_NS):
-                yield name
+        if not _ROTATED_RX.fullmatch(name):
+            continue
+        s = fam.lstat(name)
+        if s is None:
+            vanished.append(name)
+        elif stat.S_ISREG(s.st_mode) and s.st_mtime_ns >= since_ns - _ROTATED_SLACK_NS:
+            yield name, read_listed(fam, name, vanished)
 
 
 def _is_int(v: object) -> bool:
@@ -173,10 +205,8 @@ def _is_int(v: object) -> bool:
 def spool_era_pids(fam: ReadOnlyDir, since_ns: int, until_ns: int) -> Tuple[Set[int], Dict[str, int]]:
     pids: Set[int] = set()
     seen = {"files_read": 0, "malformed_lines": 0}
-    for name in log_names(fam, since_ns):
-        data = fam.read(name)
-        if data is None:
-            continue
+    vanished: List[str] = []
+    for _name, data in read_logs(fam, since_ns, vanished):
         seen["files_read"] += 1
         for line in data.split(b"\n"):
             if b'"_drain_epoch"' not in line:
@@ -191,24 +221,33 @@ def spool_era_pids(fam: ReadOnlyDir, since_ns: int, until_ns: int) -> Tuple[Set[
             pid, wall = e.get("pid"), e.get("wall_ns")
             if _is_int(pid) and pid > 0 and _is_int(wall) and since_ns <= wall < until_ns:
                 pids.add(pid)
+    seen["vanished"] = len(vanished)
     return pids, seen
 
 
 def flux(fam: ReadOnlyDir, st: ReadOnlyDir, since_ns: int, until_ns: int, d_min: int,
          epsilon: float, is_alive: Callable[[int], bool] = pid_alive) -> Dict[str, object]:
     """H1. Liveness is probed AFTER the listing and the reads."""
-    pids, seen = spool_era_pids(fam, since_ns, until_ns)
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        pids, seen = spool_era_pids(fam, since_ns, until_ns)
+        if not seen["vanished"]:
+            break
+    else:
+        return {"mode": "flux", "inconclusive": True, "attempts": MAX_ATTEMPTS, "logs": seen,
+                "red": True}
     journals: Dict[int, str] = {}
     for name in st.names():
         m = NAME_PATTERNS["journal"].fullmatch(name)
         if m:
             journals[int(m.group(1))] = name
     cells = {"alive": 0, "dead_zero_in_window": 0, "dead_zero_before_window": 0,
-             "dead_with_content": 0, "dead_no_journal": 0}
+             "dead_with_content": 0, "dead_no_journal": 0, "dead_journal_vanished": 0}
     for pid in sorted(pids):
         s = st.lstat(journals[pid]) if pid in journals else None
         if is_alive(pid):
             cells["alive"] += 1
+        elif s is None and pid in journals:
+            cells["dead_journal_vanished"] += 1
         elif s is None or not stat.S_ISREG(s.st_mode):
             cells["dead_no_journal"] += 1
         elif s.st_size > 0:
@@ -220,15 +259,16 @@ def flux(fam: ReadOnlyDir, st: ReadOnlyDir, since_ns: int, until_ns: int, d_min:
     n = len(pids)
     f = cells["dead_zero_in_window"] / n if n else None
     return {"mode": "flux", "D": n, "F": f, "cells": cells, "d_min": d_min, "epsilon": epsilon,
-            "logs": seen, "red": n < d_min or f is None or f > epsilon}
+            "logs": seen, "attempts": attempt, "inconclusive": False,
+            "red": n < d_min or f is None or f > epsilon}
 
 
 def residue(st: ReadOnlyDir, now_ns: int, g3_hours: float, h2_max: int, h3_recommend: int,
             is_alive: Callable[[int], bool] = pid_alive) -> Dict[str, object]:
     """H2 + H3 + G3 over ONE listing; locks are never stat'ed."""
     counts = {k: 0 for k in NAME_PATTERNS}
-    counts.update(journal_zero=0, journal_content=0, skipped_not_plain=0,
-                  orphan_spool_with_content=0)
+    counts.update(journal_zero=0, journal_content=0, hardlinked=0, not_regular=0,
+                  vanished=0, orphan_spool_with_content=0)
     g3: List[str] = []
     oldest_s = 0.0
     limit_ns = int(g3_hours * 3600 * 10 ** 9)
@@ -241,10 +281,12 @@ def residue(st: ReadOnlyDir, now_ns: int, g3_hours: float, h2_max: int, h3_recom
             continue
         s = st.lstat(name)
         if s is None:
+            counts["vanished"] += 1
             continue
-        if not stat.S_ISREG(s.st_mode) or s.st_nlink > 1:
-            counts["skipped_not_plain"] += 1
+        if not stat.S_ISREG(s.st_mode):
+            counts["not_regular"] += 1
             continue
+        counts["hardlinked"] += 1 if s.st_nlink > 1 else 0
         age_ns = now_ns - s.st_mtime_ns
         if kind == "journal":
             counts["journal_zero" if s.st_size == 0 else "journal_content"] += 1
@@ -259,7 +301,7 @@ def residue(st: ReadOnlyDir, now_ns: int, g3_hours: float, h2_max: int, h3_recom
     h3 = counts["spool_lock"] + counts["journal_lock"]
     return {"mode": "residue", "counts": counts, "H2": counts["journal_zero"], "h2_max": h2_max,
             "H3": h3, "recommend_w2_6": h3 >= h3_recommend, "G3": sorted(g3),
-            "oldest_draining_or_orphan_s": round(oldest_s, 1),
+            "oldest_draining_or_orphan_s": round(oldest_s, 1), "inconclusive": False,
             "red": counts["journal_zero"] > h2_max or bool(g3)}
 
 
@@ -303,7 +345,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 2
     rep["state_dir"] = str(state)
     print(json.dumps(rep, indent=1, sort_keys=True))
-    return 1 if rep["red"] else 0
+    return 2 if rep["inconclusive"] else (1 if rep["red"] else 0)
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ def _load(name: str, path: Path):
 rl = _load("check_audit_real_loss", SCRIPT)
 ss = rl.ss
 _shared = _load("_audit_spool_state_tests", Path(__file__).resolve().parent / "test_audit_spool_state.py")
-RO_WRAPPER, _Tree = _shared.RO_WRAPPER, _shared._Tree
+RO_WRAPPER, _Tree, _Vanishing = _shared.RO_WRAPPER, _shared._Tree, _shared._Vanishing
 PID = 2_100_000_000
 
 
@@ -90,13 +90,61 @@ class TestLossVerifierG6(_Tree):
     def test_loss_verifier_second_pass_rechecks_a_record_in_transit(self) -> None:
         rid = _rid()
         self.journal([self.commit(rid)])
-        empty = {"pending": set(), "quarantined": set(), "logged": set()}
-        landed = {"pending": set(), "quarantined": set(), "logged": {rid}}
+        empty = {"pending": set(), "quarantined": set(), "logged": set(), "unstable": set()}
+        landed = dict(empty, logged={rid})
         with mock.patch.object(rl, "snapshot", side_effect=[empty, landed]) as snap:
             rep = self.g6()
         self.assertEqual((rep["lost"], snap.call_count), (0, 2))
         with mock.patch.object(rl, "snapshot", side_effect=[empty, empty]):
             self.assertEqual(self.g6()["lost"], 1)
+
+    def test_loss_verifier_a_rename_target_the_listing_missed_is_never_lost(self) -> None:
+        rid = _rid()
+        self.journal([self.commit(rid)])
+        hidden = self.touch("audit-spool.%d.draining.0a1b2c3d" % PID,
+                            json.dumps({"record_id": rid}).encode() + b"\n")
+
+        class _ReaddirMiss(ss.ReadOnlyDir):
+            calls = 0
+
+            def names(self):  # call 1 = journals; then (listing, re-listing) per pass
+                _ReaddirMiss.calls += 1
+                out = super().names()
+                return [n for n in out if n != hidden.name] if self.calls % 2 == 0 else out
+
+        fam, st = ss.ReadOnlyDir(self.fam), _ReaddirMiss(self.state)
+        try:
+            rep = rl.g6(fam, st, self.now_ns - 3600 * 10 ** 9)
+        finally:
+            fam.close()
+            st.close()
+        self.assertEqual((rep["lost"], rep["inconclusive"], rep["unresolved"], rep["stable_passes"]),
+                         (0, True, 1, 0))
+        self.assertEqual((rep["passes"], rep["last_unstable"]), (rl.MAX_PASSES, [hidden.name]))
+
+    def test_loss_verifier_archive_vanishing_mid_scan_never_counts_as_absence(self) -> None:
+        rid = _rid()
+        self.journal([self.commit(rid)])
+        self.log([{"record_id": _rid()}])
+        self.log([{"record_id": rid}], "audit-log-2026-10-3.jsonl")
+        fam, st = _Vanishing(self.fam, ["audit-log-2026-10-3.jsonl"], times=2), ss.ReadOnlyDir(self.state)
+        try:
+            rep = rl.g6(fam, st, self.now_ns - 3600 * 10 ** 9)
+        finally:
+            fam.close()
+            st.close()
+        self.assertEqual((rep["lost"], rep["inconclusive"], rep["passes"], rep["stable_passes"]),
+                         (0, False, 3, 1))
+
+    def test_loss_verifier_inconclusive_exits_2_and_a_real_red_wins(self) -> None:
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.home_dir),
+               "CLAUDE_PROJECT_DIR_NATIVE": str(self.fam)}
+        argv = ["--since", "2026-10-02T00:00:00Z"]
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(rl, "g6", return_value={"lost": 0, "inconclusive": True}):
+            self.assertEqual(rl.main(argv), 2)
+            with mock.patch.object(rl, "g7", return_value={"G7": 1}):
+                self.assertEqual(rl.main(argv), 1)
 
     def test_loss_verifier_cli_exit_codes_under_read_only_audit_hook(self) -> None:
         rid = _rid()
@@ -114,6 +162,41 @@ class TestLossVerifierG6(_Tree):
         res = subprocess.run(argv[:-1] + ["2026-10-02T03:40:00"], env=env, capture_output=True,
                              text=True, timeout=120)
         self.assertEqual((res.returncode, res.stdout), (2, ""), msg=res.stderr)
+
+
+class TestLossVerifierRealRenames(TestEnvContext):
+    """P1 (rail r1): the REAL drain rename (active -> .draining) and the REAL
+    quarantine (.draining -> .malformed) land between G6's listing and its read."""
+
+    def test_loss_verifier_real_drain_and_quarantine_renames_mid_scan(self) -> None:
+        from _lib import spool_writer as sw
+        with mock.patch.object(sw, "_FORENSIC_EMIT", None):
+            sw.spool_append({"action": "g6_race", "session_id": "g6-race"})
+            sw._flush_journal_buffer(os.getpid())
+            state = sw._state_dir()
+            active = "audit-spool.%d.jsonl" % os.getpid()
+            moved = []
+
+            class _Racing(ss.ReadOnlyDir):
+                def lstat(self, name):  # the barrier: the producer acts after the listing
+                    if name == active and not moved:
+                        moved.extend(sw._phase2_sweep_and_rename(state, "0a1b2c3d", os.getpid())[0])
+                    elif name.endswith(".draining.0a1b2c3d") and len(moved) == 1:
+                        sw._quarantine(moved[0], "g6_race_test", "0e0f0a0b")
+                        moved.append(None)
+                    return super().lstat(name)
+
+            fam, st = ss.ReadOnlyDir(self.audit_dir), _Racing(state)
+            try:
+                rep = rl.g6(fam, st, time.time_ns() - 3600 * 10 ** 9)
+            finally:
+                fam.close()
+                st.close()
+        self.assertEqual(len(moved), 2, msg="both real renames must fire mid-scan")
+        self.assertTrue((state / ("audit-spool.%d.malformed.0e0f0a0b" % os.getpid())).is_file())
+        self.assertEqual((rep["commits"], rep["lost"], rep["quarantined"], rep["inconclusive"]),
+                         (1, 0, 1, False))
+        self.assertEqual(rep["passes"], 3)
 
 
 class TestWouldLogCountG7(TestEnvContext):

@@ -17,6 +17,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / ".claude" / "scripts" / "audit_spool_state.py"
@@ -102,6 +103,30 @@ class _Tree(TestEnvContext):
             st.close()
 
 
+class _Vanishing(ss.ReadOnlyDir):
+    """Moves ``victims`` away right after a listing returns (and back before the
+    next one): a listed name is gone before its lstat/read (drain, compaction,
+    retention). ``times`` listings are hit; < 0 = every listing."""
+
+    def __init__(self, path: Path, victims, times: int = 1) -> None:
+        super().__init__(path)
+        self.victims, self.times = list(victims), times
+
+    def _move(self, src: str, dst: str) -> None:
+        if (self.path / src).exists():
+            os.rename(str(self.path / src), str(self.path / dst))
+
+    def names(self):
+        for v in self.victims:  # back before every listing: each one sees the name
+            self._move("parked." + v, v)
+        out = super().names()
+        if self.times != 0:
+            self.times -= 1
+            for v in self.victims:
+                self._move(v, "parked." + v)
+        return out
+
+
 class TestSpoolResidueNames(TestEnvContext):
     def test_spool_residue_regex_block_is_the_amendment_text(self) -> None:
         block = "\n".join(ln for ln in SCRIPT.read_text(encoding="utf-8").splitlines()
@@ -173,7 +198,7 @@ class TestFluxH1(_Tree):
         self.assertEqual(rep["D"], 5)  # DEAD+1..+4 and live; the rest are outside/not spool-era
         self.assertEqual(rep["cells"], {"alive": 1, "dead_zero_in_window": 1,
                                         "dead_zero_before_window": 1, "dead_with_content": 1,
-                                        "dead_no_journal": 1})
+                                        "dead_no_journal": 1, "dead_journal_vanished": 0})
         self.assertAlmostEqual(rep["F"], 0.2)
 
     def test_flux_reads_rotated_archives_listed_after_the_log(self) -> None:
@@ -200,6 +225,35 @@ class TestFluxH1(_Tree):
         res = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=120)
         self.assertEqual((res.returncode, res.stdout), (2, ""), msg=res.stderr)
 
+
+    def test_flux_vanished_journal_and_archive_are_handled_not_silent(self) -> None:
+        self.log([self.era(DEAD + 1), self.era(DEAD + 2)])
+        self.log([self.era(DEAD + 3)], "audit-log-2026-10-3.jsonl")
+        for i in (1, 2):
+            self.touch("audit-pending.%d.journal" % (DEAD + i))
+        st = _Vanishing(self.state, ["audit-pending.%d.journal" % (DEAD + 1)])
+        fam = ss.ReadOnlyDir(self.fam)
+        try:
+            rep = ss.flux(fam, st, self.now_ns - 3600 * NS, self.now_ns + NS, 1, 0.01)
+        finally:
+            fam.close()
+            st.close()
+        self.assertEqual((rep["D"], rep["cells"]["dead_journal_vanished"],
+                          rep["cells"]["dead_zero_in_window"]), (3, 1, 1))
+        for times, want in ((1, (False, 2, 3)), (-1, (True, ss.MAX_ATTEMPTS, None))):
+            fam = _Vanishing(self.fam, ["audit-log-2026-10-3.jsonl"], times=times)
+            st = ss.ReadOnlyDir(self.state)
+            try:
+                rep = ss.flux(fam, st, self.now_ns - 3600 * NS, self.now_ns + NS, 1, 0.01)
+            finally:
+                fam.close()
+                st.close()
+            self.assertEqual((rep["inconclusive"], rep["attempts"], rep.get("D")), want)
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.home_dir),
+               "CLAUDE_PROJECT_DIR_NATIVE": str(self.fam)}
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(ss, "flux", return_value={"inconclusive": True, "red": True}):
+            self.assertEqual(ss.main(["--flux"]), 2)
 
 class TestSpoolResidue(_Tree):
     def test_spool_residue_h2_1001_zero_byte_journals_is_red(self) -> None:
@@ -230,3 +284,20 @@ class TestSpoolResidue(_Tree):
         self.touch("audit-spool.%d.jsonl" % (DEAD + 1), b"x\n", age_s=60)
         self.touch("audit-spool.%d.draining.0a1b2c3d" % DEAD, b"x\n", age_s=25 * 3600)
         self.assertEqual(self.residue()["G3"], ["audit-spool.%d.draining.0a1b2c3d" % DEAD])
+
+    def test_spool_residue_hardlinks_count_and_vanished_is_its_own_cell(self) -> None:
+        base = self._tmp_root / "base"
+        base.write_bytes(b"")
+        for i in range(1001):  # one inode, 1002 links: every name is a 0-byte journal
+            os.link(str(base), str(self.state / ("audit-pending.%d.journal" % (DEAD + i))))
+        d = self.touch("audit-spool.%d.draining.0a1b2c3d" % DEAD, b"x\n", age_s=25 * 3600)
+        os.link(str(d), str(self._tmp_root / "draining-link"))
+        rep = self.residue()
+        self.assertEqual((rep["H2"], rep["counts"]["hardlinked"], rep["red"]), (1001, 1002, True))
+        self.assertEqual(rep["G3"], [d.name])
+        st = _Vanishing(self.state, ["audit-pending.%d.journal" % DEAD, d.name])
+        try:
+            rep = ss.residue(st, self.now_ns, 24.0, 1000, 100000)
+        finally:
+            st.close()
+        self.assertEqual((rep["H2"], rep["counts"]["vanished"], rep["G3"]), (1000, 2, []))
