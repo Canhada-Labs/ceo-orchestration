@@ -2253,7 +2253,7 @@ dela. Nenhum VETO foi levantado na rodada 1; o da rodada 2 foi retirado.
 | W7a | PROCEED | C1–C10 | sem VETO |
 | W7b | RUN-ANOTHER-ROUND na rodada 1; **PROCEED** na rodada 2 (`design-coherent`) | C11–C14 e C38 refinadas; C39–C61 | RETIRADO para R2-1 = (a); volta a LEVANTADO no rail se (1) o `check-rule-invariants.py` ficar fora do manifesto ADR-192 no pacote (C39) ou (2) uma classe de falha pular o bloco sem linha nomeada (C41 a C48) |
 | W8 | PROCEED | C15–C22 | C16 e C19 cumpridas |
-| W9 | PROCEED, em W9a e W9b | C23–C32 | C25 (decisão do Owner abaixo) |
+| W9 | PROCEED, em W9a e W9b | C23–C32 | C25: decisão do Owner TOMADA em 2026-10-02, opção (i), ação auditada (abaixo); a ação segue exigida no SIGN da W9a |
 | W10 | PROCEED, L2 | C33–C36 | nenhum |
 
 - **O debate W7 está FECHADO.** Rodada 1: W7a, W8, W9 e W10 PROCEED, W7b
@@ -2263,29 +2263,41 @@ dela. Nenhum VETO foi levantado na rodada 1; o da rodada 2 foi retirado.
   leitura conservadora do `DEBATE-SCHEMA.md` §12.3; a medida M1 não roda
   nestes diretórios) sobreviveu: `consensus_survives: true`, RT-1 a RT-10
   absorvidas, nenhum P0.
-- **`approved.md` das cinco ondas: PENDENTE da ratificação do Owner.**
-  Nenhum foi gravado. Ele nasce só depois dela, em
-  `.claude/plans/PLAN-183/debate/w7-round-2/approved.md` (nunca sob
-  `architect/`; não é sentinela de edição canônica). Antes: a ratificação
-  escrita do veredito das cinco ondas, a decisão do Owner abaixo escrita ou
-  adiada por ele até o SIGN da W9a, e os ajustes dos dois consensos
-  aplicados. A W7a e a W7b não o esperam; a W7b espera a W7a landada e a
-  perna livre da C9 (C56).
-- **Decisão do Owner PENDENTE — trilha forense do P4 (W9a).** Só ela libera
-  o VETO condicional da W9 (C25); prazo: antes do SIGN da W9a. Opção (i),
-  **Recomendado pelo consenso**: ação auditada de aviso, no Bash e no
-  apply-step, pela cerimônia do `audit_emit` (cura da CLASSE, 2.ª
-  ocorrência; +1 sessão e ~100–160k tokens na W9a, estimativa de um
-  crítico). Opção (ii): aceitar a perda forense por escrito no material
-  assinado, aposentando por texto a métrica «P4 fire count» do
-  `ADR-127:158`. Sem resposta registrada neste plano; a rodada 2 não
-  acrescentou decisão do Owner.
-- **Para ciência, sem decisão:** a 1.4.3 leva a W7a sem a W7b
-  (PLAN-194), e a cura via upgrade só sai do corte com a prova da C9. O
-  destino das fixtures no plugin é do CEO (C8); a OQ-18 segue com o Owner.
-  A R2-1 = (a) troca prevenção na sessão por detecção no nightly e no
-  release para o membro novo do manifesto; o FU do filtro de PR fecha essa
-  janela.
+- **`approved.md` das cinco ondas: RATIFICADO pelo Owner em 2026-10-02
+  (S361).** Gravado em
+  `.claude/plans/PLAN-183/debate/w7-round-2/approved.md` (commit
+  `5c52998b`; nunca sob `architect/`; não é sentinela de edição canônica).
+  A ratificação foi dada por múltipla escolha, e o arquivo guarda a frase
+  literal. Ela cobre o veredito de DESENHO das cinco ondas (W7a, W7b, W8,
+  W9a/W9b e W10: PROCEED) e não autoriza publicar: cada pacote segue a
+  cascata V0 a V3. A W7a e a W7b não esperavam o arquivo; a W7b espera a
+  W7a landada e a perna livre da C9 (C56).
+- **Decisão do Owner RATIFICADA — trilha forense do P4 (W9a): opção (i),
+  ação auditada.** O Owner respondeu, em 2026-10-02: «(i) ação auditada +
+  ratificar (Recomendado)». O aviso do P4 grava uma ação auditada de aviso,
+  no Bash e no apply-step, pela cerimônia do `audit_emit` (cura da CLASSE,
+  2.ª ocorrência; +1 sessão e ~100–160k tokens na W9a, estimativa de um
+  crítico). Isto toma o ramo «ação auditada» da C25: a ação é construída e
+  testada na W9a, e o SIGN da W9a a exige. A opção (ii) fica DESCARTADA: a
+  métrica «P4 fire count» do `ADR-127:158` não é aposentada por texto. A
+  W9a entra no trem da 1.4.4; a ação nova é MINOR e pode mudar o número da
+  versão (decisão do corte, não deste plano). O VETO condicional da W9
+  fica resolvido pela decisão, nos termos do `approved.md`.
+- **Colocação no corte (decidida pelo Owner em 2026-10-02, mesma resposta
+  de ratificação):** a **W7a vai na v1.4.3** e a **W7b vai na v1.4.4**
+  (resposta «W7b na 1.4.4 (Recomendado)»; razão registrada no
+  `approved.md`: a W7b colide com o leque de ADR e com o manifesto do
+  corte). W8, W9a, W9b e W10 seguem a fila do plano. A cura via upgrade só
+  sai do corte da 1.4.3 com a prova da C9; sem ela, o CHANGELOG do corte
+  declara a cura via upgrade NÃO provada.
+- **Para ciência, sem decisão:** **C8 decidida pelo CEO em 2026-10-02,
+  opção (i):** `harness_replay` é excluído do plugin no `ignore_patterns`
+  do `scripts/build-plugin.py` por commit livre (oráculo 0), no precedente
+  do mesmo `ignore_patterns`, que já exclui `fixtures` do `_lib`; o FU da
+  asserção de PRESENÇA no packlist do `npm-publish.yml` é o item (2) de
+  «Fora destas ondas». A OQ-18 segue com o Owner. A R2-1 = (a) troca
+  prevenção na sessão por detecção no nightly e no release para o membro
+  novo do manifesto; o FU do filtro de PR fecha essa janela.
 - **OQ-13 a OQ-17** foram debatidas (Q8.1 a Q8.3 e Q9.1, Q9.2 da
   proposta). O desenho resultante vive nas condições C15–C22 e C23–C32;
   nenhuma recomendação do CEO vira por isso decisão do Owner.
@@ -2414,8 +2426,11 @@ W7b é só atrás da W7a.
   (`install-npm.sh`), com os 3 `.json` no packlist e `cmp` no alvo (o
   espelho do `npm-rebuild.sh` não prova o canal); no plugin, o CEO decide
   na abertura entre excluir `harness_replay` do `build-plugin.py` e
-  entregar com declaração no ADR; a asserção permanente de presença no
-  `npm-publish.yml` vira FU. **Upgrade (C9):** a bateria do LAND roda um
+  entregar com declaração no ADR (**decidido em 2026-10-02: excluir**, por
+  commit livre no `ignore_patterns` do `build-plugin.py`; nenhuma
+  declaração de «sem consumidor» entra no ADR-158 por conta do plugin); a
+  asserção permanente de presença no `npm-publish.yml` vira FU (item (2)
+  de «Fora destas ondas»). **Upgrade (C9):** a bateria do LAND roda um
   smoke barato (`v1.4.2` → `upgrade.sh` curado → `cmp` + gate rc 0); as
   pernas permanentes landam como commit livre antes da rc.1 da 1.4.3, senão
   o CHANGELOG do corte declara a cura via upgrade NÃO provada. Os adopters
@@ -2558,7 +2573,9 @@ W7b é só atrás da W7a.
   (conferido contra a lista da seção «Relação com a W1 pendente»), e o
   baseline do PLAN-185 não entra aqui (regra comum 3). OQ-21 resolvida
   (decisão 1): segue logo depois da W7a, sem esperar a W1; a vaga dela
-  segue a «Ordem das vagas». O manifesto ADR-192 é arquivo em comum com a
+  segue a «Ordem das vagas». **Colocação no corte: v1.4.4**, não v1.4.3
+  (Owner, 2026-10-02; ver «Resultado do debate» e a atualização de «Ordem
+  das vagas»). O manifesto ADR-192 é arquivo em comum com a
   W10 deste plano e, se o corte mudar o `release.sh`, com a W7 do PLAN-194
   (ver «Mapa de colisões com o PLAN-194 e o PLAN-195»).
 
@@ -2873,7 +2890,7 @@ adopter (Recomendado)». Em ordem:
 | as 3 iniciais | W1 do PLAN-194 (CI pronto para Ubuntu 26.04, prazo 19/10) → parte A do PLAN-195 (guarda de Bash) → W3 do PLAN-194 (pin automático verificado do Codex) | decisão 7 |
 | a que a W1 do PLAN-194 liberar ao landar | **W7a** deste plano (conserto do A1, o único P1 dos adopters) | decisão 7 |
 | depois | W2 do PLAN-194 (estado da auditoria) | decisão 7 |
-| logo depois da W7a, na fila deste plano | **W7b** | OQ-21 resolvida (decisão 1) |
+| logo depois da W7a, na fila deste plano, **no trem da v1.4.4** (não no da v1.4.3) | **W7b** | OQ-21 resolvida (decisão 1) para a ORDEM; colocação no corte decidida pelo Owner em 2026-10-02 («W7b na 1.4.4 (Recomendado)», `PLAN-183/debate/w7-round-2/approved.md`) |
 
 Leitura aplicada aqui (se estiver errada, o CEO corrige nesta tabela):
 «logo depois da W7a» quer dizer que a W7b é a PRÓXIMA onda deste plano
@@ -2883,12 +2900,24 @@ decisão 7 pôs depois da W7a. A posição da W7b frente à W5c do PLAN-194
 ondas por data-limite do PLAN-194 segue a OQ-11 do PLAN-194 («Ordem
 depois das 3 primeiras vagas»), ainda aberta.
 
+**Atualização de 2026-10-02 (S362): a ORDEM acima não muda, o TREM sim.**
+A W7a segue na v1.4.3. A W7b deixa de ocupar vaga do trem da v1.4.3 e abre
+depois do corte dela: ela cria um arquivo de ADR e muda o
+`gate-scripts-manifest.txt`, as duas superfícies em que o `approved.md`
+diz que ela colide (leque de ADR e manifesto do corte). Duas
+consequências. (1) A perna livre da C9 (E1, C56) continua landando antes
+da rc.1 da 1.4.3, porque é ela que prova a cura da W7a via upgrade no
+corte; a W7b herda essa perna já landada. (2) Nenhum path da W7b entra na
+janela do corte, e a linha do `gate-scripts-manifest.txt` do mapa de
+colisões passa a valer, para a W7b, só contra o que estiver em voo
+depois do corte.
+
 A tabela abaixo é a ordem INTERNA deste plano:
 
 | fase | pacotes | por quê |
 |---|---|---|
 | 1 | **W7a** (o pacote do código e, depois dele, o pacote separado da emenda do ADR-158, na MESMA vaga; divisão e ordem confirmadas no debate, C1), na vaga que a W1 do PLAN-194 liberar ao landar | o A1 é o único P1 dos adopters; nenhum arquivo em comum com outra onda (a parte A do PLAN-195 cruza por teste e pela superfície de ADR, em arquivos distintos — ver o mapa de colisões) |
-| 2 | **W7b** logo depois da W7a | precisa das fixtures da W7a e da perna livre da C9 (C56); não toca o baseline nem path da W1 |
+| 2 | **W7b** logo depois da W7a na ORDEM do plano, no trem da v1.4.4 (abre depois do corte da v1.4.3; Owner, 2026-10-02) | precisa das fixtures da W7a e da perna livre da C9 (C56); não toca o baseline nem path da W1 |
 | 3 | **W1a**, **W1b** e **W9**, nas vagas seguintes | W1 re-derivada no HEAD — depois da W5b do PLAN-194 e, se ela tocar os mesmos workflows, da W1.5 do PLAN-194 — e dividida em dois; W9 não colide com nada |
 | 4 | **W8**, depois **W10** | W8 depois da W1 (`upgrade.sh` + baseline), da W7b (e2e), da W5b do PLAN-194 (baseline) e da W6 do PLAN-194 (`INSTALL.md`); W10 depois da W7b (validador), nunca em paralelo com a W7 do PLAN-194 se o `release.sh` mudar |
 
@@ -2936,11 +2965,27 @@ e W5-b (ver «Critério de done») ficam fora da soma.
 - Resíduos do G19: matchers `mcp__codex__*` ociosos e o texto de
   `scripts/_codex_harness.sh:393-396` sobre o `.mcp.json` (A7-F5).
 - **FU nomeados pelo debate** (dono: CEO; posição na fila a fixar antes do
-  SIGN do pacote que o exige): (1) censo POR FORMA de «componente entregue
-  lê por padrão caminho excluído» (2.ª ocorrência, A1-F4/F5) e unificação
-  das cópias do predicado de entrega, o purge acima incluído (C10, antes do
-  SIGN da W7a); (2) asserção permanente de PRESENÇA no packlist do
-  `npm-publish.yml` (C8); (3) redação (ADR-114) e `lstat` no egresso do
+  SIGN do pacote que o exige): (1) o par que a C10 exige ANTES do SIGN da
+  W7a, registrado em 2026-10-02 (S362) como dois rascunhos
+  PLAN-SCHEMA §1.4, `status: draft`, dono CEO, na fila depois da W7b, fora
+  do caminho crítico da v1.4.3 e sem versão-alvo prometida (o §1.4 só
+  deixa um followup entrar em `executing` com o pai `done`, ou seja,
+  depois da W10): (1a) censo POR FORMA de
+  «componente entregue lê por padrão caminho excluído» (2.ª ocorrência,
+  A1-F4/F5), em
+  `.claude/plans/PLAN-183-FOLLOWUP-delivered-gate-default-path-census.md`;
+  (1b) unificação das cópias do predicado de entrega, o purge acima
+  incluído, em
+  `.claude/plans/PLAN-183-FOLLOWUP-delivery-predicate-unification.md`. A C10
+  pede a EXISTÊNCIA dos dois com dono e posição; implementar o censo ou a
+  unificação não é pré-requisito do SIGN da W7a; (2) asserção permanente
+  de PRESENÇA no packlist do `npm-publish.yml` (C8; dono CEO; depois do GA
+  da v1.4.3, sem versão-alvo prometida; arquivo canônico, oráculo 1 em
+  2026-10-02, logo cerimônia própria;
+  entra em fila DEPOIS do LAND da W4 do PLAN-194, que reescreve o mesmo
+  arquivo, nunca em paralelo; vem antes da unificação (1b), porque é o
+  controle que denuncia regressão quando as cópias passarem a derivar do
+  predicado único); (3) redação (ADR-114) e `lstat` no egresso do
   modo AUTO do `codex_review_user_code.py`, pré-existente (C32, antes do
   SIGN da W9b); (4) o 2.º predicado «repo-fonte» de
   `check-substrate-drift.py:803-808`, que decide por OUTRO marcador (RT-5,
@@ -3071,3 +3116,4 @@ e W5-b (ver «Critério de done») ficam fora da soma.
 - **2026-10-01 (S361, aceite em bloco do Owner às recomendações do CEO, no chat; edição de texto, sem sentinel, `status: executing` inalterado):** (1) **W7a** — o marcador de runtime `{{PROJECT_DIR}}` é recodificado na fixture e no hook (não casa `\{\{[A-Z_][A-Z0-9_]*\}\}`), porque o caminho novo é entregue ao adopter e o `grep` do `install.sh` e o `test_install_sh_placeholders.py` o acusariam; `test_install_sh_placeholders.py` entra na bateria, com controle vermelho; o patch usa delete + add explícitos, sem rename, o que fixa a conta em 9 paths (com delete + add o G4 conta origem e destino; o passo S do LAND derivado enumera com `--no-renames`, porque a listagem padrão do staged esconderia as origens). (2) **Arquivos de ADR** — a emenda do ADR-158 pela W7a é ADITIVA e fica DENTRO do `ADR-158-harness-config-gate.md`: a linha do arquivo novo `ADR-158-AMEND-1-<slug>.md` sai da tabela; regra comum 13 e linhas novas do mapa de colisões (W7a × parte A do PLAN-195: as duas mexem em ADR, mas a W7a não cria arquivo; índice dos ADR, documentos de contagem e `CLAUDE.md:54` só no pacote que cria arquivo, 4.ª exceção ao teto de 8 paths). (3) **Perguntas abertas** — OQ-12 RESPONDIDA: pasta de dados `.claude/hooks/_lib/harness_replay/`, sem `__init__.py`; OQ-13 a OQ-17 encaminhadas ao debate das ondas W7–W10 em `.claude/plans/PLAN-183/debate/w7-round-1/` (regra comum 11); OQ-18 (purga no arbitrage-monitor) a critério do Owner, que a executa numa sessão do adopter. (4) **Fechamento do plano** — critério de done completado com os resíduos de W2, W3-P1, W4 e W5-b, levados a `PLAN-183-FOLLOWUP-<slug>` em `draft` (os arquivos ainda não existem); regra comum 12 (e2e de ~34 min: 33 min 40 s no run `36502140251`; roda destacado, timeout explícito de até 2 h, polling); `budget_tokens` e `budget_sessions` atualizados (710–1200k, 8–11 sessões, estimativa); a contagem da base da W1 re-medida em 134 commits (HEAD `e2e6bd1b`). A entrada de 30/09 acima, que cita 127 commits, é registro datado e fica como está.
 - **2026-10-02 (S361, debate L3 das ondas W7a–W10, rodada 1; edição de texto, sem sentinel, `status: executing` inalterado):** consenso em `.claude/plans/PLAN-183/debate/w7-round-1/consensus.md` (HEAD `36de68be`). W7a, W8, W9 (em W9a e W9b) e W10 PROCEED, `design-coherent`; W7b RUN-ANOTHER-ROUND, com rodada 2 em `w7-round-2/` e parada em C37. 38 condições, nenhum VETO levantado, VETO condicional em W7b, W8 e W9. A decisão do Owner sobre a trilha forense do P4 (W9a) segue PENDENTE, com a opção (i) recomendada pelo consenso. Os 24 ajustes da §4 do consenso aplicados neste arquivo, entre eles a correção do A1 (nenhuma INSTALAÇÃO nova entregou as fixtures; o `upgrade.sh` da `v1.1.0` copiava `.claude/hooks` inteiro até `e718cd89`) e a divisão 8+1 da W7a. Nenhum `approved.md` gravado.
 - **2026-10-02 (S361, debate L3 da W7b, rodada 2, final pela C37; edição de texto, sem sentinel, `status: executing` inalterado):** consenso em `.claude/plans/PLAN-183/debate/w7-round-2/consensus.md` (HEAD `42326c86`) e Red Team em `.claude/plans/PLAN-183/debate/w7-round-3/red-team.md`. W7b PROCEED (`design-coherent`, 3 de 3; `consensus_survives: true`, RT-1 a RT-10 absorvidas, nenhum P0); VETO de segurança retirado, com dois gatilhos que o devolvem no rail. R2-1 = (a), predicado no `check-rule-invariants.py` com entrada no manifesto ADR-192 no mesmo pacote; R2-2 FAIL nomeado; R2-3 `--repo-root` no `.py`; R2-4 quatro pernas E1 a E4. 23 condições novas (C39 a C61); os 18 ajustes da §4 do consenso aplicados na W7b e em «Resultado do debate»; tabela da W7b em 8 paths. Debate W7 FECHADO: o `approved.md` das cinco ondas aguarda a ratificação do Owner (nada gravado) e a decisão do Owner sobre a trilha forense do P4 (W9a) segue PENDENTE. Medido em 2026-10-02: a árvore `.claude/hooks/tests` da `v1.1.0` tem 496 de 549 arquivos idênticos ao HEAD (53 KEPT esperados no purge); a da `v1.4.2`, 578 de 578.
+- **2026-10-02 (S362, FD-13 parte 1; edição de texto, sem sentinel, `status: executing` inalterado):** (1) as duas linhas que o runbook apontava, `:2266` («`approved.md` das cinco ondas») e `:2274` («Decisão do Owner PENDENTE — trilha forense do P4»), foram relidas no HEAD `97a78fce` e NÃO se deslocaram; passam a **RATIFICADO**, com a ratificação do Owner de 2026-10-02 (S361) lida em `PLAN-183/debate/w7-round-2/approved.md` (commit `5c52998b`): P4 da W9a = opção (i), ação auditada (W9a, trem da v1.4.4; a opção (ii) fica descartada). A célula da C25 na tabela do debate acompanha. (2) **W7b na v1.4.4**, W7a na v1.4.3 (Owner, 2026-10-02; D-18 do runbook S362): a ORDEM interna do plano não muda, o TREM sim; atualizados a tabela de «Ordem das vagas» (linha da W7b e parágrafo «Atualização de 2026-10-02»), a fase 2 da ordem interna e o «Depende de» da W7b. (3) **C8 decidida pelo CEO, opção (i):** `harness_replay` sai do plugin no `ignore_patterns` do `scripts/build-plugin.py` por commit livre (o commit acompanha este, mesma sombra); o texto da W7a («Canais») registra a decisão. (4) **C10:** o FU (1) de «Fora destas ondas» deixa de ser nome solto e aponta dois arquivos `draft`, criados neste commit — `PLAN-183-FOLLOWUP-delivered-gate-default-path-census.md` e `PLAN-183-FOLLOWUP-delivery-predicate-unification.md`, dono CEO, na fila depois da W7b, `executing` só com o PLAN-183 `done` (§1.4); o FU (2), a asserção de PRESENÇA no packlist do `npm-publish.yml` (C8), ganha dono e posição (depois do GA da v1.4.3 e do LAND da W4 do PLAN-194, antes da unificação). Nenhum dos FU está implementado. Os registros de 3072 e 3073 deste log, que dizem «nenhum `approved.md` gravado» e «aguarda a ratificação», ficam como histórico datado.
