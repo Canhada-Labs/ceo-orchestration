@@ -942,6 +942,26 @@ class TestStrandedConsultsDeclaredWait(TestEnvContext):
         self.assertTrue(any("PLAN-901-none" in r for r in recs))
         self.assertFalse(any("PLAN-910-wait" in r for r in recs))
 
+    def test_no_wait_behind_comment_or_label_stays_red(self):
+        # Rail S361 (codex, P2): a trailing YAML comment or a Markdown leaf
+        # label in front of a no-wait value must not read as a declared
+        # wait (it hid a stranded plan before this fix).
+        self._plans({
+            "PLAN-912-cmt": ('external_wait: "none" # no dependency\n', ""),
+            "PLAN-913-leaf": ("", "## Blockers\n\n- **Leaf:** none\n"),
+            "PLAN-914-plain": ("", "## Blockers\n\n- Leaf: nenhum\n"),
+            "PLAN-915-unq": ("external_wait: none # sem espera\n", ""),
+            "PLAN-916-wait": (
+                'external_wait: "Owner: assinatura GPG" # da W1\n', ""),
+        })
+        status, summary, detail = self._run()
+        self.assertEqual(status, "red", summary)
+        self.assertEqual(detail, [
+            "PLAN-912-cmt", "PLAN-913-leaf", "PLAN-914-plain",
+            "PLAN-915-unq",
+        ])
+        self.assertIn("1 waiting", summary)
+
     def test_activity_still_green(self):
         self._plans({"PLAN-911-busy": ("external_wait: none\n", "")})
         status, summary, detail = self._run(

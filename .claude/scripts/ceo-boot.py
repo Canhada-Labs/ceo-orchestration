@@ -391,8 +391,18 @@ _NO_WAIT_TOKENS = frozenset({
 
 def _declares_wait(value: str) -> bool:
     """True when one `external_wait` value / Blockers line names a wait."""
-    v = value.strip().strip("\"'").strip()
-    v = re.sub(r"^[-*+]\s+", "", v).strip().strip("\"'").strip()
+    v = value.strip()
+    # A quoted YAML scalar ends at its closing quote; anything after it (a
+    # `# comment`) is not part of the value. Unquoted: drop a trailing
+    # ` # comment` (YAML needs the space before `#`).
+    quoted = re.match(r"""^(["'])(.*?)\1""", v)
+    v = quoted.group(2) if quoted else re.sub(r"\s+#.*$", "", v)
+    v = re.sub(r"^[-*+]\s+", "", v.strip())
+    # A Markdown leaf label (`**Leaf:** none`, `**Leaf**: none`, `Leaf: none`)
+    # names the field, not the wait — judge the value after it.
+    v = re.sub(r"^\*\*[^*]{1,40}\*\*\s*:?\s*", "", v)
+    v = re.sub(r"^[^\W\d_][\w -]{0,30}:\s+", "", v)
+    v = v.strip().strip("\"'").strip()
     first = re.split(r"[\s,;:.()]+", v.lower(), maxsplit=1)[0] if v else ""
     return first not in _NO_WAIT_TOKENS
 
