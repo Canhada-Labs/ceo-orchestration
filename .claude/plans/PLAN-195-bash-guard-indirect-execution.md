@@ -166,6 +166,8 @@ lista; debate r1 C11 + r2):
 12. Ponto cego de comentário no normalizador de quebra de linha do E4 (guarda de toggle): o E4
     fica byte-idêntico na W1; FU `PLAN-195-FOLLOWUP-e4-comment-normaliser`.
 
+**→ item C12: resíduo 13.**
+
 ## Thesis
 
 Curar a CLASSE pela FORMA, não por lista de exemplos (CLAUDE.md §4; regra "cure a
@@ -338,7 +340,7 @@ heading `### §6.6` (`grep -c '§6.6'` = 0) e as três âncoras das afirmações
 em `:231`, `:262` e `:286` ⇒ o Check sai VERMELHO antes da W0. (O `grep 'not covered'`
 antigo já casava hoje o título da §1.2, `:53`, e por isso não provava nada.)
 
-- [ ] Reescrever `docs/security-bash-canonical-guards.md` §6 (`:229-308`), começando pelo
+- [x] Reescrever `docs/security-bash-canonical-guards.md` §6 (`:229-308`), começando pelo
   parágrafo de abertura (`:231-232`, texto atual: "Five vector classes remain advisory
   post-Wave-B-3 (forensic-only). Each has documented mitigation; none is a "free"
   bypass."), que conta 5 classes e promete mitigação para todas. Criar a seção nova
@@ -349,14 +351,14 @@ antigo já casava hoje o título da §1.2, `:53`, e por isso não provava nada.)
   afirmações falsas de substrato (§6.2 filhos do xargs `:260-266`, §6.4 expansão
   pré-hook `:286-291`, §6.5 forense pós-fato `:304-306`) e marcar 19/33 como BLOQUEADAS e
   17/18/34 como descobertas.
-- [ ] Atualizar `docs/threat-model.md` vetor 2 (`:2131`) para nomear a classe aberta e a
+- [x] Atualizar `docs/threat-model.md` vetor 2 (`:2131`) para nomear a classe aberta e a
   contagem real. **CUIDADO:** `check-threat-model-freshness.py` ESCREVE esse arquivo
   (flip `accepted→stale`) como efeito colateral — rodar por último e commitar o flip
   conscientemente (lição S328), no mesmo commit da W0 e fora de janela de SIGN.
   **→ corrigido em «Correções pós-debate S360», item C1: NÃO seguir este texto ao pé da letra —
   rodar só com `--dry-run --verbose`, nunca commitar o flip nem mover `Last updated`, e incluir
   `tests/integration/test_threat_model_coverage.py` na bateria da W0.**
-- [ ] (debate r1) No mesmo texto da W0: (a) não afirmar que as formas DIRETAS seguem
+- [x] (debate r1) No mesmo texto da W0: (a) não afirmar que as formas DIRETAS seguem
   bloqueadas sem qualificar — só a grafia canônica; as formas diretas irmãs entram na §6.6 pela
   forma; (b) registrar que, para as classes A e B, o `PreToolUse` é a ÚNICA detecção — o
   forense pós-fato só casa quatro formas literais de escrita canônica
@@ -364,8 +366,9 @@ antigo já casava hoje o título da §1.2, `:53`, e por isso não provava nada.)
   §6.6 traz a lista de residuais pela forma — a FONTE ÚNICA é a lista do Goal deste plano
   (12 itens), reproduzida pela forma, sem receitas. — Check: none (doc-only; coberto pelo
   Check da W0)
-- [ ] `SECURITY.md`: confirmar que a linha 23 (classe já em escopo) permanece honesta;
+- [x] `SECURITY.md`: confirmar que a linha 23 (classe já em escopo) permanece honesta;
   ajustar só se necessário — Check: none (doc-only)
+  — ✅ S361 (2026-10-02): W0 landada (doc de guardas §6.6 pela forma, contagem real 31/34, detecção forense parcial declarada; threat-model vetor 2 e 7 com nota escopada, Status e Last updated intocados; `SECURITY.md:23` conferida, sem edição). Rail: Codex r1 APPROVE, r2 REQUEST-CHANGES, anexo APPROVE; refutador de segurança r1 e r2 REQUEST-CHANGES curados; resíduo 13 no item C12, com a reconfirmação dos dois VETOs em `PLAN-195/debate/reconfirm-s361-c12/`.
 
 ### W1 — cura parte A: execução indireta e formas diretas irmãs (canônica, L3) — dividida no debate r1 em W1-ADR → W1a → W1b
 Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py .claude/hooks/tests/test_check_bash_safety.py .claude/hooks/tests/test_check_harness_config.py .claude/hooks/tests/test_bash_posture_toggle_invocation.py .claude/hooks/tests/test_check_bash_safety_cp_chaining.py .claude/hooks/tests/test_check_bash_safety_h5_rewrite.py .claude/hooks/tests/test_byte_identity_fuzzer.py .claude/hooks/tests/test_byte_identity_harness.py -q && python3 scripts/build-plugin.py --check && cmp .claude/hooks/check_bash_safety.py dist/ceo-plugin/hooks/check_bash_safety.py && cmp .claude/hooks/check_bash_safety.py npm/.claude/hooks/check_bash_safety.py
@@ -1055,3 +1058,39 @@ arquivo inteiro, como na rodada 2. A pendência não bloqueia a W0 (doc-only; o 
 pré-requisito só de W1 e W2). Para a W1, valem os pré-requisitos comuns e o checklist da W1
 (debate fechado com PROCEED, o que inclui esta reconfirmação): ela precisa estar registrada
 antes do início da W1 e, em qualquer caso, antes de qualquer edição do hook (W1a, W1b e W2).
+
+**C12 — Resíduo 13 do Goal (revisão da W0, 2026-10-02).** A revisão de segurança da W0 achou uma
+subclasse que nem o Goal nem a W2 nomeiam. A lista de residuais do Goal ganha o item 13:
+
+13. Destino LITERAL que não é byte-igual à grafia da guarda: variante de grafia do caminho
+    (segmentos redundantes; caixa diferente em sistema de arquivos insensível a caixa) e apelido
+    criado antes no sistema de arquivos. O E3 normaliza só o `./` inicial e o caminho absoluto
+    sob a raiz (`check_bash_safety.py:2222-2240`); o casador cru por segmento que o E3 chama
+    diferencia caixa (`check_canonical_edit.py:949-985`). Só ele: o classificador da guarda de
+    Edit/Write dobra a caixa e resolve o caminho (`check_canonical_edit.py:821-863`, `:866-912`),
+    e o E3 não o usa.
+
+Fica como residual, e NÃO como escopo da W2, por dois motivos: o escopo da W2 foi pré-registrado
+no debate sem essa subclasse; e o USO de um apelido já existente só se resolve com chamada ao
+sistema de arquivos dentro do hook, que o próprio arquivo recusa (`check_bash_safety.py:2531-2534`).
+A CRIAÇÃO do apelido pela shell é outra coisa: fica visível no texto do comando, e o mesmo arquivo
+já a recusa para o toggle (`check_bash_safety.py:3777-3787`), não para os demais caminhos canônicos.
+A W2 decide na abertura se traz a metade de grafia (normalização só de texto), com o padrão fixado
+pelas condições abaixo. A fonte única dos residuais passa a ser
+«Goal + C12», e a §6.6 da W0 reproduz 13 itens (os 12 do Goal e este). Este item muda o sha do
+plano e toca o Goal; por isso, como no C11, exige a reconfirmação dos dois portadores de VETO
+(Security Engineer e Threat Detection Engineer) sobre o sha novo, registrada em
+`.claude/plans/PLAN-195/debate/`.
+
+**Reconfirmação do C12: feita.** Os dois portadores reviram o diff sobre o sha256 `93e4b83f…5379`
+do plano e MANTIVERAM a retirada do VETO (`PLAN-195/debate/reconfirm-s361-c12/security-engineer.md`
+e `PLAN-195/debate/reconfirm-s361-c12/threat-detection-engineer.md`). As duas precisões de
+redação acima (uso × criação do apelido; só o casador cru que o E3 chama diferencia caixa) e a
+remissão às condições abaixo entraram DEPOIS desse sha; segundo os dois registros, nem essas
+precisões nem a incorporação das condições reabrem a reconfirmação.
+
+**Condições novas dos registros (valem para os pacotes deste plano, como as do C11):** as N1 a N3
+do Threat Detection Engineer e a P1-C12 do Security Engineer, nos arquivos acima, que são a fonte.
+Em resumo, para a abertura da W2: a normalização só de texto da grafia e da caixa do alvo e a
+recusa de criação de link cuja origem é caminho protegido entram POR PADRÃO; deixar alguma de fora
+exige motivo registrado no pacote e um FU nomeado `PLAN-195-FOLLOWUP-<slug>`.

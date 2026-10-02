@@ -42,6 +42,18 @@
 > script REWRITES it as a side effect, and a dirty `Status:` line fails the P0
 > of a SIGN. Run it with `--dry-run` in preflight, or revert the flip before
 > signing — the S328 morning runbook does exactly that.
+>
+> **PLAN-195 W0 (2026-10-02), same discipline.** What was reviewed is
+> scoped: row 2 of the harness-vs-hook containment map (Bash writes to
+> canonical paths) and the class that row omitted — writes with a computed
+> or respelled target, declared NOT covered in
+> `docs/security-bash-canonical-guards.md` §6.6. The row now carries the
+> real matrix count (31/34). The same section's destructive half (indirect
+> execution of a destructive command) also weakens row 7; row 7 got only a
+> pointer to it, not a re-review. Nothing else here was re-reviewed;
+> `Status` and `Last updated` stay unchanged for the reason above. The
+> freshness script ran only with `--dry-run --verbose` (no write; rc 1,
+> as before this edit).
 **Last updated:** 2026-06-12 (PLAN-135 W4 D5+D8 — harness-vs-hook containment map + MCP-connector decision rule; W3 K14b — browser/computer-use trust boundary)
 **Owner:** Principal Security Engineer
 **Scope:** ceo-orchestration framework v1.7.0-rc.1 (pre-adopter)
@@ -2128,12 +2140,12 @@ honest gap.
 | # | Vector | Native floor | Hook-owned | Owner | Layer |
 |---|---|---|---|---|---|
 | 1 | Edit/Write/MultiEdit (incl. `mcp__*` file tools) to canonical paths (T-01, T-003) | W1 S2 static Edit-denies on `PROTOCOL.md` / `.claude/settings.json` / `SPEC/` — native DENY short-circuits **before** PreToolUse | `check_canonical_edit.py` sentinel (KERNEL HARD-DENY + audit emit) | **BOTH** (post-W1; hook stays authoritative — it carries the audit trail and the sentinel chain) | model/policy |
-| 2 | Bash writes to canonical paths (`sed -i`, redirects, `tee`, interpreter `-c`, shell-in-shell — `security-bash-canonical-guards.md` §1.1) | **Not covered** — an Edit-deny does NOT cover Bash writes to the same path (W1 S2 coverage-limit (a)) | `check_bash_safety.py` matrix v2 (29/34 BLOCK, 5 advisory, fail-CLOSED on parse failure) + `check_bash_canonical_forensic.py` PostToolUse | **HOOK** | model/policy |
+| 2 | Bash writes to canonical paths (`sed -i`, redirects, `tee`, interpreter `-c`, shell-in-shell — `security-bash-canonical-guards.md` §1.1) | **Not covered** — an Edit-deny does NOT cover Bash writes to the same path (W1 S2 coverage-limit (a)) | `check_bash_safety.py` matrix v2 (31/34 BLOCK; rows 17/18/34 unblocked; fail-CLOSED on parse failure) + `check_bash_canonical_forensic.py` PostToolUse (four literal write shapes only). **Open class, not blocked:** writes with a computed target, or a literal target in a spelling other than the guard's (`security-bash-canonical-guards.md` §6.6, Class B). A computed target has no detection at all; a respelled or symlinked literal may leave a forensic breadcrumb after the fact, only in the four §5 shapes, untested and with no default reader | **HOOK** for literal forms in the guard's own spelling; **NONE** (preventive) for the §6.6 class — forensic breadcrumb only for a respelled literal in the four §5 shapes, not coverage | model/policy |
 | 3 | Heredoc smuggling / unparseable command bodies | Harness blocks heredoc-smuggled writes natively (harvest D5 recon — version-dependent, see probe caveat below) | shlex parse failure → fail-CLOSED block (`bash_parse_failed_fail_closed`) | **BOTH** | model/policy |
 | 4 | Startup-file writes (`~/.bashrc`, `~/.zshrc`, profile.d) | Harness blocks startup-file writes natively (harvest D5 recon) | Not enumerated in `_CANONICAL_GUARDS` | **NATIVE only** — note: a native block emits **no audit event** (see caveats) | model/policy |
 | 5 | Web-content prompt injection (fetched pages) | Harness web-context isolation (harvest D5 recon) | `check_webfetch_injection.py` + `check_read_injection.py` (advisory, ID-003) | **BOTH** | content |
 | 6 | Read-file prompt injection (workspace files) | None | `check_read_injection.py` (ADVISORY — L-rated in the STRIDE matrix) | **HOOK** (advisory) | content |
-| 7 | Dangerous git (`git push --force`/`-f`; hook bypass `--no-verify`) | W1 S2 deny `Bash(git push --force*)` | `check_bash_safety.py` patterns + ADR-143 git-hook-bypass guard (PROPOSED) + W2 H5 `--force-with-lease` rewrite pilot (**PENDING**; rewrite-failure ⇒ BLOCK, normative) | **BOTH** (force-push); HOOK (`--no-verify`) | model/policy |
+| 7 | Dangerous git (`git push --force`/`-f`; hook bypass `--no-verify`) | W1 S2 deny `Bash(git push --force*)` | `check_bash_safety.py` patterns + ADR-143 git-hook-bypass guard (PROPOSED) + W2 H5 `--force-with-lease` rewrite pilot (**PENDING**; rewrite-failure ⇒ BLOCK, normative) | **BOTH** (force-push, canonical spelling only — other forms: `security-bash-canonical-guards.md` §6.6, Class A); HOOK (`--no-verify`) | model/policy |
 | 8 | Off-allowlist model ID (ADR-149) | W1 S1a `availableModels` mirror + S1b `fallbackModel` chain constraint — both **generated from** the ADR-149 allowlist (single source) | ADR-149 allowlist checks in model/tier routing + lint | **BOTH** | model/policy |
 | 9 | Ungoverned sub-agent spawn (E-004) | None | `check_agent_spawn.py` PreToolUse (byte-identity fixtures). Recursive spawn-depth (subagents now nest 5-deep) = `CEO_MAX_SPAWN_DEPTH`, **H11 DEFERRED** | **HOOK** | model/policy |
 | 10 | Rail tamper: `disableAllHooks`, `permissions.defaultMode: bypassPermissions`, `ANTHROPIC_BASE_URL`/`ANTHROPIC_AUTH_TOKEN`/`apiKeyHelper` remap, `settings.local.json` layer (T-05 class) | None — `settings.local.json` is gitignored and sentinel-blind | W1 S3 boot tripwires on **RESOLVED** settings (advisory, fires next boot) + W2 H2 ConfigChange guard (**PENDING**; honest boundary: H2 is itself a hook — disarmed by the very key it polices) + `check_config_protection.py` | **HOOK** (advisory + named compensators; see THREAT-MODEL-WORKSHEET §2) | model/policy |
