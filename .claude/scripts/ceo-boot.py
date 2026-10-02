@@ -40,6 +40,7 @@ from concurrent.futures import (
     ThreadPoolExecutor,
     TimeoutError as FuturesTimeout,
     as_completed,
+    wait as futures_wait,
 )
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -113,6 +114,13 @@ PER_CHECK_TIMEOUT_S = 1.0
 AGGREGATE_TIMEOUT_S = 5.0
 MAX_WORKERS = 8
 
+# S361 (PLAN-194 L2-d) — the ONE time budget of `scheduled_workflows_red`.
+# Until S360 three constants described the same budget (3.5 s gh timeout,
+# 3.8 s check deadline, 4.0 s soft override) and drifted apart; now the
+# soft override below, the check's own deadline and every per-workflow gh
+# call derive from this value (see _sched_red_budget_s).
+SCHED_RED_BUDGET_S = 4.0
+
 # Per-check overrides — PLAN-082 Codex Item A: governance_validate now
 # dispatches `validate-governance.sh --fast --json` (~40 ms typical).
 # Previous full-walk path required 2.5 s ceiling; fast profile fits the
@@ -142,9 +150,9 @@ PER_CHECK_TIMEOUT_OVERRIDES_S: Dict[str, float] = {
     # E1 gate; subprocess timeout 2.5s default, see
     # _harness_config_gate_timeout_s).
     "harness_config_gate": 3.0,
-    # S292 — network-bound (single gh api call; subprocess timeout 3.5s
-    # default, see _sched_red_gh_timeout_s).
-    "scheduled_workflows_red": 4.0,
+    # S292 — network-bound (S361: one gh call per scheduled workflow, in
+    # parallel, all inside the single SCHED_RED_BUDGET_S).
+    "scheduled_workflows_red": SCHED_RED_BUDGET_S,
 }
 
 # ---- Sentinel mtime cutoff (Codex S82 P2 fix) ------------------------------
@@ -2595,43 +2603,73 @@ def check_harness_config_gate() -> Tuple[str, str, Any]:
 # CI signal the operator actually looks at, so its red persists unseen.
 #
 # Design constraints:
-# - stdlib-only: the scheduled-workflow set is derived from a line-regex scan
-#   of `.github/workflows/*.y*ml` (no yaml parser in the runtime deps). The
-#   INPUT LIST is carried verbatim in the detail payload — the instrument
-#   prints its inputs (S291 measurement doctrine).
-# - network via the `gh` CLI, ONE batched call (event=schedule, per_page=100)
-#   with its own subprocess timeout. NO DATA IS NEVER GREEN: gh missing /
-#   timeout / rc!=0 / unparseable payload / zero coverage → yellow "no data".
-#   Only the explicit operator disable (CEO_BOOT_SCHED_RED=0) renders green.
+# - stdlib-only: the scheduled-workflow set (and each workflow's cron lines)
+#   is derived from a line-regex scan of `.github/workflows/*.y*ml` (no yaml
+#   parser in the runtime deps). The INPUT LIST is carried verbatim in the
+#   detail payload — the instrument prints its inputs (S291 doctrine).
+# - S361 (PLAN-194 L2, cure of the CLASS behind the S360 false red, 2nd
+#   occurrence): the gh endpoints that FILTER server-side are not
+#   deterministic — measured S360: `actions/runs?event=schedule` answered
+#   total_count 145 (newest run 2026-09-05) and, seconds later, 419 (newest
+#   2026-10-01); `workflows/validate.yml/runs?event=schedule&status=completed`
+#   answered 25 → 39. Only the UNFILTERED per-workflow listing answered right.
+#   So: ONE unfiltered call per scheduled workflow, all in parallel; the
+#   client filters; detection AND cure come out of the SAME response (no
+#   second "cure probe" that can run out of budget); ONE budget constant
+#   (SCHED_RED_BUDGET_S); a freshness guard derived from the cron turns old
+#   data YELLOW, never red; a red whose cure cannot be verified says so in
+#   the summary.
+# - NO DATA IS NEVER GREEN: gh missing / timeout / rc!=0 / unparseable
+#   payload / no scheduled run in the page / stale page → yellow. Only the
+#   explicit operator disable (CEO_BOOT_SCHED_RED=0) renders green.
 # - no new audit action names (the action registry is canonical); the
 #   timeout path reuses the registered `ceo_boot_check_skipped`.
 
-SCHED_RED_GH_TIMEOUT_S_DEFAULT = 3.5
 _SCHED_RED_BAD_CONCLUSIONS = frozenset(
     {"failure", "timed_out", "startup_failure"}
 )
+# Rows per workflow page. Measured S360 (unfiltered): 10 rows 1.13 s, 30
+# rows 1.5 s, 100 rows 6.36 s. A busy push lane can bury its scheduled run
+# deeper than this — that case is reported (yellow), never guessed.
+_SCHED_RED_PER_PAGE = 30
+_SCHED_RED_MAX_PARALLEL = 16
+_SCHED_RED_WF_NAME_RE = re.compile(r"[A-Za-z0-9._-]{1,128}\Z")
+_SCHED_RED_DAY_S = 86400.0
+# Data older than FACTOR × cron period is stale (one dropped firing is
+# tolerated). Unparseable cron ⇒ the longest common period (monthly).
+_SCHED_RED_STALE_FACTOR = 2.0
+_SCHED_RED_PERIOD_FALLBACK_S = 31 * _SCHED_RED_DAY_S
 
 
-def _sched_red_gh_timeout_s() -> float:
-    """Subprocess timeout for the gh call, clamped to [0.5, 8.0]s."""
+def _sched_red_budget_s() -> float:
+    """The check's single time budget, clamped to [0.5, 8.0]s.
+
+    Every gh call and the check's own deadline derive from this value
+    (env override CEO_BOOT_SCHED_RED_TIMEOUT_S, else SCHED_RED_BUDGET_S).
+    """
     raw = os.environ.get("CEO_BOOT_SCHED_RED_TIMEOUT_S", "")
     if raw:
         try:
             return max(0.5, min(8.0, float(raw)))
         except (TypeError, ValueError):
             pass
-    return SCHED_RED_GH_TIMEOUT_S_DEFAULT
+    return SCHED_RED_BUDGET_S
 
 
-def _scheduled_workflow_paths() -> List[str]:
-    """Repo-relative paths of workflows with a `schedule:` trigger.
+def _sched_red_now() -> float:
+    """Wall clock for the freshness guard (patched in tests)."""
+    return time.time()
+
+
+def _scheduled_workflows() -> Dict[str, List[str]]:
+    """Repo-relative workflow path → its cron expressions.
 
     Line-regex derivation (requires BOTH a `schedule:` line and a
     `- cron:` line) — stdlib-only stand-in for a yaml parse. Sorted for
     CR-N7 determinism.
     """
     wf_dir = REPO_ROOT / ".github" / "workflows"
-    out: List[str] = []
+    out: Dict[str, List[str]] = {}
     if not wf_dir.is_dir():
         return out
     for p in sorted(wf_dir.glob("*.y*ml")):
@@ -2639,134 +2677,80 @@ def _scheduled_workflow_paths() -> List[str]:
             text = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        if re.search(r"(?m)^\s*schedule:\s*$", text) and re.search(
-            r"(?m)^\s*-\s*[\"']?cron[\"']?\s*:", text
-        ):
-            out.append(f".github/workflows/{p.name}")
+        crons = re.findall(
+            r"(?m)^\s*-\s*[\"']?cron[\"']?\s*:\s*[\"']?([^\"'#\n]*?)[\"']?\s*(?:#.*)?$",
+            text,
+        )
+        if re.search(r"(?m)^\s*schedule:\s*$", text) and crons:
+            out[f".github/workflows/{p.name}"] = [c.strip() for c in crons]
     return out
 
 
-_SCHED_RED_CURE_PROBE_MAX = 4
-_SCHED_RED_CHECK_DEADLINE_S = 3.8
-_SCHED_RED_WF_NAME_RE = re.compile(r"[A-Za-z0-9._-]{1,128}\Z")
+def _scheduled_workflow_paths() -> List[str]:
+    """Repo-relative paths of workflows with a `schedule:` trigger."""
+    return list(_scheduled_workflows())
+
+
+def _sched_red_cron_period_s(expr: str) -> Optional[float]:
+    """Approximate firing period of one 5-field cron, floored at one day.
+
+    Conservative on purpose (a weekday list counts as weekly): the guard may
+    call stale data fresh, never fresh data stale.
+    """
+    fields = expr.split()
+    if len(fields) != 5:
+        return None
+    _minute, _hour, dom, month, dow = fields
+    if month != "*":
+        return 366 * _SCHED_RED_DAY_S
+    if dom != "*":
+        return 31 * _SCHED_RED_DAY_S
+    if dow != "*":
+        return 7 * _SCHED_RED_DAY_S
+    return _SCHED_RED_DAY_S
+
+
+def _sched_red_period_s(crons: List[str]) -> float:
+    periods = [p for p in (_sched_red_cron_period_s(c) for c in crons) if p]
+    return min(periods) if periods else _SCHED_RED_PERIOD_FALLBACK_S
+
+
+def _sched_red_parse_ts(raw: Any) -> Optional[float]:
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).timestamp()
+    except (TypeError, ValueError):
+        return None
 
 
 def _sched_red_fetch_workflow_rows(
     basename: str, timeout_s: float
-) -> Optional[List[Any]]:
-    """Newest COMPLETED runs of ONE workflow, across ALL trigger events.
+) -> Tuple[Optional[List[Any]], str]:
+    """Newest runs of ONE workflow, ALL events and statuses (no server filter).
 
-    S317 cure-detection, second generation. The S293 design asked ONE
-    repo-wide ``actions/runs?per_page=100`` question and looked each red
-    path up in the answer. Measured on this repo that window spans ~2 days
-    (one push fans out to ~8 workflows), while the lanes it guards fire as
-    rarely as MONTHLY -- so any cure older than the window was structurally
-    unreachable and the red could never be retired by the probe. Live miss:
-    ``tournament.yml`` red at the 2026-08-01 cron, fixed in 2aceb05 and
-    dispatch-validated green on 2026-08-04, still reported red on
-    2026-08-20 -- 16 days outside the window.
-
-    Asking PER WORKFLOW deletes the window (the cure's age stops mattering)
-    and is also cheaper: measured 733 ms against 2760 ms for the repo-wide
-    call. It is issued LAZILY -- only when a red exists -- so a steady-state
-    green boot now spends ZERO extra calls where the S293 design always paid
-    for the concurrent prefetch.
-
-    Fail-visible: any error returns None and the caller KEEPS the path red --
-    a dead probe can only under-cure, never under-report.
+    Returns ``(rows, "")`` or ``(None, reason)``. History: S293 asked one
+    repo-wide window; S317 asked per workflow but kept server filters
+    (``status=completed``); S361 drops every server filter (measured
+    non-deterministic, see the section header) and filters in the client.
     """
     if not _SCHED_RED_WF_NAME_RE.match(basename or ""):
         # Fail-closed on input: a basename this guard cannot vouch for never
-        # reaches the URL. The name comes off local disk today; the check
-        # costs one regex and removes the class outright.
-        return None
+        # reaches the URL (the path stays "no data", never "cured").
+        return None, "unvouchable name"
     try:
         proc = subprocess.run(
             [
                 "gh", "api",
                 "repos/{owner}/{repo}/actions/workflows/"
                 + basename
-                + "/runs?status=completed&per_page=5",
+                + "/runs?per_page="
+                + str(_SCHED_RED_PER_PAGE),
                 "--jq",
-                "[.workflow_runs[] | {path: .path, status: .status, "
-                "conclusion: .conclusion}]",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-            cwd=str(REPO_ROOT),
-            stdin=subprocess.DEVNULL,
-        )
-    except Exception:
-        return None
-    if proc.returncode != 0:
-        return None
-    try:
-        rows = json.loads(proc.stdout or "[]")
-    except ValueError:
-        return None
-    return rows if isinstance(rows, list) else None
-
-
-def _sched_red_probe_conclusion(path: str, timeout_s: float) -> Optional[str]:
-    """Newest completed conclusion for ``path``, or None if unknowable."""
-    rows = _sched_red_fetch_workflow_rows(path.rsplit("/", 1)[-1], timeout_s)
-    if not isinstance(rows, list):
-        return None
-    for r in rows:  # newest-first
-        if not isinstance(r, dict):
-            continue
-        # The endpoint is already scoped to one workflow; re-checking the
-        # path keeps a mis-scoped answer from curing the wrong lane.
-        if str(r.get("path") or "") != path:
-            continue
-        if r.get("status") != "completed":
-            continue
-        return str(r.get("conclusion") or "")
-    return None
-
-
-def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
-    """S292 — 24th Tier-S check: latest scheduled-run conclusion per workflow.
-
-    red    — ≥1 scheduled workflow whose latest COMPLETED scheduled run
-             concluded failure/timed_out/startup_failure AND whose newest
-             completed run across ALL events is not green (S293
-             cure-detection: a newer green `workflow_dispatch` validation
-             counts as cured-pending-cron, not red -- S317 made that probe
-             per-workflow, so a cure of ANY age is reachable);
-    yellow — data unavailable (gh missing/timeout/error/unparseable) or
-             zero scheduled-run coverage — never green on missing data;
-    green  — every covered workflow green at its latest scheduled run
-             (workflows outside the 100-run window are listed, not hidden),
-             no scheduled workflows at all, or explicit operator disable.
-    ADVISORY — never blocks the session.
-    """
-    if os.environ.get("CEO_BOOT_SCHED_RED", "") == "0":
-        return (
-            "green",
-            "scheduled-red check disabled (CEO_BOOT_SCHED_RED=0)",
-            {"disabled": True},
-        )
-    scheduled = _scheduled_workflow_paths()
-    if not scheduled:
-        return "green", "no scheduled workflows", {"scheduled": []}
-    scheduled_set = set(scheduled)
-    timeout_s = _sched_red_gh_timeout_s()
-    # S317: a sonda de cura e LAZY (so dispara se houver red) e POR
-    # WORKFLOW -- ver docstring de _sched_red_fetch_workflow_rows. O relogio
-    # existe para nao estourar o orcamento do check ao encadear as duas
-    # chamadas: medido, 2760 ms (agendadas) + 733 ms (sonda) < 4.0 s.
-    t_start = time.monotonic()
-    try:
-        proc = subprocess.run(
-            [
-                "gh", "api",
-                "repos/{owner}/{repo}/actions/runs"
-                "?event=schedule&per_page=100",
-                "--jq",
-                "[.workflow_runs[] | {path: .path, status: .status, "
-                "conclusion: .conclusion}]",
+                "[.workflow_runs[] | {path: .path, event: .event, "
+                "status: .status, conclusion: .conclusion, "
+                "created_at: .created_at}]",
             ],
             capture_output=True,
             text=True,
@@ -2775,101 +2759,184 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
             stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired:
-        _emit_ceo_boot_check_skipped_safe(
-            check_name="scheduled_workflows_red",
-            timeout_ms=int(timeout_s * 1000),
-        )
-        return (
-            "yellow",
-            f"no data — gh timeout >{timeout_s:.1f}s "
-            f"({len(scheduled)} scheduled workflow(s) unwatched)",
-            {"scheduled": scheduled, "timeout": True},
-        )
+        return None, "timeout"
     except OSError:
-        return (
-            "yellow",
-            f"no data — gh CLI unavailable "
-            f"({len(scheduled)} scheduled workflow(s) unwatched; "
-            f"set CEO_BOOT_SCHED_RED=0 to silence)",
-            {"scheduled": scheduled, "gh_available": False},
-        )
+        return None, "gh CLI unavailable"
     if proc.returncode != 0:
         first = next(
             (l.strip() for l in (proc.stderr or "").splitlines() if l.strip()),
             "",
         )
-        return (
-            "yellow",
-            _sanitize_for_recs(
-                f"no data — gh rc={proc.returncode}"
-                + (f": {first}" if first else "")
-            )[:200],
-            {"scheduled": scheduled, "rc": proc.returncode},
-        )
+        return None, f"gh rc={proc.returncode}" + (f": {first}" if first else "")
     try:
-        runs = json.loads(proc.stdout or "[]")
-        if not isinstance(runs, list):
-            raise ValueError("payload not a list")
+        rows = json.loads(proc.stdout or "[]")
     except ValueError:
-        return (
-            "yellow",
-            "no data — unparseable gh payload",
-            {"scheduled": scheduled, "parse_error": True},
+        return None, "unparseable gh payload"
+    if not isinstance(rows, list):
+        return None, "unparseable gh payload"
+    return rows, ""
+
+
+def _sched_red_fetch_all(
+    paths: List[str], budget_s: float
+) -> Dict[str, Tuple[Optional[List[Any]], str]]:
+    """One fetch per workflow, in parallel, all inside ONE deadline."""
+    deadline = time.monotonic() + budget_s
+
+    def _one(path: str) -> Tuple[Optional[List[Any]], str]:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None, "deadline"
+        return _sched_red_fetch_workflow_rows(path.rsplit("/", 1)[-1], remaining)
+
+    out: Dict[str, Tuple[Optional[List[Any]], str]] = {}
+    pool = ThreadPoolExecutor(
+        max_workers=max(1, min(_SCHED_RED_MAX_PARALLEL, len(paths)))
+    )
+    try:
+        futs = {pool.submit(_one, p): p for p in paths}
+        done, _pending = futures_wait(
+            futs, timeout=max(0.0, deadline - time.monotonic())
         )
-    # API returns newest-first; first COMPLETED run per path wins.
-    latest: Dict[str, str] = {}
-    for r in runs:
-        if not isinstance(r, dict):
-            continue
-        path = str(r.get("path") or "")
-        if path not in scheduled_set or path in latest:
-            continue
+        for fut, p in futs.items():
+            if fut not in done:
+                out[p] = (None, "deadline")
+                continue
+            try:
+                out[p] = fut.result()
+            except Exception:  # noqa: BLE001 — a dead fetch is "no data"
+                out[p] = (None, "error")
+    finally:
+        # Non-blocking: a gh process still running past the deadline is
+        # killed by its own timeout; the check does not wait for it.
+        pool.shutdown(wait=False, cancel_futures=True)
+    return out
+
+
+def _sched_red_classify(
+    path: str, rows: List[Any], period_s: float, now: float
+) -> Dict[str, Any]:
+    """Detection AND cure out of ONE newest-first page of one workflow.
+
+    state: ``uncovered`` (no completed scheduled run in the page) /
+    ``stale`` (newest completed scheduled run older than FACTOR × period, or
+    undated) / ``green`` / ``red`` / ``cured`` (red scheduled run followed by
+    a newer completed run that is not red — S293 semantics, any event).
+    """
+    page = [
+        r for r in rows
+        if isinstance(r, dict) and str(r.get("path") or "") == path
+    ]  # a mis-scoped row never decides anything
+    idx = next(
+        (
+            i for i, r in enumerate(page)
+            if r.get("event") == "schedule" and r.get("status") == "completed"
+        ),
+        None,
+    )
+    if idx is None:
+        return {"state": "uncovered"}
+    conclusion = str(page[idx].get("conclusion") or "")
+    ts = _sched_red_parse_ts(page[idx].get("created_at"))
+    limit_s = _SCHED_RED_STALE_FACTOR * period_s
+    age_s = None if ts is None else max(0.0, now - ts)
+    out: Dict[str, Any] = {
+        "conclusion": conclusion,
+        "age_days": None if age_s is None else round(age_s / _SCHED_RED_DAY_S, 1),
+        "stale_after_days": round(limit_s / _SCHED_RED_DAY_S, 1),
+    }
+    if age_s is None or age_s > limit_s:
+        out["state"] = "stale"
+        return out
+    if conclusion not in _SCHED_RED_BAD_CONCLUSIONS:
+        out["state"] = "green"
+        return out
+    newer = page[:idx]
+    for r in newer:  # newest-first: the newest COMPLETED newer run decides
         if r.get("status") != "completed":
             continue
-        latest[path] = str(r.get("conclusion") or "")
-    red = sorted(p for p, c in latest.items() if c in _SCHED_RED_BAD_CONCLUSIONS)
-    # S317 cure-detection: uma sonda POR WORKFLOW vermelho, concorrentes,
-    # disparadas SO se houver red (um boot verde nao paga nada).
-    cured: Dict[str, str] = {}
-    probe: Dict[str, Any] = {
-        "mode": "per_workflow",
-        "probed": [],
-        "capped": 0,
-        "skipped_no_budget": False,
-    }
-    if red:
-        remaining = _SCHED_RED_CHECK_DEADLINE_S - (time.monotonic() - t_start)
-        probe_timeout = min(timeout_s, remaining)
-        if probe_timeout < 0.4:
-            # Sem orcamento para a sonda: mantem tudo vermelho e DIZ isso.
-            # Um teto silencioso aqui leria como "nao havia cura".
-            probe["skipped_no_budget"] = True
-        else:
-            todo = red[:_SCHED_RED_CURE_PROBE_MAX]
-            probe["capped"] = len(red) - len(todo)
-            probe["probed"] = [p.rsplit("/", 1)[-1] for p in todo]
-            with ThreadPoolExecutor(max_workers=len(todo)) as ex:
-                futs = {
-                    ex.submit(_sched_red_probe_conclusion, p, probe_timeout): p
-                    for p in todo
-                }
-                for fut, p in futs.items():
-                    try:
-                        c = fut.result(timeout=probe_timeout + 0.5)
-                    except Exception:
-                        c = None
-                    if c is not None and c not in _SCHED_RED_BAD_CONCLUSIONS:
-                        cured[p] = c
-        red = [p for p in red if p not in cured]
-    uncovered = sorted(scheduled_set - set(latest))
+        c = str(r.get("conclusion") or "")
+        if c not in _SCHED_RED_BAD_CONCLUSIONS:
+            out["state"] = "cured"
+            out["cured_by"] = c
+            return out
+        break
+    out["state"] = "red"
+    out["newer_not_completed"] = sum(
+        1 for r in newer if r.get("status") != "completed"
+    )
+    return out
+
+
+def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
+    """S292 — 24th Tier-S check: latest scheduled-run conclusion per workflow.
+
+    red    — ≥1 scheduled workflow whose newest COMPLETED scheduled run is
+             FRESH (cron-derived guard) and concluded failure/timed_out/
+             startup_failure, with no newer completed non-red run in the
+             SAME page (S293 cure semantics, any event); a red whose cure
+             cannot be verified (newer runs still in progress) says so;
+    yellow — no data for some workflow (gh missing/timeout/error/
+             unparseable), no scheduled run in its page, or stale data —
+             never green on missing data, never red on old data;
+    green  — every scheduled workflow green (or cured) at a fresh latest
+             scheduled run, no scheduled workflows at all, or explicit
+             operator disable.
+    ADVISORY — never blocks the session.
+    """
+    if os.environ.get("CEO_BOOT_SCHED_RED", "") == "0":
+        return (
+            "green",
+            "scheduled-red check disabled (CEO_BOOT_SCHED_RED=0)",
+            {"disabled": True},
+        )
+    workflows = _scheduled_workflows()
+    scheduled = list(workflows)
+    if not scheduled:
+        return "green", "no scheduled workflows", {"scheduled": []}
+    budget_s = _sched_red_budget_s()
+    fetched = _sched_red_fetch_all(scheduled, budget_s)
+    now = _sched_red_now()
+
+    no_data: Dict[str, str] = {}
+    states: Dict[str, Dict[str, Any]] = {}
+    for path in scheduled:
+        rows, reason = fetched.get(path, (None, "deadline"))
+        if rows is None:
+            no_data[path] = _sanitize_for_recs(reason)[:120]
+            continue
+        states[path] = _sched_red_classify(
+            path, rows, _sched_red_period_s(workflows[path]), now
+        )
+    if any(r in ("timeout", "deadline") for r in no_data.values()):
+        _emit_ceo_boot_check_skipped_safe(
+            check_name="scheduled_workflows_red",
+            timeout_ms=int(budget_s * 1000),
+        )
+
+    def _of(state: str) -> List[str]:
+        return sorted(p for p, s in states.items() if s["state"] == state)
+
+    def _names(paths: List[str]) -> str:
+        return ", ".join(p.rsplit("/", 1)[-1] for p in paths)
+
+    red, uncovered, stale = _of("red"), _of("uncovered"), _of("stale")
+    cured = {p: states[p]["cured_by"] for p in _of("cured")}
+    unverified = [p for p in red if states[p].get("newer_not_completed")]
     detail = {
         "scheduled": scheduled,
-        "fetched_runs": len(runs),
-        "latest": latest,
+        "mode": "per_workflow_unfiltered",
+        "per_page": _SCHED_RED_PER_PAGE,
+        "budget_s": budget_s,
+        "latest": {
+            p: s["conclusion"] for p, s in states.items() if "conclusion" in s
+        },
         "red": red,
+        "cure_unverified": unverified,
         "cured_pending_cron": cured,
-        "cure_probe": probe,
+        "stale": {p: states[p] for p in stale},
         "no_recent_scheduled_run": uncovered,
+        "no_data": no_data,
     }
     cured_note = (
         " ({0} cured post-red by a newer completed run; awaiting next "
@@ -2877,30 +2944,64 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
         if cured
         else ""
     )
+    gaps: List[str] = []
+    if stale:
+        gaps.append(
+            "{0} stale (latest scheduled run older than the cron allows): "
+            "{1}".format(len(stale), ", ".join(
+                "{0} {1}d ago {2}".format(
+                    p.rsplit("/", 1)[-1],
+                    states[p]["age_days"] if states[p]["age_days"] is not None
+                    else "?",
+                    states[p]["conclusion"] or "?",
+                )
+                for p in stale
+            ))
+        )
+    if uncovered:
+        gaps.append("{0} with no scheduled run in the last {1} runs: {2}".format(
+            len(uncovered), _SCHED_RED_PER_PAGE, _names(uncovered)))
+    if no_data:
+        gaps.append("{0} without data: {1}".format(
+            len(no_data), _names(sorted(no_data))))
     if red:
-        names = ", ".join(p.rsplit("/", 1)[-1] for p in red)
+        # (f) the cure check is part of the SAME response; when it cannot be
+        # concluded (newer runs not finished) the summary SAYS so, first.
+        verified = (
+            "cure NOT verified for {0} (newer run still in progress)".format(
+                _names(unverified))
+            if unverified
+            else "no newer completed run"
+        )
         return (
             "red",
             _sanitize_for_recs(
-                f"{len(red)} scheduled workflow(s) red at latest run: "
-                f"{names}{cured_note}"
+                f"{len(red)} scheduled workflow(s) red at latest run "
+                f"({verified}): {_names(red)}"
+                + "".join("; " + g for g in gaps) + cured_note
             )[:200],
             detail,
         )
-    if not latest:
-        return (
-            "yellow",
-            f"no data — 0/{len(scheduled)} scheduled workflows covered "
-            f"by the {len(runs)}-run window",
-            detail,
-        )
-    if uncovered:
-        names = ", ".join(p.rsplit("/", 1)[-1] for p in uncovered)
+    if no_data and not states:
+        reasons = sorted(set(no_data.values()))
+        why = reasons[0] if len(reasons) == 1 else "mixed errors"
+        if why in ("timeout", "deadline"):
+            why = f"gh timeout >{budget_s:.1f}s"
         return (
             "yellow",
             _sanitize_for_recs(
-                f"{len(latest)}/{len(scheduled)} green at latest run; "
-                f"{len(uncovered)} with no run in window: {names}{cured_note}"
+                f"no data — {why} ({len(scheduled)} scheduled workflow(s) "
+                f"unwatched; set CEO_BOOT_SCHED_RED=0 to silence)"
+            )[:200],
+            detail,
+        )
+    ok = len(scheduled) - len(stale) - len(uncovered) - len(no_data)
+    if gaps:
+        return (
+            "yellow",
+            _sanitize_for_recs(
+                f"{ok}/{len(scheduled)} green at a fresh latest run; "
+                + "; ".join(gaps) + cured_note
             )[:200],
             detail,
         )
@@ -2908,14 +3009,14 @@ def check_scheduled_workflows_red() -> Tuple[str, str, Any]:
         return (
             "green",
             _sanitize_for_recs(
-                f"{len(latest)}/{len(scheduled)} scheduled workflows "
+                f"{len(scheduled)}/{len(scheduled)} scheduled workflows "
                 f"healthy{cured_note}"
             )[:200],
             detail,
         )
     return (
         "green",
-        f"{len(latest)}/{len(scheduled)} scheduled workflows green at "
+        f"{len(scheduled)}/{len(scheduled)} scheduled workflows green at "
         f"latest run",
         detail,
     )
