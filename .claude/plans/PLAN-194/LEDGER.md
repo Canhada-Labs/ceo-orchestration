@@ -58,17 +58,21 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   da sessão, para o ensaio do pacote do RP.
 - 2026-10-02 (S362): o rail do RP (rodada 1, lente de afirmações) deu P1 — o sentinel do pacote 0160 dizia «reportado para cura no gerador» sem registro rastreável; registro em `.claude/plans/PLAN-194-FOLLOWUP-repin-generator-hardening.md` (`draft`). Medido no mesmo dia: o endpoint de atestados do npm para `@openai/codex@0.160.0-darwin-arm64` responde HTTP 200 com o atestado de publicação e o SLSA `provenance/v1`; o gerador não o confere.
 
-## Unidade atual — S362 (2026-10-03; `main` = `c4670649`)
+## Unidade atual — S362 (2026-10-03; `main` = `4a1eec73`)
 
-- 2026-10-03: `main` = `origin/main` = `c4670649` (F1 hotfix-2).
-  verifier: `git merge-base --is-ancestor c4670649 HEAD` exit=0
+- 2026-10-03: `main` = `origin/main` = `4a1eec73` (RP assinado pelo Owner e landado; Validate verde, run 37121036583).
+  verifier: `git merge-base --is-ancestor 4a1eec73 HEAD` exit=0
 - Landados com a assinatura do Owner desde a abertura da S361: W2.0, a cura da condição 67
   (`65cd50d7`); W3b.1 (`a0a6df06`); W1 (`c54934d8`).
   verifier: `git merge-base --is-ancestor 65cd50d7 HEAD && git merge-base --is-ancestor a0a6df06 HEAD && git merge-base --is-ancestor c54934d8 HEAD` exit=0
 - Debate L3 ratificado pelo Owner (`debate/round-3/approved.md`, commit `5c52998b`): W5c e W2 PROCEED;
   decisões 2, 4, 5 e 6 aceitas; decisão 1 superada; decisão 3 NÃO tomada ⇒ W3 ADIADA para a 1.4.4.
   verifier: `git merge-base --is-ancestor 5c52998b HEAD && test -f .claude/plans/PLAN-194/debate/round-3/approved.md` exit=0
-- Em curso: o RP (seção acima). Decisões da abertura do trem: seção «Decisões do Owner — S362» do plano.
+- RP LANDADO em `4a1eec73` (pai `4e4e21a8`; 4 paths: os 2 do pin, o sentinel e o `.asc`). Conferido pelo CEO: assinatura
+  do sentinel válida com a chave do allowlist; os 2 arquivos do pin byte-iguais aos `.new` revisados; faixa
+  `>=0.128.0,<0.161.0`; `check_pair_rail.py --verify-codex-pin` = `verified` (payload `112fae7a…`). O rail oficial passa
+  a correr no Codex 0.160.0. Decisões da abertura do trem: seção «Decisões do Owner — S362» do plano.
+  verifier: `git merge-base --is-ancestor 4a1eec73 HEAD && grep -q '<0.161.0' .claude/governance/codex-cli-pin.txt` exit=0
 
 ## Saídas para a 1.4.4 e hotfix do teste do F1 (2026-10-03, S362)
 
@@ -87,6 +91,12 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   antes da checagem). Verificação (CEO, python 3.9.6): pareado 27 passed; ordem do CI em processo único
   (`.claude/hooks/tests` + o arquivo, `-m 'not serial'`) 7.137 passed, 34 skipped, 4 xfailed, rc 0.
   verifier: `git merge-base --is-ancestor 2b96bfd7 HEAD && git merge-base --is-ancestor c4670649 HEAD` exit=0
+- Script da limpeza única da W2.6 (fora do repositório, `s362-tools/w26/`, sha `1191f7cc…` na rodada 3) SAI da 1.4.3 →
+  1.4.4: na rodada 3, FINAL, o Codex deu NO-GO com duas afirmações falsas reproduzidas — «a família só sai inteira»
+  (acréscimo num membro candidato depois do fsync da intenção ⇒ remoção parcial) e «o `--reconcile` nunca sai 0 com
+  contagem inexata» (SIGSTOP/SIGKILL no meio ⇒ `exact=true`, rc 0, com 1 unlink efetivo). A cura pede troca de
+  arquitetura: uma trava de manutenção honrada pelos escritores, em vez de detectar mudança depois do fato. A W26
+  (limpeza do Owner, Lote 6) sai junto; a regra «agentes 8 → 12 depois da W2.6» fica sem gatilho.
 
 ## Bloqueios em aberto
 
