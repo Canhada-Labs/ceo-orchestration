@@ -2,8 +2,8 @@
 
 Plan: PLAN-194
 Wave: re-pin codex-cli 0.156.1 → 0.160.0
-Anchor-SHA: (preenchido pelo passo 1 do script de cerimônia)
-Data: (preenchida pelo passo 1 do script de cerimônia)
+Anchor-SHA: 4e4e21a879db30ccdf30f5abe55cfecfc0ba9411
+Data: 2026-10-03
 
 ## Ratificação (Owner, 2026-10-02)
 
