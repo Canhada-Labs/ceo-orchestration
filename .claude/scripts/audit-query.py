@@ -2799,31 +2799,44 @@ def _critical_safe_summary(event: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-def _build_shared_parser() -> argparse.ArgumentParser:
-    """Return the parent parser with the shared flags.
+def _build_shared_parser(*, for_subcommand: bool = False) -> argparse.ArgumentParser:
+    """Return a parent parser with the shared flags.
 
-    Parent parser carrying the shared flags. These are added to each
-    sub-command via ``parents=[]``, so users can write either::
+    The same flags are registered on the top-level parser AND on every
+    sub-command, so users can write either::
 
-        audit-query.py summary --json
-        audit-query.py --json summary          # also works
+        audit-query.py summary --log X --json
+        audit-query.py --log X --json summary  # same result
+
+    Precedence rule: the top-level copy owns the real defaults; the
+    sub-command copy (``for_subcommand=True``) registers every flag with
+    ``default=argparse.SUPPRESS``, so a sub-command that does not repeat
+    a flag keeps the value given before it. A flag given on BOTH sides
+    resolves to the sub-command-level value. argparse parses a
+    sub-command into a fresh namespace and copies every attribute back —
+    with real defaults there, ``--log X summary`` silently read the
+    default log instead of X (FD-23).
     """
+    def _default(value: Any) -> Any:
+        return argparse.SUPPRESS if for_subcommand else value
+
     shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument(
         "--log",
-        default=None,
+        default=_default(None),
         help="Path to audit-log.jsonl (default: CEO_AUDIT_LOG_PATH or ~)",
     )
     shared.add_argument(
         "--include-rotated",
         action="store_true",
+        default=_default(False),
         help="Also read audit-log-YYYY-MM*.jsonl siblings",
     )
-    shared.add_argument("--json", dest="as_json", action="store_true")
-    shared.add_argument("--csv", dest="as_csv", action="store_true")
+    shared.add_argument("--json", dest="as_json", action="store_true", default=_default(False))
+    shared.add_argument("--csv", dest="as_csv", action="store_true", default=_default(False))
     shared.add_argument(
         "--errors-path",
-        default=None,
+        default=_default(None),
         help="Override path for the `errors` sub-command",
     )
     return shared
@@ -3187,9 +3200,11 @@ def build_parser() -> argparse.ArgumentParser:
     ``_add_plan080_subparsers`` / ``_add_plan081_subparsers``). The
     public contract of this function is unchanged — callers get back
     an ``argparse.ArgumentParser`` with ``cmd`` as the required
-    subcommand.
+    subcommand. Sub-commands get the SUPPRESS-default copy of the shared
+    flags (precedence rule in ``_build_shared_parser``).
     """
     shared = _build_shared_parser()
+    sub_shared = _build_shared_parser(for_subcommand=True)
 
     parser = argparse.ArgumentParser(
         prog="audit-query.py",
@@ -3216,13 +3231,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     sub = parser.add_subparsers(dest="cmd", required=True)
-    _add_v1_subparsers(sub, shared)
-    _add_v2_subparsers(sub, shared)
-    _add_sprint8_9_subparsers(sub, shared)
-    _add_plan015_subparsers(sub, shared)
-    _add_plan080_subparsers(sub, shared)
-    _add_plan081_subparsers(sub, shared)
-    _add_plan113_subparsers(sub, shared)
+    _add_v1_subparsers(sub, sub_shared)
+    _add_v2_subparsers(sub, sub_shared)
+    _add_sprint8_9_subparsers(sub, sub_shared)
+    _add_plan015_subparsers(sub, sub_shared)
+    _add_plan080_subparsers(sub, sub_shared)
+    _add_plan081_subparsers(sub, sub_shared)
+    _add_plan113_subparsers(sub, sub_shared)
 
     return parser
 
