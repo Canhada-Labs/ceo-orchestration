@@ -2317,8 +2317,10 @@ do `97a78fce` (`git merge-base --is-ancestor`): L1, L2a e L2b (`6f7069d3`,
    depois da cura e 3.ª leva do estresse na sombra) → U2-D (num fechamento de sessão).
 3. **W5c, em paralelo:** pré-registro do re-teste → re-teste pago com PASS; W6.0 → W6.2; W5b; rodadas na
    sombra; rodada final sobre o patch re-derivado depois do LAND do U2-C.
-4. **Fora do caminho, mas antes do kit ou da rc.1:** W4, W7a do PLAN-183, W5.1, W5a, doc da W6,
-   derivadores do kit e FX.
+4. **Fora do caminho, mas antes do kit ou da rc.1:** W4, W7a do PLAN-183, W5.1, W5a, doc da W6 e
+   derivadores do kit. O FX (cura do teste instável `TestParallelWritersChain`) foi para a 1.4.4 (seção
+   «Saídas para a 1.4.4 e hotfix do teste do F1» do LEDGER); resíduo declarado: o CI pede re-run quando o
+   teste instável falhar.
 5. **Corte:** seção `[1.4.3]` do `CHANGELOG.md` → RM → kit → rc.1 → hold de 24 h → GA. Linha de corte: o
    kit começa no máximo em 2026-10-11.
 
