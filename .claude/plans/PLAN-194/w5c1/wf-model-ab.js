@@ -51,9 +51,12 @@ const OUT = args.out
 const INSTR = args.instrument_dir
 const SALT = args.blind_salt
 const BI = INSTR + '/build-items.py'
-const CC_VERSION_REQUIRED = '2.1.287 (Claude Code)'
+// Re-version 2026-10-02 (PREREG.md section 9): substrate only — CC 2.1.288 and the sha256
+// of the native binary that 'claude' resolves to.
+const CC_VERSION_REQUIRED = '2.1.288 (Claude Code)'
+const CC_BINARY_SHA256 = 'bbe93063f7a0879a1021b2891e5c9354e5b3b98433e32efe6750f7710afed750'
 // Manifest digest that build-items.py --build MUST print (PREREG.md section 3).
-const EXPECTED_DIGEST = '5117525e78144e7fbc7388d668c4215a9c5ca8d82eca947423a4a621ad837d7f'
+const EXPECTED_DIGEST = '0ce3c825ec19870bad3fe581024ff489f82635dc24f2f769de8448ffb9d7d6b9'
 const ITEMS = ['D01', 'D02', 'D03', 'D04', 'D05', 'D06', 'D07', 'D08', 'D09', 'D10']
 const ARMS = ['claude-sonnet-5', 'claude-sonnet-5-5']
 
@@ -217,11 +220,11 @@ const PREFLIGHT_SCHEMA = {
   type: 'object',
   properties: {
     sha_ok: { type: 'boolean' }, sha_output: { type: 'string' },
-    cc_version: { type: 'string' }, effort_flag_ok: { type: 'boolean' },
+    cc_version: { type: 'string' }, binary_sha256: { type: 'string' }, effort_flag_ok: { type: 'boolean' },
     plan_ok: { type: 'boolean' }, build_ok: { type: 'boolean' }, build_digest: { type: 'string' },
     notes: { type: 'string' },
   },
-  required: ['sha_ok', 'sha_output', 'cc_version', 'effort_flag_ok', 'plan_ok', 'build_ok', 'build_digest', 'notes'],
+  required: ['sha_ok', 'sha_output', 'cc_version', 'binary_sha256', 'effort_flag_ok', 'plan_ok', 'build_ok', 'build_digest', 'notes'],
 }
 
 const RUN_SCHEMA = {
@@ -272,13 +275,14 @@ const preflight = await agent(assertDispatchable(`${head(OUT)}
 
 Run exactly these commands with the Bash tool, in order, and report the literal results:
 1. cd ${INSTR} && shasum -a 256 -c SHA256SUMS   (sha_ok = every line ends with OK; sha_output = the full output)
-2. claude --version   (cc_version = the output, trimmed; the run requires exactly ${CC_VERSION_REQUIRED})
+2. python3 ${BI} --substrate   (prints one JSON line: cc_version and binary_sha256 = its fields, copied verbatim; the run requires exactly ${CC_VERSION_REQUIRED} and ${CC_BINARY_SHA256})
 3. claude --help   (effort_flag_ok = ALL of: the --effort levels include xhigh; the --permission-mode choices include manual; the options --tools, --setting-sources, --strict-mcp-config, --mcp-config, --no-session-persistence, --max-budget-usd, --output-format and --model are listed)
 4. python3 ${BI} --plan   (plan_ok = it prints 40 entries tagged t01 to t40)
 5. mkdir -p ${OUT} && python3 ${BI} --build ${OUT}   (the last line is JSON: build_ok = its ok field; build_digest = its digest field)
 Do not run anything else. Never run claude -p.`, 'w5c1:preflight'), { label: 'w5c1:preflight', phase: 'Preflight', schema: PREFLIGHT_SCHEMA })
 
 const preflightOk = Boolean(preflight && preflight.sha_ok && preflight.cc_version === CC_VERSION_REQUIRED
+  && preflight.binary_sha256 === CC_BINARY_SHA256
   && preflight.effort_flag_ok && preflight.plan_ok && preflight.build_ok && preflight.build_digest === EXPECTED_DIGEST)
 if (!preflightOk) {
   log('preflight failed: the run is INVALID before any paid call')

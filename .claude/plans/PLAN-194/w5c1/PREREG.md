@@ -11,6 +11,9 @@
   - este `PREREG.md`.
 - **Quem roda:** o S2 do runbook (FD-18), depois do LAND deste pacote e do Lote 0.
   Gasto autorizado pelo Owner: ~US$ 15–30, estimado (decisão D-9 de 02/10/2026).
+- **Re-versão 2026-10-02 (CC 2.1.288) — §9.** Só o substrato mudou; ela substitui os
+  pinos da versão landada em `db346fc6` + `2a01a558`. Nenhum ensaio pago foi rodado
+  antes dela.
 
 Qualquer mudança nos números, na regra ou no instrumento depois do primeiro ensaio
 pago INVALIDA o run (§4, V1). Ajuste antes do gasto entra como nova versão deste
@@ -97,7 +100,7 @@ INTERNA: Sonnet 5 × Sonnet 5.5 sobre os mesmos itens v2. Os números da S357 (O
 | M6 | ABBA com o mesmo braço abrindo sempre | ABBA por item, braço de abertura alternando com a paridade do item (D01 abre com o Sonnet 5, D02 com o Sonnet 5.5, ...) | balanceia efeito de ordem |
 | M7 | um avaliador para 40 respostas (o lote chegou truncado em 2) | um avaliador por item, com 1 controle do avaliador por item; rótulos opacos derivados de um sal escolhido no lançamento; nomes de modelo redigidos | cegueira e controle vermelho do avaliador (§4, V5) |
 | M8 | agente de veredito aplicava a regra | `build-items.py --score` aplica a regra; o agente só roda o comando | regra pré-registrada aplicada por código |
-| M9 | validade: id servido conferido | id servido conferido com a regra V2 (inclui chave extra de modelo auxiliar) e versão do CC + sha do instrumento em CADA registro | ajuste 38 do debate |
+| M9 | validade: id servido conferido | id servido conferido com a regra V2 (inclui chave extra de modelo auxiliar) e versão do CC + sha do instrumento em CADA registro (re-versão do §9: + sha256 do binário do CC) | ajuste 38 do debate |
 
 O que NÃO muda: o texto final do pedido de revisão (copiado da S357), o limite de
 220 linhas por trecho, `--output-format json`, `--setting-sources ""`,
@@ -109,16 +112,16 @@ descartável fora do repositório e «nunca repetir um ensaio pago válido».
 
 | arquivo | sha256 |
 |---|---|
-| `build-items.py` | `edd38a4503c4b46013863bf6616309bf2f8fb26c2d23dbcf069b3acc4f7cd63d` |
-| `wf-model-ab.js` | `a67e84bea7a52f26801ce9e97f466b9b853c7e6006fc77c6701f800f71bde7d1` |
+| `build-items.py` | `4af593df9dd69bcda57189e6d0c1f54abc76f78d08b4f87a6b5e6422135a40ae` |
+| `wf-model-ab.js` | `8aac6e3ef6167e6cc9a6204e6446360c42eac601265aa2a1663a15d1c2b7872d` |
 
 ---
 
 ## 3. Itens, chaves e controles (fixados antes do gasto)
 
 Digest do manifesto (o `--build` do S2 tem de imprimir exatamente este valor; o
-`wf-model-ab.js` o carrega como `EXPECTED_DIGEST`):
-`5117525e78144e7fbc7388d668c4215a9c5ca8d82eca947423a4a621ad837d7f`
+`wf-model-ab.js` o carrega como `EXPECTED_DIGEST`; re-versão do §9):
+`0ce3c825ec19870bad3fe581024ff489f82635dc24f2f769de8448ffb9d7d6b9`
 
 | item | defeito-chave (classe) | fix | receita da fonte | linhas-chave | controle |
 |---|---|---|---|---|---|
@@ -140,16 +143,16 @@ exigem:
 
 | item | source | prompt | key | control |
 |---|---|---|---|---|
-| D01 | `22671e953161a1ccc6a680f9d08bb2d9b00f960a85f2c112e91ae8072ea39494` | `c735c79c1bca8d5bcf3643b293496dbb2b0a0fff088dbafc1629629c394425e3` | `a38e06f8db5fcd878b4d9c93f4843f53b0eb422d183e3f37c6030ef33a0060ef` | `0b5935f5cf91f05f35a49fd6c068793a1f044f959776830ebe16128e9e5c2a3c` |
-| D02 | `3715d1540f75906a4b4f49717553367f2001e91b03160c822afbffe883e9421c` | `346f5de0c045e4dd8f43e677eb12c26559cfa264e4733895ba1428e9020c02e6` | `45f0f3c9f2125c304cfcc1f0686b7e0108a95ecb02c760ee5afe483ac79a04b5` | `a0a50d2a05469cd93c77cd9493cfb2eff86490603079a463c18012bbeebe4dcb` |
-| D03 | `2e405fc29e5dff33fb21e8880c8f25ce9b36e36fec5becdb39cf80e384447651` | `b12f671d85b99dbd9a608d1c8a213dfe6eaa7bfacd95f73d304443f4a68b4601` | `6e6c8f0f3c833c871ba9600829ccf28c778bfc6978eae926fbe87d1bda8b59b9` | `9743faabd17d96ac4c8fcc6301d75e37c62891d87784a7db84f6e4658d6b2268` |
-| D04 | `2731e3a991f4748beeca328b6744827d99c101d9a63cfd189db123f0adb8f8f9` | `622a07ea2548b1bd9ead553e26f45d8a535338d7baadbdadf686c9830d12f714` | `70c5702f99cca38959d6d88ed02445cfbfe265b4190fbbb1c70bdeb267cc6b49` | `18a6a8057fb1eabcb145bedb2b89c053c396259a19326423cab546a397a03f11` |
-| D05 | `8ef72ab914ba84198b942b2c6759df3b2d4e86b85b3bdcbbbe30e3f9774bc2e3` | `c352733b133c7ebea52b8d28c5bad6bc228689561de3f4491cdb7710bb168178` | `664e9d34a00d79b67abc6dc5ff5ea4d06aa6de1ec0fd6b088a6ad1c02544d888` | `618a34d379ea4aaa9247f0e50c8aa6f4d7fef962e680907bcd384e9ec986bac0` |
-| D06 | `1a9c99943e90ca89093b7b5f379ab2a07b903b5d2373978b8de872a7568d8e0a` | `179e9041d52f0129f6e96e80071c0f70d556ea4126fb84bb20678a53bb2c8d7e` | `36ba504d407b5b4c2e53067240f1035b3367a8f70d6fda71856a8fd4f0f7616e` | `00dbc2f0153d489be74494508b24bdcbec0cacb2ad62ecd6c0bb691607320b85` |
-| D07 | `b64812281fe6fd053bf719b63ec56d1695fe34700f71226f39425b8648ed72c0` | `0908bb5f78a21d9e71208655edb3e1c2411f9067bd728947a2d7d83a75b74b3a` | `031b9b58afce58b030a953b98d5e588b940ad13c15f1b3b946d662db3539518c` | `149c8c559712cabf613292792a1ca9898d1ebd65af78c0a6754f9a571480467d` |
-| D08 | `16b86af5d5061afbf972e23891ab400177806c7831a91ec731254cf318bbd7e9` | `89ef9b989abc8f9f1415e5c45fb3f7d2f7d5fb87cf7bd78a9fca58b6655c7536` | `f64aa3372a98ec3ae596940d2fd469a30ce5dcdf20afdc3e8a5c8c35863cd685` | `dbc86d4f00bbe5fc0b6388ebf88b701548f19876def0c6549722528847439805` |
-| D09 | `c382461d8ef845e4ba0efac9695b51f56121a4588037be08cee073682cc98474` | `a60320904cec9f2b5cf5531d44a91727aec06166b10384009030f320ac09e086` | `5361d97627992985b1c69c47b8263e27c313084472b6639f121816a610b62157` | `1ec96879bcdce7a1dfc2a3d7b67afc0e559f2b3ed73a6bdf8f4931087e2699a1` |
-| D10 | `5b677ff583371200d81223e90ae0ad4dad1fdfd423bbe9995c3d0517e42896c1` | `e1ab810b3203980cd3f93db1957e733971b767b940ab73cb7695e5cf461ba2f4` | `be43dbbad4462fcdf4c5020407135bf63b880e08849193e72347e0ebf8af3bd4` | `f6c51e5ea04d949581cbda439f2aac17ea9696d9bdcbb307ac7c7c4424cc7bc1` |
+| D01 | `22671e953161a1ccc6a680f9d08bb2d9b00f960a85f2c112e91ae8072ea39494` | `c735c79c1bca8d5bcf3643b293496dbb2b0a0fff088dbafc1629629c394425e3` | `3fa57134547406fc3063e5215ae13b142d7b158dd84ad11cf45e139900ce2ad3` | `0b5935f5cf91f05f35a49fd6c068793a1f044f959776830ebe16128e9e5c2a3c` |
+| D02 | `3715d1540f75906a4b4f49717553367f2001e91b03160c822afbffe883e9421c` | `346f5de0c045e4dd8f43e677eb12c26559cfa264e4733895ba1428e9020c02e6` | `dd45b26a03df2f54bbd0ec99327ff4c1185af700f916f32199b94c9b3e2fb280` | `a0a50d2a05469cd93c77cd9493cfb2eff86490603079a463c18012bbeebe4dcb` |
+| D03 | `2e405fc29e5dff33fb21e8880c8f25ce9b36e36fec5becdb39cf80e384447651` | `b12f671d85b99dbd9a608d1c8a213dfe6eaa7bfacd95f73d304443f4a68b4601` | `c03ddaee3c47f55be654b0e830b29ef6619e72e90e253d0638d3e5cc11852aba` | `9743faabd17d96ac4c8fcc6301d75e37c62891d87784a7db84f6e4658d6b2268` |
+| D04 | `2731e3a991f4748beeca328b6744827d99c101d9a63cfd189db123f0adb8f8f9` | `622a07ea2548b1bd9ead553e26f45d8a535338d7baadbdadf686c9830d12f714` | `b2b7aed3f899bf7f38eaa1a3f0a09945e8b91676451c6b3dc43cf9b271989351` | `18a6a8057fb1eabcb145bedb2b89c053c396259a19326423cab546a397a03f11` |
+| D05 | `8ef72ab914ba84198b942b2c6759df3b2d4e86b85b3bdcbbbe30e3f9774bc2e3` | `c352733b133c7ebea52b8d28c5bad6bc228689561de3f4491cdb7710bb168178` | `3c4c387e46ffbf3a572b7a48a8bcb103e8073e4ddcc3ea39252a2dd8d37eebce` | `618a34d379ea4aaa9247f0e50c8aa6f4d7fef962e680907bcd384e9ec986bac0` |
+| D06 | `1a9c99943e90ca89093b7b5f379ab2a07b903b5d2373978b8de872a7568d8e0a` | `179e9041d52f0129f6e96e80071c0f70d556ea4126fb84bb20678a53bb2c8d7e` | `a31d72988af1d1554652d573ced01a1e4626dec2e93914f935f168a3302464b0` | `00dbc2f0153d489be74494508b24bdcbec0cacb2ad62ecd6c0bb691607320b85` |
+| D07 | `b64812281fe6fd053bf719b63ec56d1695fe34700f71226f39425b8648ed72c0` | `0908bb5f78a21d9e71208655edb3e1c2411f9067bd728947a2d7d83a75b74b3a` | `fe72f8fe9884eaedac4980c746d9c492ff414f9ddf0d2b0bdaa8ffccb5bfcdbf` | `149c8c559712cabf613292792a1ca9898d1ebd65af78c0a6754f9a571480467d` |
+| D08 | `16b86af5d5061afbf972e23891ab400177806c7831a91ec731254cf318bbd7e9` | `89ef9b989abc8f9f1415e5c45fb3f7d2f7d5fb87cf7bd78a9fca58b6655c7536` | `47bf2f648d99423d9bef836e2a18e34ef0886199fa049c23045dd6545870b945` | `dbc86d4f00bbe5fc0b6388ebf88b701548f19876def0c6549722528847439805` |
+| D09 | `c382461d8ef845e4ba0efac9695b51f56121a4588037be08cee073682cc98474` | `a60320904cec9f2b5cf5531d44a91727aec06166b10384009030f320ac09e086` | `5ea38879b44ba235e47a58308670d3d38a1d394724d111ca0e7d8a0ba3266689` | `1ec96879bcdce7a1dfc2a3d7b67afc0e559f2b3ed73a6bdf8f4931087e2699a1` |
+| D10 | `5b677ff583371200d81223e90ae0ad4dad1fdfd423bbe9995c3d0517e42896c1` | `e1ab810b3203980cd3f93db1957e733971b767b940ab73cb7695e5cf461ba2f4` | `bebc96d6eac74cdd16dd991b8eb0dbd07a8af50d94a4735e22999e42d0391082` | `f6c51e5ea04d949581cbda439f2aac17ea9696d9bdcbb307ac7c7c4424cc7bc1` |
 
 As 10 fontes foram conferidas contra uma reconstrução independente feita à mão
 (`git show <pai>:<arquivo>`, extração por `sed` da pós-imagem do D04 e `git apply`
@@ -178,9 +181,10 @@ por etiqueta (as novas tentativas quebram a ordem ABBA de relógio, como na S357
 declarado).
 
 **Ensaio.** `build-items.py --trial OUT --item <ID> --model <id> --rep <n> --tag tNN`:
-confere o plano, o sha256 do prompt e a versão do CC; roda, num diretório
-descartável fora do repositório e sem as variáveis `CLAUDE_CODE_*`,
-`ANTHROPIC_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL` e `ANTHROPIC_DEFAULT_*_MODEL`:
+confere o plano, o sha256 do prompt, a versão do CC e o sha256 do binário que
+`claude` resolve; roda, num diretório descartável fora do repositório, sem as
+variáveis `CLAUDE_CODE_*`, `ANTHROPIC_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL` e
+`ANTHROPIC_DEFAULT_*_MODEL`, e com `DISABLE_AUTOUPDATER=1` (§9):
 
 ```
 claude -p <prompt> --model <id> --effort xhigh --output-format json --setting-sources "" \
@@ -194,8 +198,8 @@ e grava o registro (`runs/tNN.json`), a saída crua, o stderr e o texto da respo
 
 | # | escopo | condição | consequência |
 |---|---|---|---|
-| V0 | run | o pré-voo falha: `SHA256SUMS` não confere, `claude --version` ≠ `2.1.287 (Claude Code)`, flag ausente no `--help`, plano ≠ t01–t40, digest do `--build` ≠ §3 | **INVÁLIDO** antes de qualquer gasto |
-| V1 | run | algum registro com versão do CC ≠ 2.1.287, sha256 do `build-items.py` diferente do atual, esforço ≠ xhigh, fora do plano, ou de autoteste | **INVÁLIDO**: nada conta; refaz do zero com este mesmo pré-registro |
+| V0 | run | o pré-voo falha: `SHA256SUMS` não confere, `build-items.py --substrate` ≠ `2.1.288 (Claude Code)` com binário `bbe93063…d750`, flag ausente no `--help`, plano ≠ t01–t40, digest do `--build` ≠ §3 | **INVÁLIDO** antes de qualquer gasto |
+| V1 | run | algum registro com versão do CC ≠ 2.1.288, sha256 do binário ≠ `bbe93063…d750`, sha256 do `build-items.py` diferente do atual, esforço ≠ xhigh, fora do plano, ou de autoteste | **INVÁLIDO**: nada conta; refaz do zero com este mesmo pré-registro |
 | V2 | ensaio | id SERVIDO ≠ id PEDIDO: as chaves de `modelUsage`, sem o sufixo `[1m]`, têm de ser exatamente `{id pedido}` (uma chave extra, de qualquer modelo, também invalida) | ensaio **inválido**, não conta, refeito (até 3 tentativas) |
 | V3 | ensaio | status ≠ sucesso (erro, estouro do teto de US$ 2, relógio de 540 s) ou sem texto de resposta | ensaio **vazio** |
 | V4 | braço | 5 ou mais dos 20 ensaios de um braço sem nota válida (vazio, inválido, ou sem nota do avaliador) | **INCONCLUSIVO** |
@@ -209,7 +213,8 @@ na V2; se isso levar à V4, o INCONCLUSIVO é reportado ao Owner com a causa
 (recusas do braço), nunca convertido em PASS.
 
 **Substrato a registrar no LEDGER (toda entrada da medição):** versão do Claude Code
-(`2.1.287`) e o sha256 do binário; sistema (macOS / Darwin 27.0.0); `python3`
+(`2.1.288`) e o sha256 do binário (`bbe93063f7a0879a1021b2891e5c9354e5b3b98433e32efe6750f7710afed750`,
+conferido em cada ensaio); sistema (macOS / Darwin 27.0.0); `python3`
 (3.9.6 nesta máquina em 02/10) e `git` (2.54.0); o sha256 de `SHA256SUMS` e dos três
 arquivos; o digest do manifesto (§3); os ids servidos por braço; o modelo da sessão
 que rodou os avaliadores; a data; se havia `ANTHROPIC_API_KEY` no ambiente (só
@@ -286,7 +291,9 @@ jeito, com essa observação no LEDGER.
 FALSO e exige, entre outros: id servido trocado ⇒ inválido; chave extra de modelo ⇒
 inválido; variante `[1m]` ⇒ válido; 3 tentativas e esgota; estouro de orçamento ⇒
 vazio; teto do run ⇒ recusa sem chamar o CLI; versão do CC diferente ⇒ recusa sem
-chamar; prompt adulterado ⇒ recusa; resposta adulterada ⇒ o cegamento recusa;
+chamar; binário com outro sha256 ⇒ recusa sem chamar, e registro com sha do binário
+divergente ⇒ INVÁLIDO no placar; ambiente do sujeito com `DISABLE_AUTOUPDATER=1`;
+prompt adulterado ⇒ recusa; resposta adulterada ⇒ o cegamento recusa;
 ensaio válido nunca é repetido; respostas cegas sem nome de modelo; 18 × 16 ⇒ C1;
 18 × 15 ⇒ C3; custo 1,3× ⇒ C2; sem tokens ⇒ custo por `total_cost_usd` em todos;
 custo zero ⇒ INCONCLUSIVO; controle do avaliador errado ⇒ INCONCLUSIVO; 5
@@ -309,7 +316,9 @@ procedimento do §7, nomeado.
 ## 7. Como rodar (S2)
 
 Pré-condições: este pacote landado; Lote 0 aplicado (Claude Code congelado em
-2.1.287 com `DISABLE_AUTOUPDATER=1`); `python3 build-items.py --check` verde no
+2.1.288 com `DISABLE_AUTOUPDATER=1` no `env` do settings do usuário);
+`python3 build-items.py --substrate` com rc 0 (versão e binário conferem) e
+`python3 build-items.py --check` verde no
 checkout que vai rodar.
 
 1. Escolher um diretório de run FORA do repositório (no scratchpad da sessão) e um
@@ -355,3 +364,64 @@ falhar).
   cada despacho (bloco COMMON).
 - **R8 — `ANT-02` não medida.** Resíduo declarado (D-10); as sondas pagas do adapter
   ficam para a 1.4.4.
+
+---
+
+## 9. Re-versão 2026-10-02 (CC 2.1.288)
+
+**O que mudou: só o substrato.** Itens, recortes, prompts, controles, plano, δ, regra
+de custo, regras de validade e células ficam como estavam. Os sha256 de `source`,
+`prompt` e `control` dos 10 itens são os MESMOS da versão anterior; os prompts que o
+sujeito recebe são byte a byte os mesmos. Mudaram:
+
+| o quê | antes (landado em `db346fc6` + `2a01a558`) | agora |
+|---|---|---|
+| versão do Claude Code exigida | `2.1.287 (Claude Code)` | `2.1.288 (Claude Code)` |
+| sha256 do binário | só registrado no LEDGER | PINADO e conferido em cada ensaio e no placar: `bbe93063f7a0879a1021b2891e5c9354e5b3b98433e32efe6750f7710afed750` (o realpath de `claude`; no 2.1.287 era `6eab8333fe2121553100d8f40bfada384a3e989b94f947e18ba6677a6fcb41ea`) |
+| ambiente do sujeito | sem `DISABLE_AUTOUPDATER` | `DISABLE_AUTOUPDATER=1` no processo do `claude -p` (motivo abaixo, ponto 6) |
+| pré-voo | `claude --version` | `build-items.py --substrate` (versão + sha256 do binário, rc 0 só se os dois conferem) |
+| `INSTRUMENT_VERSION` | `w5c1-v2` | `w5c1-v2.1` (por isso só o sha256 das CHAVES muda: o campo `instrument` está nelas) |
+| digest do manifesto | `5117525e78144e7fbc7388d668c4215a9c5ca8d82eca947423a4a621ad837d7f` | o do §3 |
+| sha256 dos arquivos | `PREREG.md` `b54857fb…9703`, `build-items.py` `edd38a45…d63d`, `wf-model-ab.js` `a67e84be…bde7d1` (`SHA256SUMS` `d9f9dfc1…2579`) | os de `SHA256SUMS` |
+
+**Por quê.** O Claude Code 2.1.287 se atualizou sozinho para o 2.1.288 em 2026-10-02
+(binário de 17:31:44 -0300, symlink de 17:32:06 -0300) e o Owner decidiu ADOTAR o
+2.1.288 e congelá-lo com `DISABLE_AUTOUPDATER=1`. A versão anterior exigia
+exatamente o 2.1.287 e recusava antes do gasto (fail-closed, como desenhado); o
+refutador do rail R-1 apontou isso. Esta re-versão é o caminho que o próprio
+pré-registro prevê («ajuste antes do gasto entra como nova versão»), não uma edição
+por cima: os valores antigos ficam registrados na tabela acima e no histórico git.
+
+**NENHUM ensaio pago foi rodado antes desta re-versão.** O S2 não começou; nenhum
+`claude -p` foi chamado por este instrumento em nenhuma versão.
+
+**Re-medição 2.1.287 × 2.1.288** (fonte: o relatório da re-medição do binário,
+`cc288.json`, sha256 `79228c6011de7da84099fe26a191d3569f0dc00866ac7ed7331c4c82cb2e235b`,
+leitura de código minificado dos dois binários; o único comando executado lá foi
+`--version`). Os pontos que o instrumento usa:
+
+| ponto | 287 × 288 | efeito no instrumento |
+|---|---|---|
+| 1. varredura `cleanupPeriodDays` | igual (diff normalizado de 0 linhas) | nenhum: o instrumento grava fora de `~/.claude/projects/` e usa `--no-session-persistence` |
+| 2. `workflowSizeGuideline` | igual (texto byte-idêntico) | nenhum: o workflow tem 15 despachos (até 26 com repasses de avaliação), no máximo 10 em paralelo; o guideline não é imposto e, acima de 25 agentes, há só um aviso |
+| 3. loader de settings | igual | nenhum: o sujeito roda com `--setting-sources ""` |
+| 4. watchdog do Workflow (600 s, pausado com ferramenta em voo) e concorrência | igual; à parte, o comportamento de quota do workflow mudou atrás de flags de servidor com padrão desligado | nenhum na regra: os comandos dos agentes têm limite de 600 s; uma espera de quota só atrasa o run |
+| 5. strings novas (por exemplo `autoCompactWindow` por modelo, `/restart`, atalhos de esforço) | mudou | nenhum: nenhuma toca `claude -p`, `--effort`, `availableModels`, a retenção ou o updater |
+| 6. `DISABLE_AUTOUPDATER` | igual, MAS só vale em processo que carrega a fonte `userSettings` | **afeta**: o sujeito roda com `--setting-sources ""`, então o congelamento do Owner não chegaria a ele. Cura nesta re-versão: o instrumento põe `DISABLE_AUTOUPDATER=1` no ambiente do próprio processo, que o binário lê direto de `process.env` nas duas versões. Uma troca de versão no meio do run seria pega de qualquer jeito (versão e binário conferidos antes de cada ensaio ⇒ V1), mas desperdiçaria gasto |
+| 7. mudanças adjacentes (`/restart`, quota do workflow) | mudou | nenhum: controladas pelo servidor ou dependentes do symlink, que fica congelado |
+
+**`claude --help` do 2.1.288** (rodado em 2026-10-02, sem chamada à API): lista
+`--tools` («Use "" to disable all tools»), `--permission-mode` com a escolha
+`manual`, `--setting-sources`, `--strict-mcp-config`, `--mcp-config`,
+`--max-budget-usd`, `--no-session-persistence`, `--output-format`, `--model` e
+`--effort` com `xhigh`; `claude --version` = `2.1.288 (Claude Code)`; sha256 do
+binário resolvido = `bbe93063…d750`, igual ao pino.
+
+**Controles da re-versão (sem gasto).** `build-items.py --check` verde. Quatro
+mutantes, cada um vermelho nomeado no `--check`: conferência do binário desligada no
+ensaio (`cc-binary-refused`), conferência do binário desligada no placar
+(`binary-pin-in-score`), `DISABLE_AUTOUPDATER` fora do ambiente do sujeito
+(`child-env-disables-autoupdate`) e o pino de versão de volta ao 2.1.287 (o
+autoteste aborta). A simulação do runtime do Workflow continua verde (17 despachos,
+plano igual ao do Python) e recusa no pré-voo uma versão 2.1.287, um binário com
+outro sha256 e um digest errado.

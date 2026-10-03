@@ -17,6 +17,8 @@ Modos (exatamente um por chamada)
   --print-manifest        imprime os sha256 que a construção produz (é assim que
                           ``EXPECTED`` foi preenchida; não grava nada).
   --plan                  imprime o plano dos 40 ensaios (ABBA, etiquetas t01–t40).
+  --substrate             SEM gasto: versão do Claude Code e sha256 do binário
+                          resolvido, contra os pinos (saída 0 = confere).
   --build OUT             materializa ``items/<ID>/prompt.txt``, ``keys/<ID>.json``
                           e ``controls/<ID>.txt`` em OUT e RECUSA (saída 1) se
                           qualquer sha256 divergir de ``EXPECTED``.
@@ -69,12 +71,16 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 # Constantes pré-registradas (PREREG.md §2–§5). Mudar qualquer uma muda o
 # sha256 deste arquivo, e um sha diferente do SHA256SUMS INVALIDA o run.
 # --------------------------------------------------------------------------
-INSTRUMENT_VERSION = "w5c1-v2"
+# Re-versão 2026-10-02 (PREREG.md §9): só o substrato mudou — CC 2.1.287 -> 2.1.288,
+# sha256 do binário conferido por ensaio, DISABLE_AUTOUPDATER=1 no ambiente do sujeito.
+INSTRUMENT_VERSION = "w5c1-v2.1"
 ORIGIN_JSON_DEFAULT = "~/ceo-owner-tools/s357/results/effort-ab.json"
 ORIGIN_JSON_SHA256 = "b01d4e3982266d09aa17120f87c8001e19e2221521483313777fdb0219a8f101"
 ORIGIN_WF_SHA256 = "c57102c33a7d66210cbf0465d3f999a01b3e39c691febb624237c51ee8449128"
 
-CC_VERSION_REQUIRED = "2.1.287 (Claude Code)"
+CC_VERSION_REQUIRED = "2.1.288 (Claude Code)"
+# sha256 do binário nativo para o qual ``claude`` resolve (realpath do symlink).
+CC_BINARY_SHA256 = "bbe93063f7a0879a1021b2891e5c9354e5b3b98433e32efe6750f7710afed750"
 ARMS = ("claude-sonnet-5", "claude-sonnet-5-5")  # braço de referência, braço sob teste
 EFFORT = "xhigh"
 PER_TRIAL_BUDGET_USD = 2
@@ -517,61 +523,61 @@ EXPECTED: Dict[str, Dict[str, str]] = {
     "D01": {
         "source": "22671e953161a1ccc6a680f9d08bb2d9b00f960a85f2c112e91ae8072ea39494",
         "prompt": "c735c79c1bca8d5bcf3643b293496dbb2b0a0fff088dbafc1629629c394425e3",
-        "key": "a38e06f8db5fcd878b4d9c93f4843f53b0eb422d183e3f37c6030ef33a0060ef",
+        "key": "3fa57134547406fc3063e5215ae13b142d7b158dd84ad11cf45e139900ce2ad3",
         "control": "0b5935f5cf91f05f35a49fd6c068793a1f044f959776830ebe16128e9e5c2a3c",
     },
     "D02": {
         "source": "3715d1540f75906a4b4f49717553367f2001e91b03160c822afbffe883e9421c",
         "prompt": "346f5de0c045e4dd8f43e677eb12c26559cfa264e4733895ba1428e9020c02e6",
-        "key": "45f0f3c9f2125c304cfcc1f0686b7e0108a95ecb02c760ee5afe483ac79a04b5",
+        "key": "dd45b26a03df2f54bbd0ec99327ff4c1185af700f916f32199b94c9b3e2fb280",
         "control": "a0a50d2a05469cd93c77cd9493cfb2eff86490603079a463c18012bbeebe4dcb",
     },
     "D03": {
         "source": "2e405fc29e5dff33fb21e8880c8f25ce9b36e36fec5becdb39cf80e384447651",
         "prompt": "b12f671d85b99dbd9a608d1c8a213dfe6eaa7bfacd95f73d304443f4a68b4601",
-        "key": "6e6c8f0f3c833c871ba9600829ccf28c778bfc6978eae926fbe87d1bda8b59b9",
+        "key": "c03ddaee3c47f55be654b0e830b29ef6619e72e90e253d0638d3e5cc11852aba",
         "control": "9743faabd17d96ac4c8fcc6301d75e37c62891d87784a7db84f6e4658d6b2268",
     },
     "D04": {
         "source": "2731e3a991f4748beeca328b6744827d99c101d9a63cfd189db123f0adb8f8f9",
         "prompt": "622a07ea2548b1bd9ead553e26f45d8a535338d7baadbdadf686c9830d12f714",
-        "key": "70c5702f99cca38959d6d88ed02445cfbfe265b4190fbbb1c70bdeb267cc6b49",
+        "key": "b2b7aed3f899bf7f38eaa1a3f0a09945e8b91676451c6b3dc43cf9b271989351",
         "control": "18a6a8057fb1eabcb145bedb2b89c053c396259a19326423cab546a397a03f11",
     },
     "D05": {
         "source": "8ef72ab914ba84198b942b2c6759df3b2d4e86b85b3bdcbbbe30e3f9774bc2e3",
         "prompt": "c352733b133c7ebea52b8d28c5bad6bc228689561de3f4491cdb7710bb168178",
-        "key": "664e9d34a00d79b67abc6dc5ff5ea4d06aa6de1ec0fd6b088a6ad1c02544d888",
+        "key": "3c4c387e46ffbf3a572b7a48a8bcb103e8073e4ddcc3ea39252a2dd8d37eebce",
         "control": "618a34d379ea4aaa9247f0e50c8aa6f4d7fef962e680907bcd384e9ec986bac0",
     },
     "D06": {
         "source": "1a9c99943e90ca89093b7b5f379ab2a07b903b5d2373978b8de872a7568d8e0a",
         "prompt": "179e9041d52f0129f6e96e80071c0f70d556ea4126fb84bb20678a53bb2c8d7e",
-        "key": "36ba504d407b5b4c2e53067240f1035b3367a8f70d6fda71856a8fd4f0f7616e",
+        "key": "a31d72988af1d1554652d573ced01a1e4626dec2e93914f935f168a3302464b0",
         "control": "00dbc2f0153d489be74494508b24bdcbec0cacb2ad62ecd6c0bb691607320b85",
     },
     "D07": {
         "source": "b64812281fe6fd053bf719b63ec56d1695fe34700f71226f39425b8648ed72c0",
         "prompt": "0908bb5f78a21d9e71208655edb3e1c2411f9067bd728947a2d7d83a75b74b3a",
-        "key": "031b9b58afce58b030a953b98d5e588b940ad13c15f1b3b946d662db3539518c",
+        "key": "fe72f8fe9884eaedac4980c746d9c492ff414f9ddf0d2b0bdaa8ffccb5bfcdbf",
         "control": "149c8c559712cabf613292792a1ca9898d1ebd65af78c0a6754f9a571480467d",
     },
     "D08": {
         "source": "16b86af5d5061afbf972e23891ab400177806c7831a91ec731254cf318bbd7e9",
         "prompt": "89ef9b989abc8f9f1415e5c45fb3f7d2f7d5fb87cf7bd78a9fca58b6655c7536",
-        "key": "f64aa3372a98ec3ae596940d2fd469a30ce5dcdf20afdc3e8a5c8c35863cd685",
+        "key": "47bf2f648d99423d9bef836e2a18e34ef0886199fa049c23045dd6545870b945",
         "control": "dbc86d4f00bbe5fc0b6388ebf88b701548f19876def0c6549722528847439805",
     },
     "D09": {
         "source": "c382461d8ef845e4ba0efac9695b51f56121a4588037be08cee073682cc98474",
         "prompt": "a60320904cec9f2b5cf5531d44a91727aec06166b10384009030f320ac09e086",
-        "key": "5361d97627992985b1c69c47b8263e27c313084472b6639f121816a610b62157",
+        "key": "5ea38879b44ba235e47a58308670d3d38a1d394724d111ca0e7d8a0ba3266689",
         "control": "1ec96879bcdce7a1dfc2a3d7b67afc0e559f2b3ed73a6bdf8f4931087e2699a1",
     },
     "D10": {
         "source": "5b677ff583371200d81223e90ae0ad4dad1fdfd423bbe9995c3d0517e42896c1",
         "prompt": "e1ab810b3203980cd3f93db1957e733971b767b940ab73cb7695e5cf461ba2f4",
-        "key": "be43dbbad4462fcdf4c5020407135bf63b880e08849193e72347e0ebf8af3bd4",
+        "key": "bebc96d6eac74cdd16dd991b8eb0dbd07a8af50d94a4735e22999e42d0391082",
         "control": "f6c51e5ea04d949581cbda439f2aac17ea9696d9bdcbb307ac7c7c4424cc7bc1",
     },
 }
@@ -949,6 +955,10 @@ def _child_env() -> Dict[str, str]:
             continue
         env[k] = v
     env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    # Com --setting-sources "" o env do settings do USUÁRIO não é carregado no
+    # sujeito, então o congelamento do Owner não vale lá: desliga o updater pelo
+    # ambiente do processo (lido direto de process.env no 2.1.287 e no 2.1.288).
+    env["DISABLE_AUTOUPDATER"] = "1"
     return env
 
 
@@ -1005,7 +1015,8 @@ def classify_result(data: Any, model: str) -> Dict[str, Any]:
 
 
 def run_trial(out: str, item_id: str, model: str, rep: int, tag: str,
-              claude_bin: Optional[str], selftest: bool = False) -> Tuple[int, Dict[str, Any]]:
+              claude_bin: Optional[str], selftest: bool = False,
+              binary_sha256: str = CC_BINARY_SHA256) -> Tuple[int, Dict[str, Any]]:
     """UM ensaio. Saídas: 0 gravado (válido ou não), 3 tentativas esgotadas,
     4 teto de gasto do run, 5 erro do instrumento (nada foi chamado)."""
     plan = PLAN_BY_TAG.get(tag)
@@ -1048,16 +1059,20 @@ def run_trial(out: str, item_id: str, model: str, rep: int, tag: str,
     ver = subprocess.run([claude_bin, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          env=env, timeout=60)
     cc_version = ver.stdout.decode("utf-8", "replace").strip()
+    cc_binary_sha256 = sha256_file(os.path.realpath(claude_bin))
     record: Dict[str, Any] = {
         "schema": "w5c1.trial/v1", "instrument": INSTRUMENT_VERSION,
         "instrument_sha256": instrument_sha256(), "selftest": bool(selftest),
         "tag": tag, "item": item_id, "model": model, "rep": rep, "attempt": done + 1,
-        "cc_version": cc_version, "effort": EFFORT, "prompt_sha256": sha256_bytes(prompt),
+        "cc_version": cc_version, "cc_binary_sha256": cc_binary_sha256,
+        "effort": EFFORT, "prompt_sha256": sha256_bytes(prompt),
         "api_key_env_present": "ANTHROPIC_API_KEY" in env,
+        "child_disable_autoupdater": env.get("DISABLE_AUTOUPDATER"),
     }
-    if cc_version != CC_VERSION_REQUIRED:
-        record.update({"status": "instrument_error", "valid": False,
-                       "invalid_reason": "cc_version:" + cc_version})
+    if cc_version != CC_VERSION_REQUIRED or cc_binary_sha256 != binary_sha256:
+        why = ("cc_version:" + cc_version) if cc_version != CC_VERSION_REQUIRED \
+            else ("cc_binary:" + cc_binary_sha256)
+        record.update({"status": "instrument_error", "valid": False, "invalid_reason": why})
         _atomic_write(rec_path, _json_bytes(record))
         return 5, record
     argv = [claude_bin, "-p", prompt.decode("utf-8"), "--model", model, "--effort", EFFORT,
@@ -1199,7 +1214,8 @@ ACTIONS = {
 }
 
 
-def score(out: str, salt: str, allow_selftest: bool = False) -> Tuple[int, Dict[str, Any]]:
+def score(out: str, salt: str, allow_selftest: bool = False,
+          binary_sha256: str = CC_BINARY_SHA256) -> Tuple[int, Dict[str, Any]]:
     result: Dict[str, Any] = {"instrument": INSTRUMENT_VERSION, "instrument_sha256": instrument_sha256(),
                               "ant02": "não medida", "verdict": None, "cell": None}
     recs = _final_records(out)
@@ -1216,6 +1232,8 @@ def score(out: str, salt: str, allow_selftest: bool = False) -> Tuple[int, Dict[
             problems.append("%s: instrument sha256 changed during the run" % p["tag"])
         if rec.get("cc_version") != CC_VERSION_REQUIRED:
             problems.append("%s: Claude Code version %r" % (p["tag"], rec.get("cc_version")))
+        if rec.get("cc_binary_sha256") != binary_sha256:
+            problems.append("%s: Claude Code binary sha256 differs from the pin" % p["tag"])
         if rec.get("effort") != EFFORT:
             problems.append("%s: effort %r" % (p["tag"], rec.get("effort")))
     if problems:
@@ -1325,7 +1343,7 @@ def score(out: str, salt: str, allow_selftest: bool = False) -> Tuple[int, Dict[
 _STUB = r'''#!/usr/bin/env python3
 import json, os, sys
 if "--version" in sys.argv:
-    print(os.environ.get("W5C1_STUB_VERSION", "2.1.287 (Claude Code)"))
+    print(os.environ.get("W5C1_STUB_VERSION", "2.1.288 (Claude Code)"))
     sys.exit(0)
 counter = os.environ["W5C1_STUB_COUNTER"]
 try:
@@ -1373,6 +1391,16 @@ def _selftest(repo: str) -> List[str]:
         with open(stub, "w", encoding="utf-8") as fh:
             fh.write(_STUB)
         os.chmod(stub, 0o755)
+        stub_sha = sha256_file(stub)
+
+        def trial(*a: Any, **k: Any) -> Tuple[int, Dict[str, Any]]:
+            k.setdefault("binary_sha256", stub_sha)
+            return run_trial(*a, **k)
+
+        def scr(*a: Any, **k: Any) -> Tuple[int, Dict[str, Any]]:
+            k.setdefault("binary_sha256", stub_sha)
+            return score(*a, **k)
+
         os.environ["W5C1_STUB_COUNTER"] = os.path.join(root, "calls")
         salt = "SelfTestSalt0123456789"
 
@@ -1394,7 +1422,7 @@ def _selftest(repo: str) -> List[str]:
 
         def run_all(out: str) -> None:
             for p in PLAN:
-                run_trial(out, p["item"], p["model"], p["rep"], p["tag"], stub, selftest=True)
+                trial(out, p["item"], p["model"], p["rep"], p["tag"], stub, selftest=True)
 
         def grade_all(out: str, yes_ref: int, yes_sub: int, break_control: bool = False) -> None:
             mapping = blind_map(out, salt)
@@ -1417,27 +1445,28 @@ def _selftest(repo: str) -> List[str]:
         out = fresh("pass")
         run_all(out)
         n = calls()
-        rc, rec = run_trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
+        rc, rec = trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
         expect("reuse-does-not-call", calls() == n and rec.get("reused") is True)
         expect("valid-record", rec.get("valid") is True and rec.get("cost_tok_usd") == 0.202)
+        expect("child-env-disables-autoupdate", rec.get("child_disable_autoupdater") == "1")
         listing = blind(out, salt)
         expect("blind-count", len(listing) == 50)
         expect("blind-redacts", all("Sonnet" not in open(e["path"], encoding="utf-8").read() for e in listing))
         try:
-            run_trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
+            trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
             expect("trials-frozen-after-blind", False)
         except InstrumentError:
             pass
         grade_all(out, 18, 16)                                  # 80 % >= 90 % - 10 pp
-        rc, res = score(out, salt, allow_selftest=True)
+        rc, res = scr(out, salt, allow_selftest=True)
         expect("C1-pass-at-delta-boundary", rc == 0 and res.get("cell") == "C1")
-        rc, res = score(out, salt, allow_selftest=False)
+        rc, res = scr(out, salt, allow_selftest=False)
         expect("selftest-records-invalid-in-real-run", rc == 2 and res.get("verdict") == "INVÁLIDO")
         grade_all(out, 18, 15)                                  # 75 % < 80 % -> inferior
-        rc, res = score(out, salt, allow_selftest=True)
+        rc, res = scr(out, salt, allow_selftest=True)
         expect("C3-fail-beyond-delta", rc == 1 and res.get("cell") == "C3")
         grade_all(out, 18, 18, break_control=True)
-        rc, res = score(out, salt, allow_selftest=True)
+        rc, res = scr(out, salt, allow_selftest=True)
         expect("control-failure-inconclusive", rc == 2 and res.get("controls_failed") == ["D01"])
 
         # (b) custo > 1,2x -> C2.
@@ -1446,24 +1475,24 @@ def _selftest(repo: str) -> List[str]:
         run_all(out)
         blind(out, salt)
         grade_all(out, 18, 18)
-        rc, res = score(out, salt, allow_selftest=True)
+        rc, res = scr(out, salt, allow_selftest=True)
         expect("C2-cost-declared", rc == 0 and res.get("cell") == "C2")
         os.environ["W5C1_STUB_OUT55"] = "22000"
 
         # (c) id servido != pedido -> inválido; 3 tentativas e esgota; braço vazio -> INCONCLUSIVO.
         os.environ["W5C1_STUB_MODE"] = "swap"
         out = fresh("swap")
-        rc, rec = run_trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
+        rc, rec = trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
         expect("served-mismatch-invalid", rec.get("valid") is False
                and str(rec.get("invalid_reason")).startswith("served_mismatch:"))
-        run_trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
-        run_trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
-        rc, rec = run_trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
+        trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
+        trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
+        rc, rec = trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
         expect("attempts-exhausted", rc == 3)
         run_all(out)
         blind(out, salt)
         grade_all(out, 20, 20)
-        rc, res = score(out, salt, allow_selftest=True)
+        rc, res = scr(out, salt, allow_selftest=True)
         expect("void-arm-inconclusive", rc == 2 and res.get("verdict") == "INCONCLUSIVO")
 
         # (b2) sem tokens no CLI: cai para total_cost_usd em TODOS; custo zero -> INCONCLUSIVO.
@@ -1472,14 +1501,14 @@ def _selftest(repo: str) -> List[str]:
         run_all(out)
         blind(out, salt)
         grade_all(out, 18, 18)
-        rc, res = score(out, salt, allow_selftest=True)
+        rc, res = scr(out, salt, allow_selftest=True)
         expect("cost-fallback-total", rc == 0 and res.get("cost_source") == "total_cost_usd")
         os.environ["W5C1_STUB_COST"] = "0"
         out = fresh("zerocost")
         run_all(out)
         blind(out, salt)
         grade_all(out, 18, 18)
-        rc, res = score(out, salt, allow_selftest=True)
+        rc, res = scr(out, salt, allow_selftest=True)
         expect("zero-cost-inconclusive", rc == 2 and res.get("verdict") == "INCONCLUSIVO")
         os.environ["W5C1_STUB_COST"] = "0.3"
 
@@ -1492,7 +1521,7 @@ def _selftest(repo: str) -> List[str]:
             run_all(out)
             blind(out, salt)
             grade_all(out, 20, 20)
-            rc, res = score(out, salt, allow_selftest=True)
+            rc, res = scr(out, salt, allow_selftest=True)
             expect(name, rc == want_rc and res["arms"][ARMS[0]]["void"] == (5 if swap_first == 9 else 4))
         os.environ["W5C1_STUB_COUNTER"] = os.path.join(root, "calls")
 
@@ -1502,7 +1531,7 @@ def _selftest(repo: str) -> List[str]:
         with open(os.path.join(out, "items", "D01", "prompt.txt"), "ab") as fh:
             fh.write(b" ")
         try:
-            run_trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
+            trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
             expect("tampered-prompt-refused", False)
         except InstrumentError:
             pass
@@ -1519,37 +1548,53 @@ def _selftest(repo: str) -> List[str]:
         # (d) chave extra (modelo auxiliar) -> inválido; variante [1m] -> válido.
         os.environ["W5C1_STUB_MODE"] = "extra"
         out = fresh("extra")
-        rc, rec = run_trial(out, "D02", ARMS[1], 1, "t05", stub, selftest=True)
+        rc, rec = trial(out, "D02", ARMS[1], 1, "t05", stub, selftest=True)
         expect("extra-model-key-invalid", rec.get("valid") is False)
         os.environ["W5C1_STUB_MODE"] = "1m"
         out = fresh("onem")
-        rc, rec = run_trial(out, "D02", ARMS[1], 1, "t05", stub, selftest=True)
+        rc, rec = trial(out, "D02", ARMS[1], 1, "t05", stub, selftest=True)
         expect("1m-variant-valid", rec.get("valid") is True)
 
         # (e) estouro de orçamento por ensaio -> vazio; teto do run -> recusa.
         os.environ["W5C1_STUB_MODE"] = "budget"
         out = fresh("budget")
-        rc, rec = run_trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
+        rc, rec = trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
         expect("budget-kill-void", rec.get("status") == "error_max_budget" and rec.get("valid") is False)
         os.environ["W5C1_STUB_MODE"] = "ok"
         os.environ["W5C1_STUB_COST"] = "41"
-        run_trial(out, "D01", ARMS[1], 1, "t02", stub, selftest=True)
+        trial(out, "D01", ARMS[1], 1, "t02", stub, selftest=True)
         n = calls()
-        rc, rec = run_trial(out, "D01", ARMS[1], 2, "t03", stub, selftest=True)
+        rc, rec = trial(out, "D01", ARMS[1], 2, "t03", stub, selftest=True)
         expect("run-budget-cap", rc == 4 and calls() == n)
         os.environ["W5C1_STUB_COST"] = "0.3"
 
         # (f) versão do Claude Code diferente -> erro do instrumento, nada pago.
-        os.environ["W5C1_STUB_VERSION"] = "2.1.288 (Claude Code)"
+        os.environ["W5C1_STUB_VERSION"] = "2.1.289 (Claude Code)"
         out = fresh("ccver")
         n = calls()
-        rc, rec = run_trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
+        rc, rec = trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True)
         expect("cc-version-refused", rc == 5 and calls() == n)
         os.environ["W5C1_STUB_VERSION"] = CC_VERSION_REQUIRED
 
+        # (f2) binário com sha256 diferente do pinado -> erro do instrumento, nada pago;
+        #      registro com sha do binário divergente -> o placar declara INVÁLIDO.
+        out = fresh("ccbin")
+        n = calls()
+        rc, rec = trial(out, "D01", ARMS[0], 1, "t01", stub, selftest=True, binary_sha256="0" * 64)
+        expect("cc-binary-refused", rc == 5 and calls() == n
+               and str(rec.get("invalid_reason")).startswith("cc_binary:"))
+        out = fresh("ccbin2")
+        run_all(out)
+        blind(out, salt)
+        grade_all(out, 18, 18)
+        rc, res = scr(out, salt, allow_selftest=True)
+        expect("binary-pin-baseline-decides", rc == 0)
+        rc, res = scr(out, salt, allow_selftest=True, binary_sha256="0" * 64)
+        expect("binary-pin-in-score", rc == 2 and res.get("verdict") == "INVÁLIDO")
+
         # (g) fora do plano -> recusa.
         try:
-            run_trial(out, "D01", ARMS[1], 1, "t01", stub, selftest=True)
+            trial(out, "D01", ARMS[1], 1, "t01", stub, selftest=True)
             expect("off-plan-refused", False)
         except InstrumentError:
             pass
@@ -1629,6 +1674,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     mode.add_argument("--check", action="store_true")
     mode.add_argument("--print-manifest", action="store_true")
     mode.add_argument("--plan", action="store_true")
+    mode.add_argument("--substrate", action="store_true")
     mode.add_argument("--build", metavar="OUT")
     mode.add_argument("--trial", metavar="OUT")
     mode.add_argument("--blind", metavar="OUT")
@@ -1648,6 +1694,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if ns.plan:
             print(json.dumps(PLAN, indent=1))
             return 0
+        if ns.substrate:
+            cb = shutil.which("claude")
+            if not cb:
+                raise InstrumentError("claude binary not found on PATH")
+            ver = subprocess.run([cb, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 env=_child_env(), timeout=60)
+            got = {"cc_version": ver.stdout.decode("utf-8", "replace").strip(),
+                   "binary_sha256": sha256_file(os.path.realpath(cb))}
+            got["version_ok"] = got["cc_version"] == CC_VERSION_REQUIRED
+            got["binary_ok"] = got["binary_sha256"] == CC_BINARY_SHA256
+            print(json.dumps(got, sort_keys=True))
+            return 0 if got["version_ok"] and got["binary_ok"] else 1
         repo = _repo_root()
         if ns.check:
             return check(repo)
