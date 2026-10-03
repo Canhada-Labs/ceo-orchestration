@@ -385,30 +385,34 @@ sujeito recebe são byte a byte os mesmos. Mudaram:
 | sha256 dos arquivos | `PREREG.md` `b54857fb…9703`, `build-items.py` `edd38a45…d63d`, `wf-model-ab.js` `a67e84be…bde7d1` (`SHA256SUMS` `d9f9dfc1…2579`) | os de `SHA256SUMS` |
 
 **Por quê.** O Claude Code 2.1.287 se atualizou sozinho para o 2.1.288 em 2026-10-02
-(binário de 17:31:44 -0300, symlink de 17:32:06 -0300) e o Owner decidiu ADOTAR o
-2.1.288 e congelá-lo com `DISABLE_AUTOUPDATER=1`. A versão anterior exigia
-exatamente o 2.1.287 e recusava antes do gasto (fail-closed, como desenhado); o
-refutador do rail R-1 apontou isso. Esta re-versão é o caminho que o próprio
-pré-registro prevê («ajuste antes do gasto entra como nova versão»), não uma edição
-por cima: os valores antigos ficam registrados na tabela acima e no histórico git.
+(binário novo gravado às 20:31:44Z) e o Owner decidiu ADOTAR o 2.1.288 e congelá-lo com
+`DISABLE_AUTOUPDATER=1`. A versão anterior exigia exatamente o 2.1.287 e recusava
+antes do gasto (fail-closed, como desenhado); o refutador do rail R-1 apontou isso.
+Esta re-versão é o caminho que o próprio pré-registro prevê («ajuste antes do gasto
+entra como nova versão»), não uma edição por cima: os valores antigos ficam
+registrados na tabela acima e no histórico git.
 
 **NENHUM ensaio pago foi rodado antes desta re-versão.** O S2 não começou; nenhum
 `claude -p` foi chamado por este instrumento em nenhuma versão.
 
-**Re-medição 2.1.287 × 2.1.288** (fonte: o relatório da re-medição do binário,
-`cc288.json`, sha256 `79228c6011de7da84099fe26a191d3569f0dc00866ac7ed7331c4c82cb2e235b`,
-leitura de código minificado dos dois binários; o único comando executado lá foi
-`--version`). Os pontos que o instrumento usa:
+**Re-medição 2.1.287 × 2.1.288.** Fonte NORMATIVA (durável, versionada): a seção
+«CC 2.1.288 — adoção e re-medição 287 × 288 (2026-10-02, S362)» do
+`.claude/plans/PLAN-194/LEDGER.md`, landada no commit
+`8e9f1115ae76e5ff74e868c5a7f156d47587c3de` (leitura do código minificado dos dois
+binários; o único comando executado foi `--version`; itens (1) a (6)). Medição bruta da
+sessão S362, NÃO versionada e só como rastro: `cc288.json`, sha256
+`79228c6011de7da84099fe26a191d3569f0dc00866ac7ed7331c4c82cb2e235b` (não é copiado para o
+repositório: carrega caminhos absolutos da máquina). Os itens do LEDGER, lidos contra o
+que o instrumento usa:
 
-| ponto | 287 × 288 | efeito no instrumento |
+| item do LEDGER | 287 × 288 | efeito no instrumento |
 |---|---|---|
-| 1. varredura `cleanupPeriodDays` | igual (diff normalizado de 0 linhas) | nenhum: o instrumento grava fora de `~/.claude/projects/` e usa `--no-session-persistence` |
-| 2. `workflowSizeGuideline` | igual (texto byte-idêntico) | nenhum: o workflow tem 15 despachos (até 26 com repasses de avaliação), no máximo 10 em paralelo; o guideline não é imposto e, acima de 25 agentes, há só um aviso |
-| 3. loader de settings | igual | nenhum: o sujeito roda com `--setting-sources ""` |
-| 4. watchdog do Workflow (600 s, pausado com ferramenta em voo) e concorrência | igual; à parte, o comportamento de quota do workflow mudou atrás de flags de servidor com padrão desligado | nenhum na regra: os comandos dos agentes têm limite de 600 s; uma espera de quota só atrasa o run |
-| 5. strings novas (por exemplo `autoCompactWindow` por modelo, `/restart`, atalhos de esforço) | mudou | nenhum: nenhuma toca `claude -p`, `--effort`, `availableModels`, a retenção ou o updater |
-| 6. `DISABLE_AUTOUPDATER` | igual, MAS só vale em processo que carrega a fonte `userSettings` | **afeta**: o sujeito roda com `--setting-sources ""`, então o congelamento do Owner não chegaria a ele. Cura nesta re-versão: o instrumento põe `DISABLE_AUTOUPDATER=1` no ambiente do próprio processo, que o binário lê direto de `process.env` nas duas versões. Uma troca de versão no meio do run seria pega de qualquer jeito (versão e binário conferidos antes de cada ensaio ⇒ V1), mas desperdiçaria gasto |
-| 7. mudanças adjacentes (`/restart`, quota do workflow) | mudou | nenhum: controladas pelo servidor ou dependentes do symlink, que fica congelado |
+| (1) varredura `cleanupPeriodDays` | igual | nenhum: o instrumento grava fora de `~/.claude/projects/` e usa `--no-session-persistence` |
+| (2) `workflowSizeGuideline` | igual (texto byte-idêntico) | nenhum: o workflow tem 15 despachos (até 26 com repasses de avaliação), no máximo 10 em paralelo; o guideline não é imposto |
+| (3) loader de settings | igual | nenhum: o sujeito roda com `--setting-sources ""` |
+| (4) watchdog do Workflow (600 s, pausado com ferramenta em voo) e concorrência | igual | nenhum: os comandos dos agentes têm limite de 600 s |
+| (5) mudanças periféricas (`autoCompactWindow` por modelo, `/restart`, espera de quota do subagente de Workflow atrás de flag de servidor com padrão desligado) | só adições | nenhum na regra: nada toca `claude -p`, `--effort`, `availableModels`, a varredura ou o atualizador; uma espera de quota só atrasaria o run |
+| (6) `DISABLE_AUTOUPDATER` | ainda desliga o atualizador, MAS não vale sob `--setting-sources` sem `user` | **afeta**: o sujeito roda com `--setting-sources ""`, então o congelamento do Owner não chegaria a ele. Cura nesta re-versão: o instrumento põe `DISABLE_AUTOUPDATER=1` no ambiente do próprio processo (a medição bruta lê o predicado em `process.env.DISABLE_AUTOUPDATER` nas duas versões). Uma troca de versão no meio do run seria pega de qualquer jeito (versão e binário conferidos antes de cada ensaio ⇒ V1), mas desperdiçaria gasto |
 
 **`claude --help` do 2.1.288** (rodado em 2026-10-02, sem chamada à API): lista
 `--tools` («Use "" to disable all tools»), `--permission-mode` com a escolha
@@ -425,3 +429,16 @@ ensaio (`cc-binary-refused`), conferência do binário desligada no placar
 autoteste aborta). A simulação do runtime do Workflow continua verde (17 despachos,
 plano igual ao do Python) e recusa no pré-voo uma versão 2.1.287, um binário com
 outro sha256 e um digest errado.
+
+**Resíduo P3 declarado (refutador do rail R-1, re-versão `f8bf170c`): janela entre o
+sha256 e a execução do binário.** O executor calcula o sha256 do `realpath` de `claude`
+e, em seguida, executa `claude`; a conferência e a execução NÃO são uma syscall só. Uma
+troca do symlink (ou do binário) nessa janela faria um ensaio rodar noutro binário com o
+registro dizendo o pino. Uma troca que PERSISTE custa só gasto, nunca um PASS: a versão e
+o binário são relidos antes de cada ensaio, o ensaio seguinte vira `instrument_error`, e o
+placar exige TODOS os registros no pino de versão e de binário (V1 ⇒ run INVÁLIDO).
+Precisão: só uma troca de ida e volta dentro da janela de um ÚNICO ensaio (milissegundos
+entre o sha256 e a execução, desfeita antes da conferência seguinte) passaria sem
+registro — isso exige ação deliberada sobre o symlink, não acontece por atualização com
+o Claude Code congelado (Lote 0), e afetaria no máximo um dos 40 ensaios. Fechar a janela
+pediria executar pelo descritor do arquivo conferido, o que o `claude` nativo não oferece.
