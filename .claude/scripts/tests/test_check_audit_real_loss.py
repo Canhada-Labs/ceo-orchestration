@@ -199,11 +199,24 @@ class TestLossVerifierG6(_Tree):
 
 class TestLossVerifierRealRenames(TestEnvContext):
     """P1 (rail r1): the REAL drain rename (active -> .draining) and the REAL
-    quarantine (.draining -> .malformed) land between G6's listing and its read."""
+    quarantine (.draining -> .malformed) land between G6's listing and its read.
 
-    def test_loss_verifier_real_drain_and_quarantine_renames_mid_scan(self) -> None:
+    The producers keep per-PROCESS state (journal buffer, header cache, ordinal)
+    that an earlier test of the same process can leave behind: ``_reset_caches_for_test``
+    drops the state-dir cache, so the project-switch flush never runs, and a
+    leftover ``commit`` of that test is flushed into THIS tree (CI run 37079951247:
+    4 commits, 3 "lost"). Each case runs with that state emptied and restores it."""
+
+    def _producer_state(self, sw):
+        stack = contextlib.ExitStack()
+        for cache in (sw._JOURNAL_BUFFER, sw._SPOOL_HEADER_CACHE, sw._ORDINAL_COUNTER):
+            stack.enter_context(mock.patch.dict(cache, clear=True))
+        stack.enter_context(mock.patch.object(sw, "_FORENSIC_EMIT", None))
+        return stack
+
+    def _race(self):
         from _lib import spool_writer as sw
-        with mock.patch.object(sw, "_FORENSIC_EMIT", None):
+        with self._producer_state(sw):
             sw.spool_append({"action": "g6_race", "session_id": "g6-race"})
             sw._flush_journal_buffer(os.getpid())
             state = sw._state_dir()
@@ -230,6 +243,24 @@ class TestLossVerifierRealRenames(TestEnvContext):
         self.assertEqual((rep["commits"], rep["lost"], rep["quarantined"], rep["inconclusive"]),
                          (1, 0, 1, False))
         self.assertEqual(rep["passes"], 3)
+
+    def test_loss_verifier_real_drain_and_quarantine_renames_mid_scan(self) -> None:
+        self._race()
+
+    def test_loss_verifier_real_renames_after_a_test_that_left_producer_state(self) -> None:
+        from _lib import spool_writer as sw
+        other = self._tmp_root / "earlier-test-project"
+        other.mkdir()
+        with mock.patch.dict(sw._JOURNAL_BUFFER), mock.patch.dict(sw._SPOOL_HEADER_CACHE), \
+                mock.patch.dict(sw._ORDINAL_COUNTER):  # restored: no leftover of OURS leaks on
+            with mock.patch.dict(os.environ, {"CEO_AUDIT_LOG_DIR": str(other)}), \
+                    mock.patch.object(sw, "_FORENSIC_EMIT", None):
+                sw._reset_caches_for_test()
+                sw.spool_append({"action": "leftover", "session_id": "earlier-test"})  # never flushed
+            sw._reset_caches_for_test()  # what TestEnvContext.setUp does between two tests
+            leftover = [json.loads(b)["op"] for b in sw._JOURNAL_BUFFER.get(os.getpid(), [])]
+            self.assertIn("commit", leftover, msg="the dirty state this control needs")
+            self._race()
 
 
 class TestWouldLogCountG7(TestEnvContext):
