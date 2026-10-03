@@ -58,8 +58,10 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   da sessão, para o ensaio do pacote do RP.
 - 2026-10-02 (S362): o rail do RP (rodada 1, lente de afirmações) deu P1 — o sentinel do pacote 0160 dizia «reportado para cura no gerador» sem registro rastreável; registro em `.claude/plans/PLAN-194-FOLLOWUP-repin-generator-hardening.md` (`draft`). Medido no mesmo dia: o endpoint de atestados do npm para `@openai/codex@0.160.0-darwin-arm64` responde HTTP 200 com o atestado de publicação e o SLSA `provenance/v1`; o gerador não o confere.
 
-## Unidade atual — S362 (2026-10-02; `main` = `97a78fce`)
+## Unidade atual — S362 (2026-10-03; `main` = `c4670649`)
 
+- 2026-10-03: `main` = `origin/main` = `c4670649` (F1 hotfix-2).
+  verifier: `git merge-base --is-ancestor c4670649 HEAD` exit=0
 - Landados com a assinatura do Owner desde a abertura da S361: W2.0, a cura da condição 67
   (`65cd50d7`); W3b.1 (`a0a6df06`); W1 (`c54934d8`).
   verifier: `git merge-base --is-ancestor 65cd50d7 HEAD && git merge-base --is-ancestor a0a6df06 HEAD && git merge-base --is-ancestor c54934d8 HEAD` exit=0
@@ -67,6 +69,24 @@ substrato. Este arquivo é LIVRE (oráculo de canonicidade = 0).
   decisões 2, 4, 5 e 6 aceitas; decisão 1 superada; decisão 3 NÃO tomada ⇒ W3 ADIADA para a 1.4.4.
   verifier: `git merge-base --is-ancestor 5c52998b HEAD && test -f .claude/plans/PLAN-194/debate/round-3/approved.md` exit=0
 - Em curso: o RP (seção acima). Decisões da abertura do trem: seção «Decisões do Owner — S362» do plano.
+
+## Saídas para a 1.4.4 e hotfix do teste do F1 (2026-10-03, S362)
+
+- FD-03 (cura do teste instável `TestParallelWritersChain`) SAI da 1.4.3 → 1.4.4: o anexo mecânico que o
+  Owner decidiu deu NO-GO no Codex por afirmação falsa («todo caminho»: o `start()` ~`:615` e o assert
+  ~`:474` ficam antes do `try`). Patches guardados fora do repositório. Até lá, o CI pede re-run quando o
+  teste instável falhar — resíduo declarado da rc; a dependência FX da rc vira resíduo.
+- F1e (rail r2 do F1; sombra do FD-07, commit `26ac3461`, fora do `main`) SAI da 1.4.3 → 1.4.4: na rodada
+  3, FINAL, o Codex deu NO-GO com afirmação falsa reproduzida — «G7 never a silent 0» falha quando o
+  `audit-log.errors` some e outro arquivo vazio ocupa o mesmo nome antes da 2.ª tentativa (G7 = 0,
+  exit 0); o censo AST aceita `_spool_path(f.pid + 1)` no destino. O F1 landado (`9d47790f`..`eceb07af`)
+  fica como está.
+- Hotfix do teste do F1 landado em DUAS partes: `2b96bfd7` (o teste do race do G6 isolado do estado de
+  PROCESSO do `spool_writer`) e `c4670649` (o controle parte de um buffer VAZIO: com ≥ 8 envelopes
+  sobrando de testes anteriores, o begin/commit passava do `_JOURNAL_FLUSH_EVERY` = 10 e descarregava
+  antes da checagem). Verificação (CEO, python 3.9.6): pareado 27 passed; ordem do CI em processo único
+  (`.claude/hooks/tests` + o arquivo, `-m 'not serial'`) 7.137 passed, 34 skipped, 4 xfailed, rc 0.
+  verifier: `git merge-base --is-ancestor 2b96bfd7 HEAD && git merge-base --is-ancestor c4670649 HEAD` exit=0
 
 ## Bloqueios em aberto
 
