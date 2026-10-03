@@ -171,7 +171,7 @@ def _health_verdict() -> str:
         return "UNKNOWN"
     try:
         result = subprocess.run(
-            [sys.executable, str(aq), "health", "--as-json"],
+            [sys.executable, str(aq), "health", "--json"],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode != 0:
