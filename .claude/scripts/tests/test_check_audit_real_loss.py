@@ -251,8 +251,12 @@ class TestLossVerifierRealRenames(TestEnvContext):
         from _lib import spool_writer as sw
         other = self._tmp_root / "earlier-test-project"
         other.mkdir()
-        with mock.patch.dict(sw._JOURNAL_BUFFER), mock.patch.dict(sw._SPOOL_HEADER_CACHE), \
-                mock.patch.dict(sw._ORDINAL_COUNTER):  # restored: no leftover of OURS leaks on
+        # Cleared, so the dirt below is EXACTLY one begin/commit pair: 8+ envelopes left
+        # by earlier tests would cross _JOURNAL_FLUSH_EVERY and flush it away. Restored
+        # on exit: no leftover of OURS leaks on.
+        with mock.patch.dict(sw._JOURNAL_BUFFER, clear=True), \
+                mock.patch.dict(sw._SPOOL_HEADER_CACHE, clear=True), \
+                mock.patch.dict(sw._ORDINAL_COUNTER, clear=True):
             with mock.patch.dict(os.environ, {"CEO_AUDIT_LOG_DIR": str(other)}), \
                     mock.patch.object(sw, "_FORENSIC_EMIT", None):
                 sw._reset_caches_for_test()
