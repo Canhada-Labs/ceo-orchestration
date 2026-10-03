@@ -215,6 +215,39 @@ ainda; os resultados entram em entradas datadas abaixo dela.
   `audit-verify-chain.py --log-file <state dir>/audit-log.jsonl --key-file <state dir>/audit-key --json`
   ⇒ `intact`, 10.887 elos.
 
+## CC 2.1.288 — adoção e re-medição 287 × 288 (2026-10-02, S362)
+
+- Decisão do Owner (2026-10-02, por múltipla escolha): «Adotar o 2.1.288». O 2.1.287 se atualizou
+  sozinho às ~20:31Z (binário novo gravado às 20:31:44Z): o `DISABLE_AUTOUPDATER` não estava gravado, e o
+  `autoUpdates=false` do `~/.claude.json` não protege instalação nativa com
+  `autoUpdatesProtectedForNative=true`.
+- Binários (só leitura; o único comando executado foi `--version`): 2.1.288 sha256
+  `bbe93063f7a0879a1021b2891e5c9354e5b3b98433e32efe6750f7710afed750` (229.255.312 bytes; build
+  2026-10-02T16:42:03Z, git `17fe1eb7`); 2.1.287 sha256
+  `6eab8333fe2121553100d8f40bfada384a3e989b94f947e18ba6677a6fcb41ea` (build 2026-10-01T16:02:06Z, git
+  `3c446a1b`). Método: busca de bytes e comparação de funções com os identificadores minificados
+  normalizados. Reconferido às 2026-10-03T00:17Z: os dois sha e `claude --version` = 2.1.288.
+- (1) `cleanupPeriodDays`: IGUAL (chunk da varredura com 36.757 bytes nas duas, diff normalizado vazio;
+  padrão 30; mesma precedência; mesmo pulo `user_source_disabled`) ⇒ a W6.0 vale no 2.1.288.
+- (2) `workflowSizeGuideline`: texto byte-idêntico (`{small:5,medium:10,large:50}`, padrão `medium`;
+  guideline, não limite) ⇒ a correção do `_posture_comment` (15 → 10) da W6.2 segue válida.
+- (3) Loader replicado por `.claude/scripts/tests/test_settings_guard_loadability.py`: IGUAL entre 287 e
+  288 (33 eventos na mesma ordem, 9 chaves isentas, 26 funções com `unloadableGuards` normalizadas
+  idênticas). Deriva no docstring do teste: a âncora `return{settings:c.data,errors:i}` não existe mais
+  (hoje `errors:d`). A equivalência 2.1.280 → 2.1.288 foi checada só pelas constantes (o 2.1.280 não
+  está em disco).
+- (4) Watchdog e concorrência do Workflow: IGUAL — stall de 600 s, pausado com ferramenta em voo;
+  concorrência `min(16, max(2, ncpu−2))` = 14 nesta máquina.
+- (5) Mudanças periféricas, só adições: `modelSettings.<modelo>.autoCompactWindow` (100k a 1M ou `auto`);
+  `/restart` no lugar do `/update` oculto, atrás de flag de servidor (`tengu_fancy_wand`); a espera de
+  quota do subagente de Workflow (`workflowWaitsOutUsageLimit`), atrás de flag de servidor
+  (`tengu_lantern_snuffer`, padrão desligado). Nada toca a varredura, o atualizador nem
+  `availableModels`/`effortLevel`.
+- (6) `DISABLE_AUTOUPDATER=1` ainda desliga o atualizador no 2.1.288 (o env do settings do usuário entra
+  antes da confiança no workspace). Estado em 2026-10-03T00:17Z (21:17 de 2026-10-02 em Brasília): o
+  `~/.claude/settings.json` AINDA não tem a chave ⇒ o congelamento só vale depois que o Owner gravá-la, e
+  não vale sob `--setting-sources` sem `user`.
+
 ## W0.2 — manifesto do setup-python (controle vermelho da W1)
 
 - 2026-10-01 (S361): no `versions-manifest.json` do ramo `main` de `actions/python-versions`, o
