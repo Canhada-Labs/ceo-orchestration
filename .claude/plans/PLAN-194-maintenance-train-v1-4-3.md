@@ -2056,8 +2056,9 @@ materiais do corte (como na S362).
 
 **Onde o plano mudou (só texto):** esta seção; «Next» (itens 3 e 5); «Success criteria» (item do Sonnet 5.5);
 «How to continue» (versão do `claude`). No LEDGER: as seções «CC 2.1.295 — adoção e re-medição 288 × 295» e
-«Noite S363». **As menções antigas à linha de 2026-10-11 e à W5c na 1.4.3 (frontmatter `eta_calendar`, «Goal»,
-W5, W7, a D-14 da tabela S362 e «Blockers») NÃO foram reescritas nesta rodada; onde divergirem, vale esta seção.**
+«Noite S363». **As menções antigas à linha de 2026-10-11 e à W5c na 1.4.3 (entre outras: frontmatter `eta_calendar`,
+`budget_tokens` e `external_wait`, a exceção (2) da «Regra de WIP», «Paths × oráculo», «Goal», W5, W7, a D-14 da
+tabela S362 e «Blockers») NÃO foram reescritas nesta rodada; onde divergirem, vale esta seção.**
 
 ## Decisões do Owner — S362 (2026-10-02)
 

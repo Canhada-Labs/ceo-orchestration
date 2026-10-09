@@ -317,6 +317,7 @@ ainda; os resultados entram em entradas datadas abaixo dela.
   Mtok). Sonnet 5.5 e Opus 5.5: `medium`; Fable 5.1: `high`; entradas idênticas às do 292. O working set do ADR-149 tem
   `claude-haiku-4-5`, que pelo prefixo não admite `claude-haiku-5-5`; o modelo auxiliar do harness pode ir para Haiku
   5.5 mesmo assim (só `deniedModels` o barra). Adotar Haiku 5.5 é emenda da camada T.
+- (8) = o texto do `_posture_comment`, aplicado na W6.2 (m295 §(c); sombra w62, commit `da26fd87`).
 - (9) Desde o 2.1.293 (ausente no 2.1.292), a leitura de UM arquivo pelo Bash também dispara o CLAUDE.md aninhado e
   as regras por caminho. Formas: `cat`/`nl`/`bat`, `head`, `tail`, `sed -n 'A,Bp'`; `grep`/`rg` só como comando único
   e com exit 0. Qualquer `|`, `<` ou `>` no texto desliga o gatilho; `cd x && cat y` não dispara. Carrega o CLAUDE.md
@@ -335,17 +336,18 @@ ainda; os resultados entram em entradas datadas abaixo dela.
   `bbe93063f7a0879a1021b2891e5c9354e5b3b98433e32efe6750f7710afed750`. **2.1.287** (medido em 2026-10-02, S362):
   offset 178658526 (o registro original não diz se é zod ou describe); sha256 do binário
   `6eab8333fe2121553100d8f40bfada384a3e989b94f947e18ba6677a6fcb41ea`. Os offsets do 2.1.288 e do 2.1.287 estavam
-  registrados só no commit `1dafd090` da W6.2 (`ceremony(PLAN-194 W6.2)`, 2026-10-02), que NÃO é ancestral do
-  `main` em 2026-10-09 (`git merge-base --is-ancestor 1dafd090 HEAD` = 1); os sha256 dos binários 2.1.287 e
+  registrados só nos commits da W6.2 (`8cd6ef31` e `1dafd090`, `ceremony(PLAN-194 W6.2)`, autoria 2026-10-02),
+  nenhum ancestral do `main` em 2026-10-09 (`git merge-base --is-ancestor 1dafd090 HEAD` = 1); os sha256 dos binários 2.1.287 e
   2.1.288 já constavam na seção «CC 2.1.288 — adoção e re-medição 287 × 288». Os binários 2.1.287 e 2.1.288 estão
   fora do disco desde então ⇒ esses números são INVERIFICÁVEIS hoje; o span de 496 bytes do 2.1.292, em disco, tem
   o mesmo sha256 (controle). Registro da lente: `rail/w62-r1/claude-r-w62-a-verbatim.md` (scratchpad da sessão
   `d876fa66`).
 - Retenção — P2 medido pelo rail da W6.2 (lente r-w62-b, 2026-10-09 ~01:50Z; fora do diff da W6.2): há 55 checkouts
-  irmãos em `~/canhada-labs` com `cleanupPeriodDays` 90 nesta máquina; a varredura de qualquer sessão deles apaga os
+  irmãos com `cleanupPeriodDays` 90 nesta máquina (contagem da lente; o refutador do texto, varrendo o `$HOME` até
+  profundidade 8, achou 257 árvores com a chave em 90, ao menos 32 fora de `~/canhada-labs`); a varredura de qualquer sessão deles apaga os
   `*.jsonl` de topo de TODOS os diretórios de `~/.claude/projects/` (corte de 90 dias EFETIVO; `last-cleanup`
   2026-10-08 21:59). O `audit-log-2026-08-1.jsonl` (mtime 2026-08-23) completa 90 dias em 2026-11-21 e será
-  apagado nessa data, com ou sem o patch da W6.2. Curas possíveis, a decidir pelo Owner: managed/policy settings
+  apagado a partir dessa data, na 1.ª varredura de uma sessão com 90, com ou sem o patch da W6.2. Curas possíveis, a decidir pelo Owner: managed/policy settings
   com 3650 (vence todas as camadas, @204769628 no binário 2.1.295), ou 3650 na camada local de cada checkout
   irmão; e agendar a W6.1.
 
