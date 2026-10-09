@@ -5,7 +5,7 @@
 # -Users-<nome>- -> -Users-<user>-, /var/folders/../T/ -> <TMPDIR>/. Números intactos
 # (conferidos folha a folha). Originais e raw.jsonl ficam FORA do repositório
 # (checkpoint s363-packs/fd12/); o sha256 do original vai em «origem».
-# evidence.json: derivado por script dos raw e das marcas (rodada 2 do rail).
+# Tudo aqui é refeito por ../derive_evidence.py --pack <checkpoint> (--check confere).
 
 083a68a1908f9c6a7aae919a54b86f811da1504a095c25f3d6dd93d6b74ff391  summary-a.json
 #   origem: 0ec74907126354b75b8bdbfda07e79ecc80083cefc6e0831328451f1828285ec  s363-packs/fd12/runs/head-20261009T114839Z/summary.json
@@ -22,9 +22,11 @@ f5f640ff940101b5a865b8b0f59edf223c1fd2d852af309ff65d1a38ffc40b06  guard-C1.mark
 #   origem: 8fc4d85f021af536490979a2fbe4ee7156a60b94094988a23a5f3a387ea6782e  s363-packs/fd12/x7/guard-C1.mark
 2cc87f8b633469ac03c99e6c906839d009ef46553224a532c4847f1a9c1576de  guard-C2.mark
 #   origem: 1f7341b13989e665fbd1ee3ca4502966933b84f66f93a48c9f6c55ee2a1881b8  s363-packs/fd12/x7/guard-C2.mark
-0acc6525d0696cec8f8944aa8e75096b5f125b23dc27ab31ac11ad265524ccb6  evidence.json
+145c73de2f616e1a8448d4b1275625b2d50856bce2aa3c534c72f66e954d5f2f  evidence.json
 #   derivado de: 8328ad79feae9809068dd359bb3c99f14e1fc42a4edd81786d711fe6a1547e13  s363-packs/fd12/runs/head-20261009T114839Z/raw.jsonl
 #   derivado de: 5ded17159a1520bed6057b67cd00e2feadf9f33f43f82cca4108486b16156f33  s363-packs/fd12/runs/head-20261009T115531Z/raw.jsonl
 #   derivado de: 7d0e21cb2660374796f7cd4431ebcc676ac89949e9fec7d7187a4e257357ca34  s363-packs/fd12/runs/head-20261009T120436Z/raw.jsonl
 #   derivado de: 8fc4d85f021af536490979a2fbe4ee7156a60b94094988a23a5f3a387ea6782e  s363-packs/fd12/x7/guard-C1.mark
 #   derivado de: 1f7341b13989e665fbd1ee3ca4502966933b84f66f93a48c9f6c55ee2a1881b8  s363-packs/fd12/x7/guard-C2.mark
+6500f043e8350eb67d2152c94678311bee38b3c9e8a0201a3adb2ee7a098cd9c  ../derive_evidence.py
+#   o derivador; usa _last_mark de ../w05_harness.py (sha256 9612ac655aa35199ec31149907f41a714349d3ed7d1fece307b25c305614a932)

@@ -941,7 +941,8 @@
      "lat_exit_max_ms": 716.214,
      "over_3000ms_exits": []
     }
-   }
+   },
+   "timeout_ms_of_run": 3000.0
   },
   "b": {
    "cells": {
@@ -1514,7 +1515,8 @@
      "lat_exit_max_ms": 658.487,
      "over_3000ms_exits": []
     }
-   }
+   },
+   "timeout_ms_of_run": 3000.0
   },
   "info5s": {
    "cells": {
@@ -1674,11 +1676,12 @@
      "x5_max_ms": 372.742,
      "x5_p95_ms": 254.543
     }
-   }
+   },
+   "timeout_ms_of_run": 5000.0
   }
  },
- "nota": "derivado por script dos raw.jsonl e das marcas do guard do X7 (fora do repositorio, sha256 abaixo); ultima marca = a marca de maior tempo gravada pelo guard antes da morte; discarded_v1 = criterio do instrumento v1 (morta pelo driver); discarded_killed_or_over_3000ms = criterio (ii) do pre-registro pos-cura",
- "schema": "w05-evidence-r2",
+ "nota": "derivado por derive_evidence.py dos raw.jsonl e das marcas do guard do X7 (fora do repositorio, sha256 abaixo); ultima marca = regra _last_mark do instrumento v2 (marcas com instante, inclusive o retorno de cada drain; contadores fora); os campos *_3000ms usam o corte FIXO de 3.000 ms, inclusive no braco info5s, cujo run matava aos timeout_ms_of_run = 5.000 ms; discarded_v1 = criterio do instrumento v1 (morta pelo driver); discarded_killed_or_over_3000ms = criterio (ii) do pre-registro pos-cura",
+ "schema": "w05-evidence-r3",
  "sources": {
   "a": {
    "raw": "s363-packs/fd12/runs/head-20261009T114839Z/raw.jsonl",

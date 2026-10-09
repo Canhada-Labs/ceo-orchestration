@@ -747,8 +747,12 @@ def _derive(r: Dict[str, Any]) -> None:
     r["interp"] = m.get("interp")
 
 
+_MARK_COUNTERS = frozenset(("emitted_n",))  # contadores, nao instantes
+
+
 def _last_mark(r: Dict[str, Any]) -> str:
-    m = [(n, t) for n, t in r["marks"].items() if isinstance(t, int)]
+    m = [(n, t) for n, t in r["marks"].items() if isinstance(t, int) and n not in _MARK_COUNTERS]
+    m += [("drain", d["t_ret"]) for d in r["marks"].get("drains", []) if isinstance(d.get("t_ret"), int)]
     return max(m, key=lambda x: x[1])[0] if m else "none"
 
 
