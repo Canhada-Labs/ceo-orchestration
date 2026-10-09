@@ -77,6 +77,12 @@ loader's verdict for each settings file. It was run in a scratch project with
   http entry. "entry ignored" for ``"retry"`` under PostToolUse. No settings
   finding for ``"block"`` on a PreToolUse command entry, nor for ``"retry"``
   on a PreToolUse prompt entry.
+* 2026-10-09 UTC, Claude Code 2.1.295, http ``url``: one PreToolUse file
+  holding the 1,121 URLs the replica accepts from a 68,553-URL corpus gave no
+  settings finding, and each of the 7 negative controls in
+  ``test_http_url_is_proved_valid_or_flagged`` gave "url: Invalid URL".
+  ``new URL(u.trim())`` under Bun 1.3.9 and Node 26.3.0 rejected none of the
+  1,121 either.
 
 Every other shape below rests on the text read. When re-deriving, plant a
 shape in such a scratch project and compare the ``claude doctor`` output with
@@ -129,7 +135,10 @@ valid, an empty or blank ``command``), never the reverse. A false red costs a
 look. A false green costs the whole rail. A field the replica does not list
 in ``_TYPE_FIELDS`` is stripped like an extra key, so every field the binary
 validates must be listed: until the 2.1.295 re-derivation, ``onFailure`` was
-such a false green.
+such a false green. So was ``url``: the old check took any ``scheme://`` plus
+non-blank text, so ``https://x.test:invalid/h`` passed. The check now accepts
+only an http(s) URL whose host (a domain, a dotted-quad IPv4 or a bracketed
+IPv6) and port (1-65535) it can prove valid, and flags everything else.
 
 OUT OF SCOPE (declared)
 -----------------------
@@ -155,6 +164,7 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import ipaddress
 import json
 import math
 import re
@@ -324,11 +334,36 @@ def _is_on_failure(v: Any) -> bool:
     return v in ("continue", "block")
 
 
-_URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://\S+$")
+# The http ``url`` is ``o().url()``: zod trims the value and it is valid when
+# ``new URL()`` parses it. A parse fails on the scheme, the host or the port, so
+# the replica accepts only an http(s) URL whose host and port it can prove
+# valid. Everything else counts as invalid, valid or not in the binary.
+_URL_RE = re.compile(
+    r"https?://(?P<host>\[[0-9A-Fa-f:]+\]|[A-Za-z0-9.-]+)(?::(?P<port>[1-9][0-9]{0,4}))?"
+    r"(?:[/?#][!#$%&'()*+,\-./0-9:;=?@A-Z_a-z~]*)?")
+_DNS_LABEL_RE = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
+_IPV4_PART_RE = re.compile(r"0|[1-9][0-9]{0,2}")
 
 
 def _is_url_conservative(v: Any) -> bool:
-    return isinstance(v, str) and bool(_URL_RE.match(v))
+    m = _URL_RE.fullmatch(v) if isinstance(v, str) else None
+    if m is None or (m.group("port") and int(m.group("port")) > 65535):
+        return False
+    host = m.group("host")
+    if host.startswith("["):
+        try:
+            ipaddress.IPv6Address(host[1:-1])
+        except ValueError:
+            return False
+        return True
+    labels = host.split(".")
+    if all(_IPV4_PART_RE.fullmatch(x) for x in labels):
+        return len(labels) == 4 and all(int(x) <= 255 for x in labels)
+    # A domain: ASCII labels, no punycode, and a last label that starts with a
+    # letter (a numeric or 0x last label makes the URL parser read an IPv4).
+    return len(host) <= 253 and labels[-1][:1].isalpha() and all(
+        _DNS_LABEL_RE.fullmatch(x) and len(x) <= 63 and not x.lower().startswith("xn--")
+        for x in labels)
 
 
 _Check = Callable[[Any], bool]
@@ -691,6 +726,30 @@ class PlantedFatalShapesAreFlagged(TestEnvContext):
                       {"type": "mcp_tool", "server": "s", "tool": "t", "onFailure": "retry"}):
             with self.subTest(type=entry["type"]):
                 self.assertEqual(settings_findings(_doc(entry)), ([], []))
+
+    def test_http_url_is_proved_valid_or_flagged(self) -> None:
+        # The 2.1.295 ``url`` check is ``new URL(value.trim())``. ``claude doctor``
+        # on 2.1.295 printed "url: Invalid URL" for each negative and nothing for
+        # each positive (docstring, RUNTIME CROSS-CHECK).
+        negatives = {
+            "port not a number": "https://x.test:invalid/h",
+            "port out of range": "https://x.test:65536/h",
+            "IPv6 with two ::": "https://[1::2::3]/h",
+            "IPv6 bracket not closed": "https://[::1/h",
+            "IPv6 not hex": "https://[g::1]/h",
+            "no host": "https://",
+            "no host before the port": "https://:80/h",
+        }
+        for name, url in negatives.items():
+            with self.subTest(case=name):
+                self.assertFatal(_doc({"type": "http", "url": url}), "url")
+        for url in ("https://x.test/h", "http://127.0.0.1:8080/h", "https://[::1]:8443/h"):
+            with self.subTest(url=url):
+                self.assertEqual(settings_findings(_doc({"type": "http", "url": url})), ([], []))
+        # Conservative: the binary loads these, the replica cannot prove them.
+        for url in ("HTTPS://x.test/h", "https://x.test./h", "https://user@x.test/h", "ftp://x.test/h"):
+            with self.subTest(conservative=url):
+                self.assertFatal(_doc({"type": "http", "url": url}), "url")
 
     def test_conservative_blank_command(self) -> None:
         self.assertFatal(_doc(_entry(command="  ")), "conservative")
