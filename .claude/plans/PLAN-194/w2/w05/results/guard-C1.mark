@@ -1,0 +1,10 @@
+start 642273407523958 642273407421291
+interp 642273408831833 {"exe":"/opt/homebrew/opt/python@3.11/bin/python3.11","ver":"3.11.15","argv0":"<SCRATCH>/work/fd12/x7/mirror/.claude/hooks/w05_guard.py"}
+decision 642273408888333 
+flushed 642273408910083 
+imported 642273434124833 
+emitted 642273435017750 w05_late
+main_end 642273435039083 
+atexit_first 642273435077416 
+exit_sleep_begin 642273435100291 
+drain 642276171231541 {"t0":642276167125875,"force":true,"kw":["force"],"ok":true,"error":null,"contended":false,"eds":"NA","appended":1}

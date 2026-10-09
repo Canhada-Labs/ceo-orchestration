@@ -1,0 +1,1738 @@
+{
+ "arms": {
+  "a": {
+   "cells": {
+    "C1": {
+     "N": 100,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 278.185,
+     "lat_exit_max_ms": 443.8,
+     "over_3000ms_exits": []
+    },
+    "C2": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 413.513,
+     "lat_exit_max_ms": 459.128,
+     "over_3000ms_exits": []
+    },
+    "C3": {
+     "N": 100,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 679.73,
+     "lat_exit_max_ms": 691.795,
+     "over_3000ms_exits": []
+    },
+    "C4": {
+     "N": 108,
+     "deaths": [
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3001.794,
+       "slot": 3,
+       "unit": 1
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.383,
+       "slot": 7,
+       "unit": 1
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.274,
+       "slot": 8,
+       "unit": 1
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.457,
+       "slot": 4,
+       "unit": 2
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.472,
+       "slot": 8,
+       "unit": 3
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3001.987,
+       "slot": 8,
+       "unit": 4
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.387,
+       "slot": 2,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.286,
+       "slot": 5,
+       "unit": 6
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.245,
+       "slot": 7,
+       "unit": 7
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.58,
+       "slot": 5,
+       "unit": 10
+      }
+     ],
+     "discarded_killed_or_over_3000ms": 10,
+     "discarded_v1": 10,
+     "exits_over_3000ms": 10,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 10,
+     "killed_last_marks": {
+      "atexit_first": 10
+     },
+     "lat_exit_2nd_ms": 3006.472,
+     "lat_exit_max_ms": 3006.58,
+     "over_3000ms_exits": [
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3001.794,
+       "slot": 3,
+       "unit": 1
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.383,
+       "slot": 7,
+       "unit": 1
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.274,
+       "slot": 8,
+       "unit": 1
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.457,
+       "slot": 4,
+       "unit": 2
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.472,
+       "slot": 8,
+       "unit": 3
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3001.987,
+       "slot": 8,
+       "unit": 4
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.387,
+       "slot": 2,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.286,
+       "slot": 5,
+       "unit": 6
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.245,
+       "slot": 7,
+       "unit": 7
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.58,
+       "slot": 5,
+       "unit": 10
+      }
+     ]
+    },
+    "C5": {
+     "N": 100,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 205.274,
+     "lat_exit_max_ms": 219.793,
+     "over_3000ms_exits": []
+    },
+    "C6": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 536.819,
+     "lat_exit_max_ms": 539.014,
+     "over_3000ms_exits": []
+    },
+    "C7": {
+     "N": 100,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 603.668,
+     "lat_exit_max_ms": 632.227,
+     "over_3000ms_exits": []
+    },
+    "C8": {
+     "N": 108,
+     "deaths": [
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.519,
+       "slot": 4,
+       "unit": 6
+      }
+     ],
+     "discarded_killed_or_over_3000ms": 1,
+     "discarded_v1": 1,
+     "exits_over_3000ms": 1,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 1,
+     "killed_last_marks": {
+      "atexit_first": 1
+     },
+     "lat_exit_2nd_ms": 2955.0,
+     "lat_exit_max_ms": 3006.519,
+     "over_3000ms_exits": [
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.519,
+       "slot": 4,
+       "unit": 6
+      }
+     ]
+    },
+    "X1": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 1971.463,
+     "lat_exit_max_ms": 2041.853,
+     "over_3000ms_exits": []
+    },
+    "X2": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 2994.412,
+     "lat_exit_max_ms": 2999.48,
+     "over_3000ms_exits": []
+    },
+    "X5": {
+     "N": 108,
+     "deaths": [
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3008.132,
+       "slot": 5,
+       "unit": 1
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3003.633,
+       "slot": 0,
+       "unit": 2
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.303,
+       "slot": 4,
+       "unit": 2
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.609,
+       "slot": 7,
+       "unit": 2
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3010.52,
+       "slot": 8,
+       "unit": 2
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.912,
+       "slot": 7,
+       "unit": 3
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.843,
+       "slot": 3,
+       "unit": 4
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.6,
+       "slot": 0,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.167,
+       "slot": 1,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.481,
+       "slot": 3,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.267,
+       "slot": 4,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.14,
+       "slot": 5,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.488,
+       "slot": 7,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.268,
+       "slot": 8,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3014.331,
+       "slot": 0,
+       "unit": 6
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3017.733,
+       "slot": 1,
+       "unit": 6
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3010.82,
+       "slot": 2,
+       "unit": 6
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.039,
+       "slot": 6,
+       "unit": 6
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3013.449,
+       "slot": 7,
+       "unit": 6
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3002.428,
+       "slot": 5,
+       "unit": 7
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.079,
+       "slot": 6,
+       "unit": 7
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.592,
+       "slot": 1,
+       "unit": 8
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.171,
+       "slot": 2,
+       "unit": 8
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.111,
+       "slot": 5,
+       "unit": 8
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.034,
+       "slot": 6,
+       "unit": 8
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.196,
+       "slot": 7,
+       "unit": 8
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.976,
+       "slot": 0,
+       "unit": 9
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.108,
+       "slot": 1,
+       "unit": 9
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.346,
+       "slot": 2,
+       "unit": 9
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3003.461,
+       "slot": 3,
+       "unit": 9
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3010.095,
+       "slot": 5,
+       "unit": 9
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.256,
+       "slot": 6,
+       "unit": 9
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3012.638,
+       "slot": 7,
+       "unit": 9
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3020.862,
+       "slot": 8,
+       "unit": 9
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.113,
+       "slot": 1,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.785,
+       "slot": 2,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3014.217,
+       "slot": 3,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3018.737,
+       "slot": 4,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.427,
+       "slot": 5,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3009.121,
+       "slot": 6,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3008.389,
+       "slot": 7,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.884,
+       "slot": 1,
+       "unit": 11
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.717,
+       "slot": 2,
+       "unit": 11
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.314,
+       "slot": 5,
+       "unit": 11
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3008.922,
+       "slot": 6,
+       "unit": 11
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3002.217,
+       "slot": 7,
+       "unit": 11
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.044,
+       "slot": 8,
+       "unit": 11
+      }
+     ],
+     "discarded_killed_or_over_3000ms": 49,
+     "discarded_v1": 47,
+     "exits_over_3000ms": 49,
+     "exits_over_3000ms_delivered_by_v1": 2,
+     "killed": 47,
+     "killed_last_marks": {
+      "atexit_first": 47
+     },
+     "lat_exit_2nd_ms": 3018.737,
+     "lat_exit_max_ms": 3020.862,
+     "over_3000ms_exits": [
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3008.132,
+       "slot": 5,
+       "unit": 1
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3003.633,
+       "slot": 0,
+       "unit": 2
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.303,
+       "slot": 4,
+       "unit": 2
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.609,
+       "slot": 7,
+       "unit": 2
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3010.52,
+       "slot": 8,
+       "unit": 2
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.912,
+       "slot": 7,
+       "unit": 3
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.843,
+       "slot": 3,
+       "unit": 4
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.6,
+       "slot": 0,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.167,
+       "slot": 1,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.481,
+       "slot": 3,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.267,
+       "slot": 4,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.14,
+       "slot": 5,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.488,
+       "slot": 7,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.268,
+       "slot": 8,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3014.331,
+       "slot": 0,
+       "unit": 6
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3017.733,
+       "slot": 1,
+       "unit": 6
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3010.82,
+       "slot": 2,
+       "unit": 6
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.039,
+       "slot": 6,
+       "unit": 6
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3013.449,
+       "slot": 7,
+       "unit": 6
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3005.282,
+       "slot": 8,
+       "unit": 6
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3002.428,
+       "slot": 5,
+       "unit": 7
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.079,
+       "slot": 6,
+       "unit": 7
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.592,
+       "slot": 1,
+       "unit": 8
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.171,
+       "slot": 2,
+       "unit": 8
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.111,
+       "slot": 5,
+       "unit": 8
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.034,
+       "slot": 6,
+       "unit": 8
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.196,
+       "slot": 7,
+       "unit": 8
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.976,
+       "slot": 0,
+       "unit": 9
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.108,
+       "slot": 1,
+       "unit": 9
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.346,
+       "slot": 2,
+       "unit": 9
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3003.461,
+       "slot": 3,
+       "unit": 9
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3010.095,
+       "slot": 5,
+       "unit": 9
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.256,
+       "slot": 6,
+       "unit": 9
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3012.638,
+       "slot": 7,
+       "unit": 9
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3020.862,
+       "slot": 8,
+       "unit": 9
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.113,
+       "slot": 1,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.785,
+       "slot": 2,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3014.217,
+       "slot": 3,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3018.737,
+       "slot": 4,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.427,
+       "slot": 5,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3009.121,
+       "slot": 6,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3008.389,
+       "slot": 7,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.884,
+       "slot": 1,
+       "unit": 11
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.717,
+       "slot": 2,
+       "unit": 11
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3005.472,
+       "slot": 4,
+       "unit": 11
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.314,
+       "slot": 5,
+       "unit": 11
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3008.922,
+       "slot": 6,
+       "unit": 11
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3002.217,
+       "slot": 7,
+       "unit": 11
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.044,
+       "slot": 8,
+       "unit": 11
+      }
+     ],
+     "x5_N": 108,
+     "x5_max_ms": 960.267,
+     "x5_p95_ms": 654.848
+    },
+    "X6": {
+     "N": 10,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 578.633,
+     "lat_exit_max_ms": 716.214,
+     "over_3000ms_exits": []
+    }
+   }
+  },
+  "b": {
+   "cells": {
+    "C1": {
+     "N": 100,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 1235.788,
+     "lat_exit_max_ms": 1815.205,
+     "over_3000ms_exits": []
+    },
+    "C2": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 2187.62,
+     "lat_exit_max_ms": 2293.748,
+     "over_3000ms_exits": []
+    },
+    "C3": {
+     "N": 100,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 1042.877,
+     "lat_exit_max_ms": 1087.627,
+     "over_3000ms_exits": []
+    },
+    "C4": {
+     "N": 108,
+     "deaths": [
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.531,
+       "slot": 1,
+       "unit": 1
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.344,
+       "slot": 4,
+       "unit": 2
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3003.876,
+       "slot": 7,
+       "unit": 2
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.67,
+       "slot": 7,
+       "unit": 3
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.783,
+       "slot": 4,
+       "unit": 4
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3003.126,
+       "slot": 3,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.67,
+       "slot": 6,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3001.322,
+       "slot": 7,
+       "unit": 7
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.244,
+       "slot": 1,
+       "unit": 9
+      }
+     ],
+     "discarded_killed_or_over_3000ms": 9,
+     "discarded_v1": 9,
+     "exits_over_3000ms": 9,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 9,
+     "killed_last_marks": {
+      "atexit_first": 9
+     },
+     "lat_exit_2nd_ms": 3006.531,
+     "lat_exit_max_ms": 3006.67,
+     "over_3000ms_exits": [
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.531,
+       "slot": 1,
+       "unit": 1
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.344,
+       "slot": 4,
+       "unit": 2
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3003.876,
+       "slot": 7,
+       "unit": 2
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.67,
+       "slot": 7,
+       "unit": 3
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.783,
+       "slot": 4,
+       "unit": 4
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3003.126,
+       "slot": 3,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.67,
+       "slot": 6,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3001.322,
+       "slot": 7,
+       "unit": 7
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.244,
+       "slot": 1,
+       "unit": 9
+      }
+     ]
+    },
+    "C5": {
+     "N": 100,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 1619.777,
+     "lat_exit_max_ms": 1819.431,
+     "over_3000ms_exits": []
+    },
+    "C6": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 1933.947,
+     "lat_exit_max_ms": 2076.093,
+     "over_3000ms_exits": []
+    },
+    "C7": {
+     "N": 100,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 707.671,
+     "lat_exit_max_ms": 908.749,
+     "over_3000ms_exits": []
+    },
+    "C8": {
+     "N": 108,
+     "deaths": [
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.302,
+       "slot": 3,
+       "unit": 2
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3007.035,
+       "slot": 6,
+       "unit": 5
+      }
+     ],
+     "discarded_killed_or_over_3000ms": 2,
+     "discarded_v1": 2,
+     "exits_over_3000ms": 2,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 2,
+     "killed_last_marks": {
+      "atexit_first": 2
+     },
+     "lat_exit_2nd_ms": 3005.302,
+     "lat_exit_max_ms": 3007.035,
+     "over_3000ms_exits": [
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.302,
+       "slot": 3,
+       "unit": 2
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3007.035,
+       "slot": 6,
+       "unit": 5
+      }
+     ]
+    },
+    "X1": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 2211.144,
+     "lat_exit_max_ms": 2339.361,
+     "over_3000ms_exits": []
+    },
+    "X2": {
+     "N": 108,
+     "deaths": [
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3001.22,
+       "slot": 3,
+       "unit": 1
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3001.437,
+       "slot": 6,
+       "unit": 1
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.975,
+       "slot": 8,
+       "unit": 1
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3001.845,
+       "slot": 1,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.974,
+       "slot": 2,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.849,
+       "slot": 3,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3001.029,
+       "slot": 4,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.745,
+       "slot": 5,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3004.303,
+       "slot": 6,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3002.141,
+       "slot": 7,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.541,
+       "slot": 8,
+       "unit": 5
+      },
+      {
+       "last_mark": "atexit_last",
+       "lat_exit_ms": 3006.115,
+       "slot": 1,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.898,
+       "slot": 2,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.008,
+       "slot": 3,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3005.76,
+       "slot": 4,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3003.261,
+       "slot": 5,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3003.246,
+       "slot": 6,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.017,
+       "slot": 7,
+       "unit": 10
+      },
+      {
+       "last_mark": "atexit_first",
+       "lat_exit_ms": 3006.059,
+       "slot": 8,
+       "unit": 10
+      }
+     ],
+     "discarded_killed_or_over_3000ms": 20,
+     "discarded_v1": 19,
+     "exits_over_3000ms": 20,
+     "exits_over_3000ms_delivered_by_v1": 1,
+     "killed": 19,
+     "killed_last_marks": {
+      "atexit_first": 18,
+      "atexit_last": 1
+     },
+     "lat_exit_2nd_ms": 3006.059,
+     "lat_exit_max_ms": 3006.115,
+     "over_3000ms_exits": [
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3001.22,
+       "slot": 3,
+       "unit": 1
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3000.905,
+       "slot": 5,
+       "unit": 1
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3001.437,
+       "slot": 6,
+       "unit": 1
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.975,
+       "slot": 8,
+       "unit": 1
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3001.845,
+       "slot": 1,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.974,
+       "slot": 2,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.849,
+       "slot": 3,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3001.029,
+       "slot": 4,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.745,
+       "slot": 5,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3004.303,
+       "slot": 6,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3002.141,
+       "slot": 7,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.541,
+       "slot": 8,
+       "unit": 5
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.115,
+       "slot": 1,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.898,
+       "slot": 2,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.008,
+       "slot": 3,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3005.76,
+       "slot": 4,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3003.261,
+       "slot": 5,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3003.246,
+       "slot": 6,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.017,
+       "slot": 7,
+       "unit": 10
+      },
+      {
+       "delivered_v1": false,
+       "killed": true,
+       "lat_exit_ms": 3006.059,
+       "slot": 8,
+       "unit": 10
+      }
+     ]
+    },
+    "X5": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 2465.924,
+     "lat_exit_max_ms": 2476.999,
+     "over_3000ms_exits": [],
+     "x5_N": 108,
+     "x5_max_ms": 259.485,
+     "x5_p95_ms": 202.52
+    },
+    "X6": {
+     "N": 10,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 633.315,
+     "lat_exit_max_ms": 658.487,
+     "over_3000ms_exits": []
+    }
+   }
+  },
+  "info5s": {
+   "cells": {
+    "C4": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 7,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 7,
+     "exits_over_3000ms_delivered_by_v1": 7,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 3166.052,
+     "lat_exit_max_ms": 3301.237,
+     "over_3000ms_exits": [
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3010.469,
+       "slot": 5,
+       "unit": 0
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3099.169,
+       "slot": 6,
+       "unit": 3
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3000.056,
+       "slot": 4,
+       "unit": 5
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3301.237,
+       "slot": 6,
+       "unit": 5
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3134.594,
+       "slot": 8,
+       "unit": 7
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3166.052,
+       "slot": 8,
+       "unit": 8
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3127.185,
+       "slot": 4,
+       "unit": 9
+      }
+     ]
+    },
+    "C8": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 6,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 6,
+     "exits_over_3000ms_delivered_by_v1": 6,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 3203.799,
+     "lat_exit_max_ms": 3261.782,
+     "over_3000ms_exits": [
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3164.92,
+       "slot": 5,
+       "unit": 0
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3154.987,
+       "slot": 8,
+       "unit": 1
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3203.799,
+       "slot": 8,
+       "unit": 2
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3067.945,
+       "slot": 4,
+       "unit": 3
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3171.475,
+       "slot": 8,
+       "unit": 4
+      },
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3261.782,
+       "slot": 1,
+       "unit": 7
+      }
+     ]
+    },
+    "X2": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 0,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 0,
+     "exits_over_3000ms_delivered_by_v1": 0,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 2959.043,
+     "lat_exit_max_ms": 2971.869,
+     "over_3000ms_exits": []
+    },
+    "X5": {
+     "N": 108,
+     "deaths": [],
+     "discarded_killed_or_over_3000ms": 1,
+     "discarded_v1": 0,
+     "exits_over_3000ms": 1,
+     "exits_over_3000ms_delivered_by_v1": 1,
+     "killed": 0,
+     "killed_last_marks": {},
+     "lat_exit_2nd_ms": 2994.372,
+     "lat_exit_max_ms": 3022.798,
+     "over_3000ms_exits": [
+      {
+       "delivered_v1": true,
+       "killed": false,
+       "lat_exit_ms": 3022.798,
+       "slot": 6,
+       "unit": 0
+      }
+     ],
+     "x5_N": 108,
+     "x5_max_ms": 372.742,
+     "x5_p95_ms": 254.543
+    }
+   }
+  }
+ },
+ "nota": "derivado por script dos raw.jsonl e das marcas do guard do X7 (fora do repositorio, sha256 abaixo); ultima marca = a marca de maior tempo gravada pelo guard antes da morte; discarded_v1 = criterio do instrumento v1 (morta pelo driver); discarded_killed_or_over_3000ms = criterio (ii) do pre-registro pos-cura",
+ "schema": "w05-evidence-r2",
+ "sources": {
+  "a": {
+   "raw": "s363-packs/fd12/runs/head-20261009T114839Z/raw.jsonl",
+   "records": 1169,
+   "sha256": "8328ad79feae9809068dd359bb3c99f14e1fc42a4edd81786d711fe6a1547e13"
+  },
+  "b": {
+   "raw": "s363-packs/fd12/runs/head-20261009T115531Z/raw.jsonl",
+   "records": 1169,
+   "sha256": "5ded17159a1520bed6057b67cd00e2feadf9f33f43f82cca4108486b16156f33"
+  },
+  "info5s": {
+   "raw": "s363-packs/fd12/runs/head-20261009T120436Z/raw.jsonl",
+   "records": 435,
+   "sha256": "7d0e21cb2660374796f7cd4431ebcc676ac89949e9fec7d7187a4e257357ca34"
+  }
+ },
+ "timeout_ms": 3000.0,
+ "x7": {
+  "C1": {
+   "atexit_last_present": false,
+   "drains": [
+    {
+     "after_start_s": 2.759601917,
+     "appended": 1,
+     "force": true,
+     "ok": true,
+     "t0": 642276167125875
+    }
+   ],
+   "exit_sleep_begin": 642273435100291,
+   "flush_after_start_ms": 1.386125,
+   "flushed": 642273408910083,
+   "origin_sha256": "8fc4d85f021af536490979a2fbe4ee7156a60b94094988a23a5f3a387ea6782e",
+   "source": "results/guard-C1.mark",
+   "start": 642273407523958
+  },
+  "C2": {
+   "atexit_last_present": true,
+   "drains": [
+    {
+     "after_start_s": 0.062097417,
+     "appended": 1,
+     "force": true,
+     "ok": true,
+     "t0": 642259217932208
+    }
+   ],
+   "exit_sleep_begin": null,
+   "flush_after_start_ms": 1.374959,
+   "flushed": 642259157209750,
+   "origin_sha256": "1f7341b13989e665fbd1ee3ca4502966933b84f66f93a48c9f6c55ee2a1881b8",
+   "source": "results/guard-C2.mark",
+   "start": 642259155834791
+  }
+ }
+}
