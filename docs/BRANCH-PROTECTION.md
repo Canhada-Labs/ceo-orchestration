@@ -441,17 +441,21 @@ Then update both `VERSION` and `EXPECTED_SHA256` in
 
 ### Node 24 deprecation tracking
 
-`actions/checkout@v4` and `actions/setup-python@v5` declare
-`runs.using: node20` (`actions/upload-artifact@v4` did too, but no
-workflow pins it any more). GitHub's deprecation timeline targets
-**2026-05-15** for Node 20 in runners, after which the actions must
-declare `node24` or be replaced.
+`actions/checkout@v4`, `actions/setup-python@v5` and
+`actions/upload-artifact@v4` declare `runs.using: node20`. No live
+workflow in `.github/workflows/` pins `upload-artifact@v4` any more, but
+the delivered template `templates/.github/workflows/benchmarks.yml.template`
+still pins `upload-artifact@v4`, `checkout@v4` and `setup-python@v5`.
+GitHub's deprecation timeline targets **2026-05-15** for Node 20 in
+runners, after which the actions must declare `node24` or be replaced.
 
 Current state (2026-10-09): the four pins in `docs/actions-versions.md`
 — checkout `v6.0.2`, setup-python `v6.2.0`, setup-node `v6.4.0`,
 upload-artifact `v7.0.1` — all declare `node24`. Older `node20` pins
 remain outside that table: `tier-policy.yml` (checkout `v4.2.2`,
-setup-python `v5.3.0`) and `mutation-gate.yml` (setup-python `v5`).
+setup-python `v5.3.0`), `mutation-gate.yml` (setup-python `v5`),
+`formal-verify.yml` (`actions/setup-java` `v4.7.1`, `c5195efe…`) and the
+benchmarks template above.
 
 **Sprint 6 Phase 6a status** (2026-04-13):
 

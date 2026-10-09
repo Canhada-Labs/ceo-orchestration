@@ -63,14 +63,17 @@ id-token, no environment, never publishes) whose steps shared with
 The post-land hardening of that class (rail r1 P3s of the W4 land) pins,
 in the text lane that still runs where PyYAML is absent, what a
 byte-identical copy cannot: the `on:` surface (tag push only, no
-workflow_dispatch), the top-level permissions, the RC job's single
-`contents: read` block, the version assertions inside the "Pin npm CLI"
-step and the body of the RC pack dry-run; the RC exclusion and the
-`production-npm` gate are read from the `publish` JOB, not from the
-header comment that also spells them.
+workflow_dispatch), the top-level keys and permissions, the job
+headers, the RC job's single `contents: read` block and the exact body of
+EVERY step of the two jobs (a step whose check is still there but no
+longer runs — `if: false`, `exit 0`, a fixed read, a heredoc — is the
+same class that identity between the copies cannot see); the RC exclusion
+and the `production-npm` gate are read from the `publish` JOB, not from
+the header comment that also spells them.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -1600,12 +1603,24 @@ _W4_TOP_PERMISSIONS = ["  contents: read", "  id-token: write"]
 # The RC job's only permission block; `publish` carries none of its own
 # (it inherits the top-level block, id-token included).
 _W4_RC_PERMISSIONS = ["      contents: read"]
-# What the pin step asserts after the install, verbatim as stripped code
-# lines: removing a check, inverting its operator or dropping its `exit 1`
-# turns the step into an echo — and the shared-step identity test cannot
-# see that, because both copies would change together.
+# Exact step bodies. A step's body is its code lines (comments and blanks
+# dropped, `uses:` SHAs normalised — Dependabot bumps them and the SHA-pin
+# format is checked elsewhere), so `if:`, `continue-on-error:`, `env:`,
+# `exit 0`, a fixed read or a heredoc around the checks are LINES of the
+# body and go red; identity between the two copies cannot see them, both
+# would change together. The three steps below ARE the toolchain contract
+# and are pinned verbatim; every other step is pinned by sha256 of its
+# lines (_W4_STEP_DIGESTS).
 _W4_PIN_STEP = _W4_SHARED_STEPS[2]
-_W4_PIN_CHECKS = (
+_W4_PIN_STEP_CODE = (
+    "- name: " + _W4_PIN_STEP,
+    "run: |",
+    "set -euo pipefail",
+    'npm install -g "npm@${%s}"' % _W4_ENV_NPM,
+    'NODE_V="$(node --version)"',
+    'NPM_V="$(npm --version)"',
+    'echo "node --version: ${NODE_V}"',
+    'echo "npm --version: ${NPM_V}"',
     'case "${NODE_V}" in',
     '"v${%s}".*) ;;' % _W4_ENV_NODE,
     "*)",
@@ -1619,6 +1634,28 @@ _W4_PIN_CHECKS = (
     % _W4_ENV_NPM,
     "exit 1",
     "fi",
+    'echo "OK: node ${NODE_V} + npm ${NPM_V} (exact pin; trusted publishing '
+    'needs npm >= 11.5.1 on Node >= 22.14.0)"',
+)
+_W4_RC_VERSION_CODE = (
+    "- name: " + _W4_RC_VERSION_STEP,
+    "run: |",
+    "set -euo pipefail",
+    'TAG="${GITHUB_REF_NAME}"',
+    "VERSION_FILE=\"$(tr -d '[:space:]' < VERSION)\"",
+    'EXPECTED="${TAG#v}"',
+    'BASE="${EXPECTED%-rc.[0-9]*}"',
+    'if [[ "$BASE" == "$EXPECTED" ]]; then',
+    'echo "::error::tag $TAG carries no -rc.N suffix — this job runs on RC '
+    'tags only"',
+    "exit 1",
+    "fi",
+    'if [[ "$VERSION_FILE" != "$BASE" ]]; then',
+    'echo "::error::VERSION ($VERSION_FILE) does not match RC tag ($TAG → '
+    'base $BASE)"',
+    "exit 1",
+    "fi",
+    'echo "OK: VERSION=$VERSION_FILE matches RC tag=$TAG (base $BASE)"',
 )
 # The RC pack step, as stripped code lines: `--dry-run` is the whole reason
 # the proof may run without a registry credential — a real `npm pack`, a
@@ -1639,6 +1676,68 @@ _W4_RC_PACK_CODE = (
     'echo "OK: npm pack --dry-run on node $(node --version) '
     '+ npm $(npm --version) — nothing was written to the registry"',
 )
+# sha256 of "\n".join(body lines) of every other step (the sibling copies of
+# a shared step carry the same digest). A change to one of these steps is a
+# ceremony edit anyway: update the digest the failure prints in the same
+# patch, together with the sibling job's copy.
+_W4_STEP_DIGESTS = {
+    _W4_SHARED_STEPS[0]:  # Checkout tag
+        "7a43bc79d51f10f16086bcb544f42847b20e5342bf29a78404096736db84bae2",
+    _W4_SHARED_STEPS[1]:  # Setup Node
+        "ae6212d8580e1a850d8e7ef2931fd554f9e0e4b9774b6dd0dc5b6925a97fe851",
+    "Verify VERSION matches tag":
+        "8e003c190c81d8b6f55908a30553b4348040e917d570af0445ae40c7491a24f0",
+    _W4_SHARED_STEPS[3]:  # Verify npm/package.json version matches VERSION
+        "4e97965f001c703e6beaf1da4fffdec0a8a6ee9c09eea3b5d67d307a59c64dd4",
+    _W4_SHARED_STEPS[4]:  # Verify zero runtime dependencies
+        "d5867e714ee74153dd689389b45aa1f2dfde43e198858e5751425014a4c83f6e",
+    _W4_SHARED_STEPS[5]:  # Stage bundle into npm/
+        "aa60b1b0bd1e385460fdd5e5754f0de0e9bf9b5cffce38f315504a189a2fe0d4",
+    _W4_SHARED_STEPS[6]:  # Syntax-check the shim
+        "32dd50d4298a83410b5adad5cc4fd4eac14d1de31b711f6dc2000c9f4c08a68e",
+    _W4_SHARED_STEPS[7]:  # Verify scripts/install.sh is present
+        "127681a1d5f5ce425f0e3f789494b578027ab3eadfdcf207ab636c3946f07bd3",
+    _W4_SHARED_STEPS[8]:  # Populate install.sh self-SHA trailer
+        "8b6d4dbebd78d634c57d8cbe3e6345c983d2974d2678b90bd5cab928ba22d874",
+    _W4_SHARED_STEPS[9]:  # Packlist gate
+        "ea326c5b77361d25c3cbfa48af1dd0d8044c19e48781185a1c5e249dd00fcc31",
+    "Check registry for already-published version":
+        "9d331b5941707e07cc81930d4fe52a228ea8330d77f1c433854a374717b28084",
+    "Assert remote tag still points at this run's SHA":
+        "d8d3135687bab43c1526866b22c20cf79d4283de91620c24b3e7998d052d98c9",
+    "Publish (Trusted Publishing — OIDC)":
+        "2a80649fa21f95fef112ffa82d373f83203a681c654b0224ee3bc53e4edf6fa0",
+    "Publish skipped — version already in registry (no-op success)":
+        "29c1ad383c929f94c252ce93c3bf17cc2e42c000c7f3e20ac871eca9d41adf71",
+}
+_W4_STEP_BODIES = {
+    _W4_PIN_STEP: _W4_PIN_STEP_CODE,
+    _W4_RC_VERSION_STEP: _W4_RC_VERSION_CODE,
+    _W4_RC_PACK_STEP: _W4_RC_PACK_CODE,
+}
+# Job headers (every key before `steps:`) and the workflow's top-level keys:
+# a job-level `continue-on-error`, `env: BASH_ENV`, `defaults.run.shell` or
+# `container` neutralises steps without touching one of them.
+_W4_PUBLISH_HEAD = (
+    "publish:",
+    'if: "!%s"' % _W4_RC_IF,
+    "needs: await-release-gate",
+    "runs-on: ubuntu-latest",
+    "environment: production-npm",
+    "timeout-minutes: 8",
+    "steps:",
+)
+_W4_RC_HEAD = (
+    _W4_RC_JOB + ":",
+    "name: RC toolchain proof (no publish)",
+    "if: " + _W4_RC_IF,
+    "runs-on: ubuntu-latest",
+    "timeout-minutes: 8",
+    "permissions:",
+    "contents: read",
+    "steps:",
+)
+_W4_TOP_KEYS = ["name", "on", "concurrency", "permissions", "env", "jobs"]
 
 _W4_JOB_HEAD = re.compile(r"^  ([A-Za-z0-9_-]+):[ \t]*$", re.M)
 _W4_ANY_STEP = re.compile(r"^      - ", re.M)
@@ -1706,10 +1805,21 @@ def _w4_code_lines(block: str) -> List[str]:
     ]
 
 
-def _w4_has_run(lines: List[str], run: Tuple[str, ...]) -> bool:
-    """True when `run` occurs in `lines` as one contiguous slice."""
-    n = len(run)
-    return any(tuple(lines[i:i + n]) == run for i in range(len(lines) - n + 1))
+def _w4_body(block: str) -> Tuple[str, ...]:
+    """A step's body for pinning: code lines, `uses:` SHAs normalised."""
+    return tuple(
+        re.sub(r"@[0-9a-f]{40}\b", "@<sha>", ln) for ln in _w4_code_lines(block)
+    )
+
+
+def _w4_digest(body: Tuple[str, ...]) -> str:
+    return hashlib.sha256("\n".join(body).encode("utf-8")).hexdigest()
+
+
+def _w4_job_head(job_text: str) -> Tuple[str, ...]:
+    """Code lines of a job from its head line up to and including `steps:`."""
+    first = _W4_ANY_STEP.search(job_text)
+    return tuple(_w4_code_lines(job_text[:first.start()] if first else job_text))
 
 
 def _w4_key_blocks(
@@ -1894,15 +2004,35 @@ def _w4_text_offenders(source: str) -> List[str]:
             "step %r is not byte-identical between publish and %s: "
             "publish=%r rc=%r" % (name, _W4_RC_JOB, diff[0], diff[1])
         )
-    for label, blocks in (("publish", pub_blocks), (_W4_RC_JOB, rc_blocks)):
-        if not _w4_has_run(
-                _w4_code_lines(blocks.get(_W4_PIN_STEP, "")), _W4_PIN_CHECKS):
+    for label, steps in (("publish", pub_steps), (_W4_RC_JOB, rc_steps)):
+        for name, block in steps:
+            body = _w4_body(block)
+            if name in _W4_STEP_BODIES:
+                if body != _W4_STEP_BODIES[name]:
+                    out.append(
+                        "%s step %r body differs from the pinned body: %r"
+                        % (label, name, body))
+            elif name in _W4_STEP_DIGESTS:
+                if _w4_digest(body) != _W4_STEP_DIGESTS[name]:
+                    out.append(
+                        "%s step %r body differs from the pinned digest "
+                        "(now %s, %d code lines)"
+                        % (label, name, _w4_digest(body), len(body)))
+            elif name is not None:
+                out.append("%s step %r has no body pin" % (label, name))
+    for label, text, head in (
+            ("publish", publish, _W4_PUBLISH_HEAD),
+            (_W4_RC_JOB, rc, _W4_RC_HEAD)):
+        if _w4_job_head(text) != head:
             out.append(
-                "%s %r no longer asserts the declared Node line and the "
-                "EXACT npm after the install (expected the case/if checks "
-                "with their `exit 1`, verbatim) — an install that lands "
-                "the wrong toolchain would pass" % (label, _W4_PIN_STEP)
-            )
+                "%s job header is %r — expected %r (a job-level key can "
+                "neutralise every step)" % (label, _w4_job_head(text), head))
+    top = re.findall(r"(?m)^([A-Za-z_][A-Za-z0-9_-]*):", source)
+    if top != _W4_TOP_KEYS or set(env) != {_W4_ENV_NODE, _W4_ENV_NPM}:
+        out.append(
+            "top-level keys %r / env keys %r — expected %r and exactly the "
+            "two toolchain keys (a `defaults:` shell or an env var such as "
+            "BASH_ENV reaches every step)" % (top, sorted(env), _W4_TOP_KEYS))
     pack = rc_blocks.get(_W4_RC_PACK_STEP, "")
     # Anchored on the COMMAND line (pre-review P2, S362): the step's own
     # `::error::` echo also says "npm pack --dry-run".
@@ -1910,12 +2040,6 @@ def _w4_text_offenders(source: str) -> List[str]:
             r'(?m)^[ \t]*if ! npm pack --dry-run 2> "\$LOG"; then[ \t]*$', pack):
         out.append(
             "%r does not run `npm pack --dry-run`" % _W4_RC_PACK_STEP
-        )
-    if tuple(_w4_code_lines(pack)) != _W4_RC_PACK_CODE:
-        out.append(
-            "%r body differs from the pinned dry-run step (a real `npm "
-            "pack`, a swallowed failure or an extra command): %r"
-            % (_W4_RC_PACK_STEP, _w4_code_lines(pack))
         )
     return out
 
@@ -2186,25 +2310,26 @@ class Plan194W4PublishToolchainTest(TestEnvContext):
     def _red(self, mutated: str, text_needle: str, structural_needle=None):
         offenders = _w4_text_offenders(mutated)
         self.assertTrue(any(text_needle in o for o in offenders), offenders)
-        if structural_needle is not None:
-            yaml = self._yaml()
-            offenders = _w4_structural_offenders(yaml.safe_load(mutated))
-            self.assertTrue(
-                any(structural_needle in o for o in offenders), offenders)
+        if structural_needle is None:
+            return
+        try:
+            import yaml  # type: ignore
+        except ImportError:  # the text half above already ran
+            return
+        offenders = _w4_structural_offenders(yaml.safe_load(mutated))
+        self.assertTrue(
+            any(structural_needle in o for o in offenders), offenders)
 
     def test_live_post_land_pins_hold(self):
         self.assertEqual(
             _w4_key_blocks(self.source, "on", 0), [("", _W4_ON_BODY)])
+        # Coverage: no step of either job is left without a body pin.
+        pinned = set(_W4_STEP_BODIES) | set(_W4_STEP_DIGESTS)
+        live = set()
         for job in ("publish", _W4_RC_JOB):
-            steps = dict(_w4_steps(_w4_job_text(self.source, job) or ""))
-            with self.subTest(job=job):
-                self.assertTrue(_w4_has_run(
-                    _w4_code_lines(steps.get(_W4_PIN_STEP, "")),
-                    _W4_PIN_CHECKS))
-        pack = dict(_w4_steps(_w4_job_text(self.source, _W4_RC_JOB) or ""))
-        self.assertEqual(
-            tuple(_w4_code_lines(pack.get(_W4_RC_PACK_STEP, ""))),
-            _W4_RC_PACK_CODE)
+            live |= {n for n, _b in _w4_steps(
+                _w4_job_text(self.source, job) or "")}
+        self.assertEqual(live, pinned)
 
     def test_control_widened_triggers_and_permissions_go_red(self):
         tags = '    tags:\n      - "v*"\n'
@@ -2247,46 +2372,127 @@ class Plan194W4PublishToolchainTest(TestEnvContext):
             with self.subTest(mutation=label):
                 self._red(mutated, text_needle, structural_needle)
 
-    def test_control_pin_step_without_its_checks_goes_red(self):
-        # Applied to BOTH copies: the byte-identical test cannot see a step
-        # that is wrong the same way twice.
-        case_block = (
-            '          case "${NODE_V}" in\n'
-            '            "v${PUBLISH_NODE_MAJOR}".*) ;;\n'
-            '            *)\n'
-            '              echo "::error::node ${NODE_V} is not on the '
-            'declared v${PUBLISH_NODE_MAJOR}.x line"\n'
-            '              exit 1\n'
-            '              ;;\n'
-            '          esac\n'
-        )
-        for label, old, new in (
-            ("node check removed", case_block, ""),
-            ("npm check inverted",
-             '!= "${PUBLISH_NPM_VERSION}" ]]',
-             '== "${PUBLISH_NPM_VERSION}" ]]'),
-            ("npm exit dropped",
-             '(PLAN-194 W4, D-12)"\n            exit 1\n',
-             '(PLAN-194 W4, D-12)"\n'),
-            ("node exit dropped",
-             '.x line"\n              exit 1\n', '.x line"\n'),
-        ):
-            mutated = self.source
-            for job in ("publish", _W4_RC_JOB):
-                mutated = _w4_in_job(mutated, job, old, new)
-            with self.subTest(mutation=label):
-                self._red(mutated, "no longer asserts")
+    def _both(self, old: str, new: str, src=None) -> str:
+        """`old` -> `new` inside BOTH jobs: a shared step neutralised in both
+        copies is identical, so only an exact-body pin can see it."""
+        for job in ("publish", _W4_RC_JOB):
+            src = _w4_in_job(src or self.source, job, old, new)
+        return src
 
-    def test_control_rc_pack_step_that_packs_for_real_goes_red(self):
-        tail = '          tail -n 12 "$LOG"\n'
-        for label, old, new in (
-            ("real pack added", tail, "          npm pack\n" + tail),
-            ("failure swallowed", "            exit 1\n          fi\n" + tail,
-             "            true\n          fi\n" + tail),
-        ):
-            mutated = _w4_in_job(self.source, _W4_RC_JOB, old, new)
+    def test_control_neutralised_steps_go_red(self):
+        n = "      - name: "
+        pin = n + _W4_PIN_STEP + "\n"
+        ind = "          "
+        node_read = ind + 'NODE_V="$(node --version)"\n'
+        npm_read = ind + 'NPM_V="$(npm --version)"\n'
+        case = ind + 'case "${NODE_V}" in\n'
+        ok = ind + 'echo "OK: node ${NODE_V}'
+        tag_ref = ind + 'TAG="${GITHUB_REF_NAME}"\n'
+        fixed_node = ind + 'NODE_V="v${PUBLISH_NODE_MAJOR}.0.0"\n'
+        fixed_npm = ind + 'NPM_V="${PUBLISH_NPM_VERSION}"\n'
+        tail = ind + 'tail -n 12 "$LOG"\n'
+        cases = (
+            # the pin step = the toolchain contract (rail r1 W4POST: g1-g5,
+            # g10, g11 + the five Codex variants; Codex's if:false and
+            # continue-on-error are the same lines as g11 and g10)
+            ("g1 node read fixed", self._both(node_read, fixed_node)),
+            ("g2 npm read fixed", self._both(npm_read, fixed_npm)),
+            ("g3 checks under if false", self._both(
+                ok, ind + "fi\n" + ok,
+                self._both(case, ind + "if false; then\n" + case))),
+            ("g4 exit shadowed", self._both(
+                case, ind + "exit() { :; }\n" + case)),
+            ("g5 exit 0 before the checks", self._both(
+                case, ind + "exit 0\n" + case)),
+            ("g10 continue-on-error", self._both(
+                pin, pin + "        continue-on-error: true\n")),
+            ("g11 if false", self._both(pin, pin + "        if: false\n")),
+            ("cx3 exit 0 before the reads", self._both(
+                node_read, ind + "exit 0\n" + node_read)),
+            ("cx4 both reads fixed", self._both(
+                npm_read, fixed_npm, self._both(node_read, fixed_node))),
+            ("cx5 checks as a heredoc", self._both(
+                ok, ind + "CHECKS\n" + ok,
+                self._both(case, ind + "cat <<'CHECKS'\n" + case))),
+            ("node check removed", self._both(
+                case + ind + '  "v${PUBLISH_NODE_MAJOR}".*) ;;\n', "")),
+            ("npm check inverted", self._both(
+                '!= "${PUBLISH_NPM_VERSION}" ]]',
+                '== "${PUBLISH_NPM_VERSION}" ]]')),
+            ("npm exit dropped", self._both(
+                '(PLAN-194 W4, D-12)"\n' + ind + "  exit 1\n",
+                '(PLAN-194 W4, D-12)"\n')),
+            # the RC-only steps
+            ("g12 exit 0 in the RC version step", _w4_in_job(
+                self.source, _W4_RC_JOB, tag_ref,
+                ind + "exit 0\n" + tag_ref)),
+            ("rc version check inverted", _w4_in_job(
+                self.source, _W4_RC_JOB,
+                '"$VERSION_FILE" != "$BASE" ]]',
+                '"$VERSION_FILE" == "$BASE" ]]')),
+            ("rc pack for real", _w4_in_job(
+                self.source, _W4_RC_JOB, tail, ind + "npm pack\n" + tail)),
+            ("rc pack failure swallowed", _w4_in_job(
+                self.source, _W4_RC_JOB,
+                ind + "  exit 1\n" + ind + "fi\n" + tail,
+                ind + "  true\n" + ind + "fi\n" + tail)),
+            # every other shared step, neutralised in both copies
+            ("packlist gate if false", self._both(
+                n + "Packlist gate (PLAN-152 tarball-02)\n",
+                n + "Packlist gate (PLAN-152 tarball-02)\n"
+                "        if: false\n")),
+            ("setup-node if false", self._both(
+                n + _W4_SHARED_STEPS[1] + "\n",
+                n + _W4_SHARED_STEPS[1] + "\n        if: false\n")),
+            ("stage continue-on-error", self._both(
+                n + "Stage bundle into npm/\n",
+                n + "Stage bundle into npm/\n"
+                "        continue-on-error: true\n")),
+            ("deps check exit 0", self._both(
+                ind + "DEP_COUNT=$(", ind + "exit 0\n" + ind + "DEP_COUNT=$(")),
+            ("trailer exit 0", self._both(
+                ind + 'FILE="scripts/install.sh"\n',
+                ind + "exit 0\n" + ind + 'FILE="scripts/install.sh"\n')),
+            # publish-only steps
+            ("publish version check exit 0", _w4_in_job(
+                self.source, "publish", tag_ref, ind + "exit 0\n" + tag_ref)),
+            ("tag liveness continue-on-error", _w4_in_job(
+                self.source, "publish",
+                n + "Assert remote tag still points at this run's SHA\n",
+                n + "Assert remote tag still points at this run's SHA\n"
+                "        continue-on-error: true\n")),
+            ("publish swallowed", _w4_in_job(
+                self.source, "publish",
+                "run: npm publish --provenance --access public\n",
+                "run: npm publish --provenance --access public || true\n")),
+        )
+        for label, mutated in cases:
             with self.subTest(mutation=label):
-                self._red(mutated, "body differs")
+                self.assertNotEqual(mutated, self.source)
+                self._red(mutated, "body differs from the pinned")
+
+    def test_control_job_and_workflow_level_neutralisers_go_red(self):
+        top_env = '  %s: "%s"\n' % (_W4_ENV_NPM, _W4_NPM_VERSION)
+        runs_on = "    runs-on: ubuntu-latest\n"
+        cases = (
+            ("rc job continue-on-error", _w4_in_job(
+                self.source, _W4_RC_JOB, runs_on,
+                runs_on + "    continue-on-error: true\n"), "job header"),
+            ("publish job env BASH_ENV", _w4_in_job(
+                self.source, "publish", "    steps:\n",
+                "    env:\n      BASH_ENV: /dev/null\n    steps:\n"),
+             "job header"),
+            ("workflow default shell", self._replaced(
+                "\njobs:\n",
+                '\ndefaults:\n  run:\n    shell: "true {0}"\n\njobs:\n'),
+             "top-level keys"),
+            ("workflow env extra", self._replaced(
+                top_env, top_env + '  NODE_OPTIONS: "--require=x"\n'),
+             "top-level keys"),
+        )
+        for label, mutated, needle in cases:
+            with self.subTest(mutation=label):
+                self._red(mutated, needle)
 
 
 if __name__ == "__main__":
