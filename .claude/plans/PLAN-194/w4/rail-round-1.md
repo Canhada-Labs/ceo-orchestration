@@ -4,7 +4,7 @@ Rail-Round: 1
 Rail-Subject: .claude/plans/PLAN-194/w4/w4.patch
 Rail-Subject-sha256: ae76d066e9eaf00f9bfaa42c9f64b616f3c25f7c138f6145b1bf6d7afaa26c0c
 Rail-Subject-patch-id: e869026b17c324a8c411c93ac7cff901ae93b992
-Rail-Sentinel-sha256: 6538e1f4bdc3e7d6706727591c8c1cb30e719885611d5d1225af02e218919c64
+Rail-Sentinel-sha256: 864c6d8bfe84d45b6b01a266a67165b6818877f3f1d86f44badf3b3048cdb445
 Rail-Control: classe Plan194W4PublishToolchainTest (dentro do patch): 17 failed contra os canônicos de a953a08204d4, 17 passed com o patch (w4/red-control.txt)
 Rail-Reviewer: codex-cli 0.160.0 (pin assinado 4a1eec73), exec --sandbox read-only, modelo do config do usuário (gpt-6-astra, model_reasoning_effort xhigh), config sha256 9af51fe781bf86c1…, memories e chronicle desligados; refutadores Claude r-w4-a (DevOps) e r-w4-b (Security), modelo fable
 Rail-Prompt: fora do repositório (prompt da rodada na sessão S363, 2026-10-09; critérios resumidos na triagem)
@@ -47,13 +47,23 @@ VERDICT: GO
   o `on:` (pré-existente); P3-4: npm por versão exata sem hash no repositório (endurecimento opcional).
   Reproduziu: 84 passed; controle 17 failed / 67 deselected na base; actionlint 1.7.12 rc 0; rollback
   rc 0 na base e com o patch; 21 mutantes.
-- Disposição: nenhum P0/P1/P2 ⇒ APPROVE. Os P3 das duas lanes Claude e o `SPEC/v1/npm-shim.md:61`
-  (desatualizado por contrato) ficam DECLARADOS no texto assinável (seção «Residual declarado») e viram
-  pacote LIVRE depois do LAND.
+- Disposição: nenhum P0/P1/P2 ⇒ APPROVE. Ficam DECLARADOS no texto assinável (seção «Residual
+  declarado»), em dois destinos distintos: o pacote LIVRE de depois do LAND = os P3 do teste novo e
+  `docs/BRANCH-PROTECTION.md:447-457`; a dívida CANÔNICA = `SPEC/v1/npm-shim.md:61` (desatualizado por
+  contrato; o arquivo é canônico, oráculo `--is-canonical` = 1), corrigida só por cerimônia própria,
+  fora da 1.4.3.
 - O que a rodada 1 NÃO revisou: o texto do sentinel `w4-approved.md`, o `OWNER-W4-SIGN.sh` e o harness
   `test-ceremony-w4.sh`, escritos depois dela (materiais da cerimônia, S363). A linha
   Rail-Sentinel-sha256 prende este registro ao texto commitado — o SIGN recusa se ele mudar —, mas não
   afirma que o rail o revisou.
+- Re-vínculo (S363, rodada 2 dos materiais): a rodada 1 dos materiais (texto anterior do sentinel,
+  sha256 `6538e1f4bdc3e7d6706727591c8c1cb30e719885611d5d1225af02e218919c64`, e os scripts) deu Codex
+  GO-WITH-CONDITIONS — 3 P2: o flake de tempo do `test_install_smoke` não declarado; o
+  `SPEC/v1/npm-shim.md:61` roteado ao pacote livre, sendo canônico; o T33 do harness sem simulação no
+  `--full-suite` — e refutador Claude GO com 2 P3 (o mesmo flake; o «424 PASS / 0 FAIL» sem dizer que
+  as suítes eram fachada). Curados no sentinel, no cabeçalho do SIGN, no harness e nesta disposição; a
+  linha Rail-Sentinel-sha256 passou a apontar o sentinel curado. O patch, o Rail-Subject-sha256 e o
+  veredito da rodada 1 do patch não mudam.
 
 ## Saídas das lanes Claude (verbatim; o SIGN não lê esta seção)
 

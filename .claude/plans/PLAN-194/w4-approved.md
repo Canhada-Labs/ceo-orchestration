@@ -95,16 +95,26 @@ Data: TO-FILL-BY-SIGN
 - O Node é a LINHA 24, não um build: o `setup-node` resolve uma 24.x na hora do run (cache do runner
   primeiro, senão o manifesto), e o passo confere só o prefixo `v24.`. O npm é exato por VERSÃO, baixado
   do registry na hora do run, sem hash pinado no repositório.
-- `SPEC/v1/npm-shim.md:61` segue dizendo que o npm é `>=11.5.1` atualizado no job porque o Node 20 traz
-  npm 10.x: fica desatualizado por contrato — o `SPEC/v1` não é deste pacote.
-- Afirmações vizinhas falsas fora do escopo: `docs/BRANCH-PROTECTION.md:447-457` repete o bump para Node
-  24 que a W4 corrigiu em `docs/actions-versions.md` (e as linhas vizinhas sobre o `upload-artifact` e o
-  `setup-node`). Vão para um pacote LIVRE depois do LAND.
+- Dívida CANÔNICA, fora do pacote livre: `SPEC/v1/npm-shim.md:61` segue dizendo que o npm é `>=11.5.1`
+  atualizado no job porque o Node 20 traz npm 10.x, e fica desatualizado por contrato. O arquivo é
+  canônico (oráculo `--is-canonical` = 1): a correção só entra por cerimônia própria, fora da 1.4.3.
+- O pacote LIVRE de depois do LAND é só isto: `docs/BRANCH-PROTECTION.md:447-457`, que repete o bump para
+  Node 24 que a W4 corrigiu em `docs/actions-versions.md` (e as linhas vizinhas sobre o
+  `upload-artifact` e o `setup-node`), e as lacunas do teste novo do item seguinte.
 - Lacunas do teste novo, todas P3 na rodada 1 e no pacote livre de depois do LAND: mutantes que ficam
   verdes — remover as conferências de versão do passo do npm, um `npm pack` sem `--dry-run` no passo
   próprio da rc, apagar o `id-token: write` do workflow e acrescentar `workflow_dispatch` ao `on:`
   (estes dois, pré-existentes); a lane de texto não exige o bloco `permissions:` da rc (só a lane YAML
   o pega); o teste antigo da exclusão de rc casa o texto também no comentário do cabeçalho.
+- Flake de tempo conhecido, fora deste patch: o teste
+  `tests/integration/test_install_smoke.py::test_install_is_idempotent_and_preserves_user_edits` roda o
+  `install.sh` duas vezes com orçamento ABSOLUTO de 90 s cada (`_run_install`). No ensaio da bateria inteira (2026-10-09) ele falhou só na
+  passada paralela com o patch; isolado, passou 10 de 10 vezes nas duas árvores (base 84–113 s, patch
+  95–137 s), e um A/B intercalado não mostrou diferença entre elas; nem o teste nem o `install.sh` leem
+  os 5 caminhos do patch. Classe: orçamento de tempo absoluto = flake de runner. O que o SIGN faz com
+  ele: rerroda o teste isolado, com o patch, até 3 vezes e anota «instável» se passar; se falhar nas 3
+  (máquina carregada), roda uma vez sem o patch — se lá também falha, é nota (pré-existente); se lá
+  passa, o SIGN aborta fail-closed e desfaz, e rodar de novo é seguro.
 - `contains()` do GitHub não distingue maiúsculas: uma tag `-RC.` cai no job da rc, onde o corte
   `-rc.[0-9]*` distingue e reprova (como no `release.yml`); não abre caminho de publish.
 - O controle vermelho→verde do PLAN-194 em CI (o job da rc.1 da 1.4.3 com Node 24 e npm exato, contra o
@@ -166,7 +176,9 @@ Data: TO-FILL-BY-SIGN
   `.claude/plans/PLAN-194/w4/rail-round-N.md`. Regra de parada pré-registrada: no máximo 3 rodadas. A
   rodada 1 teve por sujeito o patch (`git diff a953a08204d4..4672153e8ed9`, patch-id `e869026b17c3…`):
   Codex «NENHUM ACHADO» e GO; os dois refutadores, GO só com P3. Este texto e os scripts da cerimônia
-  foram escritos depois da rodada 1: ela não os revisou. O SIGN exige que o registro da última rodada
+  foram escritos depois da rodada 1: ela não os revisou. Uma rodada sobre os materiais (a versão
+  anterior deste texto, sha256 `6538e1f4…`, e os scripts) deu Codex GO-WITH-CONDITIONS (3 P2) e
+  refutador Claude GO (2 P3); as condições estão curadas neste texto e nos scripts. O SIGN exige que o registro da última rodada
   nomeie o sha256 deste patch e o sha256 deste texto no HEAD (com os quatro campos por preencher) — o
   que impede editar este texto sem um registro novo —, que a linha Rail-Reviewer-Verdict seja a última
   linha `VERDICT:` da saída verbatim do revisor — lida pela gramática estrita do registro: exatamente uma

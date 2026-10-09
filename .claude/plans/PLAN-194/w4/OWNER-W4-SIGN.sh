@@ -31,7 +31,17 @@
 #      patch (um achado que só existe com o patch reprova, mesmo com a base vermelha);
 #  (5) sem os check-model-* da W3b.1 (o patch não toca modelos); o worktree do controle segue as regras
 #      do worktree da base (criado no P0, removido logo depois do controle; o desfazer e uma execução
-#      nova removem o que uma execução interrompida deixou).
+#      nova removem o que uma execução interrompida deixou);
+#  (6) resíduos declarados (detalhe no texto assinável): (a) flake de tempo conhecido, fora do patch —
+#      tests/integration/test_install_smoke.py::test_install_is_idempotent_and_preserves_user_edits
+#      roda o install.sh 2× com orçamento ABSOLUTO de 90 s cada (_run_install); no ensaio da bateria
+#      inteira (2026-10-09) falhou só na passada paralela com o patch, e isolado passou 10/10 nas duas
+#      árvores (base 84–113 s, patch 95–137 s; A/B intercalado sem diferença). Este SIGN o trata como a
+#      qualquer falha das suítes (judge_fails): rerun isolado com o patch até 3× ⇒ «instável» se passar;
+#      se falhar nas 3, roda sem o patch ⇒ nota se lá também falha, abort fail-closed se lá passa (rodar
+#      de novo é seguro). (b) O pacote LIVRE de depois do LAND = os P3 do teste novo e
+#      docs/BRANCH-PROTECTION.md:447-457; SPEC/v1/npm-shim.md:61 é CANÔNICO (oráculo 1) e fica como
+#      dívida declarada, só por cerimônia própria, fora da 1.4.3.
 # Do molde, sem mudança de semântica: P0 (main, origin/main contido no HEAD, árvore rastreada limpa,
 # materiais commitados, base pinada pelas linhas index, Scope = tocados, canônicos = o declarado, chave
 # do allowlist, marcador de preenchimento só nas 4 linhas de campo); o registro do rail preso ao sha256

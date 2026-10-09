@@ -6,7 +6,9 @@
 # como vermelho; T17c: uma coleta quebrada não conta; T17d: um skip só com o patch reprova o verde);
 # T17b (passada dura de testes vermelha com o patch E sem ele reprova); T21 (achado de actionlint no
 # workflow do pacote reprova na passada dura); T29-T31 (patch dormente de rollback ausente, diferente
-# do pinado, ou que deixa de aplicar com o patch); T33 (sem PyYAML recusa no P0); T19/T19b/T20 da W1
+# do pinado, ou que deixa de aplicar com o patch); T33 (sem PyYAML recusa no P0 — com um python3 de
+# fachada próprio do T33, exercitado com o PATH do modo padrão E com o do --full-suite, em qualquer
+# modo do harness, mais o controle positivo da sonda sem a variável); T19/T19b/T20 da W1
 # (sem actionlint, sem shellcheck, achado de actionlint pré-existente fora do patch). A deriva plantada
 # (T5/T15), as marcas do T26 e o toque fora dos hunks (T13) ficam no docs/actions-versions.md (hunks
 # longe do fim); o toque no contexto de um hunk (T13b) fica no npm-publish.yml (último hunk ancorado
@@ -136,12 +138,8 @@ REALPY="$(command -v python3)"
 PYUB="$(python3 -m site --user-base)"
 cat > "$WORK/shim/python3" <<SHIM
 #!/bin/bash
-# fachada do ensaio: responde às duas passadas inteiras do pytest do SIGN, à passada dura dos 4 arquivos
-# (só com W4_SHIM_HARD_FAST=1) e à sonda do PyYAML (só com W4_SHIM_NO_YAML=1); o resto é o python3 real
-if [ "\${1:-}" = "-c" ] && [ "\${2:-}" = "import yaml" ] && [ "\${W4_SHIM_NO_YAML:-}" = "1" ]; then
-  echo "ModuleNotFoundError: No module named 'yaml' (fachada do ensaio)" >&2
-  exit 1
-fi
+# fachada do ensaio: responde às duas passadas inteiras do pytest do SIGN e à passada dura dos 4 arquivos
+# (só com W4_SHIM_HARD_FAST=1); o resto é o python3 real (a sonda do PyYAML é do T33, com fachada própria)
 if [ "\${1:-}" = "-m" ] && [ "\${2:-}" = "pytest" ] && [ "\${3:-}" = ".claude/scripts/tests/test_release_workflow_asserts.py" ] \
    && [ "\${4:-}" = ".claude/scripts/tests/test_install_sh_self_sha.py" ] && [ "\${W4_SHIM_HARD_FAST:-}" = "1" ]; then
   printf '274 passed in 0.01s\n'
@@ -763,13 +761,46 @@ has "$WORK/logs/t30.log" "o patch dormente de rollback não é o pinado" "T30: r
 has "$WORK/logs/t30.log" "nada a desfazer" "T30: nada foi aplicado"
 clean_tree "$C" "T30"
 
-step "T33 sem PyYAML recusa no P0 (a lane estrutural do controle pularia)"
-C="$(fresh noyaml)"
-rc=0; W4_SHIM_NO_YAML=1 run_dry "$C" "$WORK/logs/t33.log" || rc=$?
-[ "$rc" = "1" ] && ok "T33: rc 1" || ko "T33: rc $rc (esperado 1)"
-has "$WORK/logs/t33.log" "PyYAML ausente" "T33: recusa nomeada"
-has "$WORK/logs/t33.log" "nada a desfazer" "T33: nada foi aplicado"
-clean_tree "$C" "T33"
+step "T33 sem PyYAML recusa no P0 (a lane estrutural do controle pularia) — simulação própria, nos DOIS modos de PATH"
+# Um python3 de fachada só do T33, que vai à frente do PATH: com W4_SHIM_NO_YAML=1, a sonda
+# «python3 -c 'import yaml'» falha como numa máquina sem PyYAML; todo o resto é o python3 real. Roda com o
+# PATH do modo padrão (com a fachada das suítes) E com o do --full-suite (sem ela), em qualquer modo do
+# harness — a recusa vem no P0, antes da bateria, então as duas variantes custam segundos.
+NOYAML="$WORK/noyaml"
+mkdir -p "$NOYAML"
+cat > "$NOYAML/python3" <<NOY
+#!/bin/bash
+# simulação do T33: com W4_SHIM_NO_YAML=1 a sonda do PyYAML falha; o resto é o python3 real
+if [ "\${1:-}" = "-c" ] && [ "\${2:-}" = "import yaml" ] && [ "\${W4_SHIM_NO_YAML:-}" = "1" ]; then
+  echo "ModuleNotFoundError: No module named 'yaml' (simulação do T33)" >&2
+  exit 1
+fi
+exec "$REALPY" "\$@"
+NOY
+chmod 755 "$NOYAML/python3"
+for mode in padrao full-suite; do
+  if [ "$mode" = "padrao" ]; then MPATH="$NOYAML:$WORK/shim:$TOOLS:/usr/bin:/bin:/usr/sbin:/sbin"; else MPATH="$NOYAML:$TOOLS:/usr/bin:/bin:/usr/sbin:/sbin"; fi
+  # a simulação discrimina: sem a variável a sonda passa; com ela, reprova
+  if env -i PATH="$MPATH" HOME="$WORK/home" PYTHONUSERBASE="$PYUB" python3 -c 'import yaml' >/dev/null 2>&1; then
+    ok "T33-$mode: sem W4_SHIM_NO_YAML a sonda do PyYAML passa (controle positivo)"
+  else
+    ko "T33-$mode: sem W4_SHIM_NO_YAML a sonda do PyYAML reprovou"
+  fi
+  if env -i PATH="$MPATH" HOME="$WORK/home" PYTHONUSERBASE="$PYUB" W4_SHIM_NO_YAML=1 python3 -c 'import yaml' >/dev/null 2>&1; then
+    ko "T33-$mode: com W4_SHIM_NO_YAML=1 a sonda do PyYAML passou (a simulação não age neste PATH)"
+  else
+    ok "T33-$mode: com W4_SHIM_NO_YAML=1 a sonda do PyYAML reprova"
+  fi
+  C="$(fresh "noyaml-$mode")"
+  rc=0
+  ( cd "$C" && W4_SHIM_NO_YAML=1 sign_env | sed "s#^PATH=.*#PATH=$MPATH#" > "$WORK/logs/env-t33-$mode" \
+      && exec env -i $(cat "$WORK/logs/env-t33-$mode") bash "$SIGN" --dry-run ) >"$WORK/logs/t33-$mode.log" 2>&1 </dev/null || rc=$?
+  grep -qx "PATH=$MPATH" "$WORK/logs/env-t33-$mode" && ok "T33-$mode: o SIGN rodou com o PATH do modo" || ko "T33-$mode: PATH inesperado no ambiente do SIGN"
+  [ "$rc" = "1" ] && ok "T33-$mode: rc 1" || ko "T33-$mode: rc $rc (esperado 1)"
+  has "$WORK/logs/t33-$mode.log" "PyYAML ausente" "T33-$mode: recusa nomeada"
+  has "$WORK/logs/t33-$mode.log" "nada a desfazer" "T33-$mode: nada foi aplicado"
+  clean_tree "$C" "T33-$mode"
+done
 
 step "T25 modo REAL: falha DEPOIS da assinatura (o commit recusa) — sentinel restaurado, .asc removida, patch revertido"
 C="$(fresh realfail)"
