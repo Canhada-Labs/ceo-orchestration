@@ -104,10 +104,15 @@ the shipped pin `claude-opus-5` to `claude-opus-5-5` in a file that
 sets no level, it writes `effortLevel: high`, the Opus 5 default; it
 never overwrites a value you set. Without the key, and with no other
 source setting a level (`CLAUDE_CODE_EFFORT_LEVEL`, `--effort`,
-`/effort`, a level saved for the model, `ultracode`), Opus 5.5 runs at
-its default medium effort (Opus 5 defaults to high), a default that an
+`/effort`, a level saved for the model), Opus 5.5 runs at its default
+medium effort (Opus 5 defaults to high), a default that an
 organization default effort replaces when the session runs the
-organization default model; a `maxEffortLevel` caps any level. In the
+organization default model; a `maxEffortLevel` caps any level. Both
+defaults were read from the model catalog in the Claude Code 2.1.295
+binary on 2026-10-09. On Claude Code 2.1.280, `ultracode` also made
+`xhigh` the default level. The 2.1.284 changelog says it no longer forces
+`xhigh`, and the 2.1.295 binary describes it as orchestration "at any
+effort level"; its effect on effort was not probed on 2.1.295. In the
 project file the key applies to every model and outranks a level a
 developer saved with `/effort` (kept per model under `modelSettings` in
 user settings); a personal level belongs in

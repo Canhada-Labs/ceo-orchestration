@@ -1,4 +1,4 @@
-"""Guard-hook loadability of every shipped settings surface (rule derived from the Claude Code 2.1.277, 2.1.278 and 2.1.280 binaries).
+"""Guard-hook loadability of every shipped settings surface (rule derived from the Claude Code 2.1.280 binary, re-derived from 2.1.295).
 
 WHY THIS FILE EXISTS
 --------------------
@@ -19,39 +19,68 @@ Before this file, no tracked Python, shell or workflow file mentioned this
 rule (``git grep``, 2026-09-22). This file replicates the rule and asserts
 that no shipped surface trips it.
 
-PROVENANCE (measured 2026-09-22, macOS, Claude Code 2.1.280)
-------------------------------------------------------------
-The replica below was re-derived by reading the JavaScript embedded in the
-native binary ``~/.local/share/claude/versions/2.1.280`` (sha256
-``DERIVED_FROM_BINARY_SHA256``). Six code segments are byte-identical after
-identifier normalisation in 2.1.277, 2.1.278 and 2.1.280: (1) the entry
+PROVENANCE (re-derived 2026-10-09, macOS, Claude Code 2.1.295)
+---------------------------------------------------------------
+The rule was first derived on 2026-09-22 by reading the JavaScript embedded
+in the 2.1.277, 2.1.278 and 2.1.280 native binaries. Six code segments were
+byte-identical after identifier normalisation in those builds: (1) the entry
 check, recursive guard scan, exempt-key set and matcher walk; (2) the
 settings-file validator; (3) the per-file parse; (4) the event list; (5) the
-hook entry schemas; (6) the matcher schema. Only the minified names differ
-between builds, so search by message text, not by name. The plugin
-``hooks.json`` variant was read in 2.1.280 only. To re-derive the rule,
-search the binary for ``unloadableGuards`` and for these strings:
+hook entry schemas; (6) the matcher schema.
+
+The replica is now pinned to ``~/.local/share/claude/versions/2.1.295``
+(sha256 ``DERIVED_FROM_BINARY_SHA256``), re-measured on 2026-10-09 (section
+"CC 2.1.295" of ``.claude/plans/PLAN-194/LEDGER.md``). Against 2.1.292, the
+oldest build still on disk, the entry check, the matcher walk, the
+settings-file validator and the per-file parse are identical after renaming.
+The 33 events keep their order and the 9 exempt keys are the same. Segment
+(5) changed: the ``command`` and ``http`` entry schemas gained ``onFailure``,
+an optional enum ``"continue"``/``"block"`` with no ``.catch``. A byte search
+for the field's describe text and for ``onFailure`` right after each
+schema's ``timeout`` finds it in 2.1.295 only, once per schema, and in none
+of 2.1.292, 2.1.293 or 2.1.294. No other build on disk carries this exact
+rule, so ``SAME_RULE_NORMALISED_IN`` is empty. 2.1.280 and 2.1.288 are no
+longer on disk: the chain back to 2.1.280 rests on recorded constants, not
+on a diff. The plugin ``hooks.json`` variant was read in 2.1.280 only.
+
+Minified names change in every build, so search by message text, not by
+name. To re-derive the rule, search the binary for ``unloadableGuards`` and
+for these strings (names: 2.1.295 first, then 2.1.280):
 
 * ``holds PreToolUse/PermissionRequest hooks where a matcher was expected``
-  (the per-event matcher walk, named ``Lt`` in 2.1.280);
+  (the per-event matcher walk, ``on``; ``Lt``);
 * ``PreToolUse/PermissionRequest hooks are declared outside "hooks"`` (the
-  settings-file validator, ``Af``/``vf`` in 2.1.280; ``Af`` calls ``k6`` with
-  the exempt-key set ``Js``);
-* ``Hook entry must be an object`` (the entry check ``rd``, which validates
-  against the discriminated union of the hook schemas);
+  settings-file validator ``u_``, which calls ``G8`` with the exempt-key set
+  ``si``; ``Af``, ``k6`` and ``Js``);
+* ``Hook entry must be an object`` (the entry check, ``Rp``; ``rd``, which
+  validates against the discriminated union of the hook schemas);
 * ``.describe("Shell command hook type")`` (the hook entry schemas);
-* ``return{settings:c.data,errors:i}`` (the per-file parse ``POe``, which
-  returns ``settings:null`` when any finding has ``severity==="fatal"``).
+* ``What a failure of this hook does`` (the shared ``onFailure`` schema
+  ``ni``, used as ``onFailure:ni()`` by the command and http schemas only);
+* ``return{settings:c.data,errors:d}`` (the per-file parse, ``OE``; ``POe``,
+  which returns ``settings:null`` when any finding has
+  ``severity==="fatal"``). The 2.1.280 text of this docstring gave the anchor
+  as ``errors:i``; that form is absent from 2.1.287, 2.1.288 and 2.1.292 to
+  2.1.295.
 
-RUNTIME CROSS-CHECK (2026-09-23 UTC, Claude Code 2.1.280). ``claude doctor``
-makes no model call and prints the loader's verdict for each settings file.
-Run in a scratch project with ``HOME`` and ``CLAUDE_CONFIG_DIR`` pointed at
-scratch directories, it printed the fatal reason quoted above for a PreToolUse
-entry of unknown ``type``, "entry ignored" for the same entry under
-PostToolUse, and no settings finding for a clean control. Only those three
-documents were run; every other shape below rests on the text read. When
-re-deriving, plant a shape in such a scratch project and compare the
-``claude doctor`` output with the replica's verdict.
+RUNTIME CROSS-CHECK. ``claude doctor`` makes no model call and prints the
+loader's verdict for each settings file. It was run in a scratch project with
+``HOME`` and ``CLAUDE_CONFIG_DIR`` pointed at scratch directories.
+
+* 2026-09-23 UTC, Claude Code 2.1.280: the fatal reason quoted above for a
+  PreToolUse entry of unknown ``type``, "entry ignored" for the same entry
+  under PostToolUse, and no settings finding for a clean control.
+* 2026-10-09 UTC, Claude Code 2.1.295 (with ``DISABLE_AUTOUPDATER=1`` and
+  ``CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1``), six ``onFailure``
+  documents. The fatal reason for ``"retry"`` and for ``null``
+  on a PreToolUse command entry, and for ``"Block"`` on a PermissionRequest
+  http entry. "entry ignored" for ``"retry"`` under PostToolUse. No settings
+  finding for ``"block"`` on a PreToolUse command entry, nor for ``"retry"``
+  on a PreToolUse prompt entry.
+
+Every other shape below rests on the text read. When re-deriving, plant a
+shape in such a scratch project and compare the ``claude doctor`` output with
+the replica's verdict.
 
 The replica is pinned to one Claude Code version. ``ReplicaPinTracksTheLedger``
 holds ``DERIVED_FROM_CLAUDE_CODE`` equal to ``claude_code.last_seen.version`` in
@@ -87,13 +116,20 @@ A settings file is dropped whole when any of these holds:
    entry is not an object, has no string ``type``, has a ``type`` outside
    command/prompt/agent/http/mcp_tool, or fails that type's schema, for example
    a missing ``command``, a ``timeout`` that is not a positive number, or a
-   wrong-typed optional field. Unknown extra keys such as ``_comment`` are
-   stripped, not rejected, because the schemas are plain (non-strict) objects.
+   wrong-typed optional field. Since 2.1.295 that includes an ``onFailure``
+   on a command or http entry that is not ``"continue"`` or ``"block"``;
+   ``null`` fails too, because the field is optional, not nullable. Unknown
+   extra keys such as ``_comment`` are stripped, not rejected, because the
+   schemas are plain (non-strict) objects. ``onFailure`` on a prompt, agent
+   or mcp_tool entry is such an extra key.
 
 The replica is FAITHFUL where it can be and CONSERVATIVE where it cannot: it
 may flag something the binary would load (an http ``url`` it cannot prove
 valid, an empty or blank ``command``), never the reverse. A false red costs a
-look. A false green costs the whole rail.
+look. A false green costs the whole rail. A field the replica does not list
+in ``_TYPE_FIELDS`` is stripped like an extra key, so every field the binary
+validates must be listed: until the 2.1.295 re-derivation, ``onFailure`` was
+such a false green.
 
 OUT OF SCOPE (declared)
 -----------------------
@@ -135,9 +171,10 @@ if str(_HOOKS_DIR) not in sys.path:
 
 from _lib.testing import TestEnvContext  # noqa: E402
 
-DERIVED_FROM_CLAUDE_CODE = "2.1.280"
-DERIVED_FROM_BINARY_SHA256 = "387a5c5dcdbb815085edf0baf79591f9d8894efe922bceaf3d75b1b08055229d"
-SAME_RULE_NORMALISED_IN = ("2.1.277", "2.1.278")
+DERIVED_FROM_CLAUDE_CODE = "2.1.295"
+DERIVED_FROM_BINARY_SHA256 = "0116ee2e0a513900b633d9951367f18747686478e2b462805b8c31609f047f70"
+# Empty: 2.1.292-2.1.294 lack ``onFailure`` (module docstring, PROVENANCE).
+SAME_RULE_NORMALISED_IN: Tuple[str, ...] = ()
 
 # The 33-event registry, in binary order.
 HOOK_EVENTS: Tuple[str, ...] = (
@@ -283,6 +320,10 @@ def _is_shell(v: Any) -> bool:
     return v in ("bash", "powershell")
 
 
+def _is_on_failure(v: Any) -> bool:
+    return v in ("continue", "block")
+
+
 _URL_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://\S+$")
 
 
@@ -295,15 +336,18 @@ _COMMON_OPTIONAL: Dict[str, _Check] = {
     "if": _is_str, "timeout": _is_positive_number, "statusMessage": _is_str, "once": _is_bool,
 }
 # type -> (required fields, optional fields). ``cloud`` is omitted: the binary
-# wraps it in .catch(), so no value of it can fail.
+# wraps it in .catch(), so no value of it can fail. ``onFailure`` (``ni`` in
+# 2.1.295, command and http only) has no .catch: a value outside its enum fails.
 _TYPE_FIELDS: Dict[str, Tuple[Dict[str, _Check], Dict[str, _Check]]] = {
     "command": ({"command": _is_str}, {
         "args": _is_str_list, "shell": _is_shell, "async": _is_bool, "asyncRewake": _is_bool,
-        "rewakeMessage": _is_str_min1, "rewakeSummary": _is_str_min1}),
+        "rewakeMessage": _is_str_min1, "rewakeSummary": _is_str_min1,
+        "onFailure": _is_on_failure}),
     "prompt": ({"prompt": _is_str}, {"model": _is_str, "continueOnBlock": _is_bool}),
     "agent": ({"prompt": _is_str}, {"model": _is_str}),
     "http": ({"url": _is_url_conservative}, {
-        "headers": _is_str_record, "allowedEnvVars": _is_str_list}),
+        "headers": _is_str_record, "allowedEnvVars": _is_str_list,
+        "onFailure": _is_on_failure}),
     "mcp_tool": ({"server": _is_str, "tool": _is_str}, {"input": _is_record}),
 }
 
@@ -495,10 +539,9 @@ class ShippedSurfacesLoadWhole(TestEnvContext):
                 findings[rel] = fatal
         self.assertEqual(
             findings, {},
-            "By the rule derived from the Claude Code 2.1.277, 2.1.278 and 2.1.280 binaries "
-            "(a text replica, not a runtime observation), Claude Code would IGNORE these "
-            "whole settings files: %r"
-            % (findings,))
+            "By the rule derived from the Claude Code %s binary (a text replica, not a "
+            "runtime observation), Claude Code would IGNORE these whole settings files: %r"
+            % (DERIVED_FROM_CLAUDE_CODE, findings))
 
     def test_no_hook_entry_dropped_with_warning(self) -> None:
         findings = {}
@@ -595,6 +638,10 @@ class PlantedFatalShapesAreFlagged(TestEnvContext):
             "asyncRewake not a bool": _entry(asyncRewake="yes"),
             "rewakeMessage empty": _entry(rewakeMessage=""),
             "rewakeSummary empty": _entry(rewakeSummary=""),
+            "onFailure unknown value": _entry(onFailure="retry"),
+            "onFailure wrong case": _entry(onFailure="Block"),
+            "onFailure null": _entry(onFailure=None),
+            "onFailure not a string": _entry(onFailure=True),
             "prompt missing prompt": {"type": "prompt"},
             "prompt model not a string": {"type": "prompt", "prompt": "p", "model": 1},
             "prompt continueOnBlock not a bool": {"type": "prompt", "prompt": "p",
@@ -612,11 +659,38 @@ class PlantedFatalShapesAreFlagged(TestEnvContext):
                                          "headers": {"A": 1}},
             "http allowedEnvVars not a list": {"type": "http", "url": "https://x.test/h",
                                                "allowedEnvVars": "TOKEN"},
+            "http onFailure unknown value": {"type": "http", "url": "https://x.test/h",
+                                             "onFailure": "retry"},
         }
         for name, entry in cases.items():
             for event in sorted(GUARD_EVENTS):
                 with self.subTest(case=name, event=event):
                     self.assertFatal(_doc(entry, event=event), "hooks.%s.0.hooks.0" % event)
+
+    def test_on_failure_field(self) -> None:
+        # 2.1.295 gives the command and http entries ``onFailure`` (``ni``): enum
+        # continue|block, optional, no .catch. ``claude doctor`` on 2.1.295
+        # gave these verdicts (docstring, RUNTIME CROSS-CHECK); the agent and
+        # mcp_tool legs rest on the byte search (``onFailure:ni()`` twice).
+        http = {"type": "http", "url": "https://x.test/h"}
+        for value in ("continue", "block"):
+            for entry in (_entry(onFailure=value), dict(http, onFailure=value)):
+                with self.subTest(value=value, type=entry["type"]):
+                    self.assertEqual(settings_findings(_doc(entry)), ([], []))
+        self.assertFatal(_doc(_entry(onFailure="retry")), "onFailure")
+        self.assertFatal(_doc(_entry(onFailure=None)), "onFailure")
+        self.assertFatal(_doc(dict(http, onFailure="Block"), event="PermissionRequest"),
+                         "onFailure")
+        # Under a non-guard event the entry is dropped and the file still loads.
+        fatal, dropped = settings_findings(_doc(_entry(onFailure="retry"), event="PostToolUse"))
+        self.assertEqual(fatal, [])
+        self.assertTrue(any("onFailure" in d for d in dropped), dropped)
+        # On the other entry types the field is an extra key and is stripped.
+        for entry in ({"type": "prompt", "prompt": "p", "onFailure": "retry"},
+                      {"type": "agent", "prompt": "p", "onFailure": "retry"},
+                      {"type": "mcp_tool", "server": "s", "tool": "t", "onFailure": "retry"}):
+            with self.subTest(type=entry["type"]):
+                self.assertEqual(settings_findings(_doc(entry)), ([], []))
 
     def test_conservative_blank_command(self) -> None:
         self.assertFatal(_doc(_entry(command="  ")), "conservative")

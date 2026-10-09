@@ -34,6 +34,10 @@ probes run in throwaway directories around Claude Opus 5.5
 - **2026-09-23 re-runs**, with user settings excluded (`--setting-sources
   project,local`): the recipe end to end, R4's merge, and the ConfigChange
   behaviour described [below](#use-the-model-key-not-anthropic_model).
+- **2026-10-09 binary reads, Claude Code 2.1.295** (no probe re-run): the
+  default effort per model in the embedded model catalog, the `effortLevel`
+  schema and the `ultracode` key's description. Statements that rest on
+  them name 2.1.295.
 
 Where a statement rests on the docs alone, or on one probe, it says so. The
 raw probe outputs are not kept in this repository. These are harness
@@ -151,13 +155,17 @@ shows which model you got.
    Claude Platform on AWS, Amazon Bedrock and Google Cloud's Agent Platform,
    and to Opus 4.6 on Microsoft Foundry.
 
-3. **Optional: `ultracode`.** To get xhigh effort plus dynamic workflow
-   orchestration by default, add `"ultracode": true` next to `model`. The
-   settings reference gives the key the scope "Any file", and a probe on
-   2026-09-22 with user settings excluded read it applied from the local file
-   alone (`get_settings`: `ultracode` true, effort `xhigh`, source
-   `localSettings`); so there it applies to every session of this project on
-   this machine. It changes more than effort. Per the Claude Code docs, while
+3. **Optional: `ultracode`.** To get dynamic workflow orchestration by
+   default, add `"ultracode": true` next to `model`. On Claude Code 2.1.280
+   it also made `xhigh` the default effort. The 2.1.284 changelog says it no
+   longer forces `xhigh`, and the 2.1.295 binary describes it as
+   orchestration "at any effort level"; the effort it yields on 2.1.295 was
+   not probed. The settings reference gives the key the scope "Any file",
+   and a probe on 2026-09-22 (Claude Code 2.1.280) with user settings
+   excluded read it applied from the local file alone (`get_settings`:
+   `ultracode` true, effort `xhigh`, source `localSettings`); so there it
+   applies to every session of this project on this machine. It changes
+   more than orchestration and effort. Per the Claude Code docs, while
    `ultracode` is active the session is not held to the Agent tool's
    concurrent-subagent limit (20 by default,
    `CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`; Claude Code 2.1.217 or later; the
@@ -320,10 +328,13 @@ missing from that table does not support effort at all).
   organization's default model, the effort level your organization sets
   (docs, read 2026-09-22). Probe E5, with no effort set anywhere, read
   `medium` applied to `claude-opus-5-5`. If you relied on the old default,
-  set it explicitly.
+  set it explicitly. The model catalog in the Claude Code 2.1.295 binary
+  (read 2026-10-09) also gives `medium` to Sonnet 5.5 and Haiku 5.5, and
+  `high` to Fable 5.1.
 - The `effortLevel` settings key (top level, or per model under
   `modelSettings.<model>.effortLevel`) accepts only `low` to `xhigh`; a `max`
-  value there is dropped.
+  value there is dropped. In the 2.1.295 binary both schemas still list
+  `low` to `xhigh` and drop any other value (read 2026-10-09).
 - **An `xhigh` in a settings file needs a Claude Code that accepts it.** The
   changelog (read 2026-09-23) adds the `xhigh` level in 2.1.111. Two later
   entries show one failure shape, a single value a build does not accept
@@ -345,13 +356,14 @@ missing from that table does not support effort at all).
 - `max` persists only through the `CLAUDE_CODE_EFFORT_LEVEL` environment
   variable, which takes precedence over `--effort`, `/effort` and the effort
   settings, `ultracode` included; a `maxEffortLevel` cap still applies
-  (docs). Probe E7
-  (`CLAUDE_CODE_EFFORT_LEVEL=max` plus `ultracode: true`) saw every tool call
+  (docs). Probe E7 (Claude Code 2.1.280;
+  `CLAUDE_CODE_EFFORT_LEVEL=max` plus `ultracode: true`) saw every tool call
   run at `max`, including one from a workflow agent started with
   `{effort: 'low'}`.
 
-**`ultracode` and `max` do not combine.** `ultracode: true` makes the default
-effort `xhigh` and enables dynamic workflow orchestration. The Claude Code
+**On Claude Code 2.1.280, `ultracode` and `max` did not combine.** There,
+`ultracode: true` made the default effort `xhigh` and enabled dynamic
+workflow orchestration. The Claude Code
 docs (model configuration, read 2026-09-22) name three conditions under which
 it is not available: workflows are turned off, the model does not support
 `xhigh`, or an effort cap below `xhigh` applies to the model. That cap is an
@@ -369,13 +381,21 @@ set but has no effect. Probes E3, E4, E7 and E8 (`ultracode: true` through
 consent skip belong to an applied `ultracode` (docs); neither was probed on
 its own.
 
+The 2.1.284 changelog says Ultracode "no longer forces xhigh effort and stays
+on at any effort level". The 2.1.295 binary's description of the key (read
+2026-10-09) keeps the session-scoped text, says that interactive toggles
+never persist it, and names two requirements: workflows enabled and a model
+that supports ultracode. It names no effort condition. None of the probes
+above was re-run on 2.1.295, so whether `ultracode` and `max` combine there
+is not measured.
+
 The combination recommended here is `ultracode: true` for the main session,
 with `max` requested per agent inside workflow scripts
-(`agent(prompt, {effort: 'max'})`). Probe E6 measured it with `ultracode`
-passed through `--settings`: `ultracode` applied, the main session and a
-subagent ran at `xhigh`, and a workflow agent started with
-`{effort: 'max'}` ran at `max` (one started with `{effort: 'low'}` ran at
-`low`). A local-file `ultracode` was probed only for the applied setting
+(`agent(prompt, {effort: 'max'})`). Probe E6 (Claude Code 2.1.280) measured
+it with `ultracode` passed through `--settings`: `ultracode` applied, the
+main session and a subagent ran at `xhigh`, and a workflow agent started
+with `{effort: 'max'}` ran at `max` (one started with `{effort: 'low'}` ran
+at `low`). A local-file `ultracode` was probed only for the applied setting
 (step 3), not for per-agent effort.
 
 ## What the local override reaches
