@@ -59,6 +59,15 @@ ONCE in the workflow-level `env:` and read by both toolchain jobs, plus
 the `rc-toolchain-proof` job (RC tags only, `contents: read` only, no
 id-token, no environment, never publishes) whose steps shared with
 `publish` must be byte-identical copies. Live only, no skip.
+
+The post-land hardening of that class (rail r1 P3s of the W4 land) pins,
+in the text lane that still runs where PyYAML is absent, what a
+byte-identical copy cannot: the `on:` surface (tag push only, no
+workflow_dispatch), the top-level permissions, the RC job's single
+`contents: read` block, the version assertions inside the "Pin npm CLI"
+step and the body of the RC pack dry-run; the RC exclusion and the
+`production-npm` gate are read from the `publish` JOB, not from the
+header comment that also spells them.
 """
 from __future__ import annotations
 
@@ -311,28 +320,79 @@ class NpmPublishRcPostureTest(TestEnvContext):
         super().setUp()
         self.source = (_WF / "npm-publish.yml").read_text(encoding="utf-8")
 
-    def test_rc_exclusion_present(self):
+    # Read from the `publish` JOB, never from the whole file: the header
+    # comment spells both the RC exclusion and `environment: production-npm`
+    # too, so a whole-file search stays green after the real key is gone
+    # (rail r1 P3 of the W4 land). The guard line is exact for the same
+    # reason the RC job's `if:` is (see _w4_text_offenders).
+    _RC_GUARD_LINE = "\n    if: \"%s\"\n" % _RC_EXCLUSION
+    _ENV_GATE_LINE = "\n    environment: production-npm\n"
+
+    def _publish_job(self, source: str) -> str:
+        job = _w4_job_text(source, "publish")
+        self.assertIsNotNone(job, "npm-publish.yml has no `publish` job")
+        return job
+
+    def _assert_rc_exclusion(self, source: str) -> None:
         self.assertIn(
-            _RC_EXCLUSION, self.source,
-            "npm-publish.yml lost the RC tag exclusion — RC tags must "
-            "NEVER trigger an npm publish (PLAN-013 anti-goals #3/#16)",
+            self._RC_GUARD_LINE, self._publish_job(source),
+            "the `publish` job lost the RC tag exclusion as its `if:` — RC "
+            "tags must NEVER trigger an npm publish (PLAN-013 anti-goals "
+            "#3/#16); the header comment that spells it does not count",
         )
 
-    def test_rc_exclusion_precedes_publish_command(self):
+    def _assert_rc_exclusion_precedes_publish(self, source: str) -> None:
         # Ordering sanity: the job-level guard must appear before any
-        # `npm publish` invocation in the file.
+        # `npm publish` invocation in the SAME job.
+        job = self._publish_job(source)
+        self.assertIn(self._RC_GUARD_LINE, job)
+        self.assertIn("npm publish --provenance", job)
         self.assertLess(
-            self.source.index(_RC_EXCLUSION),
-            self.source.index("npm publish --provenance"),
+            job.index(self._RC_GUARD_LINE),
+            job.index("npm publish --provenance"),
             "RC exclusion must guard the job containing the publish step",
         )
 
-    def test_manual_approval_environment_gate_present(self):
+    def _assert_environment_gate(self, source: str) -> None:
         self.assertIn(
-            "environment: production-npm", self.source,
+            self._ENV_GATE_LINE, self._publish_job(source),
             "the Owner-in-the-loop manual approval environment gate "
-            "(PLAN-013 anti-goal #16) must stay on the publish job",
+            "(PLAN-013 anti-goal #16) must stay a key of the publish job",
         )
+
+    def test_rc_exclusion_present(self):
+        self._assert_rc_exclusion(self.source)
+
+    def test_rc_exclusion_precedes_publish_command(self):
+        self._assert_rc_exclusion_precedes_publish(self.source)
+
+    def test_manual_approval_environment_gate_present(self):
+        self._assert_environment_gate(self.source)
+
+    def test_control_header_comment_alone_does_not_satisfy_the_guards(self):
+        # Positive control for the three asserts above: delete the two real
+        # keys from the publish JOB and leave every comment — the header
+        # still spells both, which is exactly what a whole-file search
+        # accepted before.
+        job = self._publish_job(self.source)
+        for line in (self._RC_GUARD_LINE, self._ENV_GATE_LINE):
+            self.assertIn(line, job, "control fixture: %r" % line)
+        mutated = self.source.replace(
+            job,
+            job.replace(self._RC_GUARD_LINE, "\n").replace(
+                self._ENV_GATE_LINE, "\n"),
+            1,
+        )
+        self.assertIn(_RC_EXCLUSION, mutated)
+        self.assertIn("environment: production-npm", mutated)
+        for check in (
+            self._assert_rc_exclusion,
+            self._assert_rc_exclusion_precedes_publish,
+            self._assert_environment_gate,
+        ):
+            with self.subTest(check=check.__name__):
+                with self.assertRaises(AssertionError):
+                    check(mutated)
 
 
 class ReleaseNotesTemplateTest(TestEnvContext):
@@ -1526,6 +1586,59 @@ _W4_NO_PERSIST = "          persist-credentials: false"
 _W4_RC_FORBIDDEN = (
     "npm publish", "id-token", "environment:", "secrets.", "NODE_AUTH_TOKEN",
 )
+# Post-land hardening (rail r1 P3s of the W4 land): the blocks below are
+# compared as code lines (comments and blank lines dropped, indentation
+# kept) so a flow-style rewrite, a sibling key or a duplicate key is red.
+# `on:` is the tag push and nothing else — the header says there is no
+# workflow_dispatch BY DESIGN (a failed GA publish means rollback +
+# delete/re-tag), and a PR trigger would reach `publish` because a PR ref
+# never contains `-rc.`.
+_W4_ON_BODY = ["  push:", "    tags:", '      - "v*"']
+# Top-level permissions: id-token is what the GA OIDC exchange needs (a
+# missing one dies ENEEDAUTH only at GA), and nothing else may be added.
+_W4_TOP_PERMISSIONS = ["  contents: read", "  id-token: write"]
+# The RC job's only permission block; `publish` carries none of its own
+# (it inherits the top-level block, id-token included).
+_W4_RC_PERMISSIONS = ["      contents: read"]
+# What the pin step asserts after the install, verbatim as stripped code
+# lines: removing a check, inverting its operator or dropping its `exit 1`
+# turns the step into an echo — and the shared-step identity test cannot
+# see that, because both copies would change together.
+_W4_PIN_STEP = _W4_SHARED_STEPS[2]
+_W4_PIN_CHECKS = (
+    'case "${NODE_V}" in',
+    '"v${%s}".*) ;;' % _W4_ENV_NODE,
+    "*)",
+    'echo "::error::node ${NODE_V} is not on the declared v${%s}.x line"'
+    % _W4_ENV_NODE,
+    "exit 1",
+    ";;",
+    "esac",
+    'if [[ "${NPM_V}" != "${%s}" ]]; then' % _W4_ENV_NPM,
+    'echo "::error::npm ${NPM_V} is not the pinned ${%s} (PLAN-194 W4, D-12)"'
+    % _W4_ENV_NPM,
+    "exit 1",
+    "fi",
+)
+# The RC pack step, as stripped code lines: `--dry-run` is the whole reason
+# the proof may run without a registry credential — a real `npm pack`, a
+# swallowed failure or an extra command inside this step must be red.
+_W4_RC_PACK_CODE = (
+    "- name: " + _W4_RC_PACK_STEP,
+    "working-directory: npm",
+    "run: |",
+    "set -euo pipefail",
+    'LOG="${RUNNER_TEMP}/rc-pack-dry-run.log"',
+    'if ! npm pack --dry-run 2> "$LOG"; then',
+    'cat "$LOG"',
+    'echo "::error::npm pack --dry-run failed on node $(node --version) '
+    '+ npm $(npm --version)"',
+    "exit 1",
+    "fi",
+    'tail -n 12 "$LOG"',
+    'echo "OK: npm pack --dry-run on node $(node --version) '
+    '+ npm $(npm --version) — nothing was written to the registry"',
+)
 
 _W4_JOB_HEAD = re.compile(r"^  ([A-Za-z0-9_-]+):[ \t]*$", re.M)
 _W4_ANY_STEP = re.compile(r"^      - ", re.M)
@@ -1585,9 +1698,74 @@ def _w4_steps(job_text: str) -> List[Tuple[Optional[str], str]]:
     return steps
 
 
+def _w4_code_lines(block: str) -> List[str]:
+    """Stripped code lines of a raw block: blank and comment lines dropped."""
+    return [
+        ln.strip() for ln in block.split("\n")
+        if ln.strip() and not ln.lstrip().startswith("#")
+    ]
+
+
+def _w4_has_run(lines: List[str], run: Tuple[str, ...]) -> bool:
+    """True when `run` occurs in `lines` as one contiguous slice."""
+    n = len(run)
+    return any(tuple(lines[i:i + n]) == run for i in range(len(lines) - n + 1))
+
+
+def _w4_key_blocks(
+    text: str, key: str, indent: int
+) -> List[Tuple[str, List[str]]]:
+    """Every `<indent spaces><key>:` mapping in `text`: (inline value, children).
+
+    Children are the code lines nested under the key, indentation kept,
+    `# ...` tails dropped. Blank and comment-only lines never end a block
+    (as in YAML), so a comment can neither hide a key nor fake one; a
+    flow-style value (`permissions: {..}`) comes back as a non-empty inline
+    value and a duplicated key as a second entry — each unequal to the
+    one-entry, empty-inline shape the callers compare against.
+    """
+    lines = text.split("\n")
+    head = re.compile(r"^%s%s:[ \t]*(.*)$" % (" " * indent, re.escape(key)))
+    found = []
+    for i, line in enumerate(lines):
+        m = head.match(line)
+        if m is None:
+            continue
+        inline = re.sub(r"(^|[ \t]+)#.*$", "", m.group(1)).strip()
+        body = []
+        for nxt in lines[i + 1:]:
+            if not nxt.strip() or nxt.lstrip().startswith("#"):
+                continue
+            if len(nxt) - len(nxt.lstrip(" ")) <= indent:
+                break
+            body.append(re.sub(r"[ \t]+#.*$", "", nxt).rstrip())
+        found.append((inline, body))
+    return found
+
+
 def _w4_text_offenders(source: str) -> List[str]:
-    """Every way `source` breaks the W4 contract — pure text, no yaml."""
+    """The part of the W4 contract readable from raw text — no yaml.
+
+    This lane runs where PyYAML is absent; `_w4_structural_offenders` (which
+    skips there) reads the same contract from the parsed document and adds
+    what raw text cannot see (a toolchain key redefined in a job- or
+    step-level `env:`, the `with:` of setup-node). Neither lane is the
+    whole contract alone.
+    """
     out = []
+    if _w4_key_blocks(source, "on", 0) != [("", _W4_ON_BODY)]:
+        out.append(
+            "the `on:` block is not exactly `push: tags: [\"v*\"]` — a tag "
+            "push and nothing else (no workflow_dispatch by design; a PR "
+            "ref never contains `-rc.`, so a PR trigger would reach "
+            "`publish`)"
+        )
+    if _w4_key_blocks(source, "permissions", 0) != [("", _W4_TOP_PERMISSIONS)]:
+        out.append(
+            "top-level permissions are not exactly %r — id-token is what "
+            "the GA OIDC exchange needs, and nothing else may be granted"
+            % ([ln.strip() for ln in _W4_TOP_PERMISSIONS],)
+        )
     env = _w4_env(source)
     node, npm = env.get(_W4_ENV_NODE), env.get(_W4_ENV_NPM)
     if node != _W4_NODE_MAJOR:
@@ -1653,6 +1831,24 @@ def _w4_text_offenders(source: str) -> List[str]:
                 "%s carries %r — the RC proof must hold no credential and "
                 "never publish" % (_W4_RC_JOB, needle)
             )
+    # Exactly ONE permissions key in the RC job, and it is the read-only
+    # block: dropping it falls back to the top-level grant (id-token
+    # included), and a sibling or second key widens it.
+    rc_perm_keys = re.findall(r"(?m)^[ \t]*permissions:", rc)
+    if (len(rc_perm_keys) != 1
+            or _w4_key_blocks(rc, "permissions", 4)
+            != [("", _W4_RC_PERMISSIONS)]):
+        out.append(
+            "%s must carry exactly one block `permissions:` + `contents: "
+            "read` (found %d `permissions:` key(s)) — without it the job "
+            "inherits the top-level id-token grant"
+            % (_W4_RC_JOB, len(rc_perm_keys))
+        )
+    if re.search(r"(?m)^[ \t]*permissions:", publish):
+        out.append(
+            "publish defines its own `permissions:` — it must inherit the "
+            "top-level block (contents: read + id-token: write)"
+        )
     pub_steps = _w4_steps(publish)
     rc_steps = _w4_steps(rc)
     for label, steps in (("publish", pub_steps), (_W4_RC_JOB, rc_steps)):
@@ -1698,6 +1894,15 @@ def _w4_text_offenders(source: str) -> List[str]:
             "step %r is not byte-identical between publish and %s: "
             "publish=%r rc=%r" % (name, _W4_RC_JOB, diff[0], diff[1])
         )
+    for label, blocks in (("publish", pub_blocks), (_W4_RC_JOB, rc_blocks)):
+        if not _w4_has_run(
+                _w4_code_lines(blocks.get(_W4_PIN_STEP, "")), _W4_PIN_CHECKS):
+            out.append(
+                "%s %r no longer asserts the declared Node line and the "
+                "EXACT npm after the install (expected the case/if checks "
+                "with their `exit 1`, verbatim) — an install that lands "
+                "the wrong toolchain would pass" % (label, _W4_PIN_STEP)
+            )
     pack = rc_blocks.get(_W4_RC_PACK_STEP, "")
     # Anchored on the COMMAND line (pre-review P2, S362): the step's own
     # `::error::` echo also says "npm pack --dry-run".
@@ -1705,6 +1910,12 @@ def _w4_text_offenders(source: str) -> List[str]:
             r'(?m)^[ \t]*if ! npm pack --dry-run 2> "\$LOG"; then[ \t]*$', pack):
         out.append(
             "%r does not run `npm pack --dry-run`" % _W4_RC_PACK_STEP
+        )
+    if tuple(_w4_code_lines(pack)) != _W4_RC_PACK_CODE:
+        out.append(
+            "%r body differs from the pinned dry-run step (a real `npm "
+            "pack`, a swallowed failure or an extra command): %r"
+            % (_W4_RC_PACK_STEP, _w4_code_lines(pack))
         )
     return out
 
@@ -1716,10 +1927,29 @@ def _w4_structural_offenders(data: dict) -> List[str]:
     if (env.get(_W4_ENV_NODE), env.get(_W4_ENV_NPM)) != (
             _W4_NODE_MAJOR, _W4_NPM_VERSION):
         out.append("parsed workflow env is %r" % (env,))
+    # PyYAML (YAML 1.1) parses the bare key `on` as the boolean True.
+    triggers = data[True] if True in data else data.get("on")
+    if triggers != {"push": {"tags": ["v*"]}}:
+        out.append(
+            "parsed `on:` is %r — a tag push and nothing else (no "
+            "workflow_dispatch, no pull_request)" % (triggers,)
+        )
+    if data.get("permissions") != {"contents": "read", "id-token": "write"}:
+        out.append(
+            "parsed top-level permissions are %r — exactly contents: read "
+            "+ id-token: write (the GA OIDC exchange needs the latter)"
+            % (data.get("permissions"),)
+        )
     jobs = data.get("jobs") or {}
     pub, rc = jobs.get("publish"), jobs.get(_W4_RC_JOB)
     if not isinstance(pub, dict) or not isinstance(rc, dict):
         return out + ["publish or %s missing from parsed jobs" % _W4_RC_JOB]
+    if "permissions" in pub:
+        out.append(
+            "publish carries its own permissions=%r — it must inherit the "
+            "top-level block (a job-level block REPLACES it, id-token "
+            "included)" % (pub.get("permissions"),)
+        )
     if rc.get("if") != _W4_RC_IF:
         out.append("%s if=%r" % (_W4_RC_JOB, rc.get("if")))
     if pub.get("if") != "!" + _W4_RC_IF:
@@ -1943,6 +2173,120 @@ class Plan194W4PublishToolchainTest(TestEnvContext):
         )
         self.assertTrue(any(
             "closed sequence" in o for o in _w4_text_offenders(mutated)))
+
+    # -- post-land hardening (rail r1 P3s of the W4 land) ------------------
+    # Each control mutates a COPY, so it also proves the pin is not vacuous.
+    # The text lane must catch every one WITHOUT PyYAML; the structural lane
+    # is asserted too where the mutation is visible in the parsed document.
+
+    def _replaced(self, old: str, new: str) -> str:
+        assert self.source.count(old) == 1, "control fixture: %r" % old
+        return self.source.replace(old, new, 1)
+
+    def _red(self, mutated: str, text_needle: str, structural_needle=None):
+        offenders = _w4_text_offenders(mutated)
+        self.assertTrue(any(text_needle in o for o in offenders), offenders)
+        if structural_needle is not None:
+            yaml = self._yaml()
+            offenders = _w4_structural_offenders(yaml.safe_load(mutated))
+            self.assertTrue(
+                any(structural_needle in o for o in offenders), offenders)
+
+    def test_live_post_land_pins_hold(self):
+        self.assertEqual(
+            _w4_key_blocks(self.source, "on", 0), [("", _W4_ON_BODY)])
+        for job in ("publish", _W4_RC_JOB):
+            steps = dict(_w4_steps(_w4_job_text(self.source, job) or ""))
+            with self.subTest(job=job):
+                self.assertTrue(_w4_has_run(
+                    _w4_code_lines(steps.get(_W4_PIN_STEP, "")),
+                    _W4_PIN_CHECKS))
+        pack = dict(_w4_steps(_w4_job_text(self.source, _W4_RC_JOB) or ""))
+        self.assertEqual(
+            tuple(_w4_code_lines(pack.get(_W4_RC_PACK_STEP, ""))),
+            _W4_RC_PACK_CODE)
+
+    def test_control_widened_triggers_and_permissions_go_red(self):
+        tags = '    tags:\n      - "v*"\n'
+        top = "\npermissions:\n  contents: read\n"
+        rc_block = "    permissions:\n      contents: read\n"
+        on_text, on_yaml = "`on:` block", "parsed `on:`"
+        top_text, top_yaml = "top-level permissions", "parsed top-level perm"
+        rc_text = "exactly one block"
+        cases = (
+            ("workflow_dispatch", self._replaced(
+                tags, tags + "  workflow_dispatch:\n"), on_text, on_yaml),
+            ("pull_request", self._replaced(
+                tags, tags + "  pull_request:\n"), on_text, on_yaml),
+            ("every tag", self._replaced('      - "v*"\n', '      - "*"\n'),
+             on_text, on_yaml),
+            ("top id-token removed", re.sub(
+                r"(?m)^  id-token: write[^\n]*\n", "", self.source, count=1),
+             top_text, top_yaml),
+            ("top extra grant", self._replaced(
+                top, top + "  actions: write\n"), top_text, top_yaml),
+            # A job-level block REPLACES the top-level one: publish would
+            # lose id-token and die ENEEDAUTH only at GA.
+            ("publish own permissions", _w4_in_job(
+                self.source, "publish", "    timeout-minutes: 8\n",
+                "    timeout-minutes: 8\n" + rc_block),
+             "publish defines its own", "publish carries its own"),
+            ("rc permissions removed", _w4_in_job(
+                self.source, _W4_RC_JOB, rc_block, ""), rc_text,
+             "permissions="),
+            ("rc permissions sibling", _w4_in_job(
+                self.source, _W4_RC_JOB, "      contents: read\n",
+                "      contents: read\n      actions: write\n"), rc_text,
+             "permissions="),
+            # Parsed, a duplicate key keeps the last value: text lane only.
+            ("rc permissions twice", _w4_in_job(
+                self.source, _W4_RC_JOB, rc_block, rc_block * 2), rc_text,
+             None),
+        )
+        for label, mutated, text_needle, structural_needle in cases:
+            with self.subTest(mutation=label):
+                self._red(mutated, text_needle, structural_needle)
+
+    def test_control_pin_step_without_its_checks_goes_red(self):
+        # Applied to BOTH copies: the byte-identical test cannot see a step
+        # that is wrong the same way twice.
+        case_block = (
+            '          case "${NODE_V}" in\n'
+            '            "v${PUBLISH_NODE_MAJOR}".*) ;;\n'
+            '            *)\n'
+            '              echo "::error::node ${NODE_V} is not on the '
+            'declared v${PUBLISH_NODE_MAJOR}.x line"\n'
+            '              exit 1\n'
+            '              ;;\n'
+            '          esac\n'
+        )
+        for label, old, new in (
+            ("node check removed", case_block, ""),
+            ("npm check inverted",
+             '!= "${PUBLISH_NPM_VERSION}" ]]',
+             '== "${PUBLISH_NPM_VERSION}" ]]'),
+            ("npm exit dropped",
+             '(PLAN-194 W4, D-12)"\n            exit 1\n',
+             '(PLAN-194 W4, D-12)"\n'),
+            ("node exit dropped",
+             '.x line"\n              exit 1\n', '.x line"\n'),
+        ):
+            mutated = self.source
+            for job in ("publish", _W4_RC_JOB):
+                mutated = _w4_in_job(mutated, job, old, new)
+            with self.subTest(mutation=label):
+                self._red(mutated, "no longer asserts")
+
+    def test_control_rc_pack_step_that_packs_for_real_goes_red(self):
+        tail = '          tail -n 12 "$LOG"\n'
+        for label, old, new in (
+            ("real pack added", tail, "          npm pack\n" + tail),
+            ("failure swallowed", "            exit 1\n          fi\n" + tail,
+             "            true\n          fi\n" + tail),
+        ):
+            mutated = _w4_in_job(self.source, _W4_RC_JOB, old, new)
+            with self.subTest(mutation=label):
+                self._red(mutated, "body differs")
 
 
 if __name__ == "__main__":

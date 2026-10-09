@@ -441,20 +441,30 @@ Then update both `VERSION` and `EXPECTED_SHA256` in
 
 ### Node 24 deprecation tracking
 
-`actions/checkout@v4`, `actions/setup-python@v5`, and
-`actions/upload-artifact@v4` currently declare `runs.using: node20`.
-GitHub's deprecation timeline targets **2026-05-15** for Node 20 in
-runners, after which the actions must declare `node24` or be replaced.
+`actions/checkout@v4` and `actions/setup-python@v5` declare
+`runs.using: node20` (`actions/upload-artifact@v4` did too, but no
+workflow pins it any more). GitHub's deprecation timeline targets
+**2026-05-15** for Node 20 in runners, after which the actions must
+declare `node24` or be replaced.
+
+Current state (2026-10-09): the four pins in `docs/actions-versions.md`
+— checkout `v6.0.2`, setup-python `v6.2.0`, setup-node `v6.4.0`,
+upload-artifact `v7.0.1` — all declare `node24`. Older `node20` pins
+remain outside that table: `tier-policy.yml` (checkout `v4.2.2`,
+setup-python `v5.3.0`) and `mutation-gate.yml` (setup-python `v5`).
 
 **Sprint 6 Phase 6a status** (2026-04-13):
 
 - ✅ Pinned versions documented in `docs/actions-versions.md`
   (freeze-doc)
-- ✅ `npm-publish.yml` bumped to `node-version: 24` runtime
+- ❌ `npm-publish.yml` bump to `node-version: 24` — NOT done in Sprint 6
+  (the file kept `node-version: "20"`); done by PLAN-194 W4 on
+  2026-10-02 (see `docs/actions-versions.md`, "Sprint 6 Phase 6a scope")
 - **DEFERRED to Sprint 7** (per R-DEV3 consensus — each action bumps
   in its own PR to isolate schema-break risk):
   - `actions/checkout@v4 → v5`
-  - `actions/setup-node@v4 → v5`
+  - ~~`actions/setup-node@v4 → v5`~~ — moot (2026-10-02): the setup-node
+    pin is `v6.4.0`
   - `actions/setup-python@v5.4 → v5.5+` if required
   - `actions/upload-artifact@v4 → v5` (with input-schema audit)
 
