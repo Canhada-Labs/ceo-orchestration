@@ -50,6 +50,12 @@ no sentido do AMEND-4 §4.2 (`sys.argv[0]` dentro de `_HOOKS_DIR`). Toda a famil
 (log, trava, erros, chave HMAC, state dir) fica em `CEO_AUDIT_LOG_DIR` da celula; HOME e
 TMPDIR dos filhos sao descartaveis. NUNCA o state dir vivo nem a chave real.
 
+v2 (pos-cura; LEDGER «W0.5-pre-registro-pos-cura», 2026-10-09): (ii) decisao descartada =
+morta pelo driver OU `lat_exit_ms` > timeout; (iii) a regra condicional da X5 e avaliada pelo
+MAXIMO de «decisao -> stdout»; o summary ganha a ultima marca de cada morte, maximo e 2.o da
+latencia, saidas acima do timeout e o maximo da X5; o `x7` guarda os drains das marcas. O v1
+(sha256 27473c1d...) mediu o HEAD; nada mais muda.
+
 Estatistica (pre-registro): percentil por posto mais proximo; p95 so com N >= 100 (senao
 p90). p_hat = descartadas/N em X2; N do braco seguinte com 3/N <= p_hat/10. Nada disso vira
 assercao de tempo em teste. Stdlib only, Python >= 3.9.
@@ -741,6 +747,11 @@ def _derive(r: Dict[str, Any]) -> None:
     r["interp"] = m.get("interp")
 
 
+def _last_mark(r: Dict[str, Any]) -> str:
+    m = [(n, t) for n, t in r["marks"].items() if isinstance(t, int)]
+    return max(m, key=lambda x: x[1])[0] if m else "none"
+
+
 def run_unit(cfg: Cfg, cell: str, unit: int, conc: int, audit_dir: Path,
              knobs: Dict[str, str], raw_fh) -> List[Dict[str, Any]]:
     mdir = cfg.run_dir / "marks" / cell
@@ -797,10 +808,19 @@ def summarize(cell: str, recs: List[Dict[str, Any]], timeout_s: float) -> Dict[s
     tname = "p95" if tp == 0.95 else "p90"
     killed = sum(1 for r in recs if r["killed"])
     signaled = sum(1 for r in recs if r["signaled"])
-    delivered = sum(1 for r in recs if r["delivered"])
+    cens = timeout_s * 1000.0
+    over = [r for r in recs if r["lat_exit_ms"] is not None and r["lat_exit_ms"] > cens]
+    # v2 (ii): descartada = morta pelo driver OU saida depois do timeout.
+    delivered = sum(1 for r in recs if r["delivered"] and not (r["lat_exit_ms"] is not None
+                                                               and r["lat_exit_ms"] > cens))
     lat = [r["lat_exit_ms"] for r in recs if r["lat_exit_ms"] is not None]
     p50, ptl = _pct(lat, 0.5), _pct(lat, tp)
-    cens = timeout_s * 1000.0
+    lat_desc = sorted(lat, reverse=True)
+    deaths = [{"unit": r["unit"], "slot": r["slot"], "last_mark": _last_mark(r),
+               "lat_exit_ms": r["lat_exit_ms"]} for r in recs if r["killed"]]
+    last_marks: Dict[str, int] = {}
+    for d in deaths:
+        last_marks[d["last_mark"]] = last_marks.get(d["last_mark"], 0) + 1
     exit_drains = [d for r in recs for d in r["exit_drains"]]
     eds_vals = [d.get("eds") for d in exit_drains]
     if any(v == "NA" for v in eds_vals) or not eds_vals:
@@ -820,6 +840,9 @@ def summarize(cell: str, recs: List[Dict[str, Any]], timeout_s: float) -> Dict[s
         "delivered": delivered, "discarded": n - delivered,
         "lat_exit_p50_ms": p50, "lat_exit_tail_ms": ptl,
         "lat_tail_censored": bool(ptl is not None and ptl >= cens),
+        "lat_exit_max_ms": lat_desc[0] if lat_desc else None,
+        "lat_exit_2nd_ms": lat_desc[1] if len(lat_desc) > 1 else None,
+        "exits_over_T": len(over), "killed_last_marks": last_marks, "deaths": deaths,
         "exit_drain_p50_ms": _pct([r["exit_drain_ms"] for r in recs if r["exit_drain_ms"] is not None], 0.5),
         "exit_drain_tail_ms": _pct([r["exit_drain_ms"] for r in recs if r["exit_drain_ms"] is not None], tp),
         "exit_drain_errors": errs, "exit_drain_calls": len(exit_drains),
@@ -833,6 +856,7 @@ def summarize(cell: str, recs: List[Dict[str, Any]], timeout_s: float) -> Dict[s
     x5 = [r["x5_ms"] for r in recs if r["x5_ms"] is not None]
     if x5:
         s["x5_p50_ms"], s["x5_tail_ms"], s["x5_N"] = _pct(x5, 0.5), _pct(x5, _tail_p(len(x5))), len(x5)
+        s["x5_max_ms"] = max(x5)
     return s
 
 
@@ -888,7 +912,7 @@ def verdict(summ: Dict[str, Dict[str, Any]], all_recs: List[Dict[str, Any]],
                  "wrapper_to_kernel_start": pooled(all_recs, "x4_kstart_ms")}
     x5 = summ.get("X5")
     if x5 and x5.get("x5_tail_ms") is not None:
-        out["X5_rule_fires"] = bool(x5["x5_tail_ms"] / 1000.0 > EXIT_MARGIN_S)
+        out["X5_rule_fires"] = bool(x5["x5_max_ms"] / 1000.0 > EXIT_MARGIN_S)  # v2 (iii): pelo MAXIMO
     x1 = summ.get("X1")
     if x1:
         out["T2_trigger_X1"] = {
@@ -1186,6 +1210,9 @@ def cmd_x7(a: argparse.Namespace) -> int:
         "hook_ran": hook_runs > 0, "hook_runs": hook_runs, "marker_exists": marker.exists(),
         "exit_sleep_s": env_parts["W05_EXIT_SLEEP"], "hook_timeout_s": HOOK_TIMEOUT_S,
         "guard_marks": {k: v for k, v in marks.items() if k != "drains"},
+        "guard_drains": marks.get("drains", []),
+        "drain_after_start_s": ([(d["t0"] - marks["start"]) / 1e9 for d in marks.get("drains", [])]
+                                if "start" in marks else []),
         "claude_result": {k: res.get(k) for k in ("is_error", "num_turns", "result", "total_cost_usd",
                                                    "permission_denials", "subtype")},
         "stderr_tail": (err or "")[-800:], "substrate": sub, "model": a.model,
