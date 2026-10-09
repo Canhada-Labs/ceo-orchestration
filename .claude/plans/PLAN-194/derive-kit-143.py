@@ -2040,6 +2040,60 @@ fi
 
 '''
 
+# A classe dos P2 M3-01 (corte) e M3-02 do GA v1.4.2 vive no MESMO maquinario do corte da rc:
+# curada aqui tambem (a regra «cure a CLASSE»). M3-01: o corte da rc nao tinha NENHUMA janela
+# de retomada entre o envelope (passo 10, NAO rastreado em .claude/governance/) e o commit
+# (passo 11) — o G0 recusava a arvore sem rota; a do GA (tree_clean_resume_11, conferida no
+# kit do GA v1.4.2 e TRANSPLANTADA dele) entra com a janela comecando no passo 9 (o 10 escreve
+# o envelope ANTES de se marcar). M3-02: o banner de CORTADA so com os 20 passos concluidos.
+CUT_WINDOW_FN_START = "# --- a arvore limpa na retomada entre os passos 10 e 11 ----------------------------\n"
+CUT_WINDOW_FN_END = "\n# ===========================================================================\n"
+CUT_WINDOW_FN_OLD = ("# os dois antes de o passo 11 poder retomar. So neste intervalo (o G0 chama esta funcao\n"
+                     "# com o passo 10 concluido e o 11 nao) e com o HEAD no candidato gravado, admite:\n")
+CUT_WINDOW_FN_NEW = ("# os dois antes de o passo 11 poder retomar. So neste intervalo (o G0 chama esta funcao\n"
+                     "# com o passo 9 concluido e o 11 nao: o passo 10 escreve o envelope ANTES de se marcar,\n"
+                     "# M3-01) e com o HEAD no candidato gravado, admite:\n")
+CUT_WINDOW_SEL_OLD = ("# fora dele, e modificacao RASTREADA nunca e tolerada em lugar nenhum.\n"
+                      'tree_clean_except "$PLAN_DIR/"\n')
+CUT_WINDOW_SEL_NEW = ("# fora dele, e modificacao RASTREADA nunca e tolerada em lugar nenhum — fora a\n"
+                      "# retomada entre os passos 9 e 11 (o envelope em .claude/governance/ e o staging da\n"
+                      "# lista literal do passo 11; tree_clean_resume_11, a cura do GA v1.4.2 com a janela do\n"
+                      "# M3-01: o passo 10 escreve o envelope ANTES de se marcar).\n"
+                      "if done_step 9 && ! done_step 11; then\n"
+                      "  tree_clean_resume_11\n"
+                      "else\n"
+                      '  tree_clean_except "$PLAN_DIR/"\n'
+                      "fi\n")
+CUT_WINDOW_DOC_OLD = ("# passo 3 pusha. Se o passo 11 morreu entre o `git add` e o `git commit`, a retomada\n"
+                      "# desfaz aquele staging (so caminhos da lista literal; nada foi commitado) e o refaz.\n")
+CUT_WINDOW_DOC_NEW = ("# passo 3 pusha. O passo 10 escreve o envelope NAO rastreado em .claude/governance/\n"
+                      "# (fora do plano) ANTES de se marcar, e um passo 11 que morreu entre o `git add` e o\n"
+                      "# `git commit` deixa caminhos da lista literal dele STAGED: SO nesse intervalo (passo 9\n"
+                      "# concluido, 11 nao, HEAD == candidato) o G0 admite o envelope exato e esse staging, e\n"
+                      "# a retomada do passo 11 desfaz o staging (nada foi commitado) e o refaz.\n")
+CUT_BANNER_DOC_OLD = ("# passo N; `--g0-only` roda so as pre-condicoes. O banner de CORTADA so sai com o passo\n"
+                      "# 20 concluido; sem ele o script lista os passos pendentes.\n")
+CUT_BANNER_DOC_NEW = ("# passo N; `--g0-only` roda so as pre-condicoes. O banner de CORTADA so sai com os 20\n"
+                      "# passos concluidos (M3-02); sem isso o script lista os passos pendentes.\n")
+CUT_BANNER_START = "# O banner de CORTADA so com o passo 20 concluido. Sem ele: --until parou antes\n"
+CUT_BANNER_END = 'bell "$TAG cortada"\n'
+CUT_BANNER = r'''# O banner de CORTADA so com os 20 passos concluidos (M3-02: um --from que PULOU um passo
+# — o 18, o gate e a prova do toolchain, por exemplo — nunca imprime o banner com ele
+# pendente). Sem isso: --until parou antes (rc 0, pendentes listados) ou algum passo ficou
+# pendente (rc 3, nunca o banner).
+_pend="$(pending_steps)"
+if [ -n "$_pend" ]; then
+  if [ "$UNTIL" -lt 20 ] && ! done_step 20; then
+    printf '\nPARADO depois do passo %s (--until). Passos pendentes:%s\n' "$UNTIL" "$_pend"
+    printf 'Re-rode este script (sem --until) para seguir de onde parou.\n'
+    exit 0
+  fi
+  printf '\nFAIL: o corte NAO terminou — passos pendentes:%s\n' "$_pend" >&2
+  printf '(um --from pulou passo nao concluido? Re-rode sem --from para retomar.)\n' >&2
+  exit 3
+fi
+'''
+
 
 def derive_cut(src: str) -> str:
     t = shift(src, "corte", CUT_PROTECT)
@@ -2058,14 +2112,23 @@ def derive_cut(src: str) -> str:
     t = cut_region(t, CUT_MSG_START, CUT_MSG_END, CUT_MSG, "mensagem do commit do veredito")
     t = sub(t, CUT_S16_OLD, CUT_S16_NEW, "texto do passo 16")
     t = cut_region(t, CUT_S18_START, CUT_S18_END, CUT_S18, "passo 18")
+    win = region(ga("cut"), CUT_WINDOW_FN_START, CUT_WINDOW_FN_END, "janela do GA (tree_clean_resume_11)")
+    win = sub(win, CUT_WINDOW_FN_OLD, CUT_WINDOW_FN_NEW, "M3-01: a janela na funcao")
+    t = sub(t, CUT_NEWFUNCS_ANCHOR, win + "\n" + CUT_NEWFUNCS_ANCHOR, "M3-01: a funcao da janela")
+    t = sub(t, CUT_WINDOW_SEL_OLD, CUT_WINDOW_SEL_NEW, "M3-01: o seletor do G0")
+    t = sub(t, CUT_WINDOW_DOC_OLD, CUT_WINDOW_DOC_NEW, "M3-01: a janela no cabecalho")
+    t = sub(t, CUT_BANNER_DOC_OLD, CUT_BANNER_DOC_NEW, "M3-02: o banner no cabecalho")
+    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")
     forbid(t, "corte", ["derive-kit-142", "Opus 5.5", "FN-04", "OQ-3", "senao por npx",
-                        "so o job do gate roda la", "rede, npx, git"])
+                        "so o job do gate roda la", "rede, npx, git", "if ! done_step 20; then"])
     need(t, "corte", ['PLAN_DIR=".claude/plans/PLAN-194"', 'TAG="v1.4.3-rc.1"', 'BASE="1.4.3"',
                       'BASE_TAG="v1.4.2"', "$PLAN_DIR/derive-kit-143.py $PLAN_DIR/test-rc1-kit.sh",
                       "A relmeta-143 ainda nao landou: assine e lande o pack .claude/plans/PLAN-194/relmeta/",
                       "matou a 1.a tentativa da v1.4.1-rc.1", "A relmeta-142 poe `--yes` no gpg",
                       "release: v1.4.3", "assert_rc_proof_job\n", "assert_no_gen_orphans\n",
-                      "  assert_route1_available\n", 'RC_PROOF_JOB="%s"' % RC_PROOF_JOB_NAME])
+                      "  assert_route1_available\n", 'RC_PROOF_JOB="%s"' % RC_PROOF_JOB_NAME,
+                      "tree_clean_resume_11() {", "if done_step 9 && ! done_step 11; then",
+                      '_pend="$(pending_steps)"'])
     return t
 
 
@@ -2175,8 +2238,11 @@ TEST_HEADER = r'''#!/bin/bash
 #       toolchain da rc, pelo nome);
 #   R.  o OWNER-RC1-CUT.sh REAL (`--g0-only` e estados de retomada plantados no
 #       .cut-state) num clone com remoto bare local e `gh` stub — com um controle de CORTE
-#       INTEIRO para cada recusa do G0 que so tinha controle verbatim (R3H-03); T. o mesmo
-#       num PSEUDO-TERMINAL;
+#       INTEIRO para cada recusa do G0 que so tinha controle verbatim (R3H-03), e a classe
+#       dos P2 M3-01/M3-02 do GA no corte da rc: R19 a janela de retomada entre os passos 9
+#       e 11 (o envelope escrito antes do marcador do 10), R7c o banner com um passo pulado;
+#       T. o mesmo num PSEUDO-TERMINAL;
+#   M3. M3-02 VERBATIM: o bloco do banner curado x o da v1.4.2-rc.1 (o gemeo vermelho);
 #   D.  UM CONTROLE VERMELHO por classe do corpus que este kit cura, e o INDICE dos
 #       controles vermelhos dos gates novos (cada um tem de ter rodado e ficado verde).
 #
@@ -2263,7 +2329,7 @@ if [ "$_k1_have" -eq 0 ]; then
   # K1a — o derivador recusa PELO NOME um HEAD sem o job da W4 (o passo 18 exige success
   # nele). Se o HEAD ja tem o job (a W4 landou), um commit descartavel o tira.
   if [ "$_k1_ok" -eq 1 ]; then
-    if python3 - "$K1WT/$_k1_wf" <<'PYK1A' && git -C "$K1WT" commit -q -am "TEST ONLY (K1a): sem o job da W4" 2>/dev/null; then
+    if python3 - "$K1WT/$_k1_wf" <<'PYK1A' && git -C "$K1WT" commit -q -m "TEST ONLY (K1a): sem o job da W4" -- "$_k1_wf" 2>/dev/null; then
 import re, sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
@@ -2282,7 +2348,10 @@ PYK1A
       refused K1a "$_k1a_rc" "$K1D/k1a.log" "nao existe no .github/workflows/npm-publish.yml do HEAD" \
         "o derivador sobre um HEAD sem o job da W4 (nenhuma saida escrita)"
     else bad "K1a: o derivador escreveu saidas sobre um HEAD sem o job da W4"; fi
-    git -C "$K1WT" reset -q --hard "$_k1_head" || { bad "K1a: reset do clone falhou"; _k1_ok=0; }
+    # Volta SO o workflow (o derivador e o harness do disco podem ser arquivos rastreados e
+    # modificados no clone: um reset --hard os levaria de volta ao HEAD).
+    { git -C "$K1WT" reset -q "$_k1_head" && git -C "$K1WT" checkout -q "$_k1_head" -- "$_k1_wf"; } \
+      || { bad "K1a: restaurar o clone falhou"; _k1_ok=0; }
   fi
   # A projecao da W4: o npm-publish.yml que RC1KIT_W4_NPM_PUBLISH aponta (o da sombra da W4),
   # ou um job MINIMO com o nome, o gatilho e as permissoes que a condicao 4 afirma.
@@ -2306,7 +2375,7 @@ PYK1A
         '        run: "true"' >> "$K1WT/$_k1_wf" || _k1_ok=0
       _k1_proj="o job MINIMO (nome, gatilho -rc. e contents: read)"
     fi
-    if [ "$_k1_ok" -eq 1 ] && git -C "$K1WT" commit -q -am "TEST ONLY (K1): projecao da W4 do PLAN-194" 2>/dev/null; then
+    if [ "$_k1_ok" -eq 1 ] && git -C "$K1WT" commit -q -m "TEST ONLY (K1): projecao da W4 do PLAN-194" -- "$_k1_wf" 2>/dev/null; then
       ok "K1: W4 projetada no clone: $_k1_proj"
     else bad "K1: commit da projecao da W4 falhou"; _k1_ok=0; fi
   elif [ "$_k1_ok" -eq 1 ]; then
@@ -2339,7 +2408,8 @@ if m2 == m:
 open(man, "w", encoding="utf-8").write(m2)
 print(scope)
 PYK1R
-    ) > "$K1D/relmeta.log" 2>&1 && git -C "$K1WT" commit -q -am "TEST ONLY (K1): projecao da relmeta-143 (driver na 1.4.3)" 2>/dev/null; then
+    ) > "$K1D/relmeta.log" 2>&1 && git -C "$K1WT" commit -q -m "TEST ONLY (K1): projecao da relmeta-143 (driver na 1.4.3)" \
+         -- .claude/scripts/local/release.sh .claude/governance/gate-scripts-manifest.txt 2>/dev/null; then
       ok "K1: relmeta-143 projetada no clone (TARGET_BASE 1.4.3; Scope $(head -n 1 "$K1D/relmeta.log"))"
     else bad "K1: projecao da relmeta-143 falhou"; sed -n '1,6p' "$K1D/relmeta.log"; _k1_ok=0; fi
   fi
@@ -2826,6 +2896,34 @@ PYR15
     # R18 — o runner do kit ausente da arvore.
     rm -f -- "$_r/wt/$EV/run-rc1-repass.sh"
     _r_whole R18 "runner ausente: $EV/run-rc1-repass.sh" "o runner do kit ausente"
+    # R19/R19b — M3-01 (a classe do P2 do GA no corte da rc): o passo 10 escreve o envelope
+    # NAO rastreado em .claude/governance/ ANTES de se marcar. Com o passo 9 feito, o 10 sem
+    # marcador e o envelope escrito, o G0 real abre a janela de retomada (R19); antes do
+    # passo 9 o envelope fora do plano segue recusado pelo nome (R19b). W11m: o G0 da
+    # v1.4.2-rc.1 (sem a janela), VERBATIM sobre o mesmo estado, recusa a arvore.
+    _r19vd=".claude/governance/pair-rail-verdict-v1.4.3-rc.1.md"
+    git -C "$_r/wt" rev-parse HEAD > "$_r/wt/$EV/CANDIDATE.sha"
+    printf 'envelope do passo 10 (TEST ONLY)\n' > "$_r/wt/$_r19vd"
+    _r_state 9
+    if _r_cut "$_r/r19.log" --g0-only && grep -q 'G0 verde (--g0-only)' "$_r/r19.log" \
+       && grep -qF 'OK: retomada entre os passos 10 e 11: fora do plano, so o envelope' "$_r/r19.log"; then
+      ok "R19: passo 9 feito, o 10 sem marcador e o envelope escrito: o G0 real abre a janela de retomada"; _red="$_red R19"
+    else bad "R19: o G0 real nao abriu a janela de retomada"; sed -n '1,14p' "$_r/r19.log"; fi
+    _r19m_cut="$ROOT/.claude/plans/PLAN-193/OWNER-RC1-CUT.sh"
+    { printf '#!/bin/bash\nset -euo pipefail\n'
+      printf 'die() { printf "\\nFAIL: %%s\\n" "$*" >&2; exit 1; }\n'
+      printf 'PLAN_DIR=%s\n' "$PLAN_DIR"
+      awk '/^tree_clean_except\(\) \{$/{f=1} f{print} f && /^\}$/{exit}' "$_r19m_cut"
+      printf 'tree_clean_except "$PLAN_DIR/"\nprintf "G0-ARVORE-OK\\n"\n'; } > "$SCRATCH/r19m.sh"
+    _r19m_rc=0; ( cd "$_r/wt" && bash "$SCRATCH/r19m.sh" ) > "$_r/r19m.log" 2>&1 || _r19m_rc=$?
+    if [ "$_r19m_rc" -ne 0 ] && grep -qF "$_r19vd (untracked)" "$_r/r19m.log"; then
+      ok "W11m (gemeo vermelho, a v1.4.2-rc.1): no mesmo estado o G0 dela recusa a arvore — a retomada ficava sem rota"; _red="$_red W11m"
+    else bad "W11m: o G0 da v1.4.2-rc.1 nao mostrou a classe"; sed -n '1,6p' "$_r/r19m.log"; fi
+    _r_state 8
+    _r19b_rc=0; _r_cut "$_r/r19b.log" --g0-only || _r19b_rc=$?
+    refused R19b "$_r19b_rc" "$_r/r19b.log" "$_r19vd (untracked)" \
+      "G0 real (corte inteiro): o envelope fora do plano ANTES do passo 9 (a janela nao abre cedo)"
+    _r_restore
 
 '''
 TEST_R8_START = "    # R8 — a sonda das condicoes no G0 recusa uma condicao FALSA pelo nome (um template\n"
@@ -2875,6 +2973,50 @@ _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R1
 _d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
+_d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m
+
+'''
+
+# R7c — M3-02 pelo corte inteiro: o passo 18 pendente (um --from 19) com o 20 concluido.
+TEST_R7C_ANCHOR = ("      else bad \"R7b: banner ausente com os 20 passos concluidos\"; sed -n '1,12p' \"$_r/r7b.log\"; fi\n")
+TEST_R7C = r'''      # R7c (M3-02): o passo 18 (o gate e a prova do toolchain) PENDENTE, com o 20 concluido
+      # e um --from 19 que o pula: rc 3, o 18 nomeado, e NUNCA o banner de CORTADA.
+      _r_state 20
+      grep -vx 'STEP-18' "$_r/wt/$EV/.cut-state" > "$_r/r7c.state" && cp -- "$_r/r7c.state" "$_r/wt/$EV/.cut-state"
+      _r7c_rc=0; _r_cut "$_r/r7c.log" --from 19 || _r7c_rc=$?
+      if lacks "$_r/r7c.log" -F 'CORTADA'; then
+        refused R7c "$_r7c_rc" "$_r/r7c.log" "o corte NAO terminou — passos pendentes: 18" \
+          "G0 real (corte inteiro): o passo 18 pendente com o 20 concluido (um --from 19)"
+      else bad "R7c: o banner de CORTADA saiu com o passo 18 pendente"; fi
+'''
+
+# M3 — M3-02 verbatim: o bloco do banner do corte da rc curado x o da v1.4.2-rc.1 (gemeo).
+TEST_M302_ANCHOR = ('# ===========================================================================\n'
+                    'say "D. controles VERMELHOS')
+TEST_M302 = r'''# ===========================================================================
+say "M3. M3-02: o banner de CORTADA so com os 20 passos concluidos (verbatim, com o gemeo da v1.4.2-rc.1)"
+_m3() {  # $1 = corte, $2 = passos feitos, $3 = UNTIL, $4 = log
+  local _s
+  : > "$SCRATCH/m3.state"
+  for _s in $2; do printf 'STEP-%s\n' "$_s" >> "$SCRATCH/m3.state"; done
+  { printf '#!/bin/bash\nset -uo pipefail\nSTATE="%s"; UNTIL=%s; TAG=vX\n' "$SCRATCH/m3.state" "$3"
+    printf 'bell() { :; }\n'
+    awk '/^done_step\(\) \{/' "$1"
+    awk '/^pending_steps\(\) \{$/{f=1} f{print} f && /^\}$/{exit}' "$1"
+    awk '/^# O banner de CORTADA so com/{f=1} /^bell "\$TAG cortada"$/{exit} f' "$1"
+    printf 'printf "BANNER-CORTADA\\n"\n'; } > "$SCRATCH/m3.sh"
+  bash "$SCRATCH/m3.sh" > "$4" 2>&1
+}
+_m3no18="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 19 20"
+_m3_rc=0; _m3 "$ROOT/$PLAN_DIR/OWNER-RC1-CUT.sh" "$_m3no18" 20 "$SCRATCH/m3-cured.log" || _m3_rc=$?
+if lacks "$SCRATCH/m3-cured.log" -F 'BANNER-CORTADA'; then
+  refused M302 "$_m3_rc" "$SCRATCH/m3-cured.log" "o corte NAO terminou — passos pendentes: 18" \
+    "o bloco do banner com o 18 pendente e o 20 concluido (sem o banner)"
+else bad "M302: o bloco curado imprimiu o banner com o 18 pendente"; fi
+_m3 "$ROOT/.claude/plans/PLAN-193/OWNER-RC1-CUT.sh" "$_m3no18" 20 "$SCRATCH/m3-mold.log" || :
+if grep -qF 'BANNER-CORTADA' "$SCRATCH/m3-mold.log"; then
+  ok "M302m (gemeo vermelho, a v1.4.2-rc.1): com o 18 pendente e o 20 concluido, o bloco dela imprime o banner"; _red="$_red M302m"
+else bad "M302m: o bloco da v1.4.2-rc.1 nao mostrou a classe"; sed -n '1,6p' "$SCRATCH/m3-mold.log"; fi
 
 '''
 
@@ -2957,6 +3099,8 @@ def derive_test(src: str) -> str:
     t = sub(t, TEST_RNEW_ANCHOR, TEST_RNEW + TEST_RNEW_ANCHOR, "R10-R18")
     t = cut_region(t, TEST_R8_START, TEST_R8_END, TEST_R8, "R8")
     t = sub(t, TEST_E3E_ANCHOR, TEST_E3E + TEST_E3E_ANCHOR, "E3e")
+    t = sub(t, TEST_R7C_ANCHOR, TEST_R7C_ANCHOR + TEST_R7C, "R7c")
+    t = sub(t, TEST_M302_ANCHOR, TEST_M302 + TEST_M302_ANCHOR, "M3")
     t = sub(t, TEST_D_ANCHOR, TEST_D_INDEX + TEST_D_ANCHOR, "indice D8-D13")
     t = lacks_rewrite(t)
     forbid(t, "harness", ["derive-kit-142", "C5-pin", "canary_pre", "PLUMBING do harness",

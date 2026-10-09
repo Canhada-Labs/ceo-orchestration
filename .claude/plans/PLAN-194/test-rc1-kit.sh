@@ -61,8 +61,11 @@
 #       toolchain da rc, pelo nome);
 #   R.  o OWNER-RC1-CUT.sh REAL (`--g0-only` e estados de retomada plantados no
 #       .cut-state) num clone com remoto bare local e `gh` stub — com um controle de CORTE
-#       INTEIRO para cada recusa do G0 que so tinha controle verbatim (R3H-03); T. o mesmo
-#       num PSEUDO-TERMINAL;
+#       INTEIRO para cada recusa do G0 que so tinha controle verbatim (R3H-03), e a classe
+#       dos P2 M3-01/M3-02 do GA no corte da rc: R19 a janela de retomada entre os passos 9
+#       e 11 (o envelope escrito antes do marcador do 10), R7c o banner com um passo pulado;
+#       T. o mesmo num PSEUDO-TERMINAL;
+#   M3. M3-02 VERBATIM: o bloco do banner curado x o da v1.4.2-rc.1 (o gemeo vermelho);
 #   D.  UM CONTROLE VERMELHO por classe do corpus que este kit cura, e o INDICE dos
 #       controles vermelhos dos gates novos (cada um tem de ter rodado e ficado verde).
 #
@@ -242,7 +245,7 @@ if [ "$_k1_have" -eq 0 ]; then
   # K1a — o derivador recusa PELO NOME um HEAD sem o job da W4 (o passo 18 exige success
   # nele). Se o HEAD ja tem o job (a W4 landou), um commit descartavel o tira.
   if [ "$_k1_ok" -eq 1 ]; then
-    if python3 - "$K1WT/$_k1_wf" <<'PYK1A' && git -C "$K1WT" commit -q -am "TEST ONLY (K1a): sem o job da W4" 2>/dev/null; then
+    if python3 - "$K1WT/$_k1_wf" <<'PYK1A' && git -C "$K1WT" commit -q -m "TEST ONLY (K1a): sem o job da W4" -- "$_k1_wf" 2>/dev/null; then
 import re, sys
 p = sys.argv[1]
 t = open(p, encoding="utf-8").read()
@@ -261,7 +264,10 @@ PYK1A
       refused K1a "$_k1a_rc" "$K1D/k1a.log" "nao existe no .github/workflows/npm-publish.yml do HEAD" \
         "o derivador sobre um HEAD sem o job da W4 (nenhuma saida escrita)"
     else bad "K1a: o derivador escreveu saidas sobre um HEAD sem o job da W4"; fi
-    git -C "$K1WT" reset -q --hard "$_k1_head" || { bad "K1a: reset do clone falhou"; _k1_ok=0; }
+    # Volta SO o workflow (o derivador e o harness do disco podem ser arquivos rastreados e
+    # modificados no clone: um reset --hard os levaria de volta ao HEAD).
+    { git -C "$K1WT" reset -q "$_k1_head" && git -C "$K1WT" checkout -q "$_k1_head" -- "$_k1_wf"; } \
+      || { bad "K1a: restaurar o clone falhou"; _k1_ok=0; }
   fi
   # A projecao da W4: o npm-publish.yml que RC1KIT_W4_NPM_PUBLISH aponta (o da sombra da W4),
   # ou um job MINIMO com o nome, o gatilho e as permissoes que a condicao 4 afirma.
@@ -285,7 +291,7 @@ PYK1A
         '        run: "true"' >> "$K1WT/$_k1_wf" || _k1_ok=0
       _k1_proj="o job MINIMO (nome, gatilho -rc. e contents: read)"
     fi
-    if [ "$_k1_ok" -eq 1 ] && git -C "$K1WT" commit -q -am "TEST ONLY (K1): projecao da W4 do PLAN-194" 2>/dev/null; then
+    if [ "$_k1_ok" -eq 1 ] && git -C "$K1WT" commit -q -m "TEST ONLY (K1): projecao da W4 do PLAN-194" -- "$_k1_wf" 2>/dev/null; then
       ok "K1: W4 projetada no clone: $_k1_proj"
     else bad "K1: commit da projecao da W4 falhou"; _k1_ok=0; fi
   elif [ "$_k1_ok" -eq 1 ]; then
@@ -318,7 +324,8 @@ if m2 == m:
 open(man, "w", encoding="utf-8").write(m2)
 print(scope)
 PYK1R
-    ) > "$K1D/relmeta.log" 2>&1 && git -C "$K1WT" commit -q -am "TEST ONLY (K1): projecao da relmeta-143 (driver na 1.4.3)" 2>/dev/null; then
+    ) > "$K1D/relmeta.log" 2>&1 && git -C "$K1WT" commit -q -m "TEST ONLY (K1): projecao da relmeta-143 (driver na 1.4.3)" \
+         -- .claude/scripts/local/release.sh .claude/governance/gate-scripts-manifest.txt 2>/dev/null; then
       ok "K1: relmeta-143 projetada no clone (TARGET_BASE 1.4.3; Scope $(head -n 1 "$K1D/relmeta.log"))"
     else bad "K1: projecao da relmeta-143 falhou"; sed -n '1,6p' "$K1D/relmeta.log"; _k1_ok=0; fi
   fi
@@ -2644,6 +2651,15 @@ GHREOF
       if _r_cut "$_r/r7b.log" && grep -q 'v1.4.3-rc.1 CORTADA' "$_r/r7b.log"; then
         ok "R7b: com o passo 20 concluido, o banner sai"
       else bad "R7b: banner ausente com os 20 passos concluidos"; sed -n '1,12p' "$_r/r7b.log"; fi
+      # R7c (M3-02): o passo 18 (o gate e a prova do toolchain) PENDENTE, com o 20 concluido
+      # e um --from 19 que o pula: rc 3, o 18 nomeado, e NUNCA o banner de CORTADA.
+      _r_state 20
+      grep -vx 'STEP-18' "$_r/wt/$EV/.cut-state" > "$_r/r7c.state" && cp -- "$_r/r7c.state" "$_r/wt/$EV/.cut-state"
+      _r7c_rc=0; _r_cut "$_r/r7c.log" --from 19 || _r7c_rc=$?
+      if lacks "$_r/r7c.log" -F 'CORTADA'; then
+        refused R7c "$_r7c_rc" "$_r/r7c.log" "o corte NAO terminou — passos pendentes: 18" \
+          "G0 real (corte inteiro): o passo 18 pendente com o 20 concluido (um --from 19)"
+      else bad "R7c: o banner de CORTADA saiu com o passo 18 pendente"; fi
       R_RC_RELEASE=""
       git -C "$_r/wt" tag -d v1.4.3-rc.1 >/dev/null 2>&1 || bad "R: limpeza da tag local falhou"
       git -C "$_r/wt" push -q origin :refs/tags/v1.4.3-rc.1 2>/dev/null || bad "R: limpeza da tag remota falhou"
@@ -2791,6 +2807,34 @@ PYR15
     # R18 — o runner do kit ausente da arvore.
     rm -f -- "$_r/wt/$EV/run-rc1-repass.sh"
     _r_whole R18 "runner ausente: $EV/run-rc1-repass.sh" "o runner do kit ausente"
+    # R19/R19b — M3-01 (a classe do P2 do GA no corte da rc): o passo 10 escreve o envelope
+    # NAO rastreado em .claude/governance/ ANTES de se marcar. Com o passo 9 feito, o 10 sem
+    # marcador e o envelope escrito, o G0 real abre a janela de retomada (R19); antes do
+    # passo 9 o envelope fora do plano segue recusado pelo nome (R19b). W11m: o G0 da
+    # v1.4.2-rc.1 (sem a janela), VERBATIM sobre o mesmo estado, recusa a arvore.
+    _r19vd=".claude/governance/pair-rail-verdict-v1.4.3-rc.1.md"
+    git -C "$_r/wt" rev-parse HEAD > "$_r/wt/$EV/CANDIDATE.sha"
+    printf 'envelope do passo 10 (TEST ONLY)\n' > "$_r/wt/$_r19vd"
+    _r_state 9
+    if _r_cut "$_r/r19.log" --g0-only && grep -q 'G0 verde (--g0-only)' "$_r/r19.log" \
+       && grep -qF 'OK: retomada entre os passos 10 e 11: fora do plano, so o envelope' "$_r/r19.log"; then
+      ok "R19: passo 9 feito, o 10 sem marcador e o envelope escrito: o G0 real abre a janela de retomada"; _red="$_red R19"
+    else bad "R19: o G0 real nao abriu a janela de retomada"; sed -n '1,14p' "$_r/r19.log"; fi
+    _r19m_cut="$ROOT/.claude/plans/PLAN-193/OWNER-RC1-CUT.sh"
+    { printf '#!/bin/bash\nset -euo pipefail\n'
+      printf 'die() { printf "\\nFAIL: %%s\\n" "$*" >&2; exit 1; }\n'
+      printf 'PLAN_DIR=%s\n' "$PLAN_DIR"
+      awk '/^tree_clean_except\(\) \{$/{f=1} f{print} f && /^\}$/{exit}' "$_r19m_cut"
+      printf 'tree_clean_except "$PLAN_DIR/"\nprintf "G0-ARVORE-OK\\n"\n'; } > "$SCRATCH/r19m.sh"
+    _r19m_rc=0; ( cd "$_r/wt" && bash "$SCRATCH/r19m.sh" ) > "$_r/r19m.log" 2>&1 || _r19m_rc=$?
+    if [ "$_r19m_rc" -ne 0 ] && grep -qF "$_r19vd (untracked)" "$_r/r19m.log"; then
+      ok "W11m (gemeo vermelho, a v1.4.2-rc.1): no mesmo estado o G0 dela recusa a arvore — a retomada ficava sem rota"; _red="$_red W11m"
+    else bad "W11m: o G0 da v1.4.2-rc.1 nao mostrou a classe"; sed -n '1,6p' "$_r/r19m.log"; fi
+    _r_state 8
+    _r19b_rc=0; _r_cut "$_r/r19b.log" --g0-only || _r19b_rc=$?
+    refused R19b "$_r19b_rc" "$_r/r19b.log" "$_r19vd (untracked)" \
+      "G0 real (corte inteiro): o envelope fora do plano ANTES do passo 9 (a janela nao abre cedo)"
+    _r_restore
 
     # R8 — a sonda das condicoes no G0 recusa uma condicao FALSA pelo nome (o job da W4 com
     # uma permissao de token OIDC: condicao 4). Sem o REPORT-ONLY: o que se confere e a linha
@@ -2834,6 +2878,31 @@ PYR9
     else bad "R9: commit/push da mutacao no clone falhou"; fi
   else bad "R: clone bare/remoto local falhou"; fi
 else printf '  (R e T pulados: sem clone, sem chave ou sem base)\n'; fi
+
+# ===========================================================================
+say "M3. M3-02: o banner de CORTADA so com os 20 passos concluidos (verbatim, com o gemeo da v1.4.2-rc.1)"
+_m3() {  # $1 = corte, $2 = passos feitos, $3 = UNTIL, $4 = log
+  local _s
+  : > "$SCRATCH/m3.state"
+  for _s in $2; do printf 'STEP-%s\n' "$_s" >> "$SCRATCH/m3.state"; done
+  { printf '#!/bin/bash\nset -uo pipefail\nSTATE="%s"; UNTIL=%s; TAG=vX\n' "$SCRATCH/m3.state" "$3"
+    printf 'bell() { :; }\n'
+    awk '/^done_step\(\) \{/' "$1"
+    awk '/^pending_steps\(\) \{$/{f=1} f{print} f && /^\}$/{exit}' "$1"
+    awk '/^# O banner de CORTADA so com/{f=1} /^bell "\$TAG cortada"$/{exit} f' "$1"
+    printf 'printf "BANNER-CORTADA\\n"\n'; } > "$SCRATCH/m3.sh"
+  bash "$SCRATCH/m3.sh" > "$4" 2>&1
+}
+_m3no18="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 19 20"
+_m3_rc=0; _m3 "$ROOT/$PLAN_DIR/OWNER-RC1-CUT.sh" "$_m3no18" 20 "$SCRATCH/m3-cured.log" || _m3_rc=$?
+if lacks "$SCRATCH/m3-cured.log" -F 'BANNER-CORTADA'; then
+  refused M302 "$_m3_rc" "$SCRATCH/m3-cured.log" "o corte NAO terminou — passos pendentes: 18" \
+    "o bloco do banner com o 18 pendente e o 20 concluido (sem o banner)"
+else bad "M302: o bloco curado imprimiu o banner com o 18 pendente"; fi
+_m3 "$ROOT/.claude/plans/PLAN-193/OWNER-RC1-CUT.sh" "$_m3no18" 20 "$SCRATCH/m3-mold.log" || :
+if grep -qF 'BANNER-CORTADA' "$SCRATCH/m3-mold.log"; then
+  ok "M302m (gemeo vermelho, a v1.4.2-rc.1): com o 18 pendente e o 20 concluido, o bloco dela imprime o banner"; _red="$_red M302m"
+else bad "M302m: o bloco da v1.4.2-rc.1 nao mostrou a classe"; sed -n '1,6p' "$SCRATCH/m3-mold.log"; fi
 
 # ===========================================================================
 say "D. controles VERMELHOS — cada gate tem de RECUSAR o defeito plantado"
@@ -2944,6 +3013,7 @@ _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R1
 _d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
+_d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m
 
 # ===========================================================================
 printf '\n===== RESULTADO: %s PASS, %s FAIL\n' "$PASS" "$FAIL"
