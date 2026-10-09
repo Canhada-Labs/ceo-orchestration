@@ -337,3 +337,4 @@
 .claude/plans/PLAN-185/s329-ceremony-main/step-C-sign.log | sha256:c522cb4e5026fb89ea03dda9923b51f41e164be75a0cd563990274d2a67f73d9 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
 .claude/plans/PLAN-185/s329-ceremony-main/step-E-finalize.log | sha256:91d02447627a4e6b7bdf0570ab7c16d4670bb1da09829cb7ba1b2ed6aff10173 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
 .claude/plans/PLAN-185/s329-ceremony-main/step-E-sign.log | sha256:21d24afbcd780e2043bc1de7cf289612de9eee19a11b36314df076e98ab33f06 | CEREMONY: verbatim run log — the operator checkout path is part of what the log records
+.claude/plans/PLAN-194/w2/w05/derive_evidence.py | sha256:8a3bb527ea968508d3625fe9f9d07629b4a9d9af85fe337c3fcecb7ea6688eef | derivador de sanitização: os regex genéricos casam o padrão de caminho pessoal; o arquivo não contém nome pessoal (conferido)

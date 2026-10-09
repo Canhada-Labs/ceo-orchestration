@@ -54,15 +54,11 @@ MARKS: Dict[str, Tuple[str, str]] = {
     "guard-C1.mark": ("x7/guard-C1.mark", "8fc4d85f021af536490979a2fbe4ee7156a60b94094988a23a5f3a387ea6782e"),
     "guard-C2.mark": ("x7/guard-C2.mark", "1f7341b13989e665fbd1ee3ca4502966933b84f66f93a48c9f6c55ee2a1881b8"),
 }
-# A raiz das homes do macOS entra por constante: o padrão GENÉRICO dos regex abaixo não é
-# caminho pessoal, e escrito por extenso a regra personal-path do check_contamination o lê
-# como se fosse um.
-_ROOT = "Users"
 SUBS = [
-    (re.compile(r"/private/tmp/claude-\d+/-" + _ROOT + r"-[A-Za-z0-9._]+-[A-Za-z0-9._-]*?/"
+    (re.compile(r"/private/tmp/claude-\d+/-Users-[A-Za-z0-9._]+-[A-Za-z0-9._-]*?/"
                 r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/scratchpad"), "<SCRATCH>"),
-    (re.compile(r"/" + _ROOT + r"/[A-Za-z0-9._-]+"), "<HOME>"),
-    (re.compile(r"-" + _ROOT + r"-[A-Za-z0-9._]+-"), "-" + _ROOT + "-<user>-"),
+    (re.compile(r"/Users/[A-Za-z0-9._-]+"), "<HOME>"),
+    (re.compile(r"-Users-[A-Za-z0-9._]+-"), "-Users-<user>-"),
     (re.compile(r"/var/folders/[A-Za-z0-9_]+/[A-Za-z0-9_]+/T/"), "<TMPDIR>/"),
 ]
 HEADER = [
@@ -98,7 +94,7 @@ def _read_pinned(pack: Path, rel: str, want: str) -> bytes:
 def _sanitize(txt: str) -> str:
     for rx, rep in SUBS:
         txt = rx.sub(rep, txt)
-    if ("/" + _ROOT + "/") in txt or re.search(r"-" + _ROOT + r"-(?!<user>-)", txt):
+    if "/Users/" in txt or re.search(r"-Users-(?!<user>-)", txt):
         _die("caminho pessoal residual depois da sanitização")
     return txt
 
