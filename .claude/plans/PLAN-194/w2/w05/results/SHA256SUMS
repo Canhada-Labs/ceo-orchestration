@@ -1,0 +1,19 @@
+# W0.5 no HEAD (PLAN-194) — resultados; 2026-10-09, S363 (FD-12).
+# Instrumento: .claude/plans/PLAN-194/w2/w05/w05_harness.py sha256 27473c1d8ab7fcad41c4e98bafee1ecb0d9431468dda429938e3651cc1e98f8c.
+# Cópias SANITIZADAS só em caminhos pessoais (regra personal-path do
+# check_contamination): scratch da sessão -> <SCRATCH>, /Users/<nome> -> <HOME>,
+# -Users-<nome>- -> -Users-<user>-, /var/folders/../T/ -> <TMPDIR>/. Números intactos
+# (conferidos folha a folha). Originais e raw.jsonl ficam FORA do repositório
+# (checkpoint s363-packs/fd12/); o sha256 do original vai em «origem».
+
+083a68a1908f9c6a7aae919a54b86f811da1504a095c25f3d6dd93d6b74ff391  summary-a.json
+#   origem: 0ec74907126354b75b8bdbfda07e79ecc80083cefc6e0831328451f1828285ec  s363-packs/fd12/runs/head-20261009T114839Z/summary.json
+#   raw (nao commitado): 8328ad79feae9809068dd359bb3c99f14e1fc42a4edd81786d711fe6a1547e13  s363-packs/fd12/runs/head-20261009T114839Z/raw.jsonl
+b93cd34dc3193fba1404a6e76699ac364e3f145a7757eead838cd7ede61936fd  summary-b.json
+#   origem: f9e61739adbd369a76583a09479e16f07ad626a459425244f6507be39d7a5754  s363-packs/fd12/runs/head-20261009T115531Z/summary.json
+#   raw (nao commitado): 5ded17159a1520bed6057b67cd00e2feadf9f33f43f82cca4108486b16156f33  s363-packs/fd12/runs/head-20261009T115531Z/raw.jsonl
+e291dbcbf4f023fa1e9976cbfea2cfbdc6556c5609c9ec598fc01866502ec931  summary-info5s.json
+#   origem: 5e120f0b38f656f08688c754e6ce5b65503dd2aa4269c65430b32a4ffa9d6d51  s363-packs/fd12/runs/head-20261009T120436Z/summary.json
+#   raw (nao commitado): 7d0e21cb2660374796f7cd4431ebcc676ac89949e9fec7d7187a4e257357ca34  s363-packs/fd12/runs/head-20261009T120436Z/raw.jsonl
+d921a8706ca9983917b175a8565e81c3d4f74f38787066a7dc386f98edab3376  x7-calls.json
+#   origem: 281c5c1b0866efa10b2a2255df6a12143dc6f3028a5aface9dced81e084c55c2  s363-packs/fd12/x7/calls.json

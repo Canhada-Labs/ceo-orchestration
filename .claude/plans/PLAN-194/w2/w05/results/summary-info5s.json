@@ -1,0 +1,707 @@
+{
+  "cell_meta": {
+    "C4": {
+      "after": {
+        "canonical_lines": 0,
+        "cell_wall_s": 35.7,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.292,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 3,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 3,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.7109375,
+          13.3583984375,
+          16.0341796875
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.305,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          8.84814453125,
+          13.658203125,
+          16.24755859375
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "C8": {
+      "after": {
+        "canonical_lines": 108,
+        "cell_wall_s": 36.0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.223,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 9,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 9,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.4609375,
+          12.87841796875,
+          15.74951171875
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.289,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 3,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 3,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.7109375,
+          13.3583984375,
+          16.0341796875
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "X2": {
+      "after": {
+        "canonical_lines": 108,
+        "cell_wall_s": 35.2,
+        "census": {
+          "active_spool": 108,
+          "census_s": 0.23,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233163,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 34.9,
+          "orphan_active_with_content": 108,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 117,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 117,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.57470703125,
+          12.4453125,
+          15.4560546875
+        ]
+      },
+      "before": {
+        "canonical_lines": 108,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.218,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 9,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 9,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.50390625,
+          12.83056640625,
+          15.7158203125
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "X5": {
+      "after": {
+        "canonical_lines": 10800,
+        "cell_wall_s": 29.3,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.126,
+          "draining": 0,
+          "entries": 150108,
+          "journal": 108,
+          "journal_lock": 75000,
+          "spool_lock": 75000
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 1,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 1,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          10.3388671875,
+          12.328125,
+          15.27685546875
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.223,
+          "draining": 0,
+          "entries": 150000,
+          "journal": 0,
+          "journal_lock": 75000,
+          "spool_lock": 75000
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          10.5810546875,
+          12.5625,
+          15.4619140625
+        ]
+      },
+      "x6_trajectory": []
+    }
+  },
+  "cells": {
+    "C4": {
+      "N": 108,
+      "canonical_lines_delta": 0,
+      "cell": "C4",
+      "delivered": 108,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 233055,
+      "entries_before": 233055,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 3,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 3,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 108,
+      "exit_drain_errors": {
+        "None": 105,
+        "canonical_lock_timeout": 3
+      },
+      "exit_drain_p50_ms": 1443.984,
+      "exit_drain_tail_ms": 2673.214,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 1738.335,
+      "lat_exit_tail_ms": 3010.469,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        9.71,
+        13.36,
+        16.03
+      ],
+      "loadavg_before": [
+        8.85,
+        13.66,
+        16.25
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "C8": {
+      "N": 108,
+      "canonical_lines_delta": 108,
+      "cell": "C8",
+      "delivered": 108,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 233055,
+      "entries_before": 233055,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 6,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 6,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 108,
+      "exit_drain_errors": {
+        "None": 102,
+        "canonical_lock_timeout": 6
+      },
+      "exit_drain_p50_ms": 1446.821,
+      "exit_drain_tail_ms": 2692.392,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 1763.295,
+      "lat_exit_tail_ms": 3067.945,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        9.46,
+        12.88,
+        15.75
+      ],
+      "loadavg_before": [
+        9.71,
+        13.36,
+        16.03
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "X2": {
+      "N": 108,
+      "canonical_lines_delta": 0,
+      "cell": "X2",
+      "delivered": 108,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 233163,
+      "entries_before": 233055,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 108,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 108,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 108,
+      "exit_drain_errors": {
+        "canonical_lock_timeout": 108
+      },
+      "exit_drain_p50_ms": 2536.425,
+      "exit_drain_tail_ms": 2548.659,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 2842.808,
+      "lat_exit_tail_ms": 2952.245,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        9.57,
+        12.45,
+        15.46
+      ],
+      "loadavg_before": [
+        9.5,
+        12.83,
+        15.72
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "X5": {
+      "N": 108,
+      "canonical_lines_delta": 10800,
+      "cell": "X5",
+      "delivered": 108,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 150108,
+      "entries_before": 150000,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 1,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 1,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 108,
+      "exit_drain_errors": {
+        "None": 107,
+        "canonical_lock_timeout": 1
+      },
+      "exit_drain_p50_ms": 1135.691,
+      "exit_drain_tail_ms": 2175.994,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 1536.058,
+      "lat_exit_tail_ms": 2589.224,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        10.34,
+        12.33,
+        15.28
+      ],
+      "loadavg_before": [
+        10.58,
+        12.56,
+        15.46
+      ],
+      "pre_decision_drain_contended": 96,
+      "pre_decision_drains": 108,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0,
+      "x5_N": 108,
+      "x5_p50_ms": 1.038,
+      "x5_tail_ms": 254.543
+    }
+  },
+  "result": {
+    "H1": "fora deste instrumento (LEDGER, W2 \u2014 H1 vivo: F = 0,9947, |D| = 14.572)",
+    "N_next_arm_rule": null,
+    "X3_after_exit_drain": {
+      "N": 432,
+      "max": 15.36,
+      "p50": 6.013,
+      "p90": 6.82,
+      "p95": 7.763,
+      "p99": 9.361
+    },
+    "X3_final": {
+      "N": 432,
+      "max": 15.341,
+      "p50": 5.991,
+      "p90": 6.768,
+      "p95": 7.542,
+      "p99": 9.126
+    },
+    "X4": {
+      "wrapper_to_first_line": {
+        "N": 432,
+        "max": 498.737,
+        "p50": 299.098,
+        "p90": 382.911,
+        "p95": 408.862,
+        "p99": 471.095
+      },
+      "wrapper_to_import_anchor": {
+        "N": 432,
+        "max": 523.162,
+        "p50": 325.282,
+        "p90": 407.047,
+        "p95": 433.774,
+        "p99": 494.991
+      },
+      "wrapper_to_kernel_start": {
+        "N": 432,
+        "max": 2.003,
+        "p50": 0.128,
+        "p90": 0.159,
+        "p95": 0.189,
+        "p99": 0.307
+      }
+    },
+    "X5_rule_fires": false,
+    "controls": {
+      "interp": {
+        "argv0": "<SCRATCH>/work/fd12/runs/head-20261009T120436Z/mirror/.claude/hooks/w05_guard.py",
+        "exe": "/opt/homebrew/opt/python@3.11/bin/python3.11",
+        "ver": "3.11.15"
+      },
+      "kill_discarded": true,
+      "ok_delivered": true,
+      "warmup_delivered": true
+    },
+    "interpreter_version_matches_wrapper_candidates": true,
+    "interpreters_seen": [
+      {
+        "argv0": "<SCRATCH>/work/fd12/runs/head-20261009T120436Z/mirror/.claude/hooks/w05_guard.py",
+        "exe": "/opt/homebrew/opt/python@3.11/bin/python3.11",
+        "ver": "3.11.15"
+      }
+    ],
+    "p_hat_X2": 0.0,
+    "red_criterion": {
+      "0 timeout em C2 e C6": false,
+      ">=1 timeout em C4 ou C8": false,
+      "decisao perdida em X2": false
+    },
+    "red_criterion_breadcrumb_reading_info": {
+      "C2": null,
+      "C4": 3,
+      "C6": null,
+      "C8": 6,
+      "X2": 108
+    },
+    "red_reproduced": false,
+    "stop_rule": {
+      "after_exit_drain": {
+        "fits_initial_margin": true,
+        "margin_required_s": 0.014,
+        "p99_s": 0.0094,
+        "stop_rule_fires": false
+      },
+      "final": {
+        "fits_initial_margin": true,
+        "margin_required_s": 0.0137,
+        "p99_s": 0.0091,
+        "stop_rule_fires": false
+      }
+    },
+    "verdict_line": "W0.5-veredito (HEAD): decisoes_descartadas=0 N=108"
+  },
+  "substrate_end": {
+    "bash": "/bin/bash",
+    "claude_code_version": "2.1.295 (Claude Code)",
+    "df_free_gb": 115.6,
+    "driver_python": {
+      "exe": "/Library/Developer/CommandLineTools/usr/bin/python3",
+      "ver": "3.9.6"
+    },
+    "hook_path": "<HOME>/.grok/bin:<HOME>/.local/bin:<HOME>/.bun/bin:/opt/homebrew/opt/libpq/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/opt/homebrew/bin:/Applications/Warp.app/Contents/Resources/bin",
+    "hook_timeout_s": 5.0,
+    "instrument_path": "<SCRATCH>/shadows/fd12/wt/.claude/plans/PLAN-194/w2/w05/w05_harness.py",
+    "instrument_sha256": "27473c1d8ab7fcad41c4e98bafee1ecb0d9431468dda429938e3651cc1e98f8c",
+    "load": {
+      "claude_processes": 3,
+      "loadavg": [
+        10.34,
+        12.33,
+        15.28
+      ],
+      "processes": 826,
+      "uptime": "9:07  up 7 days, 16:51, 1 user, load averages: 10.34 12.33 15.28"
+    },
+    "os": {
+      "build": "26A434",
+      "mac_ver": "27.0.1",
+      "platform": "macOS-27.0.1-arm64-arm-64bit"
+    },
+    "repo": "<SCRATCH>/shadows/fd12/wt",
+    "repo_head": "1684899f486ff376350a2eb61820020c249252b2",
+    "utc": "2026-10-09T12:07:35Z",
+    "wrapper_python_by_candidates": {
+      "candidate": "python3.11",
+      "path": "/opt/homebrew/bin/python3.11",
+      "realpath": "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/bin/python3.11",
+      "version": "3.11.15"
+    }
+  },
+  "substrate_start": {
+    "arm": "head",
+    "bash": "/bin/bash",
+    "claude_code_version": "2.1.295 (Claude Code)",
+    "constants": {
+      "CONC": 9,
+      "DEADLINE_S": 2.0,
+      "DF_FLOOR_GB": 60.0,
+      "EXIT_MARGIN_S": 1.0,
+      "FULL_ENTRIES": 233055,
+      "HOOK_TIMEOUT_S": 3.0,
+      "LOCKS_ENTRIES": 150000,
+      "N_BURSTS": 12,
+      "N_SINGLE": 100,
+      "N_X6": 10,
+      "STOP_MARGIN_S": 3.0
+    },
+    "dev_smoke": false,
+    "df_free_gb": 116.7,
+    "driver_python": {
+      "exe": "/Library/Developer/CommandLineTools/usr/bin/python3",
+      "ver": "3.9.6"
+    },
+    "hook_path": "<HOME>/.grok/bin:<HOME>/.local/bin:<HOME>/.bun/bin:/opt/homebrew/opt/libpq/bin:/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/pkg/env/global/bin:/opt/homebrew/bin:/Applications/Warp.app/Contents/Resources/bin",
+    "hook_timeout_s": 5.0,
+    "instrument_path": "<SCRATCH>/shadows/fd12/wt/.claude/plans/PLAN-194/w2/w05/w05_harness.py",
+    "instrument_sha256": "27473c1d8ab7fcad41c4e98bafee1ecb0d9431468dda429938e3651cc1e98f8c",
+    "load": {
+      "claude_processes": 3,
+      "loadavg": [
+        9.44,
+        14.17,
+        16.5
+      ],
+      "processes": 860,
+      "uptime": "9:04  up 7 days, 16:48, 1 user, load averages: 9.44 14.17 16.50"
+    },
+    "load_note": "INFORMATIVO (nao conta): corte de 5 s dos PreToolUse; PATH vivo python3.11",
+    "mirror": {
+      "guard_sha256": "b350afbcada5277c5aa57cd89f34689a55470707463907696e56e0751bddb908",
+      "key_files": {
+        "_lib/audit_emit.py": {
+          "sha256": "f60275d29c011b20fb0545eebb04e4975f4bedc11bb2543dcf99bec1751ce42e"
+        },
+        "_lib/audit_hmac.py": {
+          "sha256": "f7dd911b9f1ea74f443a85edbe40e3ac62c19819c93cc69726b783cbf65fa149"
+        },
+        "_lib/filelock.py": {
+          "sha256": "d732ddd27e2f123c66403848bf39abca4c7e986d13607b80425494d6b2c73462"
+        },
+        "_lib/runtime_paths.py": {
+          "sha256": "abe9e4a33b5a63b5ff0918b9ff729f5aae1c92abbe4574940a8ecd65c6d0c74d"
+        },
+        "_lib/spool_writer.py": {
+          "sha256": "c3276f04d827441f1016883d6da4c31ba985f30a9251e83392e9c32289216124"
+        },
+        "_python-hook.sh": {
+          "sha256": "cdc9e05f8aa34aee1282ad1156bd7f00c510ddc0d616247f615c1ec6e4a51086"
+        }
+      },
+      "lib_tree_digest": "42d7d94d9a79264765a400fae92b31bc87d2933b5e6b7dbc329929d0cc375313",
+      "mirror": "<SCRATCH>/work/fd12/runs/head-20261009T120436Z/mirror"
+    },
+    "os": {
+      "build": "26A434",
+      "mac_ver": "27.0.1",
+      "platform": "macOS-27.0.1-arm64-arm-64bit"
+    },
+    "repo": "<SCRATCH>/shadows/fd12/wt",
+    "repo_head": "1684899f486ff376350a2eb61820020c249252b2",
+    "utc": "2026-10-09T12:04:36Z",
+    "wrapper_python_by_candidates": {
+      "candidate": "python3.11",
+      "path": "/opt/homebrew/bin/python3.11",
+      "realpath": "/opt/homebrew/Cellar/python@3.11/3.11.15_1/Frameworks/Python.framework/Versions/3.11/bin/python3.11",
+      "version": "3.11.15"
+    }
+  },
+  "trees": {
+    "full": {
+      "build_s": 21.84,
+      "entries": 233055,
+      "kind": "full"
+    },
+    "locks": {
+      "build_s": 14.41,
+      "entries": 150000,
+      "kind": "locks"
+    }
+  }
+}

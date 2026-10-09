@@ -1,0 +1,1789 @@
+{
+  "cell_meta": {
+    "C1": {
+      "after": {
+        "canonical_lines": 0,
+        "cell_wall_s": 47.3,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.0,
+          "draining": 0,
+          "entries": 0,
+          "journal": 0,
+          "journal_lock": 0,
+          "spool_lock": 0
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          30.2333984375,
+          21.02587890625,
+          17.986328125
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.0,
+          "draining": 0,
+          "entries": 0,
+          "journal": 0,
+          "journal_lock": 0,
+          "spool_lock": 0
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          32.103515625,
+          19.67138671875,
+          17.3642578125
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "C2": {
+      "after": {
+        "canonical_lines": 0,
+        "cell_wall_s": 18.0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.0,
+          "draining": 0,
+          "entries": 0,
+          "journal": 0,
+          "journal_lock": 0,
+          "spool_lock": 0
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          26.1748046875,
+          20.69873046875,
+          17.939453125
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.002,
+          "draining": 0,
+          "entries": 0,
+          "journal": 0,
+          "journal_lock": 0,
+          "spool_lock": 0
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          30.2333984375,
+          21.02587890625,
+          17.986328125
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "C3": {
+      "after": {
+        "canonical_lines": 0,
+        "cell_wall_s": 62.5,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.255,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          23.99169921875,
+          23.62451171875,
+          19.7587890625
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.461,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          27.38720703125,
+          23.8994140625,
+          19.5419921875
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "C4": {
+      "after": {
+        "canonical_lines": 0,
+        "cell_wall_s": 35.9,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.244,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 6,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 6,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          19.32568359375,
+          22.4951171875,
+          19.501953125
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.273,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          23.99169921875,
+          23.62451171875,
+          19.7587890625
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "C5": {
+      "after": {
+        "canonical_lines": 100,
+        "cell_wall_s": 46.1,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.0,
+          "draining": 0,
+          "entries": 300,
+          "journal": 100,
+          "journal_lock": 100,
+          "spool_lock": 100
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          38.2783203125,
+          24.91357421875,
+          19.64501953125
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.0,
+          "draining": 0,
+          "entries": 0,
+          "journal": 0,
+          "journal_lock": 0,
+          "spool_lock": 0
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          26.1748046875,
+          20.69873046875,
+          17.939453125
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "C6": {
+      "after": {
+        "canonical_lines": 108,
+        "cell_wall_s": 15.0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.0,
+          "draining": 0,
+          "entries": 324,
+          "journal": 108,
+          "journal_lock": 108,
+          "spool_lock": 108
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          33.38037109375,
+          24.47802734375,
+          19.5810546875
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.0,
+          "draining": 0,
+          "entries": 0,
+          "journal": 0,
+          "journal_lock": 0,
+          "spool_lock": 0
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          38.2783203125,
+          24.91357421875,
+          19.64501953125
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "C7": {
+      "after": {
+        "canonical_lines": 100,
+        "cell_wall_s": 50.6,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.33,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 6,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 6,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          14.57373046875,
+          20.7685546875,
+          19.03515625
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.256,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 6,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 6,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          19.32568359375,
+          22.4951171875,
+          19.501953125
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "C8": {
+      "after": {
+        "canonical_lines": 208,
+        "cell_wall_s": 33.9,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.226,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 7,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 7,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          11.4189453125,
+          19.3046875,
+          18.5712890625
+        ]
+      },
+      "before": {
+        "canonical_lines": 100,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.315,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 6,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 6,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          14.57373046875,
+          20.7685546875,
+          19.03515625
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "X1": {
+      "after": {
+        "canonical_lines": 108,
+        "cell_wall_s": 22.4,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.117,
+          "draining": 0,
+          "entries": 150180,
+          "journal": 108,
+          "journal_lock": 75036,
+          "spool_lock": 75036
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.38232421875,
+          16.82080078125,
+          17.68505859375
+        ]
+      },
+      "before": {
+        "canonical_lines": 0,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.132,
+          "draining": 0,
+          "entries": 150000,
+          "journal": 0,
+          "journal_lock": 75000,
+          "spool_lock": 75000
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          10.20947265625,
+          17.58203125,
+          17.970703125
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "X2": {
+      "after": {
+        "canonical_lines": 208,
+        "cell_wall_s": 35.3,
+        "census": {
+          "active_spool": 108,
+          "census_s": 0.276,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233163,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 35.0,
+          "orphan_active_with_content": 108,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 97,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 97,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.80908203125,
+          18.03564453125,
+          18.13720703125
+        ]
+      },
+      "before": {
+        "canonical_lines": 208,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.24,
+          "draining": 0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 7,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 7,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          11.4189453125,
+          19.3046875,
+          18.5712890625
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "X5": {
+      "after": {
+        "canonical_lines": 10908,
+        "cell_wall_s": 26.3,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.142,
+          "draining": 0,
+          "entries": 150504,
+          "journal": 216,
+          "journal_lock": 75144,
+          "spool_lock": 75144
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          8.56884765625,
+          16.03125,
+          17.37451171875
+        ]
+      },
+      "before": {
+        "canonical_lines": 108,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.121,
+          "draining": 0,
+          "entries": 150180,
+          "journal": 108,
+          "journal_lock": 75036,
+          "spool_lock": 75036
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 0,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 0,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.38232421875,
+          16.82080078125,
+          17.68505859375
+        ]
+      },
+      "x6_trajectory": []
+    },
+    "X6": {
+      "after": {
+        "canonical_lines": 326,
+        "cell_wall_s": 8.1,
+        "census": {
+          "active_spool": 0,
+          "census_s": 0.249,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 97,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 97,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.62353515625,
+          17.7216796875,
+          18.0244140625
+        ]
+      },
+      "before": {
+        "canonical_lines": 208,
+        "census": {
+          "active_spool": 108,
+          "census_s": 0.229,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233163,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 35.3,
+          "orphan_active_with_content": 108,
+          "spool_lock": 77685
+        },
+        "errors": {
+          "drain_canonical_lock_timeout": 97,
+          "drain_now_unexpected": 0,
+          "journal_compact_failed": 0,
+          "journal_flock_timeout": 0,
+          "journal_flush_failed": 0,
+          "lines": 97,
+          "phase2_spool_flock_timeout": 0,
+          "spool_append_failed": 0,
+          "spool_flock_timeout": 0,
+          "starved_exit": 0,
+          "starved_opportunistic": 0,
+          "would_log": 0
+        },
+        "loadavg": [
+          9.80908203125,
+          18.03564453125,
+          18.13720703125
+        ]
+      },
+      "x6_trajectory": [
+        {
+          "active_spool": 0,
+          "census_s": 0.228,
+          "draining": 9,
+          "draining_age_max_s": 0.2,
+          "entries": 233064,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        {
+          "active_spool": 0,
+          "census_s": 0.232,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        {
+          "active_spool": 0,
+          "census_s": 0.23,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        {
+          "active_spool": 0,
+          "census_s": 0.232,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        {
+          "active_spool": 0,
+          "census_s": 0.215,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        {
+          "active_spool": 0,
+          "census_s": 0.301,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        {
+          "active_spool": 0,
+          "census_s": 0.28,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        {
+          "active_spool": 0,
+          "census_s": 0.383,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        {
+          "active_spool": 0,
+          "census_s": 0.279,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        },
+        {
+          "active_spool": 0,
+          "census_s": 0.241,
+          "draining": 0,
+          "draining_age_max_s": 0.0,
+          "entries": 233055,
+          "journal": 77685,
+          "journal_lock": 77685,
+          "orphan_active_age_max_s": 0.0,
+          "orphan_active_with_content": 0,
+          "spool_lock": 77685
+        }
+      ]
+    }
+  },
+  "cells": {
+    "C1": {
+      "N": 100,
+      "canonical_lines_delta": 0,
+      "cell": "C1",
+      "delivered": 100,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 0,
+      "entries_before": 0,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 0,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 0,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 100,
+      "exit_drain_errors": {
+        "None": 100
+      },
+      "exit_drain_p50_ms": 1.091,
+      "exit_drain_tail_ms": 4.087,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 411.757,
+      "lat_exit_tail_ms": 715.57,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        30.23,
+        21.03,
+        17.99
+      ],
+      "loadavg_before": [
+        32.1,
+        19.67,
+        17.36
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "C2": {
+      "N": 108,
+      "canonical_lines_delta": 0,
+      "cell": "C2",
+      "delivered": 108,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 0,
+      "entries_before": 0,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 0,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 0,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 108,
+      "exit_drain_errors": {
+        "None": 108
+      },
+      "exit_drain_p50_ms": 0.558,
+      "exit_drain_tail_ms": 1.33,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 1176.644,
+      "lat_exit_tail_ms": 1737.943,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        26.17,
+        20.7,
+        17.94
+      ],
+      "loadavg_before": [
+        30.23,
+        21.03,
+        17.99
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "C3": {
+      "N": 100,
+      "canonical_lines_delta": 0,
+      "cell": "C3",
+      "delivered": 100,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 233055,
+      "entries_before": 233055,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 0,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 0,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 100,
+      "exit_drain_errors": {
+        "None": 100
+      },
+      "exit_drain_p50_ms": 390.709,
+      "exit_drain_tail_ms": 529.648,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 584.93,
+      "lat_exit_tail_ms": 882.616,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        23.99,
+        23.62,
+        19.76
+      ],
+      "loadavg_before": [
+        27.39,
+        23.9,
+        19.54
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "C4": {
+      "N": 108,
+      "canonical_lines_delta": 0,
+      "cell": "C4",
+      "delivered": 99,
+      "discarded": 9,
+      "emit_errors": 0,
+      "entries_after": 233055,
+      "entries_before": 233055,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 6,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 6,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 99,
+      "exit_drain_errors": {
+        "None": 93,
+        "canonical_lock_timeout": 6
+      },
+      "exit_drain_p50_ms": 1452.157,
+      "exit_drain_tail_ms": 2583.506,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 1947.895,
+      "lat_exit_tail_ms": 3004.67,
+      "lat_tail_censored": true,
+      "loadavg_after": [
+        19.33,
+        22.5,
+        19.5
+      ],
+      "loadavg_before": [
+        23.99,
+        23.62,
+        19.76
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 9,
+      "tail": "p95",
+      "timeouts_killed": 9
+    },
+    "C5": {
+      "N": 100,
+      "canonical_lines_delta": 100,
+      "cell": "C5",
+      "delivered": 100,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 300,
+      "entries_before": 0,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 0,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 0,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 100,
+      "exit_drain_errors": {
+        "None": 100
+      },
+      "exit_drain_p50_ms": 4.866,
+      "exit_drain_tail_ms": 15.363,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 375.25,
+      "lat_exit_tail_ms": 1106.419,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        38.28,
+        24.91,
+        19.65
+      ],
+      "loadavg_before": [
+        26.17,
+        20.7,
+        17.94
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "C6": {
+      "N": 108,
+      "canonical_lines_delta": 108,
+      "cell": "C6",
+      "delivered": 108,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 324,
+      "entries_before": 0,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 0,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 0,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 108,
+      "exit_drain_errors": {
+        "None": 108
+      },
+      "exit_drain_p50_ms": 3.845,
+      "exit_drain_tail_ms": 6.113,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 943.776,
+      "lat_exit_tail_ms": 1317.462,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        33.38,
+        24.48,
+        19.58
+      ],
+      "loadavg_before": [
+        38.28,
+        24.91,
+        19.65
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "C7": {
+      "N": 100,
+      "canonical_lines_delta": 100,
+      "cell": "C7",
+      "delivered": 100,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 233055,
+      "entries_before": 233055,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 0,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 0,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 100,
+      "exit_drain_errors": {
+        "None": 100
+      },
+      "exit_drain_p50_ms": 306.362,
+      "exit_drain_tail_ms": 432.517,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 468.358,
+      "lat_exit_tail_ms": 672.452,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        14.57,
+        20.77,
+        19.04
+      ],
+      "loadavg_before": [
+        19.33,
+        22.5,
+        19.5
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "C8": {
+      "N": 108,
+      "canonical_lines_delta": 108,
+      "cell": "C8",
+      "delivered": 106,
+      "discarded": 2,
+      "emit_errors": 0,
+      "entries_after": 233055,
+      "entries_before": 233055,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 1,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 1,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 106,
+      "exit_drain_errors": {
+        "None": 105,
+        "canonical_lock_timeout": 1
+      },
+      "exit_drain_p50_ms": 1299.383,
+      "exit_drain_tail_ms": 2461.554,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 1668.507,
+      "lat_exit_tail_ms": 2892.209,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        11.42,
+        19.3,
+        18.57
+      ],
+      "loadavg_before": [
+        14.57,
+        20.77,
+        19.04
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 2,
+      "tail": "p95",
+      "timeouts_killed": 2
+    },
+    "X1": {
+      "N": 108,
+      "canonical_lines_delta": 108,
+      "cell": "X1",
+      "delivered": 108,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 150180,
+      "entries_before": 150000,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 0,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 0,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 108,
+      "exit_drain_errors": {
+        "None": 108
+      },
+      "exit_drain_p50_ms": 795.738,
+      "exit_drain_tail_ms": 1559.471,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 1127.811,
+      "lat_exit_tail_ms": 1947.89,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        9.38,
+        16.82,
+        17.69
+      ],
+      "loadavg_before": [
+        10.21,
+        17.58,
+        17.97
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0
+    },
+    "X2": {
+      "N": 108,
+      "canonical_lines_delta": 0,
+      "cell": "X2",
+      "delivered": 89,
+      "discarded": 19,
+      "emit_errors": 0,
+      "entries_after": 233163,
+      "entries_before": 233055,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 90,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 90,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 90,
+      "exit_drain_errors": {
+        "canonical_lock_timeout": 90
+      },
+      "exit_drain_p50_ms": 2523.957,
+      "exit_drain_tail_ms": 2551.43,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 2857.031,
+      "lat_exit_tail_ms": 3005.974,
+      "lat_tail_censored": true,
+      "loadavg_after": [
+        9.81,
+        18.04,
+        18.14
+      ],
+      "loadavg_before": [
+        11.42,
+        19.3,
+        18.57
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 19,
+      "tail": "p95",
+      "timeouts_killed": 19
+    },
+    "X5": {
+      "N": 108,
+      "canonical_lines_delta": 10800,
+      "cell": "X5",
+      "delivered": 108,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 150504,
+      "entries_before": 150180,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 0,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 0,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 108,
+      "exit_drain_errors": {
+        "None": 108
+      },
+      "exit_drain_p50_ms": 992.555,
+      "exit_drain_tail_ms": 1812.893,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 1354.715,
+      "lat_exit_tail_ms": 2167.854,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        8.57,
+        16.03,
+        17.37
+      ],
+      "loadavg_before": [
+        9.38,
+        16.82,
+        17.69
+      ],
+      "pre_decision_drain_contended": 95,
+      "pre_decision_drains": 108,
+      "signaled": 0,
+      "tail": "p95",
+      "timeouts_killed": 0,
+      "x5_N": 108,
+      "x5_p50_ms": 0.981,
+      "x5_tail_ms": 202.52
+    },
+    "X6": {
+      "N": 10,
+      "canonical_lines_delta": 118,
+      "cell": "X6",
+      "delivered": 10,
+      "discarded": 0,
+      "emit_errors": 0,
+      "entries_after": 233055,
+      "entries_before": 233163,
+      "errors_delta": {
+        "drain_canonical_lock_timeout": 0,
+        "drain_now_unexpected": 0,
+        "journal_compact_failed": 0,
+        "journal_flock_timeout": 0,
+        "journal_flush_failed": 0,
+        "lines": 0,
+        "phase2_spool_flock_timeout": 0,
+        "spool_append_failed": 0,
+        "spool_flock_timeout": 0,
+        "starved_exit": 0,
+        "starved_opportunistic": 0,
+        "would_log": 0
+      },
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "exit_drain_calls": 10,
+      "exit_drain_errors": {
+        "None": 10
+      },
+      "exit_drain_p50_ms": 285.794,
+      "exit_drain_tail_ms": 416.071,
+      "exit_without_drain_call": 0,
+      "hung_threads": 0,
+      "lat_exit_p50_ms": 452.377,
+      "lat_exit_tail_ms": 633.315,
+      "lat_tail_censored": false,
+      "loadavg_after": [
+        9.62,
+        17.72,
+        18.02
+      ],
+      "loadavg_before": [
+        9.81,
+        18.04,
+        18.14
+      ],
+      "pre_decision_drain_contended": 0,
+      "pre_decision_drains": 0,
+      "signaled": 0,
+      "tail": "p90",
+      "timeouts_killed": 0
+    }
+  },
+  "result": {
+    "H1": "fora deste instrumento (LEDGER, W2 \u2014 H1 vivo: F = 0,9947, |D| = 14.572)",
+    "N_next_arm_rule": 171,
+    "T2_trigger_X1": {
+      "exit_deadline_skip": "n/a (campo ausente no codigo medido)",
+      "tail_vs_T_min": "p95=1947.89 ms vs 3000.0 ms"
+    },
+    "X3_after_exit_drain": {
+      "N": 1136,
+      "max": 412.093,
+      "p50": 4.314,
+      "p90": 5.765,
+      "p95": 7.06,
+      "p99": 15.538
+    },
+    "X3_final": {
+      "N": 1136,
+      "max": 412.067,
+      "p50": 4.29,
+      "p90": 5.74,
+      "p95": 7.017,
+      "p99": 14.597
+    },
+    "X4": {
+      "wrapper_to_first_line": {
+        "N": 1166,
+        "max": 2249.839,
+        "p50": 302.043,
+        "p90": 1002.54,
+        "p95": 1171.024,
+        "p99": 1660.966
+      },
+      "wrapper_to_import_anchor": {
+        "N": 1166,
+        "max": 2288.718,
+        "p50": 340.159,
+        "p90": 1039.471,
+        "p95": 1213.249,
+        "p99": 1696.349
+      },
+      "wrapper_to_kernel_start": {
+        "N": 1166,
+        "max": 1.519,
+        "p50": 0.136,
+        "p90": 0.218,
+        "p95": 0.296,
+        "p99": 0.598
+      }
+    },
+    "X5_rule_fires": false,
+    "controls": {
+      "interp": {
+        "argv0": "<SCRATCH>/work/fd12/runs/head-20261009T115531Z/mirror/.claude/hooks/w05_guard.py",
+        "exe": "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "ver": "3.9.6"
+      },
+      "kill_discarded": true,
+      "ok_delivered": true,
+      "warmup_delivered": true
+    },
+    "interpreter_version_matches_wrapper_candidates": true,
+    "interpreters_seen": [
+      {
+        "argv0": "<SCRATCH>/work/fd12/runs/head-20261009T115531Z/mirror/.claude/hooks/w05_guard.py",
+        "exe": "/Library/Developer/CommandLineTools/usr/bin/python3",
+        "ver": "3.9.6"
+      }
+    ],
+    "p_hat_X2": 0.17592592592592593,
+    "red_criterion": {
+      "0 timeout em C2 e C6": true,
+      ">=1 timeout em C4 ou C8": true,
+      "decisao perdida em X2": true
+    },
+    "red_criterion_breadcrumb_reading_info": {
+      "C2": 0,
+      "C4": 6,
+      "C6": 0,
+      "C8": 1,
+      "X2": 90
+    },
+    "red_reproduced": true,
+    "stop_rule": {
+      "after_exit_drain": {
+        "fits_initial_margin": true,
+        "margin_required_s": 0.0233,
+        "p99_s": 0.0155,
+        "stop_rule_fires": false
+      },
+      "final": {
+        "fits_initial_margin": true,
+        "margin_required_s": 0.0219,
+        "p99_s": 0.0146,
+        "stop_rule_fires": false
+      }
+    },
+    "verdict_line": "W0.5-veredito (HEAD): decisoes_descartadas=19 N=108"
+  },
+  "substrate_end": {
+    "bash": "/bin/bash",
+    "claude_code_version": "2.1.295 (Claude Code)",
+    "df_free_gb": 117.6,
+    "driver_python": {
+      "exe": "/Library/Developer/CommandLineTools/usr/bin/python3",
+      "ver": "3.9.6"
+    },
+    "hook_path": "/usr/bin:/bin:/usr/sbin:/sbin",
+    "hook_timeout_s": 3.0,
+    "instrument_path": "<SCRATCH>/shadows/fd12/wt/.claude/plans/PLAN-194/w2/w05/w05_harness.py",
+    "instrument_sha256": "27473c1d8ab7fcad41c4e98bafee1ecb0d9431468dda429938e3651cc1e98f8c",
+    "load": {
+      "claude_processes": 3,
+      "loadavg": [
+        8.57,
+        16.03,
+        17.37
+      ],
+      "processes": 840,
+      "uptime": "9:03  up 7 days, 16:46, 1 user, load averages: 8.57 16.03 17.37"
+    },
+    "os": {
+      "build": "26A434",
+      "mac_ver": "27.0.1",
+      "platform": "macOS-27.0.1-arm64-arm-64bit"
+    },
+    "repo": "<SCRATCH>/shadows/fd12/wt",
+    "repo_head": "1684899f486ff376350a2eb61820020c249252b2",
+    "utc": "2026-10-09T12:03:04Z",
+    "wrapper_python_by_candidates": {
+      "candidate": "python3",
+      "path": "/usr/bin/python3",
+      "realpath": "/usr/bin/python3",
+      "version": "3.9.6"
+    }
+  },
+  "substrate_start": {
+    "arm": "head",
+    "bash": "/bin/bash",
+    "claude_code_version": "2.1.295 (Claude Code)",
+    "constants": {
+      "CONC": 9,
+      "DEADLINE_S": 2.0,
+      "DF_FLOOR_GB": 60.0,
+      "EXIT_MARGIN_S": 1.0,
+      "FULL_ENTRIES": 233055,
+      "HOOK_TIMEOUT_S": 3.0,
+      "LOCKS_ENTRIES": 150000,
+      "N_BURSTS": 12,
+      "N_SINGLE": 100,
+      "N_X6": 10,
+      "STOP_MARGIN_S": 3.0
+    },
+    "dev_smoke": false,
+    "df_free_gb": 122.0,
+    "driver_python": {
+      "exe": "/Library/Developer/CommandLineTools/usr/bin/python3",
+      "ver": "3.9.6"
+    },
+    "hook_path": "/usr/bin:/bin:/usr/sbin:/sbin",
+    "hook_timeout_s": 3.0,
+    "instrument_path": "<SCRATCH>/shadows/fd12/wt/.claude/plans/PLAN-194/w2/w05/w05_harness.py",
+    "instrument_sha256": "27473c1d8ab7fcad41c4e98bafee1ecb0d9431468dda429938e3651cc1e98f8c",
+    "load": {
+      "claude_processes": 4,
+      "loadavg": [
+        32.55,
+        19.55,
+        17.31
+      ],
+      "processes": 971,
+      "uptime": "8:55  up 7 days, 16:39, 1 user, load averages: 32.55 19.55 17.31"
+    },
+    "load_note": "braco (b) secundario: PATH fixado => /usr/bin/python3 3.9.6; time S363 ~35 agentes enderecaveis (vivos nao medidos)",
+    "mirror": {
+      "guard_sha256": "b350afbcada5277c5aa57cd89f34689a55470707463907696e56e0751bddb908",
+      "key_files": {
+        "_lib/audit_emit.py": {
+          "sha256": "f60275d29c011b20fb0545eebb04e4975f4bedc11bb2543dcf99bec1751ce42e"
+        },
+        "_lib/audit_hmac.py": {
+          "sha256": "f7dd911b9f1ea74f443a85edbe40e3ac62c19819c93cc69726b783cbf65fa149"
+        },
+        "_lib/filelock.py": {
+          "sha256": "d732ddd27e2f123c66403848bf39abca4c7e986d13607b80425494d6b2c73462"
+        },
+        "_lib/runtime_paths.py": {
+          "sha256": "abe9e4a33b5a63b5ff0918b9ff729f5aae1c92abbe4574940a8ecd65c6d0c74d"
+        },
+        "_lib/spool_writer.py": {
+          "sha256": "c3276f04d827441f1016883d6da4c31ba985f30a9251e83392e9c32289216124"
+        },
+        "_python-hook.sh": {
+          "sha256": "cdc9e05f8aa34aee1282ad1156bd7f00c510ddc0d616247f615c1ec6e4a51086"
+        }
+      },
+      "lib_tree_digest": "42d7d94d9a79264765a400fae92b31bc87d2933b5e6b7dbc329929d0cc375313",
+      "mirror": "<SCRATCH>/work/fd12/runs/head-20261009T115531Z/mirror"
+    },
+    "os": {
+      "build": "26A434",
+      "mac_ver": "27.0.1",
+      "platform": "macOS-27.0.1-arm64-arm-64bit"
+    },
+    "repo": "<SCRATCH>/shadows/fd12/wt",
+    "repo_head": "1684899f486ff376350a2eb61820020c249252b2",
+    "utc": "2026-10-09T11:55:32Z",
+    "wrapper_python_by_candidates": {
+      "candidate": "python3",
+      "path": "/usr/bin/python3",
+      "realpath": "/usr/bin/python3",
+      "version": "3.9.6"
+    }
+  },
+  "trees": {
+    "C1": {
+      "entries": 0,
+      "kind": "empty"
+    },
+    "C2": {
+      "entries": 0,
+      "kind": "empty"
+    },
+    "C5": {
+      "entries": 0,
+      "kind": "empty"
+    },
+    "C6": {
+      "entries": 0,
+      "kind": "empty"
+    },
+    "full": {
+      "build_s": 29.7,
+      "entries": 233055,
+      "kind": "full"
+    },
+    "locks": {
+      "build_s": 13.69,
+      "entries": 150000,
+      "kind": "locks"
+    }
+  }
+}
