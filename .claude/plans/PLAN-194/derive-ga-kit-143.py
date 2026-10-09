@@ -118,6 +118,15 @@ CONTENT_PENDING = [
     "o README do GA, a particao, a cobertura e o prompt (a moldura do GA sobre os da rc.1)",
     "o review record do gerador (a rodada da rc.1 e o anexo dela)",
 ]
+# Classes que o estagio final cura no harness do GA, pela FORMA (o K1 so edita o harness do
+# GA por ancora). Rodada 2 do rail do K1: um stub do gh que devolve o valor FINAL que o
+# corte extrairia com o --jq nunca roda o filtro do corte (o select pela tag, pelo commit,
+# pelo NOME do job); no kit da rc da 1.4.3 os ensaios V e X ja usam o stub unico (JSON bruto
+# e `jq -rc` com a expressao do proprio corte).
+CLASS_PENDING = [
+    "os stubs do gh do harness do GA que devolvem o valor FINAL do --jq passam ao stub unico "
+    "do kit da rc (JSON bruto e o --jq do corte aplicado pelo jq real)",
+]
 
 
 def die(msg: str) -> None:
@@ -209,7 +218,7 @@ CUT_S2_NEW = ("  # R3-CLAIMS-01: o bump do GA e NO-OP e a arvore da rc.1 esta co
               "  # reler. O driver exige a flag --npm-readme-reviewed mesmo assim; nada a reler aqui.\n"
               "  printf 'O bump do GA e NO-OP: o npm/README.md e o mesmo da rc.1 (a arvore dela esta\\n'\n"
               "  printf 'congelada desde a tag, e o G0 conferiu); o driver exige a flag\\n'\n"
-              "  printf '--npm-readme-reviewed, que este passo passa por isso.\\n'\n"
+              "  printf '%s\\n' '--npm-readme-reviewed, que este passo passa por isso.'\n"
               "  printf 'Enter para seguir com o bump no-op (ctrl-C aborta): '\n")
 
 CUT_WINDOW_DOC_OLD = ("# e recusado pelo nome. Depois do passo 10 o envelope existe NAO rastreado em\n"
@@ -232,6 +241,15 @@ CUT_WINDOW_FN_NEW = ("# os dois antes de o passo 11 poder retomar. So neste inte
 CUT_WINDOW_SEL_OLD = "if done_step 10 && ! done_step 11; then\n  tree_clean_resume_11\n"
 CUT_WINDOW_SEL_NEW = ("# M3-01: a janela comeca no passo 9 (o 10 escreve o envelope ANTES de se marcar).\n"
                       "if done_step 9 && ! done_step 11; then\n  tree_clean_resume_11\n")
+
+# M3-01: os textos da janela (mensagens de recusa, o OK do G0 e os comentarios) dizem o
+# intervalo REAL: retomada entre os passos 9 e 11 (o molde dizia 10 e 11). O cabecalho da
+# secao ganha um traco para manter a largura.
+CUT_WINDOW_TXT_OLD = "retomada entre os passos 10 e 11"
+CUT_WINDOW_TXT_NEW = "retomada entre os passos 9 e 11"
+CUT_WINDOW_TXT_N = 7
+CUT_WINDOW_HDR_OLD = "# --- a arvore limpa na retomada entre os passos 9 e 11 ----------------------------\n"
+CUT_WINDOW_HDR_NEW = "# --- a arvore limpa na retomada entre os passos 9 e 11 -----------------------------\n"
 
 CUT_BANNER_START = "# O banner de PUBLICADO so com o passo 20 concluido. Sem ele: --until parou antes\n"
 CUT_BANNER_END = 'bell "$TAG cortada"\n'
@@ -326,6 +344,8 @@ def cure_cut(t: str) -> str:
     t = sub(t, CUT_WINDOW_DOC_OLD, CUT_WINDOW_DOC_NEW, "M3-01: a janela no cabecalho")
     t = sub(t, CUT_WINDOW_FN_OLD, CUT_WINDOW_FN_NEW, "M3-01: a janela na funcao")
     t = sub(t, CUT_WINDOW_SEL_OLD, CUT_WINDOW_SEL_NEW, "M3-01: o seletor do G0")
+    t = sub(t, CUT_WINDOW_TXT_OLD, CUT_WINDOW_TXT_NEW, "M3-01: os textos da janela", CUT_WINDOW_TXT_N)
+    t = sub(t, CUT_WINDOW_HDR_OLD, CUT_WINDOW_HDR_NEW, "M3-01: a largura do cabecalho da janela")
     t = sub(t, CUT_BANNER_DOC_OLD, CUT_BANNER_DOC_NEW, "M3-02: o banner no cabecalho")
     t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")
     t = sub(t, CUT_REGVARS_ANCHOR, CUT_REGVARS_ANCHOR + CUT_REGVARS, "REGISTRY: as variaveis")
@@ -337,10 +357,12 @@ def cure_cut(t: str) -> str:
     t = sub(t, CUT_S6_INFRA_OLD, CUT_S6_INFRA_NEW, "D-4: a rota (b) do passo 6")
     t = sub(t, CUT_S6_D_OLD, CUT_S6_D_NEW, "D-4: a rota (d) do passo 6")
     forbid(t, "corte", ["RELIDO npm/README.md", "done_step 10 && ! done_step 11", "-lt 5 ]",
+                        CUT_WINDOW_TXT_OLD,
                         "apos 5 tentativas", "senao por npx", "rede, npx"])
     need(t, "corte", ["if done_step 9 && ! done_step 11; then", '_pend="$(pending_steps)"',
                       'NPM_VIEW_TRIES="${GA_NPM_VIEW_TRIES:-20}"', "    assert_route1_available\n",
-                      "Enter para seguir com o bump no-op"])
+                      "Enter para seguir com o bump no-op",
+                      "OK: retomada entre os passos 9 e 11: fora do plano, so o envelope"])
     return t
 
 
@@ -440,6 +462,9 @@ TEST_D_NEW = ('_d_need "D14 passo 18: registry, latest e recibo do publish" PUB5
               '_d_need "D15 evidencia da rc.1 no candidato e G0 numa corrida fresca" B4c B4d R2v R4c R4d\n')
 TEST_T2_OLD = "         && grep -q 'Enter para confirmar que releu' \"$_r/t2.log\" \\\n"
 TEST_T2_NEW = "         && grep -q 'Enter para seguir com o bump no-op' \"$_r/t2.log\" \\\n"
+# M3-01: o E3r do harness ancora a recusa da arvore no texto da janela (2 sitios).
+TEST_E3R_OLD = "'arvore nao esta limpa (retomada entre os passos 10 e 11'"
+TEST_E3R_NEW = "'arvore nao esta limpa (retomada entre os passos 9 e 11'"
 # REGISTRY: os PUB do harness exercitam a recusa depois de 5 tentativas ('tentativa 5/5');
 # com o padrao novo (20 x 30 s) o corte real do R passa a receber 5 x 0 s.
 TEST_RCUT_OLD = '    ( cd "$_r/wt" && env PATH="$_r/bin:$PATH" GNUPGHOME="$GH" HOME="$SCRATCH/rhome" \\\n'
@@ -460,11 +485,13 @@ def cure_test(t: str) -> str:
         t = "\n".join(lines)
     t = sub(t, TEST_D_OLD, TEST_D_NEW, "R3H-04: o indice D15")
     t = sub(t, TEST_T2_OLD, TEST_T2_NEW, "R3-CLAIMS-01: o T2 do harness")
+    t = sub(t, TEST_E3R_OLD, TEST_E3R_NEW, "M3-01: o E3r do harness (o texto da janela)", 2)
     n = t.count(TEST_RCUT_OLD)
     if n < 1:
         die("REGISTRY: o corte real do R (_r_cut) nao achado no harness")
     t = t.replace(TEST_RCUT_OLD, TEST_RCUT_NEW)
     need(t, "harness", ['_d_need "D15 ', '_red="$_red B4c"', '_red="$_red R4d"'])
+    forbid(t, "harness", ["retomada entre os passos 10 e 11"])
     return t
 
 
@@ -478,6 +505,23 @@ def nonascii_vars(kind: str, text: str) -> None:
     new = [b for b in bad if b not in NONASCII_MOLD.get(kind, ())]
     if new:
         die("%s curado: variavel colada a caractere nao-ASCII (use ${NOME}): %s" % (kind, ", ".join(new)))
+
+
+# Um printf cujo FORMATO comeca por «-» e lido como opcao pelo builtin do bash: sob o
+# `set -euo pipefail` do corte o passo morre (rc 2, «printf: --: invalid option») antes do
+# que vem depois — na rodada 1 do rail do K1, o passo 2 curado morria antes do Enter. A
+# forma segura e printf '%s\n' '--...'. A regex casa um formato entre aspas que
+# comeca por «-», logo depois do printf (ou do printf -v NOME).
+DASH_PRINTF_RE = re.compile(r"\bprintf[ \t]+(?:-v[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+)?['\"]-")
+
+
+def dash_printf(kind: str, text: str) -> None:
+    if kind == "gen":
+        return
+    bad = [ln.strip() for ln in text.split("\n") if DASH_PRINTF_RE.search(ln)]
+    if bad:
+        die("%s curado: printf com formato iniciado por «-» (use printf '%%s\\n' ...): %s"
+            % (kind, bad[0][:80]))
 
 
 # As que o molde ja trazia (fora do escopo destas curas; o estagio final as corrige no
@@ -499,6 +543,7 @@ def derive_cured():
     }
     for k, t in out.items():
         nonascii_vars(k, t)
+        dash_printf(k, t)
     return out, rc
 
 
@@ -536,9 +581,11 @@ def check_protect(out: Dict[str, str], rc) -> List[str]:
 
 def pending_message() -> str:
     return ("o kit do GA v1.4.3 so deriva INTEIRO depois do corte da v1.4.3-rc.1 — estagio K1: "
-            "fatos pendentes: %s; conteudo pendente: %s. Hoje: --check-cures (as curas sobre o kit "
-            "do GA v1.4.2, por ancora) e --emit-cured DIR (o material de ensaio)."
-            % ("; ".join("%s (%s)" % f for f in FACTS_PENDING), "; ".join(CONTENT_PENDING)))
+            "fatos pendentes: %s; conteudo pendente: %s; classe a curar no harness do GA: %s. Hoje: "
+            "--check-cures (as curas sobre o kit do GA v1.4.2, por ancora) e --emit-cured DIR (o "
+            "material de ensaio)."
+            % ("; ".join("%s (%s)" % f for f in FACTS_PENDING), "; ".join(CONTENT_PENDING),
+               "; ".join(CLASS_PENDING)))
 
 
 def main() -> int:

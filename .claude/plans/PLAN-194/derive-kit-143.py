@@ -1926,7 +1926,7 @@ CUT_S11DOC_NEW = ("  # das releases anteriores. O que liga os BYTES dele a assin
                   "  # nunca tomado da arvore.\n")
 CUT_S11_ANCHOR = "  # O .asc sai da arvore (o passo 15 recusa arquivo nao rastreado) SO agora, depois\n"
 CUT_S11_BLOCK = r'''  # O envelope RE-DERIVADO dos fields assinados, depois dos guards de HEAD e do index
-  # e antes de o .asc sair da arvore: numa retomada entre os passos 10 e 11 o $VD da
+  # e antes de o .asc sair da arvore: numa retomada entre os passos 9 e 11 o $VD da
   # arvore e um untracked que nada liga a assinatura. Se ele diferia do derivado, e
   # substituido — e e o derivado que o staging abaixo leva ao commit.
   _vd_prev=""
@@ -2002,7 +2002,9 @@ CUT_S18 = r'''if should 18; then
     fi
     # Separador `|`: o estado do run, a conclusao do gate, quantos jobs tem o NOME da prova
     # do toolchain e a conclusao dela — uma conclusao VAZIA (em andamento) nao desloca os
-    # campos. O nome e comparado EXATO (o `name:` do job), nunca por prefixo.
+    # campos. O nome da PROVA do toolchain e comparado EXATO (o `name:` do job da W4),
+    # nunca por prefixo; o do GATE segue por PREFIXO («Await release-gate», herdado do
+    # molde: o `name:` dele carrega o sufixo « (release.yml)»).
     _j18="$(gh run view "$NID" --json status,jobs \
       --jq '(.status // "") + "|" + ([.jobs[]|select(.name|startswith("Await release-gate"))][0].conclusion // "") + "|" + ([.jobs[]|select(.name == "'"$RC_PROOF_JOB"'")]|length|tostring) + "|" + ([.jobs[]|select(.name == "'"$RC_PROOF_JOB"'")][0].conclusion // "")' 2>/dev/null || echo "")"
     if [ -z "$_j18" ]; then
@@ -2048,6 +2050,13 @@ fi
 # o envelope ANTES de se marcar). M3-02: o banner de CORTADA so com os 20 passos concluidos.
 CUT_WINDOW_FN_START = "# --- a arvore limpa na retomada entre os passos 10 e 11 ----------------------------\n"
 CUT_WINDOW_FN_END = "\n# ===========================================================================\n"
+# Os textos da janela transplantada (o cabecalho, as recusas e o OK do G0) dizem o
+# intervalo REAL — retomada entre os passos 9 e 11 — e o cabecalho ganha um traco (a
+# largura do molde).
+CUT_WINDOW_TXT_OLD = "retomada entre os passos 10 e 11"
+CUT_WINDOW_TXT_NEW = "retomada entre os passos 9 e 11"
+CUT_WINDOW_HDR_OLD = "# --- a arvore limpa na retomada entre os passos 9 e 11 ----------------------------\n"
+CUT_WINDOW_HDR_NEW = "# --- a arvore limpa na retomada entre os passos 9 e 11 -----------------------------\n"
 CUT_WINDOW_FN_OLD = ("# os dois antes de o passo 11 poder retomar. So neste intervalo (o G0 chama esta funcao\n"
                      "# com o passo 10 concluido e o 11 nao) e com o HEAD no candidato gravado, admite:\n")
 CUT_WINDOW_FN_NEW = ("# os dois antes de o passo 11 poder retomar. So neste intervalo (o G0 chama esta funcao\n"
@@ -2114,13 +2123,16 @@ def derive_cut(src: str) -> str:
     t = cut_region(t, CUT_S18_START, CUT_S18_END, CUT_S18, "passo 18")
     win = region(ga("cut"), CUT_WINDOW_FN_START, CUT_WINDOW_FN_END, "janela do GA (tree_clean_resume_11)")
     win = sub(win, CUT_WINDOW_FN_OLD, CUT_WINDOW_FN_NEW, "M3-01: a janela na funcao")
+    win = sub(win, CUT_WINDOW_TXT_OLD, CUT_WINDOW_TXT_NEW, "M3-01: os textos da janela", 5)
+    win = sub(win, CUT_WINDOW_HDR_OLD, CUT_WINDOW_HDR_NEW, "M3-01: a largura do cabecalho da janela")
     t = sub(t, CUT_NEWFUNCS_ANCHOR, win + "\n" + CUT_NEWFUNCS_ANCHOR, "M3-01: a funcao da janela")
     t = sub(t, CUT_WINDOW_SEL_OLD, CUT_WINDOW_SEL_NEW, "M3-01: o seletor do G0")
     t = sub(t, CUT_WINDOW_DOC_OLD, CUT_WINDOW_DOC_NEW, "M3-01: a janela no cabecalho")
     t = sub(t, CUT_BANNER_DOC_OLD, CUT_BANNER_DOC_NEW, "M3-02: o banner no cabecalho")
     t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")
     forbid(t, "corte", ["derive-kit-142", "Opus 5.5", "FN-04", "OQ-3", "senao por npx",
-                        "so o job do gate roda la", "rede, npx, git", "if ! done_step 20; then"])
+                        "so o job do gate roda la", "rede, npx, git", "if ! done_step 20; then",
+                        CUT_WINDOW_TXT_OLD, "nunca por prefixo."])
     need(t, "corte", ['PLAN_DIR=".claude/plans/PLAN-194"', 'TAG="v1.4.3-rc.1"', 'BASE="1.4.3"',
                       'BASE_TAG="v1.4.2"', "$PLAN_DIR/derive-kit-143.py $PLAN_DIR/test-rc1-kit.sh",
                       "A relmeta-143 ainda nao landou: assine e lande o pack .claude/plans/PLAN-194/relmeta/",
@@ -2128,7 +2140,9 @@ def derive_cut(src: str) -> str:
                       "release: v1.4.3", "assert_rc_proof_job\n", "assert_no_gen_orphans\n",
                       "  assert_route1_available\n", 'RC_PROOF_JOB="%s"' % RC_PROOF_JOB_NAME,
                       "tree_clean_resume_11() {", "if done_step 9 && ! done_step 11; then",
-                      '_pend="$(pending_steps)"'])
+                      '_pend="$(pending_steps)"',
+                      "OK: retomada entre os passos 9 e 11: fora do plano, so o envelope",
+                      "o do GATE segue por PREFIXO («Await release-gate»"])
     return t
 
 
@@ -2770,12 +2784,173 @@ TEST_W3_NEW = r'''if W_LOAD="0.10 8" bash "$SCRATCH/w.sh" < /dev/null > "$SCRATC
    && grep -q 'carga baixa' "$SCRATCH/w3.log" && lacks "$SCRATCH/w3.log" 'AVISO'; then
 '''
 
-# X2-X4 — o passo 18 novo: o gate E a prova do toolchain da rc, pelo nome.
-TEST_X2_START = ("  # X2 — passo 18: o await-release-gate que terminou sem success (o de antes de um rerun\n")
-TEST_X2_END = 'else bad "X: fixture do passo 17 falhou"; fi\n'
-TEST_X2 = r'''  # X2-X4 — passo 18: o gate E a prova do toolchain da rc, PELO NOME. O stub do gh devolve,
-  # por chamada: o repo, o id do run e "<status do run>|<gate>|<quantos jobs com o nome da
-  # prova>|<prova>".
+# V e X — a classe «stub do gh que ignora o --jq» (rodada 2 do rail do K1): os stubs do
+# molde devolviam o valor FINAL que o corte extrairia com o --jq, e o filtro do corte (o
+# select pela tag, pelo commit, pelo NOME do job) nunca rodava. Um stub UNICO passa a
+# devolver o JSON BRUTO de fixtures e a aplicar a expressao do PROPRIO corte com o jq real.
+TEST_V_START = 'say "V. wait_ci_green: um gh run view transitorio tem NOME (nunca um traceback)"\n'
+TEST_V_END = ('# ===========================================================================\n'
+              'say "Z. passo 5: os passos 1, 2 e 4 conferiram ESTE candidato; CANDIDATE.sha byte a byte"\n')
+TEST_V = r'''say "V. wait_ci_green: um gh run view transitorio tem NOME (nunca um traceback)"
+# O stub do gh dos ensaios V e X (rodada 2 do rail do K1, a classe «stub que ignora o
+# --jq»): a chamada N do gh casa a linha N de GH_SEQ — «<sub> <acao> <fixture> [<3.o
+# argumento esperado>]» — e devolve o JSON BRUTO da fixture; com --jq, o stub aplica a
+# expressao do PROPRIO corte com o jq real (`jq -rc`: a saida do gh fora de um terminal).
+# O filtro, o select e o `// ""` sao os do script, nunca pre-computados aqui. Fixture
+# FALHA: o gh falha por transporte (rc 1). Fixture raw:<arquivo>: o gh imprime o arquivo
+# como veio (uma resposta que nao e JSON).
+_gs="$SCRATCH/ghstub"; mkdir -p "$_gs/bin" "$_gs/fix"
+cat > "$_gs/bin/gh" <<'GHSEOF'
+#!/bin/bash
+n="$(cat "$GH_CNT" 2>/dev/null || echo 0)"; n=$((n+1)); printf '%s' "$n" > "$GH_CNT"
+_l="$(printf '%s\n' "$GH_SEQ" | sed -n "${n}p")"
+_w1=""; _w2=""; _f=""; _a3=""
+read -r _w1 _w2 _f _a3 <<< "$_l"
+[ -n "$_f" ] || { echo "gh stub: chamada $n sem linha em GH_SEQ: gh $*" >&2; exit 9; }
+{ [ "${1:-}" = "$_w1" ] && [ "${2:-}" = "$_w2" ]; } \
+  || { echo "gh stub: chamada $n inesperada: gh $* (esperado gh $_w1 $_w2)" >&2; exit 9; }
+[ -z "$_a3" ] || [ "${3:-}" = "$_a3" ] \
+  || { echo "gh stub: chamada $n: gh $_w1 $_w2 ${3:-} (esperado $_a3)" >&2; exit 9; }
+case "$_f" in
+  FALHA) echo "error connecting to api.github.com" >&2; exit 1 ;;
+  raw:*) exec cat -- "$GH_FIX/${_f#raw:}" ;;
+esac
+[ -f "$GH_FIX/$_f" ] || { echo "gh stub: fixture ausente: $_f" >&2; exit 9; }
+_q=""; _p=""
+for _a in "$@"; do [ "$_p" = "--jq" ] && _q="$_a"; _p="$_a"; done
+[ -n "$_q" ] || exec cat -- "$GH_FIX/$_f"
+exec jq -rc "$_q" < "$GH_FIX/$_f"
+GHSEOF
+chmod 0755 "$_gs/bin/gh"
+_gs_run() {  # $1 = script, $2 = sequencia (uma linha por chamada do gh), $3 = log, $4 = diretorio
+  rm -f -- "$_gs/cnt"
+  ( cd "$4" && PATH="$_gs/bin:$PATH" GH_CNT="$_gs/cnt" GH_FIX="$_gs/fix" GH_SEQ="$2" bash "$1" ) > "$3" 2>&1
+}
+# Um ensaio que rodasse sem o jq aplicaria filtro nenhum: sem ele, V e X reprovam pelo nome.
+_gs_jq=0
+if command -v jq >/dev/null 2>&1 && [ "$(printf '[{"a":1},{"a":2}]' | jq -rc '[.[]|select(.a==2)][0].a')" = "2" ]; then _gs_jq=1
+else bad "V/X: jq ausente ou quebrado — o stub do gh nao aplicaria o --jq do corte (V e X nao rodam)"; fi
+# As fixtures do wait_ci_green: uma ISCA de outro commit (vermelha) na lista de runs e uma
+# isca de outro commit (verde) PRIMEIRO na lista do validate.yml — sem o select do corte, a
+# primeira viraria vermelho e a segunda o run errado (o stub exige o run 4242).
+_vs=0123456789abcdef0123456789abcdef01234567; _vo=fedcba9876543210fedcba9876543210fedcba98
+printf '[{"headSha":"%s","status":"completed","conclusion":"success"},{"headSha":"%s","status":"completed","conclusion":"skipped"},{"headSha":"%s","status":"completed","conclusion":"failure"}]\n' \
+  "$_vs" "$_vs" "$_vo" > "$_gs/fix/v-ci.json"
+printf '[{"headSha":"%s","databaseId":1111,"status":"completed","conclusion":"success","event":"push","headBranch":"main"},{"headSha":"%s","databaseId":4242,"status":"completed","conclusion":"success","event":"push","headBranch":"main"}]\n' \
+  "$_vo" "$_vs" > "$_gs/fix/v-validate.json"
+printf '{"jobs":[{"name":"a","status":"completed","conclusion":"success"},{"name":"b","status":"completed","conclusion":"success"},{"name":"c","status":"completed","conclusion":"success"},{"name":"d","status":"completed","conclusion":"skipped"}]}\n' \
+  > "$_gs/fix/v-jobs.json"
+printf 'oops\n' > "$_gs/fix/v-garbage.txt"
+{ printf '#!/bin/bash\nset -euo pipefail\n'
+  printf 'die() { printf "FAIL: %%s\\n" "$*" >&2; exit 1; }\n'
+  printf 'sleep() { :; }\nCI_WAIT_MAX_MIN=3\n'
+  awk '/^wait_ci_green\(\) \{$/,/^\}$/' "$_cut"
+  printf 'wait_ci_green %s\n' "$_vs"; } > "$SCRATCH/v.sh"
+_vq="$(printf 'run list v-ci.json\nrun list v-validate.json')"
+if [ "$_gs_jq" -eq 1 ]; then
+  if _gs_run "$SCRATCH/v.sh" "$(printf '%s\nrun view FALHA 4242' "$_vq")" "$SCRATCH/v1.log" "$SCRATCH"; then
+    bad "V1: gh run view que falha passou"
+  elif grep -q 'FAIL: gh run view 4242 falhou' "$SCRATCH/v1.log" && lacks "$SCRATCH/v1.log" 'Traceback'; then
+    ok "V1 (controle vermelho): gh run view que falha vira FAIL nomeado, sem traceback"
+  else bad "V1: falha sem nome"; sed -n '1,8p' "$SCRATCH/v1.log"; fi
+  if _gs_run "$SCRATCH/v.sh" "$(printf '%s\nrun view raw:v-garbage.txt 4242' "$_vq")" "$SCRATCH/v2.log" "$SCRATCH"; then
+    bad "V2: resposta ilegivel do gh run view passou"
+  elif grep -q 'FAIL: resposta do gh run view 4242 ilegivel' "$SCRATCH/v2.log"; then
+    ok "V2 (controle vermelho): resposta ilegivel do gh run view vira FAIL nomeado"
+  else bad "V2: falha sem nome"; sed -n '1,8p' "$SCRATCH/v2.log"; fi
+  if _gs_run "$SCRATCH/v.sh" "$(printf '%s\nrun view v-jobs.json 4242' "$_vq")" "$SCRATCH/v3.log" "$SCRATCH" \
+     && grep -q 'runs=2 pendentes=0 vermelhos=0' "$SCRATCH/v3.log" \
+     && grep -q 'validate.yml: 3 job(s) success' "$SCRATCH/v3.log"; then
+    ok "V3: o JSON bruto pelo --jq do corte: as iscas de outro commit ficam fora, e o run 4242 com 3 jobs verdes passa"
+  else bad "V3: o caso bom foi recusado"; sed -n '1,8p' "$SCRATCH/v3.log"; fi
+fi
+
+'''
+
+TEST_X_START = 'say "X. passo 17: conclusao terminal diferente de success e recusa na hora (nunca 120 min)"\n'
+TEST_X_END = 'else bad "X: fixture do passo 17 falhou"; fi\n'
+TEST_X = r'''say "X. passo 17: conclusao terminal diferente de success e recusa na hora (nunca 120 min)"
+# O stub do gh e o da secao V: JSON bruto e o --jq do corte aplicado pelo jq real.
+_x="$SCRATCH/x"; mkdir -p "$_x"
+# O MUTANTE do instrumento: o mesmo bloco do corte com o select trocado por select(true)
+# (o filtro do corte desligado). Com o stub aplicando o --jq de verdade, as MESMAS fixtures
+# fazem o mutante marcar o passo — prova de que as recusas abaixo vem do filtro do corte.
+_xmut() {  # $1 = origem, $2 = destino, $3 = x17 | x18
+  python3 - "$1" "$2" "$3" <<'PYXM'
+import sys
+src, dst, kind = sys.argv[1:4]
+MUT = {
+    "x17": ('select(.headSha==\\"$TAGSHA\\" and .headBranch==\\"$TAG\\" and .event==\\"push\\")', 1),
+    "x18": ('select(.name == "\'"$RC_PROOF_JOB"\'")', 2),
+}
+old, n = MUT[kind]
+t = open(src, encoding="utf-8").read()
+if t.count(old) != n:
+    sys.exit("mutante %s: o select casou %d vez(es), exigido %d" % (kind, t.count(old), n))
+open(dst, "w", encoding="utf-8").write(t.replace(old, "select(true)"))
+PYXM
+}
+if [ "$_gs_jq" -eq 1 ] && git init --quiet "$_x/w" 2>/dev/null && fixture_git_identity "$_x/w" \
+   && ( cd "$_x/w" && git commit -q --allow-empty -m a && git -c tag.gpgSign=false tag -a -m t v1.4.3-rc.1 ); then
+  _xt="$(git -C "$_x/w" rev-parse 'v1.4.3-rc.1^{commit}')"
+  # Fixtures do passo 17 (gh run list do release.yml): uma ISCA primeiro — o MESMO commit
+  # num push do main, verde — e depois o run da tag. Sem o select do corte, o [0] seria a isca.
+  _x17() {  # $1 = arquivo, $2 = status, $3 = conclusion (JSON: "..." ou null)
+    printf '[{"headSha":"%s","status":"completed","conclusion":"success","headBranch":"main","event":"push","databaseId":1111},{"headSha":"%s","status":"%s","conclusion":%s,"headBranch":"v1.4.3-rc.1","event":"push","databaseId":4242}]\n' \
+      "$_xt" "$_xt" "$2" "$3" > "$_gs/fix/$1"
+  }
+  for _xc in cancelled timed_out startup_failure failure; do _x17 "r17-$_xc.json" completed "\"$_xc\""; done
+  _x17 r17-inprog.json in_progress null; _x17 r17-queued.json queued '""'; _x17 r17-ok.json completed '"success"'
+  { printf '#!/bin/bash\nset -euo pipefail\n'
+    printf 'die() { printf "FAIL: %%s\\n" "$*" >&2; exit 1; }\n'
+    printf 'say() { :; }; bell() { :; }; sleep() { :; }; should() { return 0; }\n'
+    printf 'mark_step() { printf "X-STEP-%%s-MARCADO\\n" "$1"; }\n'
+    printf 'verdict_deadline() { printf "PRAZO-STUB"; }\n'
+    printf 'TAG=v1.4.3-rc.1\n'
+    awk '/^if should 17; then$/,/^fi$/' "$_cut"; } > "$SCRATCH/x.sh"
+  for _xc in cancelled timed_out startup_failure failure; do
+    if _gs_run "$SCRATCH/x.sh" "run list r17-$_xc.json" "$SCRATCH/x-$_xc.log" "$_x/w"; then bad "X: release.yml '$_xc' passou pelo passo 17"
+    elif grep -q "release.yml terminou '$_xc' para a tag v1.4.3-rc.1 (run 4242)" "$SCRATCH/x-$_xc.log" \
+         && grep -q 'retoma do passo 17' "$SCRATCH/x-$_xc.log" && [ "$(cat "$_gs/cnt")" = "1" ] \
+         && grep -q 'gh run rerun <run dele> --failed' "$SCRATCH/x-$_xc.log" \
+         && grep -q 'rerun so ate PRAZO-STUB' "$SCRATCH/x-$_xc.log"; then
+      ok "X (controle vermelho): release.yml '$_xc' e recusa nomeada na 1.a volta, com o run, a rota (npm-publish incluido) e o prazo"
+    else bad "X: '$_xc' sem recusa nomeada imediata"; sed -n '1,6p' "$SCRATCH/x-$_xc.log"; fi
+  done
+  if _gs_run "$SCRATCH/x.sh" "$(printf 'run list r17-inprog.json\nrun list r17-queued.json\nrun list r17-ok.json')" "$SCRATCH/x-ok.log" "$_x/w" \
+     && grep -q 'X-STEP-17-MARCADO' "$SCRATCH/x-ok.log" \
+     && grep -q 'release.yml: in_progress/?' "$SCRATCH/x-ok.log"; then
+    ok "X: em andamento (conclusao null e vazia nao deslocam os campos) e depois success marca o passo 17"
+  else bad "X: o caminho verde do passo 17 falhou"; sed -n '1,8p' "$SCRATCH/x-ok.log"; fi
+  if _xmut "$SCRATCH/x.sh" "$SCRATCH/x17m.sh" x17 > "$SCRATCH/x17m-gen.log" 2>&1 \
+     && _gs_run "$SCRATCH/x17m.sh" "run list r17-failure.json" "$SCRATCH/x17m.log" "$_x/w" \
+     && grep -q 'X-STEP-17-MARCADO' "$SCRATCH/x17m.log"; then
+    ok "X17m (o instrumento): com select(true) no passo 17, a MESMA fixture do 'failure' marca o passo pela isca verde — a recusa acima vem do filtro do corte"; _red="$_red X17m"
+  else bad "X17m: o mutante do passo 17 nao marcou (o stub nao aplica o --jq do corte?)"; sed -n '1,6p' "$SCRATCH/x17m.log" "$SCRATCH/x17m-gen.log" 2>/dev/null; fi
+  # X2-X4 — passo 18: o gate E a prova do toolchain da rc, PELO NOME. Fixtures: o repo, a
+  # lista de runs do npm-publish.yml (uma ISCA do mesmo commit no main primeiro; o stub
+  # exige o run 4343 da tag) e o `gh run view` BRUTO (status e jobs: o gate com o sufixo do
+  # `name:` dele, a prova da W4, o publish pulado).
+  printf '{"nameWithOwner":"owner/repo"}\n' > "$_gs/fix/repo.json"
+  printf '[{"headSha":"%s","databaseId":9999,"headBranch":"main","event":"push"},{"headSha":"%s","databaseId":4343,"headBranch":"v1.4.3-rc.1","event":"push"}]\n' \
+    "$_xt" "$_xt" > "$_gs/fix/runs18.json"
+  _x18() {  # $1 = arquivo, $2 = status do run, $3.. = jobs «nome|status|conclusao» (conclusao em JSON)
+    local _f="$1" _s="$2" _j="" _a _n _st _c; shift 2
+    for _a in "$@"; do
+      _n="${_a%%|*}"; _a="${_a#*|}"; _st="${_a%%|*}"; _c="${_a#*|}"
+      _j="$_j${_j:+,}{\"name\":\"$_n\",\"status\":\"$_st\",\"conclusion\":$_c}"
+    done
+    printf '{"status":"%s","jobs":[%s]}\n' "$_s" "$_j" > "$_gs/fix/$_f"
+  }
+  _xg="Await release-gate (release.yml)"; _xp="RC toolchain proof (no publish)"; _xu="publish"
+  _x18 v18-gatefail.json completed "$_xg|completed|\"failure\"" "$_xp|completed|\"success\"" "$_xu|completed|\"skipped\""
+  _x18 v18-prooffail.json in_progress "$_xg|completed|\"success\"" "$_xp|completed|\"failure\"" "$_xu|queued|null"
+  _x18 v18-similar.json completed "$_xg|completed|\"success\"" "$_xp (ubuntu)|completed|\"success\"" "$_xu|completed|\"skipped\""
+  _x18 v18-nojobs.json completed
+  _x18 v18-pend1.json in_progress "$_xg|in_progress|null" "$_xp|in_progress|null" "$_xu|queued|null"
+  _x18 v18-pend2.json in_progress "$_xg|completed|\"success\"" "$_xp|in_progress|null" "$_xu|queued|null"
+  _x18 v18-ok.json completed "$_xg|completed|\"success\"" "$_xp|completed|\"success\"" "$_xu|completed|\"skipped\""
+  _x18q() { printf 'repo view repo.json\nrun list runs18.json\nrun view %s 4343' "$1"; }
   { printf '#!/bin/bash\nset -euo pipefail\n'
     printf 'die() { printf "FAIL: %%s\\n" "$*" >&2; exit 1; }\n'
     printf 'say() { :; }; bell() { :; }; sleep() { :; }; should() { return 0; }\n'
@@ -2783,25 +2958,32 @@ TEST_X2 = r'''  # X2-X4 — passo 18: o gate E a prova do toolchain da rc, PELO 
     printf 'TAG=v1.4.3-rc.1\n'
     grep -m 1 '^RC_PROOF_JOB=' "$_cut"
     awk '/^if should 18; then$/,/^fi$/' "$_cut"; } > "$SCRATCH/x2.sh"
-  _x2_run() {
-    rm -f -- "$_x/cnt"
-    ( cd "$_x/w" && PATH="$_x/bin:$PATH" X_CNT="$_x/cnt" X_SEQ="$1" bash "$SCRATCH/x2.sh" ) > "$2" 2>&1
-  }
-  _x2_rc=0; _x2_run "$(printf 'owner/repo\n4343\ncompleted|failure|1|success')" "$SCRATCH/x2-fail.log" || _x2_rc=$?
+  _x2_rc=0; _gs_run "$SCRATCH/x2.sh" "$(_x18q v18-gatefail.json)" "$SCRATCH/x2-fail.log" "$_x/w" || _x2_rc=$?
   refused X2 "$_x2_rc" "$SCRATCH/x2-fail.log" "await-release-gate terminou 'failure' (run 4343" \
     "o await-release-gate sem success no passo 18"
   if grep -q 'gh run rerun 4343 --failed' "$SCRATCH/x2-fail.log"; then ok "X2: a recusa traz a rota do rerun do npm-publish.yml"
   else bad "X2: a recusa sem a rota do rerun"; fi
-  _x3_rc=0; _x2_run "$(printf 'owner/repo\n4343\nin_progress|success|1|failure')" "$SCRATCH/x3.log" || _x3_rc=$?
+  _x3_rc=0; _gs_run "$SCRATCH/x2.sh" "$(_x18q v18-prooffail.json)" "$SCRATCH/x3.log" "$_x/w" || _x3_rc=$?
   refused X3 "$_x3_rc" "$SCRATCH/x3.log" "a prova do toolchain da rc («RC toolchain proof (no publish)») terminou 'failure' (run 4343" \
-    "a prova do toolchain da rc sem success no passo 18"
-  _x4_rc=0; _x2_run "$(printf 'owner/repo\n4343\ncompleted|success|0|')" "$SCRATCH/x4.log" || _x4_rc=$?
+    "a prova do toolchain da rc sem success no passo 18 (o gate verde)"
+  _x4_rc=0; _gs_run "$SCRATCH/x2.sh" "$(_x18q v18-similar.json)" "$SCRATCH/x4.log" "$_x/w" || _x4_rc=$?
   refused X4 "$_x4_rc" "$SCRATCH/x4.log" "terminou SEM o job «RC toolchain proof (no publish)»" \
-    "o run concluido sem o job da prova do toolchain (pelo NOME)"
-  if _x2_run "$(printf 'owner/repo\n4343\nin_progress||1|\n4343\nin_progress|success|1|\n4343\ncompleted|success|1|success')" "$SCRATCH/x2-ok.log" \
-     && grep -q 'X-STEP-18-MARCADO' "$SCRATCH/x2-ok.log" && grep -q 'prova do toolchain: pendente' "$SCRATCH/x2-ok.log"; then
-    ok "X2: gate e prova pendentes, depois o gate verde e a prova pendente, e por fim os dois verdes marcam o passo 18"
+    "o run concluido so com um job de nome PARECIDO («RC toolchain proof (no publish) (ubuntu)», verde) — o NOME exato"
+  _x4j_rc=0; _gs_run "$SCRATCH/x2.sh" "$(_x18q v18-nojobs.json)" "$SCRATCH/x4j.log" "$_x/w" || _x4j_rc=$?
+  refused X4j "$_x4j_rc" "$SCRATCH/x4j.log" "terminou SEM o job «RC toolchain proof (no publish)»" \
+    "o run concluido com a lista de jobs VAZIA (jobs: [])"
+  if _gs_run "$SCRATCH/x2.sh" "$(printf 'repo view repo.json\nrun list runs18.json\nrun view v18-pend1.json 4343\nrun list runs18.json\nrun view v18-pend2.json 4343\nrun list runs18.json\nrun view v18-ok.json 4343')" "$SCRATCH/x2-ok.log" "$_x/w" \
+     && grep -q 'X-STEP-18-MARCADO' "$SCRATCH/x2-ok.log" && grep -q 'prova do toolchain: pendente' "$SCRATCH/x2-ok.log" \
+     && grep -q 'actions/workflows/npm-publish.yml' "$SCRATCH/x2-ok.log"; then
+    ok "X2: gate e prova pendentes, depois o gate verde e a prova pendente, e por fim o run concluido com os dois verdes (e o job da W4 pelo nome) marca o passo 18"
   else bad "X2: o caminho verde do passo 18 falhou"; sed -n '1,8p' "$SCRATCH/x2-ok.log"; fi
+  if _xmut "$SCRATCH/x2.sh" "$SCRATCH/x2m.sh" x18 > "$SCRATCH/x2m-gen.log" 2>&1 \
+     && _gs_run "$SCRATCH/x2m.sh" "$(_x18q v18-prooffail.json)" "$SCRATCH/x2m-proof.log" "$_x/w" \
+     && grep -q 'X-STEP-18-MARCADO' "$SCRATCH/x2m-proof.log" \
+     && _gs_run "$SCRATCH/x2m.sh" "$(_x18q v18-similar.json)" "$SCRATCH/x2m-similar.log" "$_x/w" \
+     && grep -q 'X-STEP-18-MARCADO' "$SCRATCH/x2m-similar.log"; then
+    ok "Xm (o instrumento): com select(true) no lugar do NOME, as MESMAS fixtures do X3 e do X4 marcam o passo 18 — as recusas vem do select do corte"; _red="$_red Xm"
+  else bad "Xm: o mutante do passo 18 nao marcou (o stub nao aplica o --jq do corte?)"; sed -n '1,6p' "$SCRATCH/x2m-proof.log" "$SCRATCH/x2m-gen.log" 2>/dev/null; fi
 '''
 
 # R — o estado bom do clone (antes do R1) e os controles de CORTE INTEIRO das recusas do G0
@@ -2906,7 +3088,8 @@ PYR15
     printf 'envelope do passo 10 (TEST ONLY)\n' > "$_r/wt/$_r19vd"
     _r_state 9
     if _r_cut "$_r/r19.log" --g0-only && grep -q 'G0 verde (--g0-only)' "$_r/r19.log" \
-       && grep -qF 'OK: retomada entre os passos 10 e 11: fora do plano, so o envelope' "$_r/r19.log"; then
+       && grep -qF 'OK: retomada entre os passos 9 e 11: fora do plano, so o envelope' "$_r/r19.log" \
+       && lacks "$_cut" -F 'retomada entre os passos 10 e 11'; then
       ok "R19: passo 9 feito, o 10 sem marcador e o envelope escrito: o G0 real abre a janela de retomada"; _red="$_red R19"
     else bad "R19: o G0 real nao abriu a janela de retomada"; sed -n '1,14p' "$_r/r19.log"; fi
     _r19m_cut="$ROOT/.claude/plans/PLAN-193/OWNER-RC1-CUT.sh"
@@ -2956,7 +3139,7 @@ PYR8
 
 TEST_D_ANCHOR = ("# ===========================================================================\n"
                  "printf '\\n===== RESULTADO: %s PASS, %s FAIL\\n' \"$PASS\" \"$FAIL\"\n")
-TEST_D_INDEX = r'''# D8-D12 — o INDICE dos controles vermelhos dos gates novos e das curas desta derivacao
+TEST_D_INDEX = r'''# D8-D15 — o INDICE dos controles vermelhos dos gates novos e das curas desta derivacao
 # (R3H-04 pela forma): cada um tem de ter rodado e ficado verde NESTE ensaio (o auxiliar
 # `refused` e os controles positivos anotam o id em _red); uma secao pulada nao prova nada.
 _d_need() {  # $1 = rotulo do gate, $2.. = controles que tem de ter passado
@@ -2968,12 +3151,13 @@ _d_need() {  # $1 = rotulo do gate, $2.. = controles que tem de ter passado
   else bad "$_g: controle(s) vermelho(s) que NAO rodaram ou NAO ficaram verdes:$_m"; fi
 }
 _d_need "D8 rota 1 so (PLAN-194 D-4): lancador plantado, npx espiao e espiao do oraculo" B7a B7b B7c B7d B7e B7f
-_d_need "D9 passo 18: o gate e a prova do toolchain da rc, pelo nome" X2 X3 X4
+_d_need "D9 passo 18: o gate e a prova do toolchain da rc, pelo nome" X2 X3 X4 X4j
 _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R14 R15 R16 R17 R18
 _d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
 _d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m
+_d_need "D15 o stub do gh aplica o --jq do corte (rodada 2): os mutantes select(true) marcam" X17m Xm
 
 '''
 
@@ -2999,7 +3183,7 @@ _m3() {  # $1 = corte, $2 = passos feitos, $3 = UNTIL, $4 = log
   local _s
   : > "$SCRATCH/m3.state"
   for _s in $2; do printf 'STEP-%s\n' "$_s" >> "$SCRATCH/m3.state"; done
-  { printf '#!/bin/bash\nset -uo pipefail\nSTATE="%s"; UNTIL=%s; TAG=vX\n' "$SCRATCH/m3.state" "$3"
+  { printf '#!/bin/bash\nset -euo pipefail\nSTATE="%s"; UNTIL=%s; TAG=vX\n' "$SCRATCH/m3.state" "$3"
     printf 'bell() { :; }\n'
     awk '/^done_step\(\) \{/' "$1"
     awk '/^pending_steps\(\) \{$/{f=1} f{print} f && /^\}$/{exit}' "$1"
@@ -3023,7 +3207,7 @@ else bad "M302m: o bloco da v1.4.2-rc.1 nao mostrou a classe"; sed -n '1,6p' "$S
 # E3e — o envelope adulterado na arvore e substituido pelo RE-DERIVADO no passo 11.
 TEST_E3E_ANCHOR = "  # E4 — o passo 2: `release.sh bump` num clone local do candidato (a forma que o\n"
 TEST_E3E = r'''  # E3e (controle vermelho; cura do GA v1.4.2): um envelope ADULTERADO na arvore (um byte a
-  # mais, numa retomada entre os passos 10 e 11) e substituido pelo RE-DERIVADO dos fields
+  # mais, numa retomada entre os passos 9 e 11) e substituido pelo RE-DERIVADO dos fields
   # assinados: a tela avisa que diferia, e e o derivado que entra no commit.
   _e3e="$SCRATCH/e3e"; _e3ehome="$SCRATCH/e3ehome"; mkdir -p "$_e3ehome"
   if [ -f "$SCRATCH/e3.sh" ] && _e_prep "$_e3e" && cp "$CLONE/$_e_vf.asc" "$_e3e/$_e_vf.asc" \
@@ -3093,7 +3277,8 @@ def derive_test(src: str) -> str:
     t = cut_region(t, TEST_C0PLUMB_START, TEST_C0PLUMB_END, "", "C0: plumbing")
     t = sub(t, TEST_C2PLUMB_OLD, TEST_C2PLUMB_NEW, "C2: plumbing")
     t = sub(t, TEST_W3_OLD, TEST_W3_NEW, "W3: ausencia com pre-condicao")
-    t = cut_region(t, TEST_X2_START, TEST_X2_END, TEST_X2, "X2-X4")
+    t = cut_region(t, TEST_V_START, TEST_V_END, TEST_V, "secao V (o stub do gh com o --jq real)")
+    t = cut_region(t, TEST_X_START, TEST_X_END, TEST_X, "secao X (o stub do gh com o --jq real)")
     t = sub(t, TEST_RGOOD_OLD, TEST_RGOOD_NEW, "R: estado bom")
     t = sub(t, TEST_R2_OLD, TEST_R2_NEW, "R2: rota da base")
     t = sub(t, TEST_RNEW_ANCHOR, TEST_RNEW + TEST_RNEW_ANCHOR, "R10-R18")
@@ -3107,7 +3292,10 @@ def derive_test(src: str) -> str:
                           "OWNER-GA-CUT.sh", "-ga."])
     need(t, "harness", ['PLAN_DIR=".claude/plans/PLAN-194"', "derive-kit-143.py --check",
                         "refs/tags/v1.4.2^{commit}", 'say "B7. ROTA 1 SO', 'say "K1. derivadores sem as saidas',
-                        "como antes da relmeta-142", 'grep -q \'nao lista: PLAN-194$\''])
+                        "como antes da relmeta-142", 'grep -q \'nao lista: PLAN-194$\'',
+                        'exec jq -rc "$_q" < "$GH_FIX/$_f"', '_d_need "D15 '])
+    forbid(t, "harness", ["X_SEQ", "V_VIEW", "OK: retomada entre os passos 10 e 11",
+                          "numa retomada entre os passos 10 e 11"])
     return t
 
 
@@ -3126,6 +3314,9 @@ def lacks_rewrite(text: str) -> str:
 # ===========================================================================
 # conferencias entre saidas e escrita
 # ===========================================================================
+DASH_PRINTF_RE = re.compile(r"""\bprintf[ \t]+(?:-v[ \t]+[A-Za-z_][A-Za-z0-9_]*[ \t]+)?['"]-""")
+
+
 def cross_checks(out: Dict[str, str]) -> None:
     """O que uma saida afirma sobre outra (recusa nomeada)."""
     # Um `$NOME` colado a um caractere nao-ASCII (`«$JOB»`): o bash de um locale que nao e
@@ -3135,6 +3326,14 @@ def cross_checks(out: Dict[str, str]) -> None:
         bad = sorted(set(m.group(0) for m in re.finditer(r"\$[A-Za-z_][A-Za-z0-9_]*(?=[^\x00-\x7f])", out[kind])))
         if bad:
             die("%s: variavel colada a caractere nao-ASCII (use ${NOME}): %s" % (kind, ", ".join(bad[:8])))
+    # Um printf cujo FORMATO comeca por «-» e lido como opcao pelo builtin do bash: sob o
+    # `set -euo pipefail` do corte o passo morre (rc 2, «printf: --: invalid option») antes
+    # do que vem depois (rodada 1 do rail do K1: o passo 2 do GA curado morria antes do
+    # Enter). A forma segura e printf '%s\n' '--...'.
+    for kind in ("runner", "cut", "test"):
+        bad = [ln.strip() for ln in out[kind].split("\n") if DASH_PRINTF_RE.search(ln)]
+        if bad:
+            die("%s: printf com formato iniciado por «-» (use printf '%%s\\n' ...): %s" % (kind, bad[0][:80]))
     # o gerador pina exatamente os ids da lista CHECKS da sonda derivada
     m = re.search(r"(?ms)^PROBE_IDS = \(\n(.*?)^\)\n", out["gen"])
     gen_ids = tuple(re.findall(r'"([^"]+)"', m.group(1))) if m else ()

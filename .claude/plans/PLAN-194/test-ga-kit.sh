@@ -20,10 +20,15 @@
 #       --emit-cured num scratch; /bin/bash -n e shellcheck -S warning nos shells curados;
 #       o check-ceremony-script sobre os shells curados (zero BLOCKING); compilacao do
 #       gerador curado.
+#   A6  a CLASSE do printf com formato iniciado por «-» (rodada 1 do rail do K1): nenhuma
+#       nos shells curados nem nos quatro arquivos deste estagio, com controle positivo.
 #   K.  o kit INTEIRO e recusa nomeada no K1 (fatos e conteudo da rc.1 pendentes), e o
-#       --emit-cured recusa um destino dentro do repositorio.
-#   C1  R3-CLAIMS-01: o prompt do passo 2 nao pede mais que o Owner «releia» o npm/README.md
-#       num bump no-op (o molde pede).
+#       --emit-cured recusa um destino dentro do repositorio — num CLONE descartavel (o
+#       derivador resolve o repositorio pelo cwd), com o gemeo do derivador sem a recusa.
+#   C1  R3-CLAIMS-01: o passo 2 VERBATIM, sob o `set -euo pipefail` do corte e com um Enter na
+#       entrada, CHEGA ao Enter (rc 0) sem pedir que o Owner «releia» o npm/README.md num bump
+#       no-op (o molde pede); C1x: o mesmo passo com o printf antigo (formato iniciado por
+#       «-») morre antes do Enter.
 #   C2  M3-02: o bloco do banner de PUBLICADO, com o passo 18 pendente (um --from 19): o
 #       curado recusa (rc 3, o 18 nomeado); o molde imprime o banner. E os caminhos bons.
 #   C3  REGISTRY: o laco do registry do passo 18 com um registry que so mostra a versao na
@@ -40,6 +45,9 @@
 #   C8  R3H-04: no harness do GA curado, B4c/B4d/R2v/R4c/R4d anotam o id em _red e o indice
 #       D os exige; um censo confere que todo id anotado em _red esta num _d_need.
 #   D.  o INDICE dos controles vermelhos deste harness.
+#
+# Os ensaios de bloco do CORTE (C1-C4) rodam sob o `set -euo pipefail` do proprio corte; os
+# do RUNNER (C5, C6), sob o `set -uo pipefail` dele.
 #
 # O que este harness NAO prova: o kit do GA v1.4.3 inteiro (ele so existe depois do corte
 # da rc.1); o corte do GA real num clone (o R/T do harness completo); que as curas ficam de
@@ -153,35 +161,93 @@ print(sum(1 for f in mine for x in f["findings"] if x["sev"] == "BLOCKING"))
 if [ "$_nb" = "0" ]; then ok "A5: ceremony-lint: 0 BLOCKING nos tres shells curados"
 else bad "A5: ceremony-lint: $_nb"; fi
 
+# A6 — a CLASSE do printf com formato iniciado por «-»: o builtin do bash le o formato como
+# opcao («printf: --: invalid option», rc 2) e, sob o `set -euo pipefail` do corte, o passo
+# morre ali. Os curados e os quatro arquivos deste estagio nao trazem nenhum.
+_A6_RE="printf[[:space:]]+(-v[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]+)?['\"]-"
+_a6="$(grep -nE "$_A6_RE" "$C_CUT" "$C_RUN" "$C_TEST" "$ROOT/$DER" "$ROOT/$PLAN_DIR/derive-kit-143.py" \
+  "$ROOT/$PLAN_DIR/test-rc1-kit.sh" "$SCRIPT_DIR/test-ga-kit.sh" 2>&1)"; _a6_rc=$?
+if [ "$_a6_rc" -eq 1 ] && [ -z "$_a6" ]; then
+  ok "A6: nenhum printf com formato iniciado por «-» nos curados nem nos quatro arquivos do K1"
+else bad "A6: printf com formato iniciado por «-» (ou grep falhou, rc $_a6_rc): $(printf '%s' "$_a6" | head -n 3 | tr '\n' ';')"; fi
+printf '%s%s\n' "  printf '" "--x\\n'" > "$SCRATCH/a6-plant.sh"
+if grep -qE "$_A6_RE" "$SCRATCH/a6-plant.sh"; then
+  ok "A6 (controle positivo): o censo acha o printf plantado com formato iniciado por «-»"; _red="$_red A6"
+else bad "A6: o censo nao achou a forma plantada (o A6 seria vacuo)"; fi
+
 # ===========================================================================
 say "K. o kit inteiro e recusa nomeada no K1; o curado nunca vai para dentro do repositorio"
 _k_rc=0; python3 "$DER" > "$SCRATCH/k1.log" 2>&1 || _k_rc=$?
 refused K1a "$_k_rc" "$SCRATCH/k1.log" "o kit do GA v1.4.3 so deriva INTEIRO depois do corte da v1.4.3-rc.1" \
   "o kit do GA inteiro no K1 (fatos e conteudo pendentes)"
-if grep -qF 'RC_PUBLISHED_AT' "$SCRATCH/k1.log" && grep -qF 'as condicoes do GA' "$SCRATCH/k1.log"; then
-  ok "K1a: a recusa nomeia os fatos e o conteudo pendentes"
+if grep -qF 'RC_PUBLISHED_AT' "$SCRATCH/k1.log" && grep -qF 'as condicoes do GA' "$SCRATCH/k1.log" \
+   && grep -qF 'classe a curar no harness do GA: os stubs do gh' "$SCRATCH/k1.log"; then
+  ok "K1a: a recusa nomeia os fatos e o conteudo pendentes e a classe do stub do gh a curar no harness do GA"
 else bad "K1a: a recusa nao nomeia os pendentes"; fi
-mkdir -p "$ROOT/$PLAN_DIR/.k1-emit-test"
-_k2_rc=0; python3 "$DER" --emit-cured "$ROOT/$PLAN_DIR/.k1-emit-test" > "$SCRATCH/k2.log" 2>&1 || _k2_rc=$?
-if [ -d "$ROOT/$PLAN_DIR/.k1-emit-test" ] && [ -z "$(ls -A "$ROOT/$PLAN_DIR/.k1-emit-test")" ]; then
-  refused K1b "$_k2_rc" "$SCRATCH/k2.log" "recusa um diretorio DENTRO do repositorio" \
-    "o --emit-cured para dentro do repositorio (nada escrito)"
-else bad "K1b: o --emit-cured escreveu dentro do repositorio"; fi
-rmdir -- "$ROOT/$PLAN_DIR/.k1-emit-test" 2>/dev/null || bad "K1b: limpeza do diretorio de teste falhou"
+# K1b — o destino DENTRO do repositorio, num clone DESCARTAVEL (o derivador resolve o
+# repositorio pelo cwd): a arvore viva nao ganha nem um diretorio. Os dois derivadores do
+# disco vao para o clone (o ensaio mede os arquivos que estao aqui, nao o HEAD).
+_kc="$SCRATCH/k1b"; _ke="$_kc/repo/$PLAN_DIR/.k1-emit-test"
+if git clone --quiet --local --shared "$ROOT" "$_kc/repo" 2>/dev/null \
+   && cp -- "$ROOT/$DER" "$_kc/repo/$DER" \
+   && cp -- "$ROOT/$PLAN_DIR/derive-kit-143.py" "$_kc/repo/$PLAN_DIR/derive-kit-143.py" && mkdir -p "$_ke"; then
+  _k2_rc=0; ( cd "$_kc/repo" && python3 "$_kc/repo/$DER" --emit-cured "$_ke" ) > "$SCRATCH/k2.log" 2>&1 || _k2_rc=$?
+  if [ -d "$_ke" ] && [ -z "$(ls -A "$_ke")" ]; then
+    refused K1b "$_k2_rc" "$SCRATCH/k2.log" "recusa um diretorio DENTRO do repositorio" \
+      "o --emit-cured para dentro do repositorio (o do clone; nada escrito)"
+  else bad "K1b: o --emit-cured escreveu dentro do repositorio (o do clone)"; fi
+  # O gemeo: o MESMO derivador sem a recusa, no mesmo destino do clone, escreve ali.
+  python3 - "$_kc/repo/$DER" "$_kc/der-sem-recusa.py" > "$SCRATCH/k1bm-gen.log" 2>&1 <<'PYK1B'
+import sys
+t = open(sys.argv[1], encoding="utf-8").read()
+old = 'die("--emit-cured recusa um diretorio DENTRO do repositorio: o curado e material de ensaio")'
+if t.count(old) != 1:
+    sys.exit("a recusa do --emit-cured casou %d vez(es)" % t.count(old))
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace(old, "pass"))
+PYK1B
+  ( cd "$_kc/repo" && python3 "$_kc/der-sem-recusa.py" --emit-cured "$_ke" ) > "$SCRATCH/k1bm.log" 2>&1 || :
+  if [ -s "$_ke/OWNER-GA-CUT.sh.cured-1.4.2" ]; then
+    ok "K1bm (gemeo vermelho, o derivador SEM a recusa): no mesmo destino do clone ele escreve o curado — o K1b nao e vacuo"; _red="$_red K1bm"
+  else bad "K1bm: o derivador sem a recusa nao escreveu — o K1b seria vacuo"; sed -n '1,6p' "$SCRATCH/k1bm.log"; fi
+else bad "K1b: clone descartavel falhou"; fi
+if [ -e "$ROOT/$PLAN_DIR/.k1-emit-test" ]; then bad "K1b: a arvore viva tem $PLAN_DIR/.k1-emit-test"
+else ok "K1b: a arvore viva nao ganhou o diretorio de teste (o ensaio rodou no clone)"; fi
 
 # ===========================================================================
 say "C1. R3-CLAIMS-01: o passo 2 do GA (bump no-op) nao pede releitura do npm/README.md"
-_c1() {  # $1 = corte; imprime o que o passo 2 diz ao Owner antes do Enter
-  awk '/^if should 2; then$/{f=1} f && /^  read -r _/{exit} f && /^  printf /' "$1" > "$SCRATCH/c1.sh" || return 1
-  bash "$SCRATCH/c1.sh"
+_c1() {  # $1 = corte, $2 = log: o passo 2 VERBATIM ate o Enter, sob o set -euo do corte
+  { printf '#!/bin/bash\nset -euo pipefail\n'
+    printf 'die() { printf "\\nFAIL: %%s\\n" "$*" >&2; exit 1; }\n'
+    printf 'say() { printf "\\n===== %%s\\n" "$*"; }\nBASE=9.9.9\n'
+    awk '/^if should 2; then$/{f=1; next} f{print} f && /^  read -r _ /{exit}' "$1"
+    printf 'printf "\\nC1-ENTER-OK\\n"\n'; } > "$SCRATCH/c1.sh"
+  printf '\n' | bash "$SCRATCH/c1.sh" > "$2" 2>&1
 }
-_c1 "$C_CUT" > "$SCRATCH/c1-cured.log" 2>&1
-_c1 "$M_CUT" > "$SCRATCH/c1-mold.log" 2>&1
-if grep -qF 'O bump do GA e NO-OP: o npm/README.md e o mesmo da rc.1' "$SCRATCH/c1-cured.log" \
+_c1_rc=0; _c1 "$C_CUT" "$SCRATCH/c1-cured.log" || _c1_rc=$?
+_c1 "$M_CUT" "$SCRATCH/c1-mold.log" || :
+if [ "$_c1_rc" -eq 0 ] && grep -qx 'C1-ENTER-OK' "$SCRATCH/c1-cured.log" \
+   && grep -qF -- '--npm-readme-reviewed, que este passo passa por isso.' "$SCRATCH/c1-cured.log" \
+   && grep -qF 'O bump do GA e NO-OP: o npm/README.md e o mesmo da rc.1' "$SCRATCH/c1-cured.log" \
    && grep -qF 'Enter para seguir com o bump no-op' "$SCRATCH/c1-cured.log" \
    && lacks "$SCRATCH/c1-cured.log" -F 'RELIDO npm/README.md'; then
-  ok "C1: o curado diz que o bump e no-op e que o npm/README.md e o da rc.1, sem pedir releitura"; _red="$_red C1"
-else bad "C1: o prompt curado do passo 2"; cat "$SCRATCH/c1-cured.log"; fi
+  ok "C1: sob o set -euo do corte o passo 2 curado chega ao Enter (rc 0) e diz que o bump e no-op e que o npm/README.md e o da rc.1, sem pedir releitura"; _red="$_red C1"
+else bad "C1: o passo 2 curado (rc $_c1_rc)"; cat "$SCRATCH/c1-cured.log"; fi
+# C1x — o mutante: o mesmo corte curado com o printf antigo (formato iniciado por «-»).
+python3 - "$C_CUT" "$SCRATCH/c1x-cut.sh" > "$SCRATCH/c1x-gen.log" 2>&1 <<'PYC1X'
+import sys
+q = "'"
+t = open(sys.argv[1], encoding="utf-8").read()
+cured = "printf " + q + "%s\\n" + q + " " + q + "--npm-readme-reviewed, que este passo passa por isso." + q
+mold = "printf " + q + "-" + "-npm-readme-reviewed, que este passo passa por isso.\\n" + q
+if t.count(cured) != 1:
+    sys.exit("o printf curado casou %d vez(es)" % t.count(cured))
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace(cured, mold))
+PYC1X
+_c1x_rc=0; _c1 "$SCRATCH/c1x-cut.sh" "$SCRATCH/c1x.log" || _c1x_rc=$?
+if [ -s "$SCRATCH/c1x-cut.sh" ] && lacks "$SCRATCH/c1x.log" -x 'C1-ENTER-OK'; then
+  refused C1x "$_c1x_rc" "$SCRATCH/c1x.log" "invalid option" \
+    "o passo 2 com o printf antigo (formato iniciado por «-») sob o set -euo: morre antes do Enter"
+else bad "C1x: o mutante do printf chegou ao Enter (ou nao foi gerado) — o C1 seria vacuo"; sed -n '1,6p' "$SCRATCH/c1x.log" "$SCRATCH/c1x-gen.log" 2>/dev/null; fi
 if grep -qF 'O bump exige que voce tenha RELIDO npm/README.md para esta release.' "$SCRATCH/c1-mold.log"; then
   twin C1m "o passo 2 do molde pede que o Owner releia o npm/README.md num bump no-op"
 else bad "C1m: o molde nao mostrou a classe (o controle seria vacuo)"; fi
@@ -195,7 +261,7 @@ _c2() {  # $1 = corte, $2 = estado (passos feitos, separados por espaco), $3 = U
   local _s
   : > "$SCRATCH/c2.state"
   for _s in $2; do printf 'STEP-%s\n' "$_s" >> "$SCRATCH/c2.state"; done
-  { printf '#!/bin/bash\nset -uo pipefail\nSTATE="%s"; UNTIL=%s; TAG=vX\n' "$SCRATCH/c2.state" "$3"
+  { printf '#!/bin/bash\nset -euo pipefail\nSTATE="%s"; UNTIL=%s; TAG=vX\n' "$SCRATCH/c2.state" "$3"
     printf 'bell() { :; }\n'
     awk '/^done_step\(\) \{/' "$1"
     awk '/^pending_steps\(\) \{$/{f=1} f{print} f && /^\}$/{exit}' "$1"
@@ -227,7 +293,7 @@ else bad "C2: o --until 19 do curado"; fi
 say "C3. REGISTRY: a espera do registry no passo 18 (o CDN do npm)"
 _c3() {  # $1 = corte, $2 = a chamada do npm view em que o registry passa a mostrar a versao, $3 = log, $4.. = env
   local _c="$1" _at="$2" _log="$3"; shift 3
-  { printf '#!/bin/bash\nset -uo pipefail\n'
+  { printf '#!/bin/bash\nset -euo pipefail\n'
     printf 'die() { printf "FATAL: %%s\\n" "$*" >&2; exit 1; }\n'
     printf 'NPM_PKG=pkg; BASE=9.9.9; TAG=v9.9.9; TERMINAL_MODE=0\n'
     printf 'sleep() { printf "x\\n" >> "%s/c3.sleeps"; }\n' "$SCRATCH"
@@ -274,7 +340,7 @@ _c4sel() {  # $1 = corte, $2 = passos feitos, $3 = log
   local _s
   : > "$_c4/$_c4ev/.cut-state"
   for _s in $2; do printf 'STEP-%s\n' "$_s" >> "$_c4/$_c4ev/.cut-state"; done
-  { printf '#!/bin/bash\nset -uo pipefail\n'
+  { printf '#!/bin/bash\nset -euo pipefail\n'
     printf 'die() { printf "\\nFAIL: %%s\\n" "$*" >&2; exit 1; }\n'
     printf 'PLAN_DIR=%s; EV=%s; STATE="$EV/.cut-state"; COND="$EV/CONDITIONS-ga.md"\n' "$PLAN_DIR" "$_c4ev"
     printf 'VF="$PLAN_DIR/verdict-fields-vX.md"; VD=".claude/governance/pair-rail-verdict-vX.md"\n'
@@ -289,7 +355,7 @@ _c4sel() {  # $1 = corte, $2 = passos feitos, $3 = log
 if [ "$_c4_ok" -eq 1 ]; then
   if _c4sel "$C_CUT" "1 2 3 4 5 6 7 8 9" "$SCRATCH/c4-cured.log" \
      && grep -qF 'G0-ARVORE-OK' "$SCRATCH/c4-cured.log" \
-     && grep -qF 'OK: retomada entre os passos 10 e 11: fora do plano, so o envelope' "$SCRATCH/c4-cured.log"; then
+     && grep -qF 'OK: retomada entre os passos 9 e 11: fora do plano, so o envelope' "$SCRATCH/c4-cured.log"; then
     ok "W11: passo 9 feito, o 10 sem marcador e o envelope escrito: o curado abre a janela e o G0 segue"; _red="$_red W11"
   else bad "W11: o curado nao abriu a janela de retomada"; sed -n '1,10p' "$SCRATCH/c4-cured.log"; fi
   _c4m_rc=0; _c4sel "$M_CUT" "1 2 3 4 5 6 7 8 9" "$SCRATCH/c4-mold.log" || _c4m_rc=$?
@@ -300,6 +366,14 @@ if [ "$_c4_ok" -eq 1 ]; then
   _c4e_rc=0; _c4sel "$C_CUT" "1 2 3 4 5 6 7 8" "$SCRATCH/c4-early.log" || _c4e_rc=$?
   refused W11b "$_c4e_rc" "$SCRATCH/c4-early.log" ".claude/governance/pair-rail-verdict-vX.md (untracked)" \
     "o envelope fora do plano ANTES do passo 9 (a janela nao abre cedo)"
+  # W11t — os textos da janela (recusas, o OK do G0, comentarios) dizem o intervalo real.
+  if lacks "$C_CUT" -F 'retomada entre os passos 10 e 11' \
+     && [ "$(grep -c 'retomada entre os passos 9 e 11' "$C_CUT")" = "7" ]; then
+    ok "W11t: os textos da janela no corte curado dizem «retomada entre os passos 9 e 11» (7), nenhum «10 e 11»"; _red="$_red W11t"
+  else bad "W11t: o corte curado ainda diz «10 e 11» (ou perdeu texto da janela)"; fi
+  if [ "$(grep -c 'retomada entre os passos 10 e 11' "$M_CUT")" = "7" ]; then
+    twin W11tm "os textos da janela do molde dizem «retomada entre os passos 10 e 11» (7)"
+  else bad "W11tm: o molde nao mostrou a classe"; fi
 else bad "C4: fixture do repositorio falhou"; fi
 
 # ===========================================================================
@@ -419,11 +493,12 @@ _d_need() {  # $1 = rotulo, $2.. = controles que tem de ter passado
   if [ -z "$_m" ]; then ok "$_g: controles exercitados e verdes ($*)"
   else bad "$_g: controle(s) que NAO rodaram ou NAO ficaram verdes:$_m"; fi
 }
-_d_need "D1 o kit inteiro recusado no K1" K1a K1b
-_d_need "D2 R3-CLAIMS-01 (passo 2)" C1 C1m
+_d_need "D0 a classe do printf com formato iniciado por «-» (censo)" A6
+_d_need "D1 o kit inteiro recusado no K1 (o destino no repositorio, num clone)" K1a K1b K1bm
+_d_need "D2 R3-CLAIMS-01 (passo 2, ate o Enter sob o set -euo)" C1 C1m C1x
 _d_need "D3 M3-02 (banner)" M302 M302m
 _d_need "D4 a espera do registry (passo 18)" REG REGm REG3 REGbad
-_d_need "D5 M3-01 (a janela do G0)" W11 W11m W11b
+_d_need "D5 M3-01 (a janela do G0 e os textos dela)" W11 W11m W11b W11t W11tm
 _d_need "D6 D-4 (a rota 1 so no runner do GA)" RT RTm
 _d_need "D7 M3-01 (as classes medidas na 0.160.0)" AL ALm CAP CAPm
 _d_need "D8 R3S-02/R3S-01 (os textos)" TXT TXTm GEN GENm
