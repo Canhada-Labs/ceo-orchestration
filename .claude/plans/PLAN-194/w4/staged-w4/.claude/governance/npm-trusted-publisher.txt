@@ -1,0 +1,50 @@
+# npm Trusted Publisher registration — PLAN-166 W1 item 4
+#
+# The npmjs.com Owner console binds OIDC trusted publishing (PLAN-158
+# Wave 1) to EXACTLY this triple: repository + workflow FILENAME +
+# environment. If ANY of the three drifts, the token exchange dies
+# ENEEDAUTH at publish time — at GA, with no earlier proof point,
+# because RC tags skip the publish job. This file is the repo-side
+# record of what the console must say; until it existed the triple
+# lived only in comments inside npm-publish.yml and in the Owner's
+# browser (F1 re-pass finding, PLAN-166).
+#
+# Format: `key=value` lines; `#` lines and blank lines are comments.
+# Keys are exactly: repository, workflow, environment.
+#
+# Consumers:
+# - .claude/scripts/tests/test_release_workflow_asserts.py
+#   (TrustedPublisherBindingTest) READS this file and cross-checks
+#   .github/workflows/npm-publish.yml — the test embeds NO values
+#   (that would be a 4th copy of the truth; the copies are: the npmjs
+#   console, the workflow, and this file — the test collapses the two
+#   repo-side copies into one checked invariant). Includes a positive
+#   control: mutating `environment:` in a copy of the workflow goes red.
+# - Humans re-registering the trusted publisher after an OIDC failure:
+#   .claude/plans/PLAN-158/oidc-failure-playbook.md (binding is by
+#   FILENAME — playbook line 18 — which is why the publish stays in
+#   npm-publish.yml instead of moving into release.yml).
+#
+# Update ceremony: this file matches `.claude/governance/*.txt` in
+# _CANONICAL_GUARDS — edits require an Owner-signed sentinel, same as
+# the workflow it describes. Change the npmjs console FIRST, then this
+# file + the workflow in one ceremony; the structural test keeps the
+# repo side from drifting silently.
+#
+# Allowed actions (PLAN-194 W4.2; lane DEP-03; docs.npmjs.com/trusted-
+# publishers, read 2026-10-02): the npmjs.com configuration behind this
+# triple MUST allow DIRECT publishing with `npm publish` — the workflow
+# runs `npm publish --provenance`, not `npm stage publish`. Per that
+# page, a configuration created after Sep 03, 2026 is set to allow only
+# `npm stage publish`, with direct publishing a separate opt-in, and one
+# created before that date requires at least one allowed action to be
+# selected explicitly. So re-creating or editing it without ticking
+# direct publishing breaks the GA publish, and no RC run can catch it
+# (the RC job holds no OIDC permission). Today's configuration predates
+# that date and published 1.4.2 on 2026-09-30 (run 36719886734). Do NOT
+# edit the npmjs.com configuration as part of a toolchain change; if it
+# must change, follow the playbook above and tick direct publishing.
+
+repository=Canhada-Labs/ceo-orchestration
+workflow=npm-publish.yml
+environment=production-npm

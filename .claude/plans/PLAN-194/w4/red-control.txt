@@ -1,0 +1,34 @@
+# W4 (PLAN-194) — controle vermelho: a classe Plan194W4PublishToolchainTest FINAL (do w4.patch) contra os canônicos ANTERIORES
+# base: a953a08204d4 (origin/main de 2026-10-09); aplicado só o que NÃO é canônico do w4.patch
+# (git apply --exclude=.github/workflows/npm-publish.yml --exclude=.claude/governance/npm-trusted-publisher.txt):
+# npm-publish.yml no blob pré-imagem 030a12c884133917773bb7c11cc060f71a252457 (Node "20", npm@^11.5.1)
+# medido em 2026-10-09 (UTC) numa árvore descartável (clone local), Python 3.9.6 da máquina, pytest 7.3.0, PyYAML 6.0.3
+# o mesmo 17/0 foi medido de forma independente pelas duas lanes Claude da rodada 1 (r-w4-a e r-w4-b)
+# comando: python3 -m pytest .claude/scripts/tests/test_release_workflow_asserts.py -k Plan194W4PublishToolchainTest -q -rfE --tb=no -p no:cacheprovider
+#   (o SIGN roda a classe pelo id do nó, .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest — sem desseleção)
+
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_both_checkouts_drop_persisted_credentials
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_job_level_override_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_one_byte_drift_in_the_rc_copy_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_other_exact_npm_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_pack_command_deleted_echo_kept_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_persisted_checkout_credentials_go_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_pre_w4_node_20_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_pre_w4_npm_range_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_publish_step_after_the_packlist_gate_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_rc_job_on_every_tag_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_rc_job_that_publishes_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_rc_job_with_id_token_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_control_unmirrored_publish_packaging_step_goes_red
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_env_pins_node_24_and_exact_npm
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_live_workflow_meets_the_w4_contract
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_live_workflow_meets_the_w4_contract_structurally
+FAILED .claude/scripts/tests/test_release_workflow_asserts.py::Plan194W4PublishToolchainTest::test_shared_steps_are_byte_identical
+17 failed, 67 deselected in 0.75s
+
+# verde depois do apply completo (canônicos inclusos), mesma árvore, mesmo dia:
+#   a classe: 17 passed, 67 deselected
+#   bateria dura — python3 -m pytest .claude/scripts/tests/test_release_workflow_asserts.py .claude/scripts/tests/test_install_sh_self_sha.py .claude/scripts/tests/test_await_release_gate.py .claude/scripts/tests/test_release_bump_sites.py -q -p no:cacheprovider: 274 passed in 147.26s (sem skip)
+#   actionlint .github/workflows/npm-publish.yml (actionlint 1.7.12, shellcheck 0.11.0): rc 0, nenhum achado
+#   git apply --check do patch dormente .claude/plans/PLAN-158/staged/wave1/rollback-oidc-to-token.patch
+#     (537 bytes, sha256 e68a508c86ebe2ac6c2eac444530934e4aa91fe05186f98b6a490d391a845b6a, NÃO rastreado): rc 0 com o patch (e rc 0 na base, pela lane r-w4-b)
