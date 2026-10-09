@@ -37,10 +37,11 @@
 - **Varredura.** Entram as linhas com `"error": "rate_limit"` (recusa),
   as linhas `system` informativas que contêm «Usage limit» (avisos do
   nativo) e as linhas `user` com `isMeta: true` e o texto de retomada.
-  O censo cobriu todos os `.jsonl` de topo do diretório do projeto com
-  mtime ≥ 2026-10-01: 5 arquivos, dos quais 3 têm recusas (26 + 21 + 30
-  linhas `rate_limit`). Os totais por ocorrência da §2 somam
-  exatamente esses números.
+  O censo cobriu os `.jsonl` de topo do diretório do projeto com mtime
+  ≥ 2026-10-01. Contados em 2026-10-09T15:01Z, são 12: 7 são segmentos do
+  log de auditoria (0 linhas `rate_limit`) e 5 são transcripts de sessão.
+  Desses 5, 3 têm recusas (26 + 21 + 30 linhas `rate_limit`). Os totais
+  por ocorrência da §2 somam exatamente esses números.
 - **Versão do CC.** O registro usa o campo `version` de cada linha, que é
   a versão do processo que escreveu a linha. Ninguém rodou
   `claude --version` no instante de cada parada. Quando este registro
@@ -96,9 +97,20 @@ Textos literais das recusas (as variações estão só no horário):
 | E9 | S363 / 2.1.295 | 2026-10-09 14:21:33Z, **W** (L10765) | 2026-10-12 11:00Z | 14:24:48Z, **Owner**: reset da cota semanal. O 1.º turno bem-sucedido foi disparado por um `task-notification` (L10775 → L10780). O Owner afirma o reset em L10782 (14:24:52Z) | — | 1 |
 
 A coluna «Recusas na principal» conta as linhas `rate_limit` da
-sessão principal entre a 1.ª recusa e a retomada. Cada uma é um turno
-disparado por mensagem de colega, `task-notification` ou cron, que
-recebeu só a recusa.
+sessão principal entre a 1.ª recusa e a retomada. **Isso é contagem de
+linhas, não de turnos perdidos.** Cada linha é a recusa de um turno
+disparado por mensagem de colega, `task-notification` ou cron. Esta
+contagem não diz se o gatilho foi tratado depois. Além disso, a sessão
+principal ainda executou ferramentas DENTRO da janela, durante a
+tolerância do harness:
+
+- **E2:** 2 `Bash` (L9407, 05:27:28Z; L9452, 05:29:47Z);
+- **E4:** 6 chamadas entre 01:02:47Z e 01:07:42Z (L5571–L5689): 3
+  `Edit`, 2 `Bash` e 1 `SendMessage` (L5572, para `r3-refute-fd07-r1`);
+- **E7:** 1 `Bash` (L5946, 07:00:41Z).
+
+Nas outras 6 ocorrências não há linha de `assistant` sem erro entre a
+1.ª recusa e a retomada.
 
 ### Aviso do nativo e cron do CEO, por ocorrência
 
@@ -137,12 +149,14 @@ recebeu só a recusa.
 - **E6.** O nativo foi armado em L3416, 01:51:04Z. O cron do CEO
   `cdfbdbf7` (`13 2 9 10 *`, isto é, 05:13Z; criado em L1566) entrou na
   fila às 05:13:38Z (L3706) e foi entregue às 05:16:29Z (L3852;
-  `prompt_submitted` `2879ae0b877145ff8192ef197e7b2c9d`), 5 min DEPOIS do
+  `prompt_submitted` 10-5 L5086 05:16:29Z,
+  `2879ae0b877145ff8192ef197e7b2c9d`), 5 min DEPOIS do
   nativo. `prompt_submitted` 05:11:05Z: L4898,
   `344c12e27c1348a1a3df9f73f1d61065`.
 - **E7.** O nativo foi armado em L5938. O cron do CEO `b7bca1d5`
   (`13 7 9 10 *`, isto é, 10:13Z; criado em L5874) entrou na fila às
   10:14:32Z (L6279) e foi entregue às 10:15:51Z (L6387;
+  `prompt_submitted` 10-5 L7771 10:15:52Z,
   `32135d8e95f840768e7304731ba0c47b`), depois do nativo.
   `prompt_submitted` 10:11:23Z: L7632, `42ad4c73e4854ad3acd19714ce124088`.
 - **E8.** O nativo foi armado em L10089 («at 2pm»). O Owner trocou de
@@ -157,13 +171,17 @@ recebeu só a recusa.
   limite superior é o 1.º turno bem-sucedido, às 14:24:48Z.
 
 Comportamento do harness em volta da recusa, observado mas não
-analisado aqui: mensagens `isMeta` que começam com «[Usage limit
-reached; a short grace allowance remains, then this turn is cut off
-without warning. …]» (S362 L5504, L5594, L5638; S363 L3365, L5944) e com
-«[Earlier usage-limit notes no longer apply. …]» (S363 L3417, L5989).
-Na E7, depois do aviso L5944 (07:00:31Z), a sessão principal ainda
-executou ferramentas (L5946, 07:00:41Z) antes da recusa seguinte
-(L5990, 07:06:20Z).
+analisado aqui. Há mensagens `isMeta` de dois tipos; o censo abaixo
+cobre os 3 transcripts:
+
+- «[Usage limit reached; a short grace allowance remains, then this turn
+  is cut off without warning. …]»: S361 L5560, L9345, L9405, L9445; S362
+  L5504, L5594, L5638; S363 L3365, L5944.
+- «[Earlier usage-limit notes no longer apply. …]»: S361 L5567, L9395,
+  L9439, L9486; S362 L5564, L5633, L5743; S363 L3417, L5989.
+
+As chamadas de ferramenta feitas durante essa tolerância estão listadas
+logo abaixo da tabela de ocorrências.
 
 ### Subagentes (time em processo, `taskKind: in_process_teammate`, e agentes gerais)
 
@@ -173,7 +191,7 @@ executou ferramentas (L5946, 07:00:41Z) antes da recusa seguinte
 | E2 | nenhum | — |
 | E3 | `fd03-flaky-chain-test` (21:24:13Z; a notificação só chega à principal às 23:31:30Z, L3410) | `SendMessage` do CEO às 23:38:57Z (L3581) |
 | E4 | `r3-refute-fd07-r1` (01:12:38Z), `fd07-spool-verifiers` (01:15:01Z) | `fd07-spool-verifiers`: `SendMessage` às 06:21:55Z (L5803). **`r3-refute-fd07-r1` não recebeu nenhum `SendMessage` depois da queda**: o último é L5572, 01:02:53Z, até o fim do arquivo (L8917) |
-| E5 | `fd21-m1-c9-e1`, `fd25-ceo-restore-fixes`, `fd18-w5c-derivator`, `fd26-verify-chain-strict` (06:49:25Z–06:50:29Z) | `SendMessage`, 4/4: L7594–7595 às 11:23:10Z, L7795 às 11:25:21Z, L7846 às 11:44:21Z |
+| E5 | `fd21-m1-c9-e1`, `fd25-ceo-restore-fixes`, `fd18-w5c-derivator`, `fd26-verify-chain-strict` (06:49:25Z–06:50:29Z) | `SendMessage`, 4/4: L7594–7595 entre 11:23:10Z e 11:23:11Z, L7795 às 11:25:21Z, L7846 às 11:44:21Z |
 | E6 | `k1` (02:47:35Z), `mat-w4` (02:56:11Z) | `SendMessage`, 2/2, às 05:11:32Z e 05:11:34Z (L3554–3555) |
 | E7 | `mat-w62` (07:28:58Z) | `SendMessage` às 10:11:50Z (L6100) |
 | E8 | 9 agentes: `mat-w2b`, `mat-w62`, `w5b`, `mat-w2a`, `w7a`, `lote`, `r-w2c-a`, `r-w2c-b`, `r4` (13:04:37Z–13:06:59Z) | `SendMessage`, 7/9, entre 13:59:29Z e 13:59:40Z (L10214–10220). **`r-w2c-a` e `r-w2c-b` não foram retomados.** Às 14:35:18Z e 14:35:23Z (L11253–11254) receberam uma tarefa NOVA, a rodada 2, com a instrução de não revisar mais a rodada 1, que ficou abandonada. Conferido até L11665 |
@@ -200,9 +218,15 @@ trabalho interrompido abandonado (E8).
   última linha de cada agente.
 - Os outros workflows da janela não tiveram recusa: 14 na S361, 5 na
   S362 e 1 na S363 (`wf_8ff9b360-626`, com 9 `started` e 9 `result`).
-  Nenhum journal da janela tem o evento `workflow_rate_limit_wait`. A
-  única linha com essa string (`wf_6efdc6cb-9db`, L196) é texto de um
-  resultado de refutador, não um evento.
+  Nenhum dos 21 journals da janela tem um evento com
+  `type: workflow_rate_limit_wait`. Os tipos presentes são só `launched`
+  (21), `started` (171) e `result` (170). O único journal com `started`
+  ≠ `result` é o `wf_f525c764-c76` (3/2), o da E1. A string aparece só
+  como texto:
+  - dentro do campo `result` de 2 journals (`wf_6efdc6cb-9db` L196, S361;
+    `wf_8ff9b360-626` L14, S363);
+  - em transcripts de agente de 3 workflows (`wf_6efdc6cb-9db`,
+    `wf_949bca28-45d`, `wf_8ff9b360-626`).
 
 ## 3. Respostas às perguntas do AC-4
 
@@ -215,11 +239,13 @@ trabalho interrompido abandonado (E8).
    troca de conta antes do reset (o nativo estava armado e não foi
    exercido); na E9 pelo reset da cota semanal, e o harness não escreveu
    o aviso do nativo.
-2. **Turnos perdidos na principal.** Os turnos disparados durante a
-   parada receberam só a recusa (coluna «Recusas na principal»). O
-   conteúdo que os disparou continua no transcript, e a mensagem de
-   retomada pede para não repetir trabalho. Não conferi, um a um, se
-   cada gatilho recusado foi tratado depois da retomada.
+2. **Turnos perdidos na principal: não medido.** A coluna «Recusas na
+   principal» conta linhas `rate_limit`, não turnos perdidos. Durante a
+   tolerância, a principal ainda trabalhou dentro da janela (E2, E4 e
+   E7; lista na §2). O conteúdo que disparou cada turno recusado
+   continua no transcript, e a mensagem de retomada pede para não
+   repetir trabalho. Não conferi, um a um, se cada gatilho recusado foi
+   tratado depois da retomada.
 3. **Limite 1: subagentes não retomam nativamente.** Ver a tabela de
    subagentes: 0 retomados pelo harness, 28 de 31 por `SendMessage` do
    CEO e 3 não retomados (um nunca mais contatado; dois com o trabalho
@@ -260,8 +286,10 @@ todo prompt, salvo kill-switch. O `audit-log.errors` tem 0 linhas com
 
 **Por que a resposta é parcial:**
 
-- (i) Os colegas medidos são `in_process_teammate`: os 57 `meta.json`
-  de `subagents/` são desse tipo, no mesmo processo. Mensagem de outra
+- (i) Os colegas medidos são `in_process_teammate`, no mesmo processo.
+  Contei 57 `meta.json` em `subagents/` em 2026-10-09, entre 14:35Z e
+  14:45Z, todos desse tipo. Às 15:02Z eram 58: o acréscimo é o `r-ac4`,
+  revisor deste registro, criado depois dele e do mesmo tipo. Mensagem de outra
   sessão, terminal ou máquina não foi exercitada.
 - (ii) A ausência do evento não separa «o hook não disparou» de «o hook
   disparou e falhou antes de emitir». Os controles e o zero de erros
