@@ -642,6 +642,37 @@ class TestIdempotency(TestEnvContext):
         # trivially true; the mix must really produce recommendations.
         self.assertGreaterEqual(len(recs1), 3)
         self.assertEqual(recs1, recs2)
+        # The fixture is built for the caps, so pin what it must yield: the
+        # ``00-*`` rows stop at 3 (``plans_executing`` drops out by the by-name
+        # sort), the list stops at 5 (rows 03/04/05 drop out), and the CR-N7
+        # order holds. Equality alone would accept a stable list that broke
+        # either cap (rail r1, Codex + refuter: ``failing[:3]`` -> ``failing``
+        # survived).
+        self.assertEqual(recs1, [
+            "Check 'audit_log_freshness' error: RuntimeError: boom (blocks gate_pass)",
+            "Check 'cost_24h_usd' error: OSError: denied (blocks gate_pass)",
+            "Check 'dispatch_count_24h' timeout: AGG_TIMEOUT (5000ms aggregate) (blocks gate_pass)",
+            "Owner GPG sign pending: 2 sentinels (a.approved.md, b.approved.md)",
+            "Stranded executing plans (>24h no commits): PLAN-001",
+        ])
+
+    def test_recs_sorted_by_rule_key_not_append_order(self):
+        """CR-N7 — rows sort by rule key; the night-mode rule is appended after
+        the scheduled-red rule but sorts before it, the one pair where append
+        order and key order differ. Without ``recs.sort`` the list inverts."""
+        with mock.patch.object(
+            _mod, "_night_mode_advisory_rec",
+            return_value=("008-night-mode", "posture drift"),
+        ):
+            recs = _mod._make_recommendations([
+                _mod.CheckResult("scheduled_workflows_red", "red", "1 red",
+                                 4.0, None),
+            ])
+        self.assertEqual(recs, [
+            "posture drift",
+            "Scheduled workflow(s) red: 1 red — schedule-only gates never "
+            "surface in push CI; triage now",
+        ])
 
     def test_recs_independent_of_result_order(self):
         """CR-N7 — the rec list does not depend on how the results are ordered."""
