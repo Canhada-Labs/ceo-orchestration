@@ -278,6 +278,106 @@ ainda; os resultados entram em entradas datadas abaixo dela.
   `~/.claude/settings.json` AINDA não tem a chave ⇒ o congelamento só vale depois que o Owner gravá-la, e
   não vale sob `--setting-sources` sem `user`.
 
+## CC 2.1.295 — adoção e re-medição 288 × 295 (2026-10-09, S363)
+
+- Decisão do Owner (2026-10-08): adotar o 2.1.295. O atualizador subiu sozinho do 2.1.288 até o 2.1.295 (2.1.292
+  gravado 2026-10-07T15:12Z; 2.1.293 às 18:13Z; 2.1.294 2026-10-08T05:24Z; 2.1.295 às 19:52Z). O 2.1.288 e os
+  2.1.289–2.1.291 não estão mais em disco. `env.DISABLE_AUTOUPDATER="1"` entrou no `~/.claude/settings.json` em
+  2026-10-09 ~00:45Z (mtime 00:47:22Z); nenhum binário novo depois disso.
+- Binários (só leitura; o único comando executado foi `--version`): 2.1.295 sha256
+  `0116ee2e0a513900b633d9951367f18747686478e2b462805b8c31609f047f70` (239.695.888 bytes; build 2026-10-08T16:50:59Z, git
+  `07e8f67e`); ponto intermediário 2.1.292 sha256 `97a01e5bc74a199e67189435d0331ea3a24eac2e07db4b76d9148c5b0386138f`
+  (235.017.328 bytes; build 2026-10-06T05:25:12Z, git `37832d0b`). Sem o 2.1.288, o 295 foi comparado com os fatos
+  desta LEDGER e, função a função, com o 292. Método: módulos extraídos do grafo do Bun (`/$bunfs/root/chunk-*.js`) e
+  comparação «idêntica a menos de renomeação» (texto de literais byte a byte).
+- (1) `cleanupPeriodDays`: semântica IGUAL (mesma varredura, padrão 30, mesma precedência, mesmo pulo
+  `user_source_disabled`; funções idênticas às do 292) ⇒ a W6.0 vale no 2.1.295. O chunk mudou: 36.757 → 38.217 bytes
+  (292: 37.886). Do 292 para o 295 entrou só a varredura de `~/.claude/seed-admin`, que roda antes do teste de pulo e
+  não toca `~/.claude/projects/`. O delta 288 → 292 (+1.129 bytes) não foi medido por diff.
+- (2) `workflowSizeGuideline`: describe byte-idêntico (496 bytes, sha256 `ac6f84ab1841f8b6…`; zod em 187905139,
+  describe em 187905221) e runtime idêntico ao 292 (`{small:5,medium:10,large:50}`, padrão `medium`, `small` em Pro)
+  ⇒ o `_posture_comment` pode citar o 2.1.295 trocando só os números.
+- (3) Loader replicado por `.claude/scripts/tests/test_settings_guard_loadability.py`: regra IGUAL (33 eventos na mesma
+  ordem, 9 chaves isentas, `unloadableGuards` em 26 pontos do JS, funções-âncora idênticas às do 292). MUDOU o schema
+  das entradas: `onFailure` (`continue`|`block`, sem `.catch`) em `command` e `http`. Valor inválido num guard ⇒
+  `fatal` ⇒ arquivo inteiro `null`; a réplica não conhece o campo e dá verde (contradiz o «never the reverse» do
+  docstring). Nenhuma superfície usa `onFailure` hoje. A âncora `return{settings:c.data,errors:i}` segue ausente
+  (`errors:d`).
+- (4) Watchdog e concorrência do Workflow: IGUAL no padrão — stall de 600 s, adiado com ferramenta em voo;
+  concorrência `min(16, max(2, ncpu−2))` = 14. Novo desde o 292: o servidor pode subir a base do stall
+  (`stream_idle_timeout_ms`, até 1.800 s ⇒ stall até 2.100 s).
+- (5) Periféricas: o alias `haiku` passou a Haiku 5.5 (first party); `budget.total` do Workflow é sempre `null` (o
+  orçamento de turno saiu do binário, sem linha no changelog; os 4 workflows do repositório não o usam); `onFailure`
+  nos hooks; autoupdate de plugins sob host-pin. Chaves de settings (192) e comandos (99) iguais aos do 292. Nada toca
+  a varredura dos projetos, o gate do atualizador nem `availableModels`/`effortLevel` (`max` segue fora).
+- (6) `DISABLE_AUTOUPDATER=1` ainda desliga o atualizador no 2.1.295 (o env do settings do usuário entra antes da
+  confiança no workspace). Estado em 2026-10-09T01:25Z: a chave está gravada (`~/.claude/settings.json:4`). Não vale
+  sob `--setting-sources` sem `user`.
+- (7) Modelos: entra `claude-haiku-5-5` (esforço padrão `medium`, aceita `max` e `xhigh`, 1M nativo; 0,10/0,50 USD por
+  Mtok). Sonnet 5.5 e Opus 5.5: `medium`; Fable 5.1: `high`; entradas idênticas às do 292. O working set do ADR-149 tem
+  `claude-haiku-4-5`, que pelo prefixo não admite `claude-haiku-5-5`; o modelo auxiliar do harness pode ir para Haiku
+  5.5 mesmo assim (só `deniedModels` o barra). Adotar Haiku 5.5 é emenda da camada T.
+- (9) Desde o 2.1.293 (ausente no 2.1.292), a leitura de UM arquivo pelo Bash também dispara o CLAUDE.md aninhado e
+  as regras por caminho. Formas: `cat`/`nl`/`bat`, `head`, `tail`, `sed -n 'A,Bp'`; `grep`/`rg` só como comando único
+  e com exit 0. Qualquer `|`, `<` ou `>` no texto desliga o gatilho; `cd x && cat y` não dispara. Carrega o CLAUDE.md
+  de cada diretório entre o cwd e o arquivo, só dentro dos diretórios de trabalho e fora de deny de Read. Vale para
+  subagentes e para o subagente de Workflow (mesmo runner, lista de gatilhos própria). `claudeMdExcludes` existe
+  desde ≤ 2.1.220 com o mesmo texto: globs picomatch (`dot:true`) contra o caminho ABSOLUTO, lidos dos settings
+  mesclados de todas as camadas (arrays somados); exclui `User`/`Project`/`Local`, nunca `Managed`, e vale também
+  para o carregamento via Bash. Padrão relativo sem `**/` não casa nada. Medido: 8 `CLAUDE.md` encenados sob
+  `.claude/plans/*/staged*/` (o maior com 37.485 bytes).
+- Proveniência dos números históricos do `_posture_comment` (cura do P3 da rodada 1 da W6.2, lente r-w62-a;
+  medidos com o binário de cada versão, só leitura): **2.1.295** (medido em 2026-10-09, S363): zod 187905139;
+  describe 187905221; sha256 do span de 496 bytes
+  `ac6f84ab1841f8b685fa9d399e771fa8c07ce5f26d168a88dcad1a7d3b146d2f`; sha256 do binário
+  `0116ee2e0a513900b633d9951367f18747686478e2b462805b8c31609f047f70`. **2.1.288** (medido em 2026-10-02, S362): zod
+  179683570; describe 179683652; sha256 do binário
+  `bbe93063f7a0879a1021b2891e5c9354e5b3b98433e32efe6750f7710afed750`. **2.1.287** (medido em 2026-10-02, S362):
+  offset 178658526 (o registro original não diz se é zod ou describe); sha256 do binário
+  `6eab8333fe2121553100d8f40bfada384a3e989b94f947e18ba6677a6fcb41ea`. Os offsets do 2.1.288 e do 2.1.287 estavam
+  registrados só no commit `1dafd090` da W6.2 (`ceremony(PLAN-194 W6.2)`, 2026-10-02), que NÃO é ancestral do
+  `main` em 2026-10-09 (`git merge-base --is-ancestor 1dafd090 HEAD` = 1); os sha256 dos binários 2.1.287 e
+  2.1.288 já constavam na seção «CC 2.1.288 — adoção e re-medição 287 × 288». Os binários 2.1.287 e 2.1.288 estão
+  fora do disco desde então ⇒ esses números são INVERIFICÁVEIS hoje; o span de 496 bytes do 2.1.292, em disco, tem
+  o mesmo sha256 (controle). Registro da lente: `rail/w62-r1/claude-r-w62-a-verbatim.md` (scratchpad da sessão
+  `d876fa66`).
+- Retenção — P2 medido pelo rail da W6.2 (lente r-w62-b, 2026-10-09 ~01:50Z; fora do diff da W6.2): há 55 checkouts
+  irmãos em `~/canhada-labs` com `cleanupPeriodDays` 90 nesta máquina; a varredura de qualquer sessão deles apaga os
+  `*.jsonl` de topo de TODOS os diretórios de `~/.claude/projects/` (corte de 90 dias EFETIVO; `last-cleanup`
+  2026-10-08 21:59). O `audit-log-2026-08-1.jsonl` (mtime 2026-08-23) completa 90 dias em 2026-11-21 e será
+  apagado nessa data, com ou sem o patch da W6.2. Curas possíveis, a decidir pelo Owner: managed/policy settings
+  com 3650 (vence todas as camadas, @204769628 no binário 2.1.295), ou 3650 na camada local de cada checkout
+  irmão; e agendar a W6.1.
+
+## Noite S363 (2026-10-09) — construção e rail
+
+Linhas propostas pelos builders (`b-w2b`, `c-w2a`, `c-free`) em `ledger-inbox/` do scratchpad da sessão
+`d876fa66`, transcritas VERBATIM; só o título de cada arquivo virou subtítulo. **FD-25** = pacote livre do
+`ceo-restore.sh`; **FD-26** = pacote livre do modo `--strict-against-counter` do `audit-verify-chain.py`.
+
+### U2-B — construção (b-w2b, 2026-10-09 ~01:27Z)
+
+- 2026-10-09 — U2-B construído na sombra: c8f61ccc6b49 sobre f03003d7 (peças (c) e (d) do ADR-055-AMEND-4); 2 paths (+334/−7); Check da W2: base 37/0 × cura 46/0; suíte .claude/hooks/tests -n auto: cura − base = ∅ (cópias sem .git) e, na sombra, 5 falhas só de orçamento de tempo, verdes em série nas duas árvores; 13 mutantes VERMELHOS; barreira 20/20 na cura e 0/10 em m1 e m2; gates staged rc=0; patch e sha256 em s363-packs/w2b (e3b0b8fc…afb48c3e).
+- 2026-10-09 — Achado do censo openers: o 4.º abridor do journal, _invalidate_per_pid_caches_on_project_switch (spool_writer.py:252-253 no f03003d7; :256-257 em c8f61ccc; PLAN-182 r13/r14), anexa SEM a trava do journal. O «só flush, compactação e reconciliação» do AMEND-4 §4.4 está incompleto; janela de perda = a do os.replace atual (journal fora do INV-NP). Corrigir o texto no U2-D; pôr o anexo sob a trava = follow-up.
+- 2026-10-09 — Dependência do U2-C: gatilho do STARVED (exit) = error=="canonical_lock_timeout" (spool_writer.py:2702 em c8f61ccc). O U2-C religa a exit_deadline_skip com espera efetiva > 0 e troca a célula negativa «espera zero» por «restante ≤ 0». Rede: -k starved reprova se o portão morrer (m3).
+- Fora do pacote: peça (b) prazo (U2-C); seletores deadline/anchor/inode/invariant; texto §4.4 + Amended-by (U2-D); anexo da troca de projeto sob trava (follow-up); censo openers só superfície de hook (ponto cego: nome montado dinamicamente).
+- Riscos: carimbo symlink fresco silencia até T (same-UID); «UM stat» medido em 3.9.6/3.11, não em 3.12/3.14; gate roda no handler SIGTERM (só syscalls).
+
+### U2-A rodada 2 (c-w2a, 2026-10-09 ~05:12Z)
+
+- 2026-10-09 (S363): U2-A rodada 2 do rail — cura 2474fed6 sobre f03003d7 (sombra w2a; patch s363-packs/w2a/3-r2-cure.patch sha256 212e127d…). Curados: Codex P1 (flush em pipe cheio), Codex P2 (chave textual), r-w2a-b P1 (journal na troca de projeto), r-w2a-a P2 (mutante M4), r-w2a-b P3 (célula (b)) e P3 de redação. 14 mutantes, 14 mortos; vermelho no f03003d7 nos 3 achados de comportamento.
+- 2026-10-09 (S363): medido — flush com O_NONBLOCK nas duas camadas PERDE a decisão (TextIOWrapper em C descarta em EAGAIN o que não cabe no buffer binário; Linux: 4096 de 6000 bytes). A cura só esvazia a camada de texto quando cabe provadamente; no Linux a decisão que está na camada de texto sai no flush final, depois do drain (ordem da base), sob o prazo do U2-C. §4.1 passo 1 do AMEND-4 condensado precisa de emenda (FD-16) e o w2a-approved declara.
+- 2026-10-09 (S363): bateria U2-A r2 — 5 arquivos ∅=∅; .claude/hooks/tests mesmo conjunto de 10 ids base × HEAD (ambiente sem .git); na sombra com .git 1 failed (p99 test_case_a_p99_under_5ms, orçamento absoluto). Gate de latência: pior R_e 1,015. Fast path de saída 15,5 µs (base 97,8). Canário: 0 linha de teste.
+- 2026-10-09 (S363): censo do resíduo 13 — largo 37/26, estreito 26/15 (comando work/c-w2a/census.sh); bateria dos 37 com conjunto idêntico base × HEAD. O 20/8 do rascunho :884-886 não reproduz com nenhum dos dois recortes.
+- Riscos: teto 721 linhas (canônico +167/−15; teste livre 539) > 400 — decisão do Owner; O_NONBLOCK na descrição de arquivo compartilhada (filhos veem na janela; SIGTERM padrão na janela sai com a flag ligada) — declarado; __sizeof__ detalhe do CPython (fora dele: lado seguro); tty com XOFF pode esperar; (pid, None) nunca removido (só se os.stat falhar logo após _state_dir()).
+
+### FD-25 / FD-26 rodada 2 (c-free, 2026-10-09 ~05:12Z)
+
+- 2026-10-09 · FD-26 r2 · 6fddda301a43 · sucesso strict sempre nomeado («absent» sem --verbose); log, chave e override com motivo nomeado e UM objeto JSON; só EACCES/EPERM dão 4; teste de troca open×fstat; 10/10 mutantes; sem strict byte-idêntico ao fd2d663f em 21 casos · resíduo: tracebacks sem strict (rc 1) → 1.4.4.
+- 2026-10-09 · FD-25 r2 · d18e3838a32a · restauração nunca escreve através de symlink (dest, intermediário, folha), tudo-ou-nada; allowlist em audit/; tarball só com arquivo/diretório relativo, checado antes e depois de extrair; escrita via temporário no destino + rename; modos pré-existentes intocados; dest não é varrido; 17/17 mutantes; verde em bash 3.2/5.3 + bsdtar e GNU tar 1.35 · resíduo: TOCTOU same-UID declarado (classe PLAN-185).
+- 2026-10-09 · FD-25 DECISÃO DO OWNER pendente: (1) backup com symlink em memory/ agora recusado (rc 2) — (a) manter + ceo-backup.sh derreferenciar/pular links (1.4.4) ou (b) restore pula só os links com aviso; (2) .claude symlinkado recusa --restore-plans/--restore-agent-metrics (rc 1, tudo-ou-nada) — (a) manter ou (b) aceitar symlink só no .claude do projeto. CEO seguiu com (a) nas duas (fail-closed) até a decisão.
+- 2026-10-09 · FD-25 follow-up · ceo-backup.sh copia symlinks de memory/ como links; docs/INCIDENT-RESPONSE.md:258 cita --dry-run, que o script recusa → 1.4.4.
+
 ## Seções arquivadas (2026-10-03, S362)
 
 O T0 fica no topo, congelado: `debate/round-1/security-engineer.md:263` cita `LEDGER.md:16-18`.

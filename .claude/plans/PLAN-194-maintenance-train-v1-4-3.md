@@ -2032,6 +2032,33 @@ demais linhas estão feitas ou fora da 1.4.3.
    tem entrada do log — a confirmar por escrita real na abertura do 1b. **Não bloqueia a W3; bloqueia ficar sem
    dono.**
 
+## Decisões do Owner — S363 (2026-10-08)
+
+Decisões do Owner no boot da S363, na noite de 2026-10-08 em Brasília (~21:40, ou seja, ~00:40Z de 2026-10-09),
+depois de 5 dias de pausa, e na rodada de perguntas seguinte; registradas em 2026-10-09. São decisões TOMADAS:
+não se perguntam de novo. **Esta seção substitui a D-14 do RUNBOOK-1.4.3 (linha de corte de 2026-10-11), que a
+tabela da S362 abaixo também traz.** Termos desta seção: **Lote 0** = os dois ajustes de configuração da D-16 da
+S362 (`DISABLE_AUTOUPDATER=1` no settings do usuário; `memories` e `chronicle` desligados no config do Codex);
+**FD-26** = pacote livre do modo `--strict-against-counter` do `audit-verify-chain.py`; **lands livres** = lands
+de arquivos de oráculo 0 (materiais de cerimônia, curas livres, textos de plano); **kit** = a derivação final dos
+materiais do corte (como na S362).
+
+| # | decisão |
+|---|---|
+| S363-1 | Cota da noite livre: «pode ir livre não tem problema se for 100% da conta». O Owner tem outra conta para trabalhar depois e ainda 1 reset desta conta, dado pela Anthropic. O CEO NÃO troca de conta e NÃO usa o reset extra por conta própria (CLAUDE.md §4, «Quota sem trocar conta»); só gasta a cota desta conta. |
+| S363-2 | Claude Code 2.1.295 ADOTADO. O 2.1.288 se atualizou sozinho até o 2.1.295 porque o Lote 0 nunca foi aplicado. Consequência: re-medir no binário 2.1.295 o que cita o 2.1.288 (o `_posture_comment` da W6.2, o pré-registro da W5c.1 e o `substrate-watch.json` da W5.1) antes do rail. A re-medição do binário (288 × 295) está no LEDGER, seção «CC 2.1.295 — adoção e re-medição 288 × 295». |
+| S363-3 | Linha de corte da 1.4.3 EMPURRADA: o kit começa até ~sábado 2026-10-17 e o GA é estimado em ~2026-10-20 a 2026-10-22. A **W5c (Sonnet 5.5) SAI para a 1.4.4**, com o texto A3.1 do ADR-149 junto (a «candidata natural» da D-14 da S362). A cura da W2 (U2-A a U2-D) FICA na 1.4.3. Motivo: 5 dias de pausa tornaram a linha de 2026-10-11 inviável para a cura de segurança; pela regra da D-14 (o CEO PARA e leva ao Owner), a decisão foi levada. Substitui a D-14 do RUNBOOK-1.4.3. |
+| S363-4 | FD-26: `audit-verify-chain.py --strict-against-counter` com contador AUSENTE sai com código 0 e `chain_length_source:"absent"` VISÍVEL; contador ILEGÍVEL segue erro nomeado, fail-closed. |
+| S363-5 | Lote 0 APLICADO pelo CEO, com autorização do Owner, em 2026-10-09 (a D-16 da S362 previa que o Owner aplicasse): (a) `env.DISABLE_AUTOUPDATER="1"` em `~/.claude/settings.json` (backup sha `cf19d8fb…`); (b) `memories=false` e `chronicle=false` em `~/.codex/config.toml` (sha `56039397…` → `9af51fe7…`, a linha de base do revisor Codex da noite). Backups em `scratchpad/lote0-backup/` da sessão `d876fa66`. |
+| S363-6 | Push ao `origin/main` dos lands LIVRES (materiais de cerimônia, curas livres, textos de plano) AUTORIZADO, com bateria + rail + CI verde. Canônico só com a assinatura do Owner. |
+| S363-7 | Haiku novo (`claude-haiku-5-5`, o id que o binário 2.1.295 traz — LEDGER, seção «CC 2.1.295») ⇒ adoção na 1.4.4, junto do Sonnet 5.5: uma onda só de modelos. Na S363, só pesquisa e proposta. |
+| S363-8 | App ChatGPT/Codex: o Owner não viu necessidade de fechá-lo; basta não usá-lo (o app já reescreveu o config na S360). Regra: conferir o sha do `~/.codex/config.toml` antes de cada rodada do Codex; mudou ⇒ a rodada não conta. Medido no boot da S363: o sha do config tinha mudado (`fb4fe01d…` → `56039397…`) e `memories` e `chronicle` ainda estavam `true` (Lote 0 pendente). |
+
+**Onde o plano mudou (só texto):** esta seção; «Next» (itens 3 e 5); «Success criteria» (item do Sonnet 5.5);
+«How to continue» (versão do `claude`). No LEDGER: as seções «CC 2.1.295 — adoção e re-medição 288 × 295» e
+«Noite S363». **As menções antigas à linha de 2026-10-11 e à W5c na 1.4.3 (frontmatter `eta_calendar`, «Goal»,
+W5, W7, a D-14 da tabela S362 e «Blockers») NÃO foram reescritas nesta rodada; onde divergirem, vale esta seção.**
+
 ## Decisões do Owner — S362 (2026-10-02)
 
 Decisões do Owner no fechamento da S361 e na abertura do trem da 1.4.3, registradas em 2026-10-02. São
@@ -2315,14 +2342,17 @@ do `97a78fce` (`git merge-base --is-ancestor`): L1, L2a e L2b (`6f7069d3`,
 2. **W2, em série no `spool_writer.py`:** pré-registro da W0.5 no LEDGER → W0.5 no HEAD, em paralelo com os
    verificadores do spool e o H1 vivo → U2-A → U2-B → W2.6 (Owner; depois dela, 12 agentes) → U2-C (W0.5
    depois da cura e 3.ª leva do estresse na sombra) → U2-D (num fechamento de sessão).
-3. **W5c, em paralelo:** pré-registro do re-teste → re-teste pago com PASS; W6.0 → W6.2; W5b; rodadas na
-   sombra; rodada final sobre o patch re-derivado depois do LAND do U2-C.
+3. ~~**W5c, em paralelo:** pré-registro do re-teste → re-teste pago com PASS;~~ **W5c: saiu para a 1.4.4
+   (decisão do Owner S363, 2026-10-08), junto do Haiku 5.5.** Em paralelo: W6.0 → W6.2; W5b; rodadas na
+   sombra; ~~rodada final sobre o patch re-derivado depois do LAND do U2-C~~ (esta «rodada final» era a do
+   patch da W5c, «re-derivado no HEAD» — item W5c, «Tamanho»; sai com ela).
 4. **Fora do caminho, mas antes do kit ou da rc.1:** W4, W7a do PLAN-183, W5.1, W5a, doc da W6 e
    derivadores do kit. O FX (cura do teste instável `TestParallelWritersChain`) foi para a 1.4.4 (seção
    «Saídas para a 1.4.4 e hotfix do teste do F1» do LEDGER); resíduo declarado: o CI pede re-run quando o
    teste instável falhar.
-5. **Corte:** seção `[1.4.3]` do `CHANGELOG.md` → RM → kit → rc.1 → hold de 24 h → GA. Linha de corte: o
-   kit começa no máximo em 2026-10-11.
+5. **Corte:** seção `[1.4.3]` do `CHANGELOG.md` → RM → kit → rc.1 → hold de 24 h → GA. Linha de corte: ~~o
+   kit começa no máximo em 2026-10-11.~~ o kit começa no máximo em ~2026-10-17 (decisão do Owner S363,
+   2026-10-08; GA estimado ~2026-10-20 a 2026-10-22; substitui a de 2026-10-11).
 
 ## How to continue
 
@@ -2332,7 +2362,8 @@ Primeira mensagem de uma sessão nova: «Ler o PLAN-194 e o `.claude/plans/PLAN-
 seguia a 0.160.0 em 2026-10-02 às ~19:43Z; muda com frequência, com várias estáveis por semana — conferir; uma
 0.160.x antes do SIGN do RP regenera o pacote, ver o plano B da W3), `codex --version` (0.156.1 até a sentada do
 re-pin manual, RP; 0.160.0 depois dela, até o LAND da W3, que fica para depois da 1.4.3),
-`claude --version` (2.1.287 em 2026-10-01; congelado durante cada onda — Q14), `df -h /System/Volumes/Data`
+`claude --version` (2.1.287 em 2026-10-01; congelado durante cada onda — Q14) (S363: 2.1.295 adotado em
+2026-10-08; `DISABLE_AUTOUPDATER=1` gravado no settings do usuário em 2026-10-09), `df -h /System/Volumes/Data`
 (o volume de dados, onde ficam o `$TMPDIR` e os clones — risco 13); ver quais vagas canônicas estão em voo
 (PLAN-194, PLAN-195, PLAN-183) e seguir a ordem da regra de WIP do topo. Se hoje ≥ 2026-10-19 e a W1 não
 landou: parar tudo e fazer a W1.»
@@ -2389,7 +2420,7 @@ demais ao abri-los.
 - [ ] `check-model-deprecations.py --check --today 2026-10-13` = 0. — Check: python3 .claude/scripts/check-model-deprecations.py --check --today 2026-10-13
 - [ ] Publish do GA 1.4.3 com Node ≥ 22.14 e npm exato. — Check: npm view ceo-orchestration version
 - [ ] Textos do ADR-149/SUPPORT/doc de adopter alinhados ao CC ≥ 2.1.286 (instalado em 2026-10-01: 2.1.287), com data e substrato. — Check: python3 .claude/scripts/generate-available-models.py --check
-- [ ] Sonnet 5.5 adotado pela emenda 4 do ADR-149 (W5c), com a linha de preço e o conjunto de vermelhos esperado sem achado novo, e o re-teste pago registrado no LEDGER. O Check afirma `claude-sonnet-5-5` no bloco do ADR-149, no `availableModels`, no `cost-table.yaml` e na entrada do re-teste no LEDGER (hoje nenhum dos quatro tem o id, então fica vermelho antes). — Check: python3 .claude/scripts/generate-available-models.py --check && python3 .claude/scripts/check-model-currency.py --expected-reds .claude/data/model-currency-expected-reds.txt && grep -q 'claude-sonnet-5-5' .claude/adr/ADR-149-model-id-allowlist.md && grep -q 'claude-sonnet-5-5' .claude/settings.json && grep -q 'claude-sonnet-5-5' .claude/scripts/cost-table.yaml && grep -q '^## W5c.1' .claude/plans/PLAN-194/LEDGER.md
+- [ ] **Saiu para a 1.4.4 (decisão do Owner S363, 2026-10-08), junto do Haiku 5.5.** Sonnet 5.5 adotado pela emenda 4 do ADR-149 (W5c), com a linha de preço e o conjunto de vermelhos esperado sem achado novo, e o re-teste pago registrado no LEDGER. O Check afirma `claude-sonnet-5-5` no bloco do ADR-149, no `availableModels`, no `cost-table.yaml` e na entrada do re-teste no LEDGER (hoje nenhum dos quatro tem o id, então fica vermelho antes). — Check: python3 .claude/scripts/generate-available-models.py --check && python3 .claude/scripts/check-model-currency.py --expected-reds .claude/data/model-currency-expected-reds.txt && grep -q 'claude-sonnet-5-5' .claude/adr/ADR-149-model-id-allowlist.md && grep -q 'claude-sonnet-5-5' .claude/settings.json && grep -q 'claude-sonnet-5-5' .claude/scripts/cost-table.yaml && grep -q '^## W5c.1' .claude/plans/PLAN-194/LEDGER.md
 - [ ] Backup agendado e ensaio de restaurar e verificar (W6.3) registrado no LEDGER, com paridade por arquivo e a decisão do Owner sobre a chave HMAC, antes de ~2026-11-21; `cleanupPeriodDays` decidido como complemento (o `--dry-run` abaixo não prova nem o agendamento nem o ensaio). — Check: bash .claude/scripts/ceo-backup.sh --dry-run
 - [ ] GA v1.4.3 publicado (tag assinada, npm `latest=1.4.3`). — Check: npm view ceo-orchestration dist-tags
 
