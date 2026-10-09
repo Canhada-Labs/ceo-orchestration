@@ -154,3 +154,25 @@ exige.
   AUSENTE (o site é pulado quando o arquivo não existe, por desenho, para fixtures
   sintéticas); `verify-counts.sh` é membro do manifesto ADR-192 ⇒ mexer nisso pede cerimônia
   (decisão do Owner). Não fixado no teste para não cimentar o comportamento.
+- 2026-10-09 (S363): registro falsificável da janela do AC-4 em
+  `.claude/plans/PLAN-169/ac4-quota-window-S362-S363.md`.
+  - **Ocorrências:** 9 esgotamentos em 3 sessões (2 na noite da S361, 3 na
+    S362, 4 na S363), no CC 2.1.287 e no 2.1.295.
+  - **Settings:** `autoContinueAtUsageLimit` ausente em todas as camadas
+    existentes. O valor efetivo é «ligado», pelos avisos do próprio
+    harness.
+  - **Sessão principal:** retomada nativa em 6 das 9 ocorrências (7
+    eventos, 49–98 s depois do minuto anunciado, sempre antes do cron do
+    CEO, cada um com `prompt_submitted` no mesmo segundo). Nas outras 3, o
+    Owner agiu antes do reset (troca de conta, ou reset da cota semanal).
+  - **Subagentes:** nenhum foi retomado nativamente. Dos 31 que caíram, 28
+    foram retomados por `SendMessage` do CEO.
+  - **Workflow:** um agente recusado (S361). O runtime redespachou o passo
+    depois do reset, sem `workflow_rate_limit_wait`.
+  - **Sonda W4.2.0(a), resposta parcial:** 0 de 140 turnos de colega
+    (`in_process_teammate`) com `prompt_submitted`, contra 21/21
+    `task-notification` e 7/7 prompts do Owner.
+  - **Resultado proposto:** (a) para a sessão principal, com 2 limites
+    declarados (subagentes não retomam nativamente; retomada nativa pode
+    cair num teto de gasto ainda ativo) — decisão do Owner pendente. As
+    caixas do AC-4 seguem sem marcar e o `status` não muda.
