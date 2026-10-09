@@ -60,16 +60,19 @@ the `rc-toolchain-proof` job (RC tags only, `contents: read` only, no
 id-token, no environment, never publishes) whose steps shared with
 `publish` must be byte-identical copies. Live only, no skip.
 
-The post-land hardening of that class (rail r1 P3s of the W4 land) pins,
-in the text lane that still runs where PyYAML is absent, what a
-byte-identical copy cannot: the `on:` surface (tag push only, no
-workflow_dispatch), the top-level keys and permissions, the job
-headers, the RC job's single `contents: read` block and the exact body of
-EVERY step of the two jobs (a step whose check is still there but no
-longer runs — `if: false`, `exit 0`, a fixed read, a heredoc — is the
-same class that identity between the copies cannot see); the RC exclusion
-and the `production-npm` gate are read from the `publish` JOB, not from
-the header comment that also spells them.
+The guarantee about the publish workflow is ONE test: the sha256 of the
+BYTES of npm-publish.yml, with no normalisation of any kind
+(test_live_workflow_is_byte_pinned). npm-publish.yml is canonical: every
+change to it goes through the ceremony, and that same ceremony updates the
+pin. Everything else in the W4 class — the closed step sequences, the
+byte-identity of the shared steps, the per-step bodies and digests, the job
+headers, the `on:`/permissions/env readers — is DIAGNOSTIC: best-effort
+parsers that say WHERE the workflow changed. They read only the shapes the
+W4 workflow uses and can miss a change the byte pin sees (a comment, a
+quoted key, a tail comment, whitespace, a line inside a shell block).
+Where a check reads one JOB (the RC exclusion and the `production-npm`
+gate in the `publish` job) it does so because the header comment also
+spells both, so a whole-file search would stay green without the real key.
 """
 from __future__ import annotations
 
@@ -1589,9 +1592,10 @@ _W4_NO_PERSIST = "          persist-credentials: false"
 _W4_RC_FORBIDDEN = (
     "npm publish", "id-token", "environment:", "secrets.", "NODE_AUTH_TOKEN",
 )
-# Post-land hardening (rail r1 P3s of the W4 land): the blocks below are
+# DIAGNOSTIC readers (the byte pin is the guarantee): the blocks below are
 # compared as code lines (comments and blank lines dropped, indentation
-# kept) so a flow-style rewrite, a sibling key or a duplicate key is red.
+# kept), which localises a flow-style rewrite, a sibling key or a duplicate
+# key.
 # `on:` is the tag push and nothing else — the header says there is no
 # workflow_dispatch BY DESIGN (a failed GA publish means rollback +
 # delete/re-tag), and a PR trigger would reach `publish` because a PR ref
@@ -1603,14 +1607,15 @@ _W4_TOP_PERMISSIONS = ["  contents: read", "  id-token: write"]
 # The RC job's only permission block; `publish` carries none of its own
 # (it inherits the top-level block, id-token included).
 _W4_RC_PERMISSIONS = ["      contents: read"]
-# Exact step bodies. A step's body is its code lines (comments and blanks
-# dropped, `uses:` SHAs normalised — Dependabot bumps them and the SHA-pin
-# format is checked elsewhere), so `if:`, `continue-on-error:`, `env:`,
-# `exit 0`, a fixed read or a heredoc around the checks are LINES of the
-# body and go red; identity between the two copies cannot see them, both
-# would change together. The three steps below ARE the toolchain contract
-# and are pinned verbatim; every other step is pinned by sha256 of its
-# lines (_W4_STEP_DIGESTS).
+# Step bodies — DIAGNOSTIC: they say WHICH step changed (the byte pin is the
+# guarantee). A step's body is its code lines: stripped, comments and blank
+# lines dropped, `uses:` SHAs normalised. That normalisation discards what a
+# shell block can carry (a `#` line inside a quoted string, indentation), so
+# a body that matches is NOT proof that the step is unchanged. Identity
+# between the two copies cannot see a step changed the same way in both
+# (`if: false`, `exit 0`, a fixed read, a heredoc); the three steps below ARE
+# the toolchain contract and are compared as verbatim lines, every other
+# step by sha256 of its lines (_W4_STEP_DIGESTS).
 _W4_PIN_STEP = _W4_SHARED_STEPS[2]
 _W4_PIN_STEP_CODE = (
     "- name: " + _W4_PIN_STEP,
@@ -1677,9 +1682,9 @@ _W4_RC_PACK_CODE = (
     '+ npm $(npm --version) — nothing was written to the registry"',
 )
 # sha256 of "\n".join(body lines) of every other step (the sibling copies of
-# a shared step carry the same digest). A change to one of these steps is a
-# ceremony edit anyway: update the digest the failure prints in the same
-# patch, together with the sibling job's copy.
+# a shared step carry the same digest). Diagnostic, like the bodies above: a
+# ceremony edit to one of these steps updates the digest the failure prints,
+# and the byte pin, in the same patch.
 _W4_STEP_DIGESTS = {
     _W4_SHARED_STEPS[0]:  # Checkout tag
         "7a43bc79d51f10f16086bcb544f42847b20e5342bf29a78404096736db84bae2",
@@ -1715,9 +1720,10 @@ _W4_STEP_BODIES = {
     _W4_RC_VERSION_STEP: _W4_RC_VERSION_CODE,
     _W4_RC_PACK_STEP: _W4_RC_PACK_CODE,
 }
-# Job headers (every key before `steps:`) and the workflow's top-level keys:
-# a job-level `continue-on-error`, `env: BASH_ENV`, `defaults.run.shell` or
-# `container` neutralises steps without touching one of them.
+# DIAGNOSTIC — job headers (every key before `steps:`) and the top-level key
+# names: they localise a job-level `continue-on-error`, `env: BASH_ENV`,
+# `defaults.run.shell` or `container`. Unquoted keys only: a quoted key
+# (`"defaults":`) is not recognised here; the byte pin sees it.
 _W4_PUBLISH_HEAD = (
     "publish:",
     'if: "!%s"' % _W4_RC_IF,
@@ -1738,6 +1744,14 @@ _W4_RC_HEAD = (
     "steps:",
 )
 _W4_TOP_KEYS = ["name", "on", "concurrency", "permissions", "env", "jobs"]
+# THE GUARANTEE (test_live_workflow_is_byte_pinned): sha256 of the BYTES of
+# .github/workflows/npm-publish.yml as the PLAN-194 W4 land produced it —
+# `shasum -a 256 .github/workflows/npm-publish.yml`. Nothing is normalised:
+# comments, whitespace, key quoting, line endings and the `uses:` SHAs are all
+# in the hash. Update it in the SAME ceremony that edits the workflow.
+_W4_WORKFLOW_SHA256 = (
+    "e2a777dd9077a1295e2bb534635ad05fca9339b84908615f7de89da0c87844e3"
+)
 
 _W4_JOB_HEAD = re.compile(r"^  ([A-Za-z0-9_-]+):[ \t]*$", re.M)
 _W4_ANY_STEP = re.compile(r"^      - ", re.M)
@@ -1816,6 +1830,11 @@ def _w4_digest(body: Tuple[str, ...]) -> str:
     return hashlib.sha256("\n".join(body).encode("utf-8")).hexdigest()
 
 
+def _w4_workflow_digest(data: bytes) -> str:
+    """sha256 of the raw bytes — the one place that must stay un-normalised."""
+    return hashlib.sha256(data).hexdigest()
+
+
 def _w4_job_head(job_text: str) -> Tuple[str, ...]:
     """Code lines of a job from its head line up to and including `steps:`."""
     first = _W4_ANY_STEP.search(job_text)
@@ -1854,13 +1873,17 @@ def _w4_key_blocks(
 
 
 def _w4_text_offenders(source: str) -> List[str]:
-    """The part of the W4 contract readable from raw text — no yaml.
+    """DIAGNOSTIC: a best-effort reading of the W4 contract from raw text.
 
-    This lane runs where PyYAML is absent; `_w4_structural_offenders` (which
-    skips there) reads the same contract from the parsed document and adds
-    what raw text cannot see (a toolchain key redefined in a job- or
-    step-level `env:`, the `with:` of setup-node). Neither lane is the
-    whole contract alone.
+    It says WHERE the workflow differs from what the W4 land produced;
+    it is not the guarantee (test_live_workflow_is_byte_pinned is). It
+    parses only the shapes the W4 workflow uses and silently ignores what it
+    does not recognise — a quoted key, an `env:` line with a tail comment, a
+    comment line or the indentation inside a shell block — so an empty list
+    does NOT prove the file is unchanged. This lane runs where PyYAML is
+    absent; `_w4_structural_offenders` (which skips there) reads the parsed
+    document and adds a toolchain key redefined in a job- or step-level
+    `env:` and the `with:` of setup-node.
     """
     out = []
     if _w4_key_blocks(source, "on", 0) != [("", _W4_ON_BODY)]:
@@ -2045,7 +2068,11 @@ def _w4_text_offenders(source: str) -> List[str]:
 
 
 def _w4_structural_offenders(data: dict) -> List[str]:
-    """The same contract read from the parsed YAML (permissions, if, env)."""
+    """DIAGNOSTIC: the parsed-YAML reading (permissions, if, env, triggers).
+
+    Best-effort like `_w4_text_offenders`: it checks the two toolchain env
+    values, not the set of env keys, and never sees what YAML parsing drops.
+    """
     out = []
     env = data.get("env") or {}
     if (env.get(_W4_ENV_NODE), env.get(_W4_ENV_NPM)) != (
@@ -2128,7 +2155,13 @@ def _w4_in_job(source: str, job: str, old: str, new: str) -> str:
 
 
 class Plan194W4PublishToolchainTest(TestEnvContext):
-    """PLAN-194 W4 — Node 24 + EXACT npm declared once; the RC proof job."""
+    """PLAN-194 W4 — Node 24 + EXACT npm declared once; the RC proof job.
+
+    test_live_workflow_is_byte_pinned is the guarantee; the other live tests
+    are diagnostics. The `test_control_*` tests mutate a COPY: the ones for
+    the diagnostics expect a named offender, the byte-pin control expects a
+    moved hash.
+    """
 
     maxDiff = None  # an offender list is the diagnosis — print all of it
 
@@ -2298,10 +2331,12 @@ class Plan194W4PublishToolchainTest(TestEnvContext):
         self.assertTrue(any(
             "closed sequence" in o for o in _w4_text_offenders(mutated)))
 
-    # -- post-land hardening (rail r1 P3s of the W4 land) ------------------
-    # Each control mutates a COPY, so it also proves the pin is not vacuous.
-    # The text lane must catch every one WITHOUT PyYAML; the structural lane
-    # is asserted too where the mutation is visible in the parsed document.
+    # -- controls for the diagnostics (rail r1 of the W4 post-land pack) ----
+    # Each mutates a COPY and expects the diagnostic named in its needle: the
+    # text lane without PyYAML, the structural lane too where it exists and
+    # the mutation is visible in the parsed document. They show the
+    # diagnostics localise THESE mutations; they do not make them complete
+    # (rail r2 found shapes they miss) — the byte pin below is what does.
 
     def _replaced(self, old: str, new: str) -> str:
         assert self.source.count(old) == 1, "control fixture: %r" % old
@@ -2319,6 +2354,85 @@ class Plan194W4PublishToolchainTest(TestEnvContext):
         offenders = _w4_structural_offenders(yaml.safe_load(mutated))
         self.assertTrue(
             any(structural_needle in o for o in offenders), offenders)
+
+    def test_live_workflow_is_byte_pinned(self):
+        """THE guarantee: the workflow is exactly the bytes the W4 land produced.
+
+        npm-publish.yml is canonical — any change goes through the
+        canonical-edit ceremony, and that same ceremony updates
+        _W4_WORKFLOW_SHA256. Nothing is normalised (comments, whitespace,
+        key quoting, line endings, `uses:` SHAs are all in the hash), so
+        this does not depend on any parser recognising the change. What it
+        does NOT say is that the bytes are right, only that they are the
+        bytes the W4 land produced.
+        """
+        data = (_WF / "npm-publish.yml").read_bytes()
+        got = _w4_workflow_digest(data)
+        if got != _W4_WORKFLOW_SHA256:
+            where = _w4_text_offenders(data.decode("utf-8", "replace"))
+            self.fail(
+                "npm-publish.yml is not the byte-for-byte file the PLAN-194 "
+                "W4 land produced: sha256 %s (%d bytes), pinned %s. The "
+                "workflow is canonical — change it only through the "
+                "ceremony, which also updates _W4_WORKFLOW_SHA256 "
+                "(`shasum -a 256 .github/workflows/npm-publish.yml`). "
+                "Best-effort diagnostics (they can miss what the hash sees): "
+                "%s" % (got, len(data), _W4_WORKFLOW_SHA256,
+                        where or "none — the change is outside what they parse")
+            )
+
+    def test_control_byte_pin_moves_on_every_kind_of_change(self):
+        # The hash helper must stay raw: each mutation below is one a
+        # normalising reader (strip, comment-drop, text decode, quote-blind
+        # key parse) would let through. Rail r2 of the post-land pack found
+        # the first ten against the parsers; the last four are the byte-level
+        # kinds no parser looks at.
+        live = (_WF / "npm-publish.yml").read_bytes().decode("utf-8")
+        self.assertEqual(
+            _w4_workflow_digest(live.encode("utf-8")), _W4_WORKFLOW_SHA256)
+        ind = "          "
+        sha = "de0fac2e4500dabe0009e67214ff5f5447ce83dd"
+        v4 = "11bd71901bbe5b1630ceea73d27597364c9af683"
+        env_npm = '  %s: "%s"\n' % (_W4_ENV_NPM, _W4_NPM_VERSION)
+        cases = (
+            ("comment line inside the packlist python", self._both(
+                ind + "import json, re, sys\n",
+                ind + "# '; exit 0; : '\n" + ind + "import json, re, sys\n")),
+            ("sys.exit(1) de-indented", self._both(
+                ind + "    sys.exit(1)\n", ind + "sys.exit(1)\n")),
+            ("quoted top-level key", self._replaced(
+                "\njobs:\n",
+                '\n"defaults":\n  run:\n    shell: "true {0}"\n\njobs:\n')),
+            ("quoted env key", self._replaced(
+                env_npm, env_npm + '  "NODE_OPTIONS": "--bad-option"\n')),
+            ("BASH_ENV with a tail comment", self._replaced(
+                env_npm, env_npm + '  BASH_ENV: "/tmp/.profile"  # preload\n')),
+            ("BASH_ENV value with a hash", self._replaced(
+                env_npm, env_npm + '  BASH_ENV: "/tmp/#profile"\n')),
+            ("BASH_ENV value with an escaped quote", self._replaced(
+                env_npm, env_npm + '  BASH_ENV: "/tmp/\\"x"\n')),
+            ("new job under jobs", live + (
+                "\n  leak:\n    runs-on: ubuntu-latest\n    steps:\n"
+                "      - run: echo leak\n")),
+            ("cancel-in-progress true", self._replaced(
+                "cancel-in-progress: false", "cancel-in-progress: true")),
+            ("both checkouts at the v4.2.2 SHA", _w4_in_job(
+                _w4_in_job(self.source, "publish", sha, v4),
+                _W4_RC_JOB, sha, v4)),
+            ("one byte of a comment", self._replaced(
+                "# Sprint 5 Phase 4;", "# Sprint 5 Phase 5;")),
+            ("one trailing space", self._replaced(
+                "name: NPM Publish\n", "name: NPM Publish \n")),
+            ("one CRLF line ending", self._replaced(
+                "name: NPM Publish\n", "name: NPM Publish\r\n")),
+            ("one extra blank line at the end", live + "\n"),
+        )
+        for label, mutated in cases:
+            with self.subTest(mutation=label):
+                self.assertNotEqual(mutated, live)
+                self.assertNotEqual(
+                    _w4_workflow_digest(mutated.encode("utf-8")),
+                    _W4_WORKFLOW_SHA256)
 
     def test_live_post_land_pins_hold(self):
         self.assertEqual(
@@ -2374,7 +2488,7 @@ class Plan194W4PublishToolchainTest(TestEnvContext):
 
     def _both(self, old: str, new: str, src=None) -> str:
         """`old` -> `new` inside BOTH jobs: a shared step neutralised in both
-        copies is identical, so only an exact-body pin can see it."""
+        copies is identical, so the identity check cannot see it."""
         for job in ("publish", _W4_RC_JOB):
             src = _w4_in_job(src or self.source, job, old, new)
         return src

@@ -465,12 +465,18 @@ benchmarks template above.
   (the file kept `node-version: "20"`); done by PLAN-194 W4 on
   2026-10-02 (see `docs/actions-versions.md`, "Sprint 6 Phase 6a scope")
 - **DEFERRED to Sprint 7** (per R-DEV3 consensus — each action bumps
-  in its own PR to isolate schema-break risk):
-  - `actions/checkout@v4 → v5`
-  - ~~`actions/setup-node@v4 → v5`~~ — moot (2026-10-02): the setup-node
-    pin is `v6.4.0`
-  - `actions/setup-python@v5.4 → v5.5+` if required
-  - `actions/upload-artifact@v4 → v5` (with input-schema audit)
+  in its own PR to isolate schema-break risk). All four items are moot:
+  the Sprint 7 Dependabot PRs #2, #3 and #1 (merged 2026-04-13, recorded
+  in `docs/actions-versions.md`, "Sprint 6 Phase 6a scope" and "Migration
+  log") took the tracked pins past these targets, and the setup-node pin
+  is `v6.4.0` (2026-10-02).
+  The `node20` pins that remain outside the table are listed under
+  "Current state" above.
+  - ~~`actions/checkout@v4 → v5`~~ — PR #2: `v6.0.2`
+  - ~~`actions/setup-node@v4 → v5`~~ — `v6.4.0`
+  - ~~`actions/setup-python@v5.4 → v5.5+` if required~~ — PR #3: `v6.2.0`
+  - ~~`actions/upload-artifact@v4 → v5` (with input-schema audit)~~ —
+    PR #1: `v7.0.1`
 
 Dependabot is configured to open these PRs individually. The
 freeze-doc at `docs/actions-versions.md` tracks the upgrade procedure.
