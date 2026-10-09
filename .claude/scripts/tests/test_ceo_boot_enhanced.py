@@ -533,38 +533,131 @@ class TestAuditEmitTelemetry(TestEnvContext):
 
 
 class TestIdempotency(TestEnvContext):
-    """CR-MF6 — back-to-back runs deterministic; transient failures recover."""
+    """CR-MF6 — back-to-back runs deterministic; transient failures recover.
+
+    The back-to-back invariants are proven over DETERMINISTIC INPUTS (a
+    hand-built ``CheckResult`` list, or a registry of pure checks) — never over
+    the live 24-check dispatch. The live dispatch reads the real repo, ``gh``
+    and the audit log under a wall-clock aggregate budget, so under load one
+    check overshoots in run 1 and not in run 2 and the recommendation count
+    shifts (Validate run 37281165784: ``2 != 3``). An absolute time budget
+    inside a unit test is a verdict on the machine, not on the engine.
+    """
 
     def setUp(self):
         super().setUp()
         self.tmpdir = tempfile.mkdtemp(prefix="ceo-boot-idem-")
         os.environ["CEO_BOOT_CACHE_DIR"] = self.tmpdir
+        # The posture advisory resolves the settings layers (including the
+        # machine-wide managed one); pin it to "absent" so the engine under
+        # test depends on the CheckResult list only.
+        patcher = mock.patch.object(
+            _mod, "_night_mode_advisory_rec", return_value=None,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
         super().tearDown()
 
+    @staticmethod
+    def _mixed_results():
+        """Fixed green/yellow/red/timeout/error mix, built fresh per call.
+
+        Four failing checks while the ``00-*`` rows cap at 3 (WHICH three
+        survive depends on the by-name sort), plus four named rules: 8
+        candidates for the engine's cap of 5.
+        """
+        C = _mod.CheckResult
+        return [
+            C("governance_validate", "green", "ok", 1.0, None),
+            C("plans_executing", "timeout", "AGG_TIMEOUT (>5000ms aggregate)",
+              5000.0, None),
+            C("audit_log_freshness", "error", "RuntimeError: boom", 2.0, None),
+            C("dispatch_count_24h", "timeout", "AGG_TIMEOUT (>5000ms aggregate)",
+              5000.0, None),
+            C("cost_24h_usd", "error", "OSError: denied", 3.0, None),
+            C("sentinels_pending_gpg", "yellow", "2 pending", 4.0,
+              ["a.approved.md", "b.approved.md"]),
+            C("plans_stranded_executing", "red", "1 stranded", 4.0, ["PLAN-001"]),
+            C("skill_unknown_ratio", "red", "ratio 0.40", 4.0, None),
+            C("audit_v3_backlog", "yellow", "1 open", 4.0, ["V3-001"]),
+            C("adrs_stale_proposed", "yellow", "1 stale", 4.0, ["ADR-001"]),
+        ]
+
+    @staticmethod
+    def _pure_registry():
+        """Registry of PURE checks: no repo, no network, no clock."""
+        def fixed(status, summary, detail=None):
+            return lambda: (status, summary, detail)
+
+        def boom():
+            raise RuntimeError("boom")
+
+        def denied():
+            raise OSError("denied")
+
+        return [
+            ("governance_validate", fixed("green", "ok")),
+            ("audit_log_freshness", boom),
+            ("cost_24h_usd", denied),
+            ("sentinels_pending_gpg",
+             fixed("yellow", "2 pending", ["a.approved.md", "b.approved.md"])),
+            ("plans_stranded_executing",
+             fixed("red", "1 stranded", ["PLAN-001"])),
+            ("skill_unknown_ratio", fixed("red", "ratio 0.40")),
+            ("audit_v3_backlog", fixed("yellow", "1 open", ["V3-001"])),
+        ]
+
+    def _dispatch_pure(self):
+        """One dispatch over the pure registry, with the clock out of the result.
+
+        PER_CHECK_* are neutralised because an over-budget green check gets a
+        ``(slow Nms ...)`` suffix — a wall-clock-dependent summary. The 60 s
+        aggregate is only a hang guard: pure checks finish in microseconds.
+        """
+        with mock.patch.object(_mod, "TIER_S_CHECKS", self._pure_registry()), \
+             mock.patch.object(_mod, "PER_CHECK_TIMEOUT_S", 3600.0), \
+             mock.patch.object(_mod, "PER_CHECK_TIMEOUT_OVERRIDES_S", {}):
+            return _mod.dispatch_parallel(aggregate_timeout_s=60.0)
+
     def test_back_to_back_identical_results(self):
-        """Running dispatch twice in quick succession yields same status set."""
-        r1 = _mod.dispatch_parallel()
-        r2 = _mod.dispatch_parallel()
-        names1 = [r.name for r in r1]
-        names2 = [r.name for r in r2]
-        self.assertEqual(names1, names2)
-        # Status set should be identical (durations may differ slightly)
-        s1 = {r.name: r.status for r in r1}
-        s2 = {r.name: r.status for r in r2}
-        self.assertEqual(s1, s2)
+        """Dispatching twice over pure checks yields the same rows, in order."""
+        r1 = self._dispatch_pure()
+        r2 = self._dispatch_pure()
+        registry_names = [n for n, _ in self._pure_registry()]
+        self.assertEqual([r.name for r in r1], registry_names)
+        self.assertEqual([r.name for r in r2], registry_names)
+        # duration_ms is the only field allowed to differ between runs.
+        rows1 = [(r.name, r.status, r.summary, r.detail) for r in r1]
+        rows2 = [(r.name, r.status, r.summary, r.detail) for r in r2]
+        self.assertEqual(rows1, rows2)
 
     def test_recs_back_to_back_same(self):
-        """Recommendations are stable across back-to-back dispatch."""
-        r1 = _mod.dispatch_parallel()
-        recs1 = _mod._make_recommendations(r1)
-        r2 = _mod.dispatch_parallel()
-        recs2 = _mod._make_recommendations(r2)
-        # Identical or near-identical (timestamps may shift status slightly,
-        # but rec list itself shouldn't grow/shrink unpredictably)
-        self.assertEqual(len(recs1), len(recs2))
+        """Same CheckResults in -> the identical recommendation list out."""
+        recs1 = _mod._make_recommendations(self._mixed_results())
+        recs2 = _mod._make_recommendations(self._mixed_results())
+        # Anti-vacuity: an empty/near-empty list would make the equality below
+        # trivially true; the mix must really produce recommendations.
+        self.assertGreaterEqual(len(recs1), 3)
+        self.assertEqual(recs1, recs2)
+
+    def test_recs_independent_of_result_order(self):
+        """CR-N7 — the rec list does not depend on how the results are ordered."""
+        forward = _mod._make_recommendations(self._mixed_results())
+        backward = _mod._make_recommendations(
+            list(reversed(self._mixed_results()))
+        )
+        self.assertGreaterEqual(len(forward), 3)
+        self.assertEqual(forward, backward)
+
+    def test_recs_dispatch_pipeline_same(self):
+        """dispatch -> recommendations over pure checks is stable run to run."""
+        recs1 = _mod._make_recommendations(self._dispatch_pure())
+        recs2 = _mod._make_recommendations(self._dispatch_pure())
+        self.assertGreaterEqual(len(recs1), 3)
+        self.assertEqual(recs1, recs2)
 
     def test_cached_store_recovers_from_oserror(self):
         """If write fails (e.g. permission), main path still emits digest."""
