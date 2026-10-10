@@ -1,14 +1,15 @@
 ---
 id: PLAN-171
 title: Imports de governança (cloudflare-os/xirp) — batch-approval, proveniência de leituras, FILE ASSIGNMENT write-time, living docs local
-status: executing
+status: done
 executing_at: 2026-09-05
+completed_at: 2026-10-10
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]
-related_commits: [4c6888d14048, 1e2f657fe796, 184a1a2fe60f, 14892ab04be3, 00839a6505f2, 3b4300ab02fa, ef4c1b3b3c45, 690c3e2194c4, 45877e49d08a, d1598acfd4bf]
+related_commits: [4c6888d14048, 1e2f657fe796, 184a1a2fe60f, 14892ab04be3, 00839a6505f2, 3b4300ab02fa, ef4c1b3b3c45, 690c3e2194c4, 45877e49d08a, d1598acfd4bf, 5b175356de6a]
 budget_tokens: 400-700k (W0 censo = ~6 lotes de ~10 hooks ≈ metade do custo; firmado S302e)
 budget_sessions: 5-8 (W0 3-4; W1/W1b-d 1-2; W4-W5 1-2)
 context_risk: medium
@@ -239,6 +240,60 @@ AC-9. Gate 3: `/debate start PLAN-171` antes do primeiro item L3.
 S302c) cumpre o review cross-model do conjunto; o `/debate` formal
 L3 roda no início da execução (Gate 3), como manda o protocolo.
 
+## Success criteria
+
+> Seção criada no fechamento (S363, 2026-10-10). Os ACs estavam espalhados em
+> §6 e §7, sem caixas. O plano fecha na W0: o entregue está marcado com a
+> evidência; o resto foi MOVIDO para destino nomeado e não conta como feito.
+
+- [x] **W0 — censo de gates com controle positivo** (AC do §6 e do §7: 100 % dos
+  hooks com controle positivo OU sem-controle-por-design justificado). São 52 de 52
+  linhas de gate com controle positivo provado vermelho. A consolidação S348 tinha
+  51; a que faltava (`check_cost_envelope.py`, caminho de bloqueio) fechou em
+  `5b175356`, com `.claude/hooks/tests/test_check_cost_envelope_block.py` (8
+  testes). Herança do AC-9 do PLAN-169: zero dívidas (lote 1, §2). Adendo datado
+  no §6 de `PLAN-171/w0/W0-consolidated-verdict-S348.md`.
+  Check: `python3 -m pytest -q .claude/hooks/tests/test_check_cost_envelope_block.py` (8 passed em 2026-10-10)
+  **Dívida nomeada, fora do censo por data:** `check_workflow_launch.py` entrou no
+  `.claude/settings.json` em 2026-09-17 (`075beed9`), depois da consolidação. Tem
+  suíte própria (`test_check_workflow_launch.py`), mas não foi medido pelo método
+  das três metades. O censo W0-delta fica como item opcional de
+  `PLAN-171-FOLLOWUP-lote2-generated-figures`.
+- [x] **W1b, metade de docs** (§7: nenhuma superfície de doc afirma «dois revisores
+  externos de release»). `.claude/hooks/_lib/adapters/grok.py:5-10` descreve o
+  adapter como de papel único, sem papel de revisor. A busca pela afirmação fora de
+  `.claude/plans/` dá zero. Nota: esse docstring é de `ac87869f` (2026-07-13),
+  anterior a este plano. A metade de docs foi satisfeita por estado já existente,
+  conferido agora, e não por commit deste plano. A frase «Grok = gatilho» nos docs
+  de rail depende do ADR e viaja com ele (caixa da W1b-ADR abaixo).
+  Check: `! grep -rniE 'dois revisores externos|two external reviewers' --include='*.md' --include='*.py' . | grep -v '\.claude/plans/'` (rc 0 em 2026-10-10)
+- [x] **W1d, metade livre** (§7: zero de «inject SKILL.md inteiro»): `d1598acf`
+  corrigiu `.claude/commands/spawn.md`.
+  Check: `grep -c 'injected via .## SKILL CONTENT' .claude/commands/spawn.md` (espera 0)
+- [>] **W1 — batch-approval** (schema do approval-queue, gate anti-lote-parcial com
+  controle positivo, 1 lote real com o pin único `delta_manifest`): MOVIDA para
+  `PLAN-171-FOLLOWUP-batch-approval`. Não entregue.
+- [>] **W1b, ADR da economia de revisores** (Codex = único revisor bloqueante do
+  rail; Grok = gatilho; ADR aceito por cerimônia): MOVIDA para
+  `PLAN-171-FOLLOWUP-batch-approval`, junto do contrato de veredito da W1. Não
+  entregue.
+- [>] **W1c — contrato de fronteira de posse dos domain-packs:** MOVIDA para o
+  PLAN-175, seu único consumidor (W3, AC-3.1). Não entregue. A edição do PLAN-175
+  que recebe o contrato fica FORA deste pacote. Até ela landar, o AC-3.1 daquele
+  plano procura o artefato no texto DESTE plano e segue vermelho, o que é o
+  estado verdadeiro.
+- [>] **W1d, metade canônica** (teto G12 de 6 para 8 em
+  `.claude/skills/core/parallelization-by-default/SKILL.md`, oráculo 1): MOVIDA
+  para `PLAN-171-FOLLOWUP-readinjection-docstring`, que reúne o texto canônico
+  desatualizado deste plano. Não entregue.
+- [>] **W2 — proveniência de leituras:** MOVIDA para
+  `PLAN-171-FOLLOWUP-read-provenance`. Não iniciada.
+- [>] **Defeito achado na W0** (o evento `cost_envelope_capped` nunca é gravado):
+  MOVIDO para `PLAN-171-FOLLOWUP-cost-envelope-emit`, que aponta o pacote de
+  código já em curso.
+- W3, W4 e W5: CORTADAS pelo Owner na S348 (§2), sem destino. A W4 pode voltar
+  como follow-up próprio se alguém pedir.
+
 ## Registro de execução
 
 - **2026-09-05 (S345)** — W0 lote 1/6 MEDIDO: os 10 gates do runbook
@@ -428,3 +483,14 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   NUNCA é gravado num bloqueio. Varredura AST: único exemplar da classe. Cura = tirar o `action=`
   (oráculo 1, cerimônia) + teste da emissão; candidato a `PLAN-171-FOLLOWUP-cost-envelope-emit`. O
   teste novo declara isso e não afirma a emissão (para não travar o defeito como contrato).
+- **2026-10-10 (S363) — FECHAMENTO NA W0, `executing → done`**, por texto, que o Owner ratifica ao
+  ver o pacote (recomendações 1 e 2 da síntese de fechamento da S363). Isso REVERTE o «Manter como
+  está» da S353 (entrada de 2026-09-15). Razões:
+  - o consumidor que justificava o plano, o PLAN-172, foi abandonado em 2026-10-01;
+  - o PLAN-188 está congelado desde 2026-10-01;
+  - o escopo restante (W1, ADR da W1b, W1c, metade canônica da W1d, W2) não está no trem 1.4.3.
+  O entregue e o movido, cada um com evidência ou destino, estão em §Success criteria. Follow-ups
+  criados neste pacote, todos `draft` com `depends_on: [PLAN-171]`: `batch-approval`,
+  `read-provenance`, `readinjection-docstring`, `lote2-generated-figures` e `cost-envelope-emit`
+  (prefixo `PLAN-171-FOLLOWUP-`). O `5b175356` entra em `related_commits`. Adendo datado no §6 do
+  veredito consolidado da W0.

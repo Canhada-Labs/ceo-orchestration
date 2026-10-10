@@ -217,3 +217,48 @@ alguma vez exercitada.
   já publicados. Qualquer decisão de fechar, re-escopar ou continuar o
   PLAN-171 continua exigindo o processo de governança normal do
   repositório (Plan → Debate → Execute para L3+, PROTOCOL.md).
+
+## 6. Adendo datado — 2026-10-10 (S363, fechamento do PLAN-171)
+
+As seções 1 a 5 ficam como foram escritas na S348. Este adendo só
+atualiza o que mudou depois.
+
+- **A linha «sem controle» fechou.** O `5b175356` (2026-10-02) acrescentou
+  `.claude/hooks/tests/test_check_cost_envelope_block.py`, com 8 testes
+  do caminho de bloqueio do `check_cost_envelope.py`, medidos nas três
+  metades (registro de execução do plano, entrada de 2026-10-02). O
+  commit muda só 2 arquivos: esse teste e o plano. Os totais do §3
+  passam a ser:
+
+  | Métrica | S348 | 2026-10-10 |
+  |---|---|---|
+  | Gates/linhas de censo | 52 | 52 |
+  | Verde | 51 | **52** |
+  | Sem controle | 1 | **0** |
+  | Arquivos de `L` cobertos | 48 de 48 | 48 de 48 (o `L` da S348) |
+
+  O AC do §7 do plano («100 % dos hooks com {positive control OU
+  registro "sem-controle-por-design" justificado}») fecha sobre o `L`
+  censado: **52/52**.
+- **O teste novo não afirma a emissão do evento.** O mesmo trabalho achou
+  que o `cost_envelope_capped` nunca é gravado (o `action` vai duas vezes
+  ao `emit_generic`; o `TypeError` é engolido). A cura é canônica e tem
+  plano próprio: `PLAN-171-FOLLOWUP-cost-envelope-emit`.
+- **Dívida nomeada: `check_workflow_launch.py` está fora do censo.** Ele
+  entrou no `.claude/settings.json` em 2026-09-17, pelo `075beed9`
+  (PLAN-190 W1), depois desta consolidação. Hoje o roster tem 52
+  entradas de hook, 51 nomeando `*.py`, e **49** arquivos `.py`
+  distintos: os 48 de `L` mais esse. O hook tem suíte própria
+  (`.claude/hooks/tests/test_check_workflow_launch.py`), mas não foi
+  medido pelo método das três metades. O censo W0-delta fica como item
+  opcional de `PLAN-171-FOLLOWUP-lote2-generated-figures`.
+- **Os follow-ups do §4 agora têm arquivo.**
+  `PLAN-171-FOLLOWUP-lote2-generated-figures` e
+  `PLAN-171-FOLLOWUP-readinjection-docstring` existem em
+  `.claude/plans/` desde este fechamento, ao lado de `batch-approval`,
+  `read-provenance` e `cost-envelope-emit`.
+- **O §5 foi superado.** O Owner ratificou o re-escopo da S348
+  (W0 + W1 + W2) na mesma noite. Em 2026-10-10, o pacote de fechamento
+  fecha o plano na W0 e move W1 e W2 para follow-ups; o Owner ratifica
+  esse fechamento ao ver o pacote. O detalhe está no
+  `## Success criteria` do plano.
