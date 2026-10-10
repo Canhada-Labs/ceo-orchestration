@@ -1,7 +1,8 @@
 ---
 id: PLAN-181
 title: "Adoção governada do /loop do harness: piloto assistido + wrapper /loop-governed (Tier-C compliant)"
-status: reviewed
+status: abandoned
+abandoned_at: 2026-10-10
 reviewed_at: 2026-08-18
 reviewed_by: "Owner — flip draft→reviewed autorizado na S313 (2026-08-18) após debate L3 round-1 (S312, round_verdict PROCEED, 3× ADJUST/0 VETO; emendas r1-C1..C3 e demais aplicadas inline no corpo). O consensus.md condicionava o flip à revisão do Owner — cumprida. GA v1.3.0 saiu 2026-08-17; W0 (piloto) só roda em CLONE com tag falsa (emenda C3), nunca num hold real."
 created: 2026-08-16
@@ -212,3 +213,55 @@ Senão: W1 → W2 → W3. Commits `feat(PLAN-181 W<n>): ...`.
   reabertura preso a `v1.4.0-rc*` virou GENÉRICO (a tag rc mais recente do
   trem corrente, com o hold de 24 h ativo), com comando verificável no campo
   `external_wait`; o resto do campo não mudou. Nenhuma wave iniciada.
+- 2026-10-10 (S363): `status: reviewed → abandoned` (recomendação 10 da síntese
+  de fechamento de planos da S363; o Owner ratifica ao ver este pacote, porque o
+  congelamento foi decisão dele). Razões e fontes na seção abaixo. Nenhuma wave
+  iniciada.
+
+## Abandonment reason
+
+Fechamento por texto, sem código. Quatro razões, cada uma com a fonte de onde
+foi tirada. Os censos de transcript são desta máquina, em 2026-10-10, sobre os
+75 `.jsonl` de topo do diretório do projeto em `~/.claude/projects/`. O harness
+apaga transcripts mais velhos que `cleanupPeriodDays`, então o censo cobre só o
+que restou em disco.
+
+1. **O `/loop` nunca foi usado neste repositório.** O estudo de origem já
+   registrava o fato (§Origem). O censo de 2026-10-10 confirma: 0 invocações do
+   comando `/loop`, 0 chamadas da skill `loop` e 0 chamadas de `ScheduleWakeup`
+   (contagem de blocos `tool_use`, não de definições de ferramenta).
+   **Residual declarado, NÃO coberto por este abandono:** a primitiva de cron
+   que o `/loop` usa (`CronCreate`, com o mesmo kill-switch
+   `CLAUDE_CODE_DISABLE_CRON`) FOI usada diretamente pelo CEO. São 55 chamadas
+   em 15 sessões, de 2026-08-24 a 2026-10-10, como batimento e acionador de
+   retomada das noites autônomas. É a recorrência Tier-C sem envoltório que a
+   W2 queria governar. Se esse uso precisar de governança, o caminho é um plano
+   NOVO (razão 4), não a reabertura deste.
+2. **O caso de uso migrou para o `Monitor`.** A emenda r1-C3 (§W0) já tirou do
+   `/loop` o «vigia de hold» e o deu ao `Monitor`, por doutrina:
+   `docs/AUTONOMOUS-LOOP-GUIDE.md:20` (vigília de CI pós-cerimônia = Monitor) e
+   `:24` (vigília e aprovação → Monitor + PushNotification). O censo de
+   2026-10-10 conta 77 chamadas de `Monitor` em 15 transcripts de sessão, e o
+   `Monitor` aparece em 107 transcripts de subagente. A retomada depois de
+   esgotar a cota ficou com o `autoContinueAtUsageLimit` nativo
+   (`.claude/plans/PLAN-169/ac4-quota-window-S362-S363.md` §3: 6 de 9 retomadas
+   da sessão principal foram nativas).
+3. **Entrega de ~0 %.** O progress log diz «Nenhuma wave iniciada» em 2026-09-06
+   e em 2026-10-01. Em disco só existe o debate round-1
+   (`.claude/plans/PLAN-181/debate/round-1/`, 6 arquivos). Não existem
+   `PLAN-181/pilot/` (AC-W0.1), `.claude/commands/loop-governed.md` nem
+   `.claude/scripts/loop_governed.py` (W2). Dos 7 commits que citam o PLAN-181
+   (`git log --all -i --grep=PLAN-181`), 4 só tocam `.claude/plans/`; os outros
+   3 (`6a9abb10`, `1ea77774`, `5e0f3f28`) são de outros planos e citam o 181
+   de passagem (gatilho genérico da S361; o `F` refutado corrigido na W2 e no
+   §Cost).
+4. **O gatilho de reabertura está falso.** O comando do campo
+   `external_wait`, rodado em 2026-10-10, não imprime nada. A tag rc mais
+   recente é `v1.4.2-rc.1`, a GA `v1.4.2` já existe e a rc tem 984.300 s
+   (~11,4 dias). Mesmo com o gatilho verdadeiro, a W0 só caberia numa janela
+   de 24 h e num clone (emenda r1-C3). As janelas da 1.4.1 e da 1.4.2
+   (`v1.4.1-rc.1`, `v1.4.2-rc.1`) passaram sem que a W0 rodasse.
+
+O que fica: o debate round-1 e o §Cost recalculado servem de insumo a um plano
+novo, se surgir um caso real de recorrência governada. Nenhum follow-up é aberto
+por este abandono.
