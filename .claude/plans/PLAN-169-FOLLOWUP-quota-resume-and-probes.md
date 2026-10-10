@@ -1,9 +1,11 @@
 ---
 id: PLAN-169-FOLLOWUP-quota-resume-and-probes
 title: Quota-resume, probes W4.2.0 e marcador do 12º site
-status: executing
+status: done
 reviewed_at: 2026-10-01
 executing_at: 2026-10-02
+completed_at: 2026-10-10
+related_commits: [b9525e708334, ca7f6d45f650, 45c0e99e2e9f, 142f01cd7363]
 reviewed_by: "Owner - Q13 alínea (e), aceite em bloco das recomendações no chat da S361 (2026-10-01): OQ-1 e OQ-2 respondidas como no texto"
 created: 2026-09-15
 owner: CEO
@@ -122,6 +124,11 @@ exige.
 
 ## How to continue
 
+> **Plano fechado em 2026-10-10 (`done`).** AC-4 e AC-7 fechados; o AC-5 foi
+> movido (caixa do AC-5 em §Success criteria: destino provisório = AC-15 do
+> PLAN-186, pernas residuais listadas). O texto abaixo é o histórico de antes do
+> fechamento.
+>
 > Ler este arquivo e o PLAN-169 (`done`) para o contexto dos três critérios.
 > OQ-1 e OQ-2 estão respondidas (acima). Dois próximos passos: escrever o teste do
 > controle vermelho do AC-7 (livre) e registrar a janela do AC-4 durante o trabalho
@@ -134,8 +141,40 @@ exige.
 
 ## Success criteria
 
-- [ ] AC-4 fechado com evidência ou impossibilidade registrada de forma falsificável
-- [ ] AC-5 fechado com controle positivo e negativo
+- [x] AC-4 fechado com o desfecho **(a) para a sessão principal, com 2 limites
+      declarados**, que é o resultado do registro falsificável
+      `.claude/plans/PLAN-169/ac4-quota-window-S362-S363.md` (§3 e §6; commits
+      `45c0e99e` e `142f01cd`). O registro propôs; a decisão do Owner é a ratificação
+      deste pacote (S363, recomendação 4 da síntese de fechamento).
+      - Evidência: 9 esgotamentos em 3 sessões (CC 2.1.287 e 2.1.295); o nativo
+        retomou a sessão principal em 6 das 9 (7 eventos, 49–98 s depois do minuto
+        anunciado, cada um com `prompt_submitted` no mesmo segundo), sempre antes do
+        cron do CEO quando havia um. E3, E8 e E9 não testam o nativo (o Owner agiu
+        antes do reset).
+      - Limite 1: subagentes não retomam nativamente (0 de 31; 28 voltaram por
+        `SendMessage` do CEO, 3 não voltaram).
+      - Limite 2: a retomada nativa pode cair num teto de gasto ainda ativo (E4).
+      - Não medido: turnos perdidos na principal (o registro conta linhas
+        `rate_limit`, não turnos).
+      - Pelo próprio texto do desfecho (a), os outros itens do AC-4 (kill-switches
+        `CEO_QUOTA_RESUME=0`/`CEO_SOTA_DISABLE=1`, gate de postura, doc,
+        `env-inventory.json`) ficam sem objeto: o mecanismo próprio não é construído.
+      Check: `test -f .claude/plans/PLAN-169/ac4-quota-window-S362-S363.md && grep -c '^| E[1-9] | S36[1-3] /' .claude/plans/PLAN-169/ac4-quota-window-S362-S363.md` (espera 9: as linhas da tabela de ocorrências do §2)
+- [>] AC-5 **MOVIDO, não executado.** Destino pedido pela síntese: o follow-up do
+      PLAN-186 que levar o matcher do `SendMessage`. **Esse follow-up NÃO existe**
+      (2026-10-10: os três `PLAN-186-FOLLOWUP-*.md` em disco são `census-runtime`,
+      `hint-discovery-walk-from-root` e `sentinel-gpg-verification`, e nenhum cita
+      `SendMessage`). Até ele existir, o dono do matcher é o AC-15 do próprio
+      PLAN-186 (`.claude/plans/PLAN-186-orchestrator-operating-model.md:201`,
+      viaja na cerimônia da W1 daquele plano). O AC-15 cobre só a perna 1 do AC-5
+      (o bloqueio via `SendMessage`) e a doutrina da OQ-5. **Pernas que viajam junto
+      e ainda não estão escritas em nenhum destino:** o controle `refuse` × `accept`
+      (nenhum turno nasce com `refuse`), a doutrina em ADR sobre a visibilidade de
+      tentativas recusadas, e as sondas W4.2.0 (b)–(f). A (a) tem resposta parcial
+      no registro do AC-4 (§4: 0 de 140 turnos de colega com `prompt_submitted`,
+      só colegas em processo). Destino definitivo: PENDENTE da re-escopagem do
+      PLAN-186.
+      Check: none (doc-only; movido)
 - [x] AC-7 fechado com as duas evidências: perna verde = os bumps reais 1.4.1/1.4.2
       (OQ-1); perna vermelha persistida em
       `.claude/scripts/tests/test_verify_counts_framework_marker.py` (S361, 2026-10-02:
@@ -176,3 +215,14 @@ exige.
     declarados (subagentes não retomam nativamente; retomada nativa pode
     cair num teto de gasto ainda ativo) — decisão do Owner pendente. As
     caixas do AC-4 seguem sem marcar e o `status` não muda.
+- 2026-10-10 (S363): fechamento por texto, `status: executing → done`, que o
+  Owner ratifica ao ver o pacote (recomendações 4 e 5 da síntese de fechamento).
+  - **AC-4:** marcado com o desfecho (a) do registro, com os 2 limites declarados.
+  - **AC-5:** movido. O follow-up do PLAN-186 que levaria o matcher do
+    `SendMessage` não existe; o dono provisório é o AC-15 do PLAN-186, e as
+    pernas que o AC-15 não cobre estão listadas na caixa do AC-5.
+  - **AC-7:** já fechado em 2026-10-02 (`ca7f6d45`).
+  - **Achado lateral do AC-7** (o `verify-counts.sh` fica verde com o
+    `.claude/.framework-version` ausente): não é critério deste plano e segue
+    sem plano dono no disco. A recomendação 6 da síntese o leva à 1.4.4 como
+    item nomeado; o registro desse item fica fora deste pacote.
