@@ -12,7 +12,8 @@ two-writer chain gap, T0-line-168 transition_violation):
 
 PLAN-194 (S361) cures the CONCURRENT case (rc.1 condition 67): key, read, HMAC,
 append and sidecar share ONE FileLock after the rotation (+ marker). Pinned by: AST
-census, read-to-append window, lock timeout, rotation, N processes on a barrier.
+census, read-to-append window, lock timeout, rotation, N processes on a barrier whose
+writer kinds interleave by a landed-line gate (S363: never by the OS scheduler).
 """
 
 from __future__ import annotations
@@ -24,7 +25,6 @@ import multiprocessing
 import os
 import random
 import sys
-import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -40,8 +40,19 @@ if str(_HOOKS) not in sys.path:
 from _lib.testing import TestEnvContext  # noqa: E402
 
 
-def _race_writer(kind, worker_id, iterations, expected_log, barrier):
-    """Child (spawn): one writer kind; exit 3 unless the log is the sandbox's."""
+def _landed(log_path: str, sid: str) -> bool:
+    """True once a line of `sid` is in the log (read-only, lock-free: the log is append-only)."""
+    try:
+        with open(log_path, "rb") as f:
+            return ('"%s"' % sid).encode() in f.read()
+    except OSError:
+        return False
+
+
+def _race_writer(kind, worker_id, iterations, expected_log, barrier, landed, delay):
+    """Child (spawn): one writer kind; exit 3 unless the log is the sandbox's. Interleave gate: once
+    its own line is IN the log (spool: after the drain), a writer flags its kind and waits for the
+    other kind's flag before writing on (exit 4 at 60 s) => the first kind comes back (A->B->A)."""
     if os.environ.get("CEO_AUDIT_LOG_PATH") != expected_log:
         sys.exit(3)
     import audit_log
@@ -49,8 +60,9 @@ def _race_writer(kind, worker_id, iterations, expected_log, barrier):
     paths = audit_log.audit_paths()
     if str(paths["log"]) != expected_log or str(audit_emit._log_path()) != expected_log:
         sys.exit(3)
-    rng = random.Random(worker_id)
+    rng, sid, gated = random.Random(worker_id), "race-%s-%d" % (kind, worker_id), False
     barrier.wait(60)  # every writer + the parent released at once
+    time.sleep(delay)  # starvation control: this kind's first write comes late
     for i in range(iterations):
         if kind == "spawn":
             audit_log.append_entry({"action": "agent_spawn", "session_id": "race-spawn-%d" % worker_id},
@@ -61,6 +73,11 @@ def _race_writer(kind, worker_id, iterations, expected_log, barrier):
         if kind == "emit" and i % 3 == 2 and os.environ.get("CEO_AUDIT_SYNC_MODE", "") != "1":
             from _lib import spool_writer  # spool: forced drain, like a hook process at exit
             spool_writer.drain_now(force=True)
+        if not gated and _landed(expected_log, sid):  # a drop / fallback line does not count
+            gated = True
+            landed[kind].set()
+            if not landed["emit" if kind == "spawn" else "spawn"].wait(60):
+                sys.exit(4)  # the other kind never landed a line: named failure, never vacuous
         time.sleep(rng.uniform(0.0, 0.004))
 
 
@@ -432,11 +449,12 @@ class TestRotationByThisWriter(_ChainCase):
 @unittest.skipUnless(os.name == "posix", "POSIX only (fcntl.flock)")
 class TestParallelWritersChain(_ChainCase):
     """agent_spawn vs audit_emit writers (sync; spool + drains) on one log + lock. A lock-timeout
-    drop (fail-open) is ACCOUNTED, never taken for the race; both kinds must interleave."""
+    drop (fail-open) is ACCOUNTED, never taken for the race; both kinds must interleave, by the
+    landed-line gate in _race_writer, not by the OS scheduler (the starved cases pin that)."""
 
-    SPAWNS, EMITS, ITERATIONS = 4, 2, 12
+    SPAWNS, EMITS, ITERATIONS, STARVE_S = 4, 2, 12, 1.5
 
-    def _race(self, sync_mode: bool) -> None:
+    def _race(self, sync_mode: bool, starve: str = "") -> None:
         ctx = multiprocessing.get_context("spawn")
         paths = self._paths()
         log, fallback = paths["log"], self._tmp_root / "fallback.log"
@@ -446,9 +464,11 @@ class TestParallelWritersChain(_ChainCase):
             if not sync_mode:
                 os.environ.pop("CEO_AUDIT_SYNC_MODE", None)
             barrier = ctx.Barrier(self.SPAWNS + self.EMITS + 1)
+            landed = {"spawn": ctx.Event(), "emit": ctx.Event()}
             kinds = ["spawn"] * self.SPAWNS + ["emit"] * self.EMITS
             procs = [ctx.Process(target=_race_writer,
-                                 args=(k, w, self.ITERATIONS, str(log), barrier))
+                                 args=(k, w, self.ITERATIONS, str(log), barrier, landed,
+                                       self.STARVE_S if k == starve else 0.0))
                      for w, k in enumerate(kinds)]
             for p in procs:
                 p.start()
@@ -457,7 +477,8 @@ class TestParallelWritersChain(_ChainCase):
                 [p.join(180) for p in procs]
             finally:
                 [p.terminate() for p in procs if p.is_alive()]
-            self.assertEqual([p.exitcode for p in procs], [0] * len(procs))
+            self.assertEqual([p.exitcode for p in procs], [0] * len(procs),
+                             msg="3 = not the sandbox log; 4 = the other kind never landed a line")
             if not sync_mode:
                 from _lib import spool_writer
                 spool_writer.drain_now(force=True)
@@ -479,6 +500,12 @@ class TestParallelWritersChain(_ChainCase):
 
     def test_parallel_spawn_and_spool_emit_writers_keep_the_chain(self) -> None:
         self._race(sync_mode=False)
+
+    def test_starved_sync_emit_writers_still_interleave(self) -> None:
+        self._race(sync_mode=True, starve="emit")  # without the gate: two blocks, 1 switch
+
+    def test_starved_spawn_writers_still_interleave_with_spool_emit(self) -> None:
+        self._race(sync_mode=False, starve="spawn")
 
 
 if __name__ == "__main__":  # pragma: no cover
