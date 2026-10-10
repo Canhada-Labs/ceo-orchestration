@@ -46,13 +46,19 @@ _PY_HOOK_DIRECT_RE = re.compile(r"(\.claude/hooks/[A-Za-z0-9_./-]+\.py)")
 _PY_HOOK_VIA_SHIM_RE = re.compile(r"_python-hook\.sh[\"']?\s+([A-Za-z0-9_/-]+\.py)")
 
 
+def _refuse_constant(name: str):
+    """parse_constant: NaN/Infinity are not JSON (JSON.parse rejects them), so a
+    settings file carrying them is malformed — exit 2, never read as valid."""
+    raise ValueError(f"non-standard JSON constant {name}")
+
+
 def _iter_hook_paths(settings_path: Path) -> Iterable[str]:
     if not settings_path.is_file():
         return
     try:
-        data = json.loads(settings_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"::error::cannot parse {settings_path}: {exc}", file=sys.stderr)
+        data = json.loads(settings_path.read_text(encoding="utf-8"), parse_constant=_refuse_constant)
+    except (OSError, ValueError, RecursionError) as exc:  # ValueError: + UnicodeDecodeError
+        print(f"::error::cannot parse {settings_path}: {type(exc).__name__}: {exc}", file=sys.stderr)
         sys.exit(2)
     hooks = data.get("hooks", {})
     if not isinstance(hooks, dict):

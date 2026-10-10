@@ -74,6 +74,26 @@ class CheckActiveHooksExecutableTest(TestEnvContext):
             )
             self.assertIn("MISSING", result.stdout)
 
+    def test_non_json_constants_are_malformed_exit_2(self) -> None:
+        """NaN/Infinity/-Infinity are not JSON: the settings file is malformed
+        (exit 2, named), never enumerated as valid (rail r3 of PLAN-183 W7a —
+        the harness-config gate delegates to this script)."""
+        import shutil
+        for const in ("NaN", "Infinity", "-Infinity"):
+            with TemporaryDirectory() as td:
+                tdp = Path(td)
+                (tdp / ".claude" / "scripts").mkdir(parents=True)
+                (tdp / ".claude" / "settings.json").write_text(
+                    '{"rail_probe": %s, "hooks": {}}' % const, encoding="utf-8")
+                copy_path = tdp / ".claude" / "scripts" / "check-active-hooks-executable.py"
+                shutil.copy2(SCRIPT, copy_path)
+                result = subprocess.run(
+                    [sys.executable, str(copy_path)],
+                    cwd=str(tdp), capture_output=True, text=True, check=False, timeout=10,
+                )
+                self.assertEqual(result.returncode, 2, msg=f"{const}: {result.stdout!r} {result.stderr!r}")
+                self.assertIn(f"non-standard JSON constant {const}", result.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
