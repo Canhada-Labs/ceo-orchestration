@@ -1,12 +1,13 @@
 ---
 id: PLAN-190
 title: Execução autônoma utilizável nos consumidores — preservar trabalho pago, recuperar progresso, aprovar por código
-status: executing
+status: done
 created: 2026-09-17
 owner: CEO
 reviewed_at: 2026-09-17
 reviewed_by: "Owner (assinatura GPG do sentinel da W1, chave AE9B236F)"
-related_commits: [075beed9d5f3e729b3abd5b7a7140dc16e214249, 6fec455b39df, 478703208efe, 3ff00dfdd156]
+completed_at: 2026-10-10
+related_commits: [075beed9d5f3e729b3abd5b7a7140dc16e214249, 6fec455b39df, 478703208efe, 3ff00dfdd156, 7bbf24705300, a12a32aee2ad]
 depends_on: []
 level: L3
 budget_tokens: "W0 feito (S354, ~0 pago: instrumentos stdlib); W1 150-300k + debate r1; W2 200-400k; W3 150-250k; W4 100-200k; W5 100-200k; W6 e2e no smoke (CI). Teto do plano: 1,5 M de agente + cerimônias."
@@ -134,6 +135,12 @@ sentinel restaurado, nenhuma assinatura pela metade; removidas as travas órfãs
 passou. Duas instabilidades apareceram sob execução paralela e passaram na nova tentativa isolada que a
 bateria faz (o mecanismo funcionou em campo). Push e adoção nos consumidores seguem como decisão do
 Owner. Segue a **W1.1** (`PLAN-190-FOLLOWUP-relaunch-out-partial-write`).
+**Atualização (2026-10-10, fechamento):** a W1.1 LANDOU em dois commits livres — `47870320`
+(2026-09-18: `relaunch --out` entrega o arquivo inteiro ou nenhum) e `7bbf2470` (2026-09-28: publica
+a cópia inteira ou nenhuma, opção B ratificada pelo Owner). O arquivo do follow-up segue `status: draft`
+no disco; o ajuste do ciclo de vida dele fica fora deste pacote. O guard da W1 recebeu depois a cura do
+FN-04 por cerimônia do PLAN-193 (`a12a32ae`, 2026-09-28: o PreToolUse do `Workflow` não grava bytes de
+`scriptPath`). A adoção nos consumidores foi para `PLAN-190-FOLLOWUP-consumer-adoption-metrics`.
 Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_workflow_launch.py` (C),
 `.claude/settings.json` (C, matcher `Workflow` em PreToolUse e PostToolUse), `templates/settings/settings.base.json`
 (C, mesma registração — o `user` deriva por subtração), `.claude/scripts/ceo-launches.py` (livre),
@@ -197,6 +204,10 @@ Paths (≤ 8): `.claude/hooks/_lib/launch_ledger.py` (C), `.claude/hooks/check_w
 recusado, steal só quando vencido, retomada pula passos só na mesma revisão). Faltam o hook
 `check_writer_lock.py` + `_lib/writer_lock.py` (cerimônia, measure-first) e a adoção nos prompts de
 fase do consumidor.
+**Atualização (2026-10-10, fechamento):** o hook de trava de escritor e o `_lib/writer_lock.py`
+passaram ao PLAN-194 (`PLAN-194-maintenance-train-v1-4-3.md:2008-2012`: dono = aquele plano, na fila
+depois do núcleo da 1.4.3, measure-first). A especificação abaixo continua valendo como fonte daquele
+item. A adoção nos prompts de fase do consumidor foi para `PLAN-190-FOLLOWUP-consumer-adoption-metrics`.
 - `.claude/scripts/mutant_sandbox.py` (livre): `run --rev <sha> --repo <path> --mutant <patch> --cmd "<teste>"
   --ledger <jsonl>`: cria cópia DESCARTÁVEL da revisão identificada (`git worktree add --detach` em
   scratch, ou `git archive` quando não houver git), aplica o mutante, roda o comando, registra
@@ -239,6 +250,13 @@ repo público.
   tipado) devolver `APPROVED`. Fixtures neutras (`tests/fixtures/approval/*.json`).
 
 ### W4 — Quota e admissão por fase  [P1]  (livre; enforce só após medir)
+**Estado (2026-10-10, fechamento):** a W4.1 (persistência) está atendida pelo sidecar que já existia
+antes deste plano: `.claude/scripts/statusline-ceo.py` grava `<audit-dir>/state/statusline-snapshot.json`
+(schema `statusline-sidecar/v1`, PLAN-135 W5), com `captured_at` e os buckets `five_hour`/`seven_day`
+(`used_pct`, `resets_at`), por escrita atômica. Não existe `quota-state.json`. A regra «idade > N min ⇒
+desconhecido» é do CONSUMIDOR do snapshot, que seria a W4.2. A W4.2 (`.claude/scripts/quota_watch.py`)
+NÃO existe e, junto com a W4.3 (enforce no hook de lançamento), foi para
+`PLAN-190-FOLLOWUP-consumer-adoption-metrics`.
 - `statusline-ceo.py` (livre) persiste `rate_limits` em `<state-dir>/quota-state.json` (instante,
   `five_hour`, `seven_day`); ausência ou idade > N min ⇒ **desconhecido**, nunca «saldo livre».
 - `.claude/scripts/quota_watch.py` (livre, determinístico, sem LLM): lê o snapshot; classifica o último
@@ -250,6 +268,9 @@ repo público.
 - Enforce no hook de lançamento (W1) só depois de janela advisory com tabela would-block.
 
 ### W5 — Integração determinística e contexto por fase  [P1]
+**Estado (2026-10-10, fechamento):** nada da W5 foi entregue. O `.claude/scripts/repin.py` (W5.1)
+NÃO existe. W5.1, W5.2 (contexto por fase) e W5.3 (effort por fase) foram para
+`PLAN-190-FOLLOWUP-consumer-adoption-metrics`.
 - `.claude/scripts/repin.py` (livre): manifesto TSV `arquivo \t marcador \t comando-de-medida`; re-mede
   na revisão de integração, reescreve o valor EXATO, re-roda a verificação; conflito semântico ⇒ sai
   com lista para análise (nunca soma delta). Mesmo padrão do `verify-counts.sh` do framework.
@@ -261,6 +282,10 @@ repo público.
 - Effort por fase avaliado com qualidade medida; modelos do perímetro financeiro NÃO descem (R1).
 
 ### W6 — Distribuição e validação e2e  [P0, acoplada a cada wave]
+**Estado (2026-10-10, fechamento):** as pernas do smoke-install NÃO existem. O
+`scripts/tests/smoke-install.sh` não cita `check_workflow_launch`, `ceo-launches` nem as CLIs da W2/W3,
+e o `docs/workflow-recovery.md:232-233` declara a precondição de distribuição «not yet exercised by
+the smoke-install». A W6 foi para `PLAN-190-FOLLOWUP-consumer-adoption-metrics`.
 - `smoke-install.sh` em consumidor isolado: presença dos scripts/hook, registração por cerimônia,
   `ceo-launches.py check` funcional, `upgrade.sh --dry-run` NO-OP em segunda passada.
 - Bateria pedida pela ordem: interrupção e retomada sem repetir etapas válidas (W2 checkpoint + W1
@@ -305,6 +330,11 @@ repo público.
   sessão sem substituto.
 
 ## How to continue
+**Plano fechado em 2026-10-10 (`done`).** Continuar pelo `PLAN-190-FOLLOWUP-consumer-adoption-metrics`
+(adoção, métricas, W4.2/W4.3, W5, W6), pelo `PLAN-190-FOLLOWUP-audit-actions` (eventos de auditoria do
+guard) e pelo PLAN-194 (hook de trava de escritor). Os passos abaixo são o histórico de antes do
+fechamento.
+
 1. Debate r1 (`/debate start PLAN-190 "W1 ledger de lançamento + guard de retomada"`) — L3.
 2. W1 em sombra (worktree descartável): lib + hook + CLI + testes verdes; pacote de cerimônia no molde
    S332/S336 (SIGN/LAND com V-block); rail codex sobre os bytes canônicos; assinatura do Owner.
@@ -315,14 +345,30 @@ repo público.
 ## Success criteria
 - [x] W1 LANDADA (`075beed9`): 100 % dos lançamentos de Workflow com manifesto ANTES do despacho; retomada sobre hash/args
   diferentes bloqueada com chaves nomeadas; `relaunch` reproduz a chamada exata; testes verdes.
-- [ ] W2: zero mutante na árvore de implementação após N interrupções (teste); zero segundo escritor
+- [x] W2: zero mutante na árvore de implementação após N interrupções (teste); zero segundo escritor
   (teste); fase interrompida retoma pulando passos registrados (teste).
-- [ ] W3: aprovação computada por código em 100 % dos casos de fixture; incompleto/ambíguo ⇒ REJECTED.
-- [ ] W4: `quota_watch` distingue reset de teto de gasto nos 4 tipos vistos; desconhecido nunca vira
-  «livre».
-- [ ] W6: smoke-install verde; consumidor isolado recebe hook + scripts pelo `upgrade.sh`.
-- [ ] Métricas no consumidor após adoção (2 semanas): fases perdidas < 2 % dos starts; reexecução de
-  chave concluída = 0; tokens por entrega aprovada REPORTADOS por sessão.
+  Evidência: `6fec455b`, `tests/unit/test_w2_recovery_tools.py` (10 testes; 10 passed em 2026-10-10):
+  `test_interrupted_run_leaves_no_sandbox_and_no_mutation`, `test_second_writer_is_refused_and_same_owner_refreshes`
+  e `test_resume_skips_recorded_steps_at_same_rev_only`. O «zero segundo escritor» está provado na CLI
+  `worktree_lock.py`. O hook que o imporia em Edit/Write passou ao PLAN-194 (`:2008-2012`).
+  Check: `python3 -m pytest -q tests/unit/test_w2_recovery_tools.py`
+- [x] W3: aprovação computada por código em 100 % dos casos de fixture; incompleto/ambíguo ⇒ REJECTED.
+  Evidência: `6fec455b`, `tests/unit/test_approval_gate.py` (20 testes, entre eles
+  `test_score_as_prose_is_ambiguous_and_rejected`, `test_missing_findings_key_is_rejected_not_treated_as_none`
+  e `test_review_of_older_revision_is_rejected`) e `tests/unit/test_test_refs.py` (9 testes); 29
+  passed em 2026-10-10. A adoção do bloco COMMON no script do consumidor foi para o follow-up.
+  Check: `python3 -m pytest -q tests/unit/test_approval_gate.py tests/unit/test_test_refs.py`
+- [>] W4: `quota_watch` distingue reset de teto de gasto nos 4 tipos vistos; desconhecido nunca vira
+  «livre». **MOVIDO, não entregue:** o `quota_watch.py` não existe. W4.2 e W4.3 (modo bloqueante) estão
+  em `PLAN-190-FOLLOWUP-consumer-adoption-metrics`. A W4.1 está atendida pelo `statusline-snapshot.json`
+  (nota na W4).
+- [>] W6: smoke-install verde; consumidor isolado recebe hook + scripts pelo `upgrade.sh`.
+  **MOVIDO, não entregue:** nenhuma perna no smoke-install (nota na W6). Está em
+  `PLAN-190-FOLLOWUP-consumer-adoption-metrics`.
+- [>] Métricas no consumidor após adoção (2 semanas): fases perdidas < 2 % dos starts; reexecução de
+  chave concluída = 0; tokens por entrega aprovada REPORTADOS por sessão. **MOVIDO, não medido:** a
+  adoção no consumidor não aconteceu neste repositório. Está em
+  `PLAN-190-FOLLOWUP-consumer-adoption-metrics`.
 
 ## Regra de parada (pré-registrada)
 - Se o guard de W1 produzir bloqueio falso em > 5 % dos lançamentos na janela advisory ⇒ não flipar
@@ -330,3 +376,21 @@ repo público.
 - Se o lock de W2 bloquear o próprio dono (identidade instável entre eventos) ⇒ recuar para advisory e
   abrir follow-up de identidade; nunca desligar o registro.
 - Qualquer wave que exija tocar código financeiro do consumidor ⇒ fora do plano.
+
+## Progress log
+- 2026-10-10 (S363): fechamento por texto, `status: executing → done`, que o Owner ratifica ao ver o
+  pacote (recomendações 7 e 8 da síntese de fechamento da S363).
+  - **Entregue e marcado:** W1 (`075beed9`) e W1.1 (`47870320`, `7bbf2470`); W2 em CLIs (`6fec455b`);
+    W3 (`6fec455b`). A W0.2 também está entregue no formato pedido: a seção «Measuring "quota per
+    approved delivery"» do `docs/workflow-recovery.md` e o `ceo-launches.py report`, ambos em
+    `075beed9`.
+  - **Movido para o PLAN-194:** o hook de trava de escritor (`:2008-2012`).
+  - **Movido para `PLAN-190-FOLLOWUP-consumer-adoption-metrics`:** adoção no consumidor, métricas da
+    janela de 2 semanas, W4.2 (`quota_watch.py`), W4.3 em modo bloqueante, W5.1 (`repin.py`), W5.2/W5.3 e as
+    pernas da W6. O `quota_watch.py` e o `repin.py` não existem e não foram marcados.
+  - **Segue no follow-up já existente:** os eventos de auditoria do guard
+    (`PLAN-190-FOLLOWUP-audit-actions`, `draft`).
+  - **Resíduo declarado (recomendação 8):** os campos «versão da CLI» e «perfil de cerimônia» que a W1
+    previa no manifesto. Não estão no manifesto e não vão para follow-up.
+  - `related_commits` ganha `7bbf2470` (W1.1) e `a12a32ae` (cura FN-04 do guard da W1, cerimônia do
+    PLAN-193).
