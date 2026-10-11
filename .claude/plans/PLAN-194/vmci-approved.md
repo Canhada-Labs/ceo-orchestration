@@ -23,9 +23,9 @@ File-sha256: .github/workflows/coverage.yml bfb751b9d17c9daf087044261438112bd0fb
 Record: .claude/plans/PLAN-194/vmci/vmci.patch
 Record-sha256: e6f5d1f9ecd7586567212d110f200bd4310bcc147f8dfdb7848a8b141f10a37a
 Review: .claude/plans/PLAN-194/vmci/REVIEW-pr2.md
-Review-sha256: bcd504adf053986a6e2bf88cae4cbe551a467dcb76313b4016cdcd0dc119f137
+Review-sha256: fa6070077788a743d4e627456de9383ce1fe86f240246b5b4ef4f263d406991c
 Control: .claude/plans/PLAN-194/vmci/red-control.txt
-Control-sha256: 4f6f571145cb7c50634b022ee94d09506b3eef0c7c1a1cce1bfa6647af7c4357
+Control-sha256: 575cf8d6437ad5e9bbb6accba6e11009c7ae9d49470338122760ad24a7c46bf8
 Data: a da assinatura, registrada na `.asc`
 
 ## O que esta assinatura ratifica, e nada além
@@ -34,7 +34,8 @@ Data: a da assinatura, registrada na `.asc`
   (96.546 bytes, blob `a1b8d1124bd6…`) e `.github/workflows/coverage.yml` (13.925 bytes, blob
   `4e4919be8063…`). Os 2 são canônicos (oráculo `--is-canonical` = 1, medido). Os mesmos bytes estão em
   `e0c5ffc23dc2` e em `d8d13aafe348`, o `main` às 02:28Z de 2026-10-11 (os 9 commits entre o Anchor e ele
-  não tocam `.github/`, medido).
+  não tocam `.github/`, medido); foram os que rodaram na 4.ª corrida na VM (push `d8d13aaf`, run
+  `38104634181`, 9 de 9 jobs verdes na tentativa 1).
 - O que esses bytes fazem: os 8 jobs dos 2 arquivos (`validate`, `integration-tests`,
   `formal-verification-mutation-harness`, `opus-4-7-profiler-smoke`, `hook-tests-dual-rail`,
   `hook-tests-python-matrix`, `hook-stdout-schema-oracle` e `coverage`) têm `runs-on` por expressão:
@@ -79,12 +80,15 @@ Data: a da assinatura, registrada na `.asc`
 
 ## Resíduos declarados (pela forma)
 
-- As tentativas 1 das 3 corridas medidas na VM falharam, por causas de natureza diferente: na 1.ª, por
-  AMBIENTE — `/tmp` dividido entre runners (um teste que lista o `/tmp` inteiro viu a sobra de outro job);
-  na 2.ª, a perna 3.9 por AMBIENTE — subprocessos de ambiente enxuto que, com o Python do tool cache de um
-  runner novo, não acham a `libpython3.9.so.1.0` (comprovado pela mensagem); na 2.ª e na 3.ª, 4 testes da
-  perna 3.12 com subprocesso morto por sinal 11, de causa NÃO diagnosticada. As tentativas 2 da 1.ª e da
-  2.ª corridas ficaram verdes (na 2.ª, a 3.12 passou no mesmo runner onde falhara). Com a variável ligada,
+- Das 4 corridas medidas na VM, as tentativas 1 das 3 primeiras falharam, por causas de natureza
+  diferente: na 1.ª, por AMBIENTE — `/tmp` dividido entre runners (um teste que lista o `/tmp` inteiro viu a
+  sobra de outro job); na 2.ª, a perna 3.9 por AMBIENTE — subprocessos de ambiente enxuto que, com o
+  Python do tool cache de um runner novo, não acham a `libpython3.9.so.1.0` (comprovado pela mensagem); na
+  2.ª e na 3.ª, 4 testes da perna 3.12 com subprocesso morto por sinal 11, de causa NÃO diagnosticada. A
+  4.ª corrida (push `d8d13aaf`) ficou verde na tentativa 1, com a 3.9 verde no mesmo runner onde caíra por
+  `libpython` — essa classe também não é fixa de um runner (ou foi curada na VM no intervalo; não se sabe
+  qual). As tentativas 2 da 1.ª e da 2.ª corridas ficaram verdes (na 2.ª, a 3.12 passou no mesmo runner
+  onde falhara); a tentativa 3 da 2.ª caiu em outro teste da 3.12 (`shutil.Error`, não diagnosticado). Com a variável ligada,
   todo `push`/`schedule` do `main` roda na VM com essas classes abertas; as curas de infraestrutura
   diagnosticadas (`TMPDIR` por runner ou ambiente descartável por job; tool cache no caminho de build, por
   runner isolado) ficam com o Owner, e os caminhos fixos em `/tmp` do próprio `validate.yml` são canônicos
@@ -115,13 +119,14 @@ Data: a da assinatura, registrada na `.asc`
 ## Revisão
 
 - `REVIEW-pr2.md` (sha256 no cabeçalho): revisão medida — tabela-verdade avaliada, dependências por job,
-  gates sensíveis ao runner, as 3 corridas na VM (e as tentativas 2) contra o hospedado, fila com 2 e com
+  gates sensíveis ao runner, as 4 corridas na VM (e as tentativas seguintes) contra o hospedado, fila com 2 e com
   4 runners, a fotografia do grupo de runners com horário, o risco do
   recuo no `ubuntu-latest`, segurança de repositório público, runner persistente, condições para manter a
   variável ligada.
 - `red-control.txt` (sha256 no cabeçalho): os controles R0–R7 com o resultado medido.
-- Nenhuma rodada de rail (Codex e refutadores Claude) revisou este texto, o registro ou a revisão até a
-  data do commit que os traz.
+- Rodada 1 do rail sobre `3fbd13c6` (Codex NO-GO; refutador Claude GO-WITH-CONDITIONS); rodada 2 sobre
+  `a6f11663` (Codex e refutador Claude GO-WITH-CONDITIONS); curas nesta versão. As rodadas seguintes
+  revisam ESTES bytes, e os registros delas vivem fora deste arquivo.
 
 ## Scope
 

@@ -1,7 +1,7 @@
 # REVIEW dos PRs #2 e #3 — `runs-on` condicional para os runners da VM (PLAN-194, ratificação VM-CI)
 
 > Revisão técnica MEDIDA, não opinião, dos bytes que os merges dos PRs #2 e #3 puseram nos 2 workflows.
-> Medições de 2026-10-11, de ~00:25Z a ~02:25Z (UTC).
+> Medições de 2026-10-11, de ~00:25Z a ~02:45Z (UTC).
 > Sujeito: `.github/workflows/validate.yml` e `.github/workflows/coverage.yml` em
 > `e21196817b299fe0557ae9c8dcf9e73b9dd4c10c` (merge do PR #3; antes dele, o merge do PR #2 `d7309efae537`;
 > pai de ambos na primeira linha, `bc803a7ac0a0`). Durante a escrita o `main` foi a `e0c5ffc23dc2` (6
@@ -57,7 +57,15 @@
   corrida).
 - 3.ª corrida na VM — Validate do push `e0c5ffc2` (run `38103716736`), 4 runners: `failure` às 02:06:35Z,
   só a matriz 3.12, agora no runner 04, com os MESMOS 4 testes mortos por sinal 11 da 2.ª corrida; a 3.9,
-  de volta ao runner 01, passou (§4.6). Sem tentativa 2 até 02:22Z.
+  de volta ao runner 01, passou (§4.6). Sem tentativa 2 até 02:44Z.
+- 4.ª corrida na VM — Validate do push `d8d13aaf` (run `38104634181`), 4 runners: `success` na tentativa 1
+  (02:16:49Z → 02:25:15Z, parede 506 s), 9 de 9 jobs verdes; a 3.9 verde no runner 04 (onde caíra por
+  `libpython` na 2.ª corrida) e a 3.12 verde no runner 02.
+- Depois, no run `38102851467` (push `e2119681`), também pedidas pela conta do Owner e não por esta
+  revisão: tentativa 3 (02:29:08Z → 02:40:15Z) `failure`, com 1 teste vermelho na 3.12 no runner 01 —
+  outra falha, de outra natureza: `test_census_runtime.py::RailRound5CuresTest::test_r5_p2_every_option_declaration_before_the_case_is_replayed`,
+  `shutil.Error` ao copiar um `.pyc` temporário de `__pycache__` que sumiu durante a cópia (causa NÃO
+  diagnosticada, não atribuída à VM); a 3.9 passou no runner 02. Tentativa 4 em andamento às 02:44Z.
 - O grupo `vm-trusted-ci` (API `orgs/…/actions/runner-groups/4`, `/repositories`, `/runners`), às 02:22Z:
   4 runners online; 4 repositórios, este (público) e 3 privados; 5 workflows permitidos, os 2 deste em
   `@refs/heads/main` e 3 privados (`ci.yml`, `tests.yml`, `ci.yml`, cada um de um repositório, em
@@ -287,16 +295,17 @@ diferente:
   `LD_LIBRARY_PATH` do job; um subprocesso de ambiente enxuto não a acha — é o que a mensagem da 3.9
   mostra. A 3.9 passou no runner 01, também com tool cache próprio, nas 3 vezes em que rodou lá — por que
   lá a `libpython` foi achada NÃO foi medido.
-- O que as amostras dizem (todas as execuções das 2 pernas na VM):
+- O que as amostras dizem (todas as execuções concluídas das 2 pernas na VM até 02:44Z):
 
 | perna | runner 01 | runner 02 | runner 03 | runner 04 |
 |---|---|---|---|---|
-| 3.9 | verde ×3 (1.ª t1, 2.ª t2, 3.ª) | — | — | vermelho ×1 (2.ª t1, `libpython`) |
-| 3.12 | — | verde ×1 (1.ª t1) | vermelho ×1 (2.ª t1, sinal 11), verde ×1 (2.ª t2) | vermelho ×1 (3.ª, sinal 11) |
+| 3.9 | verde ×3 (1.ª t1, 2.ª t2, 3.ª) | verde ×1 (2.ª t3) | — | vermelho ×1 (2.ª t1, `libpython`), verde ×1 (4.ª) |
+| 3.12 | vermelho ×1 (2.ª t3, outro teste: `shutil.Error`) | verde ×2 (1.ª t1, 4.ª) | vermelho ×1 (2.ª t1, sinal 11), verde ×1 (2.ª t2) | vermelho ×1 (3.ª, sinal 11) |
 
-  A 3.12 é INTERMITENTE no mesmo runner (03); com 1 execução da 3.9 no runner 04, não se distingue
-  diferença entre runners de intermitência. Nenhuma conclusão sobre homogeneidade dos runners se apoia
-  nestas amostras.
+  A 3.12 é INTERMITENTE no mesmo runner (03). A 3.9 caiu por `libpython` no runner 04 e passou no MESMO
+  runner 04 na 4.ª corrida: o `libpython` também não é fixo de um runner — ou é intermitente, ou foi curado
+  na VM entre 01:50Z e 02:18Z; não se sabe qual. Nenhuma conclusão sobre homogeneidade dos runners se
+  apoia nestas amostras.
 - Num runner hospedado o `pythonLocation` é `/opt/hostedtoolcache/Python/<versão>/x64` (medido no log do
   run `38052044220`), e os mesmos testes passam (runs `38052044220` e `38100541909`).
 
@@ -353,7 +362,8 @@ job; runner R1/R2 = os 2 runners do grupo naquele run):
   com 2 jobs vermelhos que pararam cedo (3.12 272 s, 3.9 163 s) — a tentativa 1 não mede tempo verde. A
   tentativa 2 (9 jobs verdes; início do run às 02:07:06Z): os 4 primeiros jobs começaram 3 s depois e os
   outros 5 de 79 a 156 s depois; parede 437 s (3.9 434 s no runner 01, 3.12 324 s no runner 03, `validate`
-  293 s no runner 04). A 3.ª corrida (run `38103716736`) teve parede de 373 s, com a 3.12 vermelha.
+  293 s no runner 04). A 3.ª corrida (run `38103716736`) teve parede de 373 s, com a 3.12 vermelha; a 4.ª
+  (run `38104634181`), 506 s, com os 9 jobs verdes.
 
 ### 5.1 Risco do PR #3: os PRs (e o recuo) caem no `ubuntu-latest` de 4 vCPU
 
@@ -415,7 +425,7 @@ próprio PR #3, `pull_request`, 01:03:41Z):
   e credenciais do agente). Num runner persistente, um passo malicioso pode se passar pelo runner e
   receber jobs dos outros repositórios do grupo, com os tokens e segredos deles. O registro EFÊMERO do
   runner (`--ephemeral` ou JIT) não resolve isso sozinho: ao fim do job ele só apaga a configuração e as
-  credenciais do próprio runner (`actions/runner` em `67f01c276e0a`: `src/Runner.Listener/Runner.cs:876-879`
+  credenciais do próprio runner (`actions/runner` em `67f01c276e0a`: `src/Runner.Listener/Runner.cs:877-880`
   chama `DeleteLocalRunnerConfig()`, `Configuration/ConfigurationManager.cs:496-`, que remove `.credentials`,
   a chave e a configuração); `/tmp`, `$HOME`, tool cache e processos deixados para trás ficam na máquina.
   A defesa é um ambiente isolado DESTRUÍDO depois de cada job (contêiner ou VM descartável), sem estado nem
@@ -461,8 +471,9 @@ o item diz.
    `actions/python-versions`; com tool cache próprio por runner, subprocesso de ambiente enxuto não acha a `libpython` (§4.6). Ou o tool cache de
    cada runner fica no caminho de build — o que, com vários runners na mesma máquina, faz os runners
    dividirem o `site-packages` (§7) —, ou cada runner é um contêiner/máquina com o seu próprio caminho de
-   build. A mensagem da 3.9 comprova a classe; se ela depende do runner ou é intermitente, as amostras
-   não dizem (§4.6: 1 execução no runner 04) — medir N execuções por runner antes de concluir.
+   build. A mensagem da 3.9 comprova a classe; a 3.9 caiu e depois passou no MESMO runner 04 (§4.6) — ou
+   a classe é intermitente, ou a VM mudou entre as duas corridas; não se sabe qual. Medir N execuções por
+   runner, com a configuração da VM registrada a cada uma, antes de concluir.
    O sinal 11 da 3.12, intermitente no mesmo runner, é outro item, sem causa: investigar antes de
    atribuir.
 3. **Isolamento do ambiente Python por job:** venv por job, ou tool cache só-leitura com os pacotes
@@ -476,8 +487,8 @@ o item diz.
    runner, §6); e não compartilhar grupo nem máquina com os 3 repositórios privados enquanto isso não
    valer.
 6. **Capacidade:** a simulação com as durações observadas na VM dá 362–448 s de parede para o push do
-   `validate.yml` com 4 runners, contra 760 s medidos com 2 (§5); com 4 runners há 1 tentativa verde
-   medida (parede 437 s, tentativa 2 do run `38102851467`); a carga dos outros repositórios e do nightly não
+   `validate.yml` com 4 runners, contra 760 s medidos com 2 (§5); com 4 runners há 2 execuções verdes
+   medidas (parede 437 s na tentativa 2 do run `38102851467`; 506 s no run `38104634181`); a carga dos outros repositórios e do nightly não
    entra na conta — decidir por N runs medidos; `PYTEST_XDIST_AUTO_NUM_WORKERS × runners ≤ vCPU` (8 × 4 = 32 na 2.ª corrida; ou afinidade de
    CPU por runner).
 7. **Sistema e ferramentas:** Ubuntu 22.04/24.04 x64 com `lsb_release` (sem 3.9 no 26.04); tool cache
@@ -488,9 +499,11 @@ o item diz.
 9. **Caminhos fixos em `/tmp`** do `validate.yml` (§4.2) trocados por `$RUNNER_TEMP` — mudança canônica,
    pacote próprio.
 10. **Medição comparativa:** N runs na VM com o conjunto EXATO de falhas E de skips igual ao do runner
-    hospedado no mesmo SHA — as tentativas 1 das 3 corridas divergiram: 1 falha na 1.ª (`/tmp` dividido),
-    104 na 2.ª (100 por `libpython` na 3.9, ambiente; 4 por sinal 11 na 3.12, não diagnosticado), 4 por
-    sinal 11 na 3.ª; as tentativas 2 da 1.ª e da 2.ª ficaram verdes.
+    hospedado no mesmo SHA — das 4 corridas, as tentativas 1 das 3 primeiras divergiram: 1 falha na 1.ª
+    (`/tmp` dividido), 104 na 2.ª (100 por `libpython` na 3.9, ambiente; 4 por sinal 11 na 3.12, não
+    diagnosticado), 4 por sinal 11 na 3.ª; a 4.ª ficou verde na tentativa 1. Nas tentativas seguintes, as
+    tentativas 2 da 1.ª e da 2.ª ficaram verdes, e a tentativa 3 da 2.ª caiu em outro teste da 3.12
+    (`shutil.Error`, não diagnosticado).
 11. **Recuo:** procedimento escrito (variável ≠ `"1"` + re-run) e alerta de runner fora do ar, porque o
     job fica na fila em vez de recuar (§2); o destino do recuo é o `ubuntu-latest` (§5.1).
 12. **`coverage` no `ubuntu-latest`:** 1925 s contra o teto de 35 min (92 %, §5.1) em `pull_request` e no

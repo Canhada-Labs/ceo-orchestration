@@ -73,18 +73,23 @@ três fatos medidos sobre os bytes deste sentinel:
       PLAN-*/wave-*-approved.md, PLAN-*/approved-amendment-*.md, architect/round-*/approved.md e os grandfathers) nem do ceo-boot.py;
   (b) _APPROVED_BY_RE (^\s*Approved-By:\s*@[\w\-]+\s+\S+) não casa o texto;
   (c) _parse_scope_paths_from_text(texto) devolve set() para o texto
-  -> com os três, assinado, ele NÃO libera edição de agente nos 2 workflows. Qualquer mudança de nome ou de texto exigiria nova assinatura
+  -> com os três, assinado, ele NÃO libera edição de agente nos 2 workflows. Qualquer mudança de texto exigiria nova assinatura
   (a .asc é sobre estes bytes); este controle não afirma o que uma versão alterada faria.
 
 ## R7 — medição no GitHub (registro, não controle)
 run 38000376122 (pull_request no PR #2, variável ausente): 11 jobs nos runners de antes (Ceo, ubuntu-latest, ubuntu-24.04)
 run 38100541909 (pull_request no PR #3): 10 jobs no ubuntu-latest, a 3.9 no ubuntu-24.04; Coverage 38100541954 no ubuntu-latest: 1925 s (teto 35 min)
-tentativas 2 abaixo: pedidas pela conta do Owner (triggering_actor), não por esta revisão — todas as chamadas dela à API foram de leitura
+tentativas 2, 3 e 4 abaixo: pedidas pela conta do Owner (triggering_actor), não por esta revisão — todas as chamadas dela à API foram de leitura
 run 38099038933 (push d7309efa, VM, 2 runners), tentativa 1 failure — hook-tests-dual-rail (0):
   FAILED .claude/hooks/tests/test_adequacy_gate.py::test_no_sandbox_leak - AssertionError: ('sandbox dirs must be cleaned up', ['ceo-adequacy-jwb3ez7a'])
   1 failed, 7121 passed, 36 skipped, 4 xfailed, 27 warnings in 44.43s ; tentativa 2 (só esse job) success
 run 38102851467 (push e2119681, VM, 4 runners), tentativa 1 failure — matriz 3.9 (runner 04) 100 failed: das 100 linhas FAILED,
   84 trazem libpython3.9.so.1.0 e 87 trazem 127 (ambiente); matriz 3.12 (runner 03) 4 failed com -11 (causa não diagnosticada);
-  tentativa 2 (02:07:09Z -> 02:14:24Z) success, 9 jobs verdes, a 3.12 no runner 03 e a 3.9 no runner 01
+  tentativa 2 (02:07:06Z -> 02:14:24Z) success, 9 jobs verdes, a 3.12 no runner 03 e a 3.9 no runner 01;
+  tentativa 3 (02:29:08Z -> 02:40:15Z) failure — 3.12 (runner 01) 1 failed: test_census_runtime.py::RailRound5CuresTest::
+  test_r5_p2_every_option_declaration_before_the_case_is_replayed, shutil.Error ao copiar um .pyc temporário de __pycache__
+  que sumiu (causa não diagnosticada); 3.9 (runner 02) success; tentativa 4 em andamento às 02:44Z
 run 38103716736 (push e0c5ffc2, VM, 4 runners) failure — matriz 3.12 (runner 04) os mesmos 4 failed com -11; 3.9 (runner 01) success;
-  sem tentativa 2 até 02:22Z
+  sem tentativa 2 até 02:44Z
+run 38104634181 (push d8d13aaf, VM, 4 runners) success na tentativa 1 (02:16:49Z -> 02:25:15Z, parede 506 s), 9/9 —
+  3.9 (runner 04, onde caíra por libpython) success, 3.12 (runner 02) success
