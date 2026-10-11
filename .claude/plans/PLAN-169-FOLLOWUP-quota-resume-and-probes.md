@@ -124,10 +124,10 @@ exige.
 
 ## How to continue
 
-> **Plano fechado em 2026-10-10 (`done`).** AC-4 e AC-7 fechados; o AC-5 foi
-> movido (caixa do AC-5 em §Success criteria: destino provisório = AC-15 do
-> PLAN-186, pernas residuais listadas). O texto abaixo é o histórico de antes do
-> fechamento.
+> **Plano fechado em 2026-10-10 (`done`).** AC-4 e AC-7 fechados. O AC-5 foi
+> movido: a perna 1 foi para o AC-15 do PLAN-186 e as pernas 2–4 para o
+> `PLAN-169-FOLLOWUP-sendmessage-probes` (caixa do AC-5 em §Success criteria). O
+> texto abaixo é o histórico de antes do fechamento.
 >
 > Ler este arquivo e o PLAN-169 (`done`) para o contexto dos três critérios.
 > OQ-1 e OQ-2 estão respondidas (acima). Dois próximos passos: escrever o teste do
@@ -160,21 +160,25 @@ exige.
         `CEO_QUOTA_RESUME=0`/`CEO_SOTA_DISABLE=1`, gate de postura, doc,
         `env-inventory.json`) ficam sem objeto: o mecanismo próprio não é construído.
       Check: `test -f .claude/plans/PLAN-169/ac4-quota-window-S362-S363.md && grep -c '^| E[1-9] | S36[1-3] /' .claude/plans/PLAN-169/ac4-quota-window-S362-S363.md` (espera 9: as linhas da tabela de ocorrências do §2)
-- [>] AC-5 **MOVIDO, não executado.** Destino pedido pela síntese: o follow-up do
-      PLAN-186 que levar o matcher do `SendMessage`. **Esse follow-up NÃO existe**
-      (2026-10-10: os três `PLAN-186-FOLLOWUP-*.md` em disco são `census-runtime`,
-      `hint-discovery-walk-from-root` e `sentinel-gpg-verification`, e nenhum cita
-      `SendMessage`). Até ele existir, o dono do matcher é o AC-15 do próprio
-      PLAN-186 (`.claude/plans/PLAN-186-orchestrator-operating-model.md:201`,
-      viaja na cerimônia da W1 daquele plano). O AC-15 cobre só a perna 1 do AC-5
-      (o bloqueio via `SendMessage`) e a doutrina da OQ-5. **Pernas que viajam junto
-      e ainda não estão escritas em nenhum destino:** o controle `refuse` × `accept`
-      (nenhum turno nasce com `refuse`), a doutrina em ADR sobre a visibilidade de
-      tentativas recusadas, e as sondas W4.2.0 (b)–(f). A (a) tem resposta parcial
-      no registro do AC-4 (§4: 0 de 140 turnos de colega com `prompt_submitted`,
-      só colegas em processo). Destino definitivo: PENDENTE da re-escopagem do
-      PLAN-186.
-      Check: none (doc-only; movido)
+- [>] AC-5 **MOVIDO, não executado, para DOIS destinos em disco** (recíprocas
+      gravadas em 2026-10-11):
+      - **Perna 1** (peer tenta induzir edição canônica via `SendMessage` ⇒
+        BLOQUEADO, com evento HMAC de campos whitelisted, checklist R-SEC9) → AC-15
+        do PLAN-186, dono do matcher do `SendMessage`, que viaja na cerimônia da W1
+        daquele plano. Linha recíproca datada em
+        `.claude/plans/PLAN-186-orchestrator-operating-model.md:203`, sob o AC-15
+        (`:201`).
+      - **Pernas 2–4** (controle `refuse` × `accept`; ADR com a decisão de
+        visibilidade das tentativas recusadas; sondas W4.2.0 (a)–(f), com a (a)
+        parcial do registro do AC-4, §4: 0 de 140 turnos de colega em processo com
+        `prompt_submitted`) → `.claude/plans/PLAN-169-FOLLOWUP-sendmessage-probes.md`
+        (`draft`, `depends_on: [PLAN-169]`).
+      - O «follow-up do PLAN-186 que levar o matcher», pedido pela síntese, não
+        existe (2026-10-10: os `PLAN-186-FOLLOWUP-*.md` em disco são
+        `census-runtime`, `hint-discovery-walk-from-root` e
+        `sentinel-gpg-verification`). Por isso a perna 1 foi para o AC-15 do próprio
+        PLAN-186.
+      Check: `grep -q 'recebe a perna 1 do AC-5 do .PLAN-169-FOLLOWUP-quota-resume-and-probes' .claude/plans/PLAN-186-orchestrator-operating-model.md && test -f .claude/plans/PLAN-169-FOLLOWUP-sendmessage-probes.md`
 - [x] AC-7 fechado com as duas evidências: perna verde = os bumps reais 1.4.1/1.4.2
       (OQ-1); perna vermelha persistida em
       `.claude/scripts/tests/test_verify_counts_framework_marker.py` (S361, 2026-10-02:
@@ -226,3 +230,7 @@ exige.
     `.claude/.framework-version` ausente): não é critério deste plano e segue
     sem plano dono no disco. A recomendação 6 da síntese o leva à 1.4.4 como
     item nomeado; o registro desse item fica fora deste pacote.
+- 2026-10-11 (S363, cura do rail r-planos: 1 P1, item «MOVIDO» sem linha recíproca no
+  destino): o AC-5 ganhou destinos exatos em disco. A perna 1 tem linha recíproca datada
+  sob o AC-15 do PLAN-186 (`:203`). As pernas 2–4 estão no novo
+  `PLAN-169-FOLLOWUP-sendmessage-probes` (`draft`). A caixa do AC-5 aponta os dois.
