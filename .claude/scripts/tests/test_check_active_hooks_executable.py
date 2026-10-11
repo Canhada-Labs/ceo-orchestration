@@ -94,6 +94,37 @@ class CheckActiveHooksExecutableTest(TestEnvContext):
                 self.assertEqual(result.returncode, 2, msg=f"{const}: {result.stdout!r} {result.stderr!r}")
                 self.assertIn(f"non-standard JSON constant {const}", result.stderr)
 
+    def test_malformed_settings_red_through_the_harness_gate_delegation(self) -> None:
+        """A top-level null / [] / 1 / "s" / true (and NaN) is malformed: exit 2 here, and
+        RED — not a WARN-green rc 0 — in check_harness_config.py, which delegates to this
+        script (subgate rail r1 P2). Measured through the delegation, with --settings."""
+        import shutil
+        not_obj = ".claude/settings.json: top-level JSON is not an object"
+        for body, why in (("null", not_obj), ("[]", not_obj), ("1", not_obj), ('"s"', not_obj),
+                          ("true", not_obj), ('{"x": NaN}', "non-standard JSON constant NaN")):
+            with TemporaryDirectory() as td:
+                tdp = Path(td)
+                for rel in (".claude/scripts/check-active-hooks-executable.py",
+                            ".claude/hooks/check_harness_config.py"):
+                    (tdp / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(REPO_ROOT / rel, tdp / rel)
+                (tdp / ".claude" / "settings.json").write_text(body, encoding="utf-8")
+                (tdp / "probe.json").write_text("{}", encoding="utf-8")
+                direct = subprocess.run(
+                    [sys.executable, str(tdp / ".claude/scripts/check-active-hooks-executable.py")],
+                    cwd=str(tdp), capture_output=True, text=True, check=False, timeout=10,
+                )
+                self.assertEqual(direct.returncode, 2, msg=f"{body}: {direct.stderr!r}")
+                self.assertTrue(direct.stderr.startswith("::error::cannot parse "), direct.stderr)
+                self.assertIn(why, direct.stderr)
+                gate = subprocess.run(
+                    [sys.executable, str(tdp / ".claude/hooks/check_harness_config.py"),
+                     "--repo-root", str(tdp), "--static", "--settings", str(tdp / "probe.json")],
+                    cwd=str(tdp), capture_output=True, text=True, check=False, timeout=60,
+                )
+                self.assertEqual(gate.returncode, 1, msg=f"{body}: {gate.stdout!r}")
+                self.assertIn("exec-bit gate rc=2", gate.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

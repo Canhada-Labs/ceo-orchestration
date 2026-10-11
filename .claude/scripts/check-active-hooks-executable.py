@@ -60,6 +60,11 @@ def _iter_hook_paths(settings_path: Path) -> Iterable[str]:
     except (OSError, ValueError, RecursionError) as exc:  # ValueError: + UnicodeDecodeError
         print(f"::error::cannot parse {settings_path}: {type(exc).__name__}: {exc}", file=sys.stderr)
         sys.exit(2)
+    if not isinstance(data, dict):
+        # null / [] / 1 / "s" / true used to raise AttributeError below, which the
+        # delegating check_harness_config.py downgraded to a WARN — rc 0.
+        print(f"::error::cannot parse {settings_path}: top-level JSON is not an object", file=sys.stderr)
+        sys.exit(2)
     hooks = data.get("hooks", {})
     if not isinstance(hooks, dict):
         return
