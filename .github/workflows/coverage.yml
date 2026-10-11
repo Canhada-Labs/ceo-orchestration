@@ -33,7 +33,7 @@ jobs:
       ${{ vars.VM_CI_ENABLED == '1' 
           && github.ref == 'refs/heads/main' 
           && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') 
-          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'Ceo' }}
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     # S157 ADR-139: subprocess capture instruments every spawned hook, so the
     # suite runs materially slower than the in-process baseline (the no-coverage
     # matrix already takes ~12 min). 35 min gives headroom for hooks + scripts

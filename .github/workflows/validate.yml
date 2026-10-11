@@ -48,7 +48,7 @@ jobs:
       ${{ vars.VM_CI_ENABLED == '1' 
           && github.ref == 'refs/heads/main' 
           && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') 
-          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'Ceo' }}
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     # PLAN-014 G.1 ADJ-040 — bumped 5 → 10 to absorb policy-drift + TLA
     # drift + TestEnvContext mandate steps (Phases A.7 + B.7 + C.4)
     # without sporadic CI flakes on slower runners. S166/PLAN-114: 15->25 —
@@ -1249,7 +1249,7 @@ jobs:
       ${{ vars.VM_CI_ENABLED == '1' 
           && github.ref == 'refs/heads/main' 
           && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') 
-          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'Ceo' }}
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 8
 
     steps:
@@ -1316,7 +1316,7 @@ jobs:
       ${{ vars.VM_CI_ENABLED == '1' 
           && github.ref == 'refs/heads/main' 
           && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') 
-          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'Ceo' }}
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     # Harness finishes in ~seconds on a laptop; 10-min ceiling is a
     # generous safety net against runaway workers.
     timeout-minutes: 10
@@ -1604,7 +1604,7 @@ jobs:
       ${{ vars.VM_CI_ENABLED == '1' 
           && github.ref == 'refs/heads/main' 
           && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') 
-          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'Ceo' }}
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -1652,7 +1652,7 @@ jobs:
           && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') 
           && fromJSON('["self-hosted","Linux","X64","canhada-ci"]')
           || (matrix.python-version == '3.9' && 'ubuntu-24.04'
-          || (matrix.python-version == '3.14' && 'ubuntu-26.04' || 'Ceo')) }}
+          || (matrix.python-version == '3.14' && 'ubuntu-26.04' || 'ubuntu-latest')) }}
     # Runner padrao (4 vCPU) = 45 min; `Ceo` (8 nucleos) segue 25. Medido
     # no `Ceo` (runs 36932014761, 36832647294): perna 3.9 = 430-646 s
     # paralela + 211-232 s serial; com metade dos nucleos encosta nos 25
