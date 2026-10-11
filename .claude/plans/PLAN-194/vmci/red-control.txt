@@ -2,7 +2,8 @@
 # objeto: os bytes de .github/workflows/validate.yml e .github/workflows/coverage.yml em
 #   e21196817b299fe0557ae9c8dcf9e73b9dd4c10c (merge do PR #3, 2026-10-11T01:44:41Z; pais d7309efae537 + fc4bf83cf3e8),
 #   que somam o merge do PR #2 (d7309efae537, 00:37:04Z; pais bc803a7ac0a0 + 29e9e2a24914) e o do PR #3
-# no Anchor (e2119681; iguais em e0c5ffc2, main na escrita — git diff --stat e2119681 e0c5ffc2 -- .github/ vazio):
+# no Anchor (e2119681; iguais em e0c5ffc2 e em d8d13aaf, main às 02:28Z — git diff --stat e2119681 e0c5ffc2 -- .github/ vazio;
+#   API compare e0c5ffc2...d8d13aaf só muda .claude/scripts/; blobs dos 2 em d8d13aaf = os de baixo):
 #   .github/workflows/validate.yml  sha256 412a51d9d92d7a7948ea6c920184770386b6214452332fbe6a56642d9cc45f72  96546 bytes  blob a1b8d1124bd653118b7edb2580b1b4e6bb98723a
 #   .github/workflows/coverage.yml  sha256 bfb751b9d17c9daf087044261438112bd0fbb75c5f43c4b77a3dd6540dfd1f2f  13925 bytes  blob 4e4919be806363a8fb7d35a97e854d09830ea1e1
 # na base bc803a7a (= 142f01cd nesses 2 caminhos):
@@ -22,6 +23,8 @@ git diff --stat d7309efa e2119681 -> os 2 arquivos, 6 inserções, 6 remoções 
 oráculo check_canonical_edit.py --is-canonical: validate.yml 1, coverage.yml 1; vmci.patch, REVIEW-pr2.md, red-control.txt,
   vmci-approved.md, vmci-approved.md.asc 0
 git apply vmci.patch sobre os blobs de bc803a7a -> blobs a1b8d1124bd6… e 4e4919be8063… (= Anchor)
+commits de cabeça dos PRs: 29e9e2a2 (ramo codex/vm-ci-main-routing-20261009) e fc4bf83c (codex/free-public-pr-runners-20261011):
+  git log --format=%G? -> N nos dois; API verification.reason -> unsigned nos dois; merges d7309efa/e2119681 -> %G? = E (chave ausente)
 git apply --check vmci.patch sobre os de e2119681 -> rc 1 ; git apply -R --check -> rc 0
   (avisos: 24 lines add whitespace errors — o espaço no fim é parte dos bytes ratificados)
 
@@ -52,7 +55,9 @@ células que vão para a VM, por job, em e2119681 (iguais às de d7309efa): vali
   formal-verification-mutation-harness, opus-4-7-profiler-smoke, hook-tests-dual-rail, hook-stdout-schema-oracle, coverage = 6 cada
   ({push,schedule,workflow_dispatch} x {refs/heads/main, refs/heads/MAIN} x {"1"}); hook-tests-python-matrix = 24 (as 6 x 3.9/3.10/3.11/3.12; 3.14 nunca)
 recuo do job validate num pull_request: 'ubuntu-latest' em e2119681 ('Ceo' em d7309efa)
-fora da VM, valor == runs-on de bc803a7a com o mapa Ceo=ubuntu-latest: 10.800 combinações, 7.392 trocadas pelo mapa, 0 diferenças;
+espaço: 270 contextos por job (6 eventos x 5 refs x 9 valores) x 5 versões só na matriz = 3.240 células distintas (ghexpr_truth/vm_cells);
+  o fallback_eq repete as 5 versões nos 7 jobs sem matriz = 10.800 avaliações das mesmas células
+fora da VM, valor == runs-on de bc803a7a com o mapa Ceo=ubuntu-latest: 10.800 avaliações, 7.392 trocadas pelo mapa, 0 diferenças;
   controle: sem o mapa, 7.392 diferenças; d7309efa sem o mapa, 0 diferenças; YAML igual fora do runs-on (topo e jobs)
 mutantes (job validate) — todos VERMELHOS, em e2119681 e em d7309efa:
   sem a cláusula do ref                       células 15
@@ -63,17 +68,23 @@ mutantes (job validate) — todos VERMELHOS, em e2119681 e em d7309efa:
 nenhum teste do repositório pina esta expressão: o controle semântico é este avaliador
 
 ## R6 — o sentinel não vira destrava de edição
-vmci-approved.md não casa nenhum padrão de descoberta do check_canonical_edit.py (_PATTERNS: PLAN-*/approved.md,
-  PLAN-*/wave-*-approved.md, PLAN-*/approved-amendment-*.md, architect/round-*/approved.md e os grandfathers) nem do ceo-boot.py,
-  e não tem linha Approved-By: -> assinado, ele NÃO libera edição de agente nos 2 workflows
-  (renomear para wave-*-approved.md ou acrescentar Approved-By: mudaria isso)
+três fatos medidos sobre os bytes deste sentinel:
+  (a) o caminho não casa nenhum padrão de descoberta do check_canonical_edit.py (_PATTERNS: PLAN-*/approved.md,
+      PLAN-*/wave-*-approved.md, PLAN-*/approved-amendment-*.md, architect/round-*/approved.md e os grandfathers) nem do ceo-boot.py;
+  (b) _APPROVED_BY_RE (^\s*Approved-By:\s*@[\w\-]+\s+\S+) não casa o texto;
+  (c) _parse_scope_paths_from_text(texto) devolve set() para o texto
+  -> com os três, assinado, ele NÃO libera edição de agente nos 2 workflows. Qualquer mudança de nome ou de texto exigiria nova assinatura
+  (a .asc é sobre estes bytes); este controle não afirma o que uma versão alterada faria.
 
 ## R7 — medição no GitHub (registro, não controle)
 run 38000376122 (pull_request no PR #2, variável ausente): 11 jobs nos runners de antes (Ceo, ubuntu-latest, ubuntu-24.04)
 run 38100541909 (pull_request no PR #3): 10 jobs no ubuntu-latest, a 3.9 no ubuntu-24.04; Coverage 38100541954 no ubuntu-latest: 1925 s (teto 35 min)
+tentativas 2 abaixo: pedidas pela conta do Owner (triggering_actor), não por esta revisão — todas as chamadas dela à API foram de leitura
 run 38099038933 (push d7309efa, VM, 2 runners), tentativa 1 failure — hook-tests-dual-rail (0):
   FAILED .claude/hooks/tests/test_adequacy_gate.py::test_no_sandbox_leak - AssertionError: ('sandbox dirs must be cleaned up', ['ceo-adequacy-jwb3ez7a'])
   1 failed, 7121 passed, 36 skipped, 4 xfailed, 27 warnings in 44.43s ; tentativa 2 (só esse job) success
-run 38102851467 (push e2119681, VM, 4 runners) failure — matriz 3.9 (runner 04) 100 failed, 87 com rc 127 libpython3.9.so.1.0;
-  matriz 3.12 (runner 03) 4 failed com -11
-run 38103716736 (push e0c5ffc2, VM, 4 runners) failure — matriz 3.12 (runner 04) os mesmos 4 failed com -11; 3.9 (runner 01) success
+run 38102851467 (push e2119681, VM, 4 runners), tentativa 1 failure — matriz 3.9 (runner 04) 100 failed: das 100 linhas FAILED,
+  84 trazem libpython3.9.so.1.0 e 87 trazem 127 (ambiente); matriz 3.12 (runner 03) 4 failed com -11 (causa não diagnosticada);
+  tentativa 2 (02:07:09Z -> 02:14:24Z) success, 9 jobs verdes, a 3.12 no runner 03 e a 3.9 no runner 01
+run 38103716736 (push e0c5ffc2, VM, 4 runners) failure — matriz 3.12 (runner 04) os mesmos 4 failed com -11; 3.9 (runner 01) success;
+  sem tentativa 2 até 02:22Z

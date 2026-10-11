@@ -1,12 +1,14 @@
 # REVIEW dos PRs #2 e #3 — `runs-on` condicional para os runners da VM (PLAN-194, ratificação VM-CI)
 
 > Revisão técnica MEDIDA, não opinião, dos bytes que os merges dos PRs #2 e #3 puseram nos 2 workflows.
-> Medições de 2026-10-11, de ~00:25Z a ~02:15Z (UTC).
+> Medições de 2026-10-11, de ~00:25Z a ~02:25Z (UTC).
 > Sujeito: `.github/workflows/validate.yml` e `.github/workflows/coverage.yml` em
 > `e21196817b299fe0557ae9c8dcf9e73b9dd4c10c` (merge do PR #3; antes dele, o merge do PR #2 `d7309efae537`;
-> pai de ambos na primeira linha, `bc803a7ac0a0`). O `main` está em `e0c5ffc23dc2`, com 6 commits de
-> plano depois de `e2119681`, e nenhum deles toca `.github/` (medido: `git diff --stat e2119681 e0c5ffc2 --
-> .github/` vazio).
+> pai de ambos na primeira linha, `bc803a7ac0a0`). Durante a escrita o `main` foi a `e0c5ffc23dc2` (6
+> commits de plano depois de `e2119681`) e, às 02:28Z, a `d8d13aafe348` (mais 3 commits de gates em
+> `.claude/scripts/`); nenhum deles toca `.github/` (medido: `git diff --stat e2119681 e0c5ffc2 -- .github/`
+> vazio; a comparação `e0c5ffc2...d8d13aaf` da API muda só 2 arquivos de `.claude/scripts/`; os blobs dos
+> 2 workflows em `d8d13aaf` são os do Anchor).
 > Registro do que entrou: `vmci/vmci.patch` = `git diff --full-index bc803a7a e2119681 --
 > .github/workflows/` (128 linhas, 7098 bytes, sha256
 > `e6f5d1f9ecd7586567212d110f200bd4310bcc147f8dfdb7848a8b141f10a37a`; o mesmo com `--no-renames` e com a
@@ -17,36 +19,55 @@
 
 ## 0. Como os bytes entraram no `main`
 
-- PR #2, mergeado pelo GitHub em 2026-10-11T00:37:04Z: `bc803a7ac0a0` → `d7309efae537` (pais
-  `bc803a7a` + `29e9e2a2`; autor a conta do Owner, committer `GitHub`). Põe o `runs-on` por expressão nos
-  8 jobs (§1).
-- PR #3, mergeado pelo GitHub em 2026-10-11T01:44:41Z: `d7309efa` → `e21196817b29` (pais `d7309efa` +
-  `fc4bf83cf3e8`; autor a conta do Owner, committer `GitHub`). Troca o recuo `'Ceo'` por `'ubuntu-latest'`
+- PR #2 (ramo `codex/vm-ci-main-routing-20261009`, commit de cabeça `29e9e2a24914`), mergeado pelo GitHub
+  em 2026-10-11T00:37:04Z: `bc803a7ac0a0` → `d7309efae537` (pais `bc803a7a` + `29e9e2a2`; merge com autor a
+  conta do Owner, committer `GitHub`). Põe o `runs-on` por expressão nos 8 jobs (§1).
+- PR #3 (ramo `codex/free-public-pr-runners-20261011`, commit de cabeça `fc4bf83cf3e8`), mergeado pelo
+  GitHub em 2026-10-11T01:44:41Z: `d7309efa` → `e21196817b29` (pais `d7309efa` + `fc4bf83cf3e8`; merge com
+  autor a conta do Owner, committer `GitHub`). Troca o recuo `'Ceo'` por `'ubuntu-latest'`
   nas 6 expressões que terminavam em `'Ceo'` (`validate.yml` +5 −5, `coverage.yml` +1 −1); nada mais.
-- Resultado em `e2119681` (igual em `e0c5ffc2`): `.github/workflows/validate.yml` sha256
+- Resultado em `e2119681` (igual em `e0c5ffc2` e em `d8d13aaf`): `.github/workflows/validate.yml` sha256
   `412a51d9d92d7a7948ea6c920184770386b6214452332fbe6a56642d9cc45f72` (96.546 bytes, blob `a1b8d1124bd6…`) e
   `.github/workflows/coverage.yml` sha256 `bfb751b9d17c9daf087044261438112bd0fbb75c5f43c4b77a3dd6540dfd1f2f`
   (13.925 bytes, blob `4e4919be8063…`). Os 2 são canônicos (oráculo `--is-canonical` = 1 para os dois,
   medido): entraram no `main` sem sentinel assinado, duas vezes.
 - A variável de repositório `VM_CI_ENABLED` vale `"1"` desde 2026-10-11T00:37:01Z — 3 s antes do merge do
   PR #2 (API `actions/variables`). Nenhuma variável de organização.
+- Autoria, como fato: os 2 commits de cabeça (`29e9e2a2`, `fc4bf83c`) foram escritos por outro agente — o
+  app Codex, segundo o registro do CEO na sessão S363 («o Codex (app) está testando VM/paralelismo e
+  configurando runners», 2026-10-11 00:26Z) e os nomes dos ramos (`codex/…`); o git registra a conta do
+  Owner como autora dos dois, e os dois estão SEM assinatura (`git log --format=%G?` = `N`; API
+  `verification.reason: unsigned`). A decisão anterior do Owner, de 2026-09-18, era manter o Codex fora da
+  autoria neste repositório («vou manter sem usar o codex ainda no repo do ceo»; o Codex segue revisor,
+  pelo «Cross-LLM Reviewer Contract» do `AGENTS.md`). Qualquer decisão nova sobre isso é do Owner.
 - 1.ª corrida na VM — Validate do push `d7309efa` (run `38099038933`), 2 runners: tentativa 1 `failure`
   às 00:49:48Z, 8 jobs verdes e 1 vermelho (`hook-tests-dual-rail (0)`, por AMBIENTE: `/tmp` dividido
   entre os runners, §4.1); o job `validate` esperou 456 s na FILA (§5). A tentativa 2, só do job vermelho
-  (pedida às 01:00:27Z), esperou 154 s com os 4 runners do grupo online e ociosos na leitura das ~01:02Z,
+  (pedida às 01:00:27Z pela conta do Owner — NÃO por esta revisão), esperou 156 s com os 4 runners do grupo
+  online e ociosos na leitura das ~01:02Z,
   rodou sozinha de 01:03:03Z a 01:04:35Z e passou (7122 passed, 36 skipped; série serial 496 passed, 2
   skipped) — o run ficou `success`. Passar sozinho é consistente com o diagnóstico, não o prova.
-- 2.ª corrida na VM — Validate do push `e2119681` (run `38102851467`), 4 runners: `failure` às 01:50:23Z,
-  com 2 jobs vermelhos de novo por AMBIENTE, agora nos runners novos (§4.6): a matriz 3.12 no runner 03
-  (4 testes, subprocesso morto por sinal 11) e a matriz 3.9 no runner 04 (100 testes, `libpython3.9.so.1.0:
-  cannot open shared object file`, rc 127). O arquivo de ambiente dos runners passou a dar
-  `PYTEST_XDIST_AUTO_NUM_WORKERS: 8` (era 24 na 1.ª corrida).
+- 2.ª corrida na VM — Validate do push `e2119681` (run `38102851467`), 4 runners. Tentativa 1: `failure`
+  às 01:50:23Z, com 2 jobs vermelhos nos runners novos (§4.6) — a matriz 3.9 no runner 04 por AMBIENTE
+  (100 testes; 84 com `libpython3.9.so.1.0: cannot open shared object file` na linha, 87 com `127`) e a
+  matriz 3.12 no runner 03 com 4 testes cujo subprocesso morreu por sinal 11 (causa NÃO diagnosticada).
+  Tentativa 2 (pedida às 02:07:06Z pela conta do Owner — NÃO por esta revisão; fim às 02:14:24Z): os 9
+  jobs verdes, a 3.12 de novo no runner 03 (onde a tentativa 1 morrera por sinal 11) e a 3.9 no runner
+  01. O arquivo de ambiente dos runners passou a dar `PYTEST_XDIST_AUTO_NUM_WORKERS: 8` (era 24 na 1.ª
+  corrida).
 - 3.ª corrida na VM — Validate do push `e0c5ffc2` (run `38103716736`), 4 runners: `failure` às 02:06:35Z,
   só a matriz 3.12, agora no runner 04, com os MESMOS 4 testes mortos por sinal 11 da 2.ª corrida; a 3.9,
-  de volta ao runner 01, passou (§4.6).
+  de volta ao runner 01, passou (§4.6). Sem tentativa 2 até 02:22Z.
+- O grupo `vm-trusted-ci` (API `orgs/…/actions/runner-groups/4`, `/repositories`, `/runners`), às 02:22Z:
+  4 runners online; 4 repositórios, este (público) e 3 privados; 5 workflows permitidos, os 2 deste em
+  `@refs/heads/main` e 3 privados (`ci.yml`, `tests.yml`, `ci.yml`, cada um de um repositório, em
+  `@refs/heads/main`); nenhum workflow privado se chama `validate.yml` ou `coverage.yml`. Histórico, que já
+  não vale: na leitura desta revisão de antes das 00:43Z eram 2 runners e 3 repositórios (este e 2
+  privados), com `validate.yml`/`coverage.yml` de um privado e um `tests.yml`.
 - O Validate e o Coverage do próprio PR #3 (runs `38100541909` e `38100541954`, `pull_request`) rodaram
   nos runners hospedados padrão — são a medida do risco do PR #3 (§5.1).
-- Nada foi alterado no GitHub por esta revisão (variáveis, runners, PRs e configurações só foram LIDOS).
+- Nada foi alterado no GitHub por esta revisão: todas as chamadas dela à API foram de leitura (variáveis,
+  runners, PRs, runs e configurações); nenhuma tentativa de run foi pedida por ela.
 
 ## 1. O que entrou
 
@@ -83,8 +104,10 @@ Método: avaliador mínimo do subconjunto de expressões usado (literais, contex
 SEM caixa, coerção numérica só entre tipos diferentes, `&&`/`||` devolvendo o operando, variável ausente
 = `''`. O parser recusa o que não conhece. Auto-teste da semântica: 10/10 (Apêndice B). Entrada: os 2
 arquivos de `e2119681`, lidos com PyYAML; cada `runs-on` precisa ser expressão PURA (`${{ … }}` sem texto
-em volta — é, nos 8). Espaço avaliado: 6 eventos × 5 refs × 9 valores da variável (× 5 versões na
-matriz) = 10.800 combinações.
+em volta — é, nos 8). Espaço: 6 eventos × 5 refs × 9 valores da variável = 270 contextos por job; × 5
+versões só no job da matriz ⇒ 3.240 células distintas (job, contexto), que o `ghexpr_truth.py` e o
+`vm_cells.py` avaliam; o `fallback_eq.py` repete as 5 versões também nos 7 jobs sem matriz ⇒ 10.800
+avaliações (as mesmas 3.240 células, com repetição).
 
 Job `validate` (os outros 6 jobs sem matriz e o `coverage` dão a MESMA tabela; na matriz, a 3.9 recua
 para `ubuntu-24.04` e a 3.14 nunca sai do `ubuntu-26.04`):
@@ -108,7 +131,7 @@ Resultados (saída de `ghexpr_truth.py`, `fallback_eq.py` e `vm_cells.py`):
   vai para a VM). Valores `"true"`, `"TRUE"`, `" 1"`, `"1 "`, `"01"`, `"1.0"` e ausente NÃO ligam. O
   conjunto é o mesmo em `d7309efa` e em `e2119681`: o PR #3 não mexeu no roteamento para a VM.
 - Fora da VM, o valor é o `runs-on` de `bc803a7a` com `Ceo` → `ubuntu-latest` e nada mais: 10.800
-  combinações, 7.392 trocadas por esse mapa, 0 diferentes do esperado. Controle: sem o mapa, as mesmas
+  avaliações do `fallback_eq.py`, 7.392 trocadas por esse mapa, 0 diferentes do esperado. Controle: sem o mapa, as mesmas
   7.392 aparecem como diferença; em `d7309efa`, sem mapa, 0 diferenças.
 - Controle vermelho do avaliador: 5 mutantes da expressão (sem a cláusula do ref; sem a do evento;
   `!= '0'` no lugar de `== '1'`; `pull_request` na lista; recuo trocado) — os 5 mudam o conjunto ou o
@@ -160,8 +183,11 @@ Entre parênteses: o mesmo job no push hospedado de `bc803a7a` (run `38052044220
   Ubuntu. O instalador Linux do manifesto (`installers/nix-setup-template.sh`) não usa `sudo`; precisa de
   tool cache gravável pelo usuário do runner (`docs/advanced-usage.md`, seção de self-hosted).
 - Cobertura do manifesto, linux/x64 (baixado 2026-10-11 ~00:36Z, sha256 `3bffef7a0fdd…`, último commit do
-  arquivo `49858b91c92d` 2026-10-10T19:22Z): 3.9 → 16.04 a **24.04** (nada para 26.04); 3.10 → 18.04 a
-  26.04; 3.11 e 3.12 → 20.04 a 26.04; 3.14 → 22.04 a 26.04. O PR leva a perna 3.9 do rótulo FIXO `ubuntu-24.04`
+  arquivo `49858b91c92d` 2026-10-10T19:22Z), contando SÓ as entradas `stable: true` (o `setup-python` não
+  pede pré-release sem `allow-prereleases`, que os 2 workflows não ligam): 3.9 → 16.04 a **24.04** (nada
+  para 26.04); 3.10 → 18.04 a 26.04; 3.11 e 3.12 → 20.04 a 26.04; 3.14 → 22.04 a 26.04. Contando também as
+  pré-releases, a 3.10 desce a 16.04, a 3.11 e a 3.12 a 18.04 e a 3.14 a 20.04; a 3.9 não muda e segue sem
+  26.04 nos dois recortes. O PR leva a perna 3.9 do rótulo FIXO `ubuntu-24.04`
   (escolhido pela W1 exatamente porque 26.04 não tem 3.9) para a VM: a VM precisa ser Ubuntu 22.04 ou
   24.04 x64 com `lsb_release` (ou ter a 3.9 posta à mão no tool cache). Hoje a perna passou; um upgrade
   da VM para 26.04 sem a 3.9 no tool cache quebra a 3.9 no `main`.
@@ -200,8 +226,10 @@ nem os caminhos `/tmp/...` escritos por extenso no `validate.yml` (§4.2), que i
 (`push` e `schedule` têm grupos de concorrência distintos) disputam o mesmo arquivo: com o mesmo usuário
 Unix, um sobrescreve o outro; com usuários diferentes, o `fs.protected_regular` (padrão do systemd)
 recusa o `>` sobre arquivo alheio num diretório com sticky bit — não medido na VM. O grupo de runners
-também serve workflows de mesmo nome (`validate.yml`, `coverage.yml`) de um repositório privado da
-organização; se forem cópias deste, disputam os mesmos caminhos (conteúdo deles não lido). O conteúdo de
+também serve workflows de repositórios privados da organização (3 às 02:22Z, nenhum chamado `validate.yml`
+ou `coverage.yml`, §0; no histórico de antes das 00:43Z
+incluía um `validate.yml`/`coverage.yml` de mesmo nome que os deste); o conteúdo deles não foi lido, e
+qualquer um que escreva os mesmos caminhos fixos disputa os mesmos arquivos. O conteúdo de
 `/tmp/docs-freshness.out` vai para o log e o resumo do job, que são PÚBLICOS neste repositório.
 
 ### 4.3 Gate de latência dos hooks (ADR-163)
@@ -209,9 +237,9 @@ organização; se forem cópias deste, disputam os mesmos caminhos (conteúdo de
 O `--hook-latency` reprova por teto ABSOLUTO de p95 (180 ms, duro); a chave relativa
 (`--relative-advisory`) é só aviso na fase 1. O teto foi calibrado no `ubuntu-latest` (4 vCPU), que é
 onde o job rodava. Medido: piso de subprocesso p50 = 10,32 ms no hospedado (run `38052044220`) e 6,67 ms na
-VM (run `38099038933`). Numa VM mais rápida o mesmo teto absoluto fica MAIS FROUXO (uma regressão que
-reprovaria no hospedado passa); com jobs vizinhos usando todos os núcleos, a contenção derruba o gate
-por infraestrutura (rótulo CONTENDED). Os percentis por hook vão para o resumo do passo, não para o log, e
+VM (run `38099038933`), 1 amostra cada. Com um piso medido menor, o mesmo teto absoluto deixa mais
+folga entre o medido e o teto — uma regressão do mesmo tamanho fica mais longe de reprovar; com jobs
+vizinhos usando os núcleos, a contenção derruba o gate por infraestrutura (rótulo CONTENDED). Os percentis por hook vão para o resumo do passo, não para o log, e
 não foram comparados aqui.
 
 ### 4.4 `-n auto` e núcleos
@@ -231,14 +259,15 @@ subprocesso / com asserção sobre tempo decorrido (`perf_counter()`/`monotonic(
 (`_run_install`, 90 s por chamada). Esses testes foram afinados nos runners hospedados; sobreinscrição
 (§4.4) os torna flake de runner.
 
-### 4.6 Segunda corrida na VM: o Python do tool cache fora do lugar de build
+### 4.6 Segunda e terceira corridas na VM: `libpython` ausente na 3.9 (diagnosticado) e sinal 11 na 3.12 (não diagnosticado)
 
-Run `38102851467` (push `e2119681`, 4 runners), por AMBIENTE de novo, nos 2 runners novos:
+Run `38102851467` (push `e2119681`, 4 runners), tentativa 1, nos 2 runners novos — duas falhas de natureza
+diferente:
 
-- matriz 3.9, runner 04: 100 testes vermelhos; 87 trazem na própria linha `rc 127` e
+- matriz 3.9, runner 04, AMBIENTE: 100 testes vermelhos; das 100 linhas `FAILED`, 84 trazem
   `…/tools/Python/3.9.25/x64/bin/python3: error while loading shared libraries: libpython3.9.so.1.0: cannot
-  open shared object file`, e os outros 13 são hooks sem saída (`'{}' not found in ''`) ou oráculos que
-  acusam `exit 127` — a mesma família (ex.:
+  open shared object file` e 87 trazem `127`; as outras 13 são hooks sem saída (`'{}' not found in ''`),
+  oráculos que acusam `exit 127` ou células de matriz vazias — a mesma família (ex.:
   `test_check_adversary_live.py`, `test_check_workflow_launch.py`, e o
   `test_check_harness_config.py::TestReplay::test_live_positive_controls_all_block`, que acusa «rail NOT
   certified alive» porque os hooks não sobem). Esses testes rodam `sys.executable` num subprocesso com
@@ -248,17 +277,28 @@ Run `38102851467` (push `e2119681`, 4 runners), por AMBIENTE de novo, nos 2 runn
   `test_check_adversary_live.py`, `test_check_workflow_launch.py` e
   `test_subagent_model_override_removed.py` — 3 arquivos que, na 3.9 do runner 04, deram `rc 127`. Na 3.ª
   corrida (run `38103716736`, push `e0c5ffc2`) a 3.12 caiu no runner 04 e os MESMOS 4 testes morreram por
-  sinal 11: repete, em 2 runners novos; na 1.ª corrida a 3.12 passou no runner 02. Causa NÃO
-  diagnosticada.
+  sinal 11. Na 1.ª corrida a 3.12 passou no runner 02, e na tentativa 2 do run `38102851467` passou no
+  próprio runner 03. Causa NÃO diagnosticada: o log não traz biblioteca ausente nem outra mensagem; não
+  se atribui ao tool cache nem a ambiente sem prova.
 - Mecanismo, pela fonte: o `actions/python-versions` compila o Python de Linux com `--enable-shared`,
   `--prefix` = o tool cache do runner de BUILD e `-Wl,--rpath=<prefix>/lib`
   (`builders/ubuntu-python-builder.psm1:34-37`; o prefixo vem do `RUNNER_TOOL_CACHE` do builder,
   `builders/python-builder.psm1:50`). Fora desse caminho, o interpretador só acha a `libpython` pelo
-  `LD_LIBRARY_PATH` do job; um subprocesso de ambiente enxuto não a acha. Na 1.ª corrida a mesma perna
-  3.9 passou no runner 01, também com tool cache próprio — por que lá a `libpython` foi achada NÃO foi
-  medido. Os runners não são homogêneos.
-- Num runner hospedado o tool cache É o caminho de build, e os mesmos testes passam (runs `38052044220` e
-  `38100541909`).
+  `LD_LIBRARY_PATH` do job; um subprocesso de ambiente enxuto não a acha — é o que a mensagem da 3.9
+  mostra. A 3.9 passou no runner 01, também com tool cache próprio, nas 3 vezes em que rodou lá — por que
+  lá a `libpython` foi achada NÃO foi medido.
+- O que as amostras dizem (todas as execuções das 2 pernas na VM):
+
+| perna | runner 01 | runner 02 | runner 03 | runner 04 |
+|---|---|---|---|---|
+| 3.9 | verde ×3 (1.ª t1, 2.ª t2, 3.ª) | — | — | vermelho ×1 (2.ª t1, `libpython`) |
+| 3.12 | — | verde ×1 (1.ª t1) | vermelho ×1 (2.ª t1, sinal 11), verde ×1 (2.ª t2) | vermelho ×1 (3.ª, sinal 11) |
+
+  A 3.12 é INTERMITENTE no mesmo runner (03); com 1 execução da 3.9 no runner 04, não se distingue
+  diferença entre runners de intermitência. Nenhuma conclusão sobre homogeneidade dos runners se apoia
+  nestas amostras.
+- Num runner hospedado o `pythonLocation` é `/opt/hostedtoolcache/Python/<versão>/x64` (medido no log do
+  run `38052044220`), e os mesmos testes passam (runs `38052044220` e `38100541909`).
 
 ## 5. (d) Concorrência e tempo — a 1.ª corrida na VM contra o hospedado
 
@@ -269,7 +309,8 @@ Jobs que caem na VM: `push` em `main` = 9 (`validate`, `integration-tests`, `for
 
 Por job, push de `bc803a7a` no hospedado (run `38052044220`, criado 12:27:54Z, todos os jobs começaram às
 12:27:56Z) contra o push de `d7309efa` na VM (run `38099038933`, tentativa 1, criado 00:37:07Z; fila =
-início do job − criação do run; runner R1/R2 = os 2 runners do grupo naquele run):
+início do job − início do run; parede = do início do run (`run_started_at` da tentativa) ao fim do último
+job; runner R1/R2 = os 2 runners do grupo naquele run):
 
 | job | hospedado: runner, duração | VM: fila | VM: duração | VM: runner |
 |---|---|---|---|---|
@@ -282,14 +323,12 @@ início do job − criação do run; runner R1/R2 = os 2 runners do grupo naquel
 | `integration-tests` (E2E) | `Ceo`, 101 s | 160 s | 86 s | R2 |
 | `hook-tests-python-matrix (3.12)` | `Ceo`, 438 s | 247 s | 319 s | R2 |
 | `validate` (Governance…) | `Ceo`, 371 s | 456 s | 304 s | R1 |
-| **run** | soma 2310 s, parede 1016 s | — | soma 1321 s, parede 759 s | 2 runners |
+| **run** | soma 2310 s, parede 1018 s | — | soma 1321 s, parede 760 s | 2 runners |
 
-- Leitura: cada job é igual ou mais rápido na VM (a 3.9 cai de 1016 s para 362 s), mas com 2 runners os 9
-  jobs passam em FILA — o último (`validate`) só começou 456 s (7,6 min) depois do push, atrás da 3.9 no
-  mesmo runner.
-  A parede de 759 s é menor que os 1016 s do hospedado só porque o caminho crítico de hoje (a 3.9 no
-  `ubuntu-24.04` de 4 vCPU) encolheu mais do que a fila cresceu. O `dual-rail (0)` vermelho parou cedo;
-  verde, o irmão levou 109 s.
+- Leitura: com 2 runners os 9 jobs passaram em FILA — o último (`validate`) só começou 456 s (7,6 min)
+  depois do push, atrás da 3.9 no mesmo runner. As durações são de 1 run em cada lado e de runners
+  diferentes; não sustentam afirmação de desempenho (o `AGENTS.md` veda afirmar speedup), só a forma da
+  fila. O `dual-rail (0)` vermelho parou cedo; verde, o irmão levou 109 s.
 - Simulação da fila (lista gulosa; ordem do YAML / LPT / piso `max(maior, soma/k)`), com as durações da
   VM acima (o `dual-rail (0)` estimado pelo irmão verde, 109 s; soma 1381 s, maior 362 s):
 
@@ -301,17 +340,20 @@ início do job − criação do run; runner R1/R2 = os 2 runners do grupo naquel
 | 6 | 387 / 362 / 362 s |
 | 8 | 362 / 362 / 362 s |
 
-  E com as durações do hospedado (hipótese pessimista de que a VM não acelera nada): push com 2 runners
+  E com as durações do hospedado (hipótese: cada job dura na VM o que durou no hospedado): push com 2 runners
   1387 / 1160 / 1155 s, com 4 runners 1133 / 1016 / 1016 s; schedule (11 jobs, soma 3214 s; 3 das 11
   durações são da tentativa 2 do run `38035614867`) com 2 runners 1769 / 1616 / 1607 s, com 4 runners
   1107 / 989 / 989 s.
-- Fora da simulação: o grupo `vm-trusted-ci` atende 3 repositórios (este e 2 privados da organização, 5
-  workflows), cuja carga não foi medida; o `push` e o `schedule` deste repositório têm grupos de
+- Fora da simulação: o grupo `vm-trusted-ci` atende 4 repositórios às 02:22Z (este e 3 privados da
+  organização, 5 workflows; §0), cuja carga não foi medida; o `push` e o `schedule` deste repositório têm grupos de
   concorrência distintos e podem rodar juntos; o `coverage` noturno (1258 s no `Ceo`, run `38034174442`)
   ocupa 1 runner. Um run não é amostra: a decisão de capacidade pede N runs (§8).
 - 2.ª corrida, 4 runners (run `38102851467`, push `e2119681`, criado 01:44:43Z): fila de 2 a 8 s para os
-  5 primeiros jobs, 82 a 177 s para os 4 seguintes (a 3.9 começou 177 s depois do push); parede 338 s, mas
-  com 2 jobs vermelhos que pararam cedo (3.12 272 s, 3.9 163 s) — não serve como medida de tempo verde.
+  5 primeiros jobs, 82 a 177 s para os 4 seguintes (a 3.9 começou 177 s depois do push); parede 340 s, mas
+  com 2 jobs vermelhos que pararam cedo (3.12 272 s, 3.9 163 s) — a tentativa 1 não mede tempo verde. A
+  tentativa 2 (9 jobs verdes; início do run às 02:07:06Z): os 4 primeiros jobs começaram 3 s depois e os
+  outros 5 de 79 a 156 s depois; parede 437 s (3.9 434 s no runner 01, 3.12 324 s no runner 03, `validate`
+  293 s no runner 04). A 3.ª corrida (run `38103716736`) teve parede de 373 s, com a 3.12 vermelha.
 
 ### 5.1 Risco do PR #3: os PRs (e o recuo) caem no `ubuntu-latest` de 4 vCPU
 
@@ -366,13 +408,18 @@ próprio PR #3, `pull_request`, 01:03:41Z):
   rodar na VM sem cerimônia).
 - Cadeia de suprimento: todos os jobs fazem `pip install` do PyPI com versões ABERTAS (`pytest==8.*`,
   `PyYAML>=6.0`, `pytest-xdist`, `pyyaml`, `coverage==7.6.*`). No hospedado o raio de uma versão maliciosa
-  é uma VM efêmera; na VM persistente é a máquina que atende 2 repositórios privados. As actions estão
+  é uma VM efêmera; na VM persistente é a máquina que atende 3 repositórios privados (02:22Z). As actions estão
   pinadas por SHA (`checkout`, `setup-python`, `upload-artifact`) e o binário do actionlint é conferido por
   sha256.
 - Credenciais do runner: o passo roda como o usuário Unix do runner e lê o diretório do runner (registro
   e credenciais do agente). Num runner persistente, um passo malicioso pode se passar pelo runner e
-  receber jobs dos outros repositórios do grupo, com os tokens e segredos deles. A defesa conhecida são
-  runners efêmeros (`--ephemeral` ou JIT).
+  receber jobs dos outros repositórios do grupo, com os tokens e segredos deles. O registro EFÊMERO do
+  runner (`--ephemeral` ou JIT) não resolve isso sozinho: ao fim do job ele só apaga a configuração e as
+  credenciais do próprio runner (`actions/runner` em `67f01c276e0a`: `src/Runner.Listener/Runner.cs:876-879`
+  chama `DeleteLocalRunnerConfig()`, `Configuration/ConfigurationManager.cs:496-`, que remove `.credentials`,
+  a chave e a configuração); `/tmp`, `$HOME`, tool cache e processos deixados para trás ficam na máquina.
+  A defesa é um ambiente isolado DESTRUÍDO depois de cada job (contêiner ou VM descartável), sem estado nem
+  credenciais compartilhados — o registro efêmero é só a parte do «um job por registro».
 - O log de um job deste repositório é público: o «Set up job» publica o nome do runner e o nome da máquina
   (medido); qualquer sobra de outro repositório que um passo imprima (ex.: §4.2) também vira pública.
 
@@ -406,26 +453,32 @@ do lado do GitHub e da VM, ficam com o Owner, e nenhuma delas está medida como 
 o item diz.
 
 1. **`/tmp` por runner (a falha da 1.ª corrida):** `TMPDIR` próprio por runner, no `.env` de cada runner,
-   OU runners descartáveis (um job por runner, máquina ou contêiner novo). Com `TMPDIR` por runner,
+   OU ambiente descartável por job (item 5). Com `TMPDIR` por runner,
    somar limpeza desse diretório no hook de início de job do runner (sobra de job morto no mesmo runner)
    — e os caminhos `/tmp/...` escritos por extenso no `validate.yml` seguem fora (item 9).
-2. **Python do tool cache no caminho de build (a falha da 2.ª corrida):** o interpretador que o
+2. **Python do tool cache no caminho de build (a falha da 3.9 na 2.ª corrida):** o interpretador que o
    `setup-python` põe é compilado com `-Wl,--rpath=<tool cache de build>/lib` pelo
    `actions/python-versions`; com tool cache próprio por runner, subprocesso de ambiente enxuto não acha a `libpython` (§4.6). Ou o tool cache de
    cada runner fica no caminho de build — o que, com vários runners na mesma máquina, faz os runners
    dividirem o `site-packages` (§7) —, ou cada runner é um contêiner/máquina com o seu próprio caminho de
-   build. Os runners têm de ser homogêneos: a mesma perna passou num runner e caiu noutro.
+   build. A mensagem da 3.9 comprova a classe; se ela depende do runner ou é intermitente, as amostras
+   não dizem (§4.6: 1 execução no runner 04) — medir N execuções por runner antes de concluir.
+   O sinal 11 da 3.12, intermitente no mesmo runner, é outro item, sem causa: investigar antes de
+   atribuir.
 3. **Isolamento do ambiente Python por job:** venv por job, ou tool cache só-leitura com os pacotes
    pinados — hoje o `pip install` de um job fica para o seguinte do mesmo runner (§7).
 4. **Usuário e credenciais:** um usuário Unix por runner; a VM sem credenciais (nada de `gh` autenticado,
    chave SSH, `~/.claude` de sessão humana); o uso por SSH planejado para baterias pesadas num usuário à
    parte.
-5. **Grupo dedicado ao repositório público:** não compartilhar o grupo (nem a máquina) com os 2
-   repositórios privados, ou só com runners efêmeros.
-6. **Capacidade:** com as durações da VM, 4 runners bastam para o push do `validate.yml` (simulação:
-   362–448 s contra 759 s medidos com 2, §5); a única corrida com 4 runners (§5) teve 2 jobs vermelhos e não
-   mede tempo verde; a carga dos outros repositórios e do nightly não entra na conta — decidir por N runs
-   medidos; `PYTEST_XDIST_AUTO_NUM_WORKERS × runners ≤ vCPU` (8 × 4 = 32 na 2.ª corrida; ou afinidade de
+5. **Ambiente isolado e destruído por job, e grupo dedicado ao repositório público:** cada job num
+   contêiner ou VM descartável, destruído depois do job, sem estado nem credenciais compartilhados (o
+   registro efêmero `--ephemeral`/JIT sozinho NÃO isola: só apaga a configuração e as credenciais do
+   runner, §6); e não compartilhar grupo nem máquina com os 3 repositórios privados enquanto isso não
+   valer.
+6. **Capacidade:** a simulação com as durações observadas na VM dá 362–448 s de parede para o push do
+   `validate.yml` com 4 runners, contra 760 s medidos com 2 (§5); com 4 runners há 1 tentativa verde
+   medida (parede 437 s, tentativa 2 do run `38102851467`); a carga dos outros repositórios e do nightly não
+   entra na conta — decidir por N runs medidos; `PYTEST_XDIST_AUTO_NUM_WORKERS × runners ≤ vCPU` (8 × 4 = 32 na 2.ª corrida; ou afinidade de
    CPU por runner).
 7. **Sistema e ferramentas:** Ubuntu 22.04/24.04 x64 com `lsb_release` (sem 3.9 no 26.04); tool cache
    gravável; `shellcheck`, `jq`, `rsync`, node/`npm`, `gpg`, `git`, `curl`, `sha256sum`, `shasum`
@@ -435,8 +488,9 @@ o item diz.
 9. **Caminhos fixos em `/tmp`** do `validate.yml` (§4.2) trocados por `$RUNNER_TEMP` — mudança canônica,
    pacote próprio.
 10. **Medição comparativa:** N runs na VM com o conjunto EXATO de falhas E de skips igual ao do runner
-    hospedado no mesmo SHA — as 3 corridas medidas divergiram (1 falha na 1.ª, 104 na 2.ª, 4 na 3.ª, todas
-    de ambiente).
+    hospedado no mesmo SHA — as tentativas 1 das 3 corridas divergiram: 1 falha na 1.ª (`/tmp` dividido),
+    104 na 2.ª (100 por `libpython` na 3.9, ambiente; 4 por sinal 11 na 3.12, não diagnosticado), 4 por
+    sinal 11 na 3.ª; as tentativas 2 da 1.ª e da 2.ª ficaram verdes.
 11. **Recuo:** procedimento escrito (variável ≠ `"1"` + re-run) e alerta de runner fora do ar, porque o
     job fica na fila em vez de recuar (§2); o destino do recuo é o `ubuntu-latest` (§5.1).
 12. **`coverage` no `ubuntu-latest`:** 1925 s contra o teto de 35 min (92 %, §5.1) em `pull_request` e no
@@ -453,9 +507,10 @@ o item diz.
   `38100541954` (PR #3, `pull_request`, `ubuntu-latest`), `38102851467` (push `e2119681`, VM, 4 runners),
   `38103716736` (push `e0c5ffc2`, VM, 4 runners).
 - Grupos de runner (API da organização): `vm-trusted-ci` `visibility: selected`,
-  `allows_public_repositories: true`, `restricted_to_workflows: true`, 5 workflows (`validate.yml` e
-  `coverage.yml` deste repositório em `@refs/heads/main`, mais 3 de 2 repositórios privados); 2 runners no
-  run `38099038933` e 4 online às ~01:00Z, todos `Linux`, rótulos `self-hosted,Linux,X64,canhada-ci`. Permissões de Actions do repositório: `allowed_actions:
+  `allows_public_repositories: true`, `restricted_to_workflows: true`, 5 workflows. Na leitura de antes das 00:43Z: os
+  2 deste em `@refs/heads/main` e 3 de 2 repositórios privados. Às 02:22Z: os 2 deste e 3 privados
+  (`ci.yml`, `tests.yml`, `ci.yml`) de 3 repositórios; 4 repositórios no grupo (1 público, 3 privados). 2
+  runners no run `38099038933` e 4 online às ~01:00Z e às 02:22Z, todos `Linux`, rótulos `self-hosted,Linux,X64,canhada-ci`. Permissões de Actions do repositório: `allowed_actions:
   all`, `sha_pinning_required: false`, token padrão `read`.
 - actionlint 1.7.12 (local), shellcheck do Homebrew; PyYAML 6.0.3; pytest-xdist 3.8.0 (local).
 
