@@ -2,7 +2,7 @@
 id: PLAN-190-FOLLOWUP-relaunch-out-partial-write
 parent: PLAN-190
 title: "relaunch --out confere a escrita inteira (escrita parcial entregaria cópia truncada)"
-status: reviewed
+status: executing
 created: 2026-09-17
 reviewed_at: 2026-09-28
 reviewed_by: "Owner — RATIFICO digitado em 2026-09-28 17:19 -0300 pelo OWNER-S357-MORNING.sh (etapa 2), registrado na seção «Ratificação do Owner (S357, 2026-09-28 17:19 -0300)» deste plano e landado em 7bbf2470"
@@ -157,6 +157,10 @@ lane (S357), não da condição 14.
   S357 — confirmar no ledger do Owner. Precondição de land: DEPOIS da tag GA da 1.4.1 (os dois arquivos
   de código chegam aos adopters). Paths: `.claude/scripts/ceo-launches.py`,
   `.claude/hooks/tests/test_check_workflow_launch.py`, `docs/workflow-recovery.md`, este plano.
+  - **Atualização 2026-10-11 (S363):** a W2 foi LANDADA em `7bbf2470` (2026-09-28 17:20 -0300, land
+    livre pelo `OWNER-S357-MORNING.sh`, etapa 2, no mesmo commit da ratificação abaixo), depois da tag
+    `v1.4.1` (ancestral de `7bbf2470`) e dentro de `v1.4.2`. O «NÃO landada» da linha acima e o
+    «Falta:» no fim desta seção são o registro da lane ANTES do land e ficam como estavam.
   - Evidência (suíte ALVO `.claude/hooks/tests/test_check_workflow_launch.py`, 61 testes em HEAD → 85
     na lane; Python 3.9.6, macOS APFS case-insensitive, 2026-09-23, depois da rodada 1 da revisão do
     build 1.4.2): com o `ceo-launches.py` de HEAD `19771fa1` e os testes da lane ⇒ 23 VERMELHOS, os 23
