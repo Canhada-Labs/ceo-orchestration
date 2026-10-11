@@ -1,0 +1,79 @@
+# VM-CI (PLAN-194) — controles da ratificação pós-fato, com o resultado MEDIDO (qualquer um pode refazer)
+# objeto: os bytes de .github/workflows/validate.yml e .github/workflows/coverage.yml em
+#   e21196817b299fe0557ae9c8dcf9e73b9dd4c10c (merge do PR #3, 2026-10-11T01:44:41Z; pais d7309efae537 + fc4bf83cf3e8),
+#   que somam o merge do PR #2 (d7309efae537, 00:37:04Z; pais bc803a7ac0a0 + 29e9e2a24914) e o do PR #3
+# no Anchor (e2119681; iguais em e0c5ffc2, main na escrita — git diff --stat e2119681 e0c5ffc2 -- .github/ vazio):
+#   .github/workflows/validate.yml  sha256 412a51d9d92d7a7948ea6c920184770386b6214452332fbe6a56642d9cc45f72  96546 bytes  blob a1b8d1124bd653118b7edb2580b1b4e6bb98723a
+#   .github/workflows/coverage.yml  sha256 bfb751b9d17c9daf087044261438112bd0fbb75c5f43c4b77a3dd6540dfd1f2f  13925 bytes  blob 4e4919be806363a8fb7d35a97e854d09830ea1e1
+# na base bc803a7a (= 142f01cd nesses 2 caminhos):
+#   .github/workflows/validate.yml  blob 1a23175cf3df0eb676f6fe1d5989e757420b317c
+#   .github/workflows/coverage.yml  blob 6e4d8c86c4e870763fa9ad60ac059ca0a5d1ace8
+# registro: vmci/vmci.patch = git diff --full-index bc803a7a e2119681 -- .github/workflows/
+#   sha256 e6f5d1f9ecd7586567212d110f200bd4310bcc147f8dfdb7848a8b141f10a37a (128 linhas, 7098 bytes)
+# medido em 2026-10-11 (UTC), árvores descartáveis no scratchpad da sessão, git do macOS, actionlint 1.7.12 +
+# shellcheck do Homebrew, PyYAML 6.0.3
+
+## R0 — referência (o que a verificação tem de ver)
+git show e2119681:<caminho> | shasum -a 256 -> os 2 sha256 acima (o checkout da sombra s363/vmci3, sobre e0c5ffc2, dá os mesmos)
+git diff --full-index bc803a7a e2119681 -- .github/workflows/ -> sha256 e6f5d1f9ecd7… ; idem com --no-renames ;
+  idem com GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
+git diff --stat bc803a7a e2119681 (árvore inteira) -> só os 2 arquivos, 55 inserções, 9 remoções
+git diff --stat d7309efa e2119681 -> os 2 arquivos, 6 inserções, 6 remoções (o PR #3: 'Ceo' -> 'ubuntu-latest' nas 6 expressões)
+oráculo check_canonical_edit.py --is-canonical: validate.yml 1, coverage.yml 1; vmci.patch, REVIEW-pr2.md, red-control.txt,
+  vmci-approved.md, vmci-approved.md.asc 0
+git apply vmci.patch sobre os blobs de bc803a7a -> blobs a1b8d1124bd6… e 4e4919be8063… (= Anchor)
+git apply --check vmci.patch sobre os de e2119681 -> rc 1 ; git apply -R --check -> rc 0
+  (avisos: 24 lines add whitespace errors — o espaço no fim é parte dos bytes ratificados)
+
+## R1 — 1 byte diferente no arquivo ratificado
+um único byte trocado em qualquer dos 2 arquivos muda o sha256 do conteúdo -> não confere com o sentinel
+medido no registro: canhada-ci -> canhada-cj na 1.ª ocorrência (hunk do coverage.yml), sha256 do mutante e0d3f2822f25…;
+  git apply do mutante sobre bc803a7a sai rc 0 (o git NÃO confere a pós-imagem declarada) e o coverage.yml resultante
+  tem blob 5caeab082206… != 4e4919be8063…
+  => verificar pelo sha256/blob dos ARQUIVOS no Anchor, nunca pelo rc de um git apply
+
+## R2 — normalizar o espaço no fim (git apply --whitespace=fix)
+blobs resultantes: validate.yml 739a7a5c4713… coverage.yml d2d244883e1f… != os ratificados
+  => uma «limpeza» de espaço no fim desses 2 arquivos é mudança canônica nova, não coberta por esta assinatura
+
+## R3 — caminho fora do Scope
+registro + um hunk em README.md -> caminhos: .github/workflows/coverage.yml .github/workflows/validate.yml README.md -> conjunto != Scope
+(medido com o registro de d7309efa; a regra é a mesma: só os 2 caminhos do Scope)
+
+## R4 — actionlint, as duas formas do CI, com -config-file .github/actionlint.yaml
+forma do job validate (-shellcheck="-S error -e SC2002,SC2012,SC2016,SC2129") e forma do actionlint.yml, sobre os 2 arquivos:
+  bc803a7a 0 achados, d7309efa 0 achados, e2119681 0 achados
+sem -config-file e fora de um repositório git, o bc803a7a dá 5 achados [runner-label] ("Ceo") e o d7309efa 0 — o rótulo foi para
+  dentro de expressão, onde o actionlint não confere
+
+## R5 — semântica da expressão (avaliador do Apêndice B do REVIEW-pr2.md: ghexpr_truth.py + vm_cells.py + fallback_eq.py)
+auto-teste do avaliador: 10/10
+células que vão para a VM, por job, em e2119681 (iguais às de d7309efa): validate, integration-tests,
+  formal-verification-mutation-harness, opus-4-7-profiler-smoke, hook-tests-dual-rail, hook-stdout-schema-oracle, coverage = 6 cada
+  ({push,schedule,workflow_dispatch} x {refs/heads/main, refs/heads/MAIN} x {"1"}); hook-tests-python-matrix = 24 (as 6 x 3.9/3.10/3.11/3.12; 3.14 nunca)
+recuo do job validate num pull_request: 'ubuntu-latest' em e2119681 ('Ceo' em d7309efa)
+fora da VM, valor == runs-on de bc803a7a com o mapa Ceo=ubuntu-latest: 10.800 combinações, 7.392 trocadas pelo mapa, 0 diferenças;
+  controle: sem o mapa, 7.392 diferenças; d7309efa sem o mapa, 0 diferenças; YAML igual fora do runs-on (topo e jobs)
+mutantes (job validate) — todos VERMELHOS, em e2119681 e em d7309efa:
+  sem a cláusula do ref                       células 15
+  sem a cláusula do evento                    células 12
+  != '0' no lugar de == '1'                   células 48
+  + pull_request na lista de eventos          células 8
+  recuo trocado por 'MUTANTE'                 recuo(PR) = MUTANTE
+nenhum teste do repositório pina esta expressão: o controle semântico é este avaliador
+
+## R6 — o sentinel não vira destrava de edição
+vmci-approved.md não casa nenhum padrão de descoberta do check_canonical_edit.py (_PATTERNS: PLAN-*/approved.md,
+  PLAN-*/wave-*-approved.md, PLAN-*/approved-amendment-*.md, architect/round-*/approved.md e os grandfathers) nem do ceo-boot.py,
+  e não tem linha Approved-By: -> assinado, ele NÃO libera edição de agente nos 2 workflows
+  (renomear para wave-*-approved.md ou acrescentar Approved-By: mudaria isso)
+
+## R7 — medição no GitHub (registro, não controle)
+run 38000376122 (pull_request no PR #2, variável ausente): 11 jobs nos runners de antes (Ceo, ubuntu-latest, ubuntu-24.04)
+run 38100541909 (pull_request no PR #3): 10 jobs no ubuntu-latest, a 3.9 no ubuntu-24.04; Coverage 38100541954 no ubuntu-latest: 1925 s (teto 35 min)
+run 38099038933 (push d7309efa, VM, 2 runners), tentativa 1 failure — hook-tests-dual-rail (0):
+  FAILED .claude/hooks/tests/test_adequacy_gate.py::test_no_sandbox_leak - AssertionError: ('sandbox dirs must be cleaned up', ['ceo-adequacy-jwb3ez7a'])
+  1 failed, 7121 passed, 36 skipped, 4 xfailed, 27 warnings in 44.43s ; tentativa 2 (só esse job) success
+run 38102851467 (push e2119681, VM, 4 runners) failure — matriz 3.9 (runner 04) 100 failed, 87 com rc 127 libpython3.9.so.1.0;
+  matriz 3.12 (runner 03) 4 failed com -11
+run 38103716736 (push e0c5ffc2, VM, 4 runners) failure — matriz 3.12 (runner 04) os mesmos 4 failed com -11; 3.9 (runner 01) success
