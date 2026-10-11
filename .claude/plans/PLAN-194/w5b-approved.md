@@ -169,7 +169,9 @@ dirigida, fica só nas passadas do `testpaths`: com o patch, dois testes dele sa
   MAT-W5B, numa máquina carregada (2026-10-09), viu os dois testes do `test_install_smoke.py` reprovarem
   por `TimeoutExpired` de 90 s com e sem o patch. O primeiro roda na linha `hard` da passada dirigida, que
   não tem repetição; o segundo, nas passadas do `testpaths`, com até 3 repetições isoladas. Um teto
-  estourado sob carga reprova o SIGN.
+  estourado sob carga reprova o SIGN. Medido no ensaio `--dry-run` da migração (2026-10-11, esta máquina,
+  com suítes de outras sessões rodando ao mesmo tempo): 4 testes do `test_install_sh_placeholders.py`
+  estouraram os 120 s e a linha `hard` 9 saiu rc 1.
 
 ## Revisão do patch (rail)
 
@@ -182,9 +184,9 @@ dirigida, fica só nas passadas do `testpaths`: com o patch, dois testes dele sa
 - O `w5b.patch` é `git diff --full-index --no-renames 0a953ece 01f94c78` da sombra do pacote (sem rename
   no diff: os bytes são os mesmos sem `--no-renames`). Os blobs pré-imagem das linhas `index` são os dos 4
   caminhos no `main` desde `0a953ece`.
-- O registro citado na chave `rail` dos dados é o da rodada única desta migração para o molde (texto deste
-  sentinel e dados), presa ao sha256 do patch, ao deste texto com os campos por preencher e ao dos dados.
-  O patch não mudou na migração.
+- O registro citado na chave `rail` dos dados, `rail-round-3.md`, é o da rodada única desta migração para
+  o molde (texto deste sentinel e dados) e fica preso ao sha256 do patch, ao deste texto com os campos por
+  preencher e ao dos dados. O patch não mudou na migração.
 
 <!-- bloco-comum sign-min v1 -->
 ## O SIGN deste pacote (bloco comum a todos os pacotes do molde sign-min)

@@ -3,7 +3,7 @@
 Rail-Round: 3
 Rail-Subject: .claude/plans/PLAN-194/w5b/w5b.patch (inalterado desde a rodada 2), .claude/plans/PLAN-194/w5b-approved.md (reescrito para o molde) e .claude/plans/PLAN-194/w5b/sign.tsv (novo)
 Rail-Subject-sha256: 6c691139e1c9a048b4c1b1a66586a7271d1d7e4902cd3e6b8f66319fee513bf1
-Rail-Sentinel-sha256: acb44ffcc6a6dedc0f7d235c7340adefb968d34b88314d8161fc92d723ddb6d8
+Rail-Sentinel-sha256: 8fa5244e2debecf6233d10352b3d6ba0098c44bfed5a96fd439d8a28b715138a
 Rail-Data-sha256: 78c5bd18b78e88b818f7200ab304edfff7d58761c1592bc703795da40e5e406c
 Rail-Reviewer: PENDENTE (rodada única pela D2: Codex read-only e 2 refutadores Claude na mesma rodada)
 Rail-Date: PENDENTE
