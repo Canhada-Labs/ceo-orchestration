@@ -254,16 +254,18 @@ def palavras_proibidas(texto: str) -> List[str]:
 
 MARCA_FUNC_MODELO = '''
 import os as _os
+import tempfile as _tf
 def marca(nome):
     d = @ATUAL@
     with open(_os.path.join(d, "ordem.log"), "a") as fh:
         fh.write("%s %d %d\\n" % (nome, _os.getpid(), _os.getpgid(0)))
     with open(_os.path.join(d, "env-" + nome + ".txt"), "w") as fh:
         for k in sorted(_os.environ):
-            if k in ("GNUPGHOME", "GPG_TTY", "PYTHONUNBUFFERED"):
+            if k in ("GNUPGHOME", "GPG_TTY", "PYTHONUNBUFFERED", "TMPDIR"):
                 fh.write(k + "=" + _os.environ[k] + "\\n")
             else:
                 fh.write(k + "\\n")
+        fh.write("@tempdir=" + _tf.gettempdir() + "\\n")
 '''
 
 GATES = [
@@ -847,7 +849,7 @@ def mutante_texto(texto: str, marcador: str) -> str:
            "marcador %s não é único" % marcador)
     i = alvo[0]
     recuo = linhas[i][:len(linhas[i]) - len(linhas[i].lstrip())]
-    if marcador.startswith("P0:"):
+    if marcador.startswith(("P0:", "B:")):
         linhas[i] = recuo + "pass  # " + marcador
     else:
         linhas[i] = recuo + ":  # " + marcador
@@ -856,14 +858,21 @@ def mutante_texto(texto: str, marcador: str) -> str:
     return novo
 
 
+# mutante cujo vermelho só conta com este texto na falha (o caso confere outras coisas antes)
+MOTIVO_MUTANTE = {"B:tmp": "TMPDIR"}
+
+
 def roda_mutante(caso: Caso, marcador: str, checa: Callable[[Caso, Optional[Dict[str, Optional[Tuple[str, bytes]]]]], None]) -> None:
-    caminho = NUCLEO if marcador.startswith("P0:") else ENTRADA
+    caminho = NUCLEO if marcador.startswith(("P0:", "B:")) else ENTRADA
     original = le(os.path.join(REPO, caminho)).decode()
     novo = mutante_texto(original, marcador)
     sobrepor = {caminho: ("100644", novo.encode())}
     try:
         checa(caso, sobrepor)
-    except Falha:
+    except Falha as exc:
+        motivo = MOTIVO_MUTANTE.get(marcador)
+        afirma(motivo is None or motivo in str(exc),
+               "o mutante %s reprovou o caso %s por outro motivo: %s" % (marcador, caso.nome, exc))
         G.mutantes_vermelhos.append(marcador)
         return
     raise Falha("o mutante %s passou no caso %s (devia reprovar)" % (marcador, caso.nome))
@@ -1494,14 +1503,29 @@ def confere_h1_ordem(ex: Exec) -> None:
     afirma(not depois, "marcador da fixture depois da assinatura: %r" % depois)
 
 
-def confere_h1_env(ex: Exec) -> None:
+def confere_env_filhos(ex: Exec) -> None:
+    """Todo hard, teste e gate da fixture: GNUPGHOME de T, sem GPG_TTY e TMPDIR = <T>/tmp-filhos real."""
     arquivos = glob.glob(os.path.join(G.atual, "env-*.txt"))
     nomes = [os.path.basename(a)[4:-4] for a in arquivos if os.path.basename(a)[4:].startswith(MARCADORES_FIXTURE)]
     afirma(len(nomes) >= 3 + 2 + 13, "arquivos de ambiente insuficientes: %d" % len(nomes))
+    tmp = os.path.join(ex.t, "tmp-filhos")
+    afirma(os.path.realpath(tmp) == tmp, "o TMPDIR esperado %r não é o caminho real" % tmp)
+    parcial = "/"
+    for parte in tmp.split("/")[1:]:
+        parcial = os.path.join(parcial, parte)
+        afirma(not os.path.islink(parcial), "componente do TMPDIR esperado é link simbólico: %r" % parcial)
+    afirma(os.path.isdir(tmp) and (os.lstat(tmp).st_mode & 0o7777) == 0o700, "o TMPDIR esperado não é diretório 0700")
     for nome in nomes:
         env = le_env(nome)
         afirma(env.get("GNUPGHOME") == os.path.join(ex.t, "gnupg-vazio"), "%s: GNUPGHOME %r" % (nome, env.get("GNUPGHOME")))
         afirma("GPG_TTY" not in env, "%s recebeu GPG_TTY" % nome)
+        afirma(env.get("TMPDIR") == tmp, "%s: TMPDIR %r (esperado %r)" % (nome, env.get("TMPDIR"), tmp))
+        afirma(env.get("@tempdir") == tmp, "%s: tempfile.gettempdir() %r com TMPDIR %r" % (
+            nome, env.get("@tempdir"), env.get("TMPDIR")))
+
+
+def confere_h1_env(ex: Exec) -> None:
+    confere_env_filhos(ex)
 
 
 def plantios_h1(ex: Exec) -> None:
@@ -1551,6 +1575,7 @@ def def_h() -> None:
         afirma(not os.path.exists(os.path.join(ex.clone, ASC)), "há .asc")
         afirma(le(os.path.join(ex.clone, SENT)) == ex.c.sent, "o sentinel difere do blob de A")
         afirma(not any(ln.startswith("GPG --detach-sign") for ln in ex.ordem()), "houve assinatura")
+        confere_env_filhos(ex)
     c.confere = confere_h2
 
 
@@ -2152,17 +2177,13 @@ W5B_HARD = [
 ]
 
 
-# Medido em 2026-10-11 (macOS, git 2.54.0, Python 3.9.6, pytest 7.3.0, sandbox do agente), NA ÂNCORA
-# 61aa7372 e sem o patch: (1) o teste do gpg_verify falha sem TMPDIR (o env -i do roteiro não o passa e o
-# P0:env o recusa; /tmp é symlink no macOS) e passa com TMPDIR; (2) os 2 testes do inventário de skills
-# saem rc 137 (o script morre no substrato). O ensaio exige o conjunto EXATO: qualquer mudança reprova.
-ANCORA_VERMELHOS_W5B = {
-    ".claude/hooks/tests/test_gpg_verify.py::TestLoadAllowlist::test_path_is_directory",
-    ".claude/scripts/tests/test_generate_skill_inventory.py::TestGenerateSkillInventoryCheck::"
-    "test_check_mode_passes_on_clean_tree",
-    ".claude/scripts/tests/test_generate_skill_inventory.py::TestGenerateSkillInventoryCheck::"
-    "test_emit_mode_produces_begin_end_markers",
-}
+def diagnostico_ensaio(t: str) -> str:
+    """Listas que o próprio SIGN gravou em T (ids e erros de coleta), para o relatório da falha."""
+    partes = []
+    for nome in sorted(os.listdir(t)) if t and os.path.isdir(t) else []:
+        if nome.startswith(("sobram-", "coleta-", "ids-")) and nome.endswith(".txt"):
+            partes.append("%s: %s" % (nome, le(os.path.join(t, nome)).decode("utf-8", "replace")[:4000].strip()))
+    return "; ".join(partes)
 
 
 def caso_ensaio_w5b(w5b: str) -> None:
@@ -2224,27 +2245,27 @@ def caso_ensaio_w5b(w5b: str) -> None:
         G.saidas.append(("ENSAIO-W5B", out + p.stderr.decode("utf-8", "replace")))
         linhas_out = out.splitlines()
         grava(os.path.join(G.h, "ensaio-w5b.out"), p.stdout + b"\n--stderr--\n" + p.stderr)
-        afirma(p.stderr == b"", "ensaio W5b: stderr não vazio")
+        tl = [ln[len("SIGN-FATO: logs em "):] for ln in linhas_out if ln.startswith("SIGN-FATO: logs em ")]
+        t = tl[0] if tl else ""
+        # o ensaio só passa com SIGN-ENSAIO e rc 0: nenhum desfecho de falha é aceito
+        afirma(p.returncode == 0 and linhas_out[-1:] == [msg("ENSAIO")] and p.stderr == b"",
+               "ensaio W5b: SIGN-RC=%d; fim %r; stderr %r; %s" % (
+                   p.returncode, linhas_out[-3:], p.stderr[:300], diagnostico_ensaio(t)))
         for k in range(1, len(W5B_HARD) + 1):
             afirma(any(re.match(r"^SIGN-FATO: hard %d saiu rc 0 \([0-9.]+ s\)$" % k, ln) for ln in linhas_out),
                    "ensaio W5b: hard %d sem rc 0" % k)
-        t = [ln[len("SIGN-FATO: logs em "):] for ln in linhas_out if ln.startswith("SIGN-FATO: logs em ")][0]
-        if p.returncode == 0:
-            afirma(linhas_out[-1] == msg("ENSAIO"), "ensaio W5b: rc 0 sem SIGN-ENSAIO")
-            desfecho = "SIGN-RC=0 (SIGN-ENSAIO)"
-        else:
-            sobram_p = os.path.join(t, "sobram-paralela.txt")
-            afirma(p.returncode == 1 and linhas_out[-2:] == [
-                msg("X-SUITE", p="paralela", k=len(ANCORA_VERMELHOS_W5B), arq=sobram_p), msg("FIXA")],
-                "ensaio W5b: rc %d; fim %r" % (p.returncode, linhas_out[-3:]))
-            sobram = set(le(sobram_p).decode().splitlines())
-            afirma(sobram == ANCORA_VERMELHOS_W5B, "ensaio W5b: vermelhos %r ≠ os da âncora" % sorted(sobram))
-            desfecho = ("SIGN-RC=1 por X-SUITE na passada paralela, com exatamente os %d ids vermelhos NA ÂNCORA "
-                        "neste substrato; serial e gates não rodaram" % len(sobram))
+        passadas = [ln for ln in linhas_out if re.match(r"^SIGN-FATO: passada (paralela|serial): ", ln)]
+        afirma([ln.split(":")[1].strip() for ln in passadas] == ["passada paralela", "passada serial"],
+               "ensaio W5b: passadas %r" % passadas)
+        n_rc0 = sum(1 for ln in linhas_out if re.match(r"^SIGN-FATO: .+ saiu rc 0 \([0-9.]+ s\)$", ln))
+        afirma(n_rc0 == len(W5B_HARD) + len(GATES), "ensaio W5b: %d linhas «saiu rc 0» (esperado %d)" % (
+            n_rc0, len(W5B_HARD) + len(GATES)))
         afirma(len(git(["-C", clone, "rev-list", "--all"], env=env).splitlines()) == commits_antes, "ensaio: commit novo")
         afirma(not os.path.exists(os.path.join(clone, ".claude/plans/PLAN-194/w5b-approved.md.asc")), "ensaio: .asc")
         afirma(le(os.path.join(clone, ".claude/plans/PLAN-194/w5b-approved.md")) == sent, "ensaio: sentinel mudou")
-        G.ensaio = "W5b --dry-run: %s; 9 hard rc 0; %.0f s; %d linhas" % (desfecho, dur, len(linhas_out))
+        G.ensaio = "W5b --dry-run: SIGN-RC=0 (SIGN-ENSAIO); %d hard e %d gates rc 0; %s; %.0f s; %d linhas" % (
+            len(W5B_HARD), len(GATES), "; ".join(ln[len("SIGN-FATO: "):].rsplit(" (", 1)[0] for ln in passadas),
+            dur, len(linhas_out))
     finally:
         if not G.manter:
             shutil.rmtree(d, ignore_errors=True)
@@ -2411,9 +2432,11 @@ def main() -> int:
                 afirma(c.marcador not in MUTANTE_DE, "marcador repetido %s" % c.marcador)
                 MUTANTE_DE[c.marcador] = c.nome
         MUTANTE_DE["P0:cfg"] = "H2"
+        MUTANTE_DE["B:tmp"] = "H2"
         nucleo = le(os.path.join(REPO, NUCLEO)).decode()
         entrada = le(os.path.join(REPO, ENTRADA)).decode()
-        todos = sorted(set(re.findall(r"# (P0:[a-z]+)\n", nucleo)) | set(re.findall(r"# (E:[a-z]+)\n", entrada)))
+        todos = sorted(set(re.findall(r"# (P0:[a-z]+)\n", nucleo)) | set(re.findall(r"# (B:[a-z]+)\n", nucleo)) |
+                       set(re.findall(r"# (E:[a-z]+)\n", entrada)))
         afirma(todos == sorted(MUTANTE_DE), "marcadores sem caso: %s" % (set(todos) ^ set(MUTANTE_DE)))
         roda_casos(so, args.w5b)
         if so or G.sem_ensaio:

@@ -10,7 +10,9 @@ confere pela AST (caso C1):
 - ``git`` e ``gpg`` do próprio núcleo saem dos caminhos absolutos fixados
   em P0:tools;
 - cada conferência do P0 é chamada por uma linha com o marcador único
-  ``# P0:<id>`` (os mutantes do harness trocam essa linha por ``pass``).
+  ``# P0:<id>`` (os mutantes do harness trocam essa linha por ``pass``);
+  a linha que dá o ``TMPDIR`` aos filhos da bateria leva o marcador
+  ``# B:tmp``, com o mesmo tratamento.
 """
 from __future__ import annotations
 
@@ -1460,11 +1462,15 @@ def main() -> int:
     passo(1)
     st.t = os.path.realpath(tempfile.mkdtemp(prefix="sign-min.", dir="/tmp"))
     os.mkdir(arquivo_t("gnupg-vazio"), 0o700)
+    os.mkdir(arquivo_t("tmp-filhos"), 0o700)
+    os.chmod(arquivo_t("tmp-filhos"), 0o700)
     st.git_log = arquivo_t("git.log")
     t = st.t
     say("F-TMP", t=t)
     st.env_filhos = {k: v for k, v in os.environ.items() if k != "GPG_TTY"}
     st.env_filhos["GNUPGHOME"] = arquivo_t("gnupg-vazio")
+    # TMPDIR próprio dos filhos, pelo caminho real (T já passou por realpath)
+    st.env_filhos["TMPDIR"] = arquivo_t("tmp-filhos")  # B:tmp
 
     passo(2)
     patch_t = grava_t("patch", st.patch_blob)
