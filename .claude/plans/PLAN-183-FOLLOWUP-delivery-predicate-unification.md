@@ -37,7 +37,10 @@ predicado» vale só para install e upgrade**: os canais de empacotamento e o
 purge mantêm cópias à mão (achado da revisão de QA e de DevOps do debate,
 2026-10-02; A1-F4).
 
-Sítios, relidos no HEAD `97a78fce` (a lista é de partida, não exaustiva):
+Sítios, relidos no HEAD `97a78fce` e reconferidos em `61aa7372`
+(2026-10-11, S363: os sítios 1, 2, 3, 4, 6 e 7 seguem nas mesmas linhas; o
+sítio 5 andou para `:345-349` com o `harness_replay` já landado). A lista é
+de partida, não exaustiva:
 
 | # | sítio | o que codifica |
 |---|---|---|
@@ -45,7 +48,7 @@ Sítios, relidos no HEAD `97a78fce` (a lista é de partida, não exaustiva):
 | 2 | `.github/workflows/npm-publish.yml:317-331` | `RSYNC_EXCLUDES` do canal npm (publicação) |
 | 3 | `.github/workflows/npm-publish.yml:398` | o gate do packlist: regex que afirma só a AUSÊNCIA de `tests`/`fixtures`/`eval`/`red-team-corpus`/`plans/PLAN-N`/`testing.py`/`test_isolation.py`, nunca a PRESENÇA de algo |
 | 4 | `scripts/install-npm.sh:116-130` | `RSYNC_EXCLUDES` do staging local do canal npm |
-| 5 | `scripts/build-plugin.py:342-345` | `ignore_patterns` do canal plugin (a C8 do consenso decidiu, em 2026-10-02, opção (i): acrescentar `harness_replay` aqui, por commit livre; é mais uma entrada à mão, que esta unificação absorve) |
+| 5 | `scripts/build-plugin.py:345-349` | `ignore_patterns` do canal plugin. A C8 do consenso decidiu, em 2026-10-02, opção (i): acrescentar `harness_replay` aqui, por commit livre. **Já feito** em `868231d9` (a entrada está na lista; o comentário que a explica fica em `:341-344`), portanto não é item futuro; segue sendo mais uma entrada à mão, que esta unificação absorve |
 | 6 | `scripts/npm-rebuild.sh:64-66` | `RSYNC_FLAGS` do espelho `npm/`: exclui só caches, nada de `tests`/`fixtures`; o espelho não prova o canal (C8) |
 | 7 | `scripts/upgrade.sh:4241-4242` | o purge: `_pm_trees` e `_pm_files` repetem a lista à mão (A1-F4, P3) |
 

@@ -506,9 +506,10 @@ na hora de escrever o Scope):
 **E nao ha caminho "de graca" (rail r10, P2 — verificado no repo).** A ideia
 de "usar o canal ja existente e nao mexer em auditoria" NAO se sustenta: o
 evento que existe hoje, `hint_provenance_recorded`, tem allowlist FECHADA
-(`audit_emit.py:8583-8590`: `reason, rel_dir_depth, family_hits,
+(`audit_emit.py:8592-8604`, a allowlist começa em `:8592`, linhas
+reconferidas em `61aa7372` em 2026-10-11: `reason, rel_dir_depth, family_hits,
 bytes_scanned` + envelope) — **nao ha campo de completude** — e a razao e um
-enum FECHADO (`:8597-8599`: `loaded, blocked_injection, blocked_oversize,
+enum FECHADO (`:8606-8613`: `loaded, blocked_injection, blocked_oversize,
 read_error, other`) em que qualquer valor de fora e COAGIDO para `other`.
 Carregar a incompletude na provenance exige, portanto, mexer em
 `audit_emit.py` **e** no espelho `guardrail_validator.HINT_PROVENANCE_REASONS`

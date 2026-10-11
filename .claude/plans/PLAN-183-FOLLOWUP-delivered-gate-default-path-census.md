@@ -65,6 +65,16 @@ medida**: cada sítio precisa, antes de contar como achado, da prova de que
 A lista é de PARTIDA, não exaustiva: a razão de ser deste followup é que
 ninguém a esgota lendo.
 
+**Reconferência em `61aa7372` (2026-10-11, S363, leitura em disco).** As três
+linhas de partida seguem onde a tabela diz: `hook-profiler.py:39` (a
+constante) e `:115` (o `in.json`), `ceo-diagnose.py:296` (o `pytest`) e
+`check-test-env-hygiene.py:58-59` (as duas primeiras raízes da tupla que abre
+em `:57`). O predicado também segue em
+`scripts/_framework_manifest_set.sh:95-107`. A W7a ainda não landou nesse
+commit: `check_harness_config.py:156` segue lendo
+`.claude/hooks/tests/fixtures/harness-config/replay`, portanto `61aa7372`
+também serve como árvore PRÉ-W7a para o controle vermelho.
+
 ## Desenho (restrições herdadas, não opções)
 
 - **O predicado é chamado, nunca copiado.** «Entregue» = coberto por uma
