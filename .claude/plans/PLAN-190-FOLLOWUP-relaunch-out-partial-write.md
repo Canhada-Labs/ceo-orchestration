@@ -1,8 +1,11 @@
 ---
 id: PLAN-190-FOLLOWUP-relaunch-out-partial-write
+parent: PLAN-190
 title: "relaunch --out confere a escrita inteira (escrita parcial entregaria cópia truncada)"
-status: draft
+status: reviewed
 created: 2026-09-17
+reviewed_at: 2026-09-28
+reviewed_by: "Owner — RATIFICO digitado em 2026-09-28 17:19 -0300 pelo OWNER-S357-MORNING.sh (etapa 2), registrado na seção «Ratificação do Owner (S357, 2026-09-28 17:19 -0300)» deste plano e landado em 7bbf2470"
 owner: CEO
 depends_on: [PLAN-190]
 level: L2
