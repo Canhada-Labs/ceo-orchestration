@@ -26,6 +26,10 @@ pela regra «rodada final com anexo» que o Owner ratificou em 10/09/2026.
 um retorno de 2 para 11 bytes. Hoje isso devolve sucesso e deixa no disco uma cópia TRUNCADA do snapshot
 do script — exatamente o material que o rito de recuperação manda passar como `scriptPath`.
 
+**Nota 2026-10-11 (S363):** este Context descreve o `_write_new_file` de `075beed9`, ANTES da W1
+(`47870320`) e da W2 (`7bbf2470`); o «Hoje» acima é o dia em que o achado foi registrado (2026-09-17),
+não o código de `main`. O estado depois dos dois lands está em «Progresso» e em «Success criteria».
+
 ## Goal
 
 `relaunch --out` ou entrega o arquivo com os bytes completos, ou falha nomeando o erro e NÃO deixa
@@ -487,13 +491,27 @@ macOS. Ancestralidade: `git merge-base --is-ancestor 47870320 61aa7372` e
 Check: python3 -m pytest -q .claude/hooks/tests/test_check_workflow_launch.py -k 'relaunch or Relaunch'
 
 - [x] W1 — escrita completa ou nada (laço até o último byte; falha ⇒ rc 2, nada incompleto no
-  disco): LANDADA em `47870320` (2026-09-18).
+  disco): LANDADA em `47870320` (2026-09-18), com a limpeza (`lstat` + `unlink` do destino, dois
+  passos) e os casos (a)–(d) da condição 14 declarados known-open na v1.4.1 (ver «Progresso» e a
+  entrada da 1.4.2 no `CHANGELOG.md`); a W2 abaixo é a cura desse resíduo.
 - [x] W2 — cura estrutural «opção B» (temporário no diretório privado, publicação por `link` sem
   substituição, nenhum `unlink` no destino), com as seis decisões ratificadas pelo Owner na seção
-  acima: LANDADA em `7bbf2470` (2026-09-28).
+  acima: LANDADA em `7bbf2470` (2026-09-28). «O arquivo inteiro ou nenhum» vale com a qualificação
+  de três partes registrada em «Progresso» e na entrada da 1.4.2 do `CHANGELOG.md`: enquanto a máquina
+  fica de pé; enquanto, durante a chamada, ninguém escreve no diretório do destino nem troca o que um
+  diretório do caminho resolve (rename, symlink reapontado, mount); e enquanto ninguém escreve no que
+  a chamada cria. Nada é afirmado depois de uma queda de energia.
 
 Medição do Check: 48 verdes, 59 desmarcados pelo `-k` (o arquivo inteiro: 107 verdes). Controle
 vermelho: com o `.claude/scripts/ceo-launches.py` de `7bbf2470^` (W1 sem a W2) e os testes de hoje,
 o mesmo Check dá 36 vermelhos e 12 verdes; os bytes de hoje foram restaurados e conferidos por sha256
 (`84b32bf4…`). O controle mede o código ANTERIOR à W2 contra os testes de hoje, que incluem também os
 de mudanças posteriores ao land; não atribui cada vermelho à W2.
+
+Lacuna declarada no fechamento: o `_PLAN_PATH_RE` de `.claude/hooks/check_plan_edit.py`
+(`\.claude/plans/PLAN-\d{3}-[a-z0-9-]+\.md$`) não casa `FOLLOWUP` em maiúsculas, então a máquina de
+estados do hook não vê este arquivo nem os outros planos FOLLOWUP (19 em `61aa7372`, 14 deles em
+`status: draft`). Foi por isso que a W2 landou com o plano em `draft`, e as três transições deste
+fechamento (`draft → reviewed → executing → done`, uma por commit) foram conferidas à mão, não pelo
+hook. O hook é caminho canônico; a cura da classe (aceitar `PLAN-\d{3}-FOLLOWUP-[a-z0-9-]+\.md`, com
+regressão) é item de cerimônia, fora deste plano.
