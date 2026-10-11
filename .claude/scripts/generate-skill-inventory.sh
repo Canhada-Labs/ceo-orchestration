@@ -47,9 +47,12 @@ done
 extract_frontmatter_field() {
   local file="$1"
   local field="$2"
-  python3 - "$file" "$field" <<'PY'
-import sys, re
-path, field = sys.argv[1], sys.argv[2]
+  # Inputs travel in the environment, not argv: on a macOS host with an EDR that
+  # scans interpreter argv, a long description passed as an argument got the
+  # interpreter SIGKILLed (rc 137, measured 2026-10-11); the environment did not.
+  GSI_FILE="$file" GSI_FIELD="$field" python3 - <<'PY'
+import os, re, sys
+path, field = os.environ["GSI_FILE"], os.environ["GSI_FIELD"]
 with open(path) as fh:
     content = fh.read()
 m = re.match(r'^---\s*\n(.*?)\n---\s*\n', content, re.DOTALL)
@@ -71,9 +74,10 @@ PY
 first_sentence() {
   local text="$1"
   # Find first `. ` (period+space) or truncate to 180 chars with ellipsis
-  python3 - "$text" <<'PY'
-import sys
-text = sys.argv[1]
+  # Same reason as extract_frontmatter_field: the text goes in the environment.
+  GSI_TEXT="$text" python3 - <<'PY'
+import os, sys
+text = os.environ["GSI_TEXT"]
 # First sentence up to ". " (period followed by space)
 for i, ch in enumerate(text):
     if ch == '.' and i + 1 < len(text) and text[i+1] == ' ':
