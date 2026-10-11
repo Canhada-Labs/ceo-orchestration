@@ -43,6 +43,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _HOOKS_DIR = _REPO_ROOT / ".claude" / "hooks"
@@ -95,10 +96,59 @@ def _make_root(dest):
         dst = Path(dest) / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.is_dir():
-            shutil.copytree(str(src), str(dst))
+            # Other pytest workers can atomically replace bytecode while this
+            # fixture is copied. Only source/configuration belongs in the census.
+            shutil.copytree(
+                str(src), str(dst),
+                ignore=shutil.ignore_patterns("__pycache__", "*.py[co]", "*.py[co].*"),
+            )
         else:
             shutil.copy2(str(src), str(dst))
     return dest
+
+
+
+class SkeletonCopyIsolationTest(TestEnvContext):
+    """Fixture snapshots contain sources, never interpreter-owned caches."""
+
+    def test_disappearing_bytecode_does_not_break_source_snapshot(self):
+        with TemporaryDirectory() as scratch:
+            source = Path(scratch) / "source"
+            package = source / "package"
+            cache = package / "__pycache__"
+            cache.mkdir(parents=True)
+            (package / "module.py").write_text("VALUE = 7\n")
+            (package / "settings.yaml").write_text("enabled: true\n")
+            (cache / "module.cpython-312.pyc.12345").write_bytes(b"temporary")
+            (package / "legacy.pyc").write_bytes(b"compiled")
+            (package / "legacy.pyo").write_bytes(b"optimized")
+            (package / "legacy.pyc.12345").write_bytes(b"temporary")
+            destination = Path(scratch) / "snapshot"
+            copyfile = shutil.copyfile
+
+            def copying_while_bytecode_is_renamed(src, dst, **kwargs):
+                path = Path(src)
+                if "__pycache__" in path.parts or ".pyc" in path.name:
+                    path.unlink()
+                return copyfile(src, dst, **kwargs)
+
+            with mock.patch.dict(globals(), {"_REPO_ROOT": source, "_SKELETON": ("package",)}):
+                with mock.patch.object(shutil, "copyfile", side_effect=copying_while_bytecode_is_renamed):
+                    _make_root(destination)
+            copied = destination / "package"
+            self.assertEqual({p.name for p in copied.iterdir()}, {"module.py", "settings.yaml"})
+            self.assertEqual((copied / "module.py").read_text(), "VALUE = 7\n")
+            self.assertEqual((copied / "settings.yaml").read_text(), "enabled: true\n")
+
+    def test_source_copy_errors_still_fail_the_snapshot(self):
+        with TemporaryDirectory() as scratch:
+            source = Path(scratch) / "source"
+            (source / "package").mkdir(parents=True)
+            (source / "package" / "module.py").write_text("VALUE = 7\n")
+            with mock.patch.dict(globals(), {"_REPO_ROOT": source, "_SKELETON": ("package",)}):
+                with mock.patch.object(shutil, "copyfile", side_effect=PermissionError("source unreadable")):
+                    with self.assertRaises(shutil.Error):
+                        _make_root(Path(scratch) / "snapshot")
 
 
 def _run(root):
