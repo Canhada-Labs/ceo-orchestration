@@ -2,9 +2,11 @@
 id: PLAN-190-FOLLOWUP-relaunch-out-partial-write
 parent: PLAN-190
 title: "relaunch --out confere a escrita inteira (escrita parcial entregaria cópia truncada)"
-status: executing
+status: done
 created: 2026-09-17
 reviewed_at: 2026-09-28
+completed_at: 2026-10-11
+related_commits: [47870320, 7bbf2470]
 reviewed_by: "Owner — RATIFICO digitado em 2026-09-28 17:19 -0300 pelo OWNER-S357-MORNING.sh (etapa 2), registrado na seção «Ratificação do Owner (S357, 2026-09-28 17:19 -0300)» deste plano e landado em 7bbf2470"
 owner: CEO
 depends_on: [PLAN-190]
@@ -475,3 +477,23 @@ da «Regra de parada», com a CLASSE de ambientes e o membro rc 2 → 7; o B-R1-
 itens de «Falta:» não são decisões do Owner: o CI Linux e a bateria completa ficam com o CI do push
 deste commit, a entrada do CHANGELOG da 1.4.2 é do portão 5b da esteira e o land depois da tag GA
 da 1.4.1 é este commit.
+
+## Success criteria
+
+Conferidos em 2026-10-11 (S363) sobre `61aa7372` (= `origin/main` naquele instante), Python 3.9.6,
+macOS. Ancestralidade: `git merge-base --is-ancestor 47870320 61aa7372` e
+`git merge-base --is-ancestor 7bbf2470 61aa7372` ⇒ rc 0 nos dois.
+
+Check: python3 -m pytest -q .claude/hooks/tests/test_check_workflow_launch.py -k 'relaunch or Relaunch'
+
+- [x] W1 — escrita completa ou nada (laço até o último byte; falha ⇒ rc 2, nada incompleto no
+  disco): LANDADA em `47870320` (2026-09-18).
+- [x] W2 — cura estrutural «opção B» (temporário no diretório privado, publicação por `link` sem
+  substituição, nenhum `unlink` no destino), com as seis decisões ratificadas pelo Owner na seção
+  acima: LANDADA em `7bbf2470` (2026-09-28).
+
+Medição do Check: 48 verdes, 59 desmarcados pelo `-k` (o arquivo inteiro: 107 verdes). Controle
+vermelho: com o `.claude/scripts/ceo-launches.py` de `7bbf2470^` (W1 sem a W2) e os testes de hoje,
+o mesmo Check dá 36 vermelhos e 12 verdes; os bytes de hoje foram restaurados e conferidos por sha256
+(`84b32bf4…`). O controle mede o código ANTERIOR à W2 contra os testes de hoje, que incluem também os
+de mudanças posteriores ao land; não atribui cada vermelho à W2.
