@@ -1,0 +1,6 @@
+format	sign-min-1
+rail	.claude/plans/PLAN-183/w7a/rail-record.md
+canonical	.claude/hooks/check_harness_config.py
+hard	bash	.claude/plans/PLAN-183/w7a/hard-w7a.sh
+hard	python3	.claude/scripts/validate_governance_fast.py
+hard	python3	-m	pytest	--strict-markers	-p	no:cacheprovider	-q	-rfE	--tb=no	.claude/hooks/tests/test_check_bash_safety.py	.claude/scripts/tests/test_check_active_hooks_executable.py	.claude/scripts/tests/test_check_hook_stdout_schema.py	.claude/scripts/tests/test_build_plugin_idempotency.py	.claude/scripts/tests/test_env_inventory_check.py
