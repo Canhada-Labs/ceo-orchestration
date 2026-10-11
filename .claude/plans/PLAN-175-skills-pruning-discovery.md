@@ -5,7 +5,7 @@ status: reviewed
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
-last_revised: 2026-09-07
+last_revised: 2026-10-11
 owner: CEO
 depends_on: [PLAN-171]
 budget_tokens: 620-950k
@@ -103,7 +103,10 @@ execução: o flip para `executing` é decisão do Owner, registrada no item
    dois domínios de referência na árvore. **Bloqueador nomeado:** o
    artefato de contrato da onda W1c do PLAN-171 (fronteira de posse dos
    pacotes), hoje inexistente — o PLAN-171 está `executing` e a W1c é
-   contract-only e não iniciada. O que o P3 remove é a FONTE que o
+   contract-only e não iniciada. **Atualização 2026-10-11 (S363):** o
+   PLAN-171 fechou `done` na W0 em 2026-10-10 sem entregar a W1c. O
+   contrato da W1c passou a ser da W3 deste plano (recebido do PLAN-171
+   em 2026-10-11) e é o primeiro pacote dela (AC-3.1). O que o P3 remove é a FONTE que o
    caminho de instalação por perfil lê hoje (`install.sh` resolve
    `.claude/skills/domains/<parte>` e o gerador de manifesto emite o mesmo
    caminho por parte de perfil), então o teste de regressão tem de exercer
@@ -780,16 +783,24 @@ Caminhos: o `SKILL.md` de origem, o arquivo de destino fora de
 - [ ] **AC-2.4** a consolidação usa o critério do §2.3 e as figuras são GERADAS no patch, não digitadas.
   Check: `python3 .claude/plans/PLAN-175/p2/prune-rule.py --repo . --consolidation-census --json | python3 -c "import json,sys;d=json.load(sys.stdin);p=d['duplicate_basename_pairs'];print(p);sys.exit(0 if isinstance(p,list) and all('core' not in x['tiers'] for x in p) else 1)"` — reprova se algum par duplicado passar a envolver `core`, que é a condição em que o §2.3 muda de resposta.
 
-### W3 — domain-packs opcionais (BLOQUEADA pelo PLAN-171 W1c)
+### W3 — domain-packs opcionais (o contrato da W1c é desta onda desde 2026-10-11)
 
-Regra de parada: sem o artefato de contrato da W1c em disco, com caminho e
-data, esta onda não abre. Decomposição por domínio, um pacote por vez, para
-caber no teto de 8 caminhos.
+**Atualização 2026-10-11 (S363): o contrato da W1c é desta onda** (recebido
+do PLAN-171 em 2026-10-11). O PLAN-171 fechou `done` na W0 em 2026-10-10 e
+moveu a W1c para cá (caixa da W1c no `## Success criteria` dele). A regra
+de parada antiga era «sem o artefato de contrato da W1c em disco, com
+caminho e data, esta onda não abre». Com o PLAN-171 `done`, ela deixaria a
+onda fechada para sempre. A regra passa a valer DENTRO da onda: o primeiro
+pacote da W3 escreve o contrato (AC-3.1), e nenhum pacote de migração por
+domínio abre antes de o contrato estar em disco, com caminho e data.
+Decomposição por domínio, um pacote por vez, para caber no teto de 8
+caminhos.
 
 - [ ] **AC-3.0** [P0] o harness de instalação aprende a receber perfil. **Medido no HEAD: ele não parseia argumento nenhum** — `scripts/tests/smoke-install.sh:17` é `TARGET="${1:-}"`, `:25` faz `mkdir -p "$TARGET"` e `:34` chama o installer com `--profile core,frontend` FIXO; não há `case`, `shift` nem `getopts` no arquivo. Passar `--profile core,<domínio>` a ele cria um diretório chamado `--profile` e instala o perfil fixo. O harness é caminho LIVRE (oráculo `0`); o installer, não (oráculo `1`). **Quem entrega esta perna — esta onda ou o PLAN-171 — é a OQ-7 do §10.**
   Check: `D=$(mktemp -d); bash scripts/tests/smoke-install.sh "$D" --profile core,fintech >/dev/null 2>&1; test -d "$D/.claude/skills/domains/fintech"; R=$?; rm -rf "$D"; exit $R` — vermelho hoje, porque o harness ignora a bandeira e instala o perfil fixo `core,frontend`. **O alvo é sempre um diretório descartável passado como primeiro posicional**: rodar o harness com a bandeira na posição do alvo faria `mkdir -p "--profile"` dentro do repositório, e um `Check:` não escreve lixo na árvore viva.
-- [ ] **AC-3.1** [P0] o artefato de contrato da W1c do PLAN-171 existe em disco, com caminho e data, e é citado aqui pelo caminho. A W1c sobreviveu ao corte de 2026-09-06 que cortou W3, W4 e W5 daquele plano (`.claude/plans/PLAN-171-governance-imports-provenance.md:164`, `:186`, `:210`).
-  Check: `python3 -c "import re,os,sys;x=open('.claude/plans/PLAN-171-governance-imports-provenance.md').read();m=re.search(r'W1c[^\n]*\n(?:[^\n]*\n){0,40}?([.\w/-]+\.md)',x);p=m.group(1) if m else None;print(p, bool(p) and os.path.exists(p));sys.exit(0 if p and os.path.exists(p) else 1)"` — uma perna só, que casa o caminho citado E confere que ele existe em disco. Vermelho hoje: a expressão devolve `None`, porque a W1c é contract-only e não iniciada.
+- [ ] **AC-3.1** [P0] o contrato da W1c, agora produzido por esta onda, existe em disco em `.claude/plans/PLAN-175/w3/domain-pack-ownership-contract.md`, com uma linha `Data: AAAA-MM-DD`, e responde às três perguntas que o PLAN-171 fixou para a W1c (§7 daquele plano): o que é framework e o que é pack; quem assina um pack; como a CI trata um pack ausente. O AC herdado vale aqui: a migração por domínio executa SEM decisão nova. Origem: `.claude/plans/PLAN-171-governance-imports-provenance.md:166`, `:188` e `:212`.
+  Check: `P=.claude/plans/PLAN-175/w3/domain-pack-ownership-contract.md; test -f "$P" && grep -qE '^Data: [0-9]{4}-[0-9]{2}-[0-9]{2}' "$P" && grep -q '^## Fronteira framework-pack' "$P" && grep -q '^## Quem assina o pack' "$P" && grep -q '^## Pack ausente na CI' "$P"` — vermelho até o contrato existir com a data e as três seções. Não lê o texto de nenhum outro plano.
+  — 2026-10-11 (S363): Check TROCADO. O anterior procurava, no texto do PLAN-171, uma linha que começasse com um caminho `.md` até 40 linhas depois de «W1c» e conferia se o arquivo existia. Com o PLAN-171 `done`, o artefato nunca seria citado lá. E qualquer caminho `.md` existente que caísse naquela janela deixaria o Check verde em falso. Medido antes da troca: `None False`, rc 1.
 - [ ] **AC-3.2** [P0] perna A do teste-mestre: instalação de adotante SEM pacotes de domínio funciona.
   Check: `bash scripts/tests/smoke-install.sh` sai `0`. Aqui o código de saída É o veredito — o harness carrega as próprias asserções e sai diferente de zero quando uma delas reprova, ao contrário das invocações que só imprimem.
 - [ ] **AC-3.3** [P0] perna B do teste-mestre, a que de fato regride: instalação com perfil `core` mais um domínio, DEPOIS da mudança — o caminho que hoje lê `.claude/skills/domains/<parte>` (`scripts/install.sh:1310` e `:1319`). O AC asserta que o diretório do domínio APARECE no alvo; a perna A e a perna B deixam de ser o mesmo comando.
@@ -801,7 +812,9 @@ caber no teto de 8 caminhos.
 
 - **Bloqueador único e real:** o artefato de contrato da onda W1c do
   PLAN-171 (fronteira de posse dos domain-packs). Ele prende **apenas a
-  W3**. As ondas W0, W1 e W4 não dependem dele.
+  W3**. As ondas W0, W1 e W4 não dependem dele. **Atualização 2026-10-11
+  (S363):** deixou de ser bloqueador externo. O PLAN-171 fechou `done` e o
+  contrato passou a ser o primeiro pacote da própria W3 (AC-3.1).
 - **Uma só fonte de espera externa — agora verificável.** O frontmatter diz
   `external_wait: none`, **ratificado pelo Owner em 2026-09-06** (registro
   em `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md`
@@ -1018,6 +1031,11 @@ redação.
   AC-3.0 deste plano, ou o PLAN-171. O harness é caminho livre; o installer
   não. Consequência de não escolher: a AC-3.3 fica dependente de um
   instrumento sem dono.
+  - **Nota 2026-10-11 (S363):** o contrato da W1c é desta onda (recebido
+    do PLAN-171 em 2026-10-11). O PLAN-171 fechou `done` na W0 em
+    2026-10-10 e não entrega nem a W1c nem a perna de perfil do harness,
+    então a opção «o PLAN-171» desta pergunta deixou de existir. A escolha
+    do dono da AC-3.0 continua do Owner.
 - **OQ-8 — teto de gasto e critério de morte por custo.** O §9 pré-registra
   o mecanismo (medir ao fim de cada sessão e parar no teto) e deixa o
   NÚMERO em aberto, porque ele decide quando o plano para. A faixa
@@ -1073,3 +1091,8 @@ redação.
 
 - **2026-09-07 (S348, Owner acordado; verbatim):** OQ-1 (arquitetura da elegibilidade, opções A/B/C/D da §2.1) — «D — não mensurável hoje» (contra a recomendação C). Consequência: sem rodada 3 e sem wave de poda até existir um instrumento que meça a elegibilidade; o plano permanece `reviewed`. A wave de instrumento é decisão seguinte do Owner.
 - **2026-09-07 (S348, Owner acordado; verbatim):** próximo passo após «D — não mensurável hoje» — «W0 de instrumento (livre): medir a elegibilidade antes de podar (Recomendado)». A W0 constrói o instrumento (citações reais por arquétipo, uso no audit log, roteamento) e publica a série; a poda só depois, com a arquitetura escolhida sobre números. `status:` permanece `reviewed` até a W0 ser landada e a arquitetura ratificada.
+- **2026-10-11 (S363, recíproca do fechamento do PLAN-171):** o contrato da W1c é desta onda,
+  recebido do PLAN-171 em 2026-10-11 (o PLAN-171 fechou `done` na W0 em 2026-10-10). Mudou: o
+  título e a regra de parada da W3, o AC-3.1 (artefato desta onda e Check que não lê outro plano),
+  o bloqueador do §6, o passo 3 do §1 e uma nota na OQ-7. O Check novo do AC-3.1 é vermelho até
+  o contrato existir. `status:` permanece `reviewed`.

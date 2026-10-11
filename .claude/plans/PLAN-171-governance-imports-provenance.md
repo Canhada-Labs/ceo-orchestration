@@ -277,11 +277,12 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   rail; Grok = gatilho; ADR aceito por cerimônia): MOVIDA para
   `PLAN-171-FOLLOWUP-batch-approval`, junto do contrato de veredito da W1. Não
   entregue.
-- [>] **W1c — contrato de fronteira de posse dos domain-packs:** MOVIDA para o
-  PLAN-175, seu único consumidor (W3, AC-3.1). Não entregue. A edição do PLAN-175
-  que recebe o contrato fica FORA deste pacote. Até ela landar, o AC-3.1 daquele
-  plano procura o artefato no texto DESTE plano e segue vermelho, o que é o
-  estado verdadeiro.
+- [>] **W1c — contrato de fronteira de posse dos domain-packs:** MOVIDA para a
+  W3 do PLAN-175, seu único consumidor. Não entregue. Recíproca datada de
+  2026-10-11 no PLAN-175: título e regra de parada da W3, §6 e OQ-7. O AC-3.1
+  de lá passou a exigir o artefato que a própria W3 produz, com Check que não
+  lê o texto deste plano e que fica vermelho até o contrato existir.
+  Check: `grep -q 'o contrato da W1c é desta onda' .claude/plans/PLAN-175-skills-pruning-discovery.md`
 - [>] **W1d, metade canônica** (teto G12 de 6 para 8 em
   `.claude/skills/core/parallelization-by-default/SKILL.md`, oráculo 1): MOVIDA
   para `PLAN-171-FOLLOWUP-readinjection-docstring`, que reúne o texto canônico
@@ -494,3 +495,8 @@ L3 roda no início da execução (Gate 3), como manda o protocolo.
   `read-provenance`, `readinjection-docstring`, `lote2-generated-figures` e `cost-envelope-emit`
   (prefixo `PLAN-171-FOLLOWUP-`). O `5b175356` entra em `related_commits`. Adendo datado no §6 do
   veredito consolidado da W0.
+- **2026-10-11 (S363, cura do rail r-planos: 1 P1, item «MOVIDO» sem linha recíproca no destino):**
+  a W1c ganhou a recíproca no PLAN-175 (W3, §6, OQ-7). O AC-3.1 de lá aponta o artefato que a W3
+  produz (`.claude/plans/PLAN-175/w3/domain-pack-ownership-contract.md`). Antes, ele procurava um
+  caminho `.md` no texto deste plano. O Check novo continua vermelho até o contrato existir;
+  provado com controle positivo e dois negativos numa árvore descartável.
