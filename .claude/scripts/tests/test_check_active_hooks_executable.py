@@ -94,37 +94,68 @@ class CheckActiveHooksExecutableTest(TestEnvContext):
                 self.assertEqual(result.returncode, 2, msg=f"{const}: {result.stdout!r} {result.stderr!r}")
                 self.assertIn(f"non-standard JSON constant {const}", result.stderr)
 
-    def test_malformed_settings_red_through_the_harness_gate_delegation(self) -> None:
-        """A top-level null / [] / 1 / "s" / true (and NaN) is malformed: exit 2 here, and
-        RED — not a WARN-green rc 0 — in check_harness_config.py, which delegates to this
-        script (subgate rail r1 P2). Measured through the delegation, with --settings."""
+    def _direct_and_gate(self, td: Path, body: str):
+        """Run this script directly, and check_harness_config.py --static (which
+        delegates to it) with a clean --settings, over a temp tree whose
+        .claude/settings.json is ``body``."""
         import shutil
+        for rel in (".claude/scripts/check-active-hooks-executable.py",
+                    ".claude/hooks/check_harness_config.py"):
+            (td / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO_ROOT / rel, td / rel)
+        (td / ".claude" / "settings.json").write_text(body, encoding="utf-8")
+        (td / "probe.json").write_text("{}", encoding="utf-8")
+        direct = subprocess.run(
+            [sys.executable, str(td / ".claude/scripts/check-active-hooks-executable.py")],
+            cwd=str(td), capture_output=True, text=True, check=False, timeout=10,
+        )
+        gate = subprocess.run(
+            [sys.executable, str(td / ".claude/hooks/check_harness_config.py"),
+             "--repo-root", str(td), "--static", "--settings", str(td / "probe.json")],
+            cwd=str(td), capture_output=True, text=True, check=False, timeout=60,
+        )
+        return direct, gate
+
+    def test_malformed_settings_red_through_the_harness_gate_delegation(self) -> None:
+        """Malformed settings are exit 2 here and RED — never a WARN-green rc 0 — in
+        check_harness_config.py, which delegates to this script (subgate rails r1/r2):
+        a top-level non-object, NaN, a hooks shape that deviates (layer 1, by JSON
+        path) and a form layer 1 does not foresee (layer 2, by exception type)."""
         not_obj = ".claude/settings.json: top-level JSON is not an object"
-        for body, why in (("null", not_obj), ("[]", not_obj), ("1", not_obj), ('"s"', not_obj),
-                          ("true", not_obj), ('{"x": NaN}', "non-standard JSON constant NaN")):
+        cases = [(lit, not_obj) for lit in ("null", "[]", "1", '"s"', "true")] + [
+            ('{"x": NaN}', "non-standard JSON constant NaN"),
+            ('{"hooks":{"PreToolUse":[{"hooks":1}]}}', 'hooks["PreToolUse"][0].hooks: expected array'),
+            ('{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":1}]}]}}',
+             'hooks["PreToolUse"][0].hooks[0].command: expected string'),
+            ('{"hooks":[]}', "hooks: expected object"),
+            ('{"hooks":{"PreToolUse":"x"}}', 'hooks["PreToolUse"]: expected array'),
+            ('{"hooks":{"Stop":[{"hooks":[{"type":"prompt","command":1}]}]}}', "TypeError while reading"),
+        ]
+        for body, why in cases:
             with TemporaryDirectory() as td:
-                tdp = Path(td)
-                for rel in (".claude/scripts/check-active-hooks-executable.py",
-                            ".claude/hooks/check_harness_config.py"):
-                    (tdp / rel).parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(REPO_ROOT / rel, tdp / rel)
-                (tdp / ".claude" / "settings.json").write_text(body, encoding="utf-8")
-                (tdp / "probe.json").write_text("{}", encoding="utf-8")
-                direct = subprocess.run(
-                    [sys.executable, str(tdp / ".claude/scripts/check-active-hooks-executable.py")],
-                    cwd=str(tdp), capture_output=True, text=True, check=False, timeout=10,
-                )
+                direct, gate = self._direct_and_gate(Path(td), body)
                 self.assertEqual(direct.returncode, 2, msg=f"{body}: {direct.stderr!r}")
-                self.assertTrue(direct.stderr.startswith("::error::cannot parse "), direct.stderr)
+                self.assertTrue(direct.stderr.startswith("::error::"), direct.stderr)
                 self.assertIn(why, direct.stderr)
-                gate = subprocess.run(
-                    [sys.executable, str(tdp / ".claude/hooks/check_harness_config.py"),
-                     "--repo-root", str(tdp), "--static", "--settings", str(tdp / "probe.json")],
-                    cwd=str(tdp), capture_output=True, text=True, check=False, timeout=60,
-                )
                 self.assertEqual(gate.returncode, 1, msg=f"{body}: {gate.stdout!r}")
                 self.assertIn("exec-bit gate rc=2", gate.stdout)
 
+    def test_legitimate_settings_stay_green_through_the_delegation(self) -> None:
+        """Converse controls: settings WITHOUT a ``hooks`` key (0 refs) and the real
+        repo settings (hooks present) stay green, directly and through the gate."""
+        with TemporaryDirectory() as td:
+            direct, gate = self._direct_and_gate(Path(td), '{"permissions": {}}')
+            self.assertEqual((direct.returncode, gate.returncode), (0, 0), msg=direct.stderr + gate.stdout)
+            self.assertIn("OK: 0 active hook reference(s)", direct.stdout)
+        with TemporaryDirectory() as td:
+            (Path(td) / "probe.json").write_text("{}", encoding="utf-8")
+            gate = subprocess.run(
+                [sys.executable, str(REPO_ROOT / ".claude/hooks/check_harness_config.py"),
+                 "--repo-root", str(REPO_ROOT), "--static", "--settings", str(Path(td) / "probe.json")],
+                cwd=str(REPO_ROOT), capture_output=True, text=True, check=False, timeout=60,
+            )
+            self.assertEqual(gate.returncode, 0, msg=gate.stdout)
+            self.assertNotIn("exec_bit", gate.stdout)
 
 if __name__ == "__main__":
     unittest.main()

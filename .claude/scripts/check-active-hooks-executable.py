@@ -65,25 +65,53 @@ def _iter_hook_paths(settings_path: Path) -> Iterable[str]:
         # delegating check_harness_config.py downgraded to a WARN — rc 0.
         print(f"::error::cannot parse {settings_path}: top-level JSON is not an object", file=sys.stderr)
         sys.exit(2)
-    hooks = data.get("hooks", {})
-    if not isinstance(hooks, dict):
-        return
-    for matcher_block in hooks.values():
-        if not isinstance(matcher_block, list):
-            continue
-        for entry in matcher_block:
-            if not isinstance(entry, dict):
-                continue
-            for hook in entry.get("hooks", []) or []:
-                if not isinstance(hook, dict):
-                    continue
-                cmd = hook.get("command", "") or ""
-                for match in _PY_HOOK_DIRECT_RE.finditer(cmd):
-                    yield match.group(1)
-                for match in _PY_HOOK_VIA_SHIM_RE.finditer(cmd):
-                    name = match.group(1)
+    # Layer 1 — the shape, by FORM, before any walk: a malformed `hooks` used to be
+    # skipped (rc 0) or to raise mid-walk (WARN-green through the delegation).
+    bad = _hooks_shape_error(data)
+    if bad:
+        print(f"::error::malformed settings: {bad} ({settings_path})", file=sys.stderr)
+        sys.exit(2)
+    # Layer 2 — any exception while walking the settings is INPUT this gate cannot
+    # consume (never infrastructure): exit 2 named, so a form layer 1 does not
+    # foresee closes too.
+    found: List[str] = []
+    try:
+        for entries in data.get("hooks", {}).values():
+            for entry in entries:
+                for hook in entry["hooks"]:
+                    cmd = hook.get("command", "") or ""
+                    found += [m.group(1) for m in _PY_HOOK_DIRECT_RE.finditer(cmd)]
                     # Bare hook script — resolve to .claude/hooks/<name>
-                    yield f".claude/hooks/{name}"
+                    found += [f".claude/hooks/{m.group(1)}" for m in _PY_HOOK_VIA_SHIM_RE.finditer(cmd)]
+    except Exception as exc:
+        print(f"::error::malformed settings: {type(exc).__name__} while reading {settings_path}: {exc}",
+              file=sys.stderr)
+        sys.exit(2)
+    yield from found
+
+
+def _hooks_shape_error(data: dict) -> str:
+    """'<JSON path> <expected type>' of the first deviation of ``hooks`` from the
+    settings shape, or '' — settings without a ``hooks`` key are valid (0 refs)."""
+    if "hooks" not in data:
+        return ""
+    if not isinstance(data["hooks"], dict):
+        return "hooks: expected object"
+    for event, entries in data["hooks"].items():
+        at = f"hooks[{json.dumps(event)[:80]}]"
+        if not isinstance(entries, list):
+            return f"{at}: expected array"
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                return f"{at}[{i}]: expected object"
+            if not isinstance(entry.get("hooks"), list):
+                return f"{at}[{i}].hooks: expected array"
+            for j, hook in enumerate(entry["hooks"]):
+                if not isinstance(hook, dict):
+                    return f"{at}[{i}].hooks[{j}]: expected object"
+                if hook.get("type") == "command" and not isinstance(hook.get("command"), str):
+                    return f"{at}[{i}].hooks[{j}].command: expected string"
+    return ""
 
 
 def main() -> int:
