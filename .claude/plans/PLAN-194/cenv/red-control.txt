@@ -1,0 +1,23 @@
+# cenv (PLAN-194, Lote B) — controle vermelho: o teste NOVO do pacote contra o hook ANTERIOR
+# base: HEAD 61aa7372 (main em 2026-10-11); .claude/hooks/check_cost_envelope.py no blob pré-imagem
+# 03ad92380ad8fc95878c1d36a4efb63f4b1c8a0d, o mesmo de 6ccde6b0 (a base do sujeito revisado pelo rail)
+# o teste novo = a pós-imagem de .claude/hooks/tests/test_check_cost_envelope_emit.py do cenv.patch (blob
+# 8e13237d68bbdb344fa69e70d483c11717c2a126), materializado SOZINHO numa cópia do HEAD (git archive) e
+# rodado na raiz dela com `python3 -m pytest -q -p no:cacheprovider -rfE --tb=short <o teste>`
+# medido pelo construtor dos materiais em 2026-10-11T04:30:10Z, macOS (Darwin 27.0.0), Python 3.9.6,
+# pytest 7.3.0: rc=1, «1 failed in 0.44s»; a asserção «exactly one cost_envelope_capped row expected; got
+# 0» traz o stderr do hook, «[check_cost_envelope] emit_generic cost_envelope_capped exception:
+# TypeError("emit_generic() got multiple values for argument 'action'")» (as aspas simples aparecem
+# escapadas no log, por isso a linha REASON abaixo para antes delas)
+# o teste novo e o de bloqueio com o patch inteiro (cópia do HEAD + cenv.patch, blobs pós-imagem 0f3052a5…,
+# b432d9a8…, 8e13237d…), mesmo dia, 2026-10-11T04:29:41Z: rc=0, «9 passed in 3.46s», nenhuma linha FAILED
+# reproduzido pelo construtor da migração ao molde sign-min em 2026-10-11T19:28:00Z (vermelho) e
+# 19:28:11Z (verde), mesma máquina e versões, sobre 598b70e5 (o hook no mesmo blob pré-imagem 03ad9238…),
+# com HOME descartável: rc=1, «1 failed in 0.70s», o mesmo id e o mesmo TypeError; com o patch, rc=0,
+# «9 passed in 3.35s»
+# Este arquivo é REGISTRO (molde sign-min, decisão D1): o SIGN não o lê nem o executa; o rail do pacote o
+# reproduz sobre as pré-imagens que o SIGN confere. As linhas abaixo são o conjunto esperado de ids
+# («FAILED »/«ERROR »: nem a mais, nem a menos) e trechos que aparecem no log («REASON: »).
+
+FAILED .claude/hooks/tests/test_check_cost_envelope_emit.py::CostEnvelopeCappedEmitTests::test_capped_dispatch_writes_exactly_one_event
+REASON: emit_generic cost_envelope_capped exception: TypeError("emit_generic() got multiple values for argument

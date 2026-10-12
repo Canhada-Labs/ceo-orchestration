@@ -1,0 +1,14 @@
+# W5b (PLAN-194): dados do molde sign-min (formato sign-min-1). Os hard sao os do SIGN anterior do pacote:
+# passadas duras, gates de corpus proprios e a passada dirigida dos oraculos pytest do install.sh.
+format	sign-min-1
+rail	.claude/plans/PLAN-194/w5b/rail-round-3.md
+canonical	scripts/install.sh
+hard	bash	-n	scripts/install.sh
+hard	python3	.claude/scripts/check-installer-write-safety.py
+hard	bash	scripts/tests/test-install-deny-baseline.sh
+hard	python3	.claude/scripts/validate_governance_fast.py
+hard	python3	.claude/scripts/check-time-unit.py	docs/deny-baseline.md
+hard	python3	.claude/scripts/check-install-profiles.py
+hard	python3	.claude/scripts/gen-settings-user-template.py	--check
+hard	bash	scripts/tests/test-manifest-delivery-route.sh
+hard	python3	-m	pytest	--strict-markers	-p	no:cacheprovider	-q	-rfE	--tb=short	.claude/hooks/tests/test_session_76_audit_v3_findings.py	.claude/hooks/tests/test_session_77_audit_v3_backlog_findings.py	.claude/scripts/tests/test_check_installer_write_safety.py	.claude/scripts/tests/test_install_sh_placeholders.py	.claude/scripts/tests/test_install_sh_self_sha.py	.claude/scripts/tests/test_settings_guard_loadability.py	.claude/scripts/tests/test_parity_seed_once_declared.py	.claude/scripts/tests/test_parity_source_resolution.py	.claude/scripts/tests/test_check_contamination_personal_path.py	tests/unit/test_install_yaml_glob.py	.claude/scripts/tests/test_upgrade_settings_migration.py	.claude/scripts/tests/test_install_user_skips_governance_hooks.py	.claude/scripts/tests/test_install_user_preserves_existing_repo.py	.claude/scripts/tests/test_install_maintainer_unchanged.py

@@ -1,0 +1,79 @@
+# W7a (PLAN-183), pacote de CÓDIGO — controle vermelho e registros (medição do construtor; o SIGN não os roda)
+#
+# O SIGN do molde sign-min não executa nenhum controle vermelho (decisão D1 do molde): este arquivo registra o
+# que o construtor mediu, com data e substrato, e o rail do pacote o reproduz sobre as pré-imagens que o SIGN
+# confere pelas linhas `index` do w7a.patch (P0:patch). Pré-imagens: .claude/hooks/check_harness_config.py no
+# blob 4a60dd75ff3687b28268340ca477de1d2eaf9c54 (100755), .claude/hooks/tests/test_check_harness_config.py no
+# blob 8d9da38d2b1f4082fb70b937cf1cbacd01549a4e e as 3 fixtures antigas nos blobs b57030c5…, 8474fa9c… e
+# 64c2088a…; os 3 caminhos criados, ausentes. Essas pré-imagens são as mesmas em 0a953ece (a base do sujeito
+# revisado pelo rail), em 61aa7372 e em 598b70e5 (o molde, sobre 2a815a16 = origin/main de 2026-10-11).
+#
+# (a) O teste NOVO (a pós-imagem de .claude/hooks/tests/test_check_harness_config.py do w7a.patch, blob
+#     eadc45cef5a1915df6dcbdd77c7560382193888c), SOZINHO, contra o hook pré-imagem: numa cópia descartável da
+#     árvore de 598b70e5 (clone local, só esse arquivo trocado pela pós-imagem), `python3 -m pytest
+#     .claude/hooks/tests/test_check_harness_config.py -q -p no:cacheprovider -rfE --tb=no` sob `env -i` (PATH,
+#     HOME e TMPDIR descartáveis, USER, LOGNAME, SHELL, TERM, LANG, PAGER, PYTHONUSERBASE), 3 execuções
+#     terminadas às 2026-10-11T19:31:19Z (macOS, Darwin 27.0.0, Python 3.9.6, pytest 7.3.0): rc 1 nas 3, «9
+#     failed, 30 passed», sempre com EXATAMENTE os ids abaixo (sha1 da lista ordenada das linhas FAILED, sem a
+#     mensagem: 2342bd8058f21463af5cd8ca94af22932de9033d nas 3 — o mesmo da medição de 2026-10-11 às 04:00Z
+#     sobre 61aa7372). Com o w7a.patch inteiro aplicado, o mesmo arquivo dá «39 passed» (a 5.ª conferência do
+#     .claude/plans/PLAN-183/w7a/hard-w7a.sh, que o SIGN roda).
+
+FAILED .claude/hooks/tests/test_check_harness_config.py::TestStaticOnFixtureCorpus::test_malformed_settings_raises_value_error
+FAILED .claude/hooks/tests/test_check_harness_config.py::TestStaticOnFixtureCorpus::test_non_utf8_allowlist_falls_back_to_seed
+FAILED .claude/hooks/tests/test_check_harness_config.py::TestReplay::test_default_dir_holds_exactly_the_required_fixtures
+FAILED .claude/hooks/tests/test_check_harness_config.py::TestReplay::test_doubled_brace_fixture_reddens_run
+FAILED .claude/hooks/tests/test_check_harness_config.py::TestReplay::test_every_json_read_refuses_non_json_constants
+FAILED .claude/hooks/tests/test_check_harness_config.py::TestReplay::test_placeholder_substitution
+FAILED .claude/hooks/tests/test_check_harness_config.py::TestReplay::test_undecodable_deep_or_non_json_hook_stdout_is_named_red
+FAILED .claude/hooks/tests/test_check_harness_config.py::TestReplay::test_unparseable_fixture_reddens_run
+FAILED .claude/hooks/tests/test_check_harness_config.py::TestDeliveredDefaults::test_red_on_absence_reads_are_delivered
+
+# (b) Perna vermelha da C7: instalação do zero (`bash <árvore>/scripts/install.sh <alvo> --profile core`, alvo
+#     com um .git vazio, HOME descartável, sem CEO_SOTA_DISABLE, CLAUDE_PROJECT_DIR e CLAUDE_PROJECT_DIR_NATIVE)
+#     a partir da árvore de 598b70e5 SEM o patch, e `python3 -B <alvo>/.claude/hooks/check_harness_config.py
+#     --repo-root <alvo> --replay --no-exec-bit`: instalação rc 0 em 69 s, terminada às 2026-10-11T19:32:45Z; o
+#     gate: rc 1, três blocos «[RED] replay @», três «positive-control fixture MISSING» e a última linha
+#     «FAIL: 3 RED finding(s) (0 warning(s))». A perna verde é a 2.ª conferência do hard-w7a.sh.
+#
+# C6 (os dois varrimentos de marcador sobre <alvo>/.claude — `grep -RIl '{{[A-Z_][A-Z0-9_]*}}'`, o do
+#     install.sh, e `grep -RIl '{{'`): no alvo da perna (b), 16 e 28 arquivos; num alvo instalado do mesmo modo
+#     a partir da árvore de 598b70e5 COM o patch, 16 e 28 (instalação terminada às 2026-10-11T19:36:27Z); os
+#     mesmos caminhos relativos nos dois alvos (listas iguais byte a byte). Essa comparação usa o alvo sem o patch, por isso é registro, como a perna (b);
+#     o SIGN confere, no alvo com o patch, que a pasta nova não tem «{{» (2.ª conferência do hard-w7a.sh).
+#
+# Registros anteriores (medidos pelo MAT-W7A em 2026-10-11, sobre 61aa7372, mesmas pré-imagens; macOS, Darwin
+# 27.0.0, Python 3.9.6, pytest 7.3.0):
+#
+# AC3 (asserção estrutural de entrega, «o teste falha quando REPLAY_FIXTURES_REL volta a .claude/hooks/tests/...»):
+#     numa cópia descartável da árvore com o w7a.patch, só a constante REPLAY_FIXTURES_REL trocada de volta para
+#     ".claude/hooks/tests/fixtures/harness-config/replay" (um hunk de 1 linha, aplicado por git apply na cópia):
+#     o arquivo de teste dá rc 1, «5 failed, 34 passed» (2026-10-11 às 04:14:34Z):
+#       TestReplay::test_default_dir_holds_exactly_the_required_fixtures
+#       TestReplay::test_doubled_brace_fixture_reddens_run
+#       TestReplay::test_live_positive_controls_all_block
+#       TestReplay::test_tampered_fixture_reddens_run
+#       TestDeliveredDefaults::test_red_on_absence_reads_are_delivered
+#     Com a constante do patch: «39 passed».
+#
+# AC4 (marcador, C6 — «test_install_sh_all_placeholders_substituted sobre as fixtures no caminho novo com o
+#     marcador ainda literal reprova»): numa cópia descartável da árvore com o w7a.patch, a fixture
+#     .claude/hooks/_lib/harness_replay/canonical_edit_unauthorized.json com o marcador antigo de volta (o blob
+#     resultante é 64c2088a0d32dc2afbd7e5001074002b692c8e8b, o da fixture antiga), `python3 -m pytest
+#     .claude/scripts/tests/test_install_sh_placeholders.py::test_install_sh_all_placeholders_substituted`:
+#     rc 1, «1 failed in 106.05s», com o único achado inesperado
+#       hooks/_lib/harness_replay/canonical_edit_unauthorized.json:9 (o marcador antigo, entre chaves duplas)
+#     (2026-10-11 às 04:16:50Z). Sobre a árvore com o w7a.patch, o mesmo teste: rc 0, «1 passed in 87.92s»
+#     (04:18:18Z). O teste tem teto ABSOLUTO de 120 s por instalação (classe de runner, declarada no sentinel).
+#
+# C8 (canal npm; «staging real e local, sem publicar, os 3 .json no packlist e cmp no alvo, com o resultado
+#     registrado no material»): `bash scripts/install-npm.sh --smoke --keep` numa cópia descartável da árvore com o
+#     w7a.patch (HOME, TMPDIR e cache do npm descartáveis, npm_config_offline=true; node v26.3.0, npm 11.16.0,
+#     openrsync protocolo 29), 2026-10-11, terminado às 04:13:05Z, 95 s: rc 0; «OK: packlist clean — 1392
+#     files»; tarball ceo-orchestration-1.4.2.tgz, sha256
+#     d0bfdc8f149393d1cd12d2b20c6348811c6762bf7eb63494e043bae8018af84d; no tarball,
+#     package/.claude/hooks/_lib/harness_replay/ com os 3 .json, cada um cmp-idêntico ao da fonte; no alvo do
+#     smoke (npx ceo-orchestration <alvo> --profile core), os 3 .json cmp-idênticos e o gate `--repo-root <alvo>
+#     --replay --no-exec-bit` rc 0 com «OK: harness-config gate green (static=no, replay=yes, 0 warning(s))».
+#     O install-npm.sh reescreve npm/README.md e npm/SHA256SUMS.txt (rastreados) na árvore em que roda — por
+#     isso o canal npm é registro, não comando do SIGN.

@@ -1,0 +1,10 @@
+# cenv (PLAN-194, Lote B): dados do molde sign-min (format sign-min-1)
+format	sign-min-1
+rail	.claude/plans/PLAN-194/cenv/rail-sign-min.md
+canonical	.claude/hooks/check_cost_envelope.py
+hard	python3	.claude/plans/PLAN-194/cenv/sintaxe.py	.claude/hooks/check_cost_envelope.py	.claude/hooks/tests/test_check_cost_envelope_block.py	.claude/hooks/tests/test_check_cost_envelope_emit.py
+hard	python3	-m	pytest	-p	no:cacheprovider	-q	-rfE	--tb=short	.claude/hooks/tests/test_check_cost_envelope_emit.py	.claude/hooks/tests/test_check_cost_envelope_block.py
+hard	python3	-m	pytest	-p	no:cacheprovider	-q	-rfE	--tb=short	.claude/hooks/tests/test_audit_emit.py	.claude/hooks/tests/test_audit_emit_api_contract.py
+hard	python3	.claude/scripts/check-audit-registry-coverage.py
+hard	python3	.claude/scripts/validate_governance_fast.py
+hard	python3	-m	pytest	-p	no:cacheprovider	-q	-rfE	--tb=no	--strict-markers	.claude/hooks/_lib/tests/test_cost_envelope.py	.claude/hooks/tests/test_template_dogfood_parity.py

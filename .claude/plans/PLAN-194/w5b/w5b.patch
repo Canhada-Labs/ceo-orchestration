@@ -1,0 +1,408 @@
+diff --git a/.claude/scripts/data/installer-write-safety-baseline.txt b/.claude/scripts/data/installer-write-safety-baseline.txt
+index cafb730f3e66ec956e28b13797da3f1ab1fe6631..aa9550f3f41ae76cf9877b66163edcb9bb095e51 100644
+--- a/.claude/scripts/data/installer-write-safety-baseline.txt
++++ b/.claude/scripts/data/installer-write-safety-baseline.txt
+@@ -185,13 +185,13 @@ scripts/doctor.sh:1147:write-candidate:desguardado:-:bb2e9d0a4e911b14
+ scripts/doctor.sh:1148:symlink-follow:desguardado:-:8d1ef27cd13c0d6b
+ scripts/doctor.sh:1175:symlink-follow:indeterminado:i-unmodeled-occurrence:d6dbfa69207c94df
+ scripts/doctor.sh:1182:write-candidate:indeterminado:i-write-candidate-unproven:3beb7e23d77cf223
+-scripts/install-accelerators.sh:47:write-candidate:desguardado:-:41a83abe435393b7
+-scripts/install-accelerators.sh:55:write-candidate:desguardado:-:3108adc7cf71a48f
+-scripts/install-accelerators.sh:57:write-candidate:desguardado:-:56f7abed062a2473
+-scripts/install-accelerators.sh:60:write-candidate:indeterminado:i-write-candidate-unproven:8ec4701da99ab191
+-scripts/install-accelerators.sh:61:write-candidate:indeterminado:i-write-candidate-unproven:f2e93474fb1ca1fa
+-scripts/install-accelerators.sh:64:write-candidate:desguardado:-:d7b5aa658db54a09
+-scripts/install-accelerators.sh:72:write-candidate:desguardado:-:22e4587b11f1b983
++scripts/install-accelerators.sh:56:write-candidate:desguardado:-:41a83abe435393b7
++scripts/install-accelerators.sh:64:write-candidate:desguardado:-:3108adc7cf71a48f
++scripts/install-accelerators.sh:66:write-candidate:desguardado:-:56f7abed062a2473
++scripts/install-accelerators.sh:69:write-candidate:indeterminado:i-write-candidate-unproven:8ec4701da99ab191
++scripts/install-accelerators.sh:70:write-candidate:indeterminado:i-write-candidate-unproven:f2e93474fb1ca1fa
++scripts/install-accelerators.sh:73:write-candidate:desguardado:-:d7b5aa658db54a09
++scripts/install-accelerators.sh:81:write-candidate:desguardado:-:22e4587b11f1b983
+ scripts/install-npm.sh:133:write-candidate:desguardado:-:c7695317b177a2af
+ scripts/install-npm.sh:144:write-candidate:indeterminado:i-write-candidate-unproven:288e954fe5c6306d
+ scripts/install-npm.sh:173:symlink-follow:indeterminado:i-unmodeled-occurrence:90b91d2557c81173
+@@ -313,65 +313,65 @@ scripts/install.sh:2360:symlink-follow:indeterminado:i-unmodeled-occurrence:585d
+ scripts/install.sh:2362:write-candidate:desguardado:-:013a0a85e5607868
+ scripts/install.sh:2374:write-candidate:desguardado:-:59f8d97068a4ba1c
+ scripts/install.sh:2399:write-candidate:desguardado:-:02d13b02b601560e
+-scripts/install.sh:2499:symlink-follow:indeterminado:i-predicate-arg-unbound:f9f1b3d02d9a03cc
+-scripts/install.sh:2519:write-candidate:desguardado:-:33750b69fdabcb7c
+-scripts/install.sh:2523:write-candidate:desguardado:-:141048f7eab2a307
+-scripts/install.sh:2534:write-candidate:desguardado:-:0576b738f33ba73d
+-scripts/install.sh:2547:write-candidate:desguardado:-:12e4bb496b8fb63d
+-scripts/install.sh:2583:symlink-follow:indeterminado:i-predicate-arg-unbound:81b638ca6d1de2c1
+-scripts/install.sh:2590:write-candidate:indeterminado:i-write-candidate-unproven:ab483f61c347cf4d
+-scripts/install.sh:2596:write-candidate:indeterminado:i-write-candidate-unproven:db96cb2082386e1e
+-scripts/install.sh:2610:write-candidate:desguardado:-:f8dcaf8eddcf5dec
+-scripts/install.sh:2611:write-candidate:desguardado:-:6b2d3192dea92f86
+-scripts/install.sh:2629:write-candidate:indeterminado:i-write-candidate-unproven:a9aed7649b483919
+-scripts/install.sh:2664:write-candidate:indeterminado:i-write-candidate-unproven:d260a9136b59a4da
+-scripts/install.sh:2670:write-candidate:indeterminado:i-write-candidate-unproven:9913519cec5a92e4
+-scripts/install.sh:2684:write-candidate:indeterminado:i-write-candidate-unproven:25c207dffaa48b5b
+-scripts/install.sh:2712:write-candidate:indeterminado:i-write-candidate-unproven:df166b1b482b3726
+-scripts/install.sh:2719:write-candidate:indeterminado:i-write-candidate-unproven:9f5e3f9c3bc96885
+-scripts/install.sh:2752:symlink-follow:indeterminado:i-guard-not-dominating:3d0e5c04e79d09a4
+-scripts/install.sh:2778:write-candidate:desguardado:-:c956fc7858f1e6b3
+-scripts/install.sh:2781:write-candidate:desguardado:-:ae620df37714d626
+-scripts/install.sh:2815:write-candidate:indeterminado:i-write-candidate-unproven:b2c5131827e73767
+-scripts/install.sh:2815:write-candidate:indeterminado:i-write-candidate-unproven:5daad1971f227520
+-scripts/install.sh:2837:write-candidate:indeterminado:i-write-candidate-unproven:953ef6c4f3ce245e
+-scripts/install.sh:2847:write-candidate:indeterminado:i-write-candidate-unproven:ca705749564836b0
+-scripts/install.sh:2849:sed-interp:indeterminado:i-script-not-literal:bf1704d618695580
+-scripts/install.sh:2849:write-candidate:desguardado:-:7b76533b148de2e6
+-scripts/install.sh:2854:write-candidate:desguardado:-:13c4e4b4a0d956b6
+-scripts/install.sh:2855:write-candidate:desguardado:-:ff5d383fd60db6b8
+-scripts/install.sh:2990:symlink-follow:desguardado:-:80f66dc652c0c893
+-scripts/install.sh:2995:write-candidate:indeterminado:i-write-candidate-unproven:6614c849a872ade7
+-scripts/install.sh:3008:symlink-follow:desguardado:-:436b287f52920b28
+-scripts/install.sh:3013:write-candidate:indeterminado:i-write-candidate-unproven:1fa17fba42631b15
+-scripts/install.sh:3066:symlink-follow:desguardado:-:5fa978aff80d99b0
+-scripts/install.sh:3068:write-candidate:desguardado:-:3d79ed8afa29f82a
+-scripts/install.sh:3073:write-candidate:desguardado:-:be2f01306f93604a
+-scripts/install.sh:3078:symlink-follow:desguardado:-:f7867010aed60fd5
+-scripts/install.sh:3082:write-candidate:indeterminado:i-write-candidate-unproven:f59df3cea864746d
+-scripts/install.sh:3116:symlink-follow:indeterminado:i-unmodeled-occurrence:b40a8812fed6e22a
+-scripts/install.sh:3124:write-candidate:indeterminado:i-write-candidate-unproven:eda787f88edf90b0
+-scripts/install.sh:3124:write-candidate:indeterminado:i-write-candidate-unproven:9ca4662af4540801
+-scripts/install.sh:3128:write-candidate:indeterminado:i-write-candidate-unproven:4b52b362c43997b9
+-scripts/install.sh:3128:write-candidate:indeterminado:i-write-candidate-unproven:80b1c749cf590cd7
+-scripts/install.sh:3140:symlink-follow:indeterminado:i-unmodeled-occurrence:d221c1780fbe6108
+-scripts/install.sh:3147:symlink-follow:desguardado:-:894dce4858de1084
+-scripts/install.sh:3156:symlink-follow:indeterminado:i-unmodeled-occurrence:d704fce482d5ce57
+-scripts/install.sh:3158:write-candidate:indeterminado:i-write-candidate-unproven:5870f6f63386c3bd
+-scripts/install.sh:3245:write-candidate:indeterminado:i-write-candidate-unproven:b5e29836504a0e46
+-scripts/install.sh:3263:symlink-follow:indeterminado:i-unmodeled-occurrence:cbde12916d70da6c
+-scripts/install.sh:3269:symlink-follow:indeterminado:i-unmodeled-occurrence:c0efda7374641dd9
+-scripts/install.sh:3278:symlink-follow:indeterminado:i-unmodeled-occurrence:622281003b56e551
+-scripts/install.sh:3303:symlink-follow:indeterminado:i-unmodeled-occurrence:a734b8df92c09888
+-scripts/install.sh:3417:symlink-follow:indeterminado:i-unmodeled-occurrence:67f6a061a2d235cc
+-scripts/install.sh:3455:write-candidate:indeterminado:i-write-candidate-unproven:74bf15507dcb0097
+-scripts/install.sh:3504:write-candidate:indeterminado:i-write-candidate-unproven:2c72ccffe1aa14e0
+-scripts/install.sh:3575:write-candidate:indeterminado:i-write-candidate-unproven:a97f573ae91c7a1a
+-scripts/install.sh:3769:symlink-follow:indeterminado:i-unmodeled-occurrence:d41d28522da2b4fc
+-scripts/install.sh:3770:write-candidate:indeterminado:i-write-candidate-unproven:9e3db91084a1d894
+-scripts/install.sh:3787:write-candidate:indeterminado:i-opaque-command:e39ddb6aec8ea5ee
+-scripts/install.sh:3885:write-candidate:indeterminado:i-write-candidate-unproven:3512cb83417b29eb
+-scripts/install.sh:3898:write-candidate:indeterminado:i-write-candidate-unproven:0f07b4c8d7a15488
++scripts/install.sh:2513:symlink-follow:indeterminado:i-predicate-arg-unbound:f9f1b3d02d9a03cc
++scripts/install.sh:2535:write-candidate:desguardado:-:d5fcb060cfca39d7
++scripts/install.sh:2540:write-candidate:desguardado:-:141048f7eab2a307
++scripts/install.sh:2551:write-candidate:desguardado:-:8213a19e7a0457f1
++scripts/install.sh:2565:write-candidate:desguardado:-:12e4bb496b8fb63d
++scripts/install.sh:2601:symlink-follow:indeterminado:i-predicate-arg-unbound:81b638ca6d1de2c1
++scripts/install.sh:2608:write-candidate:indeterminado:i-write-candidate-unproven:ab483f61c347cf4d
++scripts/install.sh:2614:write-candidate:indeterminado:i-write-candidate-unproven:db96cb2082386e1e
++scripts/install.sh:2628:write-candidate:desguardado:-:f8dcaf8eddcf5dec
++scripts/install.sh:2629:write-candidate:desguardado:-:6b2d3192dea92f86
++scripts/install.sh:2647:write-candidate:indeterminado:i-write-candidate-unproven:a9aed7649b483919
++scripts/install.sh:2682:write-candidate:indeterminado:i-write-candidate-unproven:d260a9136b59a4da
++scripts/install.sh:2688:write-candidate:indeterminado:i-write-candidate-unproven:9913519cec5a92e4
++scripts/install.sh:2702:write-candidate:indeterminado:i-write-candidate-unproven:25c207dffaa48b5b
++scripts/install.sh:2730:write-candidate:indeterminado:i-write-candidate-unproven:df166b1b482b3726
++scripts/install.sh:2737:write-candidate:indeterminado:i-write-candidate-unproven:9f5e3f9c3bc96885
++scripts/install.sh:2770:symlink-follow:indeterminado:i-guard-not-dominating:3d0e5c04e79d09a4
++scripts/install.sh:2796:write-candidate:desguardado:-:c956fc7858f1e6b3
++scripts/install.sh:2799:write-candidate:desguardado:-:ae620df37714d626
++scripts/install.sh:2833:write-candidate:indeterminado:i-write-candidate-unproven:b2c5131827e73767
++scripts/install.sh:2833:write-candidate:indeterminado:i-write-candidate-unproven:5daad1971f227520
++scripts/install.sh:2855:write-candidate:indeterminado:i-write-candidate-unproven:953ef6c4f3ce245e
++scripts/install.sh:2865:write-candidate:indeterminado:i-write-candidate-unproven:ca705749564836b0
++scripts/install.sh:2867:sed-interp:indeterminado:i-script-not-literal:bf1704d618695580
++scripts/install.sh:2867:write-candidate:desguardado:-:7b76533b148de2e6
++scripts/install.sh:2872:write-candidate:desguardado:-:13c4e4b4a0d956b6
++scripts/install.sh:2873:write-candidate:desguardado:-:ff5d383fd60db6b8
++scripts/install.sh:3008:symlink-follow:desguardado:-:80f66dc652c0c893
++scripts/install.sh:3013:write-candidate:indeterminado:i-write-candidate-unproven:6614c849a872ade7
++scripts/install.sh:3026:symlink-follow:desguardado:-:436b287f52920b28
++scripts/install.sh:3031:write-candidate:indeterminado:i-write-candidate-unproven:1fa17fba42631b15
++scripts/install.sh:3084:symlink-follow:desguardado:-:5fa978aff80d99b0
++scripts/install.sh:3086:write-candidate:desguardado:-:3d79ed8afa29f82a
++scripts/install.sh:3091:write-candidate:desguardado:-:be2f01306f93604a
++scripts/install.sh:3096:symlink-follow:desguardado:-:f7867010aed60fd5
++scripts/install.sh:3100:write-candidate:indeterminado:i-write-candidate-unproven:f59df3cea864746d
++scripts/install.sh:3134:symlink-follow:indeterminado:i-unmodeled-occurrence:b40a8812fed6e22a
++scripts/install.sh:3142:write-candidate:indeterminado:i-write-candidate-unproven:eda787f88edf90b0
++scripts/install.sh:3142:write-candidate:indeterminado:i-write-candidate-unproven:9ca4662af4540801
++scripts/install.sh:3146:write-candidate:indeterminado:i-write-candidate-unproven:4b52b362c43997b9
++scripts/install.sh:3146:write-candidate:indeterminado:i-write-candidate-unproven:80b1c749cf590cd7
++scripts/install.sh:3158:symlink-follow:indeterminado:i-unmodeled-occurrence:d221c1780fbe6108
++scripts/install.sh:3165:symlink-follow:desguardado:-:894dce4858de1084
++scripts/install.sh:3174:symlink-follow:indeterminado:i-unmodeled-occurrence:d704fce482d5ce57
++scripts/install.sh:3176:write-candidate:indeterminado:i-write-candidate-unproven:5870f6f63386c3bd
++scripts/install.sh:3263:write-candidate:indeterminado:i-write-candidate-unproven:b5e29836504a0e46
++scripts/install.sh:3281:symlink-follow:indeterminado:i-unmodeled-occurrence:cbde12916d70da6c
++scripts/install.sh:3287:symlink-follow:indeterminado:i-unmodeled-occurrence:c0efda7374641dd9
++scripts/install.sh:3296:symlink-follow:indeterminado:i-unmodeled-occurrence:622281003b56e551
++scripts/install.sh:3321:symlink-follow:indeterminado:i-unmodeled-occurrence:a734b8df92c09888
++scripts/install.sh:3435:symlink-follow:indeterminado:i-unmodeled-occurrence:67f6a061a2d235cc
++scripts/install.sh:3473:write-candidate:indeterminado:i-write-candidate-unproven:74bf15507dcb0097
++scripts/install.sh:3522:write-candidate:indeterminado:i-write-candidate-unproven:2c72ccffe1aa14e0
++scripts/install.sh:3593:write-candidate:indeterminado:i-write-candidate-unproven:a97f573ae91c7a1a
++scripts/install.sh:3787:symlink-follow:indeterminado:i-unmodeled-occurrence:d41d28522da2b4fc
++scripts/install.sh:3788:write-candidate:indeterminado:i-write-candidate-unproven:9e3db91084a1d894
++scripts/install.sh:3805:write-candidate:indeterminado:i-opaque-command:e39ddb6aec8ea5ee
++scripts/install.sh:3903:write-candidate:indeterminado:i-write-candidate-unproven:3512cb83417b29eb
++scripts/install.sh:3916:write-candidate:indeterminado:i-write-candidate-unproven:0f07b4c8d7a15488
+ scripts/local/historical/OWNER-CEREMONY-PLAN-094-WAVE-A.sh:106:write-candidate:indeterminado:i-write-candidate-unproven:2c97bc46f6df970d
+ scripts/local/historical/OWNER-CEREMONY-PLAN-094-WAVE-A.sh:126:write-candidate:indeterminado:i-write-candidate-unproven:c1d31c671ff50931
+ scripts/local/historical/OWNER-CEREMONY-PLAN-094-WAVE-A.sh:154:symlink-follow:indeterminado:i-unmodeled-occurrence:455a1503953d465f
+diff --git a/docs/deny-baseline.md b/docs/deny-baseline.md
+index ed3573b18f19e736cfccb3e47ea9dc75f63bde2e..ef6240addbcc8ec8d14971ae4a86e8a1229bef30 100644
+--- a/docs/deny-baseline.md
++++ b/docs/deny-baseline.md
+@@ -119,7 +119,19 @@ consistent with the framing: a coarse backstop, not coverage.
+ ## How an adopter opts out
+ 
+ - **At install time:** `CEO_INSTALL_SKIP_DENY_BASELINE=1 ./scripts/install.sh <target> …`
+-  skips the injection entirely (mirrors `CEO_INSTALL_SKIP_SELF_SHA`).
++  skips the injection entirely (mirrors `CEO_INSTALL_SKIP_SELF_SHA`). The same
++  merge also writes `permissions.defaultMode` = `"manual"` when the
++  `settings.json` the run produced has none (a `--ceremony user` install ships
++  no `permissions` block), so the opt-out, like the fail-open case below,
++  leaves that key unwritten too. With no `defaultMode` in any settings source,
++  Claude Code 2.1.295 can open the session in auto mode: its fallback for "no
++  source configured a mode" picks auto when, among other conditions,
++  `disableAutoMode` is not `"disable"`, the auto-mode killswitch is off, a
++  server-side flag (default on) or an account setting allows it, and either
++  the session is interactive or a server-side flag that is on by default
++  waives that
++  (measured in the 2.1.295 binary on 2026-10-09; not a documented contract).
++  If you opt out, set `permissions.defaultMode` yourself.
+ - **After install:** delete any entries you don't want from
+   `permissions.deny` in `<target>/.claude/settings.json`. Re-runs of the
+   installer will not put them back.
+diff --git a/scripts/install.sh b/scripts/install.sh
+index 46299358f5b6ed0748a20340b42576c0ad3b1e94..05f2660f3e3a6519ea2e08ddb70be087af9208cb 100755
+--- a/scripts/install.sh
++++ b/scripts/install.sh
+@@ -2444,6 +2444,20 @@ fi
+ # the just-copied settings.json untouched.
+ #
+ # Opt-out: CEO_INSTALL_SKIP_DENY_BASELINE=1 (mirrors CEO_INSTALL_SKIP_SELF_SHA).
++#
++# PLAN-194 W5b (OQ-7, Owner answer 2026-10-01): the same merge writes
++# permissions.defaultMode = DEFAULT_MODE_BASELINE when the settings.json this
++# run produced carries no defaultMode key. The `--ceremony user` template
++# ships no permissions block, and a session whose settings sources configure
++# no mode can start in Claude Code's gated auto default (CHANGELOG 2.1.284;
++# the 2.1.295 binary names it permission_mode_from_default_fallback). A
++# defaultMode the produced file already carries (the maintainer template's
++# own) is kept as-is, and a pre-existing settings.json is never touched (see
++# Idempotency). The value is the "new" of the permissions.defaultMode row of
++# upgrade.sh's T5.4 table, which writes the same key into an upgraded install
++# that lacks it; the test derives its expectation from that table. The
++# opt-out above skips this key too: one merge, one switch.
++DEFAULT_MODE_BASELINE="manual"
+ 
+ DENY_BASELINE_ENTRIES=(
+   "Read(~/.ssh/**)"
+@@ -2479,21 +2493,21 @@ apply_deny_baseline() {
+     return 0
+   fi
+   if [[ "${CEO_INSTALL_SKIP_DENY_BASELINE:-0}" = "1" ]]; then
+-    echo "    SKIP: deny baseline (CEO_INSTALL_SKIP_DENY_BASELINE=1)"
++    echo "    SKIP: deny baseline + permissions.defaultMode (CEO_INSTALL_SKIP_DENY_BASELINE=1)"
+     return 0
+   fi
+ 
+   if [[ "$DRY_RUN" -eq 1 ]]; then
+     if [[ "$SETTINGS_PRE_EXISTING" -eq 1 ]]; then
+-      echo "    (dry-run) settings.json pre-existed — would NOT touch deny baseline"
++      echo "    (dry-run) settings.json pre-existed — would NOT touch deny baseline + defaultMode"
+     else
+-      echo "    (dry-run) would MERGE ${#DENY_BASELINE_ENTRIES[@]} deny-baseline entries into .claude/settings.json"
++      echo "    (dry-run) would MERGE ${#DENY_BASELINE_ENTRIES[@]} deny-baseline entries (+ permissions.defaultMode \"$DEFAULT_MODE_BASELINE\" if absent) into .claude/settings.json"
+     fi
+     return 0
+   fi
+ 
+   if [[ "$SETTINGS_PRE_EXISTING" -eq 1 ]]; then
+-    echo "    SKIP: settings.json pre-existed this run (add entries manually if wanted — docs/deny-baseline.md)"
++    echo "    SKIP: deny baseline + defaultMode — settings.json pre-existed this run (add them manually if wanted — docs/deny-baseline.md)"
+     return 0
+   fi
+   if [[ ! -f "$SETTINGS_DST" ]]; then
+@@ -2515,23 +2529,26 @@ apply_deny_baseline() {
+ 
+   if command -v jq >/dev/null 2>&1; then
+     # Order-preserving dedup: keep existing deny list as-is, append only
+-    # baseline entries not already present (jq array subtraction).
+-    if jq --argjson newdeny "$entries_json" '
++    # baseline entries not already present (jq array subtraction). The
++    # defaultMode is set only where the key is absent (`has`, not a value
++    # test: a present key is the template's, whatever it holds).
++    if jq --argjson newdeny "$entries_json" --arg mode "$DEFAULT_MODE_BASELINE" '
+          (.permissions.deny // []) as $cur
+          | .permissions.deny = ($cur + ($newdeny - $cur))
++         | if (.permissions | has("defaultMode")) then . else .permissions.defaultMode = $mode end
+        ' "$SETTINGS_DST" > "$tmp" 2>/dev/null; then
+       mv "$tmp" "$SETTINGS_DST"
+-      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline -> .claude/settings.json (docs/deny-baseline.md)"
++      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline (+ permissions.defaultMode if absent) -> .claude/settings.json (docs/deny-baseline.md)"
+       return 0
+     fi
+     rm -f "$tmp"
+     echo "    WARNING: jq merge of the deny baseline failed — settings.json left untouched." >&2
+-    echo "             Add the permissions.deny entries manually: docs/deny-baseline.md." >&2
++    echo "             Add the permissions.deny entries manually (docs/deny-baseline.md), and permissions.defaultMode \"$DEFAULT_MODE_BASELINE\" if absent." >&2
+     return 0
+   fi
+ 
+   if command -v python3 >/dev/null 2>&1; then
+-    if python3 - "$SETTINGS_DST" "$entries_json" > "$tmp" <<'PY'
++    if python3 - "$SETTINGS_DST" "$entries_json" "$DEFAULT_MODE_BASELINE" > "$tmp" <<'PY'
+ import json
+ import sys
+ 
+@@ -2541,21 +2558,22 @@ new = json.loads(sys.argv[2])
+ perms = settings.setdefault("permissions", {})
+ cur = perms.get("deny") or []
+ perms["deny"] = cur + [e for e in new if e not in cur]
++perms.setdefault("defaultMode", sys.argv[3])
+ sys.stdout.write(json.dumps(settings, indent=2) + "\n")
+ PY
+     then
+       mv "$tmp" "$SETTINGS_DST"
+-      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline -> .claude/settings.json (python3; docs/deny-baseline.md)"
++      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline (+ permissions.defaultMode if absent) -> .claude/settings.json (python3; docs/deny-baseline.md)"
+       return 0
+     fi
+     rm -f "$tmp"
+     echo "    WARNING: python3 merge of the deny baseline failed — settings.json left untouched." >&2
+-    echo "             Add the permissions.deny entries manually: docs/deny-baseline.md." >&2
++    echo "             Add the permissions.deny entries manually (docs/deny-baseline.md), and permissions.defaultMode \"$DEFAULT_MODE_BASELINE\" if absent." >&2
+     return 0
+   fi
+ 
+   echo "    WARNING: neither jq nor python3 found — deny baseline NOT applied." >&2
+-  echo "             Add the permissions.deny entries manually: docs/deny-baseline.md." >&2
++  echo "             Add the permissions.deny entries manually (docs/deny-baseline.md), and permissions.defaultMode \"$DEFAULT_MODE_BASELINE\" if absent." >&2
+   return 0
+ }
+ 
+diff --git a/scripts/tests/test-install-deny-baseline.sh b/scripts/tests/test-install-deny-baseline.sh
+index d27d11c375cb02dfc6543477d5b38389d5368ff8..f13c1b5f51e60a4c26834e4821432ea38090db68 100644
+--- a/scripts/tests/test-install-deny-baseline.sh
++++ b/scripts/tests/test-install-deny-baseline.sh
+@@ -23,6 +23,15 @@
+ #       permissions.deny is CREATED with exactly the baseline.
+ #   (E) jq hidden from PATH -> python3 fallback still applies the baseline
+ #       (base-only install needs no jq; the injection must not either).
++#   (F) PLAN-194 W5b: permissions.defaultMode equals the "new" of the
++#       permissions.defaultMode row of upgrade.sh --print-settings-baselines
++#       (derived, never re-hardcoded) — WRITTEN by the jq branch on the
++#       leg-D --ceremony user install (no key in that template), KEPT as the
++#       template's own on the leg-A maintainer install.
++#   (G) --ceremony user with jq hidden -> the python3 branch writes the same
++#       defaultMode next to the baseline.
++#   (H) a settings.json that pre-exists with its own defaultMode
++#       ("acceptEdits") -> byte-identical after a --ceremony user install.
+ #
+ # stdlib + bash-3.2-safe. Needs python3 (assertions) and, for leg E,
+ # a python3 visible without jq.
+@@ -87,15 +96,18 @@ T_A="$(mktemp -d -t ceo-denybase-a-XXXXXX)"
+ T_C="$(mktemp -d -t ceo-denybase-c-XXXXXX)"
+ T_D="$(mktemp -d -t ceo-denybase-d-XXXXXX)"
+ T_E="$(mktemp -d -t ceo-denybase-e-XXXXXX)"
++T_G="$(mktemp -d -t ceo-denybase-g-XXXXXX)"
++T_H="$(mktemp -d -t ceo-denybase-h-XXXXXX)"
+ FAKEBIN="$(mktemp -d -t ceo-denybase-nojq-XXXXXX)"
+ cleanup() {
+-  rm -rf "$T_A" "$T_C" "$T_D" "$T_E" "$FAKEBIN" \
++  rm -rf "$T_A" "$T_C" "$T_D" "$T_E" "$T_G" "$T_H" "$FAKEBIN" \
+     "$T_A.install.log" "$T_A.install-rerun.log" "$T_A.settings.snapshot" \
+-    "$T_C.install.log" "$T_D.install.log" "$T_E.install.log"
++    "$T_C.install.log" "$T_D.install.log" "$T_E.install.log" \
++    "$T_G.install.log" "$T_H.install.log" "$T_H.settings.snapshot"
+ }
+ trap cleanup EXIT
+ 
+-for t in "$T_A" "$T_C" "$T_D" "$T_E"; do
++for t in "$T_A" "$T_C" "$T_D" "$T_E" "$T_G" "$T_H"; do
+   ( cd "$t" && git init -q )
+ done
+ 
+@@ -310,9 +322,80 @@ else
+   fail=1
+ fi
+ 
++# --- (F) PLAN-194 W5b: permissions.defaultMode next to the baseline ----------
++# The expected value is the T5.4 table's, read from upgrade.sh itself, so the
++# install and the upgrade cannot drift apart without this leg going red.
++echo "==> [F] permissions.defaultMode (user: written; maintainer: template's own)"
++EXPECTED_MODE="$(bash "$SOURCE_DIR/scripts/upgrade.sh" --print-settings-baselines \
++  | python3 -c 'import json,sys; print(json.load(sys.stdin)["permissions.defaultMode"]["new"])')" \
++  || EXPECTED_MODE=""
++if [[ -z "$EXPECTED_MODE" ]]; then
++  echo "::error::[F] upgrade.sh --print-settings-baselines gave no permissions.defaultMode new value"
++  exit 1
++fi
++
++# Args: settings.json path, leg label, expected defaultMode value.
++assert_default_mode() {
++  python3 - "$1" "$2" "$3" <<'PY'
++import json
++import sys
++
++path, leg, want = sys.argv[1], sys.argv[2], sys.argv[3]
++perms = json.load(open(path)).get("permissions", {})
++got = perms.get("defaultMode", "<absent>")
++if got != want:
++    print("::error::[%s] permissions.defaultMode is %r, expected %r"
++          % (leg, got, want), file=sys.stderr)
++    sys.exit(1)
++print("    [%s] PASS: permissions.defaultMode == %r" % (leg, want))
++PY
++}
++
++assert_default_mode "$T_D/.claude/settings.json" "F/user" "$EXPECTED_MODE" || fail=1
++assert_default_mode "$SETTINGS_A" "F/maintainer" "$EXPECTED_MODE" || fail=1
++
++# --- (G) user ceremony, jq hidden: the python3 branch writes it too ----------
++echo "==> [G] --ceremony user with jq hidden (python3 branch) into $T_G"
++LOG_G="$T_G.install.log"
++if ! env PATH="$FAKEBIN" \
++     CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 \
++     bash "$INSTALL" "$T_G" --ceremony user >"$LOG_G" 2>&1; then
++  echo "::error::[G] no-jq --ceremony user install.sh failed (see log)"
++  tail -30 "$LOG_G" >&2
++  exit 1
++fi
++if grep -q "python3; docs/deny-baseline.md" "$LOG_G"; then
++  echo "    [G] PASS: python3 fallback path was the one taken (jq absent)"
++else
++  echo "::error::[G] expected the python3 fallback merge message in the install log"
++  fail=1
++fi
++assert_default_mode "$T_G/.claude/settings.json" "G" "$EXPECTED_MODE" || fail=1
++
++# --- (H) pre-existing settings.json keeps its own defaultMode ----------------
++echo "==> [H] pre-existing settings.json with defaultMode acceptEdits into $T_H"
++mkdir -p "$T_H/.claude"
++printf '%s\n' '{"permissions": {"defaultMode": "acceptEdits"}}' \
++  > "$T_H/.claude/settings.json"
++SNAP_H="$T_H.settings.snapshot"
++cp "$T_H/.claude/settings.json" "$SNAP_H"
++LOG_H="$T_H.install.log"
++if ! run_install "$T_H" --ceremony user >"$LOG_H" 2>&1; then
++  echo "::error::[H] --ceremony user install.sh failed (see log)"
++  tail -30 "$LOG_H" >&2
++  exit 1
++fi
++if cmp -s "$SNAP_H" "$T_H/.claude/settings.json"; then
++  echo "    [H] PASS: pre-existing settings.json byte-identical (its defaultMode kept)"
++else
++  echo "::error::[H] the install rewrote a pre-existing settings.json"
++  fail=1
++fi
++assert_default_mode "$T_H/.claude/settings.json" "H" "acceptEdits" || fail=1
++
+ # --- verdict ------------------------------------------------------------------
+ if [[ "$fail" -ne 0 ]]; then
+   echo "==> FAIL: install deny-baseline test"
+   exit 1
+ fi
+-echo "==> PASS: deny baseline merged, ordered, deduplicated, opt-out honored, exclusions honored, no-jq fallback works"
++echo "==> PASS: deny baseline merged, ordered, deduplicated, opt-out honored, exclusions honored, no-jq fallback works, defaultMode written when absent and kept when present"
