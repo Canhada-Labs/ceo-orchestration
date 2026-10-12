@@ -1128,6 +1128,14 @@ OQ-10. Pelo C11, ele exige a reconfirmação por diff dos dois portadores de VET
 e Threat Detection Engineer) sobre o sha que o contém, com o diff integral contra a versão do commit
 `b2ab8805` (sha256 `bb8a9d9c…305d`), registrada em `.claude/plans/PLAN-195/debate/`. Até lá, o
 estado dos dois VETOs sobre este texto é «não reconfirmado», e nenhum pacote da W1 começa.
+Essa é a última versão commitada, mas não é a base da última retirada registrada: os dois
+registros do C12 valem para o sha256 `93e4b83f…5379`, uma cópia de sombra não commitada (HEAD
+`399efbaa`), e nenhum commit do plano tem esse sha. O trecho entre as duas bases não se reproduz
+por `git diff`; o parágrafo «Reconfirmação do C12: feita» declara o que entrou nele (as duas
+precisões de redação e a remissão às condições), além do próprio registro do resultado. Como na
+cadeia desde a retirada anterior que o registro do Security Engineer sobre o C12 percorre, cada
+registro do C13 nomeia as DUAS bases e diz, pela lista «não reabrem» do próprio registro do C12,
+se esse trecho reabre a reconfirmação.
 
 *1. Decisões do Owner (2026-10-02; opção escolhida: «Aceitar P-1..P-4 do replay»).* As quatro saem
 da recomendação do relatório do replay; a numeração das linhas é a do ponto 3.
