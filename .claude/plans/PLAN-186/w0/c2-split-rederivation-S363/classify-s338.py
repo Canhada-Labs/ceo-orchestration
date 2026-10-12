@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
-"""PLAN-186 W0, item C2 (S363) -- re-derivação do split construtor/refutador
-da noite S338 com o instrumento SHIPADO, e da figura de -US$ 1.369/mês.
+"""PLAN-186 W0 C2 (S363): re-derivação do split construtor/refutador da noite S338 e
+da figura de -US$ 1.369/mês com o instrumento SHIPADO (`.claude/scripts/
+ceo-cost-transcripts.py`, importado como biblioteca: as MESMAS funções da CLI).
+Papel = `phaseTitle` do registro `<project-dir>/<session>/workflows/<run>.json`
+(`workflowProgress[]`); os sidecars `agent-*.meta.json` só têm `agentType` e
+`spawnDepth`. Sem rede; não escreve no repo nem no corpus (`--selftest` escreve só num
+diretório temporário). Imprime ids, contagens e USD, nunca prompt, rótulo ou caminho.
 
-READ-ONLY (sem rede, sem escrita). Importa `.claude/scripts/ceo-cost-transcripts.py`
-como biblioteca e usa AS MESMAS funções da CLI. O papel vem do registro da corrida
-`<project-dir>/<session>/workflows/<run>.json` (`workflowProgress[]`: `agentId` +
-`phaseTitle`); os sidecars `agent-*.meta.json` só têm `agentType` e `spawnDepth`.
-Imprime JSON com ids, contagens e USD -- nunca texto de prompt, rótulo ou caminho.
-
-Uso (da raiz do repo):
-    python3 .claude/plans/PLAN-186/w0/c2-split-rederivation-S363/classify-s338.py
-    ... --figure   # + perfil de 30 d (lê o corpus inteiro: PESADO)
-
-rc 0 = ok; rc 2 = entrada recusada pelo nome (registro ausente ou ilegível,
-fase desconhecida, agente sem transcript ou transcript sem agente).
+Uso, da raiz do repo: sem flag = os 7 transcripts; `--figure` = + perfil de 30 d (corpus
+inteiro: PESADO); `--selftest` = recusas em fixtures sintéticas (não lê o corpus).
+rc 0 = ok; rc 1 = selftest falhou; rc 2 = entrada recusada pelo nome (registro ausente
+ou ilegível, fase desconhecida ou não-texto, agente sem transcript ou transcript sem agente).
 """
 from __future__ import annotations
 
@@ -81,7 +78,7 @@ def phases_from_run(run_json: Path) -> Dict[str, str]:
         agent, phase = item.get("agentId"), item.get("phaseTitle")
         if not isinstance(agent, str) or not agent or agent in out:
             raise Refused("workflow_agent sem agentId ou repetido")
-        if phase not in PHASE_ROLE:
+        if not isinstance(phase, str) or phase not in PHASE_ROLE:
             raise Refused("fase desconhecida no registro: %r" % (phase,))
         out[agent] = phase
     if not out:
@@ -90,8 +87,7 @@ def phases_from_run(run_json: Path) -> Dict[str, str]:
 
 
 def records_05style(cct: Any, path: Path) -> List[Any]:
-    """O agregador do relatório 05: chave (requestId, apiBlockIndex,
-    message.id) e a PRIMEIRA linha vence (o defeito que a W0 curou)."""
+    """Agregador do 05: chave (requestId, apiBlockIndex, message.id), 1.ª linha vence (defeito da W0)."""
     seen: Dict[Any, Any] = {}
     counters = cct.ScanCounters()
     with path.open("rb") as f:
@@ -163,6 +159,33 @@ def figure(cct: Any, project_dir: Path, table: Dict[str, Any], b_values: Dict[st
             "tudo_em": all_as, "delta_iv_menos_i": deltas(all_as, b_values)}
 
 
+def selftest() -> int:
+    """Recusas rc 2 e um rc 0 positivo sobre fixtures sintéticas num diretório temporário."""
+    import contextlib, io, tempfile
+    turn = json.dumps({"type": "assistant", "timestamp": "2026-09-02T02:00:00Z", "message": {
+        "id": "m1", "model": "claude-fable-5-1", "usage": {"input_tokens": 1, "output_tokens": 1}}})
+    cases = (("valido", ["Build"], "a", 0), ("registro ausente", None, "a", 2),
+             ("fase desconhecida", ["Plan"], "a", 2), ("fase lista", [[]], "a", 2),
+             ("fase dict", [{}], "a", 2), ("agente sem transcript", ["Build", "Verify"], "a", 2),
+             ("transcript sem agente", ["Build"], "ab", 2))
+    bad = 0
+    for name, phases, transcripts, want in cases:
+        with tempfile.TemporaryDirectory() as d:
+            run = Path(d, "s", "subagents", "workflows", "wf")
+            run.mkdir(parents=True)
+            Path(d, "s", "workflows").mkdir()
+            if phases is not None:
+                Path(d, "s", "workflows", "wf.json").write_text(json.dumps({"workflowProgress": [
+                    {"type": "workflow_agent", "agentId": "abc"[i], "phaseTitle": ph} for i, ph in enumerate(phases)]}))
+            for a in transcripts:
+                (run / ("agent-%s.jsonl" % a)).write_text(turn + "\n")
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                rc = main(["--project-dir", d, "--session", "s", "--run", "wf"])
+        bad += rc != want
+        print("selftest %-22s rc=%d esperado=%d %s" % (name, rc, want, "ok" if rc == want else "FALHOU"))
+    return 1 if bad else 0
+
+
 def main(argv: List[str]) -> int:
     p = argparse.ArgumentParser(prog="classify-s338.py")
     p.add_argument("--project-dir", default=None)
@@ -170,7 +193,10 @@ def main(argv: List[str]) -> int:
     p.add_argument("--run", default="wf_e3144372-b04")
     p.add_argument("--design-agent", default=DESIGN_DEFAULT)
     p.add_argument("--figure", action="store_true")
+    p.add_argument("--selftest", action="store_true")
     args = p.parse_args(argv)
+    if args.selftest:
+        return selftest()
     try:
         cct = load_instrument()
         project_dir = Path(args.project_dir) if args.project_dir else cct._default_project_dir()
