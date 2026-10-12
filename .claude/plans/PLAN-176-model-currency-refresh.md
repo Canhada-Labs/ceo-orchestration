@@ -661,7 +661,7 @@ caminhos que as caixas abaixo tocam ou invocam):
 `.claude/scripts/tests/test_check_model_literals.py`. Nenhum existe em
 HEAD: os cinco são criados aqui.
 
-- [ ] `[P0][US3][.claude/data/models-preference.json]` A camada P existe,
+- [x] `[P0][US3][.claude/data/models-preference.json]` A camada P existe,
       valida contra o esquema e resolve pelo menos um apelido para um
       identificador concreto.
       Check: `python3 -m pytest .claude/scripts/tests/test_model_preference.py -q`
@@ -1229,6 +1229,37 @@ K-9) antes do §4 real e sem a K-9 no real, o teste anterior PASSA (cego)
 e o novo falha com `not in §4 ['K-9']`.
 
 ## Progress log
+
+- 2026-10-12 (S363, W1a, metade 1): **camada P entregue — nascem
+  `.claude/data/models-preference.json` e
+  `.claude/scripts/tests/test_model_preference.py`, oráculo 0 nos dois; a
+  primeira caixa da W1a fica `[x]`.** Um apelido, `claude-frontier` →
+  `claude-opus-5-5`: padrão técnico, escolhido por ser o pin de sessão que a
+  Amendment 3 do ADR-149 declara (`ADR-149-model-id-allowlist.md:97-100`) e o
+  `model` de `.claude/settings.json:796`. Trocar o alvo (por exemplo, para o
+  Fable 5.1) é decisão do Owner, por Pull Request auditado; o arquivo fica
+  INERTE até o resolver da W1b. O teste LÊ o conjunto de trabalho pelo leitor
+  da W0a (`read_adr_blocks` de `check-model-currency.py`) e não digita
+  identificador: a W5c do PLAN-194 (adoção do Sonnet 5.5, emenda 4 do ADR-149)
+  acrescenta um membro ao conjunto e não pede edição aqui. Esquema FECHADO,
+  guardado no teste até a W1b o levar ao registro T: exatamente `_note`,
+  `schema` (inteiro 1, booleano recusado) e `aliases` (objeto não vazio);
+  apelido na gramática do §3.2 por `fullmatch`, que recusa a quebra de linha
+  final; apelido igual a identificador da camada T é recusado (sombra); chave
+  duplicada é recusada (o `json` do Python guardaria a última em silêncio).
+  4 casos, verdes sob `-W error`; três deles são controles dentro do próprio
+  teste (apelido fora do conjunto ⇒ `alias-outside-working-set` nomeado; cópia
+  descartável do ADR-149 sem o alvo no bloco do conjunto de trabalho ⇒ a mesma
+  falha nomeada; um mutante por regra do esquema). Controles VERMELHOS
+  executados: sem o arquivo de dados, 4 falhas; o arquivo com o apelido
+  apontado para um identificador fora do conjunto, 3 falhas, a do caso
+  principal nomeando `alias-outside-working-set: claude-frontier -> <id>`; e
+  cinco mutantes do validador (sem a checagem de pertença, `match` no lugar de
+  `fullmatch`, sem a detecção de duplicata, booleano aceito como versão, sem a
+  checagem de sombra), cada um vermelho. A metade 2 (lint de literais, registro de
+  exceções e o teste do lint) fica para pacote próprio, com o escopo do lint
+  fixado antes de construir. `status:` NÃO muda.
+  Check: `python3 -m pytest .claude/scripts/tests/test_model_preference.py -q`
 
 - 2026-10-12 (S363, W3a): **advisory de modelos no `/ceo-boot` entregue como
   check Tier-A (`tier_a_model_currency`, o 11.º)** — padrão recomendado,
