@@ -1,42 +1,45 @@
 """PLAN-175 W0a (AC-0.1 a AC-0.4): a regra de poda do §2 vira programa.
 
-Três pernas (§2.1) sobre as skills core, todas lidas de disco:
-- perna 0, elegibilidade, arquitetura D (OQ-1 do Owner, 2026-09-07): exclui da
-  candidatura toda skill citada por um canal que NÃO emite evento. Enquanto
-  nenhum canal emitir (EMITTING_CHANNELS vazio), é a união dos quatro canais
-  do censo ``eligibility-census.py``, importado: canais, piso de VETO
-  (``veto_floor: true`` em ``.claude/agents/``) e Gate 2 do CLAUDE.md têm uma
-  fonte só e nenhum nome é digitado aqui;
-- perna 1, denominador: MIN_OBSERVED_SPAWNS eventos ``agent_spawn`` e
-  ``--min-window-coverage-days`` dias entre o 1.º e o último evento da família
-  (PARÂMETRO; o padrão é o valor escrito no §2.1 até o Owner responder a OQ-2);
-- perna 2, telemetria: zero ``agent_spawn`` com ``skill=<nome>``, pelo leitor
-  nomeado (READER do censo, rodado com ``-B``).
+Pernas (§2.1), lidas de disco. 0, elegibilidade, arquitetura D (OQ-1 do Owner,
+2026-09-07): exclui toda skill citada por canal que NÃO emite; sem canal
+emitindo (EMITTING_CHANNELS vazio) é a união dos quatro canais do censo
+``eligibility-census.py``, importado: canais, piso de VETO e Gate 2 têm uma
+fonte só e nenhum nome é digitado aqui. 1, denominador: MIN_OBSERVED_SPAWNS
+``agent_spawn`` e ``--min-window-coverage-days`` de cobertura (PARÂMETRO; o
+padrão é o valor do §2.1 até a OQ-2 do Owner). 2, telemetria: zero
+``agent_spawn`` com ``skill=<nome>`` pelo leitor nomeado (READER, com ``-B``).
 
-Três saídas (§2.2): MANTER (não candidata, ou invocada), ARQUIVAR (candidata,
-denominador suficiente, cadeia íntegra, zero invocações) e RECUSA, para TODAS,
-quando o leitor falha, não acha log ou avisa linha/arquivo ilegível
-(``telemetry_unavailable``), a cadeia não sai «intact» (``chain_not_intact``)
-ou falta denominador (``insufficient_sample``).
+Saídas (§2.2): MANTER, ARQUIVAR (candidata, denominador, cadeia íntegra, zero
+invocações) e RECUSA para todas: ``telemetry_unavailable`` (o leitor falha,
+não acha log ou avisa linha/arquivo ilegível), ``chain_not_intact`` (o
+``chain_status`` do leitor, que verifica SÓ o log primário: ver
+``inputs.chain_scope``; atestar os rotacionados antes de qualquer ARQUIVAR é
+condição da W2, AC-2.0 e OQ-3) ou ``insufficient_sample``.
 
-Uso: prune-rule.py [--repo PATH] [--json] [--coverage-observed]
-       [--min-window-coverage-days N] [--assert-keep-veto-floor]
-       [--disable-eligibility] [--force-empty-telemetry] | --ac-matrix
+Código (§5): 0 a regra respondeu sem skill protegida (Gate 2 + piso de VETO)
+em ARQUIVAR; 2 erro de uso: bandeira desconhecida (abreviação não vale) ou
+input ausente, inclusive piso de VETO ou Gate 2 derivado vazio quando
+``--assert-keep-veto-floor`` ou ``--ac-matrix`` pedem a asserção, que seria
+vácua; 3 skill protegida sairia ARQUIVAR, com ou sem a bandeira, nomes em
+``offenders``; 4 RECUSA. Toda saída JSON (``--json``, ``--ac-matrix`` e o erro
+de uso com ``--json``) traz ``inputs``, ``skills[]``, ``exit_reason`` e
+``offenders[]``. ``--coverage-observed`` neutraliza a perna 1 INTEIRA (§2.1 e
+AC-0.2): é controle, para que a única variável entre a AC-0.2 e a AC-0.3 seja
+a perna 0. ``--force-empty-telemetry`` simula log vazio e íntegro sem rodar o
+leitor. ``--ac-matrix``: o envelope do run padrão (AC-0.1) mais ``runs``, os
+Checks da AC-0.1 a AC-0.4 e dois controles do §4.2 sobre UMA leitura, cada um
+com o predicado do seu Check; sai 0 se todos valem e 1 se algum reprova (o 1
+dos pipes dos Checks; a matriz não é invocação do §5), nomes em
+``failed_checks``.
 
-Saída (§5): 0 a asserção pedida vale (sem ``--assert-keep-veto-floor`` ela é
-só «a regra respondeu»); 2 erro de uso (bandeira desconhecida, input ausente,
-ou piso de VETO / Gate 2 sem skill core, que tornaria a asserção vácua); 3 skill protegida (Gate 2 + piso de VETO) sairia ARQUIVAR, nomes em
-``offenders``; 4 RECUSA. ``--json`` imprime sempre ``inputs``, ``skills[]``,
-``exit_reason`` (ok, would_archive, os três motivos de RECUSA acima ou
-usage_error) e ``offenders[]``. ``--coverage-observed`` neutraliza SÓ a
-cobertura: o piso de spawns segue ativo, senão telemetria vazia com a perna 0
-desligada arquivaria tudo (o caso do §4.2). ``--force-empty-telemetry`` não
-roda o leitor e simula log vazio e íntegro. ``--ac-matrix`` gera a evidência
-datada: os Checks da AC-0.1 a AC-0.4 e o controle do §4.2 sobre UMA leitura.
-
-O leitor resolve o diretório de estado pelo resolvedor por projeto: numa sombra
-use ``CLAUDE_PROJECT_DIR=<checkout do projeto>`` (só leitura). Só lê arquivos;
-biblioteca padrão, Python >= 3.9.
+Cobertura, política PRÓPRIA (não a do heredoc JANELA do §4): os arquivos que
+o leitor devolveu (relativo = relativo a ``--repo``); linha que não é JSON =
+RECUSA, salvo a última sem quebra (``partial_tail_lines``: escrita em curso);
+conta ``ts``/``timestamp`` que começa por ano, comparado PARSEADO (ISO-8601
+com segundos, fração cortada em microssegundos, sem fuso = UTC, outro formato
+= RECUSA); TRUNCADA em centésimos de dia, nunca arredondada para cima do piso.
+Numa sombra, rode com ``CLAUDE_PROJECT_DIR=<checkout do projeto>`` (só
+leitura). Biblioteca padrão, Python >= 3.9.
 """
 from __future__ import annotations
 
@@ -57,15 +60,20 @@ HERE = Path(__file__).resolve().parent
 EMITTING_CHANNELS: Tuple[str, ...] = ()  # §2.1, linha D: nenhum canal emite hoje
 MIN_OBSERVED_SPAWNS = 100  # §2.1, perna 1
 DEFAULT_MIN_COVERAGE_DAYS = 90  # §2.1 (round 1); OQ-2 do Owner aberta
-LOG_NAME = re.compile(r"audit-log[^/]*\.jsonl")  # = o glob do leitor com --include-rotated
-MATRIX = (  # (nome, bandeiras): os Checks da W0a e o controle do §4.2
-    ("AC-0.1", []),
-    ("AC-0.2", ["--coverage-observed", "--assert-keep-veto-floor"]),
-    ("AC-0.3", ["--coverage-observed", "--assert-keep-veto-floor", "--disable-eligibility"]),
-    ("AC-0.4/1", ["--force-empty-telemetry"]),
-    ("AC-0.4/2", ["--coverage-observed"]),
-    ("§4.2", ["--force-empty-telemetry", "--coverage-observed", "--assert-keep-veto-floor",
-              "--disable-eligibility"]),
+TS = re.compile(r"(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:[.,](\d+))?(Z|[+-]\d{2}:?\d{2})?")
+INPUT_KEYS = {"window", "events", "reader", "chain_status", "eligibility_architecture"}
+MATRIX = (  # (nome, bandeiras, predicado do Check sobre o run r e o censo c)
+    ("AC-0.1", [], lambda r, c: not INPUT_KEYS - set(r["inputs"])),
+    ("AC-0.2", ["--coverage-observed", "--assert-keep-veto-floor"], lambda r, c: r["rc"] == 0),
+    ("AC-0.3", ["--coverage-observed", "--assert-keep-veto-floor", "--disable-eligibility"],
+     lambda r, c: r["exit_reason"] == "would_archive" and set(c["gate2"]["skills"]) <= set(r["offenders"])),
+    ("AC-0.4/1", ["--force-empty-telemetry"], lambda r, c: verdicts(r) == {"RECUSA"}),
+    ("AC-0.4/2", ["--coverage-observed"], lambda r, c: verdicts(r) != {"RECUSA"}),
+    ("§4.2/perna1", ["--force-empty-telemetry", "--assert-keep-veto-floor", "--disable-eligibility"],
+     lambda r, c: r["exit_reason"] == "insufficient_sample" and "ARQUIVAR" not in verdicts(r)),
+    ("§4.2/sem-pernas-0-e-1", ["--force-empty-telemetry", "--coverage-observed",
+                               "--assert-keep-veto-floor", "--disable-eligibility"],
+     lambda r, c: r["exit_reason"] == "would_archive" and protected(c) <= set(r["offenders"])),
 )
 
 
@@ -76,6 +84,18 @@ class UsageError(Exception):
 class Parser(argparse.ArgumentParser):
     def error(self, message: str) -> None:  # type: ignore[override]
         raise UsageError(message)  # bandeira desconhecida ou valor inválido -> rc 2
+
+
+def verdicts(r: Dict[str, Any]) -> set:
+    return {s["verdict"] for s in r["skills"]}
+
+
+def count(r: Dict[str, Any]) -> Dict[str, int]:
+    return dict(sorted(collections.Counter(s["verdict"] for s in r["skills"]).items()))
+
+
+def protected(c: Dict[str, Any]) -> set:
+    return set(c["veto_floor"]["skills"]) | set(c["gate2"]["skills"])
 
 
 def load_census() -> Any:
@@ -92,32 +112,41 @@ def sha256(p: Path) -> str:
 
 
 def parse_ts(s: str) -> dt.datetime:
-    t = dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
-    return t if t.tzinfo else t.replace(tzinfo=dt.timezone.utc)
+    m = TS.fullmatch(s.strip())
+    if not m:
+        raise ValueError("ts fora do ISO-8601 aceito")
+    tz = m.group(4) or "+00:00"
+    tz = "+00:00" if tz == "Z" else (tz if ":" in tz else tz[:3] + ":" + tz[3:])
+    frac = (m.group(3) or "")[:6].ljust(6, "0")  # fromisoformat do 3.9 só aceita 3 ou 6 casas
+    return dt.datetime.fromisoformat("%sT%s.%s%s" % (m.group(1), m.group(2), frac, tz))
 
 
 def coverage(paths: List[Path]) -> Dict[str, Any]:
-    """1.º e último ts dos arquivos que o leitor leu (a regra do heredoc JANELA do §4)."""
-    first: Optional[str] = None
-    last: Optional[str] = None
+    """1.º e último instante dos arquivos que o leitor leu (política no docstring do módulo)."""
+    first: Optional[Tuple[dt.datetime, str]] = None
+    last: Optional[Tuple[dt.datetime, str]] = None
     partial = 0
     for f in paths:
-        if not LOG_NAME.fullmatch(f.name) or not f.is_file():
-            raise ValueError("arquivo inesperado do leitor")
+        if not f.is_file():
+            raise ValueError("arquivo do leitor sumiu")
         with open(f, "r", encoding="utf-8", errors="replace") as fh:
             for line in fh:
-                if not line.endswith("\n"):
-                    partial += 1  # cauda ainda sendo escrita: não é evento
-                    continue
                 if not line.strip():
                     continue
-                ev = json.loads(line)  # linha completa ilegível -> ValueError -> RECUSA
+                try:
+                    ev = json.loads(line)
+                except ValueError:
+                    if line.endswith("\n"):
+                        raise  # linha completa ilegível -> RECUSA
+                    partial += 1  # cauda sem quebra que não parseia: escrita em curso
+                    continue
                 ts = (ev.get("ts") or ev.get("timestamp")) if isinstance(ev, dict) else None
                 if isinstance(ts, str) and ts[:4].isdigit():
-                    first = ts if first is None or ts < first else first
-                    last = ts if last is None or ts > last else last
-    days = (parse_ts(last) - parse_ts(first)).total_seconds() / 86400.0 if first and last else 0.0
-    return {"since": "all", "first_ts": first, "last_ts": last,
+                    t = (parse_ts(ts), ts)
+                    first = t if first is None or t[0] < first[0] else first
+                    last = t if last is None or t[0] > last[0] else last
+    days = (last[0] - first[0]).total_seconds() / 86400.0 if first and last else 0.0
+    return {"since": "all", "first_ts": first and first[1], "last_ts": last and last[1],
             "coverage_days": int(days * 100) / 100.0,  # trunca: nunca arredonda para cima do piso
             "files": len(paths), "partial_tail_lines": partial}
 
@@ -141,8 +170,9 @@ def read_telemetry(cm: Any, repo: Path) -> Dict[str, Any]:
                     "CLAUDE_PROJECT_DIR=<checkout do projeto>)")
     if warned:
         return dict(t, reason="%d aviso(s) do leitor: linha ou arquivo ilegível" % warned)
-    try:
-        t["window"] = coverage([Path(x) for x in d.get("log_paths") or []])
+    try:  # o leitor rodou com cwd=repo: caminho relativo dele é relativo ao repo
+        t["window"] = coverage([x if x.is_absolute() else repo / x
+                                for x in map(Path, d.get("log_paths") or [])])
     except (OSError, ValueError) as e:
         return dict(t, reason="cobertura: %s" % type(e).__name__)
     t["invocations"] = {r.get("skill"): int(r.get("invocations") or 0) for r in d.get("skills") or []}
@@ -159,21 +189,22 @@ def empty_telemetry(cm: Any) -> Dict[str, Any]:
 
 def evaluate(cm: Any, c: Dict[str, Any], t: Dict[str, Any], a: argparse.Namespace) -> Dict[str, Any]:
     excluded = [] if a.disable_eligibility else [ch for ch in cm.CHANNELS if ch not in EMITTING_CHANNELS]
-    protected = set(c["veto_floor"]["skills"]) | set(c["gate2"]["skills"])
     win = dict(t.get("window") or {}, min_window_coverage_days=a.min_window_coverage_days,
-               coverage_leg="neutralizada (--coverage-observed)" if a.coverage_observed else "ativa")
+               denominator_leg="neutralizada (--coverage-observed)" if a.coverage_observed else "ativa")
     spawns = int((t.get("events") or {}).get("agent_spawn") or 0)
+    cov = float(win.get("coverage_days") or 0.0)
     why: List[List[str]] = []
     if t["status"] == "unavailable":
         why.append(["telemetry_unavailable", t["reason"]])
     if t["status"] == "read" and not t["chain_status"].startswith("intact"):
         why.append(["chain_not_intact", t["chain_status"]])
-    if t["status"] != "unavailable" and spawns < MIN_OBSERVED_SPAWNS:
-        why.append(["insufficient_sample", "%d agent_spawn < %d" % (spawns, MIN_OBSERVED_SPAWNS)])
-    cov = float(win.get("coverage_days") or 0.0)
-    if t["status"] != "unavailable" and not a.coverage_observed and cov < a.min_window_coverage_days:
-        why.append(["insufficient_sample", "cobertura %.2f d < %d d" % (cov, a.min_window_coverage_days)])
+    if t["status"] != "unavailable" and not a.coverage_observed:  # perna 1 inteira
+        if spawns < MIN_OBSERVED_SPAWNS:
+            why.append(["insufficient_sample", "%d agent_spawn < %d" % (spawns, MIN_OBSERVED_SPAWNS)])
+        if cov < a.min_window_coverage_days:
+            why.append(["insufficient_sample", "cobertura %.2f d < %d d" % (cov, a.min_window_coverage_days)])
     inv = t.get("invocations")
+    prot = protected(c)
     skills = []
     for s in c["core"]["names"]:
         cited = sorted(c["skills"][s]["cited_by"])
@@ -181,12 +212,12 @@ def evaluate(cm: Any, c: Dict[str, Any], t: Dict[str, Any], a: argparse.Namespac
         n = None if inv is None else int(inv.get(s, 0))
         verdict = "RECUSA" if why else ("MANTER" if not cand or n else "ARQUIVAR")
         skills.append({"skill": s, "verdict": verdict, "candidate": cand, "cited_by": cited,
-                       "invocations": n, "protected": s in protected})
+                       "invocations": n, "protected": s in prot})
     offenders = [x["skill"] for x in skills if x["protected"] and x["verdict"] == "ARQUIVAR"]
     if why:
         reason, rc = why[0][0], 4
     elif offenders:
-        reason, rc = "would_archive", (3 if a.assert_keep_veto_floor else 0)
+        reason, rc = "would_archive", 3  # §5: com ou sem --assert-keep-veto-floor
     else:
         reason, rc = "ok", 0
     arch = {"id": "nenhuma (--disable-eligibility)" if a.disable_eligibility else "D",
@@ -195,7 +226,9 @@ def evaluate(cm: Any, c: Dict[str, Any], t: Dict[str, Any], a: argparse.Namespac
     inputs = {
         "window": win, "events": dict(t.get("events") or {}, min_observed_spawns=MIN_OBSERVED_SPAWNS),
         "reader": t["reader"], "chain_status": t.get("chain_status"),
-        "chain_scope": "log primário (o leitor verifica só ele; os rotacionados não)",
+        "chain_scope": {"verified": "só o log primário (chain_status do leitor)",
+                        "files_read": win.get("files"), "rotated_attested": False,
+                        "note": "atestar os rotacionados antes de ARQUIVAR: W2 (AC-2.0), OQ-3 do Owner"},
         "eligibility_architecture": arch, "telemetry": {"status": t["status"], "reason": t.get("reason")},
         "protected": {"gate2": c["gate2"]["skills"], "veto_floor_agents": c["veto_floor"]["agents"],
                       "veto_floor_skills": c["veto_floor"]["skills"]},
@@ -208,12 +241,14 @@ def evaluate(cm: Any, c: Dict[str, Any], t: Dict[str, Any], a: argparse.Namespac
 
 
 def build_parser() -> Parser:
-    ap = Parser(description=(__doc__ or "").split("\n")[0])
+    ap = Parser(description=(__doc__ or "").split("\n")[0], allow_abbrev=False)
     ap.add_argument("--repo", default=".", help="raiz do repositório (padrão: .)")
     ap.add_argument("--json", action="store_true", help="saída JSON")
-    ap.add_argument("--coverage-observed", action="store_true", help="neutraliza a cobertura (perna 1)")
+    ap.add_argument("--coverage-observed", action="store_true",
+                    help="neutraliza a perna 1 inteira (controle)")
     ap.add_argument("--min-window-coverage-days", type=int, default=DEFAULT_MIN_COVERAGE_DAYS)
-    ap.add_argument("--assert-keep-veto-floor", action="store_true", help="rc 3 se protegida sair ARQUIVAR")
+    ap.add_argument("--assert-keep-veto-floor", action="store_true",
+                    help="exige piso de VETO e Gate 2 derivados não vazios")
     ap.add_argument("--disable-eligibility", action="store_true", help="desliga a perna 0 (controle)")
     ap.add_argument("--force-empty-telemetry", action="store_true", help="log vazio simulado")
     ap.add_argument("--ac-matrix", action="store_true", help="gera a evidência datada da W0a")
@@ -223,42 +258,45 @@ def build_parser() -> Parser:
 def matrix(cm: Any, c: Dict[str, Any], a: argparse.Namespace, now: str) -> Tuple[int, Dict[str, Any]]:
     real = read_telemetry(cm, Path(a.repo).resolve())
     runs: Dict[str, Any] = {}
-    inputs: Dict[str, Any] = {}
-    per_skill: Dict[str, Any] = {}
-    for name, flags in MATRIX:
-        ra = build_parser().parse_args(["--min-window-coverage-days", str(a.min_window_coverage_days)] + flags)
+    out: Dict[str, Any] = {}
+    for name, flags, check in MATRIX:
+        ra = build_parser().parse_args(flags + ["--min-window-coverage-days",
+                                                str(a.min_window_coverage_days)])
         r = evaluate(cm, c, empty_telemetry(cm) if ra.force_empty_telemetry else real, ra)
         runs[name] = {"flags": flags, "rc": r["rc"], "exit_reason": r["exit_reason"],
                       "offenders": r["offenders"], "refusal_reasons": r["inputs"]["refusal_reasons"],
-                      "verdicts": dict(sorted(collections.Counter(s["verdict"] for s in r["skills"]).items())),
-                      "would_archive": [s["skill"] for s in r["skills"] if s["verdict"] == "ARQUIVAR"]}
+                      "verdicts": count(r),
+                      "would_archive": [s["skill"] for s in r["skills"] if s["verdict"] == "ARQUIVAR"],
+                      "check": "pass" if check(r, c) else "FAIL"}
         if name == "AC-0.1":
-            inputs = dict(r["inputs"], generated_at=now)
-            per_skill = {s["skill"]: {k: s[k] for k in ("invocations", "cited_by", "protected")}
-                         for s in r["skills"]}
-    return (0 if real["status"] == "read" else 4), {
-        "schema": "plan175-prune-rule-matrix/1", "inputs": inputs, "runs": runs, "per_skill": per_skill}
+            out = {k: r[k] for k in ("exit_reason", "offenders", "skills")}
+            out["inputs"] = dict(r["inputs"], generated_at=now)
+    failed = [n for n, r in runs.items() if r["check"] != "pass"]
+    return (1 if failed else 0), dict(out, schema="plan175-prune-rule-matrix/2", runs=runs,
+                                      failed_checks=failed)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
+    as_json = bool({"--json", "--ac-matrix"} & set(raw))  # só até o parse; depois vale o namespace
     try:
         a = build_parser().parse_args(raw)
+        as_json = a.json or a.ac_matrix
         if a.min_window_coverage_days < 0:
             raise UsageError("--min-window-coverage-days não pode ser negativo")
         if a.ac_matrix and (a.coverage_observed or a.assert_keep_veto_floor
                             or a.disable_eligibility or a.force_empty_telemetry):
-            raise UsageError("--ac-matrix só aceita --repo e --min-window-coverage-days")
+            raise UsageError("--ac-matrix só aceita --repo, --json e --min-window-coverage-days")
         cm = load_census()
     except (UsageError, OSError) as e:
-        return usage_error(str(e), "--json" in raw)
+        return usage_error(str(e), as_json)
     try:
         c = cm.census(Path(a.repo).resolve())
     except (cm.InputError, OSError) as e:  # input ausente sob --repo
-        return usage_error(str(e), "--json" in raw)
+        return usage_error(str(e), as_json)
     if (a.assert_keep_veto_floor or a.ac_matrix) and not (c["veto_floor"]["skills"] and c["gate2"]["skills"]):
-        return usage_error("piso de VETO ou Gate 2 derivado sem skill core: a asserção seria vácua",
-                           "--json" in raw)
+        return usage_error("input ausente: piso de VETO ou Gate 2 derivado sem skill core "
+                           "(a asserção seria vácua)", as_json)
     now = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     if a.ac_matrix:
         rc, out = matrix(cm, c, a, now)
@@ -270,14 +308,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if a.json:
         print(cm.render(r))
     else:
-        w, e = r["inputs"]["window"], r["inputs"]["events"]
-        print("arquitetura %s; cobertura %s (mínimo %d d); piso %d agent_spawn" % (
-            r["inputs"]["eligibility_architecture"]["id"], w["coverage_leg"],
-            a.min_window_coverage_days, MIN_OBSERVED_SPAWNS))
-        print("telemetria %s; cadeia %s; agent_spawn %s; cobertura %s d" % (
-            t["status"], r["inputs"]["chain_status"], e.get("agent_spawn"), w.get("coverage_days")))
-        print("vereditos %s" % dict(sorted(collections.Counter(s["verdict"] for s in r["skills"]).items())))
-        print("exit_reason = %s; offenders = %s" % (r["exit_reason"], r["offenders"]))
+        print("exit_reason = %s; offenders = %s; vereditos = %s; perna 1 %s; cadeia %s" % (
+            r["exit_reason"], r["offenders"], count(r), r["inputs"]["window"]["denominator_leg"],
+            r["inputs"]["chain_status"]))
     return r["rc"]
 
 
