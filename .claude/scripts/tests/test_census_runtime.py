@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Tests for PLAN-186-FOLLOWUP-census-runtime W0 — ``census_runtime.py``.
+"""Tests for PLAN-186-FOLLOWUP-census-runtime W0 + W1a — ``census_runtime.py``.
 
 The instrument under test derives the role->model table from the RUNTIME
 (an import in the owner's real package context, the owner's own parsers
 for the data owners, an ANCHORED detector for the shell owner) and never
 from a text fingerprint. These tests prove:
 
-* GREEN on the live tree — four surfaces, four rows, three owner classes.
+* GREEN on the live tree — one row per DECLARED surface (four W0 + three
+  W1a), three owner classes, the label each family carries in the note.
+* W1a (Owner decision 2026-10-12, the three lowest-risk reopened owners):
+  ``task-route.py`` asked through ``_agents_for`` over a domain HARVESTED
+  from the owner, with a fail-closed LINE-coverage guard; the ADR-052
+  baseline asked through the tier-policy LOADER and cross-checked against
+  the builder in a separate process; the delivered template read by the
+  owner's own loader. One RED control (at least) per owner, each a
+  mutation of a disposable COPY; the devops divergence is published.
+* The census never writes the audit chain: the test env points HOME and
+  ``CEO_AUDIT_LOG_PATH`` at the TestEnvContext tree and the tree is
+  byte-for-byte unchanged after the run.
 * Check (a) RED in its three named forms (import fails / empty map / a
   pair on one side only).
 * Check (b) RED per owner (missing key), plus alias leaking into the
@@ -36,6 +47,7 @@ Python >= 3.9 (no PEP 604 at runtime, no ``match``).
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -75,11 +87,24 @@ _SKELETON = (
     ".claude/scripts/build-canonical-models.py",
     ".claude/adr/ADR-149-model-id-allowlist.md",
     "SUPPORT.md",
+    # W1a — task-route.py and the ``_lib`` modules its import pulls in.
+    ".claude/scripts/task-route.py",
+    ".claude/hooks/_lib/__init__.py",
+    ".claude/hooks/_lib/injection_salt.py",
+    ".claude/hooks/_lib/runtime_paths.py",
+    ".claude/hooks/_lib/secret_patterns.py",
+    ".claude/hooks/_lib/tier_policy",
+    # W1a — the template ``install.sh`` delivers to every adopter.
+    "templates/.claude/tier-policy.json",
 )
 
 _CONSTANTS_REL = ".claude/scripts/tier_policy_cli/_constants.py"
 _MATRIX_REL = ".claude/dispatcher/routing-matrix.yaml"
 _INJECT_REL = ".claude/scripts/inject-agent-context.sh"
+_TASK_ROUTE_REL = ".claude/scripts/task-route.py"
+_TIER_LOADER_REL = ".claude/scripts/tier_policy_cli/loader.py"
+_TIER_TYPES_REL = ".claude/scripts/tier_policy_cli/_types.py"
+_TIER_TEMPLATE_REL = "templates/.claude/tier-policy.json"
 
 
 def _load_census():
@@ -198,17 +223,20 @@ def _patch(root, rel, old, new, count=1):
 class CensusRuntimeGreenTest(TestEnvContext):
     """The live tree must be GREEN and shaped as the AC declares."""
 
-    def test_live_tree_green_four_rows(self):
+    def test_live_tree_green_one_row_per_declared_surface(self):
         proc = _run(_REPO_ROOT)
         self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, "")
         census = _load_census()
         rows = census.build_table(str(_REPO_ROOT))
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(census.W0_SURFACES), 4)
+        self.assertEqual(len(census.W1A_SURFACES), 3)
+        self.assertEqual(len(rows), len(census.EXPECTED_SURFACES))
         self.assertEqual(
-            sorted(r["surface"] for r in rows), sorted(census.EXPECTED_SURFACES)
+            [r["surface"] for r in rows], list(census.EXPECTED_SURFACES)
         )
 
-    def test_three_owner_classes_and_one_label(self):
+    def test_three_owner_classes_and_the_label_of_each_family(self):
         census = _load_census()
         rows = census.build_table(str(_REPO_ROOT))
         self.assertEqual(
@@ -216,16 +244,27 @@ class CensusRuntimeGreenTest(TestEnvContext):
             sorted({census.OWNER_DATA, census.OWNER_IMPORTABLE, census.OWNER_SHELL}),
         )
         for row in rows:
-            self.assertEqual(row["label"], census.LOCAL_OWNER_LABEL)
+            expected = (
+                census.LOCAL_OWNER_LABEL
+                if row["surface"] in census.W0_SURFACES
+                else census.REOPENED_OWNER_LABEL
+            )
+            self.assertEqual(row["label"], expected, row["surface"])
 
     def test_no_alias_reaches_the_resolved_column(self):
         census = _load_census()
         rows = census.build_table(str(_REPO_ROOT))
-        allowed = set(census.working_set(str(_REPO_ROOT)))
+        fleet = set(census.working_set(str(_REPO_ROOT)))
         for row in rows:
             self.assertTrue(row["resolved_model_ids"])
+            owner_domain = row.get("_model_id_domain")
+            allowed = set(owner_domain) if owner_domain is not None else fleet
             for mid in row["resolved_model_ids"]:
                 self.assertIn(mid, allowed, row["surface"])
+                if mid not in fleet:
+                    # Outside the ADR-149 working set (the DATED haiku of the
+                    # tier-policy owners): PUBLISHED, never normalized away.
+                    self.assertIn(mid, row["resolution_step"], row["surface"])
             if row["raw_unit"] == census.UNIT_ALIAS:
                 self.assertFalse(row["resolution_step"].startswith("nenhum"))
 
@@ -736,8 +775,10 @@ class RailRound2ProbesTest(TestEnvContext):
         """F9: case alternations must not blow up the six-column table."""
         proc = _run(_REPO_ROOT)
         self.assertEqual(proc.returncode, 0, proc.stderr)
+        census = _load_census()
         lines = [ln for ln in proc.stdout.split("\n") if ln.startswith("|")]
-        self.assertEqual(len(lines), 6)  # header + separator + four rows
+        # header + separator + one row per declared surface (4 W0 + 3 W1a)
+        self.assertEqual(len(lines), 2 + len(census.EXPECTED_SURFACES))
         widths = {len(_split_md_row(ln)) for ln in lines}
         # 7 colunas desde a S348-r6: a coluna «cobertura» entrou com a
         # publicacao NAO-EXAUSTIVA da linha MODEL_HINT.
@@ -1118,6 +1159,324 @@ class RailRound5CuresTest(TestEnvContext):
         text = (_REPO_ROOT / _INJECT_REL).read_text(encoding="utf-8")
         blk = text.index('case "$DETECTED_SKILL" in')
         self.assertEqual(census._owner_shell_options(text, blk), "set -euo pipefail")
+
+
+#: The tail of ``_agents_for`` — anchor for planting a branch before it.
+_TR_TAIL = "    return agents\n\n\ndef _context_strategy("
+
+
+class W1aTaskRouteTest(TestEnvContext):
+    """Owner 2 — ``task-route.py``, asked through ``_agents_for``."""
+
+    def test_row_equals_an_independent_enumeration_of_the_owner(self):
+        """The harvested domain loses no route the owner can return.
+
+        The oracle here is INDEPENDENT of the census harvest: the owner's
+        own ``CLASSIFICATION_MODES`` x every value ``_detect_workflow_signal``
+        documents x truthy/falsy veto domain x both booleans.
+        """
+        census = _load_census()
+        module = census._import_task_route(str(_REPO_ROOT))
+        expected = set()
+        for cls in module.CLASSIFICATION_MODES:
+            for veto in (None, "auth"):
+                for wf in (None, "release", "ci", "rag", "test-infra"):
+                    for schema in (False, True):
+                        for agent in module._agents_for(cls, veto, wf, schema):
+                            expected.add((agent["role"], agent["model"]))
+        reading = census.read_task_route(str(_REPO_ROOT))
+        got = set((r, m) for r, ms in reading["routes"].items() for m in ms)
+        self.assertTrue(expected)
+        self.assertEqual(expected, got)
+        # The harvest found every classification the owner's enum declares.
+        for cls in module.CLASSIFICATION_MODES:
+            self.assertIn(cls, reading["domain"]["classification"])
+
+    def test_check_a_two_readings_agree(self):
+        """Row (harvest + trace, in process) == the ONE command (no harvest)."""
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        row = [r for r in rows if r["surface"] == census.SURFACE_TASK_ROUTE][0]
+        second = census.read_task_route_one_command(str(_REPO_ROOT), row["_raw_domain"])
+        self.assertEqual(row["_pairs"], second)
+        self.assertEqual(row["coverage"], census.COVERAGE_PROBED)
+        census.check_a(str(_REPO_ROOT), rows)
+
+    def test_red_check_a_row_that_drops_a_route(self):
+        """RED: a row that lost a (role, model) pair disagrees with the import."""
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        for row in rows:
+            if row["surface"] == census.SURFACE_TASK_ROUTE:
+                row["_pairs"].pop(sorted(row["_pairs"])[0])
+        with self.assertRaises(census.Red) as ctx:
+            census.check_a(str(_REPO_ROOT), rows)
+        self.assertEqual(ctx.exception.name, "task_route_pair_missing_in_table")
+
+    def test_green_control_a_new_literal_branch_is_derived_not_remembered(self):
+        """A route behind a NEW literal shows up with no census change."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            before = _run(root)
+            self.assertEqual(before.returncode, 0, before.stderr)
+            _patch(
+                root,
+                _TASK_ROUTE_REL,
+                _TR_TAIL,
+                '    if workflow_change == "census-deploy":\n'
+                '        agents.append({"role": "devops", "model": "claude-haiku-4-5"})\n'
+                + _TR_TAIL,
+            )
+            after = _run(root)
+            self.assertEqual(after.returncode, 0, after.stderr)
+            self.assertNotEqual(before.stdout, after.stdout)
+            self.assertIn("devops=claude-haiku-4-5[em ", after.stdout)
+            self.assertIn("devops=claude-opus-4-8[em ", after.stdout)
+
+    def test_red_control_branch_the_probe_cannot_reach_is_refused(self):
+        """RED: a route behind ``startswith`` would vanish — it is refused."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TASK_ROUTE_REL,
+                _TR_TAIL,
+                '    if workflow_change is not None and workflow_change.startswith("dep"):\n'
+                '        agents.append({"role": "devops", "model": "claude-haiku-4-5"})\n'
+                + _TR_TAIL,
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("task_route_branch_unreached", proc.stderr)
+
+    def test_red_control_owner_sys_exit_on_import_is_a_named_red(self):
+        """RED: the owner calls ``sys.exit(2)`` when an import fails."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TASK_ROUTE_REL,
+                "    from _lib.agent_frontmatter import VETO_FLOOR_ROLES\n",
+                "    from _lib.agent_frontmatter import VETO_FLOOR_ROLES\n"
+                "    from _lib.census_absent_module import NOTHING  # noqa: F401\n",
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("task_route_import_failed", proc.stderr)
+            self.assertNotIn("Traceback", proc.stderr)
+
+    def test_red_control_alias_in_the_owner_is_refused(self):
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TASK_ROUTE_REL,
+                '"model": "claude-sonnet-4-6",',
+                '"model": "sonnet",',
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("alias_leaked_into_table", proc.stderr)
+
+    def test_errata_r6_the_veto_homonym_is_not_a_model_surface(self):
+        """By IMPORT: what task-route reads as VETO_HARDCODE maps to task types."""
+        census = _load_census()
+        homonym = census.task_route_veto_homonym(str(_REPO_ROOT))
+        self.assertTrue(homonym)
+        fleet = set(census.working_set(str(_REPO_ROOT)))
+        for role, value in homonym.items():
+            self.assertIsInstance(value, frozenset, role)
+            self.assertFalse(set(value) & fleet, role)
+
+    def test_red_coverage_claim_stronger_than_the_probe(self):
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        for row in rows:
+            if row["surface"] == census.SURFACE_TASK_ROUTE:
+                row["coverage"] = census.COVERAGE_OWNER_ANSWER
+        with self.assertRaises(census.Red) as ctx:
+            census.check_b(str(_REPO_ROOT), rows)
+        self.assertEqual(ctx.exception.name, "coverage_marker_missing")
+
+    def test_red_reopened_owner_labelled_as_a_w0_surface(self):
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        for row in rows:
+            if row["surface"] == census.SURFACE_TIER_TEMPLATE:
+                row["label"] = census.LOCAL_OWNER_LABEL
+        with self.assertRaises(census.Red) as ctx:
+            census.check_b(str(_REPO_ROOT), rows)
+        self.assertEqual(ctx.exception.name, "label_wrong")
+
+    def test_compare_pairs_names_the_owner(self):
+        census = _load_census()
+        with self.assertRaises(census.Red) as ctx:
+            census.compare_pairs({}, {"devops->x": "1"}, "task_route")
+        self.assertEqual(ctx.exception.name, "task_route_pair_missing_in_table")
+        with self.assertRaises(census.Red) as ctx2:
+            census.compare_pairs({"devops->x": "2"}, {"devops->x": "1"}, "tier_baseline")
+        self.assertEqual(ctx2.exception.name, "tier_baseline_pair_diverges")
+
+
+class W1aTierPolicyTest(TestEnvContext):
+    """Owners 4 and 5 — the ADR-052 baseline and the delivered template."""
+
+    def test_baseline_row_is_the_loader_fallback_and_matches_the_builder(self):
+        census = _load_census()
+        pairs, domain = census.read_tier_baseline(str(_REPO_ROOT))
+        self.assertEqual(pairs, census.read_tier_baseline_one_command(str(_REPO_ROOT)))
+        self.assertIn(pairs["devops"], domain)
+
+    def test_red_control_loader_fallback_diverging_from_the_builder(self):
+        """RED: the loader stops falling back to ``build_adr052_baseline``."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TIER_LOADER_REL,
+                "_FROZEN_BASELINE = build_adr052_baseline()\n",
+                "_FROZEN_BASELINE = dict(build_adr052_baseline(), devops=Assignment("
+                'tier="claude-sonnet-4-6", locked_by=None, evidence=None))\n',
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("tier_baseline_pair_diverges", proc.stderr)
+
+    def test_red_control_alias_in_the_baseline_is_refused(self):
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TIER_TYPES_REL,
+                'tier="claude-haiku-4-5-20251001",',
+                'tier="haiku",',
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("alias_leaked_into_table", proc.stderr)
+
+    def test_template_row_is_what_the_owner_loader_returns(self):
+        """Oracle independent of the loader: plain ``json`` over the file."""
+        census = _load_census()
+        pairs, _domain, status = census.read_tier_template(str(_REPO_ROOT))
+        self.assertEqual(status, "ok")
+        raw = json.loads((_REPO_ROOT / _TIER_TEMPLATE_REL).read_text(encoding="utf-8"))
+        self.assertEqual(
+            pairs, dict((k, v["tier"]) for k, v in raw["assignments"].items())
+        )
+
+    def test_red_control_template_the_owner_loader_rejects(self):
+        """RED: the adopter would fall back — the census says so by name."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TIER_TEMPLATE_REL,
+                '"tier": "claude-haiku-4-5-20251001"',
+                '"tier": "haiku"',
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("tier_template_rejected_by_owner_loader", proc.stderr)
+            self.assertIn("invalid_model_id", proc.stderr)
+
+    def test_green_control_a_template_change_moves_the_table(self):
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            before = _run(root)
+            self.assertEqual(before.returncode, 0, before.stderr)
+            _patch(
+                root,
+                _TIER_TEMPLATE_REL,
+                '"tier": "claude-haiku-4-5-20251001"',
+                '"tier": "claude-sonnet-4-6"',
+            )
+            after = _run(root)
+            self.assertEqual(after.returncode, 0, after.stderr)
+            self.assertNotEqual(before.stdout, after.stdout)
+            self.assertIn(
+                "templates/.claude/tier-policy.json=claude-sonnet-4-6", after.stdout
+            )
+
+    def test_devops_divergence_is_published_not_reconciled(self):
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        found = dict(census.role_divergences(rows))
+        self.assertIn("devops", found)
+        devops = dict(found["devops"])
+        self.assertEqual(devops[census.SURFACE_AGENTS], ["claude-sonnet-4-6"])
+        self.assertEqual(
+            devops[census.SURFACE_TIER_BASELINE], ["claude-haiku-4-5-20251001"]
+        )
+        # A role every role-keyed surface agrees on is NOT a divergence.
+        self.assertNotIn("qa-architect", found)
+        # Alias / skill-keyed surfaces never enter the comparison.
+        for entries in found.values():
+            surfaces = set(s for s, _m in entries)
+            self.assertNotIn(census.SURFACE_HINT, surfaces)
+            self.assertNotIn(census.SURFACE_MATRIX, surfaces)
+        proc = _run(_REPO_ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        line = [ln for ln in proc.stdout.split("\n") if ln.startswith("- devops:")]
+        self.assertEqual(len(line), 1, proc.stdout)
+        self.assertIn("agents/*.md=claude-sonnet-4-6", line[0])
+        self.assertIn(
+            census.SURFACE_TIER_BASELINE + "=claude-haiku-4-5-20251001", line[0]
+        )
+
+
+class W1aAuditIsolationTest(TestEnvContext):
+    """The census and the W1a readers write NOTHING to the audit chain."""
+
+    @staticmethod
+    def _snapshot(base):
+        out = {}
+        for dirpath, dirnames, filenames in os.walk(str(base)):
+            for name in dirnames:
+                out[os.path.relpath(os.path.join(dirpath, name), str(base))] = "dir"
+            for name in filenames:
+                path = os.path.join(dirpath, name)
+                st = os.stat(path)
+                out[os.path.relpath(path, str(base))] = (st.st_size, st.st_mtime_ns)
+        return out
+
+    def test_census_never_writes_the_audit_chain(self):
+        tmp_root = os.path.realpath(str(self._tmp_root))
+        log_path = os.environ["CEO_AUDIT_LOG_PATH"]
+        self.assertTrue(os.path.realpath(log_path).startswith(tmp_root), log_path)
+        self.assertTrue(os.path.realpath(os.environ["HOME"]).startswith(tmp_root))
+        # The resolver every emitter uses lands under the ISOLATED home.
+        resolved = subprocess.run(
+            [
+                sys.executable,
+                str(_REPO_ROOT / ".claude" / "hooks" / "_lib" / "runtime_paths.py"),
+                "--state-dir",
+                "--project",
+                str(_REPO_ROOT),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+        self.assertEqual(resolved.returncode, 0, resolved.stderr)
+        self.assertTrue(
+            os.path.realpath(resolved.stdout.strip()).startswith(tmp_root),
+            resolved.stdout,
+        )
+        watched = self.home_dir / ".claude"
+        before = self._snapshot(watched)
+        census = _load_census()
+        census.read_task_route(str(_REPO_ROOT))
+        census.read_tier_baseline(str(_REPO_ROOT))
+        census.read_tier_template(str(_REPO_ROOT))
+        proc = _run(_REPO_ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(before, self._snapshot(watched))
+        self.assertFalse(os.path.exists(log_path))
+        # Positive control: the snapshot DOES see a write to the audit path.
+        Path(log_path).write_text("probe\n", encoding="utf-8")
+        self.assertNotEqual(before, self._snapshot(watched))
 
 
 if __name__ == "__main__":

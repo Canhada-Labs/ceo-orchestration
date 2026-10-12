@@ -1,16 +1,30 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""census_runtime.py — PLAN-186-FOLLOWUP-census-runtime, W0.
+"""census_runtime.py — PLAN-186-FOLLOWUP-census-runtime, W0 + W1a.
 
 Censo papel->modelo derivado do RUNTIME, nao de fingerprint sobre
-texto-fonte. Emite EXATAMENTE quatro linhas — uma por superficie — para
-as quatro superficies que a nota S340 do AC-12 nomeia e rotula «dona
-local»:
+texto-fonte. Emite UMA linha por superficie DECLARADA em
+``EXPECTED_SURFACES`` — sete hoje.
+
+W0 — as quatro superficies que a nota S340 do AC-12 nomeia e rotula
+«dona local»:
 
     VETO_HARDCODE          .claude/scripts/tier_policy_cli/_constants.py
     routing-matrix.yaml    .claude/dispatcher/routing-matrix.yaml
     agents/*.md            .claude/agents/<slug>.md  (frontmatter `model:`)
     MODEL_HINT             .claude/scripts/inject-agent-context.sh
+
+W1a — tres dos donos que a MESMA nota REABRE («ha donos VIVOS a mais»),
+os de menor risco (decisao do Owner, 2026-10-12), rotulados «dono VIVO
+a mais» (detalhe no bloco W1a abaixo):
+
+    task-route.py                       .claude/scripts/task-route.py (_agents_for)
+    baseline ADR-052 (tier_policy_cli)  tier_policy_cli/_types.py, via loader
+    templates/.claude/tier-policy.json  pelo carregador do proprio tier-policy
+
+Os outros dois donos reabertos — ``set-quality-profile.sh`` (script de
+shell) e ``_ADR_052_ROLE_TO_MODEL`` (``.claude/hooks/audit_log.py``) —
+ficam para um pack seguinte; ate la o AC-F1 segue aberto.
 
 TRES classes de dono, nenhuma delas lida por heuristica de coluna:
 
@@ -93,12 +107,15 @@ TRES classes de dono, nenhuma delas lida por heuristica de coluna:
     construcao — so a execucao do dono INTEIRO a responde.
     O residual que NAO fecha por instrumento, e que e a rota de cura de
     (v) e (vi): enquanto esta superficie nao tiver uma API de dono a quem
-    PERGUNTAR (as outras tres tem), derivar QUAIS sondas rodar continua
-    sendo leitura de gramatica. A cura e dar um DONO ao ``MODEL_HINT``
-    (funcao shell com contrato, ou um dado que o script consome) — edicao
-    CANONICA, fora do alcance de um pack livre; e a opcao (3) da
-    ``ARCHITECTURE-NOTE-S347.md`` §5, e os dois itens estao NOMEADOS como
-    residuais no proprio plano.
+    PERGUNTAR (as demais superficies tem), derivar QUAIS sondas rodar
+    continua sendo leitura de gramatica. A cura e dar um DONO ao
+    ``MODEL_HINT`` (funcao shell com contrato, ou um dado que o script
+    consome) — e a opcao (3) da ``ARCHITECTURE-NOTE-S347.md`` §5, e os
+    dois itens estao NOMEADOS como residuais no proprio plano. Ela NAO e
+    edicao canonica: o oraculo ``check_canonical_edit.py --is-canonical``
+    responde 0 para ``.claude/scripts/inject-agent-context.sh`` (medido
+    em 2026-10-12); um arquivo de DADO novo pergunta ao oraculo pelo
+    caminho que escolher, na wave dele.
     A guarda de cobertura que este censo EXECUTA e uma varredura por
     SUBSTRING dentro de ``read_model_hint``, e nao um regex: uma linha
     do arquivo do dono que contenha o literal ``MODEL_HINT=`` tem de
@@ -151,16 +168,75 @@ refutador (remover ``[1m]`` de ``SUPPORT.md:88``) portanto nao move
 nenhum byte da tabela e nao muda o rc — e isso e a DECLARACAO, medida
 pelo teste ``test_census_runtime.py``, nao uma suposicao.
 
-SEM JUNCAO ENTRE SUPERFICIES. O censo emite quatro linhas de SUPERFICIE
-e nao junta papeis entre elas. O keyspace do ``MODEL_HINT`` e SKILL
-detectada (um ``case`` sobre ``$DETECTED_SKILL``), nao slug de arquetipo;
-sem um passo skill->papel DECLARADO, essa juncao nao acontece.
+W1a — DONOS REABERTOS, e como cada um e PERGUNTADO.
+
+  * ``task-route.py`` (python-importavel; import isolado em
+    ``_import_task_route``). A rota e o VALOR que ``_agents_for`` devolve;
+    o contexto e o argumento que a seleciona. O DOMINIO das sondas nao e
+    lembrado: vem da ASSINATURA do dono (``str``, ``Optional[str]``,
+    ``bool``; outro tipo e ``task_route_param_unmodelled``) e, nos
+    parametros de texto, dos literais contra os quais o PROPRIO dono
+    compara o argumento (``_EqProbe``, ate o ponto fixo), mais um valor
+    que nao casa nada. O produto e EXECUTADO; cada (papel, modelo) sai com
+    quantos contextos o produzem (a rota e CONDICIONAL ao contexto; os
+    contextos vao no ``--json``), e papel com mais de um modelo sai em
+    entradas SEPARADAS. COBERTURA, fail-CLOSED: sob
+    ``sys.settrace``, toda funcao do arquivo dono que a sonda executou
+    tem de ter TODAS as suas linhas executaveis rodadas (menos a do
+    ``def``: a partir do 3.11 o ``RESUME`` dela roda antes do
+    rastreador); linha
+    nao alcancada e ``task_route_branch_unreached`` — ramo guardado por
+    forma que a sonda nao colhe (``startswith``, regex, ``set``/``dict``
+    por hash, ``is``) e RECUSADO, nunca some.
+    FORA da cobertura, por construcao: (vii) alternativas na MESMA linha
+    (expressao condicional, ``and``/``or``) cujo ramo nenhum valor
+    colhido alcanca — cobertura por LINHA nao as distingue; (viii)
+    codigo FORA do arquivo dono (um auxiliar em ``_lib``) — so as funcoes
+    de ``task-route.py`` entram na exigencia. Por isso a coluna
+    «cobertura» desta linha e ``COVERAGE_PROBED``, nunca «resposta do
+    dono».
+    ERRATA r6: o ``VETO_HARDCODE`` que ``task-route.py`` importa e o
+    HOMONIMO de ``_lib.tier_policy._constants`` (papel -> ``frozenset``
+    de task_type), conferido por import no teste; ele NAO e leitor da
+    superficie ``VETO_HARDCODE`` e o censo nao o publica como tal.
+  * baseline ADR-052 (python-importavel). Perguntado ao RUNTIME que o
+    consome: ``tier_policy_cli.loader.load_policy`` sobre um caminho que
+    NAO existe devolve ``status=bootstrap`` e o ``baseline`` que o loader
+    usaria — o caminho do runtime quando ``.claude/tier-policy.json``
+    falta (o caso deste repo). Outro status e
+    ``tier_baseline_not_runtime_fallback``. O Check (a) compara essa
+    linha, par a par, com ``build_adr052_baseline()`` importado num
+    processo separado (``TIER_BASELINE_ONE_COMMAND``): o loader deixar de
+    cair no builder e VERMELHO (``tier_baseline_pair_diverges``).
+  * ``templates/.claude/tier-policy.json`` (dado). Lido pelo carregador
+    do proprio tier-policy (``load_policy``), o mesmo que o adopter roda
+    depois que o ``install.sh`` copia o arquivo; um template que esse
+    carregador REJEITA (o adopter cairia no fallback) e
+    ``tier_template_rejected_by_owner_loader``, com a razao do dono.
+  UNIDADE nos dois donos do tier-policy: o dominio de model_id e o
+  ``VALID_MODEL_IDS`` que o PROPRIO carregador valida (espelho do ADR-149
+  com a forma DATADA do haiku); o que fica fora do
+  ``AVAILABLE_MODELS_WORKING_SET`` do ADR-149 sai PUBLICADO na coluna do
+  passo, nunca normalizado.
+  DIVERGENCIAS: as linhas cujo keyspace e PAPEL e cuja unidade ja e
+  model_id (``agents/*.md``, ``VETO_HARDCODE``, ``task-route.py`` e as
+  duas do tier-policy) sao comparadas papel a papel, e toda divergencia
+  sai PUBLICADA abaixo da tabela com o valor de cada superficie — nunca
+  uma linha reconciliada (ex.: ``devops`` = Haiku no baseline, Sonnet em
+  ``agents/``). O ``--json`` continua sendo a lista de linhas; as
+  divergencias saem na saida Markdown e por ``role_divergences``.
+
+SEM JUNCAO ALEM DESSA. O keyspace do ``MODEL_HINT`` e SKILL detectada (um
+``case`` sobre ``$DETECTED_SKILL``), nao slug de arquetipo, e o do
+``routing-matrix.yaml`` e arquetipo com valor em ALIAS; sem um passo
+DECLARADO de traducao, nenhuma das duas entra na comparacao de
+divergencias acima.
 
 Stdlib-only (PyYAML e OPCIONAL, com fallback declarado). Python >= 3.9
 per ADR-002: sem PEP 604 em runtime, sem ``match``.
 
 Exit codes:
-  0 — as quatro linhas passam.
+  0 — todas as linhas declaradas passam.
   1 — pelo menos um VERMELHO nomeado (a razao vai para stderr).
   2 — erro de uso.
 """
@@ -168,15 +244,20 @@ from __future__ import annotations
 
 import argparse
 import ast
+import dis
 import importlib
 import importlib.util
+import inspect
+import itertools
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
+import typing
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 # --------------------------------------------------------------------------
 # Declaracoes fechadas — nada aqui e derivado de prosa.
@@ -184,18 +265,43 @@ from typing import Any, Dict, List, Optional, Tuple
 
 #: Rotulo unico que a nota S340 do AC-12 aplica as quatro superficies.
 LOCAL_OWNER_LABEL = "dona local"
+#: Rotulo dos donos que a MESMA nota REABRE: «ha donos VIVOS a mais».
+REOPENED_OWNER_LABEL = "dono VIVO a mais"
 
 SURFACE_VETO = "VETO_HARDCODE"
 SURFACE_MATRIX = "routing-matrix.yaml"
 SURFACE_AGENTS = "agents/*.md"
 SURFACE_HINT = "MODEL_HINT"
 
-#: As QUATRO superficies, na ordem em que a nota S340 as nomeia.
-EXPECTED_SURFACES = (
+SURFACE_TASK_ROUTE = "task-route.py"
+SURFACE_TIER_BASELINE = "baseline ADR-052 (tier_policy_cli)"
+SURFACE_TIER_TEMPLATE = "templates/.claude/tier-policy.json"
+
+#: W0 — as QUATRO superficies, na ordem em que a nota S340 as nomeia.
+W0_SURFACES = (
     SURFACE_AGENTS,
     SURFACE_HINT,
     SURFACE_MATRIX,
     SURFACE_VETO,
+)
+
+#: W1a — os tres donos reabertos de menor risco (decisao do Owner,
+#: 2026-10-12). ``set-quality-profile.sh`` e ``_ADR_052_ROLE_TO_MODEL``
+#: ficam para um pack seguinte.
+W1A_SURFACES = (
+    SURFACE_TASK_ROUTE,
+    SURFACE_TIER_BASELINE,
+    SURFACE_TIER_TEMPLATE,
+)
+
+#: Toda superficie DECLARADA: uma linha cada, nem mais nem menos.
+EXPECTED_SURFACES = W0_SURFACES + W1A_SURFACES
+
+#: Rotulo DECLARADO por superficie (a nota rotula as duas familias de
+#: modo diferente; uma linha com o rotulo da outra familia e VERMELHO).
+SURFACE_LABEL = dict(
+    [(s, LOCAL_OWNER_LABEL) for s in W0_SURFACES]
+    + [(s, REOPENED_OWNER_LABEL) for s in W1A_SURFACES]
 )
 
 OWNER_IMPORTABLE = "python-importavel"
@@ -215,6 +321,27 @@ COVERAGE_NONEXHAUSTIVE = (
     "OBSERVACAO NAO-EXAUSTIVA (sondas derivadas da gramatica do case; "
     "bracos na MESMA linha e alcancabilidade do bloco FORA — r6)"
 )
+#: ``task-route.py``: o dono RESPONDE, mas sob sondas — o dominio e
+#: colhido em runtime e a cobertura por LINHA e fail-CLOSED; o que a
+#: cobertura por linha nao enxerga esta DITO no rotulo (itens (vii) e
+#: (viii) do docstring de modulo).
+COVERAGE_PROBED = (
+    "RESPOSTA DO DONO SOB SONDA (dominio colhido em runtime; cobertura "
+    "de LINHA fail-closed; alternativas na MESMA linha e codigo fora do "
+    "arquivo dono FORA)"
+)
+
+#: Marca de cobertura DECLARADA por superficie. Uma linha que publique
+#: marca diferente da sua — mais forte ou mais fraca — e VERMELHO.
+SURFACE_COVERAGE = {
+    SURFACE_AGENTS: COVERAGE_OWNER_ANSWER,
+    SURFACE_HINT: COVERAGE_NONEXHAUSTIVE,
+    SURFACE_MATRIX: COVERAGE_OWNER_ANSWER,
+    SURFACE_VETO: COVERAGE_OWNER_ANSWER,
+    SURFACE_TASK_ROUTE: COVERAGE_PROBED,
+    SURFACE_TIER_BASELINE: COVERAGE_OWNER_ANSWER,
+    SURFACE_TIER_TEMPLATE: COVERAGE_OWNER_ANSWER,
+}
 
 _REL_CONSTANTS = os.path.join(".claude", "scripts", "tier_policy_cli", "_constants.py")
 _REL_SCRIPTS = os.path.join(".claude", "scripts")
@@ -228,6 +355,9 @@ _REL_ADR149 = os.path.join(".claude", "adr", "ADR-149-model-id-allowlist.md")
 _REL_GEN_AVAIL = os.path.join(".claude", "scripts", "generate-available-models.py")
 _REL_BUILD_MODELS = os.path.join(".claude", "scripts", "build-canonical-models.py")
 _REL_GEN_DISPATCH = os.path.join(".claude", "scripts", "generate-dispatch.py")
+_REL_TASK_ROUTE = os.path.join(".claude", "scripts", "task-route.py")
+_REL_HOOKS = os.path.join(".claude", "hooks")
+_REL_TIER_TEMPLATE = os.path.join("templates", ".claude", "tier-policy.json")
 
 
 class Red(Exception):
@@ -1075,6 +1205,528 @@ def read_model_hint(root: str) -> List[Tuple[str, str]]:
 
 
 # --------------------------------------------------------------------------
+# W1a — donos reabertos (task-route.py, baseline ADR-052, template).
+# --------------------------------------------------------------------------
+
+
+#: A funcao do dono que devolve as rotas papel->modelo.
+TASK_ROUTE_FUNCTION = "_agents_for"
+
+#: Valor de sonda que nao casa nenhum literal do dono: representa «qualquer
+#: outro valor» do parametro. Nao e um identificador valido de nada.
+PROBE_OTHER = "<census:outro-valor>"
+
+#: Teto do produto de contextos. Passar dele e VERMELHO nomeado, nunca uma
+#: enumeracao truncada em silencio.
+MAX_PROBE_CONTEXTS = 4096
+
+
+def _is_lib_module(name: str) -> bool:
+    return name == "_lib" or name.startswith("_lib.")
+
+
+def _import_task_route(root: str) -> Any:
+    """Importa ``task-route.py`` da RAIZ, com o ``_lib`` da propria raiz.
+
+    O dono poe ``.claude/hooks`` em ``sys.path`` e importa ``_lib`` no
+    topo. Aqui o ``_lib`` do processo hospedeiro e purgado de
+    ``sys.modules`` antes e restaurado depois, e o ``sys.path`` volta ao
+    que era — um ``_lib`` de OUTRA raiz, ja importado, nao responde por
+    esta. O dono faz ``sys.exit(2)`` quando um import dele falha: isso
+    e capturado (``SystemExit`` nao e ``Exception``) e vira VERMELHO.
+    """
+    path = os.path.join(root, _REL_TASK_ROUTE)
+    cached = _MODULE_CACHE.get(path)
+    if cached is not None:
+        return cached
+    if not os.path.isfile(path):
+        raise Red("task_route_import_failed", "arquivo ausente: {0}".format(path))
+    name = "_census_task_route"
+    saved_path = list(sys.path)
+    saved_lib = {k: v for k, v in sys.modules.items() if _is_lib_module(k)}
+    previous = sys.modules.get(name)
+    for k in list(saved_lib):
+        del sys.modules[k]
+    sys.path.insert(0, os.path.join(root, _REL_HOOKS))
+    try:
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            raise Red("task_route_import_failed", "spec nao construida para {0}".format(path))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except KeyboardInterrupt:
+            raise
+        except BaseException as exc:  # noqa: BLE001 — inclui o sys.exit do dono
+            raise Red(
+                "task_route_import_failed",
+                "import falhou: {0}: {1}".format(type(exc).__name__, exc),
+            )
+    finally:
+        for k in list(sys.modules):
+            if _is_lib_module(k):
+                del sys.modules[k]
+        sys.modules.update(saved_lib)
+        if previous is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous
+        sys.path[:] = saved_path
+    _MODULE_CACHE[path] = module
+    return module
+
+
+class _EqProbe(str):
+    """Sonda ``str`` que REGISTRA cada literal contra o qual e comparada.
+
+    ``==`` devolve ``False`` e ``!=`` devolve ``True``: a sonda segue o
+    caminho «nenhum literal casou», e o dono, ao comparar, ENTREGA o
+    literal. O ``in`` sobre tupla ou lista compara por ``==`` e tambem
+    entrega. Formas que nao passam por ``==``/``!=`` (``startswith``,
+    regex, ``set``/``dict`` por hash, ``is``) nao entregam nada — e e a
+    guarda de cobertura que as RECUSA, nao esta sonda.
+    """
+
+    def __new__(cls, seen: Set[str]) -> "_EqProbe":
+        obj = str.__new__(cls, PROBE_OTHER)
+        obj._seen = seen
+        return obj
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, str) and not isinstance(other, _EqProbe):
+            self._seen.add(str(other))
+        return False
+
+    def __ne__(self, other: object) -> bool:
+        if isinstance(other, str) and not isinstance(other, _EqProbe):
+            self._seen.add(str(other))
+        return True
+
+    __hash__ = str.__hash__
+
+
+def _call_owner(fn: Any, kwargs: Dict[str, Any]) -> Any:
+    try:
+        return fn(**kwargs)
+    except Exception as exc:  # noqa: BLE001 — a razao vira o VERMELHO
+        raise Red(
+            "task_route_probe_raised",
+            "{0}({1}) levantou {2}: {3}".format(
+                TASK_ROUTE_FUNCTION, _ctx_label(kwargs), type(exc).__name__, exc
+            ),
+        )
+
+
+def _ctx_value(value: Any) -> str:
+    if isinstance(value, str) and value == PROBE_OTHER:
+        return "<outro-valor>"
+    return str(value)
+
+
+def _ctx_label(kwargs: Dict[str, Any]) -> str:
+    return ", ".join("{0}={1}".format(k, _ctx_value(kwargs[k])) for k in kwargs)
+
+
+def _probe_domain(fn: Any) -> List[Tuple[str, List[Any]]]:
+    """Dominio de cada parametro, PERGUNTADO ao dono (assinatura + sonda)."""
+    try:
+        sig = inspect.signature(fn)
+        hints = typing.get_type_hints(fn)
+    except Exception as exc:  # noqa: BLE001
+        raise Red(
+            "task_route_signature_unmodelled",
+            "assinatura de {0} nao resolvida: {1}: {2}".format(
+                TASK_ROUTE_FUNCTION, type(exc).__name__, exc
+            ),
+        )
+    params = []  # type: List[Tuple[str, List[Any], bool]]
+    for name, par in sig.parameters.items():
+        if par.kind not in (par.POSITIONAL_OR_KEYWORD, par.KEYWORD_ONLY):
+            raise Red(
+                "task_route_param_unmodelled",
+                "parametro {0!r} de tipo de passagem {1} nao modelado".format(name, par.kind),
+            )
+        hint = hints.get(name)
+        if hint is str:
+            params.append((name, [PROBE_OTHER], True))
+        elif hint == Optional[str]:
+            params.append((name, [None, PROBE_OTHER], True))
+        elif hint is bool:
+            params.append((name, [False, True], False))
+        else:
+            raise Red(
+                "task_route_param_unmodelled",
+                "parametro {0!r} anotado {1!r}: so str, Optional[str] e bool "
+                "tem dominio derivavel; recusado".format(name, hint),
+            )
+
+    def _size() -> int:
+        total = 1
+        for _n, dom, _h in params:
+            total *= len(dom)
+        return total
+
+    changed = True
+    while changed:
+        changed = False
+        for idx, (name, dom, harvest) in enumerate(params):
+            if not harvest:
+                continue
+            others = [(n, d) for j, (n, d, _h) in enumerate(params) if j != idx]
+            for combo in itertools.product(*[d for _n, d in others]):
+                seen = set()  # type: Set[str]
+                kwargs = dict((n, v) for (n, _d), v in zip(others, combo))
+                kwargs[name] = _EqProbe(seen)
+                _call_owner(fn, kwargs)
+                for literal in sorted(seen):
+                    if literal not in dom:
+                        dom.append(literal)
+                        changed = True
+            if _size() > MAX_PROBE_CONTEXTS:
+                raise Red(
+                    "task_route_domain_too_large",
+                    "produto de contextos {0} > {1}; recusado, nunca truncado".format(
+                        _size(), MAX_PROBE_CONTEXTS
+                    ),
+                )
+    return [(n, list(d)) for n, d, _h in params]
+
+
+def read_task_route(root: str) -> Dict[str, Any]:
+    """Dono IMPORTAVEL: o que ``_agents_for`` DEVOLVE, sob sondas.
+
+    Devolve ``{"routes": {papel: {modelo: [contexto, ...]}}, "contexts":
+    N, "domain": {param: [valor, ...]}}``. VERMELHO quando o import
+    falha, quando a funcao some, quando uma rota nao tem papel/modelo em
+    texto, quando nenhuma rota sai, e quando alguma linha executavel do
+    arquivo dono que a sonda alcancou nao rodou
+    (``task_route_branch_unreached``).
+    """
+    module = _import_task_route(root)
+    fn = getattr(module, TASK_ROUTE_FUNCTION, None)
+    if fn is None or not callable(fn):
+        raise Red(
+            "task_route_reader_missing",
+            "task-route.{0} ausente — recusado por nome".format(TASK_ROUTE_FUNCTION),
+        )
+    domain = _probe_domain(fn)
+    names = [n for n, _d in domain]
+
+    owner_file = fn.__code__.co_filename
+    hit = {}  # type: Dict[Any, Set[int]]
+
+    def _tracer(frame: Any, event: str, arg: Any) -> Any:
+        if frame.f_code.co_filename != owner_file:
+            return None
+        lines = hit.setdefault(frame.f_code, set())
+
+        def _local(fr: Any, ev: str, a: Any) -> Any:
+            if ev == "line":
+                lines.add(fr.f_lineno)
+            return _local
+
+        return _local
+
+    routes = {}  # type: Dict[str, Dict[str, List[str]]]
+    total = 0
+    previous = sys.gettrace()
+    sys.settrace(_tracer)
+    try:
+        for combo in itertools.product(*[d for _n, d in domain]):
+            kwargs = dict(zip(names, combo))
+            result = _call_owner(fn, kwargs)
+            total += 1
+            if not isinstance(result, list):
+                raise Red(
+                    "task_route_route_malformed",
+                    "{0} devolveu {1}, nao uma lista".format(TASK_ROUTE_FUNCTION, type(result).__name__),
+                )
+            for item in result:
+                role = item.get("role") if isinstance(item, dict) else None
+                model = item.get("model") if isinstance(item, dict) else None
+                if not isinstance(role, str) or not isinstance(model, str):
+                    raise Red(
+                        "task_route_route_malformed",
+                        "rota sem papel/modelo em texto em {0}: {1!r}".format(
+                            _ctx_label(kwargs), item
+                        ),
+                    )
+                routes.setdefault(role, {}).setdefault(model, []).append(_ctx_label(kwargs))
+    finally:
+        sys.settrace(previous)
+
+    for code, lines in sorted(hit.items(), key=lambda kv: kv[0].co_firstlineno):
+        required = set(
+            ln for _off, ln in dis.findlinestarts(code) if ln is not None
+        ) - {code.co_firstlineno}
+        missing = sorted(required - lines)
+        if missing:
+            raise Red(
+                "task_route_branch_unreached",
+                "{0} (task-route.py): linha(s) {1} nunca rodaram sob o dominio "
+                "colhido — ha ramo guardado por forma que a sonda nao colhe; "
+                "recusado, nunca omitido em silencio".format(code.co_name, missing),
+            )
+    if not routes:
+        raise Red("task_route_map_empty", "{0} nao devolveu nenhuma rota".format(TASK_ROUTE_FUNCTION))
+    return {
+        "routes": routes,
+        "contexts": total,
+        "domain": dict((n, [_ctx_value(v) for v in d]) for n, d in domain),
+        "raw_domain": dict((n, list(d)) for n, d in domain),
+    }
+
+
+def task_route_pairs(reading: Dict[str, Any]) -> Dict[str, str]:
+    """Forma comparavel: ``"papel->modelo"`` -> numero de contextos."""
+    out = {}  # type: Dict[str, str]
+    for role, models in reading["routes"].items():
+        for model, ctxs in models.items():
+            out["{0}->{1}".format(role, model)] = str(len(ctxs))
+    return out
+
+
+def _render_task_route(reading: Dict[str, Any]) -> str:
+    """``papel=modelo[em n/N contextos]`` — a rota e CONDICIONAL ao contexto.
+
+    A contagem sai sempre, tambem para papel de modelo unico: um papel
+    recomendado so em parte dos contextos, publicado sem ela, leria como
+    rota incondicional. Os contextos em si vao no ``--json``
+    (``route_contexts``).
+    """
+    parts = []  # type: List[str]
+    total = reading["contexts"]
+    for role in sorted(reading["routes"]):
+        models = reading["routes"][role]
+        for model in sorted(models):
+            parts.append(
+                "{0}={1}[em {2}/{3} contextos]".format(role, model, len(models[model]), total)
+            )
+    return ", ".join(parts)
+
+
+#: O UM comando do Check (a) de ``task-route.py``, rodado de
+#: ``.claude/scripts/``: importa o dono como o proprio dono se importa (ele
+#: poe o ``.claude/hooks`` da raiz em ``sys.path``) e chama ``_agents_for``
+#: sobre o dominio PUBLICADO na linha — sem colheita, sem rastreador, sem a
+#: purga de ``_lib``. A linha tem de ser EXATAMENTE o que ele devolve.
+TASK_ROUTE_ONE_COMMAND = (
+    "import importlib.util, itertools, json, sys\n"
+    "spec = importlib.util.spec_from_file_location('_task_route_one', 'task-route.py')\n"
+    "m = importlib.util.module_from_spec(spec)\n"
+    "spec.loader.exec_module(m)\n"
+    "dom = json.loads(sys.argv[1])\n"
+    "names = list(dom)\n"
+    "out = {}\n"
+    "for combo in itertools.product(*[dom[n] for n in names]):\n"
+    "    for a in m." + TASK_ROUTE_FUNCTION + "(**dict(zip(names, combo))):\n"
+    "        key = a['role'] + '->' + a['model']\n"
+    "        out[key] = out.get(key, 0) + 1\n"
+    "print(json.dumps(dict((k, str(v)) for k, v in out.items()), sort_keys=True))\n"
+)
+
+
+def read_task_route_one_command(root: str, raw_domain: Dict[str, List[Any]]) -> Dict[str, str]:
+    """A SEGUNDA leitura do Check (a): o UM comando, num processo separado."""
+    scripts_dir = os.path.join(root, _REL_SCRIPTS)
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", TASK_ROUTE_ONE_COMMAND, json.dumps(raw_domain)],
+            cwd=scripts_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=180,
+        )
+    except Exception as exc:  # noqa: BLE001 — timeout/OSError viram VERMELHO
+        raise Red("task_route_import_failed", "o UM comando nao rodou: {0}".format(exc))
+    if proc.returncode != 0:
+        raise Red(
+            "task_route_import_failed",
+            "o UM comando saiu rc={0}: {1}".format(
+                proc.returncode, (proc.stderr or "").strip().split("\n")[-1]
+            ),
+        )
+    try:
+        data = json.loads(proc.stdout)
+    except ValueError as exc:
+        raise Red("task_route_import_failed", "saida nao JSON: {0}".format(exc))
+    if not isinstance(data, dict):
+        raise Red("task_route_import_failed", "saida nao e um mapa")
+    return dict((str(k), str(v)) for k, v in data.items())
+
+
+def task_route_veto_homonym(root: str) -> Dict[str, Any]:
+    """ERRATA r6, por import: o ``VETO_HARDCODE`` que ``task-route.py`` le.
+
+    Devolve o mapeamento como o dono o enxerga. O teste afirma que os
+    valores sao ``frozenset`` de task_type — logo ele NAO e leitor da
+    superficie ``VETO_HARDCODE`` (papel -> model_id).
+    """
+    module = _import_task_route(root)
+    return dict(getattr(module, "VETO_HARDCODE", {}) or {})
+
+
+def _import_tier_policy(root: str, dotted: str, red_name: str) -> Any:
+    """Importa um submodulo de ``tier_policy_cli`` no CONTEXTO DO PACOTE.
+
+    Mesma disciplina de ``read_veto_hardcode``: ``.claude/scripts`` entra
+    em ``sys.path[0]`` so durante o import e o pacote e purgado de
+    ``sys.modules`` antes e depois.
+    """
+    scripts_dir = os.path.join(root, _REL_SCRIPTS)
+    if not os.path.isdir(os.path.join(scripts_dir, "tier_policy_cli")):
+        raise Red(red_name, "pacote ausente: {0}".format(os.path.join(_REL_SCRIPTS, "tier_policy_cli")))
+    saved_path = list(sys.path)
+    saved_mods = {
+        k: v for k, v in sys.modules.items() if k == "tier_policy_cli" or k.startswith("tier_policy_cli.")
+    }
+    for k in list(saved_mods):
+        del sys.modules[k]
+    sys.path.insert(0, scripts_dir)
+    try:
+        return importlib.import_module(dotted)
+    except Exception as exc:  # noqa: BLE001
+        raise Red(red_name, "{0}: {1}: {2}".format(dotted, type(exc).__name__, exc))
+    finally:
+        for k in list(sys.modules):
+            if k == "tier_policy_cli" or k.startswith("tier_policy_cli."):
+                del sys.modules[k]
+        sys.modules.update(saved_mods)
+        sys.path[:] = saved_path
+
+
+def _assignment_tiers(mapping: Any, prefix: str) -> Dict[str, str]:
+    if not isinstance(mapping, dict):
+        raise Red(prefix + "_malformed", "atribuicoes nao sao um mapa: {0!r}".format(type(mapping)))
+    if not mapping:
+        raise Red(prefix + "_map_empty", "o dono devolveu atribuicoes vazias")
+    out = {}  # type: Dict[str, str]
+    for slug, assignment in mapping.items():
+        tier = getattr(assignment, "tier", None)
+        if not isinstance(tier, str):
+            raise Red(prefix + "_malformed", "{0}: sem tier em texto".format(slug))
+        out[str(slug)] = tier
+    return out
+
+
+def _owner_model_ids(loader: Any, prefix: str) -> Tuple[str, ...]:
+    ids = getattr(loader, "VALID_MODEL_IDS", None)
+    if not ids:
+        raise Red(prefix + "_domain_missing", "loader.VALID_MODEL_IDS ausente ou vazio")
+    return tuple(str(i) for i in ids)
+
+
+def read_tier_baseline(root: str) -> Tuple[Dict[str, str], Tuple[str, ...]]:
+    """Dono IMPORTAVEL: o baseline que o LOADER usa quando o JSON falta."""
+    loader = _import_tier_policy(root, "tier_policy_cli.loader", "tier_baseline_import_failed")
+    load = getattr(loader, "load_policy", None)
+    bootstrap = getattr(loader, "STATUS_BOOTSTRAP", None)
+    if load is None or bootstrap is None:
+        raise Red("tier_baseline_import_failed", "loader.load_policy/STATUS_BOOTSTRAP ausente")
+    with tempfile.TemporaryDirectory() as tmp:
+        absent = Path(tmp) / "ausente" / "tier-policy.json"
+        try:
+            result = load(absent)
+        except Exception as exc:  # noqa: BLE001 — o dono promete nunca levantar
+            raise Red("tier_baseline_import_failed", "load_policy levantou {0}: {1}".format(type(exc).__name__, exc))
+    status = getattr(result, "status", None)
+    if status != bootstrap:
+        raise Red(
+            "tier_baseline_not_runtime_fallback",
+            "load_policy(ausente) devolveu status={0!r} (reason={1!r}), nao {2!r} — "
+            "o runtime nao cai no baseline".format(status, getattr(result, "reason", None), bootstrap),
+        )
+    pairs = _assignment_tiers(getattr(result, "baseline", None), "tier_baseline")
+    return pairs, _owner_model_ids(loader, "tier_baseline")
+
+
+#: O UM comando do Check (a) do baseline, rodado de ``.claude/scripts/``.
+TIER_BASELINE_ONE_COMMAND = (
+    "import tier_policy_cli._types as t; "
+    "print(sorted((k, v.tier) for k, v in t.build_adr052_baseline().items()))"
+)
+
+
+def read_tier_baseline_one_command(root: str) -> Dict[str, str]:
+    """A SEGUNDA leitura: o builder do dono, num processo separado."""
+    scripts_dir = os.path.join(root, _REL_SCRIPTS)
+    if not os.path.isdir(scripts_dir):
+        raise Red("tier_baseline_import_failed", "diretorio ausente: {0}".format(_REL_SCRIPTS))
+    proc = subprocess.run(
+        [sys.executable, "-c", TIER_BASELINE_ONE_COMMAND],
+        cwd=scripts_dir,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise Red(
+            "tier_baseline_import_failed",
+            "o UM comando saiu rc={0}: {1}".format(
+                proc.returncode, (proc.stderr or "").strip().split("\n")[-1]
+            ),
+        )
+    try:
+        pairs = ast.literal_eval(proc.stdout.strip())
+    except Exception as exc:  # noqa: BLE001
+        raise Red("tier_baseline_import_failed", "saida nao literal: {0}".format(exc))
+    return dict((str(k), str(v)) for k, v in pairs)
+
+
+def read_tier_template(root: str) -> Tuple[Dict[str, str], Tuple[str, ...], str]:
+    """Dono DADO: o template ENTREGUE, lido pelo carregador do tier-policy."""
+    path = os.path.join(root, _REL_TIER_TEMPLATE)
+    if not os.path.isfile(path):
+        raise Red("tier_template_missing", "arquivo ausente: {0}".format(path))
+    loader = _import_tier_policy(root, "tier_policy_cli.loader", "tier_template_import_failed")
+    load = getattr(loader, "load_policy", None)
+    accepted = (getattr(loader, "STATUS_OK", None), getattr(loader, "STATUS_MIGRATED", None))
+    if load is None or None in accepted:
+        raise Red("tier_template_import_failed", "loader.load_policy/STATUS_OK ausente")
+    try:
+        result = load(Path(path))
+    except Exception as exc:  # noqa: BLE001
+        raise Red("tier_template_import_failed", "load_policy levantou {0}: {1}".format(type(exc).__name__, exc))
+    status = getattr(result, "status", None)
+    record = getattr(result, "policy_record", None)
+    if status not in accepted or record is None:
+        raise Red(
+            "tier_template_rejected_by_owner_loader",
+            "o carregador do dono devolveu status={0!r} reason={1!r} — o adopter "
+            "cairia no fallback ADR-052".format(status, getattr(result, "reason", None)),
+        )
+    pairs = _assignment_tiers(getattr(record, "assignments", None), "tier_template")
+    return pairs, _owner_model_ids(loader, "tier_template"), str(status)
+
+
+def role_divergences(rows: List[Dict[str, Any]]) -> List[Tuple[str, List[Tuple[str, List[str]]]]]:
+    """Papeis cujo model_id DIVERGE entre as linhas chaveadas por papel.
+
+    So entram linhas com ``_role_models`` (keyspace papel, unidade ja
+    model_id). Devolve ``[(papel, [(superficie, [modelos]), ...]), ...]``
+    para todo papel com mais de um model_id distinto — publicado, nunca
+    reconciliado.
+    """
+    by_role = {}  # type: Dict[str, List[Tuple[str, List[str]]]]
+    for row in rows:
+        mapping = row.get("_role_models")
+        if not mapping:
+            continue
+        for role, models in mapping.items():
+            by_role.setdefault(role, []).append((row["surface"], sorted(models)))
+    out = []  # type: List[Tuple[str, List[Tuple[str, List[str]]]]]
+    for role in sorted(by_role):
+        distinct = set()  # type: Set[str]
+        for _surface, models in by_role[role]:
+            distinct.update(models)
+        if len(distinct) > 1:
+            out.append((role, by_role[role]))
+    return out
+
+
+# --------------------------------------------------------------------------
 # Tabela.
 # --------------------------------------------------------------------------
 
@@ -1083,8 +1735,13 @@ def _render_pairs(mapping: Dict[str, str]) -> str:
     return ", ".join("{0}={1}".format(k, mapping[k]) for k in sorted(mapping))
 
 
+def _outside_working_set(root: str, ids: List[str]) -> List[str]:
+    allowed = set(working_set(root))
+    return sorted(i for i in set(ids) if i not in allowed)
+
+
 def build_table(root: str) -> List[Dict[str, Any]]:
-    """Quatro linhas — uma por superficie, na ordem de EXPECTED_SURFACES."""
+    """Uma linha por superficie DECLARADA, na ordem de EXPECTED_SURFACES."""
     rows = []  # type: List[Dict[str, Any]]
 
     pins = read_agent_pins(root)
@@ -1101,6 +1758,9 @@ def build_table(root: str) -> List[Dict[str, Any]]:
             "resolution_step": "nenhum (valor ja e model_id)",
             "keyspace": "papel (SLUG DO ARQUIVO agents/<slug>.md)",
             "coverage": COVERAGE_OWNER_ANSWER,
+            "_role_models": dict(
+                (k, {v}) for k, v in pins.items() if v not in NON_PIN_VALUES
+            ),
         }
     )
 
@@ -1149,6 +1809,87 @@ def build_table(root: str) -> List[Dict[str, Any]]:
             "keyspace": "papel (slug de agents/<slug>.md)",
             "coverage": COVERAGE_OWNER_ANSWER,
             "_pairs": dict(veto),
+            "_role_models": dict((k, {v}) for k, v in veto.items()),
+        }
+    )
+
+    # ---- W1a: donos reabertos de menor risco -----------------------------
+    route = read_task_route(root)
+    route_ids = sorted(
+        set(m for models in route["routes"].values() for m in models)
+    )
+    rows.append(
+        {
+            "surface": SURFACE_TASK_ROUTE,
+            "owner_class": OWNER_IMPORTABLE,
+            "label": REOPENED_OWNER_LABEL,
+            "raw_unit": UNIT_MODEL_ID,
+            "raw_value": _render_task_route(route),
+            "resolved_model_ids": route_ids,
+            "resolution_step": (
+                "nenhum (valor ja e model_id); dominio de model_id = "
+                "AVAILABLE_MODELS_WORKING_SET (ADR-149); {0} contextos sondados".format(
+                    route["contexts"]
+                )
+            ),
+            "keyspace": "papel (chave 'role' do que _agents_for devolve)",
+            "coverage": COVERAGE_PROBED,
+            "probe_domain": route["domain"],
+            "route_contexts": route["routes"],
+            "_pairs": task_route_pairs(route),
+            "_raw_domain": route["raw_domain"],
+            "_role_models": dict(
+                (role, set(models)) for role, models in route["routes"].items()
+            ),
+        }
+    )
+
+    baseline, baseline_domain = read_tier_baseline(root)
+    rows.append(
+        {
+            "surface": SURFACE_TIER_BASELINE,
+            "owner_class": OWNER_IMPORTABLE,
+            "label": REOPENED_OWNER_LABEL,
+            "raw_unit": UNIT_MODEL_ID,
+            "raw_value": _render_pairs(baseline),
+            "resolved_model_ids": sorted(set(baseline.values())),
+            "resolution_step": (
+                "nenhum (valor ja e model_id); dominio de model_id = "
+                "VALID_MODEL_IDS do dono (a lista com que o carregador valida "
+                "a politica); fora do "
+                "AVAILABLE_MODELS_WORKING_SET (ADR-149): {0}".format(
+                    ", ".join(_outside_working_set(root, list(baseline.values()))) or "nenhum"
+                )
+            ),
+            "keyspace": "papel (slug; chave do baseline que load_policy devolve)",
+            "coverage": COVERAGE_OWNER_ANSWER,
+            "_pairs": dict(baseline),
+            "_model_id_domain": baseline_domain,
+            "_role_models": dict((k, {v}) for k, v in baseline.items()),
+        }
+    )
+
+    template, template_domain, template_status = read_tier_template(root)
+    rows.append(
+        {
+            "surface": SURFACE_TIER_TEMPLATE,
+            "owner_class": OWNER_DATA,
+            "label": REOPENED_OWNER_LABEL,
+            "raw_unit": UNIT_MODEL_ID,
+            "raw_value": _render_pairs(template),
+            "resolved_model_ids": sorted(set(template.values())),
+            "resolution_step": (
+                "nenhum (valor ja e model_id); carregador do dono status={0}; "
+                "dominio de model_id = VALID_MODEL_IDS do dono; fora do "
+                "AVAILABLE_MODELS_WORKING_SET (ADR-149): {1}".format(
+                    template_status,
+                    ", ".join(_outside_working_set(root, list(template.values()))) or "nenhum",
+                )
+            ),
+            "keyspace": "papel (slug; chave de assignments)",
+            "coverage": COVERAGE_OWNER_ANSWER,
+            "_model_id_domain": template_domain,
+            "_role_models": dict((k, {v}) for k, v in template.items()),
         }
     )
     return rows
@@ -1159,37 +1900,74 @@ def build_table(root: str) -> List[Dict[str, Any]]:
 # --------------------------------------------------------------------------
 
 
-def check_a_compare(table_pairs: Dict[str, str], import_pairs: Dict[str, str]) -> None:
-    """Compara PAR A PAR a linha da tabela com o import. Tres VERMELHOS."""
+def compare_pairs(
+    table_pairs: Dict[str, str], import_pairs: Dict[str, str], prefix: str
+) -> None:
+    """Compara PAR A PAR a linha da tabela com o import. Tres VERMELHOS.
+
+    Os nomes sao ``<prefix>_map_empty``, ``<prefix>_pair_missing_in_table``,
+    ``<prefix>_pair_missing_in_import`` e ``<prefix>_pair_diverges``.
+    """
     if not import_pairs:
-        raise Red("veto_map_empty", "o import devolveu um mapa vazio")
+        raise Red(prefix + "_map_empty", "o import devolveu um mapa vazio")
     for k in sorted(set(import_pairs) | set(table_pairs)):
         if k not in table_pairs:
             raise Red(
-                "veto_pair_missing_in_table",
+                prefix + "_pair_missing_in_table",
                 "par {0}={1} esta no import e falta na tabela".format(k, import_pairs[k]),
             )
         if k not in import_pairs:
             raise Red(
-                "veto_pair_missing_in_import",
+                prefix + "_pair_missing_in_import",
                 "par {0}={1} esta na tabela e falta no import".format(k, table_pairs[k]),
             )
         if table_pairs[k] != import_pairs[k]:
             raise Red(
-                "veto_pair_diverges",
+                prefix + "_pair_diverges",
                 "papel {0}: tabela={1} import={2}".format(k, table_pairs[k], import_pairs[k]),
             )
 
 
+def check_a_compare(table_pairs: Dict[str, str], import_pairs: Dict[str, str]) -> None:
+    """Check (a) do ``VETO_HARDCODE`` (nomes ``veto_*`` da W0)."""
+    compare_pairs(table_pairs, import_pairs, "veto")
+
+
+#: Check (a) por dono IMPORTAVEL: superficie -> (prefixo dos VERMELHOS,
+#: SEGUNDA leitura num processo separado, que recebe a raiz e a linha).
+_CHECK_A_SECOND_READING = (
+    (SURFACE_VETO, "veto", lambda root, row: read_veto_hardcode_one_command(root)),
+    (
+        SURFACE_TASK_ROUTE,
+        "task_route",
+        lambda root, row: read_task_route_one_command(root, row.get("_raw_domain") or {}),
+    ),
+    (
+        SURFACE_TIER_BASELINE,
+        "tier_baseline",
+        lambda root, row: read_tier_baseline_one_command(root),
+    ),
+)
+
+
 def check_a(root: str, rows: List[Dict[str, Any]]) -> None:
-    """Check (a) do AC-F1 — dono IMPORTAVEL, o import e a verdade."""
-    row = None
-    for r in rows:
-        if r["surface"] == SURFACE_VETO:
-            row = r
-    if row is None:
-        raise Red("surface_missing", "{0} ausente da tabela".format(SURFACE_VETO))
-    check_a_compare(dict(row.get("_pairs") or {}), read_veto_hardcode_one_command(root))
+    """Check (a) do AC-F1 — cada dono IMPORTAVEL, o import e a verdade.
+
+    A linha (import NO PROCESSO) e comparada par a par com uma SEGUNDA
+    leitura, num processo separado e por OUTRO caminho de codigo: o UM
+    comando do AC para o ``VETO_HARDCODE``; para ``task-route.py``, um
+    comando que importa o dono como ele mesmo se importa e chama
+    ``_agents_for`` sobre o dominio PUBLICADO (sem colheita, rastreador
+    nem purga — a contagem por par tem de bater); para o baseline, o
+    builder ``build_adr052_baseline()`` (a linha vem do LOADER — se o
+    loader deixar de cair no builder, diverge).
+    """
+    by_surface = dict((r["surface"], r) for r in rows)
+    for surface, prefix, second in _CHECK_A_SECOND_READING:
+        row = by_surface.get(surface)
+        if row is None:
+            raise Red("surface_missing", "{0} ausente da tabela".format(surface))
+        compare_pairs(dict(row.get("_pairs") or {}), second(root, row), prefix)
 
 
 def check_b(root: str, rows: List[Dict[str, Any]]) -> None:
@@ -1206,29 +1984,31 @@ def check_b(root: str, rows: List[Dict[str, Any]]) -> None:
             "surface_count",
             "esperadas {0} linhas, obtidas {1}".format(len(EXPECTED_SURFACES), len(seen)),
         )
-    allowed = set(working_set(root))
+    fleet = set(working_set(root))
     for r in rows:
         cov = r.get("coverage")
-        if cov not in (COVERAGE_OWNER_ANSWER, COVERAGE_NONEXHAUSTIVE):
+        if cov not in set(SURFACE_COVERAGE.values()):
             raise Red(
                 "coverage_marker_missing",
                 "{0} sem marca de COBERTURA declarada (obtido {1!r})".format(
                     r["surface"], cov
                 ),
             )
-        if (r["surface"] == SURFACE_HINT) != (cov == COVERAGE_NONEXHAUSTIVE):
+        if cov != SURFACE_COVERAGE[r["surface"]]:
             raise Red(
                 "coverage_marker_missing",
-                "{0}: a marca de cobertura {1!r} nao corresponde a superficie "
-                "— so {2} e publicada como OBSERVACAO NAO-EXAUSTIVA".format(
-                    r["surface"], cov, SURFACE_HINT
+                "{0}: a marca de cobertura {1!r} nao e a DECLARADA para a "
+                "superficie ({2!r}) — so {3} e publicada como OBSERVACAO "
+                "NAO-EXAUSTIVA, e so {4} como resposta SOB SONDA".format(
+                    r["surface"], cov, SURFACE_COVERAGE[r["surface"]],
+                    SURFACE_HINT, SURFACE_TASK_ROUTE,
                 ),
             )
-        if r["label"] != LOCAL_OWNER_LABEL:
+        if r["label"] != SURFACE_LABEL[r["surface"]]:
             raise Red(
                 "label_wrong",
                 "{0} rotulada {1!r}, esperado {2!r}".format(
-                    r["surface"], r["label"], LOCAL_OWNER_LABEL
+                    r["surface"], r["label"], SURFACE_LABEL[r["surface"]]
                 ),
             )
         if not r["resolved_model_ids"]:
@@ -1239,12 +2019,21 @@ def check_b(root: str, rows: List[Dict[str, Any]]) -> None:
                 "{0} tem valor em ALIAS e nenhum passo de resolucao "
                 "DECLARADO — VERMELHO, nunca um mapa inventado".format(r["surface"]),
             )
+        # Dominio de model_id: o do PROPRIO dono quando ele declara um
+        # (tier-policy: VALID_MODEL_IDS, com a forma DATADA do haiku), senao
+        # o AVAILABLE_MODELS_WORKING_SET do ADR-149.
+        owner_domain = r.get("_model_id_domain")
+        allowed = set(owner_domain) if owner_domain is not None else fleet
+        source = (
+            "VALID_MODEL_IDS do dono" if owner_domain is not None
+            else "AVAILABLE_MODELS_WORKING_SET (ADR-149)"
+        )
         for mid in r["resolved_model_ids"]:
             if mid not in allowed:
                 raise Red(
                     "alias_leaked_into_table",
-                    "{0}: {1!r} nao e model_id do AVAILABLE_MODELS_WORKING_SET "
-                    "(ADR-149) — a tabela mistura alias com model_id".format(r["surface"], mid),
+                    "{0}: {1!r} nao e model_id do {2} — a tabela mistura "
+                    "alias com model_id".format(r["surface"], mid, source),
                 )
 
 
@@ -1276,6 +2065,25 @@ def render_table(rows: List[Dict[str, Any]]) -> str:
     return "\n".join(out)
 
 
+def render_divergences(rows: List[Dict[str, Any]]) -> str:
+    """Divergencias papel->model_id, como lista (fora da tabela)."""
+    out = [
+        "Divergencias papel->model_id entre as superficies chaveadas por "
+        "papel (publicadas como estao, nunca reconciliadas):"
+    ]
+    found = role_divergences(rows)
+    if not found:
+        out.append("- nenhuma")
+    for role, entries in found:
+        out.append(
+            "- {0}: {1}".format(
+                role,
+                "; ".join("{0}={1}".format(s, ", ".join(m)) for s, m in entries),
+            )
+        )
+    return "\n".join(out)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--root", default=None, help="raiz do repo (default: derivada deste arquivo)")
@@ -1302,7 +2110,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         payload = [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows]
         sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
     else:
-        sys.stdout.write(render_table(rows) + "\n")
+        sys.stdout.write(render_table(rows) + "\n\n" + render_divergences(rows) + "\n")
     return 0
 
 
