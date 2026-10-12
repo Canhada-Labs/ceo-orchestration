@@ -432,6 +432,30 @@ class TestMinimalResponse(TestEnvContext):
         reward = _score(self._tasks()["t05-add-unit-test"], payload)
         self.assertLess(reward, 0.99, f"stateful t05 payload scored {reward}")
 
+    def test_t05_partial_tests_score_exactly_as_declared(self):
+        # Declared residual of the mutation rule (W0-pre note): a passing test
+        # that leaves ONE documented behavior unasserted stays below PASS
+        # (0.99). Exact scores pin the chosen semantics; changing the mutant
+        # set or the instruction must change this table on purpose.
+        cases = [
+            # the pack spec's one-line empty-only form (spec said 1.00):
+            # Owner-reserved choice, default = incomplete test
+            ("def test_x():\n    r = parse_csv_line(''); assert r == []\n", 0.625),
+            # no inner whitespace: the no-strip mutant survives
+            ("def test_b():\n    assert parse_csv_line('a,b,c') == ['a', 'b', 'c']\n"
+             "def test_e():\n    assert parse_csv_line('') == []\n", 0.875),
+            ("def test_b():\n    assert parse_csv_line(' a ') == ['a']\n"
+             "def test_e():\n    assert parse_csv_line('') == []\n", 0.75),
+            ("def test_b():\n    assert parse_csv_line('a') == ['a']\n"
+             "def test_e():\n    assert parse_csv_line('') == []\n", 0.75),
+        ]
+        task = self._tasks()["t05-add-unit-test"]
+        for i, (src, expected) in enumerate(cases):
+            with self.subTest(case=i):
+                reward = _score(task, {"test_solution.py": src})
+                self.assertAlmostEqual(reward, expected, places=6,
+                                       msg=f"partial t05#{i} scored {reward}")
+
 
 # ---------------------------------------------------------------------------
 # Runner: worst-of-N + flaky reuse, serial, quota gate

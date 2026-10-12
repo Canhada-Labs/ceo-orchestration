@@ -80,10 +80,15 @@ conteúdo. As curas medem cada parte pela própria forma ou pelo comportamento:
   teste que conta as próprias cargas passa só na primeira rodada e chega a 1,00); sem o módulo
   `solution` (a forma com `import` cai a 0,00); sem o mutante da linha vazia (o teste sem caso
   vazio chega a 1,00); referência lida do `solution.py` do diretório (a reescrita chega a 1,00).
-  Decisão técnica pelo padrão recomendado na triagem: um teste que só verifica a linha vazia
-  mata 1 de 4 mutantes e fica em 0,625, porque a instrução pede o comportamento «incluindo» o
-  caso vazio; as formas legítimas entram nos controles como testes completos. Se o Owner
-  preferir aceitar o teste só do caso vazio, basta tirar os outros três mutantes.
+  Desvio DECLARADO da cláusula de prova do pacote 191-A2, que pedia 1,00 para a forma de uma
+  linha `r = parse_csv_line(''); assert r == []`: essa forma só verifica a linha vazia, mata 1
+  de 4 mutantes e fica em 0,625 (abaixo do PASS de 0,99). A própria cláusula se contradiz
+  (os mutantes de `strip`, separador e último campo que ela pede não morrem com um teste só do
+  caso vazio). Padrão técnico adotado: a instrução pede o comportamento «incluindo» o caso
+  vazio, então as formas legítimas entram nos controles como testes completos. Aceitar ou não
+  o teste só do caso vazio é decisão de produto, reservada ao Owner, não ao construtor; se ele
+  preferir aceitá-lo, basta tirar os outros três mutantes. A escolha vigente fica fixada por
+  teste (`test_t05_partial_tests_score_exactly_as_declared`, valor exato 0,625).
 - **Mutante:** reverter UM dos quatro verificadores de cada vez deixa o teste vermelho (4 de 4).
 - **Rodada de refutação (sobre `0bf1e824`):** dois achados P2 confirmados por sonda e curados.
   t04: o payload que apaga o teste de negativo de `area_rectangle` dava 1,00 e fica em 0,73
@@ -95,7 +100,7 @@ conteúdo. As curas medem cada parte pela própria forma ou pelo comportamento:
   de fluxo de dados do t05 saiu no pacote 191-A2; ver o item seguinte.)
 - **Verde:** GOLDEN 10 de 10 = 1,00; árvore inicial sem mudança (t04 0,80, demais 0,00);
   `VALID_ALTERNATIVES` 9 de 9 = 1,00 (6 do t05, aceitos como lista;
-  `test_valid_alternative_keeps_full_reward`); o arquivo de teste inteiro passa (31 testes).
+  `test_valid_alternative_keeps_full_reward`); o arquivo de teste inteiro passa (32 testes).
 
 ## Residuais declarados
 
@@ -112,6 +117,19 @@ conteúdo. As curas medem cada parte pela própria forma ou pelo comportamento:
   verificador não tem limite de tempo, e um laço que dependa do resultado pode não terminar
   contra um mutante; quatro mutantes cobrem só os três comportamentos documentados.
   Por isso o W1 já pré-registra o juiz cego ao braço para medir escapes.
+- Falso negativo do t05 por mutação (classe nova do pacote 191-A2): com quatro mutantes e PASS
+  em 0,99, a nota exige que o teste afirme os quatro comportamentos (`strip` dos campos,
+  vírgula como separador, todos os campos, linha vazia). Agora são as ENTRADAS do teste, e não
+  a forma da asserção, que decidem a nota: um teste correto que deixa um comportamento de fora
+  fica entre 0,75 e 0,875 e reprova. Medido (verificador de `2e1d8135` → mutação): `'a,b,c'`
+  mais a linha vazia, 1,00 → 0,875 (sem espaço dentro dos campos, o mutante sem `strip`
+  devolve o mesmo resultado e sobrevive); `' a '` mais a linha vazia, 1,00 → 0,75 (o espaço
+  das pontas sai no `strip` da linha inteira, antes do `split`: sobrevivem o mutante sem
+  `strip` e o do separador); `'a'` mais a linha vazia, 1,00 → 0,75. O `strip` dos campos está na docstring de `parse_csv_line`, não
+  na instrução. Esses valores ficam fixados em `test_t05_partial_tests_score_exactly_as_declared`.
+  Alinhar a instrução ao conjunto de mutantes, ou mudar o limiar ou os mutantes, fica para o
+  Owner, depois que o juiz cego do W1 medir com que frequência candidatos reais caem nessa
+  faixa.
 - `.claude/eval/README.md` cita `.github/workflows/eval-nightly.yml` como proposta do
   PLAN-133; o arquivo não existe em `.github/workflows/`. Consertar os verificadores só muda,
   no CI, o resultado de `test_eval_c3.py`.
