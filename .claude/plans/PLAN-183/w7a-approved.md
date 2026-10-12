@@ -160,8 +160,8 @@ executa. O rail deste pacote a reproduz sobre as pré-imagens que o SIGN confere
 - Condição da última conferência do rail do patch (rx-w7a, P3): o censo AST do teste verifica o guard
   `_refuse_constant` pelo NOME, e uma segunda ligação desse nome no módulo passaria por ele (só os testes de
   comportamento a pegam, e só nas 3 leituras existentes). Follow-up nomeado:
-  `PLAN-183-FOLLOWUP-json-census-call-binding` — um censo que siga a chamada, não o nome (trem da v1.4.4). O
-  arquivo desse follow-up ainda não existe em `.claude/plans/`; ele é criado no backlog da v1.4.4.
+  `.claude/plans/PLAN-183-FOLLOWUP-json-census-call-binding.md` — um censo que siga a chamada, não o nome
+  (trem da v1.4.4).
 - O censo AST cobre as leituras por `json.load`, `json.loads` e `json.JSONDecoder` do módulo; leitura por
   `__import__`, `importlib` ou `sys.modules` fica fora (declarado pelas lanes do rail).
 - Chave duplicada e `1e999` seguem aceitos nas settings e na decisão do hook sob teste, como o `JSON.parse` do

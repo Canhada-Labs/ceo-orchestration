@@ -4,7 +4,7 @@ Rail-Subject: .claude/plans/PLAN-183/w7a/w7a.patch
 Rail-Subject-sha256: 84371b9f58b17006c8438bd6f0683ed371603dc4fd477c8f73ee25f41432979e
 Rail-Subject-patch-id: 341f0bafd41be57caeabc091a8ee7af3994a0305
 Rail-Sentinel: .claude/plans/PLAN-183/w7a-approved.md
-Rail-Sentinel-sha256: 10e03881e93adce69c46c8035711b4f960f4d7f7ef0d7572fd4a7f5ffc3dfeb4
+Rail-Sentinel-sha256: d778876021af031edc8ad27ca8d3456e00f49a6b9320cb655b42f91519244b5e
 Rail-Data: .claude/plans/PLAN-183/w7a/sign.tsv
 Rail-Data-sha256: 6c927476564ee9454fa28a8dada3ea0ceedffdf13fe70e34c03464bbbc3e66cd
 Rail-Verdict: PENDENTE
