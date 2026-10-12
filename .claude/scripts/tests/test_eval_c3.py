@@ -294,6 +294,10 @@ MINIMAL_RESPONSES = {
         {"test_solution.py": "def test_x():\n    assert True  # parse_csv_line('') == []\n"},
         # Calls the function but asserts on nothing it returned.
         {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    assert [] == []\n"},
+        # S363 recheck: the name is bound to the result only AFTER the assert,
+        # or rebound to something else before it — form without substance.
+        {"test_solution.py": "def test_x():\n    r = 1\n    assert r == 1\n    r = parse_csv_line('')\n"},
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    r = 1\n    assert r == 1\n"},
         {"test_solution.py": "def test_x():\n    assert [] == []  # parse_csv_line\n"},
         # Rewrites the implementation so a WRONG assertion passes.
         {"solution.py": "def parse_csv_line(line):\n    return ['x']\n",

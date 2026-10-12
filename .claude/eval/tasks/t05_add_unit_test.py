@@ -46,8 +46,11 @@ def _calls_target(node: ast.AST) -> bool:
 
 def _asserts_on_target(test_src: str) -> bool:
     """True if some ``assert`` calls parse_csv_line, directly or through a name
-    bound to its result in the same function (``result = parse_csv_line(...)``;
-    one step of dataflow). AST: comments never count."""
+    whose LAST binding before the assert (same function, earlier line) is the
+    result of parse_csv_line (``result = parse_csv_line(...)`` or
+    ``result: list = parse_csv_line(...)``; one step of dataflow). A binding
+    after the assert, or a rebinding to anything else in between, does not
+    count. AST: comments never count."""
     try:
         tree = ast.parse(test_src)
     except SyntaxError:
@@ -55,12 +58,22 @@ def _asserts_on_target(test_src: str) -> bool:
     if any(isinstance(n, ast.Assert) and _calls_target(n.test) for n in ast.walk(tree)):
         return True
     for fn in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)):
-        bound = {t.id for n in ast.walk(fn) if isinstance(n, ast.Assign) and _calls_target(n.value)
-                 for tgt in n.targets for t in ast.walk(tgt) if isinstance(t, ast.Name)}
+        binds = []  # (lineno, name, binds the target's result?)
         for n in ast.walk(fn):
-            if isinstance(n, ast.Assert) and any(
-                    isinstance(s, ast.Name) and s.id in bound for s in ast.walk(n.test)):
-                return True
+            if isinstance(n, ast.Assign):
+                hit = _calls_target(n.value)
+                binds += [(n.lineno, t.id, hit) for tgt in n.targets
+                          for t in ast.walk(tgt) if isinstance(t, ast.Name)]
+            elif isinstance(n, (ast.AnnAssign, ast.AugAssign)) and isinstance(n.target, ast.Name):
+                hit = isinstance(n, ast.AnnAssign) and n.value is not None and _calls_target(n.value)
+                binds.append((n.lineno, n.target.id, hit))
+        for n in ast.walk(fn):
+            if not isinstance(n, ast.Assert):
+                continue
+            for name in {s.id for s in ast.walk(n.test) if isinstance(s, ast.Name)}:
+                before = [x for x in binds if x[1] == name and x[0] < n.lineno]
+                if before and max(before)[2]:
+                    return True
     return False
 
 

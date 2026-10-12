@@ -52,9 +52,14 @@ conteúdo. As curas medem cada parte pela própria forma ou pelo comportamento:
 
 ## Controles
 
-- **Vermelho:** os onze payloads de `MINIMAL_RESPONSES`
+- **Vermelho:** os onze payloads da primeira versão de `MINIMAL_RESPONSES`
   (`.claude/scripts/tests/test_eval_c3.py`, classe `TestMinimalResponse`) davam 1,00 nos
-  verificadores de `38d56f35`; com o patch, nenhum passa de 0,80. O teste
+  verificadores de `38d56f35`; com o patch, nenhum passa de 0,80. A lista cresceu nas rodadas de
+  refutação e hoje tem 15 payloads; o teste exige de TODOS menos que o limiar de PASS do runner
+  (0,99). O payload-guarda do t05 (chama a função, mas o `assert` não lê o resultado) fica em 0,85.
+  Na rechecagem (S363) entraram mais dois do t05, a ligação ao resultado só DEPOIS do `assert` e a
+  religação a outro valor antes dele: davam 1,00 e agora não passam (o fluxo de dados do t05 olha a
+  ÚLTIMA ligação anterior ao `assert`). O teste
   `test_minimal_response_does_not_score_full` falhava na árvore anterior
   (`1.0 not less than 0.99`).
 - **Mutante:** reverter UM dos quatro verificadores de cada vez deixa o teste vermelho (4 de 4).
