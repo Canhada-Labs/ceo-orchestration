@@ -9,7 +9,7 @@ RED, so a green run is evidence rather than a claim.
   2. no_network_runtime_oracle_with_transitive_import_control
   3. injected_model_turns_red
   4. state_file_contract_has_cycle_lanes_fp_and_ts
-  5. state_json_serves_all_seven_death_criteria
+  5. state_json_serves_every_death_criterion_in_plan_table
   6. expected_reds_file_has_a_cause_per_line
   7. expected_reds_exact_set_with_shrinkage_control
   8. active_lanes_is_anthropic_only
@@ -29,6 +29,8 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
+import re
 import socket
 import sys
 import tempfile
@@ -47,10 +49,24 @@ REAL_EXPECTED_REDS = (
     REPO_ROOT / ".claude" / "data" / "model-currency-expected-reds.txt")
 REAL_STATE = REPO_ROOT / ".claude" / "data" / "model-currency-state.json"
 
-#: The death criteria of PLAN-176 §4. The AC name says "seven" because §4
-#: carried seven when the check was written; debate round 2 appended K-8 and
-#: K-9. Asserting all NINE serves the seven a fortiori.
-DEATH_CRITERIA = ("K-1", "K-2", "K-3", "K-4", "K-5", "K-6", "K-7", "K-8", "K-9")
+#: PLAN-176 §4 is the SOURCE of the death criteria. The test reads the
+#: ``| K-n |`` rows of that table instead of typing them (round-3 finding C1:
+#: a typed tuple let the AC keep its old count after the table grew).
+PLAN_FILE = (REPO_ROOT / ".claude" / "plans"
+             / "PLAN-176-model-currency-refresh.md")
+#: Test-only override of PLAN_FILE: the red controls point it at a
+#: DISPOSABLE copy of the plan with a K row removed or added.
+PLAN_FILE_ENV = "P176_PLAN_FILE"
+_SECTION4_RE = re.compile(r"^## 4\.[^\n]*\n(.*?)(?=^## |\Z)", re.S | re.M)
+_K_ROW_RE = re.compile(r"^\| (K-\d+) \|", re.M)
+
+
+def plan_death_criteria(text):
+    """The ``| K-n |`` row ids of the plan's §4 table, in table order."""
+    section = _SECTION4_RE.search(text)
+    if section is None:
+        raise AssertionError("PLAN-176 §4 heading not found")
+    return tuple(_K_ROW_RE.findall(section.group(1)))
 
 
 def _load_module():
@@ -307,14 +323,32 @@ class TestStateFile(_Fixture):
         self.assertEqual(
             json.loads(fresh.read_text(encoding="utf-8"))["cycle"], 1)
 
-    def test_state_json_serves_all_seven_death_criteria(self):
+    def test_state_json_serves_every_death_criterion_in_plan_table(self):
+        # The parser reads ONLY the §4 table, and a planted row is seen.
+        synthetic = ("## 4. Criteria\n\n| # | c |\n|---|---|\n"
+                     "| K-1 | a |\n| K-10 | b |\n\n## 5. Next\n"
+                     "| K-99 | outside §4 |\n")
+        self.assertEqual(plan_death_criteria(synthetic), ("K-1", "K-10"))
+
+        plan_file = Path(os.environ.get(PLAN_FILE_ENV) or PLAN_FILE)
+        planned = plan_death_criteria(plan_file.read_text(encoding="utf-8"))
+        self.assertTrue(planned, "no `| K-n |` row in §4 of %s" % plan_file)
+        self.assertEqual(len(planned), len(set(planned)), planned)
+
         rc, payload, err = run_json(
             self._real_argv(state_file=REAL_STATE)
             + ["--state", "--now", "2026-09-07T12:00:00Z"])
         self.assertEqual(rc, 0, err)
         served = {c["criterion"]: c for c in payload["criteria"]}
-        self.assertEqual(tuple(sorted(served)), DEATH_CRITERIA)
-        for name in DEATH_CRITERIA:
+        # Both directions, NAMED: a §4 row the detector does not serve, and
+        # a served criterion the §4 table no longer publishes.
+        missing = sorted(set(planned) - set(served))
+        unpublished = sorted(set(served) - set(planned))
+        self.assertEqual(
+            (missing, unpublished), ([], []),
+            "plan §4 vs --state --json: not served %s, not in §4 %s"
+            % (missing, unpublished))
+        for name in planned:
             entry = served[name]
             self.assertTrue(entry["field"], name)
             self.assertTrue(entry["threshold"], name)
@@ -330,7 +364,7 @@ class TestStateFile(_Fixture):
 
         # POSITIVE CONTROL, on a DISPOSABLE copy: a criterion whose field is
         # gone must FAIL CLOSED and NAME the criterion — never quietly serve
-        # eight of nine.
+        # all but one.
         tmp = Path(tempfile.mkdtemp(prefix="p176w0a-crit-"))
         self.addCleanup(__import__("shutil").rmtree, tmp, True)
         for name, field, _threshold, _enf, _gated in MOD._DEATH_CRITERIA:
