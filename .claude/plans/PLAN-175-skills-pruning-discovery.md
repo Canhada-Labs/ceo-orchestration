@@ -5,7 +5,7 @@ status: reviewed
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
-last_revised: 2026-10-11
+last_revised: 2026-10-12
 owner: CEO
 depends_on: [PLAN-171]
 budget_tokens: 620-950k
@@ -671,17 +671,17 @@ exceção. **Esta regra já disparou uma vez** (round 1: a regra arquivava
 `ceo-orchestration`; round 2: a cura zerou as candidatas). A troca de
 arquitetura está no §2.1 e a escolha é do Owner.
 
-- [ ] **AC-0.1** [P0] a regra existe como programa, com as três pernas do §2.1 e as três saídas do §2.2, e imprime seus INPUTS: janela, número de eventos, leitor, `chain_status` da cadeia e a arquitetura de elegibilidade em vigor. Falta de qualquer um reprova.
+- [x] **AC-0.1** [P0] a regra existe como programa, com as três pernas do §2.1 e as três saídas do §2.2, e imprime seus INPUTS: janela, número de eventos, leitor, `chain_status` da cadeia e a arquitetura de elegibilidade em vigor. Falta de qualquer um reprova.
   Check: `python3 .claude/plans/PLAN-175/p2/prune-rule.py --repo . --json | python3 -c "import json,sys;i=json.load(sys.stdin).get('inputs',{});f=sorted({'window','events','reader','chain_status','eligibility_architecture'}-set(i));print('inputs ausentes:',f);sys.exit(1 if f else 0)"`
-- [ ] **AC-0.2** [P0] **CONTROLE DE NÃO-AUTOFAGIA.** Rodada sobre ESTE repositório, a regra devolve `MANTER` para `ceo-orchestration` e para as skills dos cinco arquétipos do piso de VETO do ADR-052 — hoje 4 skills distintas, porque dois arquétipos compartilham uma. O conjunto é derivado de `.claude/agents/`, nunca digitado. **A perna 1 roda NEUTRALIZADA (`--coverage-observed`)**, para que a única variável entre este AC e o próximo seja a perna 0.
+- [x] **AC-0.2** [P0] **CONTROLE DE NÃO-AUTOFAGIA.** Rodada sobre ESTE repositório, a regra devolve `MANTER` para `ceo-orchestration` e para as skills dos cinco arquétipos do piso de VETO do ADR-052 — hoje 4 skills distintas, porque dois arquétipos compartilham uma. O conjunto é derivado de `.claude/agents/`, nunca digitado. **A perna 1 roda NEUTRALIZADA (`--coverage-observed`)**, para que a única variável entre este AC e o próximo seja a perna 0.
   Check: `python3 .claude/plans/PLAN-175/p2/prune-rule.py --repo . --coverage-observed --assert-keep-veto-floor` sai `0`. Qualquer outro código reprova; `3` vem com o nome da skill desprotegida e `4` significa que a regra não respondeu.
-- [ ] **AC-0.3** [P0] **CONTROLE POSITIVO DO MECANISMO.** A mesma invocação com a perna 0 desligada tem de reprovar **por autofagia**, não por amostra: `exit_reason == "would_archive"` e `ceo-orchestration` em `offenders`. Um vermelho por `insufficient_sample` ou `chain_not_intact` REPROVA este AC — foi exatamente assim que a guarda de 90 dias deixou o controle do round 1 verde pelo motivo errado.
+- [x] **AC-0.3** [P0] **CONTROLE POSITIVO DO MECANISMO.** A mesma invocação com a perna 0 desligada tem de reprovar **por autofagia**, não por amostra: `exit_reason == "would_archive"` e `ceo-orchestration` em `offenders`. Um vermelho por `insufficient_sample` ou `chain_not_intact` REPROVA este AC — foi exatamente assim que a guarda de 90 dias deixou o controle do round 1 verde pelo motivo errado.
   Check: `python3 .claude/plans/PLAN-175/p2/prune-rule.py --repo . --coverage-observed --assert-keep-veto-floor --disable-eligibility --json | python3 -c "import json,sys;d=json.load(sys.stdin);r=d.get('exit_reason');o=d.get('offenders',[]);print(r,o);sys.exit(0 if r=='would_archive' and 'ceo-orchestration' in o else 1)"`
-- [ ] **AC-0.4** [P0] a guarda de denominador devolve `RECUSA`, nunca `ARQUIVAR`, quando a telemetria está vazia — o caso medido no §4.2 — **e DISCRIMINA do run normal**: com a perna 1 neutralizada, o run normal NÃO devolve `RECUSA` para todas. Se as duas pernas derem o mesmo conjunto de vereditos, o AC reprova.
+- [x] **AC-0.4** [P0] a guarda de denominador devolve `RECUSA`, nunca `ARQUIVAR`, quando a telemetria está vazia — o caso medido no §4.2 — **e DISCRIMINA do run normal**: com a perna 1 neutralizada, o run normal NÃO devolve `RECUSA` para todas. Se as duas pernas derem o mesmo conjunto de vereditos, o AC reprova.
   Check (as duas pernas têm de passar): `python3 .claude/plans/PLAN-175/p2/prune-rule.py --repo . --force-empty-telemetry --json | python3 -c "import json,sys;v={s['verdict'] for s in json.load(sys.stdin)['skills']};print(v);sys.exit(0 if v=={'RECUSA'} else 1)"` **e** `python3 .claude/plans/PLAN-175/p2/prune-rule.py --repo . --coverage-observed --json | python3 -c "import json,sys;v={s['verdict'] for s in json.load(sys.stdin)['skills']};print(v);sys.exit(0 if v!={'RECUSA'} else 1)"`
-- [ ] **AC-0.5** [P0] a sonda de idioma passa a PARSEAR argv, a usar o modo devolvido pelo recuperador, a resolver o recuperador por caminho absoluto e a recusar rodar contra índice inválido; nenhum número aparece digitado na saída. **Medido no HEAD: a sonda tem zero parsing de argv** (`grep -cE 'argv|argparse|require-mode|--pairs'` devolve `0`) e sai `0` mesmo recebendo bandeira inexistente — as duas pernas abaixo estão VERMELHAS hoje.
+- [x] **AC-0.5** [P0] a sonda de idioma passa a PARSEAR argv, a usar o modo devolvido pelo recuperador, a resolver o recuperador por caminho absoluto e a recusar rodar contra índice inválido; nenhum número aparece digitado na saída. **Medido no HEAD: a sonda tem zero parsing de argv** (`grep -cE 'argv|argparse|require-mode|--pairs'` devolve `0`) e sai `0` mesmo recebendo bandeira inexistente — as duas pernas abaixo estão VERMELHAS hoje.
   Check (as duas pernas): `python3 .claude/plans/PLAN-175/p1/probe-retrieval-language-gap.py --bandeira-inexistente; test $? -eq 2` **e** `python3 .claude/plans/PLAN-175/p1/probe-retrieval-language-gap.py --require-mode tfidf --json | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('mode'),d.get('numbers_source'));sys.exit(0 if d.get('mode')=='tfidf' and d.get('numbers_source')=='measured' else 1)"`
-- [ ] **AC-0.7** o censo de elegibilidade do §2.1 é GERADO, não digitado, e a tabela do plano reproduz o gerado.
+- [x] **AC-0.7** o censo de elegibilidade do §2.1 é GERADO, não digitado, e a tabela do plano reproduz o gerado.
   Check: `python3 .claude/plans/PLAN-175/p2/eligibility-census.py --json | python3 -c "import json,sys;d=json.load(sys.stdin);c=d['candidates_by_architecture'];print(c);sys.exit(0 if c['A']==0 and c['B']==2 and c['C']==37 else 1)"` — vermelho quando o catálogo ou os canais mudarem, que é quando a tabela do §2.1 precisa ser regerada.
 
 ### W0b — a referência morta sai do roteador (pacote CANÔNICO, 1 caminho, exige assinatura)
@@ -700,17 +700,17 @@ Regra de parada: se a re-medição com N ≥ 30 não reproduzir a DIREÇÃO da
 tabela do §4.4, a decisão (b) volta para o Owner com a evidência nova, e a
 Fase 1 não liga.
 
-- [ ] **AC-1.1** [P0] o baseline do unknown-ratio é PUBLICADO como arquivo GERADO, carregando os inputs: invocação literal do leitor, janela, `chain_status`, o bloco `discovery_health` e a data de geração.
+- [x] **AC-1.1** [P0] o baseline do unknown-ratio é PUBLICADO como arquivo GERADO, carregando os inputs: invocação literal do leitor, janela, `chain_status`, o bloco `discovery_health` e a data de geração.
   Check: `python3 -c "import json,sys;d=json.load(open('.claude/plans/PLAN-175/evidence/unknown-ratio-baseline-2026-09-07.json'));f=[k for k in ('reader_invocation','window','chain_status','discovery_health','generated_at') if k not in d];print('faltam:',f);sys.exit(1 if f else 0)"` — vermelho hoje: o arquivo não existe, e esta onda o cria.
-- [ ] **AC-1.2** a condição de ativação da Fase 2 é estrita e casa com o instrumento de referência: nenhuma forma maior-ou-igual sobrevive no plano, **em nenhuma das quatro grafias** (com e sem espaço, com vírgula e com ponto decimal).
+- [x] **AC-1.2** a condição de ativação da Fase 2 é estrita e casa com o instrumento de referência: nenhuma forma maior-ou-igual sobrevive no plano, **em nenhuma das quatro grafias** (com e sem espaço, com vírgula e com ponto decimal).
   Check: `grep -nE "(≥|>=) ?0[.,]10|igual ou acima de 0[.,]10" .claude/plans/PLAN-175-skills-pruning-discovery.md | grep -v "Check:"` não devolve nada (o filtro existe porque a própria linha de verificação cita o padrão proibido), e `grep -n "ratio > 0.10" .claude/scripts/ceo-boot.py` devolve a linha do instrumento
-- [ ] **AC-1.3** [P0] re-medição do gap de idioma com N ≥ 30 pares, usando a sonda corrigida da AC-0.5, com a verdade-base gerada e revisada. A asserção é sobre a SAÍDA, não sobre bandeiras que a sonda antiga ignorava.
+- [x] **AC-1.3** [P0] re-medição do gap de idioma com N ≥ 30 pares, usando a sonda corrigida da AC-0.5, com a verdade-base gerada e revisada. A asserção é sobre a SAÍDA, não sobre bandeiras que a sonda antiga ignorava.
   Check: `python3 .claude/plans/PLAN-175/p1/probe-retrieval-language-gap.py --pairs 30 --require-mode tfidf --json | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('pairs'),d.get('mode'));sys.exit(0 if d.get('pairs',0)>=30 and d.get('mode')=='tfidf' else 1)"`
-- [ ] **AC-1.3b** a FRAÇÃO de consultas por idioma no caminho de produção é publicada, ou o plano registra por escrito que ela é não-mensurável e por quê. Hoje é não-mensurável: não há injetor e o recuperador é opt-in e desligado (§4.5), logo não existe corpus de consultas reais. Este AC só pode virar medição depois da W1b.
+- [x] **AC-1.3b** a FRAÇÃO de consultas por idioma no caminho de produção é publicada, ou o plano registra por escrito que ela é não-mensurável e por quê. Hoje é não-mensurável: não há injetor e o recuperador é opt-in e desligado (§4.5), logo não existe corpus de consultas reais. Este AC só pode virar medição depois da W1b.
   Check: `python3 -c "import json,sys;d=json.load(open('.claude/plans/PLAN-175/evidence/query-language-fraction.json'));print(d.get('status'),d.get('reason'));sys.exit(0 if d.get('status') in ('measured','not-measurable') and d.get('reason') else 1)"` — vermelho hoje: o arquivo não existe.
 - [ ] **AC-1.4** [P0] a decisão (b) — indexar português, normalizar a consulta, ou declarar a limitação e manter a busca estática como caminho primário — é RATIFICADA pelo Owner antes de a Fase 1 ligar. O registro fica em `.claude/plans/PLAN-175/decisions/decisao-b-idioma.md`, criado por esta onda, e carrega opção ratificada, dono, conjunto fechado de opções e critério de morte.
   Check: `grep -rn "decisao-b" .claude/plans/PLAN-175/decisions/` devolve o registro **e** `python3 -c "import sys;x=open('.claude/plans/PLAN-175/decisions/decisao-b-idioma.md').read();f=[k for k in ('opcao_ratificada:','dono:','conjunto_fechado:','criterio_de_morte:','data:') if k not in x];print('faltam:',f);sys.exit(1 if f else 0)"` — as duas pernas vermelhas hoje (`rc=2`, diretório inexistente).
-- [ ] **AC-1.7** a Fase 1 **FECHA no baseline**. O `external_wait: none` foi ratificado pelo Owner em 2026-09-06, e um plano que declara ausência de espera externa não pode carregar uma espera de calendário de 30 dias no corpo. A re-medição posterior e a decisão de ligar ou não a Fase 2 saem daqui e viram follow-up nomeado (`PLAN-175-FOLLOWUP-<slug>`, PLAN-SCHEMA §1.4), criado nesta onda com o gatilho escrito.
+- [x] **AC-1.7** a Fase 1 **FECHA no baseline**. O `external_wait: none` foi ratificado pelo Owner em 2026-09-06, e um plano que declara ausência de espera externa não pode carregar uma espera de calendário de 30 dias no corpo. A re-medição posterior e a decisão de ligar ou não a Fase 2 saem daqui e viram follow-up nomeado (`PLAN-175-FOLLOWUP-<slug>`, PLAN-SCHEMA §1.4), criado nesta onda com o gatilho escrito.
   Check (as duas pernas): `test -f .claude/plans/PLAN-175-FOLLOWUP-fase2-remedicao.md && grep -qE "^gatilho:" .claude/plans/PLAN-175-FOLLOWUP-fase2-remedicao.md` — vermelho hoje, porque o follow-up ainda não existe **e** `grep -n "A Fase 1 não fecha no baseline" .claude/plans/PLAN-175-skills-pruning-discovery.md | grep -v "Check:"; test $? -eq 1` — a frase do round 1 que AFIRMAVA a espera saiu nesta revisão, e o `Check:` fica vermelho se ela voltar. O filtro por `Check:` existe pela mesma razão da AC-1.2: a linha de verificação cita o padrão que proíbe. A asserção é sobre a frase que AFIRMA a espera, não sobre qualquer menção a calendário — o §6 cita a espera removida por razões de registro, e citar não é afirmar.
 
 ### W1b — o injetor e a rota de nascimento do índice (pacote CANÔNICO, exige assinatura)
@@ -1096,3 +1096,146 @@ redação.
   título e a regra de parada da W3, o AC-3.1 (artefato desta onda e Check que não lê outro plano),
   o bloqueador do §6, o passo 3 do §1 e uma nota na OQ-7. O Check novo do AC-3.1 é vermelho até
   o contrato existir. `status:` permanece `reviewed`.
+- **2026-10-12 (S363, fechamento de texto da W0a):** os três pacotes livres da W0a landaram no
+  main — P175-A (`9906b624`) e P175-C (`7fdd1444`, `628aea97`, `fa4db7af`) pelo merge `63920fa8`;
+  P175-B (`a4d9524d`, `eb457223`, `cd18bbba`) pelo merge `818aac5e`. Onze caixas marcadas (AC-0.1
+  a AC-0.5, AC-0.7, AC-1.1, AC-1.2, AC-1.3, AC-1.3b e AC-1.7), cada uma com o Check rodado e a
+  saída no apêndice «Fechamento de texto da W0a (S363)», que também traz as correções medidas do
+  texto ratificado. Criados o baseline gerado `evidence/unknown-ratio-baseline-2026-10-12.json` e
+  o follow-up `PLAN-175-FOLLOWUP-fase2-remedicao` (`draft`). `status:` permanece `reviewed` e o
+  `external_wait` não muda: o flip é do Owner.
+
+## Apêndice — Fechamento de texto da W0a (S363, 2026-10-12)
+
+Regra S361: correção de texto já ratificado vai para um apêndice datado. O corpo acima ficou como
+estava, salvo as caixas marcadas e o `last_revised`; as linhas citadas aqui são as do corpo. Base:
+`818aac5e`. Os Checks que leem o log de auditoria rodaram numa sombra do mesmo HEAD com
+`CLAUDE_PROJECT_DIR=<checkout do projeto>`, só leitura: sem a variável, a sombra não acha log
+nenhum (§4).
+
+### A.1 Caixas marcadas e a saída de cada Check
+
+| AC | Check rodado | saída em 2026-10-12 | evidência |
+|---|---|---|---|
+| AC-0.1 | o do texto | `inputs ausentes: []`, rc 0 | `evidence/prune-rule-inputs-2026-10-12.json` (`failed_checks: []`) |
+| AC-0.2 | o do texto | `exit_reason = ok`, 42 `MANTER`, rc 0 | idem |
+| AC-0.3 | o do texto | `would_archive`; `offenders` = `ceo-orchestration`, `identity-and-trust-architecture`, `incident-management`; rc 0 | idem |
+| AC-0.4 | o do texto, duas pernas | `{'RECUSA'}` e `{'MANTER'}`, rc 0 nas duas | idem |
+| AC-0.5 | o do texto, duas pernas | rc 2 com bandeira inexistente; `tfidf measured` sobre 33 pares | `evidence/language-gap-remeasure-2026-10-12.json` |
+| AC-0.7 | o do texto | `{'A': 0, 'B': 2, 'C': 37, 'D': 'not-measurable'}`, rc 0 | `evidence/eligibility-series-2026-10-12.json`; ver A.2, item 9 |
+| AC-1.1 | o substituto do A.2, item 1 | `faltam: []`, rc 0; mutante sem `discovery_health`: rc 1 | `evidence/unknown-ratio-baseline-2026-10-12.json` |
+| AC-1.2 | o do texto | o `grep` não devolve nada; `ceo-boot.py:814` | já verde antes deste fechamento |
+| AC-1.3 | o do texto | `30 tfidf`, rc 0; controle com `--pairs 29`: rc 1 | `evidence/language-gap-remeasure-2026-10-12.json` |
+| AC-1.3b | o do texto | `not-measurable`, com o motivo; rc 0 | `evidence/query-language-fraction.json` |
+| AC-1.7 | o do texto, duas pernas | perna 1: rc 1 antes do follow-up, rc 0 depois; perna 2: rc 0 | `PLAN-175-FOLLOWUP-fase2-remedicao.md` |
+
+### A.2 Correções medidas do texto ratificado
+
+1. **Check da AC-1.1 (:703-704).** O nome fixo `unknown-ratio-baseline-2026-09-07.json` só seria
+   satisfeito mentindo a data, e o §4 manda cada figura levar a data em que foi lida. O baseline
+   foi gerado em 2026-10-12 pelo leitor nomeado, com o comando e o código do gerador gravados
+   dentro do próprio arquivo. Check substituto, com a data real:
+   `python3 -c "import json,sys;d=json.load(open('.claude/plans/PLAN-175/evidence/unknown-ratio-baseline-2026-10-12.json'));f=[k for k in ('reader_invocation','window','chain_status','discovery_health','generated_at') if k not in d];print('faltam:',f);sys.exit(1 if f else 0)"`
+2. **Check da AC-2.5 (:778-779).** A chave `catalog_tokens` não existe em `context-budget.py`
+   (`grep -c` devolve 0): o Check do texto sai com `KeyError` no lado vivo e nunca fica verde. No
+   `--json`, o catálogo é a soma das categorias `skills` (165 arquivos) e `core_skill` (o
+   `SKILL.md` da `ceo-orchestration`, contado à parte em `context-budget.py:486-501`). Check
+   substituto; o arquivo «antes» nasce na W2a, com a mesma soma na chave `catalog_est_tokens`:
+   `python3 .claude/scripts/context-budget.py --json | python3 -c "import json,sys;d=json.load(sys.stdin);a=sum(c['est_tokens'] for c in d['categories'] if c['category'] in ('skills','core_skill'));b=json.load(open('.claude/plans/PLAN-175/evidence/context-budget-before-W2a.json'))['catalog_est_tokens'];print(b,'->',a);sys.exit(0 if a<b else 1)"`
+   Hoje fica vermelho por desenho (o arquivo «antes» não existe). Contra um «antes» de controle
+   igual ao vivo (751.537): rc 1; contra vivo + 1: rc 0. A AC-2.5 continua aberta.
+3. **Perguntas (§0 :63-65, §2.1 :176-177, §10 :996).** O texto diz «Sete perguntas continuam
+   abertas» e «nenhuma decidida aqui». O §10 lista OITO (OQ-1 a OQ-8; o Progress log, :1089, já
+   diz «Oito»), e a OQ-1 foi decidida pelo Owner em 2026-09-07: «D — não mensurável hoje»
+   (Progress log, :1092). A RE-decisão sobre os números da W0a é pergunta aberta (A.3).
+4. **Cadeia de auditoria (§2.2 :276-284, §4 :388-390, AC-2.0 :770, OQ-3 :1012-1016).** O texto diz
+   que o leitor devolve `NOT INTACT`. Hoje ele devolve `intact (12473 entries verified)`, no
+   baseline gerado. Esse estado é só do log PRIMÁRIO: o leitor chama `verify_chain(primary)`
+   (`skill-health.py:538`) e lê os outros 20 arquivos da família sem atestá-los, como o
+   `prune-rule.py` imprime em `inputs.chain_scope` (`rotated_attested: false`). A premissa da OQ-3
+   sumiu para o primário; atestar a família antes de qualquer ARQUIVAR continua sendo condição da
+   W2 (AC-2.0).
+5. **Bandeira `--include-rotated` (§1 :86-89).** O texto diz que ela é INERTE porque o run devolve
+   `rotated_siblings_present: false` e «esta família ainda não rotacionou». As duas metades caíram:
+   a família tem hoje 21 arquivos (20 rotacionados e o primário), então a bandeira muda a leitura;
+   e o campo só é calculado SEM a bandeira (`skill-health.py:750`). Com ela, sai `false` por
+   construção e nunca mediu rotação.
+6. **Início da janela (§2.1 :232-233; §4 :350-351).** O texto dá o primeiro instante da família
+   como `2026-08-21T12:13:43Z`. Hoje, sobre os 21 arquivos, é `2026-08-21T21:40:18Z`
+   (`prune-rule.py`, `inputs.window.first_ts`, que compara instantes parseados): nenhum evento
+   anterior está mais na família. O arquivo base de agosto, `audit-log-2026-08.jsonl`, não existe
+   hoje; setembro e outubro têm o arquivo base e os numerados, agosto só `-1` e `-2` (lista em
+   `log_files_read` do baseline). É compatível com a classe declarada no `CHANGELOG.md` [1.4.2] (a
+   limpeza do Claude Code apaga `*.jsonl` de topo do diretório do projeto, inclusive os arquivos
+   rotacionados do log de auditoria), mas a causa deste arquivo não foi apurada aqui. O leitor,
+   que verifica só o primário (item 4), não vê a falta. Com o início novo, os 90 dias continuam se
+   completando em 2026-11-19.
+7. **Leitura datada que o §4 pede (compare com o §4.1, :396-403).**
+
+   | grandeza | 2026-09-07 (§4) | 2026-10-12 |
+   |---|---|---|
+   | arquivos da família | 10 | 21 |
+   | eventos lidos | 144.532 | 296.481 |
+   | eventos `agent_spawn` | 114 | 288 |
+   | sem skill (`unknown`) | 28 | 32 |
+   | unknown-ratio | 0,246 | 0,111 |
+   | skills distintas invocadas | 11 | 14 |
+   | skills sem nenhuma invocação | 153 | 150 |
+   | cobertura | 16,63 dias | 51,77 dias |
+
+   A coluna nova vem do baseline gerado (lido às 16:09:20Z); a cobertura, do run padrão do
+   `prune-rule.py` (16:10:05Z). O ratio caiu SEM injetor (não há injetor:
+   `evidence/query-language-fraction.json`); logo, uma queda medida depois da W1b não prova sozinha
+   efeito do injetor. A regra da Fase 2 já é pela meta absoluta (§1, passo 1). No piso de VETO
+   (§4.3, :452-457): `code-review-checklist` tem 25 invocações e `security-and-auth` 60 (o texto
+   diz 3 e 11); `identity-and-trust-architecture` e `incident-management` seguem com 0. A
+   conclusão do §4.3 sobrevive; os números, não.
+8. **Linhas citadas que andaram.** `ceo-boot.py:708` (§2.1 :227) está hoje em `:801`
+   (`if total == 0` devolve `green`) e `:814` (`ratio > 0.10`). Na AC-3.0 (:799), `smoke-install.sh:17`, `:25` e
+   `:34` são hoje `:51`, `:59` e `:68`; e «não há `case`» é falso: há um `case` em `:31`, no bloco
+   do stub `claude()` (piso de versão), que não parseia argumento. `shift` e `getopts` seguem
+   ausentes, e o fato de fundo (o harness não parseia `--profile`) continua verdadeiro. Na AC-3.3
+   (:806), `install.sh:1310` e `:1319` são hoje `:1449` e `:1458`.
+9. **AC-0.7: os números sozinhos não provam equivalência com o heredoc do §2.1.** O censo usa a
+   mesma expressão de limite de palavra, e um diferencial por skill e por canal no HEAD dá
+   conjuntos idênticos nos quatro canais e nas candidatas A, B e C. Mas o override de C difere: o
+   heredoc protege qualquer skill citada no `CLAUDE.md` inteiro; o censo, só as citadas na seção
+   «Gate 2», que é o que a tabela do §2.1 diz. Numa cópia descartável com `terse-mode` citada no
+   `CLAUDE.md` fora do Gate 2, o heredoc dá C = 36 e o censo dá C = 37. Hoje coincidem porque o
+   `CLAUDE.md` cita uma só skill core, dentro do Gate 2. O piso de VETO também tem fonte diferente
+   (cinco nomes digitados no heredoc; `veto_floor: true` no censo), com o mesmo conjunto hoje.
+10. **W4c é assinatura e tem de vir antes da W4a e da W4b (nota; a ordem do §5 não muda aqui).**
+    O §5 (:634) e a W4c (:750-755) chamam a W4c de «CERIMÔNIA» com oráculo livre. O
+    `verify-counts.sh` responde 0, mas a AC-4.5 rebumpa no mesmo patch o manifesto
+    `.claude/governance/gate-scripts-manifest.txt`, que responde 1 (o `verify-counts.sh` é o
+    primeiro dos 9 membros): é assinatura do Owner. E a ordem W4a → W4b → W4c não fecha. Os
+    casamentos de `skills` do verificador leem o TOTAL (`verify-counts.sh:584-594`, `:737`,
+    `:757`); a AC-4.3 tira o literal dos documentos e a AC-4.2 exige que os casamentos `skills@`
+    não caiam. Sem a W4c antes (ou no mesmo patch, que estoura 8 caminhos), as duas não ficam
+    verdes juntas. Reordenar é revisão de desenho, fora deste fechamento.
+11. **§6 (:813-817).** «Bloqueador único e real» lê como vigente; desde 2026-10-11 é histórico,
+    como a própria nota de atualização do item diz.
+12. **A série da W0, nomeada.** A decisão do Owner de 2026-09-07 (Progress log, :1093) pede que a
+    W0 «publique a série», e as ACs da W0a não nomeiam o artefato. Ele é
+    `evidence/eligibility-series-2026-10-12.json`: citações por canal, piso de VETO, Gate 2,
+    candidatas A, B e C, D não mensurável e o uso por skill (`--with-telemetry`). Cada ponto novo
+    da série é uma nova geração datada do mesmo programa.
+
+### A.3 Perguntas abertas ao Owner (citadas, não respondidas)
+
+1. **OQ-2, janela padrão.** Com o padrão de 90 dias a regra devolve `RECUSA` para as 42 skills
+   (`insufficient_sample`, cobertura 51,77 d < 90 d), e os 90 dias só se completam em 2026-11-19.
+   Manter os 90 dias, exigir só 100 spawns observados (com a incerteza da janela impressa nos
+   inputs) ou fixar outro mínimo de dias? O `prune-rule.py` recebe o número por parâmetro
+   (`--min-window-coverage-days`) e não muda com a resposta.
+2. **OQ-1, re-decisão.** Re-decidir a arquitetura sobre o censo publicado (A = 0, B = 2, C = 37, D
+   não mensurável) e, na mesma rodada, o flip `reviewed → executing`. O CEO não flipa antes.
+3. **Contrato de posse dos domain-packs (AC-3.1).** Rascunhar agora
+   `.claude/plans/PLAN-175/w3/domain-pack-ownership-contract.md`, fora da ordem W0 → W1 → W4 → W2
+   → W3, para o Owner ratificar com calma?
+4. A pergunta do PLAN-SCHEMA §1.4 (a re-medição espera o pai chegar a `done`?) está no follow-up.
+
+### A.4 O que este fechamento não muda
+
+`status: reviewed`, `external_wait: none`, a ordem das ondas e o texto ratificado acima. Seguem
+abertas a AC-0.6 (W0b), as AC-1.4 a AC-1.6, e as ondas W4, W2 e W3.
