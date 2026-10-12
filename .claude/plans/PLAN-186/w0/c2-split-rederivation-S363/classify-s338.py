@@ -2,15 +2,11 @@
 """PLAN-186 W0, item C2 (S363) -- re-derivação do split construtor/refutador
 da noite S338 com o instrumento SHIPADO, e da figura de -US$ 1.369/mês.
 
-READ-ONLY. Sem rede, sem escrita, não toca o audit log. Importa
-`.claude/scripts/ceo-cost-transcripts.py` como biblioteca e usa AS MESMAS
-funções que a CLI usa (`_extract_record`, `scan_files`, `dedup`,
-`load_pricing`, `price_records`). O papel de cada agente vem do registro da
-corrida `<project-dir>/<session>/workflows/<run>.json` (`workflowProgress[]`,
-tipo `workflow_agent`: `agentId` + `phaseTitle`), porque os sidecars
-`agent-*.meta.json` dessa corrida só carregam `agentType` e `spawnDepth`.
-Imprime JSON com ids, contagens, classes de token e USD -- nunca texto de
-prompt, rótulo ou caminho.
+READ-ONLY (sem rede, sem escrita). Importa `.claude/scripts/ceo-cost-transcripts.py`
+como biblioteca e usa AS MESMAS funções da CLI. O papel vem do registro da corrida
+`<project-dir>/<session>/workflows/<run>.json` (`workflowProgress[]`: `agentId` +
+`phaseTitle`); os sidecars `agent-*.meta.json` só têm `agentType` e `spawnDepth`.
+Imprime JSON com ids, contagens e USD -- nunca texto de prompt, rótulo ou caminho.
 
 Uso (da raiz do repo):
     python3 .claude/plans/PLAN-186/w0/c2-split-rederivation-S363/classify-s338.py
@@ -39,10 +35,21 @@ DESIGN_DEFAULT = "aeee4ec1aac1a5e3c"
 #: Janela de 30 d do relatório 05, como o AC-1 do PLAN-186 a reproduz (S344).
 AC1_SINCE_AT = "2026-08-03T00:00:00Z"
 AC1_UNTIL = "2026-09-02T12:55:05.807Z"
-CLASSES = ("input_tokens", "output_tokens", "cache_read_tokens",
-           "cache_write_5m", "cache_write_1h")
+CLASSES = ("input_tokens", "output_tokens", "cache_read_tokens", "cache_write_5m", "cache_write_1h")
 #: Os três modelos da figura: (i) 100 % opus-5 contra (iv) b sonnet-5 + (1-b) fable-5-1.
 FIG_BASE, FIG_BUILDER, FIG_REST = "claude-opus-5", "claude-sonnet-5", "claude-fable-5-1"
+#: 05 §1.4, coluna «subagentes» dos contrafactuais (perfil de 30 d todo num modelo).
+PUB_S = {FIG_BASE: 2905.12, FIG_BUILDER: 1162.05, FIG_REST: 3043.47}
+#: 05 §2.1 por agente: turnos, input, cache write, cache read, output, USD.
+PUB_05 = {
+    "ab057190f4e9d6857": (143, 19834, 4389481, 36445447, 23102, 65.33),
+    "aeee4ec1aac1a5e3c": (262, 26238, 2609747, 97752023, 10585, 57.85),
+    "a4df5635cd955284b": (68, 15282, 2327792, 11036638, 9563, 32.49),
+    "aaec11aac18b6d0f3": (84, 10588, 1229934, 16904021, 4954, 19.95),
+    "a506a7af45201e703": (144, 13292, 926165, 30292512, 6825, 19.62),
+    "a27d43c4c3afec442": (64, 10043, 1138823, 8223927, 7756, 16.78),
+    "aaaed0571dadc41d4": (78, 11135, 586043, 12643311, 17453, 11.47),
+}
 
 
 class Refused(Exception):
@@ -95,13 +102,10 @@ def records_05style(cct: Any, path: Path) -> List[Any]:
                 obj = json.loads(raw)
             except ValueError:
                 continue
-            if not isinstance(obj, dict):
-                continue
-            rec = cct._extract_record(obj, "subagent", path.parent.name, counters)
-            if rec is None:
-                continue
-            msg = obj.get("message") or {}
-            seen.setdefault((obj.get("requestId"), obj.get("apiBlockIndex"), msg.get("id")), rec)
+            rec = cct._extract_record(obj, "subagent", path.parent.name, counters) if isinstance(obj, dict) else None
+            if rec is not None:
+                key = (obj.get("requestId"), obj.get("apiBlockIndex"), (obj.get("message") or {}).get("id"))
+                seen.setdefault(key, rec)
     return list(seen.values())
 
 
@@ -113,6 +117,11 @@ def totals(cct: Any, recs: List[Any], table: Dict[str, Any]) -> Dict[str, Any]:
     t["usd"] = round(sum(p.cost_usd for p in priced), 6)
     t["unresolved_turns"] = sum(1 for p in priced if not p.resolved)
     return t
+
+
+def cells_05(t: Dict[str, Any]) -> tuple:
+    return (t["turns"], t["input_tokens"], t["cache_write_5m"] + t["cache_write_1h"],
+            t["cache_read_tokens"], t["output_tokens"], round(t["usd"], 2))
 
 
 def split(agents: List[Dict[str, Any]], key: str, design: str) -> Dict[str, Any]:
@@ -128,6 +137,19 @@ def split(agents: List[Dict[str, Any]], key: str, design: str) -> Dict[str, Any]
     return out
 
 
+def deltas(s: Dict[str, float], b_values: Dict[str, float]) -> Dict[str, Any]:
+    """Δ(b) = b·S(sonnet-5) + (1 − b)·S(fable-5-1) − S(opus-5), e a fração de S(opus-5)."""
+    out: Dict[str, Any] = {}
+    for k, b in sorted(b_values.items()):
+        d = b * s[FIG_BUILDER] + (1 - b) * s[FIG_REST] - s[FIG_BASE]
+        out[k] = {"abs": round(d, 6), "fracao": round(d / s[FIG_BASE], 6) if s[FIG_BASE] else None}
+    return out
+
+
+def ratio(num: float, den: float) -> Any:
+    return round(num / den, 4) if den else None
+
+
 def figure(cct: Any, project_dir: Path, table: Dict[str, Any], b_values: Dict[str, float]) -> Dict[str, Any]:
     _, sub = cct.discover_files(project_dir)
     recs = cct.scan_files(sub, "subagent", project_dir, cct.ScanCounters())
@@ -135,10 +157,10 @@ def figure(cct: Any, project_dir: Path, table: Dict[str, Any], b_values: Dict[st
     recs, _ = cct.dedup([r for r in recs if lo <= r.ts <= hi])
     all_as = {m: round(sum(p.cost_usd for p in cct.price_records(
         [dataclasses.replace(r, model=m) for r in recs], table)), 6) for m in (FIG_BASE, FIG_BUILDER, FIG_REST)}
-    delta = {k: round(b * all_as[FIG_BUILDER] + (1 - b) * all_as[FIG_REST] - all_as[FIG_BASE], 6)
-             for k, b in sorted(b_values.items())}
     return {"janela": [AC1_SINCE_AT, AC1_UNTIL], "servido": totals(cct, recs, table),
-            "tudo_em": all_as, "delta_iv_menos_i": delta}
+            # o que o corpus VIVO ainda cobre da janela (registro mais antigo e mais novo)
+            "cobertura": [min(r.ts for r in recs).isoformat(), max(r.ts for r in recs).isoformat()] if recs else None,
+            "tudo_em": all_as, "delta_iv_menos_i": deltas(all_as, b_values)}
 
 
 def main(argv: List[str]) -> int:
@@ -168,25 +190,33 @@ def main(argv: List[str]) -> int:
     for agent in sorted(files):
         recs, _ = cct.dedup(cct.scan_files([files[agent]], "subagent", project_dir, cct.ScanCounters()))
         agents.append({
-            "agent": agent, "phase": phases[agent], "role": PHASE_ROLE[phases[agent]],
-            "models": sorted({r.model for r in recs}),
+            "agent": agent, "phase": phases[agent], "role": PHASE_ROLE[phases[agent]], "models": sorted({r.model for r in recs}),
             "ts": [min(r.ts for r in recs).isoformat(), max(r.ts for r in recs).isoformat()] if recs else None,
             "instrumento": totals(cct, recs, table),
             "relatorio05": totals(cct, records_05style(cct, files[agent]), table),
         })
-    out: Dict[str, Any] = {
-        "agentes": agents,
-        "soma": {},
-        "split_raw_tokens": split(agents, "raw_tokens", args.design_agent),
-        "split_usd": split(agents, "usd", args.design_agent),
-    }
+    out: Dict[str, Any] = {"agentes": agents, "soma": {},
+                           "split_raw_tokens": split(agents, "raw_tokens", args.design_agent),
+                           "split_usd": split(agents, "usd", args.design_agent)}
     for view in ("instrumento", "relatorio05"):
         out["soma"][view] = {k: round(sum(a[view][k] for a in agents), 6)
                              for k in ("turns", "raw_tokens", "usd") + CLASSES}
+    # K0: células da tabela 05 §2.1 que o leitor «estilo 05» reproduz exatamente.
+    out["k0_celulas_05"] = [sum(1 for a in agents for x, y in zip(cells_05(a["relatorio05"]),
+                                PUB_05.get(a["agent"], ())) if x == y), 6 * len(PUB_05)]
+    # K3: razão «estilo 05» / instrumento, por papel e no total.
+    out["inflacao_05_sobre_instrumento"] = {
+        role or "total": {k: ratio(sum(a["relatorio05"][k] for a in agents if role in (None, a["role"])),
+                                   sum(a["instrumento"][k] for a in agents if role in (None, a["role"])))
+                          for k in ("raw_tokens", "turns", "usd")}
+        for role in ("construtor", "refutador", None)}
+    b = {"publicado_0.80": 0.80,
+         "rederivado_raw": out["split_raw_tokens"]["duas_vias"]["construtor"]["share"],
+         "rederivado_usd": out["split_usd"]["duas_vias"]["construtor"]["share"],
+         "sem_desenho_raw": out["split_raw_tokens"]["tres_vias"]["construtor"]["share"]}
+    # só o split muda: a fórmula sobre os contrafactuais PUBLICADOS do 05 §1.4.
+    out["figura_contrafactuais_05"] = deltas(PUB_S, b)
     if args.figure:
-        b = {"publicado_0.80": 0.80,
-             "rederivado_raw": out["split_raw_tokens"]["duas_vias"]["construtor"]["share"],
-             "rederivado_usd": out["split_usd"]["duas_vias"]["construtor"]["share"]}
         out["figura"] = figure(cct, project_dir, table, b)
     print(json.dumps(out, indent=2, sort_keys=True))
     return 0
