@@ -1232,7 +1232,7 @@ e o novo falha com `not in §4 ['K-9']`.
 
 - 2026-10-12 (S363, W3a): **advisory de modelos no `/ceo-boot` entregue como
   check Tier-A (`tier_a_model_currency`, o 11.º)** — padrão recomendado,
-  pergunta 4 aberta (Tier-A × Tier-S fica com o Owner). Por raia ATIVA do
+  pergunta ao Owner de 2026-10-12, em aberto (Tier-A × Tier-S fica com o Owner; registrada nas notas de retomada do CEO, não neste plano). Por raia ATIVA do
   detector da W0a, carregado em processo (o `--state --json` não traz o
   conjunto de trabalho): instalado (`model` do `.claude/settings.json`),
   fixado (ADR-149) e upstream (cache da W0b, só lido), mais o conjunto
