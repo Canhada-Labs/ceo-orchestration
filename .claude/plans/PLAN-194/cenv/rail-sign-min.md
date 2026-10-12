@@ -177,7 +177,8 @@ VERDICT: GO
 - O sentinel mudou depois da conferência em dois pontos, e só neles. (i) A frase da seção «Ratificação
   (Owner)» sobre as duas regras do molde: elas eram «decisões do CEO com a ratificação do Owner pendente»
   e foram ratificadas pelo Owner em 2026-10-12 (~02:12Z, «Ratifico D1 e D2»), então o texto passa a dizê-lo
-  (2 linhas; correção do CEO em 2026-10-12, para a frase não ficar falsa na data da assinatura). (ii) O bloco
+  (3 linhas físicas: 26, 27 e 29; correção do CEO em 2026-10-12, para a frase não ficar falsa na data da
+  assinatura). (ii) O bloco
   comum embutido. O anexo do molde (`fc44f81e`,
   com a condição de `e5dde0e4`) trocou o `bloco-comum.md` (sha256 `3a25e4535be179343efffa3959cc59cd65f64f2c55b9a700e485ffbca2f82044` →
   `d335eb3c66f7bc63542e2e7c4db47d09a6feb638bdfa69289955c0c678b04e74`), e o miolo entre os marcadores foi trocado
@@ -185,7 +186,7 @@ VERDICT: GO
   `56b89e3be5c8d6ebf37c3a77b218f85cb493bd10ce11168a4689c2fba9b46c36` (o conferido; a lista «Materiais desta
   rodada» acima mantém esse valor, o do commit do anexo) para
   `aaf06ac6a522059f1bcf4d9630e2672e11da90b891b71d7d50ce1da31642a0a2`, o `Rail-Sentinel-sha256` acima (antes da correção (i), `42a92f9c38989e3d…`). A identidade foi
-  conferida mecanicamente: fora dos marcadores, os bytes são os do sentinel conferido, exceto as 2 linhas
+  conferida mecanicamente: fora dos marcadores, os bytes são os do sentinel conferido, exceto as 3 linhas
   da correção (i), e `p0_sent` e
   `p0_rail` do núcleo anexado, importados em processo sobre o commit deste registro, aceitam o sentinel,
   os três sha256 e o veredito. Patch e dados seguem com os sha256 conferidos.
