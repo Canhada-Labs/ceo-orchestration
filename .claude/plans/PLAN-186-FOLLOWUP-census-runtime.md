@@ -584,3 +584,50 @@ novo, o oráculo é perguntado pelo caminho escolhido, na wave dela.
   `MODEL_HINT` não é canônica). Status permanece `draft`: pela
   PLAN-SCHEMA §1.4, um followup não entra em `executing` antes de o pai
   chegar a `done`, e o PLAN-186 segue `executing`.
+- 2026-10-12 (S363, **rodada de correção da W1a**, única): os refutadores
+  apontaram dois P2 sobre `bdda87c`; os dois foram REPRODUZIDOS em cópia
+  descartável antes de qualquer cura, e cada um ganhou um commit próprio
+  por cima (nada reescrito). **(1) Ramo na MESMA linha da rota.** O
+  docstring dizia que um ramo guardado por `set`/`dict` por hash era
+  RECUSADO; isso só valia para ramo em linha própria. Trocando o bloco do
+  `devops` (`task-route.py:534-542`) por um `dict.get` na linha do
+  `"model"`, ou por `A if workflow_change in {...} else B`, o censo saía
+  rc 0, stderr vazio, e a rota `devops=claude-opus-4-8` sumia da tabela
+  (o dono, perguntado direto, ainda a devolvia para `release` e `ci`).
+  Cura estrutural em `4dd48c88`: uma segunda guarda, de FORMA
+  (`_assert_probe_forms`), lê o `def` de `_agents_for` e só aceita os
+  usos de um parâmetro de texto sondado que a sonda COLHE (`==`/`!=`,
+  `in`/`not in` sobre tupla ou lista literal, `is`/`is not None`, e
+  verdade só quando o domínio traz `None`); qualquer outro uso é
+  `task_route_form_unprobeable`, em qualquer linha — lista de formas
+  aceitas, então forma nova nasce recusada. Os dois plants agora saem
+  rc 1 com esse nome. Seguem FORA, declarados no docstring e no rótulo
+  de cobertura da linha: (vii) ramo na mesma linha guardado por algo que
+  não é parâmetro (estado de módulo, ambiente, resultado de chamada),
+  (viii) código fora do arquivo dono e funções dele que não são
+  `_agents_for`, (ix) leitura dos parâmetros por reflexão do quadro
+  (`sys._getframe`, `inspect`; só `locals`, `vars`, `eval` e `exec` são
+  recusados por nome). **(2) Bytecode na árvore lida.** Rodado sobre uma
+  cópia sem cache, o censo de `bdda87c` deixava 18 arquivos `.pyc` na
+  árvore que mede (Python 3.11; no Python 3.9 da Apple, também 18, no
+  espelho do `sys.pycache_prefix`) — imports dos donos da W0 e da
+  W1a pelo carregador normal, e três processos filhos sem `-B`. O teste
+  de isolamento vigiava só `HOME/.claude`. Cura em `6ec6f0bf`, por FORMA:
+  toda função do instrumento cujo primeiro parâmetro é `root` roda
+  inteira com `sys.dont_write_bytecode` ligado (o escopo é o leitor
+  inteiro porque donos também importam dentro das próprias funções), o
+  import por caminho também, e todo filho Python sai de `_python_argv`,
+  que põe `-B`. Depois da cura: 0 `.pyc` na árvore e no espelho, nos dois
+  interpretadores. **Controles:** sete testes novos, todos vermelhos
+  contra o censo de `bdda87c` e verdes depois; cada teste de bytecode
+  tem controle positivo (um import cru do dono, no mesmo ambiente, é
+  visto). Mutantes do próprio instrumento (driver na área de rascunho,
+  não versionado): sem o `-B`, sem o embrulho por forma, sem a chamada
+  da guarda de forma, com `set` aceito no `in` e com chamada aceita —
+  cinco mortos; o sexto, sem a flag ligada no `__main__`, sobrevive por
+  ser equivalente (as outras duas pernas já cobrem). **Bateria:**
+  `test_census_runtime.py` 84 passed em `bdda87c`, 88 em `4dd48c88` e 91
+  em `6ec6f0bf` (pytest, Python 3.9.6); 91 OK em `unittest` no Python
+  3.11. A tabela viva fica idêntica, a não ser pelo rótulo de cobertura
+  da linha do `task-route.py`. Os donos (1) e (3) seguem para o pack
+  seguinte; status permanece `draft`.
