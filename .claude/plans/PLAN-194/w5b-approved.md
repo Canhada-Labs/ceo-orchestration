@@ -89,7 +89,8 @@ Data: TO-FILL-BY-SIGN
 
 Registro do construtor dos materiais (MAT-W5B), em `.claude/plans/PLAN-194/w5b/red-control.txt`. O SIGN
 não o executa nem o lê; o rail do pacote o reproduz sobre as pré-imagens, que o SIGN confere pelos blobs
-das linhas `index` do patch.
+das linhas `index` do patch. O lado vermelho do controle depende, portanto, do rail; o SIGN prova só o
+lado verde, na linha `hard` 3 (o teste do pacote com o patch, rc 0).
 
 - Medido em 2026-10-09, entre ~20:13Z e ~20:29Z, em macOS (Darwin 27.0.0), bash 3.2 (`/bin/bash`) e
   Python 3.9.6. Base: HEAD `142f01cd7363`, com `scripts/install.sh` no blob pré-imagem
@@ -136,6 +137,25 @@ dirigida, fica só nas passadas do `testpaths`: com o patch, dois testes dele sa
 (`test_no_match_statement`, em Python 3.9, e `test_pending_entries_point_at_an_open_question`, com
 `exclude_hooks_pending` vazio), e uma linha `hard` de pytest exige resumo só de aprovados; nas passadas do
 `testpaths` um SKIP não reprova.
+
+O SIGN anterior conferia também a SAÍDA de três desses comandos: no teste do pacote, a última linha
+«==> PASS: …» e nenhuma linha `::error::`; no `validate_governance_fast.py`, a última linha `PASS`; no
+`validate-governance.sh` (hoje gate genérico do molde), `Errors:   0`. O molde exige deles só rc 0. As duas
+exigências são equivalentes no código (EQUIV):
+- `scripts/tests/test-install-deny-baseline.sh` (a pós-imagem do patch, blob `f13c1b5f…`): roda sob
+  `set -euo pipefail` (:43); toda linha `::error::` que ele imprime vem seguida de `fail=1` ou `exit 1` no
+  bash, ou, nos verificadores `python3` embutidos, de `ok = False` ou `sys.exit(1)`, com a chamada
+  terminando em `|| fail=1`; as instalações escrevem em arquivos de log e só voltam à saída do teste por
+  `tail`, antes de um `exit 1`; o veredito sai 1 com `fail` diferente de 0 e só imprime «==> PASS: …» no
+  caminho de rc 0 (:396-401). O único outro `exit 0` é o SKIP sem `python3` no PATH (:85-88), inalcançável
+  no SIGN: a entrada recusa sem `python3` no PATH (`OWNER-SIGN.sh:5`), e os comandos da bateria herdam
+  esse PATH.
+- `.claude/scripts/validate_governance_fast.py`: `rc` é 1 se e só se há erro (:505), a última linha do
+  relatório é `PASS` se e só se `rc` é 0 (:534), e o processo sai com esse `rc` (:551, :555).
+- `.claude/scripts/validate-governance.sh`, que o molde chama sem argumento (sem o desvio `--fast` de
+  :30-34): o único `exit 0` é o do resumo (:1327), no ramo em que `ERRORS` não é maior que 0, depois de
+  imprimir `Errors:   $ERRORS` (:1317); `ERRORS` começa em 0 (:36) e só recebe somas de contagens, então
+  rc 0 sai sempre com «Errors:   0».
 
 ## Resíduos declarados (pela forma)
 

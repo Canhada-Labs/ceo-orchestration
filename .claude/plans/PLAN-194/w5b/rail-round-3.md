@@ -3,7 +3,7 @@
 Rail-Round: 3
 Rail-Subject: .claude/plans/PLAN-194/w5b/w5b.patch (inalterado desde a rodada 2), .claude/plans/PLAN-194/w5b-approved.md (reescrito para o molde) e .claude/plans/PLAN-194/w5b/sign.tsv (novo)
 Rail-Subject-sha256: 6c691139e1c9a048b4c1b1a66586a7271d1d7e4902cd3e6b8f66319fee513bf1
-Rail-Sentinel-sha256: 8fa5244e2debecf6233d10352b3d6ba0098c44bfed5a96fd439d8a28b715138a
+Rail-Sentinel-sha256: 117365e3e59842d3b6cc678874fbed9a2913f89d09b7ae25ed49a8c7e3fd7ffd
 Rail-Data-sha256: 78c5bd18b78e88b818f7200ab304edfff7d58761c1592bc703795da40e5e406c
 Rail-Reviewer: PENDENTE (rodada única pela D2: Codex read-only e 2 refutadores Claude na mesma rodada)
 Rail-Date: PENDENTE
@@ -11,8 +11,9 @@ Rail-Reviewer-Verdict: PENDENTE
 Rail-Verdict: PENDENTE
 Rail-Findings: PENDENTE
 
-O patch é o mesmo das rodadas 1 e 2 (sha256 igual ao do `Rail-Subject-sha256` de `rail-round-2.md`). Esta
-rodada revisa o que a migração para o molde `.claude/plans/PLAN-194/sign-min/` mudou: o texto do sentinel
+O patch é o mesmo aprovado na rodada 2, incluindo o anexo `01f94c78` (sha256 igual ao do
+`Rail-Subject-sha256` de `rail-round-2.md`); a rodada 1 revisou o antecessor dele, `0a953ece..b03934b9`
+(3 caminhos). Esta rodada revisa o que a migração para o molde `.claude/plans/PLAN-194/sign-min/` mudou: o texto do sentinel
 (cabeçalho com `Dados`/`Molde`, bloco comum, «Controle vermelho (registro)», bateria própria, resíduos) e os
 dados do pacote. O `Rail-Sentinel-sha256` é o do sentinel com os quatro campos por preencher; o
 `Rail-Data-sha256`, o do `sign.tsv`.
