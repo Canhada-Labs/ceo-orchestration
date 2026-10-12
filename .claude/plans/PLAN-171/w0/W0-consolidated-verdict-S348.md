@@ -252,6 +252,13 @@ atualiza o que mudou depois.
   (`.claude/hooks/tests/test_check_workflow_launch.py`), mas não foi
   medido pelo método das três metades. O censo W0-delta fica como item
   opcional de `PLAN-171-FOLLOWUP-lote2-generated-figures`.
+  **Atualização de 2026-10-12: dívida paga** em
+  `.claude/plans/PLAN-171/w0/W0-delta-check_workflow_launch-S363.md`.
+  Verde nas três metades: como está, 107 + 29 testes passam; com o mutante
+  em `decide_pre` (`_lib/launch_ledger.py:968`), 25 + 3 vão ao vermelho;
+  depois do `git restore`, os 136 voltam a passar. Os totais do §3 e da
+  tabela de 2026-10-10 continuam medidos sobre o `L` da S348: o resultado
+  deste hook fica no relatório W0-delta e não entra nesses totais.
 - **Os follow-ups do §4 agora têm arquivo.**
   `PLAN-171-FOLLOWUP-lote2-generated-figures` e
   `PLAN-171-FOLLOWUP-readinjection-docstring` existem em
