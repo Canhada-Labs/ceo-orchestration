@@ -1237,13 +1237,18 @@ e o novo falha com `not in §4 ['K-9']`.
   conjunto de trabalho): instalado (`model` do `.claude/settings.json`),
   fixado (ADR-149) e upstream (cache da W0b, só lido), mais o conjunto
   vermelho contra o esperado. Nunca vermelho: amarelo = id upstream fora do
-  fixado, vermelhos fora do esperado, ou cache malformado/acima de 64 KiB;
-  cache ausente ou com mais de 96 h, e árvore de adopter sem ADR-149, dão
-  «sem dado». Contrato de leitura para a W0b: `{"lanes": {"<raia>":
-  {"models": [...]}}}`, idade = mtime. Fora da linha `Paths:`, o pacote toca
+  fixado, vermelhos fora do esperado, cache ilegível (não é JSON com `lanes`
+  objeto) ou acima de 64 KiB, ou raia presente e malformada; cache ausente
+  ou com mais de 96 h, raia ausente do cache e árvore de adopter sem
+  ADR-149 dão «sem dado». O estado da W0a (`model-currency-state.json`) não
+  é entrada do trio: a ausência dele não degrada nada (asserido no teste).
+  Contrato de leitura para a W0b: `{"lanes": {"<raia>": {"models": [...]}}}`,
+  idade = mtime. Fora da linha `Paths:`, o pacote toca
   `test_ceo_boot_enhanced.py` (contagens 10→11 e 34→35). Controles
-  VERMELHOS: o teste novo contra o `ceo-boot.py` anterior (5 falhas) e oito
-  mutantes com 1 falha cada. `status:` NÃO muda.
+  VERMELHOS: o teste novo contra o `ceo-boot.py` de `63920fa8` (5 falhas) e
+  um mutante por defesa, cada um vermelho — expressões exatas e contagens
+  medidas no corpo do commit `537fed85` (o «1 falha cada» de `a903e1c4`
+  não era reexecutável). `status:` NÃO muda.
   Check: `python3 -m pytest .claude/scripts/tests/test_ceo_boot_model_currency.py -q`
 
 - 2026-10-12 (S363, correção da cura): três P2 dos refutadores corrigidos
