@@ -4,21 +4,33 @@ Rail-Subject: .claude/plans/PLAN-183/w7a/w7a.patch
 Rail-Subject-sha256: 84371b9f58b17006c8438bd6f0683ed371603dc4fd477c8f73ee25f41432979e
 Rail-Subject-patch-id: 341f0bafd41be57caeabc091a8ee7af3994a0305
 Rail-Sentinel: .claude/plans/PLAN-183/w7a-approved.md
-Rail-Sentinel-sha256: 84a35d54d5525ff06488085f13134607f052df3e203b2fdd932d3e334f8ff54d
+Rail-Sentinel-sha256: 10e03881e93adce69c46c8035711b4f960f4d7f7ef0d7572fd4a7f5ffc3dfeb4
 Rail-Data: .claude/plans/PLAN-183/w7a/sign.tsv
 Rail-Data-sha256: 6c927476564ee9454fa28a8dada3ea0ceedffdf13fe70e34c03464bbbc3e66cd
 Rail-Verdict: PENDENTE
 
 Este registro tem duas partes. A primeira é a rodada ÚNICA do molde sign-min sobre o texto do sentinel (com os
 quatro campos por preencher), os dados `sign.tsv`, o envoltório `hard-w7a.sh` e o `red-control.txt`, com o
-patch acima inalterado; ela ainda não rodou, e o veredito acima fica `PENDENTE` até ela terminar (o P0 do SIGN
-recusa qualquer valor fora de `APPROVE` e `DECLARED-P2`). A segunda é o histórico das rodadas do patch (r1 a r3
+patch acima inalterado; a rodada 1 rodou sobre o texto anterior, o anexo dela muda o texto e o envoltório, e o
+veredito acima fica `PENDENTE` até a conferência do anexo terminar (o P0 do SIGN recusa qualquer valor fora de
+`APPROVE` e `DECLARED-P2`). A segunda é o histórico das rodadas do patch (r1 a r3
 e as conferências r3x e r3y), copiado do registro anterior do pacote: o patch revisado nelas é este, byte a byte
 (`git diff --full-index --no-renames 0a953ece 94483a01` da sombra w7a, mesmo sha256 e mesmo patch-id).
 
 ## Rodada única do molde (texto, dados, envoltório e registro do controle vermelho)
 
 - Estado: PENDENTE (nenhuma lane rodou sobre os sha256 acima).
+- Rodada 1 (materiais de `e539268f`, sentinel de sha256 `84a35d54…`, dados `6c927476…`, patch inalterado):
+  Codex 0.160.0 «VERDICT: GO-WITH-CONDITIONS» — P2: conferências de saída de `validate_governance_fast.py`
+  («PASS») e `validate-governance.sh` («Errors:   0») julgadas só pelo rc; P2: o envoltório não confinava o
+  bytecode dos descendentes e não declarava a retenção do diretório de trabalho em falha; P3: conferências do
+  SIGN anterior retiradas sem declaração (registro de worktree, URL do remote, sondas de modo e GID, cruzamento
+  verbatim do rail); P3: o `grep` do «{{» tratava rc 2 como ausência. Lanes Claude: código «VERDICT: GO» e
+  segurança «VERDICT: GO», só P3 (entre eles, o arquivo do follow-up `PLAN-183-FOLLOWUP-json-census-call-binding`
+  ainda não existe). Anexo único: equivalência do rc declarada no sentinel, com as linhas do código;
+  `PYTHONDONTWRITEBYTECODE=1` exportado pelo envoltório, com o resíduo do replay e a sonda declarados; retenção
+  em falha declarada; seção das conferências aposentadas e do que as substitui; `grep` com rc 0, 1 e outro
+  tratados à parte; o follow-up declarado como criado no backlog da v1.4.4. `sign.tsv` e patch inalterados.
 - Checklist da rodada: cada frase do sentinel fora do bloco comum é verdadeira no código; o bloco comum é o do
   molde; nenhum comando do SIGN anterior do pacote sumiu (os gates genéricos estão na lista fixa do molde; os
   específicos estão nas linhas `hard` ou, os da passada dirigida, nas duas passadas do molde, todos no

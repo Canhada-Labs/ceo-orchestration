@@ -20,10 +20,14 @@
 #   5. o arquivo de teste do gate: rc 0 e o resumo «39 passed».
 # As instalações, o upgrade e os gates rodam sem CEO_SOTA_DISABLE, CLAUDE_PROJECT_DIR e
 # CLAUDE_PROJECT_DIR_NATIVE, com HOME próprio dentro do diretório de trabalho deste script, criado sob
-# ${TMPDIR:-/tmp}. Os alvos são apagados depois de conferidos, e o diretório de trabalho, no fim, só com rc 0;
-# a limpeza só apaga caminhos dentro desse diretório.
+# ${TMPDIR:-/tmp} (o TMPDIR recebido não é trocado: os filhos herdam o que quem chama dá). Os alvos são apagados
+# depois de conferidos, e o diretório de trabalho, no fim, só com rc 0; com qualquer outro rc ele fica onde
+# está, com os logs e, se houver, o alvo do passo que falhou. A limpeza só apaga caminhos dentro desse diretório.
+# PYTHONDONTWRITEBYTECODE=1 é exportado para todos os descendentes que herdam o ambiente; os hooks que o gate
+# executa no replay recebem o ambiente montado por _replay_env do hook, que não carrega essa variável.
 set -u
 set -o pipefail
+export PYTHONDONTWRITEBYTECODE=1
 
 HOOK=.claude/hooks/check_harness_config.py
 TEST_PATH=.claude/hooks/tests/test_check_harness_config.py
@@ -87,7 +91,12 @@ LISTA=$(ls -A "$TP/$NEW_DIR" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')
 for fx in $FIXTURES; do
   cmp -s "$ROOT/$NEW_DIR/$fx" "$TP/$NEW_DIR/$fx" || fail "C7: $fx no alvo difere desta árvore"
 done
-if grep -RIl '{{' "$TP/$NEW_DIR" >/dev/null 2>&1; then fail "C7: um .json da pasta nova do alvo contém «{{»"; fi
+RC=0; grep -RIl '{{' "$TP/$NEW_DIR" >/dev/null 2>&1 || RC=$?
+case "$RC" in
+  0) fail "C7: um .json da pasta nova do alvo contém «{{»" ;;
+  1) ;;
+  *) fail "C7: a busca de «{{» na pasta nova do alvo saiu rc=$RC" ;;
+esac
 ok "C7 perna verde: $GATE_TARGET_LINE; os 3 .json iguais byte a byte, nada além deles, nenhum «{{»"
 
 # 3. contrato do /ceo-boot

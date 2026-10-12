@@ -67,7 +67,10 @@ Data: TO-FILL-BY-SIGN
    alvo sai rc 0, os 3 `.json` e o hook ficam iguais byte a byte aos da árvore e o gate do alvo sai rc 0 com a
    linha verde do alvo; e o arquivo de teste do gate sai rc 0 com o resumo «39 passed». As instalações, o
    upgrade e os gates rodam sem `CEO_SOTA_DISABLE`, `CLAUDE_PROJECT_DIR` e `CLAUDE_PROJECT_DIR_NATIVE`, com HOME
-   próprio dentro do diretório de trabalho do envoltório, criado sob o `TMPDIR` que o SIGN dá à bateria.
+   próprio dentro do diretório de trabalho do envoltório, criado sob o `TMPDIR` que o SIGN dá à bateria (o
+   envoltório não troca esse `TMPDIR`). O envoltório exporta `PYTHONDONTWRITEBYTECODE=1` para os descendentes
+   que herdam o ambiente. Com rc 0 ele apaga o diretório de trabalho; com qualquer outro rc, o diretório, se já
+   tiver sido criado, fica dentro desse `TMPDIR`, com os logs e, se houver, o alvo do passo que falhou.
 2. `python3 .claude/scripts/validate_governance_fast.py`.
 3. `python3 -m pytest` sobre `test_check_bash_safety.py`, `test_check_active_hooks_executable.py`,
    `test_check_hook_stdout_schema.py`, `test_build_plugin_idempotency.py` e `test_env_inventory_check.py`, num
@@ -78,6 +81,18 @@ Os outros quatro arquivos que o SIGN anterior deste pacote rodava numa passada d
 `test_check_bash_safety_canonical_matrix.py`, que termina com 3 xfailed; `test_ceo_boot_liveness.py`, com 1
 skipped; e `test_install_sh_placeholders.py`, com teto absoluto de 120 s por instalação) estão no `testpaths` do
 `pytest.ini` e entram nas duas passadas do molde, com a repetição isolada dele.
+
+Duas conferências de saída do SIGN anterior deste pacote passam a ser o rc, por equivalência no código (linhas
+do `598b70e5`; os dois arquivos estão fora do patch):
+
+- `validate_governance_fast.py` (linha 2 acima), antes julgado por rc 0 e última linha «PASS»: o `run` grava
+  `"rc": 1 if errors else 0` (:505), o resumo termina em «PASS» se e só se `result["rc"] == 0` (:534) e o
+  `main` devolve `result["rc"]` (:551). Logo, rc 0 implica a última linha «PASS».
+- `validate-governance.sh` (gate da lista fixa do molde), antes julgado por rc 0 e «Errors:   0» no resumo: o
+  script roda sob `set -euo pipefail` (:2), imprime «  Errors:   $ERRORS» no resumo (:1317), e os seus dois
+  únicos `exit` são o `exit 1` quando `ERRORS` > 0 (:1320-1323) e o `exit 0` do outro ramo (:1327). Logo, rc 0
+  implica o resumo com «Errors:   0». A tolerância do SIGN anterior a um vermelho que já existia sem o patch
+  (comparação do resumo e do multiconjunto dos achados com a árvore sem o patch) saiu: agora só rc 0 passa.
 
 ## Controle vermelho (registro)
 
@@ -118,12 +133,35 @@ executa. O rail deste pacote a reproduz sobre as pré-imagens que o SIGN confere
   com patch-id estável `341f0bafd41be57caeabc091a8ee7af3994a0305`; nenhum dos 8 caminhos mudou entre
   `0a953ece` e `598b70e5`.
 
+## Conferências do SIGN anterior aposentadas, e o que fica no lugar
+
+- Veto a qualquer registro de worktree do clone, inclusive o de um diretório que não existe mais: aposentado. O
+  molde não cria worktree (o SIGN anterior criava os do controle vermelho e da base do validate-governance, que
+  saíram com eles), e o P0 exige que o diretório atual seja a raiz do clone, com `--git-dir` e
+  `--git-common-dir` iguais a `.git`, um diretório próprio. Outros registros em `.git/worktrees` não são
+  conferidos; o requisito de que nenhum processo além do SIGN e dos comandos dele escreva no clone cobre o uso
+  deles durante a execução.
+- Remote com «Canhada-Labs/ceo-orchestration» na URL: aposentado. O P0 do molde exige `HEAD` =
+  `refs/heads/main` = `refs/remotes/origin/main` = `Anchor-SHA` (o SIGN anterior exigia só que o HEAD contivesse
+  `origin/main`); a URL do remote não é conferida, e a publicação é do Owner, pelo roteiro.
+- Sondas de modo e GID dos arquivos modificados e removidos, e da criação da pasta nova: aposentadas. Elas
+  serviam à escrita e ao desfazer pelo próprio SIGN anterior; o molde aplica o patch com `git apply --index`, não
+  desfaz nada e confere que o índice difere do `Anchor-SHA` exatamente nas linhas `index` do patch (caminhos,
+  modos e blobs) e que a árvore tem os bytes e o bit de execução do índice. Permissões além do bit de execução
+  e o GID não são conferidos.
+- Cruzamento do registro do rail com o bloco verbatim do revisor (última linha `VERDICT:` igual a
+  `Rail-Reviewer-Verdict`, `Rail-Round` até 3, `Rail-Findings` com P0=0 P1=0 P2=0 para APPROVE e a seção «## P2
+  declarados» para DECLARED-P2): aposentado. O P0 do molde confere só os três sha256 (patch, este texto com os
+  campos por preencher, dados) e `Rail-Verdict` em APPROVE ou DECLARED-P2; a coerência desse valor com as saídas
+  verbatim das lanes fica com quem preenche o registro e com a conferência de anexo, não com o SIGN.
+
 ## Resíduos declarados (pela forma)
 
 - Condição da última conferência do rail do patch (rx-w7a, P3): o censo AST do teste verifica o guard
   `_refuse_constant` pelo NOME, e uma segunda ligação desse nome no módulo passaria por ele (só os testes de
   comportamento a pegam, e só nas 3 leituras existentes). Follow-up nomeado:
-  `PLAN-183-FOLLOWUP-json-census-call-binding` — um censo que siga a chamada, não o nome (trem da v1.4.4).
+  `PLAN-183-FOLLOWUP-json-census-call-binding` — um censo que siga a chamada, não o nome (trem da v1.4.4). O
+  arquivo desse follow-up ainda não existe em `.claude/plans/`; ele é criado no backlog da v1.4.4.
 - O censo AST cobre as leituras por `json.load`, `json.loads` e `json.JSONDecoder` do módulo; leitura por
   `__import__`, `importlib` ou `sys.modules` fica fora (declarado pelas lanes do rail).
 - Chave duplicada e `1e999` seguem aceitos nas settings e na decisão do hook sob teste, como o `JSON.parse` do
@@ -139,6 +177,14 @@ executa. O rail deste pacote a reproduz sobre as pré-imagens que o SIGN confere
 - Os adopters seguem com o gate vermelho até um CORTE levar este pacote. As pernas permanentes da C9 no
   `test-upgrade-historical-adopter.sh` landam como commit livre antes da rc.1 da 1.4.3; se não landarem, o
   CHANGELOG do corte declara a cura via upgrade NÃO provada.
+- O envoltório exporta `PYTHONDONTWRITEBYTECODE=1`, mas os hooks que o gate executa no replay recebem só o
+  ambiente montado por `_replay_env` do hook (HOME, TMPDIR e GNUPGHOME temporários, sem essa variável): com um
+  `python3` sem `pycache_prefix`, eles podem gravar `__pycache__` sob `.claude/hooks/` do clone (ignorado pelo
+  `.gitignore`; o SIGN confere o índice e os arquivos rastreados, não os ignorados). Medido em 2026-10-11 com o
+  `python3` do macOS (3.9.6, `pycache_prefix` em `$HOME/Library/Caches/com.apple.python`), em duas execuções do
+  envoltório com rc 0 numa cópia com o patch, sob `env -i` com PATH, HOME novo, USER, LOGNAME, SHELL, TERM,
+  LANG, PAGER, PYTHONUSERBASE, `GNUPGHOME` vazio e `TMPDIR` = `<T>/tmp-filhos`: nenhum caminho novo no clone nem
+  no HOME dado, e o `TMPDIR` vazio no fim.
 - O envoltório é julgado só pelo rc (forma 2 do molde): o SIGN não lê o resumo dele, e quem garante que ele
   sai com rc diferente de 0 quando uma conferência falha é o rail deste pacote.
 - O `test_install_sh_placeholders.py` tem teto ABSOLUTO de 120 s por instalação (e o
