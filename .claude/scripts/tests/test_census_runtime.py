@@ -1675,7 +1675,9 @@ class W1aBytecodeIsolationTest(TestEnvContext):
     ``sys.pycache_prefix`` (in process) at a watched temp dir, clears
     ``PYTHONDONTWRITEBYTECODE`` and starts from a cache-free copy, so a
     write lands EITHER in the read tree OR in the prefix — both are
-    snapshotted, on any interpreter. Each test carries a positive control.
+    snapshotted, on any interpreter. The two tests that watch for writes
+    carry a positive control (a raw import of the owner is seen); the
+    structural test checks the FORM and carries only a non-vacuity control.
     """
 
     _snap = staticmethod(W1aAuditIsolationTest._snapshot)

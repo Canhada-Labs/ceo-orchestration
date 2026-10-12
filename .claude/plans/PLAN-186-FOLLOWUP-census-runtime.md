@@ -619,9 +619,12 @@ novo, o oráculo é perguntado pelo caminho escolhido, na wave dela.
   import por caminho também, e todo filho Python sai de `_python_argv`,
   que põe `-B`. Depois da cura: 0 `.pyc` na árvore e no espelho, nos dois
   interpretadores. **Controles:** sete testes novos, todos vermelhos
-  contra o censo de `bdda87c` e verdes depois; cada teste de bytecode
-  tem controle positivo (um import cru do dono, no mesmo ambiente, é
-  visto). Mutantes do próprio instrumento (driver na área de rascunho,
+  contra o censo de `bdda87c` e verdes depois; os dois testes de
+  bytecode que observam escrita têm controle positivo (um import cru do
+  dono, no mesmo ambiente, é visto); o terceiro confere a FORMA (toda
+  função cujo primeiro parâmetro é `root` carrega a guarda) e tem só o
+  controle de não-vácuo (`read_task_route` e `build_table` entre os
+  leitores). Mutantes do próprio instrumento (driver na área de rascunho,
   não versionado): sem o `-B`, sem o embrulho por forma, sem a chamada
   da guarda de forma, com `set` aceito no `in` e com chamada aceita —
   cinco mortos; o sexto, sem a flag ligada no `__main__`, sobrevive por
