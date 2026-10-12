@@ -1181,10 +1181,11 @@ nenhum (§4).
    | unknown-ratio | 0,246 | 0,111 |
    | skills distintas invocadas | 11 | 14 |
    | skills sem nenhuma invocação | 153 | 150 |
-   | cobertura | 16,63 dias | 51,77 dias |
+   | cobertura | 16,63 dias | 51,74 dias |
 
-   A coluna nova vem do baseline gerado (lido às 16:09:20Z); a cobertura, do run padrão do
-   `prune-rule.py` (16:10:05Z). O ratio caiu SEM injetor (não há injetor:
+   A coluna nova vem do baseline gerado (lido às 16:09:20Z), salvo a cobertura, que vem do
+   arquivo commitado `evidence/prune-rule-inputs-2026-10-12.json` (`inputs.window`: eventos até
+   15:37:32Z; o programa trunca, nunca arredonda para cima). O ratio caiu SEM injetor (não há injetor:
    `evidence/query-language-fraction.json`); logo, uma queda medida depois da W1b não prova sozinha
    efeito do injetor. A regra da Fase 2 já é pela meta absoluta (§1, passo 1). No piso de VETO
    (§4.3, :452-457): `code-review-checklist` tem 25 invocações e `security-and-auth` 60 (o texto
@@ -1224,7 +1225,8 @@ nenhum (§4).
 ### A.3 Perguntas abertas ao Owner (citadas, não respondidas)
 
 1. **OQ-2, janela padrão.** Com o padrão de 90 dias a regra devolve `RECUSA` para as 42 skills
-   (`insufficient_sample`, cobertura 51,77 d < 90 d), e os 90 dias só se completam em 2026-11-19.
+   (`insufficient_sample`, cobertura 51,74 d < 90 d em `evidence/prune-rule-inputs-2026-10-12.json`,
+   `runs.AC-0.1`), e os 90 dias só se completam em 2026-11-19.
    Manter os 90 dias, exigir só 100 spawns observados (com a incerteza da janela impressa nos
    inputs) ou fixar outro mínimo de dias? O `prune-rule.py` recebe o número por parâmetro
    (`--min-window-coverage-days`) e não muda com a resposta.
