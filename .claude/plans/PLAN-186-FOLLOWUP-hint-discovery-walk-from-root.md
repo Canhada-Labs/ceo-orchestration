@@ -528,6 +528,10 @@ e do §3 e e tomada ANTES de comecar; um escopo que declare menos reprova nos
 gates de auditoria ou obriga a alargar o Scope no meio da wave, que e
 exatamente o que a cerimonia proibe.
 
+> **Decisão do Owner (2026-10-12): opção (i).** O aviso de busca incompleta
+> vira um campo no evento que já existe (`hint_provenance_recorded`), sem ação
+> nova. Registro completo no «Progress log».
+
 **Truncar tem de ser VISIVEL.** Devolver uma lista parcial calada faz
 `validate_hierarchical_hints` nao conseguir distinguir "acabou" de "estourou
 o orcamento" — hints mais profundos ficariam sem validacao E sem
@@ -808,3 +812,18 @@ passa a ser observavel (acima). O resto fica — nunca levanta, shallow-first.
   comando que decide o bloqueio dominante (iii, status do PLAN-186
   pai). Nenhum AC tocado, nenhuma wave iniciada. Fonte:
   `.claude/plans/PLAN-186/portfolio-review-S348/portfolio-review-S348.md` §2.
+- 2026-10-12 (S363) — **Decisão do Owner (2026-10-12).** Resposta do Owner à
+  pergunta do CEO com seis itens (AskUserQuestion, ~12:50Z): «Aceito as 6
+  (Recommended)». O item deste plano dizia: «hint-discovery: o aviso de busca
+  incompleta vira um campo no evento que já existe (opção i)». Consequências
+  no texto, sem tocar AC nem frontmatter:
+  - a escolha que o §4 manda tomar «ANTES de comecar» está tomada: opção (i),
+    campo ou razão nova no `hint_provenance_recorded`, com o espelho
+    `guardrail_validator.HINT_PROVENANCE_REASONS` e o teste de paridade;
+  - as superfícies CONDICIONAIS do §3 (ADR novo, golden, os pins de contagem
+    de ações da tabela do §4 e o índice de ADRs) só entram com ação nova e,
+    portanto, saem do
+    escopo. O escopo fica nos quatro caminhos incondicionais do §3 mais os
+    sítios do bump do §3-bis, que valem nas duas opções;
+  - o `status` continua `draft`, e o bloqueio (iii) do `external_wait`
+    (PLAN-186 pai em `done`) não muda.

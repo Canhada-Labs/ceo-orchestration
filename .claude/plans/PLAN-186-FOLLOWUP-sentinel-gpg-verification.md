@@ -139,6 +139,31 @@ por REMOCAO. Manter (a) so se paga se o Owner quiser que sentinels possam
 congelar caminhos pessoais sem custo de revisao — o que hoje nunca aconteceu.
 A decisao e do Owner porque muda o contrato entregue ao adopter.
 
+## Decisão do Owner (2026-10-12)
+
+Resposta do Owner à pergunta do CEO com seis itens (AskUserQuestion, S363,
+~12:50Z): «Aceito as 6 (Recommended)». O item deste plano dizia:
+«sentinel-gpg-verification: o Owner NÃO quer a verificação GPG no CI com a
+chave pública (opção a); o plano encerra quando o furo do índice (AC-7)
+entrar, na 1.4.4».
+
+- **Opção (a) recusada.** O AC-1 a AC-5 descrevem a opção (a) e não serão
+  implementados. O `external_wait` do frontmatter («decisão do Owner: instalar
+  `gpg` no runner do CI e shipar a chave pública no repo») fica respondido por
+  esta entrada, e o «se o Owner preferir (a) mesmo assim» do AC-0 também.
+- **O plano encerra quando o AC-7 entrar, na 1.4.4.** O pacote do AC-7 (o
+  pacote D da triagem de planos) está estacionado para redesenho em
+  `refs/s363/plans-d-1.4.4` = `ea9995de`, fora do `main`: o `scan()` tem mais
+  bordas fail-open do que o AC-7 previa. O pacote caiu duas vezes no rail;
+  entre os achados, o symlink rastreado que a RULE 1 lê pelo destino e os
+  nomes não-UTF-8 que colidem na prova de cobertura. O redesenho começa por
+  um censo das bordas. O
+  registro das quedas está no item 11 de
+  `PLAN-194-FOLLOWUP-v1-4-4-backlog.md`.
+- A resposta do Owner não menciona o AC-6 (fronteira índice × worktree); este
+  registro não o decide.
+- O `status` continua `draft`.
+
 ## AC
 
 - [x] **AC-0 — DECIDIDO: (b) REMOVER. Feito e medido no proprio pacote

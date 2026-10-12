@@ -147,3 +147,15 @@ que a divergência que sobrar seja a escolhida, nunca a acidental.
   presença. Pelo PLAN-SCHEMA §1.4 só entra em `executing` quando o PLAN-183
   estiver `done`; se o Owner quiser antecipar, é exceção explícita dele,
   registrada aqui. Nenhum item deste rascunho está implementado.
+
+## Decisão do Owner (2026-10-12)
+
+Resposta do Owner à pergunta do CEO com seis itens (AskUserQuestion, S363,
+~12:50Z): «Aceito as 6 (Recommended)». O item destes dois follow-ups dizia: «os
+2 follow-ups do PLAN-183 (delivery-predicate-unification,
+delivered-gate-default-path-census) ficam para a 1.4.4, sem exceção».
+
+- Este follow-up fica para a 1.4.4. Não há exceção para antecipar: a
+  pergunta do último item de «Fronteiras» está respondida. A regra do
+  PLAN-SCHEMA §1.4 (`executing` só com o PLAN-183 `done`) segue valendo.
+- O `status` continua `draft`.
