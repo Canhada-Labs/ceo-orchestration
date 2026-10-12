@@ -1,5 +1,5 @@
 {
-  "_note": "PLAN-176 W1a — the P (preference) layer: stable alias -> concrete model id. Changes by audited Pull Request, no signature. The T layer is the ceiling: every value must be a member of AVAILABLE_MODELS_WORKING_SET in ADR-149, which .claude/scripts/tests/test_model_preference.py READS (never types). Closed schema: exactly the keys _note, schema and aliases. INERT until the W1b resolver (canonical) lands; no code reads this file today.",
+  "_note": "PLAN-176 W1a — the P (preference) layer: stable alias -> concrete model id. Changes by audited Pull Request, no signature. The T layer is the ceiling: every value must be a member of AVAILABLE_MODELS_WORKING_SET in ADR-149, which .claude/scripts/tests/test_model_preference.py READS (never types). Closed schema: exactly the keys _note, schema and aliases. INERT until the W1b resolver (canonical) lands: today only that test reads this file, and no runtime code uses it to select a model.",
   "aliases": {
     "claude-frontier": "claude-opus-5-5"
   },

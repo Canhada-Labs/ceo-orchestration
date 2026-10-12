@@ -658,8 +658,10 @@ caminhos que as caixas abaixo tocam ou invocam):
 `.claude/scripts/check-model-literals.py`,
 `.claude/scripts/model-literals-grandfather.txt`,
 `.claude/scripts/tests/test_model_preference.py`,
-`.claude/scripts/tests/test_check_model_literals.py`. Nenhum existe em
-HEAD: os cinco são criados aqui.
+`.claude/scripts/tests/test_check_model_literals.py`. Nenhum existia na
+base `818aac5e`: os cinco são criados aqui — `models-preference.json` e
+`test_model_preference.py` pela metade 1 (Progress log de 2026-10-12); os
+três do lint seguem por criar.
 
 - [x] `[P0][US3][.claude/data/models-preference.json]` A camada P existe,
       valida contra o esquema e resolve pelo menos um apelido para um
@@ -1254,9 +1256,16 @@ e o novo falha com `not in §4 ['K-9']`.
   executados: sem o arquivo de dados, 4 falhas; o arquivo com o apelido
   apontado para um identificador fora do conjunto, 3 falhas, a do caso
   principal nomeando `alias-outside-working-set: claude-frontier -> <id>`; e
-  cinco mutantes do validador (sem a checagem de pertença, `match` no lugar de
+  seis mutantes do validador (sem a checagem de pertença, `match` no lugar de
   `fullmatch`, sem a detecção de duplicata, booleano aceito como versão, sem a
-  checagem de sombra), cada um vermelho. A metade 2 (lint de literais, registro de
+  checagem de sombra, `_note` fora das chaves obrigatórias), cada um vermelho.
+  Rodada de correção do rail, no mesmo dia: o leitor carrega no `setUp`,
+  dentro do isolamento, e não fica em `sys.modules`; erro no `setUp` desfaz o
+  isolamento; a cópia do ADR-149 perde o alvo pela estrutura AST do bloco
+  (verde também com o bloco reformatado em aspas simples); o caso 3 passa pelo
+  MESMO caminho do `setUp` (o conjunto digitado à mão deixa o caso 3
+  vermelho). A frase do §W1a «Nenhum existe em HEAD» passa a citar a base
+  `818aac5e` (alteração no lugar, registrada aqui). A metade 2 (lint de literais, registro de
   exceções e o teste do lint) fica para pacote próprio, com o escopo do lint
   fixado antes de construir. `status:` NÃO muda.
   Check: `python3 -m pytest .claude/scripts/tests/test_model_preference.py -q`

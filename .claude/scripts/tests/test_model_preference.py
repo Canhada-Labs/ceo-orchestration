@@ -9,16 +9,23 @@ blocks, fail-closed on ambiguity); it never types a model id, so a working-set
 change (e.g. a new id added by an ADR-149 amendment) needs no edit here.
 
 The closed schema lives HERE until the W1b resolver (canonical) moves it into
-the T registry; the file is inert until then (no code reads it).
+the T registry. Until then the file is inert: this test reads it, but no
+runtime code uses it to select a model.
+
+The reader is loaded in ``setUp``, inside the TestEnvContext isolation, and is
+never registered in ``sys.modules``: importing this module (``--collect-only``
+included) does not execute the detector.
 
 Cases — each with a RED control, so a green run is evidence:
   1. preference_layer_validates_and_resolves_an_alias  (the W1a AC)
   2. alias_outside_working_set_is_a_named_failure
-  3. working_set_is_read_from_adr149_not_typed  (disposable ADR copy)
+  3. working_set_is_read_from_adr149_not_typed  (disposable ADR copy, fed
+     through the SAME path setUp uses)
   4. closed_schema_names_each_violation  (one mutant per rule)
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 import re
@@ -46,22 +53,45 @@ ALIAS_RE = re.compile(r"[a-z0-9][a-z0-9.-]{0,63}")
 
 
 def _load_reader():
-    """Load the W0a detector (hyphenated file) under a private module name."""
-    name = "_p176_w1a_adr149_reader"
-    spec = importlib.util.spec_from_file_location(name, DETECTOR)
+    """Load the W0a detector (hyphenated file) as an UNREGISTERED module."""
+    spec = importlib.util.spec_from_file_location(
+        "_p176_w1a_adr149_reader", DETECTOR)
     mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
     spec.loader.exec_module(mod)
     return mod
 
 
-READER = _load_reader()
+def drop_member(reader, text, block, member):
+    # type: (Any, str, str, str) -> str
+    """ADR text with ``member`` removed from ``block``, located by AST.
 
-
-def trust_sets(adr_path=ADR_149):
-    # type: (Path) -> Dict[str, List[str]]
-    """The two ADR-149 blocks, read (never typed)."""
-    return READER.read_adr_blocks(adr_path)
+    Uses the reader's own grammar (its fence regex and assignment matcher)
+    and rewrites only the literal that holds the elements, so the quote
+    style, comments and trailing commas of the ADR do not matter.
+    Fail-closed: exactly one definition, holding ``member`` exactly once.
+    """
+    found = []
+    for fence in reader._FENCE_RE.finditer(text):
+        try:
+            tree = ast.parse(fence.group(1))
+        except SyntaxError:
+            continue
+        found += [(fence, node.value) for node in tree.body
+                  if reader._assign_target(node) == block]
+    if len(found) != 1:
+        raise AssertionError("%s: %d definitions" % (block, len(found)))
+    fence, literal = found[0]
+    if isinstance(literal, ast.Call):  # frozenset({...})
+        literal = literal.args[0]
+    kept = [e.value for e in literal.elts if e.value != member]
+    if len(kept) != len(literal.elts) - 1:
+        raise AssertionError("%s: %s not exactly once" % (block, member))
+    raw = fence.group(1).encode("utf-8")  # ast offsets count UTF-8 bytes
+    line = [0] + [i + 1 for i, b in enumerate(raw) if b == 0x0A]
+    a = line[literal.lineno - 1] + literal.col_offset
+    z = line[literal.end_lineno - 1] + literal.end_col_offset
+    body = raw[:a] + repr(tuple(kept)).encode("utf-8") + raw[z:]
+    return text[:fence.start(1)] + body.decode("utf-8") + text[fence.end(1):]
 
 
 def violations(text, working_set, trust_ids):
@@ -112,16 +142,27 @@ def violations(text, working_set, trust_ids):
 class _Base(TestEnvContext):
     def setUp(self):
         super().setUp()
-        blocks = trust_sets()
+        try:
+            self.reader = _load_reader()  # inside the isolation, not at import
+            self.veto = self.load_trust(ADR_149)["VETO_FLOOR_ALLOWED"]
+            self.text = PREFERENCE_FILE.read_text(encoding="utf-8")
+            self.doc = json.loads(self.text)  # type: Dict[str, Any]
+        except BaseException:
+            self.tearDown()  # unittest skips tearDown when setUp raises
+            raise
+
+    def load_trust(self, adr_path):
+        # type: (Path) -> Dict[str, List[str]]
+        """The ONE path from an ADR file to the trust sets: read, never typed."""
+        blocks = self.reader.read_adr_blocks(adr_path)
         self.ws = blocks["AVAILABLE_MODELS_WORKING_SET"]
         self.trust = sorted(set(self.ws) | set(blocks["VETO_FLOOR_ALLOWED"]))
-        self.text = PREFERENCE_FILE.read_text(encoding="utf-8")
-        self.doc = json.loads(self.text)  # type: Dict[str, Any]
+        return blocks
 
-    def check(self, doc_or_text, ws=None):
+    def check(self, doc_or_text):
         text = (doc_or_text if isinstance(doc_or_text, str)
                 else json.dumps(doc_or_text))
-        return violations(text, self.ws if ws is None else ws, self.trust)
+        return violations(text, self.ws, self.trust)
 
 
 class TestModelPreferenceLayer(_Base):
@@ -148,25 +189,15 @@ class TestModelPreferenceLayer(_Base):
 
     def test_working_set_is_read_from_adr149_not_typed(self):
         alias, target = sorted(self.doc["aliases"].items())[0]
-        text = ADR_149.read_text(encoding="utf-8")
-        heads = [m.start() for m in re.finditer(
-            r"^AVAILABLE_MODELS_WORKING_SET\b", text, re.M)]
-        self.assertEqual(len(heads), 1, "block definition not unique")
-        start = heads[0]
-        end = text.index("```", start)
-        line_re = re.compile(r'^[ \t]*"%s",[^\n]*\n' % re.escape(target), re.M)
-        block, hits = line_re.subn("", text[start:end])
-        self.assertEqual(hits, 1, "target %s not exactly once in the block"
-                         % target)
         copy = self.project_dir / "ADR-149-copy.md"
-        copy.write_text(text[:start] + block + text[end:], encoding="utf-8")
-        blocks = trust_sets(copy)
-        self.assertNotIn(target, blocks["AVAILABLE_MODELS_WORKING_SET"])
-        self.assertEqual(blocks["VETO_FLOOR_ALLOWED"],
-                         trust_sets()["VETO_FLOOR_ALLOWED"])  # one block only
+        copy.write_text(drop_member(
+            self.reader, ADR_149.read_text(encoding="utf-8"),
+            "AVAILABLE_MODELS_WORKING_SET", target), encoding="utf-8")
+        blocks = self.load_trust(copy)  # the same path setUp takes
+        self.assertNotIn(target, self.ws)
+        self.assertEqual(blocks["VETO_FLOOR_ALLOWED"], self.veto)  # one block
         self.assertIn("alias-outside-working-set: %s -> %s" % (alias, target),
-                      self.check(self.text,
-                                 ws=blocks["AVAILABLE_MODELS_WORKING_SET"]))
+                      self.check(self.text))
 
     def test_closed_schema_names_each_violation(self):
         base = json.loads(self.text)
@@ -189,6 +220,7 @@ class TestModelPreferenceLayer(_Base):
         mutants = [
             ("extra key", with_("ceiling", "VETO_FLOOR_ALLOWED"),
              "unknown-key: ceiling"),
+            ("missing note", without("_note"), "missing-key: _note"),
             ("missing schema", without("schema"), "missing-key: schema"),
             ("missing aliases", without("aliases"), "missing-key: aliases"),
             ("empty note", with_("_note", " "), "note-not-text"),
