@@ -1,0 +1,11 @@
+--- a/.github/workflows/npm-publish.yml	2026-07-13 17:46:43
++++ b/.github/workflows/npm-publish.yml	2026-07-13 17:47:03
+@@ -288,6 +288,8 @@
+         # failed run would re-execute the OIDC tree). Full sequence:
+         # .claude/plans/PLAN-158/oidc-failure-playbook.md
+         run: npm publish --provenance --access public
++        env:
++          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+ 
+       - name: Publish skipped — version already in registry (no-op success)
+         if: steps.already_published.outputs.published == 'true'
