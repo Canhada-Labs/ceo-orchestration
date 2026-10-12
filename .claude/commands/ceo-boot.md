@@ -26,6 +26,7 @@ Single command at session start that consolidates governance reads + state diges
 | `--cached` | Cache-hit path (TTL 1h; key=HEAD+audit-log mtime) | ≤200 ms |
 | `--json` | Machine-readable; stable ordering | preserves above |
 | `--bench` | Run N=5 iterations + report p50/p95 + RSS delta | runs synchronously |
+| `--verbose` | Adds the 11 Tier-A checks (incl. the model-currency advisory, Step 2.5); also in `--json --verbose` | ≤10 s |
 
 ## Procedure
 
@@ -49,6 +50,10 @@ The script uses `ThreadPoolExecutor(max_workers=8)` to dispatch 24 Tier-S checks
 6. **ADRs** — `adrs_stale_proposed`
 
 Each check has a 500 ms hard timeout. Aggregate wall-clock budget is 5 s. Per-check timeout emits `ceo_boot_check_skipped` audit event (CR-MF6 forensic trace).
+
+### Step 2.5 — Model-currency advisory (Tier-A `tier_a_model_currency`, PLAN-176 W3a)
+
+Per ACTIVE vendor lane of `check-model-currency.py`: `instalado` (`.claude/settings.json` `model`) · `fixado` (ADR-149 working set) · `upstream` (`.claude/data/model-currency-upstream-cache.json`, written only by the W0b fetcher), plus the red set against `model-currency-expected-reds.txt`. It READS the cache and never fetches, and it is never red: yellow = an upstream id outside the pinned set, a red set off the expected one, or a malformed/oversize cache. Absent or stale (> 96 h) cache, or an adopter tree without ADR-149, prints «sem dado». The cache is external data: bounded read (64 KiB) and only grammar-valid ids — at most 3 — inside the `«externo, …»` fence; the rest is counted, never echoed. Promotion to the default digest (Tier-S) is an open Owner question.
 
 ### Step 3 — Format digest
 
@@ -124,7 +129,7 @@ Pre-canonical-ceremony, the call is a hasattr-guarded no-op (script works in ado
 
 ## Out-of-scope (deferred to PLAN-067 v1.13.0)
 
-- Tier-A 10 additional checks (`--verbose` stub today)
+- Tier-A promotion into the default digest (`--verbose` runs 11 Tier-A checks today — Step 2.5)
 - Auto-`session-resume` integration (Phase 3-C)
 - Watchdog detector #7 (Sec HARD VETO conditional → PLAN-067 per ADR-103)
 

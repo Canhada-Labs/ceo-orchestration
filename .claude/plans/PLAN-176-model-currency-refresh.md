@@ -875,24 +875,24 @@ pós-round-3, 2026-10-12) e a cerca sobre o conteúdo, no molde da
 `untrusted_feed_is_fenced` da W2a. O `.gitignore` não entra na linha
 `Paths:` acima porque a W3a não o edita: só assere a linha que já existe.
 
-- [ ] `[P0][US6][.claude/scripts/ceo-boot.py]` O `/ceo-boot` mostra, por
+- [x] `[P0][US6][.claude/scripts/ceo-boot.py]` O `/ceo-boot` mostra, por
       raia ativa, o trio {instalado, fixado, upstream} — e **nunca
       bloqueia**.
       Check: `python3 -m pytest .claude/scripts/tests/test_ceo_boot_model_currency.py -q -k shows_triple_per_active_lane`
-- [ ] `[P0][US6][.claude/scripts/ceo-boot.py]` Controle de que é advisory
+- [x] `[P0][US6][.claude/scripts/ceo-boot.py]` Controle de que é advisory
       mesmo: com um upstream falso à frente do valor fixado, o boot
       continua com código de saída 0.
       Check: `python3 -m pytest .claude/scripts/tests/test_ceo_boot_model_currency.py -q -k advisory_never_blocks`
-- [ ] `[P0][US6][.claude/scripts/ceo-boot.py]` **O boot LÊ o cache e
+- [x] `[P0][US6][.claude/scripts/ceo-boot.py]` **O boot LÊ o cache e
       nunca busca.** Com `socket.socket` substituído por uma função que
       levanta, o boot completa; e com o cache ausente a coluna sai «sem
       dado» com a idade, não vazia e não vermelha.
       Check: `python3 -m pytest .claude/scripts/tests/test_ceo_boot_model_currency.py -q -k boot_reads_cache_never_fetches_and_degrades_visibly`
-- [ ] `[P1][US6][.claude/commands/ceo-boot.md]` A superfície de comando
+- [x] `[P1][US6][.claude/commands/ceo-boot.md]` A superfície de comando
       documenta a dimensão nova, para que o que o boot imprime seja
       legível sem ler o código.
       Check: `grep -q 'model-currency' .claude/commands/ceo-boot.md`
-- [ ] `[P0][US6][.claude/scripts/ceo-boot.py]` **Cerca sobre o conteúdo
+- [x] `[P0][US6][.claude/scripts/ceo-boot.py]` **Cerca sobre o conteúdo
       do cache.** O que o boot mostra do cache sai cercado e truncado,
       nunca colado cru: um cache plantado numa árvore descartável com
       carga acima do limite e um texto de instrução embutido produz saída
@@ -1229,6 +1229,22 @@ K-9) antes do §4 real e sem a K-9 no real, o teste anterior PASSA (cego)
 e o novo falha com `not in §4 ['K-9']`.
 
 ## Progress log
+
+- 2026-10-12 (S363, W3a): **advisory de modelos no `/ceo-boot` entregue como
+  check Tier-A (`tier_a_model_currency`, o 11.º)** — padrão recomendado,
+  pergunta 4 aberta (Tier-A × Tier-S fica com o Owner). Por raia ATIVA do
+  detector da W0a, carregado em processo (o `--state --json` não traz o
+  conjunto de trabalho): instalado (`model` do `.claude/settings.json`),
+  fixado (ADR-149) e upstream (cache da W0b, só lido), mais o conjunto
+  vermelho contra o esperado. Nunca vermelho: amarelo = id upstream fora do
+  fixado, vermelhos fora do esperado, ou cache malformado/acima de 64 KiB;
+  cache ausente ou com mais de 96 h, e árvore de adopter sem ADR-149, dão
+  «sem dado». Contrato de leitura para a W0b: `{"lanes": {"<raia>":
+  {"models": [...]}}}`, idade = mtime. Fora da linha `Paths:`, o pacote toca
+  `test_ceo_boot_enhanced.py` (contagens 10→11 e 34→35). Controles
+  VERMELHOS: o teste novo contra o `ceo-boot.py` anterior (5 falhas) e oito
+  mutantes com 1 falha cada. `status:` NÃO muda.
+  Check: `python3 -m pytest .claude/scripts/tests/test_ceo_boot_model_currency.py -q`
 
 - 2026-10-12 (S363, correção da cura): três P2 dos refutadores corrigidos
   (autenticação do conjunto vermelho, analisador do §4 no teste, espera da

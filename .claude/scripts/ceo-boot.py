@@ -1166,7 +1166,7 @@ def check_adrs_stale_proposed() -> Tuple[str, str, Any]:
     return ("yellow" if proposed_old else "green", f"{len(proposed_old)} proposed >30d", proposed_old)
 
 
-# ---- 10 Tier-A checks (--verbose mode; PLAN-065 §4.3.3) ------------------
+# ---- 11 Tier-A checks (--verbose mode; PLAN-065 §4.3.3) ------------------
 # Selection rationale (each picked for high signal-to-cost ratio + non-overlap
 # with Tier-S; see PLAN-065 §4.3.3):
 #   tier_a_debate_transcripts     — debate hygiene (Round-1 archetype output)
@@ -1179,6 +1179,7 @@ def check_adrs_stale_proposed() -> Tuple[str, str, Any]:
 #   tier_a_hook_test_baseline_age — last-cached hook-test baseline age (S81 cache)
 #   tier_a_sentinel_signers_tracked — .claude/state/sentinel-signers.txt git-tracked?
 #   tier_a_gitignore_state_excluded — .gitignore covers state/ dir?
+#   tier_a_model_currency         — PLAN-176 W3a trio per lane (advisory, offline)
 
 
 def check_tier_a_debate_transcripts() -> Tuple[str, str, Any]:
@@ -1431,6 +1432,146 @@ def check_tier_a_gitignore_state_excluded() -> Tuple[str, str, Any]:
     return ("green" if has_state else "yellow",
             f"state/ excluded={has_state}",
             {"covered": has_state})
+
+
+# PLAN-176 W3a — 11th Tier-A check, advisory + offline: per ACTIVE lane of the W0a
+# detector (in-process; `--state --json` has no working set) the trio instalado /
+# fixado (ADR-149) / upstream (W0b cache, READ, never fetched). Never red; failures
+# and adopter trees (no ADR-149) degrade to «sem dado». The cache is EXTERNAL: bounded
+# read, only grammar ids (<= SHOW_MAX) inside «externo, …», the rest only counted.
+# W0b reader contract: {"lanes": {"<lane>": {"models": [ids]}}}; age = file mtime.
+_MC_ADR_REL = (".claude", "adr", "ADR-149-model-id-allowlist.md")
+_MC_DETECTOR_REL = (".claude", "scripts", "check-model-currency.py")
+_MC_EXPECTED_REL = (".claude", "data", "model-currency-expected-reds.txt")
+_MC_CACHE_REL = (".claude", "data", "model-currency-upstream-cache.json")
+MODEL_CURRENCY_CACHE_MAX_BYTES = 64 * 1024
+MODEL_CURRENCY_SHOW_MAX_IDS = 3
+MODEL_CURRENCY_STALE_HOURS = 96  # K-3 of PLAN-176 §4
+_MC_ID_RE = re.compile(r"[a-z0-9]+(?:[.-][a-z0-9]+){0,7}\Z")
+_MC_NO_DATA = {
+    "absent": "sem dado (cache ausente; idade n/d)",
+    "stale": "sem dado (cache com {age} > %d h)" % MODEL_CURRENCY_STALE_HOURS,
+    "oversize": "sem dado (cache acima de %d bytes: leitura truncada, conteúdo "
+                "descartado; idade {age})" % MODEL_CURRENCY_CACHE_MAX_BYTES,
+    "malformed": "sem dado (cache malformado ou sem a raia; idade {age})",
+}
+
+
+def _mc_id_ok(value: Any) -> bool:
+    return isinstance(value, str) and len(value) <= 48 and bool(_MC_ID_RE.match(value))
+
+
+def _mc_lane(det: Any, model_id: str) -> Optional[str]:
+    try:
+        return det.family_of(model_id)[0]
+    except Exception:  # noqa: BLE001 — unmodelled family = no lane
+        return None
+
+
+def _mc_read_upstream(root: Path) -> Dict[str, Any]:
+    import stat as _stat
+    path = root.joinpath(*_MC_CACHE_REL)
+    try:
+        st = os.stat(path)
+    except OSError:
+        return {"state": "absent", "age": "n/d"}
+    age_h = max(0.0, time.time() - st.st_mtime) / 3600.0
+    out: Dict[str, Any] = {"state": "malformed", "age": "%.1f h" % age_h}
+    if age_h > MODEL_CURRENCY_STALE_HOURS:
+        out["state"] = "stale"
+    elif _stat.S_ISREG(st.st_mode):  # a FIFO would block the boot on open()
+        try:
+            with open(path, "rb") as fh:
+                raw = fh.read(MODEL_CURRENCY_CACHE_MAX_BYTES + 1)
+            if len(raw) > MODEL_CURRENCY_CACHE_MAX_BYTES:
+                out["state"] = "oversize"
+            else:
+                lanes = json.loads(raw.decode("utf-8")).get("lanes")
+                if isinstance(lanes, dict):
+                    out.update(state="ok", lanes=lanes)
+        except (OSError, UnicodeDecodeError, ValueError, AttributeError):
+            pass
+    return out
+
+
+def _mc_upstream_cell(det: Any, up: Dict[str, Any], lane: str,
+                      pinned: List[str]) -> Tuple[str, List[str]]:
+    entry = (up.get("lanes") or {}).get(lane)
+    models = entry.get("models") if isinstance(entry, dict) else None
+    if up["state"] != "ok" or not isinstance(models, list):
+        key = up["state"] if up["state"] != "ok" else "malformed"
+        return _MC_NO_DATA[key].format(age=up["age"]), []
+    valid = [m for m in models if _mc_id_ok(m) and _mc_lane(det, m) == lane]
+    unique = list(dict.fromkeys(valid))
+    novel = [m for m in unique if m not in pinned]
+    shown = novel[:MODEL_CURRENCY_SHOW_MAX_IDS]
+    more = " (+%d truncados)" % (len(novel) - len(shown)) if novel[len(shown):] else ""
+    return ("«externo, %s: %d ids; fora do fixado: %s%s; descartados=%d»" % (
+        up["age"], len(unique), ", ".join(shown) or "nenhum", more,
+        len(models) - len(valid))), novel
+
+
+def _mc_trio(root: Path) -> Tuple[str, str, Any]:
+    try:
+        settings = json.loads(root.joinpath(".claude", "settings.json").read_text(
+            encoding="utf-8"))
+    except (OSError, ValueError):
+        settings = {}
+    settings = settings if isinstance(settings, dict) else {}
+    raw = settings.get("model")
+    installed = raw if _mc_id_ok(raw) else None
+    inst = installed or ("sem dado" if raw is None else "valor não reconhecido")
+    det_path = root.joinpath(*_MC_DETECTOR_REL)
+    if not root.joinpath(*_MC_ADR_REL).is_file() or not det_path.is_file():
+        why = ("ADR-149 ausente — árvore de adopter"
+               if not root.joinpath(*_MC_ADR_REL).is_file() else "detector ausente")
+        return "green", "model-currency: sem dado (%s); instalado=%s" % (why, inst), None
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_ceo_boot_mc_detector", str(det_path))
+    det = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(det)  # type: ignore[union-attr]
+    try:
+        report = det.scan(root, det.build_parser().parse_args([]))
+        exp = root.joinpath(*_MC_EXPECTED_REL)
+        drift = (det.compare_reds(report["red_ids"], det.read_expected_reds(exp))
+                 if exp.is_file() else None)
+    except det.DetectorBroke as exc:
+        why = _sanitize_for_recs(str(exc)).replace("|", "/")[:120]
+        return "yellow", "model-currency: sem dado (detector recusou: %s)" % why, None
+    pinned_all = list(report["authorities"]["working_set"])
+    up = _mc_read_upstream(root)
+    cells: List[str] = []
+    lanes: Dict[str, Any] = {}
+    for lane in report["active_lanes"]:
+        pinned = [m for m in pinned_all if _mc_lane(det, m) == lane]
+        mine = installed if installed and _mc_lane(det, installed) == lane else None
+        member = "" if mine is None else (
+            " (instalado ∈ fixado)" if mine in pinned else " (instalado FORA do fixado)")
+        cell, novel = _mc_upstream_cell(det, up, lane, pinned)
+        cells.append("%s: instalado=%s · fixado=%d ids%s · upstream=%s" % (
+            lane, mine or "nenhum nesta raia", len(pinned), member, cell))
+        lanes[lane] = {"installed": mine, "novel": novel[:MODEL_CURRENCY_SHOW_MAX_IDS]}
+    n_red = len(report["red_ids"])
+    reds = ("vermelhos=%d (sem conjunto esperado)" % n_red if drift is None else
+            "vermelhos=%d (fora do esperado: +%d/-%d)" % (n_red, len(drift[0]), len(drift[1]))
+            if drift[0] or drift[1] else "vermelhos=%d (= esperado)" % n_red)
+    summary = "model-currency: %s · availableModels %s · %s" % (
+        " ; ".join(cells), "= fixado" if settings.get("availableModels") == pinned_all
+        else "≠ fixado", reds)
+    detail = {"lanes": lanes, "upstream": up["state"]}
+    if (any(v["novel"] for v in lanes.values()) or up["state"] in ("oversize", "malformed")
+            or (drift is not None and (drift[0] or drift[1]))):
+        return "yellow", summary, detail
+    return "green", summary, detail
+
+
+def check_tier_a_model_currency() -> Tuple[str, str, Any]:
+    """PLAN-176 W3a advisory — never red, never raises (see block comment)."""
+    try:
+        return _mc_trio(REPO_ROOT)
+    except Exception as exc:  # noqa: BLE001 — advisory floor: degrade, never break
+        return "yellow", "model-currency: sem dado (advisory falhou: %s)" % (
+            type(exc).__name__), None
 
 
 # ---- Registry --------------------------------------------------------------
@@ -3100,9 +3241,10 @@ TIER_A_CHECKS: List[Tuple[str, Callable[[], Tuple[str, str, Any]]]] = [
     ("tier_a_hook_test_baseline_age", check_tier_a_hook_test_baseline_age),
     ("tier_a_sentinel_signers_tracked", check_tier_a_sentinel_signers_tracked),
     ("tier_a_gitignore_state_excluded", check_tier_a_gitignore_state_excluded),
+    ("tier_a_model_currency", check_tier_a_model_currency),  # PLAN-176 W3a
 ]
 
-assert len(TIER_A_CHECKS) == 10, f"Expected 10 Tier-A checks, got {len(TIER_A_CHECKS)}"
+assert len(TIER_A_CHECKS) == 11, f"Expected 11 Tier-A checks, got {len(TIER_A_CHECKS)}"
 
 
 # Verbose-mode aggregate budget: extends Tier-S 5s window to 10s when
@@ -4915,7 +5057,7 @@ def main(argv: List[str]) -> int:
     parser.add_argument("--bench-n", type=int, default=5, help="bench N runs (default 5)")
     parser.add_argument("--bench-json", action="store_true", help="emit bench report as JSON instead of markdown")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON digest")
-    parser.add_argument("--verbose", action="store_true", help="include 10 Tier-A checks (~10s budget)")
+    parser.add_argument("--verbose", action="store_true", help="include 11 Tier-A checks (~10s budget)")
     args = parser.parse_args(argv)
 
     # Codex S82 P1 fix: --short defaults to cached path per spec
