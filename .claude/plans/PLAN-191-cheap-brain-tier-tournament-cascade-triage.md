@@ -4,8 +4,8 @@ title: "Cérebro barato — torneio de tiers, cascata com verificador e triagem;
 status: executing
 executing_at: 2026-10-12
 executing_by: "CEO (S363), self-gate de PLAN-SCHEMA §4 no primeiro commit de trabalho (W0-pre)"
-last_commit_sha: 3a833b846a23
-related_commits: [3a833b846a23]
+last_commit_sha: 2c3e0707e8fb
+related_commits: [3a833b846a23, 2c3e0707e8fb]
 reviewed_at: 2026-10-01
 reviewed_by: "Owner - Q13 alínea (d), aceite em bloco das recomendações no chat da S361 (2026-10-01): passa a revisado; a pré-condição t09 vira item livre (W0-pre); o torneio roda numa noite própria, fora do trabalho longo"
 created: 2026-09-18
@@ -322,11 +322,11 @@ da Q13-d):**
   (W0.b financiado desde já; adendos do PLAN-172 e do PLAN-189 atualizados); a pré-condição `t09`
   virou o item livre W0-pre; o torneio fica para uma noite própria, fora do trabalho longo da S361.
   Nenhuma wave iniciada.
-- 2026-10-12 (S363): W0-pre fechado em `3a833b846a23` — os quatro verificadores fracos (t04, t05, t07,
-  t09) consertados, com controle vermelho e mutante; resultado por tarefa em
-  `PLAN-191/w0/w0-pre-minimal-response-S363.md`; correções de fato no apêndice abaixo.
-  `status: reviewed → executing` (self-gate do CEO, PLAN-SCHEMA §4). Próximo: `PLAN-191/PREREG.md`;
-  a data da noite do W0 é do Owner.
+- 2026-10-12 (S363): W0-pre fechado em `3a833b846a23` (+ rodada de refutação, `2c3e0707e8fb`) — os
+  quatro verificadores fracos (t04, t05, t07, t09) consertados, com controle vermelho e mutante;
+  resultado por tarefa em `PLAN-191/w0/w0-pre-minimal-response-S363.md`; correções de fato no
+  apêndice abaixo. `status: reviewed → executing` (self-gate do CEO, PLAN-SCHEMA §4). Próximo:
+  `PLAN-191/PREREG.md`; a data da noite do W0 é do Owner.
 
 ## Apêndice — correções de fato (2026-10-12, S363)
 
