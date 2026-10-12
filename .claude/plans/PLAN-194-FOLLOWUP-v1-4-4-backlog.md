@@ -83,7 +83,7 @@ destino recíproco escrito no plano que o recebe.
 - **Evidência:** ref `refs/s363/w62-1.4.4` = `adc927c7` (materiais no molde antigo; patch de código
   `.claude/plans/PLAN-194/w62/w62.patch`, 22 linhas, só esses dois valores). O rail dos materiais
   (rodada 4, Codex) deu NO-GO com 2 P1 de afirmação falsa reproduzida; a lane B de Claude deu GWC com 5 P3.
-  As 5 curas pedidas: P1-1 publicação por `update-ref` direto sem 2 fases («NADA publicado» depois de
+  As 5 curas pedidas (os 2 P1 e os 3 P2 vieram da mesma rodada 4 do Codex): P1-1 publicação por `update-ref` direto sem 2 fases («NADA publicado» depois de
   SIGKILL pós-`update-ref`); P1-2 a recusa altera estado (`git status` regrava o `.git/index`;
   `FETCH_HEAD` e temporários nascem antes da detecção); P2-1 `core.fsmonitor` com valor vazio passa como
   ausente; P2-2 TERM depois do CAS sai 143 em vez de 3; P2-3 o censo de palavras proibidas não pega
@@ -119,7 +119,7 @@ destino recíproco escrito no plano que o recebe.
   carrega os `CLAUDE.md` dos diretórios entre o cwd e o arquivo. Contratos velhos de pacotes encenados em
   `.claude/plans/**/staged*/` (até ~37 KB) entram no contexto. Achado de segurança junto: um
   `settings.local.json` com `claudeMdExcludes: ["**/CLAUDE.md"]` remove o `CLAUDE.md` raiz sem aviso, e
-  `FORBIDDEN_KEYS` (`.claude/hooks/_lib/effective_config.py:135`) não cobre a chave (0 ocorrências).
+  `FORBIDDEN_KEYS` (`.claude/hooks/_lib/effective_config.py:135`) não cobre a chave (0 ocorrências no código dos hooks; a única do repositório é uma nota de observação em `.claude/scripts/substrate-watch.json:33`).
 - **Evidência:** ref `refs/s363/r4-1.4.4` = `4ffb7574` (`settings.json` +4, teste novo de 549 linhas).
   Rodada 3 (final), Codex: NO-GO por 2 P2 de afirmação falsa (o censo pode omitir uma regra da raiz; «so
   a wider pattern fails» é falsa). Duas rodadas seguidas da classe «glob não ancora a raiz» (um checkout
