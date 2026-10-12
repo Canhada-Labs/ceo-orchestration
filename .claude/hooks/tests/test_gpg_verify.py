@@ -86,7 +86,11 @@ class TestNormaliseFpr(unittest.TestCase):
 class TestLoadAllowlist(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
-        self.tmpdir = Path(self._tmp.name)
+        # S363: caminho REAL. Sem TMPDIR (ex.: sob `env -i`, como no SIGN do W4) o
+        # tempfile cai em /tmp, que no macOS é symlink para /private/tmp; o
+        # load_allowlist recusa pai com symlink e test_path_is_directory dava
+        # allowlist_symlink_rejected em vez de allowlist_not_file.
+        self.tmpdir = Path(os.path.realpath(self._tmp.name))
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
