@@ -30,7 +30,7 @@ Este texto é assinado pelo arquivo citado em `Molde:`, que executa o núcleo `.
 - o bash começa com o ambiente montado por `env -i`: sem `BASH_ENV`, sem `ENV` e sem função importada;
 - nenhum processo além do SIGN e dos comandos que ele inicia escreve no clone nem no diretório temporário durante a execução;
 - a configuração efetiva do git no clone, no início, não define programa que o git execute além do que o SIGN confere acima;
-- a configuração que o `gpg` e o `gpg-agent` leem do `GNUPGHOME`, e a do sistema que o `git` lê, não os manda gravar arquivo no clone nem no diretório temporário; o SIGN não confere essas configurações, porque a máquina, a conta e a configuração do Owner estão dentro da fronteira de confiança do roteiro;
+- a configuração que o `gpg` e o `gpg-agent` leem do `GNUPGHOME`, e a que o `git` lê fora do clone, não os manda gravar arquivo no clone nem no diretório temporário; o SIGN não confere essas configurações, porque a máquina, a conta e a configuração do Owner estão dentro da fronteira de confiança do roteiro;
 - `/tmp` gravável; no PATH, `git`, `gpg`, `bash` e `python3`;
 - nada troca, durante a execução, o que o `git` e o `gpg` carregam ou executam (bibliotecas, o programa para o qual um executável delega, o gpg-agent e o pinentry): o SIGN confere só o sha256 dos dois executáveis;
 - no modo real, a chave do allowlist utilizável pelo gpg, com pinentry no terminal, o gpg-agent iniciado sem a senha em cache e a senha não guardada no chaveiro do sistema;
