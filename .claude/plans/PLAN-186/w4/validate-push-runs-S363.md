@@ -32,9 +32,13 @@
 | 38144760679 | `95ba98c4` | 2026-10-11 13:50:14 | 13:58:00 | 7m46s | self-hosted `canhada-ci` |
 
 **A troca de classe.** `runs-on` do `validate.yml` passou a ser condicionado por
-`vars.VM_CI_ENABLED` no `push`/`schedule`/`workflow_dispatch` do `main` (commit
-`29e9e2a`, 2026-10-09): com a variável em `1`, os jobs vão para
-`["self-hosted","Linux","X64","canhada-ci"]`; sem ela, para `ubuntu-latest`. O último
+`vars.VM_CI_ENABLED` no `push`/`schedule`/`workflow_dispatch` do `main` pelos commits
+`29e9e2a` (2026-10-09 22:39Z) e `fc4bf83` (2026-10-11 01:03Z), que chegaram ao `main`
+pelos merges `d7309efa` (2026-10-11 00:37Z) e `e2119681` (2026-10-11 01:44Z). No arquivo
+em `c76b61c1`: com a variável em `1`, os jobs de `push` vão para
+`["self-hosted","Linux","X64","canhada-ci"]`; sem ela, para `ubuntu-latest` (a perna 3.9
+da matriz, para `ubuntu-24.04`). No `29e9e2a` o fallback ainda era `Ceo` em 5 dos 7
+`runs-on`; o `fc4bf83` trocou esses 5 por `ubuntu-latest`. O último
 run de `push` em `Ceo` é `38052044220` (2026-10-10 12:27Z). O primeiro em
 `canhada-ci` é `38099038933` (2026-10-11 01:00Z). Nos 3 runs detalhados em §3, os 9 jobs
 reportam `runner_group_name` = `vm-trusted-ci`.
@@ -49,9 +53,14 @@ reportam `runner_group_name` = `vm-trusted-ci`.
 | 37924183139 | `6710a9d5` | 2026-10-09 11:30:45 | 14m16s |
 | 37916505685 | `6e5fafe4` | 2026-10-09 10:15:44 | 16m09s |
 
-1/5 ≤ 14 min antes da troca; 6/6 depois. O `validate.yml` também mudou entre as duas
-séries (`c54934d8`, `29e9e2a`, `fc4bf83`), logo a amostra não separa o efeito do
-runner do efeito do conteúdo.
+1/5 ≤ 14 min antes da troca; 6/6 depois. Entre `6e5fafe4` e `c76b61c1`, os únicos
+commits que tocam o `validate.yml` são `29e9e2a` e `fc4bf83`, e os dois mudam só
+`runs-on` (e comentários), isto é, a própria troca de runner; o `c54934d8` é ancestral de
+`6e5fafe4` e está nas duas séries. O que o Validate testa e lê mudou no mesmo intervalo:
+`git diff --shortstat 6e5fafe4 c76b61c1 -- . ':(exclude).github'` = 55 arquivos
+(+15.466/−145): 46 em `.claude/plans/`, 6 em `.claude/scripts/` (2 deles testes), 1 teste
+em `.claude/hooks/tests/` e 2 docs. Logo a amostra não separa o efeito do runner do efeito do
+conteúdo testado.
 
 ## 2. AC-6, metade Smoke — 6 runs verdes de `push` (≤ 45 min: 0/6)
 
