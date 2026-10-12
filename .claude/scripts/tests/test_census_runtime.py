@@ -1479,5 +1479,185 @@ class W1aAuditIsolationTest(TestEnvContext):
         self.assertNotEqual(before, self._snapshot(watched))
 
 
+#: The devops guard + route head inside ``_agents_for`` (anchor for the
+#: same-line hash-lookup plants of the W1a correction round).
+_TR_DEVOPS_HEAD = (
+    '    if workflow_change == "release" or workflow_change == "ci":\n'
+    "        agents.append({\n"
+    '            "archetype": "DevOps & Platform Engineer",\n'
+    '            "role": "devops",\n'
+    '            "skill": "devops-ci-cd",\n'
+    '            "model": "claude-opus-4-8",\n'
+)
+_TR_DEVOPS_DICT_GET = (
+    '    _devops_model = {"release": "claude-opus-4-8", "ci": "claude-opus-4-8"}\n'
+    "    if workflow_change is not None:\n"
+    "        agents.append({\n"
+    '            "archetype": "DevOps & Platform Engineer",\n'
+    '            "role": "devops",\n'
+    '            "skill": "devops-ci-cd",\n'
+    '            "model": _devops_model.get(workflow_change, "claude-sonnet-4-6"),\n'
+)
+_TR_DEVOPS_SET_IFEXP = (
+    "    if workflow_change is not None:\n"
+    "        agents.append({\n"
+    '            "archetype": "DevOps & Platform Engineer",\n'
+    '            "role": "devops",\n'
+    '            "skill": "devops-ci-cd",\n'
+    '            "model": "claude-opus-4-8" if workflow_change in {"release", "ci"}'
+    ' else "claude-sonnet-4-6",\n'
+)
+
+#: One function per form. ``ok_*`` use only the forms the probe harvests;
+#: every ``bad_*`` is a form it does not, and must be refused BY FORM.
+_FORM_TABLE_SRC = '''
+from typing import Optional
+
+TABLE = {"a": 1}
+SENTINEL = object()
+
+
+def ok_harvested(p: str, q: Optional[str], b: bool):
+    if p == "a" or q != "b" or "c" == p:
+        return 1
+    if p in ("a", "b") and q not in ["c"]:
+        return 2
+    if q is None or q is not None:
+        return 3
+    if q and not q:
+        return 4
+    x = 5 if q else 6
+    return [b, x, [1 for _ in range(1) if q]]
+
+
+def bad_method(p: str):
+    return p.startswith("a")
+
+
+def bad_dict_get(p: str):
+    return {"a": 1}.get(p, 0)
+
+
+def bad_subscript(p: str):
+    return TABLE[p]
+
+
+def bad_in_set(p: str):
+    return 1 if p in {"a", "b"} else 2
+
+
+def bad_in_name(p: str):
+    return 1 if p in TABLE else 2
+
+
+def bad_substring(p: str):
+    return "a" in p
+
+
+def bad_is_other(p: str):
+    return p is SENTINEL
+
+
+def bad_truth_on_str(p: str):
+    return 1 if p else 2
+
+
+def bad_value_through_or(q: Optional[str]):
+    x = q or "default"
+    return x
+
+
+def bad_rebind(p: str):
+    p = "x"
+    return p
+
+
+def bad_call_argument(p: str):
+    return len(p)
+
+
+def bad_fstring(p: str):
+    return f"{p}"
+
+
+def bad_chained(p: str):
+    return "a" == p == "b"
+
+
+def bad_reflection(p: str):
+    return locals()
+'''
+
+
+class W1aFormGuardTest(TestEnvContext):
+    """Refuter P2 (correction round): a same-line hash lookup is refused."""
+
+    def test_red_control_dict_get_on_the_route_line_is_refused(self):
+        """The refuter's repro: the route vanished at rc 0 before the cure."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(root, _TASK_ROUTE_REL, _TR_DEVOPS_HEAD, _TR_DEVOPS_DICT_GET)
+            census = _load_census()
+            owner = census._import_task_route(str(root))
+            # Independent oracle: the mutated owner STILL routes devops to
+            # Opus for release/ci — the route the census must not lose.
+            for wf in ("release", "ci"):
+                got = [(a["role"], a["model"]) for a in owner._agents_for("M", None, wf, False)]
+                self.assertIn(("devops", "claude-opus-4-8"), got)
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("task_route_form_unprobeable", proc.stderr)
+            self.assertNotIn("Traceback", proc.stderr)
+
+    def test_red_control_set_membership_in_a_conditional_on_the_route_line(self):
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(root, _TASK_ROUTE_REL, _TR_DEVOPS_HEAD, _TR_DEVOPS_SET_IFEXP)
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("task_route_form_unprobeable", proc.stderr)
+
+    def test_form_table_accepts_only_harvested_forms(self):
+        census = _load_census()
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "census_form_table.py"
+            path.write_text(_FORM_TABLE_SRC, encoding="utf-8")
+            saved = sys.dont_write_bytecode
+            sys.dont_write_bytecode = True
+            try:
+                spec = importlib.util.spec_from_file_location("_census_form_table", str(path))
+                table = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(table)
+            finally:
+                sys.dont_write_bytecode = saved
+            census._assert_probe_forms(table.ok_harvested)
+            refused = sorted(n for n in vars(table) if n.startswith("bad_"))
+            self.assertEqual(len(refused), 14)
+            for name in refused:
+                with self.assertRaises(census.Red, msg=name) as ctx:
+                    census._assert_probe_forms(getattr(table, name))
+                self.assertEqual(ctx.exception.name, "task_route_form_unprobeable", name)
+
+    def test_red_control_duplicate_def_is_refused(self):
+        census = _load_census()
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "census_dup_def.py"
+            path.write_text(
+                "def f(p: str):\n    return p == 'a'\n\n\ndef f(p: str):\n    return p == 'b'\n",
+                encoding="utf-8",
+            )
+            saved = sys.dont_write_bytecode
+            sys.dont_write_bytecode = True
+            try:
+                spec = importlib.util.spec_from_file_location("_census_dup_def", str(path))
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+            finally:
+                sys.dont_write_bytecode = saved
+            with self.assertRaises(census.Red) as ctx:
+                census._assert_probe_forms(mod.f)
+            self.assertEqual(ctx.exception.name, "task_route_form_unprobeable")
+
+
 if __name__ == "__main__":
     unittest.main()

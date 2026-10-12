@@ -185,16 +185,31 @@ W1a — DONOS REABERTOS, e como cada um e PERGUNTADO.
     tem de ter TODAS as suas linhas executaveis rodadas (menos a do
     ``def``: a partir do 3.11 o ``RESUME`` dela roda antes do
     rastreador); linha
-    nao alcancada e ``task_route_branch_unreached`` — ramo guardado por
-    forma que a sonda nao colhe (``startswith``, regex, ``set``/``dict``
-    por hash, ``is``) e RECUSADO, nunca some.
+    nao alcancada e ``task_route_branch_unreached``. Essa guarda so
+    RECUSA um ramo que ocupa LINHA PROPRIA: guardado por forma que a sonda
+    nao colhe e escrito na MESMA linha da rota (``{...}.get(p, B)``,
+    ``A if p in {...} else B``), o ramo roda a linha inteira e a rota
+    sumiria com rc 0 (achado P2 do refutador, rodada de correcao da W1a,
+    medido em copia descartavel). Por isso ha uma SEGUNDA guarda, de
+    FORMA (``_assert_probe_forms``), sobre o ``def`` de ``_agents_for``:
+    todo uso de um parametro de TEXTO sondado tem de estar na lista
+    FECHADA de formas colhidas — ``==``/``!=``, ``in``/``not in`` sobre
+    tupla ou lista LITERAL, ``is``/``is not None``, e verdade so quando o
+    dominio traz ``None`` —; qualquer outro uso (metodo como
+    ``startswith``, regex, subscrito, ``dict.get``, ``in`` sobre
+    ``set``/``dict``/nome, ``is`` contra outro valor, argumento de
+    chamada, valor que escoa por ``and``/``or``, reatribuicao) e
+    ``task_route_form_unprobeable``, em qualquer linha.
     FORA da cobertura, por construcao: (vii) alternativas na MESMA linha
-    (expressao condicional, ``and``/``or``) cujo ramo nenhum valor
-    colhido alcanca — cobertura por LINHA nao as distingue; (viii)
-    codigo FORA do arquivo dono (um auxiliar em ``_lib``) — so as funcoes
-    de ``task-route.py`` entram na exigencia. Por isso a coluna
-    «cobertura» desta linha e ``COVERAGE_PROBED``, nunca «resposta do
-    dono».
+    guardadas por algo que NAO e parametro sondado (estado de modulo,
+    ambiente, resultado de chamada) — nem a LINHA nem a FORMA as
+    distinguem; (viii) codigo FORA do arquivo dono (um auxiliar em
+    ``_lib``) e funcoes do arquivo dono que nao sao ``_agents_for`` — a
+    guarda de forma so le o ``def`` sondado, e a de linha so as funcoes de
+    ``task-route.py``; (ix) leitura dos parametros por reflexao do quadro
+    (``sys._getframe``, ``inspect``) — so ``locals``/``vars``/``eval``/
+    ``exec`` sao recusados por nome. Por isso a coluna «cobertura» desta
+    linha e ``COVERAGE_PROBED``, nunca «resposta do dono».
     ERRATA r6: o ``VETO_HARDCODE`` que ``task-route.py`` importa e o
     HOMONIMO de ``_lib.tier_policy._constants`` (papel -> ``frozenset``
     de task_type), conferido por import no teste; ele NAO e leitor da
@@ -322,13 +337,14 @@ COVERAGE_NONEXHAUSTIVE = (
     "bracos na MESMA linha e alcancabilidade do bloco FORA — r6)"
 )
 #: ``task-route.py``: o dono RESPONDE, mas sob sondas — o dominio e
-#: colhido em runtime e a cobertura por LINHA e fail-CLOSED; o que a
-#: cobertura por linha nao enxerga esta DITO no rotulo (itens (vii) e
-#: (viii) do docstring de modulo).
+#: colhido em runtime e as coberturas por LINHA e por FORMA sao
+#: fail-CLOSED; o que nenhuma das duas enxerga esta DITO no rotulo (itens
+#: (vii), (viii) e (ix) do docstring de modulo).
 COVERAGE_PROBED = (
     "RESPOSTA DO DONO SOB SONDA (dominio colhido em runtime; cobertura "
-    "de LINHA fail-closed; alternativas na MESMA linha e codigo fora do "
-    "arquivo dono FORA)"
+    "de LINHA e de FORMA fail-closed; ramo na MESMA linha guardado por "
+    "algo que nao e parametro, codigo fora do arquivo dono e reflexao do "
+    "quadro FORA)"
 )
 
 #: Marca de cobertura DECLARADA por superficie. Uma linha que publique
@@ -1284,8 +1300,10 @@ class _EqProbe(str):
     caminho «nenhum literal casou», e o dono, ao comparar, ENTREGA o
     literal. O ``in`` sobre tupla ou lista compara por ``==`` e tambem
     entrega. Formas que nao passam por ``==``/``!=`` (``startswith``,
-    regex, ``set``/``dict`` por hash, ``is``) nao entregam nada — e e a
-    guarda de cobertura que as RECUSA, nao esta sonda.
+    regex, ``set``/``dict`` por hash, ``is``) nao entregam nada — e sao
+    as guardas que as RECUSAM, nao esta sonda: a de LINHA quando o ramo
+    ocupa linha propria, a de FORMA (``_assert_probe_forms``) em qualquer
+    linha, inclusive na MESMA linha da rota.
     """
 
     def __new__(cls, seen: Set[str]) -> "_EqProbe":
@@ -1393,15 +1411,159 @@ def _probe_domain(fn: Any) -> List[Tuple[str, List[Any]]]:
     return [(n, list(d)) for n, d, _h in params]
 
 
+#: Nomes cuja simples MENCAO no dono e recusada: leem os parametros pelo
+#: quadro, sem passar por um ``Name`` que a guarda de forma enxergue.
+_FRAME_REFLECTION_NAMES = frozenset(("locals", "vars", "eval", "exec"))
+
+
+def _text_params(fn: Any) -> Dict[str, bool]:
+    """Parametros de TEXTO sondados -> o dominio tem valor FALSO (``None``)?
+
+    Mesma fonte que ``_probe_domain``: a anotacao do dono. ``bool`` fica
+    de fora — o dominio dele e enumerado por inteiro, qualquer uso e coberto.
+    """
+    hints = typing.get_type_hints(fn)
+    out = {}  # type: Dict[str, bool]
+    for name in inspect.signature(fn).parameters:
+        hint = hints.get(name)
+        if hint is str:
+            out[name] = False
+        elif hint == Optional[str]:
+            out[name] = True
+    return out
+
+
+def _owner_function_node(fn: Any) -> Any:
+    """O ``def`` do dono no arquivo dele — o MESMO objeto que a sonda rodou."""
+    path = fn.__code__.co_filename
+    try:
+        with open(path, encoding="utf-8") as fh:
+            tree = ast.parse(fh.read(), filename=path)
+    except (OSError, SyntaxError, ValueError) as exc:
+        raise Red("task_route_form_unprobeable", "fonte do dono ilegivel: {0}".format(exc))
+    found = [
+        n for n in tree.body
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == fn.__name__
+    ]
+    if len(found) != 1:
+        raise Red(
+            "task_route_form_unprobeable",
+            "{0} definida {1} vez(es) no topo de {2}; a guarda de forma nao sabe "
+            "qual rodou — recusado".format(fn.__name__, len(found), os.path.basename(path)),
+        )
+    node = found[0]
+    first = min([node.lineno] + [d.lineno for d in node.decorator_list])
+    if first != fn.__code__.co_firstlineno:
+        raise Red(
+            "task_route_form_unprobeable",
+            "o {0} que rodou (linha {1}) nao e o def do topo (linha {2})".format(
+                fn.__name__, fn.__code__.co_firstlineno, first
+            ),
+        )
+    return node
+
+
+def _in_truth_position(name: Any, parents: Dict[Any, Any]) -> bool:
+    """O valor de ``name`` so e usado como VERDADE (``if``/``not``/...)?"""
+    child = name
+    parent = parents.get(child)
+    while True:
+        if isinstance(parent, ast.UnaryOp) and isinstance(parent.op, ast.Not):
+            return True
+        if isinstance(parent, (ast.If, ast.While, ast.IfExp, ast.Assert)) and parent.test is child:
+            return True
+        if isinstance(parent, ast.comprehension) and any(c is child for c in parent.ifs):
+            return True
+        if isinstance(parent, ast.BoolOp):
+            # ``and``/``or`` devolvem um OPERANDO: so contam como verdade se
+            # a propria expressao estiver em posicao de verdade.
+            child = parent
+            parent = parents.get(child)
+            continue
+        return False
+
+
+def _harvested_use(name: Any, parents: Dict[Any, Any], falsy_in_domain: bool) -> bool:
+    """O uso de ``name`` esta na lista FECHADA de formas que a sonda colhe?"""
+    parent = parents.get(name)
+    if isinstance(parent, ast.Compare) and len(parent.ops) == 1:
+        op = parent.ops[0]
+        other = parent.comparators[0] if parent.left is name else parent.left
+        if isinstance(op, (ast.Eq, ast.NotEq)):
+            return True
+        if isinstance(op, (ast.In, ast.NotIn)):
+            # ``in`` sobre tupla/lista LITERAL compara por ``==``; sobre
+            # ``set``/``dict``/nome compara por hash ou por tipo desconhecido.
+            return parent.left is name and isinstance(parent.comparators[0], (ast.Tuple, ast.List))
+        if isinstance(op, (ast.Is, ast.IsNot)):
+            return isinstance(other, ast.Constant) and other.value is None
+        return False
+    # Verdade so e coberta quando o dominio tem os DOIS lados (None e texto).
+    return falsy_in_domain and _in_truth_position(name, parents)
+
+
+def _assert_probe_forms(fn: Any) -> None:
+    """Guarda de FORMA, fail-CLOSED, sobre o corpo do dono sondado.
+
+    A cobertura por LINHA nao distingue duas alternativas na MESMA linha:
+    ``{"release": A}.get(p, B)`` roda a linha inteira com a sonda e a rota
+    A some com rc 0 (achado P2 do refutador, medido em copia descartavel).
+    Aqui todo uso de um parametro de TEXTO sondado tem de estar na lista
+    FECHADA de formas que a sonda colhe — ``==``/``!=``, ``in``/``not in``
+    sobre tupla ou lista LITERAL, ``is``/``is not None``, e verdade
+    (``if p``, ``not p``, ``and``/``or`` em posicao de verdade) so quando
+    o dominio traz ``None``. Qualquer outro uso — metodo (``startswith``,
+    ``lower``), subscrito, ``dict.get``, ``in`` sobre ``set``/``dict``/nome,
+    ``is`` contra outro valor, argumento de chamada, f-string, valor que
+    escoa por ``and``/``or``, reatribuicao — e
+    ``task_route_form_unprobeable``. A lista e de formas ACEITAS, nao de
+    formas proibidas: forma nova nasce recusada. Mencionar ``locals``,
+    ``vars``, ``eval`` ou ``exec`` no dono tambem e recusado.
+    """
+    text = _text_params(fn)
+    node = _owner_function_node(fn)
+    parents = {}  # type: Dict[Any, Any]
+    for parent in ast.walk(node):
+        for child in ast.iter_child_nodes(parent):
+            parents[child] = parent
+    for sub in ast.walk(node):
+        if not isinstance(sub, ast.Name):
+            continue
+        where = "{0} (task-route.py) linha {1}".format(fn.__name__, getattr(sub, "lineno", "?"))
+        if sub.id in _FRAME_REFLECTION_NAMES:
+            raise Red(
+                "task_route_form_unprobeable",
+                "{0}: {1!r} le os parametros pelo quadro — a sonda nao colhe; "
+                "recusado".format(where, sub.id),
+            )
+        if sub.id not in text:
+            continue
+        if not isinstance(sub.ctx, ast.Load):
+            raise Red(
+                "task_route_form_unprobeable",
+                "{0}: o parametro sondado {1!r} e REATRIBUIDO — recusado".format(where, sub.id),
+            )
+        if not _harvested_use(sub, parents, text[sub.id]):
+            raise Red(
+                "task_route_form_unprobeable",
+                "{0}: uso de {1!r} em {2} — forma que a sonda nao colhe; um ramo "
+                "na MESMA linha sumiria com rc 0; recusado, nunca omitido".format(
+                    where, sub.id, type(parents.get(sub)).__name__
+                ),
+            )
+
+
 def read_task_route(root: str) -> Dict[str, Any]:
     """Dono IMPORTAVEL: o que ``_agents_for`` DEVOLVE, sob sondas.
 
     Devolve ``{"routes": {papel: {modelo: [contexto, ...]}}, "contexts":
     N, "domain": {param: [valor, ...]}}``. VERMELHO quando o import
     falha, quando a funcao some, quando uma rota nao tem papel/modelo em
-    texto, quando nenhuma rota sai, e quando alguma linha executavel do
+    texto, quando nenhuma rota sai, quando alguma linha executavel do
     arquivo dono que a sonda alcancou nao rodou
-    (``task_route_branch_unreached``).
+    (``task_route_branch_unreached``), e quando um parametro de texto
+    sondado e usado numa forma que a sonda nao colhe
+    (``task_route_form_unprobeable``, ``_assert_probe_forms``).
     """
     module = _import_task_route(root)
     fn = getattr(module, TASK_ROUTE_FUNCTION, None)
@@ -1468,6 +1630,9 @@ def read_task_route(root: str) -> Dict[str, Any]:
                 "colhido — ha ramo guardado por forma que a sonda nao colhe; "
                 "recusado, nunca omitido em silencio".format(code.co_name, missing),
             )
+    # Depois da cobertura por LINHA: o que ela nao separa (dois ramos na
+    # mesma linha) a guarda de FORMA recusa.
+    _assert_probe_forms(fn)
     if not routes:
         raise Red("task_route_map_empty", "{0} nao devolveu nenhuma rota".format(TASK_ROUTE_FUNCTION))
     return {
