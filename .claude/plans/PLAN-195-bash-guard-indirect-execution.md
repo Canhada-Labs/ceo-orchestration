@@ -1,7 +1,7 @@
 ---
 id: PLAN-195
 title: Guarda de Bash — execução indireta e alvo de escrita computado (classe GuardFall)
-status: reviewed
+status: executing
 created: 2026-09-30
 reviewed_at: 2026-10-01
 reviewed_by: "Owner — aceite em bloco, no chat da S361 (2026-10-01), da recomendação sobre o plano revisto no debate: corpo do debate (sha 9894151f, PROCEED) + apêndice «Correções pós-debate S360»; OQ-8 mantida como o CEO resolveu no debate"
