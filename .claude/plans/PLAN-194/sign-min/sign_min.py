@@ -11,8 +11,10 @@ confere pela AST (caso C1):
   em P0:tools;
 - cada conferência do P0 é chamada por uma linha com o marcador único
   ``# P0:<id>`` (os mutantes do harness trocam essa linha por ``pass``);
-  a linha que dá o ``TMPDIR`` aos filhos da bateria leva o marcador
-  ``# B:tmp``, com o mesmo tratamento.
+  as linhas que dão o ``TMPDIR`` aos filhos da bateria, que conferem a
+  ausência da ``.asc`` antes da assinatura e que silenciam o traceback
+  levam os marcadores ``# B:tmp``, ``# B:asc`` e ``# B:exc``, com o mesmo
+  tratamento.
 """
 from __future__ import annotations
 
@@ -33,7 +35,7 @@ import sys  # noqa: E402
 import tempfile  # noqa: E402
 import time  # noqa: E402
 from pathlib import Path  # noqa: E402
-from typing import Dict, List, Optional, Set, Tuple  # noqa: E402
+from typing import Callable, Dict, List, Optional, Set, Tuple  # noqa: E402
 
 MENSAGENS: Dict[str, str] = {
     "FIXA": "Pare e chame o CEO.",
@@ -61,7 +63,7 @@ MENSAGENS: Dict[str, str] = {
     "P-BYTES": "SIGN-RECUSA: {n} caminho(s) rastreado(s) com modo fora de 100644/100755, ou com bytes ou bit de execução diferentes do índice; o primeiro tem id {h}",
     "P-DATA-AUS": "SIGN-RECUSA: dados {arg} ausentes no commit {a} como arquivo 100644",
     "P-DATA": "SIGN-RECUSA: dados {arg}, linha {n}: {motivo}",
-    "P-MAT": "SIGN-RECUSA: {caminho} falta como arquivo no commit {a} ou na árvore com o patch",
+    "P-MAT": "SIGN-RECUSA: {caminho} não está no commit {a} como arquivo com o modo exigido, ou falta na árvore com o patch",
     "P-PATCH": "SIGN-RECUSA: patch, {regra}: {caminho}",
     "P-APPLY": "SIGN-RECUSA: git apply --check saiu rc {r}",
     "P-SENT": "SIGN-RECUSA: sentinel, {regra}",
@@ -77,7 +79,7 @@ MENSAGENS: Dict[str, str] = {
     "P-KEY": "SIGN-RECUSA: nenhuma chave secreta acessível ao gpg está no allowlist do commit {a}",
     "PASSO": "SIGN-PASSO: {k} de {n}: {rotulo}",
     "F-TMP": "SIGN-FATO: logs em {t}",
-    "F-RC0": "SIGN-FATO: {rotulo} saiu rc 0 ({s} s)",
+    "F-RC": "SIGN-FATO: {rotulo} saiu rc {r} ({s} s)",
     "F-SUITE": "SIGN-FATO: passada {p}: {f} id(s) falharam; {r} passaram numa repetição isolada ({s} s)",
     "X-RC": "SIGN-FALHA: {rotulo} saiu rc {rc}; log em {arq}",
     "X-PYT": "SIGN-FALHA: {rotulo} saiu rc 0 sem resumo só de aprovados; log em {arq}",
@@ -90,6 +92,7 @@ MENSAGENS: Dict[str, str] = {
     "X-BG": "SIGN-FALHA: o grupo de processos de {rotulo} ainda tinha processo vivo 10 s depois de ele terminar; log em {arq}",
     "X-FILTER": "SIGN-FALHA: {n} caminho(s) rastreado(s) com atributo filter depois da bateria; lista em {arq}",
     "X-VER": "SIGN-FALHA: a assinatura não verificou; motivo em {arq}",
+    "X-ASC": "SIGN-FALHA: o caminho da .asc deste sentinel já existe na árvore antes da assinatura",
     "X-OS": "SIGN-FALHA: {rotulo}: erro do sistema {errno}",
     "X-EXC": "SIGN-FALHA: {rotulo}: exceção {tipo}",
     "X-COMMIT": "SIGN-FALHA: o commit {c} difere do esperado; detalhe em {arq}",
@@ -275,9 +278,10 @@ def say(chave: str, **valores: object) -> None:
         elif not MEDIDO.match(texto):
             raise ValueError(nome)
         prontos[nome] = texto
-    linha = modelo.format(**prontos) + "\n"
-    sys.stdout.buffer.write(linha.encode("utf-8"))
-    sys.stdout.buffer.flush()
+    dados = (modelo.format(**prontos) + "\n").encode("utf-8")
+    fd = sys.stdout.fileno()  # stdout ausente no início (fd 1 fechado) levanta aqui
+    while dados:
+        dados = dados[os.write(fd, dados):]
 
 
 def fim() -> None:
@@ -310,13 +314,15 @@ def rotulo(valor: str) -> None:
 
 def run(argv: List[str], entrada: Optional[bytes] = None, cwd: Optional[str] = None,
         env: Optional[Dict[str, str]] = None, log: Optional[str] = None,
-        erro: Optional[str] = None, grupo: bool = False) -> Tuple[int, bytes, bool]:
+        erro: Optional[str] = None, grupo: bool = False,
+        ao_fim: Optional[Callable[[int], None]] = None) -> Tuple[int, bytes, bool]:
     """Único ponto de subprocesso: lista de argumentos, sem shell.
 
     stdout: capturado (log None) ou gravado no arquivo ``log`` (com o
     stderr junto). stderr sem log: /dev/null ou o arquivo ``erro`` (append).
-    Com ``grupo``, o filho roda em sessão própria e o retorno diz se o
-    grupo dele ainda tinha processo vivo 10 s depois do fim.
+    Com ``grupo``, o filho roda em sessão própria, ``ao_fim(rc)`` é chamado
+    quando ele termina e o retorno diz se o grupo dele ainda tinha processo
+    vivo 10 s depois do fim.
     """
     fh_saida = None
     fh_erro = None
@@ -345,6 +351,8 @@ def run(argv: List[str], entrada: Optional[bytes] = None, cwd: Optional[str] = N
         rc = proc.returncode
         vivo = False
         if grupo:
+            if ao_fim is not None:
+                ao_fim(rc)
             vivo = grupo_vivo(proc.pid)
     finally:
         if fh_saida is not None:
@@ -362,7 +370,7 @@ def grupo_vivo(pgid: int) -> bool:
         except ProcessLookupError:
             return False
         except PermissionError:
-            return True
+            pass  # processo vivo que o SIGN não pode sinalizar: conta como vivo até o limite
         if time.monotonic() >= limite:
             return True
         time.sleep(0.1)
@@ -1163,8 +1171,7 @@ def le_raw(out: bytes) -> Set[Tuple[str, str, str, str, str, str]]:
 
 def confere_indice(esperado: Set[Tuple[str, str, str, str, str, str]]) -> None:
     obtido = le_diff_index()
-    difs = sorted(set(t[5] for t in (obtido ^ esperado)))
-    difs += sorted(os.fsdecode(c) for c in confere_bytes())
+    difs = sorted(set(t[5] for t in (obtido ^ esperado)) | set(os.fsdecode(c) for c in confere_bytes()))
     st.n_indice += 1
     if difs:
         n = len(difs)
@@ -1176,7 +1183,11 @@ def confere_indice(esperado: Set[Tuple[str, str, str, str, str, str]]) -> None:
 def roda_bateria(rot: str, argv: List[str], log: str) -> Tuple[int, float]:
     rotulo(rot)
     inicio = time.monotonic()
-    rc, _out, vivo = run([*argv], env=st.env_filhos, log=log, grupo=True)
+
+    def fato(r: int) -> None:
+        s = "%.1f" % (time.monotonic() - inicio)
+        say("F-RC", rotulo=rot, r=r, s=s)
+    rc, _out, vivo = run([*argv], env=st.env_filhos, log=log, grupo=True, ao_fim=fato)
     if vivo:
         arq = log
         say("X-BG", rotulo=rot, arq=arq)
@@ -1205,7 +1216,7 @@ def passo_hard() -> None:
     for k, campos in enumerate(hard, 1):  # type: ignore[arg-type]
         rot = "hard %d" % k
         log = arquivo_t("hard-%d.log" % k)
-        rc, dur = roda_bateria(rot, campos, log)
+        rc, _dur = roda_bateria(rot, campos, log)
         arq = log
         if rc != 0:
             say("X-RC", rotulo=rot, rc=rc, arq=arq)
@@ -1213,8 +1224,6 @@ def passo_hard() -> None:
         if campos[1:3] == ["-m", "pytest"] and not so_aprovados(le_log(log)):
             say("X-PYT", rotulo=rot, arq=arq)
             fim()
-        s = "%.1f" % dur
-        say("F-RC0", rotulo=rot, s=s)
 
 
 def ids_de_falha(dados: bytes) -> Tuple[List[str], List[str]]:
@@ -1291,13 +1300,11 @@ def passada(nome: str, args: List[str]) -> None:
 def passo_gates() -> None:
     for k, (rot, argv) in enumerate(GATES, 1):
         log = arquivo_t("gate-%d.log" % k)
-        rc, dur = roda_bateria(rot, argv, log)
+        rc, _dur = roda_bateria(rot, argv, log)
         if rc != 0:
             arq = log
             say("X-RC", rotulo=rot, rc=rc, arq=arq)
             fim()
-        s = "%.1f" % dur
-        say("F-RC0", rotulo=rot, s=s)
 
 
 def passo_reconfere() -> None:
@@ -1428,6 +1435,16 @@ def confere_commit(esperado: Set[Tuple[str, str, str, str, str, str]]) -> None:
     say("OK", c=c, a=a, n=n, fpr=fpr)
 
 
+def confere_asc_ausente() -> None:
+    """Imediatamente antes do gpg: nada (arquivo, diretório ou link) no caminho da .asc."""
+    try:
+        os.lstat(os.path.join(st.raiz, st.asc_p))
+    except FileNotFoundError:
+        return
+    say("X-ASC")
+    fim()
+
+
 def main() -> int:
     argv = sys.argv[1:]
     st.raiz = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", ".."))
@@ -1510,6 +1527,7 @@ def main() -> int:
 
     passo(9)
     rotulo("gpg")
+    confere_asc_ausente()  # B:asc
     log_gpg = arquivo_t("gpg-sign.log")
     rc, _out, _vivo = run([st.gpg_abs, "--armor", "--detach-sign", "--local-user", st.fpr,
                            "--output", st.asc_p, "--", st.sent_p], log=log_gpg)
@@ -1561,7 +1579,12 @@ def main() -> int:
     return 0
 
 
+def sem_rastro(*_args: object) -> None:
+    """Exceção que escapa do próprio relato (ex.: stdout inutilizável): rc 1, sem traceback."""
+
+
 def principal() -> int:
+    sys.excepthook = sem_rastro  # B:exc
     try:
         return main()
     except OSError as exc:

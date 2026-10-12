@@ -405,6 +405,7 @@ class Pacote:
         self.extra_a: Dict[str, Optional[Tuple[str, bytes]]] = {}
         self.escopo: Optional[List[str]] = None
         self.sem_dados = False
+        self.modo_patch = "100644"
 
     def dados(self) -> bytes:
         if self.dados_txt is not None:
@@ -486,7 +487,7 @@ def constroi(pk: Pacote, sobrepor: Optional[Dict[str, Optional[Tuple[str, bytes]
         rail_txt = pk.rail_fn(rail_txt)
     c.rail = rail_txt.encode()
     mats: Dict[str, Optional[Tuple[str, bytes]]] = dict(pk.pre)
-    mats[PATCH] = ("100644", c.patch)
+    mats[PATCH] = (pk.modo_patch, c.patch)
     mats[SENT] = ("100644", c.sent)
     if pk.rail_p == RAIL:
         mats[RAIL] = ("100644", c.rail)
@@ -605,6 +606,7 @@ class Caso:
         self.confere: Optional[Callable[["Exec"], None]] = None
         self.ao_ler: Optional[Callable[["Exec", str], None]] = None
         self.timeout = 300.0
+        self.fecha_stdout = False
         self.extra_dirs: List[str] = []
 
 
@@ -666,9 +668,12 @@ def roda(ex: Exec) -> None:
     cwd = os.path.join(ex.clone, caso.cwd_rel) if caso.cwd_rel else ex.clone
     fsize = caso.fsize
     usa_pty = caso.pty
+    fecha = caso.fecha_stdout
 
     def preexec() -> None:
         os.setsid()
+        if fecha:
+            os.close(1)
         if usa_pty:
             fcntl.ioctl(0, termios.TIOCSCTTY, 0)
         if fsize:
@@ -748,7 +753,7 @@ def retrato(ex: Exec) -> Dict[str, object]:
     return {
         "index": sha256f(os.path.join(gitdir, "index")) if os.path.exists(os.path.join(gitdir, "index")) else "",
         "fetch": os.path.exists(os.path.join(gitdir, "FETCH_HEAD")),
-        "refs": refs, "nobj": nobj, "tmp": set(glob.glob("/tmp/sign-min.*")), "gitdir": gitdir,
+        "refs": refs, "nobj": nobj, "gitdir": gitdir,
     }
 
 
@@ -818,7 +823,9 @@ def confere_recusa(ex: Exec, antes: Dict[str, object], marca: float, chave: str,
     raizes = [ex.clone] + ([antes["gitdir"]] if not str(antes["gitdir"]).startswith(ex.clone) else [])  # type: ignore[list-item]
     novos = novos_desde(raizes, marca)  # type: ignore[arg-type]
     afirma(not novos, "a recusa escreveu no clone: %s" % novos[:3])
-    for k in ("index", "fetch", "refs", "nobj", "tmp"):
+    # sem o conjunto global /tmp/sign-min.* (um SIGN concorrente daria falso vermelho): a saída de
+    # exatamente 2 linhas prova que o PASSO 1 não saiu, e o C1 prova que o único mkdtemp vem depois dele
+    for k in ("index", "fetch", "refs", "nobj"):
         afirma(antes[k] == depois[k], "retrato mudou em %s" % k)
     esperado = [msg(chave, **valores), msg("FIXA")]
     afirma(ex.rc == 1, "rc %s (esperado 1)" % ex.rc)
@@ -866,7 +873,7 @@ def mutante_texto(texto: str, marcador: str) -> str:
 
 
 # mutante cujo vermelho só conta com este texto na falha (o caso confere outras coisas antes)
-MOTIVO_MUTANTE = {"B:tmp": "TMPDIR"}
+MOTIVO_MUTANTE = {"B:tmp": "TMPDIR", "B:asc": "tempo limite", "B:exc": "stderr"}
 
 
 def roda_mutante(caso: Caso, marcador: str, checa: Callable[[Caso, Optional[Dict[str, Optional[Tuple[str, bytes]]]]], None]) -> None:
@@ -1251,6 +1258,16 @@ def def_r_patch() -> None:
     c.marcador = "P0:mat"
     c.pk.rail_p = ".claude/plans/PLAN-900/pk1/rail-inexistente.md"
     c.esperado_fn = lambda ex: ("P-MAT", {"caminho": ".claude/plans/PLAN-900/pk1/rail-inexistente.md", "a": ex.c.a})
+    c = caso("R-mat-modo", "R")
+    c.pk.modo_patch = "100755"
+    c.esperado_fn = lambda ex: ("P-MAT", {"caminho": PATCH, "a": ex.c.a})
+
+    def confere_mat_modo(ex: Exec) -> None:
+        afirma(ex.gitc(["ls-tree", ex.c.a, "--", PATCH]).decode().startswith("100755 blob "),
+               "plantio sem efeito: o patch não está no commit como 100755")
+        afirma(ex.out[0] == "SIGN-RECUSA: %s não está no commit %s como arquivo com o modo exigido, ou falta "
+               "na árvore com o patch" % (PATCH, ex.c.a), "texto do P-MAT: %r" % ex.out[0])
+    c.confere = confere_mat_modo
     c = caso("R-mat-hard-removido", "R")
     c.pk.pos["tools/hard_ok.py"] = None
     c.esperado_fn = lambda ex: ("P-MAT", {"caminho": "tools/hard_ok.py", "a": ex.c.a})
@@ -1702,7 +1719,41 @@ def def_f() -> None:
                               "( sleep 15; printf 'bg-tardio\\n' >> %s ) &\nexit 0\n"
                               % q(os.path.join(G.atual, "ordem.log"))).encode())
     c.timeout = 120
-    c.confere = falha_antes("X-BG", rotulo="hard %d" % k, arq=t_arq("hard-%d.log" % k))
+
+    def confere_bg(ex: Exec, k: int = k) -> None:
+        falha_antes("X-BG", rotulo="hard %d" % k, arq=t_arq("hard-%d.log" % k))(ex)
+        afirma(re.match(r"^SIGN-FATO: hard %d saiu rc 0 \([0-9.]+ s\)$" % k, ex.out[-3]) is not None,
+               "o fato com o rc do hard não veio antes do X-BG: %r" % ex.out[-3])
+    c.confere = confere_bg
+    c = caso("F-asc-previo", "F", real=True)
+    alvo = os.path.join(G.atual, "asc-alvo.txt")
+    com_hard(c, "asc.sh", ("#!/bin/bash\nprintf 'alvo\\n' > %s\nln -s %s %s\n" % (q(alvo), q(alvo), q(ASC))).encode())
+    c.timeout = 90
+
+    def confere_asc(ex: Exec) -> None:
+        afirma(os.path.islink(os.path.join(ex.clone, ASC)), "plantio sem efeito: a .asc não é link")
+        falha_antes("X-ASC")(ex)
+        afirma(le(alvo) == b"alvo\n", "o alvo do link mudou")
+    c.confere = confere_asc
+    c.marcador = "B:asc"
+    c = caso("F-idx-duplo", "F")
+    com_hard(c, "idx.sh", b"#!/bin/bash\nprintf 'x\\n' >> docs/a.md && git add docs/a.md && printf 'y\\n' >> docs/a.md\n")
+
+    def confere_idx_duplo(ex: Exec) -> None:
+        falha_antes("X-IDX", n=1, arq=t_arq("indice-2.txt"))(ex)
+        afirma(le(os.path.join(ex.t, "indice-2.txt")) == b"docs/a.md\n", "lista do X-IDX: %r" % le(
+            os.path.join(ex.t, "indice-2.txt")))
+    c.confere = confere_idx_duplo
+    c = caso("F-stdout-fechado", "F")
+    c.fecha_stdout = True
+    c.argv_fn = lambda ex, a: a[:-1] + ["x/sign.tsv"]
+
+    def confere_stdout(ex: Exec) -> None:
+        afirma(ex.rc == 1, "rc %s (esperado 1)" % ex.rc)
+        afirma(ex.out == [], "saída com stdout fechado: %r" % ex.out)
+        afirma(ex.err == b"", "stderr não vazio: %r" % ex.err[:300])
+    c.confere = confere_stdout
+    c.marcador = "B:exc"
     c = caso("F-setsid", "F", real=True)
     c.pk.pre["tools/setsid_filho.py"] = ("100644", (
         "import os\nimport time\nos.setsid()\nlog = %r\nfim = time.time() + 120\n"
@@ -1970,6 +2021,27 @@ def censo_ast(fonte: str) -> List[str]:
     if len(sinais) != 2 or chamadas[:2] != sinais or not all(
             isinstance(s.args[1], ast.Attribute) and s.args[1].attr == "SIG_DFL" for s in sinais):
         erros.append("signal.signal fora da forma (2 × SIG_DFL antes de qualquer chamada)")
+    # o único T: um mkdtemp no main, depois do PASSO 1 e antes do F-TMP (com a saída de 2 linhas de cada
+    # recusa, prova que nenhuma recusa cria T sem olhar o /tmp global)
+    usos = [n for n in ast.walk(arvore) if isinstance(n, ast.Attribute) and isinstance(n.value, ast.Name)
+            and n.value.id == "tempfile"]
+    prefixos = [n for n in ast.walk(arvore) if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and (n.value.startswith("sign-min.") or "/sign-min." in n.value)]
+    if len(usos) != 1 or usos[0].attr != "mkdtemp" or dentro(usos[0]) != "main" or len(prefixos) != 1:
+        erros.append("T fora do único tempfile.mkdtemp do main")
+    else:
+        corpo = [no for no in arvore.body if isinstance(no, ast.FunctionDef) and no.name == "main"][0].body
+
+        def indice(pred: Callable[[ast.AST], bool]) -> int:
+            achados = [i for i, s in enumerate(corpo) if any(pred(x) for x in ast.walk(s))]
+            return achados[0] if achados else -1
+        i_passo = indice(lambda x: isinstance(x, ast.Call) and isinstance(x.func, ast.Name) and x.func.id == "passo"
+                         and bool(x.args) and isinstance(x.args[0], ast.Constant) and x.args[0].value == 1)
+        i_t = indice(lambda x: x is usos[0])
+        i_ftmp = indice(lambda x: isinstance(x, ast.Call) and isinstance(x.func, ast.Name) and x.func.id == "say"
+                        and bool(x.args) and isinstance(x.args[0], ast.Constant) and x.args[0].value == "F-TMP")
+        if not (0 <= i_passo < i_t < i_ftmp):
+            erros.append("mkdtemp fora da ordem PASSO 1 → mkdtemp → F-TMP no main")
     for chave, valor in mensagens.items():
         if chave == "FIXA":
             continue
@@ -2101,6 +2173,11 @@ def caso_c1() -> None:
         "home": fonte.replace("def fim() -> None:\n", "def fim() -> None:\n    os.environ['HOME']\n", 1),
         "sinal": fonte.replace("signal.signal(signal.SIGPIPE, signal.SIG_DFL)\n", "", 1),
         "gpg_bin": fonte.replace("gpg_bin=st.gpg_abs)", "gpg_bin=None)", 1),
+        "mkdtemp-no-p0": fonte.replace('    rotulo("P0:args")\n',
+                                       '    rotulo("P0:args")\n    tempfile.mkdtemp(prefix="sign-min.", dir="/tmp")\n', 1),
+        "mkdtemp-antes-do-passo": fonte.replace(
+            '    passo(1)\n    st.t = os.path.realpath(tempfile.mkdtemp(prefix="sign-min.", dir="/tmp"))\n',
+            '    st.t = os.path.realpath(tempfile.mkdtemp(prefix="sign-min.", dir="/tmp"))\n    passo(1)\n', 1),
     }
     for nome, mutado in controles.items():
         afirma(mutado != fonte, "controle C1 %s não mudou a fonte" % nome)
@@ -2268,9 +2345,9 @@ def caso_ensaio_w5b(w5b: str) -> None:
         passadas = [ln for ln in linhas_out if re.match(r"^SIGN-FATO: passada (paralela|serial): ", ln)]
         afirma([ln.split(":")[1].strip() for ln in passadas] == ["passada paralela", "passada serial"],
                "ensaio W5b: passadas %r" % passadas)
-        n_rc0 = sum(1 for ln in linhas_out if re.match(r"^SIGN-FATO: .+ saiu rc 0 \([0-9.]+ s\)$", ln))
-        afirma(n_rc0 == len(W5B_HARD) + len(GATES), "ensaio W5b: %d linhas «saiu rc 0» (esperado %d)" % (
-            n_rc0, len(W5B_HARD) + len(GATES)))
+        for gate in GATES:
+            afirma(any(re.match(r"^SIGN-FATO: %s saiu rc 0 \([0-9.]+ s\)$" % re.escape(os.path.basename(gate)), ln)
+                       for ln in linhas_out), "ensaio W5b: gate %s sem rc 0" % os.path.basename(gate))
         afirma(len(git(["-C", clone, "rev-list", "--all"], env=env).splitlines()) == commits_antes, "ensaio: commit novo")
         afirma(not os.path.exists(os.path.join(clone, ".claude/plans/PLAN-194/w5b-approved.md.asc")), "ensaio: .asc")
         afirma(le(os.path.join(clone, ".claude/plans/PLAN-194/w5b-approved.md")) == sent, "ensaio: sentinel mudou")
