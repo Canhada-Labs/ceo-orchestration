@@ -4,9 +4,10 @@
 > novo sobre os 7 transcripts do S338 antes de qualquer nova citação do −US$ 1.369»
 > (`.claude/plans/PLAN-186-orchestrator-operating-model.md:138`; debate round 1, C2).
 > **Estado deste arquivo:** §1 é o PRÉ-REGISTRO, commitado ANTES de ler qualquer
-> transcript (o commit anterior deste arquivo no `git log --follow` só tem a §1);
-> §2 são os resultados. **Resposta curta:** o split 80/20 não sobrevive (85/15), e a
-> figura de −US$ 1.369/mês não sobrevive como número mensal citável (§2.3).
+> transcript: o 1.º commit deste arquivo (`49aa3580`) tem a §1 inteira e, na §2, só o
+> marcador «Pendentes»; a §1 não mudou desde então. §2 são os resultados. **Resposta
+> curta:** o split 80/20 não sobrevive (85/15), e a figura de −US$ 1.369/mês não
+> sobrevive como número mensal citável (§2.3).
 
 ## 1. Pré-registro
 
@@ -86,17 +87,37 @@ re-derivado (só o perfil muda) e Δ(b re-derivado) (os dois mudam).
 Comandos, da raiz do checkout principal (num worktree o resolvedor aponta para
 outro slug: passe `--project-dir` com o diretório de estado do checkout principal):
 
-    C=.claude/plans/PLAN-186/w0/c2-split-rederivation-S363/classify-s338.py
-    python3 $C              # [A] 7 transcripts da noite (leve)
-    python3 $C --figure     # [B] = [A] + perfil de 30 d (lê o corpus inteiro)
-    T=.claude/scripts/ceo-cost-transcripts.py
-    python3 $T --since-at 2026-09-02T01:31:33.868Z --until 2026-09-02T04:00:40.990Z --by role,model --json  # [N]
-    python3 $T --since-at 2026-08-03T00:00:00Z --until 2026-09-02T12:55:05.807Z --by role,model --json     # [P]
+```sh
+C=.claude/plans/PLAN-186/w0/c2-split-rederivation-S363/classify-s338.py
+python3 $C              # [A] 7 transcripts da noite (leve)
+python3 $C --figure     # [B] = [A] + perfil de 30 d (lê o corpus inteiro)
+python3 $C --selftest   # [S] recusas em fixtures sintéticas (não lê o corpus)
+T=.claude/scripts/ceo-cost-transcripts.py
+python3 $T --since-at 2026-09-02T01:31:33.868Z --until 2026-09-02T04:00:40.990Z --by role,model --json  # [N]
+python3 $T --since-at 2026-08-03T00:00:00Z --until 2026-09-02T12:55:05.807Z --by role,model --json     # [P]
+python3 - $C <<'X'      # [M] mutantes sobre [A]; argumentos após $C vão ao main()
+import contextlib, io, json, sys
+C, A = sys.argv[1], 'obj.get("apiBlockIndex"), '
+src = open(C, encoding="utf-8").read(); assert src.count(A) == 1
+for nome in "AB":  # A: chave 05 sem apiBlockIndex; B: dedup do instrumento -> 1.ª linha vence
+    g = {"__name__": "mutante", "__file__": C}
+    exec(compile(src.replace(A, "") if nome == "A" else src, C, "exec"), g)
+    if nome == "B":
+        def lb(li=g["load_instrument"]):
+            m = li(); m.dedup = lambda rs: (list({r.key: r for r in rs[::-1]}.values()), 0); return m
+        g["load_instrument"] = lb
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out): rc = g["main"](sys.argv[2:])
+    r = json.loads(out.getvalue())
+    print(nome, rc, r["k0_celulas_05"], round(r["soma"]["instrumento"]["usd"], 2),
+          r["split_raw_tokens"]["duas_vias"]["construtor"]["share"])
+X
+```
 
 [A] e [B] rodaram duas vezes cada, saídas byte-idênticas (sha256 começa por `599355e1d867e019`
-e `1439a1b04d8315d7`). [N] rodou duas vezes: diferem só `elapsed_s` e `lines` (o corpus cresce
-com a sessão corrente); `grand_total`, `by_role`, `by_role,model`, `unresolved_models` e as
-contagens de dedup são idênticos.
+e `1439a1b04d8315d7`; [A] repetiu `599355e1d867e019` com o script da correção do rail). [N] rodou
+duas vezes: diferem só `elapsed_s` e `lines` (o corpus cresce com a sessão corrente);
+`grand_total`, `by_role`, `by_role,model`, `unresolved_models` e as contagens de dedup são idênticos.
 
 ### 2.1 Por agente (instrumento shipado; «05» = leitor estilo 05)
 
@@ -122,11 +143,14 @@ $72,59**, igual à soma da tabela — o script e a CLI são o mesmo pipeline.
 - **K1 — CAI.** Fatia do construtor em tokens brutos: **85,05 %** (refutador 14,95 %),
   fora de [78 %, 82 %]. Em USD: 77,52 % / 22,48 %. Em 3 vias (tokens brutos):
   construtor 39,74 %, desenho 45,31 %, refutador 14,95 % (`split_raw_tokens`, `split_usd`).
-- **K3 — a inflação SOBREVIVE, o mecanismo NÃO.** Razão 05 / instrumento no total:
-  **2,87×** em tokens brutos (3,08× em USD), dentro de [2,7; 2,9]. O viés por papel
-  existe, mas ao contrário do que o debate supôs: refutador **3,80×**, construtor
-  **2,71×** (`inflacao_05_sobre_instrumento`). O 05 SUBESTIMOU a fatia do construtor
-  (80,24 % → 85,05 %).
+- **K3 — a inflação e o viés por papel SOBREVIVEM; a direção do viés é resultado novo.**
+  Razão 05 / instrumento no total: **2,87×** em tokens brutos (3,08× em USD), dentro de
+  [2,7; 2,9]. O debate previu o viés sem dar direção («o fator de inflação não é
+  constante entre os dois grupos», `.claude/plans/PLAN-186/debate/round-1/llm-finops-architect.md:151-152`)
+  e ele se confirma: refutador **3,80×**, construtor **2,71×** (`inflacao_05_sobre_instrumento`).
+  A direção contradiz o mecanismo que o debate descreveu (inflação por bloco de conteúdo,
+  «builders emitem muito `tool_use`», `:149-151`), que, lido como implicação, apontaria
+  construtores mais inflados. O 05 SUBESTIMOU a fatia do construtor (80,24 % → 85,05 %).
 - **K2 — INDECIDÍVEL no corpus vivo** (célula não prevista no pré-registro;
   declarada aqui). O perfil de 30 d não existe mais em disco: o registro mais antigo
   da janela hoje é de **2026-08-23T17:59:02Z** (`figura.cobertura` em [B]); em [P] o
@@ -139,10 +163,12 @@ $72,59**, igual à soma da tabela — o script e a CLI são o mesmo pipeline.
 
 Controles vermelhos: `--until 2026-09-02T02:31:00Z` em [N] cai para 189 turnos / $52,67;
 `--since-at` posterior a `--until` ⇒ rc 2 com recusa nomeada; a janela da triagem tem ZERO
-turnos `claude-fable-5-1` de subagente. Mutante A (chave estilo 05 SEM `apiBlockIndex`) ⇒
-K0 = **0/42**: é esse campo que reproduz o 05. Mutante B (dedup do instrumento trocado por
-«primeira linha vence») ⇒ soma $68,77 ≠ $72,59 da CLI, e o split só vai a 85,07 %. Recusas
-rc 2 (fase desconhecida, agente sem transcript, registro ausente) provadas em fixtures sintéticas.
+turnos `claude-fable-5-1` de subagente. [M], mutante A (chave estilo 05 SEM `apiBlockIndex`)
+⇒ K0 = **0/42**: é esse campo que reproduz o 05; mutante B (dedup do instrumento trocado por
+«primeira linha vence») ⇒ soma $68,77 ≠ $72,59 da CLI, e o split só vai a 85,07 %. Saída de
+[M] em 2026-10-12: `A 0 [0, 42] 72.59 0.85046` e `B 0 [42, 42] 68.77 0.85071`. [S]: um caso
+válido rc 0 e as recusas rc 2 (registro ausente, fase desconhecida, fase lista ou objeto,
+agente sem transcript, transcript sem agente), cada caso num diretório temporário próprio.
 
 ### 2.3 A figura de −US$ 1.369/mês
 
