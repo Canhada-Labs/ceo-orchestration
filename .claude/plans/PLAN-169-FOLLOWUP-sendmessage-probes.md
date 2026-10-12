@@ -2,8 +2,10 @@
 id: PLAN-169-FOLLOWUP-sendmessage-probes
 parent: PLAN-169
 title: Mensageria entre agentes — controle refuse × accept, ADR de visibilidade e sondas W4.2.0 (pernas 2–4 do AC-5 do PLAN-169)
-status: draft
+status: reviewed
 created: 2026-10-11
+reviewed_at: 2026-10-12
+reviewed_by: "Owner (S363, AskUserQuestion do CEO, 2026-10-12 ~12:50Z): «Sim, três modos; revisado (Recommended)», em resposta a «o teste cobre os três modos (refuse, hold, accept), e posso marcar o plano como revisado, deixando para depois a pergunta sobre o adopter que já usa accept?»"
 owner: CEO
 depends_on: [PLAN-169]
 level: L3
