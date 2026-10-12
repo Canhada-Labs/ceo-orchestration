@@ -6,7 +6,7 @@ post-MVP §4.3 acceptance suite:
 
 - §4.3.2 real per-key cache (cold/warm/stale TTL/corrupted/wrong-key/LRU)
 - §4.3 --bench mode (N=5, p50/p95 ordering, RSS delta, markdown table)
-- §4.3.3 --verbose mode (10 Tier-A checks discovery + budget + ordering)
+- §4.3.3 --verbose mode (11 Tier-A checks discovery + budget + ordering)
 - §4.3 Sec MF-4 sanitization (NFKC + 200-cap + 5-item cap + scan + homoglyph
   + NUL + path-traversal + deterministic order)
 - §4.3.4 audit emit telemetry (emitted called / fields whitelisted /
@@ -245,15 +245,15 @@ class TestBenchMode(TestEnvContext):
 
 
 # ----------------------------------------------------------------------------
-# §4.3.3 --verbose mode (10 Tier-A checks)
+# §4.3.3 --verbose mode (11 Tier-A checks)
 # ----------------------------------------------------------------------------
 
 
 class TestVerboseMode(TestEnvContext):
     """PLAN-065 §4.3.3 — Tier-A check registry + dispatch."""
 
-    def test_tier_a_registry_has_10_checks(self):
-        self.assertEqual(len(_mod.TIER_A_CHECKS), 10)
+    def test_tier_a_registry_has_11_checks(self):
+        self.assertEqual(len(_mod.TIER_A_CHECKS), 11)  # PLAN-176 W3a: +model_currency
 
     def test_tier_a_names_unique(self):
         names = [name for name, _ in _mod.TIER_A_CHECKS]
@@ -270,15 +270,16 @@ class TestVerboseMode(TestEnvContext):
                             f"Tier-A name {name!r} missing prefix")
 
     def test_dispatch_with_tier_a_returns_all_results(self):
-        """include_tier_a=True dispatches all 34 checks (24+10).
+        """include_tier_a=True dispatches all 35 checks (24+11).
 
         PLAN-091 Wave A.1: Tier-S bumped 15 → 16.
         S127 + PLAN-106 Wave F: Tier-S bumped 16 → 20 (drift absorbed).
         PLAN-135 W1 S3: Tier-S bumped 20 → 21 (settings_tamper_tripwires).
         PLAN-153 Wave E: 21 → 23. S292: 23 → 24 (scheduled_workflows_red).
+        PLAN-176 W3a: Tier-A 10 → 11 (tier_a_model_currency).
         """
         results = _mod.dispatch_parallel(include_tier_a=True)
-        self.assertEqual(len(results), 34)  # S292: 24+10
+        self.assertEqual(len(results), 35)  # PLAN-176 W3a: 24+11
 
     def test_dispatch_without_tier_a_returns_tier_s(self):
         """Default dispatch (Tier-S only) returns 24 post-S292."""
