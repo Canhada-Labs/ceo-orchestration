@@ -362,8 +362,9 @@ Paths (4, todos com oráculo = 0 — medido):
 `.claude/scripts/check-model-currency.py`,
 `.claude/data/model-currency-state.json`,
 `.claude/data/model-currency-expected-reds.txt`,
-`.claude/scripts/tests/test_check_model_currency.py`. Nenhum existe em
-HEAD: **os quatro são CRIADOS por esta onda.** O diretório de testes
+`.claude/scripts/tests/test_check_model_currency.py`. Na base da onda
+nenhum existia: **os quatro foram CRIADOS por esta onda** (em `c03b1eda`,
+2026-09-07; nota de 2026-10-12, S363). O diretório de testes
 está em `pytest.ini` `testpaths` (`.claude/scripts/tests`, linha 41),
 logo tudo o que as caixas abaixo invocam é coletável.
 
@@ -658,10 +659,12 @@ caminhos que as caixas abaixo tocam ou invocam):
 `.claude/scripts/check-model-literals.py`,
 `.claude/scripts/model-literals-grandfather.txt`,
 `.claude/scripts/tests/test_model_preference.py`,
-`.claude/scripts/tests/test_check_model_literals.py`. Nenhum existe em
-HEAD: os cinco são criados aqui.
+`.claude/scripts/tests/test_check_model_literals.py`. Nenhum existia na
+base `818aac5e`: os cinco são criados aqui — `models-preference.json` e
+`test_model_preference.py` pela metade 1 (Progress log de 2026-10-12); os
+três do lint seguem por criar.
 
-- [ ] `[P0][US3][.claude/data/models-preference.json]` A camada P existe,
+- [x] `[P0][US3][.claude/data/models-preference.json]` A camada P existe,
       valida contra o esquema e resolve pelo menos um apelido para um
       identificador concreto.
       Check: `python3 -m pytest .claude/scripts/tests/test_model_preference.py -q`
@@ -1229,6 +1232,44 @@ K-9) antes do §4 real e sem a K-9 no real, o teste anterior PASSA (cego)
 e o novo falha com `not in §4 ['K-9']`.
 
 ## Progress log
+
+- 2026-10-12 (S363, W1a, metade 1): **camada P entregue — nascem
+  `.claude/data/models-preference.json` e
+  `.claude/scripts/tests/test_model_preference.py`, oráculo 0 nos dois; a
+  primeira caixa da W1a fica `[x]`.** Um apelido, `claude-frontier` →
+  `claude-opus-5-5`: padrão técnico, escolhido por ser o pin de sessão que a
+  Amendment 3 do ADR-149 declara (`ADR-149-model-id-allowlist.md:97-100`) e o
+  `model` de `.claude/settings.json:796`. Trocar o alvo (por exemplo, para o
+  Fable 5.1) é decisão do Owner, por Pull Request auditado; o arquivo fica
+  INERTE até o resolver da W1b. O teste LÊ o conjunto de trabalho pelo leitor
+  da W0a (`read_adr_blocks` de `check-model-currency.py`) e não digita
+  identificador: a W5c do PLAN-194 (adoção do Sonnet 5.5, emenda 4 do ADR-149)
+  acrescenta um membro ao conjunto e não pede edição aqui. Esquema FECHADO,
+  guardado no teste até a W1b o levar ao registro T: exatamente `_note`,
+  `schema` (inteiro 1, booleano recusado) e `aliases` (objeto não vazio);
+  apelido na gramática do §3.2 por `fullmatch`, que recusa a quebra de linha
+  final; apelido igual a identificador da camada T é recusado (sombra); chave
+  duplicada é recusada (o `json` do Python guardaria a última em silêncio).
+  4 casos, verdes sob `-W error`; três deles são controles dentro do próprio
+  teste (apelido fora do conjunto ⇒ `alias-outside-working-set` nomeado; cópia
+  descartável do ADR-149 sem o alvo no bloco do conjunto de trabalho ⇒ a mesma
+  falha nomeada; um mutante por regra do esquema). Controles VERMELHOS
+  executados: sem o arquivo de dados, 4 falhas; o arquivo com o apelido
+  apontado para um identificador fora do conjunto, 3 falhas, a do caso
+  principal nomeando `alias-outside-working-set: claude-frontier -> <id>`; e
+  seis mutantes do validador (sem a checagem de pertença, `match` no lugar de
+  `fullmatch`, sem a detecção de duplicata, booleano aceito como versão, sem a
+  checagem de sombra, `_note` fora das chaves obrigatórias), cada um vermelho.
+  Rodada de correção do rail, no mesmo dia: o leitor carrega no `setUp`,
+  dentro do isolamento, e não fica em `sys.modules`; erro no `setUp` desfaz o
+  isolamento; a cópia do ADR-149 perde o alvo pela estrutura AST do bloco
+  (verde também com o bloco reformatado em aspas simples); o caso 3 passa pelo
+  MESMO caminho do `setUp` (o conjunto digitado à mão deixa o caso 3
+  vermelho). A frase do §W1a «Nenhum existe em HEAD» passa a citar a base
+  `818aac5e` (alteração no lugar, registrada aqui). A metade 2 (lint de literais, registro de
+  exceções e o teste do lint) fica para pacote próprio, com o escopo do lint
+  fixado antes de construir. `status:` NÃO muda.
+  Check: `python3 -m pytest .claude/scripts/tests/test_model_preference.py -q`
 
 - 2026-10-12 (S363, W3a): **advisory de modelos no `/ceo-boot` entregue como
   check Tier-A (`tier_a_model_currency`, o 11.º)** — padrão recomendado,
