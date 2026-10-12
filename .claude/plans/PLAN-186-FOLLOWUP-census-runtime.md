@@ -365,12 +365,21 @@ OBSERVACAO NAO-EXAUSTIVA na coluna «cobertura».
    de funcao nunca chamada, ou depois de um `exit`).
 
 **Rota de cura (uma, para os dois):** dar um DONO ao `MODEL_HINT` —
-uma funcao shell com contrato (`model_hint_for_skill <skill>`) ou um
-dado (TSV/YAML) que o script consome — e entao perguntar a ele como
-este censo ja faz nas outras tres superficies. E edicao CANONICA em
-`.claude/scripts/inject-agent-context.sh`, logo cerimonia GPG e wave
-propria: e a opcao (3) da §5 de `ARCHITECTURE-NOTE-S347.md`, fora do
-alcance deste pack LIVRE.
+uma função shell com contrato (`model_hint_for_skill <skill>`) ou um
+dado (TSV/YAML) que o script consome — e então perguntar a ele como
+este censo já faz nas demais superfícies. É a opção (3) da §5 de
+`ARCHITECTURE-NOTE-S347.md` (nota do pack, não rastreada no repo:
+`git ls-files` não a lista em 2026-10-12).
+
+**Correção (2026-10-12): essa cura NÃO é edição canônica.** A redação
+anterior dizia «edição CANÔNICA em `.claude/scripts/inject-agent-context.sh`,
+logo cerimônia GPG e wave própria» — falso. O oráculo
+`python3 .claude/hooks/check_canonical_edit.py --is-canonical
+.claude/scripts/inject-agent-context.sh` responde `0` (medido em
+2026-10-12 sobre `3e32a1ff`), e `.claude/scripts/` não está na tabela
+de superfícies guardadas do `AGENTS.md` §4. A cura continua sendo uma
+wave própria, fora da W1a, mas LIVRE; se ela criar um arquivo de DADO
+novo, o oráculo é perguntado pelo caminho escolhido, na wave dela.
 
 ## 5. Fronteiras deste followup
 
@@ -494,3 +503,84 @@ alcance deste pack LIVRE.
   ÚNICA linha que carrega o token `[1m]` e planta a mutação nela — a
   declaração sob teste (prosa fora do escopo do censo) não mudou. Classe
   de defeito: teste ancorado num NÚMERO DE LINHA de um documento vivo.
+- 2026-10-12 (S363, trem do PLAN-194 para a v1.4.3, **W1a**): três dos
+  cinco donos reabertos entram no censo. **Decisão do Owner**, registrada
+  pelo CEO da S363 a partir da pergunta feita por AskUserQuestion em
+  2026-10-12 por volta das 12:50Z — pergunta, verbatim: «Instrumento que
+  pergunta a cada dono qual modelo ele usa
+  (PLAN-186-FOLLOWUP-census-runtime): sigo hoje só com os 3 donos de
+  menor risco (task-route, linha de base do tier-policy e o JSON do
+  template), deixando o script de shell e o audit_log para depois?»;
+  resposta, verbatim: «Sim, só os 3 de menor risco (Recommended)».
+  Commits no branch `s363/plans-pe2` (o land pode reescrever os SHAs):
+  `92a6e4b1` — cherry-pick, com a mensagem original, do `2f07fe3c`
+  (`refs/s363/codex-fixture`, nunca landado): a cópia do esqueleto dos
+  testes deixa de levar bytecode transitório, que outro worker do pytest
+  pode trocar no meio da cópia; controle vermelho: sem o filtro, o teste
+  novo cai com `shutil.Error`. `bd469066` — a W1a no instrumento e na
+  bateria. Como cada dono é PERGUNTADO (linhas conferidas em 2026-10-12):
+  (2) `task-route.py` — o import do dono, e a rota é o valor que
+  `_agents_for` (`task-route.py:488-556`) devolve; o domínio das sondas
+  vem da assinatura do dono e dos literais que ele mesmo compara, e a
+  execução roda sob `sys.settrace`: toda linha das funções do arquivo
+  dono que rodaram tem de ter rodado (menos a linha do `def`), senão o
+  censo RECUSA (`task_route_branch_unreached`). Fora dessa cobertura, declarado no
+  docstring (itens (vii) e (viii)): alternativas na MESMA linha e código
+  fora do arquivo dono — por isso a coluna «cobertura» desta linha diz
+  «resposta do dono SOB SONDA». A errata do r6 foi conferida por import:
+  o `VETO_HARDCODE` que o `task-route.py` importa é o de
+  `_lib.tier_policy._constants`, papel → conjunto de tipos de tarefa, e
+  não entra na tabela como rota. (4) baseline ADR-052 — lido do próprio
+  LOADER: `load_policy` sobre um caminho que não existe devolve
+  `status=bootstrap` (atalho em `tier_policy_cli/loader.py:423`) com o
+  `_FROZEN_BASELINE` (`loader.py:113`), e o Check (a) compara com
+  `build_adr052_baseline()` (`tier_policy_cli/_types.py:205-241`) num
+  processo separado. (5) `templates/.claude/tier-policy.json` — lido por
+  esse mesmo `load_policy`, o carregador que o adopter roda depois que o
+  `install_tier_policy` do `install.sh` copia o arquivo. **Divergências
+  medidas, publicadas e NÃO reconciliadas** (a tabela lista cada uma com
+  o valor de cada superfície): `devops` = `claude-sonnet-4-6` em
+  `agents/`, `claude-haiku-4-5-20251001` no baseline e no template,
+  `claude-opus-4-8` no `task-route.py` (em 32 dos 80 contextos sondados,
+  todos com `workflow_change` em `release` ou `ci`) — a divergência
+  Haiku × Sonnet que a nota S340 apontava existe e está na tabela;
+  `code-reviewer` e `security-engineer` = `claude-fable-5` em `agents/`,
+  no `VETO_HARDCODE` e no baseline, `claude-opus-4-8` no `task-route.py`
+  e no template. O Haiku datado não está no `AVAILABLE_MODELS_WORKING_SET`
+  do ADR-149 (que traz `claude-haiku-4-5`): para os dois donos do
+  tier-policy o domínio de model_id é o `VALID_MODEL_IDS` do próprio
+  dono, e o id fora do working set sai escrito na coluna do passo, nunca
+  normalizado. **Controles:** pelo menos um VERMELHO por dono, cada um
+  numa cópia descartável — `task-route.py` (ramo guardado por
+  `startswith` → `task_route_branch_unreached`; import quebrado, em que o
+  dono faz `sys.exit(2)` → `task_route_import_failed`, sem traceback;
+  alias no lugar do model_id → `alias_leaked_into_table`), baseline
+  (loader deixando de cair no builder → `tier_baseline_pair_diverges`;
+  alias → `alias_leaked_into_table`), template (tier que o carregador
+  rejeita → `tier_template_rejected_by_owner_loader`, com
+  `invalid_model_id`); e dois VERDES que provam derivação em vez de
+  memória (um literal novo no `task-route.py` e uma troca no template
+  movem a tabela sem nenhuma mudança no censo). Mutações do PRÓPRIO
+  instrumento (driver na área de rascunho da sessão, não versionado):
+  sete mutantes mortos pelos testes (sem a guarda de cobertura, sem a
+  colheita de literais, sem capturar o `sys.exit`, sem o Check (a) do
+  baseline, sem o Check (a) do `task-route.py`, sem o domínio de
+  model_id do dono, sem conferir o status do carregador); um oitavo, que
+  lê os tiers do template por `json` cru depois de o carregador aceitar
+  o arquivo, sobrevive por ser equivalente. **Isolamento da cadeia de auditoria:**
+  o teste novo confere que `HOME` e `CEO_AUDIT_LOG_PATH` apontam para a
+  árvore temporária do `TestEnvContext`, que o resolvedor de estado
+  (`_lib/runtime_paths.py --state-dir`) cai dentro dela, e que ela fica
+  idêntica depois do censo — com controle positivo (uma escrita no
+  caminho do log é vista). **Bateria:** `test_census_runtime.py` 63
+  passed antes do cherry-pick, 65 depois dele e 84 com a W1a (pytest,
+  Python 3.9.6); a mesma bateria em `unittest` no Python 3.11 dá 84 OK; o
+  censo sobre a árvore mínima dá rc 0, stderr vazio e saída
+  byte-idêntica em contêiner com Python 3.9 e 3.12. **Segue aberto:** a
+  caixa do AC-F1 continua desmarcada — os donos (1)
+  `set-quality-profile.sh` (script de shell) e (3)
+  `_ADR_052_ROLE_TO_MODEL` (import do `audit_log.py`) ficam para um pack
+  seguinte, como o Owner decidiu. A §4-b foi corrigida (a cura do
+  `MODEL_HINT` não é canônica). Status permanece `draft`: pela
+  PLAN-SCHEMA §1.4, um followup não entra em `executing` antes de o pai
+  chegar a `done`, e o PLAN-186 segue `executing`.
