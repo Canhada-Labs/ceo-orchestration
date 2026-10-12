@@ -7,7 +7,7 @@ created: 2026-09-17
 reviewed_at: 2026-09-28
 completed_at: 2026-10-11
 related_commits: [47870320, 7bbf2470]
-reviewed_by: "Owner — RATIFICO digitado em 2026-09-28 17:19 -0300 pelo OWNER-S357-MORNING.sh (etapa 2), registrado na seção «Ratificação do Owner (S357, 2026-09-28 17:19 -0300)» deste plano e landado em 7bbf2470"
+reviewed_by: "Owner — RATIFICO digitado em 2026-09-28 17:19 -0300 pelo OWNER-S357-MORNING.sh (etapa 2), registrado na seção «Ratificação do Owner (S357, 2026-09-28 17:19 -0300)» deste plano e landado em 7bbf2470; confirmado pelo Owner como revisão do plano em 2026-10-12 (S363, resposta «Sim, fechar» à pergunta do CEO)"
 owner: CEO
 depends_on: [PLAN-190]
 level: L2
@@ -510,8 +510,8 @@ de mudanças posteriores ao land; não atribui cada vermelho à W2.
 
 Lacuna declarada no fechamento: o `_PLAN_PATH_RE` de `.claude/hooks/check_plan_edit.py`
 (`\.claude/plans/PLAN-\d{3}-[a-z0-9-]+\.md$`) não casa `FOLLOWUP` em maiúsculas, então a máquina de
-estados do hook não vê este arquivo nem os outros planos FOLLOWUP (19 em `61aa7372`, 14 deles em
-`status: draft`). Foi por isso que a W2 landou com o plano em `draft`, e as três transições deste
-fechamento (`draft → reviewed → executing → done`, uma por commit) foram conferidas à mão, não pelo
-hook. O hook é caminho canônico; a cura da classe (aceitar `PLAN-\d{3}-FOLLOWUP-[a-z0-9-]+\.md`, com
-regressão) é item de cerimônia, fora deste plano.
+estados do hook não vê os planos FOLLOWUP; as três transições deste fechamento
+(`draft → reviewed → executing → done`, uma por commit) foram conferidas à mão, não pelo hook. A
+mesma expressão está em `.claude/hooks/_lib/policy_preprocessors.py:237`. Os dois caminhos são
+canônicos; a cura da classe (aceitar `PLAN-\d{3}-FOLLOWUP-[a-z0-9-]+\.md`, com regressão) é item de
+cerimônia da 1.4.4, fora deste plano.
