@@ -283,9 +283,17 @@ MINIMAL_RESPONSES = {
             "def area_square(s):\n"
             "    if s < 0: raise ValueError('negative')\n"
             "    return s * s\n")},
+        # Deletes area_rectangle's check: one raise left, negatives unverified.
+        {"solution.py": (
+            "def area_rectangle(w, h):\n    return w * h\n"
+            "def area_square(s):\n"
+            "    if s < 0: raise ValueError('negative')\n"
+            "    return s * s\n")},
     ],
     "t05-add-unit-test": [
         {"test_solution.py": "def test_x():\n    assert True  # parse_csv_line('') == []\n"},
+        # Calls the function but asserts on nothing it returned.
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    assert [] == []\n"},
         {"test_solution.py": "def test_x():\n    assert [] == []  # parse_csv_line\n"},
         # Rewrites the implementation so a WRONG assertion passes.
         {"solution.py": "def parse_csv_line(line):\n    return ['x']\n",
@@ -313,6 +321,10 @@ VALID_ALTERNATIVES = {
         "    return w * h\n"
         "def area_square(s):\n"
         "    return area_rectangle(s, s)\n")},
+    "t05-add-unit-test": {"test_solution.py": (
+        "def test_basic():\n    result = parse_csv_line('a, b ,c')\n"
+        "    assert result == ['a', 'b', 'c']\n"
+        "def test_empty():\n    result = parse_csv_line('')\n    assert result == []\n")},
     "t07-sql-param-fix": {"solution.py": (
         "def build_query(user_id):\n"
         "    return ('select * from users where id = :id', {'id': user_id})\n")},

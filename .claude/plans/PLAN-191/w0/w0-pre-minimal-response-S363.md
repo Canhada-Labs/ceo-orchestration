@@ -13,6 +13,7 @@ sombra antes de editar).
 | t02 | não | `return []` | 0,00 | 0,00 | nenhuma |
 | t03 | não | `return dict(DEFAULTS)` | 0,67 | 0,67 | nenhuma |
 | t04 | **sim** | apagar só os 9 caracteres ` or s < 0` | 1,00 | 0,80 | consertado |
+| t04 | **sim** | apagar o teste de negativo de `area_rectangle` (rodada de refutação) | 1,00 | 0,73 | consertado |
 | t05 | **sim** | `assert True` com as palavras-chave num comentário | 1,00 | 0,50 | consertado |
 | t06 | não | `return True` | 0,75 | 0,75 | nenhuma |
 | t07 | **sim** | `return ('?', (user_id,))` (nem é SQL) | 1,00 | 0,20 | consertado |
@@ -35,13 +36,16 @@ conteúdo. As curas medem cada parte pela própria forma ou pelo comportamento:
   de REFERÊNCIA (`_IMPL`), não contra o `solution.py` do diretório, que o candidato podia
   reescrever para uma asserção errada passar; as chamadas a `parse_csv_line` são registradas
   em tempo de execução (0,2 se houve chamada, 0,15 se a linha vazia foi exercitada); 0,15 se
-  algum `assert` tem na expressão uma chamada à função (AST — comentário não conta).
+  algum `assert` tem na expressão uma chamada à função, ou lê um nome que recebeu o resultado
+  dela no mesmo teste (`result = parse_csv_line(...)`; AST — comentário não conta).
 - **t07** — o SQL mantém a forma da consulta (`select … from users … where`) e o placeholder
   é o valor comparado a `id` (`%s`, `?`, `:nome`, `%(nome)s`, `$n`). Parâmetros em
   dicionário contam pelos valores: antes, a alternativa válida `:id` + `{'id': user_id}`
   ficava em 0,80 (falso negativo, curado no mesmo patch).
 - **t04** — sinal de refatoração = as duas funções públicas definidas E exatamente UM
-  `raise` (contado por AST): um helper compartilhado, ou uma função delegando à outra.
+  `raise` (contado por AST): um helper compartilhado, ou uma função delegando à outra. Os
+  negativos são exercitados nas DUAS funções (`area_square(-2)`, `area_rectangle(-1, 2)` e
+  `(2, -1)`): apagar o teste de `area_rectangle` também deixa um único `raise`.
   Decisão técnica tomada pelo padrão recomendado na triagem (consertar, não declarar
   aceitável): a instrução pede remover a lógica duplicada, e a solução de referência já tem
   um único teste de negativo. Se o Owner preferir «aceitável», basta reverter o sinal do t04.
@@ -54,8 +58,15 @@ conteúdo. As curas medem cada parte pela própria forma ou pelo comportamento:
   `test_minimal_response_does_not_score_full` falhava na árvore anterior
   (`1.0 not less than 0.99`).
 - **Mutante:** reverter UM dos quatro verificadores de cada vez deixa o teste vermelho (4 de 4).
+- **Rodada de refutação (sobre `0bf1e824`):** dois achados P2 confirmados por sonda e curados.
+  t04: o payload que apaga o teste de negativo de `area_rectangle` dava 1,00 e fica em 0,73
+  (vermelho antes, verde depois). t05: o estilo `result = parse_csv_line(...)` + `assert result
+  == ...` ficava em 0,85, abaixo do limiar de PASS do runner (0,99) — falso negativo; agora
+  1,00, controle em `VALID_ALTERNATIVES`. Payload-guarda (chama a função, mas o `assert` não lê
+  o resultado): 0,85 antes e depois. Mutantes vermelhos: só `area_square` testado no negativo;
+  sem o passo de dataflow; crédito para qualquer `assert` de função que chama a função.
 - **Verde:** GOLDEN 10 de 10 = 1,00; árvore inicial sem mudança (t04 0,80, demais 0,00);
-  `VALID_ALTERNATIVES` 3 de 3 = 1,00 (`test_valid_alternative_keeps_full_reward`); o arquivo
+  `VALID_ALTERNATIVES` 4 de 4 = 1,00 (`test_valid_alternative_keeps_full_reward`); o arquivo
   de teste inteiro passa (30 testes).
 
 ## Residuais declarados
@@ -64,7 +75,9 @@ conteúdo. As curas medem cada parte pela própria forma ou pelo comportamento:
   resposta mínima; aceitam qualquer implementação correta (o t10 aceita uma busca linear).
   Isso é aderência à instrução, outra classe, fora do W0-pre.
 - Um verificador determinístico não julga semântica: um README com título, uma frase de três
-  palavras quaisquer, um bloco que chama `add(` e as três funções nomeadas ainda chega a 1,0.
+  palavras quaisquer, um bloco que chama `add(` e as três funções nomeadas ainda chega a 1,0;
+  no t05, um `assert` tautológico (`parse_csv_line('') == parse_csv_line('')`, ou `r == r` com
+  `r = parse_csv_line('')`) também — a forma direta já chegava a 1,0 em `0bf1e824`.
   Por isso o W1 já pré-registra o juiz cego ao braço para medir escapes.
 - `.claude/eval/README.md` cita `.github/workflows/eval-nightly.yml` como proposta do
   PLAN-133; o arquivo não existe em `.github/workflows/`. Consertar os verificadores só muda,

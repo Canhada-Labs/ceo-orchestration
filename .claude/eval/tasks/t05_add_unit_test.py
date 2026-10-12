@@ -9,7 +9,8 @@ PLAN-191 W0-pre: coverage is measured by BEHAVIOR, never by substrings (a
 keyword in a comment used to score 1.0 with ``assert True``): the candidate
 tests run against the REFERENCE ``_IMPL`` (a rewritten ``solution.py`` cannot
 make a wrong assertion pass), every call to ``parse_csv_line`` is recorded at
-runtime, and the assertion credit needs an ``assert`` whose expression calls it.
+runtime, and the assertion credit needs an ``assert`` whose expression calls it
+or reads a name bound to its result in the same test function.
 """
 
 from __future__ import annotations
@@ -33,20 +34,33 @@ def setup(workdir: Path) -> None:
     (workdir / "solution.py").write_text(_IMPL, encoding="utf-8")
 
 
+def _calls_target(node: ast.AST) -> bool:
+    for sub in ast.walk(node):
+        if isinstance(sub, ast.Call):
+            func = sub.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+            if name == "parse_csv_line":
+                return True
+    return False
+
+
 def _asserts_on_target(test_src: str) -> bool:
-    """True if some ``assert`` expression calls parse_csv_line (AST: comments never count)."""
+    """True if some ``assert`` calls parse_csv_line, directly or through a name
+    bound to its result in the same function (``result = parse_csv_line(...)``;
+    one step of dataflow). AST: comments never count."""
     try:
         tree = ast.parse(test_src)
     except SyntaxError:
         return False
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assert):
-            for sub in ast.walk(node.test):
-                if isinstance(sub, ast.Call):
-                    func = sub.func
-                    name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
-                    if name == "parse_csv_line":
-                        return True
+    if any(isinstance(n, ast.Assert) and _calls_target(n.test) for n in ast.walk(tree)):
+        return True
+    for fn in (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)):
+        bound = {t.id for n in ast.walk(fn) if isinstance(n, ast.Assign) and _calls_target(n.value)
+                 for tgt in n.targets for t in ast.walk(tgt) if isinstance(t, ast.Name)}
+        for n in ast.walk(fn):
+            if isinstance(n, ast.Assert) and any(
+                    isinstance(s, ast.Name) and s.id in bound for s in ast.walk(n.test)):
+                return True
     return False
 
 

@@ -58,9 +58,12 @@ def verify(workdir: Path) -> float:
     ):
         got = run_python(workdir, "solution.py", func=func, args=args)
         behavior.append(got == expected)
-    # Negative must raise (verifier catches the sentinel == it raised).
-    neg = run_python(workdir, "solution.py", func="area_square", args=(-2,))
-    behavior.append(neg is _VERIFY_ERROR)
+    # Negatives must raise in BOTH functions (sentinel == it raised): deleting
+    # area_rectangle's check also leaves one raise and used to score 1.0.
+    for func, args in (("area_square", (-2,)), ("area_rectangle", (-1, 2)),
+                       ("area_rectangle", (2, -1))):
+        neg = run_python(workdir, "solution.py", func=func, args=args)
+        behavior.append(neg is _VERIFY_ERROR)
 
     behavior_score = sum(1 for b in behavior if b) / len(behavior)
 
