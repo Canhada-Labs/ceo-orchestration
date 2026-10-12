@@ -1,9 +1,10 @@
-# Roteiro do Lote A (S363, PLAN-194): W4 → U2-A → U2-B → W5b
+# Roteiro dos Lotes A e B (S363, PLAN-194 e PLAN-183): W4 → W5b → cenv → W7a
 
-Para o Owner, copiar e colar. Cada pacote do Lote A é UM SIGN, rodado por você num clone NOVO do GitHub, um pacote
-por vez, nesta ordem. O W4 roda o SIGN dele, `.claude/plans/PLAN-194/w4/OWNER-W4-SIGN.sh`. O U2-A, o U2-B e a W5b
-rodam o molde «SIGN mínimo», `.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh`, com os dados do pacote (`sign.tsv`).
-O roteiro não tem script próprio: são comandos do git, do gpg e os SIGNs.
+Para o Owner, copiar e colar. Cada pacote dos Lotes A e B é UM SIGN, rodado por você num clone NOVO do GitHub, um
+pacote por vez, nesta ordem. O W4 roda o SIGN dele, `.claude/plans/PLAN-194/w4/OWNER-W4-SIGN.sh`. A W5b, o cenv e a
+W7a rodam o molde «SIGN mínimo», `.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh`, com os dados do pacote
+(`sign.tsv`). U2-A e U2-B foram para a 1.4.4 em 2026-10-12. O roteiro não tem script próprio: são comandos do git,
+do gpg e os SIGNs.
 
 **Fronteira de confiança.** O roteiro confia na sua máquina, na sua conta e na sua configuração. Um processo do seu
 usuário do sistema (um programa seu, uma sessão do Claude Code) alcança tudo o que o roteiro usa: os clones, a chave
@@ -24,8 +25,8 @@ anteriores definiram. Se o terminal fechar no meio do roteiro, pare e chame o CE
 sugeridos (por exemplo `git reset`, `git apply -R`, `rm`, «rode de novo»). Fora do esperado, pare e chame o CEO.
 
 **Os valores de cada pacote vêm do CEO**, depois que ele conferir o pacote anterior publicado. São a âncora (o SHA
-do main do GitHub de onde o pacote parte) e os sha256 dos arquivos que o bloco (d) confere: no W4, o do SIGN; no
-U2-A, no U2-B e na W5b, os da entrada do molde (`OWNER-SIGN.sh`), do núcleo do molde (`sign_min.py`) e dos dados
+do main do GitHub de onde o pacote parte) e os sha256 dos arquivos que o bloco (d) confere: no W4, o do SIGN; na
+W5b, no cenv e na W7a, os da entrada do molde (`OWNER-SIGN.sh`), do núcleo do molde (`sign_min.py`) e dos dados
 do pacote (`sign.tsv`). Você troca o texto depois do `=` nas linhas `COLE-AQUI-…` pelos valores informados.
 
 **O push só sai depois da resposta do CEO.** Depois do SIGN, o bloco (f) confere o commit pela ref e imprime o SHA
@@ -277,159 +278,9 @@ cd "${D:?}" && confere_config && [ "$(HOME="${LH:?}" git rev-parse --verify "ref
 cd "${D:?}" && [ "$(HOME="${LH:?}" git ls-remote origin refs/heads/main | cut -f1)" = "${SHA:?}" ] && echo PUBLICADO-OK && echo "${SHA}"
 ```
 
-Mande ao CEO: `W4: PUBLICADO-OK <sha>`. Espere os valores do U2-A.
+Mande ao CEO: `W4: PUBLICADO-OK <sha>`. Espere os valores da W5b.
 
-## 2. U2-A (pacote 2 de 4)
-
-(a) Troque o texto depois do `=` nas linhas `COLE-AQUI-…` pelos valores que o CEO informou para o U2-A.
-
-```bash
-ANCORA=COLE-AQUI-O-SHA-DO-CEO
-SIGN_SHA=COLE-AQUI-O-SHA256-DO-SIGN
-CORE_SHA=COLE-AQUI-O-SHA256-DO-NUCLEO
-DADOS_SHA=COLE-AQUI-O-SHA256-DOS-DADOS
-SHA= SHA_LIBERADO= GPG_ABS= GPG_SHA=
-D="${RF:?}/u2a"
-LH="${RF:?}/home-u2a"
-cd "${RF:?}" && [ ! -e "${D}" ] && [ ! -L "${D}" ] && mkdir "${LH}" && [ ! -L "${LH}" ] && [ "$(cd "${LH}" && pwd -P)" = "${LH}" ] && [ "$(HOME="${LH}" git ls-remote "${URL:?}" refs/heads/main | cut -f1)" = "${ANCORA:?}" ] && echo ORIGEM-OK
-```
-
-```bash
-cd "${RF:?}" && HOME="${LH:?}" git -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --template= --no-checkout --single-branch --branch main "${URL:?}" "${D:?}" && [ ! -L "${D}" ] && cd "${D}" && [ "$(pwd -P)" = "${D}" ] && HOME="${LH}" git config core.hooksPath /dev/null && HOME="${LH}" git config core.fsmonitor false && HOME="${LH}" git config core.untrackedCache false && HOME="${LH}" git config user.name "${NOME}" && HOME="${LH}" git config user.email "${EMAIL}" && { [ -z "${CHAVE}" ] || HOME="${LH}" git config user.signingkey "${CHAVE}"; } && echo CLONE-OK
-```
-
-```bash
-cd "${D:?}" && confere_config && HOME="${LH:?}" git checkout main && echo CHECKOUT-OK
-```
-
-(b)
-
-```bash
-cd "${D:?}" && [ "$(HOME="${LH:?}" git rev-parse HEAD)" = "${ANCORA:?}" ] && [ -z "$(HOME="${LH}" git status --porcelain)" ] && echo ANCORA-OK
-```
-
-(c) Sem insumo.
-
-(d) Conferências antes do SIGN: o sha256 da entrada do molde, do núcleo e dos dados do pacote são os informados
-pelo CEO; o resto é como no W4.
-
-```bash
-S=.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
-N=.claude/plans/PLAN-194/sign-min/sign_min.py
-DADOS=.claude/plans/PLAN-194/w2a/sign.tsv
-cd "${D:?}" && [ "$(shasum -a 256 < "${S}" | cut -d' ' -f1)" = "${SIGN_SHA:?}" ] && [ "$(shasum -a 256 < "${N}" | cut -d' ' -f1)" = "${CORE_SHA:?}" ] && [ "$(shasum -a 256 < "${DADOS}" | cut -d' ' -f1)" = "${DADOS_SHA:?}" ] && [ "$(HOME="${LH:?}" git config --show-origin --get-all core.fsmonitor)" = "$(printf 'file:.git/config\tfalse')" ] && [ "$(HOME="${LH}" git config --show-origin --get-all core.hooksPath)" = "$(printf 'file:.git/config\t/dev/null')" ] && confere_config && [ -z "$(ls -A "${LH}")" ] && [ -z "$(env | grep -E '^(GIT_|CEO_|CLAUDE_PROJECT_DIR|BASH_ENV=|BASH_FUNC_|GNUPGHOME=|XDG_CONFIG_HOME=)')" ] && GPG_ABS="$(command -v gpg)" && GPG_SHA="$(shasum -a 256 < "${GPG_ABS}" | cut -d' ' -f1)" && [ "${#GPG_SHA}" = 64 ] && echo PRE-SIGN-OK && printf 'gpg: %s %s\n' "${GPG_ABS}" "${GPG_SHA}"
-```
-
-(e) O SIGN do molde, a partir da raiz do clone, com o sha256 do núcleo e os dados do pacote. Ele não faz push. O
-bloco encerra o gpg-agent antes e depois do SIGN.
-
-```bash
-gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent && cd "${D:?}" && env -i PATH="${PATH}" HOME="${LH:?}" GNUPGHOME="${HOME}/.gnupg" PYTHONUSERBASE="${PYUB:?}" USER="${USER}" LOGNAME="${LOGNAME}" SHELL="${SHELL}" TERM="${TERM}" LANG="${LANG}" PAGER=cat GPG_TTY="$(tty)" bash .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh --nucleo-sha256="${CORE_SHA:?}" "${DADOS:?}"; echo "SIGN-RC=$?"; gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent
-```
-
-`SIGN-RC=0`: siga para (f). Qualquer outro: pare e chame o CEO, sem rodar nada que o SIGN sugerir.
-
-(f)
-
-```bash
-P=.claude/plans/PLAN-194/w2a/w2a.patch
-SE=.claude/plans/PLAN-194/w2a-approved.md
-cd "${D:?}" && SHA="$(HOME="${LH:?}" git rev-parse --verify "refs/heads/main^{commit}")" && [ "$(HOME="${LH}" git symbolic-ref HEAD)" = refs/heads/main ] && [ "$(HOME="${LH}" git rev-parse --verify "HEAD^{commit}")" = "${SHA}" ] && [ "$(HOME="${LH}" git rev-list --parents -n 1 "${SHA}")" = "${SHA} ${ANCORA:?}" ] && [ "$(HOME="${LH}" git diff-tree -r --no-renames --raw --no-abbrev "${ANCORA}" "${SHA}" | awk -F'\t' '{split($1, h, " "); print substr(h[1], 2) " " h[2] " " h[5] "\t" $2}' | LC_ALL=C sort)" = "$( { HOME="${LH}" git cat-file blob "${ANCORA}:${P}" | awk '/^diff --git a\//{if (p != "") print o " " n " " s "\t" p; p = $3; sub(/^a\//, "", p); s = "M"; o = ""; n = ""} /^new file mode /{s = "A"; o = "000000"; n = $4} /^deleted file mode /{s = "D"; o = $4; n = "000000"} /^index [0-9a-f]+[.][.][0-9a-f]+ [0-7]+$/{if (s == "M") {o = $3; n = $3}} END {if (p != "") print o " " n " " s "\t" p}'; printf '100644 100644 M\t%s\n000000 100644 A\t%s.asc\n' "${SE}" "${SE}"; } | LC_ALL=C sort)" ] && [ "$(command -v gpg)" = "${GPG_ABS:?}" ] && [ "$(shasum -a 256 < "${GPG_ABS}" | cut -d' ' -f1)" = "${GPG_SHA:?}" ] && echo LAND-OK && printf '%s\ngpg: %s %s\n' "${SHA}" "${GPG_ABS}" "${GPG_SHA}"
-```
-
-(f2) Mande ao CEO `U2-A: SIGN-RC=0, LAND-OK` e as duas linhas que o (f) imprimiu depois do `LAND-OK` (o SHA e a
-linha `gpg:`). Espere a resposta do CEO: `PUSH-LIBERADO <sha>`. Sem ela, não há push.
-
-(g) Só depois do `PUSH-LIBERADO`, com o SHA da resposta do CEO na primeira linha.
-
-```bash
-SHA_LIBERADO=COLE-AQUI-O-SHA-DO-PUSH-LIBERADO
-cd "${D:?}" && confere_config && [ "$(HOME="${LH:?}" git rev-parse --verify "refs/heads/main^{commit}")" = "${SHA:?}" ] && [ "${SHA_LIBERADO:?}" = "${SHA}" ] && git -c core.hooksPath=/dev/null -c core.fsmonitor=false push origin "${SHA}:refs/heads/main" && echo PUSH-OK
-```
-
-(h)
-
-```bash
-cd "${D:?}" && [ "$(HOME="${LH:?}" git ls-remote origin refs/heads/main | cut -f1)" = "${SHA:?}" ] && echo PUBLICADO-OK && echo "${SHA}"
-```
-
-Mande ao CEO: `U2-A: PUBLICADO-OK <sha>`. Espere os valores do U2-B.
-
-## 3. U2-B (pacote 3 de 4)
-
-(a) Troque o texto depois do `=` nas linhas `COLE-AQUI-…` pelos valores que o CEO informou para o U2-B.
-
-```bash
-ANCORA=COLE-AQUI-O-SHA-DO-CEO
-SIGN_SHA=COLE-AQUI-O-SHA256-DO-SIGN
-CORE_SHA=COLE-AQUI-O-SHA256-DO-NUCLEO
-DADOS_SHA=COLE-AQUI-O-SHA256-DOS-DADOS
-SHA= SHA_LIBERADO= GPG_ABS= GPG_SHA=
-D="${RF:?}/u2b"
-LH="${RF:?}/home-u2b"
-cd "${RF:?}" && [ ! -e "${D}" ] && [ ! -L "${D}" ] && mkdir "${LH}" && [ ! -L "${LH}" ] && [ "$(cd "${LH}" && pwd -P)" = "${LH}" ] && [ "$(HOME="${LH}" git ls-remote "${URL:?}" refs/heads/main | cut -f1)" = "${ANCORA:?}" ] && echo ORIGEM-OK
-```
-
-```bash
-cd "${RF:?}" && HOME="${LH:?}" git -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --template= --no-checkout --single-branch --branch main "${URL:?}" "${D:?}" && [ ! -L "${D}" ] && cd "${D}" && [ "$(pwd -P)" = "${D}" ] && HOME="${LH}" git config core.hooksPath /dev/null && HOME="${LH}" git config core.fsmonitor false && HOME="${LH}" git config core.untrackedCache false && HOME="${LH}" git config user.name "${NOME}" && HOME="${LH}" git config user.email "${EMAIL}" && { [ -z "${CHAVE}" ] || HOME="${LH}" git config user.signingkey "${CHAVE}"; } && echo CLONE-OK
-```
-
-```bash
-cd "${D:?}" && confere_config && HOME="${LH:?}" git checkout main && echo CHECKOUT-OK
-```
-
-(b)
-
-```bash
-cd "${D:?}" && [ "$(HOME="${LH:?}" git rev-parse HEAD)" = "${ANCORA:?}" ] && [ -z "$(HOME="${LH}" git status --porcelain)" ] && echo ANCORA-OK
-```
-
-(c) Sem insumo.
-
-(d)
-
-```bash
-S=.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
-N=.claude/plans/PLAN-194/sign-min/sign_min.py
-DADOS=.claude/plans/PLAN-194/w2b/sign.tsv
-cd "${D:?}" && [ "$(shasum -a 256 < "${S}" | cut -d' ' -f1)" = "${SIGN_SHA:?}" ] && [ "$(shasum -a 256 < "${N}" | cut -d' ' -f1)" = "${CORE_SHA:?}" ] && [ "$(shasum -a 256 < "${DADOS}" | cut -d' ' -f1)" = "${DADOS_SHA:?}" ] && [ "$(HOME="${LH:?}" git config --show-origin --get-all core.fsmonitor)" = "$(printf 'file:.git/config\tfalse')" ] && [ "$(HOME="${LH}" git config --show-origin --get-all core.hooksPath)" = "$(printf 'file:.git/config\t/dev/null')" ] && confere_config && [ -z "$(ls -A "${LH}")" ] && [ -z "$(env | grep -E '^(GIT_|CEO_|CLAUDE_PROJECT_DIR|BASH_ENV=|BASH_FUNC_|GNUPGHOME=|XDG_CONFIG_HOME=)')" ] && GPG_ABS="$(command -v gpg)" && GPG_SHA="$(shasum -a 256 < "${GPG_ABS}" | cut -d' ' -f1)" && [ "${#GPG_SHA}" = 64 ] && echo PRE-SIGN-OK && printf 'gpg: %s %s\n' "${GPG_ABS}" "${GPG_SHA}"
-```
-
-(e)
-
-```bash
-gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent && cd "${D:?}" && env -i PATH="${PATH}" HOME="${LH:?}" GNUPGHOME="${HOME}/.gnupg" PYTHONUSERBASE="${PYUB:?}" USER="${USER}" LOGNAME="${LOGNAME}" SHELL="${SHELL}" TERM="${TERM}" LANG="${LANG}" PAGER=cat GPG_TTY="$(tty)" bash .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh --nucleo-sha256="${CORE_SHA:?}" "${DADOS:?}"; echo "SIGN-RC=$?"; gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent
-```
-
-`SIGN-RC=0`: siga para (f). Qualquer outro: pare e chame o CEO, sem rodar nada que o SIGN sugerir.
-
-(f)
-
-```bash
-P=.claude/plans/PLAN-194/w2b/w2b.patch
-SE=.claude/plans/PLAN-194/w2b-approved.md
-cd "${D:?}" && SHA="$(HOME="${LH:?}" git rev-parse --verify "refs/heads/main^{commit}")" && [ "$(HOME="${LH}" git symbolic-ref HEAD)" = refs/heads/main ] && [ "$(HOME="${LH}" git rev-parse --verify "HEAD^{commit}")" = "${SHA}" ] && [ "$(HOME="${LH}" git rev-list --parents -n 1 "${SHA}")" = "${SHA} ${ANCORA:?}" ] && [ "$(HOME="${LH}" git diff-tree -r --no-renames --raw --no-abbrev "${ANCORA}" "${SHA}" | awk -F'\t' '{split($1, h, " "); print substr(h[1], 2) " " h[2] " " h[5] "\t" $2}' | LC_ALL=C sort)" = "$( { HOME="${LH}" git cat-file blob "${ANCORA}:${P}" | awk '/^diff --git a\//{if (p != "") print o " " n " " s "\t" p; p = $3; sub(/^a\//, "", p); s = "M"; o = ""; n = ""} /^new file mode /{s = "A"; o = "000000"; n = $4} /^deleted file mode /{s = "D"; o = $4; n = "000000"} /^index [0-9a-f]+[.][.][0-9a-f]+ [0-7]+$/{if (s == "M") {o = $3; n = $3}} END {if (p != "") print o " " n " " s "\t" p}'; printf '100644 100644 M\t%s\n000000 100644 A\t%s.asc\n' "${SE}" "${SE}"; } | LC_ALL=C sort)" ] && [ "$(command -v gpg)" = "${GPG_ABS:?}" ] && [ "$(shasum -a 256 < "${GPG_ABS}" | cut -d' ' -f1)" = "${GPG_SHA:?}" ] && echo LAND-OK && printf '%s\ngpg: %s %s\n' "${SHA}" "${GPG_ABS}" "${GPG_SHA}"
-```
-
-(f2) Mande ao CEO `U2-B: SIGN-RC=0, LAND-OK` e as duas linhas que o (f) imprimiu depois do `LAND-OK` (o SHA e a
-linha `gpg:`). Espere a resposta do CEO: `PUSH-LIBERADO <sha>`. Sem ela, não há push.
-
-(g) Só depois do `PUSH-LIBERADO`, com o SHA da resposta do CEO na primeira linha.
-
-```bash
-SHA_LIBERADO=COLE-AQUI-O-SHA-DO-PUSH-LIBERADO
-cd "${D:?}" && confere_config && [ "$(HOME="${LH:?}" git rev-parse --verify "refs/heads/main^{commit}")" = "${SHA:?}" ] && [ "${SHA_LIBERADO:?}" = "${SHA}" ] && git -c core.hooksPath=/dev/null -c core.fsmonitor=false push origin "${SHA}:refs/heads/main" && echo PUSH-OK
-```
-
-(h)
-
-```bash
-cd "${D:?}" && [ "$(HOME="${LH:?}" git ls-remote origin refs/heads/main | cut -f1)" = "${SHA:?}" ] && echo PUBLICADO-OK && echo "${SHA}"
-```
-
-Mande ao CEO: `U2-B: PUBLICADO-OK <sha>`. Espere os valores da W5b.
-
-## 4. W5b (pacote 4 de 4)
+## 2. W5b (pacote 2 de 4)
 
 (a) Troque o texto depois do `=` nas linhas `COLE-AQUI-…` pelos valores que o CEO informou para o W5b.
 
@@ -460,7 +311,8 @@ cd "${D:?}" && [ "$(HOME="${LH:?}" git rev-parse HEAD)" = "${ANCORA:?}" ] && [ -
 
 (c) Sem insumo.
 
-(d)
+(d) Conferências antes do SIGN: o sha256 da entrada do molde, do núcleo e dos dados do pacote são os informados
+pelo CEO; o resto é como no W4.
 
 ```bash
 S=.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
@@ -469,7 +321,8 @@ DADOS=.claude/plans/PLAN-194/w5b/sign.tsv
 cd "${D:?}" && [ "$(shasum -a 256 < "${S}" | cut -d' ' -f1)" = "${SIGN_SHA:?}" ] && [ "$(shasum -a 256 < "${N}" | cut -d' ' -f1)" = "${CORE_SHA:?}" ] && [ "$(shasum -a 256 < "${DADOS}" | cut -d' ' -f1)" = "${DADOS_SHA:?}" ] && [ "$(HOME="${LH:?}" git config --show-origin --get-all core.fsmonitor)" = "$(printf 'file:.git/config\tfalse')" ] && [ "$(HOME="${LH}" git config --show-origin --get-all core.hooksPath)" = "$(printf 'file:.git/config\t/dev/null')" ] && confere_config && [ -z "$(ls -A "${LH}")" ] && [ -z "$(env | grep -E '^(GIT_|CEO_|CLAUDE_PROJECT_DIR|BASH_ENV=|BASH_FUNC_|GNUPGHOME=|XDG_CONFIG_HOME=)')" ] && GPG_ABS="$(command -v gpg)" && GPG_SHA="$(shasum -a 256 < "${GPG_ABS}" | cut -d' ' -f1)" && [ "${#GPG_SHA}" = 64 ] && echo PRE-SIGN-OK && printf 'gpg: %s %s\n' "${GPG_ABS}" "${GPG_SHA}"
 ```
 
-(e)
+(e) O SIGN do molde, a partir da raiz do clone, com o sha256 do núcleo e os dados do pacote. Ele não faz push. O
+bloco encerra o gpg-agent antes e depois do SIGN.
 
 ```bash
 gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent && cd "${D:?}" && env -i PATH="${PATH}" HOME="${LH:?}" GNUPGHOME="${HOME}/.gnupg" PYTHONUSERBASE="${PYUB:?}" USER="${USER}" LOGNAME="${LOGNAME}" SHELL="${SHELL}" TERM="${TERM}" LANG="${LANG}" PAGER=cat GPG_TTY="$(tty)" bash .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh --nucleo-sha256="${CORE_SHA:?}" "${DADOS:?}"; echo "SIGN-RC=$?"; gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent
@@ -501,11 +354,159 @@ cd "${D:?}" && confere_config && [ "$(HOME="${LH:?}" git rev-parse --verify "ref
 cd "${D:?}" && [ "$(HOME="${LH:?}" git ls-remote origin refs/heads/main | cut -f1)" = "${SHA:?}" ] && echo PUBLICADO-OK && echo "${SHA}"
 ```
 
-Mande ao CEO: `W5b: PUBLICADO-OK <sha>`. O Lote A termina quando o CEO confirmar este último commit.
+Mande ao CEO: `W5b: PUBLICADO-OK <sha>`. Espere os valores do cenv.
 
-## 5. Depois do Lote A
+## 3. cenv (pacote 3 de 4)
 
-Só depois que o CEO confirmar a W5b. É o primeiro git no seu checkout principal desde o início do roteiro:
+(a) Troque o texto depois do `=` nas linhas `COLE-AQUI-…` pelos valores que o CEO informou para o cenv.
+
+```bash
+ANCORA=COLE-AQUI-O-SHA-DO-CEO
+SIGN_SHA=COLE-AQUI-O-SHA256-DO-SIGN
+CORE_SHA=COLE-AQUI-O-SHA256-DO-NUCLEO
+DADOS_SHA=COLE-AQUI-O-SHA256-DOS-DADOS
+SHA= SHA_LIBERADO= GPG_ABS= GPG_SHA=
+D="${RF:?}/cenv"
+LH="${RF:?}/home-cenv"
+cd "${RF:?}" && [ ! -e "${D}" ] && [ ! -L "${D}" ] && mkdir "${LH}" && [ ! -L "${LH}" ] && [ "$(cd "${LH}" && pwd -P)" = "${LH}" ] && [ "$(HOME="${LH}" git ls-remote "${URL:?}" refs/heads/main | cut -f1)" = "${ANCORA:?}" ] && echo ORIGEM-OK
+```
+
+```bash
+cd "${RF:?}" && HOME="${LH:?}" git -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --template= --no-checkout --single-branch --branch main "${URL:?}" "${D:?}" && [ ! -L "${D}" ] && cd "${D}" && [ "$(pwd -P)" = "${D}" ] && HOME="${LH}" git config core.hooksPath /dev/null && HOME="${LH}" git config core.fsmonitor false && HOME="${LH}" git config core.untrackedCache false && HOME="${LH}" git config user.name "${NOME}" && HOME="${LH}" git config user.email "${EMAIL}" && { [ -z "${CHAVE}" ] || HOME="${LH}" git config user.signingkey "${CHAVE}"; } && echo CLONE-OK
+```
+
+```bash
+cd "${D:?}" && confere_config && HOME="${LH:?}" git checkout main && echo CHECKOUT-OK
+```
+
+(b)
+
+```bash
+cd "${D:?}" && [ "$(HOME="${LH:?}" git rev-parse HEAD)" = "${ANCORA:?}" ] && [ -z "$(HOME="${LH}" git status --porcelain)" ] && echo ANCORA-OK
+```
+
+(c) Sem insumo.
+
+(d)
+
+```bash
+S=.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
+N=.claude/plans/PLAN-194/sign-min/sign_min.py
+DADOS=.claude/plans/PLAN-194/cenv/sign.tsv
+cd "${D:?}" && [ "$(shasum -a 256 < "${S}" | cut -d' ' -f1)" = "${SIGN_SHA:?}" ] && [ "$(shasum -a 256 < "${N}" | cut -d' ' -f1)" = "${CORE_SHA:?}" ] && [ "$(shasum -a 256 < "${DADOS}" | cut -d' ' -f1)" = "${DADOS_SHA:?}" ] && [ "$(HOME="${LH:?}" git config --show-origin --get-all core.fsmonitor)" = "$(printf 'file:.git/config\tfalse')" ] && [ "$(HOME="${LH}" git config --show-origin --get-all core.hooksPath)" = "$(printf 'file:.git/config\t/dev/null')" ] && confere_config && [ -z "$(ls -A "${LH}")" ] && [ -z "$(env | grep -E '^(GIT_|CEO_|CLAUDE_PROJECT_DIR|BASH_ENV=|BASH_FUNC_|GNUPGHOME=|XDG_CONFIG_HOME=)')" ] && GPG_ABS="$(command -v gpg)" && GPG_SHA="$(shasum -a 256 < "${GPG_ABS}" | cut -d' ' -f1)" && [ "${#GPG_SHA}" = 64 ] && echo PRE-SIGN-OK && printf 'gpg: %s %s\n' "${GPG_ABS}" "${GPG_SHA}"
+```
+
+(e)
+
+```bash
+gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent && cd "${D:?}" && env -i PATH="${PATH}" HOME="${LH:?}" GNUPGHOME="${HOME}/.gnupg" PYTHONUSERBASE="${PYUB:?}" USER="${USER}" LOGNAME="${LOGNAME}" SHELL="${SHELL}" TERM="${TERM}" LANG="${LANG}" PAGER=cat GPG_TTY="$(tty)" bash .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh --nucleo-sha256="${CORE_SHA:?}" "${DADOS:?}"; echo "SIGN-RC=$?"; gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent
+```
+
+`SIGN-RC=0`: siga para (f). Qualquer outro: pare e chame o CEO, sem rodar nada que o SIGN sugerir.
+
+(f)
+
+```bash
+P=.claude/plans/PLAN-194/cenv/cenv.patch
+SE=.claude/plans/PLAN-194/cenv-approved.md
+cd "${D:?}" && SHA="$(HOME="${LH:?}" git rev-parse --verify "refs/heads/main^{commit}")" && [ "$(HOME="${LH}" git symbolic-ref HEAD)" = refs/heads/main ] && [ "$(HOME="${LH}" git rev-parse --verify "HEAD^{commit}")" = "${SHA}" ] && [ "$(HOME="${LH}" git rev-list --parents -n 1 "${SHA}")" = "${SHA} ${ANCORA:?}" ] && [ "$(HOME="${LH}" git diff-tree -r --no-renames --raw --no-abbrev "${ANCORA}" "${SHA}" | awk -F'\t' '{split($1, h, " "); print substr(h[1], 2) " " h[2] " " h[5] "\t" $2}' | LC_ALL=C sort)" = "$( { HOME="${LH}" git cat-file blob "${ANCORA}:${P}" | awk '/^diff --git a\//{if (p != "") print o " " n " " s "\t" p; p = $3; sub(/^a\//, "", p); s = "M"; o = ""; n = ""} /^new file mode /{s = "A"; o = "000000"; n = $4} /^deleted file mode /{s = "D"; o = $4; n = "000000"} /^index [0-9a-f]+[.][.][0-9a-f]+ [0-7]+$/{if (s == "M") {o = $3; n = $3}} END {if (p != "") print o " " n " " s "\t" p}'; printf '100644 100644 M\t%s\n000000 100644 A\t%s.asc\n' "${SE}" "${SE}"; } | LC_ALL=C sort)" ] && [ "$(command -v gpg)" = "${GPG_ABS:?}" ] && [ "$(shasum -a 256 < "${GPG_ABS}" | cut -d' ' -f1)" = "${GPG_SHA:?}" ] && echo LAND-OK && printf '%s\ngpg: %s %s\n' "${SHA}" "${GPG_ABS}" "${GPG_SHA}"
+```
+
+(f2) Mande ao CEO `cenv: SIGN-RC=0, LAND-OK` e as duas linhas que o (f) imprimiu depois do `LAND-OK` (o SHA e a
+linha `gpg:`). Espere a resposta do CEO: `PUSH-LIBERADO <sha>`. Sem ela, não há push.
+
+(g) Só depois do `PUSH-LIBERADO`, com o SHA da resposta do CEO na primeira linha.
+
+```bash
+SHA_LIBERADO=COLE-AQUI-O-SHA-DO-PUSH-LIBERADO
+cd "${D:?}" && confere_config && [ "$(HOME="${LH:?}" git rev-parse --verify "refs/heads/main^{commit}")" = "${SHA:?}" ] && [ "${SHA_LIBERADO:?}" = "${SHA}" ] && git -c core.hooksPath=/dev/null -c core.fsmonitor=false push origin "${SHA}:refs/heads/main" && echo PUSH-OK
+```
+
+(h)
+
+```bash
+cd "${D:?}" && [ "$(HOME="${LH:?}" git ls-remote origin refs/heads/main | cut -f1)" = "${SHA:?}" ] && echo PUBLICADO-OK && echo "${SHA}"
+```
+
+Mande ao CEO: `cenv: PUBLICADO-OK <sha>`. Espere os valores da W7a.
+
+## 4. W7a (pacote 4 de 4)
+
+(a) Troque o texto depois do `=` nas linhas `COLE-AQUI-…` pelos valores que o CEO informou para o W7a.
+
+```bash
+ANCORA=COLE-AQUI-O-SHA-DO-CEO
+SIGN_SHA=COLE-AQUI-O-SHA256-DO-SIGN
+CORE_SHA=COLE-AQUI-O-SHA256-DO-NUCLEO
+DADOS_SHA=COLE-AQUI-O-SHA256-DOS-DADOS
+SHA= SHA_LIBERADO= GPG_ABS= GPG_SHA=
+D="${RF:?}/w7a"
+LH="${RF:?}/home-w7a"
+cd "${RF:?}" && [ ! -e "${D}" ] && [ ! -L "${D}" ] && mkdir "${LH}" && [ ! -L "${LH}" ] && [ "$(cd "${LH}" && pwd -P)" = "${LH}" ] && [ "$(HOME="${LH}" git ls-remote "${URL:?}" refs/heads/main | cut -f1)" = "${ANCORA:?}" ] && echo ORIGEM-OK
+```
+
+```bash
+cd "${RF:?}" && HOME="${LH:?}" git -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --template= --no-checkout --single-branch --branch main "${URL:?}" "${D:?}" && [ ! -L "${D}" ] && cd "${D}" && [ "$(pwd -P)" = "${D}" ] && HOME="${LH}" git config core.hooksPath /dev/null && HOME="${LH}" git config core.fsmonitor false && HOME="${LH}" git config core.untrackedCache false && HOME="${LH}" git config user.name "${NOME}" && HOME="${LH}" git config user.email "${EMAIL}" && { [ -z "${CHAVE}" ] || HOME="${LH}" git config user.signingkey "${CHAVE}"; } && echo CLONE-OK
+```
+
+```bash
+cd "${D:?}" && confere_config && HOME="${LH:?}" git checkout main && echo CHECKOUT-OK
+```
+
+(b)
+
+```bash
+cd "${D:?}" && [ "$(HOME="${LH:?}" git rev-parse HEAD)" = "${ANCORA:?}" ] && [ -z "$(HOME="${LH}" git status --porcelain)" ] && echo ANCORA-OK
+```
+
+(c) Sem insumo.
+
+(d)
+
+```bash
+S=.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
+N=.claude/plans/PLAN-194/sign-min/sign_min.py
+DADOS=.claude/plans/PLAN-183/w7a/sign.tsv
+cd "${D:?}" && [ "$(shasum -a 256 < "${S}" | cut -d' ' -f1)" = "${SIGN_SHA:?}" ] && [ "$(shasum -a 256 < "${N}" | cut -d' ' -f1)" = "${CORE_SHA:?}" ] && [ "$(shasum -a 256 < "${DADOS}" | cut -d' ' -f1)" = "${DADOS_SHA:?}" ] && [ "$(HOME="${LH:?}" git config --show-origin --get-all core.fsmonitor)" = "$(printf 'file:.git/config\tfalse')" ] && [ "$(HOME="${LH}" git config --show-origin --get-all core.hooksPath)" = "$(printf 'file:.git/config\t/dev/null')" ] && confere_config && [ -z "$(ls -A "${LH}")" ] && [ -z "$(env | grep -E '^(GIT_|CEO_|CLAUDE_PROJECT_DIR|BASH_ENV=|BASH_FUNC_|GNUPGHOME=|XDG_CONFIG_HOME=)')" ] && GPG_ABS="$(command -v gpg)" && GPG_SHA="$(shasum -a 256 < "${GPG_ABS}" | cut -d' ' -f1)" && [ "${#GPG_SHA}" = 64 ] && echo PRE-SIGN-OK && printf 'gpg: %s %s\n' "${GPG_ABS}" "${GPG_SHA}"
+```
+
+(e)
+
+```bash
+gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent && cd "${D:?}" && env -i PATH="${PATH}" HOME="${LH:?}" GNUPGHOME="${HOME}/.gnupg" PYTHONUSERBASE="${PYUB:?}" USER="${USER}" LOGNAME="${LOGNAME}" SHELL="${SHELL}" TERM="${TERM}" LANG="${LANG}" PAGER=cat GPG_TTY="$(tty)" bash .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh --nucleo-sha256="${CORE_SHA:?}" "${DADOS:?}"; echo "SIGN-RC=$?"; gpgconf --homedir "${HOME}/.gnupg" --kill gpg-agent
+```
+
+`SIGN-RC=0`: siga para (f). Qualquer outro: pare e chame o CEO, sem rodar nada que o SIGN sugerir.
+
+(f)
+
+```bash
+P=.claude/plans/PLAN-183/w7a/w7a.patch
+SE=.claude/plans/PLAN-183/w7a-approved.md
+cd "${D:?}" && SHA="$(HOME="${LH:?}" git rev-parse --verify "refs/heads/main^{commit}")" && [ "$(HOME="${LH}" git symbolic-ref HEAD)" = refs/heads/main ] && [ "$(HOME="${LH}" git rev-parse --verify "HEAD^{commit}")" = "${SHA}" ] && [ "$(HOME="${LH}" git rev-list --parents -n 1 "${SHA}")" = "${SHA} ${ANCORA:?}" ] && [ "$(HOME="${LH}" git diff-tree -r --no-renames --raw --no-abbrev "${ANCORA}" "${SHA}" | awk -F'\t' '{split($1, h, " "); print substr(h[1], 2) " " h[2] " " h[5] "\t" $2}' | LC_ALL=C sort)" = "$( { HOME="${LH}" git cat-file blob "${ANCORA}:${P}" | awk '/^diff --git a\//{if (p != "") print o " " n " " s "\t" p; p = $3; sub(/^a\//, "", p); s = "M"; o = ""; n = ""} /^new file mode /{s = "A"; o = "000000"; n = $4} /^deleted file mode /{s = "D"; o = $4; n = "000000"} /^index [0-9a-f]+[.][.][0-9a-f]+ [0-7]+$/{if (s == "M") {o = $3; n = $3}} END {if (p != "") print o " " n " " s "\t" p}'; printf '100644 100644 M\t%s\n000000 100644 A\t%s.asc\n' "${SE}" "${SE}"; } | LC_ALL=C sort)" ] && [ "$(command -v gpg)" = "${GPG_ABS:?}" ] && [ "$(shasum -a 256 < "${GPG_ABS}" | cut -d' ' -f1)" = "${GPG_SHA:?}" ] && echo LAND-OK && printf '%s\ngpg: %s %s\n' "${SHA}" "${GPG_ABS}" "${GPG_SHA}"
+```
+
+(f2) Mande ao CEO `W7a: SIGN-RC=0, LAND-OK` e as duas linhas que o (f) imprimiu depois do `LAND-OK` (o SHA e a
+linha `gpg:`). Espere a resposta do CEO: `PUSH-LIBERADO <sha>`. Sem ela, não há push.
+
+(g) Só depois do `PUSH-LIBERADO`, com o SHA da resposta do CEO na primeira linha.
+
+```bash
+SHA_LIBERADO=COLE-AQUI-O-SHA-DO-PUSH-LIBERADO
+cd "${D:?}" && confere_config && [ "$(HOME="${LH:?}" git rev-parse --verify "refs/heads/main^{commit}")" = "${SHA:?}" ] && [ "${SHA_LIBERADO:?}" = "${SHA}" ] && git -c core.hooksPath=/dev/null -c core.fsmonitor=false push origin "${SHA}:refs/heads/main" && echo PUSH-OK
+```
+
+(h)
+
+```bash
+cd "${D:?}" && [ "$(HOME="${LH:?}" git ls-remote origin refs/heads/main | cut -f1)" = "${SHA:?}" ] && echo PUBLICADO-OK && echo "${SHA}"
+```
+
+Mande ao CEO: `W7a: PUBLICADO-OK <sha>`. Os Lotes A e B terminam quando o CEO confirmar este último commit.
+
+## 5. Depois dos Lotes A e B
+
+Só depois que o CEO confirmar a W7a. É o primeiro git no seu checkout principal desde o início do roteiro:
 
 ```bash
 cd "${HOME}/canhada-labs/ceo-orchestration" && git pull --ff-only && echo PULL-OK
