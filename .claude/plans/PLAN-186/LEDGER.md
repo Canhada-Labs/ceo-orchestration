@@ -3,7 +3,18 @@
 > Só identificadores verbatim (paths, SHAs, ids) — nunca corpo de transcript
 > (repo público). Escrito em fronteira de unidade. Teto ≤ 2k tokens.
 
-## Unidade corrente — S348 (2026-09-06 → 07), noite autônoma
+## Unidade corrente — S363 (2026-10-12)
+
+- Status do plano: `executing`. Base conferida: `c76b61c1`. Lista completa de commits = `related_commits` do plano, re-derivada nesta unidade (55 SHAs).
+- Fechados desde a S348: AC-13 ✅ S361 em `82736c9` (relatório `PLAN-186/w0/ac13-routing-invariant-S361.md`).
+- PLAN-188 CONGELADO desde 2026-10-01 (S361; `PLAN-188-shared-ceremony-toolkit.md`): a W6a e a `w4b-gates-v2` seguem pelo molde por onda. Isso supera, abaixo, «aguarda rodada 12» e «materiais esperam o toolkit».
+- W1: não landou. Só volta como pack NOVO, re-arquitetado (regra R3; Q4 do bloco B da S348). O pin do assento é `claude-opus-5-5` desde a Emenda 3 do ADR-149 (S357); o alvo da W1 é a OQ-11 do plano, aberta para o Owner.
+- CI (`PLAN-186/w4/validate-push-runs-S363.md`): o Validate de `push` roda no self-hosted `canhada-ci` desde 2026-10-11, 6/6 ≤ 14 min; o Smoke mede 73m45s–115m47s, 0/6 ≤ 45 min.
+- Follow-ups, todos `draft` (PLAN-SCHEMA §1.4: nenhum entra em `executing` antes de o PLAN-186 ficar `done`): `PLAN-186-FOLLOWUP-census-runtime.md` (W0 landada em `cad21f0`; trabalho não landado em sombra na S363); `PLAN-186-FOLLOWUP-hint-discovery-walk-from-root.md` e `PLAN-186-FOLLOWUP-sentinel-gpg-verification.md` (em edição em outras sombras na S363); `PLAN-186-FOLLOWUP-seat-fable51-row.md` (novo nesta unidade, decisão 4.4 da S347).
+- Decisões do Owner desde a S348: `1059f23` (S348-c, `PLAN-186/debate/owner-decisions-S348-c.md`), S353 (`PLAN-186/debate/owner-decisions-S353.md`), S361 (`6a9abb1`, Q1–Q14).
+- Próxima unidade: resposta do Owner à OQ-11; depois, a fila canônica da S348 (W4b → W6a → W1 re-arquitetada), cada uma com cerimônia GPG.
+
+## Unidade anterior — S348 (2026-09-06 → 07), noite autônoma (histórico)
 
 - Status do plano: `executing` (`.claude/plans/PLAN-186-orchestrator-operating-model.md`). Waves: W0 landada; W4a landada `8003b65` e medida `0b5e6ed`; W4b (`s344-packs/w4b-ci-matrix`) RESCINDIDA na S348 (52 registros de rail) → pack sucessor `s344-packs/w4b-gates-v2` (construído, 0 rodadas); W6a (`s344-packs/w6-adapter`) sujeito APPROVE, materiais com arquitetura de congelamento construída, aguarda rodada 12; W1 (`s344-packs/w1-widen`, 40 registros) só re-arquitetada; W5 doutrina em debate (`de42dfb`).
 - Follow-ups: `PLAN-186-FOLLOWUP-census-runtime.md` (W0 landada `cad21f0`), `PLAN-186-FOLLOWUP-hint-discovery-walk-from-root.md` (`3f8f4f0`, curas `a3425ba`), `PLAN-186-FOLLOWUP-sentinel-gpg-verification.md` (draft).
@@ -48,4 +59,4 @@
   - `b590f00` 2026-09-03 — PLAN-186 W0 s341-cost-integration-v2
   - `7535b2f` 2026-09-03 — PLAN-186 W0+W4a s340/s341
   - `400638e` 2026-09-02 — docs+plan(PLAN-186 S339): estudo do modelo operacional do orquestrador → PLAN-186 r
-- Próxima unidade: respostas do Owner às perguntas 1-11 de `s344-packs/MORNING-S348.md` §4; depois closeout S348 (`CLAUDE.md` §5 linha S348).
+- Próxima unidade: respostas do Owner às perguntas 1-11 de `s344-packs/MORNING-S348.md` §4; depois closeout S348 (`CLAUDE.md` §5 linha S348). ↘ S363: respondidas em `1059f23` (`owner-decisions-S348-c.md`).

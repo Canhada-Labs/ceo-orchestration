@@ -196,3 +196,8 @@ __pycache__/
 # The committed peers.example.yaml template is intentionally tracked.
 .claude/data/federation/peers.yaml
 dist/
+
+# PLAN-176 (round-3 finding K4, S363) — upstream model-feed cache. Written only
+# by the W0b fetcher under --enable-upstream-fetch and read by /ceo-boot (W3a):
+# a runtime artifact with EXTERNAL content, never tracked.
+.claude/data/model-currency-upstream-cache.json

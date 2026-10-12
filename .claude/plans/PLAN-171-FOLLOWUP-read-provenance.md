@@ -44,6 +44,15 @@ pagar o p95 do PostToolUse acima do teto do perf-gate vigente.
 ### W2 — anexo aos artefatos e camada do `/council`  [P2]
 - Só depois do piloto verde.
 
+## Decisão do Owner (2026-10-12)
+
+Resposta do Owner à pergunta do CEO com seis itens (AskUserQuestion, S363,
+~12:50Z): «Aceito as 6 (Recommended)». O item deste plano dizia: «registro do
+que cada agente leu (read-provenance): fila da 1.4.4».
+
+- O plano entra na fila da 1.4.4. O `status` continua `draft`; esta decisão
+  não responde a OQ-1 (custo).
+
 ## Open questions
 
 - **OQ-1.** O custo fica a firmar no refinamento. A síntese de fechamento da

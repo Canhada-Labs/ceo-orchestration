@@ -1,0 +1,11 @@
+{
+ "schema": "plan175-query-language-fraction/1",
+ "generated_at": "2026-10-12",
+ "ac": "AC-1.3b",
+ "status": "not-measurable",
+ "reason": "não existe corpus de consultas reais no caminho de produção: (1) não há injetor — nenhum hook importa o recuperador nem o roteador e .claude/settings.json não os cita; (2) o recuperador é opt-in e desligado (§4.5): o único chamador é .claude/scripts/inject-agent-context.sh, atrás da bandeira --skill-retrieve (USE_SKILL_RETRIEVE=0 na linha 42), e nenhum script, comando ou workflow passa essa bandeira; (3) mesmo ligado, nada grava o texto da consulta: skill-retrieve.py não emite evento próprio e os eventos rag_* do roteador levam só decisão, motivo e contagens",
+ "verified_by": ["grep -lE 'skill-retrieve|skill_retrieve|rag_router|rag_bridge' .claude/hooks/*.py → rc 1", "grep -nE 'skill-retrieve|skill_retrieve|rag_router|rag_bridge' .claude/settings.json → rc 1", "git grep -l -- '--skill-retrieve' -- ':!.claude/plans/*' → só inject-agent-context.sh (onde a bandeira é definida), ADR-029 e docs/ROADMAP.md (texto); nem os testes a passam", "grep -n USE_SKILL_RETRIEVE .claude/scripts/inject-agent-context.sh → :42 (=0), :103 (=1 só com a bandeira), :1034 (a chamada)", "assinaturas em .claude/hooks/_lib/audit_emit.py: emit_rag_query_routed(query_class, result, latency_ms_p50), emit_rag_auto_wire_skipped_sidecar_down(reason), emit_rag_false_large_demoted e emit_rag_hit_rate_degraded (taxas) — nenhuma recebe o texto da consulta"],
+ "becomes_measurable_when": "a W1b ligar o injetor (AC-1.5, AC-1.6) e o idioma de cada consulta passar a ser registrado; só então esta AC vira medição",
+ "proxy_not_used": "o idioma dos prompts de spawn nos transcripts seria um proxy, não a consulta de produção; não foi lido nem medido aqui",
+ "related_evidence": ".claude/plans/PLAN-175/evidence/language-gap-remeasure-2026-10-12.json mede o EFEITO do idioma na recuperação; este arquivo trata da FRAÇÃO de consultas por idioma, que segue sem medida"
+}

@@ -2,8 +2,10 @@
 id: PLAN-169-FOLLOWUP-sendmessage-probes
 parent: PLAN-169
 title: Mensageria entre agentes — controle refuse × accept, ADR de visibilidade e sondas W4.2.0 (pernas 2–4 do AC-5 do PLAN-169)
-status: draft
+status: reviewed
 created: 2026-10-11
+reviewed_at: 2026-10-12
+reviewed_by: "Owner (S363, AskUserQuestion do CEO, 2026-10-12 ~12:50Z): «Sim, três modos; revisado (Recommended)», em resposta a «o teste cobre os três modos (refuse, hold, accept), e posso marcar o plano como revisado, deixando para depois a pergunta sobre o adopter que já usa accept?»"
 owner: CEO
 depends_on: [PLAN-169]
 level: L3
@@ -66,6 +68,22 @@ doutrina escrita num ADR.
   invisível» é escolha, não default). Se a postura não for `refuse`, inclui
   também o escopo degradado EXPLÍCITO da claim de auditabilidade.
 
+## Decisão do Owner (2026-10-12)
+
+Pergunta do CEO (AskUserQuestion, S363, ~12:50Z): «o teste cobre os três modos
+(refuse, hold, accept), e posso marcar o plano como revisado, deixando para
+depois a pergunta sobre o adopter que já usa accept?». Resposta do Owner: «Sim,
+três modos; revisado (Recommended)».
+
+- **Três células na W2.** O texto já as tinha desde `95ba98c4` (W2, terceira
+  célula `hold`; OQ-1, registro de 2026-10-11) e o Check do segundo critério de
+  sucesso já exige as três linhas (`refuse`, `hold`, `accept`) no
+  `refuse-accept.md`. A decisão confirma esse desenho; nada mais muda na W2.
+- **Revisado.** O `status` passou de `draft` a `reviewed` no commit anterior a
+  este, sozinho.
+- **OQ-2 adiada.** A pergunta sobre o adopter que já usa `accept` fica para
+  depois (ver a OQ-2).
+
 ## Open questions
 
 - **OQ-1.** A chave `crossSessionInbound` e o comportamento medido no PLAN-169
@@ -94,6 +112,10 @@ doutrina escrita num ADR.
 - **OQ-2.** A linha `refuse` no `settings.json` do adopter passa pela decisão de
   posse (PLAN-169 `:629-635`, classe PLAN-167): um adopter com `accept`
   explícito fica preservado? Responder antes de qualquer linha nova em template.
+  - **Adiada pelo Owner em 2026-10-12** (ver «Decisão do Owner (2026-10-12)»):
+    fica aberta. A W1 e a W2 são medição (a W2 num clone descartável) e não
+    acrescentam linha em template, então não esperam por ela. A regra acima
+    continua: nenhuma linha nova em template antes da resposta.
 - **OQ-3.** O custo fica a firmar no refinamento, em tokens e sessões (ADR-081).
 
 ## Success criteria

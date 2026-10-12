@@ -9,7 +9,7 @@ RED, so a green run is evidence rather than a claim.
   2. no_network_runtime_oracle_with_transitive_import_control
   3. injected_model_turns_red
   4. state_file_contract_has_cycle_lanes_fp_and_ts
-  5. state_json_serves_all_seven_death_criteria
+  5. state_json_serves_every_death_criterion_in_plan_table
   6. expected_reds_file_has_a_cause_per_line
   7. expected_reds_exact_set_with_shrinkage_control
   8. active_lanes_is_anthropic_only
@@ -29,6 +29,8 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
+import re
 import socket
 import sys
 import tempfile
@@ -47,10 +49,46 @@ REAL_EXPECTED_REDS = (
     REPO_ROOT / ".claude" / "data" / "model-currency-expected-reds.txt")
 REAL_STATE = REPO_ROOT / ".claude" / "data" / "model-currency-state.json"
 
-#: The death criteria of PLAN-176 §4. The AC name says "seven" because §4
-#: carried seven when the check was written; debate round 2 appended K-8 and
-#: K-9. Asserting all NINE serves the seven a fortiori.
-DEATH_CRITERIA = ("K-1", "K-2", "K-3", "K-4", "K-5", "K-6", "K-7", "K-8", "K-9")
+#: PLAN-176 §4 is the SOURCE of the death criteria. The test reads the
+#: ``| K-n |`` rows of that table instead of typing them (round-3 finding C1:
+#: a typed tuple let the AC keep its old count after the table grew).
+PLAN_FILE = (REPO_ROOT / ".claude" / "plans"
+             / "PLAN-176-model-currency-refresh.md")
+#: Test-only override of PLAN_FILE: the red controls point it at a
+#: DISPOSABLE copy of the plan with a K row removed or added.
+PLAN_FILE_ENV = "P176_PLAN_FILE"
+#: The EXACT §4 heading: the old bare ``^## 4\.`` prefix also read a
+#: ``## 4.1`` decoy or a fenced heading placed BEFORE the real §4.
+SECTION4_HEADING = "## 4. Critérios de morte"
+_SECTION4_HEAD_RE = re.compile(r"^## 4\. Critérios de morte(?:\s|$)")
+_K_ROW_RE = re.compile(r"^\| (K-\d+) \|")
+_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")  # CommonMark fence
+
+
+def plan_death_criteria(text):
+    """``| K-n |`` ids of the §4 table, in order; fenced lines are skipped.
+
+    The §4 heading must occur EXACTLY once outside fences, else fail closed.
+    """
+    fence, heads, in_section4, rows = None, 0, False, []
+    for line in text.splitlines():
+        mark = _FENCE_RE.match(line)
+        if fence is not None:
+            if (mark and mark.group(1)[0] == fence[0]
+                    and len(mark.group(1)) >= len(fence)
+                    and not line[mark.end():].strip()):
+                fence = None
+        elif mark:
+            fence = mark.group(1)
+        elif line.startswith("## "):
+            in_section4 = bool(_SECTION4_HEAD_RE.match(line))
+            heads += in_section4
+        elif in_section4 and _K_ROW_RE.match(line):
+            rows.append(_K_ROW_RE.match(line).group(1))
+    if heads != 1:
+        raise AssertionError("heading %r found %d times outside code fences"
+                             " (want 1)" % (SECTION4_HEADING, heads))
+    return tuple(rows)
 
 
 def _load_module():
@@ -307,14 +345,45 @@ class TestStateFile(_Fixture):
         self.assertEqual(
             json.loads(fresh.read_text(encoding="utf-8"))["cycle"], 1)
 
-    def test_state_json_serves_all_seven_death_criteria(self):
+    def test_state_json_serves_every_death_criterion_in_plan_table(self):
+        # The parser reads ONLY the §4 table, and a planted row is seen.
+        head = SECTION4_HEADING + " — real\n"
+        synthetic = (head + "\n| # | c |\n|---|---|\n"
+                     "| K-1 | a |\n| K-10 | b |\n\n## 5. Next\n"
+                     "| K-99 | outside §4 |\n")
+        self.assertEqual(plan_death_criteria(synthetic), ("K-1", "K-10"))
+        # Decoys BEFORE the real §4 are never read in its place: a
+        # ``## 4.1`` heading, a fenced copy of the §4 heading, and a fenced
+        # K row inside §4 (each was read by the old ``^## 4\.`` prefix).
+        decoys = ("## 4.1 Exemplo\n| K-1 | decoy |\n"
+                  "```\n" + head + "| K-2 | decoy |\n```\n"
+                  "~~~~\n## 5. x\n~~~\n| K-3 | decoy |\n~~~~\n")
+        real = head + "| K-9 | real |\n```\n| K-4 | fenced |\n```\n"
+        self.assertEqual(plan_death_criteria(decoys + real), ("K-9",))
+        # Zero or two §4 headings outside fences FAIL CLOSED.
+        for broken in (decoys, real + real):
+            with self.assertRaises(AssertionError):
+                plan_death_criteria(broken)
+
+        plan_file = Path(os.environ.get(PLAN_FILE_ENV) or PLAN_FILE)
+        planned = plan_death_criteria(plan_file.read_text(encoding="utf-8"))
+        self.assertTrue(planned, "no `| K-n |` row in §4 of %s" % plan_file)
+        self.assertEqual(len(planned), len(set(planned)), planned)
+
         rc, payload, err = run_json(
             self._real_argv(state_file=REAL_STATE)
             + ["--state", "--now", "2026-09-07T12:00:00Z"])
         self.assertEqual(rc, 0, err)
         served = {c["criterion"]: c for c in payload["criteria"]}
-        self.assertEqual(tuple(sorted(served)), DEATH_CRITERIA)
-        for name in DEATH_CRITERIA:
+        # Both directions, NAMED: a §4 row the detector does not serve, and
+        # a served criterion the §4 table no longer publishes.
+        missing = sorted(set(planned) - set(served))
+        unpublished = sorted(set(served) - set(planned))
+        self.assertEqual(
+            (missing, unpublished), ([], []),
+            "plan §4 vs --state --json: not served %s, not in §4 %s"
+            % (missing, unpublished))
+        for name in planned:
             entry = served[name]
             self.assertTrue(entry["field"], name)
             self.assertTrue(entry["threshold"], name)
@@ -330,7 +399,7 @@ class TestStateFile(_Fixture):
 
         # POSITIVE CONTROL, on a DISPOSABLE copy: a criterion whose field is
         # gone must FAIL CLOSED and NAME the criterion — never quietly serve
-        # eight of nine.
+        # all but one.
         tmp = Path(tempfile.mkdtemp(prefix="p176w0a-crit-"))
         self.addCleanup(__import__("shutil").rmtree, tmp, True)
         for name, field, _threshold, _enf, _gated in MOD._DEATH_CRITERIA:

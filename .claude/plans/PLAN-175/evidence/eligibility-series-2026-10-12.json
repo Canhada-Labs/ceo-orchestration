@@ -1,0 +1,101 @@
+{
+  "candidates": {
+    "A": [],
+    "B": ["agent-architect", "terse-mode"],
+    "C": ["agent-architect", "ai-llm-orchestration", "architecture-decisions", "chaos-and-resilience", "code-intelligence-lsp", "codebase-onboarding", "compliance-lgpd", "consent-lifecycle", "cookbook-advisor", "coverage-audit", "cross-llm-pair-review", "data-schema-design", "devops-ci-cd", "dpo-reporting", "evidence-based-qa", "git-workflow-discipline", "growth-and-launch", "help-me", "incremental-refactoring", "llm-routing-and-finops", "mcp-server-authoring", "minimal-change-discipline", "monetization-and-billing", "observability-and-ops", "parallelization-by-default", "performance-engineering", "pii-data-flow", "pre-plan-brainstorm", "product-conversion-readiness", "public-api-design", "receiving-review", "requirement-quality-checklist", "spec-clarify", "state-machines-and-invariants", "technical-writing", "terse-mode", "testing-strategy"]
+  },
+  "candidates_by_architecture": {
+    "A": 0,
+    "B": 2,
+    "C": 37,
+    "D": "not-measurable"
+  },
+  "channels": {
+    "CLAUDE.md": {"count": 1, "names": ["ceo-orchestration"]},
+    "SKILLMAP": {"count": 39, "names": ["ai-llm-orchestration", "architecture-decisions", "chaos-and-resilience", "code-intelligence-lsp", "code-review-checklist", "codebase-onboarding", "compliance-lgpd", "consent-lifecycle", "cookbook-advisor", "coverage-audit", "cross-llm-pair-review", "data-schema-design", "devops-ci-cd", "dpo-reporting", "evidence-based-qa", "git-workflow-discipline", "growth-and-launch", "help-me", "identity-and-trust-architecture", "incident-management", "incremental-refactoring", "llm-routing-and-finops", "mcp-server-authoring", "minimal-change-discipline", "monetization-and-billing", "observability-and-ops", "parallelization-by-default", "performance-engineering", "pii-data-flow", "pre-plan-brainstorm", "product-conversion-readiness", "public-api-design", "receiving-review", "requirement-quality-checklist", "security-and-auth", "spec-clarify", "state-machines-and-invariants", "technical-writing", "testing-strategy"]},
+    "agents": {"count": 8, "names": ["code-review-checklist", "devops-ci-cd", "identity-and-trust-architecture", "incident-management", "llm-routing-and-finops", "performance-engineering", "security-and-auth", "testing-strategy"]},
+    "commands": {"count": 9, "names": ["agent-architect", "architecture-decisions", "ceo-orchestration", "codebase-onboarding", "devops-ci-cd", "public-api-design", "security-and-auth", "terse-mode", "testing-strategy"]}
+  },
+  "core": {
+    "count": 42,
+    "names": ["agent-architect", "ai-llm-orchestration", "architecture-decisions", "ceo-orchestration", "chaos-and-resilience", "code-intelligence-lsp", "code-review-checklist", "codebase-onboarding", "compliance-lgpd", "consent-lifecycle", "cookbook-advisor", "coverage-audit", "cross-llm-pair-review", "data-schema-design", "devops-ci-cd", "dpo-reporting", "evidence-based-qa", "git-workflow-discipline", "growth-and-launch", "help-me", "identity-and-trust-architecture", "incident-management", "incremental-refactoring", "llm-routing-and-finops", "mcp-server-authoring", "minimal-change-discipline", "monetization-and-billing", "observability-and-ops", "parallelization-by-default", "performance-engineering", "pii-data-flow", "pre-plan-brainstorm", "product-conversion-readiness", "public-api-design", "receiving-review", "requirement-quality-checklist", "security-and-auth", "spec-clarify", "state-machines-and-invariants", "technical-writing", "terse-mode", "testing-strategy"]
+  },
+  "gate2": {
+    "skills": ["ceo-orchestration"]
+  },
+  "inputs": {
+    "c_override_rule": "seção «Gate 2» do CLAUDE.md + skills citadas pelos agentes do piso de VETO",
+    "channel_files": {"CLAUDE.md": ["CLAUDE.md"], "SKILLMAP": [".claude/team.md", ".claude/frontend-team.md"], "agents": [".claude/agents/_dispatch.md", ".claude/agents/_probe_architect.md", ".claude/agents/_probe_canonical_edit.md", ".claude/agents/_probe_missing_skill.md", ".claude/agents/code-reviewer.md", ".claude/agents/devops.md", ".claude/agents/identity-trust-architect.md", ".claude/agents/incident-commander.md", ".claude/agents/llm-finops-architect.md", ".claude/agents/performance-engineer.md", ".claude/agents/qa-architect.md", ".claude/agents/security-engineer.md", ".claude/agents/threat-detection-engineer.md"], "commands": [".claude/commands/agent-budget.md", ".claude/commands/architect.md", ".claude/commands/audit-page.md", ".claude/commands/audit-tokens.md", ".claude/commands/ceo-boot.md", ".claude/commands/ceo-info.md", ".claude/commands/context-budget.md", ".claude/commands/council.md", ".claude/commands/debate.md", ".claude/commands/effort.md", ".claude/commands/fan-plan.md", ".claude/commands/goap.md", ".claude/commands/lesson-evolve.md", ".claude/commands/lesson-review.md", ".claude/commands/memory-scratchpad.md", ".claude/commands/night-mode.md", ".claude/commands/onboard.md", ".claude/commands/pitfall.md", ".claude/commands/resume.md", ".claude/commands/self-test.md", ".claude/commands/skill-health.md", ".claude/commands/skill-review.md", ".claude/commands/spawn.md", ".claude/commands/squad-install.md", ".claude/commands/status.md", ".claude/commands/terse.md", ".claude/commands/veto-check.md"]},
+    "core_glob": ".claude/skills/core/*/SKILL.md",
+    "generated_at": "2026-10-12T13:45:20Z",
+    "head_sha": "c76b61c1d78d1f7cf677ab9148f2fa72938dfe5c",
+    "inputs_sha256": "fdd6d549e9aaeeda2d3f2e87f543c3972c8ca686ddc054f338b0259c43abdfd4",
+    "veto_floor_rule": ".claude/agents/*.md com veto_floor: true no frontmatter",
+    "word_boundary_regex": "(?<![A-Za-z0-9_-])<re.escape(nome)>(?![A-Za-z0-9_-])"
+  },
+  "not_measurable": {
+    "D": "o canal de invocação por assento e por comando não emite evento; a perna 0 só encolhe depois que esse canal ganhar instrumento (emissão sob .claude/hooks/, caminho canônico) e de uma janela de observação posterior -- §2.1, linha D"
+  },
+  "schema": "plan175-eligibility-census/1",
+  "skills": {
+    "agent-architect": {"candidate_in": ["B", "C"], "cited_by": {"commands": [".claude/commands/architect.md"]}, "invocations": 0},
+    "ai-llm-orchestration": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "architecture-decisions": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"], "commands": [".claude/commands/debate.md", ".claude/commands/spawn.md", ".claude/commands/status.md"]}, "invocations": 20},
+    "ceo-orchestration": {"candidate_in": [], "cited_by": {"CLAUDE.md": ["CLAUDE.md"], "commands": [".claude/commands/ceo-info.md", ".claude/commands/context-budget.md", ".claude/commands/debate.md", ".claude/commands/spawn.md", ".claude/commands/status.md"]}, "invocations": 0},
+    "chaos-and-resilience": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 1},
+    "code-intelligence-lsp": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "code-review-checklist": {"candidate_in": [], "cited_by": {"SKILLMAP": [".claude/team.md", ".claude/frontend-team.md"], "agents": [".claude/agents/_dispatch.md", ".claude/agents/code-reviewer.md"]}, "invocations": 25},
+    "codebase-onboarding": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"], "commands": [".claude/commands/onboard.md"]}, "invocations": 0},
+    "compliance-lgpd": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md", ".claude/frontend-team.md"]}, "invocations": 0},
+    "consent-lifecycle": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "cookbook-advisor": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "coverage-audit": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "cross-llm-pair-review": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 1},
+    "data-schema-design": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "devops-ci-cd": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md", ".claude/frontend-team.md"], "agents": [".claude/agents/devops.md"], "commands": [".claude/commands/debate.md", ".claude/commands/status.md"]}, "invocations": 56},
+    "dpo-reporting": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "evidence-based-qa": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "git-workflow-discipline": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "growth-and-launch": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "help-me": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "identity-and-trust-architecture": {"candidate_in": [], "cited_by": {"SKILLMAP": [".claude/team.md"], "agents": [".claude/agents/identity-trust-architect.md"]}, "invocations": 0},
+    "incident-management": {"candidate_in": [], "cited_by": {"SKILLMAP": [".claude/team.md"], "agents": [".claude/agents/incident-commander.md", ".claude/agents/threat-detection-engineer.md"]}, "invocations": 0},
+    "incremental-refactoring": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md", ".claude/frontend-team.md"]}, "invocations": 1},
+    "llm-routing-and-finops": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"], "agents": [".claude/agents/llm-finops-architect.md"]}, "invocations": 5},
+    "mcp-server-authoring": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "minimal-change-discipline": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "monetization-and-billing": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "observability-and-ops": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 3},
+    "parallelization-by-default": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "performance-engineering": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"], "agents": [".claude/agents/performance-engineer.md"]}, "invocations": 5},
+    "pii-data-flow": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "pre-plan-brainstorm": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "product-conversion-readiness": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md", ".claude/frontend-team.md"]}, "invocations": 0},
+    "public-api-design": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md", ".claude/frontend-team.md"], "commands": [".claude/commands/status.md"]}, "invocations": 11},
+    "receiving-review": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "requirement-quality-checklist": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "security-and-auth": {"candidate_in": [], "cited_by": {"SKILLMAP": [".claude/team.md", ".claude/frontend-team.md"], "agents": [".claude/agents/_dispatch.md", ".claude/agents/identity-trust-architect.md", ".claude/agents/security-engineer.md", ".claude/agents/threat-detection-engineer.md"], "commands": [".claude/commands/context-budget.md", ".claude/commands/debate.md"]}, "invocations": 59},
+    "spec-clarify": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 0},
+    "state-machines-and-invariants": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 3},
+    "technical-writing": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md"]}, "invocations": 35},
+    "terse-mode": {"candidate_in": ["B", "C"], "cited_by": {"commands": [".claude/commands/audit-tokens.md", ".claude/commands/terse.md"]}, "invocations": 0},
+    "testing-strategy": {"candidate_in": ["C"], "cited_by": {"SKILLMAP": [".claude/team.md", ".claude/frontend-team.md"], "agents": [".claude/agents/qa-architect.md"], "commands": [".claude/commands/context-budget.md"]}, "invocations": 29}
+  },
+  "telemetry": {
+    "chain_status": "intact (9212 entries verified)",
+    "core_invoked": 14,
+    "core_zero_invocations": 28,
+    "discovery_health": {"invoked_known_skills": 14, "total_invocations": 286, "unknown_invocation_count": 32, "unknown_invocation_ratio": 0.112},
+    "events_in_window": 293218,
+    "events_scanned": 293218,
+    "log_files": 21,
+    "reader": "python3 .claude/scripts/skill-health.py --include-rotated --since all --json",
+    "state_dir_from": "CLAUDE_PROJECT_DIR",
+    "status": "measured",
+    "window": "all"
+  },
+  "veto_floor": {
+    "agents": ["code-reviewer", "identity-trust-architect", "incident-commander", "security-engineer", "threat-detection-engineer"],
+    "skills": ["code-review-checklist", "identity-and-trust-architecture", "incident-management", "security-and-auth"]
+  }
+}

@@ -15,8 +15,48 @@
 > Medido em 2026-09-06 numa worktree descartável (`git worktree add
 > --detach`), um gate por vez, `git restore` entre cada um. Nenhuma
 > edição na árvore viva. **Bases (medido, não suposto):** As duas metades foram medidas em `HEAD = 5f7f24f466c337c49700aad806a6cc7433372c5e`; a derivação é aplicada sobre `HEAD = a3425ba9a1445c4d1a0f61b269039c3249ee7762`. O delta entre os dois, RESTRITO aos diretórios que este censo lê (`.claude/settings.json`, `.claude/hooks`, `.claude/scripts`, `pytest.ini`, `.github/workflows`), foi medido por `git diff --name-only` e tem **1** arquivo(s): `.claude/hooks/tests/test_session_start.py`. Nenhum deles é um dos dez hooks, dos dez controles, do `settings.json`, do `pytest.ini` ou de um workflow — logo a medição vale para a base da derivação. O SHA da worktree de censo, a limpeza dela ao fim das trinta execuções e o transcript exato deste `git diff` estão no §1b do `EVIDENCE.md`, escritos pelo PRÓPRIO driver do censo (`measured-at.json`), não digitados.
+>
+> **Proveniência das figuras — anotação de 2026-10-12
+> (`PLAN-171-FOLLOWUP-lote2-generated-figures`, W1).** Nenhum instrumento
+> do pack deste lote está no repositório: em 2026-10-12, `git ls-files`
+> não lista `gen-report.py`, `gen-count.py`, `partition.py`,
+> `remainder.py` nem `measure-optin.py`, nem o `EVIDENCE.md`, o
+> `red-half.json`, o `node-ids.txt` ou o `measured-at.json` que este
+> relatório cita. Por decisão do Owner (S363, 2026-10-12), as figuras que
+> só esses arquivos refariam ficam marcadas como literais datados, em vez
+> de reconstruídas. Cada seção com figuras abre com a sua marca:
+>
+> - **§1, §4, §5 e Apêndices A, B e D** — figuras medidas em 2026-09-06
+>   (data deste cabeçalho), landadas em `184a1a2fe60f` e curadas em
+>   `14892ab04be3`, os dois commits de 2026-09-06. Vieram do gerador de
+>   relatório do pack do lote 2, que é o que o Apêndice C afirma.
+> - **§2** tem duas proveniências. A linha de contagem, no fim da seção,
+>   e os `# N` do Apêndice C continuam reproduzíveis pelos greps do
+>   Apêndice C. Esses greps refazem a CONTAGEM sobre a tabela, não a
+>   medição que a preencheu. As células da tabela (tempos do pytest,
+>   números de linha do `settings.json` e dos workflows) são do mesmo dia
+>   e também literais. Os números de linha já envelheceram: em
+>   2026-10-12 o job `hook-tests-python-matrix` começa na l. 1640 do
+>   `validate.yml`, e não na l. 1601.
+> - **Apêndice F** — saída do `measure-optin.py`, acrescentada pela cura
+>   `14892ab04be3` sobre `HEAD = bb68edf55413`; instrumento não preservado.
+> - **Apêndice E** lista entradas. A única figura dele (os quatro legs do
+>   `mutation-gate.yml`) é literal de 2026-09-06.
+> - **Este cabeçalho.** O delta entre as duas bases é reproduzível hoje:
+>   `git diff --name-only 5f7f24f466c3 a3425ba9a144 -- .claude/settings.json .claude/hooks .claude/scripts pytest.ini .github/workflows`
+>   devolve, em 2026-10-12, o mesmo arquivo único,
+>   `.claude/hooks/tests/test_session_start.py`. O resto do cabeçalho (o
+>   SHA da worktree de censo, a limpeza dela, as trinta execuções) remete
+>   ao §1b do `EVIDENCE.md`, que não foi preservado: literal datado.
+> - **§3** não tem figura própria: remete ao §1, ao §2 e ao Apêndice F e
+>   herda as marcas deles.
 
 ## 1. Partição (determinística, computada — não acordada)
+
+> **Marca (2026-10-12):** literal datado: saída do gen-report.py do pack S347; gerador não preservado.
+> Medido em 2026-09-06. Segundo o próprio relatório, o bloco abaixo é a
+> saída verbatim do `partition.py`, que também não foi preservado. Vale
+> para toda figura desta seção.
 
 `L` = os ARQUIVOS de hook registrados em `.claude/settings.json`, na
 ordem de PRIMEIRA ocorrência (itera o objeto `hooks` na ordem do
@@ -89,6 +129,12 @@ lote 1 nomeia 8 arquivos, dos quais **6** estão em `L` — os outros dois
 isso não estavam em `L` para serem removidos. `|R| = 48 − 6 = 42`.
 
 ## 2. Tabela
+
+> **Marca (2026-10-12):** duas proveniências nesta seção. A linha de
+> contagem, no fim dela, é reproduzível pelos greps do Apêndice C. As
+> células da tabela (tempos do pytest, números de linha) são literal
+> datado de 2026-09-06, vindo do driver do censo (`red-half.json` e
+> `EVIDENCE.md` do pack, não preservados). Os números de linha envelhecem.
 
 | # | Gate (hook) | Arquivo | Registro em `.claude/settings.json` (evento / matcher; par de linhas MEDIDO) | Workflow + step de CI | Controle positivo (node id) | Como está | Enforcement removido | Restaurado | Verdito | O que o controle prova |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -170,6 +216,11 @@ construção da partição, hooks registrados em `settings.json`).
 
 ## 4. Defeito de MEDIÇÃO encontrado e curado dentro do próprio lote
 
+> **Marca (2026-10-12):** literal datado: saída do gen-report.py do pack S347; gerador não preservado.
+> Medido em 2026-09-06. Vale para toda figura desta seção (o 10/10 da
+> primeira derivação, o tamanho da mutação). A transcrição com comando e
+> saída está no Apêndice D, que leva a mesma marca.
+
 A primeira derivação deste censo produziu 10/10 verde — e estava
 **errada por um instante**. Reproduzido, com comando e saída, no
 Apêndice D: depois da mutação-e-restauração da linha `tier-policy`, o
@@ -207,6 +258,12 @@ mesma família que o W0 existe para caçar. Fica registrado porque
 qualquer lote futuro que mute e restaure arquivos herda o risco.
 
 ## 5. O que a partição NÃO cobre — o RESTO, declarado
+
+> **Marca (2026-10-12):** literal datado: saída do gen-report.py do pack S347; gerador não preservado.
+> Medido em 2026-09-06. Segundo o próprio relatório, o bloco abaixo é a
+> saída do `remainder.py`, que também não foi preservado. As contagens
+> envelheceram: `check_workflow_launch.py` entrou no `.claude/settings.json`
+> em 2026-09-17 (`075beed9d5f3`), depois desta medição.
 
 O AC do W0 no PLAN-171 (l. 170-172) pede «100% dos **hooks**», não
 «100% dos hooks REGISTRADOS». `L` sai do `.claude/settings.json`, logo
@@ -253,6 +310,12 @@ vez de desaparecer entre dois documentos.
 
 ## Apêndice A — baseline «como está» (10/10 verde)
 
+> **Marca (2026-10-12):** literal datado: saída do gen-report.py do pack S347; gerador não preservado.
+> Medido em 2026-09-06. O `node-ids.txt` e o `red-half.json` citados
+> abaixo também não estão no repositório. Os dez node ids do §2 permitem
+> rodar o comando de novo, mas o resultado de outro dia mede outra árvore
+> e não substitui este.
+
 Os dez node ids numa invocação, lidos de um arquivo (`node-ids.txt`,
 derivado do campo `node` do `red-half.json` — logo o conjunto que passa
 aqui é, por construção, o MESMO que foi ao vermelho no Apêndice B):
@@ -264,6 +327,11 @@ PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 \
 ```
 
 ## Apêndice B — metade RED, gate a gate
+
+> **Marca (2026-10-12):** literal datado: saída do gen-report.py do pack S347; gerador não preservado.
+> Medido em 2026-09-06, a partir do `red-half.json` do driver, também não
+> preservado. A contagem das linhas desta tabela (o último `# 10` do
+> Apêndice C) é reproduzível; o conteúdo das células, não.
 
 Para cada linha: `git restore` → mutação mínima → **mesmo** node id →
 `git restore` → **mesmo** node id de novo (controle de restauração).
@@ -293,6 +361,20 @@ Registro cru das dez rodadas: `red-half.json` no pack da sessão
 (`gate`, `neuter_*`, `node`, `asis_rc`, `red_rc`, `restored_rc`, tails).
 
 ## Apêndice C — contagem derivada, não digitada
+
+> **Marca (2026-10-12): reproduzível.** Os cinco greps abaixo rodam sobre
+> este arquivo. Em 2026-10-12, depois da anotação de proveniência,
+> devolvem 10, 10, 0, 0 e 10, iguais aos `# N` (conferido com
+> `/usr/bin/grep`). Eles refazem a contagem sobre as tabelas, não a
+> medição que as preencheu. Duas figuras da linha de contagem do §2 não
+> têm grep próprio aqui. Uma é `0 sem-controle-por-design`: o grep
+> análogo, `grep -cE '^\| [0-9]+ \|.*::.*sem-controle-por-design'`,
+> devolve 0 em 2026-10-12. A outra é `0 UNREGISTERED`, verdade por
+> construção da partição do §1, cuja marca ela herda. O `gen-count.py`
+> que escreveu os blocos também não está no repositório, mas não faz
+> falta para refazer a contagem. O follow-up nomeado no parágrafo «O
+> resto das figuras…», abaixo, resolveu-se marcando essas figuras como
+> literais datados (ver a nota de proveniência no cabeçalho).
 
 A linha de contagem do §2 sai de comandos sobre a PRÓPRIA tabela deste
 arquivo. Cuidado herdado do lote 1: `^\| [0-9]+ \|` sozinho casa as
@@ -328,6 +410,11 @@ escopo deste pacote. As saídas da derivação FINAL estão no
 
 ## Apêndice D — o defeito de medição do §4, com comando e saída
 
+> **Marca (2026-10-12):** literal datado: saída do gen-report.py do pack S347; gerador não preservado.
+> Medido em 2026-09-06 numa worktree de censo descartável (o cabeçalho
+> registra a limpeza dela). A contagem de `.pyc` (52) e os tempos não
+> podem ser refeitos.
+
 ```
 $ git -C <CENSUS-WT> status --porcelain    # (vazio: árvore limpa)
 $ grep -c '"decision": "block", "reason": reason' .claude/hooks/check_tier_policy.py
@@ -348,6 +435,10 @@ $ PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q --no-header \
 
 ## Apêndice E — o que o lote consumiu como INPUT (rastreável)
 
+> **Marca (2026-10-12):** a lista abaixo nomeia entradas. A única figura
+> dela, os quatro legs do `mutation-gate.yml`, é literal datado de
+> 2026-09-06.
+
 - `.claude/plans/PLAN-171-governance-imports-provenance.md` §5, §6, §7.
 - `.claude/plans/PLAN-171/w0/lote-1-S345.md` §1 (a coluna «Arquivo(s)»,
   lida pelo instrumento da partição — é ela que define o que sai de `L`).
@@ -359,6 +450,13 @@ $ PYTHONPATH=. PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q --no-header \
   `audit_hmac`, `canonical_guard`, `check_pair_rail`).
 
 ## Apêndice F — as linhas «advisory» do §2, medidas contra o seu próprio switch
+
+> **Marca (2026-10-12):** literal datado: saída do `measure-optin.py` do
+> pack, acrescentada pela cura `14892ab04be3` (2026-09-06) sobre
+> `HEAD = bb68edf55413`. Nem o instrumento nem o
+> `payload/optin-measurement.json` foram preservados. Vale para toda
+> figura deste apêndice: contagens por forma, números de linha dos hooks
+> e tempos.
 
 Achado pós-land: a lane de TEXTO da rodada de rail do land terminou
 DEPOIS do push e mostrou que o §2 classificava hooks como advisory

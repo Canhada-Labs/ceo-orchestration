@@ -24,8 +24,9 @@ tags: [backlog, v1-4-4, followup, s363, spool, settings, ci, ceremony, classe]
 > cada item traz o defeito, a evidência no `main` (`dc805ed5`) ou numa ref `refs/s363/*` com SHA, se o
 > caminho é canônico, a cura proposta e um Check.
 >
-> **O texto do PLAN-194 ainda não registra** as saídas da W6.2, do U2-C e do R4 para a 1.4.4 (o corpo
-> dele ainda os põe na 1.4.3). Atualizar o PLAN-194 é tarefa de uma edição própria, fora deste arquivo.
+> **O texto do PLAN-194 ainda não registra** as saídas da W6.2, do U2-C, do R4, do U2-A e do U2-B para a
+> 1.4.4 (o corpo dele ainda os põe na 1.4.3). Atualizar o PLAN-194 é tarefa de uma edição própria, fora
+> deste arquivo.
 
 **Vocabulário:** *ref* = referência git local `refs/s363/<nome>`, que guarda o último commit de um pacote
 fora do `main` (existe só no checkout do Owner; não foi enviada ao GitHub); *canônico* = o oráculo
@@ -37,8 +38,18 @@ S363 em que o NO-GO só vale por P0 ou por afirmação falsa reproduzida.
 
 ## Context
 
-A S363 landou no `main` só pacotes livres e textos; nenhum canônico. Os canônicos do Lote A (W4, U2-A,
-U2-B, W5b) e do Lote B (W7a, cost_envelope) seguem no trem da 1.4.3, migrados para o molde SIGN mínimo.
+A S363 landou no `main` só pacotes livres e textos; nenhum canônico. Os canônicos do Lote A (W4, W5b) e
+do Lote B (W7a, cost_envelope) seguem no trem da 1.4.3, migrados para o molde SIGN mínimo.
+
+**Correção de 2026-10-12:** a versão anterior deste parágrafo punha também o U2-A e o U2-B no Lote A da
+1.4.3. Os dois foram para a 1.4.4 em 2026-10-12. O micro-anexo do U2-A (`ab777824`) trouxe outra frase
+falsa, e o Codex deu NO-GO: «a fotografia prova só que a configuração não mudou durante o SIGN»
+(`.claude/plans/PLAN-194/w2a/rail-record.md:67-68` naquele commit) é falsa, porque a comparação é de dois
+pontos e uma mudança A → B → A passa. A regra do Owner para esse anexo era «outra frase falsa ⇒ U2-A e
+U2-B → 1.4.4». Estão estacionados em `refs/s363/u2a-1.4.4` = `ab777824` e `refs/s363/u2b-1.4.4` =
+`49436225`. Este arquivo ainda não tem item próprio para eles; o registro (defeito, cura e Check) fica
+para uma edição própria.
+
 Ficaram para trás: a W6.2, o U2-C e o R4 (canônicos), o FD-25 e o FD-26 (livres, caíram na rodada
 final), os pacotes livres C e D da triagem de planos (caíram duas vezes cada), e uma série de achados de
 rail sem dono. Dois incidentes da noite (agente mexendo no checkout principal) e duas classes de crash
@@ -322,6 +333,42 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   de estável = 10 verdes seguidas), tirar a exceção da 3.14 do `runs-on`; ou o Owner decide manter no
   hospedado, e o item fecha pelo registro da decisão.
 
+### Item 16 — classe de teste: `subprocess.run(..., timeout=N)` sobre script de shell deixa netos vivos no grupo (livre)
+
+- **Defeito (pela forma):** um teste que chama `subprocess.run(..., timeout=N)` sobre um script de shell,
+  sem `start_new_session=True` e sem matar o grupo no estouro, deixa vivos os processos que o script lançou.
+  No POSIX, o `subprocess.run` trata o estouro com `process.kill()` (só o filho direto), `process.wait()` e
+  `raise` (conferido no código do `subprocess.run` do Python 3.9.6). Os netos ficam no grupo de processos
+  de quem chamou, e um verificador que espera o grupo esvaziar (o X-BG do molde SIGN mínimo) recusa.
+- **Evidência:** em 2026-10-12, o harness do molde SIGN mínimo sobre `2bd7c18c` caiu no ensaio do W5b com
+  «o grupo de processos de hard 4 ainda tinha processo vivo 10 s depois de ele terminar» (X-BG; log da
+  sessão, fora do repositório). No ensaio, o `hard` 4 é só
+  `pytest .claude/scripts/tests/test_install_sh_placeholders.py` (lista `W5B_HARD` do `test-sign-min.py`
+  no branch `s363/sign-min`); nos dados reais do W5b (`sign.tsv` do branch `s363/pk-w5b`, `124842e4`) o
+  mesmo arquivo roda dentro do `hard` 9. O arquivo
+  chama o `install.sh` por `subprocess.run(..., timeout=...)` sem sessão própria em dois sítios: o helper
+  `_run_install` (`:87-89`, `timeout=120.0`, chamado em `:145`, `:193` e `:221`) e a chamada direta de
+  `:256-259` (`timeout=120` em `:258`). A corrida que caiu estava carregada (o `hard` 3 levou 500,6 s,
+  contra 379,2–410,5 s em três tentativas novas só do ensaio, nenhuma das quais reproduziu: 0 processos
+  sobrando no grupo). O log do `hard` 4 da corrida que caiu foi apagado, então não está provado que o
+  estouro de 120 s disparou NAQUELA corrida: a ligação é inferência do CEO, não um fato medido (o Codex da
+  rodada do molde confirmou o mecanismo e disse o mesmo: «não determina a causa da corrida cujo log foi
+  apagado»). O mecanismo foi medido à parte em 2026-10-12, numa sonda descartável: `bash -c 'sleep 30 | cat'` sob
+  `timeout=1` deixa 2 processos vivos no grupo (`sleep` e `cat`); com `start_new_session=True` e
+  `os.killpg` no estouro, 0; com `start_new_session=True` mas só o `kill` do filho, os mesmos 2 no grupo
+  do filho.
+- **Canônico:** não, se o helper ficar em `.claude/scripts/tests/` (o oráculo dá `0` para
+  `.claude/scripts/tests/test_install_sh_placeholders.py` e para um arquivo novo nessa pasta). Em
+  `.claude/hooks/_lib/testing.py` o oráculo dá `1`, ou seja, SIGN.
+- **Cura (classe):** um helper de teste que roda o filho em sessão própria (`start_new_session=True`) e,
+  no estouro, mata o GRUPO (`os.killpg`) antes de esperar; os dois sítios do
+  `test_install_sh_placeholders.py` passam a usá-lo. Mais um censo AST que lista todo
+  `subprocess.run`/`Popen`/`communicate` com `timeout` nos testes que não passa pelo helper (ratchet: a
+  lista só diminui). Já existe código parecido no repositório:
+  `.claude/scripts/swarm/_process_group.py` (`new_session_preexec`, `:54`; `kill_process_group`, `:92`);
+  avaliar o reuso antes de escrever outro. O item 9 tem a mesma superfície (helper + censo AST sobre
+  subprocesso nos testes): decidir na abertura se os dois viram um helper só, com as duas propriedades.
+
 ## Open questions
 
 - **OQ-1 (FD-25, pendente desde 2026-10-09, LEDGER do PLAN-194):** (1) backup com symlink em `memory/`:
@@ -340,7 +387,7 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
 
 «Leia `.claude/plans/PLAN-194-FOLLOWUP-v1-4-4-backlog.md`. Confira que o GA da 1.4.3 saiu e que o molde
 SIGN mínimo está no `main`. Para cada item, rode o oráculo `--is-canonical` nos caminhos e o Check do item
-(deve estar vermelho); abra primeiro os livres (4, 5, 6a, 9, 10, 11), cada um numa sombra própria a partir
+(deve estar vermelho); abra primeiro os livres (4, 5, 6a, 9, 10, 11, 16), cada um numa sombra própria a partir
 da ref citada quando houver, com rail Codex + 1 Claude. Os canônicos seguem a ordem do Approach e esperam
 as respostas das Open questions que os tocam.»
 
@@ -378,3 +425,6 @@ as respostas das Open questions que os tocam.»
   Check: `python3 -m pytest .claude/scripts/tests/test_check_ceremony_script.py .claude/scripts/tests/test_ceo_boot.py -q -k fu144 && ! git show-ref --verify -q refs/heads/ensaio-outra`
 - [ ] Item 15 (3.14) decidido pelo Owner e, se for para a VM, landado por SIGN.
   Check: `! grep -q -F "matrix.python-version != '3.14' && vars.VM_CI_ENABLED" .github/workflows/validate.yml`
+- [ ] Item 16 (helper que mata o grupo no estouro + censo) landado livre, com os dois sítios do
+  `test_install_sh_placeholders.py` convertidos.
+  Check: `python3 -m pytest .claude/scripts/tests/test_install_sh_placeholders.py .claude/scripts/tests/test_subprocess_timeout_group_census.py -q -k fu144`

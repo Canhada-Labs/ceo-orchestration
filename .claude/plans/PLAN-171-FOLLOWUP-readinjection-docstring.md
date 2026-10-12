@@ -37,13 +37,38 @@ Nenhuma das duas frases contradiz o comportamento medido.
 ## Items
 
 ### W1 — docstring  [P2]  (canônico)
-- Qualificar a linha 4. Pode ir de carona no pacote canônico do
-  `cost_envelope_capped` (`PLAN-171-FOLLOWUP-cost-envelope-emit`), se esse
-  pacote ainda estiver aberto.
+- Qualificar a linha 4, sozinha, num SIGN próprio da 1.4.4 (decisão do Owner
+  de 2026-10-12). A carona no pacote do `cost_envelope`
+  (`PLAN-171-FOLLOWUP-cost-envelope-emit`) não existe mais: o pacote
+  `cost_envelope` convergiu, fora do `main` até a assinatura (rodada do anexo
+  `11cda73e`, no branch local `s363/pk-cenv`, com Codex GO e Claude GO), e o
+  patch dele toca só 3 caminhos: `.claude/hooks/check_cost_envelope.py`,
+  `.claude/hooks/tests/test_check_cost_envelope_block.py` e
+  `.claude/hooks/tests/test_check_cost_envelope_emit.py`.
 
 ### W2 — teto G12  [P2]  (canônico; `SKILL.md` exige rota SP-NNN)
-- Reler a medição PLAN-083 P0-1, medir de novo no Claude Code vigente e só
-  então trocar o número.
+- Medir de novo no Claude Code vigente e só então trocar o número (decisão do
+  Owner de 2026-10-12: o limite espera essa medição).
+- A fonte «PLAN-083 P0-1» não se acha no repositório: nenhum caminho
+  rastreado tem `PLAN-083` no nome (`git ls-files | grep -ci 'PLAN-083'` = 0
+  em `3e32a1ff`), e o texto só aparece como citação (por exemplo na própria
+  skill, `SKILL.md:95`, e em `.claude/scripts/cost-table.yaml:48`). A probe do
+  PLAN-163 já registrou que os scripts, o limiar e o workload originais «não
+  estão disponíveis» e montou uma baseline nova em 2026-07-28
+  (`.claude/plans/PLAN-163/probes/flock-2.1.220.md:23-28`). Não há medição
+  PLAN-083 para reler; a medição nova é o único insumo.
+
+## Decisão do Owner (2026-10-12)
+
+Resposta do Owner à pergunta do CEO com seis itens (AskUserQuestion, S363,
+~12:50Z): «Aceito as 6 (Recommended)». O item deste plano dizia:
+«readinjection-docstring: a frase de 1 linha do check_read_injection vai
+sozinha num SIGN da 1.4.4, e o limite de agentes em paralelo espera uma
+medição nova».
+
+- W1: SIGN próprio da 1.4.4, só com a linha 4; sem carona (ver W1).
+- W2: o número da skill espera a medição nova (ver W2 e OQ-1).
+- O `status` continua `draft`.
 
 ## Open questions
 
@@ -52,6 +77,8 @@ Nenhuma das duas frases contradiz o comportamento medido.
   W2.6 (decisão D-21, `PLAN-194-maintenance-train-v1-4-3.md:2093`), e o
   `PLAN-194/LEDGER.md:99` diz que essa regra ficou sem gatilho quando a W2.6
   foi para a 1.4.4. A decisão é do Owner, com a medição nova na mão.
+  - **Registro de 2026-10-12:** o Owner confirmou que o número espera a medição
+    nova. A OQ-1 continua aberta até essa medição existir.
 
 ## Success criteria
 

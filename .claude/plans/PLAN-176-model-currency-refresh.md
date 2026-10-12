@@ -7,14 +7,14 @@ reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 
 created: 2026-08-11
 owner: CEO
 depends_on: [PLAN-169]
-related_commits: [72910e933bfb, a6629d0322f7, d414a6a18fb1, 5fcf8617a6f3, 7c331b4f77b8, 88a30b11fe33, c03b1eda6727]
+related_commits: [72910e933bfb, a6629d0322f7, d414a6a18fb1, 5fcf8617a6f3, 7c331b4f77b8, 88a30b11fe33, c03b1eda6727, fd845667f63d]
 budget_tokens: 1.09-1.54M
 budget_sessions: 6-8
-budget_usd_estimate: "9.8-13.9 USD"
-tier_mix_estimate: "CEO Opus 5 ~70% (plano, refutacao, cerimonia); builders Sonnet 5 ~25% (docs e testes); Haiku 4.5 ~5% (leituras) — a mistura vale sobre a metade de TRABALHO; o piso re-pago de gate-boot e 100% contexto do CEO (Opus 5)"
+budget_usd_estimate: "7.8-11.1 USD (estimativa sob o pin claude-opus-5-5, não teto; tabela de preços vencida desde 2026-09-13 — ver §5)"
+tier_mix_estimate: "CEO Opus 5.5 ~70% (plano, refutação, cerimônia); builders Sonnet 5 ~25% (docs e testes); Haiku 4.5 ~5% (leituras) — a mistura vale sobre a metade de TRABALHO; o piso re-pago de gate-boot é 100% contexto do CEO (Opus 5.5)"
 context_risk: high
-external_wait: none
-eta_calendar: "mesmo-dia a D+1"
+external_wait: "W1c: land da W4b do PLAN-186 (pack w4b-ci-matrix, sucessor w4b-gates-v2), que leva o manifesto ADR-192 de 9 para 12 membros — medido 9 em 2026-10-12. A espera da W3b pelo PLAN-169 acabou: o 169 fechou done em 2026-09-15 (ver §0)."
+eta_calendar: "W1c = depois do land da W4b do PLAN-186, sem data; as demais ondas = uma assinatura do Owner por perna canônica (W0b, W1b, W1c, W3b) sob WIP canônico ≤ 3 por dia"
 tags: [model-currency, egress, automation, seed]
 ---
 
@@ -34,7 +34,8 @@ tags: [model-currency, egress, automation, seed]
 > veredito `ESCALATE-TO-OWNER` do round 1 está RESOLVIDO por essa
 > decisão. `status:` permanece `reviewed`: o flip para `executing` é a
 > decisão 4.10, e só acontece depois da rodada 2 do debate sobre este
-> texto revisado.
+> texto revisado. *(Nota histórica, 2026-10-12: o flip aconteceu em
+> 2026-09-07, `88a30b11`; ver Progress log.)*
 
 > **Aviso de nomenclatura (leia antes de comparar com o consenso).** O
 > consenso do round 1 propôs cortar a onda W0 em «W0a canônico / W0b
@@ -60,13 +61,15 @@ tags: [model-currency, egress, automation, seed]
 > e do que a cara custa); e o orçamento
 > passa a incluir o piso de gate-boot re-pago. `status:` permanece
 > `reviewed` — o flip é a decisão 4.10 do Owner e não é matéria desta
-> cura.
+> cura. *(Nota histórica, 2026-10-12: o flip aconteceu em 2026-09-07,
+> `88a30b11`. A cura pós-round-3 está no §9.)*
 
 ## 0. A dependência dura do PLAN-169, nomeada
 
 `depends_on: [PLAN-169]` era um identificador nu. O entregável concreto
 é a **W4.3 / W4-C — a parte de DECISÃO do fleet-currency**
-(`.claude/plans/PLAN-169-closure-and-cross-session-evolution.md:661-675`),
+(`.claude/plans/PLAN-169-closure-and-cross-session-evolution.md:674-688`
+em 2026-10-12; era `:661-675` quando esta linha foi escrita),
 e dela dois itens:
 
 - **(i) F1-P1** — os perfis passam a ter alvo na geração corrente com o
@@ -76,14 +79,22 @@ e dela dois itens:
   PLAN-169 nomeia («duas tabelas papel→modelo paralelas sem dono»).
 - **(iv)** — a **dimensão `fleet-currency` no `nightly-hygiene`**
   (manifesto de superfícies portadoras de identificador de modelo +
-  oráculo por superfície). É a superfície que a W3b deste plano estende.
+  oráculo por superfície). Era a superfície que a W3b deste plano
+  estenderia; o item não aterrissou e a W3b cria a própria dimensão
+  (último parágrafo desta seção).
 
 Palavra do Owner na abertura daquela wave (S315, registrada em
-`PLAN-169:721`): «É o gargalo de 170, 174, **176** e 181.»
+`PLAN-169:734` em 2026-10-12): «É o gargalo de 170, 174, **176** e 181.»
 
-**O que espera e o que não espera.** Medido:
+**O que espera e o que não espera.** Medido em 2026-09-07:
 `grep -n '^status:' .claude/plans/PLAN-169-closure-and-cross-session-evolution.md`
-⇒ `status: executing`. Decisão de sequenciamento deste plano:
+⇒ `status: executing`. **Re-medido em 2026-10-12:** `status: done`
+(`completed_at: 2026-09-15`) — e o item (iv) **não aterrissou**:
+`grep -c fleet-currency .claude/workflows/nightly-hygiene.js` = 0, e o
+arquivo segue declarando nove dimensões. A espera da W3b acabou por
+FECHAMENTO do PLAN-169, não por entrega; a entrega do item (i) não foi
+re-medida por esta cura. Decisão de sequenciamento deste plano (texto
+de 2026-09-07; o efeito do fechamento está no último parágrafo):
 
 - **W0a, W0b, W1a, W1b, W1c, W2a e W3a NÃO esperam** o fechamento do
   PLAN-169. Nenhuma delas toca as superfícies do fleet-currency; a
@@ -92,6 +103,12 @@ Palavra do Owner na abertura daquela wave (S315, registrada em
   dimensão ao mesmo arquivo de varredura noturna. Abrir a W3b antes é
   editar um arquivo que outra wave está reescrevendo — a classe do
   baseline vivo, que este repositório já pagou na S329.
+
+**Efeito do fechamento do PLAN-169 (2026-10-12).** Nenhuma onda espera
+mais o PLAN-169. A premissa de uma dimensão-irmã `fleet-currency` a
+ESTENDER é falsa: a W3b acrescenta a sua própria dimensão ao arquivo
+como ele está hoje — que é o que a AC `dimension_is_wired_by_configuration`
+da W3b já exige (o teste conta as dimensões antes e depois).
 
 ## 1. Vocabulário (siglas definidas uma vez)
 
@@ -130,9 +147,11 @@ O split T/P preserva a cerimônia **por construção**, sem alargar a
 lista de guardas do hook canônico. Medido com o oráculo acima —  que
 decide por **PADRÃO de caminho**, não por conteúdo de arquivo. É por
 isso que a tabela é verificável ANTES de existir código, e é também o
-seu limite: **8 destes 10 caminhos ainda não existem em disco**
-(existem hoje só `gate-scripts-manifest.txt` e `validate.yml`; medido
-com `ls`). Os dez vereditos, reproduzíveis com
+seu limite: **7 destes 10 caminhos ainda não existem em disco**
+(existem `gate-scripts-manifest.txt`, `validate.yml` e, desde a W0a
+em `c03b1eda`, `check-model-currency.py`; re-medido com `ls` em
+2026-10-12 — eram 8 de 10 quando esta linha foi escrita). Os dez
+vereditos, reproduzíveis com
 `python3 .claude/hooks/check_canonical_edit.py --is-canonical <path>`:
 
     .claude/governance/models-registry.json      1   (T — exige assinatura)
@@ -196,7 +215,10 @@ respondida pelo relatório, que não é à prova de adulteração.
 > fizesse, e traria a forense para dentro da cadeia. A rota barata é a
 > degradação acima. Este plano executa a barata enquanto o Owner não
 > escolher a cara; nenhuma onda abre com a decisão pendente porque a
-> forma degradada já é executável.
+> forma degradada já é executável. *(2026-10-12: o Owner ESCOLHEU a
+> rota cara em 2026-09-07 — `audit_emit.py` entra na W1, Progress log.
+> A re-redação deste parágrafo, do §3.3, da W0b e da W1b para essa
+> decisão NÃO foi feita: é pendência nomeada no §9.)*
 
 ### 3.2 A variável de ambiente é um conjunto FECHADO de um elemento
 
@@ -232,7 +254,8 @@ existe campo de motivo**, e o scrub (`:5290-5291`) dropa o que sobra,
 deixando apenas um breadcrumb. `fell_back_to_static` é o único campo
 que carrega o FATO da degradação; o motivo em texto vive no relatório
 do detector. Vale aqui a mesma OQ-2 do §3.1: emendar o allowlist é
-cerimônia, e este plano não a gasta sem decisão do Owner.
+cerimônia, e este plano não a gasta sem decisão do Owner. *(2026-10-12:
+a decisão existe — rota cara, 2026-09-07; pendência de re-redação no §9.)*
 
 ### 3.4 Onde a doutrina T/P ganha autoridade
 
@@ -268,7 +291,8 @@ livre». Isso não se sustenta em nenhum dos dois lados:
   e `ADR-200-shared-ceremony-toolkit.md` em
   `.claude/plans/PLAN-188/debate/round-3/`.
 
-**A regra que substitui a aritmética, e é reproduzível.** O número
+**A regra que substitui a aritmética — medida ANTES do land e fixada
+pela decisão OQ-1 do Owner, não reproduzível hoje.** O número
 deste plano é *o maior número livre ≤ 197 com ZERO menção em qualquer
 arquivo do repositório* — livre porque nenhum arquivo o usa, e sem
 menção porque nenhum plano o reservou em texto. Derivação, gerada e não
@@ -288,9 +312,22 @@ print(len(livres), livres); print(len(zero), zero); print(max(zero))
 PY
 ```
 
-Saída medida em HEAD: **22 livres** `[68, 130, 134, 166-180, 184, 187,
+Saída medida em HEAD **antes do land da cura do round 2** (2026-09-07):
+**22 livres** `[68, 130, 134, 166-180, 184, 187,
 188, 189]`; **13 com zero menção** `[68, 166, 167, 168, 169, 170, 171,
 172, 176, 177, 178, 179, 180]`; escolhido **180**.
+
+**A regra NÃO é idempotente (achado K1 do round 3), e isso fica
+escrito.** Depois do land, este próprio plano passou a mencionar o
+número que ele elege. Re-rodada em 2026-10-12, a mesma derivação dá 22
+livres, **12** com zero menção (`[68, 166-172, 176-179]`) e máximo
+**179** — e excluir da varredura os arquivos do PLAN-176 não devolve o
+180, porque o registro da decisão do Owner
+(`.claude/plans/PLAN-186/debate/owner-decisions-S348-c.md:15`) também o
+cita. O número **180 é FIXO por decisão do Owner** — OQ-1, «Manter
+ADR-180 (Recomendado)», 2026-09-07 (Progress log) — e não por
+re-execução da regra. A colisão real continua verificada no land pela
+AC de reserva da W1b.
 
 **A reserva é o próprio pacote, não esta linha.** A lição que o round 2
 extraiu é que alocação de número de ADR não é medição local por plano —
@@ -332,8 +369,11 @@ logo tudo o que as caixas abaixo invocam é coletável.
 
 - [x] `[P0][US1][.claude/scripts/check-model-currency.py]` O detector lê os
       blocos `VETO_FLOOR_ALLOWED` e `AVAILABLE_MODELS_WORKING_SET` do
-      ADR-149 e os compara com `cost-table.yaml`,
-      `model-deprecations.json` e `settings.json`; divergência sai como
+      ADR-149 e os compara com `.claude/scripts/cost-table.yaml`,
+      `.claude/scripts/model-deprecations.json` e `.claude/settings.json`
+      (caminhos completos desde 2026-10-12 — achado K5 do round 3; são os
+      padrões de `check-model-currency.py:15-17`; não existe
+      `.claude/data/model-deprecations.json`); divergência sai como
       achado NOMEADO (identificador, superfície e autoridade que
       diverge), nunca como diferença crua. **O código de saída separa
       EXECUÇÃO de ACHADO** — `0` executou sem achado, `1` executou com
@@ -362,13 +402,17 @@ logo tudo o que as caixas abaixo invocam é coletável.
       arquivo é JSON válido.
       Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k state_file_contract_has_cycle_lanes_fp_and_ts`
 - [x] `[P0][US1][.claude/scripts/check-model-currency.py]` **A bandeira
-      de leitura `--state --json` existe e serve os SETE critérios de
-      morte.** É o comando único do §4: o teste enumera os sete
-      critérios e assere que cada um encontra o seu campo na saída. Um
-      critério sem campo deixa a caixa VERMELHA — que é o defeito que a
-      rodada 2 encontrou (o comando era declarado e não era exercido
-      por caixa nenhuma).
-      Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k state_json_serves_all_seven_death_criteria`
+      de leitura `--state --json` existe e serve TODOS os critérios de
+      morte da tabela do §4** — hoje nove, K-1..K-9. É o comando único
+      do §4: o teste LÊ as linhas `| K-n |` da tabela do §4 deste plano
+      (o número não é mais digitado — achado C1 do round 3, curado em
+      2026-10-12) e assere que cada critério encontra o seu campo na
+      saída e que a saída não serve critério fora da tabela. Um
+      critério sem campo, ou uma linha nova na tabela sem critério no
+      detector, deixa a caixa VERMELHA — que é o defeito que a rodada 2
+      encontrou (o comando era declarado e não era exercido por caixa
+      nenhuma).
+      Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k state_json_serves_every_death_criterion_in_plan_table`
 **O conjunto VERMELHO conhecido, e por que ele mudou de onda.** O texto
 anterior punha esta caixa na perna canônica da W1b, invocando um arquivo
 que onda nenhuma criava e uma bandeira que AC nenhuma declarava — a
@@ -378,16 +422,39 @@ W0a. O conteúdo do achado não muda: o oráculo `replacements ⊆
 valid_override_ids` como escrito no texto original é um **erro de
 categoria** — compara substitutos Anthropic contra `_VALID_MODELS`, que
 é a lista de revisores da linha OpenAI. Na forma correta, por família de
-fornecedor e por SUPERFÍCIE, **sete identificadores estão
-vermelhos hoje** — medido na W0a, contra as TRÊS superfícies que a primeira
-caixa desta onda manda comparar. Quatro vêm da superfície de SUBSTITUTOS:
+fornecedor e por SUPERFÍCIE, **seis identificadores estão vermelhos hoje**
+(re-medido em 2026-10-12: `check-model-currency.py` imprime `RED-IDS: 6`, e
+`--expected-reds` sai com 0), contra as TRÊS superfícies que a primeira
+caixa desta onda manda comparar. Três vêm da superfície de SUBSTITUTOS:
 `claude-haiku-4-5-20251001`, `claude-mythos-5` e `claude-opus-4-8-fast`
-fora do conjunto de trabalho do ADR-149, e `gpt-5.6-sol` fora de
-`_VALID_MODELS`. Três vêm da superfície de PREÇO, e a revisão anterior não
-os contava: `claude-opus-4-7` e `claude-opus-4-7-1m` (geração anterior, linha
+fora do conjunto de trabalho do ADR-149. Três vêm só da superfície de PREÇO:
+`claude-opus-4-7` e `claude-opus-4-7-1m` (geração anterior, linha
 de preço histórica retida) e `claude-opus-5-fast` (variante de modo rápido que
-o ADR-149 não assina). Publicados, não escondidos — e publicar quatro faria o
-portão da caixa `--expected-reds` nascer vermelho no primeiro dia.
+o ADR-149 não assina); `claude-haiku-4-5-20251001` e `claude-opus-4-8-fast`
+também aparecem nela. Publicados, não escondidos.
+
+**Por que eram sete na W0a e são seis hoje (achado C4 do round 3).** O
+sétimo, `gpt-5.6-sol`, era o substituto das linhas OpenAI fora de
+`_VALID_MODELS` (`.claude/hooks/_lib/codex_cli_shape.py`); a W3b.1 do
+PLAN-194 (`a0a6df06`, 2026-10-02) pôs a família gpt-5.6 nessa lista, e o
+vermelho saiu DE PROPÓSITO — a causa está no parágrafo final de
+`.claude/data/model-currency-expected-reds.txt`. **Autenticação do
+portão, declarada:** esse arquivo NÃO é membro de
+`.claude/governance/gate-scripts-manifest.txt` (medido: zero linhas;
+o molde `ownership-expected-reds.txt` é a linha 6), logo o conjunto
+exato é autenticado SÓ pela revisão do Pull Request que o edita. São
+duas coisas diferentes: o portão COMPARA conjuntos, e ninguém
+AUTENTICA a edição do arquivo. Apagar uma linha cujo identificador
+segue vermelho é DETECTADO (medido em 2026-10-12: a cópia sem a linha
+`claude-opus-4-7-1m` sai com código 1 e
+`RED-SET UNEXPECTED: claude-opus-4-7-1m`; o arquivo íntegro sai com 0).
+O furo é o inverso: quem ACRESCENTA uma linha com causa para um
+vermelho NOVO deixa o portão verde — o mesmo par medido mostra isso,
+lido ao contrário —, e o teste só exige que haja um comentário acima de
+cada linha, não que a causa seja verdadeira. Isso só a revisão do Pull
+Request autentica. Inscrevê-lo no
+manifesto o moveria para a perna canônica e mudaria o corte das ondas:
+rota NÃO decidida por esta cura.
 
 - [x] `[P1][US1][.claude/data/model-currency-expected-reds.txt]` **O
       conjunto VERMELHO conhecido nasce aqui, em arquivo rastreado**, no
@@ -409,9 +476,12 @@ portão da caixa `--expected-reds` nascer vermelho no primeiro dia.
       conjunto de trabalho do ADR-149 **e** com linha de preço em
       `cost-table.yaml`. Fornecedor sem linha de preço é INERTE por
       construção — fail-closed, nunca uma raia que reporta vazio. Medido
-      nesta revisão: a tabela de preços tem 12 identificadores, todos
+      nesta revisão: a tabela de preços tinha 12 identificadores, todos
       `claude-*`; zero `gpt`, zero `gemini`, zero `grok`. **Na abertura,
-      portanto, existe exatamente UMA raia ativa: Anthropic.**
+      portanto, existe exatamente UMA raia ativa: Anthropic.** Re-medido
+      em 2026-10-12: **13** identificadores (a linha `claude-opus-5-5`
+      entrou com a Amendment 3 do ADR-149), ainda todos `claude-*` — a
+      raia única não muda.
       Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k active_lanes_is_anthropic_only`
 
 **Ponto cego declarado do oráculo de runtime.** Ele prova os caminhos de
@@ -503,7 +573,11 @@ CAMINHO vive no relatório do fetcher, fora da cadeia HMAC; o que a
 cadeia carrega é host + `egress_class` (`network_http`, valor do enum
 fechado de `:8495-8498`) + a decisão. Vale aqui a **OQ-2** do §3.1: a
 rota cara é emendar `_lib/audit_emit.py` (oráculo = 1) e traz +1
-caminho canônico e +1 assinatura a esta onda.
+caminho canônico e +1 assinatura a esta onda. *(2026-10-12: «+ a
+decisão» é o achado C2 do round 3 — o allowlist medido não tem campo
+`decision`, e recusa e sucesso no mesmo host gravam evento
+indistinguível. NÃO curado aqui: a cura depende de como a rota cara,
+escolhida pelo Owner em 2026-09-07, entra na W1 — pendência no §9.)*
 
 Paths (2): `.claude/hooks/_lib/model_feed_fetch.py` (oráculo = **1**,
 canônico — é o que faz da onda uma cerimônia) e
@@ -514,13 +588,19 @@ aparece numa caixa abaixo como alvo **somente de leitura** — a onda não
 o edita, e por isso ele não é caminho do pacote. O fetcher também
 ESCREVE `.claude/data/model-currency-upstream-cache.json`, que a W3a lê:
 é artefato de tempo de execução, **não rastreado**, e por isso também
-não é caminho do pacote.
+não é caminho do pacote. *(Desde 2026-10-12 «não rastreado» tem
+mecanismo: a linha do `.gitignore` entregue pela cura pós-round-3 —
+achado K4; a AC que a assere mora na W3a.)*
 
 - [ ] `[P0][US2][.claude/hooks/_lib/model_feed_fetch.py]` O fetcher nasce
       DESLIGADO: sem a bandeira `--enable-upstream-fetch`, ele não abre
       soquete e retorna "desabilitado". O controle positivo substitui
       `socket.socket` por uma função que levanta e prova que a chamada
-      padrão completa mesmo assim.
+      padrão completa mesmo assim. **Pelos DOIS caminhos** (achado K3 do
+      round 3): o de `__main__` sem a bandeira E o de IMPORTAÇÃO —
+      `from _lib import model_feed_fetch` chamando a função pública sem o
+      parâmetro de habilitação —, porque uma bandeira lida só em
+      `__main__` não alcança quem importa o módulo.
       Check: `python3 -m pytest .claude/hooks/tests/test_model_feed_fetch.py -q -k disabled_by_default_opens_no_socket`
 - [ ] `[P0][US2][.claude/hooks/_lib/model_feed_fetch.py]` A lista de
       destinos permitidos é constante no módulo e casa o par **(host,
@@ -683,7 +763,12 @@ pré-existente dele pode ser editado; o BASELINE é o hash do vivo». Por
 isso, declarado:
 
 - **A W1c só abre depois do land do `w4b-ci-matrix`.** A W1b não espera
-  nada disso — foi o ganho do re-corte.
+  nada disso — foi o ganho do re-corte. *(2026-10-12, achado C3 do
+  round 3: a espera é real e agora está no `external_wait` do
+  cabeçalho. O pack foi rescindido em favor do sucessor `w4b-gates-v2`
+  (`PLAN-186:398`), e o manifesto segue com 9 membros — medido. Enquanto
+  a W1c não landar, **K-2 é critério declarado SEM instrumento** — dívida
+  declarada, não catraca.)*
 - **O baseline do manifesto é re-derivado no momento do SIGN**, nunca
   copiado do material escrito antes.
 
@@ -783,6 +868,13 @@ quando roda com `--enable-upstream-fetch`. É a diferença dele para
 ausente ou velho não é erro: a coluna `upstream` sai como «sem dado» com
 a idade em horas, que é informação, não bloqueio.
 
+**O cache é dado de fonte EXTERNA lido para dentro do contexto do CEO
+(achado K4 do round 3).** Por isso ganha duas caixas: a linha do
+`.gitignore` que torna «não rastreado» um mecanismo (entregue pela cura
+pós-round-3, 2026-10-12) e a cerca sobre o conteúdo, no molde da
+`untrusted_feed_is_fenced` da W2a. O `.gitignore` não entra na linha
+`Paths:` acima porque a W3a não o edita: só assere a linha que já existe.
+
 - [ ] `[P0][US6][.claude/scripts/ceo-boot.py]` O `/ceo-boot` mostra, por
       raia ativa, o trio {instalado, fixado, upstream} — e **nunca
       bloqueia**.
@@ -800,6 +892,17 @@ a idade em horas, que é informação, não bloqueio.
       documenta a dimensão nova, para que o que o boot imprime seja
       legível sem ler o código.
       Check: `grep -q 'model-currency' .claude/commands/ceo-boot.md`
+- [ ] `[P0][US6][.claude/scripts/ceo-boot.py]` **Cerca sobre o conteúdo
+      do cache.** O que o boot mostra do cache sai cercado e truncado,
+      nunca colado cru: um cache plantado numa árvore descartável com
+      carga acima do limite e um texto de instrução embutido produz saída
+      cercada, truncada, e sem o texto da instrução.
+      Check: `python3 -m pytest .claude/scripts/tests/test_ceo_boot_model_currency.py -q -k cache_content_is_fenced_and_truncated`
+- [x] `[P0][US6][.gitignore]` **O cache não é rastreado por mecanismo,
+      não por afirmação.** Entregue pela cura pós-round-3 (2026-10-12);
+      o comando sai VERMELHO (código 1) se a linha sumir — controle
+      medido antes da linha existir.
+      Check: `git check-ignore -q .claude/data/model-currency-upstream-cache.json`
 
 ### Wave W3b — dimensão na varredura noturna (canônica, UMA assinatura)
 
@@ -809,10 +912,14 @@ a idade em horas, que é informação, não bloqueio.
 livre porque a citava por um caminho de skill que não existe; o arquivo
 real exige assinatura GPG. A onda ganha, por isso, perna própria.
 
-**Ela espera o PLAN-169.** É a única onda deste plano que espera: o item
-(iv) da W4.3/W4-C acrescenta a dimensão `fleet-currency` a este mesmo
-arquivo (§0). Abrir a W3b antes é editar um arquivo que outra wave está
-reescrevendo — a classe S329 do baseline vivo, outra vez.
+**A espera pelo PLAN-169 acabou, e a W3b CRIA a dimensão.** Re-medido
+em 2026-10-12: o PLAN-169 fechou `done` (`completed_at: 2026-09-15`)
+sem entregar o item (iv) da W4.3/W4-C —
+`grep -c fleet-currency .claude/workflows/nightly-hygiene.js` = 0. Não
+há dimensão-irmã a estender nem outra onda reescrevendo este arquivo:
+a W3b acrescenta a SUA dimensão ao arquivo como ele está (§0, último
+parágrafo). A única espera externa deste plano é a da W1c
+(`external_wait`).
 
 Paths (2): `.claude/workflows/nightly-hygiene.js` (oráculo = 1, existe
 em HEAD),
@@ -843,7 +950,9 @@ por 24 h** (a varredura noturna é invocada pelo operador, não por
 
 Arquivo de estado único e rastreado: `.claude/data/model-currency-state.json`.
 Comando de leitura único: `check-model-currency.py --state --json` — **e
-ele agora tem AC própria** (W0a, `state_json_serves_all_seven_death_criteria`);
+ele agora tem AC própria** (W0a, `state_json_serves_every_death_criterion_in_plan_table`,
+que LÊ as linhas `| K-n |` da tabela abaixo: acrescentar ou tirar uma
+linha sem mexer no detector deixa a caixa VERMELHA);
 o texto anterior o declarava sem que caixa nenhuma o exercitasse.
 
 | # | critério | limiar | dono |
@@ -860,9 +969,9 @@ o texto anterior o declarava sem que caixa nenhuma o exercitasse.
 
 **Por que K-8 e K-9 existem, e por que K-5 saiu da raia.** O plano mede
 que existe **exatamente UMA raia ativa** hoje (Anthropic; a tabela de
-preços tem 12 identificadores, todos `claude-*`). Nesse regime, K-6
+preços tem 13 identificadores em 2026-10-12, todos `claude-*`). Nesse regime, K-6
 «3 ciclos ⇒ raia desligada» desliga **o produto inteiro**, e nenhum dos
-sete critérios anteriores cobria o estado resultante: a rotina passaria a
+critérios K-1..K-7 cobria o estado resultante: a rotina passaria a
 rodar verde e vazia, que é a assinatura visual de saúde. Pior, K-5 — o
 controle de falso-NEGATIVO, o único detector de morte — rodava **dentro**
 da raia que K-6 acabara de marcar morta. As três correções:
@@ -879,6 +988,18 @@ as raias inertes — e é K-8 que impede isso de passar em silêncio. O
 defeito de PREÇO em si é do ADR-148 e sai por
 `PLAN-176-FOLLOWUP-canonical-models-expiry` (§5), não por esta classe.
 
+**LACUNA NOMEADA (2026-10-12): a frase acima descreve o desenho, não o
+código.** Medido: `grep -c valid_until .claude/scripts/check-model-currency.py`
+= 0 — o detector NÃO lê `cost_table_valid_until`. A tabela venceu em
+2026-09-13 e o detector ainda imprime `active lanes: anthropic`, com K-8
+`ok`: hoje uma tabela vencida NÃO torna raia nenhuma inerte, e K-8 não a
+enxerga. A cura é de CÓDIGO e fica para um pacote próprio (rótulo
+`P176-EXPIRY` na fila da S363), fora desta cura de texto. O follow-up
+citado acima não existe em disco (medido: zero arquivos
+`PLAN-176-FOLLOWUP-*`) e, pelo PLAN-SCHEMA §1.4, não poderia entrar em
+`executing` antes de este plano estar `done`; a rota de renovação dos
+preços é decisão aberta do Owner, e esta cura não muda preço nem tabela.
+
 ## 5. Decisões que o round 1 exigiu e ficam registradas
 
 - **`.claude/data/canonical_models.json` fica FORA desta classe, com
@@ -887,7 +1008,8 @@ defeito de PREÇO em si é do ADR-148 e sai por
   preferência de modelo. Não é absorvido nem apagado por este plano. O
   que é verdade e não some: ele está expirado (`valid_until:
   2026-09-01`). Isso é defeito de preço e ganha follow-up próprio,
-  `PLAN-176-FOLLOWUP-canonical-models-expiry`.
+  `PLAN-176-FOLLOWUP-canonical-models-expiry`. *(2026-10-12: o
+  follow-up não foi criado; ver a lacuna nomeada no fim do §4.)*
 - **Custo declarado do resolver ser canônico.** Todo conserto no
   resolver custa uma cerimônia. Isso é consequência desejada do desenho
   — quem decide confiança fica sob assinatura — e não defeito. Fica
@@ -919,24 +1041,33 @@ defeito de PREÇO em si é do ADR-148 e sai por
   rastreado é `.claude/plans/PLAN-179/w0/gateboot_repay.py`, e é dele
   que a próxima revisão deve gerar a faixa em vez de digitá-la.
 
-- **O valor em dólares é TETO, e isso agora está dito.** O cabeçalho
-  carrega o teto conservador: total × preço do Opus 5. Insumos, todos
-  lidos de `.claude/scripts/cost-table.yaml`: Opus 5 a 5,00 de entrada
-  e 25,00 de saída por milhão (`:85-87`), com
+- **O valor em dólares é ESTIMATIVA SOB O PIN `claude-opus-5-5`, não
+  teto** (achado K2 do round 3; recalculado em 2026-10-12 com a tabela
+  viva). O cabeçalho carrega total × preço do pin de sessão
+  (`.claude/settings.json:796`, `"model": "claude-opus-5-5"`). Insumos,
+  todos de `.claude/scripts/cost-table.yaml`, citados pelo identificador
+  da linha (o número de linha desloca quando uma linha nova entra):
+  `claude-opus-5-5` a 4,00 de entrada e 20,00 de saída por milhão, com
   `blended_input_share: 0.80` / `blended_output_share: 0.20`
-  (`:45-46`) ⇒ **9,00 por milhão**; 1,09M a 1,54M ⇒ **9,84 a 13,85
-  dólares**, publicado como «9.8-13.9 USD».
+  ⇒ **7,20 por milhão**; 1,09M a 1,54M ⇒ **7,85 a 11,09
+  dólares**, publicado como «7.8-11.1 USD» — a faixa agora reproduz a
+  faixa de tokens do cabeçalho (achado K11). **Não é teto:** o conjunto
+  de trabalho do ADR-149 inclui `claude-fable-5-1` a 10,00/50,00 ⇒ 18,00
+  por milhão, e o mesmo total sob ele daria 19,6 a 27,7 dólares. **A
+  tabela está vencida** (`cost_table_valid_until: 2026-09-13`): as duas
+  figuras herdam o vencimento, e renovar preço não é matéria desta cura.
 
   A `tier_mix_estimate` do cabeçalho **não é decorativa e não é o
   mesmo número** — ela vale sobre a metade de TRABALHO. Aplicando
-  70/25/5 aos preços do mesmo arquivo (Sonnet 5 2,00/10,00 em
-  `:110-112`; Haiku 4.5 1,00/5,00 em `:115-117`) dá **7,29 por
-  milhão**; o piso re-pago é 100 % contexto do CEO e não admite
-  mistura. Total pela derivação mista: **8,97 a 12,55 dólares**. As
-  duas figuras coexistem por desenho — o cabeçalho leva o teto, o
-  texto leva o esperado —, e a rodada 2 tinha razão: o defeito era
-  publicar uma só e derivá-la dos insumos da outra. Ambas excluem
-  contexto de subagentes e desconto de leitura de cache.
+  70/25/5 aos preços do mesmo arquivo (`claude-opus-5-5` 4,00/20,00;
+  `claude-sonnet-5` 2,00/10,00; `claude-haiku-4-5` 1,00/5,00) dá
+  **6,03 por milhão**; o piso re-pago é 100 % contexto do CEO (7,20 por
+  milhão) e não admite mistura. Total pela derivação mista: **7,28 a
+  10,19 dólares**. As duas figuras coexistem por desenho — o cabeçalho
+  leva a estimativa sob o pin, o texto leva a da mistura —, e a rodada 2
+  tinha razão: o defeito era publicar uma só e derivá-la dos insumos da
+  outra. Ambas excluem contexto de subagentes e desconto de leitura de
+  cache. As figuras de 2026-09-07 (pin `claude-opus-5`) estão no §9.
 - **Nome do arquivo deste plano.** É
   `.claude/plans/PLAN-176-model-currency-refresh.md`. O caminho
   `.claude/plans/PLAN-176.md`, citado no material de abertura do
@@ -980,7 +1111,9 @@ A rodada 2 acrescentou dois, pela mesma razão — vivem na W2a:
   tabela (W0a), então uma tabela expirada pode tornar todas as raias
   inertes. A metade que este plano já cobre é o critério **K-8** (§4);
   a metade de PREÇO é do ADR-148 e sai por
-  `PLAN-176-FOLLOWUP-canonical-models-expiry` (§5).
+  `PLAN-176-FOLLOWUP-canonical-models-expiry` (§5). *(2026-10-12: a
+  cobertura por K-8 é do DESENHO — o detector não lê a validade da
+  tabela, e o follow-up não existe; ver a lacuna nomeada no fim do §4.)*
 
 ## 7. Fundamentação externa do split T/P (advisory, anexo S305)
 
@@ -1008,7 +1141,114 @@ de CI sem alternativa em 6 lugares; versão de Python misturada entre
 3.11 e 3.12; o verificador de workflows triplicado com uma cópia sem
 resumo criptográfico.
 
+## 9. Apêndice — cura pós-round-3 (S363, 2026-10-12)
+
+O round 3 (`.claude/plans/PLAN-176/debate/round-3/consensus.md`, veredito
+`RUN-ANOTHER-ROUND`) nunca tinha sido curado no texto: o CEO parou o ciclo,
+o Owner decidiu as três OQs e autorizou a W0a em 2026-09-07. Esta cura
+aplica NO LUGAR os itens de TEXTO, cada fato re-medido em disco em
+2026-10-12, e registra aqui cada mudança — correção pós-debate vai ao
+apêndice (regra S361). `status:` não muda.
+
+**Censo mecânico ANTES de escrever** (a recomendação de método do round 3:
+onze dos achados eram «cura no sítio nomeado, irmão esquecido»). Linhas do
+texto anterior (HEAD `c76b61c1`): `sete|SETE|all_seven|seven` ⇒ plano
+:365, :366, :371, :381, :846, :865, :1027, :1031 e teste :12, :50-52, :310;
+`teto` ⇒ só :922-936 é o sentido de dólar (curado; :161-174, :605, :647,
+:956 e :1098 são teto de confiança ou de pacote, intocados);
+`12 identificadores` ⇒ :412, :863; `PLAN-169` ⇒ :69, :82, :86, :812;
+`external_wait|eta_calendar` ⇒ :16, :17; `.claude/data/model-deprecations`
+⇒ zero (o K5 são os nomes nus de :335-336); `8 destes 10` ⇒ :133;
+`OQ-[123]|rota cara|não a gasta|não escolher` ⇒ :193-199, :235, :504-506,
+:952-956; `valid_until|FOLLOWUP-canonical` ⇒ :876-880, :888-890, :979-983.
+
+| achado do round 3 | onde estava | o que mudou |
+|---|---|---|
+| C1 | :364-371, :846; teste :12, :50-53, :310 | AC = TODOS os critérios da tabela do §4; o teste LÊ as linhas `\| K-n \|` e nomeia o critério que sobra ou falta; `-k` renomeado; :865 passa a «K-1..K-7» |
+| C3 | :16-17, :685 | `external_wait` nomeia a espera da W1c; `eta_calendar` derivado das esperas; K-2 sem instrumento declarado como dívida |
+| C4 | :381-390 | seis vermelhos (o sétimo saiu com `a0a6df06`); portão autenticado SÓ pela revisão do Pull Request, declarado |
+| K1 | :271, :291-293 | saída datada como medida antes do land; 180 fixo pela OQ-1 do Owner; re-execução dá 179 |
+| K2 (+ K11) | :13-14, :922-939 | «teto» ⇒ estimativa sob o pin `claude-opus-5-5`, recalculada; faixa reproduz o cabeçalho |
+| K3 | :519-524 | a AC do interruptor exerce também o caminho de IMPORTAÇÃO |
+| K4 | :514-517, :775-784; `.gitignore` | linha no `.gitignore` + duas caixas na W3a (cerca e `check-ignore`) |
+| K5 | :335-336 | caminhos completos das três autoridades |
+| re-medição | :10, :35-37, :61-63, :69, :82-94, :133-135, :412-414, :863 | `fd845667` em `related_commits`; notas datadas; PLAN-169 `done`; 7 de 10; 13 linhas de preço |
+| lacuna | :875-880, :888-890, :979-983 | o detector não lê `cost_table_valid_until` — nomeada; cura de código é o pacote `P176-EXPIRY` |
+
+**Figuras e frases substituídas, para o histórico:**
+`budget_usd_estimate: "9.8-13.9 USD"` como «teto» sob o pin `claude-opus-5`
+(9,00 por milhão ⇒ 9,84-13,85) e a mista 7,29 por milhão ⇒ 8,97-12,55;
+`tier_mix_estimate` com «CEO Opus 5»; `external_wait: none`;
+`eta_calendar: "mesmo-dia a D+1"`; «sete identificadores» (com
+`gpt-5.6-sol`); «serve os SETE critérios» e o nome
+`state_json_serves_all_seven_death_criteria`; «12 identificadores»;
+«8 destes 10». As ocorrências de «sete» que sobram no plano são
+históricas (Progress log de 2026-09-07 e este apêndice) e ficam.
+
+**O que esta cura NÃO faz — pendências nomeadas, nenhuma decidida aqui:**
+
+1. **C2 e a re-redação para a OQ-2 já decidida.** O Owner escolheu a rota
+   CARA em 2026-09-07 (`audit_emit.py` entra na W1), mas §3.1, §3.3, W0b e
+   W1b seguem escritos para a rota barata — a linha `Paths:` da W1b ainda
+   tem 4 caminhos, sem `audit_emit.py`. A AC `refused_destination_emits_event`
+   da W0b exige um campo `decision` que o allowlist não carrega
+   (re-medido: ausente de `_EGRESS_DESTINATION_DETECTED_ALLOWLIST`). Curar
+   pede decidir como a emenda entra na W1b e se a W0b aterrissa depois
+   dela — desenho de corte de ondas, pacote próprio, com o censo das ações
+   que o plano EMITE. As âncoras de linha de `audit_emit.py` citadas no
+   plano derivaram (medido: `_OPTIMIZER_ENVELOPE` :1352,
+   `_MODEL_ROUTING_ENFORCED_ALLOWLIST` :1604,
+   `_EGRESS_DESTINATION_DETECTED_ALLOWLIST` :8494,
+   `_coerce_egress_destination` :8520) e se re-ancoram no mesmo pacote.
+2. As linhas novas do §5b que o round 3 propôs (dono, relógio e critério
+   de desistência da espera da W1c; teto sob o pin × sobre o conjunto de
+   trabalho; quota do revisor externo) são perguntas ao Owner, não curas.
+3. A rota da autenticação do conjunto vermelho (inscrever o arquivo no
+   manifesto ADR-192) fica aberta (C4).
+4. Os advisory K6-K10 e C5 não foram curados.
+5. Renovar preços e criar o follow-up de expiração: decisão aberta do
+   Owner; esta cura não muda preço nem tabela.
+
+### 9.1 Correção da cura após a refutação (S363, 2026-10-12, mesmo dia)
+
+Três P2 dos refutadores sobre `da4e5b4f`, cada um reproduzido antes da
+correção; «onde estava» usa as linhas de `da4e5b4f`. Censo:
+`apaga uma linha|portão verde` ⇒ só :444; `W3b deste plano estende|Ela espera o PLAN-169`
+⇒ :82 e :904 (o censo da cura já listava esse :904, era o :812 de
+`c76b61c1`, e a cura não o tocou). O :100-103 fica: o §0 o data de 2026-09-07.
+
+| achado | onde estava | o que mudou |
+|---|---|---|
+| R1 — «quem apaga uma linha junto com a causa deixa o portão verde» era falso | :443-444 | :445-457: apagar a linha de um identificador que segue vermelho é detectado (código 1, `RED-SET UNEXPECTED`); o furo é ACRESCENTAR linha com causa para um vermelho novo, e só a revisão do Pull Request o autentica |
+| R2 — o padrão do §4 no teste casava `## 4.1` e cabeçalho dentro de cerca | teste :60-69 | teste :60-91: cabeçalho EXATO, cercas puladas, cabeçalho único (zero ou dois falham fechado); controles em :355-366 |
+| R3 — «Ela espera o PLAN-169» contradizia :105 e o `external_wait` | :904-907 e o irmão :82 | :915-922: a espera acabou e a W3b CRIA a dimensão; :82-84 passa ao passado |
+
+Controles de R2: o analisador anterior dentro do teste novo dá 1 falha
+(`('K-1',) != ('K-9',)`); numa cópia do plano com um §4 cercado (K-1 a
+K-9) antes do §4 real e sem a K-9 no real, o teste anterior PASSA (cego)
+e o novo falha com `not in §4 ['K-9']`.
+
 ## Progress log
+
+- 2026-10-12 (S363, correção da cura): três P2 dos refutadores corrigidos
+  (autenticação do conjunto vermelho, analisador do §4 no teste, espera da
+  W3b); tabela e controles no §9.1; 11 casos. `status:` NÃO muda.
+  Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k state_json_serves_every_death_criterion_in_plan_table`
+
+- 2026-10-12 (S363, texto + teste): **cura pós-round-3 dos itens de TEXTO e
+  re-medição do plano** — C1, C3, C4, K1, K2, K3, K4 e K5 (K11 por
+  consequência) aplicados no lugar, cada sítio achado por censo mecânico
+  antes da escrita; tabela achado → linha, censo e pendências no §9. O
+  teste do `--state --json` passa a LER as linhas `| K-n |` do §4 (cura
+  estrutural de C1): o arquivo segue com 11 casos, verdes sob `-W error`;
+  controles VERMELHOS com cópia descartável do plano apontada por
+  `P176_PLAN_FILE` — sem a linha K-9 e com uma linha K-10 —, 1 falha
+  cada, nomeando o critério; o teste antigo ficava verde (cego) com a
+  K-10 plantada. O `.gitignore` ganha a linha do cache upstream
+  (`git check-ignore` 1 → 0). Lacuna nomeada: o detector não lê
+  `cost_table_valid_until`. Não curados, com razão no §9: C2 e a
+  re-redação para a OQ-2 que o Owner já decidiu. `status:` NÃO muda.
+  Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q`
 
 - 2026-09-07 (S349, W0a): **detecção OFFLINE entregue — 4 arquivos NOVOS mais
   este plano, oráculo 0 nos cinco, zero rede.** Nascem

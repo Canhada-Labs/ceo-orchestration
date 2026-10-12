@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Tests for PLAN-186-FOLLOWUP-census-runtime W0 — ``census_runtime.py``.
+"""Tests for PLAN-186-FOLLOWUP-census-runtime W0 + W1a — ``census_runtime.py``.
 
 The instrument under test derives the role->model table from the RUNTIME
 (an import in the owner's real package context, the owner's own parsers
 for the data owners, an ANCHORED detector for the shell owner) and never
 from a text fingerprint. These tests prove:
 
-* GREEN on the live tree — four surfaces, four rows, three owner classes.
+* GREEN on the live tree — one row per DECLARED surface (four W0 + three
+  W1a), three owner classes, the label each family carries in the note.
+* W1a (Owner decision 2026-10-12, the three lowest-risk reopened owners):
+  ``task-route.py`` asked through ``_agents_for`` over a domain HARVESTED
+  from the owner, with a fail-closed LINE-coverage guard; the ADR-052
+  baseline asked through the tier-policy LOADER and cross-checked against
+  the builder in a separate process; the delivered template read by the
+  owner's own loader. One RED control (at least) per owner, each a
+  mutation of a disposable COPY; the devops divergence is published.
+* The census never writes the audit chain: the test env points HOME and
+  ``CEO_AUDIT_LOG_PATH`` at the TestEnvContext tree and the tree is
+  byte-for-byte unchanged after the run.
 * Check (a) RED in its three named forms (import fails / empty map / a
   pair on one side only).
 * Check (b) RED per owner (missing key), plus alias leaking into the
@@ -35,7 +46,10 @@ Python >= 3.9 (no PEP 604 at runtime, no ``match``).
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
+import inspect
+import json
 import os
 import shutil
 import subprocess
@@ -43,6 +57,7 @@ import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest import mock
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _HOOKS_DIR = _REPO_ROOT / ".claude" / "hooks"
@@ -74,17 +89,37 @@ _SKELETON = (
     ".claude/scripts/build-canonical-models.py",
     ".claude/adr/ADR-149-model-id-allowlist.md",
     "SUPPORT.md",
+    # W1a — task-route.py and the ``_lib`` modules its import pulls in.
+    ".claude/scripts/task-route.py",
+    ".claude/hooks/_lib/__init__.py",
+    ".claude/hooks/_lib/injection_salt.py",
+    ".claude/hooks/_lib/runtime_paths.py",
+    ".claude/hooks/_lib/secret_patterns.py",
+    ".claude/hooks/_lib/tier_policy",
+    # W1a — the template ``install.sh`` delivers to every adopter.
+    "templates/.claude/tier-policy.json",
 )
 
 _CONSTANTS_REL = ".claude/scripts/tier_policy_cli/_constants.py"
 _MATRIX_REL = ".claude/dispatcher/routing-matrix.yaml"
 _INJECT_REL = ".claude/scripts/inject-agent-context.sh"
+_TASK_ROUTE_REL = ".claude/scripts/task-route.py"
+_TIER_LOADER_REL = ".claude/scripts/tier_policy_cli/loader.py"
+_TIER_TYPES_REL = ".claude/scripts/tier_policy_cli/_types.py"
+_TIER_TEMPLATE_REL = "templates/.claude/tier-policy.json"
 
 
 def _load_census():
-    spec = importlib.util.spec_from_file_location("_census_under_test", str(_CENSUS))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # Loading the census writes no bytecode next to it either (the
+    # instrument's own suppression is measured in W1aBytecodeIsolationTest).
+    saved = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec = importlib.util.spec_from_file_location("_census_under_test", str(_CENSUS))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    finally:
+        sys.dont_write_bytecode = saved
     return mod
 
 
@@ -95,10 +130,59 @@ def _make_root(dest):
         dst = Path(dest) / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         if src.is_dir():
-            shutil.copytree(str(src), str(dst))
+            # Other pytest workers can atomically replace bytecode while this
+            # fixture is copied. Only source/configuration belongs in the census.
+            shutil.copytree(
+                str(src), str(dst),
+                ignore=shutil.ignore_patterns("__pycache__", "*.py[co]", "*.py[co].*"),
+            )
         else:
             shutil.copy2(str(src), str(dst))
     return dest
+
+
+
+class SkeletonCopyIsolationTest(TestEnvContext):
+    """Fixture snapshots contain sources, never interpreter-owned caches."""
+
+    def test_disappearing_bytecode_does_not_break_source_snapshot(self):
+        with TemporaryDirectory() as scratch:
+            source = Path(scratch) / "source"
+            package = source / "package"
+            cache = package / "__pycache__"
+            cache.mkdir(parents=True)
+            (package / "module.py").write_text("VALUE = 7\n")
+            (package / "settings.yaml").write_text("enabled: true\n")
+            (cache / "module.cpython-312.pyc.12345").write_bytes(b"temporary")
+            (package / "legacy.pyc").write_bytes(b"compiled")
+            (package / "legacy.pyo").write_bytes(b"optimized")
+            (package / "legacy.pyc.12345").write_bytes(b"temporary")
+            destination = Path(scratch) / "snapshot"
+            copyfile = shutil.copyfile
+
+            def copying_while_bytecode_is_renamed(src, dst, **kwargs):
+                path = Path(src)
+                if "__pycache__" in path.parts or ".pyc" in path.name:
+                    path.unlink()
+                return copyfile(src, dst, **kwargs)
+
+            with mock.patch.dict(globals(), {"_REPO_ROOT": source, "_SKELETON": ("package",)}):
+                with mock.patch.object(shutil, "copyfile", side_effect=copying_while_bytecode_is_renamed):
+                    _make_root(destination)
+            copied = destination / "package"
+            self.assertEqual({p.name for p in copied.iterdir()}, {"module.py", "settings.yaml"})
+            self.assertEqual((copied / "module.py").read_text(), "VALUE = 7\n")
+            self.assertEqual((copied / "settings.yaml").read_text(), "enabled: true\n")
+
+    def test_source_copy_errors_still_fail_the_snapshot(self):
+        with TemporaryDirectory() as scratch:
+            source = Path(scratch) / "source"
+            (source / "package").mkdir(parents=True)
+            (source / "package" / "module.py").write_text("VALUE = 7\n")
+            with mock.patch.dict(globals(), {"_REPO_ROOT": source, "_SKELETON": ("package",)}):
+                with mock.patch.object(shutil, "copyfile", side_effect=PermissionError("source unreadable")):
+                    with self.assertRaises(shutil.Error):
+                        _make_root(Path(scratch) / "snapshot")
 
 
 def _run(root):
@@ -148,17 +232,20 @@ def _patch(root, rel, old, new, count=1):
 class CensusRuntimeGreenTest(TestEnvContext):
     """The live tree must be GREEN and shaped as the AC declares."""
 
-    def test_live_tree_green_four_rows(self):
+    def test_live_tree_green_one_row_per_declared_surface(self):
         proc = _run(_REPO_ROOT)
         self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(proc.stderr, "")
         census = _load_census()
         rows = census.build_table(str(_REPO_ROOT))
-        self.assertEqual(len(rows), 4)
+        self.assertEqual(len(census.W0_SURFACES), 4)
+        self.assertEqual(len(census.W1A_SURFACES), 3)
+        self.assertEqual(len(rows), len(census.EXPECTED_SURFACES))
         self.assertEqual(
-            sorted(r["surface"] for r in rows), sorted(census.EXPECTED_SURFACES)
+            [r["surface"] for r in rows], list(census.EXPECTED_SURFACES)
         )
 
-    def test_three_owner_classes_and_one_label(self):
+    def test_three_owner_classes_and_the_label_of_each_family(self):
         census = _load_census()
         rows = census.build_table(str(_REPO_ROOT))
         self.assertEqual(
@@ -166,16 +253,27 @@ class CensusRuntimeGreenTest(TestEnvContext):
             sorted({census.OWNER_DATA, census.OWNER_IMPORTABLE, census.OWNER_SHELL}),
         )
         for row in rows:
-            self.assertEqual(row["label"], census.LOCAL_OWNER_LABEL)
+            expected = (
+                census.LOCAL_OWNER_LABEL
+                if row["surface"] in census.W0_SURFACES
+                else census.REOPENED_OWNER_LABEL
+            )
+            self.assertEqual(row["label"], expected, row["surface"])
 
     def test_no_alias_reaches_the_resolved_column(self):
         census = _load_census()
         rows = census.build_table(str(_REPO_ROOT))
-        allowed = set(census.working_set(str(_REPO_ROOT)))
+        fleet = set(census.working_set(str(_REPO_ROOT)))
         for row in rows:
             self.assertTrue(row["resolved_model_ids"])
+            owner_domain = row.get("_model_id_domain")
+            allowed = set(owner_domain) if owner_domain is not None else fleet
             for mid in row["resolved_model_ids"]:
                 self.assertIn(mid, allowed, row["surface"])
+                if mid not in fleet:
+                    # Outside the ADR-149 working set (the DATED haiku of the
+                    # tier-policy owners): PUBLISHED, never normalized away.
+                    self.assertIn(mid, row["resolution_step"], row["surface"])
             if row["raw_unit"] == census.UNIT_ALIAS:
                 self.assertFalse(row["resolution_step"].startswith("nenhum"))
 
@@ -686,8 +784,10 @@ class RailRound2ProbesTest(TestEnvContext):
         """F9: case alternations must not blow up the six-column table."""
         proc = _run(_REPO_ROOT)
         self.assertEqual(proc.returncode, 0, proc.stderr)
+        census = _load_census()
         lines = [ln for ln in proc.stdout.split("\n") if ln.startswith("|")]
-        self.assertEqual(len(lines), 6)  # header + separator + four rows
+        # header + separator + one row per declared surface (4 W0 + 3 W1a)
+        self.assertEqual(len(lines), 2 + len(census.EXPECTED_SURFACES))
         widths = {len(_split_md_row(ln)) for ln in lines}
         # 7 colunas desde a S348-r6: a coluna «cobertura» entrou com a
         # publicacao NAO-EXAUSTIVA da linha MODEL_HINT.
@@ -1068,6 +1168,634 @@ class RailRound5CuresTest(TestEnvContext):
         text = (_REPO_ROOT / _INJECT_REL).read_text(encoding="utf-8")
         blk = text.index('case "$DETECTED_SKILL" in')
         self.assertEqual(census._owner_shell_options(text, blk), "set -euo pipefail")
+
+
+#: The tail of ``_agents_for`` — anchor for planting a branch before it.
+_TR_TAIL = "    return agents\n\n\ndef _context_strategy("
+
+
+class W1aTaskRouteTest(TestEnvContext):
+    """Owner 2 — ``task-route.py``, asked through ``_agents_for``."""
+
+    def test_row_equals_an_independent_enumeration_of_the_owner(self):
+        """The harvested domain loses no route the owner can return.
+
+        The oracle here is INDEPENDENT of the census harvest: the owner's
+        own ``CLASSIFICATION_MODES`` x every value ``_detect_workflow_signal``
+        documents x truthy/falsy veto domain x both booleans.
+        """
+        census = _load_census()
+        module = census._import_task_route(str(_REPO_ROOT))
+        expected = set()
+        for cls in module.CLASSIFICATION_MODES:
+            for veto in (None, "auth"):
+                for wf in (None, "release", "ci", "rag", "test-infra"):
+                    for schema in (False, True):
+                        for agent in module._agents_for(cls, veto, wf, schema):
+                            expected.add((agent["role"], agent["model"]))
+        reading = census.read_task_route(str(_REPO_ROOT))
+        got = set((r, m) for r, ms in reading["routes"].items() for m in ms)
+        self.assertTrue(expected)
+        self.assertEqual(expected, got)
+        # The harvest found every classification the owner's enum declares.
+        for cls in module.CLASSIFICATION_MODES:
+            self.assertIn(cls, reading["domain"]["classification"])
+
+    def test_check_a_two_readings_agree(self):
+        """Row (harvest + trace, in process) == the ONE command (no harvest)."""
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        row = [r for r in rows if r["surface"] == census.SURFACE_TASK_ROUTE][0]
+        second = census.read_task_route_one_command(str(_REPO_ROOT), row["_raw_domain"])
+        self.assertEqual(row["_pairs"], second)
+        self.assertEqual(row["coverage"], census.COVERAGE_PROBED)
+        census.check_a(str(_REPO_ROOT), rows)
+
+    def test_red_check_a_row_that_drops_a_route(self):
+        """RED: a row that lost a (role, model) pair disagrees with the import."""
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        for row in rows:
+            if row["surface"] == census.SURFACE_TASK_ROUTE:
+                row["_pairs"].pop(sorted(row["_pairs"])[0])
+        with self.assertRaises(census.Red) as ctx:
+            census.check_a(str(_REPO_ROOT), rows)
+        self.assertEqual(ctx.exception.name, "task_route_pair_missing_in_table")
+
+    def test_green_control_a_new_literal_branch_is_derived_not_remembered(self):
+        """A route behind a NEW literal shows up with no census change."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            before = _run(root)
+            self.assertEqual(before.returncode, 0, before.stderr)
+            _patch(
+                root,
+                _TASK_ROUTE_REL,
+                _TR_TAIL,
+                '    if workflow_change == "census-deploy":\n'
+                '        agents.append({"role": "devops", "model": "claude-haiku-4-5"})\n'
+                + _TR_TAIL,
+            )
+            after = _run(root)
+            self.assertEqual(after.returncode, 0, after.stderr)
+            self.assertNotEqual(before.stdout, after.stdout)
+            self.assertIn("devops=claude-haiku-4-5[em ", after.stdout)
+            self.assertIn("devops=claude-opus-4-8[em ", after.stdout)
+
+    def test_red_control_branch_the_probe_cannot_reach_is_refused(self):
+        """RED: a route behind ``startswith`` would vanish — it is refused."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TASK_ROUTE_REL,
+                _TR_TAIL,
+                '    if workflow_change is not None and workflow_change.startswith("dep"):\n'
+                '        agents.append({"role": "devops", "model": "claude-haiku-4-5"})\n'
+                + _TR_TAIL,
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("task_route_branch_unreached", proc.stderr)
+
+    def test_red_control_owner_sys_exit_on_import_is_a_named_red(self):
+        """RED: the owner calls ``sys.exit(2)`` when an import fails."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TASK_ROUTE_REL,
+                "    from _lib.agent_frontmatter import VETO_FLOOR_ROLES\n",
+                "    from _lib.agent_frontmatter import VETO_FLOOR_ROLES\n"
+                "    from _lib.census_absent_module import NOTHING  # noqa: F401\n",
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("task_route_import_failed", proc.stderr)
+            self.assertNotIn("Traceback", proc.stderr)
+
+    def test_red_control_alias_in_the_owner_is_refused(self):
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TASK_ROUTE_REL,
+                '"model": "claude-sonnet-4-6",',
+                '"model": "sonnet",',
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("alias_leaked_into_table", proc.stderr)
+
+    def test_errata_r6_the_veto_homonym_is_not_a_model_surface(self):
+        """By IMPORT: what task-route reads as VETO_HARDCODE maps to task types."""
+        census = _load_census()
+        homonym = census.task_route_veto_homonym(str(_REPO_ROOT))
+        self.assertTrue(homonym)
+        fleet = set(census.working_set(str(_REPO_ROOT)))
+        for role, value in homonym.items():
+            self.assertIsInstance(value, frozenset, role)
+            self.assertFalse(set(value) & fleet, role)
+
+    def test_red_coverage_claim_stronger_than_the_probe(self):
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        for row in rows:
+            if row["surface"] == census.SURFACE_TASK_ROUTE:
+                row["coverage"] = census.COVERAGE_OWNER_ANSWER
+        with self.assertRaises(census.Red) as ctx:
+            census.check_b(str(_REPO_ROOT), rows)
+        self.assertEqual(ctx.exception.name, "coverage_marker_missing")
+
+    def test_red_reopened_owner_labelled_as_a_w0_surface(self):
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        for row in rows:
+            if row["surface"] == census.SURFACE_TIER_TEMPLATE:
+                row["label"] = census.LOCAL_OWNER_LABEL
+        with self.assertRaises(census.Red) as ctx:
+            census.check_b(str(_REPO_ROOT), rows)
+        self.assertEqual(ctx.exception.name, "label_wrong")
+
+    def test_compare_pairs_names_the_owner(self):
+        census = _load_census()
+        with self.assertRaises(census.Red) as ctx:
+            census.compare_pairs({}, {"devops->x": "1"}, "task_route")
+        self.assertEqual(ctx.exception.name, "task_route_pair_missing_in_table")
+        with self.assertRaises(census.Red) as ctx2:
+            census.compare_pairs({"devops->x": "2"}, {"devops->x": "1"}, "tier_baseline")
+        self.assertEqual(ctx2.exception.name, "tier_baseline_pair_diverges")
+
+
+class W1aTierPolicyTest(TestEnvContext):
+    """Owners 4 and 5 — the ADR-052 baseline and the delivered template."""
+
+    def test_baseline_row_is_the_loader_fallback_and_matches_the_builder(self):
+        census = _load_census()
+        pairs, domain = census.read_tier_baseline(str(_REPO_ROOT))
+        self.assertEqual(pairs, census.read_tier_baseline_one_command(str(_REPO_ROOT)))
+        self.assertIn(pairs["devops"], domain)
+
+    def test_red_control_loader_fallback_diverging_from_the_builder(self):
+        """RED: the loader stops falling back to ``build_adr052_baseline``."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TIER_LOADER_REL,
+                "_FROZEN_BASELINE = build_adr052_baseline()\n",
+                "_FROZEN_BASELINE = dict(build_adr052_baseline(), devops=Assignment("
+                'tier="claude-sonnet-4-6", locked_by=None, evidence=None))\n',
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("tier_baseline_pair_diverges", proc.stderr)
+
+    def test_red_control_alias_in_the_baseline_is_refused(self):
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TIER_TYPES_REL,
+                'tier="claude-haiku-4-5-20251001",',
+                'tier="haiku",',
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("alias_leaked_into_table", proc.stderr)
+
+    def test_template_row_is_what_the_owner_loader_returns(self):
+        """Oracle independent of the loader: plain ``json`` over the file."""
+        census = _load_census()
+        pairs, _domain, status = census.read_tier_template(str(_REPO_ROOT))
+        self.assertEqual(status, "ok")
+        raw = json.loads((_REPO_ROOT / _TIER_TEMPLATE_REL).read_text(encoding="utf-8"))
+        self.assertEqual(
+            pairs, dict((k, v["tier"]) for k, v in raw["assignments"].items())
+        )
+
+    def test_red_control_template_the_owner_loader_rejects(self):
+        """RED: the adopter would fall back — the census says so by name."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(
+                root,
+                _TIER_TEMPLATE_REL,
+                '"tier": "claude-haiku-4-5-20251001"',
+                '"tier": "haiku"',
+            )
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("tier_template_rejected_by_owner_loader", proc.stderr)
+            self.assertIn("invalid_model_id", proc.stderr)
+
+    def test_green_control_a_template_change_moves_the_table(self):
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            before = _run(root)
+            self.assertEqual(before.returncode, 0, before.stderr)
+            _patch(
+                root,
+                _TIER_TEMPLATE_REL,
+                '"tier": "claude-haiku-4-5-20251001"',
+                '"tier": "claude-sonnet-4-6"',
+            )
+            after = _run(root)
+            self.assertEqual(after.returncode, 0, after.stderr)
+            self.assertNotEqual(before.stdout, after.stdout)
+            self.assertIn(
+                "templates/.claude/tier-policy.json=claude-sonnet-4-6", after.stdout
+            )
+
+    def test_devops_divergence_is_published_not_reconciled(self):
+        census = _load_census()
+        rows = census.build_table(str(_REPO_ROOT))
+        found = dict(census.role_divergences(rows))
+        self.assertIn("devops", found)
+        devops = dict(found["devops"])
+        self.assertEqual(devops[census.SURFACE_AGENTS], ["claude-sonnet-4-6"])
+        self.assertEqual(
+            devops[census.SURFACE_TIER_BASELINE], ["claude-haiku-4-5-20251001"]
+        )
+        # A role every role-keyed surface agrees on is NOT a divergence.
+        self.assertNotIn("qa-architect", found)
+        # Alias / skill-keyed surfaces never enter the comparison.
+        for entries in found.values():
+            surfaces = set(s for s, _m in entries)
+            self.assertNotIn(census.SURFACE_HINT, surfaces)
+            self.assertNotIn(census.SURFACE_MATRIX, surfaces)
+        proc = _run(_REPO_ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        line = [ln for ln in proc.stdout.split("\n") if ln.startswith("- devops:")]
+        self.assertEqual(len(line), 1, proc.stdout)
+        self.assertIn("agents/*.md=claude-sonnet-4-6", line[0])
+        self.assertIn(
+            census.SURFACE_TIER_BASELINE + "=claude-haiku-4-5-20251001", line[0]
+        )
+
+
+class W1aAuditIsolationTest(TestEnvContext):
+    """The census and the W1a readers write NOTHING to the audit chain."""
+
+    @staticmethod
+    def _snapshot(base):
+        out = {}
+        for dirpath, dirnames, filenames in os.walk(str(base)):
+            for name in dirnames:
+                out[os.path.relpath(os.path.join(dirpath, name), str(base))] = "dir"
+            for name in filenames:
+                path = os.path.join(dirpath, name)
+                st = os.stat(path)
+                out[os.path.relpath(path, str(base))] = (st.st_size, st.st_mtime_ns)
+        return out
+
+    def test_census_never_writes_the_audit_chain(self):
+        tmp_root = os.path.realpath(str(self._tmp_root))
+        log_path = os.environ["CEO_AUDIT_LOG_PATH"]
+        self.assertTrue(os.path.realpath(log_path).startswith(tmp_root), log_path)
+        self.assertTrue(os.path.realpath(os.environ["HOME"]).startswith(tmp_root))
+        # The resolver every emitter uses lands under the ISOLATED home.
+        resolved = subprocess.run(
+            [
+                sys.executable,
+                str(_REPO_ROOT / ".claude" / "hooks" / "_lib" / "runtime_paths.py"),
+                "--state-dir",
+                "--project",
+                str(_REPO_ROOT),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
+        )
+        self.assertEqual(resolved.returncode, 0, resolved.stderr)
+        self.assertTrue(
+            os.path.realpath(resolved.stdout.strip()).startswith(tmp_root),
+            resolved.stdout,
+        )
+        watched = self.home_dir / ".claude"
+        before = self._snapshot(watched)
+        census = _load_census()
+        census.read_task_route(str(_REPO_ROOT))
+        census.read_tier_baseline(str(_REPO_ROOT))
+        census.read_tier_template(str(_REPO_ROOT))
+        proc = _run(_REPO_ROOT)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(before, self._snapshot(watched))
+        self.assertFalse(os.path.exists(log_path))
+        # Positive control: the snapshot DOES see a write to the audit path.
+        Path(log_path).write_text("probe\n", encoding="utf-8")
+        self.assertNotEqual(before, self._snapshot(watched))
+
+
+#: The devops guard + route head inside ``_agents_for`` (anchor for the
+#: same-line hash-lookup plants of the W1a correction round).
+_TR_DEVOPS_HEAD = (
+    '    if workflow_change == "release" or workflow_change == "ci":\n'
+    "        agents.append({\n"
+    '            "archetype": "DevOps & Platform Engineer",\n'
+    '            "role": "devops",\n'
+    '            "skill": "devops-ci-cd",\n'
+    '            "model": "claude-opus-4-8",\n'
+)
+_TR_DEVOPS_DICT_GET = (
+    '    _devops_model = {"release": "claude-opus-4-8", "ci": "claude-opus-4-8"}\n'
+    "    if workflow_change is not None:\n"
+    "        agents.append({\n"
+    '            "archetype": "DevOps & Platform Engineer",\n'
+    '            "role": "devops",\n'
+    '            "skill": "devops-ci-cd",\n'
+    '            "model": _devops_model.get(workflow_change, "claude-sonnet-4-6"),\n'
+)
+_TR_DEVOPS_SET_IFEXP = (
+    "    if workflow_change is not None:\n"
+    "        agents.append({\n"
+    '            "archetype": "DevOps & Platform Engineer",\n'
+    '            "role": "devops",\n'
+    '            "skill": "devops-ci-cd",\n'
+    '            "model": "claude-opus-4-8" if workflow_change in {"release", "ci"}'
+    ' else "claude-sonnet-4-6",\n'
+)
+
+#: One function per form. ``ok_*`` use only the forms the probe harvests;
+#: every ``bad_*`` is a form it does not, and must be refused BY FORM.
+_FORM_TABLE_SRC = '''
+from typing import Optional
+
+TABLE = {"a": 1}
+SENTINEL = object()
+
+
+def ok_harvested(p: str, q: Optional[str], b: bool):
+    if p == "a" or q != "b" or "c" == p:
+        return 1
+    if p in ("a", "b") and q not in ["c"]:
+        return 2
+    if q is None or q is not None:
+        return 3
+    if q and not q:
+        return 4
+    x = 5 if q else 6
+    return [b, x, [1 for _ in range(1) if q]]
+
+
+def bad_method(p: str):
+    return p.startswith("a")
+
+
+def bad_dict_get(p: str):
+    return {"a": 1}.get(p, 0)
+
+
+def bad_subscript(p: str):
+    return TABLE[p]
+
+
+def bad_in_set(p: str):
+    return 1 if p in {"a", "b"} else 2
+
+
+def bad_in_name(p: str):
+    return 1 if p in TABLE else 2
+
+
+def bad_substring(p: str):
+    return "a" in p
+
+
+def bad_is_other(p: str):
+    return p is SENTINEL
+
+
+def bad_truth_on_str(p: str):
+    return 1 if p else 2
+
+
+def bad_value_through_or(q: Optional[str]):
+    x = q or "default"
+    return x
+
+
+def bad_rebind(p: str):
+    p = "x"
+    return p
+
+
+def bad_call_argument(p: str):
+    return len(p)
+
+
+def bad_fstring(p: str):
+    return f"{p}"
+
+
+def bad_chained(p: str):
+    return "a" == p == "b"
+
+
+def bad_reflection(p: str):
+    return locals()
+'''
+
+
+class W1aFormGuardTest(TestEnvContext):
+    """Refuter P2 (correction round): a same-line hash lookup is refused."""
+
+    def test_red_control_dict_get_on_the_route_line_is_refused(self):
+        """The refuter's repro: the route vanished at rc 0 before the cure."""
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(root, _TASK_ROUTE_REL, _TR_DEVOPS_HEAD, _TR_DEVOPS_DICT_GET)
+            census = _load_census()
+            owner = census._import_task_route(str(root))
+            # Independent oracle: the mutated owner STILL routes devops to
+            # Opus for release/ci — the route the census must not lose.
+            for wf in ("release", "ci"):
+                got = [(a["role"], a["model"]) for a in owner._agents_for("M", None, wf, False)]
+                self.assertIn(("devops", "claude-opus-4-8"), got)
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("task_route_form_unprobeable", proc.stderr)
+            self.assertNotIn("Traceback", proc.stderr)
+
+    def test_red_control_set_membership_in_a_conditional_on_the_route_line(self):
+        with TemporaryDirectory() as tmp:
+            root = _make_root(tmp)
+            _patch(root, _TASK_ROUTE_REL, _TR_DEVOPS_HEAD, _TR_DEVOPS_SET_IFEXP)
+            proc = _run(root)
+            self.assertEqual(proc.returncode, 1, proc.stdout)
+            self.assertIn("task_route_form_unprobeable", proc.stderr)
+
+    def test_form_table_accepts_only_harvested_forms(self):
+        census = _load_census()
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "census_form_table.py"
+            path.write_text(_FORM_TABLE_SRC, encoding="utf-8")
+            saved = sys.dont_write_bytecode
+            sys.dont_write_bytecode = True
+            try:
+                spec = importlib.util.spec_from_file_location("_census_form_table", str(path))
+                table = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(table)
+            finally:
+                sys.dont_write_bytecode = saved
+            census._assert_probe_forms(table.ok_harvested)
+            refused = sorted(n for n in vars(table) if n.startswith("bad_"))
+            self.assertEqual(len(refused), 14)
+            for name in refused:
+                with self.assertRaises(census.Red, msg=name) as ctx:
+                    census._assert_probe_forms(getattr(table, name))
+                self.assertEqual(ctx.exception.name, "task_route_form_unprobeable", name)
+
+    def test_red_control_duplicate_def_is_refused(self):
+        census = _load_census()
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "census_dup_def.py"
+            path.write_text(
+                "def f(p: str):\n    return p == 'a'\n\n\ndef f(p: str):\n    return p == 'b'\n",
+                encoding="utf-8",
+            )
+            saved = sys.dont_write_bytecode
+            sys.dont_write_bytecode = True
+            try:
+                spec = importlib.util.spec_from_file_location("_census_dup_def", str(path))
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+            finally:
+                sys.dont_write_bytecode = saved
+            with self.assertRaises(census.Red) as ctx:
+                census._assert_probe_forms(mod.f)
+            self.assertEqual(ctx.exception.name, "task_route_form_unprobeable")
+
+
+class W1aBytecodeIsolationTest(TestEnvContext):
+    """Refuter P2 (correction round): the census writes no bytecode.
+
+    Every watched run points ``PYTHONPYCACHEPREFIX`` (children) and
+    ``sys.pycache_prefix`` (in process) at a watched temp dir, clears
+    ``PYTHONDONTWRITEBYTECODE`` and starts from a cache-free copy, so a
+    write lands EITHER in the read tree OR in the prefix — both are
+    snapshotted, on any interpreter. The two tests that watch for writes
+    carry a positive control (a raw import of the owner is seen); the
+    structural test checks the FORM and carries only a non-vacuity control.
+    """
+
+    _snap = staticmethod(W1aAuditIsolationTest._snapshot)
+
+    def _cache_free_root(self, tmp):
+        root = Path(tmp) / "root"
+        root.mkdir()
+        _make_root(root)
+        cached = [p for p in root.rglob("*") if p.name == "__pycache__" or p.suffix in (".pyc", ".pyo")]
+        self.assertEqual(cached, [])
+        prefix = Path(tmp) / "pycache-prefix"
+        prefix.mkdir()
+        return root, prefix
+
+    def _state(self, root, prefix):
+        """The read tree + the part of the prefix that MIRRORS it.
+
+        Under a pycache prefix the interpreter also caches its OWN stdlib
+        there at startup (measured: Apple's 3.9 writes ``Library/...``) —
+        that is not the tree the census reads, so only the mirror of the
+        read root counts, under the given AND the resolved path.
+        """
+        mirrors = set(
+            base.lstrip(os.sep) for base in (str(root), os.path.realpath(str(root)))
+        )
+        mirrored = dict(
+            (k, v) for k, v in self._snap(prefix).items()
+            if any(k == m or k.startswith(m + os.sep) for m in mirrors)
+        )
+        return (self._snap(root), mirrored)
+
+    def test_cli_writes_no_bytecode_in_the_read_tree_or_the_cache_prefix(self):
+        with TemporaryDirectory() as tmp:
+            root, prefix = self._cache_free_root(tmp)
+            env = dict(os.environ)
+            env.pop("PYTHONDONTWRITEBYTECODE", None)
+            env["PYTHONPYCACHEPREFIX"] = str(prefix)
+            before = self._state(root, prefix)
+            proc = subprocess.run(
+                [sys.executable, str(_CENSUS), "--root", str(root)],
+                env=env, capture_output=True, text=True, check=False, timeout=180,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(before, self._state(root, prefix))
+            # Positive control: the SAME env and snapshots see a plain import.
+            ctl = subprocess.run(
+                [sys.executable, "-c", "import tier_policy_cli.loader"],
+                cwd=str(root / ".claude" / "scripts"),
+                env=env, capture_output=True, text=True, check=False, timeout=60,
+            )
+            self.assertEqual(ctl.returncode, 0, ctl.stderr)
+            self.assertNotEqual(before, self._state(root, prefix))
+
+    def test_in_process_readers_write_no_bytecode(self):
+        census = _load_census()
+        with TemporaryDirectory() as tmp:
+            root, prefix = self._cache_free_root(tmp)
+            saved = (sys.dont_write_bytecode, sys.pycache_prefix)
+            with mock.patch.dict(os.environ, {"PYTHONPYCACHEPREFIX": str(prefix)}):
+                os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
+                sys.dont_write_bytecode = False
+                sys.pycache_prefix = str(prefix)
+                try:
+                    before = self._state(root, prefix)
+                    rows = census.build_table(str(root))
+                    census.check_a(str(root), rows)
+                    census.check_b(str(root), rows)
+                    census.read_task_route(str(root))
+                    census.task_route_veto_homonym(str(root))
+                    after = self._state(root, prefix)
+                    # Positive control: an unguarded import of an owner file
+                    # from the same copy IS seen by the same snapshots.
+                    spec = importlib.util.spec_from_file_location(
+                        "_census_bytecode_control",
+                        str(root / ".claude" / "scripts" / "generate-available-models.py"),
+                    )
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    control = self._state(root, prefix)
+                finally:
+                    sys.dont_write_bytecode, sys.pycache_prefix = saved
+            self.assertEqual(before, after)
+            self.assertNotEqual(before, control)
+
+    def test_every_root_reader_carries_the_bytecode_guard(self):
+        """By FORM: every census function whose first parameter is ``root``."""
+        census = _load_census()
+        readers = []
+        for name, obj in vars(census).items():
+            if not inspect.isfunction(obj) or obj.__module__ != census.__name__:
+                continue
+            params = list(inspect.signature(obj).parameters)
+            if params and params[0] == "root":
+                readers.append(name)
+                self.assertTrue(getattr(obj, "_census_bytecode_off", False), name)
+        self.assertIn("read_task_route", readers)
+        self.assertIn("build_table", readers)
+        self.assertTrue(getattr(census._load_module_from_path, "_census_bytecode_off", False))
+        # Every Python child goes through ``_python_argv`` (which adds -B):
+        # ``sys.executable`` appears exactly once, inside it.
+        tree = ast.parse(_CENSUS.read_text(encoding="utf-8"))
+
+        def _is_sys_executable(node):
+            return (
+                isinstance(node, ast.Attribute)
+                and node.attr == "executable"
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "sys"
+            )
+
+        total = sum(1 for n in ast.walk(tree) if _is_sys_executable(n))
+        inside = [
+            f.name for f in ast.walk(tree)
+            if isinstance(f, ast.FunctionDef) and any(_is_sys_executable(n) for n in ast.walk(f))
+        ]
+        self.assertEqual(total, 1)
+        self.assertEqual(inside, ["_python_argv"])
+        self.assertEqual(census._python_argv("-c", "x")[1], "-B")
 
 
 if __name__ == "__main__":
