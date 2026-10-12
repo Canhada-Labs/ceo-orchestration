@@ -1,6 +1,6 @@
 {
  "schema": "plan175-language-gap/2",
- "generated_at": "2026-10-12T14:25:26Z",
+ "generated_at": "2026-10-12T14:41:59Z",
  "invocation": "python3 .claude/plans/PLAN-175/p1/probe-retrieval-language-gap.py --require-mode tfidf --json",
  "require_mode": "tfidf",
  "status": "measured",
@@ -10,7 +10,7 @@
  "pairs": 33,
  "top_k": 5,
  "inputs": {
-  "probe_sha256": "1dacf98e8ad31531f934d94a1cb78870865be89b2a991b846500efbd654ef2c7",
+  "probe_sha256": "3d531ae70bb70072d96971040b008e43c89bdb1f5e6e8045af81c75146a191fa",
   "retriever": ".claude/scripts/skill-retrieve.py",
   "retriever_sha256": "a33e7aeb5eba0a14117d23eee51681cfad702425f21f6b9bf581f4647c659806",
   "ground_truth": ".claude/team.md §ROUTING TABLE",
@@ -18,12 +18,12 @@
   "pairs_file": ".claude/plans/PLAN-175/evidence/language-gap-pairs-30.json",
   "pairs_sha256": "af54553c5d3623e6583261f8ef3794843f120e6e438a72e3bdca9484507ab86b",
   "rag_sidecar": "desligado na sonda (CEO_SIDECAR_C2_VECTOR_MEMORY_ENABLED=0): o sujeito é o tf-idf léxico",
-  "audit_isolation": "subprocessos sem CEO_AUDIT_*, CEO_PROJECT_STATE_DIR e CLAUDE_PROJECT_DIR*; HOME, log e state-dir no diretório temporário (o dreno de saída do audit_emit não alcança o state-dir vivo)",
+  "audit_isolation": "subprocessos sem as variáveis HERDADAS CEO_AUDIT_*, CEO_PROJECT_STATE_DIR e CLAUDE_PROJECT_DIR*; CEO_AUDIT_LOG_DIR e CEO_PROJECT_STATE_DIR apontam para <tmp>/audit e HOME para <tmp>/home (o dreno de saída do audit_emit não alcança o state-dir vivo)",
   "tokenizer_rule": "_lib/embeddings.tokenize é ASCII-only ([A-Za-z0-9]+): letra acentuada parte a palavra («migrações» vira migra + es); pt_ascii isola só o efeito dos diacríticos",
   "archetype_boost": "não usado: o reforço por arquétipo independe do idioma e mascararia o efeito",
   "hit_rule": "acerto = alguma skill do ouro entre os top_k devolvidos com score > 0",
   "mode_rule": "`tfidf-empty` (nenhum termo da consulta no vocabulário do índice) é o modo tfidf com vetor vazio: conta como erro de recall e aparece em modes_observed; sob --require-mode tfidf, os modos static, static-fallback e rag+tfidf RECUSAM",
-  "index": {"location": "state-dir local da máquina (<state-dir> = runtime_paths.runtime_state_dir()), fora do repositório; não commitável", "resolved_by": "skill-retrieve.resolve_index_path()", "path": "<state-dir>/skill-index.sqlite", "exists": true, "measured_on": "cópia byte-idêntica num diretório temporário; o recuperador lê a cópia", "bytes": 1306624, "wal_bytes": 0, "sha256": "1138c240b415bbdd6c45fea8d599efc11c4a9c5725aee4588f2d255e98c324b4", "mtime_utc": "2026-08-23T01:19:02Z", "age_days": 50.55, "built_at_utc": "2026-08-23T01:19:02Z", "skills_in_index": 166, "skill_files_in_catalog": 166, "paths_only_in_catalog": [], "paths_only_in_index": [], "content_changed_since_build": 0, "content_rule": "sha256 do texto indexado (skill-index-build._extract_indexed_text) contra content_sha do índice", "gold_missing_from_index": []}
+  "index": {"location": "state-dir local da máquina (<state-dir> = runtime_paths.runtime_state_dir()), fora do repositório; não commitável", "resolved_by": "skill-retrieve.resolve_index_path()", "path": "<state-dir>/skill-index.sqlite", "exists": true, "measured_on": "cópia byte-idêntica num diretório temporário; o recuperador lê a cópia", "bytes": 1306624, "wal_bytes": 0, "sha256": "1138c240b415bbdd6c45fea8d599efc11c4a9c5725aee4588f2d255e98c324b4", "mtime_utc": "2026-08-23T01:19:02Z", "age_days": 50.56, "built_at_utc": "2026-08-23T01:19:02Z", "skills_in_index": 166, "skill_files_in_catalog": 166, "paths_only_in_catalog": [], "paths_only_in_index": [], "content_changed_since_build": 0, "content_rule": "sha256 do texto indexado (skill-index-build._extract_indexed_text) contra content_sha do índice", "gold_missing_from_index": []}
  },
  "modes_observed": {"tfidf": 95, "tfidf-empty": 4},
  "recall": {

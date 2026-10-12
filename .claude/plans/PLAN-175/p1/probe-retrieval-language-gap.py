@@ -241,8 +241,9 @@ def main(argv: List[str]) -> int:
                    "ground_truth": ".claude/team.md §ROUTING TABLE", "team_md_sha256": _sha(TEAM_MD),
                    "pairs_file": _rel(PAIRS_FILE), "pairs_sha256": _sha(PAIRS_FILE),
                    "rag_sidecar": "desligado na sonda (CEO_SIDECAR_C2_VECTOR_MEMORY_ENABLED=0): o sujeito é o tf-idf léxico",
-                   "audit_isolation": "subprocessos sem CEO_AUDIT_*, CEO_PROJECT_STATE_DIR e CLAUDE_PROJECT_DIR*; HOME, log e state-dir "
-                                      "no diretório temporário (o dreno de saída do audit_emit não alcança o state-dir vivo)",
+                   "audit_isolation": "subprocessos sem as variáveis HERDADAS CEO_AUDIT_*, CEO_PROJECT_STATE_DIR e CLAUDE_PROJECT_DIR*; "
+                                      "CEO_AUDIT_LOG_DIR e CEO_PROJECT_STATE_DIR apontam para <tmp>/audit e HOME para <tmp>/home "
+                                      "(o dreno de saída do audit_emit não alcança o state-dir vivo)",
                    "tokenizer_rule": "_lib/embeddings.tokenize é ASCII-only ([A-Za-z0-9]+): letra acentuada parte a palavra "
                                      "(«migrações» vira migra + es); pt_ascii isola só o efeito dos diacríticos",
                    "archetype_boost": "não usado: o reforço por arquétipo independe do idioma e mascararia o efeito",
