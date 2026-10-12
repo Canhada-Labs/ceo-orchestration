@@ -2,8 +2,9 @@
 id: PLAN-171-FOLLOWUP-lote2-generated-figures
 parent: PLAN-171
 title: Resíduos do instrumento do censo W0 — figuras literais do lote 2 e censo W0-delta do check_workflow_launch
-status: reviewed
+status: executing
 created: 2026-10-10
+executing_at: 2026-10-12
 reviewed_at: 2026-10-12
 reviewed_by: "Owner (S363, AskUserQuestion de 2026-10-12 ~12:50Z — resposta «Sim, fechar hoje (Recommended)» à pergunta «Posso marcar o plano das figuras do lote 2 (PLAN-171-FOLLOWUP-lote2) como revisado e fechá-lo hoje? As figuras cujo gerador se perdeu ficariam anotadas como “números copiados de 07/09, sem script para refazer”, e eu rodaria hoje a medição do guarda de retomada de Workflow num clone descartável.»; texto transcrito pelo CEO no despacho do builder)"
 owner: CEO
