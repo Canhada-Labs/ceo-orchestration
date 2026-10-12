@@ -13,6 +13,10 @@ Uso:
   python3 test-sign-min.py --base <dir descartável> --w5b <sombra mat-w5b> [--so A,B] [--manter]
 
 rc 0 só com a linha ``EVIDÊNCIA:`` (corrida completa, sem ``--so``).
+
+A limpeza apaga só o que esta corrida causou, por caminho exato: os T que
+cada SIGN anunciou (``SIGN-FATO: logs em``), o ``GNUPGHOME`` descartável e
+o diretório-base; nunca por glob (caso LIMPA-ALHEIO).
 """
 from __future__ import annotations
 
@@ -121,7 +125,9 @@ class G:
     saidas: List[Tuple[str, str]] = []
     executados: List[str] = []
     mutantes_vermelhos: List[str] = []
-    tmp_antes: Set[str] = set()
+    criados_t: List[str] = []
+    alheio = ""
+    n_limpos = 0
     manter = False
     inicio = 0.0
     marca_func = ""
@@ -712,6 +718,7 @@ def roda(ex: Exec) -> None:
             ex.out.append(linha)
             if linha.startswith("SIGN-FATO: logs em "):
                 ex.t = linha[len("SIGN-FATO: logs em "):]
+                G.criados_t.append(ex.t)
             if caso.ao_ler is not None:
                 caso.ao_ler(ex, linha)
             if proc.stdout.closed:  # type: ignore[union-attr]
@@ -1822,11 +1829,13 @@ def def_k() -> None:
     c.pk.hard.insert(0, ["bash", "tools/dorme2.sh"])
 
     def ao_ler5(ex: Exec, linha: str) -> None:
-        if len(ex.out) == 1:
+        # fecha depois da linha F-TMP: o T anunciado fica registrado para a limpeza
+        if linha.startswith("SIGN-FATO: logs em "):
             ex.proc.stdout.close()  # type: ignore[union-attr]
     c.ao_ler = ao_ler5
 
     def confere5(ex: Exec) -> None:
+        afirma(ex.t != "" and ex.out[-1].startswith("SIGN-FATO: logs em "), "o leitor não fechou na linha F-TMP")
         afirma(ex.rc == -signal.SIGPIPE, "rc %s (esperado -13 = 141 no shell)" % ex.rc)
         afirma(ex.err == b"", "stderr não vazio: %r" % ex.err[:200])
     c.confere = confere5
@@ -2247,6 +2256,8 @@ def caso_ensaio_w5b(w5b: str) -> None:
         grava(os.path.join(G.h, "ensaio-w5b.out"), p.stdout + b"\n--stderr--\n" + p.stderr)
         tl = [ln[len("SIGN-FATO: logs em "):] for ln in linhas_out if ln.startswith("SIGN-FATO: logs em ")]
         t = tl[0] if tl else ""
+        if t:
+            G.criados_t.append(t)
         # o ensaio só passa com SIGN-ENSAIO e rc 0: nenhum desfecho de falha é aceito
         afirma(p.returncode == 0 and linhas_out[-1:] == [msg("ENSAIO")] and p.stderr == b"",
                "ensaio W5b: SIGN-RC=%d; fim %r; stderr %r; %s" % (
@@ -2297,7 +2308,7 @@ def prepara_gnupg() -> None:
 
 
 def declarados() -> List[str]:
-    return [c.nome for c in CASOS] + ["C1", "C2", "C3", "C4", "C5", "ENSAIO-W5B"]
+    return [c.nome for c in CASOS] + ["C1", "C2", "C3", "C4", "C5", "ENSAIO-W5B", "LIMPA-ALHEIO"]
 
 
 def roda_casos(so: Optional[Set[str]], w5b: str) -> None:
@@ -2364,20 +2375,49 @@ def roda_casos(so: Optional[Set[str]], w5b: str) -> None:
         caso_ensaio_w5b(w5b)
         G.executados.append("ENSAIO-W5B")
         print("ok   ENSAIO-W5B: %s" % G.ensaio, flush=True)  # type: ignore[attr-defined]
+    if G.alheio:
+        caso_limpa_alheio()
+        G.executados.append("LIMPA-ALHEIO")
+        print("ok   LIMPA-ALHEIO: %d T registrado(s) apagado(s) por caminho exato; o alheio sobreviveu" % G.n_limpos,
+              flush=True)
+
+
+def gpgconf_kill(homedir: str) -> None:
+    subprocess.run([os.path.join(os.path.dirname(G.gpg_real), "gpgconf"), "--homedir", homedir, "--kill", "gpg-agent"],
+                   env=env_h(), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def limpa_t_registrados() -> int:
+    """Apaga, um a um e por caminho exato, só os T que os SIGNs desta corrida anunciaram (F-TMP); nunca por glob."""
+    pai = os.path.realpath("/tmp")
+    n = 0
+    for t in list(dict.fromkeys(G.criados_t)):
+        if not (os.path.dirname(t) == pai and os.path.basename(t).startswith("sign-min.")
+                and os.path.realpath(t) == t and os.path.isdir(t)):
+            continue
+        gv = os.path.join(t, "gnupg-vazio")
+        if os.path.isdir(gv):
+            gpgconf_kill(gv)
+        shutil.rmtree(t, ignore_errors=True)
+        n += 1
+    G.criados_t = []
+    return n
+
+
+def caso_limpa_alheio() -> None:
+    """Um /tmp/sign-min.* que nenhum SIGN desta corrida anunciou sobrevive à limpeza."""
+    G.n_limpos = limpa_t_registrados()
+    afirma(G.n_limpos > 0, "LIMPA-ALHEIO: nenhum T registrado")
+    afirma(os.path.isfile(os.path.join(G.alheio, "alheio.txt")), "LIMPA-ALHEIO: a limpeza apagou o diretório alheio")
 
 
 def limpa_tudo(h: str) -> None:
-    for t in set(glob.glob("/tmp/sign-min.*")) - G.tmp_antes:
-        real = os.path.realpath(t)
-        if os.path.basename(real).startswith("sign-min.") and os.path.dirname(real) in ("/tmp", "/private/tmp"):
-            gv = os.path.join(real, "gnupg-vazio")
-            if os.path.isdir(gv):
-                subprocess.run([os.path.join(os.path.dirname(G.gpg_real), "gpgconf"), "--homedir", gv, "--kill", "gpg-agent"], env=env_h(),
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            shutil.rmtree(real, ignore_errors=True)
+    limpa_t_registrados()
+    if G.alheio and os.path.dirname(G.alheio) == os.path.realpath("/tmp") and \
+            os.path.basename(G.alheio).startswith("sign-min.alheio."):
+        shutil.rmtree(G.alheio, ignore_errors=True)
     if G.gnupg and os.path.basename(G.gnupg).startswith("smg."):
-        subprocess.run([os.path.join(os.path.dirname(G.gpg_real), "gpgconf"), "--homedir", G.gnupg, "--kill", "gpg-agent"], env=env_h(),
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        gpgconf_kill(G.gnupg)
         shutil.rmtree(G.gnupg, ignore_errors=True)
     if not G.manter and os.path.basename(h).startswith("sign-min-h."):
         shutil.rmtree(h, ignore_errors=True)
@@ -2397,8 +2437,11 @@ def main() -> int:
     G.manter = args.manter
     G.verboso = args.verboso
     G.inicio = time.monotonic()
-    G.tmp_antes = set(glob.glob("/tmp/sign-min.*"))
     G.h = os.path.realpath(tempfile.mkdtemp(prefix="sign-min-h.", dir=args.base))
+    if not so or "LIMPA-ALHEIO" in so:
+        # diretório «alheio»: criado durante a corrida e nunca anunciado por um SIGN
+        G.alheio = os.path.realpath(tempfile.mkdtemp(prefix="sign-min.alheio.", dir="/tmp"))
+        grava(os.path.join(G.alheio, "alheio.txt"), b"nao apagar\n")
     G.atual = os.path.join(G.h, "atual")
     G.home_h = os.path.join(G.h, "home-h")
     os.makedirs(G.home_h)
