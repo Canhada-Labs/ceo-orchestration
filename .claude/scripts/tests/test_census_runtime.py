@@ -46,7 +46,9 @@ Python >= 3.9 (no PEP 604 at runtime, no ``match``).
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
+import inspect
 import json
 import os
 import shutil
@@ -108,9 +110,16 @@ _TIER_TEMPLATE_REL = "templates/.claude/tier-policy.json"
 
 
 def _load_census():
-    spec = importlib.util.spec_from_file_location("_census_under_test", str(_CENSUS))
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # Loading the census writes no bytecode next to it either (the
+    # instrument's own suppression is measured in W1aBytecodeIsolationTest).
+    saved = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        spec = importlib.util.spec_from_file_location("_census_under_test", str(_CENSUS))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    finally:
+        sys.dont_write_bytecode = saved
     return mod
 
 
@@ -1657,6 +1666,134 @@ class W1aFormGuardTest(TestEnvContext):
             with self.assertRaises(census.Red) as ctx:
                 census._assert_probe_forms(mod.f)
             self.assertEqual(ctx.exception.name, "task_route_form_unprobeable")
+
+
+class W1aBytecodeIsolationTest(TestEnvContext):
+    """Refuter P2 (correction round): the census writes no bytecode.
+
+    Every watched run points ``PYTHONPYCACHEPREFIX`` (children) and
+    ``sys.pycache_prefix`` (in process) at a watched temp dir, clears
+    ``PYTHONDONTWRITEBYTECODE`` and starts from a cache-free copy, so a
+    write lands EITHER in the read tree OR in the prefix — both are
+    snapshotted, on any interpreter. Each test carries a positive control.
+    """
+
+    _snap = staticmethod(W1aAuditIsolationTest._snapshot)
+
+    def _cache_free_root(self, tmp):
+        root = Path(tmp) / "root"
+        root.mkdir()
+        _make_root(root)
+        cached = [p for p in root.rglob("*") if p.name == "__pycache__" or p.suffix in (".pyc", ".pyo")]
+        self.assertEqual(cached, [])
+        prefix = Path(tmp) / "pycache-prefix"
+        prefix.mkdir()
+        return root, prefix
+
+    def _state(self, root, prefix):
+        """The read tree + the part of the prefix that MIRRORS it.
+
+        Under a pycache prefix the interpreter also caches its OWN stdlib
+        there at startup (measured: Apple's 3.9 writes ``Library/...``) —
+        that is not the tree the census reads, so only the mirror of the
+        read root counts, under the given AND the resolved path.
+        """
+        mirrors = set(
+            base.lstrip(os.sep) for base in (str(root), os.path.realpath(str(root)))
+        )
+        mirrored = dict(
+            (k, v) for k, v in self._snap(prefix).items()
+            if any(k == m or k.startswith(m + os.sep) for m in mirrors)
+        )
+        return (self._snap(root), mirrored)
+
+    def test_cli_writes_no_bytecode_in_the_read_tree_or_the_cache_prefix(self):
+        with TemporaryDirectory() as tmp:
+            root, prefix = self._cache_free_root(tmp)
+            env = dict(os.environ)
+            env.pop("PYTHONDONTWRITEBYTECODE", None)
+            env["PYTHONPYCACHEPREFIX"] = str(prefix)
+            before = self._state(root, prefix)
+            proc = subprocess.run(
+                [sys.executable, str(_CENSUS), "--root", str(root)],
+                env=env, capture_output=True, text=True, check=False, timeout=180,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(before, self._state(root, prefix))
+            # Positive control: the SAME env and snapshots see a plain import.
+            ctl = subprocess.run(
+                [sys.executable, "-c", "import tier_policy_cli.loader"],
+                cwd=str(root / ".claude" / "scripts"),
+                env=env, capture_output=True, text=True, check=False, timeout=60,
+            )
+            self.assertEqual(ctl.returncode, 0, ctl.stderr)
+            self.assertNotEqual(before, self._state(root, prefix))
+
+    def test_in_process_readers_write_no_bytecode(self):
+        census = _load_census()
+        with TemporaryDirectory() as tmp:
+            root, prefix = self._cache_free_root(tmp)
+            saved = (sys.dont_write_bytecode, sys.pycache_prefix)
+            with mock.patch.dict(os.environ, {"PYTHONPYCACHEPREFIX": str(prefix)}):
+                os.environ.pop("PYTHONDONTWRITEBYTECODE", None)
+                sys.dont_write_bytecode = False
+                sys.pycache_prefix = str(prefix)
+                try:
+                    before = self._state(root, prefix)
+                    rows = census.build_table(str(root))
+                    census.check_a(str(root), rows)
+                    census.check_b(str(root), rows)
+                    census.read_task_route(str(root))
+                    census.task_route_veto_homonym(str(root))
+                    after = self._state(root, prefix)
+                    # Positive control: an unguarded import of an owner file
+                    # from the same copy IS seen by the same snapshots.
+                    spec = importlib.util.spec_from_file_location(
+                        "_census_bytecode_control",
+                        str(root / ".claude" / "scripts" / "generate-available-models.py"),
+                    )
+                    mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(mod)
+                    control = self._state(root, prefix)
+                finally:
+                    sys.dont_write_bytecode, sys.pycache_prefix = saved
+            self.assertEqual(before, after)
+            self.assertNotEqual(before, control)
+
+    def test_every_root_reader_carries_the_bytecode_guard(self):
+        """By FORM: every census function whose first parameter is ``root``."""
+        census = _load_census()
+        readers = []
+        for name, obj in vars(census).items():
+            if not inspect.isfunction(obj) or obj.__module__ != census.__name__:
+                continue
+            params = list(inspect.signature(obj).parameters)
+            if params and params[0] == "root":
+                readers.append(name)
+                self.assertTrue(getattr(obj, "_census_bytecode_off", False), name)
+        self.assertIn("read_task_route", readers)
+        self.assertIn("build_table", readers)
+        self.assertTrue(getattr(census._load_module_from_path, "_census_bytecode_off", False))
+        # Every Python child goes through ``_python_argv`` (which adds -B):
+        # ``sys.executable`` appears exactly once, inside it.
+        tree = ast.parse(_CENSUS.read_text(encoding="utf-8"))
+
+        def _is_sys_executable(node):
+            return (
+                isinstance(node, ast.Attribute)
+                and node.attr == "executable"
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "sys"
+            )
+
+        total = sum(1 for n in ast.walk(tree) if _is_sys_executable(n))
+        inside = [
+            f.name for f in ast.walk(tree)
+            if isinstance(f, ast.FunctionDef) and any(_is_sys_executable(n) for n in ast.walk(f))
+        ]
+        self.assertEqual(total, 1)
+        self.assertEqual(inside, ["_python_argv"])
+        self.assertEqual(census._python_argv("-c", "x")[1], "-B")
 
 
 if __name__ == "__main__":

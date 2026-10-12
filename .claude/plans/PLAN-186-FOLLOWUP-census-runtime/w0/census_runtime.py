@@ -141,6 +141,18 @@ profundidade, um corpo de braco que contenha ``$(``, crase, ``>``,
 enumeravel e portanto uma CORTESIA: a defesa real e o ``PATH`` vazio, o
 env zerado, a cwd descartavel e o timeout.
 
+SEM BYTECODE (rodada de correcao da W1a). Importar um dono escreve
+``.pyc`` ao lado da fonte (ou sob ``sys.pycache_prefix``) — o censo
+escreveria na arvore que MEDE (achado P2 do refutador; medido: 18
+``.pyc`` numa copia sem cache, em Python 3.11). Por FORMA, e nao por
+lista: toda funcao deste modulo cujo primeiro parametro e ``root`` roda
+inteira sob ``sys.dont_write_bytecode`` (``_guard_root_readers``, no fim
+do modulo — o escopo e o leitor inteiro porque donos tambem importam
+TARDE, dentro das proprias funcoes), o import por caminho
+(``_load_module_from_path``) tambem, e todo filho Python sai de
+``_python_argv``, que poe ``-B``. Rodado como script, o processo liga a
+flag antes do ``main``.
+
 UNIDADE. As quatro superficies nao falam a mesma unidade: ``MODEL_HINT``
 e ``routing-matrix.yaml`` carregam ALIAS DE TIER (``opus``/``sonnet``);
 ``VETO_HARDCODE`` e os pins de ``agents/*.md`` carregam ``model_id``. Um
@@ -259,7 +271,9 @@ from __future__ import annotations
 
 import argparse
 import ast
+import contextlib
 import dis
+import functools
 import importlib
 import importlib.util
 import inspect
@@ -272,7 +286,7 @@ import sys
 import tempfile
 import typing
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Set, Tuple
 
 # --------------------------------------------------------------------------
 # Declaracoes fechadas — nada aqui e derivado de prosa.
@@ -393,6 +407,40 @@ class Red(Exception):
 _MODULE_CACHE = {}  # type: Dict[str, Any]
 
 
+@contextlib.contextmanager
+def _bytecode_off() -> Iterator[None]:
+    """``sys.dont_write_bytecode`` LIGADO durante o bloco, e restaurado depois.
+
+    O carregador do Python consulta a flag a cada import, inclusive nos
+    imports TARDIOS que um dono faz dentro das proprias funcoes; por isso o
+    escopo e o leitor inteiro, nao so a linha do import.
+    """
+    saved = sys.dont_write_bytecode
+    sys.dont_write_bytecode = True
+    try:
+        yield
+    finally:
+        sys.dont_write_bytecode = saved
+
+
+def _no_bytecode(fn: Any) -> Any:
+    """Decorador: ``fn`` roda inteira sob ``_bytecode_off``."""
+
+    @functools.wraps(fn)
+    def _wrapper(*args: Any, **kwargs: Any) -> Any:
+        with _bytecode_off():
+            return fn(*args, **kwargs)
+
+    _wrapper._census_bytecode_off = True  # type: ignore[attr-defined]
+    return _wrapper
+
+
+def _python_argv(*args: str) -> List[str]:
+    """argv de TODO filho Python do censo: sempre com ``-B`` (sem bytecode)."""
+    return [sys.executable, "-B"] + list(args)
+
+
+@_no_bytecode
 def _load_module_from_path(path: str, mod_name: str, red_name: str) -> Any:
     cached = _MODULE_CACHE.get(path)
     if cached is not None:
@@ -545,7 +593,7 @@ def read_veto_hardcode_one_command(root: str) -> Dict[str, str]:
     if not os.path.isdir(scripts_dir):
         raise Red("veto_import_failed", "diretorio ausente: {0}".format(_REL_SCRIPTS))
     proc = subprocess.run(
-        [sys.executable, "-c", VETO_ONE_COMMAND],
+        _python_argv("-c", VETO_ONE_COMMAND),
         cwd=scripts_dir,
         capture_output=True,
         text=True,
@@ -1697,7 +1745,7 @@ def read_task_route_one_command(root: str, raw_domain: Dict[str, List[Any]]) -> 
     scripts_dir = os.path.join(root, _REL_SCRIPTS)
     try:
         proc = subprocess.run(
-            [sys.executable, "-c", TASK_ROUTE_ONE_COMMAND, json.dumps(raw_domain)],
+            _python_argv("-c", TASK_ROUTE_ONE_COMMAND, json.dumps(raw_domain)),
             cwd=scripts_dir,
             capture_output=True,
             text=True,
@@ -1820,7 +1868,7 @@ def read_tier_baseline_one_command(root: str) -> Dict[str, str]:
     if not os.path.isdir(scripts_dir):
         raise Red("tier_baseline_import_failed", "diretorio ausente: {0}".format(_REL_SCRIPTS))
     proc = subprocess.run(
-        [sys.executable, "-c", TIER_BASELINE_ONE_COMMAND],
+        _python_argv("-c", TIER_BASELINE_ONE_COMMAND),
         cwd=scripts_dir,
         capture_output=True,
         text=True,
@@ -2279,5 +2327,28 @@ def main(argv: Optional[List[str]] = None) -> int:
     return 0
 
 
+def _guard_root_readers() -> None:
+    """Todo leitor que recebe a RAIZ roda sem escrever bytecode — por FORMA.
+
+    Percorre as funcoes DESTE modulo e embrulha em ``_no_bytecode`` toda
+    aquela cujo primeiro parametro se chama ``root``: um leitor novo entra
+    sozinho, sem ninguem lembrar de decora-lo. O teste
+    ``test_every_root_reader_carries_the_bytecode_guard`` confere a forma.
+    """
+    namespace = globals()
+    for name, obj in list(namespace.items()):
+        if not inspect.isfunction(obj) or obj.__module__ != __name__:
+            continue
+        if getattr(obj, "_census_bytecode_off", False):
+            continue
+        params = list(inspect.signature(obj).parameters)
+        if params and params[0] == "root":
+            namespace[name] = _no_bytecode(obj)
+
+
+_guard_root_readers()
+
+
 if __name__ == "__main__":
+    sys.dont_write_bytecode = True
     sys.exit(main())
