@@ -1440,6 +1440,7 @@ def check_tier_a_gitignore_state_excluded() -> Tuple[str, str, Any]:
 # and adopter trees (no ADR-149) degrade to «sem dado». The cache is EXTERNAL: bounded
 # read, only grammar ids (<= SHOW_MAX) inside «externo, …», the rest only counted.
 # W0b reader contract: {"lanes": {"<lane>": {"models": [ids]}}}; age = file mtime.
+# Lane missing from the cache = «sem dado»; lane present but malformed = yellow.
 _MC_ADR_REL = (".claude", "adr", "ADR-149-model-id-allowlist.md")
 _MC_DETECTOR_REL = (".claude", "scripts", "check-model-currency.py")
 _MC_EXPECTED_REL = (".claude", "data", "model-currency-expected-reds.txt")
@@ -1453,7 +1454,8 @@ _MC_NO_DATA = {
     "stale": "sem dado (cache com {age} > %d h)" % MODEL_CURRENCY_STALE_HOURS,
     "oversize": "sem dado (cache acima de %d bytes: leitura truncada, conteúdo "
                 "descartado; idade {age})" % MODEL_CURRENCY_CACHE_MAX_BYTES,
-    "malformed": "sem dado (cache malformado ou sem a raia; idade {age})",
+    "malformed": "sem dado (cache malformado; idade {age})",
+    "no_lane": "sem dado (cache sem a raia; idade {age})",
 }
 
 
@@ -1495,12 +1497,14 @@ def _mc_read_upstream(root: Path) -> Dict[str, Any]:
 
 
 def _mc_upstream_cell(det: Any, up: Dict[str, Any], lane: str,
-                      pinned: List[str]) -> Tuple[str, List[str]]:
+                      pinned: List[str]) -> Tuple[str, List[str], str]:
     entry = (up.get("lanes") or {}).get(lane)
     models = entry.get("models") if isinstance(entry, dict) else None
-    if up["state"] != "ok" or not isinstance(models, list):
-        key = up["state"] if up["state"] != "ok" else "malformed"
-        return _MC_NO_DATA[key].format(age=up["age"]), []
+    key = up["state"]
+    if key == "ok" and not isinstance(models, list):
+        key = "malformed" if lane in up["lanes"] else "no_lane"
+    if key != "ok":
+        return _MC_NO_DATA[key].format(age=up["age"]), [], key
     valid = [m for m in models if _mc_id_ok(m) and _mc_lane(det, m) == lane]
     unique = list(dict.fromkeys(valid))
     novel = [m for m in unique if m not in pinned]
@@ -1508,7 +1512,7 @@ def _mc_upstream_cell(det: Any, up: Dict[str, Any], lane: str,
     more = " (+%d truncados)" % (len(novel) - len(shown)) if novel[len(shown):] else ""
     return ("«externo, %s: %d ids; fora do fixado: %s%s; descartados=%d»" % (
         up["age"], len(unique), ", ".join(shown) or "nenhum", more,
-        len(models) - len(valid))), novel
+        len(models) - len(valid))), novel, key
 
 
 def _mc_trio(root: Path) -> Tuple[str, str, Any]:
@@ -1547,10 +1551,11 @@ def _mc_trio(root: Path) -> Tuple[str, str, Any]:
         mine = installed if installed and _mc_lane(det, installed) == lane else None
         member = "" if mine is None else (
             " (instalado ∈ fixado)" if mine in pinned else " (instalado FORA do fixado)")
-        cell, novel = _mc_upstream_cell(det, up, lane, pinned)
+        cell, novel, key = _mc_upstream_cell(det, up, lane, pinned)
         cells.append("%s: instalado=%s · fixado=%d ids%s · upstream=%s" % (
             lane, mine or "nenhum nesta raia", len(pinned), member, cell))
-        lanes[lane] = {"installed": mine, "novel": novel[:MODEL_CURRENCY_SHOW_MAX_IDS]}
+        lanes[lane] = {"installed": mine, "novel": novel[:MODEL_CURRENCY_SHOW_MAX_IDS],
+                       "upstream": key}
     n_red = len(report["red_ids"])
     reds = ("vermelhos=%d (sem conjunto esperado)" % n_red if drift is None else
             "vermelhos=%d (fora do esperado: +%d/-%d)" % (n_red, len(drift[0]), len(drift[1]))
@@ -1559,7 +1564,7 @@ def _mc_trio(root: Path) -> Tuple[str, str, Any]:
         " ; ".join(cells), "= fixado" if settings.get("availableModels") == pinned_all
         else "≠ fixado", reds)
     detail = {"lanes": lanes, "upstream": up["state"]}
-    if (any(v["novel"] for v in lanes.values()) or up["state"] in ("oversize", "malformed")
+    if (any(v["novel"] or v["upstream"] in ("oversize", "malformed") for v in lanes.values())
             or (drift is not None and (drift[0] or drift[1]))):
         return "yellow", summary, detail
     return "green", summary, detail
