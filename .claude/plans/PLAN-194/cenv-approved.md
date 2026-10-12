@@ -27,6 +27,10 @@ Data: TO-FILL-BY-SIGN
   pendente na data deste texto: o controle vermelho fica FORA do SIGN, como registro reproduzido pelo
   rail (seção «Controle vermelho (registro)»), e o pacote tem rodada única de rail e, no máximo, uma
   conferência de anexo. A assinatura deste texto as ratifica para este pacote.
+- Do SIGN anterior do pacote (nunca no `main`), o molde não traz a publicação por CAS, o rc 3, os
+  worktrees da base e do controle nem o modo `--check-base`: a entrada aceita só o sha256 do núcleo,
+  `--dry-run` opcional e o caminho dos dados; o núcleo devolve rc 0 ou 1, grava pelo `git commit` e não
+  chama `git worktree`, `git update-ref`, `git fetch` nem `git push`.
 
 ## O que esta cerimônia entrega, e nada além
 
@@ -52,12 +56,18 @@ Data: TO-FILL-BY-SIGN
 
 ## O que o evento passa a gravar (Sec MF-3)
 
-- A linha leva só os campos da allowlist `_COST_ENVELOPE_CAPPED_ALLOWLIST` (`audit_emit.py`; o
-  `emit_generic` filtra o evento por ela): `action`, `ts`, `session_id`, `project`, `event_schema`,
-  `tokens_in`, `tokens_out`, `tokens_total`, `hmac`, `hmac_error`, `class_tier`, `window_breached`,
-  `cap_cents` e `current_cents`. O hook passa `class_tier`, `window_breached`, `cap_cents`,
-  `current_cents`, `session_id` e `project`; o `_write_event` acrescenta `event_schema`, `ts`, os três
-  `tokens_*` (nulos) e `hmac`/`hmac_error` — nenhum deles é `project`.
+- Os campos do evento que o chamador leva à linha são só os da allowlist
+  `_COST_ENVELOPE_CAPPED_ALLOWLIST` (`audit_emit.py`; o `emit_generic` filtra o evento por ela):
+  `action`, `ts`, `session_id`, `project`, `event_schema`, `tokens_in`, `tokens_out`, `tokens_total`,
+  `hmac`, `hmac_error`, `class_tier`, `window_breached`, `cap_cents` e `current_cents`. O hook passa
+  `class_tier`, `window_breached`, `cap_cents`, `current_cents`, `session_id` e `project`; o
+  `_write_event` acrescenta `event_schema`, `ts`, os três `tokens_*` (nulos) e `hmac`/`hmac_error` —
+  nenhum deles é `project`.
+- No caminho do spool (o `_write_event` entrega o evento ao `spool_writer` quando o spool está disponível
+  e o modo síncrono `CEO_AUDIT_SYNC_MODE=1` não está ligado), o spool acrescenta à linha os seus
+  metadados: `wall_ns`, `pid`, `spool_uuid`, `ordinal_within_file`, `record_id`, `_drain_sha256` e
+  `_drain_epoch`. O teste novo prova o caminho síncrono: o hook roda com o ambiente do `subprocess_env`
+  do `TestEnvContext`, que fixa `CEO_AUDIT_SYNC_MODE=1`.
 - `project` é um campo por linha que o CHAMADOR preenche: o hook passa `project=` de
   `_resolve_project_path()`, que devolve `CLAUDE_PROJECT_DIR` ou, sem ela, `os.getcwd()`. O campo está na
   allowlist e na tabela de campos do evento (v2.27) em `SPEC/v1/audit-log.schema.md`.
@@ -141,6 +151,15 @@ terminam com resumo só de aprovados.
 
 O `check-test-env-hygiene.py` e o `validate-governance.sh` são gates fixos do molde (bloco comum).
 
+O SIGN anterior do pacote conferia também a SAÍDA de dois gates que não são pytest, e o molde julga só
+o rc deles; a conferência equivale ao rc no fonte de cada gate:
+- `validate_governance_fast.py` (`hard` 5): o antigo exigia `PASS` na última linha não vazia. O gate
+  imprime `PASS` como última linha da sua saída padrão se e só se o seu `rc` é 0, e o rc do processo é
+  esse `rc`.
+- `validate-governance.sh` (gate fixo do molde): o antigo exigia `Errors:   0`. O gate imprime
+  `Errors:   <n>` no resumo, com `n` ≥ 0, e depois sai 1 se `n` > 0; a única saída com rc 0 é a do
+  resumo, depois de imprimir `Errors:   0`.
+
 ## Rail
 
 - Rodada 1 (sobre o patch): `codex exec --sandbox read-only` (codex-cli 0.160.0) e 2 refutadores Claude
@@ -171,7 +190,13 @@ O `check-test-env-hygiene.py` e o `validate-governance.sh` são gates fixos do m
 - O teste novo herda o resíduo do teste de bloqueio: o contador diário vive num arquivo de estado por data
   UTC e o hook não tem seam de relógio, então os dois despachos do teste precisam cair na mesma data UTC
   (declarado na docstring dos dois testes).
-- A linha `hard` 1 é um script do pacote chamado pela forma 3 do molde: o SIGN julga só o rc dele.
+- A linha `hard` 1 é um script do pacote chamado pela forma 3 do molde: o SIGN julga só o rc dele. A
+  forma 3 não aceita opção antes do script, então ele roda sem o `-I` da passada antiga: o diretório do
+  script entra no `sys.path` (no commit de materiais, o único `.py` desse diretório é o próprio script).
+- Dos materiais do pacote, o P0 confere contra o registro do rail o sha256 do patch, deste texto e dos
+  dados. O `sintaxe.py`, que a linha `hard` 1 executa, e o `red-control.txt` entram por caminho, sem
+  sha256 conferido pelo SIGN; o veredito do rail vale para os sha256 deles listados no registro do rail,
+  cujo sha256 o SIGN grava em `Rail-Record-sha256`.
 
 ## Scope
 
