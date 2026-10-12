@@ -38,7 +38,7 @@
   {"id": "R29", "gold": ["minimal-change-discipline"], "en": "Change-scope discipline", "pt": "Disciplina de escopo da mudança"},
   {"id": "R30", "gold": ["coverage-audit"], "en": "Cross-artifact consistency audit", "pt": "Auditoria de consistência entre artefatos"},
   {"id": "R31", "gold": ["parallelization-by-default"], "en": "Task decomposition + parallel sub-agent dispatch", "pt": "Decomposição de tarefas + despacho paralelo de subagentes"},
-  {"id": "R32", "gold": ["help-me"], "en": "Owner contextual help", "pt": "Ajuda contextual ao Owner"},
+  {"id": "R32", "gold": ["help-me"], "en": "Owner contextual help", "pt": "Ajuda contextual ao proprietário"},
   {"id": "R33", "gold": ["cookbook-advisor"], "en": "Anthropic Cookbook pattern advisory", "pt": "Consultoria sobre padrões do Anthropic Cookbook"}
  ]
 }

@@ -7,9 +7,11 @@ diacríticos, gerada aqui) — contra dois braços da CLI do recuperador:
 Verdade-base GERADA da ROUTING TABLE de `.claude/team.md` (EN = «Work type» sem
 parênteses; ouro = skills de «Skill to load»), re-derivada a cada execução:
 divergência com o arquivo de pares RECUSA. Acerto = ouro entre os `top_k` com
-score > 0. O índice (state-dir) é lido numa cópia temporária. Saída: 0 medido;
-2 uso; 3 RECUSA (modo diferente do exigido, erro do recuperador — nunca contado
-como erro de recall —, verdade-base divergente, ouro fora do catálogo/índice).
+score > 0. O índice (state-dir) é lido numa cópia temporária; os subprocessos do
+recuperador rodam com HOME e destinos de auditoria nesse diretório temporário.
+Saída: 0 medido; 2 uso; 3 RECUSA (modo diferente do exigido, erro, falha de
+execução ou estouro de tempo do recuperador — nunca contados como erro de
+recall —, verdade-base divergente, ouro fora do catálogo/índice).
 """
 from __future__ import annotations
 
@@ -18,6 +20,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
+sys.dont_write_bytecode = True  # os _load abaixo não deixam __pycache__ no repositório (os filhos rodam com -B)
 REPO = Path(__file__).resolve().parents[4]
 RETRIEVER = REPO / ".claude" / "scripts" / "skill-retrieve.py"
 BUILDER = REPO / ".claude" / "scripts" / "skill-index-build.py"
@@ -26,6 +29,7 @@ PAIRS_FILE = REPO / ".claude" / "plans" / "PLAN-175" / "evidence" / "language-ga
 TOP_K, CUTS, LANGS = 5, (1, 3, 5), ("en", "pt", "pt_ascii")
 MODES = ("tfidf", "static", "static-fallback", "rag+tfidf")
 EXPAND = {(), ("inputs",), ("recall",)}
+LABELS: List[Tuple[str, str]] = []  # (texto, rótulo) para _redact; resolvido uma vez em main
 
 
 class Refusal(Exception):
@@ -37,9 +41,7 @@ def _rel(path: Path) -> str:
 
 def _redact(text: str) -> str:
     """Tira da saída commitável o state-dir, o checkout e o diretório pessoal."""
-    state = _load(REPO / ".claude" / "hooks" / "_lib" / "runtime_paths.py", "runtime_paths").runtime_state_dir()
-    home = str(Path.home())
-    for raw, label in ((str(state), "<state-dir>"), (str(REPO), "<repo>"), (home.replace(os.sep, "-"), "<home>"), (home, "$HOME")):
+    for raw, label in LABELS:
         text = text.replace(raw, label)
     return text
 
@@ -124,13 +126,26 @@ def index_inputs(override: Optional[str], tmp: Path, builder) -> Tuple[Path, Dic
     return copy, info, {r[0] for r in rows}
 
 
-def retrieve(task: str, index: Path, static: bool) -> Tuple[str, List[Tuple[str, float]]]:
-    env = dict(os.environ, CEO_SIDECAR_C2_VECTOR_MEMORY_ENABLED="0")
+def child_env(tmp: Path, static: bool) -> Dict[str, str]:
+    """Ambiente dos subprocessos: o tf-idf importa audit_emit (rag_router), cujo dreno de saída escreveria
+    no state-dir herdado. Remove por PREFIXO todo destino de auditoria e aponta HOME, log e state para `tmp`."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("CEO_AUDIT_", "CEO_PROJECT_STATE_DIR", "CLAUDE_PROJECT_DIR"))}
+    env.update(HOME=str(tmp / "home"), CEO_AUDIT_LOG_DIR=str(tmp / "audit"), CEO_PROJECT_STATE_DIR=str(tmp / "audit"),
+               CEO_SIDECAR_C2_VECTOR_MEMORY_ENABLED="0", PYTHONDONTWRITEBYTECODE="1")
     if static:
         env["CEO_SOTA_DISABLE"] = "1"
-    cmd = [sys.executable, str(RETRIEVER), "--json", "--task", task, "--top-k", str(TOP_K),
+    return env
+
+
+def retrieve(task: str, index: Path, env: Dict[str, str]) -> Tuple[str, List[Tuple[str, float]]]:
+    cmd = [sys.executable, "-B", str(RETRIEVER), "--json", "--task", task, "--top-k", str(TOP_K),
            "--repo-root", str(REPO), "--index-path", str(index)]
-    proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=120)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=env["HOME"], timeout=120)
+    except subprocess.TimeoutExpired:
+        raise Refusal("o recuperador excedeu 120 s") from None
+    except OSError as exc:
+        raise Refusal(f"o recuperador não executou: {exc}") from None
     if proc.returncode != 0:
         raise Refusal(f"recuperador saiu {proc.returncode}: {_redact(proc.stderr.strip())[-300:]}")
     try:
@@ -160,6 +175,8 @@ def measure(args: argparse.Namespace, out: Dict[str, object]) -> List[Dict[str, 
         out["inputs"]["index"] = info
         if info["gold_missing_from_index"] and args.require_mode == "tfidf":
             raise Refusal(f"ouro ausente do índice (índice defasado): {info['gold_missing_from_index']}")
+        (tmp / "home").mkdir(mode=0o700)
+        envs = {static: child_env(tmp, static) for static in (False, True)}
         modes: Counter = Counter()
         rows: List[Dict[str, object]] = []
         for pair in pairs:
@@ -169,7 +186,7 @@ def measure(args: argparse.Namespace, out: Dict[str, object]) -> List[Dict[str, 
             for arm, static in (("retriever", False), ("static_baseline", True)):
                 row[arm] = {}
                 for lang, query in queries.items():
-                    mode, results = retrieve(str(query), index, static)
+                    mode, results = retrieve(str(query), index, envs[static])
                     if static and mode != "static":
                         raise Refusal(f"{pair['id']}/{lang}: a linha de base devolveu modo {mode!r}, esperado 'static'")
                     if not static:
@@ -213,6 +230,9 @@ def main(argv: List[str]) -> int:
     parser.add_argument("--index-path", default=None, help="índice a usar (padrão: o resolvedor do recuperador)")
     parser.add_argument("--json", action="store_true", help="saída JSON")
     args = parser.parse_args(argv)
+    home = str(Path.home())
+    state = _load(REPO / ".claude" / "hooks" / "_lib" / "runtime_paths.py", "runtime_paths").runtime_state_dir()
+    LABELS[:] = [(str(state), "<state-dir>"), (str(REPO), "<repo>"), (home.replace(os.sep, "-"), "<home>"), (home, "$HOME")]
     out: Dict[str, object] = {
         "schema": "plan175-language-gap/2", "generated_at": _utc(datetime.datetime.now().timestamp()),
         "invocation": shlex.join(["python3", _rel(Path(__file__))] + argv), "require_mode": args.require_mode,
@@ -221,6 +241,10 @@ def main(argv: List[str]) -> int:
                    "ground_truth": ".claude/team.md §ROUTING TABLE", "team_md_sha256": _sha(TEAM_MD),
                    "pairs_file": _rel(PAIRS_FILE), "pairs_sha256": _sha(PAIRS_FILE),
                    "rag_sidecar": "desligado na sonda (CEO_SIDECAR_C2_VECTOR_MEMORY_ENABLED=0): o sujeito é o tf-idf léxico",
+                   "audit_isolation": "subprocessos sem CEO_AUDIT_*, CEO_PROJECT_STATE_DIR e CLAUDE_PROJECT_DIR*; HOME, log e state-dir "
+                                      "no diretório temporário (o dreno de saída do audit_emit não alcança o state-dir vivo)",
+                   "tokenizer_rule": "_lib/embeddings.tokenize é ASCII-only ([A-Za-z0-9]+): letra acentuada parte a palavra "
+                                     "(«migrações» vira migra + es); pt_ascii isola só o efeito dos diacríticos",
                    "archetype_boost": "não usado: o reforço por arquétipo independe do idioma e mascararia o efeito",
                    "hit_rule": "acerto = alguma skill do ouro entre os top_k devolvidos com score > 0",
                    "mode_rule": "`tfidf-empty` (nenhum termo da consulta no vocabulário do índice) é o modo tfidf com vetor "
