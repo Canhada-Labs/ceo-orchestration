@@ -23,10 +23,10 @@ Data: TO-FILL-BY-SIGN
   assinaturas em dois conjuntos, «Lote A primeiro […]; Lote B depois = W7a + emenda ADR-158 +
   cost_envelope + U2-D». Este pacote é o `cost_envelope` do Lote B.
 - Molde: a troca do SIGN próprio do pacote pelo molde «SIGN mínimo» é decisão do Owner (S363). Duas
-  regras aplicadas aqui são decisões do CEO de 2026-10-11 (~13:35Z), com a ratificação do Owner
-  pendente na data deste texto: o controle vermelho fica FORA do SIGN, como registro reproduzido pelo
+  regras aplicadas aqui são decisões do CEO de 2026-10-11 (~13:35Z), ratificadas pelo Owner em
+  2026-10-12 (~02:12Z, S363; registro da sessão, fora do repositório): o controle vermelho fica FORA do SIGN, como registro reproduzido pelo
   rail (seção «Controle vermelho (registro)»), e o pacote tem rodada única de rail e, no máximo, uma
-  conferência de anexo. A assinatura deste texto as ratifica para este pacote.
+  conferência de anexo. A assinatura deste texto as confirma para este pacote.
 - Do SIGN anterior do pacote (nunca no `main`), o molde não traz a publicação por CAS, o rc 3, os
   worktrees da base e do controle nem o modo `--check-base`: a entrada aceita só o sha256 do núcleo,
   `--dry-run` opcional e o caminho dos dados; o núcleo devolve rc 0 ou 1, grava pelo `git commit` e não

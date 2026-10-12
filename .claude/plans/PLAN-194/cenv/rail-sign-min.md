@@ -2,7 +2,7 @@
 
 Rail-Subject: .claude/plans/PLAN-194/cenv/cenv.patch
 Rail-Subject-sha256: 4a4b3e7c4f890df09d70ac02daf67b0a1b20c05081a4388e701297d103534854
-Rail-Sentinel-sha256: 42a92f9c38989e3db7083960e31d47fa34c188a85fa2993dfd2a10537738a07a
+Rail-Sentinel-sha256: aaf06ac6a522059f1bcf4d9630e2672e11da90b891b71d7d50ce1da31642a0a2
 Rail-Data-sha256: 3f8a8e0161372dcf32e94ef6c2a877c47d2f12a2577106cf12e2f017064684f0
 Rail-Round: única (molde sign-min), com a conferência do anexo
 Rail-Reviewer: codex-cli 0.160.0 (`exec --sandbox read-only`, gpt-6-astra, reasoning xhigh, config_sha 86435b2bc52b15b0 no preflight), conferência do anexo; refutador Claude na mesma conferência
@@ -174,14 +174,19 @@ VERDICT: GO
   persistida foi corrigida, e a equivalência das conferências de saída ao rc foi provada nas invocações
   do pacote e confirmada pelas duas lanes da conferência. Os P3 estão declarados no sentinel; daí
   `APPROVE`.
-- O sentinel mudou depois da conferência SÓ no bloco comum embutido. O anexo do molde (`fc44f81e`,
+- O sentinel mudou depois da conferência em dois pontos, e só neles. (i) A frase da seção «Ratificação
+  (Owner)» sobre as duas regras do molde: elas eram «decisões do CEO com a ratificação do Owner pendente»
+  e foram ratificadas pelo Owner em 2026-10-12 (~02:12Z, «Ratifico D1 e D2»), então o texto passa a dizê-lo
+  (2 linhas; correção do CEO em 2026-10-12, para a frase não ficar falsa na data da assinatura). (ii) O bloco
+  comum embutido. O anexo do molde (`fc44f81e`,
   com a condição de `e5dde0e4`) trocou o `bloco-comum.md` (sha256 `3a25e4535be179343efffa3959cc59cd65f64f2c55b9a700e485ffbca2f82044` →
   `d335eb3c66f7bc63542e2e7c4db47d09a6feb638bdfa69289955c0c678b04e74`), e o miolo entre os marcadores foi trocado
   byte a byte. O sha256 do sentinel com os campos por preencher passou de
   `56b89e3be5c8d6ebf37c3a77b218f85cb493bd10ce11168a4689c2fba9b46c36` (o conferido; a lista «Materiais desta
   rodada» acima mantém esse valor, o do commit do anexo) para
-  `42a92f9c38989e3db7083960e31d47fa34c188a85fa2993dfd2a10537738a07a`, o `Rail-Sentinel-sha256` acima. A identidade foi
-  conferida mecanicamente: fora dos marcadores, os bytes são os do sentinel conferido, e `p0_sent` e
+  `aaf06ac6a522059f1bcf4d9630e2672e11da90b891b71d7d50ce1da31642a0a2`, o `Rail-Sentinel-sha256` acima (antes da correção (i), `42a92f9c38989e3d…`). A identidade foi
+  conferida mecanicamente: fora dos marcadores, os bytes são os do sentinel conferido, exceto as 2 linhas
+  da correção (i), e `p0_sent` e
   `p0_rail` do núcleo anexado, importados em processo sobre o commit deste registro, aceitam o sentinel,
   os três sha256 e o veredito. Patch e dados seguem com os sha256 conferidos.
 
