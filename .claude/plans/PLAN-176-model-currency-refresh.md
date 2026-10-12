@@ -1211,35 +1211,28 @@ históricas (Progress log de 2026-09-07 e este apêndice) e ficam.
 
 ### 9.1 Correção da cura após a refutação (S363, 2026-10-12, mesmo dia)
 
-Os refutadores da cura acima (HEAD `da4e5b4f`) acharam três defeitos P2.
-Cada um foi reproduzido em disco antes da correção; as linhas «onde
-estava» são as de `da4e5b4f`. Censo antes de escrever:
+Três P2 dos refutadores sobre `da4e5b4f`, cada um reproduzido antes da
+correção; «onde estava» usa as linhas de `da4e5b4f`. Censo:
 `apaga uma linha|portão verde` ⇒ só :444; `W3b deste plano estende|Ela espera o PLAN-169`
-⇒ :82 e :904. O censo da cura já listava esse :904 (era o :812 de
-`c76b61c1`), mas a cura não o tocou. O :100-103 fica como está: é texto
-de 2026-09-07, e o próprio §0 o data.
+⇒ :82 e :904 (o censo da cura já listava esse :904, era o :812 de
+`c76b61c1`, e a cura não o tocou). O :100-103 fica: o §0 o data de 2026-09-07.
 
 | achado | onde estava | o que mudou |
 |---|---|---|
-| R1 — «quem apaga uma linha junto com a causa deixa o portão verde» era falso | :443-444 | :445-457: apagar a linha de um identificador que segue vermelho é detectado (código 1, `RED-SET UNEXPECTED`); o furo nomeado é ACRESCENTAR linha com causa para um vermelho novo, que só a revisão do Pull Request autentica |
-| R2 — o padrão do §4 no teste casava `## 4.1` e cabeçalho dentro de cerca | teste :60-69 | teste :60-103: cabeçalho EXATO, cercas puladas, cabeçalho único (zero ou dois falham fechado); controles nas linhas :367-378 do teste |
+| R1 — «quem apaga uma linha junto com a causa deixa o portão verde» era falso | :443-444 | :445-457: apagar a linha de um identificador que segue vermelho é detectado (código 1, `RED-SET UNEXPECTED`); o furo é ACRESCENTAR linha com causa para um vermelho novo, e só a revisão do Pull Request o autentica |
+| R2 — o padrão do §4 no teste casava `## 4.1` e cabeçalho dentro de cerca | teste :60-69 | teste :60-91: cabeçalho EXATO, cercas puladas, cabeçalho único (zero ou dois falham fechado); controles em :355-366 |
 | R3 — «Ela espera o PLAN-169» contradizia :105 e o `external_wait` | :904-907 e o irmão :82 | :915-922: a espera acabou e a W3b CRIA a dimensão; :82-84 passa ao passado |
 
-Controles de R2: com o analisador anterior trocado dentro do teste novo,
-1 falha (`('K-1',) != ('K-9',)`). Com uma cópia do plano que põe um §4
-cercado com K-1 a K-9 antes do §4 real e tira a K-9 do §4 real, o teste
-anterior PASSA (cego) e o novo falha com `not in §4 ['K-9']`. As cópias
-sem a K-9 e com uma K-10 seguem com 1 falha cada.
+Controles de R2: o analisador anterior dentro do teste novo dá 1 falha
+(`('K-1',) != ('K-9',)`); numa cópia do plano com um §4 cercado (K-1 a
+K-9) antes do §4 real e sem a K-9 no real, o teste anterior PASSA (cego)
+e o novo falha com `not in §4 ['K-9']`.
 
 ## Progress log
 
-- 2026-10-12 (S363, correção da cura): **três P2 dos refutadores
-  corrigidos, cada um reproduzido antes** — a frase da autenticação do
-  conjunto vermelho (apagar uma linha é detectado; o furo é acrescentar
-  uma), o analisador do §4 no teste (cabeçalho exato, cercas puladas,
-  cabeçalho único) e o parágrafo da W3b (a espera pelo PLAN-169 acabou).
-  Tabela e controles no §9.1. O teste segue com 11 casos. `status:` NÃO
-  muda.
+- 2026-10-12 (S363, correção da cura): três P2 dos refutadores corrigidos
+  (autenticação do conjunto vermelho, analisador do §4 no teste, espera da
+  W3b); tabela e controles no §9.1; 11 casos. `status:` NÃO muda.
   Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k state_json_serves_every_death_criterion_in_plan_table`
 
 - 2026-10-12 (S363, texto + teste): **cura pós-round-3 dos itens de TEXTO e

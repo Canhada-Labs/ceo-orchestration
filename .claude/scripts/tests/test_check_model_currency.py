@@ -57,49 +57,37 @@ PLAN_FILE = (REPO_ROOT / ".claude" / "plans"
 #: Test-only override of PLAN_FILE: the red controls point it at a
 #: DISPOSABLE copy of the plan with a K row removed or added.
 PLAN_FILE_ENV = "P176_PLAN_FILE"
-#: The EXACT §4 heading. A bare ``^## 4\.`` prefix also matched a
-#: ``## 4.1 …`` heading and a heading inside a code fence, so a decoy written
-#: BEFORE the real §4 was read in its place (correction-round finding).
+#: The EXACT §4 heading: the old bare ``^## 4\.`` prefix also read a
+#: ``## 4.1`` decoy or a fenced heading placed BEFORE the real §4.
 SECTION4_HEADING = "## 4. Critérios de morte"
 _SECTION4_HEAD_RE = re.compile(r"^## 4\. Critérios de morte(?:\s|$)")
 _K_ROW_RE = re.compile(r"^\| (K-\d+) \|")
-#: CommonMark fence: up to 3 spaces, then 3+ backticks or 3+ tildes.
-_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")  # CommonMark fence
 
 
 def plan_death_criteria(text):
-    """The ``| K-n |`` row ids of the plan's §4 table, in table order.
+    """``| K-n |`` ids of the §4 table, in order; fenced lines are skipped.
 
-    Lines inside a code fence are skipped. The §4 heading must occur EXACTLY
-    once outside fences — zero or a twin fails closed, never a guess.
+    The §4 heading must occur EXACTLY once outside fences, else fail closed.
     """
-    fence = None
-    heads = 0
-    in_section4 = False
-    rows = []
+    fence, heads, in_section4, rows = None, 0, False, []
     for line in text.splitlines():
         mark = _FENCE_RE.match(line)
-        if fence is None:
-            if mark:
-                fence = mark.group(1)
-                continue
-        else:
+        if fence is not None:
             if (mark and mark.group(1)[0] == fence[0]
                     and len(mark.group(1)) >= len(fence)
                     and not line[mark.end():].strip()):
                 fence = None
-            continue
-        if line.startswith("## "):
+        elif mark:
+            fence = mark.group(1)
+        elif line.startswith("## "):
             in_section4 = bool(_SECTION4_HEAD_RE.match(line))
             heads += in_section4
-            continue
-        row = _K_ROW_RE.match(line) if in_section4 else None
-        if row:
-            rows.append(row.group(1))
+        elif in_section4 and _K_ROW_RE.match(line):
+            rows.append(_K_ROW_RE.match(line).group(1))
     if heads != 1:
-        raise AssertionError(
-            "PLAN-176 heading %r found %d times outside code fences "
-            "(want exactly 1)" % (SECTION4_HEADING, heads))
+        raise AssertionError("heading %r found %d times outside code fences"
+                             " (want 1)" % (SECTION4_HEADING, heads))
     return tuple(rows)
 
 
