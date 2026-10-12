@@ -57,16 +57,50 @@ PLAN_FILE = (REPO_ROOT / ".claude" / "plans"
 #: Test-only override of PLAN_FILE: the red controls point it at a
 #: DISPOSABLE copy of the plan with a K row removed or added.
 PLAN_FILE_ENV = "P176_PLAN_FILE"
-_SECTION4_RE = re.compile(r"^## 4\.[^\n]*\n(.*?)(?=^## |\Z)", re.S | re.M)
-_K_ROW_RE = re.compile(r"^\| (K-\d+) \|", re.M)
+#: The EXACT §4 heading. A bare ``^## 4\.`` prefix also matched a
+#: ``## 4.1 …`` heading and a heading inside a code fence, so a decoy written
+#: BEFORE the real §4 was read in its place (correction-round finding).
+SECTION4_HEADING = "## 4. Critérios de morte"
+_SECTION4_HEAD_RE = re.compile(r"^## 4\. Critérios de morte(?:\s|$)")
+_K_ROW_RE = re.compile(r"^\| (K-\d+) \|")
+#: CommonMark fence: up to 3 spaces, then 3+ backticks or 3+ tildes.
+_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
 def plan_death_criteria(text):
-    """The ``| K-n |`` row ids of the plan's §4 table, in table order."""
-    section = _SECTION4_RE.search(text)
-    if section is None:
-        raise AssertionError("PLAN-176 §4 heading not found")
-    return tuple(_K_ROW_RE.findall(section.group(1)))
+    """The ``| K-n |`` row ids of the plan's §4 table, in table order.
+
+    Lines inside a code fence are skipped. The §4 heading must occur EXACTLY
+    once outside fences — zero or a twin fails closed, never a guess.
+    """
+    fence = None
+    heads = 0
+    in_section4 = False
+    rows = []
+    for line in text.splitlines():
+        mark = _FENCE_RE.match(line)
+        if fence is None:
+            if mark:
+                fence = mark.group(1)
+                continue
+        else:
+            if (mark and mark.group(1)[0] == fence[0]
+                    and len(mark.group(1)) >= len(fence)
+                    and not line[mark.end():].strip()):
+                fence = None
+            continue
+        if line.startswith("## "):
+            in_section4 = bool(_SECTION4_HEAD_RE.match(line))
+            heads += in_section4
+            continue
+        row = _K_ROW_RE.match(line) if in_section4 else None
+        if row:
+            rows.append(row.group(1))
+    if heads != 1:
+        raise AssertionError(
+            "PLAN-176 heading %r found %d times outside code fences "
+            "(want exactly 1)" % (SECTION4_HEADING, heads))
+    return tuple(rows)
 
 
 def _load_module():
@@ -325,10 +359,23 @@ class TestStateFile(_Fixture):
 
     def test_state_json_serves_every_death_criterion_in_plan_table(self):
         # The parser reads ONLY the §4 table, and a planted row is seen.
-        synthetic = ("## 4. Criteria\n\n| # | c |\n|---|---|\n"
+        head = SECTION4_HEADING + " — real\n"
+        synthetic = (head + "\n| # | c |\n|---|---|\n"
                      "| K-1 | a |\n| K-10 | b |\n\n## 5. Next\n"
                      "| K-99 | outside §4 |\n")
         self.assertEqual(plan_death_criteria(synthetic), ("K-1", "K-10"))
+        # Decoys BEFORE the real §4 are never read in its place: a
+        # ``## 4.1`` heading, a fenced copy of the §4 heading, and a fenced
+        # K row inside §4 (each was read by the old ``^## 4\.`` prefix).
+        decoys = ("## 4.1 Exemplo\n| K-1 | decoy |\n"
+                  "```\n" + head + "| K-2 | decoy |\n```\n"
+                  "~~~~\n## 5. x\n~~~\n| K-3 | decoy |\n~~~~\n")
+        real = head + "| K-9 | real |\n```\n| K-4 | fenced |\n```\n"
+        self.assertEqual(plan_death_criteria(decoys + real), ("K-9",))
+        # Zero or two §4 headings outside fences FAIL CLOSED.
+        for broken in (decoys, real + real):
+            with self.assertRaises(AssertionError):
+                plan_death_criteria(broken)
 
         plan_file = Path(os.environ.get(PLAN_FILE_ENV) or PLAN_FILE)
         planned = plan_death_criteria(plan_file.read_text(encoding="utf-8"))

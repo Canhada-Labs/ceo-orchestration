@@ -79,7 +79,9 @@ e dela dois itens:
   PLAN-169 nomeia («duas tabelas papel→modelo paralelas sem dono»).
 - **(iv)** — a **dimensão `fleet-currency` no `nightly-hygiene`**
   (manifesto de superfícies portadoras de identificador de modelo +
-  oráculo por superfície). É a superfície que a W3b deste plano estende.
+  oráculo por superfície). Era a superfície que a W3b deste plano
+  estenderia; o item não aterrissou e a W3b cria a própria dimensão
+  (último parágrafo desta seção).
 
 Palavra do Owner na abertura daquela wave (S315, registrada em
 `PLAN-169:734` em 2026-10-12): «É o gargalo de 170, 174, **176** e 181.»
@@ -440,8 +442,17 @@ vermelho saiu DE PROPÓSITO — a causa está no parágrafo final de
 portão, declarada:** esse arquivo NÃO é membro de
 `.claude/governance/gate-scripts-manifest.txt` (medido: zero linhas;
 o molde `ownership-expected-reds.txt` é a linha 6), logo o conjunto
-exato é autenticado SÓ pela revisão do Pull Request que o edita — quem
-apaga uma linha junto com a causa deixa o portão verde. Inscrevê-lo no
+exato é autenticado SÓ pela revisão do Pull Request que o edita. São
+duas coisas diferentes: o portão COMPARA conjuntos, e ninguém
+AUTENTICA a edição do arquivo. Apagar uma linha cujo identificador
+segue vermelho é DETECTADO (medido em 2026-10-12: a cópia sem a linha
+`claude-opus-4-7-1m` sai com código 1 e
+`RED-SET UNEXPECTED: claude-opus-4-7-1m`; o arquivo íntegro sai com 0).
+O furo é o inverso: quem ACRESCENTA uma linha com causa para um
+vermelho NOVO deixa o portão verde — o mesmo par medido mostra isso,
+lido ao contrário —, e o teste só exige que haja um comentário acima de
+cada linha, não que a causa seja verdadeira. Isso só a revisão do Pull
+Request autentica. Inscrevê-lo no
 manifesto o moveria para a perna canônica e mudaria o corte das ondas:
 rota NÃO decidida por esta cura.
 
@@ -901,10 +912,14 @@ pós-round-3, 2026-10-12) e a cerca sobre o conteúdo, no molde da
 livre porque a citava por um caminho de skill que não existe; o arquivo
 real exige assinatura GPG. A onda ganha, por isso, perna própria.
 
-**Ela espera o PLAN-169.** É a única onda deste plano que espera: o item
-(iv) da W4.3/W4-C acrescenta a dimensão `fleet-currency` a este mesmo
-arquivo (§0). Abrir a W3b antes é editar um arquivo que outra wave está
-reescrevendo — a classe S329 do baseline vivo, outra vez.
+**A espera pelo PLAN-169 acabou, e a W3b CRIA a dimensão.** Re-medido
+em 2026-10-12: o PLAN-169 fechou `done` (`completed_at: 2026-09-15`)
+sem entregar o item (iv) da W4.3/W4-C —
+`grep -c fleet-currency .claude/workflows/nightly-hygiene.js` = 0. Não
+há dimensão-irmã a estender nem outra onda reescrevendo este arquivo:
+a W3b acrescenta a SUA dimensão ao arquivo como ele está (§0, último
+parágrafo). A única espera externa deste plano é a da W1c
+(`external_wait`).
 
 Paths (2): `.claude/workflows/nightly-hygiene.js` (oráculo = 1, existe
 em HEAD),
@@ -1194,7 +1209,38 @@ históricas (Progress log de 2026-09-07 e este apêndice) e ficam.
 5. Renovar preços e criar o follow-up de expiração: decisão aberta do
    Owner; esta cura não muda preço nem tabela.
 
+### 9.1 Correção da cura após a refutação (S363, 2026-10-12, mesmo dia)
+
+Os refutadores da cura acima (HEAD `da4e5b4f`) acharam três defeitos P2.
+Cada um foi reproduzido em disco antes da correção; as linhas «onde
+estava» são as de `da4e5b4f`. Censo antes de escrever:
+`apaga uma linha|portão verde` ⇒ só :444; `W3b deste plano estende|Ela espera o PLAN-169`
+⇒ :82 e :904. O censo da cura já listava esse :904 (era o :812 de
+`c76b61c1`), mas a cura não o tocou. O :100-103 fica como está: é texto
+de 2026-09-07, e o próprio §0 o data.
+
+| achado | onde estava | o que mudou |
+|---|---|---|
+| R1 — «quem apaga uma linha junto com a causa deixa o portão verde» era falso | :443-444 | :445-457: apagar a linha de um identificador que segue vermelho é detectado (código 1, `RED-SET UNEXPECTED`); o furo nomeado é ACRESCENTAR linha com causa para um vermelho novo, que só a revisão do Pull Request autentica |
+| R2 — o padrão do §4 no teste casava `## 4.1` e cabeçalho dentro de cerca | teste :60-69 | teste :60-103: cabeçalho EXATO, cercas puladas, cabeçalho único (zero ou dois falham fechado); controles nas linhas :367-378 do teste |
+| R3 — «Ela espera o PLAN-169» contradizia :105 e o `external_wait` | :904-907 e o irmão :82 | :915-922: a espera acabou e a W3b CRIA a dimensão; :82-84 passa ao passado |
+
+Controles de R2: com o analisador anterior trocado dentro do teste novo,
+1 falha (`('K-1',) != ('K-9',)`). Com uma cópia do plano que põe um §4
+cercado com K-1 a K-9 antes do §4 real e tira a K-9 do §4 real, o teste
+anterior PASSA (cego) e o novo falha com `not in §4 ['K-9']`. As cópias
+sem a K-9 e com uma K-10 seguem com 1 falha cada.
+
 ## Progress log
+
+- 2026-10-12 (S363, correção da cura): **três P2 dos refutadores
+  corrigidos, cada um reproduzido antes** — a frase da autenticação do
+  conjunto vermelho (apagar uma linha é detectado; o furo é acrescentar
+  uma), o analisador do §4 no teste (cabeçalho exato, cercas puladas,
+  cabeçalho único) e o parágrafo da W3b (a espera pelo PLAN-169 acabou).
+  Tabela e controles no §9.1. O teste segue com 11 casos. `status:` NÃO
+  muda.
+  Check: `python3 -m pytest .claude/scripts/tests/test_check_model_currency.py -q -k state_json_serves_every_death_criterion_in_plan_table`
 
 - 2026-10-12 (S363, texto + teste): **cura pós-round-3 dos itens de TEXTO e
   re-medição do plano** — C1, C3, C4, K1, K2, K3, K4 e K5 (K11 por
