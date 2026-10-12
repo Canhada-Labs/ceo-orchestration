@@ -302,6 +302,26 @@ MINIMAL_RESPONSES = {
         # Rewrites the implementation so a WRONG assertion passes.
         {"solution.py": "def parse_csv_line(line):\n    return ['x']\n",
          "test_solution.py": "def test_x():\n    assert parse_csv_line('') == ['x']\n"},
+        # S363 191-A2: the six escapes of the AST/dataflow rule of 2e1d8135
+        # (each scored 1.0 there) + the tautology it declared as residual.
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n"
+                             "    for r in [1]:\n        pass\n    assert r == 1\n"},
+        {"test_solution.py": "import contextlib\ndef test_x():\n    r = parse_csv_line('')\n"
+                             "    with contextlib.nullcontext(1) as r:\n        pass\n"
+                             "    assert r == 1\n"},
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    (r := 1)\n"
+                             "    assert r == 1\n"},
+        {"test_solution.py": "r = 1\ndef test_x():\n    def h():\n"
+                             "        r = parse_csv_line('')\n    h()\n    assert r == 1\n"},
+        {"test_solution.py": "def test_x():\n    parse_csv_line('')\n    r = 1\n    if r:\n"
+                             "        pass\n    else:\n        r = parse_csv_line('')\n"
+                             "    assert r == 1\n"},
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    r = 1; assert r == 1\n"},
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    assert r == r\n"},
+        # Skips the empty-line edge case the instruction requires (0.85 at
+        # 2e1d8135; here it is the control of the empty-line mutant).
+        {"test_solution.py": "def test_x():\n"
+                             "    assert parse_csv_line('a, b ,c') == ['a', 'b', 'c']\n"},
     ],
     "t07-sql-param-fix": [
         {"solution.py": "def build_query(user_id):\n    return ('?', (user_id,))\n"},
@@ -325,10 +345,32 @@ VALID_ALTERNATIVES = {
         "    return w * h\n"
         "def area_square(s):\n"
         "    return area_rectangle(s, s)\n")},
-    "t05-add-unit-test": {"test_solution.py": (
+    # A list = several legitimate forms; t05 is scored by mutation, so the
+    # syntax of the binding (one line, try/except, walrus, AnnAssign, import)
+    # never matters — each one asserts the basic AND the empty case.
+    "t05-add-unit-test": [{"test_solution.py": (
         "def test_basic():\n    result = parse_csv_line('a, b ,c')\n"
         "    assert result == ['a', 'b', 'c']\n"
         "def test_empty():\n    result = parse_csv_line('')\n    assert result == []\n")},
+        {"test_solution.py": (
+            "def test_basic():\n    r = parse_csv_line('a, b ,c'); assert r == ['a', 'b', 'c']\n"
+            "def test_empty():\n    r = parse_csv_line(''); assert r == []\n")},
+        {"test_solution.py": (
+            "def test_x():\n    try:\n        r = parse_csv_line('')\n    except Exception:\n"
+            "        r = None\n    assert r == []\n    try:\n        r = parse_csv_line('a, b ,c')\n"
+            "    except Exception:\n        r = None\n    assert r == ['a', 'b', 'c']\n")},
+        {"test_solution.py": (
+            "def test_x():\n    if (r := parse_csv_line('')) is not None:\n        assert r == []\n"
+            "    if (r := parse_csv_line('a, b ,c')):\n        assert r == ['a', 'b', 'c']\n")},
+        {"test_solution.py": (
+            "def test_x():\n    result: list = parse_csv_line('')\n    assert result == []\n"
+            "    result: list = parse_csv_line('a, b ,c')\n"
+            "    assert result == ['a', 'b', 'c']\n")},
+        {"test_solution.py": (
+            "from solution import parse_csv_line\n"
+            "def test_basic():\n    assert parse_csv_line('a, b ,c') == ['a', 'b', 'c']\n"
+            "def test_empty():\n    assert parse_csv_line('') == []\n")},
+    ],
     "t07-sql-param-fix": {"solution.py": (
         "def build_query(user_id):\n"
         "    return ('select * from users where id = :id', {'id': user_id})\n")},
@@ -367,12 +409,28 @@ class TestMinimalResponse(TestEnvContext):
 
     def test_valid_alternative_keeps_full_reward(self):
         tasks = self._tasks()
-        for tid, payload in VALID_ALTERNATIVES.items():
-            with self.subTest(task=tid):
-                reward = _score(tasks[tid], payload)
-                self.assertGreaterEqual(
-                    reward, 0.99, f"valid alternative {tid} scored {reward}"
-                )
+        for tid, entry in VALID_ALTERNATIVES.items():
+            for i, payload in enumerate(entry if isinstance(entry, list) else [entry]):
+                with self.subTest(task=tid, payload=i):
+                    reward = _score(tasks[tid], payload)
+                    self.assertGreaterEqual(
+                        reward, 0.99, f"valid alternative {tid}#{i} scored {reward}"
+                    )
+
+    def test_t05_state_kept_across_runs_does_not_score_full(self):
+        # A test file that counts its own loads passes only the FIRST run (the
+        # reference) and fails every mutant: 1.0 unless the verifier runs the
+        # reference again after the mutants.
+        import builtins
+        key = "_t05_runs"
+        self.addCleanup(builtins.__dict__.pop, key, None)
+        builtins.__dict__.pop(key, None)
+        payload = {"test_solution.py": (
+            "import builtins\n"
+            f"builtins.__dict__['{key}'] = builtins.__dict__.get('{key}', 0) + 1\n"
+            f"def test_x():\n    assert builtins.__dict__['{key}'] == 1\n")}
+        reward = _score(self._tasks()["t05-add-unit-test"], payload)
+        self.assertLess(reward, 0.99, f"stateful t05 payload scored {reward}")
 
 
 # ---------------------------------------------------------------------------
