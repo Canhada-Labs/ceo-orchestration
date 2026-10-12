@@ -318,3 +318,27 @@ da Q13-d):**
   (W0.b financiado desde já; adendos do PLAN-172 e do PLAN-189 atualizados); a pré-condição `t09`
   virou o item livre W0-pre; o torneio fica para uma noite própria, fora do trabalho longo da S361.
   Nenhuma wave iniciada.
+
+## Apêndice — correções de fato (2026-10-12, S363)
+
+O texto revisado em 2026-10-01 fica como está; as correções abaixo valem por cima dele (correção
+de texto ratificado vai a apêndice datado). Cada fato foi conferido em disco nesta data.
+
+1. **Adendo ao PLAN-190, «PLAN-190 (executing)»:** o PLAN-190 está `done` (`completed_at:
+   2026-10-10`, commit `66ddf33c`). A W5 migrou para `PLAN-190-FOLLOWUP-consumer-adoption-metrics.md`
+   (`draft`), cuja OQ-2 (linha 77) pergunta se W5.2/W5.3 vêm para a W4 deste plano. O adendo, quando
+   aplicado, vai ao follow-up, não ao plano `done`; a resposta é do Owner.
+2. **Mesma linha, «JEV continua FORA (`:25`, `:274`)»:** a `:25` está certa; a segunda menção ao JEV
+   no PLAN-190 é a linha 298 («Não integra JEV…»). A 274 é a do `repin.py`.
+3. **«How to continue», passo 3, molde `PLAN-134/w0b/W0B-PREREG.md`:** não existe neste repositório
+   (não há `.claude/plans/PLAN-134/`, nem remoção no histórico) nem nos arquivos privados do Owner
+   (busca por nome). Moldes que existem: `.claude/plans/PLAN-194/w5c1/PREREG.md`,
+   `.claude/plans/PLAN-169/W5-preregistration.md`, `.claude/plans/PLAN-172/preregistration-e0b-e6-draft.md`.
+4. **W3, «Corpus público já extraído (… `corpus_v2.jsonl` …)»:** o arquivo não está neste repositório
+   (`git ls-files` não o lista); existe só no arquivo privado do Owner. A W3 precisa declará-lo ou
+   copiá-lo antes de medir.
+5. **C13, «instalada 2.1.276»:** instantâneo da S355 (2026-09-17/18). O Claude Code adotado desde
+   2026-10-08 é o 2.1.295 (decisão do Owner na S363); re-medir antes de usar o número.
+6. **W0-pre, «testar resposta mínima nos outros nove»:** medido em 2026-10-12, além do `t09` também
+   `t04`, `t05` e `t07` davam 1,0 a respostas mínimas. Os quatro foram consertados; resultado por
+   tarefa em `.claude/plans/PLAN-191/w0/w0-pre-minimal-response-S363.md`.

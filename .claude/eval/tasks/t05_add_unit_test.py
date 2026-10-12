@@ -4,10 +4,17 @@ The task ships a correct ``parse_csv_line`` and asks for a ``test_solution.py``
 that asserts its behavior. The verifier RUNS the candidate's test file against
 the reference implementation and rewards based on how much it asserts (it must
 pass, and it must actually contain assertions about edge cases).
+
+PLAN-191 W0-pre: coverage is measured by BEHAVIOR, never by substrings (a
+keyword in a comment used to score 1.0 with ``assert True``): the candidate
+tests run against the REFERENCE ``_IMPL`` (a rewritten ``solution.py`` cannot
+make a wrong assertion pass), every call to ``parse_csv_line`` is recorded at
+runtime, and the assertion credit needs an ``assert`` whose expression calls it.
 """
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 from . import clamp_reward, read_text
@@ -26,18 +33,43 @@ def setup(workdir: Path) -> None:
     (workdir / "solution.py").write_text(_IMPL, encoding="utf-8")
 
 
+def _asserts_on_target(test_src: str) -> bool:
+    """True if some ``assert`` expression calls parse_csv_line (AST: comments never count)."""
+    try:
+        tree = ast.parse(test_src)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assert):
+            for sub in ast.walk(node.test):
+                if isinstance(sub, ast.Call):
+                    func = sub.func
+                    name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+                    if name == "parse_csv_line":
+                        return True
+    return False
+
+
 def verify(workdir: Path) -> float:
     test_src = read_text(workdir, "test_solution.py")
     if not test_src.strip():
         return 0.0
-    impl_src = read_text(workdir, "solution.py")
     # Run the candidate test file in a namespace that has the reference impl.
     ns = {"__name__": "__cand_test__"}
     try:
-        exec(compile(impl_src, "solution.py", "exec"), ns)  # noqa: S102
+        exec(compile(_IMPL, "solution.py", "exec"), ns)  # noqa: S102
+        reference = ns["parse_csv_line"]
         exec(compile(test_src, "test_solution.py", "exec"), ns)  # noqa: S102
     except Exception:
         return 0.0
+    calls = []
+
+    def _recording(line, *args, **kwargs):
+        calls.append(line)
+        return reference(line, *args, **kwargs)
+
+    # Installed AFTER the test module ran, so a shadowing definition loses.
+    ns["parse_csv_line"] = _recording
     # Collect + run every test_* callable. All must pass.
     test_funcs = [v for k, v in ns.items() if k.startswith("test") and callable(v)]
     if not test_funcs:
@@ -49,15 +81,14 @@ def verify(workdir: Path) -> float:
             ran += 1
         except Exception:
             return 0.0  # a failing assertion against the correct impl = bad test
-    # Reward scales with assertion coverage signal: did the test touch the
-    # empty-line edge case and the strip behavior?
+    # Reward scales with what the tests actually exercised at runtime.
     coverage = 0.5  # base for a passing test
-    if "parse_csv_line" in test_src:
-        coverage += 0.2
-    if '""' in test_src or "''" in test_src or "[]" in test_src:
-        coverage += 0.15  # empty-line edge case
-    if "assert" in test_src:
-        coverage += 0.15
+    if calls:
+        coverage += 0.2  # parse_csv_line was really called
+    if any(isinstance(c, str) and not c.strip() for c in calls):
+        coverage += 0.15  # empty-line edge case was really exercised
+    if _asserts_on_target(test_src):
+        coverage += 0.15  # an assertion is about parse_csv_line's result
     return clamp_reward(min(1.0, coverage))
 
 

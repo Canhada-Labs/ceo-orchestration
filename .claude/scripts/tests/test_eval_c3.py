@@ -260,6 +260,106 @@ class TestTaskSuite(TestEnvContext):
 
 
 # ---------------------------------------------------------------------------
+# PLAN-191 W0-pre — "minimal response" must not score full reward
+# ---------------------------------------------------------------------------
+
+
+def _t04_drop_redundant_or(wd):
+    # Deletes only the 9 chars ' or s < 0' and keeps BOTH negative checks.
+    p = wd / "solution.py"
+    p.write_text(p.read_text(encoding="utf-8").replace(" or s < 0", "", 1),
+                 encoding="utf-8")
+
+
+# Each payload scored 1.0 on the verifiers shipped before PLAN-191 W0-pre
+# (measured S363): form without substance. Callable = edit of the setup tree.
+MINIMAL_RESPONSES = {
+    "t04-refactor-dedupe": [
+        _t04_drop_redundant_or,
+        {"solution.py": (
+            "def area_rectangle(w, h):\n"
+            "    if min(w, h) < 0: raise ValueError('negative')\n"
+            "    return w * h\n"
+            "def area_square(s):\n"
+            "    if s < 0: raise ValueError('negative')\n"
+            "    return s * s\n")},
+    ],
+    "t05-add-unit-test": [
+        {"test_solution.py": "def test_x():\n    assert True  # parse_csv_line('') == []\n"},
+        {"test_solution.py": "def test_x():\n    assert [] == []  # parse_csv_line\n"},
+        # Rewrites the implementation so a WRONG assertion passes.
+        {"solution.py": "def parse_csv_line(line):\n    return ['x']\n",
+         "test_solution.py": "def test_x():\n    assert parse_csv_line('') == ['x']\n"},
+    ],
+    "t07-sql-param-fix": [
+        {"solution.py": "def build_query(user_id):\n    return ('?', (user_id,))\n"},
+        {"solution.py": "def build_query(user_id):\n    return (':', [user_id])\n"},
+        {"solution.py": "def build_query(user_id):\n    return ('%s', (user_id,))\n"},
+    ],
+    "t09-readme-doc": [
+        {"README.md": "# add subtract multiply usage\n"},
+        {"README.md": "# add subtract multiply example\n"},
+        {"README.md": "# x\n```\nadd subtract multiply\n```\n"},
+    ],
+}
+
+# Legitimate answers other than GOLDEN that must keep full reward (the cure
+# must not over-tighten the verifier).
+VALID_ALTERNATIVES = {
+    "t04-refactor-dedupe": {"solution.py": (
+        "def area_rectangle(w, h):\n"
+        "    if w < 0 or h < 0:\n"
+        "        raise ValueError('negative')\n"
+        "    return w * h\n"
+        "def area_square(s):\n"
+        "    return area_rectangle(s, s)\n")},
+    "t07-sql-param-fix": {"solution.py": (
+        "def build_query(user_id):\n"
+        "    return ('select * from users where id = :id', {'id': user_id})\n")},
+    "t09-readme-doc": {"README.md": (
+        "# calc\n\nSmall arithmetic helpers for scripts.\n\n## Example\n\n"
+        "```python\nimport calc\ncalc.add(2, 3)\n```\n\n"
+        "- `add(a, b)`\n- `subtract(a, b)`\n- `multiply(a, b)`\n")},
+}
+
+
+def _score(task, payload):
+    with tempfile.TemporaryDirectory() as d:
+        wd = Path(d)
+        task["setup"](wd)
+        if callable(payload):
+            payload(wd)
+        else:
+            for rel, content in payload.items():
+                (wd / rel).write_text(content, encoding="utf-8")
+        return tasks_pkg.clamp_reward(task["verify"](wd))
+
+
+class TestMinimalResponse(TestEnvContext):
+    def _tasks(self):
+        return {t["id"]: t for t in tasks_pkg.load_all_tasks()}
+
+    def test_minimal_response_does_not_score_full(self):
+        tasks = self._tasks()
+        for tid, payloads in MINIMAL_RESPONSES.items():
+            for i, payload in enumerate(payloads):
+                with self.subTest(task=tid, payload=i):
+                    reward = _score(tasks[tid], payload)
+                    self.assertLess(
+                        reward, 0.99, f"minimal {tid}#{i} scored {reward}"
+                    )
+
+    def test_valid_alternative_keeps_full_reward(self):
+        tasks = self._tasks()
+        for tid, payload in VALID_ALTERNATIVES.items():
+            with self.subTest(task=tid):
+                reward = _score(tasks[tid], payload)
+                self.assertGreaterEqual(
+                    reward, 0.99, f"valid alternative {tid} scored {reward}"
+                )
+
+
+# ---------------------------------------------------------------------------
 # Runner: worst-of-N + flaky reuse, serial, quota gate
 # ---------------------------------------------------------------------------
 
