@@ -362,8 +362,9 @@ Paths (4, todos com oráculo = 0 — medido):
 `.claude/scripts/check-model-currency.py`,
 `.claude/data/model-currency-state.json`,
 `.claude/data/model-currency-expected-reds.txt`,
-`.claude/scripts/tests/test_check_model_currency.py`. Nenhum existe em
-HEAD: **os quatro são CRIADOS por esta onda.** O diretório de testes
+`.claude/scripts/tests/test_check_model_currency.py`. Na base da onda
+nenhum existia: **os quatro foram CRIADOS por esta onda** (em `c03b1eda`,
+2026-09-07; nota de 2026-10-12, S363). O diretório de testes
 está em `pytest.ini` `testpaths` (`.claude/scripts/tests`, linha 41),
 logo tudo o que as caixas abaixo invocam é coletável.
 
