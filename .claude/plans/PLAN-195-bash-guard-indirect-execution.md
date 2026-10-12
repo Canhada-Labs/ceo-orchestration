@@ -1128,7 +1128,8 @@ OQ-10. Pelo C11, ele exige a reconfirmação por diff dos dois portadores de VET
 e Threat Detection Engineer) sobre o sha que o contém, com o diff integral contra a versão do commit
 `b2ab8805` (sha256 `bb8a9d9c…305d`), registrada em `.claude/plans/PLAN-195/debate/`. Até lá, o
 estado dos dois VETOs sobre este texto é «não reconfirmado», e nenhum pacote da W1 começa.
-Essa é a última versão commitada antes deste item, mas não é a base da última retirada registrada: os dois
+Depois dela, e antes deste item, só entrou o flip de status de uma linha em `6ee8c218` (sha256
+`aacbe945…0f58`); e ela não é a base da última retirada registrada: os dois
 registros do C12 valem para o sha256 `93e4b83f…5379`, uma cópia de sombra não commitada (HEAD
 `399efbaa`), e nenhum commit do plano tem esse sha. O trecho entre as duas bases não se reproduz
 por `git diff`; o parágrafo «Reconfirmação do C12: feita» declara o que entrou nele (as duas
@@ -1178,8 +1179,10 @@ comandos distintos (igualdade exata de bytes); 52 sessões. Medição sobre o HE
 hook de sha256 `18944c69…de12` e o isolamento do item C4 com controle positivo (delta 0 atribuível
 ao replay na família viva). Entre `48f03b3a` e `38d56f35` (conferido em 2026-10-12), o hook tem o
 mesmo sha256, o `check_canonical_edit.py` não mudou e, em `_lib/`, só mudou o `codex_cli_shape.py`,
-que o grafo estático de imports a partir do hook não alcança (quem o importa são o
-`check_pair_rail.py` e, sob demanda, o `_lib/adapters/codex.py`, que o hook não carrega). «Candidatos» são os comandos com ALLOW no HEAD
+que o grafo estático de imports a partir do hook não alcança: quem o importa, dentro de
+funções, são o `check_pair_rail.py` (`_resolve_codex_cli_shape`) e o `_lib/adapters/codex.py`
+(`make_invoke_command`), adapter que o hook só carrega sob `CEO_HOOK_ADAPTER=codex` e cuja
+`make_invoke_command` o guard não chama. «Candidatos» são os comandos com ALLOW no HEAD
 que a parte A recusaria pela regra da linha, segundo o classificador do instrumento. É estimativa:
 o número que conta para a meta é o do replay DIFERENCIAL, que ainda não rodou (depende do patch da
 W1a/W1b).
