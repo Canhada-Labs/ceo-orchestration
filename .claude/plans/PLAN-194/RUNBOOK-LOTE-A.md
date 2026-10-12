@@ -200,7 +200,7 @@ cd "${RF:?}" && [ ! -e "${D}" ] && [ ! -L "${D}" ] && mkdir "${LH}" && [ ! -L "$
 cd "${RF:?}" && HOME="${LH:?}" git -c core.hooksPath=/dev/null -c core.fsmonitor=false clone --template= --no-checkout --single-branch --branch main "${URL:?}" "${D:?}" && [ ! -L "${D}" ] && cd "${D}" && [ "$(pwd -P)" = "${D}" ] && HOME="${LH}" git config core.hooksPath /dev/null && HOME="${LH}" git config core.fsmonitor false && HOME="${LH}" git config core.untrackedCache false && HOME="${LH}" git config user.name "${NOME}" && HOME="${LH}" git config user.email "${EMAIL}" && { [ -z "${CHAVE}" ] || HOME="${LH}" git config user.signingkey "${CHAVE}"; } && echo CLONE-OK
 ```
 
-A configuração efetiva, ANTES do checkout (se aparecer «fora da lista», pare e chame o CEO), e o checkout:
+A configuração efetiva, ANTES do checkout (se aparecer «fora da lista» ou «faltando», pare e chame o CEO), e o checkout:
 
 ```bash
 cd "${D:?}" && confere_config && HOME="${LH:?}" git checkout main && echo CHECKOUT-OK
