@@ -1128,14 +1128,15 @@ OQ-10. Pelo C11, ele exige a reconfirmação por diff dos dois portadores de VET
 e Threat Detection Engineer) sobre o sha que o contém, com o diff integral contra a versão do commit
 `b2ab8805` (sha256 `bb8a9d9c…305d`), registrada em `.claude/plans/PLAN-195/debate/`. Até lá, o
 estado dos dois VETOs sobre este texto é «não reconfirmado», e nenhum pacote da W1 começa.
-Essa é a última versão commitada, mas não é a base da última retirada registrada: os dois
+Essa é a última versão commitada antes deste item, mas não é a base da última retirada registrada: os dois
 registros do C12 valem para o sha256 `93e4b83f…5379`, uma cópia de sombra não commitada (HEAD
 `399efbaa`), e nenhum commit do plano tem esse sha. O trecho entre as duas bases não se reproduz
 por `git diff`; o parágrafo «Reconfirmação do C12: feita» declara o que entrou nele (as duas
 precisões de redação e a remissão às condições), além do próprio registro do resultado. Como na
 cadeia desde a retirada anterior que o registro do Security Engineer sobre o C12 percorre, cada
-registro do C13 nomeia as DUAS bases e diz, pela lista «não reabrem» do próprio registro do C12,
-se esse trecho reabre a reconfirmação.
+registro do C13 nomeia as DUAS bases e diz, pelo escopo da própria retirada registrada no C12
+(a lista «Não a reabrem» do Security Engineer; a ponte com a retirada anterior do Threat
+Detection Engineer), se esse trecho reabre a reconfirmação.
 
 *1. Decisões do Owner (2026-10-02; opção escolhida: «Aceitar P-1..P-4 do replay»).* As quatro saem
 da recomendação do relatório do replay; a numeração das linhas é a do ponto 3.
@@ -1177,7 +1178,8 @@ comandos distintos (igualdade exata de bytes); 52 sessões. Medição sobre o HE
 hook de sha256 `18944c69…de12` e o isolamento do item C4 com controle positivo (delta 0 atribuível
 ao replay na família viva). Entre `48f03b3a` e `38d56f35` (conferido em 2026-10-12), o hook tem o
 mesmo sha256, o `check_canonical_edit.py` não mudou e, em `_lib/`, só mudou o `codex_cli_shape.py`,
-que nem o hook nem outro módulo de `_lib/` importa. «Candidatos» são os comandos com ALLOW no HEAD
+que o grafo estático de imports a partir do hook não alcança (quem o importa são o
+`check_pair_rail.py` e, sob demanda, o `_lib/adapters/codex.py`, que o hook não carrega). «Candidatos» são os comandos com ALLOW no HEAD
 que a parte A recusaria pela regra da linha, segundo o classificador do instrumento. É estimativa:
 o número que conta para a meta é o do replay DIFERENCIAL, que ainda não rodou (depende do patch da
 W1a/W1b).
