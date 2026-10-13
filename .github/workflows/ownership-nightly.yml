@@ -130,7 +130,10 @@ jobs:
           OWNERSHIP_GATE_HARNESS: python3 scripts/tests/ownership-parallel.py --workers ${{ runner.environment == 'self-hosted' && '16' || '2' }}
         run: |
           set -euo pipefail
-          bash scripts/tests/ownership-nightly-gate.sh
+          # Parallel fixtures outgrow the runner's 4 GiB private /tmp.
+          # Keep them in this job's private, disk-backed scratch directory.
+          mkdir -p "$RUNNER_TEMP/ownership-fixtures"
+          TMPDIR="$RUNNER_TEMP/ownership-fixtures" bash scripts/tests/ownership-nightly-gate.sh
 
   ownership-e2e-replay:
     if: vars.CEO_SOTA_DISABLE != '1'
