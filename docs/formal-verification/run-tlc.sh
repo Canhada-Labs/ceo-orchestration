@@ -33,7 +33,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 
 TLA_VERSION="1.8.0"
-TLA_TOOLS_SHA256="baf125a62e192f8d9df38035b8283b9d05f08dbf01860b2df40af489b894563d"
+TLA_TOOLS_SHA256="c0d2f72abc30e92871bb16c56f6878612eccd936bf7ca5fa7e4e324200a0a5c4"
 TLA_TOOLS_URL="https://github.com/tlaplus/tlaplus/releases/download/v${TLA_VERSION}/tla2tools.jar"
 
 CACHE_DIR="${TLA_CACHE:-/tmp/tla-cache}"
