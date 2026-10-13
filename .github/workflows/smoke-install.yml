@@ -1,6 +1,7 @@
 name: Smoke Install
 
 on:
+  workflow_dispatch: {}
   pull_request:
     paths:
       - "scripts/install.sh"
@@ -91,6 +92,8 @@ on:
       # (the full 4-leg e2e runs in ownership-nightly.yml).
       - "scripts/tests/ownership-nightly-gate.sh"
       - "scripts/tests/test-ownership-nightly-gate.sh"
+      - "scripts/tests/ownership-parallel.py"
+      - "scripts/tests/test_ownership_parallel.py"
       - "scripts/tests/ownership-expected-reds.txt"
       - "scripts/tests/test-protocol-pointer-render.sh"
       - "scripts/tests/test-protocol-pointer-inv4.sh"
@@ -165,6 +168,8 @@ on:
       # (the full 4-leg e2e runs in ownership-nightly.yml).
       - "scripts/tests/ownership-nightly-gate.sh"
       - "scripts/tests/test-ownership-nightly-gate.sh"
+      - "scripts/tests/ownership-parallel.py"
+      - "scripts/tests/test_ownership_parallel.py"
       - "scripts/tests/ownership-expected-reds.txt"
       - "scripts/tests/test-protocol-pointer-render.sh"
       - "scripts/tests/test-protocol-pointer-inv4.sh"
@@ -193,7 +198,13 @@ jobs:
   smoke:
     # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity.
     if: vars.CEO_SOTA_DISABLE != '1'
-    runs-on: ubuntu-latest
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     # PLAN-161: 5 -> 8 — headroom for the two upgrade oracles (each runs
     # full install + upgrade legs against fixture adopter repos).
     # PLAN-166 F4: 8 -> 20. MEASURED, not guessed. The parity e2e runs 2 full
@@ -343,6 +354,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       # PLAN-169 W2.8 (ADR-192, route (b)-narrow) — gate-scripts integrity.
       # Same canonical manifest as release.yml: the free scripts whose
@@ -431,11 +443,6 @@ jobs:
       # install-baseline manifest suite, which went to ownership-nightly.yml.
       # `if: always()` for the same PLAN-183 §9.8 reason as the step above: it
       # certifies the table the delivery steps below depend on.
-      - name: Delivery-route resolution oracle (doctor restore/repair, D4)
-        if: always()
-        run: |
-          set -euo pipefail
-          bash scripts/tests/test-doctor-delivery-route.sh
 
       # Re-pass rc.4 t7 P2 (t6 condition 5): the gitignore symlink-refusal +
       # dry-run preview unit is seconds — run it per-PR. The full
@@ -532,10 +539,6 @@ jobs:
           set -euo pipefail
           bash scripts/tests/test-upgrade-dryrun-identity.sh
 
-      - name: Upgrade oracle — exclusion parity + opt-in purge (U2/U3)
-        run: |
-          set -euo pipefail
-          bash scripts/tests/test-upgrade-exclusions.sh
 
       # WS4-user-ceremony-leg
       - name: Install with --ceremony user (governance rc=0 + no out-of-.claude writes)
@@ -631,11 +634,6 @@ jobs:
       # continue-on-error, deliberately.
       # PLAN-183 W5 (§9.8): delivery-record OWNERSHIP is exactly the area this
       # wave widens, so it must not go `skipped` on a red main gate.
-      - name: Upgrade SPEC/marker delivery-record ownership (S1-S8)
-        if: always()
-        run: |
-          set -euo pipefail
-          bash scripts/tests/test-upgrade-spec-ownership.sh
 
       # PLAN-177 W1 (CF-9) - EFFICACY of the posture-state ignores, which no
       # parity check can see: an ignore that does not work is equally broken on
@@ -646,13 +644,6 @@ jobs:
       # the GA re-pass named as the damaged population. Each scenario carries an
       # inline positive control that cannot be switched off. Needs the pin tag
       # fetched above. NO continue-on-error, deliberately.
-      - name: night-mode ignore efficacy (upgrade route + user ceremony)
-        # PLAN-183 W5 (§9.8): third of the three steps observed as `skipped`
-        # in run 32639637945.
-        if: always()
-        run: |
-          set -euo pipefail
-          bash scripts/tests/test-night-mode-ignore-effect.sh
 
       # PLAN-183 W5 (D1 + OQ-5) — upgrade.sh delivers docs/ + .github/, and it
       # reaches the HISTORICAL adopter. Two things no other check here can
@@ -688,7 +679,13 @@ jobs:
 
   smoke-historical:
     if: vars.CEO_SOTA_DISABLE != '1'
-    runs-on: ubuntu-latest
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 150
     permissions:
       contents: read
@@ -697,6 +694,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Gate-scripts integrity (W2.8 checksum manifest)
         run: |
@@ -757,7 +755,13 @@ jobs:
 
   smoke-confinement:
     if: vars.CEO_SOTA_DISABLE != '1'
-    runs-on: ubuntu-latest
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 150
     permissions:
       contents: read
@@ -766,6 +770,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Gate-scripts integrity (W2.8 checksum manifest)
         run: |
@@ -830,7 +835,13 @@ jobs:
 
   smoke-roster:
     if: vars.CEO_SOTA_DISABLE != '1'
-    runs-on: ubuntu-latest
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 150
     permissions:
       contents: read
@@ -839,6 +850,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Gate-scripts integrity (W2.8 checksum manifest)
         run: |
@@ -895,3 +907,304 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
+
+  smoke-doctor:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
+          git fetch --no-tags --depth 1 origin "+refs/tags/v*:refs/tags/v*"
+          echo "release tags fetched: $(git tag -l 'v[0-9]*' | wc -l)"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      - name: Deepen git history (parity + historical-adopter e2e need prior generations)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow --no-tags
+            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
+          else
+            echo "already complete: $(git rev-list --count HEAD) commits reachable"
+          fi
+          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
+          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
+          if [ "$gens" -lt 2 ]; then
+            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
+            exit 1
+          fi
+
+      - name: Delivery-route resolution oracle (doctor restore/repair, D4)
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-doctor-delivery-route.sh
+
+  smoke-exclusions:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
+          git fetch --no-tags --depth 1 origin "+refs/tags/v*:refs/tags/v*"
+          echo "release tags fetched: $(git tag -l 'v[0-9]*' | wc -l)"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      - name: Deepen git history (parity + historical-adopter e2e need prior generations)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow --no-tags
+            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
+          else
+            echo "already complete: $(git rev-list --count HEAD) commits reachable"
+          fi
+          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
+          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
+          if [ "$gens" -lt 2 ]; then
+            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
+            exit 1
+          fi
+
+      - name: Upgrade oracle — exclusion parity + opt-in purge (U2/U3)
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-exclusions.sh
+
+  smoke-spec:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
+          git fetch --no-tags --depth 1 origin "+refs/tags/v*:refs/tags/v*"
+          echo "release tags fetched: $(git tag -l 'v[0-9]*' | wc -l)"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      - name: Deepen git history (parity + historical-adopter e2e need prior generations)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow --no-tags
+            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
+          else
+            echo "already complete: $(git rev-list --count HEAD) commits reachable"
+          fi
+          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
+          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
+          if [ "$gens" -lt 2 ]; then
+            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
+            exit 1
+          fi
+
+      - name: Upgrade SPEC/marker delivery-record ownership (S1-S8)
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-spec-ownership.sh
+
+  smoke-night-mode:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
+          git fetch --no-tags --depth 1 origin "+refs/tags/v*:refs/tags/v*"
+          echo "release tags fetched: $(git tag -l 'v[0-9]*' | wc -l)"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      - name: Deepen git history (parity + historical-adopter e2e need prior generations)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow --no-tags
+            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
+          else
+            echo "already complete: $(git rev-list --count HEAD) commits reachable"
+          fi
+          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
+          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
+          if [ "$gens" -lt 2 ]; then
+            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
+            exit 1
+          fi
+
+      - name: night-mode ignore efficacy (upgrade route + user ceremony)
+        # PLAN-183 W5 (§9.8): third of the three steps observed as `skipped`
+        # in run 32639637945.
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-night-mode-ignore-effect.sh

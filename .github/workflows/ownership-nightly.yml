@@ -24,14 +24,20 @@ on:
   workflow_dispatch: {}
 
 concurrency:
-  group: ownership-nightly
+  group: ownership-nightly-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   ownership-e2e:
     # PLAN-012 Phase 2 CEO_SOTA_DISABLE parity (same switch as smoke-install).
     if: vars.CEO_SOTA_DISABLE != '1'
-    runs-on: ubuntu-latest
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     # ~25 min local (Darwin arm64, 16 cores, 2026-08-07); ubuntu-latest is the
     # usual 2-3x slower => 50-75 min expected. Same anti-flake sizing rule as
     # the smoke-install budget notes: leave headroom, re-tighten on a real p95.
@@ -50,6 +56,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       # PLAN-169 W2.8 (ADR-192, route (b)-narrow) — gate-scripts integrity.
       # ownership-nightly-gate.sh decides this workflow's verdict (the
@@ -101,6 +108,9 @@ jobs:
       # (B2-c4). ~11 min local (Darwin arm64); budgeted ~2-3x here, inside
       # this job's timeout headroom (bumped 90 -> 110, same measured
       # anti-flake sizing rule as smoke-install's F4 bump).
+      - name: Parallel ownership adapter positive and negative controls
+        run: python3 scripts/tests/test_ownership_parallel.py
+
       - name: Gate positive control (planted failure modes)
         run: |
           set -euo pipefail
@@ -117,13 +127,20 @@ jobs:
           # 60s/cell flakes on 2-core CI iron (2-3x slower than the local
           # baseline the default was sized on).
           CELL_TIMEOUT: "180"
+          OWNERSHIP_GATE_HARNESS: python3 scripts/tests/ownership-parallel.py --workers ${{ runner.environment == 'self-hosted' && '16' || '2' }}
         run: |
           set -euo pipefail
           bash scripts/tests/ownership-nightly-gate.sh
 
   ownership-e2e-replay:
     if: vars.CEO_SOTA_DISABLE != '1'
-    runs-on: ubuntu-latest
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 150
     permissions:
       contents: read
@@ -132,6 +149,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Gate-scripts integrity (W2.8 checksum manifest)
         run: |
@@ -172,7 +190,13 @@ jobs:
 
   ownership-e2e-baseline:
     if: vars.CEO_SOTA_DISABLE != '1'
-    runs-on: ubuntu-latest
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 150
     permissions:
       contents: read
@@ -181,6 +205,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Gate-scripts integrity (W2.8 checksum manifest)
         run: |
@@ -240,7 +265,13 @@ jobs:
 
   ownership-e2e-pointer:
     if: vars.CEO_SOTA_DISABLE != '1'
-    runs-on: ubuntu-latest
+    # Only trusted main events may use the restricted VM runners. All PRs stay hosted.
+    runs-on: >-
+      ${{ github.repository == 'Canhada-Labs/ceo-orchestration'
+          && vars.VM_CI_ENABLED == '1'
+          && github.ref == 'refs/heads/main'
+          && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+          && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     timeout-minutes: 150
     permissions:
       contents: read
@@ -249,6 +280,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Gate-scripts integrity (W2.8 checksum manifest)
         run: |
