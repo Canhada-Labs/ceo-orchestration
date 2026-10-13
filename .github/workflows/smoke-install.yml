@@ -668,62 +668,6 @@ jobs:
       # `if: always()` for the same §9.8 reason as the three steps above.
       # NO continue-on-error, deliberately.
       # rail round-1 F3 — DEEPEN THE HISTORY the step below needs.
-      - name: Upgrade historical-adopter delivery (D1 + OQ-5 amendment)
-        if: always()
-        run: |
-          set -euo pipefail
-          bash scripts/tests/test-upgrade-historical-adopter.sh
-
-      # PLAN-185 W1+W2 (AC-3 Check (d)) — the installer must not write outside
-      # the directory it was given, and --github-owner must not be able to
-      # leave .github/CODEOWNERS empty for ever. Nothing else in CI can see
-      # either defect: the parity and ownership e2e above compare TARGETS, and
-      # a write that lands OUTSIDE the target is invisible to a comparison of
-      # what is inside it. Every F1 leg asserts on BYTES at an external path,
-      # never on the exit code — the pre-cure installer exits 0 while writing
-      # outside the target, so an exit-code assertion would have passed
-      # against the defect (plan AC-1, debate consensus C2/C4).
-      # NEGATIVE CONTROL (debate consensus C12): the file must be PROVED
-      # present before it is invoked. Renaming or deleting the e2e is exactly
-      # the drift this step exists to catch, and a step that reports success
-      # because it ran nothing is the "red gate nobody runs" class the two
-      # oracles above were wired to close.
-      # `if: always()` for the same PLAN-183 §9.8 reason as the seven steps
-      # above that carry it: a security oracle must not report `skipped`
-      # because something earlier in the job is red. NO continue-on-error,
-      # deliberately.
-      - name: Installer write-confinement e2e (F1 symlink/hardlink, F2 CODEOWNERS)
-        if: always()
-        run: |
-          set -euo pipefail
-          T=scripts/tests/test-installer-write-safety-e2e.sh
-          if [[ ! -f "$T" ]]; then
-            echo "::error::$T is missing — the write-confinement e2e was renamed, moved or deleted. This step must never pass without running it (PLAN-185 AC-3)."
-            exit 1
-          fi
-          bash "$T"
-      # PLAN-169 W-E (S329) — upgrade.sh derives the hook roster it registers
-      # from templates/settings/settings.base.json rather than carrying a
-      # second copy of it. Nothing else here can see this: the parity e2e
-      # compares install against upgrade on the SAME tree (a roster missing
-      # from both is byte-identical and green), and test_template_dogfood_parity
-      # compares dogfood to template, never dogfood to THE RESULT OF AN
-      # UPGRADE — which is exactly why check_ledger_checkpoint.py shipped for
-      # a whole wave with its script on disk and its registration nowhere
-      # (S328). Its E.3 red control replays `git show HEAD:scripts/upgrade.sh`,
-      # which a depth-1 checkout satisfies (HEAD, not a prior generation) — so
-      # unlike the two steps above it does NOT depend on the deepen. Once this
-      # patch lands, HEAD carries the cure and E.3 reports itself EXPIRED by
-      # name instead of asserting a falsehood; re-arming it means pinning the
-      # pre-cure commit, and that is deliberate maintenance, not a failure.
-      # `if: always()` for the same §9.8 reason as the five steps above.
-      # NO continue-on-error, deliberately.
-      - name: Upgrade hook-roster derivation (W-E — template is the roster)
-        if: always()
-        run: |
-          set -euo pipefail
-          bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh
-
       - name: Assert npx/npm shim contract (if present)
         # Phase 4 deliverable; skip if directory missing
         run: |
@@ -741,3 +685,213 @@ jobs:
           else
             echo "npm/ shim not yet present — skipping"
           fi
+
+  smoke-historical:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
+          git fetch --no-tags --depth 1 origin "+refs/tags/v*:refs/tags/v*"
+          echo "release tags fetched: $(git tag -l 'v[0-9]*' | wc -l)"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      - name: Deepen git history (parity + historical-adopter e2e need prior generations)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow --no-tags
+            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
+          else
+            echo "already complete: $(git rev-list --count HEAD) commits reachable"
+          fi
+          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
+          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
+          if [ "$gens" -lt 2 ]; then
+            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
+            exit 1
+          fi
+
+      - name: Upgrade historical-adopter delivery (D1 + OQ-5 amendment)
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-historical-adopter.sh
+
+
+  smoke-confinement:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
+          git fetch --no-tags --depth 1 origin "+refs/tags/v*:refs/tags/v*"
+          echo "release tags fetched: $(git tag -l 'v[0-9]*' | wc -l)"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      - name: Deepen git history (parity + historical-adopter e2e need prior generations)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow --no-tags
+            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
+          else
+            echo "already complete: $(git rev-list --count HEAD) commits reachable"
+          fi
+          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
+          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
+          if [ "$gens" -lt 2 ]; then
+            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
+            exit 1
+          fi
+
+      - name: Installer write-confinement e2e (F1 symlink/hardlink, F2 CODEOWNERS)
+        if: always()
+        run: |
+          set -euo pipefail
+          T=scripts/tests/test-installer-write-safety-e2e.sh
+          if [[ ! -f "$T" ]]; then
+            echo "::error::$T is missing — the write-confinement e2e was renamed, moved or deleted. This step must never pass without running it (PLAN-185 AC-3)."
+            exit 1
+          fi
+          bash "$T"
+
+  smoke-roster:
+    if: vars.CEO_SOTA_DISABLE != '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 1
+
+      - name: Gate-scripts integrity (W2.8 checksum manifest)
+        run: |
+          set -euo pipefail
+          M=.claude/governance/gate-scripts-manifest.txt
+          [[ -f "$M" ]] || { echo "::error::$M missing (W2.8 canonical manifest)"; exit 1; }
+          shasum -a 256 -c "$M" \
+            || { echo "::error::gate-script drift vs $M (ADR-192) — member edits go through the canonical-edit ceremony"; exit 1; }
+          echo "OK: all gate scripts match $M"
+
+      - name: Fetch the parity pin tag
+        run: |
+          set -euo pipefail
+          PIN="$(bash scripts/tests/test-install-upgrade-parity-e2e.sh --print-pin)"
+          echo "parity historical pin: $PIN"
+          git fetch --no-tags --depth 1 origin "+refs/tags/$PIN:refs/tags/$PIN"
+          git rev-parse --verify "refs/tags/$PIN^{commit}"
+          git fetch --no-tags --depth 1 origin "+refs/tags/v*:refs/tags/v*"
+          echo "release tags fetched: $(git tag -l 'v[0-9]*' | wc -l)"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.11"
+
+      - name: Install jq (for settings.json merge)
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq jq
+          fi
+          jq --version
+
+      - name: Deepen git history (parity + historical-adopter e2e need prior generations)
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow --no-tags
+            echo "unshallowed: $(git rev-list --count HEAD) commits now reachable"
+          else
+            echo "already complete: $(git rev-list --count HEAD) commits reachable"
+          fi
+          gens="$(git log --format=%H -- templates/docs/BRANCH-PROTECTION.md | wc -l | tr -d ' ')"
+          echo "generations of templates/docs/BRANCH-PROTECTION.md: $gens"
+          if [ "$gens" -lt 2 ]; then
+            echo "::error::history deepen did not expose a prior generation (gens=$gens); the historical-adopter e2e cannot run" >&2
+            exit 1
+          fi
+
+      - name: Upgrade hook-roster derivation (W-E — template is the roster)
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/tests/test-upgrade-lifecycle-hooks-derived.sh

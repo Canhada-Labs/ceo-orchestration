@@ -4,9 +4,14 @@ name: Formal Verification (TLC)
 # SHA-pinned Java + TLC toolchain per ADR-044 §Toolchain pin.
 
 on:
+  pull_request:
+    paths:
+      - "docs/formal-verification/**"
+      - ".github/workflows/formal-verify.yml"
   push:
     paths:
       - 'docs/formal-verification/**'
+      - '.github/workflows/formal-verify.yml'
   workflow_dispatch:
   schedule:
     # Monday 16:00 UTC — weekly advisory run
@@ -17,16 +22,22 @@ permissions:
 
 env:
   TLA_VERSION: "1.8.0"
-  TLA_TOOLS_SHA256: "4c1d62e0f67c1d89f833619d7edad9d161e74a54b153f4f81dcef6043ea0d618"
+  TLA_TOOLS_SHA256: "baf125a62e192f8d9df38035b8283b9d05f08dbf01860b2df40af489b894563d"
   TLA_TOOLS_URL: "https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar"
 
 jobs:
   tlc-model-check:
-    name: TLC Model Check
+    name: TLC Model Check (${{ matrix.model }})
+    if: vars.CEO_SOTA_DISABLE != '1'
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        model: [breaker, plan-lifecycle, debate-convergence]
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Advisory-only: failures do not block merges in Sprint 14
-    continue-on-error: true
+    # Advisory workflow (not a required PR check); its status must still
+    # report toolchain errors and counterexamples honestly.
 
     steps:
       - name: Checkout
@@ -46,58 +57,35 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Check CEO_SOTA_DISABLE
-        run: |
-          if [ "${CEO_SOTA_DISABLE:-0}" = "1" ]; then
-            echo "CEO_SOTA_DISABLE=1 — skipping formal verification"
-            exit 0
-          fi
-
       - name: Download + verify tla2tools.jar
+        env:
+          TLA_CACHE: ${{ runner.temp }}/tla-cache
         run: |
-          mkdir -p /tmp/tla-cache
-          JAR_PATH="/tmp/tla-cache/tla2tools-${TLA_VERSION}.jar"
-          if [ ! -f "$JAR_PATH" ]; then
-            curl -fsSL -o "$JAR_PATH" "$TLA_TOOLS_URL"
-          fi
-          echo "${TLA_TOOLS_SHA256}  ${JAR_PATH}" | sha256sum -c -
-          echo "TLC_JAR=${JAR_PATH}" >> "$GITHUB_ENV"
+          set -euo pipefail
+          bash docs/formal-verification/run-tlc.sh download
+          echo "TLC_JAR=${TLA_CACHE}/tla2tools-${TLA_VERSION}.jar" >> "$GITHUB_ENV"
 
-      - name: TLC — breaker.tla
+      - name: Check model
+        env:
+          MODEL: ${{ matrix.model }}
         run: |
-          cd docs/formal-verification
-          java -cp "$TLC_JAR" tlc2.TLC \
-            -config breaker.cfg \
-            -workers auto \
-            -deadlock \
-            breaker.tla 2>&1 | tee /tmp/tlc-breaker.log
-        continue-on-error: true
-
-      - name: TLC — plan-lifecycle.tla
-        run: |
-          cd docs/formal-verification
-          java -cp "$TLC_JAR" tlc2.TLC \
-            -config plan-lifecycle.cfg \
-            -workers auto \
-            -deadlock \
-            plan-lifecycle.tla 2>&1 | tee /tmp/tlc-plan-lifecycle.log
-        continue-on-error: true
-
-      - name: TLC — debate-convergence.tla
-        run: |
-          cd docs/formal-verification
-          java -cp "$TLC_JAR" tlc2.TLC \
-            -config debate-convergence.cfg \
-            -workers auto \
-            -deadlock \
-            debate-convergence.tla 2>&1 | tee /tmp/tlc-debate-convergence.log
-        continue-on-error: true
+          set -euo pipefail
+          # TLA+ module names must match the filename. Published source paths
+          # retain hyphens; stage exact bytes under the declared module name.
+          WORK="$(mktemp -d "${RUNNER_TEMP}/tlc.XXXXXX")"
+          MODULE="${MODEL//-/_}"
+          cp "docs/formal-verification/${MODEL}.tla" "${WORK}/${MODULE}.tla"
+          cp "docs/formal-verification/${MODEL}.cfg" "${WORK}/${MODULE}.cfg"
+          cd "$WORK"
+          java -Xmx2G -cp "$TLC_JAR" tlc2.TLC \
+            -config "${MODULE}.cfg" -workers 4 -deadlock \
+            "${MODULE}.tla" 2>&1 | tee "${RUNNER_TEMP}/tlc-${MODEL}.log"
 
       - name: Print TLC log hashes
         if: always()
         run: |
           echo "=== TLC log hashes ==="
-          for log in /tmp/tlc-*.log; do
+          for log in ${{ runner.temp }}/tlc-*.log; do
             if [ -f "$log" ]; then
               name=$(basename "$log" .log)
               hash=$(sha256sum "$log" | cut -d' ' -f1)
@@ -113,6 +101,6 @@ jobs:
         # (043fb46). Aligning to avoid one-at-a-time Dependabot drift.
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: tlc-logs
-          path: /tmp/tlc-*.log
+          name: tlc-logs-${{ matrix.model }}
+          path: ${{ runner.temp }}/tlc-*.log
           retention-days: 30
