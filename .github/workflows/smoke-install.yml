@@ -759,7 +759,8 @@ jobs:
           HISTORICAL_WORKERS: ${{ runner.environment == 'self-hosted' && '24' || '2' }}
         run: |
           set -euo pipefail
-          python3 scripts/tests/historical-parallel.py --workers "$HISTORICAL_WORKERS"
+          mkdir -p "$RUNNER_TEMP/historical-fixtures"
+          TMPDIR="$RUNNER_TEMP/historical-fixtures" python3 scripts/tests/historical-parallel.py --workers "$HISTORICAL_WORKERS"
 
 
   smoke-confinement:
