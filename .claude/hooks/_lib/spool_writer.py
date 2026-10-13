@@ -728,7 +728,9 @@ def _origin_for_new_spool() -> str:
     return "live"
 
 
-def _ensure_spool_header(pid: int, _retry_depth: int = 0) -> Dict[str, Any]:
+def _ensure_spool_header(
+    pid: int, _retry_depth: int = 0, *, sync_header: bool = True,
+) -> Dict[str, Any]:
     """Return the header dict for the current spool, creating it if absent.
 
     Header is written exactly once per spool file (first line). Fresh
@@ -742,6 +744,11 @@ def _ensure_spool_header(pid: int, _retry_depth: int = 0) -> Dict[str, Any]:
     iter4-P1-2: malformed-header → quarantine active spool via direct
     rename (NOT drain_now() — Phase 2 self-deadlocks on our flock) +
     fresh-mint retry (bounded depth=1).
+
+    Only spool_append may defer the header fsync: it holds the spool lock
+    and fsyncs the SAME file after writing the first event, before commit
+    or acknowledging success. That sync persists both header and body.
+    Standalone callers keep the durable-header default.
     """
     header = _SPOOL_HEADER_CACHE.get(pid)
     spool_p = _spool_path(pid)
@@ -809,7 +816,10 @@ def _ensure_spool_header(pid: int, _retry_depth: int = 0) -> Dict[str, Any]:
                             f"failed after {_retry_depth + 1} attempt(s); "
                             f"aborting append fail-open"
                         )
-                    return _ensure_spool_header(pid, _retry_depth=_retry_depth + 1)
+                    return _ensure_spool_header(
+                        pid, _retry_depth=_retry_depth + 1,
+                        sync_header=sync_header,
+                    )
                 # Quarantine succeeded → fall through to fresh-mint path.
 
     header = {
@@ -831,7 +841,8 @@ def _ensure_spool_header(pid: int, _retry_depth: int = 0) -> Dict[str, Any]:
         fd = os.open(str(spool_p), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         try:
             os.write(fd, line.encode("utf-8"))
-            os.fsync(fd)
+            if sync_header:
+                os.fsync(fd)
         finally:
             os.close(fd)
     _SPOOL_HEADER_CACHE[pid] = header
@@ -1008,7 +1019,10 @@ def spool_append(entry: Dict[str, Any]) -> None:
             with spool_flock:
                 _IN_SPOOL_APPEND = True
                 try:
-                    header = _ensure_spool_header(pid)
+                    # The body fsync below covers the new header on this same
+                    # inode too. Do not acknowledge or journal a commit until
+                    # that fsync succeeds. No event durability is deferred.
+                    header = _ensure_spool_header(pid, sync_header=False)
                     # iter3-P1-1: isolate any unterminated final line from a
                     # prior crashed writer BEFORE we mint our ordinal so the
                     # new entry can't be silently lost via concatenation.

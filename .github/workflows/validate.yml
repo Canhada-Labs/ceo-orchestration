@@ -1460,6 +1460,7 @@ jobs:
           att = sys.argv[1]
           out = os.environ.get("GITHUB_STEP_SUMMARY")
           def note(text):
+              print(text)
               if out:
                   with open(out, "a") as f:
                       f.write(text + "\n")
@@ -1588,6 +1589,12 @@ jobs:
               sys.exit(f"FAIL: subprocess floor p50={p50_ms}ms > 200ms (CI runner regression?)")
           print(f"✓ subprocess floor p50={p50_ms}ms (under 200ms sanity cap)")
           PY
+
+      - name: Diagnose output hook startup and audit drain
+        # Diagnose failures AFTER the untouched gate; green runs pay no overhead.
+        # This is additional evidence, never a substitute for a failed gate.
+        if: ${{ failure() && !cancelled() }}
+        run: timeout 180 python3 .claude/scripts/diagnose-output-hook.py
 
   # ===========================================================================
   # PLAN-020 Phase 1 — hook-tests-dual-rail (CEO_NATIVE_SUBAGENTS=[0,1])

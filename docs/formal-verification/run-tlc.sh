@@ -33,7 +33,7 @@ set -euo pipefail
 # -----------------------------------------------------------------------------
 
 TLA_VERSION="1.8.0"
-TLA_TOOLS_SHA256="4c1d62e0f67c1d89f833619d7edad9d161e74a54b153f4f81dcef6043ea0d618"
+TLA_TOOLS_SHA256="0f56d6a813368c48008dfbecb23a73ab43a4a5e1bf09f026782a674aa9d4b3c9"
 TLA_TOOLS_URL="https://github.com/tlaplus/tlaplus/releases/download/v${TLA_VERSION}/tla2tools.jar"
 
 CACHE_DIR="${TLA_CACHE:-/tmp/tla-cache}"
@@ -124,7 +124,7 @@ run_tlc() {
     -Xmx2G \
     -cp "${JAR_PATH}" \
     tlc2.TLC \
-      -workers auto \
+      -workers "${TLC_WORKERS:-4}" \
       -config "${CONFIG}" \
       "${SPEC}" \
       >"${log_file}" 2>&1 || tlc_exit=$?

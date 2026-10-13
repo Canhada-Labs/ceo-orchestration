@@ -363,6 +363,41 @@ class TestNoAutoDispatch(unittest.TestCase):
                 f"planner references {needle!r} — advisory invariant at risk",
             )
 
+class TestAuditDiscoveryCache(unittest.TestCase):
+    """Only immutable code-location discovery is cached, never an audit call."""
+
+    def test_every_event_reaches_the_current_emitter(self):
+        from unittest.mock import patch
+        mod = _load_goap_planner()
+        from _lib import audit_emit
+        with patch.object(audit_emit, 'emit_goap_search_summary') as first:
+            mod._audit_emit('goap_search_summary', explored=1)
+            discovered = mod._audit_hooks_path
+            self.assertIsNotNone(discovered)
+            with patch.object(mod.Path, 'resolve', side_effect=AssertionError('repeated walk')):
+                mod._audit_emit('goap_search_summary', explored=2)
+            self.assertEqual(first.call_count, 2)
+        with patch.object(audit_emit, 'emit_goap_search_summary') as second:
+            mod._audit_emit('goap_search_summary', explored=3)
+            second.assert_called_once_with(explored=3)
+
+    def test_missing_discovery_is_retried_and_removed_path_restored(self):
+        from unittest.mock import patch
+        mod = _load_goap_planner()
+        original = sys.path[:]
+        try:
+            with patch.object(mod.Path, 'is_dir', return_value=False):
+                mod._audit_emit('nonexistent')
+                self.assertIsNone(mod._audit_hooks_path)
+            mod._audit_emit('nonexistent')
+            hooks = mod._audit_hooks_path
+            self.assertEqual(hooks, str(_REPO_ROOT / '.claude' / 'hooks'))
+            sys.path[:] = [p for p in sys.path if p != hooks]
+            mod._audit_emit('nonexistent')
+            self.assertEqual(sys.path[0], hooks)
+        finally:
+            sys.path[:] = original
+
 
 if __name__ == "__main__":
     unittest.main()
