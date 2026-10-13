@@ -1391,6 +1391,9 @@ jobs:
           python3 .claude/scripts/profile-opus-4-7.py --smoke --budget-seconds 30
           echo "✓ opus-4-7 profiler smoke green (all checks passed)"
 
+      - name: Diagnose output hook startup and audit drain
+        run: timeout 60 python3 .claude/scripts/diagnose-output-hook.py
+
       - name: Run profile-opus-4-7.py --hook-latency (p95/p99 gate)
         run: |
           set -euo pipefail
