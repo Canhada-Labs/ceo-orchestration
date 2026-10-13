@@ -50,6 +50,21 @@
 #
 # Run:  bash scripts/tests/test-upgrade-historical-adopter.sh ; echo rc=$?
 set -uo pipefail   # NOT -e: every failure is asserted, never fatal-by-default.
+# Each selected group owns its fixture tree and install caches. The default
+# remains the original serial order. H.18 shares A/H with the core group;
+# H.26 shares the aged template with H.24. Never split those dependencies.
+HIST_GROUP=all
+HIST_GROUPS="core hostile symlink negative dryrun fresh unclaimed pin transform unrenderable route-symlink duplicates dangling scratch environment header preview source-symlink hardlink no-replay prior-rendered"
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    --list-groups) [ "$#" -eq 1 ] || exit 2; printf '%s\n' $HIST_GROUPS; exit 0 ;;
+    --group) [ "$#" -eq 2 ] || exit 2; HIST_GROUP="$2" ;;
+    *) echo "Usage: $0 [--list-groups | --group NAME]" >&2; exit 2 ;;
+  esac
+  case " $HIST_GROUPS " in *" $HIST_GROUP "*) ;; *) echo "Unknown group: $HIST_GROUP" >&2; exit 2 ;; esac
+fi
+_hist_group() { [ "$HIST_GROUP" = all ] || [ "$HIST_GROUP" = "$1" ]; }
+
 # >>> harness-claude-stub (ADR-149 Amendment 3) >>>
 # scripts/install.sh and scripts/upgrade.sh read `claude --version` against the
 # Claude Code floor (CC_FLOOR_VERSION) and refuse below it (exit 6). A harness
@@ -266,6 +281,7 @@ _summary_field() {
     }' "$1" 2>/dev/null
 }
 
+if _hist_group core; then
 # --- H.1  route enumeration is not vacuous ---------------------------------
 echo ""
 echo "==> H.1 — the route table yields exactly $EXPECTED_ROUTES destinations"
@@ -530,6 +546,9 @@ else
   bad "H.9c .github/ changed on the second upgrade"
 fi
 
+fi # historical group core
+
+if _hist_group hostile; then
 # --- H.7 hostile github_owner ---------------------------------------------
 echo ""
 echo "==> H.7 — a '/'-bearing github_owner in the UNSIGNED state file is refused"
@@ -558,6 +577,9 @@ else
   ok "H.7b the malformed handle appears nowhere in the run"
 fi
 
+fi # historical group hostile
+
+if _hist_group symlink; then
 # --- H.8 dangling symlink destination -------------------------------------
 echo ""
 echo "==> H.8 — a dangling symlink destination is PRESERVED, never written through"
@@ -582,6 +604,9 @@ else
   bad "H.8b no symlink-refusal line for docs/BRANCH-PROTECTION.md — a silent skip and a refusal look the same"
 fi
 
+fi # historical group symlink
+
+if _hist_group negative; then
 # --- N.1 NEGATIVE control --------------------------------------------------
 # Neither install-state nor .framework-version => today's fail-safe stands and
 # NOTHING is delivered. Without this leg, "ENABLED" above could simply be
@@ -655,6 +680,9 @@ else
   bad "N.2 the first upgrade did not create .claude/.framework-version — a marker-less adopter would never be reached at all"
 fi
 
+fi # historical group negative
+
+if _hist_group dryrun; then
 # --- H.10 --dry-run writes nothing ----------------------------------------
 echo ""
 echo "==> H.10 — --dry-run previews the delivery and writes nothing"
@@ -676,6 +704,9 @@ else
   bad "H.10b --dry-run MODIFIED docs/BRANCH-PROTECTION.md"
 fi
 
+fi # historical group dryrun
+
+if _hist_group fresh; then
 # --- H.11 the delivered CODEOWNERS carries a fresh install's MODE -----------
 # MEASURED (S327): `cp` from a mktemp render buffer produces 0600, because
 # mktemp creates 0600 and POSIX cp copies the source's permission bits, while
@@ -717,6 +748,9 @@ else
   fi
 fi
 
+fi # historical group fresh
+
+if _hist_group unclaimed; then
 # --- H.12 (rail round-1 F5) an UNCLAIMED rendered CODEOWNERS suppresses the
 # --- .template route, on the first upgrade AND on the second ---------------
 # The shape H.6 cannot reach: fixture (a) was installed WITHOUT a handle, so
@@ -771,6 +805,9 @@ else
   ok "H.12e still exactly one of the two after a second consecutive upgrade"
 fi
 
+fi # historical group unclaimed
+
+if _hist_group core; then
 # --- H.13 (rail round-1 F2) a poisoned route table delivers NOTHING --------
 # MEASURED pre-cure (S327): a row with dest=../../outside/PWNED.md put 536 real
 # bytes at "$TARGET/../../outside/PWNED.md", before any ownership gate. The
@@ -884,6 +921,9 @@ else
   bad "H.13h neither banner appeared — a human reading the tail of $LOG_H cannot tell this run from a successful one"
 fi
 
+fi # historical group core
+
+if _hist_group pin; then
 # --- H.14 (rail round-2 F2) a PINNED upgrade still has its route table -----
 # The reader resolves the table at SOURCE time out of the tree upgrade.sh was
 # invoked from; the readers stat it ~3300 lines later. `--pin <ref>` checks
@@ -1013,6 +1053,9 @@ else
   bad "H.14f docs/ and/or .github/ destinations are missing after the pinned upgrade — routes enumerated but nothing landed"
 fi
 
+fi # historical group pin
+
+if _hist_group transform; then
 # --- H.15 (rail round-2 F3) an unrenderable CODEOWNERS transform is refused -
 # Pre-cure the CODEOWNERS branch ignored the reader's rc, re-parsed the row for
 # its SOURCE only, and applied the OWNER_HANDLE substitution unconditionally.
@@ -1087,6 +1130,9 @@ else
   bad "H.15c $T_SEEN verdict(s) for $EXPECTED_ROUTES routes — the refusal dropped a destination instead of counting it (see $LOG_T)"
 fi
 
+fi # historical group transform
+
+if _hist_group unrenderable; then
 # --- H.15d (rc.1 re-pass part 1 P1-4) a GENERIC route with no renderer ------
 # H.15 covers the CODEOWNERS branch, which has its own transform test. The
 # finding was measured on the OTHER site: the `*)` arm of the delivery case
@@ -1155,6 +1201,9 @@ else
   bad "H.15d6 $G_SEEN verdict(s) for $EXPECTED_ROUTES routes — the fail-closed refusal dropped a destination instead of counting it (see $LOG_G)"
 fi
 
+fi # historical group unrenderable
+
+if _hist_group route-symlink; then
 # --- H.15e (rc.1 re-pass round 3, part 1) the SNAPSHOT cannot launder a link -
 # The unit oracle in test-manifest-delivery-route.sh proves the READER refuses a
 # symlinked table. It cannot see the defect that mattered: `upgrade.sh` COPIES
@@ -1210,6 +1259,9 @@ else
   bad "H.15e4 the install-state does not persist upgrade_succeeded: false (see $L/.claude/.install-state.json)"
 fi
 
+fi # historical group route-symlink
+
+if _hist_group duplicates; then
 # --- H.15f (rc.1 re-pass round 3, part 1) duplicate destinations ------------
 # Two valid rows, one destination. Pre-cure: routes=7 for 6 real destinations,
 # identical=6 (the first row's verdict counted twice), the second row never
@@ -1258,6 +1310,9 @@ else
   bad "H.15f4 docs/rotation-log.md changed under a table this upgrader refused"
 fi
 
+fi # historical group duplicates
+
+if _hist_group dangling; then
 # --- H.17 (rail round-3 F5) a DANGLING CODEOWNERS symlink counts as PRESENT -
 # `-e` is FALSE for a dangling symlink. A historical adopter with no recorded
 # handle and a dangling .github/CODEOWNERS therefore read as "no CODEOWNERS
@@ -1317,6 +1372,9 @@ else
   bad "H.17e $U_SEEN verdict(s) for $EXPECTED_ROUTES routes — the suppression dropped a destination instead of counting it (see $LOG_U)"
 fi
 
+fi # historical group dangling
+
+if _hist_group core; then
 # --- H.18 (rail round-4 F1) an ownership record needs a DELIVERY ------------
 # The baseline manifest is not a list of files that look like ours: it is the
 # framework's claim of ownership, and `uninstall.sh:196` walks it and DELETES
@@ -1464,6 +1522,9 @@ else
   bad "H.18e the poisoned-table run recorded $H_HITS route(s) — half-trusting a table this run declared untrustworthy (rail round-1 F2, same class)"
 fi
 
+fi # historical group core
+
+if _hist_group scratch; then
 # --- H.19 (rail round-5 F3) scratch never lands inside $TARGET -------------
 # `mktemp "${TMPDIR:-/tmp}/..."` is outside the target only while the CALLER's
 # TMPDIR is. Point TMPDIR at the adopter repository and every scratch file the
@@ -1542,6 +1603,9 @@ else
   esac
 fi
 
+fi # historical group scratch
+
+if _hist_group environment; then
 # --- H.20 (rail round-6 F3) the ENVIRONMENT cannot supply the route table --
 # The table drives WRITES, so a supplied one is a write primitive. Rounds 1-4
 # hardened what a ROW may say; a WELL-FORMED hostile table breaks none of those
@@ -1621,6 +1685,9 @@ else
   bad "H.20g with the table read the hostile row reached a write: '$J20_VICTIM_BEFORE' -> '$J20_VICTIM_AFTER2'"
 fi
 
+fi # historical group environment
+
+if _hist_group header; then
 # --- H.21 (rail round-6 F2) a corrupted HEADER stops the whole delivery -----
 # MEASURED pre-cure (S327): with the header row deleted, or its 2nd/3rd column
 # names corrupted, the readers consumed the data rows anyway — dests=6, rows=6,
@@ -1667,6 +1734,9 @@ H21_DOC_AFTER="$( _sha "$H21/docs/BRANCH-PROTECTION.md" 2>/dev/null || echo abse
   && ok "H.21e nothing was delivered (docs/BRANCH-PROTECTION.md unchanged)" \
   || bad "H.21e a delivery happened despite the failed precondition: '$H21_DOC_BEFORE' -> '$H21_DOC_AFTER'"
 
+fi # historical group header
+
+if _hist_group preview; then
 # --- H.22 (rail round-6 F4) --dry-run PREVIEWS the mode normalisation -------
 # Pre-cure, a destination holding the CURRENT framework bytes with a drifted
 # mode printed only `IDENTICAL` under --dry-run, while the same code path in a
@@ -1748,6 +1818,9 @@ H22_MODE_FINAL="$( _h22_mode "$H22/$H22_REL" )"
   && ok "H.22d the real run converged the mode (755 -> $H22_MODE_FINAL)" \
   || bad "H.22d the mode is still 755 after the real run"
 
+fi # historical group preview
+
+if _hist_group source-symlink; then
 # --- H.23 (rail round-7 F2) a SYMLINKED SOURCE delivers foreign bytes -------
 # `[ -f ]`, `cp`, `cat` and sha256 all FOLLOW symlinks, so a `templates/...`
 # source that is a link to a regular file OUTSIDE the checkout passed every
@@ -1870,6 +1943,9 @@ else
   bad "H.23f could not build the symlinked-ancestor checkout"
 fi
 
+fi # historical group source-symlink
+
+if _hist_group hardlink; then
 # --- H.24 (rail round-7 F3) a HARD-LINKED destination is an inode escape ----
 # _up_tpl_symlink_refuses and _up_tpl_confined_refuses both answer questions
 # about the PATH; a hard link is a second NAME for the same inode and neither
@@ -2007,6 +2083,9 @@ else
   bad "H.24d could not plant the hard link for the atomicity leg"
 fi
 
+fi # historical group hardlink
+
+if _hist_group no-replay; then
 # --- H.25 (rail round-7 F4) --no-replay must reach request.github_owner -----
 # The handle is a RECORDED REQUEST field, the same class as profile/stack/
 # harness, and --no-replay is the documented opt-out from replaying the
@@ -2083,6 +2162,9 @@ grep -q 'SKIPPED (CODEOWNERS present): .github/CODEOWNERS.template' "$LOG_H25" \
   && ok "H.25g no second CODEOWNERS surface appeared" \
   || bad "H.25g .github/CODEOWNERS.template was installed next to the rendered file"
 
+fi # historical group no-replay
+
+if _hist_group hardlink; then
 # --- H.26 (rail round-7 F3) preview and run agree on the REFRESH lane -------
 # round-6 F4's rule is that a preview must not report LESS than the run it
 # previews. round-7 F3 moved the mode into the WRITE (atomic replace stages a
@@ -2096,6 +2178,12 @@ echo ""
 echo "==> H.26 — the REFRESH lane previews exactly what it performs (no phantom chmod)"
 H26="$WORK/refreshmode/adopter"
 _install_into "$H26"
+# The independent hardlink group derives the same mode oracle from its
+# own untouched fresh install, before planting drift. Serial mode keeps A.
+if [ "$HIST_GROUP" = hardlink ]; then
+  MODE_REF_REFRESH="$( ls -l "$H26/$H24_REL" | cut -c1-10 )"
+  case "$MODE_REF_REFRESH" in *x*) scaffold "fresh REFRESH oracle has an exec bit" ;; esac
+fi
 [ -f "$H26/$H24_REL" ] || scaffold "H.26 fixture: install delivered no $H24_REL"
 chmod 0755 "$H26/$H24_REL" || scaffold "H.26 fixture: chmod failed"
 [ "$( ls -l "$H26/$H24_REL" | cut -c1-10 )" != "$MODE_REF_REFRESH" ] \
@@ -2129,6 +2217,9 @@ grep -qE "MODE-NORMALIZED \(.*\): $H24_REL\$" "$LOG_H26" \
   && ok "H.26e and the mode converged to a fresh install's ($MODE_REF_REFRESH) with no chmod in sight — the write set it" \
   || bad "H.26e the mode is $( ls -l "$H26/$H24_REL" | cut -c1-10 ), a fresh install produces $MODE_REF_REFRESH — silence here would mean the drift SURVIVED"
 
+fi # historical group hardlink
+
+if _hist_group prior-rendered; then
 # --- H.27 (S328) the RENDERED route refreshes a PRISTINE PRIOR GENERATION ----
 # `.github/CODEOWNERS` is the ONLY rendered destination in the table, and it is
 # the only one whose prior-generation evidence has to be MANUFACTURED:
@@ -2377,9 +2468,12 @@ else
   bad "H.27i the manifest digest went '${H27_MAN:-<unrecorded>}' -> '${H27_MAN2:-<unrecorded>}' across the two upgrades"
 fi
 
+fi # historical group prior-rendered
+
 echo ""
 echo "=============================================================="
 echo "RESULT: $PASS passed, $FAIL failed"
+echo "HISTORICAL-GROUP: $HIST_GROUP"
 echo "=============================================================="
 [ "$FAIL" -eq 0 ] || exit 1
 exit 0

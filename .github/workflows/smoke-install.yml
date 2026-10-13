@@ -33,6 +33,8 @@ on:
       # check that exercises the OQ-5 amendment, because the parity e2e's
       # pinned route always has a recorded ceremony.
       - "scripts/tests/test-upgrade-historical-adopter.sh"
+      - "scripts/tests/historical-parallel.py"
+      - "scripts/tests/test_historical_parallel.py"
       # rail round-1 F6: the route-resolution oracle for the CANONICAL manifest
       # generator (D3). Measured S327: it was referenced by NOTHING but itself
       # — no step invoked it and neither path filter named it — so its
@@ -141,6 +143,8 @@ on:
       # PLAN-183 W5 (D1/D3) — KEEP IDENTICAL to the pull_request list above.
       - "scripts/delivery-routes.tsv"
       - "scripts/tests/test-upgrade-historical-adopter.sh"
+      - "scripts/tests/historical-parallel.py"
+      - "scripts/tests/test_historical_parallel.py"
       - "scripts/tests/test-manifest-delivery-route.sh"   # rail round-1 F6
       - "scripts/tests/test-doctor-delivery-route.sh"     # rail round-2 F4
       - "scripts/tests/test-installer-write-safety-e2e.sh"  # PLAN-185 W1+W2
@@ -746,11 +750,16 @@ jobs:
             exit 1
           fi
 
+      - name: Historical parallel adapter checks
+        run: python3 -m unittest discover -s scripts/tests -p test_historical_parallel.py -v
+
       - name: Upgrade historical-adopter delivery (D1 + OQ-5 amendment)
         if: always()
+        env:
+          HISTORICAL_WORKERS: ${{ runner.environment == 'self-hosted' && '24' || '2' }}
         run: |
           set -euo pipefail
-          bash scripts/tests/test-upgrade-historical-adopter.sh
+          python3 scripts/tests/historical-parallel.py --workers "$HISTORICAL_WORKERS"
 
 
   smoke-confinement:
