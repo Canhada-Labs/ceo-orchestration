@@ -285,4 +285,3 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/tests/test-protocol-pointer-inv4.sh
-
