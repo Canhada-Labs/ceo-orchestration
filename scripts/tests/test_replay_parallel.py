@@ -8,6 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("replay_parallel", Path(__file__).with_name("replay-parallel.py"))
 adapter = importlib.util.module_from_spec(spec)
@@ -35,7 +36,8 @@ class ReplayParallelTests(unittest.TestCase):
             adapter.checked_result("core", self.result(failed, 0))
 
     def test_all_groups_execute_once_and_missing_assertions_fail(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, mock.patch.object(
+                adapter, "EXPECTED_GROUPS", ("first", "second")):
             harness = Path(tmp) / "fixture.sh"
             script = '''#!/bin/bash
 if [ "$1" = --list-groups ]; then printf 'first\nsecond\n'; exit; fi

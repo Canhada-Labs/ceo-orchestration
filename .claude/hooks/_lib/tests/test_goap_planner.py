@@ -363,10 +363,6 @@ class TestNoAutoDispatch(unittest.TestCase):
                 f"planner references {needle!r} — advisory invariant at risk",
             )
 
-
-if __name__ == "__main__":
-    unittest.main()
-
 class TestAuditDiscoveryCache(unittest.TestCase):
     """Only immutable code-location discovery is cached, never an audit call."""
 
@@ -401,3 +397,7 @@ class TestAuditDiscoveryCache(unittest.TestCase):
             self.assertEqual(sys.path[0], hooks)
         finally:
             sys.path[:] = original
+
+
+if __name__ == "__main__":
+    unittest.main()

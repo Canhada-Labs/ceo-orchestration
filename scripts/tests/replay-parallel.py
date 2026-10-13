@@ -18,6 +18,8 @@ import time
 
 SUMMARY = re.compile(r"^== RESULT: PASS=(\d+) FAIL=(\d+) ==$", re.MULTILINE)
 EXPECTED_ASSERTIONS = 73
+EXPECTED_GROUPS = ("profile", "fallback", "ceremony", "schema",
+                   "schema-refusal", "ownership", "tracked")
 
 
 def checked_result(group, result):
@@ -59,7 +61,7 @@ def execute(harness, workers, timeout):
     listed = subprocess.run(["bash", str(harness), "--list-groups"],
                             check=True, capture_output=True, text=True, timeout=30)
     groups = listed.stdout.splitlines()
-    if (not groups or len(groups) != len(set(groups))
+    if (set(groups) != set(EXPECTED_GROUPS) or len(groups) != len(set(groups))
             or any(not re.fullmatch(r"[a-z][a-z-]*", g) for g in groups)):
         raise ValueError("invalid replay group inventory")
     passed = failed = 0
