@@ -41,10 +41,15 @@ def main() -> None:
         with tempfile.TemporaryDirectory(prefix="ceo-profile-diagnostic-") as tmp:
             env = dict(os.environ)
             for key in ("CLAUDE_PROJECT_DIR_NATIVE", "CLAUDE_SESSION_ID",
-                        "CEO_LEARNING_OBSERVE", "CEO_TOOL_LIFECYCLE", "CEO_SOTA_DISABLE"):
+                        "CEO_LEARNING_OBSERVE", "CEO_TOOL_LIFECYCLE", "CEO_SOTA_DISABLE",
+                        "CEO_ANTI_OVERHEAD"):
                 env.pop(key, None)
             env.update(HOME=tmp, CEO_AUDIT_LOG_DIR=tmp + "/audit",
                        CLAUDE_PROJECT_DIR=str(root))
+            for key in ("CEO_MODEL_ROUTING", "CEO_PROMOTION_HEURISTIC",
+                        "CEO_COOKBOOK_ADVISOR_ENABLED", "CEO_SPEC_CTX_SANITIZER_ENABLED",
+                        "CEO_SPAWN_CONFIDENCE_ENABLED"):
+                env[key] = "0"
             if observe:
                 env["CEO_LEARNING_OBSERVE"] = observe
             stats_path = str(Path(tmp) / "hook.prof")
