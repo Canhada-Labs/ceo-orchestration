@@ -130,6 +130,9 @@ class SearchResult:
 # Audit emit shim (hasattr-guarded — works pre-canonical-ceremony)
 # ---------------------------------------------------------------------------
 
+_audit_hooks_path: Optional[str] = None
+
+
 def _audit_emit(action: str, **fields: Any) -> None:
     """Emit a goap_* audit event via _lib.audit_emit.
 
@@ -137,16 +140,20 @@ def _audit_emit(action: str, **fields: Any) -> None:
     applied the PLAN-098 kernel-override ceremony yet. Sec MF-3 caller
     fields whitelisted at the emit_* boundary.
     """
+    global _audit_hooks_path
     try:
-        here = Path(__file__).resolve()
-        cand = here.parent
-        while cand != cand.parent:
-            if (cand / ".claude" / "hooks" / "_lib").is_dir():
-                hooks_path = str(cand / ".claude" / "hooks")
-                if hooks_path not in sys.path:
-                    sys.path.insert(0, hooks_path)
-                break
-            cand = cand.parent
+        # __file__ anchors this lookup, not HOME/cwd/project. Cache only
+        # a successful discovery; a missing adopter install is retried.
+        # Keep canonical path insertion BEFORE importing the audit module.
+        if _audit_hooks_path is None:
+            cand = Path(__file__).resolve().parent
+            while cand != cand.parent:
+                if (cand / ".claude" / "hooks" / "_lib").is_dir():
+                    _audit_hooks_path = str(cand / ".claude" / "hooks")
+                    break
+                cand = cand.parent
+        if _audit_hooks_path is not None and _audit_hooks_path not in sys.path:
+            sys.path.insert(0, _audit_hooks_path)
         from _lib import audit_emit as _ae  # type: ignore
     except Exception:
         return

@@ -188,7 +188,7 @@ jobs:
       - name: Install-state replay suite (B2 — ceremony, schema refresh, symlink refusal)
         run: |
           set -euo pipefail
-          bash scripts/tests/test_install_state_replay.sh
+          python3 scripts/tests/replay-parallel.py --workers ${{ runner.environment == 'self-hosted' && '7' || '2' }}
 
 
   ownership-e2e-baseline:

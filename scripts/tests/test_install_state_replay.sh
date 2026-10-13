@@ -65,6 +65,18 @@ claude() {
 export -f claude
 # <<< harness-claude-stub <<<
 
+# Independent fixtures may run in separate processes; serial remains the default.
+REPLAY_GROUP=all
+case "${1:-}" in
+  --list-groups) printf '%s\n' profile fallback ceremony schema schema-refusal ownership tracked; exit 0 ;;
+  --group)
+    [ "$#" -eq 2 ] || { echo 'expected --group NAME' >&2; exit 2; }
+    case "$2" in profile|fallback|ceremony|schema|schema-refusal|ownership|tracked) REPLAY_GROUP="$2" ;; *) echo 'unknown replay group' >&2; exit 2 ;; esac ;;
+  '') [ "$#" -eq 0 ] || exit 2 ;;
+  *) echo 'unknown replay argument' >&2; exit 2 ;;
+esac
+selected() { [ "$REPLAY_GROUP" = all ] || [ "$REPLAY_GROUP" = "$1" ]; }
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SOURCE_DIR="$( cd "$SCRIPT_DIR/../.." && pwd )"
 # Override points so the test can be pointed at staged/candidate scripts
@@ -232,6 +244,7 @@ PY
 }
 
 # ===========================================================================
+if selected profile; then
 echo "== B1-a: fresh install records the original request + operations =="
 # ===========================================================================
 OWNER_VAL='Ada "Quote" Backslash\ OMalley'
@@ -252,6 +265,9 @@ else
 fi
 
 # ===========================================================================
+fi
+
+if selected profile; then
 echo "== B1-b: re-run updates in place (run_count, first_recorded_at) =="
 # ===========================================================================
 FIRST_AT="$( python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["first_recorded_at"])' "$STATE_A" )"
@@ -260,6 +276,9 @@ if run_install "$T_A" --profile core; then ok "re-run install rc=0"; else bad "r
 py_assert "$STATE_A" "B1-b rerun assertions" rerun "$FIRST_AT"
 
 # ===========================================================================
+fi
+
+if selected profile; then
 echo "== B1-c: --dry-run writes NO state file =="
 # ===========================================================================
 T_C="$( mktemp -d "$WORKROOT/tgt-dry-XXXXXX" )"
@@ -268,6 +287,9 @@ if run_install "$T_C" --dry-run --profile core; then ok "dry-run rc=0"; else bad
 if [ ! -e "$T_C/$STATE_REL" ]; then ok "dry-run wrote no state file"; else bad "dry-run wrote no state file"; fi
 
 # ===========================================================================
+fi
+
+if selected profile; then
 echo "== B2-a: upgrade with no flags REPLAYS the recorded profile =="
 # ===========================================================================
 if run_upgrade "$T_A"; then ok "replayed upgrade rc=0"; else bad "replayed upgrade rc=0"; fi
@@ -289,6 +311,9 @@ fi
 py_assert "$STATE_A" "B2-a state rewritten by upgrade (replay + preservation)" replayed-upgrade
 
 # ===========================================================================
+fi
+
+if selected profile; then
 echo "== B2-b: explicit --profile beats replay and is re-recorded =="
 # ===========================================================================
 if run_upgrade "$T_A" --profile core,frontend; then ok "explicit upgrade rc=0"; else bad "explicit upgrade rc=0"; fi
@@ -305,6 +330,9 @@ fi
 py_assert "$STATE_A" "B2-b explicit profile re-recorded" explicit-upgrade
 
 # ===========================================================================
+fi
+
+if selected fallback; then
 echo "== B2-c: BACK-COMPAT — missing state (pre-Wave-B) never errors/no-ops =="
 # ===========================================================================
 T_F="$( fresh_install f --profile core )" || exit 1
@@ -336,6 +364,9 @@ else
 fi
 
 # ===========================================================================
+fi
+
+if selected ceremony; then
 echo "== B2-c2: pre-state ceremony migration (re-pass rc.4 t3 P1) =="
 # ===========================================================================
 # Default = fail-SAFE user; --ceremony maintainer opts back in; the
@@ -398,6 +429,9 @@ else
 fi
 
 # ===========================================================================
+fi
+
+if selected schema; then
 echo "== B2-c3: schema docs — hash-gated refresh (t5 P1) =="
 # ===========================================================================
 # adopter-MODIFIED schema is PRESERVED; a byte-pristine PRIOR generation is
@@ -433,6 +467,9 @@ else
 fi
 
 # ===========================================================================
+fi
+
+if selected schema-refusal; then
 echo "== B2-c4: schema refresh — symlink refusal + --skip + hasher fallback (t7 P1) =="
 # ===========================================================================
 # (1) symlinked LEAF: refresh must refuse and never write the REFERENT.
@@ -537,6 +574,9 @@ else
 fi
 
 # ===========================================================================
+fi
+
+if selected ownership; then
 echo "== B2-c5: schema ownership follows DELIVERY, not presence (t8 P1) =="
 # ===========================================================================
 # A fresh install over an adopter-customized schema must NOT record the
@@ -576,6 +616,9 @@ else
 fi
 
 # ===========================================================================
+fi
+
+if selected tracked; then
 echo "== B2-c6: TRACKED posture artifact => upgrade FALHA com migracao (t10 P1) =="
 # ===========================================================================
 T_T="$( fresh_install s9 --profile core )" || exit 1
@@ -605,6 +648,9 @@ else
 fi
 
 # ===========================================================================
+fi
+
+if selected fallback; then
 echo "== B2-d: garbage state => NOTE + fallback + rewritten valid =="
 # ===========================================================================
 printf 'this is not json{{{' > "$T_F/$STATE_REL"
@@ -617,6 +663,9 @@ fi
 py_assert "$T_F/$STATE_REL" "B2-d state rewritten as valid JSON" valid
 
 # ===========================================================================
+fi
+
+if selected fallback; then
 echo "== B2-e: hostile profile value fails charset validation => no replay =="
 # ===========================================================================
 python3 - "$T_F/$STATE_REL" <<'PY'
@@ -647,6 +696,9 @@ else
 fi
 
 # ===========================================================================
+fi
+
+if selected profile; then
 echo "== B2-f: --dry-run replays for preview but never writes; --no-replay opts out =="
 # ===========================================================================
 SNAP="$WORKROOT/state.snapshot"
@@ -668,7 +720,10 @@ if grep -q 'REPLAY:' "$T_A.upgrade.log"; then
 else
   ok "--no-replay suppresses replay"
 fi
+fi
+
 
 echo ""
 echo "== RESULT: PASS=$PASS FAIL=$FAIL =="
+echo "REPLAY-GROUP: $REPLAY_GROUP"
 [ "$FAIL" -eq 0 ]
