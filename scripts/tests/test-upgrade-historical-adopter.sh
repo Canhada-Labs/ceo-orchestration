@@ -52,9 +52,10 @@
 set -uo pipefail   # NOT -e: every failure is asserted, never fatal-by-default.
 # Each selected group owns its fixture tree and install caches. The default
 # remains the original serial order. H.18 shares A/H with the core group;
-# H.26 shares the aged template with H.24. Never split those dependencies.
+# N.1/N.2 and H.10 also use core's gen.candidate; H.26 shares the aged template with
+# H.24. Never split those dependencies.
 HIST_GROUP=all
-HIST_GROUPS="core hostile symlink negative dryrun fresh unclaimed pin transform unrenderable route-symlink duplicates dangling scratch environment header preview source-symlink hardlink no-replay prior-rendered"
+HIST_GROUPS="core hostile symlink fresh unclaimed pin transform unrenderable route-symlink duplicates dangling scratch environment header preview source-symlink hardlink no-replay prior-rendered"
 if [ "$#" -gt 0 ]; then
   case "$1" in
     --list-groups) [ "$#" -eq 1 ] || exit 2; printf '%s\n' $HIST_GROUPS; exit 0 ;;
@@ -606,7 +607,7 @@ fi
 
 fi # historical group symlink
 
-if _hist_group negative; then
+if _hist_group core; then
 # --- N.1 NEGATIVE control --------------------------------------------------
 # Neither install-state nor .framework-version => today's fail-safe stands and
 # NOTHING is delivered. Without this leg, "ENABLED" above could simply be
@@ -680,9 +681,9 @@ else
   bad "N.2 the first upgrade did not create .claude/.framework-version — a marker-less adopter would never be reached at all"
 fi
 
-fi # historical group negative
+fi # historical group core
 
-if _hist_group dryrun; then
+if _hist_group core; then
 # --- H.10 --dry-run writes nothing ----------------------------------------
 echo ""
 echo "==> H.10 — --dry-run previews the delivery and writes nothing"
@@ -704,7 +705,7 @@ else
   bad "H.10b --dry-run MODIFIED docs/BRANCH-PROTECTION.md"
 fi
 
-fi # historical group dryrun
+fi # historical group core
 
 if _hist_group fresh; then
 # --- H.11 the delivered CODEOWNERS carries a fresh install's MODE -----------
