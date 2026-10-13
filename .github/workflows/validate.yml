@@ -1591,9 +1591,9 @@ jobs:
           PY
 
       - name: Diagnose output hook startup and audit drain
-        # Keep instrumentation AFTER the untouched timed gate, even on failure.
+        # Diagnose failures AFTER the untouched gate; green runs pay no overhead.
         # This is additional evidence, never a substitute for a failed gate.
-        if: ${{ !cancelled() }}
+        if: ${{ failure() && !cancelled() }}
         run: timeout 180 python3 .claude/scripts/diagnose-output-hook.py
 
   # ===========================================================================
