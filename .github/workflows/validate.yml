@@ -1594,7 +1594,7 @@ jobs:
         # Keep instrumentation AFTER the untouched timed gate, even on failure.
         # This is additional evidence, never a substitute for a failed gate.
         if: ${{ !cancelled() }}
-        run: timeout 30 python3 .claude/scripts/diagnose-output-hook.py
+        run: timeout 180 python3 .claude/scripts/diagnose-output-hook.py
 
   # ===========================================================================
   # PLAN-020 Phase 1 — hook-tests-dual-rail (CEO_NATIVE_SUBAGENTS=[0,1])

@@ -15,6 +15,8 @@ import pstats
 import runpy
 import subprocess
 import sys
+import time
+import shutil
 import tempfile
 
 
@@ -53,21 +55,33 @@ def main() -> None:
             if observe:
                 env["CEO_LEARNING_OBSERVE"] = observe
             stats_path = str(Path(tmp) / "hook.prof")
-            for i in range(4):
+            samples = []
+            worst_ms = -1.0
+            worst_path = str(Path(tmp) / "worst.prof")
+            for i in range(201):
                 tool_id = "diagnostic-%d" % i
                 subprocess.run(
                     [sys.executable, str(hook.with_name("check_anti_ceo_overhead.py"))],
                     input=gate._latency_pre_payload(tool_id), env=env,
                     cwd=root, capture_output=True, timeout=10, check=True,
                 )
+                started = time.perf_counter()
                 subprocess.run(
                     [sys.executable, str(Path(__file__).resolve()), "--child", stats_path],
                     input=gate._latency_post_payload(tool_id), env=env,
                     cwd=root, capture_output=True, timeout=10, check=True,
                 )
+                elapsed_ms = (time.perf_counter() - started) * 1000
+                stats = pstats.Stats(stats_path)
+                fsync_ms = sum(v[2] for k, v in stats.stats.items() if "posix.fsync" in k[2]) * 1000
+                samples.append((elapsed_ms, fsync_ms))
+                if elapsed_ms > worst_ms:
+                    worst_ms = elapsed_ms
+                    shutil.copyfile(stats_path, worst_path)
+            print("DIAGNOSTIC wall/fsync ms (cold then 200 warm):", samples)
             print("OUTPUT HOOK DIAGNOSTIC observe=%s (separate from gate)" % (observe or "unset"))
-            pstats.Stats(stats_path).strip_dirs().sort_stats("cumulative").print_stats(25)
-            pstats.Stats(stats_path).strip_dirs().sort_stats("tottime").print_stats(15)
+            pstats.Stats(worst_path).strip_dirs().sort_stats("cumulative").print_stats(25)
+            pstats.Stats(worst_path).strip_dirs().sort_stats("tottime").print_stats(15)
 
 
 if __name__ == "__main__":
