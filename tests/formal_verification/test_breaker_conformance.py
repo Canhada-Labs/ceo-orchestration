@@ -314,7 +314,7 @@ class TestS1BreakerOpensOnThreshold(TestEnvContext):
 
 
 class TestS2HalfOpenSingleton(TestEnvContext):
-    """Property S2: HALF_OPEN => |in_flight| <= 1.
+    """Property S2: at most one new probe per HALF_OPEN epoch.
 
     Mutation budget: 5.
     """
@@ -394,6 +394,37 @@ class TestS2HalfOpenSingleton(TestEnvContext):
         Authoritative test name per mapping table §2.
         """
         self._core_assertion(CircuitBreaker)
+
+    def test_s2_legacy_call_does_not_count_as_a_new_probe(self) -> None:
+        """Replay the TLC counterexample without assuming cancellation."""
+        t = [0.0]
+        cb = CircuitBreaker(threshold=3, window_s=10, half_open_s=5,
+                            clock=lambda: t[0])
+        self.assertTrue(cb.should_allow())  # legacy request stays in flight
+        for _ in range(3):
+            self.assertTrue(cb.should_allow())
+            cb.record_failure()
+        self.assertEqual(cb.state, BreakerState.OPEN)
+        t[0] = 5.0
+        self.assertTrue(cb.should_allow())  # exactly one NEW probe
+        self.assertFalse(cb.should_allow())
+        self.assertFalse(cb.should_allow())
+        cb.record_success()
+        self.assertEqual(cb.state, BreakerState.CLOSED)
+
+    def test_open_legacy_success_can_close_before_the_probe_timer(self) -> None:
+        """The runtime explicitly handles this race; the model must too."""
+        t = [0.0]
+        cb = CircuitBreaker(threshold=2, window_s=10, half_open_s=5,
+                            clock=lambda: t[0])
+        self.assertTrue(cb.should_allow())
+        for _ in range(2):
+            self.assertTrue(cb.should_allow())
+            cb.record_failure()
+        self.assertEqual(cb.state, BreakerState.OPEN)
+        cb.record_success()  # result of the legacy call, while still OPEN
+        self.assertEqual(cb.state, BreakerState.CLOSED)
+        self.assertEqual(t[0], 0.0)
 
     def test_s2_mutations_fail(self) -> None:
         """Every S2 mutation violates the singleton invariant."""

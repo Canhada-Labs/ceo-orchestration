@@ -82,6 +82,10 @@ jobs:
             -config "${MODULE}.cfg" -workers 4 -deadlock \
             "${MODULE}.tla" 2>&1 | tee "${RUNNER_TEMP}/tlc-${MODEL}.log"
 
+      - name: Breaker model regression and mutation checks
+        if: matrix.model == 'breaker'
+        run: python3 docs/formal-verification/check-breaker-model.py "$TLC_JAR"
+
       - name: Print TLC log hashes
         if: always()
         run: |

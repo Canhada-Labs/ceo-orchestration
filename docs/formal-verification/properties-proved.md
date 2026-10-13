@@ -1,5 +1,40 @@
 # Formal Properties Proved — 3 State Machines
 
+## October correction (2026-10-13)
+
+The April proof inventory below is historical, not a statement that the old
+model passed TLC. Its first real run found `S2_HalfOpenSingleton`: a call
+admitted while CLOSED can remain in flight when the timer permits a new probe.
+ADR-040 permits one **new probe per half-open epoch**; it does not cancel old
+calls. The runtime's lock and one-shot flag enforce that admission rule.
+
+`breaker.tla` now measures `probe_admissions` separately from `in_flight`.
+The Python conformance harness replays both that legacy-call scenario and the
+explicit OPEN + legacy-success race, which may close before the timer elapses.
+No runtime behavior or admission gate was weakened or changed.
+
+The executable model also replaces the clock frozen at `MaxTime` with relative
+ages saturated at the relevant time boundaries; bounds failure history at the
+opening threshold; and retains the latest audit event with an alternating
+emission bit. These finite abstractions permit repeated recovery cycles rather
+than cutting off exploration after a time horizon. S1 checks the threshold
+postcondition, S3 checks a fresh event on every opening, and L1 checks departure
+from OPEN/HALF_OPEN under explicit weak fairness of time, admission and reports.
+Without eventual reports, no recovery guarantee is claimed. Permanent errors,
+non-counting errors, reset, real clocks and audit I/O are outside this TLC model.
+
+Local TLC checked all 7,842 distinct states with the default configuration.
+`check-breaker-model.py` additionally checks three callers and a shorter failure
+window, then requires deliberate probe, threshold, audit and timer defects to
+fail their respective properties. The 11 Python breaker conformance tests,
+including the existing runtime mutation checks, passed. CI repeats both checks.
+This is a finite model result plus runtime regression evidence, not an unbounded
+proof of every production execution. `breaker.pcal` is an archival sketch and
+must not be used to regenerate the corrected hand-maintained TLA+ model.
+
+---
+
+
 **Status:** SPECIFIED 2026-04-16 (PLAN-013 D.3 breaker) + 2026-04-15
 (PLAN-014 B.1/B.2 plan-lifecycle + debate-convergence).
 **TLC run:** PENDING — this environment lacks a functional Java runtime
