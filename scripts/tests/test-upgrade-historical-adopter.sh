@@ -50,22 +50,6 @@
 #
 # Run:  bash scripts/tests/test-upgrade-historical-adopter.sh ; echo rc=$?
 set -uo pipefail   # NOT -e: every failure is asserted, never fatal-by-default.
-# Each selected group owns its fixture tree and install caches. The default
-# remains the original serial order. H.18 shares A/H with the core group;
-# N.1/N.2 and H.10 also use core's gen.candidate; H.26 shares the aged template with
-# H.24. Never split those dependencies.
-HIST_GROUP=all
-HIST_GROUPS="core hostile symlink fresh unclaimed pin transform unrenderable route-symlink duplicates dangling scratch environment header preview source-symlink hardlink no-replay prior-rendered"
-if [ "$#" -gt 0 ]; then
-  case "$1" in
-    --list-groups) [ "$#" -eq 1 ] || exit 2; printf '%s\n' $HIST_GROUPS; exit 0 ;;
-    --group) [ "$#" -eq 2 ] || exit 2; HIST_GROUP="$2" ;;
-    *) echo "Usage: $0 [--list-groups | --group NAME]" >&2; exit 2 ;;
-  esac
-  case " $HIST_GROUPS " in *" $HIST_GROUP "*) ;; *) echo "Unknown group: $HIST_GROUP" >&2; exit 2 ;; esac
-fi
-_hist_group() { [ "$HIST_GROUP" = all ] || [ "$HIST_GROUP" = "$1" ]; }
-
 # >>> harness-claude-stub (ADR-149 Amendment 3) >>>
 # scripts/install.sh and scripts/upgrade.sh read `claude --version` against the
 # Claude Code floor (CC_FLOOR_VERSION) and refuse below it (exit 6). A harness
@@ -100,6 +84,22 @@ claude() {
 }
 export -f claude
 # <<< harness-claude-stub <<<
+
+# Each selected group owns its fixture tree and install caches. The default
+# remains the original serial order. H.18 shares A/H with the core group;
+# N.1/N.2 and H.10 also use core's gen.candidate; H.26 shares the aged template with
+# H.24. Never split those dependencies.
+HIST_GROUP=all
+HIST_GROUPS="core hostile symlink fresh unclaimed pin transform unrenderable route-symlink duplicates dangling scratch environment header preview source-symlink hardlink no-replay prior-rendered"
+if [ "$#" -gt 0 ]; then
+  case "$1" in
+    --list-groups) [ "$#" -eq 1 ] || exit 2; printf '%s\n' $HIST_GROUPS; exit 0 ;;
+    --group) [ "$#" -eq 2 ] || exit 2; HIST_GROUP="$2" ;;
+    *) echo "Usage: $0 [--list-groups | --group NAME]" >&2; exit 2 ;;
+  esac
+  case " $HIST_GROUPS " in *" $HIST_GROUP "*) ;; *) echo "Unknown group: $HIST_GROUP" >&2; exit 2 ;; esac
+fi
+_hist_group() { [ "$HIST_GROUP" = all ] || [ "$HIST_GROUP" = "$1" ]; }
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$( cd "$SCRIPT_DIR/../.." && pwd )"
