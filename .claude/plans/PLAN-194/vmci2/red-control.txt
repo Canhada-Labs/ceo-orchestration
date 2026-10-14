@@ -1,0 +1,151 @@
+# VM-CI 2 (PLAN-194) — controles da ratificação pós-fato, com o resultado MEDIDO (qualquer um pode refazer)
+# objeto: os bytes dos 7 caminhos canônicos que mudam entre a Base 3ecb388a72eb848b524b4619b19aac11b29fb1f2 e o Anchor
+#   0e2511b1fdb05c8faf5a4cdf84707a4be1be89a4 (o merge do PR #5, no GitHub).
+# montagem: uma cópia descartável do repositório; nela, o land dos 4 materiais desta pasta foi SIMULADO por 1 commit
+#   local sobre o Anchor (autor e data fixos), e refs/remotes/origin/main aponta para esse commit — o papel do main
+#   publicado depois do land. Nada foi publicado.
+# os mutantes são commits locais feitos com read-tree/update-index/commit-tree num índice temporário (a árvore de
+#   trabalho não muda), autor/committer «mut», data 2026-10-14T00:00:00Z; um mutante usado como Anchor é filho do
+#   Anchor real, e a ref remota usada com ele (refs/remotes/t/<nome>) é o mutante + os 4 materiais
+# medido em 2026-10-14 (UTC), macOS 27.0.1, git 2.54.0 (Apple Git-157), Python 3.9.6; cada controle roda
+#   python3 -I -B .claude/plans/PLAN-194/vmci2/gen-ratify.py na raiz da cópia; códigos: 0 = ok, 2 = uso/infraestrutura,
+#   3 = recusa; --main-ref padrão = refs/remotes/origin/main
+
+## R0 — referência (o que o gerador tem de produzir)
+escrita com --anchor 0e2511b1… -> rc 0, grava pr4-pr5.patch e vmci2-approved.md
+--check logo depois -> rc 0, «OK: Record e sentinel conferem byte a byte»
+escrita repetida -> rc 0, os 2 arquivos «igual (nada a fazer)»
+apagar os 2 arquivos e regerar -> byte a byte iguais (determinismo na mesma cópia); idem numa 2.ª cópia independente
+  do repositório, com o mesmo land simulado (mesmo SHA) -> sentinel e Record byte a byte iguais aos da 1.ª
+Record do gerador == git diff --full-index 3ecb388a 0e2511b1 -- <os 7> com a configuração comum da cópia
+  (sha256 4817e9cdde0eef6c633a3b68ec0afcff51f85c435c98cb2148c25fddfc4f3ddd; 7 arquivos, +841 −188, 1.323 linhas,
+  61.665 bytes): as opções explícitas e o ambiente neutro do gerador não mudam um byte aqui
+nenhum marcador <<GERADOR:…>> restante no sentinel
+para cada um dos 7: git show 0e2511b1:<caminho> | shasum -a 256 == a linha File-sha256 do sentinel
+saída da escrita: 28 caminhos mudam entre a Base e o Anchor; canônicos = os 7 do Scope; do kernel = coverage.yml e
+  validate.yml
+
+## R1 — 1 byte diferente num arquivo ratificado (o controle vermelho central)
+mutante mut1 = Anchor + 1 commit: validate.yml com «canhada-ci» -> «canhada-cj» na 1.ª ocorrência (mesmo tamanho,
+  97.043 bytes; sha256 df9f0366…, blob a59adc452c95); mut1 = 2a12514bb2be9068327b76fb03a85b5d15b3f344
+--check --anchor <mut1> --main-ref refs/remotes/t/mut1 -> rc 3, «RECUSA R-d: .github/workflows/validate.yml no Anchor
+  tem sha256 df9f0366… (97043 bytes, blob a59adc452c95, modo 100644); o revisto é ada86947… (97043 bytes, blob
+  7dbbf634432b, modo 100644)»
+escrita com o mesmo Anchor -> rc 3, a mesma RECUSA R-d; nada gravado
+--check --anchor 0e2511b1… --main-ref refs/remotes/t/pr6, onde pr6 = o main + o mesmo byte no validate.yml (o byte
+  muda DEPOIS do Anchor) -> rc 3, «RECUSA R-e: caminho(s) do Scope mudaram entre o Anchor e refs/remotes/t/pr6:
+  .github/workflows/validate.yml»
+  => um byte a mais, a menos ou trocado em qualquer dos 7 arquivos, no Anchor ou depois dele no main, faz o gerador recusar
+
+## R2 — 1 byte diferente nos materiais (--check)
+1.º byte do vmci2-approved.md trocado         -> rc 3, RECUSA R-f (o sentinel difere do que o gerador produz)
+1.º byte do pr4-pr5.patch trocado             -> rc 3, RECUSA R-f (o Record difere)
+1.º byte do REVIEW-pr4-pr5.md trocado         -> rc 3, RECUSA R-g (difere do blob em refs/remotes/origin/main)
+1.º byte do red-control.txt trocado           -> rc 3, RECUSA R-g
+1 byte a mais no vmci2-approved.md.draft      -> rc 3, RECUSA R-g
+1 byte a mais no gen-ratify.py do repositório -> rc 3, RECUSA R-g
+1 dígito de uma linha File-sha256 trocado     -> rc 3, RECUSA R-f
+tudo restaurado                                -> rc 0, OK
+
+## R3 — caminho fora do Scope que não podia mudar
+mut2 = Anchor + 1 byte em .github/workflows/release.yml -> rc 3, «RECUSA R-b: caminho(s) canônico(s) fora do Scope
+  mudaram entre Base e Anchor: .github/workflows/release.yml»
+mut3 = Anchor + check_canonical_edit.py com _is_canonical devolvendo sempre False + 1 byte no release.yml -> rc 3,
+  «RECUSA R-b: … .claude/hooks/check_canonical_edit.py, .github/workflows/release.yml»
+  controle: o oráculo DO mut3, rodado à parte, dá 0 para os dois caminhos — por isso o gerador nunca executa código
+  do Anchor (ainda não ratificado): extrai da Base, com git archive, o oráculo e o classificador do kernel, e os roda
+  num diretório vazio
+kernel: mutk1 = Anchor + 1 linha em .claude/sentinel-signers.txt -> rc 3, «RECUSA R-b: caminho(s) do kernel de
+  arbitragem fora do Scope mudaram entre Base e Anchor: .claude/sentinel-signers.txt»; mutk2 = Anchor + 1 linha em
+  .claude/data/federation/enabled.md -> rc 3, a mesma RECUSA para esse caminho
+  controle: o oráculo canônico da Base dá 0 para esses 2 caminhos — só a regra do kernel os pega
+controle positivo do classificador do kernel (EXPECTED_KERNEL): um git de fachada no PATH regrava a saída do git
+  archive da Base e acrescenta ao check_arbitration_kernel.py extraído uma nova definição de _is_kernel_path
+  premissa conferida: com a fachada sem acréscimo (só regrava o tar) -> --check rc 0, OK, e a saída lista do kernel
+    coverage.yml e validate.yml
+  _is_kernel_path devolvendo sempre False -> --check rc 3, «RECUSA R-b: os caminhos do kernel de arbitragem que
+    mudam entre Base e Anchor não são os medidos — o classificador da Base deu: nenhum; o medido:
+    .github/workflows/coverage.yml, .github/workflows/validate.yml»; premissa conferida: com a mesma fachada, o
+    gerador sem esta regra (sha256 8ca15f5d…) gera o sentinel com rc 0 e a lista do kernel vazia
+  _is_kernel_path devolvendo True também para spool_writer.py (caminho do Scope) -> --check rc 3, a mesma RECUSA
+    R-b, com «deu: .claude/hooks/_lib/spool_writer.py, .github/workflows/coverage.yml, .github/workflows/validate.yml»
+conjunto: mutx1 = Anchor + um arquivo novo docs/vmci2-extra-controle.md (oráculo 0, kernel 0) -> rc 3, «RECUSA R-b: o
+  conjunto de caminhos que mudam entre Base e Anchor não é o medido — a mais: docs/vmci2-extra-controle.md; a menos:
+  nenhum»
+caminho que não é UTF-8: mutu1 = Anchor + docs/bad<byte 0xFF>name.md -> rc 3, «RECUSA R-b: caminho mudado que não é
+  UTF-8 válido: …», sem traceback
+controle positivo: mut4 = Anchor + 1 byte em docs/formal-verification/properties-proved.md (caminho que já muda,
+  oráculo 0) -> rc 0, gera; o Record sai byte a byte igual ao do Anchor (a regra R-b não recusa mudança não canônica
+  dentro do conjunto medido)
+
+## R4 — Anchor, --main-ref e Base
+--anchor 0e2511b1… --main-ref refs/remotes/t/old (= baf9de11f427, anterior ao Anchor) -> rc 3, «RECUSA R-a: o Anchor
+  0e2511b1fdb0 não é alcançável de refs/remotes/t/old (baf9de11f427)»
+--anchor <a Base> -> rc 3, «RECUSA R-a: Anchor igual à Base»
+--anchor main (nome de ramo) e --anchor 0e2511b1 (SHA curto) -> rc 3, «RECUSA R-a: o Anchor tem de ser um SHA de 40
+  hexadecimais minúsculos, não um nome de ref nem um SHA curto»
+--anchor deadbeef… (40 hex, inexistente) -> rc 3, «RECUSA R-a: … não é um commit deste repositório (faltou git fetch?)»
+--main-ref origin/main (nome curto) -> rc 3, «RECUSA R-a: --main-ref tem de ser um nome completo sob refs/remotes/»
+--main-ref refs/remotes/origin/nao-existe -> rc 3, «RECUSA R-a: … não existe exatamente com esse nome»
+tag que sombreia: refs/remotes/origin/main = pr6 (o main + o byte no validate.yml) e uma tag chamada origin/main
+  apontando para o main sem o byte; premissa conferida: git rev-parse origin/main (nome curto) resolve para a tag
+  -> --check com o --main-ref padrão: rc 3, «RECUSA R-e: … refs/remotes/origin/main: .github/workflows/validate.yml»;
+  com --main-ref origin/main: rc 3, a RECUSA R-a do nome curto
+--base <qualquer valor> -> rc 2, «unrecognized arguments: --base …» (a Base é constante do gerador)
+objeto de substituição: git replace mut2 0e2511b1…; premissa conferida: o git comum passa a ver mut2 sem a mudança
+  no release.yml -> --check --anchor <mut2>: rc 3, «RECUSA R-b: … .github/workflows/release.yml» (o gerador
+  desliga refs/replace)
+enxerto: .git/info/grafts dando ao main o mut1 como pai; premissa conferida: o git comum passa a dizer que mut1 é
+  ancestral do main -> --check --anchor <mut1>: rc 3, «RECUSA R-a: o Anchor 2a12514bb2be não é alcançável de
+  refs/remotes/origin/main» (o gerador desliga enxertos)
+
+## R5 — caminho do Scope que não mudou (Anchor errado)
+--anchor b0b8c490dce9… (o PR #5 sem o commit do coverage.yml) -> rc 3, «RECUSA R-c: caminho(s) do Scope que não mudaram
+  entre Base e Anchor (Anchor errado?): .github/workflows/coverage.yml»
+--anchor baf9de11f427… (só o PR #4) -> rc 3, a mesma RECUSA R-c
+
+## R6 — a escrita não sobrescreve
+sentinel gravado com 1 byte a mais e escrita de novo -> rc 3, «RECUSA R-f: .claude/plans/PLAN-194/vmci2-approved.md já
+  existe com outro conteúdo»
+.asc ao lado do sentinel (com o byte a mais) e escrita de novo -> rc 3, «RECUSA R-f: o sentinel já tem .asc ao lado e o
+  conteúdo mudaria: não regravo um arquivo assinado»
+restaurado -> rc 0, OK
+
+## R7 — o sentinel não vira destrava de edição (medido com o check_canonical_edit.py e o ceo-boot.py da cópia)
+(a) _find_sentinels(raiz) não lista .claude/plans/PLAN-194/vmci2-approved.md (53 sentinels descobertos, ele não);
+    os 4 padrões do ceo-boot.py (PLAN-*/architect/round-*/approved.md, PLAN-*/approved.md, PLAN-*/wave-*-approved.md,
+    PLAN-*/approved-amendment-*.md) não casam o nome
+(b) _APPROVED_BY_RE não casa o texto
+(c) _parse_scope_paths_from_text(texto) devolve set() (o «## Scope» é título de markdown, não a linha «Scope:» que o
+    leitor procura); nenhum marcador BEGIN SIGNED SCOPE
+contraprova: os MESMOS bytes copiados como PLAN-194/wave-vmci2-approved.md SÃO descobertos — o nome é uma das 3
+  barreiras, e é por isso que este sentinel não usa o prefixo «wave-»; (b) e (c) seguiriam barrando
+  -> com os três, assinado, ele NÃO libera edição de agente nos 7 arquivos. Este controle vale para estes bytes; não
+  afirma o que uma versão alterada faria
+
+## R8 — os oráculos não dependem da árvore de trabalho
+os 28 caminhos que mudam entre a Base e o Anchor, classificados pelo check_canonical_edit.py --is-canonical da Base e
+  pelo do Anchor, num diretório vazio e na raiz da cópia -> respostas idênticas nos 4 casos (7 canônicos, os do Scope)
+o classificador do kernel da Base sobre os 28 -> 1 só para coverage.yml e validate.yml
+
+## R9 — formas que mudariam o Record ou a leitura dos bytes
+modo: mutmode = Anchor + spool_writer.py com o MESMO blob em modo 100755 -> rc 3, «RECUSA R-d: … modo 100755); o revisto
+  é … modo 100644)»
+entrada duplicada: uma árvore do Anchor com 2 entradas validate.yml (a revista e a do mut1) -> rc 3, «RECUSA R-c:
+  .github/workflows/validate.yml aparece 2 vezes na árvore do Anchor»
+Record diferente: um git de fachada no PATH que acrescenta 1 quebra de linha à saída do diff --full-index (a forma de
+  outra versão do git) -> rc 3, «RECUSA R-d: o Record tem sha256 ce4f8a69… (… 1.324 linhas, 61.666 bytes); o revisto
+  é 4817e9cd…»
+locale: LC_ALL=en_US.ISO8859-1 -> --check rc 0, sem traceback
+commit local à frente: main local 1 commit à frente de refs/remotes/origin/main, com 1 linha a mais no REVIEW -> rc 3,
+  «RECUSA R-g: .claude/plans/PLAN-194/vmci2/REVIEW-pr4-pr5.md na árvore de trabalho difere do blob em
+  refs/remotes/origin/main»
+
+## O que estes controles NÃO cobrem
+- a assinatura em si: gerar e conferir a .asc é passo do Owner (gpg + verify_detached contra o allowlist); os
+  controles negativos desse passo estão no script de assinatura
+- um .git local adulterado por quem já escreve nele (objetos, índice de commits, configuração local): o gerador
+  desliga refs/replace e enxertos (medido acima), lê com a configuração global e a de sistema desligadas e recusa um
+  Record diferente, mas não é defesa contra quem controla o repositório local
+- o código e os scripts NÃO canônicos que mudam entre a Base e o Anchor: o gerador confere só que o conjunto deles é o
+  medido; os bytes deles não são conferidos nem ratificados
