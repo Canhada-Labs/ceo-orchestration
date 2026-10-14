@@ -45,6 +45,10 @@ jobs:
       - name: Checkout
         # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          # Baseline derivation needs GA tags and their ancestry, including on
+          # reused runners (same cure as validate.yml hook-tests-python-matrix).
+          fetch-depth: 0
 
       - name: Setup Python 3.11
         # SHA-pinned (Sprint 7 Dependabot bump): actions/setup-python@v6.2.0
