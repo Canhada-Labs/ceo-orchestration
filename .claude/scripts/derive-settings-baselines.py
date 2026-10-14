@@ -56,9 +56,14 @@ declared by hand: a scalar key that gains one exits 2 unless it is listed in
 ``SCALAR_SUPERSEDED_CONSUMERS`` (the list asserts the code, it does not read it;
 see that tuple for the tree it describes).
 
-Wiring: no ``.github/workflows/validate.yml`` step runs ``--check``: a CI
-checkout is shallow and tagless, where the derivation cannot answer. The
-release preflight DOES run it: ``release.sh preflight`` runs
+Wiring: no workflow step runs ``--check`` directly. Two CI jobs reach it
+through ``SupersededLiveRepoTest``: ``hook-tests-python-matrix``
+(``.github/workflows/validate.yml``) and ``coverage``
+(``.github/workflows/coverage.yml``) check out the full history with tags
+(``fetch-depth: 0``), so their ``pytest .claude/scripts/tests/`` derives
+against the live GA tags. Any other checkout is shallow and tagless, where
+the derivation cannot answer and the tests skip, visibly. The
+release preflight also runs it: ``release.sh preflight`` runs
 ``pytest .claude/scripts/tests/``, whose ``SupersededLiveRepoTest`` runs
 ``--check scripts/upgrade.sh`` against the live tags of the maintainer
 checkout (the same tests skip, visibly, where no GA tag exists). Any patch
