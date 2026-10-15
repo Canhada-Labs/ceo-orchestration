@@ -197,7 +197,6 @@ def _safe_emit_capped(
     try:
         _audit_emit.emit_generic(
             "cost_envelope_capped",
-            action="cost_envelope_capped",
             class_tier=str(class_tier),
             window_breached=str(window),
             cap_cents=int(cap_cents),

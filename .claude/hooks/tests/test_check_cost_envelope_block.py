@@ -31,7 +31,7 @@ measured RED against a one-anchor mutation in a disposable clone, and GREEN
 again after ``git restore`` (the restoration control):
 
 * ``{"decision": "block", ...}`` emission replaced by ``{}``
-  (``check_cost_envelope.py:281``)   -> every test in this file goes red;
+  (``check_cost_envelope.py:280``)   -> every test in this file goes red;
 * Bash + swarm-signature guard removed -> the non-swarm and non-Bash tests;
 * that guard AND both kill-switch checks removed -> the two kill-switch tests
   as well;
@@ -40,12 +40,13 @@ again after ``git restore`` (the restoration control):
 * the ``(None, -1, -1)`` lock-unavailable sentinel treated as a breach -> the
   fail-open test.
 
-NOT covered here, deliberately: the ``cost_envelope_capped`` audit event. As
-of this writing ``_safe_emit_capped`` passes ``action=`` twice to
-``emit_generic`` (positional + keyword), so the call raises ``TypeError``, is
-swallowed by the fail-open ``except`` and the event is never written; the fix
-is a canonical-file change. Pinning the broken behaviour here would turn a
-defect into a contract, so this file asserts only the decision.
+NOT covered here: the ``cost_envelope_capped`` audit event. It has its own
+control, ``test_check_cost_envelope_emit.py`` (S363), which drives the same
+block path with the real emitter and asserts exactly one chain-covered row.
+Until that cure ``_safe_emit_capped`` passed ``action`` twice to
+``emit_generic`` (positional + keyword); the ``TypeError`` was swallowed by
+the fail-open ``except`` and the event was never written. This file still
+asserts only the decision.
 
 Known residual: the daily counter lives in a UTC-date-keyed state file and the
 hook has no clock seam, so a dispatch sequence that straddles 00:00 UTC would

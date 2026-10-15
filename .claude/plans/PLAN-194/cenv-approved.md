@@ -6,10 +6,10 @@ Dados: .claude/plans/PLAN-194/cenv/sign.tsv
 Molde: .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
 Patch: .claude/plans/PLAN-194/cenv/cenv.patch
 Control: .claude/plans/PLAN-194/cenv/red-control.txt
-Patch-sha256: TO-FILL-BY-SIGN
-Rail-Record-sha256: TO-FILL-BY-SIGN
-Anchor-SHA: TO-FILL-BY-SIGN
-Data: TO-FILL-BY-SIGN
+Patch-sha256: 4a4b3e7c4f890df09d70ac02daf67b0a1b20c05081a4388e701297d103534854
+Rail-Record-sha256: e15cc7b642f84e444b46538fcb972c48a814431cc2002e79d627a319a684b673
+Anchor-SHA: 39e6754d5d5cbcd70d03e154727011d17823f63b
+Data: 2026-10-15
 
 ## Ratificação (Owner)
 
