@@ -37,13 +37,17 @@ class HistoricalParallelTests(unittest.TestCase):
     def test_all_groups_execute_once_and_missing_assertions_fail(self):
         with tempfile.TemporaryDirectory() as tmp:
             harness = Path(tmp) / "fixture.sh"
+            # The two fake groups split the adapter's own total, so the
+            # complete inventory passes and losing either group cannot.
+            first = adapter.EXPECTED_ASSERTIONS // 2
             script = '''#!/bin/bash
 if [ "$1" = --list-groups ]; then printf 'first\nsecond\n'; exit; fi
 printf '%s\n' "$2" >> "$(dirname "$0")/executed"
-for ((i=0;i<82;i++)); do echo '  ok   H.test'; done
-echo 'RESULT: 82 passed, 0 failed'
+case "$2" in first) n=@FIRST@;; *) n=@SECOND@;; esac
+for ((i=0;i<n;i++)); do echo '  ok   H.test'; done
+echo "RESULT: $n passed, 0 failed"
 echo "HISTORICAL-GROUP: $2"
-'''
+'''.replace("@FIRST@", str(first)).replace("@SECOND@", str(adapter.EXPECTED_ASSERTIONS - first))
             harness.write_text(script)
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(adapter.execute(harness, 2, 10), 0)
