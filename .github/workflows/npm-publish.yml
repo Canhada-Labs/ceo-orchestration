@@ -2,10 +2,12 @@ name: NPM Publish
 
 # Sprint 5 Phase 4; registry auth migrated to npm **Trusted Publishing**
 # (OIDC) by PLAN-158 Wave 1 (PLAN-152 §Deferred backlog-oidc successor).
-# Publishes ceo-orchestration on tag push (`v*`): the npm CLI (>=11.5.1,
-# upgraded in-job — Node 20 bundles npm 10.x, which cannot do the
-# exchange) detects the GitHub Actions OIDC context (`id-token: write`)
-# and exchanges the per-run JWT for a short-lived publish credential
+# Publishes ceo-orchestration on GA tag push (`v*` without `-rc.`): the
+# npm CLI — an EXACT version pinned in the workflow-level `env:` below
+# and installed in-job on Node 24 (PLAN-194 W4; npm documents trusted
+# publishing as npm >= 11.5.1 on Node >= 22.14.0) — detects the GitHub
+# Actions OIDC context (`id-token: write`) and exchanges the per-run
+# JWT for a short-lived publish credential
 # scoped to this repo + workflow + `production-npm` environment as
 # registered in the npmjs.com trusted-publisher config (Owner console).
 # The same JWT keeps feeding the Sigstore `--provenance` attestation.
@@ -26,11 +28,15 @@ name: NPM Publish
 #
 # PLAN-013 Phase 0 item 0.2 hardening (debate Round 1 consensus §C5
 # CRITICAL, 2/5 agents — DevOps + Staff Backend):
-#   - Skip RC tags entirely (`if: !contains(github.ref, '-rc.')`) —
+#   - The publish job skips RC tags entirely
+#     (`if: !contains(github.ref, '-rc.')`) —
 #     pushing `v1.4.0-rc.1` MUST NOT trigger a public npm publish;
 #     that would violate PLAN-013 anti-goal #3 ("NO NPM publish during
 #     Sprint 13") and anti-goal #16 ("NO auto-publish from tag without
-#     manual approval").
+#     manual approval"). RC tags run `rc-toolchain-proof` instead
+#     (PLAN-194 W4.3, last job in this file): the same toolchain and
+#     packaging steps, read-only, with no step that writes to the
+#     registry — see that job's header for what it does NOT prove.
 #   - GA tags (`v1.4.0`) gate through `environment: production-npm`,
 #     which requires a manual approval step in GitHub's Environments
 #     settings before the job runs. The manual approval is the
@@ -91,6 +97,20 @@ concurrency:
 permissions:
   contents: read
   id-token: write   # required for OIDC trusted publishing + provenance
+
+# PLAN-194 W4.1 (D-12) — the publish TOOLCHAIN, declared ONCE for the two
+# jobs that run it (`publish` on GA tags, `rc-toolchain-proof` on RC
+# tags); no job or step redefines these keys. Node: the 24 line, which
+# setup-node resolves to a 24.x release (runner tool cache first, else
+# the actions/node-versions manifest) — above the Node >= 22.14.0 that
+# npm documents for trusted publishing. npm: an EXACT version, never a
+# range — 11.20.0 is the CLI that published the 1.4.2 GA (run
+# 36719886734). Moving either value (npm 12 included) is a written Owner
+# decision; test_release_workflow_asserts.py
+# (Plan194W4PublishToolchainTest) pins both and goes red otherwise.
+env:
+  PUBLISH_NODE_MAJOR: "24"
+  PUBLISH_NPM_VERSION: "11.20.0"
 
 jobs:
   # ---------------------------------------------------------------------
@@ -216,8 +236,10 @@ jobs:
 
   publish:
     # PLAN-013 Phase 0 item 0.2 — RC tag guard.
-    # RC tags contain `-rc.` (e.g. `v1.4.0-rc.1`). Skip them entirely.
-    # Only GA tags (`v1.4.0`) proceed, and those gate through the
+    # RC tags contain `-rc.` (e.g. `v1.4.0-rc.1`). This job skips them
+    # entirely; they run `rc-toolchain-proof` (PLAN-194 W4.3, below),
+    # which cannot mint a registry credential and never publishes. Only
+    # GA tags (`v1.4.0`) proceed here, and those gate through the
     # `production-npm` environment (manual approval).
     # PLAN-153 Wave B item 5 (f): RC posture UNCHANGED — this exclusion
     # is load-bearing (PLAN-013 anti-goals #3/#16) and MUST survive any
@@ -238,34 +260,55 @@ jobs:
     steps:
       - name: Checkout tag
         # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        # persist-credentials: false (PLAN-194 W4): the job token is not
+        # left in .git/config for the later steps, which run repo code
+        # (install.sh smoke, npm pack). None of them needs it: the only
+        # remote git call, publish's tag-liveness `git ls-remote origin`,
+        # works anonymously on this PUBLIC repo — and fails closed (no
+        # publish) if the repo ever stops being public.
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Setup Node 20
-        # SHA-pinned: actions/setup-node@v4.1.0
+      - name: Setup Node ${{ env.PUBLISH_NODE_MAJOR }}
+        # SHA-pinned: actions/setup-node@v6.4.0 (the action itself runs on
+        # node24; the Node it INSTALLS is `node-version` below)
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          node-version: "20"
+          node-version: ${{ env.PUBLISH_NODE_MAJOR }}
           registry-url: "https://registry.npmjs.org"
 
-      - name: Upgrade npm CLI for Trusted Publishing (OIDC)
-        # PLAN-158 W1 (debate, all 3 critics): Node 20 bundles npm 10.x,
-        # which does NOT implement the trusted-publishing token exchange —
-        # without this step the OIDC publish dies ENEEDAUTH at GA, and
-        # there is no earlier proof point (RC tags skip this workflow
-        # entirely). npm >=11.5.1 is the first trusted-publishing-GA CLI.
+      - name: Pin npm CLI to the exact version (Trusted Publishing — OIDC)
+        # PLAN-158 W1 (debate, all 3 critics) installed npm in-job because
+        # the Node 20 line bundled npm 10.x, which does NOT implement the
+        # trusted-publishing token exchange (npm >= 11.5.1 is the first
+        # CLI that does). PLAN-194 W4.1 (D-12) keeps the in-job install
+        # but pins the EXACT version from the workflow-level env — a range
+        # would let a newer npm land between the RC proof and the GA run —
+        # and asserts BOTH versions before any packaging step runs. The
+        # `publish` and `rc-toolchain-proof` copies of this step are
+        # byte-identical: the RC run is the toolchain's earlier proof
+        # point. The OIDC exchange itself is still first exercised at GA.
         run: |
           set -euo pipefail
-          npm install -g npm@^11.5.1
+          npm install -g "npm@${PUBLISH_NPM_VERSION}"
+          NODE_V="$(node --version)"
           NPM_V="$(npm --version)"
-          case "$NPM_V" in
-            10.*|11.0.*|11.1.*|11.2.*|11.3.*|11.4.*|11.5.0)
-              echo "::error::npm $NPM_V < 11.5.1 — trusted publishing unsupported"
+          echo "node --version: ${NODE_V}"
+          echo "npm --version: ${NPM_V}"
+          case "${NODE_V}" in
+            "v${PUBLISH_NODE_MAJOR}".*) ;;
+            *)
+              echo "::error::node ${NODE_V} is not on the declared v${PUBLISH_NODE_MAJOR}.x line"
               exit 1
               ;;
           esac
-          echo "OK: npm $NPM_V (>=11.5.1, trusted-publishing capable)"
+          if [[ "${NPM_V}" != "${PUBLISH_NPM_VERSION}" ]]; then
+            echo "::error::npm ${NPM_V} is not the pinned ${PUBLISH_NPM_VERSION} (PLAN-194 W4, D-12)"
+            exit 1
+          fi
+          echo "OK: node ${NODE_V} + npm ${NPM_V} (exact pin; trusted publishing needs npm >= 11.5.1 on Node >= 22.14.0)"
 
       - name: Verify VERSION matches tag
         run: |
@@ -504,3 +547,255 @@ jobs:
         if: steps.already_published.outputs.published == 'true'
         run: |
           echo "::notice::publish skipped — exact version already in the registry; this re-run is an idempotent no-op (PLAN-153 Wave B item 5)"
+
+  # ---------------------------------------------------------------------
+  # PLAN-194 W4.3 — RC TOOLCHAIN PROOF. RC tags never reach `publish`
+  # (its RC exclusion above is load-bearing and unchanged); they run
+  # THIS job instead, so the toolchain the GA publish will use is
+  # exercised before GA: the same Node line, the same exact npm, the
+  # same staging + install.sh trailer + packlist gate, then a
+  # `npm pack --dry-run` (no archive is written). Every step it shares
+  # with `publish` is a BYTE-IDENTICAL copy — edit both, or
+  # test_release_workflow_asserts.py (Plan194W4PublishToolchainTest)
+  # goes red. Its only own steps are an RC-aware VERSION check (an RC
+  # tree carries the GA VERSION — release.yml's RC flow) and the pack
+  # dry-run.
+  # Its permissions are `contents: read` ONLY: no OIDC token permission
+  # (so no registry credential can be minted), no GitHub environment, no
+  # `secrets.` reference, and no step that writes to the registry. The
+  # runner's ephemeral job token (scoped by that `contents: read`) goes
+  # only to the two pinned actions — checkout fetches with it, and
+  # setup-node takes it as its default `token` input to download Node —
+  # and is not left in .git/config for the steps that run repo code
+  # (`persist-credentials: false` on the checkout). It does not wait
+  # for `await-release-gate`: it changes nothing, and the toolchain
+  # evidence should exist even on an RC whose gate goes red.
+  # What it does NOT prove (declared residual, PLAN-194 OQ-5): the OIDC
+  # token exchange and the registry write — both are first exercised at
+  # GA, with .claude/plans/PLAN-158/oidc-failure-playbook.md as the net.
+  # ---------------------------------------------------------------------
+  rc-toolchain-proof:
+    name: RC toolchain proof (no publish)
+    if: contains(github.ref, '-rc.')
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout tag
+        # SHA-pinned (Sprint 7 Dependabot bump): actions/checkout@v6.0.2
+        # persist-credentials: false (PLAN-194 W4): the job token is not
+        # left in .git/config for the later steps, which run repo code
+        # (install.sh smoke, npm pack). None of them needs it: the only
+        # remote git call, publish's tag-liveness `git ls-remote origin`,
+        # works anonymously on this PUBLIC repo — and fails closed (no
+        # publish) if the repo ever stops being public.
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node ${{ env.PUBLISH_NODE_MAJOR }}
+        # SHA-pinned: actions/setup-node@v6.4.0 (the action itself runs on
+        # node24; the Node it INSTALLS is `node-version` below)
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version: ${{ env.PUBLISH_NODE_MAJOR }}
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Pin npm CLI to the exact version (Trusted Publishing — OIDC)
+        # PLAN-158 W1 (debate, all 3 critics) installed npm in-job because
+        # the Node 20 line bundled npm 10.x, which does NOT implement the
+        # trusted-publishing token exchange (npm >= 11.5.1 is the first
+        # CLI that does). PLAN-194 W4.1 (D-12) keeps the in-job install
+        # but pins the EXACT version from the workflow-level env — a range
+        # would let a newer npm land between the RC proof and the GA run —
+        # and asserts BOTH versions before any packaging step runs. The
+        # `publish` and `rc-toolchain-proof` copies of this step are
+        # byte-identical: the RC run is the toolchain's earlier proof
+        # point. The OIDC exchange itself is still first exercised at GA.
+        run: |
+          set -euo pipefail
+          npm install -g "npm@${PUBLISH_NPM_VERSION}"
+          NODE_V="$(node --version)"
+          NPM_V="$(npm --version)"
+          echo "node --version: ${NODE_V}"
+          echo "npm --version: ${NPM_V}"
+          case "${NODE_V}" in
+            "v${PUBLISH_NODE_MAJOR}".*) ;;
+            *)
+              echo "::error::node ${NODE_V} is not on the declared v${PUBLISH_NODE_MAJOR}.x line"
+              exit 1
+              ;;
+          esac
+          if [[ "${NPM_V}" != "${PUBLISH_NPM_VERSION}" ]]; then
+            echo "::error::npm ${NPM_V} is not the pinned ${PUBLISH_NPM_VERSION} (PLAN-194 W4, D-12)"
+            exit 1
+          fi
+          echo "OK: node ${NODE_V} + npm ${NPM_V} (exact pin; trusted publishing needs npm >= 11.5.1 on Node >= 22.14.0)"
+
+      - name: Verify VERSION matches the RC tag base
+        # RC-aware variant of the publish job's "Verify VERSION matches
+        # tag" (same convention as release.yml "Assert VERSION matches
+        # tag"): an RC tag `v<X.Y.Z>-rc.N` is cut from a tree whose VERSION
+        # already reads `X.Y.Z`, so the `-rc.N` suffix is stripped before
+        # comparing. A tag with no `-rc.N` suffix fails here — this job is
+        # for RC tags only.
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION_FILE="$(tr -d '[:space:]' < VERSION)"
+          EXPECTED="${TAG#v}"
+          BASE="${EXPECTED%-rc.[0-9]*}"
+          if [[ "$BASE" == "$EXPECTED" ]]; then
+            echo "::error::tag $TAG carries no -rc.N suffix — this job runs on RC tags only"
+            exit 1
+          fi
+          if [[ "$VERSION_FILE" != "$BASE" ]]; then
+            echo "::error::VERSION ($VERSION_FILE) does not match RC tag ($TAG → base $BASE)"
+            exit 1
+          fi
+          echo "OK: VERSION=$VERSION_FILE matches RC tag=$TAG (base $BASE)"
+
+      - name: Verify npm/package.json version matches VERSION
+        run: |
+          set -euo pipefail
+          PKG_VERSION=$(node -p "require('./npm/package.json').version")
+          VERSION_FILE="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$PKG_VERSION" != "$VERSION_FILE" ]]; then
+            echo "::error::npm/package.json version ($PKG_VERSION) does not match VERSION ($VERSION_FILE)"
+            exit 1
+          fi
+          echo "OK: npm/package.json version=$PKG_VERSION matches VERSION"
+
+      - name: Verify zero runtime dependencies
+        run: |
+          set -euo pipefail
+          DEP_COUNT=$(node -p "Object.keys(require('./npm/package.json').dependencies || {}).length")
+          if [[ "$DEP_COUNT" -ne 0 ]]; then
+            echo "::error::ceo-orchestration must ship with 0 runtime dependencies (got $DEP_COUNT)"
+            exit 1
+          fi
+          echo "OK: ceo-orchestration has zero runtime dependencies"
+
+      - name: Stage bundle into npm/
+        # The npm package needs the framework source tree relative to npm/.
+        # Copy (don't symlink — npm pack walks symlinks unpredictably across hosts).
+        # PLAN-152 tarball-01: SELECTIVE staging. The root .npmignore is INERT
+        # (package.json "files" whitelist takes precedence in npm-packlist), so
+        # exclusion must happen at stage time. Framework-internal artifacts
+        # (test harness, fixture corpora, eval/, red-team corpus, numbered plan
+        # trees, _lib/testing.py + _lib/test_isolation.py per the PLAN-120
+        # contract install.sh already honors) must NOT ship. Kept deliberately:
+        # .claude/plans/ schemas + README + examples/ (install.sh provisions
+        # them) and .claude/policies/fixtures/ (install.sh PLAN-014 A.8 ships
+        # the policy bundle including fixtures).
+        run: |
+          set -euo pipefail
+          RSYNC_EXCLUDES=(
+            --include='.claude/policies/fixtures/'
+            --include='templates/oidc-proxy/tests/'
+            --include='templates/oidc-proxy/tests/**'
+            --exclude='**/tests/'
+            --exclude='**/fixtures/'
+            --exclude='.claude/scripts/red-team-corpus/'
+            --exclude='.claude/eval/'
+            --exclude='.claude/plans/PLAN-[0-9]*'
+            --exclude='.claude/hooks/_lib/testing.py'
+            --exclude='.claude/hooks/_lib/test_isolation.py'
+            --exclude='__pycache__/'
+            --exclude='*.pyc'
+            --exclude='.pytest_cache/'
+          )
+          # GA-F3 (S288, fechado S293): README.md FORA da lista — rsync do README
+          # raiz sobrescrevia o npm/README.md REVISADO (stamp de review é gate de
+          # release em verify-counts VERSION_SITES). O npm publica o npm/README.md
+          # rastreado, que é a cópia npm-facing revisada a cada bump.
+          for src in scripts templates .claude SPEC VERSION LICENSE PROTOCOL.md; do
+            if [[ -e "$src" ]]; then
+              rsync -a --delete --delete-excluded "${RSYNC_EXCLUDES[@]}" "$src" "npm/"
+            fi
+          done
+          ls -la npm/
+
+      - name: Syntax-check the shim
+        run: node --check npm/bin/ceo-orch-init.js
+
+      - name: Verify scripts/install.sh is present in staged bundle
+        run: test -f npm/scripts/install.sh
+
+      - name: Populate install.sh self-SHA trailer (P0-15, PLAN-045)
+        # PLAN-045 F-15R2-01 / Session 41: install.sh ships with a
+        # `# CEO-INSTALL-SHA256: PLACEHOLDER_RELEASE_FILL` trailer as its
+        # last line. At publish time, compute sha256 of the script body
+        # (all lines EXCEPT the last) and substitute the placeholder with
+        # the real hex. The script's own self-verify logic reads the same
+        # last-line pattern, so downstream adopters running
+        # `bash install.sh ...` trigger a rc=5 fail-CLOSED if the script
+        # is modified in transit.
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          FILE="scripts/install.sh"
+          TRAILER_LINE="$(tail -n 1 "$FILE")"
+          if [ "$TRAILER_LINE" != "# CEO-INSTALL-SHA256: PLACEHOLDER_RELEASE_FILL" ]; then
+            echo "::error::$FILE trailer not at expected placeholder state"
+            echo "got: $TRAILER_LINE"
+            exit 1
+          fi
+          # Compute sha of everything EXCEPT the last line.
+          HASH=$(awk 'NR==FNR{n++; next} FNR < n' "$FILE" "$FILE" | sha256sum | awk '{print $1}')
+          # In-place substitute ONLY the last line.
+          awk -v hash="$HASH" '
+            NR == FNR { total = NR; next }
+            FNR == total { print "# CEO-INSTALL-SHA256: " hash; next }
+            { print }
+          ' "$FILE" "$FILE" > "$FILE.new"
+          mv "$FILE.new" "$FILE"
+          chmod +x "$FILE"
+          # Smoke-verify: execute the self-verify branch by running
+          # the script without args (hits _verify_self_sha, then usage).
+          bash "$FILE" 2>&1 | head -3 || true
+          echo "OK: install.sh trailer populated with sha256 $HASH"
+
+      - name: Packlist gate (PLAN-152 tarball-02)
+        # Last-line assert before publish: the would-be tarball must carry no
+        # tests/ or fixtures/ dirs (except .claude/policies/fixtures/, shipped
+        # by install.sh contract), no .claude/eval/, no red-team-corpus/, no
+        # .claude/plans/PLAN-<N>* artifacts, no _lib/testing.py or
+        # _lib/test_isolation.py. Fail-closed: a pack or JSON parse failure
+        # fails the job (set -euo pipefail).
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          npm pack --dry-run --json 2>/dev/null | python3 -c '
+          import json, re, sys
+          d = json.load(sys.stdin)
+          o = d[0] if isinstance(d, list) else d
+          paths = [f["path"] for f in o["files"]]
+          pat = re.compile(r"(^|/)(tests|fixtures)(/|$)|(^|/)eval/|(^|/)red-team-corpus/|(^|/)plans/PLAN-[0-9]|(^|/)_lib/(testing|test_isolation)\.py$")
+          allow = (".claude/policies/fixtures/", "templates/oidc-proxy/tests/")
+          bad = [p for p in paths if pat.search(p) and not p.startswith(allow)]
+          if bad:
+              print("::error::tarball would ship %d framework-internal artifact(s):" % len(bad))
+              print("\n".join(bad[:40]))
+              sys.exit(1)
+          print("OK: packlist clean — %d files" % len(paths))
+          '
+
+      - name: Pack dry-run (RC proof — no archive, no registry write)
+        # The pack the GA run will publish, on the pinned toolchain, with
+        # `--dry-run` (npm writes no .tgz). The per-file notices go to a
+        # scratch log; the job prints only its tail (the tarball summary:
+        # name, version, sizes, file count) — or the whole log on failure.
+        working-directory: npm
+        run: |
+          set -euo pipefail
+          LOG="${RUNNER_TEMP}/rc-pack-dry-run.log"
+          if ! npm pack --dry-run 2> "$LOG"; then
+            cat "$LOG"
+            echo "::error::npm pack --dry-run failed on node $(node --version) + npm $(npm --version)"
+            exit 1
+          fi
+          tail -n 12 "$LOG"
+          echo "OK: npm pack --dry-run on node $(node --version) + npm $(npm --version) — nothing was written to the registry"

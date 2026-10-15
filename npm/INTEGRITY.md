@@ -122,7 +122,8 @@ npm audit signatures   # audits THIS project's tree, which now holds it
 **Status: specification only — no workflow implements any part of it.**
 Inputs:
 - `SOURCE_DATE_EPOCH = <VERSION tag creator-date, unix-epoch>`
-- Node 20.x (`npm-publish.yml` step "Setup Node 20")
+- Node 24.x + the exact npm CLI version pinned in `npm-publish.yml`
+  (workflow-level `env`: `PUBLISH_NODE_MAJOR`, `PUBLISH_NPM_VERSION`)
 - No `npm install` for the bundle itself (zero runtime deps)
 
 Intended output: byte-identical tarball across any ubuntu-latest GitHub

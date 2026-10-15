@@ -30,6 +30,20 @@
 # the workflow it describes. Change the npmjs console FIRST, then this
 # file + the workflow in one ceremony; the structural test keeps the
 # repo side from drifting silently.
+#
+# Allowed actions (PLAN-194 W4.2; lane DEP-03; docs.npmjs.com/trusted-
+# publishers, read 2026-10-02): the npmjs.com configuration behind this
+# triple MUST allow DIRECT publishing with `npm publish` — the workflow
+# runs `npm publish --provenance`, not `npm stage publish`. Per that
+# page, a configuration created after Sep 03, 2026 is set to allow only
+# `npm stage publish`, with direct publishing a separate opt-in, and one
+# created before that date requires at least one allowed action to be
+# selected explicitly. So re-creating or editing it without ticking
+# direct publishing breaks the GA publish, and no RC run can catch it
+# (the RC job holds no OIDC permission). Today's configuration predates
+# that date and published 1.4.2 on 2026-09-30 (run 36719886734). Do NOT
+# edit the npmjs.com configuration as part of a toolchain change; if it
+# must change, follow the playbook above and tick direct publishing.
 
 repository=Canhada-Labs/ceo-orchestration
 workflow=npm-publish.yml

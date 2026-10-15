@@ -52,6 +52,13 @@ structural asserts for release.yml's verdict delta + ancestry gate step
 (no continue-on-error, fail-closed on the transition var, delegation to
 _release_tag_guard.py, parent+GITHUB_SHA ancestry, pinned step order,
 `release-gate` job-name pin) plus the guard-module contract pins.
+
+PLAN-194 W4 (Plan194W4PublishToolchainTest, at the bottom) pins the
+publish toolchain: Node 24 and an EXACT npm (D-12: 11.20.0) declared
+ONCE in the workflow-level `env:` and read by both toolchain jobs, plus
+the `rc-toolchain-proof` job (RC tags only, `contents: read` only, no
+id-token, no environment, never publishes) whose steps shared with
+`publish` must be byte-identical copies. Live only, no skip.
 """
 from __future__ import annotations
 
@@ -60,7 +67,7 @@ import re
 import sys
 import unittest
 from pathlib import Path
-from typing import Iterator, Optional, Tuple
+from typing import Iterator, List, Optional, Tuple
 
 def _find_repo() -> Path:
     """Repo root — robust to BOTH homes this file can run from.
@@ -1432,6 +1439,510 @@ class ObserverProducerDeadlineTest(TestEnvContext):
             "timeout surfaces as the decision function's BLOCK, not an "
             "opaque runner kill",
         )
+
+
+# ---------------------------------------------------------------------
+# PLAN-194 W4 — the publish toolchain (Node 24 + EXACT npm, declared
+# once) and the RC toolchain proof.
+#
+# What is pinned here, and why each pin exists:
+# - ONE workflow-level `env:` carries the toolchain; both toolchain jobs
+#   read it and no job or step redefines it. npm is an EXACT version —
+#   D-12 (S362): 11.20.0, the CLI that published the 1.4.2 GA (run
+#   36719886734, log: «node: v20.20.2», «OK: npm 11.20.0»). A range
+#   (the pre-W4 `^11.5.1`) lets a new npm land between the RC proof and
+#   the GA publish. Node is the 24 line: npm documents trusted
+#   publishing as npm >= 11.5.1 on Node >= 22.14.0, and the pre-W4
+#   workflow ran Node 20.
+# - `rc-toolchain-proof` runs ONLY on RC tags (the exact complement of
+#   the publish job's load-bearing RC exclusion) with `contents: read`
+#   only — no id-token, no environment, no `secrets.` reference, no job
+#   token left in .git/config — and never publishes.
+# - Every step the two jobs share is a BYTE-IDENTICAL copy: the RC proof
+#   is only worth something if the RC runs what the GA will run.
+# LIVE ONLY, no skip (rail rc.3 r3 P2 precedent): the workflow edit and
+# this class land atomically, so a revert must go red here.
+# ---------------------------------------------------------------------
+
+_W4_NODE_MAJOR = "24"
+# D-12 (S362): moving this pin (npm 12 included) is a written Owner
+# decision — update it in the same ceremony as the workflow env.
+_W4_NPM_VERSION = "11.20.0"
+_W4_ENV_NODE = "PUBLISH_NODE_MAJOR"
+_W4_ENV_NPM = "PUBLISH_NPM_VERSION"
+_W4_RC_JOB = "rc-toolchain-proof"
+_W4_RC_IF = "contains(github.ref, '-rc.')"
+_W4_NPM_INSTALL = 'npm install -g "npm@${%s}"' % _W4_ENV_NPM
+_W4_NODE_VERSION_LINE = "node-version: ${{ env.%s }}" % _W4_ENV_NODE
+
+# Steps the RC proof shares with `publish`, in execution order; each is a
+# byte-identical copy. "Verify VERSION matches tag" is deliberately NOT
+# shared: an RC tree carries the GA VERSION (release.yml's RC flow), so
+# the RC job runs an RC-aware variant instead.
+_W4_SHARED_STEPS = (
+    "Checkout tag",
+    "Setup Node ${{ env.PUBLISH_NODE_MAJOR }}",
+    "Pin npm CLI to the exact version (Trusted Publishing — OIDC)",
+    "Verify npm/package.json version matches VERSION",
+    "Verify zero runtime dependencies",
+    "Stage bundle into npm/",
+    "Syntax-check the shim",
+    "Verify scripts/install.sh is present in staged bundle",
+    "Populate install.sh self-SHA trailer (P0-15, PLAN-045)",
+    "Packlist gate (PLAN-152 tarball-02)",
+)
+# The only steps the RC job may add — a closed set, so a step slipped in
+# under a benign name is red even before the structural check reads it.
+_W4_RC_VERSION_STEP = "Verify VERSION matches the RC tag base"
+_W4_RC_PACK_STEP = "Pack dry-run (RC proof — no archive, no registry write)"
+_W4_RC_STEPS = (
+    _W4_SHARED_STEPS[:3]
+    + (_W4_RC_VERSION_STEP,)
+    + _W4_SHARED_STEPS[3:]
+    + (_W4_RC_PACK_STEP,)
+)
+# The publish job's steps, also a CLOSED sequence (pre-review P2, S362):
+# the shared window plus the GA-only VERSION check, then the registry
+# tail. A packaging step added to `publish` alone would ship un-mirrored
+# in the RC proof — so it goes red here until it is added to both jobs,
+# or listed here on purpose.
+_W4_PUBLISH_STEPS = (
+    _W4_SHARED_STEPS[:3]
+    + ("Verify VERSION matches tag",)
+    + _W4_SHARED_STEPS[3:]
+    + (
+        "Check registry for already-published version",
+        "Assert remote tag still points at this run's SHA",
+        "Publish (Trusted Publishing — OIDC)",
+        "Publish skipped — version already in registry (no-op success)",
+    )
+)
+# Both "Checkout tag" copies drop the persisted job token (pre-review P2,
+# S362): no later step of either job needs it on disk — the only remote
+# git call, publish's tag-liveness `git ls-remote origin`, works
+# anonymously on this public repo (and fails closed if that changes).
+_W4_NO_PERSIST = "          persist-credentials: false"
+# Text that must never appear anywhere in the RC job.
+_W4_RC_FORBIDDEN = (
+    "npm publish", "id-token", "environment:", "secrets.", "NODE_AUTH_TOKEN",
+)
+
+_W4_JOB_HEAD = re.compile(r"^  ([A-Za-z0-9_-]+):[ \t]*$", re.M)
+_W4_ANY_STEP = re.compile(r"^      - ", re.M)
+_W4_STEP_NAME = re.compile(r"^      - name: (.+)$")
+
+
+def _w4_env(source: str) -> dict:
+    """The workflow-level `env:` mapping, read by text (no yaml needed)."""
+    m = re.search(r"^env:[ \t]*\n", source, re.M)
+    if m is None:
+        return {}
+    env = {}
+    for line in source[m.end():].split("\n"):
+        if line and not line[0].isspace():
+            break  # next top-level key
+        kv = re.match(r'^  ([A-Za-z0-9_]+):[ \t]*"?([^"#]*?)"?[ \t]*$', line)
+        if kv:
+            env[kv.group(1)] = kv.group(2)
+    return env
+
+
+def _w4_job_text(source: str, job: str) -> Optional[str]:
+    """Raw text of one job under `jobs:` — its head line to the next job."""
+    jobs_at = re.search(r"^jobs:[ \t]*$", source, re.M)
+    if jobs_at is None:
+        return None
+    heads = [h for h in _W4_JOB_HEAD.finditer(source) if h.start() > jobs_at.start()]
+    for i, head in enumerate(heads):
+        if head.group(1) != job:
+            continue
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(source)
+        top = re.search(r"^\S", source[head.end():end], re.M)
+        if top is not None:
+            end = head.end() + top.start()
+        return source[head.start():end]
+    return None
+
+
+def _w4_steps(job_text: str) -> List[Tuple[Optional[str], str]]:
+    """[(name, raw block)] per step; trailing blank/comment lines cut.
+
+    A comment block that introduces the NEXT step (or job) belongs to
+    neither copy, so it is not part of the byte comparison; comments
+    INSIDE a step are.
+    """
+    starts = [m.start() for m in _W4_ANY_STEP.finditer(job_text)]
+    steps = []
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else len(job_text)
+        lines = job_text[start:end].split("\n")
+        while lines and (
+            not lines[-1].strip() or lines[-1].lstrip().startswith("#")
+        ):
+            lines.pop()
+        name = _W4_STEP_NAME.match(lines[0]) if lines else None
+        steps.append((name.group(1) if name else None, "\n".join(lines)))
+    return steps
+
+
+def _w4_text_offenders(source: str) -> List[str]:
+    """Every way `source` breaks the W4 contract — pure text, no yaml."""
+    out = []
+    env = _w4_env(source)
+    node, npm = env.get(_W4_ENV_NODE), env.get(_W4_ENV_NPM)
+    if node != _W4_NODE_MAJOR:
+        out.append(
+            "workflow env %s=%r, expected %r — npm documents trusted "
+            "publishing on Node >= 22.14.0; the 24 line is the W4 choice"
+            % (_W4_ENV_NODE, node, _W4_NODE_MAJOR)
+        )
+    if npm is None or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", npm):
+        out.append(
+            "workflow env %s=%r is not an EXACT x.y.z npm version — a range "
+            "lets a new npm land between the RC proof and the GA publish"
+            % (_W4_ENV_NPM, npm)
+        )
+    elif npm != _W4_NPM_VERSION:
+        out.append(
+            "workflow env %s=%r != %r (D-12: moving the npm pin is a "
+            "written Owner decision; update this pin in the same ceremony)"
+            % (_W4_ENV_NPM, npm, _W4_NPM_VERSION)
+        )
+    defs = sorted(re.findall(
+        r"^[ \t]*(%s|%s)[ \t]*:" % (_W4_ENV_NODE, _W4_ENV_NPM), source, re.M))
+    if defs != sorted([_W4_ENV_NODE, _W4_ENV_NPM]):
+        out.append(
+            "toolchain keys defined %r — exactly once each, in the "
+            "workflow-level env (a job or step redefinition splits the "
+            "truth between the RC proof and the GA publish)" % defs
+        )
+    installs = [
+        ln.strip() for ln in source.split("\n")
+        if "npm install -g" in ln and not ln.lstrip().startswith("#")
+    ]
+    if installs != [_W4_NPM_INSTALL] * 2:
+        out.append(
+            "npm CLI installs are %r — expected exactly two (publish + RC "
+            "proof), both %r" % (installs, _W4_NPM_INSTALL)
+        )
+    node_lines = [
+        ln.strip() for ln in source.split("\n")
+        if re.match(r"^\s*node-version\s*:", ln)
+    ]
+    if node_lines != [_W4_NODE_VERSION_LINE] * 2:
+        out.append(
+            "setup-node inputs are %r — expected exactly two, both %r"
+            % (node_lines, _W4_NODE_VERSION_LINE)
+        )
+    publish = _w4_job_text(source, "publish")
+    rc = _w4_job_text(source, _W4_RC_JOB)
+    if publish is None or rc is None:
+        out.append(
+            "job(s) missing under jobs: publish=%s %s=%s"
+            % (publish is not None, _W4_RC_JOB, rc is not None)
+        )
+        return out
+    if ("\n    if: %s\n" % _W4_RC_IF) not in rc:
+        out.append(
+            "%s lost its job-level `if: %s` — the proof must run on RC "
+            "tags and ONLY on RC tags" % (_W4_RC_JOB, _W4_RC_IF)
+        )
+    for needle in _W4_RC_FORBIDDEN:
+        if needle in rc:
+            out.append(
+                "%s carries %r — the RC proof must hold no credential and "
+                "never publish" % (_W4_RC_JOB, needle)
+            )
+    pub_steps = _w4_steps(publish)
+    rc_steps = _w4_steps(rc)
+    for label, steps in (("publish", pub_steps), (_W4_RC_JOB, rc_steps)):
+        names = [n for n, _b in steps]
+        if None in names:
+            out.append("%s has a step not opened by `- name:`" % label)
+        if len(set(names)) != len(names):
+            out.append("%s has duplicate step names %r" % (label, names))
+    rc_names = tuple(n for n, _b in rc_steps)
+    if rc_names != _W4_RC_STEPS:
+        out.append(
+            "%s steps are %r — expected exactly %r"
+            % (_W4_RC_JOB, rc_names, _W4_RC_STEPS)
+        )
+    pub_names = tuple(n for n, _b in pub_steps)
+    if pub_names != _W4_PUBLISH_STEPS:
+        out.append(
+            "publish steps are %r — expected the closed sequence %r (a step "
+            "added to publish alone ships un-mirrored in the RC proof: add "
+            "it to both jobs, or to this sequence on purpose)"
+            % (pub_names, _W4_PUBLISH_STEPS)
+        )
+    pub_blocks = dict(pub_steps)
+    rc_blocks = dict(rc_steps)
+    for label, blocks in (("publish", pub_blocks), (_W4_RC_JOB, rc_blocks)):
+        checkout = blocks.get(_W4_SHARED_STEPS[0], "")
+        if _W4_NO_PERSIST not in checkout.split("\n"):
+            out.append(
+                "%s %r lacks %r — the job token would stay in .git/config "
+                "while the job runs repo code"
+                % (label, _W4_SHARED_STEPS[0], _W4_NO_PERSIST.strip())
+            )
+    for name in _W4_SHARED_STEPS:
+        a, b = pub_blocks.get(name), rc_blocks.get(name)
+        if a is None or b is None or a == b:
+            continue
+        diff = next(
+            (pair for pair in zip(a.split("\n"), b.split("\n"))
+             if pair[0] != pair[1]),
+            ("<length differs>", "<length differs>"),
+        )
+        out.append(
+            "step %r is not byte-identical between publish and %s: "
+            "publish=%r rc=%r" % (name, _W4_RC_JOB, diff[0], diff[1])
+        )
+    pack = rc_blocks.get(_W4_RC_PACK_STEP, "")
+    # Anchored on the COMMAND line (pre-review P2, S362): the step's own
+    # `::error::` echo also says "npm pack --dry-run".
+    if not re.search(
+            r'(?m)^[ \t]*if ! npm pack --dry-run 2> "\$LOG"; then[ \t]*$', pack):
+        out.append(
+            "%r does not run `npm pack --dry-run`" % _W4_RC_PACK_STEP
+        )
+    return out
+
+
+def _w4_structural_offenders(data: dict) -> List[str]:
+    """The same contract read from the parsed YAML (permissions, if, env)."""
+    out = []
+    env = data.get("env") or {}
+    if (env.get(_W4_ENV_NODE), env.get(_W4_ENV_NPM)) != (
+            _W4_NODE_MAJOR, _W4_NPM_VERSION):
+        out.append("parsed workflow env is %r" % (env,))
+    jobs = data.get("jobs") or {}
+    pub, rc = jobs.get("publish"), jobs.get(_W4_RC_JOB)
+    if not isinstance(pub, dict) or not isinstance(rc, dict):
+        return out + ["publish or %s missing from parsed jobs" % _W4_RC_JOB]
+    if rc.get("if") != _W4_RC_IF:
+        out.append("%s if=%r" % (_W4_RC_JOB, rc.get("if")))
+    if pub.get("if") != "!" + _W4_RC_IF:
+        out.append(
+            "publish if=%r is not the exact complement of the RC proof's"
+            % pub.get("if")
+        )
+    if rc.get("permissions") != {"contents": "read"}:
+        out.append(
+            "%s permissions=%r — exactly contents:read (no id-token: the "
+            "proof must not be able to mint an OIDC credential)"
+            % (_W4_RC_JOB, rc.get("permissions"))
+        )
+    if "environment" in rc:
+        out.append("%s gates through an environment" % _W4_RC_JOB)
+    for job_id, job in jobs.items():
+        scopes = [("job", job.get("env") or {})] + [
+            ("step %r" % s.get("name"), s.get("env") or {})
+            for s in job.get("steps") or []
+        ]
+        for scope, scope_env in scopes:
+            for key in (_W4_ENV_NODE, _W4_ENV_NPM):
+                if key in scope_env:
+                    out.append("%s %s redefines %s" % (job_id, scope, key))
+    pub_by_name = {s.get("name"): s for s in pub.get("steps") or []}
+    rc_by_name = {s.get("name"): s for s in rc.get("steps") or []}
+    for name in _W4_SHARED_STEPS:
+        if pub_by_name.get(name) != rc_by_name.get(name):
+            out.append("parsed step %r differs between the jobs" % name)
+    setup = pub_by_name.get(_W4_SHARED_STEPS[1]) or {}
+    if (setup.get("with") or {}).get("node-version") != (
+            "${{ env.%s }}" % _W4_ENV_NODE):
+        out.append("publish setup-node with=%r" % (setup.get("with"),))
+    for label, by_name in (("publish", pub_by_name), (_W4_RC_JOB, rc_by_name)):
+        checkout = by_name.get(_W4_SHARED_STEPS[0]) or {}
+        if (checkout.get("with") or {}).get("persist-credentials") is not False:
+            out.append(
+                "%s checkout with=%r — persist-credentials must be false"
+                % (label, checkout.get("with"))
+            )
+    for step in rc.get("steps") or []:
+        if "npm publish" in (step.get("run") or ""):
+            out.append("%s step %r publishes" % (_W4_RC_JOB, step.get("name")))
+    return out
+
+
+def _w4_in_job(source: str, job: str, old: str, new: str) -> str:
+    """Replace `old` once INSIDE one job's text (for the mutation controls)."""
+    text = _w4_job_text(source, job)
+    assert text is not None and old in text, "control fixture: %r" % old
+    return source.replace(text, text.replace(old, new, 1), 1)
+
+
+class Plan194W4PublishToolchainTest(TestEnvContext):
+    """PLAN-194 W4 — Node 24 + EXACT npm declared once; the RC proof job."""
+
+    maxDiff = None  # an offender list is the diagnosis — print all of it
+
+    def setUp(self):
+        super().setUp()
+        self.source = (_WF / "npm-publish.yml").read_text(encoding="utf-8")
+
+    def _yaml(self):
+        try:
+            import yaml  # type: ignore
+        except ImportError:  # pragma: no cover - CI installs pyyaml
+            self.skipTest("pyyaml not installed")
+        return yaml
+
+    # -- negative controls first: the live file passes on its own merits --
+
+    def test_live_workflow_meets_the_w4_contract(self):
+        self.assertEqual(
+            _w4_text_offenders(self.source), [],
+            "npm-publish.yml breaks the PLAN-194 W4 toolchain contract",
+        )
+
+    def test_live_workflow_meets_the_w4_contract_structurally(self):
+        yaml = self._yaml()
+        self.assertEqual(
+            _w4_structural_offenders(yaml.safe_load(self.source)), [],
+        )
+
+    def test_env_pins_node_24_and_exact_npm(self):
+        # The equality test D-12 asks for, stated on its own.
+        env = _w4_env(self.source)
+        self.assertEqual(env.get(_W4_ENV_NODE), _W4_NODE_MAJOR)
+        self.assertEqual(env.get(_W4_ENV_NPM), _W4_NPM_VERSION)
+
+    def test_shared_steps_are_byte_identical(self):
+        publish = dict(_w4_steps(_w4_job_text(self.source, "publish") or ""))
+        rc = dict(_w4_steps(_w4_job_text(self.source, _W4_RC_JOB) or ""))
+        for name in _W4_SHARED_STEPS:
+            with self.subTest(step=name):
+                self.assertIn(name, publish)
+                self.assertIn(name, rc)
+                self.assertEqual(
+                    publish[name].encode("utf-8"), rc[name].encode("utf-8"),
+                )
+
+    # -- positive controls: each mutation of a COPY must go red ------------
+
+    def _env_mutation(self, key: str, value: str) -> str:
+        old = '\n  %s: "%s"\n' % (key, _w4_env(self.source).get(key))
+        assert old in self.source, "control fixture: %r" % old
+        return self.source.replace(old, '\n  %s: "%s"\n' % (key, value), 1)
+
+    def test_control_pre_w4_npm_range_goes_red(self):
+        mutated = self._env_mutation(_W4_ENV_NPM, "^11.5.1")
+        self.assertTrue(any(
+            "not an EXACT" in o for o in _w4_text_offenders(mutated)))
+
+    def test_control_pre_w4_node_20_goes_red(self):
+        mutated = self._env_mutation(_W4_ENV_NODE, "20")
+        self.assertTrue(any(
+            _W4_ENV_NODE in o for o in _w4_text_offenders(mutated)))
+
+    def test_control_other_exact_npm_goes_red(self):
+        mutated = self._env_mutation(_W4_ENV_NPM, "12.1.0")
+        self.assertTrue(any("D-12" in o for o in _w4_text_offenders(mutated)))
+
+    def test_control_one_byte_drift_in_the_rc_copy_goes_red(self):
+        mutated = _w4_in_job(
+            self.source, _W4_RC_JOB, "--exclude='*.pyc'", "--exclude='*.pyo'")
+        self.assertTrue(any(
+            "not byte-identical" in o for o in _w4_text_offenders(mutated)))
+
+    def test_control_job_level_override_goes_red(self):
+        mutated = _w4_in_job(
+            self.source, _W4_RC_JOB,
+            "    permissions:\n",
+            '    env:\n      %s: "11.5.1"\n    permissions:\n' % _W4_ENV_NPM,
+        )
+        self.assertTrue(any(
+            "defined" in o for o in _w4_text_offenders(mutated)))
+        yaml = self._yaml()
+        self.assertTrue(any(
+            "redefines" in o
+            for o in _w4_structural_offenders(yaml.safe_load(mutated))))
+
+    def test_control_rc_job_with_id_token_goes_red(self):
+        mutated = _w4_in_job(
+            self.source, _W4_RC_JOB,
+            "      contents: read\n",
+            "      contents: read\n      id-token: write\n",
+        )
+        self.assertTrue(any(
+            "'id-token'" in o for o in _w4_text_offenders(mutated)))
+        yaml = self._yaml()
+        self.assertTrue(any(
+            "permissions=" in o
+            for o in _w4_structural_offenders(yaml.safe_load(mutated))))
+
+    def test_control_rc_job_that_publishes_goes_red(self):
+        mutated = _w4_in_job(
+            self.source, _W4_RC_JOB,
+            "npm pack --dry-run 2>", "npm publish --dry-run 2>",
+        )
+        self.assertTrue(any(
+            "'npm publish'" in o for o in _w4_text_offenders(mutated)))
+        yaml = self._yaml()
+        self.assertTrue(any(
+            "publishes" in o
+            for o in _w4_structural_offenders(yaml.safe_load(mutated))))
+
+    def test_control_rc_job_on_every_tag_goes_red(self):
+        mutated = _w4_in_job(
+            self.source, _W4_RC_JOB, "    if: %s\n" % _W4_RC_IF, "")
+        self.assertTrue(any(
+            "`if:" in o for o in _w4_text_offenders(mutated)))
+
+    def test_both_checkouts_drop_persisted_credentials(self):
+        # Pre-review P2 (S362): the job token must not sit in .git/config
+        # while the jobs run repo code (install.sh smoke, npm pack).
+        for job in ("publish", _W4_RC_JOB):
+            block = dict(_w4_steps(_w4_job_text(self.source, job) or "")).get(
+                _W4_SHARED_STEPS[0], "")
+            with self.subTest(job=job):
+                self.assertIn(_W4_NO_PERSIST, block.split("\n"))
+
+    def test_control_persisted_checkout_credentials_go_red(self):
+        old = _W4_NO_PERSIST + "\n"
+        assert self.source.count(old) == 2, "control fixture: %r" % old
+        mutated = self.source.replace(old, "")
+        self.assertTrue(any(
+            "persist-credentials" in o for o in _w4_text_offenders(mutated)))
+
+    def test_control_pack_command_deleted_echo_kept_goes_red(self):
+        # Pre-review P2 (S362): the step's own ::error:: echo also says
+        # "npm pack --dry-run" — deleting the COMMAND must still go red.
+        mutated = _w4_in_job(
+            self.source, _W4_RC_JOB,
+            'if ! npm pack --dry-run 2> "$LOG"; then',
+            'if ! true 2> "$LOG"; then',
+        )
+        self.assertIn("npm pack --dry-run failed", mutated)
+        self.assertTrue(any(
+            "does not run `npm pack --dry-run`" in o
+            for o in _w4_text_offenders(mutated)))
+
+    def test_control_unmirrored_publish_packaging_step_goes_red(self):
+        # Pre-review P2 (S362): a publish-only step slipped in between the
+        # shared steps would ship un-mirrored in the RC proof.
+        mutated = _w4_in_job(
+            self.source, "publish",
+            "      - name: Syntax-check the shim\n",
+            "      - name: Trim the staged bundle\n"
+            "        run: rm -rf npm/docs\n\n"
+            "      - name: Syntax-check the shim\n",
+        )
+        self.assertTrue(any(
+            "closed sequence" in o for o in _w4_text_offenders(mutated)))
+
+    def test_control_publish_step_after_the_packlist_gate_goes_red(self):
+        mutated = _w4_in_job(
+            self.source, "publish",
+            "      - name: Check registry for already-published version\n",
+            "      - name: Rewrite the staged bundle\n"
+            "        run: echo x > npm/extra\n\n"
+            "      - name: Check registry for already-published version\n",
+        )
+        self.assertTrue(any(
+            "closed sequence" in o for o in _w4_text_offenders(mutated)))
 
 
 if __name__ == "__main__":

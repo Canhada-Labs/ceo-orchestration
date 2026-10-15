@@ -14,10 +14,10 @@ Wave: W4 — publicação npm: Node suportado e npm com versão exata (W4.1, W4.
 Patch: .claude/plans/PLAN-194/w4/w4.patch
 Staged: .claude/plans/PLAN-194/w4/staged-w4/.github/workflows/npm-publish.yml
 Staged: .claude/plans/PLAN-194/w4/staged-w4/.claude/governance/npm-trusted-publisher.txt
-Patch-sha256: TO-FILL-BY-SIGN
-Rail-Record-sha256: TO-FILL-BY-SIGN
-Anchor-SHA: TO-FILL-BY-SIGN
-Data: TO-FILL-BY-SIGN
+Patch-sha256: ae76d066e9eaf00f9bfaa42c9f64b616f3c25f7c138f6145b1bf6d7afaa26c0c
+Rail-Record-sha256: 331db3ed5c747df717300996ee6718d427a4b45c3f3856ae0cb411f6e0bd8d2e
+Anchor-SHA: fc354a663251c6a9dc8ab3e5cde4d0a9aca99781
+Data: 2026-10-15
 
 ## Ratificação (Owner)
 
