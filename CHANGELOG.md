@@ -9,11 +9,551 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> v1.4.1: 166 skills, 27 slash commands, 198 ADRs, 72 `_lib` modules) are
+> v1.4.3: 166 skills, 27 slash commands, 198 ADRs, 72 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
 
 ---
+
+## [1.4.3] - 2026-10-15
+
+Maintenance release (PLAN-194). The requirements do not change from v1.4.2:
+Claude Code 2.1.280 or later, Python 3.9 or later, and Node.js 20 or later
+for the npm shim. What changes for an install:
+
+- The `/ceo-boot` harness-configuration gate was red on installs, because
+  its replay fixtures lived in a directory installs do not receive. It now
+  turns green, both on an install upgraded from v1.4.2 with `upgrade.sh`
+  and on a fresh install, and tests in CI prove both cases for one install
+  shape (cure: PLAN-183 W7a; tests: PLAN-183 C9).
+- The `agent_spawn` audit writer now reads the previous chain link under the
+  log lock. This retires signed condition 67 of v1.4.0-rc.1.
+- A fresh `--ceremony user` install writes
+  `permissions.defaultMode: "manual"`.
+- On an install that registered the cost-envelope hook by hand, a block
+  is now recorded in the audit log. No earlier release recorded it.
+- `audit-query.py`, `/status`, `/ceo-boot` and `check-substrate-drift.py`
+  are fixed.
+
+The pair-rail reviewer is re-pinned to Codex CLI 0.160.0.
+
+The honest part: this maintenance train set out to cure the audit spool, and
+that cure did not make the cut. The spool leaves per-process files behind,
+and its forced drain can outlast a hook's timeout. Both stay open and are
+declared below, as is the rest of the v1.4.0 annex. No speed claim.
+
+### Fixed — the `/ceo-boot` harness-configuration gate was red on installs (PLAN-183 W7a)
+
+- Before this release, the replay half of
+  `.claude/hooks/check_harness_config.py` read its three positive-control
+  fixtures from `.claude/hooks/tests/fixtures/harness-config/replay/`.
+  `/ceo-boot` runs this gate as `harness_config_gate`. Installs do not
+  receive that directory, and the gate counts a missing fixture as a RED
+  finding. So an install reported the three fixtures missing and stayed
+  red (`FAIL: 3 RED finding(s)`), whatever the adopter configured. The
+  exception is an install that still holds a copy of the hooks' test tree
+  from an earlier upgrade (Known-open below).
+- The fixtures now live in `.claude/hooks/_lib/harness_replay/`, a data
+  directory with no `__init__.py`. Installs receive it, and the gate reads
+  the fixtures there. The runtime placeholder in a fixture is now
+  `@HARNESS_REPLAY_PROJECT_DIR@`, and that is the only form accepted.
+- Tests that run in CI prove the cure on both delivery paths, for a
+  `--profile core --ceremony maintainer` install:
+  - An install made from the v1.4.2 tree and upgraded with this release's
+    `upgrade.sh` receives the three fixtures, and its gate exits 0.
+  - The gate of a fresh install exits 0.
+  - The tree from before the cure reproduces the red.
+- **The gate is stricter.**
+  - It reads JSON three times: the settings, the fixture, and the decision
+    of the hook under test. All three reads refuse `NaN` and `Infinity`.
+  - A fixture with a duplicate key, with nesting deeper than 32, or with a
+    `{{` anywhere is a RED finding.
+  - A fixture that does not parse, invalid UTF-8 included, is a named RED
+    finding, never a traceback.
+  - The hook's decision is its whole stdout, parsed as ONE JSON value. A
+    preamble, a second object, or characters such as NBSP or U+2028 around
+    the value do not certify the control.
+- The gate delegates part of its work to
+  `check-active-hooks-executable.py`. That check used to pass a settings
+  file with `NaN` or `Infinity`, or with a `hooks` value whose containers
+  have the wrong type. On a top level that is not an object it crashed;
+  when that file was not one of the gate's own settings paths, the gate
+  reported the crash as a warning, which reads as green. It
+  now exits 2 with a named error in each of those cases. It checks the
+  containers of `hooks`, not every field (Known-open below).
+
+### Fixed — two parallel audit writers could leave a chain break nobody caused (v1.4.0-rc.1 condition 67)
+
+- `append_entry` in `.claude/hooks/audit_log.py` writes the `agent_spawn`
+  events. It used to read the previous link (`audit-log.last-hmac`) and
+  compute the line's HMAC before taking the log lock. If another writer
+  appended in between (another `agent_spawn`, or an `audit_emit` event), the
+  line was chained to a stale link, and `verify_chain()` reported
+  `hmac_mismatch` with no tampering.
+- It now does four things under one log lock: reads the link, computes the
+  HMAC, appends the line and updates the sidecar. It is the same lock under
+  which `audit_emit` and the spool drain already read the link and append.
+- **This release retires signed condition 67 of v1.4.0-rc.1.** That
+  condition is the parallel-writer break described in the `[1.4.0]` entry.
+  Breaks the race already wrote stay in your logs (Known-open below).
+- When this writer rotates the log, line 1 of the new log is the
+  `chain_reset_marker` (ADR-055-AMEND-2), and the `agent_spawn` line chains
+  to it.
+- If that marker is not on disk, the line is written without an HMAC
+  (`hmac_error=chain_reset_marker_missing`). It stays outside the chain, and
+  `check-audit-hmac-null.py` shows it.
+- A lock timeout still drops the line and leaves a breadcrumb, without
+  blocking the session.
+- Both shipped settings templates register `audit_log.py`, so every install
+  gets the cure when it upgrades.
+
+### Changed — a fresh `--ceremony user` install writes `permissions.defaultMode: "manual"` (PLAN-194 W5b)
+
+- `install.sh` writes `"manual"` together with the deny baseline when the
+  `.claude/settings.json` produced by that same run has no
+  `permissions.defaultMode`. It does so on both of its routes, `jq` and
+  `python3`. When no settings source sets `defaultMode`, Claude Code
+  2.1.295 can open a session in auto mode, `claude -p` included. The
+  maintainer ceremony's template already carries `"manual"`.
+- A `.claude/settings.json` that existed before the install is never
+  touched.
+- `upgrade.sh` does not change, because it already wrote the key when it
+  was absent. This change brings a fresh `user` install in line with the
+  upgrader. It is not the cure of any v1.4.0 annex condition.
+- The project value outranks a `defaultMode` in user settings. Claude Code
+  merges settings in the order user, project, local, flag, policy, and the
+  later source wins. To use another mode for one session, pass
+  `--permission-mode` or press shift+tab.
+- `CEO_INSTALL_SKIP_DENY_BASELINE=1` skips both the deny baseline and the
+  `defaultMode`.
+
+### Fixed — a cost-envelope block was never recorded (PLAN-194)
+
+- `check_cost_envelope.py` passed `action` twice to its emitter, in every
+  release since v1.0.0. The resulting `TypeError` was swallowed by the
+  fail-open path: the block happened, but no event reached the log.
+- A block now writes exactly one `cost_envelope_capped` line, with an HMAC.
+  The line carries only the fields on the event's allowlist, `project`
+  among them. The block itself does not change.
+- No shipped settings template registers this hook. The change reaches only
+  an install that registered it by hand.
+
+### Changed — Codex model names and the deprecation ledger (PLAN-194 W3b)
+
+- `_VALID_MODELS` in `.claude/hooks/_lib/codex_cli_shape.py` lists the
+  names an EXPLICIT `--model` for the Codex reviewer may carry.
+  - Removed: `gpt-5`, `gpt-5-mini`, `gpt-5-codex`, `o3`, `o3-mini` and
+    `o4-mini`. These are ids the OpenAI deprecation ledger retires.
+  - Added: `gpt-5.6-sol`, `gpt-5.6-terra` and `gpt-5.6-luna`.
+  - Kept: `gpt-5.5`.
+- An explicit call with a removed id (for example `codex_invoke.py --model
+  o3`) is refused as `UnknownCodexModel` before it reaches the API, and the
+  review degrades to advisory.
+- Without `--model`, which is the default, nothing changes: the argv still
+  omits it, and the account serves its own model.
+- `check-model-deprecations.py` no longer matches by prefix: `gpt-5` is not
+  `gpt-5-mini`, and `o3` is not `o3-mini`.
+- The ledger (`.claude/scripts/model-deprecations.json`) gains 14 OpenAI
+  ids, among them `gpt-5-mini`, `gpt-5-codex`, `o3-mini` and `o4-mini`.
+  `o3-mini` and `o4-mini` shut down on 2026-10-23.
+- The ledger and `optimizer/` reach an install only through `upgrade.sh`. A
+  fresh install copies only the top-level `.claude/scripts/*.py`, `*.sh`
+  and `*.yaml`. The upgrade preflight reads the ledger of the source
+  checkout and scans the target before it replaces any file, so the
+  advisory model-deprecation warning fires on every upgrade from v1.4.2:
+  the v1.4.2 copies of `codex_cli_shape.py` and `codex_invoke.py` carry
+  retired OpenAI ids. Its text still says "Claude model ids" and names no
+  id; run the command it prints to see the list.
+- The `codex_invoke.py` example and the default label of
+  `optimizer/codex_phase_gate.py` move to `gpt-5.6-sol`.
+
+### Fixed — `audit-query.py`, `/status`, `/ceo-boot` and `check-substrate-drift.py`
+
+- `audit-query.py`: the shared flags (`--log`, `--include-rotated`,
+  `--json`, `--csv`, `--errors-path`) now take effect before or after the
+  subcommand. Before, the subcommand's default silently replaced a value
+  given BEFORE the subcommand. For example, `audit-query.py --log X summary`
+  summarized the default (live) log as if it were X, and `--json summary`
+  printed a table.
+- `/status` reported health as `UNKNOWN` on every run. `status.py` called
+  `audit-query.py health` with a flag that does not exist (`--as-json`); it
+  now passes `--json`.
+- `/ceo-boot`:
+  - A plan in `executing` with no commit in 24 hours is listed as waiting,
+    not stranded, when it declares its wait (`external_wait`, or a
+    `## Blockers` section with content).
+  - The false red of `scheduled_workflows_red` is cured as a class. The
+    check makes one request per scheduled workflow under one 4-second
+    budget, and stale or undated data is yellow, never red.
+- `/ceo-boot --verbose` adds an advisory Tier-A check,
+  `tier_a_model_currency`, that is never red. Installs do not receive
+  ADR-149, so in an install this check always answers green with
+  `sem dado` (no data). Its summary text is in Portuguese.
+- `check-substrate-drift.py`: a substrate ledger that is valid JSON of the
+  wrong shape (`components` not a list, `last_seen` not an object) used to
+  replace the whole report with `DETECTOR_ERROR`, hiding a Codex drift
+  already found. Each component (Codex, Claude Code, the catalog) is now
+  checked on its own. A ledger of the wrong shape is a named
+  `CC_LEDGER_UNREADABLE` (unknown), a component whose check raises is a
+  named `COMPONENT_CHECK_ERROR` (unknown), and in both cases `--strict`
+  still exits 1 on the other components' drift. This cures a P2 finding of
+  the v1.4.2 GA re-pass. `/ceo-boot` does not run this tool.
+
+### Added — read-only audit verifiers
+
+- `.claude/scripts/audit_spool_state.py` inspects the audit spool's state
+  directory.
+- `.claude/scripts/check-audit-real-loss.py` reports a lower bound of real
+  event loss.
+- Both are read-only. Their limits are in Known-open below.
+
+### Changed — other files that reach installs
+
+- `_lib/spool_writer.py`: on the first event of a new spool, the header no
+  longer gets its own `fsync`. The event's `fsync` on the same file covers
+  the header, before the commit and the success signal, so one `fsync`
+  replaces two. If that `fsync` fails, the event can later appear twice
+  (low severity). This change came through a pull-request merge (Known-open
+  below).
+- `ceo-cost-transcripts.py` gains a model-routing detector. It compares
+  the model that served each call with the declared one, VETO floor
+  included. It also gains an `--assert-routing` gate, with exit codes 0, 1
+  and 3.
+- `generate-skill-inventory.sh` now passes its texts to `python3` through
+  the environment instead of argv. Under an EDR agent on macOS, the argv
+  route ended in rc 137.
+- Two scripts changed for the framework's CI. Both reach installs, because
+  the installer copies every top-level `.claude/scripts/*.py`:
+  - `goap-planner.py`, the planner behind `/goap`, now caches where it
+    found the hook directory.
+  - The new `diagnose-output-hook.py` is a CI diagnostic that nothing in an
+    install runs.
+- The substrate ledger (`.claude/scripts/substrate-watch.json`) records
+  Claude Code 2.1.295 and Codex CLI 0.160.0. Only `upgrade.sh` delivers
+  this file. The install floor stays at Claude Code 2.1.280.
+- Framework repository docs (not delivered to installs): `SUPPORT.md` and
+  `docs/adopter-new-model-fast-access.md` now cite the Claude Code 2.1.284
+  changelog: `ultracode` no longer forces `xhigh` effort. The effort
+  defaults they cite were read in the 2.1.295 binary, not probed on it.
+
+### Changed — pair-rail reviewer re-pinned to Codex CLI 0.160.0 (PLAN-194, ADR-182)
+
+- The payload manifest pins the 0.160.0 binary by sha256, for one platform
+  only (`aarch64-apple-darwin`). The accepted range becomes
+  `>=0.128.0,<0.161.0`: the upper bound is widened, and the lower bound is
+  unchanged.
+- In the framework checkout, `check_pair_rail.py --verify-codex-pin` fails
+  CLOSED on any other binary.
+- Rail measurements taken before and after the re-pin are not comparable,
+  because the instrument changed.
+- Installs do not receive `.claude/governance/`. There the pin resolves as
+  infrastructure and fails open (advisory), whatever the Codex version.
+  That is unchanged.
+- With `--harness codex`, the installer's version-skew warning reads the
+  same range. So Codex 0.160.x now counts as in range for Codex as a hook
+  host, while the hook fixtures stay at 0.139.0 (Known-open below).
+
+### Changed — the framework's own CI and release (no installed file changes)
+
+- The npm package is now published with Node.js 24 and exactly npm
+  11.20.0. Before, it used `^11.5.1` on Node 20.
+- An rc tag runs a toolchain proof that never publishes: no `id-token`, and
+  `npm pack --dry-run`.
+- For whoever installs, nothing changes: the shim still needs Node.js 20 or
+  later.
+- On `main` pushes, scheduled runs and manual dispatches, while the
+  repository variable `VM_CI_ENABLED` is `1` (set on 2026-10-11), the jobs
+  of `validate.yml`, `coverage.yml`, `ownership-nightly.yml` and
+  `smoke-install.yml` run on the maintainer's self-hosted runner group,
+  except the 3.14 leg. Pull requests, and those runs when the variable is
+  off, use GitHub-hosted runners. These changes came through pull-request
+  merges (Known-open below).
+- Off that route, the Python 3.9 test leg runs on the fixed `ubuntu-24.04`
+  label. `setup-python` has no 3.9 for Ubuntu 26.04, and `ubuntu-latest`
+  moves to 26.04 during a rollout that starts on 2026-10-19.
+- A 3.14 leg runs on `ubuntu-26.04`, on schedule only.
+- The CI template the installer delivers (`validate.yml.template`, on
+  `ubuntu-latest`) does not change. Its steps were measured 10/10 green in
+  an `ubuntu:26.04` container.
+- Formal verification: `docs/formal-verification/properties-proved.md` now
+  opens with a correction. The April property inventory is not a statement
+  that the old model passed TLC, and the model's first real TLC run found a
+  violation (`S2_HalfOpenSingleton`). The breaker model was rewritten; the
+  runtime did not change. `formal-verify.yml` now runs TLC on the three
+  models, plus regression and mutation checks of the breaker model. The
+  job stays advisory, so a red check does not turn the run red. These are
+  results on a finite model, not a proof.
+
+### Known-open (declared by this release)
+
+- **The audit spool.**
+  - It leaves per-process lock and journal files in its state directory,
+    and nothing removes them.
+  - The forced drain at a hook's exit can wait on the canonical lock longer
+    than the hook's timeout. Claude Code discards the decision of a hook
+    that exceeds its timeout, even when the hook's output was already
+    written.
+  - This release carries neither that cure nor the stress run that would
+    prove it.
+- **The new verifiers have limits.**
+  - The real-loss verifier reports a lower bound: a record whose commit
+    never reached the on-disk journal, or was compacted away or truncated
+    there, is not seen.
+  - It can report a silent zero when the errors file disappears and an
+    empty one takes its name.
+  - Counters for forms that only the spool cure introduces read 0 by
+    design, and both verifiers cite a design amendment this release does
+    not ship.
+  - No shipped tool removes the stock of empty per-process files.
+- **Audit-file modes.** Some audit-family files are created by an `open()`
+  that sets no mode, so they take the umask's mode (0644 was observed), not
+  0600. Among them: an audit log that the spool drain's rotation creates,
+  the errors file, a compacted spool journal, and a fallback breadcrumb
+  file under `/tmp`.
+- **The condition-67 cure has declared limits.**
+  - Breaks the race already wrote stay in the live log and in the rotated
+    archives: this release rewrites no history.
+  - Under lock saturation, the longer critical section can time out and
+    drop the line (fail-open, breadcrumb only).
+  - After a failed marker write, the next line another writer signs chains
+    to the missing marker, and `verify_chain()` reports a break there.
+  - `append_entry` does not increment the `audit-log.chain-length` counter,
+    so tail-truncation detection does not count `agent_spawn` lines.
+  - The first mint of the per-project HMAC key is still not exclusive
+    (condition 68 of v1.4.0-rc.1).
+  - Writers that resolve different locks for the same log still do not
+    exclude each other.
+- **The harness-gate cure has declared limits.**
+  - An install stays red until it upgrades.
+  - The plugin does not register the gate and leaves out the fixture
+    directory. In a plugin-only install, running the gate by hand still
+    reports three missing fixtures.
+  - Nothing permanently asserts that the npm package carries the three
+    fixtures.
+  - The CI proof uses one install shape (`--profile core --ceremony
+    maintainer`) and a repository checkout, not the npm package. No test
+    runs the gate on a `--ceremony user` install or on another profile.
+  - Some earlier releases' upgrade copied the hooks' test tree. An install
+    that came from one of them keeps those copies.
+  - Text outside the gate that describes the replay fixtures, among it an
+    ADR, a workflow comment and the fixtures' README, still names the old
+    directory or the old `{{PROJECT_DIR}}` placeholder.
+  - A duplicate key and `1e999` are still accepted in settings and in the
+    hook decision.
+  - The sub-check validates the containers of `hooks`, not every field.
+    Some malformed hook entries still pass (a missing or unknown `type`, a
+    non-string `matcher`), a settings path that exists but is not a regular
+    file is skipped without a message, and a filesystem error while
+    resolving a hook path ends in a traceback.
+- **The `defaultMode` change has declared limits.**
+  - Opting out of the deny baseline also drops the `defaultMode`.
+  - The `user` settings template's note on why it carries no `permissions`
+    block is stale.
+  - The test that proves the write does not run in CI.
+- **The cost-envelope event.**
+  - Without `CLAUDE_PROJECT_DIR`, its `project` field is the current
+    directory.
+  - In the SPEC, the prose on raw project paths contradicts the field table
+    of the same event.
+- **Codex model names.**
+  - The list holds names, not availability. A given account, or an older
+    Codex CLI, may not serve an id the list keeps.
+  - The check against the deprecation ledger sees only the ids the local
+    ledger carries.
+  - A newer model family that the maintainer's Codex configuration already
+    uses is not on the list.
+- **The Codex pin.**
+  - Updating the reviewer needs a manual, signed re-pin. There is no
+    verified automatic pin.
+  - The pin covers one executable on one platform. It does not cover the
+    tarball's other members, other platforms, the launcher, or the
+    processes the payload delegates to.
+  - The pack generator does not check npm's provenance attestation.
+  - The pack generator copies the payload path from the manifest without
+    checking that the new launcher runs it.
+- **Codex as a hook host.** The range now admits 0.160.x, while the hook
+  fixtures stay at 0.139.0. The checklist that would re-certify them is
+  deferred.
+- **User-code review in AUTO mode.** With `CEO_CODEX_USER_REVIEW_AUTO=1`,
+  `codex_review_user_code.py` sends the diff of the files it rates risky,
+  and the content of new untracked files, to the Codex reviewer without the
+  egress redactor. It reads those files through symlinks. AUTO is off by
+  default; both shipped settings templates register the hook.
+- **Newer Claude models are not adopted.** Claude models that current
+  Claude Code serves by default or by alias, and that ADR-149 does not
+  cover, stay outside the working set. Among them:
+  - Sonnet 5.5, which the Claude Code 2.1.284 changelog makes the default
+    Sonnet (not measured on 2.1.295). It is admitted only by prefix and has
+    no price row, so cost rollups count it at $0.
+  - Haiku 5.5, which the `haiku` alias selects in Claude Code 2.1.295 (read
+    in the binary). The shipped `availableModels` does not admit it, and
+    the framework's model-routing table still names Haiku 4.5.
+  - The ADR-149 text on `ultracode` still describes the behavior before
+    Claude Code 2.1.284.
+- **No paid re-measurement on Claude Code 2.1.295.**
+  - The paid probes this train planned against Claude Code did not run. The
+    effort and `ultracode` texts rest on probes of 2.1.280 and on binary
+    reads of 2.1.295.
+  - Among what stays unmeasured on 2.1.295: the auto-mode prompt rate, hook
+    latency in a solo session, the `sonnet` alias, the Workflow
+    `opts.model`, the wait at the usage limit, and the model-switch hook on
+    a refusal fallback.
+  - The adopter docs do not yet cover the time limit that Claude Code
+    2.1.285 puts on background Bash commands.
+- **Audit files can be deleted by Claude Code** (see the `[1.4.2]` entry).
+  - Claude Code's cleanup sweep unlinks every top-level `*.jsonl` in each
+    project directory that is older than the `cleanupPeriodDays` of the
+    session running the sweep (default 30). That includes the audit logs
+    and their rotated archives.
+  - There is no plan in this release with a structural cure.
+  - The maintainer settings template still ships 90.
+  - The protection is still a scheduled backup with `ceo-backup.sh`.
+- **Backups leave out the key material.**
+  - `ceo-backup.sh` archives the audit logs, the errors file and
+    `memory/`. It does not archive the key material and chain state next to
+    them, among them `audit-key` and `.salt`, and the disaster-recovery
+    guide does not say so.
+  - Without the original key, a restored log cannot be verified. Keep your
+    own copy of both.
+- **Restore and verification scripts.**
+  - `ceo-restore.sh` has defects that this train's restore rehearsal found
+    and did not cure. Among them: it can write through a symlink at its
+    destination, including over the live project's HMAC key and salt; it
+    restores without an integrity check when the `.sha256` file is
+    missing; and without `--dest` it overwrites the live audit log while
+    the chain state files next to it stay as they were.
+  - The incident-response recipe tells you to run it with a flag it
+    refuses.
+  - The counter-strict mode of `audit-verify-chain.py` has exits outside
+    its contract: a traceback, an argparse exit code, and invalid JSON.
+- **The Bash guard** does not cover two cases, as `docs/threat-model.md`
+  declares: writes whose target is computed or spelled another way, and
+  the indirect execution of a destructive command.
+- **Excluding the root `CLAUDE.md`.**
+  - A settings key that excludes the root `CLAUDE.md` is not among the
+    forbidden keys.
+  - Nothing flags a session that loaded without the root contract.
+  - Since Claude Code 2.1.293, reading a file through Bash loads the nested
+    `CLAUDE.md` files on its path.
+- **A gate that delegates to a sub-check** turns an exception in that
+  sub-check into a degraded warning, which reads as green, and loses the
+  sub-check's stderr.
+- **The plan-lifecycle hook** does not recognize follow-up plan names, and
+  it fails open on them.
+- **Field findings.** PLAN-183 records several findings from installs. This
+  release cures only the harness gate; the others stay open.
+- **npm publish.**
+  - The OIDC exchange and the registry write run only at GA. An rc proves
+    the toolchain, not the publication.
+  - The Node version is pinned as a line, not a build.
+  - npm is pinned as an exact version, with no hash.
+  - The shim's SPEC contract still cites the old npm requirement.
+- **Framework files merged without the signing ceremony.**
+  - Four GitHub pull-request merges brought framework files into `main`
+    without the signing ceremony.
+  - Signed sentinels later ratified, by their bytes, the canonical files
+    among them. The other files those merges brought are covered by no
+    signature, among them top-level scripts the installer copies (above).
+  - One module the hooks run came this way and was ratified:
+    `_lib/spool_writer.py` (above).
+  - Nothing in the repository prevents a repeat: `main` has no branch
+    protection and no ruleset (measured through the GitHub API on
+    2026-10-14).
+- **CI on Ubuntu 26.04.**
+  - Jobs that run on `ubuntu-latest` were not executed on 26.04 before the
+    switch.
+  - The 3.14 leg has no `continue-on-error`. A red there turns the
+    scheduled run red and can hide a regression in other legs.
+  - The workflow lint does not check a runner label inside an expression.
+- **CI on the maintainer's runners.**
+  - A persistent runner keeps Python packages, `/tmp` and `$HOME` from one
+    job to the next, including jobs of other repositories in the same
+    runner group.
+  - Jobs that do not turn off checkout credential persistence leave the
+    token on that shared host.
+  - With the route on and the runners busy or down, jobs wait in the
+    queue: there is no automatic fallback to hosted runners.
+  - Some failure classes seen on those runners stay undiagnosed, and the
+    hook-latency gate was calibrated on hosted runners.
+  - Some workflow comments still describe the earlier runner routing.
+  - The TLC check stays advisory at job level, the shape that hid a
+    continuous red for months. Its jar hash lives in a script outside the
+    signing ceremony, and the release asset it pins can change under the
+    same address.
+
+### Known-open (carried — NOT cured by this release)
+
+- **The v1.4.0 annex.**
+  - The signed v1.4.0 verdict carries an annex of P1 findings and declared
+    conditions. The `[1.4.1]` entry re-targeted their cure to 1.4.2, and
+    the `[1.4.2]` entry declared that no release is assigned to it.
+  - This release cures one of them: signed condition 67 (above).
+  - **The rest stays open, and no release is assigned to their cure.**
+  - The `defaultMode` change above is not the cure of any annex condition.
+  - The list is in the sources the `[1.4.2]` entry names.
+- **The v1.4.2 rc.1 annex, which the `[1.4.2]` entry does not name.** The
+  three P1 findings of the signed rc.1 annex stayed open at the v1.4.2 GA
+  (its condition 13), with no release promised for their cure, and this
+  release does not cure them. By shape:
+  - An inspection CLI that receives another checkout's path imports a
+    Python module from that checkout's tree, so that module's import-time
+    code runs with the caller's privileges.
+  - A command a CLI prints for the operator to paste carries an unquoted
+    path, so a directory name that contains a command substitution runs it
+    when the command is pasted.
+  - The re-pin pack generator does not normalize tarball member names the
+    way the npm extractor does. Two members can then land on the same
+    destination, and the pack can pin the bytes of a member the extractor
+    does not leave there.
+  - The P2 findings of that annex (condition 14) stay open too. One is a
+    re-pin generator that writes `TODO(owner)` into prose that its own
+    guard then refuses.
+- **The Known-open of the `[1.4.2]` entry stays open as written there**,
+  with two notes:
+  - The Codex hook-host range now admits 0.160.x (above).
+  - The CI test jobs now fetch the full history with tags. So the test that
+    runs `derive-settings-baselines.py --check` runs there instead of being
+    skipped.
+- **What v1.4.1 left open stays open.** The `[1.4.2]` entry lists its
+  sources. This release does not change the Workflow guard and ledger, the
+  PLAN-190 recovery tools, or `upgrade.sh`.
+
+### What an adopter should know before installing or upgrading
+
+- The requirements are unchanged:
+  - Claude Code 2.1.280 or later. Install and upgrade refuse an older
+    `claude` on `PATH` with exit 6, unless you pass
+    `--allow-old-claude-code`.
+  - Python 3.9 or later.
+  - Node.js 20 or later for the npm shim.
+- Upgrade to turn the `/ceo-boot` harness-configuration gate green. An
+  install made from an earlier release stays red until it upgrades. A
+  plugin-only install still reports three missing fixtures.
+- After the upgrade, the gate refuses a settings file with `NaN` or
+  `Infinity`. If it reports one, fix the file.
+- A fresh `--ceremony user` install opens sessions in `manual` mode. To use
+  another mode for one session, pass `--permission-mode` or press
+  shift+tab. `CEO_INSTALL_SKIP_DENY_BASELINE=1` drops the deny baseline and
+  the `defaultMode` together.
+- If you pass `--model` to the Codex reviewer, use `gpt-5.5`,
+  `gpt-5.6-sol`, `gpt-5.6-terra` or `gpt-5.6-luna`, or omit the flag.
+- The upgrade's model-deprecation warning is advisory. It fires on every
+  upgrade from v1.4.2, because the v1.4.2 copies of `codex_cli_shape.py`
+  and `codex_invoke.py`, which the upgrade replaces, carry retired OpenAI
+  ids. It can also flag ids your own code uses, such as `o3-mini` or
+  `o4-mini`. Its text says "Claude model ids" and names no id: run the
+  command it prints to see the list. `--no-deprecation-warn` silences it.
+- If you set `CEO_CODEX_USER_REVIEW_AUTO=1`, the user-code review sends
+  diffs and new untracked files to the Codex reviewer without the egress
+  redactor (Known-open above).
+- On earlier releases, a report built with `audit-query.py --log X
+  <subcommand>` read the default log, not X. Re-run any such report.
+- Chain breaks that the parallel-writer race wrote before the upgrade stay
+  in your logs, and `verify_chain()` still reports them.
+- If you rely on the audit trail for longer than 30 days, raise
+  `cleanupPeriodDays` at user scope and back up the audit files. Also keep
+  your own copy of `audit-key` and `.salt`, because the backup leaves them
+  out.
 
 ## [1.4.2] - 2026-09-25
 
