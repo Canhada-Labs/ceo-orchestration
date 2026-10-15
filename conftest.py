@@ -96,15 +96,24 @@ import re as _re  # noqa: E402
 # under parallel CPU contention. Non-perf serial cases (concurrency, real-repo reads, single-
 # process-contract guards) are marked explicitly at the test (decorator / pytestmark).
 _SERIAL_NODEID_RE = _re.compile(
-    r"(latency|p99|p95|perf|performance|redos|budget|under_\d+m?s|completes|within_tolerance|largepayload|_1mb|_1kb|throughput|elapsed|concurren|producers|async_flush|spool_append|spool_drain|stale_lock|times_out|timeout|timing)",
+    r"(latency|p99|p95|perf|performance|redos|under_\d+m?s|completes|within_tolerance|largepayload|_1mb|_1kb|throughput|elapsed|concurren|producers|async_flush|spool_append|spool_drain|stale_lock|times_out|timeout|timing)",
     _re.IGNORECASE,
 )
+# S363 (2026-10-12) — `budget` left the whole-nodeid regex above and matches the
+# test NAME only (the nodeid after the first "::", class name included). Files
+# named *budget*.py hold token/char budgets with no wall clock (~340 tests went
+# serial for their FILE name alone); a wall-clock budget is named at the test
+# (`test_dispatch_verbose_budget_10s`) or its class, and stays serial.
+# Guard: .claude/scripts/tests/test_serial_marking_budget.py
+_SERIAL_NAME_RE = _re.compile(r"budget", _re.IGNORECASE)
 
 
 def pytest_collection_modifyitems(config, items):  # noqa: E302
     import pytest as _pytest
     for _item in items:
-        if _SERIAL_NODEID_RE.search(_item.nodeid):
+        if _SERIAL_NODEID_RE.search(_item.nodeid) or _SERIAL_NAME_RE.search(
+            _item.nodeid.split("::", 1)[-1]
+        ):
             _item.add_marker(_pytest.mark.serial)
 
 
