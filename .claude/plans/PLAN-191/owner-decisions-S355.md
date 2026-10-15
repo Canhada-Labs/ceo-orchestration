@@ -11,3 +11,10 @@
 
 Pré-condições que continuam valendo antes de rodar W0: consertar ou excluir `t09_readme_doc.verify`
 (aceita README só com título — reproduzido 18/09) e testar «resposta mínima» nos outros nove `verify`.
+
+**Nota de 2026-10-12 (S363), fora do registro verbatim:** a consequência escrita na linha
+«portfólio» para o PLAN-170 não se cumpriu nessa forma. `PLAN-170-e7-battery-execution.md` foi
+fechado em 2026-09-30 (S359) como `status: abandoned`, sem `superseded_by`, porque nenhum plano
+único absorve o escopo (seção «Abandonment reason» daquele plano). O rótulo do Owner («Fechar
+PLAN-170») fica como está. As pré-condições acima foram cumpridas no W0-pre (nota
+`.claude/plans/PLAN-191/w0/w0-pre-minimal-response-S363.md`).

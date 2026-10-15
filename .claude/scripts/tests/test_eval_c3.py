@@ -260,6 +260,204 @@ class TestTaskSuite(TestEnvContext):
 
 
 # ---------------------------------------------------------------------------
+# PLAN-191 W0-pre — "minimal response" must not score full reward
+# ---------------------------------------------------------------------------
+
+
+def _t04_drop_redundant_or(wd):
+    # Deletes only the 9 chars ' or s < 0' and keeps BOTH negative checks.
+    p = wd / "solution.py"
+    p.write_text(p.read_text(encoding="utf-8").replace(" or s < 0", "", 1),
+                 encoding="utf-8")
+
+
+# Each payload scored 1.0 on the verifiers shipped before PLAN-191 W0-pre
+# (measured S363): form without substance. Callable = edit of the setup tree.
+MINIMAL_RESPONSES = {
+    "t04-refactor-dedupe": [
+        _t04_drop_redundant_or,
+        {"solution.py": (
+            "def area_rectangle(w, h):\n"
+            "    if min(w, h) < 0: raise ValueError('negative')\n"
+            "    return w * h\n"
+            "def area_square(s):\n"
+            "    if s < 0: raise ValueError('negative')\n"
+            "    return s * s\n")},
+        # Deletes area_rectangle's check: one raise left, negatives unverified.
+        {"solution.py": (
+            "def area_rectangle(w, h):\n    return w * h\n"
+            "def area_square(s):\n"
+            "    if s < 0: raise ValueError('negative')\n"
+            "    return s * s\n")},
+    ],
+    "t05-add-unit-test": [
+        {"test_solution.py": "def test_x():\n    assert True  # parse_csv_line('') == []\n"},
+        # Calls the function but asserts on nothing it returned.
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    assert [] == []\n"},
+        # S363 recheck: the name is bound to the result only AFTER the assert,
+        # or rebound to something else before it — form without substance.
+        {"test_solution.py": "def test_x():\n    r = 1\n    assert r == 1\n    r = parse_csv_line('')\n"},
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    r = 1\n    assert r == 1\n"},
+        {"test_solution.py": "def test_x():\n    assert [] == []  # parse_csv_line\n"},
+        # Rewrites the implementation so a WRONG assertion passes.
+        {"solution.py": "def parse_csv_line(line):\n    return ['x']\n",
+         "test_solution.py": "def test_x():\n    assert parse_csv_line('') == ['x']\n"},
+        # S363 191-A2: the six escapes of the AST/dataflow rule of 2e1d8135
+        # (each scored 1.0 there) + the tautology it declared as residual.
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n"
+                             "    for r in [1]:\n        pass\n    assert r == 1\n"},
+        {"test_solution.py": "import contextlib\ndef test_x():\n    r = parse_csv_line('')\n"
+                             "    with contextlib.nullcontext(1) as r:\n        pass\n"
+                             "    assert r == 1\n"},
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    (r := 1)\n"
+                             "    assert r == 1\n"},
+        {"test_solution.py": "r = 1\ndef test_x():\n    def h():\n"
+                             "        r = parse_csv_line('')\n    h()\n    assert r == 1\n"},
+        {"test_solution.py": "def test_x():\n    parse_csv_line('')\n    r = 1\n    if r:\n"
+                             "        pass\n    else:\n        r = parse_csv_line('')\n"
+                             "    assert r == 1\n"},
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    r = 1; assert r == 1\n"},
+        {"test_solution.py": "def test_x():\n    r = parse_csv_line('')\n    assert r == r\n"},
+        # Skips the empty-line edge case the instruction requires (0.85 at
+        # 2e1d8135; here it is the control of the empty-line mutant).
+        {"test_solution.py": "def test_x():\n"
+                             "    assert parse_csv_line('a, b ,c') == ['a', 'b', 'c']\n"},
+    ],
+    "t07-sql-param-fix": [
+        {"solution.py": "def build_query(user_id):\n    return ('?', (user_id,))\n"},
+        {"solution.py": "def build_query(user_id):\n    return (':', [user_id])\n"},
+        {"solution.py": "def build_query(user_id):\n    return ('%s', (user_id,))\n"},
+    ],
+    "t09-readme-doc": [
+        {"README.md": "# add subtract multiply usage\n"},
+        {"README.md": "# add subtract multiply example\n"},
+        {"README.md": "# x\n```\nadd subtract multiply\n```\n"},
+    ],
+}
+
+# Legitimate answers other than GOLDEN that must keep full reward (the cure
+# must not over-tighten the verifier).
+VALID_ALTERNATIVES = {
+    "t04-refactor-dedupe": {"solution.py": (
+        "def area_rectangle(w, h):\n"
+        "    if w < 0 or h < 0:\n"
+        "        raise ValueError('negative')\n"
+        "    return w * h\n"
+        "def area_square(s):\n"
+        "    return area_rectangle(s, s)\n")},
+    # A list = several legitimate forms; t05 is scored by mutation, so the
+    # syntax of the binding (one line, try/except, walrus, AnnAssign, import)
+    # never matters — each one asserts the basic AND the empty case.
+    "t05-add-unit-test": [{"test_solution.py": (
+        "def test_basic():\n    result = parse_csv_line('a, b ,c')\n"
+        "    assert result == ['a', 'b', 'c']\n"
+        "def test_empty():\n    result = parse_csv_line('')\n    assert result == []\n")},
+        {"test_solution.py": (
+            "def test_basic():\n    r = parse_csv_line('a, b ,c'); assert r == ['a', 'b', 'c']\n"
+            "def test_empty():\n    r = parse_csv_line(''); assert r == []\n")},
+        {"test_solution.py": (
+            "def test_x():\n    try:\n        r = parse_csv_line('')\n    except Exception:\n"
+            "        r = None\n    assert r == []\n    try:\n        r = parse_csv_line('a, b ,c')\n"
+            "    except Exception:\n        r = None\n    assert r == ['a', 'b', 'c']\n")},
+        {"test_solution.py": (
+            "def test_x():\n    if (r := parse_csv_line('')) is not None:\n        assert r == []\n"
+            "    if (r := parse_csv_line('a, b ,c')):\n        assert r == ['a', 'b', 'c']\n")},
+        {"test_solution.py": (
+            "def test_x():\n    result: list = parse_csv_line('')\n    assert result == []\n"
+            "    result: list = parse_csv_line('a, b ,c')\n"
+            "    assert result == ['a', 'b', 'c']\n")},
+        {"test_solution.py": (
+            "from solution import parse_csv_line\n"
+            "def test_basic():\n    assert parse_csv_line('a, b ,c') == ['a', 'b', 'c']\n"
+            "def test_empty():\n    assert parse_csv_line('') == []\n")},
+    ],
+    "t07-sql-param-fix": {"solution.py": (
+        "def build_query(user_id):\n"
+        "    return ('select * from users where id = :id', {'id': user_id})\n")},
+    "t09-readme-doc": {"README.md": (
+        "# calc\n\nSmall arithmetic helpers for scripts.\n\n## Example\n\n"
+        "```python\nimport calc\ncalc.add(2, 3)\n```\n\n"
+        "- `add(a, b)`\n- `subtract(a, b)`\n- `multiply(a, b)`\n")},
+}
+
+
+def _score(task, payload):
+    with tempfile.TemporaryDirectory() as d:
+        wd = Path(d)
+        task["setup"](wd)
+        if callable(payload):
+            payload(wd)
+        else:
+            for rel, content in payload.items():
+                (wd / rel).write_text(content, encoding="utf-8")
+        return tasks_pkg.clamp_reward(task["verify"](wd))
+
+
+class TestMinimalResponse(TestEnvContext):
+    def _tasks(self):
+        return {t["id"]: t for t in tasks_pkg.load_all_tasks()}
+
+    def test_minimal_response_does_not_score_full(self):
+        tasks = self._tasks()
+        for tid, payloads in MINIMAL_RESPONSES.items():
+            for i, payload in enumerate(payloads):
+                with self.subTest(task=tid, payload=i):
+                    reward = _score(tasks[tid], payload)
+                    self.assertLess(
+                        reward, 0.99, f"minimal {tid}#{i} scored {reward}"
+                    )
+
+    def test_valid_alternative_keeps_full_reward(self):
+        tasks = self._tasks()
+        for tid, entry in VALID_ALTERNATIVES.items():
+            for i, payload in enumerate(entry if isinstance(entry, list) else [entry]):
+                with self.subTest(task=tid, payload=i):
+                    reward = _score(tasks[tid], payload)
+                    self.assertGreaterEqual(
+                        reward, 0.99, f"valid alternative {tid}#{i} scored {reward}"
+                    )
+
+    def test_t05_state_kept_across_runs_does_not_score_full(self):
+        # A test file that counts its own loads passes only the FIRST run (the
+        # reference) and fails every mutant: 1.0 unless the verifier runs the
+        # reference again after the mutants.
+        import builtins
+        key = "_t05_runs"
+        self.addCleanup(builtins.__dict__.pop, key, None)
+        builtins.__dict__.pop(key, None)
+        payload = {"test_solution.py": (
+            "import builtins\n"
+            f"builtins.__dict__['{key}'] = builtins.__dict__.get('{key}', 0) + 1\n"
+            f"def test_x():\n    assert builtins.__dict__['{key}'] == 1\n")}
+        reward = _score(self._tasks()["t05-add-unit-test"], payload)
+        self.assertLess(reward, 0.99, f"stateful t05 payload scored {reward}")
+
+    def test_t05_partial_tests_score_exactly_as_declared(self):
+        # Declared residual of the mutation rule (W0-pre note): a passing test
+        # that leaves ONE documented behavior unasserted stays below PASS
+        # (0.99). Exact scores pin the chosen semantics; changing the mutant
+        # set or the instruction must change this table on purpose.
+        cases = [
+            # the pack spec's one-line empty-only form (spec said 1.00):
+            # Owner-reserved choice, default = incomplete test
+            ("def test_x():\n    r = parse_csv_line(''); assert r == []\n", 0.625),
+            # no inner whitespace: the no-strip mutant survives
+            ("def test_b():\n    assert parse_csv_line('a,b,c') == ['a', 'b', 'c']\n"
+             "def test_e():\n    assert parse_csv_line('') == []\n", 0.875),
+            ("def test_b():\n    assert parse_csv_line(' a ') == ['a']\n"
+             "def test_e():\n    assert parse_csv_line('') == []\n", 0.75),
+            ("def test_b():\n    assert parse_csv_line('a') == ['a']\n"
+             "def test_e():\n    assert parse_csv_line('') == []\n", 0.75),
+        ]
+        task = self._tasks()["t05-add-unit-test"]
+        for i, (src, expected) in enumerate(cases):
+            with self.subTest(case=i):
+                reward = _score(task, {"test_solution.py": src})
+                self.assertAlmostEqual(reward, expected, places=6,
+                                       msg=f"partial t05#{i} scored {reward}")
+
+
+# ---------------------------------------------------------------------------
 # Runner: worst-of-N + flaky reuse, serial, quota gate
 # ---------------------------------------------------------------------------
 

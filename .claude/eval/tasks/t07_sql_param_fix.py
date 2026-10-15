@@ -4,13 +4,24 @@ The verifier cannot run a real DB, so it checks the candidate's
 ``build_query(user_id)`` returns the SAFE two-tuple ``(sql_with_placeholder,
 params)`` rather than an interpolated string — a security-relevant transform we
 can verify structurally + deterministically.
+
+PLAN-191 W0-pre: the SQL must keep the query's SHAPE (select ... from users
+where ...) and the placeholder must be the value compared to ``id`` — a lone
+``'?'`` with the value in params used to score 1.0. Mapping params (named
+placeholders such as ``:id``) carry the value in their values.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from . import clamp_reward, read_text, run_python, _VERIFY_ERROR
+
+_SHAPE = re.compile(r"\bselect\b.+\bfrom\s+users\b.*\bwhere\b", re.I | re.S)
+_ID_PLACEHOLDER = re.compile(
+    r"\bwhere\s+(?:\w+\.)?id\s*=\s*(?:%s|\?|:[a-z_]\w*|%\([a-z_]\w*\)s|\$\d+)", re.I
+)
 
 _VULN = '''\
 def build_query(user_id):
@@ -34,17 +45,18 @@ def verify(workdir: Path) -> float:
         return 0.0
     sql, params = got
     sql = str(sql)
-    # 0.5 — the dangerous user string must NOT appear in the SQL text.
-    if "5 OR 1=1" not in sql and "OR 1=1" not in sql:
+    # 0.5 — still the users-by-id query, without the dangerous user string.
+    if "OR 1=1" not in sql and _SHAPE.search(sql):
         score += 0.5
-    # 0.3 — a placeholder must be present.
-    if "%s" in sql or "?" in sql or ":" in sql:
+    # 0.3 — the placeholder is the value compared to id.
+    if _ID_PLACEHOLDER.search(sql):
         score += 0.3
     # 0.2 — params must carry the value, not the SQL.
     try:
-        if "5 OR 1=1" in tuple(params) or "5 OR 1=1" in list(params):
+        values = list(params.values()) if isinstance(params, dict) else list(params)
+        if "5 OR 1=1" in values:
             score += 0.2
-    except TypeError:
+    except Exception:
         pass
     # Guard: if the source still uses `%` / f-string interpolation of user_id, cap.
     src = read_text(workdir, "solution.py")
