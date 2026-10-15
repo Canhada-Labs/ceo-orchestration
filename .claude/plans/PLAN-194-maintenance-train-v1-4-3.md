@@ -2032,6 +2032,30 @@ demais linhas estão feitas ou fora da 1.4.3.
    tem entrada do log — a confirmar por escrita real na abertura do 1b. **Não bloqueia a W3; bloqueia ficar sem
    dono.**
 
+## Decisões do Owner — S364 (2026-10-15)
+
+Decisões do Owner de 2026-10-15, por múltipla escolha, depois do lote assinado (registro no LEDGER, seção
+«Lote assinado — 2026-10-15 (S364)»). São decisões TOMADAS: não se perguntam de novo. Termos desta seção:
+**W7ad** = a emenda aditiva do ADR-158 que o sentinel da W7a remete a outro pacote; **C9** = a perna livre do
+upgrade do PLAN-183 (E1, C56: alvo instalado na `v1.4.2` → `upgrade.sh` → gate do harness com rc 0, mais
+«install do zero → gate rc 0»); **F2** = o teste de estresse da W2.5.
+
+| # | decisão |
+|---|---|
+| S364-1 | W7ad SAI da 1.4.3 → 1.4.4. O `ADR-158-harness-config-gate.md:60` e o comentário de `.github/workflows/validate.yml:1123` seguem citando `.claude/hooks/tests/fixtures/harness-config/replay/`, que a W7a esvaziou; os dois sítios viajam com a emenda (item 17 do `PLAN-194-FOLLOWUP-v1-4-4-backlog`). |
+| S364-2 | U2-D (`ADR-055-AMEND-4` ACCEPTED e o leque) SAI da 1.4.3 → 1.4.4, junto das curas que ele aceitaria (item 18 do backlog). Substitui, nesse ponto, a S363-3 («A cura da W2 (U2-A a U2-D) FICA na 1.4.3»): o U2-C saiu em 2026-10-09, o U2-A e o U2-B em 2026-10-12 (backlog, «Context») e o U2-D agora; nenhum pacote da W2 entra no corte. |
+| S364-3 | C9: CONSTRUIR antes da rc.1 (livre, `scripts/tests/test-upgrade-historical-adopter.sh`). Se não fechar até o kit, o `CHANGELOG.md` do corte declara pela FORMA que a cura via upgrade NÃO foi provada. |
+| S364-4 | F2, leva 1, SAI da 1.4.3 → 1.4.4, junto das curas que ele estressa (item 19 do backlog). |
+
+**Correção de fato (texto anterior a esta data):** o FX (cura do teste instável `TestParallelWritersChain`,
+FD-03) NÃO ficou para a 1.4.4: landou no `main` em `bc803a7a` (2026-10-10, «alternância dos gravadores …
+por construção»), como o backlog já registra. A dependência FX da rc está satisfeita; as frases «FX → 1.4.4»
+de «Next» (item 4) e do LEDGER («Saídas para a 1.4.4 e hotfix do teste do F1») descrevem o estado de
+2026-10-03.
+
+**Onde o plano mudou (só texto):** esta seção; «Next» (estado de 2026-10-15); «Session history» (S364). No
+LEDGER: a seção «Lote assinado — 2026-10-15 (S364)». No backlog da 1.4.4: itens 17 a 20.
+
 ## Decisões do Owner — S363 (2026-10-08)
 
 Decisões do Owner no boot da S363, na noite de 2026-10-08 em Brasília (~21:40, ou seja, ~00:40Z de 2026-10-09),
@@ -2330,6 +2354,16 @@ exceção da W3b) — (a lista das decisões está em «Decisões do Owner — S
 
 ## Next
 
+**Estado em 2026-10-15 (S364):** todo o código canônico do escopo da 1.4.3 está no `main`. O lote
+W4 → W5b → cost_envelope → W7a do PLAN-183 foi assinado e publicado pelo Owner (`8fa12aa0`, `39e6754d`,
+`11428840`, `b0f5fd45`); depois landaram os livres `ci-free`, `plans-p195` e `plans-p191` (`557c4234`) e o
+W4POST (`4cd2bbc6`). Fora do corte por decisão do Owner: ver «Decisões do Owner — S364». Falta, nesta ordem:
+a C9 (em construção) → os textos livres restantes (doc da W6, FD-22) → a seção `[1.4.3]` do `CHANGELOG.md`
+→ RM (relmeta-143, SIGN; DEPOIS de todo land que cite plano, porque o escopo da tag sai de
+`git log v1.4.2..HEAD`) → kit → rc.1 → hold de 24 h → GA. Nenhum plano NOVO entra no repositório antes do
+corte: antes do RM ele alargaria o escopo da tag; depois do RM, o G0 do kit o recusa por estar fora do
+`RELEASE_SCOPE`.
+
 **Feito até 2026-10-02:** as medições W0.1, W0.2 e W0.6 (no LEDGER) e os lands abaixo, todos ancestrais
 do `97a78fce` (`git merge-base --is-ancestor`): L1, L2a e L2b (`6f7069d3`,
 `c4574b72`, `eb2e1e49`); W3b (`a9924eb1`, `803d7b5e`, `399efbaa`, `a0a6df06`); W1 (`c54934d8`); W2.0
@@ -2520,6 +2554,10 @@ demais ao abri-los.
   W0.5 e arquivamento do T0, da W0.1 e da W0.2 com âncoras estáveis. Commit 4 (2 P1 do rail de texto):
   molduras de historicidade na abertura da W3, na abertura da W7 e no risco 4 (D-2 e D-4); W5c com
   1,5-3,0 M no Goal, na W5 e no «Orçamento», cuja conta fecha em 5,7-11,1 M. Status inalterado (`executing`).
+- S364 (2026-10-15, depois do lote assinado): seção «Decisões do Owner — S364» (W7ad, U2-D e F2 leva 1 →
+  1.4.4; C9 construída antes da rc.1) com a correção do FX (landado em `bc803a7a`); «Next» com o estado de
+  2026-10-15 e a ordem do corte. LEDGER: seção «Lote assinado — 2026-10-15 (S364)». Backlog da 1.4.4: itens
+  17 a 20. Status inalterado (`executing`).
 
 ## Reference links
 

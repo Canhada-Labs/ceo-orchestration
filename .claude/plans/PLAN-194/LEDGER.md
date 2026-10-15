@@ -394,6 +394,58 @@ Linhas propostas pelos builders (`b-w2b`, `c-w2a`, `c-free`) em `ledger-inbox/` 
 - 2026-10-09 · FD-25 DECISÃO DO OWNER pendente: (1) backup com symlink em memory/ agora recusado (rc 2) — (a) manter + ceo-backup.sh derreferenciar/pular links (1.4.4) ou (b) restore pula só os links com aviso; (2) .claude symlinkado recusa --restore-plans/--restore-agent-metrics (rc 1, tudo-ou-nada) — (a) manter ou (b) aceitar symlink só no .claude do projeto. CEO seguiu com (a) nas duas (fail-closed) até a decisão.
 - 2026-10-09 · FD-25 follow-up · ceo-backup.sh copia symlinks de memory/ como links; docs/INCIDENT-RESPONSE.md:258 cita --dry-run, que o script recusa → 1.4.4.
 
+## Lote assinado — 2026-10-15 (S364)
+
+O Owner assinou e publicou os 4 pacotes num script único, fora do repositório (`ASSINAR-LOTE.sh`, que
+encadeia os blocos ensaiados do roteiro; 2026-10-15, 10:03 → 11:52 em Brasília), com uma janela de senha
+por pacote e um push por SHA, sem force. Assinante dos 4: `AE9B236FDAF0462874060C6BCFCFACF00335DC74`,
+presente em `.claude/sentinel-signers.txt`, que não mudou no trecho. Cadeia linear a partir de `fc354a66`:
+
+| pacote | commit | pai | Patch-sha256 | registro do rail (sha256) | SIGN |
+|---|---|---|---|---|---|
+| W4 | `8fa12aa0` | `fc354a66` | `ae76d066…` | `w4/rail-round-1.md` (`331db3ed…`): APPROVE, P0=P1=P2=0 | 21 min |
+| W5b | `39e6754d` | `8fa12aa0` | `6c691139…` | `w5b/rail-round-3.md` (`f7581fac…`): DECLARED-P2, P2=2 | 40 min |
+| cenv | `11428840` | `39e6754d` | `4a4b3e7c…` | `cenv/rail-sign-min.md` (`e15cc7b6…`): APPROVE, P0=P1=P2=0 | 21 min |
+| W7a (PLAN-183) | `b0f5fd45` | `11428840` | `84371b9f…` | `PLAN-183/w7a/rail-record.md` (`197a9411…`): DECLARED-P2, P2=1 | 25 min |
+
+- Bateria de cada SIGN (a do próprio molde): passadas duras e gates rc 0. Na passada paralela, 2 (W4, W5b,
+  cenv) e 3 (W7a) ids falharam e passaram na repetição isolada; passada serial sem falha nos 4.
+- CI dos 4 pushes: 16 runs, todos `success` (Validate nos 4; as ausências são do filtro `paths` de cada
+  workflow).
+- Conferência independente do CEO, só leitura (workflow `wf_b744cca7-ed0`, 9 agentes): por pacote, um
+  verificador fez 10 conferências por bytes. São elas: pai; conjunto tocado = caminhos do patch ∪
+  {sentinel, `.asc`}; sha256 do patch; patch reaplicado fora do repositório sobre a âncora = blobs e modos
+  do commit; sentinel só com os campos de preenchimento; `gpg --verify` com GOODSIG e VALIDSIG da chave do
+  allowlist; allowlist inalterado; registro do rail aprovador; mensagem; identidade. Todas deram CONFIRMED.
+  Um refutador por métodos diferentes (ls-tree em Python, hashlib, `patch(1)`, BADSIG de controle sobre o
+  sentinel da âncora) deu HOLDS nos 4. Uma lente do GitHub confirmou árvores e pais remotos iguais aos
+  locais.
+- Observações (INFO, todas já declaradas nos próprios registros): no W4, a rodada de MATERIAIS
+  (GO-WITH-CONDITIONS do Codex, 3 P2) existe só narrada no registro, sem bloco verbatim na árvore; em W5b,
+  cenv e W7a, o sentinel assinado difere do que as lanes revisaram só no bloco comum re-embutido (no cenv,
+  também em 3 linhas da Ratificação), com a identidade conferida mecanicamente pelo molde; no cenv, a
+  conferência do anexo teve o Codex e 1 refutador Claude, coberta pela regra do molde «rodada única + no
+  máximo uma conferência de anexo».
+  verifier: `for c in 8fa12aa0 39e6754d 11428840 b0f5fd45; do git merge-base --is-ancestor $c HEAD || exit 1; done` exit=0
+- Livres depois do lote, com a bateria do molde (os 13 gates e as duas passadas do `pytest.ini`) sobre a
+  árvore composta: `s363/ci-free` por squash (`8d010682`), `s363/plans-p195` e `s363/plans-p191` por
+  `merge --no-ff` (`c91b4b89`, `557c4234`; os textos citam SHAs dos próprios ramos). Gates rc 0. Na
+  passada paralela, 1 instável (`test_install_sh_placeholders.py::test_install_sh_all_placeholders_substituted`,
+  verde isolado). Na serial, 1 falha de AMBIENTE:
+  `test_plan104_microbench.py::TestDetectorLatencyBudget::test_full_scan_subprocess_p95_budget`
+  roda um `git rev-list` por ramo local. No checkout do Owner (76 ramos locais), isso dá ~1,2 s contra o
+  orçamento de 500 ms, e falha IGUAL na árvore sem os pacotes (sem eles: 1,21 s e 1,15 s; com eles:
+  1,23 s nas 2 medições). Clone novo e CI (só o `main`) passam. Item 20 do backlog da 1.4.4.
+- W4POST: os 3 commits pós-land do W4 (`ee5902d2`, `4865e9ba`, `066070cf`) reaplicados sem conflito sobre
+  o W4 publicado (`d1218d03`, `9ec9d559`, `4cd2bbc6`); os 2 arquivos ficam BYTE-iguais aos de `066070cf`,
+  o sujeito da rodada 3 FINAL do rail na S363 (Codex «NENHUM ACHADO / VERDICT: GO» e o refutador Claude
+  GO só com P3). O pin `e2a777dd…` é o sha256 do `npm-publish.yml` publicado; os testes de release
+  (`test_release_workflow_asserts.py` + `test_release_bump_sites.py`, 253) passaram e os 13 gates deram rc 0.
+  verifier: `git merge-base --is-ancestor 4cd2bbc6 HEAD && grep -q e2a777dd9077a1295e2bb534635ad05fca9339b84908615f7de89da0c87844e3 .claude/scripts/tests/test_release_workflow_asserts.py` exit=0
+- Bloqueios em aberto depois do lote (substitui a lista «Bloqueios em aberto» acima para o trem da 1.4.3):
+  a C9 (decisão S364-3), a doc da W6 (FD-22), a seção `[1.4.3]` do `CHANGELOG.md`, o RM com SIGN do Owner,
+  o kit e o rail dele (lane Codex). A ordem e as decisões estão no plano, «Next» e «Decisões do Owner — S364».
+
 ## Seções arquivadas (2026-10-03, S362)
 
 O T0 fica no topo, congelado: `debate/round-1/security-engineer.md:263` cita `LEDGER.md:16-18`.
