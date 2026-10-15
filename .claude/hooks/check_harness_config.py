@@ -53,11 +53,13 @@ static scan structurally cannot see:
    what certifies a security rail alive is a REPLAYED planted violation the
    rail MUST block, asserted red. ``run_replay`` feeds each hook listed in
    ``REQUIRED_REPLAY_CONTROLS`` a known-bad fixture on stdin (inert JSON
-   data under ``.claude/hooks/tests/fixtures/harness-config/replay/``),
+   data under ``.claude/hooks/_lib/harness_replay/`` — a DELIVERED path,
+   so the gate finds its controls in adopter installs too; PLAN-183 W7a),
    inside a scrubbed hermetic env (temp HOME/GNUPGHOME/audit dir; no
    CEO_* session overrides can leak in), and asserts the stdout decision is
    block-shaped. A fixture that is missing, unparseable, tampered
-   (``expect`` != ``block``), or that stops firing REDDENS the run.
+   (``expect`` != ``block``), carrying the retired doubled-brace marker, or
+   that stops firing REDDENS the run.
 
 Failure doctrine (house rules):
 - This is a CI/preflight GATE, not a registered session hook: it fails
@@ -152,17 +154,19 @@ REQUIRED_REPLAY_CONTROLS: Tuple[Tuple[str, str], ...] = (
     ("check_agent_spawn.py", "agent_spawn_named_no_skill_content.json"),
 )
 
-#: Default replay fixtures location (repo-relative).
-REPLAY_FIXTURES_REL = ".claude/hooks/tests/fixtures/harness-config/replay"
+#: Default replay fixtures location (repo-relative). PLAN-183 W7a: it MUST be
+#: a path the installer delivers — a missing fixture reddens the run, and the
+#: old ``.claude/hooks/tests/...`` home (``_framework_path_excluded``) left
+#: EVERY adopter install permanently red. ``install_lib_selective`` ships each
+#: top-level ``_lib/`` entry. DATA, not a Python package: no ``__init__.py``.
+REPLAY_FIXTURES_REL = ".claude/hooks/_lib/harness_replay"
 
-#: Placeholder replaced by the absolute repo root in fixture payloads.
-#: Built from fragments so the doubled-brace PROJECT_DIR marker never appears
-#: as a contiguous token at rest in this shipped hook. The install-time
-#: placeholder scanner (test_install_sh_placeholders) greps every installed
-#: .claude/ file for doubled-brace UPPER_SNAKE markers; this value is a RUNTIME
-#: fixture marker (not an install-time --flag placeholder), so it must not
-#: false-positive that scan. The concatenation rebuilds the exact value.
-FIXTURE_PROJECT_PLACEHOLDER = "{{" + "PROJECT_DIR" + "}}"
+#: Runtime marker replaced by the absolute repo root in fixture payloads.
+#: PLAN-183 W7a (C6): NO doubled brace, so it sits outside every install-time
+#: placeholder grammar (the installer's "Placeholders remaining" grep, the sed
+#: keys, the placeholder tests), all of which now walk the fixtures. Only this
+#: form is accepted: a doubled brace in a fixture is RED (_fixture_defect).
+FIXTURE_PROJECT_PLACEHOLDER = "@HARNESS_REPLAY_PROJECT_DIR@"
 
 # Settings files scanned by default (mirrors check-active-hooks-executable).
 DEFAULT_SETTINGS_REL = (
@@ -214,9 +218,9 @@ def load_settings(path: Path) -> Dict[str, Any]:
     """Parse a settings JSON file. Raises ValueError on any failure
     (fail-CLOSED: a gate input we cannot parse is an error, not a skip)."""
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"cannot parse {path}: {exc}") from exc
+        data = json.loads(path.read_text(encoding="utf-8"), parse_constant=_refuse_constant)
+    except (OSError, ValueError, RecursionError) as exc:  # + UnicodeDecodeError
+        raise ValueError(f"cannot parse {path}: {type(exc).__name__}: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"cannot parse {path}: top-level JSON is not an object")
     return data
@@ -406,8 +410,8 @@ def load_noop_allowlist(repo_root: Path, override: Optional[Path] = None) -> Lis
                 line = line.split("#", 1)[0].strip()
                 if line:
                     entries.append(line)
-    except OSError:
-        # Infra failure reading an OPTIONAL allowlist: proceed with the seed
+    except (OSError, ValueError):
+        # Infra failure reading an OPTIONAL allowlist (or a non-UTF-8 one): proceed with the seed
         # (a read error must not un-allowlist and false-RED the gate run,
         # nor silently allow anything new).
         pass
@@ -679,6 +683,44 @@ def _substitute_placeholders(node: Any, repo_root: Path) -> Any:
     return node
 
 
+#: Fixtures are depth 4 today; deeper ones are refused BEFORE the recursive
+#: helpers run, so they cannot crash the gate at the interpreter limit (rail r1).
+_MAX_FIXTURE_DEPTH = 32
+
+
+def _strict_pairs(pairs: List[Tuple[str, Any]]) -> Dict[str, Any]:
+    """object_pairs_hook: a duplicate key is ambiguous (RFC 8259 §4) — refused, never last-wins."""
+    out: Dict[str, Any] = {}
+    for key, value in pairs:
+        if key in out:
+            raise ValueError(f"duplicate key {repr(key)[:80]}")
+        out[key] = value
+    return out
+
+
+def _refuse_constant(name: str) -> Any:
+    """parse_constant of every JSON read in THIS module: NaN/Infinity are not JSON (rail r3)."""
+    raise ValueError(f"non-standard JSON constant {name}")
+
+
+def _fixture_defect(doc: Any) -> Optional[str]:
+    """Iterative walk of the PARSED fixture: first defect or None — nesting past the cap, or a
+    doubled brace in any key/string (retired marker / placeholder grammar, C6; escaped too)."""
+    stack: List[Tuple[Any, int]] = [(doc, 1)]
+    while stack:
+        node, depth = stack.pop()
+        if depth > _MAX_FIXTURE_DEPTH:
+            return f"nesting deeper than {_MAX_FIXTURE_DEPTH}"
+        if isinstance(node, str) and "{{" in node:
+            return ("doubled-brace marker (the retired form / an install-time "
+                    f"placeholder grammar) — the runtime marker is {FIXTURE_PROJECT_PLACEHOLDER}")
+        if isinstance(node, dict):
+            stack.extend((x, depth + 1) for kv in node.items() for x in kv)
+        elif isinstance(node, list):
+            stack.extend((x, depth + 1) for x in node)
+    return None
+
+
 def _is_block_shaped(decision: Any) -> bool:
     if not isinstance(decision, dict):
         return False
@@ -757,11 +799,15 @@ def run_replay(
                 )
                 continue
             try:
-                doc = json.loads(fixture_path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                findings.append(
-                    _red("replay", loc, f"fixture unparseable ({exc}) — fail-closed")
+                doc = json.loads(
+                    fixture_path.read_text(encoding="utf-8"),
+                    object_pairs_hook=_strict_pairs,
+                    parse_constant=_refuse_constant,
                 )
+            except (OSError, ValueError, RecursionError) as exc:
+                # A traceback here would drop every other control (rail r1 P2).
+                why = f"{type(exc).__name__}: {exc}"
+                findings.append(_red("replay", loc, f"fixture unparseable ({why}) — fail-closed"))
                 continue
             if not isinstance(doc, dict) or doc.get("expect") != "block":
                 findings.append(
@@ -778,8 +824,14 @@ def run_replay(
                     _red("replay", loc, "fixture missing 'payload' object")
                 )
                 continue
+            defect = _fixture_defect(doc)
+            if defect is not None:
+                findings.append(_red("replay", loc, f"fixture refused: {defect}; fail-closed"))
+                continue
             payload = _substitute_placeholders(payload, repo_root)
 
+            # C3: program, argv, env and cwd come from THIS gate's table and _replay_env, never
+            # from the fixture (its ``hook`` field is documentation); the fixture is stdin data.
             hook_path = repo_root / ".claude" / "hooks" / hook_name
             if not hook_path.is_file():
                 findings.append(
@@ -796,7 +848,8 @@ def run_replay(
                     cwd=str(repo_root),
                     timeout=timeout,
                 )
-            except (subprocess.TimeoutExpired, OSError) as exc:
+            except (subprocess.TimeoutExpired, OSError, ValueError) as exc:
+                # ValueError: stdout that does not decode as text.
                 findings.append(
                     _red(
                         "replay",
@@ -805,20 +858,23 @@ def run_replay(
                     )
                 )
                 continue
-            lines = [l for l in proc.stdout.strip().splitlines() if l.strip()]
+            # The WHOLE stdout is ONE JSON value: a preamble or a second object is not a
+            # decision (rail r3). No .strip(): it also drops \x0b, \x0c, NBSP and U+2028, which JSON
+            # forbids; json.loads already allows JSON's own whitespace (space, tab, CR, LF).
+            out = proc.stdout
             decision: Any = None
-            if lines:
+            if out:
                 try:
-                    decision = json.loads(lines[-1])
-                except json.JSONDecodeError:
+                    decision = json.loads(out, parse_constant=_refuse_constant)
+                except (ValueError, RecursionError):
                     decision = None
             if decision is None:
                 findings.append(
                     _red(
                         "replay",
                         loc,
-                        f"no parseable decision on stdout (rc={proc.returncode}) — "
-                        "rail NOT certified alive",
+                        f"no parseable decision on stdout (rc={proc.returncode}; the "
+                        "whole stdout must be ONE JSON value) — rail NOT certified alive",
                     )
                 )
                 continue

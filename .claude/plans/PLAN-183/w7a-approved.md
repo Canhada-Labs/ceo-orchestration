@@ -4,10 +4,10 @@ Plan: PLAN-183
 Wave: W7a, pacote de CÓDIGO — as 3 fixtures do replay de `.claude/hooks/tests/fixtures/harness-config/replay/` para `.claude/hooks/_lib/harness_replay/` (A1, P1 dos adopters)
 Dados: .claude/plans/PLAN-183/w7a/sign.tsv
 Molde: .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
-Patch-sha256: TO-FILL-BY-SIGN
-Rail-Record-sha256: TO-FILL-BY-SIGN
-Anchor-SHA: TO-FILL-BY-SIGN
-Data: TO-FILL-BY-SIGN
+Patch-sha256: 84371b9f58b17006c8438bd6f0683ed371603dc4fd477c8f73ee25f41432979e
+Rail-Record-sha256: 197a9411677a10233c54e3bc8f1e99c18c0bb507378e521ba41b5019982aa397
+Anchor-SHA: 1142884039f818fcb09570c17abd094a18b613ec
+Data: 2026-10-15
 
 ## Ratificação (Owner)
 

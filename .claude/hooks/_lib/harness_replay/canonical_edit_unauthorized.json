@@ -6,7 +6,7 @@
     "hook_event_name": "PreToolUse",
     "tool_name": "Edit",
     "tool_input": {
-      "file_path": "{{PROJECT_DIR}}/.claude/hooks/check_bash_safety.py",
+      "file_path": "@HARNESS_REPLAY_PROJECT_DIR@/.claude/hooks/check_bash_safety.py",
       "old_string": "PLANTED-VIOLATION-INERT",
       "new_string": "PLANTED-VIOLATION-INERT-2"
     }
