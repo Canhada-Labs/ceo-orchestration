@@ -5,10 +5,10 @@ Wave: W5b — `scripts/install.sh`: a instalação `--ceremony user` grava `perm
 Dados: .claude/plans/PLAN-194/w5b/sign.tsv
 Molde: .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
 Patch: .claude/plans/PLAN-194/w5b/w5b.patch
-Patch-sha256: TO-FILL-BY-SIGN
-Rail-Record-sha256: TO-FILL-BY-SIGN
-Anchor-SHA: TO-FILL-BY-SIGN
-Data: TO-FILL-BY-SIGN
+Patch-sha256: 6c691139e1c9a048b4c1b1a66586a7271d1d7e4902cd3e6b8f66319fee513bf1
+Rail-Record-sha256: f7581facb9f221d1dc430cb2fc9145834ac5bb8636aba2d5c16631f8ebb0b16a
+Anchor-SHA: 8fa12aa0f1033c401ec2fa9ccfccb55d13548c06
+Data: 2026-10-15
 
 ## Ratificação (Owner)
 

@@ -119,7 +119,19 @@ consistent with the framing: a coarse backstop, not coverage.
 ## How an adopter opts out
 
 - **At install time:** `CEO_INSTALL_SKIP_DENY_BASELINE=1 ./scripts/install.sh <target> …`
-  skips the injection entirely (mirrors `CEO_INSTALL_SKIP_SELF_SHA`).
+  skips the injection entirely (mirrors `CEO_INSTALL_SKIP_SELF_SHA`). The same
+  merge also writes `permissions.defaultMode` = `"manual"` when the
+  `settings.json` the run produced has none (a `--ceremony user` install ships
+  no `permissions` block), so the opt-out, like the fail-open case below,
+  leaves that key unwritten too. With no `defaultMode` in any settings source,
+  Claude Code 2.1.295 can open the session in auto mode: its fallback for "no
+  source configured a mode" picks auto when, among other conditions,
+  `disableAutoMode` is not `"disable"`, the auto-mode killswitch is off, a
+  server-side flag (default on) or an account setting allows it, and either
+  the session is interactive or a server-side flag that is on by default
+  waives that
+  (measured in the 2.1.295 binary on 2026-10-09; not a documented contract).
+  If you opt out, set `permissions.defaultMode` yourself.
 - **After install:** delete any entries you don't want from
   `permissions.deny` in `<target>/.claude/settings.json`. Re-runs of the
   installer will not put them back.

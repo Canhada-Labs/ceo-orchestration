@@ -2444,6 +2444,20 @@ fi
 # the just-copied settings.json untouched.
 #
 # Opt-out: CEO_INSTALL_SKIP_DENY_BASELINE=1 (mirrors CEO_INSTALL_SKIP_SELF_SHA).
+#
+# PLAN-194 W5b (OQ-7, Owner answer 2026-10-01): the same merge writes
+# permissions.defaultMode = DEFAULT_MODE_BASELINE when the settings.json this
+# run produced carries no defaultMode key. The `--ceremony user` template
+# ships no permissions block, and a session whose settings sources configure
+# no mode can start in Claude Code's gated auto default (CHANGELOG 2.1.284;
+# the 2.1.295 binary names it permission_mode_from_default_fallback). A
+# defaultMode the produced file already carries (the maintainer template's
+# own) is kept as-is, and a pre-existing settings.json is never touched (see
+# Idempotency). The value is the "new" of the permissions.defaultMode row of
+# upgrade.sh's T5.4 table, which writes the same key into an upgraded install
+# that lacks it; the test derives its expectation from that table. The
+# opt-out above skips this key too: one merge, one switch.
+DEFAULT_MODE_BASELINE="manual"
 
 DENY_BASELINE_ENTRIES=(
   "Read(~/.ssh/**)"
@@ -2479,21 +2493,21 @@ apply_deny_baseline() {
     return 0
   fi
   if [[ "${CEO_INSTALL_SKIP_DENY_BASELINE:-0}" = "1" ]]; then
-    echo "    SKIP: deny baseline (CEO_INSTALL_SKIP_DENY_BASELINE=1)"
+    echo "    SKIP: deny baseline + permissions.defaultMode (CEO_INSTALL_SKIP_DENY_BASELINE=1)"
     return 0
   fi
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     if [[ "$SETTINGS_PRE_EXISTING" -eq 1 ]]; then
-      echo "    (dry-run) settings.json pre-existed — would NOT touch deny baseline"
+      echo "    (dry-run) settings.json pre-existed — would NOT touch deny baseline + defaultMode"
     else
-      echo "    (dry-run) would MERGE ${#DENY_BASELINE_ENTRIES[@]} deny-baseline entries into .claude/settings.json"
+      echo "    (dry-run) would MERGE ${#DENY_BASELINE_ENTRIES[@]} deny-baseline entries (+ permissions.defaultMode \"$DEFAULT_MODE_BASELINE\" if absent) into .claude/settings.json"
     fi
     return 0
   fi
 
   if [[ "$SETTINGS_PRE_EXISTING" -eq 1 ]]; then
-    echo "    SKIP: settings.json pre-existed this run (add entries manually if wanted — docs/deny-baseline.md)"
+    echo "    SKIP: deny baseline + defaultMode — settings.json pre-existed this run (add them manually if wanted — docs/deny-baseline.md)"
     return 0
   fi
   if [[ ! -f "$SETTINGS_DST" ]]; then
@@ -2515,23 +2529,26 @@ apply_deny_baseline() {
 
   if command -v jq >/dev/null 2>&1; then
     # Order-preserving dedup: keep existing deny list as-is, append only
-    # baseline entries not already present (jq array subtraction).
-    if jq --argjson newdeny "$entries_json" '
+    # baseline entries not already present (jq array subtraction). The
+    # defaultMode is set only where the key is absent (`has`, not a value
+    # test: a present key is the template's, whatever it holds).
+    if jq --argjson newdeny "$entries_json" --arg mode "$DEFAULT_MODE_BASELINE" '
          (.permissions.deny // []) as $cur
          | .permissions.deny = ($cur + ($newdeny - $cur))
+         | if (.permissions | has("defaultMode")) then . else .permissions.defaultMode = $mode end
        ' "$SETTINGS_DST" > "$tmp" 2>/dev/null; then
       mv "$tmp" "$SETTINGS_DST"
-      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline -> .claude/settings.json (docs/deny-baseline.md)"
+      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline (+ permissions.defaultMode if absent) -> .claude/settings.json (docs/deny-baseline.md)"
       return 0
     fi
     rm -f "$tmp"
     echo "    WARNING: jq merge of the deny baseline failed — settings.json left untouched." >&2
-    echo "             Add the permissions.deny entries manually: docs/deny-baseline.md." >&2
+    echo "             Add the permissions.deny entries manually (docs/deny-baseline.md), and permissions.defaultMode \"$DEFAULT_MODE_BASELINE\" if absent." >&2
     return 0
   fi
 
   if command -v python3 >/dev/null 2>&1; then
-    if python3 - "$SETTINGS_DST" "$entries_json" > "$tmp" <<'PY'
+    if python3 - "$SETTINGS_DST" "$entries_json" "$DEFAULT_MODE_BASELINE" > "$tmp" <<'PY'
 import json
 import sys
 
@@ -2541,21 +2558,22 @@ new = json.loads(sys.argv[2])
 perms = settings.setdefault("permissions", {})
 cur = perms.get("deny") or []
 perms["deny"] = cur + [e for e in new if e not in cur]
+perms.setdefault("defaultMode", sys.argv[3])
 sys.stdout.write(json.dumps(settings, indent=2) + "\n")
 PY
     then
       mv "$tmp" "$SETTINGS_DST"
-      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline -> .claude/settings.json (python3; docs/deny-baseline.md)"
+      echo "    MERGED: ${#DENY_BASELINE_ENTRIES[@]}-entry coarse deny baseline (+ permissions.defaultMode if absent) -> .claude/settings.json (python3; docs/deny-baseline.md)"
       return 0
     fi
     rm -f "$tmp"
     echo "    WARNING: python3 merge of the deny baseline failed — settings.json left untouched." >&2
-    echo "             Add the permissions.deny entries manually: docs/deny-baseline.md." >&2
+    echo "             Add the permissions.deny entries manually (docs/deny-baseline.md), and permissions.defaultMode \"$DEFAULT_MODE_BASELINE\" if absent." >&2
     return 0
   fi
 
   echo "    WARNING: neither jq nor python3 found — deny baseline NOT applied." >&2
-  echo "             Add the permissions.deny entries manually: docs/deny-baseline.md." >&2
+  echo "             Add the permissions.deny entries manually (docs/deny-baseline.md), and permissions.defaultMode \"$DEFAULT_MODE_BASELINE\" if absent." >&2
   return 0
 }
 

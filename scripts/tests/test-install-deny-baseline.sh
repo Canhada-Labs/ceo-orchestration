@@ -23,6 +23,15 @@
 #       permissions.deny is CREATED with exactly the baseline.
 #   (E) jq hidden from PATH -> python3 fallback still applies the baseline
 #       (base-only install needs no jq; the injection must not either).
+#   (F) PLAN-194 W5b: permissions.defaultMode equals the "new" of the
+#       permissions.defaultMode row of upgrade.sh --print-settings-baselines
+#       (derived, never re-hardcoded) — WRITTEN by the jq branch on the
+#       leg-D --ceremony user install (no key in that template), KEPT as the
+#       template's own on the leg-A maintainer install.
+#   (G) --ceremony user with jq hidden -> the python3 branch writes the same
+#       defaultMode next to the baseline.
+#   (H) a settings.json that pre-exists with its own defaultMode
+#       ("acceptEdits") -> byte-identical after a --ceremony user install.
 #
 # stdlib + bash-3.2-safe. Needs python3 (assertions) and, for leg E,
 # a python3 visible without jq.
@@ -87,15 +96,18 @@ T_A="$(mktemp -d -t ceo-denybase-a-XXXXXX)"
 T_C="$(mktemp -d -t ceo-denybase-c-XXXXXX)"
 T_D="$(mktemp -d -t ceo-denybase-d-XXXXXX)"
 T_E="$(mktemp -d -t ceo-denybase-e-XXXXXX)"
+T_G="$(mktemp -d -t ceo-denybase-g-XXXXXX)"
+T_H="$(mktemp -d -t ceo-denybase-h-XXXXXX)"
 FAKEBIN="$(mktemp -d -t ceo-denybase-nojq-XXXXXX)"
 cleanup() {
-  rm -rf "$T_A" "$T_C" "$T_D" "$T_E" "$FAKEBIN" \
+  rm -rf "$T_A" "$T_C" "$T_D" "$T_E" "$T_G" "$T_H" "$FAKEBIN" \
     "$T_A.install.log" "$T_A.install-rerun.log" "$T_A.settings.snapshot" \
-    "$T_C.install.log" "$T_D.install.log" "$T_E.install.log"
+    "$T_C.install.log" "$T_D.install.log" "$T_E.install.log" \
+    "$T_G.install.log" "$T_H.install.log" "$T_H.settings.snapshot"
 }
 trap cleanup EXIT
 
-for t in "$T_A" "$T_C" "$T_D" "$T_E"; do
+for t in "$T_A" "$T_C" "$T_D" "$T_E" "$T_G" "$T_H"; do
   ( cd "$t" && git init -q )
 done
 
@@ -310,9 +322,80 @@ else
   fail=1
 fi
 
+# --- (F) PLAN-194 W5b: permissions.defaultMode next to the baseline ----------
+# The expected value is the T5.4 table's, read from upgrade.sh itself, so the
+# install and the upgrade cannot drift apart without this leg going red.
+echo "==> [F] permissions.defaultMode (user: written; maintainer: template's own)"
+EXPECTED_MODE="$(bash "$SOURCE_DIR/scripts/upgrade.sh" --print-settings-baselines \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["permissions.defaultMode"]["new"])')" \
+  || EXPECTED_MODE=""
+if [[ -z "$EXPECTED_MODE" ]]; then
+  echo "::error::[F] upgrade.sh --print-settings-baselines gave no permissions.defaultMode new value"
+  exit 1
+fi
+
+# Args: settings.json path, leg label, expected defaultMode value.
+assert_default_mode() {
+  python3 - "$1" "$2" "$3" <<'PY'
+import json
+import sys
+
+path, leg, want = sys.argv[1], sys.argv[2], sys.argv[3]
+perms = json.load(open(path)).get("permissions", {})
+got = perms.get("defaultMode", "<absent>")
+if got != want:
+    print("::error::[%s] permissions.defaultMode is %r, expected %r"
+          % (leg, got, want), file=sys.stderr)
+    sys.exit(1)
+print("    [%s] PASS: permissions.defaultMode == %r" % (leg, want))
+PY
+}
+
+assert_default_mode "$T_D/.claude/settings.json" "F/user" "$EXPECTED_MODE" || fail=1
+assert_default_mode "$SETTINGS_A" "F/maintainer" "$EXPECTED_MODE" || fail=1
+
+# --- (G) user ceremony, jq hidden: the python3 branch writes it too ----------
+echo "==> [G] --ceremony user with jq hidden (python3 branch) into $T_G"
+LOG_G="$T_G.install.log"
+if ! env PATH="$FAKEBIN" \
+     CEO_INSTALL_SKIP_SELF_SHA=1 CEO_RAG_INSTALL_PROMPT=0 \
+     bash "$INSTALL" "$T_G" --ceremony user >"$LOG_G" 2>&1; then
+  echo "::error::[G] no-jq --ceremony user install.sh failed (see log)"
+  tail -30 "$LOG_G" >&2
+  exit 1
+fi
+if grep -q "python3; docs/deny-baseline.md" "$LOG_G"; then
+  echo "    [G] PASS: python3 fallback path was the one taken (jq absent)"
+else
+  echo "::error::[G] expected the python3 fallback merge message in the install log"
+  fail=1
+fi
+assert_default_mode "$T_G/.claude/settings.json" "G" "$EXPECTED_MODE" || fail=1
+
+# --- (H) pre-existing settings.json keeps its own defaultMode ----------------
+echo "==> [H] pre-existing settings.json with defaultMode acceptEdits into $T_H"
+mkdir -p "$T_H/.claude"
+printf '%s\n' '{"permissions": {"defaultMode": "acceptEdits"}}' \
+  > "$T_H/.claude/settings.json"
+SNAP_H="$T_H.settings.snapshot"
+cp "$T_H/.claude/settings.json" "$SNAP_H"
+LOG_H="$T_H.install.log"
+if ! run_install "$T_H" --ceremony user >"$LOG_H" 2>&1; then
+  echo "::error::[H] --ceremony user install.sh failed (see log)"
+  tail -30 "$LOG_H" >&2
+  exit 1
+fi
+if cmp -s "$SNAP_H" "$T_H/.claude/settings.json"; then
+  echo "    [H] PASS: pre-existing settings.json byte-identical (its defaultMode kept)"
+else
+  echo "::error::[H] the install rewrote a pre-existing settings.json"
+  fail=1
+fi
+assert_default_mode "$T_H/.claude/settings.json" "H" "acceptEdits" || fail=1
+
 # --- verdict ------------------------------------------------------------------
 if [[ "$fail" -ne 0 ]]; then
   echo "==> FAIL: install deny-baseline test"
   exit 1
 fi
-echo "==> PASS: deny baseline merged, ordered, deduplicated, opt-out honored, exclusions honored, no-jq fallback works"
+echo "==> PASS: deny baseline merged, ordered, deduplicated, opt-out honored, exclusions honored, no-jq fallback works, defaultMode written when absent and kept when present"
