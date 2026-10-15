@@ -17,7 +17,7 @@ import sys
 import time
 
 SUMMARY = re.compile(r"^RESULT: (\d+) passed, (\d+) failed$", re.MULTILINE)
-EXPECTED_ASSERTIONS = 164
+EXPECTED_ASSERTIONS = 185
 
 
 def checked_result(group, result):

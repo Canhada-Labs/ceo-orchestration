@@ -45,6 +45,12 @@
 #        delivery DISABLED. Without it, "delivery enabled" could just be
 #        unconditional and every positive assertion above would still pass.
 #
+# PLAN-183 C9 (debate round 2, C56) adds three groups at the end of this file:
+# harness-upgrade (E1: installed at v1.4.2 -> upgrade -> the replay gate green),
+# harness-fresh (E0: install from zero -> the same gate green) and harness-red
+# (the SAME probe on the pre-W7a tree must stay RED, by name). See the block
+# above them.
+#
 # bash-3.2 safe (no associative arrays, no mapfile). Network-free. Writes only
 # under mktemp -d. Requires: git, python3.
 #
@@ -90,7 +96,7 @@ export -f claude
 # N.1/N.2 and H.10 also use core's gen.candidate; H.26 shares the aged template with
 # H.24. Never split those dependencies.
 HIST_GROUP=all
-HIST_GROUPS="core hostile symlink fresh unclaimed pin transform unrenderable route-symlink duplicates dangling scratch environment header preview source-symlink hardlink no-replay prior-rendered"
+HIST_GROUPS="core hostile symlink fresh unclaimed pin transform unrenderable route-symlink duplicates dangling scratch environment header preview source-symlink hardlink no-replay prior-rendered harness-upgrade harness-fresh harness-red"
 if [ "$#" -gt 0 ]; then
   case "$1" in
     --list-groups) [ "$#" -eq 1 ] || exit 2; printf '%s\n' $HIST_GROUPS; exit 0 ;;
@@ -164,6 +170,10 @@ trap cleanup EXIT
 
 export CEO_INSTALL_SKIP_SELF_SHA=1
 export CEO_RAG_INSTALL_PROMPT=0
+# No install or upgrade below may reach the network. The one path that can
+# (install.sh's OSV.dev supply-chain advisory) is an opt-in of the CALLER's
+# environment, so it is switched off here, for every group at once.
+unset CEO_OSV_GATE CEO_OSV_COMMANDS
 
 # rail round-6 F3 — the environment can no longer name the route table: the
 # library resolves it from the tree it ships in, unconditionally. An upgrade
@@ -2470,6 +2480,423 @@ else
 fi
 
 fi # historical group prior-rendered
+
+# =============================================================================
+# PLAN-183 C9 (debate round 2, C56) — the replay gate on an UPGRADED adopter
+# and on a FRESH one
+# =============================================================================
+# The W7a (b0f5fd45) moved the positive-control fixtures of the harness gate
+# out of .claude/hooks/tests/ — a tree the installer EXCLUDES
+# (_framework_path_excluded) — into .claude/hooks/_lib/harness_replay/, which it
+# delivers. Before that, check_harness_config.py answered every adopter install
+# with «FAIL: 3 RED»: a gate that could never go green on the population it
+# exists for. The W7a's own battery proved the cure ONCE, on a throwaway target;
+# these are the permanent legs PLAN-183 requires before the 1.4.3 rc.1 — without
+# them the cut's CHANGELOG declares the cure-via-upgrade NOT proven.
+#
+#   harness-upgrade  E1: installed at v1.4.2 -> upgrade.sh of THIS tree -> the
+#                    delivered fixtures and gate cmp-identical to the source,
+#                    the replay gate rc 0 with 0 warnings, the /ceo-boot
+#                    contract green, and the validator arming no PLAN-119 gate.
+#   harness-fresh    E0: install from zero (this tree) -> the same probe green.
+#   harness-red      the RED controls: the SAME probe on the pre-W7a tree
+#                    (v1.4.2 -> ITS upgrade.sh, and ITS install from zero) must
+#                    reproduce the defect by name: the pre-W7a installer
+#                    withholds the fixtures the pre-W7a gate reads (cmp against
+#                    the pre-W7a source, at the folder THAT gate declares), and
+#                    that gate answers «FAIL: 3 RED». They prove the probe and
+#                    the red-shape matcher SEE the defect the green lanes call
+#                    cured. They run the PINNED pre-W7a gate, so they do not
+#                    guard THIS tree's gate against a replay switched off: its
+#                    own unit tests do (.claude/hooks/tests/
+#                    test_check_harness_config.py, the MISSING and tampered
+#                    fixture cases). An empty fixture list is a scaffold in
+#                    _hg_constants; a cmp that never ran fails E1c/E0c, which
+#                    need N of N.
+#
+# WHAT the probe reads is derived from the gate under test, never restated here:
+# REPLAY_FIXTURES_REL and the fixture column of REQUIRED_REPLAY_CONTROLS are
+# parsed (ast, no import) out of $REPO_ROOT's check_harness_config.py. Run from
+# a pre-W7a checkout, this file therefore looks where THAT gate looks — and the
+# E1/E0 legs fail by name, which is how their own RED was measured.
+#
+# The two historical identifiers ARE pinned, because they name history, not
+# content: v1.4.2 is the release the adopters run (C56 names it; the cure ships
+# first in 1.4.3) and 1142884039 is the W7a's parent (b0f5fd45^). What could rot
+# about them is asserted instead of assumed: the v1.4.2 install has to START red
+# (E1-control) and the pre-W7a lanes have to END red (harness-red).
+#
+# The RED count is pinned the same way: the v1.4.2 and pre-W7a gates declare 3
+# replay controls, and C56/C7 name the defect «FAIL: 3 RED», all MISSING.
+#
+# Every gate and validator run drops CEO_SOTA_DISABLE (which skips the replay),
+# CLAUDE_PROJECT_DIR and CLAUDE_PROJECT_DIR_NATIVE (which would re-point the
+# gate at another tree) and gets a HOME and a TMPDIR of its own under $WORK.
+HG_TAG="v1.4.2"
+HG_PRE_W7A="1142884039f818fcb09570c17abd094a18b613ec"
+HG_RED_N=3
+HG_GATE_REL=".claude/hooks/check_harness_config.py"
+HG_GREEN_LINE="OK: harness-config gate green (static=no, replay=yes, 0 warning(s))"
+HG_BOOT_PREFIX="OK: harness-config gate green (static=yes, replay=yes, "
+
+_hg_clean() {  # $1 = HOME name; the rest = the command
+  _hgh="$WORK/hg-home/$1"; _hgt="$WORK/hg-tmp/$1"; shift
+  mkdir -p "$_hgh" "$_hgt" || scaffold "could not create the isolated HOME/TMPDIR $_hgh $_hgt"
+  env -u CEO_SOTA_DISABLE -u CLAUDE_PROJECT_DIR -u CLAUDE_PROJECT_DIR_NATIVE HOME="$_hgh" TMPDIR="$_hgt" "$@" </dev/null
+}
+
+# Removes a scratch tree this section created. Confined: only a real directory
+# strictly inside $WORK, never a symlink — the extracted trees are 180-186 MB
+# each and there is no reason to keep one past its last reader.
+_hg_drop() {
+  case "$1" in "$WORK"/?*) ;; *) scaffold "refusing to remove '$1': not inside $WORK" ;; esac
+  case "/$1/" in */../*) scaffold "refusing to remove '$1': it climbs out with .." ;; esac
+  [ -d "$1" ] && [ ! -L "$1" ] || scaffold "refusing to remove '$1': not a real directory"
+  chmod -R u+w "$1" 2>/dev/null || true
+  rm -rf "$1" || scaffold "could not remove $1"
+}
+
+# $1 = commit-ish, $2 = directory to create. A pure read of the object store
+# (git archive), never a checkout of $REPO_ROOT.
+_hg_extract() {
+  mkdir -p "$2" || return 1
+  git -C "$REPO_ROOT" archive "$1" 2>/dev/null | tar -x -C "$2" 2>/dev/null || return 1
+  [ -f "$2/scripts/install.sh" ] && [ -f "$2/scripts/upgrade.sh" ]
+}
+
+# Install tree $1 into a NEW target $2 the way _install_into does (same flags,
+# same ".../adopter" basename), with no cache: these trees are not HEAD.
+_hg_install_from() {
+  mkdir -p "$2" || return 1
+  ( cd "$2" && git init -q ) || return 1
+  bash "$1/scripts/install.sh" "$2" --profile core --ceremony maintainer > "$2.install.log" 2>&1
+}
+
+# Sets HG_REL, HG_FIXTURES (sorted, space-separated) and HG_N in THIS shell,
+# from the gate file $1 (default: $REPO_ROOT's). The parse goes to a file, not
+# through $( ): the heredoc stays outside a command substitution, which bash
+# 3.2 parses badly.
+_hg_constants() {
+  _hgc_gate="${1:-$REPO_ROOT/$HG_GATE_REL}"
+  _hgc_file="$WORK/hg-constants.$$.txt"
+  python3 -I -B - "$_hgc_gate" > "$_hgc_file" <<'PY' || scaffold "C9: $_hgc_gate no longer declares REPLAY_FIXTURES_REL / REQUIRED_REPLAY_CONTROLS in a shape the probe can read — guessing the folder instead would be the D3 class"
+import ast, re, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        tree = ast.parse(fh.read())
+except Exception:
+    sys.exit(3)
+vals = {}
+for node in tree.body:
+    if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+        name, value = node.targets[0].id, node.value
+    elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+        name, value = node.target.id, node.value
+    else:
+        continue
+    if name in ("REPLAY_FIXTURES_REL", "REQUIRED_REPLAY_CONTROLS"):
+        try:
+            vals[name] = ast.literal_eval(value)
+        except Exception:
+            sys.exit(3)
+rel = vals.get("REPLAY_FIXTURES_REL")
+ctl = vals.get("REQUIRED_REPLAY_CONTROLS")
+if not isinstance(rel, str) or not rel or rel.startswith("/") or ".." in rel.split("/"):
+    sys.exit(3)
+if not isinstance(ctl, tuple) or not ctl:
+    sys.exit(3)
+names = []
+for pair in ctl:
+    if not (isinstance(pair, tuple) and len(pair) == 2 and all(isinstance(x, str) for x in pair)):
+        sys.exit(3)
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+[.]json", pair[1]):
+        sys.exit(3)
+    names.append(pair[1])
+if len(set(names)) != len(names):
+    sys.exit(3)
+print(rel)
+for n in sorted(names):
+    print(n)
+PY
+  HG_REL="$( sed -n '1p' "$_hgc_file" )"
+  HG_FIXTURES="$( sed '1d' "$_hgc_file" | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//' )"
+  HG_N="$( sed '1d' "$_hgc_file" | grep -c . )"
+  case "$HG_N" in ''|*[!0-9]*|0) scaffold "C9: the gate declares no replay fixture — every cmp below would be vacuous" ;; esac
+  echo "    gate under test: $_hgc_gate"
+  echo "    replay fixtures: $HG_REL/{$( printf '%s' "$HG_FIXTURES" | tr ' ' ',' )} ($HG_N)"
+}
+
+# Probe target $1: the delivered fixtures and gate against the source tree $2
+# (default $REPO_ROOT), then the delivered gate itself in replay mode (the W7a
+# battery's invocation). Sets, in THIS shell (never through $( ), same reason
+# as _upgrade):
+#   HG_SET      the delivered fixture folder, listed ("<absent>" when missing)
+#   HG_CMP      required fixtures cmp-identical to the source's
+#   HG_HOOK     same | differs | absent — the delivered gate vs the source's
+#   HG_RC, HG_LAST   the replay gate's rc and last non-empty line
+#   HG_RED, HG_MISSING   its [RED] rows, and how many say «fixture MISSING»
+_HG_SEQ=0
+_hg_probe() {
+  _HG_SEQ=$(( _HG_SEQ + 1 ))
+  _hgp_src="${2:-$REPO_ROOT}"
+  if [ -d "$1/$HG_REL" ]; then
+    HG_SET="$( ls -A "$1/$HG_REL" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//' )"
+  else
+    HG_SET="<absent>"
+  fi
+  HG_CMP=0
+  for _hgp_f in $HG_FIXTURES; do
+    cmp -s "$_hgp_src/$HG_REL/$_hgp_f" "$1/$HG_REL/$_hgp_f" 2>/dev/null && HG_CMP=$(( HG_CMP + 1 ))
+  done
+  if [ ! -f "$1/$HG_GATE_REL" ]; then
+    HG_HOOK=absent
+  elif cmp -s "$_hgp_src/$HG_GATE_REL" "$1/$HG_GATE_REL"; then
+    HG_HOOK=same
+  else
+    HG_HOOK=differs
+  fi
+  HG_OUT="$1.gate.$_HG_SEQ.out"
+  HG_RC=0
+  _hg_clean "gate-$_HG_SEQ" python3 -B "$1/$HG_GATE_REL" --repo-root "$1" --replay --no-exec-bit \
+    > "$HG_OUT" 2>&1 || HG_RC=$?
+  HG_LAST="$( awk 'NF { l = $0 } END { print l }' "$HG_OUT" )"
+  HG_RED="$( grep -c '^\[RED\] ' "$HG_OUT" )"
+  HG_MISSING="$( grep -c 'positive-control fixture MISSING' "$HG_OUT" )"
+  case "${HG_RED:-}" in ''|*[!0-9]*) HG_RED=0 ;; esac
+  case "${HG_MISSING:-}" in ''|*[!0-9]*) HG_MISSING=0 ;; esac
+}
+
+# The /ceo-boot contract: cwd = the target, no arguments (static checks + the
+# replay). Sets HG_BOOT_RC, HG_BOOT_LAST and HG_BOOT_SECS. The time is RECORDED
+# against the 2.5 s ceiling of W7a C7, never asserted: an absolute time budget
+# in a test is a runner flake, not a finding.
+_hg_now() { python3 -c 'import time; print("%.3f" % time.time())'; }
+_hg_boot() {
+  _HG_SEQ=$(( _HG_SEQ + 1 ))
+  _hgb_out="$1.boot.$_HG_SEQ.out"
+  HG_BOOT_RC=0
+  _hgb_t0="$( _hg_now )"
+  ( cd "$1" && _hg_clean "boot-$_HG_SEQ" python3 -B "$HG_GATE_REL" ) > "$_hgb_out" 2>&1 || HG_BOOT_RC=$?
+  _hgb_t1="$( _hg_now )"
+  HG_BOOT_SECS="$( awk -v a="$_hgb_t0" -v b="$_hgb_t1" 'BEGIN { printf "%.2f", b - a }' )"
+  HG_BOOT_LAST="$( awk 'NF { l = $0 } END { print l }' "$_hgb_out" )"
+}
+
+# The full validator of target $1. Sets HG_VG_OUT, HG_VG_P119 (PLAN-119 block
+# headers) and HG_VG_SUMMARY (1 when the run reached its summary).
+# Declared residual: the validator itself writes and then removes
+# /tmp/validate-governance-settings-json-err.<its pid>, a literal /tmp outside
+# $WORK; an interrupt inside that one json.load leaves it behind. The cure
+# belongs in validate-governance.sh, a gate-scripts manifest member.
+_hg_validate() {
+  _HG_SEQ=$(( _HG_SEQ + 1 ))
+  HG_VG_OUT="$1.validate.$_HG_SEQ.out"
+  _hg_clean "validate-$_HG_SEQ" bash "$1/.claude/scripts/validate-governance.sh" > "$HG_VG_OUT" 2>&1 || true
+  HG_VG_P119="$( grep -c '^--- PLAN-119 ' "$HG_VG_OUT" )"
+  case "${HG_VG_P119:-}" in ''|*[!0-9]*) HG_VG_P119=0 ;; esac
+  if grep -q '^--- Summary ---$' "$HG_VG_OUT" && grep -qE '^  Errors: +[0-9]+$' "$HG_VG_OUT"; then
+    HG_VG_SUMMARY=1
+  else
+    HG_VG_SUMMARY=0
+  fi
+}
+
+# The RED shape, asserted the same way wherever it is expected: rc 1, exactly
+# $HG_RED_N [RED] rows, every one a MISSING fixture, and the gate's own summary
+# line for that count. $1 = assertion id, $2 = what is red.
+_hg_assert_red() {
+  if [ "$HG_RC" -eq 1 ] && [ "$HG_RED" -eq "$HG_RED_N" ] && [ "$HG_MISSING" -eq "$HG_RED" ] \
+     && [ "$HG_LAST" = "FAIL: $HG_RED RED finding(s) (0 warning(s))" ]; then
+    ok "$1 $2: rc 1, «${HG_LAST}», all $HG_RED positive-control fixtures MISSING"
+  else
+    bad "$1 $2 is not the MISSING-fixture red: rc=$HG_RC red=$HG_RED missing=$HG_MISSING last=«${HG_LAST}» (see $HG_OUT)"
+  fi
+}
+
+# The GREEN shape: the delivered fixtures and gate are the source's, and the
+# gate replays green. $1 = assertion-id prefix, $2 = target. The letters mean
+# the same thing in E1 and E0: b = the folder, c = cmp of the fixtures, d = cmp
+# of the gate, e = the replay gate, f = the /ceo-boot contract.
+_hg_assert_green() {
+  if [ "$HG_SET" = "$HG_FIXTURES" ]; then
+    ok "${1}b $HG_REL holds exactly the $HG_N fixtures the gate requires ($HG_SET)"
+  else
+    bad "${1}b $HG_REL holds «${HG_SET}», the gate requires «${HG_FIXTURES}»"
+  fi
+  if [ "$HG_CMP" -eq "$HG_N" ]; then
+    ok "${1}c all $HG_N fixtures are cmp-identical to $REPO_ROOT/$HG_REL"
+  else
+    bad "${1}c only $HG_CMP of $HG_N fixtures are cmp-identical to $REPO_ROOT/$HG_REL"
+  fi
+  if [ "$HG_HOOK" = "same" ]; then
+    ok "${1}d the delivered $HG_GATE_REL is cmp-identical to the source"
+  else
+    bad "${1}d the delivered $HG_GATE_REL is $HG_HOOK (vs $REPO_ROOT/$HG_GATE_REL)"
+  fi
+  if [ "$HG_RC" -eq 0 ] && [ "$HG_LAST" = "$HG_GREEN_LINE" ]; then
+    ok "${1}e the replay gate is green: rc 0, «${HG_LAST}»"
+  else
+    bad "${1}e the replay gate is not green: rc=$HG_RC last=«${HG_LAST}» (see $HG_OUT)"
+  fi
+  _hg_boot "$2"
+  case "$HG_BOOT_LAST" in "$HG_BOOT_PREFIX"*) _hgb_ok=1 ;; *) _hgb_ok=0 ;; esac
+  if [ "$HG_BOOT_RC" -eq 0 ] && [ "$_hgb_ok" -eq 1 ]; then
+    ok "${1}f the /ceo-boot contract (cwd = target, no arguments) is green: rc 0, «${HG_BOOT_LAST}»"
+  else
+    bad "${1}f the /ceo-boot contract is not green: rc=$HG_BOOT_RC last=«${HG_BOOT_LAST}» (see $_hgb_out)"
+  fi
+  echo "    /ceo-boot contract wall time: ${HG_BOOT_SECS} s (W7a C7 ceiling 2.5 s — recorded, not asserted)"
+}
+
+if _hist_group harness-upgrade; then
+# --- E1 (C56) installed at v1.4.2 -> upgrade -> the replay gate green -------
+echo ""
+echo "==> E1 — an adopter installed at $HG_TAG is cured by upgrade.sh (PLAN-183 C9, C56)"
+_hg_constants
+git -C "$REPO_ROOT" rev-parse --verify --quiet "refs/tags/$HG_TAG" >/dev/null 2>&1 \
+  || scaffold "E1 tag $HG_TAG does not resolve in $REPO_ROOT. In CI the 'Fetch the parity pin tag'
+                 step of smoke-install.yml fetches +refs/tags/v*; locally:
+                     git -C '$REPO_ROOT' fetch --no-tags origin '+refs/tags/$HG_TAG:refs/tags/$HG_TAG'"
+E1_SRC="$WORK/hg-upgrade/src"
+_hg_extract "$HG_TAG" "$E1_SRC" || scaffold "E1 could not extract the $HG_TAG tree (git archive | tar)"
+E1="$WORK/hg-upgrade/adopter"
+_hg_install_from "$E1_SRC" "$E1" \
+  || { tail -30 "$E1.install.log" >&2; scaffold "E1 install.sh @ $HG_TAG failed for $E1"; }
+_hg_drop "$E1_SRC"
+[ "$( cat "$E1/.claude/.framework-version" 2>/dev/null )" = "${HG_TAG#v}" ] \
+  || scaffold "E1 the $HG_TAG install does not carry .claude/.framework-version = ${HG_TAG#v} — this is not the population the leg speaks for"
+
+# The fixture has to START red, or the green below proves nothing about the
+# upgrade: it would be a target that never needed curing.
+_hg_probe "$E1"
+_hg_assert_red "E1-control" "the $HG_TAG install, before any upgrade, answers the gate RED"
+if [ "$HG_SET" = "<absent>" ]; then
+  ok "E1-control nothing at $HG_REL before the upgrade — whatever is there afterwards, the upgrade delivered"
+else
+  bad "E1-control $HG_REL already holds «${HG_SET}» before the upgrade — the leg cannot tell a delivery from a leftover"
+fi
+
+_upgrade "$E1"
+E1_LOG="$_UP_LOG"
+if [ "$_UP_RC" -eq 0 ]; then
+  ok "E1a upgrade.sh ($REPO_ROOT) exited 0 on the $HG_TAG adopter"
+else
+  tail -30 "$E1_LOG" >&2
+  bad "E1a upgrade.sh exited rc=$_UP_RC on the $HG_TAG adopter (see $E1_LOG)"
+fi
+_hg_probe "$E1"
+_hg_assert_green "E1" "$E1"
+
+# C56: the validator on the cured adopter reaches its summary and arms no
+# PLAN-119 block (the dogfood-only gate keys TODAY on .claude/hooks/tests, which
+# the upgrade must not deliver). The validator's own verdict is NOT asserted
+# here: rc and the exact WARN set are the E2 leg's (C57, W7b).
+_hg_validate "$E1"
+if [ "$HG_VG_SUMMARY" -eq 1 ] && [ "$HG_VG_P119" -eq 0 ]; then
+  ok "E1g validate-governance.sh on the upgraded adopter reached its summary with no PLAN-119 block"
+else
+  bad "E1g validate-governance.sh: summary=$HG_VG_SUMMARY, PLAN-119 headers=$HG_VG_P119 (want 1 and 0; see $HG_VG_OUT)"
+fi
+# ...and the grep above can SEE that block: plant the test tree it keys on, in
+# a copy, and the header has to appear exactly once. Without this, a renamed
+# header would make E1g green forever.
+# EXPIRES WITH THE W7b: there PLAN-119 arms on the ADR-001 marker through the
+# CLI predicate (C41), and planted residue must no longer arm it (C57). The
+# W7b's patch converts this control to the marker form C53 allows, in the same
+# change that moves the arming key — left as is, it goes red on that land.
+E1_P119="$WORK/hg-upgrade/p119/adopter"
+mkdir -p "$( dirname "$E1_P119" )" || scaffold "E1g-control could not create $( dirname "$E1_P119" )"
+cp -R "$E1" "$E1_P119" || scaffold "E1g-control could not copy the upgraded adopter"
+mkdir "$E1_P119/.claude/hooks/tests" || scaffold "E1g-control could not plant .claude/hooks/tests"
+_hg_validate "$E1_P119"
+if [ "$HG_VG_SUMMARY" -eq 1 ] && [ "$HG_VG_P119" -eq 1 ]; then
+  ok "E1g-control with .claude/hooks/tests planted, the same validator prints the PLAN-119 header exactly once"
+else
+  bad "E1g-control planted .claude/hooks/tests: summary=$HG_VG_SUMMARY, PLAN-119 headers=$HG_VG_P119 (want 1 and 1; see $HG_VG_OUT) — E1g cannot see what it asserts absent"
+fi
+_hg_drop "$( dirname "$E1_P119" )"
+
+fi # historical group harness-upgrade
+
+if _hist_group harness-fresh; then
+# --- E0 (C9) install from zero -> the replay gate green ---------------------
+echo ""
+echo "==> E0 — a fresh install of this tree answers the replay gate green (PLAN-183 C9)"
+_hg_constants
+E0="$WORK/hg-fresh/adopter"
+_install_into "$E0"
+_hg_probe "$E0"
+_hg_assert_green "E0" "$E0"
+
+fi # historical group harness-fresh
+
+if _hist_group harness-red; then
+# --- the RED controls: the pre-W7a tree, through the SAME probe -------------
+echo ""
+echo "==> E1-RED / E0-RED — the pre-W7a tree ($( printf '%s' "$HG_PRE_W7A" | cut -c1-10 )) must stay RED through the same probe"
+git -C "$REPO_ROOT" rev-parse --verify --quiet "$HG_PRE_W7A^{commit}" >/dev/null 2>&1 \
+  || scaffold "RED base $HG_PRE_W7A is not in $REPO_ROOT's object store — a shallow or filtered clone.
+                 Remedy: git -C '$REPO_ROOT' fetch --unshallow --no-tags"
+git -C "$REPO_ROOT" rev-parse --verify --quiet "refs/tags/$HG_TAG" >/dev/null 2>&1 \
+  || scaffold "RED tag $HG_TAG does not resolve in $REPO_ROOT (see the E1 remedy)"
+
+R_SRC142="$WORK/hg-red/src-tag"
+_hg_extract "$HG_TAG" "$R_SRC142" || scaffold "RED could not extract the $HG_TAG tree"
+R1="$WORK/hg-red/upgraded/adopter"
+_hg_install_from "$R_SRC142" "$R1" \
+  || { tail -30 "$R1.install.log" >&2; scaffold "RED install.sh @ $HG_TAG failed for $R1"; }
+_hg_drop "$R_SRC142"
+R_SRCPRE="$WORK/hg-red/src-pre"
+_hg_extract "$HG_PRE_W7A" "$R_SRCPRE" || scaffold "RED could not extract the pre-W7a tree $HG_PRE_W7A"
+# The RED lanes look where the pre-W7a gate looks, and compare against the
+# pre-W7a source: «0 of N delivered» is then a fact about the pre-W7a
+# installer, not a path that cannot exist in any pre-W7a target.
+_hg_constants "$R_SRCPRE/$HG_GATE_REL"
+for _hgr_f in $HG_FIXTURES; do
+  [ -f "$R_SRCPRE/$HG_REL/$_hgr_f" ] \
+    || scaffold "RED the pre-W7a source does not carry $HG_REL/$_hgr_f, which its own gate requires — the cmp below would be vacuous"
+done
+
+# E1-RED: the same v1.4.2 adopter, upgraded by the pre-W7a upgrade.sh.
+_UPGRADE_SEQ=$(( _UPGRADE_SEQ + 1 ))
+R1_LOG="$R1.upgrade.$_UPGRADE_SEQ.log"
+_R1_RC=0
+bash "$R_SRCPRE/scripts/upgrade.sh" "$R1" --profile core --no-diff-warn > "$R1_LOG" 2>&1 || _R1_RC=$?
+if [ "$_R1_RC" -eq 0 ]; then
+  ok "E1-RED-control the pre-W7a upgrade.sh exited 0 — the red below is about what it delivered, not a dead upgrade"
+else
+  tail -30 "$R1_LOG" >&2
+  bad "E1-RED-control the pre-W7a upgrade.sh exited rc=$_R1_RC (see $R1_LOG) — a dead upgrade is not the red this lane exists to reproduce"
+fi
+_hg_probe "$R1" "$R_SRCPRE"
+if [ "$HG_CMP" -eq 0 ]; then
+  ok "E1-RED the pre-W7a upgrade delivers 0 of $HG_N fixtures at $HG_REL, the folder its own gate reads (folder: $HG_SET) — the defect E1 cures"
+else
+  bad "E1-RED the pre-W7a upgrade delivered $HG_CMP of $HG_N fixtures at $HG_REL — the defect does not reproduce, so E1's green is not evidence"
+fi
+# v1.4.2 and the pre-W7a tree carry the same gate bytes, so this says which
+# gate answers below, not which upgrade wrote it.
+if [ "$HG_HOOK" = "same" ]; then
+  ok "E1-RED the adopter's gate is the pre-W7a gate byte for byte — the red below is that gate's"
+else
+  bad "E1-RED the delivered gate is '$HG_HOOK' vs the pre-W7a source's — the lane is not running the gate whose red it reproduces"
+fi
+_hg_assert_red "E1-RED" "the pre-W7a upgrade leaves the gate RED"
+
+# E0-RED: the pre-W7a tree, installed from zero.
+R0="$WORK/hg-red/fresh/adopter"
+_hg_install_from "$R_SRCPRE" "$R0" \
+  || { tail -30 "$R0.install.log" >&2; scaffold "RED install.sh @ $HG_PRE_W7A failed for $R0"; }
+_hg_probe "$R0" "$R_SRCPRE"
+_hg_drop "$R_SRCPRE"
+if [ "$HG_CMP" -eq 0 ]; then
+  ok "E0-RED a fresh pre-W7a install delivers 0 of $HG_N fixtures at $HG_REL, the folder its own gate reads (folder: $HG_SET) — the defect E0 cures"
+else
+  bad "E0-RED a fresh pre-W7a install delivered $HG_CMP of $HG_N fixtures at $HG_REL — the defect does not reproduce, so E0's green is not evidence"
+fi
+_hg_assert_red "E0-RED" "a fresh pre-W7a install answers the gate RED"
+
+fi # historical group harness-red
 
 echo ""
 echo "=============================================================="
