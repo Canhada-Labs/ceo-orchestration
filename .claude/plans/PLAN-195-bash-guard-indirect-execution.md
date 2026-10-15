@@ -1,7 +1,7 @@
 ---
 id: PLAN-195
 title: Guarda de Bash — execução indireta e alvo de escrita computado (classe GuardFall)
-status: reviewed
+status: executing
 created: 2026-09-30
 reviewed_at: 2026-10-01
 reviewed_by: "Owner — aceite em bloco, no chat da S361 (2026-10-01), da recomendação sobre o plano revisto no debate: corpo do debate (sha 9894151f, PROCEED) + apêndice «Correções pós-debate S360»; OQ-8 mantida como o CEO resolveu no debate"
@@ -11,7 +11,7 @@ level: L3
 budget_tokens: "estimado (refeito no debate r1, S360) — W0 (doc-only) ~60-120k; instrumento de replay de falso-positivo ~60-120k; parte A = W1-ADR ~80-150k + W1a ~350-650k + W1b ~300-600k (total ~0,8-1,5 M, rail com teto de 4 rodadas por pacote); W2 (cura B + mensagem A3 + argv + rail) ~350-700k; W3 (medição do sandbox, sem código) ~40-80k; debate L3 ~0,5-1 M"
 budget_sessions: "estimado 5-7 (W0 e a medição do sandbox cabem numa; parte A 3-4 sessões em 3 pacotes na mesma vaga; W2 1-2; cada pacote canônico pede a sua cerimônia)"
 context_risk: medium
-external_wait: "Owner: assinatura GPG de cada wave canônica (W1, W2); decisão de ligar ou não o sandbox do SO DEPOIS da medição (W3 — «Medir antes de ligar» já decidido na S359). Debate L3 antes de W1/W2 (Security Engineer tem VETO; a reconfirmação dos dois VETOs sobre o sha novo do plano foi REGISTRADA em 2026-10-01 — item C11; o SIGN do ADR-201 espera o replay da OQ-1 medido e as decisões do Owner P-1..P-5). Vaga canônica: parte A na 2.ª vaga; parte B e sandbox sem vaga reservada (ver «Regra de WIP»)."
+external_wait: "Owner: assinatura GPG de cada wave canônica (W1, W2); decisão de ligar ou não o sandbox do SO DEPOIS da medição (W3 — «Medir antes de ligar» já decidido na S359). Debate L3 antes de W1/W2 (Security Engineer tem VETO; a reconfirmação dos dois VETOs sobre o sha novo do plano foi REGISTRADA em 2026-10-01 — item C11; o SIGN do ADR-201 espera o replay da OQ-1 medido e as decisões do Owner P-1..P-5). Vaga canônica: parte A na 2.ª vaga; parte B e sandbox sem vaga reservada (ver «Regra de WIP»). → item C13 (S363, 2026-10-12): o PLAN-195 inteiro foi para a 1.4.4 (D-17) e nada canônico daqui landa antes do GA da 1.4.3; o replay de linha de base está medido; P-1..P-4 decididas pelo Owner em 2026-10-02; a P-5 é proposta do CEO, ratificada no SIGN do ADR-201; o C13 espera a reconfirmação dos dois VETOs por diff."
 eta_calendar: "mesmo-dia a D+1 por wave (CEO-only fora das assinaturas e do debate); calendário estica só pelas cerimônias do Owner"
 tags: [security, bash-guard, canonical-edit, threat-model, guardfall, fail-closed]
 ---
@@ -31,6 +31,11 @@ tags: [security, bash-guard, canonical-edit, threat-model, guardfall, fail-close
 > eventual edição do sandbox (W3 daqui) **não têm vaga reservada**: entram quando uma vaga liberar, na
 > fila da OQ-11 do PLAN-194; a parte B nunca antes do land da parte A (mesmo arquivo). A W0 (docs,
 > land livre), o debate e as medições não ocupam vaga canônica.
+>
+> **→ item C13 (S363, 2026-10-12):** o teto do bloco do PLAN-194 hoje é **4** pacotes canônicos em
+> voo (D-21), não 3; o PLAN-195 inteiro foi para a **1.4.4** (D-17), e nada canônico daqui landa antes
+> do GA da 1.4.3; a W1a é construída numa vaga própria durante o rail da W1-ADR (D-17 (a)), e o land
+> dela continua depois do da W1-ADR.
 
 ## Context
 
@@ -167,6 +172,7 @@ lista; debate r1 C11 + r2):
     fica byte-idêntico na W1; FU `PLAN-195-FOLLOWUP-e4-comment-normaliser`.
 
 **→ item C12: resíduo 13.**
+**→ item C13: pela P-3, o resíduo 10 vale também para o verbo computado (H-1).**
 
 ## Thesis
 
@@ -547,8 +553,13 @@ re-derivados no LAND).**
   Detection Engineer com VETO) antes de qualquer edição do hook (**→ item C11:** inclui a
   reconfirmação dos dois VETOs sobre o sha do plano que contém o apêndice, registrada em
   `PLAN-195/debate/`; REGISTRADA em 2026-10-01 em `PLAN-195/debate/reconfirm-s361/`) — Check: none (debate gate)
-- [ ] Instrumento de replay de falso-positivo (OQ-1) pronto e medido sobre o HEAD
+  **→ item C13 (S363):** o debate está fechado (PROCEED); falta só a reconfirmação dos dois VETOs
+  sobre o sha que contém o C13, que toca o Goal — a caixa se marca quando ela for registrada.
+- [x] Instrumento de replay de falso-positivo (OQ-1) pronto e medido sobre o HEAD
   — Check: none (instrumento fora do repo; contagens registradas no pacote)
+  — ✅ S363 (2026-10-12): linha de base medida em 2026-10-02 sobre o HEAD `48f03b3a` (hook sha256
+  `18944c69…de12`, o mesmo no HEAD `38d56f35`); contagens e denominador no item C13. Ficam por
+  medir a V-1 (contagem privada, P-4), a P-5 e o diferencial, que depende do patch da W1a/W1b.
 - [ ] W1-ADR: ADR-201 `PROPOSED` com o conteúdo mínimo acima; cerimônia — Check: test -f .claude/adr/ADR-201-bash-guard-indirect-execution.md
 - [ ] W1a: passada aditiva, caminhador, normalizador, gramática do `git`, recursão nos corpos,
   teto, `reason_code` e kill-switch próprios, pré-léxico e chaves; prova (a)-(k) — Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py -q
@@ -684,7 +695,7 @@ ficam iguais, para não quebrar referências.
   de delta 0**) e sem executar nada — só contagens no repo, delta
   classificado à mão na evidência privada; meta: as regras de EQUIVALÊNCIA com a forma direta
   não geram nenhum bloqueio novo legítimo, e as regras heurísticas ficam abaixo de um limite
-  pré-registrado na ADR-201; (c) `reason_code` por classe + contagem por 7 dias por PROJETO
+  pré-registrado na ADR-201 (**→ item C13: «abaixo» lê-se «não excede»; limites da P-1**); (c) `reason_code` por classe + contagem por 7 dias por PROJETO
   para ver a regra disparar depois do land.
 - OQ-2 (RESOLVIDA no debate r2, 3/3 — a passada única aditiva e monotônica atende «os dois
   sítios consomem o mesmo caminhador»): heredoc, aspas e os dois sítios. **Decisão:** nem recursão nos dois sítios nem helper chamado pelos dois — UMA passada
@@ -736,7 +747,8 @@ ficam iguais, para não quebrar referências.
   residuais declarados (itens 8 e 9 do Goal). O replay (OQ-1) mede quantos comandos legítimos
   cada opção recusaria antes de o Owner decidir. **→ item C8: regra padrão fixada pelo Owner em
   2026-10-01 — decide pelas contagens do replay; sem replay pronto na abertura da W1b, a
-  resposta é NÃO, e o SIM vira o pacote W1c.**
+  resposta é NÃO, e o SIM vira o pacote W1c.** **→ item C13: o replay está pronto, com as contagens
+  no C13; a decisão segue com o Owner.**
 - OQ-6 (Owner, W3) — só o que resta: **ligar ou não o sandbox depois da medição.** (Medir
   antes de ligar já está decidido.)
 
@@ -767,9 +779,10 @@ ordem da colisão com a W6 do PLAN-194.
 
 ## Success criteria
 
-- [ ] `docs/security-bash-canonical-guards.md` §6 e `docs/threat-model.md` vetor 2
+- [x] `docs/security-bash-canonical-guards.md` §6 e `docs/threat-model.md` vetor 2
   descrevem a cobertura REAL (classe indireta/computada declarada não-coberta ou curada) —
   Check: grep -n '^### §6.6 ' docs/security-bash-canonical-guards.md && ! grep -nF -e 'hits the PreToolUse matcher AGAIN' -e 'before sending tokens to Claude' -e 'Five vector classes remain advisory' docs/security-bash-canonical-guards.md
+  — ✅ W0 landada em `b2ab8805` (S361, 2026-10-02); Check verde em 2026-10-12 no HEAD `38d56f35`.
 - [ ] O hook recusa as formas da classe que a ADR-201 declara cobertas (formas diretas
   irmãs, indireção de destrutivo, verbo computado com marcador destrutivo literal, escrita
   canônica com alvo computado), nenhuma forma reconhecida recebe veredito mais permissivo que
@@ -853,6 +866,17 @@ ordem da colisão com a W6 do PLAN-194.
   arquivo. A reconfirmação dos dois VETOs sobre o novo sha ficou pendente nesta data e foi
   REGISTRADA em 2026-10-01 (item C11; `debate/reconfirm-s361/`). Nada executado; a transição `reviewed → executing` é do CEO e ocorre no commit da
   W0.
+- S361 (2026-10-02, W0): W0 landada em `b2ab8805` (land livre: os dois docs, o plano e os
+  registros da reconfirmação dos dois VETOs sobre o C12 em `debate/reconfirm-s361-c12/`). O flip
+  `reviewed → executing` que o C6 previa para esse commit não entrou nele (feito na S363).
+- S363 (2026-10-12): flip `reviewed → executing` em commit próprio, anterior a este registro
+  (self-gate do CEO, PLAN-SCHEMA §4; o primeiro commit de execução é o `b2ab8805`). Item C13: as
+  decisões do Owner de 2026-10-02 (P-1..P-4; P-5 como proposta do CEO; D-17 e D-21), a tabela K1
+  com as contagens da linha de base do replay e as leituras «não excede» e «antes do diferencial».
+  Caixas marcadas: replay pronto e medido (W1) e critério de sucesso 1. A caixa do debate fica
+  aberta até a reconfirmação do C13. Efeito colateral esperado: o detector de plano parado
+  (`check-staleness.py`) passa a acusar o modo 8.2 se nenhum commit tocar este plano por mais de
+  24 h; com o plano estacionado para a 1.4.4 (D-17), o aviso é esperado.
 
 ## Correções pós-debate S360 (aceitas pelo Owner na S361, 2026-10-01)
 
@@ -1094,3 +1118,130 @@ do Threat Detection Engineer e a P1-C12 do Security Engineer, nos arquivos acima
 Em resumo, para a abertura da W2: a normalização só de texto da grafia e da caixa do alvo e a
 recusa de criação de link cuja origem é caminho protegido entram POR PADRÃO; deixar alguma de fora
 exige motivo registrado no pacote e um FU nomeado `PLAN-195-FOLLOWUP-<slug>`.
+
+**C13 — Decisões do Owner de 2026-10-02, tabela K1 com as contagens do replay e duas leituras
+(registro da S363, 2026-10-12).** Fontes conferidas em 2026-10-12: a seção «Decisões do Owner —
+S362 (2026-10-02)» do PLAN-194 (D-17, D-21 e D-23); a memória `project-owner-decisions-s361-closeout`;
+e o relatório da linha de base do replay da OQ-1, fora do repositório, do qual vêm só contagens
+(nenhuma string de comando — item C5). Este item toca o Goal (P-3) e as condições da OQ-9 e da
+OQ-10. Pelo C11, ele exige a reconfirmação por diff dos dois portadores de VETO (Security Engineer
+e Threat Detection Engineer) sobre o sha que o contém, com o diff integral contra a versão do commit
+`b2ab8805` (sha256 `bb8a9d9c…305d`), registrada em `.claude/plans/PLAN-195/debate/`. Até lá, o
+estado dos dois VETOs sobre este texto é «não reconfirmado», e nenhum pacote da W1 começa.
+Depois dela, e antes deste item, só entrou o flip de status de uma linha em `6ee8c218` (sha256
+`aacbe945…0f58`); e ela não é a base da última retirada registrada: os dois
+registros do C12 valem para o sha256 `93e4b83f…5379`, uma cópia de sombra não commitada (HEAD
+`399efbaa`), e nenhum commit do plano tem esse sha. O trecho entre as duas bases não se reproduz
+por `git diff`; o parágrafo «Reconfirmação do C12: feita» declara o que entrou nele (as duas
+precisões de redação e a remissão às condições), além do próprio registro do resultado. Como na
+cadeia desde a retirada anterior que o registro do Security Engineer sobre o C12 percorre, cada
+registro do C13 nomeia as DUAS bases e diz, pelo escopo da própria retirada registrada no C12
+(a lista «Não a reabrem» do Security Engineer; a ponte com a retirada anterior do Threat
+Detection Engineer), se esse trecho reabre a reconfirmação.
+
+*1. Decisões do Owner (2026-10-02; opção escolhida: «Aceitar P-1..P-4 do replay»).* As quatro saem
+da recomendação do relatório do replay; a numeração das linhas é a do ponto 3.
+
+- **P-1 — limites das linhas HEURÍSTICAS**, em número absoluto de comandos legítimos distintos na
+  janela do replay: **H-1 = 0, H-2.2 = 0 e H-2.3 = 0** (nenhum candidato na linha de base);
+  **H-2.1 = 1, H-2.4 = 2 e H-2.5 = 8** (o observado).
+- **P-2 — desempate do alimentador opaco:** quando o programa não se recupera do transcript, o caso
+  conta como **falso-positivo** (o ônus é da regra); se o produtor visível for um baixador de rede,
+  conta como «consistente com a política», e a sub-forma nunca é rebaixada (piso (e) da OQ-9).
+- **P-3 — SIM:** o rebaixamento por sub-forma, só em cerimônia, com o mesmo `reason_code` e o
+  desfecho «faria bloquear» (condições (c) e (d) da OQ-9, no conteúdo mínimo da W1-ADR), vale
+  também para o verbo computado (H-1). Efeito no Goal: o resíduo 10 passa a cobrir as sub-formas
+  heurísticas rebaixadas por essa regra — alimentadores opacos e verbo computado. A §6.6 do
+  `docs/security-bash-canonical-guards.md` (o item 10 e a frase que aponta a fonte única, «Goal plus
+  its item C12») espelha o Goal e acompanha em land livre próprio (oráculo 0), depois da
+  reconfirmação.
+- **P-4 — vocabulário estendido (A-9, linha V-1):** classe HEURÍSTICA, rebaixamento só em
+  cerimônia, limite igual à contagem legítima medida em privado (o vocabulário da A-9 vive na matriz
+  privada; saem só contagens). A tag `destructive` da A-9 não entrou nesta decisão e segue com o
+  Owner, antes do SIGN do ADR-201.
+- **P-5 — linhas F-2, F-3 e F-4 do rascunho da ADR-201** (teto de profundidade e tamanho, teto de
+  palavras de chave e flag desconhecida de lançador): proposta do CEO, com medição. Ela é ratificada
+  dentro do SIGN do ADR-201, com os números no sentinel (D-17 (b)); antes disso, não é decisão do
+  Owner. O instrumento do replay ainda não tem contador para essas três linhas.
+
+*2. Calendário.* D-17: o PLAN-195 inteiro vai para a 1.4.4; pode ser construído sem pressa, fora do
+caminho crítico, e nada canônico daqui landa antes do GA da 1.4.3. A dúvida «kernel + `SPEC/v1`» da
+W1a fica para a 1.4.4. D-17 (a): a W1a é construída numa vaga própria durante o rail da W1-ADR; o
+land dela continua depois do da W1-ADR. D-21: o teto é de 4 pacotes canônicos em voo. Fato
+conferido em 2026-10-12, para a abertura dos pacotes de código: `check_bash_safety.py` e
+`_lib/audit_emit.py` estão em `_KERNEL_PATHS` (`check_arbitration_kernel.py:198` e `:99`). O
+`PLAN-194-FOLLOWUP-v1-4-4-backlog.md` cita o PLAN-195 entre os itens da 1.4.4; o escopo e as
+decisões continuam aqui.
+
+*3. Tabela K1 — numeração e contagens da linha de base.* Denominador: janela UTC observada
+2026-08-23T17:32:33Z → 2026-10-02T04:16:25Z (39,45 dias); 102.979 invocações deduplicadas; 99.673
+comandos distintos (igualdade exata de bytes); 52 sessões. Medição sobre o HEAD `48f03b3a`, com o
+hook de sha256 `18944c69…de12` e o isolamento do item C4 com controle positivo (delta 0 atribuível
+ao replay na família viva). Entre `48f03b3a` e `38d56f35` (conferido em 2026-10-12), o hook tem o
+mesmo sha256, o `check_canonical_edit.py` não mudou e, em `_lib/`, só mudou o `codex_cli_shape.py`,
+que o grafo estático de imports a partir do hook não alcança: quem o importa, dentro de
+funções, são o `check_pair_rail.py` (`_resolve_codex_cli_shape`) e o `_lib/adapters/codex.py`
+(`make_invoke_command`), adapter que o hook só carrega sob `CEO_HOOK_ADAPTER=codex` e cuja
+`make_invoke_command` o guard não chama. «Candidatos» são os comandos com ALLOW no HEAD
+que a parte A recusaria pela regra da linha, segundo o classificador do instrumento. É estimativa:
+o número que conta para a meta é o do replay DIFERENCIAL, que ainda não rodou (depende do patch da
+W1a/W1b).
+
+| Linha | Sub-forma (pela forma) | Classe | Exposição: distintos | Candidatos: distintos (sessões) | Meta ou limite |
+|---|---|---|---:|---:|---|
+| E-1 | formas diretas irmãs | EQUIVALÊNCIA | 41.053 | 157 (20) | 0 falso-positivo |
+| E-2 | tomador de corpo | EQUIVALÊNCIA | 451 | 2 (2) | 0 falso-positivo |
+| E-3 | runner de argv | EQUIVALÊNCIA | 408 | 4 (2) | 0 falso-positivo |
+| H-1 | verbo computado com marcador literal do trio | HEURÍSTICA | 4.312 | 0 (0) | 0 (P-1); rebaixável (P-3) |
+| H-2.1 | opaco: programa pela entrada padrão vinda de cano | HEURÍSTICA | 1 | 1 (1) | 1 (P-1) |
+| H-2.2 | opaco: programa pela entrada redirecionada | HEURÍSTICA | 0 | 0 | 0 (P-1) |
+| H-2.3 | opaco: programa lido de um descritor | HEURÍSTICA | 0 | 0 | 0 (P-1) |
+| H-2.4 | opaco: programa por substituição de processo | HEURÍSTICA | 2 | 2 (2) | 2 (P-1) |
+| H-2.5 | avaliação da saída de uma substituição | HEURÍSTICA | 8 | 8 (6) | 8 (P-1) |
+| V-1 | vocabulário estendido (A-9) | HEURÍSTICA (P-4) | não medido | não medido | contagem privada (P-4) |
+
+- Nas linhas E, um BLOCK novo é «consistente com a política» (a forma direta também bloqueia), não
+  falso-positivo: os 163 candidatos E são atrito, não custo da meta. Dos 157 da E-1, 155 estão em
+  comando que menciona diretório de rascunho ou temporário.
+- União dos candidatos E e H: 173 distintos, 23 sessões. Variantes com baixador de rede nas linhas
+  H-2: 0.
+- **Numeração das linhas H-2.** O rascunho da ADR-201 (fora do repositório) tem 4 linhas H-2:
+  entrada padrão, descritor, substituição de processo e avaliação. O replay, sobre o qual o Owner
+  decidiu a P-1, separa a entrada padrão em cano (H-2.1) e entrada redirecionada (H-2.2), e por isso
+  tem 5. Vale a numeração do replay: aplicar a P-1 às 4 linhas do rascunho daria limite 0 à
+  substituição de processo, que observou 2, e limite 2 à avaliação, que observou 8. A ADR-201 adota
+  as 5 linhas acima.
+
+*4. Duas leituras que acompanham a P-1 (entram na reconfirmação).*
+
+- **Limite = «não excede».** A OQ-1 (b) diz que as regras heurísticas «ficam abaixo de um limite».
+  Com limite 0, «abaixo» em sentido estrito seria impossível; com limite igual ao observado, o
+  próprio valor observado já o violaria. Leitura: a linha HEURÍSTICA cumpre a meta quando o falso-positivo classificado no
+  diferencial é menor ou igual ao limite; acima dele, o rebaixamento daquela sub-forma vai para
+  cerimônia (OQ-9 (c)). A frase do rascunho da ADR-201 («atinge a meta quando fica ABAIXO do
+  limite») muda junto.
+- **«Antes do replay» = antes do DIFERENCIAL.** O conteúdo mínimo da W1-ADR manda fixar a tabela
+  «ANTES de o replay rodar», e a condição 2 do Threat Detection Engineer
+  (`debate/reconfirm-s361/threat-detection-engineer.md`) pede as condições do K1 «antes do replay».
+  A linha de base mede só exposição e candidatos; quem mede o falso-positivo é o diferencial (HEAD ×
+  cura). Leitura: os limites ficaram fixados sobre a linha de base e antes da 1.ª execução
+  diferencial, que é o momento que essas regras protegem.
+
+*5. OQ-10 e C10 — contagens.* Remoção recursiva sem a opção de força: 11 distintos com ALLOW no HEAD
+(8 sessões). A-8: 267 distintos com ALLOW no HEAD (9 sessões). União: 275 distintos (≈ 7 por dia) —
+é o que o SIM da OQ-10 recusaria nesta janela. Com o replay pronto, o padrão «sem replay ⇒ NÃO» do
+C8 não se aplica; a OQ-10 segue com o Owner, decidida sobre essas contagens. C10: a forma do item
+(busca só de leitura, referência canônica só em outro segmento, nenhum segmento escrevendo em caminho
+canônico) tem 125 distintos em 27 sessões; o caso rotulado do relato não é somado: se ele está nos
+transcripts, já foi contado uma vez (deduplicação, condição 7 do Threat Detection Engineer,
+`debate/reconfirm-s361/`).
+
+*6. O que falta antes do SIGN do ADR-201* (registro; nada aqui decide pelo Owner):
+
+- a reconfirmação dos dois VETOs sobre o sha deste item (C11);
+- a V-1 (contagem privada da A-9) e a medição da P-5;
+- as decisões do Owner ainda abertas: a tag `destructive` da A-9 (P-4), a OQ-10 e a rota de limpeza
+  sancionada para o idioma de limpeza de rascunho e de reposição de clone descartável que as linhas
+  E passam a recusar;
+- o rascunho da ADR-201, fora do repositório, re-derivado sobre o HEAD com as 5 linhas H-2, a
+  leitura «não excede» e os 13 residuais (Goal + C12, com o item 10 estendido por este item).
