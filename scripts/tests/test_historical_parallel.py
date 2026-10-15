@@ -63,6 +63,17 @@ echo "HISTORICAL-GROUP: $2"
             with self.assertRaises(ValueError):
                 adapter.execute(harness, 2, 10)
 
+    def test_real_harness_lists_the_c9_groups(self):
+        # The fake harness above splits whatever total the adapter holds, so
+        # dropping a group and lowering the total in one line would stay green
+        # there. The C9 legs (PLAN-183) are named here, from the real inventory.
+        harness = Path(__file__).with_name("test-upgrade-historical-adopter.sh")
+        listed = subprocess.run(["bash", str(harness), "--list-groups"],
+                                check=True, capture_output=True, text=True, timeout=30)
+        groups = listed.stdout.splitlines()
+        for group in ("harness-upgrade", "harness-fresh", "harness-red"):
+            self.assertIn(group, groups)
+
 
 if __name__ == "__main__":
     unittest.main()
