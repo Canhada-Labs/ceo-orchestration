@@ -445,6 +445,7 @@ presente em `.claude/sentinel-signers.txt`, que não mudou no trecho. Cadeia lin
 - Bloqueios em aberto depois do lote (substitui a lista «Bloqueios em aberto» acima para o trem da 1.4.3):
   a C9 (decisão S364-3), a doc da W6 (FD-22), a seção `[1.4.3]` do `CHANGELOG.md`, o RM com SIGN do Owner,
   o kit e o rail dele (lane Codex). A ordem e as decisões estão no plano, «Next» e «Decisões do Owner — S364».
+  Sem destino: a W5.0 (medições pagas), pergunta aberta ao Owner na mesma seção.
 
 ## Seções arquivadas (2026-10-03, S362)
 

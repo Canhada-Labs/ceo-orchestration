@@ -2047,6 +2047,10 @@ upgrade do PLAN-183 (E1, C56: alvo instalado na `v1.4.2` → `upgrade.sh` → ga
 | S364-3 | C9: CONSTRUIR antes da rc.1 (livre, `scripts/tests/test-upgrade-historical-adopter.sh`). Se não fechar até o kit, o `CHANGELOG.md` do corte declara pela FORMA que a cura via upgrade NÃO foi provada. |
 | S364-4 | F2, leva 1, SAI da 1.4.3 → 1.4.4, junto das curas que ele estressa (item 19 do backlog). |
 
+**Pendente (pergunta ao Owner, sem decisão em 2026-10-15):** a W5.0 (medições pagas «na vez da W5», item
+W5 deste plano, sem Check) não tem destino registrado: não landou, não foi dispensada e não está entre as
+decisões S364. Até a resposta, ela fica fora da lista «Falta» de «Next» e entra como pergunta do corte.
+
 **Correção de fato (texto anterior a esta data):** o FX (cura do teste instável `TestParallelWritersChain`,
 FD-03) NÃO ficou para a 1.4.4: landou no `main` em `bc803a7a` (2026-10-10, «alternância dos gravadores …
 por construção»), como o backlog já registra. A dependência FX da rc está satisfeita; as frases «FX → 1.4.4»

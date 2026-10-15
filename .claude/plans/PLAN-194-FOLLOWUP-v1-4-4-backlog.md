@@ -375,12 +375,18 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   sentinel da W7a (`.claude/plans/PLAN-183/w7a-approved.md`, landado em `b0f5fd45`) remete a emenda do
   ADR-158 a OUTRO pacote; ela não foi construída para a 1.4.3.
 - **Defeito:** a W7a moveu as fixtures de replay para `.claude/hooks/_lib/harness_replay/` e esvaziou
-  `.claude/hooks/tests/fixtures/harness-config/replay/`, mas dois sítios seguem citando a pasta antiga:
-  `.claude/adr/ADR-158-harness-config-gate.md:60` e o comentário de `.github/workflows/validate.yml:1123`
-  (medido em 2026-10-15 com `git grep 'harness-config/replay'` no `main` `4cd2bbc6`).
-- **Canônico:** sim (`validate.yml` = 1; ADR = cerimônia de ADR) ⇒ SIGN.
-- **Cura:** emenda ADITIVA do ADR-158 (a pasta nova e o porquê) e o comentário do `validate.yml` no mesmo
-  pacote.
+  `.claude/hooks/tests/fixtures/harness-config/replay/`, mas dois sítios NORMATIVOS seguem citando a pasta
+  antiga: `.claude/adr/ADR-158-harness-config-gate.md:60` e o comentário de
+  `.github/workflows/validate.yml:1123` (medido em 2026-10-15 com `git grep 'harness-config/replay'` no
+  `main` `4cd2bbc6`). Ficam fora, por desenho: os planos, a constante deliberada `_OLD_REPLAY_REL` de
+  `.claude/hooks/tests/test_check_harness_config.py:61` e o relato histórico
+  `docs/BUG-REPORT-adopter-harness-config-replay-fixtures.pt-BR.md`.
+- **Canônico:** sim (oráculo `1` para o ADR e para o `validate.yml`) ⇒ SIGN.
+- **Cura:** a do desenho ratificado no debate da W7 do PLAN-183 (C2,
+  `.claude/plans/PLAN-183/debate/w7-round-1/consensus.md:139-140`): emenda ADITIVA dentro do ADR-158, que
+  declara substituir a pasta do item 1 da Decisão (`ADR-158:57-60`), como `:166-167` já faz com texto
+  antigo; a linha antiga fica como texto histórico. No mesmo pacote, o comentário do `validate.yml`
+  passa a citar a pasta nova.
 
 ### Item 18 — U2-D: `ADR-055-AMEND-4` ACCEPTED e o leque (canônico, depois do U2-A ao U2-C)
 
@@ -394,7 +400,7 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   correções que as rodadas da S363 pediram (LEDGER do PLAN-194, «Noite S363»: o 4.º abridor do journal no
   §4.4; o passo 1 do §4.1 sob `O_NONBLOCK`).
 
-### Item 19 — F2, leva 1: estresse da W2.5 (livre)
+### Item 19 — F2, três levas: estresse da W2.5 (abre junto dos canônicos que estressa)
 
 - **Origem:** decisão S364-4 do Owner. O RUNBOOK-1.4.3 punha a leva 1 do F2 para já, a leva 2 na sombra do
   U2-B e a leva 3 na sombra do U2-C; as curas que ele estressa foram todas para a 1.4.4.
@@ -403,7 +409,7 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
 - **Cura:** rodar as três levas junto dos itens 2 e 8 e do U2-A/U2-B, cada uma contra a árvore com a cura
   correspondente.
 
-### Item 20 — classe de teste: orçamento ABSOLUTO de tempo que mede o ambiente, não o código (livre)
+### Item 20 — classe de teste: orçamento ABSOLUTO de tempo que mede o ambiente, não o código (canônico para o teste; censo livre)
 
 - **Defeito (pela forma):** um teste que compara um tempo de relógio com um teto fixo reprova por causa da
   máquina, do runner ou do estado do repositório, sem mudança de código. A classe já tinha registro: o
@@ -414,7 +420,8 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   `.claude/hooks/_lib/tests/test_plan104_microbench.py::TestDetectorLatencyBudget::test_full_scan_subprocess_p95_budget`
   mede `persona_demand_scan._scan_branch_ahead`, que roda um `git rev-list --count` por ramo local
   (`.claude/scripts/persona_demand_scan.py:152-200`). No checkout do Owner, com 76 ramos locais, deu
-  ~1,2 s contra o teto de 500 ms, com e sem os pacotes do land do dia (LEDGER, «Lote assinado —
+  ~1,2 s contra o teto de 500 ms, com e sem os pacotes LIVRES landados no dia (`ci-free`, `plans-p195`,
+  `plans-p191`; LEDGER, «Lote assinado —
   2026-10-15 (S364)»). Em clone novo e no CI, que só têm o `main`, passa. Na S364, o teste foi rodado
   isolado nas duas árvores; a passada serial em que ele falhou foi a da bateria do land.
 - **Canônico:** sim para o teste desta ocorrência (o oráculo dá `1` para
@@ -442,8 +449,8 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
 
 «Leia `.claude/plans/PLAN-194-FOLLOWUP-v1-4-4-backlog.md`. Confira que o GA da 1.4.3 saiu e que o molde
 SIGN mínimo está no `main`. Para cada item, rode o oráculo `--is-canonical` nos caminhos e o Check do item
-(deve estar vermelho); abra primeiro os livres (4, 5, 6a, 9, 10, 11, 16 e, conforme o oráculo, 19 e a parte
-livre do 20), cada um numa sombra própria a partir
+(deve estar vermelho); abra primeiro os livres (4, 5, 6a, 9, 10, 11, 16 e o censo do 20; o item 19 abre
+junto dos canônicos que ele estressa), cada um numa sombra própria a partir
 da ref citada quando houver, com rail Codex + 1 Claude. Os canônicos seguem a ordem do Approach e esperam
 as respostas das Open questions que os tocam.»
 
@@ -484,12 +491,13 @@ as respostas das Open questions que os tocam.»
 - [ ] Item 16 (helper que mata o grupo no estouro + censo) landado livre, com os dois sítios do
   `test_install_sh_placeholders.py` convertidos.
   Check: `python3 -m pytest .claude/scripts/tests/test_install_sh_placeholders.py .claude/scripts/tests/test_subprocess_timeout_group_census.py -q -k fu144`
-- [ ] Item 17 (W7ad) landado por SIGN: o ADR-158 emendado e nenhum sítio vivo com a pasta antiga.
-  Check: `! git grep -n 'harness-config/replay' -- .claude/adr/ADR-158-harness-config-gate.md .github/workflows/validate.yml`
+- [ ] Item 17 (W7ad) landado por SIGN: o ADR-158 emendado com a pasta nova e o comentário do
+  `validate.yml` sem a pasta antiga (os dois sítios normativos).
+  Check: `grep -q '_lib/harness_replay' .claude/adr/ADR-158-harness-config-gate.md && ! grep -n 'harness-config/replay' .github/workflows/validate.yml`
 - [ ] Item 18 (U2-D) landado por SIGN, depois do U2-A, do U2-B e do U2-C.
-  Check: `ls .claude/adr/ADR-055-AMEND-4-*.md >/dev/null 2>&1 && grep -l 'ACCEPTED' .claude/adr/ADR-055-AMEND-4-*.md`
+  Check: `grep -qx 'status: ACCEPTED' .claude/adr/ADR-055-AMEND-4-*.md`
 - [ ] Item 19 (F2, três levas) executado e registrado no LEDGER, cada leva contra a árvore com a sua cura.
   Check: `grep -q '^## F2 — estresse da W2.5' .claude/plans/PLAN-194/LEDGER.md`
-- [ ] Item 20 (orçamento relativo + censo da classe) landado; o teste de `persona_demand_scan` passa com
-  76 ramos locais.
-  Check: `python3 -m pytest .claude/hooks/_lib/tests/test_plan104_microbench.py -q`
+- [ ] Item 20 (orçamento relativo + censo da classe) landado; o teste de `persona_demand_scan` passa num
+  checkout com ≥ 76 ramos locais (ou numa fixture com N ramos sintéticos dentro do próprio teste).
+  Check: `[ "$(git for-each-ref refs/heads | wc -l)" -ge 76 ] && python3 -m pytest .claude/hooks/_lib/tests/test_plan104_microbench.py -q` (mais o teste do censo, com o nome que a abertura fixar)
