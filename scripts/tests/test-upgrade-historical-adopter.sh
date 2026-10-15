@@ -2504,11 +2504,15 @@ fi # historical group prior-rendered
 #                    reproduce the defect by name: the pre-W7a installer
 #                    withholds the fixtures the pre-W7a gate reads (cmp against
 #                    the pre-W7a source, at the folder THAT gate declares), and
-#                    that gate answers «FAIL: 3 RED». Without them a gate whose
-#                    replay was switched off would be green on every lane
-#                    above. (An empty fixture list is a scaffold in
+#                    that gate answers «FAIL: 3 RED». They prove the probe and
+#                    the red-shape matcher SEE the defect the green lanes call
+#                    cured. They run the PINNED pre-W7a gate, so they do not
+#                    guard THIS tree's gate against a replay switched off: its
+#                    own unit tests do (.claude/hooks/tests/
+#                    test_check_harness_config.py, the MISSING and tampered
+#                    fixture cases). An empty fixture list is a scaffold in
 #                    _hg_constants; a cmp that never ran fails E1c/E0c, which
-#                    need N of N.)
+#                    need N of N.
 #
 # WHAT the probe reads is derived from the gate under test, never restated here:
 # REPLAY_FIXTURES_REL and the fixture column of REQUIRED_REPLAY_CONTROLS are

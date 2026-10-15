@@ -67,6 +67,8 @@ echo "HISTORICAL-GROUP: $2"
         # The fake harness above splits whatever total the adapter holds, so
         # dropping a group and lowering the total in one line would stay green
         # there. The C9 legs (PLAN-183) are named here, from the real inventory.
+        # It runs from the repository layout, as the CI step does: the
+        # harness's claude stub walks up to scripts/install.sh before it lists.
         harness = Path(__file__).with_name("test-upgrade-historical-adopter.sh")
         listed = subprocess.run(["bash", str(harness), "--list-groups"],
                                 check=True, capture_output=True, text=True, timeout=30)
