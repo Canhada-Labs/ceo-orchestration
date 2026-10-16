@@ -1,0 +1,12 @@
+# relmeta-143 (PLAN-194): dados do molde sign-min (format sign-min-1). Os hard sao, nesta ordem: a sintaxe do
+# driver, as conferencias proprias do pacote (hard-relmeta.sh), a re-derivacao a partir do Anchor (--verify), o
+# teste que prova a gravacao do defaultMode (nao roda no CI), o validate rapido e o teste do driver.
+format	sign-min-1
+rail	.claude/plans/PLAN-194/relmeta/rail-record.md
+canonical	.claude/governance/gate-scripts-manifest.txt
+hard	bash	-n	.claude/scripts/local/release.sh
+hard	bash	.claude/plans/PLAN-194/relmeta/hard-relmeta.sh
+hard	python3	.claude/plans/PLAN-194/relmeta/apply-relmeta143-edits.py	--repo=.	--verify
+hard	bash	scripts/tests/test-install-deny-baseline.sh
+hard	python3	.claude/scripts/validate_governance_fast.py
+hard	python3	-m	pytest	--strict-markers	-p	no:cacheprovider	-q	-rfE	--tb=short	.claude/scripts/tests/test_release_bump_sites.py

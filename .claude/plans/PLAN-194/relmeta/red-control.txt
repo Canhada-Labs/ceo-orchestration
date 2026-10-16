@@ -1,0 +1,123 @@
+red-control — relmeta-143 (PLAN-194, RM da v1.4.3). Registro do construtor; o SIGN NAO o executa.
+
+Medido em: 2026-10-16 03:22 -0300, pelo CEO (corte final do rail), sobre os bytes do commit dos materiais que contem
+este arquivo (filho de 6b9904b13f9c6c66f876c60bc25a79e708ff15ce, o commit do CHANGELOG da [1.4.3] que afirma o verde do
+gate so para a cerimonia padrao), num clone descartavel; macOS 27.0.1 (26A434, arm64), /usr/bin/python3 3.9.6, /usr/bin/git 2.54.0
+(Apple Git-157), /bin/bash 3.2.57, /opt/homebrew/bin/gpg 2.5.18. O rehearse-relmeta143.sh (passo E2)
+refaz as secoes 1 a 3 e confere os motivos.
+Derivador: .claude/plans/PLAN-194/relmeta/apply-relmeta143-edits.py, sha256 f0a69df4b94395c7805f4a28c9bacfe22b29ca07e362ba6f872dbb4ce115a0a9.
+Arvore verde: o commit dos materiais com o relmeta.patch aplicado.
+Arvore vermelha: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2), num clone descartavel.
+
+Comando, em cada arvore:
+  python3 .claude/plans/PLAN-194/relmeta/apply-relmeta143-edits.py --repo <arvore> --claims-only
+O ambiente de cada sonda: CLAUDE_*, CEO_* e PYTHONPATH fora; HOME e TMPDIR em diretorio proprio da sonda.
+O ensaio confere, por ancora, a parte de codigo e a de texto, e que cada FAIL de codigo na v1.4.2 nomeia o
+motivo esperado (red-check do rehearse-relmeta143.sh).
+
+== 1. o commit dos materiais com o patch: rc 0, 8/8 PASS ==
+
+PASS  [ccfloor] requisitos inalterados (piso do Claude Code, Node.js do shim)
+      codigo: PASS — piso 2.1.280 rodado contra um claude falso no install.sh e no upgrade.sh (recusa abaixo e com sufixo colado, saida 6 no topo; override, ausencia, versao ilegivel e --version parado so avisam); o bloco do piso byte a byte o da v1.4.2 nos dois; SUPPORT.md cita 2.1.280; engines.node >=20
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+PASS  [harness] gate do harness: fixtures num caminho entregue
+      codigo: PASS — REPLAY_FIXTURES_REL e o marcador novos; a pasta nova so com os 3 .json; a antiga ausente; os grupos harness-* no teste historico e o smoke-install.yml rodando-o; C9 e o SIGN da W7a ancestrais; o deny da instalacao user sem exatamente as 4 entradas do DENY_BASELINE do gate que a [1.4.3] declara; o gate no modo do CI na raiz verde (HOME proprio, sem CLAUDE_*/CEO_*)
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+PASS  [cond67] condicao 67: o elo lido dentro da trava
+      codigo: PASS — por AST, a leitura do elo, a escrita da linha e a atualizacao do sidecar de append_entry num MESMO with FileLock(paths["lock"]); sentinel e .asc da cura presentes, SIGN ancestral; a condicao 67 no envelope da v1.4.0-rc.1
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+PASS  [defaultmode] defaultMode manual no install user
+      codigo: PASS — install.sh com DEFAULT_MODE_BASELINE="manual" (1 linha), as rotas jq e python e o skip por ambiente; o template user sem permissions.defaultMode (JSON); upgrade.sh com o mesmo blob da v1.4.2
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+PASS  [cenv] cost_envelope_capped gravado; nenhum template registra
+      codigo: PASS — por AST, uma chamada emit_generic('cost_envelope_capped') com kwargs = cap_cents, class_tier, current_cents, project, session_id, window_breached, sem action; nenhum templates/settings/*.json registra o hook; SIGN do cenv ancestral
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+PASS  [fixes] correcoes de audit-query, /status, /ceo-boot e check-substrate-drift
+      codigo: PASS — status.py sem --as-json; check-substrate-drift.py com COMPONENT_CHECK_ERROR; ceo-boot.py com external_wait; o teste novo da ordem dos flags do audit-query presente
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+PASS  [codex] pin do Codex CLI 0.160.0, uma plataforma
+      codigo: PASS — manifesto pina 0.160.0 por sha256 so para aarch64-apple-darwin; o range do pin o admite; SIGN do re-pin ancestral
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+PASS  [annex] parte honesta: residuos declarados
+      codigo: PASS — envelopes da v1.4.0 e da v1.4.2-rc.1 presentes; o guia de recuperacao sem audit-key nem .salt (a frase «does not say so» segue verdadeira)
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+
+== 2. v1.4.2 com o CHANGELOG.md do commit C' sobreposto: rc 1 ==
+
+A parte de TEXTO passa nas 8 (o CHANGELOG e o do HEAD). A parte de CODIGO falha em 6, cada uma pelo
+motivo dela, e passa em 2 por desenho.
+
+PASS  [ccfloor] requisitos inalterados (piso do Claude Code, Node.js do shim)
+      codigo: PASS — piso 2.1.280 rodado contra um claude falso no install.sh e no upgrade.sh (recusa abaixo e com sufixo colado, saida 6 no topo; override, ausencia, versao ilegivel e --version parado so avisam); o bloco do piso byte a byte o da v1.4.2 nos dois; SUPPORT.md cita 2.1.280; engines.node >=20
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+FAIL  [harness] gate do harness: fixtures num caminho entregue
+      codigo: FAIL — .claude/hooks/check_harness_config.py: REPLAY_FIXTURES_REL=['.claude/hooks/tests/fixtures/harness-config/replay'] (esperado ['.claude/hooks/_lib/harness_replay']); .claude/hooks/check_harness_config.py: FIXTURE_PROJECT_PLACEHOLDER=[] (esperado ['@HARNESS_REPLAY_PROJECT_DIR@']); .claude/hooks/_lib/harness_replay ausente; .claude/hooks/tests/fixtures/harness-config/replay ainda existe; scripts/tests/test-upgrade-historical-adopter.sh: HIST_GROUPS sem os grupos harness-upgrade, harness-fresh, harness-red; .github/workflows/smoke-install.yml nao roda scripts/tests/historical-parallel.py; 7428d25bb520 (land do C9) nao e ancestral do HEAD; b0f5fd453fb9 (SIGN da W7a) nao e ancestral do HEAD
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+FAIL  [cond67] condicao 67: o elo lido dentro da trava
+      codigo: FAIL — append_entry chama read_prev_hmac FORA do with FileLock(paths["lock"]) (linha(s) 1267); .claude/plans/PLAN-194/wave-auditrace-approved.md ausente; .claude/plans/PLAN-194/wave-auditrace-approved.md.asc ausente; 65cd50d7df68 (SIGN da cura da condicao 67) nao e ancestral do HEAD
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+FAIL  [defaultmode] defaultMode manual no install user
+      codigo: FAIL — scripts/install.sh: 0 linhas DEFAULT_MODE_BASELINE="manual" (exigido: 1) — DEFAULT_MODE_BASELINE ausente?; scripts/install.sh sem a rota jq (has("defaultMode")); scripts/install.sh sem a rota python (perms.setdefault("defaultMode", sys.argv[3]))
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+FAIL  [cenv] cost_envelope_capped gravado; nenhum template registra
+      codigo: FAIL — .claude/hooks/check_cost_envelope.py: emit_generic('cost_envelope_capped') com kwargs ['action', 'cap_cents', 'class_tier', 'current_cents', 'project', 'session_id', 'window_breached'] (esperado ['cap_cents', 'class_tier', 'current_cents', 'project', 'session_id', 'window_breached']; sem action); 1142884039f8 (SIGN do cenv) nao e ancestral do HEAD
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+FAIL  [fixes] correcoes de audit-query, /status, /ceo-boot e check-substrate-drift
+      codigo: FAIL — .claude/scripts/status.py ainda passa --as-json; .claude/scripts/check-substrate-drift.py sem COMPONENT_CHECK_ERROR; .claude/scripts/ceo-boot.py sem external_wait (plano que declara a espera); .claude/scripts/tests/test_audit_query_shared_flags_order.py ausente
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+FAIL  [codex] pin do Codex CLI 0.160.0, uma plataforma
+      codigo: FAIL — .claude/governance/codex-cli-pin-manifest.json: package_version='0.156.1' (esperado 0.160.0 — o re-pin landou?); .claude/governance/codex-cli-pin.txt: 0.160.0 fora do range >=0.128.0,<0.157.0; 4a1eec73e630 (SIGN do re-pin 0.160.0) nao e ancestral do HEAD
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+PASS  [annex] parte honesta: residuos declarados
+      codigo: PASS — envelopes da v1.4.0 e da v1.4.2-rc.1 presentes; o guia de recuperacao sem audit-key nem .salt (a frase «does not say so» segue verdadeira)
+      texto:  PASS — as frases ancoradas estao na [1.4.3]
+
+Por que 2 passam na v1.4.2:
+- ccfloor: a frase e «os requisitos NAO mudam desde a v1.4.2»; o codigo do piso e o mesmo nas duas arvores,
+  e a ancora o confere byte a byte contra a v1.4.2. Uma ancora vermelha aqui contradiria a frase.
+- annex: a parte honesta nao cura nada; o codigo dela confere presenca de envelopes que a v1.4.2 ja tinha e um
+  acoplamento (o guia de recuperacao nao fala do material de chave), verde nas duas arvores. A parte de texto e
+  a que carrega a ancora, e ela e vermelha na v1.4.2 pura (secao 3).
+A sonda de runtime do gate do harness (o gate na raiz) nao roda na v1.4.2: a parte estatica ja falhou. Na raiz de
+um checkout da v1.4.2 ela sairia verde (o checkout tem a pasta antiga das fixtures); o vermelho que a cura
+cura e o de uma INSTALACAO, provado pelo CI (C9) e pelo SIGN da W7a, nao por esta ancora.
+
+== 3. v1.4.2 pura (sem o CHANGELOG do HEAD): rc 1, a parte de texto FAIL nas 8 ==
+
+FAIL  [ccfloor] requisitos inalterados (piso do Claude Code, Node.js do shim)
+      codigo: PASS — piso 2.1.280 rodado contra um claude falso no install.sh e no upgrade.sh (recusa abaixo e com sufixo colado, saida 6 no topo; override, ausencia, versao ilegivel e --version parado so avisam); o bloco do piso byte a byte o da v1.4.2 nos dois; SUPPORT.md cita 2.1.280; engines.node >=20
+      texto:  FAIL — a secao [1.4.3] do CHANGELOG nao diz 'The requirements do not change from v1.4.2'; a secao [1.4.3] do CHANGELOG nao diz 'Claude Code 2.1.280 or later'; a secao [1.4.3] do CHANGELOG nao diz 'Python 3.9 or later'; a secao [1.4.3] do CHANGELOG nao diz 'Node.js 20 or later'
+FAIL  [harness] gate do harness: fixtures num caminho entregue
+      codigo: FAIL — .claude/hooks/check_harness_config.py: REPLAY_FIXTURES_REL=['.claude/hooks/tests/fixtures/harness-config/replay'] (esperado ['.claude/hooks/_lib/harness_replay']); .claude/hooks/check_harness_config.py: FIXTURE_PROJECT_PLACEHOLDER=[] (esperado ['@HARNESS_REPLAY_PROJECT_DIR@']); .claude/hooks/_lib/harness_replay ausente; .claude/hooks/tests/fixtures/harness-config/replay ainda existe; scripts/tests/test-upgrade-historical-adopter.sh: HIST_GROUPS sem os grupos harness-upgrade, harness-fresh, harness-red; .github/workflows/smoke-install.yml nao roda scripts/tests/historical-parallel.py; 7428d25bb520 (land do C9) nao e ancestral do HEAD; b0f5fd453fb9 (SIGN da W7a) nao e ancestral do HEAD
+      texto:  FAIL — a secao [1.4.3] do CHANGELOG nao diz 'With the default ceremony (`maintainer`) it now turns green, both on an install upgraded from v1.4.2 with `upgrade.sh` and on a fresh install'; a secao [1.4.3] do CHANGELOG nao diz 'tests in CI prove both cases for one install shape'; a secao [1.4.3] do CHANGELOG nao diz 'A `--ceremony user` install is not covered (Known-open below).'; a secao [1.4.3] do CHANGELOG nao diz 'The green above is claimed for the default ceremony (`maintainer`) only'; a secao [1.4.3] do CHANGELOG nao diz "The green is claimed for the default ceremony (`maintainer`) only. The gate's `deny_baseline` check requires, in a settings file that declares `permissions`, four deny entries"; a secao [1.4.3] do CHANGELOG nao diz 'and a `--ceremony user` install does not write them.'; a secao [1.4.3] do CHANGELOG nao diz 'This gap predates this release, and no release is assigned to its cure.'; a secao [1.4.3] do CHANGELOG nao diz 'The upgrade does not cover a `--ceremony user` install'; a secao [1.4.3] do CHANGELOG nao diz 'All three reads refuse `NaN` and `Infinity`'; a secao [1.4.3] nao nomeia a entrada de deny `Bash(git push --force*)`; a secao [1.4.3] nao nomeia a entrada de deny `Edit(PROTOCOL.md)`; a secao [1.4.3] nao nomeia a entrada de deny `Edit(.claude/settings.json)`; a secao [1.4.3] nao nomeia a entrada de deny `Edit(SPEC/**)`
+FAIL  [cond67] condicao 67: o elo lido dentro da trava
+      codigo: FAIL — append_entry chama read_prev_hmac FORA do with FileLock(paths["lock"]) (linha(s) 1267); .claude/plans/PLAN-194/wave-auditrace-approved.md ausente; .claude/plans/PLAN-194/wave-auditrace-approved.md.asc ausente; 65cd50d7df68 (SIGN da cura da condicao 67) nao e ancestral do HEAD
+      texto:  FAIL — a secao [1.4.3] do CHANGELOG nao diz 'This release retires signed condition 67 of v1.4.0-rc.1'; a secao [1.4.3] do CHANGELOG nao diz 'Breaks the race already wrote stay'; a secao [1.4.3] do CHANGELOG nao diz 'Writers that resolve different locks for the same log still do not exclude each other'
+FAIL  [defaultmode] defaultMode manual no install user
+      codigo: FAIL — scripts/install.sh: 0 linhas DEFAULT_MODE_BASELINE="manual" (exigido: 1) — DEFAULT_MODE_BASELINE ausente?; scripts/install.sh sem a rota jq (has("defaultMode")); scripts/install.sh sem a rota python (perms.setdefault("defaultMode", sys.argv[3]))
+      texto:  FAIL — a secao [1.4.3] do CHANGELOG nao diz 'produced by that same run has no `permissions.defaultMode`'; a secao [1.4.3] do CHANGELOG nao diz 'A `.claude/settings.json` that existed before the install is never touched'; a secao [1.4.3] do CHANGELOG nao diz '`upgrade.sh` does not change'; a secao [1.4.3] do CHANGELOG nao diz '`CEO_INSTALL_SKIP_DENY_BASELINE=1` skips both the deny baseline and the `defaultMode`'
+FAIL  [cenv] cost_envelope_capped gravado; nenhum template registra
+      codigo: FAIL — .claude/hooks/check_cost_envelope.py: emit_generic('cost_envelope_capped') com kwargs ['action', 'cap_cents', 'class_tier', 'current_cents', 'project', 'session_id', 'window_breached'] (esperado ['cap_cents', 'class_tier', 'current_cents', 'project', 'session_id', 'window_breached']; sem action); 1142884039f8 (SIGN do cenv) nao e ancestral do HEAD
+      texto:  FAIL — a secao [1.4.3] do CHANGELOG nao diz 'On an install that registered the cost-envelope hook by hand, a block is now recorded in the audit log'; a secao [1.4.3] do CHANGELOG nao diz 'No earlier release recorded it'; a secao [1.4.3] do CHANGELOG nao diz 'No shipped settings template registers this hook'
+FAIL  [fixes] correcoes de audit-query, /status, /ceo-boot e check-substrate-drift
+      codigo: FAIL — .claude/scripts/status.py ainda passa --as-json; .claude/scripts/check-substrate-drift.py sem COMPONENT_CHECK_ERROR; .claude/scripts/ceo-boot.py sem external_wait (plano que declara a espera); .claude/scripts/tests/test_audit_query_shared_flags_order.py ausente
+      texto:  FAIL — a secao [1.4.3] do CHANGELOG sem o cabecalho '### Fixed — `audit-query.py`, `/status`, `/ceo-boot` and `check-substrate-drift.py`'
+FAIL  [codex] pin do Codex CLI 0.160.0, uma plataforma
+      codigo: FAIL — .claude/governance/codex-cli-pin-manifest.json: package_version='0.156.1' (esperado 0.160.0 — o re-pin landou?); .claude/governance/codex-cli-pin.txt: 0.160.0 fora do range >=0.128.0,<0.157.0; 4a1eec73e630 (SIGN do re-pin 0.160.0) nao e ancestral do HEAD
+      texto:  FAIL — a secao [1.4.3] do CHANGELOG nao diz 're-pinned to Codex CLI 0.160.0'; a secao [1.4.3] do CHANGELOG nao diz 'for one platform only'; a secao [1.4.3] do CHANGELOG nao diz 'There the pin resolves as infrastructure and fails open (advisory)'
+FAIL  [annex] parte honesta: residuos declarados
+      codigo: PASS — envelopes da v1.4.0 e da v1.4.2-rc.1 presentes; o guia de recuperacao sem audit-key nem .salt (a frase «does not say so» segue verdadeira)
+      texto:  FAIL — o CHANGELOG nao tem a entrada [1.4.3]
+
+== 4. --verify sobre o commit dos materiais SEM o patch aplicado: rc 2 ==
+
+FATAL: .claude/scripts/local/release.sh na arvore difere da re-derivacao a partir de HEAD:.claude/scripts/local/release.sh
+(o driver na arvore ainda mira a 1.4.2; o --verify so passa com o patch aplicado.)
+
+== 5. ancora cond67 contra um append_entry sintetico de duas travas ==
+
+append_entry sintetico com duas travas: ['append_entry nao le o elo, grava a linha e atualiza o sidecar num MESMO with FileLock(paths["lock"]) (2 bloco(s) de trava)']
+o mesmo com uma trava so: []
+.claude/hooks/audit_log.py do commit C': []
+(a leitura do elo sob uma trava e a escrita da linha e do sidecar sob outra e a forma da corrida da condicao 67:
+reprova; com uma trava so, passa.)
