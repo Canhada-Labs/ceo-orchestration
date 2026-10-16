@@ -438,6 +438,13 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   mensagem de `7428d25b` registra a falha e os 2 verdes. O land não tocava o `install.sh` nem o teste. O
   `_run_install` é `subprocess.run(timeout=90)` sem `start_new_session`, a forma do item 16 (cada
   `TimeoutExpired` pode deixar netos do `install.sh`); o oráculo dá `0` para esse arquivo (livre).
+- **3.ª evidência (2026-10-16, SIGN do RM da 1.4.3):** na passada paralela do SIGN, três testes pararam no
+  teto de tempo de um `install.sh` e passaram isolados:
+  `.claude/scripts/tests/test_install_sh_placeholders.py::test_install_sh_all_placeholders_substituted`
+  (call de 120,02 s; isolado, 53,6 s), `::test_install_sh_without_flags_emits_placeholder_warning` (120,01 s;
+  isolado, 56,3 s) e `tests/integration/test_install_smoke.py::test_install_is_idempotent_and_preserves_user_edits`
+  (90,02 s; isolado, passou em 99,0 s; todos tempos de call). Fonte: os registros do SIGN do Owner. O molde repete isolado o que
+  falha na paralela, e o SIGN seguiu.
 
 ### Item 21 — doc da W6 (FD-22) com a W6.2, o FD-25 e o FD-26 (livre; decisão do Owner S364-5)
 
@@ -454,6 +461,23 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   cita o G27, `:116`; o `:62` diz que o settings do repositório fixa 90) só vale depois do land da W6.2.
   Re-conferir o texto contra o `main` da época (o FD-23 landou depois do GO da rodada 3).
 - **Land:** `merge --no-ff` (as mensagens citam SHAs).
+
+### Item 22 — W5.0 (medições pagas) e W5a (textos) (livre; decisão do Owner S365-1)
+
+- **O quê:** a W5.0 e o restante da W5a do PLAN-194, saídos do corte da 1.4.3 em 2026-10-16. A W5.0 são as 8
+  sondas `claude -p` + `get_settings` (Ultracode × esforço), as medições do alias `sonnet` do Agent/Workflow,
+  da taxa de prompts do modo auto e da latência de hooks numa sessão solo, e as sondas baratas da S361 (watchdog do Workflow, espera
+  no limite de uso, `PostModelSwitch`, `opts.model` do `agent()`). Da W5a, a 1.ª parte (textos do Ultracode por
+  leitura do binário 2.1.295, em `SUPPORT.md` e `docs/adopter-new-model-fast-access.md`) landou em `9770b5a4` e
+  está no `CHANGELOG.md` [1.4.3]; fica para a 1.4.4 a re-redação com as sondas da W5.0 e a nota do timeout do
+  Bash em background (30 min por padrão, máx. 2 h).
+- **Substrato:** os instrumentos foram pensados para o Claude Code 2.1.287; em 2026-10-16 o instalado é o
+  2.1.302 (S365-2). Antes de rodar, reler o CHANGELOG das versões posteriores à 2.1.302 e registrar a versão
+  e a data junto de cada número.
+- **Acoplamentos:** a onda de modelos da 1.4.4 (W5c + Haiku 5.5, S363-3 e S363-7) usa a resposta sobre o
+  alias `sonnet`; a W5a vem depois da W5.0; a correção do ADR-149 A3.1 (canônico) segue dentro da emenda 4 da W5c.
+- **Check:** o da W5a, `python3 .claude/scripts/check-time-unit.py SUPPORT.md docs/adopter-new-model-fast-access.md`;
+  a W5.0 não tem Check (o resultado vai ao LEDGER).
 
 ## Open questions
 

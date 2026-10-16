@@ -1394,7 +1394,7 @@ idênticos — lane `cc-local-impact`) nem nos itens do CHANGELOG do 2.1.287 lid
 (ver «Itens do CC 2.1.287» na W5.1). A versão do CC fica CONGELADA durante cada onda (Q14, S361) e só
 muda entre ondas, com `claude update`, relendo a seção nova do CHANGELOG.
 
-- [ ] **W5.0 — medições pagas, na vez da W5 (decisão do Owner S359: «Só quando chegar a vez
+- [ ] **W5.0 — medições pagas, na vez da W5; SAI para a 1.4.4 (decisão do Owner S365-1, item 22 do backlog) (decisão do Owner S359: «Só quando chegar a vez
   (Recomendado)»; antiga W0.3; regras de medição da W0).** Com os MESMOS instrumentos da S357: as 8
   sondas `claude -p` + `get_settings` de Ultracode × esforço (inclusive max + ultracode, antes
   impossível); para qual id o alias `sonnet` do Agent/Workflow resolve no CC instalado (2.1.287; na S361
@@ -1416,7 +1416,7 @@ muda entre ondas, com `claude update`, relendo a seção nova do CHANGELOG.
   folder's CLAUDE.md being attached a second time after resuming a session or after a compaction» — as
   medições do piso re-pago (F) feitas antes da 2.1.287 são de outro instrumento e não se comparam
   sem essa nota. — Check: none (medição paga; resultado no LEDGER)
-- [ ] **W5a — textos do Ultracode e do Bash em background (depois da W5.0).** `SUPPORT.md:107` e
+- [ ] **W5a — textos do Ultracode e do Bash em background (depois da W5.0); o RESTANTE SAI para a 1.4.4 com ela (S365-1): a 1.ª parte (textos do Ultracode por leitura do binário 2.1.295) landou em `9770b5a4` e está no `CHANGELOG.md` [1.4.3].** `SUPPORT.md:107` e
   `docs/adopter-new-model-fast-access.md:154-158`, `:347-370` (livres, com data e substrato); nota de
   timeout explícito para jobs longos em background (30 min padrão, máx. 2 h). A correção do ADR-149
   A3.1 (`:381`, canônico) vai dentro da emenda 4 da W5c (o Owner decidiu adotar o Sonnet 5.5; mapa de
@@ -2032,6 +2032,17 @@ demais linhas estão feitas ou fora da 1.4.3.
    tem entrada do log — a confirmar por escrita real na abertura do 1b. **Não bloqueia a W3; bloqueia ficar sem
    dono.**
 
+## Decisões do Owner — S365 (2026-10-16)
+
+Decisões do Owner de 2026-10-16, por múltipla escolha, depois do RM publicado (registro no LEDGER, seção
+«RM publicado — 2026-10-16 (S365)»). São decisões TOMADAS: não se perguntam de novo.
+
+| # | decisão |
+|---|---|
+| S365-1 | W5.0 (medições pagas) e o restante da W5a (a re-redação que depende da W5.0 e a nota do timeout do Bash em background; a 1.ª parte landou em `9770b5a4`, no `CHANGELOG.md` [1.4.3]) SAEM da 1.4.3 → 1.4.4 (item 22 do `PLAN-194-FOLLOWUP-v1-4-4-backlog`). Nenhuma das duas trava a rc.1; o consumidor principal da W5.0, a W5c (Sonnet 5.5), já está na 1.4.4 (S363-3); e os instrumentos dela foram pensados para o Claude Code 2.1.287, com o 2.1.302 instalado. Fecha o «Pendente» da seção S364. |
+| S365-2 | Claude Code 2.1.302 MANTIDO durante o corte (o link do binário mudou em 2026-10-16, às 14:58 BRT, depois do RM; o repositório registrava a 2.1.295, S363-2; no disco também há a 2.1.296 e a 2.1.300, ver o LEDGER). O CEO relê o CHANGELOG das versões novas contra os hooks e o corte e registra no LEDGER; se uma linha tocar a governança, ele PARA e leva ao Owner. |
+| S365-3 | Os lands LIVRES do corte, inclusive os materiais do kit da rc.1, sobem quando a bateria, o rail e o ensaio em cadeia passarem (a S363-6 já autorizava o push dos livres); o Owner entra só para cortar a rc.1. |
+
 ## Decisões do Owner — S364 (2026-10-15)
 
 Decisões do Owner de 2026-10-15, por múltipla escolha, depois do lote assinado (registro no LEDGER, seções
@@ -2051,6 +2062,7 @@ upgrade do PLAN-183 (E1, C56: alvo instalado na `v1.4.2` → `upgrade.sh` → ga
 **Pendente (pergunta ao Owner, sem decisão em 2026-10-15):** a W5.0 (medições pagas «na vez da W5», item
 W5 deste plano, sem Check) não tem destino registrado: não landou, não foi dispensada e não está entre as
 decisões S364. Até a resposta, ela fica fora da lista «Falta» de «Next» e entra como pergunta do corte.
+**Resolvida em 2026-10-16** pela S365-1: a W5.0 e a W5a saem para a 1.4.4.
 
 **Correção de fato (texto anterior a esta data):** o FX (cura do teste instável `TestParallelWritersChain`,
 FD-03) NÃO ficou para a 1.4.4: landou no `main` em `bc803a7a` (2026-10-10, «alternância dos gravadores …
@@ -2361,6 +2373,13 @@ exceção da W3b) — (a lista das decisões está em «Decisões do Owner — S
 
 ## Next
 
+**Estado em 2026-10-16 (S365):** o RM (relmeta-143) foi assinado e publicado pelo Owner em `48def627` (pai
+`df113232`, o Anchor; Validate do push verde) e o congelamento do `main` acabou. Depois dele landaram a cura
+do teste da perna 3.14 do nightly (`56daf990`) e o fechamento do `CLAUDE.md` da S364 (`d1678260`). A W5.0 e
+a W5a saíram para a 1.4.4 (S365-1). Falta, nesta ordem: kit (derivação final com `RELEASE_CONTENT` =
+`final`, rail e ensaio em cadeia com a suíte completa) → rc.1 → hold de 24 h → GA. A regra do parágrafo
+abaixo sobre plano NOVO continua valendo.
+
 **Estado em 2026-10-15 (S364):** todo o código canônico do escopo da 1.4.3 está no `main`. O lote
 W4 → W5b → cost_envelope → W7a do PLAN-183 foi assinado e publicado pelo Owner (`8fa12aa0`, `39e6754d`,
 `11428840`, `b0f5fd45`); depois landaram os livres `ci-free`, `plans-p195` e `plans-p191` (`557c4234`) e o
@@ -2573,6 +2592,9 @@ demais ao abri-los.
 - S364 (2026-10-15, noite): decisão S364-5 (doc da W6, FD-22 → 1.4.4); «Next» com a C9 e o `CHANGELOG.md`
   landados e o congelamento do `main` da derivação do RM até a publicação do RM. LEDGER: seção «C9 e CHANGELOG — 2026-10-15
   (S364, noite)». Backlog da 1.4.4: 2.ª evidência do item 20 e item 21. Status inalterado (`executing`).
+- S365 (2026-10-16): RM publicado (`48def627`); seção «Decisões do Owner — S365» (S365-1 a S365-3); «Next» de
+  2026-10-16; a W5.0 e a W5a marcadas → 1.4.4. LEDGER: seção «RM publicado — 2026-10-16 (S365)». Backlog da
+  1.4.4: 3.ª evidência do item 20 e item 22. Status inalterado (`executing`).
 
 ## Reference links
 

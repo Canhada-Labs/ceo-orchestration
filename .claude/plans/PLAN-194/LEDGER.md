@@ -470,6 +470,49 @@ presente em `.claude/sentinel-signers.txt`, que não mudou no trecho. Cadeia lin
   materiais do RM (inclui este LEDGER e o `CLAUDE.md`), e o app do Codex não mergeia neste repositório. O
   kit, o bump e os vereditos vêm depois dessa publicação.
 
+## RM publicado — 2026-10-16 (S365)
+
+- RM (relmeta-143) assinado e publicado pelo Owner: `48def627` (pai único `df113232`, o Anchor; molde
+  `sign-min`; push por SHA, sem force, às 14:01 BRT). No SIGN: hard 1 a 6 com rc 0; a passada paralela teve
+  4 ids que falharam e passaram na repetição isolada (3 no teto de tempo de um `install.sh`, 3.ª evidência
+  do item 20 do backlog da 1.4.4; o 4.º,
+  `test_skill_patch_propose.py::SkillPatchProposeTest::test_diff_size_cap_enforced_with_many_lessons`, sem
+  causa medida); a passada serial, sem falha; os 13 gates, rc 0. Conferência independente do CEO (workflow de
+  4 lentes, só leitura): as 9 afirmações sobre o commit conferem por bytes (pai, conjunto tocado, patch
+  reaplicado fora do repositório, sentinel só com os 4 campos do SIGN, `.asc` com GOODSIG/VALIDSIG
+  `AE9B236F…DC74` num keyring vazio e controle BADSIG, manifesto ADR-192, `TARGET_BASE="1.4.3"`); o Validate
+  do push saiu com 9 de 9 jobs `success` (a matriz do push é 3.9/3.12, por evento); os outros workflows
+  ausentes se explicam por filtro de paths (release e npm-publish disparam só por tag); nenhuma tag nova foi
+  criada. O congelamento do `main` acabou com essa publicação.
+  verifier: `git merge-base --is-ancestor 48def62703b5d80cc12950d3b0bd6091f8dd8f61 HEAD && grep -q '^TARGET_BASE="1.4.3"$' .claude/scripts/local/release.sh` exit=0
+- Perna 3.14 do nightly: o Validate agendado de 2026-10-16 (run `38869271356`, sobre `df113232`) reprovou
+  só na perna 3.14, em `test_check_harness_config.py::TestReplay::test_unparseable_fixture_reddens_run`. No
+  Python 3.14 o json lê os 100000 «[» até o fim e falha com `JSONDecodeError`, em vez de `RecursionError`; o
+  gate segue fail-closed, só o rótulo muda. O corte da rc.1 conta também os runs agendados sobre o commit do
+  corte, então a cura landou antes do kit: `56daf990` (o teste aceita os dois rótulos só nesse caso). O
+  nightly de 2026-10-17 (run `39014599681`, sobre `48def627`, sem a cura) repetiu a mesma falha única.
+  Controle: com o json da 3.14 emulado (a mesma mensagem do CI), o teste anterior reprova e o novo passa, em
+  3.9 e 3.11; sem emulação, os dois passam.
+  verifier: `git merge-base --is-ancestor 56daf990f89b HEAD && grep -qF '("RecursionError", "JSONDecodeError")' .claude/hooks/tests/test_check_harness_config.py` exit=0
+- `CLAUDE.md`: fechamento da S364 em `d1678260` (S361 a S363 comprimidas e a linha da S364), 39.898 → 39.800
+  bytes, com o governance completo em rc 0.
+  verifier: `git merge-base --is-ancestor d16782602281 HEAD` exit=0
+- Claude Code 2.1.302 (decisão S365-2): o link do binário mudou em 2026-10-16 às 14:58 BRT, com
+  `DISABLE_AUTOUPDATER=1` no settings do usuário (S363-5); o último registro do atualizador nativo é 2.1.294 →
+  2.1.295 (2026-10-08). No disco: 2.1.296 (2026-10-12 22:12), 2.1.300 (2026-10-14 21:36) e 2.1.302
+  (2026-10-16 14:58), todas depois do `DISABLE_AUTOUPDATER`; as sessões da S364 rodaram a 2.1.296 (relatório
+  da S364, §0); o repositório seguia em 2.1.295. CHANGELOG do Claude Code lido em 2026-10-16 (cópia de
+  `raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md`, sha256 `0551b63e…`): a 2.1.301 não
+  muda o contrato dos hooks nem nada do corte. As linhas que tocam a operação daqui: agentes de Workflow que
+  às vezes pulavam o passo, com o run saindo «sucesso», depois de ler a nota do harness de que o texto da
+  tarefa não tem autoridade de usuário (corrigido; a evidência por Workflow da S364, na 2.1.296, tem forma
+  de achado por frase, e a conferência do RM rodou na 2.1.302); Grep e Glob que diziam «sem resultado» quando
+  a busca falhava (corrigido); e scripts de Workflow que pediam permissão depois de um `cd` (corrigido). A
+  2.1.302 não tinha entrada no CHANGELOG nessa leitura. As versões 2.1.259 a 2.1.300 foram lidas na S364.
+- Fora do corte: a W5.0 e o restante da W5a, decisão S365-1 (item 22 do backlog da 1.4.4); a 1.ª parte da
+  W5a landou em `9770b5a4`.
+- Falta: kit → rc.1 → hold de 24 h → GA.
+
 ## Seções arquivadas (2026-10-03, S362)
 
 O T0 fica no topo, congelado: `debate/round-1/security-engineer.md:263` cita `LEDGER.md:16-18`.
