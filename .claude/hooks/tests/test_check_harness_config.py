@@ -341,8 +341,11 @@ class TestReplay(TestEnvContext):
         bad_dir = self.project_dir / "badfix"
         bad_dir.mkdir(parents=True, exist_ok=True)
         deep = '{"expect": "block", "payload": {"x": ' + "[" * 400 + "]" * 400 + "}}"
+        # 3.9-3.12 stop the 100000-deep case at the recursion limit; 3.14 bounds C
+        # recursion by stack depth and, on CI's stack, reads it to the end
+        # (JSONDecodeError). Both are fail-closed; only the label differs.
         for raw, why in ((b"{nope", "JSONDecodeError"), (b"\xff", "UnicodeDecodeError"),
-                         (b"[" * 100000, "RecursionError"),
+                         (b"[" * 100000, ("RecursionError", "JSONDecodeError")),
                          (b'{"expect": "allow", "expect": "block", "payload": {}}', "duplicate key"),
                          (b'{"expect": "block", "payload": {"n": NaN}}', "JSON constant NaN"),
                          (deep.encode(), "nesting deeper than")):
@@ -350,7 +353,9 @@ class TestReplay(TestEnvContext):
             reds = _reds_for(chc.run_replay(_REPO, bad_dir), "replay")
             locs = [f"replay:{h}" for h, _ in chc.REQUIRED_REPLAY_CONTROLS]
             self.assertEqual([f.location for f in reds], locs, why)
-            self.assertTrue(why in reds[1].message and "fail-closed" in reds[1].message, reds[1].message)
+            whys = why if isinstance(why, tuple) else (why,)
+            self.assertTrue(any(w in reds[1].message for w in whys) and "fail-closed" in reds[1].message,
+                            reds[1].message)
             self.assertEqual([("MISSING" in f.message) for f in reds], [True, False, True])
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
