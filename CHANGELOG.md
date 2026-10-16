@@ -22,10 +22,12 @@ Claude Code 2.1.280 or later, Python 3.9 or later, and Node.js 20 or later
 for the npm shim. What changes for an install:
 
 - The `/ceo-boot` harness-configuration gate was red on installs, because
-  its replay fixtures lived in a directory installs do not receive. It now
-  turns green, both on an install upgraded from v1.4.2 with `upgrade.sh`
-  and on a fresh install, and tests in CI prove both cases for one install
-  shape (cure: PLAN-183 W7a; tests: PLAN-183 C9).
+  its replay fixtures lived in a directory installs do not receive. With
+  the default ceremony (`maintainer`) it now turns green, both on an
+  install upgraded from v1.4.2 with `upgrade.sh` and on a fresh install,
+  and tests in CI prove both cases for one install shape (cure: PLAN-183
+  W7a; tests: PLAN-183 C9). A `--ceremony user` install is not covered
+  (Known-open below).
 - The `agent_spawn` audit writer now reads the previous chain link under the
   log lock. This retires signed condition 67 of v1.4.0-rc.1.
 - A fresh `--ceremony user` install writes
@@ -50,9 +52,9 @@ declared below, as is the rest of the v1.4.0 annex. No speed claim.
   `/ceo-boot` runs this gate as `harness_config_gate`. Installs do not
   receive that directory, and the gate counts a missing fixture as a RED
   finding. So an install reported the three fixtures missing and stayed
-  red (`FAIL: 3 RED finding(s)`), whatever the adopter configured. The
-  exception is an install that still holds a copy of the hooks' test tree
-  from an earlier upgrade (Known-open below).
+  red, whatever the adopter configured. The exception is an install that
+  still holds a copy of the hooks' test tree from an earlier upgrade
+  (Known-open below).
 - The fixtures now live in `.claude/hooks/_lib/harness_replay/`, a data
   directory with no `__init__.py`. Installs receive it, and the gate reads
   the fixtures there. The runtime placeholder in a fixture is now
@@ -63,6 +65,8 @@ declared below, as is the rest of the v1.4.0 annex. No speed claim.
     `upgrade.sh` receives the three fixtures, and its gate exits 0.
   - The gate of a fresh install exits 0.
   - The tree from before the cure reproduces the red.
+- The green above is claimed for the default ceremony (`maintainer`) only
+  (Known-open below).
 - **The gate is stricter.**
   - It reads JSON three times: the settings, the fixture, and the decision
     of the hook under test. All three reads refuse `NaN` and `Infinity`.
@@ -104,8 +108,8 @@ declared below, as is the rest of the v1.4.0 annex. No speed claim.
   `check-audit-hmac-null.py` shows it.
 - A lock timeout still drops the line and leaves a breadcrumb, without
   blocking the session.
-- Both shipped settings templates register `audit_log.py`, so every install
-  gets the cure when it upgrades.
+- Both shipped settings templates register `audit_log.py`, and `upgrade.sh`
+  delivers the cured file.
 
 ### Changed — a fresh `--ceremony user` install writes `permissions.defaultMode: "manual"` (PLAN-194 W5b)
 
@@ -324,7 +328,12 @@ declared below, as is the rest of the v1.4.0 annex. No speed claim.
   - Writers that resolve different locks for the same log still do not
     exclude each other.
 - **The harness-gate cure has declared limits.**
-  - An install stays red until it upgrades.
+  - The green is claimed for the default ceremony (`maintainer`) only. The
+    gate's `deny_baseline` check requires, in a settings file that declares
+    `permissions`, four deny entries (`Bash(git push --force*)`,
+    `Edit(PROTOCOL.md)`, `Edit(.claude/settings.json)` and
+    `Edit(SPEC/**)`), and a `--ceremony user` install does not write them.
+    This gap predates this release, and no release is assigned to its cure.
   - The plugin does not register the gate and leaves out the fixture
     directory. In a plugin-only install, running the gate by hand still
     reports three missing fixtures.
@@ -526,9 +535,10 @@ declared below, as is the rest of the v1.4.0 annex. No speed claim.
     `--allow-old-claude-code`.
   - Python 3.9 or later.
   - Node.js 20 or later for the npm shim.
-- Upgrade to turn the `/ceo-boot` harness-configuration gate green. An
-  install made from an earlier release stays red until it upgrades. A
-  plugin-only install still reports three missing fixtures.
+- On a default-ceremony (`maintainer`) install, upgrade to turn the
+  `/ceo-boot` harness-configuration gate green. The upgrade does not cover
+  a `--ceremony user` install (Known-open above). A plugin-only install
+  still reports three missing fixtures.
 - After the upgrade, the gate refuses a settings file with `NaN` or
   `Infinity`. If it reports one, fix the file.
 - A fresh `--ceremony user` install opens sessions in `manual` mode. To use
