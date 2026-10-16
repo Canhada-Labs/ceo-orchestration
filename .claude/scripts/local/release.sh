@@ -71,66 +71,73 @@ set -euo pipefail
 # The tag stands for the WHOLE release train in CHANGELOG.md, never just the
 # newest plan: list every plan of the train and the full ADR range.
 # ---------------------------------------------------------------------------
-TARGET_BASE="1.4.2"
-RELEASE_TITLE="Opus 5.5 as session default + Codex CLI re-pin + Workflow ledger fixes (express release)"
+TARGET_BASE="1.4.3"
+RELEASE_TITLE="Maintenance release: harness-config gate cured for the default ceremony on upgrade and fresh install, condition 67 of v1.4.0-rc.1 retired, Codex CLI re-pin"
 # O tag vale pelo TREM INTEIRO da entrada do CHANGELOG desta versao,
 # nunca pelo plano
 # mais novo. Este bloco e DERIVADO por
-# .claude/plans/PLAN-193/relmeta/apply-relmeta142-edits.py
-# a partir de `git log v1.4.1..HEAD` (planos CITADOS nos assuntos de
+# .claude/plans/PLAN-194/relmeta/apply-relmeta143-edits.py
+# a partir de `git log v1.4.2..HEAD` (planos CITADOS nos assuntos de
 # commit da faixa, DEPOIS de todos os lands da release) e do conjunto
 # de ADRs tocados na mesma faixa — nao digite nada aqui a mao.
-RELEASE_SCOPE="PLAN-190 / PLAN-193 (ADRs tocados: ADR-149)"
-RELEASE_HEADLINE="Release expressa. O Opus 5.5 vira o modelo padrao: claude-opus-5-5
-entra na lista de modelos do ADR-149, fica elegivel ao piso de VETO
-e vira o pin de sessao dos settings enviados; no template base o
-fallback segue claude-opus-5. Nenhum arquivo de agente muda de
-modelo: os agentes de veto seguem no pin deles. Um despacho sem
-modelo proprio que nao le o pin de um arquivo de agente (o
-general-purpose mitigado, os agentes de Workflow) roda no modelo da
-sessao, cujo pin passa a ser claude-opus-5-5.
+RELEASE_SCOPE="PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 (ADRs tocados: nenhum)"
+RELEASE_HEADLINE="Release de manutencao (PLAN-194). Os requisitos nao mudam desde a
+v1.4.2: Claude Code v2.1.280 ou mais novo (install.sh e upgrade.sh
+seguem recusando, com saida 6, um claude mais antigo no PATH, salvo
+com --allow-old-claude-code), Python 3.9 ou mais novo e Node.js 20
+ou mais novo para o shim do npm.
 
-Esta release exige Claude Code v2.1.280 ou mais novo, qualquer que
-seja o modelo: install.sh e upgrade.sh recusam, com saida 6, um
-claude mais antigo no PATH, salvo com --allow-old-claude-code (num
-dry-run so nomeiam a recusa); uma versao com sufixo colado aos tres
-numeros (um pre-release, por exemplo) conta como abaixo do piso. Sem
-claude no PATH, ou sem versao legivel, so avisam. Instalacao nova
-sai com esforco xhigh. Numa instalacao existente o upgrade troca por
-claude-opus-5-5 o pin claude-opus-5 de uma release anterior, ou poe
-o pin onde nao havia, se a lista de modelos efetiva o nomeia; quando
-troca a partir do claude-opus-5 e o arquivo nao define esforco,
-grava high, que passa a valer sobre o nivel salvo com /effort. Um
-esforco ja definido nunca e sobrescrito; xhigh numa instalacao
-existente so por opt-in (--adopt-setting effortLevel) ou a mao.
+O gate de configuracao do harness do /ceo-boot reprovava nas
+instalacoes: as fixtures do replay moravam num diretorio que a
+instalacao nao recebe. Elas passam a morar em
+.claude/hooks/_lib/harness_replay/. Na cerimonia padrao
+(maintainer), o gate sai verde numa instalacao feita da v1.4.2 e
+atualizada pelo upgrade.sh desta release e numa instalacao nova;
+testes no CI provam os dois casos para uma forma de instalacao
+(--profile core --ceremony maintainer), e a arvore de antes da cura
+reproduz o vermelho. A instalacao com --ceremony user nao e coberta
+por esta afirmacao (Known-open do CHANGELOG). O gate fica mais
+estrito: as leituras de JSON dele recusam os tokens NaN e Infinity.
 
-Pair-rail: o pin do Codex CLI avanca para v0.156.1, um binario por
-versao exata, conferido por sha256.
+O gravador do agent_spawn passa a ler o elo anterior da cadeia,
+calcular o HMAC, gravar a linha e atualizar o sidecar sob uma unica
+trava do log. Isto aposenta a condicao 67 assinada da v1.4.0-rc.1:
+a quebra de cadeia quando esse gravador lia o elo anterior antes de
+pegar a trava. As quebras que a corrida ja gravou ficam nos logs, e
+gravadores que resolvem travas diferentes para o mesmo log seguem
+sem se excluir.
 
-Correcoes: no PreToolUse, o hook do Workflow nao grava mais os bytes
-do arquivo que um scriptPath nomeia; dele, antes da decisao de
-permissao do harness, ficam gravados so o caminho, o sha256 e o
-tamanho. Isto cura o caso do Workflow na classe declarada no
-material do GA da v1.4.1; a classe nao se esgota nesse hook. A copia
-de um scriptPath passa a ser tirada so pelo PostToolUse da mesma
-chamada; sem ela, relaunch sai com codigo 7 e relaunch --out nao
-cria arquivo. As copias que a v1.4.1 ja gravou ficam em launches/.
-E relaunch --out publica por link um temporario
-ja completo e nunca apaga nem substitui o destino: um arquivo
-parcial nunca aparece sob o nome pedido, nos limites declarados em
-docs/workflow-recovery.md.
+Uma instalacao nova com --ceremony user grava
+permissions.defaultMode com o valor manual quando o settings.json
+produzido por essa mesma execucao nao tem defaultMode, salvo com
+CEO_INSTALL_SKIP_DENY_BASELINE=1. Um settings.json que ja existia
+antes da instalacao nunca e tocado, e o upgrade.sh nao muda.
 
-Via expressa: tres ferramentas de operador, sem hook que as imponha,
-geram o pacote de re-pin do Codex, apontam deriva entre o Codex, o
-Claude Code e os modelos instalados e o que o framework registra, e
-derivam das tags GA os baselines de migracao do upgrade.
+Numa instalacao que registrou a mao o hook do envelope de custo, um
+bloqueio passa a ser gravado no log de auditoria; nenhuma release
+anterior o gravava. Nenhum template de settings enviado registra
+esse hook. Correcoes em audit-query.py, /status, /ceo-boot e
+check-substrate-drift.py.
 
-A parte honesta: a cura dos achados P1 do anexo do envelope assinado
-da v1.4.0 nao faz parte desta release; o anexo segue aberto, sem
-release atribuida. E esta release declara que a limpeza do Claude
-Code (cleanupPeriodDays, 30 dias por padrao) pode apagar o log de
-auditoria e os arquivos dele; nenhum plano carrega a cura. Sem
-afirmacao de velocidade — governanca e auditabilidade, como sempre."
+Pair-rail: o revisor e re-pinado no Codex CLI v0.160.0; o manifesto
+do payload pina esse binario por sha256, para uma plataforma so.
+Numa instalacao o pin resolve como infraestrutura e segue advisory,
+como antes.
+
+A parte honesta: este trem saiu para curar o spool de auditoria, e
+essa cura nao entrou no corte; o spool deixa arquivos por processo
+para tras, e a drenagem forcada dele pode passar do timeout de um
+hook. Do anexo assinado da v1.4.0 esta release cura so a condicao
+67; o resto segue aberto, sem release atribuida a cura, e o mesmo
+vale para os tres achados P1 do anexo assinado da v1.4.2-rc.1. A
+limpeza do Claude Code (cleanupPeriodDays, 30 dias por padrao)
+ainda pode apagar o log de auditoria, e nenhum plano desta release
+carrega uma cura estrutural; o backup deixa de fora o material de
+chave, entre ele a chave HMAC e o sal. Quatro merges de pull
+request trouxeram arquivos do framework ao main sem a cerimonia de
+assinatura, e nada no repositorio impede a repeticao (medido em
+2026-10-14). Os demais residuos estao no Known-open da entrada do
+CHANGELOG."
 RC_NUM="1"
 STABLE=0
 DRY_RUN=0

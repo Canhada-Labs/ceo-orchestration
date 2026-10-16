@@ -1255,6 +1255,10 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
     CONSCIENTE do trem a cada corte — foi assim que a rc.1-era stale string
     foi pega (repass-r2 part-d P1).
 
+    Trem 1.4.3 (re-pinado na cerimonia relmeta-143, PLAN-194): derivado por
+    apply-relmeta143-edits.py de `git log v1.4.2..HEAD` DEPOIS de todos os
+    lands da release; o trem da 1.4.2 vira assercao negativa.
+
     Trem 1.4.2 (re-pinado na cerimonia relmeta-142, PLAN-193): derivado por
     apply-relmeta142-edits.py de `git log v1.4.1..HEAD` DEPOIS de todos os
     lands da release; o trem da 1.4.1 vira assercao negativa.
@@ -1272,9 +1276,12 @@ def test_tag_annotation_carries_the_whole_train_and_no_stale_release(synth):
     proc = driver(synth, "tag", "--stable", "--dry-run")
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert (
-        "PLAN-190 / PLAN-193 (ADRs tocados: ADR-149)" in proc.stdout
+        "PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / "
+        "PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / "
+        "PLAN-194 / PLAN-195 (ADRs tocados: nenhum)" in proc.stdout
     )
     # o trem da release ANTERIOR nao pode ter sobrevivido na anotacao
+    assert "PLAN-190 / PLAN-193" not in proc.stdout
     assert "PLAN-169 / PLAN-189 / PLAN-190" not in proc.stdout
     assert "PLAN-119 / PLAN-169 / PLAN-170" not in proc.stdout
     # nenhuma string de release ANTERIOR pode ter sobrevivido na anotacao
