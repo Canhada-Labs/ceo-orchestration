@@ -447,6 +447,29 @@ presente em `.claude/sentinel-signers.txt`, que não mudou no trecho. Cadeia lin
   o kit e o rail dele (lane Codex). A ordem e as decisões estão no plano, «Next» e «Decisões do Owner — S364».
   Sem destino: a W5.0 (medições pagas), pergunta aberta ao Owner na mesma seção.
 
+## C9 e CHANGELOG — 2026-10-15 (S364, noite)
+
+- C9 (decisão S364-3) LANDADA por `merge --no-ff` em `7428d25b` (ramo `e21f8e4e` → `f28ce00c` → `fff30375`
+  → `dd18af4b`, aberto sobre `4cd2bbc6` e mergeado sobre `f6a5ff00`). Três grupos novos no `scripts/tests/test-upgrade-historical-adopter.sh`
+  (`harness-upgrade` 10 asserções, `harness-fresh` 5, `harness-red` 6) e o executor paralelo com
+  `EXPECTED_ASSERTIONS` 185. Rail em 2 rodadas (Codex + refutadores Claude; regra de parada fixada antes da
+  2.ª): a perna vermelha deixou de ser tautológica (lê o gate pré-W7a e compara contra a fonte pré-W7a).
+  Controles (em `fff30375`; o `dd18af4b` só mudou comentários): 10/0, 5/0, 6/0; arquivo num clone em `1142884039` 6/4 e 1/4; base vermelha apontada para
+  a árvore curada `f6a5ff00`: harness-red 2/4 («delivered 3 of 3»). Executor local, 8 workers:
+  «HISTORICAL-TOTAL: 185 passed, 0 failed; 22 groups». CI de `7428d25b`: Smoke Install e Validate verdes
+  (VM, `smoke-historical` em 5,5 min).
+  verifier: `git merge-base --is-ancestor 7428d25b HEAD && grep -q '^EXPECTED_ASSERTIONS = 185$' scripts/tests/historical-parallel.py` exit=0
+- Seção `## [1.4.3] - 2026-10-15` do `CHANGELOG.md` LANDADA em `378ee4d4` (rótulo do preâmbulo v1.4.1 →
+  v1.4.3, contagens iguais: 166, 27, 198, 72). Derivação e 3 conferências; revisão; conferente final GO.
+  As checagens `assert_changelog_ready` e `_annex_problem` do molde do RM da 1.4.2, com alvo 1.4.3, verdes.
+  CI de `378ee4d4`: Validate verde.
+  verifier: `git merge-base --is-ancestor 378ee4d4 HEAD && grep -q '^## \[1.4.3\] - 2026-10-15$' CHANGELOG.md` exit=0
+- Fora do corte: a doc da W6 (FD-22), decisão S364-5. A W5.0 segue sem destino (pergunta aberta).
+- Falta: RM (relmeta-143, SIGN do Owner) → kit → rc.1 → hold de 24 h → GA. Da derivação do RM até a
+  publicação DO RM (o push do SIGN da relmeta-143), o `main` fica CONGELADO: nenhum commit fora dos
+  materiais do RM (inclui este LEDGER e o `CLAUDE.md`), e o app do Codex não mergeia neste repositório. O
+  kit, o bump e os vereditos vêm depois dessa publicação.
+
 ## Seções arquivadas (2026-10-03, S362)
 
 O T0 fica no topo, congelado: `debate/round-1/security-engineer.md:263` cita `LEDGER.md:16-18`.

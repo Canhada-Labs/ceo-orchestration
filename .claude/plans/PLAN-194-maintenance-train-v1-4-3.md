@@ -2034,8 +2034,8 @@ demais linhas estão feitas ou fora da 1.4.3.
 
 ## Decisões do Owner — S364 (2026-10-15)
 
-Decisões do Owner de 2026-10-15, por múltipla escolha, depois do lote assinado (registro no LEDGER, seção
-«Lote assinado — 2026-10-15 (S364)»). São decisões TOMADAS: não se perguntam de novo. Termos desta seção:
+Decisões do Owner de 2026-10-15, por múltipla escolha, depois do lote assinado (registro no LEDGER, seções
+«Lote assinado — 2026-10-15 (S364)» e, para a S364-5, «C9 e CHANGELOG — 2026-10-15 (S364, noite)»). São decisões TOMADAS: não se perguntam de novo. Termos desta seção:
 **W7ad** = a emenda aditiva do ADR-158 que o sentinel da W7a remete a outro pacote; **C9** = a perna livre do
 upgrade do PLAN-183 (E1, C56: alvo instalado na `v1.4.2` → `upgrade.sh` → gate do harness com rc 0, mais
 «install do zero → gate rc 0»); **F2** = o teste de estresse da W2.5.
@@ -2046,6 +2046,7 @@ upgrade do PLAN-183 (E1, C56: alvo instalado na `v1.4.2` → `upgrade.sh` → ga
 | S364-2 | U2-D (`ADR-055-AMEND-4` ACCEPTED e o leque) SAI da 1.4.3 → 1.4.4, junto das curas que ele aceitaria (item 18 do backlog). Substitui, nesse ponto, a S363-3 («A cura da W2 (U2-A a U2-D) FICA na 1.4.3»): o U2-C saiu em 2026-10-09, o U2-A e o U2-B em 2026-10-12 (backlog, «Context») e o U2-D agora; nenhum pacote da W2 entra no corte. |
 | S364-3 | C9: CONSTRUIR antes da rc.1 (livre, `scripts/tests/test-upgrade-historical-adopter.sh`). Se não fechar até o kit, o `CHANGELOG.md` do corte declara pela FORMA que a cura via upgrade NÃO foi provada. |
 | S364-4 | F2, leva 1, SAI da 1.4.3 → 1.4.4, junto das curas que ele estressa (item 19 do backlog). |
+| S364-5 | Doc da W6 (FD-22, `refs/s362/w6-doc-dr-install` = `1e08dd90`) SAI da 1.4.3 → 1.4.4. O texto dela afirma «moves to 3650 in v1.4.3» (`INSTALL.md`, a W6.2, já na 1.4.4); landada antes do corte, publicaria essa frase falsa. Os trechos sobre o `ceo-restore.sh` e o `--strict-against-counter` descrevem o `main` de hoje (pré-FD-25/FD-26) e ficam falsos quando eles landarem. Viaja com a W6.2, o FD-25 e o FD-26 (item 21 do backlog). |
 
 **Pendente (pergunta ao Owner, sem decisão em 2026-10-15):** a W5.0 (medições pagas «na vez da W5», item
 W5 deste plano, sem Check) não tem destino registrado: não landou, não foi dispensada e não está entre as
@@ -2058,7 +2059,9 @@ de «Next» (item 4) e do LEDGER («Saídas para a 1.4.4 e hotfix do teste do F1
 2026-10-03.
 
 **Onde o plano mudou (só texto):** esta seção; «Next» (estado de 2026-10-15); «Session history» (S364). No
-LEDGER: a seção «Lote assinado — 2026-10-15 (S364)». No backlog da 1.4.4: itens 17 a 20.
+LEDGER: a seção «Lote assinado — 2026-10-15 (S364)». No backlog da 1.4.4: itens 17 a 20. À noite (S364-5):
+a linha S364-5, «Next», o item 4 do «Caminho crítico», «Session history»; no LEDGER, a seção «C9 e
+CHANGELOG — 2026-10-15 (S364, noite)»; no backlog, a 2.ª evidência do item 20 e o item 21.
 
 ## Decisões do Owner — S363 (2026-10-08)
 
@@ -2361,12 +2364,16 @@ exceção da W3b) — (a lista das decisões está em «Decisões do Owner — S
 **Estado em 2026-10-15 (S364):** todo o código canônico do escopo da 1.4.3 está no `main`. O lote
 W4 → W5b → cost_envelope → W7a do PLAN-183 foi assinado e publicado pelo Owner (`8fa12aa0`, `39e6754d`,
 `11428840`, `b0f5fd45`); depois landaram os livres `ci-free`, `plans-p195` e `plans-p191` (`557c4234`) e o
-W4POST (`4cd2bbc6`). Fora do corte por decisão do Owner: ver «Decisões do Owner — S364». Falta, nesta ordem:
-a C9 (em construção) → os textos livres restantes (doc da W6, FD-22) → a seção `[1.4.3]` do `CHANGELOG.md`
-→ RM (relmeta-143, SIGN; DEPOIS de todo land que cite plano, porque o escopo da tag sai de
-`git log v1.4.2..HEAD`) → kit → rc.1 → hold de 24 h → GA. Nenhum plano NOVO entra no repositório antes do
-corte: antes do RM ele alargaria o escopo da tag; depois do RM, o G0 do kit o recusa por estar fora do
-`RELEASE_SCOPE`.
+W4POST (`4cd2bbc6`). Fora do corte por decisão do Owner: ver «Decisões do Owner — S364». Na noite de
+2026-10-15 landaram a C9 (`7428d25b`, merge `--no-ff`; CI verde) e a seção `[1.4.3]` do `CHANGELOG.md`
+(`378ee4d4`; CI verde); a doc da W6 (FD-22) saiu para a 1.4.4 (S364-5). Falta, nesta ordem: RM
+(relmeta-143, SIGN; DEPOIS de todo land que cite plano, porque o escopo da tag sai de
+`git log v1.4.2..HEAD`) → kit → rc.1 → hold de 24 h → GA. Da derivação do RM até a publicação DO RM (o
+push do SIGN da relmeta-143) o `main` fica CONGELADO: nenhum commit fora dos materiais do RM (inclui o
+LEDGER e o `CLAUDE.md`), e o app do Codex não mergeia neste repositório; o kit, o bump e os vereditos vêm
+DEPOIS dessa publicação, como no corte da 1.4.2. A resposta da W5.0 se registra antes da derivação do RM
+ou depois da publicação dele, nunca dentro da janela. Nenhum plano NOVO entra no repositório antes do corte: antes do RM ele
+alargaria o escopo da tag; depois do RM, o G0 do kit o recusa por estar fora do `RELEASE_SCOPE`.
 
 **Feito até 2026-10-02:** as medições W0.1, W0.2 e W0.6 (no LEDGER) e os lands abaixo, todos ancestrais
 do `97a78fce` (`git merge-base --is-ancestor`): L1, L2a e L2b (`6f7069d3`,
@@ -2388,7 +2395,8 @@ do `97a78fce` (`git merge-base --is-ancestor`): L1, L2a e L2b (`6f7069d3`,
 4. **Fora do caminho, mas antes do kit ou da rc.1:** W4, W7a do PLAN-183, W5.1, W5a, doc da W6 e
    derivadores do kit. O FX (cura do teste instável `TestParallelWritersChain`) foi para a 1.4.4 (seção
    «Saídas para a 1.4.4 e hotfix do teste do F1» do LEDGER); resíduo declarado: o CI pede re-run quando o
-   teste instável falhar.
+   teste instável falhar. (Correção de 2026-10-15: a doc da W6 saiu para a 1.4.4, decisão S364-5; o FX
+   landou em `bc803a7a`, ver «Decisões do Owner — S364».)
 5. **Corte:** seção `[1.4.3]` do `CHANGELOG.md` → RM → kit → rc.1 → hold de 24 h → GA. Linha de corte: ~~o
    kit começa no máximo em 2026-10-11.~~ o kit começa no máximo em ~2026-10-17 (decisão do Owner S363,
    2026-10-08; GA estimado ~2026-10-20 a 2026-10-22; substitui a de 2026-10-11).
@@ -2562,6 +2570,9 @@ demais ao abri-los.
   1.4.4; C9 construída antes da rc.1) com a correção do FX (landado em `bc803a7a`); «Next» com o estado de
   2026-10-15 e a ordem do corte. LEDGER: seção «Lote assinado — 2026-10-15 (S364)». Backlog da 1.4.4: itens
   17 a 20. Status inalterado (`executing`).
+- S364 (2026-10-15, noite): decisão S364-5 (doc da W6, FD-22 → 1.4.4); «Next» com a C9 e o `CHANGELOG.md`
+  landados e o congelamento do `main` da derivação do RM até a publicação do RM. LEDGER: seção «C9 e CHANGELOG — 2026-10-15
+  (S364, noite)». Backlog da 1.4.4: 2.ª evidência do item 20 e item 21. Status inalterado (`executing`).
 
 ## Reference links
 

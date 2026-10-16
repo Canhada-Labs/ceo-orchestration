@@ -430,6 +430,30 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
 - **Cura (classe):** orçamento RELATIVO, normalizado por unidade de trabalho (aqui, por ramo) ou contra uma
   medida de referência no mesmo processo, como o gate de latência fez (`hook_p50 ≤ K_e × ref_p50`); mais
   um censo que lista os testes com teto absoluto de relógio (ratchet: a lista só diminui).
+- **2.ª evidência (2026-10-15, bateria do land da C9):**
+  `tests/integration/test_install_smoke.py::test_install_creates_expected_layout` reprovou na passada
+  paralela e nas 3 re-execuções isoladas da bateria por `TimeoutExpired` do `install.sh` (teto de 90 s,
+  `tests/integration/test_install_smoke.py:34`), com load ~13 e o executor histórico rodando ao lado;
+  depois, com load ~7,7, passou 2 de 2 isolado (67 s e 54 s). Fonte: registro da bateria da sessão S364; a
+  mensagem de `7428d25b` registra a falha e os 2 verdes. O land não tocava o `install.sh` nem o teste. O
+  `_run_install` é `subprocess.run(timeout=90)` sem `start_new_session`, a forma do item 16 (cada
+  `TimeoutExpired` pode deixar netos do `install.sh`); o oráculo dá `0` para esse arquivo (livre).
+
+### Item 21 — doc da W6 (FD-22) com a W6.2, o FD-25 e o FD-26 (livre; decisão do Owner S364-5)
+
+- **O quê:** `refs/s362/w6-doc-dr-install` = `1e08dd90` (4 commits sobre `cd5b90c7`; `INSTALL.md` e
+  `docs/DISASTER-RECOVERY.md`; GO na rodada 3 da S362). O texto afirma a W6.2 («The framework repository's
+  own `.claude/settings.json` moves to 3650 in v1.4.3», `INSTALL.md`), que está na 1.4.4. Os trechos sobre o
+  `ceo-restore.sh` («Known limitations of ceo-restore.sh») e sobre a cópia em staging com o
+  `--strict-against-counter` descrevem o `main` de HOJE, pré-FD-25/FD-26: ficam falsos quando eles landarem.
+- **Acoplamentos:** landar no mesmo trem que a W6.2, o FD-25 e o FD-26, com a frase da versão corrigida para
+  1.4.4, a seção «Known limitations of ceo-restore.sh» reescrita depois do FD-25 e o parágrafo da cópia em
+  staging reescrito depois do FD-26. O Known-open da `[1.4.3]` do `CHANGELOG.md` («… and the
+  disaster-recovery guide does not say so») é verdade hoje e deixa de valer quando a doc landar: a entrada
+  da 1.4.4 o retira. O conserto de `docs/substrate-adopt-2026-09.md:62` e `:116` (o P3-2 do rail da W6.2
+  cita o G27, `:116`; o `:62` diz que o settings do repositório fixa 90) só vale depois do land da W6.2.
+  Re-conferir o texto contra o `main` da época (o FD-23 landou depois do GO da rodada 3).
+- **Land:** `merge --no-ff` (as mensagens citam SHAs).
 
 ## Open questions
 
@@ -449,7 +473,8 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
 
 «Leia `.claude/plans/PLAN-194-FOLLOWUP-v1-4-4-backlog.md`. Confira que o GA da 1.4.3 saiu e que o molde
 SIGN mínimo está no `main`. Para cada item, rode o oráculo `--is-canonical` nos caminhos e o Check do item
-(deve estar vermelho); abra primeiro os livres (4, 5, 6a, 9, 10, 11, 16 e o censo do 20; o item 19 abre
+(deve estar vermelho); abra primeiro os livres (4, 5, 6a, 9, 10, 11, 16 e o censo do 20; o 21 vai junto
+do item 1 e do FD-25/FD-26; o item 19 abre
 junto dos canônicos que ele estressa), cada um numa sombra própria a partir
 da ref citada quando houver, com rail Codex + 1 Claude. Os canônicos seguem a ordem do Approach e esperam
 as respostas das Open questions que os tocam.»
@@ -501,3 +526,6 @@ as respostas das Open questions que os tocam.»
 - [ ] Item 20 (orçamento relativo + censo da classe) landado; o teste de `persona_demand_scan` passa num
   checkout com ≥ 76 ramos locais (ou numa fixture com N ramos sintéticos dentro do próprio teste).
   Check: `[ "$(git for-each-ref refs/heads | wc -l)" -ge 76 ] && python3 -m pytest .claude/hooks/_lib/tests/test_plan104_microbench.py -q` (mais o teste do censo, com o nome que a abertura fixar)
+- [ ] Item 21 (doc da W6, FD-22) landado livre, com a frase da versão em 1.4.4 e os trechos do restore e do
+  `--strict-against-counter` reconciliados com o FD-25 e o FD-26.
+  Check: `git merge-base --is-ancestor 1e08dd90 HEAD && ! grep -q 'in v1.4.3' INSTALL.md && ! grep -q 'ceo-restore-listing' docs/DISASTER-RECOVERY.md`
