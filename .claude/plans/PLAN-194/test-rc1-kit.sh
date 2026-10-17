@@ -680,6 +680,8 @@ else bad "A0: derive-kit-143.py --check FALHOU"; sed -n '1,14p' "$SCRATCH/derive
 # G11m: as janelas de cron do corte fora das constantes da sonda de crons (LM-03). G12m: a sonda
 # com outra PROVISIONAL_MARK (LD-02). G13m/G14m: o guard dos heredocs roda no texto FINAL
 # (LM2-04): uma crase no banner DEPOIS do ultimo corte do banner, e um heredoc de texto novo.
+# G16m/G17m (rodada 3): um heredoc de delimitador numerico e um echo -n com $( -- o guard conta
+# os << de cada linha e confere o echo ate o fim da linha.
 # As ancoras daqui casam UMA vez no derivador da arvore (cross-check do derivador).
 _a0m() {  # $1 = id, $2 = mutacao (g2 | g3), $3 = texto fixo da recusa, $4 = o caso
   local _rc=0
@@ -716,6 +718,14 @@ MUT = {
             '    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n'
             "    t = t.replace('bell \"$TAG cortada\"\\ncat <<DONE\\n', "
             "'cat <<NOTE\\nhora do corte: `date`\\nNOTE\\nbell \"$TAG cortada\"\\ncat <<DONE\\n')\n"),
+    "g16": ('    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n',
+            '    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n'
+            "    t = t.replace('bell \"$TAG cortada\"\\ncat <<DONE\\n', "
+            "'cat <<123\\nhora do corte: $(date)\\n123\\nbell \"$TAG cortada\"\\ncat <<DONE\\n')\n"),
+    "g17": ('    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n',
+            '    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n'
+            "    t = t.replace('bell \"$TAG cortada\"\\ncat <<DONE\\n', "
+            "'echo -n \"$(date)\"\\nbell \"$TAG cortada\"\\ncat <<DONE\\n')\n"),
 }
 old, new = MUT[kind]
 t = open(src, encoding="utf-8").read()
@@ -749,6 +759,10 @@ _a0m G13m g13 "o banner de CORTADA (heredoc SEM aspas) carrega '\`'" \
   "uma crase no banner DEPOIS do ultimo corte do banner (o guard roda no texto FINAL)"
 _a0m G14m g14 "heredoc SEM aspas <<NOTE (linha" \
   "um heredoc de texto sem aspas novo no corte (nem de dados nem declarado)"
+_a0m G16m g16 "heredoc SEM aspas <<123 (linha" \
+  "um heredoc de delimitador numerico no corte (rodada 3: o guard conta os <<, nao lista formas)"
+_a0m G17m g17 "um echo expande \$( ou barra fora das linhas declaradas" \
+  "um echo -n com \$( no corte (rodada 3: o echo e conferido ate o fim da linha, qualquer opcao)"
 # G15f — o censo dos crons (LM2-05): uma COPIA dos workflows com um cron diario a mais, SEM aspas
 # e num .yaml, faz o probe_crons do derivador morrer pelo nome (antes, .yaml e cron sem aspas
 # ficavam fora do censo e o corte seguia citando as mesmas janelas).
@@ -1664,6 +1678,12 @@ PYP28
     _p_red P33 "$SCRATCH/p33" C13-route1 "FAIL C13-route1: o runner do candidato atribui CODEX_LAUNCHER" \
       "o lancador do shim reatribuido por export depois do oraculo"
   else bad "P33: fixture do export CODEX_LAUNCHER falhou"; fi
+  # P34 — a mesma reatribuicao por printf -v, com o nome entre aspas (rodada 3: o censo e EXATO,
+  # toda linha que menciona CODEX_LAUNCHER, nao uma lista de formas de atribuicao).
+  if _p_mut "$SCRATCH/p34" "CODEX_LAUNCHER reatribuido por printf -v" "printf 'printf -v \"CODEX_LAUNCHER\" \"%%s\" \"/tmp/TEST-ONLY-outro-codex\"\n' >> $EV/run-rc1-repass.sh"; then
+    _p_red P34 "$SCRATCH/p34" C13-route1 "FAIL C13-route1: o runner do candidato atribui CODEX_LAUNCHER" \
+      "o lancador do shim reatribuido por printf -v com o nome entre aspas"
+  else bad "P34: fixture do printf -v CODEX_LAUNCHER falhou"; fi
   # P31 — o if do job publish COMENTADO (o texto segue no arquivo; condicao 6 e cabecalho).
   _p31py="$SCRATCH/p31-mut.py"
   cat > "$_p31py" <<'PYP31'
@@ -3386,10 +3406,10 @@ _d_need "D8 rota 1 so (PLAN-194 D-4): lancador plantado, npx espiao e espiao do 
 _d_need "D9 passo 18: o gate e a prova do toolchain da rc, pelo nome" X2 X3 X4 X4j
 _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R14 R15 R16 R17 R18
 _d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14 \
-  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P26 P28 P29 P30 P31 P32 P33
+  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P26 P28 P29 P30 P31 P32 P33 P34
 _d_need "D17 wait_ci_green: o CI do candidato pelo commit (o select do corte sem o filtro do servidor; um vermelho agendado antigo nao some; a consulta cheia e recusa)" V3s V4 V4m V4c V4p V4v
 _d_need "D16 os guards do derivador nao sao vacuos: heredocs e echos de texto no texto FINAL, condicoes sem verificacao, a divida no CONTEXT, as janelas de cron e o censo dos crons, a marca do provisorio" \
-  G2m G3m G6m G7m G8m G9m G10m G11m G12m G13m G14m G15f
+  G2m G3m G6m G7m G8m G9m G10m G11m G12m G13m G14m G16m G17m G15f
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
 _d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m

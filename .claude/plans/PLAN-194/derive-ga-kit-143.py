@@ -619,6 +619,12 @@ def class_pending(rc=None, check_applied: bool = False) -> List[str]:
             "que o kit do GA herda vem dele" % DERIVE_RC143)
     if not isinstance(na, tuple):
         die("%s sem o GA_NA (tupla de (id, motivo))" % DERIVE_RC143)
+    # Rodada 3 do rail: o contrato e UM so, o do exportador (ids na forma, texto ASCII de uma
+    # linha, onde no conjunto fechado); este consumidor o chama antes das conferencias dele.
+    chk = getattr(rc, "check_ga_carry", None)
+    if not callable(chk):
+        die("%s sem check_ga_carry() (o validador do GA_CARRY/GA_NA)" % DERIVE_RC143)
+    chk()
     ids: List[str] = []
     out = [CLASS_PENDING_HEAD] + list(CLASS_PENDING_GA)
     for e in carry:

@@ -407,17 +407,18 @@ def c13_route1(t: Tree) -> str:
                  'CODEX_LAUNCHER="$_glob"', "printf 'exec %s \"$@\"\\n' \"$(printf '%q' \"$CODEX_LAUNCHER\")\""):
         if need not in runner:
             raise AssertionError("o runner do candidato sem %r" % need)
-    # LDR2-05: a atribuicao em QUALQUER forma nas linhas de codigo (export, declare, typeset,
-    # readonly, local, `+=`, `${CODEX_LAUNCHER:=...}`, read, printf -v e unset), nao so a linha
-    # que comeca por CODEX_LAUNCHER=.
-    assign_re = re.compile(r"(?<![\w$])CODEX_LAUNCHER\+?=|\$\{CODEX_LAUNCHER:?=|"
-                           r"\bread\b[^;&|\n]*\bCODEX_LAUNCHER\b|\bprintf\s+-v\s*CODEX_LAUNCHER\b|"
-                           r"\bunset\b[^;&|\n]*\bCODEX_LAUNCHER\b")
-    assigns = [ln.strip() for ln in runner.splitlines()
-               if not ln.lstrip().startswith("#") and assign_re.search(ln)]
-    if assigns != ['CODEX_LAUNCHER=""', 'CODEX_LAUNCHER="$_glob"']:
-        raise AssertionError("o runner do candidato atribui CODEX_LAUNCHER %r (exigido: \"\" e depois $_glob, "
-                             "so)" % assigns)
+    # LDR2-05 e rodada 3 do rail: o censo e EXATO, nao uma lista de formas de atribuicao -- toda
+    # linha de codigo do runner que menciona o nome CODEX_LAUNCHER e uma destas cinco, nesta ordem
+    # (uma atribuicao em outra forma, export, declare, printf -v, read, um indice de array, e uma
+    # linha a mais). Fora do censo: o nome montado em tempo de execucao.
+    launcher = ['CODEX_LAUNCHER=""', 'CODEX_LAUNCHER="$_glob"', 'if [ -z "$CODEX_LAUNCHER" ]; then',
+                '--verify-codex-pin "$CODEX_LAUNCHER")"',
+                "printf 'exec %s \"$@\"\\n' \"$(printf '%q' \"$CODEX_LAUNCHER\")\""]
+    mentions = [ln.strip() for ln in runner.splitlines()
+                if not ln.lstrip().startswith("#") and "CODEX_LAUNCHER" in ln]
+    if mentions != launcher:
+        raise AssertionError("o runner do candidato atribui CODEX_LAUNCHER (ou o menciona) fora das cinco "
+                             "linhas esperadas: %r" % mentions)
     i_or = runner.find('--verify-codex-pin "$_glob"')
     i_ex = runner.find('"$_glob" --version')
     if i_ex < 0 or i_or < 0 or i_ex < i_or:

@@ -200,10 +200,11 @@ GA_CARRY = (
     ("divida-com-excecoes-gerador", "gerador",
      "o review record do envelope declara a divida carregada COM as duas excecoes que esta release cura"),
     ("guard-heredoc-echo", "derivador",
-     "guard ESTRUTURAL no texto FINAL do corte e do runner (LM2-04): todo heredoc sem aspas e de DADOS "
-     "(corpo exato numa allowlist) ou de TEXTO declarado (sem crase, $( nem barra; so as variaveis "
-     "declaradas), todo braco echo da particao tem a forma estrita, e o resto e recusa nomeada; o "
-     "molde do GA tem o banner cat <<DONE sem guard"),
+     "guard ESTRUTURAL no texto FINAL do corte e do runner (LM2-04 e rodada 3): em cada linha fora de "
+     "comentario e de corpo de heredoc, tantos << (fora de <<<) quantas aberturas reconhecidas; o heredoc "
+     "sem aspas e de DADOS (corpo exato numa allowlist) ou de TEXTO declarado (sem crase, $( nem barra; "
+     "so as variaveis declaradas); cada linha com echo conferida do echo ao fim da linha; o braco echo da "
+     "particao na forma estrita; o resto e recusa nomeada; o molde do GA tem o banner cat <<DONE sem guard"),
     ("janelas-de-cron", "derivador",
      "as janelas de cron que o corte cita sao as constantes que a sonda de crons confere (.yml e .yaml, "
      "cron com e sem aspas, a contagem por grep simples igual a lida)"),
@@ -222,9 +223,13 @@ GA_CARRY = (
     ("readme-limites", "derivador",
      "README secao 10: os limites conhecidos do kit (o CI pelo commit com teto e a recusa da consulta "
      "cheia; o preflight do release.sh numa janela dos runs, arquivo do manifesto ADR-192)"),
-    ("sonda-launcher-qualquer-forma", "derivador",
-     "na sonda (condicao 5): o censo das atribuicoes de CODEX_LAUNCHER casa export, declare, typeset, "
-     "readonly, local, +=, ${...:=}, read, printf -v e unset (LDR2-05)"),
+    ("sonda-launcher-censo-exato", "derivador",
+     "na sonda (condicao 5): toda linha de codigo do runner que menciona o nome CODEX_LAUNCHER e uma das "
+     "cinco esperadas, na ordem (LDR2-05 e rodada 3; o nome montado em tempo de execucao fica fora)"),
+    ("comentario-do-shim", "runner",
+     "o comentario do shim diz que ele delega ao lancador global do codex cujo payload o oraculo "
+     "verificou (LT-03); o molde do GA diz que delega ao codex pinado (payload verificado), mais do que "
+     "o exec faz"),
     ("sonda-condicao-15-conteudo", "derivador",
      "na sonda (condicao 2): a condicao 15 do GA v1.4.2 conferida pelo CONTEUDO, nao so pelo marcador"),
     ("sonda-if-do-publish", "derivador",
@@ -244,10 +249,11 @@ GA_CARRY = (
      "os controles do CI pelo commit: V3s (o select do corte sem o filtro do servidor), V4/V4m (um "
      "vermelho agendado antigo) e V4c/V4p/V4v (a consulta cheia)"),
     ("mutantes-do-derivador", "harness",
-     "A0m: os mutantes do derivador (G2m a G14m) e o G15f do censo dos crons provam que os guards do "
+     "A0m: os mutantes do derivador (G2m a G17m) e o G15f do censo dos crons provam que os guards do "
      "derivador nao sao vacuos; o molde do GA nao tem a secao"),
     ("controles-da-sonda", "harness",
-     "os controles vermelhos da sonda desta release (P26 a P33, entre eles o CODEX_LAUNCHER por export)"),
+     "os controles vermelhos da sonda desta release (P26 a P34, entre eles o CODEX_LAUNCHER por export e "
+     "por printf -v)"),
 )
 GA_NA = (
     ("prova-do-toolchain-rc",
@@ -937,13 +943,16 @@ fi
 
 # LM2-04 — 3.a ocorrencia da classe «texto do derivador num contexto que o shell expande» (G2,
 # LM-08, LM2-04): cura ESTRUTURAL. O guard roda no texto FINAL do corte e do runner, logo antes
-# do return, e acha por VARREDURA todo heredoc (os com aspas sao pulados: o corpo deles nao
-# expande) e todo echo. Um heredoc SEM aspas e de DADOS, com o corpo EXATO declarado aqui, ou
+# do return. Rodada 3 do rail: a cobertura e medida por CONTAGEM, nao por uma lista de formas --
+# cada linha fora de comentario e de corpo de heredoc tem tantos `<<` (fora de `<<<`) quantas
+# aberturas de heredoc reconhecidas (delimitador palavra, com ou sem aspas; os com aspas sao
+# pulados: o corpo deles nao expande), e cada linha com a palavra echo e conferida do echo ao
+# fim da linha. Um heredoc SEM aspas e de DADOS, com o corpo EXATO declarado aqui, ou
 # de TEXTO declarado (nome, as variaveis que podem expandir e, no maximo, um bloco de codigo
 # tirado byte a byte da fonte pinada), sem crase, `$(` nem barra invertida. Echo: o braco
 # `N) echo "texto" ;;` da particao so na forma estrita, e exatamente 2 x NPARTS deles no runner
-# (nenhum no corte); em qualquer outro echo, nenhuma crase, e `$(` ou barra so nas linhas
-# declaradas. O que nao casa com nada disso e recusa NOMEADA.
+# (nenhum no corte); nas demais linhas com echo, nenhuma crase do echo ao fim da linha, e `$(` ou
+# barra so nas linhas declaradas. O que nao casa com nada disso e recusa NOMEADA.
 HEREDOC_DATA = {
     "corte": {"BTSIG": "$_bt_signers", "FPL": "$_fpl", "STAGED": "$_st_names",
               "CACHED": "$(git diff --cached --name-only)"},
@@ -958,7 +967,13 @@ HEREDOC_TEXT = {
 # O bloco de codigo DENTRO do heredoc do prompt (as condicoes declaradas, quando existem): o da
 # fonte pinada depois do deslocamento de versao, byte a byte.
 HEREDOC_CODE = {"runner": {"PROMPT": ('$( if [ -s "$CONDITIONS_SNAPSHOT" ]; then\n', "\nfi )\n")}}
-ECHO_EXPAND_OK = {"corte": (), "runner": ('echo "- Data: $(date -u +%Y-%m-%dT%H:%M:%SZ)"',)}
+ECHO_EXPAND_OK = {"corte": (), "runner": (
+    'echo "- Data: $(date -u +%Y-%m-%dT%H:%M:%SZ)"',
+    # a barra destas duas e a continuacao de linha, fora das aspas
+    '{ prompt_header "$P" "$LABEL" "$COVER" && echo && cat "$DIFF"; } > "$RAW" \\',
+    'echo "- LIMITE DE USO da CONTA Codex: parte(s)$QUOTA_PARTS sem veredito${QUOTA_RESET:+ (o codex diz: try '
+    'again at $QUOTA_RESET)}; o runner NAO re-tentou e recusa esta tentativa (nao e rodada)" \\',
+)}
 ECHO_ARM_RE = r'^\s*[0-9]+\)\s*echo "[^"$`\\]*" ;;$'
 
 
@@ -982,7 +997,12 @@ def shell_text_guard(t: str, who: str) -> None:
     while i < len(lines):
         ln = lines[i]
         hs = [] if ln.lstrip().startswith("#") else list(
-            re.finditer(r"""(?<!<)<<(-?)[ \t]*(['"]?)([A-Za-z_][A-Za-z_0-9]*)\2""", ln))
+            re.finditer(r"""(?<!<)<<(-?)[ \t]*(['"]?)([A-Za-z_0-9]+)\2""", ln))
+        if not ln.lstrip().startswith("#"):
+            n_open = len(re.findall(r"(?<!<)<<(?!<)", ln))
+            if n_open != len(hs):
+                die("%s: a linha %d tem %d `<<` e %d abertura(s) de heredoc reconhecida(s) (delimitador "
+                    "palavra, com ou sem aspas): %r" % (who, i + 1, n_open, len(hs), ln.strip()[:90]))
         if not hs:
             i += 1
             continue
@@ -1039,10 +1059,10 @@ def shell_text_guard(t: str, who: str) -> None:
             continue
         if "`" in ln[e.start():]:
             die("%s: um echo carrega crase (linha %d): %r" % (who, k + 1, ln.strip()[:90]))
-        for em in re.finditer(r'\becho\s+"((?:[^"\\]|\\.)*)"', ln):
-            if ("$(" in em.group(1) or "\\" in em.group(1)) and ln.strip() not in ECHO_EXPAND_OK[who]:
-                die("%s: um echo expande $( ou barra fora das linhas declaradas (linha %d): %r"
-                    % (who, k + 1, ln.strip()[:90]))
+        rest = ln[e.end():]
+        if ("$(" in rest or "\\" in rest) and ln.strip() not in ECHO_EXPAND_OK[who]:
+            die("%s: um echo expande $( ou barra fora das linhas declaradas (linha %d): %r"
+                % (who, k + 1, ln.strip()[:90]))
     want = 2 * NPARTS if who == "runner" else 0
     if arms != want:
         die("%s: %d braco(s) echo de particao; exigido %d (rotulo e cobertura de cada parte)" % (who, arms, want))
@@ -1422,17 +1442,18 @@ def c13_route1(t: Tree) -> str:
                  'CODEX_LAUNCHER="$_glob"', "printf 'exec %s \"$@\"\\n' \"$(printf '%q' \"$CODEX_LAUNCHER\")\""):
         if need not in runner:
             raise AssertionError("o runner do candidato sem %r" % need)
-    # LDR2-05: a atribuicao em QUALQUER forma nas linhas de codigo (export, declare, typeset,
-    # readonly, local, `+=`, `${CODEX_LAUNCHER:=...}`, read, printf -v e unset), nao so a linha
-    # que comeca por CODEX_LAUNCHER=.
-    assign_re = re.compile(r"(?<![\w$])CODEX_LAUNCHER\+?=|\$\{CODEX_LAUNCHER:?=|"
-                           r"\bread\b[^;&|\n]*\bCODEX_LAUNCHER\b|\bprintf\s+-v\s*CODEX_LAUNCHER\b|"
-                           r"\bunset\b[^;&|\n]*\bCODEX_LAUNCHER\b")
-    assigns = [ln.strip() for ln in runner.splitlines()
-               if not ln.lstrip().startswith("#") and assign_re.search(ln)]
-    if assigns != ['CODEX_LAUNCHER=""', 'CODEX_LAUNCHER="$_glob"']:
-        raise AssertionError("o runner do candidato atribui CODEX_LAUNCHER %r (exigido: \"\" e depois $_glob, "
-                             "so)" % assigns)
+    # LDR2-05 e rodada 3 do rail: o censo e EXATO, nao uma lista de formas de atribuicao -- toda
+    # linha de codigo do runner que menciona o nome CODEX_LAUNCHER e uma destas cinco, nesta ordem
+    # (uma atribuicao em outra forma, export, declare, printf -v, read, um indice de array, e uma
+    # linha a mais). Fora do censo: o nome montado em tempo de execucao.
+    launcher = ['CODEX_LAUNCHER=""', 'CODEX_LAUNCHER="$_glob"', 'if [ -z "$CODEX_LAUNCHER" ]; then',
+                '--verify-codex-pin "$CODEX_LAUNCHER")"',
+                "printf 'exec %s \"$@\"\\n' \"$(printf '%q' \"$CODEX_LAUNCHER\")\""]
+    mentions = [ln.strip() for ln in runner.splitlines()
+                if not ln.lstrip().startswith("#") and "CODEX_LAUNCHER" in ln]
+    if mentions != launcher:
+        raise AssertionError("o runner do candidato atribui CODEX_LAUNCHER (ou o menciona) fora das cinco "
+                             "linhas esperadas: %r" % mentions)
     i_or = runner.find('--verify-codex-pin "$_glob"')
     i_ex = runner.find('"$_glob" --version')
     if i_ex < 0 or i_or < 0 or i_ex < i_or:
@@ -3381,6 +3402,8 @@ TEST_A0M = r'''# A0m — os guards do derivador nao sao vacuos: um MUTANTE do de
 # G11m: as janelas de cron do corte fora das constantes da sonda de crons (LM-03). G12m: a sonda
 # com outra PROVISIONAL_MARK (LD-02). G13m/G14m: o guard dos heredocs roda no texto FINAL
 # (LM2-04): uma crase no banner DEPOIS do ultimo corte do banner, e um heredoc de texto novo.
+# G16m/G17m (rodada 3): um heredoc de delimitador numerico e um echo -n com $( -- o guard conta
+# os << de cada linha e confere o echo ate o fim da linha.
 # As ancoras daqui casam UMA vez no derivador da arvore (cross-check do derivador).
 _a0m() {  # $1 = id, $2 = mutacao (g2 | g3), $3 = texto fixo da recusa, $4 = o caso
   local _rc=0
@@ -3417,6 +3440,14 @@ MUT = {
             '    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n'
             "    t = t.replace('bell \"$TAG cortada\"\\ncat <<DONE\\n', "
             "'cat <<NOTE\\nhora do corte: `date`\\nNOTE\\nbell \"$TAG cortada\"\\ncat <<DONE\\n')\n"),
+    "g16": ('    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n',
+            '    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n'
+            "    t = t.replace('bell \"$TAG cortada\"\\ncat <<DONE\\n', "
+            "'cat <<123\\nhora do corte: $(date)\\n123\\nbell \"$TAG cortada\"\\ncat <<DONE\\n')\n"),
+    "g17": ('    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n',
+            '    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n'
+            "    t = t.replace('bell \"$TAG cortada\"\\ncat <<DONE\\n', "
+            "'echo -n \"$(date)\"\\nbell \"$TAG cortada\"\\ncat <<DONE\\n')\n"),
 }
 old, new = MUT[kind]
 t = open(src, encoding="utf-8").read()
@@ -3450,6 +3481,10 @@ _a0m G13m g13 "o banner de CORTADA (heredoc SEM aspas) carrega '\`'" \
   "uma crase no banner DEPOIS do ultimo corte do banner (o guard roda no texto FINAL)"
 _a0m G14m g14 "heredoc SEM aspas <<NOTE (linha" \
   "um heredoc de texto sem aspas novo no corte (nem de dados nem declarado)"
+_a0m G16m g16 "heredoc SEM aspas <<123 (linha" \
+  "um heredoc de delimitador numerico no corte (rodada 3: o guard conta os <<, nao lista formas)"
+_a0m G17m g17 "um echo expande \$( ou barra fora das linhas declaradas" \
+  "um echo -n com \$( no corte (rodada 3: o echo e conferido ate o fim da linha, qualquer opcao)"
 # G15f — o censo dos crons (LM2-05): uma COPIA dos workflows com um cron diario a mais, SEM aspas
 # e num .yaml, faz o probe_crons do derivador morrer pelo nome (antes, .yaml e cron sem aspas
 # ficavam fora do censo e o corte seguia citando as mesmas janelas).
@@ -3849,6 +3884,12 @@ PYP28
     _p_red P33 "$SCRATCH/p33" C13-route1 "FAIL C13-route1: o runner do candidato atribui CODEX_LAUNCHER" \
       "o lancador do shim reatribuido por export depois do oraculo"
   else bad "P33: fixture do export CODEX_LAUNCHER falhou"; fi
+  # P34 — a mesma reatribuicao por printf -v, com o nome entre aspas (rodada 3: o censo e EXATO,
+  # toda linha que menciona CODEX_LAUNCHER, nao uma lista de formas de atribuicao).
+  if _p_mut "$SCRATCH/p34" "CODEX_LAUNCHER reatribuido por printf -v" "printf 'printf -v \"CODEX_LAUNCHER\" \"%%s\" \"/tmp/TEST-ONLY-outro-codex\"\n' >> $EV/run-rc1-repass.sh"; then
+    _p_red P34 "$SCRATCH/p34" C13-route1 "FAIL C13-route1: o runner do candidato atribui CODEX_LAUNCHER" \
+      "o lancador do shim reatribuido por printf -v com o nome entre aspas"
+  else bad "P34: fixture do printf -v CODEX_LAUNCHER falhou"; fi
   # P31 — o if do job publish COMENTADO (o texto segue no arquivo; condicao 6 e cabecalho).
   _p31py="$SCRATCH/p31-mut.py"
   cat > "$_p31py" <<'PYP31'
@@ -4366,10 +4407,10 @@ _d_need "D8 rota 1 so (PLAN-194 D-4): lancador plantado, npx espiao e espiao do 
 _d_need "D9 passo 18: o gate e a prova do toolchain da rc, pelo nome" X2 X3 X4 X4j
 _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R14 R15 R16 R17 R18
 _d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14 \
-  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P26 P28 P29 P30 P31 P32 P33
+  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P26 P28 P29 P30 P31 P32 P33 P34
 _d_need "D17 wait_ci_green: o CI do candidato pelo commit (o select do corte sem o filtro do servidor; um vermelho agendado antigo nao some; a consulta cheia e recusa)" V3s V4 V4m V4c V4p V4v
 _d_need "D16 os guards do derivador nao sao vacuos: heredocs e echos de texto no texto FINAL, condicoes sem verificacao, a divida no CONTEXT, as janelas de cron e o censo dos crons, a marca do provisorio" \
-  G2m G3m G6m G7m G8m G9m G10m G11m G12m G13m G14m G15f
+  G2m G3m G6m G7m G8m G9m G10m G11m G12m G13m G14m G16m G17m G15f
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
 _d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m
@@ -4517,7 +4558,8 @@ def derive_test(src: str) -> str:
                         '--argjson n "${_lim:-20}"', "_p_red P31 ",
                         "_a0m G2m g2 ", "_a0m G3m g3 ", "_a0m G10m g10 ", "_p_red P32 ",
                         "_a0m G11m g11 ", "_a0m G12m g12 ", "_a0m G13m g13 ", "_a0m G14m g14 ",
-                        "refused G15f ", "_p_red P33 ", "GH_STUB_NO_COMMIT=1 _gs_run "])
+                        "refused G15f ", "_p_red P33 ", "GH_STUB_NO_COMMIT=1 _gs_run ",
+                        "_a0m G16m g16 ", "_a0m G17m g17 ", "_p_red P34 "])
     forbid(t, "harness", ["X_SEQ", "V_VIEW", "OK: retomada entre os passos 10 e 11",
                           "numa retomada entre os passos 10 e 11"])
     return t
