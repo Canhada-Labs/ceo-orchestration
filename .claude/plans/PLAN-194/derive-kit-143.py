@@ -1828,15 +1828,15 @@ Codex 0.160.0 (cerimônia própria); a prova do toolchain do npm nas tags `-rc.`
 publica); a rota de CI do próprio framework; e as notas da verificação formal (o TLC). O
 candidato é o commit do bump, sobre os lands do trem (a ordem está no LEDGER do PLAN-194).
 
-O plano do PLAN-194 e o backlog da 1.4.4 registram para onde foi cada item que saiu do trem,
-entre eles: a cura do spool de auditoria e o estresse que a provaria (que o `CHANGELOG.md` [1.4.3]
-declara não entregues); a adoção do Sonnet 5.5 e do Haiku 5.5; a re-medição paga no Claude Code
-(W5.0) e o restante da W5a, que vão para a 1.4.4 (decisão S365-1) — a primeira parte da W5a, os
-textos do `ultracode` e do esforço com data e substrato, landou em `9770b5a4` e está no
-`CHANGELOG.md` [1.4.3]; a W6.2 e a documentação da W6; a emenda W7ad; e o PLAN-195. A
-verificação formal canônica (W8 do plano) fica para depois do GA; o TLC já roda nos três
-modelos, advisory, pelo merge de pull request cujo workflow uma cerimônia assinada ratificou
-depois, pelos bytes.
+O plano do PLAN-194, o LEDGER dele e o backlog da 1.4.4 registram para onde foram os itens que
+saíram do trem, entre eles: a cura do spool de auditoria e o estresse que a provaria (que o
+`CHANGELOG.md` [1.4.3] declara não entregues); a adoção do Sonnet 5.5 e do Haiku 5.5; a
+re-medição paga no Claude Code (W5.0) e o restante da W5a, que vão para a 1.4.4 (decisão
+S365-1) — a primeira parte da W5a, os textos do `ultracode` e do esforço com data e substrato,
+landou em `9770b5a4` e está no `CHANGELOG.md` [1.4.3]; a W6.2 e a documentação da W6; a emenda
+W7ad; e o PLAN-195. A verificação formal canônica (W8 do plano) fica para depois do GA; o TLC
+já roda nos três modelos, advisory, pelo merge de pull request cujo workflow uma cerimônia
+assinada ratificou depois, pelos bytes.
 
 Nenhum tamanho é digitado aqui: a sonda das condições (`--sizes`) projeta cada parte com as
 funções do PRÓPRIO runner — pathspec, rótulo, cobertura e cabeçalho do prompt — e recusa, no G0
@@ -1994,7 +1994,7 @@ def derive_readme(src: str) -> str:
     need(t, "README", ["`derive-kit-143.py`", "`v1.4.2`", "decisão D-4 do PLAN-194",
                        "`npm-trusted-publisher.txt`", "| `.claude/eval/**` |",
                        "| `conftest.py`, `pytest.ini` (da raiz) |", "| `.gitignore` (da raiz) |",
-                       "(decisão S365-1)", "exceção do CASO que esta release declara curado",
+                       "(decisão\nS365-1)", "exceção do CASO que esta release declara curado",
                        "Resíduo, da forma que o Known-open do `CHANGELOG.md` [1.4.3] declara para o pin"])
     return t
 
