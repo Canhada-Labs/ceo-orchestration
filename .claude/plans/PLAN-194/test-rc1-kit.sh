@@ -698,6 +698,8 @@ MUT = {
            '    t = t.replace(" - Ate o GA, main fica congelado.\\n", " - Ate o GA, main fica congelado `date`.\\n")\n'),
     "g9": ("  assigned for its cure) EXCEPT the case of signed condition 67, which\n  this release declares cured; what",
            "  assigned for its cure); what"),
+    "g10": ('.claude/skills/**" ;;\n    4) echo "',
+            '.claude/skills/**" ;;\n      4) echo "$HOME '),
 }
 old, new = MUT[kind]
 t = open(src, encoding="utf-8").read()
@@ -715,12 +717,14 @@ _a0m G3m g3 "a condicao 7 do texto nao tem verificacao na sonda" \
   "a condicao 7 sem verificacao na sonda (o derivador morre antes de qualquer saida)"
 _a0m G6m g6 "as condicoes tem item numerado fora da forma" \
   "um item numerado sem negrito nas condicoes (escaparia do censo G3)"
-_a0m G7m g7 "um rotulo ou cobertura da particao (echo entre aspas) carrega" \
+_a0m G7m g7 "uma linha echo da particao (rotulo ou cobertura) fora da forma" \
   "uma variavel num rotulo da particao (o echo do runner a expandiria)"
 _a0m G8m g8 "o banner de CORTADA (heredoc SEM aspas) carrega '\`'" \
   "uma crase no banner de CORTADA (heredoc sem aspas do corte)"
 _a0m G9m g9 "runner derivado sem '  assigned for its cure) EXCEPT the case of signed condition 67" \
   "o CONTEXT do prompt sem a excecao da condicao 67"
+_a0m G10m g10 "uma linha echo da particao (rotulo ou cobertura) fora da forma" \
+  "uma linha echo da particao com outra indentacao e $HOME (a guarda independe da indentacao)"
 for f in $SHELLS; do
   [ -f "$f" ] || { bad "ausente: $f"; continue; }
   if /bin/bash -n "$f" 2>/dev/null; then ok "/bin/bash -n $(basename "$f") ($(/bin/bash -c 'echo $BASH_VERSION' | cut -c1-3))"; else bad "/bin/bash -n $(basename "$f")"; fi
@@ -1584,33 +1588,11 @@ PYP15
     _p_red P24 "$SCRATCH/p24" C11-scope "FAIL C11-scope: em .claude/scripts/local/ muda .claude/scripts/local/TEST-ONLY-p24.txt" \
       "um arquivo em .claude/scripts/local/ alem do release.sh"
   else bad "P24: fixture do scripts/local falhou"; fi
-  # P25 — uma rota de entrega PLANTADA no install.sh (copia o conftest.py da raiz para o alvo):
-  # a instalacao descartavel da sonda a acha (condicao 10).
-  if _p_mut "$SCRATCH/p25" "rota de entrega plantada" "python3 -c 'import sys; p=sys.argv[1]; t=open(p,encoding=\"utf-8\").read(); a=\"# Release workflow (.github/workflows/release.yml) replaces the\"; i=t.index(a); open(p,\"w\",encoding=\"utf-8\").write(t[:i]+\"cp -- \\\"\$SCRIPT_DIR/../conftest.py\\\" \\\"\$TARGET/conftest.py\\\"  # TEST ONLY (P25)\n\"+t[i:])' scripts/install.sh"; then
-    _p_red P25 "$SCRATCH/p25" C18-delivery "FAIL C18-delivery: a instalacao nova pelo install.sh entregou o que a condicao 10 declara fora: conftest.py" \
-      "uma rota de entrega plantada no install.sh (o conftest.py da raiz no alvo)"
-  else bad "P25: fixture da rota de entrega plantada falhou"; fi
   # P26 — o HMAC (compute_entry_hmac) calculado FORA da trava em append_entry (condicoes 1 e 3).
   if _p_mut "$SCRATCH/p26" "compute_entry_hmac fora da trava" "python3 '$_p15py' .claude/hooks/audit_log.py 'compute_entry_hmac(b\"\", {})'"; then
     _p_red P26 "$SCRATCH/p26" C14-cure-67 "FAIL C14-cure-67: append_entry calcula o HMAC (compute_entry_hmac) FORA do bloco da trava" \
       "o calculo do HMAC fora da trava em append_entry"
   else bad "P26: fixture do HMAC fora da trava falhou"; fi
-  # P27 — a regra do upgrade.sh mudada: ele deixa de entregar .claude/scripts/local/, que o
-  # README declara entregue (condicao 10): a instalacao descartavel + upgrade da C18 o acha.
-  _p27py="$SCRATCH/p27-mut.py"
-  cat > "$_p27py" <<'PYP27'
-import sys
-p = sys.argv[1]
-t = open(p, encoding="utf-8").read()
-a = "    .claude/scripts/tests|.claude/scripts/tests/*) return 0 ;;\n"
-if t.count(a) != 1:
-    sys.exit("ancora da exclusao casou %d vez(es)" % t.count(a))
-open(p, "w", encoding="utf-8").write(t.replace(a, a + "    .claude/scripts/local|.claude/scripts/local/*) return 0 ;;  # TEST ONLY (P27)\n"))
-PYP27
-  if _p_mut "$SCRATCH/p27" "upgrade sem scripts/local" "python3 '$_p27py' scripts/_framework_manifest_set.sh"; then
-    _p_red P27 "$SCRATCH/p27" C18-delivery "FAIL C18-delivery: a entrega da classe FORA .claude/scripts/local/: instalacao nova/upgrade.sh medidos (False, False)" \
-      "o upgrade.sh deixando de entregar uma classe que o README declara entregue"
-  else bad "P27: fixture da regra do upgrade falhou"; fi
   # P28 — o job da prova da rc redefinindo o npm por $GITHUB_ENV (condicao 6).
   _p28py="$SCRATCH/p28-mut.py"
   cat > "$_p28py" <<'PYP28'
@@ -1651,6 +1633,25 @@ PYP31
     _p_red P31 "$SCRATCH/p31" C0-npm "FAIL C0-npm: o job publish do npm-publish.yml nao pula mais as tags -rc." \
       "o if do job publish comentado (o texto segue no arquivo)"
   else bad "P31: fixture do if comentado falhou"; fi
+  # P32 — a condicao 15 do GA v1.4.2 com o marcador mas outro conteudo (condicao 2).
+  _p32py="$SCRATCH/p32-mut.py"
+  cat > "$_p32py" <<'PYP32'
+import glob, re, sys
+# as condicoes do GA v1.4.2 (o CONDITIONS do re-pass dele, nao o snapshot .reviewed)
+c = glob.glob(sys.argv[1] + "/CONDITIONS-g?.md")
+if len(c) != 1:
+    sys.exit("%d CONDITIONS do GA em %s" % (len(c), sys.argv[1]))
+p = c[0]
+t = open(p, encoding="utf-8").read()
+n = re.sub(r"(?m)^15\. \*\*[^\n]*\n", "15. **TODOS OS ACHADOS ESTAO CURADOS.**\n", t, count=1)
+if n == t:
+    sys.exit("a condicao 15 do GA nao foi achada")
+open(p, "w", encoding="utf-8").write(n)
+PYP32
+  if _p_mut "$SCRATCH/p32" "condicao 15 do GA reescrita" "python3 '$_p32py' .claude/plans/PLAN-193/repass-ga"; then
+    _p_red P32 "$SCRATCH/p32" C2-carried-1.4.2 "nao numera mais '15. **O P2 da parte 1 dependia" \
+      "a condicao 15 do GA com o marcador e outro conteudo"
+  else bad "P32: fixture da condicao 15 do GA falhou"; fi
   # P14 — um id desconhecido em --only nunca vira verde vacuo (cura da sonda do GA).
   _p14_rc=0
   ( cd "$CLONE" && PYTHONDONTWRITEBYTECODE=1 python3 "$EV/probe-conditions-rc1.py" --root "$CLONE" \
@@ -2369,6 +2370,31 @@ PYV4
      && grep -q 'runs=30 pendentes=0 vermelhos=0' "$SCRATCH/v4m.log"; then
     ok "V4m (gemeo vermelho, a v1.4.2-rc.1): a janela dos 30 runs mais recentes nao ve o vermelho agendado e passa"; _red="$_red V4m"
   else bad "V4m: o wait_ci_green da v1.4.2-rc.1 nao mostrou a classe (o V4 seria vacuo)"; sed -n '1,8p' "$SCRATCH/v4m.log"; fi
+  # V4c/V4p — a consulta pelo commit que volta no TETO (200 runs) nao prova que nao ha vermelho
+  # (V4c) nem pendente (V4p) fora da janela: recusa nomeada da consulta cheia. V4v: o mesmo na
+  # consulta do validate.yml.
+  python3 - "$_vs" "$_gs/fix" <<'PYV4C'
+import json, sys
+sha, d = sys.argv[1:3]
+g = {"headSha": sha, "status": "completed", "conclusion": "success", "workflowName": "Validate",
+     "event": "push", "headBranch": "main"}
+green = [dict(g, databaseId=6000 + i) for i in range(200)]
+for name, extra in (("v-full-red.json", dict(g, conclusion="failure", event="schedule", databaseId=4001)),
+                    ("v-full-pend.json", dict(g, status="in_progress", conclusion=None, event="schedule",
+                                              databaseId=4002)),
+                    ("v-full-validate.json", None)):
+    rows = green + ([extra] if extra else [])
+    open("%s/%s" % (d, name), "w", encoding="utf-8").write(json.dumps(rows) + "\n")
+PYV4C
+  _v4c_rc=0; _gs_run "$SCRATCH/v.sh" "run list v-full-red.json" "$SCRATCH/v4c.log" "$SCRATCH" || _v4c_rc=$?
+  refused V4c "$_v4c_rc" "$SCRATCH/v4c.log" "consulta cheia: 200 runs no commit $_vs" \
+    "200 runs verdes do candidato e um vermelho agendado alem do teto (a consulta cheia)"
+  _v4p_rc=0; _gs_run "$SCRATCH/v.sh" "run list v-full-pend.json" "$SCRATCH/v4p.log" "$SCRATCH" || _v4p_rc=$?
+  refused V4p "$_v4p_rc" "$SCRATCH/v4p.log" "consulta cheia: 200 runs no commit $_vs" \
+    "200 runs verdes do candidato e um pendente agendado alem do teto (a consulta cheia)"
+  _v4v_rc=0; _gs_run "$SCRATCH/v.sh" "$(printf 'run list v-ci.json\nrun list v-full-validate.json')" "$SCRATCH/v4v.log" "$SCRATCH" || _v4v_rc=$?
+  refused V4v "$_v4v_rc" "$SCRATCH/v4v.log" "consulta cheia: 200 runs do validate.yml no commit $_vs" \
+    "a consulta do validate.yml do candidato que volta no teto"
 fi
 
 # ===========================================================================
@@ -3304,9 +3330,9 @@ _d_need "D8 rota 1 so (PLAN-194 D-4): lancador plantado, npx espiao e espiao do 
 _d_need "D9 passo 18: o gate e a prova do toolchain da rc, pelo nome" X2 X3 X4 X4j
 _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R14 R15 R16 R17 R18
 _d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14 \
-  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31
-_d_need "D17 wait_ci_green: o CI do candidato pelo commit (um vermelho agendado antigo nao some)" V4 V4m
-_d_need "D16 os guards do derivador nao sao vacuos: heredocs e echos de texto, condicoes sem verificacao, a divida no CONTEXT" G2m G3m G6m G7m G8m G9m
+  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P26 P28 P29 P30 P31 P32
+_d_need "D17 wait_ci_green: o CI do candidato pelo commit (um vermelho agendado antigo nao some; a consulta cheia e recusa)" V4 V4m V4c V4p V4v
+_d_need "D16 os guards do derivador nao sao vacuos: heredocs e echos de texto, condicoes sem verificacao, a divida no CONTEXT" G2m G3m G6m G7m G8m G9m G10m
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
 _d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m

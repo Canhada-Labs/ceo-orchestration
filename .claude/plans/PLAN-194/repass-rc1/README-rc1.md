@@ -42,7 +42,7 @@ do `OWNER-RC1-CUT.sh`, no passo 5 e no runner, uma parte acima de `MAX_RAW_BYTES
 | 1 | `templates/**`, `.claude/settings.json`, `.claude/agents/**`, `scripts/**` fora de `scripts/local/`, `.claude/hooks/_lib/agent_frontmatter.py`, `.claude/hooks/_lib/effective_config.py`, `.claude/scripts/env-inventory.json`, `.github/**` (os workflows de CI e de release, com o job da prova do toolchain da rc), o texto de release (`CHANGELOG.md`, `INSTALL.md`, `SUPPORT.md`, `README*.md`, `npm/**`) e os sítios de versão do bump fora de `docs/` — sempre fora de `**/tests/**` | é o que decide com que modelo, esforço e hooks a sessão do adopter abre, por onde a instalação e o upgrade chegam lá, e o pipeline que publica o pacote que ele instala |
 | 2 | `.claude/hooks/**` fora dos testes e dos dois arquivos da parte 1 | é o código que RODA na sessão do adopter (o `audit_log` e a cadeia de auditoria, os adapters, os auxiliares de `_lib/`) |
 | 3 | `.claude/scripts/**` fora dos testes, de `local/`, de `data/` e do `env-inventory.json`; `.claude/commands/**` e `.claude/skills/**` | ferramentas e comandos: a maior parte roda quando o operador a chama, e algumas rodam também chamadas por um hook ou pelo CI entregue ao adopter; nenhum destes arquivos é hook, instalação, upgrade ou settings (partes 1 e 2) |
-| 4 | `docs/**` fora de `docs/research/`, com os modelos e os scripts de `docs/formal-verification/` e o sítio de versão do bump em `docs/` (`docs/ARCHITECTURE.md`) | a documentação do repositório; o instalador não a entrega (o `docs/` que ele escreve no alvo vem de `templates/docs/`, da parte 1); separada da parte 3 pelo tamanho |
+| 4 | `docs/**` fora de `docs/research/`, com os modelos e os scripts de `docs/formal-verification/` e o sítio de versão do bump em `docs/` (`docs/ARCHITECTURE.md`) | a documentação do repositório; separada da parte 3 pelo tamanho |
 
 ### O manifesto de cada parte é DERIVADO, nunca uma lista fixa
 
@@ -66,32 +66,23 @@ não têm rail próprio.
 
 ## 4. O que fica FORA, e por quê
 
-Cada linha diz também o que da classe CHEGA ao adopter, pela regra de quem entrega: a
-instalação nova (`install.sh`) e o `upgrade.sh`. A regra do `upgrade.sh` é substituir
-`.claude/scripts/` e `.claude/hooks/` inteiros, fora o que a exclusão dele cobre — os testes de
-`.claude/hooks/` e de `.claude/scripts/tests/`, o `legacy/` dos hooks, `_lib/testing.py`,
-`_lib/test_isolation.py` e os `.pyc`; a instalação nova copia de `.claude/scripts/` só os
-arquivos do topo. Entregue a adopters não quer dizer revisado aqui: a classe fica fora do
-re-pass pelo motivo da linha.
+Fora do re-pass não quer dizer não entregue: o que chega a um adopter é o que o `install.sh` e o `upgrade.sh` do candidato entregam, e este kit não o afirma classe a classe.
 
-| fora | motivo, e o que chega ao adopter |
+| fora | motivo |
 |---|---|
-| testes, fixtures e harnesses de teste (`**/tests/**`) | o oráculo, que roda no CI do candidato. Chegam ao adopter: pela instalação nova, só os testes que moram dentro de uma skill (ela copia a skill inteira); pelo `upgrade.sh`, também os `tests/` dos subdiretórios de `.claude/scripts/` (a exclusão dele não os cobre) |
-| `.claude/plans/**` | registro de trabalho. Chegam ao adopter, pela instalação nova e pelo `upgrade.sh`, só os esquemas, o `README.md` e os exemplos de `.claude/plans/`; os planos numerados, não |
-| `docs/research/**` | registro de trabalho; nem a instalação nova nem o `upgrade.sh` o entregam |
-| `CLAUDE.md` | contrato de operação DESTE repositório; nem a instalação nova nem o `upgrade.sh` o copiam: o adopter recebe `templates/CLAUDE.md` (parte 1, se mudar) |
-| `.claude/governance/**` | nesta faixa, no máximo os dois arquivos de pin do Codex (re-pin 0.160.0, cerimônia assinada própria em `PLAN-194/codex-pin-0160/`), o manifesto ADR-192 dos gates (muda com os gates que as cerimônias tocam) e o comentário do publicador confiável do npm (`npm-trusted-publisher.txt`, mudado na cerimônia da W4); nem a instalação nova nem o `upgrade.sh` o entregam |
-| `.claude/scripts/local/**` | nesta faixa, no máximo o `release.sh` (o bloco por-release, na cerimônia própria da relmeta); engenharia de release. A instalação nova não o entrega; o `upgrade.sh` o entrega, byte a byte |
-| `.claude/adr/**` | texto de decisão. Chega ao adopter, pela instalação nova e pelo `upgrade.sh`, só o `README.md` do diretório; os ADRs, não |
-| `.claude/data/**` | dados de oráculo e de teste, entre eles os reds esperados e o mapa de preferência de modelos (inerte: hoje só um teste o lê); nem a instalação nova nem o `upgrade.sh` o entregam |
-| `.claude/scripts/data/**` | dado de oráculo (o baseline do censo do instalador). A instalação nova não o entrega; o `upgrade.sh` o entrega, byte a byte |
-| `scripts/local/**` | harness de smoke do mantenedor; nem a instalação nova nem o `upgrade.sh` o entregam |
-| `.claude/eval/**` | o harness de avaliação do framework: nem a instalação nova nem o `upgrade.sh` o entregam, e o `npm-publish.yml` o exclui do pacote |
-| `conftest.py`, `pytest.ini` (da raiz) | a configuração de teste deste repositório (o oráculo); nem a instalação nova nem o `upgrade.sh` os entregam |
-| `.gitignore` (da raiz) | higiene deste repositório; nem a instalação nova nem o `upgrade.sh` o copiam: o instalador escreve no `.gitignore` do alvo os blocos dele |
-
-A sonda confere o que de cada classe chega ao adopter (§9): numa instalação descartável pelo
-`install.sh` do candidato, seguida do `upgrade.sh` dele, sobre os arquivos rastreados da classe.
+| testes, fixtures e harnesses de teste (`**/tests/**`) | o oráculo, que roda no CI do candidato |
+| `.claude/plans/**` | registro de trabalho |
+| `docs/research/**` | registro de trabalho |
+| `CLAUDE.md` | contrato de operação DESTE repositório |
+| `.claude/governance/**` | nesta faixa, no máximo os dois arquivos de pin do Codex (re-pin 0.160.0, cerimônia assinada própria em `PLAN-194/codex-pin-0160/`), o manifesto ADR-192 dos gates (muda com os gates que as cerimônias tocam) e o comentário do publicador confiável do npm (`npm-trusted-publisher.txt`, mudado na cerimônia da W4) |
+| `.claude/scripts/local/**` | nesta faixa, no máximo o `release.sh` (o bloco por-release, na cerimônia própria da relmeta); engenharia de release |
+| `.claude/adr/**` | texto de decisão |
+| `.claude/data/**` | dados de oráculo e de teste, entre eles os reds esperados e o mapa de preferência de modelos (inerte: hoje só um teste o lê) |
+| `.claude/scripts/data/**` | dado de oráculo (o baseline do censo do instalador) |
+| `scripts/local/**` | harness de smoke do mantenedor |
+| `.claude/eval/**` | o harness de avaliação do framework |
+| `conftest.py`, `pytest.ini` (da raiz) | a configuração de teste deste repositório (o oráculo) |
+| `.gitignore` (da raiz) | higiene deste repositório |
 
 ## 5. Critério de parada (proposto por este kit, fixado ANTES da 1.ª rodada)
 
@@ -164,8 +155,7 @@ texto do CHANGELOG (condições 1 e 3); o P2 da parte 3 do GA pelo cenário repr
 e 4); o pin do Codex e a rota única do runner (condição 5); o job da prova do toolchain da rc e a
 paridade de toolchain com o publish (condição 6); o exemplo de `--pin` do `INSTALL.md` contra o
 `VERSION`, o `upgrade.sh` sem a tag e o adapter intacto (condições 7 e 8); a partição, com as
-funções do próprio runner, e o tamanho de cada parte (condição 9); o escopo fora e o que de cada
-classe fora chega ao adopter, numa instalação descartável seguida do `upgrade.sh` (condição 10);
+funções do próprio runner, e o tamanho de cada parte (condição 9); o escopo fora (condição 10);
 e, no cabeçalho, a árvore, o npm e a ausência da marca
 do conteúdo provisório do K1. Toda condição numerada tem ao menos uma verificação: o derivador
 recusa uma condição sem id que não esteja na lista declarada só-texto (hoje vazia). Roda no G0
@@ -177,9 +167,10 @@ declara a sonda vermelha e o gerador do envelope recusa essa evidência.
 ## 10. Limites conhecidos deste kit
 
 - O CI do candidato: o `wait_ci_green` do corte consulta os runs PELO COMMIT, com todos os
-  eventos (agendados inclusive), e recusa pelo nome um vermelho do commit, por mais antigo que
-  seja. O preflight do `release.sh` (o bloco canônico, assinado na relmeta) confere o CI do HEAD
-  numa janela dos runs mais recentes do repositório, filtrada depois pelo commit: um vermelho do
-  mesmo commit mais antigo que a janela não aparece ali. O kit não muda o `release.sh`.
-- A sonda roda o `install.sh` e o `upgrade.sh` do candidato numa instalação descartável (a
-  entrega das classes fora, §4): no G0, no passo 5 e no runner ela leva alguns minutos.
+  eventos (agendados inclusive), até um teto de 200 runs por consulta. Entre os runs que a
+  consulta devolve, ele recusa pelo nome um run vermelho e espera os pendentes até o teto de
+  tempo (recusando pelo nome se não terminarem); e recusa pelo nome a consulta que volta no
+  teto, porque ela não prova que não há vermelho nem pendente fora da janela. O preflight do
+  `release.sh` (o bloco canônico, assinado na relmeta) confere o CI do HEAD numa janela dos runs
+  mais recentes do repositório, filtrada depois pelo commit: um vermelho do mesmo commit mais
+  antigo que a janela não aparece ali. O kit não muda o `release.sh`.

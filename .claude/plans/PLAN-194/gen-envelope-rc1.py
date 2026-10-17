@@ -356,7 +356,7 @@ PROBE_MAP_ITEM_RE = r"(cabecalho|[0-9]+): ([^\s:;]+(?: [^\s:;]+)*)"
 PROBE_IDS = (
     "C0-tree", "C0-npm", "C0-rc-proof", "C17-final-text", "C1-annex-v1.4.0",
     "C2-carried-1.4.2", "C14-cure-67", "C15-cure-ga-p2", "C9-codex-pin", "C13-route1",
-    "C12-plan-decisions", "C16-adopter-notes", "C11-scope", "C18-delivery",
+    "C12-plan-decisions", "C16-adopter-notes", "C11-scope",
 )
 
 

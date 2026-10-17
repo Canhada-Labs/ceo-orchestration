@@ -103,28 +103,6 @@ INSTALL_PIN_RE = r"--pin v([0-9]+\.[0-9]+\.[0-9]+)([^\s`]*)"
 BUMP_SITES_REL = ".claude/scripts/local/_release_bump_sites.py"
 BUMP_SITE_INSTALL = '("INSTALL.md", PLAIN, r"(--pin v)" + SEMVER)'
 ADAPTER_REL = ".claude/hooks/_lib/adapters/live/claude.py"
-# Condicao 10: o que fica fora do re-pass e tambem fora da entrega (instalacao descartavel).
-UNDELIVERED_DIR = ".claude/eval"
-UNDELIVERED_ROOT = ("conftest.py", "pytest.ini", ".gitignore")
-# Condicao 10 e README §4: o que de cada classe FORA (as pathspecs de out_of_scope_pathspec do
-# runner) chega ao adopter — (instalacao nova, depois o upgrade.sh) —, medido pela C18 numa
-# instalacao descartavel: True = ao menos um arquivo rastreado da classe chega byte a byte.
-OUT_DELIVERY = {
-    ":(glob)**/tests/**": (True, True),
-    ".claude/plans/": (True, True),
-    "docs/research/": (False, False),
-    "CLAUDE.md": (False, False),
-    ".claude/governance/": (False, False),
-    ".claude/scripts/local/": (False, True),
-    ".claude/adr/": (True, True),
-    ".claude/data/": (False, False),
-    ".claude/scripts/data/": (False, True),
-    "scripts/local/": (False, False),
-    ".claude/eval/": (False, False),
-    "conftest.py": (False, False),
-    "pytest.ini": (False, False),
-    ".gitignore": (False, False),
-}
 
 
 class Infra(Exception):
@@ -396,7 +374,7 @@ def c2_carried(t: Tree) -> str:
     gc = _norm(t.show(t.head, GA_CONDITIONS) or "")
     for need in ("13. **Os três P1 do anexo assinado da rc.1 seguem ABERTOS no GA",
                  "14. **Os P2 dos quatro vereditos da rc.1 seguem ABERTOS no GA",
-                 "15. **"):
+                 "15. **O P2 da parte 1 dependia de a tag `v1.4.2` não existir"):
         if need not in gc:
             raise AssertionError("%s nao numera mais %r (a condicao 2 cita as condicoes 13 a 15 dele)"
                                  % (GA_CONDITIONS, need[:40]))
@@ -614,48 +592,6 @@ def _section(text: str, version: str) -> str:
     return rest[: nxt.start() + 4] if nxt else rest
 
 
-def _fresh_install(t: Tree) -> Dict:
-    """Uma instalacao NOVA pelo install.sh do checkout num alvo temporario (um `claude`
-    FALSO acima do piso), e o plano do upgrade.sh (--dry-run) sobre ela. Medida uma vez
-    por execucao (a verificacao da entrega, condicao 10)."""
-    got = getattr(t, "rc1_install", None)
-    if got is not None:
-        return got
-    tmp = tempfile.mkdtemp(prefix="rc1probe-install.")
-    try:
-        stub = _claude_stub(Path(tmp), "2.1.999")
-        home = os.path.join(tmp, "home")
-        os.mkdir(home)
-        target = Path(tmp) / "alvo"
-        target.mkdir()
-        if run(["git", "init", "-q", str(target)]).returncode != 0:
-            raise Infra("git init do alvo da instalacao nova")
-        env = _env({"HOME": home, "PATH": stub + os.pathsep + os.environ.get("PATH", "")})
-        p = run(["bash", str(t.path("scripts/install.sh")), str(target)], cwd=t.root, env=env, stdin=b"", timeout=900)
-        gov = target / ".claude" / "governance"
-        res = {"rc": p.returncode, "tail": (p.stderr or p.stdout).decode("utf-8", "replace")[-240:],
-               "gov": os.path.lexists(str(gov)),
-               "undelivered": _undelivered_in_target(t, target)}
-        d = run(["bash", str(t.path("scripts/upgrade.sh")), str(target), "--dry-run", "--no-replay",
-                 "--no-deprecation-warn"], cwd=t.root, env=env, stdin=b"", timeout=600)
-        out = (d.stdout + d.stderr).decode("utf-8", "replace")
-        res.update({"dry_rc": d.returncode, "dry_tail": out[-240:],
-                    "dry_lines": [ln.strip() for ln in out.splitlines() if "(dry-run)" in ln],
-                    "dry_would": [ln.strip() for ln in out.splitlines() if "(dry-run) would" in ln],
-                    "dry_gov": [ln.strip() for ln in out.splitlines() if ".claude/governance" in ln],
-                    "gov_after": os.path.lexists(str(gov))})
-        res["out_install"] = _out_delivered(t, target)
-        u = run(["bash", str(t.path("scripts/upgrade.sh")), str(target), "--no-replay",
-                 "--no-deprecation-warn"], cwd=t.root, env=env, stdin=b"", timeout=900)
-        res.update({"up_rc": u.returncode,
-                    "up_tail": (u.stdout + u.stderr).decode("utf-8", "replace")[-240:],
-                    "out_upgrade": _out_delivered(t, target)})
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-    setattr(t, "rc1_install", res)
-    return res
-
-
 def _cure67_compute_inside(src: str) -> List[str]:
     """Alem do verificador da relmeta-143: o HMAC (compute_entry_hmac) e calculado so dentro
     do bloco da trava que le o elo, grava a linha e atualiza o sidecar (src ja passou por
@@ -830,96 +766,6 @@ def c16_adopter_notes(t: Tree) -> str:
             "--dry-run sai rc 2 com «unknown --pin ref»; %s sem mudanca na faixa" % (ref, ref, ADAPTER_REL))
 
 
-def _undelivered_in_target(t: Tree, target: Path) -> List[str]:
-    """O que a condicao 10 declara fora e NAO entregue, achado no alvo de uma instalacao:
-    .claude/eval/ (em qualquer forma) e a copia byte a byte de um dos arquivos da raiz."""
-    found = []
-    if os.path.lexists(str(target / UNDELIVERED_DIR)):
-        found.append(UNDELIVERED_DIR + "/")
-    for rel in UNDELIVERED_ROOT:
-        p = target / rel
-        src = run(["git", "-C", t.root, "show", "%s:%s" % (t.head, rel)])
-        if src.returncode == 0 and p.is_file() and not p.is_symlink() and p.read_bytes() == src.stdout:
-            found.append(rel)
-    return found
-
-
-def _blob_sha(data: bytes) -> str:
-    return hashlib.sha1(b"blob %d\x00" % len(data) + data).hexdigest()
-
-
-def _out_delivered(t: Tree, target: Path) -> Dict[str, bool]:
-    """Para cada pathspec FORA do runner: algum arquivo rastreado da classe (no indice do
-    --root, que o C0-tree prova igual ao --head) esta no alvo byte a byte?"""
-    runner = t.show(t.head, RUNNER_REL)
-    if runner is None:
-        raise Infra("runner ausente em %s" % t.head)
-    res = {}
-    for spec in [ln for ln in _bash_fn(runner, "out_of_scope_pathspec", "out_of_scope_pathspec").splitlines() if ln]:
-        hit = False
-        for row in t.git("ls-files", "-s", "-z", "--", spec).split("\x00"):
-            if not row:
-                continue
-            meta, path = row.split("\t", 1)
-            f = target / path
-            if f.is_file() and not f.is_symlink() and _blob_sha(f.read_bytes()) == meta.split()[1]:
-                hit = True
-                break
-        res[spec] = hit
-    return res
-
-
-def c18_delivery(t: Tree) -> str:
-    """Condicao 10: o que ela declara fora tambem nao chega ao adopter. Numa instalacao NOVA pelo
-    install.sh do candidato (alvo temporario) nao ha .claude/eval/ nem copia byte a byte de
-    conftest.py, pytest.ini ou .gitignore da raiz; o plano do upgrade.sh (--dry-run) sobre ela
-    nao os nomeia; o passo «Stage bundle into npm/» dos dois jobs do npm-publish.yml exclui
-    .claude/eval/, e o files do npm/package.json nao lista os tres da raiz."""
-    wf = t.show(t.head, NPM_PUBLISH_WF) or ""
-    for job in ("publish", RC_PROOF_JOB_ID):
-        stage = re.search(r"(?ms)^      - name: Stage bundle into npm/\n(.*?)(?=^      - name: |\Z)",
-                          _job_block(wf, job) or "")
-        if not stage or "--exclude='.claude/eval/'" not in [ln.strip() for ln in _code_lines(stage.group(1))]:
-            raise AssertionError("o passo «Stage bundle into npm/» do job %s nao exclui .claude/eval/ do "
-                                 "pacote (condicao 10)" % job)
-    try:
-        files = json.loads(t.show(t.head, "npm/package.json") or "").get("files") or []
-    except (ValueError, AttributeError):
-        raise AssertionError("npm/package.json ilegivel (condicao 10)")
-    listed = sorted(set(files) & set(UNDELIVERED_ROOT))
-    if listed:
-        raise AssertionError("npm/package.json lista %s no files (condicao 10)" % ", ".join(listed))
-    r = _fresh_install(t)
-    if r["rc"] != 0:
-        raise AssertionError("install.sh (instalacao nova) rc %d: %s" % (r["rc"], r["tail"]))
-    if r["undelivered"]:
-        raise AssertionError("a instalacao nova pelo install.sh entregou o que a condicao 10 declara fora: %s"
-                             % ", ".join(r["undelivered"]))
-    if r["dry_rc"] != 0 or not any(".claude/scripts" in ln for ln in r["dry_would"]):
-        raise AssertionError("upgrade.sh --dry-run sobre a instalacao nova: rc %d, %d linha(s) «would» (o plano "
-                             "nao mediria nada): %s" % (r["dry_rc"], len(r["dry_would"]), r["dry_tail"]))
-    named = [ln for ln in r["dry_lines"]
-             if re.search(r"(?:^|[\s:])\.claude/eval(?:/|\s|$)", ln)
-             or re.search(r":\s+(?:conftest\.py|pytest\.ini|\.gitignore)\s*$", ln)]
-    if named:
-        raise AssertionError("o plano do upgrade.sh nomeia o que a condicao 10 declara fora: %s"
-                             % "; ".join(named[:3]))
-    # o que de cada classe FORA chega ao adopter (README §4): instalacao nova, depois upgrade.sh
-    if r["up_rc"] != 0:
-        raise AssertionError("upgrade.sh sobre a instalacao nova: rc %d: %s" % (r["up_rc"], r["up_tail"]))
-    if set(r["out_install"]) != set(OUT_DELIVERY):
-        raise AssertionError("as classes FORA do runner %s nao sao as que OUT_DELIVERY declara %s (condicao 10)"
-                             % (sorted(r["out_install"]), sorted(OUT_DELIVERY)))
-    for spec in sorted(OUT_DELIVERY):
-        got = (r["out_install"][spec], r["out_upgrade"][spec])
-        if got != OUT_DELIVERY[spec]:
-            raise AssertionError("a entrega da classe FORA %s: instalacao nova/upgrade.sh medidos %s, o README "
-                                 "declara %s (condicao 10)" % (spec, got, OUT_DELIVERY[spec]))
-    return ("instalacao nova pelo install.sh: sem .claude/eval/ e sem copia de conftest.py, pytest.ini e "
-            ".gitignore da raiz; o plano do upgrade.sh sobre ela (--dry-run, %d linhas «would») nao os "
-            "nomeia; os dois «Stage bundle» do npm-publish.yml excluem .claude/eval/; a entrega das %d "
-            "classes FORA (instalacao nova, depois o upgrade.sh) e a que o README declara"
-            % (len(r["dry_would"]), len(OUT_DELIVERY)))
 
 
 def _runner_fn(runner: str, name: str) -> str:
@@ -993,7 +839,7 @@ CHECKS: List[Tuple[str, Callable[[Tree], str], Tuple[str, ...]]] = [
     ("C9-codex-pin", c9_codex, ("5",)), ("C13-route1", c13_route1, ("5",)),
     ("C12-plan-decisions", c12_plan_decisions, ("5", "8")),
     ("C16-adopter-notes", c16_adopter_notes, ("7", "8")),
-    ("C11-scope", c11_scope, ("9", "10")), ("C18-delivery", c18_delivery, ("10",)),
+    ("C11-scope", c11_scope, ("9", "10")),
 ]
 # A condicao que a projecao de tamanho (--sizes) confere: o derivador a le daqui (pela AST) e
 # exige que toda condicao numerada do texto tenha ao menos um id (ou seja declarada so-texto).

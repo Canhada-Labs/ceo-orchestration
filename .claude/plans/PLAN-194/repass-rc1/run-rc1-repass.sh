@@ -12,8 +12,7 @@
 #   2 os hooks que rodam na sessao do adopter (.claude/hooks/ fora dos testes e dos dois
 #     arquivos da parte 1)
 #   3 as CLIs do mantenedor e do operador, os comandos e as skills
-#   4 a documentacao do repositorio (docs/ fora de docs/research/; o instalador nao a
-#     entrega: o docs/ que ele escreve no alvo vem de templates/docs/, da parte 1)
+#   4 a documentacao do repositorio (docs/ fora de docs/research/)
 # Todo caminho que muda na faixa esta em exatamente uma parte ou numa classe declarada
 # FORA (out_of_scope_pathspec); a sonda das condicoes confere isso antes do codex.
 #
@@ -398,7 +397,7 @@ part_label() {
     1) echo "instalacao, upgrade, settings e o pipeline de release: templates/**, .claude/settings.json, .claude/agents/**, scripts/** (install.sh, upgrade.sh e o resto do instalador), o piso VETO e o pin efetivo (_lib/agent_frontmatter.py, _lib/effective_config.py), env-inventory, .github/** (os workflows de CI e de release, com o job da prova do toolchain da rc), CHANGELOG/INSTALL/SUPPORT/README, npm/ e os sitios de versao do bump" ;;
     2) echo "os hooks que rodam na sessao do adopter: .claude/hooks/** fora dos testes e dos dois arquivos da parte 1 (o audit_log e a cadeia de auditoria, os adapters e os auxiliares de _lib/)" ;;
     3) echo "as CLIs do mantenedor e do operador: .claude/scripts/** fora dos testes, de local/ e de data/ (boot, custo e telemetria, auditoria, deprecacoes de modelo, deriva de substrato), .claude/commands/** e .claude/skills/**" ;;
-    4) echo "a documentacao do repositorio: docs/** fora de docs/research/ (o instalador nao a entrega: o docs/ que ele escreve no alvo vem de templates/docs/, da parte 1), com os modelos e os scripts de docs/formal-verification/ e o sitio de versao do bump nesta parte (docs/ARCHITECTURE.md)" ;;
+    4) echo "a documentacao do repositorio: docs/** fora de docs/research/, com os modelos e os scripts de docs/formal-verification/ e o sitio de versao do bump nesta parte (docs/ARCHITECTURE.md)" ;;
   esac
 }
 part_coverage() {

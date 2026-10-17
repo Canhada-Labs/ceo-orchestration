@@ -29,7 +29,7 @@ envelope recusa a evidência dele).
    o texto de release e de documentação, os templates de settings, `scripts/upgrade.sh` e
    `scripts/install.sh`, os workflows de CI e de release (`.github/workflows/`), o código de hooks
    (`.claude/hooks/`, fora dos testes), os testes e harnesses de teste (`**/tests/**`, fora deste
-   re-pass) e o contrato deste repositório (`CLAUDE.md`, não entregue). Esta condição não afirma
+   re-pass) e o contrato deste repositório (`CLAUDE.md`). Esta condição não afirma
    que cada achado siga reproduzível linha a linha: afirma que, fora o caso da condição 67, nenhum
    é declarado curado.
 2. **O que o envelope assinado do GA v1.4.2 declarou aberto segue sem cura declarada, exceto o
@@ -116,13 +116,7 @@ envelope recusa a evidência dele).
    (`npm-trusted-publisher.txt`, mudado na cerimônia da W4); `.claude/scripts/local/**` — nesta
    faixa, no máximo o `release.sh`; `.claude/adr/**`, texto de decisão; dados de oráculo e de
    teste (`.claude/data/**`, `.claude/scripts/data/**`); `scripts/local/**`, harness de smoke do
-   mantenedor; o harness de avaliação `.claude/eval/**`, que nem o `install.sh` nem o
-   `upgrade.sh` entregam e que o `npm-publish.yml` exclui do pacote; a configuração de teste da
-   raiz (`conftest.py` e `pytest.ini`: o oráculo), não entregue; e o `.gitignore` da raiz, higiene
-   deste repositório — o instalador escreve no `.gitignore` do alvo os blocos dele, nunca uma
-   cópia deste arquivo. Fora do re-pass não quer dizer não entregue: o `upgrade.sh` entrega
-   `.claude/scripts/local/**`, `.claude/scripts/data/**` e os `tests/` dos subdiretórios de
-   `.claude/scripts/` (ele substitui `.claude/scripts/` inteiro, fora o que a exclusão dele
-   cobre), e a instalação nova e o upgrade entregam os esquemas, o README e os exemplos de
-   `.claude/plans/` e o README de `.claude/adr/`; o README diz, classe a classe, o que chega ao
-   adopter. A sonda confere isso numa instalação descartável seguida do `upgrade.sh`.
+   mantenedor; o harness de avaliação `.claude/eval/**`; a configuração de teste da raiz
+   (`conftest.py` e `pytest.ini`: o oráculo); e o `.gitignore` da raiz, higiene deste
+   repositório. Fora do re-pass não quer dizer não entregue: o que chega a um adopter é o que o
+   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit não o afirma classe a classe.

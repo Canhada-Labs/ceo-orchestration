@@ -253,15 +253,18 @@ tree_clean_except() {
 wait_ci_green() {
   # $1 = sha. Espera TODOS os workflows do sha terminarem e exige um run
   # COMPLETO e success do validate.yml no nivel de JOB.
-  local sha="$1" i info n p b vid vj vs vf vp vo
+  local sha="$1" i info n p b vid vj vs vf vp vo tt vt vq lim
+  # O teto de cada consulta pelo commit: uma consulta que volta CHEIA nao prova que nao ha
+  # vermelho nem pendente fora da janela, e e recusa nomeada (fail-closed).
+  lim=200
   sha="$1"; i=0
   while :; do
     i=$((i+1)); [ "$i" -le "$CI_WAIT_MAX_MIN" ] \
       || die "CI nao terminou em $CI_WAIT_MAX_MIN min — re-rode este script: ele retoma deste passo (RC1_CI_WAIT_MAX_MIN=<min> estica o teto)"
     sleep 60
-    info="$(gh run list --commit "$sha" --limit 200 --json headSha,status,conclusion \
-      --jq "[.[]|select(.headSha==\"$sha\")] | \
-{n:length, p:[.[]|select(.status!=\"completed\")]|length, \
+    info="$(gh run list --commit "$sha" --limit "$lim" --json headSha,status,conclusion \
+      --jq "length as \$t | [.[]|select(.headSha==\"$sha\")] | \
+{t:\$t, n:length, p:[.[]|select(.status!=\"completed\")]|length, \
 b:[.[]|select(.status==\"completed\" and .conclusion!=\"success\" \
 and .conclusion!=\"skipped\")]|length}" 2>/dev/null || echo "")"
     [ -n "$info" ] || { printf '  ... gh falhou, tentando de novo\n'; continue; }
@@ -271,6 +274,10 @@ and .conclusion!=\"skipped\")]|length}" 2>/dev/null || echo "")"
       || { printf '  ... resposta do gh ilegivel, tentando de novo\n'; continue; }
     b="$(printf '%s' "$info" | python3 -c 'import json,sys;print(json.load(sys.stdin)["b"])')" \
       || { printf '  ... resposta do gh ilegivel, tentando de novo\n'; continue; }
+    tt="$(printf '%s' "$info" | python3 -c 'import json,sys;print(json.load(sys.stdin)["t"])')" \
+      || { printf '  ... resposta do gh ilegivel, tentando de novo\n'; continue; }
+    [ "$tt" -lt "$lim" ] || die "consulta cheia: $tt runs no commit $sha (o teto da consulta e $lim); nao da
+para provar que nao ha vermelho nem pendente fora da janela — me chame no Claude"
     printf '  ... runs=%s pendentes=%s vermelhos=%s\n' "$n" "$p" "$b"
     if [ "$b" -ne 0 ]; then
       gh run list --commit "$sha" --limit 200 --json headSha,status,conclusion,workflowName,databaseId,event \
@@ -286,11 +293,15 @@ patch. Qualquer outro vermelho: me chame no Claude."
     fi
     if [ "$n" -gt 0 ] && [ "$p" -eq 0 ]; then break; fi
   done
-  vid="$(gh run list --workflow validate.yml --commit "$sha" --limit 200 \
+  vq="$(gh run list --workflow validate.yml --commit "$sha" --limit "$lim" \
     --json headSha,databaseId,status,conclusion,event,headBranch \
-    --jq "[.[]|select(.headSha==\"$sha\" and .status==\"completed\" and .conclusion==\"success\" and .event==\"push\" and .headBranch==\"main\")][0].databaseId" 2>/dev/null || echo "")"
-  [ -n "$vid" ] && [ "$vid" != "null" ] \
+    --jq "(length|tostring) + \" \" + ([.[]|select(.headSha==\"$sha\" and .status==\"completed\" and .conclusion==\"success\" and .event==\"push\" and .headBranch==\"main\")][0].databaseId|tostring)" 2>/dev/null || echo "")"
+  vt="${vq%% *}"; vid="${vq#* }"
+  [ -n "$vq" ] && [ -n "$vid" ] && [ "$vid" != "null" ] \
     || die "nenhum run COMPLETO e success do validate.yml para $sha"
+  case "$vt" in ""|*[!0-9]*) die "resposta do gh run list do validate.yml ilegivel: $vq" ;; esac
+  [ "$vt" -lt "$lim" ] || die "consulta cheia: $vt runs do validate.yml no commit $sha (o teto da consulta e $lim);
+nao da para provar que nao ha vermelho nem pendente fora da janela — me chame no Claude"
   vj="$(gh run view "$vid" --json jobs \
     --jq '{s:[.jobs[]|select(.conclusion=="success")]|length, f:[.jobs[]|select(.conclusion=="failure")]|length, p:[.jobs[]|select(.status!="completed")]|length, o:[.jobs[]|select(.status=="completed" and .conclusion!="success" and .conclusion!="skipped")]|length}' 2>/dev/null || echo "")"
   # Uma falha transitoria do `gh run view` tem NOME (antes era um traceback do python
