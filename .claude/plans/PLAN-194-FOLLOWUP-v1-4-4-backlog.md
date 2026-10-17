@@ -504,7 +504,8 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   escreve as duas; (b) o `upgrade.sh`, com `--pin v<X.Y.Z>` ausente e `v<X.Y.Z>-rc.<N>` presente, nomeia a rc
   na recusa. Nas duas, uma sonda comportamental no molde do `c15_install_pin`: `upgrade.sh --pin <ref do
   exemplo> --dry-run` num checkout com as tags até a rc e sem a do GA.
-- **Acoplamentos:** o bump da rc da 1.4.4 é o próximo que escreve o sítio; a cura landa antes dele.
+- **Acoplamentos:** depois do corte da 1.4.3, o bump da rc da 1.4.4 é o próximo que escreve o sítio; a cura
+  landa antes dele.
 - **Check:** `python3 -m pytest .claude/scripts/tests/test_release_bump_sites.py -q -k fu144`.
 
 ### Item 24 — shim da rota 1 executa o lançador, não o payload que o oráculo verificou (livre)
@@ -540,7 +541,8 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   do Check devolve saída vazia.
 - **Texto defasado da W8:** os «Fatos» e o «Resíduo a declarar» descrevem o arquivo de antes do PR #4. Hoje o
   `continue-on-error: true` fica só no nível do job (`formal-verify.yml:41`), os passos não têm
-  `continue-on-error` próprio, e o pin do `tla2tools` mudou em `f465bb50` (2026-10-13).
+  `continue-on-error` próprio, e o pin atual do `tla2tools` vem de `f465bb50` (2026-10-13; o PR #4 o trocou em `c2f34fac`,
+  `ef96cf08` e `f465bb50`).
 - **Canônico:** o Check e os fatos são texto do PLAN-194 (oráculo `0`); a W8 segue canônica
   (`formal-verify.yml` = `1`). Se o PR #4 já cumpre a W8 é decisão da abertura, depois de reler os fatos.
 - **Cura:** o filtro casa o prefixo e exige todos verdes:
