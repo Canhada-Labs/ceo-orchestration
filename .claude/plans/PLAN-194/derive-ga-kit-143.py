@@ -142,6 +142,10 @@ CLASS_PENDING = [
     "(--g0-only, recusa pelo nome; o _r_whole do kit da rc)",
     "no runner: o comentario do seam CODEX_BIN ainda diz que, com ele posto, o pin do npx NAO "
     "e exigido (a rota 2, recusada pela D-4)",
+    "no corte: a mensagem do commit do veredito vai num heredoc SEM aspas; o guard do kit da rc "
+    "(crase, $(, barra invertida e $ fora de $TAG/$CAND recusados pelo nome) chega ao corte do GA",
+    "no derivador: toda condicao numerada tem verificacao na sonda ou fica na lista explicita "
+    "so-texto, e a condicao do SIZE deixa de ser numero fixo (o censo G3 do kit da rc)",
 ]
 
 
