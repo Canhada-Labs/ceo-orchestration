@@ -470,7 +470,9 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   no limite de uso, `PostModelSwitch`, `opts.model` do `agent()`). Da W5a, a 1.ª parte (textos do Ultracode por
   leitura do binário 2.1.295, em `SUPPORT.md` e `docs/adopter-new-model-fast-access.md`) landou em `9770b5a4` e
   está no `CHANGELOG.md` [1.4.3]; fica para a 1.4.4 a re-redação com as sondas da W5.0 e a nota do timeout do
-  Bash em background (30 min por padrão, máx. 2 h).
+  Bash em background (30 min por padrão, máx. 2 h). A rodada 2 do rail da mesma entrega (`6ccde6b0`) mudou só
+  o `.claude/scripts/substrate-watch.json` e o `.claude/scripts/tests/test_settings_guard_loadability.py`
+  (W5.1), não esses textos; os dois commits estão em `v1.4.2..HEAD` (medido em 2026-10-17).
 - **Substrato:** os instrumentos foram pensados para o Claude Code 2.1.287; em 2026-10-16 o instalado é o
   2.1.302 (S365-2). Antes de rodar, reler o CHANGELOG das versões posteriores à 2.1.302 e registrar a versão
   e a data junto de cada número.
@@ -478,6 +480,99 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
   alias `sonnet`; a W5a vem depois da W5.0; a correção do ADR-149 A3.1 (canônico) segue dentro da emenda 4 da W5c.
 - **Check:** o da W5a, `python3 .claude/scripts/check-time-unit.py SUPPORT.md docs/adopter-new-model-fast-access.md`;
   a W5.0 não tem Check (o resultado vai ao LEDGER).
+
+### Item 23 — exemplo `--pin` do `INSTALL.md` durante o hold: cura de classe (3.ª ocorrência registrada)
+
+- **O quê:** o `release.sh bump` da rc escreve a versão GA no exemplo de upgrade do `INSTALL.md`
+  (`bash scripts/upgrade.sh /path/to/your/project --pin v<X.Y.Z>`, hoje `INSTALL.md:719`; sítio `INSTALL.md`
+  da tabela `.claude/scripts/local/_release_bump_sites.py:87`). Durante o hold de 24 h a tag do GA não
+  existe, e o `upgrade.sh` sai com `ERROR: unknown --pin ref` e código 2 (`scripts/upgrade.sh:927-930`). A
+  árvore do GA é a da rc (o bump do GA é NO-OP, `R3-CLAIMS-01` no `derive-ga-kit-143.py`), então o exemplo
+  tem de servir aos dois momentos.
+- **Ocorrências:** (1) rc.1 da 1.4.1, P2 da parte 2 do re-pass (`.claude/plans/PLAN-192/repass-rc1/verdict-rc1-2.txt:17`);
+  (2) 1.4.2, condição 15 do envelope do GA (`.claude/plans/PLAN-193/repass-ga/CONDITIONS-ga.md:236-242`), com
+  a sonda `c15_install_pin` (`.claude/plans/PLAN-193/repass-ga/probe-conditions-ga.py:1599`); (3) 1.4.3, a mesma
+  forma, sem cura nesta release. Medido em 2026-10-17: o `INSTALL.md` das tags `v1.4.0-rc.1` e `v1.4.1-rc.1`
+  traz `--pin v1.4.0` e `--pin v1.4.1` (`:660`), e o da `v1.4.2-rc.1`, `--pin v1.4.2` (`:719`). A forma já
+  existia na 1.4.0, sem registro.
+- **Canônico:** depende da forma da cura. O `release.sh` e o `verify-counts.sh` (espelho do sítio, `:1099`)
+  são membros do manifesto ADR-192 (`.claude/governance/gate-scripts-manifest.txt`) ⇒ cerimônia; o
+  `scripts/upgrade.sh` tem oráculo `1` ⇒ SIGN; o `_release_bump_sites.py` e o `INSTALL.md` têm oráculo `0`
+  (medido em 2026-10-17).
+- **Cura (classe):** o exemplo deixa de nomear uma ref que o hold garante ausente. Formas a decidir na
+  abertura: (a) o `INSTALL.md` mostra as duas refs, a da rc para o hold e a do GA para depois, e o bump
+  escreve as duas; (b) o `upgrade.sh`, com `--pin v<X.Y.Z>` ausente e `v<X.Y.Z>-rc.<N>` presente, nomeia a rc
+  na recusa. Nas duas, uma sonda comportamental no molde do `c15_install_pin`: `upgrade.sh --pin <ref do
+  exemplo> --dry-run` num checkout com as tags até a rc e sem a do GA.
+- **Acoplamentos:** o bump da rc da 1.4.4 é o próximo que escreve o sítio; a cura landa antes dele.
+- **Check:** `python3 -m pytest .claude/scripts/tests/test_release_bump_sites.py -q -k fu144`.
+
+### Item 24 — shim da rota 1 executa o lançador, não o payload que o oráculo verificou (livre)
+
+- **O quê:** no runner do re-pass dos kits da 1.4.3 (rc e GA), o diretório-shim no início do `PATH` faz
+  `exec` do `CODEX_LAUNCHER`, o `codex` global. Na máquina do Owner ele é um lançador Node
+  (`/opt/homebrew/bin/codex` → `@openai/codex/bin/codex.js`, medido em 2026-10-17). O oráculo
+  `check_pair_rail.py --verify-codex-pin` confere o payload nativo e devolve o caminho dele no JSON
+  (`result["path"] = str(payload)`, `.claude/hooks/check_pair_rail.py:727`); o shim não usa esse caminho.
+  O shim vem dos moldes (`.claude/plans/PLAN-193/repass-rc1/run-rc1-repass.sh:267` e
+  `.claude/plans/PLAN-193/repass-ga/run-ga-repass.sh:302`), e os derivadores da 1.4.3 não reescrevem esse
+  trecho. O comentário do shim («delega ao codex … pinado (payload verificado)») afirma mais do que o `exec` faz.
+- **Resíduo declarado na 1.4.3:** o `CHANGELOG.md` [1.4.3], Known-open, «The Codex pin»
+  (`CHANGELOG.md:374-382`): o pin não cobre o lançador. Resíduo de mesmo UID; a explorabilidade NÃO foi medida.
+- **Canônico:** não. Os derivadores do kit ficam em `.claude/plans/` (oráculo `0`); o `check_pair_rail.py`
+  (oráculo `1`) não muda, porque o `path` já sai no JSON.
+- **Cura:** o shim faz `exec` do `path` que o oráculo devolveu na verificação fail-CLOSED (o mesmo JSON de
+  onde o runner tira o `expected_sha256`). Antes, medir numa sonda descartável o que o lançador prepara
+  antes de chamar o payload (ambiente, `PATH` dos binários do pacote): NÃO medido. Controle no harness do
+  kit: um espião no lançador prova zero execução dele no re-pass, com o gêmeo vermelho do shim antigo
+  (molde: os controles B7 do `test-rc1-kit.sh`).
+- **Acoplamentos:** o item 26 (a inversão da rota 2 exige o mesmo shim); o Known-open «The Codex pin» muda
+  na entrada da 1.4.4 quando a cura landar.
+- **Check:** none (o controle vive no harness do kit da 1.4.4; o id entra no índice D dele).
+
+### Item 25 — o Check da W8 do PLAN-194 não casa job nenhum (texto do plano)
+
+- **O quê:** o Check da W8 e da W8.1 do PLAN-194 filtra `select(.name=="TLC Model Check")`. Desde `c2f34fac`
+  (2026-10-12, landado no merge `baf9de11` do PR #4, de 2026-10-13), o job `tlc-model-check` de
+  `.github/workflows/formal-verify.yml` é uma matriz de 3 modelos com o nome
+  `TLC Model Check (${{ matrix.model }})` (`:30-37`). Medido em 2026-10-17 na run `38445208876` (push de
+  `baf9de11`, a mais recente do workflow): três jobs `TLC Model Check (<modelo>)`, todos `success`; o filtro
+  do Check devolve saída vazia.
+- **Texto defasado da W8:** os «Fatos» e o «Resíduo a declarar» descrevem o arquivo de antes do PR #4. Hoje o
+  `continue-on-error: true` fica só no nível do job (`formal-verify.yml:41`), os passos não têm
+  `continue-on-error` próprio, e o pin do `tla2tools` mudou em `f465bb50` (2026-10-13).
+- **Canônico:** o Check e os fatos são texto do PLAN-194 (oráculo `0`); a W8 segue canônica
+  (`formal-verify.yml` = `1`). Se o PR #4 já cumpre a W8 é decisão da abertura, depois de reler os fatos.
+- **Cura:** o filtro casa o prefixo e exige todos verdes:
+  `gh run view "$(gh run list --workflow formal-verify.yml --limit 1 --json databaseId -q '.[0].databaseId')" --json jobs -q '[.jobs[] | select(.name | startswith("TLC Model Check (")) | .conclusion] | (length > 0 and all(. == "success"))'`
+  deve imprimir `true` (medido em 2026-10-17 sobre a run `38445208876`: `true`). Os «Fatos» e o «Resíduo»
+  da W8 são reescritos no mesmo land.
+- **Land:** livre (texto do plano).
+- **Check:** `! grep -qF 'select(.name=="TLC Model Check")' .claude/plans/PLAN-194-maintenance-train-v1-4-3.md`.
+
+### Item 26 — inversão da rota 2 do runner do re-pass (registro; vai com a W3)
+
+- **O quê (registro do texto do PLAN-194 até 2026-10-16):** a W7.1 previa INVERTER a rota 2: materializar o
+  pacote do manifesto SEM executar (`npm install --prefix <OUT>`, `--ignore-scripts`, ambiente do npm montado
+  do zero, registro fixo, cache novo, versão EXATA do manifesto) → oráculo sem flag → shim com `exec` do
+  `path` VERIFICADO → só então o `--version`. Controles: lançador plantado num registro redirecionado NUNCA
+  executa; um espião prova ZERO execução antes do oráculo; o K-06 repete o controle de falha da condição 12
+  (cache esvaziado, modo offline e proxy morto explícito ⇒ falha); o R-12 sai dos resíduos. A D-4 (S362)
+  trocou isso, na 1.4.3, pela rota 1 só, com a rota 2 recusada pelo nome. Texto integral:
+  `git show 9cfeafeb:.claude/plans/PLAN-194-maintenance-train-v1-4-3.md`, seção W7, «Pré-condições do corte».
+- **As pré-condições (i) a (vi) da época, e o que vale delas:** (i) a inversão com os controles acima: vale;
+  (ii) pré-voo com a rede, o tamanho do pacote e o piso de `df`: vale, re-medido (os ~331 MB são da 0.159.3,
+  W3 do PLAN-194); (iii) argv do runner alinhado à base da W3 e sondado na versão do manifesto: vale (o
+  texto citava a 0.156.1, o manifesto da época; hoje é a 0.160.0); (iv) pré-voo da Q11: vale, e já está nas
+  pré-condições do corte da 1.4.3; (v) linha de corte da W5c: superada (W5c → 1.4.4, S363-3); (vi) nenhum
+  pacote de ADR em voo durante o kit: vale, e está na W7; o «1b da W3 antes da derivação do kit» volta com a
+  W3 (D-2).
+- **Acoplamentos:** é a pré-condição (1) da W3.6 (PLAN-194, W3; consenso r3 §2) e entra na ordem W7 × W3
+  (condição 22, `.claude/plans/PLAN-194/debate/round-3/consensus.md:224`); vai com a W3 para a 1.4.4 (D-2).
+  O item 24 é o mesmo shim. «O Codex global pode diferir do manifesto», do texto antigo, só vale COM a
+  inversão: sob a D-4, o runner e o passo 6 do corte recusam um Codex global diferente.
+- **Canônico:** não para os derivadores do kit (oráculo `0`); a W3 tem os pacotes canônicos dela.
+- **Check:** o da W3.6 do PLAN-194.
 
 ## Open questions
 
@@ -501,7 +596,9 @@ SIGN mínimo está no `main`. Para cada item, rode o oráculo `--is-canonical` n
 do item 1 e do FD-25/FD-26; o item 19 abre
 junto dos canônicos que ele estressa), cada um numa sombra própria a partir
 da ref citada quando houver, com rail Codex + 1 Claude. Os canônicos seguem a ordem do Approach e esperam
-as respostas das Open questions que os tocam.»
+as respostas das Open questions que os tocam. Os itens 23 a 26 são do corte da 1.4.4: o 25 é texto do
+PLAN-194 (land livre); o 23 landa antes do bump da rc da 1.4.4; o 24 e o 26 entram nos derivadores do kit
+dela, o 26 junto da W3.»
 
 ## Success criteria
 
@@ -553,3 +650,13 @@ as respostas das Open questions que os tocam.»
 - [ ] Item 21 (doc da W6, FD-22) landado livre, com a frase da versão em 1.4.4 e os trechos do restore e do
   `--strict-against-counter` reconciliados com o FD-25 e o FD-26.
   Check: `git merge-base --is-ancestor 1e08dd90 HEAD && ! grep -q 'in v1.4.3' INSTALL.md && ! grep -q 'ceo-restore-listing' docs/DISASTER-RECOVERY.md`
+- [ ] Item 23 (exemplo `--pin` do `INSTALL.md` durante o hold) curado pela classe antes do bump da rc da
+  1.4.4, com a sonda comportamental.
+  Check: `python3 -m pytest .claude/scripts/tests/test_release_bump_sites.py -q -k fu144`
+- [ ] Item 24 (shim da rota 1 com `exec` do `path` verificado) nos derivadores do kit da 1.4.4, com o
+  controle do espião no lançador no índice D do harness.
+  Check: none (o controle vive no harness do kit da 1.4.4)
+- [ ] Item 25 (Check e fatos da W8 do PLAN-194) reescritos.
+  Check: `! grep -qF 'select(.name=="TLC Model Check")' .claude/plans/PLAN-194-maintenance-train-v1-4-3.md`
+- [ ] Item 26 (inversão da rota 2) landado com a W3, como pré-condição da W3.6.
+  Check: o da W3.6 do PLAN-194

@@ -1636,9 +1636,15 @@ primeiro, ou a linha entra no mesmo patch de documentação.
 ### W7 — Corte da v1.4.3 (rc.1 → hold de 24 h → GA)
 Check: bash .claude/scripts/local/release.sh preflight
 
-**Emenda S362 (D-4):** na 1.4.3 o kit corre só pela rota 1 do runner do re-pass, e a rota 2 é recusa
-nomeada. A W7.1 e as «Pré-condições do corte», abaixo, ainda descrevem a INVERSÃO da rota 2: esse trecho
-vale como registro para a 1.4.4 e é reescrito junto com os derivadores do kit da 1.4.3.
+**Emenda S362 (D-4), aplicada nos derivadores do kit (texto reescrito em 2026-10-17, S365):** na 1.4.3 o
+re-pass corre só pela rota 1 do runner: o Codex global, depois de o oráculo `check_pair_rail.py
+--verify-codex-pin` conferir o sha256 do payload sem executá-lo. A rota 2 (`npx` num cache próprio) é
+RECUSA NOMEADA: nada é baixado nem executado. O `derive-kit-143.py` aplica a decisão no runner da rc e no
+guard da rota 1 do passo 6 do corte; o `derive-ga-kit-143.py`, na cura `D-4` do kit do GA. O
+`test-rc1-kit.sh` carrega os controles B7a a B7f da rota única (índice D8). A INVERSÃO da rota 2, que a
+W7.1 e as «Pré-condições do corte» descreviam até 2026-10-16 (a W3, acima, ainda a chama de «1.ª peça da
+W7.1»), volta com a W3 na 1.4.4: registro no item 26 do `PLAN-194-FOLLOWUP-v1-4-4-backlog`. O texto
+anterior está em `git show 9cfeafeb:.claude/plans/PLAN-194-maintenance-train-v1-4-3.md`, seção W7.
 
 **Objetivo:** publicar a 1.4.3 com o que landou neste trem, com o kit derivado do kit do GA 1.4.2 e os
 P2 herdados curados no DERIVADOR. **Paths:** `.claude/plans/PLAN-194/derive-kit-143.py` e
@@ -1651,14 +1657,22 @@ como no PLAN-192/193 — o derivador do GA 1.4.2 tem 8.984 linhas); 1-2 M tokens
 invertida saíram com a decisão S362 D-4: a rota 2 vira recusa nomeada). **Debate:** não para o
 kit (molde); rail com regra de parada pré-registrada (≤ 3 rodadas; NO-GO só por P0 ou afirmação falsa).
 
-- [ ] W7.1 curar no derivador os P2 abertos herdados do PLAN-193 (lista abaixo) e INVERTER a rota 2 do
-  runner do re-pass (rodada 2; «Pré-condições do corte» — o `test-rc1-kit.sh` carrega os dois controles:
-  lançador plantado nunca executa; espião de zero execução antes do oráculo). — Check: bash .claude/plans/PLAN-194/test-rc1-kit.sh
+- [ ] W7.1 curar no derivador da rc os P2 herdados do PLAN-193 (lista abaixo) que se aplicam à rc, e
+  correr o re-pass só pela rota 1 (D-4). Curados hoje no `derive-kit-143.py` e no `test-rc1-kit.sh`:
+  `R3C-01`, `M3-01` (ferramentas e corte), `M3-02`, `R3H-01` a `R3H-03`, e `R3H-04` pela forma (o índice
+  D8 a D15 é lista à mão, não censo). Os controles B7a a B7f da rota única exigem que o lançador plantado
+  e o `npx` espião nunca executem e que o Codex não execute antes do oráculo. Os P2 que só existem no
+  kit do GA (`R3-CLAIMS-01`, `R3S-01`, `R3S-02` e a espera do registry) estão curados no
+  `derive-ga-kit-143.py`. `R3C-01` e `R3H-01` a `R3H-03` ainda não estão curados no kit do GA: a recusa
+  do estágio K1 dele os nomeia (`CLASS_PENDING`). Resíduo declarado, sem cura nesta release: o shim da
+  rota 1 executa o lançador global (o `codex.js` do pacote), que o oráculo não hasheia. O `CHANGELOG.md`
+  [1.4.3] o declara no Known-open, «The Codex pin»; a cura é o item 24 do backlog da 1.4.4. — Check: bash .claude/plans/PLAN-194/test-rc1-kit.sh
 - [ ] W7.2 dívida «known-open» RE-DECLARADA no material assinado pela FORMA (sem enumerar sítios). — Check: none (doc-only)
 - [ ] W7.3 ensaio em cadeia com a suíte COMPLETA sobre a árvore composta (regra S357). — Check: python3 -m pytest .claude/hooks/tests .claude/scripts/tests -q -x
 - [ ] W7.4 rc.1 → adopters no mesmo dia → hold de 24 h (ADR-103) → GA → npm. — Check: npm view ceo-orchestration version
 
-**P2 herdados do PLAN-193 (fonte: `PLAN-193/LEDGER.md:16-18`, `:34-35`, e o registro da rodada 3
+**P2 herdados do PLAN-193 — registro dos achados no kit do GA 1.4.2; o estado das curas está na W7.1
+(fonte: `PLAN-193/LEDGER.md:16-18`, `:34-35`, e o registro da rodada 3
 do re-pass do GA 1.4.2 — evidência privada do Owner, fora do repositório —, que tem **11**; a memória
 diz 12):**
 `R3-CLAIMS-01` (passo 2 pede releitura do `npm/README.md` num bump no-op, `OWNER-GA-CUT.sh:1168-1170`);
@@ -1672,38 +1686,29 @@ controle de corte inteiro); `R3H-04` (índice D de `:3640-3659` não cobre B4c/B
 espera do registry no passo 18 (5×30 s curta para o CDN do npm); passo 5 sobrescreve `CANDIDATE.sha`
 (aberto por desenho, `LEDGER.md:34-35`); o P2 da parte 3 do re-pass é a L1.
 
-**Pré-condições do corte:** W4 landada (senão a rc não prova o toolchain); o veredito do re-pass
-precisa de `codex_cli` dentro da faixa pinada E de `codex_payload_sha256` IGUAL ao do MANIFESTO assinado
-da árvore tagueada (`release.yml:754-763`; `validate-pair-rail-verdict.py:745-763`; o
-`gen-envelope-ga.py` do kit recusa sha ou versão diferentes) — cumprido com o manifesto atual (o do
-0.156.1); a W3 NÃO muda isso (pergunta 7 da W3: o pin automático não muda os cortes). **Rodada 1 do
-debate:** o **Codex global pode diferir do manifesto**, porque o runner do re-pass resolve o Codex do
-MANIFESTO pela rota 2 (`npx` em cache próprio) e o envelope lê a PROVENANCE, nunca a máquina; por isso a
-W3.6 roda logo depois do LAND da W3, sem esperar o corte. **Rodada 2:** a rota 2 dos runners atuais
-EXECUTA antes de verificar e o shim executa o LANÇADOR, então ela é **INVERTIDA nos dois derivadores do
-kit** (custo: +100 a 150k tokens). Pré-condições dessa independência: (i) os derivadores do kit
-(`derive-kit-143.py` e `derive-ga-kit-143.py`) invertem a rota 2 COM controle — materializar SEM executar
-(`npm install --prefix <OUT>`, `--ignore-scripts`, ambiente do npm montado do zero, registro fixo, cache
-novo, versão EXATA do manifesto) → oráculo sem flag → shim com `exec` do `path` VERIFICADO → só então o
-`--version`; um lançador plantado num registro redirecionado NUNCA executa, e um espião prova ZERO
-execução antes do oráculo; kit com Codex global ≠ manifesto ⇒ a PROVENANCE registra a versão do manifesto
-e a rota 2; o R-12 sai dos resíduos; **o K-06 repete o CONTROLE DE FALHA da
-condição 12** (a mesma invocação do npm do kit, com o cache ESVAZIADO, em modo offline e com proxy morto
-EXPLÍCITO, tem de FALHAR; a materialização em si segue ONLINE, com cache novo — a aquisição inicial não é
-offline); (ii) o pré-voo declara a rede, os ~331 MB e o piso de `df`; (iii) o
-argv do runner fica alinhado à base da W3 (ou a divergência é declarada no material assinado) e o argv
-fixo é sondado também na 0.156.1 do manifesto; (iv) o pré-voo da Q11 vale no re-pass da rc e do GA; (v)
-linha de corte da W5c: se ela não estiver landada quando começar a derivação do kit, vai para depois do
-GA; (vi) nenhum pacote de ADR em voo durante o kit (primeiro pronto, primeiro a landar; um por
-fechamento; nenhum pacote de ADR em voo entre o início da derivação do kit e a publicação do GA) — por isso o **1b (pacote
-de ADR da W3) landa ANTES de começar a derivação do kit**, senão a W3.6 escorrega para depois do GA (condição
-22); a inversão da rota 2 pode landar como a PRIMEIRA peça da W7.1 (derivadores com oráculo 0, K-01 e K-02),
-para a W3.6 não esperar o kit inteiro. W1
-obrigatória se o corte for depois de 2026-10-19; W2 recomendada. **Escopo do corte (Q7, S361):** o núcleo descrito no Goal;
-a escolha entre 1.4.3 e 1.5.0 sai do diff do `SPEC/v1` na abertura do corte. **Colisão com o leque de
-ADR:** o `CHANGELOG.md` é path desta onda e carrega a contagem de ADR no preâmbulo — um pacote que cria
-arquivo de ADR e a W7 não podem estar em voo juntos (mapa de colisões). **Prazo:** sem data prometida
-(`eta_calendar`).
+**Pré-condições do corte (reescritas em 2026-10-17, S365, com os fatos do `main` em `9cfeafeb`):**
+
+- W4 landada (`8fa12aa0`, mais o W4POST `d1218d03`, `9ec9d559` e `4cd2bbc6`); sem ela a rc não prova o
+  toolchain. Relmeta-143 landada e publicada (`48def627`).
+- O veredito do re-pass precisa de `codex_cli` dentro da faixa pinada E de `codex_payload_sha256` IGUAL
+  ao do MANIFESTO assinado da árvore tagueada (`release.yml`; `validate-pair-rail-verdict.py`). Os
+  geradores do envelope recusam payload ou versão diferentes do manifesto. O manifesto pina a 0.160.0
+  (re-pin `4a1eec73`). Pela D-4, o Codex global TEM de ser o pinado: o runner e o passo 6 do corte
+  recusam pelo nome e nunca baixam outro. Nenhum `npm update -g` até o GA.
+- Pré-voo da Q11 em cada rodada do rail do kit e no re-pass da rc e do GA.
+- Nenhum pacote de ADR em voo do início da derivação do kit até a publicação do GA. **Colisão com o leque
+  de ADR:** o `CHANGELOG.md` é path desta onda e carrega a contagem de ADR no preâmbulo (mapa de
+  colisões). Nenhum assunto de commit da faixa cita plano fora do `RELEASE_SCOPE` do `release.sh`: o G0
+  do corte recusa.
+- W1 landada (`c54934d8`). O `ubuntu-latest` passa a Ubuntu 26.04 de 2026-10-19 a 2026-11-19
+  (actions/runner-images#14748). Os jobs `ubuntu-latest` do `release.yml` e do `npm-publish.yml` não
+  foram medidos em 26.04; a data do corte diante disso é decisão do Owner.
+- **Escopo do corte (Q7, S361):** o núcleo descrito no Goal. O `SPEC/` não muda em `v1.4.2..HEAD`
+  (medido em 2026-10-17), então a versão é 1.4.3 (`TARGET_BASE="1.4.3"` no `release.sh`).
+- **Prazo:** sem data prometida (`eta_calendar`).
+
+A inversão da rota 2 e as pré-condições (i) a (vi) dela, com o Codex do manifesto anterior e o pré-voo
+de rede, saíram deste texto em 2026-10-17: registro no item 26 do `PLAN-194-FOLLOWUP-v1-4-4-backlog`.
 
 ### W8 — TLC da verificação formal (canônico, sem prazo)
 Check: gh run view "$(gh run list --workflow formal-verify.yml --limit 1 --json databaseId -q '.[0].databaseId')" --json jobs -q '.jobs[] | select(.name=="TLC Model Check") | .conclusion'
@@ -1730,7 +1735,8 @@ igual a 0. **Resíduo a declarar:** os 3 passos TLC têm `continue-on-error: tru
 ### Itens livres (oráculo 0, fora do manifesto ADR-192 — land livre com a bateria completa)
 Check: python3 .claude/scripts/validate_governance_fast.py
 
-- [ ] **L1 — `check-substrate-drift.py:782` (P2 da parte 3 do re-pass do GA; ANTES da W3).** Validar o
+- [x] **L1 — `check-substrate-drift.py:782` (P2 da parte 3 do re-pass do GA; ANTES da W3). LANDADA em
+  `6f7069d3` (2026-10-01), ancestral do `main`; marcada em 2026-10-17.** Validar o
   tipo do container do ledger, devolver «desconhecido» por componente e preservar os achados dos outros
   componentes. Controle: ledger com `"last_seen": "2.1.280"` (string) → hoje o relatório zera
   (vermelho); depois, drift do Codex preservado (verde). ~40 linhas, 2 paths. —
@@ -2595,6 +2601,13 @@ demais ao abri-los.
 - S365 (2026-10-16): RM publicado (`48def627`); seção «Decisões do Owner — S365» (S365-1 a S365-3); «Next» de
   2026-10-16; a W5.0 e a W5a marcadas → 1.4.4. LEDGER: seção «RM publicado — 2026-10-16 (S365)». Backlog da
   1.4.4: 3.ª evidência do item 20 e item 22. Status inalterado (`executing`).
+- S365 (2026-10-17, texto do kit da rc.1): W7 — a «Emenda S362 (D-4)», a W7.1 e as «Pré-condições do
+  corte» reescritas com o que vale no `main` (rota 1 só; rota 2 recusa nomeada, com os controles B7a a
+  B7f; resíduo do lançador declarado no Known-open do `CHANGELOG.md` [1.4.3]); a inversão da rota 2 e as
+  pré-condições (i) a (vi) viraram registro da 1.4.4; L1 marcada (`6f7069d3`). Backlog da 1.4.4: itens 23
+  a 26 e uma nota no item 22. `derive-ga-kit-143.py`: `R3C-01`, `R3H-01` a `R3H-03` e o comentário do
+  seam `CODEX_BIN` no `CLASS_PENDING`; a mensagem do commit do veredito do GA no `CONTENT_PENDING`. Status
+  inalterado (`executing`).
 
 ## Reference links
 

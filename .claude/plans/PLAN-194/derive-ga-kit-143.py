@@ -117,15 +117,31 @@ CONTENT_PENDING = [
     "a sonda do GA (as verificacoes da rc.1 e as do GA sobre a arvore congelada)",
     "o README do GA, a particao, a cobertura e o prompt (a moldura do GA sobre os da rc.1)",
     "o review record do gerador (a rodada da rc.1 e o anexo dela)",
+    "a mensagem do commit do veredito do GA (as excecoes da condicao 67 e do P2 da parte 3; o "
+    "corte curado ainda traz a da 1.4.2, com o CASO da condicao 23)",
 ]
-# Classes que o estagio final cura no harness do GA, pela FORMA (o K1 so edita o harness do
-# GA por ancora). Rodada 2 do rail do K1: um stub do gh que devolve o valor FINAL que o
-# corte extrairia com o --jq nunca roda o filtro do corte (o select pela tag, pelo commit,
-# pelo NOME do job); no kit da rc da 1.4.3 os ensaios V e X ja usam o stub unico (JSON bruto
-# e `jq -rc` com a expressao do proprio corte).
+# Classes que o estagio final cura no kit do GA, pela FORMA (o K1 so edita o kit do GA por
+# ancora). O 1.o elemento fica PRIMEIRO: o K1a do test-ga-kit.sh casa o prefixo «classe a
+# curar no harness do GA: os stubs do gh». Rodada 2 do rail do K1: um stub do gh que
+# devolve o valor FINAL que o corte extrairia com o --jq nunca roda o filtro do corte (o
+# select pela tag, pelo commit, pelo NOME do job); no kit da rc da 1.4.3 os ensaios V e X ja
+# usam o stub unico (JSON bruto e `jq -rc` com a expressao do proprio corte). Os demais
+# (S365, kit da rc.1): os P2 do PLAN-193 que o kit da rc cura e o do GA ainda nao, e o
+# comentario do seam CODEX_BIN do runner do GA, que a cura D-4 deste estagio nao alcanca.
 CLASS_PENDING = [
     "os stubs do gh do harness do GA que devolvem o valor FINAL do --jq passam ao stub unico "
     "do kit da rc (JSON bruto e o --jq do corte aplicado pelo jq real)",
+    "R3C-01 no corte e no harness: um .gen-*.tmp orfao do gerador do envelope (mkstemp com "
+    "prefixo .gen-) fica sem rota; o corte ganha o assert_no_gen_orphans do kit da rc (recusa "
+    "nomeada, com a rota) e o harness o R14 pelo corte inteiro",
+    "R3H-01 no harness: os controles por AUSENCIA de texto sem pre-condicao de existencia passam "
+    "ao lacks() do kit da rc (arquivo ausente ou vazio da rc 2), com o censo A3",
+    "R3H-02 no harness: os controles que prometem recusa nomeada e conferem so o codigo de saida "
+    "passam ao refused() do kit da rc (rc != 0 E o texto fixo no log)",
+    "R3H-03 no harness: as recusas herdadas do G0 ganham controle pelo corte INTEIRO "
+    "(--g0-only, recusa pelo nome; o _r_whole do kit da rc)",
+    "no runner: o comentario do seam CODEX_BIN ainda diz que, com ele posto, o pin do npx NAO "
+    "e exigido (a rota 2, recusada pela D-4)",
 ]
 
 
@@ -580,12 +596,16 @@ def check_protect(out: Dict[str, str], rc) -> List[str]:
 
 
 def pending_message() -> str:
+    # O 1.o elemento do CLASS_PENDING e do harness; os demais dizem onde moram (corte, runner).
+    later = ""
+    if len(CLASS_PENDING) > 1:
+        later = "; classes declaradas no K1, a curar no kit do GA: %s" % "; ".join(CLASS_PENDING[1:])
     return ("o kit do GA v1.4.3 so deriva INTEIRO depois do corte da v1.4.3-rc.1 — estagio K1: "
-            "fatos pendentes: %s; conteudo pendente: %s; classe a curar no harness do GA: %s. Hoje: "
+            "fatos pendentes: %s; conteudo pendente: %s; classe a curar no harness do GA: %s%s. Hoje: "
             "--check-cures (as curas sobre o kit do GA v1.4.2, por ancora) e --emit-cured DIR (o "
             "material de ensaio)."
             % ("; ".join("%s (%s)" % f for f in FACTS_PENDING), "; ".join(CONTENT_PENDING),
-               "; ".join(CLASS_PENDING)))
+               CLASS_PENDING[0], later))
 
 
 def main() -> int:
