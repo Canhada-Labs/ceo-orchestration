@@ -66,7 +66,7 @@ não têm rail próprio.
 
 ## 4. O que fica FORA, e por quê
 
-Fora do re-pass não quer dizer não entregue: o que chega a um adopter é o que o `install.sh` e o `upgrade.sh` do candidato entregam, e este kit não o afirma classe a classe.
+Fora do re-pass não quer dizer não entregue; este kit não afirma, classe a classe, o que chega a um adopter.
 
 | fora | motivo |
 |---|---|

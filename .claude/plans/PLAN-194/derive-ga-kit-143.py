@@ -129,17 +129,15 @@ CONTENT_PENDING = [
 CLASS_PENDING_HEAD = (
     "os stubs do gh do harness do GA que devolvem o valor FINAL do --jq passam ao stub unico "
     "do kit da rc (JSON bruto e o --jq do corte aplicado pelo jq real)")
-# As que sao DESTE estagio (o kit da rc nao as tem): o comentario do seam CODEX_BIN do runner
-# do GA, que a cura D-4 deste estagio nao alcanca.
-CLASS_PENDING_GA = [
-    "no runner: o comentario do seam CODEX_BIN ainda diz que, com ele posto, o pin do npx NAO "
-    "e exigido (a rota 2, recusada pela D-4)",
-]
-# As curas do kit da rc que o molde do GA (PLAN-193) ainda nao tem vem do PROPRIO derivador da
-# rc, por construcao: GA_CARRY ((id, onde, texto), ...) e GA_NA ((id, motivo), ...), conjunto
-# FECHADO depois da rodada 3 do rail do kit da rc. Rodada 2 do rail do K-b (LDR2-03/LM2-02): a
-# lista mantida a mao aqui esqueceu classes duas vezes (LD-08 na rodada 1; o CI pelo commit, a
-# guarda do banner e o texto do G0 na rodada 2) -- a cura e nao manter lista aqui.
+# As que sao so DESTE estagio, que o kit da rc nao cura (hoje nenhuma: o comentario do seam
+# CODEX_BIN, que ficava aqui, o kit da rc cura, e ele foi para o GA_CARRY na rodada 3 do rail).
+CLASS_PENDING_GA: List[str] = []
+# As curas do kit da rc que o molde do GA (PLAN-193) ainda nao tem: uma lista mantida a mao, mas
+# num lugar so, o derivador da rc -- GA_CARRY ((id, onde, texto), ...) e GA_NA ((id, motivo),
+# ...), conjunto FECHADO depois da rodada 3 do rail do kit da rc --, e o CLASS_PENDING sai dela por
+# construcao. Rodada 2 do rail do K-b (LDR2-03/LM2-02): a lista mantida aqui, separada da do kit
+# da rc, esqueceu classes duas vezes (LD-08 na rodada 1; o CI pelo commit, a guarda do banner e o
+# texto do G0 na rodada 2).
 # CARRY_IN_HEAD: ids do GA_CARRY que o CLASS_PENDING_HEAD ja diz (nao se repetem).
 CARRY_IN_HEAD: Tuple[str, ...] = ("stub-gh-unico",)
 # GA_APPLIED: ids do GA_CARRY que ESTE estagio ja aplica ao molde do GA (nao sao pendencia), com

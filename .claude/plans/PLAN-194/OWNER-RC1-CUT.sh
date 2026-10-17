@@ -276,11 +276,12 @@ and .conclusion!=\"skipped\")]|length}" 2>/dev/null || echo "")"
       || { printf '  ... resposta do gh ilegivel, tentando de novo\n'; continue; }
     tt="$(printf '%s' "$info" | python3 -c 'import json,sys;print(json.load(sys.stdin)["t"])')" \
       || { printf '  ... resposta do gh ilegivel, tentando de novo\n'; continue; }
+    case "$n$p$b$tt" in ''|*[!0-9]*) die "resposta do gh run list ilegivel: $info" ;; esac
     [ "$tt" -lt "$lim" ] || die "consulta cheia: $tt runs no commit $sha (o teto da consulta e $lim); nao da
 para provar que nao ha vermelho nem pendente fora da janela — me chame no Claude"
     printf '  ... runs=%s pendentes=%s vermelhos=%s\n' "$n" "$p" "$b"
     if [ "$b" -ne 0 ]; then
-      gh run list --commit "$sha" --limit 200 --json headSha,status,conclusion,workflowName,databaseId,event \
+      gh run list --commit "$sha" --limit "$lim" --json headSha,status,conclusion,workflowName,databaseId,event \
         --jq ".[]|select(.headSha==\"$sha\" and .status==\"completed\" and .conclusion!=\"success\" and .conclusion!=\"skipped\")|\"   vermelho: \" + .workflowName + \" (run \" + (.databaseId|tostring) + \", \" + .conclusion + \", evento \" + .event + \")\"" \
         || printf '   (gh nao listou os runs vermelhos)\n'
       die "workflow vermelho para $sha (conta QUALQUER workflow e evento sobre o commit,
@@ -297,11 +298,12 @@ patch. Qualquer outro vermelho: me chame no Claude."
     --json headSha,databaseId,status,conclusion,event,headBranch \
     --jq "(length|tostring) + \" \" + ([.[]|select(.headSha==\"$sha\" and .status==\"completed\" and .conclusion==\"success\" and .event==\"push\" and .headBranch==\"main\")][0].databaseId|tostring)" 2>/dev/null || echo "")"
   vt="${vq%% *}"; vid="${vq#* }"
-  [ -n "$vq" ] && [ -n "$vid" ] && [ "$vid" != "null" ] \
-    || die "nenhum run COMPLETO e success do validate.yml para $sha"
+  [ -n "$vq" ] || die "nenhum run COMPLETO e success do validate.yml para $sha"
   case "$vt" in ""|*[!0-9]*) die "resposta do gh run list do validate.yml ilegivel: $vq" ;; esac
   [ "$vt" -lt "$lim" ] || die "consulta cheia: $vt runs do validate.yml no commit $sha (o teto da consulta e $lim);
-nao da para provar que nao ha vermelho nem pendente fora da janela — me chame no Claude"
+nao da para provar que o run success do validate.yml do commit esta na janela — me chame no Claude"
+  [ -n "$vid" ] && [ "$vid" != "null" ] \
+    || die "nenhum run COMPLETO e success do validate.yml para $sha"
   vj="$(gh run view "$vid" --json jobs \
     --jq '{s:[.jobs[]|select(.conclusion=="success")]|length, f:[.jobs[]|select(.conclusion=="failure")]|length, p:[.jobs[]|select(.status!="completed")]|length, o:[.jobs[]|select(.status=="completed" and .conclusion!="success" and .conclusion!="skipped")]|length}' 2>/dev/null || echo "")"
   # Uma falha transitoria do `gh run view` tem NOME (antes era um traceback do python

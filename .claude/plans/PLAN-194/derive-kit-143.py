@@ -175,17 +175,19 @@ GA_CARRY = (
      "validate.yml), onde um vermelho antigo do commit some"),
     ("g0-mensagem", "corte",
      "a recusa do gh release view do G0 diz que o G0 nao executa passo do corte (no maximo registra o "
-     "push da tag que ja aconteceu); o molde do GA diz 'O G0 so le' (4 sitios), falso: o G0 cria o "
+     "push da tag que ja aconteceu); o molde do GA diz 'o G0 so le' (4 sitios, maiuscula ou minuscula), "
+     "falso: o G0 cria o "
      ".cut-state, faz fetch e pode registrar o passo 16"),
     ("g0-orfaos-do-gerador", "corte",
-     "o G0 recusa o .gen-*.tmp orfao de um gerador do envelope morto no meio da escrita "
-     "(assert_no_gen_orphans, com a rota); o molde do GA nao tem o guard"),
+     "R3C-01: o G0 recusa o .gen-*.tmp orfao de um gerador do envelope morto no meio da escrita "
+     "(assert_no_gen_orphans, com a rota), e o harness o exercita pelo corte inteiro (R14); o molde do "
+     "GA nao tem o guard"),
     ("janela-9-11", "corte",
      "a janela da retomada do passo 11 (tree_clean_resume_11) abre com o passo 9 concluido, porque o "
      "passo 10 escreve o envelope ANTES de se marcar (M3-01); o molde do GA a abre com o passo 10"),
     ("rota-1-so-corte", "corte",
-     "PLAN-194 D-4: o G0 confere a rota 1 (o codex global, pinado pelo oraculo; "
-     "assert_route1_available) e o texto do passo 6 nao oferece o npx; o molde do GA aceita a rota 2"),
+     "PLAN-194 D-4: o passo 6 confere a rota 1 antes do runner (o codex global, pinado pelo oraculo; "
+     "assert_route1_available) e o texto dele nao oferece o npx; o molde do GA aceita a rota 2"),
     ("divida-com-excecoes-corte", "corte",
      "a mensagem do commit do veredito declara a divida carregada COM as excecoes que esta release "
      "cura (o CASO da condicao 67 da v1.4.0-rc.1; um P2 da parte 3 do re-pass do GA v1.4.2)"),
@@ -202,8 +204,8 @@ GA_CARRY = (
     ("guard-heredoc-echo", "derivador",
      "guard ESTRUTURAL no texto FINAL do corte e do runner (LM2-04 e rodada 3): em cada linha fora de "
      "comentario e de corpo de heredoc, tantos << (fora de <<<) quantas aberturas reconhecidas; o heredoc "
-     "sem aspas e de DADOS (corpo exato numa allowlist) ou de TEXTO declarado (sem crase, $( nem barra; "
-     "so as variaveis declaradas); cada linha com echo conferida do echo ao fim da linha; o braco echo da "
+     "sem aspas e de DADOS (corpo exato numa allowlist) ou de TEXTO declarado (sem crase, $( nem barra "
+     "invertida fora de um bloco de codigo tirado byte a byte da fonte pinada; so as variaveis declaradas); cada linha com echo conferida do echo ao fim da linha; o braco echo da "
      "particao na forma estrita; o resto e recusa nomeada; o molde do GA tem o banner cat <<DONE sem guard"),
     ("janelas-de-cron", "derivador",
      "as janelas de cron que o corte cita sao as constantes que a sonda de crons confere (.yml e .yaml, "
@@ -227,9 +229,18 @@ GA_CARRY = (
      "na sonda (condicao 5): toda linha de codigo do runner que menciona o nome CODEX_LAUNCHER e uma das "
      "cinco esperadas, na ordem (LDR2-05 e rodada 3; o nome montado em tempo de execucao fica fora)"),
     ("comentario-do-shim", "runner",
-     "o comentario do shim diz que ele delega ao lancador global do codex cujo payload o oraculo "
-     "verificou (LT-03); o molde do GA diz que delega ao codex pinado (payload verificado), mais do que "
-     "o exec faz"),
+     "o cabecalho do runner e o comentario do shim dizem que ele delega ao lancador global do codex cujo "
+     "payload o oraculo verificou (LT-03); o molde do GA diz que delega ao codex pinado (payload "
+     "verificado), mais do que o exec faz"),
+    ("seam-codex-bin", "runner",
+     "o comentario do seam CODEX_BIN diz que, com ele posto, a rota 1 (o oraculo do pin sobre o codex "
+     "global) nao roda; o molde do GA diz que o pin do npx nao e exigido (a rota 2, recusada pela D-4)"),
+    ("tool-versions-na-mensagem", "corte",
+     "a mensagem do commit do veredito diz quem confere o que em tool_versions (a faixa pela funcao do "
+     "validador, o manifesto pelo gerador; claude_code medido por claude --version) (LT-05)"),
+    ("size-da-constante-da-sonda", "derivador",
+     "a condicao do SIZE no MAPA da sonda e no MAPA sintetico do harness vem da constante SIZE_CONDITION "
+     "da sonda (lida pela AST), nunca de um numero fixo (o censo G3); o molde do GA fixa a condicao 11"),
     ("sonda-condicao-15-conteudo", "derivador",
      "na sonda (condicao 2): a condicao 15 do GA v1.4.2 conferida pelo CONTEUDO, nao so pelo marcador"),
     ("sonda-if-do-publish", "derivador",
@@ -256,6 +267,9 @@ GA_CARRY = (
      "por printf -v)"),
 )
 GA_NA = (
+    ("c11-publicador-so-comentario",
+     "a C11-scope aceita no npm-trusted-publisher.txt so mudanca de comentario (LD-04): verificacao da "
+     "sonda, que a sonda do GA herda com as condicoes da rc (o CONTENT_PENDING do kit do GA)"),
     ("prova-do-toolchain-rc",
      "a prova do toolchain da rc (o job RC toolchain proof, assert_rc_proof_job, a C0-rc-proof e o passo "
      "18 da rc pelo nome) so existe para tags -rc.; no GA roda o job do publish"),
@@ -453,7 +467,8 @@ CRONS_MONTH_DAY1 = ["04:00", "07:00"]
 
 def probe_crons() -> None:
     # LM2-05: o censo le .yml E .yaml, o cron com e sem aspas (e com comentario no fim da linha),
-    # e a contagem por grep simples (toda linha com `cron:`) tem de ser a lida: uma forma que a
+    # e a contagem simples (toda linha com a chave cron, com ou sem aspas, com ou sem espaco antes dos
+    # dois-pontos -- rodada 3, LM3-03) tem de ser a lida: uma forma que a
     # regex nao modela e recusa nomeada, nunca um cron fora do censo (o corte seguiria citando as
     # mesmas janelas).
     wfdir = REPO / ".github" / "workflows"
@@ -463,7 +478,7 @@ def probe_crons() -> None:
     found = []
     for wf in sorted(list(wfdir.glob("*.yml")) + list(wfdir.glob("*.yaml"))):
         txt = wf.read_text(encoding="utf-8")
-        plain += sum(1 for ln in txt.splitlines() if "cron:" in ln)
+        plain += sum(1 for ln in txt.splitlines() if re.search(r"""\bcron['"]?[ \t]*:""", ln))
         for m in rx.finditer(txt):
             found.append((wf.name, [g for g in m.groups() if g is not None][0]))
     if plain != len(found):
@@ -2021,8 +2036,8 @@ envelope recusa a evidência dele).
    teste (`.claude/data/**`, `.claude/scripts/data/**`); `scripts/local/**`, harness de smoke do
    mantenedor; o harness de avaliação `.claude/eval/**`; a configuração de teste da raiz
    (`conftest.py` e `pytest.ini`: o oráculo); e o `.gitignore` da raiz, higiene deste
-   repositório. Fora do re-pass não quer dizer não entregue: o que chega a um adopter é o que o
-   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit não o afirma classe a classe.
+   repositório. Fora do re-pass não quer dizer não entregue; este kit não afirma, classe a
+   classe, o que chega a um adopter.
 '''
 
 
@@ -2030,10 +2045,12 @@ envelope recusa a evidência dele).
 # §4 numa linha, na condicao 10 quebrada na largura do texto. E os radicais que nao podem voltar
 # nas duas regioes (escopo por REGIAO: o §1 e o CONTEXT citam o titulo do CHANGELOG sobre o que
 # chega as instalacoes, que nao e esta classe).
-DELIVERY_FORM = ("Fora do re-pass não quer dizer não entregue: o que chega a um adopter é o que o "
-                 "`install.sh` e o `upgrade.sh` do candidato entregam, e este kit não o afirma classe a classe.")
-DELIVERY_FORM_COND = ("Fora do re-pass não quer dizer não entregue: o que chega a um adopter é o que o\n"
-                      "   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit não o afirma classe a classe.")
+# Rodada 3 do rail (LT3-01, 3.o NO-GO da classe): a clausula «o que chega e o que o install.sh e o
+# upgrade.sh entregam» saiu por REMOCAO (ha a 3.a rota, a do plugin); fica so a frase de forma.
+DELIVERY_FORM = ("Fora do re-pass não quer dizer não entregue; este kit não afirma, classe a classe, o que chega "
+                 "a um adopter.")
+DELIVERY_FORM_COND = ("Fora do re-pass não quer dizer não entregue; este kit não afirma, classe a\n"
+                      "   classe, o que chega a um adopter.")
 DELIVERY_STEMS = ["entreg", "chega", "recebe", "instalação nova", "o instalador escreve", "pacote",
                   "copia", "upgrade.sh", "install.sh"]
 
@@ -2062,7 +2079,8 @@ def derive_cond(src: str) -> str:
     # a mesma remocao na condicao 10 (e o «não entregue» da condicao 1): so a frase de forma fala de entrega
     c10 = region(t, "10. **Fora do re-pass, pela forma**", "\n\n", "condicao 10") if "\n\n" in t[
         t.index("10. **Fora do re-pass, pela forma**"):] else t[t.index("10. **Fora do re-pass, pela forma**"):]
-    forbid(c10.replace(DELIVERY_FORM_COND, "", 1), "condicao 10 (sem afirmacao de entrega)", DELIVERY_STEMS)
+    forbid(c10.replace(DELIVERY_FORM_COND, "", 1).lower(), "condicao 10 (sem afirmacao de entrega)",
+           [s.lower() for s in DELIVERY_STEMS])
     need(t, "condicoes", [DELIVERY_FORM_COND])
     forbid(t, "condicoes", ["`CLAUDE.md`, não entregue", "instalação descartável", "chega ao adopter"])
     need(t, "condicoes", ["`v1.4.2..candidato`", "decisão D-4 do PLAN-194", RC_PROOF_JOB_NAME,
@@ -2148,7 +2166,7 @@ não têm rail próprio.
 
 ## 4. O que fica FORA, e por quê
 
-Fora do re-pass não quer dizer não entregue: o que chega a um adopter é o que o `install.sh` e o `upgrade.sh` do candidato entregam, e este kit não o afirma classe a classe.
+Fora do re-pass não quer dizer não entregue; este kit não afirma, classe a classe, o que chega a um adopter.
 
 | fora | motivo |
 |---|---|
@@ -2286,7 +2304,7 @@ def derive_readme(src: str) -> str:
     # A classe «o que chega ao adopter, classe a classe» saiu da release POR REMOCAO (dois NO-GOs
     # em rodadas diferentes do rail): na §4 so fica o MOTIVO de cada classe e a frase de forma.
     sec4 = region(t, "## 4. O que fica FORA", "## 5. ", "README §4").replace(DELIVERY_FORM, "", 1)
-    forbid(sec4, "README §4 (sem afirmacao de entrega)", DELIVERY_STEMS)
+    forbid(sec4.lower(), "README §4 (sem afirmacao de entrega)", [s.lower() for s in DELIVERY_STEMS])
     need(t, "README", [DELIVERY_FORM])
     forbid(t, "README", ["chega ao adopter", "chegam ao adopter", "instalação descartável",
                          "o instalador não a entrega"])
@@ -2988,12 +3006,13 @@ CUT_CI_BY_COMMIT = [
     ("    printf '  ... runs=%s pendentes=%s vermelhos=%s\\n' \"$n\" \"$p\" \"$b\"\n",
      "    tt=\"$(printf '%s' \"$info\" | python3 -c 'import json,sys;print(json.load(sys.stdin)[\"t\"])')\" \\\n"
      "      || { printf '  ... resposta do gh ilegivel, tentando de novo\\n'; continue; }\n"
+     "    case \"$n$p$b$tt\" in ''|*[!0-9]*) die \"resposta do gh run list ilegivel: $info\" ;; esac\n"
      "    [ \"$tt\" -lt \"$lim\" ] || die \"consulta cheia: $tt runs no commit $sha (o teto da consulta e $lim); nao da\n"
      "para provar que nao ha vermelho nem pendente fora da janela — me chame no Claude\"\n"
      "    printf '  ... runs=%s pendentes=%s vermelhos=%s\\n' \"$n\" \"$p\" \"$b\"\n",
      "wait_ci_green: a consulta cheia e recusa"),
     ('      gh run list --limit 30 --json headSha,status,conclusion,workflowName,databaseId,event \\\n',
-     '      gh run list --commit "$sha" --limit 200 --json headSha,status,conclusion,workflowName,databaseId,event \\\n',
+     '      gh run list --commit "$sha" --limit "$lim" --json headSha,status,conclusion,workflowName,databaseId,event \\\n',
      "wait_ci_green: os vermelhos pelo commit"),
     ('  vid="$(gh run list --workflow validate.yml --limit 20 \\\n'
      '    --json headSha,databaseId,status,conclusion,event,headBranch \\\n'
@@ -3007,11 +3026,12 @@ CUT_CI_BY_COMMIT = [
      'and .conclusion==\\"success\\" and .event==\\"push\\" and .headBranch==\\"main\\")][0].databaseId|tostring)" '
      '2>/dev/null || echo "")"\n'
      '  vt="${vq%% *}"; vid="${vq#* }"\n'
-     '  [ -n "$vq" ] && [ -n "$vid" ] && [ "$vid" != "null" ] \\\n'
-     '    || die "nenhum run COMPLETO e success do validate.yml para $sha"\n'
+     '  [ -n "$vq" ] || die "nenhum run COMPLETO e success do validate.yml para $sha"\n'
      '  case "$vt" in ""|*[!0-9]*) die "resposta do gh run list do validate.yml ilegivel: $vq" ;; esac\n'
      '  [ "$vt" -lt "$lim" ] || die "consulta cheia: $vt runs do validate.yml no commit $sha (o teto da consulta e $lim);\n'
-     'nao da para provar que nao ha vermelho nem pendente fora da janela — me chame no Claude"\n',
+     'nao da para provar que o run success do validate.yml do commit esta na janela — me chame no Claude"\n'
+     '  [ -n "$vid" ] && [ "$vid" != "null" ] \\\n'
+     '    || die "nenhum run COMPLETO e success do validate.yml para $sha"\n',
      "wait_ci_green: o validate.yml pelo commit, com o total devolvido"),
 ]
 
@@ -3416,8 +3436,8 @@ MUT = {
            "Evidencia do re-pass no MESMO commit (`date`): quatro partes, ordenadas por raio de\n"),
     "g3": ('    ("C16-adopter-notes", c16_adopter_notes, ("7", "8")),\n',
            '    ("C16-adopter-notes", c16_adopter_notes, ("8",)),\n'),
-    "g6": ("   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit n\u00e3o o afirma classe a classe.\n" + Q3 + "\n",
-           "   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit n\u00e3o o afirma classe a classe.\n"
+    "g6": ("   classe, o que chega a um adopter.\n" + Q3 + "\n",
+           "   classe, o que chega a um adopter.\n"
            "11. Uma condicao nova sem negrito.\n" + Q3 + "\n"),
     "g7": ('(docs/ARCHITECTURE.md)" ;;\n',
            '(docs/ARCHITECTURE.md $HOME)" ;;\n'),

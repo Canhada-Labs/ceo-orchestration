@@ -118,5 +118,5 @@ envelope recusa a evidência dele).
    teste (`.claude/data/**`, `.claude/scripts/data/**`); `scripts/local/**`, harness de smoke do
    mantenedor; o harness de avaliação `.claude/eval/**`; a configuração de teste da raiz
    (`conftest.py` e `pytest.ini`: o oráculo); e o `.gitignore` da raiz, higiene deste
-   repositório. Fora do re-pass não quer dizer não entregue: o que chega a um adopter é o que o
-   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit não o afirma classe a classe.
+   repositório. Fora do re-pass não quer dizer não entregue; este kit não afirma, classe a
+   classe, o que chega a um adopter.

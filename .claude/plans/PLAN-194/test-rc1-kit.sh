@@ -694,8 +694,8 @@ MUT = {
            "Evidencia do re-pass no MESMO commit (`date`): quatro partes, ordenadas por raio de\n"),
     "g3": ('    ("C16-adopter-notes", c16_adopter_notes, ("7", "8")),\n',
            '    ("C16-adopter-notes", c16_adopter_notes, ("8",)),\n'),
-    "g6": ("   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit n\u00e3o o afirma classe a classe.\n" + Q3 + "\n",
-           "   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit n\u00e3o o afirma classe a classe.\n"
+    "g6": ("   classe, o que chega a um adopter.\n" + Q3 + "\n",
+           "   classe, o que chega a um adopter.\n"
            "11. Uma condicao nova sem negrito.\n" + Q3 + "\n"),
     "g7": ('(docs/ARCHITECTURE.md)" ;;\n',
            '(docs/ARCHITECTURE.md $HOME)" ;;\n'),
