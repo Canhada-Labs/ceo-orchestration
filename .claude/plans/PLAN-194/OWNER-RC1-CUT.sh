@@ -955,7 +955,7 @@ if _grv="$(gh release view "$TAG" --json isPrerelease,isDraft 2>&1)"; then
 else
   printf '%s' "$_grv" | grep -qi "not found\|release not found\|HTTP 404" \
     || die "gh release view falhou sem ser NOT-FOUND (transporte ou API): $_grv
-O G0 nao avanca o corte: re-rode este script. Persistindo, me chame no Claude."
+O G0 nao executa passo do corte (no maximo registra o push da tag que ja aconteceu): re-rode este script. Persistindo, me chame no Claude."
 fi
 assert_no_gen_orphans
 assert_kit_committed
@@ -1442,8 +1442,7 @@ contra o candidato pela sonda do kit (probe-rc1.txt, no MANIFEST).
 tool_versions.codex_cli vem da PROVENANCE do run PINADO e e re-validado
 contra a faixa do codex-cli-pin.txt pela funcao do proprio validador e contra o
 manifesto ADR-182 pelo gerador — nunca de 'codex --version' desta maquina;
-tool_versions.claude_code
-e MEDIDO por 'claude --version' ao gerar os fields.
+tool_versions.claude_code e MEDIDO por 'claude --version' ao gerar os fields.
 
 Evidencia do re-pass no MESMO commit: quatro partes, ordenadas por raio de
 dano ao adotante, sobre o delta v1.4.2..$CAND. Reviewer: codex-cli na versao

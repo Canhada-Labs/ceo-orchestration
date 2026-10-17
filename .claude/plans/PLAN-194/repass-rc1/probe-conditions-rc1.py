@@ -407,7 +407,14 @@ def c13_route1(t: Tree) -> str:
                  'CODEX_LAUNCHER="$_glob"', "printf 'exec %s \"$@\"\\n' \"$(printf '%q' \"$CODEX_LAUNCHER\")\""):
         if need not in runner:
             raise AssertionError("o runner do candidato sem %r" % need)
-    assigns = [ln.strip() for ln in runner.splitlines() if ln.strip().startswith("CODEX_LAUNCHER=")]
+    # LDR2-05: a atribuicao em QUALQUER forma nas linhas de codigo (export, declare, typeset,
+    # readonly, local, `+=`, `${CODEX_LAUNCHER:=...}`, read, printf -v e unset), nao so a linha
+    # que comeca por CODEX_LAUNCHER=.
+    assign_re = re.compile(r"(?<![\w$])CODEX_LAUNCHER\+?=|\$\{CODEX_LAUNCHER:?=|"
+                           r"\bread\b[^;&|\n]*\bCODEX_LAUNCHER\b|\bprintf\s+-v\s*CODEX_LAUNCHER\b|"
+                           r"\bunset\b[^;&|\n]*\bCODEX_LAUNCHER\b")
+    assigns = [ln.strip() for ln in runner.splitlines()
+               if not ln.lstrip().startswith("#") and assign_re.search(ln)]
     if assigns != ['CODEX_LAUNCHER=""', 'CODEX_LAUNCHER="$_glob"']:
         raise AssertionError("o runner do candidato atribui CODEX_LAUNCHER %r (exigido: \"\" e depois $_glob, "
                              "so)" % assigns)

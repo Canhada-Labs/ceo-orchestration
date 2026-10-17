@@ -677,6 +677,10 @@ else bad "A0: derive-kit-143.py --check FALHOU"; sed -n '1,14p' "$SCRATCH/derive
 # fontes desta arvore; --check nao escreve nada) morre PELO NOME. G2m: uma crase na mensagem do
 # commit do veredito, que o passo 11 passa num heredoc SEM aspas (so $TAG e $CAND expandem
 # ali). G3m: a condicao 7 sem verificacao na sonda e fora da lista so-texto (COND_TEXT_ONLY).
+# G11m: as janelas de cron do corte fora das constantes da sonda de crons (LM-03). G12m: a sonda
+# com outra PROVISIONAL_MARK (LD-02). G13m/G14m: o guard dos heredocs roda no texto FINAL
+# (LM2-04): uma crase no banner DEPOIS do ultimo corte do banner, e um heredoc de texto novo.
+# As ancoras daqui casam UMA vez no derivador da arvore (cross-check do derivador).
 _a0m() {  # $1 = id, $2 = mutacao (g2 | g3), $3 = texto fixo da recusa, $4 = o caso
   local _rc=0
   if ! python3 - "$ROOT/$PLAN_DIR/derive-kit-143.py" "$SCRATCH/$1-derive.py" "$2" > "$SCRATCH/$1-gen.log" 2>&1 <<'PYA0M'
@@ -688,8 +692,8 @@ MUT = {
            "Evidencia do re-pass no MESMO commit (`date`): quatro partes, ordenadas por raio de\n"),
     "g3": ('    ("C16-adopter-notes", c16_adopter_notes, ("7", "8")),\n',
            '    ("C16-adopter-notes", c16_adopter_notes, ("8",)),\n'),
-    "g6": ("   adopter. A sonda confere isso numa instala\u00e7\u00e3o descart\u00e1vel seguida do `upgrade.sh`.\n" + Q3 + "\n",
-           "   adopter. A sonda confere isso numa instala\u00e7\u00e3o descart\u00e1vel seguida do `upgrade.sh`.\n"
+    "g6": ("   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit n\u00e3o o afirma classe a classe.\n" + Q3 + "\n",
+           "   `install.sh` e o `upgrade.sh` do candidato entregam, e este kit n\u00e3o o afirma classe a classe.\n"
            "11. Uma condicao nova sem negrito.\n" + Q3 + "\n"),
     "g7": ('(docs/ARCHITECTURE.md)" ;;\n',
            '(docs/ARCHITECTURE.md $HOME)" ;;\n'),
@@ -700,6 +704,18 @@ MUT = {
            "  assigned for its cure); what"),
     "g10": ('.claude/skills/**" ;;\n    4) echo "',
             '.claude/skills/**" ;;\n      4) echo "$HOME '),
+    "g11": ("    # LM-03: as janelas de cron que o corte cita sao as constantes que probe_crons conferiu\n",
+            '    t = t.replace("07:37", "07:38")\n'
+            "    # LM-03: as janelas de cron que o corte cita sao as constantes que probe_crons conferiu\n"),
+    "g12": ('    head = PROBE_HEAD.replace("@@PROVISIONAL_MARK@@", json.dumps(PROVISIONAL_MARK, ensure_ascii=False))\n',
+            '    head = PROBE_HEAD.replace("@@PROVISIONAL_MARK@@", json.dumps(PROVISIONAL_MARK + " (mutante)", ensure_ascii=False))\n'),
+    "g13": ('    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n',
+            '    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n'
+            '    t = t.replace(" - Ate o GA, main fica congelado.\\n", " - Ate o GA, main fica congelado `date`.\\n")\n'),
+    "g14": ('    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n',
+            '    t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")\n'
+            "    t = t.replace('bell \"$TAG cortada\"\\ncat <<DONE\\n', "
+            "'cat <<NOTE\\nhora do corte: `date`\\nNOTE\\nbell \"$TAG cortada\"\\ncat <<DONE\\n')\n"),
 }
 old, new = MUT[kind]
 t = open(src, encoding="utf-8").read()
@@ -725,6 +741,30 @@ _a0m G9m g9 "runner derivado sem '  assigned for its cure) EXCEPT the case of si
   "o CONTEXT do prompt sem a excecao da condicao 67"
 _a0m G10m g10 "uma linha echo da particao (rotulo ou cobertura) fora da forma" \
   "uma linha echo da particao com outra indentacao e $HOME (a guarda independe da indentacao)"
+_a0m G11m g11 "corte (as janelas de cron) derivado sem" \
+  "as janelas de cron do corte fora das constantes que a sonda de crons conferiu (LM-03)"
+_a0m G12m g12 "a sonda nao carrega a PROVISIONAL_MARK do derivador" \
+  "a sonda com outra marca do conteudo provisorio (LD-02)"
+_a0m G13m g13 "o banner de CORTADA (heredoc SEM aspas) carrega '\`'" \
+  "uma crase no banner DEPOIS do ultimo corte do banner (o guard roda no texto FINAL)"
+_a0m G14m g14 "heredoc SEM aspas <<NOTE (linha" \
+  "um heredoc de texto sem aspas novo no corte (nem de dados nem declarado)"
+# G15f — o censo dos crons (LM2-05): uma COPIA dos workflows com um cron diario a mais, SEM aspas
+# e num .yaml, faz o probe_crons do derivador morrer pelo nome (antes, .yaml e cron sem aspas
+# ficavam fora do censo e o corte seguia citando as mesmas janelas).
+_g15="$SCRATCH/g15f/.github/workflows"; _g15_rc=0
+if mkdir -p "$_g15" && cp "$ROOT"/.github/workflows/*.yml "$_g15"/ \
+   && printf 'on:\n  schedule:\n    - cron: 30 14 * * *\n' > "$_g15/zz-test-only.yaml"; then
+  ( cd "$ROOT" && python3 - "$ROOT/$PLAN_DIR/derive-kit-143.py" "$SCRATCH/g15f" <<'PYG15'
+import pathlib, runpy, sys
+m = runpy.run_path(sys.argv[1], run_name="g15f")
+m["probe_crons"].__globals__["REPO"] = pathlib.Path(sys.argv[2])
+m["probe_crons"]()
+PYG15
+  ) > "$SCRATCH/G15f.log" 2>&1 || _g15_rc=$?
+  refused G15f "$_g15_rc" "$SCRATCH/G15f.log" "sonda crons: diarios" \
+    "um cron diario a mais, sem aspas e num .yaml (o censo dos crons le as duas formas)"
+else bad "G15f: fixture dos workflows falhou"; fi
 for f in $SHELLS; do
   [ -f "$f" ] || { bad "ausente: $f"; continue; }
   if /bin/bash -n "$f" 2>/dev/null; then ok "/bin/bash -n $(basename "$f") ($(/bin/bash -c 'echo $BASH_VERSION' | cut -c1-3))"; else bad "/bin/bash -n $(basename "$f")"; fi
@@ -1618,6 +1658,12 @@ PYP28
     _p_red P30 "$SCRATCH/p30" C13-route1 "FAIL C13-route1: o runner do candidato atribui CODEX_LAUNCHER" \
       "o lancador do shim reatribuido depois do oraculo"
   else bad "P30: fixture do CODEX_LAUNCHER falhou"; fi
+  # P33 — a mesma reatribuicao na forma `export` (LDR2-05: o censo casa export, declare,
+  # readonly, local e `+=`, nao so a linha que comeca por CODEX_LAUNCHER=).
+  if _p_mut "$SCRATCH/p33" "CODEX_LAUNCHER reatribuido por export" "printf 'export CODEX_LAUNCHER=\"/tmp/TEST-ONLY-outro-codex\"\n' >> $EV/run-rc1-repass.sh"; then
+    _p_red P33 "$SCRATCH/p33" C13-route1 "FAIL C13-route1: o runner do candidato atribui CODEX_LAUNCHER" \
+      "o lancador do shim reatribuido por export depois do oraculo"
+  else bad "P33: fixture do export CODEX_LAUNCHER falhou"; fi
   # P31 — o if do job publish COMENTADO (o texto segue no arquivo; condicao 6 e cabecalho).
   _p31py="$SCRATCH/p31-mut.py"
   cat > "$_p31py" <<'PYP31'
@@ -2288,6 +2334,9 @@ for _a in "$@"; do
   [ "$_p" = "--commit" ] && _cm="$_a"
   _p="$_a"
 done
+# GH_STUB_NO_COMMIT=1 (so o gemeo V3s): o stub IGNORA o --commit, como um servidor que nao
+# filtrasse — as iscas de outro commit chegam ao corte e so o select dele as tira.
+[ "${GH_STUB_NO_COMMIT:-0}" = 1 ] && _cm=""
 _src="$GH_FIX/$_f"
 # `gh run list`: o servidor filtra por --commit e DEPOIS corta em --limit (padrao 20) — o stub
 # faz o mesmo, para que uma janela curta numa lista longa aconteca no ensaio como no gh real.
@@ -2302,15 +2351,17 @@ GHSEOF
 chmod 0755 "$_gs/bin/gh"
 _gs_run() {  # $1 = script, $2 = sequencia (uma linha por chamada do gh), $3 = log, $4 = diretorio
   rm -f -- "$_gs/cnt"
-  ( cd "$4" && PATH="$_gs/bin:$PATH" GH_CNT="$_gs/cnt" GH_FIX="$_gs/fix" GH_SEQ="$2" bash "$1" ) > "$3" 2>&1
+  ( cd "$4" && PATH="$_gs/bin:$PATH" GH_CNT="$_gs/cnt" GH_FIX="$_gs/fix" GH_SEQ="$2" \
+      GH_STUB_NO_COMMIT="${GH_STUB_NO_COMMIT:-0}" bash "$1" ) > "$3" 2>&1
 }
 # Um ensaio que rodasse sem o jq aplicaria filtro nenhum: sem ele, V e X reprovam pelo nome.
 _gs_jq=0
 if command -v jq >/dev/null 2>&1 && [ "$(printf '[{"a":1},{"a":2}]' | jq -rc '[.[]|select(.a==2)][0].a')" = "2" ]; then _gs_jq=1
 else bad "V/X: jq ausente ou quebrado — o stub do gh nao aplicaria o --jq do corte (V e X nao rodam)"; fi
 # As fixtures do wait_ci_green: uma ISCA de outro commit (vermelha) na lista de runs e uma
-# isca de outro commit (verde) PRIMEIRO na lista do validate.yml — sem o select do corte, a
-# primeira viraria vermelho e a segunda o run errado (o stub exige o run 4242).
+# isca de outro commit (verde) PRIMEIRO na lista do validate.yml. No V3 o stub as tira pelo
+# --commit (o filtro do servidor); no gemeo V3s o stub IGNORA o --commit e so o select do corte
+# as tira — sem ele, a primeira viraria vermelho e a segunda o run errado (o stub exige o 4242).
 _vs=0123456789abcdef0123456789abcdef01234567; _vo=fedcba9876543210fedcba9876543210fedcba98
 printf '[{"headSha":"%s","status":"completed","conclusion":"success"},{"headSha":"%s","status":"completed","conclusion":"skipped"},{"headSha":"%s","status":"completed","conclusion":"failure"}]\n' \
   "$_vs" "$_vs" "$_vo" > "$_gs/fix/v-ci.json"
@@ -2341,6 +2392,11 @@ if [ "$_gs_jq" -eq 1 ]; then
      && grep -q 'validate.yml: 3 job(s) success' "$SCRATCH/v3.log"; then
     ok "V3: o JSON bruto pelo --jq do corte: as iscas de outro commit ficam fora, e o run 4242 com 3 jobs verdes passa"
   else bad "V3: o caso bom foi recusado"; sed -n '1,8p' "$SCRATCH/v3.log"; fi
+  if GH_STUB_NO_COMMIT=1 _gs_run "$SCRATCH/v.sh" "$(printf '%s\nrun view v-jobs.json 4242' "$_vq")" "$SCRATCH/v3s.log" "$SCRATCH" \
+     && grep -q 'runs=2 pendentes=0 vermelhos=0' "$SCRATCH/v3s.log" \
+     && grep -q 'validate.yml: 3 job(s) success' "$SCRATCH/v3s.log"; then
+    ok "V3s (gemeo, o stub sem o filtro do servidor): o select do corte tira as iscas de outro commit (runs=2, run 4242)"; _red="$_red V3s"
+  else bad "V3s: sem o filtro do servidor, o select do corte nao tirou as iscas"; sed -n '1,8p' "$SCRATCH/v3s.log"; fi
   # V4 — o CI do candidato PELO COMMIT: 30 runs verdes mais novos do MESMO commit e, depois
   # deles, um run AGENDADO vermelho. Pelo commit (todos os eventos) ele aparece e e recusa
   # nomeada; numa janela dos 30 runs mais recentes do repositorio ele sumia (V4m).
@@ -3330,9 +3386,10 @@ _d_need "D8 rota 1 so (PLAN-194 D-4): lancador plantado, npx espiao e espiao do 
 _d_need "D9 passo 18: o gate e a prova do toolchain da rc, pelo nome" X2 X3 X4 X4j
 _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R14 R15 R16 R17 R18
 _d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14 \
-  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P26 P28 P29 P30 P31 P32
-_d_need "D17 wait_ci_green: o CI do candidato pelo commit (um vermelho agendado antigo nao some; a consulta cheia e recusa)" V4 V4m V4c V4p V4v
-_d_need "D16 os guards do derivador nao sao vacuos: heredocs e echos de texto, condicoes sem verificacao, a divida no CONTEXT" G2m G3m G6m G7m G8m G9m G10m
+  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P26 P28 P29 P30 P31 P32 P33
+_d_need "D17 wait_ci_green: o CI do candidato pelo commit (o select do corte sem o filtro do servidor; um vermelho agendado antigo nao some; a consulta cheia e recusa)" V3s V4 V4m V4c V4p V4v
+_d_need "D16 os guards do derivador nao sao vacuos: heredocs e echos de texto no texto FINAL, condicoes sem verificacao, a divida no CONTEXT, as janelas de cron e o censo dos crons, a marca do provisorio" \
+  G2m G3m G6m G7m G8m G9m G10m G11m G12m G13m G14m G15f
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
 _d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m

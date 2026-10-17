@@ -171,6 +171,7 @@ declara a sonda vermelha e o gerador do envelope recusa essa evidência.
   consulta devolve, ele recusa pelo nome um run vermelho e espera os pendentes até o teto de
   tempo (recusando pelo nome se não terminarem); e recusa pelo nome a consulta que volta no
   teto, porque ela não prova que não há vermelho nem pendente fora da janela. O preflight do
-  `release.sh` (o bloco canônico, assinado na relmeta) confere o CI do HEAD numa janela dos runs
-  mais recentes do repositório, filtrada depois pelo commit: um vermelho do mesmo commit mais
-  antigo que a janela não aparece ali. O kit não muda o `release.sh`.
+  `release.sh` (arquivo do manifesto ADR-192, cujo sha256 a relmeta re-pinou; o preflight não
+  mudou nesta faixa) confere o CI do HEAD numa janela dos runs mais recentes do repositório,
+  filtrada depois pelo commit: um vermelho do mesmo commit mais antigo que a janela não aparece
+  ali. O kit não muda o `release.sh`.
