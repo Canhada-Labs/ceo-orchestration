@@ -125,28 +125,34 @@ CONTENT_PENDING = [
 # curar no harness do GA: os stubs do gh». Rodada 2 do rail do K1: um stub do gh que
 # devolve o valor FINAL que o corte extrairia com o --jq nunca roda o filtro do corte (o
 # select pela tag, pelo commit, pelo NOME do job); no kit da rc da 1.4.3 os ensaios V e X ja
-# usam o stub unico (JSON bruto e `jq -rc` com a expressao do proprio corte). Os demais
-# (S365, kit da rc.1): os P2 do PLAN-193 que o kit da rc cura e o do GA ainda nao, e o
-# comentario do seam CODEX_BIN do runner do GA, que a cura D-4 deste estagio nao alcanca.
-CLASS_PENDING = [
+# usam o stub unico (JSON bruto e `jq -rc` com a expressao do proprio corte).
+CLASS_PENDING_HEAD = (
     "os stubs do gh do harness do GA que devolvem o valor FINAL do --jq passam ao stub unico "
-    "do kit da rc (JSON bruto e o --jq do corte aplicado pelo jq real)",
-    "R3C-01 no corte e no harness: um .gen-*.tmp orfao do gerador do envelope (mkstemp com "
-    "prefixo .gen-) fica sem rota; o corte ganha o assert_no_gen_orphans do kit da rc (recusa "
-    "nomeada, com a rota) e o harness o R14 pelo corte inteiro",
-    "R3H-01 no harness: os controles por AUSENCIA de texto sem pre-condicao de existencia passam "
-    "ao lacks() do kit da rc (arquivo ausente ou vazio da rc 2), com o censo A3",
-    "R3H-02 no harness: os controles que prometem recusa nomeada e conferem so o codigo de saida "
-    "passam ao refused() do kit da rc (rc != 0 E o texto fixo no log)",
-    "R3H-03 no harness: as recusas herdadas do G0 ganham controle pelo corte INTEIRO "
-    "(--g0-only, recusa pelo nome; o _r_whole do kit da rc)",
+    "do kit da rc (JSON bruto e o --jq do corte aplicado pelo jq real)")
+# As que sao DESTE estagio (o kit da rc nao as tem): o comentario do seam CODEX_BIN do runner
+# do GA, que a cura D-4 deste estagio nao alcanca.
+CLASS_PENDING_GA = [
     "no runner: o comentario do seam CODEX_BIN ainda diz que, com ele posto, o pin do npx NAO "
     "e exigido (a rota 2, recusada pela D-4)",
-    "no corte: a mensagem do commit do veredito vai num heredoc SEM aspas; o guard do kit da rc "
-    "(crase, $(, barra invertida e $ fora de $TAG/$CAND recusados pelo nome) chega ao corte do GA",
-    "no derivador: toda condicao numerada tem verificacao na sonda ou fica na lista explicita "
-    "so-texto, e a condicao do SIZE deixa de ser numero fixo (o censo G3 do kit da rc)",
 ]
+# As curas do kit da rc que o molde do GA (PLAN-193) ainda nao tem vem do PROPRIO derivador da
+# rc, por construcao: GA_CARRY ((id, onde, texto), ...) e GA_NA ((id, motivo), ...), conjunto
+# FECHADO depois da rodada 3 do rail do kit da rc. Rodada 2 do rail do K-b (LDR2-03/LM2-02): a
+# lista mantida a mao aqui esqueceu classes duas vezes (LD-08 na rodada 1; o CI pelo commit, a
+# guarda do banner e o texto do G0 na rodada 2) -- a cura e nao manter lista aqui.
+# CARRY_IN_HEAD: ids do GA_CARRY que o CLASS_PENDING_HEAD ja diz (nao se repetem).
+CARRY_IN_HEAD: Tuple[str, ...] = ("stub-gh-unico",)
+# GA_APPLIED: ids do GA_CARRY que ESTE estagio ja aplica ao molde do GA (nao sao pendencia), com
+# o rotulo da edicao por ancora que os aplica; o --check-cures confere que o rotulo rodou.
+GA_APPLIED: Dict[str, str] = {
+    "janela-9-11": "M3-01: o seletor do G0",
+    "rota-1-so-corte": "D-4: o guard da rota 1",
+    "rota-1-so-runner": "D-4: as rotas do codex",
+    "oraculo-no-projeto": "D-4: o oraculo com CLAUDE_PROJECT_DIR",
+}
+# Os rotulos das edicoes por ancora que rodaram (preenchido por sub() e cut_region()).
+APPLIED_LABELS: List[str] = []
+CARRY_WHERE = ("corte", "runner", "harness", "derivador", "gerador")
 
 
 def die(msg: str) -> None:
@@ -174,6 +180,7 @@ def sub(text: str, old: str, new: str, what: str, n: int = 1) -> str:
     c = text.count(old)
     if c != n:
         die("ancora %r casou %d vez(es) (exigido: %d)" % (what, c, n))
+    APPLIED_LABELS.append(what)
     return text.replace(old, new)
 
 
@@ -185,6 +192,7 @@ def cut_region(text: str, start: str, end: str, new: str, what: str) -> str:
     j = text.find(end, i + len(start))
     if j < 0:
         die("ancora final de %r ausente" % what)
+    APPLIED_LABELS.append(what)
     return text[:i] + new + text[j:]
 
 
@@ -599,17 +607,61 @@ def check_protect(out: Dict[str, str], rc) -> List[str]:
     return rows
 
 
+def class_pending(rc=None, check_applied: bool = False) -> List[str]:
+    """O CLASS_PENDING: o do harness primeiro, os deste estagio e o GA_CARRY do kit da rc
+    (menos o que este estagio ja aplica; com check_applied, depois de derive_cured, confere que
+    a edicao de cada id do GA_APPLIED rodou)."""
+    rc = rc if rc is not None else rc143()
+    carry = getattr(rc, "GA_CARRY", None)
+    na = getattr(rc, "GA_NA", None)
+    if not isinstance(carry, tuple) or not carry:
+        die("%s sem o GA_CARRY (tupla nao vazia de (id, onde, texto)): as curas do kit da rc "
+            "que o kit do GA herda vem dele" % DERIVE_RC143)
+    if not isinstance(na, tuple):
+        die("%s sem o GA_NA (tupla de (id, motivo))" % DERIVE_RC143)
+    ids: List[str] = []
+    out = [CLASS_PENDING_HEAD] + list(CLASS_PENDING_GA)
+    for e in carry:
+        if not (isinstance(e, tuple) and len(e) == 3
+                and all(isinstance(x, str) and x.strip() and x.isascii() for x in e)):
+            die("GA_CARRY: entrada fora da forma (id, onde, texto) em ASCII: %r" % (e,))
+        cid, where, text = e
+        if where not in CARRY_WHERE:
+            die("GA_CARRY %s: onde=%r fora de %s" % (cid, where, "/".join(CARRY_WHERE)))
+        ids.append(cid)
+        if cid not in CARRY_IN_HEAD and cid not in GA_APPLIED:
+            out.append("%s, no %s: %s" % (cid, where, text))
+    for e in na:
+        if not (isinstance(e, tuple) and len(e) == 2
+                and all(isinstance(x, str) and x.strip() for x in e)):
+            die("GA_NA: entrada fora da forma (id, motivo): %r" % (e,))
+        ids.append(e[0])
+    dup = sorted(set(i for i in ids if ids.count(i) > 1))
+    if dup:
+        die("GA_CARRY/GA_NA: id repetido: %s" % ", ".join(dup))
+    carry_ids = set(e[0] for e in carry)
+    stale = sorted((set(CARRY_IN_HEAD) | set(GA_APPLIED)) - carry_ids)
+    if stale:
+        die("CARRY_IN_HEAD/GA_APPLIED cita id ausente do GA_CARRY: %s" % ", ".join(stale))
+    if check_applied:
+        missing = sorted(i for i, lab in GA_APPLIED.items() if lab not in APPLIED_LABELS)
+        if missing:
+            die("GA_APPLIED: a edicao que aplicaria %s nao rodou" % ", ".join(missing))
+    return out
+
+
 def pending_message() -> str:
     # O 1.o elemento do CLASS_PENDING e do harness; os demais dizem onde moram (corte, runner).
+    cp = class_pending()
     later = ""
-    if len(CLASS_PENDING) > 1:
-        later = "; classes declaradas no K1, a curar no kit do GA: %s" % "; ".join(CLASS_PENDING[1:])
+    if len(cp) > 1:
+        later = "; classes declaradas no K1, a curar no kit do GA: %s" % "; ".join(cp[1:])
     return ("o kit do GA v1.4.3 so deriva INTEIRO depois do corte da v1.4.3-rc.1 — estagio K1: "
             "fatos pendentes: %s; conteudo pendente: %s; classe a curar no harness do GA: %s%s. Hoje: "
             "--check-cures (as curas sobre o kit do GA v1.4.2, por ancora) e --emit-cured DIR (o "
             "material de ensaio)."
             % ("; ".join("%s (%s)" % f for f in FACTS_PENDING), "; ".join(CONTENT_PENDING),
-               CLASS_PENDING[0], later))
+               cp[0], later))
 
 
 def main() -> int:
@@ -622,6 +674,9 @@ def main() -> int:
         die(pending_message())
     out, rc = derive_cured()
     if a.check_cures:
+        cp = class_pending(rc, check_applied=True)
+        print("class_pending OK (%d classes; GA_CARRY %d, dos quais %d ja aplicados aqui; GA_NA %d)"
+              % (len(cp), len(rc.GA_CARRY), len(GA_APPLIED), len(rc.GA_NA)))
         for row in check_protect(out, rc):
             print("protect %s" % row)
         for k in CURED_KINDS:
