@@ -12,20 +12,21 @@
 #
 # Dois modos, decididos pelo DISCO:
 #   K1  — a arvore tem o derivador e este harness, e NENHUMA das outras sete saidas do kit
-#         (o estado do K1 do PLAN-194 W7: os derivadores landam antes das saidas). O harness
-#         NAO roda contra ela: clona-a (HEAD + derivador e harness do disco) num diretorio
-#         DESCARTAVEL do scratch, prova que o derivador recusa pelo nome um HEAD sem o job
-#         da W4 e uma escrita do conteudo provisorio sem --provisional, projeta a W4 no clone
-#         (o npm-publish.yml de RC1KIT_W4_NPM_PUBLISH, se posto; senao um job MINIMO com o
-#         nome, o gatilho e as permissoes que a condicao 4 afirma), deriva o kit la, confere
-#         que o harness derivado e byte a byte ESTE arquivo e re-executa o harness derivado
-#         no clone. Um kit PARCIAL no disco e recusa.
+#         (o ensaio da derivacao ANTES de commitar as saidas: o derivador e este harness do
+#         disco sobre o HEAD). O harness NAO roda contra ela: clona-a (HEAD + derivador e
+#         harness do disco) num diretorio DESCARTAVEL do scratch, prova que o derivador recusa
+#         pelo nome um HEAD sem o job da W4 (K1a), que um derivador com o conteudo da release
+#         PROVISORIO recusa escrever sem --provisional (K1e) e que --provisional sob o conteudo
+#         final e recusa nomeada (K1f), confere que o HEAD ja tem a W4 e a relmeta-143 (as duas
+#         landaram: nada e projetado), deriva o conteudo final la sem flag (K1b), confere que o
+#         harness derivado e byte a byte ESTE arquivo (K1c) e re-executa o harness derivado no
+#         clone (K1d). Um kit PARCIAL no disco e recusa.
 #   kit — a arvore tem o kit derivado (commitado ou nao): o ensaio completo, abaixo.
 #
-# Onde roda o modo kit: numa arvore em que os lands da 1.4.3 JA estao (a da manha, depois da
-# relmeta-143; ou, antes dela, uma arvore PROJETADA com eles — a do K1). A fixture recria a
-# tag base v1.4.2 no upstream DESCARTAVEL, assinada por uma chave descartavel, no commit
-# RC1KIT_BASE_REV (padrao: o commit da v1.4.2 real) — nada sai do scratch.
+# Onde roda o modo kit: numa arvore em que os lands da 1.4.3 JA estao (a W4 e a relmeta-143
+# landaram). A fixture recria a tag base v1.4.2 no upstream DESCARTAVEL, assinada por uma
+# chave descartavel, no commit RC1KIT_BASE_REV (padrao: o commit da v1.4.2 real) — nada sai
+# do scratch.
 #   RC1KIT_SCRATCH_PARENT  pai do scratch (padrao /tmp; com um pai longo, o homedir GPG
 #                          ganha um ALIAS curto em /tmp, removido na saida).
 #
@@ -33,7 +34,9 @@
 #   F.  controles de EVIDENCIA do gerador e dos guards do runner (sem GPG nem rede),
 #       inclusive o relatorio da sonda conferido pelo gerador (as formas que nao provam a
 #       sonda VERDE deste candidato sao recusadas pelo nome — cura do GA v1.4.2);
-#   A.  lint estatico: `derive-kit-143.py --check`, `/bin/bash -n` (3.2) + `shellcheck -S
+#   A.  lint estatico: `derive-kit-143.py --check` (A0m: dois MUTANTES do derivador morrem pelo
+#       nome — uma crase na mensagem do commit do veredito, G2m, e uma condicao sem verificacao
+#       na sonda, G3m), `/bin/bash -n` (3.2) + `shellcheck -S
 #       warning` nos shells do kit, compilacao EM MEMORIA (sem .pyc) nos pythons, e
 #       `check-ceremony-script.py` exigindo ZERO achado BLOCKING nos arquivos do kit; A3 o
 #       CENSO deste harness: nenhum controle por AUSENCIA de texto sem pre-condicao de
@@ -243,7 +246,8 @@ if [ "$_k1_have" -eq 0 ]; then
     return 0
   }
   # K1a — o derivador recusa PELO NOME um HEAD sem o job da W4 (o passo 18 exige success
-  # nele). Se o HEAD ja tem o job (a W4 landou), um commit descartavel o tira.
+  # nele), SEM --provisional: os fatos do HEAD vem antes de qualquer outra recusa. O HEAD ja
+  # tem o job (a W4 landou): um commit descartavel o tira.
   if [ "$_k1_ok" -eq 1 ]; then
     if python3 - "$K1WT/$_k1_wf" <<'PYK1A' && git -C "$K1WT" commit -q -m "TEST ONLY (K1a): sem o job da W4" -- "$_k1_wf" 2>/dev/null; then
 import re, sys
@@ -259,7 +263,7 @@ PYK1A
       :
     fi
     _k1a_rc=0
-    ( cd "$K1WT" && python3 "$PLAN_DIR/derive-kit-143.py" --provisional ) > "$K1D/k1a.log" 2>&1 || _k1a_rc=$?
+    ( cd "$K1WT" && python3 "$PLAN_DIR/derive-kit-143.py" ) > "$K1D/k1a.log" 2>&1 || _k1a_rc=$?
     if _k1_outs_absent; then
       refused K1a "$_k1a_rc" "$K1D/k1a.log" "nao existe no .github/workflows/npm-publish.yml do HEAD" \
         "o derivador sobre um HEAD sem o job da W4 (nenhuma saida escrita)"
@@ -269,82 +273,56 @@ PYK1A
     { git -C "$K1WT" reset -q "$_k1_head" && git -C "$K1WT" checkout -q "$_k1_head" -- "$_k1_wf"; } \
       || { bad "K1a: restaurar o clone falhou"; _k1_ok=0; }
   fi
-  # A projecao da W4: o npm-publish.yml que RC1KIT_W4_NPM_PUBLISH aponta (o da sombra da W4),
-  # ou um job MINIMO com o nome, o gatilho e as permissoes que a condicao 4 afirma.
-  if [ "$_k1_ok" -eq 1 ] && lacks "$K1WT/$_k1_wf" '^  rc-toolchain-proof:'; then
-    if [ -n "${RC1KIT_W4_NPM_PUBLISH:-}" ]; then
-      if [ -f "$RC1KIT_W4_NPM_PUBLISH" ] && [ ! -L "$RC1KIT_W4_NPM_PUBLISH" ] \
-         && cp -- "$RC1KIT_W4_NPM_PUBLISH" "$K1WT/$_k1_wf"; then
-        _k1_proj="o npm-publish.yml de RC1KIT_W4_NPM_PUBLISH ($(shasum -a 256 "$RC1KIT_W4_NPM_PUBLISH" | cut -c1-12))"
-      else bad "K1: RC1KIT_W4_NPM_PUBLISH nao e arquivo regular: $RC1KIT_W4_NPM_PUBLISH"; _k1_ok=0; fi
-    else
-      printf '%s\n' '' \
-        '  # TEST ONLY (K1): projecao MINIMA da W4 do PLAN-194 — o job da prova do toolchain da rc.' \
-        '  rc-toolchain-proof:' \
-        '    name: RC toolchain proof (no publish)' \
-        "    if: contains(github.ref, '-rc.')" \
-        '    runs-on: ubuntu-latest' \
-        '    permissions:' \
-        '      contents: read' \
-        '    steps:' \
-        '      - name: projecao do ensaio K1 (nunca roda)' \
-        '        run: "true"' >> "$K1WT/$_k1_wf" || _k1_ok=0
-      _k1_proj="o job MINIMO (nome, gatilho -rc. e contents: read)"
-    fi
-    if [ "$_k1_ok" -eq 1 ] && git -C "$K1WT" commit -q -m "TEST ONLY (K1): projecao da W4 do PLAN-194" -- "$_k1_wf" 2>/dev/null; then
-      ok "K1: W4 projetada no clone: $_k1_proj"
-    else bad "K1: commit da projecao da W4 falhou"; _k1_ok=0; fi
-  elif [ "$_k1_ok" -eq 1 ]; then
-    ok "K1: o HEAD ja tem o job da W4 (nenhuma projecao)"
-  fi
-  # A projecao da relmeta-143 (o driver na 1.4.3): TARGET_BASE, o RELEASE_SCOPE DERIVADO dos
-  # planos citados nos assuntos de v1.4.2..HEAD e dos ADRs tocados (a mesma regra do G0), e o
-  # sha novo do release.sh no manifesto ADR-192 — so se o HEAD ainda nao a tem.
-  if [ "$_k1_ok" -eq 1 ] && lacks "$K1WT/.claude/scripts/local/release.sh" '^TARGET_BASE="1.4.3"$'; then
-    if ( cd "$K1WT" && python3 - <<'PYK1R'
-import hashlib, re, subprocess
-def g(*a):
-    return subprocess.check_output(["git"] + list(a), universal_newlines=True)
-rel = ".claude/scripts/local/release.sh"
-man = ".claude/governance/gate-scripts-manifest.txt"
-plans = sorted(set(re.findall(r"PLAN-\d{3}", g("log", "--format=%s", "v1.4.2..HEAD"))))
-adrs = sorted(set(re.findall(r"ADR-\d{3}", g("diff", "--name-only", "v1.4.2", "HEAD", "--", ".claude/adr/"))))
-scope = "%s (ADRs tocados: %s)" % (" / ".join(plans), ", ".join(adrs) or "nenhum")
-t = open(rel, encoding="utf-8").read()
-t2 = re.sub(r'(?m)^TARGET_BASE="[^"]*"$', 'TARGET_BASE="1.4.3"', t, count=1)
-t2 = re.sub(r'(?m)^RELEASE_SCOPE="[^"\n]*"$', lambda m: 'RELEASE_SCOPE="%s"' % scope, t2, count=1)
-if t2 == t:
-    raise SystemExit(3)
-open(rel, "w", encoding="utf-8").write(t2)
-sha = hashlib.sha256(t2.encode("utf-8")).hexdigest()
-m = open(man, encoding="utf-8").read()
-m2 = re.sub(r"(?m)^[0-9a-f]{64}(  \.claude/scripts/local/release\.sh)$", lambda x: sha + x.group(1), m, count=1)
-if m2 == m:
-    raise SystemExit(4)
-open(man, "w", encoding="utf-8").write(m2)
-print(scope)
-PYK1R
-    ) > "$K1D/relmeta.log" 2>&1 && git -C "$K1WT" commit -q -m "TEST ONLY (K1): projecao da relmeta-143 (driver na 1.4.3)" \
-         -- .claude/scripts/local/release.sh .claude/governance/gate-scripts-manifest.txt 2>/dev/null; then
-      ok "K1: relmeta-143 projetada no clone (TARGET_BASE 1.4.3; Scope $(head -n 1 "$K1D/relmeta.log"))"
-    else bad "K1: projecao da relmeta-143 falhou"; sed -n '1,6p' "$K1D/relmeta.log"; _k1_ok=0; fi
-  fi
-  # K1b — sem --provisional, o conteudo provisorio da release nao e escrito.
+  # O conteudo final so deriva sobre a W4 e a relmeta-143, que landaram: nada e projetado.
   if [ "$_k1_ok" -eq 1 ]; then
-    _k1b_rc=0
-    ( cd "$K1WT" && python3 "$PLAN_DIR/derive-kit-143.py" ) > "$K1D/k1b.log" 2>&1 || _k1b_rc=$?
+    if grep -q '^  rc-toolchain-proof:' "$K1WT/$_k1_wf" \
+       && grep -q '^TARGET_BASE="1.4.3"$' "$K1WT/.claude/scripts/local/release.sh"; then
+      ok "K1: o HEAD ja tem o job da W4 e a relmeta-143 (nenhuma projecao)"
+    else bad "K1: o HEAD sem o job da W4 ou sem a relmeta-143 (o conteudo final da 1.4.3 so deriva sobre as duas)"; _k1_ok=0; fi
+  fi
+  # K1e — um derivador com o conteudo da release PROVISORIO (um MUTANTE fora do clone: so
+  # RELEASE_CONTENT trocado) recusa escrever sem --provisional, pelo nome.
+  if [ "$_k1_ok" -eq 1 ]; then
+    _k1e_rc=0
+    if python3 - "$K1WT/$PLAN_DIR/derive-kit-143.py" "$K1D/derive-prov.py" <<'PYK1E'
+import sys
+src, dst = sys.argv[1:3]
+t = open(src, encoding="utf-8").read()
+old = 'RELEASE_CONTENT = "final"\n'
+if t.count(old) != 1:
+    sys.exit("o derivador nao tem UMA linha %r" % old)
+open(dst, "w", encoding="utf-8").write(t.replace(old, 'RELEASE_CONTENT = "provisorio-K1"\n'))
+PYK1E
+    then
+      ( cd "$K1WT" && python3 "$K1D/derive-prov.py" ) > "$K1D/k1e.log" 2>&1 || _k1e_rc=$?
+      if _k1_outs_absent; then
+        refused K1e "$_k1e_rc" "$K1D/k1e.log" "conteudo da release e PROVISORIO" \
+          "a escrita do conteudo provisorio sem --provisional (nenhuma saida escrita)"
+      else bad "K1e: o derivador com o conteudo provisorio escreveu sem --provisional"; fi
+    else bad "K1e: o mutante do conteudo provisorio nao foi gerado"; fi
+  fi
+  # K1f — --provisional sob o conteudo FINAL e recusa nomeada (a flag nao escreve o final).
+  if [ "$_k1_ok" -eq 1 ]; then
+    _k1f_rc=0
+    ( cd "$K1WT" && python3 "$PLAN_DIR/derive-kit-143.py" --provisional ) > "$K1D/k1f.log" 2>&1 || _k1f_rc=$?
     if _k1_outs_absent; then
-      refused K1b "$_k1b_rc" "$K1D/k1b.log" "conteudo da release e PROVISORIO" \
-        "a escrita do conteudo provisorio sem --provisional (nenhuma saida escrita)"
-    else bad "K1b: o derivador escreveu o conteudo provisorio sem --provisional"; fi
+      refused K1f "$_k1f_rc" "$K1D/k1f.log" "o conteudo da release e final; --provisional nao se aplica" \
+        "--provisional sob o conteudo final (nenhuma saida escrita)"
+    else bad "K1f: --provisional sob o conteudo final escreveu saidas"; fi
   fi
-  # K1c — a derivacao no clone; --check; e o harness derivado e ESTE arquivo, byte a byte.
+  # K1b — sem flag, o conteudo FINAL e escrito (as oito saidas), sem o AVISO do provisorio.
   if [ "$_k1_ok" -eq 1 ]; then
-    if ( cd "$K1WT" && python3 "$PLAN_DIR/derive-kit-143.py" --provisional ) > "$K1D/k1c.log" 2>&1 \
-       && ( cd "$K1WT" && python3 "$PLAN_DIR/derive-kit-143.py" --check ) > "$K1D/k1c-check.log" 2>&1 \
+    if ( cd "$K1WT" && python3 "$PLAN_DIR/derive-kit-143.py" ) > "$K1D/k1b.log" 2>&1 \
+       && [ "$(grep -c '^wrote ' "$K1D/k1b.log")" = "8" ] && lacks "$K1D/k1b.log" 'AVISO'; then
+      ok "K1b: sem flag, o derivador escreve as oito saidas com o conteudo final (sem o AVISO do provisorio)"
+    else bad "K1b: o derivador sem flag nao escreveu o conteudo final"; sed -n '1,16p' "$K1D/k1b.log"; _k1_ok=0; fi
+  fi
+  # K1c — --check sobre o que o K1b escreveu; e o harness derivado e ESTE arquivo, byte a byte.
+  if [ "$_k1_ok" -eq 1 ]; then
+    if ( cd "$K1WT" && python3 "$PLAN_DIR/derive-kit-143.py" --check ) > "$K1D/k1c-check.log" 2>&1 \
        && grep -q -- '--check OK (disco == derivado)' "$K1D/k1c-check.log"; then
       ok "K1c: o kit derivado no clone; --check OK (8 saidas)"
-    else bad "K1c: derivacao/--check no clone falhou"; sed -n '1,16p' "$K1D/k1c.log" "$K1D/k1c-check.log"; _k1_ok=0; fi
+    else bad "K1c: --check no clone falhou"; sed -n '1,16p' "$K1D/k1c-check.log"; _k1_ok=0; fi
   fi
   if [ "$_k1_ok" -eq 1 ]; then
     if cmp -s -- "$K1WT/$PLAN_DIR/test-rc1-kit.sh" "$ROOT/$PLAN_DIR/test-rc1-kit.sh"; then
@@ -432,13 +410,18 @@ if not gen.PROBE_IDS or sorted(gen.PROBE_IDS) != sorted(_probe_ids) \
     raise RuntimeError("PROBE_IDS do gerador %r != ids da lista CHECKS da sonda %r"
                        % (gen.PROBE_IDS, _probe_ids))
 # A linha MAPA na forma que a sonda escreve (condition_map): os ids de cada condicao na
-# ordem da lista CHECKS, SIZE na condicao 11, o cabecalho primeiro e as condicoes em ordem
+# ordem da lista CHECKS, SIZE na SIZE_CONDITION da sonda, o cabecalho primeiro e as condicoes em ordem
 # numerica — o parse de VARIOS itens do gerador roda no caminho verde.
 _probe_by = {}
 for _e in _checks[0].elts:
     for _c in _e.elts[2].elts:
         _probe_by.setdefault(_c.value, []).append(_e.elts[0].value)
-_probe_by.setdefault("11", []).append("SIZE")
+_size_c = [n.value.value for n in ast.parse(_probe_src).body
+           if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
+           and any(getattr(_tg, "id", "") == "SIZE_CONDITION" for _tg in n.targets)]
+if len(_size_c) != 1:
+    raise RuntimeError("sonda do kit sem UMA constante SIZE_CONDITION")
+_probe_by.setdefault(_size_c[0], []).append("SIZE")
 _probe_map = "MAPA condicao -> ids: " + "; ".join(
     "%s: %s" % (k, " ".join(_probe_by[k]))
     for k in sorted(_probe_by, key=lambda k: (-1 if k == "cabecalho" else int(k))))
@@ -690,6 +673,35 @@ say "A. lint estatico"
 if python3 "$PLAN_DIR/derive-kit-143.py" --check > "$SCRATCH/derive-check.log" 2>&1; then
   ok "A0: derive-kit-143.py --check (o kit no disco e o derivado, byte a byte)"
 else bad "A0: derive-kit-143.py --check FALHOU"; sed -n '1,14p' "$SCRATCH/derive-check.log"; fi
+# A0m — os guards do derivador nao sao vacuos: um MUTANTE do derivador (no scratch, lendo as
+# fontes desta arvore; --check nao escreve nada) morre PELO NOME. G2m: uma crase na mensagem do
+# commit do veredito, que o passo 11 passa num heredoc SEM aspas (so $TAG e $CAND expandem
+# ali). G3m: a condicao 7 sem verificacao na sonda e fora da lista so-texto (COND_TEXT_ONLY).
+_a0m() {  # $1 = id, $2 = mutacao (g2 | g3), $3 = texto fixo da recusa, $4 = o caso
+  local _rc=0
+  if ! python3 - "$ROOT/$PLAN_DIR/derive-kit-143.py" "$SCRATCH/$1-derive.py" "$2" > "$SCRATCH/$1-gen.log" 2>&1 <<'PYA0M'
+import sys
+src, dst, kind = sys.argv[1:4]
+MUT = {
+    "g2": ("Evidencia do re-pass no MESMO commit: quatro partes, ordenadas por raio de\n",
+           "Evidencia do re-pass no MESMO commit (`date`): quatro partes, ordenadas por raio de\n"),
+    "g3": ('    ("C16-adopter-notes", c16_adopter_notes, ("7", "8")),\n',
+           '    ("C16-adopter-notes", c16_adopter_notes, ("8",)),\n'),
+}
+old, new = MUT[kind]
+t = open(src, encoding="utf-8").read()
+if t.count(old) != 1:
+    sys.exit("mutante %s: a ancora casou %d vez(es), exigido 1" % (kind, t.count(old)))
+open(dst, "w", encoding="utf-8").write(t.replace(old, new))
+PYA0M
+  then bad "$1: o mutante do derivador nao foi gerado"; sed -n '1,4p' "$SCRATCH/$1-gen.log"; return; fi
+  ( cd "$ROOT" && python3 "$SCRATCH/$1-derive.py" --check ) > "$SCRATCH/$1.log" 2>&1 || _rc=$?
+  refused "$1" "$_rc" "$SCRATCH/$1.log" "$3" "$4"
+}
+_a0m G2m g2 "a mensagem do commit do veredito (heredoc SEM aspas do passo 11) carrega '\`'" \
+  "uma crase na mensagem do commit do veredito (o derivador morre antes de qualquer saida)"
+_a0m G3m g3 "a condicao 7 do texto nao tem verificacao na sonda" \
+  "a condicao 7 sem verificacao na sonda (o derivador morre antes de qualquer saida)"
 for f in $SHELLS; do
   [ -f "$f" ] || { bad "ausente: $f"; continue; }
   if /bin/bash -n "$f" 2>/dev/null; then ok "/bin/bash -n $(basename "$f") ($(/bin/bash -c 'echo $BASH_VERSION' | cut -c1-3))"; else bad "/bin/bash -n $(basename "$f")"; fi
@@ -1473,26 +1485,92 @@ if [ -n "${UPSTREAM:-}" ] && [ -n "$BASE_REV" ]; then
     _p_red P10 "$SCRATCH/p10" C1-annex-v1.4.0 "FAIL C1-annex-v1.4.0: arquivo citado pelos vereditos da v1.4.0 muda fora das classes declaradas: AGENTS.md" \
       "arquivo citado da v1.4.0 fora das classes declaradas (condicao 1)"
   else bad "P10: fixture do AGENTS.md falhou"; fi
-  # P11 — o job da W4 com uma permissao de token OIDC (condicao 4).
+  # P11 — o job da W4 com uma permissao de token OIDC (condicao 6).
   if _p_mut "$SCRATCH/p11" "id-token no job da rc" "python3 -c 'import sys; p=sys.argv[1]; t=open(p,encoding=\"utf-8\").read(); i=t.index(\"  rc-toolchain-proof:\"); j=t.index(\"      contents: read\", i); open(p,\"w\",encoding=\"utf-8\").write(t[:j]+\"      id-token: write\n\"+t[j:])' .github/workflows/npm-publish.yml"; then
     _p_red P11 "$SCRATCH/p11" C0-rc-proof "FAIL C0-rc-proof: o job rc-toolchain-proof tem permissions" \
-      "o job da prova do toolchain com id-token: write (condicao 4)"
+      "o job da prova do toolchain com id-token: write (condicao 6)"
   else bad "P11: fixture do id-token falhou"; fi
   # P11b — o job da W4 com outro nome (o passo 18 o exige pelo nome).
   if _p_mut "$SCRATCH/p11b" "job da rc renomeado" "python3 -c 'import sys; p=sys.argv[1]; t=open(p,encoding=\"utf-8\").read(); n=t.replace(\"    name: RC toolchain proof (no publish)\", \"    name: RC proof\", 1); open(p,\"w\",encoding=\"utf-8\").write(n); sys.exit(0 if n!=t else 3)' .github/workflows/npm-publish.yml"; then
     _p_red P11b "$SCRATCH/p11b" C0-rc-proof "FAIL C0-rc-proof: o job rc-toolchain-proof se chama ['RC proof']" \
       "o job da prova do toolchain com outro nome"
   else bad "P11b: fixture do job renomeado falhou"; fi
-  # P12 — o manifesto ADR-182 pinando outra versao (condicao 3).
+  # P12 — o manifesto ADR-182 pinando outra versao (condicao 5).
   if _p_mut "$SCRATCH/p12" "manifesto em outra versao" "python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); d[\"package_version\"]=\"0.159.0\"; open(p,\"w\").write(json.dumps(d,indent=2)+\"\n\")' .claude/governance/codex-cli-pin-manifest.json"; then
     _p_red P12 "$SCRATCH/p12" C9-codex-pin "FAIL C9-codex-pin: o manifesto ADR-182 pina '0.159.0' (esperado 0.160.0" \
       "o manifesto pinando outra versao do codex"
   else bad "P12: fixture do manifesto falhou"; fi
-  # P13 — o runner do candidato com a rota 2 viva (condicao 3).
+  # P13 — o runner do candidato com a rota 2 viva (condicao 5).
   if _p_mut "$SCRATCH/p13" "rota 2 viva no runner" "printf '_nv=\"\$(npx -y \"@openai/codex@x\" --version)\"\n' >> $EV/run-rc1-repass.sh"; then
     _p_red P13 "$SCRATCH/p13" C13-route1 "FAIL C13-route1: o runner do candidato ainda invoca npx (a rota 2 viva)" \
       "o runner do candidato que invoca npx"
   else bad "P13: fixture da rota 2 viva falhou"; fi
+  # P15/P16 — o CASO da condicao 67 (condicoes 1 e 3): uma leitura do elo, ou uma
+  # atualizacao do sidecar, FORA do with FileLock de append_entry (a forma da corrida).
+  _p15py="$SCRATCH/p15-mut.py"
+  cat > "$_p15py" <<'PYP15'
+import sys
+p, call = sys.argv[1:3]
+t = open(p, encoding="utf-8").read()
+i = t.index("def append_entry(")
+anchor = '        with FileLock(paths["lock"], timeout=2.5):\n'
+j = t.index(anchor, i)
+open(p, "w", encoding="utf-8").write(t[:j] + "        _audit_hmac.%s  # TEST ONLY\n" % call + t[j:])
+PYP15
+  if _p_mut "$SCRATCH/p15" "read_prev_hmac fora da trava" "python3 '$_p15py' .claude/hooks/audit_log.py 'read_prev_hmac()'"; then
+    _p_red P15 "$SCRATCH/p15" C14-cure-67 "FAIL C14-cure-67: append_entry chama read_prev_hmac FORA do with FileLock" \
+      "a leitura do elo fora da trava em append_entry (a forma da corrida da condicao 67)"
+  else bad "P15: fixture da leitura do elo fora da trava falhou"; fi
+  if _p_mut "$SCRATCH/p16" "write_last_hmac fora da trava" "python3 '$_p15py' .claude/hooks/audit_log.py 'write_last_hmac(b\"\")'"; then
+    _p_red P16 "$SCRATCH/p16" C14-cure-67 "FAIL C14-cure-67: append_entry chama write_last_hmac FORA do with FileLock" \
+      "a atualizacao do sidecar fora da trava em append_entry"
+  else bad "P16: fixture do sidecar fora da trava falhou"; fi
+  # P17 — o CHANGELOG do candidato sem a frase da cura da 67 (condicoes 1 e 3).
+  if _p_mut "$SCRATCH/p17" "CHANGELOG sem a cura da 67" "python3 -c 'import sys; p=sys.argv[1]; t=open(p,encoding=\"utf-8\").read(); o=\"This release cures one of them: signed condition 67\"; n=t.replace(o, \"This release cures none of them\", 1); open(p,\"w\",encoding=\"utf-8\").write(n); sys.exit(0 if n!=t else 3)' CHANGELOG.md"; then
+    _p_red P17 "$SCRATCH/p17" C14-cure-67 "FAIL C14-cure-67: a secao [1.4.3] do CHANGELOG nao diz 'This release cures one of them: signed condition 67'" \
+      "o CHANGELOG sem a frase da cura da condicao 67"
+  else bad "P17: fixture do CHANGELOG sem a cura da 67 falhou"; fi
+  # P18 — o check-substrate-drift.py sem o achado nomeado COMPONENT_CHECK_ERROR (condicoes 2 e 4).
+  if _p_mut "$SCRATCH/p18" "drift sem COMPONENT_CHECK_ERROR" "python3 -c 'import sys; p=sys.argv[1]; t=open(p,encoding=\"utf-8\").read(); n=t.replace(\"COMPONENT_CHECK_ERROR\", \"COMPONENT_ERROR_X\"); open(p,\"w\",encoding=\"utf-8\").write(n); sys.exit(0 if n!=t else 3)' .claude/scripts/check-substrate-drift.py"; then
+    _p_red P18 "$SCRATCH/p18" C15-cure-ga-p2 "FAIL C15-cure-ga-p2: .claude/scripts/check-substrate-drift.py sem o achado nomeado COMPONENT_CHECK_ERROR" \
+      "o check-substrate-drift.py sem o achado nomeado da checagem que levanta"
+  else bad "P18: fixture do drift sem COMPONENT_CHECK_ERROR falhou"; fi
+  # P19 — o exemplo de upgrade do INSTALL.md com uma pre-release (condicao 7).
+  if _p_mut "$SCRATCH/p19" "INSTALL com exemplo -rc" "python3 -c 'import re,sys; p=sys.argv[1]; t=open(p,encoding=\"utf-8\").read(); n=re.sub(r\"(--pin v[0-9]+\\.[0-9]+\\.[0-9]+)\", r\"\\1-rc.1\", t, count=1); open(p,\"w\",encoding=\"utf-8\").write(n); sys.exit(0 if n!=t else 3)' INSTALL.md"; then
+    _p_red P19 "$SCRATCH/p19" C16-adopter-notes "FAIL C16-adopter-notes: o exemplo --pin do INSTALL.md e uma pre-release" \
+      "o exemplo de upgrade do INSTALL.md com uma pre-release"
+  else bad "P19: fixture do INSTALL com -rc falhou"; fi
+  # P20 — o adapter Claude da lane live tocado na faixa (condicao 8).
+  if _p_mut "$SCRATCH/p20" "adapter claude tocado" "printf '\n# TEST ONLY: P20\n' >> .claude/hooks/_lib/adapters/live/claude.py"; then
+    _p_red P20 "$SCRATCH/p20" C16-adopter-notes "FAIL C16-adopter-notes: .claude/hooks/_lib/adapters/live/claude.py muda na faixa" \
+      "o adapter Claude da lane live tocado na faixa"
+  else bad "P20: fixture do adapter tocado falhou"; fi
+  # P21 — as condicoes do candidato com a marca do conteudo provisorio do K1 (cabecalho).
+  if _p_mut "$SCRATCH/p21" "condicoes provisorias" "python3 -c 'import sys; open(sys.argv[1],\"a\",encoding=\"utf-8\").write(\"\n> CONTE\u00daDO PROVIS\u00d3RIO (deriva\u00e7\u00e3o K1)\n\")' $EV/CONDITIONS-rc1.md"; then
+    _p_red P21 "$SCRATCH/p21" C17-final-text "FAIL C17-final-text: $EV/CONDITIONS-rc1.md carrega a marca do conteudo provisorio" \
+      "as condicoes do candidato com a marca do conteudo provisorio do K1"
+  else bad "P21: fixture das condicoes provisorias falhou"; fi
+  # P22 — o job da prova da rc lendo outra variavel de npm que o publish (condicao 6).
+  if _p_mut "$SCRATCH/p22" "rc lendo outra versao do npm" "python3 -c 'import sys; p=sys.argv[1]; t=open(p,encoding=\"utf-8\").read(); i=t.index(\"  rc-toolchain-proof:\"); o=\"npm install -g \\\"npm@\${PUBLISH_NPM_VERSION}\\\"\"; j=t.index(o, i); open(p,\"w\",encoding=\"utf-8\").write(t[:j]+\"npm install -g \\\"npm@\${RC_NPM_VERSION}\\\"\"+t[j+len(o):])' .github/workflows/npm-publish.yml"; then
+    _p_red P22 "$SCRATCH/p22" C0-rc-proof "FAIL C0-rc-proof: paridade de toolchain com o publish (condicao 6): o job rc-toolchain-proof nao tem exatamente uma linha" \
+      "o job da prova da rc instalando o npm de outra variavel que o publish"
+  else bad "P22: fixture do npm de outra variavel falhou"; fi
+  # P23 — um arquivo novo em .claude/governance/ fora do declarado (condicao 10).
+  if _p_mut "$SCRATCH/p23" "governance fora do declarado" "printf 'x\n' > .claude/governance/TEST-ONLY-p23.txt"; then
+    _p_red P23 "$SCRATCH/p23" C11-scope "FAIL C11-scope: muda em .claude/governance/ fora do declarado: .claude/governance/TEST-ONLY-p23.txt" \
+      "um arquivo novo em .claude/governance/ fora do declarado"
+  else bad "P23: fixture do governance falhou"; fi
+  # P24 — um arquivo em .claude/scripts/local/ alem do release.sh (condicao 10).
+  if _p_mut "$SCRATCH/p24" "scripts/local alem do release.sh" "printf 'x\n' > .claude/scripts/local/TEST-ONLY-p24.txt"; then
+    _p_red P24 "$SCRATCH/p24" C11-scope "FAIL C11-scope: em .claude/scripts/local/ muda .claude/scripts/local/TEST-ONLY-p24.txt" \
+      "um arquivo em .claude/scripts/local/ alem do release.sh"
+  else bad "P24: fixture do scripts/local falhou"; fi
+  # P25 — uma rota de entrega PLANTADA no install.sh (copia o conftest.py da raiz para o alvo):
+  # a instalacao descartavel da sonda a acha (condicao 10).
+  if _p_mut "$SCRATCH/p25" "rota de entrega plantada" "python3 -c 'import sys; p=sys.argv[1]; t=open(p,encoding=\"utf-8\").read(); a=\"# Release workflow (.github/workflows/release.yml) replaces the\"; i=t.index(a); open(p,\"w\",encoding=\"utf-8\").write(t[:i]+\"cp -- \\\"\$SCRIPT_DIR/../conftest.py\\\" \\\"\$TARGET/conftest.py\\\"  # TEST ONLY (P25)\n\"+t[i:])' scripts/install.sh"; then
+    _p_red P25 "$SCRATCH/p25" C18-delivery "FAIL C18-delivery: a instalacao nova pelo install.sh entregou o que a condicao 10 declara fora: conftest.py" \
+      "uma rota de entrega plantada no install.sh (o conftest.py da raiz no alvo)"
+  else bad "P25: fixture da rota de entrega plantada falhou"; fi
   # P14 — um id desconhecido em --only nunca vira verde vacuo (cura da sonda do GA).
   _p14_rc=0
   ( cd "$CLONE" && PYTHONDONTWRITEBYTECODE=1 python3 "$EV/probe-conditions-rc1.py" --root "$CLONE" \
@@ -2930,8 +3008,8 @@ PYR15
     _r_restore
 
     # R8 — a sonda das condicoes no G0 recusa uma condicao FALSA pelo nome (o job da W4 com
-    # uma permissao de token OIDC: condicao 4). Sem o REPORT-ONLY: o que se confere e a linha
-    # da condicao 4. O job segue com o nome e o gatilho (o guard do job no G0 passa).
+    # uma permissao de token OIDC: condicao 6). Sem o REPORT-ONLY: o que se confere e a linha
+    # da condicao 6. O job segue com o nome e o gatilho (o guard do job no G0 passa).
     if python3 - "$_r/wt/.github/workflows/npm-publish.yml" <<'PYR8' \
        && git -C "$_r/wt" commit -q -am "TEST ONLY: id-token no job da rc" \
        && git -C "$_r/wt" push -q origin HEAD:refs/heads/main 2>/dev/null
@@ -2948,7 +3026,7 @@ PYR8
              TMPDIR="$_r/tmp" RC1_SELFTEST=1 RC1_SELFTEST_SCRATCH="$SCRATCH" RC1_SELFTEST_SIGNER_FPR="$FPR" \
              bash "$PLAN_DIR/OWNER-RC1-CUT.sh" --g0-only ) < /dev/null > "$_r/r8.log" 2>&1 || _r8_rc=$?
       refused R8 "$_r8_rc" "$_r/r8.log" "a sonda das condicoes achou afirmacao FALSA" \
-        "G0 real (corte inteiro): uma condicao FALSA (condicao 4)"
+        "G0 real (corte inteiro): uma condicao FALSA (condicao 6)"
       if grep -q 'FAIL C0-rc-proof: o job rc-toolchain-proof tem permissions' "$_r/r8.log"; then
         ok "R8: a recusa nomeia a afirmacao (C0-rc-proof)"
       else bad "R8: G0 real recusou sem nomear a condicao"; grep -E 'FAIL|sonda' "$_r/r8.log" | sed -n '1,8p'; fi
@@ -3089,7 +3167,7 @@ if [ "$_live" != "0000000000000000000000000000000000000000" ]; then
   ok "D7 CM-11: baseline forjado difere do vivo — o SIGN abortaria"
 else bad "D7 CM-11: o plant colidiu com o hash real (impossivel)"; fi
 
-# D8-D15 — o INDICE dos controles vermelhos dos gates novos e das curas desta derivacao
+# D8-D16 — o INDICE dos controles vermelhos dos gates novos e das curas desta derivacao
 # (R3H-04 pela forma): cada um tem de ter rodado e ficado verde NESTE ensaio (o auxiliar
 # `refused` e os controles positivos anotam o id em _red); uma secao pulada nao prova nada.
 _d_need() {  # $1 = rotulo do gate, $2.. = controles que tem de ter passado
@@ -3103,7 +3181,9 @@ _d_need() {  # $1 = rotulo do gate, $2.. = controles que tem de ter passado
 _d_need "D8 rota 1 so (PLAN-194 D-4): lancador plantado, npx espiao e espiao do oraculo" B7a B7b B7c B7d B7e B7f
 _d_need "D9 passo 18: o gate e a prova do toolchain da rc, pelo nome" X2 X3 X4 X4j
 _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R14 R15 R16 R17 R18
-_d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14
+_d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14 \
+  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P25
+_d_need "D16 os guards do derivador nao sao vacuos: a crase no heredoc do veredito e a condicao sem verificacao" G2m G3m
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
 _d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m
