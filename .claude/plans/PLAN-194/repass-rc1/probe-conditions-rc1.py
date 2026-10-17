@@ -76,7 +76,8 @@ GOV_ALLOWED = frozenset([".claude/governance/codex-cli-pin.txt",
 LOCAL_ALLOWED = frozenset([".claude/scripts/local/release.sh"])
 README_REL = EV_REL + "/README-rc1.md"
 CHANGELOG = "CHANGELOG.md"
-# A marca do conteudo provisorio do K1 (derive-kit-143.py): nunca num corte (C17).
+# A marca do conteudo provisorio do K1 (derive-kit-143.py): nunca num corte (C17). Escrita pelo
+# derivador a partir da constante dele (uma fonte so).
 PROVISIONAL_MARK = "CONTEÚDO PROVISÓRIO (derivação K1)"
 # Condicoes 1 e 3: o CASO da condicao 67 da v1.4.0-rc.1 (o verificador AST e o da relmeta-143).
 AUDIT_LOG = ".claude/hooks/audit_log.py"
@@ -105,6 +106,25 @@ ADAPTER_REL = ".claude/hooks/_lib/adapters/live/claude.py"
 # Condicao 10: o que fica fora do re-pass e tambem fora da entrega (instalacao descartavel).
 UNDELIVERED_DIR = ".claude/eval"
 UNDELIVERED_ROOT = ("conftest.py", "pytest.ini", ".gitignore")
+# Condicao 10 e README §4: o que de cada classe FORA (as pathspecs de out_of_scope_pathspec do
+# runner) chega ao adopter — (instalacao nova, depois o upgrade.sh) —, medido pela C18 numa
+# instalacao descartavel: True = ao menos um arquivo rastreado da classe chega byte a byte.
+OUT_DELIVERY = {
+    ":(glob)**/tests/**": (True, True),
+    ".claude/plans/": (True, True),
+    "docs/research/": (False, False),
+    "CLAUDE.md": (False, False),
+    ".claude/governance/": (False, False),
+    ".claude/scripts/local/": (False, True),
+    ".claude/adr/": (True, True),
+    ".claude/data/": (False, False),
+    ".claude/scripts/data/": (False, True),
+    "scripts/local/": (False, False),
+    ".claude/eval/": (False, False),
+    "conftest.py": (False, False),
+    "pytest.ini": (False, False),
+    ".gitignore": (False, False),
+}
 
 
 class Infra(Exception):
@@ -183,8 +203,9 @@ def c0_tree(t: Tree) -> str:
 
 def c0_npm_rc(t: Tree) -> str:
     wf = t.show(t.head, ".github/workflows/npm-publish.yml") or ""
-    if "if: \"!contains(github.ref, '-rc.')\"" not in wf:
-        raise AssertionError("npm-publish.yml nao pula mais as tags -rc.")
+    ifs = [ln.strip() for ln in _code_lines(_job_block(wf, "publish") or "") if re.match(r"^    if:", ln)]
+    if ifs != ["if: \"!contains(github.ref, '-rc.')\""]:
+        raise AssertionError("o job publish do npm-publish.yml nao pula mais as tags -rc. (if: %r)" % ifs)
     return "a rc nao publica no npm (npm-publish.yml pula -rc.)"
 
 
@@ -224,6 +245,10 @@ def _toolchain_parity(wf: str) -> List[str]:
                      'npm install -g "npm@${PUBLISH_NPM_VERSION}"', "runs-on: ubuntu-latest"):
             if code.count(line) != 1:
                 bad.append("o job %s nao tem exatamente uma linha %r" % (job, line))
+        # uma redefinicao por $GITHUB_ENV muda os passos seguintes sem chave YAML nenhuma
+        for ln in code:
+            if "GITHUB_ENV" in ln and ("PUBLISH_NODE_MAJOR" in ln or "PUBLISH_NPM_VERSION" in ln):
+                bad.append("o job %s redefine o toolchain por $GITHUB_ENV (%r)" % (job, ln[:80]))
     return bad
 
 
@@ -370,11 +395,12 @@ def c2_carried(t: Tree) -> str:
         counts.append("%s: %d pelo MANIFEST + %d por condicao" % (rel.rsplit("/", 1)[1], len(man), len(cond)))
     gc = _norm(t.show(t.head, GA_CONDITIONS) or "")
     for need in ("13. **Os três P1 do anexo assinado da rc.1 seguem ABERTOS no GA",
-                 "14. **Os P2 dos quatro vereditos da rc.1 seguem ABERTOS no GA"):
+                 "14. **Os P2 dos quatro vereditos da rc.1 seguem ABERTOS no GA",
+                 "15. **"):
         if need not in gc:
-            raise AssertionError("%s nao numera mais %r (a condicao 2 cita as condicoes 13 e 14 dele)"
+            raise AssertionError("%s nao numera mais %r (a condicao 2 cita as condicoes 13 a 15 dele)"
                                  % (GA_CONDITIONS, need[:40]))
-    return "%d veredito(s) pinado(s), todos presentes com o sha256 pinado (%s); GA: 13 e 14" % (
+    return "%d veredito(s) pinado(s), todos presentes com o sha256 pinado (%s); GA: 13 a 15" % (
         len(seen), "; ".join(counts))
 
 
@@ -403,6 +429,10 @@ def c13_route1(t: Tree) -> str:
                  'CODEX_LAUNCHER="$_glob"', "printf 'exec %s \"$@\"\\n' \"$(printf '%q' \"$CODEX_LAUNCHER\")\""):
         if need not in runner:
             raise AssertionError("o runner do candidato sem %r" % need)
+    assigns = [ln.strip() for ln in runner.splitlines() if ln.strip().startswith("CODEX_LAUNCHER=")]
+    if assigns != ['CODEX_LAUNCHER=""', 'CODEX_LAUNCHER="$_glob"']:
+        raise AssertionError("o runner do candidato atribui CODEX_LAUNCHER %r (exigido: \"\" e depois $_glob, "
+                             "so)" % assigns)
     i_or = runner.find('--verify-codex-pin "$_glob"')
     i_ex = runner.find('"$_glob" --version')
     if i_ex < 0 or i_or < 0 or i_ex < i_or:
@@ -449,6 +479,15 @@ def c11_scope(t: Tree) -> str:
     gov = set(t.changed(".claude/governance/"))
     if not gov <= GOV_ALLOWED:
         raise AssertionError("muda em .claude/governance/ fora do declarado: %s" % ", ".join(sorted(gov - GOV_ALLOWED)))
+    # a condicao 10 diz que do publicador confiavel do npm muda so o COMENTARIO
+    ntp = ".claude/governance/npm-trusted-publisher.txt"
+    if ntp in gov:
+        body = [ln for ln in t.git("diff", "-U0", "--no-renames", t.base, t.head, "--", ntp).splitlines()
+                if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
+        data = [ln for ln in body if not ln[1:].lstrip().startswith("#") and ln[1:].strip()]
+        if data:
+            raise AssertionError("%s muda fora do comentario (a condicao 10 diz: so o comentario): %r"
+                                 % (ntp, data[0][:80]))
     loc = set(t.changed(".claude/scripts/local/"))
     if not loc <= LOCAL_ALLOWED:
         raise AssertionError("em .claude/scripts/local/ muda %s (a condicao 10 diz: no maximo o release.sh)"
@@ -605,6 +644,12 @@ def _fresh_install(t: Tree) -> Dict:
                     "dry_would": [ln.strip() for ln in out.splitlines() if "(dry-run) would" in ln],
                     "dry_gov": [ln.strip() for ln in out.splitlines() if ".claude/governance" in ln],
                     "gov_after": os.path.lexists(str(gov))})
+        res["out_install"] = _out_delivered(t, target)
+        u = run(["bash", str(t.path("scripts/upgrade.sh")), str(target), "--no-replay",
+                 "--no-deprecation-warn"], cwd=t.root, env=env, stdin=b"", timeout=900)
+        res.update({"up_rc": u.returncode,
+                    "up_tail": (u.stdout + u.stderr).decode("utf-8", "replace")[-240:],
+                    "out_upgrade": _out_delivered(t, target)})
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     setattr(t, "rc1_install", res)
@@ -799,6 +844,31 @@ def _undelivered_in_target(t: Tree, target: Path) -> List[str]:
     return found
 
 
+def _blob_sha(data: bytes) -> str:
+    return hashlib.sha1(b"blob %d\x00" % len(data) + data).hexdigest()
+
+
+def _out_delivered(t: Tree, target: Path) -> Dict[str, bool]:
+    """Para cada pathspec FORA do runner: algum arquivo rastreado da classe (no indice do
+    --root, que o C0-tree prova igual ao --head) esta no alvo byte a byte?"""
+    runner = t.show(t.head, RUNNER_REL)
+    if runner is None:
+        raise Infra("runner ausente em %s" % t.head)
+    res = {}
+    for spec in [ln for ln in _bash_fn(runner, "out_of_scope_pathspec", "out_of_scope_pathspec").splitlines() if ln]:
+        hit = False
+        for row in t.git("ls-files", "-s", "-z", "--", spec).split("\x00"):
+            if not row:
+                continue
+            meta, path = row.split("\t", 1)
+            f = target / path
+            if f.is_file() and not f.is_symlink() and _blob_sha(f.read_bytes()) == meta.split()[1]:
+                hit = True
+                break
+        res[spec] = hit
+    return res
+
+
 def c18_delivery(t: Tree) -> str:
     """Condicao 10: o que ela declara fora tambem nao chega ao adopter. Numa instalacao NOVA pelo
     install.sh do candidato (alvo temporario) nao ha .claude/eval/ nem copia byte a byte de
@@ -834,9 +904,22 @@ def c18_delivery(t: Tree) -> str:
     if named:
         raise AssertionError("o plano do upgrade.sh nomeia o que a condicao 10 declara fora: %s"
                              % "; ".join(named[:3]))
+    # o que de cada classe FORA chega ao adopter (README §4): instalacao nova, depois upgrade.sh
+    if r["up_rc"] != 0:
+        raise AssertionError("upgrade.sh sobre a instalacao nova: rc %d: %s" % (r["up_rc"], r["up_tail"]))
+    if set(r["out_install"]) != set(OUT_DELIVERY):
+        raise AssertionError("as classes FORA do runner %s nao sao as que OUT_DELIVERY declara %s (condicao 10)"
+                             % (sorted(r["out_install"]), sorted(OUT_DELIVERY)))
+    for spec in sorted(OUT_DELIVERY):
+        got = (r["out_install"][spec], r["out_upgrade"][spec])
+        if got != OUT_DELIVERY[spec]:
+            raise AssertionError("a entrega da classe FORA %s: instalacao nova/upgrade.sh medidos %s, o README "
+                                 "declara %s (condicao 10)" % (spec, got, OUT_DELIVERY[spec]))
     return ("instalacao nova pelo install.sh: sem .claude/eval/ e sem copia de conftest.py, pytest.ini e "
             ".gitignore da raiz; o plano do upgrade.sh sobre ela (--dry-run, %d linhas «would») nao os "
-            "nomeia; os dois «Stage bundle» do npm-publish.yml excluem .claude/eval/" % len(r["dry_would"]))
+            "nomeia; os dois «Stage bundle» do npm-publish.yml excluem .claude/eval/; a entrega das %d "
+            "classes FORA (instalacao nova, depois o upgrade.sh) e a que o README declara"
+            % (len(r["dry_would"]), len(OUT_DELIVERY)))
 
 
 def _runner_fn(runner: str, name: str) -> str:

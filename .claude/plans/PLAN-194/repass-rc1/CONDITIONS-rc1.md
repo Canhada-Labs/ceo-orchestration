@@ -34,7 +34,7 @@ envelope recusa a evidência dele).
    é declarado curado.
 2. **O que o envelope assinado do GA v1.4.2 declarou aberto segue sem cura declarada, exceto o
    CASO de um P2 da parte 3 do re-pass daquele GA.** Aquele envelope declarou abertos os itens
-   das condições dele — que carregam as da `v1.4.2-rc.1` e, pelas condições 13 e 14 dele, os três
+   das condições dele — que carregam as da `v1.4.2-rc.1` e, pelas condições 13 a 15 dele, os três
    P1 do anexo assinado da `v1.4.2-rc.1` e os P2 dos quatro vereditos daquela rc — e, de todo
    veredito que ele ou o envelope da `v1.4.2-rc.1` pina pelo MANIFEST da evidência (cujo sha256 o
    envelope carrega), os achados sob «NEW FINDINGS (annex)» e os P2. Esta release declara curado
@@ -114,10 +114,15 @@ envelope recusa a evidência dele).
    `.claude/governance/**` — nesta faixa, no máximo os dois arquivos de pin do Codex (condição 5),
    o manifesto ADR-192 dos gates e o comentário do publicador confiável do npm
    (`npm-trusted-publisher.txt`, mudado na cerimônia da W4); `.claude/scripts/local/**` — nesta
-   faixa, no máximo o `release.sh`; `.claude/adr/**`, texto de decisão; dados de oráculo
-   (`.claude/data/**`, `.claude/scripts/data/**`); `scripts/local/**`, harness de smoke do
+   faixa, no máximo o `release.sh`; `.claude/adr/**`, texto de decisão; dados de oráculo e de
+   teste (`.claude/data/**`, `.claude/scripts/data/**`); `scripts/local/**`, harness de smoke do
    mantenedor; o harness de avaliação `.claude/eval/**`, que nem o `install.sh` nem o
    `upgrade.sh` entregam e que o `npm-publish.yml` exclui do pacote; a configuração de teste da
    raiz (`conftest.py` e `pytest.ini`: o oráculo), não entregue; e o `.gitignore` da raiz, higiene
    deste repositório — o instalador escreve no `.gitignore` do alvo os blocos dele, nunca uma
-   cópia deste arquivo. A sonda confere a não-entrega numa instalação descartável.
+   cópia deste arquivo. Fora do re-pass não quer dizer não entregue: o `upgrade.sh` entrega
+   `.claude/scripts/local/**`, `.claude/scripts/data/**` e os `tests/` dos subdiretórios de
+   `.claude/scripts/` (ele substitui `.claude/scripts/` inteiro, fora o que a exclusão dele
+   cobre), e a instalação nova e o upgrade entregam os esquemas, o README e os exemplos de
+   `.claude/plans/` e o README de `.claude/adr/`; o README diz, classe a classe, o que chega ao
+   adopter. A sonda confere isso numa instalação descartável seguida do `upgrade.sh`.

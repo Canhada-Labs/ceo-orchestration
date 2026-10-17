@@ -682,11 +682,22 @@ _a0m() {  # $1 = id, $2 = mutacao (g2 | g3), $3 = texto fixo da recusa, $4 = o c
   if ! python3 - "$ROOT/$PLAN_DIR/derive-kit-143.py" "$SCRATCH/$1-derive.py" "$2" > "$SCRATCH/$1-gen.log" 2>&1 <<'PYA0M'
 import sys
 src, dst, kind = sys.argv[1:4]
+Q3 = "'" * 3
 MUT = {
     "g2": ("Evidencia do re-pass no MESMO commit: quatro partes, ordenadas por raio de\n",
            "Evidencia do re-pass no MESMO commit (`date`): quatro partes, ordenadas por raio de\n"),
     "g3": ('    ("C16-adopter-notes", c16_adopter_notes, ("7", "8")),\n',
            '    ("C16-adopter-notes", c16_adopter_notes, ("8",)),\n'),
+    "g6": ("   adopter. A sonda confere isso numa instala\u00e7\u00e3o descart\u00e1vel seguida do `upgrade.sh`.\n" + Q3 + "\n",
+           "   adopter. A sonda confere isso numa instala\u00e7\u00e3o descart\u00e1vel seguida do `upgrade.sh`.\n"
+           "11. Uma condicao nova sem negrito.\n" + Q3 + "\n"),
+    "g7": ('(docs/ARCHITECTURE.md)" ;;\n',
+           '(docs/ARCHITECTURE.md $HOME)" ;;\n'),
+    "g8": ('    t = sub(t, CUT_G0READ_OLD, CUT_G0READ_NEW, "recusa do gh release view (LM-05)")\n',
+           '    t = sub(t, CUT_G0READ_OLD, CUT_G0READ_NEW, "recusa do gh release view (LM-05)")\n'
+           '    t = t.replace(" - Ate o GA, main fica congelado.\\n", " - Ate o GA, main fica congelado `date`.\\n")\n'),
+    "g9": ("  assigned for its cure) EXCEPT the case of signed condition 67, which\n  this release declares cured; what",
+           "  assigned for its cure); what"),
 }
 old, new = MUT[kind]
 t = open(src, encoding="utf-8").read()
@@ -702,6 +713,14 @@ _a0m G2m g2 "a mensagem do commit do veredito (heredoc SEM aspas do passo 11) ca
   "uma crase na mensagem do commit do veredito (o derivador morre antes de qualquer saida)"
 _a0m G3m g3 "a condicao 7 do texto nao tem verificacao na sonda" \
   "a condicao 7 sem verificacao na sonda (o derivador morre antes de qualquer saida)"
+_a0m G6m g6 "as condicoes tem item numerado fora da forma" \
+  "um item numerado sem negrito nas condicoes (escaparia do censo G3)"
+_a0m G7m g7 "um rotulo ou cobertura da particao (echo entre aspas) carrega" \
+  "uma variavel num rotulo da particao (o echo do runner a expandiria)"
+_a0m G8m g8 "o banner de CORTADA (heredoc SEM aspas) carrega '\`'" \
+  "uma crase no banner de CORTADA (heredoc sem aspas do corte)"
+_a0m G9m g9 "runner derivado sem '  assigned for its cure) EXCEPT the case of signed condition 67" \
+  "o CONTEXT do prompt sem a excecao da condicao 67"
 for f in $SHELLS; do
   [ -f "$f" ] || { bad "ausente: $f"; continue; }
   if /bin/bash -n "$f" 2>/dev/null; then ok "/bin/bash -n $(basename "$f") ($(/bin/bash -c 'echo $BASH_VERSION' | cut -c1-3))"; else bad "/bin/bash -n $(basename "$f")"; fi
@@ -1571,6 +1590,67 @@ PYP15
     _p_red P25 "$SCRATCH/p25" C18-delivery "FAIL C18-delivery: a instalacao nova pelo install.sh entregou o que a condicao 10 declara fora: conftest.py" \
       "uma rota de entrega plantada no install.sh (o conftest.py da raiz no alvo)"
   else bad "P25: fixture da rota de entrega plantada falhou"; fi
+  # P26 — o HMAC (compute_entry_hmac) calculado FORA da trava em append_entry (condicoes 1 e 3).
+  if _p_mut "$SCRATCH/p26" "compute_entry_hmac fora da trava" "python3 '$_p15py' .claude/hooks/audit_log.py 'compute_entry_hmac(b\"\", {})'"; then
+    _p_red P26 "$SCRATCH/p26" C14-cure-67 "FAIL C14-cure-67: append_entry calcula o HMAC (compute_entry_hmac) FORA do bloco da trava" \
+      "o calculo do HMAC fora da trava em append_entry"
+  else bad "P26: fixture do HMAC fora da trava falhou"; fi
+  # P27 — a regra do upgrade.sh mudada: ele deixa de entregar .claude/scripts/local/, que o
+  # README declara entregue (condicao 10): a instalacao descartavel + upgrade da C18 o acha.
+  _p27py="$SCRATCH/p27-mut.py"
+  cat > "$_p27py" <<'PYP27'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+a = "    .claude/scripts/tests|.claude/scripts/tests/*) return 0 ;;\n"
+if t.count(a) != 1:
+    sys.exit("ancora da exclusao casou %d vez(es)" % t.count(a))
+open(p, "w", encoding="utf-8").write(t.replace(a, a + "    .claude/scripts/local|.claude/scripts/local/*) return 0 ;;  # TEST ONLY (P27)\n"))
+PYP27
+  if _p_mut "$SCRATCH/p27" "upgrade sem scripts/local" "python3 '$_p27py' scripts/_framework_manifest_set.sh"; then
+    _p_red P27 "$SCRATCH/p27" C18-delivery "FAIL C18-delivery: a entrega da classe FORA .claude/scripts/local/: instalacao nova/upgrade.sh medidos (False, False)" \
+      "o upgrade.sh deixando de entregar uma classe que o README declara entregue"
+  else bad "P27: fixture da regra do upgrade falhou"; fi
+  # P28 — o job da prova da rc redefinindo o npm por $GITHUB_ENV (condicao 6).
+  _p28py="$SCRATCH/p28-mut.py"
+  cat > "$_p28py" <<'PYP28'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+i = t.index("  rc-toolchain-proof:")
+o = '          npm install -g "npm@${PUBLISH_NPM_VERSION}"\n'
+j = t.index(o, i)
+open(p, "w", encoding="utf-8").write(t[:j] + '          echo "PUBLISH_NPM_VERSION=10.0.0" >> "$GITHUB_ENV"\n' + t[j:])
+PYP28
+  if _p_mut "$SCRATCH/p28" "rc redefine o npm por GITHUB_ENV" "python3 '$_p28py' .github/workflows/npm-publish.yml"; then
+    _p_red P28 "$SCRATCH/p28" C0-rc-proof "FAIL C0-rc-proof: paridade de toolchain com o publish (condicao 6): o job rc-toolchain-proof redefine o toolchain por" \
+      "o job da prova da rc redefinindo o npm por GITHUB_ENV"
+  else bad "P28: fixture do GITHUB_ENV falhou"; fi
+  # P29 — uma linha de DADO (nao comentario) mudada no npm-trusted-publisher.txt (condicao 10).
+  if _p_mut "$SCRATCH/p29" "publicador do npm com dado novo" "printf 'TEST-ONLY=1\n' >> .claude/governance/npm-trusted-publisher.txt"; then
+    _p_red P29 "$SCRATCH/p29" C11-scope "FAIL C11-scope: .claude/governance/npm-trusted-publisher.txt muda fora do comentario" \
+      "uma linha de dado nova no npm-trusted-publisher.txt"
+  else bad "P29: fixture do publicador do npm falhou"; fi
+  # P30 — o lancador do shim reatribuido depois do oraculo (condicao 5).
+  if _p_mut "$SCRATCH/p30" "CODEX_LAUNCHER reatribuido" "printf 'CODEX_LAUNCHER=\"/tmp/TEST-ONLY-outro-codex\"\n' >> $EV/run-rc1-repass.sh"; then
+    _p_red P30 "$SCRATCH/p30" C13-route1 "FAIL C13-route1: o runner do candidato atribui CODEX_LAUNCHER" \
+      "o lancador do shim reatribuido depois do oraculo"
+  else bad "P30: fixture do CODEX_LAUNCHER falhou"; fi
+  # P31 — o if do job publish COMENTADO (o texto segue no arquivo; condicao 6 e cabecalho).
+  _p31py="$SCRATCH/p31-mut.py"
+  cat > "$_p31py" <<'PYP31'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+i = t.index("\n  publish:\n")
+o = "    if: \"!contains(github.ref, '-rc.')\"\n"
+j = t.index(o, i)
+open(p, "w", encoding="utf-8").write(t[:j] + "    # if: \"!contains(github.ref, '-rc.')\"  TEST ONLY\n" + t[j + len(o):])
+PYP31
+  if _p_mut "$SCRATCH/p31" "if do publish comentado" "python3 '$_p31py' .github/workflows/npm-publish.yml"; then
+    _p_red P31 "$SCRATCH/p31" C0-npm "FAIL C0-npm: o job publish do npm-publish.yml nao pula mais as tags -rc." \
+      "o if do job publish comentado (o texto segue no arquivo)"
+  else bad "P31: fixture do if comentado falhou"; fi
   # P14 — um id desconhecido em --only nunca vira verde vacuo (cura da sonda do GA).
   _p14_rc=0
   ( cd "$CLONE" && PYTHONDONTWRITEBYTECODE=1 python3 "$EV/probe-conditions-rc1.py" --root "$CLONE" \
@@ -2200,10 +2280,23 @@ case "$_f" in
   raw:*) exec cat -- "$GH_FIX/${_f#raw:}" ;;
 esac
 [ -f "$GH_FIX/$_f" ] || { echo "gh stub: fixture ausente: $_f" >&2; exit 9; }
-_q=""; _p=""
-for _a in "$@"; do [ "$_p" = "--jq" ] && _q="$_a"; _p="$_a"; done
-[ -n "$_q" ] || exec cat -- "$GH_FIX/$_f"
-exec jq -rc "$_q" < "$GH_FIX/$_f"
+_q=""; _p=""; _lim=""; _cm=""
+for _a in "$@"; do
+  [ "$_p" = "--jq" ] && _q="$_a"
+  [ "$_p" = "--limit" ] && _lim="$_a"
+  [ "$_p" = "--commit" ] && _cm="$_a"
+  _p="$_a"
+done
+_src="$GH_FIX/$_f"
+# `gh run list`: o servidor filtra por --commit e DEPOIS corta em --limit (padrao 20) — o stub
+# faz o mesmo, para que uma janela curta numa lista longa aconteca no ensaio como no gh real.
+if [ "${1:-}" = "run" ] && [ "${2:-}" = "list" ]; then
+  jq -c --arg c "$_cm" --argjson n "${_lim:-20}" '[.[]|select($c == "" or .headSha == $c)]|.[0:$n]' \
+    < "$_src" > "$GH_FIX/.run-list" || { echo "gh stub: fixture de run list ilegivel: $_f" >&2; exit 9; }
+  _src="$GH_FIX/.run-list"
+fi
+[ -n "$_q" ] || exec cat -- "$_src"
+exec jq -rc "$_q" < "$_src"
 GHSEOF
 chmod 0755 "$_gs/bin/gh"
 _gs_run() {  # $1 = script, $2 = sequencia (uma linha por chamada do gh), $3 = log, $4 = diretorio
@@ -2247,6 +2340,35 @@ if [ "$_gs_jq" -eq 1 ]; then
      && grep -q 'validate.yml: 3 job(s) success' "$SCRATCH/v3.log"; then
     ok "V3: o JSON bruto pelo --jq do corte: as iscas de outro commit ficam fora, e o run 4242 com 3 jobs verdes passa"
   else bad "V3: o caso bom foi recusado"; sed -n '1,8p' "$SCRATCH/v3.log"; fi
+  # V4 — o CI do candidato PELO COMMIT: 30 runs verdes mais novos do MESMO commit e, depois
+  # deles, um run AGENDADO vermelho. Pelo commit (todos os eventos) ele aparece e e recusa
+  # nomeada; numa janela dos 30 runs mais recentes do repositorio ele sumia (V4m).
+  python3 - "$_vs" "$_gs/fix/v-old.json" <<'PYV4'
+import json, sys
+sha, out = sys.argv[1:3]
+g = {"headSha": sha, "status": "completed", "conclusion": "success", "workflowName": "Validate",
+     "event": "push", "headBranch": "main"}
+rows = [dict(g, databaseId=5000 + i) for i in range(30)]
+rows.append(dict(g, conclusion="failure", event="schedule", databaseId=4000))
+open(out, "w", encoding="utf-8").write(json.dumps(rows) + "\n")
+PYV4
+  _v4_rc=0; _gs_run "$SCRATCH/v.sh" "$(printf 'run list v-old.json\nrun list v-old.json')" "$SCRATCH/v4.log" "$SCRATCH" || _v4_rc=$?
+  refused V4 "$_v4_rc" "$SCRATCH/v4.log" "workflow vermelho para $_vs" \
+    "um run AGENDADO vermelho do candidato depois de 30 runs verdes mais novos (o CI pelo commit)"
+  if grep -qF 'vermelho: Validate (run 4000, failure, evento schedule)' "$SCRATCH/v4.log"; then
+    ok "V4: a recusa nomeia o run agendado vermelho (run 4000, evento schedule)"
+  else bad "V4: a recusa nao nomeia o run agendado vermelho"; sed -n '1,8p' "$SCRATCH/v4.log"; fi
+  # V4m (gemeo vermelho, a v1.4.2-rc.1): o wait_ci_green dela (os 30 runs mais recentes,
+  # filtrados depois) sobre a MESMA fixture nao ve o vermelho e passa.
+  { printf '#!/bin/bash\nset -euo pipefail\n'
+    printf 'die() { printf "FAIL: %%s\\n" "$*" >&2; exit 1; }\n'
+    printf 'sleep() { :; }\nCI_WAIT_MAX_MIN=3\n'
+    awk '/^wait_ci_green\(\) \{$/,/^\}$/' "$ROOT/.claude/plans/PLAN-193/OWNER-RC1-CUT.sh"
+    printf 'wait_ci_green %s\n' "$_vs"; } > "$SCRATCH/v4m.sh"
+  if _gs_run "$SCRATCH/v4m.sh" "$(printf 'run list v-old.json\nrun list v-validate.json\nrun view v-jobs.json 4242')" "$SCRATCH/v4m.log" "$SCRATCH" \
+     && grep -q 'runs=30 pendentes=0 vermelhos=0' "$SCRATCH/v4m.log"; then
+    ok "V4m (gemeo vermelho, a v1.4.2-rc.1): a janela dos 30 runs mais recentes nao ve o vermelho agendado e passa"; _red="$_red V4m"
+  else bad "V4m: o wait_ci_green da v1.4.2-rc.1 nao mostrou a classe (o V4 seria vacuo)"; sed -n '1,8p' "$SCRATCH/v4m.log"; fi
 fi
 
 # ===========================================================================
@@ -3167,7 +3289,7 @@ if [ "$_live" != "0000000000000000000000000000000000000000" ]; then
   ok "D7 CM-11: baseline forjado difere do vivo — o SIGN abortaria"
 else bad "D7 CM-11: o plant colidiu com o hash real (impossivel)"; fi
 
-# D8-D16 — o INDICE dos controles vermelhos dos gates novos e das curas desta derivacao
+# D8-D17 — o INDICE dos controles vermelhos dos gates novos e das curas desta derivacao
 # (R3H-04 pela forma): cada um tem de ter rodado e ficado verde NESTE ensaio (o auxiliar
 # `refused` e os controles positivos anotam o id em _red); uma secao pulada nao prova nada.
 _d_need() {  # $1 = rotulo do gate, $2.. = controles que tem de ter passado
@@ -3182,8 +3304,9 @@ _d_need "D8 rota 1 so (PLAN-194 D-4): lancador plantado, npx espiao e espiao do 
 _d_need "D9 passo 18: o gate e a prova do toolchain da rc, pelo nome" X2 X3 X4 X4j
 _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R14 R15 R16 R17 R18
 _d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14 \
-  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P25
-_d_need "D16 os guards do derivador nao sao vacuos: a crase no heredoc do veredito e a condicao sem verificacao" G2m G3m
+  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31
+_d_need "D17 wait_ci_green: o CI do candidato pelo commit (um vermelho agendado antigo nao some)" V4 V4m
+_d_need "D16 os guards do derivador nao sao vacuos: heredocs e echos de texto, condicoes sem verificacao, a divida no CONTEXT" G2m G3m G6m G7m G8m G9m
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
 _d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m

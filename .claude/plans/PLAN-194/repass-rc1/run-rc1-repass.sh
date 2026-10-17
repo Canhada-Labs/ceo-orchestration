@@ -38,7 +38,8 @@
 # v1.4.2 (`npx` num cache PROPRIO) EXECUTAVA o pacote baixado antes de qualquer verificacao:
 # aqui ela e RECUSA NOMEADA — nada e baixado nem executado, e a recusa diz a rota (o codex
 # pinado instalado globalmente). Um diretorio-shim no inicio do PATH garante que qualquer
-# `codex` invocado durante o run seja o verificado. A PROVENANCE registra a rota, o modelo
+# `codex` invocado durante o run seja o lancador global cujo PAYLOAD o oraculo verificou (o
+# lancador em si nao e hasheado; o residuo esta na condicao 5). A PROVENANCE registra a rota, o modelo
 # (-m, com a origem) e as mortes do codex re-tentadas.
 # MORTES do codex (cura do GA v1.4.2): classificadas SO pelas linhas ERROR: do proprio codex
 # no fim do transcript. Capacidade do modelo: re-tentada ate 2 vezes. LIMITE DE USO/quota da
@@ -262,7 +263,7 @@ else
   mkdir -p "$SHIM_DIR" || die "mkdir do shim falhou"
   {
     printf '#!/bin/bash\n'
-    printf '# shim do runner rc.1 da 1.4.3 — delega ao codex %s pinado (payload verificado)\n' "$CODEX_VER"
+    printf '# shim do runner rc.1 da 1.4.3 — delega ao lancador global do codex %s, cujo payload o oraculo verificou\n' "$CODEX_VER"
     printf 'exec %s "$@"\n' "$(printf '%q' "$CODEX_LAUNCHER")"
   } > "$SHIM_DIR/codex" || die "escrita do shim falhou"
   chmod 0755 "$SHIM_DIR/codex" || die "chmod do shim falhou"
@@ -436,7 +437,10 @@ CONTEXT
   read-only audit verifiers; the pair-rail re-pin to Codex 0.160.0 (its
   own signed ceremony); an RC toolchain proof job that never publishes
   (the publish job still skips RC tags); the framework's own CI routing;
-  and the formal-verification (TLC) notes. What the train set out to do and
+  the formal-verification (TLC) notes; and the other files the release
+  text lists as reaching installs (among them the single fsync on the
+  first event of _lib/spool_writer.py, which came through a pull-request
+  merge). What the train set out to do and
   did not ship (among it the audit-spool cure and the stress run that would
   prove it) is declared in that text as open, not shipped here.
   What is outside the $NPARTS payloads is DECLARED out of scope, with the

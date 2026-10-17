@@ -14,8 +14,11 @@ nova com `--ceremony user`; o bloqueio do envelope de custo gravado no log de au
 de modelo do Codex e o ledger de deprecações; as correções de `audit-query.py`, `/status`,
 `/ceo-boot` e `check-substrate-drift.py`; os verificadores só-leitura da auditoria; o re-pin do
 Codex 0.160.0 (cerimônia própria); a prova do toolchain do npm nas tags `-rc.` (um job que nunca
-publica); a rota de CI do próprio framework; e as notas da verificação formal (o TLC). O
-candidato é o commit do bump, sobre os lands do trem (a ordem está no LEDGER do PLAN-194).
+publica); a rota de CI do próprio framework; as notas da verificação formal (o TLC); e as
+demais mudanças que o `CHANGELOG.md` [1.4.3] lista como arquivos que chegam às instalações
+(«Changed — other files that reach installs»), entre elas o `fsync` único no primeiro evento do
+`_lib/spool_writer.py`, que chegou por um merge de pull request. O candidato é o commit do bump,
+sobre os lands do trem (a ordem está no LEDGER do PLAN-194).
 
 O plano do PLAN-194, o LEDGER dele e o backlog da 1.4.4 registram para onde foram os itens que
 saíram do trem, entre eles: a cura do spool de auditoria e o estresse que a provaria (que o
@@ -63,21 +66,32 @@ não têm rail próprio.
 
 ## 4. O que fica FORA, e por quê
 
-| fora | motivo |
-|---|---|
-| testes, fixtures e harnesses de teste (`**/tests/**`) | não são entregues como produto; são o oráculo, e o oráculo roda no CI do candidato |
-| `.claude/plans/**`, `docs/research/**` | registro de trabalho; não são entregues |
-| `CLAUDE.md` | contrato de operação DESTE repositório; o adopter recebe `templates/CLAUDE.md` (parte 1, se mudar) |
-| `.claude/governance/**` | nesta faixa, no máximo os dois arquivos de pin do Codex (re-pin 0.160.0, cerimônia assinada própria em `PLAN-194/codex-pin-0160/`), o manifesto ADR-192 dos gates (muda com os gates que as cerimônias tocam) e o comentário do publicador confiável do npm (`npm-trusted-publisher.txt`, mudado na cerimônia da W4) |
-| `.claude/scripts/local/**` | nesta faixa, no máximo o `release.sh` (o bloco por-release, na cerimônia própria da relmeta); engenharia de release |
-| `.claude/adr/**` | texto de decisão |
-| `.claude/data/**`, `.claude/scripts/data/**` | dados de oráculo (reds esperados, baseline do censo do instalador) |
-| `scripts/local/**` | harness de smoke do mantenedor |
-| `.claude/eval/**` | o harness de avaliação do framework: nem o `install.sh` nem o `upgrade.sh` o entregam, e o `npm-publish.yml` o exclui do pacote |
-| `conftest.py`, `pytest.ini` (da raiz) | a configuração de teste deste repositório (o oráculo); não entregues |
-| `.gitignore` (da raiz) | higiene deste repositório; não entregue: o instalador escreve no `.gitignore` do alvo os blocos dele, nunca uma cópia deste arquivo |
+Cada linha diz também o que da classe CHEGA ao adopter, pela regra de quem entrega: a
+instalação nova (`install.sh`) e o `upgrade.sh`. A regra do `upgrade.sh` é substituir
+`.claude/scripts/` e `.claude/hooks/` inteiros, fora o que a exclusão dele cobre — os testes de
+`.claude/hooks/` e de `.claude/scripts/tests/`, o `legacy/` dos hooks, `_lib/testing.py`,
+`_lib/test_isolation.py` e os `.pyc`; a instalação nova copia de `.claude/scripts/` só os
+arquivos do topo. Entregue a adopters não quer dizer revisado aqui: a classe fica fora do
+re-pass pelo motivo da linha.
 
-A não-entrega das três últimas linhas é conferida pela sonda numa instalação descartável (§9).
+| fora | motivo, e o que chega ao adopter |
+|---|---|
+| testes, fixtures e harnesses de teste (`**/tests/**`) | o oráculo, que roda no CI do candidato. Chegam ao adopter: pela instalação nova, só os testes que moram dentro de uma skill (ela copia a skill inteira); pelo `upgrade.sh`, também os `tests/` dos subdiretórios de `.claude/scripts/` (a exclusão dele não os cobre) |
+| `.claude/plans/**` | registro de trabalho. Chegam ao adopter, pela instalação nova e pelo `upgrade.sh`, só os esquemas, o `README.md` e os exemplos de `.claude/plans/`; os planos numerados, não |
+| `docs/research/**` | registro de trabalho; nem a instalação nova nem o `upgrade.sh` o entregam |
+| `CLAUDE.md` | contrato de operação DESTE repositório; nem a instalação nova nem o `upgrade.sh` o copiam: o adopter recebe `templates/CLAUDE.md` (parte 1, se mudar) |
+| `.claude/governance/**` | nesta faixa, no máximo os dois arquivos de pin do Codex (re-pin 0.160.0, cerimônia assinada própria em `PLAN-194/codex-pin-0160/`), o manifesto ADR-192 dos gates (muda com os gates que as cerimônias tocam) e o comentário do publicador confiável do npm (`npm-trusted-publisher.txt`, mudado na cerimônia da W4); nem a instalação nova nem o `upgrade.sh` o entregam |
+| `.claude/scripts/local/**` | nesta faixa, no máximo o `release.sh` (o bloco por-release, na cerimônia própria da relmeta); engenharia de release. A instalação nova não o entrega; o `upgrade.sh` o entrega, byte a byte |
+| `.claude/adr/**` | texto de decisão. Chega ao adopter, pela instalação nova e pelo `upgrade.sh`, só o `README.md` do diretório; os ADRs, não |
+| `.claude/data/**` | dados de oráculo e de teste, entre eles os reds esperados e o mapa de preferência de modelos (inerte: hoje só um teste o lê); nem a instalação nova nem o `upgrade.sh` o entregam |
+| `.claude/scripts/data/**` | dado de oráculo (o baseline do censo do instalador). A instalação nova não o entrega; o `upgrade.sh` o entrega, byte a byte |
+| `scripts/local/**` | harness de smoke do mantenedor; nem a instalação nova nem o `upgrade.sh` o entregam |
+| `.claude/eval/**` | o harness de avaliação do framework: nem a instalação nova nem o `upgrade.sh` o entregam, e o `npm-publish.yml` o exclui do pacote |
+| `conftest.py`, `pytest.ini` (da raiz) | a configuração de teste deste repositório (o oráculo); nem a instalação nova nem o `upgrade.sh` os entregam |
+| `.gitignore` (da raiz) | higiene deste repositório; nem a instalação nova nem o `upgrade.sh` o copiam: o instalador escreve no `.gitignore` do alvo os blocos dele |
+
+A sonda confere o que de cada classe chega ao adopter (§9): numa instalação descartável pelo
+`install.sh` do candidato, seguida do `upgrade.sh` dele, sobre os arquivos rastreados da classe.
 
 ## 5. Critério de parada (proposto por este kit, fixado ANTES da 1.ª rodada)
 
@@ -150,11 +164,22 @@ texto do CHANGELOG (condições 1 e 3); o P2 da parte 3 do GA pelo cenário repr
 e 4); o pin do Codex e a rota única do runner (condição 5); o job da prova do toolchain da rc e a
 paridade de toolchain com o publish (condição 6); o exemplo de `--pin` do `INSTALL.md` contra o
 `VERSION`, o `upgrade.sh` sem a tag e o adapter intacto (condições 7 e 8); a partição, com as
-funções do próprio runner, e o tamanho de cada parte (condição 9); o escopo fora e a não-entrega
-numa instalação descartável (condição 10); e, no cabeçalho, a árvore, o npm e a ausência da marca
+funções do próprio runner, e o tamanho de cada parte (condição 9); o escopo fora e o que de cada
+classe fora chega ao adopter, numa instalação descartável seguida do `upgrade.sh` (condição 10);
+e, no cabeçalho, a árvore, o npm e a ausência da marca
 do conteúdo provisório do K1. Toda condição numerada tem ao menos uma verificação: o derivador
 recusa uma condição sem id que não esteja na lista declarada só-texto (hoje vazia). Roda no G0
 (contra o HEAD), no passo 5 e no runner (contra o candidato), e a saída do runner entra no
 MANIFEST (`probe-rc1.txt`), com a linha MAPA que diz que ids conferem cada condição.
 `RC1_PROBE_REPORT_ONLY=1` existe só para o harness: o corte e o runner seguem, a PROVENANCE
 declara a sonda vermelha e o gerador do envelope recusa essa evidência.
+
+## 10. Limites conhecidos deste kit
+
+- O CI do candidato: o `wait_ci_green` do corte consulta os runs PELO COMMIT, com todos os
+  eventos (agendados inclusive), e recusa pelo nome um vermelho do commit, por mais antigo que
+  seja. O preflight do `release.sh` (o bloco canônico, assinado na relmeta) confere o CI do HEAD
+  numa janela dos runs mais recentes do repositório, filtrada depois pelo commit: um vermelho do
+  mesmo commit mais antigo que a janela não aparece ali. O kit não muda o `release.sh`.
+- A sonda roda o `install.sh` e o `upgrade.sh` do candidato numa instalação descartável (a
+  entrega das classes fora, §4): no G0, no passo 5 e no runner ela leva alguns minutos.

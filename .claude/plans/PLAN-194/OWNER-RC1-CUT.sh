@@ -80,8 +80,9 @@
 #   SIM         passo 16  confirmar o push da tag (o passo irreversivel)
 #
 # A rc NAO publica no npm: o job do publish do npm-publish.yml pula tags com `-rc.`; o
-# passo 18 confere, PELO NOME, o controle positivo do gate (o job «Await release-gate» =
-# success) e a prova do toolchain da rc (o job «RC toolchain proof (no publish)» =
+# passo 18 confere o controle positivo do gate (o job «Await release-gate» = success,
+# casado pelo PREFIXO do nome, que carrega o sufixo « (release.yml)») e, pelo nome
+# EXATO, a prova do toolchain da rc (o job «RC toolchain proof (no publish)» =
 # success), que a W4 do PLAN-194 acrescentou e que nunca publica.
 #
 # O QUE ESTE SCRIPT NUNCA FAZ SOZINHO: empurrar a tag sem o SIM, publicar no npm, ou
@@ -111,7 +112,7 @@ GEN="$PLAN_DIR/gen-envelope-rc1.py"
 TAG="v1.4.3-rc.1"
 BASE="1.4.3"
 RCN="1"
-# A base do re-pass e da faixa da release: o GA anterior, cortado na mesma manha.
+# A base do re-pass e da faixa da release: o GA v1.4.2 (cortado em 2026-09-30).
 BASE_TAG="v1.4.2"
 KEY="CFCFACF00335DC74"
 # O job da rc que a W4 acrescentou ao npm-publish.yml: o passo 18 exige success nele PELO
@@ -258,7 +259,7 @@ wait_ci_green() {
     i=$((i+1)); [ "$i" -le "$CI_WAIT_MAX_MIN" ] \
       || die "CI nao terminou em $CI_WAIT_MAX_MIN min — re-rode este script: ele retoma deste passo (RC1_CI_WAIT_MAX_MIN=<min> estica o teto)"
     sleep 60
-    info="$(gh run list --limit 30 --json headSha,status,conclusion \
+    info="$(gh run list --commit "$sha" --limit 200 --json headSha,status,conclusion \
       --jq "[.[]|select(.headSha==\"$sha\")] | \
 {n:length, p:[.[]|select(.status!=\"completed\")]|length, \
 b:[.[]|select(.status==\"completed\" and .conclusion!=\"success\" \
@@ -272,7 +273,7 @@ and .conclusion!=\"skipped\")]|length}" 2>/dev/null || echo "")"
       || { printf '  ... resposta do gh ilegivel, tentando de novo\n'; continue; }
     printf '  ... runs=%s pendentes=%s vermelhos=%s\n' "$n" "$p" "$b"
     if [ "$b" -ne 0 ]; then
-      gh run list --limit 30 --json headSha,status,conclusion,workflowName,databaseId,event \
+      gh run list --commit "$sha" --limit 200 --json headSha,status,conclusion,workflowName,databaseId,event \
         --jq ".[]|select(.headSha==\"$sha\" and .status==\"completed\" and .conclusion!=\"success\" and .conclusion!=\"skipped\")|\"   vermelho: \" + .workflowName + \" (run \" + (.databaseId|tostring) + \", \" + .conclusion + \", evento \" + .event + \")\"" \
         || printf '   (gh nao listou os runs vermelhos)\n'
       die "workflow vermelho para $sha (conta QUALQUER workflow e evento sobre o commit,
@@ -285,7 +286,7 @@ patch. Qualquer outro vermelho: me chame no Claude."
     fi
     if [ "$n" -gt 0 ] && [ "$p" -eq 0 ]; then break; fi
   done
-  vid="$(gh run list --workflow validate.yml --limit 20 \
+  vid="$(gh run list --workflow validate.yml --commit "$sha" --limit 200 \
     --json headSha,databaseId,status,conclusion,event,headBranch \
     --jq "[.[]|select(.headSha==\"$sha\" and .status==\"completed\" and .conclusion==\"success\" and .event==\"push\" and .headBranch==\"main\")][0].databaseId" 2>/dev/null || echo "")"
   [ -n "$vid" ] && [ "$vid" != "null" ] \
@@ -943,7 +944,7 @@ if _grv="$(gh release view "$TAG" --json isPrerelease,isDraft 2>&1)"; then
 else
   printf '%s' "$_grv" | grep -qi "not found\|release not found\|HTTP 404" \
     || die "gh release view falhou sem ser NOT-FOUND (transporte ou API): $_grv
-O G0 so le: re-rode este script. Persistindo, me chame no Claude."
+O G0 nao avanca o corte: re-rode este script. Persistindo, me chame no Claude."
 fi
 assert_no_gen_orphans
 assert_kit_committed
@@ -1428,8 +1429,9 @@ re-pin do Codex 0.160.0 e a prova do toolchain do npm nas tags -rc.
 Antes do codex, cada afirmacao sobre codigo das condicoes foi conferida
 contra o candidato pela sonda do kit (probe-rc1.txt, no MANIFEST).
 tool_versions.codex_cli vem da PROVENANCE do run PINADO e e re-validado
-contra codex-cli-pin.txt e contra o manifesto ADR-182 pela funcao do proprio
-validador — nunca de 'codex --version' desta maquina; tool_versions.claude_code
+contra a faixa do codex-cli-pin.txt pela funcao do proprio validador e contra o
+manifesto ADR-182 pelo gerador — nunca de 'codex --version' desta maquina;
+tool_versions.claude_code
 e MEDIDO por 'claude --version' ao gerar os fields.
 
 Evidencia do re-pass no MESMO commit: quatro partes, ordenadas por raio de

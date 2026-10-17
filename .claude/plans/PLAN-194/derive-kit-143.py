@@ -33,8 +33,9 @@ Saidas, todas em .claude/plans/PLAN-194/:
   repass-rc1/.gitignore             arquivos de trabalho do runner
   gen-envelope-rc1.py               gerador de fields + envelope (relatorio da sonda conferido)
   OWNER-RC1-CUT.sh                  corte em 20 passos; o passo 18 exige `success` no job do
-                                    gate («Await release-gate») E no job da prova do toolchain
-                                    da rc da W4 («RC toolchain proof (no publish)»), PELO NOME;
+                                    gate (pelo PREFIXO do nome, «Await release-gate») E no job
+                                    da prova do toolchain da rc da W4 (pelo nome EXATO, «RC
+                                    toolchain proof (no publish)»);
                                     o G0 recusa pelo nome um HEAD sem esse job e um `.gen-*.tmp`
                                     orfao de um gerador morto (com a rota)
   test-rc1-kit.sh                   harness com chave GPG descartavel e stubs. Numa arvore SEM
@@ -436,7 +437,8 @@ RUNNER_CODEXDOC = r'''# CODEX PINADO SEM MEXER NA MAQUINA. A versao revisora e a
 # v1.4.2 (`npx` num cache PROPRIO) EXECUTAVA o pacote baixado antes de qualquer verificacao:
 # aqui ela e RECUSA NOMEADA — nada e baixado nem executado, e a recusa diz a rota (o codex
 # pinado instalado globalmente). Um diretorio-shim no inicio do PATH garante que qualquer
-# `codex` invocado durante o run seja o verificado. A PROVENANCE registra a rota, o modelo
+# `codex` invocado durante o run seja o lancador global cujo PAYLOAD o oraculo verificou (o
+# lancador em si nao e hasheado; o residuo esta na condicao 5). A PROVENANCE registra a rota, o modelo
 # (-m, com a origem) e as mortes do codex re-tentadas.
 # MORTES do codex (cura do GA v1.4.2): classificadas SO pelas linhas ERROR: do proprio codex
 # no fim do transcript. Capacidade do modelo: re-tentada ate 2 vezes. LIMITE DE USO/quota da
@@ -587,7 +589,10 @@ RUNNER_CONTEXT = r'''CONTEXT
   read-only audit verifiers; the pair-rail re-pin to Codex 0.160.0 (its
   own signed ceremony); an RC toolchain proof job that never publishes
   (the publish job still skips RC tags); the framework's own CI routing;
-  and the formal-verification (TLC) notes. What the train set out to do and
+  the formal-verification (TLC) notes; and the other files the release
+  text lists as reaching installs (among them the single fsync on the
+  first event of _lib/spool_writer.py, which came through a pull-request
+  merge). What the train set out to do and
   did not ship (among it the audit-spool cure and the stress run that would
   prove it) is declared in that text as open, not shipped here.
   What is outside the $NPARTS payloads is DECLARED out of scope, with the
@@ -809,6 +814,16 @@ def derive_runner(src: str) -> str:
     t = sub(t, RUNNER_VERIFY_OLD, RUNNER_VERIFY_NEW, "oraculo do pin")
     t = sub(t, RUNNER_PKG_OLD, "", "CODEX_PKG (so a rota 2 o usava)")
     t = sub(t, RUNNER_SEAMDOC_OLD, RUNNER_SEAMDOC_NEW, "comentario do seam CODEX_BIN (o pin do npx)")
+    # LT-03: o shim executa o LANCADOR global; o que o oraculo verificou e o PAYLOAD
+    t = sub(t, "# shim do runner rc.1 da 1.4.3 \u2014 delega ao codex %s pinado (payload verificado)\\n",
+            "# shim do runner rc.1 da 1.4.3 \u2014 delega ao lancador global do codex %s, cujo payload o "
+            "oraculo verificou\\n", "comentario do shim")
+    # LD-07: os rotulos e a cobertura vao num echo "..." do runner: nenhum $, crase, aspas nem barra
+    for ln in RUNNER_PARTS.splitlines():
+        m = re.match(r'^    [0-9]\) echo "(.*)" ;;$', ln)
+        if m and re.search(r'[$`"\\]', m.group(1)):
+            die("runner: um rotulo ou cobertura da particao (echo entre aspas) carrega $, crase, aspas ou "
+                "barra invertida: %r" % m.group(1)[:80])
     # O CONTEXT e o WHAT TO VERIFY 5 vao num heredoc SEM aspas (prompt_header), e os rotulos e a
     # cobertura num `echo "..."`: uma crase ou um `$(` ali EXECUTA no runner. So expandem
     # $NPARTS e $3 no CONTEXT (os $1 da particao sao os argumentos das funcoes).
@@ -838,7 +853,13 @@ def derive_runner(src: str) -> str:
     t = sub(t, RUNNER_OVERALL_OLD, RUNNER_OVERALL_NEW, "recusa do limite de conta")
     forbid(t, "runner", ["npx -y", "NPX_CACHE", "npm_config_cache", "CODEX_PKG",
                          "PLAN-193/repass-rc1/probe", "derive-kit-142", "Opus 5.5", "FN-04",
-                         "pin do npx", "a documentacao entregue", "o validate.yml e o npm-publish.yml"])
+                         "pin do npx", "a documentacao entregue", "o validate.yml e o npm-publish.yml",
+                         "mesma manha", "nasce na manha", "seja o verificado", "pinado (payload verificado)",
+                         # LD-01: a divida do K1 sem as excecoes, no CONTEXT do prompt
+                         "among it - and the\n  P2 follow-ups"])
+    need(t, "runner", ["  assigned for its cure) EXCEPT the case of signed condition 67, which\n",
+                       "  known-open - the signed v1.4.2-rc.1 annex (three P1) among it - EXCEPT\n"
+                       "  one P2 of part 3 of the v1.4.2 GA re-pass"])
     need(t, "runner", ['OUT="$REPO_ROOT/.claude/plans/PLAN-194/repass-rc1"', 'BASE_TAG="v1.4.2"',
                        "e RECUSA NOMEADA nesta release (PLAN-194 D-4): nada foi baixado nem executado",
                        '"$WT/.claude/plans/PLAN-194/repass-rc1/probe-conditions-rc1.py"',
@@ -938,8 +959,9 @@ GOV_ALLOWED = frozenset([".claude/governance/codex-cli-pin.txt",
 LOCAL_ALLOWED = frozenset([".claude/scripts/local/release.sh"])
 README_REL = EV_REL + "/README-rc1.md"
 CHANGELOG = "CHANGELOG.md"
-# A marca do conteudo provisorio do K1 (derive-kit-143.py): nunca num corte (C17).
-PROVISIONAL_MARK = "CONTEÚDO PROVISÓRIO (derivação K1)"
+# A marca do conteudo provisorio do K1 (derive-kit-143.py): nunca num corte (C17). Escrita pelo
+# derivador a partir da constante dele (uma fonte so).
+PROVISIONAL_MARK = @@PROVISIONAL_MARK@@
 # Condicoes 1 e 3: o CASO da condicao 67 da v1.4.0-rc.1 (o verificador AST e o da relmeta-143).
 AUDIT_LOG = ".claude/hooks/audit_log.py"
 COND67_DECL = "67. **`append_entry` lê o predecessor e calcula o HMAC FORA do lock**"
@@ -967,6 +989,25 @@ ADAPTER_REL = ".claude/hooks/_lib/adapters/live/claude.py"
 # Condicao 10: o que fica fora do re-pass e tambem fora da entrega (instalacao descartavel).
 UNDELIVERED_DIR = ".claude/eval"
 UNDELIVERED_ROOT = ("conftest.py", "pytest.ini", ".gitignore")
+# Condicao 10 e README §4: o que de cada classe FORA (as pathspecs de out_of_scope_pathspec do
+# runner) chega ao adopter — (instalacao nova, depois o upgrade.sh) —, medido pela C18 numa
+# instalacao descartavel: True = ao menos um arquivo rastreado da classe chega byte a byte.
+OUT_DELIVERY = {
+    ":(glob)**/tests/**": (True, True),
+    ".claude/plans/": (True, True),
+    "docs/research/": (False, False),
+    "CLAUDE.md": (False, False),
+    ".claude/governance/": (False, False),
+    ".claude/scripts/local/": (False, True),
+    ".claude/adr/": (True, True),
+    ".claude/data/": (False, False),
+    ".claude/scripts/data/": (False, True),
+    "scripts/local/": (False, False),
+    ".claude/eval/": (False, False),
+    "conftest.py": (False, False),
+    "pytest.ini": (False, False),
+    ".gitignore": (False, False),
+}
 
 
 '''
@@ -1011,6 +1052,10 @@ def _toolchain_parity(wf: str) -> List[str]:
                      'npm install -g "npm@${PUBLISH_NPM_VERSION}"', "runs-on: ubuntu-latest"):
             if code.count(line) != 1:
                 bad.append("o job %s nao tem exatamente uma linha %r" % (job, line))
+        # uma redefinicao por $GITHUB_ENV muda os passos seguintes sem chave YAML nenhuma
+        for ln in code:
+            if "GITHUB_ENV" in ln and ("PUBLISH_NODE_MAJOR" in ln or "PUBLISH_NPM_VERSION" in ln):
+                bad.append("o job %s redefine o toolchain por $GITHUB_ENV (%r)" % (job, ln[:80]))
     return bad
 
 
@@ -1119,11 +1164,12 @@ PROBE_CHECKS_B = r'''def c2_carried(t: Tree) -> str:
         counts.append("%s: %d pelo MANIFEST + %d por condicao" % (rel.rsplit("/", 1)[1], len(man), len(cond)))
     gc = _norm(t.show(t.head, GA_CONDITIONS) or "")
     for need in ("13. **Os três P1 do anexo assinado da rc.1 seguem ABERTOS no GA",
-                 "14. **Os P2 dos quatro vereditos da rc.1 seguem ABERTOS no GA"):
+                 "14. **Os P2 dos quatro vereditos da rc.1 seguem ABERTOS no GA",
+                 "15. **"):
         if need not in gc:
-            raise AssertionError("%s nao numera mais %r (a condicao 2 cita as condicoes 13 e 14 dele)"
+            raise AssertionError("%s nao numera mais %r (a condicao 2 cita as condicoes 13 a 15 dele)"
                                  % (GA_CONDITIONS, need[:40]))
-    return "%d veredito(s) pinado(s), todos presentes com o sha256 pinado (%s); GA: 13 e 14" % (
+    return "%d veredito(s) pinado(s), todos presentes com o sha256 pinado (%s); GA: 13 a 15" % (
         len(seen), "; ".join(counts))
 
 
@@ -1152,6 +1198,10 @@ def c13_route1(t: Tree) -> str:
                  'CODEX_LAUNCHER="$_glob"', "printf 'exec %s \"$@\"\\n' \"$(printf '%q' \"$CODEX_LAUNCHER\")\""):
         if need not in runner:
             raise AssertionError("o runner do candidato sem %r" % need)
+    assigns = [ln.strip() for ln in runner.splitlines() if ln.strip().startswith("CODEX_LAUNCHER=")]
+    if assigns != ['CODEX_LAUNCHER=""', 'CODEX_LAUNCHER="$_glob"']:
+        raise AssertionError("o runner do candidato atribui CODEX_LAUNCHER %r (exigido: \"\" e depois $_glob, "
+                             "so)" % assigns)
     i_or = runner.find('--verify-codex-pin "$_glob"')
     i_ex = runner.find('"$_glob" --version')
     if i_ex < 0 or i_or < 0 or i_ex < i_or:
@@ -1198,6 +1248,15 @@ def c11_scope(t: Tree) -> str:
     gov = set(t.changed(".claude/governance/"))
     if not gov <= GOV_ALLOWED:
         raise AssertionError("muda em .claude/governance/ fora do declarado: %s" % ", ".join(sorted(gov - GOV_ALLOWED)))
+    # a condicao 10 diz que do publicador confiavel do npm muda so o COMENTARIO
+    ntp = ".claude/governance/npm-trusted-publisher.txt"
+    if ntp in gov:
+        body = [ln for ln in t.git("diff", "-U0", "--no-renames", t.base, t.head, "--", ntp).splitlines()
+                if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
+        data = [ln for ln in body if not ln[1:].lstrip().startswith("#") and ln[1:].strip()]
+        if data:
+            raise AssertionError("%s muda fora do comentario (a condicao 10 diz: so o comentario): %r"
+                                 % (ntp, data[0][:80]))
     loc = set(t.changed(".claude/scripts/local/"))
     if not loc <= LOCAL_ALLOWED:
         raise AssertionError("em .claude/scripts/local/ muda %s (a condicao 10 diz: no maximo o release.sh)"
@@ -1413,6 +1472,31 @@ def _undelivered_in_target(t: Tree, target: Path) -> List[str]:
     return found
 
 
+def _blob_sha(data: bytes) -> str:
+    return hashlib.sha1(b"blob %d\x00" % len(data) + data).hexdigest()
+
+
+def _out_delivered(t: Tree, target: Path) -> Dict[str, bool]:
+    """Para cada pathspec FORA do runner: algum arquivo rastreado da classe (no indice do
+    --root, que o C0-tree prova igual ao --head) esta no alvo byte a byte?"""
+    runner = t.show(t.head, RUNNER_REL)
+    if runner is None:
+        raise Infra("runner ausente em %s" % t.head)
+    res = {}
+    for spec in [ln for ln in _bash_fn(runner, "out_of_scope_pathspec", "out_of_scope_pathspec").splitlines() if ln]:
+        hit = False
+        for row in t.git("ls-files", "-s", "-z", "--", spec).split("\x00"):
+            if not row:
+                continue
+            meta, path = row.split("\t", 1)
+            f = target / path
+            if f.is_file() and not f.is_symlink() and _blob_sha(f.read_bytes()) == meta.split()[1]:
+                hit = True
+                break
+        res[spec] = hit
+    return res
+
+
 def c18_delivery(t: Tree) -> str:
     """Condicao 10: o que ela declara fora tambem nao chega ao adopter. Numa instalacao NOVA pelo
     install.sh do candidato (alvo temporario) nao ha .claude/eval/ nem copia byte a byte de
@@ -1448,9 +1532,22 @@ def c18_delivery(t: Tree) -> str:
     if named:
         raise AssertionError("o plano do upgrade.sh nomeia o que a condicao 10 declara fora: %s"
                              % "; ".join(named[:3]))
+    # o que de cada classe FORA chega ao adopter (README §4): instalacao nova, depois upgrade.sh
+    if r["up_rc"] != 0:
+        raise AssertionError("upgrade.sh sobre a instalacao nova: rc %d: %s" % (r["up_rc"], r["up_tail"]))
+    if set(r["out_install"]) != set(OUT_DELIVERY):
+        raise AssertionError("as classes FORA do runner %s nao sao as que OUT_DELIVERY declara %s (condicao 10)"
+                             % (sorted(r["out_install"]), sorted(OUT_DELIVERY)))
+    for spec in sorted(OUT_DELIVERY):
+        got = (r["out_install"][spec], r["out_upgrade"][spec])
+        if got != OUT_DELIVERY[spec]:
+            raise AssertionError("a entrega da classe FORA %s: instalacao nova/upgrade.sh medidos %s, o README "
+                                 "declara %s (condicao 10)" % (spec, got, OUT_DELIVERY[spec]))
     return ("instalacao nova pelo install.sh: sem .claude/eval/ e sem copia de conftest.py, pytest.ini e "
             ".gitignore da raiz; o plano do upgrade.sh sobre ela (--dry-run, %d linhas «would») nao os "
-            "nomeia; os dois «Stage bundle» do npm-publish.yml excluem .claude/eval/" % len(r["dry_would"]))
+            "nomeia; os dois «Stage bundle» do npm-publish.yml excluem .claude/eval/; a entrega das %d "
+            "classes FORA (instalacao nova, depois o upgrade.sh) e a que o README declara"
+            % (len(r["dry_would"]), len(OUT_DELIVERY)))
 
 
 '''
@@ -1615,7 +1712,26 @@ def derive_probe(src: str) -> str:
              '"dry_tail": out[-240:],\n'
              '                    "dry_lines": [ln.strip() for ln in out.splitlines() if "(dry-run)" in ln],\n',
              "_fresh_install: as linhas do plano")
-    t = (PROBE_HEAD + helpers + PROBE_AFFIRM_HEAD + c0 + PROBE_CHECKS_A + pins + PROBE_CHECKS_B
+    # o upgrade.sh REAL sobre a instalacao nova (depois do --dry-run): o que de cada classe FORA
+    # chega ao adopter, antes e depois dele (condicao 10, README §4)
+    fi = sub(fi, '                    "gov_after": os.path.lexists(str(gov))})\n',
+             '                    "gov_after": os.path.lexists(str(gov))})\n'
+             '        res["out_install"] = _out_delivered(t, target)\n'
+             '        u = run(["bash", str(t.path("scripts/upgrade.sh")), str(target), "--no-replay",\n'
+             '                 "--no-deprecation-warn"], cwd=t.root, env=env, stdin=b"", timeout=900)\n'
+             '        res.update({"up_rc": u.returncode,\n'
+             '                    "up_tail": (u.stdout + u.stderr).decode("utf-8", "replace")[-240:],\n'
+             '                    "out_upgrade": _out_delivered(t, target)})\n',
+             "_fresh_install: o upgrade.sh real e a entrega de cada classe FORA")
+    # LM-02: o job do publish pula as tags -rc. pela linha de CODIGO dele (nao um comentario)
+    c0 = sub(c0, """    if "if: \\"!contains(github.ref, '-rc.')\\"" not in wf:
+        raise AssertionError("npm-publish.yml nao pula mais as tags -rc.")
+""", """    ifs = [ln.strip() for ln in _code_lines(_job_block(wf, "publish") or "") if re.match(r"^    if:", ln)]
+    if ifs != ["if: \\"!contains(github.ref, '-rc.')\\""]:
+        raise AssertionError("o job publish do npm-publish.yml nao pula mais as tags -rc. (if: %r)" % ifs)
+""", "C0-npm: o if do job publish")
+    head = PROBE_HEAD.replace("@@PROVISIONAL_MARK@@", json.dumps(PROVISIONAL_MARK, ensure_ascii=False))
+    t = (head + helpers + PROBE_AFFIRM_HEAD + c0 + PROBE_CHECKS_A + pins + PROBE_CHECKS_B
          + stub + upg + c67 + fi + PROBE_CHECKS_C + tail + PROBE_TAIL)
     if probe_ids(t) != PROBE_IDS:
         die("PROBE_IDS %r != ids da lista CHECKS da sonda derivada %r" % (PROBE_IDS, probe_ids(t)))
@@ -1683,7 +1799,7 @@ envelope recusa a evidência dele).
    é declarado curado.
 2. **O que o envelope assinado do GA v1.4.2 declarou aberto segue sem cura declarada, exceto o
    CASO de um P2 da parte 3 do re-pass daquele GA.** Aquele envelope declarou abertos os itens
-   das condições dele — que carregam as da `v1.4.2-rc.1` e, pelas condições 13 e 14 dele, os três
+   das condições dele — que carregam as da `v1.4.2-rc.1` e, pelas condições 13 a 15 dele, os três
    P1 do anexo assinado da `v1.4.2-rc.1` e os P2 dos quatro vereditos daquela rc — e, de todo
    veredito que ele ou o envelope da `v1.4.2-rc.1` pina pelo MANIFEST da evidência (cujo sha256 o
    envelope carrega), os achados sob «NEW FINDINGS (annex)» e os P2. Esta release declara curado
@@ -1763,13 +1879,18 @@ envelope recusa a evidência dele).
    `.claude/governance/**` — nesta faixa, no máximo os dois arquivos de pin do Codex (condição 5),
    o manifesto ADR-192 dos gates e o comentário do publicador confiável do npm
    (`npm-trusted-publisher.txt`, mudado na cerimônia da W4); `.claude/scripts/local/**` — nesta
-   faixa, no máximo o `release.sh`; `.claude/adr/**`, texto de decisão; dados de oráculo
-   (`.claude/data/**`, `.claude/scripts/data/**`); `scripts/local/**`, harness de smoke do
+   faixa, no máximo o `release.sh`; `.claude/adr/**`, texto de decisão; dados de oráculo e de
+   teste (`.claude/data/**`, `.claude/scripts/data/**`); `scripts/local/**`, harness de smoke do
    mantenedor; o harness de avaliação `.claude/eval/**`, que nem o `install.sh` nem o
    `upgrade.sh` entregam e que o `npm-publish.yml` exclui do pacote; a configuração de teste da
    raiz (`conftest.py` e `pytest.ini`: o oráculo), não entregue; e o `.gitignore` da raiz, higiene
    deste repositório — o instalador escreve no `.gitignore` do alvo os blocos dele, nunca uma
-   cópia deste arquivo. A sonda confere a não-entrega numa instalação descartável.
+   cópia deste arquivo. Fora do re-pass não quer dizer não entregue: o `upgrade.sh` entrega
+   `.claude/scripts/local/**`, `.claude/scripts/data/**` e os `tests/` dos subdiretórios de
+   `.claude/scripts/` (ele substitui `.claude/scripts/` inteiro, fora o que a exclusão dele
+   cobre), e a instalação nova e o upgrade entregam os esquemas, o README e os exemplos de
+   `.claude/plans/` e o README de `.claude/adr/`; o README diz, classe a classe, o que chega ao
+   adopter. A sonda confere isso numa instalação descartável seguida do `upgrade.sh`.
 '''
 
 
@@ -1825,8 +1946,11 @@ nova com `--ceremony user`; o bloqueio do envelope de custo gravado no log de au
 de modelo do Codex e o ledger de deprecações; as correções de `audit-query.py`, `/status`,
 `/ceo-boot` e `check-substrate-drift.py`; os verificadores só-leitura da auditoria; o re-pin do
 Codex 0.160.0 (cerimônia própria); a prova do toolchain do npm nas tags `-rc.` (um job que nunca
-publica); a rota de CI do próprio framework; e as notas da verificação formal (o TLC). O
-candidato é o commit do bump, sobre os lands do trem (a ordem está no LEDGER do PLAN-194).
+publica); a rota de CI do próprio framework; as notas da verificação formal (o TLC); e as
+demais mudanças que o `CHANGELOG.md` [1.4.3] lista como arquivos que chegam às instalações
+(«Changed — other files that reach installs»), entre elas o `fsync` único no primeiro evento do
+`_lib/spool_writer.py`, que chegou por um merge de pull request. O candidato é o commit do bump,
+sobre os lands do trem (a ordem está no LEDGER do PLAN-194).
 
 O plano do PLAN-194, o LEDGER dele e o backlog da 1.4.4 registram para onde foram os itens que
 saíram do trem, entre eles: a cura do spool de auditoria e o estresse que a provaria (que o
@@ -1874,21 +1998,32 @@ não têm rail próprio.
 
 ## 4. O que fica FORA, e por quê
 
-| fora | motivo |
-|---|---|
-| testes, fixtures e harnesses de teste (`**/tests/**`) | não são entregues como produto; são o oráculo, e o oráculo roda no CI do candidato |
-| `.claude/plans/**`, `docs/research/**` | registro de trabalho; não são entregues |
-| `CLAUDE.md` | contrato de operação DESTE repositório; o adopter recebe `templates/CLAUDE.md` (parte 1, se mudar) |
-| `.claude/governance/**` | nesta faixa, no máximo os dois arquivos de pin do Codex (re-pin 0.160.0, cerimônia assinada própria em `PLAN-194/codex-pin-0160/`), o manifesto ADR-192 dos gates (muda com os gates que as cerimônias tocam) e o comentário do publicador confiável do npm (`npm-trusted-publisher.txt`, mudado na cerimônia da W4) |
-| `.claude/scripts/local/**` | nesta faixa, no máximo o `release.sh` (o bloco por-release, na cerimônia própria da relmeta); engenharia de release |
-| `.claude/adr/**` | texto de decisão |
-| `.claude/data/**`, `.claude/scripts/data/**` | dados de oráculo (reds esperados, baseline do censo do instalador) |
-| `scripts/local/**` | harness de smoke do mantenedor |
-| `.claude/eval/**` | o harness de avaliação do framework: nem o `install.sh` nem o `upgrade.sh` o entregam, e o `npm-publish.yml` o exclui do pacote |
-| `conftest.py`, `pytest.ini` (da raiz) | a configuração de teste deste repositório (o oráculo); não entregues |
-| `.gitignore` (da raiz) | higiene deste repositório; não entregue: o instalador escreve no `.gitignore` do alvo os blocos dele, nunca uma cópia deste arquivo |
+Cada linha diz também o que da classe CHEGA ao adopter, pela regra de quem entrega: a
+instalação nova (`install.sh`) e o `upgrade.sh`. A regra do `upgrade.sh` é substituir
+`.claude/scripts/` e `.claude/hooks/` inteiros, fora o que a exclusão dele cobre — os testes de
+`.claude/hooks/` e de `.claude/scripts/tests/`, o `legacy/` dos hooks, `_lib/testing.py`,
+`_lib/test_isolation.py` e os `.pyc`; a instalação nova copia de `.claude/scripts/` só os
+arquivos do topo. Entregue a adopters não quer dizer revisado aqui: a classe fica fora do
+re-pass pelo motivo da linha.
 
-A não-entrega das três últimas linhas é conferida pela sonda numa instalação descartável (§9).
+| fora | motivo, e o que chega ao adopter |
+|---|---|
+| testes, fixtures e harnesses de teste (`**/tests/**`) | o oráculo, que roda no CI do candidato. Chegam ao adopter: pela instalação nova, só os testes que moram dentro de uma skill (ela copia a skill inteira); pelo `upgrade.sh`, também os `tests/` dos subdiretórios de `.claude/scripts/` (a exclusão dele não os cobre) |
+| `.claude/plans/**` | registro de trabalho. Chegam ao adopter, pela instalação nova e pelo `upgrade.sh`, só os esquemas, o `README.md` e os exemplos de `.claude/plans/`; os planos numerados, não |
+| `docs/research/**` | registro de trabalho; nem a instalação nova nem o `upgrade.sh` o entregam |
+| `CLAUDE.md` | contrato de operação DESTE repositório; nem a instalação nova nem o `upgrade.sh` o copiam: o adopter recebe `templates/CLAUDE.md` (parte 1, se mudar) |
+| `.claude/governance/**` | nesta faixa, no máximo os dois arquivos de pin do Codex (re-pin 0.160.0, cerimônia assinada própria em `PLAN-194/codex-pin-0160/`), o manifesto ADR-192 dos gates (muda com os gates que as cerimônias tocam) e o comentário do publicador confiável do npm (`npm-trusted-publisher.txt`, mudado na cerimônia da W4); nem a instalação nova nem o `upgrade.sh` o entregam |
+| `.claude/scripts/local/**` | nesta faixa, no máximo o `release.sh` (o bloco por-release, na cerimônia própria da relmeta); engenharia de release. A instalação nova não o entrega; o `upgrade.sh` o entrega, byte a byte |
+| `.claude/adr/**` | texto de decisão. Chega ao adopter, pela instalação nova e pelo `upgrade.sh`, só o `README.md` do diretório; os ADRs, não |
+| `.claude/data/**` | dados de oráculo e de teste, entre eles os reds esperados e o mapa de preferência de modelos (inerte: hoje só um teste o lê); nem a instalação nova nem o `upgrade.sh` o entregam |
+| `.claude/scripts/data/**` | dado de oráculo (o baseline do censo do instalador). A instalação nova não o entrega; o `upgrade.sh` o entrega, byte a byte |
+| `scripts/local/**` | harness de smoke do mantenedor; nem a instalação nova nem o `upgrade.sh` o entregam |
+| `.claude/eval/**` | o harness de avaliação do framework: nem a instalação nova nem o `upgrade.sh` o entregam, e o `npm-publish.yml` o exclui do pacote |
+| `conftest.py`, `pytest.ini` (da raiz) | a configuração de teste deste repositório (o oráculo); nem a instalação nova nem o `upgrade.sh` os entregam |
+| `.gitignore` (da raiz) | higiene deste repositório; nem a instalação nova nem o `upgrade.sh` o copiam: o instalador escreve no `.gitignore` do alvo os blocos dele |
+
+A sonda confere o que de cada classe chega ao adopter (§9): numa instalação descartável pelo
+`install.sh` do candidato, seguida do `upgrade.sh` dele, sobre os arquivos rastreados da classe.
 
 ## 5. Critério de parada (proposto por este kit, fixado ANTES da 1.ª rodada)
 
@@ -1961,14 +2096,25 @@ texto do CHANGELOG (condições 1 e 3); o P2 da parte 3 do GA pelo cenário repr
 e 4); o pin do Codex e a rota única do runner (condição 5); o job da prova do toolchain da rc e a
 paridade de toolchain com o publish (condição 6); o exemplo de `--pin` do `INSTALL.md` contra o
 `VERSION`, o `upgrade.sh` sem a tag e o adapter intacto (condições 7 e 8); a partição, com as
-funções do próprio runner, e o tamanho de cada parte (condição 9); o escopo fora e a não-entrega
-numa instalação descartável (condição 10); e, no cabeçalho, a árvore, o npm e a ausência da marca
+funções do próprio runner, e o tamanho de cada parte (condição 9); o escopo fora e o que de cada
+classe fora chega ao adopter, numa instalação descartável seguida do `upgrade.sh` (condição 10);
+e, no cabeçalho, a árvore, o npm e a ausência da marca
 do conteúdo provisório do K1. Toda condição numerada tem ao menos uma verificação: o derivador
 recusa uma condição sem id que não esteja na lista declarada só-texto (hoje vazia). Roda no G0
 (contra o HEAD), no passo 5 e no runner (contra o candidato), e a saída do runner entra no
 MANIFEST (`probe-rc1.txt`), com a linha MAPA que diz que ids conferem cada condição.
 `RC1_PROBE_REPORT_ONLY=1` existe só para o harness: o corte e o runner seguem, a PROVENANCE
 declara a sonda vermelha e o gerador do envelope recusa essa evidência.
+
+## 10. Limites conhecidos deste kit
+
+- O CI do candidato: o `wait_ci_green` do corte consulta os runs PELO COMMIT, com todos os
+  eventos (agendados inclusive), e recusa pelo nome um vermelho do commit, por mais antigo que
+  seja. O preflight do `release.sh` (o bloco canônico, assinado na relmeta) confere o CI do HEAD
+  numa janela dos runs mais recentes do repositório, filtrada depois pelo commit: um vermelho do
+  mesmo commit mais antigo que a janela não aparece ali. O kit não muda o `release.sh`.
+- A sonda roda o `install.sh` e o `upgrade.sh` do candidato numa instalação descartável (a
+  entrega das classes fora, §4): no G0, no passo 5 e no runner ela leva alguns minutos.
 '''
 
 README_PROVISIONAL_NOTE = '''
@@ -1991,6 +2137,8 @@ def derive_readme(src: str) -> str:
                          "lands do trem — o `audit_log` e os hooks, o workflow de CI"])
     if RELEASE_CONTENT == "final":
         forbid(t, "README", [PROVISIONAL_MARK])
+    if t.count("|---|---|") != t.count("\n|---|") or t.count("| fora |") != 1:
+        die("README derivado com uma tabela de cabecalho solto ou duplicado na §4")
     need(t, "README", ["`derive-kit-143.py`", "`v1.4.2`", "decisão D-4 do PLAN-194",
                        "`npm-trusted-publisher.txt`", "| `.claude/eval/**` |",
                        "| `conftest.py`, `pytest.ini` (da raiz) |", "| `.gitignore` (da raiz) |",
@@ -2295,8 +2443,9 @@ CUT_ENTER6_NEW = ("#   Enter       passo 6   SO se o re-pass tiver de rodar com 
 CUT_NPMDOC_OLD = ("# A rc NAO publica no npm: o npm-publish.yml pula tags com `-rc.`; o passo 18 confere\n"
                   "# so o controle positivo do gate (o job «Await release-gate» = success).\n")
 CUT_NPMDOC_NEW = ("# A rc NAO publica no npm: o job do publish do npm-publish.yml pula tags com `-rc.`; o\n"
-                  "# passo 18 confere, PELO NOME, o controle positivo do gate (o job «Await release-gate» =\n"
-                  "# success) e a prova do toolchain da rc (o job «RC toolchain proof (no publish)» =\n"
+                  "# passo 18 confere o controle positivo do gate (o job «Await release-gate» = success,\n"
+                  "# casado pelo PREFIXO do nome, que carrega o sufixo « (release.yml)») e, pelo nome\n"
+                  "# EXATO, a prova do toolchain da rc (o job «RC toolchain proof (no publish)» =\n"
                   "# success), que a W4 do PLAN-194 acrescentou e que nunca publica.\n")
 
 CUT_VARS_OLD = 'KEY="CFCFACF00335DC74"\n'
@@ -2517,8 +2666,9 @@ re-pin do Codex 0.160.0 e a prova do toolchain do npm nas tags -rc.
 Antes do codex, cada afirmacao sobre codigo das condicoes foi conferida
 contra o candidato pela sonda do kit (probe-rc1.txt, no MANIFEST).
 tool_versions.codex_cli vem da PROVENANCE do run PINADO e e re-validado
-contra codex-cli-pin.txt e contra o manifesto ADR-182 pela funcao do proprio
-validador — nunca de 'codex --version' desta maquina; tool_versions.claude_code
+contra a faixa do codex-cli-pin.txt pela funcao do proprio validador e contra o
+manifesto ADR-182 pelo gerador — nunca de 'codex --version' desta maquina;
+tool_versions.claude_code
 e MEDIDO por 'claude --version' ao gerar os fields.
 
 Evidencia do re-pass no MESMO commit: quatro partes, ordenadas por raio de
@@ -2662,6 +2812,26 @@ fi
 '''
 
 
+# LT-02: o comentario da base dizia que ela e cortada na mesma manha (o GA v1.4.2 foi em 2026-09-30).
+CUT_BASECMT_OLD = "# A base do re-pass e da faixa da release: o GA anterior, cortado na mesma manha.\n"
+CUT_BASECMT_NEW = "# A base do re-pass e da faixa da release: o GA v1.4.2 (cortado em 2026-09-30).\n"
+# LM-05: o G0 nao so le (cria o .cut-state, faz fetch, pode registrar o passo 16).
+CUT_G0READ_OLD = "O G0 so le: re-rode este script. Persistindo, me chame no Claude.\""
+CUT_G0READ_NEW = "O G0 nao avanca o corte: re-rode este script. Persistindo, me chame no Claude.\""
+# B: wait_ci_green consulta os runs PELO COMMIT (gh run list --commit, todos os eventos, ate 200).
+CUT_CI_BY_COMMIT = [
+    ('    info="$(gh run list --limit 30 --json headSha,status,conclusion \\\n',
+     '    info="$(gh run list --commit "$sha" --limit 200 --json headSha,status,conclusion \\\n',
+     "wait_ci_green: o CI pelo commit"),
+    ('      gh run list --limit 30 --json headSha,status,conclusion,workflowName,databaseId,event \\\n',
+     '      gh run list --commit "$sha" --limit 200 --json headSha,status,conclusion,workflowName,databaseId,event \\\n',
+     "wait_ci_green: os vermelhos pelo commit"),
+    ('  vid="$(gh run list --workflow validate.yml --limit 20 \\\n',
+     '  vid="$(gh run list --workflow validate.yml --commit "$sha" --limit 200 \\\n',
+     "wait_ci_green: o validate.yml pelo commit"),
+]
+
+
 def derive_cut(src: str) -> str:
     t = shift(src, "corte", CUT_PROTECT)
     t = cut_region(t, CUT_HEAD_START, CUT_HEAD_END, CUT_HEAD, "cabecalho do corte")
@@ -2677,18 +2847,39 @@ def derive_cut(src: str) -> str:
     t = sub(t, CUT_S11DOC_OLD, CUT_S11DOC_NEW, "doc do passo 11")
     t = sub(t, CUT_S11_ANCHOR, CUT_S11_BLOCK + CUT_S11_ANCHOR, "envelope re-derivado no passo 11")
     t = cut_region(t, CUT_MSG_START, CUT_MSG_END, CUT_MSG, "mensagem do commit do veredito")
-    # A mensagem vai num heredoc SEM aspas (`git commit -F - <<MSG`, passo 11): uma crase, um
-    # `$(` ou uma barra invertida ali EXECUTA ou reescreve texto no corte (licao S363: a crase
-    # num heredoc sem aspas mudou a branch do checkout principal). So $TAG e $CAND expandem.
-    msg = region(t, CUT_MSG_START, CUT_MSG_END, "mensagem do commit do veredito (heredoc)")
-    for bad in ("`", "$(", "\\"):
-        if bad in msg:
-            die("corte: a mensagem do commit do veredito (heredoc SEM aspas do passo 11) carrega %r: "
-                "so $TAG e $CAND podem expandir ali" % bad)
-    stray = sorted(set(re.findall(r"\$\{?[A-Za-z_0-9]*", msg)) - {"$TAG", "$CAND"})
-    if stray:
-        die("corte: a mensagem do commit do veredito (heredoc SEM aspas do passo 11) expande %s: so "
-            "$TAG e $CAND podem expandir ali" % ", ".join(stray))
+    t = sub(t, CUT_BASECMT_OLD, CUT_BASECMT_NEW, "comentario da base (LT-02)")
+    t = sub(t, CUT_G0READ_OLD, CUT_G0READ_NEW, "recusa do gh release view (LM-05)")
+    # B: o CI do candidato consultado PELO COMMIT (todos os eventos), nunca numa janela dos
+    # runs mais recentes do repositorio filtrada depois (um vermelho antigo sumia dela).
+    for old, new, what in CUT_CI_BY_COMMIT:
+        t = sub(t, old, new, what)
+    # Os heredocs de TEXTO sem aspas do corte (a mensagem do commit do veredito, passo 11, e o
+    # banner de CORTADA): uma crase, um `$(` ou uma barra invertida ali EXECUTA ou reescreve
+    # texto (licao S363: a crase num heredoc sem aspas mudou a branch do checkout principal).
+    # So expandem as variaveis declaradas de cada um.
+    for name, start, end, allowed in (
+            ("a mensagem do commit do veredito (heredoc SEM aspas do passo 11)", CUT_MSG_START, CUT_MSG_END,
+             {"$TAG", "$CAND"}),
+            ("o banner de CORTADA (heredoc SEM aspas)", "cat <<DONE\n", "\nDONE\n",
+             {"$TAG", "$ARCHIVE_ROOT", "$EV"})):
+        body = region(t, start, end, name)
+        for bad in ("`", "$(", "\\"):
+            if bad in body:
+                die("corte: %s carrega %r: so %s podem expandir ali" % (name, bad, ", ".join(sorted(allowed))))
+        stray = sorted(set(re.findall(r"\$\{?[A-Za-z_0-9]*", body)) - allowed)
+        if stray:
+            die("corte: %s expande %s: so %s podem expandir ali" % (name, ", ".join(stray), ", ".join(sorted(allowed))))
+    # LM-03: as janelas de cron que o corte cita sao as constantes que probe_crons conferiu
+    daily = ", ".join(CRONS_DAILY[:-1]) + " e " + CRONS_DAILY[-1]
+    day1 = " e ".join(CRONS_MONTH_DAY1)
+    nword = {10: "dez"}.get(CRONS_MONDAY_N)
+    if nword is None:
+        die("corte: CRONS_MONDAY_N=%d sem a palavra que o texto do corte usa" % CRONS_MONDAY_N)
+    need(t, "corte (as janelas de cron)", [
+        "todo dia %s; as segundas, %s\n#      entre %s e %s; no dia 1 do mes, %s." % (
+            daily, nword, CRONS_MONDAY_SPAN[0], CRONS_MONDAY_SPAN[1], day1),
+        "todo dia %s;\\n'\nprintf '   as segundas, %s de %s a %s; no dia 1 do mes, %s." % (
+            daily, nword, CRONS_MONDAY_SPAN[0], CRONS_MONDAY_SPAN[1], day1)])
     t = sub(t, CUT_S16_OLD, CUT_S16_NEW, "texto do passo 16")
     t = cut_region(t, CUT_S18_START, CUT_S18_END, CUT_S18, "passo 18")
     win = region(ga("cut"), CUT_WINDOW_FN_START, CUT_WINDOW_FN_END, "janela do GA (tree_clean_resume_11)")
@@ -2702,7 +2893,8 @@ def derive_cut(src: str) -> str:
     t = cut_region(t, CUT_BANNER_START, CUT_BANNER_END, CUT_BANNER, "M3-02: o banner")
     forbid(t, "corte", ["derive-kit-142", "Opus 5.5", "FN-04", "OQ-3", "senao por npx",
                         "so o job do gate roda la", "rede, npx, git", "if ! done_step 20; then",
-                        CUT_WINDOW_TXT_OLD, "nunca por prefixo.", "2.1.302",
+                        CUT_WINDOW_TXT_OLD, "nunca por prefixo.", "2.1.302", "mesma manha",
+                        "nasce na manha", "O G0 so le", "gh run list --limit 30",
                         # a divida do K1 sem as excecoes (FALSA contra o CHANGELOG [1.4.3])
                         "aberto, sem versao prometida para a cura, e o que o envelope do GA v1.4.2",
                         "os envelopes pinam entre eles) segue sem cura declarada.\n"])
@@ -3038,11 +3230,22 @@ _a0m() {  # $1 = id, $2 = mutacao (g2 | g3), $3 = texto fixo da recusa, $4 = o c
   if ! python3 - "$ROOT/$PLAN_DIR/derive-kit-143.py" "$SCRATCH/$1-derive.py" "$2" > "$SCRATCH/$1-gen.log" 2>&1 <<'PYA0M'
 import sys
 src, dst, kind = sys.argv[1:4]
+Q3 = "'" * 3
 MUT = {
     "g2": ("Evidencia do re-pass no MESMO commit: quatro partes, ordenadas por raio de\n",
            "Evidencia do re-pass no MESMO commit (`date`): quatro partes, ordenadas por raio de\n"),
     "g3": ('    ("C16-adopter-notes", c16_adopter_notes, ("7", "8")),\n',
            '    ("C16-adopter-notes", c16_adopter_notes, ("8",)),\n'),
+    "g6": ("   adopter. A sonda confere isso numa instala\u00e7\u00e3o descart\u00e1vel seguida do `upgrade.sh`.\n" + Q3 + "\n",
+           "   adopter. A sonda confere isso numa instala\u00e7\u00e3o descart\u00e1vel seguida do `upgrade.sh`.\n"
+           "11. Uma condicao nova sem negrito.\n" + Q3 + "\n"),
+    "g7": ('(docs/ARCHITECTURE.md)" ;;\n',
+           '(docs/ARCHITECTURE.md $HOME)" ;;\n'),
+    "g8": ('    t = sub(t, CUT_G0READ_OLD, CUT_G0READ_NEW, "recusa do gh release view (LM-05)")\n',
+           '    t = sub(t, CUT_G0READ_OLD, CUT_G0READ_NEW, "recusa do gh release view (LM-05)")\n'
+           '    t = t.replace(" - Ate o GA, main fica congelado.\\n", " - Ate o GA, main fica congelado `date`.\\n")\n'),
+    "g9": ("  assigned for its cure) EXCEPT the case of signed condition 67, which\n  this release declares cured; what",
+           "  assigned for its cure); what"),
 }
 old, new = MUT[kind]
 t = open(src, encoding="utf-8").read()
@@ -3058,6 +3261,14 @@ _a0m G2m g2 "a mensagem do commit do veredito (heredoc SEM aspas do passo 11) ca
   "uma crase na mensagem do commit do veredito (o derivador morre antes de qualquer saida)"
 _a0m G3m g3 "a condicao 7 do texto nao tem verificacao na sonda" \
   "a condicao 7 sem verificacao na sonda (o derivador morre antes de qualquer saida)"
+_a0m G6m g6 "as condicoes tem item numerado fora da forma" \
+  "um item numerado sem negrito nas condicoes (escaparia do censo G3)"
+_a0m G7m g7 "um rotulo ou cobertura da particao (echo entre aspas) carrega" \
+  "uma variavel num rotulo da particao (o echo do runner a expandiria)"
+_a0m G8m g8 "o banner de CORTADA (heredoc SEM aspas) carrega '\`'" \
+  "uma crase no banner de CORTADA (heredoc sem aspas do corte)"
+_a0m G9m g9 "runner derivado sem '  assigned for its cure) EXCEPT the case of signed condition 67" \
+  "o CONTEXT do prompt sem a excecao da condicao 67"
 '''
 
 # F: a condicao do SIZE no MAPA sintetico, lida da constante SIZE_CONDITION da sonda (pela AST).
@@ -3411,6 +3622,67 @@ PYP15
     _p_red P25 "$SCRATCH/p25" C18-delivery "FAIL C18-delivery: a instalacao nova pelo install.sh entregou o que a condicao 10 declara fora: conftest.py" \
       "uma rota de entrega plantada no install.sh (o conftest.py da raiz no alvo)"
   else bad "P25: fixture da rota de entrega plantada falhou"; fi
+  # P26 — o HMAC (compute_entry_hmac) calculado FORA da trava em append_entry (condicoes 1 e 3).
+  if _p_mut "$SCRATCH/p26" "compute_entry_hmac fora da trava" "python3 '$_p15py' .claude/hooks/audit_log.py 'compute_entry_hmac(b\"\", {})'"; then
+    _p_red P26 "$SCRATCH/p26" C14-cure-67 "FAIL C14-cure-67: append_entry calcula o HMAC (compute_entry_hmac) FORA do bloco da trava" \
+      "o calculo do HMAC fora da trava em append_entry"
+  else bad "P26: fixture do HMAC fora da trava falhou"; fi
+  # P27 — a regra do upgrade.sh mudada: ele deixa de entregar .claude/scripts/local/, que o
+  # README declara entregue (condicao 10): a instalacao descartavel + upgrade da C18 o acha.
+  _p27py="$SCRATCH/p27-mut.py"
+  cat > "$_p27py" <<'PYP27'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+a = "    .claude/scripts/tests|.claude/scripts/tests/*) return 0 ;;\n"
+if t.count(a) != 1:
+    sys.exit("ancora da exclusao casou %d vez(es)" % t.count(a))
+open(p, "w", encoding="utf-8").write(t.replace(a, a + "    .claude/scripts/local|.claude/scripts/local/*) return 0 ;;  # TEST ONLY (P27)\n"))
+PYP27
+  if _p_mut "$SCRATCH/p27" "upgrade sem scripts/local" "python3 '$_p27py' scripts/_framework_manifest_set.sh"; then
+    _p_red P27 "$SCRATCH/p27" C18-delivery "FAIL C18-delivery: a entrega da classe FORA .claude/scripts/local/: instalacao nova/upgrade.sh medidos (False, False)" \
+      "o upgrade.sh deixando de entregar uma classe que o README declara entregue"
+  else bad "P27: fixture da regra do upgrade falhou"; fi
+  # P28 — o job da prova da rc redefinindo o npm por $GITHUB_ENV (condicao 6).
+  _p28py="$SCRATCH/p28-mut.py"
+  cat > "$_p28py" <<'PYP28'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+i = t.index("  rc-toolchain-proof:")
+o = '          npm install -g "npm@${PUBLISH_NPM_VERSION}"\n'
+j = t.index(o, i)
+open(p, "w", encoding="utf-8").write(t[:j] + '          echo "PUBLISH_NPM_VERSION=10.0.0" >> "$GITHUB_ENV"\n' + t[j:])
+PYP28
+  if _p_mut "$SCRATCH/p28" "rc redefine o npm por GITHUB_ENV" "python3 '$_p28py' .github/workflows/npm-publish.yml"; then
+    _p_red P28 "$SCRATCH/p28" C0-rc-proof "FAIL C0-rc-proof: paridade de toolchain com o publish (condicao 6): o job rc-toolchain-proof redefine o toolchain por" \
+      "o job da prova da rc redefinindo o npm por GITHUB_ENV"
+  else bad "P28: fixture do GITHUB_ENV falhou"; fi
+  # P29 — uma linha de DADO (nao comentario) mudada no npm-trusted-publisher.txt (condicao 10).
+  if _p_mut "$SCRATCH/p29" "publicador do npm com dado novo" "printf 'TEST-ONLY=1\n' >> .claude/governance/npm-trusted-publisher.txt"; then
+    _p_red P29 "$SCRATCH/p29" C11-scope "FAIL C11-scope: .claude/governance/npm-trusted-publisher.txt muda fora do comentario" \
+      "uma linha de dado nova no npm-trusted-publisher.txt"
+  else bad "P29: fixture do publicador do npm falhou"; fi
+  # P30 — o lancador do shim reatribuido depois do oraculo (condicao 5).
+  if _p_mut "$SCRATCH/p30" "CODEX_LAUNCHER reatribuido" "printf 'CODEX_LAUNCHER=\"/tmp/TEST-ONLY-outro-codex\"\n' >> $EV/run-rc1-repass.sh"; then
+    _p_red P30 "$SCRATCH/p30" C13-route1 "FAIL C13-route1: o runner do candidato atribui CODEX_LAUNCHER" \
+      "o lancador do shim reatribuido depois do oraculo"
+  else bad "P30: fixture do CODEX_LAUNCHER falhou"; fi
+  # P31 — o if do job publish COMENTADO (o texto segue no arquivo; condicao 6 e cabecalho).
+  _p31py="$SCRATCH/p31-mut.py"
+  cat > "$_p31py" <<'PYP31'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+i = t.index("\n  publish:\n")
+o = "    if: \"!contains(github.ref, '-rc.')\"\n"
+j = t.index(o, i)
+open(p, "w", encoding="utf-8").write(t[:j] + "    # if: \"!contains(github.ref, '-rc.')\"  TEST ONLY\n" + t[j + len(o):])
+PYP31
+  if _p_mut "$SCRATCH/p31" "if do publish comentado" "python3 '$_p31py' .github/workflows/npm-publish.yml"; then
+    _p_red P31 "$SCRATCH/p31" C0-npm "FAIL C0-npm: o job publish do npm-publish.yml nao pula mais as tags -rc." \
+      "o if do job publish comentado (o texto segue no arquivo)"
+  else bad "P31: fixture do if comentado falhou"; fi
   # P14 — um id desconhecido em --only nunca vira verde vacuo (cura da sonda do GA).
   _p14_rc=0
   ( cd "$CLONE" && PYTHONDONTWRITEBYTECODE=1 python3 "$EV/probe-conditions-rc1.py" --root "$CLONE" \
@@ -3479,10 +3751,23 @@ case "$_f" in
   raw:*) exec cat -- "$GH_FIX/${_f#raw:}" ;;
 esac
 [ -f "$GH_FIX/$_f" ] || { echo "gh stub: fixture ausente: $_f" >&2; exit 9; }
-_q=""; _p=""
-for _a in "$@"; do [ "$_p" = "--jq" ] && _q="$_a"; _p="$_a"; done
-[ -n "$_q" ] || exec cat -- "$GH_FIX/$_f"
-exec jq -rc "$_q" < "$GH_FIX/$_f"
+_q=""; _p=""; _lim=""; _cm=""
+for _a in "$@"; do
+  [ "$_p" = "--jq" ] && _q="$_a"
+  [ "$_p" = "--limit" ] && _lim="$_a"
+  [ "$_p" = "--commit" ] && _cm="$_a"
+  _p="$_a"
+done
+_src="$GH_FIX/$_f"
+# `gh run list`: o servidor filtra por --commit e DEPOIS corta em --limit (padrao 20) — o stub
+# faz o mesmo, para que uma janela curta numa lista longa aconteca no ensaio como no gh real.
+if [ "${1:-}" = "run" ] && [ "${2:-}" = "list" ]; then
+  jq -c --arg c "$_cm" --argjson n "${_lim:-20}" '[.[]|select($c == "" or .headSha == $c)]|.[0:$n]' \
+    < "$_src" > "$GH_FIX/.run-list" || { echo "gh stub: fixture de run list ilegivel: $_f" >&2; exit 9; }
+  _src="$GH_FIX/.run-list"
+fi
+[ -n "$_q" ] || exec cat -- "$_src"
+exec jq -rc "$_q" < "$_src"
 GHSEOF
 chmod 0755 "$_gs/bin/gh"
 _gs_run() {  # $1 = script, $2 = sequencia (uma linha por chamada do gh), $3 = log, $4 = diretorio
@@ -3526,6 +3811,35 @@ if [ "$_gs_jq" -eq 1 ]; then
      && grep -q 'validate.yml: 3 job(s) success' "$SCRATCH/v3.log"; then
     ok "V3: o JSON bruto pelo --jq do corte: as iscas de outro commit ficam fora, e o run 4242 com 3 jobs verdes passa"
   else bad "V3: o caso bom foi recusado"; sed -n '1,8p' "$SCRATCH/v3.log"; fi
+  # V4 — o CI do candidato PELO COMMIT: 30 runs verdes mais novos do MESMO commit e, depois
+  # deles, um run AGENDADO vermelho. Pelo commit (todos os eventos) ele aparece e e recusa
+  # nomeada; numa janela dos 30 runs mais recentes do repositorio ele sumia (V4m).
+  python3 - "$_vs" "$_gs/fix/v-old.json" <<'PYV4'
+import json, sys
+sha, out = sys.argv[1:3]
+g = {"headSha": sha, "status": "completed", "conclusion": "success", "workflowName": "Validate",
+     "event": "push", "headBranch": "main"}
+rows = [dict(g, databaseId=5000 + i) for i in range(30)]
+rows.append(dict(g, conclusion="failure", event="schedule", databaseId=4000))
+open(out, "w", encoding="utf-8").write(json.dumps(rows) + "\n")
+PYV4
+  _v4_rc=0; _gs_run "$SCRATCH/v.sh" "$(printf 'run list v-old.json\nrun list v-old.json')" "$SCRATCH/v4.log" "$SCRATCH" || _v4_rc=$?
+  refused V4 "$_v4_rc" "$SCRATCH/v4.log" "workflow vermelho para $_vs" \
+    "um run AGENDADO vermelho do candidato depois de 30 runs verdes mais novos (o CI pelo commit)"
+  if grep -qF 'vermelho: Validate (run 4000, failure, evento schedule)' "$SCRATCH/v4.log"; then
+    ok "V4: a recusa nomeia o run agendado vermelho (run 4000, evento schedule)"
+  else bad "V4: a recusa nao nomeia o run agendado vermelho"; sed -n '1,8p' "$SCRATCH/v4.log"; fi
+  # V4m (gemeo vermelho, a v1.4.2-rc.1): o wait_ci_green dela (os 30 runs mais recentes,
+  # filtrados depois) sobre a MESMA fixture nao ve o vermelho e passa.
+  { printf '#!/bin/bash\nset -euo pipefail\n'
+    printf 'die() { printf "FAIL: %%s\\n" "$*" >&2; exit 1; }\n'
+    printf 'sleep() { :; }\nCI_WAIT_MAX_MIN=3\n'
+    awk '/^wait_ci_green\(\) \{$/,/^\}$/' "$ROOT/.claude/plans/PLAN-193/OWNER-RC1-CUT.sh"
+    printf 'wait_ci_green %s\n' "$_vs"; } > "$SCRATCH/v4m.sh"
+  if _gs_run "$SCRATCH/v4m.sh" "$(printf 'run list v-old.json\nrun list v-validate.json\nrun view v-jobs.json 4242')" "$SCRATCH/v4m.log" "$SCRATCH" \
+     && grep -q 'runs=30 pendentes=0 vermelhos=0' "$SCRATCH/v4m.log"; then
+    ok "V4m (gemeo vermelho, a v1.4.2-rc.1): a janela dos 30 runs mais recentes nao ve o vermelho agendado e passa"; _red="$_red V4m"
+  else bad "V4m: o wait_ci_green da v1.4.2-rc.1 nao mostrou a classe (o V4 seria vacuo)"; sed -n '1,8p' "$SCRATCH/v4m.log"; fi
 fi
 
 '''
@@ -3802,7 +4116,7 @@ PYR8
 
 TEST_D_ANCHOR = ("# ===========================================================================\n"
                  "printf '\\n===== RESULTADO: %s PASS, %s FAIL\\n' \"$PASS\" \"$FAIL\"\n")
-TEST_D_INDEX = r'''# D8-D16 — o INDICE dos controles vermelhos dos gates novos e das curas desta derivacao
+TEST_D_INDEX = r'''# D8-D17 — o INDICE dos controles vermelhos dos gates novos e das curas desta derivacao
 # (R3H-04 pela forma): cada um tem de ter rodado e ficado verde NESTE ensaio (o auxiliar
 # `refused` e os controles positivos anotam o id em _red); uma secao pulada nao prova nada.
 _d_need() {  # $1 = rotulo do gate, $2.. = controles que tem de ter passado
@@ -3817,8 +4131,9 @@ _d_need "D8 rota 1 so (PLAN-194 D-4): lancador plantado, npx espiao e espiao do 
 _d_need "D9 passo 18: o gate e a prova do toolchain da rc, pelo nome" X2 X3 X4 X4j
 _d_need "D10 recusas do G0 pelo corte inteiro (R3H-03)" R2 R8 R10 R11 R12 R13 R14 R15 R16 R17 R18
 _d_need "D11 sonda: os controles vermelhos das condicoes da 1.4.3" P2 P4 P5 P10 P11 P11b P12 P13 P14 \
-  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P25
-_d_need "D16 os guards do derivador nao sao vacuos: a crase no heredoc do veredito e a condicao sem verificacao" G2m G3m
+  P15 P16 P17 P18 P19 P20 P21 P22 P23 P24 P25 P26 P27 P28 P29 P30 P31
+_d_need "D17 wait_ci_green: o CI do candidato pelo commit (um vermelho agendado antigo nao some)" V4 V4m
+_d_need "D16 os guards do derivador nao sao vacuos: heredocs e echos de texto, condicoes sem verificacao, a divida no CONTEXT" G2m G3m G6m G7m G8m G9m
 _d_need "D12 censo do harness (R3H-01/R3H-02) e o modelo recusado pelo nome" A3 B3c
 _d_need "D13 passo 11: o envelope re-derivado dos fields assinados (cura do GA v1.4.2)" E3e E3f
 _d_need "D14 a classe dos P2 M3-01/M3-02 do GA no corte da rc (a janela 9-11 e o banner)" R19 R19b W11m R7c M302 M302m
@@ -3955,14 +4270,15 @@ def derive_test(src: str) -> str:
     t = sub(t, TEST_E3E_ANCHOR, TEST_E3E + TEST_E3E_ANCHOR, "E3e")
     t = sub(t, TEST_R7C_ANCHOR, TEST_R7C_ANCHOR + TEST_R7C, "R7c")
     t = sub(t, TEST_M302_ANCHOR, TEST_M302 + TEST_M302_ANCHOR, "M3")
-    t = sub(t, TEST_D_ANCHOR, TEST_D_INDEX + TEST_D_ANCHOR, "indice D8-D16")
+    t = sub(t, TEST_D_ANCHOR, TEST_D_INDEX + TEST_D_ANCHOR, "indice D8-D17")
     t = lacks_rewrite(t)
     forbid(t, "harness", ["derive-kit-142", "C5-pin", "canary_pre", "PLUMBING do harness",
                           "OWNER-GA-CUT.sh", "-ga."])
     need(t, "harness", ['PLAN_DIR=".claude/plans/PLAN-194"', "derive-kit-143.py --check",
                         "refs/tags/v1.4.2^{commit}", 'say "B7. ROTA 1 SO', 'say "K1. derivadores sem as saidas',
                         "como antes da relmeta-142", 'grep -q \'nao lista: PLAN-194$\'',
-                        'exec jq -rc "$_q" < "$GH_FIX/$_f"', '_d_need "D15 ', '_d_need "D16 ',
+                        'exec jq -rc "$_q" < "$_src"', '_d_need "D15 ', '_d_need "D16 ', '_d_need "D17 ',
+                        '--argjson n "${_lim:-20}"', "_p_red P31 ",
                         "_a0m G2m g2 ", "_a0m G3m g3 ", "P25 \"$SCRATCH/p25\" C18-delivery"])
     forbid(t, "harness", ["X_SEQ", "V_VIEW", "OK: retomada entre os passos 10 e 11",
                           "numa retomada entre os passos 10 e 11"])
@@ -4031,6 +4347,14 @@ def cross_checks(out: Dict[str, str]) -> None:
     # (ou e a da projecao de tamanho, SIZE_CONDITION) ou esta declarada so-texto em
     # COND_TEXT_ONLY. Uma condicao sem verificacao nunca passa calada.
     nums = set(re.findall(r"(?m)^([0-9]+)\. \*\*", out["cond"]))
+    # LD-06: toda linha numerada do texto tem a forma `N. **` (um item sem negrito escaparia do censo)
+    numbered = re.findall(r"(?m)^\s*([0-9]+)\.\s", out["cond"])
+    if sorted(numbered, key=int) != sorted(nums, key=int):
+        die("as condicoes tem item numerado fora da forma `N. **` (numerados %s; com negrito %s)"
+            % (sorted(numbered, key=int), sorted(nums, key=int)))
+    # LD-02: a marca do provisorio da sonda e a do derivador (uma fonte so)
+    if ('PROVISIONAL_MARK = %s\n' % json.dumps(PROVISIONAL_MARK, ensure_ascii=False)) not in out["probe"]:
+        die("a sonda nao carrega a PROVISIONAL_MARK do derivador (%r)" % PROVISIONAL_MARK)
     mapped = set(c for c in probe_conditions(out["probe"]) if c != "cabecalho")
     size_c = probe_size_condition(out["probe"])
     if not mapped or not mapped <= nums:
