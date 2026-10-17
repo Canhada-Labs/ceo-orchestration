@@ -513,6 +513,36 @@ presente em `.claude/sentinel-signers.txt`, que não mudou no trecho. Cadeia lin
   W5a landou em `9770b5a4`.
 - Falta: kit → rc.1 → hold de 24 h → GA.
 
+## Kit da rc.1 — 2026-10-17 (S365)
+
+- Kit da v1.4.3-rc.1 landado livre (decisão S365-1: o kit sobe quando o rail e o ensaio em cadeia passam).
+  K-a, texto do plano e do backlog: `97e4951a`, `2725143c`. K-b, derivador e saídas: `849f4486`, `f5b7a983`,
+  `cb75587c`, `4381ba73`, `cdb067d4`, `27c85afe`, `20ec3d4e`, `25d26e72`, `b978c703`. As 8 saídas
+  (`repass-rc1/` com o runner, a sonda, as condições, o README e o `.gitignore`; `gen-envelope-rc1.py`;
+  `OWNER-RC1-CUT.sh`; `test-rc1-kit.sh`) saem byte a byte de `derive-kit-143.py` (`--check`). O kit do GA
+  segue no estágio K1: `derive-ga-kit-143.py --check-cures` cura o kit do GA v1.4.2 por âncora, e o
+  `CLASS_PENDING` dele sai por construção do `GA_CARRY`/`GA_NA` do derivador da rc.
+  verifier: `python3 -I .claude/plans/PLAN-194/derive-kit-143.py --check && python3 -I .claude/plans/PLAN-194/derive-ga-kit-143.py --check-cures` exit=0
+- Rail: K-a em 1 rodada; K-b em 3 rodadas, a 3.ª final, pela regra de parada pré-registrada. Codex e lanes
+  Claude na MESMA rodada. P0 = 0. A classe «o que chega ao adopter» (§4 do README, condição 10, C18 da sonda)
+  levou NO-GO nas rodadas 1, 2 e 3 e saiu por REMOÇÃO. Registro no formato da W1:
+  `.claude/plans/PLAN-194/kit143-rail-record.md`.
+- Ensaio em cadeia sobre a ponta: na passada paralela, 16.032 passed e 1 falha de teto de tempo
+  (`test_install_smoke.py::test_install_creates_expected_layout`, 90 s sob carga; isolada, passa em 41,7 s;
+  item 20 do backlog da 1.4.4); na serial, 683 passed; `test-rc1-kit.sh` com 267 PASS e 0 FAIL;
+  `test-ga-kit.sh` com 57 PASS e 0 FAIL (detalhe no registro do rail).
+- Substrato do Codex (registro): o prompt longo passado como argumento morre com rc 137 e log vazio; pela
+  entrada padrão roda (o runner do re-pass já usa a entrada padrão). O `config.toml` mudou em 2026-10-16
+  (`cdb20042…`) e em 2026-10-17, entre 16:04Z e 21:04Z (`56eabc9c…`), com os mesmos modelo, esforço,
+  memories e chronicle.
+- Claude Code 2.1.302: CHANGELOG lido em 2026-10-17 (cópia de
+  `raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md`, sha256 `57fde96b…`). A entrada não
+  muda o contrato dos hooks de comando, os únicos que este repositório registra (nenhum hook `prompt` ou
+  `agent` no `.claude/settings.json`); o limite de 12 hooks `prompt`/`agent` simultâneos por evento não o
+  alcança. Ela liga os fork subagents por padrão no `claude -p`, e o corte não chama `claude -p`. Ela
+  também acrescenta o controle da idle compaction no `/config`.
+- Falta: o corte da rc.1 pelo Owner (`OWNER-RC1-CUT.sh`) → hold de 24 h (ADR-103) → kit do GA → GA.
+
 ## Seções arquivadas (2026-10-03, S362)
 
 O T0 fica no topo, congelado: `debate/round-1/security-engineer.md:263` cita `LEDGER.md:16-18`.

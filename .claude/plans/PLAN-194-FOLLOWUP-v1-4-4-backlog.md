@@ -576,6 +576,33 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
 - **Canônico:** não para os derivadores do kit (oráculo `0`); a W3 tem os pacotes canônicos dela.
 - **Check:** o da W3.6 do PLAN-194.
 
+### Item 27 — resíduos do rail do kit da v1.4.3-rc.1 (livre; derivadores do kit da 1.4.4)
+
+- **O quê:** achados P3 do rail do kit da rc.1 (`.claude/plans/PLAN-194/kit143-rail-record.md`) declarados sem
+  cura no kit. Todos tocam só os derivadores e o harness do kit, nunca o produto.
+  - **LM-01:** o detector de `npx` da C13 da sonda deixa passar `npx "<pacote>"` (com aspas) e `npx codex`. O
+    regex que a lane sugeriu casaria também o «(npx» do texto do próprio `die`; a cura casa `npx` em POSIÇÃO DE
+    COMANDO, ignorando strings, com o controle P13b na forma com aspas.
+  - **LM-04 (resto):** faltam dois controles vermelhos. Um da projeção SIZE: uma parte inflada acima de
+    245.616 B, rodando a sonda com `--sizes`. Outro do cenário reproduzido da C15: um
+    `check-substrate-drift.py` que perde o drift ou não nomeia `CC_LEDGER_UNREADABLE`, com o FAIL esperado
+    no cenário, não no nome.
+  - **LM-06:** os `read -r _` dos Enters dos passos 1/15, 2, 7 e 9 e a gravação do `.tag-push-epoch` no passo
+    16 do corte não têm `|| die`. Vem do molde da v1.4.2 e toca o comportamento que os ensaios T/R exercitam.
+  - **LM3-02 e LDR3-05 (rodada 3):** ramos novos da guarda de heredoc e echo e dos censos sem controle
+    vermelho: o corpo exato do heredoc de DADOS, a variável fora da lista no heredoc de TEXTO, o
+    antivácuo do heredoc de TEXTO ausente, a crase num echo geral, a contagem de braços da partição, a
+    recusa do censo dos crons por contagem diferente, os radicais de entrega proibidos e, no derivador
+    do GA, `check_ga_carry`, `class_pending` e `GA_APPLIED`.
+  - **LDR3-03 (rodada 3):** as strings de `die` e de `printf` com texto derivado ficam fora da guarda,
+    que confere heredocs e linhas com echo.
+  - **LDR3-04 (resto, rodada 3):** o rótulo e o cabeçalho da parte 4 do runner ficam fora das regiões dos
+    radicais de entrega proibidos; a cura de classe é um molde fixo do §4 e da condição 10, conferido
+    byte a byte.
+- **Canônico:** não (derivadores e harness em `.claude/plans/`, oráculo `0`).
+- **Cura:** nos derivadores do kit da 1.4.4 (rc e GA), cada uma com o controle vermelho no índice D.
+- **Check:** none (os controles vivem no harness do kit da 1.4.4).
+
 ## Open questions
 
 - **OQ-1 (FD-25, pendente desde 2026-10-09, LEDGER do PLAN-194):** (1) backup com symlink em `memory/`:
@@ -662,3 +689,6 @@ dela, o 26 junto da W3.»
   Check: `! grep -qF 'select(.name=="TLC Model Check")' .claude/plans/PLAN-194-maintenance-train-v1-4-3.md`
 - [ ] Item 26 (inversão da rota 2) landado com a W3, como pré-condição da W3.6.
   Check: o da W3.6 do PLAN-194
+- [ ] Item 27 (resíduos do rail do kit da v1.4.3-rc.1) curados nos derivadores do kit da 1.4.4, cada um com
+  o controle vermelho no índice D.
+  Check: none (os controles vivem no harness do kit da 1.4.4)
