@@ -543,6 +543,41 @@ presente em `.claude/sentinel-signers.txt`, que não mudou no trecho. Cadeia lin
   também acrescenta o controle da idle compaction no `/config`.
 - Falta: o corte da rc.1 pelo Owner (`OWNER-RC1-CUT.sh`) → hold de 24 h (ADR-103) → kit do GA → GA.
 
+## rc.1 cortada — 2026-10-18 (S365)
+
+- O Owner cortou a v1.4.3-rc.1 com o `OWNER-RC1-CUT.sh`: os 20 passos verdes, de 2026-10-17 ~19:00 (o passo
+  1 marcado às 19:14; o bump às 20:30) a 2026-10-18 ~02:32 BRT. Bump `ec98fa59` (`release: v1.4.3`), com o CI do candidato verde (Validate 9 jobs
+  `success`). Re-pass do Codex 0.160.0 pela rota 1 (payload `112fae7a…` conferido pelo oráculo): as 4
+  partes GO-WITH-CONDITIONS (o runner: OVERALL GO; o envelope assinado: GO-WITH-CONDITIONS). Veredito assinado e evidência em `5e7cb65e` (pai = o candidato
+  `ec98fa59`). Tag anotada e assinada `v1.4.3-rc.1` (objeto `b41a5165`, aponta para `5e7cb65e`), pushada.
+  O release.yml saiu `success` (run `39099583164`). No npm-publish, «Await release-gate» e «RC toolchain
+  proof (no publish)» saíram `success` (run `39099583163`), com o publish pulado. O pre-release é público
+  e não é rascunho, com publishedAt `2026-10-18T05:30:18Z`. O npm `latest` segue 1.4.2.
+  verifier: `git cat-file -t v1.4.3-rc.1 | grep -qx tag && [ "$(git rev-parse 'v1.4.3-rc.1^{commit}')" = 5e7cb65ebc259da586256ddb6b29918ba3a39ab6 ]` exit=0
+- Conferência do CEO, só leitura:
+  - a assinatura da tag é GOOD num chaveiro isolado, só com a chave pública `AE9B236F…DC74`;
+  - o release é pre-release e não é rascunho, e o npm segue em 1.4.2;
+  - os runs agendados de 2026-10-18 sobre `5e7cb65e` (Validate, Coverage, Ownership Nightly, mcp-smoke)
+    saíram `success`. A perna 3.14 do Validate noturno passou com a cura `56daf990`.
+- Achados do re-pass, todos na parte 3; as partes 1, 2 e 4 não trouxeram achado novo (a parte 1: nenhum
+  comportamental, e anota whitespace em expressões do CI):
+  - **P1, sob «NEW FINDINGS (annex)»:** o `diagnose-output-hook.py` pode gravar eventos sintéticos no log
+    de auditoria vivo quando `CEO_AUDIT_LOG_PATH` aponta para ele, porque o ambiente do filho preserva a
+    variável.
+  - **P2:** o `check-audit-real-loss.py` cai com `record_id` malformado.
+  - **P2:** os verificadores «só leitura» tentam gravar `.pyc`.
+  O GA reavalia a árvore da rc.1, então nenhuma cura entra antes dele. Os três vão ao material do GA, o P1
+  no anexo assinado, e ao backlog da 1.4.4 (itens 28 a 30).
+- Hold ADR-103: o GA a partir de `2026-10-19T05:30:18Z` (segunda-feira, 02:30 BRT). Às segundas, os crons
+  de 03:00 a 19:23 UTC rodam sobre o commit congelado (o G0 do corte avisa).
+- `.claude/plans/PLAN-194/repass-rc1/.tag-push-epoch` (o piso do passo 19) commitado neste fechamento,
+  como o da v1.4.2-rc.1. `~/.ceo-rc1-archive/` não existe: nenhuma tentativa foi arquivada.
+- Falta:
+  1. o kit do GA: `derive-ga-kit-143.py` no estágio final, com os fatos acima, o conteúdo da 1.4.3 e as
+     classes do `CLASS_PENDING`;
+  2. os adopters sobre a rc.1;
+  3. o corte do GA pelo Owner.
+
 ## Seções arquivadas (2026-10-03, S362)
 
 O T0 fica no topo, congelado: `debate/round-1/security-engineer.md:263` cita `LEDGER.md:16-18`.

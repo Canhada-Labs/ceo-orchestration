@@ -603,6 +603,42 @@ pré-existentes como follow-up; lane Claude GO com 1 P3); estes ficaram como fol
 - **Cura:** nos derivadores do kit da 1.4.4 (rc e GA), cada uma com o controle vermelho no índice D.
 - **Check:** none (os controles vivem no harness do kit da 1.4.4).
 
+### Item 28 — `diagnose-output-hook.py` pode escrever no log de auditoria vivo (P1 do anexo do re-pass da rc.1)
+
+- **O quê:** o re-pass da v1.4.3-rc.1 (parte 3, «NEW FINDINGS (annex)», `PLAN-194/repass-rc1/verdict-rc1-3.txt`)
+  registrou que `.claude/scripts/diagnose-output-hook.py` monta o ambiente do filho a partir de
+  `os.environ` e retira só algumas chaves (`:44-48`). Com `CEO_AUDIT_LOG_PATH` apontando para o log vivo, a
+  variável chega ao hook de post-tool que o diagnóstico executa, e os eventos sintéticos do ciclo de vida
+  podem cair no log vivo; o `HOME` e o `CEO_AUDIT_LOG_DIR` temporários não bastam, porque o resolvedor do
+  spool prefere o caminho explícito.
+- **Na 1.4.3:** a declarar no anexo assinado do GA; a árvore do GA é a da rc.1.
+- **Canônico:** não (`.claude/scripts/diagnose-output-hook.py`, oráculo `0`).
+- **Cura:** limpar do ambiente do filho todo destino herdado de auditoria e de estado antes de pôr os
+  temporários; controle com um canário externo (um log vivo plantado que tem de ficar intocado).
+- **Check:** o teste do canário, com o nome que a abertura fixar.
+
+### Item 29 — `check-audit-real-loss.py` cai com `record_id` malformado (P2 do re-pass da rc.1)
+
+- **O quê:** parte 3 do re-pass da v1.4.3-rc.1: quando há commit do journal a reconciliar desde o `--since`,
+  uma linha de log com `{"record_id":[]}` levanta `TypeError`
+  na pertença ao conjunto (`.claude/scripts/check-audit-real-loss.py:108`); a CLI não emite o relatório JSON
+  e não chega ao G7 quando as duas conferências foram pedidas.
+- **Canônico:** não (oráculo `0`).
+- **Cura:** validar o `record_id` antes da pertença, reportar a entrada malformada pelo nome e preservar os
+  achados que não dependem dela.
+- **Check:** o teste da entrada malformada, com o nome que a abertura fixar.
+
+### Item 30 — verificadores «só leitura» gravam bytecode (P2 do re-pass da rc.1)
+
+- **O quê:** parte 3 do re-pass da v1.4.3-rc.1: sem `-B` nem `PYTHONDONTWRITEBYTECODE`, até o `--help` de
+  `.claude/scripts/audit_spool_state.py` (`:65`) e de `.claude/scripts/check-audit-real-loss.py` (`:67`) tenta
+  gravar `.pyc` ao importar os auxiliares locais. Os testes «só leitura» mascaram isso porque põem
+  `PYTHONDONTWRITEBYTECODE=1`.
+- **Canônico:** não (oráculo `0`).
+- **Cura:** desligar a escrita de bytecode antes dos imports dos auxiliares nas duas entradas; o teste roda
+  SEM a variável e confere que nenhum `.pyc` aparece.
+- **Check:** o teste sem `PYTHONDONTWRITEBYTECODE`, com o nome que a abertura fixar.
+
 ## Open questions
 
 - **OQ-1 (FD-25, pendente desde 2026-10-09, LEDGER do PLAN-194):** (1) backup com symlink em `memory/`:
@@ -692,3 +728,5 @@ dela, o 26 junto da W3.»
 - [ ] Item 27 (resíduos do rail do kit da v1.4.3-rc.1) curados nos derivadores do kit da 1.4.4, cada um com
   o controle vermelho no índice D.
   Check: none (os controles vivem no harness do kit da 1.4.4)
+- [ ] Itens 28 a 30 (o P1 e os dois P2 do re-pass da v1.4.3-rc.1) curados, cada um com o seu teste.
+  Check: none até a abertura fixar os nomes dos testes

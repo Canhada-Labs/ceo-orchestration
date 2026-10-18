@@ -1668,7 +1668,7 @@ kit (molde); rail com regra de parada pré-registrada (≤ 3 rodadas; NO-GO só 
   rota 1 executa o lançador global (o `codex.js` do pacote), que o oráculo não hasheia. O `CHANGELOG.md`
   [1.4.3] o declara no Known-open, «The Codex pin»; a cura é o item 24 do backlog da 1.4.4. — Check: bash .claude/plans/PLAN-194/test-rc1-kit.sh
 - [ ] W7.2 dívida «known-open» RE-DECLARADA no material assinado pela FORMA (sem enumerar sítios). — Check: none (doc-only)
-- [ ] W7.3 ensaio em cadeia com a suíte COMPLETA sobre a árvore composta (regra S357). — Check: python3 -m pytest .claude/hooks/tests .claude/scripts/tests -q -x
+- [x] W7.3 ensaio em cadeia com a suíte COMPLETA sobre a árvore composta (regra S357; sobre `b978c703`, registro em `PLAN-194/kit143-rail-record.md`). — Check: python3 -m pytest .claude/hooks/tests .claude/scripts/tests -q -x
 - [ ] W7.4 rc.1 → adopters no mesmo dia → hold de 24 h (ADR-103) → GA → npm. — Check: npm view ceo-orchestration version
 
 **P2 herdados do PLAN-193 — registro dos achados no kit do GA 1.4.2; o estado das curas está na W7.1
