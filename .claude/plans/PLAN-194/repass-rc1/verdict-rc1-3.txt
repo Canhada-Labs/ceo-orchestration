@@ -1,0 +1,26 @@
+One new P1 and two P2 follow-ups. No P0 or false applicable numbered condition found. This is advisory evidence, not authorization.
+
+Conditions **1–2** remain carried debt; **4** is supported: malformed-ledger and component-exception probes preserved Codex drift and `--strict` exit 1. Conditions **9–10** bound this review. The local workflow also supports **6**: eight shared command blocks match, the RC job has only `contents: read`, and publication still excludes RC tags.
+
+**NEW FINDINGS (annex)**
+
+- **P1 annex — Diagnostic can contaminate the live audit log.**  
+  **FILE:LINE:** [`.claude/scripts/diagnose-output-hook.py:44`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.r7pcp3/wt/.claude/scripts/diagnose-output-hook.py:44), new in this diff.  
+  **Scenario:** An operator runs the diagnostic with `CEO_AUDIT_LOG_PATH` pointing to their live log. The child environment preserves that override while redirecting only `HOME` and `CEO_AUDIT_LOG_DIR`. The real post-tool hook emits synthetic lifecycle events, and the spool’s canonical-log resolver still selects the live path. An in-memory probe confirmed that destination selection. This affects both fresh and upgraded installations when the diagnostic is invoked.  
+  **Minimal fix:** Clear all inherited audit/state destination overrides before setting temporary destinations; verify isolation with an external canary.
+
+**P2 follow-ups**
+
+- **P2 — Malformed record shape crashes the real-loss verifier.**  
+  **FILE:LINE:** [`.claude/scripts/check-audit-real-loss.py:108`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.r7pcp3/wt/.claude/scripts/check-audit-real-loss.py:108), new in this diff.  
+  **Scenario:** With a committed candidate to reconcile, a log line containing `{"record_id":[]}` raises an uncaught `TypeError` during set membership. The CLI produces no JSON report and never reaches G7 when both checks were requested. The actual `main()` path reproduced this with in-memory inputs.  
+  **Minimal fix:** Validate `record_id` before membership, report malformed input explicitly, and preserve independently obtainable findings.
+
+- **P2 — “Read-only” verifiers still create Python bytecode caches.**  
+  **FILE:LINE:** [`.claude/scripts/audit_spool_state.py:65`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.r7pcp3/wt/.claude/scripts/audit_spool_state.py:65) and [`.claude/scripts/check-audit-real-loss.py:67`](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.r7pcp3/wt/.claude/scripts/check-audit-real-loss.py:67), both added.  
+  **Scenario:** Without `-B` or `PYTHONDONTWRITEBYTECODE`, even `--help` attempts `.pyc` writes while importing local helpers. Intercepting the cache writer confirmed three attempts without allowing writes. The read-only tests mask this by setting `PYTHONDONTWRITEBYTECODE=1`.  
+  **Minimal fix:** Disable bytecode writes before helper imports in both entry points.
+
+Python 3.9 parsing passed for all 14 changed Python files; parser-precedence probes, Bash syntax, scoped whitespace checks and the conditions hash also passed. Review stayed offline and read-only; no full installation or live audit writes were exercised.
+
+VERDICT: GO-WITH-CONDITIONS — Retain the applicable declared conditions, include the new P1 in the signed annex, and preserve the mandatory 24-hour hold.

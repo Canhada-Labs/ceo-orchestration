@@ -1,0 +1,20 @@
+No P0, false applicable declared condition, or undeclared P1 found in payload 1.
+
+**NEW FINDINGS (annex):** None.
+
+**P2 follow-ups:** No new behavioral finding.
+
+The applicable declarations remain honest:
+
+- **Conditions 1–2:** carried installer and migration debt remains material. In particular, upgrading a `user` installation can still add `availableModels`, `fallbackModel`, and `permissions.defaultMode` through ceremony-independent migration ([scripts/upgrade.sh:3729](/private/var/folders/9n/hm9srl0s1nz45_p12tj61pd80000gn/T/repass-rc1.r7pcp3/wt/scripts/upgrade.sh:3729)). This is the carried **P1, v1.4.0 condition 55**, not a new finding. Minimal fix: derive migratable settings from the selected ceremony; the declared workaround remains `--no-settings-migrate`.
+- **Condition 6:** the RC job explicitly restricts permissions to `contents: read`, has no environment or secret reference, and contains no publishing step. All ten shared RC/publish steps compare equal. Both jobs consume the same Node/npm variables without overrides; publish still excludes `-rc.` tags.
+- **Condition 7:** the bumped `INSTALL.md` example names the unavailable GA tag during the hold. Adopters must use `--pin v1.4.3-rc.1`; unknown references exit 2.
+- **Conditions 5, 8–10:** the declared pin limitations remain relevant; the live Claude adapter is unchanged; all 379 changed paths belong to exactly one payload or excluded class. Payload 1 contains 22 paths. The implementation inspected for conditions **3–4** supports their narrowly stated cure claims.
+
+The fresh-install change preserves existing settings and existing `defaultMode` keys. Its `jq` and Python branches agree. Settings templates, hook registrations, model/effort pins, VETO floor, effective configuration, and `upgrade.sh` are byte-identical to v1.4.2.
+
+The easiest integration detail to miss is that **adding `manual` does not make the `user` harness gate green**: its required deny entries remain absent. The release explicitly declares this limitation. Fresh installation and upgrade deliver the relocated replay fixtures; plugin packaging deliberately excludes them.
+
+Validation covered seven in-memory merge cases, workflow YAML and shell syntax, shared-step equality, version consistency, and scope partitioning. No previous smoke/ownership step name disappeared during the job split. Full installation, live harness execution, packaging, and hosted CI were not run. `git diff --check` reported trailing whitespace in CI expressions.
+
+VERDICT: GO-WITH-CONDITIONS — Payload 1 satisfies the prescribed cut rule with the applicable declarations and carried restrictions retained; this is advisory evidence, not authorization.

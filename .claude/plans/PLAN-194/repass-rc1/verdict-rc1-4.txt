@@ -1,0 +1,16 @@
+Reviewed all 17 files in payload 4 at `ec98fa5926d26087936f3c4092ef6ab3033c13e8`. The conditions digest matches. **No P0, false applicable declared condition, or new P1/P2 finding identified.**
+
+- **Adopter impact:** these repository documents and TLC tools are not delivered through the installer’s documentation-template routes or invoked during installation/upgrade. This payload introduces no automatic settings, hook, model, or effort change.
+- **Claims and fail direction:** the revised Bash-guard limitations match the implementation, including absent forensic coverage for computed targets. The deny-baseline opt-out correctly warns that it also skips the new `defaultMode` insertion. Historical harness observations distinguish binary inspection from runtime measurement.
+- **Formal verification:** the corrected singleton property counts new probes per recovery epoch, allowing previously admitted calls to remain in flight. An independent, in-memory translation reproduced **7,842** baseline states, found no S1–S3 violations, and exposed the intended defects in all four mutations. This was **not a TLC execution** or a production-conformance proof.
+- **Release integration:** condition **6** matches the workflow: shared Node/npm variables, RC-only proof job with `contents: read`, no registry credential or publish step, and continued exclusion of RC tags from publishing. The architecture version matches `VERSION`.
+
+The easily missed distinction is that the corrected model permits legacy completion races; it does not establish production audit durability or recovery without the stated fairness assumptions.
+
+Validation included Python 3.9 grammar parsing, stdlib import inspection, shell syntax checking, and diff checks. No network calls or file changes were made. TLC and vendor probes were not rerun.
+
+**NEW FINDINGS (annex):** None.
+
+**P2 follow-ups:** None additional; carried debt remains under conditions **1–2**.
+
+VERDICT: GO-WITH-CONDITIONS — Retain conditions 1–2, 6, 8 and 9–10 and the mandatory 24-hour hold; this payload review is advisory evidence, not release authorization.

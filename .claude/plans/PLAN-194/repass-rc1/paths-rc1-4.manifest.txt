@@ -1,0 +1,17 @@
+docs/ARCHITECTURE.md
+docs/BRANCH-PROTECTION.md
+docs/actions-versions.md
+docs/adopter-new-model-fast-access.md
+docs/cost-of-operation.md
+docs/deny-baseline.md
+docs/formal-verification/breaker.cfg
+docs/formal-verification/breaker.pcal
+docs/formal-verification/breaker.tla
+docs/formal-verification/check-breaker-model.py
+docs/formal-verification/debate-convergence.cfg
+docs/formal-verification/plan-lifecycle.cfg
+docs/formal-verification/properties-proved.md
+docs/formal-verification/run-tlc.sh
+docs/security-bash-canonical-guards.md
+docs/threat-model.md
+docs/workflow-recovery.md

@@ -1,0 +1,21 @@
+# Proveniencia do re-pass do CANDIDATO v1.4.3-rc.1 - PLAN-194 - 4 partes
+- Base: v1.4.2 (900b219bf8b38e887d2a71fd9924cc805fe6ac09 -> b55084da6dd8e4a05fc9893b2690df8aebcfd0ca) .. Candidato: ec98fa5926d26087936f3c4092ef6ab3033c13e8 (PRE-tag; base resolvida no run)
+- Worktree detached do CANDIDATO: sim - Pipeline: prompt+diff -> codex_egress_redact --outgoing -> controles -> codex exec --sandbox read-only
+- Caminhos pessoais (/Users/<dono>, /home/<dono>, -Users-<dono>) substituidos por <user> no diff antes do payload e em transcript/verdict depois do codex (cura 1 do gate de contaminacao; rodada 17)
+- codex: 0.160.0 / aarch64-apple-darwin / payload 112fae7a5a1223e673c8a1791d32338f37df8b527ff1159bb8adac6c4dbf1b4b
+- rota do codex: binario global (versao pinada, payload verificado)
+- modelo: gpt-6-astra (explicito via -m; origem: config.toml do codex (tabela raiz))
+- condicoes declaradas no prompt (DATA para o revisor): CONDITIONS-rc1.reviewed.md sha256 eebf7191267a85535be53dc9872223a4e7fba89a44778bccac46a46d194a8c51
+- sonda das condicoes: verde (17 linhas OK, nenhuma FALSA; probe-rc1.txt)
+- base assinada por: AE9B236FDAF0462874060C6BCFCFACF00335DC74
+- classes de morte do codex (so das linhas ERROR: do proprio codex nas ultimas 40 linhas do transcript): capacidade do modelo = re-tentada ate 2 vezes; LIMITE DE USO/quota da CONTA Codex = sem re-tentativa, nenhuma parte nova lancada, recusa nomeada
+- Data: 2026-10-17T23:54:04Z
+- parte 1 (instalacao, upgrade, settings e o pipeline de release: templates/**, .claude/settings.json, .claude/agents/**, scripts/** (install.sh, upgrade.sh e o resto do instalador), o piso VETO e o pin efetivo (_lib/agent_frontmatter.py, _lib/effective_config.py), env-inventory, .github/** (os workflows de CI e de release, com o job da prova do toolchain da rc), CHANGELOG/INSTALL/SUPPORT/README, npm/ e os sitios de versao do bump): VERDICT: GO-WITH-CONDITIONS — Payload 1 satisfies the prescribed cut rule with the applicable declarations and carried restrictions retained; this is advisory evidence, not authorization. [codex rc=0]
+  - payload-rc1-1.raw.txt NAO commitado; pin sha256: 9136b4d36721c1ae8908f6adf3e3e5b34f6698e4c9cc8521720191e5dc0cda19
+- parte 2 (os hooks que rodam na sessao do adopter: .claude/hooks/** fora dos testes e dos dois arquivos da parte 1 (o audit_log e a cadeia de auditoria, os adapters e os auxiliares de _lib/)): VERDICT: GO-WITH-CONDITIONS — The applicable declarations are honest and sufficient for this payload under the stated cut rule, retaining the declared debt and mandatory 24-hour hold. [codex rc=0]
+  - payload-rc1-2.raw.txt NAO commitado; pin sha256: 455d08814ea04a9ea3530d2b31e158f951d31f704ca40599a510a767e9fb5516
+- parte 3 (as CLIs do mantenedor e do operador: .claude/scripts/** fora dos testes, de local/ e de data/ (boot, custo e telemetria, auditoria, deprecacoes de modelo, deriva de substrato), .claude/commands/** e .claude/skills/**): VERDICT: GO-WITH-CONDITIONS — Retain the applicable declared conditions, include the new P1 in the signed annex, and preserve the mandatory 24-hour hold. [codex rc=0]
+  - payload-rc1-3.raw.txt NAO commitado; pin sha256: 0bade826351c2295cf36a987f590187895939ced545e2e3986802cd38cc379ff
+- parte 4 (a documentacao do repositorio: docs/** fora de docs/research/, com os modelos e os scripts de docs/formal-verification/ e o sitio de versao do bump nesta parte (docs/ARCHITECTURE.md)): VERDICT: GO-WITH-CONDITIONS — Retain conditions 1–2, 6, 8 and 9–10 and the mandatory 24-hour hold; this payload review is advisory evidence, not release authorization. [codex rc=0]
+  - payload-rc1-4.raw.txt NAO commitado; pin sha256: 72a185346fcac341f750185d4ef6b14d460dd011f6fda5d09d43aeebb50b213a
+RUNNER-OVERALL: rc=0

@@ -1,0 +1,8 @@
+.claude/hooks/_lib/codex_cli_shape.py
+.claude/hooks/_lib/harness_replay/agent_spawn_named_no_skill_content.json
+.claude/hooks/_lib/harness_replay/bash_safety_destructive.json
+.claude/hooks/_lib/harness_replay/canonical_edit_unauthorized.json
+.claude/hooks/_lib/spool_writer.py
+.claude/hooks/audit_log.py
+.claude/hooks/check_cost_envelope.py
+.claude/hooks/check_harness_config.py

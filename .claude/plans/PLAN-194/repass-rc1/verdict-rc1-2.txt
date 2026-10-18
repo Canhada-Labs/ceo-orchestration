@@ -1,0 +1,17 @@
+Advisory review of `ec98fa5926d26087936f3c4092ef6ab3033c13e8`, payload 2/4: **no P0, false applicable declared condition, or undeclared P1 found.**
+
+- **Condition 3 is honest.** At [audit_log.py:1275](.claude/hooks/audit_log.py#L1275), predecessor read, HMAC calculation, append and sidecar update share one lock. Rotation emits the marker before reading the predecessor. Lock timeout drops the event with a breadcrumb. This cures the stated condition-67 case.
+- **The easily missed limit remains declared:** failed marker emission leaves this invocation’s spawn unchained, but a subsequent writer can still sign against the absent marker. Key-creation races, differing lock paths and incomplete chain-length accounting also remain open. Conditions **1–2** and the Known-open text accurately retain these limitations.
+- **Adopter delivery is consistent with the harness cure.** [check_harness_config.py:160](.claude/hooks/check_harness_config.py#L160) selects the new directory, which install and upgrade include. Malformed fixtures and invalid stdout produce RED findings. This is a preflight gate; its rejection behavior does not introduce a registered session hook that blocks on infrastructure failure. The `user` ceremony and plugin limitations remain disclosed.
+- **Spool durability ordering survives the change.** [spool_writer.py:1025](.claude/hooks/_lib/spool_writer.py#L1025) defers only header synchronization; the event’s `fsync` precedes commit and success. Failed synchronization does not acknowledge success. The disclosed duplicate-event and forced-drain risks remain.
+- **The remaining changes match their descriptions.** [check_cost_envelope.py:198](.claude/hooks/check_cost_envelope.py#L198) eliminates the duplicate `action` argument. The model allowlist preserves omission of `--model` by default and rejects removed explicit IDs without substituting another model. The live Claude adapter is unchanged, consistent with **condition 8**.
+
+A local workflow cross-check also supports **condition 6**: the RC job has only `contents: read`, no credential inputs or publish step, and shares the Node/npm variables with publish; publish still excludes RC tags. This does not establish actual workflow success. Conditions **9–10** delimit this payload’s verdict.
+
+**NEW FINDINGS (annex):** None.
+
+**New P2 follow-ups:** None.
+
+Validation passed: conditions hash, Python 3.9 parsing, stdlib gate, scoped whitespace check, and in-memory replay, audit failure, spool ordering and model-selection probes. A base-versus-candidate probe confirmed the cost-event fix. No files changed or network used; real install/upgrade, filesystem concurrency and crash tests were not rerun.
+
+VERDICT: GO-WITH-CONDITIONS — The applicable declarations are honest and sufficient for this payload under the stated cut rule, retaining the declared debt and mandatory 24-hour hold.

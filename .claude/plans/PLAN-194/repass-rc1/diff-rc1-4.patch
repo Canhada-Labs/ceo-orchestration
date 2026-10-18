@@ -1,0 +1,1199 @@
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+index c651c6e8d49b..dde4402bb0d0 100644
+--- a/docs/ARCHITECTURE.md
++++ b/docs/ARCHITECTURE.md
+@@ -225,3 +225,3 @@ the honest *Risks / Not-For* caveat in the [README](../README.md).
+ `SPEC/v1/` is the published, versioned compliance contract (SemVer; currently
+-v1.4.2, aligned with the repo `VERSION`). It contains 28 schema files defining
++v1.4.3, aligned with the repo `VERSION`). It contains 28 schema files defining
+ the stable interfaces an adopter can pin to — among them `audit-log.schema.md`,
+diff --git a/docs/BRANCH-PROTECTION.md b/docs/BRANCH-PROTECTION.md
+index 661f6b03992a..51bbcd66c5db 100644
+--- a/docs/BRANCH-PROTECTION.md
++++ b/docs/BRANCH-PROTECTION.md
+@@ -443,4 +443,7 @@ Then update both `VERSION` and `EXPECTED_SHA256` in
+ 
+-`actions/checkout@v4`, `actions/setup-python@v5`, and
+-`actions/upload-artifact@v4` currently declare `runs.using: node20`.
++`actions/checkout@v4`, `actions/setup-python@v5` and
++`actions/upload-artifact@v4` declare `runs.using: node20`. No live
++workflow in `.github/workflows/` pins `upload-artifact@v4` any more, but
++the delivered template `templates/.github/workflows/benchmarks.yml.template`
++still pins `upload-artifact@v4`, `checkout@v4` and `setup-python@v5`.
+ GitHub's deprecation timeline targets **2026-05-15** for Node 20 in
+@@ -448,2 +451,10 @@ runners, after which the actions must declare `node24` or be replaced.
+ 
++Current state (2026-10-09): the four pins in `docs/actions-versions.md`
++— checkout `v6.0.2`, setup-python `v6.2.0`, setup-node `v6.4.0`,
++upload-artifact `v7.0.1` — all declare `node24`. Older `node20` pins
++remain outside that table: `tier-policy.yml` (checkout `v4.2.2`,
++setup-python `v5.3.0`), `mutation-gate.yml` (setup-python `v5`),
++`formal-verify.yml` (`actions/setup-java` `v4.7.1`, `c5195efe…`) and the
++benchmarks template above.
++
+ **Sprint 6 Phase 6a status** (2026-04-13):
+@@ -452,9 +463,18 @@ runners, after which the actions must declare `node24` or be replaced.
+   (freeze-doc)
+-- ✅ `npm-publish.yml` bumped to `node-version: 24` runtime
++- ❌ `npm-publish.yml` bump to `node-version: 24` — NOT done in Sprint 6
++  (the file kept `node-version: "20"`); done by PLAN-194 W4 on
++  2026-10-02 (see `docs/actions-versions.md`, "Sprint 6 Phase 6a scope")
+ - **DEFERRED to Sprint 7** (per R-DEV3 consensus — each action bumps
+-  in its own PR to isolate schema-break risk):
+-  - `actions/checkout@v4 → v5`
+-  - `actions/setup-node@v4 → v5`
+-  - `actions/setup-python@v5.4 → v5.5+` if required
+-  - `actions/upload-artifact@v4 → v5` (with input-schema audit)
++  in its own PR to isolate schema-break risk). All four items are moot:
++  the Sprint 7 Dependabot PRs #2, #3 and #1 (merged 2026-04-13, recorded
++  in `docs/actions-versions.md`, "Sprint 6 Phase 6a scope" and "Migration
++  log") took the tracked pins past these targets, and the setup-node pin
++  is `v6.4.0` (2026-10-02).
++  The `node20` pins that remain outside the table are listed under
++  "Current state" above.
++  - ~~`actions/checkout@v4 → v5`~~ — PR #2: `v6.0.2`
++  - ~~`actions/setup-node@v4 → v5`~~ — `v6.4.0`
++  - ~~`actions/setup-python@v5.4 → v5.5+` if required~~ — PR #3: `v6.2.0`
++  - ~~`actions/upload-artifact@v4 → v5` (with input-schema audit)~~ —
++    PR #1: `v7.0.1`
+ 
+diff --git a/docs/actions-versions.md b/docs/actions-versions.md
+index 4c50215cdd0b..7badb097f28c 100644
+--- a/docs/actions-versions.md
++++ b/docs/actions-versions.md
+@@ -24,3 +24,3 @@ sync with workflow files.
+ | `actions/setup-python` | `v6.2.0` | `a309ff8b426b58ec0e2a45f0f869d46889d02405` | Node 24 | ✅ migrated |
+-| `actions/setup-node` | `v4.1.0` | `39370e3970a6d050c480ffad4ff0ed4d3fdee5af` | Node 20 | 2026-06-02 — Dependabot should open PR for v5 |
++| `actions/setup-node` | `v6.4.0` | `48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e` | Node 24 | ✅ migrated — row corrected 2026-10-02 (PLAN-194 W4): this SHA, the only setup-node pin (`npm-publish.yml`), resolves to tag `v6.4.0` (`runs.using: node24`); the `v4.1.0` / `39370e39…` this row used to carry was not the pin in the workflow |
+ | `actions/upload-artifact` | `v7.0.1` | `043fb46d1a93c77aae656e7c1c64a875d1fc6a0a` | Node 24 | ✅ migrated |
+@@ -31,3 +31,3 @@ sync with workflow files.
+ |---|---|---|
+-| `npm-publish.yml` | Node | **`24`** (bumped Sprint 6 Phase 6a) |
++| `npm-publish.yml` | Node + npm | Node **`24`** + npm **`11.20.0`** (exact) — the workflow-level `env` (`PUBLISH_NODE_MAJOR`, `PUBLISH_NPM_VERSION`), read by `publish` and `rc-toolchain-proof`; set by PLAN-194 W4 (2026-10-02). Until then the file declared Node `"20"` and `npm@^11.5.1` — the Sprint 6 bump below never landed |
+ | `coverage.yml` | Python | `3.11` |
+@@ -43,3 +43,5 @@ not closeout. Scope:
+ - ✅ Document current pins in this file
+-- ✅ Bump `npm-publish.yml` `node-version: 20 → 24` (runtime update)
++- ❌ Bump `npm-publish.yml` `node-version: 20 → 24` (runtime update) —
++  NOT done in Sprint 6 (the file kept `node-version: "20"`); done by
++  PLAN-194 W4 on 2026-10-02 (correction recorded then)
+ - ✅ Flag 2026-06-02 Node 20 deprecation deadline per action
+@@ -50,4 +52,4 @@ not closeout. Scope:
+   - ✅ PR #1: `actions/upload-artifact@v4.6 → v7.0` (SHA `043fb46d…`)
+-- **Pending Dependabot**: `actions/setup-node@v4 → v5` (não aberta
+-  ainda; monitor Dependabot)
++- ~~**Pending Dependabot**: `actions/setup-node@v4 → v5`~~ — moot
++  (2026-10-02): the setup-node pin is `v6.4.0` (see the table above)
+ 
+@@ -80,4 +82,5 @@ Current active deprecation: **Node 20 runtime** — deadline 2026-05-15.
+ After that date, actions built on Node 20 will fail with warnings,
+-eventually errors. All actions listed in the pin table above are
+-currently Node 20; Sprint 7 migrates them to v5 (Node 24).
++eventually errors. All four actions listed in the pin table above run
++on Node 24 (`runs.using` read from each pinned SHA's `action.yml`,
++2026-10-02); the table does not list every action the workflows use.
+ 
+diff --git a/docs/adopter-new-model-fast-access.md b/docs/adopter-new-model-fast-access.md
+index fe1fd0f36a5b..ef9a96e28e79 100644
+--- a/docs/adopter-new-model-fast-access.md
++++ b/docs/adopter-new-model-fast-access.md
+@@ -36,2 +36,6 @@ probes run in throwaway directories around Claude Opus 5.5
+   behaviour described [below](#use-the-model-key-not-anthropic_model).
++- **2026-10-09 binary reads, Claude Code 2.1.295** (no probe re-run): the
++  default effort per model in the embedded model catalog, the `effortLevel`
++  schema and the `ultracode` key's description. Statements that rest on
++  them name 2.1.295.
+ 
+@@ -153,9 +157,13 @@ shows which model you got.
+ 
+-3. **Optional: `ultracode`.** To get xhigh effort plus dynamic workflow
+-   orchestration by default, add `"ultracode": true` next to `model`. The
+-   settings reference gives the key the scope "Any file", and a probe on
+-   2026-09-22 with user settings excluded read it applied from the local file
+-   alone (`get_settings`: `ultracode` true, effort `xhigh`, source
+-   `localSettings`); so there it applies to every session of this project on
+-   this machine. It changes more than effort. Per the Claude Code docs, while
++3. **Optional: `ultracode`.** To get dynamic workflow orchestration by
++   default, add `"ultracode": true` next to `model`. On Claude Code 2.1.280
++   it also made `xhigh` the default effort. The 2.1.284 changelog says it no
++   longer forces `xhigh`, and the 2.1.295 binary describes it as
++   orchestration "at any effort level"; the effort it yields on 2.1.295 was
++   not probed. The settings reference gives the key the scope "Any file",
++   and a probe on 2026-09-22 (Claude Code 2.1.280) with user settings
++   excluded read it applied from the local file alone (`get_settings`:
++   `ultracode` true, effort `xhigh`, source `localSettings`); so there it
++   applies to every session of this project on this machine. It changes
++   more than orchestration and effort. Per the Claude Code docs, while
+    `ultracode` is active the session is not held to the Agent tool's
+@@ -322,6 +330,9 @@ missing from that table does not support effort at all).
+   `medium` applied to `claude-opus-5-5`. If you relied on the old default,
+-  set it explicitly.
++  set it explicitly. The model catalog in the Claude Code 2.1.295 binary
++  (read 2026-10-09) also gives `medium` to Sonnet 5.5 and Haiku 5.5, and
++  `high` to Fable 5.1.
+ - The `effortLevel` settings key (top level, or per model under
+   `modelSettings.<model>.effortLevel`) accepts only `low` to `xhigh`; a `max`
+-  value there is dropped.
++  value there is dropped. In the 2.1.295 binary both schemas still list
++  `low` to `xhigh` and drop any other value (read 2026-10-09).
+ - **An `xhigh` in a settings file needs a Claude Code that accepts it.** The
+@@ -347,4 +358,4 @@ missing from that table does not support effort at all).
+   settings, `ultracode` included; a `maxEffortLevel` cap still applies
+-  (docs). Probe E7
+-  (`CLAUDE_CODE_EFFORT_LEVEL=max` plus `ultracode: true`) saw every tool call
++  (docs). Probe E7 (Claude Code 2.1.280;
++  `CLAUDE_CODE_EFFORT_LEVEL=max` plus `ultracode: true`) saw every tool call
+   run at `max`, including one from a workflow agent started with
+@@ -352,4 +363,5 @@ missing from that table does not support effort at all).
+ 
+-**`ultracode` and `max` do not combine.** `ultracode: true` makes the default
+-effort `xhigh` and enables dynamic workflow orchestration. The Claude Code
++**On Claude Code 2.1.280, `ultracode` and `max` did not combine.** There,
++`ultracode: true` made the default effort `xhigh` and enabled dynamic
++workflow orchestration. The Claude Code
+ docs (model configuration, read 2026-09-22) name three conditions under which
+@@ -371,9 +383,17 @@ its own.
+ 
++The 2.1.284 changelog says Ultracode "no longer forces xhigh effort and stays
++on at any effort level". The 2.1.295 binary's description of the key (read
++2026-10-09) keeps the session-scoped text, says that interactive toggles
++never persist it, and names two requirements: workflows enabled and a model
++that supports ultracode. It names no effort condition. None of the probes
++above was re-run on 2.1.295, so whether `ultracode` and `max` combine there
++is not measured.
++
+ The combination recommended here is `ultracode: true` for the main session,
+ with `max` requested per agent inside workflow scripts
+-(`agent(prompt, {effort: 'max'})`). Probe E6 measured it with `ultracode`
+-passed through `--settings`: `ultracode` applied, the main session and a
+-subagent ran at `xhigh`, and a workflow agent started with
+-`{effort: 'max'}` ran at `max` (one started with `{effort: 'low'}` ran at
+-`low`). A local-file `ultracode` was probed only for the applied setting
++(`agent(prompt, {effort: 'max'})`). Probe E6 (Claude Code 2.1.280) measured
++it with `ultracode` passed through `--settings`: `ultracode` applied, the
++main session and a subagent ran at `xhigh`, and a workflow agent started
++with `{effort: 'max'}` ran at `max` (one started with `{effort: 'low'}` ran
++at `low`). A local-file `ultracode` was probed only for the applied setting
+ (step 3), not for per-agent effort.
+diff --git a/docs/cost-of-operation.md b/docs/cost-of-operation.md
+index cfc075c4fb36..0c665c64d8c0 100644
+--- a/docs/cost-of-operation.md
++++ b/docs/cost-of-operation.md
+@@ -304,2 +304,51 @@ separate wave, deliberately out of scope here.
+ 
++### The routing invariant (PLAN-186 AC-13)
++
++The same instrument that prices the transcripts also asserts, on every
++execution, that **the model a spawn was served equals the model its call
++site declared** (`ceo-cost-transcripts.py`, and therefore the transcripts
++block of `ceo-cost.py` and `budget-summary.py`). The harness's own routing
++of `agent(..., {model})` was measured once, on one build (ADR-144); this is
++the check that does not expire with that build.
++
++- *Declared* is the `model` key of the spawn's `agent-<id>.meta.json`
++  sidecar (what the call passed); absent or `inherit` is no claim and is
++  counted, never a violation. *Served* is `message.model` of the paired
++  transcript, never the agent's self-report.
++- An alias (`opus`, `sonnet`, `haiku`, `fable`) is matched by **family**, a
++  full id exactly. A pinned alias-to-id table was refused on evidence: the
++  same `sonnet` was served as `claude-sonnet-5` and later as
++  `claude-sonnet-5-5` on one harness. The alias-to-served pairs actually
++  observed are printed, never judged.
++- A second predicate covers the VETO floor: a spawn of a VETO archetype
++  must be served inside `VETO_FLOOR_ALLOWED` whatever it declared, because
++  `model: sonnet` served as Sonnet *matches itself* and is still a breach.
++- Verdicts, worst first: `RED` (a violation: `MISMATCH`, `MIXED`,
++  `FLOOR_BREACH`), `INCONCLUSIVE` (something unreadable or unclassified,
++  named), `VACUOUS` (nothing was compared; a vacuous GREEN is refused),
++  `GREEN`.
++- The served model is read from **every** assistant turn, including one the
++  cost report drops for want of `usage`; a turn that cannot be read at all
++  makes the verdict `INCONCLUSIVE`, and so does a message whose chunks
++  disagree about the model when one of them has no `usage` (the terminal
++  chunk cannot be proven; that group is excluded from the comparison, so it
++  can neither raise a violation nor vouch for the routing). A spawn, or a single unreadable record with a
++  valid timestamp, outside the window never gates it, and every string taken
++  from a transcript or sidecar is made printable where it enters the
++  instrument, so none can forge a verdict line.
++
++```bash
++# the verdict is printed on every run; the exit code stays 0 ...
++python3 .claude/scripts/ceo-cost-transcripts.py --since 7d
++# ... unless you ask for the gate: 0 GREEN, 1 RED, 3 not proven
++python3 .claude/scripts/ceo-cost-transcripts.py --since 7d --assert-routing
++```
++
++Out of scope, by design: the seat (it has no sidecar), a spawn that declares
++nothing, the persona-injected `general-purpose` rail (the sidecar does not
++record the archetype), and whether a site's `model:` is the *right* one for
++its task. The detector's own death criteria are pre-registered in the
++module docstring of `ceo-cost-transcripts.py` (K-A1..K-A3, K-B1..K-B2) and
++are pinned by a test.
++
+ ## Measuring cost
+diff --git a/docs/deny-baseline.md b/docs/deny-baseline.md
+index ed3573b18f19..ef6240addbcc 100644
+--- a/docs/deny-baseline.md
++++ b/docs/deny-baseline.md
+@@ -121,3 +121,15 @@ consistent with the framing: a coarse backstop, not coverage.
+ - **At install time:** `CEO_INSTALL_SKIP_DENY_BASELINE=1 ./scripts/install.sh <target> …`
+-  skips the injection entirely (mirrors `CEO_INSTALL_SKIP_SELF_SHA`).
++  skips the injection entirely (mirrors `CEO_INSTALL_SKIP_SELF_SHA`). The same
++  merge also writes `permissions.defaultMode` = `"manual"` when the
++  `settings.json` the run produced has none (a `--ceremony user` install ships
++  no `permissions` block), so the opt-out, like the fail-open case below,
++  leaves that key unwritten too. With no `defaultMode` in any settings source,
++  Claude Code 2.1.295 can open the session in auto mode: its fallback for "no
++  source configured a mode" picks auto when, among other conditions,
++  `disableAutoMode` is not `"disable"`, the auto-mode killswitch is off, a
++  server-side flag (default on) or an account setting allows it, and either
++  the session is interactive or a server-side flag that is on by default
++  waives that
++  (measured in the 2.1.295 binary on 2026-10-09; not a documented contract).
++  If you opt out, set `permissions.defaultMode` yourself.
+ - **After install:** delete any entries you don't want from
+diff --git a/docs/formal-verification/breaker.cfg b/docs/formal-verification/breaker.cfg
+index 3dbedc3545d6..c91447da2251 100644
+--- a/docs/formal-verification/breaker.cfg
++++ b/docs/formal-verification/breaker.cfg
+@@ -9,3 +9,2 @@ CONSTANTS
+   HALF_OPEN_HOLD_S  = 5
+-  MaxTime           = 30
+   MAX_CALLERS       = 2
+@@ -14,5 +13,5 @@ INVARIANTS
+   TypeOK
+-  S2_HalfOpenSingleton
+ 
+ PROPERTIES
++  S2_HalfOpenSingleton
+   S1_OpenOnThreshold
+diff --git a/docs/formal-verification/breaker.pcal b/docs/formal-verification/breaker.pcal
+index 56ac71e8c659..e1c2e41e7274 100644
+--- a/docs/formal-verification/breaker.pcal
++++ b/docs/formal-verification/breaker.pcal
+@@ -1 +1,6 @@
++(* HISTORICAL SKETCH, superseded 2026-10-13. Not an input to TLC.
++   breaker.tla is hand-maintained: relative time ages, bounded history,
++   single NEW probe per half-open epoch, legacy completion races and explicit
++   fairness. Do not regenerate breaker.tla from this archival pseudocode.
++   See properties-proved.md § October correction for the verified abstraction and limits. *)
+ (***************************************************************************)
+@@ -3,5 +8,5 @@
+ (*                                                                         *)
+-(* This is the READABLE source. The canonical machine-checkable spec is    *)
+-(* in ``breaker.tla`` — generated by ``java -cp tla2tools.jar              *)
+-(* tlc2.pcal.trans breaker.pcal`` OR hand-derived from this file. See      *)
++(* This is the ORIGINAL sketch. The canonical machine-checkable spec is    *)
++(* in ``breaker.tla`` — NOT generated from this historical sketch.              *)
++(* The sketch below records the original April model, not the current one. *)
+ (* ``run-tlc.sh`` for the toolchain pin.                                   *)
+diff --git a/docs/formal-verification/breaker.tla b/docs/formal-verification/breaker.tla
+index 6717058ce311..3c05bb6b6408 100644
+--- a/docs/formal-verification/breaker.tla
++++ b/docs/formal-verification/breaker.tla
+@@ -1,276 +1,133 @@
+ ---------------------------- MODULE breaker ----------------------------
+-(***************************************************************************)
+-(* TLA+ specification of the ADR-040 §2 Live-Adapter Circuit Breaker.      *)
+-(*                                                                         *)
+-(* Correspondence: ``.claude/hooks/_lib/adapters/live/_breaker.py``       *)
+-(*   - breaker_state   ↔ self._state.value (str)                          *)
+-(*   - failures        ↔ self._failures (deque of (ts, reason))           *)
+-(*   - opened_at       ↔ self._opened_at (Optional[float], -1 ≡ None)     *)
+-(*   - in_flight       ↔ set of caller IDs holding a slot after          *)
+-(*                       should_allow() returned True and before          *)
+-(*                       record_success/record_failure resolves            *)
+-(*   - audit_log       ↔ sequence appended on every closed→open  or      *)
+-(*                       half_open→open transition (INTENDED behavior per *)
+-(*                       ADR-040 §7 — see properties-proved.md §4 gap).   *)
+-(*   - now             ↔ self._clock() monotonic seconds                  *)
+-(*   - probe_available ↔ self._probe_available                           *)
+-(*                                                                         *)
+-(* Author: Principal QA Architect + Principal Security Engineer           *)
+-(*         (composite), PLAN-013 Phase D.2.                               *)
+-(* Date:   2026-04-16                                                     *)
+-(*                                                                         *)
+-(* Toolchain: TLA+ Tools 1.8.0 (SHA-pinned in run-tlc.sh). Invoke via     *)
+-(* ``bash docs/formal-verification/run-tlc.sh``.                          *)
+-(***************************************************************************)
+-
+ EXTENDS Integers, Sequences, FiniteSets, TLC
+ 
+-(***************************************************************************)
+-(* Model parameters. Defaults match ``LiveCallPolicy`` in _policy.py.      *)
+-(* Override via ``breaker.cfg`` or ``-config`` when wider pilots run.      *)
+-(***************************************************************************)
+-CONSTANTS
+-  FAILURE_THRESHOLD,   \* breaker opens after this many consecutive fails
+-  WINDOW_S,            \* rolling failure window in seconds
+-  HALF_OPEN_HOLD_S,    \* open → half_open delay in seconds
+-  MaxTime,             \* finite time bound for TLC
+-  MAX_CALLERS          \* concurrency bound (2 for tractability)
+-
+-ASSUME
+-  /\ FAILURE_THRESHOLD \in Nat \ {0, 1}
+-  /\ WINDOW_S \in Nat \ {0}
+-  /\ HALF_OPEN_HOLD_S \in Nat \ {0}
+-  /\ MaxTime \in Nat
+-  /\ MAX_CALLERS \in Nat \ {0}
+-
+-(***************************************************************************)
+-(* State variables.                                                         *)
+-(***************************************************************************)
+-VARIABLES
+-  breaker_state,       \* "closed" | "open" | "half_open"
+-  failures,            \* Sequence of failure timestamps (monotonic seconds)
+-  opened_at,           \* monotonic seconds; -1 sentinel for None
+-  in_flight,           \* Set of caller IDs currently in flight (<= MAX_CALLERS)
+-  audit_log,           \* Sequence of audit records ({action, time, cause})
+-  now,                 \* current monotonic time
+-  probe_available      \* half-open singleton probe slot
+-
+-vars == <<breaker_state, failures, opened_at, in_flight, audit_log, now, probe_available>>
+-
+-(***************************************************************************)
+-(* Type invariant. Every reachable state is well-formed.                    *)
+-(***************************************************************************)
+-States == {"closed", "open", "half_open"}
++(***************************************************************************
++ ADR-040 circuit breaker: finite abstraction of adapters/live/_breaker.py.
++ A half-open epoch admits one NEW probe. Calls admitted before opening can
++ still be in flight; should_allow does not cancel them. Counting all such
++ calls as probes produced the 2026-10-13 false S2 counterexample.
++
++ Time is represented by relative ages, not a clock frozen at MaxTime.
++ Failure history is capped at the threshold: older entries cannot change a
++ closed-state decision, and opening/closing clears it before recovery.
++ Only the latest audit event and an alternating event bit are retained;
++ the action property still checks that EACH opening emits a new event.
++ These quotients keep the state graph finite without cutting off traces.
++
++ Reports model counting failures only. Permanent/non-counting reasons,
++ reset(), exceptions and audit I/O are covered by Python tests, not TLC.
++ Progress assumes time advances, available callers attempt calls, and
++ admitted calls eventually report; it does not promise network completion.
++***************************************************************************)
++CONSTANTS FAILURE_THRESHOLD, WINDOW_S, HALF_OPEN_HOLD_S, MAX_CALLERS
++ASSUME /\ FAILURE_THRESHOLD >= 2 /\ WINDOW_S > 0
++       /\ HALF_OPEN_HOLD_S > 0 /\ MAX_CALLERS > 0
++
++VARIABLES breaker_state, failures, opened_age, in_flight,
++          probe_available, probe_admissions, audit_log, audit_epoch
++vars == <<breaker_state, failures, opened_age, in_flight,
++          probe_available, probe_admissions, audit_log, audit_epoch>>
+ CallerIDs == 1..MAX_CALLERS
+-
++States == {"closed", "open", "half_open"}
++Events == [action: {"breaker_opened"},
++           cause: {"threshold_crossed", "half_open_probe_failed"}]
+ TypeOK ==
+   /\ breaker_state \in States
+-  /\ failures \in Seq(0..MaxTime)
+-  /\ opened_at \in -1..MaxTime
++  /\ failures \in Seq(0..WINDOW_S)
++  /\ Len(failures) <= FAILURE_THRESHOLD
++  /\ opened_age \in -1..HALF_OPEN_HOLD_S
+   /\ in_flight \subseteq CallerIDs
+-  /\ audit_log \in Seq([action: {"breaker_opened"}, time: 0..MaxTime, cause: {"threshold_crossed", "half_open_probe_failed"}])
+-  /\ now \in 0..MaxTime
+   /\ probe_available \in BOOLEAN
++  /\ probe_admissions \in 0..MAX_CALLERS
++  /\ audit_log \in {<<>>} \cup {<<e>> : e \in Events}
++  /\ audit_epoch \in BOOLEAN
+ 
+-(***************************************************************************)
+-(* Helper: count of failure timestamps within the rolling window.          *)
+-(* Mirrors the deque pruner in _breaker.py:252-255 _prune_window_locked.   *)
+-(***************************************************************************)
+-FailuresInWindow(seq, t) ==
+-  Cardinality({ i \in 1..Len(seq) : seq[i] >= t - WINDOW_S })
+-
+-(***************************************************************************)
+-(* Initial state.                                                           *)
+-(***************************************************************************)
+ Init ==
+-  /\ breaker_state = "closed"
+-  /\ failures = <<>>
+-  /\ opened_at = -1
+-  /\ in_flight = {}
+-  /\ audit_log = <<>>
+-  /\ now = 0
+-  /\ probe_available = FALSE
+-
+-(***************************************************************************)
+-(* Action: time advances. Models _breaker.py:117-128 self._now() progress. *)
+-(* This action is the only one that advances ``now``; TLC with weak        *)
+-(* fairness on Tick guarantees no stuck-state for liveness property L1.    *)
+-(***************************************************************************)
++  /\ breaker_state = "closed" /\ failures = <<>>
++  /\ opened_age = -1 /\ in_flight = {}
++  /\ probe_available = FALSE /\ probe_admissions = 0
++  /\ audit_log = <<>> /\ audit_epoch = FALSE
++
++Min(a,b) == IF a < b THEN a ELSE b
++AgeFailures == SelectSeq([i \in 1..Len(failures) |-> failures[i] + 1],
++                        LAMBDA age: age <= WINDOW_S)
++AddFailure == LET f == Append(failures, 0) IN
++              IF Len(f) > FAILURE_THRESHOLD THEN Tail(f) ELSE f
+ Tick ==
+-  /\ now < MaxTime
+-  /\ now' = now + 1
+-  /\ UNCHANGED <<breaker_state, failures, opened_at, in_flight, audit_log, probe_available>>
++  /\ failures' = AgeFailures
++  /\ opened_age' = IF opened_age < 0 THEN -1
++                    ELSE Min(opened_age + 1, HALF_OPEN_HOLD_S)
++  /\ UNCHANGED <<breaker_state, in_flight, probe_available,
++                  probe_admissions, audit_log, audit_epoch>>
+ 
+-(***************************************************************************)
+-(* Action: open→half_open timer. Fires whenever open state AND             *)
+-(* HALF_OPEN_HOLD_S elapsed. Mirrors _breaker.py:257-266                   *)
+-(* _refresh_state_locked. Note: impl fires this lazily on the NEXT         *)
+-(* call; model fires eagerly so liveness property L1 holds. This is a      *)
+-(* modeling abstraction — the real impl transitions at the latest on      *)
+-(* the next should_allow() / record_* call, which the conformance test    *)
+-(* validates with fake-clock injection.                                    *)
+-(***************************************************************************)
+ RefreshToHalfOpen ==
+-  /\ breaker_state = "open"
+-  /\ opened_at >= 0
+-  /\ (now - opened_at) >= HALF_OPEN_HOLD_S
+-  /\ breaker_state' = "half_open"
+-  /\ probe_available' = TRUE
+-  /\ failures' = <<>>
+-  /\ UNCHANGED <<opened_at, in_flight, audit_log, now>>
++  /\ breaker_state = "open" /\ opened_age = HALF_OPEN_HOLD_S
++  /\ breaker_state' = "half_open" /\ probe_available' = TRUE
++  /\ probe_admissions' = 0 /\ failures' = <<>>
++  /\ UNCHANGED <<opened_age, in_flight, audit_log, audit_epoch>>
+ 
+-(***************************************************************************)
+-(* Action: caller acquires an in-flight slot. Models should_allow().       *)
+-(* Mirrors _breaker.py:154-174.                                            *)
+-(***************************************************************************)
+ StartCall(c) ==
+-  /\ c \in CallerIDs
+-  /\ c \notin in_flight
+-  /\ \/ /\ breaker_state = "closed"
+-        /\ in_flight' = in_flight \cup {c}
+-        /\ UNCHANGED <<breaker_state, failures, opened_at, audit_log, now, probe_available>>
+-     \/ /\ breaker_state = "half_open"
+-        /\ probe_available
+-        /\ probe_available' = FALSE
+-        /\ in_flight' = in_flight \cup {c}
+-        /\ UNCHANGED <<breaker_state, failures, opened_at, audit_log, now>>
+-
+-(***************************************************************************)
+-(* Action: caller reports success. Mirrors _breaker.py:213-232.            *)
+-(***************************************************************************)
++  /\ c \in CallerIDs \ in_flight
++  /\ breaker_state = "closed" \/
++       (breaker_state = "half_open" /\ probe_available)
++  /\ in_flight' = in_flight \cup {c}
++  /\ probe_available' = IF breaker_state = "half_open" THEN FALSE
++                         ELSE probe_available
++  /\ probe_admissions' = IF breaker_state = "half_open"
++                          THEN probe_admissions + 1 ELSE probe_admissions
++  /\ UNCHANGED <<breaker_state, failures, opened_age, audit_log, audit_epoch>>
++
++\* The implementation refreshes lazily before reporting. Force the abstract
++\* refresh first when the timer has elapsed, then allow the report.
++CanReport == breaker_state # "open" \/ opened_age < HALF_OPEN_HOLD_S
+ ReportSuccess(c) ==
+-  /\ c \in in_flight
++  /\ c \in in_flight /\ CanReport
+   /\ in_flight' = in_flight \ {c}
+-  /\ \/ /\ breaker_state = "half_open"
+-        /\ breaker_state' = "closed"
+-        /\ opened_at' = -1
+-        /\ probe_available' = FALSE
+-        /\ failures' = <<>>
+-        /\ UNCHANGED <<audit_log, now>>
+-     \/ /\ breaker_state = "closed"
+-        /\ UNCHANGED <<breaker_state, failures, opened_at, audit_log, now, probe_available>>
++  /\ breaker_state' = "closed"
++  /\ failures' = IF breaker_state = "closed" THEN failures ELSE <<>>
++  /\ opened_age' = -1 /\ probe_available' = FALSE
++  /\ UNCHANGED <<probe_admissions, audit_log, audit_epoch>>
+ 
+-(***************************************************************************)
+-(* Action: caller reports failure. Mirrors _breaker.py:176-211.            *)
+-(* transient-only abstraction (permanent/non-counting reasons are folded   *)
+-(* into the "transient" case for modeling tractability). The concrete     *)
+-(* impl's reason-branch is covered by the conformance test matrix.        *)
+-(***************************************************************************)
+ ReportFailure(c) ==
+-  /\ c \in in_flight
++  /\ c \in in_flight /\ CanReport
+   /\ in_flight' = in_flight \ {c}
+-  /\ LET window_fails == FailuresInWindow(Append(failures, now), now)
+-     IN
+-       \* Half-open probe failed → re-open.
+-       \/ /\ breaker_state = "half_open"
+-          /\ breaker_state' = "open"
+-          /\ opened_at' = now
+-          /\ failures' = Append(failures, now)
+-          /\ probe_available' = FALSE
+-          /\ audit_log' = Append(audit_log,
+-                                 [action |-> "breaker_opened",
+-                                  time   |-> now,
+-                                  cause  |-> "half_open_probe_failed"])
+-          /\ UNCHANGED now
+-       \* Threshold crossed in closed state → open.
+-       \/ /\ breaker_state = "closed"
+-          /\ window_fails >= FAILURE_THRESHOLD
+-          /\ breaker_state' = "open"
+-          /\ opened_at' = now
+-          /\ failures' = Append(failures, now)
++  /\ failures' = AddFailure
++  /\ IF breaker_state = "half_open" \/
++         (breaker_state = "closed" /\ Len(AddFailure) >= FAILURE_THRESHOLD)
++     THEN /\ breaker_state' = "open" /\ opened_age' = 0
+           /\ probe_available' = FALSE
+-          /\ audit_log' = Append(audit_log,
+-                                 [action |-> "breaker_opened",
+-                                  time   |-> now,
+-                                  cause  |-> "threshold_crossed"])
+-          /\ UNCHANGED now
+-       \* Closed + failure but below threshold → stay closed, append.
+-       \/ /\ breaker_state = "closed"
+-          /\ window_fails < FAILURE_THRESHOLD
+-          /\ failures' = Append(failures, now)
+-          /\ UNCHANGED <<breaker_state, opened_at, audit_log, now, probe_available>>
+-
+-(***************************************************************************)
+-(* Next-state relation.                                                     *)
+-(***************************************************************************)
+-Next ==
+-  \/ Tick
+-  \/ RefreshToHalfOpen
+-  \/ \E c \in CallerIDs : StartCall(c) \/ ReportSuccess(c) \/ ReportFailure(c)
+-
+-(***************************************************************************)
+-(* Specification with weak fairness on Tick + RefreshToHalfOpen so L1      *)
+-(* (liveness) holds. Without fairness, an infinite stutter of zero Tick    *)
+-(* would falsify L1 trivially.                                              *)
+-(***************************************************************************)
+-Spec == Init /\ [][Next]_vars /\ WF_vars(Tick) /\ WF_vars(RefreshToHalfOpen)
+-
+-(***************************************************************************)
+-(* ========== PROPERTIES ==========                                        *)
+-(***************************************************************************)
+-
+-(***************************************************************************)
+-(* S1 — Threshold-triggered open transition (safety).                      *)
+-(*                                                                          *)
+-(* When FAILURE_THRESHOLD failures accumulate within WINDOW_S, the         *)
+-(* breaker MUST transition from closed to open.                            *)
+-(*                                                                          *)
+-(* Corresponds to _breaker.py:207-211 in ``record_failure``.               *)
+-(***************************************************************************)
+-S1_OpenOnThreshold ==
+-  [](
+-    (breaker_state = "closed" /\ FailuresInWindow(failures, now) >= FAILURE_THRESHOLD)
+-    => <>(breaker_state = "open")
+-  )
+-
+-(***************************************************************************)
+-(* S2 — Half-open singleton (safety).                                      *)
+-(*                                                                          *)
+-(* While in "half_open", at most ONE caller may hold an in-flight slot.    *)
+-(* Enforced by probe_available gate in _breaker.py:170-174.                *)
+-(***************************************************************************)
+-S2_HalfOpenSingleton ==
+-  [](breaker_state = "half_open" => Cardinality(in_flight) <= 1)
+-
+-(***************************************************************************)
+-(* S3 — State-transition audit (safety).                                   *)
+-(*                                                                          *)
+-(* Every closed→open transition appends an audit record with action         *)
+-(* "breaker_opened". Corresponds to the INTENDED contract in ADR-040 §7;   *)
+-(* the real impl currently does NOT emit this event from _open_locked     *)
+-(* (Gap #3 from PLAN-013 Session-20 findings). The conformance test        *)
+-(* asserts intended behavior; it will fail against current _breaker.py    *)
+-(* and pass once the emit hook is added.                                   *)
+-(***************************************************************************)
+-S3_OpenEmitsAudit ==
+-  [][
+-    (breaker_state = "closed" /\ breaker_state' = "open")
+-    => /\ Len(audit_log') > Len(audit_log)
+-       /\ audit_log'[Len(audit_log')].action = "breaker_opened"
+-  ]_vars
+-
+-(***************************************************************************)
+-(* L1 — Eventually heal (liveness).                                        *)
+-(*                                                                          *)
+-(* A breaker in "open" eventually transitions to "half_open" (under        *)
+-(* HALF_OPEN_HOLD_S bounded time), and a breaker in "half_open" eventually *)
+-(* transitions to either "closed" (success) or "open" (failure). No        *)
+-(* terminal stuck state.                                                   *)
+-(*                                                                          *)
+-(* Requires weak-fairness on Tick + RefreshToHalfOpen + some caller        *)
+-(* eventually reporting (modeled implicitly by the non-empty process       *)
+-(* pool; the spec does NOT require WF on caller reports — if no caller    *)
+-(* EVER reports, the half_open state may persist indefinitely, which is    *)
+-(* a modeling gap acknowledged in properties-proved.md §4).                *)
+-(***************************************************************************)
++          /\ audit_epoch' = ~audit_epoch
++          /\ audit_log' = <<[action |-> "breaker_opened",
++               cause |-> IF breaker_state = "half_open"
++                         THEN "half_open_probe_failed"
++                         ELSE "threshold_crossed"]>>
++     ELSE UNCHANGED <<breaker_state, opened_age, probe_available,
++                       audit_epoch, audit_log>>
++  /\ UNCHANGED probe_admissions
++
++StartAny == \E c \in CallerIDs : StartCall(c)
++Report(c) == ReportSuccess(c) \/ ReportFailure(c)
++Next == Tick \/ RefreshToHalfOpen \/ StartAny \/
++        (\E c \in CallerIDs : Report(c))
++Spec == Init /\ [][Next]_vars
++        /\ WF_vars(Tick) /\ WF_vars(RefreshToHalfOpen)
++        /\ WF_vars(StartAny) /\ (\A c \in CallerIDs : WF_vars(Report(c)))
++
++\* Count only admissions in the CURRENT recovery epoch, never legacy calls.
++S2_HalfOpenSingleton == [](breaker_state = "half_open" =>
++  (probe_admissions <= 1 /\ (probe_available => probe_admissions = 0)))
++\* A counting failure at the threshold cannot leave the breaker closed.
++S1_OpenOnThreshold == [](breaker_state = "closed" =>
++                         Len(failures) < FAILURE_THRESHOLD)
++S3_OpenEmitsAudit == [][
++  (breaker_state # "open" /\ breaker_state' = "open") =>
++    (audit_epoch' # audit_epoch /\ Len(audit_log') = 1 /\
++     audit_log'[1].action = "breaker_opened")
++]_vars
++\* A legacy success may close OPEN directly: _breaker.py explicitly handles
++\* that race. Neither OPEN nor HALF_OPEN may remain stuck under fairness.
+ L1_EventuallyHeal ==
+-  /\ []( breaker_state = "open"
+-         => <>(breaker_state = "half_open") )
+-  /\ []( breaker_state = "half_open"
+-         => <>(breaker_state \in {"closed", "open"}) )
++  /\ [](breaker_state = "open" => <>(breaker_state # "open"))
++  /\ [](breaker_state = "half_open" => <>(breaker_state # "half_open"))
+ 
+-(***************************************************************************)
+-(* Top-level theorems. TLC verifies each by enumerating reachable states   *)
+-(* under Spec. Run via run-tlc.sh.                                         *)
+-(***************************************************************************)
+ THEOREM Spec => []TypeOK
+@@ -280,3 +137,2 @@ THEOREM Spec => S3_OpenEmitsAudit
+ THEOREM Spec => L1_EventuallyHeal
+-
+ =============================================================================
+diff --git a/docs/formal-verification/check-breaker-model.py b/docs/formal-verification/check-breaker-model.py
+new file mode 100644
+index 000000000000..ff1c0500fc93
+--- /dev/null
++++ b/docs/formal-verification/check-breaker-model.py
+@@ -0,0 +1,63 @@
++#!/usr/bin/env python3
++"""Check the finite breaker model and prove that each property can fail.
++
++Uses the SHA-verified TLC jar supplied by run-tlc.sh; no downloads here.
++Mutants live only in a temporary directory. Runtime conformance is separate.
++"""
++from __future__ import annotations
++import pathlib
++import subprocess
++import sys
++import tempfile
++
++
++def main() -> None:
++    root = pathlib.Path(__file__).resolve().parent
++    jar = pathlib.Path(sys.argv[1]).resolve()
++    source = (root / 'breaker.tla').read_text()
++    config = (root / 'breaker.cfg').read_text()
++    cases = [
++        ('baseline', source, config, None),
++        ('three-callers', source, config.replace('MAX_CALLERS       = 2', 'MAX_CALLERS       = 3'), None),
++        ('short-window', source, config.replace('WINDOW_S          = 10', 'WINDOW_S          = 2'), None),
++    ]
++    mutations = [
++        ('double-probe', 'THEN FALSE\n                         ELSE probe_available',
++         'THEN TRUE\n                         ELSE probe_available', 'S2_HalfOpenSingleton'),
++        ('threshold-missed', 'Len(AddFailure) >= FAILURE_THRESHOLD',
++         'Len(AddFailure) > FAILURE_THRESHOLD', 'S1_OpenOnThreshold'),
++        ('audit-missing', "audit_epoch' = ~audit_epoch", "audit_epoch' = audit_epoch", 'S3_OpenEmitsAudit'),
++        ('timer-stuck', 'opened_age = HALF_OPEN_HOLD_S', 'opened_age > HALF_OPEN_HOLD_S', 'L1_EventuallyHeal'),
++    ]
++    for name, old, new, prop in mutations:
++        if source.count(old) != 1:
++            raise AssertionError('mutation anchor drift: ' + name)
++        cases.append((name, source.replace(old, new), config, prop))
++    for name, model, cfg, expected_failure in cases:
++        with tempfile.TemporaryDirectory(prefix='breaker-tlc-') as tmp:
++            work = pathlib.Path(tmp)
++            (work / 'breaker.tla').write_text(model)
++            (work / 'breaker.cfg').write_text(cfg)
++            result = subprocess.run(
++                ['java', '-Xmx2G', '-cp', str(jar), 'tlc2.TLC',
++                 '-workers', '4', '-config', 'breaker.cfg', 'breaker.tla'],
++                cwd=work, text=True, stdout=subprocess.PIPE,
++                stderr=subprocess.STDOUT, timeout=180)
++            log = result.stdout
++            if expected_failure is None:
++                ok = result.returncode == 0 and 'No error has been found' in log
++            else:
++                # A syntax error or timeout must never count as killing a mutant.
++                ok = result.returncode != 0 and (
++                    ('Invariant ' + expected_failure + ' is violated') in log or
++                    ('Action property ' + expected_failure + ' is violated') in log or
++                    ('Temporal property ' + expected_failure + ' was violated') in log)
++            if not ok:
++                print(log)
++                raise AssertionError('unexpected TLC result for ' + name)
++            print(name + ': ' + ('PASS' if expected_failure is None
++                                 else 'rejected by ' + expected_failure), flush=True)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/docs/formal-verification/debate-convergence.cfg b/docs/formal-verification/debate-convergence.cfg
+index aac29d162305..4ebc5fca55a2 100644
+--- a/docs/formal-verification/debate-convergence.cfg
++++ b/docs/formal-verification/debate-convergence.cfg
+@@ -12,5 +12,5 @@ INVARIANTS
+   TypeOK
+-  S1_MaxRoundsRespected
+ 
+ PROPERTIES
++  S1_MaxRoundsRespected
+   S2_RedTeamFires
+diff --git a/docs/formal-verification/plan-lifecycle.cfg b/docs/formal-verification/plan-lifecycle.cfg
+index 007ffcc682d9..1b387ea1f005 100644
+--- a/docs/formal-verification/plan-lifecycle.cfg
++++ b/docs/formal-verification/plan-lifecycle.cfg
+@@ -10,5 +10,5 @@ INVARIANTS
+   TypeOK
+-  S3_MonotonicTimestamps
+ 
+ PROPERTIES
++  S3_MonotonicTimestamps
+   S1_NoSkip
+diff --git a/docs/formal-verification/properties-proved.md b/docs/formal-verification/properties-proved.md
+index a7bad93b4b42..961091ced1cc 100644
+--- a/docs/formal-verification/properties-proved.md
++++ b/docs/formal-verification/properties-proved.md
+@@ -2,2 +2,37 @@
+ 
++## October correction (2026-10-13)
++
++The April proof inventory below is historical, not a statement that the old
++model passed TLC. Its first real run found `S2_HalfOpenSingleton`: a call
++admitted while CLOSED can remain in flight when the timer permits a new probe.
++ADR-040 permits one **new probe per half-open epoch**; it does not cancel old
++calls. The runtime's lock and one-shot flag enforce that admission rule.
++
++`breaker.tla` now measures `probe_admissions` separately from `in_flight`.
++The Python conformance harness replays both that legacy-call scenario and the
++explicit OPEN + legacy-success race, which may close before the timer elapses.
++No runtime behavior or admission gate was weakened or changed.
++
++The executable model also replaces the clock frozen at `MaxTime` with relative
++ages saturated at the relevant time boundaries; bounds failure history at the
++opening threshold; and retains the latest audit event with an alternating
++emission bit. These finite abstractions permit repeated recovery cycles rather
++than cutting off exploration after a time horizon. S1 checks the threshold
++postcondition, S3 checks a fresh event on every opening, and L1 checks departure
++from OPEN/HALF_OPEN under explicit weak fairness of time, admission and reports.
++Without eventual reports, no recovery guarantee is claimed. Permanent errors,
++non-counting errors, reset, real clocks and audit I/O are outside this TLC model.
++
++Local TLC checked all 7,842 distinct states with the default configuration.
++`check-breaker-model.py` additionally checks three callers and a shorter failure
++window, then requires deliberate probe, threshold, audit and timer defects to
++fail their respective properties. The 11 Python breaker conformance tests,
++including the existing runtime mutation checks, passed. CI repeats both checks.
++This is a finite model result plus runtime regression evidence, not an unbounded
++proof of every production execution. `breaker.pcal` is an archival sketch and
++must not be used to regenerate the corrected hand-maintained TLA+ model.
++
++---
++
++
+ **Status:** SPECIFIED 2026-04-16 (PLAN-013 D.3 breaker) + 2026-04-15
+diff --git a/docs/formal-verification/run-tlc.sh b/docs/formal-verification/run-tlc.sh
+index e6f70e89504e..2fbfa0f488d0 100755
+--- a/docs/formal-verification/run-tlc.sh
++++ b/docs/formal-verification/run-tlc.sh
+@@ -35,3 +35,3 @@ set -euo pipefail
+ TLA_VERSION="1.8.0"
+-TLA_TOOLS_SHA256="4c1d62e0f67c1d89f833619d7edad9d161e74a54b153f4f81dcef6043ea0d618"
++TLA_TOOLS_SHA256="0f56d6a813368c48008dfbecb23a73ab43a4a5e1bf09f026782a674aa9d4b3c9"
+ TLA_TOOLS_URL="https://github.com/tlaplus/tlaplus/releases/download/v${TLA_VERSION}/tla2tools.jar"
+@@ -126,3 +126,3 @@ run_tlc() {
+     tlc2.TLC \
+-      -workers auto \
++      -workers "${TLC_WORKERS:-4}" \
+       -config "${CONFIG}" \
+diff --git a/docs/security-bash-canonical-guards.md b/docs/security-bash-canonical-guards.md
+index 4c900ba5cce4..77a13caa23d5 100644
+--- a/docs/security-bash-canonical-guards.md
++++ b/docs/security-bash-canonical-guards.md
+@@ -6,8 +6,8 @@ closed automatically on the surfaces it covers.
+ 
+-**Last updated:** 2026-05-13 (S116-cont, PLAN-089 Wave B draft).
++**Last updated:** 2026-10-02 (PLAN-195 W0 — coverage claims re-checked against the code; §6 rewritten).
+ **Related ADRs:** ADR-010, ADR-040, ADR-115, ADR-116, ADR-117,
+ ADR-121 (proposed in PLAN-089 Wave C).
+-**Source:** `.claude/hooks/check_bash_safety.py:332-447` (matcher),
++**Source:** `.claude/hooks/check_bash_safety.py:2167-2449` (`_e3_check_canonical_path_write`),
+ `.claude/hooks/check_bash_canonical_forensic.py` (forensic sibling),
+-`.claude/plans/PLAN-089/wave-b-audit.md` (audit detail).
++`.claude/plans/PLAN-089/wave-b-audit.md` (audit detail; not in the public tree).
+ 
+@@ -35,3 +35,4 @@ TIER-4 evolution-roadmap item (R-027). PLAN-085 Wave E.3 landed a
+ (`>` / `>>` / `tee` / `tee -a` / `sed -i` / `git checkout -- path`).
+-PLAN-089 Wave B closes 14 more vectors (the **matrix v2** matcher).
++PLAN-089 Wave B closed 15 more vectors (the **matrix v2** matcher);
++row 33 followed at S207.
+ 
+@@ -52,7 +53,8 @@ PLAN-089 Wave B closes 14 more vectors (the **matrix v2** matcher).
+ 
+-### §1.2 Surfaces NOT covered (advisory-only)
++### §1.2 Surfaces NOT covered
+ 
+-5 vector classes are **structurally infeasible** to block at PreToolUse
+-time and remain advisory (forensic detector logs them, but the matcher
+-does NOT block). See §6 below.
++Three matrix rows (17, 18, 34) are not blocked, and no hook detects
++them after the fact. The class of indirect execution and computed write
++target is not covered generically (§6.6). Neither is a literal target
++written in a spelling other than the guard's own (§6.6, Class B).
+ 
+@@ -62,6 +64,7 @@ does NOT block). See §6 below.
+ 
+-The matcher uses `shlex.split(command, posix=True)` to tokenize.
+-**Two fail paths are explicitly fail-CLOSED** (block the command):
++The E3 matcher tokenizes with a POSIX `shlex.shlex` lexer, with
++`punctuation_chars` and `whitespace_split` (`check_bash_safety.py:2190-2192`).
++**Three fail paths are explicitly fail-CLOSED** (block the command):
+ 
+-1. **`shlex.split` raises `ValueError`** — unbalanced quotes,
++1. **The lexer raises `ValueError`** — unbalanced quotes,
+    unterminated heredoc, etc. Per PLAN-085 Wave E.3 R1 Sec-2: emit
+@@ -69,3 +72,3 @@ The matcher uses `shlex.split(command, posix=True)` to tokenize.
+    `"GOVERNANCE: bash command failed shlex.split parse"`.
+-   (`check_bash_safety.py:372-387`.)
++   (`check_bash_safety.py:2193-2208`.)
+ 2. **Inner body parse failure in `_scan_blob`** (Wave B addition) —
+@@ -80,3 +83,3 @@ The matcher uses `shlex.split(command, posix=True)` to tokenize.
+ - **`check_canonical_edit._CANONICAL_GUARDS` import failure** —
+-  delayed-import error path at `check_bash_safety.py:393-397`. If
++  delayed-import error path at `check_bash_safety.py:2214-2218`. If
+   the canonical-guard list cannot be loaded, the matcher returns
+@@ -85,4 +88,4 @@ The matcher uses `shlex.split(command, posix=True)` to tokenize.
+   is also offline; blocking Bash here would be redundant noise that
+-  hides a deeper governance fault. The fault is itself emitted
+-  (PostToolUse forensic detector logs `canonical_edit_completed`).
++  hides a deeper governance fault. No event records this fault: the
++  forensic detector imports the same module and logs nothing on failure.
+ 
+@@ -90,4 +93,4 @@ The matcher uses `shlex.split(command, posix=True)` to tokenize.
+ 
+-- `decide_command` outer function fails-OPEN on any uncaught
+-  Exception (`check_bash_safety.py:541-547`). This is by design —
++- The hook's `main()` fails-OPEN on any uncaught
++  Exception (`check_bash_safety.py:4227-4233`). This is by design —
+   the hook NEVER bricks a user session on its own bug.
+@@ -101,6 +104,6 @@ The matcher uses `shlex.split(command, posix=True)` to tokenize.
+ 
+-| Bucket | Pre-Wave-B-3 | Post-Wave-B-3 (verified via simulation) |
++| Bucket | Pre-Wave-B-3 | Current (`test_check_bash_safety_canonical_matrix.py`) |
+ |---|---|---|
+-| BLOCK | 15 / 34 (44%) | 29 / 34 (85%) |
+-| ADVISORY (forensic only) | 19 / 34 | 5 / 34 |
++| BLOCK | 15 / 34 (44%) | 31 / 34 (91%) |
++| NOT BLOCKED (no forensic backup either) | 19 / 34 | 3 / 34 (rows 17, 18, 34 — strict xfail) |
+ | ALLOW false-positives | 0 / 5 | 0 / 5 |
+@@ -108,3 +111,6 @@ The matcher uses `shlex.split(command, posix=True)` to tokenize.
+ 
+-Detail per row in `.claude/plans/PLAN-089/wave-b-audit.md` §2 + §3.2.
++Per-row detail lived in `.claude/plans/PLAN-089/wave-b-audit.md` (not in
++the public tree); the matrix test is the live source.
++The matrix does not represent the §6.6 class, so 31 / 34 is not a
++coverage figure for that class.
+ 
+@@ -114,2 +120,8 @@ Detail per row in `.claude/plans/PLAN-089/wave-b-audit.md` §2 + §3.2.
+ 
++> **Status (checked 2026-10-02): NOT implemented.** No code in
++> `check_bash_safety.py` reads these variables, the key file, or a
++> `_BYPASS_KEY_VERSION` constant; the E3 matcher has no bypass path.
++> §4.1–§4.5 and §7.4 describe a design, not shipped behavior. Only the
++> PostToolUse forensic hook emits `bash_canonical_bypass_invoked`.
++
+ Bypass token for emergency administrative override. Use ONLY when the
+@@ -196,6 +208,6 @@ intentionally different lifecycles + responsibilities:
+ | Blocks? | **YES** (fail-CLOSED) | **NO** (always allow) |
+-| Detection set | matrix v2 (29/34 vectors) | regex v1 (`>`, `>>`, `tee`, `sed -i`) |
+-| Audit event | `veto_triggered(canonical_bypass)` on block | `canonical_edit_completed` breadcrumb |
++| Detection set | matrix v2 (31/34 rows; not the §6.6 class) | regex v1 (`>`, `>>`, `tee`, `sed -i`), literal canonical target only |
++| Audit event | none on a canonical-path block; `veto_triggered(bash_parse_failed_fail_closed)` on parse failure | `canonical_edit_completed` breadcrumb |
+ | False-positive cost | command rejected — user retries | log line emitted — no user impact |
+-| False-negative cost | bypass succeeds — Wave B closes 14 of 19 v1 gaps | log line missed — forensic gap |
++| False-negative cost | bypass succeeds — 16 of 19 v1 gaps closed (15 by Wave B.3, row 33 at S207) | log line missed — forensic gap |
+ | Decision latency target | ≤50ms p95 | <1ms p99 (regex-only, no dep import) |
+@@ -204,6 +216,12 @@ intentionally different lifecycles + responsibilities:
+ 
+-- **The blocker can have gaps** (matrix v2 still has 5 advisory
+-  rows). The forensic detector logs commands that look like writes
+-  even when the blocker missed them. SOC analyst reviewing audit
+-  logs sees the breadcrumb and can trace the attack.
++- **The blocker has gaps** (§6). The forensic detector is NOT a
++  backstop for them. It matches only four literal write shapes in the
++  same raw command text, so it never sees the §6 rows, Class A or a
++  computed target. It classifies a target with the Edit/Write classifier
++  (`check_bash_canonical_forensic.py:63-69` → `check_canonical_edit._is_canonical`),
++  which resolves the path and folds ASCII case. By code reading, it can
++  log a respelled or symlinked literal target after the fact, in those
++  four shapes only. No test pins this, and `canonical_edit_completed` is
++  outside `_CRITICAL_SECURITY_ACTIONS`, with no default reader. It is
++  not coverage.
+ - **The forensic detector can have false positives** (the regex is
+@@ -228,6 +246,11 @@ PostToolUse-always-allow invariant. Verified by
+ 
+-## §6. Advisory-only surfaces (not blocked by matcher)
++## §6. Coverage gaps (not blocked by the matcher)
+ 
+-Five vector classes remain advisory post-Wave-B-3 (forensic-only).
+-Each has documented mitigation; none is a "free" bypass.
++The `PreToolUse` hook receives the raw command text once per Bash tool
++call: nothing is expanded yet, and processes the command spawns never
++re-enter the hook. The forensic detector (§5) is a regex over that same
++text, and `check_canonical_edit.py` never observes Bash. Rows 17, 18 and
++34 stay unblocked (`_ADVISORY_ROWS`, strict xfail), with no detection
++after the fact. Rows 19 and 33 are blocked today. Every canonical-path
++block assumes the target is written in the guard's own spelling (§6.6).
+ 
+@@ -235,16 +258,4 @@ Each has documented mitigation; none is a "free" bypass.
+ 
+-```bash
+-source ./attacker.sh
+-. ./attacker.sh
+-```
+-
+-The shell loads `attacker.sh` and evaluates its body. The matcher
+-sees only the `source` invocation, not the script body. **If** the
+-script ends up calling sed/cp/tee/etc., those commands fire the
+-forensic detector PostToolUse + the canonical-edit hook on any
+-Edit/Write Claude subsequently emits to update the file. The
+-end-to-end bypass requires Claude to issue the `source` invocation
+-AND the attacker-controlled script to mutate a canonical path
+-without going through any tool that re-engages our governance —
+-which is rare in practice (legitimate scripts use Edit/Write).
++NOT covered. The matcher sees the command that loads a script file,
++never the script body. No hook observes what the body runs.
+ 
+@@ -252,16 +263,5 @@ which is rare in practice (legitimate scripts use Edit/Write).
+ 
+-```bash
+-xargs -I{} sed -i '' 's/x/y/' {} < kernel-list.txt
+-```
+-
+-The xargs body is `sed -i '' 's/x/y/' {}` — no literal canonical
+-path. The list of canonical paths comes from stdin. Matcher v2 #6
+-scans the xargs body for canonical literals; finds none; allows.
+-Mitigation: the resulting `sed -i` invocation **per file** is a
+-new Bash invocation (xargs forks subprocess per record), and each
+-subprocess invocation hits the PreToolUse matcher AGAIN on the
+-expanded form `sed -i '' 's/x/y/' PROTOCOL.md` which IS blocked by
+-v1 sed -i. **Net effect:** the parent xargs command is allowed,
+-but each child blocks. The advisory is "fork-and-block-child"
+-rather than "block-at-parent".
++NOT covered. A target that reaches `xargs` through standard input is not
++a literal in the command. The children `xargs` spawns never re-enter
++`PreToolUse`.
+ 
+@@ -269,11 +269,4 @@ rather than "block-at-parent".
+ 
+-```bash
+-find . -name 'PROTOCOL.md' -exec sed -i '' 's/x/y/' {} +
+-```
+-
+-Same as §6.2 — the find -exec body is `sed -i '' 's/x/y/' {}`.
+-The `-name 'PROTOCOL.md'` predicate IS a canonical literal that
+-`_scan_blob` (b)-pass should catch, BUT find is not in
+-`_E3_INDIRECTION_VERBS` in the current Wave B.3 patch. Add `find`
+-to that set in **Wave B.3-bis 1-line follow-up** to close this row.
++BLOCKED while the canonical path is a literal: `find` is in
++`_E3_INDIRECTION_VERBS` (`check_bash_safety.py:2157`).
+ 
+@@ -281,12 +274,5 @@ to that set in **Wave B.3-bis 1-line follow-up** to close this row.
+ 
+-```bash
+-$(eval "sed -i '' s/x/y/ PROTOCOL.md")
+-```
+-
+-Bash evaluates `$(...)` before sending tokens to Claude. The
+-matcher receives a single token `$(...)` with no inner content.
+-Matcher v2 #6 catches the surrounding form `eval "sed ... PROTOCOL.md"`
+-when it is the outer command, but not when buried in `$(...)`.
+-Mitigation: forensic detector PostToolUse for the resulting
+-`sed -i` invocation that the shell expanded.
++BLOCKED since S207. The E3 lexer isolates `(`, `)` and the backtick
++(`check_bash_safety.py:2190`), so the `eval` body reaches the indirection
++scan as raw, unexpanded text.
+ 
+@@ -294,14 +280,65 @@ Mitigation: forensic detector PostToolUse for the resulting
+ 
+-```bash
+-IFS=/ cd ../PROTOCOL.md/.. && touch foo
+-```
+-
+-`IFS=/` rebinds the field separator to `/`. Tokens reaching the
+-matcher's shlex split are pre-IFS; Python's `shlex.split` does NOT
+-honor `IFS=` rebinding. The cleanest mitigation would be
+-parser-level path canonicalization (walking each token through
+-`os.path.normpath`), but that re-introduces the TOCTOU surface we
+-are trying to close. Mitigation: forensic detector PostToolUse +
+-the subsequent `touch foo` fires the canonical-edit hook if
+-`foo` resolves to a canonical-tier file.
++NOT covered. The E3 lexer does not model the field separator, and the
++forensic detector has no shape for this row.
++
++### §6.6 Indirect execution and computed write target — NOT covered
++
++The matchers compare literal tokens of the raw text, in one spelling.
++Two classes escape that comparison, and neither is covered generically
++today. The cure is tracked in `.claude/plans/PLAN-195-bash-guard-indirect-execution.md`.
++
++**Class A — indirect execution of a destructive command.** The trio
++(`_check_rm_rf`, `_check_git_reset_hard`, `_check_git_push_force`,
++`check_bash_safety.py:364-465`) reads the leading tokens of each chunk
++and never recurses. It has no rule for a verb inside a nested interpreter
++body, a dynamic evaluation, a chaining runner or a pipe into an
++interpreter. It has none for a command name that an expansion produces.
++`_scan_blob` inspects bodies, but seeks only canonical path literals.
++
++**Direct sibling forms.** The direct forms are blocked only in the
++canonical spelling: the verb first in a chunk split on `&&`, `||`, `;` or
++`|` (`check_bash_safety.py:275`). The command word and the `git`
++subcommand are compared case-sensitively, at fixed positions, after
++stripping only four launcher prefixes and leading assignments (`:107`).
++Other separators, grouping, reserved words, launchers, command-word case,
++options before the subcommand, and disagreements between its tokenizers
++do not match.
++
++**Class B — computed or respelled write target.** E3 compares each
++target string with `_CANONICAL_GUARDS` and expands nothing. When a
++variable, a glob, a relative directory change or a program argument
++produces the destination, E3 never compares the destination itself. A
++LITERAL target is compared only in the guard's own spelling: E3
++normalizes just a leading `./` and an absolute path under the root
++(`check_bash_safety.py:2222-2240`), and the raw segment matcher it calls
++is case-sensitive (`check_canonical_edit.py:949-985`). The Edit/Write
++classifier folds case; E3 does not use it. Another spelling of the same
++path, or a filesystem alias, is not blocked.
++
++**Detection.** No generic block exists for either class. For Class A
++and for a computed target, `PreToolUse` is the only detection, and it
++has no rule for them. For a respelled or symlinked literal target, the
++forensic hook gives partial detection, after the fact only, and only in
++its four literal write shapes (§5); no test pins it and no default
++reader consumes the event. Nothing detects copy, move, removal, a hard
++link, or the creation of the alias. The OS sandbox is disabled
++(`.claude/settings.json`, `sandbox.enabled: false`).
++
++**Residuals declared by form.** Static shell analysis is incomplete by
++construction. These forms stay open even after the planned cure (single
++source: the PLAN-195 Goal plus its item C12; items 8–10 await decisions):
++
++1. Destructive APIs of the interpreter's own language, with no shell verb.
++2. A script in a file, including one the Write tool wrote earlier.
++3. Functions and aliases from the shell profile or from earlier calls.
++4. Tool configuration that runs a configured value as a program.
++5. Shell startup-file variables (env-hijack guard, advisory by default).
++6. Arguments that reach `xargs` through standard input.
++7. A fully computed command word and arguments, with no literal destructive marker.
++8. Removal by a file search with a removal action, with or without a predicate.
++9. Recursive removal without the force option (allowed by the trio today).
++10. Opaque-feeder sub-forms (input the hook cannot read) demoted to advisory, if any.
++11. A directory change made in an earlier tool call (the hook gets no working directory).
++12. A comment blind spot in the E4 line-break normalizer (posture-toggle guard).
++13. A literal target not byte-equal to the guard's spelling: a path-spelling variant, or a filesystem alias made earlier.
+ 
+@@ -324,3 +361,3 @@ When a new bypass shape is discovered:
+ 5. Commit under a sentinel ceremony (the file is canonical-tier).
+-6. Update `wave-b-audit.md` §2 + §3.2 + §7 coverage tables.
++6. Update §3 above and the matrix test docstring (`wave-b-audit.md` is not in the public tree).
+ 7. Update §1.1 above (this doc).
+@@ -333,3 +370,3 @@ tier, sentinel-gated). This automatically widens BOTH detectors
+ delayed-import dependency at
+-`check_bash_safety.py:393-395` + `check_bash_canonical_forensic.py:64-69`.
++`check_bash_safety.py:2214-2218` + `check_bash_canonical_forensic.py:64-69`.
+ 
+@@ -391,3 +428,3 @@ sentinel ceremony (canonical-tier file edit).
+ - **PLAN-089 Wave B** — Matrix v2 (this doc's primary surface).
+-- **`.claude/plans/PLAN-089/wave-b-audit.md`** — Per-row audit detail.
++- **`.claude/plans/PLAN-089/wave-b-audit.md`** — Per-row audit detail (not in the public tree).
+ - **`.claude/hooks/check_bash_safety.py`** — Source.
+diff --git a/docs/threat-model.md b/docs/threat-model.md
+index 4561def2c866..08e90cb23dea 100644
+--- a/docs/threat-model.md
++++ b/docs/threat-model.md
+@@ -44,2 +44,14 @@
+ > signing — the S328 morning runbook does exactly that.
++>
++> **PLAN-195 W0 (2026-10-02), same discipline.** What was reviewed is
++> scoped: row 2 of the harness-vs-hook containment map (Bash writes to
++> canonical paths) and the class that row omitted — writes with a computed
++> or respelled target, declared NOT covered in
++> `docs/security-bash-canonical-guards.md` §6.6. The row now carries the
++> real matrix count (31/34). The same section's destructive half (indirect
++> execution of a destructive command) also weakens row 7; row 7 got only a
++> pointer to it, not a re-review. Nothing else here was re-reviewed;
++> `Status` and `Last updated` stay unchanged for the reason above. The
++> freshness script ran only with `--dry-run --verbose` (no write; rc 1,
++> as before this edit).
+ **Last updated:** 2026-06-12 (PLAN-135 W4 D5+D8 — harness-vs-hook containment map + MCP-connector decision rule; W3 K14b — browser/computer-use trust boundary)
+@@ -2130,3 +2142,3 @@ honest gap.
+ | 1 | Edit/Write/MultiEdit (incl. `mcp__*` file tools) to canonical paths (T-01, T-003) | W1 S2 static Edit-denies on `PROTOCOL.md` / `.claude/settings.json` / `SPEC/` — native DENY short-circuits **before** PreToolUse | `check_canonical_edit.py` sentinel (KERNEL HARD-DENY + audit emit) | **BOTH** (post-W1; hook stays authoritative — it carries the audit trail and the sentinel chain) | model/policy |
+-| 2 | Bash writes to canonical paths (`sed -i`, redirects, `tee`, interpreter `-c`, shell-in-shell — `security-bash-canonical-guards.md` §1.1) | **Not covered** — an Edit-deny does NOT cover Bash writes to the same path (W1 S2 coverage-limit (a)) | `check_bash_safety.py` matrix v2 (29/34 BLOCK, 5 advisory, fail-CLOSED on parse failure) + `check_bash_canonical_forensic.py` PostToolUse | **HOOK** | model/policy |
++| 2 | Bash writes to canonical paths (`sed -i`, redirects, `tee`, interpreter `-c`, shell-in-shell — `security-bash-canonical-guards.md` §1.1) | **Not covered** — an Edit-deny does NOT cover Bash writes to the same path (W1 S2 coverage-limit (a)) | `check_bash_safety.py` matrix v2 (31/34 BLOCK; rows 17/18/34 unblocked; fail-CLOSED on parse failure) + `check_bash_canonical_forensic.py` PostToolUse (four literal write shapes only). **Open class, not blocked:** writes with a computed target, or a literal target in a spelling other than the guard's (`security-bash-canonical-guards.md` §6.6, Class B). A computed target has no detection at all; a respelled or symlinked literal may leave a forensic breadcrumb after the fact, only in the four §5 shapes, untested and with no default reader | **HOOK** for literal forms in the guard's own spelling; **NONE** (preventive) for the §6.6 class — forensic breadcrumb only for a respelled literal in the four §5 shapes, not coverage | model/policy |
+ | 3 | Heredoc smuggling / unparseable command bodies | Harness blocks heredoc-smuggled writes natively (harvest D5 recon — version-dependent, see probe caveat below) | shlex parse failure → fail-CLOSED block (`bash_parse_failed_fail_closed`) | **BOTH** | model/policy |
+@@ -2135,3 +2147,3 @@ honest gap.
+ | 6 | Read-file prompt injection (workspace files) | None | `check_read_injection.py` (ADVISORY — L-rated in the STRIDE matrix) | **HOOK** (advisory) | content |
+-| 7 | Dangerous git (`git push --force`/`-f`; hook bypass `--no-verify`) | W1 S2 deny `Bash(git push --force*)` | `check_bash_safety.py` patterns + ADR-143 git-hook-bypass guard (PROPOSED) + W2 H5 `--force-with-lease` rewrite pilot (**PENDING**; rewrite-failure ⇒ BLOCK, normative) | **BOTH** (force-push); HOOK (`--no-verify`) | model/policy |
++| 7 | Dangerous git (`git push --force`/`-f`; hook bypass `--no-verify`) | W1 S2 deny `Bash(git push --force*)` | `check_bash_safety.py` patterns + ADR-143 git-hook-bypass guard (PROPOSED) + W2 H5 `--force-with-lease` rewrite pilot (**PENDING**; rewrite-failure ⇒ BLOCK, normative) | **BOTH** (force-push, canonical spelling only — other forms: `security-bash-canonical-guards.md` §6.6, Class A); HOOK (`--no-verify`) | model/policy |
+ | 8 | Off-allowlist model ID (ADR-149) | W1 S1a `availableModels` mirror + S1b `fallbackModel` chain constraint — both **generated from** the ADR-149 allowlist (single source) | ADR-149 allowlist checks in model/tier routing + lint | **BOTH** | model/policy |
+diff --git a/docs/workflow-recovery.md b/docs/workflow-recovery.md
+index 4392b48d0458..c375e2929b92 100644
+--- a/docs/workflow-recovery.md
++++ b/docs/workflow-recovery.md
+@@ -241,2 +241,34 @@ is PLAN-190 W6.
+   W2 adds a phase checkpoint file the phase prompt reads and writes; the runner itself is the limit.
++- **How an agent is stopped: the runner's stall watchdog, by substrate (read from the installed
++  Claude Code binaries, 2026-10-01).** The runner restarts an `agent()` that makes no progress. The
++  stream's byte watchdog is a different mechanism that shares the 180 s default. Both belong to the
++  harness. The guard does not see either of them.
++  - **In every version read.** The runner's stall timer is suspended while a tool call is in flight.
++    The code clears it when an assistant message carries a tool call and re-arms it only when no tool
++    call is in flight. A long tool call by itself therefore does not fire this watchdog. This was read
++    from the code in the 2.1.285, 2.1.286 and 2.1.287 binaries on 2026-10-01 (2.1.284: the S360
++    planning verification) and was not measured at run time.
++  - **Up to Claude Code 2.1.285.** The default stall window of an `agent()` is a fixed 180 s, with up
++    to 5 retries (1 + 5 attempts).
++  - **Claude Code 2.1.286.** The default is derived and equals 600 s unless an override is set:
++    `CLAUDE_ASYNC_AGENT_STALL_TIMEOUT_MS` when set, a fixed 600 s when `CLAUDE_ENABLE_STREAM_WATCHDOG`
++    is off, otherwise `max(CLAUDE_STREAM_IDLE_TIMEOUT_MS, 300000) + 300000` ms. The retry count is
++    still 5. A per-agent
++    `opts.stallMs` overrides the default; the same field already overrode the fixed 180 s in 2.1.285.
++    After the last attempt the runner reports
++    `agent stalled on all N attempts (no progress for X ms each)`.
++  - **Stream byte watchdog (2.1.286 binary).** The default window is 180 s on the `firstParty`
++    provider and 300 s on other providers. With neither environment variable set, the server-side flag
++    `tengu_byte_stream_idle_timeout_ms` can replace that default without a new Claude Code version; its
++    cached value was 180000 when the S360 planning verification read it (2026-10-01).
++    `CLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS` overrides the window. `CLAUDE_STREAM_IDLE_TIMEOUT_MS` also
++    overrides it, with a 300 s floor, so a lower value yields 300 s. The result is clamped to 10 s
++    through 30 min.
++  - **Not measured.** The effect at run time. The 2.1.286 changelog lists a fix for Workflow
++    subagents restarted from their original prompt when a connection stalled for a few minutes
++    mid-response; whether a stalled agent now resumes its partial reply or restarts was not tested.
++    The 2.1.287 binary installed when this was written has the same derived-default function; its
++    constants were not read.
++  - **Practice, unchanged.** Run a long job in the background and poll it. A script that needs a
++    different window can set `opts.stallMs` per agent.
+ - The run id is extracted from the tool response by shape (`wf_<hex8>[-<hex>]`, 98.5 % of 329 real

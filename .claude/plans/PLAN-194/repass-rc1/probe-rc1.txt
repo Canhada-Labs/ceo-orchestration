@@ -1,0 +1,19 @@
+OK   C0-tree: arvore == ec98fa5926d2; base ancestral
+OK   C0-npm: a rc nao publica no npm (npm-publish.yml pula -rc.)
+OK   C0-rc-proof: job rc-toolchain-proof «RC toolchain proof (no publish)»: so nas tags -rc., permissions contents: read, sem id-token/environment/secrets, sem npm publish; Node e npm das MESMAS variaveis do workflow que o publish (PUBLISH_NODE_MAJOR, PUBLISH_NPM_VERSION), ambos em ubuntu-latest
+OK   C17-final-text: as condicoes e o README do kit sao o conteudo final (sem a marca do provisorio do K1)
+OK   C1-annex-v1.4.0: anexo da v1.4.0 re-declarado (envelope do GA v1.4.2); 10 citado(s) mudam, todos nas classes
+OK   C2-carried-1.4.2: 8 veredito(s) pinado(s), todos presentes com o sha256 pinado (pair-rail-verdict-v1.4.2.md: 4 pelo MANIFEST + 0 por condicao; pair-rail-verdict-v1.4.2-rc.1.md: 4 pelo MANIFEST + 0 por condicao); GA: 13 a 15
+OK   C14-cure-67: append_entry le o elo, calcula o HMAC, grava a linha e atualiza o sidecar num mesmo with FileLock(paths["lock"]) (AST); o CHANGELOG [1.4.3] declara a cura e os limites; os dois envelopes da v1.4.0 numeram a 67
+OK   C15-cure-ga-p2: o CHANGELOG [1.4.3] declara a cura; .claude/scripts/check-substrate-drift.py nomeia CC_LEDGER_UNREADABLE e COMPONENT_CHECK_ERROR; o cenario do P2 reproduzido: rc 1 (--strict), CC_LEDGER_UNREADABLE e a deriva do Codex (CODEX_INSTALLED_NOT_PINNED) preservada
+OK   C9-codex-pin: manifesto ADR-182 pina 0.160.0; cerimonia do re-pin landada
+OK   C13-route1: o runner do candidato: rota 1 so (oraculo antes de executar), rota 2 recusa nomeada, nenhum npx; o shim executa o codex global do PATH (o lancador)
+OK   C12-plan-decisions: as condicoes citam D-4, D-10; todas na tabela de decisoes do plano commitado
+OK   C16-adopter-notes: o INSTALL.md pina v1.4.3 (== VERSION; o bump reescreve o exemplo); sem a tag, upgrade.sh --pin v1.4.3 --dry-run sai rc 2 com «unknown --pin ref»; .claude/hooks/_lib/adapters/live/claude.py sem mudanca na faixa
+OK   C11-scope: 379 caminhos: 22+8+19+17 dentro das partes, 313 fora (declarado); governance e local no declarado
+OK   SIZE parte 1: ~142453 B (teto 245616 = MAX_RAW_BYTES - 16384), 22 arquivo(s), 2456 linhas de diff
+OK   SIZE parte 2: ~39453 B (teto 245616 = MAX_RAW_BYTES - 16384), 8 arquivo(s), 417 linhas de diff
+OK   SIZE parte 3: ~189260 B (teto 245616 = MAX_RAW_BYTES - 16384), 19 arquivo(s), 3227 linhas de diff
+OK   SIZE parte 4: ~88248 B (teto 245616 = MAX_RAW_BYTES - 16384), 17 arquivo(s), 1199 linhas de diff
+MAPA condicao -> ids: cabecalho: C0-tree C0-npm C17-final-text; 1: C1-annex-v1.4.0 C14-cure-67; 2: C2-carried-1.4.2 C15-cure-ga-p2; 3: C14-cure-67; 4: C15-cure-ga-p2; 5: C9-codex-pin C13-route1 C12-plan-decisions; 6: C0-npm C0-rc-proof; 7: C16-adopter-notes; 8: C12-plan-decisions C16-adopter-notes; 9: C11-scope SIZE; 10: C11-scope
+SONDA: 0 FALSA(S), 0 sem medida
