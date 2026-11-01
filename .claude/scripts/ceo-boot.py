@@ -116,6 +116,67 @@ from _lib._ceo_boot_parts import install as _install_ceo_boot_parts  # noqa: E40
 _install_ceo_boot_parts(globals())
 del _install_ceo_boot_parts
 
+
+def check_tier_a_spec_version_drift() -> Tuple[str, str, Any]:
+    """VERSION major vs latest SPEC/v* major agreement — red on drift.
+
+    Lesson validation remains delegated to `_validate_boot_lesson`.
+    """
+    fw_file = REPO_ROOT / ".claude" / ".framework-version"
+    if not fw_file.exists():
+        return "green", "no .framework-version (drift not attributable)", None
+    try:
+        repo_v = fw_file.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return "yellow", ".framework-version unreadable", None
+    provenance_ok = False
+    manifest = REPO_ROOT / ".claude" / ".install-manifest.sha256"
+    try:
+        if manifest.exists() and ".claude/.framework-version" in manifest.read_text(
+                encoding="utf-8", errors="replace"):
+            provenance_ok = True
+    except OSError:
+        pass
+    if not provenance_ok:
+        try:
+            provenance_ok = subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "ls-files", "--error-unmatch",
+                 ".claude/.framework-version"],
+                capture_output=True, timeout=2,
+            ).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            provenance_ok = False
+    spec_root = REPO_ROOT / "SPEC"
+    if not spec_root.exists():
+        return "green", f"repo {repo_v}, no SPEC dir", repo_v
+    spec_majors = []
+    for p in spec_root.iterdir():
+        if p.is_dir() and p.name.startswith("v"):
+            try:
+                spec_majors.append(int(p.name[1:]))
+            except ValueError:
+                return "yellow", f"unparseable SPEC dir {p.name}", None
+    if not spec_majors:
+        return "green", f"repo {repo_v}, no SPEC versions", repo_v
+    try:
+        repo_major = int(repo_v.split(".", 1)[0])
+    except ValueError:
+        return "yellow", f"unparseable .framework-version {repo_v}", None
+    latest_spec = max(spec_majors)
+    detail = {"repo_version": repo_v,
+              "spec_versions": ["v%d" % m for m in sorted(spec_majors)],
+              "provenance_verified": provenance_ok}
+    if repo_major != latest_spec:
+        if provenance_ok:
+            return "red", (
+                f"drift: framework major {repo_major} vs SPEC v{latest_spec}"
+            ), detail
+        return "yellow", (
+            f"drift suspected: marker {repo_major} vs SPEC v{latest_spec} "
+            "(provenance unverified — ADR-155-AMEND-1 §5)"
+        ), detail
+    return "green", f"framework {repo_v} ~ spec v{latest_spec}", detail
+
 # === PLAN-065 Phase 2 audit_emit wire ===
 # `_emit_ceo_boot_emitted_safe` and `_emit_ceo_boot_check_skipped_safe` are
 # real declarations in the ordered parts above. This surface marker belongs

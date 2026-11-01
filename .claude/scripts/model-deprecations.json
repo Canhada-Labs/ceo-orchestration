@@ -349,7 +349,7 @@
     },
     {
       "rule_id": "by-design-id-carriers",
-      "pattern": "\\.claude/scripts/(ceo-cost\\.py|cost-table\\.yaml|budget-summary\\.py|audit-telemetry\\.py|success-receipt\\.py|value-dashboard\\.py|generate-dispatch\\.py|spot-check-findings\\.py|detectors/(wasteful_thinking|overpowered)\\.py|optimizer/model_normalize\\.py)|\\.claude/hooks/_lib/adapters/live/claude\\.py|\\.claude/data/canonical_models\\.json|\\.claude/skills/core/(ai-llm-orchestration/SKILL\\.md|security-and-auth/(SKILL\\.md|benchmarks/owasp-llm-top-10\\.yaml))",
+      "pattern": "\\.claude/scripts/(ceo-cost\\.py|cost-table\\.yaml|budget-summary\\.py|audit-telemetry\\.py|success-receipt\\.py|value-dashboard\\.py|generate-dispatch\\.py|spot-check-findings\\.py|detectors/(wasteful_thinking|overpowered)\\.py|optimizer/model_normalize\\.py)|\\.claude/hooks/_lib/(adapters/live/claude|_budget_summary_parts/cost_rollup)\\.py|\\.claude/data/canonical_models\\.json|\\.claude/skills/core/(ai-llm-orchestration/SKILL\\.md|security-and-auth/(SKILL\\.md|benchmarks/owasp-llm-top-10\\.yaml))",
       "reason": "historical pricing/replay tables (incl. ADR-148 canonical_models.json models.dev pricing catalog — retained historical rows for cost reconciliation, S227 rate-card class) + adaptive-thinking known-id table + instructional skill content — mirrors smoke-install-parity.sh ALLOWLIST_RE (every entry justified there)"
     },
     {
@@ -364,7 +364,7 @@
     },
     {
       "rule_id": "model-currency-family-prefixes",
-      "pattern": "(^|/)\\.claude/scripts/check-model-currency\\.py$",
+      "pattern": "(^|/)(\\.claude/scripts/check-model-currency\\.py|\\.claude/hooks/_lib/model_currency\\.py)$",
       "reason": "PLAN-194 W3b.0 — the `_FAMILIES` table carries vendor id PREFIXES (\"gpt-\", \"o3\", \"o4\"), not model ids; the live ids come from the authorities it reads (ADR-149 working set, codex_cli_shape._VALID_MODELS), which are scanned at their source"
     }
   ]

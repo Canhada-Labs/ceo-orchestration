@@ -795,12 +795,14 @@
   "_model_pin_comment": "PLAN-163 T1.1 contingency (ADR-181 §Contingency) — session-default pin. CC 2.1.220 honors the top-level settings key \"model\" (zod: E.string().optional(); describe \"Override the default model used by Claude Code\"; source at 2.1.220 binary offset 226819212, sha256 8addc857..., positioned between \"permissions\" and \"fallbackModel\" in the settings schema — NOT the internal workflow prop \"defaultModel\", NOT the env var ANTHROPIC_MODEL). Pinned to claude-opus-5-5 since ADR-149 Amendment 3 (S357; Claude Opus 5.5 needs Claude Code >= 2.1.280); from ADR-181 until then the pin was claude-opus-5 (OQ1=b primary/fallback), which stays the fallbackModel. Rationale: APPENDING claude-sonnet-5 to availableModels makes the 2.1.220 tier-default (sonnet-5) an ALLOWED model, so enforceAvailableModels no longer redirects the session away from it and the session default would silently FLIP from claude-opus-4-8 (=availableModels[0], the prior fallback target) to sonnet-5; the explicit pin forecloses that flip. The pinned value MUST remain an EXACT member of availableModels below (claude-opus-5-5 is present): SessionDefaultPinTest in .claude/hooks/tests/test_template_dogfood_parity.py compares exact ids, while Claude Code itself admits an id that extends an allowed entry by a - segment and replaces a pin the allowlist does not admit with the default model at startup (with a warning). Env ANTHROPIC_MODEL / CLI --model still override per-session at runtime. Mirror this key in templates/settings/settings.base.json or SessionDefaultPinTest reddens.",
   "model": "claude-opus-5-5",
   "availableModels": [
-    "claude-opus-4-8", "claude-fable-5", "claude-sonnet-4-6", "claude-haiku-4-5", "claude-opus-5", "claude-sonnet-5", "claude-opus-4-6",
-    "claude-opus-4-7", "gpt-5.4", "gpt-6.1-sol", "claude-fable-5-1", "claude-opus-5-5", "claude-opus-4", "claude-opus-6", "claude-opus-7",
-    "claude-opus-8", "claude-opus-9", "claude-sonnet-4", "claude-sonnet-6", "claude-sonnet-7", "claude-sonnet-8", "claude-sonnet-9",
-    "claude-haiku-4", "claude-haiku-5", "claude-haiku-6", "claude-haiku-7", "claude-haiku-8", "claude-haiku-9", "gpt-5", "gpt-6", "gpt-7",
-    "gpt-8", "gpt-9", "o3", "o4", "o5", "o6", "o7", "o8", "o9", "gemini-2", "gemini-3", "gemini-4", "gemini-5", "gemini-6", "gemini-7",
-    "gemini-8", "gemini-9", "grok-3", "grok-4", "grok-5", "grok-6", "grok-7", "grok-8", "grok-9"
+    "claude-opus-4-8",
+    "claude-fable-5",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "claude-opus-5",
+    "claude-sonnet-5",
+    "claude-fable-5-1",
+    "claude-opus-5-5"
   ],
   "_enforce_available_models_comment": "PLAN-153 wave-backlog (Anthropic ADOPT sweep 2026-07) — Claude Code >=2.1.202 verified semantics: when true and availableModels is a non-empty array, the DEFAULT model selection is also constrained to the allowlist (if the tier default is not in availableModels, Default resolves to the first allowed entry). ADR-149 Amendment 3 (S357, measured on Claude Code 2.1.280): the harness matches availableModels entries by segment PREFIX (an entry admits every id that extends it by a - segment; claude-opus-5 already admitted claude-opus-5-5), so this key does NOT redirect a tier default that extends an allowed entry; the explicit top-level model pin is what fixes the session default. Schema-verified optional boolean, valid in project settings (cascade-trust mode). Caveat (Claude Code settings reference, read 2026-09-23): when an organization deploys ANY managed settings, Claude Code reads this key from the managed source alone and ignores it in this file — fail-open at harness level; acceptable because an availableModels list still gates explicit selection.",
   "enforceAvailableModels": true,

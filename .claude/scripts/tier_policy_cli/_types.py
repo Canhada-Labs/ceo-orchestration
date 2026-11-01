@@ -24,11 +24,16 @@ from typing import Dict, Final, List, Literal, Optional, Tuple
 _HOOKS = Path(__file__).resolve().parents[2] / "hooks"
 if str(_HOOKS) not in sys.path:
     sys.path.insert(0, str(_HOOKS))
-from _lib import model_currency as _model_currency  # noqa: E402
+try:
+    from _lib import model_currency as _model_currency  # noqa: E402
+except ImportError:
+    _model_currency = None  # type: ignore[assignment]
 
 def is_valid_model_id(model: object) -> bool:
     """Accept semantic families and the explicit compatibility mirror."""
-    return _model_currency.is_allowed_model(model, VALID_MODEL_IDS)
+    if _model_currency is not None:
+        return _model_currency.is_allowed_model(model, VALID_MODEL_IDS)
+    return isinstance(model, str) and model in VALID_MODEL_IDS
 
 
 # ---------------------------------------------------------------------
@@ -54,13 +59,8 @@ VALID_MODEL_IDS: "Final[Tuple[str, ...]]" = (
     "claude-haiku-4-5-20251001",
     "claude-opus-5",
     "claude-sonnet-5",
-    "claude-opus-4-6",
-    "claude-opus-4-7",
-    "gpt-5.4",
-    "gpt-6.1-sol",
     "claude-fable-5-1",
     "claude-opus-5-5",
-
 )
 
 

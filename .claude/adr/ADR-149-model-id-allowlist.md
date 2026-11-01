@@ -35,10 +35,6 @@ VETO_FLOOR_ALLOWED: frozenset = frozenset({
     "claude-fable-5",    # S225/PLAN-134 W0 — the running generation (ceiling pin)
     "claude-opus-5",     # ADR-181 (PLAN-163 T1.3, OQ1=b) — Claude 5 Opus joins the floor
     "claude-opus-5-5",   # ADR-149 Amendment 3 (S357, PLAN-193) — Opus 5.5 joins the floor
-    "claude-opus-4-6",
-    "claude-opus-4-7",
-    "gpt-5.4",
-    "gpt-6.1-sol",
 })
 ```
 
@@ -94,10 +90,6 @@ AVAILABLE_MODELS_WORKING_SET: tuple = (
     #    ADR-181 justification) --
     "claude-opus-5",      # debate/arch routing + fallback target + floor member
     "claude-sonnet-5",    # advisory tier target (ADR-157 member; OQ2 migrate-now)
-    "claude-opus-4-6",    # legacy 4.6 Opus floor/working-set compatibility
-    "claude-opus-4-7",    # legacy 4.7 Opus floor/working-set compatibility
-    "gpt-5.4",            # cross-family pair-rail model id
-    "gpt-6.1-sol",        # cross-family pair-rail model id
     # -- Fable 5.1 -- ADR-149 Amendment 2, S338 2026-09-01; APPENDED AT END.
     #    Working-set ONLY: not a floor member, not the fallback, not the
     #    session pin. The legacy claude-fable-5 stays available. --
@@ -783,9 +775,7 @@ historical; the session pin is `claude-opus-5-5` (A3.2 item 4).
 The Owner authorizes family admission without a GPG ceremony for each model version.
 The earlier closed-list/per-bump clauses remain historical; this amendment replaces them.
 
-```python
-MODEL_FAMILY_POLICY = "semantic-families-v1"
-```
+# MODEL_FAMILY_POLICY = "semantic-families-v1"
 
 The explicit blocks remain deterministic compatibility mirrors. Their historic A2/A3 tail
 is retained; new compatible identifiers do not need another entry or signature. Runtime

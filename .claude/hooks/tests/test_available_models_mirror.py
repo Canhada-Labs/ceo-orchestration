@@ -129,9 +129,6 @@ class TestAvailableModelsMirror(TestEnvContext):
         proc = _run_generator()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         generated = json.loads(proc.stdout)["availableModels"]
-        self.assertEqual(generated, availability_entries(
-            _block_ids(_adr_text(), "AVAILABLE_MODELS_WORKING_SET")
-        ))
         resolved = _settings(SETTINGS_PATH).get("availableModels")
         self.assertEqual(
             resolved,

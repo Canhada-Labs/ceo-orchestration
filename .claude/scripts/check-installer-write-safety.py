@@ -29,6 +29,7 @@ else:
     from _installer_write_safety import bind as _bind_legacy_api
 
 _bind_legacy_api(globals())
+PROVEN_READONLY = frozenset(PROVEN_READONLY)
 
 
 if __name__ == "__main__":

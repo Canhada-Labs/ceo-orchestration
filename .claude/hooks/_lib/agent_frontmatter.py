@@ -71,13 +71,15 @@ import sys
 from pathlib import Path
 from typing import Dict, FrozenSet, Iterable, List, Optional, Tuple
 
-from _lib import model_currency as _model_currency
-
 _HOOKS_DIR = Path(__file__).resolve().parent.parent
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
 from _lib.frontmatter import parse_frontmatter  # noqa: E402
+try:
+    from _lib import model_currency as _model_currency  # noqa: E402
+except ImportError:
+    _model_currency = None  # type: ignore[assignment]
 
 __all__ = [
     "VETO_FLOOR_ROLES",
@@ -139,11 +141,6 @@ VETO_FLOOR_ALLOWED: FrozenSet[str] = frozenset({
     "claude-fable-5",
     "claude-opus-5",
     "claude-opus-5-5",
-    "claude-opus-4-6",
-    "claude-opus-4-7",
-    "gpt-5.4",
-    "gpt-6.1-sol",
-
 })
 
 
@@ -258,8 +255,10 @@ def check_veto_floor_for_role(
         return False, "model_field_missing"
     if expected_model is not None:
         model_ok = actual == expected_model
-    else:
+    elif _model_currency is not None:
         model_ok = _model_currency.is_veto_floor_model(actual) or actual in allowed
+    else:
+        model_ok = actual in allowed
     if not model_ok:
         return False, f"model_mismatch:{actual}"
     return True, ""

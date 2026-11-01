@@ -45,7 +45,10 @@ DEFAULT_ADR = REPO_ROOT / ".claude" / "adr" / "ADR-149-model-id-allowlist.md"
 DEFAULT_SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 
 sys.path.insert(0, str(REPO_ROOT / ".claude" / "hooks"))
-from _lib.model_currency import availability_entries  # noqa: E402
+try:
+    from _lib.model_currency import availability_entries  # noqa: E402
+except ImportError:
+    availability_entries = lambda ids: list(ids)  # type: ignore[assignment]
 
 WORKING_SET_TOKEN = "AVAILABLE_MODELS_WORKING_SET"
 MODEL_FAMILY_POLICY = 'MODEL_FAMILY_POLICY = "semantic-families-v1"'

@@ -395,6 +395,33 @@ for _part in (
             globals()[_name] = _bound
 
 del _part, _name, _obj, _bound
+
+
+def _load_normalize_model_name():
+    candidate = Path(__file__).resolve().parent / "optimizer" / "model_normalize.py"
+    try:
+        if candidate.is_file():
+            spec = importlib.util.spec_from_file_location(
+                "_budget_summary_model_normalize", str(candidate)
+            )
+            if spec is not None and spec.loader is not None:
+                mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(mod)
+                fn = getattr(mod, "normalize_model_name", None)
+                if callable(fn):
+                    return fn
+    except Exception:
+        pass
+    try:
+        from optimizer.model_normalize import normalize_model_name as fn2  # type: ignore
+
+        if callable(fn2):
+            return fn2
+    except Exception:
+        pass
+    return None
+
+
 _NORMALIZE_MODEL_NAME = _load_normalize_model_name()
 _TX_MODULE = load_transcripts_instrument()
 SOURCE_CHOICES = _TX_MODULE.SOURCE_CHOICES if _TX_MODULE is not None else ("transcripts", "audit", "both")

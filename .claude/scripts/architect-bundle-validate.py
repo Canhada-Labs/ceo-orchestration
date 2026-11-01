@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""architect-bundle-validate.py — verify an Architect draft bundle.
+r"""architect-bundle-validate.py — verify an Architect draft bundle.
 
 Sprint 5 Phase 7. Validates the 5-file bundle the Agent Architect
 emits into `.claude/plans/PLAN-NNN/architect/round-1/`. Used by the

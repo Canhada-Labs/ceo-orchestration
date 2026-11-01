@@ -294,7 +294,7 @@ def extract_cmd_substs(text: str) -> List[str]:
     """Every `$( ... )` / backtick body in a token, recursively.
 
     Commands inside a substitution are commands.  Leaving them unread is how
-    `sed "s/{{X}}/$handle/g"` inside `_utg_hash="$( ... | sed ... )"` stayed
+    `sed "s/<X>/$handle/g"` inside `_utg_hash="$( ... | sed ... )"` stayed
     invisible to three passes of this instrument.
     """
     out: List[str] = []
