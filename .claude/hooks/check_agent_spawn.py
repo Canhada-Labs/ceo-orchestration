@@ -2382,6 +2382,7 @@ def aggregate_subagent_findings(*args, **kwargs):
 # can patch its seams and each import retains independent invocation state.
 _SPAWN_COMPONENT_IMPORT_ERROR = None
 try:
+    # Surface guard: .claude/skills/** and SKILL.md (via _lib/agent_spawn/skill_reference.py)
     from _lib.agent_spawn import bind as _bind_spawn_components
     _bind_spawn_components(globals())
     del _bind_spawn_components
