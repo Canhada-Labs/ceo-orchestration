@@ -3544,6 +3544,17 @@ _install_parts(globals(), (
 ))
 
 
+_iter_events_impl = iter_events
+
+
+def iter_events(
+    path: Optional[Path] = None,
+    action_filter: Optional[str] = None,
+) -> Iterator[Dict[str, Any]]:
+    """Yield audit events, retaining the explicit public read-API declaration."""
+    yield from _iter_events_impl(path, action_filter)
+
+
 # PLAN-094 Wave A.3 — module-load wire-up for spool-writer integration.
 # Executes at first import of audit_emit. Idempotent (set_forensic_emitter
 # overwrites callback safely; install_exit_handlers is guarded internally).

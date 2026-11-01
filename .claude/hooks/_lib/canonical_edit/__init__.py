@@ -10,12 +10,12 @@ from __future__ import annotations
 
 from types import FunctionType
 
-from . import paths, sentinels, session_roots
+from . import paths, sentinels, signature_rail, session_roots, utility, decisions, entry
 
 
 def bind(namespace: dict) -> None:
     """Install implementations with the owning hook's globals and identity."""
-    for component in (paths, sentinels, session_roots):
+    for component in (paths, sentinels, signature_rail, session_roots, utility, decisions, entry):
         for name in component.__all__:
             original = getattr(component, name)
             bound = FunctionType(

@@ -1723,7 +1723,10 @@ class NightModeTerminalPathOracleTest(_NightModeBase):
     """
 
     def _tree(self) -> ast.Module:
-        return ast.parse(SCRIPT.read_text(encoding="utf-8"), filename=str(SCRIPT))
+        # Toggle bodies live in the extracted declaration module; inspect the
+        # actual implementation, not only the facade's binding statements.
+        parts = SCRIPT.parent.parent / "hooks" / "_lib" / "_night_mode_parts" / "toggles.py"
+        return ast.parse(parts.read_text(encoding="utf-8"), filename=str(parts))
 
     def _functions(self) -> Dict[str, ast.FunctionDef]:
         found: Dict[str, ast.FunctionDef] = {}
@@ -1803,7 +1806,8 @@ class NightModeTerminalPathOracleTest(_NightModeBase):
                 )
 
     def test_status_never_emits_a_toggle_record(self):
-        for node in ast.walk(self._tree()):
+        facade = ast.parse(SCRIPT.read_text(encoding="utf-8"), filename=str(SCRIPT))
+        for node in ast.walk(facade):
             if isinstance(node, ast.FunctionDef) and node.name == "cmd_status":
                 for helper in _TERMINAL_HELPERS:
                     names = [
@@ -1839,8 +1843,11 @@ class NightModeMainRecordPairingTest(_NightModeBase):
     """
 
     def _module_statement_lists(self) -> List[List[ast.stmt]]:
-        tree = ast.parse(SCRIPT.read_text(encoding="utf-8"), filename=str(SCRIPT))
-        return _statement_lists(tree)
+        parts = SCRIPT.parent.parent / "hooks" / "_lib" / "_night_mode_parts" / "toggles.py"
+        sources = (SCRIPT, parts)
+        return [stmts for source in sources
+                for stmts in _statement_lists(ast.parse(
+                    source.read_text(encoding="utf-8"), filename=str(source)))]
 
     def test_summary_and_emit_are_always_adjacent_siblings(self):
         pairs = 0
