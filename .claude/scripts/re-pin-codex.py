@@ -192,6 +192,8 @@ import zlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from _repin_guard import GUARD as _GUARD, guard as _guard
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE = "@openai/codex"
 GENERATOR = ".claude/scripts/re-pin-codex.py"
@@ -917,21 +919,6 @@ def hash_member(data: bytes, member: str) -> Tuple[str, int]:
 # Mold parsing (fail-closed) and rendering
 # ---------------------------------------------------------------------------
 
-
-# The guard injected right after the mold's trap line. A mold that is itself
-# a generated script carries it already: the parser recognises it (exact
-# lines) as an owned region, so it is regenerated, never duplicated.
-_GUARD = [
-    f"# [{GENERATOR}] a justificativa humana do pack fica em {TODO_MARK}:",
-    "# o run real recusa assinar enquanto restar um; o ensaio só avisa.",
-    f"if grep -n '{TODO_MARK}' \"$SENT\" \"$SRC_PIN\" 2>/dev/null; then",
-    f"  [ \"$DRY\" = \"1\" ] || die \"{TODO_MARK} pendente nos materiais (linhas acima)"
-    " — escreva a justificativa antes de assinar\"",
-    f"  printf '   AVISO: {TODO_MARK} pendente — o run real vai recusar\\n'",
-    "fi",
-]
-
-
 def _find_one(body: List[str], pattern: "re.Pattern[str]", what: str,
               label: str = "mold") -> int:
     hits = [i for i, line in enumerate(body) if pattern.fullmatch(line)]
@@ -1299,11 +1286,22 @@ def _previous_guard(body: List[str], trap: int) -> int:
     marks = [i for i, line in enumerate(body) if line == _GUARD[0]]
     if not marks:
         return 0
-    if marks != [trap + 1] or body[trap + 1:trap + 1 + len(_GUARD)] != _GUARD:
+    if marks != [trap + 1]:
         raise RePinError(EXIT_INPUT, "mold carries a moved or modified generator "
                                      "guard; regenerate from an unmodified pack")
-    return len(_GUARD)
-
+    candidate = body[trap + 1:trap + 1 + len(_GUARD)]
+    if (candidate[:2] == _GUARD[:2] and candidate[3:] == _GUARD[3:]
+            and candidate[2].startswith("if env -u GREP_OPTIONS LC_ALL=C grep -Fn -- ")
+            and "'$SENT'" not in candidate[2] and "'$SRC_PIN'" not in candidate[2]):
+        return len(_GUARD)
+    # v1.4.3 emitted the same marked guard before grep isolation and explicit
+    # non-0/1 handling. Accept exactly that former six-line owned region so a
+    # current re-pin regenerates it; arbitrary edits remain a refusal.
+    old = candidate[:6]
+    if len(old) == 6 and old[2].startswith("if grep -n ") and old[-1] == "fi":
+        return 6
+    raise RePinError(EXIT_INPUT, "mold carries a moved or modified generator "
+                                 "guard; regenerate from an unmodified pack")
 
 def _old_tokens(parts: Dict[str, Any]) -> List[str]:
     body, owned = parts["body"], parts["owned"]
@@ -1421,7 +1419,7 @@ def render_mold(parts: Dict[str, Any], ctx: Dict[str, Any]) -> str:
         body[idx] = f"{name}={values[name]}"
     message = _render_commit_message(parts, ctx)
     after_guard = parts["trap"] + 1 + parts["guard_len"]
-    out = (body[:parts["trap"] + 1] + _GUARD
+    out = (body[:parts["trap"] + 1] + _guard(ctx)
            + body[after_guard:parts["commit"] + 1] + message
            + body[parts["commit_end"]:])
     return "\n".join([parts["shebang"]] + _render_header(parts, ctx) + out)
@@ -1464,7 +1462,7 @@ def _render_constants_mold(parts: Dict[str, Any], ctx: Dict[str, Any]) -> str:
         if key in values:
             body[idx] = f"{key}={values[key]}"
     trap = parts["trap"]
-    out = body[:trap + 1] + _GUARD + body[trap + 1 + parts["guard_len"]:]
+    out = body[:trap + 1] + _guard(ctx) + body[trap + 1 + parts["guard_len"]:]
     script = f"{ctx['pack_dir']}/{ctx['script_name']}"
     head = _generated_notice(ctx, ctx["mold_rel"], ctx["mold_sha"],
                              f"este cabeçalho, os valores do bloco de constantes e o "

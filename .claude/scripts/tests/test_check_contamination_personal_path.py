@@ -95,6 +95,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
 from _lib.testing import TestEnvContext  # noqa: E402
 
 import check_contamination as cc  # noqa: E402
+from _fu144_contamination_cases import TestRuleOneInventoryFu144  # noqa: E402,F401
 
 #: Synthetic home-directory owner: not a placeholder, not a real handle.
 _OWNER = "zzfake"
@@ -649,7 +650,7 @@ class TestNothingIsExemptByName(_Base):
                          "a name still decides whether a file is read")
         self.assertEqual(self.cli().returncode, 1)
 
-    def test_a_symlink_named_owner_sh_is_scanned(self) -> None:
+    def test_a_symlink_named_owner_sh_is_scanned_fu144(self) -> None:
         """The reproduction from the land rail, byte for byte.
 
         Two tracked symlinks with the SAME target and different names.
@@ -1988,7 +1989,7 @@ class TestUndecodableTrackedPath(_Base):
         with self.stubbed_walk(paths, walker=walker):
             return cc.scan_personal_paths(self.root)
 
-    def test_an_undecodable_tracked_path_is_fatal(self) -> None:
+    def test_an_undecodable_tracked_path_is_fatal_fu144(self) -> None:
         with self.assertRaises(cc.PersonalPathUnreadable) as ctx:
             self._scan_with(["docs/a\ufffdb.md"])
         message = str(ctx.exception)
@@ -2607,12 +2608,12 @@ class TestRailRound10Cures(_Base):
         self.assertNotIn(str(self.root), blob)
         self.assertIn("holds no blob", blob)
 
-    def test_an_absent_indexed_link_is_still_not_an_error(self) -> None:
-        """The companion: absence is NOT unreadable input, and stays None."""
+    def test_an_absent_indexed_link_is_a_term_scan_fatal(self) -> None:
+        """Rule 1 cannot call a missing indexed link clean."""
         link = self._commit_symlink("docs/link.md", _MAC + "/secret.md")
         link.unlink()
-        green = self.cli()
-        self.assertEqual(green.returncode, 0, green.stdout + green.stderr)
+        fatal = self.cli()
+        self.assertEqual(fatal.returncode, 2, fatal.stdout + fatal.stderr)
 
     # ---- A-P2-1 -------------------------------------------------------
     def test_an_allowlist_that_is_a_directory_is_a_named_fatal(self) -> None:
@@ -3817,12 +3818,7 @@ class RailRound24PlaceholderMask(_Base):
 class TestWalkerFailureIsSanitised(TestEnvContext):
     """The ENUMERATION can fail, not just one file (land round 1, text lane).
 
-    `PersonalPathUnreadable` names a file the rule could not READ. The walker
-    itself -- the index query underneath it -- can fail for its own reasons,
-    and that escaped as an UNCAUGHT exception whose TRACEBACK frame lines
-    carry the absolute checkout path. The frames are printed by the
-    interpreter, so no redaction inside the rule can reach them: the only
-    cure is not to let the exception out.
+    The index query can fail and must not escape with an absolute path.
     """
 
     def _run_main_with_walker_failing(self, exc):
@@ -3830,6 +3826,8 @@ class TestWalkerFailureIsSanitised(TestEnvContext):
         import contextlib
         err = io.StringIO()
         real = cc.scan_personal_paths
+        subprocess.run(["git", "init", "-q"], cwd=self.project_dir,
+                       check=True, capture_output=True)
 
         def boom(_root):
             raise exc
@@ -3838,7 +3836,7 @@ class TestWalkerFailureIsSanitised(TestEnvContext):
         try:
             with contextlib.redirect_stderr(err):
                 with contextlib.redirect_stdout(io.StringIO()):
-                    rc = cc.main([])
+                    rc = cc.main(["--root", str(self.project_dir)])
         finally:
             cc.scan_personal_paths = real
         return rc, err.getvalue()

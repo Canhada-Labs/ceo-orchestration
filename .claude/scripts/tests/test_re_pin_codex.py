@@ -93,6 +93,7 @@ if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
 from _lib.testing import TestEnvContext  # noqa: E402
+from _fu144_repin_cases import run_literal_guard  # noqa: E402
 
 
 def _load(name: str, path: Path) -> Any:
@@ -1280,32 +1281,20 @@ class RepinEmittedScriptTest(_RePinBase):
                     if f["sev"] == "BLOCKING"]
         self.assertEqual(blocking, [])
 
-    def _run_guard(self, script: Path, dry: str, todo: bool) -> subprocess.CompletedProcess:
-        lines = script.read_text().splitlines()
-        start = next(i for i, ln in enumerate(lines) if ln.startswith("# [") and "re-pin-codex" in ln)
-        end = next(i for i in range(start, len(lines)) if lines[i] == "fi")
-        sent = self.root / "sent.md"
-        pin = self.root / "pin.new"
-        sent.write_text("TODO(owner): falta\n" if todo else "pronto\n")
-        pin.write_text("# ok\n")
-        harness = "\n".join([
-            "set -euo pipefail",
-            "die() { printf 'DIE: %s\\n' \"$*\"; exit 1; }",
-            f"DRY={dry}", f"SENT='{sent}'", f"SRC_PIN='{pin}'",
-        ] + lines[start:end + 1] + ["echo PASSED"])
-        return subprocess.run(["bash", "-c", harness], capture_output=True, text=True,
-                              timeout=60, check=False)
-
-    def test_todo_guard_executes_as_declared(self) -> None:
+    def test_todo_guard_executes_as_declared_fu144(self) -> None:
         script = self._generated()
-        real = self._run_guard(script, "0", todo=True)
+        guard = script.read_text().split(MOD._GUARD[0], 1)[1].split("fi", 1)[0]
+        self.assertIn("env -u GREP_OPTIONS LC_ALL=C grep -Fn --", guard)
+        self.assertNotIn("$SENT", guard)
+        self.assertNotIn("$SRC_PIN", guard)
+        real = run_literal_guard(self, script, "0", todo=True)
         self.assertEqual(real.returncode, 1, real.stdout + real.stderr)
         self.assertIn("DIE: TODO(owner) pendente", real.stdout)
-        rehearsal = self._run_guard(script, "1", todo=True)
+        rehearsal = run_literal_guard(self, script, "1", todo=True)
         self.assertEqual(rehearsal.returncode, 0, rehearsal.stderr)
         self.assertIn("AVISO", rehearsal.stdout)
         self.assertIn("PASSED", rehearsal.stdout)
-        filled = self._run_guard(script, "0", todo=False)
+        filled = run_literal_guard(self, script, "0", todo=False)
         self.assertEqual(filled.returncode, 0, filled.stderr)
         self.assertEqual(filled.stdout.strip(), "PASSED")
 
@@ -1567,9 +1556,9 @@ class RepinConstantsGrammarTest(_RePinBase):
                     for text in (readme, sentinel):
                         self.assertIn("Contradição detectada nesta geração", text)
 
-    def test_todo_guard_executes_in_the_constants_grammar(self) -> None:
+    def test_todo_guard_executes_in_the_constants_grammar_fu144(self) -> None:
         _summary, pack = self._emit()
-        real = RepinEmittedScriptTest._run_guard(self, pack / "OWNER-PIN-SIGN.sh", "0", todo=True)
+        real = run_literal_guard(self, pack / "OWNER-PIN-SIGN.sh", "0", todo=True)
         self.assertEqual(real.returncode, 1, real.stdout + real.stderr)
         self.assertIn("DIE: TODO(owner) pendente", real.stdout)
 

@@ -21,6 +21,9 @@ import sys
 import unittest
 from pathlib import Path
 
+from _lib.testing import TestEnvContext
+from _subprocess_helpers import run_in_process_group
+
 try:
     import pytest
 except ImportError:  # pragma: no cover - unittest-discover without pytest
@@ -31,6 +34,16 @@ except ImportError:  # pragma: no cover - unittest-discover without pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_installer_env():
+    context = TestEnvContext()
+    context.setUp()
+    try:
+        yield
+    finally:
+        context.tearDown()
 
 # All UPPER_SNAKE install-time placeholders the installer accepts via
 # CLI flags or env vars. Must stay in sync with build_sed_script() in
@@ -86,7 +99,7 @@ _ARCHETYPE_PLACEHOLDER_RE = re.compile(r"\{\{[A-Z][a-zA-Z_]+\}\}")
 
 def _run_install(target: Path, *args: str, timeout: float = 120.0) -> subprocess.CompletedProcess:
     cmd = ["bash", str(INSTALL_SH), str(target), *args]
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    return run_in_process_group(cmd, capture_output=True, text=True, timeout=timeout)
 
 
 def _collect_placeholders(root: Path, regex: re.Pattern) -> dict:
@@ -253,7 +266,7 @@ def test_install_sh_env_vars_substitute(tmp_path: Path):
     env["CEO_PROJECT"] = "EnvProject"
     env["CEO_DEPLOY_COMMAND"] = "./env-deploy.sh"
 
-    result = subprocess.run(
+    result = run_in_process_group(
         ["bash", str(INSTALL_SH), str(target), "--profile", "core"],
         capture_output=True, text=True, timeout=120, env=env,
     )

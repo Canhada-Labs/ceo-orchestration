@@ -53,8 +53,17 @@ def _refuse_constant(name: str):
 
 
 def _iter_hook_paths(settings_path: Path) -> Iterable[str]:
-    if not settings_path.is_file():
+    try:
+        exists = settings_path.exists() or settings_path.is_symlink()
+        is_file = settings_path.is_file()
+    except OSError as exc:
+        print(f"::error::cannot inspect {settings_path}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        sys.exit(2)
+    if not exists:
         return
+    if not is_file:
+        print(f"::error::cannot parse {settings_path}: expected a regular file", file=sys.stderr)
+        sys.exit(2)
     try:
         data = json.loads(settings_path.read_text(encoding="utf-8"), parse_constant=_refuse_constant)
     except (OSError, ValueError, RecursionError) as exc:  # ValueError: + UnicodeDecodeError
@@ -79,7 +88,7 @@ def _iter_hook_paths(settings_path: Path) -> Iterable[str]:
         for entries in data.get("hooks", {}).values():
             for entry in entries:
                 for hook in entry["hooks"]:
-                    cmd = hook.get("command", "") or ""
+                    cmd = hook.get("command", "") if hook["type"] == "command" else ""
                     found += [m.group(1) for m in _PY_HOOK_DIRECT_RE.finditer(cmd)]
                     # Bare hook script — resolve to .claude/hooks/<name>
                     found += [f".claude/hooks/{m.group(1)}" for m in _PY_HOOK_VIA_SHIM_RE.finditer(cmd)]
@@ -109,8 +118,21 @@ def _hooks_shape_error(data: dict) -> str:
             for j, hook in enumerate(entry["hooks"]):
                 if not isinstance(hook, dict):
                     return f"{at}[{i}].hooks[{j}]: expected object"
-                if hook.get("type") == "command" and not isinstance(hook.get("command"), str):
-                    return f"{at}[{i}].hooks[{j}].command: expected string"
+                hook_type = hook.get("type")
+                if not isinstance(hook_type, str):
+                    return f"{at}[{i}].hooks[{j}].type: expected string"
+                required = {
+                    "command": ("command",), "prompt": ("prompt",),
+                    "agent": ("prompt",), "http": ("url",),
+                    "mcp_tool": ("server", "tool"),
+                }.get(hook_type)
+                if required is None:
+                    return f"{at}[{i}].hooks[{j}].type: unknown hook type {hook_type!r}"
+                for key in required:
+                    if not isinstance(hook.get(key), str):
+                        return f"{at}[{i}].hooks[{j}].{key}: expected string"
+            if "matcher" in entry and not isinstance(entry["matcher"], str):
+                return f"{at}[{i}].matcher: expected string"
     return ""
 
 
@@ -125,12 +147,16 @@ def main() -> int:
             if key in seen:
                 continue
             seen.add(key)
-            full = (REPO_ROOT / hook_rel).resolve()
-            if not full.is_file():
-                missing.append(f"{settings_path.name}: {hook_rel}")
-                continue
-            if not os.access(full, os.X_OK):
-                not_exec.append(f"{settings_path.name}: {hook_rel}")
+            try:
+                full = (REPO_ROOT / hook_rel).resolve()
+                if not full.is_file():
+                    missing.append(f"{settings_path.name}: {hook_rel}")
+                    continue
+                if not os.access(full, os.X_OK):
+                    not_exec.append(f"{settings_path.name}: {hook_rel}")
+            except (OSError, RuntimeError) as exc:
+                print(f"::error::cannot inspect hook {hook_rel}: {type(exc).__name__}: {exc}", file=sys.stderr)
+                return 2
 
     if missing or not_exec:
         if missing:
