@@ -3065,3 +3065,65 @@ def test_delta_still_cuts_a_tag_on_an_authorizing_verdict(synth, decision):
     assert _DECISION_REFUSED not in proc.stderr, proc.stderr
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "closed allowlist" in proc.stdout
+
+# --- PLAN-194-FOLLOWUP-v1-4-4-backlog, item 23 -------------------------------
+
+
+def test_fu144_bump_writes_both_refs_of_the_install_example_and_keeps_the_rc_suffix(synth):
+    """The site regex has no end anchor: both lines move, and `-rc.1` stays a suffix."""
+    repo = synth["repo"]
+    write_sites(repo, SYNTH_PREV, D0)
+    (repo / "INSTALL.md").write_text(
+        "bash scripts/upgrade.sh /p --pin v%s\nbash scripts/upgrade.sh /p --pin v%s-rc.1\n"
+        % (SYNTH_PREV, SYNTH_PREV), encoding="utf-8")
+    proc = module(synth, "bump", "--target", SYNTH_BASE, "--today", D1)
+    assert proc.returncode == 0, proc.stderr
+    assert (repo / "INSTALL.md").read_text().split("\n")[:2] == [
+        "bash scripts/upgrade.sh /p --pin v%s" % SYNTH_BASE,
+        "bash scripts/upgrade.sh /p --pin v%s-rc.1" % SYNTH_BASE,
+    ]
+
+
+def _install_pin_refs():
+    version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    return "v%s" % version, "v%s-rc.1" % version
+
+
+def test_fu144_install_example_shows_the_ga_ref_and_the_ref_the_hold_can_use():
+    ga, rc = _install_pin_refs()
+    lines = [ln.strip() for ln in (REPO_ROOT / "INSTALL.md").read_text(encoding="utf-8").splitlines()]
+    for ref in (ga, rc):
+        assert "bash scripts/upgrade.sh /path/to/your/project --pin %s" % ref in lines
+
+
+def test_fu144_upgrade_resolves_the_rc_example_during_the_hold_and_names_the_missing_ga(tmp_path):
+    """The behavioural probe, in the mold of c15_install_pin (PLAN-193/repass-ga): a source
+    checkout with the tags up to the rc and without the GA, as the hold guarantees."""
+    ga, rc = _install_pin_refs()
+    home = tmp_path / "home"
+    (home / "gnupg").mkdir(parents=True)
+    env = _env(home)
+    source = tmp_path / "source"
+    git(tmp_path, env, "clone", "-q", "--no-tags", "--shared", str(REPO_ROOT), str(source))
+    git(source, env, "tag", rc, "HEAD")
+    target = tmp_path / "target"
+    target.mkdir()
+    git(target, env, "init", "-q")
+    stub = tmp_path / "bin"
+    stub.mkdir()
+    (stub / "claude").write_text("#!/bin/sh\necho '2.1.999 (Claude Code)'\n", encoding="utf-8")
+    (stub / "claude").chmod(0o755)
+    env = dict(env, PATH="%s%s%s" % (stub, os.pathsep, os.environ["PATH"]))
+
+    def upgrade(ref):
+        return subprocess.run(
+            ["bash", "scripts/upgrade.sh", str(target), "--pin", ref, "--dry-run",
+             "--no-replay", "--no-deprecation-warn"],
+            cwd=str(source), env=env, input=b"", capture_output=True, timeout=300, check=False)
+
+    missing = upgrade(ga)
+    assert missing.returncode == 2, missing.stdout + missing.stderr
+    assert ("ERROR: unknown --pin ref: %s" % ga).encode() in missing.stderr
+    found = upgrade(rc)
+    assert found.returncode == 0, found.stdout + found.stderr
+    assert ("==> Dry-run: diff between current source and --pin %s" % rc).encode() in found.stdout

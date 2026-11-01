@@ -717,6 +717,9 @@ To refresh framework-derived content in an existing adopter install
 cd /path/to/ceo-orchestration   # source framework checkout
 git pull                         # get the latest framework
 bash scripts/upgrade.sh /path/to/your/project --pin v1.4.3
+# While a release is on its 24 h hold, its GA tag does not exist yet and the line
+# above stops with `ERROR: unknown --pin ref` (exit 2). Pin the candidate instead:
+bash scripts/upgrade.sh /path/to/your/project --pin v1.4.3-rc.1
 ```
 
 What gets refreshed:
