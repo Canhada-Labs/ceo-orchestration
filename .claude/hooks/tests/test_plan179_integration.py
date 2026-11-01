@@ -124,7 +124,12 @@ def _pick_staged_first(staged: Path, canonical: Path, marker: str) -> Path:
     assertion below fail for the wrong reason."""
     for candidate in (staged, canonical):
         try:
-            if candidate.is_file() and marker in candidate.read_text(encoding="utf-8"):
+            sources = [candidate]
+            if candidate.name == "audit_emit.py":
+                sources.extend(sorted(candidate.with_name("_audit_emit_parts").glob("*.py")))
+            if candidate.is_file() and any(
+                marker in source.read_text(encoding="utf-8") for source in sources
+            ):
                 return candidate
         except OSError:
             continue

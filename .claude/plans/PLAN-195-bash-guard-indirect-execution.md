@@ -881,6 +881,41 @@ ordem da colisão com a W6 do PLAN-194.
   (`check-staleness.py`) passa a acusar o modo 8.2 se nenhum commit tocar este plano por mais de
   24 h; com o plano estacionado para a 1.4.4 (D-17), o aviso é esperado.
 
+### Registro de implementação local P6 (2026-11-01; WIP não landado)
+
+Nota de integração (2026-11-01): este registro descreve o estado da frente P6
+antes do Merge Train. O `executing` citado abaixo é histórico; o frontmatter
+mantém `done` e `completed_at: 2026-11-01`, autorizados pelo CEO/Owner na Onda 1A.
+As limitações e evidências técnicas registradas pela P6 permanecem abaixo.
+
+Implementação técnica preliminar em `check_bash_safety.py` e no módulo novo
+`_lib/bash_indirect_guard.py`: passada aditiva para posições de comando,
+invocadores `-c`, `env -S`, `eval`, `xargs`, `find -exec`, funções/alias definidos
+no comando, substituições `$()`/crase/processo, here-docs e here-strings, alimentador opaco,
+verbo computado com marcador literal e alguns alvos de escrita computados
+(variável literal, `printf` estático, glob com piso, `cd` dentro do comando e
+argv de interpretador). Os dois switches em `trusted_env` vêm ligados por
+padrão; desligar só as heurísticas não desliga o veto por equivalência.
+W2a também ajusta a mensagem de leitura A3 e limita o ramo E3 de `find` ao
+segmento, com controles. Testes sintéticos novos verificam `reason_code`,
+marcação `destructive` e controles ALLOW, sem executar comandos de exemplo.
+Última bateria no palco: `270 passed, 3 xfailed, 1 warning in 0.58s`
+(`test_check_bash_safety*.py`); 65/65 mutantes isolados vermelhos (um por
+caso novo coletado), 0 sobreviventes, 0 erros de coleta, 130 restaurações
+`cp`/`cmp` byte-idênticas. Este registro não afirma cobertura exaustiva,
+replay diferencial, V-1/P-5, revisão de
+segurança, sentinel, SIGN ou LAND. O plano permanece `executing`: W1a/W1b/W2,
+os gates externos e os critérios de sucesso continuam abertos. A9/V-1 segue
+dependente de vocabulário privado e contagem do Owner, não reproduzidos neste
+repositório público. A observabilidade dos dois switches foi integrada com
+`_lib/bash_indirect_telemetry.py` (implementação em frente disjunta): o hook
+chama `disabled_once` somente para OFF explícito e com `session_id` do payload;
+sem desarme não chama. Seis casos de telemetria verificam o JSONL real,
+deduplicação entre processos/sessões, os dois switches e falha de armazenamento;
+seis mutantes isolados foram mortos e restaurados por `cp`/`cmp`.
+O ADR-201 foi criado como `PROPOSED`, com enums e SPEC coerentes; a ratificação,
+a conciliação com o rascunho externo e a evidência privada seguem pendentes.
+
 ## Correções pós-debate S360 (aceitas pelo Owner na S361, 2026-10-01)
 
 O corpo acima é o texto fechado no debate (sha256 `9894151f…0406`, PROCEED), acrescido do

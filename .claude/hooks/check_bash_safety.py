@@ -20,20 +20,14 @@ has no way to express "only when the first token is `rm`".
 This hook:
 
 1. Reads `tool_input.command` from the hook stdin JSON.
-2. Splits the command on top-level shell control operators (`&&`, `||`,
-   `;`, `|`) via a naive regex. (The split over-splits inside quotes,
-   but `shlex.split` on each piece fails closed on unbalanced quotes
-   and the chunk is skipped — a safe failure mode.)
-3. For each subcommand, uses `shlex.split()` to tokenize. Crucially,
-   shlex strips quoting BEFORE the rules see the tokens, so
-   `echo "rm -rf foo"` tokenizes to `['echo', 'rm -rf foo']` and the
-   first token is `echo`, not `rm`.
+2. Legacy split/token rules run first; PLAN-195 adds one bounded, additive
+   scanner of shell command positions and nested shell bodies.
 4. Applies three rules per subcommand:
    - `rm` with both `-r` and `-f` (catches `-rf`, `-fr`, `-Rf`, `-r -f`)
    - `git reset --hard` (exact first 3 tokens)
    - `git push --force` or `git push -f` — but NOT `--force-with-lease`
-5. Any match → block with a concrete remediation.
-6. Any error → fail-open (allow), log breadcrumb to stderr.
+5. Any match → block with a concrete remediation; infrastructure errors
+   still fail-open.
 
 ## Output contract
 
@@ -313,12 +307,10 @@ class Decision:
     reason: Optional[str] = None
     rewrite: Optional["Rewrite"] = None
     # >>> PLAN-153.E5 / ADR-175 citation-gate BEGIN (destructive tag)
-    # True ONLY when the block came from one of the three destructive-command
-    # matchers (rm -rf / git reset --hard / git push --force), including the
-    # quote-aware rawscan recheck path. The citation gate keys off this tag —
-    # NEVER off reason-string matching — so canonical-path, credential-leak,
-    # git-bypass and env-hijack blocks can never be unlocked by a citation.
+    # Destructive-command class, including PLAN-195's indirect forms. Citation
+    # gating uses the tag, never reason-string matching.
     destructive: bool = False
+    reason_code: Optional[str] = None
     # <<< PLAN-153.E5 / ADR-175 citation-gate END
 
     def to_json(self) -> str:
@@ -2329,7 +2321,6 @@ def _e3_check_canonical_path_write(command: str) -> Optional[str]:
                         return pattern
             return None
 
-        # 1) Interpreter -c / -e body scan (python/ruby/node/perl).
         if cmd in _E3_INTERPRETER_C_FLAGS:
             flags = _E3_INTERPRETER_C_FLAGS[cmd]
             for j in range(i + 1, n - 1):
@@ -2339,8 +2330,9 @@ def _e3_check_canonical_path_write(command: str) -> Optional[str]:
                     if hit is not None:
                         return (
                             f"GOVERNANCE: bash {tok!r} -c/-e body references "
-                            f"canonical path {hit!r}. Use Edit/Write with "
-                            "sentinel."
+                            f"canonical path {hit!r}. The guard cannot prove "
+                            "read vs write: use Read/cat/grep for reading, "
+                            "or Edit/Write with sentinel for edits."
                         )
                     break
 
@@ -2428,7 +2420,7 @@ def _e3_check_canonical_path_write(command: str) -> Optional[str]:
         # keep single-next-token scan.
         if cmd in _E3_INDIRECTION_VERBS and i + 1 < n:
             if cmd == "find":
-                for _follow in tokens[i + 1:]:
+                for _follow in _e3_segment_positionals(tokens, i + 1):
                     hit = _scan_blob(_follow)
                     if hit is not None:
                         return (
@@ -3849,19 +3841,14 @@ def decide_command(command: str) -> Decision:
     if toggle_reason is not None:
         return Decision(allow=False, reason=toggle_reason)
 
-    # PLAN-133 A1 — linker/loader/runtime env-hijack denylist. Runs BEFORE the
-    # destructive matchers (a higher-severity class). Default-OFF: only BLOCKS
-    # when CEO_ENV_GUARD_ENFORCE=='1'; otherwise advisory (the emit still fires
-    # in main()). decide_command stays pure (no emit here).
+    # PLAN-133 A1 — optional env-hijack denylist; pure decision.
     if _env_guard_enforced():
         env_hit = _check_env_hijack(command)
         if env_hit is not None:
             _hijack_class, _key, reason = env_hit
             return Decision(allow=False, reason=reason)
 
-    # PLAN-124 WS-1 — git hook-bypass guard (runs BEFORE the destructive
-    # matchers; an authorized escape-hatch use ALLOWs, an unauthorized bypass
-    # BLOCKs, and the bounded parse_failure is a deliberate fail-CLOSED).
+    # PLAN-124 WS-1 — git bypass guard runs before destructive checks.
     git_bypass_hit = _check_git_bypass(command)
     if git_bypass_hit is not None:
         kind, _flag_class, reason = git_bypass_hit
@@ -3918,6 +3905,20 @@ def decide_command(command: str) -> Decision:
                 # citation-gatable (main() applies the gate off this tag).
                 return Decision(allow=False, reason=reason, destructive=True)
 
+    from _lib import bash_indirect_guard as _indirect_guard
+    try:
+        _indirect_switch = _trusted_env.get_trusted("CEO_BASH_INDIRECT_GUARD")
+        _heuristic_switch = _trusted_env.get_trusted("CEO_BASH_INDIRECT_HEURISTICS")
+    except Exception:  # no trusted snapshot -> safety default ON
+        _indirect_switch = None
+        _heuristic_switch = None
+    indirect_hit = None if _indirect_switch == "0" else _indirect_guard.scan(
+        command, heuristics=_heuristic_switch != "0"
+    )
+    if indirect_hit is not None:
+        _is_destructive = indirect_hit.reason_code != "bash_computed_canonical_target"
+        return Decision(allow=False, reason=indirect_hit.reason,
+                        destructive=_is_destructive, reason_code=indirect_hit.reason_code)
     return Decision(allow=True)
 
 
@@ -4148,21 +4149,17 @@ def main() -> int:
         if not command and isinstance(event.tool_input, dict):
             command = str(event.tool_input.get("command") or "")
 
+        try:
+            from _lib import bash_indirect_telemetry as _indirect_telemetry
+            for _switch in ("CEO_BASH_INDIRECT_GUARD", "CEO_BASH_INDIRECT_HEURISTICS"):
+                if _trusted_env.get_trusted(_switch) == "0":
+                    _indirect_telemetry.disabled_once(_switch, event.session_id)
+        except Exception:  # audit infrastructure must not change the verdict
+            pass
+
         decision = decide_command(command)
-        # >>> PLAN-153.E5 / ADR-175 citation-gate BEGIN (gate application)
-        # Applied ONLY to destructive-class blocks (Decision.destructive) and
-        # ONLY when the pilot flag is armed. Verified citation → ALLOW +
-        # HMAC-chain record; absent/malformed/unverifiable → BLOCK
-        # (fail-CLOSED). Runs BEFORE the emit tail so downstream emits see
-        # the final decision.
-        # >>> PLAN-154.F6 fact-gate BEGIN (deny-once application)
-        # The PLAN-154 deny-once fact gate runs FIRST on the same rare
-        # already-matched path. SHADOW (default): decision untouched,
-        # telemetry only — the ADR-175 pilot below then behaves exactly as
-        # before. ENFORCE (settings-backed flip): the fact gate owns the
-        # outcome (deny-once / exact-hash cited release) and the pilot is
-        # SKIPPED — its first-attempt allow path must not undercut the
-        # deny-once ritual.
+        # PLAN-154 fact gate precedes the PLAN-153 citation pilot for
+        # destructive-class blocks. Both see the final decision.
         if not decision.allow and decision.destructive:
             _fact_transcript_path = _extract_transcript_path(_raw_stdin_text)
             decision, _fact_enforce_active = _apply_fact_gate(
@@ -4179,6 +4176,14 @@ def main() -> int:
                 )
         # <<< PLAN-154.F6 fact-gate END
         # <<< PLAN-153.E5 / ADR-175 citation-gate END
+        if not decision.allow and decision.reason_code and _audit_emit is not None:
+            try:
+                _audit_emit.emit_veto_triggered(
+                    hook="check_bash_safety", reason_code=decision.reason_code,
+                    reason_preview=decision.reason[:200], blocked_tool="Bash",
+                )
+            except Exception:  # audit infrastructure must remain fail-open
+                pass
         # Re-run detector on credential blocks to emit audit event.
         if not decision.allow and decision.reason and "API credential" in decision.reason:
             hit = _check_credential_leak(command)
@@ -4203,12 +4208,7 @@ def main() -> int:
             if env_hit is not None:
                 _hijack_class, _key, _reason = env_hit
                 _emit_env_var_hijack_event(_hijack_class)
-        # PLAN-133 A3 — egress-destination taxonomy. Classify EVERY command
-        # (block OR allow — this emit tail runs on all paths) and emit one
-        # egress_destination_detected per distinct (class, host). Default-OFF
-        # via CEO_EGRESS_TAXONOMY_EMIT (advisory; A3 never blocks). The
-        # destructive/credential/git-bypass blocks above do NOT gate this emit,
-        # so a destructive+egress compound still records the egress.
+        # PLAN-133 A3 — emit egress destinations on block or allow.
         if _egress_emit_enabled():
             for _eclass, _edest in _classify_egress(command):
                 _emit_egress_destination_event(_eclass, _edest)

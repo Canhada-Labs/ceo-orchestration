@@ -85,6 +85,15 @@ def _pick(canonical: Path, staged: Path, marker: str) -> Path:
     try:
         if canonical.is_file() and marker in canonical.read_text(encoding="utf-8"):
             return canonical
+        # PLAN-195/R3: audit_emit's public API is delegated to mechanical
+        # parts while the canonical module remains its import facade.
+        if canonical.name == "audit_emit.py" and canonical.is_file():
+            parts = canonical.parent / "_audit_emit_parts"
+            if parts.is_dir() and any(
+                marker in file.read_text(encoding="utf-8")
+                for file in parts.glob("*.py")
+            ):
+                return canonical
     except OSError:
         pass
     if staged.is_file() and marker in staged.read_text(encoding="utf-8"):
