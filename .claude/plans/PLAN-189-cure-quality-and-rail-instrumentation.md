@@ -1,7 +1,8 @@
 ---
 id: PLAN-189
 title: Cure quality and rail instrumentation
-status: draft
+status: superseded
+superseded_by: PLAN-196
 created: 2026-09-15
 owner: CEO
 depends_on: []

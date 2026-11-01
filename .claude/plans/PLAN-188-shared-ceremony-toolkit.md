@@ -1,7 +1,8 @@
 ---
 id: PLAN-188
 title: "Cerimônia compartilhada — scripts de assinatura e land por manifesto"
-status: draft
+status: superseded
+superseded_by: PLAN-196
 created: 2026-09-05
 owner: CEO
 depends_on: [PLAN-186]

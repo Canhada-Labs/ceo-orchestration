@@ -1,7 +1,8 @@
 ---
 id: PLAN-191
 title: "Cérebro barato — torneio de tiers, cascata com verificador e triagem; Jev como lane opcional"
-status: executing
+status: superseded
+superseded_by: PLAN-196
 executing_at: 2026-10-12
 executing_by: "CEO (S363), self-gate de PLAN-SCHEMA §4 no primeiro commit de trabalho (W0-pre)"
 last_commit_sha: 2c3e0707e8fb

@@ -1,7 +1,8 @@
 ---
 id: PLAN-190-FOLLOWUP-audit-actions
 title: Eventos de auditoria para o ledger de lançamento de Workflow (bloqueio, override, orphan)
-status: draft
+status: superseded
+superseded_by: PLAN-196
 created: 2026-09-17
 owner: CEO
 depends_on: [PLAN-190]
