@@ -1712,26 +1712,35 @@ A inversão da rota 2 e as pré-condições (i) a (vi) dela, com o Codex do mani
 de rede, saíram deste texto em 2026-10-17: registro no item 26 do `PLAN-194-FOLLOWUP-v1-4-4-backlog`.
 
 ### W8 — TLC da verificação formal (canônico, sem prazo)
-Check: gh run view "$(gh run list --workflow formal-verify.yml --limit 1 --json databaseId -q '.[0].databaseId')" --json jobs -q '.jobs[] | select(.name=="TLC Model Check") | .conclusion'
+Check: gh run view "$(gh run list --workflow formal-verify.yml --limit 1 --json databaseId -q '.[0].databaseId')" --json jobs -q '[.jobs[] | select(.name | startswith("TLC Model Check (")) | .conclusion] | (length > 0 and all(. == "success"))'
 
 **Correção:** a triagem listava o TLC (verificador de modelos do TLA+) como item livre; o oráculo diz
-que `.github/workflows/formal-verify.yml` é canônico (1). **Fatos:** `continue-on-error: true` em `:29`;
-o hash pinado do `tla2tools` não bate desde ≥ 06/07 (lane `DEP-08`); o gate semanal do release lista
-`formal-verify.yml` (`release.yml:550`) mas lê a conclusão da RUN (`:557`), que sai success.
+que `.github/workflows/formal-verify.yml` é canônico (1). **Fatos (relidos em 2026-11-01, depois do PR
+#4, `baf9de11`):** o job `tlc-model-check` é uma matriz de 3 modelos, com o nome
+`TLC Model Check (${{ matrix.model }})` (`formal-verify.yml:30-37`); o `continue-on-error: true` fica só
+no nível do job (`:41`), e nenhum passo tem o seu; o `tla2tools` está pinado na 1.8.0, com o sha256 em
+`:26` (pin atual de `f465bb50`, 2026-10-13; o PR #4 o trocou em `c2f34fac`, `ef96cf08` e `f465bb50`); o
+gate semanal do release lista `formal-verify.yml` (`release.yml:550`) mas lê a conclusão da RUN
+(`:557-558`), que sai success. Se o PR #4 já cumpre a W8 é decisão da abertura (item 25 do
+`PLAN-194-FOLLOWUP-v1-4-4-backlog`).
 **Paths:** `formal-verify.yml` (1). **Estimativa:** 5-20 linhas, 1 path. **Debate:** não.
 
-**Por que o Check olha o JOB e não a RUN:** o `continue-on-error: true` está no nível do job
-(`formal-verify.yml:29`), então a RUN sai `success` mesmo com o passo quebrado. Medido 2026-09-30 na
-run `36719886973` (push): run `success`; job «TLC Model Check» `failure`; passo «Download + verify
-tla2tools.jar» `failure`; os 3 passos TLC `skipped` — o controle vermelho já existe. Verde = job
-`success`; se a decisão for remover o job, verde = `grep -c 'tlc-model-check' .github/workflows/formal-verify.yml`
-igual a 0. **Resíduo a declarar:** os 3 passos TLC têm `continue-on-error: true` próprio (`:74`, `:84`,
-`:94`), então job `success` prova o download e a conferência do jar, não que o modelo passou.
+**Por que o Check olha os JOBS e não a RUN:** o `continue-on-error: true` está no nível do job
+(`formal-verify.yml:41`), então a RUN sai `success` mesmo com o passo quebrado. Medido 2026-09-30 na
+run `36719886973` (push, arquivo de antes do PR #4): run `success`; job «TLC Model Check» `failure`; passo
+«Download + verify tla2tools.jar» `failure`; os passos TLC `skipped` — o controle vermelho já existe.
+O filtro casa o prefixo do nome da matriz e exige ao menos um job, todos `success`: imprime `true` ou
+`false`, nunca saída vazia (medido em 2026-10-17 sobre a run `38445208876`: `true`). O filtro antigo,
+por igualdade com o nome sem o sufixo da matriz, devolvia saída vazia desde `c2f34fac`. Se a decisão for remover o job,
+verde = `grep -c 'tlc-model-check' .github/workflows/formal-verify.yml` igual a 0. **Resíduo a declarar:**
+sem `continue-on-error` nos passos, um job `success` agora prova o download, a conferência do jar e os
+passos TLC daquele modelo; o `continue-on-error` do job segue fazendo a RUN sair `success` com um modelo
+vermelho, e por isso o gate semanal que lê a RUN não enxerga o TLC.
 
 - [ ] W8.1 investigar o asset fora do CI (download exige OK do Owner) e decidir: re-pinar o hash com
   procedência, trocar para fonte imutável, ou remover o job e declarar. **Não** mudar o gate semanal
   para ler a conclusão do JOB antes do TLC ficar verde (bloquearia cortes). Exige `success` no job
-  (ou o job removido, conferido pelo `grep` acima). — Check: gh run view "$(gh run list --workflow formal-verify.yml --limit 1 --json databaseId -q '.[0].databaseId')" --json jobs -q '.jobs[] | select(.name=="TLC Model Check") | .conclusion'
+  (ou o job removido, conferido pelo `grep` acima). — Check: gh run view "$(gh run list --workflow formal-verify.yml --limit 1 --json databaseId -q '.[0].databaseId')" --json jobs -q '[.jobs[] | select(.name | startswith("TLC Model Check (")) | .conclusion] | (length > 0 and all(. == "success"))'
 
 ### Itens livres (oráculo 0, fora do manifesto ADR-192 — land livre com a bateria completa)
 Check: python3 .claude/scripts/validate_governance_fast.py
