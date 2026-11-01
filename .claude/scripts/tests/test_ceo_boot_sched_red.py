@@ -183,7 +183,7 @@ def _check(test: unittest.TestCase, files: Dict[str, str], pages: Dict[str, Any]
 
 class TestRegistryWiring(TestEnvContext):
     def test_registry_has_24_checks(self):
-        self.assertEqual(len(_mod.TIER_S_CHECKS), 24)
+        self.assertEqual(len(_mod.TIER_S_CHECKS), 25)
 
     def test_check_registered(self):
         names = [name for name, _ in _mod.TIER_S_CHECKS]

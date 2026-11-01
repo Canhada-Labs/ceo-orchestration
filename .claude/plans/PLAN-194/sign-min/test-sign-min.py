@@ -21,6 +21,7 @@ o diretório-base; nunca por glob (caso LIMPA-ALHEIO).
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import ast
 import fcntl
 import glob
@@ -2501,6 +2502,20 @@ def limpa_tudo(h: str) -> None:
 
 
 def main() -> int:
+    """A corrida, mais a regressão do repositório chamador (item 14 (b) do backlog da 1.4.4)."""
+    spec = importlib.util.spec_from_file_location(
+        "caller_repo_guard", os.path.join(REPO, ".claude", "scripts", "caller_repo_guard.py"))
+    guarda = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guarda)
+    antes = guarda.snapshot(REPO)
+    rc = corrida()
+    problemas = guarda.differences(antes, guarda.snapshot(REPO))
+    for problema in problemas:
+        print("FALHA: o repositório chamador mudou durante a corrida: %s" % problema, flush=True)
+    return 1 if problemas else rc
+
+
+def corrida() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="/tmp")
     ap.add_argument("--w5b", default="")

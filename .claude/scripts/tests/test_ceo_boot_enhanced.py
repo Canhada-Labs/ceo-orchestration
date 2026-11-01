@@ -91,7 +91,7 @@ class TestRealCache(TestEnvContext):
         # PLAN-091 Wave A.1: bumped 15 → 16.
         # S127 cadence-amendment + PLAN-106 Wave F: 16 → 20 (drift absorbed).
         # PLAN-135 W1 S3: 20 → 21 (settings_tamper_tripwires).
-        self.assertEqual(payload["checks_total"], 24)  # S292: +1 (scheduled_workflows_red)
+        self.assertEqual(payload["checks_total"], 25)  # S292: +1 (scheduled_workflows_red)
         self.assertEqual(payload["checks_failed"], 0)
         self.assertTrue(payload["gate_pass"])
 
@@ -270,7 +270,7 @@ class TestVerboseMode(TestEnvContext):
                             f"Tier-A name {name!r} missing prefix")
 
     def test_dispatch_with_tier_a_returns_all_results(self):
-        """include_tier_a=True dispatches all 35 checks (24+11).
+        """include_tier_a=True dispatches all 36 checks (25+11).
 
         PLAN-091 Wave A.1: Tier-S bumped 15 → 16.
         S127 + PLAN-106 Wave F: Tier-S bumped 16 → 20 (drift absorbed).
@@ -279,12 +279,12 @@ class TestVerboseMode(TestEnvContext):
         PLAN-176 W3a: Tier-A 10 → 11 (tier_a_model_currency).
         """
         results = _mod.dispatch_parallel(include_tier_a=True)
-        self.assertEqual(len(results), 35)  # PLAN-176 W3a: 24+11
+        self.assertEqual(len(results), 36)  # backlog item 14: 25+11
 
     def test_dispatch_without_tier_a_returns_tier_s(self):
-        """Default dispatch (Tier-S only) returns 24 post-S292."""
+        """Default dispatch (Tier-S only) returns 25 (backlog item 14)."""
         results = _mod.dispatch_parallel()
-        self.assertEqual(len(results), 24)  # S292: +1
+        self.assertEqual(len(results), 25)  # backlog item 14: +1
 
     def test_dispatch_verbose_budget_10s(self):
         """Verbose dispatch fits in 10s aggregate (CI cold-start slack: 12s)."""
