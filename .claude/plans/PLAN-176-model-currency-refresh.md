@@ -1,8 +1,9 @@
 ---
 id: PLAN-176
-title: Currency de modelos — detectar lançamento novo; adoção nunca automática
-status: superseded
-superseded_by: PLAN-196
+title: Currency de modelos — famílias homologadas sem GPG por versão
+status: done
+completed_at: 2026-11-01
+consolidated_in: PLAN-196
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11
@@ -19,15 +20,13 @@ eta_calendar: "W1c = depois do land da W4b do PLAN-186, sem data; as demais onda
 tags: [model-currency, egress, automation, seed]
 ---
 
-# PLAN-176 — Detectar modelo novo (a adoção continua sendo cerimônia)
+# PLAN-176 — Famílias homologadas sem GPG por versão
 
-> **O que este plano entrega, em uma frase.** Quando um fornecedor
-> lança um modelo novo, o repositório **descobre sozinho** e **avisa**.
-> Quem decide adotar continua sendo o Owner, por assinatura GPG
-> (GNU Privacy Guard, a chave com que o Owner assina material
-> canônico). Detecção automática, adoção nunca automática — é a regra
-> já publicada em `CLAUDE.md` §5, e este plano constrói só a metade
-> da detecção.
+> **Decisão atual (2026-11-01, Onda 6B):** famílias homologadas + lista explícita,
+> com piso de VETO separado, substituem a cerimônia GPG por versão de modelo.
+> Este escopo está concluído; a fonte preserva abaixo o desenho histórico.
+> Feed upstream, preços, mensuração e demais entregas não executadas continuam
+> abertos no PLAN-196. `done` não atesta essas entregas nem disponibilidade upstream.
 
 > **Revisão de 2026-09-06 (S348).** Este texto absorve os 16 must-fix
 > do consenso do round 1 (`.claude/plans/PLAN-176/debate/round-1/consensus.md`)

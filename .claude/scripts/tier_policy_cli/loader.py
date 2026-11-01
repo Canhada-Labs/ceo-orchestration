@@ -43,7 +43,7 @@ try:
         CANONICAL_5_AGENTS,
         CURRENT_POLICY_SCHEMA_VERSION,
         TierPolicyRecord,
-        VALID_MODEL_IDS,
+        VALID_MODEL_IDS, is_valid_model_id,
         build_adr052_baseline,
     )
 except ImportError:  # pragma: no cover — direct-script execution
@@ -53,7 +53,7 @@ except ImportError:  # pragma: no cover — direct-script execution
         CANONICAL_5_AGENTS,
         CURRENT_POLICY_SCHEMA_VERSION,
         TierPolicyRecord,
-        VALID_MODEL_IDS,
+        VALID_MODEL_IDS, is_valid_model_id,
         build_adr052_baseline,
     )
 
@@ -248,7 +248,7 @@ def _validate_assignment(agent_slug: str, raw: Any) -> Assignment:
             )
         )
     tier = raw["tier"]
-    if tier not in VALID_MODEL_IDS:
+    if not is_valid_model_id(tier):
         raise ValueError(
             "invalid_model_id: {a} {t!r}".format(a=agent_slug, t=tier)
         )

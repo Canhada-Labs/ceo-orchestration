@@ -217,7 +217,22 @@ if [ "$PHASE_NUM" = "6" ]; then
     echo "  Refusing to exec the unverified codex payload (M4 ordering)."
     exit 1
   fi
-  echo "  OK: native payload sha256 matches codex-cli-pin-manifest.json"
+  PIN_STATUS=$(printf '%s' "$PIN_JSON" | python3 -c '
+import json, sys
+try:
+    status = json.load(sys.stdin).get("status")
+except (ValueError, AttributeError):
+    status = ""
+sys.stdout.write(status if status in ("verified", "compatible") else "")
+')
+  if [ "$PIN_STATUS" = "verified" ]; then
+    echo "  OK: native payload sha256 matches codex-cli-pin-manifest.json"
+  elif [ "$PIN_STATUS" = "compatible" ]; then
+    echo "  INFO: payload is version-floor compatible; it is not hash-verified."
+  else
+    echo "  FAIL: verifier returned rc=0 without verified or compatible JSON status"
+    exit 1
+  fi
 fi
 
 # ---- Gate 3b: Codex CLI warm startup (exec) — gated behind Gate 4 on Phase 6 ----

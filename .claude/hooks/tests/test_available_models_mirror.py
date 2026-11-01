@@ -35,6 +35,7 @@ _HOOKS_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_HOOKS_DIR))
 
 from _lib.testing import TestEnvContext  # noqa: E402
+from _lib.model_currency import availability_entries  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ADR_PATH = REPO_ROOT / ".claude" / "adr" / "ADR-149-model-id-allowlist.md"
@@ -128,6 +129,9 @@ class TestAvailableModelsMirror(TestEnvContext):
         proc = _run_generator()
         self.assertEqual(proc.returncode, 0, proc.stderr)
         generated = json.loads(proc.stdout)["availableModels"]
+        self.assertEqual(generated, availability_entries(
+            _block_ids(_adr_text(), "AVAILABLE_MODELS_WORKING_SET")
+        ))
         resolved = _settings(SETTINGS_PATH).get("availableModels")
         self.assertEqual(
             resolved,

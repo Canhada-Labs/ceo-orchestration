@@ -121,6 +121,11 @@ baseline; a re-medição pertence ao followup externo indicado abaixo.
 
 ### P176 — Atualização de modelos
 
+A Onda 6B de 2026-11-01 concluiu a admissão por família e piso de VETO do
+PLAN-176, agora `done`. A exigência histórica de GPG por versão foi substituída
+pelo ADR-149 A4. Os itens abaixo conservam apenas as entregas remanescentes;
+esta conclusão não prova feed, preços, medidas ou cerimônias ainda pendentes.
+
 Manter W0b (feed upstream opcional, desligado por padrão), resíduos de W1a
 (lint e grandfather list), W1b (registro T, resolver e ADR-180), W1c
 (manifesto/CI), W2a (proposta auditada) e W3b (varredura noturna). Preservar

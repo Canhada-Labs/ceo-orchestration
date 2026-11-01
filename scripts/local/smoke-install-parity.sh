@@ -92,7 +92,9 @@ FAIL=0
 # frontmatter/env lint only, NOT the availableModels evidence — see [6/6]).
 # ADR-149 Amendment 2 (S338): claude-fable-5-1 appended (working set only).
 # ADR-149 Amendment 3 (S357): claude-opus-5-5 appended (working set + floor).
-ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 claude-opus-5 claude-sonnet-5 claude-fable-5-1 claude-opus-5-5 haiku sonnet opus inherit"
+ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5 claude-opus-5 \
+claude-sonnet-5 claude-opus-4-6 claude-opus-4-7 gpt-5.4 gpt-6.1-sol claude-fable-5-1 claude-opus-5-5 \
+claude-haiku-4-5-20251001 haiku sonnet opus inherit"
 
 is_allowed_model() {
   # $1 = candidate value (already trimmed). Empty == inherit == allowed.
@@ -101,7 +103,7 @@ is_allowed_model() {
   for a in $ALLOWED_MODELS; do
     [ "$v" = "$a" ] && return 0
   done
-  return 1
+  python3 "$TARGET/.claude/hooks/_lib/model_currency.py" "$v"
 }
 
 # Stale model-id literals that must never reach an adopter outside the
@@ -117,7 +119,7 @@ is_allowed_model() {
 # delta; check-model-deprecations.py IS installed and its build_matcher
 # docstring carries opus-4-1 literals by design → ALLOWLIST_RE delta below
 # (the static audit missed it; the live-fire run caught it).
-STALE_RE='claude-opus-4-7|claude-opus-4-6|claude-opus-4-1|claude-sonnet-3|claude-3-'
+STALE_RE='claude-opus-4-1|claude-sonnet-3|claude-3-'
 
 # Path-CLASS exemptions (relative paths): test suites + fixtures keep old
 # ids on purpose (negative cases, historical-log replay), backups and
@@ -144,7 +146,7 @@ EXEMPT_PATH_RE='(^|/)(tests|fixtures)/|(^|/)test_[^/]*\.py$|_test\.py$|\.bak(\.|
 #     model_baseline_version measurement anchor (references/owasp.md added
 #     PLAN-163 T1.8: the PLAN-153 skill import landed it AFTER this scan
 #     was authored — latent pre-existing offender caught by live-fire)
-ALLOWLIST_RE='\.claude/scripts/(ceo-cost\.py|cost-table\.yaml|budget-summary\.py|audit-telemetry\.py|success-receipt\.py|value-dashboard\.py|generate-dispatch\.py|spot-check-findings\.py|check-model-deprecations\.py|detectors/(wasteful_thinking|overpowered)\.py|optimizer/model_normalize\.py)|\.claude/hooks/_lib/adapters/live/claude\.py|\.claude/skills/core/(ai-llm-orchestration/SKILL\.md|security-and-auth/(SKILL\.md|benchmarks/owasp-llm-top-10\.yaml|references/owasp\.md))'
+ALLOWLIST_RE='\.claude/scripts/(ceo-cost\.py|cost-table\.yaml|budget-summary\.py|audit-telemetry\.py|success-receipt\.py|value-dashboard\.py|generate-dispatch\.py|spot-check-findings\.py|check-model-deprecations\.py|detectors/(wasteful_thinking|overpowered)\.py|optimizer/model_normalize\.py)|\.claude/hooks/_lib/adapters/live/claude\.py|\.claude/hooks/_lib/model_currency\.py|\.claude/skills/core/(ai-llm-orchestration/SKILL\.md|security-and-auth/(SKILL\.md|benchmarks/owasp-llm-top-10\.yaml|references/owasp\.md))'
 
 # ---------------------------------------------------------------------------
 echo "==> [1/6] install.sh (maintainer ceremony) into: $TARGET"

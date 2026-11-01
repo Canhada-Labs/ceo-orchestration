@@ -54,6 +54,8 @@ bit-equivalent with the standalone module's detector functions.
 """
 from __future__ import annotations
 
+from _lib import model_currency as _model_currency
+
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -65,9 +67,7 @@ from typing import Any, Dict, List, Optional
 # SEPARATE Owner decision and is deliberately NOT folded into the
 # ADR-149 model-allowlist batch.
 _VETO_ROLES = frozenset({"code-reviewer", "security-engineer"})
-# ADR-149: floor-tier model FAMILIES (top tier). Same allowlist
-# semantics as agent_frontmatter.VETO_FLOOR_ALLOWED, expressed as
-# prefixes because audit events can carry suffixed IDs (e.g. "[1m]").
+# ADR-149 legacy prefix exports; the shared predicate owns runtime policy.
 _FLOOR_TIER_PREFIXES = ("claude-opus-", "claude-fable-")
 _OPUS_PREFIX = _FLOOR_TIER_PREFIXES[0]  # legacy name, kept for back-compat
 _GATE_1_FILES = ("CLAUDE.md", "PROTOCOL.md")
@@ -120,7 +120,7 @@ def _lookup_plan_level(plan_id: str, plans_dir: Path) -> Optional[str]:
 
 def _is_floor_tier(model: str) -> bool:
     """ADR-149: True when ``model`` belongs to a floor-tier family."""
-    return bool(model) and model.lower().startswith(_FLOOR_TIER_PREFIXES)
+    return _model_currency.is_veto_floor_model(model[:-4] if model.endswith("[1m]") else model)
 
 
 # Legacy alias — existing callers/tests import _is_opus by name.
