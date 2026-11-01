@@ -29,6 +29,7 @@ if str(_HOOKS) not in sys.path:
     sys.path.insert(0, str(_HOOKS))
 
 from _lib import audit_hmac  # noqa: E402
+from _lib.testing import TestEnvContext  # noqa: E402
 from _lib.audit_hmac import (  # noqa: E402
     GENESIS_PREV,
     compute_entry_hmac,
@@ -185,7 +186,7 @@ class AuditVerifyChainCliTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stderr)
 
 
-class StrictAgainstCounterContractFu144Test(unittest.TestCase):
+class StrictAgainstCounterContractFu144Test(TestEnvContext):
     """PLAN-194-FOLLOWUP-v1-4-4-backlog, item 5 (FD-26) + Owner decision S363-4.
 
     Under --strict-against-counter the outcome is always one of the five documented
@@ -194,6 +195,7 @@ class StrictAgainstCounterContractFu144Test(unittest.TestCase):
     """
 
     def setUp(self):
+        super().setUp()
         self._tmp = tempfile.TemporaryDirectory(prefix="fu144-strict-")
         self.tmp = Path(self._tmp.name)
         self.log_path = self.tmp / "audit-log.jsonl"
@@ -204,23 +206,23 @@ class StrictAgainstCounterContractFu144Test(unittest.TestCase):
         self.key = self.key_path.read_bytes()
         content, _ = _build_chain(self.key, [{"a": 1}, {"a": 2}])
         self.log_path.write_text(content)
-        self.env = dict(os.environ)
-        self.env["HOME"] = str(self.tmp)
-        self.env["CEO_AUDIT_CHAIN_LENGTH_PATH"] = str(self.counter_path)
-        self.env["PYTHONIOENCODING"] = "utf-8"
-        for name in ("CEO_AUDIT_LOG_PATH", "CEO_AUDIT_LOG_DIR"):
-            self.env.pop(name, None)
+        self.locale = {"PYTHONIOENCODING": "utf-8"}
 
     def tearDown(self):
         self._tmp.cleanup()
+        super().tearDown()
 
     def _cli(self, *args, stdin=None, log=True, timeout=30):
         cmd = [sys.executable, str(_CLI), "--key-file", str(self.key_path)]
         if log:
             cmd += ["--log-file", str(self.log_path)]
         cmd += list(args)
+        env = self.subprocess_env(
+            CEO_AUDIT_CHAIN_LENGTH_PATH=str(self.counter_path), **self.locale)
+        if "PYTHONIOENCODING" not in self.locale:
+            env.pop("PYTHONIOENCODING", None)
         return subprocess.run(
-            cmd, capture_output=True, input=stdin, env=self.env, timeout=timeout)
+            cmd, capture_output=True, input=stdin, env=env, timeout=timeout)
 
     def _json_report(self, proc):
         lines = proc.stdout.decode("utf-8").splitlines()
@@ -288,9 +290,7 @@ class StrictAgainstCounterContractFu144Test(unittest.TestCase):
         as_stdin = self._cli("--strict-against-counter", "--json", "--stdin", stdin=bad, log=False)
         self._assert_named(as_file, 3, "log_undecodable")
         self._assert_named(as_stdin, 3, "log_undecodable")
-        env_c = dict(self.env, LC_ALL="C", LANG="C")
-        env_c.pop("PYTHONIOENCODING", None)
-        self.env = env_c
+        self.locale = {"LC_ALL": "C", "LANG": "C"}
         self._assert_named(
             self._cli("--strict-against-counter", "--json", "--stdin", stdin=bad, log=False),
             3, "log_undecodable")
@@ -365,10 +365,8 @@ class StrictAgainstCounterContractFu144Test(unittest.TestCase):
         proc = self._cli("--json")
         self.assertEqual((proc.returncode, proc.stdout), (3, b""))
         self.assertIn(b"line 1 is malformed JSON", proc.stderr)
-        fifo_free = subprocess.run(
-            [sys.executable, str(_CLI), "--key-file", str(self.key_path), "--log-file", "/dev/stdin"],
-            input=b"", capture_output=True, env=self.env, timeout=30)
-        self.assertEqual(fifo_free.returncode, 0, fifo_free.stderr)
+        piped = self._cli("--log-file", "/dev/stdin", stdin=b"", log=False)
+        self.assertEqual(piped.returncode, 0, piped.stderr)
 
 
 if __name__ == "__main__":
