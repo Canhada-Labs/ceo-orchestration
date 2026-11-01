@@ -153,7 +153,14 @@ echo "==> Packlist gate"
 ( cd "$NPM_DIR" && npm pack --dry-run --json 2>/dev/null ) | python3 -c '
 import json, re, sys
 d = json.load(sys.stdin)
-o = d[0] if isinstance(d, list) else d
+# This directory packs one package: npm 11 emits a list or direct record;
+# npm 12.2+ keys the record by package name.
+if isinstance(d, list):
+    o, = d
+elif "files" in d:
+    o = d
+else:
+    o, = d.values()
 paths = [f["path"] for f in o["files"]]
 pat = re.compile(r"(^|/)(tests|fixtures)(/|$)|(^|/)eval/|(^|/)red-team-corpus/|(^|/)plans/PLAN-[0-9]|(^|/)_lib/(testing|test_isolation)\.py$")
 allow = (".claude/policies/fixtures/", "templates/oidc-proxy/tests/")

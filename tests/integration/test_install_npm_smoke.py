@@ -23,6 +23,7 @@ the script under test takes no env dependency beyond PATH for node/npm.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -179,6 +180,41 @@ def _run_script(*args: str, timeout: float = 120.0, env_extra=None):
 # ---------------------------------------------------------------------------
 # Tarball build (no --smoke flag)
 # ---------------------------------------------------------------------------
+
+
+class TestPacklistGate:
+
+    @pytest.mark.parametrize("shape", ["npm11-list", "npm11-object", "npm12-map"])
+    def test_packlist_formats_enforce_exclusions(self, tmp_path, shape):
+        """All npm JSON formats must inspect files and reject internal artifacts."""
+        gate = _SCRIPT.read_text().split('echo "==> Packlist gate"\n', 1)[1]
+        gate = gate.split("# -------------------------------- npm pack", 1)[0]
+        paths = [
+            "scripts/install.sh",
+            ".claude/policies/fixtures/allowed.jsonl",
+            "templates/oidc-proxy/tests/allowed.py",
+        ]
+        forbidden = ".claude/hooks/tests/internal.py"
+        for blocked in (False, True):
+            pack = {"files": [{"path": p} for p in paths + ([forbidden] if blocked else [])]}
+            payload = {
+                "npm11-list": [pack],
+                "npm11-object": pack,
+                "npm12-map": {"ceo-orchestration": pack},
+            }[shape]
+            proc = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c",
+                 'NPM_DIR="$1"\nnpm() { cat; }\n' + gate,
+                 "packlist-test", str(tmp_path)],
+                input=json.dumps(payload), capture_output=True, text=True, timeout=10,
+            )
+            assert proc.returncode == int(blocked), proc.stdout + proc.stderr
+            if blocked:
+                assert "tarball would ship 1 framework-internal artifact(s):" in proc.stdout
+                assert forbidden in proc.stdout
+                assert "OK: packlist clean" not in proc.stdout
+            else:
+                assert "OK: packlist clean — 3 files" in proc.stdout
 
 
 class TestTarballBuild:

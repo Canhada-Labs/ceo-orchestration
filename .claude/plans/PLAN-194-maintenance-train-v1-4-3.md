@@ -1,13 +1,14 @@
 ---
 id: PLAN-194
 title: Trem de manutenção pós-GA 1.4.2 até a v1.4.3
-status: executing
+status: completed
 created: 2026-09-30
 reviewed_at: 2026-10-01
 executing_at: 2026-10-02
 reviewed_by: "Owner — aceite em bloco das recomendações do planejamento S360 no chat da S361 (2026-10-01); Q3 opção 1: W2, W3 e W5c BLOQUEADAS até o PROCEED do debate único, com os must-fix valendo por onda"
 owner: CEO
 depends_on: [PLAN-193]
+related_commits: [eb7b6f19]
 level: L3
 budget_tokens: "estimado (contexto do CEO; subagentes à parte). Trem da 1.4.3 depois da S362 (2026-10-02), total ~5,7-11,1 M: re-pin manual do Codex 0.160.0 (RP: sonda, texto, pacote gerado, ensaio, rail) 300-600k; W2 (U2-A a U2-D + livres: verificadores do spool, estresse, W0.5, script da W2.6, AMEND-4 condensado) 1,8-3,2 M; W7a do PLAN-183 300-700k; W4 + W5.0/W5a/W5b/W5.1 + W6 800k-1,5 M + isca paga mínima da W6.0 + sondas pagas da W5.0; W5c (adoção do Sonnet 5.5) 1,5-3,0 M + re-teste pago de ~US$ 15-30; corte (derivadores do kit, metadados do release, CHANGELOG, kit, rc.1, kit do GA, GA) 900k-1,9 M; livres (cura do teste instável, textos, LEDGER) 100-200k. Já gastos, fora da conta: W0, W1, W3b, W2.0 e o debate. Fora da 1.4.3 (vão para a 1.4.4): W3 (pin automático) 1,6-2,8 M em 3 a 4 sessões, com o pacote de kernel de registro de ações; o PLAN-195; W8 50-150k; L2 restante e L3 a L5"
 budget_sessions: "8-12 (estimado na S362; várias em paralelo; pelo menos 3 sessões do CEO, por dois fechamentos obrigatórios — a W2.6 e o U2-D; cada assinatura do Owner é uma parada; eram 6-11 com a W3 dentro)"

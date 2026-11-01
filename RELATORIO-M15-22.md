@@ -3,12 +3,17 @@
 Data: 2026-11-01. Branch: `tracks/m15-ceo-orchestration-v144`.
 Base inspecionada: `eb7b6f19254f3662309e036a85f71ca268199dbc`.
 
+**Rodada 2 concluída:** as quatro falhas abaixo foram corrigidas. Os dois
+arquivos solicitados passaram com npm nativo 12.2.1: **19 passed, 0 failed**.
+O resultado da suíte completa da rodada 1 permanece registrado como histórico.
+
 ## Escopo e método
 
 O roteiro pede inspeção do commit, execução da suíte completa e levantamento
 das pendências da v1.4.4. O commit altera quatro arquivos de planejamento;
 acrescenta os itens 28–30 ao backlog e registra o fechamento da v1.4.3-rc.1.
-Este trabalho produz o relatório de validação, sem implementar as curas do backlog.
+A rodada 1 produziu a validação; a rodada 2 corrige as quatro falhas encontradas,
+sem implementar os demais itens do backlog.
 
 Ambiente isolado em `/var/tmp/pista-22/venv`: Python 3.12.3, pytest 8.4.2,
 pytest-xdist 3.8.0, PyYAML 6.0.3, hypothesis 6.100.0 e jsonschema 4.21.1.
@@ -20,7 +25,7 @@ os 16 diretórios de `pytest.ini:39`, em duas parcelas complementares conforme
 o tratamento de `serial` em `conftest.py` e no CI. Não foram removidos caches
 de bytecode antes dos testes.
 
-## Resultados
+## Resultados da rodada 1
 
 `python3 -m pytest -n 8 -m 'not serial' --strict-markers --tb=short -q`
 terminou com código 1. Linha final literal:
@@ -106,7 +111,7 @@ PASS: Governance files validated.
   `check-audit-real-loss.py`. Logo, o sucesso de `--help` não prova ausência
   de escrita. Os três itens ainda não têm nomes de testes definidos no plano.
 
-## Entrega
+## Entrega da rodada 1
 
 O relatório é entregue também em `/dev/shm/pista-22/RELATORIO-M15-22.md`.
 Nenhum caso de teste foi adicionado; mutantes novos não se aplicam a esta
@@ -120,3 +125,52 @@ permanece bloqueada pelo nodeid de staleness; a v1.4.4 mantém os checks
 pendentes descritos acima. A correção do frontmatter exige reconciliar os
 planos com seu histórico real; este relatório não altera seus estados nem
 reduz os critérios de teste.
+
+## Rodada 2 — correções e validação
+
+- `scripts/install-npm.sh`: o gate normaliza os três formatos de JSON do
+  `npm pack --dry-run --json`: lista ou registro direto (npm 11), e mapa
+  indexado pelo nome do pacote (npm 12.2+). A lista de arquivos continua
+  passando pelas mesmas exclusões e exceções antes da criação do tarball.
+- `PLAN-194`: `status: completed` e `related_commits: [eb7b6f19]`, conforme
+  `git log --oneline` e o fechamento registrado nesse commit.
+- `PLAN-195`: preservado `status: executing`; `related_commits` preenchido
+  com os commits reais `b2ab8805`, `6ee8c218`, `0d07791b`, `ee71777a`,
+  `9ef0d929` e `d40fd744`. O histórico registra W0 e as atualizações de C13;
+  isso não declara concluído o trabalho transferido para a v1.4.4.
+- Costura obrigatória: `installer-write-safety-baseline.txt` foi regenerado
+  pelo censo, com apenas referências de linha deslocadas no instalador;
+  classificações e fingerprints foram preservados.
+
+Execução em cópia no palco `/var/tmp/pista-22/m15-22-r2-stage-eebjgfj1`,
+sem `.git` acima; `TMPDIR=/dev/shm/pista-22/m15-22-r2-run-49dn37pd`, tmpfs
+verificado. Nenhum cache de bytecode foi apagado antes dos testes. O comando
+abaixo usou `/home/autobahn/.local/bin/npm` **12.2.1**, com Node **v24.22.2**:
+
+```bash
+PATH=/var/tmp/pista-22/venv/bin:$PATH python3 -m pytest tests/integration/test_install_npm_smoke.py .claude/scripts/tests/test_check_staleness.py -v
+```
+
+Código 0; linha final literal:
+
+```text
+============================= 19 passed in 22.22s ==============================
+```
+
+Passaram os quatro nodeids que falharam na rodada 1, listados acima, e os
+três casos novos de
+`tests/integration/test_install_npm_smoke.py::TestPacklistGate::test_packlist_formats_enforce_exclusions`
+(`npm11-list`, `npm11-object`, `npm12-map`). Cada caso verifica o payload
+limpo e a denúncia do caminho interno proibido. Um mutante isolado por formato
+removeu sua normalização; cada teste correspondente acusou a regressão.
+Restauração por `cp` e confirmação por `cmp` após cada mutante; linhas finais:
+
+```text
+1 failed in 0.10s
+1 failed in 0.09s
+1 failed in 0.09s
+```
+
+Pré-checagem: ok. As quatro falhas estão encerradas no recorte solicitado;
+a suíte completa não foi repetida nesta rodada. O PLAN-195 continua aberto
+e sujeito aos avisos de estagnação; as pendências da v1.4.4 acima permanecem.
