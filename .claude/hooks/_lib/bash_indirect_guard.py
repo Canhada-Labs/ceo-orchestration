@@ -135,8 +135,13 @@ def _unshield(value: str) -> str:
 
 
 def _command_substitutions(command: str, depth: int,
-                           heuristics: bool = True) -> Optional[GuardHit]:
+                           heuristics: bool = True,
+                           source_comments: bool = True) -> Optional[GuardHit]:
     """Inspect executable $(...) even inside double quotes, never single."""
+    # Strip comments in shell SOURCE.  Unquoted here-doc bodies are DATA:
+    # their `# $(...)` still undergoes command substitution before delivery.
+    if source_comments:
+        command = _prelex(command)
     index = 0
     quote = ""
     while index < len(command):
@@ -148,7 +153,9 @@ def _command_substitutions(command: str, depth: int,
             quote = ""
         elif ch in ("'", '"') and not quote:
             quote = ch
-        elif quote != "'" and command[index:index + 2] in ("$(", "<(", ">("):
+        elif (quote != "'" and command[index:index + 2] == "$(") or (
+            not quote and command[index:index + 2] in ("<(", ">(")
+        ):
             start = index + 2
             level = 1
             cursor = start
@@ -218,12 +225,14 @@ def _extract_heredocs(command: str, depth: int,
         output.append(prefix + command[match.start():begin])
         consumer_tokens = prefix.strip().split()
         consumer = os.path.basename(consumer_tokens[0]) if consumer_tokens else ""
-        if consumer in SHELLS or consumer == "eval":
-            bodies.append(body)
-        elif not match.group(1):
-            substitutions = _command_substitutions(body, depth, heuristics)
+        if not match.group(1):
+            substitutions = _command_substitutions(
+                body, depth, heuristics, source_comments=False
+            )
             if substitutions:
                 return "", [substitutions]
+        if consumer in SHELLS or consumer == "eval":
+            bodies.append(body)
         cursor = begin + closing.end()
     return "".join(output), bodies
 
@@ -312,9 +321,24 @@ def _shell_body(argv: List[str]) -> Optional[str]:
 def _brace_commands(token: str) -> List[str]:
     opening = token.find("{")
     closing = token.find("}", opening + 1)
-    if opening < 0 or closing < 0 or "," not in token[opening + 1:closing]:
+    if opening < 0 or closing < 0:
         return [token]
-    variants = token[opening + 1:closing].split(",")
+    body = token[opening + 1:closing]
+    if "," in body:
+        variants = body.split(",")
+    else:
+        numeric = re.fullmatch(r"(-?\d+)\.\.(-?\d+)(?:\.\.(-?\d+))?", body)
+        if numeric is None:
+            return [token]
+        first, last = int(numeric.group(1)), int(numeric.group(2))
+        # Bash takes the magnitude of an explicit step, chooses direction
+        # from the endpoints, and treats a zero step as one.
+        stride = abs(int(numeric.group(3))) if numeric.group(3) else 1
+        step = (stride or 1) * (1 if first <= last else -1)
+        count = abs(last - first) // abs(step) + 1
+        if count > 128:
+            raise ValueError("brace ceiling")
+        variants = [str(first + i * step) for i in range(count)]
     if len(variants) > 128:
         raise ValueError("brace ceiling")
     return [token[:opening] + item + token[closing + 1:] for item in variants]
@@ -336,7 +360,10 @@ def _scan_segment(argv: List[str], depth: int,
         ) for arg in argv[1:]):
             if any(marker in argv for marker in ("-rf", "-fr", "--hard", "--force")):
                 return _hit("bash_indirect_ambiguous_launcher")
-    expanded = [_brace_commands(word) for word in argv]
+    try:
+        expanded = [_brace_commands(word) for word in argv]
+    except ValueError:
+        return _hit("bash_indirect_limit")
     combinations = 1
     for options in expanded:
         combinations *= len(options)
@@ -460,7 +487,9 @@ def _scan(command: str, depth: int, *, strict: bool = False,
     command = STATIC_PRINTF.sub(lambda match: match.group(1), command)
     try:
         words = _words(command)
-    except ValueError:
+    except ValueError as exc:
+        if str(exc) == "word ceiling":
+            return _hit("bash_indirect_limit")
         return _hit("bash_indirect_unparseable_shell") if strict else None
     segment: List[str] = []
     cwd = ""
