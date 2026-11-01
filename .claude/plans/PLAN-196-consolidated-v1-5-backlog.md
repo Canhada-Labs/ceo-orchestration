@@ -19,7 +19,7 @@ tags: [backlog, consolidation, v1-5, governance]
 ## Context
 
 Em 2026-11-01, o CEO/Owner aprovou a consolidação proposta pela PISTA 1:
-este plano assume integralmente o escopo ainda pendente das onze fontes abaixo,
+este plano assume integralmente o escopo ainda pendente das doze fontes abaixo,
 que passam a `superseded`, com `superseded_by: PLAN-196`, conforme
 [PLAN-SCHEMA §11](PLAN-SCHEMA.md#superseded-status-added-plan-113-w2).
 O trabalho entregue, os commits, as datas originais e as decisões permanecem
@@ -45,6 +45,7 @@ continuam pendentes para o Owner antes da onda afetada.
 
 | Frente | Fonte incorporada | Dependências e vínculos preservados |
 | --- | --- | --- |
+| P169-mensageria | [Sondas SendMessage](PLAN-169-FOLLOWUP-sendmessage-probes.md) | PLAN-169 AC-5, pernas 2–4; P186 AC-15; decisão do Owner de 2026-10-12 e OQ-2 adiada |
 | P175 | [Skills, poda e descoberta](PLAN-175-skills-pruning-discovery.md) | PLAN-171; Fase 2 separada; cerimônias W0b/W1/W2b/W4c |
 | P176 | [Atualização de modelos](PLAN-176-model-currency-refresh.md) | PLAN-169; W1c espera a W4b de P186; ADR-149/180/192 |
 | P183 | [Adopter fitness](PLAN-183-adopter-fitness.md) | PLAN-167/168; mapa de colisões e vagas com PLAN-194/195 |
@@ -74,6 +75,35 @@ onda, conferir o código integrado e os anexos vigentes, registrar o delta
 restante e reestimar o esforço; não somar estimativas históricas sobrepostas.
 
 ## Items
+
+### P169-mensageria — Sondas e doutrina de mensagens
+
+Incorporar as pernas 2–4 do AC-5 do PLAN-169, com todos os critérios e
+registros do [followup](PLAN-169-FOLLOWUP-sendmessage-probes.md). A perna 1
+continua no AC-15 de P186, já herdado acima; coordenar o matcher, sem duplicá-lo.
+
+W1 preserva as seis sondas W4.2.0: (a) `UserPromptSubmit` para mensagens de
+outra sessão, terminal ou máquina, distinguindo ausência de disparo de falha
+antes da emissão; (b) `SubagentStart` para `agent()` de Workflow; (c) roteamento
+entre máquinas, reply-only versus name-first; (d) efeito de `refuse` sobre
+filhos da própria sessão; (e) visibilidade HMAC de turnos nascidos de mensagens
+recebidas; (f) `PreToolUse` de `SendMessage` emitido por subagentes/peers,
+coordenado com P186 AC-15. Cada sonda exige sua linha de evidência.
+
+W2 ocorre em clone descartável, nunca no repositório canônico. Medir as três
+células aprovadas pelo Owner em 2026-10-12: `refuse` sem turno; `hold` sem turno
+imediato, registrando retenção e entrega após a troca para `accept`; `accept`
+como controle positivo. Revalidar a chave e a precedência de settings de
+projeto no Claude Code vigente antes da medição. Os textos históricos do
+binário não comprovam comportamento; OQ-1 só fecha com as três células medidas.
+
+W3 exige ADR aceito e cerimônia com a decisão sobre visibilidade das tentativas
+recusadas; uma postura diferente de `refuse` deve declarar explicitamente o
+escopo degradado de auditabilidade. Preservar OQ-2 adiada pelo Owner: decidir
+sobre o adopter com `accept` explícito antes de acrescentar qualquer linha em
+template. W1/W2 podem ser medidas sem essa resposta, conforme a fonte. OQ-3
+mantém a estimativa de tokens e sessões para o refinamento. A migração não
+declara sondas, controles nem ADR já entregues.
 
 ### P175 — Skills, poda e descoberta
 
@@ -248,3 +278,7 @@ são apagados nem considerados satisfeitos por um pai ficar `superseded`:
 - 2026-11-01: consolidação documental autorizada pelo CEO/Owner. As onze
   fontes passam a `superseded`; critérios, condições e evidências permanecem
   vinculados aqui. Este plano começa em `draft`, com as ACs acima abertas.
+- 2026-11-01: CEO/Owner autoriza incorporar também o followup SendMessage
+  de P169 após sua detecção pelo gate de staleness. A décima segunda fonte
+  passa a `superseded`, com vínculo recíproco e preservação de W1–W3, critérios
+  de sucesso, decisão de três células e OQ-2 adiada.

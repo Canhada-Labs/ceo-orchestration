@@ -168,3 +168,7 @@ This amendment ADR is documentation + ABI specification. Runtime enforcement shi
 ---
 
 **Editorial reference**: `.claude/plans/PLAN-094/ADR-055-AMEND-1-draft.md` (981 LoC; full design rationale, fold logs across 7 Codex R2 iterations, expanded 22-test Wave A delta). This canonical is field-by-field equivalent (S120 doctrine), NOT byte-identical.
+
+## Amended-by
+
+- **[ADR-055-AMEND-4](ADR-055-AMEND-4-spool-state-drain-and-signal-hardening.md)** — accepted decision for spool-state accounting, zero-drain hook exit and signal hardening. Runtime integration is partial; acceptance does not attest U2-A/U2-B, the external drainer, F2, or an Owner SIGN. See the amendment §1 and PLAN-194 LEDGER.

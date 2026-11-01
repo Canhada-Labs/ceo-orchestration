@@ -57,6 +57,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO, Callable, Dict, Iterator, List, Optional, Set, Tuple
 
+# This read-only CLI can import local helpers during a normal interpreter run.
+# Disable bytecode creation before importing the framework resolver.
+sys.dont_write_bytecode = True
+
 for _anc in Path(__file__).resolve().parents:
     if (_anc / ".claude" / "hooks" / "_lib").is_dir():
         if str(_anc / ".claude" / "hooks") not in sys.path:

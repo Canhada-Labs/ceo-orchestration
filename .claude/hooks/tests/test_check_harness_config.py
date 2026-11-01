@@ -39,13 +39,12 @@ def _real_repo_root() -> Path:
     """Walk up from this file until the real repo root (works from both
     the staged location and the landed .claude/hooks/tests/ location).
 
-    Requires BOTH the hook file and `.git` — a PLAN staging mirror
-    (.claude/plans/PLAN-NNN/staged/wave-X/.claude/hooks/...) can contain
-    staged copies of the hooks but is never a git root."""
+    Requires the hook plus the framework-version marker, so archive-based
+    test stages work without a `.git` directory."""
     d = Path(__file__).resolve().parent
     for candidate in [d, *d.parents]:
         if (
-            (candidate / ".git").exists()
+            (candidate / ".claude" / ".framework-version").is_file()
             and (candidate / ".claude" / "hooks" / "check_bash_safety.py").is_file()
         ):
             return candidate
@@ -268,6 +267,46 @@ class TestLiveRepoStatic(TestEnvContext):
             [],
             "live settings must pass: " + "; ".join(f.message for f in _reds(findings)),
         )
+
+
+class TestExecBitDelegationFu144(TestEnvContext):
+    """PLAN-194 Item 6b: delegated failures cannot degrade to a warning."""
+
+    def _run_subgate(self, body):
+        script = self.project_dir / ".claude" / "scripts" / "check-active-hooks-executable.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text(body, encoding="utf-8")
+        rows = chc.run_exec_bit_gate(self.project_dir)
+        self.assertEqual(len(rows), 1)
+        return rows[0], script
+
+    def test_fu144_exec_bit_stderr_is_red_detail(self):
+        row, script = self._run_subgate(
+            "import sys\ndef main():\n print('::error:: planted stderr', file=sys.stderr)\n return 7\n"
+        )
+        self.assertEqual((row.check_id, row.severity, row.location),
+                         ("exec_bit", "RED", str(script)))
+        self.assertIn("exec-bit gate rc=7", row.message)
+        self.assertIn("::error:: planted stderr", row.message)
+
+    def test_fu144_exec_bit_exception_is_named_fail_closed(self):
+        row, script = self._run_subgate(
+            "import sys\nprint('import stderr', file=sys.stderr)\ndef main():\n"
+            " print('exception stderr', file=sys.stderr)\n raise RuntimeError('planted exception')\n"
+        )
+        self.assertEqual((row.check_id, row.severity, row.location),
+                         ("exec_bit", "RED", str(script)))
+        self.assertIn("RuntimeError: planted exception", row.message)
+        self.assertIn("fail-CLOSED", row.message)
+        self.assertIn("import stderr", row.message)
+        self.assertIn("exception stderr", row.message)
+
+    def test_fu144_exec_bit_system_exit_keeps_rc_contract(self):
+        row, script = self._run_subgate("def main():\n raise SystemExit(2)\n")
+        self.assertEqual((row.check_id, row.severity, row.location),
+                         ("exec_bit", "RED", str(script)))
+        self.assertIn("exec-bit gate rc=2", row.message)
+        self.assertNotIn("raised SystemExit", row.message)
 
 
 class TestReplay(TestEnvContext):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -31,6 +32,15 @@ class TestClaudeMdExcludesFu144(TestEnvContext):
                 "name": "project", "data": {"claudeMdExcludes": [pattern]},
             }]), {})
         self.assertEqual(findings, [])
+
+    def test_fu144_shipped_setting_excludes_staged_contract_not_root(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        settings = json.loads((repo_root / ".claude/settings.json").read_text())
+        patterns = settings["claudeMdExcludes"]
+        staged = self.project_dir / ".claude/plans/PLAN-194/staged-contract"
+        staged.mkdir(parents=True)
+        self.assertFalse(excludes.root_claude_md_excluded(patterns, repo_root))
+        self.assertTrue(excludes.root_claude_md_excluded(patterns, staged))
 
     def test_fu144_glob_matching_root_is_flagged_in_every_settings_layer(self) -> None:
         for layer_name in ("user", "project", "local", "managed"):

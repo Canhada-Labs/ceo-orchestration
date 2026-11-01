@@ -62,6 +62,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
+# These entries are read-only diagnostics.  Set this before loading the local
+# verifier so a normal CLI invocation cannot create a cache beside its source.
+sys.dont_write_bytecode = True
+
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 import audit_spool_state as ss  # noqa: E402
@@ -92,7 +96,8 @@ def _is_int(v: object) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
 
 
-def record_ids(lines: Iterable[bytes], top_level_only: bool, wanted: Set[str]) -> Set[str]:
+def record_ids(lines: Iterable[bytes], top_level_only: bool, wanted: Set[str],
+               malformed_files: Optional[Set[str]] = None, source: str = "") -> Set[str]:
     """The ``wanted`` ids among ``lines`` (memory follows the candidates, not the log)."""
     out: Set[str] = set()
     for line in lines:
@@ -105,8 +110,15 @@ def record_ids(lines: Iterable[bytes], top_level_only: bool, wanted: Set[str]) -
                 out.update(r for r in (m.decode("ascii") for m in _RID_RX.findall(line))
                            if r in wanted)
             continue
-        if isinstance(e, dict) and e.get("record_id") in wanted:
-            out.add(e["record_id"])
+        if not isinstance(e, dict) or "record_id" not in e:
+            continue
+        rid = e["record_id"]
+        if not isinstance(rid, str):
+            if malformed_files is not None:
+                malformed_files.add(source)
+            continue
+        if rid in wanted:
+            out.add(rid)
     return out
 
 
@@ -143,13 +155,21 @@ def snapshot(fam: ss.ReadOnlyDir, st: ss.ReadOnlyDir, since_ns: int,
              wanted: Set[str]) -> Dict[str, Set[str]]:
     """Steps (1)-(3) of the reading order, from fresh listings; ``unstable`` names
     the files that vanished before their read and the rename targets that appeared."""
-    snap: Dict[str, Set[str]] = {"pending": set(), "quarantined": set(), "logged": set()}
+    snap: Dict[str, Set[str]] = {
+        "pending": set(), "quarantined": set(), "logged": set(),
+        "malformed_record_id_files": set(),
+    }
     vanished: List[str] = []
     listed = {n: k for n, k in ((n, _spool_side(n)) for n in st.names()) if k}
     for name in sorted(listed):
-        snap[listed[name]] |= record_ids(ss.listed_lines(st, name, vanished), False, wanted)
-    for _name, lines in ss.read_logs(fam, since_ns, vanished):
-        snap["logged"] |= record_ids(lines, True, wanted)
+        snap[listed[name]] |= record_ids(
+            ss.listed_lines(st, name, vanished), False, wanted,
+            snap["malformed_record_id_files"], name,
+        )
+    for name, lines in ss.read_logs(fam, since_ns, vanished):
+        snap["logged"] |= record_ids(
+            lines, True, wanted, snap["malformed_record_id_files"], name,
+        )
     appeared = [n for n in st.names() if n not in listed and _spool_side(n)
                 and ss.classify(n)[0] != "active_spool"]  # never a rename target
     snap["unstable"] = set(vanished) | set(appeared)
@@ -162,10 +182,12 @@ def g6(fam: ss.ReadOnlyDir, st: ss.ReadOnlyDir, since_ns: int) -> Dict[str, obje
     pending: Set[str] = set()
     quarantined: Set[str] = set()
     unstable: List[str] = []
+    malformed_record_id_files: Set[str] = set()
     passes = stable = 0
     while lost and stable < 2 and passes < MAX_PASSES:
         passes += 1
         snap = snapshot(fam, st, since_ns, lost)
+        malformed_record_id_files |= snap.get("malformed_record_id_files", set())
         lost -= snap["logged"]
         quarantined |= lost & snap["quarantined"]
         lost -= snap["quarantined"]
@@ -182,7 +204,8 @@ def g6(fam: ss.ReadOnlyDir, st: ss.ReadOnlyDir, since_ns: int) -> Dict[str, obje
             "inconclusive": inconclusive, "unresolved": len(lost) if inconclusive else 0,
             "unresolved_record_ids": ids if inconclusive else [], "passes": passes,
             "stable_passes": stable, "last_unstable": unstable[:20],
-            "journals_vanished": journals_vanished, "journal_malformed_lines": malformed}
+            "journals_vanished": journals_vanished, "journal_malformed_lines": malformed,
+            "malformed_record_id_files": sorted(malformed_record_id_files)[:50]}
 
 
 def g7(fam: ss.ReadOnlyDir, since: datetime) -> Dict[str, object]:
@@ -240,8 +263,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     rep.update(since=since.isoformat(), state_dir=str(state))
     red = bool(rep.get("g6", {}).get("lost")) or bool(rep.get("g7", {}).get("G7"))
     rep["red"] = red
-    rep["attention"] = (["g6_journal_malformed_lines"]
-                        if rep.get("g6", {}).get("journal_malformed_lines") else [])
+    rep["attention"] = []
+    if rep.get("g6", {}).get("journal_malformed_lines"):
+        rep["attention"].append("g6_journal_malformed_lines")
+    if rep.get("g6", {}).get("malformed_record_id_files"):
+        rep["attention"].append("g6_malformed_record_id_files")
     print(json.dumps(rep, indent=1, sort_keys=True))
     return 1 if red else (2 if rep.get("g6", {}).get("inconclusive") else 0)
 
