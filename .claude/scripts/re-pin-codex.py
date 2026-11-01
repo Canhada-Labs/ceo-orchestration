@@ -240,7 +240,7 @@ PLATFORM_TRIPLE: Dict[str, str] = {
 
 _MANIFEST_KEYS = frozenset({"schema", "package_version", "npm_integrity", "payloads"})
 _SEMVER_RE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
-_RANGE_RE = re.compile(r">=([0-9]+\.[0-9]+\.[0-9]+),<([0-9]+\.[0-9]+\.[0-9]+)")
+_RANGE_RE = re.compile(r">=([0-9]+\.[0-9]+\.[0-9]+)(?:,<([0-9]+\.[0-9]+\.[0-9]+))?")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _SRI512_RE = re.compile(r"sha512-[A-Za-z0-9+/]{86}==")
 _PACK_DIR_RE = re.compile(r"\.claude/plans/(PLAN-[0-9]{3})/[a-z0-9][a-z0-9._-]*")
@@ -460,8 +460,8 @@ def _check_manifest(data: Any) -> Dict[str, Any]:
     return data
 
 
-def parse_pin(text: str) -> Tuple[List[str], str, str]:
-    """Split the pin file into (comment prefix, lower, upper).
+def parse_pin(text: str) -> Tuple[List[str], str, Optional[str]]:
+    """Split the pin file into (comment prefix, lower, optional upper).
 
     The range must be the only non-comment line, and the last one.
     """
@@ -478,16 +478,23 @@ def parse_pin(text: str) -> Tuple[List[str], str, str]:
     m = _RANGE_RE.fullmatch(lines[-1])
     if m is None:
         raise RePinError(EXIT_INPUT, f"{PIN_REL} last line {lines[-1]!r} is not "
-                                     "'>=X.Y.Z,<X.Y.Z'")
+                                     "'>=X.Y.Z' or '>=X.Y.Z,<X.Y.Z'")
     return lines[:-1], m.group(1), m.group(2)
 
 
-def plan_range(lower: str, upper: str,
+def plan_range(lower: str, upper: Optional[str],
                target: Tuple[int, int, int]) -> Tuple[str, bool]:
-    """Return (new range, widened?). Widen-upper-only; the lower bound is fixed."""
+    """Return (new range, widened?).
+
+    The live policy may be an unbounded floor. The optional ceremony pack
+    retains its legacy bounded grammar, so materializing that floor for a
+    pack uses the target's next minor as its reproducible upper boundary.
+    """
     if target < parse_version(lower):
         raise RePinError(EXIT_INPUT, f"target is below the lower bound >={lower}; "
                                      "widen-upper-only cannot express it")
+    if upper is None:
+        return f">={lower},<{target[0]}.{target[1] + 1}.0", True
     if target < parse_version(upper):
         return f">={lower},<{upper}", False
     return f">={lower},<{target[0]}.{target[1] + 1}.0", True
@@ -2161,7 +2168,8 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
         "platform": platform, "entry_path": manifest["payloads"][triple]["path"],
         "old_sha": manifest["payloads"][triple]["sha256"],
         "date": date, "offline": bool(args.offline_from), "lower": lower,
-        "old_upper": upper, "new_upper": new_range.rsplit("<", 1)[1],
+        "old_upper": upper or new_range.rsplit("<", 1)[1],
+        "new_upper": new_range.rsplit("<", 1)[1],
         "new_range": new_range, "widened": widened, "pack_dir": pack_dir,
         "pack_name": Path(pack_dir).name, "plan_id": plan_id, "tag": tag,
         "sentinel_stem": sentinel_stem, "sentinel_name": sentinel_stem + ".md",
@@ -2183,7 +2191,8 @@ def run(args: argparse.Namespace) -> Dict[str, Any]:
     summary: Dict[str, Any] = {"status": "dry-run" if args.dry_run else "emitted",
                                "grammar": parts["grammar"]}
     summary.update({k: ctx[k] for k in keys})
-    summary.update({"registry": NPM_REGISTRY, "range": f">={lower},<{upper}",
+    summary.update({"registry": NPM_REGISTRY,
+                    "range": f">={lower}" if upper is None else f">={lower},<{upper}",
                     "inherited_prose_flags": ctx["inherited_flags"],
                     "out": str(out), "files": sorted(files),
                     # the two files the emitted guard greps (sentinel, pin)

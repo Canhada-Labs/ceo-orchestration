@@ -43,7 +43,7 @@ fi
 # .claude/governance/codex-cli-pin.txt (last non-comment, non-blank line);
 # fall back to the PLAN-142-verified range if that file is absent.
 # ---------------------------------------------------------------------------
-CODEX_VERIFIED_VERSION="0.139.0"   # the pin PLAN-155 fixtures were recorded on
+CODEX_VERIFIED_VERSION="0.160.0"   # default semantic floor when the canonical pin is absent
 
 _codex_pin_range() {
   local pin_file="$SOURCE_DIR/.claude/governance/codex-cli-pin.txt"
@@ -55,7 +55,7 @@ _codex_pin_range() {
   if [[ -n "$line" ]]; then
     printf '%s\n' "$line"
   else
-    printf '%s\n' ">=0.128.0,<0.140.0"
+    printf '%s\n' ">=0.160.0"
   fi
 }
 

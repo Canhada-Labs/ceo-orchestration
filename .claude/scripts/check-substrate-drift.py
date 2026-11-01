@@ -568,6 +568,14 @@ def _codex_installed_findings(repo: Path, pin: Dict[str, Any],
                              "manifest pins {} but codex-cli-pin.txt range {} excludes it".format(
                                  pinned, pin["range"]), repin_next(repo, pinned))]
         return []
+    if (clauses is not None and len(clauses) == 1 and clauses[0][0] == ">="
+            and _RELEASE_RE.match(installed) and in_range(installed, clauses)):
+        return [_finding(
+            "codex", "CODEX_INSTALLED_COMPATIBLE", "info",
+            "installed codex {} meets the unbounded semantic floor {} — version "
+            "compatibility only; the payload hash is verified separately".format(
+                installed, pin["range"]),
+            [], {"installed": installed, "floor": pin["range"]})]
     ikey, pkey = semver_key(installed), semver_key(pinned)
     claim = ("installed codex {} is not the pinned {}{} — the payload sha256 will not "
              "match the manifest, so the pair-rail fails CLOSED at the next L3+ call"

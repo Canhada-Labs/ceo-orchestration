@@ -507,7 +507,7 @@ def _verify_pin_cli(argv: List[str]) -> int:
     except Exception:
         pass
     status = res.get("status")
-    if status == "verified":
+    if status in ("verified", "compatible"):
         return 0
     if status in ("mismatch", "triple_missing"):
         return 1

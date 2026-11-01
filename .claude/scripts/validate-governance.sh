@@ -4,15 +4,9 @@ set -euo pipefail
 # Usage: bash .claude/scripts/validate-governance.sh [--fast] [--json]
 # Returns: 0 if all OK, 1 if issues found
 #
-# --fast --json: PLAN-082 Codex Item A fast profile for ceo-boot Tier-S.
-#   Delegates to .claude/scripts/validate_governance_fast.py (Python stdlib,
-#   <2s budget). Performs only cheap structural checks; full profile (no
-#   --fast) keeps running in CI / pre-commit / explicit ceremonies.
-#
-# Updated for the tiered skills structure:
-#   .claude/skills/core/<skill>/SKILL.md
-#   .claude/skills/frontend/<skill>/SKILL.md
-#   .claude/skills/domains/<domain>/skills/<skill>/SKILL.md
+# --fast --json delegates cheap Tier-S structural checks to the stdlib
+# validate_governance_fast.py helper (PLAN-082); CI/pre-commit use the full walk.
+# Skill tiers: .claude/skills/{core,frontend}/ and domains/<domain>/skills/.
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
@@ -721,12 +715,15 @@ if [ -d "$AGENTS_DIR" ]; then
     else
       model_val=$(echo "$model_line" | sed -E 's/^model:[[:space:]]*//' | tr -d '[:space:]')
       case "$model_val" in
-        claude-fable-5|claude-opus-4-8|claude-sonnet-4-6|claude-haiku-4-5|claude-haiku-4-5-20251001|claude-opus-5|claude-sonnet-5|claude-fable-5-1|claude-opus-5-5|"")
+        claude-opus-4-8|claude-fable-5|claude-sonnet-4-6|claude-haiku-4-5|claude-opus-5|claude-sonnet-5|\
+claude-opus-4-6|claude-opus-4-7|gpt-5.4|gpt-6.1-sol|claude-fable-5-1|claude-opus-5-5|claude-haiku-4-5-20251001|"")
           : ;;
         *)
-          echo "  ERROR: $base has invalid model value: '$model_val'"
-          echo "    Expected one of: claude-fable-5, claude-opus-4-8, claude-sonnet-4-6, claude-haiku-4-5, claude-haiku-4-5-20251001, claude-opus-5, claude-sonnet-5, claude-fable-5-1, claude-opus-5-5, or empty (inherit)"
-          ERRORS=$((ERRORS + 1))
+          if ! python3 "$REPO_ROOT/.claude/hooks/_lib/model_currency.py" "$model_val"; then
+            echo "  ERROR: $base has invalid model value: '$model_val'"
+            echo "    Expected an ADR-149 compatibility ID, admitted semantic family, or empty (inherit)"
+            ERRORS=$((ERRORS + 1))
+          fi
           ;;
       esac
     fi

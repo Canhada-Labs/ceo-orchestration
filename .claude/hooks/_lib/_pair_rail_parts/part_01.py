@@ -1,5 +1,6 @@
 from __future__ import annotations
 from ._shared import *
+from _lib import cli_currency as _cli_currency
 
 _PRODUCTION_PROMOTED_BY_PLAN_091: bool = True
 
@@ -429,6 +430,7 @@ def verify_codex_payload(
         "path": "",
         "sha256": "",
         "expected_sha256": "",
+        "installed_version": "",
         "target_triple": "",
         "manifest": str(manifest_path),
     }
@@ -474,6 +476,11 @@ def verify_codex_payload(
 
         entry = manifest["payloads"].get(triple)
         if entry is None:
+            currency_path = Path(payload_override) if payload_override else launcher_path
+            if currency_path and _apply_currency_policy(
+                currency_path, launcher_path, manifest, result
+            ):
+                return result
             result["status"] = "triple_missing"
             result["detail"] = "triple_absent_from_manifest"
             return result
@@ -528,6 +535,8 @@ def verify_codex_payload(
         result["sha256"] = actual
 
         if actual != expected:
+            if _apply_currency_policy(payload, launcher_path, manifest, result):
+                return result
             result["status"] = "mismatch"
             result["detail"] = "payload_sha256_mismatch"
             return result
@@ -540,46 +549,41 @@ def verify_codex_payload(
         result["detail"] = f"unexpected:{type(e).__name__}"
         return result
 
+
+def _apply_currency_policy(
+    payload: Path, launcher: Optional[Path], manifest: Dict[str, Any], result: Dict[str, Any],
+) -> bool:
+    """Record qualified version and apply only the explicitly allowed currency arm."""
+    installed = _cli_currency.qualified_package_version(payload, launcher)
+    result["installed_version"] = installed or ""
+    if installed is None:
+        return False
+    manifest_version = manifest.get("package_version")
+    if _cli_currency.parse_semver(manifest_version) is None:
+        result["status"] = "mismatch"
+        result["detail"] = "manifest_package_version_malformed"
+        return True
+    if _cli_currency.compatible_package_version(payload, launcher, manifest_version):
+        result["status"] = "compatible"
+        result["detail"] = "version_floor_only"
+        result["path"] = str(payload)
+        return True
+    return False
+
+
 def _resolve_codex_bin() -> Optional[str]:
-    """Return the VERIFIED native Codex payload path (ADR-182), None on
-    INFRA failure, or raise `CodexPinMismatch` on a fail-CLOSED arm.
-
-    H1 fail-CLOSED (PLAN-163 fix-pass): the `CEO_PAIR_RAIL_CODEX_BIN`
-    test seam overrides which artifact is hashed but NEVER skips
-    verification. When set, that path is routed through
-    `verify_codex_payload(payload_override=...)` — its sha256 is compared
-    against the pin-manifest entry for the current triple, identical to
-    the $PATH-discovered payload. A mismatch / set-but-missing override
-    raises `CodexPinMismatch` (fail-CLOSED); there is NO unverified
-    return. To exercise a stand-in binary, a test pins its sha into the
-    (test-mode) manifest — no env relaxes the sha comparison.
-
-    Post-ADR-182 the returned path is the native payload the launcher
-    would spawn — `_invoke_codex_review` execs EXACTLY this path, so the
-    artifact that was hashed is the artifact that runs (no
-    verify-A-invoke-B gap, no TOCTOU via the launcher indirection).
-
-    Raises:
-        CodexPinMismatch — triple absent from manifest, malformed
-        manifest entry, payload sha256 mismatch, or a set-but-missing
-        `CEO_PAIR_RAIL_CODEX_BIN` override (all fail-CLOSED).
-    """
+    """Return verified or floor-compatible native payload; infra is None."""
     override = os.environ.get("CEO_PAIR_RAIL_CODEX_BIN")
-    # H1: the override is a hash TARGET, not a trust bypass — it flows
-    # through the SAME verify_codex_payload() sha gate as $PATH discovery.
     res = (
         verify_codex_payload(payload_override=override)
         if override
         else verify_codex_payload()
     )
     status = res.get("status")
-    if status == "verified":
+    if status in ("verified", "compatible"):
         return str(res.get("path") or "") or None
     if status == "infra":
-        # INFRA → fail-OPEN: caller maps None to CodexUnavailable
-        # (advisory), matching the historical missing-binary doctrine.
         return None
-    # "mismatch" / "triple_missing" → fail-CLOSED per ADR-182.
     raise CodexPinMismatch(
         f"{status}:{res.get('detail')} triple={res.get('target_triple') or '?'} "
         f"payload_sha={str(res.get('sha256'))[:16] or '?'} "
@@ -637,6 +641,7 @@ __all__ = (
     '_load_pin_manifest',
     '_sha256_file',
     '_resolve_codex_payload',
+    '_apply_currency_policy',
     'verify_codex_payload',
     '_resolve_codex_bin',
     '_build_codex_prompt',

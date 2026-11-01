@@ -195,9 +195,9 @@ class TestValidateGovernanceMirror(TestEnvContext):
     """Shell case-arm literal == working set + dated-haiku alias."""
 
     def _case_ids(self) -> List[str]:
-        text = VALIDATE_SH.read_text(encoding="utf-8")
-        # The model-lint case arm: claude-...|...|"") — one line by
-        # construction (ends with the empty-string alternative + the
+        text = VALIDATE_SH.read_text(encoding="utf-8").replace("\\\n", "")
+        # The model-lint arm is one logical shell line after joining
+        # continuations (ends with the empty-string alternative + the
         # case-arm closing paren); parse it rather than trusting line
         # numbers.
         m = re.search(r'^\s*(claude-[a-z0-9|.-]+)\|""\)\s*$', text, re.M)
@@ -270,7 +270,7 @@ class TestSmokeParityAllowlistMirror(TestEnvContext):
     """smoke-install-parity ALLOWED_MODELS covers the working set."""
 
     def _allowed(self) -> List[str]:
-        text = PARITY_SH.read_text(encoding="utf-8")
+        text = PARITY_SH.read_text(encoding="utf-8").replace("\\\n", "")
         m = re.search(r'^ALLOWED_MODELS="([^"]+)"\s*$', text, re.M)
         self.assertIsNotNone(
             m, "ALLOWED_MODELS not found in smoke-install-parity.sh"

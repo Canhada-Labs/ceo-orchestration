@@ -47,7 +47,7 @@ try:
         Recommendation,
         ROLE_TO_TASK_TYPES,
         TierPolicyRecord,
-        VALID_MODEL_IDS,
+        VALID_MODEL_IDS, is_valid_model_id,
     )
 except ImportError:  # pragma: no cover — direct-script execution
     from _constants import (  # type: ignore[no-redef]
@@ -61,7 +61,7 @@ except ImportError:  # pragma: no cover — direct-script execution
         Recommendation,
         ROLE_TO_TASK_TYPES,
         TierPolicyRecord,
-        VALID_MODEL_IDS,
+        VALID_MODEL_IDS, is_valid_model_id,
     )
 
 
@@ -459,7 +459,7 @@ def _aggregate_task_records(
             verdict = rec.get("verdict")
             if not isinstance(task_type, str) or not isinstance(model, str):
                 continue
-            if model not in VALID_MODEL_IDS:
+            if not is_valid_model_id(model):
                 continue
             if verdict not in ("pass", "fail", "errored"):
                 continue

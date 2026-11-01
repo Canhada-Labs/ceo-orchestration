@@ -63,7 +63,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
 from _lib import claude_md_excludes as _claude_md_excludes
-
+from _lib import model_currency as _model_currency
 _PathLike = Union[str, "os.PathLike[str]"]
 
 # ---------------------------------------------------------------------------
@@ -233,8 +233,9 @@ _DETAIL_CAP = 240
 _HOOK_SCRIPT_RE = re.compile(r"([A-Za-z0-9_\-]+\.py)\b")
 
 #: Quoted model ids inside the ADR-149 allowlist block.
-_MODEL_ID_DQ_RE = re.compile(r'"(claude-[A-Za-z0-9.\-]+)"')
-_MODEL_ID_SQ_RE = re.compile(r"'(claude-[A-Za-z0-9.\-]+)'")
+_MODEL_ID_DQ_RE = re.compile(r'"([A-Za-z][A-Za-z0-9.\-]*)"')
+_MODEL_ID_SQ_RE = re.compile(r"'([A-Za-z][A-Za-z0-9.\-]*)'")
+_WORKING_SET_RE = re.compile(r"^AVAILABLE_MODELS_WORKING_SET[^=\n]*=\s*\((.*?)\)", re.M | re.S)
 _FROZENSET_RE = re.compile(r"frozenset\(\s*\{(.*?)\}\s*\)", re.DOTALL)
 
 _ADR_149_RELPATH = ("/".join((".claude", "adr", "ADR-149-model-id-allowlist.md")))
@@ -478,7 +479,7 @@ def _check_env_mapping(
             continue
         if key in _MODEL_REMAP_EXACT_KEYS or key.startswith(_MODEL_REMAP_PREFIX):
             if allow_set:
-                if _fold_one_m_tag(stripped) not in allow_set:
+                if not _model_currency.is_allowed_model(_fold_one_m_tag(stripped), allow_set):
                     findings.append(_finding(
                         TAMPER_MODEL_REMAP, layer_name,
                         f"{key}={stripped} outside model allowlist "
@@ -705,18 +706,20 @@ def _resolve_repo_root(project_dir: Optional[_PathLike]) -> Path:
 def _parse_allowlist_members(text: str) -> List[str]:
     """Extract model ids from ADR-149, robustly.
 
-    Strategy: prefer ids quoted inside the first ``frozenset({...})``
-    block; fall back to any quoted ``claude-*`` id in the document.
-    Order-preserving, de-duplicated.
+    Prefer the working-set tuple, then the legacy floor block.
+    Quoted model IDs are order-preserving and de-duplicated.
     """
-    match = _FROZENSET_RE.search(text)
+    match = _WORKING_SET_RE.search(text) or _FROZENSET_RE.search(text)
     chunk = match.group(1) if match else text
     members = _MODEL_ID_DQ_RE.findall(chunk) + _MODEL_ID_SQ_RE.findall(chunk)
     if not members and match:
         members = _MODEL_ID_DQ_RE.findall(text) + _MODEL_ID_SQ_RE.findall(text)
     out: List[str] = []
     for member in members:
-        if member not in out:
+        if (
+            member.startswith("claude-")
+            or _model_currency.is_allowed_model(member, ())
+        ) and member not in out:
             out.append(member)
     return out
 

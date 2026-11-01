@@ -44,7 +44,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ADR = REPO_ROOT / ".claude" / "adr" / "ADR-149-model-id-allowlist.md"
 DEFAULT_SETTINGS = REPO_ROOT / ".claude" / "settings.json"
 
+sys.path.insert(0, str(REPO_ROOT / ".claude" / "hooks"))
+from _lib.model_currency import availability_entries  # noqa: E402
+
 WORKING_SET_TOKEN = "AVAILABLE_MODELS_WORKING_SET"
+MODEL_FAMILY_POLICY = 'MODEL_FAMILY_POLICY = "semantic-families-v1"'
+_POLICY_FENCE_RE = re.compile(
+    r"```python\s*\n(?:(?!```)[\s\S])*?^MODEL_FAMILY_POLICY = \"semantic-families-v1\"\s*$",
+    re.MULTILINE,
+)
 VETO_FLOOR_TOKEN = "VETO_FLOOR_ALLOWED"
 FALLBACK_CHAIN_MAX = 3  # documented harness cap (model-config: "capped at three")
 
@@ -105,6 +113,8 @@ def parse_working_set(adr_path: Path) -> Tuple[List[str], str]:
         raise RuntimeError("cannot read ADR at {}: {}".format(adr_path, exc))
     ids = _extract_block_ids(text, WORKING_SET_TOKEN)
     if ids:
+        if _POLICY_FENCE_RE.search(text):
+            return availability_entries(ids), WORKING_SET_TOKEN
         return ids, WORKING_SET_TOKEN
     fallback = _extract_block_ids(text, VETO_FLOOR_TOKEN)
     if fallback:
