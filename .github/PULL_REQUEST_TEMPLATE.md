@@ -10,7 +10,8 @@ the "what" (the diff shows the "what"). -->
 
 ## Test plan
 
-<!-- Checklist of what you ran locally. Copy-paste ready. -->
+<!-- Checklist of what you ran locally. List commands and their literal outputs;
+explain failures and checks not run. Copy-paste ready. -->
 
 - [ ] `bash .claude/scripts/validate-governance.sh` — zero errors
 - [ ] `python3 -m unittest discover -s .claude/hooks/tests` — all pass
@@ -32,6 +33,8 @@ the "what" (the diff shows the "what"). -->
 
 ## Blast radius
 
+<!-- List canonical or kernel files touched, or state none. -->
+
 - [ ] L1 — 1-2 files, contained
 - [ ] L2 — one subsystem
 - [ ] L3+ — 3+ modules, new contract, or new dep (ADR required — cite below)
@@ -45,6 +48,10 @@ ADR(s) referenced: …
 - [ ] Does NOT weaken MUST/MUST NOT/NEVER/ALWAYS in `PROTOCOL.md` or `team.md`
 - [ ] Does NOT auto-publish from tag without manual approval env (anti-goal #16)
 - [ ] Does NOT deploy to public (Sprint 17 conditional — repo stays private)
+
+## How to revert
+
+<!-- Give the exact safe rollback procedure, including required checks and data handling. -->
 
 ## Related
 
