@@ -37,6 +37,7 @@ if str(_HOOKS_DIR) not in sys.path:
 
 from _lib import credentials as _credentials  # noqa: E402
 from _lib import plan_frontmatter as _fm  # noqa: E402
+from _lib import plan_paths as _plan_paths  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -234,9 +235,6 @@ def bash_safety_preprocess(event: Dict[str, Any]) -> Dict[str, Any]:
 # Plan-edit preprocessor
 # ---------------------------------------------------------------------------
 
-_PLAN_PATH_RE = re.compile(r"\.claude/plans/PLAN-\d{3}-[a-z0-9-]+\.md$")
-_PLAN_ID_RE = re.compile(r"(PLAN-\d{3})-[a-z0-9-]+\.md$")
-
 _LEGAL_STATUSES = frozenset({"draft", "reviewed", "executing", "done", "abandoned", "refused"})
 
 _ALLOWED_TRANSITIONS: Dict[str, frozenset] = {
@@ -314,12 +312,11 @@ def plan_edit_preprocess(event: Dict[str, Any],
         replace_all = bool(tool_input.get("replace_all") or False)
 
         # Scope guard.
-        if not file_path or not _PLAN_PATH_RE.search(file_path):
+        if not _plan_paths.is_plan_path(file_path):
             enriched["_derived_plan"] = derived
             return enriched
         derived["is_plan_file"] = True
-        m = _PLAN_ID_RE.search(file_path)
-        derived["plan_id"] = m.group(1) if m else ""
+        derived["plan_id"] = _plan_paths.plan_id_from_path(file_path)
 
         current = reader(file_path)
         if not current:

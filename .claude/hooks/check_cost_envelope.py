@@ -88,6 +88,11 @@ try:
 except Exception:  # pragma: no cover
     _audit_emit = None  # type: ignore[assignment]
 
+try:
+    from _lib import runtime_paths as _runtime_paths
+except Exception:  # pragma: no cover
+    _runtime_paths = None
+
 
 _DEFAULT_ESTIMATE_CENTS = 2
 # P1 #1 fold — require BOTH CEO_SWARM=1 AND command body match a real
@@ -174,8 +179,12 @@ def _resolve_user_id() -> str:
     return "default"
 
 
-def _resolve_project_path() -> str:
-    return os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+def _resolve_project_path() -> Optional[str]:
+    """A hook needs an explicit project; the CLI resolver's fallback is unsafe here."""
+    project = os.environ.get("CLAUDE_PROJECT_DIR")
+    if not project or not os.path.isabs(project) or _runtime_paths is None:
+        return None
+    return str(_runtime_paths.project_dir())
 
 
 def _safe_emit_capped(
@@ -237,6 +246,10 @@ def main() -> int:
     try:
         class_tier = _resolve_class_tier()
         project_path = _resolve_project_path()
+        if project_path is None:
+            _breadcrumb("project scope unavailable; no cost envelope evaluated or spend recorded")
+            _emit_decision({})
+            return 0
         user_id = _resolve_user_id()
         env = CostEnvelope(
             project_path=project_path,

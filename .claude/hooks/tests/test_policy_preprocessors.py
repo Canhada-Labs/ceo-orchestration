@@ -512,3 +512,47 @@ class TestPlanEditPreprocessor(TestEnvContext):
             read_current=_fake_reader(_BASE_DRAFT_PLAN),
         )["_derived_plan"]
         self.assertEqual(d["plan_id"], "PLAN-042")
+
+    def test_fu144_real_plan_name_census(self):
+        plans_dir = Path(__file__).resolve().parents[3] / ".claude" / "plans"
+        plan_files = [
+            plan_file for plan_file in plans_dir.glob("PLAN-*.md")
+            if plan_file.name != "PLAN-SCHEMA.md"
+        ]
+        self.assertTrue(plan_files)
+        for plan_file in plan_files:
+            derived = pp.plan_edit_preprocess(
+                _edit_event(str(plan_file)),
+                read_current=_fake_reader(_BASE_DRAFT_PLAN),
+            )["_derived_plan"]
+            self.assertTrue(derived["is_plan_file"], msg=plan_file.name)
+
+    def test_fu144_rejects_invalid_plan_name_forms(self):
+        invalid_paths = (
+            ".claude/plans/PLAN-99-too-short.md",
+            ".claude/plans/PLAN-099-FOLLOWUP.md",
+            ".claude/plans/PLAN-099-FOLLOWUP-good_slug.md",
+            ".claude/plans/PLAN-099-FOLLOWUP--double.md",
+            ".claude/plans/PLAN-099-UPPERCASE.md",
+            ".claude/plans/PLAN-099-good-.md",
+        )
+        for path in invalid_paths:
+            derived = pp.plan_edit_preprocess(
+                _edit_event(path), read_current=_fake_reader(_BASE_DRAFT_PLAN)
+            )["_derived_plan"]
+            self.assertFalse(derived["is_plan_file"], msg=path)
+
+    def test_fu144_followup_transition_blocks_for_posix_and_windows_paths(self):
+        paths = (
+            "/tmp/project/.claude/plans/PLAN-194-FOLLOWUP-path-matcher.md",
+            r"C:\project\.claude\plans\PLAN-194-FOLLOWUP-path-matcher.md",
+        )
+        for path in paths:
+            derived = pp.plan_edit_preprocess(
+                _edit_event(path, "status: draft", "status: executing"),
+                read_current=_fake_reader(_BASE_DRAFT_PLAN),
+            )["_derived_plan"]
+            self.assertTrue(derived["is_plan_file"], msg=path)
+            self.assertEqual(derived["plan_id"], "PLAN-194")
+            self.assertFalse(derived["transition_legal"])
+            self.assertEqual(derived["transition_reason_key"], "illegal_transition")
