@@ -715,8 +715,7 @@ if [ -d "$AGENTS_DIR" ]; then
     else
       model_val=$(echo "$model_line" | sed -E 's/^model:[[:space:]]*//' | tr -d '[:space:]')
       case "$model_val" in
-        claude-opus-4-8|claude-fable-5|claude-sonnet-4-6|claude-haiku-4-5|claude-opus-5|claude-sonnet-5|\
-claude-opus-4-6|claude-opus-4-7|gpt-5.4|gpt-6.1-sol|claude-fable-5-1|claude-opus-5-5|claude-haiku-4-5-20251001|"")
+        claude-fable-5|claude-opus-4-8|claude-sonnet-4-6|claude-haiku-4-5|claude-haiku-4-5-20251001|claude-opus-5|claude-sonnet-5|claude-fable-5-1|claude-opus-5-5|"")
           : ;;
         *)
           if ! python3 "$REPO_ROOT/.claude/hooks/_lib/model_currency.py" "$model_val"; then
