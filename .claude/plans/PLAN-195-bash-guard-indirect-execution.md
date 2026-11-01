@@ -7,6 +7,7 @@ reviewed_at: 2026-10-01
 reviewed_by: "Owner — aceite em bloco, no chat da S361 (2026-10-01), da recomendação sobre o plano revisto no debate: corpo do debate (sha 9894151f, PROCEED) + apêndice «Correções pós-debate S360»; OQ-8 mantida como o CEO resolveu no debate"
 owner: CEO
 depends_on: []
+related_commits: [b2ab8805, 6ee8c218, 0d07791b, ee71777a, 9ef0d929, d40fd744]
 level: L3
 budget_tokens: "estimado (refeito no debate r1, S360) — W0 (doc-only) ~60-120k; instrumento de replay de falso-positivo ~60-120k; parte A = W1-ADR ~80-150k + W1a ~350-650k + W1b ~300-600k (total ~0,8-1,5 M, rail com teto de 4 rodadas por pacote); W2 (cura B + mensagem A3 + argv + rail) ~350-700k; W3 (medição do sandbox, sem código) ~40-80k; debate L3 ~0,5-1 M"
 budget_sessions: "estimado 5-7 (W0 e a medição do sandbox cabem numa; parte A 3-4 sessões em 3 pacotes na mesma vaga; W2 1-2; cada pacote canônico pede a sua cerimônia)"
