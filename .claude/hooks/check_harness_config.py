@@ -562,7 +562,7 @@ def run_exec_bit_gate(repo_root: Path) -> List[Finding]:
 
     That script remains the single owner of the exists+exec-bit sweep
     (Session 75 Codex Finding 9). We import it by file path (its name is
-    not import-safe) and call its main() with stdout captured.
+    not import-safe) and call its main() with output captured.
     """
     script = repo_root / ".claude" / "scripts" / "check-active-hooks-executable.py"
     if not script.is_file():
@@ -574,6 +574,7 @@ def run_exec_bit_gate(repo_root: Path) -> List[Finding]:
                 "sub-check skipped (degraded)",
             )
         ]
+    buf = io.StringIO()
     try:
         import importlib.util
 
@@ -583,19 +584,18 @@ def run_exec_bit_gate(repo_root: Path) -> List[Finding]:
         if spec is None or spec.loader is None:
             raise ImportError("spec_from_file_location returned None")
         mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            spec.loader.exec_module(mod)
             try:
                 rc = int(mod.main())
             except SystemExit as exc:  # its parser exits 2 on parse failure
                 rc = int(exc.code or 0)
     except Exception as exc:
         return [
-            _warn(
+            _red(
                 "exec_bit",
                 str(script),
-                f"could not run exec-bit gate ({type(exc).__name__}: {exc}) — degraded",
+                f"exec-bit gate raised {type(exc).__name__}: {exc} — fail-CLOSED | {buf.getvalue().strip()}",
             )
         ]
     if rc != 0:

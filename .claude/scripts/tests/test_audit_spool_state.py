@@ -60,6 +60,14 @@ sys.stderr.write("ro-events-checked\n")
 sys.exit(code)
 """
 
+_RUN_WITH_PYCACHE_PREFIX = (
+    "import runpy, sys\n"
+    "path = sys.argv[2]\n"
+    "sys.pycache_prefix = sys.argv[1]\n"
+    "sys.argv = [path] + sys.argv[3:]\n"
+    "runpy.run_path(path, run_name='__main__')\n"
+)
+
 
 class _Tree(TestEnvContext):
     def setUp(self) -> None:
@@ -187,6 +195,20 @@ class TestSpoolResidueNames(TestEnvContext):
         for bad in ("2026-10-02T03:40:00", "<LAND>", ""):
             with self.assertRaises(ValueError):
                 ss.parse_iso_utc(bad)
+
+    def test_fu144_help_creates_no_bytecode_without_env_opt_out(self) -> None:
+        """Loading the resolver for a normal help invocation cannot leave pyc."""
+        cache = self._tmp_root / "spool-state-pycache"
+        env = self.subprocess_env()
+        env.pop("PYTHONDONTWRITEBYTECODE", None)
+        res = subprocess.run(
+            [sys.executable, "-c", _RUN_WITH_PYCACHE_PREFIX, str(cache), str(SCRIPT), "--help"],
+            env=env,
+            capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertIn("--residue", res.stdout)
+        self.assertEqual(list(cache.rglob("*runtime_paths*.pyc")), [])
 
 
 class TestFluxH1(_Tree):

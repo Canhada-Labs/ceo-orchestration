@@ -53,7 +53,7 @@ ceo-orchestration/
     │   ├── core/                   # 42 universal backend skills
     │   ├── frontend/               # 8 universal frontend skills
     │   └── domains/                # 116 skills across 33 domain profiles
-    ├── adr/                        # 198 architecture decision records
+    ├── adr/                        # 199 architecture decision records
     └── plans/                      # plan schemas + per-plan working files
 ```
 
@@ -68,9 +68,9 @@ faith — run the commands:
 | Hook registrations | 49 wired into `settings.json`| (parse the `hooks` block of `.claude/settings.json`)      |
 | `_lib` modules     | 74 top-level (147 recursive) | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
 | Slash commands     | 27                           | `ls .claude/commands/*.md \| wc -l`                       |
-| ADRs               | 198                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
+| ADRs               | 199                          | `ls .claude/adr/ADR-*.md \| wc -l`                        |
 | SPEC/v1 files      | 32 (28 `*.schema.md`)        | `ls SPEC/v1/*.md \| wc -l`                                |
-| Test files         | ~810                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
+| Test files         | ~850                         | `git ls-files '*test_*.py' '*_test.py' \| wc -l`          |
 | Collected cases    | ~16.2k parametrized cases      | `make test-collect` (pytest `--collect-only`)             |
 
 > **On the "60 vs 49" hook gap.** 60 is the number of hook *scripts* present in
@@ -81,7 +81,7 @@ faith — run the commands:
 > numbers are reported here rather than conflated into one impressive figure.
 
 > **On "~16.2k tests."** That is the count of *collected, parametrized* cases
-> reported by `pytest --collect-only`, spread across ~810 test files. It is
+> reported by `pytest --collect-only`, spread across ~850 test files. It is
 > not ~16,200 hand-written cases — many are the
 > same logic exercised over a table of inputs. We report the collector's number
 > with that caveat rather than dress it up.

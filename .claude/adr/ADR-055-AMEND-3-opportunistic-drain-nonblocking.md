@@ -181,3 +181,7 @@ ADR-055 `## Amended-by` appendix lands in the SAME commit.
 Documentation + behavioral refinement. Runtime enforcement ships at the v1.0.0
 genesis commit (patch + tests). ADR-055 `## Amended-by` appendix lands in the
 same commit.
+
+## Amended-by
+
+- **[ADR-055-AMEND-4](ADR-055-AMEND-4-spool-state-drain-and-signal-hardening.md)** — accepted decision for spool-state accounting, zero-drain hook exit and signal hardening. Runtime integration is partial; acceptance does not attest U2-A/U2-B, the external drainer, F2, or an Owner SIGN. See the amendment §1 and PLAN-194 LEDGER.

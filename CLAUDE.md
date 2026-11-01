@@ -51,7 +51,7 @@ library — you install it *into* an existing repository with
 - **A cross-LLM pair-rail** — a second model (Codex) reviews canonical edits Claude proposes, so no single model is both author and sole reviewer.
 - **A skill library** — **166 skills** ready-made (42 core + 8 frontend + 116 domain).
 - **Governance hooks** — 60 Python hook scripts on disk (49 wired into `.claude/settings.json` (52 event registrations)), built on 74 stdlib-only `_lib/` modules.
-- **198 ADRs** (architecture decision records, `.claude/adr/`) and **27 slash commands** (`.claude/commands/`).
+- **199 ADRs** (architecture decision records, `.claude/adr/`) and **27 slash commands** (`.claude/commands/`).
 
 A note this repo keeps deliberately: **there is no speed claim.** Six
 internal experiments found no general speedup over an optimized solo
@@ -70,7 +70,7 @@ workflow — the value here is governance and auditability, not throughput.
 | Role             | Framework / meta-repo (dogfood)                                       |
 | Runtime          | Python ≥ 3.9, stdlib-only (zero third-party runtime deps — see `SBOM.md`) |
 | Clone            | `https://github.com/Canhada-Labs/ceo-orchestration.git`               |
-| Tests            | ~810 test files; `make test-collect` (pytest `--collect-only`) reports ~16,200 parametrized cases |
+| Tests            | ~850 test files; `make test-collect` (pytest `--collect-only`) reports ~16,200 parametrized cases |
 | CI               | Workflows under `.github/workflows/`; key: `validate.yml` (governance), `release.yml` (tag gate), `coverage.yml` (tiered coverage) |
 | Plans            | `.claude/plans/PLAN-<NNN>-<slug>.md`                                   |
 | ADRs             | `.claude/adr/ADR-<NNN>-<slug>.md`                                      |

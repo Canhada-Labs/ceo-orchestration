@@ -20,6 +20,48 @@ import shutil
 import tempfile
 
 
+# Location carriers from _lib.test_isolation.  This runtime script cannot
+# import that pytest-only module, so keep the production copy explicit and
+# pin parity in test_diagnose_output_hook.py.  HOME is included because it is
+# the resolver fallback; CLAUDE_PROJECT_DIR_NATIVE wins every other carrier.
+_CHILD_LOCATION_CARRIERS = (
+    "HOME", "CEO_AUDIT_LOG_DIR", "CEO_PROJECT_STATE_DIR",
+    "CEO_AUDIT_LOG_PATH", "CEO_AUDIT_LOG_ERR", "CEO_AUDIT_LOG_LOCK",
+    "CEO_AUDIT_KEY_PATH", "CEO_AUDIT_LAST_HMAC_PATH",
+    "CEO_AUDIT_CHAIN_LENGTH_PATH", "CEO_AUDIT_LOG_FALLBACK_PATH",
+    "CEO_AUDIT_LOG_ROTATE_BYTES", "CEO_AUDIT_HMAC_DISABLE",
+    "CLAUDE_PROJECT_DIR_NATIVE",
+)
+
+
+def _isolated_child_env(base: dict, tmp: str, root: Path) -> dict:
+    """Build a child environment whose audit family lives below ``tmp``."""
+    env = dict(base)
+    for key in _CHILD_LOCATION_CARRIERS:
+        env.pop(key, None)
+    env.update(
+        HOME=tmp,
+        CEO_AUDIT_LOG_DIR=str(Path(tmp) / "audit"),
+        CEO_PROJECT_STATE_DIR=str(Path(tmp) / "state"),
+        CLAUDE_PROJECT_DIR=str(root),
+    )
+    return env
+
+
+def _iterations(argv: list) -> int:
+    """Read the optional diagnostic sample count without changing its default."""
+    if not argv:
+        return 201
+    if len(argv) == 2 and argv[0] == "--iterations":
+        try:
+            count = int(argv[1])
+        except ValueError:
+            count = 0
+        if count > 0:
+            return count
+    raise SystemExit("usage: diagnose-output-hook.py [--iterations POSITIVE]")
+
+
 def main() -> None:
     root = Path(__file__).resolve().parents[2]
     hook = root / ".claude/hooks/check_output_secrets.py"
@@ -39,15 +81,14 @@ def main() -> None:
     )
     gate = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gate)
+    iterations = _iterations(sys.argv[1:])
     for observe in ("", "1"):
         with tempfile.TemporaryDirectory(prefix="ceo-profile-diagnostic-") as tmp:
-            env = dict(os.environ)
-            for key in ("CLAUDE_PROJECT_DIR_NATIVE", "CLAUDE_SESSION_ID",
+            env = _isolated_child_env(os.environ, tmp, root)
+            for key in ("CLAUDE_SESSION_ID",
                         "CEO_LEARNING_OBSERVE", "CEO_TOOL_LIFECYCLE", "CEO_SOTA_DISABLE",
                         "CEO_ANTI_OVERHEAD"):
                 env.pop(key, None)
-            env.update(HOME=tmp, CEO_AUDIT_LOG_DIR=tmp + "/audit",
-                       CLAUDE_PROJECT_DIR=str(root))
             for key in ("CEO_MODEL_ROUTING", "CEO_PROMOTION_HEURISTIC",
                         "CEO_COOKBOOK_ADVISOR_ENABLED", "CEO_SPEC_CTX_SANITIZER_ENABLED",
                         "CEO_SPAWN_CONFIDENCE_ENABLED"):
@@ -58,7 +99,7 @@ def main() -> None:
             samples = []
             worst_ms = -1.0
             worst_path = str(Path(tmp) / "worst.prof")
-            for i in range(201):
+            for i in range(iterations):
                 tool_id = "diagnostic-%d" % i
                 subprocess.run(
                     [sys.executable, str(hook.with_name("check_anti_ceo_overhead.py"))],
@@ -78,7 +119,7 @@ def main() -> None:
                 if elapsed_ms > worst_ms:
                     worst_ms = elapsed_ms
                     shutil.copyfile(stats_path, worst_path)
-            print("DIAGNOSTIC wall/fsync ms (cold then 200 warm):", samples)
+            print("DIAGNOSTIC wall/fsync ms (1 cold then %d warm):" % (iterations - 1), samples)
             print("OUTPUT HOOK DIAGNOSTIC observe=%s (separate from gate)" % (observe or "unset"))
             pstats.Stats(worst_path).strip_dirs().sort_stats("cumulative").print_stats(25)
             pstats.Stats(worst_path).strip_dirs().sort_stats("tottime").print_stats(15)
