@@ -60,18 +60,19 @@ def _branched_actions() -> Set[str]:
     """Return every action with an explicit ``action == "X"`` branch in
     ``emit_generic`` (parsed from the live source, so the test follows the
     code automatically)."""
-    src = inspect.getsource(audit_emit.emit_generic)
-    tree = ast.parse(src)
+    handlers = getattr(audit_emit, "_GENERIC_DISPATCH_HANDLERS", ())
+    trees = [ast.parse(inspect.getsource(handler)) for handler in handlers]
     out: Set[str] = set()
-    for node in ast.walk(tree):
-        if (
-            isinstance(node, ast.Compare)
-            and isinstance(node.left, ast.Name)
-            and node.left.id == "action"
-        ):
-            for comp in node.comparators:
-                if isinstance(comp, ast.Constant) and isinstance(comp.value, str):
-                    out.add(comp.value)
+    for tree in trees:
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Compare)
+                and isinstance(node.left, ast.Name)
+                and node.left.id == "action"
+            ):
+                for comp in node.comparators:
+                    if isinstance(comp, ast.Constant) and isinstance(comp.value, str):
+                        out.add(comp.value)
     return out
 
 
@@ -146,7 +147,7 @@ def _adr_status(adr_id: str) -> Optional[str]:
     # non-digit / non-AMEND boundary (so ADR-135 != ADR-135-AMEND-1).
     exact: List[Path] = []
     for c in candidates:
-        rest = c.name[len(adr_id):]
+        rest = c.name[len(adr_id) :]
         # rest looks like "-<slug>.md" or "-AMEND-N-<slug>.md"
         if rest.startswith("-AMEND") and "AMEND" not in adr_id:
             continue
@@ -210,9 +211,7 @@ class TestDefaultDenyGuard(_GuardBase):
         # exist, each MUST default-deny.
         for action in targets:
             events = self._emit_and_read(action, **{self.GHOST: self.GHOST_VALUE})
-            self.assertEqual(
-                len(events), 1, f"{action}: expected exactly 1 event"
-            )
+            self.assertEqual(len(events), 1, f"{action}: expected exactly 1 event")
             ev = events[0]
             self.assertNotIn(
                 self.GHOST,

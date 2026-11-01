@@ -113,6 +113,34 @@ class _FakeRepoTest(TestEnvContext):
 
 
 class TestDeterministicGeneration(_FakeRepoTest):
+    def test_bound_parts_are_scanned_without_importing_or_counting_unused_packages(self):
+        hooks = self.repo / ".claude/hooks"
+        (hooks / "guard_skills.py").write_text(
+            "from _lib.bound import bind\nfrom _lib.unused import install\nbind(globals())\n",
+            encoding="utf-8",
+        )
+        for package, text in (
+            ("bound", "raise RuntimeError('must not import')\nSURFACE = '.claude/skills'\n"),
+            ("unused", "SURFACE = '.claude/commands'\n"),
+        ):
+            folder = hooks / "_lib" / package
+            folder.mkdir(parents=True)
+            (folder / "__init__.py").write_text(text, encoding="utf-8")
+        actual = gen_map.surface_guards(self.repo, [{"hook": "guard_skills.py"}])
+        self.assertEqual(actual, {"skills": ["guard_skills.py"], "commands": [], "unresolved": []})
+
+    def test_missing_bound_declarations_fail_instead_of_reporting_empty_surface(self):
+        hook = self.repo / ".claude/hooks/guard_skills.py"
+        hook.write_text("from _lib.missing import install\ninstall(globals())\n", encoding="utf-8")
+        with self.assertRaisesRegex(FileNotFoundError, "Missing bound hook declarations"):
+            gen_map.surface_guards(self.repo, [{"hook": "guard_skills.py"}])
+
+    def test_shell_guard_preserves_textual_surface_detection(self):
+        hook = self.repo / ".claude/hooks/guard_commands.sh"
+        hook.write_text("#!/bin/sh\ncase $1 in .claude/commands/*) exit 1;; esac\n", encoding="utf-8")
+        actual = gen_map.surface_guards(self.repo, [{"hook": hook.name}])
+        self.assertEqual(actual, {"skills": [], "commands": [hook.name], "unresolved": []})
+
     def test_double_generation_byte_identical(self) -> None:
         self.assertEqual(gen_map.generate(self.repo), gen_map.generate(self.repo))
 

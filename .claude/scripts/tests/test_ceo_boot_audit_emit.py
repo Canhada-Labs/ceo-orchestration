@@ -424,22 +424,25 @@ class TestAdversarialDeniedField(TestEnvContext):
         self.assertTrue(callable(self._ae.emit_ceo_boot_check_skipped))
 
     def test_emit_generic_bypass_blocked_post_ceremony(self):
-        """Codex S82 P1 #1 closure — emit_generic("ceo_boot_emitted", forbidden=...)
-        MUST scrub via the same allowlist (defense-in-depth boundary).
-
-        Asserts the source pattern is in place. Runtime assertion deferred
-        to byte-identity tests that ship with the canonical ceremony PR.
-        """
-        if "ceo_boot_emitted" not in self._ae._KNOWN_ACTIONS:
-            self.skipTest("Canonical ceremony pending")
-        # Source-level check: emit_generic must reference _scrub_ceo_boot_event
-        # for the new actions (regression guard).
-        import inspect
-        src = inspect.getsource(self._ae.emit_generic)
-        self.assertIn("_scrub_ceo_boot_event", src,
-                      "emit_generic must route ceo_boot_* through scrub")
-        self.assertIn("ceo_boot_emitted", src)
-        self.assertIn("ceo_boot_check_skipped", src)
+        """Generic boot events must scrub forbidden fields before persistence."""
+        captured = []
+        original_write = self._ae._write_event
+        self._ae._write_event = captured.append
+        try:
+            for action, allowed in (
+                ("ceo_boot_emitted", {"gate_pass": True}),
+                ("ceo_boot_check_skipped", {"check_name": "probe"}),
+            ):
+                with self.subTest(action=action):
+                    captured.clear()
+                    self._ae.emit_generic(action, forbidden="must-not-reach-audit", **allowed)
+                    self.assertEqual(len(captured), 1)
+                    self.assertEqual(captured[0]["action"], action)
+                    for key, value in allowed.items():
+                        self.assertEqual(captured[0][key], value)
+                    self.assertNotIn("forbidden", captured[0])
+        finally:
+            self._ae._write_event = original_write
 
 
 # ---------------------------------------------------------------------------
