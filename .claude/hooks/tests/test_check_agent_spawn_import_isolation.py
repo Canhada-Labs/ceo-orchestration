@@ -20,7 +20,7 @@ class CheckAgentSpawnImportIsolationTests(unittest.TestCase):
     def test_dispatch_shim_does_not_import_audit_emit_at_module_load(self) -> None:
         probe = (
             "import sys;"
-            "sys.path.insert(0, '.claude/hooks');"
+            f"sys.path.insert(0, {str(_HOOKS_DIR)!r});"
             "import _lib.audit_emit_dispatch;"
             "print('audit_emit_imported=' + str('_lib.audit_emit' in sys.modules))"
         )
@@ -41,7 +41,7 @@ class CheckAgentSpawnImportIsolationTests(unittest.TestCase):
         tmpdir = tempfile.mkdtemp(prefix="ceo-audit-isolation-")
         probe = (
             "import sys;"
-            "sys.path.insert(0, '.claude/hooks');"
+            f"sys.path.insert(0, {str(_HOOKS_DIR)!r});"
             "import _lib.audit_emit_dispatch as d;"
             "pre = '_lib.audit_emit' in sys.modules;"
             "d.emit_generic('agent_spawn', test='probe');"
@@ -64,7 +64,7 @@ class CheckAgentSpawnImportIsolationTests(unittest.TestCase):
     def test_kill_switch_eager_import(self) -> None:
         probe = (
             "import sys;"
-            "sys.path.insert(0, '.claude/hooks');"
+            f"sys.path.insert(0, {str(_HOOKS_DIR)!r});"
             "import _lib.audit_emit_dispatch;"
             "print('audit_emit_imported=' + str('_lib.audit_emit' in sys.modules))"
         )
