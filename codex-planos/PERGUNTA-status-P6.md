@@ -1,53 +1,59 @@
-# P6 — Devolução W6a: três achados P1/P2 corrigidos
+# P6 — W6f: helpers de PLAN-188, PLAN-183, PLAN-175 e PLAN-191
 
-Branch: `tracks/ceo-w6a-audit-fixes`; base `bdb99699`; 2026-11-01.
+Branch `tracks/ceo-w6f-pending-plans`; base `4d46f3ca`; 2026-11-01.
 
-**Delivery:** os pacotes `_audit_query`, `_installer_write_safety` e
-`_contamination` foram movidos para `hooks/_lib`, entregue recursivamente pelo
-instalador. Fachadas, binder, raiz/hash do censo e fixture isolada foram
-ajustados. Instalação limpa `--profile core`: os três CLIs executam `--help`
-com código 0, sem PYTHONPATH ou dependência da árvore de origem.
+**Entrega:** três pacotes stdlib em `hooks/_lib`: preparo de cerimônia com
+escopo exato, hashes recalculados e GPG; censo de imports versus entrega
+seletiva; resolução de skills relativos/symlinks e cascata consultiva por
+complexidade. Orçamento inválido bloqueia a cascata; custo desconhecido
+permanece `None`. Nenhuma assinatura, publicação ou chamada de modelo feita.
 
-**GuardFall:** limites de palavras/alternativas agora vetam por limite de
-análise; ranges respeitam direção e magnitude do passo, inclusive passo zero.
-Comentários de shell e substituição de processo entre aspas duplas são dados;
-substituições executáveis e here-doc não citado continuam analisados.
+Os nomes de planos do roteiro não existem. A etapa dos helpers foi registrada
+como concluída no PLAN-196; os quatro planos históricos seguem `superseded`,
+sem afirmar conclusão do escopo amplo herdado. O censo aponta dois gaps
+preexistentes: `scripts/detectors` e `scripts/optimizer`, ainda não entregues
+pelo instalador. O censo informa esse resultado, sem produzir sucesso falso.
 
-**Wiring:** `check_harness_config.main()` chama o classificador de carregamento
-raiz. Sem fonte completa, informa `root_load_unobservable`. O snapshot JSON
-opcional é identificado como fornecido pelo operador, sem afirmar observação
-nativa ou completude autenticada. Pino recursivo de `_lib` rederivado do disco:
-203 arquivos Python; dois pontos de `docs/ARCHITECTURE.md` atualizados.
+**Casos:** os três arquivos exigidos executaram integralmente, 55 nodeids.
+Exemplos de casos e artefatos acusadores (prefixo `.claude/`):
 
-Casos novos (prefixos nodeid; todas as parametrizações foram executadas):
+- `scripts/tests/test_plan188_ceremony_toolkit.py::test_sha256_pins_remeasured_after_content_change`
+  e `::test_detached_gpg_signature_validates_real_bytes`: hash e GPG sobre
+  bytes históricos SP-042, chave pública em chaveiro temporário isolado.
+- `scripts/tests/test_plan183_shipped_path_census.py::test_new_scripts_subpackage_not_shipped_by_top_level_glob`
+  e `::test_empty_root_is_unproven`: payload de pacote omitido e fonte ausente.
+- `hooks/tests/test_plan175_191_telemetry_and_cascade.py::test_symlink_alias_uses_target_slug`
+  e `::test_invalid_budget_blocks_all_tiers`: caminho real e payload bloqueado;
+  inclui todas as parametrizações de layouts, orçamento e tiers.
 
-- `.claude/scripts/tests/test_installed_script_packages.py::TestInstalledScriptPackages::test_core_install_runs_split_clis_without_source_tree`.
-- `.claude/hooks/tests/test_check_bash_safety_indirect_exec.py::TestReviewW6GuardFallRegressions::test_hook_payload_matches_bash_execution_semantics` e `::test_heredoc_data_expansion_reaches_hook_payload` — 9 casos no JSON do hook/veto.
-- `.claude/hooks/tests/test_claude_md_excludes.py::TestRootInstructionRuntimeWiring`: `test_runtime_report_loaded_from_complete_snapshot`, `test_runtime_report_absent_from_complete_snapshot`, `test_runtime_rejects_partial_snapshot_as_proof`, `test_runtime_rejects_invalid_entries_as_proof`, `test_runtime_without_observed_source_is_unobservable`, `test_runtime_malformed_json_is_unobservable` — saída real do CLI.
+**Mutantes:** 16/16 cerimônia, 10/10 censo e 29/29 discovery/cascata; um
+isolado por nodeid. Remoção de guardas de escopo/hash/assinatura, falso
+positivo de entrega/raiz vazia, slug inventado, orçamento inválido aceito e
+tier incorreto foram detectados por asserções. Restauração por `cp` e
+comparação de bytes a cada execução; erros de coleta não contados.
 
-Mutantes isolados mortos: Delivery **3/3** (uma fachada por vez), GuardFall
-**9/9**, wiring **6/6**. Todos falharam por asserção do artefato/payload; fontes
-restauradas por `cp` e verificadas por `cmp`, sem contar erro de coleta.
-
-Linhas finais literais, em palcos sem `.git` e temporários em RAM:
+Linhas finais literais dos testes focais e vizinhos diretos:
 
 ```text
-492 passed, 1 skipped in 13.34s
-860 passed, 1 skipped, 3 xfailed in 24.84s
+55 passed, 1 warning in 0.99s
+1 failed, 103 passed, 1 skipped in 12.85s
+1 passed in 0.59s
 ```
 
-A primeira linha é a base; a segunda inclui os quatro arquivos obrigatórios,
-vizinhos diretos e o teste da instalação limpa. Sem suíte inteira.
+O único erro de vizinho era o controle de corpus exigindo o índice Git que
+não existe na cópia de teste. O mesmo nodeid passou usando o índice real em
+somente leitura via `GIT_DIR`; pytest permaneceu no palco. O aviso é um
+`SyntaxWarning` preexistente em `architect-bundle-validate.py`; o skip é do
+vizinho GPG existente. Os 55 casos novos não tiveram skips.
 
-**Pré-checagem funcional: ok.** Casos medem arquivos entregues, JSON e saída do
-CLI; fontes incompletas não viram afirmação de carregamento. Testes com ambiente
-isolado; sintaxe Python 3.9 e stdlib verificadas. Não há afirmação de conclusão
-global do PLAN-195 nem alteração de produção/main.
+**Pré-checagem: ok** nos comportamentos medidos. Contagem de `_lib` rederivada
+do disco: 76 módulos no topo, 211 arquivos Python recursivos. Palco separado
+e temporários em tmpfs, fora de repositório reconhecido pelo Git (o sandbox
+cria diretórios `.git` vazios nos pais). Nenhum banco de produção utilizado.
 
-**Limitações de ferramenta:** `autobahnctl pre-juiz --delta --json` não está
-instalado neste ambiente; não afirmo zero órfãs/duplicatas/pitfalls sem essa
-medição. Comentários remotos de PR não puderam ser consultados (`gh` sem
-autenticação); os três achados foram tratados a partir do roteiro local.
+Limitações de ferramenta: `autobahnctl pre-juiz` indisponível; não se afirma
+zero órfãs/duplicatas/pitfalls sem medição. `gh` sem autenticação impede ler
+comentários remotos; a implementação segue o roteiro local do CEO.
 
-Nenhuma outra fatia está liberada no roteiro desta pista. Commit local para
-revisão e integração pelo CEO, sem push ou abertura de PR.
+Roteiro removido após execução. Nenhuma outra fatia liberada nesta pista;
+commit local para revisão e integração pelo CEO, sem push ou abertura de PR.

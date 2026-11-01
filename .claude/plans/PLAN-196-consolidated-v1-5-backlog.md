@@ -76,6 +76,33 @@ restante e reestimar o esforço; não somar estimativas históricas sobrepostas.
 
 ## Items
 
+### Etapa local W6f — helpers de P175, P183, P188 e P191
+
+Roteiro do CEO de 2026-11-01: implementação limitada aos três pacotes abaixo
+e seus testes focais. Os quatro nomes de arquivos citados no roteiro não
+existiam; as fontes históricas da tabela acima continuam `superseded`.
+Esta entrega não fecha seus critérios herdados nem altera o status deste plano.
+Etapa dos helpers: `status: done`; `completed_at: 2026-11-01`.
+
+- P188: `_lib/_ceremony_toolkit` prepara escopo canônico, hashes recalculados,
+  verificação de assinatura destacada com chaveiro explícito e resumo para
+  revisão. O helper não assina nem publica mudanças.
+- P183: `_lib/_shipped_path_census` relaciona imports locais e a estrutura do
+  instalador seletivo, distinguindo pacote ausente de análise inconclusiva.
+  O censo identifica os gaps existentes `scripts/detectors` e
+  `scripts/optimizer`; a correção da entrega desses pacotes permanece aberta.
+- P175: `_lib/_skill_telemetry_router` resolve o slug a partir de um arquivo
+  de skill existente, inclusive caminhos relativos e links simbólicos.
+- P191: o mesmo pacote propõe uma sequência de tiers por complexidade e
+  valida o teto informado com `Decimal`. A saída é consultiva: sem cotação
+  e contagem de tokens não afirma custo nem capacidade de pagar uma chamada.
+  A integração ao roteamento e as medições do torneio continuam pendentes.
+
+Casos executáveis: `test_plan188_ceremony_toolkit.py`,
+`test_plan183_shipped_path_census.py` e
+`test_plan175_191_telemetry_and_cascade.py`. Resultados e limites desta etapa
+constam em `codex-planos/PERGUNTA-status-P6.md`.
+
 ### P169-mensageria — Sondas e doutrina de mensagens
 
 Incorporar as pernas 2–4 do AC-5 do PLAN-169, com todos os critérios e
