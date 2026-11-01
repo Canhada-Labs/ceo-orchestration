@@ -61,8 +61,9 @@ blind spots.
 - 0 — clean
 - 1 — contamination found (printed to stdout)
 - 2 — fatal error (unreadable INPUT: the terms file, the
-      personal-path allowlist, or an in-scope file that exists
-      and cannot be read)
+      personal-path allowlist, or a file this scan had to read
+      that exists and cannot be read; or an enumeration of the
+      index the scan cannot prove it covered)
 """
 
 from __future__ import annotations
@@ -122,8 +123,12 @@ def _load_private_terms(repo_root: Path) -> List[str]:
     Propagates OSError when the file exists but cannot be read.
     """
     path = repo_root / _PRIVATE_TERMS_RELPATH
-    if not path.is_file():
+    # Only real ABSENCE means "no private terms". `is_file()` also said False for a
+    # dangling link and a directory, which dropped the whole term list in silence.
+    if not os.path.lexists(path):
         return []
+    if not stat.S_ISREG(os.stat(path).st_mode):  # a FIFO would block the read below
+        raise OSError(errno.EINVAL, "not a regular file")
     terms: List[str] = []
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -2981,8 +2986,53 @@ def _parse_args(argv: Optional[List[str]]) -> "argparse.Namespace":
     return args
 
 
+#: `git ls-files -s` mode of a submodule entry: it has no blob in this repository,
+#: so it is the one mode RULE 1 releases by name (and only this one).
+_TERM_GITLINK_MODE = "160000"
+
+# ---------------------------------------------------------------------------
+# RULE 1 (`scan`) — census of the borders where it could answer "clean" without
+# having looked, taken before changing it (PLAN-186-FOLLOWUP AC-7; item 11 of the
+# 1.4.4 backlog: the pack fell twice in the rail, by edges AC-7 had not listed).
+# CURED, each with a test named test_fu144_* in test_check_contamination_personal_path.py:
+#   * empty or partial walk: FileWalker turns a git failure into an empty iterator.
+#     The set of paths seen must COVER the index (a set, not a count, for the reason
+#     RULE 2 paid for in pair-rail S344 round 3);
+#   * an index that cannot be read (git missing, timeout, rc != 0): refused;
+#   * a name that is not valid UTF-8: both sides of the proof decode with
+#     errors="replace", so two such names collapse into one and the sets compare equal
+#     over an unread file. Refused over the WHOLE index before any comparison; RULE 2's
+#     scope exception does not apply, because this rule's scope is every tracked path;
+#   * a tracked symlink (120000): its blob is the target STRING. read_bytes() followed
+#     it, so a term in the payload was never read and someone else's file was judged;
+#   * an index mode other than file, executable, link or gitlink: refused;
+#   * a file that exists and cannot be read, or a non-regular inode at a tracked path
+#     (a FIFO used to hang the read): rc 2. This reverses a deliberate "fail-OPEN,
+#     INFRASTRUCTURE" note; it is a gate, not a hook, as _personal_path_assert_enumerable
+#     already argues, so nothing here blocks a session;
+#   * a terms file that is not a regular file was read as absent (`_load_private_terms`).
+# DECLARED, not cured:
+#   * one stray non-UTF-8 byte still makes this rule skip an ordinary file whole (a term
+#     beside it goes unseen). Outside the LEDGER class that is a pinned decision, not an
+#     oversight: test_an_undecodable_non_plan_file_is_still_skipped calls it what keeps
+#     the exception narrow. Changing it is the Owner's call, not this pack's;
+#   * _SKIP_SUFFIXES still exempts a REGULAR file by suffix, and the allowlist by path:
+#     that is this rule's design, and a term inside a .png is what RULE 2 does not read
+#     either unless it is in scope;
+#   * a UTF-16 document does not match;
+#   * the index is enumerated and the worktree is read, as in RULE 2's blind spots;
+#   * a U+FFFD that is really in a tracked name is refused too (the safe direction).
+# Measured on this tree on 2026-11-01: 6301 tracked paths, 0 undecodable or carrying
+# U+FFFD, 0 symlinks, 0 gitlinks. No in-repo verdict moves.
+# ---------------------------------------------------------------------------
+
+
 def scan(repo_root: Path) -> List[Path]:
-    """Return list of files where the pattern matched, excluding allowlist."""
+    """Return list of files where the pattern matched, excluding allowlist.
+
+    Raises ``PersonalPathUnreadable`` when it cannot prove it read what it had to;
+    see the census above. Its messages are composed here, with masked paths.
+    """
     walker = FileWalker(
         repo_root=repo_root,
         mode="git",
@@ -2991,12 +3041,15 @@ def scan(repo_root: Path) -> List[Path]:
     )
 
     pattern = build_pattern(repo_root)
+    modes = _personal_path_index_modes(walker.repo_root)
+    if any(_PERSONAL_PATH_UNDECODABLE_RE.search(rel) for rel in modes):
+        raise PersonalPathUnreadable(
+            "a tracked path is not valid UTF-8; the term rule cannot address it "
+            "(rename it, then re-run)")
 
+    seen_rels = set()
     violations: List[Path] = []
     for path in walker.iter_files():
-        # Skip binaries by suffix
-        if path.suffix.lower() in _SKIP_SUFFIXES:
-            continue
         # Relative to the WALKER's root, which is already `.resolve()`d.
         # Using the caller's unresolved `repo_root` would raise here the
         # moment the two differ — which on macOS they routinely do
@@ -3005,37 +3058,49 @@ def scan(repo_root: Path) -> List[Path]:
             rel = path.relative_to(walker.repo_root).as_posix()
         except ValueError:
             rel = path.as_posix()
+        seen_rels.add(rel)
+        mode = modes.get(rel)
+        if mode is None:
+            raise PersonalPathUnreadable(
+                "%s: walked but absent from the index snapshot taken by this same "
+                "call; the term scan is inconsistent and has no verdict"
+                % _personal_path_mask_rel(rel))
         if walker.is_allowlisted(path) and not is_never_allowlisted(rel):
             continue
-        try:
-            raw = path.read_bytes()
-        except OSError:
+        if mode == _TERM_GITLINK_MODE:
+            continue
+        if mode not in _PERSONAL_PATH_BLOB_MODES:
+            raise PersonalPathUnreadable(
+                "%s: index mode %s is not a blob this rule can read; the term scan "
+                "has no verdict for it" % (_personal_path_mask_rel(rel), mode))
+        is_link = mode == _PERSONAL_PATH_LINK_MODE
+        # Skip binaries by suffix. Never a link: its payload is a string, not the
+        # content the suffix describes.
+        if not is_link and path.suffix.lower() in _SKIP_SUFFIXES:
+            continue
+        blob = _personal_path_blob(path, rel, index_is_link=is_link)
+        if blob is None:  # tracked and absent: absence is not unreadable input
             continue
         try:
-            text = raw.decode("utf-8")
+            text = blob.raw.decode("utf-8")
         except UnicodeDecodeError:
-            # rail round-1 P1. For an ordinary file this skip is fine: the
-            # allowlist already decided the file is not interesting, and an
-            # undecodable blob that slipped past _SKIP_SUFFIXES is noise.
-            #
-            # For the never-allowlisted class it is a FAIL-OPEN, and it was
-            # reachable: ONE stray 0xFF byte anywhere in a plan `LEDGER.md`
-            # made `scan()` skip the WHOLE file, marker and all — measured,
-            # the probe returned `[]` on a ledger that carried a placeholder
-            # handle in valid UTF-8 two lines below the bad byte.
-            #
-            # These files exist BECAUSE nobody reads them before they are
-            # committed, so "the guard could not parse it" must not read the
-            # same as "the guard found nothing". Fail CLOSED, per the
-            # CLAUDE.md §4 rule for security matchers: unparseable INPUT is
-            # blocked, never waved through. The OSError arm above stays
-            # fail-OPEN on purpose — an unreadable file is INFRASTRUCTURE.
+            # rail round-1 P1, for the never-allowlisted class: ONE stray 0xFF byte
+            # anywhere in a plan `LEDGER.md` made `scan()` skip the WHOLE file, marker
+            # and all. These files exist BECAUSE nobody reads them before they are
+            # committed, so "the guard could not parse it" must not read the same as
+            # "the guard found nothing" (CLAUDE.md §4): reported as such. An ordinary
+            # file stays skipped: see the census above.
             if is_never_allowlisted(rel):
                 violations.append(path)
             continue
         normalized = unicodedata.normalize("NFKC", text)
         if pattern.search(normalized):
             violations.append(path)
+    unseen = set(modes) - seen_rels
+    if unseen:
+        raise PersonalPathUnreadable(
+            "the walk reached %d of the %d tracked entries; %d were never read and "
+            "the term scan has no verdict" % (len(seen_rels), len(modes), len(unseen)))
     return violations
 
 
@@ -3100,8 +3165,15 @@ def main(argv: Optional[List[str]] = None) -> int:
             repo_root, allowlist_path, emit_rows=True,
         )
 
+    term_fatal = False
+    violations: List[Path] = []
     try:
         violations = scan(repo_root)
+    except PersonalPathUnreadable as exc:
+        # Composed by scan() itself, with masked paths: say which proof failed. RULE 2
+        # still runs below, as it does after a term hit, and rc stays 2.
+        print("FATAL: %s" % _personal_path_safe(str(exc)), file=sys.stderr)
+        term_fatal = True
     except Exception as exc:
         # A BOUNDARY, not a list of exception types. The term
         # scan reads a file and COMPILES what is in it as a raw
@@ -3142,7 +3214,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # BOTH rules always run — a term hit must not hide a path hit —
     # and a fatal (2) must never be reported as a mere finding (1).
-    rc_terms = _report_terms(violations, repo_root)
+    rc_terms = 2 if term_fatal else _report_terms(violations, repo_root)
     rc_paths = report_personal_paths(
         repo_root, allowlist_path,
         fail_on_stale=args.fail_on_stale,
