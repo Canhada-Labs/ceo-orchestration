@@ -1,7 +1,7 @@
 ---
 id: PLAN-194
 title: Trem de manutenção pós-GA 1.4.2 até a v1.4.3
-status: completed
+status: done
 created: 2026-09-30
 reviewed_at: 2026-10-01
 executing_at: 2026-10-02
