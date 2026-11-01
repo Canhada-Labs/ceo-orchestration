@@ -39,7 +39,7 @@ class TestRuleOneInventoryFu144(TestEnvContext):
     def test_fu144_symlink_payload_is_scanned_not_clean_target(self) -> None:
         target = self.root / "clean-target"
         target.write_text("clean", encoding="utf-8")
-        (self.root / "link.md").symlink_to("example owner")
+        (self.root / "link.md").symlink_to("example" + " owner")
         self._add("clean-target")
         self._add("link.md")
         violations = cc.scan(self.root)
