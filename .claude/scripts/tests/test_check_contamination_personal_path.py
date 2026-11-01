@@ -3836,9 +3836,13 @@ class TestWalkerFailureIsSanitised(TestEnvContext):
 
         cc.scan_personal_paths = boom
         try:
-            with contextlib.redirect_stderr(err):
-                with contextlib.redirect_stdout(io.StringIO()):
-                    rc = cc.main([])
+            # This focused failure probe reaches the walker, so it must not
+            # depend on pytest's current directory being a checkout.  The
+            # production root check is covered by its own CLI tests.
+            with mock.patch.object(cc.Path, "exists", return_value=True):
+                with contextlib.redirect_stderr(err):
+                    with contextlib.redirect_stdout(io.StringIO()):
+                        rc = cc.main([])
         finally:
             cc.scan_personal_paths = real
         return rc, err.getvalue()
