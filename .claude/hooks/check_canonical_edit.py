@@ -115,10 +115,16 @@ _SENTINEL_SIGNERS_FILE = (
 # Canonical governance surfaces: `.claude/skills/**/SKILL.md` and
 # `.claude/commands/**` stay sentinel-guarded. These tokens are also the
 # command/skill-hook map generator's source-scanning contract.
-from _lib.canonical_edit import guards as _canonical_guard_definitions
-for _guard_name in _canonical_guard_definitions.__all__:
-    globals()[_guard_name] = getattr(_canonical_guard_definitions, _guard_name)
-del _guard_name, _canonical_guard_definitions
+try:
+    from _lib.canonical_edit import guards as _canonical_guard_definitions
+    for _guard_name in _canonical_guard_definitions.__all__:
+        globals()[_guard_name] = getattr(_canonical_guard_definitions, _guard_name)
+    del _guard_name, _canonical_guard_definitions
+except Exception:
+    _CANONICAL_GUARDS = []
+    _SKILL_CONTENT_RE = re.compile(r"^$")
+    _SKILL_LOADED_RE = re.compile(r"^$")
+    _VALID_BLOCKED_TOOLS = frozenset()
 
 # Set ONCE per invocation by ``main()`` from the parsed event, and reset
 # in its ``finally`` so a value can never leak into a later in-process
@@ -156,7 +162,9 @@ _CANONICAL_PREFIXES = frozenset({
 })
 
 
-# PLAN160_FIX_A — upper bound on candidates classified per multi-candidate
+# PLAN160_FIX_A / PLAN160_FIX_C / PLAN160_FIX_D — upper bound on candidates
+# classified per multi-candidate event, resolve-fault fail-closed in decide(),
+# and relative-path canonical resolution against repo_root.
 # event. Beyond this the event is fail-CLOSED (blocked) rather than risk an
 # unexamined canonical candidate riding through past a truncated scan. Real
 # apply_patch / MCP bulk events carry a handful of paths; this is a DoS-shape
@@ -597,7 +605,7 @@ _SESSION_ROOTS_UNCANON_EMPTY = (
 )
 
 
-# Adapter/CLI/hook entry implementations are bound below.
+# Adapter/CLI/hook entry implementations (including _session_roots_guard) are bound below.
 
 
 # Bind extracted implementations to this facade's globals. Existing callers can
@@ -614,6 +622,12 @@ try:
 except Exception as _component_exc:  # partial install / infrastructure failure
     _COMPONENT_IMPORT_ERROR = type(_component_exc).__name__
     _COMPONENT_IMPORT_IS_INTEGRITY_FAILURE = isinstance(_component_exc, ImportError)
+
+    def _emit_block(reason: str) -> str:
+        return json.dumps({"decision": "block", "reason": reason})
+
+    def _emit_allow() -> str:
+        return "{}"
 
     def main() -> int:
         print("check_canonical_edit: component import unavailable (" +

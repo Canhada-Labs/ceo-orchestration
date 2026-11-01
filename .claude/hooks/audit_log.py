@@ -311,6 +311,7 @@ from pathlib import Path as _FacadePath
 _PARTS = (
     "paths_skills", "entries_usage", "rotation_storage", "adapters_runtime",
 )
+# Entry payload emits "skill" key via entries_usage.py
 _FACADE_DOC = __doc__
 
 def _install_parts() -> None:

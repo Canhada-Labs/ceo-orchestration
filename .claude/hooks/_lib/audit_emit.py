@@ -471,6 +471,9 @@ _GENERIC_DISPATCH_HANDLERS = (
 
 
 def emit_generic(action: str, **kwargs: Any) -> None:
+    if action == "tool_call_lifecycle_recorded":
+        _dispatch_generic(action, kwargs)
+        return
     _dispatch_generic(action, kwargs)
 
 

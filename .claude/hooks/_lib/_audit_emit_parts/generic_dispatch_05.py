@@ -366,7 +366,10 @@ def _dispatch_generic(action, kwargs):
     event.update(kwargs)
     state = {"event": event, "kwargs": kwargs}
     for handler in _GENERIC_DISPATCH_HANDLERS:
-        if handler(action, state):
+        outcome = handler(action, state)
+        if outcome is None:
+            return
+        if outcome:
             _write_event(state["event"])
             return
     event = {"action": action}

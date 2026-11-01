@@ -103,7 +103,11 @@ is_allowed_model() {
   for a in $ALLOWED_MODELS; do
     [ "$v" = "$a" ] && return 0
   done
-  python3 "$TARGET/.claude/hooks/_lib/model_currency.py" "$v"
+  case "$v" in
+    claude-opus-[4-9]*|claude-sonnet-[4-9]*|claude-haiku-[4-9]*|claude-fable-[5-9]*|gpt-[5-9]*|o[3-9]*|gemini-[2-9]*|grok-[3-9]*)
+      return 0 ;;
+  esac
+  return 1
 }
 
 # Stale model-id literals that must never reach an adopter outside the
