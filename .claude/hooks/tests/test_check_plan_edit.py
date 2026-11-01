@@ -87,6 +87,47 @@ class TestScopeGuard(unittest.TestCase):
         self.assertFalse(d.allow)  # draft → done is illegal
 
 
+class TestPlanPathMatcherFu144(TestEnvContext):
+    """PLAN-194 Item 7: lifecycle hook follows PLAN-SCHEMA filenames."""
+
+    def test_fu144_real_plan_name_census(self):
+        plans_dir = Path(__file__).resolve().parents[3] / ".claude" / "plans"
+        plan_files = [
+            plan_file for plan_file in plans_dir.glob("PLAN-*.md")
+            if plan_file.name != "PLAN-SCHEMA.md"
+        ]
+        self.assertTrue(plan_files)
+        self.assertTrue(all(cpe._is_plan_file(str(plan_file)) for plan_file in plan_files))
+
+    def test_fu144_rejects_invalid_plan_name_forms(self):
+        invalid_paths = (
+            ".claude/plans/PLAN-99-too-short.md",
+            ".claude/plans/PLAN-099-FOLLOWUP.md",
+            ".claude/plans/PLAN-099-FOLLOWUP-good_slug.md",
+            ".claude/plans/PLAN-099-FOLLOWUP--double.md",
+            ".claude/plans/PLAN-099-UPPERCASE.md",
+            ".claude/plans/PLAN-099-good-.md",
+        )
+        self.assertTrue(all(not cpe._is_plan_file(path) for path in invalid_paths))
+
+    def test_fu144_followup_transition_blocks_for_posix_and_windows_paths(self):
+        paths = (
+            "/tmp/project/.claude/plans/PLAN-194-FOLLOWUP-path-matcher.md",
+            r"C:\project\.claude\plans\PLAN-194-FOLLOWUP-path-matcher.md",
+        )
+        for path in paths:
+            decision = cpe.decide(
+                file_path=path,
+                old_string="status: draft",
+                new_string="status: executing",
+                replace_all=False,
+                read_current=_fake_read(_BASE_DRAFT_PLAN),
+            )
+            self.assertFalse(decision.allow, msg=path)
+            self.assertIn("illegal transition", decision.reason)
+            self.assertEqual(cpe._extract_plan_id(path), "PLAN-194")
+
+
 class TestTransitions(unittest.TestCase):
 
     def _decide(self, old_content, old_string, new_string):

@@ -406,6 +406,9 @@ case "$_CEO_EVENT" in
     ;;
 esac
 
+# Registered hooks have invocation deadlines: exit must leave spool work pending.
+export CEO_HOOK_BOUNDED_EXIT=1
+
 if [ "$_CEO_GROK_PATH" -eq 0 ] || [ "$_CEO_BLOCKING_EVENT" -eq 0 ]; then
   # Not the grok blocking path (Claude/Codex byte-identical to the historical
   # shim), or a passive grok event: preserve the historical exec (zero added

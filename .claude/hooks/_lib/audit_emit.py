@@ -8826,9 +8826,9 @@ _SETTINGS_TAMPER_CLASSES = frozenset({
     "settings_tamper_sidecar_redirect",
     # PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch surface census tamper:
     # a deregistered `.codex` registration (only ceo.rules left) or a referenced
-    # codex hook missing on disk. Added to _lib/effective_config.TAMPER_CLASSES
-    # in the same wave; MUST mirror here (enum-parity test).
+    # codex hook missing on disk; MUST mirror effective_config (enum-parity test).
     "settings_tamper_codex_killswitch_missing",
+    "settings_tamper_claude_md_excludes_root",
     "other",
 })
 _SETTINGS_TAMPER_LAYERS = frozenset({

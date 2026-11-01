@@ -628,52 +628,53 @@ def is_sync_mode() -> bool:
 _EXIT_HANDLER_INSTALLED = False
 _PREV_SIGTERM_HANDLER: Any = None
 _PREV_SIGINT_HANDLER: Any = None
+# An armed hook deadline disables unbounded exit work.
+_EXIT_DEADLINE_MONOTONIC: Optional[float] = None
 
-# Per-PID spool header cache — populated on first append; mirrors what the
-# spool file's header line carries. We keep an in-process counter for the
-# strictly-monotonic ordinal_within_file.
+
+def set_exit_deadline(deadline_monotonic: Optional[float]) -> None:
+    """Arm no-drain exit context; hook entrypoints own the monotonic deadline."""
+    global _EXIT_DEADLINE_MONOTONIC
+    if deadline_monotonic is None:
+        _EXIT_DEADLINE_MONOTONIC = None
+        return
+    try:
+        _EXIT_DEADLINE_MONOTONIC = float(deadline_monotonic)
+    except (TypeError, ValueError):
+        _EXIT_DEADLINE_MONOTONIC = None
+        _breadcrumb("exit deadline ignored: invalid monotonic value")
+
+
+def _exit_deadline_active() -> bool:
+    """Whether this process is running under a hook-owned deadline."""
+    return _EXIT_DEADLINE_MONOTONIC is not None or os.environ.get("CEO_HOOK_BOUNDED_EXIT") == "1"
+
+
+def _record_exit_deadline_skip(source: str) -> None:
+    _breadcrumb(f"exit_deadline_skip source={source}")
+
+# Per-PID spool headers and strictly monotonic in-process ordinals.
 _SPOOL_HEADER_CACHE: Dict[int, Dict[str, Any]] = {}
 _ORDINAL_COUNTER: Dict[int, int] = {}
 
-# Callback wired by audit_emit so we can emit forensic events without
-# importing audit_emit (circular dep). audit_emit.install() passes a
-# function with signature (action: str, fields: Dict[str, Any]) -> None.
+# Callback wired by audit_emit without importing it (avoids a circular dep).
 _FORENSIC_EMIT: Optional[Callable[[str, Dict[str, Any]], None]] = None
 
-# P1-4 reentrancy guard: prevent the cycle
-#   spool_append → drain → _forensic → emit_generic → spool_append → ...
-# Module-level flag set during _forensic() execution; if re-entered, write
-# a breadcrumb and bail (no spool, no canonical).
+# Prevent spool_append → drain → _forensic → emit_generic re-entry.
 _IN_FORENSIC_EMIT = False
 
-# P1-1 reentrancy guard: prevent signal handler calling drain_now() from
-# deadlocking against a writer mid-spool_append in the same PID. The signal
-# handler checks this and bails (the partial spool entry is picked up by
-# next-session reconciliation).
+# A signal skips draining during a same-PID spool append to avoid deadlock.
 _IN_SPOOL_APPEND = False
 
-# PLAN-094-FOLLOWUP Wave A.3-fail-open (option B) — module-level durability
-# indicator for the last `spool_append()` call. audit_emit wire-in checks
-# `last_append_succeeded()` after each call; on False, falls through to the
-# sync canonical write path. Preserves the existing fail-open invariant
-# (`spool_append` never raises to caller) while restoring durability defense
-# depth on per-PID spool flock alloc / encode / OSError / unexpected paths.
+# Last spool_append durability; audit_emit falls back to sync on False.
 _LAST_APPEND_SUCCEEDED = True
 
 
 def last_append_succeeded() -> bool:
-    """Return True if the most recent spool_append() persisted durably.
-
-    audit_emit wire-in uses this to decide whether to fall back to the
-    sync canonical write path (False = silent-drop on spool side; sync
-    is now responsible for durability of THIS event).
-    """
+    """Whether the last spool_append persisted durably."""
     return _LAST_APPEND_SUCCEEDED
 
-# P1-2 journal buffer state (per-PID amortized fsync).
-# Buffer envelopes in memory; flush + fsync at: drain boundary, signal,
-# atexit, or every _JOURNAL_FLUSH_EVERY writes. ADR-055-AMEND-1 §3 line 96:
-# "journal fsync every 100ms OR 10 emits".
+# Per-PID journal buffer; flush at drain boundaries or every ten writes.
 _JOURNAL_FLUSH_EVERY = 10
 _JOURNAL_BUFFER: Dict[int, List[bytes]] = {}
 
@@ -2585,12 +2586,10 @@ def _journal_rec_dict(rec: JournalReconciliation) -> Dict[str, Any]:
 
 
 def _atexit_drain() -> None:
-    """atexit hook — best-effort final drain. Swallow all errors.
-
-    P1-2: also flushes the in-memory journal buffer for our PID so any
-    begin/commit envelopes that hadn't hit the amortization threshold
-    are durable before process exit.
-    """
+    """Best-effort exit drain, except while a hook deadline is armed."""
+    if _exit_deadline_active():
+        _record_exit_deadline_skip("atexit")
+        return
     try:
         drain_now(force=True)
     except Exception:
@@ -2602,51 +2601,33 @@ def _atexit_drain() -> None:
 
 
 def _signal_drain_handler(signum: int, frame: Any) -> None:
-    """SIGTERM/SIGINT — force-drain then re-raise to default handler.
-
-    P1-1: if a writer is currently inside spool_append (holding the spool
-    flock in our PID), bail without forcing a drain — the in-flight entry
-    will be picked up by next-session reconciliation.
-
-    P1-2: flushes the journal buffer for our PID so begin/commit envelopes
-    survive signal-driven termination.
-
-    P2-5: if the previous handler was signal.SIG_IGN, preserve it (the
-    user explicitly ignored this signal; default termination would be a
-    behavior change). atexit does NOT run after default signal termination
-    so our drain call here IS the final flush opportunity for SIG_DFL paths.
-    """
+    """Drain when safe, then preserve the previous signal disposition."""
     if _IN_SPOOL_APPEND:
-        # Writer in progress; bail rather than deadlock against ourself.
         _breadcrumb(f"signal {signum} arrived during spool_append; bail")
-        return
-    try:
-        drain_now(force=True)
-    except Exception:
-        pass
-    try:
-        _flush_journal_buffer(os.getpid())
-    except Exception:
-        pass
-    # Resolve the previous handler.
+    elif _exit_deadline_active():
+        _record_exit_deadline_skip(f"signal-{signum}")
+    else:
+        try:
+            drain_now(force=True)
+        except Exception:
+            pass
+        try:
+            _flush_journal_buffer(os.getpid())
+        except Exception:
+            pass
     if signum == signal.SIGTERM:
         prev = _PREV_SIGTERM_HANDLER
     elif signum == signal.SIGINT:
         prev = _PREV_SIGINT_HANDLER
     else:
         prev = signal.SIG_DFL
-
-    # P2-5: distinguish SIG_IGN vs SIG_DFL vs callable.
     if prev is signal.SIG_IGN:
-        # Restore IGN and do NOT re-raise — the user wanted this signal
-        # ignored; honoring that is correctness, not failure.
         try:
             signal.signal(signum, signal.SIG_IGN)
         except (ValueError, OSError):  # pragma: no cover
             pass
         return
     if callable(prev):
-        # Chain to user handler.
         try:
             signal.signal(signum, prev)
         except (ValueError, OSError):  # pragma: no cover
@@ -2656,9 +2637,6 @@ def _signal_drain_handler(signum: int, frame: Any) -> None:
         except Exception:  # pragma: no cover
             pass
         return
-    # Default: restore SIG_DFL and re-raise. atexit does NOT run after
-    # default-signal termination → the drain_now(force=True) above is the
-    # final flush opportunity.
     try:
         signal.signal(signum, signal.SIG_DFL)
     except (ValueError, OSError):  # pragma: no cover
@@ -2683,6 +2661,8 @@ def install_exit_handlers() -> None:
         _PREV_SIGTERM_HANDLER = signal.signal(
             signal.SIGTERM, _signal_drain_handler,
         )
+        if _PREV_SIGTERM_HANDLER is _signal_drain_handler:
+            _PREV_SIGTERM_HANDLER = signal.SIG_DFL
     except (ValueError, OSError) as e:
         # Signal handlers only work on main thread; in worker threads
         # signal.signal raises ValueError. Fail-open.
@@ -2691,6 +2671,8 @@ def install_exit_handlers() -> None:
         _PREV_SIGINT_HANDLER = signal.signal(
             signal.SIGINT, _signal_drain_handler,
         )
+        if _PREV_SIGINT_HANDLER is _signal_drain_handler:
+            _PREV_SIGINT_HANDLER = signal.SIG_DFL
     except (ValueError, OSError) as e:
         _breadcrumb(f"SIGINT install skipped: {type(e).__name__}: {e}")
     _EXIT_HANDLER_INSTALLED = True
@@ -2704,9 +2686,26 @@ def install_exit_handlers() -> None:
 def _reset_for_test() -> None:
     """Clear all in-process spool state (caches + handler latch + buffer)."""
     global _EXIT_HANDLER_INSTALLED, _IN_FORENSIC_EMIT, _IN_SPOOL_APPEND
+    global _PREV_SIGTERM_HANDLER, _PREV_SIGINT_HANDLER
+    global _EXIT_DEADLINE_MONOTONIC
+    if _EXIT_HANDLER_INSTALLED:
+        for signum, previous in (
+            (signal.SIGTERM, _PREV_SIGTERM_HANDLER),
+            (signal.SIGINT, _PREV_SIGINT_HANDLER),
+        ):
+            if previous is None:
+                continue
+            try:
+                if signal.getsignal(signum) is _signal_drain_handler:
+                    signal.signal(signum, previous)
+            except (ValueError, OSError):  # pragma: no cover
+                pass
     _SPOOL_HEADER_CACHE.clear()
     _ORDINAL_COUNTER.clear()
     _JOURNAL_BUFFER.clear()
     _EXIT_HANDLER_INSTALLED = False
+    _PREV_SIGTERM_HANDLER = None
+    _PREV_SIGINT_HANDLER = None
+    _EXIT_DEADLINE_MONOTONIC = None
     _IN_FORENSIC_EMIT = False
     _IN_SPOOL_APPEND = False

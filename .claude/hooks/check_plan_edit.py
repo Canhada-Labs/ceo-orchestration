@@ -91,6 +91,7 @@ if str(_HOOKS_DIR) not in sys.path:
 from _lib import contract as _contract  # noqa: E402
 from _lib import adapters as _adapters  # noqa: E402
 from _lib import plan_frontmatter as _fm  # noqa: E402
+from _lib import plan_paths as _plan_paths  # noqa: E402
 
 # Optional: emit to event stream v2 (fail-open if module missing or errors)
 try:
@@ -132,12 +133,6 @@ _ALLOWED_TRANSITIONS: Dict[str, set] = {
     "superseded": {"superseded"},  # terminal — must cite superseded_by
 }
 
-# Path pattern for plan files
-_PLAN_PATH_RE = re.compile(r"\.claude/plans/PLAN-\d{3}-[a-z0-9-]+\.md$")
-
-# Extract plan ID from a file path (e.g. "PLAN-004")
-_PLAN_ID_RE = re.compile(r"(PLAN-\d{3})-[a-z0-9-]+\.md$")
-
 # ---------------------------------------------------------------------
 # PLAN-065 §4.4.B — Stranded-work detection thresholds
 # ---------------------------------------------------------------------
@@ -155,8 +150,7 @@ _STRANDED_REVIEWED_MAX_AGE_SECS = 7 * 24 * 3600  # 7 days
 
 def _extract_plan_id(file_path: str) -> str:
     """Return the plan ID from a plan file path, or empty string."""
-    m = _PLAN_ID_RE.search(file_path)
-    return m.group(1) if m else ""
+    return _plan_paths.plan_id_from_path(file_path)
 
 
 def _emit_transition(file_path: str, old_status: str, new_status: str, editor_tool: str = "Edit") -> None:
@@ -242,10 +236,8 @@ class Decision:
 
 
 def _is_plan_file(file_path: str) -> bool:
-    """Return True only if the path matches .claude/plans/PLAN-NNN-slug.md."""
-    if not file_path:
-        return False
-    return bool(_PLAN_PATH_RE.search(file_path))
+    """Return True only for a schema-valid plan path."""
+    return _plan_paths.is_plan_path(file_path)
 
 
 def _read_current_plan(file_path: str) -> str:
@@ -529,7 +521,7 @@ def detect_stranded(
     for plan_file in plan_files:
         try:
             # Skip PLAN-SCHEMA.md / DEBATE-SCHEMA.md / etc.
-            if not _PLAN_PATH_RE.search(str(plan_file)):
+            if not _is_plan_file(str(plan_file)):
                 continue
 
             text = plan_file.read_text(encoding="utf-8")

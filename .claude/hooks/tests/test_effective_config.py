@@ -580,6 +580,7 @@ class TestPublicContract(_EffectiveConfigBase):
                 "settings_tamper_sidecar_redirect",
                 # PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch census
                 "settings_tamper_codex_killswitch_missing",
+                "settings_tamper_claude_md_excludes_root",
             },
         )
 
