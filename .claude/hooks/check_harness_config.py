@@ -1025,7 +1025,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Runtime evidence is optional and independent of settings/glob findings.
     # Never promote a static exclusion pattern into a claim about what loaded.
-    findings.append(check_root_instruction_load(repo_root, args.instruction_load_evidence))
+    if do_static or args.instruction_load_evidence is not None:
+        findings.append(check_root_instruction_load(repo_root, args.instruction_load_evidence))
 
     _print_findings(findings)
     reds = [f for f in findings if f.severity == "RED"]

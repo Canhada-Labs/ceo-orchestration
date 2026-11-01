@@ -191,12 +191,12 @@ def _rp_state_dir():
     """
     if _rp is not None:
         return _rp.runtime_state_dir()
-    import sys as _s
-    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")
-    from pathlib import Path as _P
-    import os as _o
-    _h = _o.environ.get("HOME") or str(_P.home())
-    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
+    import sys as _s  # pragma: no cover — partial-upgrade fallback
+    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")  # pragma: no cover
+    from pathlib import Path as _P  # pragma: no cover
+    import os as _o  # pragma: no cover
+    _h = _o.environ.get("HOME") or str(_P.home())  # pragma: no cover
+    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback  # pragma: no cover
 
 
 # -----------------------------------------------------------------------------
