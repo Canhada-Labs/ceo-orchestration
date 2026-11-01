@@ -18,6 +18,7 @@ Stdlib only. TestEnvContext for env hygiene.
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import io
 import os
 import sys
@@ -80,9 +81,14 @@ class TestRealityLedgerClosure(TestEnvContext):
         )
 
     def test_wire_helpers_present(self):
-        src = SCRIPT.read_text(encoding="utf-8")
-        self.assertIn("_emit_ceo_boot_emitted_safe", src)
-        self.assertIn("_emit_ceo_boot_check_skipped_safe", src)
+        module = _load_module()
+        for name, emitter in (
+            ("_emit_ceo_boot_emitted_safe", "emit_ceo_boot_emitted"),
+            ("_emit_ceo_boot_check_skipped_safe", "emit_ceo_boot_check_skipped"),
+        ):
+            helper = getattr(module, name)
+            self.assertTrue(callable(helper), name)
+            self.assertIn(emitter, inspect.getsource(helper))
 
     def test_wire_section_delimiter_present(self):
         src = SCRIPT.read_text(encoding="utf-8")

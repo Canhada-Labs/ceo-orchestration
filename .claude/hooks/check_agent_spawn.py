@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 # Make the _lib package importable — hooks live in .claude/hooks/ and
-# _lib is a sibling package.
+# _lib is a sibling package; delegated skill-reference guards cover .claude/skills/**/SKILL.md.
 _HOOKS_DIR = Path(__file__).resolve().parent
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
