@@ -19,6 +19,9 @@ Port of `.claude/hooks/check-agent-spawn.sh` with:
 If either strategy matches, the prompt MUST contain `## SKILL CONTENT`.
 Without it, the spawn is blocked as a generic agent wearing a name tag.
 
+The extracted agent_spawn.skill_reference helpers also validate references to
+SKILL.md files under .claude/skills; this hook still guards that skill surface.
+
 ## Output contract
 
 Writes a single-line JSON decision to stdout:

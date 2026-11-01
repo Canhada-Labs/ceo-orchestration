@@ -2047,7 +2047,7 @@ class TestRemediationTellsTheTruth(_Base):
 
     def test_the_followup_plan_the_module_names_exists(self) -> None:
         """A comment that names a plan file is a claim about the tree."""
-        module = Path(cc.__file__).resolve()
+        module = Path(cc._personal_constants.__file__).resolve()
         text = module.read_text(encoding="utf-8")
         self.assertIn("PLAN-186-FOLLOWUP-sentinel-gpg-verification", text)
         plan = (_REPO_ROOT / ".claude" / "plans"
@@ -2351,10 +2351,10 @@ class TestRailRound3Cures(_Base):
 
     def test_the_allowlist_is_read_through_the_nofollow_helper(self):
         """Round 4 P1: a re-open by NAME was a second inode."""
-        src = (_SCRIPTS_DIR / "check_contamination.py").read_text(
+        src = Path(cc.load_personal_path_allowlist.__code__.co_filename).read_text(
             encoding="utf-8")
         head = src[src.index("def load_personal_path_allowlist"):]
-        body = head[:head.index("def personal_path_verdict")]
+        body = head[:head.index("class PersonalPathUnreadable")]
         self.assertIn("_personal_path_read_nofollow(path)", body)
         self.assertNotIn("path.read_text(", body)
         self.assertNotIn("if not path.is_file():", body)
@@ -2776,7 +2776,8 @@ class TestRailRound11Cures(_Base):
 
     def test_the_link_branch_asks_the_filesystem_once(self) -> None:
         """The regression guard for the shape, not only for the outcome."""
-        source = Path(cc.__file__).read_text(encoding="utf-8")
+        source = Path(cc._personal_path_blob.__code__.co_filename).read_text(
+            encoding="utf-8")
         start = source.index("        if index_is_link:")
         end = source.index("        return _personal_path_read_nofollow(path)",
                            start)
