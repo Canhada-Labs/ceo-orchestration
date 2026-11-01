@@ -85,6 +85,7 @@ _HOOKS_DIR = Path(__file__).resolve().parent.parent / "hooks"
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 from _lib.file_walker import FileWalker  # noqa: E402
+from _contamination_inventory import scan_rule_one  # noqa: E402
 
 
 # Contamination tokens, in TWO parts — see the module docstring.
@@ -2992,55 +2993,16 @@ def scan(repo_root: Path) -> List[Path]:
 
     pattern = build_pattern(repo_root)
 
-    violations: List[Path] = []
-    for path in walker.iter_files():
-        # Skip binaries by suffix
-        if path.suffix.lower() in _SKIP_SUFFIXES:
-            continue
-        # Relative to the WALKER's root, which is already `.resolve()`d.
-        # Using the caller's unresolved `repo_root` would raise here the
-        # moment the two differ — which on macOS they routinely do
-        # (`/tmp` is a symlink to `/private/tmp`).
-        try:
-            rel = path.relative_to(walker.repo_root).as_posix()
-        except ValueError:
-            rel = path.as_posix()
-        if walker.is_allowlisted(path) and not is_never_allowlisted(rel):
-            continue
-        try:
-            raw = path.read_bytes()
-        except OSError:
-            continue
-        try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            # rail round-1 P1. For an ordinary file this skip is fine: the
-            # allowlist already decided the file is not interesting, and an
-            # undecodable blob that slipped past _SKIP_SUFFIXES is noise.
-            #
-            # For the never-allowlisted class it is a FAIL-OPEN, and it was
-            # reachable: ONE stray 0xFF byte anywhere in a plan `LEDGER.md`
-            # made `scan()` skip the WHOLE file, marker and all — measured,
-            # the probe returned `[]` on a ledger that carried a placeholder
-            # handle in valid UTF-8 two lines below the bad byte.
-            #
-            # These files exist BECAUSE nobody reads them before they are
-            # committed, so "the guard could not parse it" must not read the
-            # same as "the guard found nothing". Fail CLOSED, per the
-            # CLAUDE.md §4 rule for security matchers: unparseable INPUT is
-            # blocked, never waved through. The OSError arm above stays
-            # fail-OPEN on purpose — an unreadable file is INFRASTRUCTURE.
-            if is_never_allowlisted(rel):
-                violations.append(path)
-            continue
-        normalized = unicodedata.normalize("NFKC", text)
-        if pattern.search(normalized):
-            violations.append(path)
-    return violations
+    return scan_rule_one(
+        repo_root=walker.repo_root,
+        pattern=pattern,
+        allowlisted=walker.is_allowlisted,
+        never_allowlisted=is_never_allowlisted,
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    """CLI entrypoint — the term rule, then the personal-path rule."""
+    """Resolve the CLI boundary before running both contamination rules."""
     try:
         args = _parse_args(argv)
     except PersonalPathUsage as exc:
@@ -3088,6 +3050,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         print("FATAL: not inside a git repo", file=sys.stderr)
         return 2
 
+    return _run_checks(repo_root, args)
+
+
+def _run_checks(repo_root: Path, args: argparse.Namespace) -> int:
+    """Preserve path diagnostics, then check and report the term inventory."""
     allowlist_path = (
         Path(args.personal_path_allowlist)
         if args.personal_path_allowlist is not None
@@ -3099,6 +3066,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         return report_personal_paths(
             repo_root, allowlist_path, emit_rows=True,
         )
+
+    # A personal-path input failure has a subject-specific, redacted
+    # diagnostic.  Run it first so Rule 1's independent inventory cannot
+    # replace that repairable message with a generic term-scan failure.
+    rc_paths = report_personal_paths(
+        repo_root, allowlist_path,
+        fail_on_stale=args.fail_on_stale,
+    )
+    if rc_paths == 2:
+        return 2
 
     try:
         violations = scan(repo_root)
@@ -3140,13 +3117,9 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
         return 2
 
-    # BOTH rules always run — a term hit must not hide a path hit —
-    # and a fatal (2) must never be reported as a mere finding (1).
+    # Both rules ran unless Rule 2 had a fatal input failure.  A fatal is
+    # never reported as a mere finding, and a term hit cannot hide a path hit.
     rc_terms = _report_terms(violations, repo_root)
-    rc_paths = report_personal_paths(
-        repo_root, allowlist_path,
-        fail_on_stale=args.fail_on_stale,
-    )
     return max(rc_terms, rc_paths)
 
 

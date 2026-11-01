@@ -84,7 +84,10 @@ _SITES: List[Tuple[str, str, str]] = [
     (".claude/.framework-version", PLAIN, r"\A\s*" + SEMVER + r"\s*\Z"),
     ("npm/package.json", PLAIN, r'("version"\s*:\s*")' + SEMVER + r'(")'),
     ("pyproject.toml", PLAIN, r'(?m)^(version\s*=\s*")' + SEMVER + r'(")'),
-    ("INSTALL.md", PLAIN, r"(--pin v)" + SEMVER),
+    # The upgrade instructions resolve the latest RC tag during the hold and
+    # use the GA tag afterwards. One pattern owns both version stems, so a
+    # bump cannot leave either route on a prior train.
+    ("INSTALL.md", PLAIN, r"((?:--pin |git tag --list ['\"]?)v)" + SEMVER),
     (
         "docs/ARCHITECTURE.md",
         PLAIN,

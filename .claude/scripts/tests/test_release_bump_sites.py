@@ -41,7 +41,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 import pytest
-
+from _fu144_release_cases import TestFu144ReleaseExamples, test_fu144_bump_keeps_rc_and_ga_examples_on_same_release  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LOCAL = REPO_ROOT / ".claude" / "scripts" / "local"
 DRIVER_SRC = LOCAL / "release.sh"

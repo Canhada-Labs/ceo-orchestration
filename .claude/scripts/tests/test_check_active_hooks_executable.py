@@ -129,7 +129,6 @@ class CheckActiveHooksExecutableTest(TestEnvContext):
              'hooks["PreToolUse"][0].hooks[0].command: expected string'),
             ('{"hooks":[]}', "hooks: expected object"),
             ('{"hooks":{"PreToolUse":"x"}}', 'hooks["PreToolUse"]: expected array'),
-            ('{"hooks":{"Stop":[{"hooks":[{"type":"prompt","command":1}]}]}}', "TypeError while reading"),
         ]
         for body, why in cases:
             with TemporaryDirectory() as td:
@@ -156,6 +155,67 @@ class CheckActiveHooksExecutableTest(TestEnvContext):
             )
             self.assertEqual(gate.returncode, 0, msg=gate.stdout)
             self.assertNotIn("exec_bit", gate.stdout)
+
+    def test_fu144_hook_schema_matches_the_loader_and_ignores_prompt_command(self) -> None:
+        """Every supported hook type has its loader-required string fields.
+
+        A prompt's unrelated ``command`` field is deliberately ignored: the
+        loader does not execute it and this gate must inspect only commands.
+        """
+        failures = (
+            ('{"hooks":{"Stop":[{"hooks":[{"command":"x"}]}]}}', ".type: expected string"),
+            ('{"hooks":{"Stop":[{"hooks":[{"type":"function"}]}]}}', "unknown hook type"),
+            ('{"hooks":{"Stop":[{"matcher":7,"hooks":[{"type":"prompt","prompt":"ok"}]}]}}', ".matcher: expected string"),
+            ('{"hooks":{"Stop":[{"hooks":[{"type":"mcp_tool","server":"s"}]}]}}', ".tool: expected string"),
+        )
+        for body, message in failures:
+            with self.subTest(body=body), TemporaryDirectory() as td:
+                direct, _gate = self._direct_and_gate(Path(td), body)
+                self.assertEqual(direct.returncode, 2, direct.stderr)
+                self.assertIn(message, direct.stderr)
+        body = '{"hooks":{"Stop":[{"hooks":[{"type":"prompt","prompt":"ok","command":1}]}]}}'
+        with TemporaryDirectory() as td:
+            direct, _gate = self._direct_and_gate(Path(td), body)
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+
+    def test_fu144_settings_that_are_not_regular_files_fail_closed(self) -> None:
+        """A directory and a dangling link cannot be mistaken for no settings."""
+        import shutil
+        for kind in ("directory", "dangling-link"):
+            with self.subTest(kind=kind), TemporaryDirectory() as td:
+                root = Path(td)
+                script = root / ".claude/scripts/check-active-hooks-executable.py"
+                script.parent.mkdir(parents=True)
+                shutil.copy2(SCRIPT, script)
+                settings = root / ".claude/settings.json"
+                if kind == "directory":
+                    settings.mkdir()
+                else:
+                    settings.symlink_to(root / "absent.json")
+                result = subprocess.run([sys.executable, str(script)], cwd=str(root),
+                                        capture_output=True, text=True, check=False, timeout=10)
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertIn("expected a regular file", result.stderr)
+
+    def test_fu144_symlink_loop_during_hook_resolution_is_named_rc2(self) -> None:
+        """A hook path that cannot resolve is malformed input, never a traceback."""
+        import shutil
+        with TemporaryDirectory() as td:
+            root = Path(td)
+            script = root / ".claude/scripts/check-active-hooks-executable.py"
+            script.parent.mkdir(parents=True)
+            shutil.copy2(SCRIPT, script)
+            hooks = root / ".claude/hooks"
+            hooks.mkdir()
+            (hooks / "loop.py").symlink_to("loop.py")
+            (root / ".claude/settings.json").write_text(
+                '{"hooks":{"Stop":[{"hooks":[{"type":"command",'
+                '"command":"python3 .claude/hooks/loop.py"}]}]}}', encoding="utf-8")
+            result = subprocess.run([sys.executable, str(script)], cwd=str(root),
+                                    capture_output=True, text=True, check=False, timeout=10)
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("cannot inspect hook", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
 
 if __name__ == "__main__":
     unittest.main()
