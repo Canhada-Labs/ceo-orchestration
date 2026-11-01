@@ -937,8 +937,8 @@ class TestPlan092WaveBInvariants(_PairRailTestBase):
         one, still fails loudly.
         """
         import re as _re
-        source_path = _HOOKS_DIR / "check_pair_rail.py"
-        src = source_path.read_text(encoding="utf-8")
+        import inspect as _inspect
+        src = _inspect.getsource(check_pair_rail._decide)
         # Match dict-literal assignments of {"decision": "block"} or
         # {'decision': 'block'} including indentation. Permits internal
         # constant strings like codex_verdict="BLOCK" (case-sensitive

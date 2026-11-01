@@ -37,6 +37,7 @@ Stdlib-only, Python >= 3.9.
 from __future__ import annotations
 
 import argparse
+import ast
 import difflib
 import json
 import re
@@ -191,12 +192,46 @@ def _hook_label(command: str) -> str:
     return "(inline)"
 
 
+def _hook_declaration_sources(repo: Path, source: Path) -> str:
+    """Include private declarations explicitly bound to this facade's globals.
+
+    Read AST only: importing a hook can register signal handlers or emit events.
+    Unused imports and ordinary dependencies do not constitute bound declarations.
+    """
+    text = source.read_text(encoding="utf-8")
+    if source.suffix != ".py":
+        return text
+    tree = ast.parse(text, filename=str(source))
+    binders = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("_lib."):
+            for alias in node.names:
+                if alias.name in ("bind", "install"):
+                    binders[alias.asname or alias.name] = node.module
+    packages = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        if node.func.id not in binders or not node.args:
+            continue
+        namespace = node.args[0]
+        if isinstance(namespace, ast.Call) and isinstance(namespace.func, ast.Name) and namespace.func.id == "globals":
+            packages.add(binders[node.func.id])
+    sources = [text]
+    for package in sorted(packages):
+        directory = repo / ".claude/hooks" / Path(*package.split("."))
+        if not directory.is_dir():
+            raise FileNotFoundError("Missing bound hook declarations: %s" % directory)
+        sources.extend(path.read_text(encoding="utf-8") for path in sorted(directory.glob("*.py")))
+    return "\n".join(sources)
+
+
 def surface_guards(repo: Path,
                    rows: Sequence[Dict[str, object]]) -> Dict[str, List[str]]:
     """Which registered hook sources reference each surface.
 
     Rule (over-approximating, stated in the doc): a hook guards a surface iff
-    its source under .claude/hooks/ contains the literal '.claude/skills' or
+    its source (including bound parts) under .claude/hooks/ contains '.claude/skills' or
     'SKILL.md' (skill surface) / '.claude/commands' (command surface)."""
     guards: Dict[str, List[str]] = {"skills": [], "commands": [], "unresolved": []}
     for label in sorted({str(r["hook"]) for r in rows}):
@@ -206,7 +241,7 @@ def surface_guards(repo: Path,
         if not src.is_file():
             guards["unresolved"].append(label)
             continue
-        text = src.read_text(encoding="utf-8", errors="replace")
+        text = _hook_declaration_sources(repo, src)
         if ".claude/skills" in text or "SKILL.md" in text:
             guards["skills"].append(label)
         if ".claude/commands" in text:

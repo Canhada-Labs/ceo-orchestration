@@ -696,6 +696,37 @@ class TestGoldenInventory(TestEnvContext):
         self.assertNotIn("ghostdef", body)
 
 
+class TestModularEmitterCoverage(TestEnvContext):
+    def _part(self, body):
+        facade = _write_audit_emit(self.project_dir, ["alpha"])
+        _write_schema(self.project_dir, ["alpha"])
+        parts = facade.parent / "_audit_emit_parts"
+        parts.mkdir()
+        part = parts / "events.py"
+        part.write_text(body, encoding="utf-8")
+        return part
+
+    def test_part_definitions_report_real_source_without_importing(self):
+        self._part("raise AssertionError('must not import')\ndef emit_missing():\n    pass\n")
+        result = _run(self.project_dir)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("emit_missing", result.stderr)
+        self.assertIn("_audit_emit_parts/events.py:2", result.stderr)
+        self.assertNotIn("must not import", result.stderr)
+
+    def test_part_invalid_source_is_a_named_error(self):
+        self._part("def broken(\n")
+        result = _run(self.project_dir)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("events.py parse error", result.stderr)
+
+    def test_parts_cannot_replace_facade_registry(self):
+        self._part("_KNOWN_ACTIONS = {'phantom'}\ndef emit_alpha():\n    pass\n")
+        result = _run(self.project_dir, verbose=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("known=1", result.stdout)
+
+
 class TestRealRepoSmoke(unittest.TestCase):
     """Positive smoke test — the real repo's audit registry must pass.
 
