@@ -1,7 +1,7 @@
 ---
 adr_id: ADR-201
 title: Bounded additive guard for indirect shell execution
-status: PROPOSED
+status: ACCEPTED
 date: 2026-11-01
 plan: PLAN-195
 ---
@@ -10,15 +10,18 @@ plan: PLAN-195
 
 ## Status and provenance
 
-PROPOSED. This is a local implementation proposal derived from
-[PLAN-195](../plans/PLAN-195-bash-guard-indirect-execution.md), including its
-accepted corrections C1–C13. It does not reproduce the private draft mentioned
-there, assert a new security review, or authorize SIGN/LAND. Reconcile it with
-that draft, the private A-9 matrix, and the differential replay before acceptance.
+ACCEPTED by the CEO/Owner instruction for W6G on 2026-11-01. This records
+acceptance of the bounded architecture implemented in `027895f1`, derived from
+[PLAN-195](../plans/PLAN-195-bash-guard-indirect-execution.md) and corrections
+C1–C13. It does not assert that the private replay, veto reconfirmations,
+GPG signatures or OS-sandbox measurements have occurred.
 
-The source of the decisions and historical measurements below is PLAN-195 C13.
-The local synthetic tests are implementation checks, not a replacement corpus.
-Keep the plan `executing` while any acceptance evidence remains unavailable.
+Enforcement commit: `027895f1` (integrated implementation and synthetic tests).
+
+The source of historical measurements below is PLAN-195 C13. The plan's
+`done` metadata was authorized for the integrated technical scope; the
+outstanding acceptance evidence remains listed separately in the plan and in
+this ADR. Synthetic tests do not replace the private differential corpus.
 
 ## Problem
 
@@ -31,7 +34,7 @@ The guard must raise the cost of those forms without claiming complete shell
 evaluation. It must never execute the submitted command, expand the real
 filesystem, read shell profiles, or treat arbitrary quoted data as a program.
 
-## Proposed architecture
+## Architecture
 
 Use one bounded additional scan at the tail of `decide_command`, after the
 existing checks. The new scanner only adds vetoes; an earlier BLOCK stays BLOCK.
@@ -94,7 +97,7 @@ produce no disabled event. Each explicit disable emits at most one
 creation under the audit directory. Marker/storage failure must not crash the
 hook; a crash after marker creation can lose that telemetry record.
 
-**Schema choice proposed here:** extend `_LEARNING_RAIL_ENUM` with
+**Schema decision:** extend `_LEARNING_RAIL_ENUM` with
 `bash_indirect`, and `_LEARNING_SWITCH_ENUM` with the two exact names above.
 Update `SPEC/v1/audit-log.schema.md` together. Retain the existing registered
 action and field allowlist; never let coercion mislabel this rail as `observe`
@@ -128,7 +131,7 @@ The historical denominator in C13 is 2026-08-23T17:32:33Z through
 2026-10-02T04:16:25Z: 102,979 deduplicated invocations, 99,673 byte-distinct
 commands, 52 sessions. These are historical plan records, not results of this
 implementation. Attach the differential denominator and classification before
-claiming this proposal meets any limit. “Meets” means does not exceed.
+claiming this implementation meets any limit. “Meets” means does not exceed.
 
 Depth/size, brace-word ceilings, and unknown-launcher flags are C13 P-5
 proposals pending measurement and Owner ratification. Do not invent limits for
@@ -137,7 +140,7 @@ their acceptable false positives or for V-1 from missing corpus data.
 Downgrade a heuristic sub-form only through an ADR amendment plus a code
 constant, after review; never through an arbitrary runtime rule configuration.
 Keep its reason code, report the would-block outcome, and declare the residual.
-No sub-form is declared downgraded by this proposal.
+No sub-form is declared downgraded by this decision.
 
 ## Limitations and acceptance work
 
@@ -155,9 +158,9 @@ The hook must remain a superset of its YAML twin without modifying the twin in
 W1. Corpus findings remain limited by one repository, retention, and survivor
 bias. W3 measures an OS sandbox separately before any Owner enablement decision.
 
-Before ACCEPTED: reconcile the private draft and vocabulary; classify HEAD ×
+Before claiming complete external validation: reconcile the private draft and vocabulary; classify HEAD ×
 patch replay in both directions with isolated audit storage and positive
 zero-live-delta control; measure V-1/P-5; resolve the A-9 tag, OQ-10 and cleanup
 route; obtain the C13 veto reconfirmations; verify local mirrors; and complete
-the applicable Owner signature and release gates. No approval or signature is
-inferred from this file's existence.
+the applicable Owner signature and release gates. The acceptance above records the Owner's
+decision; no GPG signature or unexecuted measurement is inferred from it.

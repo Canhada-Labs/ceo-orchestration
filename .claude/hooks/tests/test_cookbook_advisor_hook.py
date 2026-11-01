@@ -33,6 +33,12 @@ from _lib import audit_emit  # noqa: E402
 # Fixtures
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def cookbook_project_root(monkeypatch):
+    """Locate repository data independently of the pytest working directory."""
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(REPO_ROOT))
+
+
 @pytest.fixture
 def matching_prompt_p1():
     # Hits COOK-P1 via "emit json" + "tool_choice .* strict" + "downstream automation"

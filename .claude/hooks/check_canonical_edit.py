@@ -35,9 +35,8 @@ Registered in `.claude/settings.json` PreToolUse Edit/Write/MultiEdit:
 
 ## Fail-open contract
 
-Any internal exception → allow. The hook never blocks the user on its
-own bug. (The canonical edit is allowed; the canonical path is still
-governed by CODEOWNERS / branch protection on the merge side.)
+Internal exceptions generally allow; an unavailable canonical-edit component
+blocks because the matcher cannot establish the integrity of its decision.
 """
 
 from __future__ import annotations
@@ -1473,6 +1472,10 @@ def main() -> int:
     if _COMPONENT_IMPORT_ERROR is not None:
         print("check_canonical_edit: component import unavailable (" +
               _COMPONENT_IMPORT_ERROR + ")", file=sys.stderr)
+        if _COMPONENT_IMPORT_IS_INTEGRITY_FAILURE:
+            print(_emit_block("CANONICAL-EDIT-BLOCKED: canonical_edit integrity "
+                              "failure: component import unavailable."))
+            return 0
         print(_emit_allow())
         return 0
     _start_wall_budget()
@@ -1817,12 +1820,14 @@ def _main_guarded() -> int:
 # still patch dependencies here, and each import owns its caches and counters.
 # PLAN162_FIX_7: local file-URI normalization lives in canonical_edit.paths.
 _COMPONENT_IMPORT_ERROR = None
+_COMPONENT_IMPORT_IS_INTEGRITY_FAILURE = False
 try:
     from _lib.canonical_edit import bind as _bind_canonical_edit
     _bind_canonical_edit(globals())
     del _bind_canonical_edit
 except Exception as _component_exc:  # partial install / infrastructure failure
     _COMPONENT_IMPORT_ERROR = type(_component_exc).__name__
+    _COMPONENT_IMPORT_IS_INTEGRITY_FAILURE = isinstance(_component_exc, ImportError)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ id: ADR-055-AMEND-4
 title: "ADR-055 §Components — estado da auditoria, zero drain sob prazo e encadeamento de sinais"
 status: ACCEPTED
 accepted_at: 2026-11-01
-implementation_status: "PARTIAL — Onda 2A em 8f71ec88; U2-A/U2-B e o F2 completo aguardam integração"
+implementation_status: "PARTIAL — Onda 2A em 8f71ec88 e subconjunto F2 em 59aaf353; U2-A/U2-B e o F2 completo permanecem pendentes"
 condensed: true
 source_draft: ".claude/plans/PLAN-194/debate/round-2/ADR-055-AMEND-4-draft.md — 1.038 linhas, sha256 98eab278bebc50a8f362561b1123df0b0384c09105e9deeea7eba32561dcb00a (blob no HEAD `9a458f19`; última alteração em `092377af`). Fonte integral; este arquivo é a parte normativa condensada (decisão D-6 do Owner)."
 canonical_path: ".claude/adr/ADR-055-AMEND-4-spool-state-drain-and-signal-hardening.md (destino indicado pela Onda 5B)"
@@ -43,6 +43,15 @@ enforcement_commit: "8f71ec88 (PARCIAL: zero drain/flush na saída de hook e sin
 # ADR-055-AMEND-4 — Estado da auditoria sem acúmulo (W2 do PLAN-194)
 
 **Status:** ACCEPTED como decisão normativa, por instrução da Onda 5B em 2026-11-01; implementação PARCIAL (§1).
+
+Reconciliação W6G (2026-11-01): a Onda 5B acrescentou em `59aaf353` o
+`TestF2IntegratedSubset` de `test_spool_state_amend4.py`: 100 drenagens,
+recuperação de escritor morto e quatro escritores paralelos até ponto fixo.
+O [registro F2](../plans/PLAN-194/LEDGER.md#f2--estresse-da-w25) preserva os
+limites: esse subconjunto não prova U2-A/U2-B, as 50 transições, rotação,
+reuso/adoção de PID ou os mutantes M-a..M-d. Aceite do ADR e conclusão de F2
+são estados distintos.
+
 **Fonte condensada:** D-6 do plano `:2049`, de 2026-10-02.
 **Fonte integral:** `.claude/plans/PLAN-194/debate/round-2/ADR-055-AMEND-4-draft.md`, 1.038 linhas, sha256
 `98eab278bebc50a8f362561b1123df0b0384c09105e9deeea7eba32561dcb00a`. «Rascunho `:N`» aponta para esse blob.

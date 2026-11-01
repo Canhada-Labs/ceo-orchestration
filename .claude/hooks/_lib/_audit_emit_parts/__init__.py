@@ -17,11 +17,15 @@ from types import FunctionType
 from typing import Any, Dict, Tuple
 
 
-def install(namespace: Dict[str, Any], modules: Tuple[str, ...]) -> None:
-    """Publish declarations with the facade as their sole runtime namespace."""
+def install(namespace: Dict[str, Any], modules: Tuple[str, ...],
+            package: str = __name__) -> None:
+    """Publish declarations with the facade as their sole runtime namespace.
+
+    ``package`` permits other facades to share the same binding contract.
+    """
     declarations = {}
     for name in modules:
-        module = import_module(f"{__name__}.{name}")
+        module = import_module(f"{package}.{name}")
         declarations.update({key: getattr(module, key) for key in module.__all__})
         namespace.setdefault("__annotations__", {}).update(
             getattr(module, "__annotations__", {})

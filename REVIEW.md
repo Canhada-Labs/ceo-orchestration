@@ -26,7 +26,9 @@ or escalate them under the protocol before seeking approval.
   not a claim that every hook has an enforced 500 ms deadline. Infrastructure
   failures normally fail open with a breadcrumb; the canonical-edit matcher's
   wall deadline deliberately fails closed as incomplete verification under
-  [ADR-186](.claude/adr/ADR-186-hook-deadline-policy.md).
+  [ADR-186](.claude/adr/ADR-186-hook-deadline-policy.md). An `ImportError` in
+  its internal `canonical_edit` package also blocks the decision, with an
+  integrity diagnostic; it cannot establish that an edit is authorized.
 - [`scripts/install.sh`](scripts/install.sh) and
   [`scripts/upgrade.sh`](scripts/upgrade.sh): writes outside the authorized
   manifest, TOCTOU exposure, POSIX/BSD/GNU incompatibility, or loss of
@@ -45,7 +47,19 @@ not replace its hook behavior or the protocol's vetoes.
 
 ## Review Round Cap
 
-Limit review to three rounds. Starting with round 2, review only the delta
-(`--delta-only`): changes since the prior round and their necessary context.
-Do not reopen findings already discarded. At the cap, escalate unresolved
-issues under the protocol; do not treat the cap as approval or override a veto.
+Limit review to three rounds. Starting with round 2, review only changes since
+the prior round and their necessary context. Set `PREVIOUS_ROUND_COMMIT` to
+the reviewed commit, `PREVIOUS_ROUND_AT` to its review timestamp (ISO 8601),
+and `AUDIT_LOG` to the audit log being examined. Use the existing interfaces:
+
+```bash
+git diff "$PREVIOUS_ROUND_COMMIT" HEAD --
+git diff --name-only "$PREVIOUS_ROUND_COMMIT" HEAD -- | python3 .claude/hooks/check_canonical_edit.py --is-canonical -
+python3 .claude/scripts/audit-query.py since "$PREVIOUS_ROUND_AT" --log "$AUDIT_LOG" --json
+```
+
+The Git diff identifies the changed content. `--is-canonical` classifies paths;
+`since` filters audit events by time. Neither command supplies an automatic
+review verdict. Do not reopen findings already discarded. At the cap, escalate
+unresolved issues under the protocol; do not treat the cap as approval or
+override a veto.

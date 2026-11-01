@@ -52,7 +52,7 @@ class TestComponentCompatibility(TestEnvContext):
         accept.assert_called_once_with(sentinel)
         reject.assert_called_once_with(sentinel)
 
-    def test_missing_component_emits_allow_and_infrastructure_breadcrumb(self):
+    def test_missing_component_blocks_and_emits_integrity_breadcrumb(self):
         original_import = builtins.__import__
 
         def unavailable(name, *args, **kwargs):
@@ -65,5 +65,7 @@ class TestComponentCompatibility(TestEnvContext):
         output, errors = io.StringIO(), io.StringIO()
         with redirect_stdout(output), redirect_stderr(errors):
             self.assertEqual(module.main(), 0)
-        self.assertEqual(json.loads(output.getvalue()), {})
+        decision = json.loads(output.getvalue())
+        self.assertEqual(decision["decision"], "block")
+        self.assertIn("canonical_edit integrity", decision["reason"])
         self.assertIn("component import unavailable (ImportError)", errors.getvalue())
