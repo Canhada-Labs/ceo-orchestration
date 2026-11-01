@@ -69,6 +69,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from _subprocess_helpers import run_in_process_group
 from _lib.testing import TestEnvContext  # noqa: E402
 
 _HOOK = Path(__file__).resolve().parent.parent / "check_cost_envelope.py"
@@ -298,7 +299,7 @@ class CostEnvelopeBlockPathTests(TestEnvContext):
 
     def _process_fu144(self, env: Dict[str, str], cwd: Path):
         payload = {"tool_name": "Bash", "tool_input": {"command": _SWARM_CMD}}
-        proc = subprocess.run(
+        proc = run_in_process_group(
             [sys.executable, str(_HOOK)], input=json.dumps(payload), env=env,
             cwd=str(cwd), capture_output=True, text=True, timeout=30,
         )

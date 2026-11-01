@@ -15,6 +15,8 @@ Covers semantics:
 
 from __future__ import annotations
 
+from _subprocess_helpers import run_in_process_group
+
 import json
 import os
 import subprocess
@@ -196,7 +198,7 @@ class StrictAgainstCounterContractFu144Test(TestEnvContext):
 
     def setUp(self):
         super().setUp()
-        self._tmp = tempfile.TemporaryDirectory(prefix="fu144-strict-")
+        self._tmp = tempfile.TemporaryDirectory(prefix="fu144-strict-", dir=self._tmp_root)
         self.tmp = Path(self._tmp.name)
         self.log_path = self.tmp / "audit-log.jsonl"
         self.key_path = self.tmp / "audit-key"
@@ -221,8 +223,10 @@ class StrictAgainstCounterContractFu144Test(TestEnvContext):
             CEO_AUDIT_CHAIN_LENGTH_PATH=str(self.counter_path), **self.locale)
         if "PYTHONIOENCODING" not in self.locale:
             env.pop("PYTHONIOENCODING", None)
-        return subprocess.run(
+        proc = run_in_process_group(
             cmd, capture_output=True, input=stdin, env=env, timeout=timeout)
+        self.assertIn(proc.returncode, (0, 1, 2, 3, 4), proc.stderr)
+        return proc
 
     def _json_report(self, proc):
         lines = proc.stdout.decode("utf-8").splitlines()

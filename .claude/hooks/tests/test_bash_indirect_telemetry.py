@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from unittest import mock
 
+from _subprocess_helpers import run_in_process_group
 from _lib import audit_emit, bash_indirect_telemetry
 from _lib.testing import TestEnvContext
 
@@ -22,8 +22,8 @@ class TestBashIndirectTelemetry(TestEnvContext):
         ]
 
     def test_real_payload_has_closed_names_without_env_values(self):
-        os.environ["CEO_BASH_INDIRECT_GUARD"] = "0"
-        bash_indirect_telemetry.disabled_once("CEO_BASH_INDIRECT_GUARD", "sid-1")
+        with mock.patch.dict(os.environ, {"CEO_BASH_INDIRECT_GUARD": "0"}):
+            bash_indirect_telemetry.disabled_once("CEO_BASH_INDIRECT_GUARD", "sid-1")
 
         events = self._events()
         self.assertEqual(len(events), 1)
@@ -48,7 +48,7 @@ class TestBashIndirectTelemetry(TestEnvContext):
             "from _lib import bash_indirect_telemetry as t; "
             "t.disabled_once('CEO_BASH_INDIRECT_GUARD', 'same-session')"
         )
-        result = subprocess.run(
+        result = run_in_process_group(
             [sys.executable, "-c", script, hooks_dir],
             env=os.environ.copy(), capture_output=True, text=True,
             check=False, timeout=15,

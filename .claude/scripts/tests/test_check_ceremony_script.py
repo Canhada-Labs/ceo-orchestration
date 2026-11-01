@@ -8,6 +8,8 @@ PLAN-166/repass-*/ — debate r1 F4).
 """
 from __future__ import annotations
 
+from _subprocess_helpers import run_in_process_group
+
 import hashlib
 import json
 import os
@@ -262,8 +264,10 @@ class TestCallerRepoGuardFu144:
         return root
 
     def _cli(self, *args):
-        return subprocess.run([sys.executable, self.GUARD] + [str(a) for a in args],
+        proc = run_in_process_group([sys.executable, self.GUARD] + [str(a) for a in args],
                               capture_output=True, text=True, timeout=60)
+        assert proc.returncode in (0, 1, 2), proc.stdout + proc.stderr
+        return proc
 
     def test_fu144_quiet_run_is_green(self, tmp_path):
         root = self._repo(tmp_path)

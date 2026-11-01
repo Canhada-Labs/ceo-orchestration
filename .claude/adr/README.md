@@ -453,9 +453,9 @@ _Auto-generated: 199 ADR(s) on disk. Run `python3 .claude/scripts/generate-adr-i
 
 <!-- END ADR-INDEX -->
 
-> Index note (re-measured 2026-09-08, cerimonia rel-meta-2): a nota anterior
+> Index note (re-measured 2026-11-01): a nota anterior
 > afirmava que as linhas ADR-157..ADR-181 nao estavam listadas. A
-> medicao diz o contrario: **198 arquivos `ADR-*.md` no disco, 175 ids
+> medicao diz o contrario: **199 arquivos `ADR-*.md` no disco, 176 ids
 > distintos** (a diferenca sao as colisoes de id documentadas acima),
 > e **todo id em disco aparece no indice** — o conjunto de ausentes e
 > vazio. A afirmacao de atraso era, ela propria, o que estava

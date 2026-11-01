@@ -37,7 +37,7 @@ conftest), but retiring them is explicitly a Phase 2 item
 (PLAN-019 §P1-QA-5), not Phase 1. Mechanical removal will happen in
 a dedicated commit so the diff is reviewable.
 
-## Why these three paths?
+## Why these paths?
 
 - ``.claude/hooks/`` — hosts ``_lib.*`` (payload, redact, testing,
   policy, audit_emit, adapters, ...) plus the ``check_*.py`` hooks
@@ -49,12 +49,15 @@ a dedicated commit so the diff is reviewable.
   per-file ``sys.path.insert`` convention used across 114 test
   modules.
 
+- ``.claude/scripts/tests/`` — supplies the shared subprocess runner to
+  both hook and script tests, including focused hook-only invocations.
+
 - repo root (``.``) — makes ``tests/formal_verification`` a proper
   top-level package discoverable by pytest rootdir collection.
 
 Order matters: we insert at position 0 (highest priority), hooks
 first so ``_lib.*`` resolves before any legacy shadow modules, then
-scripts, then repo root last.
+scripts and their shared test helpers, then repo root last.
 
 ## Compatibility with ``python3 -m unittest``
 
@@ -73,7 +76,7 @@ _REPO_ROOT = Path(__file__).parent.resolve()
 
 # Canonical sys.path additions for pytest whole-tree discovery.
 # Order: hooks first (so `_lib.*` resolves), scripts second, root last.
-for _rel in (".claude/hooks", ".claude/scripts", "."):
+for _rel in (".claude/hooks", ".claude/scripts", ".claude/scripts/tests", "."):
     _candidate = str((_REPO_ROOT / _rel).resolve())
     if _candidate not in sys.path:
         sys.path.insert(0, _candidate)

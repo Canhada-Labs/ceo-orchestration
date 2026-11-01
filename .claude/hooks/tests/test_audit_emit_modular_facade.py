@@ -7,10 +7,10 @@ defined in the original monolithic module did.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 
+from _subprocess_helpers import run_in_process_group
 from _lib import audit_emit
 
 
@@ -98,7 +98,7 @@ assert len(written) == 1, written
 assert written[0]['action'] == 'plan_transition'
 assert written[0]['file_path'] == 'plans/PLAN-FACADE.md'
 """
-    result = subprocess.run(
+    result = run_in_process_group(
         [sys.executable, "-c", script, str(hooks_dir)],
         capture_output=True,
         text=True,

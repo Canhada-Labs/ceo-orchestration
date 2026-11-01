@@ -4,10 +4,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import signal
-import subprocess
 import sys
 from unittest import mock
 
+from _subprocess_helpers import run_in_process_group
 from _lib import spool_writer
 from _lib.testing import TestEnvContext
 
@@ -101,7 +101,7 @@ class TestSpoolWriterSignalChain(TestEnvContext):
         )
         with mock.patch.dict(os.environ, {"CEO_AUDIT_SYNC_MODE": "1"}):
             for script in (literal, stale_self):
-                child = subprocess.run(
+                child = run_in_process_group(
                     [sys.executable, "-c", script, str(hooks_dir)],
                     capture_output=True,
                     env=self.subprocess_env(),

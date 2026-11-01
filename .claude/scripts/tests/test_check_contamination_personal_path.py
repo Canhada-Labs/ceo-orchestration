@@ -66,6 +66,8 @@ a false statement about the file it stands in (pair-rail round 3, P3).
 """
 from __future__ import annotations
 
+from _subprocess_helpers import run_in_process_group
+
 import argparse
 import base64
 import contextlib
@@ -3875,7 +3877,7 @@ class TestTermRuleBordersFu144(_Base):
         return sorted(p.relative_to(self.root).as_posix() for p in cc.scan(self.root))
 
     def _assert_gate_refuses(self, timeout: int = 30) -> str:
-        proc = subprocess.run(
+        proc = run_in_process_group(
             [sys.executable, str(Path(cc.__file__).resolve()), "--root", str(self.root),
              "--personal-path-allowlist", str(self.allowlist)],
             capture_output=True, text=True, check=False, timeout=timeout,

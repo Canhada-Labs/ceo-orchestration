@@ -65,6 +65,8 @@ Covered:
 """
 from __future__ import annotations
 
+from _subprocess_helpers import run_in_process_group
+
 import base64
 import contextlib
 import difflib
@@ -1295,7 +1297,7 @@ class RepinEmittedScriptTest(_RePinBase):
             "die() { printf 'DIE: %s\\n' \"$*\"; exit 1; }",
             f"DRY={dry}",
         ] + list(prelude) + lines[start:end + 1] + ["echo PASSED"])
-        return subprocess.run(["bash", "-c", harness], capture_output=True, text=True,
+        return run_in_process_group(["bash", "-c", harness], capture_output=True, text=True,
                               timeout=60, check=False, cwd=str(self.repo), env=env)
 
     def test_todo_guard_executes_as_declared_fu144(self) -> None:

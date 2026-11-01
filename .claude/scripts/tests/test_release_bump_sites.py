@@ -28,6 +28,8 @@ test process is never mutated and the real repo is never touched.
 
 from __future__ import annotations
 
+from _subprocess_helpers import run_in_process_group
+
 import hashlib
 import importlib.util
 import json
@@ -3116,7 +3118,7 @@ def test_fu144_upgrade_resolves_the_rc_example_during_the_hold_and_names_the_mis
     env = dict(env, PATH="%s%s%s" % (stub, os.pathsep, os.environ["PATH"]))
 
     def upgrade(ref):
-        return subprocess.run(
+        return run_in_process_group(
             ["bash", "scripts/upgrade.sh", str(target), "--pin", ref, "--dry-run",
              "--no-replay", "--no-deprecation-warn"],
             cwd=str(source), env=env, input=b"", capture_output=True, timeout=300, check=False)

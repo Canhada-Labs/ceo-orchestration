@@ -5,6 +5,8 @@ hardcoded 4-hook list in `.github/workflows/validate.yml`.
 """
 from __future__ import annotations
 
+from _subprocess_helpers import run_in_process_group
+
 import json
 import os
 import subprocess
@@ -232,10 +234,12 @@ class CheckActiveHooksExecutableTest(TestEnvContext):
         return copy
 
     def _run_copy(self, td: Path, timeout: int = 10) -> "subprocess.CompletedProcess[str]":
-        return subprocess.run(
+        result = run_in_process_group(
             [sys.executable, str(self._copy_script(td))],
             cwd=str(td), capture_output=True, text=True, check=False, timeout=timeout,
         )
+        self.assertIn(result.returncode, (0, 1, 2), result.stderr)
+        return result
 
     def _settings(self, td: Path, hook: dict, matcher_entry: Optional[dict] = None) -> None:
         entry = {"hooks": [hook]}

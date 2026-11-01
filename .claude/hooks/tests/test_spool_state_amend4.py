@@ -4,11 +4,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import shutil
-import subprocess
 import sys
 import time
 from unittest import mock
 
+from _subprocess_helpers import run_in_process_group
 from _lib import spool_writer
 from _lib.testing import TestEnvContext
 
@@ -78,7 +78,7 @@ class TestSpoolStateAmend4(TestEnvContext):
         with mock.patch.dict(os.environ, {
             "CEO_AUDIT_SYNC_MODE": "1", "CEO_HOOK_BOUNDED_EXIT": "",
         }):
-            child = subprocess.run(
+            child = run_in_process_group(
                 ["bash", str(shim), "deadline_probe.py"],
                 capture_output=True,
                 cwd=self.project_dir,
