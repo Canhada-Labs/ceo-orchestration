@@ -152,3 +152,63 @@ def _restore_steering_env():
         _os.environ.pop(_k, None)
     for _k, _v in _saved.items():
         _os.environ[_k] = _v
+
+
+class _StaticRepoText:
+    """Cache opt-in de texto UTF-8; cada leitura revalida a identidade do arquivo.
+
+    Só armazena strings, sem compartilhar JSON mutável ou resultados de processos.
+    mtime + ctime + inode detectam edição, troca atômica e restauração de mtime.
+    Não substitui Path.read_text: leituras do código sob teste continuam reais.
+    """
+
+    def __init__(self, paths):
+        self._allowed = {Path(path).absolute() for path in paths}
+        self._entries = {}
+
+    @staticmethod
+    def _signature(path):
+        info = path.stat()
+        return (info.st_dev, info.st_ino, info.st_mode, info.st_size,
+                info.st_mtime_ns, info.st_ctime_ns)
+
+    def __call__(self, path):
+        path = Path(path).absolute()
+        if path not in self._allowed or path.resolve() != path:
+            raise ValueError("Leitura fora dos arquivos estáticos declarados")
+        try:
+            signature = self._signature(path)
+            cached = self._entries.get(path)
+            if cached is not None and cached[0] == signature:
+                return cached[1]
+            text = path.read_text(encoding="utf-8")
+            self._entries.pop(path, None)
+            if self._signature(path) == signature:
+                self._entries[path] = (signature, text)
+            return text
+        except (OSError, UnicodeError):
+            self._entries.pop(path, None)
+            raise
+
+
+@_pytest_mod.fixture(scope="session")
+def repo_static_text():
+    """Leitor compartilhado por worker, restrito a fontes explícitas da fixture."""
+    return _StaticRepoText(_REPO_ROOT / rel for rel in (
+        ".claude/settings.json", ".claude/team.md", ".claude/frontend-team.md",
+        "templates/settings/settings.base.json", "templates/settings/settings.user.json",
+        "scripts/upgrade.sh",
+    ))
+
+
+@_pytest_mod.fixture(scope="module", autouse=True)
+def repo_static_text_reader(request):
+    """Adesão por módulo; unittest mantém o leitor sem cache e sem pytest."""
+    from unittest.mock import patch
+
+    if not getattr(request.module, "_USE_STATIC_REPO_TEXT", False):
+        yield
+        return
+    repo_static_text = request.getfixturevalue("repo_static_text")
+    with patch.object(request.module, "_read_repo_text", repo_static_text):
+        yield
