@@ -165,3 +165,12 @@ an adopter on a pre-2.1.216 CLI that still consulted `Write` rules loses
 only the redundant twin — the Owner accepted this version-conditional
 residual (OQ5(a); Security VETO lift condition (ii)). Any "seven-entry"
 phrasing elsewhere in this record survives only as historical text.
+
+## Amendment (PLAN-194 FOLLOWUP item 17, 2026-11-01)
+
+The replay fixtures named by Decision 1 now live under
+`.claude/hooks/_lib/harness_replay/`. This supersedes the former
+`.claude/hooks/tests/fixtures/harness-config/replay/` location in that
+decision. The old path in the original decision remains historical evidence
+of the initial fixture layout; the harness-config gate and CI comment name
+the current location.

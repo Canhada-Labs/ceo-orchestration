@@ -54,18 +54,20 @@ if str(_HOOKS_DIR) not in sys.path:
 from _lib.testing import TestEnvContext  # noqa: E402
 
 FUNC_NAME = "_merge_lifecycle_hooks_into_settings"
-
-# The same whole-token shape the function's jq uses. Kept here as an
-# INDEPENDENT re-implementation on purpose: an oracle that imports the
-# implementation's own extractor cannot catch that extractor being wrong.
+# Independent whole-token oracle: importing the extractor would hide its defects.
 _PY_TOKEN = re.compile(r"(?<![A-Za-z0-9_.-])[A-Za-z0-9_][A-Za-z0-9_.-]*\.py(?![A-Za-z0-9_.-])")
 
 _HAVE_JQ = shutil.which("jq") is not None
+_USE_STATIC_REPO_TEXT = True
+
+
+def _read_repo_text(path):
+    return path.read_text(encoding="utf-8")
 
 
 def _func_source() -> str:
     """The shipped function body, extracted from upgrade.sh by anchor."""
-    text = UPGRADE_SH.read_text(encoding="utf-8")
+    text = _read_repo_text(UPGRADE_SH)
     starts = [
         i for i, line in enumerate(text.split("\n"))
         if line == "%s() {" % FUNC_NAME
@@ -86,7 +88,7 @@ def _func_source() -> str:
 def _tmpbase_source() -> str:
     """The shipped _up_tmpbase, extracted by anchor — the REAL helper, so the
     scratch-confinement test measures the contract the upgrader actually runs."""
-    lines = UPGRADE_SH.read_text(encoding="utf-8").split("\n")
+    lines = _read_repo_text(UPGRADE_SH).split("\n")
     starts = [i for i, line in enumerate(lines) if line == "_up_tmpbase() {"]
     if len(starts) != 1:
         raise AssertionError("expected exactly one _up_tmpbase in upgrade.sh, found %d" % len(starts))
@@ -116,13 +118,9 @@ def _block_keys(block: Dict) -> List[str]:
 
 
 def _keybag(doc: Dict) -> List[str]:
-    """``"<event> <key>"`` lines WITH MULTIPLICITY, sorted.
+    """Sorted registration keys with multiplicity; _keyset cannot detect duplicates.
 
-    The oracle for "was anything duplicated". ``_keyset`` cannot answer that
-    question — it collapses duplicates before the caller ever sees them, so a
-    count taken from it is bounded by 1 and the assertion can never fail (rail
-    round 1, P2). ``TestDuplicateOracle`` is the positive control that keeps
-    this distinction from decaying back into one helper.
+    TestDuplicateOracle prevents collapsing this oracle into the set helper.
     """
     out = []
     hooks = doc.get("hooks")
@@ -155,12 +153,9 @@ class _MergeHarness(TestEnvContext):
         (self.target / ".claude").mkdir(parents=True)
         self.source = Path(self._tmp) / "source"
         (self.source / "templates" / "settings").mkdir(parents=True)
-        # Default source templates == the shipped artifacts, BOTH of them: the
-        # ceremony selects between them (rail round 6, P1), so a scratch source
-        # that carried only settings.base.json would make every user-ceremony
-        # merge fail-open on "template unreadable" and prove nothing.
-        self.set_template(json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8")))
-        self.set_user_template(json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8")))
+        # Both shipped templates seed scratch sources; ceremony selects between them.
+        self.set_template(json.loads(_read_repo_text(TEMPLATE_SETTINGS)))
+        self.set_user_template(json.loads(_read_repo_text(TEMPLATE_USER_SETTINGS)))
 
     # --- fixture setters ---------------------------------------------------
 
@@ -233,7 +228,7 @@ class TestTemplateIsTheRoster(_MergeHarness):
     """The roster comes from the template — all of it, and only it."""
 
     def test_every_template_registration_lands_on_an_empty_settings(self) -> None:
-        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
+        template = json.loads(_read_repo_text(TEMPLATE_SETTINGS))
         expected = _keyset(template)
         self.assertGreaterEqual(
             len(expected), 20,
@@ -250,7 +245,7 @@ class TestTemplateIsTheRoster(_MergeHarness):
 
     def test_every_template_python_hook_is_present_by_name(self) -> None:
         """The finding's own shape: a .py in the template must reach the adopter."""
-        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
+        template = json.loads(_read_repo_text(TEMPLATE_SETTINGS))
         wanted = sorted({
             name
             for blocks in template["hooks"].values() if isinstance(blocks, list)
@@ -278,11 +273,11 @@ class TestTemplateIsTheRoster(_MergeHarness):
         # assertTrue, not assertNotIn: the container here is a 200 KB script and
         # unittest would paste all of it into the failure message.
         self.assertTrue(
-            synth not in UPGRADE_SH.read_text(encoding="utf-8"),
+            synth not in _read_repo_text(UPGRADE_SH),
             "%r appears in upgrade.sh — pick another name; this control assumes "
             "the upgrader cannot know it" % synth,
         )
-        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
+        template = json.loads(_read_repo_text(TEMPLATE_SETTINGS))
         template["hooks"].setdefault("PreToolUse", []).append({
             "matcher": "Bash",
             "hooks": [{"type": "command", "command": "bash h.sh %s" % synth, "timeout": 5}],
@@ -294,7 +289,7 @@ class TestTemplateIsTheRoster(_MergeHarness):
 
     def test_a_template_entry_removed_is_not_registered(self) -> None:
         """Negative half of the control: the roster tracks the template both ways."""
-        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
+        template = json.loads(_read_repo_text(TEMPLATE_SETTINGS))
         template["hooks"]["PreToolUse"] = [
             b for b in template["hooks"]["PreToolUse"]
             if "check_ledger_checkpoint.py" not in _block_keys(b)
@@ -649,7 +644,7 @@ class TestTemplateMustBeStructurallyValid(_MergeHarness):
         whole merge, so one malformed block in the shipped template would
         silently stop registering hooks for every adopter on earth.
         """
-        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
+        template = json.loads(_read_repo_text(TEMPLATE_SETTINGS))
         bad = []
         for event, value in template["hooks"].items():
             if not isinstance(value, list):
@@ -889,7 +884,7 @@ class TestDryRun(_MergeHarness):
             self.settings_path.read_bytes(), before,
             "--dry-run modified settings.json",
         )
-        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
+        template = json.loads(_read_repo_text(TEMPLATE_SETTINGS))
         for line in _keyset(template):
             if not line.endswith(".py"):
                 continue
@@ -900,7 +895,7 @@ class TestDryRun(_MergeHarness):
             )
 
     def test_dry_run_on_a_current_settings_says_no_op(self) -> None:
-        template = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
+        template = json.loads(_read_repo_text(TEMPLATE_SETTINGS))
         # A CURRENT settings carries the template's .env too (rail round 7, P1:
         # the settings travel with the hooks) — a seed without it is a legacy
         # adopter, and for that one the dry-run correctly announces work.
@@ -923,12 +918,12 @@ class TestCeremonySelectsTheTemplate(_MergeHarness):
     """
 
     def _base_only(self) -> List[str]:
-        base = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
-        user = json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8"))
+        base = json.loads(_read_repo_text(TEMPLATE_SETTINGS))
+        user = json.loads(_read_repo_text(TEMPLATE_USER_SETTINGS))
         return sorted(set(_keyset(base)) - set(_keyset(user)))
 
     def _user_keys(self) -> List[str]:
-        return _keyset(json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8")))
+        return _keyset(json.loads(_read_repo_text(TEMPLATE_USER_SETTINGS)))
 
     def test_the_two_templates_actually_differ(self) -> None:
         # Non-vacuity first: if user == base, nothing below can fail.
@@ -968,7 +963,7 @@ class TestCeremonySelectsTheTemplate(_MergeHarness):
         )
 
     def test_maintainer_ceremony_derives_from_the_base_template(self) -> None:
-        base = json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8"))
+        base = json.loads(_read_repo_text(TEMPLATE_SETTINGS))
         self.seed({"hooks": {}})
         self.run_merge(ceremony="maintainer")
         self.assertEqual(_keyset(self.result()), _keyset(base))
@@ -980,18 +975,18 @@ class TestCeremonySelectsTheTemplate(_MergeHarness):
         self.seed({"hooks": {}})
         self.run_merge(ceremony=None, persist=None)
         got = set(_keyset(self.result()))
-        self.assertTrue(got < set(_keyset(json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8")))),
+        self.assertTrue(got < set(_keyset(json.loads(_read_repo_text(TEMPLATE_SETTINGS)))),
                         "with CEREMONY_EFFECTIVE unset the merge selected the full base roster")
 
     def test_unknown_ceremony_value_never_selects_the_wider_roster(self) -> None:
         self.seed({"hooks": {}})
         self.run_merge(ceremony="wizard")
         got = set(_keyset(self.result()))
-        self.assertTrue(got < set(_keyset(json.loads(TEMPLATE_SETTINGS.read_text(encoding="utf-8")))),
+        self.assertTrue(got < set(_keyset(json.loads(_read_repo_text(TEMPLATE_SETTINGS)))),
                         "an unrecognised ceremony value selected the full base roster")
 
     def test_a_fresh_user_install_is_already_complete(self) -> None:
-        self.seed(json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8")))
+        self.seed(json.loads(_read_repo_text(TEMPLATE_USER_SETTINGS)))
         before = self.settings_path.read_bytes()
         proc = self.run_merge(ceremony="user")
         self.assertEqual(
@@ -1005,7 +1000,7 @@ class TestCeremonySelectsTheTemplate(_MergeHarness):
         """Positive control: a hook planted ONLY in the user template is
         registered under ceremony=user and NOT under ceremony=maintainer."""
         planted = "synthetic_user_only_probe_%d.py" % os.getpid()
-        user = json.loads(TEMPLATE_USER_SETTINGS.read_text(encoding="utf-8"))
+        user = json.loads(_read_repo_text(TEMPLATE_USER_SETTINGS))
         user["hooks"].setdefault("SessionStart", []).append({
             "hooks": [{"type": "command", "timeout": 5,
                        "command": 'python3 "$CLAUDE_PROJECT_DIR"/.claude/hooks/%s' % planted}],
@@ -1021,7 +1016,7 @@ class TestCeremonySelectsTheTemplate(_MergeHarness):
             "the hook planted only in settings.user.json reached a MAINTAINER "
             "merge — the ceremony is not selecting the template",
         )
-        self.assertNotIn(planted, UPGRADE_SH.read_text(encoding="utf-8"))
+        self.assertNotIn(planted, _read_repo_text(UPGRADE_SH))
 
 
 class TestEnvTravelsWithTheRoster(_MergeHarness):
@@ -1036,7 +1031,7 @@ class TestEnvTravelsWithTheRoster(_MergeHarness):
 
     def _tpl(self, which: str) -> Dict:
         path = TEMPLATE_USER_SETTINGS if which == "user" else TEMPLATE_SETTINGS
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(_read_repo_text(path))
 
     def test_a_legacy_user_adopter_receives_the_settings_with_the_hooks(self) -> None:
         self.seed({"hooks": {}})
@@ -1131,7 +1126,7 @@ class TestTemplateMustBeExactlyOneDocument(_MergeHarness):
     def test_the_shipped_templates_are_one_document_each(self) -> None:
         # Positive control for the guard: the real artifacts pass it.
         for path in (TEMPLATE_SETTINGS, TEMPLATE_USER_SETTINGS):
-            self.assertIsInstance(json.loads(path.read_text(encoding="utf-8")), dict)
+            self.assertIsInstance(json.loads(_read_repo_text(path)), dict)
 
 
 class TestHiddenScriptIsNotTheCanonicalRegistration(_MergeHarness):
@@ -1179,7 +1174,7 @@ class TestUnknownCeremonyRegistersNoHooks(_MergeHarness):
 
     def _tpl(self, which: str) -> Dict:
         path = TEMPLATE_USER_SETTINGS if which == "user" else TEMPLATE_SETTINGS
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(_read_repo_text(path))
 
     def _shared_env(self) -> Dict:
         b, u = self._tpl("base")["env"], self._tpl("user")["env"]
@@ -1425,7 +1420,7 @@ class TestNoSecondRoster(TestEnvContext):
         )
 
     def test_the_function_is_defined_exactly_once(self) -> None:
-        text = UPGRADE_SH.read_text(encoding="utf-8")
+        text = _read_repo_text(UPGRADE_SH)
         self.assertEqual(text.count("\n%s() {\n" % FUNC_NAME), 1)
         self.assertEqual(text.count("\n%s\n" % FUNC_NAME), 1, "expected one call site")
 

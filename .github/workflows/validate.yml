@@ -1120,7 +1120,7 @@ jobs:
       #     delegation to check-active-hooks-executable.py (exec bits —
       #     single owner, re-run here so this gate is self-contained).
       #   - behavioral: replays planted-violation fixtures
-      #     (.claude/hooks/tests/fixtures/harness-config/replay/ — inert
+      #     (.claude/hooks/_lib/harness_replay/ — inert
       #     test data) through the REAL hooks in a hermetic env (temp
       #     HOME/GNUPGHOME, no override/sentinel env leakage) and asserts
       #     each rail BLOCKS its positive control. A dead rail cannot
@@ -1649,21 +1649,18 @@ jobs:
     # PLAN-194 W1 — runner por versao: `ubuntu-latest` vira 26.04 de
     # 2026-10-19 a 2026-11-19 (actions/runner-images#14748) e o setup-python
     # nao tem 3.9 para 26.04 (medido 2026-10-01). 3.9 (o piso) roda no
-    # rotulo FIXO `ubuntu-24.04` (W1.1); 3.14 em `ubuntu-26.04`, so no
-    # `schedule` (W1.3, canario); 3.10-3.12 seguem no `Ceo`. O actionlint
+    # rotulo FIXO `ubuntu-24.04` (W1.1); a 3.14 participa da mesma rota
+    # confiavel para a VM e preserva `ubuntu-26.04` como fallback hospedado.
+    # O actionlint
     # 1.7.7 nao conhece `ubuntu-26.04` e nao confere rotulo dentro de
     # expressao (medido): a validade vem do issue acima.
     runs-on: >-
-      ${{ matrix.python-version != '3.14' && vars.VM_CI_ENABLED == '1' 
+      ${{ vars.VM_CI_ENABLED == '1'
           && github.ref == 'refs/heads/main' 
           && (github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') 
           && fromJSON('["self-hosted","Linux","X64","canhada-ci"]')
           || (matrix.python-version == '3.9' && 'ubuntu-24.04'
           || (matrix.python-version == '3.14' && 'ubuntu-26.04' || 'ubuntu-latest')) }}
-    # Runner padrao (4 vCPU) = 45 min; `Ceo` (8 nucleos) segue 25. Medido
-    # no `Ceo` (runs 36932014761, 36832647294): perna 3.9 = 430-646 s
-    # paralela + 211-232 s serial; com metade dos nucleos encosta nos 25
-    # (estimativa: nenhuma perna rodou num runner padrao).
     timeout-minutes: ${{ (matrix.python-version == '3.9' || matrix.python-version == '3.14') && 45 || 25 }}
     permissions:
       contents: read

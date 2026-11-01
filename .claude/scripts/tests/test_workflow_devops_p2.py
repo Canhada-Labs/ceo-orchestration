@@ -23,6 +23,7 @@ from pathlib import Path
 
 _REPO = Path(__file__).resolve().parent.parent.parent.parent
 _WF = _REPO / ".github" / "workflows"
+_ADR_158 = _REPO / ".claude" / "adr" / "ADR-158-harness-config-gate.md"
 
 # Bootstrap TestEnvContext so env isolation holds.
 _HOOKS_DIR = _REPO / ".claude" / "hooks"
@@ -115,6 +116,49 @@ class ValidateHygieneHardFailTest(TestEnvContext):
         # The legacy ADJ-028 grep is kept as advisory continuity during
         # allowlist drain — it should NOT have been dropped.
         self.assertIn("legacy grep", self.source)
+
+
+class ValidatePythonMatrixRouteTest(TestEnvContext):
+    """PLAN-194 FOLLOWUP 13/15/17 — CI paths reflect the current contract."""
+
+    def setUp(self):
+        super().setUp()
+        self.source = (_WF / "validate.yml").read_text(encoding="utf-8")
+        match = re.search(
+            r"^  hook-tests-python-matrix:\n(.*?)(?=^  [a-z0-9-]+:|\Z)",
+            self.source,
+            flags=re.DOTALL | re.MULTILINE,
+        )
+        self.assertIsNotNone(match, "hook-tests-python-matrix ausente")
+        self.matrix_job = match.group(1)
+
+    def test_python_314_uses_the_trusted_vm_route(self):
+        self.assertIn("vars.VM_CI_ENABLED == '1'", self.matrix_job)
+        self.assertNotIn(
+            "matrix.python-version != '3.14' && vars.VM_CI_ENABLED",
+            self.matrix_job,
+        )
+        for guard in (
+            "github.ref == 'refs/heads/main'",
+            "github.event_name == 'push' || github.event_name == 'schedule'",
+            "github.event_name == 'workflow_dispatch'",
+            'fromJSON(\'["self-hosted","Linux","X64","canhada-ci"]\')',
+            "matrix.python-version == '3.14' && 'ubuntu-26.04'",
+        ):
+            self.assertIn(guard, self.matrix_job)
+
+    def test_stale_runner_capacity_comments_are_absent(self):
+        self.assertNotIn("seguem no `Ceo`", self.source)
+        self.assertNotIn("`Ceo` (8 nucleos) segue 25", self.source)
+
+    def test_harness_replay_comment_names_current_location(self):
+        self.assertIn(".claude/hooks/_lib/harness_replay/", self.source)
+        self.assertNotIn("harness-config/replay", self.source)
+
+    def test_adr_amendment_names_current_replay_location(self):
+        adr = _ADR_158.read_text(encoding="utf-8")
+        self.assertIn("PLAN-194 FOLLOWUP item 17", adr)
+        self.assertIn(".claude/hooks/_lib/harness_replay/", adr)
 
 
 class FormalVerifyShaPinAlignmentTest(TestEnvContext):
