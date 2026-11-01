@@ -18,6 +18,7 @@ _HOOKS_DIR = Path(__file__).resolve().parent
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
+from _lib import cli_currency as _cli_currency  # noqa: F401
 from _lib._pair_rail_parts import install as _install_parts
 
 _install_parts(globals(), ('part_01', 'part_02', 'part_03', 'part_04'))

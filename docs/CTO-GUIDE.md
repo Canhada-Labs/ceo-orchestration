@@ -47,7 +47,7 @@ documentation bug.
 | GitHub Actions SHA-pinned refs | every `uses:` pinned | `grep -rEc 'uses: [^#]+@(v[0-9]+\|main\|master\|latest)[[:space:]]*$' .github/workflows/*` — must be 0 everywhere |
 | Skills | 166 (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
 | Hooks | 60 .py on disk; 49 wired into `settings.json` (52 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
-| `_lib/` stdlib-only modules | 76 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+| `_lib/` stdlib-only modules | 78 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
 | Runtime 3rd-party deps | 0 | see `SBOM.md` §1 |
 
 Secondary (not strictly reproducible via one-liner, but derivable):
