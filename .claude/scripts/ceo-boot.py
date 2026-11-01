@@ -1434,6 +1434,45 @@ def check_tier_a_gitignore_state_excluded() -> Tuple[str, str, Any]:
             {"covered": has_state})
 
 
+def check_main_checkout_state() -> Tuple[str, str, Any]:
+    """Item 14 (c) of the 1.4.4 backlog: the main checkout off its default branch.
+
+    Twice in S363 an agent moved HEAD in the main checkout while the `main` ref and the
+    tree stayed intact (`git switch -c` from a heredoc; a failed `cd` before `git
+    checkout`), so nothing else showed it, and the risk is the Owner pulling and signing
+    on the wrong branch. Yellow, never red: a branch can be on purpose, and only the
+    reflog tells. A linked worktree is a shadow, so it is out of scope. Read-only.
+    """
+    def _git(*args: str) -> "subprocess.CompletedProcess[str]":
+        return subprocess.run(["git", "-C", str(REPO_ROOT)] + list(args),
+                              capture_output=True, text=True, timeout=0.8, check=False)
+
+    try:
+        dirs = _git("rev-parse", "--git-dir", "--git-common-dir")
+        if dirs.returncode != 0:
+            return "green", "not a git checkout", None
+        git_dir, common_dir = dirs.stdout.split("\n")[:2]
+        if os.path.realpath(REPO_ROOT / git_dir) != os.path.realpath(REPO_ROOT / common_dir):
+            return "green", "linked worktree (out of scope)", {"linked_worktree": True}
+        head = _git("symbolic-ref", "-q", "HEAD")
+        origin = _git("symbolic-ref", "-q", "refs/remotes/origin/HEAD")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return "yellow", "git did not answer about the checkout", None
+    prefix = "refs/remotes/origin/"
+    default = origin.stdout.strip()
+    default = default[len(prefix):] if default.startswith(prefix) else "main"
+    read_first = "read `git reflog -n 20` before any work"
+    if head.returncode != 0:
+        return "yellow", f"main checkout has a DETACHED HEAD: {read_first}", {"detached": True}
+    branch = head.stdout.strip()
+    branch = branch[len("refs/heads/"):] if branch.startswith("refs/heads/") else branch
+    if branch != default:
+        shown = branch if re.fullmatch(r"[A-Za-z0-9._/-]{1,80}", branch) else "(unprintable)"
+        return ("yellow", f"main checkout is on {shown}, not {default}: {read_first}",
+                {"detached": False, "branch": shown, "default": default})
+    return "green", f"main checkout on {default}", {"detached": False, "default": default}
+
+
 # PLAN-176 W3a — 11th Tier-A check, advisory + offline: per ACTIVE lane of the W0a
 # detector (in-process; `--state --json` has no working set) the trio instalado /
 # fixado (ADR-149) / upstream (W0b cache, READ, never fetched). Never red; failures
@@ -3230,9 +3269,12 @@ TIER_S_CHECKS: List[Tuple[str, Callable[[], Tuple[str, str, Any]]]] = [
     # S292 — 24th Tier-S check: scheduled workflows whose latest scheduled
     # run is red (6th occurrence of the invisible-scheduled-red class).
     ("scheduled_workflows_red", check_scheduled_workflows_red),
+    # Item 14 (c) of the 1.4.4 backlog — 25th Tier-S check: the main checkout off its
+    # default branch or with a detached HEAD (2 occurrences in S363).
+    ("main_checkout_state", check_main_checkout_state),
 ]
 
-assert len(TIER_S_CHECKS) == 24, f"Expected 24 Tier-S checks, got {len(TIER_S_CHECKS)}"
+assert len(TIER_S_CHECKS) == 25, f"Expected 25 Tier-S checks, got {len(TIER_S_CHECKS)}"
 
 
 TIER_A_CHECKS: List[Tuple[str, Callable[[], Tuple[str, str, Any]]]] = [

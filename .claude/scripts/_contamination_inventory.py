@@ -12,7 +12,7 @@ import stat
 import subprocess
 import unicodedata
 from pathlib import Path
-from typing import Callable, List, Pattern, Tuple
+from typing import Callable, Iterable, List, Mapping, Optional, Pattern, Tuple
 
 
 _BLOB_MODES = frozenset({"100644", "100755", "120000"})
@@ -48,6 +48,8 @@ def _index(repo_root: Path) -> List[Tuple[str, bytes]]:
         except UnicodeDecodeError as exc:
             raise RuleOneInputError(
                 "a tracked Rule 1 path is not valid UTF-8") from None
+        if "\ufffd" in name:
+            raise RuleOneInputError("a tracked Rule 1 path is not valid UTF-8")
         mode = head.split(b" ", 1)[0].decode("ascii")
         entries.append((mode, name.encode("utf-8")))
     return entries
@@ -69,7 +71,7 @@ def _read_regular(path: Path) -> bytes:
         os.close(fd)
 
 
-def _blob(path: Path, mode: str) -> bytes:
+def _blob(path: Path, mode: str) -> Optional[bytes]:
     """Read link payloads as payloads; never follow a tracked symlink."""
     if mode == "120000":
         try:
@@ -80,6 +82,10 @@ def _blob(path: Path, mode: str) -> bytes:
     try:
         return _read_regular(path)
     except OSError as exc:
+        # A removed regular worktree file is permitted; an indexed symlink
+        # must still supply its literal target via readlink above.
+        if exc.errno == errno.ENOENT:
+            return None
         if exc.errno == errno.ELOOP:
             try:
                 return os.fsencode(os.readlink(path))
@@ -94,10 +100,27 @@ def scan_rule_one(
     pattern: Pattern[str],
     allowlisted: Callable[[Path], bool],
     never_allowlisted: Callable[[str], bool],
+    walked: Iterable[Path],
+    observed_modes: Mapping[str, str],
 ) -> List[Path]:
     """Scan tracked Rule 1 blobs, with gitlinks as the sole mode exemption."""
+    entries = _index(repo_root)
+    modes = {raw_name.decode("utf-8"): mode for mode, raw_name in entries}
+    if modes != observed_modes:
+        raise RuleOneInputError("tracked index snapshots differ; the term scan has no verdict")
+    seen = set()
+    for path in walked:
+        try:
+            name = path.relative_to(repo_root).as_posix()
+        except ValueError:
+            name = path.as_posix()
+        if name not in modes:
+            raise RuleOneInputError("walked path absent from the tracked index")
+        seen.add(name)
+    if seen != set(modes):
+        raise RuleOneInputError("walk did not cover all tracked index entries")
     violations = []
-    for mode, raw_name in _index(repo_root):
+    for mode, raw_name in entries:
         name = raw_name.decode("utf-8")
         if mode == _GITLINK_MODE:
             continue
@@ -108,6 +131,8 @@ def scan_rule_one(
         if allowlisted(path) and not never_allowlisted(name):
             continue
         raw = _blob(path, mode)
+        if raw is None:
+            continue
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:

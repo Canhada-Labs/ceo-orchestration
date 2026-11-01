@@ -919,6 +919,57 @@ def hash_member(data: bytes, member: str) -> Tuple[str, int]:
 # Mold parsing (fail-closed) and rendering
 # ---------------------------------------------------------------------------
 
+
+# The guard injected right after the mold's trap line. A mold that is itself
+# a generated script carries it already: the parser recognises it as an owned
+# region, so it is regenerated, never duplicated.
+#
+# It reads LITERALS the generator wrote, never a variable of the mold: the old
+# form read $SENT/$SRC_PIN, and enumerating the assignment forms a mold could use
+# before the trap failed twice in the rail (1.4.4 backlog, item 10). Hence also
+# `env -u GREP_OPTIONS LC_ALL=C grep -F`, and a grep rc other than 0/1 is a refusal
+# in the rehearsal too: a material it could not read is not a clean material.
+_GUARD_PATH_RE = re.compile(r"[A-Za-z0-9._/-]+")
+_GUARD_GREP_RE = re.compile(
+    re.escape(_GUARD[2]).replace(re.escape("@SENT@"), r"[A-Za-z0-9._/-]+")
+    .replace(re.escape("@PIN@"), r"[A-Za-z0-9._/-]+"))
+# The exact guard of the packs generated before item 10 (they stay valid molds).
+_LEGACY_GUARD = [
+    f"# [{GENERATOR}] a justificativa humana do pack fica em {TODO_MARK}:",
+    "# o run real recusa assinar enquanto restar um; o ensaio só avisa.",
+    f"if grep -n '{TODO_MARK}' \"$SENT\" \"$SRC_PIN\" 2>/dev/null; then",
+    f"  [ \"$DRY\" = \"1\" ] || die \"{TODO_MARK} pendente nos materiais (linhas acima)"
+    " — escreva a justificativa antes de assinar\"",
+    f"  printf '   AVISO: {TODO_MARK} pendente — o run real vai recusar\\n'",
+    "fi",
+]
+_PENDING_FIELD_RE = re.compile(r"(?:# )?" + re.escape(TODO_MARK) + r": ")
+
+
+def _guard_lines(ctx: Dict[str, Any]) -> List[str]:
+    """The guard with the two literal paths of THIS pack."""
+    sent = f"{ctx['pack_dir']}/{ctx['sentinel_name']}"
+    pin = f"{ctx['pack_dir']}/{PIN_OUT}"
+    for path in (sent, pin):
+        if _GUARD_PATH_RE.fullmatch(path) is None:
+            raise RePinError(EXIT_VERIFY, f"guard path {path!r} is not a plain literal")
+    return _guard(ctx)
+
+
+def _check_guard_read_files(files: Dict[str, str], ctx: Dict[str, Any]) -> None:
+    """Repin plan, item 1 (class): in the two files the guard reads, the marker exists
+    only as a pending field the generator opened for the human. Anywhere else it would
+    make a pack its own SIGN refuses however complete the human sections are."""
+    for name in (ctx["sentinel_name"], PIN_OUT):
+        for number, line in enumerate(files[name].split("\n"), 1):
+            if TODO_MARK not in line:
+                continue
+            if line.count(TODO_MARK) != 1 or _PENDING_FIELD_RE.match(line) is None:
+                raise RePinError(EXIT_VERIFY, f"{name}:{number} carries {TODO_MARK} outside "
+                                              "a pending field (the emitted guard would "
+                                              "refuse this pack forever)")
+
+
 def _find_one(body: List[str], pattern: "re.Pattern[str]", what: str,
               label: str = "mold") -> int:
     hits = [i for i, line in enumerate(body) if pattern.fullmatch(line)]
@@ -1286,20 +1337,14 @@ def _previous_guard(body: List[str], trap: int) -> int:
     marks = [i for i, line in enumerate(body) if line == _GUARD[0]]
     if not marks:
         return 0
-    if marks != [trap + 1]:
-        raise RePinError(EXIT_INPUT, "mold carries a moved or modified generator "
-                                     "guard; regenerate from an unmodified pack")
-    candidate = body[trap + 1:trap + 1 + len(_GUARD)]
-    if (candidate[:2] == _GUARD[:2] and candidate[3:] == _GUARD[3:]
-            and candidate[2].startswith("if env -u GREP_OPTIONS LC_ALL=C grep -Fn -- ")
-            and "'$SENT'" not in candidate[2] and "'$SRC_PIN'" not in candidate[2]):
-        return len(_GUARD)
-    # v1.4.3 emitted the same marked guard before grep isolation and explicit
-    # non-0/1 handling. Accept exactly that former six-line owned region so a
-    # current re-pin regenerates it; arbitrary edits remain a refusal.
-    old = candidate[:6]
-    if len(old) == 6 and old[2].startswith("if grep -n ") and old[-1] == "fi":
-        return 6
+    if marks == [trap + 1]:
+        if body[trap + 1:trap + 1 + len(_LEGACY_GUARD)] == _LEGACY_GUARD:
+            return len(_LEGACY_GUARD)
+        window = body[trap + 1:trap + 1 + len(_GUARD)]
+        if len(window) == len(_GUARD) and all(
+                _GUARD_GREP_RE.fullmatch(got) is not None if i == 2 else got == want
+                for i, (got, want) in enumerate(zip(window, _GUARD))):
+            return len(_GUARD)
     raise RePinError(EXIT_INPUT, "mold carries a moved or modified generator "
                                  "guard; regenerate from an unmodified pack")
 
@@ -1419,7 +1464,7 @@ def render_mold(parts: Dict[str, Any], ctx: Dict[str, Any]) -> str:
         body[idx] = f"{name}={values[name]}"
     message = _render_commit_message(parts, ctx)
     after_guard = parts["trap"] + 1 + parts["guard_len"]
-    out = (body[:parts["trap"] + 1] + _guard(ctx)
+    out = (body[:parts["trap"] + 1] + _guard_lines(ctx)
            + body[after_guard:parts["commit"] + 1] + message
            + body[parts["commit_end"]:])
     return "\n".join([parts["shebang"]] + _render_header(parts, ctx) + out)
@@ -1462,7 +1507,7 @@ def _render_constants_mold(parts: Dict[str, Any], ctx: Dict[str, Any]) -> str:
         if key in values:
             body[idx] = f"{key}={values[key]}"
     trap = parts["trap"]
-    out = body[:trap + 1] + _guard(ctx) + body[trap + 1 + parts["guard_len"]:]
+    out = body[:trap + 1] + _guard_lines(ctx) + body[trap + 1 + parts["guard_len"]:]
     script = f"{ctx['pack_dir']}/{ctx['script_name']}"
     head = _generated_notice(ctx, ctx["mold_rel"], ctx["mold_sha"],
                              f"este cabeçalho, os valores do bloco de constantes e o "
@@ -1543,8 +1588,8 @@ def _inherited_prose_notes(parts: Dict[str, Any], ctx: Dict[str, Any]) -> List[s
     if parts["grammar"] != GRAMMAR_CONSTANTS:
         return []
     lines = _wrap(
-        "Texto herdado sem conferência: fora do bloco de constantes, do guard "
-        f"{TODO_MARK} e do cabeçalho, o corpo do script é o do molde, byte a byte — "
+        "Texto herdado sem conferência: fora do bloco de constantes, do guard de "
+        "pendência e do cabeçalho, o corpo do script é o do molde, byte a byte — "
         "inclusive a prosa da mensagem de commit (as linhas `printf`). O gerador só "
         "confere nela os literais de versão, hex e SRI; uma frase verdadeira apenas "
         "para o re-pin do molde passa inalterada. Leia a mensagem de commit do "
@@ -2194,6 +2239,7 @@ def render_pack(parts: Dict[str, Any], manifest: Dict[str, Any], prefix: List[st
             files[f"rehearse-pin-{ctx['tag']}.sh"] = render_rehearsal(parts, ctx)
         if "readme" in parts["roles"]:
             files["README.md"] = render_readme(parts, ctx, sorted(files) + ["README.md"])
+    _check_guard_read_files(files, ctx)
     return files
 
 

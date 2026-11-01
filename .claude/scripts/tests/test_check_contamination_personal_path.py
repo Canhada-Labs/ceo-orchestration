@@ -3859,5 +3859,158 @@ class TestWalkerFailureIsSanitised(TestEnvContext):
         self.assertIn("<redacted: names a home directory>", err)
 
 
+class TestTermRuleBordersFu144(_Base):
+    """AC-7 of PLAN-186-FOLLOWUP-sentinel-gpg-verification + item 11 of the 1.4.4
+    backlog: RULE 1's own borders, one control per row of the census above `scan()`."""
+
+    # Split on purpose: this file is scanned by the rule it tests.
+    TERM = "acme" + "Ledger"
+
+    def _commit_tree(self) -> None:
+        subprocess.run(["git", "add", "-A"], cwd=self.root, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "fixture", "-q"], cwd=self.root,
+                       check=True, capture_output=True)
+
+    def _found(self):
+        return sorted(p.relative_to(self.root).as_posix() for p in cc.scan(self.root))
+
+    def _assert_gate_refuses(self, timeout: int = 30) -> str:
+        proc = subprocess.run(
+            [sys.executable, str(Path(cc.__file__).resolve()), "--root", str(self.root),
+             "--personal-path-allowlist", str(self.allowlist)],
+            capture_output=True, text=True, check=False, timeout=timeout,
+        )
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertIn("FATAL", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        return proc.stderr
+
+    def test_fu144_empty_walk_over_a_non_empty_index_is_refused(self) -> None:
+        """FileWalker turns a git failure into an empty walk: 'clean' over zero files."""
+        self.commit("core/clean.txt", "ok\n")
+        with mock.patch.object(cc.FileWalker, "_iter_git_tracked", return_value=iter(())):
+            with self.assertRaises(cc.PersonalPathUnreadable) as caught:
+                cc.scan(self.root)
+        self.assertIn("tracked", str(caught.exception))
+
+    def test_fu144_a_repeated_path_cannot_stand_in_for_the_one_omitted(self) -> None:
+        """Coverage, not a count: the same count and an unread file would pass a count."""
+        self.commit("core/a.txt", "ok\n")
+        self.commit("core/b.txt", self.TERM + "\n")
+        twice = [self.root / "core/a.txt"] * 3
+        with mock.patch.object(cc.FileWalker, "_iter_git_tracked", return_value=iter(twice)):
+            with self.assertRaises(cc.PersonalPathUnreadable):
+                cc.scan(self.root)
+
+    def test_fu144_index_that_cannot_be_read_is_refused(self) -> None:
+        self.commit("core/clean.txt", "ok\n")
+        with mock.patch.object(cc.subprocess, "run", side_effect=OSError("no git")):
+            with self.assertRaises(cc.PersonalPathUnreadable):
+                cc.scan(self.root)
+
+    def test_fu144_symlink_is_judged_by_the_committed_target_string(self) -> None:
+        """Reproduced in the rail: term only in the link's destination gave rc 0."""
+        link = self.root / "core" / "link"
+        link.parent.mkdir(parents=True)
+        os.symlink("/nowhere/%s/x" % self.TERM, link)
+        self._commit_tree()
+        self.assertEqual(self._found(), ["core/link"])
+        self.assertEqual(self.cli().returncode, 1)
+
+    def test_fu144_symlink_is_not_read_through_to_its_destination(self) -> None:
+        """Converse: it used to scan the destination in place of the payload."""
+        outside = Path(tempfile.mkdtemp(prefix="ceo-fu144-")).resolve()
+        self.addCleanup(shutil.rmtree, outside, True)
+        (outside / "elsewhere.txt").write_text(self.TERM + "\n", encoding="utf-8")
+        link = self.root / "core" / "link"
+        link.parent.mkdir(parents=True)
+        os.symlink(outside / "elsewhere.txt", link)
+        self._commit_tree()
+        self.assertNotIn(self.TERM, os.readlink(link))
+        self.assertEqual(self._found(), [])
+
+    def test_fu144_symlink_with_a_binary_suffix_is_still_read(self) -> None:
+        """The suffix list is about file content; a link's payload is a string."""
+        link = self.root / "core" / "photo.png"
+        link.parent.mkdir(parents=True)
+        os.symlink("/nowhere/%s.png" % self.TERM, link)
+        self._commit_tree()
+        self.assertEqual(self._found(), ["core/photo.png"])
+
+    def test_fu144_undecodable_names_are_refused_before_the_coverage_proof(self) -> None:
+        """Both sides of the proof decode with errors='replace': \\xff and \\xfe become the
+        same name, so one file could be unread while the sets still compared equal."""
+        base = os.fsencode(str(self.root))
+        try:
+            for name in (b"/bad\xff.txt", b"/bad\xfe.txt"):
+                with open(base + name, "wb") as handle:
+                    handle.write(self.TERM.encode("ascii") + b"\n")
+        except OSError:
+            self.skipTest("this filesystem refuses non-UTF-8 names")
+        self._commit_tree()
+        with self.assertRaises(cc.PersonalPathUnreadable):
+            cc.scan(self.root)
+        self.assertIn("not valid UTF-8", self._assert_gate_refuses())
+
+    def test_fu144_only_the_gitlink_is_released(self) -> None:
+        """160000 has no blob in this repository; it is the one mode allowed through."""
+        self.commit("core/clean.txt", "ok\n")
+        subprocess.run(
+            ["git", "update-index", "--add", "--cacheinfo", "160000", "1" * 40, "vendor/sub"],
+            cwd=self.root, check=True, capture_output=True)
+        (self.root / "vendor" / "sub").mkdir(parents=True)
+        self.assertEqual(self._found(), [])
+        with mock.patch.object(
+                cc, "_personal_path_index_modes",
+                return_value={"allowlist.txt": "100644", "core/clean.txt": "100644",
+                              "vendor/sub": "999999"}):
+            with self.assertRaises(cc.PersonalPathUnreadable):
+                cc.scan(self.root)
+
+    def test_fu144_terms_file_that_is_not_a_regular_file_is_fatal(self) -> None:
+        """Only absence means 'no private terms'. A dangling link or a directory was
+        read as absent, which silently dropped the maintainer's whole term list."""
+        self.commit("core/clean.txt", "ok\n")
+        terms = self.root / "scripts" / "contamination-terms.txt"
+        terms.parent.mkdir(parents=True)
+        os.symlink("gone.txt", terms)
+        self._assert_gate_refuses()
+        terms.unlink()
+        terms.mkdir()
+        self._assert_gate_refuses()
+        terms.rmdir()
+        os.mkfifo(terms)
+        self._assert_gate_refuses(timeout=20)
+        terms.unlink()
+        self.assertEqual(self.cli().returncode, 0)
+
+    def test_fu144_unreadable_tracked_file_is_fatal(self) -> None:
+        path = self.commit("core/secret.txt", "ok\n")
+        path.chmod(0)
+        try:
+            self.assert_mode_000_is_unreadable(path)
+            self._assert_gate_refuses()
+        finally:
+            path.chmod(0o600)
+
+    def test_fu144_fifo_at_a_tracked_path_is_refused_without_hanging(self) -> None:
+        path = self.commit("core/pipe.txt", "ok\n")
+        path.unlink()
+        os.mkfifo(path)
+        self._assert_gate_refuses(timeout=20)
+
+    def test_fu144_tracked_but_absent_is_still_not_unreadable(self) -> None:
+        path = self.commit("core/gone.txt", "ok\n")
+        path.unlink()
+        self.assertEqual(self._found(), [])
+
+    def test_fu144_allowlisted_symlink_stays_exempt(self) -> None:
+        link = self.root / "benchmarks" / "link"
+        link.parent.mkdir(parents=True)
+        os.symlink("/nowhere/%s" % self.TERM, link)
+        self._commit_tree()
+        self.assertEqual(self._found(), [])
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

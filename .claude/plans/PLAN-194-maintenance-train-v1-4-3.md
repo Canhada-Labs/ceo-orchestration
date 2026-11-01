@@ -1715,16 +1715,27 @@ de rede, saíram deste texto em 2026-10-17: registro no item 26 do `PLAN-194-FOL
 Check: gh run view "$(gh run list --workflow formal-verify.yml --limit 1 --json databaseId -q '.[0].databaseId')" --json jobs -q '[.jobs[] | select(.name | startswith("TLC Model Check (")) | .conclusion] | (length > 0 and all(. == "success"))'
 
 **Correção:** a triagem listava o TLC (verificador de modelos do TLA+) como item livre; o oráculo diz
-que `.github/workflows/formal-verify.yml` é canônico (1). **Fatos:** `continue-on-error: true` fica no
-nível do job; nenhum passo TLC usa essa opção própria, e o pin atual do `tla2tools` veio do commit
-`f465bb50`. O gate semanal do release lista
-`formal-verify.yml` (`release.yml:550`) mas lê a conclusão da RUN (`:557`), que sai success.
+que `.github/workflows/formal-verify.yml` é canônico (1). **Fatos (relidos em 2026-11-01, depois do PR
+#4, `baf9de11`):** o job `tlc-model-check` é uma matriz de 3 modelos, com o nome
+`TLC Model Check (${{ matrix.model }})` (`formal-verify.yml:30-37`); o `continue-on-error: true` fica só
+no nível do job (`:41`), e nenhum passo tem o seu; o `tla2tools` está pinado na 1.8.0, com o sha256 em
+`:26` (pin atual de `f465bb50`, 2026-10-13; o PR #4 o trocou em `c2f34fac`, `ef96cf08` e `f465bb50`); o
+gate semanal do release lista `formal-verify.yml` (`release.yml:550`) mas lê a conclusão da RUN
+(`:557-558`), que sai success. Se o PR #4 já cumpre a W8 é decisão da abertura (item 25 do
+`PLAN-194-FOLLOWUP-v1-4-4-backlog`).
 **Paths:** `formal-verify.yml` (1). **Estimativa:** 5-20 linhas, 1 path. **Debate:** não.
 
-**Por que o Check olha os JOBS e não a RUN:** o `continue-on-error: true` está no nível do job,
-então a RUN pode sair `success` com uma matriz vermelha. O workflow nomeia cada entrada como
-`TLC Model Check (<modelo>)`; o Check exige ao menos uma entrada e que todas terminem `success`.
-O resíduo é a natureza advisory do job: a conclusão da RUN não substitui a conclusão de cada modelo.
+**Por que o Check olha os JOBS e não a RUN:** o `continue-on-error: true` está no nível do job
+(`formal-verify.yml:41`), então a RUN sai `success` mesmo com o passo quebrado. Medido 2026-09-30 na
+run `36719886973` (push, arquivo de antes do PR #4): run `success`; job «TLC Model Check» `failure`; passo
+«Download + verify tla2tools.jar» `failure`; os passos TLC `skipped` — o controle vermelho já existe.
+O filtro casa o prefixo do nome da matriz e exige ao menos um job, todos `success`: imprime `true` ou
+`false`, nunca saída vazia (medido em 2026-10-17 sobre a run `38445208876`: `true`). O filtro antigo,
+por igualdade com o nome sem o sufixo da matriz, devolvia saída vazia desde `c2f34fac`. Se a decisão for remover o job,
+verde = `grep -c 'tlc-model-check' .github/workflows/formal-verify.yml` igual a 0. **Resíduo a declarar:**
+sem `continue-on-error` nos passos, um job `success` agora prova o download, a conferência do jar e os
+passos TLC daquele modelo; o `continue-on-error` do job segue fazendo a RUN sair `success` com um modelo
+vermelho, e por isso o gate semanal que lê a RUN não enxerga o TLC.
 
 - [ ] W8.1 investigar o asset fora do CI (download exige OK do Owner) e decidir: re-pinar o hash com
   procedência, trocar para fonte imutável, ou remover o job e declarar. **Não** mudar o gate semanal

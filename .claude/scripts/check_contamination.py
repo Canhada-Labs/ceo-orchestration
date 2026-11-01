@@ -61,8 +61,9 @@ blind spots.
 - 0 — clean
 - 1 — contamination found (printed to stdout)
 - 2 — fatal error (unreadable INPUT: the terms file, the
-      personal-path allowlist, or an in-scope file that exists
-      and cannot be read)
+      personal-path allowlist, or a file this scan had to read
+      that exists and cannot be read; or an enumeration of the
+      index the scan cannot prove it covered)
 """
 
 from __future__ import annotations
@@ -126,8 +127,12 @@ def _load_private_terms(repo_root: Path) -> List[str]:
     Propagates OSError when the file exists but cannot be read.
     """
     path = repo_root / _PRIVATE_TERMS_RELPATH
-    if not path.is_file():
+    # Only real ABSENCE means "no private terms". `is_file()` also said False for a
+    # dangling link and a directory, which dropped the whole term list in silence.
+    if not os.path.lexists(path):
         return []
+    if not stat.S_ISREG(os.stat(path).st_mode):  # a FIFO would block the read below
+        raise OSError(errno.EINVAL, "not a regular file")
     terms: List[str] = []
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -1711,12 +1716,50 @@ def _parse_args(argv: Optional[List[str]]) -> "argparse.Namespace":
     return args
 
 
+#: `git ls-files -s` mode of a submodule entry: it has no blob in this repository,
+#: so it is the one mode RULE 1 releases by name (and only this one).
+_TERM_GITLINK_MODE = "160000"
+
+# ---------------------------------------------------------------------------
+# RULE 1 (`scan`) — census of the borders where it could answer "clean" without
+# having looked, taken before changing it (PLAN-186-FOLLOWUP AC-7; item 11 of the
+# 1.4.4 backlog: the pack fell twice in the rail, by edges AC-7 had not listed).
+# CURED, each with a test named test_fu144_* in test_check_contamination_personal_path.py:
+#   * empty or partial walk: FileWalker turns a git failure into an empty iterator.
+#     The set of paths seen must COVER the index (a set, not a count, for the reason
+#     RULE 2 paid for in pair-rail S344 round 3);
+#   * an index that cannot be read (git missing, timeout, rc != 0): refused;
+#   * a name that is not valid UTF-8: both sides of the proof decode with
+#     errors="replace", so two such names collapse into one and the sets compare equal
+#     over an unread file. Refused over the WHOLE index before any comparison; RULE 2's
+#     scope exception does not apply, because this rule's scope is every tracked path;
+#   * a tracked symlink (120000): its blob is the target STRING. read_bytes() followed
+#     it, so a term in the payload was never read and someone else's file was judged;
+#   * an index mode other than file, executable, link or gitlink: refused;
+#   * a file that exists and cannot be read, or a non-regular inode at a tracked path
+#     (a FIFO used to hang the read): rc 2. This reverses a deliberate "fail-OPEN,
+#     INFRASTRUCTURE" note; it is a gate, not a hook, as _personal_path_assert_enumerable
+#     already argues, so nothing here blocks a session;
+#   * a terms file that is not a regular file was read as absent (`_load_private_terms`).
+# DECLARED, not cured:
+#   * one stray non-UTF-8 byte still makes this rule skip an ordinary file whole (a term
+#     beside it goes unseen). Outside the LEDGER class that is a pinned decision, not an
+#     oversight: test_an_undecodable_non_plan_file_is_still_skipped calls it what keeps
+#     the exception narrow. Changing it is the Owner's call, not this pack's;
+#   * the path allowlist remains an exemption; all other indexed blobs are scanned;
+#   * a UTF-16 document does not match;
+#   * the index is enumerated and the worktree is read, as in RULE 2's blind spots;
+#   * a U+FFFD that is really in a tracked name is refused too (the safe direction).
+# ---------------------------------------------------------------------------
+
+
 def scan(repo_root: Path) -> List[Path]:
-    """Return list of files where the pattern matched, excluding allowlist."""
+    """Scan the verified index; refuse inputs that cannot be proved readable."""
     pattern = build_pattern(repo_root)
     return _find_term_violations(
         repo_root, pattern, FileWalker, _ALLOWLIST_EXACT, _ALLOWLIST_GLOBS,
-        _SKIP_SUFFIXES, is_never_allowlisted,
+        _SKIP_SUFFIXES, is_never_allowlisted, _personal_path_index_modes,
+        PersonalPathUnreadable,
     )
 
 
@@ -1786,18 +1829,21 @@ def _run_checks(repo_root: Path, args: argparse.Namespace) -> int:
             repo_root, allowlist_path, emit_rows=True,
         )
 
-    # A personal-path input failure has a subject-specific, redacted
-    # diagnostic.  Run it first so Rule 1's independent inventory cannot
-    # replace that repairable message with a generic term-scan failure.
+    # Preserve Rule 2's subject-specific diagnostic before the term scan.
     rc_paths = report_personal_paths(
-        repo_root, allowlist_path,
-        fail_on_stale=args.fail_on_stale,
+        repo_root, allowlist_path, fail_on_stale=args.fail_on_stale,
     )
     if rc_paths == 2:
         return 2
-
+    term_fatal = False
+    violations: List[Path] = []
     try:
         violations = scan(repo_root)
+    except PersonalPathUnreadable as exc:
+        # Composed by scan() itself, with masked paths: say which proof failed. RULE 2
+        # still runs below, as it does after a term hit, and rc stays 2.
+        print("FATAL: %s" % _personal_path_safe(str(exc)), file=sys.stderr)
+        term_fatal = True
     except Exception as exc:
         # A BOUNDARY, not a list of exception types. The term
         # scan reads a file and COMPILES what is in it as a raw
@@ -1836,9 +1882,7 @@ def _run_checks(repo_root: Path, args: argparse.Namespace) -> int:
             )
         return 2
 
-    # Both rules ran unless Rule 2 had a fatal input failure.  A fatal is
-    # never reported as a mere finding, and a term hit cannot hide a path hit.
-    rc_terms = _report_terms(violations, repo_root)
+    rc_terms = 2 if term_fatal else _report_terms(violations, repo_root)
     return max(rc_terms, rc_paths)
 
 

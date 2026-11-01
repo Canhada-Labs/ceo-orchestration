@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable, List, Set, Type
 
-from _contamination_inventory import scan_rule_one
+from _contamination_inventory import RuleOneInputError, scan_rule_one
 
 
 def find_violations(
@@ -20,6 +20,8 @@ def find_violations(
     allowlist_globs: Set[str],
     skip_suffixes: Set[str],
     never_allowlisted: Callable[[str], bool],
+    index_modes: Callable,
+    unreadable: type,
 ) -> List[Path]:
     """Apply the term rule and return tracked files that violate it.
 
@@ -32,9 +34,14 @@ def find_violations(
         path_allowlist_exact=allowlist_exact,
         path_allowlist_globs=allowlist_globs,
     )
-    return scan_rule_one(
-        repo_root=walker.repo_root,
-        pattern=pattern,
-        allowlisted=walker.is_allowlisted,
-        never_allowlisted=never_allowlisted,
-    )
+    try:
+        return scan_rule_one(
+            repo_root=walker.repo_root,
+            pattern=pattern,
+            allowlisted=walker.is_allowlisted,
+            never_allowlisted=never_allowlisted,
+            walked=walker.iter_files(),
+            observed_modes=index_modes(walker.repo_root),
+        )
+    except RuleOneInputError as exc:
+        raise unreadable(str(exc)) from None
