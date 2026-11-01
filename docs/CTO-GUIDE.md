@@ -41,13 +41,13 @@ documentation bug.
 |---|---|---|
 | Python tests collected | ~16,200 | `make test-collect` (or `python3 -m pytest --collect-only -q \| tail -1` — pytest.ini pins the testpath roots) |
 | Test files | ~810 | `git ls-files '*test_*.py' '*_test.py' \| wc -l` |
-| ADRs shipped | 198 | `ls .claude/adr/ADR-*.md \| wc -l` |
+| ADRs shipped | 199 | `ls .claude/adr/ADR-*.md \| wc -l` |
 | SPEC/v1 files | 32 (28 `*.schema.md`) | `ls SPEC/v1/*.md \| wc -l` |
 | Workflows | 23 | `ls .github/workflows/*.yml \| wc -l` |
 | GitHub Actions SHA-pinned refs | every `uses:` pinned | `grep -rEc 'uses: [^#]+@(v[0-9]+\|main\|master\|latest)[[:space:]]*$' .github/workflows/*` — must be 0 everywhere |
 | Skills | 166 (42 core + 8 frontend + 116 domain) | `find .claude/skills -name SKILL.md \| wc -l` |
 | Hooks | 60 .py on disk; 49 wired into `settings.json` (52 event registrations) | `ls .claude/hooks/*.py \| wc -l` |
-| `_lib/` stdlib-only modules | 72 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
+| `_lib/` stdlib-only modules | 74 | `ls .claude/hooks/_lib/*.py \| grep -v __init__ \| wc -l` |
 | Runtime 3rd-party deps | 0 | see `SBOM.md` §1 |
 
 Secondary (not strictly reproducible via one-liner, but derivable):
@@ -109,7 +109,7 @@ grep -rE 'urllib|requests|httpx|socket\.' .claude/hooks/check_*.py
 ls .claude/hooks/check_*.py .claude/hooks/audit_log.py
 
 # Every ADR title
-grep -h '^# ADR-' .claude/adr/ADR-*.md | sort             # 198 ADRs on disk
+grep -h '^# ADR-' .claude/adr/ADR-*.md | sort             # 199 ADRs on disk
 
 # SPEC/v1 published contract
 ls SPEC/v1/*.schema.md                                    # 28 schema files

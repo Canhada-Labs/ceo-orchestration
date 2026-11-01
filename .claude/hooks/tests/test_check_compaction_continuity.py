@@ -94,7 +94,12 @@ def _pick(canonical: Path, staged: Path, marker: str) -> Path:
     staged SOURCE copy (live pre-ceremony tree). Raises if neither — a genuine
     misconfiguration to surface, not silently skip."""
     try:
-        if canonical.is_file() and marker in canonical.read_text(encoding="utf-8"):
+        sources = [canonical]
+        if canonical.name == "audit_emit.py":
+            sources.extend(sorted(canonical.with_name("_audit_emit_parts").glob("*.py")))
+        if canonical.is_file() and any(
+            marker in source.read_text(encoding="utf-8") for source in sources
+        ):
             return canonical
     except OSError:
         pass
