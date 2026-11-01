@@ -18,6 +18,7 @@ from _lib._ceremony_toolkit import (  # noqa: E402
     validate_sentinel_pack,
     verify_detached_signatures,
 )
+from _subprocess_helpers import run_in_process_group  # noqa: E402
 
 
 @pytest.fixture
@@ -157,7 +158,7 @@ def signed_fixture(tmp_path_factory):
     shutil.copy2(claude / "trust/owner.asc", public_key)
 
     def run(*arguments):
-        return subprocess.run(
+        return run_in_process_group(
             [binary, "--no-options", "--no-autostart", "--homedir", str(home), "--batch", *arguments],
             capture_output=True, text=True, check=True, timeout=25,
         )

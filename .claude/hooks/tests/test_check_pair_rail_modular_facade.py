@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from _lib.testing import TestEnvContext
+from _subprocess_helpers import run_in_process_group
 
 
 _HOOKS = Path(__file__).resolve().parents[1]
@@ -52,7 +53,7 @@ class TestPairRailModularFacade(TestEnvContext):
         self.assertEqual(check_pair_rail._CURRENT_REVIEW_ID, "")
 
     def test_script_main_accepts_empty_event(self):
-        result = subprocess.run(
+        result = run_in_process_group(
             [sys.executable, str(_HOOKS / "check_pair_rail.py")],
             input="",
             text=True,

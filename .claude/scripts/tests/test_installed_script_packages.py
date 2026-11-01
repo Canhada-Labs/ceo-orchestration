@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from _lib.testing import TestEnvContext
+from _subprocess_helpers import run_in_process_group
 
 
 _REPO = Path(__file__).resolve().parents[3]
@@ -32,7 +33,7 @@ class TestInstalledScriptPackages(TestEnvContext):
             "CEO_AUDIT_LOG_DIR": str(self.project_dir / "audit"),
         })
         with patch.dict(os.environ, env, clear=True):
-            install = subprocess.run(
+            install = run_in_process_group(
                 ["bash", str(_REPO / "scripts/install.sh"), str(target),
                  "--profile", "core"],
                 cwd=str(_REPO), env=env, capture_output=True, text=True,
@@ -52,7 +53,7 @@ class TestInstalledScriptPackages(TestEnvContext):
         for name in _SCRIPTS:
             script = target / ".claude/scripts" / name
             self.assertTrue(script.is_file(), name)
-            completed = subprocess.run(
+            completed = run_in_process_group(
                 [sys.executable, str(script), "--help"],
                 cwd=str(target), env=env, capture_output=True, text=True,
                 timeout=30, check=False,
