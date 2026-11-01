@@ -108,8 +108,12 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Set, Tuple
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
 _INSTRUMENT_PACKAGE = Path(__file__).resolve().parent
+_REPO_ROOT = next(
+    (ancestor.parent for ancestor in _INSTRUMENT_PACKAGE.parents
+     if ancestor.name == ".claude" and (ancestor / "scripts").is_dir()),
+    Path(__file__).resolve().parents[3],
+)
 
 
 def instrument_sha256() -> str:
@@ -122,6 +126,8 @@ def instrument_sha256() -> str:
     try:
         package = _INSTRUMENT_PACKAGE
         entry_point = package.parent / "check-installer-write-safety.py"
+        if not entry_point.is_file():
+            entry_point = package.parents[2] / "scripts" / "check-installer-write-safety.py"
         members = [entry_point] + sorted(package.glob("*.py"))
         digest = hashlib.sha256()
         for member in members:

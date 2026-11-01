@@ -173,8 +173,8 @@ def read_entries(
 # Query aggregations live outside this compatibility facade.  The named
 # delegates below intentionally remain: downstream consumers load this
 # hyphenated file by path and the read-API freeze guard inspects its AST.
-from _audit_query import queries as _queries
-from _audit_query import reporting as _reporting
+from _lib._audit_query import queries as _queries
+from _lib._audit_query import reporting as _reporting
 
 
 def _bind_query_functions():

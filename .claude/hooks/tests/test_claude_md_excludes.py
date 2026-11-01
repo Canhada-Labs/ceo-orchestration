@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import sys
 import json
@@ -15,6 +17,7 @@ if str(_HOOKS_DIR) not in sys.path:
 from _lib import claude_md_excludes as excludes  # noqa: E402
 from _lib import effective_config as ec  # noqa: E402
 from _lib.testing import TestEnvContext  # noqa: E402
+import check_harness_config as harness  # noqa: E402
 
 
 class TestClaudeMdExcludesFu144(TestEnvContext):
@@ -104,3 +107,72 @@ class TestClaudeMdExcludesFu144(TestEnvContext):
             excludes.root_instruction_load_state(["CLAUDE.md"], self.project_dir),
             excludes.LOAD_STATE_UNOBSERVABLE,
         )
+
+
+class TestRootInstructionRuntimeWiring(TestEnvContext):
+    """The production CLI reports only what a complete observed list proves."""
+
+    def _report(self, evidence=None):
+        args = [
+            "--static", "--no-exec-bit", "--repo-root", str(self.project_dir),
+            "--settings", str(self.project_dir / "absent-settings.json"),
+        ]
+        if evidence is not None:
+            args.extend(("--instruction-load-evidence", str(evidence)))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            rc = harness.main(args)
+        assert rc == 0
+        return out.getvalue()
+
+    def _snapshot(self, name, value):
+        path = self.project_dir / name
+        path.write_text(json.dumps(value), encoding="utf-8")
+        return path
+
+    def test_runtime_report_loaded_from_complete_snapshot(self):
+        root = str((self.project_dir / "CLAUDE.md").resolve())
+        evidence = self._snapshot("loaded.json", {
+            "complete": True, "loaded_instruction_paths": [root],
+        })
+        report = self._report(evidence)
+        self.assertIn("[WARN] root_instruction_load @ runtime", report)
+        self.assertIn("snapshot reports root_loaded (operator-supplied snapshot; completeness unverified)", report)
+
+    def test_runtime_report_absent_from_complete_snapshot(self):
+        other = str((self.project_dir / "other.md").resolve())
+        evidence = self._snapshot("absent.json", {
+            "complete": True, "loaded_instruction_paths": [other],
+        })
+        report = self._report(evidence)
+        self.assertIn("snapshot reports root_absent (operator-supplied snapshot; completeness unverified)", report)
+
+    def test_runtime_rejects_partial_snapshot_as_proof(self):
+        root = str((self.project_dir / "CLAUDE.md").resolve())
+        evidence = self._snapshot("partial.json", {
+            "complete": False, "loaded_instruction_paths": [root],
+        })
+        report = self._report(evidence)
+        self.assertIn("root_load_unobservable (incomplete or malformed path list)", report)
+        self.assertNotIn("root_loaded", report)
+
+    def test_runtime_rejects_invalid_entries_as_proof(self):
+        root = str((self.project_dir / "CLAUDE.md").resolve())
+        evidence = self._snapshot("invalid.json", {
+            "complete": True, "loaded_instruction_paths": [root, "CLAUDE.md"],
+        })
+        report = self._report(evidence)
+        self.assertIn("root_load_unobservable (operator-supplied snapshot; completeness unverified)", report)
+        self.assertNotIn("root_loaded", report)
+
+    def test_runtime_without_observed_source_is_unobservable(self):
+        report = self._report()
+        self.assertIn("root_load_unobservable (no complete observed path list)", report)
+        self.assertNotIn("root_absent", report)
+        self.assertNotIn("root_loaded", report)
+
+    def test_runtime_malformed_json_is_unobservable(self):
+        evidence = self.project_dir / "broken.json"
+        evidence.write_text("{invalid", encoding="utf-8")
+        report = self._report(evidence)
+        self.assertIn("root_load_unobservable (unreadable or invalid path list)", report)

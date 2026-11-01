@@ -187,3 +187,83 @@ class TestIndirectSwitchAndHookPayload:
                     with mock.patch.object(sys, "stdout", io.StringIO()):
                         assert guard.main() == 0
         emit.assert_called_once_with(switch, "p195-switch")
+
+
+class TestReviewW6GuardFallRegressions:
+    @pytest.mark.parametrize("command,blocked", [
+        pytest.param(
+            "printf " + "x " * 1030 + "; bash -c 'rm -rf /tmp/example'",
+            True, id="word-ceiling-before-indirect-command",
+        ),
+        pytest.param(
+            "sh -c 'echo {1..130}; rm -rf /tmp/example'",
+            True, id="brace-ceiling-before-destructive-command",
+        ),
+        pytest.param(
+            "sh -c 'echo {130..1..1}; rm -rf /tmp/example'",
+            True, id="brace-descending-positive-step-ceiling",
+        ),
+        pytest.param(
+            "sh -c 'echo {1..130..-1}; rm -rf /tmp/example'",
+            True, id="brace-ascending-negative-step-ceiling",
+        ),
+        pytest.param(
+            "sh -c 'echo {1..130..0}; rm -rf /tmp/example'",
+            True, id="brace-zero-step-ceiling",
+        ),
+        pytest.param(
+            "echo ok # $(rm -rf /tmp/example)",
+            False, id="comment-does-not-execute-substitution",
+        ),
+        pytest.param(
+            'echo ">(rm -rf /tmp/example)"',
+            False, id="quoted-process-substitution-is-literal",
+        ),
+    ])
+    def test_hook_payload_matches_bash_execution_semantics(self, command, blocked):
+        """Judge the hook's JSON and emitted veto, not just the helper return."""
+        payload = json.dumps({
+            "session_id": "p195-review-w6-isolated",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        })
+        stdout = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(payload)):
+            with mock.patch.object(sys, "stdout", stdout):
+                with mock.patch.object(guard._audit_emit, "emit_veto_triggered") as emit:
+                    assert guard.main() == 0
+        result = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
+        if blocked:
+            assert result["decision"] == "block"
+            assert "bash_indirect_limit" in result["reason"]
+            assert emit.call_count == 1
+            assert emit.call_args.kwargs["reason_code"] == "bash_indirect_limit"
+        else:
+            assert result.get("decision", "allow") == "allow", result
+            emit.assert_not_called()
+
+    @pytest.mark.parametrize("delimiter,blocked", [
+        pytest.param("EOF", True, id="unquoted-heredoc-expands-comment-line"),
+        pytest.param("'EOF'", False, id="quoted-heredoc-keeps-comment-line-data"),
+    ])
+    def test_heredoc_data_expansion_reaches_hook_payload(self, delimiter, blocked):
+        command = "cat <<%s\n# $(rm -rf /tmp/example)\nEOF" % delimiter
+        payload = json.dumps({
+            "session_id": "p195-review-w6-heredoc",
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        })
+        stdout = io.StringIO()
+        with mock.patch.object(sys, "stdin", io.StringIO(payload)):
+            with mock.patch.object(sys, "stdout", stdout):
+                with mock.patch.object(guard._audit_emit, "emit_veto_triggered") as emit:
+                    assert guard.main() == 0
+        result = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
+        if blocked:
+            assert result["decision"] == "block"
+            assert "indirect shell execution" in result["reason"]
+            assert emit.call_count == 1
+            assert emit.call_args.kwargs["reason_code"] == "bash_indirect_rm_rf"
+        else:
+            assert result.get("decision", "allow") == "allow", result
+            emit.assert_not_called()

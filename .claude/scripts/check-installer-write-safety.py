@@ -17,7 +17,16 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent
 if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from _installer_write_safety import bind as _bind_legacy_api
+# Runtime components ship under hooks/_lib, whose subdirectories the installer
+# copies recursively.  The adjacent fallback serves isolated legacy test
+# fixtures that materialize only this entry point and its implementation.
+_HOOKS_DIR = _SCRIPTS_DIR.parent / "hooks"
+if (_HOOKS_DIR / "_lib").is_dir():
+    if str(_HOOKS_DIR) not in sys.path:
+        sys.path.insert(0, str(_HOOKS_DIR))
+    from _lib._installer_write_safety import bind as _bind_legacy_api
+else:
+    from _installer_write_safety import bind as _bind_legacy_api
 
 _bind_legacy_api(globals())
 

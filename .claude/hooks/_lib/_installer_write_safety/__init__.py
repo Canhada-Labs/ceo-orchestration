@@ -17,7 +17,9 @@ def _bind_function(original, namespace):
 
 
 def _bind_class(original, namespace):
-    if not getattr(original, "__module__", "").startswith("_installer_write_safety"):
+    if not getattr(original, "__module__", "").startswith(
+        ("_installer_write_safety", "_lib._installer_write_safety")
+    ):
         return original
     attrs = dict(vars(original))
     attrs.pop("__dict__", None)

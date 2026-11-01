@@ -2368,7 +2368,7 @@ class TestInstrumentFingerprint(CensusCase):
         tool_dir.mkdir()
         entry = tool_dir / CENSUS.name
         shutil.copy2(CENSUS, entry)
-        shutil.copytree(CENSUS.parent / "_installer_write_safety",
+        shutil.copytree(CENSUS.parent.parent / "hooks" / "_lib" / "_installer_write_safety",
                         tool_dir / "_installer_write_safety")
         root = self.tmp / "corpus"
         (root / "scripts").mkdir(parents=True)

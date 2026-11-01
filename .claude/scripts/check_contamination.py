@@ -86,10 +86,10 @@ _HOOKS_DIR = Path(__file__).resolve().parent.parent / "hooks"
 if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 from _lib.file_walker import FileWalker  # noqa: E402
-from _contamination import bind_personal_paths as _bind_personal_paths
-from _contamination import personal_path_policy as _personal_path_policy
-from _contamination import personal_path_scanner as _personal_path_scanner
-from _contamination.term_scan import find_violations as _find_term_violations
+from _lib._contamination import bind_personal_paths as _bind_personal_paths
+from _lib._contamination import personal_path_policy as _personal_path_policy
+from _lib._contamination import personal_path_scanner as _personal_path_scanner
+from _lib._contamination.term_scan import find_violations as _find_term_violations
 
 
 # Contamination tokens, in TWO parts — see the module docstring.
