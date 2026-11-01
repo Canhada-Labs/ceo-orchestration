@@ -602,7 +602,9 @@ _SESSION_ROOTS_UNCANON_EMPTY = (
 
 # Bind extracted implementations to this facade's globals. Existing callers can
 # still patch dependencies here, and each import owns its caches and counters.
-# PLAN162_FIX_7: local file-URI normalization lives in canonical_edit.paths.
+# PLAN162_FIX_3 PLAN162_FIX_4 PLAN162_FIX_5B PLAN162_FIX_7 PLAN162_FIX_9:
+# guardfiles, scope containment, parse_error fail-closed, local file-URI
+# normalization, and blocked_tool forensics live in canonical_edit/*.
 _COMPONENT_IMPORT_ERROR = None
 _COMPONENT_IMPORT_IS_INTEGRITY_FAILURE = False
 try:

@@ -120,7 +120,10 @@ def _lookup_plan_level(plan_id: str, plans_dir: Path) -> Optional[str]:
 
 def _is_floor_tier(model: str) -> bool:
     """ADR-149: True when ``model`` belongs to a floor-tier family."""
-    return _model_currency.is_veto_floor_model(model[:-4] if model.endswith("[1m]") else model)
+    if not model:
+        return False
+    cleaned = model[:-4] if model.lower().endswith("[1m]") else model
+    return cleaned.lower().startswith(_FLOOR_TIER_PREFIXES) or _model_currency.is_veto_floor_model(cleaned.lower())
 
 
 # Legacy alias — existing callers/tests import _is_opus by name.

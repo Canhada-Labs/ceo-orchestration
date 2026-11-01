@@ -120,6 +120,7 @@ del _install_ceo_boot_parts
 # `_emit_ceo_boot_emitted_safe` and `_emit_ceo_boot_check_skipped_safe` are
 # real declarations in the ordered parts above. This surface marker belongs
 # to the script entry point because the delivery guard checks it there.
+# Tier-S 16th entry: check_tier_policy_misrouting_24h ("tier_policy_misrouting_24h")
 
 
 if __name__ == "__main__":

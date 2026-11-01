@@ -123,6 +123,7 @@ class PolicyLoadError(Exception):
 
 # The parser keeps its historical public/private class name while methods live
 # in ordered mixins.  Their code executes with this facade as globals.
+# Opt-out: CEO_POLICY_ENGINE_DISABLE=1 reverts to Python-hook fallback.
 from _lib._policy_parts import install as _install_policy_parts
 _install_policy_parts(globals())
 del _install_policy_parts

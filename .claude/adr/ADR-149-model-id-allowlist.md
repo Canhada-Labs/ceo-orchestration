@@ -94,11 +94,6 @@ AVAILABLE_MODELS_WORKING_SET: tuple = (
     #    ADR-181 justification) --
     "claude-opus-5",      # debate/arch routing + fallback target + floor member
     "claude-sonnet-5",    # advisory tier target (ADR-157 member; OQ2 migrate-now)
-    # PLAN-176 compatibility IDs; the historical A2/A3 tail remains stable.
-    "claude-opus-4-6",
-    "claude-opus-4-7",
-    "gpt-5.4",
-    "gpt-6.1-sol",
     # -- Fable 5.1 -- ADR-149 Amendment 2, S338 2026-09-01; APPENDED AT END.
     #    Working-set ONLY: not a floor member, not the fallback, not the
     #    session pin. The legacy claude-fable-5 stays available. --

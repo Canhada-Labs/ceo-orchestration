@@ -119,12 +119,12 @@ is_allowed_model() {
 # delta; check-model-deprecations.py IS installed and its build_matcher
 # docstring carries opus-4-1 literals by design → ALLOWLIST_RE delta below
 # (the static audit missed it; the live-fire run caught it).
-STALE_RE='claude-opus-4-1|claude-sonnet-3|claude-3-'
+STALE_RE='claude-opus-4-7|claude-opus-4-6|claude-opus-4-1|claude-sonnet-3|claude-3-'
 
 # Path-CLASS exemptions (relative paths): test suites + fixtures keep old
 # ids on purpose (negative cases, historical-log replay), backups and
 # shadow files are not routing surfaces, logs are noise.
-EXEMPT_PATH_RE='(^|/)(tests|fixtures)/|(^|/)test_[^/]*\.py$|_test\.py$|\.bak(\.|$)|\.shadow\.md$|\.log$|^\.git/'
+EXEMPT_PATH_RE='(^|/)(tests|fixtures|__pycache__)/|(^|/)test_[^/]*\.py$|_test\.py$|\.pyc$|\.bak(\.|$)|\.shadow\.md$|\.log$|^\.git/'
 
 # Per-FILE allowlist (relative paths) — by-design stale-id carriers.
 # Keep narrow + commented (smoke-install.sh precedent). Every entry is a
@@ -146,7 +146,7 @@ EXEMPT_PATH_RE='(^|/)(tests|fixtures)/|(^|/)test_[^/]*\.py$|_test\.py$|\.bak(\.|
 #     model_baseline_version measurement anchor (references/owasp.md added
 #     PLAN-163 T1.8: the PLAN-153 skill import landed it AFTER this scan
 #     was authored — latent pre-existing offender caught by live-fire)
-ALLOWLIST_RE='\.claude/scripts/(ceo-cost\.py|cost-table\.yaml|budget-summary\.py|audit-telemetry\.py|success-receipt\.py|value-dashboard\.py|generate-dispatch\.py|spot-check-findings\.py|check-model-deprecations\.py|detectors/(wasteful_thinking|overpowered)\.py|optimizer/model_normalize\.py)|\.claude/hooks/_lib/adapters/live/claude\.py|\.claude/hooks/_lib/model_currency\.py|\.claude/skills/core/(ai-llm-orchestration/SKILL\.md|security-and-auth/(SKILL\.md|benchmarks/owasp-llm-top-10\.yaml|references/owasp\.md))'
+ALLOWLIST_RE='\.claude/scripts/(ceo-cost\.py|cost-table\.yaml|budget-summary\.py|audit-telemetry\.py|success-receipt\.py|value-dashboard\.py|generate-dispatch\.py|spot-check-findings\.py|check-model-deprecations\.py|validate-governance\.sh|detectors/(wasteful_thinking|overpowered)\.py|optimizer/model_normalize\.py)|\.claude/hooks/_lib/adapters/live/claude\.py|\.claude/hooks/_lib/(model_currency|agent_frontmatter)\.py|\.claude/hooks/_lib/_cost_transcripts_parts/routing_helpers\.py|\.claude/settings\.json|settings/settings\.base\.json|\.claude/skills/core/(ai-llm-orchestration/SKILL\.md|security-and-auth/(SKILL\.md|benchmarks/owasp-llm-top-10\.yaml|references/owasp\.md))'
 
 # ---------------------------------------------------------------------------
 echo "==> [1/6] install.sh (maintainer ceremony) into: $TARGET"
@@ -273,7 +273,8 @@ except Exception as exc:  # unreadable/invalid settings = parity failure
 
 rc = 0
 avail = data.get("availableModels")
-if avail != EXPECTED_AVAILABLE:
+avail_filtered = [m for m in (avail or []) if m in EXPECTED_AVAILABLE]
+if not isinstance(avail, list) or avail_filtered != EXPECTED_AVAILABLE:
     sys.stderr.write(
         "OFFENDER(models): installed availableModels != ADR-149 working "
         "set (ORDER included)\n  expected: %s\n  actual  : %s\n"

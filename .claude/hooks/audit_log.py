@@ -302,6 +302,7 @@ _FILE_ASSIGNMENT_RE = re.compile(r"^## FILE ASSIGNMENT", re.MULTILINE)
 
 
 
+# PLAN-074 Wave 1c provenance — see docs/PLAN-086-adr-052-role-extension.md
 # Runtime declarations are split into installable, inspectable library files.
 # They execute once in this facade dictionary so private names, mutable globals
 # and monkeypatch seams retain the historical lookup behavior.
