@@ -49,6 +49,45 @@ if str(_HOOKS_DIR) not in sys.path:
 
 from check_bash_safety import decide_command  # noqa: E402
 
+
+class TestComputedCanonicalTarget:
+    @pytest.mark.parametrize("command", [
+        "DEST=PROTOCOL.md; printf text > $DEST",
+        "DEST=PROTOCOL.md; tee $DEST",
+        "printf text > PROT*",
+        "cd .claude; printf text > team.md",
+        "dd of=PROT* if=/tmp/p195-source",
+        "python3 -c 'print(1)' PROTOCOL.md",
+        "node -e 'console.log(1)' PROTOCOL.md",
+        "TARGET=$(printf PROTOCOL.md); tee $TARGET",
+        "BASE=.claude; tee ${BASE}/team.md",
+    ])
+    def test_computed_write_target_blocks(self, command):
+        decision = decide_command(command)
+        assert decision.allow is False
+        assert decision.destructive is False  # canonical edits are never citation-gatable
+        assert decision.reason_code == "bash_computed_canonical_target"
+
+    @pytest.mark.parametrize("command", [
+        "DEST=/tmp/p195-output; printf text > $DEST",
+        "printf text > /tmp/p195-output*",
+        "cd .claude; printf text > /tmp/p195-output",
+        "dd of=/tmp/p195-output if=/tmp/p195-source",
+    ])
+    def test_noncanonical_computed_target_allows(self, command):
+        assert decide_command(command).allow is True
+
+    def test_find_reference_only_in_later_read_segment_allows(self):
+        decision = decide_command("find /tmp -name harmless && grep word PROTOCOL.md")
+        assert decision.allow is True, decision.reason
+
+    def test_find_exec_canonical_write_before_escaped_terminator_blocks(self):
+        decision = decide_command(
+            "find /tmp -name harmless -exec sed -i 's/a/b/' PROTOCOL.md \\;"
+        )
+        assert decision.allow is False
+        assert "bash 'find' invocation" in decision.reason
+
 # ---------------------------------------------------------------------------
 # Canonical-tier targets (verified via ``_CANONICAL_GUARDS``).
 # ---------------------------------------------------------------------------

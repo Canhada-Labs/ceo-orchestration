@@ -61,6 +61,12 @@ static scan structurally cannot see:
    (``expect`` != ``block``), carrying the retired doubled-brace marker, or
    that stops firing REDDENS the run.
 
+6. **Root instruction load state** — an advisory classification from an
+   explicitly supplied *complete observed* list of loaded instruction paths.
+   Settings/globs and incremental hook events cannot prove that the root
+   CLAUDE.md was loaded or absent. Without such a list, report
+   ``root_load_unobservable``; never infer a success or a zero count.
+
 Failure doctrine (house rules):
 - This is a CI/preflight GATE, not a registered session hook: it fails
   LOUD (exit != 0), never silently green.
@@ -562,7 +568,7 @@ def run_exec_bit_gate(repo_root: Path) -> List[Finding]:
 
     That script remains the single owner of the exists+exec-bit sweep
     (Session 75 Codex Finding 9). We import it by file path (its name is
-    not import-safe) and call its main() with stdout captured.
+    not import-safe) and call its main() with output captured.
     """
     script = repo_root / ".claude" / "scripts" / "check-active-hooks-executable.py"
     if not script.is_file():
@@ -574,6 +580,7 @@ def run_exec_bit_gate(repo_root: Path) -> List[Finding]:
                 "sub-check skipped (degraded)",
             )
         ]
+    buf = io.StringIO()
     try:
         import importlib.util
 
@@ -583,19 +590,18 @@ def run_exec_bit_gate(repo_root: Path) -> List[Finding]:
         if spec is None or spec.loader is None:
             raise ImportError("spec_from_file_location returned None")
         mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            spec.loader.exec_module(mod)
             try:
                 rc = int(mod.main())
             except SystemExit as exc:  # its parser exits 2 on parse failure
                 rc = int(exc.code or 0)
     except Exception as exc:
         return [
-            _warn(
+            _red(
                 "exec_bit",
                 str(script),
-                f"could not run exec-bit gate ({type(exc).__name__}: {exc}) — degraded",
+                f"exec-bit gate raised {type(exc).__name__}: {exc} — fail-CLOSED | {buf.getvalue().strip()}",
             )
         ]
     if rc != 0:
@@ -913,6 +919,48 @@ def _print_findings(findings: List[Finding]) -> None:
         print(f"[{f.severity}] {f.check_id} @ {f.location}\n    {f.message}")
 
 
+def check_root_instruction_load(
+    repo_root: Path, evidence_path: Optional[Path] = None,
+) -> Finding:
+    """Report a real runtime lookup, with explicit evidence provenance.
+
+    ``evidence_path`` is an operator-supplied JSON snapshot shaped as
+    ``{"complete": true, "loaded_instruction_paths": [absolute paths...]}``.
+    A partial, malformed or unavailable snapshot cannot prove root absence.
+    The caller supplies the list; this gate does not claim to instrument
+    Claude Code's instruction loader or authenticate the snapshot's producer.
+    """
+    try:
+        from _lib import claude_md_excludes as excludes
+    except Exception:
+        return _warn("root_instruction_load", "runtime", "root_load_unobservable (classifier unavailable)")
+
+    paths = None
+    source = "no complete observed path list"
+    if evidence_path is not None:
+        try:
+            snapshot = json.loads(
+                evidence_path.read_text(encoding="utf-8"),
+                object_pairs_hook=_strict_pairs,
+                parse_constant=_refuse_constant,
+            )
+            if isinstance(snapshot, dict) and snapshot.get("complete") is True:
+                paths = snapshot.get("loaded_instruction_paths")
+                source = "operator-supplied snapshot; completeness unverified"
+            else:
+                source = "incomplete or malformed path list"
+        except (OSError, ValueError, RecursionError):
+            source = "unreadable or invalid path list"
+    try:
+        state = excludes.root_instruction_load_state(paths, repo_root)
+    except Exception:
+        state = excludes.LOAD_STATE_UNOBSERVABLE
+        source = "classifier unavailable"
+    if state in (excludes.LOAD_STATE_LOADED, excludes.LOAD_STATE_ABSENT):
+        state = f"snapshot reports {state}"
+    return _warn("root_instruction_load", "runtime", f"{state} ({source})")
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         prog="check_harness_config.py",
@@ -930,6 +978,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     )
     parser.add_argument("--fixtures-dir", type=Path, default=None)
     parser.add_argument("--noop-allowlist", type=Path, default=None)
+    parser.add_argument(
+        "--instruction-load-evidence", type=Path, default=None,
+        help="JSON snapshot of a complete observed instruction-path list; "
+             "without it root loading is unobservable",
+    )
     parser.add_argument(
         "--static", action="store_true", help="run only the static checks"
     )
@@ -969,6 +1022,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if do_replay:
         findings.extend(run_replay(repo_root, args.fixtures_dir))
+
+    # Runtime evidence is optional and independent of settings/glob findings.
+    # Never promote a static exclusion pattern into a claim about what loaded.
+    if do_static or args.instruction_load_evidence is not None:
+        findings.append(check_root_instruction_load(repo_root, args.instruction_load_evidence))
 
     _print_findings(findings)
     reds = [f for f in findings if f.severity == "RED"]

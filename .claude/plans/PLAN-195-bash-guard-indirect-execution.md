@@ -1,9 +1,11 @@
 ---
 id: PLAN-195
 title: Guarda de Bash — execução indireta e alvo de escrita computado (classe GuardFall)
-status: executing
+status: done
 created: 2026-09-30
 reviewed_at: 2026-10-01
+executing_at: 2026-10-02
+completed_at: 2026-11-01
 reviewed_by: "Owner — aceite em bloco, no chat da S361 (2026-10-01), da recomendação sobre o plano revisto no debate: corpo do debate (sha 9894151f, PROCEED) + apêndice «Correções pós-debate S360»; OQ-8 mantida como o CEO resolveu no debate"
 owner: CEO
 depends_on: []
@@ -16,6 +18,25 @@ external_wait: "Owner: assinatura GPG de cada wave canônica (W1, W2); decisão 
 eta_calendar: "mesmo-dia a D+1 por wave (CEO-only fora das assinaturas e do debate); calendário estica só pelas cerimônias do Owner"
 tags: [security, bash-guard, canonical-edit, threat-model, guardfall, fail-closed]
 ---
+
+## Estado reconciliado — W6G, 2026-11-01
+
+O `done` autorizado pela Onda 1A registra o escopo técnico integrado; esta
+reconciliação não declara executadas medições privadas, cerimônias ou a W3.
+A implementação entrou em `027895f1`, e o
+[ADR-201](../adr/ADR-201-bash-guard-indirect-execution.md) está `ACCEPTED`
+por instrução do CEO/Owner nesta onda.
+
+- [x] Passada aditiva de execução indireta e alvos computados integrada:
+  `check_bash_safety.py`, `_lib/bash_indirect_guard.py`,
+  `test_check_bash_safety_indirect_exec.py` e
+  `test_check_bash_safety_canonical_matrix.py`.
+- [x] Desarme dos switches com evento fechado e deduplicação por sessão:
+  `_lib/bash_indirect_telemetry.py` e `test_bash_indirect_telemetry.py`.
+- [x] ADR-201 aceito como decisão normativa, com limites de cobertura explícitos.
+- [ ] Comprovar o replay diferencial privado e V-1/P-5, reconfirmações C13,
+  espelhos, SIGN/LAND e medição/decisão da W3. Os requisitos detalhados abaixo
+  continuam abertos onde dependem dessas evidências; `done` não as substitui.
 
 > **Regra de WIP (trabalho em voo) — este plano divide as vagas com o PLAN-194 e o PLAN-183.** A
 > regra vale como está escrita no bloco «Regra de WIP» do topo do PLAN-194 (no máximo 3 pacotes
@@ -628,17 +649,17 @@ espelhos não são paths do pacote. **Divisão pré-registrada como provável (d
 `reason_code`), na mesma vaga — assim a mensagem A3 nunca chega depois da regra de argv, que
 torna a recusa de leitura mais frequente; se couber, as duas num pacote só.
 
-- [ ] Resolver expansão (variável/substituição), glob e `cd` relativo no ALVO de escrita
+- [x] Resolver expansão (variável/substituição), glob e `cd` relativo no ALVO de escrita
   (redirect/`tee`/`sed -i`/`dd of=`/interpretador) antes de casar o caminho canônico,
   reusando o esqueleto do E4 com piso de literais — sem fail-closed cego. Lacuna argv aqui
   (OQ-4, decidida 3/3 no debate r1): caminho canônico entre os operandos posicionais depois
   de um corpo `-c`/`-e` de interpretador ⇒ BLOCK, sem tentar provar se o corpo lê ou escreve.
   Controle vermelho→verde pelo `-k TestComputedCanonicalTarget` acima. — Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_canonical_matrix.py -q -k TestComputedCanonicalTarget
-- [ ] Mensagem da recusa de LEITURA por `python3 -c` (A3-1/A3-3): apontar Read/`cat`/`grep`
+- [x] Mensagem da recusa de LEITURA por `python3 -c` (A3-1/A3-3): apontar Read/`cat`/`grep`
   para leitura e separar o ramo de parse falho («corpo não tokenizável/grande; nenhum caminho
   canônico identificado»), sem allowlist de leitura; texto fixado em `TestReadRefusalMessage`.
   — Check: python3 -m pytest .claude/hooks/tests/test_check_bash_safety_indirect_exec.py -q -k TestReadRefusalMessage
-- [ ] Limitar ao segmento a varredura do verbo de busca de arquivos no E3 (A3-5), com controle
+- [x] Limitar ao segmento a varredura do verbo de busca de arquivos no E3 (A3-5), com controle
   ALLOW para o comando composto só de leitura e controle BLOCK para a edição real (**→ item C3
   (1): «segmento» = a expressão do verbo de busca; mais uma linha BLOCK com edição canônica
   depois do terminador escapado**).
@@ -878,6 +899,41 @@ ordem da colisão com a W6 do PLAN-194.
   aberta até a reconfirmação do C13. Efeito colateral esperado: o detector de plano parado
   (`check-staleness.py`) passa a acusar o modo 8.2 se nenhum commit tocar este plano por mais de
   24 h; com o plano estacionado para a 1.4.4 (D-17), o aviso é esperado.
+
+### Registro de implementação local P6 (2026-11-01; WIP não landado)
+
+Nota de integração (2026-11-01): este registro descreve o estado da frente P6
+antes do Merge Train. O `executing` citado abaixo é histórico; o frontmatter
+mantém `done` e `completed_at: 2026-11-01`, autorizados pelo CEO/Owner na Onda 1A.
+As limitações e evidências técnicas registradas pela P6 permanecem abaixo.
+
+Implementação técnica preliminar em `check_bash_safety.py` e no módulo novo
+`_lib/bash_indirect_guard.py`: passada aditiva para posições de comando,
+invocadores `-c`, `env -S`, `eval`, `xargs`, `find -exec`, funções/alias definidos
+no comando, substituições `$()`/crase/processo, here-docs e here-strings, alimentador opaco,
+verbo computado com marcador literal e alguns alvos de escrita computados
+(variável literal, `printf` estático, glob com piso, `cd` dentro do comando e
+argv de interpretador). Os dois switches em `trusted_env` vêm ligados por
+padrão; desligar só as heurísticas não desliga o veto por equivalência.
+W2a também ajusta a mensagem de leitura A3 e limita o ramo E3 de `find` ao
+segmento, com controles. Testes sintéticos novos verificam `reason_code`,
+marcação `destructive` e controles ALLOW, sem executar comandos de exemplo.
+Última bateria no palco: `270 passed, 3 xfailed, 1 warning in 0.58s`
+(`test_check_bash_safety*.py`); 65/65 mutantes isolados vermelhos (um por
+caso novo coletado), 0 sobreviventes, 0 erros de coleta, 130 restaurações
+`cp`/`cmp` byte-idênticas. Este registro não afirma cobertura exaustiva,
+replay diferencial, V-1/P-5, revisão de
+segurança, sentinel, SIGN ou LAND. O plano permanece `executing`: W1a/W1b/W2,
+os gates externos e os critérios de sucesso continuam abertos. A9/V-1 segue
+dependente de vocabulário privado e contagem do Owner, não reproduzidos neste
+repositório público. A observabilidade dos dois switches foi integrada com
+`_lib/bash_indirect_telemetry.py` (implementação em frente disjunta): o hook
+chama `disabled_once` somente para OFF explícito e com `session_id` do payload;
+sem desarme não chama. Seis casos de telemetria verificam o JSONL real,
+deduplicação entre processos/sessões, os dois switches e falha de armazenamento;
+seis mutantes isolados foram mortos e restaurados por `cp`/`cmp`.
+O ADR-201 foi criado como `PROPOSED`, com enums e SPEC coerentes; a ratificação,
+a conciliação com o rascunho externo e a evidência privada seguem pendentes.
 
 ## Correções pós-debate S360 (aceitas pelo Owner na S361, 2026-10-01)
 

@@ -262,5 +262,281 @@
   "path_hint": ".claude/plans/PLAN-182/staged-w1/tree/scripts/local/historical/plan-093-kernel-override-restart.sh",
   "reason": "copia de PACK staged (PLAN-182 W1, SENT-S319): o original vive FORA de plans/ (nao e script de cerimonia); o land aplica no path canonico e a copia sai daqui — waiver pinado re-arma sozinho em qualquer edicao",
   "date": "2026-08-21"
+ },
+ {
+  "sha256": "7e625354b8de348becb3b790934bec2b3d9b9889fb810e486c8773d7503b3096",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-GA-CUT.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "842ac4483911b26c6e111f7e7bfdaa624803b5ff3458c04626c274ba04ede5c8",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-RC1-CUT.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "6e13644a47a85a98b8fa108dc5bc74378c4ef4b3a1d25faf3662617a8e068fd6",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-S328-B-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "629b5da2008e4c44e8843dfe9a61a5997fe7a7cc83ffc97f7abe9139ab447f29",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-S329-E-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "efd6314f0454821cdeb8da82a308382379b611f2bc8698acfaed542365e465dd",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-S331-F-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "4fe184d03eff0b76b4abe7c7e08a933d6f65b149db5a1b447bed012a9991308c",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-S334-ADRGATE-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "4b50b195b787b43a1dcc79a8eded81f167ea8dfba7d288e1cc52ad863faeb987",
+  "path_hint": ".claude/plans/PLAN-169/OWNER-S338-FABLE51-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "44f04107d2dd218e1c90aba9b2630a694eb99024a82873a1d2abd48a8472f1e0",
+  "path_hint": ".claude/plans/PLAN-169/repass-ga/run-ga-repass.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "4781a558611e5612ce9343c5a599eb29201a245dcf5dd128bf30eb4ba87b1b93",
+  "path_hint": ".claude/plans/PLAN-169/repass-rc1/run-rc1-repass.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "9e0b55a2a0957343b063a6461b3781dd230643c49164a26c9715d1381c2f2aaf",
+  "path_hint": ".claude/plans/PLAN-169/s328-ceremony-B/finalize-B.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "caada94efe98a862819ff88fe6d31052be540e49d7b5ef6d64640898ab20a08c",
+  "path_hint": ".claude/plans/PLAN-169/s329-ceremony-E/finalize-E.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "b6dff05e6ef1f31d46cc9d1add0aaabc70d81d4f673b5a585711cffd016c5f5a",
+  "path_hint": ".claude/plans/PLAN-169/s330-ceremony-F/finalize-F.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "f95aace5906911d766cbea2d3835420a4b987543d4d87f550234c305ef2be191",
+  "path_hint": ".claude/plans/PLAN-169/s334-ceremony-adrgate/finalize-adrgate.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "f7d294a9d66879ef611d01cde6f501ec8f5e20481d7da5e7e0f75e2a7a7e5695",
+  "path_hint": ".claude/plans/PLAN-169/s338-ceremony-fable51/finalize-fable51.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "b45e2c28f5ec06bb895bf3f11e5a78705dd3764ee5e21cfc4afee1003a64d775",
+  "path_hint": ".claude/plans/PLAN-169/s349-ceremony-rc1cure/bind-patch.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "43130b42bfd5d588d805615dd09fc0a3a10a9bd33bbc72e1cea7ab8a67dfd312",
+  "path_hint": ".claude/plans/PLAN-169/s349-ceremony-rc1cure2/bind-patch.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "5de69ba844b749e2bcd3cb1a1540660b88fdd078429d2c57001327d73d6af7fc",
+  "path_hint": ".claude/plans/PLAN-169/s349-ceremony-rc1cure3/bind-patch.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "7e153c3bad3dded8df101b9c1b61bcf4ebc9da941ac265d0142a5fc387152ef3",
+  "path_hint": ".claude/plans/PLAN-179/OWNER-S335-179CLOSE-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "1880bb3927d537cc50b365116fad97e41f67802a966b689c957f1361e05e21c6",
+  "path_hint": ".claude/plans/PLAN-179/OWNER-S338-179FU-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "4364c99ef07ea816ce2c5e11a118aec20816b1bf6d9c62022343b45c2f7a119e",
+  "path_hint": ".claude/plans/PLAN-179/s335-ceremony-179close/finalize-179close.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "a75fd8c9f388b3504c9ff26d5dd23c61ebf62f5af99a03b3e195ba9db563f3f5",
+  "path_hint": ".claude/plans/PLAN-179/s338-followup-flip/finalize-179fu.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "70e427f9fef823aa20ce2c7bb59c212e2152fe92ac15045879610ce4b9552c80",
+  "path_hint": ".claude/plans/PLAN-183/OWNER-S327-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "e41d30c00aa56be14302074dc49b821e85371c39cb724d745610104666a801dd",
+  "path_hint": ".claude/plans/PLAN-183/OWNER-S327b-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "006bd350736dc29cf45cdf8d9a066d84b26db924dddf932c55efb28aca218173",
+  "path_hint": ".claude/plans/PLAN-183/OWNER-S328-A-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "7cfe0a954be6f79403d4fbacf30a97b91f1e14453a73b9b2d3f74bc9312b2de9",
+  "path_hint": ".claude/plans/PLAN-183/OWNER-S335-183BATCH-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "13ce07075953cb68ab75e7d6511a420a96c855223f4b8b1c5a36580f78966c28",
+  "path_hint": ".claude/plans/PLAN-183/s328-ceremony-A/finalize-A.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "d0939a0f7ee00eff0baf2ba3e332058e12333bacef544f45908ffdc3b9cd2e05",
+  "path_hint": ".claude/plans/PLAN-183/s335-ceremony-183batch/finalize-183batch.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "10d9837b3731698b3525019cb34c8bb4536cc70984fc2f90807adfc67a204cb4",
+  "path_hint": ".claude/plans/PLAN-185/OWNER-S329-C-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "14e5f8f3dd6ab4684b35841b28706dfd9d350ec1f8c222556b734b95b827454c",
+  "path_hint": ".claude/plans/PLAN-185/s329-ceremony-C/finalize-C.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "ab5f3a3c4b775f020cb91b56f1ba87642d4d43fdbdd2f73c35ec7bea50b63b15",
+  "path_hint": ".claude/plans/PLAN-186/OWNER-S343-W4A-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "98448d49e3b80b1ea1a25e2946fb79c4346e8799718d26f318ce05fe3034cba6",
+  "path_hint": ".claude/plans/PLAN-186/s343-ceremony-w4a/finalize-w4a.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "653aa75a95ec48baef62708d33190e007eaddd6f7b18e676fa5017dc536cd8da",
+  "path_hint": ".claude/plans/PLAN-192/OWNER-GA-CUT.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "5743dfa85eedfd06a3fa11eecc2d6ff343539eeff73e9f4bf5a65e6d08d55dd6",
+  "path_hint": ".claude/plans/PLAN-192/OWNER-RC1-CUT.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "e374350eff50ff2062b6b526f6949822fdec05e31f5dce51cdc23ce5980a1182",
+  "path_hint": ".claude/plans/PLAN-192/repass-ga/run-ga-repass.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "3cbb13c3baa02ca9ceb363f48ad7db6204f3d1c628f1378468a3d0b5233522c3",
+  "path_hint": ".claude/plans/PLAN-192/repass-rc1/run-rc1-repass.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "cbbe2f449e508354716a01a4b85b0837b19873f838d4234d38fad5fbaa2f7d81",
+  "path_hint": ".claude/plans/PLAN-193/OWNER-GA-CUT.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "772c3db4c028e01dbd361688b203dfc498b403918f4437b29d71fb255aff08c3",
+  "path_hint": ".claude/plans/PLAN-193/OWNER-RC1-CUT.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "0b9b4703a766234a9ae9af61c29d95b5759f0c0c60dbe607d848426fe50802ec",
+  "path_hint": ".claude/plans/PLAN-193/repass-ga/run-ga-repass.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "6c02b1a71b69943d08dcdbd4f8db3e3ddf0c289c3af1ddcea05198764362c5e0",
+  "path_hint": ".claude/plans/PLAN-193/repass-rc1/run-rc1-repass.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "fd87a14dbcd8cb284c6584adfb3dabc8f4c1495238406e5ecc0083aa3c3601bd",
+  "path_hint": ".claude/plans/PLAN-193/test-ga-kit.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "210618bceb2da73368d667370a5b07cf69b1d63f0b6ca0c80678e7df115f2507",
+  "path_hint": ".claude/plans/PLAN-193/test-rc1-kit.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "98c8c1d80deb3c9f0bb2304cecc31929411c4aac7ea1be52508b1ebb81f6cc32",
+  "path_hint": ".claude/plans/PLAN-193/wave-opus55/OWNER-OPUS55-LAND.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "80b6695e949177d547d184d9ed5989e8a708f73dd4ff4fbeff472aef99d3768a",
+  "path_hint": ".claude/plans/PLAN-193/wave-opus55/test-ceremony-scripts-opus55.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "752012f90ade8dd564a41de0c9fcdc3d13c11257887e2c49c66ba14d30230b1a",
+  "path_hint": ".claude/plans/PLAN-194/OWNER-RC1-CUT.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "7ae00c3ac3f8778d1c603256d6fb45788b80e60e67b8580b938f89116f1665e7",
+  "path_hint": ".claude/plans/PLAN-194/repass-rc1/run-rc1-repass.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
+ },
+ {
+  "sha256": "e40c3241cdca10936ff320d570855d7feed591cd6d8f10fd8947c44654173c28",
+  "path_hint": ".claude/plans/PLAN-194/test-rc1-kit.sh",
+  "reason": "historico landado PRE-R9 (item 14 (a) do PLAN-194-FOLLOWUP-v1-4-4-backlog, censo 2026-11-01): a substituicao dentro do heredoc sem aspas ja rodou nas cerimonias que usaram este arquivo; waiver pinado por sha256 do CONTEUDO — re-arma sozinho em qualquer edicao",
+  "date": "2026-11-01"
  }
 ]

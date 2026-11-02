@@ -527,15 +527,9 @@ def _load_build_plugin() -> Any:
     assert spec is not None and spec.loader is not None
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
-
-
-# --------------------------------------------------------------------------
 # Real surfaces.
-# --------------------------------------------------------------------------
-
 class ShippedSurfacesLoadWhole(TestEnvContext):
     """No shipped surface trips the whole-file drop."""
-
     def test_every_surface_exists(self) -> None:
         missing = [p for p in SETTINGS_SURFACES if not (REPO_ROOT / p).is_file()]
         self.assertEqual(missing, [], "settings surface list is stale: %r" % (missing,))
@@ -577,6 +571,11 @@ class ShippedSurfacesLoadWhole(TestEnvContext):
             "By the rule derived from the Claude Code %s binary (a text replica, not a "
             "runtime observation), Claude Code would IGNORE these whole settings files: %r"
             % (DERIVED_FROM_CLAUDE_CODE, findings))
+
+    def test_fu144_dogfood_retention_and_posture_caveat(self) -> None:
+        doc = load_json(REPO_ROOT / DOGFOOD_SURFACE)
+        self.assertEqual(doc.get("cleanupPeriodDays"), 3650)
+        self.assertIn("re-read in the 2.1.295 binary", doc.get("_posture_comment"))
 
     def test_no_hook_entry_dropped_with_warning(self) -> None:
         findings = {}

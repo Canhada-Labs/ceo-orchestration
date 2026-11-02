@@ -32,10 +32,8 @@ merged view.
 Advisory only. Every public reader returns a degraded-but-typed result
 on parse errors (dict / list / int as declared) and NEVER raises to the
 caller. Degraded paths leave a stderr breadcrumb (`mcp_routing.py`
-precedent). This module is deliberately STANDALONE (no `_lib` imports,
-no audit emits) so consumers can load it via importlib from any
-checkout; closed-enum audit emission is owned by the consumers (S3/H2),
-not by this resolver.
+precedent). Its only shared helper is stdlib-only; audit emission remains
+owned by the consumers (S3/H2), not this resolver.
 
 ## Env-read doctrine
 
@@ -64,7 +62,8 @@ import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
-
+from _lib import claude_md_excludes as _claude_md_excludes
+from _lib import model_currency as _model_currency
 _PathLike = Union[str, "os.PathLike[str]"]
 
 # ---------------------------------------------------------------------------
@@ -102,16 +101,10 @@ TAMPER_HOOK_COUNT_MISMATCH = "settings_tamper_hook_count_mismatch"
 # surface); the Owner's legitimate launch-env override is structurally invisible
 # to the env-snapshot check (_capture_tamper_env filters to ANTHROPIC_*/DANGEROUSLY*).
 TAMPER_SIDECAR_REDIRECT = "settings_tamper_sidecar_redirect"
-# PLAN-155 Wave 3b (SENT-CX-E) — the Codex kill-switch registration surface
-# (`.codex/hooks.json` / `.codex/config.toml` / `.codex/rules/ceo.rules`)
-# deregistered or its referenced hook scripts removed on disk. Distinct from
-# TAMPER_HOOK_COUNT_MISMATCH (which is the CLAUDE-harness settings.json disk
-# census) so SOC triage routes the two harnesses' rail-degradation signals
-# apart. Detected ONLY when the Codex harness is actually installed (an
-# install marker present) — "absent because never installed" is not a finding
-# (no yellow-fatigue; this repo has no `.codex/`, so the census is a no-op
-# here). Disk surface, one-directional like the existing census.
+# PLAN-155 Wave 3b — missing Codex registration or referenced hook, only
+# where a Codex install marker exists (never-installed is not a finding).
 TAMPER_CODEX_KILLSWITCH_MISSING = "settings_tamper_codex_killswitch_missing"
+TAMPER_CLAUDE_MD_EXCLUDES_ROOT = "settings_tamper_claude_md_excludes_root"
 
 TAMPER_CLASSES = frozenset({
     TAMPER_DISABLE_ALL_HOOKS,
@@ -121,8 +114,8 @@ TAMPER_CLASSES = frozenset({
     TAMPER_HOOK_COUNT_MISMATCH,
     TAMPER_SIDECAR_REDIRECT,
     TAMPER_CODEX_KILLSWITCH_MISSING,
+    TAMPER_CLAUDE_MD_EXCLUDES_ROOT,
 })
-
 # ---------------------------------------------------------------------------
 # FORBIDDEN-KEYS / tamper-surface table (single source — powers S3 + W2 H2
 # + W5 O11; mirrors THREAT-MODEL-WORKSHEET.md §2). ``surface`` values:
@@ -139,6 +132,8 @@ FORBIDDEN_KEYS: Tuple[Dict[str, str], ...] = (
         "note": "one line in settings.local.json silently disarms every "
                 "registered hook (threat-model §2 vector a)",
     },
+    {"surface": "settings", "key": "claudeMdExcludes", "rule": "matches-root",
+     "tamper_class": TAMPER_CLAUDE_MD_EXCLUDES_ROOT, "note": "root CLAUDE.md excluded"},
     {
         "surface": "env", "key": "ANTHROPIC_MODEL",
         "rule": "set-outside-model-allowlist", "tamper_class": TAMPER_MODEL_REMAP,
@@ -238,8 +233,9 @@ _DETAIL_CAP = 240
 _HOOK_SCRIPT_RE = re.compile(r"([A-Za-z0-9_\-]+\.py)\b")
 
 #: Quoted model ids inside the ADR-149 allowlist block.
-_MODEL_ID_DQ_RE = re.compile(r'"(claude-[A-Za-z0-9.\-]+)"')
-_MODEL_ID_SQ_RE = re.compile(r"'(claude-[A-Za-z0-9.\-]+)'")
+_MODEL_ID_DQ_RE = re.compile(r'"([A-Za-z][A-Za-z0-9.\-]*)"')
+_MODEL_ID_SQ_RE = re.compile(r"'([A-Za-z][A-Za-z0-9.\-]*)'")
+_WORKING_SET_RE = re.compile(r"^AVAILABLE_MODELS_WORKING_SET[^=\n]*=\s*\((.*?)\)", re.M | re.S)
 _FROZENSET_RE = re.compile(r"frozenset\(\s*\{(.*?)\}\s*\)", re.DOTALL)
 
 _ADR_149_RELPATH = ("/".join((".claude", "adr", "ADR-149-model-id-allowlist.md")))
@@ -483,7 +479,7 @@ def _check_env_mapping(
             continue
         if key in _MODEL_REMAP_EXACT_KEYS or key.startswith(_MODEL_REMAP_PREFIX):
             if allow_set:
-                if _fold_one_m_tag(stripped) not in allow_set:
+                if not _model_currency.is_allowed_model(_fold_one_m_tag(stripped), allow_set):
                     findings.append(_finding(
                         TAMPER_MODEL_REMAP, layer_name,
                         f"{key}={stripped} outside model allowlist "
@@ -534,8 +530,8 @@ def _check_settings_layer(
     data: Any,
     allowlist: List[str],
     findings: List[Dict[str, str]],
+    project_dir: Optional[_PathLike] = None,
 ) -> None:
-    """Run the settings-surface forbidden-key checks against ONE layer."""
     if not isinstance(data, dict):
         return
     # (a) disableAllHooks — truthy in any layer disarms the whole rail.
@@ -544,6 +540,11 @@ def _check_settings_layer(
             TAMPER_DISABLE_ALL_HOOKS, layer_name,
             f"disableAllHooks={data.get('disableAllHooks')!r} disarms every "
             f"registered hook",
+        ))
+    if project_dir and _claude_md_excludes.root_claude_md_excluded(data.get("claudeMdExcludes"), project_dir):
+        findings.append(_finding(
+            TAMPER_CLAUDE_MD_EXCLUDES_ROOT, layer_name,
+            "claudeMdExcludes matches the project-root CLAUDE.md",
         ))
     # (d) permission bypass — defaultMode + dangerously-skip flag family.
     permissions = data.get("permissions")
@@ -705,18 +706,20 @@ def _resolve_repo_root(project_dir: Optional[_PathLike]) -> Path:
 def _parse_allowlist_members(text: str) -> List[str]:
     """Extract model ids from ADR-149, robustly.
 
-    Strategy: prefer ids quoted inside the first ``frozenset({...})``
-    block; fall back to any quoted ``claude-*`` id in the document.
-    Order-preserving, de-duplicated.
+    Prefer the working-set tuple, then the legacy floor block.
+    Quoted model IDs are order-preserving and de-duplicated.
     """
-    match = _FROZENSET_RE.search(text)
+    match = _WORKING_SET_RE.search(text) or _FROZENSET_RE.search(text)
     chunk = match.group(1) if match else text
     members = _MODEL_ID_DQ_RE.findall(chunk) + _MODEL_ID_SQ_RE.findall(chunk)
     if not members and match:
         members = _MODEL_ID_DQ_RE.findall(text) + _MODEL_ID_SQ_RE.findall(text)
     out: List[str] = []
     for member in members:
-        if member not in out:
+        if (
+            member.startswith("claude-")
+            or _model_currency.is_allowed_model(member, ())
+        ) and member not in out:
             out.append(member)
     return out
 
@@ -814,7 +817,7 @@ def classify_tampering(
             if isinstance(data, dict) and data:
                 _check_settings_layer(
                     _safe_str(layer.get("name", "unknown")),
-                    data, allowlist, findings,
+                    data, allowlist, findings, resolved.get("project_dir"),
                 )
         env = IMPORT_TIME_ENV_SNAPSHOT if env_snapshot is None else env_snapshot
         _check_env_mapping(env, LAYER_ENV, allowlist, findings)

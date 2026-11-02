@@ -1,7 +1,8 @@
 ---
 id: PLAN-183
 title: Adopter fitness — o instrumento de adopter existe, mas seu escopo exclui .github/ e ele nunca executa o CI entregue
-status: executing
+status: superseded
+superseded_by: PLAN-196
 executing_at: 2026-08-25
 reviewed_at: 2026-08-20
 reviewed_by: "Owner — autorizacao explicita em chat (S315, 2026-08-20): 'se ja esta pronto deixa como revisado e apto pra fazer'. Debate L3 round 1 fechado com veredito PROCEED (10 consensos, 28 ajustes) e ajustes incorporados ao corpo; validate_governance_fast = 0 findings; pair-rail codex 6 rodadas fechadas, 32 achados, todos curados."

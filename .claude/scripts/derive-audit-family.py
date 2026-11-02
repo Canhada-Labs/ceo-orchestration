@@ -445,17 +445,23 @@ def env_domain() -> Dict[str, Any]:
         r"|os\.environ\[\s*[\"']({u})[\"']".format(u=upper))
     domain: Dict[str, List[str]] = {}
     for mod in M2_MODULES:
-        path = os.path.join(lib, mod + ".py")
-        if not os.path.isfile(path):
-            continue
-        with open(path, encoding="utf-8") as fh:
-            text = fh.read()
-        for match in pat.finditer(text):
-            for grp in match.groups():
-                if grp:
-                    domain.setdefault(grp, [])
-                    if mod not in domain[grp]:
-                        domain[grp].append(mod)
+        paths = [os.path.join(lib, mod + ".py")]
+        parts_dir = os.path.join(lib, "_{}_parts".format(mod))
+        if os.path.isdir(parts_dir):
+            for fn in sorted(os.listdir(parts_dir)):
+                if fn.endswith(".py"):
+                    paths.append(os.path.join(parts_dir, fn))
+        for path in paths:
+            if not os.path.isfile(path):
+                continue
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+            for match in pat.finditer(text):
+                for grp in match.groups():
+                    if grp:
+                        domain.setdefault(grp, [])
+                        if mod not in domain[grp]:
+                            domain[grp].append(mod)
     inv_path = os.path.join(REPO_ROOT, ".claude", "scripts",
                             "env-inventory.json")
     inventory: List[str] = []

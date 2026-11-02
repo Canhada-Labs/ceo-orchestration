@@ -17,13 +17,15 @@ executable.
 Exit codes:
 - 0 — all active hooks present + executable
 - 1 — one or more hooks missing or not executable
-- 2 — settings.json malformed / unreadable
+- 2 — settings.json malformed / unreadable / not a regular file, or a hook file
+  whose stat fails for a reason other than absence
 """
 from __future__ import annotations
 
 import json
 import os
 import re
+import stat
 import sys
 from pathlib import Path
 from typing import Iterable, List, Set, Tuple
@@ -45,6 +47,17 @@ SETTINGS_FILES = (
 _PY_HOOK_DIRECT_RE = re.compile(r"(\.claude/hooks/[A-Za-z0-9_./-]+\.py)")
 _PY_HOOK_VIA_SHIM_RE = re.compile(r"_python-hook\.sh[\"']?\s+([A-Za-z0-9_/-]+\.py)")
 
+# Hook type -> required string fields, the same table as the loader replica in
+# tests/test_settings_guard_loadability.py (``_TYPE_FIELDS``; parity is asserted by
+# test_fu144_required_fields_of_each_type_follow_the_replica_table).
+_REQUIRED_FIELDS = {
+    "command": ("command",),
+    "prompt": ("prompt",),
+    "agent": ("prompt",),
+    "http": ("url",),
+    "mcp_tool": ("server", "tool"),
+}
+
 
 def _refuse_constant(name: str):
     """parse_constant: NaN/Infinity are not JSON (JSON.parse rejects them), so a
@@ -52,8 +65,30 @@ def _refuse_constant(name: str):
     raise ValueError(f"non-standard JSON constant {name}")
 
 
+def _settings_absent(settings_path: Path) -> bool:
+    """True only for real absence. Anything else that is not a regular file (a
+    directory, a dangling symlink, a FIFO, a forbidden parent) is an input this gate
+    cannot read: exit 2 named, never a silent skip and never a blocking read."""
+    try:
+        os.lstat(settings_path)
+    except FileNotFoundError:
+        return True
+    except (OSError, ValueError) as exc:
+        print(f"::error::cannot stat {settings_path}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        sys.exit(2)
+    try:
+        mode = os.stat(settings_path).st_mode
+    except (OSError, ValueError) as exc:
+        print(f"::error::cannot stat {settings_path}: {type(exc).__name__}: {exc}", file=sys.stderr)
+        sys.exit(2)
+    if not stat.S_ISREG(mode):
+        print(f"::error::cannot parse {settings_path}: not a regular file", file=sys.stderr)
+        sys.exit(2)
+    return False
+
+
 def _iter_hook_paths(settings_path: Path) -> Iterable[str]:
-    if not settings_path.is_file():
+    if _settings_absent(settings_path):
         return
     try:
         data = json.loads(settings_path.read_text(encoding="utf-8"), parse_constant=_refuse_constant)
@@ -79,8 +114,11 @@ def _iter_hook_paths(settings_path: Path) -> Iterable[str]:
         for entries in data.get("hooks", {}).values():
             for entry in entries:
                 for hook in entry["hooks"]:
-                    cmd = hook.get("command", "") or ""
-                    found += [m.group(1) for m in _PY_HOOK_DIRECT_RE.finditer(cmd)]
+                    # The loader discards `command` on any other type (item 6a.2).
+                    if hook["type"] != "command":
+                        continue
+                    cmd = hook["command"]
+                    found +=[m.group(1) for m in _PY_HOOK_DIRECT_RE.finditer(cmd)]
                     # Bare hook script — resolve to .claude/hooks/<name>
                     found += [f".claude/hooks/{m.group(1)}" for m in _PY_HOOK_VIA_SHIM_RE.finditer(cmd)]
     except Exception as exc:
@@ -106,12 +144,43 @@ def _hooks_shape_error(data: dict) -> str:
                 return f"{at}[{i}]: expected object"
             if not isinstance(entry.get("hooks"), list):
                 return f"{at}[{i}].hooks: expected array"
+            if "matcher" in entry and not isinstance(entry["matcher"], str):
+                return f"{at}[{i}].matcher: expected string"
             for j, hook in enumerate(entry["hooks"]):
                 if not isinstance(hook, dict):
                     return f"{at}[{i}].hooks[{j}]: expected object"
-                if hook.get("type") == "command" and not isinstance(hook.get("command"), str):
-                    return f"{at}[{i}].hooks[{j}].command: expected string"
+                bad = _hook_shape_error(hook)
+                if bad:
+                    return f"{at}[{i}].hooks[{j}].{bad}"
     return ""
+
+
+def _hook_shape_error(hook: dict) -> str:
+    """'<field>: <expected>' of the first deviation of one hook entry, or ''."""
+    if "type" not in hook:
+        return "type: required"
+    hook_type = hook["type"]
+    if not isinstance(hook_type, str):
+        return "type: expected string"
+    if hook_type not in _REQUIRED_FIELDS:
+        return f"type: unknown hook type {json.dumps(hook_type)[:80]}"
+    for field in _REQUIRED_FIELDS[hook_type]:
+        if not isinstance(hook.get(field), str):
+            return f"{field}: expected string"
+    return ""
+
+
+def _hook_problem(hook_rel: str) -> str:
+    """'missing', 'not_exec' or ''. A stat that fails for any other reason than
+    absence raises: it is input this gate cannot consume (main() names it, exit 2)."""
+    full = REPO_ROOT / hook_rel
+    try:
+        mode = os.stat(full).st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return "missing"
+    if not stat.S_ISREG(mode):
+        return "missing"
+    return "" if os.access(full, os.X_OK) else "not_exec"
 
 
 def main() -> int:
@@ -125,11 +194,15 @@ def main() -> int:
             if key in seen:
                 continue
             seen.add(key)
-            full = (REPO_ROOT / hook_rel).resolve()
-            if not full.is_file():
+            try:
+                problem = _hook_problem(hook_rel)
+            except (OSError, ValueError) as exc:
+                print(f"::error::cannot stat hook file {hook_rel} ({settings_path.name}): "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                return 2
+            if problem == "missing":
                 missing.append(f"{settings_path.name}: {hook_rel}")
-                continue
-            if not os.access(full, os.X_OK):
+            elif problem == "not_exec":
                 not_exec.append(f"{settings_path.name}: {hook_rel}")
 
     if missing or not_exec:

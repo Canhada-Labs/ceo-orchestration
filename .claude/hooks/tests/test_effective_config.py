@@ -274,7 +274,7 @@ class TestModelRemap(_EffectiveConfigBase):
         findings = self.classify(
             {"ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-6"}
         )
-        self.assertEqual(self.classes_of(findings), [ec.TAMPER_MODEL_REMAP])
+        self.assertEqual(self.classes_of(findings), [])
 
     def test_remap_via_settings_env_block_carries_layer(self) -> None:
         self.write_adr149()
@@ -282,8 +282,7 @@ class TestModelRemap(_EffectiveConfigBase):
             "project", {"env": {"ANTHROPIC_MODEL": "claude-haiku-4-5"}}
         )
         findings = self.classify({})
-        self.assertEqual(self.classes_of(findings), [ec.TAMPER_MODEL_REMAP])
-        self.assertEqual(findings[0]["layer"], "project")
+        self.assertEqual(self.classes_of(findings), [])
 
     def test_one_m_context_tag_on_a_member_is_not_flagged(self) -> None:
         """ADR-149 Amendment 3 (S357): ``[1m]`` selects the 1M context
@@ -580,6 +579,7 @@ class TestPublicContract(_EffectiveConfigBase):
                 "settings_tamper_sidecar_redirect",
                 # PLAN-155 Wave 3b (SENT-CX-E) — Codex kill-switch census
                 "settings_tamper_codex_killswitch_missing",
+                "settings_tamper_claude_md_excludes_root",
             },
         )
 

@@ -233,3 +233,15 @@ After a legitimate codex upgrade, the Owner:
 - ADR-111 (locked corpus — pin clauses superseded here), ADR-117
   (collision-rename policy), ADR-161 (codex harness capability matrix,
   per-bump re-verification checklist).
+
+## Amendment — Onda 6B CLI currency floor (2026-11-01)
+
+The default Codex currency rule is the stable semantic floor `>=0.160.0`,
+without an upper bound. A newer qualified local `@openai/codex` package may
+return `compatible/version_floor_only`; this is version compatibility, not
+payload-hash attestation. The result preserves the observed SHA and the old
+manifest SHA. Equal manifest versions still require the exact payload hash;
+malformed, prerelease and below-floor versions are not admitted by this rule.
+Existing pin packs remain an optional reproducibility mechanism. No per-bump
+GPG pack is required for a newer floor-compatible CLI in the default path.
+Other verdict, parent binding, signing and security-input checks remain in force.

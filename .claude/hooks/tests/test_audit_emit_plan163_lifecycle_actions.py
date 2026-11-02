@@ -62,7 +62,13 @@ _AE_MARKER = "def emit_notification_lifecycle"
 
 def _pick(canonical: Path, staged: Path, marker: str) -> Path:
     try:
-        if canonical.is_file() and marker in canonical.read_text(encoding="utf-8"):
+        # The canonical facade re-exports domain implementations. Select the
+        # facade even when this definition lives in one of its adjacent parts;
+        # payload assertions below still exercise the real exported emitter.
+        sources = [canonical, *sorted(canonical.with_name("_audit_emit_parts").glob("*.py"))]
+        if canonical.is_file() and any(
+            marker in source.read_text(encoding="utf-8") for source in sources
+        ):
             return canonical
     except OSError:
         pass

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib.util
+import inspect
 import json
 import os
 import sys
@@ -94,7 +95,12 @@ def _pick(canonical: Path, staged: Path, marker: str) -> Path:
     staged SOURCE copy (live pre-ceremony tree). Raises if neither — a genuine
     misconfiguration to surface, not silently skip."""
     try:
-        if canonical.is_file() and marker in canonical.read_text(encoding="utf-8"):
+        sources = [canonical]
+        if canonical.name == "audit_emit.py":
+            sources.extend(sorted(canonical.with_name("_audit_emit_parts").glob("*.py")))
+        if canonical.is_file() and any(
+            marker in source.read_text(encoding="utf-8") for source in sources
+        ):
             return canonical
     except OSError:
         pass
@@ -1484,26 +1490,24 @@ class TestLedgerIndexUS7(unittest.TestCase):
         derivation. AST over the two US7 functions: no name/attribute
         containing resolve_plan_id anywhere in their bodies."""
         import ast
-        tree = ast.parse(_H1_PRE.read_text(encoding="utf-8"))
-        checked = 0
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name in (
-                "_ledger_index", "_plan_id_from_path",
-                "_ac_path_index_mirror",
-            ):
-                checked += 1
-                for sub in ast.walk(node):
-                    if isinstance(sub, ast.Name):
-                        self.assertNotIn("resolve_plan_id", sub.id)
-                    if isinstance(sub, ast.Attribute):
-                        self.assertNotIn("resolve_plan_id", sub.attr)
-        self.assertEqual(checked, 3, "all three US7 functions must exist")
+        functions = (
+            _pre_hook._ledger_index,
+            _pre_hook._plan_id_from_path,
+            _pre_hook._ac_path_index_mirror,
+        )
+        for function in functions:
+            tree = ast.parse(inspect.getsource(function))
+            for sub in ast.walk(tree):
+                if isinstance(sub, ast.Name):
+                    self.assertNotIn("resolve_plan_id", sub.id)
+                if isinstance(sub, ast.Attribute):
+                    self.assertNotIn("resolve_plan_id", sub.attr)
 
     def test_gate_blob_wires_ledger_index(self):
         """The blob line is load-bearing: an index nobody wires is the dead-
         instrument class this plan keeps finding. Source-level assert (the
         behavioural halves are covered above and in the reinjector tests)."""
-        text = _H1_PRE.read_text(encoding="utf-8")
+        text = inspect.getsource(_pre_hook.gate)
         self.assertIn(
             chr(34) + "ledger_index" + chr(34)
             + ": _ledger_index(cwd, deadline),",
@@ -1764,7 +1768,7 @@ class TestEtaValveUS2b(unittest.TestCase):
     def test_gate_calls_valve_after_snapshot_event(self):
         """Source-order assert: the valve runs AFTER the snapshot emit —
         it must never delay or endanger the snapshot."""
-        text = _H1_PRE.read_text(encoding="utf-8")
+        text = inspect.getsource(_pre_hook.gate)
         emit_at = text.index(
             "_emit_snapshot_event(trigger, plan_id, chain_length, outcome)"
         )

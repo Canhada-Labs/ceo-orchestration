@@ -2,7 +2,7 @@
 # PLAN-063 DIM-06 P2d. Provides stable wrapper commands so docs can cite
 # `make test-collect` instead of long pytest invocations that drift.
 
-.PHONY: test-collect test-quick help
+.PHONY: test-collect test-quick help mac-sign-merge mac-cut-rc mac-cut-ga
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
@@ -12,3 +12,15 @@ test-collect:  ## Print total test count (drives docs)
 
 test-quick:  ## Run hooks + scripts test roots only (fast, ~30s)
 	python3 -m pytest .claude/hooks/tests .claude/scripts/tests -q
+
+# Extra operator flags: make mac-cut-rc MAC_RELEASE_ARGS=--push
+MAC_RELEASE_ARGS ?=
+
+mac-sign-merge:  ## Sign and push the integration merge (optional MAC_RELEASE_ARGS=--watch)
+	@python3 .claude/scripts/local/mac_sign_and_release.py sign-merge $(MAC_RELEASE_ARGS)
+
+mac-cut-rc:  ## Cut a signed RC locally (optional MAC_RELEASE_ARGS=--push)
+	@python3 .claude/scripts/local/mac_sign_and_release.py cut-rc $(MAC_RELEASE_ARGS)
+
+mac-cut-ga:  ## Cut a signed GA locally (optional MAC_RELEASE_ARGS=--push)
+	@python3 .claude/scripts/local/mac_sign_and_release.py cut-ga $(MAC_RELEASE_ARGS)

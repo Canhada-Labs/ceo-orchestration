@@ -315,23 +315,25 @@ _PAYLOAD_SHA = "80a3933d11a9d13ef806aa24f7bb8afc9169cfe4e9b09d6da6a92922cbde9cff
 
 
 def _adr182_tool_versions(
-    *, triple: str = _TRIPLE, payload_sha: str = _PAYLOAD_SHA
+    *, version: str = "0.144.6", triple: str = _TRIPLE,
+    payload_sha: str = _PAYLOAD_SHA,
 ) -> str:
     return (
-        "  codex_cli: 0.129.0\n"
+        f"  codex_cli: {version}\n"
         f"  codex_target_triple: {triple}\n"
         f"  codex_payload_sha256: {payload_sha}"
     )
 
 
 def _manifest_json(
-    *, triple: str = _TRIPLE, payload_sha: str = _PAYLOAD_SHA
+    *, package_version: str = "0.144.6", triple: str = _TRIPLE,
+    payload_sha: str = _PAYLOAD_SHA,
 ) -> str:
     import json as _json
     return _json.dumps(
         {
             "schema": 1,
-            "package_version": "0.144.6",
+            "package_version": package_version,
             "npm_integrity": "sha512-test-only",
             "payloads": {
                 triple: {
@@ -346,7 +348,7 @@ def _manifest_json(
     )
 
 
-def _run_with_manifest(args, verdict_text: str, manifest_text):
+def _run_with_manifest(args, verdict_text: str, manifest_text, pin_text=None):
     """Run validator with a tmpdir-scoped verdict + manifest pair.
 
     ``manifest_text`` None → pass a nonexistent manifest path (the
@@ -356,14 +358,19 @@ def _run_with_manifest(args, verdict_text: str, manifest_text):
         verdict_path = Path(td) / "verdict.md"
         verdict_path.write_text(verdict_text, encoding="utf-8")
         manifest_path = Path(td) / "codex-cli-pin-manifest.json"
+        pin_path = Path(td) / "codex-cli-pin.txt"
         if manifest_text is not None:
             manifest_path.write_text(manifest_text, encoding="utf-8")
+        if pin_text is not None:
+            pin_path.write_text(pin_text, encoding="utf-8")
         cmd = [
             sys.executable, str(SCRIPT),
             "--verdict-file", str(verdict_path),
             "--codex-pin-manifest-file", str(manifest_path),
             *args,
         ]
+        if pin_text is not None:
+            cmd.extend(["--codex-cli-pin-file", str(pin_path)])
         return subprocess.run(cmd, capture_output=True, text=True, timeout=30)
 
 
@@ -419,6 +426,58 @@ class TestAdr182PayloadPin(unittest.TestCase):
         r = _run_with_manifest(self.BASE_ARGS, v, '{"schema": 2}')
         self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
         self.assertIn("schema violation", r.stderr)
+
+
+class TestFu144CodexCliFloorPayloadPolicy(unittest.TestCase):
+    """Newer stable Codex releases are compatible, not old-payload attestations."""
+
+    BASE_ARGS = ["--parent-sha", "a" * 40, "--release-tag", "v1.99.0"]
+    PIN = ">=0.160.0\n"
+
+    def _run_version(self, version, payload_sha=_PAYLOAD_SHA):
+        verdict = _make_verdict(
+            parent_sha="a" * 40, release_tag="v1.99.0",
+            tool_versions_block=_adr182_tool_versions(
+                version=version, payload_sha=payload_sha,
+            ),
+        )
+        return _run_with_manifest(
+            self.BASE_ARGS, verdict,
+            _manifest_json(package_version="0.160.0", payload_sha=_PAYLOAD_SHA),
+            self.PIN,
+        )
+
+    def test_fu144_newer_stable_cli_uses_version_only_payload_policy(self):
+        r = self._run_version("0.166.0", "f" * 64)
+        self.assertEqual(r.returncode, EXIT_OK, r.stderr)
+        self.assertIn("version-only compatibility", r.stderr)
+        self.assertIn("not attested", r.stderr)
+
+    def test_fu144_newer_cli_still_rejects_malformed_payload_sha(self):
+        r = self._run_version("0.166.0", "not-hex")
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
+        self.assertIn("malformed sha256", r.stderr)
+
+    def test_fu144_floor_cli_keeps_exact_payload_sha_check(self):
+        r = self._run_version("0.160.0")
+        self.assertEqual(r.returncode, EXIT_OK, r.stderr)
+        self.assertNotIn("version-only", r.stderr)
+        self.assertNotIn("not attested", r.stderr)
+
+    def test_fu144_below_floor_is_invalid(self):
+        r = self._run_version("0.159.0")
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
+        self.assertIn("not in pin range", r.stderr)
+
+    def test_fu144_prerelease_is_invalid(self):
+        r = self._run_version("0.166.0-rc.1")
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
+        self.assertIn("not in pin range", r.stderr)
+
+    def test_fu144_malformed_cli_is_invalid(self):
+        r = self._run_version("codex-0.166.0")
+        self.assertEqual(r.returncode, EXIT_VERDICT_INVALID)
+        self.assertIn("not in pin range", r.stderr)
 
 
 class TestLegacyLauncherPinTombstone(unittest.TestCase):

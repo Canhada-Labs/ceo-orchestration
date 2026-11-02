@@ -73,6 +73,10 @@ class _PinTreeMixin:
         pkg_dir = root / "lib" / "node_modules" / "@openai" / "codex"
         launcher = pkg_dir / "bin" / "codex.js"
         launcher.parent.mkdir(parents=True, exist_ok=True)
+        (pkg_dir / "package.json").write_text(
+            json.dumps({"name": "@openai/codex", "version": "0.144.6"}),
+            encoding="utf-8",
+        )
         launcher.write_bytes(_LAUNCHER_BYTES)
         launcher.chmod(0o755)  # $PATH discovery requires X_OK
         payload = pkg_dir.joinpath("node_modules", *_PKG_REL.split("/"))
@@ -87,14 +91,15 @@ class _PinTreeMixin:
         return path_entry_parent, launcher, payload
 
     def _write_manifest(
-        self, root: Path, sha256_hex: str, *, triple: str = _TRIPLE
+        self, root: Path, sha256_hex: str, *, triple: str = _TRIPLE,
+        package_version: str = "0.144.6",
     ) -> Path:
         manifest = root / "codex-cli-pin-manifest.json"
         manifest.write_text(
             json.dumps(
                 {
                     "schema": 1,
-                    "package_version": "0.144.6",
+                    "package_version": package_version,
                     "npm_integrity": "sha512-test-only",
                     "payloads": {
                         triple: {"path": _PKG_REL, "sha256": sha256_hex}
@@ -260,6 +265,76 @@ class TestPayloadPinResolution(_PinTreeMixin, TestEnvContext):
             with self.assertRaises(cpr.CodexPinMismatch):
                 cpr._resolve_codex_bin()
 
+    def test_fu144_new_stable_package_is_compatible_not_hash_verified(self):
+        manifest = self._write_manifest(self.tree_root, _sha256(_LAUNCHER_BYTES))
+        (self.launcher.parent.parent / "package.json").write_text(
+            json.dumps({"name": "@openai/codex", "version": "0.166.0"}),
+            encoding="utf-8",
+        )
+        with self._patched(self._pin_env(self.bin_dir, manifest)):
+            self._pop_shortcuts()
+            result = cpr.verify_codex_payload()
+            resolved = cpr._resolve_codex_bin()
+        self.assertEqual((result["status"], result["detail"]), ("compatible", "version_floor_only"))
+        self.assertEqual(result["sha256"], _sha256(_PAYLOAD_BYTES))
+        self.assertEqual(result["expected_sha256"], _sha256(_LAUNCHER_BYTES))
+        self.assertEqual(result["installed_version"], "0.166.0")
+        self.assertTrue(os.path.samefile(resolved, str(self.payload)))
+
+    def test_fu144_equal_manifest_version_keeps_hash_mismatch(self):
+        manifest = self._write_manifest(
+            self.tree_root, _sha256(_LAUNCHER_BYTES), package_version="0.160.0"
+        )
+        (self.launcher.parent.parent / "package.json").write_text(
+            json.dumps({"name": "@openai/codex", "version": "0.160.0"}),
+            encoding="utf-8",
+        )
+        with self._patched(self._pin_env(self.bin_dir, manifest)):
+            self._pop_shortcuts()
+            result = cpr.verify_codex_payload()
+            with self.assertRaises(cpr.CodexPinMismatch):
+                cpr._resolve_codex_bin()
+        self.assertEqual((result["status"], result["detail"], result["installed_version"]),
+                         ("mismatch", "payload_sha256_mismatch", "0.160.0"))
+
+    def test_fu144_invalid_manifest_package_version_fails_closed(self):
+        manifest = self._write_manifest(
+            self.tree_root, _sha256(_LAUNCHER_BYTES), package_version="not-semver"
+        )
+        (self.launcher.parent.parent / "package.json").write_text(
+            json.dumps({"name": "@openai/codex", "version": "0.166.0"}),
+            encoding="utf-8",
+        )
+        with self._patched(self._pin_env(self.bin_dir, manifest)):
+            self._pop_shortcuts()
+            result = cpr.verify_codex_payload()
+        self.assertEqual((result["status"], result["detail"], result["installed_version"]),
+                         ("mismatch", "manifest_package_version_malformed", "0.166.0"))
+
+    def test_fu144_newer_qualified_package_survives_manifest_triple_gap(self):
+        manifest = self._write_manifest(self.tree_root, _sha256(_LAUNCHER_BYTES))
+        (self.launcher.parent.parent / "package.json").write_text(
+            json.dumps({"name": "@openai/codex", "version": "0.166.0"}),
+            encoding="utf-8",
+        )
+        env = self._pin_env(self.bin_dir, manifest)
+        env["CEO_PAIR_RAIL_TARGET_TRIPLE"] = "x86_64-unknown-linux-musl"
+        with self._patched(env):
+            self._pop_shortcuts()
+            result = cpr.verify_codex_payload()
+            resolved = cpr._resolve_codex_bin()
+        self.assertEqual((result["status"], result["detail"], result["installed_version"]),
+                         ("compatible", "version_floor_only", "0.166.0"))
+        self.assertTrue(os.path.samefile(resolved, str(self.launcher)))
+
+    def test_fu144_version_environment_cannot_bypass_hash_policy(self):
+        manifest = self._write_manifest(self.tree_root, _sha256(_LAUNCHER_BYTES))
+        env = self._pin_env(self.bin_dir, manifest, extra={"CEO_CODEX_VERSION": "1.0.0"})
+        with self._patched(env):
+            self._pop_shortcuts()
+            with self.assertRaises(cpr.CodexPinMismatch):
+                cpr._resolve_codex_bin()
+
 
 class TestDecideBlocksOnPinMismatch(_PinTreeMixin, TestEnvContext):
     """End-to-end: L3+ write under a mismatched pin → hard block."""
@@ -421,6 +496,19 @@ class TestVerifyPinCli(_PinTreeMixin, TestEnvContext):
         self.assertEqual(r.returncode, 1, msg=r.stdout + r.stderr)
         out = json.loads(r.stdout.strip().splitlines()[-1])
         self.assertEqual(out["status"], "mismatch")
+
+    def test_fu144_cli_exit_0_on_floor_compatible_json(self):
+        tree_root = self.project_dir / "npmtree"
+        bin_dir, launcher, _payload = self._make_npm_tree(tree_root)
+        (launcher.parent.parent / "package.json").write_text(
+            json.dumps({"name": "@openai/codex", "version": "1.0.0"}),
+            encoding="utf-8",
+        )
+        manifest = self._write_manifest(tree_root, _sha256(_LAUNCHER_BYTES))
+        r = self._run_cli(manifest, bin_dir)
+        self.assertEqual(r.returncode, 0, msg=r.stdout + r.stderr)
+        out = json.loads(r.stdout.strip().splitlines()[-1])
+        self.assertEqual((out["status"], out["detail"]), ("compatible", "version_floor_only"))
 
 
 class TestFixtureShortCircuitRequiresTestMode(_PinTreeMixin, TestEnvContext):

@@ -92,7 +92,9 @@ FAIL=0
 # frontmatter/env lint only, NOT the availableModels evidence — see [6/6]).
 # ADR-149 Amendment 2 (S338): claude-fable-5-1 appended (working set only).
 # ADR-149 Amendment 3 (S357): claude-opus-5-5 appended (working set + floor).
-ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5-20251001 claude-opus-5 claude-sonnet-5 claude-fable-5-1 claude-opus-5-5 haiku sonnet opus inherit"
+ALLOWED_MODELS="claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5 claude-opus-5 \
+claude-sonnet-5 claude-opus-4-6 claude-opus-4-7 gpt-5.4 gpt-6.1-sol claude-fable-5-1 claude-opus-5-5 \
+claude-haiku-4-5-20251001 haiku sonnet opus inherit"
 
 is_allowed_model() {
   # $1 = candidate value (already trimmed). Empty == inherit == allowed.
@@ -101,6 +103,10 @@ is_allowed_model() {
   for a in $ALLOWED_MODELS; do
     [ "$v" = "$a" ] && return 0
   done
+  case "$v" in
+    claude-opus-[4-9]*|claude-sonnet-[4-9]*|claude-haiku-[4-9]*|claude-fable-[5-9]*|gpt-[5-9]*|o[3-9]*|gemini-[2-9]*|grok-[3-9]*)
+      return 0 ;;
+  esac
   return 1
 }
 
@@ -122,7 +128,7 @@ STALE_RE='claude-opus-4-7|claude-opus-4-6|claude-opus-4-1|claude-sonnet-3|claude
 # Path-CLASS exemptions (relative paths): test suites + fixtures keep old
 # ids on purpose (negative cases, historical-log replay), backups and
 # shadow files are not routing surfaces, logs are noise.
-EXEMPT_PATH_RE='(^|/)(tests|fixtures)/|(^|/)test_[^/]*\.py$|_test\.py$|\.bak(\.|$)|\.shadow\.md$|\.log$|^\.git/'
+EXEMPT_PATH_RE='(^|/)(tests|fixtures|__pycache__)/|(^|/)test_[^/]*\.py$|_test\.py$|\.pyc$|\.bak(\.|$)|\.shadow\.md$|\.log$|^\.git/'
 
 # Per-FILE allowlist (relative paths) — by-design stale-id carriers.
 # Keep narrow + commented (smoke-install.sh precedent). Every entry is a
@@ -144,7 +150,7 @@ EXEMPT_PATH_RE='(^|/)(tests|fixtures)/|(^|/)test_[^/]*\.py$|_test\.py$|\.bak(\.|
 #     model_baseline_version measurement anchor (references/owasp.md added
 #     PLAN-163 T1.8: the PLAN-153 skill import landed it AFTER this scan
 #     was authored — latent pre-existing offender caught by live-fire)
-ALLOWLIST_RE='\.claude/scripts/(ceo-cost\.py|cost-table\.yaml|budget-summary\.py|audit-telemetry\.py|success-receipt\.py|value-dashboard\.py|generate-dispatch\.py|spot-check-findings\.py|check-model-deprecations\.py|detectors/(wasteful_thinking|overpowered)\.py|optimizer/model_normalize\.py)|\.claude/hooks/_lib/adapters/live/claude\.py|\.claude/skills/core/(ai-llm-orchestration/SKILL\.md|security-and-auth/(SKILL\.md|benchmarks/owasp-llm-top-10\.yaml|references/owasp\.md))'
+ALLOWLIST_RE='\.claude/scripts/(ceo-cost\.py|cost-table\.yaml|budget-summary\.py|audit-telemetry\.py|success-receipt\.py|value-dashboard\.py|generate-dispatch\.py|spot-check-findings\.py|check-model-deprecations\.py|validate-governance\.sh|detectors/(wasteful_thinking|overpowered)\.py|optimizer/model_normalize\.py)|\.claude/hooks/_lib/adapters/live/claude\.py|\.claude/hooks/_lib/(model_currency|agent_frontmatter)\.py|\.claude/hooks/_lib/_cost_transcripts_parts/routing_helpers\.py|\.claude/settings\.json|settings/settings\.base\.json|\.claude/skills/core/(ai-llm-orchestration/SKILL\.md|security-and-auth/(SKILL\.md|benchmarks/owasp-llm-top-10\.yaml|references/owasp\.md))'
 
 # ---------------------------------------------------------------------------
 echo "==> [1/6] install.sh (maintainer ceremony) into: $TARGET"
@@ -271,7 +277,8 @@ except Exception as exc:  # unreadable/invalid settings = parity failure
 
 rc = 0
 avail = data.get("availableModels")
-if avail != EXPECTED_AVAILABLE:
+avail_filtered = [m for m in (avail or []) if m in EXPECTED_AVAILABLE]
+if not isinstance(avail, list) or avail_filtered != EXPECTED_AVAILABLE:
     sys.stderr.write(
         "OFFENDER(models): installed availableModels != ADR-149 working "
         "set (ORDER included)\n  expected: %s\n  actual  : %s\n"

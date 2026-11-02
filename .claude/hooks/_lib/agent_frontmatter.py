@@ -76,6 +76,10 @@ if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
 from _lib.frontmatter import parse_frontmatter  # noqa: E402
+try:
+    from _lib import model_currency as _model_currency  # noqa: E402
+except ImportError:
+    _model_currency = None  # type: ignore[assignment]
 
 __all__ = [
     "VETO_FLOOR_ROLES",
@@ -135,12 +139,8 @@ VETO_FLOOR_MODEL: str = "claude-opus-4-8"
 VETO_FLOOR_ALLOWED: FrozenSet[str] = frozenset({
     "claude-opus-4-8",
     "claude-fable-5",
-    "claude-opus-5",   # ADR-181 (PLAN-163 T1.3, OQ1=b): Claude 5 Opus joins
-                       # the floor; claude-fable-5 remains the preferred
-                       # ceiling pin for VETO personas (frontmatter unchanged).
-    "claude-opus-5-5",  # ADR-149 Amendment 3 (S357, PLAN-193): Opus 5.5 joins
-                        # the floor as an ELIGIBLE id; no agent file migrates
-                        # (the veto_floor agents keep claude-fable-5).
+    "claude-opus-5",
+    "claude-opus-5-5",
 })
 
 
@@ -253,7 +253,13 @@ def check_veto_floor_for_role(
     actual = metadata.get("model", "").strip()
     if not actual:
         return False, "model_field_missing"
-    if actual not in allowed:
+    if expected_model is not None:
+        model_ok = actual == expected_model
+    elif _model_currency is not None:
+        model_ok = _model_currency.is_veto_floor_model(actual) or actual in allowed
+    else:
+        model_ok = actual in allowed
+    if not model_ok:
         return False, f"model_mismatch:{actual}"
     return True, ""
 

@@ -24,6 +24,12 @@ Regras (catálogo W1, seção A — `.claude/plans/PLAN-174/catalog.md`):
                 (set-equality — classe S272)
   R8  BLOCKING  exec-bit no índice git (modo 100755) — classe
                 reincidente (rounds 8/9/12 + fix-forwards S314)
+  R9  BLOCKING  crase ou `$(` dentro de heredoc SEM aspas: o shell executa, mesmo
+                num comentário do corpo (S363: `git switch -c` rodou no cwd do
+                chamador). Item 14 (a) do backlog da 1.4.4. Cura no script: aspas
+                no delimitador, ou calcular a variável antes do heredoc
+  R10 ADVISORY  harness de shell (`test-*`, `rehearse-*`, `ensaio-*`) sem a regressão
+                do repositório chamador (`caller_repo_guard`, item 14 (b))
 
 FP (AC reescrito pelo debate): zero-FP exigido SÓ das BLOCKING; resíduo
 histórico = waiver pinado por sha256 do CONTEÚDO em
@@ -81,6 +87,10 @@ CP_MV_VARDEST_RE = re.compile(r"\b(?:cp|mv)\b[^\n]*\s\"?\$\{?[A-Za-z_][A-Za-z_0-
 SYMLINK_TEST_RE = re.compile(r"\[\s+-L\b|test\s+-L\b")
 SHASUM_C_RE = re.compile(r"(?:shasum|sha256sum)\b[^\n]*\s-c\b")
 SET_EQ_NEAR_RE = re.compile(r"wc -l|comm\b|sort\b.*diff|diff\b.*sort")
+HEREDOC_OPEN_RE = re.compile(
+    r"""<<(-?)[ \t]*(?:'([^'\n]+)'|"([^"\n]+)"|(\\?)([A-Za-z_][A-Za-z_0-9]*))""")
+HARNESS_NAME_RE = re.compile(r"(?:^|/)(?:test|rehearse|ensaio)[-_][^/]*\.sh$")
+CALLER_GUARD_MARK = "caller_repo_guard"
 PROVENANCE_MARK = "AUTO-GENERATED"
 EXCEPTION_MARK = "CEREMONY-LINT: handwritten-exception:"
 
@@ -160,6 +170,76 @@ def discover(root: str) -> List[str]:
     return sorted(set(found))
 
 
+def _heredoc_openers(line: str) -> List[tuple]:
+    """``(delimitador, tira_tabs, expande)`` de cada heredoc aberto nesta linha de
+    código. Anda a linha com o estado de aspas: `<<` numa string, num comentário, numa
+    conta `$(( ))` ou num here-string `<<<` não abre heredoc."""
+    found: List[tuple] = []
+    quote = ""
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if quote:
+            if ch == "\\" and quote == '"':
+                i += 2
+                continue
+            if ch == quote:
+                quote = ""
+            i += 1
+        elif ch in "'\"":
+            quote = ch
+            i += 1
+        elif ch == "\\":
+            i += 2
+        elif ch == "#" and (i == 0 or line[i - 1] in " \t;|&("):
+            break
+        elif line.startswith("<<<", i):
+            i += 3
+        elif line.startswith("<<", i) and line.count("((", 0, i) <= line.count("))", 0, i):
+            m = HEREDOC_OPEN_RE.match(line, i)
+            if m is None:
+                i += 2
+                continue
+            word = m.group(2) or m.group(3) or m.group(5)
+            found.append((word, m.group(1) == "-", not (m.group(2) or m.group(3) or m.group(4))))
+            i = m.end()
+        else:
+            i += 1
+    return found
+
+
+def _expands_command(line: str) -> bool:
+    """Crase ou `$(` que o shell executaria (paridade de contrabarras respeitada)."""
+    i = 0
+    while i < len(line):
+        if line[i] == "\\":
+            i += 2
+            continue
+        if line[i] == "`" or line.startswith("$(", i):
+            return True
+        i += 1
+    return False
+
+
+def _heredoc_findings(lines: List[str]) -> List[dict]:
+    """R9, um achado por linha do corpo. Ponto cego declarado: string de várias linhas
+    com `<<` dentro desalinha o estado de aspas (resíduo vira waiver, como os demais)."""
+    findings: List[dict] = []
+    pending: List[tuple] = []
+    for i, ln in enumerate(lines, 1):
+        if pending:
+            word, strip_tabs, expands = pending[0]
+            if (ln.lstrip("\t") if strip_tabs else ln) == word:
+                pending.pop(0)
+            elif expands and _expands_command(ln):
+                findings.append({"rule": "R9", "sev": "BLOCKING", "line": i,
+                                 "msg": "crase ou $( executa dentro de heredoc sem aspas "
+                                        "(delimitador %s)" % word})
+            continue
+        pending.extend(_heredoc_openers(ln))
+    return findings
+
+
 def lint_file(path: str, rel: str, git_mode: Optional[str]) -> List[dict]:
     findings: List[dict] = []
     try:
@@ -197,6 +277,10 @@ def lint_file(path: str, rel: str, git_mode: Optional[str]) -> List[dict]:
             if not SET_EQ_NEAR_RE.search(ctx):
                 findings.append({"rule": "R6", "sev": "ADVISORY", "line": i,
                                  "msg": "shasum -c sem asserção de conjunto (set-equality)"})
+    findings.extend(_heredoc_findings(lines))
+    if HARNESS_NAME_RE.search(rel) and CALLER_GUARD_MARK not in body:
+        findings.append({"rule": "R10", "sev": "ADVISORY", "line": 1,
+                         "msg": "harness sem a regressão do repositório chamador"})
     # R8 só na superfície de binding assinado (.claude/plans/): exec-bit
     # em ferramenta de scripts/local/ é legítimo (invocada diretamente).
     if git_mode == "100755" and rel.startswith(".claude/plans/"):

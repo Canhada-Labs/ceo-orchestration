@@ -2,7 +2,8 @@
 id: PLAN-186-FOLLOWUP-sentinel-gpg-verification
 parent: PLAN-186
 title: "Verificar de verdade a assinatura de um sentinel — o waiver ESTRUTURAL foi APAGADO na v4.1; este plano e a alternativa (a), se o Owner a quiser"
-status: draft
+status: superseded
+superseded_by: PLAN-196
 created: 2026-09-04
 related_commits: []
 owner: CEO

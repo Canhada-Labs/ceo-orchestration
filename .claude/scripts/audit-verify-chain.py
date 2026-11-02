@@ -35,16 +35,40 @@ field on each line. Exits 0 iff the chain is intact.
 - Does not detect tail truncation (covered by external anchor,
   post-v1.6.0).
 - Does not detect rollback to an older log+key snapshot pair.
+
+## The --strict-against-counter contract (FD-26, Owner decision S363-4)
+
+With the flag, every outcome is one of the five exit codes above, carries a named
+reason, is exactly one JSON object on stdout under --json, and is never a traceback:
+
+- counter ABSENT: rc 0, with ``chain_length_source: "absent"`` visible (in the JSON,
+  and on stderr without --json) because tail truncation was NOT checked;
+- counter ILLEGIBLE (non-regular, undecodable, empty, not plain decimal digits):
+  rc 3 ``chain_length_unreadable`` (rc 4 when the read is refused by permissions),
+  never the 0 that ``audit_hmac.read_chain_length`` falls back to;
+- an invalid --counter-override is judged before --help: rc 3
+  ``counter_override_invalid``. Other argument errors are rc 3 ``invalid_arguments``:
+  rc 2 means "key missing" in this contract, so strict cannot borrow argparse's rc;
+- the log, from a file or from stdin, is decoded by one path with errors="strict":
+  rc 3 ``log_undecodable``. A log that is not a regular file is refused by fstat before
+  any read (rc 3 ``log_not_regular``), so a FIFO cannot hang the walk.
+
+Without the flag the CLI behaves as it did before this contract. In particular a
+non-regular log still blocks on read (``--log-file /dev/stdin`` is a supported form),
+and a counter is not consulted at all.
 """
 
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
+import re
+import stat
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterator, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 
 _REPO_HOOKS = Path(__file__).resolve().parent.parent / "hooks"
@@ -79,6 +103,39 @@ EXIT_PERM = 4
 
 def _err(msg: str) -> None:
     sys.stderr.write(msg + "\n")
+
+
+class _StrictFailure(Exception):
+    """One named outcome of the --strict-against-counter contract."""
+
+    def __init__(self, code: int, status: str, reason: str) -> None:
+        super().__init__(reason)
+        self.code = code
+        self.status = status
+        self.reason = reason
+
+
+def _strict_emit(failure: _StrictFailure, json_output: bool) -> int:
+    """Report a strict failure on the channel the caller asked for; return its rc."""
+    if json_output:
+        print(json.dumps({
+            "status": failure.status,
+            "line": 0,
+            "reason": failure.reason,
+            "entry_ts": None,
+            "entry_action": None,
+            "expected_hmac": None,
+            "actual_hmac": None,
+        }, separators=(",", ":")))
+    else:
+        _err("error: " + failure.reason)
+    return failure.code
+
+
+def _refuse_json_constant(name: str) -> Any:
+    """parse_constant under strict: NaN/Infinity are not JSON, and a report that echoed
+    one from an entry would not be valid JSON either."""
+    raise ValueError("non-standard JSON constant " + name)
 
 
 def _read_key(key_file: Optional[Path]) -> bytes:
@@ -121,12 +178,13 @@ def _read_key(key_file: Optional[Path]) -> bytes:
 def _format_report(
     status: str,
     line_num: int,
-    entry: Dict[str, Any],
+    entry: Optional[Dict[str, Any]],
     expected_hmac: Optional[str],
     actual_hmac: Optional[str],
     reason: str,
 ) -> Dict[str, Any]:
     """Build structured JSON report for --json output."""
+    entry = entry if entry is not None else {}  # None: not about one line (line 0)
     return {
         "status": status,
         "line": line_num,
@@ -173,15 +231,34 @@ def _emit_report(report, json_output: bool) -> None:
         _emit_human_report(report)
 
 
-def _decode_entry(line_num: int, raw: str) -> "tuple[Optional[str], Optional[dict], Optional[int]]":
+def _decode_entry(
+    line_num: int, raw: str, strict_contract: bool = False,
+) -> "tuple[Optional[str], Optional[dict], Optional[int]]":
     """Parse raw line → (stripped, entry_dict or None, exit_code or None).
 
     Returns ``(None, None, exit_code)`` on decode failure; returns
     ``("", None, None)`` for blank lines; otherwise ``(stripped, entry, None)``.
+    Under the strict contract a line that is not one JSON object raises
+    :class:`_StrictFailure` instead, so that --json still gets its one object.
     """
     stripped = raw.strip()
     if not stripped:
         return "", None, None
+    if strict_contract:
+        try:
+            entry = json.loads(stripped, parse_constant=_refuse_json_constant)
+        except (ValueError, RecursionError) as e:
+            raise _StrictFailure(
+                EXIT_MALFORMED, STATUS_MALFORMED,
+                "malformed_json_line: line {n}: {t}: {e}".format(
+                    n=line_num, t=type(e).__name__, e=str(e)[:200]),
+            ) from e
+        if not isinstance(entry, dict):
+            raise _StrictFailure(
+                EXIT_MALFORMED, STATUS_MALFORMED,
+                "malformed_json_line: line {n} is not a JSON object".format(n=line_num),
+            )
+        return stripped, entry, None
     try:
         entry = json.loads(stripped)
     except json.JSONDecodeError as e:
@@ -236,6 +313,7 @@ def _verify_entry_hmac(
     hmac_hex: str,
     line_num: int,
     json_output: bool,
+    strict_contract: bool = False,
 ) -> "tuple[Optional[bytes], Optional[int]]":
     """Recompute entry HMAC + constant-time compare against recorded.
 
@@ -249,6 +327,11 @@ def _verify_entry_hmac(
     try:
         expected = compute_entry_hmac(key, prev_hmac, entry_sans)
     except AuditHmacError as e:
+        if strict_contract:
+            raise _StrictFailure(
+                EXIT_MALFORMED, STATUS_MALFORMED,
+                "hmac_compute_failed: line {n}: {e}".format(n=line_num, e=e),
+            ) from e
         _err(
             "error: HMAC compute failed at line {n}: {e}".format(
                 n=line_num, e=e
@@ -259,6 +342,11 @@ def _verify_entry_hmac(
     try:
         actual = from_hex(hmac_hex)
     except AuditHmacError as e:
+        if strict_contract:
+            raise _StrictFailure(
+                EXIT_MALFORMED, STATUS_MALFORMED,
+                "hmac_field_unparseable: line {n}: {e}".format(n=line_num, e=e),
+            ) from e
         _err(
             "error: hmac field not parseable at line {n}: {e}".format(
                 n=line_num, e=e
@@ -289,8 +377,12 @@ def verify(
     log_dir: Optional[Path] = None,
     strict_against_counter: bool = False,
     counter_override: Optional[int] = None,
+    chain_length_source: Optional[str] = None,
 ) -> int:
     """Walk lines; return an exit code.
+
+    ``chain_length_source`` is set only by :func:`_main_strict` and turns on the strict
+    contract of the module docstring: ``sidecar``, ``override`` or ``absent``.
 
     ``log_lines`` is an iterable of (line_num, raw_line) tuples.
     ``since`` is 1-indexed starting line.
@@ -322,12 +414,13 @@ def verify(
     verified_count = 0
     pre_v29_count = 0
     first_chain_line_checked = False
+    strict_contract = chain_length_source is not None
 
     for line_num, raw in log_lines:
         if line_num < since:
             continue
 
-        stripped, entry, exit_code = _decode_entry(line_num, raw)
+        stripped, entry, exit_code = _decode_entry(line_num, raw, strict_contract)
         if exit_code is not None:
             return exit_code
         if not stripped:
@@ -367,7 +460,7 @@ def verify(
                 return EXIT_TAMPER
 
         new_prev, exit_code = _verify_entry_hmac(
-            key, prev_hmac, entry, hmac_hex, line_num, json_output
+            key, prev_hmac, entry, hmac_hex, line_num, json_output, strict_contract
         )
         if exit_code is not None:
             return exit_code
@@ -397,20 +490,31 @@ def verify(
             return EXIT_TAMPER
         if verified_count < expected_length:
             report = _format_report(
-                "tamper", 0, None,
-                str(verified_count), str(expected_length),
-                "chain_length_truncation: walker counted fewer "
-                "HMAC-bearing entries than persisted counter",
+                "tamper", 0, None, None, None,
+                "chain_length_truncation: walker counted {v} HMAC-bearing "
+                "entries, persisted counter says {n}".format(
+                    v=verified_count, n=expected_length
+                ),
             )
+            report["verified_count"] = verified_count
+            report["expected_length"] = expected_length
             _emit_report(report, json_output)
             return EXIT_TAMPER
 
+    summary: Dict[str, Any] = {
+        "status": "intact",
+        "verified_count": verified_count,
+        "pre_v29_count": pre_v29_count,
+    }
+    if chain_length_source is not None:
+        summary["chain_length_source"] = chain_length_source
+        if not json_output and chain_length_source == "absent":
+            _err(
+                "warning: chain_length_source=absent: no chain-length counter, "
+                "tail truncation NOT checked"
+            )
     if json_output:
-        print(json.dumps({
-            "status": "intact",
-            "verified_count": verified_count,
-            "pre_v29_count": pre_v29_count,
-        }, separators=(",", ":")))
+        print(json.dumps(summary, separators=(",", ":")))
     elif verbose:
         sys.stderr.write(
             "OK: chain intact. verified={v} pre_v29={p}\n".format(
@@ -434,12 +538,216 @@ def _iter_lines(log_path: Optional[Path]) -> "Iterator[tuple[int, str]]":
             yield (i, raw)
 
 
-def main() -> int:
-    """CLI entrypoint — verify an audit-log HMAC chain end-to-end."""
-    parser = argparse.ArgumentParser(
-        description="Verify the HMAC chain in audit-log.jsonl.",
-        epilog="Exit 0=intact, 1=tamper, 2=key missing, 3=malformed, 4=perm.",
-    )
+_COUNTER_RE = re.compile(r"[0-9]{1,32}")
+_NONBLOCK_READ = os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
+
+
+def _open_regular_strict(path: Path, what: str, unreadable: str) -> "io.BufferedReader":
+    """Open without blocking; refuse by fstat what is not a regular file.
+
+    The check and the read act on the same descriptor. O_NONBLOCK is why a FIFO with
+    no writer returns here instead of hanging on the open.
+    """
+    try:
+        fd = os.open(str(path), _NONBLOCK_READ)
+    except PermissionError as e:
+        raise _StrictFailure(
+            EXIT_PERM, STATUS_PERM_ERROR,
+            "{w}: cannot read {p}: {e}".format(w=unreadable, p=path, e=e),
+        ) from e
+    except OSError as e:
+        raise _StrictFailure(
+            EXIT_MALFORMED, STATUS_MALFORMED,
+            "{w}: cannot open {p}: {t}: {e}".format(
+                w=unreadable, p=path, t=type(e).__name__, e=e),
+        ) from e
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise _StrictFailure(
+            EXIT_MALFORMED, STATUS_MALFORMED,
+            "{w}: {what} {p} is not a regular file".format(w=unreadable, what=what, p=path),
+        )
+    return os.fdopen(fd, "rb")
+
+
+def _expected_length_strict(counter_override: Optional[int]) -> Tuple[int, str]:
+    """``(expected length, source)``. Unlike ``audit_hmac.read_chain_length``, an
+    illegible counter is an error (S363-4): only real absence is allowed through."""
+    if counter_override is not None:
+        return counter_override, "override"
+    path = audit_hmac.chain_length_path()
+    try:
+        os.lstat(str(path))
+    except FileNotFoundError:
+        return 0, "absent"
+    except OSError as e:
+        raise _StrictFailure(
+            EXIT_MALFORMED, STATUS_MALFORMED,
+            "chain_length_unreadable: cannot stat {p}: {e}".format(p=path, e=e),
+        ) from e
+    with _open_regular_strict(path, "counter", "chain_length_unreadable") as stream:
+        raw = stream.read(64)
+    text = raw.decode("ascii", "replace").strip(" \t\r\n")
+    if _COUNTER_RE.fullmatch(text) is None:
+        raise _StrictFailure(
+            EXIT_MALFORMED, STATUS_MALFORMED,
+            "chain_length_unreadable: {p} does not hold a plain decimal count".format(p=path),
+        )
+    return int(text), "sidecar"
+
+
+def _read_key_strict(key_file: Optional[Path]) -> bytes:
+    """:func:`_read_key` with its exits and OS errors mapped to named failures."""
+    try:
+        return _read_key(key_file)
+    except SystemExit as e:
+        if e.code == EXIT_KEY_MISSING:
+            raise _StrictFailure(EXIT_KEY_MISSING, STATUS_KEY_MISSING, "key_missing") from e
+        raise _StrictFailure(EXIT_PERM, STATUS_PERM_ERROR, "key_unusable") from e
+    except OSError as e:
+        raise _StrictFailure(
+            EXIT_PERM, STATUS_PERM_ERROR, "key_unusable: {e}".format(e=e)
+        ) from e
+
+
+def _open_log_strict(log_path: Optional[Path]) -> "io.TextIOWrapper":
+    """One decoding path for file and stdin, so the same bytes get the same verdict."""
+    if log_path is None:
+        return io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8", errors="strict")
+    try:
+        os.lstat(str(log_path))
+    except FileNotFoundError as e:
+        raise _StrictFailure(
+            EXIT_MALFORMED, STATUS_MALFORMED,
+            "log_not_found: {p}".format(p=log_path),
+        ) from e
+    except OSError:
+        pass  # the open below names it
+    binary = _open_regular_strict(log_path, "log", "log_not_regular")
+    return io.TextIOWrapper(binary, encoding="utf-8", errors="strict")
+
+
+def _main_strict(args: argparse.Namespace) -> int:
+    """The --strict-against-counter contract of the module docstring."""
+    try:
+        log_path = _resolve_log_path(args)
+        if log_path is _LOG_PATH_UNRESOLVED:
+            raise _StrictFailure(
+                EXIT_MALFORMED, STATUS_MALFORMED,
+                "log_unresolved: cannot resolve default audit-log path; pass --log-file",
+            )
+        key = _read_key_strict(args.key_file)
+        expected, source = _expected_length_strict(args.counter_override)
+        stream = _open_log_strict(log_path)
+        try:
+            return verify(
+                enumerate(stream, start=1),
+                key,
+                since=args.since,
+                json_output=args.json,
+                verbose=args.verbose,
+                log_dir=log_path.parent if log_path is not None else None,
+                strict_against_counter=True,
+                counter_override=expected,
+                chain_length_source=source,
+            )
+        finally:
+            stream.close()
+    except _StrictFailure as failure:
+        return _strict_emit(failure, args.json)
+    except UnicodeError as e:
+        return _strict_emit(
+            _StrictFailure(
+                EXIT_MALFORMED, STATUS_MALFORMED,
+                "log_undecodable: {t}: {e}".format(t=type(e).__name__, e=str(e)[:200]),
+            ),
+            args.json,
+        )
+    except Exception as e:  # the CLI's boundary: named and fail-closed, no traceback
+        return _strict_emit(
+            _StrictFailure(
+                EXIT_MALFORMED, STATUS_MALFORMED,
+                "internal_error: {t}: {e}".format(t=type(e).__name__, e=str(e)[:200]),
+            ),
+            args.json,
+        )
+
+
+class _PreScanFailed(Exception):
+    """The lenient pre-scan could not read the argv."""
+
+
+class _PreScanParser(argparse.ArgumentParser):
+    """Only learns whether this is a strict run; never reports anything itself."""
+
+    def error(self, message: str) -> Any:
+        raise _PreScanFailed(message)
+
+
+class _ContractParser(argparse.ArgumentParser):
+    """argparse, except that under strict an argument error is a named rc 3."""
+
+    strict_json: Optional[bool] = None  # None: not strict, stock behaviour
+
+    def error(self, message: str) -> Any:
+        if self.strict_json is None:
+            super().error(message)
+        raise SystemExit(
+            _strict_emit(
+                _StrictFailure(
+                    EXIT_MALFORMED, STATUS_MALFORMED,
+                    "invalid_arguments: " + message,
+                ),
+                self.strict_json,
+            )
+        )
+
+
+def _strict_prescan(argv: List[str]) -> Tuple[bool, bool, Optional[str]]:
+    """``(strict, json, raw override)``, before argparse validates or prints help.
+
+    The same options as the real parser (abbreviations stay as ambiguous as they are
+    there) without its value types. An argv the scan cannot read falls back to looking
+    for the two flags by token.
+    """
+    pre = _add_arguments(_PreScanParser(add_help=False), lenient=True)
+    try:
+        known, _ = pre.parse_known_args(argv)
+    except _PreScanFailed:
+        def has(flag: str, floor: str) -> bool:
+            return any(t.startswith(floor) and flag.startswith(t) for t in argv)
+        return (
+            has("--strict-against-counter", "--str"),
+            has("--json", "--j"),
+            None,
+        )
+    return known.strict_against_counter, known.json, known.counter_override
+
+
+_LOG_PATH_UNRESOLVED = Path("/nonexistent/ceo-audit-log-unresolved")
+
+
+def _resolve_log_path(args: argparse.Namespace) -> Optional[Path]:
+    """The log path of ``args``: None means stdin. :data:`_LOG_PATH_UNRESOLVED` means
+    the default directory could not be resolved."""
+    if args.stdin or (args.log_file is not None and str(args.log_file) == "-"):
+        return None
+    if args.log_file is not None:
+        return args.log_file
+    env_log = os.environ.get("CEO_AUDIT_LOG_PATH")
+    if env_log:
+        return Path(env_log)
+    # Default: sibling of audit-key resolution.
+    try:
+        default_dir = audit_hmac._audit_dir_from_env()
+    except Exception:
+        return _LOG_PATH_UNRESOLVED
+    return default_dir / "audit-log.jsonl"
+
+
+def _add_arguments(parser: Any, lenient: bool = False) -> Any:
+    """Declare the CLI. ``lenient`` leaves the two int values unconverted (pre-scan)."""
+    int_type = str if lenient else int
     parser.add_argument(
         "--log-file",
         type=Path,
@@ -454,7 +762,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--since",
-        type=int,
+        type=int_type,
         default=1,
         help="1-indexed starting line (default: 1 = verify from genesis)",
     )
@@ -485,7 +793,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--counter-override",
-        type=int,
+        type=int_type,
         default=None,
         help=(
             "Test/forensic-only: override the persisted "
@@ -493,27 +801,37 @@ def main() -> int:
             "--strict-against-counter). Default reads the on-disk sidecar."
         ),
     )
-    args = parser.parse_args()
+    return parser
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    """CLI entrypoint — verify an audit-log HMAC chain end-to-end."""
+    args_in = list(sys.argv[1:] if argv is None else argv)
+    strict, strict_json, raw_override = _strict_prescan(args_in)
+    if strict and raw_override is not None and _COUNTER_RE.fullmatch(raw_override) is None:
+        return _strict_emit(
+            _StrictFailure(
+                EXIT_MALFORMED, STATUS_MALFORMED,
+                "counter_override_invalid: expected plain decimal digits",
+            ),
+            strict_json,
+        )
+    parser = _ContractParser(
+        description="Verify the HMAC chain in audit-log.jsonl.",
+        epilog="Exit 0=intact, 1=tamper, 2=key missing, 3=malformed, 4=perm.",
+    )
+    if strict:
+        parser.strict_json = strict_json
+    args = _add_arguments(parser).parse_args(args_in)
+    if args.strict_against_counter:
+        return _main_strict(args)
 
     # Resolve log path.
-    log_path: Optional[Path]
-    if args.stdin or (args.log_file is not None and str(args.log_file) == "-"):
-        log_path = None
-    elif args.log_file is not None:
-        log_path = args.log_file
-    else:
-        env_log = os.environ.get("CEO_AUDIT_LOG_PATH")
-        if env_log:
-            log_path = Path(env_log)
-        else:
-            # Default: sibling of audit-key resolution.
-            try:
-                default_dir = audit_hmac._audit_dir_from_env()
-            except Exception:
-                _err("error: cannot resolve default audit-log path; "
-                     "pass --log-file")
-                return EXIT_MALFORMED
-            log_path = default_dir / "audit-log.jsonl"
+    log_path = _resolve_log_path(args)
+    if log_path is _LOG_PATH_UNRESOLVED:
+        _err("error: cannot resolve default audit-log path; "
+             "pass --log-file")
+        return EXIT_MALFORMED
 
     # Read key.
     try:
@@ -528,8 +846,6 @@ def main() -> int:
         json_output=args.json,
         verbose=args.verbose,
         log_dir=log_path.parent if hasattr(log_path, "parent") else None,
-        strict_against_counter=args.strict_against_counter,
-        counter_override=args.counter_override,
     )
 
 

@@ -1,7 +1,8 @@
 ---
 id: PLAN-175
 title: Skills — descoberta antes de poda: regra de poda falsificável, unknown-ratio <0,10, domain-packs opt-in, contagem derivada
-status: reviewed
+status: superseded
+superseded_by: PLAN-196
 reviewed_at: 2026-08-11
 reviewed_by: "Owner - ratificacao S302f via OWNER-RATIFY-S302.sh: ratifico os 6 planos na v2.6 (rail Codex 7 rounds, r7 APPROVE, commits ab45f56..0c90174)"
 created: 2026-08-11

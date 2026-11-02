@@ -60,7 +60,7 @@ class TestRegistry(TestEnvContext):
         # at 168h cadence, Codex R2 `019e33a3` AMEND).
         # PLAN-106 Wave F: 20 Tier-S checks (was 19; added confidence_gate_drift_7d).
         # PLAN-135 W1 S3: 21 Tier-S checks (added settings_tamper_tripwires).
-        self.assertEqual(len(_mod.TIER_S_CHECKS), 24)  # S292: +1 (scheduled_workflows_red)
+        self.assertEqual(len(_mod.TIER_S_CHECKS), 25)  # S292: +1 (scheduled_workflows_red)
 
     def test_tier_policy_misrouting_check_present(self):
         # PLAN-091 Wave A.1: 16th Tier-S check registered.
@@ -113,7 +113,7 @@ class TestDispatcher(TestEnvContext):
         results = _mod.dispatch_parallel()
         # PLAN-106 Wave F: 20 Tier-S checks (was 19; added confidence_gate_drift_7d).
         # PLAN-135 W1 S3: 21 Tier-S checks (added settings_tamper_tripwires).
-        self.assertEqual(len(results), 24)  # S292: +1 (scheduled_workflows_red)
+        self.assertEqual(len(results), 25)  # backlog item 14: +1 (main_checkout_state)
         for r in results:
             self.assertIsInstance(r, _mod.CheckResult)
             self.assertIn(r.status, ("green", "yellow", "red", "timeout", "error"))
@@ -496,7 +496,7 @@ class TestRenderer(TestEnvContext):
         results = [self._ck(name, "green", "ok") for name, _ in _mod.TIER_S_CHECKS]
         out = _mod.render_digest(results, short=True)
         # PLAN-135 W1 S3: 21 Tier-S checks.
-        self.assertIn("24 green", out)  # S292: 24 Tier-S checks
+        self.assertIn("25 green", out)  # backlog item 14: 25 Tier-S checks
         self.assertNotIn("| Check |", out)
 
     def test_render_short_surfaces_non_green(self):
@@ -643,7 +643,76 @@ class TestMainCLI(TestEnvContext):
         self.assertIn("checks_total", payload)
         self.assertIn("results", payload)
         # PLAN-135 W1 S3: 21 Tier-S checks.
-        self.assertEqual(len(payload["results"]), 24)  # S292
+        self.assertEqual(len(payload["results"]), 25)  # backlog item 14
+
+
+class TestMainCheckoutStateFu144(TestEnvContext):
+    """Item 14 (c) of the 1.4.4 backlog: a throwaway checkout, not this one."""
+
+    def _git(self, *args: str) -> None:
+        subprocess.run(["git", "-C", str(self.repo), "-c", "user.name=t", "-c", "user.email=t@t.invalid",
+                        "-c", "commit.gpgsign=false"] + list(args), check=True, capture_output=True)
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self._tmp.name).resolve() / "checkout"
+        self.repo.mkdir()
+        self._git("init", "-q", "-b", "main")
+        (self.repo / "f").write_text("x\n", encoding="utf-8")
+        self._git("add", "f")
+        self._git("commit", "-q", "-m", "c")
+        patcher = mock.patch.object(_mod, "REPO_ROOT", self.repo)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+
+    def test_fu144_on_the_default_branch_is_green(self) -> None:
+        status, _msg, _data = _mod.check_main_checkout_state()
+        self.assertEqual(status, "green")
+
+    def test_fu144_detached_head_says_to_read_the_reflog(self) -> None:
+        self._git("checkout", "-q", "--detach")
+        status, msg, data = _mod.check_main_checkout_state()
+        self.assertEqual(status, "yellow")
+        self.assertIn("DETACHED", msg)
+        self.assertIn("git reflog", msg)
+        self.assertTrue(data["detached"])
+
+    def test_fu144_other_branch_is_named_and_says_to_read_the_reflog(self) -> None:
+        self._git("switch", "-q", "-c", "ensaio-outra")
+        status, msg, _data = _mod.check_main_checkout_state()
+        self.assertEqual(status, "yellow")
+        self.assertIn("ensaio-outra", msg)
+        self.assertIn("git reflog", msg)
+
+    def test_fu144_default_branch_comes_from_origin_when_it_says(self) -> None:
+        self._git("switch", "-q", "-c", "trunk")
+        self._git("update-ref", "refs/remotes/origin/trunk", "HEAD")
+        self._git("symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+        status, msg, _data = _mod.check_main_checkout_state()
+        self.assertEqual(status, "green", msg)
+
+    def test_fu144_linked_worktree_is_out_of_scope(self) -> None:
+        shadow = Path(self._tmp.name).resolve() / "shadow"
+        self._git("worktree", "add", "-q", "--detach", str(shadow))
+        with mock.patch.object(_mod, "REPO_ROOT", shadow):
+            status, _msg, data = _mod.check_main_checkout_state()
+        self.assertEqual(status, "green")
+        self.assertTrue(data["linked_worktree"])
+
+    def test_fu144_outside_a_git_checkout_is_quiet(self) -> None:
+        with mock.patch.object(_mod, "REPO_ROOT", Path(self._tmp.name).resolve()):
+            status, _msg, _data = _mod.check_main_checkout_state()
+        self.assertEqual(status, "green")
+
+    def test_fu144_git_that_does_not_answer_is_yellow_not_a_crash(self) -> None:
+        with mock.patch.object(_mod.subprocess, "run", side_effect=OSError("no git")):
+            status, _msg, _data = _mod.check_main_checkout_state()
+        self.assertEqual(status, "yellow")
+
+    def test_fu144_registered_as_tier_s(self) -> None:
+        self.assertIn("main_checkout_state", [name for name, _ in _mod.TIER_S_CHECKS])
 
 
 if __name__ == "__main__":

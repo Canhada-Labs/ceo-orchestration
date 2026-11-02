@@ -19,13 +19,6 @@ The registry MUST stay in sync with the schema. When it drifts:
     registry → the ``_write_event`` fail-open path silently drops the
     event via ``_breadcrumb("unknown action: ...")``.
 
-Session 20 surfaced the exact failure this check prevents (Gap #3):
-``live_adapter_call_*`` + ``breaker_*`` + ``credential_rotation_due``
-were emitted by ``_lib/adapters/live/_transport.py`` yet unregistered
-in ``_KNOWN_ACTIONS``. The Wave 0 fix registered those 6 + added 4 MCP
-events. This CI check locks the invariant so a future commit cannot
-regress without turning the PR red.
-
 ## Golden-registry drift guard (PLAN-133 E8 — generated SPEC inventory)
 
 In addition to the live cross-check, the script can emit a deterministic
@@ -33,14 +26,6 @@ In addition to the live cross-check, the script can emit a deterministic
 (``_KNOWN_ACTIONS`` + every ``def emit_<name>``) and assert that a
 checked-in golden file (``.claude/data/audit-registry.golden.txt``)
 matches it byte-for-byte.
-
-The motivation (rite §3.1): the live ``_KNOWN_ACTIONS`` ⇆ schema-table
-cross-check can pass while BOTH sources drift together (e.g. a global
-rename that touches the set literal and the table in lockstep but breaks
-a downstream consumer). A checked-in golden gives a reviewer ONE small
-reviewable artifact whose diff is forced to appear in every PR that adds,
-removes, or renames an action — a drift gate that is a CI step, not
-advisory theater.
 
   - ``--write-golden`` regenerates the golden file from the code. Run it
     in the same commit that bumps ``_KNOWN_ACTIONS`` (or via closeout).
@@ -50,11 +35,6 @@ advisory theater.
   - When ``--check`` is NOT passed the script behaves exactly as before
     (live cross-check only), so this augmentation is **default-OFF**: the
     golden gate only runs when a caller opts in with ``--check``.
-
-The golden is intentionally a flat sorted newline-delimited list (NOT a
-re-serialization of the schema table) so it stays diff-friendly and free
-of the schema's per-action required-field prose. It is the *inventory*
-contract, complementary to (not a replacement for) the schema table.
 
 ## Exit codes
 
@@ -80,7 +60,7 @@ set sizes.
     executes that call — docstring mentions + comments never parse to
     ``Call`` nodes.
   - **Normative function-def coverage**. Every ``def emit_<name>`` in
-    ``audit_emit.py`` MUST have ``<name>`` in ``_KNOWN_ACTIONS`` — this
+    ``audit_emit.py`` or its private parts MUST have ``<name>`` in ``_KNOWN_ACTIONS`` — this
     cross-check is lightweight and catches copy-paste regressions.
 
 Stdlib only. Python 3.9+.
@@ -178,14 +158,13 @@ class CallSite:
         return f"{rel}:{self.line}"
 
 
-class FunctionDef:
-    """One ``def emit_<name>(...)`` discovered in audit_emit.py."""
+class FunctionDef(CallSite):
+    """One typed emitter, retaining its actual source for drift diagnostics."""
 
-    __slots__ = ("name", "line")
+    __slots__ = ()
 
-    def __init__(self, name: str, line: int) -> None:
-        self.name = name
-        self.line = line
+    def __init__(self, name: str, line: int, file: Path = AUDIT_EMIT_REL) -> None:
+        super().__init__(name, file, line)
 
 
 # ---------------------------------------------------------------------------
@@ -193,22 +172,33 @@ class FunctionDef:
 # ---------------------------------------------------------------------------
 
 
-def extract_known_actions(audit_emit_path: Path) -> Tuple[Set[str], List[FunctionDef]]:
-    """Parse audit_emit.py and return (registered_actions, emit_function_defs).
-
-    Uses AST to find the ``_KNOWN_ACTIONS`` assignment (Set literal) and
-    every top-level ``def emit_<name>`` function.
-    """
-    source = audit_emit_path.read_text(encoding="utf-8")
+def _parse_emitter_source(path: Path) -> ast.Module:
+    """Read declarations without importing code or suppressing broken parts."""
     try:
-        tree = ast.parse(source, filename=str(audit_emit_path))
+        return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except SyntaxError as exc:
         raise RuntimeError(
-            f"audit_emit.py parse error at line {exc.lineno}: {exc.msg}"
+            f"{path.name} parse error at line {exc.lineno}: {exc.msg}"
         ) from exc
+    except (OSError, UnicodeError) as exc:
+        raise RuntimeError(f"{path.name} unreadable: {exc}") from exc
 
+
+def _emitter_definitions(tree: ast.AST, path: Path) -> List[FunctionDef]:
+    definitions = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("emit_"):
+            action = node.name[len("emit_"):]
+            if _ACTION_NAME_RE.match(action):
+                definitions.append(FunctionDef(action, node.lineno, path))
+    return definitions
+
+
+def extract_known_actions(audit_emit_path: Path) -> Tuple[Set[str], List[FunctionDef]]:
+    """Read the literal facade registry and emitter definitions across its parts."""
+    tree = _parse_emitter_source(audit_emit_path)
     known: Optional[Set[str]] = None
-    emit_defs: List[FunctionDef] = []
+    emit_defs = _emitter_definitions(tree, audit_emit_path)
 
     for node in ast.walk(tree):
         # _KNOWN_ACTIONS = {...}  — single-target Assign to a Set literal
@@ -232,16 +222,14 @@ def extract_known_actions(audit_emit_path: Path) -> Tuple[Set[str], List[Functio
                         )
                 known = collected
 
-        # def emit_<name>(...)
-        if isinstance(node, ast.FunctionDef) and node.name.startswith("emit_"):
-            action = node.name[len("emit_"):]
-            if _ACTION_NAME_RE.match(action):
-                emit_defs.append(FunctionDef(action, node.lineno))
-
     if known is None:
         raise RuntimeError(
             "_KNOWN_ACTIONS set literal not found in audit_emit.py"
         )
+    parts = audit_emit_path.parent / "_audit_emit_parts"
+    if parts.is_dir():
+        for path in sorted(parts.glob("*.py")):
+            emit_defs.extend(_emitter_definitions(_parse_emitter_source(path), path))
     return known, emit_defs
 
 
@@ -650,7 +638,7 @@ def _emit_drift_report(
             if hint_def is not None:
                 print(
                     f"  - {name} (registered; see "
-                    f"{AUDIT_EMIT_REL}:{hint_def.line})",
+                    f"{hint_def.ref(repo_root)})",
                     file=out,
                 )
             else:
@@ -675,7 +663,7 @@ def _emit_drift_report(
         )
         for d in unregistered_defs:
             print(
-                f"  - emit_{d.name} at {AUDIT_EMIT_REL}:{d.line}; "
+                f"  - emit_{d.name} at {d.ref(repo_root)}; "
                 f"add '{d.name}' to _KNOWN_ACTIONS",
                 file=out,
             )

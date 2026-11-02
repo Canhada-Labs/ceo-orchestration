@@ -1,7 +1,8 @@
 ---
 id: PLAN-186-FOLLOWUP-census-runtime
 title: "Censo papel->modelo derivado do RUNTIME, nao de fingerprint sobre texto-fonte"
-status: draft
+status: superseded
+superseded_by: PLAN-196
 created: 2026-09-04
 owner: CEO
 depends_on: [PLAN-186]

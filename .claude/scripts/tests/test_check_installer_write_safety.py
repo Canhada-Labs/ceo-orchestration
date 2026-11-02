@@ -37,6 +37,7 @@ writes outside the tempdir.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -2357,6 +2358,43 @@ def _live(*args: str) -> Tuple[int, dict]:
     proc = subprocess.run([sys.executable, str(CENSUS), "--json"] + list(args),
                           capture_output=True, text=True, cwd=str(REPO))
     return proc.returncode, json.loads(proc.stdout)
+
+
+class TestInstrumentFingerprint(CensusCase):
+    """The published instrument identity includes split implementation files."""
+
+    def test_component_change_changes_json_fingerprint_not_census_counts(self) -> None:
+        tool_dir = self.tmp / "tool"
+        tool_dir.mkdir()
+        entry = tool_dir / CENSUS.name
+        shutil.copy2(CENSUS, entry)
+        shutil.copytree(CENSUS.parent.parent / "hooks" / "_lib" / "_installer_write_safety",
+                        tool_dir / "_installer_write_safety")
+        root = self.tmp / "corpus"
+        (root / "scripts").mkdir(parents=True)
+        (root / "scripts" / "fixture.sh").write_text(
+            "#!/bin/sh\nvalue=$1\nprintf '%s\\n' \"$value\" > \"$2\"\n",
+            encoding="utf-8")
+        baseline = root / "baseline.txt"
+        baseline.write_text("", encoding="utf-8")
+
+        def payload():
+            proc = subprocess.run(
+                [sys.executable, str(entry), "--repo-root", str(root),
+                 "--baseline", str(baseline), "--json"],
+                capture_output=True, text=True, check=False)
+            self.assertEqual(1, proc.returncode, proc.stderr)
+            return json.loads(proc.stdout)
+
+        first = payload()
+        stable = payload()
+        self.assertEqual(first["instrument_sha256"], stable["instrument_sha256"])
+        component = tool_dir / "_installer_write_safety" / "syntax.py"
+        component.write_text(component.read_text(encoding="utf-8") + "\n# probe\n",
+                             encoding="utf-8")
+        changed = payload()
+        self.assertEqual(first["counts"], changed["counts"])
+        self.assertNotEqual(first["instrument_sha256"], changed["instrument_sha256"])
 
 
 class TestLiveCorpus(TestEnvContext):

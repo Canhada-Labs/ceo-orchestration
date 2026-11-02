@@ -60,6 +60,12 @@ import sys
 from typing import Any, Dict, List, Optional, Tuple
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+HOOKS_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "hooks"))
+if HOOKS_DIR not in sys.path:
+    sys.path.insert(0, HOOKS_DIR)
+
+from _lib import cli_currency  # noqa: E402
+
 DEFAULT_LEDGER_PATH = os.path.join(SCRIPT_DIR, "substrate-watch.json")
 
 _VERSION_RE = re.compile(r"(\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.\-]+)?)")
@@ -228,11 +234,18 @@ def build_report(
             installed, note = _probe_installed(str(comp.get("key", "")))
             row["installed_version"] = installed
             row["probe_note"] = note
-            if (
-                installed is not None
-                and seen_version != "unknown"
-                and installed != seen_version
-            ):
+            codex_current = (
+                str(comp.get("key", "")) in ("codex_cli", "codex_harness")
+                and cli_currency.compare_semver(
+                    installed, cli_currency.CODEX_VERSION_FLOOR
+                ) is not None
+                and cli_currency.compare_semver(
+                    installed, cli_currency.CODEX_VERSION_FLOOR
+                ) >= 0
+            )
+            if installed is not None and codex_current:
+                row["currency"] = "compatible"
+            elif installed is not None and seen_version != "unknown" and installed != seen_version:
                 row["drift"] = True
                 any_drift = True
                 # Attach the code-registered runbook (None-safe): the alert

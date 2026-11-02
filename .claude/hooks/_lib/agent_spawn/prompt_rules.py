@@ -1,0 +1,559 @@
+from __future__ import annotations
+
+import re
+
+__all__ = ('_strip_fenced_and_comments', '_has_skill_content', '_has_skill_content_sanitized', 'ENABLE_NATIVE_SUBAGENTS', 'ENABLE_SKILL_REFERENCE_MODE', '_SKILL_REFERENCE_HEADER_RE', '_SKILL_REFERENCE_LINE_RE', '_SKILL_REFERENCE_MAX_BYTES', '_SKILL_REFERENCE_MIN_BODY_BYTES', 'REASON_REFERENCE_MISSING', 'REASON_REFERENCE_UNSAFE_PATH', 'REASON_REFERENCE_HASH_MISMATCH', 'REASON_REFERENCE_SYMLINK_REFUSED', 'REASON_REFERENCE_TOO_LARGE', 'REASON_REFERENCE_REDACTION_HIT', 'REASON_REFERENCE_WRONG_FILENAME', 'REASON_REFERENCE_MISSING_FRONTMATTER', 'REASON_REFERENCE_BYTE_FLOOR_UNDERFLOW', 'REASON_REFERENCE_UNICODE_NORMALIZATION_MISMATCH', 'REASON_REFERENCE_OUTSIDE_SKILLS_ROOT', 'REASON_MISSING_SKILL_CONTENT', '_SECRET_TOKENS_IN_OUTPUT', '_EFFORT_TOKEN_RE', '_has_effort_token', '_SPAWN_SECRET_PATTERNS', '_inject_terse_marker', '_validate_spawn_prompt_has_no_secrets', '_ARCHITECT_NAME_RE', '_TOOL_ALLOWLIST_HEADER_RE', '_TOOL_BULLET_RE', '_KNOWN_TOOL_NAMES', '_TOOL_REQUEST_HINTS', '_TOOL_SCAN_WINDOW', '_SUBAGENT_DEPTH_MARKER_RE', '_FILE_ASSIGNMENT_HEADER_RE', '_CAN_EDIT_LINE_RE', '_FA_LIST_LINE_RE', '_FA_ALLOWED_GRANT_LINE_RE', '_FA_ALLOWED_PROSE_LINE_RE', '_FA_AUTHORITY_WORDS', '_OVERLAP_MAX_PATHS', '_OVERLAP_TAIL_LINES', '_FA_READONLY_TOKEN', '_FA_FENCE_RE', '_PROMPT_DEFENSE_HEADER_RE', '_PROMPT_DEFENSE_BULLET_RE', '_PROMPT_DEFENSE_MIN_BULLETS', '_PROMPT_DEFENSE_SCAN_CAP', '_UNTRUSTED_CONTENT_HINTS', '_prompt_defense_required', '_has_prompt_defense_block', '_emit_prompt_defense_event', '_enforce_prompt_defense')
+
+def _strip_fenced_and_comments(text: str) -> str:
+    """Return a version of ``text`` with HTML comments removed and
+    fenced-code-block content masked so marker/body searches cannot
+    match inside them (P1-SEC-B bypass hardening)."""
+    stripped = _HTML_COMMENT_RE.sub("", text)
+    out_parts = []
+    in_fence = False
+    for line in stripped.splitlines(keepends=True):
+        if _CODE_FENCE_RE.match(line):
+            in_fence = not in_fence
+            out_parts.append(line)
+            continue
+        if in_fence:
+            out_parts.append("".join(
+                "\n" if c == "\n" else " " for c in line
+            ))
+        else:
+            out_parts.append(line)
+    return "".join(out_parts)
+
+
+def _has_skill_content(prompt: str) -> bool:
+    """True iff ``prompt`` contains a real `## SKILL CONTENT` section.
+
+    Enforces four bypass-resistant checks (P1-SEC-B):
+    1. Marker on own line (not inline narrative).
+    2. Marker NOT inside HTML comment.
+    3. Marker NOT inside fenced code block.
+    4. >=_SKILL_CONTENT_MIN_BYTES non-ws bytes between marker and next ##.
+    """
+    if not prompt:
+        return False
+    return _has_skill_content_sanitized(_strip_fenced_and_comments(prompt))
+
+
+def _has_skill_content_sanitized(sanitized: str) -> bool:
+    """Shared ``## SKILL CONTENT`` check against already-sanitized text.
+
+    PLAN-023 Phase F (F-perf-003) — split out so ``decide`` and other
+    callers can share a single ``_strip_fenced_and_comments`` pass
+    rather than re-stripping inside each sub-check.
+    """
+    match = _SKILL_CONTENT_MARKER_RE.search(sanitized)
+    if match is None:
+        return False
+    body_start = match.end()
+    next_heading = _NEXT_H2_RE.search(sanitized, body_start)
+    body_end = next_heading.start() if next_heading else len(sanitized)
+    body = sanitized[body_start:body_end]
+    non_ws_bytes = sum(1 for c in body if not c.isspace())
+    return non_ws_bytes >= _SKILL_CONTENT_MIN_BYTES
+
+
+# =============================================================================
+# PLAN-020 Phase 2 — `## SKILL REFERENCE` additive sentinel (ADR-051)
+# =============================================================================
+#
+# Parallel accept-path. Does NOT replace `_has_skill_content`. Hardened
+# against 14 attack classes documented in ADR-051 §Threat model.
+#
+# Hook recognition order in decide():
+#   1. If prompt has `## SKILL REFERENCE` → strict validation, fail-CLOSED.
+#   2. Else if prompt has `## SKILL CONTENT` → inline path (existing P1-SEC-B).
+#   3. Else block with the legacy `missing_skill_content` reason.
+
+# Module-level toggles (Phase revert = single-line flip to False).
+ENABLE_NATIVE_SUBAGENTS = True
+ENABLE_SKILL_REFERENCE_MODE = True
+
+# Reference sentinel header — must be on own line, not inside fences.
+_SKILL_REFERENCE_HEADER_RE = re.compile(
+    r"^##[ \t]+SKILL[ \t]+REFERENCE[ \t]*$",
+    flags=re.MULTILINE,
+)
+
+# Reference body line: `@<path> sha256=<64-hex>`. Path may be relative.
+_SKILL_REFERENCE_LINE_RE = re.compile(
+    r"^@(?P<path>\S+)[ \t]+sha256=(?P<hash>[0-9a-f]{64})\b",
+    flags=re.MULTILINE,
+)
+
+# Caps + thresholds (ADR-051 §Synchronous validation).
+_SKILL_REFERENCE_MAX_BYTES = 1_048_576  # 1 MiB DoS cap
+_SKILL_REFERENCE_MIN_BODY_BYTES = 512   # distinct from inline 256 floor
+
+# 12 telemetry reason codes (ADR-051 §Telemetry reason codes).
+REASON_REFERENCE_MISSING = "reference_missing"
+REASON_REFERENCE_UNSAFE_PATH = "reference_unsafe_path"
+REASON_REFERENCE_HASH_MISMATCH = "reference_hash_mismatch"
+REASON_REFERENCE_SYMLINK_REFUSED = "reference_symlink_refused"
+REASON_REFERENCE_TOO_LARGE = "reference_too_large"
+REASON_REFERENCE_REDACTION_HIT = "reference_redaction_hit"
+REASON_REFERENCE_WRONG_FILENAME = "reference_wrong_filename"
+REASON_REFERENCE_MISSING_FRONTMATTER = "reference_missing_frontmatter"
+REASON_REFERENCE_BYTE_FLOOR_UNDERFLOW = "reference_byte_floor_underflow"
+REASON_REFERENCE_UNICODE_NORMALIZATION_MISMATCH = (
+    "reference_unicode_normalization_mismatch"
+)
+REASON_REFERENCE_OUTSIDE_SKILLS_ROOT = "reference_outside_skills_root"
+REASON_MISSING_SKILL_CONTENT = "missing_skill_content"  # legacy/inline
+
+# Session 32 BUGFIX — _lib.redact.redact_secrets whitespace-collapses
+# always; equality check with original text is not a valid "secret
+# detected" signal. Instead we look for specific replacement tokens
+# that `_redact._PATTERNS` inserts when a secret matches.
+_SECRET_TOKENS_IN_OUTPUT = frozenset({
+    "[JWT]",
+    "[API_KEY]",
+    "[GITHUB_PAT]",
+    "[AWS_KEY]",
+    "[TOKEN]",
+    "[URL_WITH_CREDS]",
+    "[HEX_SECRET]",
+    "[REDACTED]",
+    "[SLACK_BOT]",
+    "[STRIPE_KEY]",
+    "[GOOGLE_REFRESH]",
+    # PLAN-024 F-hooks-001 P0 fix: redact.py replaces the PEM header
+    # with "[SSH_PRIVATE_KEY_HEADER]" — matching raw "-----BEGIN" will
+    # never fire after redaction. Check the replacement token instead.
+    "[SSH_PRIVATE_KEY_HEADER]",
+})
+
+
+# =============================================================================
+# PLAN-020 Phase 3 — `/effort` token rejection in spawn prompts
+# =============================================================================
+#
+# `/effort` hints (low/default/high/max + `ultrathink` keyword) are
+# CEO-only. They MUST NOT appear in spawn prompts (sub-agents inherit
+# their thinking budget from Anthropic defaults). PLAN-020 §4 Phase 3
+# §scope clause (QA must-fix #7).
+
+_EFFORT_TOKEN_RE = re.compile(
+    r"(?:^|[^\w/])/effort(?:[ \t]+(?:low|default|high|max))?\b",
+    flags=re.IGNORECASE,
+)
+
+
+def _has_effort_token(prompt: str) -> bool:
+    """True iff prompt contains a `/effort [tier]` slash-command token."""
+    if not prompt:
+        return False
+    sanitized = _strip_fenced_and_comments(prompt)
+    return bool(_EFFORT_TOKEN_RE.search(sanitized))
+
+
+# ---------------------------------------------------------------------------
+# PLAN-045 F-10-04 — spawn-prompt secret-scan pre-dispatch
+# ---------------------------------------------------------------------------
+# Spawn prompts are the #1 vector for accidentally shipping secrets into a
+# sub-agent's context. A CEO that copy-pastes a `.env` into a task prompt
+# or builds a prompt that interpolates an env var leaks the secret to
+# whatever model the sub-agent uses AND to the audit log (spawn prompts
+# are recorded for governance).
+#
+# Reject spawns whose prompt contains any of 6 high-signal secret shapes.
+# Each shape is a narrow regex to avoid false-positives on docs / test
+# fixtures (prefix-bound + entropy-adjacent). Audit emits
+# `veto_triggered(reason_code=spawn_prompt_contains_secret)` on reject.
+#
+# Kill-switch: `CEO_SPAWN_SECRET_SCAN=0` for the rare case where a prompt
+# legitimately contains a long opaque id that trips the scan; Owner-only
+# escape logged via veto_triggered(reason_code=spawn_secret_scan_bypassed).
+_SPAWN_SECRET_PATTERNS: List[Tuple[str, re.Pattern[str]]] = [
+    # AWS access key ID (AKIA prefix, 16 uppercase alnum after).
+    ("aws_access_key_id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    # Generic AWS secret access key.
+    (
+        "aws_secret_access_key",
+        re.compile(
+            r"\b(?:aws[_-]?secret[_-]?access[_-]?key)\b\s*[:=]\s*"
+            r"[\"\']?[A-Za-z0-9/+=]{40}[\"\']?",
+            re.IGNORECASE,
+        ),
+    ),
+    # Stripe live/test secret key.
+    ("stripe_secret_key", re.compile(r"\bsk_(?:live|test)_[0-9A-Za-z]{24,}\b")),
+    # GitHub personal access token.
+    ("github_pat", re.compile(r"\bghp_[0-9A-Za-z]{36,}\b")),
+    # OpenAI API key.
+    ("openai_api_key", re.compile(r"\bsk-[A-Za-z0-9]{48,}\b")),
+    # PEM private key preamble.
+    (
+        "pem_private_key",
+        re.compile(
+            r"-----BEGIN (?:RSA |EC |OPENSSH |PGP |DSA )?PRIVATE KEY-----"
+        ),
+    ),
+]
+
+
+def _inject_terse_marker(prompt: str, subagent_type: str) -> str:
+    """Inject ## TERSE-MODE marker per PLAN-047 Phase 2."""
+    if os.environ.get("CEO_TERSE_MODE", "0") != "1":
+        return prompt
+    veto_roles = {"code-reviewer", "security-engineer", "qa-architect", "compliance-specialist"}
+    if (subagent_type or "") in veto_roles:
+        return prompt + "\n\n## TERSE-MODE-DISABLED — VETO role requires full-prose rationale.\n"
+    return prompt + "\n\n## TERSE-MODE — fragments OK in exploratory flows; never truncate code or numbers.\n"
+
+def _validate_spawn_prompt_has_no_secrets(
+    prompt: str,
+) -> Tuple[bool, Optional[str], Optional[str]]:
+    """Return (ok, reason_code, detail) — ok=False means BLOCK spawn.
+
+    Short-circuits with ok=True when `CEO_SPAWN_SECRET_SCAN=0` is set
+    (Owner bypass; any non-"0" value enforces).
+    """
+    # Session 75 Codex Finding 4 closure (Owner D4 staged rollout):
+    # default OFF, opt-in via CEO_SPAWN_SECRET_SCAN=1. Without the env
+    # var (or with =0), function returns ok=True without scanning. Soak
+    # protocol: ≥3 sessions of opt-in usage with FPR<1%% before any
+    # default flip ADR. Until then, this is a wire-only landing.
+    if os.environ.get("CEO_SPAWN_SECRET_SCAN", "0") != "1":
+        return True, None, None
+    if not prompt:
+        return True, None, None
+    for family, pattern in _SPAWN_SECRET_PATTERNS:
+        m = pattern.search(prompt)
+        if m:
+            return (
+                False,
+                "spawn_prompt_contains_secret",
+                f"family={family} prompt_len={len(prompt)}",
+            )
+    return True, None, None
+
+
+# Sprint 5 Phase 7 (ADR-010) — Architect recursion guard.
+# When CEO_ARCHITECT_ACTIVE=1 is in the env, any spawn whose
+# description/prompt names "Agent Architect" is BLOCKED. Prevents
+# meta-agent recursion (Architect-spawning-Architect).
+_ARCHITECT_NAME_RE = re.compile(
+    r"\bAgent\s+Architect\b",
+    flags=re.IGNORECASE,
+)
+
+
+# ---------------------------------------------------------------------------
+# PLAN-133 E3 — Per-spawn tool scoping + depth/overlap rails.
+# ---------------------------------------------------------------------------
+# Ports the Goose recipe "declared capability scope + one-level recursion +
+# file partition" idea, re-implemented from scratch in stdlib (rite §2). All
+# three rails are ADVISORY by default (emit only) and become BLOCKING only
+# under their per-rail env flag. NEVER raises (fail-open per CLAUDE.md §5).
+#
+# Rail 1 — Tool allow-list: a spawn profile MAY declare
+#     ## TOOL ALLOW-LIST
+#     - Read
+#     - Edit
+#     - Bash
+# When declared AND the prompt's ## TASK/## RESTRICTIONS text requests a tool
+# OUTSIDE that set (heuristic keyword scan, bounded), emit/block. A profile
+# with NO ## TOOL ALLOW-LIST block is unrestricted (back-compat: silent allow).
+#
+# Rail 2 — Depth fence: a sub-agent that itself emits a NAMED spawn is a
+# depth-2 spawn. The harness Agent payload has no native depth field, so we
+# read the advisory marker the CEO injects into a delegated prompt
+# (## SUBAGENT-CONTEXT depth=N) AND the env breadcrumb CEO_SPAWN_DEPTH. If
+# EITHER says depth>=1 AND this spawn is itself NAMED, it is depth-over-one.
+#
+# Rail 3 — FILE ASSIGNMENT overlap: parse this spawn's `CAN edit:` file list
+# from its ## FILE ASSIGNMENT block, compare against the `CAN edit:` lists of
+# other spawns recorded in the audit log within a short concurrency window
+# (same session, same plan). Any shared concrete path = clobber risk.
+
+# --- Rail 1: tool allow-list ----------------------------------------------
+_TOOL_ALLOWLIST_HEADER_RE = re.compile(
+    r"^##[ \t]+TOOL[ \t]+ALLOW-?LIST[ \t]*$",
+    flags=re.MULTILINE,
+)
+# A bullet line inside the block: "- Read" / "* Bash" / "Read,Edit".
+_TOOL_BULLET_RE = re.compile(
+    r"^[ \t]*[-*][ \t]*([A-Za-z][A-Za-z0-9_/ ,]+)$",
+    flags=re.MULTILINE,
+)
+# Canonical Claude Code tool names we recognize (closed set — anything not
+# here in a request is ignored, NOT blocked; we only gate KNOWN tools so an
+# unknown token can never cause a false block).
+_KNOWN_TOOL_NAMES = frozenset({
+    "read", "edit", "write", "multiedit", "bash", "glob", "grep",
+    "webfetch", "websearch", "task", "agent", "notebookedit",
+})
+# Heuristic: which tools a spawn is REQUESTING, inferred from prompt text.
+# First-hit, bounded scan. Conservative — only fires on high-signal verbs so
+# a profile that simply mentions a word does not trip the rail.
+_TOOL_REQUEST_HINTS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+    ("bash", ("run the command", "run `", "execute the script", "shell out",
+              "git commit", "git push", "npm install", "curl ", "subprocess")),
+    ("write", ("create the file", "write a new file", "write the file")),
+    ("edit", ("edit the file", "modify the file", "apply the patch")),
+    ("webfetch", ("fetch the url", "download from http", "fetch http")),
+    ("websearch", ("search the web", "web search")),
+)
+_TOOL_SCAN_WINDOW = 8 * 1024  # bytes of prompt scanned for tool hints
+
+# --- Rail 2: depth fence ---------------------------------------------------
+_SUBAGENT_DEPTH_MARKER_RE = re.compile(
+    r"^##[ \t]+SUBAGENT-CONTEXT\b[^\n]*\bdepth=(\d+)",
+    flags=re.MULTILINE,
+)
+
+# --- Rail 3: FILE ASSIGNMENT overlap --------------------------------------
+# Case-insensitive + 0-3 space indent (codex r32 P1): `## File
+# Assignment` and ` ## FILE ASSIGNMENT` are the SAME heading to a
+# Markdown renderer/agent — recognizing them (instead of enumerating
+# taints) keeps the parser aligned with what the agent SEES.
+_FILE_ASSIGNMENT_HEADER_RE = re.compile(
+    r"^[ ]{0,3}##[ \t]+FILE[ \t]+ASSIGNMENT[ \t]*$",
+    flags=re.MULTILINE | re.IGNORECASE,
+)
+# "- CAN edit: a/b.py, c/d.py" (rest of line after the colon, comma-split).
+# Leading indent 0-3 SPACES only (codex r33 P1): 4+ spaces (or a tab)
+# make the line a CommonMark CODE BLOCK — example text, never a grant.
+_CAN_EDIT_LINE_RE = re.compile(
+    r"^[ ]{0,3}[-*+][ \t]*CAN[ \t]+edit:[ \t]*(.+)$",
+    flags=re.MULTILINE | re.IGNORECASE,
+)
+# STRUCTURAL closure of the parser-differential class (codex r25→r32:
+# MAY/MUST edit, `+`/numbered markers, header variants — each enumerated
+# fix bred the next variant). ONE rule instead: inside a FILE ASSIGNMENT
+# block, every LIST line (any CommonMark marker: -, *, +, 1., 1)) must
+# match a CLOSED whitelist of recognized forms — anything else is a
+# visible grant/instruction the parser did not validate => taint.
+_FA_LIST_LINE_RE = re.compile(
+    r"^[ ]{0,3}(?:[-*+]|\d+[.)])[ \t]+\S[^\n]*$",
+    flags=re.MULTILINE,
+)
+_FA_ALLOWED_GRANT_LINE_RE = re.compile(
+    r"^[ ]{0,3}[-*+][ \t]*CAN[ \t]+edit:",
+    flags=re.IGNORECASE,
+)
+_FA_ALLOWED_PROSE_LINE_RE = re.compile(
+    r"^[ ]{0,3}[-*+][ \t]*(?:"
+    r"CANNOT[ \t]+edit"        # negative prose (not parsed, harmless)
+    r"|MAY[ \t]+read\b"        # architect read declaration
+    r"|FORBIDDEN\b"             # architect forbidden list
+    # canonical template escape-hatch prose — the FULL fixed phrase, so
+    # the prefix CONSUMES its own `edit` and the suffix rule below can
+    # ban any further edit-grant text (codex r34 P1)
+    r"|If[ \t]+you[ \t]+need[ \t]+to[ \t]+edit[ \t]+a[ \t]+forbidden[ \t]+file"
+    r")",
+    flags=re.IGNORECASE,
+)
+# Authority words banned in an allowed-prose SUFFIX (codex r34+r41+r42:
+# the axis moved from `edit` to synonyms — `MUST write hidden.py`).
+# WHOLE-TOKEN semantics, not substring (r42 FP: a denied path like
+# `src/write.py` carries "write" INSIDE a path token — filenames are not
+# authority). A token is a whitespace-delimited word stripped of edge
+# punctuation; tokens containing / or . are path-like and never match.
+_FA_AUTHORITY_WORDS = frozenset((
+    "edit", "write", "create", "modify", "delete", "append", "overwrite",
+    "rename", "move", "must", "should", "allowed",
+))
+
+
+# _OVERLAP_LOOKBACK_S is re-exported from agent_spawn.file_assignment below.
+_OVERLAP_MAX_PATHS = 64            # bound the per-spawn path set
+_OVERLAP_TAIL_LINES = 256          # bounded audit-log tail (~512KB)
+
+
+# PLAN-178 C1 / ADR-191 — the ONLY valid explicit "this spawn writes
+# nothing" declaration. The bare token `none` stays a DROPPED placeholder
+# (indistinguishable from omission BY DESIGN — that ambiguity is the cell
+# ADR-191 cures): read-only intent must be spelled out with this token.
+_FA_READONLY_TOKEN = "none-read-only"
+
+# CommonMark fences indented 1-3 spaces (codex r29 P1): the shared
+# `_strip_fenced_and_comments` masks column-zero fences only — a fenced
+# FILE ASSIGNMENT example indented by 1-3 spaces (still a valid fence per
+# CommonMark) would leak into classification and could satisfy the gate
+# for a spawn with NO real assignment. Masked LOCALLY here (small blast
+# radius; the shared regex serves every other block parser unchanged).
+# CommonMark-correct fence masking for THIS classifier (codex r29+r30+
+# r35): indent 0-3 (column zero included — the SHARED masker is a naive
+# toggle that ignores opener type/length, so a 4-backtick opener "closed"
+# by 3 backticks, or ``` closed by ~~~, leaks fenced content); closing
+# fence must be the SAME char and >= opener length (\1 + absorb longer);
+# an unclosed fence masks to EOF (\Z). Applied BEFORE the shared masker.
+# Closer must be the SAME character, length >= opener (codex r37 P2:
+# the old [`~]* suffix accepted a mixed ```~~~ "close"). Group 2 captures
+# the fence char; closer = \1 (full opener string) + \2* (same char
+# only). A shorter/mismatched closer falls through to \Z — masking to
+# EOF, the fail-CLOSED direction.
+_FA_FENCE_RE = re.compile(
+    r"^[ ]{0,3}((`|~)\2{2,})[^\n]*\n.*?(?:^[ ]{0,3}\1\2*[ \t]*$|\Z)",
+    flags=re.MULTILINE | re.DOTALL,
+)
+
+# Telemetry marker hash for the explicit read-only declaration. DOMAIN-
+# SEPARATED from real path hashes (codex r1 P2, Lote B): hashing the bare
+# token collided with a legitimate concrete path `./none-read-only` (the
+# token check runs BEFORE ./-normalization, so that path survives as
+# concrete and would hash identically — under CEO_SPAWN_OVERLAP_GUARD=1 it
+# would false-block against every prior read-only spawn). NUL bytes cannot
+# appear in a real declared path, so this input is unreachable from
+# _path_hash(path) space.
+
+
+# ---------------------------------------------------------------------------
+# PLAN-153 Wave E item 7 (ADR-175) — Prompt Defense Baseline gate.  [BEGIN]
+# ---------------------------------------------------------------------------
+# NAMED spawns whose task indicates contact with UNTRUSTED CONTENT (web
+# fetch/search, scraping, imported/upstream/third-party material) MUST carry
+# the 6-bullet `## PROMPT DEFENSE` anti-injection block that
+# `.claude/scripts/inject-agent-context.sh` now emits unconditionally.
+#
+# Failure semantics (CLAUDE.md §4 doctrine):
+#   - INPUT side is fail-CLOSED: heuristic matched + section missing/thin
+#     => BLOCK (precedent: check_bash_safety.py `_e3` parse gate + C4).
+#   - INFRASTRUCTURE side is fail-OPEN: any exception inside this gate
+#     => allow (never punish the session for our own bug).
+#
+# Detection is a CONSERVATIVE lowercase-substring keyword set scanned over
+# the sanitized (fence/comment-stripped) description + prompt. HONESTY —
+# documented false negatives, by design:
+#   - synonyms/other languages are missed ("crawl", "harvest", "baixar",
+#     "read the vendor tarball", ...);
+#   - obfuscated intents (base64, hyphenation, l33t) are missed;
+#   - keywords appearing ONLY inside fenced code blocks are masked by
+#     `_strip_fenced_and_comments` and therefore missed;
+#   - scan is capped at `_PROMPT_DEFENSE_SCAN_CAP` bytes; mentions beyond
+#     the cap are missed.
+# The cheap mitigation for every miss-class is the same: the spawn template
+# emits the block UNCONDITIONALLY, so any template-generated prompt passes
+# regardless of heuristic reach. This gate exists to catch hand-rolled
+# prompts that bypass the template.
+#
+# Kill-switches (advisory demotion — event still emitted, spawn allowed):
+#   CEO_PROMPT_DEFENSE_GATE=0   per-gate opt-out
+#   CEO_SOTA_DISABLE=1          master kill (E3-rail precedent)
+_PROMPT_DEFENSE_HEADER_RE = re.compile(
+    r"^##[ \t]+PROMPT[ \t]+DEFENSE[ \t]*$",
+    flags=re.MULTILINE,
+)
+# A bullet line: "-" or "*" + whitespace + at least one non-space char.
+_PROMPT_DEFENSE_BULLET_RE = re.compile(
+    r"^[ \t]*[-*][ \t]+\S",
+    flags=re.MULTILINE,
+)
+_PROMPT_DEFENSE_MIN_BULLETS = 6
+_PROMPT_DEFENSE_SCAN_CAP = 256 * 1024  # bytes of sanitized text scanned
+# Closed, lowercase substring set. Ordering = report priority (first hit
+# wins; the matched token is the ONLY prompt-derived value that reaches the
+# audit log — closed-enum-safe, no prompt body echo).
+_UNTRUSTED_CONTENT_HINTS: Tuple[str, ...] = (
+    "webfetch",
+    "websearch",
+    "web search",
+    "search the web",
+    "fetch the url",
+    "fetch url",
+    "fetch http",
+    "download from http",
+    "scrape",
+    "scraping",
+    "imported",
+    "upstream",
+    "third-party",
+    "third party",
+    "untrusted",
+)
+
+
+def _prompt_defense_required(
+    description: str, prompt_sanitized: str
+) -> Optional[str]:
+    """Return the first matched untrusted-content hint, or None.
+
+    Pure. Never raises. Bounded scan over lowercase(description + sanitized
+    prompt) capped at `_PROMPT_DEFENSE_SCAN_CAP` bytes.
+    """
+    haystack = (
+        (description or "") + "\n" + (prompt_sanitized or "")
+    )[:_PROMPT_DEFENSE_SCAN_CAP].lower()
+    for hint in _UNTRUSTED_CONTENT_HINTS:
+        if hint in haystack:
+            return hint
+    return None
+
+
+def _has_prompt_defense_block(prompt_sanitized: str) -> bool:
+    """True iff sanitized prompt has `## PROMPT DEFENSE` on its own line
+    with >= `_PROMPT_DEFENSE_MIN_BULLETS` bullet lines before the next
+    `##` heading / EOF. Fence/comment-masked headers do NOT count
+    (P1-SEC-B precedent — caller passes pre-sanitized text)."""
+    if not prompt_sanitized:
+        return False
+    m = _PROMPT_DEFENSE_HEADER_RE.search(prompt_sanitized)
+    if m is None:
+        return False
+    block_start = m.end()
+    nxt = _NEXT_H2_RE.search(prompt_sanitized, block_start)
+    block = prompt_sanitized[
+        block_start: nxt.start() if nxt else len(prompt_sanitized)
+    ]
+    bullets = len(_PROMPT_DEFENSE_BULLET_RE.findall(block))
+    return bullets >= _PROMPT_DEFENSE_MIN_BULLETS
+
+
+def _emit_prompt_defense_event(
+    *, keyword: str, present: bool, enforced: bool
+) -> None:
+    """Emit `spawn_prompt_defense_gate` telemetry. `keyword` is from the
+    closed `_UNTRUSTED_CONTENT_HINTS` enum — no prompt body ever persists.
+    Fail-open."""
+    try:
+        if not _AUDIT_EMIT_AVAILABLE:
+            return
+        _audit_emit.emit_generic(
+            "spawn_prompt_defense_gate",
+            keyword=(keyword or "")[:32],
+            present=1 if present else 0,
+            enforced=1 if enforced else 0,
+        )
+    except Exception:  # pragma: no cover - fail-open
+        return
+
+
+def _enforce_prompt_defense(
+    *,
+    description: str,
+    prompt: str,
+    env: Dict[str, str],
+) -> Optional[Tuple[str, str]]:
+    """Evaluate the Prompt Defense Baseline gate for a NAMED spawn.
+
+    Returns (reason_code, detail) when the gate is ENFORCING and fires;
+    None otherwise. NEVER raises (infra fail-open); the block itself is
+    the input-side fail-CLOSED posture (matched + missing => BLOCK).
+    """
+    try:
+        sanitized = _strip_fenced_and_comments(prompt or "")
+        keyword = _prompt_defense_required(description or "", sanitized)
+        if keyword is None:
+            return None  # no untrusted-content signal — out of scope
+        present = _has_prompt_defense_block(sanitized)
+        master_off = (env.get("CEO_SOTA_DISABLE") or "").strip() == "1"
+        raw = (env.get("CEO_PROMPT_DEFENSE_GATE") or "").strip()
+        gate_off = raw in ("0", "false", "False", "no", "off")
+        enforced = (not master_off) and (not gate_off)
+        _emit_prompt_defense_event(
+            keyword=keyword, present=present, enforced=enforced
+        )
+        if present or not enforced:
+            return None
+        return (
+            "spawn_prompt_defense_missing",
+            f"keyword={keyword} min_bullets={_PROMPT_DEFENSE_MIN_BULLETS}",
+        )
+    except Exception:  # pragma: no cover - fail-open invariant
+        return None

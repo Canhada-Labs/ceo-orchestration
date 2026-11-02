@@ -82,6 +82,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_HOOKS_DIR = _REPO_ROOT / ".claude" / "hooks"
+sys.path.insert(0, str(_HOOKS_DIR)) if str(_HOOKS_DIR) not in sys.path else None
+from _lib import cli_currency  # noqa: E402
+
 EXIT_OK = 0
 EXIT_INFRA_ERROR = 1
 EXIT_VERDICT_EXPIRED = 2
@@ -338,35 +343,20 @@ def compute_inputs_hash(repo_root: Path, manifest_path: Path) -> str:
 
 
 def parse_pin_range(pin_file: Path) -> Tuple[Optional[str], Optional[str]]:
-    """Parse pin range like '>=0.128.0,<0.130.0'. Returns (min, max)."""
+    """Parse a stable ``>=floor`` range with an optional legacy upper bound."""
     if not pin_file.exists():
         return None, None
     for line in pin_file.read_text().splitlines():
         line = line.split("#", 1)[0].strip()
         if not line:
             continue
-        # parse `>=X.Y.Z,<A.B.C` shape
-        m = re.search(r">=\s*([\d.]+(?:[-+][\w.]+)?)\s*,\s*<\s*([\d.]+(?:[-+][\w.]+)?)", line)
-        if m:
-            return m.group(1), m.group(2)
+        m = re.fullmatch(r">=\s*([^,\s]+)(?:\s*,\s*<\s*([^,\s]+))?", line)
+        if m and cli_currency.parse_semver(m.group(1)) is not None:
+            upper = m.group(2)
+            if upper is None or cli_currency.parse_semver(upper) is not None:
+                return m.group(1), upper
+        raise ValueError("pin range must be >=MAJOR.MINOR.PATCH with optional < upper bound")
     return None, None
-
-
-def parse_semver(s: str) -> Tuple[int, int, int]:
-    m = re.match(r"(\d+)\.(\d+)\.(\d+)", s.strip())
-    if not m:
-        raise ValueError(f"unparseable semver: {s!r}")
-    return int(m.group(1)), int(m.group(2)), int(m.group(3))
-
-
-def semver_in_range(version: str, min_v: str, max_v: str) -> bool:
-    try:
-        v = parse_semver(version)
-        lo = parse_semver(min_v)
-        hi = parse_semver(max_v)
-        return lo <= v < hi
-    except ValueError:
-        return False
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -598,8 +588,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # R1 C5: Codex CLI pin enforcement
     if args.codex_cli_pin_file:
-        min_v, max_v = parse_pin_range(Path(args.codex_cli_pin_file))
-        if min_v and max_v:
+        try:
+            min_v, max_v = parse_pin_range(Path(args.codex_cli_pin_file))
+        except (OSError, ValueError) as exc:
+            print(f"INVALID: codex CLI pin range rejected: {exc}", file=sys.stderr); return EXIT_VERDICT_INVALID
+        if min_v:
             tool_versions = verdict.get("tool_versions", {})
             if not isinstance(tool_versions, dict):
                 # Codex iter-6 P1 fix — malformed tool_versions (scalar /
@@ -612,13 +605,23 @@ def main(argv: Optional[List[str]] = None) -> int:
                 )
                 return EXIT_VERDICT_INVALID
             cli_v = tool_versions.get("codex_cli", "")
-            if not semver_in_range(cli_v, min_v, max_v):
+            comparison = cli_currency.compare_semver(cli_v, min_v)
+            upper_comparison = cli_currency.compare_semver(cli_v, max_v) if max_v else None
+            if (
+                comparison is None
+                or comparison < 0
+                or (max_v is not None and (upper_comparison is None or upper_comparison >= 0))
+            ):
+                range_text = f">={min_v}" if max_v is None else f">={min_v},<{max_v}"
                 print(
                     f"INVALID: codex_cli version {cli_v!r} not in pin "
-                    f"range >={min_v},<{max_v}",
+                    f"range {range_text}",
                     file=sys.stderr,
                 )
                 return EXIT_VERDICT_INVALID
+            if comparison > 0 and max_v is None:
+                print(f"INFO: codex_cli {cli_v} is newer than compatibility floor "
+                      f">={min_v}; payload pin uses version-only compatibility", file=sys.stderr)
 
     # PLAN-081 Phase 6-bis / T-8: Codex CLI binary SHA-256 pin enforcement
     if args.codex_cli_binary_sha256_file:
@@ -709,12 +712,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         if (
             not isinstance(manifest, dict)
             or manifest.get("schema") != 1
+            or cli_currency.parse_semver(manifest.get("package_version")) is None
             or not isinstance(manifest.get("payloads"), dict)
         ):
             print(
                 "INVALID: codex-pin-manifest-file schema violation "
-                "(expected schema=1 + payloads dict) — fail-CLOSED per "
-                "ADR-182",
+                "(expected schema=1 + stable package_version + payloads dict) — fail-CLOSED per ADR-182",
                 file=sys.stderr,
             )
             return EXIT_VERDICT_INVALID
@@ -742,6 +745,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 file=sys.stderr,
             )
             return EXIT_VERDICT_INVALID
+        if not re.fullmatch(r"[0-9a-f]{64}", declared_payload_sha):
+            print("INVALID: verdict codex_payload_sha256 has malformed sha256 "
+                  "— fail-CLOSED per ADR-182", file=sys.stderr)
+            return EXIT_VERDICT_INVALID
         entry = manifest["payloads"].get(declared_triple)
         if not isinstance(entry, dict):
             print(
@@ -758,7 +765,12 @@ def main(argv: Optional[List[str]] = None) -> int:
                 file=sys.stderr,
             )
             return EXIT_VERDICT_INVALID
-        if declared_payload_sha != expected_payload_sha:
+        package_version = manifest["package_version"]
+        cli_version = tool_versions.get("codex_cli")
+        version_comparison = cli_currency.compare_semver(cli_version, package_version)
+        newer_floor = cli_currency.compare_semver(cli_version, cli_currency.CODEX_VERSION_FLOOR)
+        exact_payload_pin = version_comparison in (None, 0) or newer_floor is None or newer_floor < 0
+        if exact_payload_pin and declared_payload_sha != expected_payload_sha:
             print(
                 f"INVALID: codex_payload_sha256 mismatch for "
                 f"'{declared_triple}' — "
@@ -767,6 +779,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 file=sys.stderr,
             )
             return EXIT_VERDICT_INVALID
+        if not exact_payload_pin:
+            print(f"INFO: codex_cli {cli_version} is newer than the payload manifest version; "
+                  "payload sha is format-validated but not attested by this older manifest", file=sys.stderr)
 
     # GPG signature presence (verifies via separate `git verify-tag` in
     # release.yml; here we just assert the field is present + non-empty)

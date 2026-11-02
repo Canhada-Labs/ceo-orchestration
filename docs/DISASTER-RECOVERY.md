@@ -51,9 +51,8 @@ limitation).
    ```
 2. **Restore from latest backup**:
    ```bash
-   bash .claude/scripts/ceo-restore.sh \
-     ~/.ceo-backups/<slug>/<latest>.tar.gz \
-     --dry-run                       # verify what will land
+   # Omitting --apply verifies what would land.
+   bash .claude/scripts/ceo-restore.sh ~/.ceo-backups/<slug>/<latest>.tar.gz
    bash .claude/scripts/ceo-restore.sh \
      ~/.ceo-backups/<slug>/<latest>.tar.gz \
      --apply                         # commit
@@ -75,6 +74,11 @@ limitation).
    ```bash
    python3 .claude/scripts/audit-query.py recent --limit 20
    ```
+   When investigating a suspected missing tail, run
+   `audit-verify-chain.py --strict-against-counter`. This mode compares the
+   verified HMAC-entry count with the persisted chain-length sidecar and
+   reports tampering when the log is shorter; a sidecar read failure is also
+   reported rather than treated as an intact chain.
 5. **Investigate root cause** — was it disk pressure, a hook bug,
    or operator action? See `INCIDENT-RESPONSE.md` Scenario 2 if
    intentional tampering is suspected.
@@ -203,9 +207,8 @@ limitation).
 
 1. **Re-bootstrap audit log + memory dirs** from the latest backup:
    ```bash
-   bash .claude/scripts/ceo-restore.sh \
-     ~/.ceo-backups/<slug>/<latest>.tar.gz \
-     --dry-run
+   # Default mode verifies what would be restored.
+   bash .claude/scripts/ceo-restore.sh ~/.ceo-backups/<slug>/<latest>.tar.gz
 
    bash .claude/scripts/ceo-restore.sh \
      ~/.ceo-backups/<slug>/<latest>.tar.gz \
@@ -363,11 +366,10 @@ Run quarterly. Total time ~30 minutes.
    python3 .claude/scripts/audit-query.py recent --limit 5 \
      --audit-log /tmp/dr-test/audit-log.jsonl
    ```
-4. **Run `ceo-restore.sh --dry-run`** against current state:
+4. **Run `ceo-restore.sh` in its default preview mode** against current state:
    ```bash
-   bash .claude/scripts/ceo-restore.sh \
-     ~/.ceo-backups/<slug>/<latest>.tar.gz \
-     --dry-run
+   # Omit --apply to preview the restore.
+   bash .claude/scripts/ceo-restore.sh ~/.ceo-backups/<slug>/<latest>.tar.gz
    ```
 5. **Confirm rotation** — verify older backups were pruned per
    policy:

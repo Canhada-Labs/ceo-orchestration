@@ -100,7 +100,7 @@ if _PACK_STAGED_AE.is_file() and _PACK_STAGED_AE != (
 # -- Public API surface (alphabetical) --------------------------------------
 # Pinned 2026-04-22. Every emit_* / iter_* function callable via
 # `from _lib import audit_emit; audit_emit.<name>`. Matches output of
-# `grep -nE '^def (emit_|iter_)' _lib/audit_emit.py | awk '{print $2}'`.
+# callable emit_* / iter_* names in dir(audit_emit), including extracted parts.
 _EXPECTED_PUBLIC_SYMBOLS = frozenset({
     # PLAN-059 SEC-P0-04 / ADR-080 (Session 62 cont, 2026-04-25) — audit-tokens
     # content-ban emitters (counts-only allowlist enforcement).

@@ -104,9 +104,26 @@ class _Base(TestEnvContext):
 
 
 class TestGenerateMode(_Base):
+    def test_fu144_policy_expands_native_prefixes(self) -> None:
+        adr = self._write("adr.md", AMENDED_ADR + '\n```python\nMODEL_FAMILY_POLICY = "semantic-families-v1"\n```\n')
+        proc = _run("--adr", str(adr))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        ids = json.loads(proc.stdout)["availableModels"]
+        self.assertIn("gpt-6", ids)
+        self.assertIn("claude-opus-9", ids)
+
+    def test_fu144_policy_comment_does_not_expand(self) -> None:
+        adr = self._write("adr.md", AMENDED_ADR + '\n# MODEL_FAMILY_POLICY = "semantic-families-v1"\n')
+        proc = _run("--adr", str(adr))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["availableModels"], WORKING_SET)
+
     def test_live_adr_parses_state_agnostic(self) -> None:
         """Green pre- AND post-ceremony: ids are a superset of the VETO floor
-        and a subset of the working-set union, whichever block is live."""
+        and every member satisfies the semantic family currency policy."""
+        sys.path.insert(0, str(_REPO_ROOT / ".claude" / "hooks"))
+        from _lib.model_currency import is_allowed_model  # noqa: PLC0415
+
         proc = _run("--adr", str(LIVE_ADR))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         ids = json.loads(proc.stdout)["availableModels"]
@@ -114,7 +131,10 @@ class TestGenerateMode(_Base):
         for member in VETO_FLOOR:
             self.assertIn(member, ids)
         for member in ids:
-            self.assertIn(member, WORKING_SET)
+            self.assertTrue(
+                member in WORKING_SET or is_allowed_model(member),
+                f"unexpected member: {member}",
+            )
 
     def test_amended_adr_emits_working_set_in_order(self) -> None:
         adr = self._write("adr.md", AMENDED_ADR)

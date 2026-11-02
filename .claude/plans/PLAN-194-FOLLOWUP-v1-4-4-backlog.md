@@ -728,5 +728,11 @@ dela, o 26 junto da W3.»
 - [ ] Item 27 (resíduos do rail do kit da v1.4.3-rc.1) curados nos derivadores do kit da 1.4.4, cada um com
   o controle vermelho no índice D.
   Check: none (os controles vivem no harness do kit da 1.4.4)
-- [ ] Itens 28 a 30 (o P1 e os dois P2 do re-pass da v1.4.3-rc.1) curados, cada um com o seu teste.
+- [x] Itens 28 a 30 (o P1 e os dois P2 do re-pass da v1.4.3-rc.1) curados, cada um com o seu teste.
+  Entrega integrada em `59aaf353` (Onda 5B): item 28 em
+  `diagnose-output-hook.py` + `test_diagnose_output_hook.py`; item 29 em
+  `check-audit-real-loss.py` + `test_check_audit_real_loss.py`; item 30 em
+  `audit_spool_state.py`/`check-audit-real-loss.py` + testes de ausência de bytecode
+  em `test_audit_spool_state.py`/`test_check_audit_real_loss.py`.
+
   Check: none até a abertura fixar os nomes dos testes

@@ -8,6 +8,8 @@ PLAN-166/repass-*/ — debate r1 F4).
 """
 from __future__ import annotations
 
+from _subprocess_helpers import run_in_process_group
+
 import hashlib
 import json
 import os
@@ -196,3 +198,111 @@ class TestRealCorpusPositiveControl:
         assert d["blocking_unwaived"] == 0, (
             "blocking novo sem waiver — ou uma cerimônia nova violou uma "
             "classe, ou um arquivo waivado foi editado (re-arme por sha256)")
+
+
+class TestHeredocCommandSubstitutionFu144:
+    """Item 14 (a) do backlog da 1.4.4. Os crases num COMENTÁRIO do corpo são a forma
+    exata do incidente de 2026-10-09: nenhum shell os trata como comentário ali."""
+
+    @staticmethod
+    def _r9(tmp_path, body):
+        root, _ = make_repo(tmp_path, BASE.replace("git tag", "# CEREMONY-LINT: handwritten-exception: x\ngit tag") + body)
+        proc = run_lint("--root", str(root), "--floor", "1", "--json")
+        data = json.loads(proc.stdout)
+        found = [x for f in data["files"] for x in f["findings"] if x["rule"] == "R9"]
+        return proc, found
+
+    @pytest.mark.parametrize("line", [
+        "# comentario com `git switch -c ensaio-outra`",
+        "valor=$(git rev-parse HEAD)",
+        "linha com \\\\$(id) depois de contrabarra escapada",
+    ])
+    def test_fu144_substitution_in_an_unquoted_heredoc_is_blocking(self, tmp_path, line):
+        proc, found = self._r9(tmp_path, "cat <<SHIM\n%s\nSHIM\n" % line)
+        assert proc.returncode == 1, proc.stdout
+        assert [x["sev"] for x in found] == ["BLOCKING"]
+
+    @pytest.mark.parametrize("body", [
+        "cat <<'SHIM'\n$(id) `id`\nSHIM\n",
+        'cat <<"SHIM"\n$(id) `id`\nSHIM\n',
+        "cat <<\\SHIM\n$(id) `id`\nSHIM\n",
+        "cat <<SHIM\n\\$(id) \\`id\\` $HOME\nSHIM\n",
+        "x=$(( 1 << y ))\necho `id`\n",
+        "echo 'a <<SHIM b'\necho $(id)\n",
+        "# nota: cat <<SHIM\necho $(id)\n",
+        "cat <<<\"$(id)\"\n",
+        "cat <<-SHIM\n\tsem substituicao\n\tSHIM\necho $(id)\n",
+    ])
+    def test_fu144_what_the_shell_does_not_execute_is_not_a_finding(self, tmp_path, body):
+        proc, found = self._r9(tmp_path, body)
+        assert found == [], found
+        assert proc.returncode == 0, proc.stdout
+
+    def test_fu144_end_of_a_tab_stripped_heredoc_and_a_second_one(self, tmp_path):
+        body = "cat <<-A <<B\n\tum\n\tA\n$(id)\nB\necho $(id)\n"
+        _proc, found = self._r9(tmp_path, body)
+        assert [x["line"] for x in found] == [8], found
+
+
+class TestCallerRepoGuardFu144:
+    """Item 14 (b): os dois incidentes de 2026-10-09 e 2026-10-11 ficam vermelhos."""
+
+    GUARD = os.path.join(REPO_ROOT, ".claude", "scripts", "caller_repo_guard.py")
+
+    @staticmethod
+    def _git(root, *args):
+        subprocess.run(["git", "-C", str(root), "-c", "user.name=t", "-c", "user.email=t@t.invalid",
+                        "-c", "commit.gpgsign=false"] + list(args), check=True, capture_output=True)
+
+    def _repo(self, tmp_path):
+        root = tmp_path / "caller"
+        root.mkdir()
+        self._git(root, "init", "-q", "-b", "main")
+        (root / "f").write_text("x\n")
+        self._git(root, "add", "f")
+        self._git(root, "commit", "-q", "-m", "c")
+        return root
+
+    def _cli(self, *args):
+        proc = run_in_process_group([sys.executable, self.GUARD] + [str(a) for a in args],
+                              capture_output=True, text=True, timeout=60)
+        assert proc.returncode in (0, 1, 2), proc.stdout + proc.stderr
+        return proc
+
+    def test_fu144_quiet_run_is_green(self, tmp_path):
+        root = self._repo(tmp_path)
+        foto = tmp_path / "antes.json"
+        assert self._cli("snapshot", "--repo", root, "--out", foto).returncode == 0
+        (root / "f").write_text("a arvore pode mudar\n")
+        proc = self._cli("verify", "--repo", root, "--from", foto)
+        assert (proc.returncode, proc.stdout) == (0, "")
+
+    @pytest.mark.parametrize("mexe", [
+        ("switch", "-q", "-c", "ensaio-outra"),
+        ("checkout", "-q", "--detach"),
+        ("branch", "sobra"),
+        ("tag", "sobra"),
+    ])
+    def test_fu144_each_shape_of_the_incident_is_red(self, tmp_path, mexe):
+        root = self._repo(tmp_path)
+        foto = tmp_path / "antes.json"
+        assert self._cli("snapshot", "--repo", root, "--out", foto).returncode == 0
+        self._git(root, *mexe)
+        proc = self._cli("verify", "--repo", root, "--from", foto)
+        assert proc.returncode == 1, proc.stdout + proc.stderr
+        assert "caller-repo-guard:" in proc.stdout
+
+    def test_fu144_input_it_cannot_read_is_rc2(self, tmp_path):
+        root = self._repo(tmp_path)
+        foto = tmp_path / "antes.json"
+        foto.write_text("nao e json")
+        assert self._cli("verify", "--repo", root, "--from", foto).returncode == 2
+        assert self._cli("verify", "--repo", root, "--from", tmp_path / "nada").returncode == 2
+        assert self._cli("snapshot", "--repo", tmp_path / "nada", "--out", foto).returncode == 2
+
+    def test_fu144_lint_counts_a_harness_without_the_guard_as_advisory(self, tmp_path):
+        marca = BASE.replace("git tag", "# CEREMONY-LINT: handwritten-exception: x\ngit tag")
+        root, _ = make_repo(tmp_path, marca, name="test-ceremony-x.sh")
+        data = json.loads(run_lint("--root", str(root), "--floor", "1", "--json").stdout)
+        assert data["advisory_rates"].get("R10") == 1
+        assert data["blocking_unwaived"] == 0

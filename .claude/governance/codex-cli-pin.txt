@@ -193,4 +193,7 @@
 # beside it, the payloads of the other npm platforms, and the launcher of
 # the main package (bin/codex.js). Same posture as every earlier generation,
 # not a regression of this pack.
->=0.128.0,<0.161.0
+# Current compatibility floor (Onda6B): stable Codex CLI releases at or above
+# 0.128.0 are compatible version evidence. This unbounded range is not a
+# payload-hash attestation; codex-cli-pin-manifest.json remains that gate.
+>=0.128.0

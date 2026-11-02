@@ -246,8 +246,13 @@ fi
 
 if [ -d "$AUDIT_DIR/memory" ]; then
   mkdir -p "$STAGE_DIR/memory"
-  # Use cp -r to avoid tar streaming surprises with weird filenames
-  cp -pR "$AUDIT_DIR/memory/." "$STAGE_DIR/memory/"
+  # Snapshot regular files only.  Keeping a link would make a later restore
+  # able to redirect writes outside the selected state directory.
+  while IFS= read -r -d '' f; do
+    rel="${f#"$AUDIT_DIR/memory/"}"
+    mkdir -p "$STAGE_DIR/memory/$(dirname "$rel")"
+    cp -p -- "$f" "$STAGE_DIR/memory/$rel"
+  done < <(find "$AUDIT_DIR/memory" -type f -print0)
 fi
 
 if [ -n "$ADOPTER_ROOT" ] && [ -f "$ADOPTER_ROOT/.claude/agent-metrics.md" ]; then

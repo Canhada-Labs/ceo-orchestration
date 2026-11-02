@@ -2713,7 +2713,13 @@ class RoutingPreRegistrationTests(TestEnvContext):
         # A tripwire, not a proof: K-A3 says the detector has NO way to
         # mute a finding, so the routing section may not grow one under any
         # of the obvious names.
-        src = (Path(cct.__file__)).read_text(encoding="utf-8")
+        # The detector lives in two extracted implementation parts. Keep
+        # inspecting its complete real source, rather than the facade.
+        parts = Path(cct.__file__).resolve().parents[1] / "hooks" / "_lib" / "_cost_transcripts_parts"
+        src = "\n".join(
+            (parts / name).read_text(encoding="utf-8")
+            for name in ("routing_helpers.py", "routing.py")
+        )
         start = src.index("# Routing invariant (PLAN-186 AC-13) -- contract")
         end = src.index("# Programmatic API (PLAN-186 W0, AC-1b)")
         body = src[start:end].lower()

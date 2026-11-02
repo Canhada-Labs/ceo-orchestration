@@ -775,7 +775,7 @@ class TestPLAN078Wave1ModelRoutingAdvisory(TestEnvContext):
             description="Spawn Sofia",
             prompt=body,
             names_regex=re.compile(r"\bSofia\b", re.IGNORECASE),
-            env={},
+            env={"CLAUDE_PROJECT_DIR": str(self.project_dir)},
             subagent_type="code-reviewer",
         )
         # Advisory emit should have happened during decide()

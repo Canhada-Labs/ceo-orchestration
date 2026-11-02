@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -19,13 +20,31 @@ from unittest import mock
 from pathlib import Path
 
 _HOOKS_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_HOOKS_DIR.parent / "scripts" / "tests"))
 
 from _lib.testing import TestEnvContext  # noqa: E402
+from _subprocess_helpers import run_in_process_group  # noqa: E402
 
 _HOOK = _HOOKS_DIR / "check_canonical_edit.py"
 
 
 class CheckCanonicalEditTest(TestEnvContext):
+
+    def test_missing_canonical_component_blocks_with_integrity_reason(self):
+        isolated_hook = self.project_dir / "check_canonical_edit.py"
+        shutil.copyfile(_HOOK, isolated_hook)
+        env = dict(os.environ)
+        env.pop("PYTHONPATH", None)
+        result = run_in_process_group(
+            [sys.executable, str(isolated_hook)], timeout=10,
+            input=json.dumps({"tool_input": {"file_path": ".claude/team.md"}}),
+            capture_output=True, text=True, env=env, cwd=str(self.project_dir),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        decision = json.loads(result.stdout)
+        self.assertEqual(decision["decision"], "block", result.stderr)
+        self.assertIn("canonical_edit integrity", decision["reason"])
+        self.assertIn("component import unavailable", result.stderr)
 
     def _invoke(self, payload: dict) -> tuple[int, str, str]:
         """Run the hook as subprocess, returning (rc, stdout, stderr).

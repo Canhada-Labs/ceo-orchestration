@@ -65,6 +65,8 @@ Covered:
 """
 from __future__ import annotations
 
+from _subprocess_helpers import run_in_process_group
+
 import base64
 import contextlib
 import difflib
@@ -93,6 +95,7 @@ if str(_HOOKS_DIR) not in sys.path:
     sys.path.insert(0, str(_HOOKS_DIR))
 
 from _lib.testing import TestEnvContext  # noqa: E402
+from _fu144_repin_cases import run_literal_guard  # noqa: E402
 
 
 def _load(name: str, path: Path) -> Any:
@@ -1280,34 +1283,103 @@ class RepinEmittedScriptTest(_RePinBase):
                     if f["sev"] == "BLOCKING"]
         self.assertEqual(blocking, [])
 
-    def _run_guard(self, script: Path, dry: str, todo: bool) -> subprocess.CompletedProcess:
+    def _run_guard(self, script: Path, dry: str, todo: bool, prelude: Tuple[str, ...] = (),
+                   env: Optional[Dict[str, str]] = None) -> subprocess.CompletedProcess:
         lines = script.read_text().splitlines()
         start = next(i for i, ln in enumerate(lines) if ln.startswith("# [") and "re-pin-codex" in ln)
         end = next(i for i in range(start, len(lines)) if lines[i] == "fi")
-        sent = self.root / "sent.md"
-        pin = self.root / "pin.new"
+        sent = next(script.parent.glob("pin-*-approved.md"))
+        pin = script.parent / "codex-cli-pin.txt.new"
         sent.write_text("TODO(owner): falta\n" if todo else "pronto\n")
         pin.write_text("# ok\n")
         harness = "\n".join([
             "set -euo pipefail",
             "die() { printf 'DIE: %s\\n' \"$*\"; exit 1; }",
-            f"DRY={dry}", f"SENT='{sent}'", f"SRC_PIN='{pin}'",
-        ] + lines[start:end + 1] + ["echo PASSED"])
-        return subprocess.run(["bash", "-c", harness], capture_output=True, text=True,
-                              timeout=60, check=False)
+            f"DRY={dry}",
+        ] + list(prelude) + lines[start:end + 1] + ["echo PASSED"])
+        return run_in_process_group(["bash", "-c", harness], capture_output=True, text=True,
+                              timeout=60, check=False, cwd=str(self.repo), env=env)
 
-    def test_todo_guard_executes_as_declared(self) -> None:
+    def test_todo_guard_executes_as_declared_fu144(self) -> None:
         script = self._generated()
-        real = self._run_guard(script, "0", todo=True)
+        guard = script.read_text().split(MOD._GUARD[0], 1)[1].split("fi", 1)[0]
+        self.assertIn("env -u GREP_OPTIONS LC_ALL=C grep -Fn --", guard)
+        self.assertNotIn("$SENT", guard)
+        self.assertNotIn("$SRC_PIN", guard)
+        real = run_literal_guard(self, script, "0", todo=True)
         self.assertEqual(real.returncode, 1, real.stdout + real.stderr)
         self.assertIn("DIE: TODO(owner) pendente", real.stdout)
-        rehearsal = self._run_guard(script, "1", todo=True)
+        rehearsal = run_literal_guard(self, script, "1", todo=True)
         self.assertEqual(rehearsal.returncode, 0, rehearsal.stderr)
         self.assertIn("AVISO", rehearsal.stdout)
         self.assertIn("PASSED", rehearsal.stdout)
-        filled = self._run_guard(script, "0", todo=False)
+        filled = run_literal_guard(self, script, "0", todo=False)
         self.assertEqual(filled.returncode, 0, filled.stderr)
         self.assertEqual(filled.stdout.strip(), "PASSED")
+
+    # --- PLAN-194-FOLLOWUP-v1-4-4-backlog, item 10 (pacote C) --------------------
+
+    def test_fu144_guard_reads_the_literals_the_generator_wrote_not_mold_variables(self) -> None:
+        """Pacote C (1)/(2): any assignment form in the mold could point the old guard
+        at /dev/null, so it printed PASSED with the marker open. It reads no variable."""
+        script = self._generated()
+        for prelude in (("SENT=/dev/null", "SRC_PIN=/dev/null"),
+                        ("declare -a SENT=(/dev/null)", "SRC_PIN=/dev/null")):
+            real = self._run_guard(script, "0", todo=True, prelude=prelude)
+            self.assertEqual(real.returncode, 1, real.stdout + real.stderr)
+            self.assertIn("DIE: TODO(owner) pendente", real.stdout)
+            self.assertNotIn("PASSED", real.stdout)
+
+    def test_fu144_guard_grep_is_literal_and_ignores_the_ambient_options(self) -> None:
+        """Pacote C (3): GREP_OPTIONS reaches a bare grep (-E is a fail-open on BSD)."""
+        script = self._generated()
+        shim = self.root / "grep-spy"
+        shim.mkdir()
+        real_grep = shutil.which("grep")
+        spy = shim / "grep"
+        spy.write_text(
+            "#!/bin/sh\n"
+            'printf \'SPY GREP_OPTIONS=%s LC_ALL=%s ARGV=%s\\n\' '
+            '"${GREP_OPTIONS-unset}" "${LC_ALL-unset}" "$*"\n'
+            f'exec "{real_grep}" "$@"\n')
+        spy.chmod(0o755)
+        env = dict(os.environ, GREP_OPTIONS="-E", LC_ALL="pt_BR.UTF-8",
+                   PATH=f"{shim}{os.pathsep}{os.environ['PATH']}")
+        proc = self._run_guard(script, "0", todo=False, env=env)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("SPY GREP_OPTIONS=unset LC_ALL=C ARGV=-Fn -- TODO(owner) ", proc.stdout)
+
+    def test_fu144_grep_failure_is_refused_not_read_as_clean(self) -> None:
+        """Pacote C (4): rc 2 (a material it could not read) used to fall through."""
+        script = self._generated()
+        pin = script.parent / "codex-cli-pin.txt.new"
+        for dry in ("0", "1"):
+            proc = self._run_guard(script, dry, todo=False,
+                                   prelude=(f"rm -f '{pin}'",))
+            self.assertEqual(proc.returncode, 1, f"DRY={dry}: {proc.stdout} {proc.stderr}")
+            self.assertIn("DIE: não consegui conferir TODO(owner) nos materiais", proc.stdout)
+
+    def test_fu144_legacy_guard_of_a_real_pack_is_still_a_valid_mold(self) -> None:
+        """The packs on disk carry the old guard: one exact form stays recognised, and
+        any other edit of it is refused as before."""
+        trap = "trap 'x' EXIT"
+        self.assertEqual(MOD._previous_guard([trap] + MOD._LEGACY_GUARD + ["y"], 0),
+                         len(MOD._LEGACY_GUARD))
+        hacked = list(MOD._LEGACY_GUARD)
+        hacked[2] = hacked[2].replace('"$SENT"', "/dev/null")
+        with self.assertRaises(MOD.RePinError):
+            MOD._previous_guard([trap] + hacked + ["y"], 0)
+
+    def test_fu144_current_guard_with_a_replaced_path_shape_is_refused(self) -> None:
+        trap = "trap 'x' EXIT"
+        ctx = {"pack_dir": ".claude/plans/PLAN-9/codex-pin-03", "sentinel_name": "pin-03-approved.md"}
+        guard = MOD._guard_lines(ctx)
+        self.assertEqual(MOD._previous_guard([trap] + guard + ["y"], 0), len(guard))
+        hacked = [ln.replace(" 2>/dev/null; then", " ; true 2>/dev/null; then") for ln in guard]
+        with self.assertRaises(MOD.RePinError):
+            MOD._previous_guard([trap] + hacked + ["y"], 0)
+        with self.assertRaises(MOD.RePinError):
+            MOD._guard_lines({"pack_dir": "a'; rm -rf /; '", "sentinel_name": "s"})
 
     def test_generated_script_is_a_valid_mold_for_the_next_generation(self) -> None:
         script = self._generated()
@@ -1357,6 +1429,34 @@ class RepinConstantsGrammarTest(_RePinBase):
             if m is None or m.group(1) not in MOD._CONST_RENDERED:
                 out.append(ln)
         return out
+
+    def test_fu144_marker_only_in_the_pending_fields_of_what_the_guard_reads(self) -> None:
+        """Repin plan, item 1 (class): the inherited-prose note named the marker, so every
+        pack of this grammar had a sentinel its own SIGN refused, even once filled in."""
+        _summary, pack = self._emit()
+        sent = next(pack.glob("pin-*-approved.md"))
+        pin = pack / "codex-cli-pin.txt.new"
+        for path in (sent, pin):
+            for line in path.read_text().split("\n"):
+                if MOD.TODO_MARK in line:
+                    self.assertRegex(line, r"^(# )?TODO\(owner\): ", path.name)
+        filled = [ln for ln in sent.read_text().split("\n")
+                  if not ln.startswith(MOD.TODO_MARK)]
+        self.assertNotIn(MOD.TODO_MARK, "\n".join(filled))
+
+    def test_fu144_stray_marker_is_refused_before_anything_is_written(self) -> None:
+        ctx = {"sentinel_name": "pin-03-approved.md"}
+        good = {"pin-03-approved.md": "TODO(owner): falta\n", MOD.PIN_OUT: "# TODO(owner): x\n1\n"}
+        MOD._check_guard_read_files(good, ctx)
+        for name, body in (("pin-03-approved.md", "o guard TODO(owner) e o resto\n"),
+                           (MOD.PIN_OUT, "# nota: TODO(owner) citado\n"),
+                           ("pin-03-approved.md", "TODO(owner): a TODO(owner)\n")):
+            bad = dict(good)
+            bad[name] = body
+            with self.assertRaises(MOD.RePinError) as caught:
+                MOD._check_guard_read_files(bad, ctx)
+            self.assertEqual(caught.exception.rc, MOD.EXIT_VERIFY)
+            self.assertIn(name, str(caught.exception))
 
     def test_emits_the_pack_with_every_constant_rendered(self) -> None:
         summary, pack = self._emit()
@@ -1421,7 +1521,10 @@ class RepinConstantsGrammarTest(_RePinBase):
                                       text=True, timeout=60, check=False)
                 self.assertEqual(proc.returncode, 0, proc.stderr)
                 rel = path.relative_to(self.repo).as_posix()
-                self.assertEqual(lint.lint_file(str(path), rel, "100644"), [])
+                # R10 is the advisory census of harnesses without the caller-repo guard
+                # (backlog item 14): the rehearsal comes from the mold, byte for byte.
+                self.assertEqual([f for f in lint.lint_file(str(path), rel, "100644")
+                                  if f["rule"] != "R10"], [])
         scan = subprocess.run(["bash", "-c", REHEARSAL_LITERAL_SCAN, "scan",
                                str(pack / "OWNER-PIN-SIGN.sh")],
                               capture_output=True, text=True, timeout=60, check=False)
@@ -1567,9 +1670,9 @@ class RepinConstantsGrammarTest(_RePinBase):
                     for text in (readme, sentinel):
                         self.assertIn("Contradição detectada nesta geração", text)
 
-    def test_todo_guard_executes_in_the_constants_grammar(self) -> None:
+    def test_todo_guard_executes_in_the_constants_grammar_fu144(self) -> None:
         _summary, pack = self._emit()
-        real = RepinEmittedScriptTest._run_guard(self, pack / "OWNER-PIN-SIGN.sh", "0", todo=True)
+        real = run_literal_guard(self, pack / "OWNER-PIN-SIGN.sh", "0", todo=True)
         self.assertEqual(real.returncode, 1, real.stdout + real.stderr)
         self.assertIn("DIE: TODO(owner) pendente", real.stdout)
 

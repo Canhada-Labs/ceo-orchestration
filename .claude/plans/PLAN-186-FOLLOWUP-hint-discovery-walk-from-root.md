@@ -1,7 +1,8 @@
 ---
 id: PLAN-186-FOLLOWUP-hint-discovery-walk-from-root
 title: "discover_hint_dirs limita a caminhada de hints e sinaliza truncagem"
-status: draft
+status: superseded
+superseded_by: PLAN-196
 created: 2026-09-05
 owner: CEO
 depends_on: [PLAN-186]

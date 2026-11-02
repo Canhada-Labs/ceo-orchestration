@@ -588,3 +588,20 @@ A convenção do hook de checkpoint chama o arquivo de `LEDGER-ARCHIVE.md`; o no
 - §W3b.3 — verificação em fonte primária (ids da OpenAI): arquivada em `LEDGER-archive-s361-s362.md` (sha256 `01963694d0827d89e38a9ca92fd266a30eaa39e172c803ce5c34cf652ae19b22`).
 - §W0.6 — verificador de procedência do Codex (S361, 2026-10-02): arquivada em `LEDGER-archive-s361-s362.md` (sha256 `01963694d0827d89e38a9ca92fd266a30eaa39e172c803ce5c34cf652ae19b22`).
 - §Arquivo (S362, 2026-10-02): arquivada em `LEDGER-archive-s361-s362.md` (sha256 `01963694d0827d89e38a9ca92fd266a30eaa39e172c803ce5c34cf652ae19b22`).
+
+## F2 — estresse da W2.5
+
+**Estado: BLOQUEADO para veredito F2 completo; subconjunto integrado executado em 2026-11-01.**
+Palco sem `.git`, TMPDIR `tmpfs`, Python 3.12.3. Comando final: `python3 -m pytest
+.claude/hooks/tests/test_spool_state_amend4.py::TestF2IntegratedSubset -q`; resultado: `3 passed in 0.56s`.
+
+- Leva 1: 1.000 `agent_spawn` em 100 drains; conjunto de `record_id`, 1.000 linhas correspondentes e
+  `verify_chain()` íntegro.
+- Leva 2: filho `READY` recebeu `SIGKILL`; drainer seguinte recuperou exatamente 25 linhas `{0..24}`;
+  stderr sem `Fatal Python error`.
+- Leva 3: quatro escritores × 25, duas drenagens; exatamente 100 linhas `{0..99}`; stderr sem fatal.
+
+Os três controles mataram retorno antecipado de `drain_now`; o helper de visão do log duplicado matou a
+asserção de multiplicidade (set igual, 2.000 linhas). Isto não equivale aos M-a..M-d. F2 completo segue
+dependente de U2-A/B, escritor direto composto, 50 transições, rotação, reuso/adoption PID e M-a..M-d.
+Evidência: `/var/tmp/pista-3/ceo-w5b-stress-results.txt`.

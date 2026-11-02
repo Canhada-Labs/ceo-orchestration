@@ -210,7 +210,7 @@ Always (regardless of profile):
 - `.claude/hooks/check_agent_spawn.py` — the mechanical spawn enforcement (Python)
 - `.claude/hooks/audit_log.py` — silent PostToolUse audit observer
 - `.claude/hooks/_python-hook.sh` — Python 3.9+ version resolver shim
-- `.claude/hooks/_lib/` — 72 shared modules, excluding the package `__init__.py` (payload, redact, filelock, team, testing, test_isolation, audit_emit, audit_hmac, policy, tool_lifecycle, advisory_dampen, codex_cli_shape, …)
+- `.claude/hooks/_lib/` — 78 shared modules, excluding the package `__init__.py` (payload, redact, filelock, team, testing, test_isolation, audit_emit, audit_hmac, policy, tool_lifecycle, advisory_dampen, codex_cli_shape, …)
 - `.claude/scripts/` — validate-governance, inject-agent-context,
   check-skill-health, check-pitfall-regression (universal)
 - `.claude/commands/audit-page.md` — generic page audit
@@ -578,7 +578,7 @@ your-project/
 │   │       ├── commands/                # domain slash commands
 │   │       └── scripts/                 # domain check scripts
 │   ├── hooks/
-│   │   ├── _lib/                        # 72 shared Python modules, excl. __init__.py (audit_emit, audit_hmac, policy, redact, tool_lifecycle, …)
+│   │   ├── _lib/                        # 78 shared Python modules, excl. __init__.py (audit_emit, audit_hmac, policy, redact, tool_lifecycle, …)
 │   │   ├── _python-hook.sh              # Python version resolver + invoker
 │   │   ├── check_agent_spawn.py         # mechanical enforcement of spawn protocol
 │   │   ├── audit_log.py                 # silent PostToolUse audit observer
@@ -695,28 +695,31 @@ cat TARGET/.claude/.framework-version   # preferred — refreshed on every upgra
 cat TARGET/VERSION                      # fallback (pre-v1.3.0 installs)
 ```
 
-Prefer `.claude/.framework-version` as the forensic anchor when an
-adopter reports a bug. The root `VERSION` file matches the git tag of
-the source framework checkout **at install time only**: `upgrade.sh`
-deliberately never touches it (an adopter repo may have its own
-`VERSION`, and taking it over is the S238/ADR-155 clobber class — see
-`ADR-155-AMEND-1`), so on an upgraded install `VERSION` reports the
-ORIGINAL install version, not the current one. The marker is refreshed
-on every upgrade and is cross-checked against `VERSION` in every
-framework release; fall back to `VERSION` only on pre-v1.3.0 installs
-that have not upgraded yet.
+Prefer `.claude/.framework-version` as the forensic anchor when an adopter reports a bug.
+The root `VERSION` file matches the git tag of the source framework checkout **at install time only**:
+`upgrade.sh` deliberately never touches it (an adopter repo may have its own `VERSION`, and taking it over
+is the S238/ADR-155 clobber class — see `ADR-155-AMEND-1`), so on an upgraded install `VERSION` reports the
+ORIGINAL install version, not the current one. The marker is refreshed on every upgrade
+and is cross-checked against `VERSION` in every
+framework release; fall back to `VERSION` only on pre-v1.3.0 installs that have not upgraded yet.
 
 ---
 
 ## Upgrade flow
 
-To refresh framework-derived content in an existing adopter install
-(without touching user-customized files), use `scripts/upgrade.sh`:
+To refresh framework-derived content without touching user-customized files,
+use `scripts/upgrade.sh` with the RC pin during the hold or the GA pin after publication:
 
 ```bash
 cd /path/to/ceo-orchestration   # source framework checkout
-git pull                         # get the latest framework
+git pull --tags                   # get the framework and published tags
+# During the RC hold, resolve the latest published RC tag:
+bash scripts/upgrade.sh /path/to/your/project --pin "$(git tag --list 'v1.4.3-rc.*' --sort=-v:refname | head -n 1)"
+# Alternatively, after the GA tag is published:
 bash scripts/upgrade.sh /path/to/your/project --pin v1.4.3
+# While a release is on its 24 h hold, its GA tag does not exist yet and the line
+# above stops with `ERROR: unknown --pin ref` (exit 2). Pin the candidate instead:
+bash scripts/upgrade.sh /path/to/your/project --pin v1.4.3-rc.1
 ```
 
 What gets refreshed:

@@ -255,7 +255,7 @@ See ADR-055 §Threat Model §Out-of-scope for the complete residual list.
      Linux, fs_usage on macOS) if available.
 4. **Restore from backup** if tampering confirmed:
    ```bash
-   bash .claude/scripts/ceo-restore.sh ~/.ceo-backups/<slug>/<latest>.tar.gz --dry-run
+   bash .claude/scripts/ceo-restore.sh ~/.ceo-backups/<slug>/<latest>.tar.gz
    bash .claude/scripts/ceo-restore.sh ~/.ceo-backups/<slug>/<latest>.tar.gz --apply
    ```
 5. **Increase backup cadence** going forward (e.g. cron every hour
@@ -482,7 +482,7 @@ at minimum before the first production deploy of any adopter project.
    `injection_flag` events injected into a temp audit log. Time the
    first-5-min response.
 2. **Backup restore drill**: actually run `ceo-restore.sh
-   --dry-run` on a recent backup. Verify the dry-run output matches
+   without `--apply` on a recent backup. Verify the preview output matches
    expected paths.
 3. **Hook bypass attempt**: try to spawn an agent without skill
    content; verify the hook blocks. Try with `CEO_SOTA_DISABLE=1`;

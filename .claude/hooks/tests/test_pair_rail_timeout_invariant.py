@@ -57,6 +57,7 @@ stdlib-only (json, re, pathlib, unittest). Python >= 3.9.
 from __future__ import annotations
 
 import json
+import inspect
 import re
 import sys
 import unittest
@@ -126,9 +127,9 @@ _INTERNAL_DEFAULT_RE = re.compile(
 
 
 def _extract_internal_default_s(hook_source: Path) -> int:
-    matches = _INTERNAL_DEFAULT_RE.findall(
-        hook_source.read_text(encoding="utf-8")
-    )
+    import check_pair_rail
+
+    matches = _INTERNAL_DEFAULT_RE.findall(inspect.getsource(check_pair_rail.main))
     if len(matches) != 1:
         raise AssertionError(
             "expected exactly ONE CEO_PAIR_RAIL_TIMEOUT_S default seam in "
@@ -253,9 +254,9 @@ class TestPairRailTimeoutInvariant(TestEnvContext):
             "that edits this test in the same change (ADR-110-AMEND-1)"
             % (self.internal_default_s, _RATIFIED_INTERNAL_S),
         )
-        fallbacks = _FALLBACK_RE.findall(
-            _HOOK_SOURCE.read_text(encoding="utf-8")
-        )
+        import check_pair_rail
+
+        fallbacks = _FALLBACK_RE.findall(inspect.getsource(check_pair_rail.main))
         self.assertEqual(
             fallbacks,
             [str(_RATIFIED_INTERNAL_S)] * 2,

@@ -7,6 +7,8 @@ is a disposable tmp dir. The G7 positive control drives the REAL producers: the
 
 from __future__ import annotations
 
+from _subprocess_helpers import run_in_process_group
+
 import contextlib
 import importlib
 import importlib.util
@@ -153,6 +155,46 @@ class TestLossVerifierG6(_Tree):
         rep = json.loads(out.getvalue())
         self.assertEqual((rc, rep["g6"]["lost"], rep["g6"]["journal_malformed_lines"]), (0, 0, 1))
         self.assertEqual(rep["attention"], ["g6_journal_malformed_lines"])
+
+    def test_fu144_malformed_record_id_is_named_and_other_gates_continue(self) -> None:
+        """A non-string top-level id is reported without hiding G6 or G7."""
+        lost = _rid()
+        self.journal([self.commit(lost)])
+        self.log([{"record_id": []}])
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        (self.fam / rl.ERRORS_FILE).write_text(
+            "[%s] lock timeout (stale?)  would-log={}\n" % stamp,
+            encoding="utf-8",
+        )
+        env = {"PATH": os.environ.get("PATH", ""), "HOME": str(self.home_dir),
+               "CLAUDE_PROJECT_DIR_NATIVE": str(self.fam)}
+        out = io.StringIO()
+        with mock.patch.dict(os.environ, env, clear=True), contextlib.redirect_stdout(out):
+            rc = rl.main(["--since", "2026-10-01T00:00:00Z"])
+        rep = json.loads(out.getvalue())
+        self.assertEqual(rc, 1)
+        self.assertEqual(rep["g6"]["lost_record_ids"], [lost])
+        self.assertEqual(rep["g6"]["malformed_record_id_files"], ["audit-log.jsonl"])
+        self.assertEqual(rep["g7"]["G7"], 1)
+        self.assertIn("g6_malformed_record_id_files", rep["attention"])
+
+    def test_fu144_real_loss_cli_creates_no_bytecode_without_env_opt_out(self) -> None:
+        """The ordinary read-only G7 entrypoint leaves its pycache prefix empty."""
+        cache = self._tmp_root / "real-loss-pycache"
+        env = self.subprocess_env(CLAUDE_PROJECT_DIR_NATIVE=str(self.fam))
+        for key in ("CEO_AUDIT_LOG_DIR", "CEO_AUDIT_LOG_PATH", "CEO_AUDIT_LOG_ERR",
+                    "CEO_AUDIT_LOG_LOCK", "CEO_PROJECT_STATE_DIR"):
+            env.pop(key, None)
+        env.pop("PYTHONDONTWRITEBYTECODE", None)
+        res = run_in_process_group(
+            [sys.executable, "-c", _shared._RUN_WITH_PYCACHE_PREFIX, str(cache), str(SCRIPT),
+             "--g7", "--since", "2026-10-01T00:00:00Z"],
+            env=env, capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(json.loads(res.stdout)["g7"]["G7"], 0)
+        self.assertEqual(list(cache.rglob("*check-audit-real-loss*.pyc")), [])
+        self.assertEqual(list(cache.rglob("*audit_spool_state*.pyc")), [])
 
     def test_loss_verifier_streams_lines_and_never_reads_a_whole_file(self) -> None:
         a, b = _rid(), _rid()

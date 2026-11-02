@@ -26,9 +26,14 @@ def _is_kernel_ceremony_landed_F4() -> bool:
     return "Session 75 Codex Finding 4 closure" in text
 
 
+def _mcp_finding_doc() -> str:
+    # Read the exported function itself; its implementation may be extracted.
+    from _lib import audit_emit
+    return audit_emit.emit_mcp_injection_finding.__doc__ or ""
+
+
 def _is_kernel_ceremony_landed_F6() -> bool:
-    text = (REPO_ROOT / ".claude" / "hooks" / "_lib" / "audit_emit.py").read_text(encoding="utf-8")
-    return "Session 75 Codex Finding 6 closure" in text
+    return "Session 75 Codex Finding 6 closure" in _mcp_finding_doc()
 
 
 def _is_kernel_ceremony_landed_F7() -> bool:
@@ -164,7 +169,7 @@ class Session75F8SentinelUnlockEmit(TestEnvContext):
 )
 class Session75F6AuditEmitDocstring(TestEnvContext):
     def test_severity_docstring_aligned(self) -> None:
-        text = (REPO_ROOT / ".claude" / "hooks" / "_lib" / "audit_emit.py").read_text(encoding="utf-8")
+        text = _mcp_finding_doc()
         # New (correct) form
         self.assertIn("`low` | `medium` | `high`", text)
         # Old (drifted) form must be removed for the mcp-finding doc-block
@@ -172,7 +177,7 @@ class Session75F6AuditEmitDocstring(TestEnvContext):
         self.assertNotIn("severity: `info` | `warn` | `block`", text)
 
     def test_scanner_action_docstring_aligned(self) -> None:
-        text = (REPO_ROOT / ".claude" / "hooks" / "_lib" / "audit_emit.py").read_text(encoding="utf-8")
+        text = _mcp_finding_doc()
         self.assertIn("`advisory` | `stripped` | `blocked`", text)
 
 

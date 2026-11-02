@@ -769,3 +769,28 @@ is historical (it predates the ADR-181 pin); the pin above is the truth.
 
 The A1.1 sentence on the primary session model and A2.2 item 4 are
 historical; the session pin is `claude-opus-5-5` (A3.2 item 4).
+
+## Amendment 4 — PLAN-176 semantic families (2026-11-01, Onda 6B)
+
+The Owner authorizes family admission without a GPG ceremony for each model version.
+The earlier closed-list/per-bump clauses remain historical; this amendment replaces them.
+
+# MODEL_FAMILY_POLICY = "semantic-families-v1"
+
+The explicit blocks remain deterministic compatibility mirrors. Their historic A2/A3 tail
+is retained; new compatible identifiers do not need another entry or signature. Runtime
+acceptance is explicit membership OR an anchored family: Claude opus/sonnet/haiku majors
+4–9, GPT 5–9, o 3–9, Gemini 2–9, Grok 3–9. Only Opus, GPT and o families, plus the
+explicit legacy floor, are VETO-eligible. Sonnet, Haiku, Gemini and Grok availability
+does not grant a VETO seat. The retired `claude-opus-4-1` remains rejected.
+
+`_lib/model_currency.py` owns these predicates. The availability generator appends
+major-family prefixes to the explicit IDs when this formal policy assignment is present,
+so the harness segment-prefix matcher can select future family members without editing
+settings for each bump. Exact settings equality still compares against the generated
+entries. A native availability prefix cannot express a per-ID retirement exception; the
+retirement and VETO checks remain local guard policy. Acceptance validates local naming
+and role policy, not provider availability, price, capability or a measured promotion.
+The preferred session model, fallback chain and role-to-provider assignments are unchanged.
+Changes to families, floors or retirement rules remain policy changes; ordinary admitted
+model versions require neither an ADR edit nor a per-version GPG ceremony.

@@ -15,15 +15,32 @@ stdlib-only (ADR-002). Python >= 3.9 compatible:
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, Final, List, Literal, Optional, Tuple
+
+
+_HOOKS = Path(__file__).resolve().parents[2] / "hooks"
+if str(_HOOKS) not in sys.path:
+    sys.path.insert(0, str(_HOOKS))
+try:
+    from _lib import model_currency as _model_currency  # noqa: E402
+except ImportError:
+    _model_currency = None  # type: ignore[assignment]
+
+def is_valid_model_id(model: object) -> bool:
+    """Accept semantic families and the explicit compatibility mirror."""
+    if _model_currency is not None:
+        return _model_currency.is_allowed_model(model, VALID_MODEL_IDS)
+    return isinstance(model, str) and model in VALID_MODEL_IDS
 
 
 # ---------------------------------------------------------------------
 # Model ID type alias (C-P0-9 — full IDs only; no short names).
 # Matches ADR-052 canonical form + .claude/agents/<slug>.md model: field.
 # ---------------------------------------------------------------------
-MODEL_ID = "Literal['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-5', 'claude-sonnet-5', 'claude-fable-5-1', 'claude-opus-5-5']"
+MODEL_ID = str  # Open family namespace; runtime policy is checked below.
 # Runtime constant — used by loader.py / learn.py for allowlist checks.
 # ADR-149: claude-fable-5 added (flagship generation bump, additive).
 # ADR-181 (PLAN-163 T1.2d): claude-opus-5 + claude-sonnet-5 added — the
@@ -36,8 +53,8 @@ MODEL_ID = "Literal['claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-4-6', 'c
 # (defense-in-depth literal; parity enforced by
 # hooks/tests/test_adr149_validator_parity.py).
 VALID_MODEL_IDS: "Final[Tuple[str, ...]]" = (
-    "claude-fable-5",
     "claude-opus-4-8",
+    "claude-fable-5",
     "claude-sonnet-4-6",
     "claude-haiku-4-5-20251001",
     "claude-opus-5",

@@ -69,6 +69,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from _subprocess_helpers import run_in_process_group
 from _lib.testing import TestEnvContext  # noqa: E402
 
 _HOOK = Path(__file__).resolve().parent.parent / "check_cost_envelope.py"
@@ -295,6 +296,51 @@ class CostEnvelopeBlockPathTests(TestEnvContext):
             self._dispatch(estimate=600, plan_id="PLAN-A", home=broken_home),
             "a lock/IO failure must fail OPEN (CLAUDE.md §4), never block",
         )
+
+    def _process_fu144(self, env: Dict[str, str], cwd: Path):
+        payload = {"tool_name": "Bash", "tool_input": {"command": _SWARM_CMD}}
+        proc = run_in_process_group(
+            [sys.executable, str(_HOOK)], input=json.dumps(payload), env=env,
+            cwd=str(cwd), capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("Fatal Python error", proc.stderr)
+        return proc, json.loads(proc.stdout)
+
+    def _cost_files_fu144(self):
+        return {str(p): p.read_bytes() for p in self.home_dir.rglob("cost-envelope-*.json")}
+
+    def test_fu144_missing_project_never_charges_current_directory(self) -> None:
+        self._assert_allowed(self._dispatch(estimate=300, plan_id="PLAN-A"))
+        before = self._cost_files_fu144()
+        self.assertTrue(before, "control must have persisted a real cost state")
+        env = self._child_env(estimate=100, plan_id="NO-PROJECT")
+        env.pop("CLAUDE_PROJECT_DIR", None)
+        proc, decision = self._process_fu144(env, self.project_dir)
+        self._assert_allowed(decision)
+        self.assertEqual(self._cost_files_fu144(), before)
+        self.assertIn("project scope unavailable", proc.stderr)
+
+    def test_fu144_relative_project_does_not_create_a_cost_bucket(self) -> None:
+        env = self._child_env(estimate=100, plan_id="RELATIVE-PROJECT")
+        env["CLAUDE_PROJECT_DIR"] = "relative-project"
+        proc, decision = self._process_fu144(env, self.project_dir)
+        self._assert_allowed(decision)
+        self.assertEqual(self._cost_files_fu144(), {})
+        self.assertIn("project scope unavailable", proc.stderr)
+
+    def test_fu144_explicit_project_is_independent_of_child_cwd(self) -> None:
+        from _lib.cost_envelope import CostEnvelope
+
+        elsewhere = self.project_dir / "unrelated-cwd"
+        elsewhere.mkdir()
+        env = self._child_env(estimate=100, plan_id="EXPLICIT-PROJECT")
+        _, decision = self._process_fu144(env, elsewhere)
+        self._assert_allowed(decision)
+        bucket = CostEnvelope(str(self.project_dir), "cost-envelope-block-control")
+        other = CostEnvelope(str(elsewhere), "cost-envelope-block-control")
+        self.assertEqual(bucket.current_spend("daily"), 100)
+        self.assertFalse(other.state_path.exists())
 
 
 if __name__ == "__main__":  # pragma: no cover

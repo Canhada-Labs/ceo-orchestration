@@ -164,6 +164,32 @@ fi
 
 log "ceo-restore: tarball=$TARBALL dest=$DEST mode=$([ "$APPLY" -eq 1 ] && echo APPLY || echo DRY-RUN)"
 
+_physical_dest() {
+  local raw="$1" parent leaf
+  case "$raw" in
+    *//*|*/./*|*/../*|../*|.)
+      echo "fatal: refused destination spelling: $raw" >&2; return 1 ;;
+  esac
+  parent="$(dirname "$raw")"
+  leaf="$(basename "$raw")"
+  if [ -e "$raw" ] || [ -L "$raw" ]; then
+    [ -d "$raw" ] && [ ! -L "$raw" ] || {
+      echo "fatal: destination must be a real directory, not a link or file" >&2; return 1;
+    }
+    (cd -P "$raw" && pwd)
+    return 0
+  fi
+  [ -d "$parent" ] && [ ! -L "$parent" ] || {
+    echo "fatal: destination parent must be a real directory" >&2; return 1;
+  }
+  printf '%s/%s\n' "$(cd -P "$parent" && pwd)" "$leaf"
+}
+
+ARCHIVE_VALIDATOR="$(dirname "${BASH_SOURCE[0]}")/_restore_archive.py"
+[ -f "$ARCHIVE_VALIDATOR" ] || { echo "fatal: archive validator missing" >&2; exit 2; }
+python3 "$ARCHIVE_VALIDATOR" "$TARBALL" || exit 2
+DEST="$(_physical_dest "$DEST")" || exit 2
+
 # Resolve sha256 binary
 SHA256_BIN=""
 if command -v sha256sum >/dev/null 2>&1; then
@@ -188,12 +214,79 @@ else
   log "warning: no .sha256 sidecar found; integrity not verified"
 fi
 
+# Validate the exact tree that both preview and apply describe.  This is before
+# the dry-run return deliberately: preview must never bless an apply it rejects.
+if [ "$RESTORE_AGENT_METRICS" -eq 1 ] || [ "$RESTORE_PLANS" -eq 1 ]; then
+  if [ -L "$(pwd)/.claude" ] || [ ! -d "$(pwd)/.claude" ]; then
+    echo "fatal: optional restore requires a real .claude directory in CWD" >&2
+    exit 2
+  fi
+  if [ "$RESTORE_PLANS" -eq 1 ] && [ -L "$(pwd)/.claude/plans" ]; then
+    echo "fatal: optional plans restore requires a real .claude/plans directory" >&2
+    exit 2
+  fi
+fi
+STAGE_DIR="$(mktemp -d -t ceo-restore-XXXXXX)"
+trap 'rm -rf "$STAGE_DIR"' EXIT
+tar -xzf "$TARBALL" -C "$STAGE_DIR" --no-same-owner --no-same-permissions
+if find "$STAGE_DIR" -type l -print -quit | grep -q .; then
+  echo "fatal: archive contains symbolic links" >&2
+  exit 2
+fi
+
 # List contents (dry-run preview)
 log ""
 log "tarball contents:"
-tar -tzf "$TARBALL" | sed 's/^/  /' | (head -50; echo "  ... (use 'tar tzf $TARBALL' for full listing)" 2>/dev/null) | head -52 | tee /tmp/ceo-restore-listing.$$ >/dev/null
-[ "$QUIET" -eq 0 ] && cat /tmp/ceo-restore-listing.$$ >&2
-rm -f /tmp/ceo-restore-listing.$$
+if [ "$QUIET" -eq 0 ]; then
+  tar -tzf "$TARBALL" | sed -n '1,50{s/^/  /;p;}' >&2
+fi
+
+_refuse_link_ancestors() {
+  local path="$1" stop="$2"
+  if [ -L "$path" ]; then
+    echo "fatal: restore target is a symbolic link: $path" >&2
+    return 2
+  fi
+  if [ -e "$path" ] && [ ! -f "$path" ]; then
+    echo "fatal: restore target must be a regular file: $path" >&2
+    return 2
+  fi
+  while [ "$path" != "$stop" ]; do
+    if [ -L "$path" ]; then
+      echo "fatal: restore target is a symbolic link: $path" >&2
+      return 2
+    fi
+    path="$(dirname "$path")"
+  done
+}
+
+_preflight_targets() {
+  local f rel target
+  if [ -d "$STAGE_DIR/audit" ]; then
+    for f in "$STAGE_DIR/audit"/*; do
+      [ -f "$f" ] || continue
+      _refuse_link_ancestors "$DEST/$(basename "$f")" "$DEST" || return 2
+    done
+  fi
+  if [ -d "$STAGE_DIR/memory" ]; then
+    while IFS= read -r -d '' f; do
+      rel="${f#"$STAGE_DIR/memory/"}"
+      target="$DEST/memory/$rel"
+      _refuse_link_ancestors "$target" "$DEST" || return 2
+    done < <(find "$STAGE_DIR/memory" -type f -print0)
+  fi
+  if [ "$RESTORE_AGENT_METRICS" -eq 1 ] && [ -f "$STAGE_DIR/agent-metrics.md" ]; then
+    _refuse_link_ancestors "$(pwd)/.claude/agent-metrics.md" "$(pwd)" || return 2
+  fi
+  if [ "$RESTORE_PLANS" -eq 1 ] && [ -d "$STAGE_DIR/plans" ]; then
+    while IFS= read -r -d '' f; do
+      rel="${f#"$STAGE_DIR/plans/"}"
+      _refuse_link_ancestors "$(pwd)/.claude/plans/$rel" "$(pwd)" || return 2
+    done < <(find "$STAGE_DIR/plans" -type f -print0)
+  fi
+}
+
+_preflight_targets || exit 2
 
 if [ "$APPLY" -eq 0 ]; then
   log ""
@@ -203,40 +296,17 @@ if [ "$APPLY" -eq 0 ]; then
 fi
 
 # ----- APPLY -----
-
-# Confirmation
 if [ "$FORCE" -ne 1 ]; then
-  echo ""
-  echo "About to restore tarball INTO:"
-  echo "  $DEST/audit/        (overwrites audit-log.jsonl + rotated archives)"
-  echo "  $DEST/memory/       (overwrites auto-memory)"
-  if [ "$RESTORE_AGENT_METRICS" -eq 1 ]; then
-    echo "  $(pwd)/.claude/agent-metrics.md (if present in tarball)"
-  fi
-  if [ "$RESTORE_PLANS" -eq 1 ]; then
-    echo "  $(pwd)/.claude/plans/ (if present in tarball)"
-  fi
-  echo ""
-  read -p "Proceed? [yes/no] " ANSWER
-  if [ "$ANSWER" != "yes" ]; then
-    echo "aborted."
-    exit 1
-  fi
+  read -r -p "Proceed with restore into $DEST? [yes/no] " ANSWER
+  [ "$ANSWER" = "yes" ] || { echo "aborted."; exit 1; }
 fi
-
 mkdir -p "$DEST"
-
-# Stage extract to a temp dir then move
-STAGE_DIR="$(mktemp -d -t ceo-restore-XXXXXX)"
-trap 'rm -rf "$STAGE_DIR"' EXIT
-
-tar -xzf "$TARBALL" -C "$STAGE_DIR"
 
 # Restore audit/
 if [ -d "$STAGE_DIR/audit" ]; then
   for f in "$STAGE_DIR/audit"/*; do
-    [ -f "$f" ] || continue
-    cp -p "$f" "$DEST/$(basename "$f")"
+    [ -f "$f" ] && [ ! -L "$f" ] || continue
+    cp -p -- "$f" "$DEST/$(basename "$f")"
   done
   log "restored: audit/ → $DEST/"
 fi
@@ -244,7 +314,11 @@ fi
 # Restore memory/
 if [ -d "$STAGE_DIR/memory" ]; then
   mkdir -p "$DEST/memory"
-  cp -pR "$STAGE_DIR/memory/." "$DEST/memory/"
+  while IFS= read -r -d '' f; do
+    rel="${f#"$STAGE_DIR/memory/"}"
+    mkdir -p "$DEST/memory/$(dirname "$rel")"
+    cp -p -- "$f" "$DEST/memory/$rel"
+  done < <(find "$STAGE_DIR/memory" -type f -print0)
   log "restored: memory/ → $DEST/memory/"
 fi
 
@@ -262,7 +336,11 @@ fi
 if [ "$RESTORE_PLANS" -eq 1 ] && [ -d "$STAGE_DIR/plans" ]; then
   if [ -d "$(pwd)/.claude" ]; then
     mkdir -p "$(pwd)/.claude/plans"
-    cp -pR "$STAGE_DIR/plans/." "$(pwd)/.claude/plans/"
+    while IFS= read -r -d '' f; do
+      rel="${f#"$STAGE_DIR/plans/"}"
+      mkdir -p "$(pwd)/.claude/plans/$(dirname "$rel")"
+      cp -p -- "$f" "$(pwd)/.claude/plans/$rel"
+    done < <(find "$STAGE_DIR/plans" -type f -print0)
     log "restored: plans/ → $(pwd)/.claude/plans/"
   else
     log "warning: no .claude/ in CWD; plans/ not restored"
