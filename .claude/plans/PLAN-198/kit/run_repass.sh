@@ -18,10 +18,15 @@
 # Each lane runs in its own process group from a copy of the candidate OUTSIDE the repository,
 # every file of which went through the same ADR-114 redactor before any lane started (the files
 # it cannot keep are withheld and listed in withheld-<sfx>.txt); HUP, INT or TERM stop every
-# lane's process group before that copy is removed. Every attempt (start; each lane's verdict,
-# with nogo=1 for a NO-GO, as soon as it is complete; end with exit code, NO-GO count, manifest
-# hash) is appended to the hash-chained .claude/worktrees/repass-attempts.log, which moving an
-# attempt out of the repository keeps; a fresh start on a candidate with a NO-GO there is refused.
+# lane's process group before that copy is removed. Every attempt is appended to the
+# hash-chained .claude/worktrees/repass-attempts.log, which moving an attempt out of the
+# repository keeps: its start; each lane's dispatch, before the reviewer starts; each lane's
+# outcome, written by the lane's own spawn process as soon as the reviewer exits (nogo=1 for a
+# NO-GO or an invalid verdict); its end with exit code, NO-GO count, tree and manifest hash.
+# Each reviewer writes into .claude/worktrees/repass-lanes/<sfx>-<candidate>/ first; its files
+# are copied into the evidence only after the ledger holds the lane's outcome. A start on a
+# candidate (or tree) with a NO-GO in the ledger is refused, and so is a fresh start while a lane
+# outcome or the end of the last attempt is missing there (--resume reconciles them).
 #
 # Exit codes: 0 every lane answered GO or GO-WITH-CONDITIONS (evidence finalized)
 #             1 a lane answered NO-GO or gave no valid VERDICT line (evidence finalized; the
@@ -43,7 +48,7 @@ GEN="$KIT_DIR/gen_envelope.py"
 PLAN_DIR="$(dirname "$KIT_DIR")"
 WTROOT="$REPO/.claude/worktrees"
 mkdir -p "$WTROOT" || exit 2
-TAG="" BASE="" CAND="" COND="" JOBS=2 RESUME=0 LOG="" RUN="" TREEROOT="" EV="" STUB=0 ATTEMPT=0 HELD=0
+TAG="" BASE="" CAND="" COND="" JOBS=2 RESUME=0 LOG="" RUN="" TREEROOT="" EV="" STUB=0 ATTEMPT=0 HELD=0 CTREE=""
 LANE_TIMEOUT="${KIT_LANE_TIMEOUT_SECONDS:-7200}"
 
 sfx_of() {  # rcN | ga | unknown
@@ -80,13 +85,14 @@ pg_signal() {  # $1 signal, then group files written by `gen_envelope.py spawn`;
   return "$hit"
 }
 cleanup() {
-  local rc=$? f man="-"
+  local rc=$? f man="-" nogo
   if [ "$HELD" -eq 1 ]; then  # finalize did not succeed: the attempt gets its run records back
     for f in "$RUN"/hold/.header "$RUN"/hold/.rc-*; do [ -e "$f" ] && mv -f "$f" "$EV/"; done
   fi
   if [ "$ATTEMPT" -eq 1 ]; then
     [ ! -f "$EV/MANIFEST-$SFX.sha256" ] || man="$(shasum -a 256 "$EV/MANIFEST-$SFX.sha256" | awk '{print $1}')"
-    python3 "$GEN" ledger-add --tag "$TAG" --candidate "$CAND" --event "end rc=$rc nogo=$(cat "$EV"/*-"$SFX"-*.verdict.txt 2>/dev/null | grep -c '^VERDICT: NO-GO') manifest=$man" \
+    nogo="$(python3 "$GEN" nogo-count "$EV"/*-"$SFX"-*.verdict.txt 2>/dev/null)" || nogo=1
+    python3 "$GEN" ledger-add --tag "$TAG" --candidate "$CAND" --event "end rc=$rc nogo=${nogo:-1} tree=$CTREE manifest=$man" \
       || say "WARNING: the attempts ledger did not record the end of this attempt"
   fi
   case "$RUN" in "$WTROOT"/repass-*-run.*) rm -rf -- "$RUN" ;; esac
@@ -135,6 +141,9 @@ if [ -n "$CAND" ]; then
   [ "$(git rev-parse -q --verify "$CAND^{commit}")" = "$HEAD_SHA" ] || die "--candidate $CAND is not HEAD ($HEAD_SHA)"
 fi
 CAND="$HEAD_SHA"
+CTREE="$(git rev-parse "$CAND^{tree}")" || die "git rev-parse of the candidate's tree failed"
+# The reviewers' output lands here first (never moved by hand): see the header of this file.
+LDIR="$WTROOT/repass-lanes/$SFX-$CAND"
 if [ -e "$EV" ] || [ -L "$EV" ]; then
   [ "$RESUME" -eq 1 ] || die "$EV_REL exists: this runner never deletes an attempt - move it out of the repository, or pass --resume"
   [ -d "$EV" ] && [ ! -L "$EV" ] || die "$EV_REL is not a plain directory"
@@ -160,9 +169,9 @@ TREEROOT="$(cd "$TREEROOT" && pwd -P)" || die "the lanes' copy directory vanishe
 ! git -C "$TREEROOT" rev-parse --git-dir >/dev/null 2>&1 || die "$TREEROOT is inside a git repository: point TMPDIR elsewhere"
 FREE_KB="$(df -Pk "$TREEROOT" | awk 'NR == 2 {print $4}')"
 [ "${FREE_KB:-0}" -ge 2097152 ] 2>/dev/null || die "less than 2 GiB free under $TREEROOT"
-if [ "$RESUME" -eq 0 ]; then  # moving a NO-GO attempt aside never clears the candidate
-  logged python3 "$GEN" nogo-check --candidate "$CAND" \
-    || die "the attempts ledger has a NO-GO for this candidate (the REFUSED line above): a restart is refused"
+if [ "$RESUME" -eq 0 ]; then  # moving an attempt aside never clears the candidate
+  logged python3 "$GEN" nogo-check --candidate "$CAND" --tree "$CTREE" \
+    || die "the attempts ledger refuses a fresh start on this candidate (the REFUSED line above)"
 fi
 
 # --- the two instruments --------------------------------------------------------------------
@@ -216,6 +225,16 @@ CLAUDE_EFFORT="${CLAUDE_EFFORT:-xhigh}"
 CLAUDE_ARGS=(-p --restricted --safe-mode --strict-mcp-config --tools "Read,Grep,Glob" --allowedTools "Read,Grep,Glob"
   --permission-mode dontAsk --no-session-persistence --model "$CLAUDE_MODEL" --effort "$CLAUDE_EFFORT"
   --output-format stream-json --verbose)
+# The reviewers' environment is an explicit allowlist (env -i): home, PATH, temp directory,
+# locale, terminal, login name and each CLI's own config directory when set; no API key, and
+# nothing else of this shell (its OLDPWD included).
+LANE_ENV=("HOME=${HOME:-}" "PATH=$PATH" "TMPDIR=${TMPDIR:-/tmp}" DISABLE_AUTOUPDATER=1 "GIT_CEILING_DIRECTORIES=$TREEROOT")
+for v in LANG LC_ALL TERM USER LOGNAME CODEX_HOME CLAUDE_CONFIG_DIR; do
+  [ -z "${!v+x}" ] || LANE_ENV+=("$v=${!v}")
+done
+if [ "$STUB" -eq 1 ]; then  # kit-test seam: the stub lanes' own switches
+  for v in $(compgen -e); do case "$v" in STUB_*) LANE_ENV+=("$v=${!v}") ;; esac; done
+fi
 
 # --- the lanes' read-only copy of the candidate, outside the repository, redacted -----------
 TREE="$TREEROOT/tree"
@@ -266,6 +285,21 @@ if [ "$RESUME" -eq 1 ]; then
     cmp -s "$f" "$EV/$(basename "$f")" || die "--resume: $(basename "$f") differs from its re-derivation"
   done
   rm -f "$EV/.quota"  # the account-limit stop belonged to the previous attempt
+  # Every lane the earlier attempt dispatched gets its outcome in the ledger first (from its
+  # ledger-side output); then a NO-GO there refuses the resume like any start.
+  logged python3 "$GEN" reconcile --tag "$TAG" --candidate "$CAND" --tree "$CTREE" --sfx "$SFX" --dir "$LDIR" \
+    --model "$CLAUDE_MODEL" > "$RUN/reconcile.out" || die "--resume: the earlier lanes could not be reconciled (the REFUSED line above)"
+  sed -n 's/^RECOVERED /recovered from the ledger side: /p' "$RUN/reconcile.out" | while IFS= read -r ln; do say "$ln"; done
+  logged python3 "$GEN" nogo-check --candidate "$CAND" --tree "$CTREE" --resume \
+    || die "the attempts ledger has a NO-GO for this candidate (the REFUSED line above): the resume is refused"
+  while read -r k lane n lrc; do  # a verdict the ledger holds and the evidence lacks is copied in
+    [ "$k" = ADOPT ] || continue
+    [ ! -f "$EV/.rc-$lane-$n" ] || ! grep -q '^rc=0 ' "$EV/.rc-$lane-$n" || continue
+    { cp "$LDIR/$lane-$SFX-$n.log" "$EV/" && cp "$LDIR/$lane-$SFX-$n.verdict.txt" "$EV/"; } \
+      || die "--resume: could not copy the recorded output of lane $lane part $n into $EV_REL"
+    printf 'rc=%s try=0 adopted=1 class=ok\n' "$lrc" > "$EV/.rc-$lane-$n" || die "--resume: .rc write failed"
+    say "payload $n $lane: verdict taken from the ledger side"
+  done < "$RUN/reconcile.out"
   say "resuming $EV_REL ($P_PARTS payloads)"
 else
   mv "$STAGE" "$EV" || die "could not move the payloads into $EV_REL"
@@ -281,20 +315,22 @@ ATTEMPT=1
 LIMIT_RE='hit your usage limit|reached your usage limit|Usage limit reached|Quota exceeded|out of credits|hit your spend cap|reached your workspace credit limit'
 CAPACITY_RE='at capacity|Review was interrupted|experiencing high load'
 
-verdict_of() {  # GO | GO-WITH-CONDITIONS | NO-GO when the file has exactly ONE valid VERDICT line
-  [ -f "$1" ] || return 0
-  [ "$(grep -c '^VERDICT:' "$1")" = 1 ] || return 0
-  grep '^VERDICT:' "$1" | sed -n -E 's/^VERDICT: (GO-WITH-CONDITIONS|GO|NO-GO)([[:blank:]].*)?$/\1/p'
+verdict_of() {  # the one NO-GO rule (gen_envelope.py verdict): GO | GO-WITH-CONDITIONS | NO-GO | INVALID | NONE
+  python3 "$GEN" verdict "$1" 2>/dev/null || echo INVALID
 }
 lane_done() {  # a completed review: rc 0 and exactly one valid VERDICT line
   [ -f "$EV/.rc-$1-$2" ] && grep -q '^rc=0 ' "$EV/.rc-$1-$2" \
-    && [ -n "$(verdict_of "$EV/$1-$SFX-$2.verdict.txt")" ]
+    && case "$(verdict_of "$EV/$1-$SFX-$2.verdict.txt")" in GO | GO-WITH-CONDITIONS | NO-GO) true ;; *) false ;; esac
 }
-lane_exec() {  # $1 group file, $2 stdin, $3 log, then the vendor command: own process group,
-  local pgf="$1" in="$2" lg="$3" pid rc=0  # the copy outside the repository, no API keys
-  shift 3
-  ( cd "$TREE" && exec env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY DISABLE_AUTOUPDATER=1 \
-      GIT_CEILING_DIRECTORIES="$TREEROOT" python3 "$GEN" spawn --pg-file "$pgf" --timeout "$LANE_TIMEOUT" -- "$@" ) \
+lane_exec() {  # $1 group file, $2 stdin, $3 log, $4 lane, $5 NN, $6 verdict file, then the vendor
+  local pgf="$1" in="$2" lg="$3" lane="$4" n="$5" out="$6" pid rc=0 extra=()  # command: own session,
+  shift 6                                         # the redacted copy outside the repository, env -i
+  [ "$lane" != claude ] || extra=(--model "$CLAUDE_MODEL")
+  # spawn reads the lane's log (its own stdout) only after the reviewer has exited
+  # shellcheck disable=SC2094
+  ( cd "$TREE" && exec env -i "${LANE_ENV[@]}" python3 "$GEN" spawn --pg-file "$pgf" --timeout "$LANE_TIMEOUT" \
+      --lane "$lane" --part "$n" --tag "$TAG" --candidate "$CAND" --tree "$CTREE" --out "$out" --log "$lg" \
+      --status "$LDIR/$lane-$SFX-$n.status" ${extra[@]+"${extra[@]}"} -- "$@" ) \
     < "$in" > "$lg" 2>&1 &
   pid=$!
   wait "$pid" || rc=$?
@@ -303,48 +339,55 @@ lane_exec() {  # $1 group file, $2 stdin, $3 log, then the vendor command: own p
   return "$rc"
 }
 run_lane() {  # $1 lane, $2 NN - runs in the background and writes only its own files
-  local lane="$1" n="$2" red="$EV/payload-$SFX-$2.redacted.txt" try=0 rc cls
-  local out="$EV/$1-$SFX-$2.verdict.txt" log="$EV/$1-$SFX-$2.log" pgf="$RUN/pg-$1-$2"
-  local stamp f v nogo
-  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  for f in "$log" "$out"; do  # an earlier attempt of this lane is kept, never deleted
-    if [ -e "$f" ]; then mkdir -p "$KEEP" && mv -f "$f" "$KEEP/$(basename "$f").$stamp"; fi
-  done
+  local lane="$1" n="$2" red="$EV/payload-$SFX-$2.redacted.txt" try=0 rc cls name="$1-$SFX-$2"
+  local out="$LDIR/$1-$SFX-$2.verdict.txt" log="$LDIR/$1-$SFX-$2.log" pgf="$RUN/pg-$1-$2"
+  local k v s_verdict s_result s_ledger
   while :; do
-    try=$((try + 1)) rc=0 cls=ok
+    try=$((try + 1)) rc=0 cls=ok s_verdict=NONE s_result=5 s_ledger=fail
+    # The lane's earlier files (evidence copies and ledger-side output) are kept, never deleted,
+    # and move only once the ledger holds the outcome of its last dispatch.
+    if ! python3 "$GEN" keep-lane --tag "$TAG" --candidate "$CAND" --lane "$lane" --part "$n" --name "$name" \
+        --dir "$LDIR" --ev "$EV" --keep "$KEEP" 2>> "$LOG"; then
+      cls=ledger
+      break
+    fi
     if [ "$lane" = codex ]; then
-      lane_exec "$pgf" "$red" "$log" "$CODEX_CMD" exec --skip-git-repo-check --sandbox read-only "${CODEX_ISO[@]}" \
-        --color never -m "$CODEX_MODEL" -c "model_reasoning_effort=\"$CODEX_EFFORT\"" --output-last-message "$out" - \
-        || rc=$?
-      if [ ! -s "$out" ]; then
-        cls=dead
-        if tail -n 40 "$log" | grep '^ERROR: ' | grep -Eq "$LIMIT_RE"; then
-          cls=quota
-        elif [ "$try" -lt 3 ] && tail -n 40 "$log" | grep '^ERROR: ' | grep -Eq "$CAPACITY_RE"; then
-          say "payload $n codex: model at capacity (try $try), retrying"
-          sleep $((try * ${KIT_RETRY_UNIT_SECONDS:-90}))
-          continue
-        fi
-      fi
+      lane_exec "$pgf" "$red" "$log" codex "$n" "$out" "$CODEX_CMD" exec --skip-git-repo-check --sandbox read-only \
+        "${CODEX_ISO[@]}" --color never -m "$CODEX_MODEL" -c "model_reasoning_effort=\"$CODEX_EFFORT\"" \
+        --output-last-message "$out" - || rc=$?
     else
-      lane_exec "$pgf" "$red" "$log" "$CLAUDE_CMD" "${CLAUDE_ARGS[@]}" || rc=$?
-      python3 "$GEN" claude-result --model "$CLAUDE_MODEL" "$log" "$out" 2>> "$LOG"
-      case $? in 0) ;; 4) cls=quota ;; *) cls=dead ;; esac
+      lane_exec "$pgf" "$red" "$log" claude "$n" "$out" "$CLAUDE_CMD" "${CLAUDE_ARGS[@]}" || rc=$?
+    fi
+    while IFS='=' read -r k v; do  # written by the lane's spawn after the ledger took its outcome
+      case "$k" in verdict) s_verdict="$v" ;; result) s_result="$v" ;; ledger) s_ledger="$v" ;; esac
+    done < "$LDIR/$name.status"
+    [ "$s_ledger" = ok ] || { cls=ledger; break; }
+    if [ "$lane" = codex ] && [ "$s_verdict" = NONE ]; then
+      cls=dead
+      if tail -n 40 "$log" | grep '^ERROR: ' | grep -Eq "$LIMIT_RE"; then
+        cls=quota
+      elif [ "$try" -lt 3 ] && tail -n 40 "$log" | grep '^ERROR: ' | grep -Eq "$CAPACITY_RE"; then
+        say "payload $n codex: model at capacity (try $try), retrying"
+        sleep $((try * ${KIT_RETRY_UNIT_SECONDS:-90}))
+        continue
+      fi
+    elif [ "$lane" = claude ]; then
+      case "$s_result" in 0) ;; 4) cls=quota ;; *) cls=dead ;; esac
     fi
     break
   done
-  v="$(verdict_of "$out")"
-  if [ -n "$v" ]; then  # a complete verdict reaches the ledger before this lane's shell returns
-    nogo=0
-    [ "$v" != NO-GO ] || nogo=1
-    python3 "$GEN" ledger-add --tag "$TAG" --candidate "$CAND" --event "lane $lane part $n verdict $v nogo=$nogo" 2>> "$LOG" \
-      || { cls=ledger; say "payload $n $lane: the attempts ledger did not take this verdict (the REFUSED line above): this attempt cannot finalize; stop and call Claude"; }
+  if [ "$cls" = ledger ]; then
+    say "payload $n $lane: the attempts ledger did not take this lane's dispatch or outcome (the REFUSED line above): this attempt cannot finalize; stop and call Claude"
+  else  # the ledger holds this lane's outcome: only now does its output enter the evidence
+    cp "$log" "$EV/$name.log" || cls=ledger
+    [ ! -s "$out" ] || cp "$out" "$EV/$name.verdict.txt" || cls=ledger
   fi
   printf 'rc=%s try=%s class=%s\n' "$rc" "$try" "$cls" > "$EV/.rc-$lane-$n"
   [ "$cls" != quota ] || printf '%s %s\n' "$lane" "$n" >> "$EV/.quota"
-  say "payload $n $lane: rc=$rc class=$cls verdict=$(verdict_of "$out")"
+  say "payload $n $lane: rc=$rc class=$cls verdict=$s_verdict"
 }
 
+mkdir -p "$LDIR" || { say "could not create $LDIR"; exit 3; }
 i=1 running=0
 while [ "$i" -le "$P_PARTS" ]; do
   n="$(printf '%02d' "$i")"; i=$((i + 1))
@@ -394,7 +437,7 @@ python3 "$GEN" scrub "${SCRUB[@]}" || { say "scrub failed"; exit 3; }
 {
   echo "# Provenance - pair-rail re-pass of $TAG ($SFX), PLAN-198 kit"
   cat "$EV/.header"
-  echo "- lanes: codex exec --sandbox read-only ${CODEX_ISO[*]} and claude ${CLAUDE_ARGS[*]}; each lane in its own process group with a ${LANE_TIMEOUT} s limit, from a read-only copy of the candidate outside the repository without CLAUDE.md/AGENTS.md files, every other file redacted by the same redactor or withheld (withheld-$SFX.txt), both reading the SAME redacted payload on stdin; API keys removed from both lanes' environment"
+  echo "- lanes: codex exec --sandbox read-only ${CODEX_ISO[*]} and claude ${CLAUDE_ARGS[*]}; each lane in its own process group with a ${LANE_TIMEOUT} s limit, from a read-only copy of the candidate outside the repository without CLAUDE.md/AGENTS.md files, every other file redacted by the same redactor or withheld (withheld-$SFX.txt), both reading the SAME redacted payload on stdin; each lane's environment an explicit allowlist (env -i) without API keys; each lane's dispatch and outcome recorded in the attempts ledger by its own spawn process"
   echo "- codex death classes, from the codex ERROR: lines among the last 40 transcript lines (texts measured on codex 0.160.0 only): model capacity = retried up to 2 times; account limit = no retry and no new payload"
   echo "- personal home paths replaced by <user> in the diffs, transcripts and verdicts"
   echo "- finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"

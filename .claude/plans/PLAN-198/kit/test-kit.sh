@@ -78,8 +78,21 @@ fi
 if [ "${STUB_HANG:-}" = "codex:$part" ]; then sleep 300 & echo $! > "$STUB_PIDS.child"; echo $$ > "$STUB_PIDS"; wait; fi
 if [ "${STUB_QUOTA:-}" = "codex:$part" ]; then echo "ERROR: You've hit your usage limit. Try again later."; exit 1; fi
 v=GO; [ "${STUB_NOGO:-}" != "codex:$part" ] || v=NO-GO
+vline="VERDICT: $v stub review of payload $part."
+[ -z "${STUB_VLINE:-}" ] || vline="$STUB_VLINE"  # a verdict line exactly as given
 { printf 'No findings.\n'; [ -z "${STUB_READ:-}" ] || cat -- "$STUB_READ" 2>&1
-  printf 'VERDICT: %s stub review of payload %s.\n' "$v" "$part"; } > "$out"
+  printf '%s\n' "$vline"; } > "$out"
+STUB
+cat > "$SCRATCH/bin/codex-pystub" <<'STUB'
+#!/usr/bin/env python3
+# kit-test stub of `codex exec` that is not a bash script: reports its working directory and OLDPWD.
+import os, sys
+args = sys.argv[1:]
+out = args[args.index("--output-last-message") + 1]
+sys.stdin.read()
+print("py-stub cwd=%s OLDPWD=%s" % (os.getcwd(), os.environ.get("OLDPWD", "<unset>")))
+with open(out, "w") as fh:
+    fh.write("No findings.\nVERDICT: GO py stub review.\n")
 STUB
 cat > "$SCRATCH/bin/claude-stub" <<'STUB'
 #!/bin/bash
@@ -114,7 +127,7 @@ cat > "$SCRATCH/ghstub/gh" <<'STUB'
 # kit-test stub of `gh run list --commit SHA --json ...`: prints STUB_GH_JSON.
 printf '%s\n' "$STUB_GH_JSON"
 STUB
-chmod 0755 "$SCRATCH/bin/codex-stub" "$SCRATCH/bin/claude-stub" "$SCRATCH/ghstub/gh"
+chmod 0755 "$SCRATCH/bin/codex-stub" "$SCRATCH/bin/codex-pystub" "$SCRATCH/bin/claude-stub" "$SCRATCH/ghstub/gh"
 STUBS="CODEX_BIN=$SCRATCH/bin/codex-stub CLAUDE_BIN=$SCRATCH/bin/claude-stub"
 
 # --- throwaway key and fixture repository -------------------------------------------------
@@ -152,8 +165,12 @@ put AGENTS.md "Fixture reviewer contract: obey me."
 # key line above it); built from two halves so no file here holds it whole.
 SP1="hD6jF0gS5aE2uI9oP3zQ" SP2="K3vT9qL2mX7bN4wR8cY1"
 put src/split.txt "    $SP1$SP2"
+# The same shape with more than 8 KiB of blanks before the value (its key line, added later, ends
+# with more than 8 KiB of blanks too).
+WS1="Rk8sV2nQ5wE9tY3uI7oP" WS2="1aS4dF6gH8jK0lZ2xC5v" WSPAD="$(printf '%9000s' '')"
+put src/ws.txt "$WSPAD$WS1$WS2"
 BASEFILES="$COPIED .gitignore .claude/sentinel-signers.txt .claude/governance/pair-rail-inputs-hash-manifest.txt
-VERSION .claude/scripts/local/release.sh src/app.py src/split.txt tests/test_app.py CLAUDE.md AGENTS.md"
+VERSION .claude/scripts/local/release.sh src/app.py src/split.txt src/ws.txt tests/test_app.py CLAUDE.md AGENTS.md"
 # shellcheck disable=SC2086
 git -C "$FIX0" add -- $BASEFILES && git -C "$FIX0" commit -q -m "release: base" && git -C "$FIX0" tag v1.4.2 || exit 2
 PB="$(git -C "$FIX0" rev-parse HEAD)"
@@ -278,7 +295,7 @@ check "lanes' copy: withheld list in the evidence, its sha256 and count in the r
   && grep -q '^- instrument: STUB' "$POS/$EVRC/PROVENANCE-rc1.md" && grep -q -- '--safe-mode' "$POS/$EVRC/PROVENANCE-rc1.md"
 check "evidence finalized: MANIFEST written, no hidden run files, STUB and lane isolation declared" $?
 grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* start resume=0 ' "$POS/.claude/worktrees/repass-attempts.log" \
-  && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* end rc=0 nogo=0 manifest=[0-9a-f]' "$POS/.claude/worktrees/repass-attempts.log"
+  && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* end rc=0 nogo=0 tree=[0-9a-f]\{40\} manifest=[0-9a-f]' "$POS/.claude/worktrees/repass-attempts.log"
 check "attempts ledger: start and end of the attempt recorded outside the evidence directory" $?
 STUBRUN="$SCRATCH/stubrun"
 clone_fix "$POS" "$STUBRUN"
@@ -294,7 +311,7 @@ VF="$POS/$PLAN_REL/verdict-fields-v1.4.4-rc.1.md"
 grep -q '^verdict: GO-WITH-CONDITIONS$' "$VF" \
   && grep -q '^  - claude-p01 VERDICT: GO-WITH-CONDITIONS stub review of payload 1\.$' "$VF" \
   && grep -q '^  - claude-p01 P1 src/app.py:3 - stub annex finding\.$' "$VF" \
-  && grep -q '^  - [^ ]* v1\.4\.4-rc\.1 [0-9a-f]* end rc=0 nogo=0 manifest=' "$VF" \
+  && grep -q '^  - [^ ]* v1\.4\.4-rc\.1 [0-9a-f]* end rc=0 nogo=0 tree=[0-9a-f]* manifest=' "$VF" \
   && grep -q '^attempts_ledger_sha256: [0-9a-f]\{64\}$' "$VF" && grep -q 'release-scope-covers-v1.4.2' "$VF"
 check "fields carry the lane's conditional verdict, its annex P1, every attempt and the scope check" $?
 sign "$VF" "$SCRATCH/pos.asc"
@@ -410,9 +427,10 @@ sed 's/^  codex_cli: .*/  codex_cli: 0.159.0/' "$POS/.claude/governance/pair-rai
 printf 'info the step-15 validator ALONE returns rc=%s for codex_cli 0.159.0 with the manifest sha\n' "$?"
 
 N="$SCRATCH/n-nogo"; clone_fix "$FIX0" "$N"
+cp -R "$ORIGIN" "$SCRATCH/origin-nogo.git" && git -C "$N" remote set-url origin "$SCRATCH/origin-nogo.git"
 ( export STUB_NOGO=claude:1; runner "$N" "$L/n-nogo-run.log" --tag v1.4.4-rc.1 ); rc=$?
 [ "$rc" -eq 1 ] && grep -q '^RUNNER-OVERALL: rc=1$' "$N/$EVRC/PROVENANCE-rc1.md" \
-  && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* lane claude part 01 verdict NO-GO nogo=1 prev=' "$N/.claude/worktrees/repass-attempts.log"
+  && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* lane claude part 01 verdict NO-GO nogo=1 ' "$N/.claude/worktrees/repass-attempts.log"
 check "lane NO-GO: runner exits 1, records RUNNER-OVERALL rc=1, and the lane's NO-GO is a ledger line of its own" $?
 simulate_real "$N" rc1 "$PKG" "$PSHA" verified
 gen "$N" "$L/n-nogo.log" fields --tag v1.4.4-rc.1; rc=$?
@@ -424,6 +442,10 @@ check "NO-GO re-roll (attempt moved out, same candidate started again): refused 
 runner "$N" "$L/n-rc2-run.log" --tag v1.4.4-rc.2; rc=$?
 [ "$rc" -eq 2 ] && [ ! -e "$N/$PLAN_REL/repass-rc2" ] && grep -q 'recorded a NO-GO' "$L/n-rc2-run.log"
 check "NO-GO recorded under v1.4.4-rc.1 refuses a v1.4.4-rc.2 start on the same candidate (ledger, any tag; rc=$rc)" $?
+( cd "$N" && git commit -q --allow-empty -m "empty commit (PLAN-198)" && git push -q origin main ) || bad "empty commit in the NO-GO fixture"
+runner "$N" "$L/n-empty-run.log" --tag v1.4.4-rc.1; rc=$?
+[ "$rc" -eq 2 ] && [ ! -e "$N/$EVRC" ] && grep -q 'recorded a NO-GO' "$L/n-empty-run.log"
+check "an empty commit on top of a NO-GO candidate (same tree): the start is refused (rc=$rc)" $?
 N="$SCRATCH/n-ledger"; clone_fix "$RUNOK" "$N"
 ( cd "$N" && python3 "$KIT_REL/gen_envelope.py" ledger-add --tag v1.4.4-rc.9 --candidate "$CAND" \
     --event "lane codex part 01 verdict NO-GO nogo=1" ) && gen "$N" "$L/n-ledger.log" fields --tag v1.4.4-rc.1; rc=$?
@@ -517,15 +539,15 @@ sleep 0.5
 check "TERM: the reviewer process tree (and its child) is stopped and reaped before cleanup (exit 3)" $?
 [ "$rc" -eq 3 ] || sed -n '1,20p' "$L/n-signal.log"
 
-# === a secret across a piece boundary: each piece is redacted with the lines around it ========
-# src/split.txt gets "aws_secret_access_key:" added right above its unchanged, indented value,
-# sized so that the key line is the LAST line of piece 1 and the value the first of piece 2 under
-# the piece budget of the kit under test (read from its own prepare, so the cut is exact).
-N="$SCRATCH/n-split"; clone_fix "$FIX0" "$N"
-cp -R "$ORIGIN" "$SCRATCH/origin-split.git" && git -C "$N" remote set-url origin "$SCRATCH/origin-split.git"
-python3 - "$N" "$KIT_REL" "$SP1$SP2" > "$L/n-split-build.log" 2>&1 <<'PY'
+# === a secret next to a piece cut: each changed file is redacted whole before its diff =========
+# split_fixture <repo> <path> <key line> <value line prefix> <value> <log>: <path> gets <key line>
+# added right above its unchanged value line (<prefix><value>), with filler sized so that the key
+# line is the LAST line of piece 1 and the value line the first of piece 2 under the piece budget
+# of the kit under test (read from its own prepare, so the cut is exact).
+split_fixture() {
+  python3 - "$1" "$KIT_REL" "$2" "$3" "$4" "$5" > "$6" 2>&1 <<'PY'
 import importlib.util, os, subprocess, sys
-repo, kit_rel, value = sys.argv[1:4]
+repo, kit_rel, path, key, prefix, value = sys.argv[1:7]
 os.chdir(repo)
 def git(*a):
     return subprocess.run(["git"] + list(a), check=True, capture_output=True).stdout.decode("utf-8")
@@ -552,19 +574,18 @@ try:
 except Budget as b:
     budget = b.args[0]
 base = git("rev-parse", "v1.4.3-rc.1^{commit}").strip()
-key = "aws_secret_access_key:"
 fill, extra, first = (budget - 400) // 100, 50, True
 for _ in range(10):
-    with open("src/split.txt", "w", encoding="utf-8") as fh:
-        fh.write("".join("x" * 98 + "\n" for _ in range(fill)) + "y" * extra + "\n" + key + "\n    " + value + "\n")
-    git("add", "src/split.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("".join("x" * 98 + "\n" for _ in range(fill)) + "y" * extra + "\n" + key + "\n" + prefix + value + "\n")
+    git("add", path)
     git("commit", "-q", "-m", "split fixture", *([] if first else ["--amend"]))
     first = False
     d = git("-c", "core.quotepath=on", "diff", "-U1", "--no-renames", "--no-color", "--no-ext-diff",
-            "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", base, "HEAD", "--", ":(literal)src/split.txt")
+            "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", base, "HEAD", "--", ":(literal)" + path)
     end = d.index("+" + key + "\n") + len(key) + 2  # bytes of piece 1 up to and including the key line
     if end == budget and d[end:].startswith(" ") and value in d[end:]:
-        print("budget %d: the key line ends piece 1 at byte %d, the value opens piece 2" % (budget, end))
+        print("budget %d: the key line ends piece 1 at byte %d, the value line opens piece 2" % (budget, end))
         sys.exit(0)
     extra += budget - end
     while extra < 1:
@@ -573,15 +594,57 @@ for _ in range(10):
         fill, extra = fill + 1, extra - 100
 sys.exit("split fixture: no exact fit")
 PY
-rc=$?
+}
+held_in() {  # how many files under $1 hold either half ($2, $3) of a test value
+  if [ -d "$1" ]; then grep -rl -e "$2" -e "$3" "$1" | wc -l | tr -d ' '; else echo 0; fi
+}
+own_origin() {  # $1 fixture, $2 name: a private copy of the bare origin, so the fixture can push
+  cp -R "$ORIGIN" "$SCRATCH/origin-$2.git" && git -C "$1" remote set-url origin "$SCRATCH/origin-$2.git"
+}
+N="$SCRATCH/n-split"; clone_fix "$FIX0" "$N"; own_origin "$N" split
+split_fixture "$N" src/split.txt "aws_secret_access_key:" "    " "$SP1$SP2" "$L/n-split-build.log"; rc=$?
 ( cd "$N" && git push -q origin main ) || rc=1
 runner "$N" "$L/n-split-run.log" --tag v1.4.4-rc.1; rc2=$?
-held=0; [ ! -d "$N/$EVRC" ] || held="$(grep -rl -e "$SP1" -e "$SP2" "$N/$EVRC" | wc -l | tr -d ' ')"
-printf 'info piece-boundary control: runner rc=%s, evidence files holding the value: %s\n' "$rc2" "$held"
-[ "$rc" -eq 0 ] && [ "$rc2" -eq 2 ] && [ "$held" = 0 ] \
-  && grep -q 'REFUSED: payload [0-9]*: the redactor did not keep the line count of its redaction window' "$L/n-split-run.log"
-check "a secret split across two pieces (key line ends one, its indented value opens the next): refused before any lane, in no payload" $?
+held="$(held_in "$N/$EVRC" "$SP1" "$SP2")"
+printf 'info piece-cut control: runner rc=%s, evidence files holding the value: %s\n' "$rc2" "$held"
+check "a secret next to a piece cut (key line ends one piece, its unchanged indented value opens the next): the value is in no payload, diff or lane file" "$((rc + rc2 + held))"
 [ "$rc" -eq 0 ] || sed -n '1,10p' "$L/n-split-build.log"
+
+N="$SCRATCH/n-ws"; clone_fix "$FIX0" "$N"; own_origin "$N" ws
+split_fixture "$N" src/ws.txt "aws_secret_access_key=$WSPAD" "$WSPAD" "$WS1$WS2" "$L/n-ws-build.log"; rc=$?
+( cd "$N" && git push -q origin main ) || rc=1
+runner "$N" "$L/n-ws-run.log" --tag v1.4.4-rc.1; rc2=$?
+held="$(held_in "$N/$EVRC" "$WS1" "$WS2")"
+printf 'info blank-run control: runner rc=%s, evidence files holding the value: %s\n' "$rc2" "$held"
+check "a key line ending in more than 8 KiB of blanks, its value after more than 8 KiB of blanks on the next line, across a piece cut: the value is in no payload, diff or lane file" "$((rc + rc2 + held))"
+[ "$rc" -eq 0 ] || sed -n '1,10p' "$L/n-ws-build.log"
+
+N="$SCRATCH/n-yaml"; clone_fix "$FIX0" "$N"; own_origin "$N" yaml
+YV1="Tq8Wm3Zp6Lr1Xc4Vb7Nd" YV2="2Hf5Js9Kg0Ay3Ue6Io8P"
+( cd "$N" && mkdir -p config && printf 'region: eu\naws_secret_access_key:\n  %s%s\nother: 1\n' "$YV1" "$YV2" > config/app.yml \
+    && git add -- config/app.yml && git commit -q -m "config: a yaml file" && git push -q origin main ) || bad "yaml commit"
+runner "$N" "$L/n-yaml-run.log" --tag v1.4.4-rc.1; rc=$?
+held="$(held_in "$N/$EVRC" "$YV1" "$YV2")"
+[ "$rc" -eq 0 ] && [ "$held" = 0 ] && grep -q '^in-scope	config/app.yml$' "$N/$EVRC/scope-rc1.txt"
+check "an ordinary two-line YAML addition (key line, indented value line), no piece cut: the value is in no payload, diff or lane file (rc=$rc, files $held)" $?
+
+N="$SCRATCH/n-bin"; clone_fix "$FIX0" "$N"; own_origin "$N" bin
+( cd "$N" && printf 'BIN\000\001\377\376 data\n' > src/blob.bin && git add -- src/blob.bin \
+    && git commit -q -m "src: a binary file" && git push -q origin main ) || bad "binary commit"
+runner "$N" "$L/n-bin-run.log" --tag v1.4.4-rc.1; rc=$?
+[ "$rc" -eq 2 ] && [ ! -e "$N/$EVRC" ] && grep -q 'REFUSED: src/blob.bin is binary' "$L/n-bin-run.log"
+check "an in-scope binary change (a NUL byte, not UTF-8): refused before any lane, nothing sent (rc=$rc)" $?
+
+N="$SCRATCH/n-oldpwd"; clone_fix "$FIX0" "$N"
+( cd "$N" && env CODEX_BIN="$SCRATCH/bin/codex-pystub" CLAUDE_BIN="$SCRATCH/bin/claude-stub" \
+    bash "$KIT_REL/run_repass.sh" --log "$L/n-oldpwd.runlog" --tag v1.4.4-rc.1 ) > "$L/n-oldpwd.log" 2>&1; rc=$?
+EVO="$N/$EVRC"
+nlogs="$(find "$EVO" -name 'codex-rc1-*.log' 2>/dev/null | wc -l | tr -d ' ')"
+[ "$rc" -eq 0 ] && [ "$nlogs" -ge 1 ] \
+  && [ "$(grep -l 'py-stub cwd=.* OLDPWD=<unset>$' "$EVO"/codex-rc1-*.log | wc -l | tr -d ' ')" = "$nlogs" ] \
+  && ! grep -q -F "$N" "$EVO"/codex-rc1-*.log
+check "a reviewer that is not a bash script (python stub) sees no OLDPWD and no path of the repository (rc=$rc)" $?
+[ "$rc" -eq 0 ] || sed -n '1,10p' "$L/n-oldpwd.log"
 
 # === the lanes' copy: every file redacted; symlinks and files the redactor cannot keep withheld ==
 N="$SCRATCH/n-tree"; clone_fix "$FIX0" "$N"
@@ -616,6 +679,78 @@ runner "$N" "$L/n-kill-restart.log" --tag v1.4.4-rc.1; rc=$?
 [ "$rc" -eq 2 ] && [ ! -e "$N/$EVRC" ] && ! grep -q 'runner exit' "$L/n-kill.runlog" \
   && grep -q 'recorded a NO-GO' "$L/n-kill-restart.log"
 check "SIGKILL while the other lane runs, after one lane's NO-GO; evidence moved aside: the restart is refused (rc=$rc)" $?
+
+# === SIGKILL of the runner's whole process group while a reviewer that answers NO-GO runs ======
+N="$SCRATCH/n-gkill"; clone_fix "$FIX0" "$N"
+GP="$SCRATCH/gkill-pids"
+# shellcheck disable=SC2086
+( cd "$N" && exec env $STUBS TMPDIR="$KT" STUB_NOGO=codex:1 STUB_HANG=codex:1 STUB_PIDS="$GP" \
+    python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+    bash "$KIT_REL/run_repass.sh" --log "$L/n-gkill.runlog" --tag v1.4.4-rc.1 --jobs 1 ) > "$L/n-gkill.log" 2>&1 &
+RP=$!  # the runner's process group leader (setsid above)
+k=0
+while { [ ! -s "$GP" ] || ! grep -q 'payload 01 claude: rc=' "$L/n-gkill.runlog" 2>/dev/null; } && [ "$k" -lt 300 ]; do
+  sleep 0.1; k=$((k + 1))
+done
+kill -KILL -- "-$RP"; wait "$RP" 2>/dev/null
+kill "$(cat "$GP.child")" 2>/dev/null  # the Codex stub goes on and answers NO-GO
+k=0; while kill -0 "$(cat "$GP")" 2>/dev/null && [ "$k" -lt 100 ]; do sleep 0.1; k=$((k + 1)); done
+GL="$N/.claude/worktrees/repass-attempts.log"
+k=0; while ! grep -q ' lane codex part 01 verdict NO-GO nogo=1 ' "$GL" && [ "$k" -lt 30 ]; do sleep 0.1; k=$((k + 1)); done
+runner "$N" "$L/n-gkill-resume.log" --tag v1.4.4-rc.1 --resume; rc=$?
+[ ! -d "$N/$EVRC" ] || mv "$N/$EVRC" "$SCRATCH/gkill-moved-out"
+runner "$N" "$L/n-gkill-fresh.log" --tag v1.4.4-rc.1; rc2=$?
+[ "$rc" -eq 2 ] && grep -q 'recorded a NO-GO' "$L/n-gkill-resume.log" && [ "$rc2" -eq 2 ] \
+  && grep -q 'recorded a NO-GO' "$L/n-gkill-fresh.log" && grep -q ' lane codex part 01 verdict NO-GO nogo=1 ' "$GL"
+check "SIGKILL of the runner's process group while a reviewer that answers NO-GO runs: the NO-GO reaches the ledger; --resume and a fresh start (evidence moved aside) are both refused (rc=$rc/$rc2)" $?
+
+# === a 'VERDICT: NO-GO.' line (one NO-GO rule), runner pid killed =============================
+N="$SCRATCH/n-vline"; clone_fix "$FIX0" "$N"
+VP="$SCRATCH/vline-pids"
+# shellcheck disable=SC2086
+( cd "$N" && exec env $STUBS TMPDIR="$KT" STUB_VLINE='VERDICT: NO-GO.' STUB_HANG=codex:1 STUB_PIDS="$VP" \
+    bash "$KIT_REL/run_repass.sh" --log "$L/n-vline.runlog" --tag v1.4.4-rc.1 --jobs 1 ) > "$L/n-vline.log" 2>&1 &
+RP=$!
+k=0
+while { [ ! -s "$VP" ] || ! grep -q 'payload 01 claude: rc=' "$L/n-vline.runlog" 2>/dev/null; } && [ "$k" -lt 300 ]; do
+  sleep 0.1; k=$((k + 1))
+done
+kill -KILL "$RP"; wait "$RP" 2>/dev/null
+kill "$(cat "$VP.child")" 2>/dev/null  # the Codex stub goes on and writes 'VERDICT: NO-GO.'
+k=0; while ! grep -q 'payload 01 codex: rc=' "$L/n-vline.runlog" && [ "$k" -lt 100 ]; do sleep 0.1; k=$((k + 1)); done
+mv "$N/$EVRC" "$SCRATCH/vline-moved-out" || bad "moving the killed attempt aside"
+runner "$N" "$L/n-vline-restart.log" --tag v1.4.4-rc.1; rc=$?
+[ "$rc" -eq 2 ] && grep -q 'recorded a NO-GO' "$L/n-vline-restart.log" \
+  && grep -q ' lane codex part 01 verdict NO-GO nogo=1 ' "$N/.claude/worktrees/repass-attempts.log"
+check "a 'VERDICT: NO-GO.' line with the runner pid killed: the NO-GO is in the ledger and a fresh start is refused (rc=$rc)" $?
+
+# === a lane whose spawn process died before recording: --resume records it (positive) =========
+N="$SCRATCH/n-recover"; clone_fix "$FIX0" "$N"
+RQ="$SCRATCH/recover-pids"
+# shellcheck disable=SC2086
+( cd "$N" && exec env $STUBS TMPDIR="$KT" STUB_HANG=codex:1 STUB_PIDS="$RQ" \
+    python3 -c 'import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' \
+    bash "$KIT_REL/run_repass.sh" --log "$L/n-recover.runlog" --tag v1.4.4-rc.1 --jobs 1 ) > "$L/n-recover.log" 2>&1 &
+RP=$!
+k=0
+while { [ ! -s "$RQ" ] || ! grep -q 'payload 01 claude: rc=' "$L/n-recover.runlog" 2>/dev/null; } && [ "$k" -lt 300 ]; do
+  sleep 0.1; k=$((k + 1))
+done
+kill -KILL -- "-$RP"; wait "$RP" 2>/dev/null
+RL="$N/.claude/worktrees/repass-attempts.log"
+SPID="$(sed -n 's/.* dispatch lane codex part 01 id=[0-9a-f]* pid=\([0-9]*\) .*/\1/p' "$RL" 2>/dev/null)"
+[ -z "$SPID" ] || kill -KILL "$SPID" 2>/dev/null  # the lane's spawn process dies before it records
+kill "$(cat "$RQ.child")" 2>/dev/null  # the Codex stub goes on and answers GO into its own file
+k=0; while kill -0 "$(cat "$RQ")" 2>/dev/null && [ "$k" -lt 100 ]; do sleep 0.1; k=$((k + 1)); done
+mv "$N/$EVRC" "$SCRATCH/recover-moved-out" || bad "moving the killed attempt aside"
+runner "$N" "$L/n-recover-fresh.log" --tag v1.4.4-rc.1; rc=$?
+mv "$SCRATCH/recover-moved-out" "$N/$EVRC" || bad "moving the killed attempt back"
+runner "$N" "$L/n-recover-resume.log" --tag v1.4.4-rc.1 --resume; rc2=$?
+[ -n "$SPID" ] && [ "$rc" -eq 2 ] && grep -q 'no outcome for it' "$L/n-recover-fresh.log" && [ "$rc2" -eq 0 ] \
+  && grep -q 'recovered from the ledger side: codex 01 GO' "$L/n-recover-resume.log" \
+  && grep -q ' lane codex part 01 verdict GO nogo=0 id=[0-9a-f]* rc=- tree=[0-9a-f]* recovered=1 ' "$RL" \
+  && [ -f "$N/$EVRC/MANIFEST-rc1.sha256" ]
+check "a lane whose spawn process died before recording: a fresh start is refused until --resume records the outcome, then the resume finishes (rc=$rc/$rc2)" $?
 
 # === concurrent ledger appends keep the chain ================================================
 N="$SCRATCH/n-lock"; clone_fix "$FIX0" "$N"

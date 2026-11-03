@@ -8,17 +8,25 @@ signed, reviewed tag below the tag's version; the candidate is HEAD.
 Subcommands (run_repass.sh calls the helpers; the Owner and Claude call the rest):
   prepare        RELEASE_SCOPE check, custody of the base tag (and, for a GA
                  tag, of the newest rc tag and of the carried rc conditions),
-                 scope census, payload split at the redactor's input limit,
-                 redaction through the repo's ADR-114 redactor (each split
-                 piece together with the original lines around it)
+                 scope census; each changed file redacted whole through the
+                 repo's ADR-114 redactor (base and candidate text) before its
+                 diff is taken; payload split at the redactor's input limit
+                 and a second redaction pass over each payload
   redact-tree    pass every file of the lanes' copy of the candidate through
                  the same redactor; withhold (and list) what it cannot keep
-  nogo-check     refuse a fresh start on a candidate the ledger has a NO-GO for
+  nogo-check     refuse a start on a candidate (or tree) the ledger has a NO-GO
+                 for; a fresh start also needs every earlier lane outcome
+  reconcile      (--resume) record the outcome of every dispatched lane of the
+                 attempt that has no outcome in the ledger yet
+  keep-lane      move a lane's earlier files aside once the ledger holds them
+  verdict        print the class of one verdict file (the one NO-GO rule)
+  nogo-count     count the verdict files that the NO-GO rule blocks
   instrument     refuse a Codex identity that the ADR-182 manifest and
                  CODEX_VERSION_FLOOR do not admit
   codex-config   print "<model> <effort> <source>" (environment, else the root
                  table of ~/.codex/config.toml)
-  spawn          run one lane in its own session/process group with a time limit
+  spawn          run one lane in its own session/process group with a time limit;
+                 it records the lane's dispatch, then its outcome, in the ledger
   claude-result  extract the final answer from a `claude -p` stream-json log
   ledger-add     append one line to the hash-chained attempts ledger (locked)
   scrub          replace personal home paths by <user> in evidence files
@@ -72,11 +80,20 @@ LIMIT_RE = re.compile(r"hit your (?:[a-z]+ ){0,3}limit|usage limit|rate[ _-]?lim
 LANES = ("codex", "claude")
 MARGIN = 16 * 1024  # bytes kept free under the redactor's input cap
 TRUNC = "CODEX-OUTPUT-TRUNCATED"  # the redactor's truncation marker: one more in its output = cut
-# A split piece is redacted together with whole original lines of the same file next to it:
-# at least CTX_MIN bytes on each side when they exist, at most CTX_MAX (a longer line keeps
-# only its part next to the piece). Only the piece's own lines are kept afterwards.
-CTX_MIN = 4 * 1024
-CTX_MAX = 8 * 1024
+# Each changed file is redacted whole, in its own source text, before the diff is taken. A scan
+# gets SCAN_FLOOR_SECONDS plus SCAN_SECONDS_PER_MIB per MiB of text; a scan that uses more than
+# half its time budget is refused.
+SCAN_FLOOR_SECONDS = 2.0
+SCAN_SECONDS_PER_MIB = 8.0
+# The header lines kept from the real diff of a path; the content lines come from the redacted texts.
+DIFF_HEAD_RE = re.compile(r"\A(?:diff --git |old mode |new mode |deleted file mode |new file mode |index |--- |\+\+\+ )")
+# A text the redactor replaces in one version of a file is also replaced wherever it occurs in the
+# other version (each run of 8 or more characters between blanks, quotes and separators).
+TOKEN_RE = re.compile(r"[^\s\"'`=:,;]{8,}")
+# The one NO-GO rule, for every reader: a verdict file is NO-GO when any line starts with
+# "VERDICT: NO-GO", INVALID (blocking like a NO-GO) unless it holds exactly one valid VERDICT
+# line, NONE when it is missing or empty (no answer: the lane runs again).
+VALID_VERDICTS = ("GO", "GO-WITH-CONDITIONS", "NO-GO")
 # Why a file of the lanes' copy was withheld (removed) instead of redacted in place.
 WITHHELD_CLASSES = ("symlink", "not-regular-file", "not-utf8-text", "over-redactor-input-cap",
                     "redactor-error", "line-count-changed")
@@ -179,7 +196,8 @@ def nfkc_safe(t: str) -> str:
     """Show every character that NFKC normalization would change as <U+XXXX> (display only).
 
     It runs AFTER redaction, on the redactor's output: the ADR-114 redactor always sees the
-    original text (header, conditions and diff), so this escape cannot hide a secret from it."""
+    text before this escape (header, conditions and diff), so the escape cannot hide a secret
+    from it."""
     return "".join(ch if ch < "\x80" or (unicodedata.normalize("NFKC", ch) == ch and not unicodedata.combining(ch))
                    else "<U+%04X>" % ord(ch) for ch in t)
 
@@ -328,27 +346,115 @@ def ledger_lines() -> List[str]:
     return out
 
 
-def nogo_block(cand: str, lines: List[str]) -> None:
-    """A NO-GO recorded for this candidate under ANY tag (a lane's verdict line, or the end of an
-    attempt) blocks it for good: an rc.N re-roll of the same commit included."""
+def ledger_append(tag: str, cand: str, event: str) -> None:
+    """One appender at a time (an exclusive lock on a sidecar file), so lanes that finish
+    together each chain to the bytes before them."""
+    WORK.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(WORK / "repass-attempts.log.lock"), os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
+                 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        ledger_lines()  # refuse to extend a broken chain
+        data = read_regular(LEDGER) if LEDGER.exists() else b""
+        line = "%s %s %s %s prev=%s\n" % (datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                          safe(tag, 40), safe(cand, 40), safe(event, 300), sha256_bytes(data))
+        with open(str(LEDGER), "ab") as fh:
+            fh.write(line.encode("ascii", "replace"))
+    finally:
+        os.close(fd)  # releases the lock
+
+
+def event_of(ln: str) -> Tuple[str, str, str]:
+    """(tag, candidate, event) of one ledger line."""
+    f = ln.split(" ")
+    return " ".join(f[1:2]), " ".join(f[2:3]), " ".join(f[3:-1])
+
+
+DISPATCH_RE = re.compile(r"\Adispatch lane (codex|claude) part (\d{2}) id=([0-9a-f]{12}) pid=(\d+)(?: |\Z)")
+OUTCOME_RE = re.compile(r"\Alane (codex|claude) part (\d{2}) (?:verdict (\S+) nogo=\d+|no-verdict) id=([0-9a-f]{12})(?: |\Z)")
+
+
+def dispatches(lines: List[str]) -> Tuple[List[Dict[str, str]], Dict[str, Dict[str, str]]]:
+    """Every lane dispatch in ledger order, and the outcome line of each dispatch id."""
+    disp, outcome = [], {}  # type: Tuple[List[Dict[str, str]], Dict[str, Dict[str, str]]]
     for ln in lines:
-        f = ln.split(" ")
-        if f[2:3] == [cand] and re.search(r" nogo=[1-9]", ln):
+        tag, cand, ev = event_of(ln)
+        m = DISPATCH_RE.match(ev)
+        if m:
+            disp.append({"tag": tag, "cand": cand, "lane": m.group(1), "part": m.group(2), "id": m.group(3),
+                         "pid": m.group(4)})
+            continue
+        m = OUTCOME_RE.match(ev)
+        if m:
+            outcome[m.group(4)] = {"verdict": m.group(3) or "NONE", "event": ev}
+    return disp, outcome
+
+
+def nogo_block(cand: str, tree: str, lines: List[str]) -> None:
+    """A NO-GO recorded for this candidate, or for its tree, under ANY tag (a lane's verdict line,
+    or the end of an attempt) blocks it for good: an rc.N re-roll of the same commit, or of the
+    same tree under a new commit, included."""
+    for ln in lines:
+        tag, c, ev = event_of(ln)
+        if (c == cand or (tree and re.search(r"(?:\A| )tree=%s(?: |\Z)" % re.escape(tree), ev))) \
+                and re.search(r" nogo=[1-9]", ln):
             refuse("an earlier attempt on this candidate (tag %s) recorded a NO-GO (%s): a NO-GO blocks "
-                   "the candidate under any tag, not one evidence set; fix it in a new commit and cut a "
-                   "new rc" % (safe(" ".join(f[1:2]) or "?", 40), ln[:40]))
+                   "the candidate and its tree under any tag, not one evidence set; fix it in a new commit "
+                   "and cut a new rc" % (safe(tag or "?", 40), ln[:40]))
+
+
+def pending_block(cand: str, lines: List[str]) -> None:
+    """Every lane this candidate dispatched has its outcome in the ledger, and its last start has
+    an end: otherwise a lane may still deliver (or have delivered) a verdict that only a
+    --resume of that attempt records."""
+    disp, outcome = dispatches(lines)
+    for d in disp:
+        if d["cand"] == cand and d["id"] not in outcome:
+            refuse("the attempt %s on this candidate dispatched lane %s part %s and the ledger has no "
+                   "outcome for it: run the same command with --resume to reconcile it" % (
+                       safe(d["tag"], 40), d["lane"], d["part"]))
+    last = None
+    for ln in lines:
+        tag, c, ev = event_of(ln)
+        if c == cand and ev.startswith("start "):
+            last = tag
+        elif c == cand and ev.startswith("end "):
+            last = None
+    if last is not None:
+        refuse("the last attempt on this candidate (tag %s) has a start and no end: run it again with "
+               "--resume to reconcile it" % safe(last, 40))
+
+
+def tree_of(commit: str) -> str:
+    return git("rev-parse", "%s^{tree}" % commit).strip()
 
 
 def attempts(ctx: "Ctx") -> Tuple[List[str], str]:
-    """This tag's attempts for the signed fields, after nogo_block(); the tag only selects the
-    lines the fields show."""
+    """This tag's attempts for the signed fields, after nogo_block() and pending_block(); the
+    tag only selects the lines the fields show."""
     if not LEDGER.exists():
         refuse("the attempts ledger %s is missing: every run appends to it, and without it a "
                "re-roll after a NO-GO cannot be excluded" % LEDGER.relative_to(REPO))
     lines = ledger_lines()
-    nogo_block(ctx.cand, lines)
+    nogo_block(ctx.cand, tree_of(ctx.cand), lines)
+    pending_block(ctx.cand, lines)
     mine = [ln for ln in lines if ln.split(" ")[1:2] == [ctx.tag]]
     return mine, sha256_bytes(read_regular(LEDGER))
+
+
+def verdict_class(path: Path) -> Tuple[str, int]:
+    """(GO | GO-WITH-CONDITIONS | NO-GO | INVALID | NONE, nogo): the one NO-GO rule (VALID_VERDICTS)."""
+    if not path.exists() and not path.is_symlink():
+        return "NONE", 0
+    data = read_regular(path)
+    if not data:
+        return "NONE", 0
+    rows = data.decode("utf-8", "replace").split("\n")
+    if any(r.startswith("VERDICT: NO-GO") for r in rows):
+        return "NO-GO", 1
+    found = [r for r in rows if r.startswith("VERDICT:")]
+    m = VERDICT_RE.match(found[0]) if len(found) == 1 else None
+    return (m.group(1), 0) if m else ("INVALID", 1)
 
 
 def newest_rc(ctx: "Ctx") -> str:
@@ -599,31 +705,111 @@ def pieces(path: str, text: str, budget: int) -> Tuple[str, List[str], List[Tupl
     return head, body, out
 
 
-def _fit(s: str, room: int, tail: bool) -> str:
-    """The longest end (tail=True) or start of `s` that fits in `room` UTF-8 bytes."""
-    got, n = [], 0  # type: Tuple[List[str], int]
-    for ch in (reversed(s) if tail else s):
-        n += blen(ch)
-        if n > room:
-            break
-        got.append(ch)
-    return "".join(reversed(got) if tail else got)
+def changed_entries(base: str, cand: str) -> Dict[str, Tuple[str, str, str, str]]:
+    """path -> (base mode, candidate mode, base blob, candidate blob) from `git diff --raw`."""
+    rows = git("diff", "--raw", "-z", "--no-renames", "--no-abbrev", base, cand).split("\0")
+    out = {}  # type: Dict[str, Tuple[str, str, str, str]]
+    k = 0
+    while k + 1 < len(rows) and rows[k]:
+        f = rows[k].lstrip(":").split(" ")
+        if len(f) != 5:
+            refuse("git diff --raw printed an unreadable line: %r" % rows[k][:80])
+        out[rows[k + 1]] = (f[0], f[1], f[2], f[3])
+        k += 2
+    return out
 
 
-def context(lines: List[str], start: int, step: int) -> str:
-    """The original lines next to a piece, read outward from lines[start] (step -1: before the
-    piece, +1: after it): whole lines until at least CTX_MIN bytes, at most CTX_MAX, each ending
-    with a newline. A line that would pass CTX_MAX keeps only its part next to the piece."""
-    got, size, k = [], 0, start  # type: Tuple[List[str], int, int]
-    while 0 <= k < len(lines) and size < CTX_MIN:
-        ln = lines[k] if lines[k].endswith("\n") else lines[k] + "\n"
-        if size + blen(ln) > CTX_MAX:
-            room = CTX_MAX - size
-            ln = _fit(ln, room, True) if step < 0 else _fit(ln[:-1], room - 1, False) + "\n"
-        got.append(ln)
-        size += blen(ln)
-        k += step
-    return "".join(reversed(got) if step < 0 else got)
+def blob_text(path: str, mode: str, blob: str, at: str) -> str:
+    """The text of one side of a changed path ('' when the path is absent on that side)."""
+    if mode == "000000":
+        return ""
+    if mode == "160000":
+        refuse("%s is a submodule entry at %s: the kit reviews file contents only" % (path, at))
+    data = gitb("cat-file", "blob", blob)
+    try:
+        if b"\0" in data:
+            raise UnicodeDecodeError("utf-8", data, 0, 1, "NUL byte")
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        refuse("%s is binary at %s (a NUL byte, or not UTF-8): an in-scope binary change cannot be "
+               "reviewed as text; take it out of the delta or declare its class out of scope" % (path, at))
+    return ""  # not reached
+
+
+def redact_whole(sp, path: str, text: str) -> Tuple[str, str, list]:
+    """(source text, its redaction, findings): the whole file through the ADR-114 scan in one
+    call, with a time budget scaled to its size."""
+    src = scrub_text(text)
+    budget = SCAN_FLOOR_SECONDS + SCAN_SECONDS_PER_MIB * blen(src) / 1048576.0
+    t0 = time.monotonic()
+    try:
+        red, finds = sp.scan_and_redact(src, budget_seconds=budget)
+    except Exception as exc:  # any fault of the scan: nothing of this file is sent
+        refuse("the ADR-114 scan of %s failed (%s): fail-closed" % (path, type(exc).__name__))
+    used = time.monotonic() - t0
+    if used > budget / 2:  # a scan that uses more than half its time budget is refused
+        refuse("the ADR-114 scan of %s used %.1f s of its %.1f s budget (more than half): fail-closed"
+               % (path, used, budget))
+    if not isinstance(red, str):
+        refuse("the ADR-114 scan of %s returned no text: fail-closed" % path)
+    return src, red, list(finds)
+
+
+def redact_pair(sp, path: str, base_text: str, cand_text: str) -> Tuple[str, str]:
+    """Both versions of a changed file, each redacted whole; then every text the redactor replaced
+    in either version is replaced wherever it occurs in both (TOKEN_RE runs of it)."""
+    sides = [redact_whole(sp, path, base_text), redact_whole(sp, path, cand_text)]
+    tokens = {}  # type: Dict[str, object]
+    for src, _, finds in sides:
+        for f in finds:
+            for tok in TOKEN_RE.findall(src[f.start:f.end]):
+                tokens.setdefault(tok, f)
+    out = []
+    for src, red, finds in sides:
+        extra = []
+        for tok, f in sorted(tokens.items()):
+            i = src.find(tok)
+            while i >= 0:
+                extra.append(sp.Finding(f.family_id, f.category, i, i + len(tok), f.redaction_label))
+                i = src.find(tok, i + 1)
+        out.append(sp.redact(src, finds + extra) if extra else red)
+    return out[0], out[1]
+
+
+def redacted_diff(path: str, head: str, base_red: str, cand_red: str, tmp: str) -> str:
+    """The -U1 diff of the two redacted texts (files in a private directory: only redacted text
+    is ever written), under the real diff's header lines for the path."""
+    for name, text in (("a", base_red), ("b", cand_red)):
+        with open(os.path.join(tmp, name), "wb") as fh:
+            fh.write(text.encode("utf-8"))
+    env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+    p = subprocess.run(["git", "diff", "--no-index", "-U1", "--inter-hunk-context=0", "--no-color",
+                        "--no-ext-diff", "--no-textconv", "--diff-algorithm=myers", "--indent-heuristic",
+                        "--src-prefix=a/", "--dst-prefix=b/", "--", "a", "b"],
+                       cwd=tmp, env=env, capture_output=True)
+    if p.returncode not in (0, 1):
+        refuse("git diff --no-index of the redacted texts of %s failed (rc=%d)" % (path, p.returncode))
+    lines = nl_lines(p.stdout.decode("utf-8"))
+    i = next((k for k, ln in enumerate(lines) if ln.startswith("@@")), len(lines))
+    body = "".join(lines[i:])
+    hl = nl_lines(head)
+    if (base_red != cand_red and not body) or any(ln.startswith("Binary files") for ln in lines) \
+            or (body and not (any(x.startswith("--- ") for x in hl) and any(x.startswith("+++ ") for x in hl))):
+        refuse("the diff of the redacted texts of %s does not show its change as text lines" % path)
+    return head + body
+
+
+def real_head(base: str, cand: str, path: str) -> str:
+    """The real diff's header lines for one path (DIFF_HEAD_RE), scrubbed; anything else there
+    is refused."""
+    raw = gitb("-c", "core.quotepath=on", "diff", "--text", "-U0", "--no-renames", "--no-color", "--no-ext-diff",
+               "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", base, cand, "--", ":(literal)" + path)
+    lines = nl_lines(scrub_text(raw.decode("utf-8", "replace")))
+    i = next((k for k, ln in enumerate(lines) if ln.startswith("@@")), len(lines))
+    head = lines[:i]
+    if not head or not head[0].startswith("diff --git ") or any(not DIFF_HEAD_RE.match(ln) for ln in head):
+        refuse("the real diff header of %s has a line the kit does not know" % path)
+    return "".join(head)
 
 
 def withheld_count(text: str) -> int:
@@ -645,6 +831,8 @@ def header(ctx: Ctx, st: Dict[str, str], k: int, n: int, cond: str, csha: str, w
         "Base: the signed tag %s (commit %s), whose own release was already reviewed." % (st["base"], st["base_commit"]),
         "PAYLOAD %d/%d of the delta %s..candidate. Together the payloads cover every changed path" % (k, n, st["base"]),
         "except the declared out-of-scope classes below; big diffs are split into pieces, in order.",
+        "Each changed file was redacted whole, in its own source text (base and candidate), before",
+        "its diff was taken; the diff shows the two redacted texts under the real header lines.",
         "Characters that Unicode NFKC normalization would change are shown as <U+XXXX>, after redaction.",
         "Your working directory is a read-only copy of the candidate tree, outside any repository,",
         "without its CLAUDE.md and AGENTS.md files (the diff shows any change to them), and with every",
@@ -693,38 +881,43 @@ def header(ctx: Ctx, st: Dict[str, str], k: int, n: int, cond: str, csha: str, w
     return "\n".join(lines) + "\n"
 
 
-Unit = Tuple[str, str, str, str, str, str]  # path, label, head, body, context before, context after
+Unit = Tuple[str, str, str, str]  # path, label, head, body
 
 
 def build(ctx: Ctx, st: Dict[str, str], cond: str, withheld: str) -> Tuple[Dict[str, bytes], int]:
     """Every derived evidence file by name: the runner writes them, `fields` re-derives them."""
     red_mod = lib("codex_egress_redact")
+    sp = lib("secret_patterns")
     redactor_canary(red_mod)
     cap = int(red_mod._MAX_REDACT_INPUT_BYTES)
     wn = withheld_count(withheld)
     csha = sha256_bytes(cond.encode("utf-8"))
-    # Room under the cap: the header and its blank line, then the diff, plus the original lines
-    # redacted with a split piece on each side of it.
-    budget = cap - MARGIN - esc_len(header(ctx, st, 9999, 9999, cond, csha, 999999)) - 1 - 2 * CTX_MAX
+    # Room under the cap: the header and its blank line, then the diff.
+    budget = cap - MARGIN - esc_len(header(ctx, st, 9999, 9999, cond, csha, 999999)) - 1
     if budget < 32 * 1024:
         refuse("the conditions leave less than 32 KiB per payload under the redactor cap")
-    changed = names(git("diff", "--name-only", "-z", "--no-renames", st["base_commit"], ctx.cand))
+    entries = changed_entries(st["base_commit"], ctx.cand)
     scope, units = [], []  # type: Tuple[List[str], List[Unit]]
-    for p in sorted(changed):
-        if "\t" in p or "\n" in p:
-            refuse("a changed path holds a tab or newline: %r" % p)
-        cls = scope_of(p)
-        scope.append("%s\t%s\n" % (cls, p))
-        if cls != "in-scope":
-            continue
-        raw = gitb("-c", "core.quotepath=on", "diff", "-U1", "--no-renames", "--no-color", "--no-ext-diff",
-                   "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", st["base_commit"], ctx.cand,
-                   "--", ":(literal)" + p)
-        head, body, cuts = pieces(p, scrub_text(raw.decode("utf-8", "replace")), budget)  # original text
-        for i, (s, e) in enumerate(cuts, 1):
-            units.append((p, "" if len(cuts) == 1 else "piece %d/%d" % (i, len(cuts)), head,
-                          "".join(body[s:e]), context(body, s - 1, -1) if i > 1 else "",
-                          context(body, e, 1) if i < len(cuts) else ""))
+    tmp = tempfile.mkdtemp(prefix="kit-redacted-diff-")  # 0700: only redacted text is written here
+    try:
+        os.chmod(tmp, 0o700)
+        for p in sorted(entries):
+            if "\t" in p or "\n" in p:
+                refuse("a changed path holds a tab or newline: %r" % p)
+            cls = scope_of(p)
+            scope.append("%s\t%s\n" % (cls, p))
+            if cls != "in-scope":
+                continue
+            bmode, cmode, bblob, cblob = entries[p]
+            base_red, cand_red = redact_pair(sp, p, blob_text(p, bmode, bblob, st["base"]),
+                                             blob_text(p, cmode, cblob, ctx.cand[:12]))
+            text = redacted_diff(p, real_head(st["base_commit"], ctx.cand, p), base_red, cand_red, tmp)
+            head, body, cuts = pieces(p, text, budget)
+            for i, (s, e) in enumerate(cuts, 1):
+                units.append((p, "" if len(cuts) == 1 else "piece %d/%d" % (i, len(cuts)), head,
+                              "".join(body[s:e])))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
     if not units:
         refuse("nothing in scope changed between %s and the candidate" % st["base"])
     groups, cur, size = [], [], 0  # type: Tuple[List[List[Unit]], List[Unit], int]
@@ -742,34 +935,18 @@ def build(ctx: Ctx, st: Dict[str, str], cond: str, withheld: str) -> Tuple[Dict[
              "withheld-%s.txt" % ctx.sfx: withheld.encode("utf-8")}
     for k, grp in enumerate(groups, 1):
         nn = "%02d" % k
-        diff = "".join(u[2] + u[3] for u in grp)
-        # The redaction window, in the original text: the header, then the diff with the original
-        # lines next to each split piece (kept=False), cut away again after redaction.
-        segs = [(header(ctx, st, k, n, cond, csha, wn) + "\n", True)]  # type: List[Tuple[str, bool]]
-        for _, _, head, body, before, after in grp:
-            segs += [(head, True), (before, False), (body, True)] if before else [(head + body, True)]
-            segs += [(after, False)] if after else []
-        segs = [sg for sg in segs if sg[0]]
-        window = "".join(t for t, _ in segs)
-        raw = "".join(t for t, keep in segs if keep)  # = header + "\n" + diff
-        if blen(window) > cap - MARGIN or any(not t.endswith("\n") for t, _ in segs):
+        diff = "".join(u[2] + u[3] for u in grp)  # already the diff of the redacted source texts
+        raw = header(ctx, st, k, n, cond, csha, wn) + "\n" + diff
+        if blen(raw) > cap - MARGIN:
             refuse("payload %d failed the redaction controls (size)" % k)
-        try:
-            red_win = red_mod.redact_outgoing(window)
+        try:  # the second pass: the header with the conditions, and the diff as a whole
+            red = red_mod.redact_outgoing(raw)
         except Exception as exc:  # the redactor's own time budget, or any other fault
             refuse("the ADR-114 redactor failed on payload %d (%s): fail-closed" % (k, type(exc).__name__))
-        if red_win.count("\n") != window.count("\n") or not red_win.endswith("\n"):
-            refuse("payload %d: the redactor did not keep the line count of its redaction window (the "
-                   "payload with the original lines next to each split piece), so the payload cannot be "
-                   "cut back to its own lines; fail-closed" % k)
-        rows, kept, at = red_win.split("\n"), [], 0  # type: Tuple[List[str], List[str], int]
-        for t, keep in segs:
-            c = t.count("\n")
-            kept += rows[at:at + c] if keep else []
-            at += c
-        red = "\n".join(kept) + "\n"
+        if not isinstance(red, str):
+            refuse("the ADR-114 redactor returned no text for payload %d: fail-closed" % k)
         shown = nfkc_safe(red)  # display escape, only after redaction
-        if (blen(raw) > cap - MARGIN or red_win.count(TRUNC) != window.count(TRUNC)
+        if (red.count(TRUNC) != raw.count(TRUNC)
                 or unicodedata.normalize("NFKC", shown) != shown
                 or raw.count("\n") != red.count("\n")
                 or sum(1 for x in raw.split("\n") if x.startswith("@@"))
@@ -860,13 +1037,6 @@ def exact_set(ctx: Ctx, want: List[str]) -> None:
             ctx.ev_rel, sorted(have - set(want))[:5], sorted(set(want) - have)[:5]))
 
 
-def lane_verdict(path: Path) -> Optional[str]:
-    lines = [ln for ln in read_regular(path).decode("utf-8", "replace").split("\n")
-             if ln.startswith("VERDICT:")]
-    m = VERDICT_RE.match(lines[0]) if len(lines) == 1 else None
-    return m.group(1) if m else None
-
-
 # --------------------------------------------------------------------- fields
 def load_evidence(ctx: Ctx) -> Tuple[Dict[str, object], List[str]]:
     if ctx.ev.is_symlink() or not ctx.ev.is_dir():
@@ -914,10 +1084,10 @@ def derive_fields(ctx: Ctx, a: argparse.Namespace, generated_at: str) -> Tuple[s
         nn = "%02d" % k
         for lane in LANES:
             vpath = ctx.ev / ("%s-%s-%s.verdict.txt" % (lane, ctx.sfx, nn))
-            d = lane_verdict(vpath)
+            d, _ = verdict_class(vpath)
             if d == "NO-GO":
                 refuse("lane %s says NO-GO on payload %s: a NO-GO from either lane blocks" % (lane, nn))
-            if d is None or prov["lanes"].get((nn, lane)) != 0:  # type: ignore[union-attr]
+            if d not in VALID_VERDICTS or prov["lanes"].get((nn, lane)) != 0:  # type: ignore[union-attr]
                 refuse("lane %s on payload %s has no rc=0 run with exactly one valid VERDICT line" % (lane, nn))
             decisions.append(("%s-p%s" % (lane, nn), d))
             notes += lane_notes(vpath, "%s-p%s" % (lane, nn))
@@ -1164,11 +1334,108 @@ def cmd_redact_tree(a: argparse.Namespace) -> int:
 
 
 def cmd_nogo_check(a: argparse.Namespace) -> int:
-    """A fresh start (not --resume) on a candidate the attempts ledger has a NO-GO for is refused
-    before anything is prepared or sent."""
-    if not HEX40.match(a.candidate):
-        refuse("--candidate must be a full commit sha")
-    nogo_block(a.candidate, ledger_lines())
+    """A start on a candidate (or tree) the attempts ledger has a NO-GO for is refused before
+    anything is prepared or sent. A fresh start (not --resume) also needs the outcome of every
+    lane the candidate dispatched, and an end for its last start."""
+    if not HEX40.match(a.candidate) or not HEX40.match(a.tree):
+        refuse("--candidate and --tree must be full object ids")
+    lines = ledger_lines()
+    nogo_block(a.candidate, a.tree, lines)
+    if not a.resume:
+        pending_block(a.candidate, lines)
+    return 0
+
+
+def alive(pid: int) -> bool:
+    """A lane's spawn process (the leader of its own process group) is still running."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    try:
+        return os.getpgid(pid) == pid
+    except OSError:
+        return False
+
+
+def lane_outcome(lane: str, part: str, did: str, tag: str, cand: str, tree: str, out: Path, log: Path,
+                 model: str, rc: str, recovered: bool) -> Tuple[str, int, int]:
+    """Read one lane's answer (Claude: extracted from its stream-json log first) and append its
+    outcome to the ledger under the lock: its verdict by the one NO-GO rule, or no-verdict."""
+    cres = 0
+    if lane == "claude" and (not recovered or verdict_class(out)[0] == "NONE"):
+        cres = claude_result(log, out, model) if log.is_file() and not log.is_symlink() else 5
+    v, nogo = verdict_class(out)
+    tail = "id=%s rc=%s tree=%s%s" % (did, rc, tree, " recovered=1" if recovered else "")
+    if v == "NONE":
+        ledger_append(tag, cand, "lane %s part %s no-verdict %s" % (lane, part, tail))
+    else:
+        ledger_append(tag, cand, "lane %s part %s verdict %s nogo=%d %s" % (lane, part, v, nogo, tail))
+    return v, nogo, cres
+
+
+def cmd_reconcile(a: argparse.Namespace) -> int:
+    """--resume, before any lane runs: every lane of this tag and candidate that was dispatched
+    and has no outcome in the ledger gets one now, from its ledger-side output (recovered=1); a
+    reviewer that is still running refuses the resume. Then, for every lane whose last dispatch
+    ended with a valid verdict, prints 'ADOPT <lane> <part> <rc>' for the runner."""
+    ldir = Path(a.dir)
+    disp, outcome = dispatches(ledger_lines())
+    mine = [d for d in disp if d["tag"] == a.tag and d["cand"] == a.candidate]
+    for d in mine:
+        if d["id"] in outcome:
+            continue
+        if alive(int(d["pid"])):
+            refuse("lane %s part %s of the earlier attempt is still running (pid %s): wait for it to end "
+                   "or stop that process group, then run --resume again" % (d["lane"], d["part"], d["pid"]))
+        name = "%s-%s-%s" % (d["lane"], a.sfx, d["part"])
+        v, _, _ = lane_outcome(d["lane"], d["part"], d["id"], a.tag, a.candidate, a.tree,
+                               ldir / (name + ".verdict.txt"), ldir / (name + ".log"), a.model, "-", True)
+        print("RECOVERED %s %s %s" % (d["lane"], d["part"], v))
+    disp, outcome = dispatches(ledger_lines())
+    last = {}  # type: Dict[Tuple[str, str], Dict[str, str]]
+    for d in disp:
+        if d["tag"] == a.tag and d["cand"] == a.candidate:
+            last[(d["lane"], d["part"])] = d
+    for (lane, part), d in sorted(last.items()):
+        o = outcome.get(d["id"])
+        if o and o["verdict"] in VALID_VERDICTS:
+            m = re.search(r" rc=(\d+)(?: |\Z)", o["event"])
+            print("ADOPT %s %s %s" % (lane, part, m.group(1) if m else "0"))
+    return 0
+
+
+def cmd_keep_lane(a: argparse.Namespace) -> int:
+    """Before a lane runs (again): its earlier files, in the evidence and on the ledger side, move
+    to the kept folder, and only once the ledger holds the outcome of that lane's last dispatch."""
+    disp, outcome = dispatches(ledger_lines())
+    last = [d for d in disp if (d["tag"], d["cand"], d["lane"], d["part"]) == (a.tag, a.candidate, a.lane, a.part)]
+    if last and last[-1]["id"] not in outcome:
+        refuse("lane %s part %s: the ledger has no outcome for its last dispatch; its files stay where "
+               "they are (run --resume to reconcile them)" % (a.lane, a.part))
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    ev, ldir, keep = Path(a.ev), Path(a.dir), Path(a.keep)
+    for src, suffix in ((ev / (a.name + ".log"), ""), (ev / (a.name + ".verdict.txt"), ""),
+                        (ldir / (a.name + ".log"), ".lane-output"), (ldir / (a.name + ".verdict.txt"), ".lane-output"),
+                        (ldir / (a.name + ".status"), ".lane-output")):
+        if src.exists() or src.is_symlink():
+            keep.mkdir(parents=True, exist_ok=True)
+            dst = keep / ("%s.%s%s" % (src.name, stamp, suffix))
+            if dst.exists() or dst.is_symlink():
+                refuse("%s exists already" % dst)
+            os.rename(str(src), str(dst))
+    return 0
+
+
+def cmd_verdict(a: argparse.Namespace) -> int:
+    print(verdict_class(Path(a.file))[0])
+    return 0
+
+
+def cmd_nogo_count(a: argparse.Namespace) -> int:
+    print(sum(verdict_class(Path(f))[1] for f in a.files))
     return 0
 
 
@@ -1202,14 +1469,55 @@ def cmd_codex_config(a: argparse.Namespace) -> int:
     return 0
 
 
+def _reap(pid: int, timeout: int) -> int:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        got, status = os.waitpid(pid, os.WNOHANG)
+        if got:
+            return os.WEXITSTATUS(status) if os.WIFEXITED(status) else 128 + os.WTERMSIG(status)
+        time.sleep(0.2)
+    sys.stderr.write("spawn: no answer after %d s: stopping the lane's process group\n" % timeout)
+    os.killpg(os.getpgid(0), signal.SIGTERM)
+    for _ in range(50):
+        if os.waitpid(pid, os.WNOHANG)[0]:
+            return 124
+        time.sleep(0.2)
+    os.kill(pid, signal.SIGKILL)
+    os.waitpid(pid, 0)
+    return 124
+
+
 def cmd_spawn(a: argparse.Namespace) -> int:
     """One lane in its own session and process group (macOS has no setsid binary), so the
-    runner can stop the whole reviewer tree with one signal; a wall-clock limit on top."""
+    runner can stop the whole reviewer tree with one signal; a wall-clock limit on top.
+
+    With --lane, this process (which outlives a kill of the runner's process group) appends the
+    lane's dispatch to the ledger before the reviewer starts, and its outcome after the reviewer
+    exits, then writes --status for the runner."""
     cmd = a.argv[1:] if a.argv[:1] == ["--"] else a.argv
     if not cmd:
         refuse("spawn needs a command after --")
+    lane = a.lane is not None
+    if lane and not (a.lane in LANES and re.fullmatch(r"\d{2}", a.part or "") and a.tag and a.candidate
+                     and HEX40.match(a.tree or "") and a.out and a.log and a.status):
+        refuse("spawn --lane needs --part NN, --tag, --candidate, --tree, --out, --log and --status")
     os.setsid()
     Path(a.pg_file).write_text("%d\n" % os.getpid(), encoding="ascii")
+    did = os.urandom(6).hex()
+
+    def status(verdict: str, nogo: int, result: int, ledger: str) -> None:
+        write_atomic(Path(a.status), ("verdict=%s\nnogo=%d\nresult=%d\nledger=%s\nid=%s\n" % (
+            verdict, nogo, result, ledger, did)).encode("ascii"))
+
+    if lane:
+        try:
+            ledger_append(a.tag, a.candidate, "dispatch lane %s part %s id=%s pid=%d tree=%s" % (
+                a.lane, a.part, did, os.getpid(), a.tree))
+        except Exception as exc:  # no dispatch line, no reviewer
+            sys.stderr.write("REFUSED: the attempts ledger did not take the dispatch (%s): the lane does "
+                             "not run\n" % type(exc).__name__)
+            status("NONE", 0, 0, "fail")
+            return 2
     pid = os.fork()
     if pid == 0:
         try:  # Python ignores SIGPIPE (and SIGXFSZ) at start-up; the reviewer must not inherit that
@@ -1221,27 +1529,23 @@ def cmd_spawn(a: argparse.Namespace) -> int:
         os._exit(127)
     for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):  # the group signal is for the lane;
         signal.signal(s, signal.SIG_IGN)                       # this parent stays to reap it
-    deadline = time.monotonic() + a.timeout
-    while time.monotonic() < deadline:
-        got, status = os.waitpid(pid, os.WNOHANG)
-        if got:
-            return os.WEXITSTATUS(status) if os.WIFEXITED(status) else 128 + os.WTERMSIG(status)
-        time.sleep(0.2)
-    sys.stderr.write("spawn: no answer after %d s: stopping the lane's process group\n" % a.timeout)
-    os.killpg(os.getpgid(0), signal.SIGTERM)
-    for _ in range(50):
-        if os.waitpid(pid, os.WNOHANG)[0]:
-            return 124
-        time.sleep(0.2)
-    os.kill(pid, signal.SIGKILL)
-    os.waitpid(pid, 0)
-    return 124
+    rc = _reap(pid, a.timeout)
+    if lane:
+        try:
+            v, nogo, cres = lane_outcome(a.lane, a.part, did, a.tag, a.candidate, a.tree, Path(a.out),
+                                         Path(a.log), a.model, str(rc), False)
+            status(v, nogo, cres, "ok")
+        except Exception as exc:  # the runner classes this lane as a ledger fault
+            sys.stderr.write("REFUSED: the attempts ledger did not take this lane's outcome (%s)\n"
+                             % type(exc).__name__)
+            status("NONE", 0, 5, "fail")
+    return rc
 
 
-def cmd_claude_result(a: argparse.Namespace) -> int:
+def claude_result(log: Path, out: Path, want: str) -> int:
     """0 = answer written; 4 = account limit (stop dispatch); 5 = dead; 6 = another model ran."""
     last, model, limited = None, None, False
-    for line in Path(a.log).read_text(encoding="utf-8", errors="replace").splitlines():
+    for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             obj = json.loads(line)
         except ValueError:
@@ -1254,8 +1558,8 @@ def cmd_claude_result(a: argparse.Namespace) -> int:
             last = obj
         if isinstance(obj.get("error"), str) and LIMIT_RE.search(obj["error"]):
             limited = True  # the refused assistant message of an account limit
-    if a.model and model is not None and not model.startswith(a.model):
-        sys.stderr.write("REFUSED: the lane ran model %r, not %r\n" % (model, a.model))
+    if want and model is not None and not model.startswith(want):
+        sys.stderr.write("REFUSED: the lane ran model %r, not %r\n" % (model, want))
         return 6
     if last is None:
         return 4 if limited else 5
@@ -1266,27 +1570,16 @@ def cmd_claude_result(a: argparse.Namespace) -> int:
         return 4 if (limited or LIMIT_RE.search(text + " " + etext)) else 5
     if not any(VERDICT_RE.match(ln) for ln in text.split("\n")) and (limited or LIMIT_RE.search(text[:300])):
         return 4  # a limit message delivered as the answer
-    write_atomic(Path(a.out), (text.rstrip("\n") + "\n").encode("utf-8"))
+    write_atomic(out, (text.rstrip("\n") + "\n").encode("utf-8"))
     return 0
 
 
+def cmd_claude_result(a: argparse.Namespace) -> int:
+    return claude_result(Path(a.log), Path(a.out), a.model)
+
+
 def cmd_ledger_add(a: argparse.Namespace) -> int:
-    """One appender at a time (an exclusive lock on a sidecar file), so lanes that finish
-    together each chain to the bytes before them."""
-    WORK.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(WORK / "repass-attempts.log.lock"), os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0),
-                 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        ledger_lines()  # refuse to extend a broken chain
-        data = read_regular(LEDGER) if LEDGER.exists() else b""
-        line = "%s %s %s %s prev=%s\n" % (datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                                          safe(a.tag, 40), safe(a.candidate, 40), safe(a.event, 300),
-                                          sha256_bytes(data))
-        with open(str(LEDGER), "ab") as fh:
-            fh.write(line.encode("ascii", "replace"))
-    finally:
-        os.close(fd)  # releases the lock
+    ledger_append(a.tag, a.candidate, a.event)
     return 0
 
 
@@ -1450,7 +1743,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     p = sub.add_parser("redact-tree")
     p.add_argument("--tree", required=True)
     p.add_argument("--out", required=True)
-    sub.add_parser("nogo-check").add_argument("--candidate", required=True)
+    p = sub.add_parser("nogo-check")
+    p.add_argument("--candidate", required=True)
+    p.add_argument("--tree", required=True)
+    p.add_argument("--resume", action="store_true")
+    p = sub.add_parser("reconcile")
+    for opt in ("--tag", "--candidate", "--tree", "--sfx", "--dir", "--model"):
+        p.add_argument(opt, required=True)
+    p = sub.add_parser("keep-lane")
+    for opt in ("--tag", "--candidate", "--lane", "--part", "--name", "--dir", "--ev", "--keep"):
+        p.add_argument(opt, required=True)
+    sub.add_parser("verdict").add_argument("file")
+    sub.add_parser("nogo-count").add_argument("files", nargs="*")
     p = sub.add_parser("instrument")
     for opt in ("--version", "--triple", "--sha", "--status"):
         p.add_argument(opt, required=True)
@@ -1458,6 +1762,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     p = sub.add_parser("spawn")
     p.add_argument("--pg-file", required=True)
     p.add_argument("--timeout", type=int, required=True)
+    for opt in ("--lane", "--part", "--tag", "--candidate", "--tree", "--out", "--log", "--status"):
+        p.add_argument(opt, default=None)
+    p.add_argument("--model", default="")
     p.add_argument("argv", nargs=argparse.REMAINDER)
     p = sub.add_parser("claude-result")
     p.add_argument("--model", default="")
@@ -1475,6 +1782,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--ci-only", action="store_true")
     a = ap.parse_args(argv)
     table = {"prepare": cmd_prepare, "redact-tree": cmd_redact_tree, "nogo-check": cmd_nogo_check,
+             "reconcile": cmd_reconcile, "keep-lane": cmd_keep_lane, "verdict": cmd_verdict,
+             "nogo-count": cmd_nogo_count,
              "instrument": cmd_instrument, "codex-config": cmd_codex_config,
              "spawn": cmd_spawn, "claude-result": cmd_claude_result, "ledger-add": cmd_ledger_add,
              "scrub": cmd_scrub, "finalize": cmd_finalize, "carry-conditions": cmd_carry_conditions,
