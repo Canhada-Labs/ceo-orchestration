@@ -27,11 +27,12 @@ environment reads.
 """
 from __future__ import annotations
 
+import bisect
 import logging
 import re
 import signal
 import unicodedata
-from typing import Callable, List, NamedTuple, Optional, Pattern, Tuple
+from typing import Callable, Dict, List, NamedTuple, Optional, Pattern, Tuple
 
 _logger = logging.getLogger(__name__)
 
@@ -71,7 +72,13 @@ class SecretPattern(NamedTuple):
 
 
 class Finding(NamedTuple):
-    """One match returned by scan()."""
+    """One match returned by scan().
+
+    ``start``/``end`` index the text that was passed to scan() -- the
+    caller's ORIGINAL string -- even when the match was found only in its
+    NFKC view (scan() maps such spans back; see ``_nfkc_segments``). Slice
+    or redact that same string, never a normalized copy of it.
+    """
     family_id: str
     category: str
     start: int
@@ -723,44 +730,194 @@ def _clear_itimer_guard(prev_handler: Optional[object]) -> None:
         signal.signal(signal.SIGALRM, prev_handler)
 
 
-def scan(
+# ---------------------------------------------------------------------------
+# Two detection frames, ONE offset frame (the caller's original text)
+# ---------------------------------------------------------------------------
+#
+# scan() matches every pattern in two frames and unions the findings:
+#   (a) the ORIGINAL text, as written.
+#   (b) the NFKC view (full-width, ligature, compatibility-homoglyph
+#       evasion). Its spans are mapped BACK to original offsets through the
+#       segment map below, so a finding never indexes a normalized string.
+# Redaction then cuts the ORIGINAL text only: every character outside a
+# finding is returned byte-identical. No normalized character can reach the
+# output (full-width JSON punctuation stays full-width, confusables stay
+# visible to a reviewer, and NFKC growth cannot inflate the output).
+#
+# Segment map. The original is cut BEFORE every ASCII character and before
+# every character of _SAFE_CUT below; a segment is one such cut character
+# (or the text start) plus the run of other characters after it, and is
+# NFKC-normalized on its own. Segments NFKC leaves unchanged map 1:1 like
+# the ASCII between them, so CJK, kana or Hangul prose around a full-width
+# secret is never swallowed. A cut before an ASCII character ``a`` is
+# composition-safe because NFKC(s) = compose(reorder(decompose_K(s))):
+#   1. decompose_K works per character and every ASCII character decomposes
+#      to itself, so decompose_K(x + a + y) = decompose_K(x) + a +
+#      decompose_K(y).
+#   2. Canonical reordering only swaps adjacent characters whose combining
+#      class is > 0; every ASCII character has class 0, so nothing moves
+#      across ``a``.
+#   3. Canonical composition joins a character C to the LAST starter L before
+#      it only if no starter sits between them. ``a`` is a starter, so nothing
+#      after it composes with anything before it; ``a`` itself joins L only if
+#      it is the SECOND element of a primary composite, and no ASCII character
+#      is (the second elements are combining marks plus a few non-ASCII
+#      starters such as Hangul V/T jamo).
+# Hence NFKC(x + a + y) == NFKC(x) + NFKC(a + y) for every ASCII ``a``. The
+# same three steps hold for any character ``c`` whose NFKD starts with a
+# starter (class 0) that is never the second element of a primary
+# composite: step 1 is per character, step 2 cannot cross that starter and
+# step 3 cannot join it (or anything after it) to the left. _SAFE_CUT lists
+# such characters explicitly; each one is checked against that derived
+# property and against every character that can combine (composition
+# firsts, class != 0, NFKC-changing) on the supported Unicode versions.
+# Both claims are tested in test_secret_patterns.py, and the map is ALSO
+# checked at runtime: if the segment images do not concatenate to
+# NFKC(text) the map fails CLOSED to ONE segment spanning the whole text, so
+# an NFKC-frame finding then redacts the whole text instead of leaking.
+#
+# Precision ("peel"): when a segment starts with a cut character ``s`` whose
+# NFKD is ONE character and the segment's image starts with NFKC(s), ``s``
+# composed with nothing after it (a primary composite differs from its first
+# element), and by the same three steps NFKC(s + R) == NFKC(s) + NFKC(R);
+# the segment is then split into [s][R], so a JSON quote, '=' or space right
+# before a decomposed or ligature secret is not swallowed. NFKC(R) is
+# computed on its own and goes through the same runtime concatenation check.
+#
+# A normalized finding maps to the UNION of the original segments it
+# touches. Over-redaction is acceptable; leaking is not.
+
+# Non-ASCII characters before which a cut is also composition-safe (see the
+# derived property above). Deliberately absent: U+302A-302F (combining
+# ideographic tone marks), U+3099-309C (kana voicing marks, combining and
+# spacing), U+FF9E/U+FF9F (half-width voicing marks, NFKD -> U+3099/309A),
+# half-width Hangul and the Hangul V/T jamo U+1160-11FF (they compose onto a
+# preceding L jamo or LV syllable).
+_SAFE_CUT = (
+    "\u3000-\u3029\u3030-\u303f"  # CJK symbols and punctuation
+    "\u3041-\u3096\u309d-\u309f"  # hiragana letters, iteration marks
+    "\u30a0-\u30ff"               # katakana letters, middle dot, prolonged mark
+    "\u3400-\u4dbf\u4e00-\u9fff"  # CJK unified ideographs (+ extension A)
+    "\uac00-\ud7a3"               # Hangul syllables
+    "\uff01-\uff5e"               # full-width ASCII forms
+)
+# ``seg``: an optional _SAFE_CUT head + a run of characters that are neither
+# ASCII nor _SAFE_CUT (an ASCII head is taken by the caller). ``run``: a run
+# of _SAFE_CUT characters, each its own cut, minus the last one when a
+# ``seg`` tail follows (that one heads the next ``seg``).
+_SEGMENT_RE = re.compile(
+    "(?P<head>[{s}])?(?P<tail>[^\\x00-\\x7f{s}]+)|(?P<run>[{s}]+(?![^\\x00-\\x7f{s}]))"
+    .format(s=_SAFE_CUT)
+)
+
+
+def _nfkc(s: str) -> str:
+    return unicodedata.normalize("NFKC", s)
+
+
+_Segment = Tuple[int, int, int, int]  # (orig_start, orig_end, norm_start, norm_end)
+
+
+def _nfkc_segments(
     text: str,
-    *,
-    patterns: Optional[List[SecretPattern]] = None,
-    budget_seconds: float = 0.5,
-    normalize_unicode: bool = True,
-) -> List[Finding]:
-    """Scan text for matches against the catalog. ReDoS-guarded.
+    normalized: str,
+    nfkc: Callable[[str], str] = _nfkc,
+) -> List[_Segment]:
+    """Sorted, disjoint segments of ``text`` whose NFKC image differs.
 
-    Args:
-        text: input to scan (str; bytes must be decoded by caller).
-        patterns: which patterns to apply. Default = ALL_PATTERNS.
-        budget_seconds: ITIMER wall-clock budget. Default 0.5s.
-        normalize_unicode: apply NFKC normalization first (defeats homoglyph
-            evasion). Default True.
-
-    Returns:
-        List of Finding (empty if clean). Ordered by (start, family_id).
-
-    Raises:
-        ScanBudgetExceeded: if budget exceeded (caller should fail-open per
-            security-engineer #2 regression budget; the hook wrapper should
-            audit-emit `breadcrumb=secret_scan_timeout` and return allow).
+    The rest maps 1:1. Fails CLOSED to ONE whole-text segment when the images
+    do not concatenate to ``normalized``; ``nfkc`` is injectable for a test.
     """
-    if patterns is None:
-        patterns = ALL_PATTERNS
-    if normalize_unicode:
-        # NFKC defeats tag chars, RTL override, zero-width, homoglyph evasion
-        text = unicodedata.normalize("NFKC", text)
-    findings: List[Finding] = []
+    segments: List[_Segment] = []
+    pieces: List[str] = []
+    memo: Dict[str, str] = {}  # NFKC is a pure function of the segment
+    pos = npos = 0
+
+    def image_of(s: str) -> str:
+        image = memo.get(s)
+        if image is None:
+            image = memo[s] = nfkc(s)
+        return image
+
+    def emit(start: int, end: int, image: str) -> None:
+        nonlocal pos, npos
+        if image == text[start:end]:
+            return  # unchanged: maps 1:1, like the ASCII between segments
+        pieces.append(text[pos:start])
+        npos += start - pos
+        pieces.append(image)
+        segments.append((start, end, npos, npos + len(image)))
+        npos += len(image)
+        pos = end
+    for m in _SEGMENT_RE.finditer(text):
+        start, end = m.span()
+        if m.group("run") is not None:
+            if image_of(m.group("run")) != m.group("run"):
+                for i in range(start, end):  # every character is a cut
+                    emit(i, i + 1, image_of(text[i]))
+            continue
+        if m.group("head") is None and start > 0:
+            start -= 1  # the ASCII head (a _SAFE_CUT head is in the match)
+        head = text[start]
+        image = image_of(text[start:end])
+        if (start < m.start("tail") and len(unicodedata.normalize("NFKD", head)) == 1
+                and image.startswith(image_of(head))):
+            emit(start, start + 1, image_of(head))  # peel: head composed with nothing
+            start, image = start + 1, image_of(text[start + 1:end])
+        emit(start, end, image)
+    if "".join(pieces) + text[pos:] != normalized:
+        return [(0, len(text), 0, len(normalized))]
+    return segments
+
+
+def _original_span(
+    segments: List[_Segment],
+    norm_starts: List[int],
+    text_len: int,
+    start: int,
+    end: int,
+) -> Tuple[int, int]:
+    """Original span covering every segment that normalized [start, end) touches."""
+
+    def char_range(q: int) -> Tuple[int, int]:
+        i = bisect.bisect_right(norm_starts, q) - 1
+        if i < 0:
+            return q, q + 1
+        o_start, o_end, _n_start, n_end = segments[i]
+        if q < n_end:
+            return o_start, o_end
+        return q - n_end + o_end, q - n_end + o_end + 1
+
+    lo = char_range(start)[0]
+    hi = char_range(max(end - 1, start))[1]
+    return min(lo, text_len), min(hi, text_len)
+
+
+def _map_to_original(text: str, normalized: str, findings: List[Finding]) -> List[Finding]:
+    """Re-express NFKC-frame findings in ``text`` offsets (over-covering)."""
+    segments = _nfkc_segments(text, normalized)
+    norm_starts = [seg[2] for seg in segments]
+    mapped: List[Finding] = []
+    for f in findings:
+        lo, hi = _original_span(segments, norm_starts, len(text), f.start, f.end)
+        mapped.append(f._replace(start=lo, end=hi))
+    return mapped
+
+
+def _scan_frame(
+    frame: str,
+    patterns: List[SecretPattern],
+    budget_seconds: float,
+    findings: List[Finding],
+) -> None:
+    """Append every validated match in ``frame`` to ``findings``."""
     prev = _install_itimer_guard(budget_seconds)
     try:
         for p in patterns:
-            for m in p.regex.finditer(text):
-                matched = m.group(0)
+            for m in p.regex.finditer(frame):
                 if p.validator is not None:
                     try:
-                        if not p.validator(matched):
+                        if not p.validator(m.group(0)):
                             continue
                     except Exception:
                         # Validator crash → treat as false-positive (fail-open)
@@ -774,19 +931,119 @@ def scan(
                 ))
     finally:
         _clear_itimer_guard(prev)
-    findings.sort(key=lambda f: (f.start, f.family_id))
-    return findings
+
+
+def _merge_same_family(findings: List[Finding]) -> List[Finding]:
+    """One Finding per family per overlapping cluster, with the union span.
+
+    The two frames report the same secret twice when their spans differ;
+    merging keeps ``len(findings)`` a per-secret count. Different families
+    never merge.
+    """
+    merged: List[Finding] = []
+    last: Dict[str, int] = {}
+    for f in sorted(findings, key=lambda x: (x.family_id, x.start, x.end)):
+        i = last.get(f.family_id)
+        if i is not None and f.start < merged[i].end:
+            merged[i] = merged[i]._replace(end=max(merged[i].end, f.end))
+        else:
+            last[f.family_id] = len(merged)
+            merged.append(f)
+    merged.sort(key=lambda f: (f.start, f.family_id, f.end))
+    return merged
+
+
+def scan(
+    text: str,
+    *,
+    patterns: Optional[List[SecretPattern]] = None,
+    budget_seconds: float = 0.5,
+    normalize_unicode: bool = True,
+) -> List[Finding]:
+    """Scan text for matches against the catalog. ReDoS-guarded.
+
+    Matches the historical frame -- the NFKC view when ``normalize_unicode``
+    is on, else ``text`` -- and, when that view differs from ``text``, also
+    ``text`` itself, and returns the union. Every offset indexes ``text``:
+    NFKC-frame spans are mapped back through the segment map (they may
+    over-cover, never under-cover).
+
+    Args:
+        text: input to scan (str; bytes must be decoded by caller).
+        patterns: which patterns to apply. Default = ALL_PATTERNS.
+        budget_seconds: ITIMER wall-clock budget. Default 0.5s.
+        normalize_unicode: also match the NFKC view (full-width / ligature /
+            compatibility-homoglyph evasion). Default True.
+
+    Returns:
+        Findings (empty if clean), one per family per overlapping cluster,
+        ordered by (start, family_id, end).
+
+    Raises:
+        ScanBudgetExceeded: as the historical scan did
+            (callers fail open per security-engineer #2; the hook wrapper
+            audit-emits `breadcrumb=secret_scan_timeout` and returns allow).
+    """
+    if patterns is None:
+        patterns = ALL_PATTERNS
+    view = unicodedata.normalize("NFKC", text) if normalize_unicode else text
+    findings: List[Finding] = []
+    _scan_frame(view, patterns, budget_seconds, findings)  # historical frame
+    if view == text:
+        return _merge_same_family(findings)
+    if findings:
+        findings = _map_to_original(text, view, findings)
+    try:
+        _scan_frame(text, patterns, budget_seconds, findings)
+    except ScanBudgetExceeded:
+        _logger.debug("secret_patterns: scan budget exceeded")
+    return _merge_same_family(findings)
+
+
+def _merged_runs(findings: List[Finding], text_len: int) -> List[Tuple[int, int, str]]:
+    """Union of the finding spans as (start, end, label) runs, clamped to the text.
+
+    Overlapping and adjacent spans are merged before splicing. A merged run
+    carries the label of its leftmost (then longest) finding. Empty spans
+    are dropped.
+    """
+    runs: List[Tuple[int, int, str]] = []
+    for f in sorted(findings, key=lambda x: (x.start, -x.end)):
+        start = min(max(f.start, 0), text_len)
+        end = min(max(f.end, start), text_len)
+        if end == start:
+            continue
+        if runs and start <= runs[-1][1]:
+            run_start, run_end, label = runs[-1]
+            runs[-1] = (run_start, max(run_end, end), label)
+        else:
+            runs.append((start, end, f.redaction_label))
+    return runs
 
 
 def redact(text: str, findings: List[Finding]) -> str:
-    """Replace matched ranges with redaction labels. Preserves unmatched text."""
+    """Replace the merged finding spans of ``text`` with their labels.
+
+    ``findings`` MUST come from ``scan()`` on this same ``text``: their
+    offsets index it directly (scan() already maps NFKC-frame matches back
+    to the original). Overlapping and adjacent spans are merged first; every
+    character outside the merged spans is returned byte-identical, so the
+    output grows only by (label length - span length) per merged run.
+
+    Pure function: no SIGALRM, no re-scan, never raises on Finding input.
+    Offsets outside the text are clamped to it; findings computed on a
+    DIFFERENT text are a caller error this function cannot detect.
+    """
     if not findings:
         return text
-    # Walk findings in reverse so offsets don't shift
-    result = text
-    for f in sorted(findings, key=lambda x: x.start, reverse=True):
-        result = result[:f.start] + f.redaction_label + result[f.end:]
-    return result
+    parts: List[str] = []
+    pos = 0
+    for start, end, label in _merged_runs(findings, len(text)):
+        parts.append(text[pos:start])
+        parts.append(label)
+        pos = end
+    parts.append(text[pos:])
+    return "".join(parts)
 
 
 def scan_and_redact(
@@ -796,7 +1053,11 @@ def scan_and_redact(
     budget_seconds: float = 0.5,
     normalize_unicode: bool = True,
 ) -> Tuple[str, List[Finding]]:
-    """Convenience: scan + redact in one call. Returns (redacted_text, findings)."""
+    """Scan + redact the SAME text. Returns (redacted_text, findings).
+
+    The redacted text is ``text`` with only the merged finding spans
+    replaced (see ``redact``); no normalization reaches the output.
+    """
     findings = scan(
         text,
         patterns=patterns,

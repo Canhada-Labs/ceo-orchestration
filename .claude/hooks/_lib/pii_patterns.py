@@ -731,23 +731,31 @@ def _find_entropy_matches(text: str, existing: List[Match]) -> List[Match]:
 def _apply_redactions(text: str, matches: List[Match]) -> str:
     """Produce redacted text replacing each match span with [REDACTED:FAMILY].
 
-    Overlapping matches are resolved by processing right-to-left so earlier
-    spans' offsets remain valid during replacement.
+    Spans are merged into their UNION before splicing. The previous
+    right-to-left walk SKIPPED a container whose contained span had been
+    spliced first, so the container's head and tail survived in cleartext
+    (the rest of an ``aws_secret_key=`` value after an AKIA-shaped prefix;
+    the tail of a Bearer token after its JWT). A merged run carries the
+    token of its leftmost (then longest) match. ``matches`` must index
+    ``text`` (every caller passes spans found on that same string).
     """
     if not matches:
         return text
-    # Sort descending by start so replacements don't shift later offsets
-    spans = sorted(matches, key=lambda m: m.start, reverse=True)
-    buf = text
-    covered_end = len(text) + 1
-    for m in spans:
-        # Skip if nested inside a higher-priority span already redacted
-        if m.end > covered_end:
-            continue
-        token = f"[REDACTED:{m.family.upper()}]"
-        buf = buf[: m.start] + token + buf[m.end :]
-        covered_end = m.start
-    return buf
+    runs: List[Tuple[int, int, str]] = []  # (start, end, token)
+    for m in sorted(matches, key=lambda x: (x.start, -x.end)):
+        if runs and m.start < runs[-1][1]:
+            start, end, token = runs[-1]
+            runs[-1] = (start, max(end, m.end), token)
+        else:
+            runs.append((m.start, m.end, f"[REDACTED:{m.family.upper()}]"))
+    parts: List[str] = []
+    pos = 0
+    for start, end, token in runs:
+        parts.append(text[pos:start])
+        parts.append(token)
+        pos = end
+    parts.append(text[pos:])
+    return "".join(parts)
 
 
 def scan(text: str, mode: str = "flag") -> ScanResult:

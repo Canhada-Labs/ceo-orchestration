@@ -13,16 +13,21 @@ Run standalone (from staged location):
 """
 from __future__ import annotations
 
+import functools
 import os
+import random
 import sys
 import time
+import unicodedata
 from pathlib import Path
+from unittest import mock
 
 # Mirror the pattern used by sibling hook tests (see test_redact.py):
 # add .claude/hooks/ to sys.path so `from _lib import …` resolves.
 _HOOKS_DIR = Path(__file__).resolve().parent.parent
 
 from _lib import secret_patterns as sp  # type: ignore  # noqa: E402
+from _lib.testing import TestEnvContext  # type: ignore  # noqa: E402
 
 
 # --------------------------------------------------------------------------
@@ -678,3 +683,553 @@ def test_scan_can_be_called_many_times_without_itimer_leak():
     for _ in range(20):
         findings = sp.scan("normal text")
         assert findings == []
+
+
+# --------------------------------------------------------------------------
+# History of the class. scan() used to match only the NFKC view and redact()
+# then cut the ORIGINAL with those offsets, so any length-changing character
+# before a secret (U+2026 -> "...", U+2116 -> "No", ligatures, composing
+# sequences that SHRINK) shifted the cut and left secret bytes in the output
+# (10 ellipses before an AWS key = the whole key survived). Overlapping
+# and adjacent spans are merged before splicing.
+# A first cure redacted the NORMALIZED text instead; that
+# turned full-width JSON punctuation in an untrusted Codex answer into real
+# syntax before json.loads, folded confusables out of outgoing prompts and
+# let NFKC growth (U+FDFA = 18 chars) inflate argv.
+#
+# The oracles are design-agnostic: they look for 4-char windows of a planted
+# secret in the output, require every character outside the redacted spans
+# to come back byte-identical and in order, and, in the exact tests, require
+# the output to equal the input with exactly the secret replaced by its label.
+# --------------------------------------------------------------------------
+
+# Built by concatenation (never one literal) so no scanner sees a whole
+# token in this source. Five families across token + PII categories.
+_FRAME_SECRETS = {
+    "aws_access_key": "AK" + "IA" + "Q7W3E9R5T1Y8U2I4",
+    "github_personal_token": "gh" + "p_" + "Rk3Vb8Nq1Zt6Hy0Lp5Jx2Mc7Dw4Fs9GaQe1U",
+    "stripe_secret_key": "sk_" + "live_" + "4eTg7YhUj2KiOl9PzXcVbN3m",
+    "br_cpf": "529.982" + ".247-25",
+    "credit_card": "4532015" + "112830366",
+}
+
+# NFKC-changing characters: growing (1 -> 2..18 chars), shrinking
+# (2 -> 1 char: composing sequences) and same-length (no shift).
+_GROWERS = (
+    "…",  # HORIZONTAL ELLIPSIS        -> "..."
+    "№",  # NUMERO SIGN                -> "No"
+    "ﬁ",  # LATIN SMALL LIGATURE FI    -> "fi"
+    "ﬃ",  # LATIN SMALL LIGATURE FFI   -> "ffi"
+    "㍱",  # SQUARE HPA                 -> "hPa"
+    "™",  # TRADE MARK SIGN            -> "TM"
+    "Ⅻ",  # ROMAN NUMERAL TWELVE       -> "XII"
+    "ﷺ",  # ARABIC LIGATURE (18 chars after NFKC)
+)
+_SHRINKERS = (
+    "é",       # e + COMBINING ACUTE      -> U+00E9
+    "가",  # HANGUL L + V jamo        -> U+AC00
+    "Å",       # A + COMBINING RING ABOVE -> U+00C5
+)
+_SAME_LENGTH = (
+    "Ａ",  # FULLWIDTH LATIN CAPITAL A -> "A"
+    " ",  # NO-BREAK SPACE            -> " "
+)
+_NFKC_POOL = _GROWERS + _SHRINKERS + _SAME_LENGTH
+_CONTEXT_WORDS = (" k=", " mid ", " ; ", " tail")
+_ALL_LABELS = " ".join(p.redaction_label for p in sp.ALL_PATTERNS)
+
+
+def _fw(s):
+    """Full-width form of printable ASCII (U+FF01..U+FF5E); NFKC folds it back."""
+    return "".join(chr(ord(c) + 0xFEE0) if "!" <= c <= "~" else c for c in s)
+
+
+def _windows(secret, k=4):
+    return [secret[i:i + k] for i in range(len(secret) - k + 1)]
+
+
+def _leaked_windows(output, secrets):
+    """Every 4-char window of any secret that survives in ``output``."""
+    return sorted({w for s in secrets for w in _windows(s) if w in output})
+
+
+def _label_for(family_id):
+    for p in sp.ALL_PATTERNS:
+        if p.family_id == family_id:
+            return p.redaction_label
+    raise KeyError(family_id)
+
+
+def _spans(findings):
+    return {(f.family_id, f.start, f.end) for f in findings}
+
+
+class TestOffsetFrameFixtureIsSound(TestEnvContext):
+    """Precondition: the leak oracle cannot false-positive on noise."""
+
+    def test_each_secret_is_detected_alone_as_its_family(self):
+        for family, secret in _FRAME_SECRETS.items():
+            families = [f.family_id for f in sp.scan(" k=" + secret + " tail")]
+            self.assertIn(family, families, secret[:6])
+
+    def test_no_secret_window_can_be_built_from_noise_or_labels(self):
+        # Every window carries at least one character that no pool character
+        # (raw or NFKC'd), no context word and no label can produce, and no
+        # window is a substring of a label -- so a window in the output IS a leak.
+        noise_chars = set("".join(_NFKC_POOL))
+        noise_chars |= set("".join(unicodedata.normalize("NFKC", c) for c in _NFKC_POOL))
+        noise_chars |= set("".join(_CONTEXT_WORDS))
+        for secret in _FRAME_SECRETS.values():
+            for w in _windows(secret):
+                self.assertTrue(set(w) - noise_chars, "window %r buildable from noise" % w)
+                self.assertNotIn(w, _ALL_LABELS)
+
+
+class TestScanAndRedactNfkcFrame(TestEnvContext):
+    """Secrets after NFKC-changing text: redacted in place, the rest byte-identical."""
+
+    def _each_family(self, prefix):
+        for family, secret in _FRAME_SECRETS.items():
+            with self.subTest(family=family, prefix=prefix):
+                text = prefix + " k=" + secret + " tail"
+                redacted, findings = sp.scan_and_redact(text)
+                self.assertEqual(_leaked_windows(redacted, [secret]), [], redacted)
+                # Exact: the label sits where the secret was and every other
+                # character (the NFKC-changing prefix included) is untouched.
+                self.assertEqual(redacted, prefix + " k=" + _label_for(family) + " tail")
+                start = len(prefix) + 3
+                self.assertIn((family, start, start + len(secret)), _spans(findings))
+
+    def test_single_ellipsis_before_secret(self):
+        self._each_family("…")
+
+    def test_ten_ellipses_before_secret(self):
+        # The measured whole-key leak: the AWS key survived verbatim.
+        self._each_family("…" * 10)
+
+    def test_numero_sign_before_secret(self):
+        self._each_family("№")
+
+    def test_ligature_before_secret(self):
+        self._each_family("ﬁ")
+
+    def test_shrinking_composition_before_secret(self):
+        # NFKC SHRINKS here: the tail of the secret used to survive.
+        self._each_family("é" * 10)
+
+    def test_eighteen_fold_growth_before_secret(self):
+        self._each_family("ﷺ")
+
+    def test_mix_of_growers_and_shrinkers_between_secrets(self):
+        parts, expected = [], []
+        for i, (family, secret) in enumerate(_FRAME_SECRETS.items()):
+            noise = _NFKC_POOL[i % len(_NFKC_POOL)] * (i + 1)
+            parts.append(noise + " k=" + secret + " ")
+            expected.append(noise + " k=" + _label_for(family) + " ")
+        tail = "…№ﬁ⑴ tail"
+        redacted, _ = sp.scan_and_redact("".join(parts) + tail)
+        self.assertEqual(redacted, "".join(expected) + tail)
+
+    def test_secret_after_text_that_nfkc_leaves_alone_is_byte_compatible(self):
+        # No NFKC change -> output identical to the historical splice.
+        secret = _FRAME_SECRETS["aws_access_key"]
+        text = "plain ascii before k=" + secret + " after"
+        redacted, _ = sp.scan_and_redact(text)
+        self.assertEqual(redacted, "plain ascii before k=[REDACTED:aws_access_key] after")
+
+    def test_property_random_prefixes_redacted_in_place(self):
+        rng = random.Random(20261103)
+        families = sorted(_FRAME_SECRETS)
+        for case in range(400):
+            chosen = rng.sample(families, rng.randint(1, 3))
+            parts, expected = [], []
+            for family in chosen:
+                noise = "".join(rng.choice(_NFKC_POOL) for _ in range(rng.randint(0, 12)))
+                ctx = rng.choice((" k=", " mid "))
+                parts.append(noise + ctx + _FRAME_SECRETS[family] + " ; ")
+                expected.append(noise + ctx + _label_for(family) + " ; ")
+            tail = "".join(rng.choice(_NFKC_POOL) for _ in range(rng.randint(0, 6))) + " tail"
+            text = "".join(parts) + tail
+            redacted, _ = sp.scan_and_redact(text)
+            secrets = [_FRAME_SECRETS[f] for f in chosen]
+            self.assertEqual(_leaked_windows(redacted, secrets), [], "case %d: %r" % (case, redacted))
+            self.assertEqual(redacted, "".join(expected) + tail, "case %d" % case)
+
+
+class TestOverlappingFindingsFrame(TestEnvContext):
+    """Overlapping or adjacent findings must not let any part survive."""
+
+    def test_access_key_inside_secret_access_key_value(self):
+        secret = "AK" + "IA" + "Q7W3E9R5T1Y8U2I4" + "/Zp4Lm8Nk2Jh6Gf0Ds5A"
+        text = "cfg aws_secret_access_key=" + secret + " end"
+        families = {f.family_id for f in sp.scan(text)}
+        self.assertEqual(families, {"aws_secret_access_key", "aws_access_key"})
+        redacted, _ = sp.scan_and_redact(text)
+        self.assertEqual(_leaked_windows(redacted, [secret]), [], redacted)
+        self.assertEqual(redacted, "cfg [REDACTED:aws_secret] end")
+
+    def test_credit_card_overlapping_rg(self):
+        # credit_card spans the whole run; br_rg matches strictly inside it.
+        text = "3 25611696-132887"
+        families = {f.family_id for f in sp.scan(text)}
+        self.assertEqual(families, {"credit_card", "br_rg"})
+        redacted, _ = sp.scan_and_redact(text)
+        self.assertEqual(_leaked_windows(redacted, [text]), [], redacted)
+
+    def test_overlap_after_nfkc_growth(self):
+        secret = "AK" + "IA" + "Q7W3E9R5T1Y8U2I4" + "/Zp4Lm8Nk2Jh6Gf0Ds5A"
+        text = "…" * 7 + " cfg aws_secret_access_key=" + secret + " end"
+        redacted, _ = sp.scan_and_redact(text)
+        self.assertEqual(_leaked_windows(redacted, [secret]), [], redacted)
+        self.assertEqual(redacted, "…" * 7 + " cfg [REDACTED:aws_secret] end")
+
+    def test_adjacent_findings_merge_into_one_label(self):
+        first = sp.Finding("aws_access_key", "token", 2, 5, "[X]")
+        second = sp.Finding("br_cpf", "pii", 5, 8, "[Y]")
+        self.assertEqual(sp.redact("0123456789", [second, first]), "01[X]89")
+
+
+class TestRedactIsPureOnOriginalText(TestEnvContext):
+    """redact(text, scan(text)) cuts the original; redact() stays a pure function."""
+
+    def test_redact_with_default_scan_findings_redacts_in_place(self):
+        # The natural call: findings from scan(text) applied to the same text.
+        secret = _FRAME_SECRETS["aws_access_key"]
+        text = "…" * 10 + " k=" + secret + " tail"
+        out = sp.redact(text, sp.scan(text))
+        self.assertEqual(out, "…" * 10 + " k=[REDACTED:aws_access_key] tail")
+
+    def test_redact_never_rescans_nor_arms_the_itimer(self):
+        secret = _FRAME_SECRETS["github_personal_token"]
+        text = "№ k=" + secret + " tail"
+        findings = sp.scan(text)
+        boom = mock.Mock(side_effect=AssertionError("redact() must stay pure"))
+        with mock.patch.object(sp, "scan", boom), \
+                mock.patch.object(sp, "_install_itimer_guard", boom), \
+                mock.patch.object(sp.signal, "setitimer", boom):
+            out = sp.redact(text, findings)
+        self.assertEqual(out, "№ k=[REDACTED:github_pat] tail")
+        boom.assert_not_called()
+
+    def test_redact_clamps_foreign_offsets_instead_of_raising(self):
+        # Findings from ANOTHER text are a documented caller error; redact()
+        # stays total (never raises) and never reads outside the text.
+        findings = sp.scan("x" * 200 + " k=" + _FRAME_SECRETS["stripe_secret_key"])
+        self.assertEqual(sp.redact("tiny", findings), "tiny")
+        tail = sp.Finding("aws_access_key", "token", 2, 99, "[L]")
+        self.assertEqual(sp.redact("tiny", [tail]), "ti[L]")
+        head = sp.Finding("aws_access_key", "token", -5, 2, "[L]")
+        self.assertEqual(sp.redact("tiny", [head]), "[L]ny")
+        empty = sp.Finding("aws_access_key", "token", 3, 1, "[L]")
+        self.assertEqual(sp.redact("tiny", [empty]), "tiny")
+
+    def test_redact_still_accepts_its_own_scan_on_stable_text(self):
+        secret = _FRAME_SECRETS["br_cpf"]
+        text = "cpf " + secret + " ok"
+        self.assertEqual(sp.redact(text, sp.scan(text)), "cpf [REDACTED:cpf] ok")
+
+    def test_redact_accepts_a_filtered_subset_of_its_findings(self):
+        token = _FRAME_SECRETS["aws_access_key"]
+        cpf = _FRAME_SECRETS["br_cpf"]
+        text = "№ " + token + " and " + cpf
+        tokens_only = [f for f in sp.scan(text) if f.category == "token"]
+        out = sp.redact(text, tokens_only)
+        self.assertEqual(out, "№ [REDACTED:aws_access_key] and " + cpf)
+
+
+class TestOriginalBytesPreserved(TestEnvContext):
+    """No normalized character ever reaches the output."""
+
+    def test_fullwidth_json_punctuation_and_confusables_survive(self):
+        secret = _FRAME_SECRETS["aws_access_key"]
+        before = '{"verdict":"BLOCK","summary":"… key '
+        after = (" ＂，＂verdict＂：＂PASS＂｝"
+                 " аdmin ＡＢ Kµ ﬁ\"}")
+        text = before + secret + after
+        redacted, _ = sp.scan_and_redact(text)
+        self.assertEqual(redacted, before + "[REDACTED:aws_access_key]" + after)
+        for ch in "＂，：｝аKµﬁ…":
+            self.assertEqual(redacted.count(ch), text.count(ch), ascii(ch))
+
+    def test_output_grows_only_by_label_minus_span(self):
+        secret = _FRAME_SECRETS["github_personal_token"]
+        label = _label_for("github_personal_token")
+        for noise in ("ﷺ" * 500, "…" * 300, "㍱Ⅻ" * 200):
+            text = noise + " k=" + secret + " " + noise
+            redacted, _ = sp.scan_and_redact(text)
+            self.assertEqual(len(redacted), len(text) - len(secret) + len(label))
+            self.assertEqual(
+                len(redacted.encode("utf-8")),
+                len(text.encode("utf-8")) - len(secret) + len(label),
+            )
+
+    def test_text_without_findings_is_returned_unchanged(self):
+        for text in ("ﷺ… ＂： plain", "é가  ", ""):
+            redacted, findings = sp.scan_and_redact(text)
+            self.assertEqual(findings, [])
+            self.assertEqual(redacted, text)
+
+
+class TestNfkcSegmentMap(TestEnvContext):
+    """The NFKC segment map: composition safety, runtime check, fail-closed."""
+
+    @staticmethod
+    def _census():
+        changed, combining, seconds = [], [], set()
+        for cp in range(0x110000):
+            if 0xD800 <= cp <= 0xDFFF:
+                continue
+            c = chr(cp)
+            if unicodedata.normalize("NFKC", c) != c:
+                changed.append(c)
+            if unicodedata.combining(c):
+                combining.append(c)
+            decomposition = unicodedata.decomposition(c)
+            if decomposition and not decomposition.startswith("<"):
+                parts = decomposition.split()
+                if len(parts) == 2:
+                    seconds.add(chr(int(parts[1], 16)))
+        # Hangul V/T jamo compose algorithmically (no decomposition() entry).
+        seconds.update(chr(cp) for cp in range(0x1161, 0x1176))
+        seconds.update(chr(cp) for cp in range(0x11A8, 0x11C3))
+        return changed, combining, seconds
+
+    def test_ascii_boundary_is_composition_safe_exhaustively(self):
+        def nfkc(s):
+            return unicodedata.normalize("NFKC", s)
+
+        ascii_chars = [chr(i) for i in range(128)]
+        # Premises 1-3 of the proof in secret_patterns.py.
+        for a in ascii_chars:
+            self.assertEqual(unicodedata.combining(a), 0, repr(a))
+            self.assertEqual(unicodedata.normalize("NFKD", a), a, repr(a))
+        changed, combining, seconds = self._census()
+        self.assertEqual(sorted(c for c in seconds if ord(c) < 128), [])
+        self.assertGreater(len(changed), 4000)  # the census is real
+        # Every code point NFKC changes, every combining mark and every
+        # composition second, against ALL 128 ASCII characters: the cut before
+        # ASCII holds, and so does the peel of an uncomposed ASCII starter.
+        bad = []
+        probe = sorted(set(changed) | set(combining) | seconds)
+        for c in probe:
+            image = nfkc(c)
+            for a in ascii_chars:
+                if nfkc(c + a) != image + a:
+                    bad.append(("cut", hex(ord(c)), a))
+                joined = nfkc(a + c)
+                if joined[:1] == a and joined != a + image:
+                    bad.append(("peel", hex(ord(c)), a))
+        # And EVERY code point (no surrogates) before three ASCII neighbours.
+        for a in ('"', "a", "<"):
+            for cp in range(0x110000):
+                if 0xD800 <= cp <= 0xDFFF:
+                    continue
+                c = chr(cp)
+                if nfkc(c + a) != nfkc(c) + a:
+                    bad.append(("cut-all", hex(cp), a))
+        self.assertEqual(bad[:20], [])
+
+    def test_segment_map_reconstructs_nfkc_on_random_text(self):
+        rng = random.Random(7)
+        alphabet = list("ab =;\"\\0") + list(_NFKC_POOL) + [
+            "́", "̧", "ᅡ", "ᆨ", "゙", "か", "＂", "：",
+            # CJK / kana / Hangul / full-width cut points and their excluded
+            # neighbours (half-width voicing mark, combining tone mark).
+            "\u4e2d", "\u30fc", "\uac00", "\u3000", "\uff76", "\uff9e", "\u302a",
+        ]
+        for case in range(500):
+            text = "".join(rng.choice(alphabet) for _ in range(rng.randint(0, 40)))
+            normalized = unicodedata.normalize("NFKC", text)
+            segments = sp._nfkc_segments(text, normalized)
+            pieces, pos = [], 0
+            for o_start, o_end, n_start, n_end in segments:
+                # A real segment (never the fail-closed fallback) holds no
+                # ASCII character after its first one, and its image is the
+                # NFKC of that segment ALONE.
+                self.assertFalse(any(ord(ch) < 128 for ch in text[o_start + 1:o_end]), case)
+                self.assertEqual(
+                    unicodedata.normalize("NFKC", text[o_start:o_end]),
+                    normalized[n_start:n_end], case,
+                )
+                pieces.append(text[pos:o_start])
+                pieces.append(normalized[n_start:n_end])
+                pos = o_end
+            pieces.append(text[pos:])
+            self.assertEqual("".join(pieces), normalized, case)
+
+    def test_runtime_check_fails_closed_to_one_segment(self):
+        text = "pre " + "Ａ" * 3 + " post"
+        normalized = unicodedata.normalize("NFKC", text)
+
+        def broken(s):
+            return unicodedata.normalize("NFKC", s) + "?"
+
+        self.assertEqual(
+            sp._nfkc_segments(text, normalized, nfkc=broken),
+            [(0, len(text), 0, len(normalized))],
+        )
+
+    def test_failed_map_redacts_the_whole_text_rather_than_leak(self):
+        secret = _fw(_FRAME_SECRETS["aws_access_key"])  # NFKC frame only
+        text = "pre … k=" + secret + " post"
+        real = sp._nfkc_segments
+
+        def broken(s):
+            return unicodedata.normalize("NFKC", s).upper() + "?"
+
+        with mock.patch.object(sp, "_nfkc_segments", lambda t, n: real(t, n, nfkc=broken)):
+            redacted, findings = sp.scan_and_redact(text)
+        self.assertEqual(redacted, "[REDACTED:aws_access_key]")
+        self.assertEqual([(f.start, f.end) for f in findings], [(0, len(text))])
+
+
+# --------------------------------------------------------------------------
+# Non-ASCII composition-safe cut points (segment-map precision).
+# --------------------------------------------------------------------------
+
+
+def _safe_cut_chars():
+    """Every character of secret_patterns._SAFE_CUT (a regex class body)."""
+    body, out, i = sp._SAFE_CUT, [], 0
+    while i < len(body):
+        if i + 2 < len(body) and body[i + 1] == "-":
+            out.extend(chr(cp) for cp in range(ord(body[i]), ord(body[i + 2]) + 1))
+            i += 3
+        else:
+            out.append(body[i])
+            i += 1
+    return out
+
+
+@functools.lru_cache(maxsize=None)
+def _combiner_census():
+    """(composition firsts, composition seconds, every char that can combine)."""
+    firsts, seconds, combiners = set(), set(), set()
+    for cp in range(0x110000):
+        if 0xD800 <= cp <= 0xDFFF:
+            continue
+        c = chr(cp)
+        if unicodedata.combining(c) or unicodedata.normalize("NFKC", c) != c:
+            combiners.add(c)
+        decomposition = unicodedata.decomposition(c)
+        if decomposition and not decomposition.startswith("<"):
+            parts = decomposition.split()
+            if len(parts) == 2:
+                firsts.add(chr(int(parts[0], 16)))
+                seconds.add(chr(int(parts[1], 16)))
+    seconds.update(chr(cp) for cp in range(0x1161, 0x1176))  # Hangul V jamo
+    seconds.update(chr(cp) for cp in range(0x11A8, 0x11C3))  # Hangul T jamo
+    firsts.update(chr(cp) for cp in range(0x1100, 0x1113))   # Hangul L jamo
+    firsts.update(chr(0xAC00 + 28 * i) for i in range(19 * 21))  # LV syllables
+    return frozenset(firsts), frozenset(seconds), tuple(sorted(combiners | firsts | seconds))
+
+
+class TestSafeCutAllowlist(TestEnvContext):
+    """Each _SAFE_CUT character is a provable composition boundary.
+
+    The full probe (every allowlisted character against every character
+    that can combine, cut AND peel) ran once per supported interpreter;
+    this test re-checks the derived property for EVERY allowlisted
+    character and a seeded sample of the pairs.
+    """
+
+    def _violations(self, c, partners):
+        def nfkc(s):
+            return unicodedata.normalize("NFKC", s)
+
+        bad, image = [], nfkc(c)
+        single = len(unicodedata.normalize("NFKD", c)) == 1
+        for x in partners:
+            if nfkc(x + c) != nfkc(x) + image:
+                bad.append(("cut", hex(ord(x)), hex(ord(c))))
+            joined = nfkc(c + x) if single else ""
+            if single and joined.startswith(image) and joined != image + nfkc(x):
+                bad.append(("peel", hex(ord(c)), hex(ord(x))))
+        return bad
+
+    def test_every_allowlisted_char_starts_with_a_starter_that_never_composes_back(self):
+        _firsts, seconds, _combiners = _combiner_census()
+        chars = _safe_cut_chars()
+        self.assertGreater(len(chars), 39000)  # the parse is real
+        bad = [hex(ord(c)) for c in chars
+               if ord(c) < 0x80
+               or unicodedata.combining(unicodedata.normalize("NFKD", c)[0])
+               or unicodedata.normalize("NFKD", c)[0] in seconds]
+        self.assertEqual(bad[:20], [])
+
+    def test_sampled_pairs_against_every_char_that_can_combine(self):
+        _firsts, _seconds, combiners = _combiner_census()
+        rng = random.Random(3103)
+        chars = _safe_cut_chars()
+        big = [c for c in chars if "\u3400" <= c <= "\u9fff" or "\uac00" <= c <= "\ud7a3"]
+        big_set = set(big)
+        small = [c for c in chars if c not in big_set]
+        sample = rng.sample(combiners, 1200)
+        bad = []
+        for c in small:  # kana, CJK punctuation, full-width forms
+            bad.extend(self._violations(c, sample))
+        for c in rng.sample(big, 48):  # ideographs and Hangul syllables
+            bad.extend(self._violations(c, combiners))
+        self.assertEqual(bad[:20], [])
+
+    def test_excluded_characters_would_break_the_cut(self):
+        # Negative control: the probe has teeth, and these stay out.
+        _firsts, _seconds, combiners = _combiner_census()
+        allowed = set(_safe_cut_chars())
+        for cp in (0x3099, 0x309A, 0xFF9E, 0xFF9F, 0x1161, 0x11A8, 0x302A):
+            with self.subTest(cp=hex(cp)):
+                self.assertNotIn(chr(cp), allowed)
+                self.assertTrue(self._violations(chr(cp), combiners))
+
+
+class TestCjkProseIsNotSwallowed(TestEnvContext):
+    """In the ideograph, kana and Hangul prose below, only the secret is redacted."""
+
+    def _assert_only_secret(self, before, secret, after, family):
+        text = before + secret + after
+        redacted, findings = sp.scan_and_redact(text)
+        self.assertEqual(redacted, before + _label_for(family) + after)
+        self.assertEqual(_spans(findings), {(family, len(before), len(before) + len(secret))})
+
+    def test_fullwidth_key_between_ideographs(self):
+        self._assert_only_secret(
+            "\u4e2d" * 20000, _fw(_FRAME_SECRETS["aws_access_key"]), "\u4e2d" * 20000,
+            "aws_access_key",
+        )
+
+    def test_math_alphanumeric_key_after_an_ideograph(self):
+        # Head peel for a non-ASCII cut: the ideograph composed with nothing.
+        def bold(s):
+            return "".join(chr(0x1D400 + ord(c) - 65) if c.isupper() else chr(0x1D7CE + int(c)) for c in s)
+
+        ideograph = chr(0x4E2D)
+        self._assert_only_secret(ideograph, bold(_FRAME_SECRETS["aws_access_key"]), ideograph,
+                                 "aws_access_key")
+
+    def test_member_number_in_fullwidth_digits(self):
+        # br_rg has no validator: the segment map alone bounds the cut.
+        self._assert_only_secret("会員番号", "１２３４５６７８", "", "br_rg")
+
+    def test_kana_and_hangul_prose_around_fullwidth_keys(self):
+        self._assert_only_secret(
+            "これはテストです：", _fw(_FRAME_SECRETS["github_personal_token"]),
+            "です。カタカナー", "github_personal_token",
+        )
+        self._assert_only_secret(
+            "비밀번호 ", _fw(_FRAME_SECRETS["stripe_secret_key"]), "입니다", "stripe_secret_key",
+        )
+
+
+class TestOneFindingPerSecret(TestEnvContext):
+    """Both frames seeing one secret yield ONE Finding (telemetry counts)."""
+
+    def test_merge_is_per_family_and_overlap_only(self):
+        F = sp.Finding
+        a = F("aws_access_key", "token", 2, 10, "[A]")
+        b = F("aws_access_key", "token", 5, 12, "[A]")
+        c = F("br_cpf", "pii", 4, 8, "[C]")
+        d = F("aws_access_key", "token", 12, 14, "[A]")  # adjacent: stays apart
+        self.assertEqual(
+            sp._merge_same_family([d, b, c, a, a]),
+            [F("aws_access_key", "token", 2, 12, "[A]"), c, d],
+        )

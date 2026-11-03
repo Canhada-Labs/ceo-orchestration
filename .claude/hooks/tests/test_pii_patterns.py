@@ -616,5 +616,62 @@ class TestSnippetMasksSecret(unittest.TestCase):
         self.assertEqual(out, "[MASKED:11]")
 
 
+# ---------------------------------------------------------------------------
+# Redaction span integrity: overlapping matches + NFKC frame
+# ---------------------------------------------------------------------------
+# _apply_redactions used to walk spans right-to-left and SKIP a container
+# whose contained span had been spliced first, so the container's head and
+# tail survived in cleartext. Oracle: no 4-char window of the secret value
+# may survive in redacted_text.
+
+
+def _pii_leaks(output, secret):
+    return sorted({secret[i:i + 4] for i in range(len(secret) - 3)
+                   if secret[i:i + 4] in output})
+
+
+class TestRedactionSpanUnion(TestEnvContext):
+
+    def test_aws_secret_value_with_access_key_prefix(self):
+        value = "AK" + "IA" + "Q7W3E9R5T1Y8U2I4" + "/Zp4Lm8Nk2Jh6Gf0Ds5Aq9Wx"
+        r = pp.scan("cfg aws_secret_key=" + value + " end", mode="redact")
+        self.assertGreaterEqual(r.family_counts.get("api_key", 0), 2)  # overlap
+        self.assertEqual(_pii_leaks(r.redacted_text, value), [], r.redacted_text)
+        self.assertTrue(r.redacted_text.startswith("cfg "))
+        self.assertTrue(r.redacted_text.endswith(" end"))
+
+    def test_bearer_token_tail_after_embedded_jwt(self):
+        token = ("eyJ" + "hbGciOiJIUzI1" + ".eyJzdWIiOiIx"
+                 + ".Sfl8KxwRJ4" + ".Qm9Wn3Zx7Kp")
+        r = pp.scan("Authorization: Bearer " + token, mode="redact")
+        self.assertIn("jwt", r.family_counts)
+        self.assertIn("bearer", r.family_counts)
+        self.assertEqual(_pii_leaks(r.redacted_text, token), [], r.redacted_text)
+
+    def test_nfkc_growth_before_secret_keeps_frame(self):
+        # Guard: pii_patterns redacts the SAME normalized view it scanned.
+        key = "AK" + "IA" + "Q7W3E9R5T1Y8U2I4"
+        for prefix in ("…" * 10, "№", "ﬁ", "é" * 8):
+            with self.subTest(prefix=prefix):
+                r = pp.scan(prefix + " k=" + key + " tail", mode="redact")
+                self.assertEqual(_pii_leaks(r.redacted_text, key), [])
+                self.assertIn(" k=[REDACTED:API_KEY] tail", r.redacted_text)
+
+    def test_identical_spans_still_produce_one_token(self):
+        text = "leak sk-" + "abcDEF1234567890xyzABCDEFGHIJKL here"
+        r = pp.scan(text, mode="redact")
+        self.assertEqual(r.redacted_text, "leak [REDACTED:API_KEY] here")
+
+    def test_partial_overlap_keeps_neither_tail(self):
+        # api_key ends INSIDE the bearer span (they share 'Bearer'): neither
+        # span contains the other, so dropping the later one leaks its tail.
+        key = "sk-" + "xZeeYggjbnMeZDpjtK6" + "Bearer"
+        tail = "k5rz9tQw" + "ErTyUiOp"
+        r = pp.scan("x " + key + " " + tail + " end", mode="redact")
+        self.assertEqual(set(r.family_counts), {"api_key", "bearer"})
+        self.assertEqual(_pii_leaks(r.redacted_text, key + " " + tail), [])
+        self.assertEqual(r.redacted_text, "x [REDACTED:API_KEY] end")
+
+
 if __name__ == "__main__":
     unittest.main()
