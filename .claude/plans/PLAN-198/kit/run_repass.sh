@@ -3,26 +3,34 @@
 # and kept small on purpose (the October kit came from a 12k-line derivator; see README.md).
 #
 # run_repass.sh - re-pass of the release candidate for ONE tag, by two vendors on the SAME
-# redacted payloads: Codex (codex exec --sandbox read-only) and Claude Code (claude -p with
-# read-only tools, subscription login; never --bare, which needs ANTHROPIC_API_KEY).
+# redacted payloads: Codex (codex exec --sandbox read-only, user config ignored) and Claude Code
+# (claude -p --restricted --safe-mode, read-only tools, subscription login; never --bare, which
+# needs ANTHROPIC_API_KEY).
 #
 #   bash .claude/plans/PLAN-198/kit/run_repass.sh --tag vX.Y.Z[-rc.N] [--base TAG]
 #        [--candidate SHA] [--conditions FILE] [--jobs N] [--resume] [--log FILE]
 #
 # The payload split, the custody checks and the redaction live in gen_envelope.py (prepare);
 # this script runs the lanes and writes the evidence into .claude/plans/PLAN-198/repass-<sfx>/
-# (sfx = rcN or ga). Progress goes to the log (default .claude/worktrees/repass-<sfx>.log),
+# (sfx = rcN or ga). Progress goes to the log (default .claude/worktrees/repass-<sfx>.log, or
+# repass-unknown.log when --tag is unreadable), whose last line is always "runner exit rc=N",
 # so it can run in the background: nohup bash ... >/dev/null 2>&1 &
+# Each lane runs in its own process group from a copy of the candidate OUTSIDE the repository;
+# HUP, INT or TERM stop every lane's process group before that copy is removed. Every attempt
+# (start; end with exit code, NO-GO count, manifest hash) is appended to the hash-chained
+# .claude/worktrees/repass-attempts.log, which moving an attempt out of the repository keeps.
 #
 # Exit codes: 0 every lane answered GO or GO-WITH-CONDITIONS (evidence finalized)
 #             1 a lane answered NO-GO or gave no valid VERDICT line (evidence finalized; the
-#               generator refuses it - NO-GO from either lane blocks)
+#               generator refuses it - NO-GO from either lane blocks the candidate)
 #             2 refused before any lane ran (nothing was sent anywhere)
-#             3 a lane died (account limit, crash) or the Codex payload changed during the run:
-#               partial evidence kept, re-run the same command with --resume
+#             3 a lane died (account limit, crash, time limit, signal), an instrument changed
+#               during the run, or finalize refused: partial evidence and its run records kept,
+#               re-run the same command with --resume
 # Test seams (kit test only): CODEX_BIN and CLAUDE_BIN replace both lanes with stubs; the
 # PROVENANCE then says "- instrument: STUB" and gen_envelope.py refuses that evidence.
-# KIT_RETRY_UNIT_SECONDS shortens the Codex capacity back-off.
+# KIT_RETRY_UNIT_SECONDS shortens the Codex capacity back-off; KIT_LANE_TIMEOUT_SECONDS sets the
+# per-lane wall-clock limit (default 7200).
 set -uo pipefail
 
 KIT_DIR="$(cd "$(dirname "$0")" && pwd -P)" || exit 2
@@ -31,11 +39,71 @@ cd "$REPO" || exit 2
 GEN="$KIT_DIR/gen_envelope.py"
 PLAN_DIR="$(dirname "$KIT_DIR")"
 WTROOT="$REPO/.claude/worktrees"
-TAG="" BASE="" CAND="" COND="" JOBS=2 RESUME=0 LOG="" RUN="" STUB=0
+mkdir -p "$WTROOT" || exit 2
+TAG="" BASE="" CAND="" COND="" JOBS=2 RESUME=0 LOG="" RUN="" TREEROOT="" EV="" STUB=0 ATTEMPT=0 HELD=0
+LANE_TIMEOUT="${KIT_LANE_TIMEOUT_SECONDS:-7200}"
 
-say() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | tee -a "${LOG:-/dev/null}" >&2; }
+sfx_of() {  # rcN | ga | unknown
+  if [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.([1-9][0-9]*))?$ ]]; then
+    if [ -n "${BASH_REMATCH[2]}" ]; then echo "rc${BASH_REMATCH[2]}"; else echo ga; fi
+  else
+    echo unknown
+  fi
+}
+# The log is known before any check, so a refused argument also ends it with "runner exit".
+prev=""
+for a in "$@"; do case "$prev" in --log) LOG="$a" ;; --tag) TAG="$a" ;; esac; prev="$a"; done
+SFX="$(sfx_of "$TAG")"
+[ -n "$LOG" ] || LOG="$WTROOT/repass-$SFX.log"
+
+say() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" | tee -a "$LOG" >&2; }
 die() { say "REFUSED: $*"; exit 2; }
 need() { [ "$2" -ge 2 ] || die "$1 needs a value"; }
+logged() {  # a main-shell helper call: its stderr (a REFUSED line) goes into the log and to stderr
+  local rc=0
+  "$@" 2> "$RUN/stderr" || rc=$?
+  [ ! -s "$RUN/stderr" ] || tee -a "$LOG" < "$RUN/stderr" >&2
+  return "$rc"
+}
+pg_signal() {  # $1 signal, then group files written by `gen_envelope.py spawn`; 0 = a group took it
+  local s="$1" f g hit=1
+  shift
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    g="$(cat "$f" 2>/dev/null)"
+    case "$g" in '' | *[!0-9]*) continue ;; esac
+    [ "$g" -gt 1 ] && kill "-$s" -- "-$g" 2>/dev/null && hit=0
+  done
+  return "$hit"
+}
+cleanup() {
+  local rc=$? f man="-"
+  if [ "$HELD" -eq 1 ]; then  # finalize did not succeed: the attempt gets its run records back
+    for f in "$RUN"/hold/.header "$RUN"/hold/.rc-*; do [ -e "$f" ] && mv -f "$f" "$EV/"; done
+  fi
+  if [ "$ATTEMPT" -eq 1 ]; then
+    [ ! -f "$EV/MANIFEST-$SFX.sha256" ] || man="$(shasum -a 256 "$EV/MANIFEST-$SFX.sha256" | awk '{print $1}')"
+    python3 "$GEN" ledger-add --tag "$TAG" --candidate "$CAND" --event "end rc=$rc nogo=$(cat "$EV"/*-"$SFX"-*.verdict.txt 2>/dev/null | grep -c '^VERDICT: NO-GO') manifest=$man" \
+      || say "WARNING: the attempts ledger did not record the end of this attempt"
+  fi
+  case "$RUN" in "$WTROOT"/repass-*-run.*) rm -rf -- "$RUN" ;; esac
+  case "$TREEROOT" in */kit-repass-tree.*) rm -rf -- "$TREEROOT" ;; esac
+  say "runner exit rc=$rc"
+}
+stop_lanes() {
+  local k=0
+  say "signal received: stopping every lane's process group"
+  pg_signal TERM "$RUN"/pg-*
+  while [ "$k" -lt 30 ] && pg_signal 0 "$RUN"/pg-*; do sleep 1; k=$((k + 1)); done
+  # shellcheck disable=SC2046
+  kill $(jobs -p) 2>/dev/null  # the run_lane shells (a Codex capacity back-off sleeps there)
+  sleep 1                      # a lane that was just starting has written its group file by now
+  pg_signal KILL "$RUN"/pg-*
+  wait
+  exit 3
+}
+trap cleanup EXIT
+trap stop_lanes HUP INT TERM
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -49,16 +117,11 @@ while [ $# -gt 0 ]; do
     *) die "unknown argument: $1 (usage in the header of $0)" ;;
   esac
 done
-if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.([1-9][0-9]*))?$ ]]; then
-  if [ -n "${BASH_REMATCH[2]}" ]; then SFX="rc${BASH_REMATCH[2]}"; else SFX="ga"; fi
-else
-  die "--tag must be vX.Y.Z or vX.Y.Z-rc.N (got '$TAG')"
-fi
+SFX="$(sfx_of "$TAG")"
+[ "$SFX" != unknown ] || die "--tag must be vX.Y.Z or vX.Y.Z-rc.N (got '$TAG')"
 case "$JOBS" in [1-8]) ;; *) die "--jobs must be 1..8" ;; esac
 EV="$PLAN_DIR/repass-$SFX"
 EV_REL="${EV#"$REPO"/}"
-mkdir -p "$WTROOT" || exit 2
-[ -n "$LOG" ] || LOG="$WTROOT/repass-$SFX.log"
 KEEP="$WTROOT/repass-$SFX-kept"
 say "re-pass $TAG ($SFX) starts; log: $LOG"
 
@@ -87,15 +150,21 @@ FREE_KB="$(df -Pk "$REPO" | awk 'NR == 2 {print $4}')"
 [ "${FREE_KB:-0}" -ge 2097152 ] 2>/dev/null || die "less than 2 GiB free on the repository's disk"
 
 RUN="$(mktemp -d "$WTROOT/repass-$SFX-run.XXXXXX")" || die "mktemp failed"
-cleanup() {
-  local rc=$?
-  case "$RUN" in "$WTROOT"/repass-*-run.*) rm -rf -- "$RUN" ;; esac
-  say "runner exit rc=$rc"
-}
-trap cleanup EXIT
-trap 'say "signal received: stopping the lanes"; kill $(jobs -p) 2>/dev/null; exit 3' HUP INT TERM
+# The lanes' copy of the candidate lives OUTSIDE the repository: walking up from it reaches no
+# CLAUDE.md, no auto-memory of this project and no evidence directory (the other lane's answers).
+TREEROOT="$(mktemp -d "${TMPDIR:-/tmp}/kit-repass-tree.XXXXXX")" || die "mktemp of the lanes' copy failed"
+TREEROOT="$(cd "$TREEROOT" && pwd -P)" || die "the lanes' copy directory vanished"
+! git -C "$TREEROOT" rev-parse --git-dir >/dev/null 2>&1 || die "$TREEROOT is inside a git repository: point TMPDIR elsewhere"
+FREE_KB="$(df -Pk "$TREEROOT" | awk 'NR == 2 {print $4}')"
+[ "${FREE_KB:-0}" -ge 2097152 ] 2>/dev/null || die "less than 2 GiB free under $TREEROOT"
 
 # --- the two instruments --------------------------------------------------------------------
+# Codex without the user's config.toml (plugins, MCP servers, notify, approvals reviewer), rules
+# or session files; model and effort are passed explicitly. Flags read on codex-cli 0.166.0.
+CODEX_ISO=(--ignore-user-config --ephemeral --ignore-rules)
+for f in apps plugins hooks browser_use computer_use in_app_browser image_generation memories; do
+  CODEX_ISO+=(-c "features.$f=false")
+done
 if [ -n "${CODEX_BIN:-}" ] || [ -n "${CLAUDE_BIN:-}" ]; then
   [ -x "${CODEX_BIN:-}" ] && [ -x "${CLAUDE_BIN:-}" ] || die "CODEX_BIN and CLAUDE_BIN must both name executables (kit-test seam)"
   STUB=1 CODEX_CMD="$CODEX_BIN" CLAUDE_CMD="$CLAUDE_BIN"
@@ -118,17 +187,28 @@ print(*[str(d.get(k) or "-") for k in ("status", "sha256", "target_triple", "ins
     || die "codex package.json says $C_INST but the binary says $C_VER"
   python3 "$GEN" instrument --version "$C_VER" --triple "$C_TRIPLE" --sha "$C_SHA" --status "$C_STATUS" \
     || die "the Codex instrument is not admitted (see above)"
+  "$CODEX_CMD" exec "${CODEX_ISO[@]}" --help >/dev/null 2>&1 \
+    || die "codex $C_VER refuses --ignore-user-config/--ephemeral/--ignore-rules: its lane would load the user's config.toml, plugins and MCP servers"
   CODEX_ID="$C_VER / $C_TRIPLE / payload $C_SHA / status $C_STATUS"
   # shellcheck disable=SC2046
   set -- $(python3 "$GEN" codex-config) || die "Codex model/effort unknown"
   [ $# -eq 3 ] || die "Codex model/effort unreadable"
   CODEX_MODEL="$1" CODEX_EFFORT="$2" CODEX_SRC="$3"
+  # The versioned binary, not the auto-updated symlink: the version recorded is the one that runs.
   CLAUDE_CMD="$(command -v claude)" || die "claude is not on PATH"
+  CLAUDE_CMD="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$CLAUDE_CMD")" || die "realpath of claude failed"
   CLAUDE_VER="claude-code-cli-$(cd "$RUN" && "$CLAUDE_CMD" --version 2>/dev/null | awk 'NR == 1 {print $1}')"
   [[ "$CLAUDE_VER" =~ ^claude-code-cli-[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "claude --version is unreadable ($CLAUDE_VER)"
+  "$CLAUDE_CMD" --help 2>/dev/null | grep -q -e '--safe-mode' \
+    || die "$CLAUDE_VER has no --safe-mode: its lane would load CLAUDE.md, skills, hooks and MCP servers"
 fi
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5-5}"
 CLAUDE_EFFORT="${CLAUDE_EFFORT:-xhigh}"
+# --restricted: no command-running tools, settings files ignored, file tools confined to the
+# working directory; --safe-mode: no CLAUDE.md, skills, plugins, hooks or MCP (auth kept).
+CLAUDE_ARGS=(-p --restricted --safe-mode --strict-mcp-config --tools "Read,Grep,Glob" --allowedTools "Read,Grep,Glob"
+  --permission-mode dontAsk --no-session-persistence --model "$CLAUDE_MODEL" --effort "$CLAUDE_EFFORT"
+  --output-format stream-json --verbose)
 
 # --- payloads: custody, scope, split, redaction (gen_envelope.py prepare) -------------------
 STAGE="$RUN/ev"
@@ -136,7 +216,7 @@ mkdir "$STAGE" || die "mkdir failed"
 PREP=(prepare --tag "$TAG" --candidate "$CAND" --out "$STAGE")
 [ -z "$BASE" ] || PREP+=(--base "$BASE")
 [ -z "$COND" ] || PREP+=(--conditions "$COND")
-python3 "$GEN" "${PREP[@]}" > "$RUN/prepare.out" || die "prepare refused (see above); nothing was sent"
+logged python3 "$GEN" "${PREP[@]}" > "$RUN/prepare.out" || die "prepare refused (the REFUSED line above); nothing was sent"
 P_BASE="" P_BASE_OBJ="" P_BASE_COMMIT="" P_SIGNER="" P_KIT_TREE="" P_PARTS="" P_COND_SHA="" P_RC_TAG=""
 while IFS='=' read -r k v; do
   case "$k" in
@@ -171,11 +251,17 @@ else
   cp "$RUN/header" "$EV/.header" || die "could not record the run header"
   say "$P_PARTS payloads prepared in $EV_REL (base $P_BASE)"
 fi
+logged python3 "$GEN" ledger-add --tag "$TAG" --candidate "$CAND" --event "start resume=$RESUME parts=$P_PARTS ev=$EV_REL" \
+  || die "the attempts ledger refused this attempt (the REFUSED line above)"
+ATTEMPT=1
 
-# --- a read-only copy of the candidate, inside the trusted checkout (gitignored) ------------
-TREE="$RUN/tree"
+# --- the lanes' read-only copy of the candidate, outside the repository ---------------------
+TREE="$TREEROOT/tree"
 GIT_INDEX_FILE="$RUN/index" git read-tree "$CAND" || die "git read-tree failed"
 GIT_INDEX_FILE="$RUN/index" git checkout-index -a --prefix="$TREE/" || die "git checkout-index failed"
+# The files each CLI loads as instructions on its own: in the diff they are data, never orders.
+find "$TREE" -type f \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name AGENTS.md -o -name AGENTS.override.md \) \
+  -delete || die "could not remove the instruction files from the lanes' copy"
 
 # --- the lanes ------------------------------------------------------------------------------
 LIMIT_RE='hit your usage limit|reached your usage limit|Usage limit reached|Quota exceeded|out of credits|hit your spend cap|reached your workspace credit limit'
@@ -190,9 +276,21 @@ lane_done() {  # a completed review: rc 0 and exactly one valid VERDICT line
   [ -f "$EV/.rc-$1-$2" ] && grep -q '^rc=0 ' "$EV/.rc-$1-$2" \
     && [ -n "$(verdict_of "$EV/$1-$SFX-$2.verdict.txt")" ]
 }
+lane_exec() {  # $1 group file, $2 stdin, $3 log, then the vendor command: own process group,
+  local pgf="$1" in="$2" lg="$3" pid rc=0  # the copy outside the repository, no API keys
+  shift 3
+  ( cd "$TREE" && exec env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY DISABLE_AUTOUPDATER=1 \
+      GIT_CEILING_DIRECTORIES="$TREEROOT" python3 "$GEN" spawn --pg-file "$pgf" --timeout "$LANE_TIMEOUT" -- "$@" ) \
+    < "$in" > "$lg" 2>&1 &
+  pid=$!
+  wait "$pid" || rc=$?
+  pg_signal KILL "$pgf"  # anything the reviewer left behind in its group
+  rm -f "$pgf"
+  return "$rc"
+}
 run_lane() {  # $1 lane, $2 NN - runs in the background and writes only its own files
   local lane="$1" n="$2" red="$EV/payload-$SFX-$2.redacted.txt" try=0 rc cls
-  local out="$EV/$1-$SFX-$2.verdict.txt" log="$EV/$1-$SFX-$2.log"
+  local out="$EV/$1-$SFX-$2.verdict.txt" log="$EV/$1-$SFX-$2.log" pgf="$RUN/pg-$1-$2"
   local stamp f
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   for f in "$log" "$out"; do  # an earlier attempt of this lane is kept, never deleted
@@ -201,10 +299,9 @@ run_lane() {  # $1 lane, $2 NN - runs in the background and writes only its own 
   while :; do
     try=$((try + 1)) rc=0 cls=ok
     if [ "$lane" = codex ]; then
-      ( cd "$TREE" && exec env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY "$CODEX_CMD" exec \
-          --skip-git-repo-check --sandbox read-only --color never -m "$CODEX_MODEL" \
-          -c "model_reasoning_effort=\"$CODEX_EFFORT\"" --output-last-message "$out" - ) \
-        < "$red" > "$log" 2>&1 || rc=$?
+      lane_exec "$pgf" "$red" "$log" "$CODEX_CMD" exec --skip-git-repo-check --sandbox read-only "${CODEX_ISO[@]}" \
+        --color never -m "$CODEX_MODEL" -c "model_reasoning_effort=\"$CODEX_EFFORT\"" --output-last-message "$out" - \
+        || rc=$?
       if [ ! -s "$out" ]; then
         cls=dead
         if tail -n 40 "$log" | grep '^ERROR: ' | grep -Eq "$LIMIT_RE"; then
@@ -216,12 +313,8 @@ run_lane() {  # $1 lane, $2 NN - runs in the background and writes only its own 
         fi
       fi
     else
-      ( cd "$TREE" && exec env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY "$CLAUDE_CMD" -p --restricted \
-          --strict-mcp-config --tools "Read,Grep,Glob" --allowedTools "Read,Grep,Glob" \
-          --permission-mode dontAsk --no-session-persistence --model "$CLAUDE_MODEL" \
-          --effort "$CLAUDE_EFFORT" --output-format stream-json --verbose ) \
-        < "$red" > "$log" 2>&1 || rc=$?
-      python3 "$GEN" claude-result "$log" "$out"
+      lane_exec "$pgf" "$red" "$log" "$CLAUDE_CMD" "${CLAUDE_ARGS[@]}" || rc=$?
+      python3 "$GEN" claude-result --model "$CLAUDE_MODEL" "$log" "$out" 2>> "$LOG"
       case $? in 0) ;; 4) cls=quota ;; *) cls=dead ;; esac
     fi
     break
@@ -250,6 +343,8 @@ INFRA=0 OVERALL=0
 if [ "$STUB" -eq 0 ]; then
   PIN2="$(CLAUDE_PROJECT_DIR="$REPO" python3 "$REPO/.claude/hooks/check_pair_rail.py" --verify-codex-pin "$CODEX_CMD")"
   case "$PIN2" in *"\"sha256\": \"$C_SHA\""*) ;; *) say "the Codex payload changed during the run"; INFRA=1 ;; esac
+  CV2="claude-code-cli-$(cd "$RUN" && "$CLAUDE_CMD" --version 2>/dev/null | awk 'NR == 1 {print $1}')"
+  [ "$CV2" = "$CLAUDE_VER" ] || { say "Claude Code changed during the run ($CLAUDE_VER -> $CV2)"; INFRA=1; }
 fi
 i=1
 while [ "$i" -le "$P_PARTS" ]; do
@@ -263,7 +358,7 @@ while [ "$i" -le "$P_PARTS" ]; do
   done
 done
 if [ "$INFRA" -ne 0 ]; then
-  say "a lane died or never ran (account limit or crash): evidence kept unfinalized in $EV_REL; after the reset run the same command with --resume"
+  say "a lane died or never ran, or an instrument changed: evidence kept unfinalized in $EV_REL; after the reset run the same command with --resume"
   exit 3
 fi
 
@@ -278,7 +373,7 @@ python3 "$GEN" scrub "${SCRUB[@]}" || { say "scrub failed"; exit 3; }
 {
   echo "# Provenance - pair-rail re-pass of $TAG ($SFX), PLAN-198 kit"
   cat "$EV/.header"
-  echo "- lanes: codex exec --sandbox read-only and claude -p --restricted (Read, Grep, Glob only), both from a read-only copy of the candidate inside the repository, both reading the SAME redacted payload on stdin; API keys removed from both lanes' environment"
+  echo "- lanes: codex exec --sandbox read-only ${CODEX_ISO[*]} and claude ${CLAUDE_ARGS[*]}; each lane in its own process group with a ${LANE_TIMEOUT} s limit, from a read-only copy of the candidate outside the repository without CLAUDE.md/AGENTS.md files, both reading the SAME redacted payload on stdin; API keys removed from both lanes' environment"
   echo "- codex death classes, from the codex ERROR: lines among the last 40 transcript lines (texts measured on codex 0.160.0 only): model capacity = retried up to 2 times; account limit = no retry and no new payload"
   echo "- personal home paths replaced by <user> in the diffs, transcripts and verdicts"
   echo "- finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -293,8 +388,14 @@ python3 "$GEN" scrub "${SCRUB[@]}" || { say "scrub failed"; exit 3; }
   echo "RUNNER-OVERALL: rc=$OVERALL"
 } > "$RUN/provenance" || { say "provenance write failed"; exit 3; }
 mv -f "$RUN/provenance" "$EV/PROVENANCE-$SFX.md" || { say "provenance move failed"; exit 3; }
-rm -f "$EV"/.rc-* "$EV/.quota" "$EV/.header"
-python3 "$GEN" finalize --tag "$TAG" || { say "finalize refused (see above)"; exit 3; }
+# The run records leave the evidence set only for finalize; cleanup puts them back unless it succeeds.
+mkdir "$RUN/hold" || { say "mkdir failed"; exit 3; }
+HELD=1
+mv "$EV"/.rc-* "$EV/.header" "$RUN/hold/" || { say "could not set the run records aside"; exit 3; }
+rm -f "$EV/.quota"
+logged python3 "$GEN" finalize --tag "$TAG" \
+  || { say "finalize refused (the REFUSED line above): run records restored; fix the cause, then run the same command with --resume"; exit 3; }
+HELD=0
 if [ "$OVERALL" -eq 0 ]; then
   say "every lane answered GO or GO-WITH-CONDITIONS; next: python3 $GEN fields --tag $TAG"
 else
