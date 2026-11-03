@@ -68,6 +68,13 @@ fix is declared in Known-open. The spool cure is partial, and the new
 guard's false-positive limits were never measured on this implementation.
 No speed claim.
 
+**Version number.** This release keeps a PATCH number, 1.4.4, by the
+Owner's decision. `VERSIONING.md` classes an additive SPEC change (the two
+audit-log enums below) and a new trust boundary as MINOR, and this train
+has both: the indirect-execution guard on by default, and the model checks
+and Codex pin above. Plan an upgrade from v1.4.2 as you would plan a MINOR
+one.
+
 ### Added — a Bash guard against indirect execution, on by default (PLAN-195, ADR-201)
 
 - After its existing checks, `check_bash_safety.py` runs one bounded scan

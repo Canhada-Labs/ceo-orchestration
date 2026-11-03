@@ -1,8 +1,10 @@
 ---
 id: PLAN-198
 title: Release v1.4.4 — evidence of the cut
-status: draft
+status: reviewed
 created: 2026-11-03
+reviewed_at: 2026-11-03
+reviewed_by: "Owner — S366 chat, 2026-11-03, multiple-choice answers to OQ-1 to OQ-8 and «Pode marcar como revisado» (recorded verbatim under Owner decisions)"
 owner: CEO
 depends_on: [PLAN-194, PLAN-195, PLAN-197]
 related_commits: []
@@ -177,19 +179,19 @@ Check: python3 .claude/hooks/check_canonical_edit.py --is-canonical CHANGELOG.md
 
 ### W1 — Owner decisions before any ceremony material
 Check: none (doc-only) — each answer is recorded verbatim under "Owner decisions" before W2 starts
-- [ ] OQ-1: the Owner's answer on Caminho 1+ recorded in the Owner's words (the Owner's two signed fix commits are its
+- [x] OQ-1: the Owner's answer on Caminho 1+ recorded in the Owner's words (the Owner's two signed fix commits are its
   mechanical trace, not its record).
-- [ ] OQ-2: Codex instrument for the re-passes (re-pin 0.166.0 by the pin pack, or accept the
+- [x] OQ-2: Codex instrument for the re-passes (re-pin 0.166.0 by the pin pack, or accept the
   version-floor route PR #7 introduced, with the observed payload sha recorded as the instrument id).
-- [ ] OQ-3: ratify by bytes the 233 PR-merged canonical paths in a signed sentinel, or keep them declared.
-- [ ] OQ-4 to OQ-6 answered (below).
-- [ ] OQ-7: this plan is L3 and has no debate record. Either `/debate start PLAN-198 "<proposal>"` reaches
+- [x] OQ-3: ratify by bytes the 233 PR-merged canonical paths in a signed sentinel, or keep them declared.
+- [x] OQ-4 to OQ-6 answered (below).
+- [x] OQ-7: this plan is L3 and has no debate record. Either `/debate start PLAN-198 "<proposal>"` reaches
   `design-coherent` (PROTOCOL V0) before any W2 material, or the Owner records under "Owner decisions" a
-  ruling that this release cut follows the PLAN-194 precedent without a new debate. No such ruling is
-  recorded as of 2026-11-03; this is an open item for the Owner, not a decision.
+  ruling that this release cut follows the PLAN-194 precedent without a new debate. The Owner ruled on
+  2026-11-03 that this cut follows the PLAN-194 mold without a new debate (Owner decisions, OQ-7).
   Check: test -n "$(find .claude/plans/PLAN-198/debate -name approved.md 2>/dev/null)" || grep -qE '^- OQ-7 \(answered ' .claude/plans/PLAN-198-release-v1-4-4.md
-- [ ] OQ-8: the kit limits declared in the kit README accepted, or another kit round asked for.
-- [ ] Once the Owner has read the plan and the answers above are recorded, the plan moves `draft → reviewed`
+- [x] OQ-8: the kit limits declared in the kit README accepted, or another kit round asked for.
+- [x] Once the Owner has read the plan and the answers above are recorded, the plan moves `draft → reviewed`
   with `reviewed_at` (PLAN-SCHEMA §4: the human gate, before any W2 material; `check_plan_edit.py` refuses
   `reviewed` without `reviewed_at`). W0 landed under `draft` because it only created this plan and the
   CHANGELOG entry it describes.
@@ -319,7 +321,7 @@ live under `.claude/hooks/_lib/`; two root-level files merged by the PRs (`RELAT
 - **OQ-7 (Owner): debate for this L3 plan.** PROTOCOL makes a debate mandatory for L3+ before execution
   (V0: `design-coherent`), and this plan has none on disk; the precedent release plan PLAN-194 ran three
   rounds. Run `/debate start PLAN-198 "<proposal>"` before W2, or rule that this cut, which follows the
-  PLAN-194 release mold, skips it? No Owner ruling on this is recorded yet.
+  PLAN-194 release mold, skips it? Answered 2026-11-03 (Owner decisions, OQ-7).
 - **OQ-8 (Owner): kit limits.** The round-5 review of the kit found limits in what its redaction covers
   (the payloads redact each path with what the redactor detects in that path's two versions; the
   reviewers' copy, each file with what it detects in that file) and in its custody of an interrupted
@@ -332,9 +334,36 @@ live under `.claude/hooks/_lib/`; two root-level files merged by the PRs (`RELAT
 
 ## Owner decisions
 
-None is recorded in this file as of 2026-11-03. The version number 1.4.4 was chosen by the Owner in S366
-(session memory, not a repository fact). Each answer goes here as one line in the form
-`- OQ-<n> (answered <YYYY-MM-DD>): <the Owner's words>`.
+The version number 1.4.4 was chosen by the Owner in S366 (session memory, not a repository fact). Each
+answer goes here as one line in the form `- OQ-<n> (answered <YYYY-MM-DD>): <the Owner's words>`. The
+Owner answered in the S366 chat on 2026-11-03 by multiple choice, in Portuguese: the words in «» are the
+option the Owner chose, verbatim; the English after the dash says what that option meant as it was put
+to the Owner.
+
+- OQ-1 (answered 2026-11-03): «Sim, confirmo» — Caminho 1+ confirmed: both fixes ship in 1.4.4 as the
+  Owner's two signed commits on `7fad2972` (`54bab3cc` secret redactor, `161e1dc3` kernel list and
+  Coverage timeout), pushed with the notes and the kit (`2acbee7c`).
+- OQ-2 (answered 2026-11-03): «Versão mínima + sha» — the re-passes use the version-floor route PR #7
+  introduced; the observed Codex payload sha is recorded in the signed fields, and the GA refuses a Codex
+  identity that differs from the rc's unless the change is declared in the signed fields (W3). No re-pin
+  ceremony before this cut.
+- OQ-3 (answered 2026-11-03): the Owner first asked «quanto tempo demora isso ? pq me faz sim sentido
+  ratificar mas nao queria demorar muito», was given the measured size (233 canonical paths, about 105k
+  changed lines, 199 of them new files) with three options and their cost, and chose «Declarar;
+  ratificar na 1.4.5» — keep the PR-merged canonical paths declared in `[1.4.4]` (R6); ratify what
+  remains after the 1.4.5 cures, under ceremony.
+- OQ-4 (answered 2026-11-03): «1.4.4 + frase» — keep 1.4.4 and state in `[1.4.4]` that the PATCH number
+  is the Owner's decision although `VERSIONING.md` classes this train's changes as MINOR; the Owner
+  approved the paragraph's text («Aprovar este texto»), which opens with "**Version number.**".
+- OQ-5 (answered 2026-11-03): «Inglês» — the tag title and headline are in English, ASCII.
+- OQ-6 (answered 2026-11-03): «Não ligar agora» — no GitHub branch protection or ruleset for the freeze;
+  the freeze holds by the kit README rule 2 and by the runner's refusal when `main` moves.
+- OQ-7 (answered 2026-11-03): «Seguir o molde, sem debate» — this cut follows the PLAN-194 release mold
+  without a new debate; the two fixes were reviewed by Codex and two Claude refuters over several rounds.
+- OQ-8 (answered 2026-11-03): «Aceitar» — the kit limits declared in the kit README are accepted; no
+  further kit round.
+- Plan review (answered 2026-11-03): asked whether the plan may move from draft to reviewed, the Owner
+  answered «Pode marcar como revisado».
 
 ## Risks
 
@@ -387,6 +416,10 @@ materials and the Owner's SIGN; nothing canonical is edited by Claude's tools."
   R11 added). In review, the kernel fix grew to cover three more flat modules and the live-adapter
   package (125 → 222 tracked kernel files), and the kit came to redact the original text before its
   display escape.
+- S366 (2026-11-03, evening): the Owner redid the two fix commits from the Owner's shell (`54bab3cc`,
+  `161e1dc3`); the notes and the kit landed on top and the Owner pushed (`2acbee7c`, every push workflow
+  green). W1: the Owner answered OQ-1 to OQ-8 and moved the plan to `reviewed`; the OQ-4 paragraph
+  ("**Version number.**") entered `[1.4.4]` with the Owner's approval of its text.
 
 ## Reference links
 
