@@ -15,10 +15,13 @@
 # (sfx = rcN or ga). Progress goes to the log (default .claude/worktrees/repass-<sfx>.log, or
 # repass-unknown.log when --tag is unreadable), whose last line is always "runner exit rc=N",
 # so it can run in the background: nohup bash ... >/dev/null 2>&1 &
-# Each lane runs in its own process group from a copy of the candidate OUTSIDE the repository;
-# HUP, INT or TERM stop every lane's process group before that copy is removed. Every attempt
-# (start; end with exit code, NO-GO count, manifest hash) is appended to the hash-chained
-# .claude/worktrees/repass-attempts.log, which moving an attempt out of the repository keeps.
+# Each lane runs in its own process group from a copy of the candidate OUTSIDE the repository,
+# every file of which went through the same ADR-114 redactor before any lane started (the files
+# it cannot keep are withheld and listed in withheld-<sfx>.txt); HUP, INT or TERM stop every
+# lane's process group before that copy is removed. Every attempt (start; each lane's verdict,
+# with nogo=1 for a NO-GO, as soon as it is complete; end with exit code, NO-GO count, manifest
+# hash) is appended to the hash-chained .claude/worktrees/repass-attempts.log, which moving an
+# attempt out of the repository keeps; a fresh start on a candidate with a NO-GO there is refused.
 #
 # Exit codes: 0 every lane answered GO or GO-WITH-CONDITIONS (evidence finalized)
 #             1 a lane answered NO-GO or gave no valid VERDICT line (evidence finalized; the
@@ -157,6 +160,10 @@ TREEROOT="$(cd "$TREEROOT" && pwd -P)" || die "the lanes' copy directory vanishe
 ! git -C "$TREEROOT" rev-parse --git-dir >/dev/null 2>&1 || die "$TREEROOT is inside a git repository: point TMPDIR elsewhere"
 FREE_KB="$(df -Pk "$TREEROOT" | awk 'NR == 2 {print $4}')"
 [ "${FREE_KB:-0}" -ge 2097152 ] 2>/dev/null || die "less than 2 GiB free under $TREEROOT"
+if [ "$RESUME" -eq 0 ]; then  # moving a NO-GO attempt aside never clears the candidate
+  logged python3 "$GEN" nogo-check --candidate "$CAND" \
+    || die "the attempts ledger has a NO-GO for this candidate (the REFUSED line above): a restart is refused"
+fi
 
 # --- the two instruments --------------------------------------------------------------------
 # Codex without the user's config.toml (plugins, MCP servers, notify, approvals reviewer), rules
@@ -210,20 +217,34 @@ CLAUDE_ARGS=(-p --restricted --safe-mode --strict-mcp-config --tools "Read,Grep,
   --permission-mode dontAsk --no-session-persistence --model "$CLAUDE_MODEL" --effort "$CLAUDE_EFFORT"
   --output-format stream-json --verbose)
 
+# --- the lanes' read-only copy of the candidate, outside the repository, redacted -----------
+TREE="$TREEROOT/tree"
+GIT_INDEX_FILE="$RUN/index" git read-tree "$CAND" || die "git read-tree failed"
+GIT_INDEX_FILE="$RUN/index" git checkout-index -a --prefix="$TREE/" || die "git checkout-index failed"
+# The files each CLI loads as instructions on its own: in the diff they are data, never orders.
+find "$TREE" -type f \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name AGENTS.md -o -name AGENTS.override.md \) \
+  -delete || die "could not remove the instruction files from the lanes' copy"
+# Every file through the same redactor as the payloads, before any lane starts; what it cannot
+# keep line for line (and every symlink) leaves the copy and goes into the withheld list.
+logged python3 "$GEN" redact-tree --tree "$TREE" --out "$RUN/withheld.txt" > "$RUN/redact-tree.out" \
+  || die "the lanes' copy could not be redacted (the REFUSED line above); nothing was sent"
+say "lanes' copy redacted: $(sed -n 's/^WITHHELD_N=//p' "$RUN/redact-tree.out") files withheld"
+
 # --- payloads: custody, scope, split, redaction (gen_envelope.py prepare) -------------------
 STAGE="$RUN/ev"
 mkdir "$STAGE" || die "mkdir failed"
-PREP=(prepare --tag "$TAG" --candidate "$CAND" --out "$STAGE")
+PREP=(prepare --tag "$TAG" --candidate "$CAND" --out "$STAGE" --withheld "$RUN/withheld.txt")
 [ -z "$BASE" ] || PREP+=(--base "$BASE")
 [ -z "$COND" ] || PREP+=(--conditions "$COND")
 logged python3 "$GEN" "${PREP[@]}" > "$RUN/prepare.out" || die "prepare refused (the REFUSED line above); nothing was sent"
 P_BASE="" P_BASE_OBJ="" P_BASE_COMMIT="" P_SIGNER="" P_KIT_TREE="" P_PARTS="" P_COND_SHA="" P_RC_TAG=""
+P_WITHHELD_SHA="" P_WITHHELD_N=""
 while IFS='=' read -r k v; do
   case "$k" in
-    BASE|BASE_OBJ|BASE_COMMIT|SIGNER|KIT_TREE|PARTS|COND_SHA|RC_TAG) printf -v "P_$k" '%s' "$v" ;;
+    BASE|BASE_OBJ|BASE_COMMIT|SIGNER|KIT_TREE|PARTS|COND_SHA|RC_TAG|WITHHELD_SHA|WITHHELD_N) printf -v "P_$k" '%s' "$v" ;;
   esac
 done < "$RUN/prepare.out"
-[ -n "$P_PARTS" ] && [ -n "$P_KIT_TREE" ] || die "prepare printed no plan"
+[ -n "$P_PARTS" ] && [ -n "$P_KIT_TREE" ] && [ -n "$P_WITHHELD_SHA" ] || die "prepare printed no plan"
 {
   echo "- tag: $TAG"
   echo "- base: $P_BASE tag-object $P_BASE_OBJ commit $P_BASE_COMMIT"
@@ -236,6 +257,7 @@ done < "$RUN/prepare.out"
   echo "- codex-model: $CODEX_MODEL / effort $CODEX_EFFORT (source: $CODEX_SRC)"
   echo "- claude: $CLAUDE_VER / model $CLAUDE_MODEL / effort $CLAUDE_EFFORT"
   echo "- conditions: CONDITIONS-$SFX.reviewed.md sha256 $P_COND_SHA"
+  echo "- withheld: withheld-$SFX.txt sha256 $P_WITHHELD_SHA files $P_WITHHELD_N"
   [ "$STUB" -eq 0 ] || echo "- instrument: STUB (CODEX_BIN/CLAUDE_BIN set): kit-test evidence, never a verdict"
 } > "$RUN/header" || die "header write failed"
 if [ "$RESUME" -eq 1 ]; then
@@ -254,14 +276,6 @@ fi
 logged python3 "$GEN" ledger-add --tag "$TAG" --candidate "$CAND" --event "start resume=$RESUME parts=$P_PARTS ev=$EV_REL" \
   || die "the attempts ledger refused this attempt (the REFUSED line above)"
 ATTEMPT=1
-
-# --- the lanes' read-only copy of the candidate, outside the repository ---------------------
-TREE="$TREEROOT/tree"
-GIT_INDEX_FILE="$RUN/index" git read-tree "$CAND" || die "git read-tree failed"
-GIT_INDEX_FILE="$RUN/index" git checkout-index -a --prefix="$TREE/" || die "git checkout-index failed"
-# The files each CLI loads as instructions on its own: in the diff they are data, never orders.
-find "$TREE" -type f \( -name CLAUDE.md -o -name CLAUDE.local.md -o -name AGENTS.md -o -name AGENTS.override.md \) \
-  -delete || die "could not remove the instruction files from the lanes' copy"
 
 # --- the lanes ------------------------------------------------------------------------------
 LIMIT_RE='hit your usage limit|reached your usage limit|Usage limit reached|Quota exceeded|out of credits|hit your spend cap|reached your workspace credit limit'
@@ -291,7 +305,7 @@ lane_exec() {  # $1 group file, $2 stdin, $3 log, then the vendor command: own p
 run_lane() {  # $1 lane, $2 NN - runs in the background and writes only its own files
   local lane="$1" n="$2" red="$EV/payload-$SFX-$2.redacted.txt" try=0 rc cls
   local out="$EV/$1-$SFX-$2.verdict.txt" log="$EV/$1-$SFX-$2.log" pgf="$RUN/pg-$1-$2"
-  local stamp f
+  local stamp f v nogo
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   for f in "$log" "$out"; do  # an earlier attempt of this lane is kept, never deleted
     if [ -e "$f" ]; then mkdir -p "$KEEP" && mv -f "$f" "$KEEP/$(basename "$f").$stamp"; fi
@@ -319,6 +333,13 @@ run_lane() {  # $1 lane, $2 NN - runs in the background and writes only its own 
     fi
     break
   done
+  v="$(verdict_of "$out")"
+  if [ -n "$v" ]; then  # a complete verdict reaches the ledger before this lane's shell returns
+    nogo=0
+    [ "$v" != NO-GO ] || nogo=1
+    python3 "$GEN" ledger-add --tag "$TAG" --candidate "$CAND" --event "lane $lane part $n verdict $v nogo=$nogo" 2>> "$LOG" \
+      || { cls=ledger; say "payload $n $lane: the attempts ledger did not take this verdict (the REFUSED line above): this attempt cannot finalize; stop and call Claude"; }
+  fi
   printf 'rc=%s try=%s class=%s\n' "$rc" "$try" "$cls" > "$EV/.rc-$lane-$n"
   [ "$cls" != quota ] || printf '%s %s\n' "$lane" "$n" >> "$EV/.quota"
   say "payload $n $lane: rc=$rc class=$cls verdict=$(verdict_of "$out")"
@@ -373,7 +394,7 @@ python3 "$GEN" scrub "${SCRUB[@]}" || { say "scrub failed"; exit 3; }
 {
   echo "# Provenance - pair-rail re-pass of $TAG ($SFX), PLAN-198 kit"
   cat "$EV/.header"
-  echo "- lanes: codex exec --sandbox read-only ${CODEX_ISO[*]} and claude ${CLAUDE_ARGS[*]}; each lane in its own process group with a ${LANE_TIMEOUT} s limit, from a read-only copy of the candidate outside the repository without CLAUDE.md/AGENTS.md files, both reading the SAME redacted payload on stdin; API keys removed from both lanes' environment"
+  echo "- lanes: codex exec --sandbox read-only ${CODEX_ISO[*]} and claude ${CLAUDE_ARGS[*]}; each lane in its own process group with a ${LANE_TIMEOUT} s limit, from a read-only copy of the candidate outside the repository without CLAUDE.md/AGENTS.md files, every other file redacted by the same redactor or withheld (withheld-$SFX.txt), both reading the SAME redacted payload on stdin; API keys removed from both lanes' environment"
   echo "- codex death classes, from the codex ERROR: lines among the last 40 transcript lines (texts measured on codex 0.160.0 only): model capacity = retried up to 2 times; account limit = no retry and no new payload"
   echo "- personal home paths replaced by <user> in the diffs, transcripts and verdicts"
   echo "- finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"

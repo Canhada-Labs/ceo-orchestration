@@ -21,12 +21,15 @@ PLAN_REL="$(dirname "$KIT_REL")"
 PARENT="${KIT_TEST_TMP:-${TMPDIR:-/tmp}}"
 SCRATCH="$(mktemp -d "${PARENT%/}/kit-test.XXXXXX")" || exit 2
 GH="$(mktemp -d "${TMPDIR:-/tmp}/kg.XXXXXX")" || exit 2  # short path: gpg-agent socket limit
+# TMPDIR of the runner that the SIGKILL control kills: its lanes' copy, which no cleanup removes then.
+KT="$(mktemp -d "${TMPDIR:-/tmp}/kt.XXXXXX")" || exit 2
 export GNUPGHOME="$GH" PYTHONDONTWRITEBYTECODE=1 KIT_RETRY_UNIT_SECONDS=0
 PASS=0 FAIL=0
 
 cleanup() {
   gpgconf --homedir "$GH" --kill all >/dev/null 2>&1
   case "$GH" in */kg.*) rm -rf -- "$GH" ;; esac
+  case "$KT" in */kt.*) rm -rf -- "$KT" ;; esac
   if [ "$FAIL" -ne 0 ] || [ "${KIT_TEST_KEEP:-0}" = 1 ]; then printf 'scratch kept: %s\n' "$SCRATCH"; return; fi
   case "$SCRATCH" in */kit-test.*) rm -rf -- "$SCRATCH" ;; esac
 }
@@ -68,10 +71,15 @@ done
   || { echo "stub: the lane's copy is inside a repository or keeps instruction files" >&2; exit 9; }
 part="$(sed -n 's/^PAYLOAD \([0-9]*\)\/.*/\1/p' | head -n 1)"
 echo "stub codex transcript for payload $part, cwd /Users/someone/work"
+if [ -n "${STUB_READ:-}" ]; then  # an ordinary file read from the working directory (the lanes' copy)
+  echo "stub read $STUB_READ:"; cat -- "$STUB_READ" 2>&1
+  if [ -L docs/outside-link ] || [ -e docs/outside-link ]; then echo LINK-PRESENT; else echo LINK-ABSENT; fi
+fi
 if [ "${STUB_HANG:-}" = "codex:$part" ]; then sleep 300 & echo $! > "$STUB_PIDS.child"; echo $$ > "$STUB_PIDS"; wait; fi
 if [ "${STUB_QUOTA:-}" = "codex:$part" ]; then echo "ERROR: You've hit your usage limit. Try again later."; exit 1; fi
 v=GO; [ "${STUB_NOGO:-}" != "codex:$part" ] || v=NO-GO
-printf 'No findings.\nVERDICT: %s stub review of payload %s.\n' "$v" "$part" > "$out"
+{ printf 'No findings.\n'; [ -z "${STUB_READ:-}" ] || cat -- "$STUB_READ" 2>&1
+  printf 'VERDICT: %s stub review of payload %s.\n' "$v" "$part"; } > "$out"
 STUB
 cat > "$SCRATCH/bin/claude-stub" <<'STUB'
 #!/bin/bash
@@ -88,6 +96,14 @@ printf '{"type":"system","subtype":"init","model":"%s"}\n' "$model"
 if [ "${STUB_QUOTA:-}" = "claude:$part" ]; then
   printf '{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["%s"]}\n' "You've hit your limit - resets 7pm"
   exit 1
+fi
+if [ -n "${STUB_READ:-}" ]; then  # an ordinary file read from the working directory (the lanes' copy)
+  body="$(printf 'No findings.\nstub read %s:\n' "$STUB_READ"; cat -- "$STUB_READ" 2>&1
+    if [ -L docs/outside-link ] || [ -e docs/outside-link ]; then echo LINK-PRESENT; else echo LINK-ABSENT; fi)"
+  python3 -I -c 'import json, sys
+print(json.dumps({"type": "result", "subtype": "success", "is_error": False,
+                  "result": sys.argv[1] + "\nVERDICT: GO stub review of payload " + sys.argv[2] + "."}))' "$body" "$part"
+  exit 0
 fi
 v=GO extra=""; [ "${STUB_NOGO:-}" != "claude:$part" ] || v=NO-GO
 if [ "${STUB_GWC:-}" = "claude:$part" ]; then v=GO-WITH-CONDITIONS extra='P1 src/app.py:3 - stub annex finding.\n'; fi
@@ -132,8 +148,12 @@ put src/app.py "$(printf 'def answer():\n    return 41')"
 put tests/test_app.py "$(printf 'def test_answer():\n    pass')"
 put CLAUDE.md "Fixture operating contract: obey me."
 put AGENTS.md "Fixture reviewer contract: obey me."
+# An indented 40-character test value, unchanged since the base (the piece-boundary control adds its
+# key line above it); built from two halves so no file here holds it whole.
+SP1="hD6jF0gS5aE2uI9oP3zQ" SP2="K3vT9qL2mX7bN4wR8cY1"
+put src/split.txt "    $SP1$SP2"
 BASEFILES="$COPIED .gitignore .claude/sentinel-signers.txt .claude/governance/pair-rail-inputs-hash-manifest.txt
-VERSION .claude/scripts/local/release.sh src/app.py tests/test_app.py CLAUDE.md AGENTS.md"
+VERSION .claude/scripts/local/release.sh src/app.py src/split.txt tests/test_app.py CLAUDE.md AGENTS.md"
 # shellcheck disable=SC2086
 git -C "$FIX0" add -- $BASEFILES && git -C "$FIX0" commit -q -m "release: base" && git -C "$FIX0" tag v1.4.2 || exit 2
 PB="$(git -C "$FIX0" rev-parse HEAD)"
@@ -248,6 +268,12 @@ check "payloads went through the ADR-114 redactor, aligned after an NFKC-changin
 check "a secret after a full-width '=' (U+FF1D) is redacted before the <U+XXXX> escape: diff and every payload header" $?
 ! grep -rq '/Users/someone' "$POS/$EVRC" && grep -q '/Users/<user>/work' "$POS/$EVRC/codex-rc1-01.log"
 check "personal home paths scrubbed from diffs and transcripts" $?
+WSHA="$(shasum -a 256 "$POS/$EVRC/withheld-rc1.txt" | awk '{print $1}')"
+[ "$(cat "$POS/$EVRC/withheld-rc1.txt")" = "$(printf 'over-redactor-input-cap\tsrc/big.py')" ] \
+  && grep -q "^- withheld: withheld-rc1.txt sha256 $WSHA files 1$" "$POS/$EVRC/PROVENANCE-rc1.md" \
+  && [ "$(grep -l '^file passed through the same redactor as this payload. Files withheld from that copy: 1$' \
+        "$POS/$EVRC"/payload-rc1-*.redacted.txt | wc -l | tr -d ' ')" = "${NPARTS:-0}" ]
+check "lanes' copy: withheld list in the evidence, its sha256 and count in the run header, the count in every payload header" $?
 [ -f "$POS/$EVRC/MANIFEST-rc1.sha256" ] && [ -z "$(cd "$POS/$EVRC" && ls -A | grep '^\.')" ] \
   && grep -q '^- instrument: STUB' "$POS/$EVRC/PROVENANCE-rc1.md" && grep -q -- '--safe-mode' "$POS/$EVRC/PROVENANCE-rc1.md"
 check "evidence finalized: MANIFEST written, no hidden run files, STUB and lane isolation declared" $?
@@ -385,23 +411,23 @@ printf 'info the step-15 validator ALONE returns rc=%s for codex_cli 0.159.0 wit
 
 N="$SCRATCH/n-nogo"; clone_fix "$FIX0" "$N"
 ( export STUB_NOGO=claude:1; runner "$N" "$L/n-nogo-run.log" --tag v1.4.4-rc.1 ); rc=$?
-[ "$rc" -eq 1 ] && grep -q '^RUNNER-OVERALL: rc=1$' "$N/$EVRC/PROVENANCE-rc1.md"
-check "lane NO-GO: runner exits 1 and records RUNNER-OVERALL rc=1" $?
+[ "$rc" -eq 1 ] && grep -q '^RUNNER-OVERALL: rc=1$' "$N/$EVRC/PROVENANCE-rc1.md" \
+  && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* lane claude part 01 verdict NO-GO nogo=1 prev=' "$N/.claude/worktrees/repass-attempts.log"
+check "lane NO-GO: runner exits 1, records RUNNER-OVERALL rc=1, and the lane's NO-GO is a ledger line of its own" $?
 simulate_real "$N" rc1 "$PKG" "$PSHA" verified
 gen "$N" "$L/n-nogo.log" fields --tag v1.4.4-rc.1; rc=$?
 refused "lane NO-GO: generator refuses" "$rc" "$L/n-nogo.log" "says NO-GO"
 mv "$N/$EVRC" "$SCRATCH/nogo-moved-out" || bad "moving the NO-GO attempt out"
 runner "$N" "$L/n-reroll-run.log" --tag v1.4.4-rc.1; rc=$?
-simulate_real "$N" rc1 "$PKG" "$PSHA" verified
-gen "$N" "$L/n-reroll.log" fields --tag v1.4.4-rc.1; rc2=$?
-[ "$rc" -eq 0 ] || bad "the re-roll run itself (rc=$rc)"
-refused "NO-GO re-roll (attempt moved out, same candidate run again, all GO): refused by the ledger" "$rc2" "$L/n-reroll.log" "recorded a NO-GO"
-mv "$N/$EVRC" "$SCRATCH/reroll-moved-out" || bad "moving the re-roll attempt out"
+[ "$rc" -eq 2 ] && [ ! -e "$N/$EVRC" ] && grep -q 'recorded a NO-GO' "$L/n-reroll-run.log"
+check "NO-GO re-roll (attempt moved out, same candidate started again): refused by the ledger before anything is prepared (rc=$rc)" $?
 runner "$N" "$L/n-rc2-run.log" --tag v1.4.4-rc.2; rc=$?
-simulate_real "$N" rc2 "$PKG" "$PSHA" verified
-gen "$N" "$L/n-rc2.log" fields --tag v1.4.4-rc.2; rc2=$?
-[ "$rc" -eq 0 ] || bad "the v1.4.4-rc.2 run itself (rc=$rc)"
-refused "NO-GO recorded under v1.4.4-rc.1 blocks v1.4.4-rc.2 on the same candidate (ledger, any tag)" "$rc2" "$L/n-rc2.log" "recorded a NO-GO"
+[ "$rc" -eq 2 ] && [ ! -e "$N/$PLAN_REL/repass-rc2" ] && grep -q 'recorded a NO-GO' "$L/n-rc2-run.log"
+check "NO-GO recorded under v1.4.4-rc.1 refuses a v1.4.4-rc.2 start on the same candidate (ledger, any tag; rc=$rc)" $?
+N="$SCRATCH/n-ledger"; clone_fix "$RUNOK" "$N"
+( cd "$N" && python3 "$KIT_REL/gen_envelope.py" ledger-add --tag v1.4.4-rc.9 --candidate "$CAND" \
+    --event "lane codex part 01 verdict NO-GO nogo=1" ) && gen "$N" "$L/n-ledger.log" fields --tag v1.4.4-rc.1; rc=$?
+refused "a lane NO-GO in the ledger under another tag refuses the fields of an all-GO evidence set" "$rc" "$L/n-ledger.log" "recorded a NO-GO"
 
 N="$SCRATCH/n-drift"; clone_fix "$RUNOK" "$N"
 put_n() { mkdir -p "$N/$(dirname "$1")" && printf '%s\n' "$2" > "$N/$1"; }
@@ -490,6 +516,121 @@ sleep 0.5
   && tail -n 1 "$L/n-signal.runlog" | grep -q 'runner exit rc=3$'
 check "TERM: the reviewer process tree (and its child) is stopped and reaped before cleanup (exit 3)" $?
 [ "$rc" -eq 3 ] || sed -n '1,20p' "$L/n-signal.log"
+
+# === a secret across a piece boundary: each piece is redacted with the lines around it ========
+# src/split.txt gets "aws_secret_access_key:" added right above its unchanged, indented value,
+# sized so that the key line is the LAST line of piece 1 and the value the first of piece 2 under
+# the piece budget of the kit under test (read from its own prepare, so the cut is exact).
+N="$SCRATCH/n-split"; clone_fix "$FIX0" "$N"
+cp -R "$ORIGIN" "$SCRATCH/origin-split.git" && git -C "$N" remote set-url origin "$SCRATCH/origin-split.git"
+python3 - "$N" "$KIT_REL" "$SP1$SP2" > "$L/n-split-build.log" 2>&1 <<'PY'
+import importlib.util, os, subprocess, sys
+repo, kit_rel, value = sys.argv[1:4]
+os.chdir(repo)
+def git(*a):
+    return subprocess.run(["git"] + list(a), check=True, capture_output=True).stdout.decode("utf-8")
+src = os.path.join(repo, kit_rel, "gen_envelope.py")
+spec = importlib.util.spec_from_file_location("kit_probe", src)
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+class Budget(Exception):
+    pass
+def probe(path, text, budget):
+    raise Budget(budget)
+m.pieces = probe  # stops prepare at its first piece split: the budget it would cut with
+work = os.path.join(repo, ".claude", "worktrees")
+os.makedirs(work, exist_ok=True)
+out = os.path.join(work, "probe-out")
+os.mkdir(out)
+args = ["prepare", "--tag", "v1.4.4-rc.1", "--out", out]
+if "--withheld" in open(src, encoding="utf-8").read():
+    open(os.path.join(work, "probe-withheld"), "w").close()
+    args += ["--withheld", os.path.join(work, "probe-withheld")]
+try:
+    m.main(args)
+    sys.exit("probe: prepare never split a diff")
+except Budget as b:
+    budget = b.args[0]
+base = git("rev-parse", "v1.4.3-rc.1^{commit}").strip()
+key = "aws_secret_access_key:"
+fill, extra, first = (budget - 400) // 100, 50, True
+for _ in range(10):
+    with open("src/split.txt", "w", encoding="utf-8") as fh:
+        fh.write("".join("x" * 98 + "\n" for _ in range(fill)) + "y" * extra + "\n" + key + "\n    " + value + "\n")
+    git("add", "src/split.txt")
+    git("commit", "-q", "-m", "split fixture", *([] if first else ["--amend"]))
+    first = False
+    d = git("-c", "core.quotepath=on", "diff", "-U1", "--no-renames", "--no-color", "--no-ext-diff",
+            "--no-textconv", "--src-prefix=a/", "--dst-prefix=b/", base, "HEAD", "--", ":(literal)src/split.txt")
+    end = d.index("+" + key + "\n") + len(key) + 2  # bytes of piece 1 up to and including the key line
+    if end == budget and d[end:].startswith(" ") and value in d[end:]:
+        print("budget %d: the key line ends piece 1 at byte %d, the value opens piece 2" % (budget, end))
+        sys.exit(0)
+    extra += budget - end
+    while extra < 1:
+        fill, extra = fill - 1, extra + 100
+    while extra > 150:
+        fill, extra = fill + 1, extra - 100
+sys.exit("split fixture: no exact fit")
+PY
+rc=$?
+( cd "$N" && git push -q origin main ) || rc=1
+runner "$N" "$L/n-split-run.log" --tag v1.4.4-rc.1; rc2=$?
+held=0; [ ! -d "$N/$EVRC" ] || held="$(grep -rl -e "$SP1" -e "$SP2" "$N/$EVRC" | wc -l | tr -d ' ')"
+printf 'info piece-boundary control: runner rc=%s, evidence files holding the value: %s\n' "$rc2" "$held"
+[ "$rc" -eq 0 ] && [ "$rc2" -eq 2 ] && [ "$held" = 0 ] \
+  && grep -q 'REFUSED: payload [0-9]*: the redactor did not keep the line count of its redaction window' "$L/n-split-run.log"
+check "a secret split across two pieces (key line ends one, its indented value opens the next): refused before any lane, in no payload" $?
+[ "$rc" -eq 0 ] || sed -n '1,10p' "$L/n-split-build.log"
+
+# === the lanes' copy: every file redacted; symlinks and files the redactor cannot keep withheld ==
+N="$SCRATCH/n-tree"; clone_fix "$FIX0" "$N"
+cp -R "$ORIGIN" "$SCRATCH/origin-tree.git" && git -C "$N" remote set-url origin "$SCRATCH/origin-tree.git"
+( cd "$N" && ln -s /etc/hosts docs/outside-link && git add -- docs/outside-link \
+    && git commit -q -m "docs: a link out of the tree" && git push -q origin main ) || bad "symlink commit in the tree fixture"
+( export STUB_READ=src/app.py; runner "$N" "$L/n-tree-run.log" --tag v1.4.4-rc.1 ); rc=$?
+EVT="$N/$EVRC"
+[ "$rc" -eq 0 ] && ! grep -q 'AKIAZ7Q2' "$EVT"/*.log "$EVT"/*.verdict.txt && grep -q 'REDACTED:aws_access_key' "$EVT/codex-rc1-01.log" \
+  && grep -q 'REDACTED:aws_access_key' "$EVT/claude-rc1-01.verdict.txt"
+check "a reviewer that reads src/app.py from its working directory gets it redacted: the key is in no lane log or verdict" $?
+grep -q '^LINK-ABSENT$' "$EVT/codex-rc1-01.log" && ! grep -rq 'LINK-PRESENT' "$EVT" \
+  && grep -q '^symlink	docs/outside-link$' "$EVT/withheld-rc1.txt"
+check "a committed symlink pointing outside the tree is absent from the lanes' copy and listed as withheld" $?
+
+# === SIGKILL after a lane's NO-GO: the NO-GO is already in the ledger ========================
+N="$SCRATCH/n-kill"; clone_fix "$FIX0" "$N"
+KP="$SCRATCH/kill-pids"
+# shellcheck disable=SC2086
+( cd "$N" && exec env $STUBS TMPDIR="$KT" STUB_NOGO=claude:1 STUB_HANG=codex:1 STUB_PIDS="$KP" \
+    bash "$KIT_REL/run_repass.sh" --log "$L/n-kill.runlog" --tag v1.4.4-rc.1 --jobs 1 ) > "$L/n-kill.log" 2>&1 &
+RP=$!
+k=0
+while { [ ! -s "$KP" ] || ! grep -q 'payload 01 claude: rc=' "$L/n-kill.runlog" 2>/dev/null; } && [ "$k" -lt 300 ]; do
+  sleep 0.1; k=$((k + 1))
+done
+kill -KILL "$RP"; wait "$RP" 2>/dev/null
+kill -KILL "$(cat "$KP.child")" "$(cat "$KP")" 2>/dev/null  # the hanging Codex stub the dead runner left
+k=0; while ! grep -q 'payload 01 codex: rc=' "$L/n-kill.runlog" && [ "$k" -lt 100 ]; do sleep 0.1; k=$((k + 1)); done
+mv "$N/$EVRC" "$SCRATCH/kill-moved-out" || bad "moving the killed attempt aside"
+runner "$N" "$L/n-kill-restart.log" --tag v1.4.4-rc.1; rc=$?
+[ "$rc" -eq 2 ] && [ ! -e "$N/$EVRC" ] && ! grep -q 'runner exit' "$L/n-kill.runlog" \
+  && grep -q 'recorded a NO-GO' "$L/n-kill-restart.log"
+check "SIGKILL while the other lane runs, after one lane's NO-GO; evidence moved aside: the restart is refused (rc=$rc)" $?
+
+# === concurrent ledger appends keep the chain ================================================
+N="$SCRATCH/n-lock"; clone_fix "$FIX0" "$N"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16; do
+  ( cd "$N" && python3 "$KIT_REL/gen_envelope.py" ledger-add --tag v1.4.4-rc.1 --candidate "$CAND" \
+      --event "lock probe $i" ) 2>> "$L/n-lock-add.log" &
+done
+wait
+( cd "$N" && python3 -c 'import importlib.util, sys
+spec = importlib.util.spec_from_file_location("kit_chain", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+print(sum(" lock probe " in ln for ln in m.ledger_lines()))' "$KIT_REL/gen_envelope.py" ) > "$L/n-lock.log" 2>&1
+grep -qx 16 "$L/n-lock.log"
+check "16 concurrent ledger appends: one unbroken hash chain read back by the kit (positive control of the lock)" $?
 
 # === the calling repository is untouched ====================================================
 python3 "$GUARD" verify --repo "$REAL" --from "$SCRATCH/caller-before.json"

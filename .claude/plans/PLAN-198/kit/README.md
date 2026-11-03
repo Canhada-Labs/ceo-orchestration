@@ -37,9 +37,10 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
    confirmação** — e, se o bump criar um commit, enviam esse commit também. Sem `--push`
    eles só assinam a tag localmente; o envio fica com você.
 4. **Nunca apague nem edite `.claude/worktrees/repass-attempts.log`.** É o registro de todas
-   as tentativas de re-pass (encadeado por hash); os campos que você assina listam as
-   tentativas da tag, e um NO-GO registrado bloqueia aquele commit para sempre, com qualquer tag
-   (uma rc.2 sobre o mesmo commit também é recusada).
+   as tentativas de re-pass (encadeado por hash, uma escrita de cada vez); cada revisão grava ali
+   o próprio veredito assim que termina (`nogo=1` num NO-GO). Os campos que você assina listam as
+   tentativas da tag, e um NO-GO registrado bloqueia aquele commit para sempre, com qualquer tag:
+   o runner recusa começar de novo nele (`rc=2`), e uma rc.2 sobre o mesmo commit também é recusada.
 
 ## Janelas de tempo
 
@@ -166,7 +167,8 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
 - **NO-GO (rc=1) na rc** — nessa ordem:
   1. mova `.claude/plans/PLAN-198/repass-rc1/` para uma pasta fora do repositório; nunca
      rode `git add -A` com ela lá. O registro de tentativas
-     guarda o NO-GO, e o kit recusa para sempre o mesmo commit;
+     guarda o NO-GO (o de cada revisão, assim que ela termina), e o kit recusa para sempre o
+     mesmo commit — o runner nem começa;
   2. corrija, commit (assunto com planos do `RELEASE_SCOPE`, senão a relmeta é refeita),
      push, CI verde;
   3. `bash .claude/scripts/local/release.sh bump --rc 2 --npm-readme-reviewed` (se criar
@@ -187,7 +189,9 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
 - **`verify`** (`gen_envelope.py verify --tag ... --sig ...`) refaz todas as checagens sem
   gravar nada; só funciona antes do commit do veredito.
 - Uma tentativa nunca é apagada pelo kit. Para recomeçar do zero depois de uma queda, mova a
-  pasta `repass-<rc1|ga>/` para fora do repositório; a tentativa continua no registro.
+  pasta `repass-<rc1|ga>/` para fora do repositório; a tentativa continua no registro. Se
+  alguma revisão daquela tentativa já tinha dito NO-GO, o recomeço é recusado (`rc=2`): o NO-GO
+  vale para o commit.
 - **O registro de tentativas recusa ("not an unbroken chain"):** pare e chame o Claude.
 
 ## O que o kit verifica
@@ -203,7 +207,11 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   com a assinatura.
 - **Partes:** o delta base..candidato é cortado abaixo do limite de entrada do redator
   ADR-114 (o que tira segredos e dados pessoais antes de enviar), passa por ele e é
-  conferido (sem truncamento, mesmo número de linhas e de blocos). O redator recebe o texto
+  conferido (sem truncamento, mesmo número de linhas e de blocos). Um diff grande é cortado em
+  pedaços entre linhas; cada pedaço passa pelo redator junto com pelo menos 4 KiB de linhas
+  originais inteiras do mesmo arquivo de cada lado (quando existem), o kit confere que o redator
+  manteve o número de linhas dessa janela e só então guarda as linhas do próprio pedaço; se o
+  número mudar, recusa a parte antes de qualquer envio. O redator recebe o texto
   original — o cabeçalho com as condições e o diff. Só depois, na saída dele, os caracteres que a
   normalização Unicode NFKC muda (reticências, "№") são mostrados como `<U+XXXX>`, para leitura,
   e o resultado tem de ser estável sob NFKC. Antes de redigir, o kit confere que o redator do
@@ -212,7 +220,17 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   recusa. Toda mudança fica numa parte ou numa classe declarada fora (`scope-<rc1|ga>.txt`).
 - **Revisores:** cada um num grupo de processos próprio, com limite de 2 h, a partir de uma
   cópia do candidato **fora do repositório** e sem os arquivos `CLAUDE.md`/`AGENTS.md`
-  (que os programas leriam como instrução). Codex com `--ignore-user-config --ephemeral
+  (que os programas leriam como instrução). Antes de qualquer revisão começar, cada arquivo
+  dessa cópia passa pelo mesmo redator das partes e é regravado redigido; saem da cópia, listados
+  com o motivo em `withheld-<rc1|ga>.txt` (parte da evidência), os links simbólicos e os arquivos
+  que não são texto UTF-8, que passam do limite de entrada do redator, em que o redator falha ou
+  que ele não devolve com as mesmas linhas. O cabeçalho de cada parte diz ao revisor quantos saíram e que as mudanças
+  deles no escopo estão nas partes; o sha256 da lista e a contagem ficam no cabeçalho do run
+  (`PROVENANCE`), a contagem também nos campos assinados, e a lista, como toda a evidência, no
+  `MANIFEST`. Se o redator não importar ou não passar no teste de
+  chave, o runner recusa antes de qualquer envio. Medido em 2026-11-03 numa cópia da árvore real
+  em `7fad2972`: 130 arquivos retirados (todos acima do limite de entrada), ~43 s de preparo,
+  mesma lista em duas execuções. Codex com `--ignore-user-config --ephemeral
   --ignore-rules` e apps, plugins, hooks, navegador e memórias desligados; Claude Code com
   `--restricted --safe-mode --strict-mcp-config`, o binário da versão (não o atalho que se
   atualiza sozinho) e a atualização automática desligada. A versão do Claude Code e o hash
@@ -254,7 +272,8 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   e em transcrições interativas do Claude Code, não no `claude -p`. O teste usa revisores
   simulados; a primeira execução real é a prova.
 - **`kill -9` no runner** não deixa ele encerrar os revisores; eles terminam sozinhos ou pelo
-  limite de 2 h.
+  limite de 2 h. O veredito que uma revisão já entregou está no registro de tentativas mesmo
+  assim, e um NO-GO ali bloqueia o commit.
 - **Registro de tentativas:** encadeado por hash, então editar uma linha é detectado; apagar
   o arquivo inteiro não é (mesmo usuário). Por isso a regra 4.
 - **Redator ADR-114:** o desvio de posição depois de caracteres que o NFKC muda foi corrigido
@@ -268,8 +287,8 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   o congela.
 - **Tamanho:** sem prova mecânica de código movido, o delta inteiro desde `v1.4.3-rc.1`
   vai para revisão. Medido em 2026-11-03 sobre `v1.4.3-rc.1..7fad2972` com ~14 KB de
-  condições: 281 caminhos em revisão, 32 partes, ou seja 64 revisões (32 do Codex e 32 do
-  Claude) — antes do `<U+XXXX>`, que aumenta um pouco o tamanho. O candidato real terá
+  condições: 281 caminhos em revisão, 33 partes (a folga para as linhas vizinhas de cada pedaço
+  tira 16 KiB de cada parte), ou seja 66 revisões (33 do Codex e 33 do Claude). O candidato real terá
   alguns commits a mais. `--jobs N` (padrão 2) controla quantas partes rodam ao mesmo tempo;
   cuidado com a cota das duas contas.
 - **Mesmo fornecedor:** parte do delta foi escrita pelo Codex e parte por agentes Claude;

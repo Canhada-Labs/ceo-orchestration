@@ -220,9 +220,17 @@ Check: python3 .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py --claims
 ### W3 — Release kit (hand-written, parameterized by `--tag`)
 Check: bash .claude/plans/PLAN-198/kit/test-kit.sh (harness created in this wave)
 - [x] One kit for both tags: the scripts take `--tag`, and no release version is written in their code.
-- [x] The generator binds the declared Codex version to the observed payload sha itself, because the
-  validator does not (negative control: a version below 0.160.0 carrying the manifest sha must be refused
-  by the generator).
+- [x] The generator admits a Codex instrument only through `check_instrument()`: a stable `X.Y.Z` at or
+  above the ADR-182 floor `CODEX_VERSION_FLOOR`, enforced even when the payload sha is the manifest's (the
+  validator alone would accept such a version), a well-formed sha256, and a target triple the manifest
+  lists. Status `verified` needs the manifest's version and payload sha; status `compatible` needs a
+  version above the manifest's and a payload sha different from the manifest's. No manifest says which
+  payload a `compatible` version has, so that route binds no version to a payload sha: the run header
+  (`PROVENANCE`) records the observed version, target triple, payload sha and pin status, the signed
+  fields carry them, and the GA refuses a Codex identity that differs from the rc's unless the generator
+  is given `--instrument-change-declared`, which puts an `instrument-changed-since-<rc>` finding in the
+  signed fields. Negative control: a version below 0.160.0 carrying the manifest sha is refused by the
+  generator.
 - [x] A Claude lane reviews the same payloads as the Codex lane: part of the range was authored by Codex,
   and Codex alone would be author and reviewer. The Claude lane runs without `--bare` (no API key).
 - [x] Kit committed before the bump, so it is part of the candidate tree; the runner refuses files that
