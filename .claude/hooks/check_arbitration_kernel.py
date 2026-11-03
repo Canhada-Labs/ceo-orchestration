@@ -19,6 +19,12 @@ anything.
    Claude adapter, and the PII pattern bank.
 3. **Policy-as-code files** — .claude/policies/*.yaml + corresponding
    .jsonl fixtures (these drive policy_dispatch.py decisions).
+4. **Code the v1.4.4 split moved, and the listed modules kernel code
+   calls** — the seven helper packages that hold the code of seven
+   facades since the v1.4.4 split (`_lib/canonical_edit/`,
+   `_lib/_policy_parts/`, ...), each kernel in full, plus the five flat
+   `_lib` modules and the live-adapter package listed in the
+   KERNEL-DECOMPOSITION block of `_KERNEL_PATHS`.
 
 Each is matched via a dedicated glob in `_KERNEL_PATHS` below.
 
@@ -292,6 +298,52 @@ _KERNEL_PATHS: List[str] = [
     # DELETING a file the way to choose the posture.
     ".claude/security/sentinel-signers-registry.yaml",
     ".claude/policies/.drift-manifest.json",
+    # KERNEL-DECOMPOSITION (v1.4.4 train, merge 888e9e6c). These rows
+    # cover the code the v1.4.4 split moved out of seven kernel facades,
+    # the plan-path predicate the train put in place of regexes in two
+    # kernel files, and the modules listed below that kernel code calls.
+    #   - Seven facades moved their code into helper packages. One recursive
+    #     row per package makes that code HARD-DENY again, as it was inside
+    #     the facades in v1.4.2, and a file added there later is HARD-DENY
+    #     too (the federation-dir precedent above).
+    ".claude/hooks/_lib/canonical_edit/**/*",  # check_canonical_edit.py
+    ".claude/hooks/_lib/agent_spawn/**/*",  # check_agent_spawn.py
+    ".claude/hooks/_lib/_policy_parts/**/*",  # _lib/policy.py
+    ".claude/hooks/_lib/_audit_emit_parts/**/*",  # _lib/audit_emit.py
+    ".claude/hooks/_lib/_audit_log_parts/**/*",  # audit_log.py
+    ".claude/hooks/_lib/_bash_safety_parts/**/*",  # check_bash_safety.py
+    ".claude/hooks/_lib/_pair_rail_parts/**/*",  # check_pair_rail.py
+    #   - Five flat modules that kernel code calls:
+    #     plan_paths.py — the plan-path predicate (is_plan_path,
+    #       plan_id_from_path) that replaces the plan-path regexes the train
+    #       removed from check_plan_edit.py and policy_preprocessors.py; it
+    #       is HARD-DENY again, as those regexes were in v1.4.2;
+    #     model_currency.py — is_veto_floor_model(), the VETO-floor predicate
+    #       that kernel files now call as part of their VETO-floor check
+    #       (the F-01-03 demotion check above rides on it);
+    #     cli_currency.py, bash_indirect_guard.py, bash_indirect_telemetry.py
+    #       — each added by this train and called by kernel code:
+    #       cli_currency.py is the Codex payload-pin currency arm, which
+    #       decides whether a payload SHA mismatch is accepted as
+    #       "compatible" (called by the pair-rail code; ADR-182 trust root);
+    #       bash_indirect_guard.py is the indirect-command BLOCK matcher and
+    #       bash_indirect_telemetry.py the disabled-rail telemetry, both
+    #       called by the bash-safety parts.
+    ".claude/hooks/_lib/model_currency.py",
+    ".claude/hooks/_lib/cli_currency.py",
+    ".claude/hooks/_lib/plan_paths.py",
+    ".claude/hooks/_lib/bash_indirect_guard.py",
+    ".claude/hooks/_lib/bash_indirect_telemetry.py",
+    #   - adapters/live/ — the live-adapter transport package, present since
+    #     v1.0.0 and enrolled now because the kernel adapters/__init__.py
+    #     loads it; its siblings above are already kernel.
+    ".claude/hooks/_lib/adapters/live/**/*",
+    # tests/test_kernel_decomposition_coverage.py checks that each package
+    # below _lib/ that a kernel source reaches by an import statement or
+    # by a / chain of string literals (resolved against the source's
+    # directory or .claude/hooks) is kernel in full, and that each of the
+    # five flat modules above is kernel and still imported by a kernel
+    # source.
 ]
 
 

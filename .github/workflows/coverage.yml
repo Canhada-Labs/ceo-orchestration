@@ -36,9 +36,12 @@ jobs:
           && fromJSON('["self-hosted","Linux","X64","canhada-ci"]') || 'ubuntu-latest' }}
     # S157 ADR-139: subprocess capture instruments every spawned hook, so the
     # suite runs materially slower than the in-process baseline (the no-coverage
-    # matrix already takes ~12 min). 35 min gives headroom for hooks + scripts
-    # under capture + combine. Was 15 (which the captured run overran → cancel).
-    timeout-minutes: 35
+    # matrix already takes ~12 min). Was 15 (which the captured run overran →
+    # cancel), then 35. Raised to 50 (S366): runner drift ate the 35-min
+    # headroom — job 34m36s on 2026-11-02, cancelled at 35m05s on 2026-11-03
+    # 07:48Z — and a cancelled run on HEAD is not "success", so release.sh
+    # preflight refuses the release until a green re-run.
+    timeout-minutes: 50
     # PLAN-006 Phase 3: continue-on-error removed. Gate is enforcing.
 
     steps:
