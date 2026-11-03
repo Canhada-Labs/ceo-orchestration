@@ -94,6 +94,29 @@ class Tests:
         additions = new_findings(rows, load_baseline(BASELINE))
         self.assertEqual(additions, [], additions)
 
+    def test_fu144_fingerprint_is_interpreter_stable(self):
+        # The baseline is written on one interpreter and read on every matrix
+        # interpreter (push: 3.9+3.12; PR: 3.9-3.12; nightly: 3.9-3.12+3.14).
+        # These digests were
+        # measured identical on 3.9.6, 3.12.16, 3.13.18 and 3.14.8; before the
+        # `show_empty` pin, 3.13+ produced other values and the ratchet above
+        # reported 95 phantom sites (S366). A drift here is an interpreter
+        # change to `ast.dump`, never a new subprocess site.
+        source = (
+            "import sys, subprocess\n"
+            "def case():\n"
+            "    subprocess.run([sys.executable])\n"
+            "    subprocess.run([sys.executable, '-c', f'print({1})'], timeout=1, check=False)\n"
+        )
+        self.assertEqual(
+            [(r.kind, r.scope, r.line, r.fingerprint) for r in scan_source(source)],
+            [
+                ("python-rc", "<module>.case", 3, "b7bd060d41b0b11390f8:1"),
+                ("python-rc", "<module>.case", 4, "8a611314b9a6a16c2939:1"),
+                ("timeout-group", "<module>.case", 4, "8a611314b9a6a16c2939:1"),
+            ],
+        )
+
     def test_fu144_census_includes_imported_helpers(self):
         tests = self.project_dir / ".claude/scripts/tests"
         tests.mkdir(parents=True)

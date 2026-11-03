@@ -182,9 +182,23 @@ if [ -f "$WORKROOT/.c3log" ] && ! grep -q MISMATCH "$WORKROOT/.c3log"; then
 else
   bad "C.3 hasher-alone parity (see $WORKROOT/.c3log)"
 fi
-# Guard grep (C.3): both helpers are in the canonical guard list.
-if grep -q "_hash_lib.sh" "$SOURCE_DIR/.claude/hooks/check_canonical_edit.py" \
-   && grep -q "_framework_manifest_set.sh" "$SOURCE_DIR/.claude/hooks/check_canonical_edit.py"; then
+# Guard check (C.3): both helpers are canonical. Asked of the hook's OWN
+# classification oracle (`--is-canonical`, the single source of truth), never
+# a grep of the hook's text: the W6I decomposition moved `_CANONICAL_GUARDS`
+# out of check_canonical_edit.py into _lib/canonical_edit/guards.py, and the
+# old literal grep went red on a tree where both helpers were still guarded
+# (S366 nightly). An oracle that cannot load its guard list answers 0, and a
+# nonzero exit empties the answer, so both stay a FAIL here. The oracle reports
+# a per-path classifier FAULT as 1, so this test file (never canonical) rides
+# along as a negative control and must answer 0 — an oracle answering 1 for
+# everything cannot pass. Here-strings, not `printf | grep -q` (C.2's rule).
+_c3_tab="$(printf '\t')"
+_c3_oracle="$( cd "$SOURCE_DIR" && CLAUDE_PROJECT_DIR="$SOURCE_DIR" python3 .claude/hooks/check_canonical_edit.py \
+  --is-canonical scripts/_hash_lib.sh scripts/_framework_manifest_set.sh \
+  scripts/tests/test_install_baseline_manifest.sh 2>/dev/null )" || _c3_oracle=""
+if grep -qxF "scripts/_hash_lib.sh${_c3_tab}1" <<<"$_c3_oracle" \
+   && grep -qxF "scripts/_framework_manifest_set.sh${_c3_tab}1" <<<"$_c3_oracle" \
+   && grep -qxF "scripts/tests/test_install_baseline_manifest.sh${_c3_tab}0" <<<"$_c3_oracle"; then
   ok "C.3 both helpers added to _CANONICAL_GUARDS"
 else
   bad "C.3 canonical guard entries missing"

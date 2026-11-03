@@ -11,6 +11,7 @@ import ast
 import hashlib
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, NamedTuple, Optional
 
@@ -22,6 +23,19 @@ TEST_ROOTS = (
 KINDS = ("python-rc", "timeout-group")
 SCOPE_TYPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 GROUP_HELPER = ".claude/scripts/tests/_subprocess_helpers.py"
+# The fingerprint is persisted in the baseline, so it must not depend on the
+# interpreter that computes it. Python 3.13 changed `ast.dump`'s DEFAULT output
+# (new `show_empty=False` drops empty lists such as `keywords=[]`); passing
+# `show_empty=True` restores the <=3.12 shape. Without it a baseline written on
+# 3.9-3.12 reads as 95 "new" sites on 3.13/3.14 (S366, nightly py3.14 red).
+# test_fu144_fingerprint_is_interpreter_stable pins golden digests on every
+# matrix interpreter, so the next drift fails by name instead of as a ratchet.
+_DUMP_OPTS = {"show_empty": True} if sys.version_info >= (3, 13) else {}
+
+
+def call_digest(call: ast.Call) -> str:
+    dump = ast.dump(call, include_attributes=False, **_DUMP_OPTS)
+    return hashlib.sha256(dump.encode()).hexdigest()[:20]
 
 
 class Finding(NamedTuple):
@@ -173,7 +187,7 @@ def scan_source(source: str, path: str = "test_example.py") -> List[Finding]:
             kinds = _classify(call, nodes, parents, aliases, assignments)
             if not kinds:
                 continue
-            digest = hashlib.sha256(ast.dump(call, include_attributes=False).encode()).hexdigest()[:20]
+            digest = call_digest(call)
             occurrences[digest] = occurrences.get(digest, 0) + 1
             fingerprint = f"{digest}:{occurrences[digest]}"
             for kind in kinds:
