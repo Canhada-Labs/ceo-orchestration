@@ -9,11 +9,463 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > commands, schema/contract changes, and behavior an adopter would notice after
 > installing or upgrading the framework. Internal refactors, test-only churn, and
 > release-engineering bookkeeping are omitted. Counts cited below (as of
-> v1.4.3: 166 skills, 27 slash commands, 201 ADRs, 78 `_lib` modules) are
+> v1.4.4: 166 skills, 27 slash commands, 201 ADRs, 78 `_lib` modules) are
 > reproducible from the repository via
 > `bash .claude/scripts/local/verify-counts.sh`.
 
 ---
+
+## [1.4.4] - 2026-11-03
+
+Maintenance release (PLAN-198). **v1.4.3 never reached npm.** Only
+`v1.4.3-rc.1` was tagged (2026-10-17) and published on GitHub as a
+pre-release. The npm workflow does not publish an rc tag, and no v1.4.3 GA
+was cut, so npm `latest` was still 1.4.2 when this entry was written
+(2026-11-03). The `[1.4.3]` entry below stays as written: it describes the
+rc.1 tree only. This entry covers the whole train since v1.4.2: everything
+in `[1.4.3]` is part of this release, together with the changes below.
+Coming from v1.4.2, read both entries.
+
+The requirements do not change from v1.4.2: Claude Code 2.1.280 or later,
+Python 3.9 or later, and Node.js 20 or later for the npm shim. `install.sh`,
+`upgrade.sh` and the settings templates are unchanged since v1.4.3-rc.1;
+the `--harness codex` helper that `install.sh` sources changed (below).
+What changes for an install, on top of `[1.4.3]`:
+
+- A new scan in the Bash guard blocks a destructive command that is reached
+  indirectly, on by default (PLAN-195, ADR-201).
+- Several of the largest hooks and scripts become thin entry points over
+  modules under `.claude/hooks/_lib/` (PLAN-197, ADR-202). A hook you
+  patched by hand must be patched again in its module.
+- A registered hook no longer drains the audit spool at exit (a partial
+  cure).
+- The model checks accept model families, among them other vendors' ids
+  and retired ids, and the Codex pin check accepts a newer Codex CLI on a
+  version floor, without a matching hash (Security and governance, below).
+- The secret redactor that the Codex and Grok egress uses no longer cuts
+  the text at offsets taken from its NFKC form, a defect present since
+  v1.0.0. Its `scan()` offsets now index the text passed in (Fixed,
+  below).
+- The kernel's hard-deny list covers the code that moved out of seven
+  kernel entry points, five flat modules that kernel code calls, and the
+  live-adapter package (Fixed, below).
+- Fixes to backup and restore, to `audit-verify-chain.py
+  --strict-against-counter`, to the harness gate, to the plan-lifecycle
+  hook and to the cost-envelope hook, and three findings of the
+  v1.4.3-rc.1 re-pass.
+
+The honest part: most of this train after v1.4.3-rc.1 reached `main`
+through two pull-request merges, without the signing ceremony. They
+changed 233 canonical paths, 15 of them kernel paths by the list as
+merged, and with them the meaning of three governance checks: the VETO
+floor, the model allowlist and the Codex pin. All of this is stated below
+and declared in Known-open, with no release assigned to its cure. Two
+defects found while this release was prepared are fixed in it: the
+kernel's hard-deny list had not followed the code that moved out of seven
+kernel entry points, and the secret redactor, since v1.0.0, cut the text
+at offsets taken from its normalized form. One condition of the redactor
+fix is declared in Known-open. The spool cure is partial, and the new
+guard's false-positive limits were never measured on this implementation.
+No speed claim.
+
+### Added — a Bash guard against indirect execution, on by default (PLAN-195, ADR-201)
+
+- After its existing checks, `check_bash_safety.py` runs one bounded scan
+  (`_lib/bash_indirect_guard.py`). The scan looks for `rm -rf`,
+  `git reset --hard` or a forced `git push` reached indirectly:
+  - inside `sh -c`, `eval` or a here-doc;
+  - behind a known launcher;
+  - through a computed command name;
+  - in a program fed by a pipe, a redirect, a descriptor or a process
+    substitution.
+- It also blocks a computed write when it resolves the target from the
+  command text to a canonical path.
+- It only adds blocks; an earlier BLOCK stays BLOCK. Its reason codes are
+  `bash_indirect_*` and `bash_computed_canonical_target`.
+- It fails closed on a recognized shell body it cannot parse, and at its
+  depth, size and word limits.
+- Two switches control it. Both are on unless set to `0` in the
+  environment Claude Code starts with:
+  - `CEO_BASH_INDIRECT_GUARD=0` turns off the scan;
+  - `CEO_BASH_INDIRECT_HEURISTICS=0` turns off only the computed-verb and
+    opaque-feeder forms.
+- An explicit disable writes at most one `learning_rail_disabled` event per
+  session and switch.
+
+### Changed — `SPEC/v1/audit-log.schema.md`: two closed enums gain values
+
+- `learning_rail_disabled.rail` gains `bash_indirect`, and `.switch` gains
+  the two switch names above. No event and no field is added. A consumer
+  that pins the old enum lists rejects the new values.
+- The row's prose still calls ADR-201 `PROPOSED`; the ADR is `ACCEPTED`.
+
+### Changed — hooks and scripts split into modules (PLAN-197, ADR-202)
+
+- Entry points keep their paths and their observable contracts. Their
+  implementations move into packages under `.claude/hooks/_lib/`. For
+  example, `_lib/audit_emit.py` goes from 14,522 lines to 496, and
+  `check_bash_safety.py` becomes a 42-line entry point. Among the scripts,
+  `audit-query.py`, `check_contamination.py` and
+  `check-installer-write-safety.py` move the same way.
+- Installs and upgrades receive the packages: the installer copies every
+  `_lib` entry except the test harness. On the merge of pull request #7,
+  the Smoke Install push run passed; a manually dispatched run was
+  cancelled.
+- If you patched a hook by hand, the entry point no longer holds the logic.
+  Re-apply the patch to the module.
+- The compatibility evidence is the test suites. No differential replay
+  against the code before the split is claimed.
+
+### Changed — a registered hook leaves its spool work pending at exit (ADR-055-AMEND-4, partial)
+
+- `_python-hook.sh` exports `CEO_HOOK_BOUNDED_EXIT=1`. A hook that runs
+  with it does not drain its audit spool at exit or on a signal. It leaves
+  an `exit_deadline_skip` breadcrumb instead, and its events wait in the
+  spool for a later drain, so they can reach the log later.
+- This removes the forced exit drain that could outlast a hook's timeout.
+- ADR-055-AMEND-4 is `ACCEPTED` with its implementation `PARTIAL`
+  (Known-open).
+
+### Security and governance — what changed without the signing ceremony
+
+- **How it arrived.** Pull requests #6 and #7 brought 233 canonical paths
+  into `main` with no sentinel and no signature file. Fifteen of them are
+  kernel paths by the kernel list as merged: among them the Bash-guard,
+  canonical-edit, pair-rail, policy and audit-writer hooks, the
+  agent-frontmatter VETO validator, the Codex pin file, the framework's own
+  settings and `validate.yml`. By the list this release restores (Fixed,
+  below), 101 of them are. The merge commit of #7 carries a GPG signature,
+  which is not the signing ceremony. No signed sentinel ratifies those
+  files as of this entry, and nothing in the repository requires one:
+  `main` has no branch protection and no ruleset (measured through the
+  GitHub API on 2026-11-03).
+- **The VETO floor moved from a closed list to family patterns.**
+  - Before, an agent file with `veto_floor: true` had to declare one of
+    four Owner-signed Claude ids.
+  - Now `agent_frontmatter.py` and `escalation_signals.py` also accept any
+    id that matches the families in `_lib/model_currency.py`: Claude Opus
+    majors 4 to 9, `gpt-5` to `gpt-9` and `o3` to `o9`, with numeric and
+    lowercase-word suffixes.
+  - The predicate refuses only the alias `claude-opus-4-1`. It admits ids
+    that the deprecation ledger (`.claude/scripts/model-deprecations.json`)
+    lists as retired or retiring, among them dated Claude Opus 4 and 4.1
+    ids, `gpt-5`, `gpt-5-mini`, `o3`, `o3-mini` and `o4-mini` (probed on
+    2026-11-03).
+  - The docstring of `agent_frontmatter.py` still describes the closed
+    list.
+- **The model allowlist moved to wider family patterns.**
+  - Before, the settings-tamper detector, the agent `model:` check of
+    `validate-governance.sh` and the tier-policy loader accepted only an
+    exact member of a closed list.
+  - Now all three call `is_allowed_model` in `_lib/model_currency.py`
+    (ADR-149 Amendment 4). Besides the listed ids, it admits Claude Opus,
+    Sonnet and Haiku majors 4 to 9, `gpt-5` to `gpt-9`, `o3` to `o9`,
+    `gemini-2` to `gemini-9` and `grok-3` to `grok-9`, with numeric and
+    lowercase-word suffixes.
+  - It refuses only the alias `claude-opus-4-1`, so ids that the
+    deprecation ledger lists as retired pass, among them
+    `claude-sonnet-4-20250514` and `claude-opus-4-1-20250805` (probed on
+    2026-11-03).
+  - So `settings_tamper_model_remap`, which `/ceo-boot` reports, no longer
+    flags a model variable (`ANTHROPIC_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`
+    or an `ANTHROPIC_DEFAULT_*` key) set to such an id, for example
+    `gemini-2.5-pro` or `grok-4`, in the environment or in a settings
+    `env` block. An agent file with such a `model:` passes
+    `validate-governance.sh`.
+  - The shipped `availableModels` is unchanged.
+- **The Codex pin moved from an exact payload hash to a version floor.**
+  - Before, `check_pair_rail.py --verify-codex-pin` failed closed on any
+    Codex binary whose payload sha256 differed from the signed manifest,
+    which pins one binary of Codex CLI 0.160.0.
+  - Now a Codex CLI newer than the manifest version passes as
+    `compatible/version_floor_only` when a nearby `@openai/codex`
+    `package.json` declares a stable version at or above 0.160.0
+    (`_lib/cli_currency.py`). The payload's sha256 is still computed and
+    recorded, but on this route a mismatch with the manifest no longer
+    fails.
+  - The release gate follows: `validate-pair-rail-verdict.py` only checks
+    the format of the payload sha of a verdict that declares such a
+    version. Its range check reads the pin file; its payload-hash
+    exemption uses the code constant 0.160.0
+    (`cli_currency.CODEX_VERSION_FLOOR`).
+  - The ADR-182 amendment states the floor as `>=0.160.0`. The pin file
+    reads `>=0.128.0`, with no upper bound: a CI fix in the same pull
+    request lowered it after the amendment.
+  - The operating contract still says the reviewer is pinned by hash, not
+    by range. That no longer describes `main`.
+  - Installs do not receive `.claude/governance/`, so there the pin still
+    resolves as infrastructure and fails open (advisory). That is
+    unchanged.
+  - With `--harness codex`, the installer now prints that it was verified
+    against Codex CLI 0.160.0, while the hook fixtures date from 0.139.0.
+
+### Fixed — the kernel's hard-deny list covers the code the v1.4.4 split moved out of seven kernel entry points, five flat modules that kernel code calls, and the live-adapter package
+
+- The split (PLAN-197) moved the code of seven kernel entry points into
+  helper packages: five hooks (canonical edit, pair rail, agent spawn,
+  audit log and Bash safety) and two hook library modules (policy and
+  audit emit). The same train replaced the plan-path regexes of two
+  kernel files, the plan-lifecycle hook (`check_plan_edit.py`) and the
+  policy preprocessors (`_lib/policy_preprocessors.py`), with the
+  plan-path predicate in `_lib/plan_paths.py`. The kernel's hard-deny
+  list (`check_arbitration_kernel.py`) kept naming only the kernel files,
+  so the 81 files of those packages and the predicate were canonical
+  only: a signed sentinel could unlock them. The list now has a row for
+  each, so that code is hard-deny again, as it was inside the kernel
+  files in v1.4.2.
+- The list also enrolls four modules that kernel code calls, which were
+  canonical only as well: `_lib/model_currency.py`, the VETO-floor
+  predicate that the kernel files `agent_frontmatter.py` and
+  `escalation_signals.py` now call as part of their VETO-floor check; and
+  three modules this train added, `_lib/cli_currency.py` (the Codex
+  payload-pin currency check, called by the pair-rail code),
+  `_lib/bash_indirect_guard.py` (the indirect-execution matcher) and
+  `_lib/bash_indirect_telemetry.py` (its disabled-rail telemetry), both
+  called by the Bash guard's code.
+- The live-adapter package (`_lib/adapters/live/`, 11 files: the ADR-040
+  provider adapters, off by default), which the kernel
+  `_lib/adapters/__init__.py` loads, was canonical only as well, since
+  v1.0.0. It is now enrolled in the kernel, so an edit to it goes through
+  the kernel override like an edit to any kernel file.
+- The list now has one recursive row per package (the seven helper
+  packages and `adapters/live/`), so a file added there later is a kernel
+  path too, and one row for each of the five flat modules: 13 new rows,
+  and 125 tracked kernel files become 222.
+- A new test (`tests/test_kernel_decomposition_coverage.py`) derives from
+  the code each helper package below `_lib/` that a kernel source reaches
+  by an import statement or by a `/` chain of string literals, and checks
+  that each one is kernel in full, with a positive control on the known
+  packages. It also checks that each of the five flat modules is kernel
+  and still imported by a kernel source. Dropping any one of the 13 new
+  rows turns it red.
+- No tag shipped the gap this train opened: none of the seven packages
+  and five flat modules existed at v1.4.2 or v1.4.3-rc.1.
+- The fix is a commit the maintainer signed, after review by two Claude
+  refuters and Codex. No sentinel file covers it.
+
+### Fixed — the secret redactor's offsets after an NFKC-changing character (present since v1.0.0)
+
+- `scan()` in `_lib/secret_patterns.py` matched the NFKC-normalized view
+  of a text but reported offsets in that view, while `redact()` and
+  `scan_and_redact()` cut the original text with them. A character whose
+  NFKC form has another length (an ellipsis, a ligature) before a secret
+  shifted the cut, so part or all of the secret could survive next to its
+  label. The Codex and Grok egress redactor (`_lib/codex_egress_redact.py`)
+  uses these functions. Every release since v1.0.0 has the defect.
+- `scan()` now reports offsets in the text passed in. It matches that text
+  and its NFKC view, maps the view's matches back, and merges overlapping
+  findings into one span. The output is the original text with only those
+  spans replaced; no normalized character reaches it.
+- The pattern catalog is unchanged.
+- The fix is a commit the maintainer signed, after review by Codex and two
+  Claude refuters over several rounds.
+  Codex approved it with one condition, which predates the fix and is
+  declared in Known-open. No sentinel file covers it.
+
+### Fixed — backup and restore
+
+- `ceo-backup.sh` archives only the regular files of `memory/`; a link
+  there is left out.
+- `ceo-restore.sh`:
+  - checks every archive member before extraction (`_restore_archive.py`):
+    no links, no absolute paths, no `..`, no name outside the layout, and
+    never `audit-key` or `.salt`;
+  - resolves `--dest` physically and refuses a link, or a file, as the
+    destination;
+  - refuses a restore target that is a link or sits under one;
+  - runs the same checks in the preview and in the apply.
+- The disaster-recovery and incident-response guides no longer pass
+  `--dry-run`, a flag the script refuses. The preview is the default, and
+  `--apply` restores.
+
+### Fixed — `audit-verify-chain.py --strict-against-counter`
+
+- With the flag, every result maps to a documented exit code with a named
+  reason, one JSON object under `--json`, and no traceback.
+- An absent counter exits 0 and reports `chain_length_source: "absent"`.
+  An unreadable counter exits 3.
+- A file and stdin go through one strict decode, and a log that is not a
+  regular file is refused.
+- Without the flag, nothing changes.
+
+### Fixed — three findings of the v1.4.3-rc.1 re-pass
+
+- `diagnose-output-hook.py` can no longer write to the live audit log.
+- `check-audit-real-loss.py` reports a malformed `record_id` instead of
+  crashing.
+- `audit_spool_state.py` and `check-audit-real-loss.py`, both read-only,
+  stop writing bytecode.
+
+### Fixed — harness gate, root `CLAUDE.md` exclusion, plan lifecycle, cost envelope
+
+- `check-active-hooks-executable.py` validates a hook's `type` and
+  `matcher` the way the loader does. A settings path that exists but is
+  not a regular file, and a filesystem error while resolving a hook path,
+  exit 2 with a named error.
+- `check_harness_config.py` turns an exception in that sub-check into a
+  RED finding and keeps its output. Before, it was a degraded warning,
+  which reads as green.
+- A `claudeMdExcludes` value that excludes the root `CLAUDE.md` is
+  classified as settings tamper (`settings_tamper_claude_md_excludes_root`).
+- The harness gate adds an advisory finding, `root_instruction_load`. It
+  reports `root_load_unobservable` unless you pass a complete list of the
+  loaded instruction files with `--instruction-load-evidence`.
+- The plan-lifecycle hook recognizes `PLAN-NNN-FOLLOWUP-<slug>.md` names
+  (`_lib/plan_paths.py`).
+- `check_cost_envelope.py` evaluates nothing, and records no spend, without
+  an absolute `CLAUDE_PROJECT_DIR`. Before, it fell back to the current
+  directory.
+
+### Changed — `/ceo-boot` and other files that reach installs
+
+- `/ceo-boot` adds `main_checkout_state`. It is yellow, never red, when the
+  main checkout is off its default branch or on a detached HEAD.
+- The installer copies every top-level `.claude/scripts/*.py`, so six new
+  maintenance helpers reach installs: `_contamination_inventory.py`,
+  `_repin_guard.py`, `_restore_archive.py`, `_subprocess_census.py`,
+  `caller_repo_guard.py` and `check-subprocess-tests.py`. `ceo-restore.sh`
+  uses `_restore_archive.py`.
+
+### Changed — the framework's own CI and release (no installed file changes)
+
+- `scripts/install-npm.sh`, the local packaging check, reads the
+  `npm pack --json` output of npm 12.2 and later, which keys the record by
+  package name. Publishing still pins npm 11.20.0.
+- CI runs on GitHub-hosted runners. The repository variable
+  `VM_CI_ENABLED` is unset, so the self-hosted route that `[1.4.3]`
+  describes is off (measured 2026-11-03).
+- Release automation for the maintainer's Mac: `make mac-sign-merge`,
+  `make mac-cut-rc` and `make mac-cut-ga`.
+- Two red nightly runs on the merge of pull request #7 are cured:
+  - The subprocess census fingerprint pins `ast.dump(..., show_empty=True)`
+    on Python 3.13 and later, so a baseline recorded on 3.9 to 3.12 no
+    longer reads as phantom sites on 3.13 and 3.14. The push run of
+    `validate.yml` has no 3.14 leg; the scheduled run on that commit
+    passed on 2026-11-03, its Python 3.14 leg included.
+  - The ownership e2e check C.3 finds the canonical guards through the
+    `--is-canonical` oracle, with a never-canonical negative control,
+    instead of grepping the hook text.
+- The Coverage job's timeout rises from 35 to 50 minutes. The scheduled
+  job ran 34 min 36 s on 2026-11-02 and was cancelled at 35 min 05 s on
+  2026-11-03, and a cancelled run on `HEAD` blocks the release preflight.
+- `REVIEW.md` is added to the framework repository, and its existing
+  pull-request template gains prompts for the literal output of the test
+  plan, for the canonical or kernel files touched, and for how to revert.
+
+### Known-open (declared by this release)
+
+- **The Tier-1 coverage gate and the `mcp-smoke.yml` path filters still
+  name only the entry points.** The coverage gate measures the entry-point
+  files, not the packages that hold the logic. The `mcp-smoke.yml` push and
+  pull-request filters name the entry points, not the split's packages;
+  its daily scheduled run still runs. No release is assigned to its cure
+  yet.
+- **The pair-rail inputs-hash manifest lists the entry points only.** The
+  inputs hash that the release workflow recomputes does not cover the
+  packages behind them. No release is assigned to its cure yet.
+- **The VETO floor admits retired ids** (Security and governance, above).
+  No release is assigned to its cure yet.
+- **The model allowlist admits other vendors' ids and retired ids**
+  (Security and governance, above). The settings-tamper detector
+  (`settings_tamper_model_remap`), the agent `model:` check and the
+  tier-policy loader no longer flag an id of the admitted families,
+  Gemini, Grok and retired Claude 4 ids among them. No release is assigned
+  to its cure yet.
+- **The Codex pin.** A newer Codex CLI passes on its declared version
+  alone, the pin file's floor and the ADR-182 amendment disagree, and the
+  verdict validator does not bind a declared version to its payload hash.
+  The hook fixtures for Codex as a hook host still date from 0.139.0. No
+  release is assigned to its cure yet.
+- **Files merged without the signing ceremony.** The 233 canonical paths
+  that pull requests #6 and #7 brought, the kernel paths among them, are
+  covered by no signed sentinel, and `main` has no protection that would
+  prevent a repeat. No release is assigned to its cure yet.
+- **The audit spool.** The exit-drain change is partial: per-process files
+  remain, part of the planned cure is pending, and its stress run is not
+  complete. Whether every skipped event is collected later is not proven.
+  No release is assigned to its cure yet.
+- **The new Bash guard.** Its replay acceptance against the historical
+  command corpus, the private vocabulary row and the OS-sandbox
+  measurements did not run on this implementation. No release is assigned
+  to its cure yet.
+- **Backups and restore.** The key material (`audit-key`, `.salt`) is
+  still not archived. A restore with no `.sha256` file proceeds with a
+  warning. Without `--dest`, an applied restore overwrites the live audit
+  logs while the chain-state files next to them stay as they were. No
+  release is assigned to its cure yet.
+- **The redactor runs before parsing on the way in.** The ingress path
+  redacts the raw answer text before parsing it, so a redaction can change
+  whether an answer parses. This predates the redactor fix above. Its
+  structural cure, redacting the decoded values after parsing, is scheduled
+  for the next release.
+
+### Known-open (carried — NOT cured by this release)
+
+- **The v1.4.0 annex.**
+  - The signed v1.4.0 verdict carries an annex of P1 findings and declared
+    conditions. v1.4.3-rc.1 retired signed condition 67, and that cure is
+    part of this release.
+  - This release does not claim the cure of any other annex condition. The
+    partial spool change above is not claimed as one.
+  - **The rest stays open, and no release is assigned to their cure.**
+  - The list is in the sources the `[1.4.2]` entry names.
+- **The v1.4.2 rc.1 annex.** This release does not claim the cure of its
+  three P1 findings or of its P2 findings, declared in the `[1.4.3]` entry.
+- **The rest of the `[1.4.3]` Known-open stays open as written there**,
+  except where this release changes it:
+  - the restore and strict-mode defects (above; the restore defects
+    partly);
+  - the harness sub-check gaps and the sub-check delegation (above; the
+    sub-check partly);
+  - the plan-lifecycle names and the cost-envelope directory (above);
+  - the Bash guard's indirect-execution case (above, partly);
+  - the root `CLAUDE.md` exclusion (above, partly);
+  - the audit spool (above, partly);
+  - the Codex pin and Codex as a hook host (Security and governance,
+    above, partly): a Codex CLI newer than the manifest version now passes
+    on its declared version without a re-pin, and the pin range, which
+    admitted up to 0.160.x, has no upper bound.
+- **Audit files can be deleted by Claude Code.** Claude Code's cleanup
+  sweep unlinks every top-level `*.jsonl` in each project directory that is
+  older than the `cleanupPeriodDays` of the session running the sweep
+  (default 30), the audit logs and their rotated archives included. There
+  is no plan in this release with a structural cure. The maintainer settings
+  template still ships 90; the framework repository's own settings now use
+  3650, and installs do not receive that file. The protection is still a
+  scheduled backup with `ceo-backup.sh`.
+
+### What an adopter should know before installing or upgrading
+
+- Coming from v1.4.2, read `[1.4.3]` too. Its notes apply.
+- The requirements are unchanged: Claude Code 2.1.280 or later, Python 3.9
+  or later, and Node.js 20 or later for the npm shim.
+- A command that reaches `rm -rf`, `git reset --hard` or a forced
+  `git push` indirectly may now be blocked, and so may a shell body the
+  guard cannot parse. To turn the scan off, set
+  `CEO_BASH_INDIRECT_GUARD=0`, or only the heuristics with
+  `CEO_BASH_INDIRECT_HEURISTICS=0`, in the environment Claude Code starts
+  with. Each disable is recorded once per session.
+- If you patched a hook by hand, re-apply the patch to its module. The
+  modules behind the seven kernel entry points, the five flat modules
+  above and `_lib/adapters/live/` are kernel paths now: a sentinel alone
+  no longer unlocks them; they need `CEO_KERNEL_OVERRIDE` with
+  `CEO_KERNEL_OVERRIDE_ACK=I-ACCEPT`.
+- If your code reads `Finding.start` and `Finding.end` from
+  `secret_patterns.scan()`, they now index the text you passed in, not its
+  NFKC form.
+- Expect a yellow `main_checkout_state` in `/ceo-boot` when your main
+  checkout is on a feature branch.
+- `ceo-restore.sh` previews by default; pass `--apply` to restore. Keep your
+  own copy of `audit-key` and `.salt`, because the backup leaves them out.
+- The VETO floor now admits retired model ids. If your veto roles must not
+  run on them, check the `model:` of your agent files yourself.
+- The model allowlist now admits other vendors' ids (Gemini, Grok) and
+  retired Claude 4 ids. `/ceo-boot` no longer reports a model variable set
+  to one of them as `settings_tamper_model_remap`, and `validate-governance.sh`
+  accepts such a `model:` in an agent file. If you rely on that tamper
+  finding, check the model variables of your settings yourself.
+- If you rely on the audit trail for longer than 30 days, raise
+  `cleanupPeriodDays` at user scope and back up the audit files.
 
 ## [1.4.3] - 2026-10-15
 
