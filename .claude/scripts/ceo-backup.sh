@@ -273,9 +273,11 @@ fi
 # Manifest of what's in the tarball
 ( cd "$STAGE_DIR" && find . -type f | sort > MANIFEST.txt )
 
-# Tar
+# Tar.  COPYFILE_DISABLE=1 stops macOS tar (bsdtar) from writing an
+# AppleDouble member `._<name>` before every entry that carries extended
+# attributes; GNU tar does not read the variable, so Linux is unchanged.
 ARCHIVE_PATH="$BACKUP_DIR/$ARCHIVE_NAME"
-( cd "$STAGE_DIR" && tar -czf "$ARCHIVE_PATH" . )
+( cd "$STAGE_DIR" && COPYFILE_DISABLE=1 tar -czf "$ARCHIVE_PATH" . )
 
 # Sidecar SHA256
 SHA_PATH="$ARCHIVE_PATH.sha256"

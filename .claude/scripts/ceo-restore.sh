@@ -228,7 +228,10 @@ if [ "$RESTORE_AGENT_METRICS" -eq 1 ] || [ "$RESTORE_PLANS" -eq 1 ]; then
 fi
 STAGE_DIR="$(mktemp -d -t ceo-restore-XXXXXX)"
 trap 'rm -rf "$STAGE_DIR"' EXIT
-tar -xzf "$TARBALL" -C "$STAGE_DIR" --no-same-owner --no-same-permissions
+# The validator writes ONLY the members it accepted (never `tar -x` of the
+# whole archive): a skipped macOS AppleDouble member `._<name>` never lands
+# on disk, in the preview or in the apply.
+python3 "$ARCHIVE_VALIDATOR" "$TARBALL" "$STAGE_DIR" || exit 2
 if find "$STAGE_DIR" -type l -print -quit | grep -q .; then
   echo "fatal: archive contains symbolic links" >&2
   exit 2
