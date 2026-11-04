@@ -20,8 +20,11 @@
 #   E2. âncoras: todas PASS no HEAD; na árvore da v1.4.2 com o CHANGELOG do HEAD
 #       sobreposto, a parte de TEXTO passa em todas e a de CÓDIGO falha nas
 #       esperadas, cada uma nomeando o motivo esperado (ccfloor e annex passam por
-#       desenho); na v1.4.2 pura, toda parte de texto falha; o --verify no HEAD SEM
-#       o patch falha; a âncora cond67 reprova um append_entry sintético de duas travas;
+#       desenho); na v1.4.2 pura, toda parte de texto falha; no HEAD com o CHANGELOG de
+#       PRE_C58 (antes da condição 58 na [1.4.4]), só o texto de kernelfix, redactor,
+#       annex e do parágrafo 5 falha; a âncora redactor reprova um envelope da v1.4.0
+#       com a condição 58 renumerada; o --verify no HEAD SEM o patch falha; a âncora
+#       cond67 reprova um append_entry sintético de duas travas;
 #   E3. derivação idempotente (duas vezes): o mesmo patch, byte a byte o commitado;
 #   E4. num clone com `git apply --index relmeta.patch`, cada linha hard dos
 #       dados, em ordem, sai rc 0 (pytest com resumo só de aprovados), e os
@@ -119,6 +122,8 @@ ENTRADA=.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
 NUCLEO=.claude/plans/PLAN-194/sign-min/sign_min.py
 BASE_TAG=v1.4.2
 BASE_SHA=b55084da6dd8e4a05fc9893b2690df8aebcfd0ca
+# o commit antes do que nomeia a condição 58 na [1.4.4] do CHANGELOG (o controle dos parágrafos 5 e 7 da headline)
+PRE_C58=e85f7a7f435227e75da8d4a8968368dd43c7ccf7
 TARGET_BASE=1.4.4
 T_REL=.claude/scripts/local/release.sh
 T_MAN=.claude/governance/gate-scripts-manifest.txt
@@ -428,6 +433,63 @@ p = sys.argv[1]
 if os.path.basename(p) != "base" or os.path.islink(p):
     sys.exit(1)
 shutil.rmtree(p)' "$RUN/base"
+# os parágrafos 5 e 7 da headline, que a condição 58 mudou: o HEAD com o CHANGELOG de PRE_C58 (o
+# commit antes do que nomeia a condição 58 na [1.4.4]) reprova só as partes de TEXTO de kernelfix,
+# redactor, annex e do parágrafo 5, cada uma pelo motivo dela; as de CÓDIGO passam todas
+E git clone -q --no-hardlinks "$WORK" "$RUN/c58"
+E git -C "$RUN/c58" checkout -q --detach "$MAT"
+G show "$PRE_C58:CHANGELOG.md" >"$RUN/c58/CHANGELOG.md"
+E python3 "$WORK/$APPLY_REL" --repo "$RUN/c58" --claims-only >"$LOGS/claims-pre-c58.out" 2>&1 && C58=0 || C58=$?
+E python3 - "$LOGS/claims-pre-c58.out" >"$LOGS/red-check-c58.out" 2>&1 <<'PY' && RC58=0 || RC58=$?
+import re, sys
+esperado = {
+    "kernelfix": ["the preparation of this release found that the kernel's hard-deny list"],
+    "redactor": ["which the signed v1.4.0 verdict had declared as its condition 58",
+                 "The signed v1.4.0 verdict declared this defect as its condition 58."],
+    "annex": ["diz NOT cured sobre o anexo da v1.4.0",
+              "nao diz 'Signed condition 58 is the redactor offsets defect fixed above.'"],
+    "paragrafos": ["paragrafo 5 da headline: a secao [1.4.4] nao diz \"Two of the defects this release fixes:"],
+}
+txt = open(sys.argv[1], encoding="utf-8").read()
+blocos = re.findall(r"(?m)^(PASS|FAIL)  \[([a-z0-9]+)\][^\n]*\n      codigo: (PASS|FAIL) — ([^\n]*)\n      texto:  (PASS|FAIL) — ([^\n]*)$", txt)
+assert len(blocos) == 17, len(blocos)
+for geral, chave, cod, cdet, tex, tdet in blocos:
+    assert cod == "PASS", (chave, "codigo", cdet)
+    if chave in esperado:
+        assert tex == "FAIL" and all(m in tdet for m in esperado[chave]), (chave, tdet)
+    else:
+        assert tex == "PASS", (chave, "texto", tdet)
+    print(chave, cod, tex)
+outros = re.findall(r"paragrafo (\d+) da headline", txt)
+assert outros == ["5"], outros
+PY
+check "E2: o HEAD com o CHANGELOG de ${PRE_C58:0:8}: rc=1; código PASS em todas; texto FAIL só em kernelfix, redactor, annex e no parágrafo 5, cada um pelo motivo dele (log: claims-pre-c58.out, red-check-c58.out)" \
+  eval '[ "$C58" = "1" ] && [ "$RC58" = "0" ]'
+# o acoplamento da âncora redactor com a condição 58: uma cópia do envelope da v1.4.0 com a
+# condição renumerada, num caminho fora da governança do clone, reprova; o envelope real passa
+E python3 - "$WORK/$APPLY_REL" "$RUN/c58" >"$LOGS/cond58-controle.out" 2>&1 <<'PY' && K58=0 || K58=$?
+import importlib.util, pathlib, sys
+s = importlib.util.spec_from_file_location("a", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+repo = pathlib.Path(sys.argv[2])
+src = (repo / m.V140_ENVELOPE).read_text(encoding="utf-8")
+old = "  - 58. **O redator de saída para o Codex aplica spans NFKC no texto original**"
+assert src.count(old) == 1
+dst = repo / "probe-c58" / "envelope-renumerado.md"
+dst.parent.mkdir()
+dst.write_text(src.replace(old, old.replace("58.", "59.", 1), 1), encoding="utf-8")
+real = m.code_redactor(repo)
+m.V140_ENVELOPE = str(dst.relative_to(repo))
+mut = m.code_redactor(repo)
+print("envelope real:", real); print("condicao renumerada:", mut)
+assert real == [], real
+assert len(mut) == 1 and "sem a condicao 58" in mut[0], mut
+PY
+check "E2: âncora redactor: o envelope da v1.4.0 com a condição 58 renumerada reprova; o real passa (log: cond58-controle.out)" [ "$K58" = "0" ]
+E python3 -I -B -c 'import os, shutil, sys
+p = sys.argv[1]
+if os.path.basename(p) != "c58" or os.path.islink(p):
+    sys.exit(1)
+shutil.rmtree(p)' "$RUN/c58"
 E bash -c "cd '$WORK' && python3 '$APPLY_REL' --repo=. --verify" >"$LOGS/verify-sem-patch.out" 2>&1 && VS=0 || VS=$?
 check "E2: --verify no HEAD SEM o patch: rc≠0, nomeando o release.sh que difere da re-derivação (log: verify-sem-patch.out)" \
   eval '[ "$VS" != "0" ] && grep -qF "release.sh na arvore difere da re-derivacao" "$LOGS/verify-sem-patch.out"'

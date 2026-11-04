@@ -273,17 +273,17 @@ python3 .claude/scripts/check-staleness.py >"$W/stale.out" 2>&1 \
 bash .claude/scripts/validate-governance.sh >"$W/governance.out" 2>&1 \
   || { tail -n 20 "$W/governance.out" >&2; die "validate-governance reprovou (log: $W/governance.out)"; }
 {
-  printf 'plan(%s): relmeta-144 — materiais do RM da v1.4.4, patch e sentinel derivados do HEAD\n\n' "$PLAN"
-  printf 'relmeta.patch e as linhas derivadas de relmeta-approved.md (Derivator-SHA256,\n'
-  printf 'Hard-SHA256, Derived-From, Scope-Derived e a seção do texto da tag), gerados por\n'
-  printf 'derive-relmeta144.sh num clone descartável sobre a base %s.\n' "$(git rev-parse --short=12 "$BASE_EFF")"
-  printf 'Escopo derivado de git log %s..HEAD (planos citados nos assuntos, inclusive os\n' "$BASE_TAG"
-  printf 'abandonados e os de fechamento; ADRs tocados): %s.\n\n' "$SCOPE"
-  printf 'Só caminhos de %s e o sentinel entram neste commit. A assinatura é o\n' "$D"
-  printf 'SIGN do molde sign-min (.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh com\n'
-  printf 'PLAN-198/relmeta/sign.tsv), cuja linha hard apply-relmeta144-edits.py --verify\n'
-  printf 're-deriva a partir das pré-imagens do Anchor e recusa escopo velho e lands depois\n'
-  printf 'destes materiais. O registro do rail vem depois do rail.\n\n'
+  printf 'plan(%s): relmeta-144 - release-metadata materials for v1.4.4, patch and sentinel derived from HEAD\n\n' "$PLAN"
+  printf 'relmeta.patch and the derived lines of relmeta-approved.md (Derivator-SHA256,\n'
+  printf 'Hard-SHA256, Derived-From, Scope-Derived and the tag-text section), written by\n'
+  printf 'derive-relmeta144.sh in a disposable clone on the base %s.\n' "$(git rev-parse --short=12 "$BASE_EFF")"
+  printf 'Scope derived from git log %s..HEAD (plans cited in the subjects, the abandoned\n' "$BASE_TAG"
+  printf 'and closing ones included; ADRs touched): %s.\n\n' "$SCOPE"
+  printf 'Only paths of %s and the sentinel enter this commit. The signature is\n' "$D"
+  printf 'the SIGN of the sign-min mold (.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh with\n'
+  printf 'PLAN-198/relmeta/sign.tsv), whose hard line apply-relmeta144-edits.py --verify\n'
+  printf 're-derives from the Anchor pre-images and refuses a stale scope and lands after\n'
+  printf 'these materials. The rail record comes after the rail.\n\n'
   printf 'Co-Authored-By: %s\n' "$COAUTHOR"
 } >"$W/commit-msg.txt" || die "não consegui escrever a mensagem do commit"
 git commit -q -F "$W/commit-msg.txt" || die "git commit falhou"

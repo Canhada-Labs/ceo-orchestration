@@ -6,9 +6,9 @@ Dados: .claude/plans/PLAN-198/relmeta/sign.tsv
 Molde: .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
 Patch: .claude/plans/PLAN-198/relmeta/relmeta.patch
 Control: .claude/plans/PLAN-198/relmeta/red-control.txt
-Derivator-SHA256: c26b4224477a83fd1ecc63239530f68fb0c493ed86e7184f473a680fa7ca4a2e
+Derivator-SHA256: ec4eaa77cc54cc6a4c93b72d13b92006547e81bb1e87387d5e94773374fe5679
 Hard-SHA256: 0f6861ad894337d2d712cda5c274832a606de6ca641336d101baf370b7a342db
-Derived-From: c04a773ce57391f5882115bf3f62ca9251432840
+Derived-From: c9798710208e15a17d4c53345a11cae9fada8dd5
 Scope-Derived: PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
 Patch-sha256: TO-FILL-BY-SIGN
 Rail-Record-sha256: TO-FILL-BY-SIGN
@@ -122,13 +122,14 @@ under .claude/hooks/_lib/ (PLAN-197, ADR-202): a hook patched by hand
 must be patched again in its module. A registered hook no longer
 drains the audit spool at exit, a partial cure.
 
-Two defects found while this release was prepared are fixed in it,
-each by a commit the maintainer signed, with no sentinel file. The
-kernel's hard-deny list had not followed the code that moved out of
-seven kernel entry points; that code is hard-deny again. The secret
-redactor that the Codex and Grok egress uses had, since v1.0.0, cut
-the text at offsets taken from its normalized form; its scan()
-offsets now index the text passed in.
+The preparation of this release found that the kernel's hard-deny
+list had not followed the code that moved out of seven kernel entry
+points; that code is hard-deny again. The secret redactor that the
+Codex and Grok egress uses had, since v1.0.0, cut the text at offsets
+taken from its normalized form, which the signed v1.4.0 verdict had
+declared as its condition 58; its scan() offsets now index the text
+passed in. Each of the two fixes is a commit the maintainer signed,
+with no sentinel file.
 
 The honest part: most of this train after v1.4.3-rc.1 reached main
 through two pull-request merges, without the signing ceremony; four
@@ -148,13 +149,14 @@ measured on this implementation, and the backup leaves out the key
 material. One condition of the redactor fix is declared too: the
 ingress path redacts the raw answer text before parsing it, so a
 redaction can change whether an answer parses; its structural cure
-is scheduled for the next release. Of the signed v1.4.0 annex only
-condition 67 is cured, and this release does not claim the cure of
-the three P1 findings of the signed v1.4.2-rc.1 annex. Claude Code's
-cleanup (cleanupPeriodDays, default 30) can still delete the audit
-logs, and no plan in this release carries a structural cure.
-Everything else that stays open is in the Known-open of the CHANGELOG
-entry.
+is scheduled for the next release. Of the signed v1.4.0 annex,
+conditions 67 and 58 are cured, and this release does not claim the
+cure of any other annex condition. This release does not claim the
+cure of the three P1 findings of the signed v1.4.2-rc.1 annex.
+Claude Code's cleanup (cleanupPeriodDays, default 30) can still
+delete the audit logs, and no plan in this release carries a
+structural cure. Everything else that stays open is in the
+Known-open of the CHANGELOG entry.
 
 No speed claim. See CHANGELOG.md [1.4.4].
 ```
@@ -187,7 +189,7 @@ GA) e na derivação; NÃO rodam no SIGN.
 | 2. gate do harness, condição 67 (da `[1.4.3]`) | `harness`, `cond67` | as fixtures do replay na pasta entregue, os grupos `harness-*` no teste histórico, C9 e o SIGN da W7a ancestrais, o resíduo da cerimônia `user` preso ao código e o gate no modo do CI na raiz verde; a fachada `audit_log.py` executa as partes de `_lib/_audit_log_parts/` e o único `append_entry` delas, em `rotation_storage.py`, lê o elo, grava a linha e atualiza o sidecar dentro de UM MESMO `with FileLock(paths["lock"], …)` (por AST); sentinel e `.asc` da cura e a condição 67 no envelope da v1.4.0-rc.1 |
 | 3. `defaultMode`, envelope de custo, correções (da `[1.4.3]`) | `defaultmode`, `cenv`, `fixes` | `DEFAULT_MODE_BASELINE="manual"` e as rotas do `install.sh`, o template `user` sem `permissions.defaultMode`; por AST, uma chamada `emit_generic("cost_envelope_capped", …)` com os 6 kwargs e nenhum template que registre o hook; `status.py`, `check-substrate-drift.py`, o `external_wait` hoje em `_lib/_ceo_boot_parts/` (que o `ceo-boot.py` instala) e o teste da ordem dos flags do `audit-query.py` |
 | 4. guarda de Bash, divisão em módulos, spool | `guard`, `split`, `spool` | a fachada `check_bash_safety.py` executa `posture_scan`, que importa `bash_indirect_guard`, lê os dois interruptores, só desliga a varredura com o valor `0` e, no ramo do acerto, devolve só `Decision(allow=False, …)` (por AST); ADR-201 presente; `check_bash_safety.py` com no máximo 100 linhas e `_lib/audit_emit.py` com no máximo 1000, os pacotes deles com módulos, ADR-202 presente; `_python-hook.sh` exporta `CEO_HOOK_BOUNDED_EXIT=1` e o `spool_writer.py` lê a variável e grava `exit_deadline_skip` |
-| 5. as duas correções | `kernelfix`, `redactor` | pelo predicado do kernel do HEAD, num processo próprio, todo arquivo rastreado dos 7 pacotes que receberam o código das fachadas do kernel e de `adapters/live/`, e os 5 módulos planos, são caminhos do kernel; o teste novo presente; o commit `161e1dc3` ancestral; `scan_and_redact`, num processo próprio, sobre um texto com uma reticência antes de um token de exemplo, devolve o texto com só o token trocado pelo rótulo; o redator de saída do Codex o chama; o commit `54bab3cc` ancestral |
+| 5. as duas correções | `kernelfix`, `redactor` | pelo predicado do kernel do HEAD, num processo próprio, todo arquivo rastreado dos 7 pacotes que receberam o código das fachadas do kernel e de `adapters/live/`, e os 5 módulos planos, são caminhos do kernel; o teste novo presente; o commit `161e1dc3` ancestral; `scan_and_redact`, num processo próprio, sobre um texto com uma reticência antes de um token de exemplo, devolve o texto com só o token trocado pelo rótulo; o redator de saída do Codex o chama; o commit `54bab3cc` ancestral; o envelope assinado da v1.4.0 traz a condição 58 com o título do defeito dos offsets |
 | 6. a parte honesta: os merges e as três checagens | `merges`, `models`, `codex` | pelos assuntos, 4 merges de pull request em `v1.4.2..v1.4.3-rc.1` e os #6 e #7 depois; nos caminhos que os dois trouxeram, 233 canônicos pelo oráculo do HEAD, 15 do kernel pela lista como mergeada e nenhum `.asc`; o `model_currency`, num processo próprio, admite os ids sondados (dois datados com a retirada no ledger, um de cada fornecedor externo) e os três chamadores o importam; o manifesto pina 0.160.0 por sha256 só para `aarch64-apple-darwin`, o corpo do pin é `>=0.128.0`, `CODEX_VERSION_FLOOR = "0.160.0"` e o resultado `version_floor_only` existe |
 | 7. o que fica declarado | `annex` | os envelopes da v1.4.0 e da v1.4.2-rc.1 presentes; o `ceo-backup.sh` sem `audit-key` nem `.salt` |
 
@@ -209,6 +211,12 @@ executa, e o rail a reproduz.
   pelo motivo dela; passam, por desenho, `ccfloor` (os requisitos não mudam: o código do piso é o mesmo) e
   `annex` (só presença de envelopes e um acoplamento com o `ceo-backup.sh`, verdes nas duas árvores).
 - A âncora `redactor` é uma sonda de runtime: na v1.4.2 o mesmo texto sai com o corte deslocado.
+- `--claims-only` na árvore dos materiais com o `CHANGELOG.md` de `e85f7a7f` (o commit antes do que nomeia a
+  condição 58 na `[1.4.4]`) sobreposto: a parte de CÓDIGO passa em todas as âncoras, e a de TEXTO falha só em
+  `kernelfix`, `redactor`, `annex` e no parágrafo 5 da pseudo-âncora `paragrafos`, cada uma pelo motivo dela (as
+  frases da headline sobre a condição 58 e sobre as curas do anexo da v1.4.0).
+- A âncora `redactor` contra uma cópia do envelope da v1.4.0 com a condição 58 renumerada: reprova (o envelope
+  real passa).
 - A âncora `cond67` contra um `append_entry` sintético que lê o elo sob uma trava e grava a linha e o sidecar
   sob outra: reprova (o mesmo `append_entry` com uma trava só passa).
 - A conferência de nomes do derivador contra uma cópia dele sem uma constante que ele lê: recusa, nomeando-a.

@@ -225,6 +225,8 @@ REDACTOR = ".claude/hooks/_lib/secret_patterns.py"
 EGRESS_REDACTOR = ".claude/hooks/_lib/codex_egress_redact.py"
 REDACTOR_FIX_COMMIT = "54bab3cc1a3b1e98117b707e3d435809e7149694"
 REDACTOR_TEST = ".claude/hooks/tests/test_secret_patterns.py"
+# a condicao 58 do envelope assinado da v1.4.0 e o defeito dos offsets que o 54bab3cc corrige
+COND58_DECL = "58. **O redator de saída para o Codex aplica spans NFKC no texto original**"
 # os merges de pull request da faixa: #6 e #7 depois da rc.1
 PR6_SHA = "d5e6d3885278611c7be58a4915a01d13259e9b46"
 PR7_SHA = "888e9e6ca0adc292faf9be33ed6223583e1d2118"
@@ -295,13 +297,14 @@ under .claude/hooks/_lib/ (PLAN-197, ADR-202): a hook patched by hand
 must be patched again in its module. A registered hook no longer
 drains the audit spool at exit, a partial cure.
 
-Two defects found while this release was prepared are fixed in it,
-each by a commit the maintainer signed, with no sentinel file. The
-kernel's hard-deny list had not followed the code that moved out of
-seven kernel entry points; that code is hard-deny again. The secret
-redactor that the Codex and Grok egress uses had, since v1.0.0, cut
-the text at offsets taken from its normalized form; its scan()
-offsets now index the text passed in.
+The preparation of this release found that the kernel's hard-deny
+list had not followed the code that moved out of seven kernel entry
+points; that code is hard-deny again. The secret redactor that the
+Codex and Grok egress uses had, since v1.0.0, cut the text at offsets
+taken from its normalized form, which the signed v1.4.0 verdict had
+declared as its condition 58; its scan() offsets now index the text
+passed in. Each of the two fixes is a commit the maintainer signed,
+with no sentinel file.
 
 The honest part: most of this train after v1.4.3-rc.1 reached main
 through two pull-request merges, without the signing ceremony; four
@@ -321,13 +324,14 @@ measured on this implementation, and the backup leaves out the key
 material. One condition of the redactor fix is declared too: the
 ingress path redacts the raw answer text before parsing it, so a
 redaction can change whether an answer parses; its structural cure
-is scheduled for the next release. Of the signed v1.4.0 annex only
-condition 67 is cured, and this release does not claim the cure of
-the three P1 findings of the signed v1.4.2-rc.1 annex. Claude Code's
-cleanup (cleanupPeriodDays, default 30) can still delete the audit
-logs, and no plan in this release carries a structural cure.
-Everything else that stays open is in the Known-open of the CHANGELOG
-entry."""
+is scheduled for the next release. Of the signed v1.4.0 annex,
+conditions 67 and 58 are cured, and this release does not claim the
+cure of any other annex condition. This release does not claim the
+cure of the three P1 findings of the signed v1.4.2-rc.1 annex.
+Claude Code's cleanup (cleanupPeriodDays, default 30) can still
+delete the audit logs, and no plan in this release carries a
+structural cure. Everything else that stays open is in the
+Known-open of the CHANGELOG entry."""
 
 # Uma frase da secao [1.4.4] por paragrafo da headline, NA ORDEM: o paragrafo
 # so existe se a entrada desta release diz o mesmo (as ancoras de cada
@@ -338,9 +342,10 @@ PARAGRAPH_LINKS = (
     "everything in `[1.4.3]` is part of this release",
     "A new scan in the Bash guard blocks a destructive command that is reached indirectly, on by "
     "default (PLAN-195, ADR-201).",
-    "Two defects found while this release was prepared are fixed in it: the kernel's hard-deny list "
-    "had not followed the code that moved out of seven kernel entry points, and the secret redactor, "
-    "since v1.0.0, cut the text at offsets taken from its normalized form.",
+    "Two of the defects this release fixes: the preparation of this release found that the kernel's "
+    "hard-deny list had not followed the code that moved out of seven kernel entry points; and the "
+    "secret redactor, since v1.0.0, cut the text at offsets taken from its normalized form, which "
+    "the signed v1.4.0 verdict had declared as its condition 58.",
     "The honest part: most of this train after v1.4.3-rc.1 reached `main` through two pull-request "
     "merges, without the signing ceremony.",
     "No release is assigned to its cure yet.",
@@ -757,11 +762,16 @@ def _changelog_sections(repo: pathlib.Path) -> Dict[str, str]:
 
 
 def _known_open_subsections(sec: str) -> List[str]:
+    return [corpo for _cab, corpo in _known_open_headed(sec)]
+
+
+def _known_open_headed(sec: str) -> List[Tuple[str, str]]:
+    """(cabecalho, corpo) de cada subsecao Known-open da secao."""
     subs = []
     for ko in re.finditer(r"(?m)^###[^\n]*Known-open[^\n]*\n", sec):
         tail = sec[ko.end():]
         nxt = re.search(r"(?m)^#{2,3} ", tail)
-        subs.append(tail[: nxt.start()] if nxt else tail)
+        subs.append((ko.group(0).strip(), tail[: nxt.start()] if nxt else tail))
     return subs
 
 
@@ -1410,8 +1420,8 @@ def code_kernelfix(repo: pathlib.Path) -> List[str]:
 
 def text_kernelfix(secs: Dict[str, str]) -> List[str]:
     return _phrases(secs, TARGET_BASE, (
-        "the kernel's hard-deny list had not followed the code that moved out of seven kernel entry "
-        "points",
+        "the preparation of this release found that the kernel's hard-deny list had not followed "
+        "the code that moved out of seven kernel entry points",
         "so that code is hard-deny again",
         "The fix is a commit the maintainer signed, after review by two Claude refuters and Codex. "
         "No sentinel file covers it."))
@@ -1448,16 +1458,24 @@ def code_redactor(repo: pathlib.Path) -> List[str]:
     if p.is_symlink() or not p.is_file():
         bad.append("%s ausente" % REDACTOR_TEST)
     _ancestor(repo, REDACTOR_FIX_COMMIT, bad, "commit assinado do redator")
+    # «which the signed v1.4.0 verdict had declared as its condition 58»: o envelope
+    # assinado da v1.4.0 traz a condicao 58 com o titulo do defeito dos offsets
+    env = " ".join((_need_text(repo, V140_ENVELOPE, bad)).split())
+    if env and COND58_DECL not in env:
+        bad.append("%s sem a condicao 58 (%r)" % (V140_ENVELOPE, COND58_DECL[:40]))
     return bad
 
 
 def text_redactor(secs: Dict[str, str]) -> List[str]:
     return _phrases(secs, TARGET_BASE, (
-        "the secret redactor, since v1.0.0, cut the text at offsets taken from its normalized form",
+        "the secret redactor, since v1.0.0, cut the text at offsets taken from its normalized form, "
+        "which the signed v1.4.0 verdict had declared as its condition 58",
+        "The signed v1.4.0 verdict declared this defect as its condition 58.",
         "Its `scan()` offsets now index the text passed in",
         "The Codex and Grok egress redactor (`_lib/codex_egress_redact.py`) uses these functions.",
         "The fix is a commit the maintainer signed, after review by Codex and two Claude refuters "
-        "over several rounds."))
+        "over several rounds.",
+        "is declared in Known-open. No sentinel file covers it."))
 
 
 def _pr_numbers(repo: pathlib.Path, rng: str) -> Optional[List[int]]:
@@ -1632,6 +1650,14 @@ def code_annex(repo: pathlib.Path) -> List[str]:
     return bad
 
 
+# o item do anexo da v1.4.0 no Known-open da [1.4.4]: as duas curas e nenhuma outra
+ANNEX_CURES = (
+    "v1.4.3-rc.1 retired signed condition 67, and that cure is part of this release.",
+    "Signed condition 58 is the redactor offsets defect fixed above.",
+    "This release does not claim the cure of any other annex condition.",
+)
+
+
 def text_annex(secs: Dict[str, str]) -> List[str]:
     sec = secs.get(TARGET_BASE, "")
     why = _annex_problem(sec)
@@ -1651,9 +1677,19 @@ def text_annex(secs: Dict[str, str]) -> List[str]:
                    "o log de auditoria sem plano de cura" % TARGET_BASE)
     if not any("**The audit spool.**" in s for s in subs):
         bad.append("nenhum Known-open da [%s] tem a subsecao do spool de auditoria" % TARGET_BASE)
-    bad.extend(_phrases(secs, TARGET_BASE, (
-        "v1.4.3-rc.1 retired signed condition 67, and that cure is part of this release.",
-        "This release does not claim the cure of any other annex condition.",
+    # «Of the signed v1.4.0 annex, conditions 67 and 58 are cured, and this release does
+    # not claim the cure of any other annex condition»: as tres frases no item do anexo da
+    # v1.4.0, e o cabecalho da subsecao dele sem «NOT cured» (contradiria as curas)
+    for cab, corpo in _known_open_headed(sec):
+        if not (re.search(r"(?i)\bannex", corpo) and "1.4.0" in corpo):
+            continue
+        if re.search(r"(?i)\bnot\s+cured\b", cab):
+            bad.append("o cabecalho %r diz NOT cured sobre o anexo da v1.4.0, que nomeia as curas "
+                       "das condicoes 67 e 58" % cab)
+        flat = _norm(corpo)
+        bad.extend("a subsecao %r nao diz %r" % (cab, f) for f in ANNEX_CURES if _norm(f) not in flat)
+        break
+    bad.extend(_phrases(secs, TARGET_BASE, ANNEX_CURES + (
         "This release does not claim the cure of its three P1 findings",
         "The key material (`audit-key`, `.salt`) is still not archived.",
         "Keep your own copy of `audit-key` and `.salt`, because the backup leaves them out.",
@@ -1721,7 +1757,8 @@ CLAIMS: Tuple[Claim, ...] = (
     ("redactor", "os offsets do redator indexam o texto recebido", code_redactor, text_redactor,
      "scan_and_redact, num processo proprio, sobre um texto com uma reticencia antes de um token "
      "de exemplo: a saida e o texto com so o token trocado pelo rotulo; codex_egress_redact.py "
-     "chama scan_and_redact; test_secret_patterns.py presente; o commit %s ancestral"
+     "chama scan_and_redact; test_secret_patterns.py presente; o commit %s ancestral; a condicao "
+     "58 do envelope assinado da v1.4.0 com o titulo do defeito dos offsets"
      % REDACTOR_FIX_COMMIT[:8]),
     ("merges", "merges de pull request sem a cerimonia de assinatura", code_merges, text_merges,
      "pelos assuntos, 4 merges de pull request em v1.4.2..v1.4.3-rc.1 e os #6 e #7 depois; nos "
@@ -1736,7 +1773,8 @@ CLAIMS: Tuple[Claim, ...] = (
      "cli_currency.py com CODEX_VERSION_FLOOR = \"%s\"; _lib/_pair_rail_parts/ com o resultado "
      "version_floor_only; SIGN do re-pin ancestral"
      % (CODEX_VER, ", ".join(sorted(CODEX_PLATFORMS)), CODEX_PIN_FLOOR_BODY, CODEX_VER)),
-    ("annex", "parte declarada: o que fica aberto", code_annex, text_annex,
+    ("annex", "parte declarada: o que fica aberto; do anexo da v1.4.0, as condicoes 67 e 58",
+     code_annex, text_annex,
      "envelopes da v1.4.0 e da v1.4.2-rc.1 presentes; ceo-backup.sh sem audit-key nem .salt (a "
      "frase «the backup leaves out the key material» segue verdadeira)"),
 )

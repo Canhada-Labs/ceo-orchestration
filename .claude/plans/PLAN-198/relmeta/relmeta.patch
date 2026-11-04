@@ -1,5 +1,5 @@
 diff --git a/.claude/governance/gate-scripts-manifest.txt b/.claude/governance/gate-scripts-manifest.txt
-index 917e317b66c5fa76807c195fb99a38856f5783c8..bea35902d2d155d4d6f873131e2a13dc27a1f149 100644
+index 917e317b66c5fa76807c195fb99a38856f5783c8..c941c242d6910323c206dc7ef85ead8ea418ed23 100644
 --- a/.claude/governance/gate-scripts-manifest.txt
 +++ b/.claude/governance/gate-scripts-manifest.txt
 @@ -4,6 +4,6 @@ db8eea5b66e7e144135396a14029fd7511857a3cf42c9e5116e57000dd4ffd62  .claude/script
@@ -7,14 +7,14 @@ index 917e317b66c5fa76807c195fb99a38856f5783c8..bea35902d2d155d4d6f873131e2a13dc
  2f06780eab259db9f0178befb625b0b0501f7ca726e256b31278c748d6af6340  scripts/tests/ownership-nightly-gate.sh
  2c61b558af9ad3b27d3193dadde3fb815f28a8c9070105698397d2813129ebbc  scripts/tests/ownership-expected-reds.txt
 -fb0c7356ae661f79f2022fcae4f77fd37bd975fd95cdc39b81f86419ae369c80  .claude/scripts/local/release.sh
-+feeeba810a69c0ca1942562519578ba542fc4cb9c96e1274fdaabefa3b872050  .claude/scripts/local/release.sh
++7698e44a48d8610f69c10c88bfd1e8dad48c4fbd2f188e2eee200e1513925da1  .claude/scripts/local/release.sh
  31b9f880a764751ab42edf4b6fefa3bf88c96718fb7008adf5bb5d0789069433  .github/scripts/validate-pair-rail-verdict.py
  a8c6eecc5c1fbb211ec18498443618632a0376964d5a6709f336afd26dfa1322  .claude/scripts/await_release_gate.py
 diff --git a/.claude/scripts/local/release.sh b/.claude/scripts/local/release.sh
-index e2a37aee75972f8e8efc8f7936abb4688a536374..7f9d87f54e6e7cdf947feb6137c25401756b337c 100755
+index e2a37aee75972f8e8efc8f7936abb4688a536374..bd19740ed84ac6200f0e836eb81551f1a8d56c2c 100755
 --- a/.claude/scripts/local/release.sh
 +++ b/.claude/scripts/local/release.sh
-@@ -71,73 +71,84 @@ set -euo pipefail
+@@ -71,73 +71,86 @@ set -euo pipefail
  # The tag stands for the WHOLE release train in CHANGELOG.md, never just the
  # newest plan: list every plan of the train and the full ADR range.
  # ---------------------------------------------------------------------------
@@ -124,13 +124,14 @@ index e2a37aee75972f8e8efc8f7936abb4688a536374..7f9d87f54e6e7cdf947feb6137c25401
 +must be patched again in its module. A registered hook no longer
 +drains the audit spool at exit, a partial cure.
 +
-+Two defects found while this release was prepared are fixed in it,
-+each by a commit the maintainer signed, with no sentinel file. The
-+kernel's hard-deny list had not followed the code that moved out of
-+seven kernel entry points; that code is hard-deny again. The secret
-+redactor that the Codex and Grok egress uses had, since v1.0.0, cut
-+the text at offsets taken from its normalized form; its scan()
-+offsets now index the text passed in.
++The preparation of this release found that the kernel's hard-deny
++list had not followed the code that moved out of seven kernel entry
++points; that code is hard-deny again. The secret redactor that the
++Codex and Grok egress uses had, since v1.0.0, cut the text at offsets
++taken from its normalized form, which the signed v1.4.0 verdict had
++declared as its condition 58; its scan() offsets now index the text
++passed in. Each of the two fixes is a commit the maintainer signed,
++with no sentinel file.
 +
 +The honest part: most of this train after v1.4.3-rc.1 reached main
 +through two pull-request merges, without the signing ceremony; four
@@ -150,13 +151,14 @@ index e2a37aee75972f8e8efc8f7936abb4688a536374..7f9d87f54e6e7cdf947feb6137c25401
 +material. One condition of the redactor fix is declared too: the
 +ingress path redacts the raw answer text before parsing it, so a
 +redaction can change whether an answer parses; its structural cure
-+is scheduled for the next release. Of the signed v1.4.0 annex only
-+condition 67 is cured, and this release does not claim the cure of
-+the three P1 findings of the signed v1.4.2-rc.1 annex. Claude Code's
-+cleanup (cleanupPeriodDays, default 30) can still delete the audit
-+logs, and no plan in this release carries a structural cure.
-+Everything else that stays open is in the Known-open of the CHANGELOG
-+entry."
++is scheduled for the next release. Of the signed v1.4.0 annex,
++conditions 67 and 58 are cured, and this release does not claim the
++cure of any other annex condition. This release does not claim the
++cure of the three P1 findings of the signed v1.4.2-rc.1 annex.
++Claude Code's cleanup (cleanupPeriodDays, default 30) can still
++delete the audit logs, and no plan in this release carries a
++structural cure. Everything else that stays open is in the
++Known-open of the CHANGELOG entry."
  RC_NUM="1"
  STABLE=0
  DRY_RUN=0

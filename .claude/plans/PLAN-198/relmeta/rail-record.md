@@ -23,11 +23,15 @@ Informativos (o SIGN não os confere):
 
 ## Regra de parada (pré-registrada neste esqueleto, ANTES de qualquer rodada)
 
-- Rodada 1: o Codex, dois refutadores Claude e o derivador como terceira lane, na MESMA rodada, sobre os mesmos
-  materiais commitados (o patch, o sentinel com os quatro campos por preencher, os dados, o derivador, o
-  `hard-relmeta.sh` e o `red-control.txt`). Nenhuma lane sai antes das outras terminarem.
-- Rodada 2: a ÚLTIMA para código e âncoras. Entre a rodada 1 e a 2, cada correção re-deriva e re-commita os
-  materiais (`derive-relmeta144.sh`), e a rodada 2 revisa os materiais re-commitados, não o delta.
+- Rodada 1, completa: o Codex, dois refutadores Claude e o derivador como terceira lane, na MESMA rodada, sobre
+  os mesmos materiais commitados (o patch, o sentinel com os quatro campos por preencher, os dados, o derivador,
+  o `hard-relmeta.sh` e o `red-control.txt`), re-derivados sobre a cadeia final (o último land fora do pacote é
+  o `Derived-From`). Nenhuma lane sai antes das outras terminarem. Pauta mínima: cada frase da headline contra
+  as seções `[1.4.4]` e `[1.4.3]` e o código, inclusive as frases sobre a condição 58 e as curas do anexo da
+  v1.4.0 (os parágrafos 5 e 7 da headline).
+- Rodada 2: a ÚLTIMA para código e afirmações (as âncoras do derivador e as frases da headline). Entre a
+  rodada 1 e a 2, cada correção re-deriva e re-commita os materiais (`derive-relmeta144.sh`), e a rodada 2
+  revisa os materiais re-commitados, não o delta.
 - Depois da rodada 2, um achado abaixo de P0 só se cura estreitando ou removendo texto da headline (ou do
   título), sem frase nova de resultado no lugar, ou fica declarado na seção «Declarados» deste registro. Não há
   rodada 3 para código: um P0 depois da rodada 2 para o corte e volta ao CEO e ao Owner.
