@@ -71,73 +71,84 @@ set -euo pipefail
 # The tag stands for the WHOLE release train in CHANGELOG.md, never just the
 # newest plan: list every plan of the train and the full ADR range.
 # ---------------------------------------------------------------------------
-TARGET_BASE="1.4.3"
-RELEASE_TITLE="Maintenance release: harness-config gate cured for the default ceremony on upgrade and fresh install, condition 67 of v1.4.0-rc.1 retired, Codex CLI re-pin"
+TARGET_BASE="1.4.4"
+RELEASE_TITLE="Maintenance release: the train since v1.4.2, with a Bash guard against indirect execution, hooks split into modules, and fixes to the kernel hard-deny list and the secret redactor"
 # O tag vale pelo TREM INTEIRO da entrada do CHANGELOG desta versao,
 # nunca pelo plano
 # mais novo. Este bloco e DERIVADO por
-# .claude/plans/PLAN-194/relmeta/apply-relmeta143-edits.py
+# .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py
 # a partir de `git log v1.4.2..HEAD` (planos CITADOS nos assuntos de
 # commit da faixa, DEPOIS de todos os lands da release) e do conjunto
 # de ADRs tocados na mesma faixa — nao digite nada aqui a mao.
-RELEASE_SCOPE="PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 (ADRs tocados: nenhum)"
-RELEASE_HEADLINE="Release de manutencao (PLAN-194). Os requisitos nao mudam desde a
-v1.4.2: Claude Code v2.1.280 ou mais novo (install.sh e upgrade.sh
-seguem recusando, com saida 6, um claude mais antigo no PATH, salvo
-com --allow-old-claude-code), Python 3.9 ou mais novo e Node.js 20
-ou mais novo para o shim do npm.
+RELEASE_SCOPE="PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)"
+RELEASE_HEADLINE="Maintenance release (PLAN-198). v1.4.3 never reached npm: only
+v1.4.3-rc.1 was tagged, so this release covers the whole train since
+v1.4.2, and everything in the v1.4.3 entry of the CHANGELOG is part
+of it, as changed by the v1.4.4 entry. The requirements do not
+change from v1.4.2: Claude Code v2.1.280 or later (install.sh and
+upgrade.sh still refuse an older claude on the PATH with exit 6,
+unless --allow-old-claude-code is given), Python 3.9 or later and
+Node.js 20 or later for the npm shim.
 
-O gate de configuracao do harness do /ceo-boot reprovava nas
-instalacoes: as fixtures do replay moravam num diretorio que a
-instalacao nao recebe. Elas passam a morar em
-.claude/hooks/_lib/harness_replay/. Na cerimonia padrao
-(maintainer), o gate sai verde numa instalacao feita da v1.4.2 e
-atualizada pelo upgrade.sh desta release e numa instalacao nova;
-testes no CI provam os dois casos para uma forma de instalacao
-(--profile core --ceremony maintainer), e a arvore de antes da cura
-reproduz o vermelho. A instalacao com --ceremony user nao e coberta
-por esta afirmacao (Known-open do CHANGELOG). O gate fica mais
-estrito: as leituras de JSON dele recusam os tokens NaN e Infinity.
+From the v1.4.3 entry: the harness-config gate of /ceo-boot turns
+green with the default ceremony (maintainer), both on an install
+upgraded from v1.4.2 with upgrade.sh and on a fresh install; this
+green is claimed for the default ceremony only. The agent_spawn
+writer reads the previous chain link, computes the HMAC, writes the
+line and updates the sidecar under one lock of the log, which retires
+signed condition 67 of v1.4.0-rc.1; breaks the race already wrote
+stay in the logs, and writers that resolve different locks for the
+same log still do not exclude each other.
 
-O gravador do agent_spawn passa a ler o elo anterior da cadeia,
-calcular o HMAC, gravar a linha e atualizar o sidecar sob uma unica
-trava do log. Isto aposenta a condicao 67 assinada da v1.4.0-rc.1:
-a quebra de cadeia quando esse gravador lia o elo anterior antes de
-pegar a trava. As quebras que a corrida ja gravou ficam nos logs, e
-gravadores que resolvem travas diferentes para o mesmo log seguem
-sem se excluir.
+Also from that entry: a fresh --ceremony user install writes
+permissions.defaultMode with the value manual when the settings.json
+produced by that same run has none, unless
+CEO_INSTALL_SKIP_DENY_BASELINE=1, and a settings.json that existed
+before the install is never touched. Fixes to
+audit-query.py, /status, /ceo-boot and check-substrate-drift.py.
 
-Uma instalacao nova com --ceremony user grava
-permissions.defaultMode com o valor manual quando o settings.json
-produzido por essa mesma execucao nao tem defaultMode, salvo com
-CEO_INSTALL_SKIP_DENY_BASELINE=1. Um settings.json que ja existia
-antes da instalacao nunca e tocado, e o upgrade.sh nao muda.
+New since v1.4.3-rc.1: a bounded scan in the Bash guard against
+indirect execution, on by default (PLAN-195, ADR-201); it only adds
+blocks, and CEO_BASH_INDIRECT_GUARD=0 turns it off. Several of the
+largest hooks and scripts become thin entry points over modules
+under .claude/hooks/_lib/ (PLAN-197, ADR-202): a hook patched by hand
+must be patched again in its module. A registered hook no longer
+drains the audit spool at exit, a partial cure.
 
-Numa instalacao que registrou a mao o hook do envelope de custo, um
-bloqueio passa a ser gravado no log de auditoria; nenhuma release
-anterior o gravava. Nenhum template de settings enviado registra
-esse hook. Correcoes em audit-query.py, /status, /ceo-boot e
-check-substrate-drift.py.
+The preparation of this release found that the kernel's hard-deny
+list had not followed the code that moved out of seven kernel entry
+points; that code is hard-deny again. The secret redactor that the
+Codex and Grok egress uses had, since v1.0.0, cut the text at offsets
+taken from its normalized form, which the signed v1.4.0 verdict had
+declared as its condition 58; its scan() offsets now index the text
+passed in. Neither fix has a sentinel file.
 
-Pair-rail: o revisor e re-pinado no Codex CLI v0.160.0; o manifesto
-do payload pina esse binario por sha256, para uma plataforma so.
-Numa instalacao o pin resolve como infraestrutura e segue advisory,
-como antes.
+The honest part: most of this train after v1.4.3-rc.1 reached main
+through two pull-request merges, without the signing ceremony; four
+earlier ones are in the v1.4.3 entry. The two changed 233 canonical
+paths, 15 of them kernel paths by the list as merged, and with them
+the meaning of three governance checks: the VETO floor and the model
+allowlist now accept model families, retired ids among them, and a
+Codex CLI newer than the one the manifest pins by sha256 (v0.160.0,
+one platform) passes on a version floor, without a matching hash. No
+signed sentinel ratifies those files, and main has no branch
+protection and no ruleset (measured through the GitHub API on
+2026-11-03).
 
-A parte honesta: este trem saiu para curar o spool de auditoria, e
-essa cura nao entrou no corte; o spool deixa arquivos por processo
-para tras, e a drenagem forcada dele pode passar do timeout de um
-hook. Do anexo assinado da v1.4.0 esta release cura so a condicao
-67; o resto segue aberto, sem release atribuida a cura, e o mesmo
-vale para os tres achados P1 do anexo assinado da v1.4.2-rc.1. A
-limpeza do Claude Code (cleanupPeriodDays, 30 dias por padrao)
-ainda pode apagar o log de auditoria, e nenhum plano desta release
-carrega uma cura estrutural; o backup deixa de fora o material de
-chave, entre ele a chave HMAC e o sal. Quatro merges de pull
-request trouxeram arquivos do framework ao main sem a cerimonia de
-assinatura, e nada no repositorio impede a repeticao (medido em
-2026-10-14). Os demais residuos estao no Known-open da entrada do
-CHANGELOG."
+Declared, with no release assigned to their cure: the audit spool
+cure is partial, the new guard's false-positive limits were never
+measured on this implementation, and the backup leaves out the key
+material. One condition of the redactor fix is declared too: the
+ingress path redacts the raw answer text before parsing it, so a
+redaction can change whether an answer parses; its structural cure
+is scheduled for the next release. Of the signed v1.4.0 annex,
+conditions 67 and 58 are cured, and this release does not claim the
+cure of any other annex condition. This release does not claim the
+cure of the three P1 findings of the signed v1.4.2-rc.1 annex.
+Claude Code's cleanup (cleanupPeriodDays, default 30) can still
+delete the audit logs, and no plan in this release carries a
+structural cure. Everything else that stays open is in the
+Known-open of the CHANGELOG entry."
 RC_NUM="1"
 STABLE=0
 DRY_RUN=0
