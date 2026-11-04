@@ -278,11 +278,21 @@ one.
 - `ceo-restore.sh`:
   - checks every archive member before extraction (`_restore_archive.py`):
     no links, no absolute paths, no `..`, no name outside the layout, and
-    never `audit-key` or `.salt`;
+    never `audit-key` or `.salt`, in any letter case;
   - resolves `--dest` physically and refuses a link, or a file, as the
     destination;
   - refuses a restore target that is a link or sits under one;
   - runs the same checks in the preview and in the apply.
+- On macOS, the system `tar` adds a hidden AppleDouble member
+  (`._<name>`) for each file or folder with extended attributes, and
+  `ceo-restore.sh` refused every such archive (`archive refused path:
+  ._.`). `ceo-backup.sh` no longer writes these members. For archives
+  that already have them, restore skips such a member, without writing
+  it, only when its matching file or folder is in the same archive; any
+  other `._` member is refused. Restore now extracts only the members it
+  accepted, in Python instead of with `tar -x`: a truncated or corrupt
+  archive is refused before anything is written, and so is an archive
+  with a sparse member or with two members of the same name.
 - The disaster-recovery and incident-response guides no longer pass
   `--dry-run`, a flag the script refuses. The preview is the default, and
   `--apply` restores.
@@ -400,8 +410,11 @@ one.
 - **Backups and restore.** The key material (`audit-key`, `.salt`) is
   still not archived. A restore with no `.sha256` file proceeds with a
   warning. Without `--dest`, an applied restore overwrites the live audit
-  logs while the chain-state files next to them stay as they were. No
-  release is assigned to its cure yet.
+  logs while the chain-state files next to them stay as they were.
+  Restore refuses `audit-key` and `.salt` in any letter case, but an
+  HFS+ destination treats more names as equal than the default macOS
+  disk (APFS) does, and there a crafted archive can still reach those
+  files. No release is assigned to its cure yet.
 - **The redactor runs before parsing on the way in.** The ingress path
   redacts the raw answer text before parsing it, so a redaction can change
   whether an answer parses. This predates the redactor fix above. Its
