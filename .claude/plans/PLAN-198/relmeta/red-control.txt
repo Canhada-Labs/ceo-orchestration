@@ -1,17 +1,20 @@
 red-control — relmeta-144 (PLAN-198, RM da v1.4.4). Registro do construtor; o SIGN NAO o executa.
 
-Medido em: 2026-11-03, pelo construtor (W2), em clones descartaveis do commit dos materiais (nesta medida,
-28b0172e, com Derived-From c9798710; o commit que traz este registro so muda este arquivo, e um
-rebase troca os SHAs sem trocar o que se mede); macOS 27.2 (26B123, arm64), /usr/bin/python3 3.9.6,
-/usr/bin/git 2.54.0 (Apple Git-157), /bin/bash 3.2.57, /opt/homebrew/bin/gpg 2.5.24. O rehearse-relmeta144.sh
-(passos E0 e E2) refaz as secoes 1 a 8, e os passos E4 e E5 a 9.
-Derivador: .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py, sha256 ec4eaa77cc54cc6a4c93b72d13b92006547e81bb1e87387d5e94773374fe5679.
+Medido em: 2026-11-04, pelo construtor (W2), em clones descartaveis do commit dos materiais
+b9fd97bfed60243f3d661c456a4342be93857749, com Derived-From 2af40687213d516acfdaa94d50d7f865b6afd2f2.
+O commit que traz este registro e filho desse e so muda este arquivo; nenhum comando medido aqui le este
+arquivo.
+Substrato: macOS 27.2 (26B123, arm64), /usr/bin/python3 3.9.6, /usr/bin/git 2.54.0 (Apple Git-157),
+/bin/bash 3.2.57. O rehearse-relmeta144.sh (passos E0 e E2) refaz as secoes 1 a 8, e os passos E4 e E5 as
+secoes 9 e 10.
+Derivador: .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py, sha256 49af131da54c2453ef493c809724558552cce1fd6f3cc9dbb6d8225c20bf9751.
+hard-relmeta.sh: sha256 fb653b73535171bd8917e9c9f7693ec89fcf9e7607439e5827ef6cd4f68a00fe. relmeta.patch: sha256 b54e794748090646badf03f4a375af96a5d71b5d42d72a17253d55b35f22be20.
 Arvore verde: o commit dos materiais com o relmeta.patch aplicado.
 Arvores vermelhas: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2), num clone descartavel; e, para os paragrafos
 5 e 7 da headline, o commit dos materiais com o CHANGELOG.md de e85f7a7f (secao 7).
 
-Comando, em cada arvore:
-  python3 .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py --repo <arvore> --claims-only
+Comando, em cada arvore (o derivador isolado, como o hard-relmeta.sh o roda):
+  python3 -I -B .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py --repo <arvore> --claims-only
 O ambiente de cada sonda: CLAUDE_*, CEO_* e PYTHONPATH fora; HOME e TMPDIR em diretorio proprio da sonda.
 As ancoras herdadas da 1.4.3 leem a secao [1.4.3]; as novas, a [1.4.4]; a pseudo-ancora paragrafos confere
 uma frase da [1.4.4] por paragrafo da headline e nao tem parte de codigo.
@@ -66,7 +69,7 @@ PASS  [codex] pin do Codex: um binario por sha256, piso de versao
 PASS  [annex] parte declarada: o que fica aberto; do anexo da v1.4.0, as condicoes 67 e 58
       codigo: PASS — envelopes da v1.4.0 e da v1.4.2-rc.1 presentes; ceo-backup.sh sem audit-key nem .salt (a frase «the backup leaves out the key material» segue verdadeira)
       texto:  PASS — as frases ancoradas estao no CHANGELOG
-PASS  [paragrafos] cada paragrafo da headline tem uma frase sua na [1.4.4]
+PASS  [paragrafos] cada paragrafo da headline tem uma frase na [1.4.4]
       codigo: PASS — sem parte de codigo (conferencia de texto)
       texto:  PASS — os 7 paragrafos
 
@@ -123,7 +126,7 @@ FAIL  [codex] pin do Codex: um binario por sha256, piso de versao
 PASS  [annex] parte declarada: o que fica aberto; do anexo da v1.4.0, as condicoes 67 e 58
       codigo: PASS — envelopes da v1.4.0 e da v1.4.2-rc.1 presentes; ceo-backup.sh sem audit-key nem .salt (a frase «the backup leaves out the key material» segue verdadeira)
       texto:  PASS — as frases ancoradas estao no CHANGELOG
-PASS  [paragrafos] cada paragrafo da headline tem uma frase sua na [1.4.4]
+PASS  [paragrafos] cada paragrafo da headline tem uma frase na [1.4.4]
       codigo: PASS — sem parte de codigo (conferencia de texto)
       texto:  PASS — os 7 paragrafos
 
@@ -188,7 +191,7 @@ FAIL  [codex] pin do Codex: um binario por sha256, piso de versao
 FAIL  [annex] parte declarada: o que fica aberto; do anexo da v1.4.0, as condicoes 67 e 58
       codigo: PASS — envelopes da v1.4.0 e da v1.4.2-rc.1 presentes; ceo-backup.sh sem audit-key nem .salt (a frase «the backup leaves out the key material» segue verdadeira)
       texto:  FAIL — o CHANGELOG nao tem a entrada [1.4.4]
-FAIL  [paragrafos] cada paragrafo da headline tem uma frase sua na [1.4.4]
+FAIL  [paragrafos] cada paragrafo da headline tem uma frase na [1.4.4]
       codigo: PASS — sem parte de codigo (conferencia de texto)
       texto:  FAIL — paragrafo 1 da headline: a secao [1.4.4] nao diz '**v1.4.3 never reached npm.**'; paragrafo 2 da headline: a secao [1.4.4] nao diz 'everything in `[1.4.3]` is part of this release'; paragrafo 3 da headline: a secao [1.4.4] nao diz 'everything in `[1.4.3]` is part of this release'; paragrafo 4 da headline: a secao [1.4.4] nao diz 'A new scan in the Bash guard blocks a destructive command that is reached indirectly, on by default (PLAN-195, ADR-201).'; paragrafo 5 da headline: a secao [1.4.4] nao diz "Two of the defects this release fixes: the preparation of this release found that the kernel's hard-deny list had not followed the code that moved out of seven kernel entry points; and the secret redactor, since v1.0.0, cut the text at offsets taken from its normalized form, which the signed v1.4.0 verdict had declared as its condition 58."; paragrafo 6 da headline: a secao [1.4.4] nao diz 'The honest part: most of this train after v1.4.3-rc.1 reached `main` through two pull-request merges, without the signing ceremony.'; paragrafo 7 da headline: a secao [1.4.4] nao diz 'No release is assigned to its cure yet.'
 
@@ -209,9 +212,9 @@ reprova; com uma trava so, passa.)
 
 Uma copia do derivador sem a linha CEO_BOOT_INSTALL = ... (a constante que so code_fixes le), com --self-check:
 rc 2.
-FATAL: o derivador le nome sem definicao (licao do molde clonado): CEO_BOOT_INSTALL (linha 1239)
+FATAL: o derivador le nome sem definicao (licao do molde clonado): CEO_BOOT_INSTALL (linha 1247)
 O derivador do commit dos materiais, com --self-check: rc 0.
-self-check OK: nenhum nome lido sem definicao; nenhum de PREV_BASE, DR_GUIDE, AUDIT_QUERY_TEST_OLD em uso
+self-check OK: nenhum nome lido sem definicao no arquivo; nenhum de PREV_BASE, DR_GUIDE, AUDIT_QUERY_TEST_OLD em uso
 
 == 7. o commit dos materiais com o CHANGELOG.md de e85f7a7f sobreposto: rc 1 ==
 
@@ -230,7 +233,7 @@ FAIL  [redactor] os offsets do redator indexam o texto recebido
 FAIL  [annex] parte declarada: o que fica aberto; do anexo da v1.4.0, as condicoes 67 e 58
       codigo: PASS — envelopes da v1.4.0 e da v1.4.2-rc.1 presentes; ceo-backup.sh sem audit-key nem .salt (a frase «the backup leaves out the key material» segue verdadeira)
       texto:  FAIL — o cabecalho '### Known-open (carried — NOT cured by this release)' diz NOT cured sobre o anexo da v1.4.0, que nomeia as curas das condicoes 67 e 58; a subsecao '### Known-open (carried — NOT cured by this release)' nao diz 'Signed condition 58 is the redactor offsets defect fixed above.'; a secao [1.4.4] do CHANGELOG nao diz 'Signed condition 58 is the redactor offsets defect fixed above.'
-FAIL  [paragrafos] cada paragrafo da headline tem uma frase sua na [1.4.4]
+FAIL  [paragrafos] cada paragrafo da headline tem uma frase na [1.4.4]
       codigo: PASS — sem parte de codigo (conferencia de texto)
       texto:  FAIL — paragrafo 5 da headline: a secao [1.4.4] nao diz "Two of the defects this release fixes: the preparation of this release found that the kernel's hard-deny list had not followed the code that moved out of seven kernel entry points; and the secret redactor, since v1.0.0, cut the text at offsets taken from its normalized form, which the signed v1.4.0 verdict had declared as its condition 58."
 
@@ -240,21 +243,84 @@ As outras 13 passam nas duas partes, com o detalhe da secao 1: train, ccfloor, h
 
 Num clone descartavel do commit dos materiais, uma copia do envelope assinado da v1.4.0 com o item 58 renumerado
 para 59 vai para um caminho fora da governanca do clone, e a constante V140_ENVELOPE do derivador aponta para ela
-(o passo E2 do rehearse-relmeta144.sh; a saida dele):
+(o mesmo controle do passo E2 do rehearse-relmeta144.sh; a saida dele):
 envelope real: []
-condicao renumerada: ["probe-c58/envelope-renumerado.md sem a condicao 58 ('58. **O redator de saída para o Codex ap')"]
+envelope com a condicao renumerada: ["relmeta4-probe/envelope-v1.4.0-renumbered.md sem a condicao 58 ('58. **O redator de saída para o Codex ap')"]
 (o envelope real passa; a copia sem a condicao 58 reprova a parte de codigo da ancora redactor, nomeando-a.)
 
 == 9. os verdes da mesma medida, num clone do commit dos materiais com o patch ==
 
---verify (a linha hard 3 dos dados): rc 0.
-verify OK: base b55084da6dd8 ancestral; Derived-From c9798710208e = ultimo commit fora do pacote; escopo PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
-verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 7698e44a48d8610f69c10c88bfd1e8dad48c4fbd2f188e2eee200e1513925da1); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
-hard-relmeta.sh (a linha hard 2 dos dados): rc 0.
+hard-relmeta.sh (a linha hard 2 dos dados; o passo 6 dele e o --verify do derivador, com python3 -I -B): rc 0.
 ok: derivador e este arquivo com os sha256 pinados no sentinel do HEAD
 ok: manifesto ADR-192: 9/9 linhas OK
 ok: a linha de .claude/scripts/local/release.sh no manifesto é o sha256 do arquivo
 ok: TARGET_BASE="1.4.4" uma vez, nenhum 1.4.3
 ok: release.sh --help: release.sh — operator release driver (target base version: 1.4.4)
 ok: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2) e 5e7cb65ebc259da586256ddb6b29918ba3a39ab6 (v1.4.3-rc.1) ancestrais do HEAD
-test_release_workflow_asserts.py + test_release_bump_sites.py: rc 0, 258 passed in 134.63s (0:02:14).
+verify OK: base b55084da6dd8 ancestral; Derived-From 2af40687213d = ultimo commit fora do pacote; escopo PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
+verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 e7cd69a1c951470e55785533924573fc4049e77718906b4779e14088dd04a33f); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
+ok: o --verify do derivador (python3 -I -B) saiu rc 0
+python3 -I -B apply-relmeta144-edits.py --repo=. --verify, direto, na mesma arvore: rc 0.
+verify OK: base b55084da6dd8 ancestral; Derived-From 2af40687213d = ultimo commit fora do pacote; escopo PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
+verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 e7cd69a1c951470e55785533924573fc4049e77718906b4779e14088dd04a33f); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
+test_release_workflow_asserts.py + test_release_bump_sites.py: rc 0, 258 passed in 82.32s (0:01:22).
+Depois dessas corridas, a arvore difere do commit so nos 3 caminhos do patch, no indice (git status).
+
+== 10. o derivador isolado: um argparse.py acrescentado ao diretorio dele ==
+
+Estado B: o commit dos materiais, um commit fora do pacote (que o --verify recusa) e depois um commit so
+do pacote com .claude/plans/PLAN-198/relmeta/argparse.py, que sai rc 0, e o patch aplicado. Sem -I, o diretorio
+do derivador entra no sys.path, o import de argparse executa esse arquivo e o --verify sai rc 0 sem saida (B1);
+sem o argparse.py, a mesma linha recusa o commit fora do pacote (B0). O hard-relmeta.sh roda o derivador com
+-I -B e recusa (B2). Estado A: so o argparse.py, com o patch: o hard-relmeta.sh sai rc 0 (A1). A saida do
+controle, com cada linha recuada de dois espacos:
+
+  materials commit: b9fd97bfed60243f3d661c456a4342be93857749
+  derivator sha256: 49af131da54c2453ef493c809724558552cce1fd6f3cc9dbb6d8225c20bf9751
+  hard-relmeta.sh sha256: fb653b73535171bd8917e9c9f7693ec89fcf9e7607439e5827ef6cd4f68a00fe
+
+  ######## state B: commit outside the pack, then the plant, patch applied
+  outside commit e917895345c9: docs/relmeta144-probe.txt
+  == B0. no plant: OLD line (python3 <derivator> --verify) ==
+  FATAL: Derived-From do sentinel (2af40687213d) nao e o ultimo commit fora de .claude/plans/PLAN-198/relmeta (e917895345c9); commit(s) depois da derivacao que tocam fora do pacote:
+    e9178953 docs(PLAN-198): CONTROL land outside the pack
+  Re-derive, re-rode o rail e re-commite os materiais.
+  rc=2
+  plant commit 9909131b0a63: .claude/plans/PLAN-198/relmeta/argparse.py
+  == B1. plant: OLD line (python3 <derivator> --verify) ==
+  rc=0 (any output of the run is above this line)
+  == B2. plant: NEW line (bash hard-relmeta.sh, derivator under python3 -I -B) ==
+  ok: derivador e este arquivo com os sha256 pinados no sentinel do HEAD
+  ok: manifesto ADR-192: 9/9 linhas OK
+  ok: a linha de .claude/scripts/local/release.sh no manifesto é o sha256 do arquivo
+  ok: TARGET_BASE="1.4.4" uma vez, nenhum 1.4.3
+  ok: release.sh --help: release.sh — operator release driver (target base version: 1.4.4)
+  ok: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2) e 5e7cb65ebc259da586256ddb6b29918ba3a39ab6 (v1.4.3-rc.1) ancestrais do HEAD
+  FATAL: Derived-From do sentinel (2af40687213d) nao e o ultimo commit fora de .claude/plans/PLAN-198/relmeta (e917895345c9); commit(s) depois da derivacao que tocam fora do pacote:
+    e9178953 docs(PLAN-198): CONTROL land outside the pack
+  Re-derive, re-rode o rail e re-commite os materiais.
+  FALHOU: o --verify do derivador (python3 -I -B) saiu rc diferente de 0
+  rc=1
+  == B3. plant: python3 -I -B <derivator> --verify, directly ==
+  FATAL: Derived-From do sentinel (2af40687213d) nao e o ultimo commit fora de .claude/plans/PLAN-198/relmeta (e917895345c9); commit(s) depois da derivacao que tocam fora do pacote:
+    e9178953 docs(PLAN-198): CONTROL land outside the pack
+  Re-derive, re-rode o rail e re-commite os materiais.
+  rc=2
+
+  ######## state A: the plant alone, patch applied
+  plant commit 5f63950ab2ed: .claude/plans/PLAN-198/relmeta/argparse.py
+  == A1. plant: NEW line (bash hard-relmeta.sh) ==
+  ok: derivador e este arquivo com os sha256 pinados no sentinel do HEAD
+  ok: manifesto ADR-192: 9/9 linhas OK
+  ok: a linha de .claude/scripts/local/release.sh no manifesto é o sha256 do arquivo
+  ok: TARGET_BASE="1.4.4" uma vez, nenhum 1.4.3
+  ok: release.sh --help: release.sh — operator release driver (target base version: 1.4.4)
+  ok: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2) e 5e7cb65ebc259da586256ddb6b29918ba3a39ab6 (v1.4.3-rc.1) ancestrais do HEAD
+  verify OK: base b55084da6dd8 ancestral; Derived-From 2af40687213d = ultimo commit fora do pacote; escopo PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
+  verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 e7cd69a1c951470e55785533924573fc4049e77718906b4779e14088dd04a33f); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
+  ok: o --verify do derivador (python3 -I -B) saiu rc 0
+  rc=0
+  == A2. tree vs index after the run (expect the 3 patched paths, staged) ==
+  M  .claude/governance/gate-scripts-manifest.txt
+  M  .claude/scripts/local/release.sh
+  M  .claude/scripts/tests/test_release_bump_sites.py
