@@ -1,14 +1,14 @@
 red-control — relmeta-144 (PLAN-198, RM da v1.4.4). Registro do construtor; o SIGN NAO o executa.
 
 Medido em: 2026-11-04, pelo construtor (W2), em clones descartaveis do commit dos materiais
-b9fd97bfed60243f3d661c456a4342be93857749, com Derived-From 2af40687213d516acfdaa94d50d7f865b6afd2f2.
+569261bb3a85d4290247b15e12c21d79dccbc849, com Derived-From 2af40687213d516acfdaa94d50d7f865b6afd2f2.
 O commit que traz este registro e filho desse e so muda este arquivo; nenhum comando medido aqui le este
 arquivo.
 Substrato: macOS 27.2 (26B123, arm64), /usr/bin/python3 3.9.6, /usr/bin/git 2.54.0 (Apple Git-157),
 /bin/bash 3.2.57. O rehearse-relmeta144.sh (passos E0 e E2) refaz as secoes 1 a 8, e os passos E4 e E5 as
 secoes 9 e 10.
-Derivador: .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py, sha256 49af131da54c2453ef493c809724558552cce1fd6f3cc9dbb6d8225c20bf9751.
-hard-relmeta.sh: sha256 fb653b73535171bd8917e9c9f7693ec89fcf9e7607439e5827ef6cd4f68a00fe. relmeta.patch: sha256 b54e794748090646badf03f4a375af96a5d71b5d42d72a17253d55b35f22be20.
+Derivador: .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py, sha256 a5a49eaaae58335e6319cca164c78079259923c0d8ef2b7a9fbdf2496545cdf7.
+hard-relmeta.sh: sha256 fb653b73535171bd8917e9c9f7693ec89fcf9e7607439e5827ef6cd4f68a00fe. relmeta.patch: sha256 e01de880df3c069edc2af778071ec8fc931b5411c39ad53665a2870f72e2234b.
 Arvore verde: o commit dos materiais com o relmeta.patch aplicado.
 Arvores vermelhas: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2), num clone descartavel; e, para os paragrafos
 5 e 7 da headline, o commit dos materiais com o CHANGELOG.md de e85f7a7f (secao 7).
@@ -19,7 +19,7 @@ O ambiente de cada sonda: CLAUDE_*, CEO_* e PYTHONPATH fora; HOME e TMPDIR em di
 As ancoras herdadas da 1.4.3 leem a secao [1.4.3]; as novas, a [1.4.4]; a pseudo-ancora paragrafos confere
 uma frase da [1.4.4] por paragrafo da headline e nao tem parte de codigo.
 
-== 1. o commit dos materiais com o patch: rc 0, 17/17 PASS ==
+== 1. o commit dos materiais com o patch: rc 0, 16/16 PASS ==
 
 PASS  [train] a v1.4.3 nao chegou ao npm; o trem inteiro desde a v1.4.2
       codigo: PASS — o commit da v1.4.3-rc.1 (5e7cb65e) ancestral do HEAD; o npm-publish.yml pula as tags -rc.
@@ -35,9 +35,6 @@ PASS  [cond67] condicao 67: o elo lido dentro da trava (herdada, re-ancorada)
       texto:  PASS — as frases ancoradas estao no CHANGELOG
 PASS  [defaultmode] defaultMode manual no install user (herdada)
       codigo: PASS — install.sh com DEFAULT_MODE_BASELINE="manual" (1 linha), as rotas jq e python e o skip por ambiente; o template user sem permissions.defaultMode (JSON); upgrade.sh com o mesmo blob da v1.4.2
-      texto:  PASS — as frases ancoradas estao no CHANGELOG
-PASS  [cenv] cost_envelope_capped gravado; nenhum template registra (herdada)
-      codigo: PASS — por AST, uma chamada emit_generic('cost_envelope_capped') com kwargs = cap_cents, class_tier, current_cents, project, session_id, window_breached, sem action; nenhum templates/settings/*.json registra o hook; SIGN do cenv ancestral
       texto:  PASS — as frases ancoradas estao no CHANGELOG
 PASS  [fixes] correcoes de audit-query, /status, /ceo-boot e check-substrate-drift (herdada, re-ancorada)
       codigo: PASS — status.py sem --as-json; check-substrate-drift.py com COMPONENT_CHECK_ERROR; ceo-boot.py instala _lib/_ceo_boot_parts/, que tem o external_wait; o teste da ordem dos flags do audit-query presente
@@ -75,7 +72,7 @@ PASS  [paragrafos] cada paragrafo da headline tem uma frase na [1.4.4]
 
 == 2. v1.4.2 com o CHANGELOG.md do HEAD sobreposto: rc 1 ==
 
-A parte de TEXTO passa nas 17 (o CHANGELOG e o do HEAD). A parte de CODIGO falha em 14, cada uma pelo
+A parte de TEXTO passa nas 16 (o CHANGELOG e o do HEAD). A parte de CODIGO falha em 13, cada uma pelo
 motivo dela, e passa em 3 por desenho (ccfloor, annex e a pseudo-ancora paragrafos, sem parte de codigo).
 
 FAIL  [train] a v1.4.3 nao chegou ao npm; o trem inteiro desde a v1.4.2
@@ -92,9 +89,6 @@ FAIL  [cond67] condicao 67: o elo lido dentro da trava (herdada, re-ancorada)
       texto:  PASS — as frases ancoradas estao no CHANGELOG
 FAIL  [defaultmode] defaultMode manual no install user (herdada)
       codigo: FAIL — scripts/install.sh: 0 linhas DEFAULT_MODE_BASELINE="manual" (exigido: 1) — DEFAULT_MODE_BASELINE ausente?; scripts/install.sh sem a rota jq (has("defaultMode")); scripts/install.sh sem a rota python (perms.setdefault("defaultMode", sys.argv[3]))
-      texto:  PASS — as frases ancoradas estao no CHANGELOG
-FAIL  [cenv] cost_envelope_capped gravado; nenhum template registra (herdada)
-      codigo: FAIL — .claude/hooks/check_cost_envelope.py: emit_generic('cost_envelope_capped') com kwargs ['action', 'cap_cents', 'class_tier', 'current_cents', 'project', 'session_id', 'window_breached'] (esperado ['cap_cents', 'class_tier', 'current_cents', 'project', 'session_id', 'window_breached']; sem action); 1142884039f8 (SIGN do cenv) nao e ancestral do HEAD
       texto:  PASS — as frases ancoradas estao no CHANGELOG
 FAIL  [fixes] correcoes de audit-query, /status, /ceo-boot e check-substrate-drift (herdada, re-ancorada)
       codigo: FAIL — .claude/scripts/status.py ainda passa --as-json; .claude/scripts/check-substrate-drift.py sem COMPONENT_CHECK_ERROR; .claude/scripts/ceo-boot.py nao instala .claude/hooks/_lib/_ceo_boot_parts; .claude/hooks/_lib/_ceo_boot_parts ausente; .claude/scripts/tests/test_audit_query_shared_flags_order.py ausente
@@ -141,7 +135,7 @@ A ancora redactor e uma sonda de runtime: na v1.4.2 o mesmo texto de exemplo sai
 detalhe acima mostra a saida), e no commit dos materiais sai com so o token trocado pelo rotulo.
 A sonda de runtime do gate do harness (o gate na raiz) nao roda na v1.4.2: a parte estatica ja falhou.
 
-== 3. v1.4.2 pura (sem o CHANGELOG do HEAD): rc 1, a parte de texto FAIL nas 17 ==
+== 3. v1.4.2 pura (sem o CHANGELOG do HEAD): rc 1, a parte de texto FAIL nas 16 ==
 
 FAIL  [train] a v1.4.3 nao chegou ao npm; o trem inteiro desde a v1.4.2
       codigo: FAIL — 5e7cb65ebc25 (commit da v1.4.3-rc.1) nao e ancestral do HEAD
@@ -158,9 +152,6 @@ FAIL  [cond67] condicao 67: o elo lido dentro da trava (herdada, re-ancorada)
 FAIL  [defaultmode] defaultMode manual no install user (herdada)
       codigo: FAIL — scripts/install.sh: 0 linhas DEFAULT_MODE_BASELINE="manual" (exigido: 1) — DEFAULT_MODE_BASELINE ausente?; scripts/install.sh sem a rota jq (has("defaultMode")); scripts/install.sh sem a rota python (perms.setdefault("defaultMode", sys.argv[3]))
       texto:  FAIL — a secao [1.4.3] do CHANGELOG nao diz 'produced by that same run has no `permissions.defaultMode`'; a secao [1.4.3] do CHANGELOG nao diz 'A `.claude/settings.json` that existed before the install is never touched'; a secao [1.4.3] do CHANGELOG nao diz '`upgrade.sh` does not change'; a secao [1.4.3] do CHANGELOG nao diz '`CEO_INSTALL_SKIP_DENY_BASELINE=1` skips both the deny baseline and the `defaultMode`'; a secao [1.4.4] do CHANGELOG nao diz 'everything in `[1.4.3]` is part of this release'
-FAIL  [cenv] cost_envelope_capped gravado; nenhum template registra (herdada)
-      codigo: FAIL — .claude/hooks/check_cost_envelope.py: emit_generic('cost_envelope_capped') com kwargs ['action', 'cap_cents', 'class_tier', 'current_cents', 'project', 'session_id', 'window_breached'] (esperado ['cap_cents', 'class_tier', 'current_cents', 'project', 'session_id', 'window_breached']; sem action); 1142884039f8 (SIGN do cenv) nao e ancestral do HEAD
-      texto:  FAIL — a secao [1.4.3] do CHANGELOG nao diz 'On an install that registered the cost-envelope hook by hand, a block is now recorded in the audit log'; a secao [1.4.3] do CHANGELOG nao diz 'No earlier release recorded it'; a secao [1.4.3] do CHANGELOG nao diz 'No shipped settings template registers this hook'; a secao [1.4.4] do CHANGELOG nao diz 'everything in `[1.4.3]` is part of this release'
 FAIL  [fixes] correcoes de audit-query, /status, /ceo-boot e check-substrate-drift (herdada, re-ancorada)
       codigo: FAIL — .claude/scripts/status.py ainda passa --as-json; .claude/scripts/check-substrate-drift.py sem COMPONENT_CHECK_ERROR; .claude/scripts/ceo-boot.py nao instala .claude/hooks/_lib/_ceo_boot_parts; .claude/hooks/_lib/_ceo_boot_parts ausente; .claude/scripts/tests/test_audit_query_shared_flags_order.py ausente
       texto:  FAIL — a secao [1.4.4] do CHANGELOG nao diz 'everything in `[1.4.3]` is part of this release'; a secao [1.4.3] do CHANGELOG sem o cabecalho '### Fixed — `audit-query.py`, `/status`, `/ceo-boot` and `check-substrate-drift.py`'
@@ -212,7 +203,7 @@ reprova; com uma trava so, passa.)
 
 Uma copia do derivador sem a linha CEO_BOOT_INSTALL = ... (a constante que so code_fixes le), com --self-check:
 rc 2.
-FATAL: o derivador le nome sem definicao (licao do molde clonado): CEO_BOOT_INSTALL (linha 1247)
+FATAL: o derivador le nome sem definicao (licao do molde clonado): CEO_BOOT_INSTALL (linha 1201)
 O derivador do commit dos materiais, com --self-check: rc 0.
 self-check OK: nenhum nome lido sem definicao no arquivo; nenhum de PREV_BASE, DR_GUIDE, AUDIT_QUERY_TEST_OLD em uso
 
@@ -220,7 +211,7 @@ self-check OK: nenhum nome lido sem definicao no arquivo; nenhum de PREV_BASE, D
 
 e85f7a7f e o pai do commit que nomeia a condicao 58 na [1.4.4] (349431c7). Na [1.4.4] dele, os dois defeitos
 corrigidos eram os achados na preparacao desta release, a condicao 58 nao aparecia, e o Known-open carregado
-tinha o cabecalho «NOT cured by this release». A parte de CODIGO passa nas 17 (a arvore e a dos materiais);
+tinha o cabecalho «NOT cured by this release». A parte de CODIGO passa nas 16 (a arvore e a dos materiais);
 a de TEXTO falha so nas ancoras dos paragrafos 5 e 7 da headline (kernelfix, redactor, annex e o paragrafo 5
 de paragrafos), cada uma pelo motivo dela:
 
@@ -237,7 +228,7 @@ FAIL  [paragrafos] cada paragrafo da headline tem uma frase na [1.4.4]
       codigo: PASS — sem parte de codigo (conferencia de texto)
       texto:  FAIL — paragrafo 5 da headline: a secao [1.4.4] nao diz "Two of the defects this release fixes: the preparation of this release found that the kernel's hard-deny list had not followed the code that moved out of seven kernel entry points; and the secret redactor, since v1.0.0, cut the text at offsets taken from its normalized form, which the signed v1.4.0 verdict had declared as its condition 58."
 
-As outras 13 passam nas duas partes, com o detalhe da secao 1: train, ccfloor, harness, cond67, defaultmode, cenv, fixes, guard, split, spool, merges, models, codex.
+As outras 12 passam nas duas partes, com o detalhe da secao 1: train, ccfloor, harness, cond67, defaultmode, fixes, guard, split, spool, merges, models, codex.
 
 == 8. a ancora redactor contra o envelope da v1.4.0 com a condicao 58 renumerada ==
 
@@ -245,7 +236,7 @@ Num clone descartavel do commit dos materiais, uma copia do envelope assinado da
 para 59 vai para um caminho fora da governanca do clone, e a constante V140_ENVELOPE do derivador aponta para ela
 (o mesmo controle do passo E2 do rehearse-relmeta144.sh; a saida dele):
 envelope real: []
-envelope com a condicao renumerada: ["relmeta4-probe/envelope-v1.4.0-renumbered.md sem a condicao 58 ('58. **O redator de saída para o Codex ap')"]
+envelope com a condicao renumerada: ["relmeta5-probe/envelope-v1.4.0-renumbered.md sem a condicao 58 ('58. **O redator de saída para o Codex ap')"]
 (o envelope real passa; a copia sem a condicao 58 reprova a parte de codigo da ancora redactor, nomeando-a.)
 
 == 9. os verdes da mesma medida, num clone do commit dos materiais com o patch ==
@@ -258,12 +249,12 @@ ok: TARGET_BASE="1.4.4" uma vez, nenhum 1.4.3
 ok: release.sh --help: release.sh — operator release driver (target base version: 1.4.4)
 ok: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2) e 5e7cb65ebc259da586256ddb6b29918ba3a39ab6 (v1.4.3-rc.1) ancestrais do HEAD
 verify OK: base b55084da6dd8 ancestral; Derived-From 2af40687213d = ultimo commit fora do pacote; escopo PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
-verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 e7cd69a1c951470e55785533924573fc4049e77718906b4779e14088dd04a33f); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
+verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 e1e21473889dfadf57dfbfa28d86fb794d991d669aa61e921b44ac33acde371e); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
 ok: o --verify do derivador (python3 -I -B) saiu rc 0
 python3 -I -B apply-relmeta144-edits.py --repo=. --verify, direto, na mesma arvore: rc 0.
 verify OK: base b55084da6dd8 ancestral; Derived-From 2af40687213d = ultimo commit fora do pacote; escopo PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
-verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 e7cd69a1c951470e55785533924573fc4049e77718906b4779e14088dd04a33f); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
-test_release_workflow_asserts.py + test_release_bump_sites.py: rc 0, 258 passed in 82.32s (0:01:22).
+verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 e1e21473889dfadf57dfbfa28d86fb794d991d669aa61e921b44ac33acde371e); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
+test_release_workflow_asserts.py + test_release_bump_sites.py: rc 0, 258 passed in 79.70s (0:01:19).
 Depois dessas corridas, a arvore difere do commit so nos 3 caminhos do patch, no indice (git status).
 
 == 10. o derivador isolado: um argparse.py acrescentado ao diretorio dele ==
@@ -275,18 +266,18 @@ sem o argparse.py, a mesma linha recusa o commit fora do pacote (B0). O hard-rel
 -I -B e recusa (B2). Estado A: so o argparse.py, com o patch: o hard-relmeta.sh sai rc 0 (A1). A saida do
 controle, com cada linha recuada de dois espacos:
 
-  materials commit: b9fd97bfed60243f3d661c456a4342be93857749
-  derivator sha256: 49af131da54c2453ef493c809724558552cce1fd6f3cc9dbb6d8225c20bf9751
+  materials commit: 569261bb3a85d4290247b15e12c21d79dccbc849
+  derivator sha256: a5a49eaaae58335e6319cca164c78079259923c0d8ef2b7a9fbdf2496545cdf7
   hard-relmeta.sh sha256: fb653b73535171bd8917e9c9f7693ec89fcf9e7607439e5827ef6cd4f68a00fe
 
   ######## state B: commit outside the pack, then the plant, patch applied
-  outside commit e917895345c9: docs/relmeta144-probe.txt
+  outside commit 54ba0353093e: docs/relmeta144-probe.txt
   == B0. no plant: OLD line (python3 <derivator> --verify) ==
-  FATAL: Derived-From do sentinel (2af40687213d) nao e o ultimo commit fora de .claude/plans/PLAN-198/relmeta (e917895345c9); commit(s) depois da derivacao que tocam fora do pacote:
-    e9178953 docs(PLAN-198): CONTROL land outside the pack
+  FATAL: Derived-From do sentinel (2af40687213d) nao e o ultimo commit fora de .claude/plans/PLAN-198/relmeta (54ba0353093e); commit(s) depois da derivacao que tocam fora do pacote:
+    54ba0353 docs(PLAN-198): CONTROL land outside the pack
   Re-derive, re-rode o rail e re-commite os materiais.
   rc=2
-  plant commit 9909131b0a63: .claude/plans/PLAN-198/relmeta/argparse.py
+  plant commit ab0fb79f799c: .claude/plans/PLAN-198/relmeta/argparse.py
   == B1. plant: OLD line (python3 <derivator> --verify) ==
   rc=0 (any output of the run is above this line)
   == B2. plant: NEW line (bash hard-relmeta.sh, derivator under python3 -I -B) ==
@@ -296,19 +287,19 @@ controle, com cada linha recuada de dois espacos:
   ok: TARGET_BASE="1.4.4" uma vez, nenhum 1.4.3
   ok: release.sh --help: release.sh — operator release driver (target base version: 1.4.4)
   ok: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2) e 5e7cb65ebc259da586256ddb6b29918ba3a39ab6 (v1.4.3-rc.1) ancestrais do HEAD
-  FATAL: Derived-From do sentinel (2af40687213d) nao e o ultimo commit fora de .claude/plans/PLAN-198/relmeta (e917895345c9); commit(s) depois da derivacao que tocam fora do pacote:
-    e9178953 docs(PLAN-198): CONTROL land outside the pack
+  FATAL: Derived-From do sentinel (2af40687213d) nao e o ultimo commit fora de .claude/plans/PLAN-198/relmeta (54ba0353093e); commit(s) depois da derivacao que tocam fora do pacote:
+    54ba0353 docs(PLAN-198): CONTROL land outside the pack
   Re-derive, re-rode o rail e re-commite os materiais.
   FALHOU: o --verify do derivador (python3 -I -B) saiu rc diferente de 0
   rc=1
   == B3. plant: python3 -I -B <derivator> --verify, directly ==
-  FATAL: Derived-From do sentinel (2af40687213d) nao e o ultimo commit fora de .claude/plans/PLAN-198/relmeta (e917895345c9); commit(s) depois da derivacao que tocam fora do pacote:
-    e9178953 docs(PLAN-198): CONTROL land outside the pack
+  FATAL: Derived-From do sentinel (2af40687213d) nao e o ultimo commit fora de .claude/plans/PLAN-198/relmeta (54ba0353093e); commit(s) depois da derivacao que tocam fora do pacote:
+    54ba0353 docs(PLAN-198): CONTROL land outside the pack
   Re-derive, re-rode o rail e re-commite os materiais.
   rc=2
 
   ######## state A: the plant alone, patch applied
-  plant commit 5f63950ab2ed: .claude/plans/PLAN-198/relmeta/argparse.py
+  plant commit 7c24f6162a70: .claude/plans/PLAN-198/relmeta/argparse.py
   == A1. plant: NEW line (bash hard-relmeta.sh) ==
   ok: derivador e este arquivo com os sha256 pinados no sentinel do HEAD
   ok: manifesto ADR-192: 9/9 linhas OK
@@ -317,7 +308,7 @@ controle, com cada linha recuada de dois espacos:
   ok: release.sh --help: release.sh — operator release driver (target base version: 1.4.4)
   ok: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2) e 5e7cb65ebc259da586256ddb6b29918ba3a39ab6 (v1.4.3-rc.1) ancestrais do HEAD
   verify OK: base b55084da6dd8 ancestral; Derived-From 2af40687213d = ultimo commit fora do pacote; escopo PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
-  verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 e7cd69a1c951470e55785533924573fc4049e77718906b4779e14088dd04a33f); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
+  verify OK: os 3 alvos = re-derivacao byte a byte a partir do HEAD (release.sh sha256 e1e21473889dfadf57dfbfa28d86fb794d991d669aa61e921b44ac33acde371e); texto da tag do sentinel = derivado; CHANGELOG pronto (rotulo do preambulo v1.4.4, contagens {"adrs": 201, "commands": 27, "lib": 78, "skills": 166})
   ok: o --verify do derivador (python3 -I -B) saiu rc 0
   rc=0
   == A2. tree vs index after the run (expect the 3 patched paths, staged) ==
