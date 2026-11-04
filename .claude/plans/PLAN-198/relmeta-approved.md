@@ -6,8 +6,8 @@ Dados: .claude/plans/PLAN-198/relmeta/sign.tsv
 Molde: .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
 Patch: .claude/plans/PLAN-198/relmeta/relmeta.patch
 Control: .claude/plans/PLAN-198/relmeta/red-control.txt
-Derivator-SHA256: ec4eaa77cc54cc6a4c93b72d13b92006547e81bb1e87387d5e94773374fe5679
-Hard-SHA256: 0f6861ad894337d2d712cda5c274832a606de6ca641336d101baf370b7a342db
+Derivator-SHA256: 49af131da54c2453ef493c809724558552cce1fd6f3cc9dbb6d8225c20bf9751
+Hard-SHA256: fb653b73535171bd8917e9c9f7693ec89fcf9e7607439e5827ef6cd4f68a00fe
 Derived-From: 2af40687213d516acfdaa94d50d7f865b6afd2f2
 Scope-Derived: PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
 Patch-sha256: TO-FILL-BY-SIGN
@@ -37,9 +37,14 @@ Data: TO-FILL-BY-SIGN
 - Congelamento: da derivação destes materiais até a publicação do commit deste SIGN no `main` do origin,
   nenhum commit fora dos materiais do pacote (este texto e `.claude/plans/PLAN-198/relmeta/`) entra no
   `main`, e o app do Codex não mergeia neste repositório (o PLAN-198 estende o congelamento até o push da tag
-  do GA, pela regra 2 do README do kit). A linha `--verify` dos dados recusa, antes da assinatura, qualquer
-  commit entre a linha `Derived-From` e o HEAD que toque caminho fora do pacote, inclusive trazido por merge, e
-  qualquer commit que não seja merge e não toque caminho nenhum (seção «Comandos próprios do pacote»).
+  do GA, pela regra 2 do README do kit). O `--verify` do derivador, que a linha `hard-relmeta.sh` dos dados
+  roda, recusa, antes da assinatura, qualquer commit entre a linha `Derived-From` e o HEAD que toque caminho
+  fora do pacote, inclusive trazido por merge, e qualquer commit que não seja merge e não toque caminho
+  nenhum; um commit que só toque o pacote passa por ele. Dos arquivos do pacote, o derivador e o
+  `hard-relmeta.sh` são conferidos pelo `hard-relmeta.sh` contra as linhas `Derivator-SHA256` e
+  `Hard-SHA256` deste texto, e o patch, este texto e os dados pelo registro do rail que o SIGN confere; o
+  derivador roda isolado (`python3 -I -B`), sem o diretório dele no `sys.path`, e nenhuma linha dos dados
+  executa outro arquivo do pacote (seção «Comandos próprios do pacote»).
 
 ## O que esta cerimônia entrega, e nada além
 
@@ -65,7 +70,8 @@ Data: TO-FILL-BY-SIGN
   inteira nomeia versão de três números (`x.y.z`) posterior à 1.4.4, em qualquer major e com ou sem o prefixo
   `v`, salvo as versões de ferramentas externas declaradas uma a uma no derivador (`EXTERNAL_VERSIONS`: Claude
   Code 2.1.280; npm 11.20.0); versões de dois números ficam fora do mecanismo. Cada parágrafo da headline tem
-  uma frase sua na seção `[1.4.4]` (`PARAGRAPH_LINKS` do derivador, na ordem dos parágrafos).
+  uma frase na seção `[1.4.4]` (`PARAGRAPH_LINKS` do derivador, na ordem dos parágrafos; a mesma frase serve
+  aos parágrafos 2 e 3).
 - Consequência: daqui em diante o driver mira a v1.4.4 (`release.sh --help` anuncia
   `target base version: 1.4.4`), e o título, o escopo e a headline abaixo vão para a anotação ASSINADA da tag
   de cada corte da 1.4.4 (rc e GA). O mesmo texto vale para as duas tags, por isso ele não afirma publicação
@@ -74,11 +80,12 @@ Data: TO-FILL-BY-SIGN
 ## O texto que vai para a anotação da tag
 
 A seção entre os marcadores é DERIVADA: o `derive-relmeta144.sh` a grava a partir das mesmas constantes que
-geram o patch, e a linha `--verify` dos dados exige que ela seja, byte a byte, a re-derivada a partir do
-`Anchor-SHA`. A forma é a do `msg` que o driver assina na fase `tag` (o `--verify` exige esse molde uma vez no
-driver com o patch): `<tag>` é `v1.4.4-rc.N` no corte de uma rc e `v1.4.4` no GA, e `<commit do corte>` é o
-HEAD do corte; o resto vai para a anotação como está aqui. O roteiro do Owner imprime esta seção, lida do
-`Anchor-SHA`, antes de pedir o «SIM» que inicia a cerimônia; o SIGN não a imprime.
+geram o patch, e o `--verify` do derivador, que a linha `hard-relmeta.sh` dos dados roda, exige que ela seja,
+byte a byte, a re-derivada a partir do `Anchor-SHA`. A forma é a do `msg` que o driver assina na fase `tag`
+(o `--verify` exige esse molde uma vez no driver com o patch): `<tag>` é `v1.4.4-rc.N` no corte de uma rc e
+`v1.4.4` no GA, e `<commit do corte>` é o HEAD do corte; o resto vai para a anotação como está aqui. O roteiro
+do Owner imprime esta seção, lida do `Anchor-SHA`, antes de pedir o «SIM» que inicia a cerimônia; o SIGN não
+a imprime.
 
 <!-- texto-da-tag: derivado -->
 ```text
@@ -90,10 +97,11 @@ Scope:  PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-1
 Headline: Maintenance release (PLAN-198). v1.4.3 never reached npm: only
 v1.4.3-rc.1 was tagged, so this release covers the whole train since
 v1.4.2, and everything in the v1.4.3 entry of the CHANGELOG is part
-of it. The requirements do not change from v1.4.2: Claude Code
-v2.1.280 or later (install.sh and upgrade.sh still refuse an older
-claude on the PATH with exit 6, unless --allow-old-claude-code is
-given), Python 3.9 or later and Node.js 20 or later for the npm shim.
+of it, as changed by the v1.4.4 entry. The requirements do not
+change from v1.4.2: Claude Code v2.1.280 or later (install.sh and
+upgrade.sh still refuse an older claude on the PATH with exit 6,
+unless --allow-old-claude-code is given), Python 3.9 or later and
+Node.js 20 or later for the npm shim.
 
 From the v1.4.3 entry: the harness-config gate of /ceo-boot turns
 green with the default ceremony (maintainer), both on an install
@@ -128,8 +136,7 @@ points; that code is hard-deny again. The secret redactor that the
 Codex and Grok egress uses had, since v1.0.0, cut the text at offsets
 taken from its normalized form, which the signed v1.4.0 verdict had
 declared as its condition 58; its scan() offsets now index the text
-passed in. Each of the two fixes is a commit the maintainer signed,
-with no sentinel file.
+passed in. Neither fix has a sentinel file.
 
 The honest part: most of this train after v1.4.3-rc.1 reached main
 through two pull-request merges, without the signing ceremony; four
@@ -221,6 +228,11 @@ executa, e o rail a reproduz.
   sob outra: reprova (o mesmo `append_entry` com uma trava só passa).
 - A conferência de nomes do derivador contra uma cópia dele sem uma constante que ele lê: recusa, nomeando-a.
 - `--verify` sobre o Anchor dos materiais SEM o patch aplicado falha (o driver na árvore ainda mira a 1.4.3).
+- Num clone dos materiais com o patch, depois de um commit fora do pacote e de um commit só do pacote que
+  acrescenta ao diretório do derivador um `argparse.py` que sai rc 0: o `--verify` rodado sem `-I` sai rc 0
+  antes de conferir qualquer coisa (sem o `argparse.py`, ele recusa o commit fora do pacote); o
+  `hard-relmeta.sh`, que o roda com `-I`, recusa o commit fora do pacote. Com o `argparse.py` e sem o commit
+  fora do pacote, o `hard-relmeta.sh` sai rc 0.
 
 ## Comandos próprios do pacote (as linhas `hard` dos dados, nesta ordem)
 
@@ -230,13 +242,17 @@ executa, e o rail a reproduz.
    linha `Hard-SHA256`; `shasum -a 256 -c` do manifesto sai rc 0 com tantas linhas OK quantas linhas não
    vazias; exatamente uma linha do manifesto é a do `release.sh`, com o sha256 do arquivo; `TARGET_BASE="1.4.4"`
    aparece uma vez no driver e `TARGET_BASE="1.4.3"` nenhuma; `release.sh --help` sai rc 0 com a primeira
-   linha `release.sh — operator release driver (target base version: 1.4.4)`; e os commits da v1.4.2
-   (`b55084da`) e da v1.4.3-rc.1 (`5e7cb65e`) são ancestrais do HEAD. Só lê; o git roda com
-   `GIT_OPTIONAL_LOCKS=0`.
-3. `python3 .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py --repo=. --verify`, que sai rc 0 só se: a
-   conferência de nomes do derivador passa (nenhum nome lido sem definição); `b55084da` é ancestral do HEAD (e
-   a tag `v1.4.2`, se o clone a tem, descasca nele); a linha `Derived-From` deste texto é ancestral do HEAD e é
-   o último commit do HEAD que toca algo fora de `.claude/plans/PLAN-198/relmeta/` e deste texto;
+   linha `release.sh — operator release driver (target base version: 1.4.4)`; os commits da v1.4.2
+   (`b55084da`) e da v1.4.3-rc.1 (`5e7cb65e`) são ancestrais do HEAD; e, por último,
+   `python3 -I -B .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py --repo=. --verify` sai rc 0. O `-I`
+   tira do `sys.path` o diretório do derivador e o site do usuário e faz o Python ignorar as variáveis
+   `PYTHON*`; o `-B` não grava `.pyc`; o derivador só importa a stdlib. O molde não aceita opção antes do
+   caminho de um script `python3` numa linha `hard`: por isso o derivador roda dentro do envoltório, depois
+   da conferência do sha256 dele. O envoltório só lê; o git roda com `GIT_OPTIONAL_LOCKS=0`.
+   O `--verify` sai rc 0 só se: a conferência de nomes do derivador passa (nenhum nome lido que o arquivo não
+   defina em lugar nenhum); `b55084da` é ancestral do HEAD (e a tag `v1.4.2`, se o clone a tem, descasca
+   nele); a linha `Derived-From` deste texto é ancestral do HEAD e é o último commit do HEAD que toca algo
+   fora de `.claude/plans/PLAN-198/relmeta/` e deste texto;
    `git rev-list --full-history` de `Derived-From` até o HEAD, limitado aos caminhos fora do pacote, sai vazio
    (um commit fora do pacote, inclusive trazido por merge, recusa aqui, antes da assinatura); nenhum commit
    dessa faixa que não seja merge deixa de tocar caminho (um commit vazio recusa); o escopo re-derivado de
@@ -247,11 +263,11 @@ executa, e o rail a reproduz.
    plumbing do git (`log`, `rev-list`, `cat-file`, `rev-parse`, `merge-base`, `diff`, `diff-tree`), com
    `GIT_OPTIONAL_LOCKS=0`, mais o `verify-counts.sh --json --no-tests`, que tem de sair rc 0; as âncoras NÃO
    rodam aqui.
-4. `bash scripts/tests/test-install-deny-baseline.sh`: o teste que prova que a instalação `user` grava o
+3. `bash scripts/tests/test-install-deny-baseline.sh`: o teste que prova que a instalação `user` grava o
    `defaultMode` quando ele falta e o preserva quando existe; o parágrafo 3 da headline herda essa frase, e
    nenhum workflow do CI roda este teste.
-5. `python3 .claude/scripts/validate_governance_fast.py`: o validate rápido sobre a árvore com o patch.
-6. `python3 -m pytest` sobre `.claude/scripts/tests/test_release_bump_sites.py`, com resumo só de aprovados: o
+4. `python3 .claude/scripts/validate_governance_fast.py`: o validate rápido sobre a árvore com o patch.
+5. `python3 -m pytest` sobre `.claude/scripts/tests/test_release_bump_sites.py`, com resumo só de aprovados: o
    teste re-pinado (o escopo novo exigido, o da 1.4.3 negado) e os testes de prosa do driver (versões derivadas
    de `TARGET_BASE`, nenhuma contagem de sítios, a atribuição da publicação ao `npm-publish.yml`).
 
@@ -277,15 +293,18 @@ executa, e o rail a reproduz.
   acoplamento com o guia de recuperação saiu, e o lugar dele é o do `ceo-backup.sh`.
 - O título, a headline e a palavra de ligação dos ADRs no `Scope` estão em inglês (OQ-5); a pré-condição do
   CHANGELOG exige o rótulo `v1.4.4` no preâmbulo (a tolerância a um preâmbulo intocado da release anterior saiu).
-- O derivador confere, por AST e em todo modo, que nenhum nome que ele lê ficou sem definição, e que nenhum dos
-  nomes removidos no clone segue em uso.
+- O derivador confere, por AST e em todo modo, que todo nome que ele lê é definido em algum lugar do arquivo
+  (um nome definido só como local de outra função não é pego aqui e falha ao rodar), e que nenhum dos nomes
+  removidos no clone segue em uso.
+- O `--verify` não é mais uma linha `hard` própria: ele roda no fim do `hard-relmeta.sh`, isolado
+  (`python3 -I -B`).
 
 ## Resíduos declarados (pela forma)
 
 - As âncoras são, em maioria, tripwires de presença e de forma: uma âncora que passa não prova que a prosa
   descreve o diff inteiro, e há frases só com a âncora de texto (a seção «O que o texto afirma, e a âncora»
   as declara pela forma).
-- A headline usa rótulos e siglas técnicos sem os definir (HMAC, sidecar, P1, VETO, sha256, CI): a anotação da
+- A headline usa rótulos e siglas técnicos sem os definir (HMAC, sidecar, P1, VETO, sha256): a anotação da
   tag é uma nota técnica, e as seções `[1.4.4]` e `[1.4.3]` do `CHANGELOG.md` são a referência para quem lê.
 - As âncoras não rodam no SIGN nem no G0 do corte: o `--claims-only` é um passo manual antes de cada corte.
   Uma mudança do `CHANGELOG.md` depois do land deste RM que tire uma frase ancorada só aparece nele.
@@ -295,12 +314,16 @@ executa, e o rail a reproduz.
   registro do npm.
 - Um land depois da publicação deste RM que cite um plano fora do `Scope` é recusado pelo G0 do corte e pelo
   kit, e o corte pede outro RM.
-- As linhas `python3 <arquivo>.py` dos dados rodam sem `-I`: o diretório do script entra no `sys.path`. Em
-  `.claude/plans/PLAN-198/relmeta/` o único `.py` é o próprio derivador.
-- O derivador, o `hard-relmeta.sh` e o `red-control.txt` entram nos dados por caminho; o molde não os pina.
-  O `hard-relmeta.sh` confere o sha256 do derivador e o seu próprio contra as linhas `Derivator-SHA256` e
-  `Hard-SHA256` deste texto: é um vínculo de auditoria, não uma guarda contra um envoltório alterado que pule
-  a conferência; o que fixa os bytes é o `Anchor-SHA` e o registro do rail.
+- A linha `python3 .claude/scripts/validate_governance_fast.py` dos dados roda sem `-I` (o molde não aceita
+  opção antes do caminho do script): o diretório `.claude/scripts/` entra no `sys.path` dela. Ele fica fora do
+  pacote, e um commit depois da derivação que toque caminho fora do pacote é recusado pelo `--verify`, que
+  roda antes, na linha 2. Um arquivo que um commit depois da derivação acrescente ao pacote não é recusado:
+  o derivador, isolado, não o importa, e nenhuma linha dos dados o executa.
+- O `hard-relmeta.sh` entra nos dados por caminho, e o derivador e o `red-control.txt` são citados por caminho
+  neste texto; o molde não pina nenhum dos três. O `hard-relmeta.sh` confere o sha256 do derivador e o seu
+  próprio contra as linhas `Derivator-SHA256` e `Hard-SHA256` deste texto antes de rodar o derivador: é um
+  vínculo de auditoria, não uma guarda contra um envoltório alterado que pule a conferência; o que fixa os
+  bytes é o `Anchor-SHA` e o registro do rail.
 - O `--verify` lê do HEAD este texto e as pré-imagens, e da árvore os 3 alvos e o `CHANGELOG.md`; ele não
   confere outros arquivos da árvore (o SIGN confere a árvore inteira contra o índice antes e depois da
   bateria).

@@ -17,7 +17,12 @@
 #   4. `bash .claude/scripts/local/release.sh --help` sai rc 0 e a primeira linha é
 #      «release.sh — operator release driver (target base version: 1.4.4)» (o --help imprime e sai, sem
 #      efeito colateral);
-#   5. o commit da v1.4.2 (b55084da) e o da v1.4.3-rc.1 (5e7cb65e) são ancestrais do HEAD.
+#   5. o commit da v1.4.2 (b55084da) e o da v1.4.3-rc.1 (5e7cb65e) são ancestrais do HEAD;
+#   6. `python3 -I -B <derivador> --repo=. --verify` sai rc 0 (a re-derivação a partir do Anchor; o que ela
+#      confere está no docstring do derivador e no sentinel). O -I tira do sys.path o diretório do derivador e
+#      o site do usuário, e faz o Python ignorar as variáveis PYTHON*: um arquivo acrescentado a este
+#      diretório não entra nos imports do derivador; o -B não grava .pyc. O molde não aceita opção antes do
+#      caminho de um script python3 numa linha hard, por isso o derivador roda aqui, depois do passo 0.
 # Só leitura: nada é escrito no clone. O git roda com GIT_OPTIONAL_LOCKS=0, e PYTHONDONTWRITEBYTECODE=1 vale
 # para os descendentes que herdam o ambiente.
 set -u
@@ -86,4 +91,8 @@ ok "release.sh --help: $HELP_LINE"
 git merge-base --is-ancestor "$V142" HEAD </dev/null >/dev/null 2>&1 || fail "$V142 (v1.4.2) não é ancestral do HEAD"
 git merge-base --is-ancestor "$V143RC1" HEAD </dev/null >/dev/null 2>&1 || fail "$V143RC1 (v1.4.3-rc.1) não é ancestral do HEAD"
 ok "$V142 (v1.4.2) e $V143RC1 (v1.4.3-rc.1) ancestrais do HEAD"
+
+# 6. a re-derivação a partir do Anchor, com o derivador isolado (o sha256 dele já conferido no passo 0)
+python3 -I -B "$APPLY" --repo=. --verify </dev/null || fail "o --verify do derivador (python3 -I -B) saiu rc diferente de 0"
+ok "o --verify do derivador (python3 -I -B) saiu rc 0"
 exit 0

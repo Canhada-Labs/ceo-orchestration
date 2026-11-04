@@ -38,7 +38,11 @@
 #       alterada, Derivator-SHA256 alterado, CHANGELOG com [Unreleased], anexo
 #       citando v1.4.5 ou v2.0.0, o item «no release is assigned» trocado, a frase
 #       de ligação de um parágrafo tirada da [1.4.4], um commit fora do pacote
-#       trazido por `merge -s ours` e um commit vazio;
+#       trazido por `merge -s ours` e um commit vazio; em cada um o --verify
+#       (python3 -I -B) recusa nomeando o motivo e o hard-relmeta.sh sai rc≠0; e o
+#       land fora do pacote mais um commit só do pacote que acrescenta um
+#       argparse.py que sai 0: o derivador SEM -I sai rc 0 sem conferir, o
+#       hard-relmeta.sh (com -I) recusa; só o argparse.py, com o patch: rc 0;
 #   E6'. sobre o Anchor com o allowlist REAL (o HEAD, se o registro do rail dele já é
 #       válido; senão o HEAD mais um registro sintético), um GNUPGHOME só com uma
 #       chave descartável FORA do allowlist: o SIGN --dry-run para exatamente em P-KEY;
@@ -490,7 +494,7 @@ p = sys.argv[1]
 if os.path.basename(p) != "c58" or os.path.islink(p):
     sys.exit(1)
 shutil.rmtree(p)' "$RUN/c58"
-E bash -c "cd '$WORK' && python3 '$APPLY_REL' --repo=. --verify" >"$LOGS/verify-sem-patch.out" 2>&1 && VS=0 || VS=$?
+E bash -c "cd '$WORK' && python3 -I -B '$APPLY_REL' --repo=. --verify" >"$LOGS/verify-sem-patch.out" 2>&1 && VS=0 || VS=$?
 check "E2: --verify no HEAD SEM o patch: rc≠0, nomeando o release.sh que difere da re-derivação (log: verify-sem-patch.out)" \
   eval '[ "$VS" != "0" ] && grep -qF "release.sh na arvore difere da re-derivacao" "$LOGS/verify-sem-patch.out"'
 
@@ -552,7 +556,7 @@ while IFS= read -r linha; do
     ko "E4: hard $k rc=$HRC (resumo pytest ok=$PYT_OK): ${campos[*]} (log: e4-hard-$k.log)"
   fi
 done <"$WORK/$DATA_REL"
-check "E4: os dados têm 6 linhas hard, todas executadas" [ "$k" = "6" ]
+check "E4: os dados têm 5 linhas hard, todas executadas" [ "$k" = "5" ]
 ( cd "$RUN/e4" && E python3 -m pytest -p no:cacheprovider -q -rfE --tb=short \
     .claude/scripts/tests/test_release_workflow_asserts.py .claude/scripts/tests/test_release_bump_sites.py ) \
   >"$LOGS/e4-release-tests.log" 2>&1 && RT=0 || RT=$?
@@ -571,9 +575,9 @@ check "E7: release.sh bump --dry-run em ${TARGET_BASE}: rc=0, ${NBUMP} arquivo(s
 drop "$RUN/e4"
 
 # ------------------------------------------------ E5: vermelhos do verificador
-verify_in() {  # verify_in <dir> <log> — ecoa o rc do --verify
+verify_in() {  # verify_in <dir> <log> — ecoa o rc do --verify, rodado como o hard-relmeta.sh o roda
   local rc=0
-  ( cd "$1" && E python3 "$APPLY_REL" --repo=. --verify ) >"$2" 2>&1 || rc=$?
+  ( cd "$1" && E python3 -I -B "$APPLY_REL" --repo=. --verify ) >"$2" 2>&1 || rc=$?
   printf '%s' "$rc"
 }
 hard_in() {  # hard_in <dir> <log> — ecoa o rc do hard-relmeta.sh
@@ -581,11 +585,15 @@ hard_in() {  # hard_in <dir> <log> — ecoa o rc do hard-relmeta.sh
   ( cd "$1" && E bash "$HARD_REL" ) >"$2" 2>&1 || rc=$?
   printf '%s' "$rc"
 }
-red() {  # red <nome> <dir> <padrão> [hard] — o --verify (e, com hard, o envoltório) recusa nomeando
-  local v h=0 desc="$1"
+red() {  # red <nome> <dir> <padrão> [antes] — o --verify recusa nomeando, e o hard-relmeta.sh (a linha
+  # hard que roda o --verify) sai rc≠0; sem «antes», o log do hard-relmeta.sh nomeia o mesmo motivo (o
+  # --verify dele recusou); com «antes», o hard-relmeta.sh recusa num passo anterior ao --verify
+  local v h desc="$1" hn=1
   v=$(verify_in "$2" "$LOGS/e5-$1-verify.log")
-  if [ "${4:-}" = "hard" ]; then h=$(hard_in "$2" "$LOGS/e5-$1-hard.log"); desc="$desc (e o hard-relmeta.sh rc=$h)"; fi
-  if [ "$v" != "0" ] && grep -qF -- "$3" "$LOGS/e5-$1-verify.log" && { [ "${4:-}" != "hard" ] || [ "$h" != "0" ]; }; then
+  h=$(hard_in "$2" "$LOGS/e5-$1-hard.log")
+  desc="$desc (e o hard-relmeta.sh rc=$h)"
+  if [ "${4:-}" != "antes" ] && ! grep -qF -- "$3" "$LOGS/e5-$1-hard.log"; then hn=0; fi
+  if [ "$v" != "0" ] && grep -qF -- "$3" "$LOGS/e5-$1-verify.log" && [ "$h" != "0" ] && [ "$hn" = "1" ]; then
     ok "E5: $desc: --verify rc=$v nomeando «$3»"
   else
     ko "E5: $desc: --verify rc=$v; padrão «$3» $(grep -qF -- "$3" "$LOGS/e5-$1-verify.log" && printf presente || printf AUSENTE) (log: e5-$1-verify.log)"
@@ -635,7 +643,7 @@ k = [i for i, ln in enumerate(t) if ln.endswith("  .claude/scripts/local/release
 t[k] = ("0" if t[k][0] != "0" else "1") + t[k][1:]
 open(p, "w", encoding="utf-8").write("\n".join(t))
 PY
-red c-manifesto "$RUN/e5" "gate-scripts-manifest.txt na arvore difere" hard
+red c-manifesto "$RUN/e5" "gate-scripts-manifest.txt na arvore difere" antes
 drop "$RUN/e5"
 # (d) uma palavra da headline trocada no driver
 fresh "$RUN/e5" "$MAT"
@@ -645,7 +653,7 @@ p = sys.argv[1]; t = open(p, encoding="utf-8").read()
 assert t.count("Maintenance release (PLAN-198)") == 1
 open(p, "w", encoding="utf-8").write(t.replace("Maintenance release (PLAN-198)", "MAINTENANCE release (PLAN-198)", 1))
 PY
-red d-headline "$RUN/e5" "release.sh na arvore difere" hard
+red d-headline "$RUN/e5" "release.sh na arvore difere" antes
 drop "$RUN/e5"
 # (e) a seção do texto da tag alterada no sentinel (commitada: o --verify lê o sentinel do HEAD)
 prep "$RUN/e5" "$MAT"
@@ -718,6 +726,32 @@ patch_on "$RUN/e5"
 HG=$(hard_in "$RUN/e5" "$LOGS/e5-g-derivator-hard.log")
 check "E5: Derivator-SHA256 alterado no sentinel: hard-relmeta.sh rc≠0 no passo 0 (log: e5-g-derivator-hard.log)" \
   eval '[ "$HG" != "0" ] && grep -qF "Derivator-SHA256" "$LOGS/e5-g-derivator-hard.log"'
+drop "$RUN/e5"
+# (j) o estado (b) mais um commit só do pacote que acrescenta ao diretório do derivador um argparse.py que sai 0
+# (o derivador importa argparse): sem -I, o diretório do script entra no sys.path e o --verify sai rc 0 sem
+# conferir nada; o hard-relmeta.sh roda o derivador com -I e recusa o land fora do pacote. Verde: o argparse.py
+# sozinho, com o patch, deixa o hard-relmeta.sh em rc 0 (as conferências reais rodam e passam)
+prep "$RUN/e5" "$MAT"
+printf 'ensaio\n' >"$RUN/e5/docs/relmeta144-probe.txt"
+E git -C "$RUN/e5" add -- docs/relmeta144-probe.txt
+commit_in "$RUN/e5" "docs(PLAN-198): ENSAIO land fora do pacote"
+printf 'raise SystemExit(0)\n' >"$RUN/e5/$D/argparse.py"
+E git -C "$RUN/e5" add -- "$D/argparse.py"
+commit_in "$RUN/e5" "plan(PLAN-198): ENSAIO argparse.py no diretório do derivador"
+patch_on "$RUN/e5"
+( cd "$RUN/e5" && E python3 "$APPLY_REL" --repo=. --verify ) >"$LOGS/e5-j-sem-I.log" 2>&1 && JV=0 || JV=$?
+JH=$(hard_in "$RUN/e5" "$LOGS/e5-j-hard.log")
+check "E5: land fora do pacote + argparse.py no pacote: o derivador SEM -I sai rc 0 sem saída; o hard-relmeta.sh (com -I) rc≠0 nomeando o Derived-From (logs: e5-j-*)" \
+  eval '[ "$JV" = "0" ] && [ ! -s "$LOGS/e5-j-sem-I.log" ] && [ "$JH" != "0" ] && grep -qF "Derived-From do sentinel" "$LOGS/e5-j-hard.log"'
+drop "$RUN/e5"
+prep "$RUN/e5" "$MAT"
+printf 'raise SystemExit(0)\n' >"$RUN/e5/$D/argparse.py"
+E git -C "$RUN/e5" add -- "$D/argparse.py"
+commit_in "$RUN/e5" "plan(PLAN-198): ENSAIO argparse.py no diretório do derivador"
+patch_on "$RUN/e5"
+JP=$(hard_in "$RUN/e5" "$LOGS/e5-j-hard-verde.log")
+check "E5: só o argparse.py no pacote, com o patch: o hard-relmeta.sh (com -I) rc=0, com as 2 linhas verify OK do derivador (log: e5-j-hard-verde.log)" \
+  eval '[ "$JP" = "0" ] && [ "$(grep -c "^verify OK: " "$LOGS/e5-j-hard-verde.log")" = "2" ]'
 drop "$RUN/e5"
 
 # ------------------------------------------------ registro de rail sintético (quando o do HEAD não vale)
@@ -933,8 +967,8 @@ if [ -n "$OWNER_DIR" ] && [ "$SEM_SIGN" = "0" ]; then
     eval '[ "$(E git -C "$REMOTE_T" rev-parse refs/heads/main)" = "$PUB" ] && [ "$(E git -C "$REMOTE_T" rev-list --parents -n 1 "$PUB")" = "$PUB $ANCHOR_T" ]'
   check "E8 (SIM): o commit publicado difere do Anchor só nos 3 alvos, no sentinel e na .asc" \
     eval '[ "$(E git -C "$REMOTE_T" diff-tree -r --no-commit-id --name-only "$ANCHOR_T" "$PUB" | sort | tr "\n" " ")" = "$(printf "%s\n" "$T_MAN" "$T_REL" "$T_TST" "$SENT_REL" "$SENT_REL.asc" | sort | tr "\n" " ")" ]'
-  check "E8 (SIM): o SIGN rodou as 6 linhas hard e as passou (SIGN-FATO hard 1..6 rc 0) e terminou em SIGN-OK" \
-    eval '[ "$(tr -d "\r" <"$OLOG" | grep -cE "^SIGN-FATO: hard [1-6] saiu rc 0 ")" = "6" ] && tr -d "\r" <"$OLOG" | grep -q "^SIGN-OK: commit $PUB "'
+  check "E8 (SIM): o SIGN rodou as 5 linhas hard e as passou (SIGN-FATO hard 1..5 rc 0) e terminou em SIGN-OK" \
+    eval '[ "$(tr -d "\r" <"$OLOG" | grep -cE "^SIGN-FATO: hard [1-5] saiu rc 0 ")" = "5" ] && tr -d "\r" <"$OLOG" | grep -q "^SIGN-OK: commit $PUB "'
   check "E8 (SIM): o sentinel publicado tem os 4 campos preenchidos e a .asc verifica com a chave descartável" \
     eval 'E git -C "$REMOTE_T" cat-file blob "$PUB:$SENT_REL" >"$RUN/sent-pub.md" && E git -C "$REMOTE_T" cat-file blob "$PUB:$SENT_REL.asc" >"$RUN/sent-pub.md.asc" && ! grep -q "TO-FILL-BY-SIGN" "$RUN/sent-pub.md" && grep -qx "Anchor-SHA: $ANCHOR_T" "$RUN/sent-pub.md" && env -i HOME="$RUN/home" PATH="$TOOLPATH" GNUPGHOME="$OH/.gnupg" gpg --batch --verify "$RUN/sent-pub.md.asc" "$RUN/sent-pub.md" >"$LOGS/e8-verify.out" 2>&1'
   E git -C "$REMOTE_T" log -1 --format='%H%n%P%n%an <%ae>%n%B' "$PUB" >"$LOGS/e8-land-commit.txt" 2>&1 || :

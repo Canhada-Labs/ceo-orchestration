@@ -1,5 +1,5 @@
 diff --git a/.claude/governance/gate-scripts-manifest.txt b/.claude/governance/gate-scripts-manifest.txt
-index 917e317b66c5fa76807c195fb99a38856f5783c8..c941c242d6910323c206dc7ef85ead8ea418ed23 100644
+index 917e317b66c5fa76807c195fb99a38856f5783c8..0192116e12ea2ebddbe26258f8b683d68f18222a 100644
 --- a/.claude/governance/gate-scripts-manifest.txt
 +++ b/.claude/governance/gate-scripts-manifest.txt
 @@ -4,6 +4,6 @@ db8eea5b66e7e144135396a14029fd7511857a3cf42c9e5116e57000dd4ffd62  .claude/script
@@ -7,11 +7,11 @@ index 917e317b66c5fa76807c195fb99a38856f5783c8..c941c242d6910323c206dc7ef85ead8e
  2f06780eab259db9f0178befb625b0b0501f7ca726e256b31278c748d6af6340  scripts/tests/ownership-nightly-gate.sh
  2c61b558af9ad3b27d3193dadde3fb815f28a8c9070105698397d2813129ebbc  scripts/tests/ownership-expected-reds.txt
 -fb0c7356ae661f79f2022fcae4f77fd37bd975fd95cdc39b81f86419ae369c80  .claude/scripts/local/release.sh
-+7698e44a48d8610f69c10c88bfd1e8dad48c4fbd2f188e2eee200e1513925da1  .claude/scripts/local/release.sh
++e7cd69a1c951470e55785533924573fc4049e77718906b4779e14088dd04a33f  .claude/scripts/local/release.sh
  31b9f880a764751ab42edf4b6fefa3bf88c96718fb7008adf5bb5d0789069433  .github/scripts/validate-pair-rail-verdict.py
  a8c6eecc5c1fbb211ec18498443618632a0376964d5a6709f336afd26dfa1322  .claude/scripts/await_release_gate.py
 diff --git a/.claude/scripts/local/release.sh b/.claude/scripts/local/release.sh
-index e2a37aee75972f8e8efc8f7936abb4688a536374..bd19740ed84ac6200f0e836eb81551f1a8d56c2c 100755
+index e2a37aee75972f8e8efc8f7936abb4688a536374..d9d5ff290a85dae0e914d058a7911f5406c2556a 100755
 --- a/.claude/scripts/local/release.sh
 +++ b/.claude/scripts/local/release.sh
 @@ -71,73 +71,86 @@ set -euo pipefail
@@ -92,10 +92,11 @@ index e2a37aee75972f8e8efc8f7936abb4688a536374..bd19740ed84ac6200f0e836eb81551f1
 +RELEASE_HEADLINE="Maintenance release (PLAN-198). v1.4.3 never reached npm: only
 +v1.4.3-rc.1 was tagged, so this release covers the whole train since
 +v1.4.2, and everything in the v1.4.3 entry of the CHANGELOG is part
-+of it. The requirements do not change from v1.4.2: Claude Code
-+v2.1.280 or later (install.sh and upgrade.sh still refuse an older
-+claude on the PATH with exit 6, unless --allow-old-claude-code is
-+given), Python 3.9 or later and Node.js 20 or later for the npm shim.
++of it, as changed by the v1.4.4 entry. The requirements do not
++change from v1.4.2: Claude Code v2.1.280 or later (install.sh and
++upgrade.sh still refuse an older claude on the PATH with exit 6,
++unless --allow-old-claude-code is given), Python 3.9 or later and
++Node.js 20 or later for the npm shim.
 +
 +From the v1.4.3 entry: the harness-config gate of /ceo-boot turns
 +green with the default ceremony (maintainer), both on an install
@@ -130,8 +131,7 @@ index e2a37aee75972f8e8efc8f7936abb4688a536374..bd19740ed84ac6200f0e836eb81551f1
 +Codex and Grok egress uses had, since v1.0.0, cut the text at offsets
 +taken from its normalized form, which the signed v1.4.0 verdict had
 +declared as its condition 58; its scan() offsets now index the text
-+passed in. Each of the two fixes is a commit the maintainer signed,
-+with no sentinel file.
++passed in. Neither fix has a sentinel file.
 +
 +The honest part: most of this train after v1.4.3-rc.1 reached main
 +through two pull-request merges, without the signing ceremony; four

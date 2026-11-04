@@ -21,12 +21,14 @@ com o rotulo da release anterior. O que muda:
   tag da 1.4.4 vale pelo trem inteiro `v1.4.2..HEAD`;
 - as ancoras herdadas leem as frases na secao [1.4.3] do CHANGELOG (que segue
   byte a byte a assinada pela rc.1) e as novas na secao [1.4.4]; cada
-  paragrafo da headline tem uma frase sua na [1.4.4] (PARAGRAPH_LINKS);
+  paragrafo da headline tem uma frase na [1.4.4] (PARAGRAPH_LINKS; a mesma
+  frase serve aos paragrafos 2 e 3);
 - titulo e headline em ingles, ASCII estrito, nenhuma linha que comece com
   `#`, nenhuma palavra de publicacao;
-- o derivador confere, por AST, que nenhum nome que ele le ficou sem
-  definicao (assert_no_dangling_names, a licao do molde clonado), em todo
-  modo, antes de qualquer outra coisa.
+- o derivador confere, por AST, que todo nome que ele le e definido em algum
+  lugar do arquivo (assert_no_dangling_names, a licao do molde clonado), em
+  todo modo, antes de qualquer outra coisa; um nome definido so como local de
+  outra funcao nao e pego ali e falha (NameError) ao rodar.
 
   python3 apply-relmeta144-edits.py [--repo <root>] [--check | --claims-only | --verify | --tag-text | --self-check]
 
@@ -36,9 +38,12 @@ com o rotulo da release anterior. O que muda:
 pre-condicoes. `--claims-only` roda so as ancoras e imprime uma linha
 PASS/FAIL por ancora, com o resultado de codigo e o de texto (rc 0 = todas
 passam). `--tag-text` imprime so o texto da tag derivado (o derive o grava no
-sentinel). `--self-check` roda so a conferencia de nomes. O `--verify` e a
-linha hard do SIGN: re-deriva, a partir das PRE-imagens do HEAD, o escopo, o
-bloco, o manifesto e o teste, e exige igualdade BYTE A BYTE com os 3 arquivos
+sentinel). `--self-check` roda so a conferencia de nomes. O `--verify` e o
+ultimo passo da linha hard `hard-relmeta.sh` do SIGN, que o roda isolado
+(`python3 -I -B`: nem o diretorio deste script nem o site do usuario entram
+no sys.path, e ele so importa a stdlib): re-deriva, a partir das
+PRE-imagens do HEAD, o escopo, o bloco, o manifesto e o teste, e exige
+igualdade BYTE A BYTE com os 3 arquivos
 da arvore (que no SIGN ja tem o patch aplicado); confere a secao do texto da
 tag e as linhas Derived-From e Scope-Derived do sentinel, e o CHANGELOG como
 pre-condicao. Sem `git status`: so plumbing, com GIT_OPTIONAL_LOCKS=0. As
@@ -260,15 +265,16 @@ RELEASE_TITLE = (
 # aspa dupla, nenhuma linha que comece com # (a limpeza padrao do git a
 # apagaria), e toda versao x.y.z escrita com o prefixo v (um semver NU aqui
 # reprovaria test_driver_derives_every_version_string_from_target_base). Cada
-# paragrafo tem ancora em CLAIMS e uma frase sua na secao [1.4.4] do CHANGELOG
-# (PARAGRAPH_LINKS).
+# paragrafo tem ancora em CLAIMS e uma frase na secao [1.4.4] do CHANGELOG
+# (PARAGRAPH_LINKS; a mesma frase serve aos paragrafos 2 e 3).
 RELEASE_HEADLINE = """Maintenance release (PLAN-198). v1.4.3 never reached npm: only
 v1.4.3-rc.1 was tagged, so this release covers the whole train since
 v1.4.2, and everything in the v1.4.3 entry of the CHANGELOG is part
-of it. The requirements do not change from v1.4.2: Claude Code
-v2.1.280 or later (install.sh and upgrade.sh still refuse an older
-claude on the PATH with exit 6, unless --allow-old-claude-code is
-given), Python 3.9 or later and Node.js 20 or later for the npm shim.
+of it, as changed by the v1.4.4 entry. The requirements do not
+change from v1.4.2: Claude Code v2.1.280 or later (install.sh and
+upgrade.sh still refuse an older claude on the PATH with exit 6,
+unless --allow-old-claude-code is given), Python 3.9 or later and
+Node.js 20 or later for the npm shim.
 
 From the v1.4.3 entry: the harness-config gate of /ceo-boot turns
 green with the default ceremony (maintainer), both on an install
@@ -303,8 +309,7 @@ points; that code is hard-deny again. The secret redactor that the
 Codex and Grok egress uses had, since v1.0.0, cut the text at offsets
 taken from its normalized form, which the signed v1.4.0 verdict had
 declared as its condition 58; its scan() offsets now index the text
-passed in. Each of the two fixes is a commit the maintainer signed,
-with no sentinel file.
+passed in. Neither fix has a sentinel file.
 
 The honest part: most of this train after v1.4.3-rc.1 reached main
 through two pull-request merges, without the signing ceremony; four
@@ -424,9 +429,12 @@ def _stored_names(node: ast.AST) -> Set[str]:
 
 
 def dangling_names(src: str) -> List[str]:
-    """Os nomes LIDOS (ast.Name em Load) que nenhum escopo que os enxerga
-    define, nem os builtins. Conservador: um escopo de funcao conta com tudo
-    o que ele e os escopos que o envolvem definem, inclusive em compreensoes."""
+    """Os nomes LIDOS (ast.Name em Load) que nenhuma parte do arquivo define
+    (atribuicao, for, with, except, import, def/class, argumento ou
+    global/nonlocal, em QUALQUER escopo), nem os builtins. Pega um nome lido
+    sem definicao em lugar nenhum do arquivo (uma constante de modulo
+    removida); NAO pega um nome definido so como local de outra funcao e lido
+    fora dela, que falha (NameError) ao rodar."""
     tree = ast.parse(src)
     module_names = _stored_names(tree) | set(dir(builtins)) | {"__file__", "__name__", "__doc__"}
     bad: Set[str] = set()
@@ -1797,7 +1805,7 @@ def check_claims(repo: pathlib.Path) -> List[ClaimResult]:
             parts.append((not bad, "; ".join(bad) if bad else ok_detail))
         out.append((key, name, parts[0][0], parts[0][1], parts[1][0], parts[1][1]))
     links = paragraph_links_problem(secs.get(TARGET_BASE, ""))
-    out.append(("paragrafos", "cada paragrafo da headline tem uma frase sua na [%s]" % TARGET_BASE,
+    out.append(("paragrafos", "cada paragrafo da headline tem uma frase na [%s]" % TARGET_BASE,
                 True, "sem parte de codigo (conferencia de texto)", not links,
                 "; ".join(links) if links else "os %d paragrafos" % len(PARAGRAPH_LINKS)))
     return out
@@ -2227,7 +2235,7 @@ def main() -> int:
     a = ap.parse_args()
     assert_no_dangling_names()
     if a.self_check:
-        sys.stdout.write("self-check OK: nenhum nome lido sem definicao; nenhum de %s em uso\n"
+        sys.stdout.write("self-check OK: nenhum nome lido sem definicao no arquivo; nenhum de %s em uso\n"
                          % ", ".join(REMOVED_NAMES))
         return 0
     repo = pathlib.Path(a.repo).resolve()

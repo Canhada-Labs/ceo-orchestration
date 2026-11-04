@@ -28,9 +28,9 @@
 # se a headline afirmar algo que o HEAD não sustenta. Em seguida: push, o rail
 # sobre os materiais commitados, o registro do rail e o SIGN do molde
 # (.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh com PLAN-198/relmeta/sign.tsv),
-# cuja linha hard `apply-relmeta144-edits.py --verify` refaz esta derivação a
-# partir das pré-imagens do Anchor e recusa escopo velho e materiais fora do
-# último land.
+# cuja linha hard `hard-relmeta.sh` termina com o `apply-relmeta144-edits.py
+# --verify` (rodado com python3 -I -B), que refaz esta derivação a partir das
+# pré-imagens do Anchor e recusa escopo velho e materiais fora do último land.
 set -euo pipefail
 
 # o ambiente git HERDADO não escolhe repositório, índice nem objetos deste script
@@ -129,17 +129,19 @@ git -C "$W/wt" -c core.hooksPath=/dev/null -c advice.detachedHead=false checkout
 mkdir -p "$W/wt/$D" || die "mkdir no clone falhou"
 [ ! -L "$W/wt/$APPLY" ] || die "destino é symlink no clone: $APPLY"
 cp "$APPLY" "$W/wt/$APPLY" || die "cópia do derivador para o clone falhou"
-# um ambiente de allowlist: nada de CLAUDE_*, CEO_* nem PYTHONPATH chega ao derivador
+# um ambiente de allowlist: nada de CLAUDE_*, CEO_* nem PYTHONPATH chega ao derivador;
+# o derivador roda isolado (-I: nem o diretório dele nem o site do usuário no
+# sys.path; -B: nenhum .pyc), como a linha hard do SIGN o roda
 KEEP_ENV="HOME USER LOGNAME SHELL TERM LANG LC_ALL LC_CTYPE TMPDIR PYTHONUSERBASE VIRTUAL_ENV PYENV_ROOT PYENV_VERSION"
 envs=()
 for v in $KEEP_ENV; do
   if [ -n "${!v+x}" ]; then envs+=("$v=${!v}"); fi
 done
 ( cd "$W/wt" && env -i ${envs[@]+"${envs[@]}"} PATH="$PATH" \
-    PYTHONDONTWRITEBYTECODE=1 python3 "$APPLY" --repo . ) >"$W/derive.out" 2>&1 \
+    PYTHONDONTWRITEBYTECODE=1 python3 -I -B "$APPLY" --repo . ) >"$W/derive.out" 2>&1 \
   || { cat "$W/derive.out" >&2; die "o derivador recusou (log: $W/derive.out)"; }
 ( cd "$W/wt" && env -i ${envs[@]+"${envs[@]}"} PATH="$PATH" \
-    PYTHONDONTWRITEBYTECODE=1 python3 "$APPLY" --repo . --tag-text ) >"$W/tag-text" 2>"$W/tag-text.err" \
+    PYTHONDONTWRITEBYTECODE=1 python3 -I -B "$APPLY" --repo . --tag-text ) >"$W/tag-text" 2>"$W/tag-text.err" \
   || { cat "$W/tag-text.err" >&2; die "o derivador não imprimiu o texto da tag"; }
 canon_diff "$W/wt" "$T_REL" "$T_MAN" "$T_TST" >"$W/patch" || die "git diff falhou"
 [ -s "$W/patch" ] || die "patch vazio"
@@ -281,9 +283,10 @@ bash .claude/scripts/validate-governance.sh >"$W/governance.out" 2>&1 \
   printf 'and closing ones included; ADRs touched): %s.\n\n' "$SCOPE"
   printf 'Only paths of %s and the sentinel enter this commit. The signature is\n' "$D"
   printf 'the SIGN of the sign-min mold (.claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh with\n'
-  printf 'PLAN-198/relmeta/sign.tsv), whose hard line apply-relmeta144-edits.py --verify\n'
-  printf 're-derives from the Anchor pre-images and refuses a stale scope and lands after\n'
-  printf 'these materials. The rail record comes after the rail.\n\n'
+  printf 'PLAN-198/relmeta/sign.tsv), whose hard line hard-relmeta.sh ends with\n'
+  printf 'apply-relmeta144-edits.py --verify, run isolated (python3 -I -B); it re-derives\n'
+  printf 'from the Anchor pre-images and refuses a stale scope and lands after these\n'
+  printf 'materials. The rail record comes after the rail.\n\n'
   printf 'Co-Authored-By: %s\n' "$COAUTHOR"
 } >"$W/commit-msg.txt" || die "não consegui escrever a mensagem do commit"
 git commit -q -F "$W/commit-msg.txt" || die "git commit falhou"
