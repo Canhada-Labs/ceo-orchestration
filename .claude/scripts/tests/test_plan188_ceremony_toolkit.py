@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -137,14 +139,46 @@ def test_signature_does_not_fallback_to_personal_keyring(tmp_path):
     assert result["reason"] == "explicit_keyring_required"
 
 
+#: gpg derives its agent socket paths (longest: S.gpg-agent.browser) from
+#: --homedir. A unix socket address holds 104 bytes on macOS and 108 on Linux;
+#: pytest's tmp_path under a long TMPDIR exceeded it on macOS and the key
+#: import failed with "can't connect to the gpg-agent: File name too long".
+_SOCKET_PATH_LIMIT = 100
+
+
+def _short_gnupg_home() -> Path:
+    """A fresh 0700 home whose agent socket paths fit a unix socket address."""
+    for base in (tempfile.gettempdir(), "/tmp"):
+        if len(os.path.join(base, "gpg-XXXXXXXX", "S.gpg-agent.browser")) < _SOCKET_PATH_LIMIT:
+            return Path(tempfile.mkdtemp(prefix="gpg-", dir=base))
+    pytest.fail("no temporary directory short enough for a gpg home")
+
+
+def _discard_gnupg_home(home: Path) -> None:
+    """Stop any daemon bound to the home, then delete it (it lives outside tmp_path).
+
+    Every gpg call here passes --no-autostart, so there is normally nothing to
+    stop; the kill is a bounded precaution and its exit status is not a verdict.
+    """
+    gpgconf = shutil.which("gpgconf")
+    try:
+        if gpgconf:
+            run_in_process_group(
+                [gpgconf, "--homedir", str(home), "--kill", "all"],
+                capture_output=True, timeout=25,
+            )
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
+
+
 @pytest.fixture(scope="module")
-def signed_fixture(tmp_path_factory):
+def signed_fixture(tmp_path_factory, request):
     binary = shutil.which("gpg")
     if not binary:
         pytest.skip("gpg ausente; verificacao real impossivel")
     root = tmp_path_factory.mktemp("ceremony-gpg")
-    home = root / "gnupg"
-    home.mkdir(mode=0o700)
+    home = _short_gnupg_home()
+    request.addfinalizer(lambda: _discard_gnupg_home(home))
     sample = root / "signed.md"
     signature = root / "signed.md.asc"
     # Historic signature fixture, not a new approval or test-generated key.

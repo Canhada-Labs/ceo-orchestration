@@ -97,7 +97,48 @@ if str(_SCRIPTS_DIR) not in sys.path:
 from _lib.testing import TestEnvContext  # noqa: E402
 
 import check_contamination as cc  # noqa: E402
-from _fu144_contamination_cases import TestRuleOneInventoryFu144  # noqa: E402,F401
+import _contamination_inventory as _inventory  # noqa: E402
+# The module, not the class: pytest collects every TestCase bound at module
+# level whatever its name, so binding the base here would run its cases twice.
+import _fu144_contamination_cases as _fu144_cases  # noqa: E402
+
+
+class TestRuleOneInventoryFu144(_fu144_cases.TestRuleOneInventoryFu144):
+    """The imported Rule 1 cases; the invalid-name case is built in the index."""
+
+    def test_fu144_invalid_index_name_is_fatal_before_allowlist(self) -> None:
+        """Both rules take names from `git ls-files -z`, never from the directory.
+
+        So the entry is written straight into the index, byte for byte what
+        `git add` of an empty file named `docs/a<0xff>.md` records. Creating
+        that file is not portable: APFS refuses a name that is not valid UTF-8
+        (EILSEQ), which left this case failing on every macOS run.
+        """
+        raw = b"docs/a\xff.md"
+        blob = run_in_process_group(
+            ["git", "hash-object", "-w", "--stdin"], timeout=10, cwd=str(self.root),
+            input=b"", check=True, capture_output=True,
+        ).stdout.strip()
+        run_in_process_group(
+            ["git", "update-index", "--add", "--cacheinfo", b"100644," + blob + b"," + raw],
+            timeout=10, cwd=str(self.root), check=True, capture_output=True,
+        )
+        listed = run_in_process_group(
+            ["git", "ls-files", "-s", "-z"], timeout=10, cwd=str(self.root),
+            check=True, capture_output=True,
+        ).stdout
+        self.assertEqual(listed, b"100644 " + blob + b" 0\t" + raw + b"\0")
+        with self.assertRaises(_inventory.RuleOneInputError) as raised:
+            _inventory._index(self.root)
+        self.assertIn("not valid UTF-8", str(raised.exception))
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            rc = cc.main(["--root", str(self.root)])
+        self.assertEqual(rc, 2)
+        self.assertNotIn("No contamination", stdout.getvalue())
+        self.assertIn("FATAL", stderr.getvalue())
+        self.assertIn("not valid UTF-8", stderr.getvalue())
+
 
 #: Synthetic home-directory owner: not a placeholder, not a real handle.
 _OWNER = "zzfake"

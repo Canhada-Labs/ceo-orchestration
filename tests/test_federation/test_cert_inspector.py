@@ -74,18 +74,44 @@ cert_inspector = _load_cert_inspector()
 
 OPENSSL_BIN = shutil.which("openssl")
 
+#: Per-call budget for fixture generation. setUpClass makes ~16 keys and
+#: certificates per class, and one call over budget raises TimeoutExpired out
+#: of setUpClass, which ERRORS every test of the class -- the ed25519 test
+#: included, although a quiet rerun only skips it. 15 s was within reach of a
+#: heavily loaded `-n auto` run on a laptop; the budget only bounds a hang.
+_FIXTURE_TIMEOUT_S = 120
+
 
 # ---------------------------------------------------------------------------
 # Openssl helpers (fixture generation)
 # ---------------------------------------------------------------------------
 
 
+def _load_group_runner():
+    """The repository's process-group runner, loaded by path.
+
+    A timeout must kill the whole group it started (the subprocess ratchet in
+    .claude/scripts/tests/test_subprocess_timeout_group_census.py). Loading the
+    helper by path keeps this module from changing sys.path for its neighbours.
+    """
+    import importlib.util
+
+    path = _REPO_ROOT / ".claude" / "scripts" / "tests" / "_subprocess_helpers.py"
+    spec = importlib.util.spec_from_file_location("_cert_inspector_group_runner", str(path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)  # type: ignore[union-attr]
+    return module.run_in_process_group
+
+
+_run_in_process_group = _load_group_runner()
+
+
 def _openssl(*args, stdin: Optional[bytes] = None, check: bool = True) -> subprocess.CompletedProcess:
-    proc = subprocess.run(
+    proc = _run_in_process_group(
         [OPENSSL_BIN] + list(args),
         input=stdin,
         capture_output=True,
-        timeout=15,
+        timeout=_FIXTURE_TIMEOUT_S,
     )
     if check and proc.returncode != 0:
         raise RuntimeError(
@@ -190,6 +216,10 @@ class CertInspectorTestBase(unittest.TestCase):
         cls.tmpdir = tempfile.mkdtemp(prefix="cert-inspector-test-")
         d = cls.tmpdir
         cls.fixtures = {}
+        # An optional fixture is "" (its tests skip) only when openssl EXITS
+        # non-zero, i.e. this binary cannot make it: LibreSSL 3.3 answers
+        # "Algorithm ed25519 not found". A timeout or OSError is not a missing
+        # capability; it propagates, so a skip means the same on every run.
 
         # Happy-path keys
         cls.fixtures["rsa_2048"] = _gen_rsa_cert(d, "rsa_2048", 2048)
@@ -197,38 +227,38 @@ class CertInspectorTestBase(unittest.TestCase):
         cls.fixtures["ec_p256"] = _gen_ec_cert(d, "ec_p256", "prime256v1")
         try:
             cls.fixtures["ec_p384"] = _gen_ec_cert(d, "ec_p384", "secp384r1")
-        except Exception:
+        except RuntimeError:
             cls.fixtures["ec_p384"] = ""
         try:
             cls.fixtures["ed25519"] = _gen_ed25519_cert(d, "ed25519_ok")
-        except Exception:
+        except RuntimeError:
             cls.fixtures["ed25519"] = ""
 
         # Floor-reject keys
         cls.fixtures["rsa_1024"] = _gen_rsa_cert(d, "rsa_1024", 1024)
         try:
             cls.fixtures["rsa_1536"] = _gen_rsa_cert(d, "rsa_1536", 1536)
-        except Exception:
+        except RuntimeError:
             cls.fixtures["rsa_1536"] = ""
         try:
             cls.fixtures["ec_p192"] = _gen_ec_cert(d, "ec_p192", "prime192v1")
-        except Exception:
+        except RuntimeError:
             cls.fixtures["ec_p192"] = ""  # may be disabled on modern openssl
 
         # DSA — increasingly unsupported on modern openssl; tolerate
         try:
             cls.fixtures["dsa_2048"] = _gen_dsa_cert(d, "dsa_2048", 2048)
-        except Exception:
+        except RuntimeError:
             cls.fixtures["dsa_2048"] = ""
 
         # Weak-sig certs
         try:
             cls.fixtures["rsa_md5"] = _gen_rsa_cert(d, "rsa_md5", 2048, sig_md="md5")
-        except Exception:
+        except RuntimeError:
             cls.fixtures["rsa_md5"] = ""
         try:
             cls.fixtures["rsa_sha1"] = _gen_rsa_cert(d, "rsa_sha1", 2048, sig_md="sha1")
-        except Exception:
+        except RuntimeError:
             cls.fixtures["rsa_sha1"] = ""
 
         # Expired cert (1d, backdated start)

@@ -30,6 +30,28 @@ def _load_diagnostic():
 diagnostic = _load_diagnostic()
 
 
+def _files_fu144(root: Path, child_home: str) -> dict:
+    """Every file below ``root`` with its bytes, except the interpreter's own.
+
+    The macOS system Python (/usr/bin/python3) writes files of its own under
+    ``$HOME/Library/Caches/com.apple.python``. The diagnostic child is handed
+    a HOME inside ``root`` on purpose, so on macOS that one subtree belongs to
+    the interpreter, not to the diagnostic; every other file below ``root`` is
+    still compared byte for byte.
+    """
+    own = None
+    if sys.platform == "darwin":
+        own = Path(child_home) / "Library" / "Caches" / "com.apple.python"
+    files = {}
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if own is not None and own in path.parents:
+            continue
+        files[str(path.relative_to(root))] = path.read_bytes()
+    return files
+
+
 class TestDiagnoseOutputHookIsolation(TestEnvContext):
     def _inherited_locations_fu144(self, root: Path) -> dict:
         values = {}
@@ -62,10 +84,9 @@ class TestDiagnoseOutputHookIsolation(TestEnvContext):
         native = foreign / "native-state"
         native.mkdir()
         (native / "canary").write_bytes(b"native-before\n")
-        before = {str(path.relative_to(foreign)): path.read_bytes()
-                  for path in foreign.rglob("*") if path.is_file()}
         env = dict(os.environ)
         env.update(self._inherited_locations_fu144(foreign))
+        before = _files_fu144(foreign, env["HOME"])
         env["CEO_AUDIT_LOG_PATH"] = str(canary)
         env["CLAUDE_PROJECT_DIR_NATIVE"] = str(native)
         env["CLAUDE_PROJECT_DIR"] = str(_REPO)
@@ -77,6 +98,5 @@ class TestDiagnoseOutputHookIsolation(TestEnvContext):
         self.assertEqual(child.returncode, 0, child.stderr)
         self.assertNotIn("Fatal Python error", child.stderr)
         self.assertEqual(child.stdout.count("(1 cold then 0 warm)"), 2)
-        after = {str(path.relative_to(foreign)): path.read_bytes()
-                 for path in foreign.rglob("*") if path.is_file()}
+        after = _files_fu144(foreign, env["HOME"])
         self.assertEqual(after, before)
