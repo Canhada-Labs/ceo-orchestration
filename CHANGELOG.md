@@ -59,11 +59,12 @@ through two pull-request merges, without the signing ceremony. They
 changed 233 canonical paths, 15 of them kernel paths by the list as
 merged, and with them the meaning of three governance checks: the VETO
 floor, the model allowlist and the Codex pin. All of this is stated below
-and declared in Known-open, with no release assigned to its cure. Two
-defects found while this release was prepared are fixed in it: the
-kernel's hard-deny list had not followed the code that moved out of seven
-kernel entry points, and the secret redactor, since v1.0.0, cut the text
-at offsets taken from its normalized form. One condition of the redactor
+and declared in Known-open, with no release assigned to its cure. Two of
+the defects this release fixes: the preparation of this release found
+that the kernel's hard-deny list had not followed the code that moved out
+of seven kernel entry points; and the secret redactor, since v1.0.0, cut
+the text at offsets taken from its normalized form, which the signed
+v1.4.0 verdict had declared as its condition 58. One condition of the redactor
 fix is declared in Known-open. The spool cure is partial, and the new
 guard's false-positive limits were never measured on this implementation.
 No speed claim.
@@ -258,7 +259,8 @@ one.
   NFKC form has another length (an ellipsis, a ligature) before a secret
   shifted the cut, so part or all of the secret could survive next to its
   label. The Codex and Grok egress redactor (`_lib/codex_egress_redact.py`)
-  uses these functions. Every release since v1.0.0 has the defect.
+  uses these functions. Every release since v1.0.0 has the defect. The
+  signed v1.4.0 verdict declared this defect as its condition 58.
 - `scan()` now reports offsets in the text passed in. It matches that text
   and its NFKC view, maps the view's matches back, and merges overlapping
   findings into one span. The output is the original text with only those
@@ -406,12 +408,13 @@ one.
   structural cure, redacting the decoded values after parsing, is scheduled
   for the next release.
 
-### Known-open (carried — NOT cured by this release)
+### Known-open (carried)
 
 - **The v1.4.0 annex.**
   - The signed v1.4.0 verdict carries an annex of P1 findings and declared
     conditions. v1.4.3-rc.1 retired signed condition 67, and that cure is
     part of this release.
+  - Signed condition 58 is the redactor offsets defect fixed above.
   - This release does not claim the cure of any other annex condition. The
     partial spool change above is not claimed as one.
   - **The rest stays open, and no release is assigned to their cure.**
