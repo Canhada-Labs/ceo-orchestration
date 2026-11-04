@@ -1,9 +1,10 @@
 ---
 id: PLAN-198
 title: Release v1.4.4 — evidence of the cut
-status: reviewed
+status: executing
 created: 2026-11-03
 reviewed_at: 2026-11-03
+executing_at: 2026-11-03
 reviewed_by: "Owner — S366 chat, 2026-11-03, multiple-choice answers to OQ-1 to OQ-8 and «Pode marcar como revisado» (recorded verbatim under Owner decisions)"
 owner: CEO
 depends_on: [PLAN-194, PLAN-195, PLAN-197]
@@ -199,18 +200,18 @@ Check: none (doc-only) — each answer is recorded verbatim under "Owner decisio
 
 ### W2 — Release metadata ceremony (relmeta-144)
 Check: python3 .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py --claims-only (script created in this wave; green before derivation)
-- [ ] With the first W2 commit, the plan moves `reviewed → executing` (PLAN-SCHEMA §4: the first commit that
+- [x] With the first W2 commit, the plan moves `reviewed → executing` (PLAN-SCHEMA §4: the first commit that
   depends on the plan after the Owner gate).
   Check: grep -qE '^status: (executing|done)$' .claude/plans/PLAN-198-release-v1-4-4.md
-- [ ] Clone `.claude/plans/PLAN-194/relmeta/` into `.claude/plans/PLAN-198/relmeta/`: split `PREV_BASE`
+- [x] Clone `.claude/plans/PLAN-194/relmeta/` into `.claude/plans/PLAN-198/relmeta/`: split `PREV_BASE`
   into the driver's previous target (`1.4.3`) and the range base (`1.4.2`); `TARGET_BASE="1.4.4"`;
   keep `RC_NUM="1"`; re-anchor the three CLAIMS that fail on HEAD to the code that holds them now;
   read the inherited claims from `[1.4.3]` and the new ones from `[1.4.4]`; `EXTERNAL_VERSIONS` from
   the real `[1.4.4]` text; a static check that no removed constant is still referenced.
-- [ ] `RELEASE_TITLE` and `RELEASE_HEADLINE` rewritten for `v1.4.2..HEAD`: ASCII, every version with a
+- [x] `RELEASE_TITLE` and `RELEASE_HEADLINE` rewritten for `v1.4.2..HEAD`: ASCII, every version with a
   `v` prefix, no line that starts with `#` (git's default tag cleanup would strip it), no npm-publication
   claim, the PR-merge sentence re-measured and stated by its form.
-- [ ] Derived scope covers `git log v1.4.2..HEAD` and includes PLAN-197 and PLAN-198.
+- [x] Derived scope covers `git log v1.4.2..HEAD` and includes PLAN-197 and PLAN-198.
   Check: git log --format=%s v1.4.2..HEAD | grep -oE 'PLAN-[0-9]{3}' | sort -u
 - [ ] Re-pin `test_release_bump_sites.py` (new scope positive, 1.4.3 scope negative) and the
   `release.sh` line of the gate-scripts manifest.
