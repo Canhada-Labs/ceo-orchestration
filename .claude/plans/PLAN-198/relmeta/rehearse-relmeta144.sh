@@ -223,7 +223,7 @@ chave_em() {  # chave_em <gnupghome> <rótulo> — ecoa o fingerprint
     env -i HOME="$RUN/home" PATH="$TOOLPATH" GNUPGHOME="$g" gpg --batch --passphrase '' --quick-gen-key \
       'Rehearsal Throwaway <rehearsal@example.invalid>' ed25519 sign never >"$LOGS/gpg-gen-$r.out" 2>&1
   fi
-  env -i HOME="$RUN/home" PATH="$TOOLPATH" GNUPGHOME="$g" gpg --with-colons --list-secret-keys \
+  env -i HOME="$RUN/home" PATH="$TOOLPATH" GNUPGHOME="$g" gpg --with-colons --list-secret-keys 2>"$LOGS/gpg-list-$r.err" \
     | awk -F: '$1=="fpr"{print $10; exit}'
 }
 
@@ -739,11 +739,17 @@ else
   T config user.email rehearsal@example.invalid
   T config commit.gpgsign false
   T checkout -q -B main "$DF"
-  printf '# ENSAIO: chave descartável (rehearse-relmeta144), TEST ONLY\n%s\n' "$KEY_FPR" >>"$RUN/anc-t/$SIGNERS"
-  if [ -f "$RUN/anc-t/$REGISTRY" ]; then
-    printf '\n  - key_id: "%s"\n    key_type: "hot"\n    created_at: "2026-11-03T00:00:00Z"\n    expires_at: "2030-01-01T00:00:00Z"\n    revoked_at: null\n    notes: "ENSAIO: chave descartável (rehearse-relmeta144), TEST ONLY"\n' "$KEY_FPR" >>"$RUN/anc-t/$REGISTRY"
-    T add -- "$REGISTRY"
-  fi
+  # as chaves do ensaio (a do E6 e a do HOME do SIM do E8; iguais quando importadas da mesma fonte), uma vez cada
+  VISTAS=" "
+  for fpr in "$KEY_FPR" $O_FPR; do
+    case "$VISTAS" in *" $fpr "*) continue ;; esac
+    VISTAS="$VISTAS$fpr "
+    printf '# ENSAIO: chave descartável (rehearse-relmeta144), TEST ONLY\n%s\n' "$fpr" >>"$RUN/anc-t/$SIGNERS"
+    if [ -f "$RUN/anc-t/$REGISTRY" ]; then
+      printf '\n  - key_id: "%s"\n    key_type: "hot"\n    created_at: "2026-11-03T00:00:00Z"\n    expires_at: "2030-01-01T00:00:00Z"\n    revoked_at: null\n    notes: "ENSAIO: chave descartável (rehearse-relmeta144), TEST ONLY"\n' "$fpr" >>"$RUN/anc-t/$REGISTRY"
+    fi
+  done
+  if [ -f "$RUN/anc-t/$REGISTRY" ]; then T add -- "$REGISTRY"; fi
   T add -- "$SIGNERS"
   T commit -q -m "test($PLAN): TEST ONLY — chave descartável do ensaio no allowlist do clone"
   T checkout -q "$MAT" -- "$D" "$SENT_REL"
