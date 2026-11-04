@@ -8,7 +8,7 @@ Patch: .claude/plans/PLAN-198/relmeta/relmeta.patch
 Control: .claude/plans/PLAN-198/relmeta/red-control.txt
 Derivator-SHA256: ec4eaa77cc54cc6a4c93b72d13b92006547e81bb1e87387d5e94773374fe5679
 Hard-SHA256: 0f6861ad894337d2d712cda5c274832a606de6ca641336d101baf370b7a342db
-Derived-From: 582e9530ef90cc98547c90efc287069f564c5fc5
+Derived-From: 2af40687213d516acfdaa94d50d7f865b6afd2f2
 Scope-Derived: PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
 Patch-sha256: TO-FILL-BY-SIGN
 Rail-Record-sha256: TO-FILL-BY-SIGN
