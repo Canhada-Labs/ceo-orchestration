@@ -42,7 +42,7 @@ Data: TO-FILL-BY-SIGN
   fora do pacote, inclusive trazido por merge, e qualquer commit que não seja merge e não toque caminho
   nenhum; um commit que só toque o pacote passa por ele. O patch, este texto e os dados são conferidos pelo
   registro do rail que o SIGN confere; o derivador roda isolado (`python3 -I -B`), sem o diretório dele no
-  `sys.path`, e nenhuma linha dos dados executa outro arquivo do pacote (seção «Comandos próprios do pacote»).
+  `sys.path`.
 
 ## O que esta cerimônia entrega, e nada além
 
