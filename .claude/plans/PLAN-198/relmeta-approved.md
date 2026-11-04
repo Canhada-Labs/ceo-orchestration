@@ -6,7 +6,7 @@ Dados: .claude/plans/PLAN-198/relmeta/sign.tsv
 Molde: .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
 Patch: .claude/plans/PLAN-198/relmeta/relmeta.patch
 Control: .claude/plans/PLAN-198/relmeta/red-control.txt
-Derivator-SHA256: 49af131da54c2453ef493c809724558552cce1fd6f3cc9dbb6d8225c20bf9751
+Derivator-SHA256: a5a49eaaae58335e6319cca164c78079259923c0d8ef2b7a9fbdf2496545cdf7
 Hard-SHA256: fb653b73535171bd8917e9c9f7693ec89fcf9e7607439e5827ef6cd4f68a00fe
 Derived-From: 2af40687213d516acfdaa94d50d7f865b6afd2f2
 Scope-Derived: PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)
@@ -40,11 +40,9 @@ Data: TO-FILL-BY-SIGN
   do GA, pela regra 2 do README do kit). O `--verify` do derivador, que a linha `hard-relmeta.sh` dos dados
   roda, recusa, antes da assinatura, qualquer commit entre a linha `Derived-From` e o HEAD que toque caminho
   fora do pacote, inclusive trazido por merge, e qualquer commit que não seja merge e não toque caminho
-  nenhum; um commit que só toque o pacote passa por ele. Dos arquivos do pacote, o derivador e o
-  `hard-relmeta.sh` são conferidos pelo `hard-relmeta.sh` contra as linhas `Derivator-SHA256` e
-  `Hard-SHA256` deste texto, e o patch, este texto e os dados pelo registro do rail que o SIGN confere; o
-  derivador roda isolado (`python3 -I -B`), sem o diretório dele no `sys.path`, e nenhuma linha dos dados
-  executa outro arquivo do pacote (seção «Comandos próprios do pacote»).
+  nenhum; um commit que só toque o pacote passa por ele. O patch, este texto e os dados são conferidos pelo
+  registro do rail que o SIGN confere; o derivador roda isolado (`python3 -I -B`), sem o diretório dele no
+  `sys.path`, e nenhuma linha dos dados executa outro arquivo do pacote (seção «Comandos próprios do pacote»).
 
 ## O que esta cerimônia entrega, e nada além
 
@@ -117,9 +115,7 @@ Also from that entry: a fresh --ceremony user install writes
 permissions.defaultMode with the value manual when the settings.json
 produced by that same run has none, unless
 CEO_INSTALL_SKIP_DENY_BASELINE=1, and a settings.json that existed
-before the install is never touched. On an install that registered
-the cost-envelope hook by hand, a block is recorded in the audit log;
-no shipped settings template registers that hook. Fixes to
+before the install is never touched. Fixes to
 audit-query.py, /status, /ceo-boot and check-substrate-drift.py.
 
 New since v1.4.3-rc.1: a bounded scan in the Bash guard against
@@ -194,7 +190,7 @@ GA) e na derivação; NÃO rodam no SIGN.
 |---|---|---|
 | 1. a v1.4.3 não chegou ao npm; requisitos | `train`, `ccfloor` | o commit da v1.4.3-rc.1 (`5e7cb65e`) ancestral do HEAD e o `npm-publish.yml` pulando as tags `-rc.`; o bloco do piso do Claude Code rodado contra um `claude` falso no `install.sh` e no `upgrade.sh`, e byte a byte o da v1.4.2 nos dois; `SUPPORT.md` cita 2.1.280; `engines.node` `>=20` |
 | 2. gate do harness, condição 67 (da `[1.4.3]`) | `harness`, `cond67` | as fixtures do replay na pasta entregue, os grupos `harness-*` no teste histórico, C9 e o SIGN da W7a ancestrais, o resíduo da cerimônia `user` preso ao código e o gate no modo do CI na raiz verde; a fachada `audit_log.py` executa as partes de `_lib/_audit_log_parts/` e o único `append_entry` delas, em `rotation_storage.py`, lê o elo, grava a linha e atualiza o sidecar dentro de UM MESMO `with FileLock(paths["lock"], …)` (por AST); sentinel e `.asc` da cura e a condição 67 no envelope da v1.4.0-rc.1 |
-| 3. `defaultMode`, envelope de custo, correções (da `[1.4.3]`) | `defaultmode`, `cenv`, `fixes` | `DEFAULT_MODE_BASELINE="manual"` e as rotas do `install.sh`, o template `user` sem `permissions.defaultMode`; por AST, uma chamada `emit_generic("cost_envelope_capped", …)` com os 6 kwargs e nenhum template que registre o hook; `status.py`, `check-substrate-drift.py`, o `external_wait` hoje em `_lib/_ceo_boot_parts/` (que o `ceo-boot.py` instala) e o teste da ordem dos flags do `audit-query.py` |
+| 3. `defaultMode`, correções (da `[1.4.3]`) | `defaultmode`, `fixes` | `DEFAULT_MODE_BASELINE="manual"` e as rotas do `install.sh`, o template `user` sem `permissions.defaultMode`; `status.py`, `check-substrate-drift.py`, o `external_wait` hoje em `_lib/_ceo_boot_parts/` (que o `ceo-boot.py` instala) e o teste da ordem dos flags do `audit-query.py` |
 | 4. guarda de Bash, divisão em módulos, spool | `guard`, `split`, `spool` | a fachada `check_bash_safety.py` executa `posture_scan`, que importa `bash_indirect_guard`, lê os dois interruptores, só desliga a varredura com o valor `0` e, no ramo do acerto, devolve só `Decision(allow=False, …)` (por AST); ADR-201 presente; `check_bash_safety.py` com no máximo 100 linhas e `_lib/audit_emit.py` com no máximo 1000, os pacotes deles com módulos, ADR-202 presente; `_python-hook.sh` exporta `CEO_HOOK_BOUNDED_EXIT=1` e o `spool_writer.py` lê a variável e grava `exit_deadline_skip` |
 | 5. as duas correções | `kernelfix`, `redactor` | pelo predicado do kernel do HEAD, num processo próprio, todo arquivo rastreado dos 7 pacotes que receberam o código das fachadas do kernel e de `adapters/live/`, e os 5 módulos planos, são caminhos do kernel; o teste novo presente; o commit `161e1dc3` ancestral; `scan_and_redact`, num processo próprio, sobre um texto com uma reticência antes de um token de exemplo, devolve o texto com só o token trocado pelo rótulo; o redator de saída do Codex o chama; o commit `54bab3cc` ancestral; o envelope assinado da v1.4.0 traz a condição 58 com o título do defeito dos offsets |
 | 6. a parte honesta: os merges e as três checagens | `merges`, `models`, `codex` | pelos assuntos, 4 merges de pull request em `v1.4.2..v1.4.3-rc.1` e os #6 e #7 depois; nos caminhos que os dois trouxeram, 233 canônicos pelo oráculo do HEAD, 15 do kernel pela lista como mergeada e nenhum `.asc`; o `model_currency`, num processo próprio, admite os ids sondados (dois datados com a retirada no ledger, um de cada fornecedor externo) e os três chamadores o importam; o manifesto pina 0.160.0 por sha256 só para `aarch64-apple-darwin`, o corpo do pin é `>=0.128.0`, `CODEX_VERSION_FLOOR = "0.160.0"` e o resultado `version_floor_only` existe |
@@ -323,10 +319,9 @@ executa, e o rail a reproduz.
   neste texto; o molde não pina nenhum dos três. O `hard-relmeta.sh` confere o sha256 do derivador e o seu
   próprio contra as linhas `Derivator-SHA256` e `Hard-SHA256` deste texto antes de rodar o derivador: é um
   vínculo de auditoria, não uma guarda contra um envoltório alterado que pule a conferência; o que fixa os
-  bytes é o `Anchor-SHA` e o registro do rail.
-- O `--verify` lê do HEAD este texto e as pré-imagens, e da árvore os 3 alvos e o `CHANGELOG.md`; ele não
-  confere outros arquivos da árvore (o SIGN confere a árvore inteira contra o índice antes e depois da
-  bateria).
+  bytes é o `Anchor-SHA`.
+- O `--verify` lê do HEAD este texto e as pré-imagens, e da árvore os 3 alvos e o `CHANGELOG.md` (o SIGN
+  confere a árvore inteira contra o índice antes e depois da bateria).
 - A bateria do molde roda o pytest completo, com testes de teto de tempo ABSOLUTO; uma falha por tempo que
   se repita nas 3 repetições isoladas reprova o SIGN.
 - O `test-install-deny-baseline.sh` roda só nesta bateria (o CI não o roda).

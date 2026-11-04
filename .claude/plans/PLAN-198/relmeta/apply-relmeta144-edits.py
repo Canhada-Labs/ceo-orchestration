@@ -177,13 +177,6 @@ DEFAULT_MODE_JQ = 'has("defaultMode")'
 DEFAULT_MODE_PY = 'perms.setdefault("defaultMode", sys.argv[3])'
 DEFAULT_MODE_SKIP = "CEO_INSTALL_SKIP_DENY_BASELINE"
 USER_TEMPLATE = "templates/settings/settings.user.json"
-TEMPLATES_DIR = "templates/settings"
-COST_HOOK = ".claude/hooks/check_cost_envelope.py"
-COST_EVENT = "cost_envelope_capped"
-COST_KWARGS = frozenset([
-    "class_tier", "window_breached", "cap_cents", "current_cents", "session_id", "project",
-])
-CENV_COMMIT = "1142884039f8"
 STATUS_PY = ".claude/scripts/status.py"
 SUBSTRATE_DRIFT = ".claude/scripts/check-substrate-drift.py"
 AUDIT_QUERY_TEST = ".claude/scripts/tests/test_audit_query_shared_flags_order.py"
@@ -290,9 +283,7 @@ Also from that entry: a fresh --ceremony user install writes
 permissions.defaultMode with the value manual when the settings.json
 produced by that same run has none, unless
 CEO_INSTALL_SKIP_DENY_BASELINE=1, and a settings.json that existed
-before the install is never touched. On an install that registered
-the cost-envelope hook by hand, a block is recorded in the audit log;
-no shipped settings template registers that hook. Fixes to
+before the install is never touched. Fixes to
 audit-query.py, /status, /ceo-boot and check-substrate-drift.py.
 
 New since v1.4.3-rc.1: a bounded scan in the Bash guard against
@@ -1197,43 +1188,6 @@ def text_defaultmode(secs: Dict[str, str]) -> List[str]:
         "`CEO_INSTALL_SKIP_DENY_BASELINE=1` skips both the deny baseline and the `defaultMode`"))
 
 
-def code_cenv(repo: pathlib.Path) -> List[str]:
-    bad: List[str] = []
-    src = _need_text(repo, COST_HOOK, bad)
-    if src:
-        try:
-            tree = ast.parse(src)
-        except SyntaxError as exc:
-            return ["%s nao parseia (%s)" % (COST_HOOK, exc)]
-        calls = [c for c in _calls_named(tree, "emit_generic")
-                 if c.args and isinstance(c.args[0], ast.Constant) and c.args[0].value == COST_EVENT]
-        if len(calls) != 1:
-            bad.append("%s: %d chamadas emit_generic(%r) (exigido: 1)" % (COST_HOOK, len(calls), COST_EVENT))
-        else:
-            kws = [k.arg for k in calls[0].keywords]
-            if None in kws or len(kws) != len(set(kws)) or set(kws) != COST_KWARGS:
-                bad.append("%s: emit_generic(%r) com kwargs %s (esperado %s; sem action)"
-                           % (COST_HOOK, COST_EVENT, sorted(str(k) for k in kws), sorted(COST_KWARGS)))
-    d = repo / TEMPLATES_DIR
-    tpls = sorted(p for p in d.glob("*.json") if p.is_file() and not p.is_symlink()) if d.is_dir() else []
-    names = set(p.name for p in tpls)
-    if not {"settings.base.json", "settings.user.json"} <= names:
-        bad.append("%s sem settings.base.json e settings.user.json" % TEMPLATES_DIR)
-    for p in tpls:
-        if "check_cost_envelope" in p.read_text(encoding="utf-8"):
-            bad.append("%s/%s registra check_cost_envelope" % (TEMPLATES_DIR, p.name))
-    _ancestor(repo, CENV_COMMIT, bad, "SIGN do cenv")
-    return bad
-
-
-def text_cenv(secs: Dict[str, str]) -> List[str]:
-    return _inherited(secs, (
-        "On an install that registered the cost-envelope hook by hand, a block is now "
-        "recorded in the audit log",
-        "No earlier release recorded it",
-        "No shipped settings template registers this hook"))
-
-
 def code_fixes(repo: pathlib.Path) -> List[str]:
     """O external_wait do /ceo-boot mora hoje no pacote _lib/_ceo_boot_parts/,
     que a fachada ceo-boot.py instala."""
@@ -1736,10 +1690,6 @@ CLAIMS: Tuple[Claim, ...] = (
      "install.sh com DEFAULT_MODE_BASELINE=\"manual\" (1 linha), as rotas jq e python e o skip "
      "por ambiente; o template user sem permissions.defaultMode (JSON); upgrade.sh com o mesmo "
      "blob da v%s" % RANGE_BASE),
-    ("cenv", "cost_envelope_capped gravado; nenhum template registra (herdada)", code_cenv, text_cenv,
-     "por AST, uma chamada emit_generic(%r) com kwargs = %s, sem action; nenhum "
-     "templates/settings/*.json registra o hook; SIGN do cenv ancestral"
-     % (COST_EVENT, ", ".join(sorted(COST_KWARGS)))),
     ("fixes", "correcoes de audit-query, /status, /ceo-boot e check-substrate-drift (herdada, "
      "re-ancorada)", code_fixes, text_fixes,
      "status.py sem --as-json; check-substrate-drift.py com COMPONENT_CHECK_ERROR; ceo-boot.py "

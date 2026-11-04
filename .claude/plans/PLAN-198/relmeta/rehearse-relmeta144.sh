@@ -381,7 +381,7 @@ NCLAIMS=$(E python3 -c 'import importlib.util, sys
 s = importlib.util.spec_from_file_location("a", sys.argv[1]); m = importlib.util.module_from_spec(s)
 s.loader.exec_module(m); print(len(m.CLAIMS) + 1)' "$WORK/$APPLY_REL")
 check "E2: âncoras no HEAD: rc=0 e $NCLAIMS/$NCLAIMS PASS (log: claims-head.out)" \
-  eval '[ "$CH" = "0" ] && [ "$NCLAIMS" = "17" ] && [ "$(grep -c "^PASS  " "$LOGS/claims-head.out")" = "$NCLAIMS" ]'
+  eval '[ "$CH" = "0" ] && [ "$NCLAIMS" = "16" ] && [ "$(grep -c "^PASS  " "$LOGS/claims-head.out")" = "$NCLAIMS" ]'
 E git clone -q --no-hardlinks "$WORK" "$RUN/base"
 E git -C "$RUN/base" checkout -q --detach "$BASE_SHA"
 G show "HEAD:CHANGELOG.md" >"$RUN/base/CHANGELOG.md"
@@ -396,7 +396,6 @@ esperado = {
     "harness": "REPLAY_FIXTURES_REL=['.claude/hooks/tests/fixtures/harness-config/replay']",
     "cond67": "audit_log.py ainda define append_entry",
     "defaultmode": "DEFAULT_MODE_BASELINE ausente",
-    "cenv": "com kwargs ['action',",
     "fixes": ".claude/scripts/status.py ainda passa --as-json",
     "guard": "posture_scan.py ausente",
     "split": "check_bash_safety.py tem ",
@@ -426,7 +425,7 @@ for chave, motivo in esperado.items():
 PY
 }
 red_ok "$LOGS/claims-base.out" >"$LOGS/red-check.out" 2>&1 && RB=0 || RB=$?
-check "E2: v1.4.2 + CHANGELOG do HEAD: rc=1; texto PASS em todas; código FAIL nas 14 esperadas, cada uma pelo motivo dela; ccfloor, annex e paragrafos PASS (log: claims-base.out, red-check.out)" \
+check "E2: v1.4.2 + CHANGELOG do HEAD: rc=1; texto PASS em todas; código FAIL nas 13 esperadas, cada uma pelo motivo dela; ccfloor, annex e paragrafos PASS (log: claims-base.out, red-check.out)" \
   eval '[ "$CB" = "1" ] && [ "$RB" = "0" ]'
 E git -C "$RUN/base" checkout -q -- CHANGELOG.md
 E python3 "$WORK/$APPLY_REL" --repo "$RUN/base" --claims-only >"$LOGS/claims-base-pura.out" 2>&1 && CP=0 || CP=$?
@@ -456,7 +455,7 @@ esperado = {
 }
 txt = open(sys.argv[1], encoding="utf-8").read()
 blocos = re.findall(r"(?m)^(PASS|FAIL)  \[([a-z0-9]+)\][^\n]*\n      codigo: (PASS|FAIL) — ([^\n]*)\n      texto:  (PASS|FAIL) — ([^\n]*)$", txt)
-assert len(blocos) == 17, len(blocos)
+assert len(blocos) == 16, len(blocos)
 for geral, chave, cod, cdet, tex, tdet in blocos:
     assert cod == "PASS", (chave, "codigo", cdet)
     if chave in esperado:
