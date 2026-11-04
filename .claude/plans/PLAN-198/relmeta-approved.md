@@ -6,7 +6,7 @@ Dados: .claude/plans/PLAN-198/relmeta/sign.tsv
 Molde: .claude/plans/PLAN-194/sign-min/OWNER-SIGN.sh
 Patch: .claude/plans/PLAN-198/relmeta/relmeta.patch
 Control: .claude/plans/PLAN-198/relmeta/red-control.txt
-Derivator-SHA256: 9f899c370f1d7e1acae11a77819f8fe8b80b2f416ef0542f24160b6ca462d13b
+Derivator-SHA256: c26b4224477a83fd1ecc63239530f68fb0c493ed86e7184f473a680fa7ca4a2e
 Hard-SHA256: 0f6861ad894337d2d712cda5c274832a606de6ca641336d101baf370b7a342db
 Derived-From: c04a773ce57391f5882115bf3f62ca9251432840
 Scope-Derived: PLAN-169 / PLAN-170 / PLAN-171 / PLAN-175 / PLAN-176 / PLAN-181 / PLAN-183 / PLAN-186 / PLAN-190 / PLAN-191 / PLAN-192 / PLAN-193 / PLAN-194 / PLAN-195 / PLAN-196 / PLAN-197 / PLAN-198 (ADRs touched: ADR-055 ADR-149 ADR-158 ADR-182 ADR-201 ADR-202)

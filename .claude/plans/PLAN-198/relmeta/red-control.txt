@@ -5,7 +5,7 @@ Medido em: 2026-11-03, pelo construtor (W2), sobre os bytes do commit dos materi
 descartavel; macOS 27.2 (26B123, arm64), /usr/bin/python3 3.9.6, /usr/bin/git 2.54.0 (Apple Git-157), /bin/bash 3.2.57,
 /opt/homebrew/bin/gpg 2.5.24. O rehearse-relmeta144.sh (passos E0 e E2) refaz as secoes 1 a 3, 5 e 6 e
 confere os motivos.
-Derivador: .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py, sha256 9f899c370f1d7e1acae11a77819f8fe8b80b2f416ef0542f24160b6ca462d13b.
+Derivador: .claude/plans/PLAN-198/relmeta/apply-relmeta144-edits.py, sha256 c26b4224477a83fd1ecc63239530f68fb0c493ed86e7184f473a680fa7ca4a2e.
 Arvore verde: o commit dos materiais com o relmeta.patch aplicado.
 Arvore vermelha: b55084da6dd8e4a05fc9893b2690df8aebcfd0ca (v1.4.2), num clone descartavel.
 
@@ -207,6 +207,6 @@ reprova; com uma trava so, passa.)
 
 Uma copia do derivador sem a linha CEO_BOOT_INSTALL = ... (a constante que so code_fixes le), com --self-check:
 rc 2.
-FATAL: o derivador le nome sem definicao (licao do molde clonado): CEO_BOOT_INSTALL (linha 1227)
+FATAL: o derivador le nome sem definicao (licao do molde clonado): CEO_BOOT_INSTALL (linha 1229)
 O derivador do commit dos materiais, com --self-check: rc 0.
 self-check OK: nenhum nome lido sem definicao; nenhum de PREV_BASE, DR_GUIDE, AUDIT_QUERY_TEST_OLD em uso

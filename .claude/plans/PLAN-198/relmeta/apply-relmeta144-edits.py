@@ -28,7 +28,9 @@ com o rotulo da release anterior. O que muda:
   definicao (assert_no_dangling_names, a licao do molde clonado), em todo
   modo, antes de qualquer outra coisa.
 
-  python3 apply-relmeta144-edits.py --repo <root> [--check | --claims-only | --verify | --tag-text | --self-check]
+  python3 apply-relmeta144-edits.py [--repo <root>] [--check | --claims-only | --verify | --tag-text | --self-check]
+
+(`--repo` vale, por padrão, o diretório atual: a linha Check da W2 do PLAN-198 roda o `--claims-only` da raiz.)
 
 `--check` nao escreve nada: imprime as derivacoes e valida ancoras e
 pre-condicoes. `--claims-only` roda so as ancoras e imprime uma linha
@@ -2177,7 +2179,7 @@ def verify(repo: pathlib.Path) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", required=True)
+    ap.add_argument("--repo", default=".")
     g = ap.add_mutually_exclusive_group()
     g.add_argument("--check", action="store_true")
     g.add_argument("--claims-only", action="store_true")
