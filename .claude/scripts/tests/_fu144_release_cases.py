@@ -15,6 +15,11 @@ INSTALL = REPO_ROOT / "INSTALL.md"
 SITES = REPO_ROOT / ".claude" / "scripts" / "local" / "_release_bump_sites.py"
 
 
+def _release() -> str:
+    """The release the live INSTALL.md example names: `release.sh bump` rewrites it to VERSION."""
+    return (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+
+
 def _load_sites():
     spec = importlib.util.spec_from_file_location("fu144_release_sites", str(SITES))
     assert spec is not None and spec.loader is not None
@@ -40,7 +45,7 @@ def _git(repo: Path, env, *args: str):
     )
 
 
-def _make_source(root: Path, env, ordinal: int) -> Path:
+def _make_source(root: Path, env, ordinal: int, release: str) -> Path:
     source = root / ("source-%d" % ordinal)
     (source / "scripts").mkdir(parents=True)
     shutil.copy2(REPO_ROOT / "scripts" / "upgrade.sh", source / "scripts")
@@ -50,9 +55,9 @@ def _make_source(root: Path, env, ordinal: int) -> Path:
     _git(source, env, "config", "user.email", "release-test@example.invalid")
     _git(source, env, "add", ".")
     _git(source, env, "commit", "-q", "-m", "fixture")
-    _git(source, env, "tag", "v1.4.3-rc.1")
+    _git(source, env, "tag", "v%s-rc.1" % release)
     if ordinal == 2:
-        _git(source, env, "tag", "v1.4.3-rc.2")
+        _git(source, env, "tag", "v%s-rc.2" % release)
     return source
 
 
@@ -60,22 +65,26 @@ class TestFu144ReleaseExamples(TestEnvContext):
     """The documented refs remain valid before and after the GA promotion."""
 
     def test_fu144_install_pin_examples_cover_rc_hold_and_ga(self):
+        release = _release()
+        self.assertRegex(release, r"^[0-9]+\.[0-9]+\.[0-9]+$")
+        ga = "v%s" % release
+        rc_glob = "%s-rc.*" % ga
         text = INSTALL.read_text(encoding="utf-8")
-        self.assertIn("git tag --list 'v1.4.3-rc.*' --sort=-v:refname", text)
-        self.assertIn("--pin v1.4.3", text)
+        self.assertIn("git tag --list '%s' --sort=-v:refname" % rc_glob, text)
+        self.assertIn("--pin %s" % ga, text)
         env = dict(os.environ)
         env["TMPDIR"] = str(self._tmp_root)
         for ordinal in (1, 2):
-            source = _make_source(self._tmp_root, env, ordinal)
+            source = _make_source(self._tmp_root, env, ordinal, release)
             target = self.project_dir / ("adopter-%d" % ordinal)
             target.mkdir()
             resolved = _git(
-                source, env, "tag", "--list", "v1.4.3-rc.*", "--sort=-v:refname"
+                source, env, "tag", "--list", rc_glob, "--sort=-v:refname"
             )
             ref = resolved.stdout.splitlines()[0]
-            self.assertEqual(ref, "v1.4.3-rc.%d" % ordinal)
+            self.assertEqual(ref, "%s-rc.%d" % (ga, ordinal))
             missing = run_in_process_group(
-                ["git", "rev-parse", "--verify", "v1.4.3"], cwd=str(source),
+                ["git", "rev-parse", "--verify", ga], cwd=str(source),
                 env=env, timeout=15, capture_output=True, text=True,
             )
             self.assertNotEqual(missing.returncode, 0)
@@ -83,9 +92,9 @@ class TestFu144ReleaseExamples(TestEnvContext):
             proc = _run_upgrade(source, target, ref, env)
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             self.assertIn("Dry-run: diff between current source and --pin %s" % ref, proc.stdout)
-            _git(source, env, "tag", "v1.4.3")
-            self.assertEqual(_git(source, env, "rev-parse", "v1.4.3").stdout.strip(), rc_head)
-            proc = _run_upgrade(source, target, "v1.4.3", env)
+            _git(source, env, "tag", ga)
+            self.assertEqual(_git(source, env, "rev-parse", ga).stdout.strip(), rc_head)
+            proc = _run_upgrade(source, target, ga, env)
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
 
