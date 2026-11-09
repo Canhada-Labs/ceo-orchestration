@@ -1,6 +1,6 @@
 # Security Policy
 
-<!-- last-reviewed: 2026-10-17 v1.4.3 -->
+<!-- last-reviewed: 2026-11-09 v1.4.4 -->
 
 > **Status:** pre-adopter (framework dogfooded by Owner; no third-party
 > install in production yet). This policy mirrors the maturity level

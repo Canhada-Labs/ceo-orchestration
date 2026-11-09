@@ -714,12 +714,12 @@ use `scripts/upgrade.sh` with the RC pin during the hold or the GA pin after pub
 cd /path/to/ceo-orchestration   # source framework checkout
 git pull --tags                   # get the framework and published tags
 # During the RC hold, resolve the latest published RC tag:
-bash scripts/upgrade.sh /path/to/your/project --pin "$(git tag --list 'v1.4.3-rc.*' --sort=-v:refname | head -n 1)"
+bash scripts/upgrade.sh /path/to/your/project --pin "$(git tag --list 'v1.4.4-rc.*' --sort=-v:refname | head -n 1)"
 # Alternatively, after the GA tag is published:
-bash scripts/upgrade.sh /path/to/your/project --pin v1.4.3
+bash scripts/upgrade.sh /path/to/your/project --pin v1.4.4
 # While a release is on its 24 h hold, its GA tag does not exist yet and the line
 # above stops with `ERROR: unknown --pin ref` (exit 2). Pin the candidate instead:
-bash scripts/upgrade.sh /path/to/your/project --pin v1.4.3-rc.1
+bash scripts/upgrade.sh /path/to/your/project --pin v1.4.4-rc.1
 ```
 
 What gets refreshed:
