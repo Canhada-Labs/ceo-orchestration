@@ -516,14 +516,20 @@ w("d", init, {"type": "result", "subtype": "success", "is_error": False,
               "result": "The rate limit code is fine.\nVERDICT: GO nothing found."})
 w("e", dict(init, model="claude-sonnet-5"), {"type": "result", "subtype": "success", "is_error": False,
                                               "result": "VERDICT: GO nothing found."})
+w("f", init, {"type": "result", "subtype": "success", "is_error": False,
+              "result": "VERDICT: NO-GO! The rate limit guard fails open."})
+w("g", init, {"type": "result", "subtype": "success", "is_error": False,
+              "result": "VERDICT: GO-AHEAD despite the rate limit."})
 PY
 got=""
-for f in a b c d e; do
+for f in a b c d e f g; do
   ( cd "$POS" && python3 "$KIT_REL/gen_envelope.py" claude-result --model claude-opus-5-5 "$CR/$f" "$CR/$f.out" ) 2>/dev/null
   got="$got$?"
 done
-[ "$got" = 44406 ]
-check "claude-result: 3 measured limit forms -> 4, a review that mentions rate limits -> 0, another model -> 6 (got $got)" $?
+crf="$(cd "$POS" && python3 "$KIT_REL/gen_envelope.py" verdict "$CR/f.out" 2>/dev/null)"
+crg="$(cd "$POS" && python3 "$KIT_REL/gen_envelope.py" verdict "$CR/g.out" 2>/dev/null)"
+[ "$got" = 4440600 ] && [ "$crf" = NO-GO ] && [ "$crg" = INVALID ]; crrc=$?
+check "claude-result: 3 measured limit forms -> 4, a review that mentions rate limits -> 0, another model -> 6; an answer that declares a verdict next to limit words is saved and blocks (got $got $crf $crg)" "$crrc"
 
 N="$SCRATCH/n-signal"; clone_fix "$FIX0" "$N"
 PIDS="$SCRATCH/stub-pids"
@@ -766,6 +772,72 @@ spec.loader.exec_module(m)
 print(sum(" lock probe " in ln for ln in m.ledger_lines()))' "$KIT_REL/gen_envelope.py" ) > "$L/n-lock.log" 2>&1
 grep -qx 16 "$L/n-lock.log"
 check "16 concurrent ledger appends: one unbroken hash chain read back by the kit (positive control of the lock)" $?
+
+# === an INVALID answer blocks its candidate, not the tag ======================================
+# The first real run recorded INVALID answers on a candidate before any tag existed. A fix in a
+# new commit (a new tree) starts again under the SAME tag, and the signed fields of that tag
+# then list both attempts: the tag selects the ledger lines, the candidate and its tree select
+# what blocks.
+N="$SCRATCH/n-sametag"; clone_fix "$FIX0" "$N"
+cp -R "$ORIGIN" "$SCRATCH/origin-sametag.git" && git -C "$N" remote set-url origin "$SCRATCH/origin-sametag.git"
+( export STUB_VLINE='VERDICT: GO-AHEAD'; runner "$N" "$L/n-sametag-1.log" --tag v1.4.4-rc.1 --conditions "$PLAN_REL/CONDITIONS-rc1.md" ); rc=$?
+[ "$rc" -eq 1 ] && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* lane codex part 01 verdict INVALID nogo=1 ' "$N/.claude/worktrees/repass-attempts.log"
+check "a decision word the reader does not know (VERDICT: GO-AHEAD): runner exits 1, the ledger records INVALID nogo=1 (rc=$rc)" $?
+mv "$N/$EVRC" "$SCRATCH/sametag-moved-out" || bad "moving the INVALID attempt out"
+( cd "$N" && printf '# fixed\n' >> src/app.py && git add -- src/app.py \
+    && git commit -q -m "fix after the invalid answer (PLAN-198)" && git push -q origin main ) || bad "fix commit in the same-tag fixture"
+ST_CAND="$(git -C "$N" rev-parse HEAD)"
+runner "$N" "$L/n-sametag-2.log" --tag v1.4.4-rc.1 --conditions "$PLAN_REL/CONDITIONS-rc1.md"; rc=$?
+check "a new commit with a new tree starts under the SAME tag after an INVALID on the earlier candidate (rc=$rc)" "$rc"
+[ "$rc" -eq 0 ] || sed -n '1,20p' "$L/n-sametag-2.log"
+simulate_real "$N" rc1 "$PKG" "$PSHA" verified
+gen "$N" "$L/n-sametag-fields.log" fields --tag v1.4.4-rc.1; rc=$?
+[ "$rc" -eq 0 ] || sed -n '1,20p' "$L/n-sametag-fields.log"
+VF="$N/$PLAN_REL/verdict-fields-v1.4.4-rc.1.md"
+[ "$rc" -eq 0 ] && grep -q "^parent_sha: $ST_CAND\$" "$VF" \
+  && grep -q '^  - [^ ]* v1\.4\.4-rc\.1 [0-9a-f]* lane codex part 01 verdict INVALID nogo=1 ' "$VF" \
+  && grep -q "^  - [^ ]* v1\\.4\\.4-rc\\.1 $ST_CAND end rc=0 nogo=0 " "$VF"
+check "the signed fields of that tag list BOTH attempts: the INVALID answer on the earlier candidate and the clean end on this one" $?
+sign "$VF" "$SCRATCH/sametag.asc" && gen "$N" "$L/n-sametag-env.log" envelope --tag v1.4.4-rc.1 --sig "$SCRATCH/sametag.asc" \
+  && commit_verdict "$N" v1.4.4-rc.1 \
+  && ( cd "$N" && python3 .claude/scripts/local/_release_tag_guard.py delta --tag v1.4.4-rc.1 ) > "$L/n-sametag-guard.log" 2>&1 \
+  && step15 "$N" v1.4.4-rc.1 "$ST_CAND" "$L/n-sametag-step15.log"
+check "that verdict passes the real tag guard and the real step-15 validator" $?
+
+# === the verdict line: what the header asks for and what the reader accepts ==================
+# A decision word followed by "," "." ";" or ":" is that decision (a lane answered
+# "VERDICT: GO, <sentence>" in a real run); a word that merely starts with GO is not.
+VL="$SCRATCH/vl"; mkdir -p "$VL" || exit 2
+vclass() { printf '%b' "$1" > "$VL/v.txt"; ( cd "$POS" && python3 "$KIT_REL/gen_envelope.py" verdict "$VL/v.txt" ) 2>/dev/null; }
+vl_ok=0
+while IFS='|' read -r want text; do
+  got="$(vclass "$text")"
+  [ "$got" = "$want" ] || { vl_ok=1; printf 'verdict line %s: wanted %s, got %s\n' "$text" "$want" "$got"; }
+done <<'ROWS'
+GO|VERDICT: GO\n
+GO|VERDICT: GO one sentence.\n
+GO|findings\nVERDICT: GO, one sentence.\n
+GO|VERDICT: GO. One sentence.\n
+GO|VERDICT: GO; one sentence\n
+GO|VERDICT: GO: one sentence\n
+GO-WITH-CONDITIONS|VERDICT: GO-WITH-CONDITIONS, one sentence.\n
+NO-GO|VERDICT: NO-GO, one sentence.\n
+NO-GO|VERDICT: GO, fine\nVERDICT: NO-GO\n
+INVALID|VERDICT: GO-AHEAD\n
+INVALID|VERDICT: GOOD\n
+INVALID|VERDICT: GO/NO-GO\n
+INVALID|VERDICT: GO_x\n
+INVALID|VERDICT: GO2\n
+INVALID|VERDICT: GO, one\nVERDICT: GO, two\n
+INVALID|VERDICT:GO\n
+INVALID| VERDICT: GO\n
+INVALID|no verdict line here\n
+ROWS
+check "verdict line: punctuation after the decision word is accepted, a longer word and a second line are not" "$vl_ok"
+HDR="$(ls "$POS/$EVRC"/payload-rc1-*.redacted.txt | head -n 1)"
+! grep -q '^VERDICT:' "$HDR" && ! grep -q -E 'VERDICT: (GO|NO-GO|GO-WITH-CONDITIONS)[,.;:]' "$HDR" \
+  && grep -q 'VERDICT: GO or VERDICT: NO-GO or VERDICT: GO-WITH-CONDITIONS' "$HDR"
+check "payload header: no line starts with VERDICT:, and no decision word is shown with punctuation after it" $?
 
 # === the calling repository is untouched ====================================================
 python3 "$GUARD" verify --repo "$REAL" --from "$SCRATCH/caller-before.json"

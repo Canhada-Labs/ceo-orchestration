@@ -71,7 +71,9 @@ PLAN = KIT.parent
 TAG_RE = re.compile(r"\Av(\d+)\.(\d+)\.(\d+)(?:-rc\.([1-9]\d*))?\Z")
 HEX40 = re.compile(r"\A[0-9a-f]{40}\Z")
 HEX64 = re.compile(r"\A[0-9a-f]{64}\Z")
-VERDICT_RE = re.compile(r"\AVERDICT: (GO-WITH-CONDITIONS|GO|NO-GO)(?:[ \t].*)?\Z")
+# After the decision word: the end of the line, a blank, or one of , . ; : (punctuation that
+# cannot extend the word). A letter, a digit, "-", "_" or "/" there is not a decision.
+VERDICT_RE = re.compile(r"\AVERDICT: (GO-WITH-CONDITIONS|GO|NO-GO)(?:[ \t,.;:].*)?\Z")
 # Claude account limits, measured forms: "You've hit your limit", "... session limit",
 # "... weekly limit", "... individual spend limit" (PLAN-169/ac4-quota-window-S362-S363.md),
 # and the "rate_limit" error field of the refused assistant message.
@@ -868,8 +870,10 @@ def header(ctx: Ctx, st: Dict[str, str], k: int, n: int, cond: str, csha: str, w
         "",
         "OUTPUT FORMAT",
         "Per finding: SEVERITY (P0 / P1 / P2), FILE:LINE, failure scenario, minimal fix.",
-        "End with exactly one line, at column 0 and without formatting: VERDICT: GO, VERDICT: NO-GO",
-        "or VERDICT: GO-WITH-CONDITIONS, followed on the same line by one sentence.",
+        "End with exactly one line, at column 0 and without formatting. That line begins with",
+        "either VERDICT: GO or VERDICT: NO-GO or VERDICT: GO-WITH-CONDITIONS and then, after one",
+        "space, gives one sentence. Put no comma or other punctuation right after the decision",
+        "word, and write that line only once.",
         "",
     ]
     if cond:
@@ -1568,7 +1572,9 @@ def claude_result(log: Path, out: Path, want: str) -> int:
     etext = " ".join(str(e) for e in errs) if isinstance(errs, list) else str(errs or "")
     if last.get("is_error") or last.get("subtype", "success") != "success":
         return 4 if (limited or LIMIT_RE.search(text + " " + etext)) else 5
-    if not any(VERDICT_RE.match(ln) for ln in text.split("\n")) and (limited or LIMIT_RE.search(text[:300])):
+    # An answer that declares a verdict is an answer, whatever follows the word: it is saved and
+    # verdict_class() decides (a line the reader does not accept blocks; it is never run again).
+    if not any(ln.startswith("VERDICT:") for ln in text.split("\n")) and (limited or LIMIT_RE.search(text[:300])):
         return 4  # a limit message delivered as the answer
     write_atomic(out, (text.rstrip("\n") + "\n").encode("utf-8"))
     return 0

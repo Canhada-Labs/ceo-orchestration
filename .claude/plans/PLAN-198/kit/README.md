@@ -186,6 +186,11 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   6. `bash .claude/scripts/local/release.sh tag --rc 2` (o `make mac-cut-rc` sempre corta a
      rc.1), push da tag. O prazo de 24 h do GA recomeça.
 - **NO-GO no GA:** mesma coisa: rc.2, novo prazo de 24 h.
+- **Resposta inválida (`INVALID`) sem nenhum `VERDICT: NO-GO`, antes de a tag existir:** o commit
+  e a árvore dele ficam bloqueados do mesmo jeito. Mova a pasta `repass-<rc1|ga>/` para fora do
+  repositório, corrija a causa num commit novo (que mude a árvore), push, CI verde, e rode o
+  re-pass de novo com a **mesma** tag: o registro bloqueia o commit e a árvore, não a tag. Os
+  campos que você assina passam a listar as duas tentativas dessa tag.
 - **`rc=3` com "finalize refused":** o `.header` e os registros das revisões voltam para a
   pasta; corrija a causa (a linha `REFUSED:`) e rode o mesmo comando com `--resume` — nenhuma
   revisão concluída roda de novo.
@@ -285,7 +290,8 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   do mesmo commit ou da mesma árvore no registro, com qualquer tag — e, no registro, o resultado
   de toda revisão despachada para o mesmo commit. Uma regra só de NO-GO vale em todo o kit: um
   arquivo de veredito é NO-GO se alguma linha começa com `VERDICT: NO-GO`, e conta como NO-GO
-  (`INVALID`) se não tiver exatamente uma linha `VERDICT:` válida. Recusa evidência de revisores simulados; recusa campos
+  (`INVALID`) se não tiver exatamente uma linha `VERDICT:` válida (a palavra `GO`,
+  `GO-WITH-CONDITIONS` ou `NO-GO` seguida do fim da linha, de um espaço ou de um de `, . ; :`). Recusa evidência de revisores simulados; recusa campos
   assinados sem `generated_at`, com mais de 24 h ou no futuro; no GA, exige que as condições
   carreguem todas as linhas assinadas na rc.
 
