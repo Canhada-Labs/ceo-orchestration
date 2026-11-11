@@ -20,6 +20,7 @@ Subcommands (run_repass.sh calls the helpers; the Owner and Claude call the rest
                  attempt that has no outcome in the ledger yet
   keep-lane      move a lane's earlier files aside once the ledger holds them
   verdict        print the class of one verdict file (the one NO-GO rule)
+  verdict-schema print the JSON Schema of a lane's typed answer (both lanes)
   nogo-count     count the verdict files that the NO-GO rule blocks
   instrument     refuse a Codex identity that the ADR-182 manifest and
                  CODEX_VERSION_FLOOR do not admit
@@ -96,6 +97,23 @@ TOKEN_RE = re.compile(r"[^\s\"'`=:,;]{8,}")
 # "VERDICT: NO-GO", INVALID (blocking like a NO-GO) unless it holds exactly one valid VERDICT
 # line, NONE when it is missing or empty (no answer: the lane runs again).
 VALID_VERDICTS = ("GO", "GO-WITH-CONDITIONS", "NO-GO")
+# A lane answers in ONE typed shape: claude --json-schema and codex --output-schema make the
+# lane's own CLI check it, so the decision is a field with three possible values, never a line
+# of free text the reviewer has to spell (S366: "VERDICT: GO," and "VETO: GO" each blocked a
+# candidate). compose_verdict() writes the one VERDICT line from that field; any other line the
+# lane starts with "VERDICT:" stays readable to the one NO-GO rule unless it states that same
+# decision. An answer without a valid typed decision is kept as written, and the rule decides it.
+VERDICT_FIELDS = ("report", "decision", "sentence")
+VERDICT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": list(VERDICT_FIELDS),
+    "properties": {
+        "report": {"type": "string"},
+        "decision": {"type": "string", "enum": list(VALID_VERDICTS)},
+        "sentence": {"type": "string"},
+    },
+}
 # Why a file of the lanes' copy was withheld (removed) instead of redacted in place.
 WITHHELD_CLASSES = ("symlink", "not-regular-file", "not-utf8-text", "over-redactor-input-cap",
                     "redactor-error", "line-count-changed")
@@ -457,6 +475,81 @@ def verdict_class(path: Path) -> Tuple[str, int]:
     found = [r for r in rows if r.startswith("VERDICT:")]
     m = VERDICT_RE.match(found[0]) if len(found) == 1 else None
     return (m.group(1), 0) if m else ("INVALID", 1)
+
+
+def verdict_schema_json() -> str:
+    return json.dumps(VERDICT_SCHEMA, sort_keys=True, separators=(",", ":"))
+
+
+def lane_rows(text: str) -> List[str]:
+    """Lane text as the rows verdict_class() reads, always encodable: CR and CRLF end a row, and
+    a lone surrogate (a JSON escape such as \\ud800) becomes its backslash form, not a crash."""
+    text = text.encode("utf-8", "backslashreplace").decode("utf-8")
+    return text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+
+
+def lane_text(text: str, dec: str) -> str:
+    """Lane text kept as evidence beside the typed decision `dec`. A row that is a valid VERDICT
+    line stating `dec` itself is indented two spaces (a repeat, however it is spelled). Every
+    other row that starts with "VERDICT:" stays at column 0, so the one NO-GO rule reads it as
+    the old reader did: a NO-GO blocks, any other contradiction makes the file INVALID."""
+    out = []
+    for r in lane_rows(text):
+        m = VERDICT_RE.match(r) if r.startswith("VERDICT:") else None
+        out.append(("  " + r) if m and m.group(1) == dec else r)
+    return "\n".join(out).strip("\n")
+
+
+def compose_verdict(obj: object, outside: str = "") -> Optional[str]:
+    """The verdict text of a typed answer, or None unless `obj` has exactly the VERDICT_SCHEMA
+    fields with valid values: the report, then any text the lane wrote outside its typed answer
+    (`outside`), then any row of the sentence that starts with "VERDICT:", all through
+    lane_text(); then the decision line, last, from the decision field and the sentence on one
+    line."""
+    if not isinstance(obj, dict) or set(obj) != set(VERDICT_FIELDS):
+        return None
+    rep, dec, sen = obj["report"], obj["decision"], obj["sentence"]
+    if not (isinstance(rep, str) and isinstance(sen, str) and isinstance(dec, str) and dec in VALID_VERDICTS):
+        return None
+    parts = [lane_text(rep, dec)]
+    if outside.strip():
+        parts.append("TEXT OUTSIDE THE TYPED ANSWER:\n" + lane_text(outside, dec))
+    srows = lane_rows(sen)
+    parts.append(lane_text("\n".join(r for r in srows if r.startswith("VERDICT:")), dec))
+    body = "\n\n".join(p for p in parts if p)
+    sen = " ".join(" ".join(srows).split())
+    line = "VERDICT: %s%s" % (dec, (" " + sen) if sen else "")
+    return (body + "\n\n" if body else "") + line + "\n"
+
+
+def outside_text(text: str, obj: object) -> str:
+    """The `result` text of a Claude Code answer beyond its typed object: empty when it is only
+    the JSON of that object (the measured case); a typed object given as text is expanded so its
+    own decision line goes through lane_text() too."""
+    if not text.strip():
+        return ""
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return text
+    if parsed == obj:
+        return ""
+    return compose_verdict(parsed) or text
+
+
+def codex_typed(out: Path) -> None:
+    """Codex writes its typed answer (--output-schema) as JSON into the verdict file; it becomes
+    verdict text here. Anything else stays as written, for the one NO-GO rule (idempotent: a
+    file that is already verdict text is not JSON)."""
+    if out.is_symlink() or not out.is_file():
+        return
+    try:
+        obj = json.loads(read_regular(out).decode("utf-8"))
+    except ValueError:  # not JSON (UnicodeDecodeError is a ValueError too)
+        return
+    text = compose_verdict(obj)
+    if text is not None:
+        write_atomic(out, text.encode("utf-8"))
 
 
 def newest_rc(ctx: "Ctx") -> str:
@@ -869,11 +962,13 @@ def header(ctx: Ctx, st: Dict[str, str], k: int, n: int, cond: str, csha: str, w
         "OUT OF SCOPE (declared, not omitted; listed per path in the evidence): " + classes,
         "",
         "OUTPUT FORMAT",
-        "Per finding: SEVERITY (P0 / P1 / P2), FILE:LINE, failure scenario, minimal fix.",
-        "End with exactly one line, at column 0 and without formatting. That line begins with",
-        "either VERDICT: GO or VERDICT: NO-GO or VERDICT: GO-WITH-CONDITIONS and then, after one",
-        "space, gives one sentence. Put no comma or other punctuation right after the decision",
-        "word, and write that line only once.",
+        "Your final answer is one object with exactly three fields; your own tool checks its shape:",
+        "- %s: your findings, as plain text. Per finding: SEVERITY (P0 / P1 / P2), FILE:LINE," % VERDICT_FIELDS[0],
+        "  failure scenario, minimal fix; then the NEW FINDINGS (annex) and the P2 follow-ups.",
+        "- %s: exactly one of %s (the RULE OF THIS CUT above)." % (VERDICT_FIELDS[1], " / ".join(VALID_VERDICTS)),
+        "- %s: one sentence that justifies the decision." % VERDICT_FIELDS[2],
+        "State your decision only in the %s field. A different decision stated in the %s or the" % (VERDICT_FIELDS[1], VERDICT_FIELDS[0]),
+        "%s blocks this release like a NO-GO." % VERDICT_FIELDS[2],
         "",
     ]
     if cond:
@@ -1371,6 +1466,8 @@ def lane_outcome(lane: str, part: str, did: str, tag: str, cand: str, tree: str,
     cres = 0
     if lane == "claude" and (not recovered or verdict_class(out)[0] == "NONE"):
         cres = claude_result(log, out, model) if log.is_file() and not log.is_symlink() else 5
+    if lane == "codex":
+        codex_typed(out)
     v, nogo = verdict_class(out)
     tail = "id=%s rc=%s tree=%s%s" % (did, rc, tree, " recovered=1" if recovered else "")
     if v == "NONE":
@@ -1572,11 +1669,16 @@ def claude_result(log: Path, out: Path, want: str) -> int:
     etext = " ".join(str(e) for e in errs) if isinstance(errs, list) else str(errs or "")
     if last.get("is_error") or last.get("subtype", "success") != "success":
         return 4 if (limited or LIMIT_RE.search(text + " " + etext)) else 5
+    so = last.get("structured_output")
+    typed = compose_verdict(so, outside_text(text, so)) if compose_verdict(so) is not None else None
+    if typed is not None:  # the typed answer (--json-schema): the decision is a checked field
+        write_atomic(out, typed.encode("utf-8"))
+        return 0
     # An answer that declares a verdict is an answer, whatever follows the word: it is saved and
     # verdict_class() decides (a line the reader does not accept blocks; it is never run again).
     if not any(ln.startswith("VERDICT:") for ln in text.split("\n")) and (limited or LIMIT_RE.search(text[:300])):
         return 4  # a limit message delivered as the answer
-    write_atomic(out, (text.rstrip("\n") + "\n").encode("utf-8"))
+    write_atomic(out, (text.rstrip("\n") + "\n").encode("utf-8", "backslashreplace"))
     return 0
 
 
@@ -1760,6 +1862,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     for opt in ("--tag", "--candidate", "--lane", "--part", "--name", "--dir", "--ev", "--keep"):
         p.add_argument(opt, required=True)
     sub.add_parser("verdict").add_argument("file")
+    sub.add_parser("verdict-schema")
     sub.add_parser("nogo-count").add_argument("files", nargs="*")
     p = sub.add_parser("instrument")
     for opt in ("--version", "--triple", "--sha", "--status"):
@@ -1789,7 +1892,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     a = ap.parse_args(argv)
     table = {"prepare": cmd_prepare, "redact-tree": cmd_redact_tree, "nogo-check": cmd_nogo_check,
              "reconcile": cmd_reconcile, "keep-lane": cmd_keep_lane, "verdict": cmd_verdict,
-             "nogo-count": cmd_nogo_count,
+             "verdict-schema": lambda x: print(verdict_schema_json()) or 0, "nogo-count": cmd_nogo_count,
              "instrument": cmd_instrument, "codex-config": cmd_codex_config,
              "spawn": cmd_spawn, "claude-result": cmd_claude_result, "ledger-add": cmd_ledger_add,
              "scrub": cmd_scrub, "finalize": cmd_finalize, "carry-conditions": cmd_carry_conditions,

@@ -190,7 +190,12 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   e a árvore dele ficam bloqueados do mesmo jeito. Mova a pasta `repass-<rc1|ga>/` para fora do
   repositório, corrija a causa num commit novo (que mude a árvore), push, CI verde, e rode o
   re-pass de novo com a **mesma** tag: o registro bloqueia o commit e a árvore, não a tag. Os
-  campos que você assina passam a listar as duas tentativas dessa tag.
+  campos que você assina passam a listar as duas tentativas dessa tag. Desde a segunda
+  tentativa da v1.4.4-rc.1 (10/11/2026: um GO escrito `VERDICT: GO,` e, depois, um GO escrito
+  `VETO: GO` bloquearam cada um o seu commit) os revisores não escrevem mais a linha: cada um
+  responde um objeto tipado (`report`, `decision`, `sentence`) que a própria ferramenta confere
+  (`claude --json-schema`, `codex --output-schema`), e o kit escreve a linha `VERDICT:` a partir
+  do campo `decision`. `INVALID` sobra só para uma resposta sem esse objeto válido.
 - **`rc=3` com "finalize refused":** o `.header` e os registros das revisões voltam para a
   pasta; corrija a causa (a linha `REFUSED:`) e rode o mesmo comando com `--resume` — nenhuma
   revisão concluída roda de novo.
@@ -207,7 +212,8 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
      órfão que passe disso você encerra à mão (`kill` no grupo dele);
   2. procure em `.claude/worktrees/repass-lanes/` qualquer saída (`.verdict.txt` ou `.log`) com
      uma linha que comece por `VERDICT: NO-GO` (por exemplo
-     `grep -rlE '(^|\\n)VERDICT: NO-GO' .claude/worktrees/repass-lanes/`; o log do Codex repete
+     `grep -rlE '(^|\\n)VERDICT: NO-GO|"decision": *"NO-GO"' .claude/worktrees/repass-lanes/`: a
+     resposta tipada de um revisor morto no meio ainda está crua, em JSON; o log do Codex repete
      o payload, que cita `VERDICT: NO-GO` no meio de uma linha, e isso não conta); se houver uma, não siga:
      pare e chame a sessão do Claude;
   3. nunca revise um commit vazio ou só de texto para contornar uma tentativa interrompida;
@@ -291,7 +297,13 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   de toda revisão despachada para o mesmo commit. Uma regra só de NO-GO vale em todo o kit: um
   arquivo de veredito é NO-GO se alguma linha começa com `VERDICT: NO-GO`, e conta como NO-GO
   (`INVALID`) se não tiver exatamente uma linha `VERDICT:` válida (a palavra `GO`,
-  `GO-WITH-CONDITIONS` ou `NO-GO` seguida do fim da linha, de um espaço ou de um de `, . ; :`). Recusa evidência de revisores simulados; recusa campos
+  `GO-WITH-CONDITIONS` ou `NO-GO` seguida do fim da linha, de um espaço ou de um de `, . ; :`).
+  Essa linha vem do campo `decision` da resposta tipada. Uma linha que o revisor comece por
+  `VERDICT:` (no relatório, na frase ou em texto fora do objeto) só é recuada dois espaços quando
+  é uma linha válida com a MESMA decisão do campo (uma repetição); qualquer outra fica na coluna
+  0 e a regra de sempre decide: `VERDICT: NO-GO` bloqueia, outra contradição torna a resposta
+  `INVALID`. Um caractere que não é UTF-8 válido no JSON do revisor (surrogate solto) vira a sua
+  forma com barra invertida, sem derrubar o registro. Recusa evidência de revisores simulados; recusa campos
   assinados sem `generated_at`, com mais de 24 h ou no futuro; no GA, exige que as condições
   carreguem todas as linhas assinadas na rc.
 
@@ -313,7 +325,9 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   automática; a cópia numa pasta nova faz a memória deste projeto não casar, mas não há
   prova de que memória nenhuma carrega. As mensagens de limite foram medidas no Codex 0.160.0
   e em transcrições interativas do Claude Code, não no `claude -p`. O teste usa revisores
-  simulados; a primeira execução real é a prova.
+  simulados; a primeira execução real é a prova. A resposta tipada foi medida em 10/11/2026
+  (Claude Code 2.1.322 e Codex 0.166.0, com as opções exatas das duas revisões, num arquivo de
+  teste): as duas devolveram o objeto; o re-pass inteiro com ela ainda não rodou.
 - **`kill -9` no runner** (no processo ou no grupo inteiro) não deixa ele encerrar os
   revisores; eles terminam sozinhos ou pelo limite de 2 h, aplicado pelo processo que lançou cada um. Enquanto o processo que lançou um
   revisor vive, ele grava o resultado no registro quando o revisor sai, e um NO-GO ali bloqueia o

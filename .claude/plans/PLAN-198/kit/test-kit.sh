@@ -55,10 +55,11 @@ PATH="$SCRATCH/sentinel:$PATH"; export PATH
 cat > "$SCRATCH/bin/codex-stub" <<'STUB'
 #!/bin/bash
 # kit-test stub of `codex exec`: insists on the read-only, isolated invocation, answers from the payload.
-out="" flags=""
+out="" flags="" schema=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --output-last-message) out="$2"; shift 2 ;;
+    --output-schema) schema="$2"; shift 2 ;;
     --sandbox) [ "$2" = read-only ] && flags="${flags}r"; shift 2 ;;
     --ignore-user-config) flags="${flags}u"; shift ;;
     --ephemeral) flags="${flags}e"; shift ;;
@@ -67,6 +68,8 @@ while [ $# -gt 0 ]; do
 done
 [ "$flags" = rue ] && [ -n "$out" ] || { echo "stub: not a read-only, isolated codex exec ($flags)" >&2; exit 9; }
 [ -z "${OPENAI_API_KEY:-}" ] || { echo "stub: API key leaked into the lane" >&2; exit 9; }
+[ -n "$schema" ] && python3 -I "$STUB_SCHEMA_CHECK" "$(cat -- "$schema" 2>/dev/null)" \
+  || { echo "stub: codex without the typed verdict schema (--output-schema)" >&2; exit 9; }
 [ ! -e AGENTS.md ] && [ ! -e CLAUDE.md ] && ! git rev-parse --git-dir >/dev/null 2>&1 \
   || { echo "stub: the lane's copy is inside a repository or keeps instruction files" >&2; exit 9; }
 part="$(sed -n 's/^PAYLOAD \([0-9]*\)\/.*/\1/p' | head -n 1)"
@@ -78,10 +81,18 @@ fi
 if [ "${STUB_HANG:-}" = "codex:$part" ]; then sleep 300 & echo $! > "$STUB_PIDS.child"; echo $$ > "$STUB_PIDS"; wait; fi
 if [ "${STUB_QUOTA:-}" = "codex:$part" ]; then echo "ERROR: You've hit your usage limit. Try again later."; exit 1; fi
 v=GO; [ "${STUB_NOGO:-}" != "codex:$part" ] || v=NO-GO
-vline="VERDICT: $v stub review of payload $part."
-[ -z "${STUB_VLINE:-}" ] || vline="$STUB_VLINE"  # a verdict line exactly as given
-{ printf 'No findings.\n'; [ -z "${STUB_READ:-}" ] || cat -- "$STUB_READ" 2>&1
-  printf '%s\n' "$vline"; } > "$out"
+[ "${STUB_BADTYPE:-}" != "codex:$part" ] || v=VETO  # a typed answer outside the schema
+if [ -n "${STUB_VLINE:-}" ] || [ -n "${STUB_READ:-}" ]; then  # a free-text answer (no typed object)
+  vline="VERDICT: $v stub review of payload $part."
+  [ -z "${STUB_VLINE:-}" ] || vline="$STUB_VLINE"  # a verdict line exactly as given
+  { printf 'No findings.\n'; [ -z "${STUB_READ:-}" ] || cat -- "$STUB_READ" 2>&1
+    printf '%s\n' "$vline"; } > "$out"
+else  # the typed answer, as codex --output-schema writes it
+  python3 -I -c 'import json, sys
+with open(sys.argv[1], "w") as fh:
+    json.dump({"report": "No findings.", "decision": sys.argv[2],
+               "sentence": "stub review of payload %s." % sys.argv[3]}, fh)' "$out" "$v" "$part"
+fi
 STUB
 cat > "$SCRATCH/bin/codex-pystub" <<'STUB'
 #!/usr/bin/env python3
@@ -103,7 +114,9 @@ for w in "-p" "--restricted" "--safe-mode" "--strict-mcp-config" "--tools Read,G
 done
 [ -z "${ANTHROPIC_API_KEY:-}" ] && [ "${DISABLE_AUTOUPDATER:-}" = 1 ] || { echo "stub: API key or auto-updater" >&2; exit 9; }
 [ ! -e CLAUDE.md ] && ! git rev-parse --git-dir >/dev/null 2>&1 || { echo "stub: repository or CLAUDE.md around" >&2; exit 9; }
-model="" prev=""; for a in "$@"; do [ "$prev" = --model ] && model="$a"; prev="$a"; done
+model="" schema="" prev=""
+for a in "$@"; do [ "$prev" = --model ] && model="$a"; [ "$prev" = --json-schema ] && schema="$a"; prev="$a"; done
+python3 -I "$STUB_SCHEMA_CHECK" "$schema" || { echo "stub: claude without the typed verdict schema (--json-schema)" >&2; exit 9; }
 part="$(sed -n 's/^PAYLOAD \([0-9]*\)\/.*/\1/p' | head -n 1)"
 printf '{"type":"system","subtype":"init","model":"%s"}\n' "$model"
 if [ "${STUB_QUOTA:-}" = "claude:$part" ]; then
@@ -118,16 +131,43 @@ print(json.dumps({"type": "result", "subtype": "success", "is_error": False,
                   "result": sys.argv[1] + "\nVERDICT: GO stub review of payload " + sys.argv[2] + "."}))' "$body" "$part"
   exit 0
 fi
-v=GO extra=""; [ "${STUB_NOGO:-}" != "claude:$part" ] || v=NO-GO
-if [ "${STUB_GWC:-}" = "claude:$part" ]; then v=GO-WITH-CONDITIONS extra='P1 src/app.py:3 - stub annex finding.\n'; fi
-printf '{"type":"result","subtype":"success","is_error":false,"result":"No findings.\\n%sVERDICT: %s stub review of payload %s."}\n' "$extra" "$v" "$part"
+v=GO extra="" mode=typed; [ "${STUB_NOGO:-}" != "claude:$part" ] || v=NO-GO
+if [ "${STUB_GWC:-}" = "claude:$part" ]; then v=GO-WITH-CONDITIONS extra='P1 src/app.py:3 - stub annex finding.'; fi
+[ "${STUB_VETO:-}" != "claude:$part" ] || mode=veto
+[ "${STUB_UNTYPED:-}" != "claude:$part" ] || mode=untyped
+python3 -I -c 'import json, sys
+v, extra, part, mode = sys.argv[1:5]
+report = "No findings." + ("\n" + extra if extra else "")
+if mode == "veto":  # the S366 answer: a GO with a VETO line, plus a VERDICT line quoted in the report
+    report += "\nVERDICT: GO quoted inside the report\nVETO: GO this payload has no P0"
+ans = {"report": report, "decision": v, "sentence": "stub review of payload %s." % part}
+res = {"type": "result", "subtype": "success", "is_error": False, "result": json.dumps(ans)}
+if mode == "untyped":  # a successful answer without the typed object
+    res["result"] = "No findings.\nVETO: GO stub review of payload %s." % part
+else:
+    res["structured_output"] = ans
+print(json.dumps(res))' "$v" "$extra" "$part" "$mode"
 STUB
 cat > "$SCRATCH/ghstub/gh" <<'STUB'
 #!/bin/bash
 # kit-test stub of `gh run list --commit SHA --json ...`: prints STUB_GH_JSON.
 printf '%s\n' "$STUB_GH_JSON"
 STUB
+cat > "$SCRATCH/bin/schema-check.py" <<'STUB'
+# kit-test: exit 0 only for the kit's typed verdict schema (argv[1]: the schema text a stub got).
+import json, sys
+try:
+    s = json.loads(sys.argv[1])
+    ok = (s["type"] == "object" and s["additionalProperties"] is False
+          and s["required"] == ["report", "decision", "sentence"]
+          and s["properties"]["decision"] == {"type": "string", "enum": ["GO", "GO-WITH-CONDITIONS", "NO-GO"]}
+          and s["properties"]["report"] == {"type": "string"} and s["properties"]["sentence"] == {"type": "string"})
+except Exception:
+    ok = False
+sys.exit(0 if ok else 1)
+STUB
 chmod 0755 "$SCRATCH/bin/codex-stub" "$SCRATCH/bin/codex-pystub" "$SCRATCH/bin/claude-stub" "$SCRATCH/ghstub/gh"
+export STUB_SCHEMA_CHECK="$SCRATCH/bin/schema-check.py"
 STUBS="CODEX_BIN=$SCRATCH/bin/codex-stub CLAUDE_BIN=$SCRATCH/bin/claude-stub"
 
 # --- throwaway key and fixture repository -------------------------------------------------
@@ -520,6 +560,23 @@ w("f", init, {"type": "result", "subtype": "success", "is_error": False,
               "result": "VERDICT: NO-GO! The rate limit guard fails open."})
 w("g", init, {"type": "result", "subtype": "success", "is_error": False,
               "result": "VERDICT: GO-AHEAD despite the rate limit."})
+# typed answers (--json-schema): "result" is the JSON of the object, or the lane's own text
+ans = {"report": "No findings.", "decision": "GO", "sentence": "ok."}
+w("h", init, {"type": "result", "subtype": "success", "is_error": False,
+              "result": json.dumps(ans), "structured_output": ans})
+w("i", init, {"type": "result", "subtype": "success", "is_error": False, "structured_output": ans,
+              "result": "P1 src/auth.py:42 - authorization bypass.\nVERDICT: NO-GO must fix."})
+w("j", init, {"type": "result", "subtype": "success", "is_error": False, "structured_output": ans,
+              "result": "Review done.\nVERDICT: GO, fine\nVERDICT: GO"})
+w("k", init, {"type": "result", "subtype": "success", "is_error": False,
+              "structured_output": dict(ans, decision="NO-GO"), "result": json.dumps(dict(ans, decision="NO-GO"))})
+w("l", init, {"type": "result", "subtype": "success", "is_error": False, "structured_output": ans,
+              "result": json.dumps(dict(ans, decision="NO-GO", report="P0 x.py:1 - y"))})
+w("m", init, {"type": "result", "subtype": "success", "is_error": False,
+              "structured_output": dict(ans, decision="VETO"), "result": "VETO: GO stub."})
+w("n", init, {"type": "result", "subtype": "success", "is_error": False,
+              "structured_output": dict(ans, report="keeps \udc80"), "result": json.dumps(dict(ans, report="keeps \udc80"))})
+w("o", init, {"type": "result", "subtype": "success", "is_error": False, "result": "VERDICT: GO but \ud800 here"})
 PY
 got=""
 for f in a b c d e f g; do
@@ -530,6 +587,15 @@ crf="$(cd "$POS" && python3 "$KIT_REL/gen_envelope.py" verdict "$CR/f.out" 2>/de
 crg="$(cd "$POS" && python3 "$KIT_REL/gen_envelope.py" verdict "$CR/g.out" 2>/dev/null)"
 [ "$got" = 4440600 ] && [ "$crf" = NO-GO ] && [ "$crg" = INVALID ]; crrc=$?
 check "claude-result: 3 measured limit forms -> 4, a review that mentions rate limits -> 0, another model -> 6; an answer that declares a verdict next to limit words is saved and blocks (got $got $crf $crg)" "$crrc"
+tgot=""
+for f in h i j k l m n o; do
+  ( cd "$POS" && python3 "$KIT_REL/gen_envelope.py" claude-result --model claude-opus-5-5 "$CR/$f" "$CR/$f.out" ) 2>/dev/null
+  tgot="$tgot$?:$(cd "$POS" && python3 "$KIT_REL/gen_envelope.py" verdict "$CR/$f.out" 2>/dev/null) "
+done
+[ "$tgot" = "0:GO 0:NO-GO 0:GO 0:NO-GO 0:NO-GO 0:INVALID 0:GO 0:GO " ] && grep -qx 'P1 src/auth.py:42 - authorization bypass.' "$CR/i.out" \
+  && [ "$(tail -n 1 "$CR/i.out")" = "VERDICT: GO ok." ] && grep -qx '  VERDICT: GO, fine' "$CR/j.out" \
+  && [ "$(grep -c '^VERDICT:' "$CR/j.out")" = 1 ] && grep -qF 'keeps \udc80' "$CR/n.out"
+check "claude-result, typed: the decision comes from the object; text outside it is kept and a NO-GO there blocks (Codex r1), a repeat GO does not; lone surrogates never crash (got $tgot)" $?
 
 N="$SCRATCH/n-signal"; clone_fix "$FIX0" "$N"
 PIDS="$SCRATCH/stub-pids"
@@ -834,10 +900,113 @@ INVALID| VERDICT: GO\n
 INVALID|no verdict line here\n
 ROWS
 check "verdict line: punctuation after the decision word is accepted, a longer word and a second line are not" "$vl_ok"
+
+# === typed answers: the decision is a field the lane's CLI checks, the kit writes the line ====
+# S366, second real run: a GO answered "VETO: GO" (no VERDICT line) blocked its candidate, after
+# "VERDICT: GO," blocked the first. Both lanes now answer one typed object; the instruction and
+# the schema are checked against each other here, and so is every way the line is written.
+SCH="$(cd "$POS" && python3 "$KIT_REL/gen_envelope.py" verdict-schema)"
 HDR="$(ls "$POS/$EVRC"/payload-rc1-*.redacted.txt | head -n 1)"
-! grep -q '^VERDICT:' "$HDR" && ! grep -q -E 'VERDICT: (GO|NO-GO|GO-WITH-CONDITIONS)[,.;:]' "$HDR" \
-  && grep -q 'VERDICT: GO or VERDICT: NO-GO or VERDICT: GO-WITH-CONDITIONS' "$HDR"
-check "payload header: no line starts with VERDICT:, and no decision word is shown with punctuation after it" $?
+python3 -I - "$HDR" "$SCH" <<'PY'
+import json, sys
+head = open(sys.argv[1], encoding="utf-8").read().split("DECLARED CONDITIONS")[0]
+s = json.loads(sys.argv[2])
+ok = (all("\n- %s: " % f in head for f in s["required"])
+      and all(d in head for d in s["properties"]["decision"]["enum"]) and "VERDICT" not in head)
+sys.exit(0 if ok else 1)
+PY
+check "payload header and schema agree: the header names every field and every decision, and never spells a VERDICT line" $?
+grep -qF -- "- typed answers: both lanes answer the JSON Schema $SCH (codex --output-schema, claude --json-schema)" "$POS/$EVRC/PROVENANCE-rc1.md" \
+  && [ "$(tail -n 1 "$POS/$EVRC/codex-rc1-01.verdict.txt")" = "VERDICT: GO stub review of payload 1." ] \
+  && [ "$(head -c 1 "$POS/$EVRC/codex-rc1-01.verdict.txt")" != "{" ]
+check "positive run: the provenance declares the typed answers, and the Codex JSON became verdict text with the line last" $?
+N="$SCRATCH/n-typed"; clone_fix "$FIX0" "$N"
+cp -R "$ORIGIN" "$SCRATCH/origin-typed.git" && git -C "$N" remote set-url origin "$SCRATCH/origin-typed.git"
+( export STUB_VETO=claude:1; runner "$N" "$L/n-typed-run.log" --tag v1.4.4-rc.1 --conditions "$PLAN_REL/CONDITIONS-rc1.md" ); rc=$?
+TV="$N/$EVRC/claude-rc1-01.verdict.txt"
+[ "$rc" -eq 0 ] && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* lane claude part 01 verdict GO nogo=0 ' "$N/.claude/worktrees/repass-attempts.log" \
+  && [ "$(grep -c '^VERDICT:' "$TV")" = 1 ] && [ "$(tail -n 1 "$TV")" = "VERDICT: GO stub review of payload 1." ] \
+  && grep -qx '  VERDICT: GO quoted inside the report' "$TV" && grep -qx 'VETO: GO this payload has no P0' "$TV"
+check "the S366 answer, typed (GO; 'VETO: GO' and a quoted VERDICT line in the report): GO from the field, one VERDICT line, last (rc=$rc)" $?
+[ "$rc" -eq 0 ] || sed -n '1,20p' "$L/n-typed-run.log"
+N="$SCRATCH/n-badtype"; clone_fix "$FIX0" "$N"
+cp -R "$ORIGIN" "$SCRATCH/origin-badtype.git" && git -C "$N" remote set-url origin "$SCRATCH/origin-badtype.git"
+( export STUB_BADTYPE=codex:1; runner "$N" "$L/n-badtype-run.log" --tag v1.4.4-rc.1 ); rc=$?
+[ "$rc" -eq 1 ] && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* lane codex part 01 verdict INVALID nogo=1 ' "$N/.claude/worktrees/repass-attempts.log"
+check "a typed answer outside the schema (decision VETO) is never composed: INVALID, it blocks like a NO-GO (rc=$rc)" $?
+N="$SCRATCH/n-untyped"; clone_fix "$FIX0" "$N"
+cp -R "$ORIGIN" "$SCRATCH/origin-untyped.git" && git -C "$N" remote set-url origin "$SCRATCH/origin-untyped.git"
+( export STUB_UNTYPED=claude:1; runner "$N" "$L/n-untyped-run.log" --tag v1.4.4-rc.1 ); rc=$?
+[ "$rc" -eq 1 ] && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* lane claude part 01 verdict INVALID nogo=1 ' "$N/.claude/worktrees/repass-attempts.log"
+check "a successful answer without the typed object ('VETO: GO' as text) still blocks: the one NO-GO rule is unchanged (rc=$rc)" $?
+( cd "$POS" && python3 -I - "$KIT_REL/gen_envelope.py" "$VL" ) > "$L/compose.log" 2>&1 <<'PY'
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("kit_compose", sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+f = os.path.join(sys.argv[2], "c.txt")
+
+
+def klass(obj):
+    text = m.compose_verdict(obj)
+    if text is None:
+        return "NOT-COMPOSED"
+    with open(f, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    last = text.rstrip("\n").split("\n")[-1]
+    tail = "" if last.startswith("VERDICT: ") and text.endswith("\n") else "?"
+    return m.verdict_class(m.Path(f))[0] + tail
+
+
+def A(r, d, s):
+    return {"report": r, "decision": d, "sentence": s}
+
+
+rows = [
+    ("GO", A("a", "GO", "s.")),
+    ("GO-WITH-CONDITIONS", A("P1 x.py:1 - y", "GO-WITH-CONDITIONS", "s")),
+    ("NO-GO", A("a", "NO-GO", "s")),
+    ("GO", A("", "GO", "")),
+    ("GO", A("a\r\nVERDICT: GO quoted", "GO", "one\ntwo\r\nthree")),
+    ("INVALID", A("VERDICT: GO-AHEAD", "GO", "s")),
+    ("NO-GO", A("VERDICT: NO-GO quoted", "GO", "s")),
+    ("GO", A("VERDICT: GO, also fine", "GO", "s")),
+    ("INVALID", A("VERDICT: GO-WITH-CONDITIONS the canary must run", "GO", "s")),
+    ("GO-WITH-CONDITIONS", A("VERDICT: GO-WITH-CONDITIONS the canary must run", "GO-WITH-CONDITIONS", "s")),
+    ("INVALID", A("VERDICT: **NO-GO**", "GO", "s")),
+    ("INVALID", A("VERDICT:NO-GO", "GO", "s")),
+    ("NO-GO", A("a", "GO", "fine\nVERDICT: NO-GO because P0")),
+    ("GO", A("a", "GO", "VERDICT: GO fine")),
+    ("NO-GO", A("P0 x.py:3 keeps \udc80 and leaks", "NO-GO", "P0 \ud800")),
+    ("GO", A("ok \udc80", "GO", "s")),
+    ("NOT-COMPOSED", A("a", "VETO", "s")),
+    ("NOT-COMPOSED", A("a", "go", "s")),
+    ("NOT-COMPOSED", A("a", ["GO"], "s")),
+    ("NOT-COMPOSED", A(5, "GO", "s")),
+    ("NOT-COMPOSED", A("a", "GO", None)),
+    ("NOT-COMPOSED", {"report": "a", "decision": "GO"}),
+    ("NOT-COMPOSED", dict(A("a", "GO", "s"), extra="x")),
+    ("NOT-COMPOSED", ["GO"]),
+    ("NOT-COMPOSED", None),
+]
+bad = [(w, o, klass(o)) for w, o in rows if klass(o) != w]
+t = m.compose_verdict(A("x", "GO", "one\ntwo"))
+if not t.endswith("\n\nVERDICT: GO one two\n"):
+    bad.append(("one-line sentence", t))
+# Codex: the typed JSON with a lone-surrogate escape, converted in place (and again: idempotent)
+cx = os.path.join(sys.argv[2], "cx.txt")
+with open(cx, "w", encoding="utf-8") as fh:
+    fh.write('{"report": "P0 x.py:3 keeps \\udc80", "decision": "NO-GO", "sentence": "s"}')
+m.codex_typed(m.Path(cx))
+first = open(cx, "rb").read()
+m.codex_typed(m.Path(cx))
+if m.verdict_class(m.Path(cx))[0] != "NO-GO" or open(cx, "rb").read() != first or b"\\udc80" not in first:
+    bad.append(("codex_typed surrogate/idempotent", first))
+print("BAD %r" % bad if bad else "COMPOSE-OK %d" % len(rows))
+PY
+grep -q '^COMPOSE-OK 25$' "$L/compose.log"; rc=$?
+[ "$rc" -eq 0 ] || cat "$L/compose.log"
+check "compose: the decision on one last line; a repeat of it is indented, any other VERDICT row is read as before (NO-GO blocks, a contradiction is INVALID); lone surrogates never crash; anything else is not composed" "$rc"
 
 # === the calling repository is untouched ====================================================
 python3 "$GUARD" verify --repo "$REAL" --from "$SCRATCH/caller-before.json"

@@ -205,6 +205,8 @@ print(*[str(d.get(k) or "-") for k in ("status", "sha256", "target_triple", "ins
     || die "the Codex instrument is not admitted (see above)"
   "$CODEX_CMD" exec "${CODEX_ISO[@]}" --help >/dev/null 2>&1 \
     || die "codex $C_VER refuses --ignore-user-config/--ephemeral/--ignore-rules: its lane would load the user's config.toml, plugins and MCP servers"
+  "$CODEX_CMD" exec --help 2>/dev/null | grep -q -e '--output-schema' \
+    || die "codex $C_VER has no --output-schema: its lane could not give a typed decision"
   CODEX_ID="$C_VER / $C_TRIPLE / payload $C_SHA / status $C_STATUS"
   # shellcheck disable=SC2046
   set -- $(python3 "$GEN" codex-config) || die "Codex model/effort unknown"
@@ -217,14 +219,22 @@ print(*[str(d.get(k) or "-") for k in ("status", "sha256", "target_triple", "ins
   [[ "$CLAUDE_VER" =~ ^claude-code-cli-[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "claude --version is unreadable ($CLAUDE_VER)"
   "$CLAUDE_CMD" --help 2>/dev/null | grep -q -e '--safe-mode' \
     || die "$CLAUDE_VER has no --safe-mode: its lane would load CLAUDE.md, skills, hooks and MCP servers"
+  "$CLAUDE_CMD" --help 2>/dev/null | grep -q -e '--json-schema' \
+    || die "$CLAUDE_VER has no --json-schema: its lane could not give a typed decision"
 fi
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-5-5}"
 CLAUDE_EFFORT="${CLAUDE_EFFORT:-xhigh}"
+# Both lanes answer the same typed shape (gen_envelope.py VERDICT_SCHEMA): the decision is a field
+# the lane's own CLI checks; the kit writes the VERDICT line from it. The schema file lives next
+# to the lanes' copy, outside the repository (no repository path in a reviewer's argv).
+VSCHEMA="$(python3 "$GEN" verdict-schema)" || die "the verdict schema is unreadable"
+VSCHEMA_FILE="$TREEROOT/verdict-schema.json"
+printf '%s\n' "$VSCHEMA" > "$VSCHEMA_FILE" || die "could not write $VSCHEMA_FILE"
 # --restricted: no command-running tools, settings files ignored, file tools confined to the
 # working directory; --safe-mode: no CLAUDE.md, skills, plugins, hooks or MCP (auth kept).
 CLAUDE_ARGS=(-p --restricted --safe-mode --strict-mcp-config --tools "Read,Grep,Glob" --allowedTools "Read,Grep,Glob"
   --permission-mode dontAsk --no-session-persistence --model "$CLAUDE_MODEL" --effort "$CLAUDE_EFFORT"
-  --output-format stream-json --verbose)
+  --output-format stream-json --verbose --json-schema "$VSCHEMA")
 # The reviewers' environment is an explicit allowlist (env -i): home, PATH, temp directory,
 # locale, terminal, login name and each CLI's own config directory when set; no API key, and
 # nothing else of this shell (its OLDPWD included).
@@ -354,7 +364,7 @@ run_lane() {  # $1 lane, $2 NN - runs in the background and writes only its own 
     if [ "$lane" = codex ]; then
       lane_exec "$pgf" "$red" "$log" codex "$n" "$out" "$CODEX_CMD" exec --skip-git-repo-check --sandbox read-only \
         "${CODEX_ISO[@]}" --color never -m "$CODEX_MODEL" -c "model_reasoning_effort=\"$CODEX_EFFORT\"" \
-        --output-last-message "$out" - || rc=$?
+        --output-schema "$VSCHEMA_FILE" --output-last-message "$out" - || rc=$?
     else
       lane_exec "$pgf" "$red" "$log" claude "$n" "$out" "$CLAUDE_CMD" "${CLAUDE_ARGS[@]}" || rc=$?
     fi
@@ -438,6 +448,7 @@ python3 "$GEN" scrub "${SCRUB[@]}" || { say "scrub failed"; exit 3; }
   echo "# Provenance - pair-rail re-pass of $TAG ($SFX), PLAN-198 kit"
   cat "$EV/.header"
   echo "- lanes: codex exec --sandbox read-only ${CODEX_ISO[*]} and claude ${CLAUDE_ARGS[*]}; each lane in its own process group with a ${LANE_TIMEOUT} s limit, from a read-only copy of the candidate outside the repository without CLAUDE.md/AGENTS.md files, every other file redacted by the same redactor or withheld (withheld-$SFX.txt), both reading the SAME redacted payload on stdin; each lane's environment an explicit allowlist (env -i) without API keys; each lane's dispatch and outcome recorded in the attempts ledger by its own spawn process"
+  echo "- typed answers: both lanes answer the JSON Schema $VSCHEMA (codex --output-schema, claude --json-schema); the kit writes each VERDICT line from the decision field (gen_envelope.py compose_verdict); an answer without a valid typed decision is kept as written and judged by the one NO-GO rule"
   echo "- codex death classes, from the codex ERROR: lines among the last 40 transcript lines (texts measured on codex 0.160.0 only): model capacity = retried up to 2 times; account limit = no retry and no new payload"
   echo "- personal home paths replaced by <user> in the diffs, transcripts and verdicts"
   echo "- finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
