@@ -1,0 +1,12 @@
+Payload 32/32 reviewed. No P0 or false declared condition established. Condition 12’s three upgrade-example substitutions were confirmed in memory. Python 3.9 grammar, shell syntax and JSON checks passed; no files changed.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/tier_policy_cli/learn.py:462 (also loader.py:251): Family-model admission is inconsistent with downstream consumers. For example, claude-opus-5-fast is accepted and can become a recommendation, but apply.py:401 rejects it and owner-sign rejects it at cli.py:337. Unknown pricing sends the recommendation to an approval command that cannot accept it. Minimal fix: constrain recommendations to models supported by the writer and signer until their admission, ranking and pricing rules are updated together.
+
+P2 — .github/scripts/validate-pair-rail-verdict.py:772: After a future manifest re-pin above 0.160.0, an older CLI still meeting the floor receives the payload-hash exemption: comparison -1 is omitted from the exact-pin condition. The current 0.160.0 manifest does not expose this case. Minimal fix: require exact pinning when version_comparison is None or <= 0; test older, equal and newer versions against the manifest.
+
+VERDICT: GO The two defects are nonblocking follow-ups, with no demonstrated false declared condition or P0 in this payload.

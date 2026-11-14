@@ -1,0 +1,5 @@
+.claude/hooks/_lib/audit_emit.py	piece 3/3
+.claude/hooks/_lib/bash_indirect_guard.py
+.claude/hooks/_lib/bash_indirect_telemetry.py
+.claude/hooks/_lib/canonical_edit/__init__.py
+.claude/hooks/_lib/canonical_edit/decisions.py

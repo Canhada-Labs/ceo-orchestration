@@ -1,0 +1,50 @@
+PAYLOAD 20/32: .claude/hooks/check_agent_spawn.py (facade split into _lib/agent_spawn/) and .claude/hooks/check_arbitration_kernel.py (13 new KERNEL-DECOMPOSITION rows). All checks were done by reading the read-only candidate copy. No code was run.
+
+DECLARED CONDITIONS TOUCHED BY THIS PAYLOAD
+
+Condition 5 (13 kernel rows): TRUE against the code.
+- check_arbitration_kernel.py:91-347: I counted the _KERNEL_PATHS rows one by one. There are 123. The diff adds exactly 13 (lines 309-315, 332-336, 340), so the base had 110.
+- The rows match the condition: seven recursive package rows (canonical_edit, agent_spawn, _policy_parts, _audit_emit_parts, _audit_log_parts, _bash_safety_parts, _pair_rail_parts), five flat modules (model_currency, cli_currency, plan_paths, bash_indirect_guard, bash_indirect_telemetry) and adapters/live/**/*. All sit under .claude/hooks/_lib/.
+- Glob semantics: _match_segments (lines 376-389) treats `**` as zero or more segments and `*` as exactly one. So `<pkg>/**/*` matches files directly in the package (for example agent_spawn/__init__.py) as well as nested files. The patterns are lowercased like the others, so the casefold rule still applies.
+- File count: the tree has 37 (_audit_emit_parts) + 9 (canonical_edit) + 8 (agent_spawn) + 7 (_policy_parts) + 5 (_audit_log_parts) + 9 (_bash_safety_parts) + 6 (_pair_rail_parts) + 11 (adapters/live) + 5 flat modules = 97 files. 125 + 97 = 222, which matches the condition.
+- tests/test_kernel_decomposition_coverage.py: removing any package row fails test_every_backing_package_is_kernel_in_full. A positive control covers all eight packages, and test_flat_kernel_backers asserts each of the five modules. So "goes red if any of the 13 rows leaves" holds.
+- The new comments are accurate. agent_frontmatter.py:259 and escalation_signals.py:126 call model_currency.is_veto_floor_model. check_pair_rail.py:21 and _pair_rail_parts/part_01.py:557-566 call cli_currency. _bash_safety_parts/posture_scan.py:571 and decisions_cli.py:169 call bash_indirect_guard and bash_indirect_telemetry. check_plan_edit.py:94 and policy_preprocessors.py:40 import plan_paths. adapters/__init__.py:293 lazy-imports .live.
+
+Condition 7 (thin entry points): TRUE for check_agent_spawn. The facade keeps its path and the stdout contract; the logic now lives in _lib/agent_spawn/*. That package is kernel through condition 5.
+
+MOVED-CODE ANALYSIS (what to verify, item 4)
+- Re-exports: every name removed from the facade is in exactly one part's __all__. That covers about 110 functions, regexes, constants, all 12 REASON_* codes, _BLOCK_REASON_MARKERS and main. No two parts export the same name, and no part overwrites a name the facade defines itself (Decision, decide, _classify_block_reason, _to_contract_decision, _emit_cookbook_pattern_advisory, the _AUDIT_EMIT_AVAILABLE/_audit_emit/_agent_frontmatter imports).
+- Global lookup:
+  - _audit_emit_parts.install (lines 20-48) and agent_spawn.bind (lines 13-31) rebuild each function with the facade's globals. Monkeypatching check_agent_spawn.<name> still reaches every caller.
+  - `global _TASK_ROUTE_MODULE` in _resolve_task_route writes into the facade namespace, and `__file__` still resolves to the facade path.
+  - Every free name the part code uses (os, re, sys, json, hashlib, unicodedata, Path, _redact, _HOOKS_DIR, _audit_log_path, _parse_event_ts, ...) resolves in the facade.
+  - Part module-level code only needs `re`, which each part imports. Module-level annotations are strings under `from __future__ import annotations`.
+- Ordering: bind() runs at the end of the module (lines 640-647). No module-level code in between calls a bound name. _recent_file_assignments' default (_OVERLAP_LOOKBACK_S=600) is fixed at definition time in file_assignment.py, as it was in base.
+- State isolation: install() deep-copies the mutable templates, so _FRONTMATTER_MODEL_CACHE is fresh on each import or reload, and compiled regexes deep-copy to themselves. Reload behavior matches base.
+- Text identity: I compared the removed hunks with the part files. Input-side fail-closed paths are unchanged: _validate_skill_reference and its 6 helpers, _enforce_prompt_defense, _classify_file_assignment / _enforce_spawn_rails, _has_effort_token, the unicode hard-block and the VETO-floor check that stays in decide(). The only new logic is the _SPAWN_COMPONENT_IMPORT_ERROR pre-check in _lib/agent_spawn/entrypoint.py:12-16.
+- Python 3.9 and stdlib-only: FunctionType is called with five positional arguments (valid from 3.9), deepcopy of re.Pattern works on 3.7+, and nothing outside the standard library is imported.
+
+FAIL DIRECTION (item 2)
+- Part import failure with the hook run as __main__ (check_agent_spawn.py:126-135): it writes FATAL to stderr, prints `{}` (a valid allow) and exits 0. That is fail-open on an infrastructure fault. When imported as a library (MCP spawn_agent.py:92, self_test.py:262), it raises at import, the same as any import error in base.
+- bind() failure leads to main() allowing without reading stdin. That is fail-open too.
+- check_arbitration_kernel's own fail-closed posture is unchanged.
+
+ADOPTER BLAST RADIUS (items 1 and 3)
+- Fresh install: scripts/install.sh:1520-1549 iterates `_lib/*` by glob, so _lib/agent_spawn/ and the parts packages ship automatically.
+- Upgrade path: scripts/upgrade.sh is not in the read copy, so I could not check here whether an upgrade ships the new package.
+- Kernel rows: seven of them put back the v1.4.2 HARD-DENY posture for code that used to live in kernel facades. adapters/live/** and the five flat modules are newly HARD-DENY (an edit needs CEO_KERNEL_OVERRIDE + ACK), which condition 5 declares.
+- No model or effort change, no writes, no symlink handling in this payload.
+
+P0: none.
+P1: none.
+
+NEW FINDINGS (annex): none.
+
+P2 FOLLOW-UPS
+1. P2 — check_agent_spawn.py:640-647 with _lib/agent_spawn/entrypoint.py:12-16. A bind() failure is turned into _SPAWN_COMPONENT_IMPORT_ERROR and swallowed for every caller, while _load_spawn_part (lines 130-132) re-raises outside __main__. Library callers of decide() (mcp-server/handlers/spawn_agent.py:148, self_test.py) would then get a half-bound module and a NameError on every call instead of an import-time error. This can't happen today: the package __init__ imports both submodules before bind runs, and every __all__ name exists. Minimal fix: re-raise in the bind except block when __name__ != "__main__", matching _load_spawn_part.
+2. P2 — check_agent_spawn.py:39-47. The facade's imports of hashlib, unicodedata, re, os and Path now exist only so the rebound part functions can find them, and linters will flag them as unused. Removing them would fail silently. Without `hashlib`, _skill_ref_validate_hash_and_redact raises NameError, decide() raises, and main() allows, so SKILL REFERENCE hash validation stops working. Without `re`, _classify_file_assignment raises inside _enforce_spawn_rails's try, so the FILE ASSIGNMENT gate quietly returns None. Minimal fix: a bind-time check, or a test, that every co_names global of every bound function resolves in the facade namespace or builtins. Imports inside the part modules don't help, because the bound functions read the facade's globals.
+3. P2 — check_agent_spawn.py:600-602 says the REASON_* constants are "at check_agent_spawn.py:188"; they are now in _lib/agent_spawn/prompt_rules.py:93-106. check_agent_spawn.py:633 still calls the file "this 1700-LoC file". Fix the two references.
+4. P2 — check_agent_spawn.py:22-23, 50 and 642. These comments exist so .claude/scripts/gen-command-skill-hook-map.py, which derives guard involvement from literal mentions of `.claude/skills`/`SKILL.md` in registered hook source, keeps check_agent_spawn on the skill surface now that skill_reference.py lives under _lib/. The claim is fair (the bound helpers do validate SKILL.md references, and docs/COMMAND-SKILL-HOOK-MAP.md says its rule over-approximates). But the map row now rests on a comment, and deleting it drops the row silently. Fix: let the scanner follow a facade's _lib/<pkg> parts, or document the anchor.
+5. P2 (existed before this delta, not a regression) — kernel _lib/audit_emit.py:38 imports _lib/spool_writer.py, which is not kernel, and spool_writer.py:588 now hands off to _lib/_spool_writer_parts/, also not kernel. Both stay at the canonical/sentinel tier (_lib/**/*.py in canonical_edit/guards.py:34), exactly like spool_writer.py in v1.4.2. test_kernel_decomposition_coverage only follows imports out of kernel sources, so it can't see this hop. Follow-up: decide on purpose whether the audit spool writer belongs in _KERNEL_PATHS.
+
+VERDICT: GO Both declared conditions this payload touches (5 and 7) hold against the code, the check_agent_spawn split moves the code without changing behavior or fail direction, and nothing at P0 or P1 was found, only P2 follow-ups.

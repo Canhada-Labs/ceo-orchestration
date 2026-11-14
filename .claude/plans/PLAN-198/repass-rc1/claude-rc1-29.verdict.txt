@@ -1,0 +1,65 @@
+SCOPE OF PAYLOAD 29/32: .claude/scripts/check_contamination.py, which becomes a facade over .claude/hooks/_lib/_contamination/* and .claude/scripts/_contamination_inventory.py. I read the candidate facade and all nine modules it loads, plus FileWalker, the install.sh _lib/scripts copy loops, the check-contamination.sh wrapper, the validate.yml template and the CHANGELOG [1.4.4] lines that cite this file.
+
+CONDITIONS TOUCHED BY THIS PAYLOAD
+- Condition 7 (thin entry points; logic moves to modules): TRUE for this file. The path is kept, and the logic sits in _lib/_contamination/ plus one top-level helper, .claude/scripts/_contamination_inventory.py. That helper ships because install.sh:1606-1611 copies every .claude/scripts/*.py, as CHANGELOG [1.4.4] line 343 says. _lib/_contamination/ ships through install_lib_selective (install.sh:1520-1549); _framework_path_excluded does not exclude it.
+- Condition 13: this payload shows the whole file diff. Nothing contradicts it.
+- No other declared condition is exercised by this file. No declared condition is FALSE here.
+
+MOVED-CODE CHECK (item 4). Verified, no defect:
+- Every Rule 2 function moved word for word: _personal_path_blob, load_personal_path_allowlist, the scanner, the verdict, the reporting, _parse_args and _report_terms all match their base text.
+- Each moved function is re-created with FunctionType(code, facade globals()), at check_contamination.py:480-505 and in _lib/_contamination/__init__.py:8-28. So every free name resolves in the facade namespace at call time. That keeps the monkeypatch points (cc.FileWalker, cc._personal_path_index_modes, cc._PERSONAL_PATH_* constants, cc.personal_path_verdict). It also gives cli_checks.main the facade's __file__, so the default root is still the repository root.
+- Every free name used by a moved function is present in the facade:
+  - the stdlib imports kept at check_contamination.py:71-82;
+  - the constants copied at :402-406;
+  - the policy/scanner __all__ lists, which include the private helpers and the re-exported _emit_personal_path_rows and _personal_path_mask_owner;
+  - the NamedTuple classes, whose __module__ is the component on Python 3.9+, so the :493 filter exports them;
+  - typing.NamedTuple, a function on 3.9+, is correctly skipped by the __module__ test.
+- No circular import, standard library only, and the syntax works on Python 3.9.
+- Fail direction is not inverted:
+  - every Rule 1 error is wrapped as RuleOneInputError, re-raised `from None` as PersonalPathUnreadable, and printed through _personal_path_safe at rc 2;
+  - any other exception still hits the rc-2 catch-all;
+  - no path returns 0 on failure.
+- Nothing is written; reads use O_NOFOLLOW|O_NONBLOCK.
+
+NEW FINDINGS (annex)
+
+P1 — CHANGELOG.md:112-117 versus .claude/hooks/_lib/_contamination/cli_checks.py:131-138 and :193-261, and .claude/scripts/_contamination_inventory.py:28-144. Undeclared change to the verdict of a shipped CI gate, contradicted by the CHANGELOG.
+- What the CHANGELOG says: CHANGELOG [1.4.4] says the split entry points "keep their paths and their observable contracts" and names check_contamination.py.
+- What actually changed: the term rule (Rule 1) now fails closed. It returns rc 2 where v1.4.2/v1.4.3-rc.1 returned 0 in four cases:
+  - (a) any tracked path ANYWHERE in the index is not valid UTF-8, or contains a literal U+FFFD (_index :46-52). Before, the path was decoded with errors=replace, read_bytes raised OSError, and the file was skipped. Rule 2 only refused such paths in docs/ or .claude/plans/.
+  - (b) a tracked file exists but cannot be read, or is a FIFO, a device or a directory (_read_regular/_blob :58-95).
+  - (c) a tracked symlink whose payload cannot be readlink'd (see P2-3).
+  - (d) any disagreement between the walk and the index snapshots (:109-121).
+- Other observable changes:
+  - _SKIP_SUFFIXES no longer skips anything: regular .png/.pdf/.zip blobs that decode as UTF-8 are now matched.
+  - The personal-path report now prints BEFORE the term report.
+  - A Rule 2 rc 2 now returns before Rule 1 runs (cli_checks.py:208-212).
+- None of this is in CHANGELOG [1.4.4], neither in a Fixed section nor in "What an adopter should know". Only the in-code census at check_contamination.py:439-469 states it.
+- Failure scenario: an adopter's repository has one tracked file outside docs/ with a Latin-1 name, or a name that really contains U+FFFD. Their CI runs `bash .claude/scripts/check-contamination.sh` from templates/.github/workflows/validate.yml.template:87. It passes on v1.4.2. After `upgrade.sh --pin v1.4.4-rc.1` it exits 2 with "a tracked Rule 1 path is not valid UTF-8". Renaming is the only cure (no waiver exists), and the CHANGELOG told the adopter the contract had not changed.
+- Impact: the direction is fail-closed, as §4 prescribes for a gate's input, and no session is blocked. The realistic trigger rate is low. The finding is the false CHANGELOG statement and the missing upgrade note.
+- Minimal fix: add a CHANGELOG [1.4.4] Changed/Fixed bullet plus one line under "What an adopter should know", listing the new rc-2 classes (a)-(d), the end of the suffix skip, and the new report order. Alternatively, remove check_contamination.py from the "same way / observable contracts" sentence at :116.
+
+P2 FOLLOW-UPS
+
+P2-1 — check_contamination.py:30-31 and _lib/_contamination/term_scan.py:21,31-45. The module docstring still says "Binary file suffixes are excluded by extension". find_violations takes skip_suffixes and never uses it, and scan_rule_one has no suffix test.
+- test_check_contamination.py:145 test_binary_files_skipped still passes, but only because its \x89 byte fails UTF-8 decoding, not because of the suffix.
+- The fu144 test docstring ("The suffix list is about file content") implies the list was meant to stay for regular files.
+- Fix: either restore the suffix skip for mode 100644/100755 blobs only, or delete the docstring sentence and the dead parameter, and rename or fix the test.
+
+P2-2 — _lib/_contamination/cli_checks.py:218-219. The comment says "RULE 2 still runs below, as it does after a term hit". Rule 2 now runs ABOVE (:208), and a Rule 2 fatal skips Rule 1 entirely (:211-212). That reverses the base's "BOTH rules always run" guarantee for the fatal case; the rc is still 2, so only diagnostics are lost.
+- Fix: correct the comment, or run Rule 1 even when rc_paths == 2 and return max().
+
+P2-3 — _contamination_inventory.py:76-81 (and :89-95). For a mode-120000 entry, os.readlink fails in two cases, and both become RuleOneInputError (rc 2):
+- when the link is missing from the worktree (ENOENT), although a missing regular file is tolerated at :87-88;
+- on a core.symlinks=false checkout (EINVAL, because the link is a regular file there), although Rule 2 (personal_facade_io.py:119-147) reads that file's content as the payload.
+- EMLINK (FreeBSD O_NOFOLLOW) is also not handled, unlike Rule 2.
+- Fix: mirror Rule 2. ENOENT returns None. EINVAL/regular-file reads the file through _read_regular as the payload. Treat EMLINK like ELOOP.
+
+P2-4 — _lib/_contamination/term_scan.py:12. A hooks _lib module imports the top-level `_contamination_inventory` from .claude/scripts/. That only resolves because the facade runs as a script (sys.path[0]). `python3 -I .claude/scripts/check_contamination.py`, or importing the facade from another directory, fails at import with a traceback and rc 1, which is the "findings" code rather than 2. The base needed only .claude/hooks, which it inserts itself.
+- It also means a hand-patcher of Rule 1 must look outside _lib/ (condition 7 wording).
+- Fix: have the facade insert its own directory into sys.path, or move the inventory into _lib/_contamination/.
+
+P2-5 — check_contamination.py:71-82. The imports errno, hashlib, subprocess, time and unicodedata look unused in the facade, but the rebound functions need them through facade globals. An "unused import" lint cleanup would make the gate raise NameError (traceback, rc 1) at call time.
+- Fix: add a comment stating that these imports are load-bearing, or add a test that calls every rebound function's name resolution.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition is false and the facade rebinding wires correctly, with no fail-open inversion, but one P1 goes to the annex: Rule 1 of the shipped contamination gate now exits 2 on inputs it used to pass, and CHANGELOG [1.4.4] says this entry point kept its observable contract.

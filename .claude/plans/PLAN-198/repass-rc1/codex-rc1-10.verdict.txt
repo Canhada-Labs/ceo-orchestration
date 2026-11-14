@@ -1,0 +1,16 @@
+No P0 or false declared condition established in payload 10.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_pair_rail_parts/part_01.py:478
+When the host triple is absent from the shipped manifest, the compatibility branch can return before native-payload resolution and hashing. Its result then contains an empty sha256 and, without an override, the launcher path. This contradicts CHANGELOG.md:191's claim that the payload hash is still computed and recorded. Minimal fix: resolve and hash the native payload before returning compatible on this branch.
+
+P2 — .claude/hooks/_lib/_pair_rail_parts/part_02.py:22; .claude/hooks/check_pair_rail.py:29
+The facade overwrites the installed _invoke_codex_review with another full implementation. An adopter applying a repair to the extracted function gets no runtime change. The implementations currently have identical executable ASTs. Minimal fix: retain one implementation and expose it through the existing namespace binding.
+
+Read-only validation: all four facades imported successfully with audit dependencies stubbed; function globals retained their facade bindings; 21 implementation files passed Python 3.9 syntax parsing; both policy-dsl/v1 policy files loaded successfully.
+
+VERDICT: GO The reviewed payload has two nonblocking follow-ups, with no demonstrated P0 or contradiction of a declared condition.

@@ -1,0 +1,11 @@
+Payload 17: no P0 or demonstrated false declared condition found. Python 3.9 parsing and healthy-load namespace checks passed; pre-split equivalence was not established.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/check_canonical_edit.py:624; mirrored in .claude/hooks/_lib/canonical_edit/entry.py:129. An incomplete install missing an extracted component raises ImportError, which is classified as an integrity failure. The fallback blocks every matching edit, including ordinary noncanonical files, before reading the event. This reverses the required infrastructure fail-open direction. Minimal fix: emit allow with a diagnostic for component-loading infrastructure failures; reserve integrity denial for independently established integrity failures.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/_ceremony_toolkit/preflight.py:52; .claude/hooks/_lib/canonical_edit/guards.py:5. The toolkit still searches the entry point’s top-level AST for the literal _CANONICAL_GUARDS assignment, now moved into guards.py. Default collect_modified_canonical_paths calls therefore raise canonical_guard_policy_unavailable, and sentinel-pack validation fails. Minimal fix: read the extracted policy location, with a legacy fallback if needed.
+
+P2 — .claude/hooks/_lib/escalation_signals.py:126; .claude/scripts/ceo-escalation-detector.py:375. The library now accepts GPT floor models, while the standalone detector retains Claude-only prefixes. A legitimate gpt-5 VETO-role event consequently produces a false high-severity incident in the CLI. Read-only comparison confirmed the predicates disagree. Minimal fix: make both consumers use the same floor predicate.
+
+VERDICT: GO-WITH-CONDITIONS The infrastructure-failure inversion belongs in the signed P1 annex under this cut’s rule, with two additional P2 integration regressions remaining.

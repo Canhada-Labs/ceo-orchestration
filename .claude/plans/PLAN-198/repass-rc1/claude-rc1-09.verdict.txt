@@ -1,0 +1,64 @@
+PAYLOAD 9/32 (v1.4.3-rc.1..5805af55f1fa): new files .claude/hooks/_lib/_installer_write_safety/{report,syntax,verdicts_a,verdicts_b}.py, .claude/hooks/_lib/_lessons_parts/* (all), .claude/hooks/_lib/_night_mode_parts/{__init__,helpers}.py. I read each one against its facade (.claude/scripts/check-installer-write-safety.py, lessons.py, night-mode.py), the binder modules (_installer_write_safety/__init__.py, _audit_emit_parts/__init__.py, _night_mode_parts/__init__.py), the installer, and the canonical and kernel guard lists. I could not run code (read-only copy), so every finding comes from reading the code.
+
+DECLARED CONDITIONS TOUCHED BY THIS PAYLOAD
+- Condition 7 (thin entry points over _lib modules; entry paths are kept; a hand-patched hook has to be re-patched in its module): HONEST for this payload.
+  - lessons.py, night-mode.py and check-installer-write-safety.py keep their paths and bind the code from the new modules into their own namespace.
+  - Condition 7 does not claim identical behaviour, so the finding below does not make it false.
+- No other declared condition is touched by these files. None is FALSE against the code in this payload.
+
+FINDINGS
+
+1. P2 (the one behaviour change in moved code; CI-only, fails closed, nothing triggers it today). Inputs that used to give one blocking site now crash the whole census.
+   - Locations: .claude/hooks/_lib/_installer_write_safety/__init__.py:36, with syntax.py:6-10. Affected handlers: verdicts_b.py:141, verdicts_b.py:440, verdicts_b.py:447, commands.py:131, model.py:320, model.py:344, model.py:632, operands.py:35.
+   - Cause: _bind_class clones each package class with `type(original)(name, original.__bases__, attrs)`.
+     - The facade's ParseError is a clone P' whose base is Exception.
+     - The facade's Incomplete is a clone I' whose base is the ORIGINAL syntax.ParseError, not P'.
+     - So issubclass(facade.Incomplete, facade.ParseError) is False.
+   - Effect: every bound `raise Incomplete(...)` (in _read_balanced, _read_dquote and lex) escapes the `except ParseError` handlers. In the monolith those handlers caught it and returned an indeterminate (blocking) verdict or a fallback.
+   - build_logical_lines still works, because it catches `except Incomplete`, so whole-file parsing is unaffected.
+   - Failure scenario: any scanned scripts/**/*.sh line such as `sed -e 's/${//' -e 's/}//' "$f"` (turning ${VAR} into VAR) or `sed 's/$(//'`.
+     - The first goes _verdict_one_script -> _names_in_text("${") -> _expansion_refs -> _read_balanced and raises I', which commands.py:131 misses. The second raises I', which verdicts_b.py:141 misses.
+     - The result is an uncaught traceback with exit 1. validate.yml:414 goes red without naming a site, --json emits no JSON, and --write-baseline cannot run until the shell line changes.
+   - Fail direction stays CLOSED and there is no adopter impact.
+   - A grep of the current scripts/ corpus found no line that triggers it, and no test exercises these handlers. That is why this is P2, not P1.
+   - Minimal fix, either of:
+     - in _bind_class, rebuild __bases__ from the already-cloned package classes (substitute namespace[b.__name__] for bases whose __module__ is in the package);
+     - or return the original class for subclasses of BaseException.
+     - Add a test asserting issubclass(mod.Incomplete, mod.ParseError) and that `sed 's/$(//'` yields an i-script-unparsed site.
+
+NEW FINDINGS (annex)
+- None at P1 or above.
+
+P2 FOLLOW-UPS
+- Finding 1 above.
+- .claude/hooks/_lib/_installer_write_safety/verdicts_b.py:698. The `__all__` filter excludes only _engine and _engine_name, so the module object `_commands` and the stray loop string `_commands_name` are bound into the check-installer-write-safety.py namespace. Harmless. Fix: add both names to the exclusion.
+- .claude/hooks/_lib/_installer_write_safety/__init__.py:29-35 with report.py:33-35. _bind_class rebinds plain functions, staticmethods and classmethods but not `property`.
+  - So Site.blocking keeps report.py's globals, and patching BLOCKING_VERDICTS on the facade does not reach it. This is a patch-point divergence (check item 4).
+  - Fix: rebind property fget/fset/fdel the same way.
+- .claude/hooks/_lib/_installer_write_safety/report.py:627-628. `if __name__ == "__main__": sys.exit(main())` sits in an implementation module.
+  - Run as `python -m _lib._installer_write_safety.report`, the unbound main would hit NameError (build_file_model is not in report's globals). The block is dead and misleading. Fix: remove it.
+- Night-mode posture writer: cmd_on and cmd_off now live in .claude/hooks/_lib/_night_mode_parts/toggles.py.
+  - _night_mode_parts.install() binds them to any namespace a caller supplies. That skips main()'s _check_self_path (NF-08b, helpers.py _self_path_diagnostic) and _validate_root (NM-04).
+  - _E4_POSTURE_TOGGLE_SCRIPTS (posture_tables.py:376) lists only the facade.
+  - This stays inside the declared residual: posture_tables.py:305-314 states the Bash rail does not close the boundary, and an importlib load of night-mode.py already allowed a direct cmd_on call.
+  - Edits stay sentinel-gated (canonical tier) through `.claude/hooks/_lib/**/*.py` (canonical_edit/guards.py:34).
+  - Fix: run the self-path and root checks inside cmd_on and cmd_off too, or document the package as part of the posture-writer surface.
+
+CHECKED AND CLEAN
+- Adopter delivery: install.sh install_lib_selective (install.sh:1520-1556) installs every top-level _lib entry. scripts/_framework_manifest_set.sh is exclusion-based, so _lessons_parts and _night_mode_parts ship.
+  - The facades import them unconditionally, just as lessons.py already imported _lib.runtime_paths, so this adds no new degraded path.
+- Lessons:
+  - _load_injection_scanner resolves `Path(__file__)` through the facade's globals, so the scanner is still .claude/scripts/scan-injection.py, and the promotion boundary stays fail-CLOSED (scanner_unavailable leads to QUARANTINED at add, and approval stays PENDING).
+  - The text matches the PLAN-182 staged monolith.
+  - CANDIDATE_TEXT_MAX_CHARS moved to config.py with the same value of 200.
+  - __annotations__ is cleaned up after install. There are no name collisions with the facade.
+- Night-mode helpers:
+  - REPO_ROOT, _INVOKED_SELF, _CANONICAL_SELF_PARTS, _TEST_SEAM_ENV, MARKER_VERSION, NIGHT_MODE and _RESTORABLE_MODES all resolve from the facade, so the NF-08b alias/relocation refusals and the NM-04 confinement are unchanged.
+  - _atomic_write_json still uses mkstemp in the same directory plus os.replace.
+  - The audit emit stays fail-open.
+- Census: no other cross-component class inheritance, and no duplicate top-level names across components.
+  - _REPO_ROOT and instrument_sha256 resolve correctly from the new location.
+  - The only write is still the explicit --write-baseline.
+- Python: standard library only, and compatible with 3.9 (no PEP 604 runtime unions, zip strict, slots dataclasses or match statements).
+
+VERDICT: GO No declared condition is false against this payload and there is no P0; the one behaviour change in moved code (the Incomplete/ParseError link broken by class re-binding) only affects the maintainer's CI census, fails closed, is not triggered by the current scripts, and is filed as a P2 follow-up with a minimal fix.

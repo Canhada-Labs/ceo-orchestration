@@ -1,0 +1,8 @@
+.claude/scripts/ceo-boot.py	piece 2/2
+.claude/scripts/ceo-cost-transcripts.py
+.claude/scripts/ceo-restore.sh
+.claude/scripts/ceremony-lint-waivers.json
+.claude/scripts/check-active-hooks-executable.py
+.claude/scripts/check-audit-real-loss.py
+.claude/scripts/check-audit-registry-coverage.py
+.claude/scripts/check-ceremony-script.py

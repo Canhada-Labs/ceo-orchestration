@@ -1,0 +1,13 @@
+Payload 3: no P0 or false declared condition established.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/_lib/_audit_emit_parts/writer.py:761
+During synchronous auditing or spool fallback, directory creation or lock acquisition can raise OSError before `line` is assigned. The fallback then raises UnboundLocalError, which the outer handler swallows, losing the event despite announcing fallback storage. An in-memory PermissionError probe confirmed zero fallback writes. Minimal fix: serialize `event` inside this exception handler, as the adjacent lock-timeout handler does. Introduction by this delta is unproven; this is a confirmed candidate defect.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/_audit_emit_parts/tokens_boot.py:84; .claude/hooks/_lib/audit_emit.py:12
+The rebound annotations reference typing names absent from the facade globals. Consequently, typing.get_type_hints(audit_emit.scrub_audit_tokens_event) raises NameError. Other extracted functions similarly require Callable, List, Tuple or Iterator. Minimal fix: restore those typing imports in the facade. No active repository consumer was identified.
+
+Validation: Python 3.9 checks covered 107 emitter calls with in-memory sinks, facade global resolution, patch points, reload isolation and audit-log fail-open handling. Facade validation required substituting one redacted numeric placeholder in memory; it was not an unmodified-tree integration test. No repository files or audit sinks were written.
+
+VERDICT: GO-WITH-CONDITIONS The reproduced audit-loss defect warrants an annex finding, but this payload establishes neither a P0 nor a false declared condition.

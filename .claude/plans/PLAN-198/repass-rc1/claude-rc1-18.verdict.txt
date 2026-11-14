@@ -1,0 +1,56 @@
+PAYLOAD 18/32 - v1.4.4-rc.1 (5805af55) against v1.4.3-rc.1. Files in this payload: _lib/federation/server.py, _lib/model_currency.py (new), _lib/pii_patterns.py, _lib/plan_paths.py (new), _lib/policy.py, _lib/policy_preprocessors.py, _lib/secret_patterns.py. I read each candidate file and, where code moved, the new part files it loads.
+
+DECLARED CONDITIONS CHECKED AGAINST THE CODE
+- Condition 4 (secret-filter offsets): TRUE.
+  - secret_patterns.py:956-1000: scan() matches the historical frame (the NFKC view). When that view differs from the text, it maps those matches back to original offsets through _nfkc_segments/_original_span and also scans the original text. Every finding indexes the text that was passed in.
+  - redact() (1024-1046) and scan_and_redact() (1049-1067) cut that same text, over merged runs (1003-1021).
+  - The pattern catalog is unchanged: there is no hunk between line 73 and line 725.
+  - If the segment images do not join up to NFKC(text), the map falls back to the whole text (868-869), so the failure is over-redaction, never a leak. I followed the composition-safety reasoning for the ASCII cuts, the _SAFE_CUT cuts and the head peel, and found no case where a span is under-covered.
+  - pii_patterns.py:731-758 now merges overlapping spans into their union. That fixes the nested-container leak of the old right-to-left walk. Its only caller passes spans found on the same `cleaned` string (856).
+  - Callers: codex_egress_redact.py:119/148 passes one text to scan_and_redact. check_adversary.py:135 and check_harness_config.py:485 only test whether findings exist or count them; they never slice with the offsets. No caller slices a normalized copy.
+- Condition 5 (kernel rows touching this payload): TRUE. check_arbitration_kernel.py:311 has `_policy_parts/**/*`; lines 332 and 334 have model_currency.py and plan_paths.py. The 13 rows are at 309-340.
+- Condition 7 (thin entry points): TRUE for policy.py and federation/server.py.
+  - policy.py:127-131 runs the six `_policy_parts` files inside the policy.py module's own namespace. Globals, patch points, `__all__` (loading.py:266) and the dataclass `__module__` stay identical. The parser methods split across the three mixins are the same set as before, with no name collisions.
+  - federation/server.py:369-441 rebinds every function and method from the parts to the facade's globals (`_bind_function` keeps `__kwdefaults__` and closures). Class attributes and the MRO still match the old `_FederationHandler`.
+  - Relative imports inside methods resolve through the facade's `__package__`.
+  - federation/server.py is not a kernel path, before or after this change. The sentinel rail's glob `.claude/hooks/_lib/**/*.py` (canonical_edit/guards.py:34) still covers `_server_parts/`.
+- Condition 9 (model families): TRUE and honestly worded.
+  - model_currency.py:7-16 retires only the exact id `claude-opus-4-1`.
+  - `_ALLOWED`/`_FLOOR` accept dated and `-fast` ids that model-deprecations.json lists as retired (lines 15, 24, 33, 49, 56).
+
+OTHER CHECKS
+- Adopter blast radius is low:
+  - policy.py is reached only through policy_dispatch.py, which is not registered in .claude/settings.json, and through the shadow runner.
+  - The federation server stays off by default (kill switch plus sentinels).
+  - install.sh:1520-1549 copies `_lib` subdirectories whole, so the new part directories are installed.
+  - No hook is disabled, and no model or effort changes silently.
+- Fail direction: none inverted. In the federation code, the write gates still fail closed and the reload and reaper paths still fail open. A timeout on the second secret-scan frame is caught and degrades to the v1.4.3 result; a timeout on the first frame propagates as before.
+- Python: standard library only and 3.9-compatible (nonlocal, bisect, types.FunctionType, typing generics under `__future__` annotations).
+
+FINDINGS
+- P0: none.
+- P1: none.
+
+NEW FINDINGS (annex): none.
+
+P2 FOLLOW-UPS
+1. _lib/policy.py:127-129 with _lib/_policy_parts/__init__.py:15.
+   - What goes wrong: `exec()` of each part runs its module docstring, which overwrites `_lib.policy.__doc__`. It ends up as "Extracted policy declarations: loading." (loading.py:1), so pydoc and help() show the wrong documentation.
+   - Fix: save and restore `namespace['__doc__']` inside install(), or remove the docstrings from the part files.
+2. _lib/policy.py:126.
+   - What goes wrong: the comment "Opt-out: CEO_POLICY_ENGINE_DISABLE=1 reverts to Python-hook fallback" seems to be there only to satisfy the grep in test_flip_closures.py. policy.py does not implement the switch. policy_dispatch.py:128-134 does: it allows, or delegates only if CEO_POLICY_LEGACY_HOOK_PATH is set.
+   - Fix: reword it as "honoured by policy_dispatch.py (allow, or legacy hook if CEO_POLICY_LEGACY_HOOK_PATH is set)".
+3. _lib/secret_patterns.py:991-999.
+   - What goes wrong: each frame gets its own 0.5 s budget, and the segment mapping runs with no budget, so one scan can now take about 2x budget_seconds. codex_egress_redact.py:104-105 still says "Performance bounded by budget_seconds=0.5". Also, a timeout on the original-text frame is logged only at DEBUG, so callers cannot see that detection fell back to NFKC-only.
+   - Fix: document that the budget is per frame, or split one budget across both frames, and have codex_egress_redact report the timeout.
+4. _lib/plan_paths.py:13-23 (used by policy_preprocessors.py:315-319 and check_plan_edit.py:240).
+   - What goes wrong: compared with the old `PLAN-\d{3}-[a-z0-9-]+\.md`, the new pattern also rejects names with `--`, a trailing `-`, or non-ASCII digits. Such files stop being plan-gated. CHANGELOG [1.4.4] (line 332) mentions only the FOLLOWUP widening. check_budget.py:155 still uses the permissive pattern, so the two consumers classify these names differently. The docstring says paths are "normalized", but only `\` becomes `/`: there is no folding of `.`/`..` or of letter case. That gap existed before this change.
+   - Fix: add a CHANGELOG line for the narrowing, and use plan_paths in check_budget.py.
+5. _lib/model_currency.py:7-16.
+   - What goes wrong: the family pattern has no `claude-fable-*`. Fable is accepted only as the exact legacy ids `claude-fable-5` / `claude-fable-5-1`, and only when explicit_models is None. A newer Fable id needs an explicit list entry. This is consistent with the declared design but easy to miss.
+   - Fix: add a sentence to ADR-149 or the docstring.
+6. _lib/federation/_server_parts/__init__.py:4.
+   - What goes wrong: a second docstring-like string literal that does nothing.
+   - Fix: fold it into the module docstring.
+
+VERDICT: GO The declared conditions this payload touches (4, 5, 7 and 9) all hold against the candidate code, the moved federation and policy code behaves as it did before, the secret- and PII-redaction offset fixes are correct and fail toward over-redaction, and I found no P0 or new P1, only six P2 follow-ups.

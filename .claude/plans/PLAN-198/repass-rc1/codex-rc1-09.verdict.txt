@@ -1,0 +1,10 @@
+Payload 9: no P0 or false declared condition identified.
+
+NEW FINDINGS (annex): None.
+
+P2 follow-ups:
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:36, affecting syntax.py:10. Class cloning retains original base classes: exported Incomplete no longer subclasses exported ParseError (confirmed by read-only introspection). Existing except ParseError handlers can therefore miss Incomplete and propagate an exception instead of returning their intended diagnostic. Minimal fix: preserve exception-class identity or map original bases to their cloned counterparts; assert the exported inheritance relationship.
+
+Validation: 19 related Python files passed Python 3.9 grammar parsing; the census completed on all 20 shipped shell files. No lessons or night-mode extraction regression found. Full lessons import validation was limited by a supplied redaction artifact.
+
+VERDICT: GO The identified exception-binding regression is a nonblocking compatibility follow-up under the declared cut.

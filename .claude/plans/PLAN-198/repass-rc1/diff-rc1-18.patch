@@ -1,0 +1,3927 @@
+diff --git a/.claude/hooks/_lib/federation/server.py b/.claude/hooks/_lib/federation/server.py
+index 3f86bbb1c5ae..4a4a4cb3bdc5 100644
+--- a/.claude/hooks/_lib/federation/server.py
++++ b/.claude/hooks/_lib/federation/server.py
+@@ -330,168 +330,2 @@ def _load_audit_chain_ext():
+ 
+-class FederationConfig:
+-    """Resolved server configuration (immutable after construction).
+-
+-    Fields
+-    ------
+-    bind_host
+-        Host string (IP literal or hostname). Hostnames are resolved on
+-        bind to check loopback.
+-    bind_port
+-        TCP port (1..65535).
+-    cert_file
+-        Server cert (PEM).
+-    key_file
+-        Server private key (PEM).
+-    ca_file
+-        Bundle of trusted client-CA certs (PEM).
+-    peers_path
+-        Path to ``peers.yaml`` (allowlist for client cert fingerprints).
+-    enabled_sentinel
+-        Path to ``.claude/data/federation/enabled.md`` (signed cleartext).
+-    enabled_sentinel_asc
+-        Path to ``enabled.md.asc`` (detached signature).
+-    lan_enabled_sentinel
+-        Path to ``lan-enabled.md`` (LAN-bind additional pair).
+-    lan_enabled_sentinel_asc
+-        Path to ``lan-enabled.md.asc``.
+-    signer_registry_path
+-        Path to ``.claude/security/sentinel-signers-registry.yaml`` for
+-        Stage-2 signer expiry / revocation check.
+-    write_enabled_sentinel
+-        Path to ``.claude/data/federation/write-enabled.md`` (Layer 0b /
+-        Gate #8 third sentinel pair — PLAN-112-FOLLOWUP). Optional; when
+-        None, defaults are resolved at runtime.
+-    write_enabled_sentinel_asc
+-        Detached signature for the write-enable pair.
+-    federation_sentinels_dir
+-        Directory hosting per-request Owner-co-sign sentinels (Gate #10).
+-    audit_log_path
+-        Path to the local ``audit-log.jsonl`` that the audit-event write
+-        handlers append to AND the post-handler T1565 tamper check
+-        inspects (PLAN-112-FOLLOWUP P0 #1 — Codex BLOCK). MUST be the SAME
+-        path for both or the tamper check is a no-op. Optional; when None,
+-        the handlers' own ``CEO_AUDIT_LOG_PATH``/platform-default resolution
+-        is used AND the dispatcher resolves the identical path so the
+-        check inspects the log just appended.
+-    """
+-
+-    __slots__ = (
+-        "bind_host", "bind_port", "cert_file", "key_file", "ca_file",
+-        "peers_path", "enabled_sentinel", "enabled_sentinel_asc",
+-        "lan_enabled_sentinel", "lan_enabled_sentinel_asc",
+-        "signer_registry_path",
+-        # PLAN-112-FOLLOWUP W1/W2 — write-mode activation surfaces.
+-        "write_enabled_sentinel", "write_enabled_sentinel_asc",
+-        "federation_sentinels_dir",
+-        # PLAN-112-FOLLOWUP P0 #1 — one canonical audit-log path.
+-        "audit_log_path",
+-    )
+-
+-    def __init__(
+-        self,
+-        bind_host: str,
+-        bind_port: int,
+-        cert_file: Path,
+-        key_file: Path,
+-        ca_file: Path,
+-        peers_path: Path,
+-        enabled_sentinel: Path,
+-        enabled_sentinel_asc: Path,
+-        lan_enabled_sentinel: Path,
+-        lan_enabled_sentinel_asc: Path,
+-        signer_registry_path: Optional[Path] = None,
+-        write_enabled_sentinel: Optional[Path] = None,
+-        write_enabled_sentinel_asc: Optional[Path] = None,
+-        federation_sentinels_dir: Optional[Path] = None,
+-        audit_log_path: Optional[Path] = None,
+-    ) -> None:
+-        self.bind_host = bind_host
+-        self.bind_port = int(bind_port)
+-        self.cert_file = cert_file
+-        self.key_file = key_file
+-        self.ca_file = ca_file
+-        self.peers_path = peers_path
+-        self.enabled_sentinel = enabled_sentinel
+-        self.enabled_sentinel_asc = enabled_sentinel_asc
+-        self.lan_enabled_sentinel = lan_enabled_sentinel
+-        self.lan_enabled_sentinel_asc = lan_enabled_sentinel_asc
+-        self.signer_registry_path = signer_registry_path
+-        # Default-resolve write-mode sentinel paths relative to peers_path
+-        # parent so a single data-dir hosts all three sentinel pairs.
+-        data_dir = Path(peers_path).parent if peers_path else Path(
+-            ".claude/data/federation"
+-        )
+-        self.write_enabled_sentinel = (
+-            write_enabled_sentinel
+-            if write_enabled_sentinel is not None
+-            else data_dir / "write-enabled.md"
+-        )
+-        self.write_enabled_sentinel_asc = (
+-            write_enabled_sentinel_asc
+-            if write_enabled_sentinel_asc is not None
+-            else Path(str(self.write_enabled_sentinel) + ".asc")
+-        )
+-        self.federation_sentinels_dir = (
+-            federation_sentinels_dir
+-            if federation_sentinels_dir is not None
+-            else data_dir / "sentinels"
+-        )
+-        # PLAN-112-FOLLOWUP P0 #1 — one canonical audit-log path. None →
+-        # the dispatcher resolves the SAME path the audit handlers use
+-        # (CEO_AUDIT_LOG_PATH or platform default) at serve_forever time.
+-        self.audit_log_path = (
+-            Path(audit_log_path) if audit_log_path is not None else None
+-        )
+-
+-
+-# ---------------------------------------------------------------------------
+-# Bind-loopback resolver (AC3 — covers ALL non-loopback shapes)
+-# ---------------------------------------------------------------------------
+-
+-
+-def resolve_bind_is_loopback(bind_host: str) -> Tuple[bool, str]:
+-    """Return ``(is_loopback, resolved_ip_str)`` for a bind host.
+-
+-    Resolves hostnames via :func:`socket.gethostbyname_ex` and tests
+-    EACH resolved address against :func:`ipaddress.ip_address.is_loopback`.
+-    A host with any non-loopback address counts as non-loopback (the
+-    server cannot bind to "loopback-only" without an explicit literal).
+-    """
+-    raw = (bind_host or "").strip()
+-    if not raw:
+-        return False, ""
+-
+-    # Try literal IP first (covers IPv4 + IPv6 + "::").
+-    try:
+-        addr = ipaddress.ip_address(raw)
+-        # `unspecified` (0.0.0.0 / ::) is intentionally NOT loopback.
+-        return bool(addr.is_loopback), str(addr)
+-    except ValueError:
+-        pass
+-
+-    # Hostname — resolve and check every A/AAAA.
+-    try:
+-        _, _, ips = socket.gethostbyname_ex(raw)
+-    except (socket.gaierror, OSError):
+-        return False, ""
+-
+-    all_loopback = True
+-    first = ""
+-    for ip in ips:
+-        if not first:
+-            first = ip
+-        try:
+-            addr = ipaddress.ip_address(ip)
+-        except ValueError:
+-            all_loopback = False
+-            continue
+-        if not addr.is_loopback:
+-            all_loopback = False
+-    return all_loopback, first
+-
+-
+-# ---------------------------------------------------------------------------
+-# IPv6-aware threaded HTTPS server (AC3)
+-# ---------------------------------------------------------------------------
+-
+ 
+@@ -533,1686 +367,75 @@ def build_ssl_context(
+ 
+-class JointKeyRateLimiter:
+-    """Bucket-by-minute joint-key rate limiter (AC17 — read path)."""
+-
+-    def __init__(self, per_minute: int) -> None:
+-        self.per_minute = int(per_minute)
+-        self._buckets: Dict[Tuple[str, str, int], int] = {}
+-        self._lock = threading.Lock()
+-
+-    def allow(
+-        self,
+-        peer_fpr: str,
+-        client_ip: str,
+-        now_epoch: Optional[float] = None,
+-    ) -> bool:
+-        now = now_epoch if now_epoch is not None else time.time()
+-        bucket = int(now // 60)
+-        key = (peer_fpr.lower(), client_ip, bucket)
+-        with self._lock:
+-            self._prune_locked(bucket)
+-            current = self._buckets.get(key, 0)
+-            if current >= self.per_minute:
+-                return False
+-            self._buckets[key] = current + 1
+-            return True
+-
+-    def _prune_locked(self, current_bucket: int) -> None:
+-        cutoff = current_bucket - 2
+-        stale = [k for k in self._buckets if k[2] < cutoff]
+-        for k in stale:
+-            del self._buckets[k]
+-
+-
+-# ---------------------------------------------------------------------------
+-# Peer-list reload-watcher (PLAN-112-FOLLOWUP W3 — P0-1 revocation <60s)
+-# ---------------------------------------------------------------------------
+-
+-
+-def _peers_file_signature(peers_path: Path) -> Tuple[float, int, str]:
+-    """Return a cheap (mtime, size, sha256-hex) signature of peers.yaml.
+-
+-    Used by the reload-watcher to decide whether a reload is warranted
+-    WITHOUT re-parsing on every request. The sha256 is only computed when
+-    (mtime, size) changed — see :func:`_maybe_reload_peers`.
+-    """
+-    try:
+-        st = peers_path.stat()
+-    except OSError:
+-        return (0.0, -1, "")
+-    try:
+-        data = peers_path.read_bytes()
+-        digest = hashlib.sha256(data).hexdigest()
+-    except OSError:
+-        digest = ""
+-    return (st.st_mtime, st.st_size, digest)
+-
+-
+-def _reload_peers_now(httpd: Any) -> bool:
+-    """Re-parse peers.yaml + refresh ``httpd.federation_peers`` +
+-    re-run cert-level revocation. Returns True on a successful refresh.
+-
+-    PLAN-112-FOLLOWUP W3 / R-IT-A: this re-evaluates cert-level revocation
+-    (expiry → ``federation_cert_revoked``) on every reload, NOT just the
+-    ``peer.revoked`` boolean — so a CERT revocation (expiry past) also
+-    propagates without restart. R-IT-C: every reload emits
+-    ``federation_peer_list_reloaded`` so the SLO is forensically
+-    observable.
+-
+-    Fail-CLOSED note: on a parse error we DO NOT wipe the existing peer
+-    set (that would open the federation to all-peers-denied DoS on a
+-    transient bad write) — we keep the last-good set + emit a rejected
+-    breadcrumb. A peer_revoke writes peers.yaml atomically (tmpfile +
+-    rename) so a torn read is not expected; the keep-last-good policy is
+-    purely defense-in-depth.
+-    """
+-    cfg = getattr(httpd, "federation_config", None)
+-    peers_path = getattr(cfg, "peers_path", None) if cfg else None
+-    if peers_path is None:
+-        peers_path = getattr(httpd, "federation_peers_path", None)
+-    if peers_path is None:
+-        return False
+-    peers_path = Path(peers_path)
+ 
+-    now_dt = _dt.datetime.now(_dt.timezone.utc)
+-    try:
+-        peers = load_peers(peers_path)
+-    except (FileNotFoundError, PeersFileError, PeerHasNoFingerprintError) as exc:
+-        _safe_emit(
+-            "federation_peer_list_reloaded",
+-            peer_count=len(getattr(httpd, "federation_peers", {}) or {}),
+-            reload_reason="parse_error_kept_last_good",
+-            source_path=str(peers_path)[:128],
+-        )
+-        try:
+-            sys.stderr.write(
+-                "[federation.reload] peers.yaml reload failed ({0}); "
+-                "kept last-good set\n".format(type(exc).__name__)
+-            )
+-        except Exception:
+-            pass
+-        return False
++# Mechanically extracted declarations retain this module's globals: patching a
++# facade helper/constant must affect methods even after extraction.
++import importlib.util as _importlib_util
++from types import FunctionType as _FunctionType
+ 
+-    # R-IT-A — re-run cert-level revocation on reload (mirror
+-    # _load_peers_or_raise's expiry handling).
+-    for peer in peers.values():
+-        try:
+-            days_left = (peer.not_valid_after - now_dt).days
+-        except Exception:
+-            continue
+-        if days_left < 0:
+-            _safe_emit(
+-                "federation_cert_revoked",
+-                peer_id=peer.peer_id[:64],
+-                reason="expired",
+-            )
+ 
+-    httpd.federation_peers = peers  # type: ignore[attr-defined]
+-    httpd.federation_peers_extra = {  # type: ignore[attr-defined]
+-        peer.peer_id: {
+-            "peer_id_spki_fingerprint": peer.peer_id_spki_fingerprint,
+-            "peer_id_cert_fingerprint": peer.peer_id_cert_fingerprint,
+-            "scopes": list(getattr(peer, "scopes", []) or []),
+-            "audit_event_push_allowlist": list(
+-                getattr(peer, "audit_event_push_allowlist", []) or []
+-            ),
+-            "revoked": bool(peer.revoked),
+-        }
+-        for peer in peers.values()
+-    }
+-    _safe_emit(
+-        "federation_peer_list_reloaded",
+-        peer_count=len(peers),
+-        reload_reason="content_changed",
+-        source_path=str(peers_path)[:128],
++def _bind_function(_original):
++    _bound = _FunctionType(
++        _original.__code__, globals(), _original.__name__,
++        _original.__defaults__, _original.__closure__,
+     )
+-    return True
+-
+-
+-def _maybe_reload_peers(httpd: Any, *, now: Optional[float] = None) -> None:
+-    """Reload peers.yaml IF it changed since the last check.
+-
+-    R-IT-C: kill-switch + peer-list are NOT boot-cached — this runs at the
+-    TOP of every write dispatch (and could be wired into the read path)
+-    so the <60s SLO is bounded by the request cadence, not a poll thread.
+-    A poll thread is ALSO started in ``serve_forever`` (see
+-    :meth:`FederationServer._start_reload_thread`) so the SLO holds even
+-    with zero traffic.
+-
+-    Debounced by ``PEER_RELOAD_MIN_INTERVAL_SECONDS`` to avoid hashing the
+-    file on every single request under load.
+-    """
+-    ts = time.time() if now is None else float(now)
+-    lock = getattr(httpd, "federation_reload_lock", None)
+-    if lock is None:
+-        return
+-    cfg = getattr(httpd, "federation_config", None)
+-    peers_path = getattr(cfg, "peers_path", None) if cfg else None
+-    if peers_path is None:
+-        return
+-    peers_path = Path(peers_path)
+-    with lock:
+-        last_check = getattr(httpd, "federation_peers_last_check", 0.0)
+-        if (ts - last_check) < PEER_RELOAD_MIN_INTERVAL_SECONDS:
+-            return
+-        httpd.federation_peers_last_check = ts  # type: ignore[attr-defined]
+-        sig = _peers_file_signature(peers_path)
+-        prev_sig = getattr(httpd, "federation_peers_signature", None)
+-        if prev_sig is not None and sig == prev_sig:
+-            return
+-        httpd.federation_peers_signature = sig  # type: ignore[attr-defined]
+-    # Reload OUTSIDE the debounce lock (load_peers may do I/O); the reload
+-    # itself mutates httpd attributes which are read-mostly + GIL-atomic
+-    # dict reassignment.
+-    _reload_peers_now(httpd)
+-
+-
+-def _reap_orphaned_inflight(
+-    sentinels_dir,
+-    *,
+-    max_age_seconds=300.0,
+-    now=None,
+-):
+-    """AC15 (PLAN-112-FOLLOWUP PHASE2) — housekeeping sweep for orphaned
+-    ``*.inflight`` co-sign markers.
+-
+-    Gate #10's claim renames ``approval.md`` / ``approval.md.asc`` to
+-    ``*.inflight`` BEFORE verify. Verify-failure self-reverts (Codex P2 #4)
+-    and verify-success consumes to ``*.consumed-<sigref>``; so the ONLY way
+-    an ``.inflight`` persists is a hard crash BETWEEN the two claim renames
+-    or between claim and revert/consume. This sweep moves any ``*.inflight``
+-    older than ``max_age_seconds`` to a TERMINAL ``*.orphaned-<mtime>``
+-    marker.
+-
+-    **Quarantine, NOT revert (Codex AC18 P1).** An earlier draft renamed the
+-    orphan back to ``approval.md`` to make the co-sign re-drivable. That is
+-    unsafe: a crash in the post-verify / post-handler-mutation / pre-consume
+-    window would let the reaper RESURRECT an already-admitted DESTRUCTIVE
+-    co-sign — a single-use-violation / replay. Fail-CLOSED is the only safe
+-    posture for a destructive admission: an orphaned co-sign is terminalized
+-    and the Owner must issue a FRESH co-sign. (The verify-FAILURE revert in
+-    ``_verify_owner_cosign_claim`` is still safe + kept — a co-sign that
+-    failed verification was never admitted, so restoring it merely lets the
+-    Owner retry; it cannot drive anything until it verifies.)
+-
+-    Best-effort + fail-open; returns the count quarantined. The 5-min default
+-    leaves a legitimately in-flight claim (completes in ms) untouched.
+-    """
+-    if sentinels_dir is None:
+-        return 0
+-    base = Path(sentinels_dir)
+-    if not base.is_dir():
+-        return 0
+-    ts = time.time() if now is None else float(now)
+-    quarantined = 0
+-    suffix = ".inflight"
+-    try:
+-        candidates = list(base.glob("*/*" + suffix))
+-    except OSError:
+-        return 0
+-    for inflight in candidates:
+-        try:
+-            if not inflight.is_file():
+-                continue
+-            mtime = inflight.stat().st_mtime
+-            if (ts - mtime) <= max_age_seconds:
+-                continue
+-            terminal = inflight.with_name(
+-                inflight.name[: -len(suffix)]
+-                + ".orphaned-{0}".format(int(mtime))
+-            )
+-            try:
+-                os.rename(str(inflight), str(terminal))
+-                quarantined += 1
+-            except OSError:
+-                # Terminal target already exists (re-reap) — drop the stray.
+-                try:
+-                    inflight.unlink()
+-                except OSError:
+-                    pass
+-        except OSError:
+-            continue
+-    return quarantined
+-
+-
+-# ---------------------------------------------------------------------------
+-# Request handler — 3 read endpoints + 4 write endpoints + 11-gate chain
+-# ---------------------------------------------------------------------------
+-
+-
+-class _FederationHandler(http.server.BaseHTTPRequestHandler):
+-    """Per-request handler. Wired by :class:`FederationServer`."""
+-
+-    server_version = "CEOFederation/1.0"
+-    sys_version = ""  # don't leak Python version
+-
+-    # AC16 — fail-fast timeout per request.
+-    timeout = HANDSHAKE_TIMEOUT_SECONDS
+-
+-    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+-        return  # silent — audit-log is the canonical record
+-
+-    # AC15 mechanical method allowlist. PLAN-112-FOLLOWUP W1: POST is
+-    # admitted ONLY when write-mode is active (Layer 0a env AND Layer 0b
+-    # sentinel). When write-mode is OFF, the module constant
+-    # ALLOWED_HTTP_METHODS = ("GET",) is the effective set and POST → 405.
+-    def parse_request(self) -> bool:
+-        ok = http.server.BaseHTTPRequestHandler.parse_request(self)
+-        if not ok:
+-            return ok
+-        method = (self.command or "").upper()
+-        if method in ALLOWED_HTTP_METHODS:
+-            return True
+-        # Non-GET. POST is conditionally allowed when write-mode active.
+-        if method == "POST" and self._write_mode_active():
+-            return True
+-        self._emit_write_blocked()
+-        self._send_405()
+-        return False
+-
+-    # -- Write-mode activation gates (PLAN-112-FOLLOWUP W1) -------------
+-
+-    def _write_mode_active(self) -> bool:
+-        """Layer 0a AND Layer 0b — write-mode is reachable.
+-
+-        Default-OFF (AC1/AC7): BOTH the env switch (Layer 0a) AND the
+-        write-enable sentinel (Layer 0b / Gate #8) must pass. Either OFF
+-        → False → POST stays 405. Fail-CLOSED on any error.
+-        """
+-        try:
+-            if not write_mode_enabled_from_env():
+-                return False
+-            return self._write_enable_sentinel_valid()
+-        except Exception:
+-            return False
+-
+-    def _emit_write_blocked(self) -> None:
+-        # AC15 — every non-allowed method-allowlist violation emits.
+-        peer_fpr = self._lookup_peer_fpr()
+-        correlation = self.headers.get(CORRELATION_ID_HEADER, "") or ""
+-        _safe_emit(
+-            "federation_write_attempt_blocked",
+-            method=str(self.command)[:16] if self.command else "",
+-            path=str(self.path)[:128] if self.path else "",
+-            peer_id_cert_fingerprint=peer_fpr,
+-            client_ip=self._client_ip(),
+-            fed_correlation_id=correlation[:64],
+-        )
+-
+-    def _send_405(self) -> None:
+-        self.send_response(405)
+-        # Advertise POST only when write-mode is active.
+-        allow = "GET, POST" if self._write_mode_active() else "GET"
+-        self.send_header("Allow", allow)
+-        self.send_header("Content-Type", "application/json")
+-        self.send_header("Connection", "close")
+-        body = b'{"error":"method_not_allowed"}'
+-        self.send_header("Content-Length", str(len(body)))
+-        self.end_headers()
+-        self.wfile.write(body)
+-
+-    def do_POST(self) -> None:  # noqa: N802 — base-class convention
+-        # PLAN-112-FOLLOWUP W1/W2 — when write-mode is OFF, behave exactly
+-        # as before (emit blocked + 405). When ON, run the 11-gate
+-        # dispatcher.
+-        if not self._write_mode_active():
+-            self._emit_write_blocked()
+-            self._send_405()
+-            return
+-        self._dispatch_write(method="POST")
+-
+-    def do_PUT(self) -> None:  # noqa: N802
+-        self._emit_write_blocked()
+-        self._send_405()
+-
+-    def do_PATCH(self) -> None:  # noqa: N802
+-        self._emit_write_blocked()
+-        self._send_405()
+-
+-    def do_DELETE(self) -> None:  # noqa: N802
+-        self._emit_write_blocked()
+-        self._send_405()
+-
+-    def do_OPTIONS(self) -> None:  # noqa: N802
+-        self._emit_write_blocked()
+-        self._send_405()
+-
+-    def do_HEAD(self) -> None:  # noqa: N802
+-        self._emit_write_blocked()
+-        self._send_405()
+-
+-    # -- Common helpers --------------------------------------------------
+-
+-    def _client_ip(self) -> str:
+-        try:
+-            return self.client_address[0] if self.client_address else ""
+-        except (AttributeError, IndexError):
+-            return ""
+-
+-    def _ip_prefix(self) -> str:
+-        """Return a /24 (v4) or /48 (v6) prefix of the client IP.
+-
+-        Used as the rate-limit discriminator (LLM06/GDPR — never log the
+-        full client IP). Best-effort; empty on any error.
+-        """
+-        ip = self._client_ip()
+-        if not ip:
+-            return ""
+-        try:
+-            addr = ipaddress.ip_address(ip)
+-        except ValueError:
+-            return ""
+-        try:
+-            if addr.version == 4:
+-                net = ipaddress.ip_network(ip + "/24", strict=False)
+-            else:
+-                net = ipaddress.ip_network(ip + "/48", strict=False)
+-            return str(net.network_address)
+-        except ValueError:
+-            return ""
+-
+-    def _lookup_peer_fpr(self) -> str:
+-        try:
+-            der = self.connection.getpeercert(True)  # type: ignore[union-attr]
+-        except (AttributeError, ssl.SSLError):
+-            return ""
+-        if not der:
+-            return ""
+-        return hashlib.sha256(der).hexdigest()
+-
+-    def _presented_cert_pem_bytes(self) -> bytes:
+-        try:
+-            der = self.connection.getpeercert(True)  # type: ignore[union-attr]
+-        except (AttributeError, ssl.SSLError):
+-            return b""
+-        if not der:
+-            return b""
+-        try:
+-            return ssl.DER_cert_to_PEM_cert(der).encode("ascii")
+-        except (TypeError, ValueError, UnicodeEncodeError):
+-            return b""
+-
+-    def _lookup_peer_record(self) -> Optional[PeerRecord]:
+-        # PLAN-112-FOLLOWUP W3/R-IT-B: refresh the peer list before SPKI
+-        # match so a revocation propagates at the connection-accept layer
+-        # too (not only Gate #7).
+-        try:
+-            _maybe_reload_peers(self.server)
+-        except Exception:
+-            pass  # reload is best-effort; fail-open on infra only
+-        peers = getattr(self.server, "federation_peers", {})
+-        peers_extra = getattr(self.server, "federation_peers_extra", {}) or {}
+-        if not peers:
+-            return None
+-
+-        presented_der_fpr = self._lookup_peer_fpr()
+-        if not presented_der_fpr:
+-            return None
+-
+-        presented_pem = self._presented_cert_pem_bytes()
+-        presented_spki_fpr = ""
+-        spki_compute_attempted = False
+-        spki_compute_error: Optional[str] = None
+-
+-        for peer in peers.values():
+-            if peer.revoked:
+-                continue
+-            extra = peers_extra.get(peer.peer_id, {}) if peers_extra else {}
+-            spki_from_record = peer.peer_id_spki_fingerprint
+-            spki_from_extra = extra.get("peer_id_spki_fingerprint", "") if isinstance(extra, dict) else ""
+-            effective_spki = spki_from_record or spki_from_extra or ""
+-            peer_row = {
+-                "peer_id": peer.peer_id,
+-                "peer_id_spki_fingerprint": effective_spki,
+-                "peer_id_cert_fingerprint": peer.peer_id_cert_fingerprint,
+-            }
+-            try:
+-                pin_type, pin_value = select_pin_for_peer(peer_row)
+-            except PinSelectionError:
+-                self._emit_peer_invalid_no_fingerprint(peer.peer_id)
+-                continue
+-
+-            if pin_type == "spki":
+-                if not spki_compute_attempted:
+-                    spki_compute_attempted = True
+-                    if presented_pem:
+-                        try:
+-                            presented_spki_fpr = compute_spki_fingerprint(
+-                                presented_pem
+-                            )
+-                        except (ImportError, ValueError, TypeError) as exc:
+-                            spki_compute_error = (
+-                                "{0}:{1}".format(
+-                                    type(exc).__name__, str(exc)[:64]
+-                                )
+-                            )
+-                            presented_spki_fpr = ""
+-                if not presented_spki_fpr:
+-                    self._emit_spki_fingerprint_mismatch(
+-                        peer.peer_id,
+-                        reason="presented_spki_compute_failed:{0}".format(
+-                            spki_compute_error or "no_pem"
+-                        ),
+-                    )
+-                    continue
+-                if compare_fingerprints(presented_spki_fpr, pin_value):
+-                    return peer
+-                self._emit_spki_fingerprint_mismatch(
+-                    peer.peer_id, reason="spki_mismatch"
+-                )
+-                continue
+-
+-            if compare_fingerprints(presented_der_fpr, pin_value):
+-                self._emit_pin_legacy_used(peer.peer_id)
+-                return peer
+-            continue
+-
+-        return None
+-
+-    def _resolve_peer(self) -> Optional[PeerRecord]:
+-        """Public alias for :meth:`_lookup_peer_record` (Wave D contract)."""
+-        return self._lookup_peer_record()
+-
+-    # Wave C audit emit wrappers.
+-    def _emit_spki_fingerprint_mismatch(
+-        self, peer_id: str, reason: str = "spki_mismatch",
+-    ) -> None:
+-        presented_fpr = self._lookup_peer_fpr() or ""
+-        _safe_emit(
+-            "federation_spki_fingerprint_mismatch",
+-            peer_id=peer_id[:64],
+-            expected_prefix="",
+-            presented_prefix=presented_fpr[:16],
+-            route=str(self.path or "")[:64],
+-        )
+-
+-    def _emit_pin_legacy_used(self, peer_id: str) -> None:
+-        der_fpr = self._lookup_peer_fpr() or ""
+-        _safe_emit(
+-            "federation_pin_legacy_used",
+-            peer_id=peer_id[:64],
+-            route=str(self.path or "")[:64],
+-            der_fingerprint_prefix=der_fpr[:16],
+-        )
+-
+-    def _emit_peer_invalid_no_fingerprint(self, peer_id: str) -> None:
+-        source_path = str(getattr(
+-            getattr(self, "server", None),
+-            "federation_peers_path",
+-            ".claude/data/federation/peers.yaml",
+-        ))
+-        _safe_emit(
+-            "federation_peer_invalid_no_fingerprint",
+-            peer_id=peer_id[:64],
+-            source_path=source_path[:128],
+-        )
+-
+-    def _emit_connection_rejected(self, reason: str) -> None:
+-        _safe_emit(
+-            "federation_connection_rejected",
+-            peer_id_cert_fingerprint=self._lookup_peer_fpr(),
+-            client_ip=self._client_ip(),
+-            reason=reason[:64],
+-        )
+-
+-    def _emit_connection_accepted(self, peer_id: str) -> None:
+-        correlation = self.headers.get(CORRELATION_ID_HEADER, "") or ""
+-        _safe_emit(
+-            "federation_connection_accepted",
+-            peer_id=peer_id[:64],
+-            client_ip=self._client_ip(),
+-            fed_correlation_id=correlation[:64],
+-        )
+-
+-    # -- Replay + signature verification (AC13) -------------------------
+-
+-    def _replay_freshness_preflight(
+-        self, peer: PeerRecord,
+-    ) -> Optional[str]:
+-        """R-SE-a Gate #3a — NON-mutating timestamp-window preflight.
+-
+-        Runs BEFORE the body read. Returns None if fresh, else a reason.
+-        Does NOT touch the nonce ring (no state mutation) so an unauth /
+-        replayed peer cannot poison the ring before HMAC verification.
+-        """
+-        nonce = self.headers.get("X-CEO-Federation-Nonce", "")
+-        ts = self.headers.get("X-CEO-Federation-Timestamp", "")
+-        sig = self.headers.get("X-CEO-Federation-Signature", "")
+-        if not (nonce and ts and sig):
+-            return "missing_replay_headers"
+-        try:
+-            parsed = parse_rfc3339_utc(ts)
+-        except ValueError:
+-            return "malformed_timestamp"
+-        skew = abs(parsed.timestamp() - time.time())
+-        if skew > MAX_CLOCK_SKEW_SECONDS:
+-            return "clock_skew"
+-        return None
+-
+-    def _verify_signature_only(
+-        self, peer: PeerRecord, body: bytes,
+-    ) -> Optional[str]:
+-        """R-SE-a Gate #3c — HMAC signature verify (needs body). No mutation."""
+-        nonce = self.headers.get("X-CEO-Federation-Nonce", "")
+-        ts = self.headers.get("X-CEO-Federation-Timestamp", "")
+-        sig = self.headers.get("X-CEO-Federation-Signature", "")
+-        try:
+-            from .replay import verify_signature  # type: ignore[import]
+-        except ImportError:
+-            from replay import verify_signature  # type: ignore[no-redef]
+-        ok = verify_signature(
+-            self.command or "", self.path or "", ts, nonce, body,
+-            peer.hmac_secret_hex, sig,
+-        )
+-        return None if ok else "signature_invalid"
+-
+-    def _commit_nonce(self, peer: PeerRecord) -> Optional[str]:
+-        """R-SE-a Gate #3d — MUTATING nonce commit. Runs ONLY after HMAC."""
+-        replay = getattr(self.server, "federation_replay_cache", None)
+-        if replay is None:
+-            return "replay_cache_missing"
+-        nonce = self.headers.get("X-CEO-Federation-Nonce", "")
+-        ts = self.headers.get("X-CEO-Federation-Timestamp", "")
+-        decision: ReplayDecision = replay.check_and_record(peer.peer_id, nonce, ts)
+-        return None if decision.accepted else decision.reason
+-
+-    def _verify_replay_and_signature(
+-        self, peer: PeerRecord, body: bytes,
+-    ) -> Optional[str]:
+-        """Legacy combined check (read path, GET). Kept for do_GET."""
+-        replay = getattr(self.server, "federation_replay_cache", None)
+-        if replay is None:
+-            return "replay_cache_missing"
+-        nonce = self.headers.get("X-CEO-Federation-Nonce", "")
+-        ts = self.headers.get("X-CEO-Federation-Timestamp", "")
+-        sig = self.headers.get("X-CEO-Federation-Signature", "")
+-        if not (nonce and ts and sig):
+-            return "missing_replay_headers"
+-        decision: ReplayDecision = replay.check_and_record(peer.peer_id, nonce, ts)
+-        if not decision.accepted:
+-            return decision.reason
+-        try:
+-            from .replay import verify_signature  # type: ignore[import]
+-        except ImportError:
+-            from replay import verify_signature  # type: ignore[no-redef]
+-        ok = verify_signature(
+-            self.command or "", self.path or "", ts, nonce, body,
+-            peer.hmac_secret_hex, sig,
+-        )
+-        if not ok:
+-            return "signature_invalid"
+-        return None
+-
+-    # ===================================================================
+-    # Wave D 11-gate write dispatcher (PLAN-112-FOLLOWUP W2/W3/W4/W6b)
+-    # ===================================================================
+-
+-    def _dispatch_write(self, method: str) -> None:
+-        """ADR-135-AMEND-1 §2.2 11-gate chain for write endpoints."""
+-        if _fed_scopes is None:
+-            # Partial install — scopes module absent. Fail-CLOSED.
+-            self._emit_write_blocked()
+-            self._send_405()
+-            return
+-
+-        raw_path = self.path or ""
+-        path = raw_path.split("?", 1)[0].split("#", 1)[0]
+-
+-        # Gate #2 — resolve peer (also refreshes peer list per R-IT-B).
+-        peer = self._resolve_peer()
+-        if peer is None:
+-            self._emit_connection_rejected("peer_unresolved")
+-            self._send_status(401, "unauthorized")
+-            return
+-
+-        peers_extra = getattr(self.server, "federation_peers_extra", {}) or {}
+-        extra = peers_extra.get(peer.peer_id, {}) if peers_extra else {}
+-        peer_row = {
+-            "peer_id": peer.peer_id,
+-            "peer_id_spki_fingerprint": extra.get(
+-                "peer_id_spki_fingerprint", ""
+-            ),
+-            "peer_id_cert_fingerprint": peer.peer_id_cert_fingerprint,
+-            "scopes": list(extra.get("scopes", [])),
+-            "audit_event_push_allowlist": list(
+-                extra.get("audit_event_push_allowlist", [])
+-            ),
+-            "revoked": bool(extra.get("revoked", peer.revoked)),
+-        }
+-
+-        # GATE #3a — non-mutating timestamp-window preflight (R-SE-a).
+-        pf_reason = self._replay_freshness_preflight(peer)
+-        if pf_reason is not None:
+-            _safe_emit(
+-                "federation_connection_replay_suspected",
+-                peer_id=peer.peer_id[:64],
+-                reason=pf_reason[:64],
+-                client_ip=self._client_ip(),
+-            )
+-            self._send_status(401, "hmac_or_replay")
+-            return
+-
+-        # GATE #3b — body read (capped).
+-        body = self._read_body_capped(max_bytes=1024 * 1024)
+-        if body is None:
+-            self._send_status(413, "payload_too_large")
+-            return
+-
+-        # GATE #3c — HMAC signature verify (needs body, no mutation).
+-        sig_reason = self._verify_signature_only(peer, body)
+-        if sig_reason is not None:
+-            _safe_emit(
+-                "federation_connection_replay_suspected",
+-                peer_id=peer.peer_id[:64],
+-                reason=sig_reason[:64],
+-                client_ip=self._client_ip(),
+-            )
+-            self._send_status(401, "hmac_or_replay")
+-            return
+-
+-        # GATE #3d — MUTATING nonce commit (ONLY after HMAC passes).
+-        nonce_reason = self._commit_nonce(peer)
+-        if nonce_reason is not None:
+-            _safe_emit(
+-                "federation_connection_replay_suspected",
+-                peer_id=peer.peer_id[:64],
+-                reason=nonce_reason[:64],
+-                client_ip=self._client_ip(),
+-            )
+-            self._send_status(401, "hmac_or_replay")
+-            return
+-
+-        # GATE #4 — method + path → scope.
+-        required_scope = _fed_scopes.route_required_scope(method, path)
+-        if required_scope is None:
+-            self._emit_write_blocked()
+-            self._send_405()
+-            return
+-
+-        # GATE #5 — X-CEO-Federation-Scope header presence + match.
+-        if not _fed_scopes.validate_scope_header(self.headers, required_scope):
+-            self._emit_scope_denied(peer.peer_id, path, required_scope, peer_row)
+-            self._send_status(400, "scope_header")
+-            return
+-
+-        # GATE #6 — peer's scopes list grants the required scope.
+-        if not _fed_scopes.peer_has_scope(peer_row, required_scope):
+-            self._emit_write_endpoint_denied(
+-                peer.peer_id, path, gate_failed=6, reason_code="write_unauthorized",
+-            )
+-            self._send_status(403, "scope")
+-            return
+-
+-        # GATE #7 — peer not revoked (reloaded list per P0-1).
+-        if peer_row.get("revoked") is True:
+-            self._emit_write_endpoint_denied(
+-                peer.peer_id, path, gate_failed=7, reason_code="peer_revoked",
+-            )
+-            self._send_status(403, "revoked")
+-            return
+-
+-        # GATE #8 — write-enable sentinel valid (also enforced at 0a).
+-        if not self._write_enable_sentinel_valid():
+-            self._emit_write_disabled_sentinel_invalid("gpg_verify_failed")
+-            self._send_status(503, "write_disabled")
+-            return
+-
+-        # GATE #9 — rate-limit (REAL — Wave E; default-DENY on exception).
+-        ok, rl_reason = self._rate_limit_check(method, path, self.headers, peer_row)
+-        if not ok:
+-            self._emit_write_endpoint_denied(
+-                peer.peer_id, path, gate_failed=9,
+-                reason_code=(rl_reason or "rate_limited")[:32],
+-            )
+-            self._send_status(429, "rate_limited")
+-            return
+-
+-        # GATE #10a — CLAIM + VERIFY (destructive routes; BEFORE handler).
+-        cosign_inflight_paths = None
+-        if _fed_scopes.is_destructive_route(method, path):
+-            ok, reason, cosign_inflight_paths = self._verify_owner_cosign_claim(
+-                method, path,
+-            )
+-            if not ok:
+-                self._emit_write_endpoint_denied(
+-                    peer.peer_id, path, gate_failed=10,
+-                    reason_code="destructive_unauthz:{0}".format(reason[:12]),
+-                )
+-                self._send_status(403, "owner_cosign")
+-                return
+-
+-        # GATE #11 — handler executes.
+-        # PLAN-112-FOLLOWUP P0 #1 + P1 #2 (Codex BLOCK): pass the
+-        # SERVER-CONFIGURED state paths route-specifically so a non-default
+-        # config mutates the RIGHT trust-root file (peers.yaml) and the
+-        # tamper check inspects the SAME audit-log the handler appends to.
+-        # Without this the handlers fall back to PEERS_FILE_DEFAULT /
+-        # their own audit-log resolution and the revocation-propagation +
+-        # T1565 claims become false.
+-        handler = self._route_handler(method, path)
+-        if handler is None:
+-            self._send_405()
+-            return
+-        handler_kwargs = self._handler_state_kwargs(path)
+-        try:
+-            status, reason, response_body = handler.handle(
+-                peer_row, self.headers, body, **handler_kwargs
+-            )
+-        except Exception as exc:
+-            sys.stderr.write(
+-                "[federation.dispatch] handler crashed: {0}: {1}\n".format(
+-                    type(exc).__name__, str(exc)[:200]
+-                )
+-            )
+-            self._send_status(500, "handler_crash")
+-            return
+-
+-        # GATE #10b — CONSUME (AFTER handler success only).
+-        if cosign_inflight_paths is not None and status < 400:
+-            self._consume_owner_cosign_sentinel(cosign_inflight_paths)
+-
+-        # POST-handler T1565 — audit-chain tamper detection (W4). We walk
+-        # the SAME canonical audit-log the push handler just appended to
+-        # (handler_kwargs["audit_log_path"]) so the check is guaranteed to
+-        # inspect the freshly-written record — F-7.10 critical detection
+-        # must be REACHABLE, not merely plumbed.
+-        if status < 400 and path in (
+-            "/federation/audit-event", "/federation/audit-event/batch",
+-        ):
+-            self._maybe_check_audit_chain(
+-                peer.peer_id, path, handler_kwargs.get("audit_log_path"),
+-            )
+-
+-        self._send_response_bytes(status, response_body)
+-
+-    def _resolve_audit_log_path(self) -> Optional[Path]:
+-        """Return the ONE canonical audit-log path (P0 #1).
+-
+-        Precedence: server-config ``audit_log_path`` → the audit handler's
+-        own resolver (``CEO_AUDIT_LOG_PATH`` / platform default), so the
+-        write handlers + the T1565 tamper check ALWAYS agree on the path.
+-        """
+-        cfg = getattr(self.server, "federation_config", None)
+-        path = getattr(self.server, "federation_audit_log_path", None)
+-        if path is None and cfg is not None:
+-            path = getattr(cfg, "audit_log_path", None)
+-        if path is not None:
+-            return Path(path)
+-        # Mirror the handler's resolver so both sides land on the same file.
+-        try:
+-            try:
+-                from .handlers import audit_event_push as _aep  # type: ignore
+-            except ImportError:
+-                import importlib
+-                _aep = importlib.import_module(
+-                    "_lib.federation.handlers.audit_event_push"
+-                )
+-            resolver = getattr(_aep, "_resolve_audit_log_path", None)
+-            if resolver is not None:
+-                return Path(resolver())
+-        except Exception:
+-            pass
+-        return None
+-
+-    def _handler_state_kwargs(self, path: str) -> Dict[str, Any]:
+-        """Route-specific server-state kwargs for the gate-#11 handler.
+-
+-        P1 #2: peer_register/peer_revoke get the configured ``peers_path``
+-        (NOT PEERS_FILE_DEFAULT). P0 #1: audit-event push/batch get the ONE
+-        canonical ``audit_log_path``. Only paths that the target handler's
+-        ``handle(...)`` accepts are passed (kwargs are route-matched).
+-        """
+-        cfg = getattr(self.server, "federation_config", None)
+-        if path in ("/federation/peer-register", "/federation/peer-revoke"):
+-            peers_path = getattr(self.server, "federation_peers_path", None)
+-            if peers_path is None and cfg is not None:
+-                peers_path = getattr(cfg, "peers_path", None)
+-            if peers_path is not None:
+-                return {"peers_path": Path(peers_path)}
+-            return {}
+-        if path in (
+-            "/federation/audit-event", "/federation/audit-event/batch",
+-        ):
+-            log_path = self._resolve_audit_log_path()
+-            if log_path is not None:
+-                return {"audit_log_path": log_path}
+-            return {}
+-        return {}
+-
+-    def _route_handler(self, method: str, path: str):
+-        """Map (method, path) → handler module."""
+-        key = (method.upper(), path)
+-        if key == ("POST", "/federation/peer-register"):
+-            return _h_peer_register
+-        if key == ("POST", "/federation/audit-event"):
+-            return _h_audit_event_push
+-        if key == ("POST", "/federation/audit-event/batch"):
+-            return _h_audit_event_batch
+-        if key == ("POST", "/federation/peer-revoke"):
+-            return _h_peer_revoke
+-        return None
+-
+-    # -- Gate #8 — write-enable sentinel verify ------------------------
+-
+-    def _write_enable_sentinel_valid(self) -> bool:
+-        """Gate #8 / Layer 0b — verify the write-enable sentinel pair.
+-
+-        Fail-CLOSED on any error. No caching (ADR-121 §6 v1.x no-cache).
+-        """
+-        cfg = getattr(self.server, "federation_config", None)
+-        signed_path = getattr(self.server, "write_enabled_sentinel", None)
+-        if signed_path is None and cfg is not None:
+-            signed_path = getattr(cfg, "write_enabled_sentinel", None)
+-        if signed_path is None:
+-            signed_path = Path(".claude/data/federation/write-enabled.md")
+-        signed_path = Path(signed_path)
+-
+-        sig_path = getattr(self.server, "write_enabled_sentinel_asc", None)
+-        if sig_path is None and cfg is not None:
+-            sig_path = getattr(cfg, "write_enabled_sentinel_asc", None)
+-        if sig_path is None:
+-            sig_path = Path(str(signed_path) + ".asc")
+-        sig_path = Path(sig_path)
+-
+-        if not signed_path.exists() or not sig_path.exists():
+-            return False
+-
+-        try:
+-            owner_fpr = getattr(self.server, "owner_fpr", OWNER_GPG_FPR)
+-            registry_path = getattr(self.server, "signer_registry_path", None)
+-            if registry_path is None and cfg is not None:
+-                registry_path = getattr(cfg, "signer_registry_path", None)
+-            ok, _reason = verify_enable_sentinel_pair(
+-                signed_path,
+-                sig_path,
+-                [owner_fpr],
+-                signer_registry_path=registry_path,
+-            )
+-        except Exception:
+-            return False
+-        return bool(ok)
+-
+-    # -- Gate #10 — Owner co-sign claim / consume (split TOCTOU) --------
+-
+-    def _verify_owner_cosign_claim(
+-        self, method: str, path: str,
+-    ) -> Tuple[bool, str, Optional[Tuple[Path, Path, Path, Path, str]]]:
+-        """Gate #10a — CLAIM + VERIFY per-request Owner-co-sign sentinel."""
+-        sigref = ""
+-        for k, v in self.headers.items():
+-            if isinstance(k, str) and k.lower() == "x-ceo-owner-sigref":
+-                sigref = str(v) if isinstance(v, str) else ""
+-                break
+-        if not sigref:
+-            return False, "missing_header:x_ceo_owner_sigref", None
+-        if not re.match(r"^[A-Za-z0-9_-]{1,64}$", sigref):
+-            return False, "sigref_charset", None
+-
+-        cfg = getattr(self.server, "federation_config", None)
+-        base = getattr(self.server, "federation_sentinels_dir", None)
+-        if base is None and cfg is not None:
+-            base = getattr(cfg, "federation_sentinels_dir", None)
+-        if base is None:
+-            base = Path(".claude/data/federation/sentinels")
+-        base_dir = Path(base) / sigref
+-        md_path = base_dir / "approval.md"
+-        asc_path = base_dir / "approval.md.asc"
+-
+-        if not md_path.exists() or not asc_path.exists():
+-            return False, "sentinel_not_found", None
+-
+-        md_inflight = md_path.with_suffix(md_path.suffix + ".inflight")
+-        try:
+-            os.rename(str(md_path), str(md_inflight))
+-        except OSError:
+-            return False, "sentinel_inflight_collision", None
+-
+-        asc_inflight = asc_path.with_suffix(asc_path.suffix + ".inflight")
+-        try:
+-            os.rename(str(asc_path), str(asc_inflight))
+-        except OSError:
+-            try:
+-                os.rename(str(md_inflight), str(md_path))
+-            except OSError:
+-                pass
+-            return False, "sentinel_asc_claim_failed", None
+-
+-        # PLAN-112-FOLLOWUP P2 #4 (Codex BLOCK): every failure path AFTER
+-        # both files are renamed to .inflight (verify failure, read failure,
+-        # missing signed_at, TTL expiry, unexpected exception) must REVERT
+-        # the .inflight pair to its original names — best-effort — so the
+-        # sentinel is NOT left stuck. The sentinel was NOT consumed (verify
+-        # failed), so reverting is correct: it restores the recoverable
+-        # pre-claim state. The 5-min reaper (REMAINING) is the backstop for
+-        # the residual crash-between-rename window only.
+-        def _revert_inflight() -> None:
+-            try:
+-                if md_inflight.exists() and not md_path.exists():
+-                    os.rename(str(md_inflight), str(md_path))
+-            except OSError:
+-                pass
+-            try:
+-                if asc_inflight.exists() and not asc_path.exists():
+-                    os.rename(str(asc_inflight), str(asc_path))
+-            except OSError:
+-                pass
+-
+-        try:
+-            owner_fpr = getattr(self.server, "owner_fpr", OWNER_GPG_FPR)
+-            registry_path = getattr(self.server, "signer_registry_path", None)
+-            if registry_path is None and cfg is not None:
+-                registry_path = getattr(cfg, "signer_registry_path", None)
+-            ok, reason = verify_enable_sentinel_pair(
+-                md_inflight, asc_inflight, [owner_fpr],
+-                signer_registry_path=registry_path,
+-            )
+-            if not ok:
+-                _revert_inflight()
+-                return False, "verify_failed:{0}".format(reason[:64]), None
+-            try:
+-                md_text = md_inflight.read_text(encoding="utf-8")
+-            except OSError as exc:
+-                _revert_inflight()
+-                return False, "read_md_failed:{0}".format(
+-                    exc.errno or "unknown",
+-                ), None
+-            signed_at = self._parse_signed_at(md_text)
+-            if signed_at is None:
+-                _revert_inflight()
+-                return False, "missing_signed_at", None
+-            age_seconds = time.time() - signed_at
+-            if age_seconds > 24 * 3600:
+-                _revert_inflight()
+-                return False, "ttl_expired:{0:.0f}s".format(age_seconds), None
+-        except Exception as exc:
+-            _revert_inflight()
+-            return False, "verify_call_failed:{0}".format(
+-                type(exc).__name__,
+-            ), None
+-
+-        return True, "verified", (
+-            md_path, asc_path, md_inflight, asc_inflight, sigref,
+-        )
+-
+-    def _consume_owner_cosign_sentinel(
+-        self,
+-        inflight_paths: Tuple[Path, Path, Path, Path, str],
+-    ) -> None:
+-        """Gate #10b — CONSUME the verified .inflight sentinel pair."""
+-        md_path, asc_path, md_inflight, asc_inflight, sigref = inflight_paths
+-        consumed_md = md_path.with_suffix(
+-            md_path.suffix + ".consumed-{0}".format(sigref)
+-        )
+-        consumed_asc = asc_path.with_suffix(
+-            asc_path.suffix + ".consumed-{0}".format(sigref)
+-        )
+-        try:
+-            os.rename(str(md_inflight), str(consumed_md))
+-        except OSError:
+-            return
+-        try:
+-            os.rename(str(asc_inflight), str(consumed_asc))
+-        except OSError:
+-            pass
+-
+-    def _parse_signed_at(self, md_text: str) -> Optional[float]:
+-        """Parse a ``signed_at: <iso-8601>`` line from cleartext .md."""
+-        for line in md_text.splitlines():
+-            line = line.strip()
+-            if not line.startswith("signed_at:"):
+-                continue
+-            ts_raw = line.split(":", 1)[1].strip().strip('"').strip("'")
+-            if ts_raw.endswith("Z"):
+-                ts_raw = ts_raw[:-1] + "+00:00"
+-            try:
+-                dt = _dt.datetime.fromisoformat(ts_raw)
+-                return dt.timestamp()
+-            except (ValueError, TypeError):
+-                return None
+-        return None
+-
+-    # -- Gate #9 — REAL rate-limit (Wave E; PLAN-112-FOLLOWUP W4) -------
+-
+-    def _rate_limit_check(
+-        self,
+-        method: str,
+-        path: str,
+-        headers,
+-        peer_row: dict,
+-    ) -> Tuple[bool, Optional[str]]:
+-        """Gate #9 — token-bucket + circuit-breaker + backpressure.
+-
+-        DEFAULT-DENY on any exception (R-SE-b: no gate fails OPEN). Bridges
+-        the dispatcher seam signature ``(method, path, headers, peer_row)``
+-        to ``rate_limit.py``'s ``(peer_id, route, ip_prefix, *, now=)``.
+-        Emits ``federation_message_storm_detected`` (breaker trip) +
+-        ``federation_audit_log_backpressure`` from inside rate_limit.py via
+-        the C-4-fixed _safe_emit fallback.
+-        """
+-        rl = _load_rate_limit()
+-        if rl is None:
+-            # Partial install — no limiter. Fail-CLOSED (deny).
+-            return False, "rate_limit:module_missing"
+-        try:
+-            peer_id = str(peer_row.get("peer_id", ""))
+-            route = path
+-            ip_prefix = self._ip_prefix()
+-            now_fn = getattr(self.server, "federation_clock", None)
+-            now = now_fn() if callable(now_fn) else None
+-
+-            # 1. Backpressure (T1499 latency overload).
+-            ok_bp, _info = rl.check_backpressure(now=now)
+-            if not ok_bp:
+-                return False, "audit_log_backpressure"
+-
+-            # 2. Circuit-breaker — already-tripped / trip-on-this-check.
+-            ok_cb, cb_reason = rl.check_circuit_breaker(peer_id, route, now=now)
+-            if not ok_cb:
+-                return False, (cb_reason or "circuit_breaker")[:32]
+-
+-            # 3. Token bucket.
+-            ok_rl, rl_reason = rl.check_rate_limit(
+-                peer_id, route, ip_prefix, now=now,
+-            )
+-            if not ok_rl:
+-                # Advance breaker window so a sustained storm trips it.
+-                rl.record_hit(peer_id, route, ip_prefix, now=now)
+-                return False, (rl_reason or "rate_limit")[:32]
+-            return True, None
+-        except Exception as exc:
+-            sys.stderr.write(
+-                "[federation.dispatch] rate_limit raised {0}; "
+-                "DEFAULT-DENY\n".format(type(exc).__name__)
+-            )
+-            return False, "rate_limit:exception"
+-
+-    def _maybe_check_audit_chain(
+-        self, peer_id: str, path: str,
+-        audit_log_path: Optional[Path] = None,
+-    ) -> None:
+-        """POST-handler T1565 — bounded audit-chain tamper walk (W4).
+-
+-        P0 #1 (Codex BLOCK): the path is the SAME canonical audit-log the
+-        push handler just appended to (passed from the dispatcher). We
+-        fall back to ``_resolve_audit_log_path()`` so the check still runs
+-        even if the caller didn't thread it through — it must NEVER be a
+-        no-op just because ``self.server.federation_audit_log_path`` is
+-        unset (the prior bug).
+-        """
+-        ace = _load_audit_chain_ext()
+-        if ace is None:
+-            return
+-        log_path = audit_log_path or self._resolve_audit_log_path()
+-        if log_path is None:
+-            return
+-        try:
+-            ok, _info = ace.check_chain(Path(log_path), max_events=500)
+-            # check_chain itself emits federation_tamper_detected on break
+-            # via its own _safe_emit (also C-4-fixed). Nothing to do here
+-            # on the happy path.
+-            _ = ok
+-        except Exception:
+-            pass
+-
+-    # -- Wave D emit shims (canonical F.2 vocabulary) ------------------
+-
+-    def _emit_scope_denied(
+-        self,
+-        peer_id: str,
+-        route: str,
+-        required_scope: str,
+-        peer_row: Mapping[str, Any],
+-    ) -> None:
+-        scopes_list = peer_row.get("scopes", []) if peer_row else []
+-        if not isinstance(scopes_list, (list, tuple)):
+-            scopes_list = []
+-        _safe_emit(
+-            "federation_scope_denied",
+-            peer_id=peer_id[:64],
+-            route=route[:64],
+-            required_scope=required_scope[:32],
+-            peer_scopes_count=int(len(scopes_list)),
+-        )
+-
+-    def _emit_write_endpoint_denied(
+-        self,
+-        peer_id: str,
+-        route: str,
+-        *,
+-        gate_failed: int,
+-        reason_code: str,
+-    ) -> None:
+-        _safe_emit(
+-            "federation_write_endpoint_denied",
+-            peer_id=peer_id[:64],
+-            route=route[:64],
+-            gate_failed=int(gate_failed),
+-            reason_code=reason_code[:32],
+-        )
+-
+-    def _emit_write_disabled_sentinel_invalid(
+-        self,
+-        reason_code: str = "gpg_verify_failed",
+-    ) -> None:
+-        sentinel_path = str(getattr(
+-            self.server,
+-            "write_enabled_sentinel",
+-            ".claude/data/federation/write-enabled.md",
+-        ))
+-        _safe_emit(
+-            "federation_write_disabled_sentinel_invalid",
+-            reason_code=reason_code[:32],
+-            sentinel_path=sentinel_path[:128],
+-        )
+-
+-    # -- Body / response helpers (Wave D) ------------------------------
+-
+-    def _read_body_capped(self, max_bytes: int) -> Optional[bytes]:
+-        """Read request body with a hard cap. Returns None on overflow."""
+-        cl_header = self.headers.get("Content-Length", "")
+-        try:
+-            content_length = int(cl_header) if cl_header else 0
+-        except (TypeError, ValueError):
+-            return None
+-        if content_length > max_bytes:
+-            return None
+-        if content_length <= 0:
+-            return b""
+-        try:
+-            return self.rfile.read(content_length)
+-        except (OSError, ValueError):
+-            return None
+-
+-    def _send_status(self, status: int, reason: str) -> None:
+-        body = json.dumps({"error": reason}).encode("utf-8")
+-        self.send_response(status)
+-        self.send_header("Content-Type", "application/json")
+-        self.send_header("Content-Length", str(len(body)))
+-        self.send_header("Connection", "close")
+-        self.end_headers()
+-        self.wfile.write(body)
+-
+-    def _send_response_bytes(self, status: int, body: bytes) -> None:
+-        self.send_response(status)
+-        self.send_header("Content-Type", "application/json")
+-        self.send_header("Content-Length", str(len(body)))
+-        self.send_header("Connection", "close")
+-        self.end_headers()
+-        if body:
+-            self.wfile.write(body)
+-
+-    # -- Dispatch (read path) -------------------------------------------
+-
+-    def do_GET(self) -> None:  # noqa: N802
+-        if self.command not in ALLOWED_HTTP_METHODS:
+-            self._emit_write_blocked()
+-            self._send_405()
+-            return
+-
+-        peer = self._lookup_peer_record()
+-        if peer is None:
+-            self._emit_connection_rejected("peer_unknown_or_revoked")
+-            self._send_403()
+-            return
+-
+-        body = b""
+-        cl = self.headers.get("Content-Length")
+-        if cl and cl.isdigit():
+-            try:
+-                body = self.rfile.read(min(int(cl), 4096))
+-            except OSError:
+-                body = b""
+-
+-        replay_reason = self._verify_replay_and_signature(peer, body)
+-        if replay_reason is not None:
+-            _safe_emit(
+-                "federation_connection_replay_suspected",
+-                peer_id=peer.peer_id[:64],
+-                reason=replay_reason[:64],
+-                client_ip=self._client_ip(),
+-            )
+-            self._send_401(replay_reason)
+-            return
+-
+-        self._emit_connection_accepted(peer.peer_id)
+-
+-        if self.path == "/federation/identity":
+-            self._handle_identity()
+-        elif self.path == "/federation/status":
+-            self._handle_status()
+-        elif self.path.startswith("/federation/audit-summary"):
+-            self._handle_audit_summary(peer)
+-        else:
+-            self._send_404()
+-
+-    # -- Endpoints ------------------------------------------------------
+-
+-    def _handle_identity(self) -> None:
+-        server_fpr = getattr(self.server, "federation_server_fingerprint", "")
+-        payload = {"peer_id_cert_fingerprint": server_fpr}
+-        self._send_json(200, payload)
+-
+-    def _handle_status(self) -> None:
+-        peer = self._lookup_peer_record()
+-        peer_id = peer.peer_id if peer else ""
+-        started_at = getattr(self.server, "federation_started_at", 0.0)
+-        uptime_s = max(0, int(time.time() - started_at)) if started_at else 0
+-        last_events_digest = getattr(self.server, "federation_status_digest", "")
+-        last_events_count = getattr(self.server, "federation_status_count", 0)
+-        payload = {
+-            "peer_id": peer_id,
+-            "uptime_seconds": uptime_s,
+-            "last_event_opaque_sha256": last_events_digest,
+-            "last_event_count": int(last_events_count),
+-        }
+-        self._send_json(200, payload)
+-
+-    def _handle_audit_summary(self, peer: PeerRecord) -> None:
+-        rl = getattr(self.server, "federation_rate_limiter", None)
+-        if rl is not None and not rl.allow(
+-            peer.peer_id_cert_fingerprint, self._client_ip(),
+-        ):
+-            self._send_429()
+-            return
+-
+-        fetch: Optional[Callable[[Optional[str]], List[Dict[str, Any]]]] = (
+-            getattr(self.server, "federation_audit_fetch", None)
+-        )
+-        since = ""
+-        if "?" in self.path:
+-            qs = self.path.split("?", 1)[1]
+-            for kv in qs.split("&"):
+-                if kv.startswith("since="):
+-                    since = kv.split("=", 1)[1][:64]
+-                    break
+-
+-        events: List[Dict[str, Any]] = []
+-        if fetch is not None:
+-            try:
+-                events = fetch(since or None) or []
+-            except Exception:
+-                events = []
+-
+-        events = _apply_redaction_pipeline(events)
+-        payload = {"events": events, "count": len(events)}
+-        self._send_json(200, payload)
+-
+-    # -- Response helpers ------------------------------------------------
+-
+-    def _send_json(self, code: int, payload: Dict[str, Any]) -> None:
+-        body = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+-        self.send_response(code)
+-        self.send_header("Content-Type", "application/json")
+-        self.send_header("Content-Length", str(len(body)))
+-        self.send_header("Connection", "close")
+-        self.end_headers()
+-        self.wfile.write(body)
+-
+-    def _send_403(self) -> None:
+-        body = b'{"error":"forbidden"}'
+-        self.send_response(403)
+-        self.send_header("Content-Type", "application/json")
+-        self.send_header("Content-Length", str(len(body)))
+-        self.end_headers()
+-        self.wfile.write(body)
+-
+-    def _send_401(self, reason: str) -> None:
+-        body = json.dumps(
+-            {"error": "unauthorized", "reason": reason[:64]},
+-            ensure_ascii=False,
+-        ).encode("utf-8")
+-        self.send_response(401)
+-        self.send_header("Content-Type", "application/json")
+-        self.send_header("Content-Length", str(len(body)))
+-        self.end_headers()
+-        self.wfile.write(body)
+-
+-    def _send_404(self) -> None:
+-        body = b'{"error":"not_found"}'
+-        self.send_response(404)
+-        self.send_header("Content-Type", "application/json")
+-        self.send_header("Content-Length", str(len(body)))
+-        self.end_headers()
+-        self.wfile.write(body)
+-
+-    def _send_429(self) -> None:
+-        body = b'{"error":"rate_limited"}'
+-        self.send_response(429)
+-        self.send_header("Content-Type", "application/json")
+-        self.send_header("Retry-After", "60")
+-        self.send_header("Content-Length", str(len(body)))
+-        self.end_headers()
+-        self.wfile.write(body)
+-
+-
+-# AC6 fail-CLOSED contract.
+-_REDACTION_FAIL_CLOSED_MARKER = object()
+-
+-
+-def _apply_redaction_pipeline(
+-    events: List[Dict[str, Any]],
+-) -> List[Dict[str, Any]]:
+-    """Apply ``redact_secrets`` + ``pii_patterns.scan(...,mode="redact")``."""
+-    out: List[Dict[str, Any]] = []
+-    redact_secrets = None
+-    pii_scan = None
+-    load_error: Optional[str] = None
+-    try:
+-        try:
+-            from _lib import redact as _redact  # type: ignore[import]
+-            from _lib import pii_patterns as _pii  # type: ignore[import]
+-        except ImportError:
+-            import importlib
+-            _redact = importlib.import_module(".redact", package="_lib")
+-            _pii = importlib.import_module(".pii_patterns", package="_lib")
+-        redact_secrets = getattr(_redact, "redact_secrets", None)
+-        _pii_scan = getattr(_pii, "scan", None)
+-        if _pii_scan is not None:
+-            def _pii_redact_adapter(text: str) -> str:
+-                result = _pii_scan(text, mode="redact")
+-                return getattr(result, "redacted_text", text) or text
+-            pii_scan = _pii_redact_adapter
+-    except Exception as e:  # noqa: BLE001 — defense-in-depth
+-        load_error = "{0}:{1}".format(type(e).__name__, str(e)[:80])
+-
+-    if redact_secrets is None or pii_scan is None:
+-        try:
+-            sys.stderr.write(
+-                "[federation.server] AC6 fail-CLOSED — redact_secrets={0!r} "
+-                "pii_scan={1!r} load_error={2!r}; refusing to serialise "
+-                "audit-summary events\n".format(
+-                    redact_secrets is not None,
+-                    pii_scan is not None,
+-                    load_error,
+-                )
+-            )
+-        except Exception:
+-            pass
+-        return []
+-
+-    for ev in events:
+-        if not isinstance(ev, dict):
+-            continue
+-        try:
+-            blob = json.dumps(ev, ensure_ascii=False)
+-        except (TypeError, ValueError):
+-            continue
+-        try:
+-            blob = redact_secrets(blob)
+-        except Exception:
+-            continue
+-        try:
+-            blob = pii_scan(blob)
+-        except Exception:
+-            continue
+-        try:
+-            redacted = json.loads(blob)
+-        except (TypeError, ValueError):
+-            continue
+-        out.append(redacted)
+-    return out
+-
+-
+-# ---------------------------------------------------------------------------
+-# FederationServer — orchestrator
+-# ---------------------------------------------------------------------------
+-
+-
+-class FederationServer:
+-    """Top-level orchestrator for the federation server."""
+-
+-    def __init__(
+-        self,
+-        config: FederationConfig,
+-        audit_fetch: Optional[Callable[[Optional[str]], List[Dict[str, Any]]]] = None,
+-        now: Optional[_dt.datetime] = None,
+-    ) -> None:
+-        self.config = config
+-        self._audit_fetch = audit_fetch
+-        self._now = now or _dt.datetime.now(_dt.timezone.utc)
+-        self._httpd: Optional[http.server.HTTPServer] = None
+-        self._reload_thread: Optional[threading.Thread] = None
+-        self._reload_stop = threading.Event()
+-
+-    # -- Pre-start invariants ------------------------------------------
+-
+-    def _check_kill_switch(self) -> None:
+-        v = os.environ.get(FEDERATION_KILL_SWITCH_ENV, "0").strip()
+-        if v not in ("1", "true", "TRUE"):
+-            raise FederationStartError(
+-                "kill-switch {0} not set; refusing to start".format(
+-                    FEDERATION_KILL_SWITCH_ENV
+-                )
+-            )
+-
+-    def _check_enable_sentinel(self) -> None:
+-        cfg = self.config
+-        ok, reason = verify_enable_sentinel_pair(
+-            cfg.enabled_sentinel,
+-            cfg.enabled_sentinel_asc,
+-            [OWNER_GPG_FPR],
+-            signer_registry_path=cfg.signer_registry_path,
+-            now=self._now,
+-        )
+-        if not ok:
+-            _safe_emit(
+-                "federation_enable_sentinel_invalid",
+-                sentinel_kind="enable",
+-                reason=reason[:96],
+-            )
+-            raise FederationStartError(
+-                "enable sentinel invalid: {0}".format(reason)
+-            )
+-
+-    def _check_lan_sentinel_if_required(self) -> None:
+-        cfg = self.config
+-        is_loopback, resolved = resolve_bind_is_loopback(cfg.bind_host)
+-        if is_loopback:
+-            return
+-        ok, reason = verify_enable_sentinel_pair(
+-            cfg.lan_enabled_sentinel,
+-            cfg.lan_enabled_sentinel_asc,
+-            [OWNER_GPG_FPR],
+-            signer_registry_path=cfg.signer_registry_path,
+-            now=self._now,
+-        )
+-        if not ok:
+-            _safe_emit(
+-                "federation_lan_bind_denied",
+-                bind_host=cfg.bind_host[:64],
+-                resolved_ip=resolved[:64],
+-                reason=reason[:96],
+-            )
+-            raise FederationStartError(
+-                "LAN bind denied: {0}".format(reason)
+-            )
+-
+-    def _load_peers_or_raise(self) -> Dict[str, PeerRecord]:
+-        try:
+-            peers = load_peers(self.config.peers_path)
+-        except FileNotFoundError:
+-            _safe_emit(
+-                "federation_connection_rejected",
+-                reason="peers_yaml_missing",
+-                peer_id_cert_fingerprint="",
+-                client_ip="",
+-            )
+-            raise FederationStartError(
+-                "peers.yaml missing at {0}".format(self.config.peers_path)
+-            )
+-        except PeerHasNoFingerprintError as e:
+-            _safe_emit(
+-                "federation_peer_invalid_no_fingerprint",
+-                peer_id=(getattr(e, "peer_id", "") or "")[:64],
+-                source_path=str(self.config.peers_path)[:128],
+-            )
+-            raise FederationStartError(
+-                "peers.yaml no-fingerprint invariant: {0}".format(e)
+-            )
+-        except PeersFileError as e:
+-            _safe_emit(
+-                "federation_connection_rejected",
+-                reason="peers_yaml_parse_error",
+-                peer_id_cert_fingerprint="",
+-                client_ip="",
+-            )
+-            raise FederationStartError(
+-                "peers.yaml parse error: {0}".format(e)
+-            )
+-
+-        now = self._now
+-        for peer in peers.values():
+-            days_left = (peer.not_valid_after - now).days
+-            if days_left <= CERT_EXPIRY_WARN_DAYS:
+-                _safe_emit(
+-                    "federation_cert_expiry_warned",
+-                    peer_id=peer.peer_id[:64],
+-                    days_remaining=int(days_left),
+-                )
+-            if days_left < 0:
+-                _safe_emit(
+-                    "federation_cert_revoked",
+-                    peer_id=peer.peer_id[:64],
+-                    reason="expired",
+-                )
+-        return peers
+-
+-    # -- Lifecycle -----------------------------------------------------
+-
+-    def _start_reload_thread(self, httpd: Any) -> None:
+-        """P0-1 — start a low-frequency poll thread so revocation
+-        propagates in <60s even with zero traffic."""
+-        def _poll() -> None:
+-            while not self._reload_stop.is_set():
+-                # Poll every 5s; debounce inside _maybe_reload_peers means
+-                # an unchanged file is a cheap stat+hash, not a re-parse.
+-                self._reload_stop.wait(5.0)
+-                if self._reload_stop.is_set():
+-                    break
+-                try:
+-                    _maybe_reload_peers(httpd)
+-                except Exception:
+-                    pass
+-                try:
+-                    _reap_orphaned_inflight(
+-                        getattr(httpd, "federation_sentinels_dir", None)
+-                    )
+-                except Exception:
+-                    pass
+-        t = threading.Thread(
+-            target=_poll, name="federation-peer-reload", daemon=True,
++    _bound.__kwdefaults__ = _original.__kwdefaults__
++    _bound.__annotations__ = dict(_original.__annotations__)
++    _bound.__dict__.update(_original.__dict__)
++    _bound.__qualname__ = _original.__qualname__
++    _bound.__module__ = __name__
++    return _bound
++
++
++def _bind_class(_class):
++    for _name, _member in vars(_class).copy().items():
++        if isinstance(_member, _FunctionType):
++            setattr(_class, _name, _bind_function(_member))
++        elif isinstance(_member, staticmethod):
++            setattr(_class, _name, staticmethod(_bind_function(_member.__func__)))
++        elif isinstance(_member, classmethod):
++            setattr(_class, _name, classmethod(_bind_function(_member.__func__)))
++    _class.__module__ = __name__
++    return _class
++
++
++def _load_part(_part, _names):
++    _location = Path(__file__).resolve().parent / "_server_parts" / (_part + ".py")
++    _spec = _importlib_util.spec_from_file_location(
++        __name__ + "._server_parts." + _part, _location,
++    )
++    if _spec is None or _spec.loader is None:
++        raise ImportError("cannot load federation server part " + _part)
++    _module = _importlib_util.module_from_spec(_spec)
++    # Class bases and class-level defaults are resolved while the templates
++    # are declared; method globals are rebound to this facade immediately.
++    _module.__dict__.update({
++        _key: _value for _key, _value in globals().items()
++        if not _key.startswith("__")
++    })
++    _spec.loader.exec_module(_module)
++    for _name in _names:
++        _value = getattr(_module, _name)
++        globals()[_name] = _bind_class(_value) if isinstance(_value, type) else (
++            _bind_function(_value) if isinstance(_value, _FunctionType) else _value
+         )
+-        self._reload_thread = t
+-        t.start()
+ 
+-    def serve_forever(self) -> None:
+-        """Start the server and serve until ``shutdown()`` is called."""
+-        self._check_kill_switch()
+-        self._check_enable_sentinel()
+-        self._check_lan_sentinel_if_required()
+-        peers = self._load_peers_or_raise()
+-        cfg = self.config
+ 
+-        ctx = build_ssl_context(cfg.cert_file, cfg.key_file, cfg.ca_file)
++_load_part("configuration", (
++    "FederationConfig", "resolve_bind_is_loopback", "JointKeyRateLimiter",
++    "_peers_file_signature", "_reload_peers_now", "_maybe_reload_peers",
++    "_reap_orphaned_inflight",
++))
++_load_part("handler_auth", ("_HandlerAuth",))
++_load_part("handler_write", ("_HandlerWrite",))
++_load_part("handler_read", ("_HandlerRead",))
+ 
+-        try:
+-            with open(cfg.cert_file, "r", encoding="utf-8") as fh:
+-                pem = fh.read()
+-            server_fpr = compute_cert_fingerprint(pem)
+-        except OSError:
+-            server_fpr = ""
+ 
+-        bind_family = socket.AF_INET
+-        try:
+-            if ipaddress.ip_address(cfg.bind_host).version == 6:
+-                bind_family = socket.AF_INET6
+-        except ValueError:
+-            pass
+-
+-        httpd = _ThreadingHTTPSServer(
+-            (cfg.bind_host, cfg.bind_port),
+-            _FederationHandler,
+-            address_family=bind_family,
+-        )
+-        httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+-
+-        httpd.federation_config = cfg  # type: ignore[attr-defined]
+-        httpd.federation_peers = peers  # type: ignore[attr-defined]
+-        httpd.federation_peers_path = cfg.peers_path  # type: ignore[attr-defined]
+-        httpd.federation_peers_extra = {  # type: ignore[attr-defined]
+-            peer.peer_id: {
+-                "peer_id_spki_fingerprint": peer.peer_id_spki_fingerprint,
+-                "peer_id_cert_fingerprint": peer.peer_id_cert_fingerprint,
+-                "scopes": list(getattr(peer, "scopes", []) or []),
+-                "audit_event_push_allowlist": list(
+-                    getattr(peer, "audit_event_push_allowlist", []) or []
+-                ),
+-                "revoked": bool(peer.revoked),
+-            }
+-            for peer in peers.values()
+-        }
+-        httpd.federation_replay_cache = ReplayCache(  # type: ignore[attr-defined]
+-            max_skew_seconds=MAX_CLOCK_SKEW_SECONDS,
+-        )
+-        httpd.federation_rate_limiter = JointKeyRateLimiter(  # type: ignore[attr-defined]
+-            AUDIT_SUMMARY_RATE_PER_MIN,
+-        )
+-        httpd.federation_started_at = time.time()  # type: ignore[attr-defined]
+-        httpd.federation_server_fingerprint = server_fpr  # type: ignore[attr-defined]
+-        httpd.federation_status_digest = ""  # type: ignore[attr-defined]
+-        httpd.federation_status_count = 0  # type: ignore[attr-defined]
+-        httpd.federation_audit_fetch = self._audit_fetch  # type: ignore[attr-defined]
+-        # PLAN-112-FOLLOWUP W1/W2/W3 — write-mode + reload-watcher state.
+-        httpd.write_enabled_sentinel = cfg.write_enabled_sentinel  # type: ignore[attr-defined]
+-        httpd.write_enabled_sentinel_asc = cfg.write_enabled_sentinel_asc  # type: ignore[attr-defined]
+-        httpd.federation_sentinels_dir = cfg.federation_sentinels_dir  # type: ignore[attr-defined]
+-        httpd.signer_registry_path = cfg.signer_registry_path  # type: ignore[attr-defined]
+-        httpd.owner_fpr = OWNER_GPG_FPR  # type: ignore[attr-defined]
+-        # PLAN-112-FOLLOWUP P0 #1 — ONE canonical audit-log path shared by
+-        # the audit-event handlers (gate #11) AND the T1565 tamper walk.
+-        # If cfg.audit_log_path is None we resolve the SAME path the
+-        # handlers use so the check inspects the log just appended (never a
+-        # no-op). When an explicit env CEO_AUDIT_LOG_PATH is set the handler
+-        # honours it; we mirror it here for the tamper walk.
+-        _resolved_audit_log: Optional[Path] = (
+-            Path(cfg.audit_log_path) if cfg.audit_log_path is not None
+-            else None
+-        )
+-        if _resolved_audit_log is None:
+-            try:
+-                try:
+-                    from .handlers import audit_event_push as _aep  # type: ignore
+-                except ImportError:
+-                    import importlib
+-                    _aep = importlib.import_module(
+-                        "_lib.federation.handlers.audit_event_push"
+-                    )
+-                _r = getattr(_aep, "_resolve_audit_log_path", None)
+-                if _r is not None:
+-                    _resolved_audit_log = Path(_r())
+-            except Exception:
+-                _resolved_audit_log = None
+-        httpd.federation_audit_log_path = _resolved_audit_log  # type: ignore[attr-defined]
+-        httpd.federation_reload_lock = threading.Lock()  # type: ignore[attr-defined]
+-        httpd.federation_peers_last_check = time.time()  # type: ignore[attr-defined]
+-        httpd.federation_peers_signature = _peers_file_signature(  # type: ignore[attr-defined]
+-            Path(cfg.peers_path)
+-        )
++class _FederationHandler(
++    _HandlerAuth, _HandlerWrite, _HandlerRead,
++    http.server.BaseHTTPRequestHandler,
++):
++    """Per-request handler, composed from independently bounded method groups."""
+ 
+-        self._httpd = httpd
+-        self._start_reload_thread(httpd)
+-        try:
+-            httpd.serve_forever()
+-        finally:
+-            self._reload_stop.set()
+-            try:
+-                httpd.server_close()
+-            except OSError:
+-                pass
+ 
+-    def shutdown(self) -> None:
+-        self._reload_stop.set()
+-        if self._httpd is not None:
+-            try:
+-                self._httpd.shutdown()
+-            except (OSError, RuntimeError):
+-                pass
++_load_part("redaction", ("_REDACTION_FAIL_CLOSED_MARKER", "_apply_redaction_pipeline"))
++_load_part("lifecycle", ("FederationServer",))
++del _HandlerAuth, _HandlerWrite, _HandlerRead
+diff --git a/.claude/hooks/_lib/model_currency.py b/.claude/hooks/_lib/model_currency.py
+new file mode 100644
+index 000000000000..33a06c8b4d01
+--- /dev/null
++++ b/.claude/hooks/_lib/model_currency.py
+@@ -0,0 +1,70 @@
++"""Anchored model-family currency rules for PLAN-176."""
++from __future__ import annotations
++
++import re
++from typing import Iterable, Optional
++
++_RETIRED = frozenset({"claude-opus-4-1"})
++_LEGACY_WORKING = frozenset({"claude-fable-5", "claude-fable-5-1"})
++_LEGACY_FLOOR = frozenset({"claude-fable-5"})
++_TAIL = r"(?:[.-][0-9]+)*(?:-[a-z][a-z0-9]*)*"
++_ALLOWED = re.compile(
++    r"^(?:claude-(?:opus|sonnet|haiku)-[4-9]" + _TAIL
++    + r"|gpt-[5-9]" + _TAIL + r"|o[3-9]" + _TAIL
++    + r"|gemini-[2-9]" + _TAIL + r"|grok-[3-9]" + _TAIL + r")$"
++)
++_FLOOR = re.compile(r"^(?:claude-opus-[4-9]" + _TAIL + r"|gpt-[5-9]" + _TAIL + r"|o[3-9]" + _TAIL + r")$")
++_PREFIXES = tuple(
++    ["claude-%s-%d" % (family, major) for family in ("opus", "sonnet", "haiku") for major in range(4, 10)]
++    + ["gpt-%d" % major for major in range(5, 10)]
++    + ["o%d" % major for major in range(3, 10)]
++    + ["gemini-%d" % major for major in range(2, 10)]
++    + ["grok-%d" % major for major in range(3, 10)]
++)
++
++
++def _explicit(name: str, models: Optional[Iterable[str]]) -> bool:
++    return models is not None and name in frozenset(models)
++
++
++def availability_entries(explicit_models: Iterable[str]) -> list:
++    """Stable explicit IDs followed by native major-version availability prefixes."""
++    out = []
++    for model in list(explicit_models) + list(_PREFIXES):
++        if model not in out:
++            out.append(model)
++    return out
++
++
++def is_allowed_model(name: object, explicit_models: Optional[Iterable[str]] = None) -> bool:
++    """Accept approved semantic families or an explicit legacy working ID."""
++    return isinstance(name, str) and name not in _RETIRED and (
++        bool(_ALLOWED.fullmatch(name)) or _explicit(name, explicit_models)
++        or (explicit_models is None and name in _LEGACY_WORKING)
++    )
++
++
++def is_veto_floor_model(name: object, explicit_models: Optional[Iterable[str]] = None) -> bool:
++    """Accept VETO-capable families or an explicit legacy floor ID."""
++    return isinstance(name, str) and name not in _RETIRED and (
++        bool(_FLOOR.fullmatch(name)) or _explicit(name, explicit_models)
++        or (explicit_models is None and name in _LEGACY_FLOOR)
++    )
++
++
++def main(argv: Optional[list] = None) -> int:
++    """Exit 0 for an admitted model, 1 for rejection, 2 for invalid usage."""
++    import sys
++
++    args = list(sys.argv[1:] if argv is None else argv)
++    veto = args[:1] == ["--veto"]
++    if veto:
++        args = args[1:]
++    if len(args) != 1:
++        return 2
++    predicate = is_veto_floor_model if veto else is_allowed_model
++    return 0 if predicate(args[0]) else 1
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/.claude/hooks/_lib/pii_patterns.py b/.claude/hooks/_lib/pii_patterns.py
+index 77e0b9bbb5e7..811a264a9f79 100644
+--- a/.claude/hooks/_lib/pii_patterns.py
++++ b/.claude/hooks/_lib/pii_patterns.py
+@@ -733,4 +733,9 @@ def _apply_redactions(text: str, matches: List[Match]) -> str:
+ 
+-    Overlapping matches are resolved by processing right-to-left so earlier
+-    spans' offsets remain valid during replacement.
++    Spans are merged into their UNION before splicing. The previous
++    right-to-left walk SKIPPED a container whose contained span had been
++    spliced first, so the container's head and tail survived in cleartext
++    (the rest of an ``aws_secret_key=`` value after an AKIA-shaped prefix;
++    the tail of a Bearer token after its JWT). A merged run carries the
++    token of its leftmost (then longest) match. ``matches`` must index
++    ``text`` (every caller passes spans found on that same string).
+     """
+@@ -738,14 +743,17 @@ def _apply_redactions(text: str, matches: List[Match]) -> str:
+         return text
+-    # Sort descending by start so replacements don't shift later offsets
+-    spans = sorted(matches, key=lambda m: m.start, reverse=True)
+-    buf = text
+-    covered_end = len(text) + 1
+-    for m in spans:
+-        # Skip if nested inside a higher-priority span already redacted
+-        if m.end > covered_end:
+-            continue
+-        token = f"[REDACTED:{m.family.upper()}]"
+-        buf = buf[: m.start] + token + buf[m.end :]
+-        covered_end = m.start
+-    return buf
++    runs: List[Tuple[int, int, str]] = []  # (start, end, token)
++    for m in sorted(matches, key=lambda x: (x.start, -x.end)):
++        if runs and m.start < runs[-1][1]:
++            start, end, token = runs[-1]
++            runs[-1] = (start, max(end, m.end), token)
++        else:
++            runs.append((m.start, m.end, f"[REDACTED:{m.family.upper()}]"))
++    parts: List[str] = []
++    pos = 0
++    for start, end, token in runs:
++        parts.append(text[pos:start])
++        parts.append(token)
++        pos = end
++    parts.append(text[pos:])
++    return "".join(parts)
+ 
+diff --git a/.claude/hooks/_lib/plan_paths.py b/.claude/hooks/_lib/plan_paths.py
+new file mode 100644
+index 000000000000..328e37bc0eb2
+--- /dev/null
++++ b/.claude/hooks/_lib/plan_paths.py
+@@ -0,0 +1,37 @@
++"""Shared PLAN filename and path matching for lifecycle consumers.
++
++The filename grammar is the authoritative PLAN-SCHEMA.md §1.4 pattern.
++Paths are normalized before matching so hooks receive the same result from
++relative, absolute, POSIX, and Windows-style tool payloads.
++"""
++
++from __future__ import annotations
++
++import re
++
++
++PLAN_FILENAME_RE = re.compile(
++    r"^PLAN-[0-9]{3}(-FOLLOWUP)?-[a-z0-9]+(-[a-z0-9]+)*\.md$"
++)
++
++def is_plan_path(file_path: str) -> bool:
++    """Return whether ``file_path`` names a schema-valid plan file."""
++    if not file_path:
++        return False
++    parent, _, filename = str(file_path).replace("\\", "/").rpartition("/")
++    in_plans = parent == ".claude/plans" or parent.endswith("/.claude/plans")
++    return in_plans and PLAN_FILENAME_RE.fullmatch(filename) is not None
++
++
++def plan_id_from_path(file_path: str) -> str:
++    """Return ``PLAN-NNN`` from a schema-valid path, otherwise ``""``."""
++    if not file_path:
++        return ""
++    normalized = str(file_path).replace("\\", "/")
++    filename = normalized.rsplit("/", 1)[-1]
++    if not PLAN_FILENAME_RE.fullmatch(filename):
++        return ""
++    return filename[:8]
++
++
++__all__ = ["PLAN_FILENAME_RE", "is_plan_path", "plan_id_from_path"]
+diff --git a/.claude/hooks/_lib/policy.py b/.claude/hooks/_lib/policy.py
+index b7c2887cdca3..02a2fd605908 100644
+--- a/.claude/hooks/_lib/policy.py
++++ b/.claude/hooks/_lib/policy.py
+@@ -123,22 +123,12 @@ class PolicyLoadError(Exception):
+ 
+-# ---------------------------------------------------------------------------
+-# YAML subset parser (hand-rolled, stdlib-only)
+-# ---------------------------------------------------------------------------
+-
+-
+-class _YamlParser:
+-    """Minimal YAML 1.2 subset parser per SPEC §3.1-§3.2.
+-
+-    Accepts: block mappings, block sequences, plain scalars, double-quoted
+-    strings, single-quoted strings, null/true/false, integers, comments.
+-
+-    Rejects: anchors/aliases, custom tags, flow-style, block scalars (|/>),
+-    directives (%YAML/%TAG), multi-doc streams (---), BOM.
+-
+-    Enforces SPEC §3.3 limits during parse (depth, scalar length, key count,
+-    CPU wall-clock).
+-    """
+-
++# The parser keeps its historical public/private class name while methods live
++# in ordered mixins.  Their code executes with this facade as globals.
++# Opt-out: CEO_POLICY_ENGINE_DISABLE=1 reverts to Python-hook fallback.
++from _lib._policy_parts import install as _install_policy_parts
++_install_policy_parts(globals())
++del _install_policy_parts
++
++class _YamlParser(_YamlBlocksMixin, _YamlFlowsMixin, _YamlScalarsMixin):
++    """YAML subset parser assembled from bounded implementation mixins."""
+     _INT_RE = re.compile(r"^-?\d+$")
+-    # Identifiers allowed for predicate-form / key names; permissive scalar.
+     _DIRECTIVE_RE = re.compile(r"^\s*%(YAML|TAG)\b")
+@@ -153,1397 +143 @@ class _YamlParser:
+         self._policy_id_hint = policy_id_hint
+-
+-    # ---- top-level entry -------------------------------------------------
+-
+-    def parse_document(self) -> Any:
+-        """Parse the single document and return its root value."""
+-        # Quick directive / multi-doc rejection scan (SPEC §3.2)
+-        for line in self._lines:
+-            stripped = line.rstrip("\r\n")
+-            if self._DIRECTIVE_RE.match(stripped):
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    "YAML directives (%YAML/%TAG) not allowed",
+-                    self._policy_id_hint,
+-                )
+-            if stripped.strip() == "---" or stripped.strip() == "...":
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    "multi-document streams not allowed",
+-                    self._policy_id_hint,
+-                )
+-
+-        # Skip leading blank / comment lines.
+-        self._skip_blanks()
+-        if self._i >= self._n:
+-            # Empty doc — return empty mapping.
+-            return {}
+-
+-        # Detect starting column / construct type by lookahead.
+-        line = self._current_line()
+-        indent = self._indent(line)
+-        value = self._parse_block_node(indent, depth=1)
+-
+-        # Trailing non-blank lines would indicate a multi-root; forbid.
+-        self._skip_blanks()
+-        if self._i < self._n:
+-            raise PolicyLoadError(
+-                "parse_error",
+-                f"unexpected content at line {self._i + 1}",
+-                self._policy_id_hint,
+-            )
+-        return value
+-
+-    # ---- block-level dispatch --------------------------------------------
+-
+-    def _parse_block_node(self, indent: int, depth: int) -> Any:
+-        self._check_deadline()
+-        if depth > _LIMIT_DEPTH:
+-            raise PolicyLoadError(
+-                "depth_limit",
+-                f"nesting depth exceeded {_LIMIT_DEPTH}",
+-                self._policy_id_hint,
+-            )
+-        self._skip_blanks()
+-        if self._i >= self._n:
+-            return None
+-        line = self._current_line()
+-        body = line[indent:]
+-        if body.startswith("- "):
+-            return self._parse_block_sequence(indent, depth)
+-        if body == "-" or body.startswith("- "):
+-            return self._parse_block_sequence(indent, depth)
+-        # Detect mapping vs scalar. Mapping line shape: "key:" or "key: value".
+-        if self._looks_like_mapping_start(body):
+-            return self._parse_block_mapping(indent, depth)
+-        # Fall back to scalar line (only meaningful when caller expected a
+-        # value on its own line; typically mapping values inline so rare).
+-        self._i += 1
+-        return self._parse_scalar(body)
+-
+-    def _parse_block_mapping(self, indent: int, depth: int) -> Dict[str, Any]:
+-        result: Dict[str, Any] = {}
+-        while self._i < self._n:
+-            self._check_deadline()
+-            self._skip_blanks()
+-            if self._i >= self._n:
+-                break
+-            line = self._current_line()
+-            line_indent = self._indent(line)
+-            if line_indent < indent:
+-                break
+-            if line_indent != indent:
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    f"indentation mismatch at line {self._i + 1}",
+-                    self._policy_id_hint,
+-                )
+-            body = line[indent:]
+-            if body.startswith("- "):
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    f"sequence item inside mapping at line {self._i + 1}",
+-                    self._policy_id_hint,
+-                )
+-            key, sep, rest = self._split_mapping_line(body, line_no=self._i + 1)
+-            if not sep:
+-                # Not a valid mapping line.
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    f"expected 'key: value' at line {self._i + 1}",
+-                    self._policy_id_hint,
+-                )
+-            self._key_count += 1
+-            if self._key_count > _LIMIT_KEY_COUNT:
+-                raise PolicyLoadError(
+-                    "size_limit",
+-                    f"total key count exceeded {_LIMIT_KEY_COUNT}",
+-                    self._policy_id_hint,
+-                )
+-            self._i += 1
+-            if rest.strip() == "":
+-                # Nested block follows on next line with deeper indent (or null).
+-                self._skip_blanks()
+-                if self._i < self._n:
+-                    next_line = self._current_line()
+-                    next_indent = self._indent(next_line)
+-                    if next_indent > indent:
+-                        value = self._parse_block_node(next_indent, depth + 1)
+-                    else:
+-                        value = None
+-                else:
+-                    value = None
+-            else:
+-                # Inline value — might be scalar or start of flow-style (forbidden).
+-                value = self._parse_inline_value(rest)
+-            if key in result:
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    f"duplicate key {key!r} at line {self._i}",
+-                    self._policy_id_hint,
+-                )
+-            result[key] = value
+-        return result
+-
+-    def _parse_block_sequence(self, indent: int, depth: int) -> List[Any]:
+-        items: List[Any] = []
+-        while self._i < self._n:
+-            self._check_deadline()
+-            self._skip_blanks()
+-            if self._i >= self._n:
+-                break
+-            line = self._current_line()
+-            line_indent = self._indent(line)
+-            if line_indent < indent:
+-                break
+-            if line_indent != indent:
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    f"indentation mismatch at line {self._i + 1}",
+-                    self._policy_id_hint,
+-                )
+-            body = line[indent:]
+-            if not body.startswith("- "):
+-                break
+-            rest = body[2:]
+-            self._i += 1
+-            if rest.strip() == "":
+-                # Empty marker — nested block expected on next line.
+-                self._skip_blanks()
+-                if self._i < self._n:
+-                    next_line = self._current_line()
+-                    next_indent = self._indent(next_line)
+-                    if next_indent > indent:
+-                        value: Any = self._parse_block_node(next_indent, depth + 1)
+-                    else:
+-                        value = None
+-                else:
+-                    value = None
+-                items.append(value)
+-                continue
+-            # Inline: either scalar or a mapping starting on same line "- key: v"
+-            # For simplicity we support (a) pure scalar items, and (b) mapping
+-            # items whose first "key: value" lives on the dash line + remaining
+-            # keys indented at `indent + 2`.
+-            if self._looks_like_mapping_start(rest):
+-                # The virtual block mapping starts at column `indent + 2`
+-                # (post "- "). We need to feed the first line PLUS any
+-                # deeper-indented continuation lines back through the mapping
+-                # parser. We construct a fake "start line" by rewriting:
+-                # re-insert "- " as spaces then defer to _parse_block_mapping.
+-                # Simpler: parse first k/v here and then grab continuation.
+-                map_indent = indent + 2
+-                # Re-inject the line so mapping parser sees it.
+-                self._i -= 1
+-                self._lines[self._i] = (" " * map_indent) + rest
+-                value = self._parse_block_mapping(map_indent, depth + 1)
+-                items.append(value)
+-                continue
+-            # Pure scalar item (may be quoted).
+-            items.append(self._parse_inline_value(rest))
+-        return items
+-
+-    # ---- mapping-line splitter -------------------------------------------
+-
+-    def _split_mapping_line(self, body: str, line_no: int) -> Tuple[str, bool, str]:
+-        """Return (key, had_colon, rest). Respects quoted keys and ignores
+-        colons inside quoted strings. Strips trailing inline comments.
+-        """
+-        # Strip inline comment respecting quotes.
+-        body = self._strip_inline_comment(body)
+-        # Quoted key forms.
+-        if body.startswith('"'):
+-            key, end = self._consume_double_quoted(body, 0, line_no)
+-        elif body.startswith("'"):
+-            key, end = self._consume_single_quoted(body, 0, line_no)
+-        else:
+-            # Plain-scalar key: read up to first unquoted ':'
+-            end = -1
+-            for idx, ch in enumerate(body):
+-                if ch == ':':
+-                    end = idx
+-                    break
+-            if end == -1:
+-                return body.strip(), False, ""
+-            key = body[:end].rstrip()
+-            return key, True, body[end + 1:].strip()
+-        # After quoted key: require ':' next (possibly with leading space).
+-        tail = body[end:]
+-        if not tail.startswith(":"):
+-            raise PolicyLoadError(
+-                "parse_error",
+-                f"expected ':' after quoted key at line {line_no}",
+-                self._policy_id_hint,
+-            )
+-        return key, True, tail[1:].strip()
+-
+-    # ---- inline value parse (where forbidden flow-style is caught) -------
+-
+-    def _parse_inline_value(self, raw: str) -> Any:
+-        raw = self._strip_inline_comment(raw).strip()
+-        if not raw:
+-            return None
+-        # Flow-style mapping + sequence: SPEC §3.2 rejects these as top-level
+-        # document shapes (parser branch + escaping ambiguity), but the SPEC's
+-        # own Appendix A + §3.5 predicate table use single-line flow form
+-        # (e.g. `eq: {field: tool, value: "Bash"}`) as the canonical predicate
+-        # body. Resolution: accept single-line flow-mapping + flow-sequence
+-        # inline as sugar for a block mapping/sequence — NO multi-line flow,
+-        # NO nesting beyond depth-1 in flow syntax. This matches every
+-        # example in the SPEC and is load-bearing for the DSL's ergonomics.
+-        if raw[0] == "{":
+-            return self._parse_flow_mapping(raw)
+-        if raw[0] == "[":
+-            return self._parse_flow_sequence(raw)
+-        if raw[0] in ("|", ">"):
+-            raise PolicyLoadError(
+-                "parse_error",
+-                f"block-scalar indicator {raw[0]!r} not allowed",
+-                self._policy_id_hint,
+-            )
+-        if raw.startswith("&") or raw.startswith("*"):
+-            raise PolicyLoadError(
+-                "alias_rejected",
+-                "YAML anchors/aliases are disabled",
+-                self._policy_id_hint,
+-            )
+-        if raw.startswith("!"):
+-            raise PolicyLoadError(
+-                "tag_rejected",
+-                "YAML tags are rejected",
+-                self._policy_id_hint,
+-            )
+-        if raw.startswith('"'):
+-            s, end = self._consume_double_quoted(raw, 0, line_no=self._i)
+-            if raw[end:].strip() != "":
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    f"trailing content after quoted scalar at line {self._i}",
+-                    self._policy_id_hint,
+-                )
+-            return s
+-        if raw.startswith("'"):
+-            s, end = self._consume_single_quoted(raw, 0, line_no=self._i)
+-            if raw[end:].strip() != "":
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    f"trailing content after quoted scalar at line {self._i}",
+-                    self._policy_id_hint,
+-                )
+-            return s
+-        return self._parse_scalar(raw)
+-
+-    # ---- flow-style mapping / sequence (single-line sugar) ---------------
+-
+-    def _parse_flow_scalar(self, s: str, i: int) -> Tuple[Any, int]:
+-        """Parse a scalar/quoted-scalar starting at s[i]. Return (value, end_i)."""
+-        if s[i] == '"':
+-            val, end = self._consume_double_quoted(s, i, line_no=self._i)
+-            return val, end
+-        if s[i] == "'":
+-            val, end = self._consume_single_quoted(s, i, line_no=self._i)
+-            return val, end
+-        # Plain: read until , } ] or end.
+-        end = i
+-        while end < len(s) and s[end] not in ",}]":
+-            end += 1
+-        token = s[i:end].strip()
+-        return self._parse_scalar(token), end
+-
+-    def _parse_flow_mapping(self, raw: str) -> Dict[str, Any]:
+-        assert raw[0] == "{"
+-        out: Dict[str, Any] = {}
+-        i = 1
+-        n = len(raw)
+-        while i < n:
+-            while i < n and raw[i] in " \t":
+-                i += 1
+-            if i < n and raw[i] == "}":
+-                tail = raw[i + 1:].strip()
+-                if tail:
+-                    raise PolicyLoadError(
+-                        "parse_error",
+-                        f"trailing content after flow mapping at line {self._i}",
+-                        self._policy_id_hint,
+-                    )
+-                return out
+-            # Key
+-            if i < n and raw[i] == '"':
+-                key, i = self._consume_double_quoted(raw, i, line_no=self._i)
+-            elif i < n and raw[i] == "'":
+-                key, i = self._consume_single_quoted(raw, i, line_no=self._i)
+-            else:
+-                k_end = i
+-                while k_end < n and raw[k_end] not in ":,}":
+-                    k_end += 1
+-                key = raw[i:k_end].strip()
+-                i = k_end
+-            while i < n and raw[i] in " \t":
+-                i += 1
+-            if i >= n or raw[i] != ":":
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    f"flow mapping missing ':' at line {self._i}",
+-                    self._policy_id_hint,
+-                )
+-            i += 1
+-            while i < n and raw[i] in " \t":
+-                i += 1
+-            if i < n and raw[i] == "{":
+-                # Nested flow mapping — find matching close.
+-                depth_f = 1
+-                j = i + 1
+-                while j < n and depth_f > 0:
+-                    c = raw[j]
+-                    if c == '"':
+-                        _, j = self._consume_double_quoted(raw, j, line_no=self._i)
+-                        continue
+-                    if c == "'":
+-                        _, j = self._consume_single_quoted(raw, j, line_no=self._i)
+-                        continue
+-                    if c == "{":
+-                        depth_f += 1
+-                    elif c == "}":
+-                        depth_f -= 1
+-                    j += 1
+-                inner = raw[i:j]
+-                value = self._parse_flow_mapping(inner)
+-                i = j
+-            elif i < n and raw[i] == "[":
+-                depth_f = 1
+-                j = i + 1
+-                while j < n and depth_f > 0:
+-                    c = raw[j]
+-                    if c == '"':
+-                        _, j = self._consume_double_quoted(raw, j, line_no=self._i)
+-                        continue
+-                    if c == "'":
+-                        _, j = self._consume_single_quoted(raw, j, line_no=self._i)
+-                        continue
+-                    if c == "[":
+-                        depth_f += 1
+-                    elif c == "]":
+-                        depth_f -= 1
+-                    j += 1
+-                inner = raw[i:j]
+-                value = self._parse_flow_sequence(inner)
+-                i = j
+-            else:
+-                value, i = self._parse_flow_scalar(raw, i)
+-            out[str(key)] = value
+-            while i < n and raw[i] in " \t":
+-                i += 1
+-            if i < n and raw[i] == ",":
+-                i += 1
+-                continue
+-            if i < n and raw[i] == "}":
+-                continue
+-        raise PolicyLoadError(
+-            "parse_error",
+-            f"unterminated flow mapping at line {self._i}",
+-            self._policy_id_hint,
+-        )
+-
+-    def _parse_flow_sequence(self, raw: str) -> List[Any]:
+-        assert raw[0] == "["
+-        out: List[Any] = []
+-        i = 1
+-        n = len(raw)
+-        while i < n:
+-            while i < n and raw[i] in " \t":
+-                i += 1
+-            if i < n and raw[i] == "]":
+-                tail = raw[i + 1:].strip()
+-                if tail:
+-                    raise PolicyLoadError(
+-                        "parse_error",
+-                        f"trailing content after flow sequence at line {self._i}",
+-                        self._policy_id_hint,
+-                    )
+-                return out
+-            if i < n and raw[i] == "{":
+-                depth_f = 1
+-                j = i + 1
+-                while j < n and depth_f > 0:
+-                    c = raw[j]
+-                    if c == '"':
+-                        _, j = self._consume_double_quoted(raw, j, line_no=self._i)
+-                        continue
+-                    if c == "'":
+-                        _, j = self._consume_single_quoted(raw, j, line_no=self._i)
+-                        continue
+-                    if c == "{":
+-                        depth_f += 1
+-                    elif c == "}":
+-                        depth_f -= 1
+-                    j += 1
+-                value = self._parse_flow_mapping(raw[i:j])
+-                i = j
+-            elif i < n and raw[i] == "[":
+-                depth_f = 1
+-                j = i + 1
+-                while j < n and depth_f > 0:
+-                    c = raw[j]
+-                    if c == "[":
+-                        depth_f += 1
+-                    elif c == "]":
+-                        depth_f -= 1
+-                    j += 1
+-                value = self._parse_flow_sequence(raw[i:j])
+-                i = j
+-            else:
+-                value, i = self._parse_flow_scalar(raw, i)
+-            out.append(value)
+-            while i < n and raw[i] in " \t":
+-                i += 1
+-            if i < n and raw[i] == ",":
+-                i += 1
+-                continue
+-            if i < n and raw[i] == "]":
+-                continue
+-        raise PolicyLoadError(
+-            "parse_error",
+-            f"unterminated flow sequence at line {self._i}",
+-            self._policy_id_hint,
+-        )
+-
+-    # ---- scalar parse ----------------------------------------------------
+-
+-    def _parse_scalar(self, raw: str) -> Any:
+-        raw = raw.strip()
+-        if raw == "" or raw.lower() == "null" or raw == "~":
+-            return None
+-        if raw.lower() == "true":
+-            return True
+-        if raw.lower() == "false":
+-            return False
+-        if self._INT_RE.match(raw):
+-            try:
+-                return int(raw)
+-            except ValueError:  # pragma: no cover
+-                pass
+-        # Plain string — reject aliases / anchors / tags if they appear here.
+-        if raw.startswith("&") or raw.startswith("*"):
+-            raise PolicyLoadError(
+-                "alias_rejected",
+-                "YAML anchors/aliases are disabled",
+-                self._policy_id_hint,
+-            )
+-        if raw.startswith("!"):
+-            raise PolicyLoadError(
+-                "tag_rejected",
+-                "YAML tags are rejected",
+-                self._policy_id_hint,
+-            )
+-        # Length cap.
+-        if len(raw) > _LIMIT_SCALAR_LEN:
+-            raise PolicyLoadError(
+-                "size_limit",
+-                f"scalar exceeds {_LIMIT_SCALAR_LEN}-byte limit",
+-                self._policy_id_hint,
+-            )
+-        return raw
+-
+-    # ---- quote helpers ---------------------------------------------------
+-
+-    def _consume_double_quoted(self, s: str, start: int, line_no: int) -> Tuple[str, int]:
+-        """Return (decoded string, end index AFTER closing quote)."""
+-        assert s[start] == '"'
+-        i = start + 1
+-        out: List[str] = []
+-        while i < len(s):
+-            ch = s[i]
+-            if ch == '"':
+-                decoded = "".join(out)
+-                if len(decoded) > _LIMIT_SCALAR_LEN:
+-                    raise PolicyLoadError(
+-                        "size_limit",
+-                        f"scalar exceeds {_LIMIT_SCALAR_LEN}-byte limit",
+-                        self._policy_id_hint,
+-                    )
+-                return decoded, i + 1
+-            if ch == "\\":
+-                if i + 1 >= len(s):
+-                    raise PolicyLoadError(
+-                        "parse_error",
+-                        f"dangling escape at line {line_no}",
+-                        self._policy_id_hint,
+-                    )
+-                esc = s[i + 1]
+-                if esc == "n":
+-                    out.append("\n"); i += 2
+-                elif esc == "t":
+-                    out.append("\t"); i += 2
+-                elif esc == "r":
+-                    out.append("\r"); i += 2
+-                elif esc == '"':
+-                    out.append('"'); i += 2
+-                elif esc == "\\":
+-                    out.append("\\"); i += 2
+-                elif esc == "/":
+-                    out.append("/"); i += 2
+-                elif esc == "u":
+-                    if i + 6 > len(s):
+-                        raise PolicyLoadError(
+-                            "parse_error",
+-                            f"short \\u escape at line {line_no}",
+-                            self._policy_id_hint,
+-                        )
+-                    hex4 = s[i + 2:i + 6]
+-                    try:
+-                        out.append(chr(int(hex4, 16)))
+-                    except ValueError:
+-                        raise PolicyLoadError(
+-                            "parse_error",
+-                            f"invalid \\u escape at line {line_no}",
+-                            self._policy_id_hint,
+-                        )
+-                    i += 6
+-                else:
+-                    raise PolicyLoadError(
+-                        "parse_error",
+-                        f"unknown escape \\{esc} at line {line_no}",
+-                        self._policy_id_hint,
+-                    )
+-                continue
+-            out.append(ch)
+-            i += 1
+-        raise PolicyLoadError(
+-            "parse_error",
+-            f"unterminated double-quoted scalar at line {line_no}",
+-            self._policy_id_hint,
+-        )
+-
+-    def _consume_single_quoted(self, s: str, start: int, line_no: int) -> Tuple[str, int]:
+-        assert s[start] == "'"
+-        i = start + 1
+-        out: List[str] = []
+-        while i < len(s):
+-            ch = s[i]
+-            if ch == "'":
+-                if i + 1 < len(s) and s[i + 1] == "'":
+-                    out.append("'")
+-                    i += 2
+-                    continue
+-                decoded = "".join(out)
+-                if len(decoded) > _LIMIT_SCALAR_LEN:
+-                    raise PolicyLoadError(
+-                        "size_limit",
+-                        f"scalar exceeds {_LIMIT_SCALAR_LEN}-byte limit",
+-                        self._policy_id_hint,
+-                    )
+-                return decoded, i + 1
+-            out.append(ch)
+-            i += 1
+-        raise PolicyLoadError(
+-            "parse_error",
+-            f"unterminated single-quoted scalar at line {line_no}",
+-            self._policy_id_hint,
+-        )
+-
+-    # ---- low-level helpers -----------------------------------------------
+-
+-    def _current_line(self) -> str:
+-        return self._lines[self._i]
+-
+-    def _indent(self, line: str) -> int:
+-        n = 0
+-        for ch in line:
+-            if ch == " ":
+-                n += 1
+-            elif ch == "\t":
+-                raise PolicyLoadError(
+-                    "parse_error",
+-                    "tab indentation not allowed",
+-                    self._policy_id_hint,
+-                )
+-            else:
+-                break
+-        return n
+-
+-    def _skip_blanks(self) -> None:
+-        while self._i < self._n:
+-            line = self._lines[self._i]
+-            stripped = line.strip()
+-            if stripped == "" or stripped.startswith("#"):
+-                self._i += 1
+-                continue
+-            return
+-
+-    def _looks_like_mapping_start(self, body: str) -> bool:
+-        # Strip comment + see if we have "key:" or "key: v" shape.
+-        body = self._strip_inline_comment(body).rstrip()
+-        if not body:
+-            return False
+-        # Quoted key — only a mapping if a ':' follows the closing quote.
+-        if body.startswith('"'):
+-            # find matching close quote (respecting escapes)
+-            i = 1
+-            while i < len(body):
+-                if body[i] == "\\" and i + 1 < len(body):
+-                    i += 2
+-                    continue
+-                if body[i] == '"':
+-                    tail = body[i + 1:]
+-                    return tail.startswith(":")
+-                i += 1
+-            return False
+-        if body.startswith("'"):
+-            i = 1
+-            while i < len(body):
+-                if body[i] == "'":
+-                    if i + 1 < len(body) and body[i + 1] == "'":
+-                        i += 2
+-                        continue
+-                    tail = body[i + 1:]
+-                    return tail.startswith(":")
+-                i += 1
+-            return False
+-        # Scan up to first ':' or newline; require it exists and is followed
+-        # by space or end-of-line.
+-        for idx, ch in enumerate(body):
+-            if ch == ':':
+-                if idx + 1 == len(body) or body[idx + 1] == ' ':
+-                    return True
+-                return False
+-        return False
+-
+-    def _strip_inline_comment(self, body: str) -> str:
+-        """Remove ' # ...' trailing comment but respect quotes."""
+-        in_s = False
+-        in_d = False
+-        for i, ch in enumerate(body):
+-            if ch == "'" and not in_d:
+-                in_s = not in_s
+-            elif ch == '"' and not in_s:
+-                in_d = not in_d
+-            elif ch == '#' and not in_s and not in_d:
+-                # Must have a whitespace before '#' (or be at start).
+-                if i == 0 or body[i - 1] in (" ", "\t"):
+-                    return body[:i].rstrip()
+-        return body
+-
+-    def _check_deadline(self) -> None:
+-        if time.monotonic() > self._deadline:
+-            raise PolicyLoadError(
+-                "timeout",
+-                f"parse exceeded {int(_LIMIT_PARSE_CPU_MS)} ms",
+-                self._policy_id_hint,
+-            )
+-
+-
+-# ---------------------------------------------------------------------------
+-# Predicate compiler + evaluator
+-# ---------------------------------------------------------------------------
+-
+-
+-@dataclass
+-class _CompiledPredicate:
+-    """Internal AST node for an evaluator."""
+-    form: str
+-    # For all/any/not
+-    children: List["_CompiledPredicate"] = field(default_factory=list)
+-    # For leaf forms
+-    field_path: Optional[str] = None
+-    value: Any = None
+-    values: Optional[Tuple[Any, ...]] = None
+-    pattern_src: Optional[str] = None
+-    compiled_regex: Optional["re.Pattern[str]"] = None
+-    prefix: Optional[str] = None
+-    suffix: Optional[str] = None
+-    substring: Optional[str] = None
+-    root: Optional[str] = None
+-    length: Optional[int] = None
+-
+-
+-def _compile_predicate(raw: Any, policy_id: str,
+-                       path: str = "predicate") -> _CompiledPredicate:
+-    if not isinstance(raw, dict):
+-        raise PolicyLoadError(
+-            "predicate_missing",
+-            f"predicate at {path} is not a mapping",
+-            policy_id,
+-        )
+-    if len(raw) != 1:
+-        raise PolicyLoadError(
+-            "predicate_missing",
+-            f"predicate at {path} must have exactly one form key, got {sorted(raw.keys())}",
+-            policy_id,
+-        )
+-    form, body = next(iter(raw.items()))
+-    if form not in _PREDICATE_FORMS:
+-        raise PolicyLoadError(
+-            "predicate_missing",
+-            f"unknown predicate form {form!r} at {path}",
+-            policy_id,
+-        )
+-    node = _CompiledPredicate(form=form)
+-    if form in ("all", "any"):
+-        if not isinstance(body, list) or not body:
+-            raise PolicyLoadError(
+-                "parse_error",
+-                f"{form!r} at {path} requires a non-empty list",
+-                policy_id,
+-            )
+-        for idx, child in enumerate(body):
+-            node.children.append(_compile_predicate(child, policy_id,
+-                                                   f"{path}.{form}[{idx}]"))
+-        return node
+-    if form == "not":
+-        if not isinstance(body, dict):
+-            raise PolicyLoadError(
+-                "parse_error",
+-                f"'not' at {path} requires a single predicate mapping",
+-                policy_id,
+-            )
+-        node.children.append(_compile_predicate(body, policy_id, f"{path}.not"))
+-        return node
+-    # Leaf forms — body must be dict
+-    if not isinstance(body, dict):
+-        raise PolicyLoadError(
+-            "parse_error",
+-            f"{form!r} at {path} requires a mapping body",
+-            policy_id,
+-        )
+-    fld = body.get("field")
+-    if not isinstance(fld, str) or not fld:
+-        raise PolicyLoadError(
+-            "parse_error",
+-            f"{form!r} at {path} missing 'field'",
+-            policy_id,
+-        )
+-    node.field_path = fld
+-    if form in ("eq", "neq"):
+-        if "value" not in body:
+-            raise PolicyLoadError(
+-                "parse_error",
+-                f"{form!r} at {path} missing 'value'",
+-                policy_id,
+-            )
+-        node.value = body["value"]
+-    elif form in ("in", "not_in"):
+-        vals = body.get("values")
+-        if not isinstance(vals, list):
+-            raise PolicyLoadError(
+-                "parse_error",
+-                f"{form!r} at {path} requires 'values' list",
+-                policy_id,
+-            )
+-        node.values = tuple(vals)
+-    elif form == "regex":
+-        pat = body.get("pattern")
+-        if not isinstance(pat, str):
+-            raise PolicyLoadError(
+-                "parse_error",
+-                f"regex at {path} missing 'pattern'",
+-                policy_id,
+-            )
+-        if len(pat) > _LIMIT_REGEX_PATTERN:
+-            raise PolicyLoadError(
+-                "regex_compile_error",
+-                f"regex pattern length exceeds {_LIMIT_REGEX_PATTERN}",
+-                policy_id,
+-            )
+-        # SPEC §3.6: reject backreference-in-quantifier heuristic.
+-        if re.search(r"\\[0-9]+[+*?]", pat):
+-            raise PolicyLoadError(
+-                "regex_compile_error",
+-                "backreference in quantifier is rejected",
+-                policy_id,
+-            )
+-        try:
+-            node.compiled_regex = re.compile(pat)
+-        except re.error as e:
+-            raise PolicyLoadError(
+-                "regex_compile_error",
+-                f"regex compile failed: {e}",
+-                policy_id,
+-            )
+-        node.pattern_src = pat
+-    elif form == "starts_with":
+-        p = body.get("prefix")
+-        if not isinstance(p, str):
+-            raise PolicyLoadError("parse_error",
+-                                  f"starts_with at {path} missing 'prefix' string",
+-                                  policy_id)
+-        node.prefix = p
+-    elif form == "ends_with":
+-        p = body.get("suffix")
+-        if not isinstance(p, str):
+-            raise PolicyLoadError("parse_error",
+-                                  f"ends_with at {path} missing 'suffix' string",
+-                                  policy_id)
+-        node.suffix = p
+-    elif form == "contains":
+-        p = body.get("substring")
+-        if not isinstance(p, str):
+-            raise PolicyLoadError("parse_error",
+-                                  f"contains at {path} missing 'substring' string",
+-                                  policy_id)
+-        node.substring = p
+-    elif form in ("length_le", "length_ge"):
+-        v = body.get("value")
+-        if not isinstance(v, int) or isinstance(v, bool):
+-            raise PolicyLoadError("parse_error",
+-                                  f"{form!r} at {path} requires integer 'value'",
+-                                  policy_id)
+-        node.length = v
+-    elif form == "path_under":
+-        r = body.get("root")
+-        if not isinstance(r, str) or not r:
+-            raise PolicyLoadError("parse_error",
+-                                  f"path_under at {path} missing 'root' string",
+-                                  policy_id)
+-        node.root = r
+-    return node
+-
+-
+-def _get_field(event: Any, dotted: str) -> Optional[Any]:
+-    cur: Any = event
+-    for part in dotted.split("."):
+-        if isinstance(cur, dict) and part in cur:
+-            cur = cur[part]
+-        else:
+-            return None
+-    return cur
+-
+-
+-def _evaluate(node: _CompiledPredicate, event: Dict[str, Any]) -> bool:
+-    form = node.form
+-    if form == "all":
+-        for c in node.children:
+-            if not _evaluate(c, event):
+-                return False
+-        return True
+-    if form == "any":
+-        for c in node.children:
+-            if _evaluate(c, event):
+-                return True
+-        return False
+-    if form == "not":
+-        return not _evaluate(node.children[0], event)
+-    val = _get_field(event, node.field_path or "")
+-    if val is None:
+-        # SPEC §7.3 — field missing → predicate false (not error).
+-        return False
+-    if form == "eq":
+-        return val == node.value
+-    if form == "neq":
+-        return val != node.value
+-    if form == "in":
+-        return val in (node.values or ())
+-    if form == "not_in":
+-        return val not in (node.values or ())
+-    if form == "regex":
+-        assert node.compiled_regex is not None
+-        if not isinstance(val, str):
+-            return False
+-        return node.compiled_regex.search(val) is not None
+-    if form == "starts_with":
+-        return isinstance(val, str) and val.startswith(node.prefix or "")
+-    if form == "ends_with":
+-        return isinstance(val, str) and val.endswith(node.suffix or "")
+-    if form == "contains":
+-        return isinstance(val, str) and (node.substring or "") in val
+-    if form == "length_le":
+-        try:
+-            return len(val) <= int(node.length or 0)
+-        except TypeError:
+-            return False
+-    if form == "length_ge":
+-        try:
+-            return len(val) >= int(node.length or 0)
+-        except TypeError:
+-            return False
+-    if form == "path_under":
+-        if not isinstance(val, str):
+-            return False
+-        try:
+-            target = os.path.realpath(val)
+-            root = os.path.realpath(node.root or "")
+-            common = os.path.commonpath([target, root])
+-            return common == root
+-        except ValueError:
+-            return False
+-    return False
+-
+-
+-def _predicate_to_canonical(node: _CompiledPredicate) -> Any:
+-    """Round-trip a compiled predicate back to the normalized dict form used
+-    for canonical hashing. Regex appears as source string (not compiled).
+-    """
+-    form = node.form
+-    if form in ("all", "any"):
+-        return {form: [_predicate_to_canonical(c) for c in node.children]}
+-    if form == "not":
+-        return {"not": _predicate_to_canonical(node.children[0])}
+-    body: Dict[str, Any] = {"field": node.field_path}
+-    if form in ("eq", "neq"):
+-        body["value"] = node.value
+-    elif form in ("in", "not_in"):
+-        body["values"] = list(node.values or ())
+-    elif form == "regex":
+-        body["pattern"] = node.pattern_src
+-    elif form == "starts_with":
+-        body["prefix"] = node.prefix
+-    elif form == "ends_with":
+-        body["suffix"] = node.suffix
+-    elif form == "contains":
+-        body["substring"] = node.substring
+-    elif form in ("length_le", "length_ge"):
+-        body["value"] = node.length
+-    elif form == "path_under":
+-        body["root"] = node.root
+-    return {form: body}
+-
+-
+-# ---------------------------------------------------------------------------
+-# Compiled rule + Policy
+-# ---------------------------------------------------------------------------
+-
+-
+-@dataclass
+-class CompiledRule:
+-    rule_id: str
+-    description: str
+-    decision: str
+-    reason: Optional[str]
+-    predicate: _CompiledPredicate
+-    status: Optional[str] = None  # "deprecated" etc. (advisory only)
+-
+-
+-class Policy:
+-    """Immutable post-load. :meth:`decide` is pure over the frozen AST.
+-
+-    Attributes:
+-        policy_id: slug from ``id:`` field (matches filename base).
+-        schema_version: ``"policy-dsl/v1"``.
+-        kind: ``"allow_list"`` | ``"deny_list"`` | ``"mixed"``.
+-        defaults: ``{"decision": ..., "reason": ...}``.
+-        rules: ordered list of :class:`CompiledRule`.
+-        error_reasons: closed enum from ``error_model.reasons``.
+-        canonical_hash: SHA-256 hex digest (SPEC §6.1).
+-    """
+-
+-    def __init__(
+-        self,
+-        policy_id: str,
+-        schema_version: str,
+-        description: str,
+-        kind: str,
+-        defaults: Dict[str, Any],
+-        rules: List[CompiledRule],
+-        error_reasons: Dict[str, str],
+-    ):
+-        self.policy_id = policy_id
+-        self.schema_version = schema_version
+-        self.description = description
+-        self.kind = kind
+-        self.defaults = dict(defaults)
+-        self.rules = list(rules)
+-        self.error_reasons = dict(error_reasons)
+-        self._rule_locks: Dict[str, "threading.RLock"] = {
+-            r.rule_id: threading.RLock() for r in rules
+-        }
+-        # Compute canonical hash last.
+-        payload = json.dumps(
+-            self.to_canonical_dict(),
+-            sort_keys=True,
+-            separators=(",", ":"),
+-            ensure_ascii=False,
+-        ).encode("utf-8")
+-        self.canonical_hash = hashlib.sha256(payload).hexdigest()
+-
+-    # --- public --------------------------------------------------------
+-
+-    def to_canonical_dict(self) -> Dict[str, Any]:
+-        """SPEC §6.1 canonical-form serialization.
+-
+-        - Keys sorted at every level (enforced by ``json.dumps(..., sort_keys=True)``
+-          at hash time).
+-        - Rules preserved in declared order (first-match-wins semantic).
+-        - Regex patterns as source strings.
+-        """
+-        return {
+-            "schema": self.schema_version,
+-            "id": self.policy_id,
+-            "description": self.description,
+-            "kind": self.kind,
+-            "defaults": dict(self.defaults),
+-            "rules": [
+-                {
+-                    "id": r.rule_id,
+-                    "description": r.description,
+-                    "decision": r.decision,
+-                    "reason": r.reason,
+-                    "predicate": _predicate_to_canonical(r.predicate),
+-                }
+-                for r in self.rules
+-            ],
+-            "error_model": {
+-                "reasons": dict(self.error_reasons),
+-            },
+-        }
+-
+-    def decide(self, event: Dict[str, Any]) -> Dict[str, Any]:
+-        """Evaluate rules in declared order; first match wins.
+-
+-        Emits :func:`audit_emit.emit_policy_evaluated` (always) and
+-        :func:`audit_emit.emit_policy_denied` (deny path only) before
+-        returning. Never raises; field-missing → predicate-false per
+-        SPEC §7.3.
+-        """
+-        start = time.monotonic()
+-        matched: Optional[CompiledRule] = None
+-        for rule in self.rules:
+-            if _evaluate(rule.predicate, event):
+-                matched = rule
+-                break
+-        duration_ms = int((time.monotonic() - start) * 1000)
+-        if matched is None:
+-            decision = str(self.defaults.get("decision", "allow"))
+-            reason = self.defaults.get("reason")
+-            rule_id = "<default>"
+-            out: Dict[str, Any] = {"decision": decision}
+-            if decision == "block" and reason:
+-                out["reason"] = reason
+-                msg = self.error_reasons.get(str(reason))
+-                if msg:
+-                    out["message"] = msg
+-            self._emit_evaluated(rule_id, decision, duration_ms)
+-            if decision == "block":
+-                self._emit_denied(rule_id, str(reason or ""))
+-            return out
+-        out2: Dict[str, Any] = {"decision": matched.decision}
+-        if matched.decision == "block" and matched.reason:
+-            out2["reason"] = matched.reason
+-            msg = self.error_reasons.get(matched.reason)
+-            if msg:
+-                out2["message"] = msg
+-        self._emit_evaluated(matched.rule_id, matched.decision, duration_ms)
+-        if matched.decision == "block":
+-            self._emit_denied(matched.rule_id, matched.reason or "")
+-        return out2
+-
+-    # --- audit helpers (fail-open) -------------------------------------
+-
+-    # PLAN-182 W2 (S321) — atribuicao de projeto nos emissores de policy.
+-    #
+-    # Medido: `policy_evaluated` + `policy_denied` respondiam por 15.128 dos
+-    # 15.208 eventos NAO-ATRIBUIVEIS pos-W1. A causa nao era o scrub
+-    # (`project` esta em `_FEDERATION_ENVELOPE`, logo nas allowlists) nem o
+-    # env: era o CHAMADOR omitindo o kwarg, com o default do emissor em "".
+-    # A W1 curou ONDE o evento e gravado; isto cura O QUE ele carrega.
+-    #
+-    # Fail-open por construcao: qualquer falha na resolucao devolve "" e o
+-    # evento sai como saia antes — atribuicao e observabilidade, nunca um
+-    # motivo para derrubar uma decisao de policy.
+-    @staticmethod
+-    def _project_label() -> str:
+-        try:
+-            from _lib import runtime_paths as _rp
+-
+-            return str(_rp.project_dir())
+-        except Exception:  # pragma: no cover - fail-open
+-            return ""
+-
+-    def _emit_evaluated(self, rule_id: str, decision: str, duration_ms: int) -> None:
+-        if _audit_emit is None:
+-            return
+-        try:
+-            _audit_emit.emit_policy_evaluated(
+-                policy_id=self.policy_id,
+-                rule_id=rule_id,
+-                decision=decision,
+-                duration_ms=duration_ms,
+-                project=self._project_label(),
+-            )
+-        except Exception:  # pragma: no cover
+-            pass
+-
+-    def _emit_denied(self, rule_id: str, reason: str) -> None:
+-        if _audit_emit is None:
+-            return
+-        try:
+-            _audit_emit.emit_policy_denied(
+-                policy_id=self.policy_id,
+-                rule_id=rule_id,
+-                reason=reason,
+-                project=self._project_label(),
+-            )
+-        except Exception:  # pragma: no cover
+-            pass
+-
+-
+-# ---------------------------------------------------------------------------
+-# load() entry point
+-# ---------------------------------------------------------------------------
+-
+-
+-def _estimate_size(value: Any) -> int:
+-    """Best-effort recursive sizeof for the post-parse structure."""
+-    seen: set = set()
+-
+-    def walk(v: Any) -> int:
+-        """Recursive sizeof walker — bounds total parsed-structure memory.
+-
+-        Returns an estimated byte count for ``v`` summed across any
+-        contained dicts / lists / strings. Uses ``id(v)`` in the ``seen``
+-        set to short-circuit self-referential cycles (policy docs
+-        shouldn't have cycles post-alias-rejection, but the defensive
+-        check costs nothing). Falls back to ``sys.getsizeof(v)`` on
+-        non-container types; returns 0 on access errors.
+-        """
+-        try:
+-            vid = id(v)
+-            if vid in seen:
+-                return 0
+-            seen.add(vid)
+-        except TypeError:  # pragma: no cover
+-            pass
+-        size = sys.getsizeof(v)
+-        if isinstance(v, dict):
+-            for k, vv in v.items():
+-                size += walk(k) + walk(vv)
+-        elif isinstance(v, (list, tuple, set, frozenset)):
+-            for item in v:
+-                size += walk(item)
+-        return size
+-
+-    return walk(value)
+-
+-
+-def _load_read_raw(path: Path) -> "tuple[str, str]":
+-    """PLAN-023 CLOSEOUT (DYN-REFACTOR-2) helper 1/4.
+-
+-    Stat + size cap + read bytes + BOM reject + UTF-8 decode.
+-    Returns (text, policy_id_hint); raises PolicyLoadError on any
+-    failure (preserving error_kind byte-identity per
+-    test_policy_golden_error_kinds.py).
+-    """
+-    policy_id_hint = path.stem
+-    if policy_id_hint.endswith(".policy"):
+-        policy_id_hint = policy_id_hint[: -len(".policy")]
+-
+-    try:
+-        stat = path.stat()
+-    except OSError as e:
+-        raise PolicyLoadError(
+-            "parse_error",
+-            f"cannot stat policy file: {e}",
+-            policy_id_hint,
+-        )
+-    if stat.st_size > _LIMIT_FILE_BYTES:
+-        raise PolicyLoadError(
+-            "size_limit",
+-            f"file size {stat.st_size} exceeds {_LIMIT_FILE_BYTES}",
+-            policy_id_hint,
+-        )
+-
+-    try:
+-        with open(path, "rb") as f:
+-            raw = f.read()
+-    except OSError as e:
+-        raise PolicyLoadError(
+-            "parse_error",
+-            f"cannot read policy file: {e}",
+-            policy_id_hint,
+-        )
+-    if raw.startswith(b"\xef\xbb\xbf"):
+-        raise PolicyLoadError(
+-            "parse_error",
+-            "UTF-8 BOM not allowed",
+-            policy_id_hint,
+-        )
+-    try:
+-        text = raw.decode("utf-8")
+-    except UnicodeDecodeError as e:
+-        raise PolicyLoadError(
+-            "parse_error",
+-            f"UTF-8 decode error: {e}",
+-            policy_id_hint,
+-        )
+-    return text, policy_id_hint
+-
+-
+-def _load_parse_and_audit(text: str, policy_id_hint: str) -> Dict[str, Any]:
+-    """PLAN-023 CLOSEOUT (DYN-REFACTOR-2) helper 2/4.
+-
+-    Parse the YAML subset + post-parse size audit. Returns the parsed
+-    dict or raises PolicyLoadError with byte-identical error_kind.
+-    """
+-    deadline = time.monotonic() + (_LIMIT_PARSE_CPU_MS / 1000.0)
+-    parser = _YamlParser(text, cpu_deadline_monotonic=deadline,
+-                         policy_id_hint=policy_id_hint)
+-    data = parser.parse_document()
+-    if not isinstance(data, dict):
+-        raise PolicyLoadError(
+-            "parse_error",
+-            "top-level must be a mapping",
+-            policy_id_hint,
+-        )
+-    if _estimate_size(data) > _LIMIT_TOTAL_EXPAND_BYTES:
+-        raise PolicyLoadError(
+-            "size_limit",
+-            f"post-parse size exceeds {_LIMIT_TOTAL_EXPAND_BYTES} bytes",
+-            policy_id_hint,
+-        )
+-    return data
+-
+-
+-def load(path: Path) -> Policy:
+-    """Parse + validate + compile a policy file.
+-
+-    Raises :class:`PolicyLoadError` on any SPEC §5 violation.
+-
+-    PLAN-023 CLOSEOUT decomposition: delegates to helpers
+-    ``_load_read_raw`` (I/O + decode) and ``_load_parse_and_audit``
+-    (YAML + size audit). Byte-identity preserved against
+-    ``test_policy_golden_error_kinds.py`` 18-case golden suite.
+-    """
+-    path = Path(path)
+-    text, policy_id_hint = _load_read_raw(path)
+-    data = _load_parse_and_audit(text, policy_id_hint)
+-
+-    # --- top-level schema validation ---
+-    for key in _TOP_LEVEL_REQUIRED:
+-        if key not in data:
+-            raise PolicyLoadError(
+-                "parse_error",
+-                f"missing required top-level key {key!r}",
+-                policy_id_hint,
+-            )
+-    schema_version = data["schema"]
+-    if schema_version != "policy-dsl/v1":
+-        raise PolicyLoadError(
+-            "schema_version_mismatch",
+-            f"schema must be 'policy-dsl/v1', got {schema_version!r}",
+-            policy_id_hint,
+-        )
+-    policy_id = data["id"]
+-    if not isinstance(policy_id, str) or not policy_id:
+-        raise PolicyLoadError("parse_error", "'id' must be a non-empty string",
+-                              policy_id_hint)
+-    description = data["description"]
+-    if not isinstance(description, str):
+-        raise PolicyLoadError("parse_error", "'description' must be a string",
+-                              policy_id)
+-    if len(description) > 200:
+-        raise PolicyLoadError("size_limit",
+-                              "description exceeds 200 chars",
+-                              policy_id)
+-    kind = data["kind"]
+-    if not isinstance(kind, str) or kind not in _KIND_ENUM:
+-        raise PolicyLoadError("parse_error",
+-                              f"kind must be one of {sorted(_KIND_ENUM)}, got {kind!r}",
+-                              policy_id)
+-    defaults = data["defaults"]
+-    if not isinstance(defaults, dict) or "decision" not in defaults:
+-        raise PolicyLoadError("parse_error",
+-                              "'defaults' must be a mapping with 'decision'",
+-                              policy_id)
+-    dd = defaults["decision"]
+-    if not isinstance(dd, str) or dd not in _DECISION_ENUM:
+-        raise PolicyLoadError("parse_error",
+-                              f"defaults.decision must be allow|block, got {defaults['decision']!r}",
+-                              policy_id)
+-    rules_raw = data["rules"]
+-    if not isinstance(rules_raw, list):
+-        raise PolicyLoadError("parse_error", "'rules' must be a list", policy_id)
+-    error_model = data["error_model"]
+-    if not isinstance(error_model, dict) or "reasons" not in error_model:
+-        raise PolicyLoadError("parse_error",
+-                              "'error_model' must be a mapping with 'reasons'",
+-                              policy_id)
+-    reasons_raw = error_model["reasons"]
+-    if not isinstance(reasons_raw, dict):
+-        raise PolicyLoadError("parse_error",
+-                              "'error_model.reasons' must be a mapping",
+-                              policy_id)
+-    error_reasons: Dict[str, str] = {}
+-    for k, v in reasons_raw.items():
+-        if not isinstance(k, str) or not isinstance(v, str):
+-            raise PolicyLoadError("parse_error",
+-                                  "error_model.reasons entries must be string→string",
+-                                  policy_id)
+-        error_reasons[k] = v
+-
+-    # --- compile rules ---
+-    compiled: List[CompiledRule] = []
+-    seen_ids: set = set()
+-    for idx, rule_raw in enumerate(rules_raw):
+-        if not isinstance(rule_raw, dict):
+-            raise PolicyLoadError("parse_error",
+-                                  f"rule[{idx}] must be a mapping",
+-                                  policy_id)
+-        rid = rule_raw.get("id")
+-        if not isinstance(rid, str) or not rid:
+-            raise PolicyLoadError("parse_error",
+-                                  f"rule[{idx}] missing 'id'",
+-                                  policy_id)
+-        if rid in seen_ids:
+-            raise PolicyLoadError("parse_error",
+-                                  f"duplicate rule id {rid!r}",
+-                                  policy_id)
+-        seen_ids.add(rid)
+-        decision = rule_raw.get("decision")
+-        if not isinstance(decision, str) or decision not in _DECISION_ENUM:
+-            raise PolicyLoadError("parse_error",
+-                                  f"rule {rid!r} decision must be allow|block",
+-                                  policy_id)
+-        reason = rule_raw.get("reason")
+-        if decision == "block":
+-            if not isinstance(reason, str) or not reason:
+-                raise PolicyLoadError("parse_error",
+-                                      f"rule {rid!r} decision=block requires 'reason'",
+-                                      policy_id)
+-            if reason not in error_reasons:
+-                raise PolicyLoadError("parse_error",
+-                                      f"rule {rid!r} reason {reason!r} not in error_model.reasons",
+-                                      policy_id)
+-        pred_raw = rule_raw.get("predicate")
+-        if pred_raw is None:
+-            raise PolicyLoadError("predicate_missing",
+-                                  f"rule {rid!r} missing 'predicate'",
+-                                  policy_id)
+-        predicate = _compile_predicate(pred_raw, policy_id,
+-                                       path=f"rules[{idx}].predicate")
+-        desc = rule_raw.get("description", "")
+-        if not isinstance(desc, str):
+-            desc = str(desc) if desc is not None else ""
+-        if len(desc) > 200:
+-            raise PolicyLoadError("size_limit",
+-                                  f"rule {rid!r} description exceeds 200 chars",
+-                                  policy_id)
+-        status = rule_raw.get("status")
+-        if status is not None and not isinstance(status, str):
+-            status = None
+-        compiled.append(CompiledRule(
+-            rule_id=rid,
+-            description=desc,
+-            decision=decision,
+-            reason=reason if decision == "block" else None,
+-            predicate=predicate,
+-            status=status,
+-        ))
+-
+-    # Cross-check id field matches filename hint (advisory — mismatch is NOT
+-    # an error per SPEC; fixture naming convention only).
+-    _ = policy_id_hint  # retained for diagnostics.
+-
+-    return Policy(
+-        policy_id=policy_id,
+-        schema_version=schema_version,
+-        description=description,
+-        kind=kind,
+-        defaults=defaults,
+-        rules=compiled,
+-        error_reasons=error_reasons,
+-    )
+-
+-
+-__all__ = [
+-    "Policy",
+-    "CompiledRule",
+-    "PolicyLoadError",
+-    "load",
+-]
+diff --git a/.claude/hooks/_lib/policy_preprocessors.py b/.claude/hooks/_lib/policy_preprocessors.py
+index 0f652fb3a706..6ae212edecf9 100644
+--- a/.claude/hooks/_lib/policy_preprocessors.py
++++ b/.claude/hooks/_lib/policy_preprocessors.py
+@@ -39,2 +39,3 @@ from _lib import credentials as _credentials  # noqa: E402
+ from _lib import plan_frontmatter as _fm  # noqa: E402
++from _lib import plan_paths as _plan_paths  # noqa: E402
+ 
+@@ -236,5 +237,2 @@ def bash_safety_preprocess(event: Dict[str, Any]) -> Dict[str, Any]:
+ 
+-_PLAN_PATH_RE = re.compile(r"\.claude/plans/PLAN-\d{3}-[a-z0-9-]+\.md$")
+-_PLAN_ID_RE = re.compile(r"(PLAN-\d{3})-[a-z0-9-]+\.md$")
+-
+ _LEGAL_STATUSES = frozenset({"draft", "reviewed", "executing", "done", "abandoned", "refused"})
+@@ -316,3 +314,3 @@ def plan_edit_preprocess(event: Dict[str, Any],
+         # Scope guard.
+-        if not file_path or not _PLAN_PATH_RE.search(file_path):
++        if not _plan_paths.is_plan_path(file_path):
+             enriched["_derived_plan"] = derived
+@@ -320,4 +318,3 @@ def plan_edit_preprocess(event: Dict[str, Any],
+         derived["is_plan_file"] = True
+-        m = _PLAN_ID_RE.search(file_path)
+-        derived["plan_id"] = m.group(1) if m else ""
++        derived["plan_id"] = _plan_paths.plan_id_from_path(file_path)
+ 
+diff --git a/.claude/hooks/_lib/secret_patterns.py b/.claude/hooks/_lib/secret_patterns.py
+index 29f5bc23db9f..347a3e9a16a7 100644
+--- a/.claude/hooks/_lib/secret_patterns.py
++++ b/.claude/hooks/_lib/secret_patterns.py
+@@ -29,2 +29,3 @@ from __future__ import annotations
+ 
++import bisect
+ import logging
+@@ -33,3 +34,3 @@ import signal
+ import unicodedata
+-from typing import Callable, List, NamedTuple, Optional, Pattern, Tuple
++from typing import Callable, Dict, List, NamedTuple, Optional, Pattern, Tuple
+ 
+@@ -73,3 +74,9 @@ class SecretPattern(NamedTuple):
+ class Finding(NamedTuple):
+-    """One match returned by scan()."""
++    """One match returned by scan().
++
++    ``start``/``end`` index the text that was passed to scan() -- the
++    caller's ORIGINAL string -- even when the match was found only in its
++    NFKC view (scan() maps such spans back; see ``_nfkc_segments``). Slice
++    or redact that same string, never a normalized copy of it.
++    """
+     family_id: str
+@@ -725,2 +732,225 @@ def _clear_itimer_guard(prev_handler: Optional[object]) -> None:
+ 
++# ---------------------------------------------------------------------------
++# Two detection frames, ONE offset frame (the caller's original text)
++# ---------------------------------------------------------------------------
++#
++# scan() matches every pattern in two frames and unions the findings:
++#   (a) the ORIGINAL text, as written.
++#   (b) the NFKC view (full-width, ligature, compatibility-homoglyph
++#       evasion). Its spans are mapped BACK to original offsets through the
++#       segment map below, so a finding never indexes a normalized string.
++# Redaction then cuts the ORIGINAL text only: every character outside a
++# finding is returned byte-identical. No normalized character can reach the
++# output (full-width JSON punctuation stays full-width, confusables stay
++# visible to a reviewer, and NFKC growth cannot inflate the output).
++#
++# Segment map. The original is cut BEFORE every ASCII character and before
++# every character of _SAFE_CUT below; a segment is one such cut character
++# (or the text start) plus the run of other characters after it, and is
++# NFKC-normalized on its own. Segments NFKC leaves unchanged map 1:1 like
++# the ASCII between them, so CJK, kana or Hangul prose around a full-width
++# secret is never swallowed. A cut before an ASCII character ``a`` is
++# composition-safe because NFKC(s) = compose(reorder(decompose_K(s))):
++#   1. decompose_K works per character and every ASCII character decomposes
++#      to itself, so decompose_K(x + a + y) = decompose_K(x) + a +
++#      decompose_K(y).
++#   2. Canonical reordering only swaps adjacent characters whose combining
++#      class is > 0; every ASCII character has class 0, so nothing moves
++#      across ``a``.
++#   3. Canonical composition joins a character C to the LAST starter L before
++#      it only if no starter sits between them. ``a`` is a starter, so nothing
++#      after it composes with anything before it; ``a`` itself joins L only if
++#      it is the SECOND element of a primary composite, and no ASCII character
++#      is (the second elements are combining marks plus a few non-ASCII
++#      starters such as Hangul V/T jamo).
++# Hence NFKC(x + a + y) == NFKC(x) + NFKC(a + y) for every ASCII ``a``. The
++# same three steps hold for any character ``c`` whose NFKD starts with a
++# starter (class 0) that is never the second element of a primary
++# composite: step 1 is per character, step 2 cannot cross that starter and
++# step 3 cannot join it (or anything after it) to the left. _SAFE_CUT lists
++# such characters explicitly; each one is checked against that derived
++# property and against every character that can combine (composition
++# firsts, class != 0, NFKC-changing) on the supported Unicode versions.
++# Both claims are tested in test_secret_patterns.py, and the map is ALSO
++# checked at runtime: if the segment images do not concatenate to
++# NFKC(text) the map fails CLOSED to ONE segment spanning the whole text, so
++# an NFKC-frame finding then redacts the whole text instead of leaking.
++#
++# Precision ("peel"): when a segment starts with a cut character ``s`` whose
++# NFKD is ONE character and the segment's image starts with NFKC(s), ``s``
++# composed with nothing after it (a primary composite differs from its first
++# element), and by the same three steps NFKC(s + R) == NFKC(s) + NFKC(R);
++# the segment is then split into [s][R], so a JSON quote, '=' or space right
++# before a decomposed or ligature secret is not swallowed. NFKC(R) is
++# computed on its own and goes through the same runtime concatenation check.
++#
++# A normalized finding maps to the UNION of the original segments it
++# touches. Over-redaction is acceptable; leaking is not.
++
++# Non-ASCII characters before which a cut is also composition-safe (see the
++# derived property above). Deliberately absent: U+302A-302F (combining
++# ideographic tone marks), U+3099-309C (kana voicing marks, combining and
++# spacing), U+FF9E/U+FF9F (half-width voicing marks, NFKD -> U+3099/309A),
++# half-width Hangul and the Hangul V/T jamo U+1160-11FF (they compose onto a
++# preceding L jamo or LV syllable).
++_SAFE_CUT = (
++    "\u3000-\u3029\u3030-\u303f"  # CJK symbols and punctuation
++    "\u3041-\u3096\u309d-\u309f"  # hiragana letters, iteration marks
++    "\u30a0-\u30ff"               # katakana letters, middle dot, prolonged mark
++    "\u3400-\u4dbf\u4e00-\u9fff"  # CJK unified ideographs (+ extension A)
++    "\uac00-\ud7a3"               # Hangul syllables
++    "\uff01-\uff5e"               # full-width ASCII forms
++)
++# ``seg``: an optional _SAFE_CUT head + a run of characters that are neither
++# ASCII nor _SAFE_CUT (an ASCII head is taken by the caller). ``run``: a run
++# of _SAFE_CUT characters, each its own cut, minus the last one when a
++# ``seg`` tail follows (that one heads the next ``seg``).
++_SEGMENT_RE = re.compile(
++    "(?P<head>[{s}])?(?P<tail>[^\\x00-\\x7f{s}]+)|(?P<run>[{s}]+(?![^\\x00-\\x7f{s}]))"
++    .format(s=_SAFE_CUT)
++)
++
++
++def _nfkc(s: str) -> str:
++    return unicodedata.normalize("NFKC", s)
++
++
++_Segment = Tuple[int, int, int, int]  # (orig_start, orig_end, norm_start, norm_end)
++
++
++def _nfkc_segments(
++    text: str,
++    normalized: str,
++    nfkc: Callable[[str], str] = _nfkc,
++) -> List[_Segment]:
++    """Sorted, disjoint segments of ``text`` whose NFKC image differs.
++
++    The rest maps 1:1. Fails CLOSED to ONE whole-text segment when the images
++    do not concatenate to ``normalized``; ``nfkc`` is injectable for a test.
++    """
++    segments: List[_Segment] = []
++    pieces: List[str] = []
++    memo: Dict[str, str] = {}  # NFKC is a pure function of the segment
++    pos = npos = 0
++
++    def image_of(s: str) -> str:
++        image = memo.get(s)
++        if image is None:
++            image = memo[s] = nfkc(s)
++        return image
++
++    def emit(start: int, end: int, image: str) -> None:
++        nonlocal pos, npos
++        if image == text[start:end]:
++            return  # unchanged: maps 1:1, like the ASCII between segments
++        pieces.append(text[pos:start])
++        npos += start - pos
++        pieces.append(image)
++        segments.append((start, end, npos, npos + len(image)))
++        npos += len(image)
++        pos = end
++    for m in _SEGMENT_RE.finditer(text):
++        start, end = m.span()
++        if m.group("run") is not None:
++            if image_of(m.group("run")) != m.group("run"):
++                for i in range(start, end):  # every character is a cut
++                    emit(i, i + 1, image_of(text[i]))
++            continue
++        if m.group("head") is None and start > 0:
++            start -= 1  # the ASCII head (a _SAFE_CUT head is in the match)
++        head = text[start]
++        image = image_of(text[start:end])
++        if (start < m.start("tail") and len(unicodedata.normalize("NFKD", head)) == 1
++                and image.startswith(image_of(head))):
++            emit(start, start + 1, image_of(head))  # peel: head composed with nothing
++            start, image = start + 1, image_of(text[start + 1:end])
++        emit(start, end, image)
++    if "".join(pieces) + text[pos:] != normalized:
++        return [(0, len(text), 0, len(normalized))]
++    return segments
++
++
++def _original_span(
++    segments: List[_Segment],
++    norm_starts: List[int],
++    text_len: int,
++    start: int,
++    end: int,
++) -> Tuple[int, int]:
++    """Original span covering every segment that normalized [start, end) touches."""
++
++    def char_range(q: int) -> Tuple[int, int]:
++        i = bisect.bisect_right(norm_starts, q) - 1
++        if i < 0:
++            return q, q + 1
++        o_start, o_end, _n_start, n_end = segments[i]
++        if q < n_end:
++            return o_start, o_end
++        return q - n_end + o_end, q - n_end + o_end + 1
++
++    lo = char_range(start)[0]
++    hi = char_range(max(end - 1, start))[1]
++    return min(lo, text_len), min(hi, text_len)
++
++
++def _map_to_original(text: str, normalized: str, findings: List[Finding]) -> List[Finding]:
++    """Re-express NFKC-frame findings in ``text`` offsets (over-covering)."""
++    segments = _nfkc_segments(text, normalized)
++    norm_starts = [seg[2] for seg in segments]
++    mapped: List[Finding] = []
++    for f in findings:
++        lo, hi = _original_span(segments, norm_starts, len(text), f.start, f.end)
++        mapped.append(f._replace(start=lo, end=hi))
++    return mapped
++
++
++def _scan_frame(
++    frame: str,
++    patterns: List[SecretPattern],
++    budget_seconds: float,
++    findings: List[Finding],
++) -> None:
++    """Append every validated match in ``frame`` to ``findings``."""
++    prev = _install_itimer_guard(budget_seconds)
++    try:
++        for p in patterns:
++            for m in p.regex.finditer(frame):
++                if p.validator is not None:
++                    try:
++                        if not p.validator(m.group(0)):
++                            continue
++                    except Exception:
++                        # Validator crash → treat as false-positive (fail-open)
++                        continue
++                findings.append(Finding(
++                    family_id=p.family_id,
++                    category=p.category,
++                    start=m.start(),
++                    end=m.end(),
++                    redaction_label=p.redaction_label,
++                ))
++    finally:
++        _clear_itimer_guard(prev)
++
++
++def _merge_same_family(findings: List[Finding]) -> List[Finding]:
++    """One Finding per family per overlapping cluster, with the union span.
++
++    The two frames report the same secret twice when their spans differ;
++    merging keeps ``len(findings)`` a per-secret count. Different families
++    never merge.
++    """
++    merged: List[Finding] = []
++    last: Dict[str, int] = {}
++    for f in sorted(findings, key=lambda x: (x.family_id, x.start, x.end)):
++        i = last.get(f.family_id)
++        if i is not None and f.start < merged[i].end:
++            merged[i] = merged[i]._replace(end=max(merged[i].end, f.end))
++        else:
++            last[f.family_id] = len(merged)
++            merged.append(f)
++    merged.sort(key=lambda f: (f.start, f.family_id, f.end))
++    return merged
++
++
+ def scan(
+@@ -734,2 +964,8 @@ def scan(
+ 
++    Matches the historical frame -- the NFKC view when ``normalize_unicode``
++    is on, else ``text`` -- and, when that view differs from ``text``, also
++    ``text`` itself, and returns the union. Every offset indexes ``text``:
++    NFKC-frame spans are mapped back through the segment map (they may
++    over-cover, never under-cover).
++
+     Args:
+@@ -738,12 +974,13 @@ def scan(
+         budget_seconds: ITIMER wall-clock budget. Default 0.5s.
+-        normalize_unicode: apply NFKC normalization first (defeats homoglyph
+-            evasion). Default True.
++        normalize_unicode: also match the NFKC view (full-width / ligature /
++            compatibility-homoglyph evasion). Default True.
+ 
+     Returns:
+-        List of Finding (empty if clean). Ordered by (start, family_id).
++        Findings (empty if clean), one per family per overlapping cluster,
++        ordered by (start, family_id, end).
+ 
+     Raises:
+-        ScanBudgetExceeded: if budget exceeded (caller should fail-open per
+-            security-engineer #2 regression budget; the hook wrapper should
+-            audit-emit `breadcrumb=secret_scan_timeout` and return allow).
++        ScanBudgetExceeded: as the historical scan did
++            (callers fail open per security-engineer #2; the hook wrapper
++            audit-emits `breadcrumb=secret_scan_timeout` and returns allow).
+     """
+@@ -751,29 +988,35 @@ def scan(
+         patterns = ALL_PATTERNS
+-    if normalize_unicode:
+-        # NFKC defeats tag chars, RTL override, zero-width, homoglyph evasion
+-        text = unicodedata.normalize("NFKC", text)
++    view = unicodedata.normalize("NFKC", text) if normalize_unicode else text
+     findings: List[Finding] = []
+-    prev = _install_itimer_guard(budget_seconds)
++    _scan_frame(view, patterns, budget_seconds, findings)  # historical frame
++    if view == text:
++        return _merge_same_family(findings)
++    if findings:
++        findings = _map_to_original(text, view, findings)
+     try:
+-        for p in patterns:
+-            for m in p.regex.finditer(text):
+-                matched = m.group(0)
+-                if p.validator is not None:
+-                    try:
+-                        if not p.validator(matched):
+-                            continue
+-                    except Exception:
+-                        # Validator crash → treat as false-positive (fail-open)
+-                        continue
+-                findings.append(Finding(
+-                    family_id=p.family_id,
+-                    category=p.category,
+-                    start=m.start(),
+-                    end=m.end(),
+-                    redaction_label=p.redaction_label,
+-                ))
+-    finally:
+-        _clear_itimer_guard(prev)
+-    findings.sort(key=lambda f: (f.start, f.family_id))
+-    return findings
++        _scan_frame(text, patterns, budget_seconds, findings)
++    except ScanBudgetExceeded:
++        _logger.debug("secret_patterns: scan budget exceeded")
++    return _merge_same_family(findings)
++
++
++def _merged_runs(findings: List[Finding], text_len: int) -> List[Tuple[int, int, str]]:
++    """Union of the finding spans as (start, end, label) runs, clamped to the text.
++
++    Overlapping and adjacent spans are merged before splicing. A merged run
++    carries the label of its leftmost (then longest) finding. Empty spans
++    are dropped.
++    """
++    runs: List[Tuple[int, int, str]] = []
++    for f in sorted(findings, key=lambda x: (x.start, -x.end)):
++        start = min(max(f.start, 0), text_len)
++        end = min(max(f.end, start), text_len)
++        if end == start:
++            continue
++        if runs and start <= runs[-1][1]:
++            run_start, run_end, label = runs[-1]
++            runs[-1] = (run_start, max(run_end, end), label)
++        else:
++            runs.append((start, end, f.redaction_label))
++    return runs
+ 
+@@ -781,10 +1024,24 @@ def scan(
+ def redact(text: str, findings: List[Finding]) -> str:
+-    """Replace matched ranges with redaction labels. Preserves unmatched text."""
++    """Replace the merged finding spans of ``text`` with their labels.
++
++    ``findings`` MUST come from ``scan()`` on this same ``text``: their
++    offsets index it directly (scan() already maps NFKC-frame matches back
++    to the original). Overlapping and adjacent spans are merged first; every
++    character outside the merged spans is returned byte-identical, so the
++    output grows only by (label length - span length) per merged run.
++
++    Pure function: no SIGALRM, no re-scan, never raises on Finding input.
++    Offsets outside the text are clamped to it; findings computed on a
++    DIFFERENT text are a caller error this function cannot detect.
++    """
+     if not findings:
+         return text
+-    # Walk findings in reverse so offsets don't shift
+-    result = text
+-    for f in sorted(findings, key=lambda x: x.start, reverse=True):
+-        result = result[:f.start] + f.redaction_label + result[f.end:]
+-    return result
++    parts: List[str] = []
++    pos = 0
++    for start, end, label in _merged_runs(findings, len(text)):
++        parts.append(text[pos:start])
++        parts.append(label)
++        pos = end
++    parts.append(text[pos:])
++    return "".join(parts)
+ 
+@@ -798,3 +1055,7 @@ def scan_and_redact(
+ ) -> Tuple[str, List[Finding]]:
+-    """Convenience: scan + redact in one call. Returns (redacted_text, findings)."""
++    """Scan + redact the SAME text. Returns (redacted_text, findings).
++
++    The redacted text is ``text`` with only the merged finding spans
++    replaced (see ``redact``); no normalization reaches the output.
++    """
+     findings = scan(

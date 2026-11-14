@@ -1,0 +1,55 @@
+PAYLOAD 30/32 — v1.4.3-rc.1..5805af55 (context-budget.py, derive-audit-family.py, diagnose-output-hook.py, env-inventory.json, gen-command-skill-hook-map.py, generate-available-models.py, lessons.py, local/_release_bump_sites.py, local/mac_sign_and_release.py [new], local/pair-rail-gate.sh, local/release.sh, model-deprecations.json)
+
+DECLARED CONDITIONS CHECKED AGAINST THIS PAYLOAD
+- Cond 3(a) holds. diagnose-output-hook.py:27-48. _isolated_child_env removes every carrier in _CHILD_LOCATION_CARRIERS, CEO_AUDIT_LOG_PATH included. It then sets HOME, CEO_AUDIT_LOG_DIR and CEO_PROJECT_STATE_DIR to paths under the TemporaryDirectory. The list matches the carriers in _lib/test_isolation.py:179-223 one for one. spool_writer.py only resolves paths through CEO_AUDIT_LOG_DIR and CEO_AUDIT_LOG_PATH, so no spool path escapes the isolation.
+- Cond 7 holds for the two facades here. lessons.py:203-209 and context-budget.py:198-203 are thin entry points.
+  * Bound functions resolve globals in the facade, so monkeypatch points still work.
+  * __file__ resolves to the facade. This matters for _lessons_parts/candidates.py:86, which must still find .claude/scripts/scan-injection.py. If it did not, every candidate would be quarantined as scanner_unavailable; it does find it.
+  * Defaults that are evaluated when a part is imported (cap=CANDIDATE_TEXT_MAX_CHARS) come from _lessons_parts/config.py and keep the same value.
+  * `if not __annotations__: del __annotations__` is safe on Python 3.9: install() creates the key with setdefault before the name is read.
+  * main, _render_human, _render_loops_human, scan_tool_loops, probe_status and every decide_* are all installed. _cli finds every name it uses.
+  * install.sh:1520-1549 copies every top-level _lib entry, so _lib/_lessons_parts and _lib/_context_budget_parts reach adopters.
+  * inject-agent-context.sh:994-1000 calls lessons.py and stays silent if it fails.
+- Cond 10 holds. pair-rail-gate.sh:220-235 accepts only the JSON statuses verified and compatible, and fails on rc=0 with any other status. _pair_rail_parts/part_01.py:553-571 with cli_currency.py:34-51: compatible requires a version at or above CODEX_VERSION_FLOOR "0.160.0" and strictly above the manifest package_version. The version is read from package.json, not by running the binary.
+- Cond 11 holds. release.sh: TARGET_BASE="1.4.4", and the title says "Maintenance release".
+- Cond 12 holds.
+  * _release_bump_sites.py:90 is ((?:--pin |git tag --list ['"]?)v)\d+\.\d+\.\d+ with replacement \g<1><target>.
+  * It rewrites all three INSTALL.md lines, 717 (git tag --list 'v1.4.4-rc.*'), 719 (--pin v1.4.4) and 722 (--pin v1.4.4-rc.1), and keeps the -rc.* and -rc.1 suffixes. INSTALL.md has no other --pin v or git tag --list sites.
+  * The live scripts/upgrade.sh is withheld from the copy. The staged copy (PLAN-180) prints "ERROR: unknown --pin ref" and exits 2, as declared.
+- Conds 4, 5, 6, 8 and 9: the release.sh headline matches the CHANGELOG [1.4.4] text I checked:
+  * "It only adds blocks" (CHANGELOG:91). posture_scan.py:571-585 runs the indirect scan only after every other check allowed, and only returns a deny. An exception reaches the hook's outer FATAL handler.
+  * The redactor ingress condition and "scheduled for the next release" (CHANGELOG:418-422).
+  * No branch protection (CHANGELOG:148).
+  * The "Version number." paragraph (CHANGELOG:72).
+- The model-family changes in this payload (generate-available-models.py and the model-deprecations.json exemptions) fall inside the declared cond 9.
+No declared condition is false against this payload.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1. The facade moves preserve behavior, the Python stays standard-library only and 3.9-compatible, and the only shipped scripts touched are lessons.py, context-budget.py, generate-available-models.py, gen-command-skill-hook-map.py, derive-audit-family.py and diagnose-output-hook.py. None of them is a hook, none fails closed on an infrastructure fault, and none writes outside its place.
+
+P2 FOLLOW-UPS
+1. P2 — .claude/scripts/local/pair-rail-gate.sh:180-181, 196-198, 241-242 (stale comments).
+   Failure: the comments still say Gate 3b runs codex "ONLY after Gate 4 verified the payload sha" and that exit 0 means "verified". The compatible arm now reaches the `codex --version` exec with no hash attestation. The runtime INFO line at :231 is honest; the comments are not.
+   Fix: reword them to "after Gate 4 returned verified or version-floor compatible (not hash-verified)".
+2. P2 — .claude/scripts/local/mac_sign_and_release.py:130 (automatic attestation), plus :16 and :113 (single-use constants).
+   Failure: cut_release always passes --npm-readme-reviewed to release.sh bump and only prints a reminder. That flag is a deliberate human tripwire (release.sh:58-61, 564-567), so the wrapper turns an attestation into a no-op. TRACK and the "Merge pull request #7" message are hard-coded: running sign-merge on a later train would produce a merge commit that names the wrong pull request. The script is maintainer-only; install.sh copies only top-level .claude/scripts/*.py.
+   Fix: require an explicit --npm-readme-reviewed (or an interactive confirmation) on the wrapper and forward it. Take the track and PR number as required arguments.
+3. P2 — .claude/scripts/gen-command-skill-hook-map.py:205-219.
+   Failure: the binder map ignores the package= keyword. For check_agent_spawn.py:128-129 (install(globals(), ..., package="_lib.agent_spawn")) the generator scans _lib/_audit_emit_parts/ instead of _lib/agent_spawn/. The map is right today only because the facade itself contains "SKILL.md" (3 hits). Also, :201 dropped errors="replace", so a hook that is not UTF-8 now crashes the generator.
+   Fix: when a binder call carries a package= keyword whose value is a string constant, use it. Restore errors="replace".
+4. P2 — .claude/scripts/generate-available-models.py:48-58 and :118-120.
+   Failure (a): if the _lib.model_currency import fails, the lambda fallback silently drops the family prefixes. --check then reports "drift" (exit 1) for what is really an infrastructure fault (exit 2).
+   Failure (b): the prefix branch never fires against the shipped ADR. ADR-149:778 writes the marker as a Markdown heading ("# MODEL_FAMILY_POLICY = ..."), outside any python fence, so _POLICY_FENCE_RE never matches. The MODEL_FAMILY_POLICY constant at :54 is unused. If someone later moves the marker into a fence, the generated availableModels gains gpt-/o-/gemini-/grok- prefixes and --check goes red against .claude/settings.json:797-806.
+   Fix: on ImportError, return 2 when the fence is present. Remove or test the unused branch, and state in ADR-149 or the docstring that the mirror stays explicit.
+5. P2 — .claude/scripts/model-deprecations.json:366-368.
+   Failure: the model-currency-family-prefixes exemption now covers all of _lib/model_currency.py. Its reason text describes a "_FAMILIES table" of vendor prefixes, but that file holds full ids: claude-opus-4-1 in _RETIRED, and claude-fable-5 and claude-fable-5-1 in _LEGACY_WORKING. _LEGACY_WORKING admits ids, so a retired id added there later would escape the deprecation scanner. This falls under cond 9 in substance; the reason string is inaccurate.
+   Fix: narrow the exemption to the _RETIRED and _PREFIXES lines, or correct the reason text.
+6. P2 — .claude/scripts/context-budget.py:199 and the module docstring (lines 62-64).
+   Failure: the new import, `from _lib._context_budget_parts import install`, is not guarded. If _lib cannot be imported, this advisory CLI exits with a traceback (non-zero), although the docstring promises "always 0", and the earlier degraded mode becomes unreachable (the "DEGRADED: _lib/injection_patterns unavailable" note). _context_budget_parts/inventory.py:14-15 also re-declares CHARS_PER_TOKEN and REDACTED to build HONESTY_NOTES, a second copy that can drift from the facade.
+   Fix: guard the install and print a degraded message with exit 0. Have HONESTY_NOTES read the facade constants.
+7. P2 — the two binders diverge: _lib/_audit_emit_parts/__init__.py:20-48, which lessons.py:204-206 reuses through package=, versus _lib/_context_budget_parts/__init__.py:27-52.
+   Failure: only the context-budget binder rebinds classes. A class added later to _lessons_parts would keep its part module's globals, and every facade name would raise NameError when called.
+   Fix: give lessons its own _lessons_parts.install, or move one shared binder that handles classes into _lib.
+
+VERDICT: GO Every declared condition this payload touches (3a, 7, 10, 11, 12 and the cond 9 model-family surface) holds against the code, the facade moves keep their behavior, adopter-facing paths stay fail-open, and the payload has no P0 and no new P1, only seven P2 follow-ups.

@@ -1,0 +1,71 @@
+PAYLOAD 27/32 (ceo-boot.py tail, ceo-cost-transcripts.py, ceo-restore.sh, ceremony-lint-waivers.json, check-active-hooks-executable.py, check-audit-real-loss.py, check-audit-registry-coverage.py, check-ceremony-script.py)
+
+DECLARED CONDITIONS CHECKED AGAINST THE CODE (all hold)
+- Condition 3(b): .claude/scripts/check-audit-real-loss.py:113-119. A record_id that is not a str now adds the file to malformed_record_id_files instead of raising TypeError. It is collected at :160/:190, reported at :208 and surfaced in attention at :269-270. Holds.
+- Condition 3(c): check-audit-real-loss.py:67 sets sys.dont_write_bytecode before `import audit_spool_state` (:71). audit_spool_state.py:62 sets it before `from _lib import runtime_paths` (:69). Holds.
+- Condition 7: ceo-cost-transcripts.py:248-252 and ceo-boot.py:114-116 are thin entry points over _lib/_cost_transcripts_parts and _lib/_ceo_boot_parts.
+  - ceo-boot main() moved complete to _ceo_boot_parts/lessons_cli.py:132-253. That includes the task-candidate markers and _emit_ceo_boot_emitted_safe on both the cached and uncached paths.
+  - Neither parts package is a kernel path. Neither script is a kernel entry point, so this is consistent with condition 5.
+  - The kernel binders (canonical_edit, agent_spawn, _audit_emit_parts, _pair_rail_parts) re-bind only top-level functions, so P2-1 below does not reach any governance hook.
+- CHANGELOG [1.4.4] restore claims match the code, except the trailing-slash nuance in P2-4.
+
+OTHER CHECKS
+- Python: stdlib only. No syntax beyond Python 3.9 in the parts, _restore_archive.py, check-active-hooks-executable.py or check-ceremony-script.py.
+- Fail direction:
+  - check-active-hooks-executable exits 2 on settings it cannot parse (closed).
+  - If the transcripts instrument fails to import, ceo-cost.py's loader catches it and degrades to a labelled note (open).
+  - Restore refuses links, traversal paths, key files, duplicates, sparse members and truncated archives before writing. It extracts only accepted members into a fresh mktemp stage, opening each with O_EXCL|O_NOFOLLOW.
+
+NEW FINDINGS (annex)
+- None at P1.
+
+P2 FOLLOW-UPS
+P2-1  .claude/hooks/_lib/_cost_transcripts_parts/__init__.py:54-56 (moved code, behaviour change)
+  - Cause: install() re-binds every class-dict FunctionType whose __module__ equals the part module. That includes the dataclass-generated __repr__ wrapper, because functools.wraps copies __module__ from the exec'd fn. On Python 3.13+ reprlib.recursive_repr copies it explicitly. The wrapper references the global _thread (3.9-3.12) or get_ident (3.13+) of its home module; the entry script has neither.
+  - Effect: repr()/str()/print() of any UsageRecord, ScanCounters, PricingResult or Priced built through the entry script raises NameError. The old single-file module did not.
+  - Scenario: printing transcript_rollup()'s result (it returns the pricing_result and counters objects), or a pytest/unittest failure message on these objects, crashes. No shipped path reprs them: collect() returns plain data.
+  - Fix: re-bind only methods whose __code__.co_filename is the part's own file (equivalently, skip functions with __wrapped__), or skip dataclass-generated methods entirely.
+P2-2  .claude/scripts/ceo-boot.py:120
+  - The entry script redefines check_tier_a_spec_version_drift after install(). TIER_A_CHECKS (_ceo_boot_parts/scheduled_cache.py:376) already captured the copy from model_persona.py:6.
+  - The bodies match today, but the visible copy is dead: editing it changes nothing at runtime.
+  - Fix: delete the entry-script copy.
+P2-3  .claude/scripts/ceo-cost-transcripts.py:32, :208, :241-243 (honesty)
+  - The docstring says _EMBEDDED_PRICING is "below"; it now lives in _cost_transcripts_parts/pricing.py.
+  - It says "this script writes nothing". It now imports seven helper modules without sys.dont_write_bytecode, so it writes __pycache__ beside them (same class as condition 3(c)).
+  - An empty "Pricing tables" header is left behind.
+  - Fix: correct the pointer, and set dont_write_bytecode before the imports or soften the claim.
+P2-4  .claude/scripts/ceo-restore.sh:175-176
+  - `--dest /path/link/` with a trailing slash makes `[ -L ]` false, so the link is accepted and resolved to its target. CHANGELOG says restore "refuses a link ... as the destination".
+  - Fix: strip trailing slashes from raw before the tests.
+P2-5  .claude/scripts/ceo-restore.sh:182-184
+  - _physical_dest requires an existing, non-link parent. DISASTER-RECOVERY.md Scenario D (new machine, no ~/.claude/projects) now exits 2 where the old script ran mkdir -p.
+  - On macOS, `--dest /tmp/x` is refused because /tmp is a symlink.
+  - Fails closed with a named error; no data at risk.
+  - Fix: check link-freedom on the nearest existing ancestor, then mkdir -p; or document the mkdir step.
+P2-6  .claude/scripts/ceo-restore.sh:292 vs :302-351
+  - The link pre-check runs before the confirmation prompt, which can wait indefinitely. cp follows a link planted in that window.
+  - Fix: re-run _preflight_targets after the prompt, immediately before copying.
+P2-7  .claude/scripts/ceo-restore.sh:179, :185
+  - `cd -P` inside $(...) prints the directory when an exported CDPATH resolves a relative --dest. DEST then holds two lines, and mkdir/cp write to a stray path.
+  - Fix: `CDPATH= cd -P`, or unset CDPATH at the top of the script.
+P2-8  .claude/scripts/ceo-restore.sh:243-245, :302-304
+  - The preview listing is cut at 50 lines without the old "use tar tzf" hint, while usage (:46-49) promises "every file". It also lists AppleDouble members that are never written.
+  - The confirmation prompt no longer names the CWD targets of --restore-plans and --restore-agent-metrics.
+  - Fix: restore the truncation hint and list the optional targets in the prompt.
+P2-9  .claude/scripts/ceo-restore.sh:257-263
+  - _refuse_link_ancestors stops only on string equality with stop. With DEST=/ or CWD=/, GNU `dirname //x` yields `//` and the loop never ends (degenerate case).
+  - Fix: also break when path is / or //.
+P2-10  .claude/scripts/check-active-hooks-executable.py:165-166
+  - Any hook type outside the five-entry table exits 2, which check_harness_config shows as RED in /ceo-boot.
+  - Advisory only, never blocks a session. But a type the Claude Code loader accepts and the table lacks would give adopters a false RED.
+  - Fix: keep the table in step with the loader, or downgrade unknown types to a named warning.
+P2-11  .claude/scripts/check-audit-real-loss.py:44-47
+  - The docstring's attention paragraph names only g6_journal_malformed_lines; the new g6_malformed_record_id_files (:270) is undocumented.
+  - Fix: add it.
+
+NOTHING TO REPORT
+- ceremony-lint-waivers.json: valid JSON; 47 content-sha-pinned waivers for already-run historical files.
+- check-ceremony-script.py: R9 and R10 run only in CI and the maintainer pre-commit hook, never in an adopter session.
+- check-audit-registry-coverage.py: now also reads emit_* definitions from _audit_emit_parts.
+
+VERDICT: GO The declared conditions this payload touches (3(b), 3(c), 7) hold against the code and no P0 was found; the moved-code repr regression in the cost-transcripts loader and the restore-script edge cases do not affect governance hooks or adopter sessions, so they are listed as P2 follow-ups.

@@ -1,0 +1,19 @@
+Payload 24: No P0 or false declared condition found. The query and budget refactors passed Python 3.9 binding and read-only behavior checks. Bytecode suppression precedes the local helper import.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/audit-verify-chain.py:589
+The strict counter reader validates only the first 64 bytes without checking EOF. Invalid trailing content can remain undetected, allowing an illegible counter to produce an intact result. Minimal fix: reject oversized counters or validate through EOF.
+
+P2 — .claude/scripts/caller_repo_guard.py:53
+The environment filter retains GIT_COMMON_DIR, which can redirect shared refs despite git -C. A harness inheriting this variable can miss changes to the named repository’s branches or tags. Minimal fix: remove GIT_COMMON_DIR from the child environment.
+
+P2 — .claude/scripts/audit-verify-chain.py:583
+PermissionError while inspecting the counter path becomes exit 3, although the strict contract specifies exit 4 for permission failures. This misclassifies an inaccessible counter directory as malformed input. Minimal fix: catch PermissionError before OSError and return EXIT_PERM.
+
+No files modified.
+
+VERDICT: GO-WITH-CONDITIONS No release-blocking defect was established in this payload, but three P2 robustness follow-ups remain.

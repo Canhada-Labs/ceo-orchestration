@@ -1,0 +1,5 @@
+.claude/scripts/audit-query.py
+.claude/scripts/audit-verify-chain.py
+.claude/scripts/audit_spool_state.py
+.claude/scripts/budget-summary.py
+.claude/scripts/caller_repo_guard.py

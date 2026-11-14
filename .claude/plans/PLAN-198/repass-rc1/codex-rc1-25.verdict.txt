@@ -1,0 +1,11 @@
+Payload 25/32: no P0 or declared-condition contradiction found.
+
+NEW FINDINGS (annex)
+P1 — .claude/scripts/ceo-backup.sh:255 — Failed memory traversal publishes an incomplete backup. The process-substitution find command can fail on an unreadable directory or filesystem error without propagating its status through set -euo pipefail. The script then archives the partial snapshot, publishes its checksum, reports success, and runs retention. Repeated failures can eventually prune the last complete backup; the documented cron invocation suppresses diagnostic output. Previously, recursive cp propagated traversal failures.
+Minimal fix: complete find into a temporary NUL-delimited list outside the archive staging directory, explicitly check its exit status, and abort before publication or rotation on failure.
+
+P2 follow-ups: none.
+
+Validation: Bash syntax passed; a read-only shell check confirmed that a failed process-substitution producer permits execution to continue. No files modified.
+
+VERDICT: GO-WITH-CONDITIONS The backup-completeness regression warrants an annex finding, but this payload establishes neither a false declared condition nor a P0.

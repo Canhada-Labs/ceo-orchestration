@@ -1,0 +1,46 @@
+PAYLOAD 24/32: review of v1.4.3-rc.1..5805af55. Files: .claude/scripts/audit-query.py, audit-verify-chain.py, audit_spool_state.py, budget-summary.py and caller_repo_guard.py (new). I read the extracted modules in the candidate tree as well: .claude/hooks/_lib/_audit_query/*, .claude/hooks/_lib/_budget_summary_parts/*, scripts/install.sh, scripts/build-plugin.py, .claude/scripts/mcp-server/handlers/audit_query.py and .claude/scripts/check-audit-read-api-stable.py.
+
+DECLARED CONDITIONS CHECKED AGAINST THIS PAYLOAD
+- Condition 3(c) is TRUE. audit_spool_state.py:62 sets sys.dont_write_bytecode = True before the sys.path walk and before `from _lib import runtime_paths` (line 69). check-audit-real-loss.py sets it at line 67, before `import audit_spool_state` (line 71). No hook imports audit_spool_state, so flipping this global affects only the two read-only CLIs.
+- Condition 7 is consistent. audit-query.py and budget-summary.py keep their paths and become facades over the new _lib packages. scripts/install.sh:1520-1549 (install_lib_selective) copies every top-level _lib entry, subdirectories included, and scripts/build-plugin.py:345 copytrees _lib. So _lib/_audit_query/ and _lib/_budget_summary_parts/ reach both fresh installs and the plugin. Neither package is on the condition-5 kernel list, and the condition does not claim they are.
+- No other declared condition is touched by this payload.
+
+MOVED-CODE ANALYSIS (item 4). No defect found.
+- audit-query.py:177-228. `FunctionType(code, globals(), ...)` rebinds every function in queries, reporting, reporting_health, domain, rendering, labeling, critical and parsing into the facade's globals. Effects:
+  - Test monkeypatches and the cross-calls behave as before: cmd_health → cmd_compliance/cmd_metrics, and cmd_stats → _tool_latency_stats/_percentile.
+  - __file__-relative paths keep their old meaning. labeling._compute_label_hmac still resolves `<.claude>/hooks/_lib` for audit_hmac, so the label HMAC chain keeps its key path. _LABEL_STORE_PATH is reset to the facade's directory at :203.
+  - Every free name used in the extracted bodies resolves in the facade. Imports and constants arrive through __all__ plus deepcopy, and helpers through the rebinding.
+  - No extracted name collides with a facade name defined before the rebinding (default_log_path, default_errors_path, discover_logs, read_entries).
+  - The read-API freeze guard (check-audit-read-api-stable.py:111-125, top-level public defs) still sees all 19 baseline names, because the wrappers are real defs.
+  - The MCP handler gets the same cmd_* attributes. If the import fails, the MCP handler stays fail-open (warning import_failed:*).
+  - All __all__ symbols exist. _CRITICAL_SECURITY_ACTION_SET is at critical.py:248.
+- budget-summary.py:370-397 does the same rebinding. Every old function name is accounted for across the six parts, and every free name they use exists in the facade. The only default evaluated at definition time is validate_memory_claim, and its part defines the matching constants.
+- Python 3.9 / stdlib only: both hold in every file reviewed. The FunctionType 5-argument form, string annotations under `from __future__ import annotations`, and namespace-package import of _budget_summary_parts (no __init__.py) all work on 3.9.
+
+FAIL DIRECTION / BLAST RADIUS. No hook runs any of these files, so no governance hook, model, effort or session path changes.
+- audit-verify-chain.py: without the flag, behavior is unchanged.
+  - The pre-scan only reads flags.
+  - _ContractParser falls back to stock argparse.error when the run is not strict.
+  - verify() is called with the counter off, as before, since --counter-override was ignored without the flag.
+- With --strict-against-counter the direction is closed on input it cannot read, which matches item 2:
+  - an illegible, empty or non-regular counter → rc 3;
+  - an invalid override → rc 3;
+  - an undecodable log → rc 3;
+  - a FIFO is refused via O_NONBLOCK + fstat on the same descriptor;
+  - a counter that is truly absent → rc 0, with chain_length_source:"absent" shown.
+  - The counter is now read before the walk, not after it. That removes the old race where a concurrent append made a clean log look truncated.
+- No writes outside their place. caller_repo_guard only reads git and writes the --out path its caller names.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+1. P2 — .claude/scripts/audit-verify-chain.py:491-502 vs CHANGELOG.md:300-308. Under --strict-against-counter --json, the chain_length_truncation report used to carry the counts as strings in expected_hmac/actual_hmac. Those fields are now null, and the counts move to new keys verified_count/expected_length. The [1.4.4] section does not say so. Scenario: an adopter's DR script that read the counts from the old fields now reads null. Fix: one CHANGELOG line naming the field move.
+2. P2 — CHANGELOG.md:305 says "An unreadable counter exits 3". The code (audit-verify-chain.py:553-557) and its own docstring (:46-47) return rc 4 when opening the counter is refused for permissions. Fix: say "exits 3 (4 when permission is refused)".
+3. P2 — .claude/hooks/_lib/_budget_summary_parts/native_reconciliation.py:3-6 and :564-569 duplicate MEMORY_CLAIM_* from budget-summary.py:102-105. validate_memory_claim's defaults bind to the part's copy at definition time. Scenario: a future edit to the facade's band silently leaves --validate-memory-claim on the old band. Fix: use None defaults and read the facade's globals at call time, or keep one source.
+4. P2 — .claude/scripts/caller_repo_guard.py:53. The comment says the environment cannot re-point the repository being checked, but only GIT_DIR and GIT_WORK_TREE are removed. GIT_COMMON_DIR or GIT_OBJECT_DIRECTORY inherited from a harness can still redirect the ref and HEAD reads. Fix: also drop GIT_COMMON_DIR, GIT_OBJECT_DIRECTORY, GIT_INDEX_FILE, GIT_NAMESPACE and GIT_CEILING_DIRECTORIES, or every GIT_* location variable.
+5. P2 — .claude/scripts/audit-verify-chain.py:616 and :655. In strict stdin mode the code wraps sys.stdin.buffer and closes it in the finally block. That is harmless for the CLI, but a second in-process main([... '--stdin', '--strict-against-counter']) call finds stdin closed. Fix: detach() the wrapper instead of close() when it wraps stdin.
+6. P2 (cosmetic) — .claude/scripts/audit-query.py:391. The comment "# Default window for by-domain ..." is now orphaned, because the constant moved to _lib/_audit_query/domain.py. Same for the section banner above it. Fix: delete or point it to domain.py.
+
+VERDICT: GO Condition 3(c) holds against the code and condition 7 matches the facades. The audit-query and budget-summary facades keep names, globals, patch points, __file__-relative paths and the freeze-guard surface. The strict audit-verify-chain mode closes on input it cannot read and leaves the non-flag path unchanged. Only documentation and maintenance P2 items remain, with no P0 or P1 in this payload.

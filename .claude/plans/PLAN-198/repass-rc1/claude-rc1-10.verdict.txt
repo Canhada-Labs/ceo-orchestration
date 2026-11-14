@@ -1,0 +1,37 @@
+PAYLOAD 10/32: _night_mode_parts/toggles.py, _pair_rail_parts/*, _policy_parts/*, _precompact_parts/__init__.py and ledger_index.py. I read each part against the facade that loads it (check_pair_rail.py, _lib/policy.py, check_precompact_continuity.py, .claude/scripts/night-mode.py) and against cli_currency.py, check_arbitration_kernel.py and the kit.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES (checked against the code)
+- Condition 5 is TRUE. `_policy_parts/**/*` and `_pair_rail_parts/**/*` are rows of `_KERNEL_PATHS` (check_arbitration_kernel.py:311 and :315). `_night_mode_parts` and `_precompact_parts` are not, which matches their facades: night-mode.py is canonical-tier on purpose (lines 274-276), and check_precompact_continuity.py was never kernel.
+- Condition 7 is TRUE, with one exception, which is P2-2 below.
+- Condition 9 is TRUE. `_apply_currency_policy` (part_01.py:553-571) goes through `compatible_package_version`. That function requires a stable version that is both at or above the floor and strictly newer than the manifest's `package_version` (cli_currency.py:49). The version is read from any ancestor `package.json` named `@openai/codex`, so no hash is involved, as declared. An installed version equal to the manifest's with a different sha256 still ends as `mismatch`, which blocks.
+- Condition 10 is TRUE. `_verify_pin_cli` returns 0 for both `verified` and `compatible` (part_04.py:510). Beyond what this payload covers, gen_envelope.py:1077-1100 refuses a version below the floor, a malformed sha, and a triple absent from the manifest. So a reviewer on a triple the manifest does not pin, where the oracle returns no sha, cannot get in.
+
+MOVED-CODE CHECKS (item 4), all clean
+- Pair-rail: `install()` rebuilds every exported function with the facade's globals. So patching `check_pair_rail._resolve_codex_bin` (or `_invoke_codex_review`, or `_L3_PLUS_GLOB_PATTERNS`) still takes effect. `global _CURRENT_REVIEW_ID` and `_RUBRIC_CATALOGUE_CACHE` write into the facade. `Path(__file__)` lookups resolve to `.claude/hooks/` as before.
+- `_cli_currency` is bound in the facade (check_pair_rail.py:21). Without that, the rebuilt `_apply_currency_policy` would raise NameError, `verify_codex_payload` would catch it and return `infra`, and a payload sha mismatch would fail open. That does not happen.
+- Exception classes are the same objects in the facade and in the parts. `deepcopy` returns regexes and classes unchanged.
+- Policy and PreCompact: the parts are run with `exec` inside the facade module. Names are looked up when called, so load order does not matter. The three parser mixins share no method names. Dataclass string annotations resolve against `sys.modules[__name__]`, the same as the old single file.
+- Night-mode: helpers.py `__all__` exports every name toggles.py uses. The NF-04 `ast` check (tests/test_night_mode.py:1728 and :1846) now reads toggles.py, so the comment that cites it stays true.
+- Fail direction: every new import or read failure fails open (hook exit 1, or `{}`). The ledger index refuses symlinked ancestors and leaves, and FIFOs, and only degrades the index. Night-mode only rewrites `permissions.defaultMode` and replaces files atomically rather than writing through a symlink.
+- Standard library only, and nothing above Python 3.9.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+P2-1 (honesty) part_01.py:408-412 and part_04.py:499. These docstrings still say every shape compares sha256 and that "no env relaxes this comparison". The status list leaves out "compatible", and exit 0 is documented as "verified" only. The code now accepts `compatible` with no sha match. Fix: add `compatible`/`version_floor_only` to both docstrings.
+
+P2-2 (moved code / condition 7) check_pair_rail.py:29-210 redefines `_invoke_codex_review` after `_install_parts`. That copy replaces the one at part_02.py:22, so the copy in the module is dead code. A future fix applied in part_02, where condition 7 says the logic now lives, would silently do nothing. Both files are kernel, so protection is not reduced. Fix: delete one of the two copies, or give the part_02 copy a comment saying it is shadowed.
+
+P2-3 (honesty plus fail direction) part_01.py:477-486, on a triple the manifest does not pin (it pins only aarch64-apple-darwin):
+- `compatible` returns before any hashing, and `path` is set to the launcher (or to the `CEO_PAIR_RAIL_CODEX_BIN` override). The hook then runs the npm launcher, which picks its own native binary.
+- So CHANGELOG.md:191-193 ("The payload's sha256 is still computed and recorded") is false on this route. So are part_02.py:62-66 ("the artifact that was hashed is the artifact that runs") and part_01.py:575 ("native payload").
+- If the override path does not exist but an ancestor `package.json` qualifies, the route still ends as `compatible`. Running it then fails, raises CodexUnavailable, and the review becomes advisory. That contradicts the "inexistente = BLOQUEIA" docstring (part_01.py:398-402). Reaching this requires control of the environment Claude Code starts with.
+- Fix: do the override `is_file()` check before the currency arm, and fix the three texts.
+
+P2-4 (inconsistency) cli_currency.py:49 uses a strict `> manifest_version`, and that also governs the absent-triple route. On a host with an unpinned triple, Codex exactly 0.160.0 ends as `triple_missing` and blocks every L3+ write, while 0.160.1 passes as `compatible`. This only affects source checkouts. Installs have no `.claude/governance/`, so they end as `infra` and fail open (CHANGELOG.md:204-206). It does not regress the base, where any version on an unpinned triple blocked. Fix: on the absent-triple route, accept a version greater than or equal to the manifest's, or add triples to the manifest.
+
+P2-5 (comment) _lib/policy.py:126. The comment "Opt-out: CEO_POLICY_ENGINE_DISABLE=1 reverts..." sits on the line that installs the parts. The variable is read only in policy_dispatch.py:128. Fix: move the comment or reword it.
+
+VERDICT: GO Every declared condition this payload touches (5, 7, 9, 10) matches the code, the split part modules keep the facades' globals, test patch points and fail direction, and only stale docs and narrow P2 issues remain, with no P0.

@@ -1,0 +1,43 @@
+PAYLOAD 28/32: v1.4.3-rc.1..5805af55. Files: .claude/scripts/check-installer-write-safety.py (rewritten as a thin facade), .claude/scripts/check-subprocess-tests.py (new), .claude/scripts/check-substrate-drift.py (new Codex "compatible" branch), .claude/scripts/check-substrate-watch.py (Codex floor currency).
+
+DECLARED CONDITIONS CHECKED AGAINST THIS PAYLOAD
+- Condition 7 (thin entry points over _lib modules) holds. check-installer-write-safety.py keeps its path and puts the package namespace back into its own globals through _lib/_installer_write_safety.bind(). Condition 7 promises the same paths, not identical behavior, and the CHANGELOG says no differential replay was run. The import-behavior difference I found is therefore a finding, not a false condition (F1).
+- Condition 9 (Codex pin) holds. The Codex pin check passes as "compatible" only a version >= cli_currency.CODEX_VERSION_FLOOR that is also strictly newer than the manifest version (_pair_rail_parts/part_01.py:553-571; cli_currency.py:34-50). Condition 9 makes no claim about the substrate-drift diagnostic in F2.
+- No other declared condition is touched by this payload. I found nothing that contradicts any of them.
+
+FINDINGS
+
+F1. P2. Moved code changes exception behavior. In the facade, Incomplete is no longer a subclass of ParseError.
+- Where: .claude/hooks/_lib/_installer_write_safety/__init__.py:36. The clone is built as type(original)(name, original.__bases__, attrs). syntax.py:10 defines Incomplete(ParseError).
+- Cause: bind() clones ParseError into ParseError' and Incomplete into Incomplete'. Incomplete' keeps the ORIGINAL syntax.ParseError as its base, not ParseError'. Every bound function looks names up in the facade, so `raise Incomplete` raises Incomplete', and `except ParseError` catches only ParseError'. The fail-closed handlers no longer catch what _read_balanced, _read_dquote and lex raise. Affected handlers:
+  - commands.py:129-133 (_expansion_refs: "An expansion we cannot delimit. Same fail-closed answer.")
+  - operands.py:33-37 (canon_operand)
+  - model.py:318-321, 342-345 and 630-633
+  - verdicts_b.py:141, 440 and 447
+  build_logical_lines still works because it catches `except Incomplete` and re-raises ParseError'.
+- Failure scenario: any scanned scripts/**/*.sh containing one of these makes the census die with a traceback instead of reporting an `indeterminado` site:
+  - sed 's/${//' "$f". canon gives the sed side "${", and _names_in_text then raises an uncaught Incomplete'.
+  - dd if=/dev/zero "of=$dst". The dd branch builds Tok('$dst"'), and canon_operand then raises.
+  The v1.4.3 code handled both fail-closed.
+- Impact: the exit code is still non-zero, so the validate.yml gate still blocks and the fail direction is unchanged. But the census loses its --json report and its "report what it does not understand" contract, and crash exit 1 looks the same as drift exit 1. This instrument does not run in adopter hooks. Today's corpus does not trigger it, since CI passes.
+- Minimal fix: in _bind_class, return BaseException subclasses unchanged (they have no methods that use globals), or rebuild bases through a map from original to clone. Add a test, run through the entry point, that asserts issubclass(Incomplete, ParseError) and checks that the sed 's/${//' fixture produces an indeterminate site.
+
+F2. P2 (honesty, diagnostic fails open). check-substrate-drift.py reports an installed Codex older than the pinned one as "compatible".
+- Where: .claude/scripts/check-substrate-drift.py:571-578.
+- Cause: the new branch tests in_range(installed, pin["range"]). The shipped .claude/governance/codex-cli-pin.txt:199 reads ">=0.128.0". The pair-rail's compatible route uses the code constant 0.160.0 and also requires a version strictly newer than the manifest.
+- Failure scenario: an installed codex 0.150.0 against the 0.160.0 pin now gets CODEX_INSTALLED_COMPATIBLE at severity "info", with the message "meets the unbounded semantic floor >=0.128.0 ... the payload hash is verified separately", and no restore advice. `--strict` (line 1278) now exits 0. Meanwhile check_pair_rail --verify-codex-pin returns mismatch/payload_sha256_mismatch, and the rail fails CLOSED at the next L3+ call. That is exactly what the CODEX_INSTALLED_NOT_PINNED finding this branch replaced used to predict. The older-than-pin restore branch (lines 583-587) is now unreachable for 0.128.0 up to 0.159.x.
+- Context: the Known-open entry declares the pin-file vs ADR-182 floor disagreement, but not this effect on the diagnostic. No automated gate consumes this script, and installs do not receive .claude/governance/.
+- Minimal fix: require compare_semver(installed, max(pin floor, cli_currency.CODEX_VERSION_FLOOR)) >= 0 AND installed > pinned (the same test as compatible_package_version). Otherwise fall through to CODEX_INSTALLED_NOT_PINNED. Add a test using the shipped ">=0.128.0" range; the current test_cli_floor_consumers.py:42-51 only uses ">=0.160.0".
+
+NEW FINDINGS (annex)
+None at P1 or above. F1 and F2 are recorded as P2 for the reasons given: the fail direction of the gates is kept, and no adopter hook is affected.
+
+P2 FOLLOW-UPS
+- P2. .claude/scripts/check-substrate-watch.py:267-269. When a codex row is marked "compatible" and installed != last_seen, the status is "current" with the summary "installed matches last_seen for all components", which is then false. The module docstring (lines 17-25 and 41-47) still says any installed/last_seen difference is drift and that a codex drift attaches the fixture re-record runbook. A Codex upgrade at or above 0.160.0, including the codex_harness hook-host key whose fixtures date from 0.139.0, no longer shows the runbook. Fix: give "compatible" rows their own summary line and update the docstring.
+- P2. .claude/scripts/check-substrate-watch.py:67. `from _lib import cli_currency` runs at import time without a guard. If the module is missing, the script crashes, although the docstring promises infra fail-open and build_report "NEVER raises". Impact is contained: validate.yml:209-213 turns a non-zero exit into a warning. Fix: wrap the import in try/except and skip the currency arm when it fails.
+- P2. .claude/scripts/check-subprocess-tests.py:16 and scripts/install.sh:1606-1608. The installer copies top-level *.sh, *.py and *.yaml files, so this helper reaches installs (CHANGELOG [1.4.4] says so). Its default baseline, subprocess-test-baseline.json, is not copied, so on an install the helper exits 2 with FileNotFoundError. Fix: ship the baseline, or report "no baseline (maintainer-only tool)" with exit 0, or leave the helper out of installs.
+- Note, no defect: instrument_sha256 now hashes the entry point plus the package's *.py files. Published census digests from before and after the split are not comparable, as the docstring says.
+
+Python: check-subprocess-tests.py and _subprocess_census.py use only the standard library and work on Python 3.9 (the f-strings, min(default=) and the version-gated ast.dump option are all fine). The facade uses types.FunctionType and copy.deepcopy, both of which work on 3.9.
+
+VERDICT: GO In this payload no declared condition is false against the code and there is no P0: the two concrete defects found, the lost subclass link between Incomplete and ParseError in the installer-census facade and the substrate-drift "compatible" verdict for a Codex older than the pin, keep the gates failing in the blocking direction and do not reach adopter hooks, so they are P2 follow-ups.

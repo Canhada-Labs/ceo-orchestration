@@ -1,0 +1,84 @@
+PAYLOAD 16/32 REVIEW. Files in this payload: .claude/hooks/_lib/audit_emit.py (tail of the facade rewrite), _lib/bash_indirect_guard.py (new), _lib/bash_indirect_telemetry.py (new), _lib/canonical_edit/__init__.py (new), _lib/canonical_edit/decisions.py (new). Method: I read the code only. No shell was available, so every scenario below is a hand trace of the code and was not executed.
+
+DECLARED CONDITIONS CHECKED AGAINST THIS PAYLOAD (none found false)
+- Condition 5 holds. check_arbitration_kernel.py:309-340 has the 13 rows: seven recursive package rows, including canonical_edit/**/* and _audit_emit_parts/**/*; the five flat modules, including bash_indirect_guard.py and bash_indirect_telemetry.py; and adapters/live/**/*. The matcher treats ** as zero or more segments (line 369), so files directly in each package are covered.
+- Condition 6 holds. _bash_safety_parts/posture_scan.py:571-584 reads CEO_BASH_INDIRECT_GUARD and CEO_BASH_INDIRECT_HEURISTICS from the trusted_env snapshot. Only the value "0" disables. A snapshot exception leaves the scan on. decisions_cli.py:168-174 sends the disable telemetry inside a try, so it cannot change the verdict.
+- Condition 7 holds for audit_emit (a 496-line facade over 33 installed parts) and for the canonical_edit binder.
+- ADR-186 is preserved. canonical_edit/decisions.py decide() keeps the wall-deadline fail-CLOSED check at the top of the sentinel loop and again after the loop.
+
+FAIL DIRECTION, STDLIB AND PY3.9
+- Infrastructure faults fail open:
+  - An exception or import failure in the guard reaches the outer except in decisions_cli.py:243-249, which allows.
+  - This runs only after every earlier check has already returned allow, so the guard stays a pure additional veto.
+  - _canonical_target returns False on ImportError.
+  - The telemetry swallows every failure.
+- Input the matcher cannot parse fails closed: an unparseable shell body in strict mode, and the depth, size and word limits. The CHANGELOG declares this.
+- Everything is standard library only. No syntax beyond Python 3.9.
+
+MOVED CODE (audit_emit facade)
+- All 37 typed emitters this piece removes are defined in the parts (harness, lifecycle, defense, routing, pair_rail and others).
+- Parts import nothing at top level except re, time and relative imports. Function bodies use only names the facade defines, or import hashlib, unicodedata and re locally. I grepped for runtime use of other modules and found none.
+- Nothing exported would escape rebinding: no classes, decorators or lambdas, and no exported containers that hold functions.
+- The locks are not exported (deepcopy would raise on them). The facade recreates them at audit_emit.py:483-484, before anything can call the code that uses them.
+- _GENERIC_DISPATCH_HANDLERS is rebuilt in the facade from the bound handlers (audit_emit.py:464-470).
+- The learning_rail_disabled enums at _audit_emit_parts/lifecycle_schemas.py:508-517 include the values the new telemetry sends.
+
+P0: none found.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:156-178 (the result is returned through _scan at :492-493)
+- Defect: the $( ) and <( ) matcher ignores quotes and only counts "$(" as an opening. The first ")" ends the substitution, even when that ")" is inside a quoted string. The truncated body is then scanned in strict mode. It usually has an unclosed quote, so shlex raises ValueError and the scan returns BLOCK bash_indirect_unparseable_shell.
+- Scenario, on by default for every adopter. Each of these legitimate commands is blocked:
+  - echo $(python3 -c "import sys; print(sys.version)")
+  - VERSION=$(node -p "require('./package.json').version")
+  - git log -1 --format with a quoted format containing parentheses, inside $( )
+  - $(jq '.items | map(.id)' f)
+  - $(awk '{print substr($1,1,3)}' f)
+  - diff <(jq -S '.a | map(.b)' x) y
+- The block names "indirect shell execution". CEO_BASH_INDIRECT_HEURISTICS=0 does not help; only CEO_BASH_INDIRECT_GUARD=0, set before Claude Code starts, does.
+- The legitimate-allow corpus in tests/test_check_bash_safety_indirect_exec.py:66-82 has no $( ) case with a parenthesis inside quotes.
+- Minimal fix:
+  - In the inner cursor loop, track single and double quotes and backslash escapes.
+  - Count a bare "(" as an opening outside quotes.
+  - If no balanced ")" is found, leave the command to the existing guards instead of blocking in strict mode.
+  - Add the cases above to the allow corpus.
+
+P2 FOLLOW-UPS
+
+1. Here-doc consumer misattributed (bash_indirect_guard.py:224-235). The consumer is the first word of the whole prefix since the last here-doc, not the command that actually reads the here-doc.
+   - False positive: bash scripts/test.sh && git commit -m "$(cat <<'EOF' / Don't break it / EOF)". The commit message is parsed as shell, the apostrophe leaves an unclosed quote, and the command is blocked as unparseable. The same happens for any command that starts with sh, bash, zsh, dash, ksh or eval and later passes a here-doc to a data tool.
+   - False negative: cd x && bash <<'EOF' and sudo bash <<EOF are never scanned.
+   - Fix: take the consumer from the segment that holds the << operator, after _normalise.
+
+2. Comment handling treats { and } as word boundaries (_prelex at bash_indirect_guard.py:96). In bash, braces are not metacharacters, so # after them does not start a comment.
+   - Scenario: echo $(( ${#arr[@]} - 1 )), or a backtick or $( ) containing ${#x}. The rest of the line is stripped as a comment, the $( has no closing parenthesis, and the command is blocked as unparseable.
+   - Fix: drop "{}" from the boundary set.
+
+3. Whole-command size limit (bash_indirect_guard.py:19 MAX_BODY_BYTES=16384, checked in _scan at :472-473). Any Bash command over 16,384 characters is blocked, including a plain here-doc file write.
+   - The CHANGELOG declares a size limit but gives no number. Its adopter notes mention only indirect forms and unparseable bodies.
+   - The block reason says "indirect shell execution".
+   - The module docstring (lines 1-6) says unrecognised input is left to the existing guards, which is not true for the limits or strict mode.
+   - Fix: give the number in the docs, word the reason per code, and correct the docstring.
+
+4. Interpreter operands treated as write targets (bash_indirect_guard.py:455-461). An operand after python, node, ruby or perl -c/-e is checked as a canonical write target with no evidence of a write.
+   - Read-only commands are blocked as bash_computed_canonical_target, for example python3 -c "import ast,sys; ast.parse(open(sys.argv[1]).read())" .claude/hooks/x.py.
+   - Python's -E (ignore environment) is also treated as an eval flag.
+   - Fix: limit this to -c/-e/--eval for each interpreter and require a write signal.
+
+5. Brace expansion applied to quoted words (bash_indirect_guard.py:322-345, :364-371). Bash does not brace-expand inside quotes. A JSON, jq or Python-dict argument with more than 128 comma items, or two arguments whose counts multiply past 128, is blocked as bash_indirect_limit.
+
+6. Heuristics switch scope undocumented. CEO_BASH_INDIRECT_HEURISTICS=0 also turns off the env ambiguous-launcher form (bash_indirect_guard.py:357-362). The CHANGELOG names only the computed-verb and opaque-feeder forms.
+
+7. Dead action registry. _audit_emit_parts/actions.py, actions_core.py and actions_extended.py are not in the install tuple at audit_emit.py:415-452, and nothing imports them. The live _KNOWN_ACTIONS is the literal at audit_emit.py:45-377. The header of actions_extended.py names a module "schemas_actions" that does not exist. An action added to these files later would be dropped silently as unknown. Fix: delete them, or install them and remove the literal.
+
+8. Dead branches in the facade.
+   - audit_emit.py:473-480: emit_generic has three identical branches.
+   - audit_emit.py:21, 382-383, 457-461: iter_events is defined twice and _streaming is reassigned.
+   - The two named actions do have real scrub branches (generic_dispatch_04.py:62 and :159), so behavior is not affected. But a grep-based atomicity test would now pass on the facade text alone.
+
+9. Disable markers never cleaned (bash_indirect_telemetry.py:52-58). Two marker files per session accumulate under the audit family directory, with no cleanup. Cosmetic.
+
+10. Cross-payload note, outside this diff. When the canonical_edit binder import fails, check_canonical_edit.py:622-640 blocks every Edit and Write on ImportError (fail-closed on an infrastructure fault) and allows every edit on any other exception. Its guards import at :118-127 falls back to an empty guard list. Please confirm whether that asymmetry is intended in the payload that carries check_canonical_edit.py.
+
+VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches holds against the code and no P0 was found, but the on-by-default indirect guard has an undeclared P1 that blocks common legitimate $( ) commands with a parenthesis inside quotes, so it must go into the signed annex and Known-open or be fixed before the GA.

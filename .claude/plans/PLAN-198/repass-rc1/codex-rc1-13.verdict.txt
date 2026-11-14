@@ -1,0 +1,8 @@
+Payload 13: namespace binding, export completeness and benign Python 3.9.6 checks passed.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/_lib/agent_spawn/skill_reference.py:98: Invalid pathname input can raise ValueError during resolution, but the handler catches only OSError subclasses. The exception reaches agent_spawn/entrypoint.py:63-68, which allows the spawn instead of rejecting the malformed reference. Minimal fix: reject invalid pathname syntax and translate input-derived ValueError into REASON_REFERENCE_UNSAFE_PATH. Preserve fail-open handling for infrastructure errors. Static finding; whether it predates the extraction is unverified.
+
+P2 follow-ups: none.
+
+VERDICT: GO-WITH-CONDITIONS No P0 or false declared condition was identified in this payload, but the input-validation failure requires follow-up.

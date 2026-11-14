@@ -1,0 +1,29 @@
+PAYLOAD 13/32 - SCOPE: two new files, .claude/hooks/_lib/agent_spawn/prompt_rules.py (559 lines) and .claude/hooks/_lib/agent_spawn/skill_reference.py (319 lines), part of the PLAN-197 split of check_agent_spawn.py (conditions 5 and 7).
+
+WHAT WAS VERIFIED (against the candidate tree)
+1. Same text as before the split. Every function and constant in both files is textually identical to the copy before the split at .claude/plans/PLAN-182/staged-w1/tree/.claude/hooks/check_agent_spawn.py (lines 969-1489, 1508-1792, 2208-2360). That includes the secret-pattern catalog, the PEM regex, the 12 reason codes, _FA_FENCE_RE, the prompt-defense hint set and the kill-switch semantics. Limit: that file is a staged plan snapshot, not the v1.4.3-rc.1 tag itself; the identity is to that snapshot.
+2. Every free name resolves. Neither file imports what it uses (skill_reference imports nothing; prompt_rules imports only re). check_agent_spawn.py:137-139 loads model_routing, advisories and prompt_rules through _lib._audit_emit_parts.install, which rebinds each function onto the hook's globals and deep-copies the non-function values. check_agent_spawn.py:641-647 binds skill_reference and file_assignment through _lib/agent_spawn/__init__.py:bind. Every free name these files use exists in the hook namespace at call time:
+   - _HTML_COMMENT_RE, _CODE_FENCE_RE, _NEXT_H2_RE, _SKILL_CONTENT_MARKER_RE and _SKILL_CONTENT_MIN_BYTES come from advisories.__all__ (advisories.py:5);
+   - os, re, hashlib, unicodedata, Path, _redact, _audit_emit and _AUDIT_EMIT_AVAILABLE come from the hook (check_agent_spawn.py:39-79);
+   - the REASON_* constants and the _SKILL_REFERENCE_* regexes come from prompt_rules.
+   All 63 names in prompt_rules.__all__ and all 10 in skill_reference.__all__ are defined. No name appears in two parts' __all__, and none collides with a definition in the hook itself.
+3. Import safety. Both files import cleanly on their own. The module-level annotations (List[...], re.Pattern[str]) stay as strings under `from __future__ import annotations`. Regex patterns deep-copy as themselves on 3.7+. Standard library only; compatible with Python 3.9.
+4. Fail direction. A component that fails to import gives `{}` and exit 0 under __main__ (check_agent_spawn.py:126-135), or main() allows when _SPAWN_COMPONENT_IMPORT_ERROR is set (entrypoint.py:12-16). Both fail OPEN on an infrastructure fault. The input-side blocks are unchanged: matched hint plus missing PROMPT DEFENSE block blocks, and the SKILL REFERENCE sub-checks fail CLOSED. Their block paths are exercised by test_prompt_defense_baseline.py and test_check_agent_spawn_file_assignment.py.
+5. Adopter blast radius. install.sh walks _lib/* and upgrade.sh uses the exclusion-based _framework_path_excluded, so _lib/agent_spawn/ ships. check_arbitration_kernel.py:310 lists ".claude/hooks/_lib/agent_spawn/**/*", which is consistent with condition 5. Neither file writes anything except audit emits. No model, effort or default changes.
+
+P0: none.
+P1: none.
+
+NEW FINDINGS (annex): none.
+
+P2 FOLLOW-UPS (all carried verbatim from before the split; none introduced by this delta)
+- P2 .claude/hooks/_lib/agent_spawn/prompt_rules.py:168-170 and :213-214 - honesty drift. The comment promises a CEO_SPAWN_SECRET_SCAN=0 kill-switch "logged via veto_triggered(reason_code=spawn_secret_scan_bypassed)", and the docstring says "any non-0 value enforces". The code (line 221) is default-OFF, enforces only on the exact value "1", and spawn_secret_scan_bypassed exists nowhere. Failure scenario: an operator who sets CEO_SPAWN_SECRET_SCAN=true believes the scan is armed; it is not. Minimal fix: rewrite the comment and docstring to "opt-in, exact value 1; no bypass event".
+- P2 prompt_rules.py:221 and skill_reference.py:282-284 - both read os.environ instead of the env dict passed to decide(). Callers such as the MCP handler or tests that supply an env or project_dir do not affect the secret-scan opt-in or the SKILL REFERENCE repo_root. Minimal fix: pass src_env (and a repo_root derived from it) from decide().
+- P2 fragile coupling. _enforce_prompt_defense (prompt_rules.py:527-559) and _enforce_spawn_rails (file_assignment.py:383-504) wrap their bodies in `except Exception: return None`. Their correctness now depends on implicit globals supplied by other parts. A future rename that drops one of those names would turn an input-side fail-CLOSED gate into a silent allow: the NameError would be swallowed as an "infra fault". Minimal fix: add a static test that walks co_names for every function bound from _lib/agent_spawn/* and asserts that each global resolves in the check_agent_spawn namespace.
+- P2 stale comments:
+  - prompt_rules.py:364 says _OVERLAP_LOOKBACK_S is re-exported "below"; it is bound later from file_assignment.py:7.
+  - prompt_rules.py:397-404 is an orphan comment for a read-only marker constant that lives inline at file_assignment.py:496.
+  - (other payload) check_agent_spawn.py:601-602 still points at "check_agent_spawn.py:188 REASON_REFERENCE_*"; those constants are now at prompt_rules.py:93-105.
+  Minimal fix: update the pointers.
+
+VERDICT: GO Both new files are verbatim moves out of check_agent_spawn.py; every name they rely on resolves in the hook, failure still allows the session, the package is a kernel path that ships to adopters, and the only findings are carried-over P2 comment and coupling notes, so no declared condition is false and there is no P0.

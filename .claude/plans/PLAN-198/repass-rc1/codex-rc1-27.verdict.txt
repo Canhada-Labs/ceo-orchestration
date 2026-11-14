@@ -1,0 +1,19 @@
+Payload 27/32: no P0 or falsified declared condition identified.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_cost_transcripts_parts/__init__.py:55
+The loader rebinds dataclass-generated __repr__ wrappers to facade globals, which lack the wrapper’s standard-library dependency _thread. Representing PricingResult, UsageRecord, ScanCounters or Priced therefore raises NameError. Minimal fix: distinguish methods by their actual __globals__ namespace, preserving globals for externally implemented wrappers.
+
+P2 — .claude/scripts/ceo-restore.sh:182
+The new destination check requires the immediate parent to exist. Documented fresh-machine recovery fails when ~/.claude/projects is absent, before the existing mkdir -p can create it. Minimal fix: validate the nearest existing ancestor and permit missing descendant directories to be created during apply.
+
+P2 — .claude/scripts/ceo-restore.sh:257
+Ancestor preflight checks for symlinks but not non-directory components. If DEST/memory is a regular file, preview succeeds; apply can overwrite audit files before memory restoration fails, leaving a partial restore. Minimal fix: reject every existing ancestor that is not a directory before any destination writes.
+
+Validation: read-only source review; 25 Python files passed Python 3.9 syntax parsing. Dataclass behavior was checked against Python 3.9 standard-library source. Restore application was not executed.
+
+VERDICT: GO The identified defects are P2 follow-ups, with no release-blocking finding under the stated rule.

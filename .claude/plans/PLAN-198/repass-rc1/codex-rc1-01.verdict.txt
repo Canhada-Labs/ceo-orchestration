@@ -1,0 +1,12 @@
+Scope: payload 1/32. No P0 or false declared condition established in this payload. Static checks found no missing runtime globals in the reviewed relocated functions; action registries agree at 331 entries. All 13 supplied Python files parse with Python 3.9 grammar. Validation used read-only inspection and in-memory checks.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/governance/codex-cli-pin.txt:199; .claude/scripts/check-substrate-drift.py:571. The unbounded range suppresses actionable warnings for older incompatible installations. With installed 0.139.0 and manifest 0.160.0, the detector now returns CODEX_INSTALLED_COMPATIBLE/info with no next action; the previous bounded range returned drift and restore instructions. The runtime payload gate still rejects that installation because version compatibility requires meeting 0.160.0 and exceeding the manifest version. Minimal fix: apply those same version requirements to the detector’s compatible branch.
+
+P2 — .claude/scripts/re-pin-codex.py:496, activated by .claude/governance/codex-cli-pin.txt:199. Re-pinning the new unbounded floor to target 0.166.0 produces >=0.128.0,<0.167.0 and marks it widened. Lines 2171 and 1676 consequently generate the misleading statement “Upper bound widened <0.167.0 -> <0.167.0,” although the accepted range narrowed. Minimal fix: preserve the unbounded floor through pack generation, or explicitly describe the narrowing and the previously absent upper bound.
+
+VERDICT: GO Payload 1 establishes no blocking defect under the stated cut rule and has two nonblocking P2 follow-ups.

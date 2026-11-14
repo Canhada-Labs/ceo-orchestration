@@ -1,0 +1,47 @@
+PAYLOAD 14/32: rewrite of .claude/hooks/_lib/audit_emit.py into a thin facade over the new package .claude/hooks/_lib/_audit_emit_parts/. This payload shows candidate facade lines 1-391. The base text it removes runs from the module docstring through emit_pattern_queried. Static review only: I read code and could not execute Python.
+
+WHAT WAS VERIFIED (no defect found)
+- Action registry: the facade's _KNOWN_ACTIONS literal (audit_emit.py:45-377) has 331 members. I checked them family by family against the removed base entries. Only order and comments changed. It is kept as a set literal, so the text-parsing gates still find it: check_known_actions_floor.py:59, check-audit-action-name-convention.py:96 and check-audit-registry-coverage.py:203-228.
+- Generic-emit sets: _EMIT_GENERIC_PASSTHROUGH and _RESERVED_ACTIONS (federation_schemas.py:186-399) have the same members as base. Every action the base had moved out of passthrough is still out: admin_key_lifecycle_event, bash_canonical_bypass_invoked, mcp_injection_finding, model_refusal_observed, spawn_confidence_advisory, spec_context_sanitized and statusline_sidecar_write. The diff's hunk headers line old passthrough lines up with the new sorted _KNOWN_ACTIONS; that is diff noise only.
+- Text moved unchanged: the allowlists and enums (boot_schemas.py, optimizer.py, federation_schemas.py, governance.py), _CREDENTIAL_OVERRIDE_*, _ATLAS_REGISTRY and _ATLAS_NAMESPACE_REGISTRY (adapters.py:228-373), and the writer functions _write_event, _emit_chain_reset_marker_under_lock, _write_fallback and _preview (writer.py) all match the removed base text. Every emitter this slice removes exists in exactly one part, and no def name is duplicated across parts.
+- Binding mechanism (_audit_emit_parts/__init__.py:20-48):
+  - Functions are rebound with the facade as their globals. Facade monkeypatch points, `global` writes (writer.py:56) and rate-limit dicts (rate_limits.py:268, orchestration.py:475-484) all resolve in the facade.
+  - The locks are defined in the facade (audit_emit.py:483-484) and are only used at call time.
+  - The parts contain no classes, decorators, locks or MappingProxyType values, so deepcopy is safe. Defaults that point at module constants are immutable ints.
+  - No installed part exports a name the facade defines before or after install, except replay.iter_events, which is intended and handled at audit_emit.py:455-461.
+- Python 3.9 and stdlib:
+  - Every part has `from __future__ import annotations`. Callable, Tuple, List and Iterator, dropped from the facade imports, appear only as annotations that are never evaluated; there are no isinstance or cast uses of them.
+  - No 3.10+ syntax. Standard library only.
+- Fail direction: emission stays fail-open (writer.py:554-764). Importing the facade now needs 33 part modules, but that is the same kind of risk as its existing unguarded _lib imports.
+- Install and kernel coverage:
+  - install.sh:1520-1549 copies every top-level _lib entry, and _framework_path_excluded (_framework_manifest_set.sh:95-107) does not exclude _audit_emit_parts.
+  - check_arbitration_kernel.py:312 adds `.claude/hooks/_lib/_audit_emit_parts/**/*`.
+  - This matches conditions 5 and 7, the two this payload touches.
+- Scripts that load or parse audit_emit: verify-atlas-binding.py, check_atlas_fpr.py and tier_policy_cli/apply.py:356-372 import the module, so they work through install. check-audit-read-api-stable.py checks names only and passes because of the facade stub.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+1. P2 — .claude/hooks/_lib/_audit_emit_parts/actions.py:7-16, actions_core.py:1-4 and actions_extended.py hold an orphan duplicate registry.
+   - None of the three is in the install list (audit_emit.py:415-452) and nothing imports them. Yet they define a second 331-member _KNOWN_ACTIONS plus EVENT_SCHEMA_V2.
+   - They are now the only place that keeps the per-action provenance comments.
+   - The docstring at actions_core.py:1 says "combined by schemas_actions", and no such module exists.
+   - They ship to adopters and are hard-deny kernel paths.
+   - Failure scenario: a maintainer registers a new action in actions_core.py. It has no runtime effect: _write_event (writer.py:558) logs an "unknown action" breadcrumb and drops the event.
+   - Minimal fix: delete the three modules, or install `actions` and make the facade literal derive from it (or be asserted equal to it). Fix the docstring either way.
+2. P2 — audit_emit.py:382-383 and 460-461: the public read API iter_events now shows a signature of (*args, **kwargs) instead of (path=None, action_filter=None) from replay.py:342-345.
+   - The name-based freeze check still passes. But inspect.signature and help() lose the contract, and _audit_emit_parts/__init__.py:5-6 claims signatures stay intact.
+   - Minimal fix: set __signature__ on the wrapper (or use functools.wraps), or bind the rebound function directly.
+3. P2 — audit_emit.py:1: the facade lost the module docstring that stated the design contract (additive-only, fail-open, shared lock, redaction, stdlib-only). Nothing replaces it, so `__doc__` is now None. Minimal fix: restore a short contract docstring.
+4. P2, pre-existing and carried verbatim (not introduced here) — writer.py:758-761.
+   - The `except (OSError, PermissionError)` branch calls _write_fallback(line). If mkdir or FileLock raised, `line` is unbound, so UnboundLocalError is swallowed at writer.py:763.
+   - Result: the event is lost on exactly the unwritable-primary path the F-CHAOS-1 fallback is meant for (sync mode only).
+   - Minimal fix: serialize from `event`, as the FileLockTimeout branch already does.
+   - Also pre-existing: writer.py:51, 76 and 87 open /tmp/ceo-audit-fallback-<user>.log in append mode and chmod it without O_NOFOLLOW, so another local user can plant a symlink there.
+5. P2 — _audit_emit_parts/__init__.py:27-48: import cost is unmeasured.
+   - Every hook process that imports audit_emit now imports 34 modules and deep-copies and rebinds about 250 functions plus a few hundred frozensets.
+   - This payload has no timing data. Minimal follow-up: time a cold import against the hook timeouts.
+
+VERDICT: GO This payload moves the action registry, the passthrough and reserved sets, the allowlists and the writer into the new parts unchanged, behind a facade whose function binding keeps patch points and fail-open emission. No declared condition is false against the code, and the only findings are P2 follow-ups.

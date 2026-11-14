@@ -1,0 +1,1 @@
+.claude/scripts/ceo-boot.py	piece 1/2

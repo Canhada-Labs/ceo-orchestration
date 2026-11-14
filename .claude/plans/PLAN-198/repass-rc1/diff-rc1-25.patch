@@ -1,0 +1,26 @@
+diff --git a/.claude/scripts/ceo-backup.sh b/.claude/scripts/ceo-backup.sh
+index 7bf56eb9d695..ac9419d6cd93 100755
+--- a/.claude/scripts/ceo-backup.sh
++++ b/.claude/scripts/ceo-backup.sh
+@@ -248,4 +248,9 @@ if [ -d "$AUDIT_DIR/memory" ]; then
+   mkdir -p "$STAGE_DIR/memory"
+-  # Use cp -r to avoid tar streaming surprises with weird filenames
+-  cp -pR "$AUDIT_DIR/memory/." "$STAGE_DIR/memory/"
++  # Snapshot regular files only.  Keeping a link would make a later restore
++  # able to redirect writes outside the selected state directory.
++  while IFS= read -r -d '' f; do
++    rel="${f#"$AUDIT_DIR/memory/"}"
++    mkdir -p "$STAGE_DIR/memory/$(dirname "$rel")"
++    cp -p -- "$f" "$STAGE_DIR/memory/$rel"
++  done < <(find "$AUDIT_DIR/memory" -type f -print0)
+ fi
+@@ -270,5 +275,7 @@ fi
+ 
+-# Tar
++# Tar.  COPYFILE_DISABLE=1 stops macOS tar (bsdtar) from writing an
++# AppleDouble member `._<name>` before every entry that carries extended
++# attributes; GNU tar does not read the variable, so Linux is unchanged.
+ ARCHIVE_PATH="$BACKUP_DIR/$ARCHIVE_NAME"
+-( cd "$STAGE_DIR" && tar -czf "$ARCHIVE_PATH" . )
++( cd "$STAGE_DIR" && COPYFILE_DISABLE=1 tar -czf "$ARCHIVE_PATH" . )
+ 

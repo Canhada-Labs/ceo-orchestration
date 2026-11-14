@@ -1,0 +1,11 @@
+Payload 21: no P0 or false declared condition identified.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/_lib/_bash_safety_parts/posture_scan.py:582: Scanner uncertainty becomes citation-releasable. Both bash_indirect_limit and bash_indirect_unparseable_shell receive destructive=True, although neither establishes a destructive-command classification. When the citation pilot is enabled, a verified citation can replace these denials with ALLOW; the enforced fact gate can likewise release a cited retry. The interrupted scan is never completed, so remaining computed canonical writes may remain unexamined. This reverses the required fail-closed handling of matcher input. Release paths: decisions_cli.py:179, fact_state.py:67 and fact_canonical.py:136, all under the same package. Minimal fix: keep parse/budget failures non-releasable and restrict destructive=True to confirmed destructive classifications.
+
+P2 follow-ups
+None.
+
+Verification: facade and fragments compiled under Python 3.9.6. Read-only checks passed for benign decisions, malformed-quote denial, shared facade globals, independent mutable state, monkeypatch lookup, function inspection and CLI allow output. Installer packaging includes the fragments. Direct upgrade-script inspection was unavailable because that file is withheld. The P1 assessment is based on static control flow.
+
+VERDICT: GO-WITH-CONDITIONS The facade checks pass, but an undeclared P1 allows citation gates to release scanner-uncertainty denials.

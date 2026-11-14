@@ -1,0 +1,64 @@
+SCOPE OF PAYLOAD 11/32
+New files from the PLAN-197 split, all under .claude/hooks/_lib/:
+- _precompact_parts/{pressure_sidecar,runtime,snapshot_core}.py, loaded by check_precompact_continuity.py
+- _profile_opus_parts/{__init__,cli,hook_latency_docs,latency,reference,smoke}.py, loaded by .claude/scripts/profile-opus-4-7.py
+- _reality_ledger_parts/{__init__,audit_actions,claims,constants,dispatch,environment,estimate_detection,estimate_emission,estimate_history}.py, loaded by .claude/scripts/reality-ledger.py
+
+I read each facade, each binder and the modules they call (audit_emit and its parts, scratchpad_lib, state_store, redact, runtime_paths, audit_hmac, check_postcompact_reinject.py), in the redacted candidate tree.
+
+WHAT I CHECKED AND FOUND SOUND
+1. Moved code (item 4)
+- check_precompact_continuity.py runs exec() on its part files directly inside the facade's globals, in this order: snapshot_core, pressure_sidecar, ledger_index, runtime. Every free name in the three part files from this payload is defined there before any call, and patch points stay on the facade.
+- Both binders (_profile_opus_parts, _reality_ledger_parts) rebuild each function and class against the facade's globals. Helpers that a part module does not import itself, such as _build_finding, _to_repo_rel, _pct_of_sorted and _classify_entry, resolve through the facade.
+- reality-ledger.py defines or imports, before install(), every name the parts expect from it: _REPO_ROOT, redact_secrets, _install_itimer_guard, _clear_itimer_guard and ScanBudgetExceeded. No part's __all__ overwrites any of them.
+- Every name the parts look up in audit_emit is still exported after its own split: _audit_dir, _CONTEXT_PRESSURE_USED_BUCKETS_PCT, should_emit_context_pressure (which takes session_id), emit_generic, emit_estimate_drift_detected and emit_estimate_drift_systematic_bias. So the PreCompact pressure guard and detector #7 do not silently go dead.
+2. Self-exclusion and action registry
+- SELF_EXCLUDE_PATH_FRAGMENTS adds "/_reality_ledger_parts/". That keeps the old self-exclusion: before the split, reality-ledger.py was excluded by its file name.
+- _read_known_actions reads files only (it parses with ast and imports or runs nothing). It still finds the literal _KNOWN_ACTIONS at audit_emit.py:45 on its first pass.
+3. Fail direction (item 2)
+- The PreCompact half is advisory and fails open. main() turns a stdin error or any exception from gate() into a breadcrumb plus {}. The session-store GC, the eta advisory and the pressure guard run after the snapshot, and each swallows its own failures.
+- No security matcher is involved in these files.
+4. Writes (item 3)
+- The snapshot goes to the plan or session scratchpad. Every string field is redacted before serialization: redact_secrets(max_chars=0) exists, and state_store.set stores bytes as given.
+- The PostCompact reader decodes bytes (check_postcompact_reinject.py:315).
+- The CEO_STATUSLINE_SIDECAR override is checked for symlinks and ".." the same way as the writer, and the file is only read.
+5. Python and stdlib (item 6)
+- Standard library only.
+- I found no syntax newer than 3.9. All annotations are strings under "from __future__ import annotations".
+6. Kernel list
+- None of the three packages is reached from a kernel source: check_precompact_continuity.py, profile-opus-4-7.py and reality-ledger.py are not in _KERNEL_PATHS. So condition 5 is not affected.
+7. Declared conditions
+- Condition 7 (thin entry points over _lib modules) matches these three facades.
+- Condition 3(a) claims the location-variable cleanup only for diagnose-output-hook.py, and the text says it claims only those three cases. The gap below is therefore an undeclared finding, not a false condition.
+- No condition is false against the code in this payload, and I found no P0.
+
+NEW FINDINGS (annex)
+P1: the latency profiler is not fully isolated from the live audit log.
+- Where: .claude/hooks/_lib/_profile_opus_parts/latency.py:102-127 and :198-199. The isolation claim it contradicts is at .claude/hooks/_lib/_profile_opus_parts/hook_latency_docs.py:87.
+- What the code does: run_hook_latency copies the whole os.environ, removes only CEO_LEARNING_OBSERVE, CEO_SOTA_DISABLE, CEO_TOOL_LIFECYCLE, CEO_ANTI_OVERHEAD, CLAUDE_SESSION_ID and CLAUDE_PROJECT_DIR_NATIVE, and then sets HOME and CEO_AUDIT_LOG_DIR for each corpus entry.
+- Why that is not enough: the writer gives CEO_AUDIT_LOG_PATH priority over CEO_AUDIT_LOG_DIR (_audit_emit_parts/writer.py:187-208), and so do audit_hmac._audit_dir_from_env (audit_hmac.py:189) and spool_writer. The profiler leaves these variables in place: CEO_AUDIT_LOG_PATH, CEO_AUDIT_LOG_LOCK, CEO_AUDIT_LOG_ERR, CEO_AUDIT_KEY_PATH, CEO_AUDIT_LAST_HMAC_PATH, CEO_AUDIT_CHAIN_LENGTH_PATH and CEO_PROJECT_STATE_DIR.
+- Failure scenario: a maintainer or adopter with CEO_AUDIT_LOG_PATH exported runs "profile-opus-4-7.py --hook-latency" (N=200 by default). The five corpus entries make roughly 1,400 hook runs, counting the seed runs. Every check_agent_spawn, check_anti_ceo_overhead and check_output_secrets event from those runs is appended to the LIVE audit log and HMAC chain under session "profile_latency".
+- Relation to the base re-pass: this is the same defect the v1.4.3-rc.1 re-pass ranked P1 in diagnose-output-hook.py. Condition 3(a) fixed it only there, by removing _CHILD_LOCATION_CARRIERS (diagnose-output-hook.py:27-34). That script even imports this profiler module, but the profiler's own gate was not fixed.
+- Minimal fix: in latency.py, remove the same list of variables from base_env as diagnose-output-hook.py:27-34 (or as the list in test_isolation.py), before HOME and CEO_AUDIT_LOG_DIR are set per entry. Also set CEO_PROJECT_STATE_DIR per entry, and add a test that runs the profiler with CEO_AUDIT_LOG_PATH set and checks that the real log stays the same.
+
+P2 FOLLOW-UPS
+1. Honesty: two docstrings describe the old snapshot write path.
+- Where: .claude/hooks/_lib/_precompact_parts/snapshot_core.py:335-340, and the docstring of check_precompact_continuity.py:57-63.
+- Both say the snapshot is handed to store.set as a str so that the store's redactor runs. The code at snapshot_core.py:424-426 now redacts each field first and passes BYTES. It passes a str only when _lib.redact fails to import.
+- Secrets are still redacted. One side effect: on the bytes path, state_store's "redacted" column records 0 even when a field was redacted.
+- Fix: update both docstrings to describe the field-level redaction and the bytes write.
+2. The PreCompact facade loses its module docstring.
+- Where: .claude/hooks/_lib/_precompact_parts/__init__.py:16.
+- exec() of each part file stores that part's own docstring as the facade's __doc__, so check_precompact_continuity.__doc__ ends up as runtime.py's one-line docstring instead of the 85-line contract. audit_log.py:315/328 saves and restores __doc__ for exactly this reason; this facade does not.
+- I found no production code that reads it. Fix: save __doc__ before install and restore it after.
+3. Project-root resolution can pick a nested directory.
+- Where: .claude/hooks/_lib/_precompact_parts/snapshot_core.py:53.
+- _resolve_project_root takes the nearest ancestor that has a .claude/ directory before it looks at CLAUDE_PROJECT_DIR. When the session's working directory is inside a nested .claude/ tree (a monorepo package, a fixture), the plan lookup and the ceremony glob move there. So does the hysteresis-marker write, when CEO_CONTEXT_PROGRESS_FLOOR_TOKENS is set and the sidecar identity check passes.
+- The hook fails soft and the marker write is opt-in. Fix: prefer CLAUDE_PROJECT_DIR when the working directory is inside it, and apply the same rule in the PostCompact reader.
+4. Stale help text: .claude/hooks/_lib/_reality_ledger_parts/dispatch.py:136 says "Default: all 5" for --detector, but DETECTOR_REGISTRY has 6 detectors (estimate_drift is the sixth). Cosmetic; probably carried over unchanged.
+5. A second, unused action registry (cross-reference to another payload).
+- _audit_emit_parts/actions.py defines a second _KNOWN_ACTIONS (actions_core | actions_extended). Nothing imports it, and it is not in the install list of audit_emit.py:415-452.
+- The writer checks against the literal set in the facade (writer.py:558 against audit_emit.py:45). The fallback that _read_known_actions adds in this payload (audit_actions.py) can only resolve a _KNOWN_ACTIONS that a module in the install list exports, so it is inert today.
+- Risk: two sources of truth. An action added only to actions_core.py or actions_extended.py would be dropped silently. Fix: delete actions.py and its two data modules, or make the facade take _KNOWN_ACTIONS from it.
+
+VERDICT: GO This payload makes no declared condition false and contains no P0: the three split packages resolve every name they use through their facades and stay standard-library only and Python 3.9 compatible, and the one undeclared P1 (the latency profiler can write hook events into a live audit log) goes to the signed annex, which the rule of this cut allows.

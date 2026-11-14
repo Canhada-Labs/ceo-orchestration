@@ -1,0 +1,75 @@
+PAYLOAD 31/32 covers four files: .claude/scripts/night-mode.py, profile-opus-4-7.py, re-pin-codex.py and reality-ledger.py. I also read the new code they depend on in the candidate tree: _lib/_night_mode_parts/, _lib/_profile_opus_parts/, _lib/_reality_ledger_parts/ and .claude/scripts/_repin_guard.py.
+
+WHAT I VERIFIED (no finding)
+- night-mode (moved code, item 4):
+  - helpers.py and toggles.py repeat the removed body line for line.
+  - install() (_night_mode_parts/__init__.py:14-31) rebuilds each function with the facade's globals. Every free name still resolves:
+    - from the facade: REPO_ROOT, NIGHT_MODE, MARKER_VERSION, _RESTORABLE_MODES, _DISCARD_HINT, _TEST_SEAM_ENV, _CANONICAL_SELF_PARTS, _INVOKED_SELF and the standard-library imports;
+    - from helpers' __all__: the module constants _LINE_BREAKS, _ONE_LINE_TABLE and _SUMMARY_TOKEN_SAFE.
+  - Behaviour is unchanged on these points:
+    - fail-closed handling of the marker and the overlay;
+    - the CI refusal;
+    - the NF-08b self-path check, still in main() before dispatch (night-mode.py:518-533);
+    - the order of writes (settings, then marker);
+    - the summary and audit records written as a pair.
+  - Protection tier is unchanged:
+    - .claude/hooks/_lib/**/*.py is canonical (canonical_edit/guards.py:34), the same tier as .claude/scripts/night-mode.py (guards.py:235).
+    - check_arbitration_kernel.py:274-276 says the writer is deliberately canonical-only. Condition 5 is not affected.
+  - The NF-04 ast oracle now parses toggles.py (tests/test_night_mode.py:1728, :1846), so the docstring's claim still holds.
+  - install.sh copies each top-level _lib entry, new packages included (install.sh:1520-1547).
+- profile-opus-4-7:
+  - latency.py has the same logic as the removed run_hook_latency (only comments trimmed).
+  - _REF_EXEC_SOURCE (reference.py:130-228) is byte-identical, so ref_source_sha256 does not change. The constants and the exit-code contract (phase 1 / phase 2) are the same.
+  - The docstring is restored from hook_latency_docs.
+- reality-ledger:
+  - __all__ is complete in all ten part modules.
+  - `from .constants import *` supplies the default values the functions need when they are defined.
+  - _REPO_ROOT, redact_secrets and the itimer guard come from the facade.
+  - The self-exclusion gains '/_reality_ledger_parts/' (constants.py:55), which keeps the anti-self-referential rule.
+  - _read_known_actions handles the audit_emit split by parsing files only, never importing them (audit_actions.py:38-114).
+  - The tool stays advisory-only.
+- re-pin-codex:
+  - The guard now reads literal paths, checked by _GUARD_PATH_RE before rendering (re-pin-codex.py:956-964) and passed after `--`, so they cannot be quoted or injected.
+  - A grep exit code of 2 or more now dies. The old guard treated an unreadable or missing file as clean, so this is strictly more fail-closed.
+  - The legacy guard is still accepted (:944-952, :1346-1356).
+  - _check_guard_read_files runs before anything is written.
+  - _repin_guard.py reaches installs through the *.py glob (install.sh:1606-1611), as CHANGELOG lines 342-346 say.
+- Python: everything new is standard-library only and Python 3.9 compatible (FunctionType rebinding, re.escape, typing).
+- Conditions: condition 7 holds for these three facades. Condition 10 is not contradicted. No declared condition is false in this payload.
+
+FINDINGS
+P2-1 re-pin-codex.py:496-497 and :2171-2172 — the generator mislabels the change it makes to the Codex pin range.
+- Scenario:
+  - The live pin's range is the unbounded floor `>=0.128.0` (.claude/governance/codex-cli-pin.txt:199; CHANGELOG 199-201).
+  - The next pack generated against it gets plan_range(upper=None), which returns `>=0.128.0,<X.(Y+1).0` with widened=True.
+  - run() then sets old_upper equal to new_upper.
+  - The pin paragraph (:1675-1677), the sentinel (:1744-1746), the README (:1611) and the commit message (:1437-1439) all say "Upper bound widened <0.161.0 -> <0.161.0 … (widen-upper-only)".
+  - Applying the pack actually adds an upper bound to an unbounded floor. That narrows the policy and reverses the version-floor route (condition 10; CHANGELOG 447-450), while the signed text calls it a widening.
+  - OLD_UPPER is invented. The rehearsal, copied word for word from the newest mold, asserts `live_pin[-1] == f">={lower},<{old_up}"` (PLAN-194/codex-pin-0160/rehearse-pin-0160.sh:267), so it fails.
+  - The docstring at :55-56 ("widened upper-only, and only when the version falls outside it") is no longer true.
+- Why P2: the tool is maintainer-only (it refuses in installs), the failure is closed (newer CLIs get refused) and the rehearsal catches it.
+- Minimal fix: when upper is None, either refuse by name ("live pin is an unbounded floor; the bounded pack grammar cannot express it") or render the change honestly ("upper bound ADDED: none -> <X", with no fabricated OLD_UPPER and widened=False). Add a plan_range test with upper=None.
+
+P2-2 night-mode.py:327-331 — a relocated copy now crashes instead of being refused as documented.
+- Scenario:
+  - _lib._night_mode_parts is now imported when the module loads, before main() runs _check_self_path().
+  - Take a relocated copy whose parents[2] has no .claude/hooks/_lib/_night_mode_parts, such as .claude/nm.py or a copy outside any repo.
+  - It now dies with an ImportError traceback and exit code 1, instead of the NF-08b refusal (exit 2 plus a `night-mode-event … result=refused` line).
+  - Nothing is written, so this still fails closed. But the docstring's exit-code table (night-mode.py:204-211) is wrong for this case.
+- Minimal fix: wrap the import in try/except ImportError, print a diagnostic to stderr and exit 2. Or amend the docstring.
+
+P2-3 (observation; not a new class) _lib/_night_mode_parts/toggles.py — the posture-write functions are reachable under a new name.
+- Scenario:
+  - cmd_on, cmd_off and cmd_off_discard_snapshot can now be reached by the module name _lib._night_mode_parts.
+  - The _e4 matcher does not key on that name (_E4_POSTURE_TOGGLE_SCRIPTS, _bash_safety_parts/posture_tables.py:376).
+  - The NF-08b self-path check lives only in the facade's main(), so this route skips it.
+  - This is not a new class: arbitrary `python3 -c` could already load night-mode.py through importlib with an obfuscated path and call cmd_on. The files are canonical-tier.
+- Minimal fix (optional): note the package in the matcher's comment or coherence set, or run the self-path check at the entry of cmd_on and cmd_off.
+
+NEW FINDINGS (annex)
+None. I found no P1 in this payload.
+
+P2 FOLLOW-UPS
+P2-1, P2-2 and P2-3 above.
+
+VERDICT: GO No declared condition is false against this payload's code and there is no P0; the three facade moves behave the same as before, the re-pin guard now refuses more cases, and the only defects are P2 follow-ups in the maintainer-only re-pin generator and in night-mode's exit-code documentation.

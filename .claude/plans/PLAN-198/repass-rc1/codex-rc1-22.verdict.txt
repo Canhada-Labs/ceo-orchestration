@@ -1,0 +1,13 @@
+Payload 22: no P0 or false declared condition established. Source inspection and Python 3.9 grammar checks covered the three changed files and nine canonical-edit components; no runtime suite was run.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/check_canonical_edit.py:624: A partial installation missing an extracted component raises ImportError/ModuleNotFoundError, which is classified as an integrity failure. The fallback at line 635 blocks before reading the event, denying ordinary noncanonical edits too. This inverts the required infrastructure fail-open behavior; it is unrelated to the wall-deadline exception. Minimal fix: emit the diagnostic and allow on component import failure, consistently in both entry implementations.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/_ceremony_toolkit/preflight.py:52: Default policy lookup still searches the facade for a top-level _CANONICAL_GUARDS assignment. The extraction removed that assignment, so collection raises canonical_guard_policy_unavailable and sentinel validation fails even for valid packets. Explicit canonical_patterns remains usable. Minimal fix: read the authoritative list from canonical_edit/guards.py.
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304: Sentinel-pattern discovery still scans the facade, although _PATTERNS moved to canonical_edit/paths.py. Boot therefore always falls back to four of ten recognized layouts and can undercount pending signatures in the six omitted layouts. The summary discloses fallback, but coverage remains incomplete. Minimal fix: read the new authoritative source or expose shared pattern data.
+
+No additional findings in the cost-envelope or harness-config changes.
+
+VERDICT: GO-WITH-CONDITIONS The payload has one undeclared P1 regression and two P2 integration defects, without establishing a P0 or a false declared condition.

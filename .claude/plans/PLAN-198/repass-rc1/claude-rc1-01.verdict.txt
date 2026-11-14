@@ -1,0 +1,68 @@
+SCOPE OF PAYLOAD 1/32
+Version files (.claude-plugin/plugin.json, .claude-plugin/marketplace.json, .claude/.framework-version), .claude/commands/ceo-boot.md, .claude/governance/codex-cli-pin.txt, .claude/governance/gate-scripts-manifest.txt, and the first 15 files of the new .claude/hooks/_lib/_audit_emit_parts/ package (__init__, actions, actions_core, actions_extended, adapters, boot_schemas, compaction, confidence, context_pressure, defense, federation_persona, federation_schemas, finalization).
+
+WHAT WAS CHECKED, AND THE RESULT
+1. Version bump: the three version files now say 1.4.4 and agree with each other.
+2. ceo-boot.md "24 -> 25 Tier-S": true. TIER_S_CHECKS asserts exactly 25 (.claude/hooks/_lib/_ceo_boot_parts/scheduled_cache.py:370).
+3. codex-cli-pin.txt goes from ">=0.128.0,<0.161.0" to ">=0.128.0" (no upper bound). Every consumer handles a missing upper bound:
+   - the release validator: .github/scripts/validate-pair-rail-verdict.py:345-358 and 609-624;
+   - the installer's harness script: scripts/_codex_harness.sh:77-86;
+   - the kit generator still refuses a version below cli_currency.CODEX_VERSION_FLOOR even with the manifest's sha: .claude/plans/PLAN-198/kit/gen_envelope.py:1074-1100.
+   This matches conditions 9 and 10 and CHANGELOG [1.4.4] lines 184-208 and 393-397. Conditions 9 and 10 hold.
+4. gate-scripts-manifest.txt: three hashes change. I could not recompute them (no shell here, and the tree copy is redacted). Only the framework's own CI reads this file (release.yml, smoke-install.yml, npm-publish.yml, ownership-nightly.yml). A wrong hash would block the framework's own release; adopters do not receive .claude/governance/.
+5. Moved code: how _audit_emit_parts/__init__.py install() works.
+   - It rebinds each part function onto the facade's globals. Monkeypatches on audit_emit, "global" statements and late-bound helpers therefore resolve in the facade.
+   - None of the parts has a decorator or a class, so no function keeps a part module's globals.
+   - No part exports a lock or any other object that deepcopy cannot copy. re.Pattern objects copy fine.
+   - The names exported by this payload's parts are not duplicated across parts, and no part overrides a name the facade defines before install() (_KNOWN_ACTIONS, EVENT_SCHEMA_V2, emit_credential_rotation_due). The only exception is the dead actions.py, which is never installed (P2-1).
+   - Every name the payload's parts use resolves in the facade namespace. zlib, os, time, Path and the typing names are imported at audit_emit.py:4-12. The helpers come from writer.py (_write_event, _breadcrumb, _normalize_rotation_trigger), tokens_boot.py (_scrub_ceo_boot_event, _is_sha256_hex, the _SUBAGENT_LIFECYCLE_* names), harness_schemas.py and lifecycle_schemas.py.
+   - Each part's __all__ lists every top-level definition in it.
+   - Production consumers I spot-checked still resolve: _compaction_plan_id_ok, the _CONTEXT_PRESSURE_* names, should_emit_context_pressure, clear_context_pressure_marker, _CONFIG_CHANGE_LAYERS, _ATLAS_REGISTRY, and the emit_* wrappers called by SessionStart, check_confidence_gate, the bash_safety parts, the mcp-server and ceo-escalation-detector.
+   - No part uses __file__.
+   - Python 3.9 and standard library only: every part uses "from __future__ import annotations", FunctionType is called with its five positional arguments, and nothing uses 3.10+ syntax.
+6. Fidelity of the moved code: the functions in context_pressure.py match their v1.4.0-GA text in .claude/plans/PLAN-169/repass-ga/diff-ga-6.patch:880-1131.
+   - Writes: the temp file is opened with O_EXCL|O_NOFOLLOW and mode 0600, then renamed over the target with os.replace. unlink removes a symlink itself, not what it points to. All I/O errors fail open.
+7. Fail direction:
+   - Every governance-hook import of audit_emit I checked is wrapped in try/except, so an import failure of any of the 33 parts fails open: _lib/canonical_edit/*, check_arbitration_kernel.py:585 and 647, _bash_safety_parts/normalization.py:229, and check_agent_spawn.py:74-79 (which imports the audit_emit_dispatch shim).
+   - _safe_verifier_outcome returns "" when the redactor cannot be imported. That is the data-minimizing direction and is correct.
+   - No inversion found.
+8. Condition 5: the row .claude/hooks/_lib/_audit_emit_parts/**/* is at check_arbitration_kernel.py:312. "**" matches zero or more segments (check_arbitration_kernel.py:376-389), so files directly under the package are kernel too. Condition 7 holds for audit_emit: the facade is 496 lines and the logic lives in the parts.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+P2-1. A duplicate action registry that runtime never reads.
+- Where: .claude/hooks/_lib/_audit_emit_parts/actions.py:1-16, actions_core.py:1-4 and actions_extended.py:1-4, against .claude/hooks/_lib/audit_emit.py:45-377 (the literal _KNOWN_ACTIONS) and 413-452 (the install() list, which has no "actions").
+- Failure scenario: a maintainer registers a new action in actions_extended.py, following its own in-file comments ("Registered via kernel-override ..."), and gets through the kernel override. The runtime registry is still the facade literal, so the action stays unknown and its emits are dropped to a breadcrumb. check-audit-registry-coverage.py and the reality ledger also read the literal, so no gate notices.
+- Misleading docstrings: actions_core.py and actions_extended.py say they are "combined by schemas_actions", and that module does not exist. actions.py says the facade exports it, which it does not.
+- No test checks that the two registries agree. Today they match: 234 + 97 = 331 entries.
+- Minimal fix: delete the three files, or add a test asserting _audit_emit_parts.actions._KNOWN_ACTIONS == audit_emit._KNOWN_ACTIONS and reword the docstrings to call them a mirror.
+
+P2-2. With no upper bound on the pin, the --harness codex VERSION SKEW warning no longer fires for any newer Codex.
+- Where: .claude/governance/codex-cli-pin.txt:199, with scripts/_codex_harness.sh:77-86 and 459-461.
+- Failure scenario: an adopter installs with --harness codex on a future Codex whose hook discovery has changed. The arming check prints no skew warning, although the fixtures were recorded on 0.139.0 and CODEX_VERIFIED_VERSION is 0.160.0. Untrusted or changed hooks are silent no-ops on Codex, so this warning was the operator's only version signal.
+- CHANGELOG [1.4.4] lines 207-208 mention only the "verified against 0.160.0" banner. A reader learns the warning is gone only by combining [1.4.3] lines 731-733 with [1.4.4] line 200.
+- Minimal fix: say it plainly in Known-open, or make _codex_harness.sh warn above CODEX_VERIFIED_VERSION whatever the pin's upper bound.
+
+P2-3. Stale text about the Codex pin.
+- codex-cli-pin.txt:165-166 still calls "widen-upper-only" "the only safe shape", directly above the new unbounded line.
+- INSTALL.md:1028-1030 still says that in the framework checkout a payload mismatch blocks (fail-closed). On the compatible/version_floor_only route that is no longer true, as CHANGELOG lines 184-193 already say.
+- Minimal fix: amend that comment and that paragraph.
+
+P2-4. Stale docstrings.
+- defense.py emit_learning_rail_disabled says "four learning-loop rails", but _LEARNING_RAIL_ENUM (lifecycle_schemas.py:508) has five, bash_indirect included.
+- emit_ceo_boot_check_skipped cites "15 Tier-S + 10 Tier-A", but the registry has 25 Tier-S.
+- Cosmetic only.
+
+P2-5. A crash-orphaned temp file of the shard cursor is never collected (pre-existing since v1.4.0).
+- Where: context_pressure.py:96-118 and 168-172.
+- The temp file "..gc-shard-cursor.<pid>.<rand>.tmp" never matches the marker prefix after the one-dot strip, so the GC skips it. It is left behind only if the process is killed between the O_EXCL open and os.replace.
+- Minimal fix: let the sweep also collect aged ".<_GC_SHARD_COUNTER_NAME>.*.tmp" files.
+
+NOT VERIFIED HERE
+- The sha256 values in gate-scripts-manifest.txt (no hashing tool, redacted tree).
+- The facade-side deletion from audit_emit.py and the remaining parts (writer, generic_dispatch_*, and the others) are in later payloads. Conditions 1-4, 6, 8 and 11-14 are not exercised by this payload, and nothing in it contradicts them.
+
+VERDICT: GO-WITH-CONDITIONS In payload 1 the declared conditions that apply (5, 7, 9 and 10) hold against the code, the audit_emit split binds every exported name to the facade with infrastructure failures still failing open, and the only findings are P2 follow-ups. The release can therefore proceed only under its declared conditions, chiefly the declared unbounded Codex pin.

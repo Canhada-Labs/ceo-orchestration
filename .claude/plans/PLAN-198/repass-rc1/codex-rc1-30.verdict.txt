@@ -1,0 +1,11 @@
+Payload 30/32: no P0 or false applicable declared condition found. Extraction checks found no broken exports, global lookups, or import ordering. Python 3.9 syntax passed for 21 relevant files; both JSON files parsed. INSTALL version substitution covers all three declared examples.
+
+NEW FINDINGS (annex)
+None.
+
+P2 follow-ups
+P2 — .claude/scripts/diagnose-output-hook.py:42 — Residual diagnostic isolation gap: the helper removes CEO_AUDIT_LOG_FALLBACK_PATH without assigning a temporary replacement. If the primary audit append fails or its lock times out, _audit_emit_parts/writer.py:38 resolves the fallback to shared /tmp/ceo-audit-fallback-<user>.log, allowing synthetic diagnostic events outside the temporary directory. Minimal fix: explicitly set CEO_AUDIT_LOG_FALLBACK_PATH beneath tmp/audit. In-memory path resolution confirmed this; no audit writes were executed. This does not invalidate condition 3(a)’s specific inherited live-log override correction.
+
+Review remained read-only; no installation, release, or diagnostic execution was performed.
+
+VERDICT: GO No declared condition was falsified and no P0 was found; one nonblocking diagnostic isolation follow-up remains.

@@ -1,0 +1,12 @@
+.claude/scripts/context-budget.py
+.claude/scripts/derive-audit-family.py
+.claude/scripts/diagnose-output-hook.py
+.claude/scripts/env-inventory.json
+.claude/scripts/gen-command-skill-hook-map.py
+.claude/scripts/generate-available-models.py
+.claude/scripts/lessons.py
+.claude/scripts/local/_release_bump_sites.py
+.claude/scripts/local/mac_sign_and_release.py
+.claude/scripts/local/pair-rail-gate.sh
+.claude/scripts/local/release.sh
+.claude/scripts/model-deprecations.json

@@ -1,0 +1,17 @@
+Payload 16/32: no P0 or falsified numbered envelope condition established. Audit-emitter rebinding checks found no additional concrete regression. Benign command checks ran on Python 3.9.6; no files were modified.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/check_canonical_edit.py:624, integrating .claude/hooks/_lib/canonical_edit/__init__.py:13. A missing extracted component during a partial upgrade raises ModuleNotFoundError, which is classified as an integrity failure. The fallback blocks every edit before parsing the event or checking its path, including ordinary noncanonical edits. Confirmed with in-memory import-fault injection. Minimal fix: treat missing modules/import failures as infrastructure faults and emit allow with a diagnostic; preserve the deliberate wall-deadline denial.
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:167. Substitution extraction treats quoted closing parentheses as shell delimiters. The benign command value=$(python3 -c 'print(1)') is consequently rejected as bash_indirect_unparseable_shell; formatted Git output has the same problem. Full decision checks allow these commands when the new scanner is disabled. Disabling heuristics does not help. Minimal fix: track inner quotes, escapes and syntactic parentheses when locating substitution boundaries.
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:455. Every canonical-path argument following an interpreter's inline program is treated as a write target. A Python command that only reads and prints JSON from .claude/settings.json is blocked as bash_computed_canonical_target. Confirmed through the full decision function; the same command is allowed with the new scanner disabled. Minimal fix: require a recognized write operation before treating an interpreter operand as a write target.
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:393. Launcher recursion through _scan_segment bypasses the MAX_DEPTH check located only in _scan. Deep nesting within the outer word/size limits can raise RecursionError, which .claude/hooks/_lib/_bash_safety_parts/decisions_cli.py:243 converts into allow. Thus an input-limit failure escapes the new scanner's assessment after legacy checks pass. Static finding; no exploit input executed. Minimal fix: enforce the shared depth limit at every recursive entry and return bash_indirect_limit upon exhaustion.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/bash_indirect_telemetry.py:53. If the marker directory is a symlink, mkdir(exist_ok=True) accepts it and the subsequent open creates an empty marker outside the audit directory. O_EXCL protects only the final filename; existing files are not overwritten. Minimal fix: open and validate the marker directory without following symlinks, then create the marker relative to that directory descriptor.
+
+VERDICT: GO-WITH-CONDITIONS The four new P1 findings and one P2 follow-up warrant remediation, but this payload establishes neither a P0 nor a false numbered envelope condition.

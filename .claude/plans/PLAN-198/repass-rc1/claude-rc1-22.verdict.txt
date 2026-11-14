@@ -1,0 +1,64 @@
+SCOPE OF THIS PAYLOAD (22/32): .claude/hooks/check_canonical_edit.py (split into .claude/hooks/_lib/canonical_edit/*), .claude/hooks/check_cost_envelope.py, .claude/hooks/check_harness_config.py. I read the redacted candidate tree with read-only tools only.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES
+- Condition 7 (thin entry points over _lib modules; a hand-patched hook must be patched again in its module; a condition-5 module is a kernel path): TRUE. check_canonical_edit.py is now a facade that binds the implementations from _lib/canonical_edit/{paths,sentinels,signature_rail,session_roots,utility,decisions,entry,guards}.py. The package has a recursive kernel row at check_arbitration_kernel.py:309 (".claude/hooks/_lib/canonical_edit/**/*"). It is also canonical through ".claude/hooks/_lib/**/*.py" (guards.py:34).
+- Condition 5 (the part this payload touches): the canonical_edit recursive row is present (check_arbitration_kernel.py:309).
+- CHANGELOG [1.4.4] "Fixed — harness gate ... cost envelope" lines match the code. Cost envelope: check_cost_envelope.py:182-187 and 248-252. Harness gate, RED on an exception with the captured output kept: check_harness_config.py:583-606. Advisory root_instruction_load: check_harness_config.py:922-961 and 1028-1029. It is a WARN that never claims a load without a complete snapshot. /ceo-boot consumes the gate as advisory (_ceo_boot_parts/liveness_schedule.py:360-399).
+
+MOVED-CODE VERIFICATION (no defect found here)
+- The guard list, MCP keys, scope regexes and blocked-tool enums in guards.py:5-384 are the removed text. _CANONICAL_PREFIXES and the folded lists are still computed in the facade (check_canonical_edit.py:144-204).
+- bind() (_lib/canonical_edit/__init__.py:16-31) rebuilds each exported function with FunctionType on the facade globals:
+  - Every function the diff removes appears in a component's __all__.
+  - The `global` writes (_SENTINEL_CACHE_HITS/_MISSES, _CURRENT_TOOL_NAME, _UNLOCK_TRUST_DIAG) land on facade state.
+  - The caches stay per import.
+  - Patching the facade still reaches the callees.
+  - The components have no import-time dependencies except guards.py (`re`).
+  - Nothing calls a function at import time before bind.
+- Preserved fail directions:
+  - Wall deadline stays fail-CLOSED: decisions.py:82-101, entry.py:300-304, signature_rail.py:32-35, sentinels.py:161-167.
+  - parse_error stays fail-CLOSED: entry.py:175-207.
+  - read_event raising stays fail-open: entry.py:169-173.
+  - The multi-candidate scan fault stays fail-CLOSED: entry.py:319-336.
+  - The session-roots code is verbatim.
+- Standard library only. I found no syntax newer than Python 3.9 in the package.
+- AST consumers already migrated: gen-command-skill-hook-map.py:195-226 follows bind(globals()). scripts/tests/test_install_baseline_manifest.sh:185-205 uses the --is-canonical oracle. Runtime importers fail safe when the facade fell back: posture_tables.py:51-55, _pair_rail_parts/part_02.py:330-350 (returns no bypass) and check_codex_stop_review.py:287-310.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/check_canonical_edit.py:616-640 (mirrored in _lib/canonical_edit/entry.py:126-134). The fail direction on an infrastructure fault is inverted, and this is not declared.
+- What happens: when `from _lib.canonical_edit import bind` raises ImportError (a missing component file), the fallback main() prints {"decision":"block"} for every event the hook receives. That covers Edit, Write, MultiEdit, NotebookEdit and mcp__*, canonical paths or not. It does not read the event at all.
+- Before this delta: an import failure in this hook crashed it (exit 1, a non-blocking error in Claude Code), so it failed open. Fail-closed was limited to confirmed-canonical paths (PLAN-045 F-01-07).
+- Why it is an inversion: it contradicts the review's doctrine (infrastructure faults fail OPEN) and the hook's own docstring (check_canonical_edit.py:36-40: "Any internal exception -> allow. The hook never blocks the user on its own bug").
+- Why it counts as undeclared: CHANGELOG [1.4.4] says the entry points keep their observable contracts. ADR-202:56-59 only alludes to "separate import-integrity work".
+- The integrity classification is also inconsistent:
+  (a) A component that raises anything other than ImportError (for example a truncated file giving a SyntaxError) falls back to allow-all (line 639).
+  (b) If only guards.py fails to import, the first try at lines 118-127 silently sets _CANONICAL_GUARDS = [] with no stderr line. The package __init__ does not import guards, so bind still succeeds and _COMPONENT_IMPORT_ERROR stays None. Every path then classifies as non-canonical. That silently opens: the Edit gate, the Bash canonical-write matcher (posture_tables.py:53,160), bash_indirect_guard.py:410, the check_codex_filewrite DENY_LIST and the --is-canonical oracle. mcp__ events then crash on a NameError for _MCP_WRITE_PATH_KEYS, which fails open. Kernel hard-deny still covers the kernel paths.
+- Failure scenario: an adopter's upgrade is interrupted, or _lib is pruned by hand, so check_canonical_edit.py is present but a _lib/canonical_edit/*.py file is not. Every file edit in every session is then blocked with "canonical_edit integrity failure" until the adopter reinstalls. It is recoverable through Bash, but it is the "blocking a legitimate session" class.
+- Minimal fix:
+  1. In the fallback main(), parse stdin and block only when a candidate path's lower-cased first segment is in _CANONICAL_PREFIXES_FOLDED; allow everything else.
+  2. Move the guards import into the same integrity try, so a guards-only failure sets _COMPONENT_IMPORT_ERROR and is not silent.
+  3. Or, at minimum, declare the block-all posture in CHANGELOG [1.4.4] (hooks split, plus Known-open) and correct the docstring.
+
+P2 FOLLOW-UPS
+1. .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:300-325. _sentinel_patterns() walks the AST of check_canonical_edit.py looking for `_PATTERNS`, which moved with _find_sentinels to _lib/canonical_edit/paths.py:238-249.
+   - Effect: the boot check sentinels_pending_gpg now always runs on the 4-pattern fallback and prints "[padrões em FALLBACK — a autoridade não foi lida]".
+   - It no longer reports pending sentinels under architect/wave-0a, wave-0b, wave-1-2, wave-minus-1, staging/review or audit-v2/architect/round-*.
+   - The S321 comment ("os padrões são EXTRAÍDOS por AST do arquivo que os define") is no longer true, and no test covers derived=True.
+   - Fix: parse paths.py.
+2. .claude/hooks/_lib/_ceremony_toolkit/preflight.py:50-62. _canonical_patterns() requires a top-level `_CANONICAL_GUARDS = [...]` in check_canonical_edit.py. The only remaining assignment sits inside an except block (line 124, an empty list).
+   - Effect: the default path of collect_modified_canonical_paths / validate_sentinel_pack always returns canonical_guard_policy_unavailable. That fails closed and only affects maintainers.
+   - Every test passes canonical_patterns explicitly, so this path is untested.
+   - Fix: read _lib/canonical_edit/guards.py.
+3. check_canonical_edit.py has stale or dead text:
+   - The docstring at lines 36-40 states a fail-open contract the facade no longer has.
+   - Lines 125-127 define _SKILL_CONTENT_RE, _SKILL_LOADED_RE and _VALID_BLOCKED_TOOLS, which nothing in the hook uses.
+   - The comment at lines 165-168 ends in a dangling fragment.
+   - The fallback main prints a raw Claude-shaped decision, which a Codex-host wire would not honor. The hook's own entry.py:16-18 calls that a silent fail-open.
+4. .claude/hooks/check_cost_envelope.py:187.
+   - The project string is now abspath(CLAUDE_PROJECT_DIR) instead of the raw value, and the composite spend key hashes it (_lib/cost_envelope.py:132-139). A CLAUDE_PROJECT_DIR with a trailing slash or ./.. segments starts a fresh daily, 7-day and 30-day ledger after upgrade: spend recorded under the old key no longer counts against the cap.
+   - An import failure of _lib.runtime_paths also silently disables the envelope, which the CHANGELOG line ("without an absolute CLAUDE_PROJECT_DIR") does not mention.
+   - Low impact; declare it, or keep the key derivation byte-compatible.
+
+check_harness_config.py: no defect found beyond the above.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition this payload touches is false and I found no P0, but one undeclared P1 should be declared in CHANGELOG [1.4.4] or fixed before GA: when a component fails to import, the canonical-edit fallback blocks every edit, canonical or not, and a guards-only import failure silently disables the gate.

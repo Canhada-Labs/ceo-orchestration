@@ -1,0 +1,75 @@
+SCOPE OF PAYLOAD 19/32: .claude/hooks/_lib/spool_writer.py (split into _lib/_spool_writer_parts/, plus a new exit-deadline gate), .claude/hooks/_python-hook.sh (exports CEO_HOOK_BOUNDED_EXIT=1), .claude/hooks/audit_log.py (becomes a facade that exec's _lib/_audit_log_parts/*). I read every part file in the candidate tree and compared it with the removed text in the diff.
+
+CONDITIONS TOUCHED BY THIS PAYLOAD (checked against the code)
+- Condition 8: TRUE. _python-hook.sh:409-410 exports CEO_HOOK_BOUNDED_EXIT=1 right before every Python exec path. spool_writer.py:528-532 reads the variable. _spool_writer_parts/lifecycle.py:348-350 (atexit) and :365-366 (signal) skip drain_now and _flush_journal_buffer and record exit_deadline_skip. ADR-055-AMEND-4 shows ACCEPTED with implementation PARTIAL (ADR lines 6, 45). CHANGELOG.md:402-405 says it is not proven that every skipped event is collected later, with no release assigned.
+- Condition 5 (this payload's part): TRUE. .claude/hooks/_lib/_audit_log_parts/**/* is in _KERNEL_PATHS (check_arbitration_kernel.py:313), and _python-hook.sh stays kernel (:141).
+- Condition 7: consistent. audit_log.py keeps its path, and its logic lives in kernel-listed parts.
+
+MOVED-CODE CHECK (item 4): no behavior drift found.
+- writer.py, prepare.py and drain.py match the removed functions statement for statement.
+- lifecycle.py differs only where intended: the exit-deadline gate; chaining a signal that arrives during spool_append; a guard so install_exit_handlers never chains to itself after _reset_for_test; and a longer _reset_for_test.
+- _spool_writer_parts/__init__.py:install() rebinds every exported function to the facade globals. So global lookups, `global` writes, cross-calls and test monkeypatches all resolve in _lib.spool_writer, as before.
+- No name appears in both the facade and a part's __all__. Every removed name is re-exported. Class annotations are lazy (from __future__ import annotations), so the deferred _DrainingFile and DrainStats references are never evaluated at definition time.
+- audit_emit.py:37-43 guards the import of spool_writer, so a part that fails to import falls back to the sync write path (fails open).
+- The audit_log parts are content-identical to the removed code. They execute in the facade dict, __doc__ is restored, and the __main__ block (last part) runs only after every part is defined.
+- Standard library only; Python 3.9 compatible.
+
+NEW FINDINGS (annex)
+
+P1 — In a hook-only session nothing drains the audit spool. Spool-routed audit events stay out of the HMAC-chained log indefinitely, and condition 8 and the CHANGELOG do not say so.
+FILE:LINE: .claude/hooks/_python-hook.sh:410; .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:346-358 and :361-375; .claude/hooks/_lib/_audit_emit_parts/writer.py:579-592; .claude/hooks/_lib/_spool_writer_parts/prepare.py:83-122; CHANGELOG.md:129-132 and :402-405.
+Failure scenario:
+- Every hook registered in .claude/settings.json runs through _python-hook.sh, so every hook process now skips leg 2 (the forced drain at exit).
+- Leg 1 (the in-life opportunistic drain) is effectively unreachable in a hook. should_drain() runs right after spool_append has just refreshed the process's own spool mtime, so the >100 ms age trigger cannot fire. The only reachable trigger is 100 body lines in the process's own spool, which a short hook does not produce. PLAN-194 LEDGER:178 records the same finding.
+- The only remaining drainers are non-hook processes that import audit_emit (for example /ceo-boot run through Bash). Each exit runs one drain_now(force=True), which moves at most K_MAX=100 entries (drain.py:200-203).
+- ADR-055-AMEND-4 §4.2 (lines 169-171) says the required unbounded drain caller at boot or nightly is "não está integrado".
+- Result for an upgrading or fresh adopter:
+  (a) Every audit_emit event (blocks, VETOs, canonical-edit decisions, telemetry) accumulates in per-PID spool files that have no HMAC. No reader merges the spool: /ceo-boot 24h windows, audit-query, check_tier_policy_misrouting_24h and the Stop/SessionEnd summaries all read only audit-log.jsonl.
+  (b) Each later drain re-reads and re-parses the whole backlog and rewrites every spool file it did not fully consume (drain.py:489-556), with an fsync each, while holding the canonical lock. So drain cost grows with the backlog. A long hold can push audit_log.append_entry past its 2.5 s lock timeout and drop agent_spawn rows ("would-log"), the rows check_budget sums. That direction fails open.
+  (c) The journal buffer is no longer flushed at exit, and it only flushes every 10 envelopes, i.e. 5 events (writer.py:294-297). So a hook with four events or fewer never writes begin/commit envelopes to disk. check-audit-real-loss.py G6 (:7-19, :125-144), the ADR's active real-loss revert trigger, then cannot see those records at all.
+- No governance hook is disabled, no session is blocked, and events are fsync'd. That is why this is P1, not P0.
+- The CHANGELOG line "its events wait in the spool for a later drain, so they can reach the log later" implies a scheduled drain that does not exist for hook-only sessions.
+Minimal fix: either land the ADR §4.2 unbounded drain caller outside hooks (for example a drain-to-fixed-point step in /ceo-boot or a nightly job, with a budget), or declare in condition 8 and Known-open that:
+- hook processes never drain;
+- non-hook audit_emit importers drain at most 100 entries per exit;
+- the canonical log and the G6 meter lag accordingly.
+Optionally, flush the process's own journal buffer at bounded exit with FileLock timeout=0, so G6 keeps seeing commits.
+
+P2 FOLLOW-UPS
+1. The exit_deadline_skip breadcrumb gets written on every exit of every hook that imports audit_emit, even when nothing is pending.
+   - Where: lifecycle.py:348-349 and spool_writer.py:531-532. install_exit_handlers runs when audit_emit is imported (audit_emit.py:494); policy.py, scratchpad_lib, otel_emit and _bash_safety_parts/normalization.py all import it.
+   - Effect: audit-log.errors grows about one line per hook invocation, with no bound. /ceo-boot check_audit_log_freshness (_ceo_boot_parts/state_plan_audit.py:459-483) and ceo-diagnose.py:364-422 read any non-empty file as write failures (yellow), and status.py:290 warns above 20 lines. Those signals become permanently yellow, which masks the FAIL-CLOSED flood detector (F-6.3).
+   - Base produced similar noise through "drain canonical lock timeout" under contention, so this kind of noise is not new; the per-exit volume is.
+   - Fix: skip the breadcrumb when the process's own spool is absent or empty and its journal buffer is empty (ADR §4.1 step-4 fast path), or keep skips out of the line-count detectors.
+2. Moved docstrings drifted.
+   - writer.py:273-276 and :303-304 still say the journal is flushed at "signal handler, atexit".
+   - writer.py:345-348 still says the signal handler "bails".
+   - Under CEO_HOOK_BOUNDED_EXIT=1 neither is true. Fix: update the text.
+3. Dead API: spool_writer.py:515-525 set_exit_deadline() has no caller in the tree.
+   - Only whether the stored value is set is ever checked; it is never compared to a clock.
+   - The docstring "hook entrypoints own the monotonic deadline" describes nothing that exists.
+   - Fix: remove it, or wire and enforce it.
+4. The parts put the wrong directory on the import path.
+   - _spool_writer_parts/{writer,prepare,drain,lifecycle}.py:29-31 compute _HOOKS_DIR = Path(__file__).resolve().parent.parent, which is .claude/hooks/_lib (one level too shallow), and insert it at sys.path[0] in every hook that imports audit_emit.
+   - No _lib module shadows a stdlib, hook or script name today (checked).
+   - Hazard: a future _lib/<stdlib-name>.py would shadow the stdlib module for the whole hook process.
+   - Fix: use .parent.parent.parent, or drop the block (the facade already inserts the hooks dir).
+5. audit_log.py:317-327 runs exec on the parts at import time.
+   - A missing or unreadable part raises before main(): exit 1 with a traceback.
+   - That breaks the hook's documented contract ("exits 0") and the partial-upgrade fallback kept at :180-199.
+   - It is a PostToolUse hook, so nothing blocks, and install.sh copies the _lib subdirectories.
+   - Fix: wrap the import-time call in try/except that writes a breadcrumb and exits 0 under __main__.
+6. Two source-grep guards are now satisfied by comments.
+   - audit_log.py:305 and :314 are comments that keep test_adr_052_role_to_model_coverage.py:64-80 and test_skill_unknown_ratio_path_d.py:162-175 green.
+   - The H2 guard against `pop('skill')` / `del event['skill']` now scans only the facade, not _lib/_audit_log_parts/entries_usage.py where build_entry lives, so it is vacuous.
+   - Fix: point the tests at the parts and drop the sentinel comments.
+7. Pre-existing, not introduced here: spool_writer.py and _lib/_spool_writer_parts/ are canonical-only (sentinel-unlockable), not kernel.
+   - They hold the HMAC-chaining drain and the canonical append, called by the kernel module _lib/audit_emit.py on every write.
+   - Condition 5 does not claim its list of five modules is exhaustive, so it is not false.
+   - Consider enrolling them.
+8. Informational: lifecycle.py:363-364 changes how a signal during spool_append is handled.
+   - A SIGTERM/SIGINT arriving during spool_append is now chained to the previous disposition (by default the process dies) instead of being swallowed.
+   - The in-flight event may be lost or left as a partial line, which the phase-3 discard handles.
+   - This matches ADR §4.2 but is not mentioned in the CHANGELOG.
+
+VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches holds against the code and no P0 was found, but one undeclared P1 must be carried in the signed annex: under bounded exit no regular drainer remains for hook-only sessions, so audit events stay off the chained log indefinitely and the G6 loss meter cannot see them.

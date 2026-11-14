@@ -1,0 +1,19 @@
+Payload 8/32: no P0 or false declared condition identified.
+
+NEW FINDINGS (annex)
+No undeclared P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_cost_transcripts_parts/__init__.py:56
+Dataclass-generated __repr__ wrappers are rebound to facade globals, losing dataclasses._thread. On Python 3.9, repr(ScanCounters()) raises NameError; PricingResult, UsageRecord and Priced are also affected. Logging a transcript_rollup() result can therefore fail. Minimal fix: preserve stdlib wrapper globals and rebind only methods whose actual globals belong to the implementation module.
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:36
+Cloned Incomplete retains the original ParseError base instead of the exported clone. Consequently, issubclass(Incomplete, ParseError) is false, and downstream callers catching the exported ParseError miss incomplete-input exceptions from lex(). Minimal fix: map implementation bases to their facade clones when constructing classes. The top-level census still converts malformed input into blocking parse sites.
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:29
+Property accessors are not rebound. Site.blocking still reads the template’s BLOCKING_VERDICTS, so patching that constant through the legacy facade has no effect on blocking classification. Minimal fix: clone property descriptors with rebound accessors.
+
+Validation: Python 3.9.6 read-only probes confirmed these regressions; 76 context-policy tests passed, 22 implementation files parsed with Python 3.9 grammar, and the installer census completed over all 20 discovered shell files. Files were not modified.
+
+VERDICT: GO The confirmed regressions are nonblocking compatibility issues, with no P0 or declared-condition contradiction established in this payload.

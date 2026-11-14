@@ -1,0 +1,9 @@
+Payload 31/32: no P0 or false declared condition found. Read-only checks confirmed the three extracted entry points import successfully, preserve function-global bindings, and parse with Python 3.9 grammar.
+
+NEW FINDINGS (annex)
+None.
+
+P2 follow-ups
+P2 — .claude/scripts/re-pin-codex.py:2171; related lines 497 and 1676. Re-pinning the shipped unbounded >=0.128.0 policy to 0.161.0 produces >=0.128.0,<0.162.0, but fabricates old_upper=0.162.0 and reports “Upper bound widened <0.162.0 -> <0.162.0.” Generated pin, sentinel and commit material therefore misdescribe a restriction; after application, range-based release validation rejects later versions previously accepted. Minimal fix: track the original range explicitly and describe this transition consistently as narrowing from an unbounded floor.
+
+VERDICT: GO-WITH-CONDITIONS The extraction checks passed; correct the nonblocking range-description defect before using newly generated re-pin packs.

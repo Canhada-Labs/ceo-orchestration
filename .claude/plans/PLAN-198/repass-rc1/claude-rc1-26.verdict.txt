@@ -1,0 +1,59 @@
+SCOPE OF THIS PAYLOAD
+Payload 26/32 is one change: .claude/scripts/ceo-boot.py becomes a thin entry point (condition 7, PLAN-197). About 4,900 lines leave the file. The entry point now runs 10 ordered part files from .claude/hooks/_lib/_ceo_boot_parts/ with exec(compile(text, real_path), globals()) at ceo-boot.py:114-117, so the parts' functions use the entry point's own globals. I couldn't run Python in this environment, so nothing below was executed.
+
+WHAT I CHECKED AGAINST THE CANDIDATE TREE
+- Moved code matches the deleted text line for line in: state_plan_audit.py (whole file); harness_governance.py:1-175 and 270-350; model_persona.py (whole file); the registry and dispatcher in scheduled_cache.py:303-460; lessons_cli.py (whole file, including all of main()); and the recommendation sort keys and severity map in cache_recommendations.py.
+- Names resolve the way they did before:
+  - __file__-relative loads (persona_confidence.py:183/216/275, candidates_lessons.py:202/374) still resolve to .claude/scripts/, because the parts run in the entry point's dictionary.
+  - `global _PLAN_GLOB_CACHE` binds into that same dictionary.
+  - check_governance_validate is defined at ceo-boot.py:70, before install(), and TIER_S_CHECKS needs it (scheduled_cache.py:311).
+  - The _UNSET default argument in lessons_cli.py:7 is defined by an earlier part.
+  - Patching a module attribute still reaches the parts' functions (test_ceo_boot_parts.py covers this).
+- One change is not a pure move: a 25th Tier-S check, main_checkout_state (model_persona.py:215). It can only return yellow or green. CHANGELOG lines 340 and 479 declare it.
+- Standard library only; works on Python 3.9 (cancel_futures needs 3.9+, already required).
+- Install path: install.sh:1520-1549 copies every top-level _lib entry, folders included. _framework_manifest_set.sh:100-102 excludes only tests/, test_isolation.py and testing.py, so _ceo_boot_parts/ reaches installs. upgrade.sh is not in the tree copy and I didn't check it.
+- Fail direction: ceo-boot is a slash-command script, not a hook. If the parts folder were missing, /ceo-boot would stop with a visible ImportError. That bypasses no governance control and turns nothing fail-closed into fail-open.
+- No declared condition is contradicted by this file. Condition 7 holds here.
+
+FINDINGS
+
+P2-1 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304 (_sentinel_patterns)
+Failure scenario: _sentinel_patterns() reads the _PATTERNS list by parsing .claude/hooks/check_canonical_edit.py. The PLAN-197 split in this same release moved that list into .claude/hooks/_lib/canonical_edit/paths.py:238, inside _find_sentinels. check_canonical_edit.py no longer has any _PATTERNS assignment. So every run, in the dogfood repo and in every install, returns derived=False:
+- sentinels_pending_gpg scans only the 4 fallback patterns.
+- It drops six of the guard's ten patterns: architect/wave-0a, wave-0b, wave-1-2, wave-minus-1, staging/review and audit-v2/architect/round-*.
+- Its summary always ends with "[padrões em FALLBACK — a autoridade não foi lida]".
+This is advisory and the summary flags the fallback, so gate_pass is unaffected. The patterns it loses are mostly old grandfathered ones. But the "derived from the authority" rule from S321 is broken, and the digest shows a permanent warning. No test covers _sentinel_patterns.
+Minimal fix: parse _lib/canonical_edit/paths.py as well, or instead (try the entry point first, then the module). Add a test asserting derived=True on the real tree.
+
+P2-2 — .claude/scripts/ceo-boot.py:120-178 (dead copy of check_tier_a_spec_version_drift)
+Failure scenario: the entry point defines this function again after install(). The copy actually registered in TIER_A_CHECKS is the one at model_persona.py:6 (bound at scheduled_cache.py:376). The module attribute ceo_boot.check_tier_a_spec_version_drift therefore points to a copy the dispatcher never runs. The two bodies are identical today, so runtime behavior is unchanged. But:
+- test_check_vacuous_checks.py extracts this function from the entry point's text with ast, so the S287 regression guard now tests the dead copy. Reverting the cure in model_persona.py would leave it passing.
+- A maintainer who edits the function they see in ceo-boot.py changes nothing at runtime, and the tests still pass.
+- The new docstring, "Lesson validation remains delegated to `_validate_boot_lesson`", has nothing to do with this check. It exists only so test_dead_symbol_lesson_render_safe_is_gone finds that string.
+Minimal fix: delete the copy in the entry point, and have the tests load the function from the module (or from the part file).
+
+P2-3 — .claude/scripts/check-vacuous-checks.py:133 and ceo-boot.py:180-184 (guards that now check text, not code)
+Failure scenario:
+- The vacuity lint scans only ceo-boot.py by default. It now sees 2 check_* functions instead of about 36, so test_cli_clean_on_real_ceo_boot passes without checking the parts.
+- The comment block at ceo-boot.py:180-184 exists so text-search tests keep finding their strings (test_plan_091_expected_callsites.py:133-146, test_ceo_boot_audit_emit.py:93-95). Those guards now confirm a comment exists, not that the code is wired. A check removed from TIER_S_CHECKS would still pass them.
+Minimal fix: have the lint also walk _lib/_ceo_boot_parts/*.py. Make the tests check the loaded module (names in TIER_S_CHECKS, callables) rather than source text.
+
+P2-4 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:174 onward (check_hook_live_smoke coverage shrank)
+Failure scenario: the smoke check byte-compiles only the registered hook entry files. After PLAN-197, the logic of the split kernel hooks lives in _lib packages. A syntax error in, for example, _lib/canonical_edit/*.py no longer turns hook_live_smoke red, even though the hook then fails at runtime.
+Minimal fix: also compile, or resolve the import spec of, the _lib packages each split entry point binds.
+
+P2-5 — .claude/hooks/_lib/_ceo_boot_parts/*.py:1 (__doc__ overwritten)
+Each part's docstring runs in the entry point's dictionary. So ceo_boot.__doc__ becomes "Extracted ceo-boot declarations executed by the facade." instead of the script's own docstring.
+Minimal fix: drop the part docstrings, or save and restore __doc__ around install().
+
+P2-6 — .claude/hooks/_lib/_ceo_boot_parts/model_persona.py:215 (new main_checkout_state check)
+It can make up to three git calls of 0.8 s each, one after another, inside the 5 s overall budget. It has no entry in PER_CHECK_TIMEOUT_OVERRIDES_S. If the overall budget runs out, a check gets status "timeout", which turns gate_pass false. In installs where origin/HEAD is unset and the default branch is not "main", the check is permanently yellow; the CHANGELOG declares that.
+Minimal fix: add an override entry, and run the symbolic-ref calls only when they are needed.
+
+NEW FINDINGS (annex)
+None at P1 or above in this payload.
+
+P2 FOLLOW-UPS
+P2-1 to P2-6 above. P2-1 is the one worth fixing before GA, because it permanently degrades a governance boot signal in every install.
+
+VERDICT: GO The ceo-boot.py split moves its code unchanged into parts that run in the entry point's own globals, still loads from the same places, installs correctly and contradicts no declared condition; the only defects found are P2s, led by the sentinel-pattern lookup that the canonical-edit split broke.

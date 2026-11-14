@@ -1,0 +1,69 @@
+SCOPE OF THIS PAYLOAD (23/32): .claude/hooks/check_pair_rail.py (now an entry point over _lib/_pair_rail_parts), .claude/hooks/check_plan_edit.py (now uses _lib/plan_paths), .claude/hooks/check_precompact_continuity.py (now an entry point over _lib/_precompact_parts), four new scripts (.claude/scripts/_contamination_inventory.py, _repin_guard.py, _restore_archive.py, _subprocess_census.py), and the start of .claude/scripts/architect-bundle-validate.py.
+
+WHAT I VERIFIED (no finding)
+- Moved code in check_pair_rail.py (item 4). _pair_rail_parts/__init__.py:14-24 rebuilds every part function on the entry point's own globals (FunctionType(code, namespace, ...)). So:
+  - `__file__` lookups resolve to the entry point. For example, `_emit_codex_review_invoked` computes parents[2] = the repo root, and `_resolve_codex_cli_shape` and `_load_codex_adapter` compute parent = .claude/hooks, as before.
+  - The `global` writes (_CURRENT_REVIEW_ID, _RUBRIC_CATALOGUE_CACHE) land in the entry point's namespace.
+  - Test patch points such as mock.patch.object(check_pair_rail, "_invoke_codex_review") still reach _decide.
+  - deepcopy returns the same class objects, so the exception classes are identical across the entry point and the parts.
+  - Each global used by the parts is present in the entry point (`_cli_currency` is imported at check_pair_rail.py:21). hashlib, tempfile and stat are imported locally where used, so no NameError is possible.
+- Fail direction (item 2). The new top-level `_lib` imports (check_pair_rail.py:21-22, check_precompact_continuity.py:172) can now fail at import time. Such a crash exits 1 with empty stdout:
+  - On the exec path (_python-hook.sh:412-417) and the grok path (_python-hook.sh:548), that is a non-blocking error, so infrastructure faults still fail open.
+  - pair-rail-gate.sh:212 treats any non-zero exit as failure, so a crash in the --verify-codex-pin command line is not an inversion either.
+  - The ADR-182 block arm is unchanged (part_03.py:103-126).
+- check_precompact_continuity.py: the parts are run with exec in the entry point's namespace (_precompact_parts/__init__.py:16). Every module they need is imported in the entry point. Their text matches the deleted bodies, including the no-follow ledger read chain (ledger_index.py:55-120) and the gate/main fail-open behavior (runtime.py:108-126).
+- Condition 5 holds against the code: check_arbitration_kernel.py:309-340 has the 13 new rows, including _pair_rail_parts/**/*, cli_currency.py and plan_paths.py.
+- Conditions 9 and 10 match the code: part_01.py:553-592 (`compatible`/version_floor_only), part_04.py:510-514 (the command line exits 0 for compatible), and cli_currency.py:11 (CODEX_VERSION_FLOOR = 0.160.0).
+- _restore_archive.py looks sound:
+  - It refuses links, hard links, sparse members, absolute paths, `..`, duplicate names, names outside the layout, and the key files under casefold.
+  - complete_members requires an all-zero end-of-archive block and a clean gzip stream through to the end.
+  - Extraction uses O_EXCL|O_NOFOLLOW into a mktemp stage directory (ceo-restore.sh:229-235), and the stage is removed on exit, so a partial write stays inside the stage.
+- _contamination_inventory.py fails closed through RuleOneInputError (term_scan.py:46-47).
+- _repin_guard.py only substitutes paths constrained by re-pin-codex.py:246 and :2165.
+- _subprocess_census.py is Python 3.9-safe; its show_empty pin only applies on 3.13 and later.
+- architect-bundle-validate.py: the r""" change leaves __doc__ byte-identical, because the docstring's only backslash escape is \`.
+- All the Python is standard-library only and compatible with Python 3.9.
+
+DECLARED CONDITIONS: none of the conditions reachable from this payload (5, 7, 9, 10) is false against the code. Condition 7 has the caveat in P2-1.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+P2-1 check_pair_rail.py:29-210 vs _lib/_pair_rail_parts/part_02.py:22-314. `_invoke_codex_review` exists twice. The entry point's copy, defined after `_install_parts`, overwrites the rebuilt part_02 copy, so part_02's copy is dead code.
+- Scenario: a maintainer or adopter follows condition 7 and the CHANGELOG ("re-apply the patch to the module") and patches part_02. The fix silently has no effect at runtime.
+- Fix: delete one of the two copies. Either drop the entry point's copy, or remove the name from part_02's __all__ and add a comment that the live copy is in the entry point.
+
+P2-2 check_precompact_continuity.py:172-175 and _precompact_parts/__init__.py:16. exec of each part's source assigns the part's leading docstring to the namespace's `__doc__`. After install, the hook's `__doc__` is runtime.py's one-line docstring instead of the ADR-153 contract text. audit_log.py:315 and :328 save and restore `__doc__` for exactly this reason.
+- Fix: save `__doc__` before `_install_precompact_parts(globals())` and restore it afterwards.
+
+P2-3 _lib/plan_paths.py:13-23, used at check_plan_edit.py:238-240, 609, 675 and 703. The old regex was search(`\.claude/plans/PLAN-\d{3}-[a-z0-9-]+\.md$`). The new predicate also rejects slugs with a leading, trailing or doubled hyphen, digits other than ASCII 0-9 (the old `\d` accepted them), and a parent that does not end in `/.claude/plans`.
+- Scenario: a file such as .claude/plans/PLAN-301-foo-.md is still picked up by /ceo-boot (_ceo_boot_parts/state_plan_audit.py:9 globs PLAN-*.md). The lifecycle hook no longer checks its status transitions or required fields.
+- The same bypass already existed for names with capital letters, so the impact is small.
+- CHANGELOG.md:332-333 announces only the new FOLLOWUP recognition, not this narrowing.
+- Fix: declare the narrowing in the CHANGELOG, or have check_plan_edit apply the lifecycle check to any `PLAN-*.md` directly under .claude/plans.
+
+P2-4 _lib/_pair_rail_parts/part_01.py:477-486 together with :553-571. When the host's triple is absent from the manifest (the manifest pins only aarch64-apple-darwin), the currency arm runs on the launcher, or on the override path, without resolving or hashing anything.
+- The result is `compatible` with sha256 empty and path set to the launcher. `_resolve_codex_bin` then runs the launcher.
+- CHANGELOG.md:191-193 says "the payload's sha256 is still computed and recorded"; that is false on this route.
+- On the same route, a CEO_PAIR_RAIL_CODEX_BIN override that names a missing file is no longer a fail-closed `mismatch`. It becomes compatible, then FileNotFoundError, then CodexUnavailable, then advisory. The docstring at part_01.py:397-403 still promises "set-but-missing = BLOCK".
+- Adopters are unaffected, because installs do not receive .claude/governance/ and the pin resolves as infrastructure. The weakening itself is declared in substance by condition 9.
+- Fix: on the triple-absent route, require an existing regular file before applying the currency arm, and correct the CHANGELOG sentence and the docstring.
+
+P2-5 _lib/cli_currency.py:43-60, reached through part_01.py:557-570. `qualified_package_version` returns the closest qualified @openai/codex package.json. `compatible_package_version` keeps walking every ancestor up to `/` and accepts the first one that meets the floor.
+- Scenario: the closest package says 0.150.0 and an unrelated ancestor package.json named @openai/codex says 0.200.0. The result is status `compatible/version_floor_only` with installed_version 0.150.0, which is below the floor.
+- Fix: decide compatibility on the same, closest qualified package file, and stop the walk there.
+
+P2-6 Docstrings that promise behavior the code no longer has:
+- part_04.py:498-501: the exit-0 description says "verified (sha matches)" only, but exit 0 now also covers compatible.
+- part_02.py:63-66: "the artifact that was hashed is the artifact that runs" is not true on the compatible route.
+- part_01.py:408-418: the status list omits "compatible" and the new installed_version field.
+- docs/threat-model.md:2601: still names `_PLAN_PATH_RE` in check_plan_edit.py, which no longer exists.
+- Fix: update the text.
+
+P2-7 check_pair_rail.py and check_precompact_continuity.py now fail at import if the _lib subpackages they import are missing, for example after a partial or hand-made upgrade. That is still fail-open, but both rails go silent, leaving only a stderr traceback.
+- install.sh:1520-1556 copies every top-level _lib entry. scripts/upgrade.sh is withheld from this copy, so I could not check it here.
+- Fix: none required. Optionally, a /ceo-boot check could confirm that the part packages are present.
+
+VERDICT: GO No declared condition reachable from this payload is false and no P0 was found: the pair-rail and precompact entry points keep their globals, patch points and fail-open behavior, the new scripts fail closed where they should, and the remaining items are P2 follow-ups.

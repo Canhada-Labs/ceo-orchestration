@@ -1,0 +1,4 @@
+.claude/scripts/night-mode.py
+.claude/scripts/profile-opus-4-7.py
+.claude/scripts/re-pin-codex.py
+.claude/scripts/reality-ledger.py

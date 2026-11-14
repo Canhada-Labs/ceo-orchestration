@@ -1,0 +1,11 @@
+Payload 29: no declared condition shown false and no P0 found.
+
+NEW FINDINGS (annex)
+P1 — .claude/scripts/check_contamination.py:132: os.path.lexists() suppresses permission errors, silently treating an inaccessible private-terms file as absent. If its ancestor contains no other non-allowlisted tracked files, the gate can report clean using only placeholder patterns. The previous Python 3.9 is_file() propagated this error. Minimal fix: use lstat(), recognize genuine absence explicitly, and propagate permission and other inspection errors.
+
+P2 follow-ups
+P2 — .claude/scripts/_contamination_inventory.py:76: unconditional readlink() rejects legitimate core.symlinks=false checkouts, where Git stores mode 120000 entries as regular files containing target text. A harmless non-allowlisted entry therefore makes the gate exit 2. Minimal fix: use a no-follow reader supporting both representations, retaining the index’s link classification.
+
+Validation: Python 3.9.6 CLI/import checks passed; all 39 rebound functions resolved their globals; all 11 relevant Python files parsed successfully. Full repository scanning was unavailable because the supplied tree has no Git metadata.
+
+VERDICT: GO-WITH-CONDITIONS The payload has no demonstrated blocking condition, but private-term loading can silently weaken protection and symlink handling can reject legitimate checkouts.

@@ -1,0 +1,16 @@
+No P0 or false declared condition established in payload 7.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_ceremony_toolkit/preflight.py:52
+Default policy discovery reads top-level assignments in check_canonical_edit.py, but _CANONICAL_GUARDS now resides in canonical_edit/guards.py. Default collection therefore raises canonical_guard_policy_unavailable, preventing otherwise valid preparation checks. Minimal fix: read the actual policy declaration and test discovery without injecting canonical_patterns.
+
+P2 — .claude/hooks/_lib/_ceremony_toolkit/preflight.py:95
+Scope collection stops at category headings, whereas the live canonical guard continues collecting subsequent groups. With canonical_patterns supplied, this can reject complete packets or omit later declarations from the claimed exact-scope comparison. Minimal fix: share the guard’s scope grammar, or explicitly reject unsupported scope content instead of silently truncating it.
+
+No production caller of the toolkit was found. Validation included Python 3.9.6 syntax checks for all 16 payload modules, contamination facade checks, and 82 passing pure context-budget tests; no files were modified.
+
+VERDICT: GO The two preparation-toolkit defects are nonblocking P2 follow-ups, with no release-blocking finding established in this payload.

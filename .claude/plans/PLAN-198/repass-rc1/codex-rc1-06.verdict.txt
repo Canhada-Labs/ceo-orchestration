@@ -1,0 +1,16 @@
+Payload 6/32: no P0 or false declared condition established.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304
+The sentinel reader still searches check_canonical_edit.py for _PATTERNS, now located in canonical_edit/paths.py:238. It consequently falls back to four patterns and misses six supported layouts. An isolated in-memory check with a fresh unsigned PLAN-999/staging/review/approved.md returned green / 0 pending; using the authoritative patterns returned yellow / 1 pending. The fallback warning appears, but the pending signature is absent from recommendations. Minimal fix: read the relocated authority or expose shared pattern data, with coverage for all ten layouts.
+
+P2 — .claude/scripts/check-vacuous-checks.py:133
+The default vacuity lint still scans only ceo-boot.py after this extraction. Its observed output reports checks=2, leaving 34 distinct moved checks uninspected. The validation therefore loses coverage of the implementations it previously examined. Minimal fix: include the ordered _ceo_boot_parts sources in the lint’s inputs and verify that the moved checks are counted.
+
+The loader preserves facade globals and __file__; no concrete regression in script-relative dependency lookup was established. Verification remained read-only.
+
+VERDICT: GO-WITH-CONDITIONS Two nonblocking P2 regressions were found, without evidence in this payload of a P0 or a false declared condition.

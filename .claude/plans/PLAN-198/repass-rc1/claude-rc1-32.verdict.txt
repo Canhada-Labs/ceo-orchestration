@@ -1,0 +1,108 @@
+SCOPE OF THIS PAYLOAD (32/32)
+Files changed in this payload:
+- .claude/scripts/subprocess-test-baseline.json (new)
+- tier_policy_cli/{_types,learn,loader}.py
+- validate-governance.sh
+- .claude/settings.json
+- the PR template
+- validate-pair-rail-verdict.py
+- coverage.yml, validate.yml
+- CHANGELOG [1.4.4]
+- INSTALL.md, Makefile
+- README/README.pt-BR, SBOM/SECURITY/VERSIONING
+- SPEC audit-log row
+- VERSION, npm/package.json, pyproject.toml
+- docs/* counts and restore lines
+- scripts/_codex_harness.sh
+- scripts/install-npm.sh
+
+I read each one against the candidate tree. scripts/upgrade.sh is withheld from the copy, so the condition-12 exit-2 message was seen only in an older staged copy (.claude/plans/PLAN-180/staged-s313/scripts/upgrade.sh:607-610).
+
+DECLARED CONDITIONS CHECKED AGAINST CODE (all hold where this payload gives evidence)
+- C5: _KERNEL_PATHS has 123 entries (check_arbitration_kernel.py:91-347). The 13 new rows are at :309-315, :332-336 and :340. coverage.yml timeout-minutes goes from 35 to 50.
+- C8: _python-hook.sh:410 exports CEO_HOOK_BOUNDED_EXIT=1.
+- C9 / C10:
+  - The pin manifest has package_version 0.160.0 (codex-cli-pin-manifest.json:3), and CODEX_VERSION_FLOOR is "0.160.0" (cli_currency.py:11).
+  - The oracle's route is compatible/version_floor_only (_pair_rail_parts/part_01.py:566-568).
+  - validate-pair-rail-verdict.py:768-784 skips the payload-hash compare for a declared codex_cli that is newer than the manifest and at or above the floor, as declared.
+  - model_currency.py:7-16 admits the families and refuses only claude-opus-4-1, as declared.
+  - validate-governance.sh:717-727 and tier_policy_cli loader.py:251 / learn.py:462 call it.
+- C11: the CHANGELOG "Version number." paragraph matches.
+- C12: _release_bump_sites.py:90 rewrites exactly the three upgrade lines in INSTALL.md (:717, :719, :722). The "-rc.1" suffix is kept.
+- C3 spot-check: sys.dont_write_bytecode is set early in audit_spool_state.py:62 and check-audit-real-loss.py:67. malformed_record_id_files is present.
+- SPEC row vs code: _audit_emit_parts/lifecycle_schemas.py:508/516 carry bash_indirect and the two switch names.
+- Counts: 78 top-level _lib modules, 341 recursive, 201 ADR files, all confirmed in the copy.
+
+Items 1-6 of WHAT TO VERIFY:
+1. Adopter blast radius: no hook changes in this payload.
+   - Agent model: values in the old literal list still pass (validate-governance.sh:718). Others now go through model_currency; before, every one of them was an error, so nothing that passed before is refused now.
+   - The settings.json changes (cleanupPeriodDays 3650, claudeMdExcludes) are dogfood only. Installs build from templates/settings/settings.base.json, which still has 90 (:671).
+   - claude_md_excludes.root_claude_md_excluded only matches the new pattern when the checkout itself sits under .claude/plans/**/staged*/.
+2. Fail direction:
+   - parse_pin_range now raises on a malformed body, which gives INVALID (closed; before, the line was skipped).
+   - If the module-level `_lib` import fails, the exit code is 1. release.yml:719 runs under set -euo pipefail, so the release blocks (a release gate, not a hook).
+   - A missing python3 or model_currency.py in validate-governance only affects ids that were already errors.
+3. Writes: nothing new in this payload writes outside its place.
+4. Moved code: tier_policy_cli/_types.py puts .claude/hooks at sys.path[0].
+   - No top-level hook module collides with the fallback imports (apply/learn/loader/_types/_constants/cli).
+   - _lib/__init__.py has no side effects.
+   - If the import fails, it falls back to strict membership.
+5. Honesty: see the P2 items.
+6. Python 3.9 / stdlib-only: all changed Python is stdlib-only with no syntax newer than 3.9.
+
+FINDINGS (P0 / P1): none in this payload.
+
+NEW FINDINGS (annex): none. No undeclared P1 was found in this payload.
+
+P2 FOLLOW-UPS
+P2-1 .github/scripts/validate-pair-rail-verdict.py:772 (message at :783)
+- Problem: exact_payload_pin is False whenever version_comparison != 0 and the CLI is at or above the floor. It does not require the CLI to be newer than the manifest version.
+- Scenario: after a future re-pin to package_version 0.170.0, a verdict declaring codex_cli 0.165.0 (older than the manifest but above the floor) skips the payload-sha compare, and :783 says it is "newer than the payload manifest version". The oracle (cli_currency.compatible_package_version :49) requires manifest_comparison > 0, so the two disagree.
+- Not reachable today, because manifest 0.160.0 equals the floor. It adds little beyond the declared Known-open "validator does not bind a declared version to its payload hash".
+- Fix: exact_payload_pin = not (version_comparison is not None and version_comparison > 0 and newer_floor is not None and newer_floor >= 0).
+
+P2-2 .claude/scripts/tier_policy_cli/learn.py:462 and loader.py:251, against apply.py:401 and cli.py:332-361
+- Problem: learn and loader now admit family ids that apply/owner-sign refuse, and _tier_rank (learn.py:535-564) ranks them -1.
+- Effects:
+  - A move away from an unranked family current tier (allowed by the loader now) is signed "promote" with signature_required=False. This is the PLAN-169 W2.10 F2 inversion class.
+  - A family-id winner is always signed "demote".
+  - Sparse family records (bare claude-haiku-4-5, gpt-5) now enter cells and lower n_min.
+- Today no write happens: an unpriced tier makes the cost-delta check return None (apply.py:266-269), so the move is cost_gated; :401 and owner-sign refuse unranked ids. But the recommendation and audit stream mislabel the direction.
+- The CHANGELOG names only the loader, not the learner.
+- Fix: keep learn.py on strict VALID_MODEL_IDS membership, or make _direction refuse/hold when either rank < 0. Mention the learner in Known-open.
+
+P2-3 INSTALL.md:717
+- Problem: if no v1.4.4-rc.* tag is present (fork without tags, offline pull, or the window between the bump commit and the tag push), the command substitution yields --pin "".
+- Scenario: in the readable staged upgrade.sh, an empty PIN_REF means no pin, and the upgrade runs from the checkout's current HEAD. The candidate upgrade.sh is withheld, so I could not confirm this.
+- Fix: make it `tag=$(git tag --list ... | head -n 1) && [ -n "$tag" ] && bash scripts/upgrade.sh ... --pin "$tag"`, or have upgrade.sh refuse an explicit empty --pin.
+
+P2-4 scripts/_codex_harness.sh:46, :294, :372-373, :461 (declared in the CHANGELOG, follow-up only)
+- Problem: CODEX_VERIFIED_VERSION=0.160.0 now makes three false or misleading statements:
+  - the arming check says "fixtures/enforcement were certified on 0.160.0";
+  - the requirements.toml written into the adopter repo says "Verified against codex-cli 0.160.0", while the fixtures date from 0.139.0;
+  - the :46 comment calls it the "default semantic floor", but the variable is never used as a floor (:58 hard-codes ">=0.160.0").
+- Fix: keep the certification text on 0.139.0 in a separate constant, and use a distinct floor constant.
+
+P2-5 Stale comments that contradict the code:
+- validate-governance.sh:701-710 still says ERROR when the model is not in the working set, under the independent-mirror doctrine.
+- tier_policy_cli/_types.py:8, :143 and __init__.py:17 still say "MODEL_ID Literal".
+- cli.py:350 says "claude-fable-5 is its first entry", but the reorder put claude-opus-4-8 first.
+- release.yml:693-695: step 15 still promises payload sha equals the manifest.
+- codex-cli-pin.txt:196-198 says "codex-cli-pin-manifest.json remains that gate".
+- SPEC/v1/audit-log.schema.md row still says "all four learning-loop rails", but the enum now has five.
+- Fix: update the text.
+
+P2-6 CHANGELOG.md:348 (also :735)
+- Problem: the heading says "no installed file changes", but it lists the _subprocess_census.py fix. That file is a top-level .claude/scripts/*.py and is installed (install.sh:1606-1611; the CHANGELOG lists it among the six new helpers).
+- Related: check-subprocess-tests.py ships, but its default subprocess-test-baseline.json does not (only *.sh/*.py/*.yaml are copied). In an install it exits 2 with FileNotFoundError.
+- Fix: reword the heading and exclude the census pair from installs, or ship the baseline.
+
+P2-7 .claude/scripts/tier_policy_cli/_types.py:24-26
+- Problem: importing _types mutates sys.path globally (hooks dir at index 0) for every importer, including set-quality-profile.sh via _constants if it imports _types. No collision exists today, but it is a latent shadowing hazard.
+- Fix: import model_currency by file path with importlib, or append to sys.path instead of inserting at index 0.
+
+P2-8 scripts/install-npm.sh:158-163
+- Problem: the `o, = d` unpacking raises a bare traceback (fail-closed, but unclear) on a list or dict of any length other than 1.
+- Fix: check the length and print an explicit ::error.
+
+VERDICT: GO-WITH-CONDITIONS In payload 32/32, every declared condition I could test against the code holds and I found no P0 and no undeclared P1. The weaker governance checks this payload carries (model-family allowlist, Codex version-floor route, the installer's 0.160.0 claim) are declared in the conditions and the CHANGELOG, and what remains is P2 follow-up work.

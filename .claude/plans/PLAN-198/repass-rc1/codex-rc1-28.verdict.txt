@@ -1,0 +1,20 @@
+Payload 28/32: No P0 or false declared condition established. Python 3.9.6 imports and CLI smoke checks passed; validation used the redacted candidate.
+
+NEW FINDINGS (annex)
+No P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:36
+Cloning Incomplete preserves its original ParseError base, so it is no longer a subclass of the exported ParseError. Helpers catching ParseError can consequently leak Incomplete exceptions. Top-level logical-line parsing still catches Incomplete explicitly. Minimal fix: memoize cloned classes and remap their bases to the corresponding clones.
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:29
+Property accessors are not rebound. Site.blocking still reads the component’s BLOCKING_VERDICTS, so overriding that constant through the historical entry point no longer affects classification. Defaults remain equivalent; no current overriding caller was found. Minimal fix: rebuild properties with accessors bound to the facade namespace.
+
+P2 — .claude/scripts/check-substrate-watch.py:246
+Meeting the Codex version floor suppresses reconciliation drift, including the recorded codex_harness version 0.139.0 versus installed 0.160.0. The report loses the fixture-refresh runbook and can falsely claim installed versions match last_seen. Minimal fix: record currency separately while retaining the reconciliation comparison and drift warning.
+
+P2 — .claude/scripts/check-substrate-drift.py:571
+The compatibility branch uses the live >=0.128.0 range, whereas the payload verifier’s compatibility exception requires >=0.160.0 and a version newer than the manifest. Installed 0.139.0 is therefore reported as compatible without corrective guidance although verification still rejects its mismatched payload. Minimal fix: apply the verifier’s floor and manifest-version requirements before emitting CODEX_INSTALLED_COMPATIBLE, retaining the separate hash disclaimer.
+
+VERDICT: GO-WITH-CONDITIONS Four non-blocking compatibility and diagnostic regressions remain, but this payload establishes neither a P0 nor a false declared condition.

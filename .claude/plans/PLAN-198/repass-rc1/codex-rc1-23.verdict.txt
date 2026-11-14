@@ -1,0 +1,17 @@
+Payload 23/32: no P0 or false declared condition identified. Read-only checks found no facade-global or patch-point regression; the reviewed Python files parse on Python 3.9.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/_contamination_inventory.py:76
+With core.symlinks=false, Git materializes indexed symlinks as regular files containing their target strings. Rule 1 unconditionally calls readlink(), so a clean, non-allowlisted entry fails with EINVAL and the contamination gate exits 2. Rule 2 already supports this representation. Minimal fix: handle both representations through a no-follow reader, retaining rejection of missing indexed-link payloads.
+
+P2 — .claude/scripts/_subprocess_census.py:183
+Nested helpers inherit only module-level import aliases. A helper using subprocess as sp imported by its enclosing function is missed, including its timeout and unchecked Python return code. Minimal fix: propagate enclosing-function import bindings when descending into nested scopes, respecting Python scope rules.
+
+P2 — .claude/scripts/_restore_archive.py:112
+Validation accepts regular files named audit, memory or plans, although ceo-restore.sh handles those roots only as directories. Such malformed archives can pass validation and report restore complete while silently omitting accepted content. Minimal fix: validate each layout root's required type before extraction.
+
+VERDICT: GO The identified issues are nonblocking P2 follow-ups, with no demonstrated false declared condition or P0 in this payload.

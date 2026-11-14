@@ -1,0 +1,56 @@
+PAYLOAD 17/32 — v1.4.3-rc.1..5805af55 — what I checked
+Files in this payload: _lib/canonical_edit/{entry,guards,paths,sentinels,session_roots,signature_rail,utility}.py (new), _lib/claude_md_excludes.py (new), _lib/cli_currency.py (new), _lib/effective_config.py (changed), _lib/escalation_signals.py (changed), _lib/federation/_server_parts/* (new). I read each one against its facade and its callers in the redacted candidate tree.
+
+Checked and found clean:
+- canonical_edit binding (_lib/canonical_edit/__init__.py:16-31). FunctionType rebinds each exported function onto check_canonical_edit's globals. The `global` writes to _CURRENT_TOOL_NAME, the cache counters and _UNLOCK_TRUST_DIAG therefore land on the facade. __kwdefaults__ are copied. No name appears in two component __all__ lists. Every free name used in entry/paths/sentinels/session_roots/signature_rail/utility/decisions resolves on the facade. Local variable annotations are never evaluated, so typing names are not a runtime dependency. Test patch points on the facade keep working.
+- Federation facade (_lib/federation/server.py:369-441). _load_part runs each part with a copy of the facade's globals, then rebinds the methods to the facade. Relative imports inside methods (from .replay / .handlers) resolve through the facade's __package__. Nested closures (_revert_inflight, _poll, _pii_redact_adapter) pick up the facade's globals. The three mixins share no method name and come before BaseHTTPRequestHandler in the MRO. Every name in the facade's __all__ is defined. Federation is off by default.
+- Condition 5: check_arbitration_kernel.py:309-340 has exactly the 13 rows declared (7 recursive packages, 5 flat modules, adapters/live).
+- Condition 10: the floor and the strictly-newer-than-manifest rule exist in cli_currency.py, and gen_envelope.py:1074-1100 refuses a below-floor version even with the manifest's sha.
+- Condition 9: the family widening in escalation_signals and effective_config is declared.
+- Audit enum parity: the new tamper class is in _audit_emit_parts/compaction.py:52.
+- Python 3.9 and stdlib-only: no 3.10+ syntax found in the new or changed files.
+- No new writes: everything here only reads, except the moved federation sentinel renames, whose code is unchanged.
+
+NEW FINDINGS (annex)
+
+P1 — the fail direction of the canonical-edit hook when one of its components is missing is inverted, and it differs from caller to caller.
+Where:
+- .claude/hooks/check_canonical_edit.py:616-640. On ImportError from the component bind, _COMPONENT_IMPORT_IS_INTEGRITY_FAILURE is set and the fallback main() prints a block for every event without reading it.
+- .claude/hooks/_lib/canonical_edit/entry.py:126-133 repeats the same branch.
+What it contradicts:
+- .claude/hooks/_python-hook.sh:332-335: "a missing file, an ImportError, a timeout must never block the user session".
+- The facade's own docstring, check_canonical_edit.py:36-40: "Any internal exception → allow".
+- Rule 2 of this cut. The CHANGELOG and the conditions declare nothing about this; ADR-202:56-59 and PLAN-197:45 only mention a "separate import-integrity work".
+Failure scenario:
+- In a partial install or upgrade, or with a component file deleted, every Edit/Write/MultiEdit call is blocked for the whole session. So is every mcp__.* tool call, read-only MCP tools included, because the shipped matcher is templates/settings/settings.base.json:116.
+- The same fault class goes the other way elsewhere:
+  - A non-ImportError fault while importing or binding (a SyntaxError in a component, for example) gives allow-all.
+  - A failure to import guards.py alone (check_canonical_edit.py:118-127) silently sets _CANONICAL_GUARDS=[]. That disarms the gate with no breadcrumb. The fallback branch also assigns stale names (_SKILL_CONTENT_RE, _SKILL_LOADED_RE, _VALID_BLOCKED_TOOLS) and leaves _MCP_WRITE_PATH_KEYS undefined, so mcp__ events crash with a NameError and emit nothing.
+  - The MCP Layer-B library (_lib/mcp/canonical_guard.py:244-248 and :654-660) documents fail-CLOSED on import failure. Now `import check_canonical_edit` succeeds, `_is_canonical` is missing, the AttributeError is caught and returns False, and canonical writes are allowed.
+Minimal fix:
+- Choose one posture and declare it. Either declare the ImportError fail-closed as an exception like ADR-186 in the CHANGELOG's Known-open and narrow it to events whose path classifies as canonical (guards.py does not depend on the package __init__), or move to allow plus stderr and an audit breadcrumb, as the shim's contract says.
+- In both cases: the guards fallback should set _COMPONENT_IMPORT_ERROR; and mcp/canonical_guard._lazy_init should return _REASON_IMPORT_FAILURE when `getattr(_cce, "_COMPONENT_IMPORT_ERROR", None)` is set or `_is_canonical` is not callable.
+Why P1 and not P0: it only happens on a broken tree, the block reason names the cause, and Bash stays available to reinstall.
+
+P2 follow-ups
+
+1. P2 — .claude/hooks/_lib/effective_config.py:238 together with :712-716. The non-greedy `\((.*?)\)` in _WORKING_SET_RE stops at the ")" of the tuple's first comment (ADR-149-model-id-allowlist.md:82, "(base ADR-149 Decision; ...)"). It captures no id, so the parser falls back to every quoted id anywhere in the ADR. It never uses "the legacy floor block" that the docstring promises. Today the result equals the working set only by coincidence. A future ADR line that quotes a non-family claude id would silently join the tamper allowlist. This affects the framework repo only: install.sh ships only .claude/adr/README.md. Fix: anchor the closing paren as `^\)` with re.M, or strip comments before matching.
+
+2. P2 — .claude/hooks/_lib/claude_md_excludes.py:35-36.
+- Any pattern containing "(" or ")" is treated as a possible root exclusion. Parentheses are common in macOS paths ("Project (copy)"). Such a pattern produces settings_tamper_claude_md_excludes_root.
+- check_config_change.py:263-297 re-scans every settings layer, so after that every ConfigChange in the session is advisory-blocked, and /ceo-boot reports tamper.
+- Also: _segments_match (:39-49) is exponential in the number of "**" segments; and an exception from Path.resolve() at :31 propagates into classify_tampering, which then returns [] and drops every finding, disableAllHooks included.
+- Fix: treat parentheses as syntax only after an extglob prefix character; memoize the matcher; wrap the call in a try.
+
+3. P2 — .claude/hooks/_lib/cli_currency.py:34-49 against :52-58 and _pair_rail_parts/part_01.py:557-570. compatible_package_version accepts the first qualifying @openai/codex package.json among ALL ancestors of both the payload and the launcher. installed_version records the nearest one. So a payload whose nearest package is below the floor can be marked `compatible` on the strength of an outer or launcher package, and the recorded version then disagrees with the version that justified the status. The generator's floor check still holds. Fix: judge compatibility on the version that qualified_package_version returns.
+
+4. P2 — .claude/hooks/_lib/escalation_signals.py:70 says "the shared predicate owns runtime policy". But :126 still ORs in the legacy prefixes, so "claude-opus-4-1" (refused by model_currency._RETIRED) and any claude-opus-*/claude-fable-* string still pass. Behaviour for those is unchanged from base, and nothing imports the file at runtime. Fix: reword the comment, or drop the OR.
+
+5. P2 — honesty nits:
+- effective_config.py:35 says "Its only shared helper"; there are now two _lib helpers.
+- .claude/scripts/ceo-info.py:92-97 still claims its fallback regex is "REGEX-identical" to effective_config; it no longer is.
+- check_canonical_edit.py:115-117 says .claude/commands/** "stay sentinel-guarded"; guards.py guards only .claude/commands/council.md.
+
+6. P2 — check_canonical_edit.py:119-121 copies the guards module's list object itself. Every in-process import of the facade now shares one mutable _CANONICAL_GUARDS list (bash-safety, codex-filewrite and pair-rail all import it), so a mutation in place by one caller or test leaks into all of them. Before the split each import had its own list. Fix: copy it with list(...).
+
+VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and I found no P0; the one undeclared P1 is annexed for declaration: the canonical-edit hook blocks every edit and MCP call when a component raises ImportError, while other faults, a guards.py failure and the MCP Layer-B library all fail open.

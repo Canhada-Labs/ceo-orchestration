@@ -1,0 +1,58 @@
+SCOPE: payload 21/32 = .claude/hooks/check_bash_safety.py only. The 4,236-line hook becomes a 42-line entry point. It reads 8 code fragments from .claude/hooks/_lib/_bash_safety_parts/ and runs them, in a fixed order, inside its own globals() (check_bash_safety.py:20-42).
+
+WHAT I CHECKED AGAINST THE CODE
+1. Moved code / name lookup. Every module-level reference from one fragment to another points to an earlier fragment (for example, posture_tables.py:377 uses _e3_basename from fact_canonical.py:311). Default argument values resolve inside their own fragment (fact_state.py:142/343).
+   - Inside the fragments, __file__ is the entry file's, so _HOOKS_DIR and the sys.path insert are unchanged (normalization.py:190-192).
+   - The script entry `if __name__ == "__main__": sys.exit(main())` is in the LAST fragment (decisions_cli.py:252-253). All fragments are loaded before main() runs.
+   - Function __globals__ is the entry module's dict, so monkeypatch points still work (policy-shadow-runner.py:189-207).
+   - Fragments compared against the base text in this diff, with no difference found: _rewrite_git_push_force, _check_credential_leak (fail-closed), _verify_destructive_citation (fail-closed), _extract_transcript_path, _apply_fact_gate, _fact_gate_state_dir.
+   - Deliberate changes, declared by condition 6:
+     - Decision.reason_code (normalization.py:315).
+     - The indirect scan after the legacy checks (posture_scan.py:571-585).
+     - Disable telemetry plus a veto emit keyed on reason_code (decisions_cli.py:168-202).
+2. Fail direction.
+   - A missing or unreadable fragment raises FileNotFoundError at import. The process exits 1 with empty stdout. _python-hook.sh passes that through: exec at :416, or the hook's own exit code at :548 on the grok path. Claude Code treats it as a non-blocking error, so the hook fails OPEN. A missing _lib/contract.py already behaved the same way before this release. No inversion.
+   - `from _lib import bash_indirect_guard` has no try (posture_scan.py:571). An ImportError reaches main's catch-all and the command is allowed. That is correct for an infrastructure fault.
+3. Delivery and protection.
+   - install.sh:1520-1549 copies every _lib entry, subdirectories included, and _framework_path_excluded does not exclude the new directory.
+   - _lib/**/*.py is a canonical guard (canonical_edit/guards.py:34).
+   - The kernel list has .claude/hooks/_lib/_bash_safety_parts/**/* (check_arbitration_kernel.py:314). There, `**` matches zero or more segments, so direct children are covered. Conditions 5 and 7 hold for this file.
+   - scripts/upgrade.sh was withheld from the copy, so I could not read it. _framework_manifest_set.sh walks the whole hooks tree.
+4. Python 3.9 and standard library only.
+   - The entry file imports only pathlib and typing.
+   - compile() inherits the `annotations` future flag.
+   - None of the fragments uses syntax newer than 3.9.
+5. Honesty.
+   - CHANGELOG "check_bash_safety.py becomes a 42-line entry point" is true.
+   - The ADR-139 Tier-1 coverage gate now measures only the entry file (coverage.yml:184, parse-coverage.py:64-72). The CHANGELOG already declares this as Known-open (CHANGELOG.md:376-381), so it is not a new finding.
+   - Condition 6 is true: the switches are read from the import-time trusted_env snapshot and disable only on the exact value "0".
+   - Condition 7 is true.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+(a) check_bash_safety.py:42 — the entry file does not restore __doc__.
+    - Failure: Python stores each fragment's leading string as __doc__. After loading, check_bash_safety.__doc__ is decisions_cli.py:1 ("Decision conversion, audit emitters, and hook entry point."). The audit_log.py entry file does restore it (audit_log.py:315,328).
+    - Stale references: templates/settings/settings.base.json:20 and settings.user.json:260 still say "See check_bash_safety.py docstring for full logic". That text is now a dead string expression in normalization.py:5-55, and its numbered list skips item 3. SECURITY.md:23 still names only the entry file.
+    - Fix: save and restore __doc__ as audit_log.py does, and point the comments and SECURITY.md to _lib/_bash_safety_parts/.
+(b) check_bash_safety.py:9-13 — the docstring holds the literal strings "def _rewrite_git_push_force", "def _apply_destructive_citation_gate" and "def _apply_fact_gate", so text-grep loaders still pick this file.
+    - Failure: any text check for "is this function defined here" is now satisfied by prose.
+    - Fix: move the loaders to the fragment paths or to AST parsing, then drop the markers.
+(c) Static oracles no longer see the moved code. The Known-open list does not name this.
+    - check-hook-stdout-schema.py:397-470 (static check e) parses only the registered hook file.
+    - check-stale-module-patch.py indexes only .claude/hooks/*.py and _lib/*.py (:628). It no longer sees the _audit_emit alias, which moved to normalization.py:229. Patches on check_bash_safety._audit_emit become INDETERMINADO.
+    - Fix: make both follow _PARTS, or index _lib/_bash_safety_parts/*.py.
+(d) reason_code is dropped when a gate rebuilds the decision.
+    - Where: the fact gate in ENFORCE mode (fact_canonical.py:146-155) and the armed citation gate (fact_state.py:23,38,54,67).
+    - Failure: decisions_cli.py:195-202 then skips the bash_indirect_* veto_triggered event. The default setup (fact gate in shadow mode, citation gate off) is not affected.
+    - Fix: pass reason_code=decision.reason_code into the rebuilt Decision.
+(e) posture_scan.py:578-580 — scan() has no exception wrapper.
+    - Failure: an exception other than ValueError, raised by crafted input, reaches the catch-all at decisions_cli.py:243-249, which ALLOWs. That matches the behaviour before PLAN-195, so it is not a regression. But CHANGELOG.md:93-94 "fails closed on a recognized shell body it cannot parse" holds only for the ValueError path. I did not find a crashing input.
+    - Fix: on ImportError/OSError, fail open; on any other exception, return a bash_indirect_unparseable_shell hit.
+(f) posture_scan.py:582 — every indirect hit except bash_computed_canonical_target gets destructive=True. That includes the parse-failure blocks bash_indirect_limit and bash_indirect_unparseable_shell.
+    - Failure: a verified transcript citation can release those blocks when the citation gate is armed or the fact gate is in ENFORCE mode. Both are off by default. The _e3 parse gate, the closest earlier example of a fail-closed parse block, is not releasable by citation.
+    - Fix: set destructive=False for the limit and unparseable reason codes.
+
+VERDICT: GO The new loader keeps the moved code's names, test patch points and script entry working. A missing piece fails open like any other infrastructure fault. Conditions 5, 6 and 7 hold against this file, I found no P0, and the six items I found are P2 with no default-behaviour impact on adopters.

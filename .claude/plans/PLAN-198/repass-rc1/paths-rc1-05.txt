@@ -1,0 +1,12 @@
+.claude/hooks/_lib/_bash_safety_parts/normalization.py
+.claude/hooks/_lib/_bash_safety_parts/posture_parser.py
+.claude/hooks/_lib/_bash_safety_parts/posture_scan.py
+.claude/hooks/_lib/_bash_safety_parts/posture_tables.py
+.claude/hooks/_lib/_bash_safety_parts/rewrite_citation.py
+.claude/hooks/_lib/_budget_summary_parts/audit_events.py
+.claude/hooks/_lib/_budget_summary_parts/benchmark_native.py
+.claude/hooks/_lib/_budget_summary_parts/cost_rollup.py
+.claude/hooks/_lib/_budget_summary_parts/native_formatting.py
+.claude/hooks/_lib/_budget_summary_parts/native_reconciliation.py
+.claude/hooks/_lib/_budget_summary_parts/presentation_cli.py
+.claude/hooks/_lib/_ceo_boot_parts/__init__.py

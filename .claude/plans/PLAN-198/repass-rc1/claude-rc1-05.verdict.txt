@@ -1,0 +1,84 @@
+SCOPE OF THIS CUT: payload 5/32 adds new files and nothing else. They are 8 fragments in .claude/hooks/_lib/_bash_safety_parts/ (normalization, posture_parser, posture_scan, posture_tables, rewrite_citation; fact_state, fact_canonical and decisions_cli were read for context), 6 in _lib/_budget_summary_parts/, and _lib/_ceo_boot_parts/__init__.py. I read them against the candidate facades (check_bash_safety.py, budget-summary.py, ceo-boot.py), check_canonical_edit.py with _lib/canonical_edit/*, bash_indirect_guard.py, check_arbitration_kernel.py, scripts/install.sh, _python-hook.sh and ADR-201. For the moved code I compared against the pre-split monolith kept in .claude/plans/PLAN-182/staged-w1/tree/.claude/hooks/check_bash_safety.py.
+
+WHAT I CHECKED, AND WHAT HOLDS
+
+Moved code: check_bash_safety.py
+- Load order and names:
+  - The facade execs the 8 fragments in a fixed order into its own globals.
+  - Every module-level dependency across fragments is defined earlier in that order. For example, posture_tables needs _e3_basename from fact_canonical, rewrite_citation needs _FORCE_PUSH_REWRITE_DISABLE_VAR from the end of normalization, and re, shlex and hashlib come from normalization.
+  - __file__ inside each fragment is the facade's, so _HOOKS_DIR is still .claude/hooks.
+  - Monkeypatch points and global lookup are unchanged, because the fragments run in one namespace.
+  - The monolith already had `from __future__ import annotations`, so the dataclass behaviour of Decision and Rewrite is unchanged.
+- Rules: decide_command matches the pre-split version check for check (credential leak, then canonical-path write, then posture toggle, env-guard, git-bypass, and the rm/reset/push trio with rawscan and the rewrite pilot). The PLAN-195 scan is appended only on the path that would otherwise allow, so it can add blocks and never removes one.
+- Constants and sensitive branches I spot-checked are byte-identical to the monolith:
+  - _SUBCOMMAND_SPLIT_RE, _CITE_READ_CAP_BYTES, _E4_GLOB_MIN_LITERALS and _E4_BRACE_MAX_WORDS;
+  - the rejection of plan-file citations;
+  - the expansion-pass suppression of the unparseable branch;
+  - the fail-open of _e3 on dependency failure.
+
+Fail direction
+- Infrastructure faults fail open:
+  - A missing fragment raises at import with no decision on stdout. _python-hook.sh then passes the interpreter's rc 1 through without mapping it to exit 2, so the call is not blocked.
+  - A missing bash_indirect_guard, or an exception inside it, reaches main()'s catch-all, which allows.
+  - If _trusted_env is None, get_trusted raises AttributeError, which is caught, and the scan stays ON.
+- Matcher input fails closed:
+  - _e3 already blocks on a top-level shlex failure before the scan runs.
+  - The scanner blocks on unparseable recognised shell bodies and when it hits its limits.
+
+Declared conditions as they apply here
+- Condition 6 holds: both switches come from the trusted_env startup snapshot, a value of exactly "0" disables, and heuristics= is passed through.
+- Condition 5 holds for this slice: _KERNEL_PATHS contains `.claude/hooks/_lib/_bash_safety_parts/**/*` (check_arbitration_kernel.py:314) plus bash_indirect_guard.py and bash_indirect_telemetry.py (:335-336).
+- Condition 7 holds: the facade is 42 lines, and the guard `.claude/hooks/_lib/**/*.py` (canonical_edit/guards.py:34) sentinel-gates all three parts directories. Logic moved out of the non-canonical budget-summary.py and ceo-boot.py therefore becomes stricter to edit, which is the declared re-patch burden.
+
+Cross-module dependency
+- The _e3 interceptor's lazy `from check_canonical_edit import _CANONICAL_GUARDS, _fnmatch_segments` would fail open on ImportError. It still resolves: guards.__all__ re-exports _CANONICAL_GUARDS and canonical_edit.bind exports _fnmatch_segments from paths.__all__. The canonical-path write interceptor is not silently disarmed.
+
+Install and upgrade
+- install.sh install_lib_selective copies each top-level _lib entry wholesale, excluding only tests, test_isolation.py, testing.py and __pycache__. All three parts directories ship.
+- _budget_summary_parts has no __init__.py, so it imports as a namespace package. That works on Python 3.9.
+
+budget-summary.py
+- The facade rebinds every part function to its own globals. __file__-relative lookups (ceo-cost-transcripts.py, optimizer/model_normalize.py) therefore still resolve next to the script.
+- The facade's own _load_normalize_model_name overrides the part's copy.
+- SOURCE_CHOICES, AUDIT_BANNER and ROOT_ENV are recomputed after binding, and build_parser reads them only at call time.
+- No registered hook invokes budget-summary.py.
+
+ceo-boot.py
+- _PARTS lists 10 names, which matches the 10 files on disk.
+- ceo-boot.py is a slash-command script, not a hook.
+
+Python and writes
+- Standard library only. No syntax newer than 3.9 (no `match`, no `zip(strict=)`, no runtime `X | None`). Local annotations are never evaluated.
+- No new write target appears in this slice.
+
+P0: none.
+False declared condition: none found in this slice.
+
+NEW FINDINGS (annex)
+None at P1.
+
+P2 FOLLOW-UPS
+1. P2 — .claude/hooks/_lib/_bash_safety_parts/posture_scan.py, decide_command, `_is_destructive = indirect_hit.reason_code != "bash_computed_canonical_target"`.
+   - Problem: every indirect class except the canonical target gets destructive=True. That includes bash_indirect_limit, bash_indirect_unparseable_shell, bash_indirect_ambiguous_launcher, bash_indirect_computed_verb and bash_indirect_opaque_stdin.
+   - ADR-201:80-84 tags only the trio and "its equivalent indirect forms", and says "The A-9 destructive tag is an unresolved Owner decision ... this proposal does not decide it by analogy". The code decides it.
+   - Scenario: an adopter arms CEO_FACT_GATE_ENFORCE=1 in settings, or the CEO_DESTRUCTIVE_CITATION_GATE pilot. A fail-closed parse or limit denial, or a `... | bash` denial, can then be released by a verbatim transcript citation on an exact retry. The release path is audited, not silent.
+   - With the default settings the verdict is unchanged. The only effect is that the shadow fact gate now also writes state and telemetry for these denials.
+   - Minimal fix: map only the trio-equivalent codes to destructive=True, i.e. those returned via `_hit(code)` from _destructive(). Keep the limit, unparseable, ambiguous and heuristic codes at destructive=False until the Owner decides A-9.
+2. P2 — fact_canonical.py:146-153, with the citation gate in fact_state.py.
+   - Problem: when the fact gate in enforce mode reshapes a block, it builds a new Decision without reason_code. decisions_cli.py:195 then skips the veto_triggered emit that carries the bash_indirect_* class.
+   - Effect: forensic detail only, and only under opt-in enforce.
+   - Fix: pass reason_code=decision.reason_code into the rebuilt Decision.
+3. P2 — posture_scan.py decide_command, and decisions_cli.py:171.
+   - Problem: the switches are compared with `== "0"` without strip(). Sibling switches strip (_rawscan_enabled, for example), so a value like " 0" leaves the scan armed.
+   - This fails safe. Fix: `str(raw).strip() == "0"`, for consistency.
+4. P2 — normalization.py:4-56.
+   - Problem: the library fragment carries the monolith's shebang and full module docstring as a dead string after the real docstring. That text describes "Registered in settings.json" as if this file were the hook, and its numbered list skips step 3.
+   - Fix: trim it to a fragment docstring, or point it at the facade.
+5. P2 — budget-summary.py and _lib/_budget_summary_parts/.
+   - Dead code: cost_rollup.py's _load_normalize_model_name is overridden by the facade's copy, and the first SOURCE_CHOICES, AUDIT_BANNER and ROOT_ENV computation (budget-summary.py:341-356, with _TX_MODULE=None) is dead.
+   - The part functions only work after the facade rebinds them. Calling one from a direct import raises NameError, for example _SINCE_RE in parse_since.
+   - _budget_summary_parts has no __init__.py, unlike its two sibling packages.
+   - audit_events.default_audit_dir keeps an unused `home` local.
+   - Fix: delete the dead copies, add an __init__.py, and say in a docstring that the part modules are facade-bound only.
+
+VERDICT: GO This payload moves the Bash-safety, budget-summary and ceo-boot code into installable `_lib` fragments under kernel and sentinel cover, keeps the moved behaviour unchanged and the fail directions correct, adds the declared indirect-execution scan only as extra blocks, and none of the conditions it touches is false; I found no P0 or P1, only P2 follow-ups.

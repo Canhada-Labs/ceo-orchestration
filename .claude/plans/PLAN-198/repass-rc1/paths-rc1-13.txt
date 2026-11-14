@@ -1,0 +1,2 @@
+.claude/hooks/_lib/agent_spawn/prompt_rules.py
+.claude/hooks/_lib/agent_spawn/skill_reference.py

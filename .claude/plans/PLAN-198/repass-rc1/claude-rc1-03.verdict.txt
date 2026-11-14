@@ -1,0 +1,71 @@
+PAYLOAD 3/32 — what it contains: the new files _lib/_audit_emit_parts/{orchestration,pair_rail,planning,rate_limits,replay,resource_events,routing,security,streaming,tokens_boot,workflow,writer}.py, plus _lib/_audit_log_parts/__init__.py, adapters_runtime.py and the first part of entries_usage.py. This is PLAN-197 / ADR-202 code moved out of the old monolithic _lib/audit_emit.py and audit_log.py.
+
+WHAT I CHECKED (against the candidate tree)
+1. How the moved code is loaded.
+   - audit_emit.py:413-452 imports each part. _audit_emit_parts/__init__.py:20-48 then deep-copies the values and rebuilds each function with the facade's globals (`FunctionType(code, facade_globals, ...)`). Global lookups, `global` writes (writer.py `_FALLBACK_NOTIFIED`), `globals()` (orchestration.py `_try_rate_admit`) and test patch points therefore all go through the facade, as they did in the monolith.
+   - The lookups the payload's functions make at call time all resolve to a name exported by an installed part (operations, boot_schemas, governance, lifecycle_schemas, harness_schemas, adapters) or defined in the facade: `_PLAN088_RATE_LOCK` and `_PLAN090_BUCKET_LOCK` (audit_emit.py:483-484), `emit_generic`, `_KNOWN_ACTIONS`, `EVENT_SCHEMA_V2`.
+   - Code that runs when a part is imported only uses names that part defines or imports itself: `time` in rate_limits and streaming; with `from __future__ import annotations`, annotations are never evaluated.
+   - I found no duplicate export among the names I sampled across parts, so no silent override.
+   - The `audit_hmac._ensure_canonical_lib_modules` pollution check (audit_hmac.py:760-805) reads only the module `__file__`, so the parts cannot trigger a false `hmac:null`.
+2. audit_log.py:311-327 runs paths_skills, entries_usage, rotation_storage and adapters_runtime with `exec` in its own namespace.
+   - adapters_runtime runs last, and its `if __name__ == "__main__": sys.exit(main())` (adapters_runtime.py:258) fires only after every declaration exists.
+   - `main()`, `_codex_audit_main` and `_grok_audit_main` are identical to the older staged monolith (.claude/plans/PLAN-182/staged-w1/tree/.claude/hooks/audit_log.py:1360-1616), and so is `build_entry` (:579-703).
+3. Model and effort: `_ADR_052_ROLE_TO_MODEL` (entries_usage.py:347-379) matches the staged table except for the v1.4.2 (PLAN-193) "general-purpose" -> claude-opus-5-5 row. Nothing in this delta changes it, and it only feeds the audit record's policy fallback, never routing.
+4. Fail direction.
+   - The audit writers remain fail-open.
+   - A crash at import (for example a missing part) produces no decision. `_python-hook.sh:416` then hands the exit code to the hook itself (`exec`), and on the grok blocking path `_python-hook.sh:548` returns the hook's own exit code. Only exit 2 blocks, so the session is not blocked.
+5. Condition 5: check_arbitration_kernel.py:312-313 lists `.claude/hooks/_lib/_audit_emit_parts/**/*` and `_audit_log_parts/**/*`, and `_fnmatch_segments` (:365-390) treats `**` as zero or more segments, so every file in this payload is a kernel path. TRUE.
+6. Condition 7: both entry points keep their paths, and the logic now lives in kernel-listed modules. TRUE.
+7. Delivery:
+   - scripts/install.sh:1520-1549 copies every top-level `_lib` entry.
+   - scripts/_framework_manifest_set.sh:95-105 does not exclude `_audit_*_parts`.
+8. Python and dependencies: standard library only (copy, importlib, types, typing, time, re). I found no syntax or API newer than Python 3.9.
+9. Honesty: CHANGELOG [1.4.4] says "_lib/audit_emit.py goes from 14,522 lines to 496", and the facade is 496 lines. It also claims no differential replay, which is accurate.
+
+P0: none.
+P1: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS (the code appears carried over from the monolith; I could not read the base text of audit_emit.py, so I do not count these as regressions from this delta)
+
+P2-1 — .claude/hooks/_lib/_audit_emit_parts/writer.py:758-761 (with :603-604 and filelock.py:144)
+- Failure scenario: the F-CHAOS-1 fallback references `line` before it is assigned.
+  - If the primary audit directory is unwritable and audit-log.lock does not exist yet, `FileLock.__enter__` raises OSError (EACCES) at :604. `os.open(O_CREAT)` in filelock.py:144 is the call that fails, before `line` is built at :687.
+  - The except branch at :758 prints the "::warning:: ... falling back to <fallback>" banner and then calls `_write_fallback(line)`. That raises UnboundLocalError, which the outer `except` swallows.
+  - The event is lost while stderr says it was diverted.
+- Why tests miss it: test_audit_emit.py:1183-1211 injects the PermissionError at `Path.open` on the log, after `line` exists.
+- Minimal fix: serialize the fallback line from `event` inside the except branch, as the FileLockTimeout branch already does at :751. Add a test that makes the lock path uncreatable.
+
+P2-2 — .claude/hooks/_lib/_audit_emit_parts/writer.py:38-51, :76, :87
+- Failure scenario: the fallback path `/tmp/ceo-audit-fallback-<user>.log` is predictable.
+  - It is opened with `Path.open("a")`, then `os.chmod`-ed, and both calls follow symlinks.
+  - On a shared host without protected_symlinks (stock macOS /private/tmp), another local user can plant that name as a symlink. When the victim's primary write fails or the lock times out, audit JSON is appended to a file the victim owns, and that file is chmod-ed to 0600.
+- Minimal fix: `os.open(path, O_WRONLY|O_APPEND|O_CREAT|O_NOFOLLOW, 0o600)` plus `fchmod` on the descriptor, or a per-user 0700 directory with the same trust gate `_python-hook.sh:173-198` uses.
+
+P2-3 — .claude/hooks/_lib/audit_emit.py:382-383, :455-461 and _audit_emit_parts/__init__.py:4-6
+- The package docstring promises that `inspect.isfunction` stays intact "with no proxy per event". `iter_events` is now a plain wrapper around the rebound generator, kept so the AST check in check-audit-read-api-stable.py stays green.
+- Consequence: `inspect.isgeneratorfunction(audit_emit.iter_events)` is now False.
+- Fix: state the exception in the docstring, or bind the generator directly and adapt the AST check.
+
+P2-4 — .claude/hooks/audit_log.py:317-324
+- The parts loader has no guard. A missing or unreadable `_lib/_audit_log_parts/*.py` (partial or hand-edited upgrade) raises FileNotFoundError at import.
+  - The hook exits 1 with a traceback and leaves no breadcrumb, which contradicts the module docstring's "Safety properties 1" (exit 0 plus a breadcrumb).
+  - It is still fail-open through `_python-hook.sh`, and it is the same class as the unguarded `_lib` imports at :174-179.
+- Related: the part files sit in a package (`__init__.py`), yet they cannot be imported on their own (entries_usage.py:149 uses `re` without importing it). Nothing shipped imports them.
+- Fix: guard the loader in the `__main__` path (breadcrumb, then exit 0).
+
+P2-5 — .claude/hooks/_lib/_audit_emit_parts/actions.py, actions_core.py, actions_extended.py (not in this payload's diff)
+- These files ship but are absent from the facade's install list (audit_emit.py:415-451), and nothing imports them. That leaves a second copy of `_KNOWN_ACTIONS` beside the facade literal (audit_emit.py:45-377).
+- The actions I sampled match today, so the risk is future drift.
+- Fix: remove them, or install `actions` and drop the literal (adjusting the scripts that read the literal).
+
+P2-6 — stale line references in moved docstrings and comments
+- pair_rail.py:85 and routing.py:420 ("audit_emit.py:386-396").
+- orchestration.py:217 ("line ~3484").
+- audit_hmac.py:772 still says "chokepoints 1/3 in audit_emit.py"; they now live in writer.py.
+- Cosmetic.
+
+DECLARED CONDITIONS vs THIS PAYLOAD: conditions 5, 7, 13 and 14 hold for these files. Nothing here contradicts conditions 1-4, 6 or 8-12.
+
+VERDICT: GO-WITH-CONDITIONS The moved audit-writer code in this payload is identical where it could be compared with an older copy, resolves every name through the facade, stays fail-open and standard-library-only on Python 3.9, and every file is covered by the restored kernel rows, so conditions 5 and 7 hold; with no P0 or undeclared P1 found, only P2 follow-ups remain on top of the release's declared conditions.

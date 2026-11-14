@@ -1,0 +1,61 @@
+SCOPE OF THIS CUT (payload 4/32): new files under .claude/hooks/_lib/_audit_log_parts/ (paths_skills.py, rotation_storage.py), .claude/hooks/_lib/_audit_query/ (all 9 modules), and .claude/hooks/_lib/_bash_safety_parts/ (__init__.py, decisions_cli.py, fact_canonical.py, fact_state.py). I read the code; I could not run it (no shell), so every result below comes from reading, not from a run.
+
+WHAT I VERIFIED
+
+1. How the facades load the parts. audit_log.py:311-329 and check_bash_safety.py:20-42 run each part with exec(compile(...)) in the facade's own namespace. So the names the parts use without importing them (Dict, Path, os, FileLock, getpass, stat, unicodedata, _rp_state_dir, re, hashlib, shlex, json, Decision, _trusted_env, _audit_emit, _CITE_MIN_CHARS, _DESTRUCTIVE_CITE_VAR, _extract_destructive_citation, _verify_destructive_citation, decide_command, _to_contract_decision, ...) all resolve. I found each one defined in the facade or in an earlier part. No top-level def appears twice across the bash-safety parts. No part uses the helper names that audit_log.py deletes afterwards. __file__ is the facade's own path, so _HOOKS_DIR in normalization.py:190 still resolves to .claude/hooks.
+
+2. audit-query.py (lines 177-232) copies functions from _lib._audit_query into its own globals and deep-copies the module-level constants. Because the code then runs with the facade's globals:
+   - _LABEL_STORE_PATH is reset at line 203, so it still points to .claude/scripts/audit-log-labels.jsonl.
+   - In labeling._compute_label_hmac, Path(__file__).parents[1] is still .claude, so the HMAC key still comes from .claude/hooks/_lib/audit_hmac. The label chain key does not silently change to the fallback key.
+   - Every name referenced across modules resolves through the facade: _BY_DOMAIN_DEFAULT_WINDOW_DAYS, _LABEL_VALID_CASES, _parse_since_arg, _percentile, default_errors_path, and the cmd_compliance / cmd_metrics wrappers.
+   - The modules not copied (queries, reporting, reporting_health) declare only functions.
+   - The MCP handler still loads the facade by path. Its import error is caught and fails open (handlers/audit_query.py:126-138).
+
+3. Moved code compared with older copies. append_entry and _emit_rotation_marker_under_lock in rotation_storage.py match the PLAN-194 condition-67 patch (.claude/plans/PLAN-194/w-auditrace/auditrace.patch) line for line. These also match the older monolithic copies in .claude/plans/PLAN-182/staged-w1/tree, which predate the base: audit_paths, rotate_if_needed, _legacy_rotate_inline, write_breadcrumb, _is_safe_audit_path, _fallback_security_breadcrumb, _sanitize_prompt, _validate_skill_name, _path_d_lookup, _apply_fact_gate, _fact_gate_state_dir, and the E3 tables and helpers.
+
+4. What changed in main() (decisions_cli.py). Compared with the older copy, two blocks are new:
+   (a) the CEO_BASH_INDIRECT_* disabled_once telemetry, lines ~168-174;
+   (b) a veto_triggered emit at line 195 when decision.reason_code is set. Only indirect-guard hits set it (posture_scan.py:584). Decision.reason_code exists (normalization.py:315).
+   Both blocks have their own try/except, so neither can turn a block into an allow. The emitted reason text is a fixed template with no command text in it (bash_indirect_guard.py:44-50).
+
+5. Fail direction. A part file that is missing or does not compile makes the facade raise at import. The process exits 1: for PreToolUse/PostToolUse that is a non-blocking error, so the hook fails open. That is the declared policy for infrastructure faults. The fact-gate code keeps its fail-closed side unchanged: an unparseable command never gets a release hash, and citation verification fails closed.
+
+6. Install and kernel coverage. install.sh:1520-1550 walks every top-level entry under _lib, and _framework_manifest_set.sh lists .claude/hooks as a whole tree, so the new part folders ship. The kernel list carries .claude/hooks/_lib/_audit_log_parts/**/* and _bash_safety_parts/**/* (check_arbitration_kernel.py:313-314). The canonical-edit guards cover .claude/hooks/_lib/**/*.py.
+
+7. Python. Standard library only. I found no 3.10+ syntax or APIs in these files.
+
+DECLARED CONDITIONS: none is false for the code in this payload. Conditions 5, 6 and 7 match what I read (kernel lines, trusted_env switches read at posture_scan.py:571-580, thin entry points over _lib modules).
+
+NEW FINDINGS (annex)
+
+P1 — RecursionError in the new indirect guard fails OPEN through main()'s catch-all
+FILES:
+- .claude/hooks/_lib/bash_indirect_guard.py:386-399 (the xargs and find -exec branches of _scan_segment call it again with depth+1, but _scan_segment, def at :347, never checks depth; only _scan checks MAX_DEPTH, at :472)
+- .claude/hooks/_lib/_bash_safety_parts/posture_scan.py:578-580 (_indirect_guard.scan is called outside any try)
+- .claude/hooks/_lib/_bash_safety_parts/decisions_cli.py:243-249 (except Exception -> _contract.allow())
+FAILURE SCENARIO:
+- Command: "xargs xargs ... xargs rm -rf ~", with about 995 "xargs" words. That is about 1,000 words in roughly 6 KB, under MAX_WORDS=1024 (:21, enforced at :126) and MAX_BODY_BYTES=16384.
+- No earlier check fires: _normalize_command_tokens does not strip xargs, so _check_rm_rf sees tokens[0]=='xargs'; E3 and E4 only look for canonical or toggle paths.
+- _scan then hands the whole segment to _scan_segment, which calls itself once per xargs word. That passes Python's default recursion limit of 1000 and raises RecursionError, which is not a ValueError.
+- The error goes through scan(), then decide_command(), then main()'s catch-all, which prints FATAL and emits allow.
+- The "find . -exec find . -exec ... rm -rf / ;" form does the same.
+- This is the wrong fail direction for input the matcher cannot handle. ADR-201:64-71 promises explicit depth limits and fail-closed handling of malformed bodies. The repo itself states this rule at posture_parser.py:367-370: "a RecursionError inside a security matcher is a crash — i.e. a fail-OPEN — not a deny".
+- It is not a regression from v1.4.3-rc.1: legacy matchers never blocked xargs rm -rf. Status is derived from reading, not reproduced.
+MINIMAL FIX: at the top of _scan_segment, add "if depth > MAX_DEPTH: return _hit('bash_indirect_limit')". For defence in depth, in decide_command catch RecursionError around _indirect_guard.scan and return Decision(allow=False, reason=_hit('bash_indirect_limit').reason, destructive=False, reason_code='bash_indirect_limit'). ImportError and other infrastructure faults stay fail-open.
+
+P2 FOLLOW-UPS
+
+P2-1 — .claude/hooks/check_bash_safety.py:12. The facade docstring says _apply_destructive_citation_gate is implemented in rewrite_citation.py. It is actually at _bash_safety_parts/fact_state.py:4. This misleads anyone who has to re-apply a manual patch in the module (condition 7). Fix: say fact_state.py.
+
+P2-2 — .claude/hooks/check_bash_safety.py:42. Unlike audit_log.py:315/328, this facade does not restore __doc__ after running the parts, so check_bash_safety.__doc__ ends up as decisions_cli.py's docstring ("Decision conversion, audit emitters, and hook entry point."). I found no runtime consumer. Fix: save __doc__ before _install_parts() and restore it after.
+
+P2-3 — Indirect-veto telemetry is not one event per command, as ADR-201:75-77 states.
+- In the default SHADOW fact-gate mode, each destructive-tagged indirect block writes two veto_triggered rows: fact_gate_shadow_deny (fact_state.py _fact_gate_emit) plus the class code (decisions_cli.py:195). That inflates veto_rate in cmd_metrics and cmd_health (reporting.py, reporting_health.py).
+- When fact-gate ENFORCE (fact_canonical.py:147) or the citation pilot (fact_state.py:23/38/54) rebuilds the Decision, reason_code is dropped and the class-specific code is lost.
+- Fix: carry decision.reason_code into the rebuilt Decisions, and either skip the line-195 emit when the fact gate already emitted, or have readers count reason_codes separately.
+
+P2-4 — Other payload, consumed by decisions_cli.py:178-191. posture_scan.py:582 tags every indirect class except bash_computed_canonical_target as destructive=True. That includes bash_indirect_unparseable_shell, _limit, _ambiguous_launcher, _computed_verb and _opaque_stdin. As a result, a verified CEO_DESTRUCTIVE_CITE (opt-in pilot, or settings-backed fact-gate ENFORCE) can release a block that is fail-closed by design, and the default shadow advisory calls those commands "destructive". ADR-201:80-84 only commits the existing trio's indirect forms and says the wider destructive tag is an open Owner decision. Fix: set destructive=True only for the bash_indirect_rm_rf / _git_reset / _git_push codes, or record the choice in ADR-201.
+
+Clean in this payload: no P0, no write outside its place or through a symlink beyond what the base already did, no change of model or effort, and no new hook that can block a legitimate session through the code in these files.
+
+VERDICT: GO-WITH-CONDITIONS Every declared condition holds against the code in this payload and I found no P0; the moved code and facade binding behave like the base, but the signed annex must carry one undeclared P1: crafted nested input to the new indirect Bash guard can raise RecursionError, which main()'s catch-all turns into an allow.

@@ -1,0 +1,16 @@
+Payload 26: no P0 or false declared condition identified.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304
+Sentinel discovery still parses check_canonical_edit.py, but its authoritative _PATTERNS declaration moved to canonical_edit/paths.py:238. Boot therefore always falls back from ten patterns to four. An in-memory check with an unsigned PLAN-999/staging/review/approved.md returned green, “0 pending,” and a fallback notice. Minimal fix: read the current authoritative declaration and report degraded discovery as yellow.
+
+P2 — .claude/scripts/check-vacuous-checks.py:133; .claude/scripts/ceo-boot.py:116
+The extraction leaves the default vacuity lint scanning only two facade definitions. It exits successfully with checks=2 while omitting the extracted implementations, so an always-green regression there escapes this check. Minimal fix: include the ordered part sources in the lint’s default inputs and verify coverage of every registered check.
+
+Validation: all twelve facade/package files compiled in memory under Python 3.9.6. Facade loading with optional integrations stubbed confirmed 25 Tier-S and 11 Tier-A registrations, shared globals, and preserved __file__. The duplicate drift implementations have identical executable ASTs.
+
+VERDICT: GO-WITH-CONDITIONS Two nonblocking P2 reporting and lint regressions warrant follow-up; this payload exposes no P0 or false declared condition.

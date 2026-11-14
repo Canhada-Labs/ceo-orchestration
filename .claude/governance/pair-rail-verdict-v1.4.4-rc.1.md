@@ -1,0 +1,846 @@
+# Pair-Rail Verdict - v1.4.4-rc.1
+
+```yaml
+verdict: GO-WITH-CONDITIONS
+generated_at: 2026-11-14T02:29:53Z
+ttl_hours: 24
+parent_sha: 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c
+release_tag: v1.4.4-rc.1
+base_tag: v1.4.3-rc.1
+base_commit: 5e7cb65ebc259da586256ddb6b29918ba3a39ab6
+inputs_hash: b8c9de481d1f7caf2b71a019239554de397ed42882c40e660c776cdae1292dc1
+inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
+delta_allowlist:
+  - .claude/governance/pair-rail-verdict-v1.4.4-rc.1.md
+  - .claude/plans/PLAN-198/verdict-fields-v1.4.4-rc.1.md
+  - .claude/plans/PLAN-198/repass-rc1/CONDITIONS-rc1.reviewed.md
+  - .claude/plans/PLAN-198/repass-rc1/MANIFEST-rc1.sha256
+  - .claude/plans/PLAN-198/repass-rc1/PROVENANCE-rc1.md
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-01.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-01.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-02.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-02.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-03.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-03.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-04.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-04.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-05.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-05.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-06.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-06.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-07.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-07.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-08.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-08.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-09.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-09.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-10.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-10.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-11.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-11.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-12.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-12.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-13.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-13.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-14.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-14.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-15.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-15.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-16.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-16.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-17.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-17.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-18.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-18.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-19.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-19.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-20.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-20.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-21.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-21.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-22.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-22.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-23.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-23.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-24.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-24.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-25.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-25.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-26.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-26.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-27.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-27.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-28.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-28.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-29.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-29.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-30.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-30.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-31.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-31.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-32.log
+  - .claude/plans/PLAN-198/repass-rc1/claude-rc1-32.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-01.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-01.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-02.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-02.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-03.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-03.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-04.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-04.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-05.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-05.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-06.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-06.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-07.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-07.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-08.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-08.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-09.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-09.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-10.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-10.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-11.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-11.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-12.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-12.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-13.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-13.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-14.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-14.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-15.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-15.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-16.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-16.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-17.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-17.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-18.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-18.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-19.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-19.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-20.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-20.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-21.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-21.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-22.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-22.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-23.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-23.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-24.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-24.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-25.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-25.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-26.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-26.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-27.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-27.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-28.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-28.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-29.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-29.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-30.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-30.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-31.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-31.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-32.log
+  - .claude/plans/PLAN-198/repass-rc1/codex-rc1-32.verdict.txt
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-01.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-02.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-03.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-04.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-05.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-06.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-07.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-08.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-09.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-10.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-11.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-12.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-13.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-14.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-15.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-16.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-17.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-18.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-19.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-20.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-21.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-22.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-23.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-24.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-25.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-26.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-27.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-28.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-29.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-30.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-31.patch
+  - .claude/plans/PLAN-198/repass-rc1/diff-rc1-32.patch
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-01.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-02.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-03.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-04.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-05.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-06.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-07.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-08.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-09.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-10.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-11.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-12.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-13.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-14.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-15.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-16.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-17.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-18.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-19.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-20.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-21.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-22.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-23.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-24.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-25.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-26.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-27.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-28.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-29.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-30.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-31.txt
+  - .claude/plans/PLAN-198/repass-rc1/paths-rc1-32.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-01.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-02.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-03.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-04.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-05.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-06.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-07.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-08.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-09.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-10.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-11.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-12.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-13.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-14.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-15.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-16.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-17.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-18.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-19.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-20.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-21.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-22.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-23.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-24.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-25.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-26.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-27.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-28.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-29.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-30.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-31.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/payload-rc1-32.redacted.txt
+  - .claude/plans/PLAN-198/repass-rc1/scope-rc1.txt
+  - .claude/plans/PLAN-198/repass-rc1/withheld-rc1.txt
+delta_manifest: .claude/plans/PLAN-198/repass-rc1/MANIFEST-rc1.sha256
+delta_manifest_sha256: cfb7bde27555db4d58bb06ab73559bffa798f1a91d326770dafcfebc3ad17188
+tool_versions:
+  codex_cli: 0.166.0
+  codex_target_triple: aarch64-apple-darwin
+  codex_payload_sha256: 39acf979729dd290f9a24ee38b2914e036c91b65952872e28ae2a6b88a7db7c1
+  codex_pin_status: compatible
+  codex_model: gpt-6-astra
+  codex_effort: ultra
+  claude_code: claude-code-cli-2.1.322
+  claude_model: claude-opus-5-5
+  claude_effort: xhigh
+  python: 3.9.6
+transcript_hash: c941d5517b9926dee18f398e12e4de13f7557573e4116504e13a9ccc5b88fac5
+rail_decisions: [codex-p01=GO, claude-p01=GO-WITH-CONDITIONS, codex-p02=GO, claude-p02=GO, codex-p03=GO-WITH-CONDITIONS, claude-p03=GO-WITH-CONDITIONS, codex-p04=GO, claude-p04=GO-WITH-CONDITIONS, codex-p05=GO, claude-p05=GO, codex-p06=GO-WITH-CONDITIONS, claude-p06=GO, codex-p07=GO, claude-p07=GO, codex-p08=GO, claude-p08=GO-WITH-CONDITIONS, codex-p09=GO, claude-p09=GO, codex-p10=GO, claude-p10=GO, codex-p11=GO-WITH-CONDITIONS, claude-p11=GO, codex-p12=GO, claude-p12=GO-WITH-CONDITIONS, codex-p13=GO-WITH-CONDITIONS, claude-p13=GO, codex-p14=GO, claude-p14=GO, codex-p15=GO, claude-p15=GO, codex-p16=GO-WITH-CONDITIONS, claude-p16=GO-WITH-CONDITIONS, codex-p17=GO-WITH-CONDITIONS, claude-p17=GO-WITH-CONDITIONS, codex-p18=GO, claude-p18=GO, codex-p19=GO, claude-p19=GO-WITH-CONDITIONS, codex-p20=GO, claude-p20=GO, codex-p21=GO-WITH-CONDITIONS, claude-p21=GO, codex-p22=GO-WITH-CONDITIONS, claude-p22=GO-WITH-CONDITIONS, codex-p23=GO, claude-p23=GO, codex-p24=GO-WITH-CONDITIONS, claude-p24=GO, codex-p25=GO-WITH-CONDITIONS, claude-p25=GO, codex-p26=GO-WITH-CONDITIONS, claude-p26=GO, codex-p27=GO, claude-p27=GO, codex-p28=GO-WITH-CONDITIONS, claude-p28=GO, codex-p29=GO-WITH-CONDITIONS, claude-p29=GO-WITH-CONDITIONS, codex-p30=GO, claude-p30=GO, codex-p31=GO-WITH-CONDITIONS, claude-p31=GO, codex-p32=GO, claude-p32=GO-WITH-CONDITIONS]
+findings: [parts-32, lanes-codex-and-claude, codex-pin-compatible, scope-declared-in-scope-rc1.txt, release-scope-covers-v1.4.2, attempts-382, lane-notes-158, reviewer-copy-redacted-withheld-130]
+attempts_ledger_sha256: d469d8d87d7a1da5b770a8b0330984d492496ea84d1985b19541af7a7b97d770
+attempts:
+  - 2026-11-10T10:44:57Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 start resume=0 parts=31 ev=.claude/plans/PLAN-198/repass-rc1 prev=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+  - 2026-11-10T10:44:57Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 01 id=0811e17da304 pid=34866 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=a1636ca298bf5416289bcb70cfa196c728d32089abd7fba1509ea579b1b861d5
+  - 2026-11-10T10:44:57Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 02 id=c42191386ccb pid=34868 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=6cc73ccf889fdd9d616c5934e1d755d329fb75290e509a53c1b645923af924ec
+  - 2026-11-10T10:44:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 01 id=db1591d33bef pid=34867 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=600c72f89bd3249a4f012cfcb3495ec7b6cfd83729e42dea7d525dc4d710b28f
+  - 2026-11-10T10:44:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 02 id=2dc1379e7441 pid=34869 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=e9842315347c92f60ea5e77d301683e36a01cdd4e8a85b0b409f55bacf7262a7
+  - 2026-11-10T10:47:46Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 02 verdict GO nogo=0 id=c42191386ccb rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=55980c2e495ea5d57d3a8862ea6134258eb2acec8dfece9756a54b3060fdf7d6
+  - 2026-11-10T10:47:50Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 01 verdict GO nogo=0 id=0811e17da304 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=c01af27195ed80f2dba845364813fd0a3c74ee997e851c5fd1c6b4d018c7cc96
+  - 2026-11-10T10:52:17Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 01 verdict GO nogo=0 id=db1591d33bef rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=8e6ac03b25e39f53b7b96bd9bf0bb97ffe01529f789b80952c3424d3ba32450e
+  - 2026-11-10T10:57:37Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 02 verdict GO nogo=0 id=2dc1379e7441 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=027b77b9b672709036c9d74451ee9e67fc29402a310ff63e8ab866d91093e415
+  - 2026-11-10T10:57:37Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 04 id=03eafd62fa4c pid=38797 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=d7cacad7e228d8ea964a7ba3e67ebc40dfcbc8921cba772ad494b45363cd0ae1
+  - 2026-11-10T10:57:37Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 03 id=fcb512eeac24 pid=38795 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=9a7ee7d964d70bf077bdbe8353f88b1105e46f969abcedbb46962204032d87a7
+  - 2026-11-10T10:57:37Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 03 id=cbc7e2e71e8c pid=38796 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=0b90e31ce7c73e7a171469b939e15afc718a19e3ac81944f306fdc9c4dc680bc
+  - 2026-11-10T10:57:37Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 04 id=08100a1ebc52 pid=38798 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=5642a1c3fe3db82e92b07a8867ea2c5e33d4d1ea98de6ca2ae4ee64254bafa86
+  - 2026-11-10T11:01:34Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 03 verdict GO nogo=0 id=fcb512eeac24 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=4969bc04513177a95389004deb7bdac436f62550c0c48fe8e3a033204a46ecc8
+  - 2026-11-10T11:02:11Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 04 verdict GO nogo=0 id=03eafd62fa4c rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=0f4b645dcbb722fb17251e68ae9117755934f70b176347ad17f16cd3f1269285
+  - 2026-11-10T11:05:22Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 03 verdict GO nogo=0 id=cbc7e2e71e8c rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=40c0ac363f51512f8cd827df0e79c08d99aa489887ffc5d920f2c55215620052
+  - 2026-11-10T11:09:44Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 04 verdict GO nogo=0 id=08100a1ebc52 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=63eada6d67baf57ed5f3993db84ed9577afa95be226e6fb95c498918fe8248ea
+  - 2026-11-10T11:09:44Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 05 id=8336a1d04e7b pid=41312 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=860c5433a88d70596c7c9aecf392001556972b82215f6444af3311461ea87d3b
+  - 2026-11-10T11:09:44Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 05 id=4b8d6b9348be pid=41313 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=937fc32e9c3b552d5ccb664b081882141ce4b8df0c73efd2d07370cb99644af5
+  - 2026-11-10T11:09:44Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 06 id=e5a8bf18947b pid=41315 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=9c03aba82f9de9d02b2009e7e9e5c464ea0db0006735aae421c5fc6782a26e94
+  - 2026-11-10T11:09:44Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 06 id=a6584c1a51fb pid=41314 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=b5ea383dafb12599da725ba943fa1c201d2b27df1d0280d5366463393a06a63d
+  - 2026-11-10T11:13:16Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 06 verdict GO nogo=0 id=a6584c1a51fb rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=3ebc8e710ee085c5c457984dfb43463bd60750226ea76bd8a1b68cd8ead5f326
+  - 2026-11-10T11:14:26Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 05 verdict GO-WITH-CONDITIONS nogo=0 id=8336a1d04e7b rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=3537c6d9bdb4555e491383522601ee28599e88cd8ee819dc2d5b6384ae0793a0
+  - 2026-11-10T11:14:56Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 05 verdict GO-WITH-CONDITIONS nogo=0 id=4b8d6b9348be rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=b65e822b3f36808fba044cafc975d3d872b24c03dab2994163d2d077e5220caa
+  - 2026-11-10T11:17:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 06 verdict GO nogo=0 id=e5a8bf18947b rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=3ad06b72c2f81e39ffc79349fad3fc836fe231a3f3c486909df71069428dd1cb
+  - 2026-11-10T11:17:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 07 id=e083ff307132 pid=43133 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=b99ff54a0eed68e0f0f6ea38fe4b81ccf038907e6c43ee35a0c0b1bef4cef234
+  - 2026-11-10T11:17:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 07 id=366cc7751442 pid=43134 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=1a59ba17c3ca107af53c9dde6eef4402a797ad81ff7d6dc4d73a769db33e0b2f
+  - 2026-11-10T11:17:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 08 id=76c531ee5c0b pid=43136 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=7e4d20dbf7a41eefa9579572cb9f10a5a690a6d0b9e6322b90479dd2a4529dac
+  - 2026-11-10T11:17:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 08 id=669accc1fe1b pid=43135 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=250be669173e8087728f2217e651ab58c2abaea400288d679a2688f91cdc0567
+  - 2026-11-10T11:21:21Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 08 verdict GO nogo=0 id=76c531ee5c0b rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=74fee2ff294ae0bceac611d9eb111685350cd276e47c7c0de5c79012fd0a1fed
+  - 2026-11-10T11:39:22Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 07 verdict GO nogo=0 id=e083ff307132 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=6a6777ab96b503dfa261a6cd7e06526addf440ee5961afc66628ba2a3cd4c069
+  - 2026-11-10T11:40:09Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 07 verdict GO nogo=0 id=366cc7751442 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=fcf2e728af74b6f884c179e2eaa500ac47800903932605d6777c1b00bd2af7fa
+  - 2026-11-10T11:41:25Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 08 verdict GO nogo=0 id=669accc1fe1b rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=675daf15aba8fa5a4fc7e90052ca5ee5b0010714c393172466e410e9ccf91c4b
+  - 2026-11-10T11:41:25Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 09 id=d3d52fb6b204 pid=47351 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=71b509093be2bf57fb05b867fc335718c5621f4ceab68a736d3ce06e0741954b
+  - 2026-11-10T11:41:25Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 10 id=1c6ed01146c9 pid=47350 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=67462d22c43eeacc7b0f78330d72416ff981107e46e00dcb6627d9c557f990df
+  - 2026-11-10T11:41:25Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 09 id=992d5a205730 pid=47353 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=f4617304e883758838be9697fbe77836da0a3c2ee52d7a844f5058a9a0ab1d5d
+  - 2026-11-10T11:41:25Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 10 id=35c0d051d19c pid=47352 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=03dfea726208f8e81b1489ce912088945e50ce3e811999a533d1eb286b4be19f
+  - 2026-11-10T11:46:52Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 09 verdict GO nogo=0 id=992d5a205730 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=06c7180a3ec8c8d9d7ce393a3c0a5e04f18be38b8b20f5177e94a37555e8d11b
+  - 2026-11-10T11:46:55Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 10 verdict GO-WITH-CONDITIONS nogo=0 id=1c6ed01146c9 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=8d8d9edebd53307fced53ce445ae9a2b82eecb000dc069fd7ab24601871e1c5c
+  - 2026-11-10T11:51:33Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 10 verdict GO nogo=0 id=35c0d051d19c rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=534ad050b18a0374b54e6ac1b48e6dc0a68126427a865a98499934cc73977b3d
+  - 2026-11-10T11:51:39Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 09 verdict GO nogo=0 id=d3d52fb6b204 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=369c3d687c6258b2851b98d76fb8f46ea46b1e758bafe3d5c081f05f8b86a20f
+  - 2026-11-10T11:51:40Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 12 id=f9d7f9fb6f8c pid=55493 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=50f070052d6dfc14b448ae0491fc428cee15aa4a012f36ba2737de6c2e395b82
+  - 2026-11-10T11:51:40Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 12 id=786c0a55f934 pid=55491 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=cec5c5f73aaae1a952ce9d69d0557a4169869802bad8582228c3e0f977882f14
+  - 2026-11-10T11:51:40Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 11 id=a7f1f4757374 pid=55492 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=a5f4439c63b76b9a329d3ea5d353b13dc18f81a2051aa33a5d2aa807f2aea408
+  - 2026-11-10T11:51:40Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 11 id=16e8752421de pid=55494 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=3d924454430db236c694d9fc12b840a3d173a9d67a6734aad9af9618b2a79b4f
+  - 2026-11-10T11:55:37Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 11 verdict GO-WITH-CONDITIONS nogo=0 id=a7f1f4757374 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=cf1cfac173ca4a62954bdba36ecf76f8e276096f03a4c63f4f01411dd37572c3
+  - 2026-11-10T11:57:41Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 12 verdict GO nogo=0 id=f9d7f9fb6f8c rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=c1ce7e3cad7b08be312834f25c93c0d8c93c530f7167629c5759dac6cd7537e5
+  - 2026-11-10T11:59:22Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 11 verdict GO-WITH-CONDITIONS nogo=0 id=16e8752421de rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=00da7d0f55c31e586a5de7375f73d877c6af54e859f4eca0a3d1756cd3c86257
+  - 2026-11-10T12:03:48Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 12 verdict GO-WITH-CONDITIONS nogo=0 id=786c0a55f934 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=c910a9171ea1557f82d4a4c8e95118b93ce088f4587d3f8a9dde1f4245485139
+  - 2026-11-10T12:03:49Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 13 id=bc605e2cd633 pid=59339 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=a55193c5f5347f338795a24e2b9dad3a7baef593bd4a2b366c402915bf5a5e0d
+  - 2026-11-10T12:03:49Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 13 id=ac53e5b24892 pid=59340 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=673d458884af9ffe0aedc7b83562e62e598000f906b2a60db2dea9336c8f7be3
+  - 2026-11-10T12:03:49Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 14 id=e22fc6a7a277 pid=59342 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=4880f8b9cd47b2dc14c6a71a5b02d8298056d07dfe2107a1c0a1a1181901c101
+  - 2026-11-10T12:03:49Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 14 id=a158fca0cc0d pid=59341 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=d1f7a08c396e2e6b207c4a7c0c5b8bfb59cca6d008db4f3018cd3f2892b9a31f
+  - 2026-11-10T12:07:49Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 14 verdict GO nogo=0 id=e22fc6a7a277 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=aaa0f3cccb4fbb01d9229f5e5d6551465ab9c7e6b79abdfeb55532fa307554e7
+  - 2026-11-10T12:08:23Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 13 verdict GO-WITH-CONDITIONS nogo=0 id=ac53e5b24892 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=e764215acc470b2912cac95858b4e4afc88bbd7850ebfd8b91e9d7ea8b34376c
+  - 2026-11-10T12:13:49Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 13 verdict GO nogo=0 id=bc605e2cd633 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=b423b9a4d57ea8b047f1fe372ebda9e0c93b4328c024c0fb3e2905ce191cc91e
+  - 2026-11-10T12:14:26Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 14 verdict INVALID nogo=1 id=a158fca0cc0d rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=0ede4c1c79d92b141f2a8f6a30a25043a875dbf02baa0aed3c04fc50faaeab1e
+  - 2026-11-10T12:14:27Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 15 id=bd14c50af24c pid=62683 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=d2cb1ed4cf57109426d24ccd496a205933aac484bf64489a282b9185e865df19
+  - 2026-11-10T12:14:27Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 16 id=7cdc6014d301 pid=62686 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=4ea64a4ec51ae8534aca0c5fc6009e08cba6eef1d01c8582aab9386c6ae4b008
+  - 2026-11-10T12:14:27Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 16 id=6c06d9594d13 pid=62685 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=718cfca3ab76232ca775287628b1a76e69093af2037d4570992add4b1a24379d
+  - 2026-11-10T12:14:27Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 15 id=c5b7fc582307 pid=62684 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=ea1473166dd1f1457b69ca16436b68cac851bf53e792f962171d657e3213eea3
+  - 2026-11-10T12:18:19Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 15 verdict GO nogo=0 id=bd14c50af24c rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=8ca985aa88a3171b3ce800ffa2cb5c62473c1104839ff5bfdbd206a666b2d6b0
+  - 2026-11-10T12:20:17Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 15 verdict INVALID nogo=1 id=c5b7fc582307 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=2ae434c606aa58b01c418843b2098b755bf967faee8a75c3387c419ac075b33e
+  - 2026-11-10T12:20:48Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 16 verdict GO nogo=0 id=7cdc6014d301 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=17bc2cc69f31c7526ca6a44b58d3701692ab1cf7b6fb59b6359611a9ab438ab3
+  - 2026-11-10T12:31:08Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 16 no-verdict id=6c06d9594d13 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=71481b2f32b0cb01c03195f702452bae39bc8ea42279d6da73d60f93cdb59e11
+  - 2026-11-10T12:31:08Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 17 id=c8fb672227d8 pid=66290 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=fd7c1242f23a33a578a5fd43a60aea6b68e02887c2417f68b9b89c735e738382
+  - 2026-11-10T12:31:08Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 17 id=a1c4ba2b7083 pid=66291 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=d5680f039cc479353f478ef16016a41805f369ad92282a23afeec4c1ba7ecab0
+  - 2026-11-10T12:31:08Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 18 id=02e8ef1ef8d6 pid=66293 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=26a2985402b773eabe97c75794e2d99330cf800ccc05b2245d455430ae79a063
+  - 2026-11-10T12:31:08Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 18 id=f24ed79284e2 pid=66292 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=a1073d47a7143ff64fe8440ce5e826262c2a6e51e1ae3ac88117e36f1e5e3175
+  - 2026-11-10T12:31:27Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 17 no-verdict id=c8fb672227d8 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=4649925aa3b755a8c68d808c5f18831406c0045b54cdddb884105633d5b8bd87
+  - 2026-11-10T12:31:28Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 18 no-verdict id=f24ed79284e2 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=9b1f2e67017c3a9372276d4bc04c05128820ef330b36071a0f3655894824ced7
+  - 2026-11-10T12:34:09Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 17 no-verdict id=a1c4ba2b7083 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=28cfd5e114fb04f2b6be689049165dd2742da8668609f938e88c52f21d5c8320
+  - 2026-11-10T12:34:14Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 18 no-verdict id=02e8ef1ef8d6 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=58d57f4531b3b747cec43886b067d81e5df3b7619f6735487b3cae06cf9f8f0b
+  - 2026-11-10T12:34:14Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 19 id=cb4d3552c58e pid=66950 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=c20212936bb82cd3a84e7310c72830fb7964b29374efaaecb69b110f5c358f69
+  - 2026-11-10T12:34:14Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 19 id=414b8e5c65e7 pid=66951 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=9d5666fa345369649110cb9e6f976860227d67d918032a434073045b6577f91f
+  - 2026-11-10T12:34:14Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 20 id=3609894b1c8d pid=66952 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=08823076308bf1ca877f1c8bb7555cd841c56f5d5ffdfbcd31c675b93e2fd0f4
+  - 2026-11-10T12:34:14Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 20 id=186503df6dab pid=66953 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=4afd4713e83eb08c083d2b848aed5e326f097a4230c0fb2014a98dd1ff785380
+  - 2026-11-10T12:34:33Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 19 no-verdict id=cb4d3552c58e rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=c723cbfa96fe1aa8384535194b14993ded48dbc00d90e34a62c84279f1572e64
+  - 2026-11-10T12:34:34Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 20 no-verdict id=3609894b1c8d rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=f4f64308f27e4b288960a6ab89fcd03cef84c006c0acb0e2f626d4c2ce75dc29
+  - 2026-11-10T12:43:59Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 20 verdict GO nogo=0 id=186503df6dab rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=5f82be4da5f865dff4d490156bd45cb28e2aac6b74aa35dc51b43a7779b1d65a
+  - 2026-11-10T13:44:28Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 19 no-verdict id=414b8e5c65e7 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=5c2156e618fd62bb8eb3ed48f2fd19022d3d8218411de14899c7e91f737223dd
+  - 2026-11-10T13:44:28Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 22 id=071869c05c50 pid=69376 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=e4fee7a09468d80fe893cfd8676deb6ab7d986e6d04caf3468db3a2dd07800c1
+  - 2026-11-10T13:44:28Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 21 id=3cdd8f93f2b7 pid=69377 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=24036a8475fdcb1aa0d2b56a4f5328c2a2fac00846e6e704e59fd12610e9c838
+  - 2026-11-10T13:44:28Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 21 id=a42029773dc3 pid=69378 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=8bc5e6d5d13d957a3d351d6921e73c3bddb071a2f7a6d4b6574a563d543c4e4a
+  - 2026-11-10T13:44:28Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 22 id=dcf577c91ff8 pid=69379 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=aff0a4ac64b3dcdcd398580618d002b49689de6838e2c46d8c69a5eb1c0924c9
+  - 2026-11-10T13:56:04Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 21 no-verdict id=3cdd8f93f2b7 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=16f1d130c2494f2252e361691859574614035f97051cc533da7272c262439d06
+  - 2026-11-10T13:56:04Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 22 no-verdict id=dcf577c91ff8 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=7c3cc1898b0c9772dd65f55c809188c082a50b1690507639c6eefdfff55fef9f
+  - 2026-11-10T14:03:29Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 21 no-verdict id=a42029773dc3 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=b024656174254530142dd3f9c90e1a09af043d359023f7cf5c8eda95d03ffd3d
+  - 2026-11-10T14:03:33Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 22 no-verdict id=071869c05c50 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=6b423abfaac48be4e8aded0a274b41fdd707aa9a56b10635ecaa294fbdca2efa
+  - 2026-11-10T14:03:34Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 23 id=076d5036717e pid=69975 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=601d984269ffc8a2bb57d3bc06b2f7a50cb1ca13019d47d261f6f98241b939ba
+  - 2026-11-10T14:03:34Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 23 id=2fa5abbbaae8 pid=69977 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=e9b57ff0dfb2c96272d538ac44917c51ad90238c9380b94089801ce5537ee1fa
+  - 2026-11-10T14:03:34Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 24 id=0fb2ba51dcba pid=69978 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=16a508dbdde9347b7a519a90adf825944cd14b91848aae61d5566285af346df1
+  - 2026-11-10T14:03:34Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 24 id=9c9e55bbcb7b pid=69976 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=af50b035d6218130b2d4dc531a35f2eb2595b21b66f25714ac39e749dd7316ad
+  - 2026-11-10T14:03:53Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 24 no-verdict id=0fb2ba51dcba rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=effcdaf7bdaf67f40bb16d4a448a076c37563dfab6b0ddc194ff911b421543d5
+  - 2026-11-10T14:08:19Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 23 verdict GO nogo=0 id=076d5036717e rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=d46fbde6bf5a84e53a95a7f20475b80793efbc85fd1844b1d28230ff9f8a3dc2
+  - 2026-11-10T14:11:45Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 24 verdict GO nogo=0 id=9c9e55bbcb7b rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=b7cae5c0e11f6d21a8f496aafa6ba263d4433a6ef882d68c2c0bb96d9db0e8d3
+  - 2026-11-10T14:12:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 23 verdict GO nogo=0 id=2fa5abbbaae8 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=e96258b4425d8367004f35b7ea87dd15a4ca80541f59e3cc4b4892967461c96d
+  - 2026-11-10T14:12:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 25 id=135ff2a92e0b pid=75108 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=fa3b82c589b4e27fbaf5f7bb616a17bd21c9011f4b1d95de0f33b7836d2cae6c
+  - 2026-11-10T14:12:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 26 id=ba855aa40c66 pid=75111 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=6a82c3d33feb58347e9b0e9a4dc7001b4d214b29aaa72b0eeba4b134292a3316
+  - 2026-11-10T14:12:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 25 id=f3e7cf5c502a pid=75109 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=3c739957bb9c9b8c97d1d2f8af4c438b8c119011f0228de9583a34e3c7ce32f8
+  - 2026-11-10T14:12:58Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 26 id=51fbe0f522a5 pid=75110 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=54ecfd39002eef4fff6faaa5d80e0637f0a586192e54f1f7136f900527b23f64
+  - 2026-11-10T14:17:27Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 25 verdict GO nogo=0 id=135ff2a92e0b rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=04160b5f6bfaa0e8a4a4e806cf27991ce2802248262d9386e8c8cc523abf9a3e
+  - 2026-11-10T14:18:57Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 25 verdict GO-WITH-CONDITIONS nogo=0 id=f3e7cf5c502a rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=c8c47008f1dbcff97f4c2cc42821054586b361ed7c8a4fc3810eb3fde3193246
+  - 2026-11-10T14:20:03Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 26 verdict GO nogo=0 id=ba855aa40c66 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=105840d36e5fd01ece0f80f16891aa6d0c91963e3a43d9263f2b54ef2c491319
+  - 2026-11-10T14:27:50Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 26 verdict GO nogo=0 id=51fbe0f522a5 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=a52d461338facd65cb201506c96f39de56887b8ca0d5395f0b623483586a855e
+  - 2026-11-10T14:27:50Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 27 id=197d00e3d7b8 pid=90646 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=92cdd634c77f8d58f61fc3cf7a969f847b36814324642d9b0eccff238bffd3ff
+  - 2026-11-10T14:27:51Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 28 id=0c8d227262c7 pid=90648 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=736d031687352718b97c12517efdae0807e7d0bec94706a9f6514d217db62cbe
+  - 2026-11-10T14:27:51Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 27 id=2b13fe1b5c15 pid=90647 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=8599bc4e319b0f48048746920730dd22dc3f299d172704daba1237e853a7690a
+  - 2026-11-10T14:27:51Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 28 id=c89079eb7668 pid=90649 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=1ea2568a6d1f89e3b635c94bc839a39a3ec6c524f0faf45a2c14d497a4949735
+  - 2026-11-10T15:19:16Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 27 no-verdict id=2b13fe1b5c15 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=2f76dfff029c068ce4f1495ab2f3b6e1ef82afa31d735459a697eec6cfb39d5c
+  - 2026-11-10T15:25:41Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 28 verdict GO nogo=0 id=0c8d227262c7 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=2293e3323312a5e7738dcf84b40c23589328fef14effc880b5253b662839353d
+  - 2026-11-10T15:25:57Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 28 verdict GO nogo=0 id=c89079eb7668 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=715f1ef9a88fc24036d11eb3132f39cde92723e254a8d3c54e306bb9e88ebe6b
+  - 2026-11-10T15:26:48Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 27 verdict GO nogo=0 id=197d00e3d7b8 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=db7fc2d874001da76e12f1ebfc169940c0b5b931404dd2795e3c04e1faf65452
+  - 2026-11-10T15:26:49Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 29 id=61ea8c330c7d pid=7408 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=9a257e3ddac4a50474ad51a3147d79edf56daefebcf2b1b1fa7f533e0e7b1daf
+  - 2026-11-10T15:26:50Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 29 id=4263aa1f24f8 pid=7409 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=cbc710ef83da0320e2fd47c9e31d19f051345e224b6a05d2d056afb7a5b8f711
+  - 2026-11-10T15:26:50Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 30 id=20bbb987a27d pid=7411 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=972d79d3565ef4df338d1af749dd50a4ea6c673a2860c8c228b2710afc497db8
+  - 2026-11-10T15:26:50Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 30 id=79cccd02577a pid=7410 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=fead0305cc04d76cb0fb0c83b1e0b8f3d14b9f10415d386040c80b5a753aafd6
+  - 2026-11-10T15:31:13Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 30 verdict GO nogo=0 id=20bbb987a27d rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=3ae082f26d7807a0f654b5392001df4790ff207f1f1823f2301dc3ffa21c5e0b
+  - 2026-11-10T15:31:35Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 29 verdict GO nogo=0 id=61ea8c330c7d rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=5e2e80794fdbd6bb49d2ec35657547a7011b23a8ea40d0a99f4ed549442a5f00
+  - 2026-11-10T15:35:30Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 30 verdict GO-WITH-CONDITIONS nogo=0 id=79cccd02577a rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=4c4e3354811f5d6c7cffa45feb2d22d559fd7b0cff1b1f8208dc294128d67c4c
+  - 2026-11-10T15:36:59Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 29 verdict GO nogo=0 id=4263aa1f24f8 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=ec7bd29d3c5fa7b36169e1e101e7192fff88e664c8e5d4f3311ad064d62e06b0
+  - 2026-11-10T15:36:59Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane codex part 31 id=d282c303c223 pid=39993 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=1dead42d072390111b54288b830f52460d6f08a482d35af3d77d9b744c40ba18
+  - 2026-11-10T15:37:01Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 dispatch lane claude part 31 id=ead0310a6352 pid=39994 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=ce414560e280056a192391b4eb2405122f8dc039246a2a49c8832fe98911f7e2
+  - 2026-11-10T15:42:05Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane codex part 31 verdict GO nogo=0 id=d282c303c223 rc=0 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=7bf16804563bbc4b021fc703575f3ce682ac286f10cd66b490a4ecbf20b1b779
+  - 2026-11-10T16:02:12Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 lane claude part 31 no-verdict id=ead0310a6352 rc=1 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b prev=d2dec47a093ae2350f2e2bde424ab506aa8b9220f4879c7426fa950fe0fae070
+  - 2026-11-10T16:02:21Z v1.4.4-rc.1 63e17829c1ab435f5a22c5f1ead98ec0378a1977 end rc=3 nogo=2 tree=2203b74e491f921d2f0cc00fda5c7fb40ac5ff6b manifest=- prev=75069499f01662e83884984bd9355964a519fa1b299a69e6c800f618a970a220
+  - 2026-11-10T22:55:51Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 start resume=0 parts=31 ev=.claude/plans/PLAN-198/repass-rc1 prev=3dcc7a832741b4c448f5a4b6165a445f891b1468a7f3ddb70bac24d596e2d9fd
+  - 2026-11-10T22:55:51Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 01 id=c15a7e9259d1 pid=36499 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=b69d4ae72e34cb1df38cfc29ba27742cfa1178f72a783ea873e7b94c1f941adc
+  - 2026-11-10T22:55:52Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 02 id=93eb01dfc917 pid=36502 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=2bebd466ed6b2d9c97f20bbb60ea16ae8df1e814c58fb88ac7bad80a45281e2a
+  - 2026-11-10T22:55:52Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 01 id=3bc61aaac337 pid=36500 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=bdc3f1265fc28a4fb0dd3eaf72814142e3e651e6b598162a124ef7857a7490ee
+  - 2026-11-10T22:55:53Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 02 id=d5f320b54400 pid=36503 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=18fdd0de2a4bce1803340e4fd2e61db7c9b2415f7c3e6f1d6fcca68a2ad4a84c
+  - 2026-11-10T22:59:21Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 02 verdict GO nogo=0 id=93eb01dfc917 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=6857b5ff6cd4e4ea19e40a41b65da17b69d0b02875066238aac987b59252e4bf
+  - 2026-11-10T22:59:31Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 01 verdict GO nogo=0 id=c15a7e9259d1 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=f8e1164271fd3e185311bd8137a423f73fe86f7a6450b440c8734fba955cc71d
+  - 2026-11-10T23:05:12Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 02 verdict GO nogo=0 id=d5f320b54400 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=3a79d2b5e958215d7193760c37eaeff19cc7f3e86fd54eacffaae2e85fe488a1
+  - 2026-11-10T23:07:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 01 verdict GO-WITH-CONDITIONS nogo=0 id=3bc61aaac337 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=666fd3fc0ec5abec71f3fd262c7a46d7c3768b42a4db3079cc3b6ccd3e47bb78
+  - 2026-11-10T23:07:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 04 id=a5289fd26330 pid=41276 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=409eef98d43fafb1ba0146f1b9c2202d93ca057530453ec505a06a57c6acae33
+  - 2026-11-10T23:07:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 03 id=1d7dd0ab9c42 pid=41277 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=7708f34d4c1b19f7cab8f6e9005f06596e11ac1fb36d945183ccac3cf830c24f
+  - 2026-11-10T23:07:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 03 id=bfe3d958c55c pid=41279 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=885e649b33da1e6dc498c91d26daaa44e2ee4615014bf1e68e772c26a7f10d72
+  - 2026-11-10T23:07:15Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 04 id=7c295d353276 pid=41278 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a1b404e1d8bbeeea644d5531e22711b38b96a14a913cb1fe2035a9caf4bb4f4a
+  - 2026-11-10T23:10:53Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 03 verdict GO nogo=0 id=bfe3d958c55c rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=97de8bf2c99b7619936a13fd34990c5d8743f8b856926aa0d841af842cbf3da0
+  - 2026-11-10T23:11:03Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 04 verdict GO nogo=0 id=a5289fd26330 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=0660c60ef7da2592feb956ee80f0dfedb1d5a23b34dc892eb9b62404ec3c8ba7
+  - 2026-11-10T23:17:43Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 04 verdict GO nogo=0 id=7c295d353276 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=462cbf37df89333b29b70fbb00d17fa5fbba8762755bc11dd13717aad6b29b9f
+  - 2026-11-10T23:18:57Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 03 verdict GO nogo=0 id=1d7dd0ab9c42 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=e25f4a4457acd1f85deb457340bc1fde2d071f635061fb4e1e98117c894aee59
+  - 2026-11-10T23:18:57Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 05 id=c4328df2ee4e pid=43894 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=8a8a87eedbfb46fbba1e0199e9107d347a7c450017ddae6c4761a2cbae0d1d57
+  - 2026-11-10T23:18:57Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 06 id=38ce24064305 pid=43895 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=e54a2978b637a8769603da6d37f5b434bac3ccaf71e2204723638eadff43b0ce
+  - 2026-11-10T23:18:57Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 06 id=68227dc57a02 pid=43897 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=7886ef7874f92bc825b2623ea424c6ac10fe66788900de6eda2efd998432c5ec
+  - 2026-11-10T23:18:57Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 05 id=7ab7ff6bff77 pid=43896 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a9c9cb2ab3d07cd63f8fda8086514b080705a5cfb463e2c5ebbc6de8eae312bf
+  - 2026-11-10T23:23:22Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 05 verdict GO nogo=0 id=7ab7ff6bff77 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=5d5b023fca801021764bd277738b6239d5aecac6f9640cd70df6497b8c4d0397
+  - 2026-11-10T23:23:58Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 06 verdict GO nogo=0 id=38ce24064305 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=1a7c217dbb94b4d88fe1895c0a7dde07055b7548ad9b86134c330aba0794e43e
+  - 2026-11-10T23:25:12Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 06 verdict GO-WITH-CONDITIONS nogo=0 id=68227dc57a02 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=596e42f4a38ee9ec500a5b1032c2045216fa3ecd7789fdac665b592e08f20ffb
+  - 2026-11-10T23:29:30Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 05 verdict GO nogo=0 id=c4328df2ee4e rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=d637518f604d143ea91ed918e3e93d9a0ea55e22e5c6b0f2e46860352d7a1806
+  - 2026-11-10T23:29:30Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 08 id=df231a2418c3 pid=46316 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=8bc7d3474bbd3f2d598b0f484210659270166e60545536c679ba5c1a96fab12f
+  - 2026-11-10T23:29:30Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 07 id=4c643667dfc3 pid=46314 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=801abce652f877f720b470c0a304356257fc7761241c0a98a1ac448792417ef0
+  - 2026-11-10T23:29:30Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 08 id=8e3d7c8af3ce pid=46317 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=4dfb63c76b81257033cda3ed388e302bd7f1fb00b8d13ed7a890f651c67dcc8f
+  - 2026-11-10T23:29:30Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 07 id=710fad2bada9 pid=46315 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=5988b21c69f877cc7fdce3fdf908e3332233a5bdc1f7080859ed8a640b9b2675
+  - 2026-11-10T23:34:00Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 07 verdict GO nogo=0 id=710fad2bada9 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=e889ea26128366d41057f021cb6987f6c2229324c20e7f0eff9a063363eecaca
+  - 2026-11-10T23:34:40Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 08 verdict GO nogo=0 id=8e3d7c8af3ce rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=09188633577cdd3f2f6dcc8f9056392e26ff337a8000a3c794212adef9395fa6
+  - 2026-11-10T23:37:43Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 07 verdict GO nogo=0 id=4c643667dfc3 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=7e3000295368b89c41aa3ac2d0dc5ac7ee8ee38830a54ffdd79fa83093574703
+  - 2026-11-10T23:39:51Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 08 verdict GO-WITH-CONDITIONS nogo=0 id=df231a2418c3 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=573f8077a8a657fb4e08b87b9bbbbbc6c3a80a07be18757841c8b7bfd9269dac
+  - 2026-11-10T23:39:51Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 09 id=ec609b23d86e pid=48637 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=087d89053ded116e326aec97cd75112b3e892e2ffba08435dc58e21276ac6a1c
+  - 2026-11-10T23:39:51Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 09 id=df9e0b28c15b pid=48636 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=ac64ed1214b6d5889e926555fcc93624906c33b301463c80c81e0e89ccc123c2
+  - 2026-11-10T23:39:51Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 10 id=9a0fe93e1a6a pid=48639 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=f5afd230f5406532aeae375542fd301a636b0ca047b068e0adbc05e28c3f276c
+  - 2026-11-10T23:39:51Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 10 id=3a6816de4761 pid=48638 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=294ad96ffd18315e76ed1509c1fee4ae3180cf0ffa9bee39cc33b622fc3dbbe3
+  - 2026-11-10T23:43:35Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 09 verdict GO nogo=0 id=df9e0b28c15b rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=cfb61100d9fe3abb13414fc6c01f6ed85c937146bc4300e95376fc692c077a2b
+  - 2026-11-10T23:45:34Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 10 verdict GO-WITH-CONDITIONS nogo=0 id=9a0fe93e1a6a rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=fe662aeaec50968b76f02bffacbba8d22c78ba647f0fcb9d7722ab5dfedfe591
+  - 2026-11-10T23:48:25Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 10 verdict GO nogo=0 id=3a6816de4761 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=382546b03adb7b0e158b6bb8f915134c22e080a491c9e773aa2a4f1e80fb06b0
+  - 2026-11-10T23:50:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 09 verdict GO nogo=0 id=ec609b23d86e rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=6d10d46de034e9d5eec27d975a2edbb26c801e5f68abbf5dac4e9e61e99e2963
+  - 2026-11-10T23:50:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 11 id=54d4d216db87 pid=51077 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=279681250b5a534c7385b9e80e6f6e4ce642b98950267c19eddefe2c0c0842c9
+  - 2026-11-10T23:50:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 11 id=f59d517f5c23 pid=51080 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=8b7e81e91d0d72cab1c1cbd8c6f487046ca143729d043e613b2255657457ed76
+  - 2026-11-10T23:50:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 12 id=b994d959ae56 pid=51079 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=b1e5eb4aa2a45093e9999f7b22f3605d3a22c0d7affaf9fdb51658fa8aa06fe4
+  - 2026-11-10T23:50:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 12 id=f5c2b42104de pid=51078 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=255e2288b68ade76ec9500135ff34e77164fa72ebd996c9d627ea35f619a19d8
+  - 2026-11-10T23:53:57Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 11 verdict GO-WITH-CONDITIONS nogo=0 id=54d4d216db87 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=b7301e3ca45d33e173971e101b408e4b1f8c73034517817c5db8ca7ca93a2d31
+  - 2026-11-10T23:54:22Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 12 verdict GO-WITH-CONDITIONS nogo=0 id=b994d959ae56 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=61f1c674eacd8f25419819271a2f349d464298f8debf90de245d7ccb91cbcc4a
+  - 2026-11-10T23:58:11Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 12 verdict GO nogo=0 id=f5c2b42104de rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=93103d79d0e8c277b56a654e420f49c6aa2843c9667c513dfed6b31b7203aea5
+  - 2026-11-10T23:58:18Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 11 verdict GO nogo=0 id=f59d517f5c23 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=c6d05f4a2869aad26214515734735cab5d793f141de22d4133b54a3f9cc22538
+  - 2026-11-10T23:58:18Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 13 id=991c1645dc77 pid=52973 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=0a9e31854bfc153f75167427a65315cdd21dcbd27f3c95bc3289bd48fae8f450
+  - 2026-11-10T23:58:18Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 13 id=615467e4a63d pid=52974 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=069bf9391d573a054177a0b9e9e6d6e85bb33c5c7c8b6e0fe9a0f5024ff3892b
+  - 2026-11-10T23:58:18Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 14 id=7912340294a4 pid=52975 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a9e0c5ddb7bc5ab10e557e929b545a81017e16525523fe3dcdcaf7c7c51d54a7
+  - 2026-11-10T23:58:18Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 14 id=36738711e794 pid=52976 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=e1cb6573dbfd073f76d653b78fb5c1ec357f3cafc6f6f043cd45d8b5bf0dadd3
+  - 2026-11-11T00:01:44Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 13 verdict GO nogo=0 id=991c1645dc77 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=7b2c0ed6d3ee185fa977341e7cc5f6a5f111567c9e226f7d5da246595cca428c
+  - 2026-11-11T00:02:00Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 14 verdict GO nogo=0 id=7912340294a4 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=1c289a7cecf7984184efccbe0478de5df0ef15e1f1c91b9e24bc4532f72c222b
+  - 2026-11-11T00:07:25Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 13 verdict GO nogo=0 id=615467e4a63d rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=e28635e56ed64dfee5a0053049eaf2befb2aceb361772e6e1866bbc96d626c5e
+  - 2026-11-11T00:09:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 14 verdict GO nogo=0 id=36738711e794 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=0c353c1143689a386924dcae1bb6a8e8c32b5401230950fd6a560dcef28e0f80
+  - 2026-11-11T00:09:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 16 id=0bff32e14379 pid=55402 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=ba2b1fe0da513602c1362d50d5c396d4b84ba4f5f3016552948dcb936573beb6
+  - 2026-11-11T00:09:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 16 id=f7f8101182b0 pid=55405 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=3c5bc71640fbfe5f7ad05dcf93517d5040aa1347657cfef9e7b5fd946b535019
+  - 2026-11-11T00:09:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 15 id=95104d5bd0ae pid=55404 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=92c14545498ac3d8f610707b1f711e8db488e7c1330f21b8683fc20acba9484b
+  - 2026-11-11T00:09:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 15 id=0c5ef8c8a52d pid=55403 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=ded8a731309afeeb97720d8221f1191e83ddf1f5f2cfa7e03397acb7f1d3d731
+  - 2026-11-11T00:12:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 15 verdict GO nogo=0 id=0c5ef8c8a52d rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=6a6bcda9be1abcbcdc83e606eb0bf828c7bd05ac10b713da84af0e0e71f545ef
+  - 2026-11-11T00:13:23Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 15 verdict GO nogo=0 id=95104d5bd0ae rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=432720054866f69e40a5f1e663624971d376f68f861cffd529a4b34b10536039
+  - 2026-11-11T00:15:48Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 16 verdict GO nogo=0 id=f7f8101182b0 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=ddac19d723185819ce48b6c5ff4784820627445e60043099710ee6228fe8c0cc
+  - 2026-11-11T00:24:00Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 16 verdict GO-WITH-CONDITIONS nogo=0 id=0bff32e14379 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=76332523e268d633ca29c92233d0a0a0bebaee56658d6b89070bf409ae097458
+  - 2026-11-11T00:24:01Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 18 id=42bc6667fe03 pid=58371 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=4fa835d238ff7497a4d89c18e997918b51e7983676eb2a701214ada2eb5504e7
+  - 2026-11-11T00:24:01Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 18 id=a7d6c7e5dc5e pid=58370 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=3595601ac640918cae0094c223b983eda35ade93ebdd42dde3f6d1d98c4eacbb
+  - 2026-11-11T00:24:01Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 17 id=dc17e5c7b0d3 pid=58372 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a69a6629d8688949026879ee5018e07f5c052eb1050d6fce6fe6bd8f839d2aa6
+  - 2026-11-11T00:24:01Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 17 id=0807562622d8 pid=58369 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a5f559bf7d59251dfc8258523b1909ac4e64d189f2667075c52ac14d55f903e3
+  - 2026-11-11T00:27:12Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 18 verdict GO nogo=0 id=a7d6c7e5dc5e rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=7bcc20a8d6d7453dfdfa7cd720eb2c7cf1e3dd8d18ca1e24290fa0b262c9c9cf
+  - 2026-11-11T00:27:44Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 17 verdict GO nogo=0 id=0807562622d8 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=d3021be7ae1d7ed556c6f7432d024c71915a5815cb7165b8984051750a6d8a9d
+  - 2026-11-11T00:34:02Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 18 verdict INVALID nogo=1 id=42bc6667fe03 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=9ed9b80c5ad38c4166e208c8a3c44309eb0965e40da95233f998130343a47523
+  - 2026-11-11T00:36:39Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 17 verdict GO nogo=0 id=dc17e5c7b0d3 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=8b54612171dc508e807366163975048017b4a530655aa5a28429d38c78132a85
+  - 2026-11-11T00:36:39Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 20 id=8a54fc718a15 pid=63204 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=7efaeb3678c6197cea6433286fb65e78d3c9a1d6ea6662f3bd58cf52db148784
+  - 2026-11-11T00:36:39Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 20 id=f9c4f4dc4352 pid=63207 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=fcea52470723b229f386681d623d6b854927b28fb79390ebcae15df809cb229b
+  - 2026-11-11T00:36:39Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 19 id=a15f9a83db1d pid=63206 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=be0def4a9f197ea7b8faa202a298e3baafb03b121c2f654af0e1ec8779d30056
+  - 2026-11-11T00:36:39Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 19 id=6f12311ccbb1 pid=63205 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a9db201436b7654878642259f804bffb5a3796633cb385764c6fcced90db4b41
+  - 2026-11-11T00:39:18Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 20 verdict GO nogo=0 id=f9c4f4dc4352 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=774b11048d8625401af104d20a6b507a7d31ca6a54c442d704cf8c5f6060e905
+  - 2026-11-11T00:39:23Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 19 verdict GO nogo=0 id=6f12311ccbb1 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=ef5ac08c2ee68ebbdc9ecfb5d5ba9bfd84374d3695189721e6e6b2decba517f5
+  - 2026-11-11T00:44:55Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 20 verdict GO nogo=0 id=8a54fc718a15 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=284e9049f1566bab299e8bf578bc75a6af3df7b2d20d44c1953ad87f387a44c1
+  - 2026-11-11T00:47:44Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 19 verdict GO-WITH-CONDITIONS nogo=0 id=a15f9a83db1d rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=1999e79bcda111932e891b72c2d9b5be43dc37f434552532a09f6e511b7423a5
+  - 2026-11-11T00:47:44Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 22 id=dd31945b1f11 pid=69014 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=8270b85798d0b920cdd94ffbcb9a6116252686abd50bb1c74bffc2ef68f8b0ca
+  - 2026-11-11T00:47:44Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 21 id=0044cdd98bd3 pid=69015 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=cebdac2bfd5c70d59997bd0a8ef5fbb7d42e44ce06829d40e69f727b06014b93
+  - 2026-11-11T00:47:44Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 22 id=5768ff866028 pid=69016 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=4fc13bf8b394b5e8d71d3c2c20a195f27982e19798b78799c7f13ddb5c4b6666
+  - 2026-11-11T00:47:44Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 21 id=546e3eeb0a9b pid=69017 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=3e9c23dd97d37fc6c5b323d972f7cbf433dcc5d60004ade83b939c1471a4bf46
+  - 2026-11-11T00:50:52Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 22 verdict GO nogo=0 id=5768ff866028 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=69b0d721dc75e75e14abcd4a87e4f0bc0641054d50f7e72fc89f55f3097b26bb
+  - 2026-11-11T00:53:03Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 21 no-verdict id=0044cdd98bd3 rc=1 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a7cfbe5fa7df24c809387d07d71d0ed1fef778ec9004f3716732d922f96d19a5
+  - 2026-11-11T00:54:53Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 21 verdict GO-WITH-CONDITIONS nogo=0 id=546e3eeb0a9b rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=b40fc9570306d636546f607d50def8ba851223c1023e5abe8406fb69f115aa46
+  - 2026-11-11T00:59:09Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 22 verdict GO nogo=0 id=dd31945b1f11 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=5d6341008ab4fdbce060a2de161cff0e0d4624a719b6ea0ccd9e0792c78ba7d0
+  - 2026-11-11T00:59:10Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 23 id=82b672c56311 pid=71559 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=3ebe02bb915fe16b10347dfbe68b4d2442eaef9fa6f09543ccbe8eec2a59bdda
+  - 2026-11-11T00:59:10Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 24 id=73b85cb72516 pid=71562 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=4c56e0b769525e6823d2d6cae4d305441e2503d2a32391fbeb39725d1a91bbb5
+  - 2026-11-11T00:59:10Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 23 id=41cc4ecba0e6 pid=71560 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=0aeeb661deeb132cbb06037bbd9274cd099318eb9b775f36066c4528b90b9e6b
+  - 2026-11-11T00:59:10Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 24 id=78e1c34a0ed0 pid=71561 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=05e01c556ec2e3489ea7ef037e1760cbd098460be098efd5d4d642445930258e
+  - 2026-11-11T01:03:13Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 23 verdict GO nogo=0 id=41cc4ecba0e6 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=2343dc99a22d8d7bac6fb44953273f63c5d0534ba403e938ca356e83d1a006bd
+  - 2026-11-11T01:03:18Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 24 verdict GO nogo=0 id=73b85cb72516 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=e9dd8be316a4947a0e231df1586df7d1102389654f14c1c855f1dbd8eaefdb7e
+  - 2026-11-11T01:07:26Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 24 verdict GO nogo=0 id=78e1c34a0ed0 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=9289a5caca69ed2ec0cdbed46b12b57291ada08790a8739f1af15040fbb1e8e8
+  - 2026-11-11T01:08:13Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 23 verdict GO-WITH-CONDITIONS nogo=0 id=82b672c56311 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=cae9ddb48dcd63115dbd41bb2c590617f216eb62f2ea56d35b5c24fb144dd7c2
+  - 2026-11-11T01:08:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 25 id=72a694b3b130 pid=73562 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=f5ff71c4af82ea5b5832776d2ba1f3dc8429976596f43fbafd09982e4acf2462
+  - 2026-11-11T01:08:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 25 id=cd898378e7aa pid=73561 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=7c91b883edf81d16e6ee57a030805a88d3d33a01321c3da03a51c18a9965a8a0
+  - 2026-11-11T01:08:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 26 id=086ad392e93d pid=73564 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=bd922ebb82bedbe1c739126adad4789071d88dafe876c6d49cb644689bc2129d
+  - 2026-11-11T01:08:14Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 26 id=996959f07c2b pid=73563 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=c5108769dd68852cb069fb24005490cafe792ef4d24084d3f8e0f0d327389355
+  - 2026-11-11T01:11:12Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 25 verdict GO nogo=0 id=cd898378e7aa rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=159c3050598f9b755a69cbc861cec82223daba006fb9d4737476745ec2157047
+  - 2026-11-11T01:12:45Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 25 verdict GO nogo=0 id=72a694b3b130 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=41fce3012dd59ce56268d37f21c6037cdfab3089ae54442705b5fc2dd23727cb
+  - 2026-11-11T01:14:03Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 26 verdict GO nogo=0 id=086ad392e93d rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=f8f2a1b8c2de8dd9f8a2d257242989629a79f94c4e6874ef76b38278ca544221
+  - 2026-11-11T01:20:15Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 26 verdict GO nogo=0 id=996959f07c2b rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=6dc0b50cfd4e623bc26f5ff47116fc3b8132386e3840b2d37b3ece3f10a115e9
+  - 2026-11-11T01:20:16Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 28 id=8cd65649b6df pid=76275 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=208412115e7f5336d7d4db0ed559c0127e44b3a19b12faad693c933ce513787f
+  - 2026-11-11T01:20:16Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 27 id=a4e4297f3a65 pid=76274 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=210921d18b6b3b01c6b99a08780500818ef6534e76290fe6566273a6e3d616e4
+  - 2026-11-11T01:20:16Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 28 id=dc0936ca3ad7 pid=76276 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=fef5203a70f0eb97e3e043f97da52e4ca351db0dcfeec83f0c0ddd5943503d65
+  - 2026-11-11T01:20:16Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 27 id=cf5e1a1473c1 pid=76277 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=1dca27d84cf7bc3083a6fe53fc40a5ae49f31d5f4564fe1525f574e6ae49b515
+  - 2026-11-11T01:23:43Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 27 verdict GO nogo=0 id=cf5e1a1473c1 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=3dc8242411391e93a6f53adbd2db576610ccbf300b952b865813d04e091c2e2f
+  - 2026-11-11T01:23:51Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 28 verdict GO nogo=0 id=dc0936ca3ad7 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=d39e202faab81e9310968b7af77f60d02f766c73a3d714e3abf82de6e0477769
+  - 2026-11-11T01:28:16Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 28 verdict GO nogo=0 id=8cd65649b6df rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=d17c9b617e57bbf11a95cf06230327ffa2bbdfc44fa361f6d064c03c0f374bbb
+  - 2026-11-11T01:30:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 27 verdict GO nogo=0 id=a4e4297f3a65 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a9e6dcc64daed7f95ef1e29c103c16e239cf1c9115f092db5c6a5201561b957c
+  - 2026-11-11T01:30:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 29 id=b984c5a4ab50 pid=78403 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a60066325ce158afd6c86173d624e0712d99e7afaefc127aff0eee432157f809
+  - 2026-11-11T01:30:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 30 id=a454aa018e7a pid=78402 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=0852c6d4b72d1b342aaac046266078818c14e89019233099990c1a27c059b94e
+  - 2026-11-11T01:30:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 30 id=b441e4959f59 pid=78405 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a7c958fbfb1682f6e2edeeb5858ad2085ba908a67a50c83168238407708232d3
+  - 2026-11-11T01:30:17Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 29 id=3c630e03badf pid=78404 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=080857106429ac83e94b3c0627a1454278313d15cfbe53861b35e4439447f1d5
+  - 2026-11-11T01:34:18Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 29 verdict GO nogo=0 id=b984c5a4ab50 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=97828f70f00960f5e9155f044f4cc74cba6ec2de9e7a2de53a97ed546c0771b0
+  - 2026-11-11T01:34:54Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 30 verdict GO nogo=0 id=b441e4959f59 rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=96062c17bf8c013e46fbc8e7dbf1c10812b42eb1374d91a2a63aea410f931015
+  - 2026-11-11T01:38:41Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 29 verdict GO nogo=0 id=3c630e03badf rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=7cf85182ffdd9cba1526da358001353ca13dc1c761b562a96b2f298855146d32
+  - 2026-11-11T01:40:52Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 30 verdict GO nogo=0 id=a454aa018e7a rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=260a122d76bb3ff091f89a45387e8210b0ec43167348c80cc604cfafb8d2d3e7
+  - 2026-11-11T01:40:52Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane codex part 31 id=da03cb9435ba pid=80731 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=a2537f162eea2b03b1dd02c6259544b5ee7e7f19d3ea363571f16ccc07aadc7c
+  - 2026-11-11T01:40:52Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 dispatch lane claude part 31 id=4b69caf522bb pid=80732 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=f4f7afa2526f5367703caf2b80e00f8aff4a0ba68fa7ffc86ba26e77863eaabd
+  - 2026-11-11T01:44:51Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane codex part 31 verdict GO nogo=0 id=da03cb9435ba rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=355f0e06892b0951eb179721fefe6c4ccbc483cf93624a301c2b5ba6796873c3
+  - 2026-11-11T01:50:36Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 lane claude part 31 verdict GO nogo=0 id=4b69caf522bb rc=0 tree=26845a836cb2f58aca5ca16e172143056ef0743b prev=0fe900d148e8857a2c18711784d1bffb488d87bdde6746897ebb9b7897730ae9
+  - 2026-11-11T01:50:48Z v1.4.4-rc.1 12493e9416a299e9abb1a889fc715e602eb2b205 end rc=3 nogo=1 tree=26845a836cb2f58aca5ca16e172143056ef0743b manifest=- prev=e12104d2416b3052e9e278f3572fbfe70886fb79f2d76d1cfbd9d4bd452c1f01
+  - 2026-11-13T16:20:14Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c start resume=0 parts=32 ev=.claude/plans/PLAN-198/repass-rc1 prev=28b3d3b5d7ab61e657310b50d527c03811c94b16322d14c67acec23d127f5556
+  - 2026-11-13T16:20:14Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 01 id=7388957b24c9 pid=47622 tree=a2006375523b82a6a142244757b773ce4544c32b prev=28bd0e6e8b89c5f1101002d7de6c32e075ee42a0faa469b3fcd24e79877eaf54
+  - 2026-11-13T16:20:15Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 01 id=235be64146af pid=47623 tree=a2006375523b82a6a142244757b773ce4544c32b prev=7d17ed2df84630a98b7732f13c9d6f1b8a6f60bc21cdfa49daa59afb4c3c92b6
+  - 2026-11-13T16:20:16Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 02 id=bf1ac9892d27 pid=47624 tree=a2006375523b82a6a142244757b773ce4544c32b prev=aaac476b281597ec8acb395388456587e2a802cb0e2927502b2615df3dc369fa
+  - 2026-11-13T16:20:16Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 02 id=c17c95f3acee pid=47625 tree=a2006375523b82a6a142244757b773ce4544c32b prev=08e212a37601b368b52f371f00137bcaeccffae75484bcfe08c01e559c8d7b6c
+  - 2026-11-13T16:23:47Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 02 verdict GO nogo=0 id=bf1ac9892d27 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=cab42b54488fdc6b819ab55b2c2bb6651006aacabbc7a8144cd31e065dd8be72
+  - 2026-11-13T16:24:03Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 01 verdict GO nogo=0 id=7388957b24c9 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=dddda358a9962337d23982327beeb8b8e5bf7626e4dc80643f85da62422a5da8
+  - 2026-11-13T16:28:39Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 01 verdict GO-WITH-CONDITIONS nogo=0 id=235be64146af rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=03c7e56741145f0372b5c6d38a1c37aa0154f47108a93e7e03a61f8d2fb9d24b
+  - 2026-11-13T16:28:46Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 02 verdict GO nogo=0 id=c17c95f3acee rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e105fb08bd66171f30812eb6670a1da0aac33fe855163e8939a9af7e12833176
+  - 2026-11-13T16:28:47Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 03 id=1f965bf1fb22 pid=49752 tree=a2006375523b82a6a142244757b773ce4544c32b prev=640730b44de5c0c10786753c9f3cc7ff87eb0341ee319131b15412a4f9c0deff
+  - 2026-11-13T16:28:47Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 04 id=37a5aa25fe4f pid=49753 tree=a2006375523b82a6a142244757b773ce4544c32b prev=6084dba0929089e1a4552446d5aedd390e27e55f35acfaa88f384a2382b8f5de
+  - 2026-11-13T16:28:47Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 04 id=169e13530595 pid=49754 tree=a2006375523b82a6a142244757b773ce4544c32b prev=d357fb3934edc7252f3bd2c203760be59c107972238d07b2e8c67f0f34426c65
+  - 2026-11-13T16:28:47Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 03 id=b66b840b7a0e pid=49755 tree=a2006375523b82a6a142244757b773ce4544c32b prev=df1731d190eb6ccece516d9000c7d42ed437974c5c29817538838d80e995d249
+  - 2026-11-13T16:31:49Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 04 verdict GO nogo=0 id=37a5aa25fe4f rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=0536dcb188b9fc5207e15c5705ea91614ef58535a4e5de68a555554d668a8b96
+  - 2026-11-13T16:33:33Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 03 verdict GO-WITH-CONDITIONS nogo=0 id=1f965bf1fb22 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=ffd0aefa61abca526a4747ebc4fde7aef0038649d48ffb5074926d03651b4443
+  - 2026-11-13T16:38:11Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 03 verdict GO-WITH-CONDITIONS nogo=0 id=b66b840b7a0e rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=35f0a4d3cce667376354a57b2e044b1840d047301629a247ef4e4e583aa66794
+  - 2026-11-13T16:38:42Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 04 verdict GO-WITH-CONDITIONS nogo=0 id=169e13530595 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=9b96c8fab8df715687eceb495285bd2062c21560c7c80306959d1e91109fc9ac
+  - 2026-11-13T16:38:42Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 05 id=82d1da5bc6d1 pid=52198 tree=a2006375523b82a6a142244757b773ce4544c32b prev=3828e3560dfa85e8a8f4dbf5b48bd23786249c7f6823228224d99606510cbe39
+  - 2026-11-13T16:38:42Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 06 id=bd7d0fcfd078 pid=52201 tree=a2006375523b82a6a142244757b773ce4544c32b prev=396fdfec7464b4903ae8e44d9fb1d6eef2400850a7fc6f6bb71fd4b0ffe06d85
+  - 2026-11-13T16:38:42Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 06 id=33e85a103963 pid=52200 tree=a2006375523b82a6a142244757b773ce4544c32b prev=686817d1a17becc5cac893aeceaaf247de1f18cd737de56ad1c0edcee2dd9784
+  - 2026-11-13T16:38:42Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 05 id=07cf1f30ffe6 pid=52199 tree=a2006375523b82a6a142244757b773ce4544c32b prev=b0817431027d2e8940e0327896d5b15d6e0fafa7a98c4c241b7764b3236d3555
+  - 2026-11-13T16:42:15Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 05 verdict GO nogo=0 id=82d1da5bc6d1 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e3e164cfe7c05ffb325e0687a8fe8c7dca20f19a501faf26ccee1aae51e16f0b
+  - 2026-11-13T16:43:11Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 06 verdict GO-WITH-CONDITIONS nogo=0 id=bd7d0fcfd078 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e4d638eb4c6fa966e5b4be275b4a0acfea2bf169c7f469ef6652aa7450aeb25c
+  - 2026-11-13T16:45:01Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 06 verdict GO nogo=0 id=33e85a103963 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=f8de12899c6fe381d0c6ea6389ba2f525cc83a5bc6c6aeb5a5d957643b783536
+  - 2026-11-13T16:45:48Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 05 verdict GO nogo=0 id=07cf1f30ffe6 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=7919c9fe8f2057fbb535e31a8790cb214765acfb16bceaadfc7c77948dde045c
+  - 2026-11-13T16:45:48Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 07 id=2b8a12494a3f pid=54075 tree=a2006375523b82a6a142244757b773ce4544c32b prev=6089747c47c338bb1eedbbac30573d3fb408c19a30acc9402827de5dc72d477c
+  - 2026-11-13T16:45:48Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 08 id=eee3b0cb50cd pid=54076 tree=a2006375523b82a6a142244757b773ce4544c32b prev=2d4b8e9ece264482ce45bf6b9b495327e383d49412704eea77ebccf226e454af
+  - 2026-11-13T16:45:48Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 07 id=5322505a1f00 pid=54078 tree=a2006375523b82a6a142244757b773ce4544c32b prev=6ca51d02383b898fd74f7f44cdae42c6b1ee5880272fb63b537a7697b0f315bc
+  - 2026-11-13T16:45:48Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 08 id=b84cf92d7355 pid=54077 tree=a2006375523b82a6a142244757b773ce4544c32b prev=59b6d6b8c9bdcdfde7ca104b1a026d7f408e7592711338b20075a7f4e40c256f
+  - 2026-11-13T16:49:24Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 08 verdict GO nogo=0 id=eee3b0cb50cd rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=b2cb3c2afaf42fbb83bd9da9fec3b7b8c7780e2c15ab34e76623f9ac04ea8313
+  - 2026-11-13T16:50:13Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 07 verdict GO nogo=0 id=2b8a12494a3f rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=6b852478d20e7826076a9726b32b8e2290c8cd1881e57f19f5426bdda639cab0
+  - 2026-11-13T16:52:12Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 07 verdict GO nogo=0 id=5322505a1f00 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=51b546321ed3a569ad9e4d092ce97a4252127f5a7890b3d9986cd9589f32bd76
+  - 2026-11-13T16:53:47Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 08 verdict GO-WITH-CONDITIONS nogo=0 id=b84cf92d7355 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=6ed9c95bf5ace0dcc315827feb1043f4a82c8ddf1a5f13517983ec2fbc1e2d9d
+  - 2026-11-13T16:53:48Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 09 id=02cf286e6c5c pid=56022 tree=a2006375523b82a6a142244757b773ce4544c32b prev=46ddf1d0ec9554c7143630cb58491a689410384360406d06b8b635321fc376ed
+  - 2026-11-13T16:53:48Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 10 id=8689a4047c66 pid=56025 tree=a2006375523b82a6a142244757b773ce4544c32b prev=4faa6f8ade797118ffda43668dbf34bb50d84d5ffb6c4cddfbd254fcfe12619d
+  - 2026-11-13T16:53:48Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 10 id=7cd92b182d50 pid=56023 tree=a2006375523b82a6a142244757b773ce4544c32b prev=a8c94109e56adc59720773ae1bf898a00be96ef51fa841e367f057a653e5f694
+  - 2026-11-13T16:53:48Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 09 id=dd61e51094d5 pid=56024 tree=a2006375523b82a6a142244757b773ce4544c32b prev=d0fe200355a253bde09cfdd8efd079387aea979e6d24ba832c381f9a8684a9b3
+  - 2026-11-13T16:58:30Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 09 verdict GO nogo=0 id=02cf286e6c5c rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=b00823e98ff275dd79014c67eac0e39e0e83bcf900c5bb7764965c8d28de1fcc
+  - 2026-11-13T16:59:17Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 10 verdict GO nogo=0 id=7cd92b182d50 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=10a052b3895df10b1f4a3c3b234de14fac2691420d417d4cf2e615efb8d6ac7a
+  - 2026-11-13T17:00:06Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 10 verdict GO nogo=0 id=8689a4047c66 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=99c2365bec1d3b6a4437c46ba178e675f0631930b297f8b7ef36726ebfb2b4e9
+  - 2026-11-13T17:02:39Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 09 verdict GO nogo=0 id=dd61e51094d5 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=fb41cfca4e97ddd79f8da1959a7758982715ea8c44d40e6d9f165fca52b24580
+  - 2026-11-13T17:02:39Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 11 id=3d34103ce986 pid=58105 tree=a2006375523b82a6a142244757b773ce4544c32b prev=a3ef2da769b9bd3937900792be329d60e919ccb684409177af612c6684d9f0a0
+  - 2026-11-13T17:02:39Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 11 id=f48dc5a21ed2 pid=58106 tree=a2006375523b82a6a142244757b773ce4544c32b prev=0fe81f2ac583124db557cbbbbdb178995e697f3a3fe00dbfdd4f40c888c475ed
+  - 2026-11-13T17:02:39Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 12 id=9f09c32067bc pid=58107 tree=a2006375523b82a6a142244757b773ce4544c32b prev=d341836d2166a0ade0822908c84beaffc55753593e9af91480ad9db8a15df7f3
+  - 2026-11-13T17:02:39Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 12 id=5f2d0b191e81 pid=58108 tree=a2006375523b82a6a142244757b773ce4544c32b prev=ac53baba178defec64c6ddb66f128516346aa9e37f369e63ed105e107deb0f6d
+  - 2026-11-13T17:06:18Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 12 verdict GO nogo=0 id=5f2d0b191e81 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=f855a6fd79c1b589ed6f7a28062f94fd79a738c88622e9728e771f86d6251ee9
+  - 2026-11-13T17:08:03Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 11 verdict GO-WITH-CONDITIONS nogo=0 id=3d34103ce986 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=be7dae1863b1c6a741001cbb06f0ea25e9840867510b0e59ebfe7a55bf98cc78
+  - 2026-11-13T17:10:07Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 11 verdict GO nogo=0 id=f48dc5a21ed2 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=9ea35e2dd0d8c257b9aeb2dc1917efbd63f562ac345cf0274baf0d64aa9c75c3
+  - 2026-11-13T17:13:57Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 12 verdict GO-WITH-CONDITIONS nogo=0 id=9f09c32067bc rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=62e24719dc74c0cf52900cc84f492fb427bd8a482577500f3dd35c7d62e9ef1c
+  - 2026-11-13T17:13:57Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 13 id=79f0a3374d8b pid=60753 tree=a2006375523b82a6a142244757b773ce4544c32b prev=f0e9f03086ba2c6784317cf3e0cd22f69a01173fe48feda3ab465bfd306d99c4
+  - 2026-11-13T17:13:58Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 13 id=836195e0f6c3 pid=60754 tree=a2006375523b82a6a142244757b773ce4544c32b prev=b9948316a0de3bdbc4094500bf34255109bc9c5ee0edbaf8665db5df9b0016f1
+  - 2026-11-13T17:13:58Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 14 id=4c959ac33df8 pid=60755 tree=a2006375523b82a6a142244757b773ce4544c32b prev=37a9928c3e78b52525fcfafb37ff4a67a748d96fd2f14695801e66c715c1e554
+  - 2026-11-13T17:13:58Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 14 id=42d204a290dd pid=60756 tree=a2006375523b82a6a142244757b773ce4544c32b prev=4791458bc7701583ead8a7d593817f4cd9cce87aec39f4a8ef8daad5729085f0
+  - 2026-11-13T17:17:39Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 14 verdict GO nogo=0 id=42d204a290dd rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=b4327a394bae020321ef3abdad5803992223250e41a483a4ccb216766fde7602
+  - 2026-11-13T17:18:52Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 13 verdict GO-WITH-CONDITIONS nogo=0 id=79f0a3374d8b rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=97f3ec20967eaa92406aa0cdf267a4b073eeeda95afb4acdbe8c766ab31f7c42
+  - 2026-11-13T17:19:52Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 13 verdict GO nogo=0 id=836195e0f6c3 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=5c62c717f9db83a2844e1d2fb19842c5e194303b4cd204029e146f02cd43ee2c
+  - 2026-11-13T17:23:40Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 14 verdict GO nogo=0 id=4c959ac33df8 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=d9322033890189d85b9ace55d64ad7c5564fbee8e0db309acc2b214dad143dac
+  - 2026-11-13T17:23:40Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 15 id=57bee0d6551a pid=62967 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e6edff78562a07daf27da30f90dccd9717896517b98af3d2c2eccbed79044d51
+  - 2026-11-13T17:23:40Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 15 id=bf766a0c3995 pid=62968 tree=a2006375523b82a6a142244757b773ce4544c32b prev=1755d5d5fd32e9e3131e91b0e9bc640025188f116639ff2fea06285a407bf1e5
+  - 2026-11-13T17:23:40Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 16 id=5db35ea97748 pid=62969 tree=a2006375523b82a6a142244757b773ce4544c32b prev=0384c6874c529eced2f03ed592e00a1de87daaf2c10529966c977a4c6bcbecb2
+  - 2026-11-13T17:23:40Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 16 id=0f0425c4bc9c pid=62970 tree=a2006375523b82a6a142244757b773ce4544c32b prev=49fca07ef7c7267759c0816435d399183b99a69c48e7ca34a1e54f36e6cd95b0
+  - 2026-11-13T17:27:36Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 15 verdict GO nogo=0 id=bf766a0c3995 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=34c9001796212f711fdb894538ab7c24a90e9e603b85da40c68dbf900af40694
+  - 2026-11-13T17:28:22Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 15 verdict GO nogo=0 id=57bee0d6551a rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=02c33e0217dcbf871b4dcb39a3f48e7ed77ad5e11c421214cf21aee1064d7dfb
+  - 2026-11-13T17:30:49Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 16 verdict GO-WITH-CONDITIONS nogo=0 id=0f0425c4bc9c rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=1811434329df2a55b812538a55db3cc13056498358bb8593cf1286ec36c9961c
+  - 2026-11-13T17:36:52Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 16 verdict GO-WITH-CONDITIONS nogo=0 id=5db35ea97748 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=653ec1a037362cc0052d83be65114787ca5fc108486248240ed251cb39fab8f8
+  - 2026-11-13T17:36:52Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 17 id=496ce38609e6 pid=66137 tree=a2006375523b82a6a142244757b773ce4544c32b prev=7628e5a42e7ce21d5f74389ace0578bf62325fa5a6b8b1b9f7671daed0a798ef
+  - 2026-11-13T17:36:52Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 18 id=50d6fd210fd8 pid=66136 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e6b9dc21da0cb037bde97df9a1c4948bfc66a91fc0d1f2ff18fe631b941f764b
+  - 2026-11-13T17:36:52Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 18 id=ce0412f7a77f pid=66139 tree=a2006375523b82a6a142244757b773ce4544c32b prev=92f96545ede72a655b9668c82bc081c34dda0c3b2061fb3b2f15e3b9efd5d483
+  - 2026-11-13T17:36:52Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 17 id=c1c2ea91bb41 pid=66138 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e835557e46907d0670cc93881f3f3a0bc3d69a8f3dd80e9451179fc517c3d76f
+  - 2026-11-13T17:40:42Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 18 verdict GO nogo=0 id=ce0412f7a77f rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=4d8751318a20b73db8c07738d0572ae6fc7f80a2db45b72f8e90ad17c8dd1618
+  - 2026-11-13T17:40:58Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 17 verdict GO-WITH-CONDITIONS nogo=0 id=c1c2ea91bb41 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=dc26c8d364971a5d3914ebbd0c9b756f816aa4efe7de0742573297cedff2f405
+  - 2026-11-13T17:46:16Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 18 verdict GO nogo=0 id=50d6fd210fd8 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=fad0818b2eed46b118bb04f5a72de813e687a5ee2346a77d18184fc18e4f13b8
+  - 2026-11-13T17:49:50Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 17 verdict GO-WITH-CONDITIONS nogo=0 id=496ce38609e6 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=0d389af01fa4788c714efd3286affa2936fe1a33f1dd01883eae59116c168b52
+  - 2026-11-13T17:49:51Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 20 id=ed6cd6206184 pid=69309 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e2a211944f93f346b6fad456948cfe9dd97ae0ea35c4c491b963db41cfc813fc
+  - 2026-11-13T17:49:51Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 19 id=8b0b477d157b pid=69312 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e7e5f6253168253ecc106edebd4615d6ec9ed473ec845a6b3267c524dbcd7d0e
+  - 2026-11-13T17:49:51Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 20 id=63a72687942b pid=69310 tree=a2006375523b82a6a142244757b773ce4544c32b prev=8c093e3953023a4f90b46f533966ac8ed9d2f727e87f3b87f0f5ac65e354287c
+  - 2026-11-13T17:49:51Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 19 id=2b262182ffb7 pid=69311 tree=a2006375523b82a6a142244757b773ce4544c32b prev=ef10ac814327bef3e96be17cd40a43f419e6ed3d24b1b1fb8a691550c0cf6900
+  - 2026-11-13T17:52:35Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 20 verdict GO nogo=0 id=ed6cd6206184 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=416b6ad4e2bb2d100c422e7a695a8368a9cce097af9a30b57e00e81f48f7fcee
+  - 2026-11-13T17:53:49Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 19 verdict GO nogo=0 id=2b262182ffb7 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=f74da1fb7f91397e17a5856272f9b4fac44beb4bff5a30daca7c949bf730508a
+  - 2026-11-13T17:59:26Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 20 verdict GO nogo=0 id=63a72687942b rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=19380952df263cb8280963d71bf280bb6344e68d7008215e3ea4cf90404783ba
+  - 2026-11-13T18:02:09Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 19 verdict GO-WITH-CONDITIONS nogo=0 id=8b0b477d157b rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=62a505ca2ca05ed470b008a69797afd568bfa9bd47c2d95303dbbe05d07e26bf
+  - 2026-11-13T18:02:09Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 21 id=ff72da1b6fb5 pid=72146 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e20e37102942ea3edff90d3bc626e3db2c21417d99b9f236df11a97455470532
+  - 2026-11-13T18:02:09Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 22 id=ee3f94aee0be pid=72149 tree=a2006375523b82a6a142244757b773ce4544c32b prev=30ae9a5d1e447cd3bb1abdd05aa3bc4dde188d2c15df7593b0cf04f68806420f
+  - 2026-11-13T18:02:09Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 21 id=639c8010a1d4 pid=72147 tree=a2006375523b82a6a142244757b773ce4544c32b prev=20e7ae57ffe88e2bfa12a36c963fbd098db48b0597b83be7105ec2d6e80f520c
+  - 2026-11-13T18:02:09Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 22 id=686bebd38d04 pid=72148 tree=a2006375523b82a6a142244757b773ce4544c32b prev=52b8e83799750ec0dedf79ecdc5c9ab02c0175f35d2b699d7409c5488942ea58
+  - 2026-11-13T18:05:59Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 21 verdict GO-WITH-CONDITIONS nogo=0 id=ff72da1b6fb5 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=d64caa3f0a6ea8a60b6897d1348a36e8f43ca6c61c3ca3f128c9a9d6ee708184
+  - 2026-11-13T18:06:37Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 22 verdict GO-WITH-CONDITIONS nogo=0 id=ee3f94aee0be rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=91eb665ed7c89cb79e22be2063166f1c1466ee4eca3153fc2d939a84404a79d2
+  - 2026-11-13T18:09:28Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 21 verdict GO nogo=0 id=639c8010a1d4 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=27d9869604d2d0a493181a8bdce6a3b31db057d39832aa5db923b9891f8aeca3
+  - 2026-11-13T18:10:18Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 22 verdict GO-WITH-CONDITIONS nogo=0 id=686bebd38d04 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=2f1cc12e954357227dc341b22e07517183b9966b20cba34fa0c38e326fc67bc1
+  - 2026-11-13T18:10:18Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 24 id=c37743df6798 pid=74342 tree=a2006375523b82a6a142244757b773ce4544c32b prev=77422c67cfacd6431eb6bcfb6dae8e117db52bad1cc00139dcc1d72e480d30a7
+  - 2026-11-13T18:10:18Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 24 id=61086068cbcc pid=74344 tree=a2006375523b82a6a142244757b773ce4544c32b prev=59c6488a2082a675479ffd538d83d33598d4101d8cd1943c334a161c8faab53a
+  - 2026-11-13T18:10:18Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 23 id=2ac214269ec0 pid=74341 tree=a2006375523b82a6a142244757b773ce4544c32b prev=9c5c0d07b35fab77cfe193277d7cd4f4346c263c9cf615e9658fe995c317919b
+  - 2026-11-13T18:10:18Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 23 id=f86ae93c8c51 pid=74343 tree=a2006375523b82a6a142244757b773ce4544c32b prev=1fc4b51ec796b9672f0b3e6d530a6cf4955a79db6fdf0e0e12541cabd24ed907
+  - 2026-11-13T18:13:31Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 24 verdict GO-WITH-CONDITIONS nogo=0 id=61086068cbcc rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=b4a7f711bf353b326133bd643caae15cbb9dae5343651fd40b05e275971afc4e
+  - 2026-11-13T18:15:43Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 23 verdict GO nogo=0 id=2ac214269ec0 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=afb9f7b890ad3cf88c2c53808b7f44fc5968fd89ced39052b0c66ec1a256ab67
+  - 2026-11-13T18:17:10Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 24 verdict GO nogo=0 id=c37743df6798 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=7fefa47c6dd27166e91b5843a81415a4e7598f998cf13ed5a0bc8e9a332ac21a
+  - 2026-11-13T18:19:03Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 23 verdict GO nogo=0 id=f86ae93c8c51 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=b8be99798dbb33266079c4b18bb0e4b9eea6ff2bcc7f7ef7741373c98a8efd9a
+  - 2026-11-13T18:19:04Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 25 id=2dbe0c89e746 pid=76582 tree=a2006375523b82a6a142244757b773ce4544c32b prev=1d1c1f609851c0175f42fd7c1697cfd08170c817882c2765ddc8ce9ea62c4f99
+  - 2026-11-13T18:19:04Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 25 id=cee32406d7a2 pid=76583 tree=a2006375523b82a6a142244757b773ce4544c32b prev=5b16819fd91cd9f498074d76f5cfe5587e885df891cb9b14078511c310bd39b2
+  - 2026-11-13T18:19:04Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 26 id=a384769bb335 pid=76585 tree=a2006375523b82a6a142244757b773ce4544c32b prev=1a5c33f6f55895278c5b7e3088719b0e76657d64e91685db37ab2faf959ba34e
+  - 2026-11-13T18:19:04Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 26 id=651e35cbd4f1 pid=76584 tree=a2006375523b82a6a142244757b773ce4544c32b prev=3e73ec96fcd5bdd7dc1a916df066dc53855a2aa5c8e8f2b20d4de37af3c6f2df
+  - 2026-11-13T18:21:00Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 25 verdict GO-WITH-CONDITIONS nogo=0 id=2dbe0c89e746 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=209b33ec639c30887dcf42f4ecabd65c90a97fd4e942b275c4fa0b2dba811637
+  - 2026-11-13T18:21:44Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 25 verdict GO nogo=0 id=cee32406d7a2 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=a6575fe27c870110669c0237fe90f1ba8d345f5967c0c3f7acd4f44be6fbd4fa
+  - 2026-11-13T18:22:51Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 26 verdict GO-WITH-CONDITIONS nogo=0 id=651e35cbd4f1 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=f6919446a849d917b773f1a952951c9e0ba79eafdf6b469a924bd8b43e5ed9e6
+  - 2026-11-13T18:24:34Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 26 verdict GO nogo=0 id=a384769bb335 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=6ce11924390cf4649068c57467bdd672d559db8e8144b00d2f89f87e3140c484
+  - 2026-11-13T18:24:34Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 27 id=76576af735f9 pid=77959 tree=a2006375523b82a6a142244757b773ce4544c32b prev=a42029f9522c47dd2ca29bbfd049e21471f66bfd2e417217de5ba5ae89293210
+  - 2026-11-13T18:24:34Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 27 id=745eb7ca2c45 pid=77960 tree=a2006375523b82a6a142244757b773ce4544c32b prev=978c681dc6cdbd962eefc2bdcb3c411b1e69fd0cb81e76c7e9218b5ac85ef28d
+  - 2026-11-13T18:24:34Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 28 id=19d2b73b125f pid=77961 tree=a2006375523b82a6a142244757b773ce4544c32b prev=a9034723df599b09a2fc4a54b1d15b7322bab2ee97d82d739f905cdc0deb3ac8
+  - 2026-11-13T18:24:34Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 28 id=4706a7e8360b pid=77962 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e0d6a63e9aa88bf13b711ef5331b9abe5ed522c70c4eb9af578890d86a74b744
+  - 2026-11-13T18:27:41Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 27 verdict GO nogo=0 id=76576af735f9 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=78d4dda84298dc22571bc5b582a63b8b01700cc8e285eeb5f4add4c78cac86c2
+  - 2026-11-13T18:28:19Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 28 verdict GO-WITH-CONDITIONS nogo=0 id=4706a7e8360b rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=423b21892b0696daaa76efe7f1cad35b67d0437e8d1e5a74c600cc91fbe7d193
+  - 2026-11-13T18:31:14Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 28 verdict GO nogo=0 id=19d2b73b125f rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e76754e1bdda1e1352e5d3ce21cddb39e948a534dc57299af0d48355ad8592a2
+  - 2026-11-13T18:35:36Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 27 verdict GO nogo=0 id=745eb7ca2c45 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=8b2ed32480d4e169cb4978862136762e0481c7c6cc31a6f5df0561ff86a65257
+  - 2026-11-13T18:35:36Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 30 id=bca7deb3de03 pid=80577 tree=a2006375523b82a6a142244757b773ce4544c32b prev=9ada65780ded78efcbd621167d4291d35ba7a1ba44de922a48b64b92fa1d7ff3
+  - 2026-11-13T18:35:36Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 29 id=edebd9584f0b pid=80576 tree=a2006375523b82a6a142244757b773ce4544c32b prev=d835623c2657f1d99d8e6bf7a381148457bab0d4164b16f4d97b02838ca85c56
+  - 2026-11-13T18:35:36Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 30 id=de83eabf40e3 pid=80575 tree=a2006375523b82a6a142244757b773ce4544c32b prev=30fc439d8452d8540259e1561e00887920e0322ad8496b9a84dfab6364522059
+  - 2026-11-13T18:35:36Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 29 id=024b92b30490 pid=80578 tree=a2006375523b82a6a142244757b773ce4544c32b prev=7570395b994736acd78e073511f5e504c73b7d41c466b2d795f6131d055fbf7c
+  - 2026-11-13T18:39:40Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 29 verdict GO-WITH-CONDITIONS nogo=0 id=024b92b30490 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=d1e0595516597c6d2a1b4fbbbc2474fe314b999d0ec42eea57ee1d788e37aa81
+  - 2026-11-13T18:39:40Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 30 verdict GO nogo=0 id=de83eabf40e3 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=baa115ddbbe0e8b37ca4e49403ae277e0839aab22159eaf313707da498ecf8e3
+  - 2026-11-13T18:43:31Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 29 verdict GO-WITH-CONDITIONS nogo=0 id=edebd9584f0b rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=6f81fcbfe6fffb8d3e6a4902a184a62bd81edfaa318454d415146e836eed2488
+  - 2026-11-13T18:43:50Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 30 verdict GO nogo=0 id=bca7deb3de03 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=3d94eaf2e16c01df99c5c81f59934fff456780cc6f9229ed6b549a325d5e1211
+  - 2026-11-13T18:43:51Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 31 id=f056262459d7 pid=82671 tree=a2006375523b82a6a142244757b773ce4544c32b prev=7117b34c6b883a1d07f809dfdafca385a3a8c0f0359e87ec23ec5de492cdc09b
+  - 2026-11-13T18:43:51Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 32 id=99058bc16a18 pid=82673 tree=a2006375523b82a6a142244757b773ce4544c32b prev=e21b9c523188dc0b8b1830d4c0846fa773fd97c741fc6b49620b72d23a5d367a
+  - 2026-11-13T18:43:51Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane codex part 32 id=609dbd707c2b pid=82672 tree=a2006375523b82a6a142244757b773ce4544c32b prev=7c34b32e53c1d4c71d8b71d3f35e6906a82e01e62ca1bb0f3e35b58367051abc
+  - 2026-11-13T18:43:51Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c dispatch lane claude part 31 id=811a640feced pid=82674 tree=a2006375523b82a6a142244757b773ce4544c32b prev=9855a3871c4c7d99fde54c775806a2c97929bd18485abc6ae8dd18a2ee174377
+  - 2026-11-13T18:47:23Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 32 verdict GO nogo=0 id=609dbd707c2b rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=11408346537d4b0a3332a0b50099193a01f39cfa50d4d7584ac0a12730c96b8a
+  - 2026-11-13T18:47:44Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane codex part 31 verdict GO-WITH-CONDITIONS nogo=0 id=f056262459d7 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=437510c262dd33273551773caeb9d2239315a4d778b2c066a58440d5a446d6a0
+  - 2026-11-13T18:51:13Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 31 verdict GO nogo=0 id=811a640feced rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=820369c47a28c16eb8dbc7736abafb5ef3c701eca23ab7e94a78a6eb4ea1e72f
+  - 2026-11-13T18:54:50Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c lane claude part 32 verdict GO-WITH-CONDITIONS nogo=0 id=99058bc16a18 rc=0 tree=a2006375523b82a6a142244757b773ce4544c32b prev=9a1163e21f920c7829b5309dc3597550d1f50e9438ccb81a343b23e9d93589c4
+  - 2026-11-13T18:55:04Z v1.4.4-rc.1 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c end rc=0 nogo=0 tree=a2006375523b82a6a142244757b773ce4544c32b manifest=cfb7bde27555db4d58bb06ab73559bffa798f1a91d326770dafcfebc3ad17188 prev=e9d9131080d62fbd5d5a663a50bb7d1bf6eecac19da4f7ce8c395a1acfd4ae25
+conditions:
+  - Condições do envelope — v1.4.4-rc.1 (o trem desde a v1.4.2, sobre a base v1.4.3-rc.1)
+  - Este arquivo propõe condições; não é aprovação nem assinatura. Duas revisões, Codex e Claude Code, leem os mesmos payloads redigidos, e o envelope vincula a evidência delas pelo MANIFEST cujo sha256 os campos assinados carregam. Um `NO-GO` de qualquer uma bloqueia o envelope, e um `NO-GO` gravado no registro de tentativas faz o kit recusar um re-pass novo no mesmo commit, ou na mesma árvore, com qualquer tag.
+  - Regra do corte (a que o Owner ratificou para a v1.4.0 e aplicou às releases seguintes; pela OQ-7 do PLAN-198, este corte segue o molde do PLAN-194 sem debate novo): `NO-GO` só por condição declarada FALSA contra o código ou por P0; um P1 não declarado vai ao veredito sob «NEW FINDINGS (annex)» como anexo assinado, porque cada arquivo de veredito entra no MANIFEST. Este texto não promete versão para a cura de nada que declara aberto, exceto o que o CHANGELOG [1.4.4] já agenda: a cura estrutural da condição declarada da correção do filtro de segredos (condição 4).
+  - Base: a tag assinada `v1.4.3-rc.1`, que `gen_envelope.py` escolhe pela regra dele (a tag anotada mais nova abaixo da versão pedida, ancestral do candidato e com envelope de veredito commitado); o envelope assinado dela cobre o delta `v1.4.2..candidato` daquela rc. Adopters: quem SOBE da v1.4.2 (a v1.4.3 nunca chegou ao npm, como o CHANGELOG [1.4.4] diz) ou da v1.4.3-rc.1, por `upgrade.sh --pin v1.4.4-rc.1`, e quem instala a partir de um checkout da tag pelo `install.sh`. A rc não publica no npm: o job `publish` do `npm-publish.yml` pula as tags `-rc.`.
+  - A. Dívida carregada (re-declarada)
+  - 1. **O anexo P1 da v1.4.0 segue sem cura declarada pelo CHANGELOG [1.4.4] e sem versão prometida para a cura, exceto dois casos: o da condição 67, que a v1.4.3-rc.1 declarou curado e que esta release carrega, e o da condição 58, que esta release declara curado (condição 4).** Os itens são as seções «NEW FINDINGS (annex)» dos vereditos em `.claude/plans/PLAN-169/repass-rc1/` e `.claude/plans/PLAN-169/repass-ga/`, mais as condições do envelope assinado `.claude/governance/pair-rail-verdict-v1.4.0.md`; os envelopes assinados do GA v1.4.2 e da v1.4.3-rc.1 já o declararam aberto. Fora os casos das condições 58 e 67, o CHANGELOG [1.4.4] não declara curado nenhum deles; esta condição não afirma que cada achado siga reproduzível.
+  - 2. **O que o envelope assinado do GA v1.4.2 (`.claude/governance/pair-rail-verdict-v1.4.2.md`) declarou aberto segue sem cura declarada pelo CHANGELOG [1.4.4], exceto o caso do P2 da parte 3 do re-pass daquele GA, que a v1.4.3-rc.1 declarou curado e que esta release carrega, e os dois casos da condição 1.** Aquele envelope declarou abertos os itens das condições dele (que carregam o anexo da v1.4.0, as condições da `v1.4.2-rc.1` e, pelas condições 13 e 14, os três P1 do anexo assinado da `v1.4.2-rc.1` e os P2 que a condição 14 mantém abertos) e os achados sob «NEW FINDINGS (annex)» e os P2 dos vereditos que ele ou o envelope da `v1.4.2-rc.1` pinam pelo MANIFEST da evidência. O P2 curado é o de um ledger de substrato com a forma errada que substituía o relatório inteiro do `check-substrate-drift.py`. O CHANGELOG [1.4.4] não declara curado nenhum outro, entre eles os três P1 do anexo assinado da `v1.4.2-rc.1`; esta condição não afirma que nada mudou na faixa.
+  - 3. **Dos achados do re-pass da v1.4.3-rc.1, esta release declara curados os três casos que o CHANGELOG [1.4.4] declara em «Fixed — three findings of the v1.4.3-rc.1 re-pass».** O MANIFEST da evidência daquele re-pass (`.claude/plans/PLAN-194/repass-rc1/MANIFEST-rc1.sha256`), cujo sha256 o envelope assinado da v1.4.3-rc.1 carrega, pina os vereditos: o da parte 3 traz um P1 sob «NEW FINDINGS (annex)» e dois P2, e os das outras partes não trazem achado novo. Os três são os casos curados: (a) o P1, em que `diagnose-output-hook.py` podia escrever no log de auditoria vivo; o ambiente do filho agora tira `CEO_AUDIT_LOG_PATH` e as outras variáveis de local que o script lista, e aponta `HOME` e o diretório do log de auditoria para um diretório temporário; (b) o P2 em que `check-audit-real-loss.py` caía com um `record_id` que não é texto; o arquivo agora vai para `malformed_record_id_files` no relatório; (c) o P2 em que os verificadores só de leitura `audit_spool_state.py` e `check-audit-real-loss.py` tentavam gravar arquivos ao importar os módulos auxiliares; os dois agora desligam essa gravação antes dessas importações. Esta condição afirma só esses três casos.
+  - B. O que esta release declara curado
+  - 4. **O filtro de segredos corta o texto original nos deslocamentos achados no texto original: o defeito presente desde a v1.0.0 que o CHANGELOG [1.4.4] descreve na seção «Fixed» do redator de segredos e que o envelope assinado da v1.4.0 declarou como a condição 58 dele.** Em `.claude/hooks/_lib/secret_patterns.py`, os deslocamentos que `scan()` devolve indexam o texto recebido, e `redact()` e `scan_and_redact()` cortam esse mesmo texto com eles; `.claude/hooks/_lib/pii_patterns.py` aplica trechos sobrepostos como união; o catálogo de padrões não muda. A correção é o commit `54bab3cc`, assinado pelo Owner após revisão do Codex e de dois refutadores Claude; nenhum arquivo de sentinel o cobre. O Codex aprovou com uma condição, anterior à correção, que a mensagem do commit declara nestas palavras, e que o Known-open do CHANGELOG [1.4.4] também declara: «the ingress path redacts the raw answer text before parsing it, so a redaction can change whether an answer parses». A cura estrutural, redigir os valores decodificados depois do parse, está agendada para a próxima release («scheduled for the next release»).
+  - 5. **A lista de hard-deny do kernel ganha 13 linhas: os sete pacotes auxiliares que recebem o código das sete entradas de kernel divididas pelo PLAN-197, cinco módulos que código de kernel chama e o pacote dos adapters live, como o CHANGELOG [1.4.4] descreve na seção «Fixed» da lista do kernel.** O commit `161e1dc3`, assinado pelo Owner após revisão de dois refutadores Claude e do Codex, leva `_KERNEL_PATHS` (`.claude/hooks/check_arbitration_kernel.py`) de 110 para 123 linhas e os arquivos de kernel rastreados de 125 para 222: uma linha recursiva para cada pacote (`canonical_edit`, `agent_spawn`, `_policy_parts`, `_audit_emit_parts`, `_audit_log_parts`, `_bash_safety_parts`, `_pair_rail_parts` e `adapters/live/`) e uma para cada módulo (`plan_paths.py`, `model_currency.py`, `cli_currency.py`, `bash_indirect_guard.py` e `bash_indirect_telemetry.py`), todos sob `.claude/hooks/_lib/`. O pacote dos adapters live fica inscrito no kernel, e uma edição nele passa pelo override do kernel, como a de qualquer arquivo de kernel. O teste novo `.claude/hooks/tests/test_kernel_decomposition_coverage.py` fica vermelho se qualquer uma das 13 linhas novas sair. O mesmo commit sobe o limite de tempo do job `coverage` do `.github/workflows/coverage.yml` de 35 para 50 minutos. Nenhum arquivo de sentinel cobre o commit.
+  - As demais correções que o CHANGELOG [1.4.4] descreve são julgadas como integração nos payloads, sem condição própria, com os limites que ele declara.
+  - C. O que muda para o adopter
+  - 6. **O guard de Bash ganha uma varredura de execução indireta, ligada por padrão (PLAN-195, ADR-201).** A varredura (`_lib/bash_indirect_guard.py`, no `check_bash_safety.py`) roda salvo com `CEO_BASH_INDIRECT_GUARD=0`, e as formas heurísticas dela salvo com `CEO_BASH_INDIRECT_HEURISTICS=0`, no ambiente com que o Claude Code inicia. Os limites de falso positivo dela nunca foram medidos nesta implementação, como o CHANGELOG [1.4.4] declara.
+  - 7. **Vários dos maiores hooks e scripts viram pontos de entrada finos sobre módulos em `.claude/hooks/_lib/` (PLAN-197, ADR-202).** Os pontos de entrada mantêm os caminhos e a lógica passa aos módulos: um hook remendado à mão precisa ser remendado de novo no módulo dele, e um módulo da condição 5 é caminho de kernel.
+  - 8. **Um hook registrado deixa pendente, na saída, o trabalho do spool de auditoria, e a cura é parcial.** O `.claude/hooks/_python-hook.sh` exporta `CEO_HOOK_BOUNDED_EXIT=1`; o ADR-055-AMEND-4 está `ACCEPTED` com a implementação `PARTIAL`, e o Known-open do CHANGELOG [1.4.4] declara que não está provado que todo evento pulado seja coletado depois, sem release atribuída à cura.
+  - 9. **Os merges dos pull requests 6 e 7 trouxeram ao `main` 233 caminhos canônicos sem sentinel nem arquivo de assinatura, e com eles mudou o sentido de três checagens de governança: o piso VETO, a allowlist de modelos e o pin do Codex.** O piso VETO e a allowlist passam a aceitar famílias de ids, entre eles ids que o ledger de depreciação lista como aposentados; o pin do Codex passa como `compatible` um Codex CLI mais novo que a versão do manifesto pela versão declarada, sem exigir hash igual (seção «Security and governance» do CHANGELOG [1.4.4]). Pela OQ-3 do PLAN-198, esses caminhos ficam declarados, não ratificados por bytes; o Known-open do CHANGELOG [1.4.4] declara cada um desses pontos com «No release is assigned to its cure yet».
+  - 10. **O revisor Codex deste re-pass entra pela rota do piso de versão, sem re-pin (decisão OQ-2 do PLAN-198).** O runner só o aceita se o oráculo `check_pair_rail.py --verify-codex-pin` o classifica como `verified` ou `compatible`, e o gerador recusa uma versão abaixo de `CODEX_VERSION_FLOOR` (0.160.0) mesmo com o sha do manifesto. Com `compatible`, nenhum manifesto atesta os bytes do binário: a identidade do instrumento é a versão observada, o triple, o sha256 do payload e o status do pin, que a PROVENANCE e os campos assinados (`tool_versions`) registram. O GA recusa um Codex com versão, triple, sha256 do payload ou modelo diferente do da rc, a menos que a troca entre nos campos assinados como o achado `instrument-changed-since-<rc>`.
+  - 11. **A release fica com o número PATCH, 1.4.4, por decisão do Owner (OQ-4 do PLAN-198).** O parágrafo «Version number.» do CHANGELOG [1.4.4] diz que o `VERSIONING.md` classifica como MINOR uma mudança aditiva de SPEC e uma nova fronteira de confiança, que este trem tem as duas, e que um upgrade a partir da v1.4.2 se planeja como um MINOR.
+  - 12. **Durante o hold entre a rc e o GA, quem sobe usa `--pin v1.4.4-rc.1`.** O `release.sh bump` reescreve para a versão alvo as três linhas do exemplo de upgrade do `INSTALL.md`: a que resolve a rc mais nova (`git tag --list 'v<versão>-rc.*'`), a do GA (`--pin v<versão>`) e a da rc.1 (`--pin v<versão>-rc.1`). Num checkout-fonte que ainda não tem a tag do GA, a linha do GA sai do `upgrade.sh` com `ERROR: unknown --pin ref` (código 2), como o próprio exemplo avisa.
+  - D. Escopo deste re-pass
+  - 13. **Os payloads cobrem, pela forma, todo caminho que muda entre a tag base e o candidato, exceto as classes que o `OUT_OF_SCOPE` de `.claude/plans/PLAN-198/kit/gen_envelope.py` declara fora:** testes (`tests/*`, `*/tests/*`); planos (`.claude/plans/*`); notas de pesquisa (`docs/research/*`); o contrato de operação (`CLAUDE.md`); registros de decisão (`.claude/adr/*`); dados de oráculo e de teste (`.claude/data/*`, `.claude/scripts/data/*`, `.claude/eval/*`); o harness de smoke do mantenedor (`scripts/local/*`); a configuração de teste (`conftest.py`, `pytest.ini`); higiene do repositório (`.gitignore`); o espelho gerado do plugin (`dist/*`); `RELATORIO-*.md`, `REVIEW.md` e `codex-planos/*`; e os envelopes de veredito assinados (`.claude/governance/pair-rail-verdict-v*.md`). A classe de cada caminho fica em `scope-rc1.txt`, na evidência.
+  - 14. **A cópia do candidato que os revisores leem passa arquivo a arquivo pelo mesmo redator dos payloads, e o kit retira dela, com o motivo, os arquivos que lista em `withheld-rc1.txt`, na evidência; a contagem deles vai para os campos assinados.** Fora do re-pass não quer dizer não entregue; este texto não afirma, classe a classe, o que chega a um adopter.
+lane_notes:
+  - codex-p01 Scope: payload 1/32. No P0 or false declared condition established in this payload. Static checks found no missing runtime globals in the reviewed relocated functions; action registries agree at 331 entries. All 13 supplied Python files ...
+  - codex-p01 No new P1 findings.
+  - claude-p01 P0: none.
+  - claude-p01 NEW FINDINGS (annex): none at P1.
+  - claude-p01 VERDICT: GO-WITH-CONDITIONS In payload 1 the declared conditions that apply (5, 7, 9 and 10) hold against the code, the audit_emit split binds every exported name to the facade with infrastructure failures still failing open, and the onl...
+  - codex-p02 Payload 2/32: no actionable findings, P0 defects, or false declared conditions identified.
+  - claude-p02 P0: none.
+  - claude-p02 P1: none.
+  - claude-p02 VERDICT: GO The thirteen new audit_emit part modules are a complete, consistently rebound split: every free name resolves through install() into the facade, all 173 dispatch branches scrub and set the event before writing, the closed-enu...
+  - codex-p03 Payload 3: no P0 or false declared condition established.
+  - codex-p03 P1 ? .claude/hooks/_lib/_audit_emit_parts/writer.py:761
+  - codex-p03 VERDICT: GO-WITH-CONDITIONS The reproduced audit-loss defect warrants an annex finding, but this payload establishes neither a P0 nor a false declared condition.
+  - claude-p03 P0: none.
+  - claude-p03 P1: none.
+  - claude-p03 NEW FINDINGS (annex): none at P1.
+  - claude-p03 VERDICT: GO-WITH-CONDITIONS The moved audit-writer code in this payload is identical where it could be compared with an older copy, resolves every name through the facade, stays fail-open and standard-library-only on Python 3.9, and ever...
+  - codex-p04 Payload 4/32: no P0 or falsified declared condition identified.
+  - claude-p04 P1 ? RecursionError in the new indirect guard fails OPEN through main()'s catch-all
+  - claude-p04 Clean in this payload: no P0, no write outside its place or through a symlink beyond what the base already did, no change of model or effort, and no new hook that can block a legitimate session through the code in these files.
+  - claude-p04 VERDICT: GO-WITH-CONDITIONS Every declared condition holds against the code in this payload and I found no P0; the moved code and facade binding behave like the base, but the signed annex must carry one undeclared P1: crafted nested inpu...
+  - codex-p05 Payload 5/32: no confirmed P0, false declared condition, or new P1/P2 finding.
+  - claude-p05 P0: none.
+  - claude-p05 None at P1.
+  - claude-p05 VERDICT: GO This payload moves the Bash-safety, budget-summary and ceo-boot code into installable '_lib' fragments under kernel and sentinel cover, keeps the moved behaviour unchanged and the fail directions correct, adds the declared in...
+  - codex-p06 Payload 6/32: no P0 or false declared condition established.
+  - codex-p06 No new P1 findings.
+  - codex-p06 VERDICT: GO-WITH-CONDITIONS Two nonblocking P2 regressions were found, without evidence in this payload of a P0 or a false declared condition.
+  - claude-p06 NO P0. NO NEW P1.
+  - claude-p06 NEW FINDINGS (annex): none at P1.
+  - claude-p06 VERDICT: GO This payload contradicts no declared condition and has no P0 or P1: the split preserves global lookup, loading order, the delivery path and the fail direction, and the problems found are P2 follow-ups, among them a sentinel-p...
+  - codex-p07 No P0 or false declared condition established in payload 7.
+  - codex-p07 No new P1 findings.
+  - claude-p07 - Conditions: condition 7 (thin entry points over _lib modules; a hand patch must be redone in the module) matches this code. Condition 5's 13 kernel lines rightly leave out these four packages, whose entry points are not kernel. Nothing...
+  - claude-p07 NEW FINDINGS (annex): none at P1.
+  - codex-p08 Payload 8/32: no P0 or false declared condition identified.
+  - codex-p08 No undeclared P1 findings.
+  - codex-p08 VERDICT: GO The confirmed regressions are nonblocking compatibility issues, with no P0 or declared-condition contradiction established in this payload.
+  - claude-p08 P1 ? .claude/hooks/_lib/_installer_write_safety/__init__.py:36 (_bind_class), combined with syntax.py:10 ('class Incomplete(ParseError)').
+  - claude-p08 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and I found no P0; the one undeclared P1 is latent and fails closed in a maintainer-only tool (on the facade, Incomplete no longer subclasses ParseError afte...
+  - codex-p09 Payload 9: no P0 or false declared condition identified.
+  - claude-p09 - A grep of the current scripts/ corpus found no line that triggers it, and no test exercises these handlers. That is why this is P2, not P1.
+  - claude-p09 - None at P1 or above.
+  - claude-p09 VERDICT: GO No declared condition is false against this payload and there is no P0; the one behaviour change in moved code (the Incomplete/ParseError link broken by class re-binding) only affects the maintainer's CI census, fails closed,...
+  - codex-p10 No P0 or false declared condition established in payload 10.
+  - codex-p10 No new P1 findings.
+  - codex-p10 VERDICT: GO The reviewed payload has two nonblocking follow-ups, with no demonstrated P0 or contradiction of a declared condition.
+  - claude-p10 P0: none.
+  - claude-p10 NEW FINDINGS (annex): none at P1.
+  - claude-p10 VERDICT: GO Every declared condition this payload touches (5, 7, 9, 10) matches the code, the split part modules keep the facades' globals, test patch points and fail direction, and only stale docs and narrow P2 issues remain, with no P0.
+  - codex-p11 Payload 11/32: no P0 or contradicted declared condition established. Python 3.9.6 imports, facade global bindings, and mocked PreCompact checks passed. No files modified. Findings below are confirmed in the candidate; introduction by the...
+  - codex-p11 P1 ? .claude/hooks/_lib/_profile_opus_parts/latency.py:119
+  - codex-p11 VERDICT: GO-WITH-CONDITIONS The profiler isolation defect warrants an advisory annex, while neither it nor the two P2 findings establishes a blocking condition for this payload.
+  - claude-p11 - No condition is false against the code in this payload, and I found no P0.
+  - claude-p11 P1: the latency profiler is not fully isolated from the live audit log.
+  - claude-p11 - Relation to the base re-pass: this is the same defect the v1.4.3-rc.1 re-pass ranked P1 in diagnose-output-hook.py. Condition 3(a) fixed it only there, by removing _CHILD_LOCATION_CARRIERS (diagnose-output-hook.py:27-34). That script e...
+  - claude-p11 VERDICT: GO This payload makes no declared condition false and contains no P0: the three split packages resolve every name they use through their facades and stay standard-library only and Python 3.9 compatible, and the one undeclared P1...
+  - codex-p12 Payload 12/32: No P0 or contradiction of a declared condition identified. Reviewed facade bindings, import behavior, audit durability, installer delivery, and model validation. Thirty relevant files parsed and compiled in memory under Py...
+  - claude-p12 P1 ? .claude/hooks/_lib/agent_spawn/file_assignment.py:327-379 (_recent_file_assignments reads only the canonical log, :340), together with _spool_writer_parts/lifecycle.py:346-350 and spool_writer.py:528-530.
+  - claude-p12 6. outcome_telemetry.py (_tail_recent_rendered): has the same lag as the P1. The GOAP outcome can be misfiled as no_render_prior when the render event sits behind a backlog larger than K_MAX. Telemetry only.
+  - claude-p12 VERDICT: GO-WITH-CONDITIONS Declared conditions 5, 7, 8 and 9 hold against this payload's code and no P0 was found, but one undeclared P1 must go into the signed annex: under CEO_HOOK_BOUNDED_EXIT the spawn overlap guard reads only the c...
+  - codex-p13 P1 ? .claude/hooks/_lib/agent_spawn/skill_reference.py:98: Invalid pathname input can raise ValueError during resolution, but the handler catches only OSError subclasses. The exception reaches agent_spawn/entrypoint.py:63-68, which allow...
+  - codex-p13 VERDICT: GO-WITH-CONDITIONS No P0 or false declared condition was identified in this payload, but the input-validation failure requires follow-up.
+  - claude-p13 P0: none.
+  - claude-p13 P1: none.
+  - claude-p13 VERDICT: GO Both new files are verbatim moves out of check_agent_spawn.py; every name they rely on resolves in the hook, failure still allows the session, the package is a kernel path that ships to adopters, and the only findings are car...
+  - codex-p14 VERDICT: GO No declared condition was found false and no P0 defect was identified in payload 14.
+  - claude-p14 P0: none.
+  - claude-p14 NEW FINDINGS (annex): none at P1.
+  - claude-p15 Against the declared conditions: none is shown false by this payload, and I found no P0.
+  - claude-p15 None at P1.
+  - claude-p15 VERDICT: GO This payload only deletes the old audit_emit.py body, and reading the new _audit_emit_parts modules shows the same dispatcher branches, allowlists, default-deny and passthrough order, and symlink-safe fail-open context-pressu...
+  - codex-p16 Payload 16/32: no P0 or falsified numbered envelope condition established. Audit-emitter rebinding checks found no additional concrete regression. Benign command checks ran on Python 3.9.6; no files were modified.
+  - codex-p16 P1 ? .claude/hooks/check_canonical_edit.py:624, integrating .claude/hooks/_lib/canonical_edit/__init__.py:13. A missing extracted component during a partial upgrade raises ModuleNotFoundError, which is classified as an integrity failure....
+  - codex-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:167. Substitution extraction treats quoted closing parentheses as shell delimiters. The benign command value=$(python3 -c 'print(1)') is consequently rejected as bash_indirect_unparseable_sh...
+  - codex-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:455. Every canonical-path argument following an interpreter's inline program is treated as a write target. A Python command that only reads and prints JSON from .claude/settings.json is bloc...
+  - codex-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:393. Launcher recursion through _scan_segment bypasses the MAX_DEPTH check located only in _scan. Deep nesting within the outer word/size limits can raise RecursionError, which .claude/hooks...
+  - codex-p16 VERDICT: GO-WITH-CONDITIONS The four new P1 findings and one P2 follow-up warrant remediation, but this payload establishes neither a P0 nor a false numbered envelope condition.
+  - claude-p16 P0: none found.
+  - claude-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:156-178 (the result is returned through _scan at :492-493)
+  - claude-p16 VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches holds against the code and no P0 was found, but the on-by-default indirect guard has an undeclared P1 that blocks common legitimate $( ) commands with a parenthesi...
+  - codex-p17 Payload 17: no P0 or demonstrated false declared condition found. Python 3.9 parsing and healthy-load namespace checks passed; pre-split equivalence was not established.
+  - codex-p17 P1 ? .claude/hooks/check_canonical_edit.py:624; mirrored in .claude/hooks/_lib/canonical_edit/entry.py:129. An incomplete install missing an extracted component raises ImportError, which is classified as an integrity failure. The fallbac...
+  - codex-p17 VERDICT: GO-WITH-CONDITIONS The infrastructure-failure inversion belongs in the signed P1 annex under this cut?s rule, with two additional P2 integration regressions remaining.
+  - claude-p17 P1 ? the fail direction of the canonical-edit hook when one of its components is missing is inverted, and it differs from caller to caller.
+  - claude-p17 Why P1 and not P0: it only happens on a broken tree, the block reason names the cause, and Bash stays available to reinstall.
+  - claude-p17 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and I found no P0; the one undeclared P1 is annexed for declaration: the canonical-edit hook blocks every edit and MCP call when a component raises ImportErr...
+  - claude-p18 - P0: none.
+  - claude-p18 - P1: none.
+  - claude-p18 VERDICT: GO The declared conditions this payload touches (4, 5, 7 and 9) all hold against the candidate code, the moved federation and policy code behaves as it did before, the secret- and PII-redaction offset fixes are correct and fail ...
+  - codex-p19 Payload 19/32: no P0 or contradiction of a declared condition found. The facades preserve shared-global lookup, and the bounded-exit behavior matches condition 8?s declared partial implementation. Python 3.9 syntax and Bash syntax checks...
+  - claude-p19 P1 ? In a hook-only session nothing drains the audit spool. Spool-routed audit events stay out of the HMAC-chained log indefinitely, and condition 8 and the CHANGELOG do not say so.
+  - claude-p19 - No governance hook is disabled, no session is blocked, and events are fsync'd. That is why this is P1, not P0.
+  - claude-p19 VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches holds against the code and no P0 was found, but one undeclared P1 must be carried in the signed annex: under bounded exit no regular drainer remains for hook-only ...
+  - codex-p20 VERDICT: GO This payload reveals no false declared condition or P0 defect.
+  - claude-p20 P0: none.
+  - claude-p20 P1: none.
+  - claude-p20 VERDICT: GO Both declared conditions this payload touches (5 and 7) hold against the code, the check_agent_spawn split moves the code without changing behavior or fail direction, and nothing at P0 or P1 was found, only P2 follow-ups.
+  - codex-p21 Payload 21: no P0 or false declared condition identified.
+  - codex-p21 P1 ? .claude/hooks/_lib/_bash_safety_parts/posture_scan.py:582: Scanner uncertainty becomes citation-releasable. Both bash_indirect_limit and bash_indirect_unparseable_shell receive destructive=True, although neither establishes a destru...
+  - codex-p21 Verification: facade and fragments compiled under Python 3.9.6. Read-only checks passed for benign decisions, malformed-quote denial, shared facade globals, independent mutable state, monkeypatch lookup, function inspection and CLI allow...
+  - codex-p21 VERDICT: GO-WITH-CONDITIONS The facade checks pass, but an undeclared P1 allows citation gates to release scanner-uncertainty denials.
+  - claude-p21 P0: none.
+  - claude-p21 NEW FINDINGS (annex): none at P1.
+  - claude-p21 VERDICT: GO The new loader keeps the moved code's names, test patch points and script entry working. A missing piece fails open like any other infrastructure fault. Conditions 5, 6 and 7 hold against this file, I found no P0, and the six...
+  - codex-p22 Payload 22: no P0 or false declared condition established. Source inspection and Python 3.9 grammar checks covered the three changed files and nine canonical-edit components; no runtime suite was run.
+  - codex-p22 P1 ? .claude/hooks/check_canonical_edit.py:624: A partial installation missing an extracted component raises ImportError/ModuleNotFoundError, which is classified as an integrity failure. The fallback at line 635 blocks before reading the...
+  - codex-p22 VERDICT: GO-WITH-CONDITIONS The payload has one undeclared P1 regression and two P2 integration defects, without establishing a P0 or a false declared condition.
+  - claude-p22 P1 ? .claude/hooks/check_canonical_edit.py:616-640 (mirrored in _lib/canonical_edit/entry.py:126-134). The fail direction on an infrastructure fault is inverted, and this is not declared.
+  - claude-p22 VERDICT: GO-WITH-CONDITIONS No declared condition this payload touches is false and I found no P0, but one undeclared P1 should be declared in CHANGELOG [1.4.4] or fixed before GA: when a component fails to import, the canonical-edit fal...
+  - codex-p23 Payload 23/32: no P0 or false declared condition identified. Read-only checks found no facade-global or patch-point regression; the reviewed Python files parse on Python 3.9.
+  - codex-p23 No new P1 findings.
+  - codex-p23 VERDICT: GO The identified issues are nonblocking P2 follow-ups, with no demonstrated false declared condition or P0 in this payload.
+  - claude-p23 P0: none.
+  - claude-p23 NEW FINDINGS (annex): none at P1.
+  - claude-p23 VERDICT: GO No declared condition reachable from this payload is false and no P0 was found: the pair-rail and precompact entry points keep their globals, patch points and fail-open behavior, the new scripts fail closed where they should,...
+  - codex-p24 Payload 24: No P0 or false declared condition found. The query and budget refactors passed Python 3.9 binding and read-only behavior checks. Bytecode suppression precedes the local helper import.
+  - codex-p24 No new P1 findings.
+  - codex-p24 VERDICT: GO-WITH-CONDITIONS No release-blocking defect was established in this payload, but three P2 robustness follow-ups remain.
+  - claude-p24 P0: none.
+  - claude-p24 NEW FINDINGS (annex): none at P1.
+  - claude-p24 VERDICT: GO Condition 3(c) holds against the code and condition 7 matches the facades. The audit-query and budget-summary facades keep names, globals, patch points, __file__-relative paths and the freeze-guard surface. The strict audit-v...
+  - codex-p25 Payload 25/32: no P0 or declared-condition contradiction found.
+  - codex-p25 P1 ? .claude/scripts/ceo-backup.sh:255 ? Failed memory traversal publishes an incomplete backup. The process-substitution find command can fail on an unreadable directory or filesystem error without propagating its status through set -eu...
+  - codex-p25 VERDICT: GO-WITH-CONDITIONS The backup-completeness regression warrants an annex finding, but this payload establishes neither a false declared condition nor a P0.
+  - claude-p25 - None at P0 or P1.
+  - codex-p26 Payload 26: no P0 or false declared condition identified.
+  - codex-p26 No new P1 findings.
+  - codex-p26 VERDICT: GO-WITH-CONDITIONS Two nonblocking P2 reporting and lint regressions warrant follow-up; this payload exposes no P0 or false declared condition.
+  - claude-p26 None at P1 or above in this payload.
+  - codex-p27 Payload 27/32: no P0 or falsified declared condition identified.
+  - codex-p27 No new P1 findings.
+  - claude-p27 - None at P1.
+  - claude-p27 VERDICT: GO The declared conditions this payload touches (3(b), 3(c), 7) hold against the code and no P0 was found; the moved-code repr regression in the cost-transcripts loader and the restore-script edge cases do not affect governance ...
+  - codex-p28 Payload 28/32: No P0 or false declared condition established. Python 3.9.6 imports and CLI smoke checks passed; validation used the redacted candidate.
+  - codex-p28 No P1 findings.
+  - codex-p28 VERDICT: GO-WITH-CONDITIONS Four non-blocking compatibility and diagnostic regressions remain, but this payload establishes neither a P0 nor a false declared condition.
+  - claude-p28 None at P1 or above. F1 and F2 are recorded as P2 for the reasons given: the fail direction of the gates is kept, and no adopter hook is affected.
+  - claude-p28 VERDICT: GO In this payload no declared condition is false against the code and there is no P0: the two concrete defects found, the lost subclass link between Incomplete and ParseError in the installer-census facade and the substrate-dri...
+  - codex-p29 Payload 29: no declared condition shown false and no P0 found.
+  - codex-p29 P1 ? .claude/scripts/check_contamination.py:132: os.path.lexists() suppresses permission errors, silently treating an inaccessible private-terms file as absent. If its ancestor contains no other non-allowlisted tracked files, the gate ca...
+  - codex-p29 VERDICT: GO-WITH-CONDITIONS The payload has no demonstrated blocking condition, but private-term loading can silently weaken protection and symlink handling can reject legitimate checkouts.
+  - claude-p29 P1 ? CHANGELOG.md:112-117 versus .claude/hooks/_lib/_contamination/cli_checks.py:131-138 and :193-261, and .claude/scripts/_contamination_inventory.py:28-144. Undeclared change to the verdict of a shipped CI gate, contradicted by the CHA...
+  - claude-p29 VERDICT: GO-WITH-CONDITIONS No declared condition is false and the facade rebinding wires correctly, with no fail-open inversion, but one P1 goes to the annex: Rule 1 of the shipped contamination gate now exits 2 on inputs it used to pas...
+  - codex-p30 Payload 30/32: no P0 or false applicable declared condition found. Extraction checks found no broken exports, global lookups, or import ordering. Python 3.9 syntax passed for 21 relevant files; both JSON files parsed. INSTALL version sub...
+  - codex-p30 VERDICT: GO No declared condition was falsified and no P0 was found; one nonblocking diagnostic isolation follow-up remains.
+  - claude-p30 P0: none.
+  - claude-p30 NEW FINDINGS (annex): none at P1. The facade moves preserve behavior, the Python stays standard-library only and 3.9-compatible, and the only shipped scripts touched are lessons.py, context-budget.py, generate-available-models.py, gen-co...
+  - claude-p30 VERDICT: GO Every declared condition this payload touches (3a, 7, 10, 11, 12 and the cond 9 model-family surface) holds against the code, the facade moves keep their behavior, adopter-facing paths stay fail-open, and the payload has no P...
+  - codex-p31 Payload 31/32: no P0 or false declared condition found. Read-only checks confirmed the three extracted entry points import successfully, preserve function-global bindings, and parse with Python 3.9 grammar.
+  - codex-p31 VERDICT: GO-WITH-CONDITIONS The extraction checks passed; correct the nonblocking range-description defect before using newly generated re-pin packs.
+  - claude-p31 None. I found no P1 in this payload.
+  - claude-p31 VERDICT: GO No declared condition is false against this payload's code and there is no P0; the three facade moves behave the same as before, the re-pin guard now refuses more cases, and the only defects are P2 follow-ups in the maintaine...
+  - codex-p32 Payload 32/32 reviewed. No P0 or false declared condition established. Condition 12?s three upgrade-example substitutions were confirmed in memory. Python 3.9 grammar, shell syntax and JSON checks passed; no files changed.
+  - codex-p32 No new P1 findings.
+  - codex-p32 VERDICT: GO The two defects are nonblocking follow-ups, with no demonstrated false declared condition or P0 in this payload.
+  - claude-p32 FINDINGS (P0 / P1): none in this payload.
+  - claude-p32 NEW FINDINGS (annex): none. No undeclared P1 was found in this payload.
+  - claude-p32 VERDICT: GO-WITH-CONDITIONS In payload 32/32, every declared condition I could test against the code holds and I found no P0 and no undeclared P1. The weaker governance checks this payload carries (model-family allowlist, Codex version-f...
+gpg_signature: base64:LS0tLS1CRUdJTiBQR1AgU0lHTkFUVVJFLS0tLS0KCmlKRUVBQllLQURrV0lRU3VteU52MnZCR0tIUUdER3ZQejZ6d0F6WGNkQVVDYXZmSHhoc1VnQUFBQUFBRUFBNXQKWVc1MU1pd3lMalVyTVM0eE1pd3dMRE1BQ2drUXo4K3M4QU0xM0hTZ05BRDlGSGo4Z3lwV09kSTU1NG9mVjJaLwpYd0piUXB6TkE3U2pXRURzNW54dEozSUEvM3RXb3prcm8wU2dDNkcwYi9BWHEyQ2JIYXlFcGRJWDZmcTNlS2F1CldCOEoKPThMeWYKLS0tLS1FTkQgUEdQIFNJR05BVFVSRS0tLS0tCg==
+```
+
+## Signature verification recipe
+
+base64 -d of the value after "base64:" gives the detached .asc; verify it against
+.claude/plans/PLAN-198/verdict-fields-v1.4.4-rc.1.md (committed with this file). Signer AE9B236FDAF0462874060C6BCFCFACF00335DC74.
+The conditions, the lane notes and every attempt of this tag are part of the signed
+material (the conditions, lane_notes and attempts lists of the fields).
+
+<!-- VERDICT: GO-WITH-CONDITIONS -->
+## Review record (derived by .claude/plans/PLAN-198/kit/gen_envelope.py)
+
+- Re-pass of candidate 5805af55f1fa67e5ac1f7ad93b341e72d37bc79c for v1.4.4-rc.1 against the signed base v1.4.3-rc.1.
+- Each payload was reviewed by two lanes on the same redacted bytes: Codex (read-only
+  sandbox) and Claude Code (read-only tools). A NO-GO from either lane blocks.
+- Evidence: .claude/plans/PLAN-198/repass-rc1/, every file pinned by MANIFEST-rc1.sha256; the out-of-scope classes are
+  listed per path in scope-rc1.txt (outside the payloads does not mean not shipped).
+- Before writing, the generator re-derived every payload and ran the step-15 validator.

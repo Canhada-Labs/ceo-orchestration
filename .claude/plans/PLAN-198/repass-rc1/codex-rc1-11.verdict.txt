@@ -1,0 +1,16 @@
+Payload 11/32: no P0 or contradicted declared condition established. Python 3.9.6 imports, facade global bindings, and mocked PreCompact checks passed. No files modified. Findings below are confirmed in the candidate; introduction by the split is unproven.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/_lib/_profile_opus_parts/latency.py:119
+The profiler inherits file-level audit overrides, including CEO_AUDIT_LOG_PATH, CEO_AUDIT_KEY_PATH, CEO_AUDIT_LOG_LOCK, CEO_AUDIT_LOG_ERR, CEO_AUDIT_LAST_HMAC_PATH and CEO_AUDIT_CHAIN_LENGTH_PATH. These can override its temporary HOME/audit directory and send synthetic events or sidecar writes into live audit state. Mocked execution confirmed the overrides survive into child environments. Minimal fix: scrub all audit destination overrides before constructing child environments, following diagnose-output-hook.py's isolation policy. Condition 3 expressly covers that diagnostic script, not this profiler.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_profile_opus_parts/latency.py:43
+A negative iteration count such as -22 bypasses the equal-percentile-index check. No warm samples run; empty percentiles become zero and the positive control accepts zero rows because 0 >= -22. Mocked execution returned passed=true. Minimal fix: reject iterations below 22 before calculating indices.
+
+P2 — .claude/hooks/_lib/_reality_ledger_parts/estimate_detection.py:153
+Automatically loaded Git history enters the compatibility branch intended for injected test history, selecting the latest edit as the completion date. A plan created January 1, completed January 2 with a 24-hour estimate, then edited January 10 incorrectly reports 9× drift; the completion-transition helper is never called. Minimal fix: retain whether git_log_index was caller-supplied and restrict the compatibility branch to that case.
+
+VERDICT: GO-WITH-CONDITIONS The profiler isolation defect warrants an advisory annex, while neither it nor the two P2 findings establishes a blocking condition for this payload.
