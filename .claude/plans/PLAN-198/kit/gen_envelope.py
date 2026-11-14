@@ -30,8 +30,10 @@ Subcommands (run_repass.sh calls the helpers; the Owner and Claude call the rest
                  it records the lane's dispatch, then its outcome, in the ledger
   claude-result  extract the final answer from a `claude -p` stream-json log
   ledger-add     append one line to the hash-chained attempts ledger (locked)
-  scrub          replace personal home paths by <user> in evidence files
-  finalize       write MANIFEST-<sfx>.sha256 over the exact evidence set
+  scrub          replace personal home paths by <user> in evidence files, and write in ASCII
+                 what the contamination gate cannot read and each line it still flags
+  finalize       write MANIFEST-<sfx>.sha256 over the exact evidence set, once the
+                 candidate's own contamination gate passes that set
   carry-conditions  write CONDITIONS-ga.md from the signed rc verdict
   precut         RELEASE_SCOPE check + every workflow run on HEAD green
   fields         verify the evidence, write verdict-fields-<TAG>.md
@@ -137,6 +139,13 @@ OUT_OF_SCOPE = (
 _D = "/\\s\"'`,;:)\\]}<>|"
 HOME_RE = re.compile(r"(/(?<![\w.~]/)(?:[Uu][Ss][Ee][Rr][Ss]|[Hh][Oo][Mm][Ee])/+)([^" + _D + "]+)")
 SLUG_RE = re.compile(r"(-[Uu][Ss][Ee][Rr][Ss]-+)([^" + _D + "-]+)")
+# What the repository's contamination gate cannot read as text: U+FFFD and the lone surrogates
+# that surrogateescape gives a byte that is not UTF-8 (its _PERSONAL_PATH_UNDECODABLE_RE), and NUL
+# (it refuses a whole file holding one). One U+FFFD on a line that also holds a home-path literal,
+# placeholder or not, is a hit of the gate's third clause, and a lane's stream-json line holds a
+# whole file the lane read: attempt 3 of v1.4.4-rc.1 put the gate's own U+FFFD constant and its
+# /Users/<name>/ examples on one line (claude-rc1-29.log:59) and its signed verdict failed CI.
+UNREADABLE_RE = re.compile("[\x00\ufffd\udc80-\udcff]")
 
 
 class Refused(Exception):
@@ -213,13 +222,199 @@ def scrub_text(t: str) -> str:
 
 
 def nfkc_safe(t: str) -> str:
-    """Show every character that NFKC normalization would change as <U+XXXX> (display only).
+    """Show every character that NFKC normalization would change as <U+XXXX> (display only),
+    and U+FFFD too: the contamination gate reads it as an undecodable byte (UNREADABLE_RE). A NUL
+    never gets here: a binary change in scope is refused before anything is sent.
 
     It runs AFTER redaction, on the redactor's output: the ADR-114 redactor always sees the
     text before this escape (header, conditions and diff), so the escape cannot hide a secret
     from it."""
-    return "".join(ch if ch < "\x80" or (unicodedata.normalize("NFKC", ch) == ch and not unicodedata.combining(ch))
+    return "".join(ch if ch < "\x80" or (ch != "\ufffd" and unicodedata.normalize("NFKC", ch) == ch
+                                         and not unicodedata.combining(ch))
                    else "<U+%04X>" % ord(ch) for ch in t)
+
+
+def readable_text(t: str) -> str:
+    """Every character the contamination gate cannot read as text, written in ASCII: U+FFFD as
+    the six characters \\ufffd and NUL as \\u0000 (inside a JSON string, the same string), a byte
+    that is not UTF-8 (a surrogateescape surrogate) as \\xNN."""
+    return UNREADABLE_RE.sub(lambda m: "\\u%04x" % ord(m.group()) if m.group() in "\x00\ufffd"
+                             else "\\x%02x" % (ord(m.group()) - 0xDC00), t)
+
+
+def ascii_text(t: str) -> str:
+    """Every non-ASCII character as its JSON escape (\\uXXXX; a surrogate pair above U+FFFF):
+    a JSON line keeps its meaning, and NFKC can no longer turn a look-alike into a path."""
+    return "".join(ch if ch < "\x80" else json.dumps(ch)[1:-1] for ch in t)
+
+
+def gate():
+    """The candidate's own contamination gate (.claude/scripts/check_contamination.py), loaded
+    like the validator: the evidence is judged by the code that judges it in CI."""
+    if "gate" not in _MODS:
+        scripts = REPO / ".claude" / "scripts"
+        if str(scripts) not in sys.path:
+            sys.path.insert(0, str(scripts))  # its term rule imports _contamination_inventory
+        spec = importlib.util.spec_from_file_location("kit_contamination_gate",
+                                                      str(scripts / "check_contamination.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+        _MODS["gate"] = mod
+    return _MODS["gate"]
+
+
+def gate_reading_spans(line: str, rx, drop=None) -> List[Tuple[int, int]]:
+    """Spans of `line` (original characters) behind each non-empty match of `rx` on the gate's
+    reading of it: each character NFKC-normalized on its own, so every position maps back to the
+    character it came from; with `drop`, the characters it matches are left out first (the
+    gate's second reading, without the undecodable characters). `rx` with a group 1 gives the
+    spans of group 1 (the owner segment), otherwise of the whole match."""
+    norm, src = [], []  # type: List[str], List[int]
+    for i, ch in enumerate(line):
+        if drop is not None and drop.match(ch):
+            continue
+        n = unicodedata.normalize("NFKC", ch)
+        norm.append(n)
+        src.extend([i] * len(n))
+    seen = "".join(norm)
+    grp = 1 if rx.groups else 0
+    out = []  # type: List[Tuple[int, int]]
+    for m in rx.finditer(seen):
+        if m.start(grp) >= 0 and m.end(grp) > m.start(grp):
+            out.append((src[m.start(grp)], src[m.end(grp) - 1] + 1))
+    return out
+
+
+def replace_spans(line: str, spans: List[Tuple[int, int]], token: str) -> str:
+    merged = []  # type: List[Tuple[int, int]]
+    for a, b in sorted(spans):
+        if merged and a < merged[-1][1]:  # overlaps the span before it: widen that one
+            merged[-1] = (merged[-1][0], max(merged[-1][1], b))
+        else:
+            merged.append((a, b))
+    for a, b in reversed(merged):
+        line = line[:a] + token + line[b:]
+    return line
+
+
+def mask_owners(g, line: str) -> str:
+    """Every owner segment the gate's own home-path patterns find on either of its readings of
+    `line` (NFKC, and NFKC without the undecodable characters) replaced by <user>, repeated
+    until none is left (masking one segment can expose the next) or 8 rounds have run."""
+    for _ in range(8):
+        spans = []  # type: List[Tuple[int, int]]
+        for rx in (g._PERSONAL_PATH_HOME_RE, g._PERSONAL_PATH_SLUG_RE):
+            spans += gate_reading_spans(line, rx) + gate_reading_spans(line, rx, g._PERSONAL_PATH_UNDECODABLE_RE)
+        if not spans:
+            break
+        line = replace_spans(line, spans, "<user>")
+    return line
+
+
+def gate_mask(g, line: str) -> Optional[str]:
+    """A line the gate flags, made clean: owners masked on the gate's own readings (mask_owners),
+    then what the gate cannot read and every other non-ASCII character written in ASCII; None
+    when the gate still flags the result.
+
+    The masking runs BEFORE any escape: escaping first changed what NFKC sees, so a word
+    character in front of "/Users/" that NFKC turns into punctuation (U+2474 is "(1)"), a
+    full-width look-alike, or a byte that is not UTF-8 inside "/Users/" hid a real owner from
+    both the mask and the gate (rail r1, all three lanes)."""
+    clean = readable_text(mask_owners(g, line))
+    if g.line_is_personal_path_hit(unicodedata.normalize("NFKC", clean)):
+        return None
+    return ascii_text(clean)
+
+
+def evidence_text(t: str) -> str:
+    """The text an evidence file keeps. Home paths scrubbed (scrub_text); each line the
+    candidate's gate flags made clean by gate_mask, or left exactly as it was when it cannot be
+    (finalize then runs the whole gate over the evidence and refuses); every other line with
+    what the gate cannot read written in ASCII (readable_text)."""
+    t = scrub_text(t)
+    g = gate()
+    try:
+        hit = set(g.personal_path_hit_lines(t, deadline=time.monotonic() + g._PERSONAL_PATH_FILE_BUDGET_S))
+    except g.PersonalPathUnreadable as exc:
+        refuse("the contamination gate could not read an evidence file: %s" % exc)
+    out = []
+    for n, ln in enumerate(t.split("\n"), 1):  # the gate's own split: its line numbers count "\n"
+        if n in hit:
+            masked = gate_mask(g, ln)
+            out.append(ln if masked is None else masked)
+        else:
+            out.append(readable_text(ln))
+    return "\n".join(out)
+
+
+def clean_note(s: str, cap: int = 240) -> str:
+    """A safe() item of the signed fields that the envelope (term rule) and the fields file
+    (personal-path rule) both carry, made clean by the gate's own patterns: owners as <user>,
+    contamination terms as [term]; when the gate still flags it, the line is withheld."""
+    g = gate()
+    pat = g.build_pattern(REPO)
+    s = mask_owners(g, s)
+    for _ in range(8):
+        spans = gate_reading_spans(s, pat)
+        if not spans:
+            break
+        s = replace_spans(s, spans, "[term]")
+    seen = unicodedata.normalize("NFKC", s)
+    if g.line_is_personal_path_hit(seen) or pat.search(seen):
+        return "(line withheld: the contamination gate flags it)"
+    return s if len(s) <= cap else s[:cap - 3] + "..."
+
+
+def gate_files(files: Dict[str, bytes], what: str, after: str = "") -> None:
+    """Refuse unless the candidate's contamination gate, run as CI runs it, passes `files`
+    ({repo-relative path: bytes}) at the paths they will be committed under. A temporary
+    repository holds only them and the candidate's own contamination terms file (tracked, as in
+    CI), so a hit is theirs, not the tree's; the decision is the gate's exit code, never its text."""
+    tmp = Path(tempfile.mkdtemp(prefix="kit-gate-"))
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    terms = "scripts/contamination-terms.txt"
+    files = dict(files)
+    if (REPO / terms).exists():
+        files[terms] = read_regular(REPO / terms)
+    try:
+        for rel, data in files.items():
+            dst = tmp / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.write_bytes(data)
+        quiet = ["-c", "core.hooksPath=/dev/null", "-c", "core.excludesFile=/dev/null",
+                 "-c", "init.defaultBranch=main", "-c", "core.autocrlf=false", "-c", "core.safecrlf=false"]
+        for cmd in (["init", "-q"], ["add", "-f", "-A"], ["ls-files", "-z"]):
+            p = subprocess.run(["git"] + quiet + cmd, cwd=str(tmp), env=env, capture_output=True)
+            if p.returncode != 0:
+                refuse("could not build the temporary repository for the contamination gate "
+                       "(git %s rc=%d)" % (cmd[0], p.returncode))
+        if sorted(names(p.stdout.decode("utf-8", "replace"))) != sorted(files):
+            refuse("the temporary repository for the contamination gate does not hold exactly "
+                   "the files to judge")
+        p = subprocess.run([sys.executable, "-B", str(REPO / ".claude" / "scripts" / "check_contamination.py"),
+                            "--root", str(tmp)], cwd=str(tmp), env=env, capture_output=True)
+        if p.returncode != 0:
+            out = p.stdout.decode("utf-8", "replace") + p.stderr.decode("utf-8", "replace")
+            where = [ln.strip()[2:] for ln in out.splitlines()
+                     if ln.strip()[2:].split(":", 1)[0] in files]
+            refuse("the candidate's contamination gate fails on the %s (rc=%d)%s%s" % (
+                what, p.returncode, (" at " + ", ".join(where[:10])) if where else "", after))
+    finally:
+        shutil.rmtree(str(tmp), ignore_errors=True)
+
+
+def gate_evidence(ev_rel: str, files: Dict[str, bytes]) -> None:
+    """The evidence set, before its MANIFEST: nothing is finalized when the gate fails."""
+    gate_files({"%s/%s" % (ev_rel, n): d for n, d in files.items()}, "evidence", ": nothing was finalized")
+
+
+def gate_commit_set(ctx: "Ctx", fields: str, envelope: str) -> None:
+    """The whole verdict commit (evidence, MANIFEST, fields, envelope) at its committed paths."""
+    files = {"%s/%s" % (ctx.ev_rel, n): read_regular(ctx.ev / n) for n in sorted(os.listdir(str(ctx.ev)))}
+    files[ctx.fields_rel] = fields.encode("utf-8")
+    files[ctx.env_rel] = envelope.encode("utf-8")
+    gate_files(files, "verdict commit", ": nothing was written")
 
 
 def esc_len(t: str) -> int:
@@ -342,7 +537,7 @@ def lane_notes(path: Path, label: str, cap: int = 12) -> List[str]:
     P1s to an annex the Owner would otherwise never read)."""
     hits = [ln for ln in read_regular(path).decode("utf-8", "replace").split("\n")
             if ln.startswith("VERDICT: GO-WITH-CONDITIONS") or re.search(r"\bP[01]\b", ln)]
-    out = ["%s %s" % (label, safe(h)) for h in hits[:cap]]
+    out = ["%s %s" % (label, clean_note(safe(h))) for h in hits[:cap]]
     if len(hits) > cap:
         out.append("%s and %d more P0/P1 lines in %s" % (label, len(hits) - cap, path.name))
     return out
@@ -1695,7 +1890,7 @@ def cmd_scrub(a: argparse.Namespace) -> int:
     for f in a.files:
         p = Path(f)
         old = read_regular(p).decode("utf-8", "surrogateescape")
-        new = scrub_text(old)
+        new = evidence_text(old)
         if new != old:
             write_atomic(p, new.encode("utf-8", "surrogateescape"))
     return 0
@@ -1706,7 +1901,9 @@ def cmd_finalize(a: argparse.Namespace) -> int:
     prov = parse_prov(read_regular(ctx.ev / ("PROVENANCE-%s.md" % ctx.sfx)).decode("utf-8"))
     want = expected_names(ctx.sfx, int(prov["parts"]))  # type: ignore[arg-type]
     exact_set(ctx, want)
-    text = "".join("%s  %s\n" % (sha256_bytes(read_regular(ctx.ev / x)), x) for x in want)
+    data = {x: read_regular(ctx.ev / x) for x in want}  # one read: the bytes gated are the bytes hashed
+    gate_evidence(ctx.ev_rel, data)
+    text = "".join("%s  %s\n" % (sha256_bytes(data[x]), x) for x in want)
     write_atomic(ctx.ev / ctx.manifest, text.encode("utf-8"))
     print("wrote %s/%s (%d entries)" % (ctx.ev_rel, ctx.manifest, len(want)))
     return 0
@@ -1780,7 +1977,9 @@ def cmd_fields(a: argparse.Namespace) -> int:
     ctx = Ctx(a.tag, a.candidate)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     text, st, decision = derive_fields(ctx, a, now)
-    self_validate(ctx, build_envelope(ctx, st, text, "UEVORElORw==", "<pending>", decision))
+    pending = build_envelope(ctx, st, text, "UEVORElORw==", "<pending>", decision)
+    self_validate(ctx, pending)
+    gate_commit_set(ctx, text, pending)  # before the Owner signs: CI judges these same bytes
     write_atomic(REPO / ctx.fields_rel, text.encode("utf-8"))
     print("wrote %s (verdict %s, generated_at %s). Read the conditions in it, then sign it:\n"
           "  gpg --local-user <your key> --armor --detach-sign --output .claude/worktrees/fields-%s.asc %s"
@@ -1811,6 +2010,7 @@ def cmd_envelope(a: argparse.Namespace, write: bool = True) -> int:
                % (ctx.fields_rel, st["signer"], fpr))
     env = build_envelope(ctx, st, text, base64.b64encode(sig).decode("ascii"), fpr, decision)
     self_validate(ctx, env)
+    gate_commit_set(ctx, text, env)  # a refusal here is cured by signing again (a new signature)
     target = REPO / ctx.env_rel
     if not write:
         if target.exists() and target.read_bytes() != env.encode("utf-8"):

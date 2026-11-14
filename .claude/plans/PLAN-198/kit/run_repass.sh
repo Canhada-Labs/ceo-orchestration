@@ -443,14 +443,15 @@ while [ "$i" -le "$P_PARTS" ]; do
   n="$(printf '%02d' "$i")"; i=$((i + 1))
   for lane in codex claude; do SCRUB+=("$EV/$lane-$SFX-$n.verdict.txt" "$EV/$lane-$SFX-$n.log"); done
 done
-python3 "$GEN" scrub "${SCRUB[@]}" || { say "scrub failed"; exit 3; }
+logged python3 "$GEN" scrub "${SCRUB[@]}" \
+  || { say "scrub refused (the REFUSED line above): evidence kept unfinalized; after the cause is fixed run the same command with --resume"; exit 3; }
 {
   echo "# Provenance - pair-rail re-pass of $TAG ($SFX), PLAN-198 kit"
   cat "$EV/.header"
   echo "- lanes: codex exec --sandbox read-only ${CODEX_ISO[*]} and claude ${CLAUDE_ARGS[*]}; each lane in its own process group with a ${LANE_TIMEOUT} s limit, from a read-only copy of the candidate outside the repository without CLAUDE.md/AGENTS.md files, every other file redacted by the same redactor or withheld (withheld-$SFX.txt), both reading the SAME redacted payload on stdin; each lane's environment an explicit allowlist (env -i) without API keys; each lane's dispatch and outcome recorded in the attempts ledger by its own spawn process"
   echo "- typed answers: both lanes answer the JSON Schema $VSCHEMA (codex --output-schema, claude --json-schema); the kit writes each VERDICT line from the decision field (gen_envelope.py compose_verdict); an answer without a valid typed decision is kept as written and judged by the one NO-GO rule"
   echo "- codex death classes, from the codex ERROR: lines among the last 40 transcript lines (texts measured on codex 0.160.0 only): model capacity = retried up to 2 times; account limit = no retry and no new payload"
-  echo "- personal home paths replaced by <user> in the diffs, transcripts and verdicts"
+  echo "- personal home paths replaced by <user> in the diffs, transcripts and verdicts; U+FFFD, NUL and bytes that are not UTF-8 written as ASCII escapes in the transcripts and verdicts (U+FFFD shown as <U+FFFD> in the diffs and payloads), and each transcript or verdict line the candidate's contamination gate still flagged written in ASCII with its owner segments as <user>; finalize writes the MANIFEST only after that gate, run as CI runs it, passes the whole evidence set; fields and envelope go through it too, with the lane notes masked by its own patterns, before anything is written"
   echo "- finished: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   i=1
   while [ "$i" -le "$P_PARTS" ]; do

@@ -307,6 +307,27 @@ pede a senha da sua chave GPG; re-pass = a revisão do delta inteiro antes de ca
   assinados sem `generated_at`, com mais de 24 h ou no futuro; no GA, exige que as condições
   carreguem todas as linhas assinadas na rc.
 
+- **Evidência contra a checagem de contaminação do candidato:** o `scrub` tira os caminhos
+  pessoais; nas linhas que a checagem do candidato (`.claude/scripts/check_contamination.py`)
+  ainda acusa, troca por `<user>` o dono do caminho que os padrões DELA acham nas duas leituras
+  que ela faz da linha (a normalizada NFKC e a sem os bytes ilegíveis), repetindo até não sobrar
+  nenhum, e só então escreve a linha em ASCII (escape JSON; uma linha JSON continua JSON); se ela
+  ainda acusar, a linha fica como estava. Nas outras linhas, o que a checagem não lê como texto vira
+  ASCII (U+FFFD como `\ufffd`, NUL como `\u0000`, byte que não é UTF-8 como `\xNN`). Nos diffs e
+  payloads, U+FFFD aparece como `<U+FFFD>`. Antes de gravar o `MANIFEST`, o `finalize` copia o
+  conjunto exato da evidência para um repositório temporário, no caminho em que vai ser
+  commitado, e roda ali a checagem do candidato, como a CI roda; código de saída diferente de 0
+  recusa (nada é finalizado). As notas dos revisores que vão para os campos passam pelos mesmos
+  padrões (dono como `<user>`, termo de contaminação como `[term]`; linha que ainda acusa sai
+  retida), e o `fields` (antes da assinatura) e o `envelope` rodam a checagem sobre o commit do
+  veredito inteiro (evidência, `MANIFEST`, campos e envelope, com o arquivo de termos do
+  candidato) antes de gravar qualquer coisa. Motivo: na tentativa 3 da v1.4.4-rc.1, uma linha
+  stream-json do revisor juntou o U+FFFD e os exemplos `/Users/<name>/` do código da própria
+  checagem, e o commit do veredito assinado ficou vermelho na CI (`claude-rc1-29.log:59`).
+  Limite: uma recusa no `finalize` ou no `fields` acontece antes da assinatura, mas a tentativa só
+  se recupera com um kit novo (novo candidato e nova revisão); uma recusa no `envelope` se cura
+  assinando de novo.
+
 ## Limites declarados
 
 - **Fora do re-pass, por classe:** testes; `.claude/plans/`; `docs/research/`; `CLAUDE.md`;

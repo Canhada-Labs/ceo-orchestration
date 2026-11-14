@@ -119,6 +119,8 @@ for a in "$@"; do [ "$prev" = --model ] && model="$a"; [ "$prev" = --json-schema
 python3 -I "$STUB_SCHEMA_CHECK" "$schema" || { echo "stub: claude without the typed verdict schema (--json-schema)" >&2; exit 9; }
 part="$(sed -n 's/^PAYLOAD \([0-9]*\)\/.*/\1/p' | head -n 1)"
 printf '{"type":"system","subtype":"init","model":"%s"}\n' "$model"
+python3 -I -c 'import json
+print(json.dumps({"type": "user", "tool_result": "REPLACEMENT = \"\ufffd\"\nexample /Users/<name>/project\nlook-alike \uff0fUsers\uff0fzed\uff0fwork"}, ensure_ascii=False))'
 if [ "${STUB_QUOTA:-}" = "claude:$part" ]; then
   printf '{"type":"result","subtype":"error_during_execution","is_error":true,"errors":["%s"]}\n' "You've hit your limit - resets 7pm"
   exit 1
@@ -188,7 +190,9 @@ git -C "$FIX0" remote add origin "$ORIGIN"
 COPIED=".github/scripts/validate-pair-rail-verdict.py .claude/hooks/_lib/__init__.py
 .claude/hooks/_lib/cli_currency.py .claude/hooks/_lib/codex_egress_redact.py
 .claude/hooks/_lib/secret_patterns.py .claude/scripts/local/_release_tag_guard.py
-.claude/governance/codex-cli-pin.txt .claude/governance/codex-cli-pin-manifest.json"
+.claude/governance/codex-cli-pin.txt .claude/governance/codex-cli-pin-manifest.json
+.claude/scripts/check_contamination.py .claude/scripts/_contamination_inventory.py .claude/hooks/_lib/file_walker.py
+$(cd "$REAL" && git ls-files '.claude/hooks/_lib/_contamination/*.py' | tr '\n' ' ')"
 for f in $COPIED; do mkdir -p "$FIX0/$(dirname "$f")" && cp "$REAL/$f" "$FIX0/$f" || exit 2; done
 put() { mkdir -p "$FIX0/$(dirname "$1")" && printf '%s\n' "$2" > "$FIX0/$1"; }
 relsh() { put .claude/scripts/local/release.sh "$(printf 'TARGET_BASE="%s"\nRELEASE_SCOPE="PLAN-198 (ADRs tocados: nenhum)"' "$1")"; }
@@ -237,7 +241,7 @@ done
 FW1="Q7mZ2xK9pL4vN8bR3tY6" FW2="wC1dF5gH0jS2aE4uI7oP"
 put "$PLAN_REL/CONDITIONS-rc1.md" "$(printf '# Conditions (kit test)\n- 1. The stub lanes review nothing # by design.\n- 2. Header redaction probe: aws_secret_access_key\357\274\235%s%s' "$FW1" "$FW2")"
 put src/app.py "$(printf 'def answer():\n    return 42\nKEY = "%s%s"' AKIA Z7Q2X9LMNB4KP3TW)"
-put docs/guide.md "$(printf 'Notes live in /Users/someone/notes. More to come\342\200\246\naws_secret_access_key\357\274\235%s%s' "$FW1" "$FW2")"  # NFKC-changing chars
+put docs/guide.md "$(printf 'Notes live in /Users/someone/notes. More to come\342\200\246\357\277\275\naws_secret_access_key\357\274\235%s%s' "$FW1" "$FW2")"  # NFKC-changing chars
 put tests/test_app.py "$(printf 'def test_answer():\n    assert True')"
 awk 'BEGIN { for (i = 0; i < 6000; i++) printf "VALUE_%05d = \"abcdefghijklmnopqrstuvwxyz0123456789abcdefghij\"\n", i }' \
   > "$FIX0/src/big.py"
@@ -334,6 +338,82 @@ check "lanes' copy: withheld list in the evidence, its sha256 and count in the r
 [ -f "$POS/$EVRC/MANIFEST-rc1.sha256" ] && [ -z "$(cd "$POS/$EVRC" && ls -A | grep '^\.')" ] \
   && grep -q '^- instrument: STUB' "$POS/$EVRC/PROVENANCE-rc1.md" && grep -q -- '--safe-mode' "$POS/$EVRC/PROVENANCE-rc1.md"
 check "evidence finalized: MANIFEST written, no hidden run files, STUB and lane isolation declared" $?
+python3 -I - "$POS/$EVRC" <<'PY2'
+import json, os, sys
+ev = sys.argv[1]
+for n in os.listdir(ev):
+    assert b"\xef\xbf\xbd" not in open(os.path.join(ev, n), "rb").read(), n  # no raw U+FFFD anywhere
+ln = [x for x in open(os.path.join(ev, "claude-rc1-01.log"), encoding="utf-8").read().split("\n") if '"tool_result"' in x]
+assert len(ln) == 1 and "\\ufffd" in ln[0] and "\\uff0fUsers\\uff0f<user>" in ln[0], ln
+want = 'REPLACEMENT = "\ufffd"\nexample /Users/<name>/project\nlook-alike \uff0fUsers\uff0f<user>\uff0fwork'
+assert json.loads(ln[0])["tool_result"] == want and "zed" not in ln[0]  # still JSON; the owner is gone
+PY2
+check "transcript line with U+FFFD, a /Users/<name>/ example and a full-width look-alike: valid JSON in ASCII, the look-alike's owner masked" $?
+grep -q 'come<U+2026><U+FFFD>$' "$POS/$EVRC"/payload-rc1-*.redacted.txt && grep -q 'come<U+2026><U+FFFD>$' "$POS/$EVRC"/diff-rc1-*.patch
+check "U+FFFD in a reviewed file is shown as <U+FFFD> in the payload and the diff" $?
+GNEG="$SCRATCH/gate-neg"
+clone_fix "$POS" "$GNEG"
+rm -f -- "$GNEG/$EVRC/MANIFEST-rc1.sha256"
+P1="$(cd "$GNEG/$EVRC" && ls payload-rc1-*.redacted.txt | head -n 1)"
+cp -- "$GNEG/$EVRC/$P1" "$SCRATCH/gate-neg-payload.keep"
+printf 'planted \357\277\275 beside /Users/<name>/x\n' >> "$GNEG/$EVRC/$P1"
+gen "$GNEG" "$L/gate-neg.log" finalize --tag v1.4.4-rc.1; rc=$?
+[ ! -e "$GNEG/$EVRC/MANIFEST-rc1.sha256" ] || rc=0
+refused "finalize refuses evidence the candidate's contamination gate fails (U+FFFD beside a home-path example), no MANIFEST" \
+  "$rc" "$L/gate-neg.log" "contamination gate fails on the evidence (rc=1) at $EVRC/$P1:"
+cp -- "$SCRATCH/gate-neg-payload.keep" "$GNEG/$EVRC/$P1"
+gen "$GNEG" "$L/gate-neg2.log" finalize --tag v1.4.4-rc.1 && cmp -s "$GNEG/$EVRC/MANIFEST-rc1.sha256" "$POS/$EVRC/MANIFEST-rc1.sha256"
+check "finalize again once the cause is gone: the same MANIFEST" $?
+( cd "$POS" && python3 -I - "$KIT_REL/gen_envelope.py" "$EVRC" ) > "$L/gate-unit.log" 2>&1 <<'PY3'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("kitgen", sys.argv[1])
+g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+raw = "x\x00y \ufffd /Users/<name>/p " + b"\xff".decode("utf-8", "surrogateescape")
+text = g.evidence_text(raw)
+assert text == "x\\u0000y \\ufffd /Users/<name>/p \\xff", repr(text)
+g.gate_evidence(sys.argv[2], {"t.log": text.encode("utf-8")})  # passes: nothing raised
+# rail r1 (Codex): U+2474 is a word character raw and "(1)" under NFKC, so the kit's own scrub
+# skips the path the gate flags; escaping before masking hid the owner from both.
+hidden = g.evidence_text("see \u2474/Users/zedreal/notes")
+assert hidden == "see \\u2474/Users/<user>/notes", repr(hidden)
+# rail r1 (Claude): a byte that is not UTF-8 inside the literal (the gate's second reading drops
+# it), and a chain where masking one owner exposes the next.
+split = g.evidence_text("see /Us" + b"\xff".decode("utf-8", "surrogateescape") + "ers/zedreal/work")
+assert split == "see /Us\\xffers/<user>/work", repr(split)
+chain = g.evidence_text("/Users/a/Users/zzfake2/Users/zzfake3/x")
+assert "zzfake" not in chain and not g.gate().personal_path_hit_lines(chain), repr(chain)
+# rail r1 (Claude, P0): lane notes reach the fields and the envelope; they go through the gate's
+# own patterns (a TAB that safe() makes "?", a non-ASCII letter before /Users/, a placeholder term).
+import os, tempfile, unicodedata
+from pathlib import Path
+vf = Path(tempfile.mkdtemp()) / "claude-rc1-01.verdict.txt"
+# built at run time: the source line itself must not look like a home path to the gate
+vf.write_text("P1 re-reads /Users/" + chr(9) + "zedx/notes\nP1 caf" + chr(0xe9) + "/Users/" + "zzfake/x leaks\n"
+              "P1 the placeholder example-owner no longer matches\n\nVERDICT: GO-WITH-CONDITIONS P1 annex\n",
+              encoding="utf-8")
+notes = g.lane_notes(vf, "claude-p01")
+pat = g.gate().build_pattern(g.REPO)
+for n in notes:
+    seen = unicodedata.normalize("NFKC", n)
+    assert not g.gate().line_is_personal_path_hit(seen) and not pat.search(seen), n
+assert sum("<user>" in n for n in notes) == 2 and any("[term]" in n for n in notes), notes
+try:  # the envelope's own path is judged by the term rule, with the candidate's terms file
+    g.gate_files({".claude/governance/pair-rail-verdict-v0.0.1.md": b"see example-owner here\n"}, "probe")
+except g.Refused as exc:
+    assert "contamination gate fails on the probe (rc=1)" in str(exc), exc
+else:
+    raise SystemExit("a contamination term in the envelope was not refused")
+for bad in (b"x\x00y", "a \ufffd /Users/<name>/p".encode("utf-8")):
+    try:
+        g.gate_evidence(sys.argv[2], {"t.log": bad})
+    except g.Refused as exc:
+        assert "contamination gate fails on the evidence (rc=" in str(exc), exc
+    else:
+        raise SystemExit("not refused: %r" % bad)
+print("gate-unit ok")
+PY3
+grep -q '^gate-unit ok$' "$L/gate-unit.log"
+check "NUL, U+FFFD and a non-UTF-8 byte written as ASCII escapes; owners the gate sees only under NFKC or without the bad byte are masked; lane notes and the envelope path pass through the gate" $?
 grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* start resume=0 ' "$POS/.claude/worktrees/repass-attempts.log" \
   && grep -q ' v1\.4\.4-rc\.1 [0-9a-f]* end rc=0 nogo=0 tree=[0-9a-f]\{40\} manifest=[0-9a-f]' "$POS/.claude/worktrees/repass-attempts.log"
 check "attempts ledger: start and end of the attempt recorded outside the evidence directory" $?
