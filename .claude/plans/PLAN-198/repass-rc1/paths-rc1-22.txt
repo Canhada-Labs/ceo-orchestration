@@ -1,3 +1,0 @@
-.claude/hooks/check_canonical_edit.py
-.claude/hooks/check_cost_envelope.py
-.claude/hooks/check_harness_config.py

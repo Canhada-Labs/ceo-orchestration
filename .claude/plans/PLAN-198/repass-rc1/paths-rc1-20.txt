@@ -1,2 +1,0 @@
-.claude/hooks/check_agent_spawn.py
-.claude/hooks/check_arbitration_kernel.py

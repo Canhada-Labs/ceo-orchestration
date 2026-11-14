@@ -1,3 +1,0 @@
-.claude/hooks/_lib/spool_writer.py
-.claude/hooks/_python-hook.sh
-.claude/hooks/audit_log.py
