@@ -1,0 +1,12 @@
+.claude/hooks/_lib/_audit_emit_parts/generic_dispatch_01.py
+.claude/hooks/_lib/_audit_emit_parts/generic_dispatch_02.py
+.claude/hooks/_lib/_audit_emit_parts/generic_dispatch_03.py
+.claude/hooks/_lib/_audit_emit_parts/generic_dispatch_04.py
+.claude/hooks/_lib/_audit_emit_parts/generic_dispatch_05.py
+.claude/hooks/_lib/_audit_emit_parts/governance.py
+.claude/hooks/_lib/_audit_emit_parts/harness.py
+.claude/hooks/_lib/_audit_emit_parts/harness_schemas.py
+.claude/hooks/_lib/_audit_emit_parts/lifecycle.py
+.claude/hooks/_lib/_audit_emit_parts/lifecycle_schemas.py
+.claude/hooks/_lib/_audit_emit_parts/operations.py
+.claude/hooks/_lib/_audit_emit_parts/optimizer.py

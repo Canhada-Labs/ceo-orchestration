@@ -1,0 +1,22 @@
+No P0 or false declared condition was established in payload 27. The shown condition 3 fixes passed inspection and an in-memory malformed-record check.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/ceo-restore.sh:182
+Fresh-machine recovery fails when the destination's immediate parent, such as ~/.claude/projects, does not exist. The new check exits before mkdir -p can rebuild it, breaking the documented recovery scenario. Minimal fix: resolve through the nearest existing validated ancestor and create missing directories during apply.
+
+P2 — .claude/scripts/ceo-restore.sh:257
+Remaining preflight gap: ancestors are checked for symlinks but not for non-directory files. If DEST/memory is a regular file, preview succeeds; apply can overwrite audit files before mkdir fails. Partial application was already possible before this delta. Minimal fix: validate every existing ancestor and required directory before any destination writes.
+
+P2 — .claude/scripts/check-ceremony-script.py:198,218
+R9 incorrectly marks safe heredocs BLOCKING: a partially quoted delimiter such as E"OF" is parsed as unquoted E, and arithmetic-only $((1 + 2)) is classified as command substitution. This can reject legitimate unwaived ceremony scripts. Minimal fix: parse complete delimiter tokens with quote removal and distinguish arithmetic expansion from command substitution.
+
+P2 — .claude/hooks/_lib/_cost_transcripts_parts/__init__.py:55
+The facade loader rebinds dataclass-generated repr wrappers to facade globals, losing the dataclasses module's _thread reference. On Python 3.9.6, repr fails for all four exported dataclasses; printing the dictionary returned by transcript_rollup also fails. Minimal fix: rebind only methods whose original globals belong to the implementation part, preserving library wrapper globals.
+
+Validation used read-only inspection and in-memory checks. Boot marker/audit ordering passed. Full registry coverage verification was limited by a redaction placeholder that makes one copied module unparseable; that artifact is not reported as a release defect.
+
+VERDICT: GO-WITH-CONDITIONS The payload has four nonblocking P2 follow-ups, with no established P0 or contradiction of a declared condition.

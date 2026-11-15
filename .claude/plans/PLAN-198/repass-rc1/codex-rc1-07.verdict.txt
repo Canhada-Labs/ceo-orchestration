@@ -1,0 +1,12 @@
+Payload 7: no P0 or false declared condition identified.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/_ceremony_toolkit/preflight.py:52
+The default policy reader searches check_canonical_edit.py for a top-level _CANONICAL_GUARDS assignment, but that literal now resides in _lib/canonical_edit/guards.py. Without an explicit canonical_patterns override, collection raises canonical_guard_policy_unavailable and validation rejects otherwise valid ceremony packs. No production caller was found, limiting current impact to the preparation API. Minimal fix: read the authoritative extracted literal and add an integration test using the default policy lookup.
+
+Validation: read-only Python 3.9 syntax, import and binding checks passed for the contamination and context-budget extractions; no boot telemetry extraction regression was identified.
+
+VERDICT: GO-WITH-CONDITIONS The default ceremony policy lookup needs repair, but this payload establishes neither a false declared condition nor a P0.

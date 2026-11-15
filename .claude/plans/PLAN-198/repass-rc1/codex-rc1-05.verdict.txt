@@ -1,0 +1,9 @@
+Payload 5/32: no P0, new P1, or contradicted declared condition found.
+
+Verified that the moved code preserves facade globals, patch points, initialization order and sibling-path resolution. The indirect scanner remains enabled by default. Installer coverage and kernel protection include the Bash fragments. Python 3.9 compatibility and isolated benign checks passed. No files were modified.
+
+NEW FINDINGS (annex): None.
+
+P2 follow-ups: None.
+
+VERDICT: GO The reviewed changes preserve the relevant runtime contracts, with no release-blocking defect identified in this payload.

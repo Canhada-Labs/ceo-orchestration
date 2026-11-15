@@ -1,0 +1,11 @@
+Payload 12: no P0 or false declared condition identified.
+
+Read-only checks passed for Python 3.9 syntax, module imports, and facade global bindings. No introduced defect found in spool durability or signal handling. Model-family acceptance and deferred exit draining match the declared limitations.
+
+NEW FINDINGS (annex): None.
+
+P2 follow-ups: None.
+
+Validation limits: no installer execution or filesystem-write tests; the supplied tree is redacted.
+
+VERDICT: GO No blocking defect or false declared condition was found within payload 12.

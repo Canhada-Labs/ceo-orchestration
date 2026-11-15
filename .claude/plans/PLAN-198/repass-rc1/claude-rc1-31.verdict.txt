@@ -1,0 +1,54 @@
+PAYLOAD 31/32: night-mode.py, profile-opus-4-7.py, re-pin-codex.py and reality-ledger.py.
+
+SCOPE AND METHOD
+I read the four candidate entry points, the new packages they load (.claude/hooks/_lib/_night_mode_parts, _profile_opus_parts, _reality_ledger_parts) and .claude/scripts/_repin_guard.py. I compared the moved bodies against the text this diff removes. I also checked the installer path (scripts/install.sh:1520-1549 copies every top-level _lib entry; scripts/_framework_manifest_set.sh:95-107 excludes only tests and caches) and how the night-mode posture-toggle guards apply to the moved code.
+
+What holds:
+- The three binders rebuild each function with FunctionType over the entry point's own globals. Every name the moved bodies use is still imported by its entry point: os, sys, json, stat, tempfile, socket, hashlib, copy, datetime, Path and the typing names for night-mode; the matching sets for profile-opus and reality-ledger.
+- Patching a name on the entry point therefore still reaches the logic, and the template modules stay untouched.
+- Classes (_EnvVarReadFinder, _EmitActionFinder) are rebuilt with their methods rebound, staticmethod included. No moved method uses zero-argument super().
+- In profile-opus, _REF_EXEC_SOURCE is unchanged (the inner `def main` sits inside the r''' string), so ref_source_sha256 is stable.
+- The night-mode ast oracle (.claude/scripts/tests/test_night_mode.py:1728, :1846) now reads toggles.py, so NF-04/NF-07 is still pinned.
+- In reality-ledger, the self-exclusion gains "/_reality_ledger_parts/" (constants.py:55). _read_known_actions adds a parse-only fallback for the split audit_emit (audit_actions.py:41-114); it parses those files and never imports or runs them.
+- None of the four files is a registered hook. Nothing here disables a governance hook, changes a model or effort, or blocks a session.
+- Fail direction is unchanged: the night-mode fail-closed input gates, the CI refusal, the NF-08b self-path guard, the atomic write plus read-back, and the fail-open _emit_audit all moved as the same text.
+- Python: standard library only, and I found no 3.10+ syntax or API in any of these files.
+- Declared conditions this payload touches: condition 7 (entry points keep their paths; logic moves to _lib modules; a hand-patched script must be patched again in its module) is TRUE against this diff. The candidate pin `.claude/governance/codex-cli-pin.txt:199 ">=0.128.0"`, which the generator now parses, is consistent with condition 9 and with the CHANGELOG [1.4.4] statement that the range has no upper bound. I found no declared condition FALSE in this payload and no P0.
+
+NEW FINDINGS (annex)
+None at P1.
+
+P2 FOLLOW-UPS
+
+P2-1. .claude/scripts/re-pin-codex.py:496-497, :2171, :1437-1439, :1675-1677, :1744-1745, :1611
+- Scenario: the live pin is now the open floor ">=0.128.0". Any pack generated from this tree:
+  - turns it into a bounded range ">=0.128.0,<X.(Y+1).0" with widened=True, re-adding the upper bound the Onda6B policy removed. The next newer Codex then falls back from `compatible` to out-of-range until another re-pin;
+  - sets old_upper equal to the new upper, so four outputs describe a widening that never happened: the .new pin paragraph ("Upper bound widened <A -> <A"), the commit message ("Widen-upper-only (<A -> <A)"), the Owner-signed sentinel Scope line, and the ceremony's "aplicados: range >=L,<A -> >=L,<A";
+  - keeps the inherited pin comment "This unbounded range is not a payload-hash attestation" directly above a bounded range.
+- The effect is restrictive and the pack is Owner-reviewed, which is why this is P2 and not higher; but the signed text misstates the change.
+- Minimal fix: when upper is None, return a distinct state (for example widened="bounded-from-floor") and render "open floor >=L -> bounded >=L,<N" in all four places; or emit the floor unchanged when the pack grammar allows it.
+
+P2-2. .claude/hooks/_lib/_bash_safety_parts/posture_tables.py:376 (_E4_POSTURE_TOGGLE_SCRIPTS) together with .claude/hooks/_lib/_night_mode_parts/toggles.py
+- Scenario: the code that writes the posture now lives in an importable module. A model-rail `python3 -c` body can put .claude/hooks on sys.path, call _night_mode_parts.install() on a namespace it builds itself, and call cmd_on(). It names neither .claude/scripts/night-mode.py nor settings.local.json, so neither the _e4 matcher nor the _e3 literal scan sees it, and main()'s NF-08b check never runs.
+- This is the same class as the Python-level string-concatenation bypass that already exists (runpy on a split path), so it is not a new capability. Still, the table's own comment says every future posture writer must be registered there.
+- Minimal fix: treat the module as a writer by matching `_night_mode_parts` in -c bodies, or move the CI refusal and the self-path guard into cmd_on, cmd_off and cmd_off_discard_snapshot so that calling them through the parts also refuses.
+
+P2-3. .claude/scripts/night-mode.py:326-331 (the parts import now runs at load time, before _check_self_path at :518)
+- Scenario: a copy moved outside any repo tree (for example /tmp/a/b/c/night-mode.py) now dies with an ImportError traceback and exit 1. Before, it refused with exit 2 plus the summary line. It still writes nothing.
+- The docstring ("2 — ... alias/relocated invocation (NF-08b)") and the CHANGELOG line "Entry points keep ... their observable contracts" no longer hold for this edge case.
+- Minimal fix: wrap the import in try/except ImportError and exit 2 with an NF-08b message.
+
+P2-4. .claude/scripts/reality-ledger.py:81-83
+- Scenario: the parts import sits outside the FATAL ImportError block at :58-69. A broken or missing parts package exits 1 with a traceback, not the documented "2 = detector internal error".
+- Minimal fix: move the import and the install() call inside that try.
+
+P2-5. .claude/hooks/_lib/_profile_opus_parts/latency.py:119-127 (carried, moved word for word, not introduced by this delta)
+- Scenario: the isolation scrub drops CLAUDE_PROJECT_DIR_NATIVE but not CEO_AUDIT_LOG_PATH, and CEO_AUDIT_LOG_PATH outranks CEO_AUDIT_LOG_DIR (_audit_log_parts/paths_skills.py:10).
+- A maintainer who runs --hook-latency with CEO_AUDIT_LOG_PATH exported appends about 1,000 or more measured hook rows to the live HMAC chain. That breaks the docstring promise "never the real ~/.claude" and is the same class as the diagnose-output-hook P1 cured in v1.4.3-rc.1.
+- Minimal fix: add CEO_AUDIT_LOG_PATH and the other location variables that diagnose-output-hook.py strips to the scrub tuple.
+
+P2-6. Housekeeping
+- .github/CODEOWNERS:122 still names only .claude/scripts/profile-opus-4-7.py. Its logic now lives in .claude/hooks/_lib/_profile_opus_parts/; add an entry if per-file ownership is intended.
+- The night-mode.py:320-324 header comment ("Path resolution — anchored in FUNCTIONS") now introduces an import block; update it.
+
+VERDICT: GO In this payload the four script splits keep behavior and the fail direction intact, the parts ship to installs, condition 7 and the pin facts behind condition 9 hold against the code, and what I found is P2 only: the re-pin generator mislabels a floor-to-bounded change as a widening, and there are minor gaps in exit-code contracts and isolation.

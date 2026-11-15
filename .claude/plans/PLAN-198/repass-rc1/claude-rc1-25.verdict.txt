@@ -1,0 +1,34 @@
+PAYLOAD 25/32. One file changed: .claude/scripts/ceo-backup.sh (2 hunks). I read the candidate file in full. I also read the restore side it pairs with: .claude/scripts/ceo-restore.sh:230-340 and .claude/scripts/_restore_archive.py. I checked the CHANGELOG [1.4.4] section "Fixed — backup and restore" (CHANGELOG.md:274-298) and the new test .claude/scripts/tests/test_ceo_restore.py:185-202 (test_fu144_backup_does_not_follow_memory_link).
+
+WHAT THE DELTA DOES
+- Hunk 1 (ceo-backup.sh:247-256): the old line `cp -pR "$AUDIT_DIR/memory/." ...` copied links as links. It is replaced by a loop over `find "$AUDIT_DIR/memory" -type f -print0`, using `read -r -d ''`, `mkdir -p` of the parent directory and `cp -p --`. Only regular files reach the staging directory. This matches the restore validator added in this train: it refuses any member that is not a file or directory (_restore_archive.py:112-113), and ceo-restore.sh:235 refuses any link in the staging directory. Under the old code, a single link in memory/ produced an archive that restore refused as a whole. The fix is correct in direction.
+- Hunk 2 (ceo-backup.sh:276-280): `COPYFILE_DISABLE=1` is set for tar, inside the subshell only. Apple's bsdtar honours it and then writes no `._<name>` AppleDouble members. GNU tar ignores it. The comment and the CHANGELOG lines 286-289 are accurate.
+
+CHECKS AGAINST THE REVIEW AXES
+- Adopter blast radius: this is a manual or cron backup script. It touches no hook, governance setting, model or effort, and it cannot block a session.
+- Fail direction: not a hook; no inversion of the ADR-186 or hook fail-open rules.
+- Writes: only to the mktemp staging directory and to $BACKUP_DIR, as before. The new loop never follows a link in memory/. find runs with its default -P, and `-type f` leaves out links to files.
+- Portability: the script is bash (#!/bin/bash). Process substitution and `read -d ''` work in bash 3.2 on macOS, and the same construct is already used at line 301. The quoted prefix strip `${f#"$AUDIT_DIR/memory/"}` is literal. It stays correct for a relative --audit-dir and for a trailing slash (`//memory/` matches what find prints).
+- Moved code / Python: no Python and no re-exports in this payload.
+- Honesty: CHANGELOG.md:276-277 ("archives only the regular files of memory/; a link there is left out") and :289 ("no longer writes these members") match the code.
+- Declared conditions: none of conditions 1-14 makes a claim this payload contradicts. The file is in scope (condition 13), and the CHANGELOG lines that cover it are true.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+1. P2, .claude/scripts/ceo-backup.sh:264, together with _restore_archive.py:112-113 and ceo-restore.sh:235. This hunk stops copying links for memory/ only. The `--include-plans` branch still runs `cp -pR "$ADOPTER_ROOT/.claude/plans/." ...`, which keeps links. Restore now refuses every link member, which is new in [1.4.4].
+   Failure scenario: an adopter runs `ceo-backup.sh --include-plans` and `.claude/plans/` contains one link. The backup prints "ok" and exits 0, but ceo-restore.sh refuses the whole archive ("refused member type"), including audit/ and memory/. Manual `tar -xzf` still recovers the data.
+   Minimal fix: copy plans/ with the same loop (`find ... -type f -print0` plus `cp -p --`).
+2. P2, .claude/scripts/ceo-backup.sh:247 and :255.
+   Failure scenario: `$AUDIT_DIR/memory` is itself a link to a directory, for example a synced memory folder. `[ -d ]` is true, but find with its default -P does not follow a link given on the command line, so it lists nothing. The archive gets an empty memory/, the MANIFEST lists no memory file, and the run exits 0 with no warning. The base version followed `memory/.` and backed the files up. The CHANGELOG wording roughly covers this case, so this is a silent loss of coverage rather than a false claim.
+   Minimal fix: print a warning to stderr when `[ -L "$AUDIT_DIR/memory" ]`, or use `find -H` for that starting point only. The archive would still hold only regular files.
+3. P2, .claude/scripts/ceo-backup.sh:255. If find hits an unreadable subdirectory inside memory/, it exits non-zero, but bash ignores the exit status of a process substitution. The backup is then partial, exits 0, and only find's own stderr line reports it. The old `cp -pR` failed under set -e.
+   Minimal fix: read find's status after the loop, or run find into a temporary list first and check its exit code.
+4. P2, .claude/scripts/ceo-backup.sh:253. `dirname "$rel"` without `--` fails on a name that starts with "-".
+   Effect for a top-level file: only an error message on stderr.
+   Effect for a subdirectory such as `-x/y.md`: mkdir does not create `-x`, the next cp fails, and set -e aborts the backup. It fails closed and loudly.
+   Minimal fix: `dirname -- "$rel"`. The same line exists at ceo-restore.sh:322.
+
+VERDICT: GO This payload holds only the ceo-backup.sh change, which correctly limits the memory/ snapshot to regular files and stops macOS tar from writing AppleDouble members, as the CHANGELOG states; it falsifies no declared condition and contains no P0 or undeclared P1, only four P2 edge cases.

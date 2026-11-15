@@ -1,0 +1,8 @@
+.claude/hooks/check_pair_rail.py
+.claude/hooks/check_plan_edit.py
+.claude/hooks/check_precompact_continuity.py
+.claude/scripts/_contamination_inventory.py
+.claude/scripts/_repin_guard.py
+.claude/scripts/_restore_archive.py
+.claude/scripts/_subprocess_census.py
+.claude/scripts/architect-bundle-validate.py

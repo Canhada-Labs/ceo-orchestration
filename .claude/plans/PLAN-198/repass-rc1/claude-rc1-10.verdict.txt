@@ -1,0 +1,46 @@
+PAYLOAD 10/32: v1.4.3-rc.1..0e687e3c5285. Files: _night_mode_parts/toggles.py, _pair_rail_parts/{__init__,_shared,part_01..04}.py, _policy_parts/{__init__,decisions,loading,predicates,yaml_blocks,yaml_flows,yaml_scalars}.py, _precompact_parts/{__init__,ledger_index}.py. All files are new; each is code moved out of a facade.
+
+HOW I CHECKED
+- I read the four facades: .claude/hooks/check_pair_rail.py, .claude/hooks/_lib/policy.py, .claude/hooks/check_precompact_continuity.py and .claude/scripts/night-mode.py. I read the three install() mechanisms, .claude/hooks/_lib/cli_currency.py, the pin manifest, _KERNEL_PATHS, the CHANGELOG [1.4.4] pin section and the kit's instrument check.
+- Moved code, pair-rail. The functions are rebound with the facade as their globals. So __file__ still resolves to .claude/hooks/check_pair_rail.py: hooks_dir and parents[2] are unchanged. The globals _CURRENT_REVIEW_ID and _RUBRIC_CATALOGUE_CACHE live in the facade. mock.patch.object on the facade still reaches the rebound callers.
+- Every global the parts use is defined in the facade: json, os, re, subprocess, sys, Path, typing, and _cli_currency at check_pair_rail.py:21. hashlib, platform, fnmatch, stat and tempfile are imported locally where used. Because _cli_currency is present, _apply_currency_policy cannot hit a NameError and fall into the "infra" (fail-open) result.
+- deepcopy of compiled regexes, classes and functions returns the same objects. The facade redefines _invoke_codex_review after install(), so the facade copy is the live one.
+- Policy and precompact. Their parts are exec'd in the facade namespace, in order. Classes defined by the dataclasses keep __module__ = the facade name. If _lib.policy fails to import, policy_dispatch.py:45-49 catches it (except Exception), so that infrastructure fault fails open.
+- Night-mode. The rebound toggles resolve every helper from helpers.py or the facade. The AST oracle in the test suite now parses toggles.py.
+- Fail direction is preserved:
+  - night-mode refuses (fail-closed) on a marker or overlay it cannot parse;
+  - the unlink branch still requires the overlay to be byte-for-byte what `on` writes;
+  - the precompact ledger reader keeps the no-follow descriptor chain and degrades instead of raising;
+  - in pair-rail, CodexPinMismatch still blocks, and Codex unavailable, timeout or malformed still give an advisory.
+- Python 3.9 and stdlib only: nothing new is used (subprocess errors=, os.stat dir_fd, scandir(fd) and contextmanager are all available in 3.9).
+- Condition 5: _KERNEL_PATHS has 123 string rows. _policy_parts/**/* and _pair_rail_parts/**/* are among them, with the five flat modules and adapters/live. The precompact and night-mode facades were never kernel, so their parts packages correctly stay outside the list. Conditions 7, 9 and 10 hold against this code: the kit's check_instrument refuses a triple absent from the manifest and a malformed sha.
+
+FINDINGS AGAINST DECLARED CONDITIONS
+None is false against this payload. No P0.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/_lib/_pair_rail_parts/part_01.py:477-486, with CHANGELOG.md:191.
+Problem: when the host's target triple is absent from the manifest, the code runs _apply_currency_policy before any payload is resolved or hashed.
+- With no override, currency_path is the PATH launcher. The result is status=compatible, path=launcher and sha256="". _resolve_codex_bin then returns the launcher and it gets executed. Nothing was hashed, and the native payload was never resolved.
+- The manifest pins only aarch64-apple-darwin. So this route applies on every other host (Linux x86_64/arm64, Intel macOS, Windows). Before this delta it was the documented fail-CLOSED result triple_missing ("unverifiable must not silently degrade").
+- With CEO_PAIR_RAIL_CODEX_BIN set, the override gets no is_file() check on this route. A missing override path that has any @openai/codex package.json above it newer than 0.160.0 returns compatible. The subprocess then raises FileNotFoundError, which becomes CodexUnavailable and an advisory: fail-OPEN. This inverts "inexistente = BLOQUEIA" (the line 520 contract).
+- CHANGELOG [1.4.4] line 191 says "The payload's sha256 is still computed and recorded". That is false on this route.
+Who is affected: maintainer and reviewer checkouts only. Installs do not receive .claude/governance/, so for them the manifest is absent and the pin fails open as before. The kit refuses this route for the re-pass. Condition 9 declares only the broad version-only trust, not this route.
+Minimal fix: in the entry-is-None branch, first resolve the real payload. For an override, require is_file(). For the launcher, use the vendor/<triple> path. Hash it and record sha256 and path, then apply the currency policy. Otherwise keep triple_missing. Then correct CHANGELOG line 191 to name this route.
+
+P2 FOLLOW-UPS
+1. Kernel pin docstrings and messages now contradict the code. Fix: update the texts.
+   - part_01.py:409: "No env relaxes this comparison".
+   - part_01.py:412: the status enum leaves out "compatible".
+   - The CodexPinMismatch docstring still lists "targetTriple absent → block".
+   - part_04.py:499: exit 0 is documented as "payload sha256 matches the manifest entry", but compatible also exits 0.
+   - part_02.py:66 and the facade docstring: "the artifact that was hashed is the artifact that runs".
+   - part_03.py:123: the block message tells the user to re-pin even when the installed Codex is at or below the manifest version or the floor. The remedy there is to upgrade Codex.
+2. part_01.py:557 and :566 work from two different versions. installed_version comes from the nearest qualified package.json, but compatible can be granted by ANY ancestor package.json named @openai/codex. The recorded version can therefore differ from the one that earned compatibility. The kit cross-checks this; the live hook does not. Fix: decide compatibility from the `installed` value alone.
+3. part_02.py:22 is a dead duplicate of _invoke_codex_review: check_pair_rail.py:29 overrides it after install(). A hand patch applied "to its module", as condition 7 and the CHANGELOG instruct, would silently have no effect. Fix: keep one copy.
+4. _policy_parts/__init__.py:15 and _precompact_parts/__init__.py:16 exec the part sources, so each part's module docstring is stored into the facade's __doc__. At runtime _lib.policy.__doc__ and check_precompact_continuity.__doc__ become one-line part docstrings, which hides the contract text from help()/introspection. The parts are also recompiled from source in every process, with no .pyc. Neither has a functional effect. Fix: restore __doc__ after install, or drop the part docstrings.
+5. _precompact_parts/ledger_index.py:20 uses str.isdigit(). That accepts non-ASCII digits (for example "PLAN-١٢٣" or "PLAN-²²²"), while the canonical check_ledger_checkpoint.py:281 uses [0-9]{3}. So the "espelho FIEL" (faithful mirror) diverges. A commit touching such a directory elects a plan the checkpoint never would, and puts an unsanitized plan_id into the snapshot. Fix: match with re.fullmatch(r"[0-9]{3}", ident[5:8]).
+6. Also part_01.py:477-486: on triples absent from the manifest, the strict "newer than manifest" rule blocks the manifest's own version (0.160.0) and admits any newer one. There is no hash on that route for a same-version tamper to mismatch, so the strictness has no purpose. This folds into the P1 fix.
+
+VERDICT: GO-WITH-CONDITIONS Every declared condition I could check against this payload holds, I found no P0, and the moved pair-rail, policy, precompact and night-mode code keeps its globals, patch points and fail directions; the one undeclared P1 (the triple-absent currency route that runs an unhashed launcher on maintainer checkouts, plus the CHANGELOG claim that the sha256 is still computed) goes into the signed annex as an open item.

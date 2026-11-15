@@ -1,0 +1,19 @@
+No P0 or false declared condition was established within this payload. Python 3.9.6 syntax and ordinary helper checks passed; federation package and flat imports passed. Findings below are based on static integration review.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/check_canonical_edit.py:624; .claude/hooks/_lib/canonical_edit/entry.py:129. Component ImportError is classified as an integrity failure and blocks even noncanonical edits after a partial installation. This inverts the required infrastructure fail-open behavior. Minimal fix: retain the diagnostic but allow on component import faults; preserve the separate fail-closed wall deadline.
+
+P1 — .claude/hooks/check_canonical_edit.py:123. Failure to import guards.py silently substitutes an empty guard list. The remaining modules can bind successfully, so --is-canonical returns successful noncanonical classifications for every path. templates/grok/pre-push-review-gate.sh:243 accepts that output and never activates its conservative fallback. Minimal fix: track guard-loading failure and return nonzero from oracle mode while retaining hook infrastructure fail-open behavior.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_ceremony_toolkit/preflight.py:52. The default policy reader still searches the facade’s top-level AST for _CANONICAL_GUARDS, now declared in canonical_edit/guards.py. Consequently, default collection raises canonical_guard_policy_unavailable and validation rejects otherwise valid packets. Minimal fix: read the extracted declaration and verify the default path without injected patterns.
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304. Sentinel discovery still searches the facade for _PATTERNS, now in canonical_edit/paths.py. Boot therefore always uses its four-pattern fallback, omitting six supported sentinel forms from pending-signature reporting. Minimal fix: read the new authoritative location.
+
+P2 — .claude/hooks/_lib/effective_config.py:544. With list-valued exclusions, a root-path resolution or glob-matching exception escapes into classify_tampering’s whole-scan handler, which returns [] and discards unrelated findings. Boot can consequently report no tamper indicators. Minimal fix: isolate this check, preserve accumulated findings, and conservatively flag exclusions the matcher cannot evaluate.
+
+P2 — .claude/hooks/_lib/escalation_signals.py:126. The library now recognizes GPT/o-family VETO models, but the actual CLI retains its Claude-only predicate at .claude/scripts/ceo-escalation-detector.py:373. An admitted GPT VETO event therefore produces a false high-severity veto_non_opus incident through the CLI. Minimal fix: share the updated predicate with the standalone detector.
+
+VERDICT: GO-WITH-CONDITIONS Two undeclared P1 regressions and four P2 follow-ups remain, without a demonstrated P0 or contradiction of a declared condition in this payload.

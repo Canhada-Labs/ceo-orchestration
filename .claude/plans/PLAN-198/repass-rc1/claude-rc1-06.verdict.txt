@@ -1,0 +1,50 @@
+PAYLOAD 6/32: nine new files under .claude/hooks/_lib/_ceo_boot_parts/ (the ceo-boot split, PLAN-197). I also read, from the redacted tree: the facade .claude/scripts/ceo-boot.py (its diff is in another payload), the loader _ceo_boot_parts/__init__.py, how install and upgrade enumerate files, and every module the parts load at runtime.
+
+CHECKED, NO FINDING
+- Load order. install() runs the 10 parts in _PARTS order inside the facade's own globals. Every dependency evaluated at load time resolves:
+  - _rp, REPO_ROOT, _PLAN_GLOB_CACHE and check_governance_validate are defined in the facade before install() runs (ceo-boot.py:55-116).
+  - FAILOPEN_RAIL_CLASSIFIERS (liveness_schedule.py) comes after _classify_pair_rail_event (persona_confidence.py).
+  - TIER_S_CHECKS and TIER_A_CHECKS (scheduled_cache.py) come after every check they reference.
+  - _UNSET (candidates_lessons.py) is defined before lessons_cli.py uses it as a default argument.
+- Name binding is unchanged: `global _PLAN_GLOB_CACHE`, `__file__`-relative paths (.claude/scripts for morning_ledger, lessons, persona_demand_* and check-confidence-gate-drift; parents[2] for the repo root), monkeypatch seams, and __module__ all bind to the facade, as before the split.
+- Runtime targets still expose the names the parts call: effective_config, the audit_emit facade (emit_* functions and _KNOWN_ACTIONS), check-model-currency.py, persona_demand_*, check-confidence-gate-drift.py and check_tier_policy_misrouting_24h.py.
+- Delivery: install.sh copies every top-level _lib entry recursively (install.sh:1520-1550). Upgrade enumerates .claude/hooks as a whole (_framework_manifest_set.sh), and _ceo_boot_parts is not excluded.
+- Fail direction: the _wrap_check floor still turns an exception into "error". The lesson render gate still drops the lesson when the validator is unavailable (fail-closed). Scheduled-red still never reports green on missing data. No hook runs ceo-boot.py, so a missing part breaks /ceo-boot visibly and never blocks a session.
+- Python: standard library only, and compatible with 3.9.
+- The new main_checkout_state check is read-only and yellow-only, and it never flips gate_pass. CHANGELOG [1.4.4] declares it.
+- Declared conditions: condition 7 holds for ceo-boot (thin facade, path kept). Nothing in this payload makes any of conditions 1-14 false. No P0.
+
+NEW FINDINGS (annex)
+
+P1-a — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:300-325 and :356
+- What it does: _sentinel_patterns() gets the sentinel globs by parsing .claude/hooks/check_canonical_edit.py for a `_PATTERNS =` assignment.
+- What changed: the PLAN-197 split moved that tuple to .claude/hooks/_lib/canonical_edit/paths.py:238. check_canonical_edit.py no longer contains _PATTERNS (grep: no match).
+- Effect: the function always returns (_SENTINEL_PATTERNS_FALLBACK, False), in this repo and in every install.
+- Failure scenario: sentinels_pending_gpg scans 4 of the guard's 10 patterns. It misses the architect/wave-0a, wave-0b, wave-1-2 and wave-minus-1 sentinels, staging/review, and audit-v2. Every /ceo-boot digest ends the row with "[padrões em FALLBACK — a autoridade não foi lida]". That brings back the blind guard the S321 cure removed, and a warning that fires on every boot teaches operators to ignore it.
+- Why it matters: this is moved code changing another module's behavior through a source-text dependency (item 4). It contradicts CHANGELOG [1.4.4] "Entry points keep their paths and their observable contracts" for this row, and no test covers the derivation on the real tree.
+- Minimal fix: read _lib/canonical_edit/paths.py first and fall back to check_canonical_edit.py. Add a test that _sentinel_patterns() returns derived=True and at least 10 patterns on the real tree.
+
+P1-b — .claude/scripts/ceo-boot.py:120-184, against _ceo_boot_parts/model_persona.py:6 and scheduled_cache.py:376
+- What it does: the facade defines check_tier_a_spec_version_drift a second time, after install(). TIER_A_CHECKS was built during install() and holds the model_persona.py copy.
+- Effect: --verbose dispatches the part copy, while module.check_tier_a_spec_version_drift is a separate copy that is never dispatched.
+- Text that only satisfies tests:
+  - The facade copy's docstring line "Lesson validation remains delegated to `_validate_boot_lesson`" has nothing to do with this function. It satisfies a grep in test_check_vacuous_checks.
+  - The comments at ceo-boot.py:180-184 satisfy text greps in test_plan_091_expected_callsites and test_ceo_boot_audit_emit. The code those tests are about now lives in scheduled_cache.py and telemetry_candidates.py.
+- Failure scenarios:
+  1. Reverting the PLAN-178 C3 cure in model_persona.py (the dispatched copy) leaves the functional regression tests in test_check_vacuous_checks.py green, because they extract the facade copy.
+  2. check-vacuous-checks.py ships with .claude/scripts/ceo-boot.py as its default target (line 133). It now sees 2 of the 36 registered check_* functions, so a new always-green check in any part passes the lint and test_cli_clean_on_real_ceo_boot.
+  3. Removing the tier_policy_misrouting_24h registry row from scheduled_cache.py leaves test_plan_091 green, because a comment still names it.
+- Why it matters: this contradicts the facade's own comment (ceo-boot.py:111-113) that monkeypatch seams "retain their historical identity". It weakens CHANGELOG [1.4.4] "The compatibility evidence is the test suites" for this script (items 4 and 5).
+- Minimal fix:
+  - Delete the facade duplicate and the marker comments.
+  - Point the AST tests and the lint default at _lib/_ceo_boot_parts/*.py plus the facade.
+  - Add an assertion that module.check_tier_a_spec_version_drift is dict(module.TIER_A_CHECKS)["tier_a_spec_version_drift"].
+
+P2 FOLLOW-UPS
+- P2-1 — model_persona.py:241. main_checkout_state treats the default branch as "main" when refs/remotes/origin/HEAD is unset (a repo set up with git init + remote add, or with no remote). A repo whose default is master or develop then shows yellow while on its own default branch, but the CHANGELOG says "off its default branch". Fix: read init.defaultBranch, or say "assumed main" in the summary. Also, three sequential 0.8 s git calls can exceed the 1.0 s soft per-check budget, which has no override. That costs only an annotation.
+- P2-2 — _ceo_boot_parts/__init__.py:25-26. Each part opens with a module docstring, and running the compiled part stores it into the namespace's __doc__. So ceo_boot.__doc__ becomes "Extracted ceo-boot declarations executed by the facade." Fix: drop the part docstrings, or save and restore __doc__ around the loop.
+- P2-3 — ceo-boot logic moved from .claude/scripts/ceo-boot.py, which is not a canonical path, to .claude/hooks/_lib/**/*.py, which is canonical (canonical_edit/guards.py:34). Editing ceo-boot checks in an install now needs a sentinel. That tightens governance, but the CHANGELOG does not declare it for ceo-boot.
+- P2-4 — .claude/commands/ceo-boot.md:35 still says "the 24 Tier-S checks"; everything else says 25, and the registry asserts 25.
+- P2-5 (carried, not new) — check_hook_live_smoke (harness_governance.py) runs py_compile on every registered hook at each boot, which writes __pycache__/*.pyc next to the adopter's hooks.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and no P0 was found, but two undeclared P1s must go to the signed annex: after the PLAN-197 split, sentinel-pattern derivation always falls back because it reads a file that no longer holds _PATTERNS, and the facade's never-dispatched spec-drift copy leaves the vacuity lint and its regression tests checking code that /ceo-boot does not run.

@@ -1,0 +1,21 @@
+Payload 16: no declared condition demonstrated false; no P0 found.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:167
+The command-substitution scanner treats quoted closing parentheses as terminators. The harmless command printf '%s\n' "$(git log -1 --format='(%h)')" is blocked as bash_indirect_unparseable_shell. Confirmed through decide_command; disabling heuristics does not help. Minimal fix: track quotes, escapes and nesting when locating substitution boundaries.
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:455
+Every canonical-path operand following an interpreter's inline program is treated as a write target. Even python3 -c 'import sys; print(sys.argv[1])' PROTOCOL.md is blocked as bash_computed_canonical_target. Read-only file inspection is also blocked. Confirmed through decide_command, including with heuristics disabled. Minimal fix: require a recognized write operation before classifying interpreter operands as write targets.
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:347
+Static finding: recursive xargs/find processing calls _scan_segment directly without checking MAX_DEPTH. Deep launcher nesting can exhaust Python recursion while within the input caps. The exception reaches decisions_cli.py:243–248, which emits allow: an input-limit failure becomes fail-open. Minimal fix: enforce the depth ceiling at _scan_segment entry and return bash_indirect_limit.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/bash_indirect_telemetry.py:53
+A pre-existing symlink at bash-indirect-disabled redirects marker creation outside the audit directory. O_EXCL protects the final filename, not its parent; the resulting files are empty markers, without overwriting existing files. Minimal fix: validate and open the marker directory without following symlinks, then create markers relative to its directory descriptor.
+
+Validation: both false blocks disappear when only the new scanner is disabled. Python 3.9 syntax checks passed for the new scanner, telemetry and canonical binding/decisions files. Static audit/canonical binding review found no concrete regression. Audit emission was stubbed during decision probes; no files were modified. Redaction artifacts were excluded.
+
+VERDICT: GO-WITH-CONDITIONS The findings warrant follow-up, but this payload establishes neither a false declared condition nor a P0.

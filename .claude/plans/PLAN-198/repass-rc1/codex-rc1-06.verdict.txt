@@ -1,0 +1,16 @@
+Payload 6: no P0 or false declared condition found.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304
+Sentinel discovery still AST-scans check_canonical_edit.py, but its _PATTERNS assignment moved to _lib/canonical_edit/paths.py:238. Discovery now always falls back to four patterns, omitting six supported layouts. An unsigned sentinel under PLAN-*/staging/review/approved.md can therefore produce green “0 pending,” accompanied only by the fallback note. Minimal fix: derive patterns from the new authoritative source, retaining the old source only for compatibility.
+
+P2 — .claude/scripts/check-vacuous-checks.py:133
+The extraction leaves the default vacuity lint scanning only the facade. It now exits successfully after checking two declarations while 35 check declarations reside in the extracted parts. A check that becomes unconditionally green inside those parts escapes this lint. Minimal fix: include the ordered part sources and verify that discovery covers every registered check.
+
+Validation: all 11 package files passed Python 3.9 grammar parsing. An isolated load with runtime dependencies stubbed populated both registries (25 and 11 checks) and confirmed preservation of facade globals and __file__. No files were modified.
+
+VERDICT: GO The two confirmed integration regressions are P2 follow-ups; neither falsifies a declared condition or constitutes a P0.

@@ -1,0 +1,16 @@
+.claude/hooks/_lib/_night_mode_parts/toggles.py
+.claude/hooks/_lib/_pair_rail_parts/__init__.py
+.claude/hooks/_lib/_pair_rail_parts/_shared.py
+.claude/hooks/_lib/_pair_rail_parts/part_01.py
+.claude/hooks/_lib/_pair_rail_parts/part_02.py
+.claude/hooks/_lib/_pair_rail_parts/part_03.py
+.claude/hooks/_lib/_pair_rail_parts/part_04.py
+.claude/hooks/_lib/_policy_parts/__init__.py
+.claude/hooks/_lib/_policy_parts/decisions.py
+.claude/hooks/_lib/_policy_parts/loading.py
+.claude/hooks/_lib/_policy_parts/predicates.py
+.claude/hooks/_lib/_policy_parts/yaml_blocks.py
+.claude/hooks/_lib/_policy_parts/yaml_flows.py
+.claude/hooks/_lib/_policy_parts/yaml_scalars.py
+.claude/hooks/_lib/_precompact_parts/__init__.py
+.claude/hooks/_lib/_precompact_parts/ledger_index.py

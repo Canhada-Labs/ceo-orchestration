@@ -1,0 +1,16 @@
+Payload 26/32: no P0 or declared-condition violation established.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304
+The sentinel reader still parses check_canonical_edit.py, but _PATTERNS now lives in canonical_edit/paths.py:238. Read-only verification returned derived=False and four fallback patterns instead of ten. An unsigned, post-cutoff sentinel under PLAN-*/staging/review/approved.md is therefore omitted; the check can report green with a fallback notice and produce no signing recommendation. Minimal fix: derive patterns from their new authoritative location, preferably through a shared exported constant.
+
+P2 — .claude/scripts/check-vacuous-checks.py:133; .claude/scripts/ceo-boot.py:116
+The decomposition leaves the default vacuity lint inspecting only two facade functions. Verified output reports checks=2 and exits successfully; the moved implementations are outside its scan. A moved check becoming unconditionally green would escape this lint. Minimal fix: include every source file in the loader's ordered parts list and verify coverage against the registered checks.
+
+Validation: all 12 facade/package files passed Python 3.9 grammar checks and in-memory compilation. With side-effecting dependencies stubbed, the loader assembled 25 Tier-S and 11 Tier-A checks using facade globals. No files were modified; full boot and installers were not executed.
+
+VERDICT: GO-WITH-CONDITIONS The decomposition preserves runtime namespace behavior, but two nonblocking source-inspection regressions require follow-up.

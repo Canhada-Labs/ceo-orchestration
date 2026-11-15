@@ -1,0 +1,17 @@
+Payload 23/32: no P0 or false declared condition identified. Static checks support preservation of facade globals and patch points. Python 3.9 grammar checks passed for 20 reviewed files.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/check_pair_rail.py:24; scripts/doctor.sh:1188
+Moving the timeout default into _lib/_pair_rail_parts/part_03.py leaves doctor scanning only the facade. It now skips its timeout-coherence check. An adopter with a registration timeout below 210 seconds loses the warning about prematurely terminating the 180-second review. Minimal fix: update the lookup for the extracted implementation, retaining compatibility with older installations.
+
+P2 — .claude/scripts/_restore_archive.py:44
+On supported Python 3.9, GNU longname directory entries can retain their terminal slash. Splitting before rstrip produces an empty component and rejects a valid backup containing a long memory/ or plans/ directory. Confirmed with an ordinary archive round trip entirely in memory. Minimal fix: normalize a permitted terminal directory slash before component validation while retaining traversal and repeated-slash rejection.
+
+P2 — .claude/scripts/_contamination_inventory.py:76
+For indexed symlinks, _blob unconditionally calls readlink. In a legitimate core.symlinks=false checkout, Git stores the link payload in a regular worktree file; Rule 1 therefore exits with an input error even for clean content. Minimal fix: support that regular-file representation through the existing no-follow read strategy, as the Rule 2 reader already does.
+
+VERDICT: GO The reviewed changes reveal only nonblocking compatibility and diagnostic defects, with no P0 or demonstrated contradiction of a declared condition.

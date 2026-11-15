@@ -1,0 +1,49 @@
+PAYLOAD 9/32. Files: .claude/hooks/_lib/_installer_write_safety/{report,syntax,verdicts_a,verdicts_b}.py, _lessons_parts/{__init__,candidates,cli,config,lessons,render,storage_audit}.py and _night_mode_parts/{__init__,helpers}.py. Where the behaviour depends on them, I also read the facades they bind into (.claude/scripts/check-installer-write-safety.py, lessons.py, night-mode.py, _installer_write_safety/__init__.py and engine.py, _audit_emit_parts/__init__.py) and the files around them (commands.py, model.py, operands.py, toggles.py, canonical_edit/guards.py, check_arbitration_kernel.py, validate.yml). I could only read files; I ran nothing. Every finding below comes from reading the code.
+
+DECLARED CONDITIONS TOUCHED BY THIS PAYLOAD
+- Condition 7 (thin entry points over _lib modules; a hand-patched hook must be patched again in its module): holds for these three facades. Each entry point keeps its path (check-installer-write-safety.py, lessons.py, night-mode.py), and the logic lives under .claude/hooks/_lib/. These packages stay under the canonical guard: canonical_edit/guards.py:34 covers ".claude/hooks/_lib/**/*.py". None of the three is a kernel package, and none needs to be. night-mode.py is canonical-tier on purpose (check_arbitration_kernel.py:274-276), and lessons.py and the installer census are not kernel either. So condition 5 is not undercut by these moves.
+- Conditions 13 and 14: nothing in this payload contradicts them.
+No declared condition is false against the code I read.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+
+P2-1 (moved code changes behaviour). Files: .claude/hooks/_lib/_installer_write_safety/__init__.py:36 (_bind_class) together with syntax.py:6-10.
+What is wrong: bind() copies every component class into the facade namespace with type(original)(name, original.__bases__, attrs). The bases stay the ORIGINAL classes. So the facade's Incomplete inherits from syntax.ParseError, not from the facade's ParseError, and issubclass(facade.Incomplete, facade.ParseError) is False. The rebound functions raise the facade's Incomplete, but their "except ParseError" clauses look up the facade's ParseError, so those clauses no longer catch it.
+- _read_balanced and _read_dquote only ever raise Incomplete. The handlers that existed to catch them are now dead: verdicts_b.py:141 (parse_sed_script), verdicts_b.py:440 and :447 (_sole_pipeline_producer), commands.py:131 (_expansion_refs), model.py:320, :344 and :632, and operands.py:35.
+- The lexer path itself still works: build_logical_lines catches the facade's Incomplete, and build_file_model catches the facade's ParseError.
+How it fails: a scanned script containing  sed 's/$(/X/' f  parses fine. parse_sed_script then reaches _read_balanced, which raises Incomplete("unterminated ( expansion"). Nothing catches it, so the census exits 1 with a traceback. Before the split this produced an i-script-unparsed site. A literal "${" in a sed side fails the same way through commands.py:131. --json output and --write-baseline crash too. This contradicts the docstring of parse_sed_script, which says an unmodelled construct "yields an error, which BLOCKS". There is no broad except anywhere in the package, so the failure stays closed: validate.yml:411-414 goes red. No test covers it.
+Who is affected: only the maintainer's CI census. It does not change how a hook behaves for an adopter.
+Minimal fix: in bind(), clone classes in definition order and remap bases through the clones already made (bases = tuple(clones.get(b, b) for b in original.__bases__)), or leave exception classes un-cloned. Add a test that issubclass(mod.Incomplete, mod.ParseError) holds, plus a fixture with an unbalanced literal "$(" in a sed script.
+
+P2-2 (the census misses a raw interpolation; the root is outside this payload). Files: commands.py:110-113 (_expansion_refs with honour_single_quotes=True), whose result verdicts_b.py:340 relies on.
+What is wrong: the scan tracks no double-quote state. A ' inside a double-quoted raw token is read as the start of a single quote, and with no closing quote the scan returns early with no names.
+How it fails:  sed "s/it's/$VAL/" f  gives names = {}. Then verdicts_b.py:340 ("if name not in names: continue") drops $VAL, and the site comes out nao-aplicavel / n0-no-interpolation, which does not block. The same early return makes model.py:612 (_token_is_expanded) miss an expansion such as "don't-$x", so no write-candidate site is created for it.
+Whether this is new: I could not tell whether this predates the split.
+Minimal fix: track double-quote state in _expansion_refs, and treat ' as a quote only outside double quotes.
+
+P2-3 (honesty about records on every exit). File: .claude/scripts/night-mode.py:327-331.
+What is wrong: the import of _lib._night_mode_parts runs at module level with no guard.
+How it fails: if _lib or _lib/_night_mode_parts is missing or only partly installed, the script dies with a traceback (exit 1) before main(). It writes neither the night-mode-event line nor the night_mode_toggled row. The docstring promises both records on "EVERY terminating path" of on/off, and exit 2 for refusals. This is an infrastructure fault that happens before any write, so the failure stays on the safe side.
+Minimal fix: wrap the import. On failure, print the _summary line and exit 2 with a diagnostic; the audit emit is best-effort anyway. Or state this exception in the docstring.
+
+P2-4 (informational, governance surface). Files: _lib/_night_mode_parts/{__init__,helpers,toggles}.py, with _lib/_bash_safety_parts/posture_tables.py:376.
+What is wrong: the logic that writes the posture overlay can now be imported. A python3 -c body can call install() on a namespace of its own and then cmd_on, without ever naming .claude/scripts/night-mode.py or .claude/settings.local.json. The Bash guard keys only on those spellings: _E4_POSTURE_TOGGLE_SCRIPTS, plus the canonical-list references it checks in -c/-e bodies. And the NF-08b self-path check runs only in the facade's main().
+How serious: this is not a new capability. A python write with a computed path to settings.local.json was always outside a literal matcher. But NF-08b's "second entry point" class now has a member that ships with the framework.
+Minimal fix: have the Bash guard treat a reference to _night_mode_parts in a -c/-e body the same way it treats a reference to the toggle script. Or declare this residual next to NF-08b.
+
+P2-5 (cosmetic). File: _installer_write_safety/verdicts_b.py:698.
+What is wrong: __all__ excludes only _engine and _engine_name. bind() therefore publishes _commands (the module object) and _commands_name into the facade namespace, and re-clones every class and function from commands a second time, with the last clone winning.
+Minimal fix: also exclude _commands and _commands_name from __all__.
+
+CHECKED AND FOUND CLEAN
+- Lessons parts: they are bound to the lessons.py globals through _audit_emit_parts.install, so Path(__file__) in _load_injection_scanner still points to .claude/scripts/scan-injection.py, which exists. Every global the parts use is defined in the facade. config.py keeps the default bound at definition time for _sanitize_one_liner's cap. Patches applied to the facade still reach the bound code.
+- Night-mode parts: _check_self_path uses the facade's _INVOKED_SELF and _CANONICAL_SELF_PARTS. helpers.__all__ lists every name the facade and toggles use. The AST oracle in test_night_mode.py:1728/1846 parses toggles.py, so the NF-04/NF-07 pair stays pinned after the move.
+- Installer census: _REPO_ROOT, _INSTRUMENT_PACKAGE and the entry-point fallback in instrument_sha256 resolve correctly from the package location. No name collides across the components. Nothing uses super() or __class__, so the cloned classes are not affected that way.
+- All files in the payload are standard-library only and compatible with Python 3.9 (from __future__ annotations, typing generics, no 3.10+ syntax).
+- I found no new write outside its place, through a symlink, or over a file the adopter owns. No hook's fail direction is inverted in this payload.
+
+VERDICT: GO No declared condition is false against this payload and there is no P0: the worst defect, the moved installer census losing the Incomplete-to-ParseError subclass link, only affects the maintainer's CI census and fails closed, so it is a P2 follow-up.

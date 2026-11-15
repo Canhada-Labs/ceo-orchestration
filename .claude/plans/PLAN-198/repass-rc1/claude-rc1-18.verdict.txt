@@ -1,0 +1,53 @@
+PAYLOAD 18/32: federation/server.py facade, model_currency.py (new), pii_patterns.py, plan_paths.py (new), policy.py facade, policy_preprocessors.py, secret_patterns.py.
+
+DECLARED CONDITIONS CHECKED AGAINST THE CODE
+- Condition 4 (secret redactor offsets) is TRUE.
+  - In secret_patterns.py:989-1000, scan() first matches the NFKC view, the same frame as before. Matches from that view are mapped back to positions in the original text by _map_to_original (lines 896-904). The original text is then scanned as a second frame. Every Finding indexes the text passed in.
+  - _nfkc_segments (lines 821-870) checks at runtime that the per-segment NFKC images join up to NFKC(text). If they do not, it falls back to one segment covering the whole text, so the error is over-redaction, never a leak.
+  - I traced the cases by hand: an ellipsis before an AKIA key, full-width runs, and a combining mark after ASCII. In each, the mapped span covers exactly the secret or more.
+  - redact() (lines 1024-1046) and scan_and_redact() (lines 1049-1067) cut that same text using the merged runs, with offsets clamped to the text.
+  - pii_patterns.py:731-758 now merges overlapping spans into their union. Every caller passes spans found on the string being redacted: lines 506-508 and 845-856.
+  - No hunk touches the pattern catalog (roughly lines 80-680).
+  - The Known-open ingress caveat is in CHANGELOG lines 418-422, as declared.
+- Condition 5, for the paths in this payload, is TRUE. check_arbitration_kernel.py:311 lists _lib/_policy_parts/**/*, line 332 lists model_currency.py and line 334 lists plan_paths.py.
+- Condition 7, for policy.py and federation/server.py, is TRUE. Both keep their paths and import names, and the logic now lives in _policy_parts/ and _server_parts/.
+- Condition 9, for model_currency.py, is TRUE and declared:
+  - _ALLOWED and _FLOOR accept the family patterns described in CHANGELOG lines 150-176.
+  - _RETIRED holds only claude-opus-4-1.
+  - The VETO check in agent_frontmatter.py:259 still accepts the old closed list (`or actual in allowed`), so the change only widens what passes.
+
+MOVED-CODE REVIEW (no defect found)
+- federation/server.py:375-441
+  - _bind_function rebinds every extracted function and method to the facade's globals(). Patching names such as server._maybe_reload_peers, load_peers or _load_rate_limit therefore still reaches the moved methods.
+  - Relative imports inside methods (from .handlers / from .replay) resolve through the facade's __package__.
+  - Passing __closure__ keeps the __class__ cell. Functions nested inside methods inherit the rebound globals.
+  - In the MRO, _HandlerAuth comes before BaseHTTPRequestHandler, so its timeout, parse_request, log_message and do_* overrides still win. The three mixins define no method twice. __all__ is kept.
+  - I checked the 11-gate order in handler_write.py:5-181 line by line against the removed text: it is identical.
+  - Federation is off by default, and no hook imports server.py.
+- policy.py:127-131
+  - The parts are executed in the facade's own namespace, so their globals are identical to before. loading.py restores __all__.
+  - Only policy_dispatch.py:46 (which catches Exception) and policy-shadow-runner import policy.py. The shipped settings template does not register policy_dispatch.
+- Standard library only and Python 3.9 compatible across all seven files: FunctionType(code, globals, name, defaults, closure), nonlocal, bisect and typing aliases. No module in _lib shadows the standard library when model_currency.py runs as a script (validate-governance.sh:721).
+- install.sh:1520-1549 copies _lib/ entries by glob, so the new _policy_parts/ and _server_parts/ directories ship.
+
+NEW FINDINGS (annex)
+- None at P1.
+
+P2 FOLLOW-UPS
+1. P2, secret_patterns.py:991-999 and :974; codex_egress_redact.py:104-105.
+   - Problem: when the text changes under NFKC, scan() runs _scan_frame twice, and each run gets its own budget_seconds timer. _map_to_original runs between the two with no timer. Worst-case time is therefore about twice the budget, but the docstring still calls budget_seconds "ITIMER wall-clock budget", and codex_egress_redact still says it is "bounded by budget_seconds=0.5".
+   - Scenario: crafted input to the check_adversary Bash pre-hook or to egress redaction takes up to about 1.0 s instead of 0.5 s.
+   - Minimal fix: give the second frame only the time left in a shared deadline, or document that the budget applies per frame.
+2. P2, policy_preprocessors.py:315 and plan_paths.py:13-15.
+   - Problem: the old regex `PLAN-\d{3}-[a-z0-9-]+\.md$` matched names with doubled or trailing hyphens. The new grammar does not, so the plan-edit lifecycle policy no longer checks those files. check_budget.py:155 and check_ledger_checkpoint.py:283 still treat them as plans. The CHANGELOG (line 332) mentions only the FOLLOWUP widening.
+   - Mitigation: validate_governance_fast.py:205 already reports such names as plan_schema_filename errors.
+   - Minimal fix: add one CHANGELOG line, or make check_budget.py:155 use plan_paths.PLAN_FILENAME_RE.
+3. P2 (wording), policy.py:126.
+   - Problem: the comment "Opt-out: CEO_POLICY_ENGINE_DISABLE=1 reverts to Python-hook fallback" sits on the line that installs the parts. The switch is read only at policy_dispatch.py:128, after policy.py, and so the parts, have already been imported. The switch does not stop the parts from loading.
+   - Minimal fix: reword the comment or move it to policy_dispatch.py.
+4. P2, model_currency.py:4 and :41-44.
+   - Problem: the _RETIRED check runs before the explicit list. An adopter who lists claude-opus-4-1 in availableModels now gets settings_tamper_model_remap from effective_config.py:482, and the tier-policy loader rejects that id, where exact membership used to pass. This is declared in CHANGELOG line 173 and the model is retired.
+   - Separately: the predicate's families leave out claude-fable-*, while the maintainer smoke script (scripts/local/smoke-install-parity.sh:107, out of scope) accepts claude-fable-[5-9]*. This is not a regression, since the old closed list had the same limit, but the two have drifted apart.
+   - Minimal fix: align the smoke harness with the predicate, or add a Fable row to the predicate.
+
+VERDICT: GO Conditions 4, 5, 7 and 9 hold for the code in this payload, the two moved modules keep their behavior, Python stays standard-library only and 3.9 compatible, and I found no P0 or P1, only four P2 follow-ups.

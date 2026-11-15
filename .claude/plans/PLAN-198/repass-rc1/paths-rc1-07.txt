@@ -1,0 +1,16 @@
+.claude/hooks/_lib/_ceo_boot_parts/telemetry_candidates.py
+.claude/hooks/_lib/_ceremony_toolkit/__init__.py
+.claude/hooks/_lib/_ceremony_toolkit/bundle_builder.py
+.claude/hooks/_lib/_ceremony_toolkit/preflight.py
+.claude/hooks/_lib/_contamination/__init__.py
+.claude/hooks/_lib/_contamination/cli_checks.py
+.claude/hooks/_lib/_contamination/personal_constants.py
+.claude/hooks/_lib/_contamination/personal_facade_io.py
+.claude/hooks/_lib/_contamination/personal_path_policy.py
+.claude/hooks/_lib/_contamination/personal_path_rows.py
+.claude/hooks/_lib/_contamination/personal_path_scanner.py
+.claude/hooks/_lib/_contamination/personal_reporting.py
+.claude/hooks/_lib/_contamination/term_scan.py
+.claude/hooks/_lib/_context_budget_parts/__init__.py
+.claude/hooks/_lib/_context_budget_parts/compaction.py
+.claude/hooks/_lib/_context_budget_parts/inventory.py

@@ -1,0 +1,73 @@
+PAYLOAD 16/32: what I checked
+Files: .claude/hooks/_lib/audit_emit.py (the end of the facade rewrite), the new bash_indirect_guard.py and bash_indirect_telemetry.py, and the new canonical_edit/__init__.py and canonical_edit/decisions.py. I read every file, its callers and the related tests in the read-only tree. I did not run any code: all traces below come from reading the source.
+
+DECLARED CONDITIONS THIS PAYLOAD CAN TEST: none is false
+- Condition 5 holds. check_arbitration_kernel.py:309-340 has 13 new rows: 7 recursive package rows (canonical_edit, agent_spawn, _policy_parts, _audit_emit_parts, _audit_log_parts, _bash_safety_parts, _pair_rail_parts), 5 flat modules (model_currency, cli_currency, plan_paths, bash_indirect_guard, bash_indirect_telemetry) and adapters/live. All five files in this payload are covered.
+- Condition 6 holds. posture_scan.py:571-584 runs the scan unless the trusted value is "0". With no trusted snapshot, the switch defaults to ON. decisions_cli.py:168-174 sends telemetry only when a switch is "0".
+- Condition 7 holds. check_canonical_edit.py:618-620 binds canonical_edit, and audit_emit.py:413-452 binds the _audit_emit_parts modules.
+
+P0: none found.
+
+NEW FINDINGS (annex)
+
+P1-1. Common valid commands are blocked as "unparseable"
+- Where: bash_indirect_guard.py:159-171.
+- Cause: the code that finds the end of a $(...) or <(...) body ignores quotes and plain "(". The first ")" ends the body.
+- Trace: V=$(python3 -c "print(1)") gives the body: python3 -c "print(1. Strict _words then raises "No closing quotation", and lines 489-493 return bash_indirect_unparseable_shell. posture_scan.py:582 tags that block destructive=True.
+- Other blocked examples: echo "$(node -p "require('./package.json').version")" and n=$(jq '[.[]|select(.ok)]|length' f.json).
+- The block is not tied to the heuristics switch, so only CEO_BASH_INDIRECT_GUARD=0 avoids it. The allow tests (test_check_bash_safety_indirect_exec.py:66-82) have no such case.
+- Adopter impact: routine read-only one-liners get blocked in upgraded sessions. Each block can be worked around by rewriting the command. The session is not stopped.
+- Minimal fix: inside the body scan, skip quoted spans and count unquoted "(" as nesting (bash's own matching rule). Add the three examples as allow tests.
+
+P1-2. The scan's limits let commands through, against CHANGELOG [1.4.4] lines 93-94 ("fails closed ... at its depth, size and word limits")
+- (a) Where: bash_indirect_guard.py:386-399. _scan_segment recurses into xargs/find bodies with depth+1 but never checks MAX_DEPTH. Example: echo ~ | xargs xargs ... xargs rm -rf, with about 1000 xargs. That stays under MAX_WORDS (1024) and is about 6 KB, under MAX_BODY_BYTES. The recursion raises RecursionError, decisions_cli.py:243 catches it, and the hook ALLOWS. The repo's own doctrine (posture_parser.py:369) calls a RecursionError inside a security matcher a fail-open.
+- (b) Where: bash_indirect_guard.py:243. _normalise strips at most 12 launchers, then returns a launcher as the command word. "command" repeated 13 times, then rm -rf ~, passes this scan. It also passes the base _check_rm_rf, because normalization.py:103 does not strip command or nohup. A single "command rm -rf ~" is blocked.
+- Neither case is a regression against v1.4.3-rc.1, where both commands were already allowed.
+- Minimal fix: return _hit("bash_indirect_limit") when depth > MAX_DEPTH at the top of _scan_segment, and when _normalise uses all 12 passes and still has a launcher as head. Catch RecursionError in scan() and return the same limit hit.
+
+P1-3. Two parsing defects let a simple prefix skip the scan
+Both contradict CHANGELOG line 84 ("inside sh -c, eval or a here-doc"). Neither is a regression against the base.
+- (a) Where: bash_indirect_guard.py:95-96. Comment stripping treats "{", "}" and ")" as the start of a new word. So the "#" in ${#var}, ${x}# or $(cmd)# is read as a comment, and the rest of the line is dropped before both _command_substitutions (line 144) and _words (line 101). Example: n=${#list}; sh -c 'rm -rf ~'. The scan sees only "n=${" and ALLOWS. The base guard also allows it, because the command word is sh.
+- (b) Where: bash_indirect_guard.py:224-227. The heredoc "consumer" is taken as the first word of all text since the start or the previous heredoc, not the command that owns the "<<". So true && bash <<'EOF' (body rm -rf ~), FOO=1 bash <<EOF, sudo sh <<EOF and cd x; bash <<EOF never have their body scanned. The opaque-stdin check (line ~523) looks for "<" in the token list, not "<<", so these commands are ALLOWED.
+- Minimal fix: treat "{" and "}" as part of a word, and a ")" that closes "$(" as part of a word. Take the heredoc consumer from the last simple command in the prefix, after _normalise. Treat "<<" like "<" in the opaque-stdin check. Add tests for both.
+
+P2 follow-ups
+- P2-1. False positives of the heuristic forms (switch-gated; condition 6 says false-positive limits were never measured):
+  - bash_indirect_guard.py:400-403 matches a bare -r or -f after a computed command word, so $PY -m pip install -r requirements.txt is blocked.
+  - Line ~523 blocks bash ./x.sh < /dev/null as opaque stdin.
+  - Fix: require both r and f for rm-style flags, and exempt a shell invoked with a script operand.
+- P2-2. Glob false positive at bash_indirect_guard.py:431-435. fnmatch's "*" crosses "/", so fnmatchcase(".claude/settings.json", "*.json") is True. Running sed -i 's/a/b/' *.json (or *.toml, *.yaml) at the project root is then blocked as bash_computed_canonical_target. Fix: match the glob segment by segment.
+- P2-3. Launcher coverage. _normalise (line 249) does not strip exec, timeout, nice, setsid or stdbuf, although _E4_PREFIX_RUNNERS (posture_tables.py:489-494) lists them. exec rm -rf ~ and timeout 5 rm -rf ~ pass both rails. This gap predates the release; align the two sets.
+- P2-4. Doc nit. CHANGELOG lines 98-99 say CEO_BASH_INDIRECT_HEURISTICS=0 turns off "only the computed-verb and opaque-feeder forms". It also turns off the env ambiguous-launcher form (line 357).
+- P2-5. bash_indirect_guard.py:457 treats python's -E (ignore environment) as an eval flag. python3 -E tool.py PROTOCOL.md is then blocked with a misleading "indirect shell execution" message.
+- P2-6. bash_indirect_telemetry.py:51-58 writes one marker file per session per switch under <audit dir>/bash-indirect-disabled/ and never prunes them.
+- P2-7. Adjacent file, reviewed in another payload: check_canonical_edit.py:616-640.
+  - If any component imported at canonical_edit/__init__.py:12 raises ImportError, every Edit/Write is blocked, canonical path or not.
+  - A non-ImportError failure, such as a SyntaxError from a truncated file, instead allows every edit, canonical paths included.
+  - ADR-202:56-59 assigns this to separate import-integrity work. The CHANGELOG should say what an adopter sees after a partial copy.
+  - In fallback mode, _cli_is_canonical is undefined, so the --is-canonical oracle raises NameError.
+- P2-8. Cosmetic issues in audit_emit.py:
+  - Lines 473-480: emit_generic has three identical branches.
+  - Lines 21 and 382-383: a pre-install iter_events delegates to the unbound template module. It is overwritten at lines 415 and 460, so it has no runtime effect.
+
+Checked and found clean
+- audit_emit facade end:
+  - 25 names removed from the facade were spot-checked, and each is exported by a part.
+  - The locks are recreated after install (lines 483-484) and are never deep-copied.
+  - _try_rate_admit's globals() resolves to the facade.
+  - _KNOWN_ACTIONS contains learning_rail_disabled.
+  - The rail and switch enums gain bash_indirect and both switch names (lifecycle_schemas.py:508-517), matching CHANGELOG lines 105-106.
+  - The spool forensic emitter is still wired.
+- Telemetry:
+  - It catches every exception, so it can never change the verdict.
+  - The marker is created with O_EXCL, so a symlink in its place is not followed.
+  - The session id is hashed before it becomes a file name, and the marker stays inside the audit family directory.
+- canonical_edit binding:
+  - Every entry in each component's __all__ is a function, and functions resolve in the hook's globals, so patch points are kept.
+  - decisions.py keeps both ADR-186 fail-CLOSED wall-deadline checks (lines 82 and 100).
+- Fail direction:
+  - The guard is imported (posture_scan.py:571) only after all base checks have passed, so no earlier block is lost, and an ImportError is allowed by decisions_cli.py:243.
+  - In _canonical_target, an ImportError returns False, i.e. fails open.
+- Python: all five files use only the standard library and are compatible with Python 3.9.
+
+VERDICT: GO-WITH-CONDITIONS All three declared conditions this payload can test (5, 6 and 7) hold against the code and no P0 was found, but the new indirect-execution guard, on by default, blocks common valid $(...) one-liners and lets commands through at limits the CHANGELOG says fail closed, so the three P1 annex items should be fixed or declared before GA.

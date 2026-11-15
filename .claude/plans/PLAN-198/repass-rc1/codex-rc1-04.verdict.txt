@@ -1,0 +1,11 @@
+Payload 4: no P0 or falsified declared condition established. Namespace, path-resolution and 30 in-memory CLI smoke checks passed on Python 3.9.6; label persistence was mocked. The findings below are newly observed, not proven regressions introduced by extraction.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/_lib/_bash_safety_parts/fact_state.py:327
+The default-enabled shadow gate persists state using a predictable temporary pathname opened with O_TRUNC. A pre-existing symlink there redirects truncation and JSON writes into another adopter file; a symlinked parent also redirects storage. The subsequent replace does not undo that damage. Minimal fix: reject symlinked parents, create a unique temporary file exclusively inside a verified directory, and replace through that directory; skip persistence when storage is unsafe. Confirmed by source tracing, without exercising destructive writes.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/_audit_query/domain.py:251
+Malformed sunset-policy boolean values become False, contradicting the documented True defaults for unparseable values at lines 214–215. This disables hint and UNKNOWN filtering and can report spurious reopening candidates. Both false results were confirmed through the CLI facade. Minimal fix: recognize explicit true/false values and retain True for invalid or empty values.
+
+VERDICT: GO-WITH-CONDITIONS The identified unsafe-write defect and reporting follow-up belong in the annex under this cut’s rule; neither establishes a P0 or disproves a declared condition.

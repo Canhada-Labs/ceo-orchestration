@@ -1,0 +1,14 @@
+Payload 24/32: no P0 or false declared condition identified. The spool bytecode fix precedes helper imports. Refactor binding checks, 53 selected existing tests, and Python 3.9.6 smoke checks passed. No files modified.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/audit-verify-chain.py:589
+Strict counter validation reads only the first 64 bytes without checking EOF. An oversized, malformed sidecar can therefore pass validation when its prefix forms an accepted count, contradicting the whole-counter validation promise. Minimal fix: read one byte beyond the allowed size, reject oversized files, and validate the complete accepted contents.
+
+P2 — .claude/scripts/caller_repo_guard.py:53
+The subprocess environment retains GIT_COMMON_DIR. When inherited from another repository, it can redirect ref enumeration despite git -C, allowing snapshots to miss branch/tag changes in the named caller repository. Minimal fix: remove GIT_COMMON_DIR alongside GIT_DIR and GIT_WORK_TREE. This finding and the counter finding were assessed statically.
+
+VERDICT: GO-WITH-CONDITIONS No release-blocking violation was found in this payload, but two nonblocking correctness issues remain.

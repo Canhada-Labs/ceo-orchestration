@@ -1,0 +1,48 @@
+PAYLOAD 21/32: .claude/hooks/check_bash_safety.py goes from a 4,237-line monolith to a 42-line facade. The facade execs eight source fragments from .claude/hooks/_lib/_bash_safety_parts/ into its own globals.
+
+SCOPE AND METHOD
+I read the facade and all nine files in _bash_safety_parts (the eight fragments plus __init__.py). I checked every fragment boundary for a statement or decorator split across files; none is. I compared the moved declarations with the base text in the diff, and traced the hook from install to registration to the shim to the import. I had no shell, so nothing was executed; every claim below comes from reading the code.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES (all TRUE against the code)
+- Condition 5: check_arbitration_kernel.py:314 carries ".claude/hooks/_lib/_bash_safety_parts/**/*". The canonical guard .claude/hooks/_lib/**/*.py (_lib/canonical_edit/guards.py:34) also covers the fragments.
+- Condition 6: posture_scan.py:571-585 runs bash_indirect_guard.scan() after every legacy rule. It is skipped only when trusted_env.get_trusted("CEO_BASH_INDIRECT_GUARD") == "0", and heuristics are off only when CEO_BASH_INDIRECT_HEURISTICS == "0". trusted_env takes an import-time snapshot of the CEO_* variables (trusted_env.py:41-58). A missing snapshot leaves the guard ON. The guard runs only after every earlier rule has allowed, so it never turns an earlier BLOCK into an allow.
+- Condition 7: the entry path is unchanged. Registrations at settings.json:152 and templates/codex/hooks.json:32 are byte-for-byte the same, and the logic now lives in the fragments. The CHANGELOG claim of a "42-line entry point" matches the file.
+- Conditions 1-4 and 8-14 are not exercised by this file. Nothing here contradicts them.
+
+ADOPTER BLAST RADIUS AND FAIL DIRECTION (no defect found)
+- Installation: install_lib_selective (scripts/install.sh:1520-1550) copies every top-level _lib entry, directories included. _framework_path_excluded (scripts/_framework_manifest_set.sh:95-107) does not exclude _bash_safety_parts. npm-rebuild.sh:88 rsyncs all of .claude/hooks/. The dist/ plugin mirror ships no hooks. Limitation: scripts/upgrade.sh is not in my read-only copy, so I could not confirm directly that it copies the new subdirectory. Only the CHANGELOG ("installs and upgrades receive the packages") and the shared exclusion predicate support that.
+- Infrastructure faults fail open:
+  - A missing or unreadable fragment raises at import, leaving no stdout and exit 1. Under Claude Code the shim exec's the hook (_python-hook.sh:416), so that is a non-blocking error.
+  - An empty or truncated fragment ends in a NameError, either at import or inside main()'s try, which emits allow.
+  - The v1.4.2 monolith behaved the same way on its hard _lib imports, so this is not a new class of fault.
+  - The model rail cannot empty a fragment, because the kernel hard-deny and the canonical guard both cover it.
+- The input-side fail-closed paths moved byte-for-byte: the _e3 shlex fail-closed, the _e4 unparseable-toggle check, the citation verifier, and the credential-scan fail-closed.
+- Moved code keeps its behavior. exec(code, globals(), globals()) gives every function the facade's __globals__, so these still work:
+  - monkeypatch points, e.g. policy-shadow-runner.py:189-207 swaps _check_credential_leak;
+  - the dataclasses' __module__;
+  - __file__-relative sys.path (normalization.py:190 still resolves to .claude/hooks);
+  - the delayed check_canonical_edit import.
+  compile() also inherits the facade's `annotations` future flag. decisions_cli.py:252 keeps the `if __name__ == "__main__"` guard, and it runs last, after all eight fragments are loaded. No __all__ existed before or after.
+- Writes: the facade itself writes nothing.
+- Python: standard library only, and compatible with 3.9 (pathlib, typing.Tuple, the exec/compile builtins).
+
+P0: none.
+
+NEW FINDINGS (annex): no undeclared P1 found in this payload.
+
+P2 FOLLOW-UPS
+1. P2 (comment points to the wrong file), check_bash_safety.py:12. The facade docstring says "def _apply_destructive_citation_gate — implementation in rewrite_citation.py". The function is actually defined at _lib/_bash_safety_parts/fact_state.py:4. Condition 7 and the CHANGELOG tell adopters to re-apply hand patches "in the module", so this pointer sends a maintainer to the wrong file. Fix: change the line to fact_state.py.
+2. P2 (fragment layout is hard to navigate), _bash_safety_parts. The file names do not match their contents; the split looks driven by line count:
+   - posture_tables.py:4 opens with _e3_check_canonical_path_write, the canonical-path write interceptor;
+   - fact_canonical.py holds _apply_fact_gate plus the E3 tables;
+   - fact_state.py holds the ADR-175 citation gate.
+   Fix: add a "definition → fragment" map to the facade docstring or ADR-202, or rename the fragments to match what they hold.
+3. P2 (__doc__ is overwritten; a doc pointer is stale), check_bash_safety.py:34-39 with each fragment's line-1 docstring. exec of a module code object stores the leading string in namespace["__doc__"]. After _install_parts(), check_bash_safety.__doc__ is therefore decisions_cli's "Decision conversion, audit emitters, and hook entry point.", not the facade's docstring. settings.json:147 still says "See check_bash_safety.py docstring for full logic", but that text now sits as an inert string in normalization.py:5-55. Fix: save and restore __doc__ around the exec loop, and repoint the settings comment.
+4. P2 (docstring overstates purity; a direct-caller edge), posture_scan.py:474 and :571. decide_command is still documented as "Pure decision function — no I/O", but it now does a lazy `from _lib import bash_indirect_guard` outside any try. In a partial upgrade without bash_indirect_guard.py, every command that passes the legacy rules raises ImportError:
+   - In the hook, main() logs FATAL and allows. That direction is correct for an infrastructure fault, and the legacy blocks still run first.
+   - Direct callers get an exception instead of a Decision: policy-shadow-runner.py:199 on an otherwise-allowed command (self_test.py:314 is unaffected, because "rm -rf /" is blocked earlier).
+   Fix: do the import inside the existing try and treat ImportError as "guard unavailable" with a stderr breadcrumb; correct the docstring.
+5. P2 (load-order invariant is untested), check_bash_safety.py:20-23. The entry point runs main() from inside the exec loop, through decisions_cli's __main__ guard. Any fragment appended after "decisions_cli" would load only after main() has already run and exited. Fix: drop the guard from decisions_cli, put `if __name__ == "__main__": sys.exit(main())` in the facade after _install_parts(), or assert that _PARTS[-1] == "decisions_cli".
+6. P2 (stale maintainer tooling), .claude/governance/function-length-grandfather.yaml:440-451. The grandfather entries still tie _normalize_command_tokens and _check_rm_rf to .claude/hooks/check_bash_safety.py (lines 86 and 208). Both functions now live in _bash_safety_parts/normalization.py. In enforcing mode, check-function-length.py would report them as new violations, and the old entries are dead. Fix: re-key the entries to the fragment paths.
+
+VERDICT: GO The declared conditions this payload touches (5, 6 and 7) hold against the code, the facade's import and exec path fails open on infrastructure faults and keeps every input-side fail-closed matcher, and the only findings are P2 documentation and maintainability follow-ups, with no P0 and no undeclared P1.

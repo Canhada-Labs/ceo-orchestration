@@ -1,0 +1,9 @@
+Payload 10: no P0 or false declared condition identified. Python 3.9 syntax checks passed for all 16 payload files; benign imports confirmed preserved facade globals for pair-rail, night-mode and PreCompact.
+
+NEW FINDINGS (annex)
+None.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/_policy_parts/__init__.py:15 and .claude/hooks/_lib/_precompact_parts/__init__.py:16: Executing each fragment in the facade namespace replaces its __doc__. Consequently, help(_lib.policy) and PreCompact module introspection lose the original API and operational documentation, displaying the final fragment’s short description instead. Minimal fix: preserve and restore the facade’s __doc__ around fragment installation.
+
+VERDICT: GO The reviewed extraction preserves runtime wiring, with only a nonblocking module-documentation regression identified.

@@ -1,0 +1,15 @@
+.claude/hooks/_lib/_audit_log_parts/paths_skills.py
+.claude/hooks/_lib/_audit_log_parts/rotation_storage.py
+.claude/hooks/_lib/_audit_query/__init__.py
+.claude/hooks/_lib/_audit_query/critical.py
+.claude/hooks/_lib/_audit_query/domain.py
+.claude/hooks/_lib/_audit_query/labeling.py
+.claude/hooks/_lib/_audit_query/parsing.py
+.claude/hooks/_lib/_audit_query/queries.py
+.claude/hooks/_lib/_audit_query/rendering.py
+.claude/hooks/_lib/_audit_query/reporting.py
+.claude/hooks/_lib/_audit_query/reporting_health.py
+.claude/hooks/_lib/_bash_safety_parts/__init__.py
+.claude/hooks/_lib/_bash_safety_parts/decisions_cli.py
+.claude/hooks/_lib/_bash_safety_parts/fact_canonical.py
+.claude/hooks/_lib/_bash_safety_parts/fact_state.py

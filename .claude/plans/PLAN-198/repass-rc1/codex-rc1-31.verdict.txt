@@ -1,0 +1,14 @@
+Payload 31: no P0 or false declared condition found. The three extraction reviews passed import, global-binding, export and Python 3.9 checks.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/re-pin-codex.py:2171. An unbounded live pin causes old_upper to be fabricated from the new upper bound. The generated rehearsal, copied unchanged at line 1552, requires the live pin to contain that fabricated bound, so its derivation check necessarily fails. Minimal fix: preserve the actual old range and update the modeled rehearsal to support an absent upper bound, or reject this unsupported transition before emitting a pack.
+
+P2 — .claude/scripts/re-pin-codex.py:1517. Generated signing scripts retain the newest mold’s assumption that successful pin verification means the old pinned binary is still installed. The updated oracle also succeeds for a newer compatible binary, so the ceremony incorrectly aborts before applying its new manifest. Minimal fix: distinguish verified from compatible in the modeled ceremony and rehearsal, using strict payload verification where required.
+
+Both findings affect the optional maintainer re-pin workflow; ordinary adopter sessions are unaffected. No files were modified.
+
+VERDICT: GO The payload has no blocking finding under the stated rule, with two P2 follow-ups in generated re-pin packs.

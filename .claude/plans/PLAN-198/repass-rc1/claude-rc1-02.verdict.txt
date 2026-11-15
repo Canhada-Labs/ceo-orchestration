@@ -1,0 +1,60 @@
+SCOPE OF PAYLOAD 2/32: twelve new files under .claude/hooks/_lib/_audit_emit_parts/ (generic_dispatch_01..05.py, governance.py, harness.py, harness_schemas.py, lifecycle.py, lifecycle_schemas.py, operations.py, optimizer.py). They hold declarations moved out of the former monolithic _lib/audit_emit.py (PLAN-197). install() in _audit_emit_parts/__init__.py:20-48 rebinds them to the facade namespace, called from audit_emit.py:413-452. The dispatch tuple and emit_generic are at audit_emit.py:464-480.
+
+WHAT WAS VERIFIED (against the redacted candidate tree; no code was executed)
+1. Moved code, name resolution under install(): every free name used by functions in these files resolves at call time. It is either exported in the __all__ of a module in the install list, or a facade name that exists before any call (_KNOWN_ACTIONS, emit_generic, _GENERIC_DISPATCH_HANDLERS).
+   - The helpers and enums come from writer, tokens_boot, boot_schemas, optimizer, federation_schemas, compaction, context_pressure, confidence, federation_persona, rate_limits, adapters, orchestration, workflow, finalization, lifecycle_schemas and harness_schemas.
+   - Checked one by one: _scrub_ceo_boot_event, _breadcrumb, _write_event, _preview, the clamp/hash helpers, all 29 federation allowlists, the _OPTIMIZER_ALLOWLISTS keys, the learning/ledger/persona/confidence enums, _plan088_rate_admit, _plan088_payload_cap, _ATLAS_REGISTRY, emit_task_route_key_dropped and emit_reality_ledger_key_dropped.
+   - Cross-module references are exported: harness_schemas functions use _LEARNING_ID_RE, _LESSON_SHA256_RE and _EGRESS_DEST_MAX_LEN, all exported by lifecycle_schemas or harness_schemas.
+   - No name defined in these files is also defined in another part, so install()'s later-wins update cannot silently override them.
+2. Import-time safety:
+   - Module level holds only literals, re.compile, and two explicit sibling imports: harness_schemas imports _LEARNING_ENVELOPE from lifecycle_schemas, and optimizer imports _OPTIMIZER_ENVELOPE from boot_schemas. _OPTIMIZER_ENVELOPE is a tuple, so tuple + tuple holds.
+   - No part in the package creates a lock or opens a file at module level, so install()'s deepcopy cannot raise. Compiled patterns deepcopy to themselves on Python 3.7+.
+   - All function defaults in these files are literals.
+3. Dispatch equivalence:
+   - 172 "action ==" branches across the five groups (34/45/45/28/20). No action appears in two groups, so first-match order cannot hide a second transform.
+   - The drop branches (persona_coverage_synthesized, tier_policy_loader_fallback_observed, audit_producer_path_pollution_detected) return None, and _dispatch_generic (generic_dispatch_05.py) then returns without writing.
+   - A branch that returns True gets exactly one _write_event. If every group returns False, the event is default-denied: only {"action": action} is written, plus a breadcrumb. Unknown actions are dropped with a breadcrumb.
+   - The _EMIT_GENERIC_PASSTHROUGH check runs last. Its disjointness from branched actions is asserted by the partition tests in test_audit_emit_ghost_action_guard.py, which parse the source of _GENERIC_DISPATCH_HANDLERS.
+4. Test patch points:
+   - Rebound functions look names up in the facade globals, so patching audit_emit._write_event, _preview, emit_generic, _KNOWN_ACTIONS or _EMIT_GENERIC_PASSTHROUGH still takes effect (see test_audit_emit_modular_facade.py).
+   - The only surface that patches cannot reach is _GENERIC_DISPATCH_HANDLERS, which captures the handler objects at import time. Those names are new, so no previous patch point is lost.
+5. Python:
+   - Standard library only (re, copy, importlib, types).
+   - typing names appear only in annotations, which stay strings under "from __future__ import annotations"; function-local annotations are never evaluated.
+   - No syntax newer than 3.9. FunctionType(code, globals, name, defaults, closure) is valid on 3.9.
+6. Adopter blast radius:
+   - The only change visible in these files is additive. lifecycle_schemas.py:508-516: _LEARNING_RAIL_ENUM gains "bash_indirect", and _LEARNING_SWITCH_ENUM gains CEO_BASH_INDIRECT_GUARD and CEO_BASH_INDIRECT_HEURISTICS.
+   - These match the producer (bash_indirect_telemetry.py:18-21 and 59-65) and the CHANGELOG [1.4.4] entry on SPEC enums. Without them the typed wrapper in defense.py:33-34 would coerce the values to observe/other.
+   - No hook decision, model or effort setting, or blocking path is touched. Nothing in these files writes except through _write_event.
+7. Kernel coverage: ".claude/hooks/_lib/_audit_emit_parts/**/*" is at check_arbitration_kernel.py:312, consistent with conditions 5 and 7.
+8. Shipping:
+   - scripts/install.sh:1520-1549 copies every top-level _lib entry (directories recursively) except the test harness, so _audit_emit_parts/ reaches fresh installs.
+   - scripts/upgrade.sh is withheld from this tree; the upgrade path belongs to its own payload.
+   - A facade shipped without its parts would make "import _lib.audit_emit" raise, and hooks would fail open. That is the declared direction for infrastructure faults, not a defect of this payload.
+
+REDACTION ARTIFACT, NOT A FINDING: generic_dispatch_04.py:266 reads "min([REDACTED:rg], ...)" for the chain_length clamp. The same bound is redacted the same way in the comment at actions_extended.py:198. The value cannot be checked from the redacted text.
+
+CONDITIONS AGAINST THIS PAYLOAD: conditions 5 and 7, and the telemetry side of 6, are consistent with the code. None is false.
+
+P0: none.
+
+NEW FINDINGS (annex): none.
+
+P2 FOLLOW-UPS
+- P2 .claude/hooks/_lib/_audit_emit_parts/lifecycle.py:79
+  - Problem: emit_pair_rail_review_expected cuts file_path_hash_prefix to 16 characters before validating it. The isinstance check after the slice is dead, because a non-str value raises TypeError at the slice.
+  - Inconsistency: the generic branch (generic_dispatch_05.py:262-267) validates the raw value and drops oversize values to "". So an oversized hex value is emitted as a 16-hex prefix by the typed wrapper but dropped by emit_generic.
+  - Reachability: not reachable today. The producer, _pair_rail_parts/part_04.py:105-107, passes a computed prefix and wraps the call in a fail-open try/except. The code is probably carried over verbatim.
+  - Fix: check isinstance(str) and fullmatch the raw value before any slicing, as review_id already does.
+- P2 .claude/hooks/_lib/_audit_emit_parts/defense.py:20-21 (sibling file in the same package)
+  - Problem: the docstring still describes "the four learning-loop rails (observe / distill / boot_render / fact_gate)", but lifecycle_schemas.py:508 now lists five, including bash_indirect. The PLAN-154 comment block above that enum has not been updated either.
+  - Fix: update the prose.
+- P2 .claude/hooks/_lib/audit_emit.py:474-479
+  - Problem: emit_generic has two special-case branches (tool_call_lifecycle_recorded and settings_tamper_detected) that do exactly what the fall-through does. This is dead refactor residue.
+  - Fix: delete them, or comment why they exist.
+- P2 .claude/hooks/_lib/_audit_emit_parts/__init__.py:36-48
+  - Problem: install() rebinds only top-level FunctionType exports. A future part that exports a class, a functools.partial or a container of functions would keep the template module's globals and silently bypass patches on the facade. Nothing in this payload does that.
+  - Fix: add a test asserting that every callable a part exports is a plain function that install() rebinds.
+- Not verifiable from this tree: SPEC/v1/audit-log.schema.md, where the CHANGELOG says the enum values were added, is absent from the reviewer copy (withheld). It is judged in its own payload.
+
+VERDICT: GO Payload 2/32 only moves the audit_emit declarations into parts that rebind cleanly to the facade, with every name resolved, one transform per action, unchanged drop and default-deny behaviour, standard library only, Python 3.9 compatible, an additive enum change that matches its producer and the CHANGELOG, and no declared condition contradicted and no P0 found.

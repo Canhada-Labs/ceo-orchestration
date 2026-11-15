@@ -1,0 +1,59 @@
+Scope of payload 28/32: .claude/scripts/check-installer-write-safety.py (now a facade over .claude/hooks/_lib/_installer_write_safety/), the new .claude/scripts/check-subprocess-tests.py (with .claude/scripts/_subprocess_census.py), .claude/scripts/check-substrate-drift.py (new CODEX_INSTALLED_COMPATIBLE branch) and .claude/scripts/check-substrate-watch.py (Codex currency arm). This was a static, read-only review: I read the code and executed nothing. Every trace below comes from reading the code.
+
+DECLARED CONDITIONS vs this payload
+- Condition 7 holds here. The entry point keeps its path, and the logic now lives in _lib/_installer_write_safety. The condition makes no behavior-identity claim, so the finding below does not make it false.
+- Condition 9 is consistent. The drift and watch changes follow from the version-floor policy. The extra downgrade case in the drift checker (P2-1) goes beyond the condition's wording, but it does not make the condition false.
+- No declared condition is false against this payload. No P0 found.
+- Python: standard-library only and 3.9-compatible. This covers FunctionType(code, globals, name, defaults, closure), the NamedTuple with a property, ast.dump show_empty gated on 3.13+, and (*KINDS, "all").
+- Writes: none of these files writes anything, except the unchanged --write-baseline.
+- check-subprocess-tests.py / _subprocess_census.py: no findings.
+
+NEW FINDINGS (annex)
+
+P1. .claude/hooks/_lib/_installer_write_safety/__init__.py:36 — the moved code breaks the exception hierarchy.
+- Cause: _bind_class clones each package class with `type(original)(name, original.__bases__, attrs)`. The facade's Incomplete is therefore built on the ORIGINAL syntax.ParseError, not on the facade's cloned ParseError (syntax.py:6-11 defines `Incomplete(ParseError)`). In the facade, issubclass(Incomplete, ParseError) is False.
+- Effect: every rebound handler `except ParseError` around a call that raises Incomplete no longer catches it. There are 8 such handlers: operands.py:35 (canon_operand), commands.py:131 (_expansion_refs), model.py:320 (extract_cmd_substs), model.py:344 (_subst_commands), model.py:632 (_token_is_expanded), and verdicts_b.py:141, 440, 447 (parse_sed_script, _sole_pipeline_producer).
+- Failure scenario: a script under scripts/ contains `dd if=/dev/zero "of=$dst" bs=1 count=0`.
+  - commands.py:518 builds the destination token from the raw text as `$dst"`.
+  - _record_occ calls canon_operand, which calls _read_dquote, which raises Incomplete. That exception escapes operands.py:35.
+  - It then escapes build_file_model and run_census, which have no handler. The census dies with a traceback, exit 1, no --json output and no --write-baseline.
+  - v1.4.3-rc.1 reported a write-candidate site for the same input.
+- Same failure for a substitution body that lex cannot tokenise, e.g. `$(echo a`b)`. model.py:344 used to mark the file unparseable (a blocking parse site); now the census crashes.
+- Not P0: the failure is still a nonzero exit, so CI fails closed, it is maintainer-only, and no file in today's scripts/*.sh corpus triggers it (grep for `"of=` and a backtick inside `$(...)` found nothing).
+- The test suite misses it: TestParseIsFailClosed (test_check_installer_write_safety.py:2189) only exercises a top-level ParseError.
+- Honesty: this contradicts CHANGELOG [1.4.4] lines 112-113 ("Entry points keep their paths and their observable contracts") and the facade docstring.
+- Minimal fix: in bind(), keep an original-to-clone map and build `bases = tuple(clones.get(b, b) for b in original.__bases__)`. syntax is bound before the others, so ParseError is cloned first. Alternatively, do not clone BaseException subclasses. Add a test for `issubclass(mod.Incomplete, mod.ParseError)` and a `dd "of=$x"` fixture.
+
+P2 FOLLOW-UPS
+
+P2-1. .claude/scripts/check-substrate-drift.py:571-578 — the new "compatible" branch uses the pin file's floor, not the pair-rail's acceptance rule.
+- The pin file's floor is `>=0.128.0` (.claude/governance/codex-cli-pin.txt:199). The pair-rail accepts only a version that is ≥ CODEX_VERSION_FLOOR 0.160.0 AND newer than the manifest version (cli_currency.compatible_package_version via _pair_rail_parts/part_01.py:566).
+- Scenario: installed Codex is between 0.128.0 and 0.159.x, e.g. the previous pin 0.156.1.
+  - The drift checker reports info CODEX_INSTALLED_COMPATIBLE, `--strict` exits 0, and the "restore the pinned binary" advice disappears.
+  - Meanwhile `--verify-codex-pin` returns mismatch, and the pair-rail fails closed (part_01.py:587).
+- The message "the payload hash is verified separately" also misleads: on the compatible route, a hash mismatch is tolerated.
+- The module docstring at lines 10-14 is now stale.
+- Maintainer-only: installs have no .claude/governance, so the check returns "absent" (lines 388-391).
+- Fix: take the info branch only when `cli_currency.compare_semver(installed, max(CODEX_VERSION_FLOOR, pinned)) > 0`; otherwise fall through to CODEX_INSTALLED_NOT_PINNED. Reword the message to "version floor only; no manifest attests these bytes".
+
+P2-2. .claude/scripts/check-substrate-watch.py:237-250 — Codex drift alarms are silenced at or above the floor.
+- For both codex_cli and codex_harness, any installed version ≥ 0.160.0 suppresses drift and the fixture re-record runbook (lines 112-129).
+- This includes Codex as a hook host, whose fixtures still date from 0.139.0 (CHANGELOG Known-open, line 396). Nightly hygiene emits findings only for drift=true rows, so that alarm is lost.
+- The summary "installed matches last_seen for all components" (line 269) becomes false: test_cli_floor_consumers.py:53-63 asserts status "current" with 0.166.0 installed against 0.160.0 last seen.
+- Docstring lines 21-24 and 41-47 are stale, and the CHANGELOG does not declare this change.
+- The two instruments also disagree on 0.128-0.159: the watch reports drift, the drift checker reports compatible.
+- Fix: apply the currency arm to codex_cli only, or keep drift=True for codex_harness; correct the summary text.
+
+P2-3. .claude/scripts/check-substrate-watch.py:67 — import failure now crashes a script documented as fail-open.
+- The module-level `from _lib import cli_currency` is unguarded. A missing _lib or an import error now crashes with exit 1 and a traceback.
+- The docstring (lines 34-36) promises fail-open with exit 0 on infrastructure faults. Existing callers tolerate the crash (validate.yml:209-213 turns it into a warning).
+- Fix: wrap the import in try/except ImportError and treat Codex as not current.
+
+P2-4. .claude/hooks/_lib/_installer_write_safety/__init__.py:29-35 — property objects are not rebound.
+- Site.blocking (report.py:32-34) still reads BLOCKING_VERDICTS from the report module, not from the facade.
+- A harness that patches the facade's BLOCKING_VERDICTS therefore does not affect it, contrary to the "one patchable facade namespace" promise.
+- Fix: rebind property fget/fset/fdel the same way methods are rebound.
+
+P2-5 (cosmetic). verdicts_b.py:698 — `__all__` excludes `_engine` and `_engine_name` but still exports `_commands` (a module object) and `_commands_name` into the facade namespace.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and there is no P0, but the facade's rebinding breaks the Incomplete/ParseError hierarchy: the installer census now crashes (still exiting nonzero, so CI fails closed) on inputs it used to report as sites, which needs to be carried as a signed annex P1 and fixed before GA, alongside the substrate-drift and watch P2s.

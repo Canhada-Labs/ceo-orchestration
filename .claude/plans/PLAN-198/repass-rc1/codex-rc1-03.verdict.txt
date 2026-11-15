@@ -1,0 +1,8 @@
+NEW FINDINGS (annex)
+P1 — .claude/hooks/_lib/_audit_emit_parts/writer.py:761: When spool persistence is unavailable and creating the primary directory or opening its lock raises OSError, execution reaches the fallback handler before `line` is assigned at :687. The handler announces fallback, then raises UnboundLocalError; the outer catch drops the event. An in-memory permission-failure probe confirmed one fallback banner and zero fallback writes. Minimal fix: serialize `event` inside this handler, as the lock-timeout handler already does. This defect is confirmed in the relocated code; introduction relative to the base is unestablished.
+
+P2 follow-ups: none confirmed.
+
+Validation: all 15 payload files parse under Python 3.9.6; facade binding checks found no unresolved runtime globals. Full integration testing was limited by a redaction-induced syntax error outside this payload. No files or live audit logs were modified.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition was found false and no P0 was identified in this payload; the confirmed audit fallback loss is recorded as an undeclared P1.

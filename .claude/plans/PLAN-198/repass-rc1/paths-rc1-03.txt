@@ -1,0 +1,15 @@
+.claude/hooks/_lib/_audit_emit_parts/orchestration.py
+.claude/hooks/_lib/_audit_emit_parts/pair_rail.py
+.claude/hooks/_lib/_audit_emit_parts/planning.py
+.claude/hooks/_lib/_audit_emit_parts/rate_limits.py
+.claude/hooks/_lib/_audit_emit_parts/replay.py
+.claude/hooks/_lib/_audit_emit_parts/resource_events.py
+.claude/hooks/_lib/_audit_emit_parts/routing.py
+.claude/hooks/_lib/_audit_emit_parts/security.py
+.claude/hooks/_lib/_audit_emit_parts/streaming.py
+.claude/hooks/_lib/_audit_emit_parts/tokens_boot.py
+.claude/hooks/_lib/_audit_emit_parts/workflow.py
+.claude/hooks/_lib/_audit_emit_parts/writer.py
+.claude/hooks/_lib/_audit_log_parts/__init__.py
+.claude/hooks/_lib/_audit_log_parts/adapters_runtime.py
+.claude/hooks/_lib/_audit_log_parts/entries_usage.py

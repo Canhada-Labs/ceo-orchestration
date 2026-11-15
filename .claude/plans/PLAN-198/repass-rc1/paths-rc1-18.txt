@@ -1,0 +1,7 @@
+.claude/hooks/_lib/federation/server.py
+.claude/hooks/_lib/model_currency.py
+.claude/hooks/_lib/pii_patterns.py
+.claude/hooks/_lib/plan_paths.py
+.claude/hooks/_lib/policy.py
+.claude/hooks/_lib/policy_preprocessors.py
+.claude/hooks/_lib/secret_patterns.py

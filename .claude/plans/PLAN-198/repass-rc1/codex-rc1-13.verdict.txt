@@ -1,0 +1,15 @@
+Payload 13/32: no P0 or false declared condition identified.
+
+NEW FINDINGS (annex): None.
+
+P2 follow-ups:
+
+P2 — .claude/hooks/_lib/agent_spawn/skill_reference.py:184 (also :99 and :166): Transient filesystem errors such as EIO or descriptor exhaustion become reference_missing. The caller consequently blocks a legitimate spawn instead of taking the infrastructure fail-open path. Minimal fix: distinguish invalid references from infrastructure errors and route the latter to the hook’s fail-open handler.
+
+P2 — .claude/hooks/_lib/agent_spawn/skill_reference.py:183: read_bytes() reads without a limit after a separate stat(), and no regular-file check is performed. A growing file can exceed the advertised cap; a special file can stall the hook. Minimal fix: open once, validate the descriptor’s type, read at most cap + 1 bytes, and reject overflow.
+
+These behaviors are present in the extracted code; their introduction by this split is not established.
+
+Verification: Python 3.9 grammar checks passed. Inert binding checks confirmed export completeness, facade global lookup, patched constants, and mutable-list isolation. No binding regression was found. No files were modified.
+
+VERDICT: GO The two P2 follow-ups do not establish a false declared condition or a P0 in this payload.

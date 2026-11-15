@@ -1,0 +1,13 @@
+.claude/hooks/_lib/_installer_write_safety/report.py
+.claude/hooks/_lib/_installer_write_safety/syntax.py
+.claude/hooks/_lib/_installer_write_safety/verdicts_a.py
+.claude/hooks/_lib/_installer_write_safety/verdicts_b.py
+.claude/hooks/_lib/_lessons_parts/__init__.py
+.claude/hooks/_lib/_lessons_parts/candidates.py
+.claude/hooks/_lib/_lessons_parts/cli.py
+.claude/hooks/_lib/_lessons_parts/config.py
+.claude/hooks/_lib/_lessons_parts/lessons.py
+.claude/hooks/_lib/_lessons_parts/render.py
+.claude/hooks/_lib/_lessons_parts/storage_audit.py
+.claude/hooks/_lib/_night_mode_parts/__init__.py
+.claude/hooks/_lib/_night_mode_parts/helpers.py

@@ -1,0 +1,16 @@
+No declared condition was shown false in payload 8; no P0 found.
+
+NEW FINDINGS (annex)
+No P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:36
+Class cloning preserves original bases: exported Incomplete no longer subclasses exported ParseError. Helpers such as parse_sed_script and _subst_commands therefore miss incomplete-fragment exceptions instead of returning their documented error/None result, potentially aborting the census without its report. Failure remains nonzero. Minimal fix: remap internal base classes through an original-to-clone map so Incomplete inherits the exported ParseError.
+
+P2 — .claude/hooks/_lib/_cost_transcripts_parts/__init__.py:55
+Rebinding generated dataclass __repr__ wrappers replaces their dataclasses globals with facade globals. On Python 3.9.6, repr(ScanCounters()) raises NameError for missing _thread; printing a transcript_rollup result also fails. Ordinary CLI rendering is unaffected. Minimal fix: rebind only methods whose actual __globals__ belongs to the declaration module; preserve external wrapper namespaces.
+
+Validation: 82 context-budget checks passed on Python 3.9.6; all 22 implementation files parsed successfully. The installer census completed over available files, but full baseline validation was limited by the withheld upgrade script.
+
+VERDICT: GO-WITH-CONDITIONS Two nonblocking compatibility regressions need follow-up, while this payload provides no evidence of a false declared condition or a P0 defect.

@@ -1,0 +1,9 @@
+.claude/hooks/_lib/_ceo_boot_parts/cache_recommendations.py
+.claude/hooks/_lib/_ceo_boot_parts/candidates_lessons.py
+.claude/hooks/_lib/_ceo_boot_parts/harness_governance.py
+.claude/hooks/_lib/_ceo_boot_parts/lessons_cli.py
+.claude/hooks/_lib/_ceo_boot_parts/liveness_schedule.py
+.claude/hooks/_lib/_ceo_boot_parts/model_persona.py
+.claude/hooks/_lib/_ceo_boot_parts/persona_confidence.py
+.claude/hooks/_lib/_ceo_boot_parts/scheduled_cache.py
+.claude/hooks/_lib/_ceo_boot_parts/state_plan_audit.py

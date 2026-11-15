@@ -1,0 +1,63 @@
+SCOPE OF THIS PAYLOAD
+This payload is the diff of .claude/scripts/ceo-boot.py. Its body is removed, and the file becomes a facade that runs install(globals()) from .claude/hooks/_lib/_ceo_boot_parts/__init__.py. install() compiles 10 part files in order and runs them in the facade's own namespace. I judged the facade against the candidate tree: the part files, the installer, the canonical guard list and the tests that read ceo-boot.py.
+
+CHECKED, NO DEFECT
+- How the parts run. They execute in the facade's dictionary (__init__.py:20-26), so:
+  - __file__ is still ceo-boot.py. The lookups based on scripts_dir and parents[2] are unchanged (persona_confidence.py:183,216,275; candidates_lessons.py:202,374).
+  - `global _PLAN_GLOB_CACHE` binds the facade's variable (state_plan_audit.py:6, facade :65).
+  - A monkeypatch on a module attribute reaches the part functions.
+  - TIER_S_CHECKS and TIER_A_CHECKS capture function objects when they are defined, as the monolith did.
+  - check_governance_validate (the only copy) is defined before install(), and the TIER_S_CHECKS list at scheduled_cache.py:311 binds it.
+  - No part defines __all__, deletes names or has a `__name__` guard. main() is only defined in a part and runs from the facade's guard at :187.
+- Moved text. I spot-checked state_plan_audit.py (sanitizer, plan, wait and freshness logic), the spec-drift body in model_persona.py and main() in lessons_cli.py. They match the base text.
+- Python. Standard library only, and compatible with 3.9: the future annotations import is inherited and present in every part, and there is no 3.10-only syntax.
+- Delivery. scripts/install.sh:1520-1550 copies every top-level _lib entry except tests, test_isolation.py and testing.py, so _ceo_boot_parts ships. scripts/upgrade.sh was withheld from the tree, so I could not verify the upgrade path here; the CHANGELOG [1.4.4] says upgrades receive the packages.
+- Fail direction. ceo-boot is a slash-command script, not a registered hook. A missing part fails loudly (ImportError or FileNotFoundError on /ceo-boot) and blocks no session. The advisory checks stay fail-soft.
+- New Tier-S check main_checkout_state (model_persona.py:215, registry entry 25). It is read-only, can only be green or yellow, and turns git timeouts into yellow. It cannot flip gate_pass. It is declared in CHANGELOG [1.4.4] lines 340-341 and 479-480.
+- Protection. The logic moves under the canonical guard `.claude/hooks/_lib/**/*.py` (canonical_edit/guards.py:34), which is stricter than before. It is not on the kernel list, which matches conditions 5 and 7.
+- Conditions. Condition 7 is honest for this file: the logic now lives in modules. Conditions 5, 13 and 14 are not contradicted.
+
+FINDINGS
+
+P2-1 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304 (`_sentinel_patterns`, moved unchanged from the base)
+- Failure: the function reads `_PATTERNS` by AST from .claude/hooks/check_canonical_edit.py. In this delta, PLAN-197 moved `_PATTERNS` to .claude/hooks/_lib/canonical_edit/paths.py:238, and check_canonical_edit.py no longer contains it.
+- Effect: on every /ceo-boot, in this repository and in every install, sentinels_pending_gpg falls back to 4 of the 10 patterns and adds "[padrões em FALLBACK — a autoridade não foi lida]" to its summary. It misses only the legacy formats (architect/wave-* grandfathers, staging/review, audit-v2). The check says it is degraded, so the failure is not silent, but the S321 derivation is now dead.
+- Minimal fix: parse .claude/hooks/_lib/canonical_edit/paths.py, or the entry point and then the module. Add a test that asserts derived=True on the real tree.
+
+P2-2 — .claude/scripts/ceo-boot.py:120-178 (a second copy of check_tier_a_spec_version_drift)
+- Failure: TIER_A_CHECKS (scheduled_cache.py:376) binds the copy at model_persona.py:6, because the registry is built inside install(), before the facade redefines the name at :120. The facade copy is never dispatched.
+- Effect on tests: test_check_vacuous_checks.py `_extract_spec_drift_fn` pulls the facade copy out of ceo-boot.py by AST. The PLAN-178 R2 regression guard now tests dead code: reverting the cure in model_persona.py leaves those tests green.
+- Effect on maintainers: a hand fix in the facade copy changes nothing at runtime. This is the trap condition 7 warns about, inside the facade itself.
+- Honesty: the docstring at :123, "Lesson validation remains delegated to `_validate_boot_lesson`", has nothing to do with this function. It exists only so that test_dead_symbol_lesson_render_safe_is_gone (`"_validate_boot_lesson" in src`) still passes.
+- Minimal fix: delete the facade copy and the docstring sentence. Have the test take the function from `_lib/_ceo_boot_parts/model_persona.py`, or from `dict(mod.TIER_A_CHECKS)` of the loaded facade.
+
+P2-3 — .claude/scripts/ceo-boot.py:180-184 and .claude/scripts/check-vacuous-checks.py:133 (checks that read the text of ceo-boot.py now see almost nothing)
+- The vacuous-check lint scans .claude/scripts/ceo-boot.py by default. It now sees 2 check_* functions instead of every boot check, including the new main_checkout_state. test_cli_clean_on_real_ceo_boot therefore passes trivially, and its docstring's promise (a new vacuous check turns it red) no longer holds.
+- Two text-presence tests now pass on marker comments, whether or not the registry still wires the check:
+  - test_plan_091_expected_callsites.py:133-146, through `# Tier-S 16th entry: check_tier_policy_misrouting_24h ("tier_policy_misrouting_24h")`;
+  - test_ceo_boot_audit_emit.py:93-95, through `# === PLAN-065 Phase 2 audit_emit wire ===`.
+  The facade comment says openly that the markers are there for these checks.
+- Minimal fix: make the lint's default input the facade plus `_lib/_ceo_boot_parts/*.py`. Make the tests load the module and assert registry membership, for example `"tier_policy_misrouting_24h" in dict(mod.TIER_S_CHECKS)`. Then drop the markers.
+
+P2-4 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:174-250 (check_hook_live_smoke, moved unchanged)
+- Failure: the check runs py_compile only on the registered entry points. After PLAN-197 those are short facades that compile `_lib/*_parts/*.py` at import; check_bash_safety.py:35-42 is an example.
+- Scenario: an adopter re-applies a hand patch to a part file, as the CHANGELOG asks, and introduces a syntax error, or a part file is missing. The hook crashes at import, `_python-hook.sh` lets the tool call through (an infrastructure fault fails open), and hook_live_smoke still reports green "N hook(s) smoke-pass". Before the split, the same broken logic sat in the hook file and showed red as `compile_fail`.
+- This widens a blind spot that already existed: the check never compiled the `_lib` modules that hooks import.
+- Minimal fix: also run py_compile on every file in each facade's `_PARTS` tuple (read by AST), or on every .py under the `_lib` subpackages, and report a missing part as `missing:`.
+
+P2-5 — .claude/hooks/_lib/_ceo_boot_parts/__init__.py:25-26
+- Each part starts with a docstring. When it runs in the facade's dictionary, it overwrites __doc__, so ceo_boot.__doc__ becomes "Extracted ceo-boot declarations executed by the facade.". This is cosmetic; argparse uses an explicit description.
+- Minimal fix: save and restore __doc__ around install(), or remove the part docstrings.
+
+P2-6 — stale pointers
+- .claude/hooks/SessionEnd.py:662 (`ceo-boot.py::_validate_boot_lesson`) and docs/threat-model.md:2423 still point at ceo-boot.py. The function now lives at .claude/hooks/_lib/_ceo_boot_parts/candidates_lessons.py:405.
+- The facade's module docstring ("15 Tier-S checks", "per-check timeout 500 ms") was already stale in the base and is now 25 checks out of date.
+- Minimal fix: update the references.
+
+NEW FINDINGS (annex)
+None. No undeclared P1 was found in this payload.
+
+P2 FOLLOW-UPS
+P2-1 through P2-6 above. P2-1 and P2-4 come from moved text whose assumptions PLAN-197 changed: same text, different behavior. P2-2 and P2-3 reduce what this release's test suites prove about ceo-boot, and the CHANGELOG names those suites as the compatibility evidence for the split.
+
+VERDICT: GO No declared condition is false against this payload and there is no P0 or undeclared P1: the ceo-boot facade keeps its runtime behavior, and the six findings are P2 follow-ups (four on narrower test, lint and check coverage, two on stale or misleading text).

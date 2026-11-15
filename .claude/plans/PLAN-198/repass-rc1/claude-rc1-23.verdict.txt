@@ -1,0 +1,69 @@
+PAYLOAD 23/32 — check_pair_rail.py → facade over _lib/_pair_rail_parts; check_plan_edit.py → _lib/plan_paths; check_precompact_continuity.py → facade over _lib/_precompact_parts; new _contamination_inventory.py, _repin_guard.py, _restore_archive.py, _subprocess_census.py; raw docstring in architect-bundle-validate.py.
+
+DECLARED CONDITIONS CHECKED AGAINST THE CODE IN THIS PAYLOAD (all true)
+- C5: _KERNEL_PATHS lists .claude/hooks/_lib/_pair_rail_parts/**/* (check_arbitration_kernel.py:315), cli_currency.py (:333) and plan_paths.py (:334), alongside the other rows the condition names.
+- C7: both hooks keep their paths and become thin entry points. _pair_rail_parts is a kernel path; _precompact_parts is not, because the precompact hook is not kernel.
+- C9/C10: part_01.py:553-571 (_apply_currency_policy) returns `compatible` when the version in the nearest `@openai/codex` package.json is >= CODEX_VERSION_FLOOR 0.160.0 (cli_currency.py:11) AND strictly newer than the manifest's package_version. No hash is needed for that result. _resolve_codex_bin (:583) and _verify_pin_cli (part_04.py:510) both accept `verified` or `compatible`. A malformed manifest package_version gives `mismatch`.
+
+MOVED-CODE VERIFICATION (no defect found)
+- _pair_rail_parts.install (__init__.py:8-24) rebuilds every function with the facade's globals. As a result:
+  - Patches on check_pair_rail.<name> are still seen by the moved callers (_decide → _invoke_codex_review, _resolve_codex_bin → verify_codex_payload).
+  - `global _CURRENT_REVIEW_ID` and `global _RUBRIC_CATALOGUE_CACHE` write to the facade, and reload resets them.
+  - Every free name the part functions use exists in the facade (json, os, re, subprocess, sys, Path, typing, _cli_currency). hashlib and tempfile are imported inside the functions.
+  - The exception classes are the same objects as before. The facade's own _invoke_codex_review replaces part_02's identical copy.
+- _precompact_parts.install exec's each part into the facade's namespace, so name lookup matches the old single file. I spot-checked the critical lines: --first-parent, the 1.0s index share, the O_NOFOLLOW ledger chain, the bytes store path after field redaction, set_session_value, and the GC TTL.
+- Fail direction:
+  - An ImportError at the top of the facade makes Python exit 1. On the Claude Code and Codex path, _python-hook.sh `exec`s the hook (line 416), so the session is not blocked: infrastructure failure stays fail-open.
+  - On `--verify-codex-pin`, exit 1 reads as fail-closed. That is acceptable for a release gate.
+- Install: install_lib_selective (scripts/install.sh:1520-1550) copies each _lib entry, directories included, and the exclusion predicate does not match the new packages, so they ship.
+- Adopters are not affected by the pin: the pin manifest is not installed to them, so the pair rail resolves `manifest_unreadable` → infra → advisory, and the currency arm never runs there.
+- plan_paths change, declared in CHANGELOG [1.4.4] line 332:
+  - Wider: now matches FOLLOWUP names and Windows separators.
+  - Narrower: no longer matches double or trailing hyphens, or non-ASCII digits. Real plan files never use these.
+- New scripts: stdlib only and Python 3.9 compatible.
+  - _restore_archive.py writes only below a real stage directory, with O_EXCL|O_NOFOLLOW and the mode masked to 0o777.
+  - It refuses link, device and sparse members, duplicate names, traversal and the key files in any letter case (casefold).
+  - It requires an end-of-archive block and reads the gzip stream to its end.
+  - ceo-restore.sh runs it inside a mktemp stage with an EXIT trap. The archive directory has no stdlib-shadowing modules.
+- _repin_guard.py: the paths it writes into the shell guard are validated by _PACK_DIR_RE (re-pin-codex.py:2045). When grep returns 2 the guard stops (fail-closed).
+- architect-bundle-validate.py: the r""" change is cosmetic. "\`" was an invalid escape, and the rendered text is the same.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+1. P2 — .claude/hooks/_lib/plan_paths.py:26-34, used by check_plan_edit.py:151-171 and :530.
+   - Problem: plan_id_from_path returns filename[:8], so `PLAN-194-FOLLOWUP-v1-4-4-backlog.md` (frontmatter id `PLAN-194-FOLLOWUP-v1-4-4-backlog`) gives `PLAN-194`.
+   - Scenario: now that FOLLOWUP files pass is_plan_path, a status change on a followup emits a signed `plan_transition` with plan_id=PLAN-194, the parent. Metrics, dashboards and success receipts may then show the parent re-opening after `done`. detect_stranded also reports a stranded followup as its parent. Session scoping is not affected: the event carries session_id="".
+   - Fix: return the full FOLLOWUP id, or take it from frontmatter `id`, or skip the transition emit for FOLLOWUP names until the event schema accepts that id shape. Say in the CHANGELOG which one was chosen.
+2. P2 — .claude/hooks/_lib/_pair_rail_parts/part_01.py:477-486, with the docstrings at :394-424 and :574-575.
+   - Problem: when the host triple is absent from the manifest (every host except aarch64-apple-darwin), the currency arm runs before the override-existence check.
+   - Scenario: set CEO_PAIR_RAIL_CODEX_BIN to a missing path under a tree whose ancestor holds an `@openai/codex` package.json newer than 0.160.0. The result is `compatible` with a path that does not exist, then exec fails, then CodexUnavailable, then an advisory allow. The docstring says such an override BLOCKS (H1).
+   - Also: without an override this arm returns the npm JS launcher as the exec target, but _resolve_codex_bin says "native payload".
+   - Security impact is nil, since whoever controls the env can set CEO_PAIR_RAIL_DISABLE.
+   - Fix: check that the override is a regular file before the currency call, and update both docstrings.
+3. P2 — documentation honesty after the `compatible` arm.
+   - part_04.py:499 says "0 — verified (payload sha256 matches)", but `compatible` also exits 0.
+   - The verify_codex_payload status list (part_01.py:412) omits `compatible`, and its text still says "No env relaxes this comparison".
+   - The dead part_02.py:63-66 docstring still says "the artifact that was hashed is the artifact that runs".
+   - Fix: document `compatible` as a version-only result with no byte attestation, as C9/C10 already declare.
+4. P2 — .claude/hooks/check_pair_rail.py:21.
+   - Problem: `from _lib import cli_currency as _cli_currency  # noqa: F401` looks unused but is required: the rebound _apply_currency_policy looks _cli_currency up in the facade's globals.
+   - Scenario: a lint autofix removes the line. A sha mismatch then raises NameError inside the `except Exception → infra` handler (part_01.py:547). The result flips from mismatch (BLOCK) to infra (advisory). Any other unexpected exception in the currency arm does the same.
+   - Fix: drop the noqa and comment why the import is needed, or wrap the currency call so that an exception keeps status=mismatch.
+5. P2 — templates/settings/settings.user.json:149.
+   - Problem: the evidence pointer `.claude/hooks/check_pair_rail.py:157-169,1502-1511` points into a file that now has 216 lines.
+   - Fix: repoint it to _lib/_pair_rail_parts/part_01.py and part_03.py.
+6. P2 — .claude/scripts/_restore_archive.py:99-104 against .claude/scripts/ceo-backup.sh:262-265.
+   - Problem: `--include-plans` uses `cp -pR`, which keeps symlinks found under .claude/plans, while the restore validator refuses any link member.
+   - Scenario: such a backup is created successfully and then cannot be restored. This is fail-closed, so no data is lost.
+   - Fix: copy only regular files for plans as well, as the memory/ copy already does, or warn when the backup is made.
+7. P2 — .claude/hooks/_lib/_precompact_parts/__init__.py:16.
+   - Problem: exec'ing parts that start with a docstring overwrites the facade's module __doc__ with the last part's docstring ("PreCompact hook dispatch…"). No production code reads it.
+   - Fix: remove the part docstrings, or restore __doc__ after install.
+8. P2 — _restore_archive.py:122-136.
+   - Problem: complete_members relies on TarFile.fileobj and TarFile.offset, which are internal attributes. They are stable on 3.9-3.14, but nothing pins that.
+   - Fix: add a test on every interpreter in the matrix (tests are out of scope here).
+
+VERDICT: GO The declared conditions this payload touches (5, 7, 9 and 10) hold against the code, the moved pair-rail and precompact code keeps its names, patch points and fail-open direction, and the remaining findings are P2 follow-ups with no P0.

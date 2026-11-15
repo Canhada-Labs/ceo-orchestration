@@ -1,0 +1,11 @@
+No P0 or false declared condition established in payload 11. Import/global-binding checks, Python 3.9 grammar checks, and mocked PreCompact fail-open checks passed.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/_lib/_profile_opus_parts/latency.py:197
+Running --hook-latency with CEO_AUDIT_LOG_PATH exported preserves that live-log override despite assigning temporary HOME and CEO_AUDIT_LOG_DIR. Synthetic hook events can therefore reach the live audit log. Explicit HMAC sidecar overrides also survive. A mock-only probe confirmed retained overrides in child environments and resolution outside the temporary audit directory; no actual writes were performed.
+Minimal fix: scrub the complete audit location-carrier set before assigning temporary destinations, following diagnose-output-hook.py's isolation helper. Condition 3 covers that diagnostic only. This newly identified profiler defect is not established to have originated in the extraction.
+
+P2 follow-ups
+None identified.
+
+VERDICT: GO-WITH-CONDITIONS The profiler isolation defect warrants an advisory annex, while this payload establishes neither a false declared condition nor a P0.

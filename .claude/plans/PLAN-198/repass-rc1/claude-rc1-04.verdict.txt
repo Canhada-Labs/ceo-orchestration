@@ -1,0 +1,41 @@
+PAYLOAD 4/32. Files: the new fragments under .claude/hooks/_lib/_audit_log_parts (paths_skills.py, rotation_storage.py), .claude/hooks/_lib/_audit_query/* (9 files) and .claude/hooks/_lib/_bash_safety_parts (__init__.py, decisions_cli.py, fact_canonical.py, fact_state.py). I read them together with the facades that load them (audit_log.py:305-329, check_bash_safety.py:1-42, .claude/scripts/audit-query.py:174-385). I compared them with the pre-split staged copies in .claude/plans/PLAN-182/staged-w1 and with the PLAN-194 auditrace patch.
+
+FINDINGS
+P0: none.
+P1: none.
+
+WHAT I CHECKED
+1. Moved code. These checks matter for condition 7.
+- I compared these functions with the pre-split copies, and their text matches: audit_paths, rotate_threshold, write_breadcrumb, _is_safe_audit_path, _fallback_security_breadcrumb, _apply_destructive_citation_gate, _apply_fact_gate and the _E3_* tables.
+- append_entry plus _emit_rotation_marker_under_lock match the PLAN-194 cure of condition 67, which this release carries: one FileLock with timeout 2.5 covers key, predecessor read, HMAC, append and sidecar. That cure stays in place.
+- The audit_log and check_bash_safety facades run each fragment with exec in the facade's own globals. So __file__ is still the facade's (normalization.py:190 _HOOKS_DIR resolves to .claude/hooks). Monkeypatch points and global lookups behave as before. No top-level statement uses a name from a later fragment. The cross-fragment constants (_DESTRUCTIVE_CITE_VAR, _ENV_ASSIGNMENT_RE, _CITE_*) are defined by earlier fragments. The only duplicate top-level assignment, _PRIVILEGE_PREFIXES at normalization.py:91/103, is also in the monolith.
+- audit-query.py binds every extracted function to its own globals with FunctionType. It also restores _LABEL_STORE_PATH at audit-query.py:203. As a result, _compute_label_hmac's Path(__file__).parents[1] still resolves to .claude/hooks/_lib, and the label store and label-chain key do not change.
+2. Fail direction.
+- If a fragment file is missing (partial install), the facade raises before any decision. _python-hook.sh then passes the hook's own exit code through, so the session continues: fail-open on an infrastructure fault, the same class as the unguarded _lib imports the monolith already had.
+- decisions_cli.main keeps the existing catch-all that allows on infrastructure errors. Its two new blocks are both wrapped in try/except, so neither can change the verdict: the bash_indirect_telemetry call (decisions_cli.py:168-174) and the reason_code veto_triggered emit (:195-202).
+- The fact-gate paths are byte-identical to before: infrastructure errors leave the incoming block unchanged, and a command that cannot be normalized is never released.
+3. Writes.
+- Fragment and facade write targets are unchanged.
+- The new telemetry marker (bash_indirect_telemetry.py:52-58) is created with O_CREAT|O_EXCL, mode 0600, under the audit family directory.
+4. Python and stdlib.
+- Every import in these files is stdlib or _lib.
+- I found no 3.10+ syntax. FunctionType(code, globals, name, defaults, closure) works on 3.9.
+5. Declared conditions in this payload's reach.
+- Condition 5: the rows .claude/hooks/_lib/_audit_log_parts/**/* and _bash_safety_parts/**/* are at check_arbitration_kernel.py:313-314. _match_segments lets ** match zero segments, so files directly inside the package are kernel.
+- Condition 6: the switches are read from the trusted_env snapshot (posture_scan.py:573-574, decisions_cli.py:170-172).
+- Condition 7 and the CHANGELOG "Changed — hooks and scripts split" section: install.sh:1524-1541 copies every top-level _lib entry, so the new packages ship. check_bash_safety.py is 42 lines, as claimed.
+- I found nothing in these files that makes a declared condition false.
+
+NEW FINDINGS (annex): none.
+
+P2 FOLLOW-UPS
+P2-1. .claude/hooks/check_bash_safety.py:12. The facade docstring says _apply_destructive_citation_gate is implemented in rewrite_citation.py. It is at .claude/hooks/_lib/_bash_safety_parts/fact_state.py:4. Scenario: a maintainer re-applying a hand patch, as condition 7 asks, looks in the wrong module. Minimal fix: change the comment to fact_state.py.
+P2-2. .claude/hooks/check_bash_safety.py:42. Each fragment starts with a module docstring, and exec writes it into the facade's globals. Unlike audit_log.py:315/328, this facade does not save and restore __doc__. Scenario: check_bash_safety.__doc__ becomes "Decision conversion, audit emitters, and hook entry point." I found no consumer of it. Minimal fix: save __doc__ before _install_parts() and restore it after, as audit_log.py does.
+P2-3. .claude/hooks/_lib/_audit_query/labeling.py:19 and :51; parsing.py, queries.py, reporting.py, reporting_health.py. These are importable modules, but they are correct only once audit-query.py rebinds them.
+- parsing.py, queries.py, reporting.py and reporting_health.py use names they never define: _BY_DOMAIN_DEFAULT_WINDOW_DAYS, _LABEL_VALID_*, default_errors_path, _parse_since_arg, cmd_compliance, cmd_metrics. Called directly, they raise NameError.
+- labeling's own _LABEL_STORE_PATH points at .claude/hooks/_lib/_audit_query/audit-log-labels.jsonl. Its sys.path insert resolves to .claude/hooks/_lib/hooks/_lib, so audit_hmac fails to import and the fixed fallback key is used.
+- Scenario: a future direct "from _lib._audit_query import labeling; labeling.cmd_label(...)" writes inside _lib, and the resulting label chain fails verification against the real key. No such caller exists today; audit-query.py is the only importer.
+- Minimal fix: pass the store path and hooks directory explicitly, or add a guard that raises when the function's globals are not the facade's.
+P2-4. .claude/hooks/_lib/_bash_safety_parts/decisions_cli.py:195-202, together with fact_canonical.py:147 and fact_state.py:23/38/54. The new veto_triggered emit, keyed on reason_code, reads only the final decision. When the fact gate in ENFORCE mode, or the ADR-175 citation pilot, replaces a bash_indirect_* block, the new Decision is built without reason_code. Scenario: on those paths no veto_triggered event with the indirect reason code is written; only the fact-gate or citation events are. This affects audit records only; the block decision is unchanged. Minimal fix: pass reason_code=decision.reason_code into the replacement Decision constructors.
+
+VERDICT: GO The fragments in this payload match the pre-split code wherever I compared them, keep the fail-open and fail-closed directions, stay stdlib-only and Python 3.9-compatible, are covered by the condition-5 kernel rows, and make no declared condition false; the only findings are four P2 follow-ups.

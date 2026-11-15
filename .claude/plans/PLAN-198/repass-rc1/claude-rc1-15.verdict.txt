@@ -1,0 +1,59 @@
+PAYLOAD 15/32: review of the .claude/hooks/_lib/audit_emit.py deletion hunk (v1.4.3-rc.1..0e687e3c)
+
+SCOPE OF THIS PAYLOAD
+This piece is only removed lines from .claude/hooks/_lib/audit_emit.py. It covers:
+- the tail of the replay/pattern/threat-model emitters and iter_events;
+- the whole emit_generic dispatcher;
+- the session/prompt/output emitters;
+- the audit-tokens allowlist and emitters;
+- the codex/grok/council, pair-rail, directory-added, notification, night-mode and learning-loop enums and allowlists;
+- the ledger, compaction, context-pressure and subagent allowlists;
+- the context-pressure marker logic (should_emit_context_pressure, the sharded GC, clear_context_pressure_marker);
+- the start of the typed emitters.
+Under PLAN-197 / ADR-202 this code moves into .claude/hooks/_lib/_audit_emit_parts/. I judged the deletion against where the code now lives in the candidate tree.
+
+WHAT I CHECKED AGAINST THE CANDIDATE TREE
+1. emit_generic.
+   - Every elif branch removed here comes back in the same order: 34 in generic_dispatch_01.py, 45 in _02, 45 in _03, 28 in _04, and 20 plus the passthrough in _05.
+   - The passthrough is still checked last, after every explicit branch (generic_dispatch_05.py:352). Default-deny is still {"action": action} plus a breadcrumb (generic_dispatch_05.py:375-377).
+   - Each branch ends with state["event"] = event; return True. I counted 3 markers per branch in every file, so no branch writes the unscrubbed dict.
+   - The three branches that dropped the whole event (persona_coverage_synthesized, tier_policy_loader_fallback_observed, audit_producer_path_pollution_detected) still return None, so no stub event is written (generic_dispatch_01.py:440-450, generic_dispatch_03.py:96-126).
+   - I compared the security-relevant value coercions line by line and they match: ledger_entry_rejected, settings_tamper_detected, salt_rotation_registered, pair_rail_case/review_expected, credential_override_late_set_ignored, swarm_paused_owner_absent, mcp_injection_finding, session_memory_delta_observed, the learning-loop branches, and codex/grok/council.
+   - The fail-open wrappers on the task_route_key_dropped and reality_ledger_key_dropped side-emits are kept.
+2. Enum and constant values match the removed text: _LEDGER_GATE_FAMILIES/REASONS, _LEDGER_ID_RE, _SETTINGS_TAMPER_CLASSES, _TOOL_CALL_LIFECYCLE_TOOL_NAME_ENUM, _GIT_HOOK_BYPASS_FLAG_CLASSES, _PAIR_RAIL_TIMEOUT_MS_MAX, the context-pressure bucket/TTL/GC/wall-budget constants, and the regex shape gates.
+3. Context-pressure code: context_pressure.py is the same text, including the symlink protections (O_EXCL, O_NOFOLLOW, a random tmp name, mode 0600) and the fail-open re-arm. Every free name it reads is in some part's __all__. I checked the compaction.py exports: _GC_MARKER_WALL_BUDGET_S, _CONTEXT_PRESSURE_STATE_BASENAME and the SID/TTL/GC constants. So the GC path cannot raise a NameError that its (OSError, TypeError, ValueError) guard would miss.
+4. Moved-code mechanics (checklist item 4):
+   - install() (_audit_emit_parts/__init__.py:20-48) rebinds every part function onto the facade's globals. Monkeypatching audit_emit._write_event, _breadcrumb, emit_generic and similar still takes effect.
+   - global _FALLBACK_NOTIFIED resolves to the facade.
+   - Locks stay in the facade (audit_emit.py:483-484), so deepcopy never touches them.
+   - All 37 part files have `from __future__ import annotations`. Typing names such as List, Tuple and Iterator, which the facade does not import, appear only in annotations.
+   - Module-level re.compile calls are in parts that import re themselves.
+   - iter_events stays a lazy generator through the SimpleNamespace indirection (audit_emit.py:455-461). Only replay.py exports it.
+   - The spool-writer forensic emitter and exit-handler hookup at import time is kept (audit_emit.py:486-496).
+5. Python 3.9 and standard library: FunctionType(code, globals, name, argdefs, closure) and __kwdefaults__ work on 3.9. I found no match statements, zip(strict=), runtime X|Y unions or third-party imports in the parts.
+6. Condition 5, for this file: check_arbitration_kernel.py:312 lists `.claude/hooks/_lib/_audit_emit_parts/**/*`. All 13 lines the condition names are present at :309-340.
+7. Condition 7 holds for audit_emit: the path is unchanged and the logic now lives in _lib/_audit_emit_parts/.
+8. Adopter delivery: scripts/install.sh:1522-1541 installs each entry under hooks/_lib/ with install_one (cp -R for directories), so the new subpackage is copied.
+
+No declared condition is contradicted by this payload, and I found no P0.
+
+NEW FINDINGS (annex)
+None at P1.
+
+P2 FOLLOW-UPS
+P2-1: decoy branches defeat the structural guard tests.
+- Where: .claude/hooks/_lib/audit_emit.py:473-480.
+- Scenario: the facade's emit_generic has `if action == "tool_call_lifecycle_recorded": _dispatch_generic(...)` and `if action == "settings_tamper_detected": _dispatch_generic(...)`. Both do exactly what the fall-through line does. They exist only so that inspect.getsource(audit_emit.emit_generic) still contains those comparisons, which .claude/hooks/tests/test_tool_lifecycle.py:541-563 and .claude/scripts/tests/test_ceo_boot_tamper_tripwires.py:521-525 require. The real scrub branches are generic_dispatch_04.py:62 and :159. If either is deleted or broken, those tests stay green. Today's behaviour is correct, and a regression would fall to default-deny (fields lost, not leaked), so this is test honesty, not a leak.
+- Minimal fix: remove the decoys and point the tests at the real branch, either by inspecting _apply_generic_group_04 or, better, by calling audit_emit.emit_generic with a forbidden field and asserting it is dropped and the enums are coerced.
+
+P2-2: dead duplicate action registry.
+- Where: .claude/hooks/_lib/_audit_emit_parts/actions.py:7-16, with actions_core.py (234 names) and actions_extended.py (97 names).
+- Scenario: these define a second 331-name _KNOWN_ACTIONS, but the install() roster does not include them (audit_emit.py:415-452). The runtime registry is the literal at audit_emit.py:45-377, which is also what _reality_ledger_parts/audit_actions.py:29-39 reads first. A maintainer who registers a new action in actions_core.py, which env-inventory.json also points at, gets no runtime effect. The action is then dropped as unknown, the same silent-drop class as the S76 skill_bootstrap_used regression.
+- Minimal fix: delete actions*.py, or add a parity test pinning them equal to the facade literal.
+
+P2-3: unknown-action breadcrumb lost repr escaping.
+- Where: .claude/hooks/_lib/_audit_emit_parts/generic_dispatch_05.py:363.
+- Scenario: the removed code logged f"emit_generic: unknown action {action!r}". The new code logs "unknown audit action dropped: %s" % action. An action string carrying a newline or control characters now writes raw into the audit-log.errors sidecar, which is not chained, so lines can be forged there. Callers pass constants, so exposure is low.
+- Minimal fix: use %r, and keep the old message text for anyone grepping for it.
+
+VERDICT: GO Every branch, enum, constant and fail-open path removed from audit_emit.py in this payload comes back unchanged and in the same order in _lib/_audit_emit_parts/, bound to the facade's globals so patch points still work, Python 3.9 compatible and standard-library only; condition 5's kernel line for the package is present, and the only findings are three P2 follow-ups, with no P0 and no false condition.

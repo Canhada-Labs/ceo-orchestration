@@ -1,0 +1,11 @@
+Payload 19/32: no P0 or false declared condition found. The moved functions preserve facade-global lookup, and installation includes both new packages. Bounded-exit suppression matches condition 8’s declared limitation.
+
+NEW FINDINGS (annex)
+None.
+
+P2 follow-ups
+P2 — .claude/hooks/audit_log.py:323: A missing, unreadable or syntactically invalid fragment escapes the unguarded loader before main(), producing a traceback and exit 1 instead of the documented exit-zero behavior. This does not establish that the host session blocks. Minimal fix: handle fragment-loading failures in a facade CLI wrapper, report a best-effort stderr breadcrumb and return 0.
+
+Validation: source inspection and Python 3.9 syntax parsing of all 12 affected Python files; no files modified.
+
+VERDICT: GO No declared condition was falsified and no P0 was found; the fragment-loader failure handling remains a nonblocking P2 follow-up.

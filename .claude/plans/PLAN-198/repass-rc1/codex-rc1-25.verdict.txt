@@ -1,0 +1,9 @@
+Read-only review of payload 25; Bash syntax check passed. No P0 or false declared condition identified.
+
+NEW FINDINGS (annex)
+None.
+
+P2 follow-ups
+P2 — .claude/scripts/ceo-backup.sh:255: Process substitution hides find's exit status from set -e/pipefail. An unreadable memory subdirectory or traversal I/O error therefore permits an incomplete snapshot to be archived, checksummed, reported successful, and included in retention rotation. Previously, cp -pR aborted on traversal errors. Minimal fix: generate a NUL-delimited file list with an explicitly checked find invocation; abort before archive publication and rotation if traversal fails.
+
+VERDICT: GO-WITH-CONDITIONS The unchecked traversal status warrants a backup-integrity follow-up but establishes neither a P0 nor a false declared condition.

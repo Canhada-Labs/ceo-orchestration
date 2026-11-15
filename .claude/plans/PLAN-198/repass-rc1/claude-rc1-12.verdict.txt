@@ -1,0 +1,49 @@
+SCOPE OF PAYLOAD 12/32
+New: _lib/_reality_ledger_parts/{findings,walking}.py; _lib/_shipped_path_census/*; _lib/_skill_telemetry_router/*; _lib/_spool_writer_parts/{__init__,writer,prepare,drain,lifecycle}.py; _lib/agent_spawn/{__init__,advisories,entrypoint,file_assignment,model_routing,outcome_telemetry}.py. Modified: _lib/agent_frontmatter.py. I read the facades that load these parts (spool_writer.py, check_agent_spawn.py, .claude/scripts/reality-ledger.py), the binders (_spool_writer_parts/__init__.py, _audit_emit_parts/__init__.py, agent_spawn/__init__.py, _reality_ledger_parts/__init__.py), model_currency.py, the shim, install.sh, the kernel list, CHANGELOG [1.4.4] and ADR-055-AMEND-4.
+
+DECLARED CONDITIONS THAT TOUCH THIS PAYLOAD (checked against the code; none is false)
+- Condition 5: check_arbitration_kernel.py:310 has ".claude/hooks/_lib/agent_spawn/**/*" and :332 has "_lib/model_currency.py". spool_writer.py has never been a kernel path, so _spool_writer_parts/ being outside the list does not contradict "the seven packages".
+- Condition 7: check_agent_spawn.py and spool_writer.py are now thin facades. A hand patch to either has to be re-applied in the part module. agent_spawn/ is kernel.
+- Condition 8: _python-hook.sh:410 exports CEO_HOOK_BOUNDED_EXIT=1. In that case lifecycle.py:346-370 (_atexit_drain and _signal_drain_handler) skip drain_now and record exit_deadline_skip.
+- Condition 9: agent_frontmatter.py:256-261 accepts model_currency.is_veto_floor_model(actual) OR membership in VETO_FLOOR_ALLOWED. _FLOOR (model_currency.py:16) matches claude-opus-[4-9]*, gpt-[5-9]* and o[3-9]* with -word suffixes; only "claude-opus-4-1" is refused. CHANGELOG [1.4.4] lines 150-163 state this, naming gpt-5-mini, o3-mini, o4-mini and the stale docstring. The expected_model path is still exact equality.
+
+MOVED-CODE CHECKS (no defect found)
+- spool_writer: install() rebinds every function in each part's __all__ onto the facade's globals. I checked every free name used by writer/prepare/drain/lifecycle; all exist in spool_writer.py, including FileLock, _audit_hmac, _HMAC_AVAILABLE, the _*_SUFFIX_TOKEN names, _JOURNAL_BUFFER/_JOURNAL_FLUSH_EVERY, DrainStats, JournalReconciliation and _exit_deadline_active. `global` statements (_IN_SPOOL_APPEND, _LAST_APPEND_SUCCEEDED, _EXIT_HANDLER_INSTALLED, _PREV_*_HANDLER) therefore write the facade, and atexit/signal register the facade's bound handlers. Every attribute audit_emit and the test helpers use still exists (set_forensic_emitter, install_exit_handlers, is_sync_mode, spool_append, last_append_succeeded, should_drain, drain_now, _reset_caches_for_test).
+- agent_spawn: model_routing, advisories, prompt_rules, outcome_telemetry and entrypoint are bound through _audit_emit_parts.install(package="_lib.agent_spawn"). skill_reference and file_assignment are bound by bind() at the end of the module. No two parts' __all__ lists share a name, and none collides with a facade definition (decide, Decision, _classify_block_reason, _to_contract_decision). Every free name resolves in the hook's globals at call time.
+- Fail direction is preserved: a component load failure under __main__ prints {} (allow) and exits 0, and main() allows when _SPAWN_COMPONENT_IMPORT_ERROR is set. That is fail-open on an infrastructure fault. The fail-closed input checks inside decide() are unchanged.
+- reality-ledger: the facade supplies _REPO_ROOT and redact_secrets, and constants.__all__ exports the underscore names that findings/walking take via star-import.
+- Other checks: stdlib only; nothing incompatible with Python 3.9 (annotations are lazy under `from __future__`, dataclass(eq=False) is fine, no 3.10+ syntax); no new write site. If model_currency raises ImportError, the floor falls back to the closed set, which is stricter, not inverted.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:346-357 together with prepare.py:83-123 and agent_spawn/file_assignment.py:327-380 (_recent_file_assignments). The spawn FILE ASSIGNMENT overlap rail no longer sees earlier spawns.
+- Mechanism: under the bounded exit, a hook process never drains its spool.
+  - The atexit and signal drains are skipped.
+  - should_drain() is evaluated right after spool_append has fsynced, so the spool's mtime is about now and the 100 ms staleness trigger cannot fire on APFS or ext4. The only remaining trigger is 100 or more body lines in that one process's spool.
+  - So the canonical log receives hook events only when a non-hook process (a script) exits or a drain is run by hand. Each such drain processes at most K_MAX=100 entries, oldest first (prepare.py _phase3_collect_and_sort sort; drain.py K_MAX break).
+- Failure scenario: an adopter sets CEO_SPAWN_OVERLAP_GUARD=1.
+  - Spawn A declares "CAN edit: src/x.py". Its hook writes spawn_file_assignment_recorded into audit-spool.<pid>.jsonl and exits without draining.
+  - Two minutes later, spawn B declares the same path. _recent_file_assignments tails only the canonical audit log, finds nothing, and B is allowed.
+  - The advisory overlap counts (the measure-first denominator for flipping this rail) are under-counted the same way.
+  - In v1.4.3-rc.1, A's forced atexit drain had put its record in the log before B ran.
+- Declared or not: the CHANGELOG ("can reach the log later"; Known-open "not proven") and condition 8 declare the delay itself. They do not declare that governance readers of the canonical log go blind meanwhile. The miss is in the fail-open direction; no legitimate session is blocked.
+- Minimal fix: have _recent_file_assignments also scan, read-only and bounded, the state-dir audit-spool.*.jsonl and *.draining.* files for in-window spawn_file_assignment_recorded rows. Alternatively, record that event through a direct writer. In either case, add the rail's degradation to Known-open.
+
+P2 FOLLOW-UPS
+1. _spool_writer_parts/{writer,prepare,drain,lifecycle}.py:29-31 and 40-66: copied facade boilerplate.
+   - _HOOKS_DIR is now Path(__file__).parent.parent, which is .claude/hooks/_lib. Any process that imports spool_writer therefore gets _lib inserted at sys.path[0], ahead of stdlib, so every _lib module becomes importable as a top-level name.
+   - No stdlib or .claude/scripts name collides today, and three hooks already insert _lib themselves, so this is latent shadowing and double-import risk only.
+   - Each part also defines K_MAX, SPOOL_LOCK_TIMEOUT and the other constants, which the bound functions never read (they read the facade). Editing them there silently has no effect.
+   - Fix: drop the sys.path block and the constants from the parts.
+2. The exit_deadline_skip breadcrumb is written on every bounded hook exit, unconditionally, to audit-log.errors.
+   - ceo-diagnose.py:417-422 reports yellow ("audit write errors") at 1 line, and status.py:290 shows the warning glyph above 20 lines. Both trip for every adopter, including fresh installs, after their first hooks.
+   - The file grows without bound: audit-log-retain excludes .errors, and H-03 rotation is absent. Real write-failure signals are drowned.
+   - ADR-055-AMEND-4 §9 acknowledges detector saturation; the CHANGELOG does not.
+   - Fix: breadcrumb only when the process's own spool is non-empty, or keep a counter; make the detectors ignore exit_deadline_skip lines.
+3. lifecycle.py:348-350 and 365-366: the bounded exit also skips _flush_journal_buffer. Fewer than 10 buffered begin/commit envelopes per hook process are never persisted, so per-PID journal forensics for hooks stay empty. ADR §4.2 states this; the CHANGELOG does not.
+4. lifecycle.py:240 (reconcile_journal_at_session_start) has no production caller. The comments at lifecycle.py:110-131 still list "exit-handler / session-start" as forced-drain legs, neither of which runs in hooks now.
+5. check_agent_spawn.py:312-316: the block text says the floor "is set membership, not one id", which has been stale since the family predicate. (The stale agent_frontmatter.py docstring is already declared in the CHANGELOG.)
+6. _lib/_shipped_path_census and _lib/_skill_telemetry_router are shipped by install_lib_selective but have no non-test importer and no CHANGELOG entry. They are inert.
+
+Not verifiable from this tree: scripts/upgrade.sh is withheld, so I could not confirm that upgrade delivers the new _lib/<pkg>/ directories. install.sh does deliver them, via cp -R in install_one.
+
+VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches (5, 7, 8, 9) holds against the code, and the moved spool_writer, agent_spawn and reality-ledger code keeps its name lookup, patch points and fail-open direction, so the one finding — the bounded exit leaving the FILE ASSIGNMENT overlap rail blind to earlier spawns — is an undeclared P1 that belongs in the signed annex, not a blocker.

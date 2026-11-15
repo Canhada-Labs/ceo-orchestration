@@ -1,0 +1,9 @@
+No P0 or false declared condition found in payload 18. Benign Python 3.9 checks passed for original-text offsets, overlapping redactions, extracted imports, facade globals and policy exports.
+
+NEW FINDINGS (annex)
+None.
+
+P2 follow-ups
+P2 — .claude/scripts/tier_policy_cli/learn.py:832, integrating .claude/hooks/_lib/model_currency.py:39: Tournament aggregation now accepts model-family IDs absent from the fixed tier ranking. When such an ID wins, its rank of -1 produces an actionable demotion requiring a signature, but owner-sign rejects that ID at cli.py:337 and application rejects it at apply.py:401. The adopter receives a recommendation that cannot complete. Minimal fix: emit a hold with an unknown-rank reason until ranking, signing and application support the same IDs.
+
+VERDICT: GO The applicable declared claims hold in this payload, with one nonblocking model-learning integration follow-up.

@@ -1,0 +1,14 @@
+Payload 30/32: no P0 or false declared condition established. Python 3.9.6 checks found no regression in the moved functions’ bindings; model availability and hook-map checks passed.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/diagnose-output-hook.py:42
+Incomplete isolation: the scrubber removes CEO_AUDIT_LOG_FALLBACK_PATH without redirecting it. A synchronous audit append failure can send diagnostic events to the shared /tmp/ceo-audit-fallback-<user>.log, outside the temporary directory. A read-only fault probe confirmed this destination. This residual does not invalidate condition 3(a)’s primary-path correction. Minimal fix: explicitly set CEO_AUDIT_LOG_FALLBACK_PATH beneath tmp.
+
+P2 — .claude/scripts/local/mac_sign_and_release.py:110
+A clean local main already ahead of origin/main passes git pull --ff-only. sign_merge() then merges the integration branch and automatically pushes those pre-existing local commits too. Minimal fix: require local HEAD to equal fetched origin/main before merging, refusing an ahead or diverged branch.
+
+VERDICT: GO No release-blocking defect or false declared condition was established in this payload; two nonblocking P2 follow-ups remain.

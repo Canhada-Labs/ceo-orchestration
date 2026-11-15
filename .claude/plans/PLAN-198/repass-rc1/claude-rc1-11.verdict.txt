@@ -1,0 +1,52 @@
+PAYLOAD 11/32 — scope: new packages .claude/hooks/_lib/_precompact_parts/{pressure_sidecar,runtime,snapshot_core}.py, _profile_opus_parts/{__init__,cli,hook_latency_docs,latency,reference,smoke}.py and _reality_ledger_parts/{__init__,audit_actions,claims,constants,dispatch,environment,estimate_detection,estimate_emission,estimate_history}.py. This is PLAN-197 moved code behind the facades check_precompact_continuity.py, .claude/scripts/profile-opus-4-7.py and .claude/scripts/reality-ledger.py.
+
+WHAT I CHECKED AGAINST THE TREE (no defect found)
+- Binding and name resolution:
+  - Precompact: _precompact_parts/__init__.py:16 runs exec on each part in the facade's own globals, in this order: snapshot_core, pressure_sidecar, ledger_index, runtime. Every free name the parts use is defined either in the facade or in an earlier part. The facade defines TIME_BUDGET_S, SCRATCHPAD_KEY, SESSION_SNAPSHOT_TTL_S, MAX_CEREMONY_FLAGS, _PATH_CLAMP/_LABEL_CLAMP, PROGRESS_FLOOR_ENV, the _CONTEXT_* key tuples, the _PRESSURE_* constants, and the contextlib/fnmatch/glob/stat_mod/Iterator/Path imports.
+  - Profiler: _profile_opus_parts/__init__.py rebinds functions into the facade globals. Every part imports only the names in _IMPORTS, so the deepcopy never meets a module object.
+  - Reality ledger: _reality_ledger_parts/__init__.py copies only each part's __all__, and every helper a moved function calls is exported (_to_repo_rel, _build_finding, _iter_python_files, _is_excluded, all the estimate_* helpers, the regex constants, and so on). ScanBudgetExceeded and _install_itimer_guard still come from _lib.secret_patterns in the facade and are not in any part's __all__. So _run_with_timeout catches the same class the guard raises; _bind_class never clones it.
+  - Test patch points: patches on the facade still reach the moved code, because bound functions look names up in the facade globals.
+- External symbols the moved code calls still exist:
+  - audit_emit exports _audit_dir, should_emit_context_pressure (now with the 3-argument session_id signature), _CONTEXT_PRESSURE_USED_BUCKETS_PCT and emit_generic.
+  - scratchpad_lib still has SCOPE_KIND_*, stamp_scope_kind, open_session_scratchpad, set_session_value, gc_orphan_session_stores and session_id_from_event.
+  - audit_hmac still has read_chain_length, read_prev_hmac, hex_digest and last_hmac_path.
+  - redact_secrets(max_chars=0) means no truncation (redact.py:189).
+  - The PostCompact reader decodes bytes as well as str (check_postcompact_reinject.py:315), so the bytes path in _write_snapshot is read correctly.
+- Profiler anti-vacuity probe: latency.py:97 still finds "observation_store_path" in tool_lifecycle.py:340, so the positive control stays armed and is not silently disabled by a decomposition.
+- Reality ledger: audit_emit.py:45 still holds the _KNOWN_ACTIONS literal, so _read_known_actions takes its primary path. The new roster fallback only resolves paths inside _audit_emit_parts/ (it requires isidentifier() names). The new /_reality_ledger_parts/ self-exclusion keeps the old reality-ledger.py basename exclusion intact after the move. The one emit_generic literal now visible in _audit_emit_parts (pair_rail.py:120, "dispatcher_route") is registered.
+- Fail direction: the PreCompact gate returns {} on every path, and main() fails open when stdin or gate() raises. PreCompact has no deny channel, so a facade ImportError (a partial install) only produces a non-blocking hook error. I found no inversion, and none of the code is security-matcher code.
+- Kernel scope (condition 5): none of the three facades is in _KERNEL_PATHS (check_arbitration_kernel.py:93-340). Leaving these packages off the kernel list therefore matches the condition's "seven kernel entry points" wording. Condition 7 (thin entry points with the logic in _lib modules) holds for all three.
+- Install: scripts/install.sh:1524 walks every entry under _lib/*, and _framework_path_excluded (scripts/_framework_manifest_set.sh:95) does not exclude *_parts. Adopters receive the packages.
+- Python: standard library only. I found no syntax or API newer than 3.9: FunctionType with 5 arguments, os.scandir(fd), stat with dir_fd, subprocess.run with errors=, f-strings only. Every annotation is lazy because of `from __future__ import annotations`.
+
+DECLARED CONDITIONS: this payload's code falsifies none of the declared conditions. Conditions 5 and 7 are the ones it touches, and both hold as described above.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/_lib/_profile_opus_parts/latency.py:102-126 and :198-199, with the doc claim at hook_latency_docs.py:87.
+- Defect: the hook-latency corpus isolates each entry only by setting HOME and CEO_AUDIT_LOG_DIR and popping CLAUDE_PROJECT_DIR_NATIVE. The other audit-location carriers are still inherited: CEO_AUDIT_LOG_PATH, CEO_AUDIT_LAST_HMAC_PATH, CEO_AUDIT_KEY_PATH, CEO_AUDIT_CHAIN_LENGTH_PATH, CEO_AUDIT_LOG_ERR/LOCK and CEO_AUDIT_LOG_FALLBACK_PATH. CEO_AUDIT_LOG_PATH outranks CEO_AUDIT_LOG_DIR in the writer (_audit_emit_parts/writer.py:187-191), and audit_hmac takes the HMAC family from its parent (audit_hmac.py:173-189).
+- Failure scenario: an operator who exports the documented CEO_AUDIT_LOG_PATH override runs `profile-opus-4-7.py --hook-latency`. Each corpus run appends its audit rows to the LIVE log and extends the live HMAC chain: 5 entries × (iterations+1) hook runs plus the seeded record_pre runs, about 1.4k processes at the default N=200.
+- Why nothing flags it: the gate still reports green. The observe-store controls key on CEO_AUDIT_LOG_DIR (tool_lifecycle.py:306), so they keep counting the throwaway directory.
+- Doc contradiction: the shipped contract says "every corpus entry gets its own throwaway HOME + CEO_AUDIT_LOG_DIR (never the real ~/.claude)".
+- Relation to this release: this is the same class as the v1.4.3-rc.1 P1 that condition 3(a) declares cured only for diagnose-output-hook.py. The scrub list appears to have been carried unchanged by the move (I cannot diff it against base text from this tree), so this is not a regression introduced by the delta. It is also not among the cases this payload's conditions name. It may already sit in the carried debt of conditions 1 and 2, which I could not enumerate from here.
+- Minimal fix: before applying the per-entry overrides, pop from base_env the same tuple as diagnose-output-hook.py:27-34 (_CHILD_LOCATION_CARRIERS). Pin its parity with _lib/test_isolation.py in a test, as diagnose-output-hook.py already does.
+
+P2 FOLLOW-UPS
+P2-1 — .claude/hooks/_lib/_precompact_parts/snapshot_core.py, the _write_snapshot docstring (around lines 334-341) versus :424-425.
+- The docstring says the blob "is handed to store.set as a str on BOTH paths so the store's redact_secrets pass actually runs". The same function hands store.set BYTES whenever _lib.redact imports, after its own field-level redaction (rail round-8). It falls back to str only when the redactor is unavailable.
+- The facade's module docstring repeats the stale claim (check_precompact_continuity.py:57-63).
+- Secrets are still redacted, but the comment names the wrong layer, which misleads anyone who audits the redaction path.
+- Fix: rewrite both docstrings to describe field-level redaction plus the bytes route, with str as the fallback.
+
+P2-2 — .claude/hooks/_lib/_precompact_parts/__init__.py:16.
+- Running exec on each part's source in the facade namespace also runs each part's docstring assignment. At runtime, check_precompact_continuity.__doc__ ends up as runtime.py's one-liner "PreCompact hook dispatch and command-line entry point." instead of the ADR-153 contract text.
+- I found no runtime consumer, so this is cosmetic, but it sits under a CHANGELOG line that says entry points keep their observable contracts.
+- Fix: save namespace.get("__doc__") before the loop and restore it afterwards.
+
+P2-3 — .claude/hooks/_lib/_precompact_parts/snapshot_core.py:53-79 (_resolve_project_root).
+- The function walks up to the nearest ancestor that contains .claude/ and ignores CLAUDE_PROJECT_DIR. Every Claude Code machine has ~/.claude, so a hook-input cwd under $HOME but outside any project (for example a directory added with --add-dir) resolves the "project root" to $HOME.
+- Effects in that case: plan, ceremony and ledger lookups run against ~/.claude/plans and git runs in $HOME. When CEO_CONTEXT_PROGRESS_FLOOR_TOKENS is set, the hysteresis marker is written under ~/.claude/state.
+- The git-toplevel fallback also uses a fixed 2.0 s timeout outside the TIME_BUDGET_S deadline that gate() computes beforehand.
+- Impact is low (advisory hook, edge-case cwd), and the code may predate this delta.
+- Fix: when cwd is inside CLAUDE_PROJECT_DIR, prefer it; stop the walk-up before $HOME; pass the remaining budget to the fallback _git call.
+
+VERDICT: GO This payload's moved code binds and resolves correctly, keeps its fail-open direction, ships to adopters, and contradicts none of the declared conditions. The only P1, the profiler's isolation missing CEO_AUDIT_LOG_PATH, appears to predate the move and goes to the annex rather than blocking.

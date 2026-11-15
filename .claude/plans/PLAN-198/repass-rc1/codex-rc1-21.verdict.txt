@@ -1,0 +1,7 @@
+Payload 21/32: No substantiated new defects. Fragment ordering, shared globals, original path resolution, CLI dispatch, and installer inclusion are preserved. Infrastructure load failures retain fail-open behavior. The facade and fragments compile under Python 3.9.6; runtime validation was not completed.
+
+NEW FINDINGS (annex): None.
+
+P2 follow-ups: None.
+
+VERDICT: GO This payload reveals no false declared condition or P0 defect.

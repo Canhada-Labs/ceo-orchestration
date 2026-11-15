@@ -1,0 +1,97 @@
+PAYLOAD 13/32. Two new files: .claude/hooks/_lib/agent_spawn/prompt_rules.py (559 lines) and .claude/hooks/_lib/agent_spawn/skill_reference.py (319 lines). Both hold code moved out of check_agent_spawn.py by PLAN-197.
+
+WHAT I CHECKED AND WHAT I FOUND
+
+1. Is the moved code the same as before?
+- I compared both files line by line with a pre-split copy of the old single-file hook that is kept in the tree: .claude/plans/PLAN-182/staged-w1/tree/.claude/hooks/check_agent_spawn.py, lines 969-1490, 1519-1782 and 2208-2360.
+- Every function body, regex, constant, tuple and frozenset is textually identical. The only differences:
+  - the new __all__ tuples;
+  - _OVERLAP_LOOKBACK_S was removed here and is now exported by file_assignment.py:7, with the same value (600);
+  - the _fa_* helpers moved to file_assignment.py.
+- Caveat: that copy is a pre-split snapshot, not the v1.4.3-rc.1 bytes. The deletion side of check_agent_spawn.py is in another payload.
+
+2. How the moved functions are wired back into the hook, and whether that changes behavior
+- prompt_rules is loaded at check_agent_spawn.py:126-139 through _lib/_audit_emit_parts/__init__.py:20-48. That loader deep-copies the plain values and rebuilds each function so it uses the hook module's globals.
+- skill_reference is wired in at the end of the file, check_agent_spawn.py:640-647, through _lib/agent_spawn/__init__.py:13-31.
+- Every name the moved functions use without defining it resolves in the hook module when the function is called:
+  - the modules os, re, Path, hashlib, unicodedata and _redact, imported at check_agent_spawn.py:39-58;
+  - _audit_emit and _AUDIT_EMIT_AVAILABLE, set at :74-79;
+  - the regexes _HTML_COMMENT_RE, _CODE_FENCE_RE, _NEXT_H2_RE, _SKILL_CONTENT_MARKER_RE and the constant _SKILL_CONTENT_MIN_BYTES, defined at advisories.py:338-365 and loaded at :138.
+- Every name in both __all__ tuples exists in its module (checked one by one), so neither loader can fail with AttributeError.
+- No __all__ name of prompt_rules collides with a name from model_routing, advisories, outcome_telemetry, file_assignment, skill_reference or anything the hook file defines later. Import order cannot shadow anything.
+- Test patch points still work: patching check_agent_spawn.<name> reaches the moved functions, because their globals are the hook module's dict, and their __module__ is set to the hook module's name.
+
+3. Module-level code, Python 3.9, standard library only
+- prompt_rules imports only re and, at import time, runs only re.compile calls and literals.
+- The List[...], Tuple[...] and re.Pattern[str] annotations are never evaluated (from __future__ import annotations, PEP 563), so there is no NameError on Python 3.9.
+- skill_reference runs nothing at import time.
+- copy.deepcopy of compiled regexes has worked since Python 3.7.
+- Standard library only.
+
+4. Fail direction
+- If prompt_rules fails to load while the hook runs as a script, it prints {} and exits 0, which allows the spawn (check_agent_spawn.py:130-135).
+- If the wiring at the end fails, _SPAWN_COMPONENT_IMPORT_ERROR is set and main() allows (entrypoint.py:12-16).
+- Both are infrastructure faults, and both fail open, as the doctrine requires.
+- The package __init__ imports file_assignment and skill_reference, so a broken module shows up at the first load, not silently halfway through decide().
+- The MCP spawn_agent handler calls decide() directly and fails CLOSED on any exception (.claude/scripts/mcp-server/handlers/spawn_agent.py:212-229). That is its documented posture and it is unchanged.
+- Input-side behavior inside the moved code is unchanged:
+  - _enforce_prompt_defense blocks on bad input and allows on internal errors;
+  - _validate_skill_reference blocks when any sub-check fails (ADR-051).
+
+5. Effect on adopters
+- A fresh install copies every top-level _lib entry except tests, test_isolation.py and testing.py (scripts/install.sh:1520-1550; exclusion rule at scripts/_framework_manifest_set.sh:95-107). So _lib/agent_spawn/ ships.
+- An upgrade treats .claude/hooks as one whole target.
+- These two files change no environment default, model, effort setting or block condition.
+- A hand-patched check_agent_spawn.py now has to be re-patched in these modules. Condition 7 declares this.
+
+6. Writes
+- Neither module writes files.
+- The only side effect is _audit_emit.emit_generic in _emit_prompt_defense_event. It is guarded and fails open, as before.
+
+7. Declared conditions
+- Condition 5 is true for this package: ".claude/hooks/_lib/agent_spawn/**/*" is in _KERNEL_PATHS at check_arbitration_kernel.py:310.
+- Condition 7 matches what this payload shows.
+- Nothing in these two files makes any declared condition false.
+
+FINDINGS
+No P0. No P1.
+
+NEW FINDINGS (annex)
+None.
+
+P2 FOLLOW-UPS
+
+P2-1. The secret scan on SKILL.md files only looks at the first ~117 characters (pre-existing).
+- Where: .claude/hooks/_lib/agent_spawn/skill_reference.py:250-251 and prompt_rules.py:112-128.
+- Cause: _skill_ref_validate_hash_and_redact calls _redact.redact_secrets(text) with the default max_chars=120 (_lib/redact.py:117, 120, 186-194). The output is collapsed to one line and cut to 117 characters plus "...". The token check at :251 therefore only sees the first ~117 characters of SKILL.md, which is the frontmatter.
+- Two more gaps:
+  - redact_secrets truncates its input at 64 KiB (redact.py:108, 144-146), while reference files may be up to 1 MiB;
+  - the [AWS_SECRET] token emitted by redact.py:102 is missing from _SECRET_TOKENS_IN_OUTPUT.
+- Failure scenario: a SKILL.md with a credential anywhere in its body passes sub-check 11, and a reference-mode sub-agent loads it into its context. ADR-051 sub-check 11 and docs/threat-model.md:1884 present this check as the mitigation for "Secret leak embedded in SKILL.md". The existing test (tests/test_check_agent_spawn_skill_reference.py:229-263) puts the key right after a ~50-character frontmatter, inside the window, so it cannot catch this.
+- Not a regression of this delta: the code is identical in the old single file.
+- Rated P2, not P1: the file is already committed and protected as a canonical file, and the default inline SKILL CONTENT path has no scan at all. Raise it to P1 if the Owner treats threat-model row 10 as load-bearing.
+- Minimal fix:
+  - call redact_secrets(text, max_chars=0) over 64 KiB chunks, or use a scan API that does not truncate;
+  - add "[AWS_SECRET]" to the token set;
+  - add tests with the key placed after character 200 and after 64 KiB.
+
+P2-2. Comments describe the spawn-prompt secret scan wrongly (pre-existing text, shipped again unchanged).
+- Where: prompt_rules.py:163-170 and 213-214.
+- What they say: the scan rejects by default, CEO_SPAWN_SECRET_SCAN=0 turns it off, and a bypass is logged as veto_triggered(reason_code=spawn_secret_scan_bypassed).
+- What the code does: line 221 runs the scan only when the variable is exactly "1", so it is off by default. No spawn_secret_scan_bypassed event is emitted anywhere under .claude/hooks.
+- Fix: say "opt-in via CEO_SPAWN_SECRET_SCAN=1; no bypass event".
+
+P2-3. Comments orphaned by the split (cosmetic).
+- prompt_rules.py:364 says _OVERLAP_LOOKBACK_S is re-exported "below"; it actually comes from file_assignment.py:7 through the wiring at the end of the hook file.
+- prompt_rules.py:397-404 describes a marker hash whose code is at file_assignment.py:496.
+- check_agent_spawn.py:225-227 keeps the "[END]" banner of the prompt-defense block, whose "[BEGIN]" banner is now in prompt_rules.py.
+- Fix: move or remove these comments.
+
+P2-4. The two modules cannot be used on their own.
+- Their functions find os, re, Path, hashlib, unicodedata, _redact and the advisories regexes only through the hook module's globals.
+- So a direct "from _lib.agent_spawn.skill_reference import _validate_skill_reference" fails with NameError when the function is called.
+- No caller in the tree does this today; the only importer is check_agent_spawn.py:643.
+- skill_reference.py has a docstring that says so; prompt_rules.py has none.
+- Fix: add the same docstring to prompt_rules.py, or a test that fails on direct use.
+
+VERDICT: GO Both new modules match the pre-split hook code text for text, are wired back into the hook's namespace without a missing name, a name collision or an inverted fail direction, ship to adopters by both install and upgrade, and leave conditions 5 and 7 true; the only issues found are pre-existing or cosmetic P2s.

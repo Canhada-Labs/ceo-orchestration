@@ -1,0 +1,56 @@
+PAYLOAD 1/32: what it contains
+Version bumps (.claude-plugin/marketplace.json, plugin.json, .claude/.framework-version -> 1.4.4). ceo-boot.md moves from 24 to 25 Tier-S checks. codex-cli-pin.txt goes from ">=0.128.0,<0.161.0" to an unbounded ">=0.128.0". gate-scripts-manifest.txt gets new hashes for three gate scripts. The payload also adds the new package .claude/hooks/_lib/_audit_emit_parts/: __init__.install(), actions*.py, adapters, boot_schemas, compaction, confidence, context_pressure, defense, federation_persona, federation_schemas and finalization.
+
+VERIFIED AGAINST THE CANDIDATE TREE
+- Condition 5 holds. I counted 123 entries in .claude/hooks/check_arbitration_kernel.py:91-347. The 13 declared rows are at :309-315 (seven recursive package rows, including ".claude/hooks/_lib/_audit_emit_parts/**/*" at :312), :332-336 (five flat modules) and :340 (adapters/live/**/*). The new package in this payload is therefore covered by the kernel list.
+- Condition 7: audit_emit.py is now a thin facade. It calls _install_parts(globals(), <33 part names>) at .claude/hooks/_lib/audit_emit.py:413-452.
+- Condition 10: the oracle's `compatible` route requires a version at or above CODEX_VERSION_FLOOR "0.160.0" (.claude/hooks/_lib/cli_currency.py:11, :34-51) and strictly newer than the manifest's package_version (.claude/hooks/_lib/_pair_rail_parts/part_01.py:553-571).
+- ceo-boot.md "25 Tier-S checks" is true. TIER_S_CHECKS has 25 entries, and an assert checks the count (.claude/hooks/_lib/_ceo_boot_parts/scheduled_cache.py:303-370).
+- Moved code (item 4):
+  - install() rebinds each exported function's code object onto the facade's globals. Lookups for _write_event, emit_generic and _breadcrumb therefore resolve in the facade, so test patch points on _lib.audit_emit still work.
+  - `global` statements write to the facade (writer._FALLBACK_NOTIFIED).
+  - Mutable values are deep-copied for each facade import.
+  - I checked the runtime names used by this payload's parts against the parts' __all__ and the facade's imports. Every one resolves in an installed part's __all__ or among the facade's imports. The examples I traced were the defense.py enums and allowlists (harness_schemas, lifecycle_schemas, tokens_boot), the writer helpers, zlib/os/time/Path (audit_emit.py:4-11), and the default-argument constants context_pressure.py imports from .compaction.
+  - No part defines a class, decorator, lambda or Lock; a Lock would break deepcopy, and the facade creates its two locks after install at audit_emit.py:483-484.
+  - No exported name is defined twice across parts. The facade's emit_generic, _KNOWN_ACTIONS and EVENT_SCHEMA_V2 are not overwritten by any installed part. The iter_events re-delegation at audit_emit.py:455-461 behaves as its comment says.
+  - The private names that hooks and scripts read from audit_emit (_audit_dir, _log_path, _errors_path, _write_event, _compaction_plan_id_ok, _NOTIFICATION_TYPE_ENUM, _SESSION_MEMORY_DELTA_OUTCOMES, _CONTEXT_PRESSURE_*, _SUBAGENT_LIFECYCLE_ARCHETYPES, _ATLAS_REGISTRY, _to_basis_points) are all exported by installed parts.
+- Item 6: everything is standard library only. The code is compatible with Python 3.9: FunctionType(code, globals, name, defaults, closure), typing generics under `from __future__ import annotations`, and frozenset/set unions.
+- Item 2 (fail direction): if an agent_spawn part fails to load, check_agent_spawn.py:126-135 prints {} and exits 0 in hook mode. That fails open on an infrastructure fault, as the house rule requires. An import failure of an audit_emit part also exits non-2, which does not block.
+- Item 3 (writes): the context-pressure marker and shard-cursor writes use O_CREAT|O_EXCL|O_NOFOLLOW temp files plus os.replace. GC unlinks are limited to the marker prefix and do not follow symlinks (context_pressure.py:73-200, :245-290). The docstrings state the remaining limits honestly.
+- Fresh install ships the new package: scripts/install.sh:1520-1549 copies every top-level _lib entry except tests, test_isolation.py, testing.py and __pycache__.
+
+P0: none.
+DECLARED CONDITIONS FOUND FALSE IN THIS PAYLOAD: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+1. P2: dead duplicate action registry in kernel code.
+   - Where: .claude/hooks/_lib/_audit_emit_parts/actions.py:12, actions_core.py:4 and actions_extended.py:4.
+   - Problem: "actions" is not in the install roster (audit_emit.py:415-452). The live registry is still the literal at audit_emit.py:45-377.
+   - Today they agree: 234 + 97 = 331 entries, the same as the literal.
+   - Both docstrings say "combined by schemas_actions" (actions_core.py:1, actions_extended.py:1), and no module of that name exists.
+   - Failure scenario: a maintainer registers a new action only in actions_extended.py. At runtime the action stays unregistered and is dropped to a breadcrumb. The CI coverage check (check-audit-registry-coverage.py:197-233) and the reality-ledger phantom detector both read the facade literal, so they would flag it. The only cost is a confusing, inert edit in a kernel path.
+   - Minimal fix: delete the three files, or add a test asserting actions._KNOWN_ACTIONS == audit_emit._KNOWN_ACTIONS, and correct the docstring.
+2. P2 (honesty, already disclosed): the pin comment misdescribes `compatible`.
+   - Where: .claude/governance/codex-cli-pin.txt:196-198.
+   - Problem: the comment says "stable Codex CLI releases at or above 0.128.0 are compatible version evidence". The oracle's `compatible` status actually requires at least 0.160.0 and a version newer than the manifest (cli_currency.py:11, part_01.py:566).
+   - The same file still says at :165-166 that "widen-upper-only" is "the only safe shape".
+   - Effect: scripts/_codex_harness.sh:77-86 no longer prints VERSION SKEW for any Codex 0.161 or later, while the hook fixtures are still certified on 0.139.0.
+   - This is declared by condition 9 and CHANGELOG [1.4.4] (lines 199-201 and 447-450), so it is not a false condition.
+   - Minimal fix: reword the comment to say the range is only the installer's skew gate, and that `compatible` requires at least CODEX_VERSION_FLOOR and a version above the manifest.
+3. P2: install() fails silently on non-function callables.
+   - Where: .claude/hooks/_lib/_audit_emit_parts/__init__.py:21-48.
+   - Problem: install() rebinds only FunctionType. A future part that exports a class, a functools-decorated callable or a partial would keep its template module's globals. It would then bypass facade monkeypatches, or raise NameError on facade-only names.
+   - Today none of the three users (audit_emit, check_agent_spawn with _lib.agent_spawn, lessons.py with _lib._lessons_parts) exports one.
+   - Minimal fix: raise TypeError in install() for any exported callable that is not a FunctionType, so such a part fails in tests instead of at runtime.
+4. P2 (trivial): stale comment.
+   - Where: .claude/hooks/_lib/_audit_emit_parts/context_pressure.py:30.
+   - Problem: the comment cites "_short_hash et al", which exists neither in the facade nor in the parts.
+   - Minimal fix: drop the reference.
+
+LIMITS OF THIS REVIEW
+- I did not check the new hashes in .claude/governance/gate-scripts-manifest.txt. The copy is redacted and I had no shell to hash the files. The manifest is used only by CI workflows (release.yml, smoke-install.yml, ownership-nightly.yml, npm-publish.yml), so a mismatch would fail CI loudly; it does not affect adopters.
+- I could not diff the moved declarations line by line against the base audit_emit.py, because the base tree was not available. My checks of moved-code equivalence are structural: name resolution, duplicates, the binding mechanics and the registry count.
+
+VERDICT: GO Payload 1 has no P0 and makes none of the declared conditions false: the kernel list carries the 13 declared rows, and the audit_emit split binds every part to the facade namespace and resolves every name its parts use. What remains are four P2 items, each either inert or already disclosed in the CHANGELOG.

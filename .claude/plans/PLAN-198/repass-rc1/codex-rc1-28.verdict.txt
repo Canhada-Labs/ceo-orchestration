@@ -1,0 +1,25 @@
+Payload 28/32: no P0 or false declared condition established.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/check-substrate-drift.py:571
+The compatibility branch accepts installed 0.139.0 against the live >=0.128.0 range, despite the manifest pinning 0.160.0. It removes the downgrade warning and remediation while the actual verifier rejects that version. Minimal fix: require the installed version to exceed the manifest version and meet the canonical compatibility floor.
+
+P2 — .claude/scripts/check-substrate-watch.py:238
+The floor exemption includes codex_harness, suppressing its outstanding fixture-reconciliation alert. The ledger deliberately retains 0.139.0 pending fixture rerecording; installed 0.160.0 now clears drift and omits the runbook. Minimal fix: preserve harness reconciliation drift independently of CLI version compatibility.
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:36
+Class cloning retains original bases: the exported Incomplete no longer subclasses the exported ParseError, confirmed by import. Consequently, incomplete syntax reaching handlers such as _subst_commands escapes their ParseError catch and aborts the census instead of producing a blocking parse site. Minimal fix: preserve class identity or remap cloned bases consistently. Also rebind property accessors so legacy patch points remain effective.
+
+P2 — .claude/scripts/check-subprocess-tests.py:16
+The new installed checker requires subprocess-test-baseline.json, but install_scripts_selective() delivers only .sh/.py/.yaml siblings. Default invocation after installation therefore exits 2 because its baseline is missing. Minimal fix: install the required baseline explicitly or exclude this maintenance-only checker from adopter installations.
+
+P2 — .claude/scripts/check-subprocess-tests.py:21
+An explicit nonexistent --root returns success with zero findings, silently disabling the census after a CI path typo. Minimal fix: validate that the requested root exists and is a directory before scanning.
+
+Validation: Python 3.9 imports succeeded. The installer census completed on available files with no new blocking sites; withheld files prevent a complete baseline verdict. Full subprocess scanning was limited by redacted test syntax. No files modified.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition is falsified by this payload and no P0 was found, while five P2 defects remain for follow-up.

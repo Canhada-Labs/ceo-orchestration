@@ -1,0 +1,24 @@
+No P0 or false declared condition established in payload 29.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/scripts/check_contamination.py:132
+os.path.lexists() suppresses permission errors and returns False. If the private-terms file cannot be statted because an ancestor is inaccessible, the loader silently drops every private term; otherwise-readable subjects can receive a clean verdict. Python 3.9 checks confirmed the candidate returns [], whereas the previous is_file() branch propagates PermissionError. Minimal fix: use lstat() explicitly, treating only absence as optional and propagating other errors.
+
+P1 — .claude/scripts/_contamination_inventory.py:76
+In a core.symlinks=false checkout, Git records mode 120000 but materializes the link payload as a regular file. The new term scanner unconditionally calls readlink(), which raises EINVAL and makes the gate exit 2 even for clean content. Minimal fix: support both representations through the no-follow reader, preserving refusal of missing indexed links.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_contamination/term_scan.py:12
+Loading the facade with spec_from_file_location() now fails with ModuleNotFoundError unless the caller separately adds .claude/scripts to sys.path. Normal CLI invocation works. Minimal fix: move the inventory helper into the package and use a relative import.
+
+P2 — .claude/hooks/_lib/_contamination/personal_facade_io.py:3
+typing.get_type_hints() on PersonalPathHit, PersonalPathScan and PersonalPathVerdict now raises NameError because their defining module lacks the annotation dependencies. Minimal fix: import List, Tuple and Optional there.
+
+P2 — .claude/scripts/check_contamination.py:30
+The documentation still promises binary-suffix exclusions, but the new scanner ignores skip_suffixes and reads those files. Minimal fix: update the documentation to describe the implemented scope and remove the unused parameter.
+
+Validation: read-only Python 3.9.6 checks covered imports, bindings, reporting and error handling; all 11 relevant files parsed. Index-backed integration was limited by the supplied snapshot having no .git metadata.
+
+VERDICT: GO-WITH-CONDITIONS This payload establishes no release-blocking condition, but two P1 regressions and three P2 follow-ups remain.

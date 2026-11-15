@@ -1,0 +1,4 @@
+.claude/scripts/check-installer-write-safety.py
+.claude/scripts/check-subprocess-tests.py
+.claude/scripts/check-substrate-drift.py
+.claude/scripts/check-substrate-watch.py

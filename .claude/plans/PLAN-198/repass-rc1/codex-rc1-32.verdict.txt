@@ -1,0 +1,16 @@
+Payload 32: no P0 or false declared condition identified in the reviewed changes.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/tier_policy_cli/learn.py:462; .claude/scripts/tier_policy_cli/loader.py:251. Family acceptance exceeds downstream support. A qualifying claude-haiku-4-5 recommendation reaches an owner-sign command that cli.py:337 rejects; apply.py:401 retains the same closed list. Accepted models missing from the ranking table can also produce incorrect promotion/signature-required labels, although the cost gate rejects unknown pricing. Minimal fix: limit recommendations to supported, ranked models, or update ranking, pricing, signing and writing consistently.
+
+P2 — .github/scripts/validate-pair-rail-verdict.py:772. The hash exemption also covers versions older than the manifest when they meet CODEX_VERSION_FLOOR: comparison -1 is not in (None, 0). This becomes relevant after a manifest re-pin above the current 0.160.0 version and exceeds the disclosed newer-version exception. Minimal fix: require version_comparison > 0 before exempting payload equality.
+
+P2 — .claude/scripts/subprocess-test-baseline.json:1; scripts/install.sh:1606. Fresh installs copy check-subprocess-tests.py and its Python helper but omit the required JSON baseline. Default invocation, including --list, consequently exits 2 when check-subprocess-tests.py:22 reads the absent file. This affects the maintenance command, not hook execution. Minimal fix: explicitly install its baseline or exclude this maintainer-only command from adopter delivery.
+
+Validation: read-only static inspection, Python 3.9 grammar checks for the four changed Python files, shell syntax checks for the three changed shell scripts, and JSON parsing of the baseline, settings and npm metadata. Runtime installation and the full test suite were not exercised.
+
+VERDICT: GO The reviewed payload reveals only P2 follow-ups, with no identified P0 or contradiction of a declared condition.

@@ -1,0 +1,70 @@
+PAYLOAD 19/32 — .claude/hooks/_lib/spool_writer.py, .claude/hooks/_python-hook.sh, .claude/hooks/audit_log.py (plus the files they now load: _lib/_spool_writer_parts/*, _lib/_audit_log_parts/*)
+
+WHAT WAS CHECKED AND HOLDS
+
+Condition 8 is TRUE against the code:
+- .claude/hooks/_python-hook.sh:409-410 exports CEO_HOOK_BOUNDED_EXIT=1 for every hook it runs.
+- .claude/hooks/_lib/spool_writer.py:528-532 adds _exit_deadline_active() and the exit_deadline_skip breadcrumb.
+- In .claude/hooks/_lib/_spool_writer_parts/lifecycle.py, _atexit_drain (346-358) and _signal_drain_handler (361-375) skip both drain_now(force=True) and _flush_journal_buffer while that context is set.
+- ADR-055-AMEND-4 front matter says status ACCEPTED, implementation_status PARTIAL.
+- The CHANGELOG Known-open entry (CHANGELOG.md:402-405) says it is not proven that every skipped event is collected later, with no release assigned.
+
+Condition 7 / moved code, checked against the base text in the diff:
+- The spool_writer facade keeps every constant, cache and mutable global. _spool_writer_parts.install() rebuilds each exported function with FunctionType(code, facade_globals, ...). So the following all resolve in the facade, as before the split: runtime lookups, `global` writes (_IN_SPOOL_APPEND, _LAST_APPEND_SUCCEEDED, _EXIT_HANDLER_INSTALLED), test patch points (spool_writer.drain_now, _spool_path, ...), atexit/signal handler identity, and the _PREV_* comparisons. kwdefaults are copied too.
+- The four __all__ tuples together cover every top-level def and class of the base file.
+- writer.py, prepare.py and drain.py are byte-identical to the base functions. Only the lifecycle exit handlers changed (condition 8). install_exit_handlers gained a self-chaining guard and _reset_for_test now restores signal dispositions.
+- The audit_log.py parts are identical to the base text, including the _ADR_052_ROLE_TO_MODEL table, so no model value changes. The `if __name__ == "__main__"` block sits in the last part, so main() runs only after every declaration is installed. __doc__ is restored.
+- Fail direction on infrastructure faults: if spool_writer fails to import (for example a missing _spool_writer_parts), audit_emit falls back to synchronous canonical writes (_lib/audit_emit.py:37-43). That fails open.
+- The installer ships both new packages: install_lib_selective iterates the top-level _lib entries (scripts/install.sh:1520-1547).
+
+Condition 5, for this payload:
+- check_arbitration_kernel.py:313 lists .claude/hooks/_lib/_audit_log_parts/**/* next to audit_log.py:223.
+- spool_writer.py was not a kernel path in the base and is not one now, so leaving _spool_writer_parts out is not a regression.
+
+Python 3.9 and standard-library-only: OK (FunctionType, exec/compile, __future__ annotations). There are no new write locations; breadcrumbs go to the existing errors path.
+
+NEW FINDINGS (annex)
+
+P1 — the bounded-exit change silently blinds the spawn file-overlap rail.
+- Files: .claude/hooks/_python-hook.sh:410 together with .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:348-350 and :365-366. Reader: .claude/hooks/_lib/agent_spawn/file_assignment.py:327-379 (_recent_file_assignments), used at :454-467.
+- How it worked before. check_agent_spawn records each named spawn's CAN-edit path hashes as `spawn_file_assignment_recorded` (file_assignment.py:542-560). The write goes emit_generic → _dispatch_generic → _write_event → spool_append into the per-PID spool. That is the production default, because only tests pin CEO_AUDIT_SYNC_MODE=1 (_lib/testing.py:167). The next spawn's PreToolUse looks for overlaps only in the tail of the canonical audit-log.jsonl, within a 10-minute window. The opportunistic drain after an append (_audit_emit_parts/writer.py:589-591) almost never fires in a hook: should_drain() (prepare.py:83-122) runs right after the append has refreshed the spool's mtime, so the age trigger never trips and the count trigger needs 100 lines. reconcile_journal_at_session_start has no production caller. In v1.4.3-rc.1, the only thing that made the record visible to the next spawn was the forced exit drain at the end of the check_agent_spawn process.
+- Failure. With CEO_HOOK_BOUNDED_EXIT=1, the record stays in state/audit-spool.<pid>.jsonl past the window. The overlap rail then never fires: advisory telemetry goes silent, and for adopters who set CEO_SPAWN_OVERLAP_GUARD=1 the enforcing guard allows overlapping parallel spawns with no breadcrumb.
+- This is a governance rail disabled silently. It fails open (no session is blocked) and enforcement is opt-in, which is why this is P1 and not P0. Neither condition 8 nor the CHANGELOG mentions stale canonical-log readers. The test harness's sync mode hides the regression.
+- Minimal fix, either one: make _recent_file_assignments also tail <state_dir>/audit-spool.*.jsonl and audit-spool.*.draining.* with the same action/session/ts filter; or route spawn_file_assignment_recorded through the synchronous canonical write.
+- Add a subprocess test: run without CEO_AUDIT_SYNC_MODE and with CEO_HOOK_BOUNDED_EXIT=1; two sequential named spawns with overlapping CAN-edit paths; the second must be refused under CEO_SPAWN_OVERLAP_GUARD=1.
+
+P2 FOLLOW-UPS
+
+P2-1 — drain cost now grows with the backlog. Files: _spool_writer_parts/prepare.py:262-409 and drain.py:446-556.
+- Exit drains are gone, so spools of dead PIDs pile up.
+- Each drain_now renames every swept file, reads each in full, then rewrites every file it did not fully consume while holding the canonical lock. That includes untouched files (empty consumed set), each rewritten to a new .draining.<epoch>. Yet it appends at most K_MAX=100 entries.
+- So the cost of one drain is proportional to the whole backlog, while progress is 100 entries per drain. A non-hook process that imports audit_emit pays that cost at exit.
+- Fix: leave files with no consumed lines in place, and cap the phase-2 sweep at the K_MAX budget.
+- The journal flush is also skipped at exit, so begin/commit envelopes for a hook's last fewer-than-10 events are lost. The ADR acknowledges this.
+
+P2-2 — .claude/hooks/_python-hook.sh:410: the export is unconditional.
+- An adopter's CEO_HOOK_BOUNDED_EXIT=0 is overwritten, so there is no way back to the old exit drain.
+- Every child process a hook spawns inherits the variable and also skips its exit drain.
+- Fix: export CEO_HOOK_BOUNDED_EXIT="${CEO_HOOK_BOUNDED_EXIT:-1}", and document that children inherit it.
+
+P2-3 — .claude/hooks/_lib/spool_writer.py:515-530: the docstring promises behavior that doesn't exist.
+- set_exit_deadline() has no production caller.
+- The deadline value is never compared to the clock; only "not None" matters.
+- The docstring says "hook entrypoints own the monotonic deadline", but no entry point calls it.
+- Fix: rename it or document it as a boolean arm, or remove it.
+
+P2-4 — .claude/hooks/audit_log.py:317-327: an unguarded exec of the parts files.
+- If a part is missing or unreadable (partial upgrade, hand-pruned _lib), the import raises. The hook then exits 1 with a traceback, contrary to the documented "exits 0 on all paths", and agent_spawn rows are lost.
+- It does not block, because a PostToolUse exit 1 is non-blocking. The base kept a partial-upgrade fallback in this same file.
+- Fix: wrap _install_parts() in try/except, write a stderr breadcrumb, and exit 0 when run as __main__.
+
+P2-5 — _spool_writer_parts/lifecycle.py:363-364: an undocumented behavior change.
+- A SIGTERM or SIGINT that arrives while _IN_SPOOL_APPEND is set used to be swallowed. Now it is passed on to the previous handler, so under SIG_DFL the process dies in the middle of the append.
+- This is arguably correct, and readers already tolerate a partial last line, but the CHANGELOG does not mention it.
+
+P2-6 — _spool_writer_parts/{writer,prepare,drain,lifecycle}.py: duplicated, misleading copies.
+- Each part repeats the module docstring header and the constants (K_MAX, DRAIN_TRIGGER_*, SPOOL_LOCK_TIMEOUT). Those copies do nothing, because the functions are rebound to the facade's globals. Editing K_MAX in a part file has no effect.
+- Importing a part function directly fails with NameError (for example _spool_path is not defined there).
+- Fix: drop the duplicate constants, or add a comment that the facade is authoritative.
+
+VERDICT: GO-WITH-CONDITIONS The declared conditions this payload touches (5 for audit_log's parts, 7 and 8) hold against the code and no P0 was found, but the new bounded-exit export silently blinds check_agent_spawn's file-overlap rail, an undeclared P1 that must be carried in the signed annex.

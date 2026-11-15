@@ -1,0 +1,78 @@
+SCOPE: payload 17/32 — new _lib/canonical_edit/{entry,guards,paths,sentinels,session_roots,signature_rail,utility}.py, new _lib/claude_md_excludes.py, new _lib/cli_currency.py, modified _lib/effective_config.py and _lib/escalation_signals.py, new _lib/federation/_server_parts/*. I read the code that binds these files and the code that consumes them: check_canonical_edit.py, canonical_edit/__init__.py and decisions.py, federation/server.py, model_currency.py, check_config_change.py, check_arbitration_kernel.py, _ceo_boot_parts/harness_governance.py, ceo-escalation-detector.py, install.sh. I reasoned statically; I did not execute anything.
+
+DECLARED CONDITIONS (as they touch this payload)
+- C5: true. check_arbitration_kernel.py:309-315 (7 recursive package rows, including .claude/hooks/_lib/canonical_edit/**/*), :332-336 (model_currency, cli_currency, plan_paths, bash_indirect_guard, bash_indirect_telemetry) and :340 (adapters/live/**/*) make 13 rows.
+- C7: true. check_canonical_edit.py binds the canonical_edit functions onto itself; the guard list is now in a kernel path.
+- C9 and C10: true. In model_currency, the allowlist admits Claude Opus/Sonnet/Haiku 4-9, gpt-5..9, o3..o9, gemini-2..9 and grok-3..9; the VETO floor admits Opus 4-9, gpt-5..9 and o3..o9. Both refuse only claude-opus-4-1, so retired ids pass. effective_config.py:482 and escalation_signals.py:121-126 call these predicates. cli_currency.compatible_package_version admits a version at or above CODEX_VERSION_FLOOR "0.160.0" and strictly newer than the manifest, taken from a package.json declaration with no hash.
+- No statement in C1-C14 is contradicted by this payload.
+
+VERIFIED CLEAN
+- Moved canonical-edit code. Every free name used by the 7 bound components resolves in the check_canonical_edit.py namespace, including decisions.__all__. The global writes (_CURRENT_TOOL_NAME, cache counters) land on the hook module. _now, _gpg_verify and the signer paths can still be patched there. The components import only stdlib and their own package, so they add no new infrastructure import.
+- Fail directions are unchanged:
+  - Fail closed: parse_error, a multi-candidate scan fault, too many candidates, a decide() fault on a canonical path, a corrupt session-roots registry for external writes.
+  - Fail open: read_event raising, a session-roots infrastructure fault.
+  - The ADR-186 wall deadline stays fail-closed: entry.py checks _wall_budget_expired; signature_rail and _anchored_blob_text latch _mark_wall_budget_exhausted when the budget is too short to spawn.
+- Federation split. _load_part rebinds methods to the server.py globals, so the relative imports (.replay, .handlers) still resolve against _lib.federation. The handler's parent-class order is sound. The server stays off unless both the env switch and the GPG write sentinel are set.
+- No writes outside their place in this payload.
+- Standard library only; no Python 3.10+ syntax.
+- install.sh:1520-1547 copies each top-level _lib entry recursively, so the new packages ship.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/_lib/effective_config.py:544, .claude/hooks/_lib/claude_md_excludes.py:38-49 and :52-70. A crafted claudeMdExcludes value makes the tamper classifier fail open.
+- The new check runs without its own guard inside _check_settings_layer. _segments_match handles ** by plain recursion with no cache.
+- Scenario: a settings layer (user, project, local or managed) contains "claudeMdExcludes": ["**/" repeated 1200 times + "zz"].
+  - The chain of empty ** matches goes deeper than the default recursion limit and raises RecursionError.
+  - With 60-300 ** segments, backtracking takes about C(N+L, L) calls and runs past any hook timeout.
+  - On Python 3.9, a symlink loop at <project>/CLAUDE.md makes Path.resolve() raise RuntimeError on the same path.
+- The exception escapes to classify_tampering's catch-all (effective_config.py:829-831), which returns [] for the whole call. Every finding in that call is lost: disableAllHooks, bypassPermissions, apiKeyHelper, ANTHROPIC_BASE_URL / AUTH_TOKEN, model remap, the hook census.
+- Both consumers go blind:
+  - The registered ConfigChange hook (check_config_change.py:263-278) logs config_change_observed and allows instead of blocking.
+  - The /ceo-boot tripwire reports clean.
+- Claude Code still applies the layer: the JSON is valid, and the glob simply matches nothing.
+- This is a fail-open on input the security matcher cannot process, which inverts item 2. Before this delta, an attacker could hide only their own layer, by making it unparseable, which Claude Code also rejects.
+- Precondition: write access to a settings layer — the exact case the detector exists for. Not P0, because both detectors are advisory and the project/local settings files stay canonical-guarded.
+- Minimal fix:
+  - Wrap the call: try: excluded = root_claude_md_excluded(...) except Exception: excluded = True, so a value that cannot be classified becomes a TAMPER_CLAUDE_MD_EXCLUDES_ROOT finding.
+  - Make _segments_match an iterative or cached DP over indices, O(len(path) x len(pattern)), and treat a pattern over about 64 segments or with more than 8 ** as unmodelled (return True).
+  - Add a test with a 1200-** pattern next to disableAllHooks: true that expects both findings.
+
+P2 FOLLOW-UPS
+1. Moved code broke a source-level reader: .claude/hooks/_lib/canonical_edit/paths.py:238 versus .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:300-325.
+   - _sentinel_patterns() parses check_canonical_edit.py with ast, looking for _PATTERNS, which now lives in paths.py.
+   - So /ceo-boot sentinels_pending_gpg always takes its fallback: it reports "[padrões em FALLBACK — a autoridade não foi lida]" and scans 4 of 10 patterns.
+   - A post-cutoff sentinel in the wave-0a, wave-0b, wave-1-2, wave-minus-1, staging/review or audit-v2 layouts that lacks its .asc is not reported.
+   - ADR-202 says source-level readers must be checked one by one; this one was missed, and no test asserts derived=True.
+   - Fix: move _PATTERNS to a module-level constant in paths.py and import it, or parse paths.py instead; add a test that asserts derived=True.
+
+2. Fail-closed on a missing component (fail-direction inversion; deliberate per ADR-202 "AST and integrity boundaries"): check_canonical_edit.py:616-640 is the live path; entry.py:126-133 is an unreachable copy.
+   - If any file under _lib/canonical_edit/, or _lib itself, is missing after an install or upgrade, the import raises ModuleNotFoundError. Every Edit, Write, MultiEdit and mcp__* call is then blocked, non-canonical paths included, and settings.json cannot be fixed through the harness either.
+   - This contradicts the hook's own docstring (check_canonical_edit.py:36-40, "Any internal exception → allow") and is not stated in CHANGELOG [1.4.4].
+   - Fix: declare it in the adopter section and update the docstring, or block only canonical-prefix paths in the fallback.
+
+3. Drift between the library and the script copy: escalation_signals.py:121-126 versus .claude/scripts/ceo-escalation-detector.py:94-97 and :373-375, which still says "keep bit-equivalent".
+   - The library now admits gpt-5..9, o3..o9 and claude-fable-5; the script still checks only the prefixes. No parity test catches this.
+   - The script is the stricter side, so the direction is safe, but CHANGELOG line 153 describes behavior the shipped detector does not have.
+   - The comment at escalation_signals.py:70, "the shared predicate owns runtime policy", is inaccurate: the legacy prefixes are still OR'd in, so claude-opus-4-1 and any claude-fable-* pass.
+
+4. effective_config.py:238: the lazy _WORKING_SET_RE stops at the first ")", which is inside the comment at ADR-149 line 82, "(base ... same order)".
+   - The captured text holds no ids, so the parser falls back to scanning the whole document (:715-716).
+   - Today's result happens to equal the working set. Any quoted id added later anywhere in ADR-149 prose would silently join the allowlist.
+   - Fix: anchor the closing bracket on ^\) (re.M), or literal_eval the code block; add a test.
+
+5. cli_currency.py:63-77: _package_files walks every ancestor up to /, and compatible_package_version (:34-51) can accept a different package.json than the one qualified_package_version (:54-60) records as installed_version.
+   - With a nested older @openai/codex package.json, or any {"name":"@openai/codex","version":"9.9.9"} in ~ or /, the pin reads compatible/version_floor_only while PROVENANCE records a version that did not qualify. That weakens the C10 instrument identity.
+   - This stays inside the declared trust model.
+   - Fix: stop at the first package.json named @openai/codex and use that one version for both recording and comparison.
+
+6. Honesty: CHANGELOG [1.4.4] lines 327-328 say only a value that "excludes the root CLAUDE.md" is classified as tamper. claude_md_excludes.py:34-35 and :66 also flag any pattern containing { } ( ) or !.
+   - That covers brace-set monorepo patterns, negations, and absolute paths under "Dropbox (Personal)".
+   - Because check_config_change blocks on any settings-layer finding, such an adopter gets an advisory CONFIG-TAMPER block on every ConfigChange and a /ceo-boot finding.
+   - Separately, _root_claude_md matches only the resolved path, so a pattern written against an unresolved path (/tmp versus /private/tmp, or a symlinked checkout) is a false negative.
+   - Fix: document the over-flagging, or narrow it; match both the resolved and the absolute path.
+
+7. Doc nits:
+   - effective_config.py:35 says "Its only shared helper", but the module imports two (claude_md_excludes, model_currency).
+   - "the module note above" in paths.py (_matches_canonical_guard) and sentinels.py (_sentinel_grants_path) points at notes that stayed in check_canonical_edit.py.
+   - cli_currency.py:26 docstring says "else None", but the function returns -1 or 0 when the candidate is not newer, and None only on a parse failure.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload's code and no P0 was found, but one undeclared P1 (a crafted claudeMdExcludes value makes classify_tampering drop every settings-tamper finding) goes to the signed annex with a minimal fix.

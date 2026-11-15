@@ -1,0 +1,53 @@
+SCOPE OF THIS CUT (payload 32/32): .claude/scripts/subprocess-test-baseline.json (new), tier_policy_cli/{_types,learn,loader}.py, validate-governance.sh, .claude/settings.json, PR template, .github/scripts/validate-pair-rail-verdict.py, coverage.yml, validate.yml, CHANGELOG [1.4.4], INSTALL.md, Makefile, README/README.pt-BR/npm README, SBOM/SECURITY/VERSIONING stamps, SPEC/v1/audit-log.schema.md, VERSION/npm package.json/pyproject, docs/*, scripts/_codex_harness.sh, scripts/install-npm.sh.
+
+DECLARED CONDITIONS CHECKED AGAINST THE TREE (none found false)
+- C5: check_arbitration_kernel.py:309-340 has the 7 recursive package rows, the 5 flat modules and adapters/live/**. coverage.yml timeout is 50.
+- C6: the switches are read through _trusted_env.get_trusted, so the startup environment (posture_scan.py:573-577; default ON when there is no snapshot). The disable telemetry is at decisions_cli.py:170-172. The SPEC enum additions match lifecycle_schemas.py:508,516.
+- C9/C10: model_currency.py _ALLOWED/_FLOOR/_RETIRED match the families described in the CHANGELOG exactly. validate-pair-rail-verdict.py:770-784 skips the payload-sha equality for a declared version that is not the manifest's and is at or above cli_currency.CODEX_VERSION_FLOOR (0.160.0). gen_envelope.check_instrument (kit:1269-1295) refuses below 0.160.0 even with the manifest sha, and requires a version strictly newer than the manifest for `compatible`. The pin file reads `>=0.128.0` with no upper bound, as declared.
+- C11: VERSIONING.md:15-17,45 classes SPEC changes and new trust boundaries as MINOR. The «Version number.» paragraph says so.
+- C12: _release_bump_sites.py:90 `((?:--pin |git tag --list ['"]?)v)SEMVER` rewrites all three INSTALL.md lines (717/719/722) and no other INSTALL.md site.
+- Spot checks from other payloads: C3(b)/(c): check-audit-real-loss.py:67,160-208 and audit_spool_state.py:62. C4: secret_patterns.scan maps NFKC-frame spans back to the original text.
+- Honesty of this payload's CHANGELOG lines: _lib top-level count = 78. templates/settings/settings.base.json still ships cleanupPeriodDays 90. install.sh builds settings only from templates, so the 3650 and the claudeMdExcludes in .claude/settings.json do not reach installs. The claudeMdExcludes glob cannot match a root CLAUDE.md unless the checkout itself sits under .claude/plans/**/staged*/. The `_codex_harness.sh` "verified against 0.160.0" print is declared.
+- Python: everything changed is stdlib only and 3.9-safe. No hook in .claude/hooks shares a name with a stdlib module, so the new sys.path.insert(0, .claude/hooks) in _types.py and the validator does not shadow anything. tier_policy_cli has no .claude/scripts/_lib to collide with. The names removed from the validator (parse_semver, semver_in_range) have no callers outside tests.
+- Fail direction: the validator now fails CLOSED (exit 3) on a pin line it cannot parse, a malformed verdict payload sha, or a non-stable manifest package_version. A failed import of cli_currency crashes with exit 1 (INFRA), and the PLAN-166 delta gate still fails closed in optional mode. validate-governance.sh rejects (ERROR) when python3 or model_currency.py is missing. _types.py falls back to the exact list when model_currency cannot be imported.
+
+NO P0 FOUND.
+
+NEW FINDINGS (annex)
+P1 — .github/scripts/validate-pair-rail-verdict.py:85-88, :770-772 and .claude/scripts/validate-governance.sh:721, against .claude/governance/gate-scripts-manifest.txt:2,8 (ADR-192).
+- What changed: two of the nine ADR-192 content-pinned gate scripts now delegate their deciding logic to modules outside the gate-scripts manifest.
+  - Step 15 now takes its semver parse, its comparison and the payload-hash exemption floor (CODEX_VERSION_FLOOR) from .claude/hooks/_lib/cli_currency.py, imported through _lib/__init__.py.
+  - The agent `model:` check runs .claude/hooks/_lib/model_currency.py.
+- Coverage: neither module is a manifest member. cli_currency.py is also absent from pair-rail-inputs-hash-manifest.txt. The CHANGELOG Known-open declares that this manifest lists entry points only "not the packages behind them"; the flat module and the ADR-192 manifest are not declared.
+- Why it matters: ADR-192 itself says "adicionar um ramo local que decida integridade fora do manifesto reabre a classe que esta decisão fecha".
+- Failure scenario: a later change reaches main by the pull-request route this train used, which bypasses hooks, and `main` has no protection. For example, it sets CODEX_VERSION_FLOOR = "0.0.0" or makes compare_semver lenient. release.yml step 15 then waves through any payload sha. The "Gate-scripts integrity" step stays green, and the verdict's inputs_hash does not bind the change.
+- Mitigation that exists: both modules are kernel paths now (C5), which only guards in-session edits.
+- Minimal fix:
+  - Add .claude/hooks/_lib/cli_currency.py, .claude/hooks/_lib/model_currency.py and .claude/hooks/_lib/__init__.py to gate-scripts-manifest.txt (ceremony) and cli_currency.py to pair-rail-inputs-hash-manifest.txt.
+  - Or make the validator self-contained again by inlining the ~15-line stable-semver helper and the floor constant.
+
+P2 FOLLOW-UPS
+1. validate-pair-rail-verdict.py:772
+   - Problem: `exact_payload_pin = version_comparison in (None, 0) or ...` also exempts an OLDER-than-manifest version at or above the floor. cli_currency.compatible_package_version (:49, needs > manifest) and gen_envelope (needs > manifest) do not. The INFO at :783 ("newer than the payload manifest") would then be false.
+   - Status: latent while manifest package_version == CODEX_VERSION_FLOOR == 0.160.0. It becomes live at the next re-pin unless the floor moves with it. It adds no power beyond the declared "validator does not bind declared version to payload hash".
+   - Fix: `version_comparison is None or version_comparison <= 0 or newer_floor is None or newer_floor < 0`.
+2. scripts/_codex_harness.sh:46,294-296,372-373,461
+   - Problem: CODEX_VERIFIED_VERSION=0.160.0 now goes into the adopter-committed requirements.toml ("Verified against codex-cli 0.160.0") and into the arming-check skew text ("fixtures/enforcement were certified on 0.160.0"). Fixtures date from 0.139.0, and :296 still says "codex 0.139". The comment at :44 ("PLAN-142-verified range") is stale. Partly declared in CHANGELOG/Known-open.
+   - Fix: a separate CODEX_FIXTURE_VERSION=0.139.0 for the certification wording.
+3. validate-governance.sh:701-710: the comment still describes a closed literal list. Rewrite it.
+4. tier_policy_cli/apply.py:401
+   - Problem: it still tests `new_model not in VALID_MODEL_IDS`, while loader.py:251 and learn.py:462 now admit families. A loaded or learned family tier is silently "skipped" at apply. This fails safe but is inconsistent.
+   - Fix: pick one predicate.
+5. SPEC/v1/audit-log.schema.md:484 says "SHARED by all four learning-loop rails", but there are now five rails. (The stale ADR-201 `PROPOSED` is declared.)
+6. docs/DISASTER-RECOVERY.md:79-83
+   - Problem: the new strict-mode guidance omits that an ABSENT counter exits 0 with only a warning (audit-verify-chain.py:44,582). In a truncated-tail investigation, a deleted sidecar reads as pass.
+   - Fix: state the absent case.
+7. tier_policy_cli/_types.py:8,143: docstrings still say "MODEL_ID Literal".
+8. Pin-file readers diverge:
+   - parse_pin_range (validator :349-358) takes the FIRST data line and now hard-fails on a non-matching one. _codex_harness.sh:53 takes the LAST.
+   - A second range line would make the two readers disagree.
+   - Fix: refuse more than one data line in both.
+
+NOT VERIFIABLE HERE: whether gate-scripts-manifest.txt was re-hashed for the edited validate-pair-rail-verdict.py and validate-governance.sh. I had no hashing tool, and the tree is redacted. If it was not re-hashed, release.yml's first step fails closed: the release is blocked, with no adopter impact.
+
+VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches checks out against the tree and I found no P0, but one undeclared P1 goes in the signed annex: two ADR-192 gate scripts now hand their decisions to the unpinned _lib modules cli_currency.py and model_currency.py.

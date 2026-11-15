@@ -1,0 +1,76 @@
+SCOPE: payload 3/32. It has 12 new files under .claude/hooks/_lib/_audit_emit_parts/ (orchestration, pair_rail, planning, rate_limits, replay, resource_events, routing, security, streaming, tokens_boot, workflow, writer) and 3 under .claude/hooks/_lib/_audit_log_parts/ (__init__, adapters_runtime, entries_usage). They are PLAN-197 moves behind the _lib/audit_emit.py and audit_log.py facades.
+
+WHAT I VERIFIED AGAINST THE CANDIDATE TREE
+1. How the moved code is bound. audit_emit.py:413-452 calls _audit_emit_parts.install (__init__.py:20-48). For each part it runs import_module, copies the names in the part's __all__, deep-copies the values, and rebuilds every function with FunctionType(code, facade_globals). So in the facade:
+   - global lookups resolve as before;
+   - `global _FALLBACK_NOTIFIED` (writer.py:56-59) still works;
+   - `globals().get("_plan088_rate_admit")` in _try_rate_admit (orchestration.py:288-296) still works;
+   - patches of audit_emit.* still take effect.
+   audit_log.py:311-327 runs the four part sources with exec in its own globals, in the order paths_skills, entries_usage, rotation_storage, adapters_runtime. The trailing `if __name__ == "__main__": sys.exit(main())` in adapters_runtime.py runs only after all four are installed.
+2. Names. In each file of this payload, every name listed in __all__ is defined. Every free name these parts use at call time is defined in the facade or exported by some part's __all__. Examples:
+   - _ATLAS_REGISTRY comes from adapters.py;
+   - _PAIR_RAIL_REVIEW_ID_RE, _coerce_pair_rail_timeout_ms and _AUDIT_TOKENS_ALLOWLIST come from lifecycle_schemas.py;
+   - _LEDGER_GATE_SIGNAL comes from harness_schemas.py;
+   - _AUDIT_PRODUCER_PATH_POLLUTION_* comes from operations.py;
+   - the estimate-drift and boot-task allowlists come from governance.py;
+   - the boot and model-routing allowlists come from boot_schemas.py;
+   - _PLAN088_RATE_LOCK and _PLAN090_BUCKET_LOCK are defined in the facade at audit_emit.py:483-484. They are used only at call time.
+   None of the names I checked is defined twice, so install order cannot silently replace one.
+3. Import-time safety and Python 3.9. Module-level code is limited to constants, frozensets and def statements. Default values evaluated at def time only use names the part itself defines or imports (time.time, time.monotonic, _PLAN088_PAYLOAD_MAX_BYTES). Every file has `from __future__ import annotations`, so module-level annotations such as orchestration's `_PLAN090_STREAM_BUCKETS: Dict[str, Tuple[float, int]]` are never evaluated. I found no syntax newer than 3.9 and nothing outside the standard library.
+4. Fail direction.
+   - _write_event, _breadcrumb and _write_fallback stay fail-open.
+   - The chain-reset marker stays fail-closed for the chain and fail-open for the session.
+   - The codex, grok and claude paths in adapters_runtime.py return 0 on every path. Their logic matches the staged copy .claude/plans/PLAN-182/staged-w1/tree/.claude/hooks/audit_log.py:1360-1615.
+   - The PLAN-118 canonical-resolution check (audit_hmac.py:760-805) still keys on _lib.audit_emit, which stays in _lib/. The parts are imported from the same package.
+   I found no inversion.
+5. Kernel coverage. check_arbitration_kernel.py:312-313 lists _audit_emit_parts/**/* and _audit_log_parts/**/*. The segment glob treats ** as zero or more segments, so it also covers files directly in those folders. This is consistent with conditions 5 and 7.
+6. Model value. In entries_usage.py, _ADR_052_ROLE_TO_MODEL maps "general-purpose" to claude-opus-5-5. This is only a fallback value for the audit log, not a routing switch. It arrived in v1.4.2 (CHANGELOG [1.4.2], PLAN-193), not in this delta. No model or effort setting changes here.
+
+LIMITS: The tree has no copy of the base monolithic audit_emit.py, so I could not confirm that the moved text is identical to v1.4.3-rc.1. The redactor replaced the two literals at writer.py:423-424 with "[REDACTED:rg]", so I could not judge them. I had no shell, so nothing was executed.
+
+FINDINGS: no P0, and no declared condition is false against this payload.
+
+NEW FINDINGS (annex): no undeclared P1.
+
+P2 FOLLOW-UPS
+P2-1 — .claude/hooks/_lib/_audit_emit_parts/writer.py:603-604, 687, 758-761.
+- Defect: the fallback branch reads `line` before it exists.
+- Scenario: the audit directory or the lock directory exists but is not writable.
+  1. FileLock calls os.open (filelock.py:144), which raises PermissionError before line 687 builds `line`.
+  2. The `except (OSError, PermissionError)` branch calls `_write_fallback(line)`, which raises UnboundLocalError.
+  3. The outer `except Exception` calls _breadcrumb, which writes into the same unwritable directory and fails silently.
+  4. The event is lost, with no /tmp fallback and no banner. This contradicts the F-CHAOS-1 comment.
+- Reach: only the sync path, meaning the spool kill-switch is on or the spool silently dropped the event.
+- Test gap: test_audit_emit.py:1183 only fails at log.open, after `line` exists.
+- Origin: the code looks carried over unchanged; the M9 comment at lines 741-748 already notes the same scoping problem for the timeout branch.
+- Minimal fix: in the OSError branch, serialize from `event` the same way the FileLockTimeout branch does.
+
+P2-2 — writer.py:42-51, 76, 87.
+- Defect: the fallback file /tmp/ceo-audit-fallback-<user>.log has a predictable name, and both open("a") and os.chmod follow symlinks.
+- Scenario: on a shared host (macOS has no protected_symlinks), another user plants a symlink at that path. The victim's degraded writes then append event JSON to any file the victim can write, and set that file to mode 0600.
+- Origin: carried over by the move.
+- Minimal fix: open with os.open(O_WRONLY|O_APPEND|O_CREAT|O_NOFOLLOW, 0o600) and use fchmod on the descriptor.
+
+P2-3 — .claude/hooks/audit_log.py:317-327 (the loader that runs this payload's _audit_log_parts files).
+- Defect: a missing or unreadable part file raises FileNotFoundError at import. The hook exits 1 with a traceback.
+- Mismatch: its own docstring ("Safety properties 1") promises a breadcrumb and exit 0, and the same file keeps a partial-upgrade fallback for runtime_paths at lines 180-199.
+- Impact: exit 1 on PostToolUse does not block the session, so this is not a fail-direction inversion. The audit row is lost and the user sees noise.
+- Minimal fix: wrap _install_parts in try/except, write a breadcrumb, and exit 0 when run as __main__.
+
+P2-4 — doc drift caused by the move.
+- SPEC/v1/soc2-control-map.schema.md:524: the CC7.1 verification method `grep '^def emit_' .claude/hooks/_lib/audit_emit.py` now finds only emit_credential_rotation_due and emit_generic. The typed emitters now live in _audit_emit_parts/*.py.
+- Stale code pointers: pair_rail.py:85-86 and routing.py:420 cite "audit_emit.py:386-396" and "grep -F assertions"; orchestration.py:217 cites "line ~3484".
+- Minimal fix: point the verification method at both the facade and the parts, and update the pointers.
+
+P2-5 — name lookup in the facade for annotations.
+- Defect: these parts' string annotations use names the facade does not import (audit_emit.py:12 imports only Any, Dict, Optional):
+  - List: routing.py, tokens_boot.py, workflow.py;
+  - Tuple: orchestration.py, rate_limits.py, tokens_boot.py;
+  - Callable: rate_limits.py, streaming.py;
+  - Iterator: replay.py.
+  As a result, typing.get_type_hints() on those bound emitters raises NameError.
+- Impact: no in-scope code calls get_type_hints. test_audit_emit.py:1567 imports it but introspects with inspect.signature.
+- Related hygiene: _audit_log_parts/entries_usage.py and adapters_runtime.py cannot be imported as standalone modules (re, os and sys are unbound), even though the directory is a package. In production they are only run by the facade.
+- Minimal fix: import the missing typing names in the facade, and document that _audit_log_parts is exec-only.
+
+VERDICT: GO These moved audit_emit and audit_log parts bind every name they use into the facade, stay standard-library-only and Python 3.9 compatible, keep their fail-open behavior and are on the kernel list, so no declared condition is contradicted and no P0 was found; what remains are P2 follow-ups, mostly carried over from before the split.

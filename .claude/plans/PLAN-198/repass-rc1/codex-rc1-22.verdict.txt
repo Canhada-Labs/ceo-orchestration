@@ -1,0 +1,13 @@
+Payload 22: no P0 or false numbered release condition established.
+
+NEW FINDINGS (annex)
+P1 — .claude/hooks/check_canonical_edit.py:624
+A missing extracted component during an incomplete upgrade raises ImportError, which the new fallback labels an integrity failure. main() then blocks every matched invocation before inspecting its input, including ordinary noncanonical edits. This reverses the required infrastructure fail-open posture; it is unrelated to the deliberate wall-deadline exception. Minimal fix: emit allow with a diagnostic for component import failures, including the duplicate handling in _lib/canonical_edit/entry.py:126; preserve input-parse and deadline blocks.
+
+P2 follow-ups
+P2 — .claude/hooks/check_canonical_edit.py:115
+The new comment claims .claude/commands/** stays sentinel-guarded, but the extracted guard list contains only .claude/commands/council.md. Readers can incorrectly assume other command definitions require a sentinel. Minimal fix: describe the actual guarded paths without asserting blanket command coverage. This is a new documentation overstatement, not newly removed protection.
+
+Validation: all 49 extracted functions bind to the facade globals without unresolved global references; independent imports retain separate verification caches. Python 3.9 grammar checks passed for the 12 reviewed files. The harness static check passed with the expected root_load_unobservable advisory. No additional defect found in the cost-envelope change.
+
+VERDICT: GO-WITH-CONDITIONS The infrastructure-failure regression belongs in the signed annex under the cut rule, and this payload establishes neither a P0 nor a false numbered condition.

@@ -1,0 +1,9 @@
+NEW FINDINGS (annex)
+No P1 findings.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/_installer_write_safety/syntax.py:10; binding defect at _installer_write_safety/__init__.py:36. The facade recreates ParseError and Incomplete but retains Incomplete’s original base class. Confirmed: issubclass(facade.Incomplete, facade.ParseError) is False. Callers catching the exported ParseError can therefore receive an uncaught Incomplete instead of their expected parse-error handling. Minimal fix: preserve class identity during binding and remap package-defined bases to their facade equivalents; verify inheritance and exception-catching compatibility.
+
+Read-only checks found no additional extraction regression in the lessons or night-mode helpers. All 22 inspected implementation/facade files passed Python 3.9 grammar parsing; this was not a Python 3.9 runtime test.
+
+VERDICT: GO This payload shows no false declared condition or P0, and the exception-hierarchy regression is a nonblocking P2.

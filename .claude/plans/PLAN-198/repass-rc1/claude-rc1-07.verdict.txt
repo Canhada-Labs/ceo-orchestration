@@ -1,0 +1,54 @@
+PAYLOAD 7/32. Files covered: _lib/_ceo_boot_parts/telemetry_candidates.py, _lib/_ceremony_toolkit/{__init__,bundle_builder,preflight}.py, _lib/_contamination/{__init__,cli_checks,personal_constants,personal_facade_io,personal_path_policy,personal_path_rows,personal_path_scanner,personal_reporting,term_scan}.py, _lib/_context_budget_parts/{__init__,compaction,inventory}.py. All are new files. Most are code moved out of check_contamination.py, ceo-boot.py and context-budget.py.
+
+WHAT I CHECKED AND FOUND SOUND
+- Contamination facade binding (.claude/scripts/check_contamination.py:402-506). Every global that the extracted functions use resolves in the facade namespace. That covers constants copied from personal_constants, the policy-only regexes exported through __all__, _PERSONAL_PATH_NAME_LINE from the scanner, and stdlib modules imported by the facade. The order of personal_path_verdict is correct: the policy implementation becomes _personal_path_verdict_impl, then the wrapper is published. NamedTuple and exception classes keep one identity. The default root in main() uses the facade's __file__, so the result is the same as before. Patch points survive: FileWalker and _personal_path_index_modes are looked up at call time, and term_scan receives its dependencies as arguments.
+- ceo-boot parts run inside the facade dict under their real filenames. Every name telemetry_candidates.py uses exists at that point (_rp, typing, resource, tracemalloc, AUDIT_LOG_DEFAULT, _audit_emit, TIER_*_CHECKS, dispatch_parallel).
+- context-budget install(): deepcopy and rebinding are safe for the inventory and compaction declarations. CompactionPolicy is rebuilt per facade, and its methods are bound to that facade.
+- Delivery: install_lib_selective copies each top-level _lib entry recursively (scripts/install.sh:1520-1556). test_installed_script_packages.py covers _contamination. _contamination_inventory.py ships under the *.py rule (CHANGELOG:342-346).
+- Governance: the new packages fall under the canonical guard ".claude/hooks/_lib/**/*.py" (_lib/canonical_edit/guards.py:34). They are not kernel, are not reached by kernel code, and condition 5 does not claim them. No hook calls ceo-boot.py, context-budget.py or check_contamination.py, so none of this can block a session.
+- Python 3.9 and stdlib only: OK. tuple[...] appears only in annotations, under "from __future__ import annotations", and Path.is_relative_to exists on 3.9.
+- Fail direction: the contamination code is a gate and fails closed on input, consistent with the repo's rule. The GPG verification in the ceremony toolkit fails closed: it needs an explicit keyring, refuses an empty allowlist, rejects EXPKEYSIG/REVKEYSIG because GOODSIG is required, and refuses symlinks.
+- No declared condition is contradicted by this payload. Condition 7 (thin entry points, logic in _lib modules) matches these three scripts.
+
+FINDINGS
+None at P0. None at P1.
+
+NEW FINDINGS (annex)
+None.
+
+P2 FOLLOW-UPS
+1. P2 — .claude/hooks/_lib/_ceremony_toolkit/preflight.py:50-62
+   - Defect: _canonical_patterns() looks for a top-level ast.Assign of _CANONICAL_GUARDS in .claude/hooks/check_canonical_edit.py. The guards moved to _lib/canonical_edit/guards.py:5. The only assignment left in check_canonical_edit.py is the fallback "_CANONICAL_GUARDS = []" inside the except at :124, which sits inside an ast.Try node and is never visited.
+   - Failure scenario: in the shipped tree, collect_modified_canonical_paths() and validate_sentinel_pack() called without explicit canonical_patterns always return valid=False with reason "canonical_guard_policy_unavailable". The docstring "Read the actual guard policy" is therefore false. The tests (test_plan188_ceremony_toolkit.py:47,95) always pass explicit patterns, so this path is untested.
+   - Impact: it fails closed and has no product caller.
+   - Fix: parse _lib/canonical_edit/guards.py (its top-level Assign), or follow the import. Add one test that omits canonical_patterns.
+
+2. P2 — .claude/hooks/_lib/_contamination/term_scan.py:12-47 with cli_checks.py:131-138 (honesty; affects adopter CI)
+   - Change: the term rule now goes through _contamination_inventory.scan_rule_one (FU-144, backlog item 11).
+   - It exits 2 where the base answered 0: a non-UTF-8 tracked name anywhere in the index, an unreadable blob, an unsupported index mode, or a disagreement between the index and the walk.
+   - It reads a tracked symlink's target string instead of following the link.
+   - It no longer skips files by suffix. The skip_suffixes parameter (term_scan.py:21) is dead, yet cli_checks.py:136 still passes _SKIP_SUFFIXES. The facade docstring (check_contamination.py:30-31) still says binary suffixes are excluded. test_binary_files_skipped passes only because its fixture contains a non-UTF-8 byte.
+   - Honesty gap: CHANGELOG [1.4.4]:112-117 says check_contamination.py keeps its observable contract, and no CHANGELOG line describes the FU-144 hardening.
+   - Failure scenario: an adopter repo with a Latin-1 tracked filename turns its validate.yml check (templates/.github/workflows/validate.yml.template:87) from rc 0 to rc 2 after upgrading. The failure is in the correct fail-closed direction and prints a clear FATAL message.
+   - Fix: add one CHANGELOG line, drop the dead parameter, and correct the docstring.
+
+3. P2 — .claude/hooks/_lib/_contamination/cli_checks.py:218-219
+   - Defect: the comment says "RULE 2 still runs below". In fact Rule 2 runs before the term scan (:208), and :211 returns early on its rc 2.
+   - Fix: correct the comment.
+
+4. P2 — moved script logic is now canonical
+   - Change: the code of ceo-boot.py, check_contamination.py and context-budget.py moved from non-canonical script paths into .claude/hooks/_lib/** (guards.py:34). Editing it now requires a signed sentinel, in adopters too.
+   - Stale comment: _context_budget_parts/compaction.py:19-20 still says the module "is non-canonical and lives here in scripts/".
+   - Gap: the CHANGELOG advice "re-apply the patch to the module" does not say that a sentinel is now required. This tightens governance (fail-closed) but is undeclared.
+   - Fix: one sentence in the CHANGELOG and corrected comments.
+
+5. P2 — .claude/hooks/_lib/_ceo_boot_parts/__init__.py:25-26
+   - Defect: running each part's source executes its module docstring, which overwrites the facade's __doc__. ceo-boot's module __doc__ becomes "Extracted ceo-boot declarations executed by the facade."
+   - Impact: none found; argparse uses an explicit description, and only pydoc/help() output changes.
+   - Fix: save __doc__ before install and restore it after, or drop the docstrings from the parts.
+
+6. P2 — .claude/hooks/_lib/_context_budget_parts/inventory.py:13-14
+   - Defect: CHARS_PER_TOKEN and REDACTED are copied into the part so that HONESTY_NOTES can be built when the part is imported. Both match the facade today (context-budget.py:145,189). If the facade value changes, the notes would no longer describe the estimate actually used.
+   - Fix: build the notes from the facade values after install, or assert the two are equal.
+
+VERDICT: GO Payload 7 contradicts no declared condition and contains no P0 or P1: the moved code resolves and binds correctly in its facades, is delivered to installs, stays Python 3.9 standard-library only and fails in the declared directions, and the six items found are P2 follow-ups (doc accuracy, dead code, and a ceremony-toolkit default that fails closed and has no product caller).

@@ -1,0 +1,82 @@
+PAYLOAD 8/32: review of v1.4.3-rc.1..0e687e3c5285
+
+Scope read. The new PLAN-197 split modules are `.claude/hooks/_lib/_context_budget_parts/{middle_out,status,summarization}.py`, `_cost_transcripts_parts/{__init__,cli,pricing,records,rollup,routing,routing_helpers}.py` and `_installer_write_safety/{__init__,commands,engine,model,operands}.py`. I also read the three entry points that load them (`.claude/scripts/context-budget.py:199-203`, `.claude/scripts/ceo-cost-transcripts.py:248-252`, `.claude/scripts/check-installer-write-safety.py:23-32`), the sibling modules they bind together (inventory/compaction, syntax/verdicts_a/verdicts_b/report), the fail-soft loader `ceo-cost.py:483-510`, and the CI gate `validate.yml:411-435`.
+
+Limit of this review: I had read-only file tools and no shell. Every finding below comes from reading the code against CPython 3.9 semantics. Each one comes with a short reproduction the maintainers can run.
+
+Declared conditions this payload touches:
+- Condition 7: true for these three entry points. They keep their paths, and the logic now lives in `_lib` packages.
+- Condition 5: none of these three packages is in the 13 new kernel lines, and the condition does not claim them.
+- Condition 13: every path in this payload is in scope.
+
+No declared condition is contradicted, and I found no P0.
+
+Adopter blast radius:
+- No hook, settings template, model, effort or session gate changes in this payload.
+- `context-budget.py` is an advisory CLI behind `/context-budget`.
+- `ceo-cost-transcripts.py` is loaded fail-soft by `ceo-cost.py:495-510`.
+- `check-installer-write-safety.py` is a maintainer CI census (`validate.yml:411-414`, `set -euo pipefail`), so any crash leaves CI red.
+- `install_lib_selective` (`scripts/install.sh:1520-1547`) copies each top-level `_lib` entry, so the three new packages ship on install.
+
+Python 3.9 and stdlib-only: confirmed. No 3.10+ syntax or APIs. Imports are standard library plus `_lib.runtime_paths`, `_lib.agent_frontmatter` and `_lib.injection_patterns`.
+
+Name resolution: every name the split modules leave undefined resolves in the entry point's namespace after binding:
+- context-budget: `_env_int` and `_clamp_pct` come from compaction, `_clamp_nonneg_int` from summarization, `estimate_tokens` and `_read_text` from inventory. `CAT_MCP` and `THRESHOLD_SKILL_LINES` are defined in the entry point.
+- cost-transcripts: the entry point defines `_SCRIPT_DIR` and `_rp`, and imports every stdlib name the binder excludes.
+
+No duplicate top-level definitions across components, so binding order does not change which definition wins.
+
+NEW FINDINGS (annex)
+
+P1. The installer-census entry point splits the ParseError/Incomplete exception hierarchy.
+- Where: `.claude/hooks/_lib/_installer_write_safety/__init__.py:36`.
+- Cause: `_bind_class` rebuilds every package class with `type(original)(original.__name__, original.__bases__, attrs)`, keeping the original bases. In the entry point's namespace, `ParseError` becomes a fresh clone. `Incomplete` (`syntax.py:10`, `class Incomplete(ParseError)`) becomes a clone whose base is the template `syntax.ParseError`, not that clone. So in the entry point, `issubclass(Incomplete, ParseError)` is now False; in the old single-file script it was True.
+- Effect: the rebound `_read_dquote` and `_read_balanced` raise the `Incomplete` clone (`syntax.py:44,50,63,75,89,93`), and every rebound `except ParseError:` stops catching it: `operands.py:35`, `commands.py:131`, `model.py:320,344,632`, `verdicts_b.py:141,440,447`. Only `syntax.py:270`, which names `Incomplete` itself, still catches it.
+- Failure scenario: a scanned `scripts/**/*.sh` line such as `sort --output='a"b' in.txt`, `curl --output='x"y' "$u"` or `cp --target-directory='d"x' f`.
+  1. The tokenizer accepts the line.
+  2. `_classify_output_mode` (`commands.py:571`) or the writer branch (`commands.py:478`) rebuilds the canonical value `a"b` as a new token.
+  3. `_record_command` → `_record_occ` → `canon_operand` → `_read_dquote` raises `Incomplete`, which its `except ParseError` no longer catches.
+  4. The exception escapes `build_file_model` and `run_census` (no broad except anywhere in the package). The census dies with a traceback and exit 1, emitting no site and naming no file.
+  
+  The old script fell back and kept scanning. The same applies to `_expansion_refs` on a sed side holding `${x:-it's}`.
+- Fail direction: still closed, because the CI gate goes red. But the instrument's own contract is broken: an input it cannot handle should become a blocking site, and it now becomes a crash.
+- It also contradicts CHANGELOG.md:112 ("Entry points keep their paths and their observable contracts"), which names `check-installer-write-safety.py` at :116-117. The entry point's docstring also promises downstream harnesses the parser helpers, and `try: m.lex(t) except m.ParseError` no longer catches an unterminated quote.
+- Not triggered by the current corpus: no `--opt='..."...'` form in `scripts/*.sh`. It is latent.
+- Reproduction: load `.claude/scripts/check-installer-write-safety.py` with `spec_from_file_location`, then:
+  - `issubclass(m.Incomplete, m.ParseError)` should print False (True before the split);
+  - `m.canon_operand('a"b')` should raise (it returned before).
+- Minimal fix: in `_bind_class`, return exception classes unchanged (`if issubclass(original, BaseException): return original`), or remap `__bases__` through the clones already bound in the namespace. Add tests for `issubclass(m.Incomplete, m.ParseError)` and for a census fixture containing `sort --output='a"b' x`.
+
+P2 FOLLOW-UPS
+
+1. Cost-transcripts dataclass `repr()` breaks.
+   - Where: `.claude/hooks/_lib/_cost_transcripts_parts/__init__.py:54-56`.
+   - Cause: the binder rebinds every class function whose `__module__` matches the template module. That includes the dataclass `__repr__` wrapper, which `functools.wraps` stamps with the template's `__module__`. Rebound to the entry point's globals, the wrapper's global `_thread` (`dataclasses._recursive_repr`) no longer resolves.
+   - Effect: `repr()` of `UsageRecord`, `ScanCounters`, `PricingResult` or `Priced` raises `NameError`. `transcript_rollup()` returns `pricing_result` and `counters` instances to programmatic callers, so `print(rolled)`, a debugger or a pytest failure message crashes.
+   - No production renderer calls repr on them today.
+   - Fix: do not clone classes that have no user-defined methods, or skip functions that carry `__wrapped__`, or check `__code__.co_filename`.
+
+2. Property getters keep the template's globals.
+   - Where: `.claude/hooks/_lib/_installer_write_safety/__init__.py:29-35`.
+   - Cause: `_bind_class` rebinds plain functions, staticmethods and classmethods, but not `property` objects.
+   - Effect: `Site.blocking` (`report.py:32-34`) reads `BLOCKING_VERDICTS` from the template module, while `main()` reads the entry point's. Patching `m.BLOCKING_VERDICTS` changes one and not the other, which moves a test patch point.
+   - Fix: rebind `fget`, `fset` and `fdel` too.
+
+3. Stale location claims, one of them in machine-readable output.
+   - `middle_out.py:22` and `summarization.py:21` still say the code "lives here in `scripts/`" (so does `compaction.py:20`, outside this payload).
+   - `status.py:24` refers to "probes above".
+   - The `removal_scope` strings at `status.py:70,98,133` ("this block", "the D2 block in this file") are emitted by `--probe-status` and `--json`. They now point a reader at a file that no longer holds the code.
+   - Fix: name the module paths.
+
+4. Section headers and doc comments left behind by the split.
+   - `routing.py:307-321` ends with the "Programmatic API" header and the `#:` doc comment for `ROOT_ENV`, which now lives in `rollup.py`.
+   - `pricing.py` and `rollup.py` end with headers for code that is in other files.
+   - Cosmetic only.
+
+5. Wrong repo-root fallback in the census engine.
+   - Where: `.claude/hooks/_lib/_installer_write_safety/engine.py:115`.
+   - The fallback `Path(__file__).resolve().parents[3]` is `.claude`, not the repo root, for the `hooks/_lib` layout.
+   - It is only reached when no `.claude` ancestor holds a `scripts/` directory, which would also leave the `--repo-root` default wrong.
+   - Fix: use `parents[4]`, or fail loudly.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition is contradicted by this payload and no P0 was found, but one undeclared P1 must go into the signed annex: the installer-census entry point splits the ParseError/Incomplete hierarchy, so inputs the old script handled now crash the CI gate instead of becoming blocking sites (the gate still fails closed).
