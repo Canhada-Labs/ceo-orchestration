@@ -1,0 +1,16 @@
+.claude/hooks/_lib/_policy_parts/predicates.py
+.claude/hooks/_lib/_policy_parts/yaml_blocks.py
+.claude/hooks/_lib/_policy_parts/yaml_flows.py
+.claude/hooks/_lib/_policy_parts/yaml_scalars.py
+.claude/hooks/_lib/_precompact_parts/__init__.py
+.claude/hooks/_lib/_precompact_parts/ledger_index.py
+.claude/hooks/_lib/_precompact_parts/pressure_sidecar.py
+.claude/hooks/_lib/_precompact_parts/runtime.py
+.claude/hooks/_lib/_precompact_parts/snapshot_core.py
+.claude/hooks/_lib/_profile_opus_parts/__init__.py
+.claude/hooks/_lib/_profile_opus_parts/cli.py
+.claude/hooks/_lib/_profile_opus_parts/hook_latency_docs.py
+.claude/hooks/_lib/_profile_opus_parts/latency.py
+.claude/hooks/_lib/_profile_opus_parts/reference.py
+.claude/hooks/_lib/_profile_opus_parts/smoke.py
+.claude/hooks/_lib/_reality_ledger_parts/__init__.py

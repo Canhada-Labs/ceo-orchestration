@@ -1,0 +1,30 @@
+SCOPE
+Payload 2/34 adds ten files under .claude/hooks/_lib/_audit_emit_parts/: finalization.py, generic_dispatch_01..05.py, governance.py, harness.py, harness_schemas.py and lifecycle.py. They hold code that PLAN-197 moved out of .claude/hooks/_lib/audit_emit.py. I worked statically on the redacted candidate copy, without running anything. For the base text I used the committed rc evidence .claude/plans/PLAN-198/repass-rc1/diff-rc1-15.patch and diff-rc1-16.patch, which show the removed audit_emit.py lines.
+
+WHAT I CHECKED
+1. Binding (moved code). audit_emit.py:413-452 calls install() (_audit_emit_parts/__init__.py:20-48). install() imports each part as an ordinary module, then rebuilds every function in the part's __all__ with the facade's dict as its globals; functions keep their __defaults__, and their __kwdefaults__ are deep-copied. At module level the ten files only define functions, frozensets and one re.compile. The one cross-part import is harness_schemas.py:9 (from .lifecycle_schemas import _LEARNING_ENVELOPE), and lifecycle_schemas comes before it in the install order. So each part imports on its own, with no module-level lookup of a name that isn't bound. Patch points on the facade stay live because every call resolves names in the facade at run time.
+2. Name resolution. I grep-checked about 260 global names used by the ten files (every allowlist, enum, regex and helper) against the __all__ lists of the installed parts. Every one resolves to a single installed part, or to the facade itself: _KNOWN_ACTIONS, emit_generic and _GENERIC_DISPATCH_HANDLERS are defined at module level there and read only at call time. The sampled names have no duplicate export in another installed part. The only other part that exports _KNOWN_ACTIONS is actions.py, and install() never loads it.
+3. Dispatch equivalence with the base emit_generic (diff-rc1-15.patch:120-2728). The base has 173 arms: one if, 171 elif action ==, and the final elif action in _EMIT_GENERIC_PASSTHROUGH. The five groups also have 173 arms, with the same action strings in the same order. The splits fall at mcp_canonical_guard_allowed/blocked, first_run_wizard_dispatched/estimate_calibrator_pipeline_run, spawn_confidence_advisory/spawn_prompt_defense_gate and lesson_candidate_written/lesson_approved, and the passthrough is still the last arm. All 173 arms end with state["event"] = event; return True. The base has seven drop returns: persona_coverage_synthesized x3, tier_policy_loader_fallback_observed x1 and audit_producer_path_pollution_detected x3. They are still bare returns, and _dispatch_generic (generic_dispatch_05.py:360-377) treats None as "drop without writing". A known action with no arm still gets the base default-deny: {"action": action}, plus a breadcrumb, then a write. An unknown action still returns before any write. I spot-compared the typed wrappers emit_codex_review_verdict and emit_pair_rail_review_expected, and the _learning_* helpers, against the base text; they are verbatim.
+4. Fail direction. Unchanged. The wrappers still fail open through _write_event. Exception exposure on unguarded membership tests (an unhashable caller value) is the same as in the base.
+5. Writes. None of the ten files opens a file. All persistence goes through _write_event and _breadcrumb in writer.py, which another payload covers.
+6. Python 3.9 and standard library. The imports are re, hashlib (inside a function) and the relative import. Every file has from __future__ import annotations, and local variable annotations are never evaluated. There is no 3.10+ syntax and no f-string that nests its own quote type.
+7. Delivery to adopters. install.sh:1522-1541 copies every entry under hooks/_lib/, filtered only by _framework_path_excluded (scripts/_framework_manifest_set.sh:95-107). That filter does not exclude _audit_emit_parts.
+8. Declared conditions this payload touches. Condition 5 holds: check_arbitration_kernel.py:312 carries ".claude/hooks/_lib/_audit_emit_parts/**/*". Condition 7 holds: audit_emit.py keeps its path as a facade, and a hand-patch to the emit_generic scrub logic now belongs in generic_dispatch_0N.py, as declared. This payload makes no condition false.
+
+REVIEW LIMIT (not a finding)
+The upper clamp bound for chain_length at generic_dispatch_04.py:266 reads [REDACTED:rg] in the candidate. The base text (diff-rc1-15.patch:1942) and the comment at actions_extended.py:198 carry the same redacted token, so I could not compare the literal values.
+
+P0: none.
+False declared conditions: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+P2-1. FILE:LINE .claude/hooks/_lib/_audit_emit_parts/generic_dispatch_05.py:363. The breadcrumb for an unknown action changed from f"emit_generic: unknown action {action!r}" to "unknown audit action dropped: %s" % action.
+- (a) _breadcrumb (writer.py:230-236) writes the message unescaped. An action string with a newline or control characters now lands raw in audit-log.errors, which is not chained, so someone could forge lines there.
+- (b) New detail in this review: a hashable action that is not a string, such as a tuple of two or more items, gets past the _KNOWN_ACTIONS membership test. The %-formatting then raises TypeError out of emit_generic. That breaks the "never raises" contract, and the base f-string never raised.
+- (c) The old message text is gone for anyone who greps for it.
+- Exposure is low: every in-tree caller passes a constant string. The rc re-pass already recorded (a) and (c) as P2-3 in claude-rc1-15.verdict.txt.
+- Minimal fix: _breadcrumb("emit_generic: unknown action %r" % (action,)).
+
+VERDICT: GO Payload 2 only moves the audit_emit scrub arms and wrappers into parts that bind to the facade, with every name resolved and the 173 arms, 7 drop paths and default-deny in base order, still standard-library and Python 3.9 compatible and on the kernel list, so it has no P0, no new P1 and no false declared condition, only one P2 carried from the rc.

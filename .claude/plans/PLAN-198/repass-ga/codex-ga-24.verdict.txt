@@ -1,0 +1,32 @@
+Payload 24/34: no P0 or false declared condition established. The reviewed portions of conditions 5, 7 and 9 remain consistent with the code.
+
+Validation: Python 3.9.6 syntax and benign mocked checks passed. In-memory comparison confirmed unchanged executable AST for all 32 moved PreCompact functions and preservation of pair-rail definitions apart from the declared currency changes. No files modified.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/_lib/cli_currency.py:22; .claude/hooks/_lib/_pair_rail_parts/part_01.py:547
+On Python runtimes with a decimal integer conversion limit, an excessively long numeric version component raises ValueError. When compatibility evaluation encounters this in manifest or package metadata, the verifier's catch-all returns infra, permitting advisory degradation instead of rejecting unparseable security input. This requires a checkout using the pin-verification path. Static call-chain finding; the available Python 3.11 runtime has the conversion limit enabled. Minimal fix: bound version components and catch conversion ValueError in parse_semver, returning None so malformed input retains a closed result.
+
+Carried findings confirmed
+
+P1 — .claude/scripts/_contamination_inventory.py:76
+A legitimate core.symlinks=false checkout represents indexed symlinks as regular files containing their target text. Unconditional readlink rejects that representation, making the contamination gate exit 2 even for clean content. Minimal fix: support this representation through the no-follow regular-file reader while retaining rejection of missing indexed links.
+
+P1 — .claude/scripts/_restore_archive.py:112; .claude/scripts/ceo-backup.sh:264
+Backup --include-plans preserves symlinks, while restore rejects the entire archive containing them, including otherwise usable audit and memory data. Minimal fix: snapshot regular plan files consistently with memory, and report omitted links during backup.
+
+P2 follow-ups — carried from the rc review
+
+P2 — .claude/scripts/_restore_archive.py:44
+Valid GNU long-name directory members can retain a trailing slash on Python 3.9. Splitting before stripping rejects these backups. Confirmed with an ordinary in-memory archive. Minimal fix: normalize the permitted trailing directory slash before component validation.
+
+P2 — .claude/scripts/ceo-restore.sh:257
+Preflight checks ancestor symlinks but misses existing non-directory ancestors. Preview can succeed, then apply overwrites audit files before memory or plans creation fails. Minimal fix: validate every required ancestor's directory type before applying any writes.
+
+P2 — .claude/hooks/_lib/plan_paths.py:34
+Newly recognized FOLLOWUP files receive their parent's eight-character plan ID, misattributing lifecycle events and stranded-plan reports. Minimal fix: preserve distinct followup identities through the reporting schema, or suppress unsupported transition emissions.
+
+P2 — scripts/doctor.sh:1188
+The timeout checker still searches only check_pair_rail.py after its default moved into part_03.py, so it skips the timeout-coherence warning. Minimal fix: read the extracted implementation while retaining support for older installations.
+
+VERDICT: GO-WITH-CONDITIONS The new parser fail-direction defect and carried compatibility issues warrant advisory follow-up, but this payload establishes neither a P0 nor a false declared condition.

@@ -1,0 +1,115 @@
+SCOPE OF PAYLOAD 13/34
+New files:
+- _lib/_reality_ledger_parts/{audit_actions,claims,constants,dispatch,environment,estimate_detection,estimate_emission,estimate_history,findings,walking}.py
+- _lib/_shipped_path_census/{__init__,census}.py
+- _lib/_skill_telemetry_router/{__init__,cheap_tier_cascade,discovery_telemetry}.py
+- _lib/_spool_writer_parts/{__init__,drain,lifecycle,prepare}.py
+
+What I read alongside:
+- the facades that load the parts: .claude/scripts/reality-ledger.py and _lib/spool_writer.py
+- the two binders (_reality_ledger_parts/__init__.py and _spool_writer_parts/__init__.py) and _spool_writer_parts/writer.py
+- _lib/audit_emit.py and _audit_emit_parts/writer.py:582-591
+- _python-hook.sh:409-410, check_arbitration_kernel.py, canonical_edit/guards.py:32-34, install.sh and _framework_manifest_set.sh:95-103
+- CHANGELOG [1.4.4], and the front matter and §4.2 of ADR-055-AMEND-4
+- the base text of spool_writer.py and reality-ledger.py, taken from the committed rc1 evidence diffs (.claude/plans/PLAN-198/repass-rc1/diff-rc1-19.patch and diff-rc1-31.patch)
+By the GA-only condition, the code here is the rc code.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES (all checked against the code; none is false)
+- Condition 8: holds.
+  - _python-hook.sh:410 runs `export CEO_HOOK_BOUNDED_EXIT=1`.
+  - In lifecycle.py, _atexit_drain (:346-358) and _signal_drain_handler (:361-375) skip drain_now(force=True) and _flush_journal_buffer when _exit_deadline_active() is true, and write the exit_deadline_skip breadcrumb instead.
+  - ADR-055-AMEND-4 says status: ACCEPTED and implementation_status: PARTIAL.
+  - CHANGELOG lines 127-135 and Known-open lines 402-405 say so as well.
+- Condition 7: holds.
+  - spool_writer.py:588-590 and reality-ledger.py:81-83 bind their parts. The logic lives in the parts, so a hand patch to either entry point must be re-applied in the part module.
+- Condition 5: not contradicted.
+  - Neither spool_writer.py nor reality-ledger.py is in _KERNEL_PATHS, before or after this change. Leaving both parts packages off the kernel list matches "seven kernel entry points".
+  - Both packages are canonical through guards.py:34 (".claude/hooks/_lib/**/*.py").
+- Condition 3(c): holds.
+  - audit_spool_state.py:62 and check-audit-real-loss.py:67 set dont_write_bytecode before importing anything.
+  - Neither imports spool_writer or audit_emit. So the parts' sys.path insertion and the atexit drain registration never reach these read-only verifiers.
+
+MOVED CODE, CHECKED AGAINST THE BASE TEXT
+- spool_writer:
+  - The moved functions match the base. I compared drain_now, reconcile_journal_at_session_start, the phase-4/5 functions and should_drain line by line against diff-rc1-19.
+  - The changes in lifecycle are:
+    - the bounded-exit skip (condition 8);
+    - the _IN_SPOOL_APPEND branch no longer returns early (P2-3 below);
+    - a guard against the handler chaining to itself, and _reset_for_test now restores the previous signal dispositions.
+  - How install() binds them:
+    - It rebinds every function in each part's __all__ onto the facade's globals.
+    - It copies __defaults__ and __kwdefaults__. This matters for _ensure_spool_header(sync_header=True) and _phase4_build_batch(starting_processed=0).
+    - The `global` writes in install_exit_handlers and _reset_for_test land in the facade.
+    - atexit and signal register the facade's bound handlers.
+  - No part's __all__ collides with a facade name, and only the facades import the parts.
+  - _DrainingFile is assigned unchanged, with eq=False, and its annotations stay lazy.
+- reality-ledger:
+  - The binder deep-copies the constants into the facade (re.Pattern deepcopy returns the same object), then rebinds the functions and the two NodeVisitor classes, staticmethod included.
+  - _REPO_ROOT, redact_secrets, ScanBudgetExceeded and the itimer guards resolve from the facade.
+  - The base _read_known_actions returned right after walking the literal. The new roster fallback (audit_actions.py:41-116) runs only when the literal is absent, and audit_emit.py:45 still has it.
+  - It reads target files as data, and only reaches identifier-named files inside _audit_emit_parts.
+  - The base SELF_EXCLUDE_PATH_FRAGMENTS had no "/_reality_ledger_parts/". The new entry (constants.py:55) carries the reality-ledger.py self-exclusion over to the moved code.
+- _shipped_path_census and _skill_telemetry_router have no importer outside tests. They ship through install_lib_selective and stay inert.
+
+FAIL DIRECTION
+- If _spool_writer_parts is missing or broken, importing spool_writer raises. audit_emit.py:37-43 then falls back to synchronous canonical writes, which is fail-open.
+- reality-ledger is an advisory CLI, not a hook.
+- No security matcher code is in this payload, and I found no inversion.
+
+WRITES
+- No new write location. The parts write the same state dir, canonical log and breadcrumb paths as the base.
+- The reality-ledger CSV and --output paths are unchanged.
+- The census and router packages write nothing.
+
+PYTHON
+- Standard library only.
+- Python 3.9 compatible: lazy annotations, dataclass(eq=False), 5-argument FunctionType, ast.Constant and the 3.9 form of Subscript.slice, Decimal, no 3.10+ syntax.
+
+P0: none.
+
+NEW FINDINGS (annex): no undeclared P1.
+- The P1 already recorded in the lane notes claude-p12 and claude-p19 (the bounded exit blinds the FILE ASSIGNMENT overlap rail) still reproduces on this candidate:
+  - _audit_emit_parts/writer.py:589-591 calls should_drain() right after spool_append's fsync, so the 100 ms age trigger in prepare.py should_drain cannot fire;
+  - lifecycle.py:348-350 skips the exit drain.
+- It is declared through those carried notes, so I do not raise it again.
+
+P2 FOLLOW-UPS
+P2-1 (new): the budget-bypass quota count goes stale under the bounded exit.
+- Files: check_budget.py:635-669, with :930-931 and :790-818.
+- Mechanism:
+  - _count_recent_bypasses counts budget_bypass_used events in the canonical log through iter_events.
+  - The same registered hook writes that event through the spool (_audit_emit_parts/writer.py:582-591).
+  - lifecycle.py:348 skips the exit drain, so the event stays in the spool.
+- Failure scenario:
+  - With CEO_BUDGET_BYPASS=1, every bypassed spawn reports "BUDGET BYPASS USED ... (1/10 in 24h)".
+  - The over-quota message never appears until a process outside the shim drains the spool. Each such drain moves at most the 100 oldest entries (the K_MAX break in drain.py).
+- Impact: advisory only. In State 0, decide() always allows (check_budget.py:750). This is the same class as the carried overlap-rail P1, but neither condition 8 nor the CHANGELOG names it.
+- Fix: apply the carried P1's fix (have readers also scan state/audit-spool.*.jsonl and *.draining.*, bounded and read-only, or write these governance events synchronously). Alternatively, declare in Known-open that readers of the canonical log are degraded.
+
+P2-2 (carried from rc claude-p12 P2-1 and p19 P2-6): the parts put _lib itself at sys.path[0].
+- Files: _spool_writer_parts/{drain,lifecycle,prepare}.py:29-31.
+- Path(__file__).parent.parent is .claude/hooks/_lib, not .claude/hooks. So every process that imports spool_writer gets _lib at sys.path[0].
+- No stdlib name collides today. But _lib/mcp/ now shadows the third-party `mcp` package name, and every _lib module becomes importable as a top-level name, which is a double-import risk.
+- Each part also carries copies of K_MAX and the other constants that nothing reads.
+- Fix: drop the block and the copied constants.
+
+P2-3 (carried from rc claude-p19 P2-5): undocumented signal change.
+- File: lifecycle.py:363-364.
+- A SIGTERM or SIGINT that arrives during spool_append used to be swallowed. Now it is passed on to the previous handler.
+- The new behaviour is correct: writer.py:209-244 isolates the partial last line on the next append. The CHANGELOG does not mention it.
+
+P2-4 (carried from rc claude-p19 P2-1 and claude-p12 P2-2): backlog and breadcrumb noise.
+- Each drain costs time in proportion to the whole backlog but moves at most 100 entries.
+- lifecycle.py:349 writes the exit_deadline_skip breadcrumb on every hook exit. That keeps /ceo-boot's audit-log check permanently yellow (_ceo_boot_parts/state_plan_audit.py:478-483).
+
+P2-5 (new, minor): the roster fallback cannot find the only part that exports _KNOWN_ACTIONS.
+- Files: _reality_ledger_parts/audit_actions.py:41-116.
+- _audit_emit_parts/actions.py:10-12 is the only part that exports _KNOWN_ACTIONS, and "actions" is not in the facade's install roster (audit_emit.py:415-452). actions.py, actions_core.py and actions_extended.py have no importer, so they form a second action registry that can drift from the live literal.
+- Scenario: if _KNOWN_ACTIONS is moved into actions.py, detector #6 reads an empty set and flags every emitted action as phantom. That failure is loud and advisory, not silent.
+- Fix: add a fixture test for the fallback, and either delete the dead registry or add it to the roster.
+
+P2-6 (new, cosmetic): stale evidence text.
+- File: _reality_ledger_parts/environment.py:210-214.
+- The expected_evidence string still lists the old exclusion set, without /staging/ or /_reality_ledger_parts/.
+
+VERDICT: GO Conditions 3(c), 5, 7 and 8 hold against this payload's code and the moved spool_writer and reality-ledger code keeps its bindings, defaults, patch points and fail-open direction; I found no P0 and no undeclared P1, and the one P1 that still reproduces is already declared in the carried lane notes, leaving only P2 follow-ups.

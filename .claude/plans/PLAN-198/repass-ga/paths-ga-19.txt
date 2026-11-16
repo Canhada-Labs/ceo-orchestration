@@ -1,0 +1,10 @@
+.claude/hooks/_lib/federation/_server_parts/configuration.py
+.claude/hooks/_lib/federation/_server_parts/handler_auth.py
+.claude/hooks/_lib/federation/_server_parts/handler_read.py
+.claude/hooks/_lib/federation/_server_parts/handler_write.py
+.claude/hooks/_lib/federation/_server_parts/lifecycle.py
+.claude/hooks/_lib/federation/_server_parts/redaction.py
+.claude/hooks/_lib/federation/server.py
+.claude/hooks/_lib/model_currency.py
+.claude/hooks/_lib/pii_patterns.py
+.claude/hooks/_lib/plan_paths.py

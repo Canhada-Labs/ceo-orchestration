@@ -1,0 +1,14 @@
+Payload 33: no P0 or false declared condition established. Read-only checks confirmed facade bindings, exports, installer delivery, and Python 3.9 compatibility. No files modified.
+
+NEW FINDINGS (annex)
+No new P1 findings. The previously recorded profiler audit-path isolation defect remains unchanged.
+
+P2 follow-ups — carried from the rc and reconfirmed:
+
+P2 — .claude/scripts/re-pin-codex.py:2171, :497. With the live >=0.128.0 floor, targeting 0.161.0 produces >=0.128.0,<0.162.0 and fabricates old_upper=0.162.0. Generated prose falsely calls this widening; the copied rehearsal requires that fabricated bound in the live pin and necessarily fails. Minimal fix: preserve the actual old range and support an absent upper bound throughout rendering and rehearsal, or reject the unsupported transition before emitting.
+
+P2 — .claude/scripts/re-pin-codex.py:1517. Generated ceremonies retain the mold’s assumption that verifier exit 0 means the old pinned binary remains installed. The current verifier also returns 0 for a newer compatible binary, causing the ceremony to abort before applying its new manifest. Minimal fix: distinguish verified from compatible and independently validate the intended payload digest.
+
+P2 — .claude/scripts/reality-ledger.py:81. A missing implementation package raises an uncaught ImportError outside the existing handler, producing exit 1 and a traceback instead of the documented exit 2. Minimal fix: include the parts import and installation in the guarded import block.
+
+VERDICT: GO The confirmed issues are nonblocking P2 follow-ups, with no P0 or contradiction of a declared condition in this payload.

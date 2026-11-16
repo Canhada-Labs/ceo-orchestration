@@ -1,0 +1,50 @@
+PAYLOAD 12/34. Files: _lib/_policy_parts/{predicates,yaml_blocks,yaml_flows,yaml_scalars}.py; _lib/_precompact_parts/{__init__,ledger_index,pressure_sidecar,runtime,snapshot_core}.py; _lib/_profile_opus_parts/{__init__,cli,hook_latency_docs,latency,reference,smoke}.py; _lib/_reality_ledger_parts/__init__.py. I checked each one against the facade that loads it and the code that calls it in the candidate tree.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES
+- Condition 5 holds. The kernel list has the row ".claude/hooks/_lib/_policy_parts/**/*" (check_arbitration_kernel.py:311), so all four policy parts in this payload are kernel paths. _precompact_parts, _profile_opus_parts and _reality_ledger_parts do not claim to be kernel rows, and they are not.
+- Condition 7 holds. Each of the four entry points keeps its path and is now a thin facade:
+  - _lib/policy.py:127-131 installs the parts, then defines _YamlParser over the three mixins.
+  - check_precompact_continuity.py:172-175
+  - scripts/profile-opus-4-7.py:70-72
+  - scripts/reality-ledger.py:81-83
+  install.sh:1520-1556 copies every top-level _lib entry, so installs and upgrades receive all four packages.
+- No other condition is contradicted by this payload.
+
+MOVED CODE (what I checked)
+- Policy and PreCompact: the parts are run with exec in the facade's globals, in a fixed order. Every name they use is either imported or defined by the facade before install, or comes from an earlier part:
+  - policy: PolicyLoadError, the _LIMIT_* constants, _PREDICATE_FORMS, dataclass/field, threading, _audit_emit;
+  - PreCompact: _LABEL_CLAMP, _PATH_CLAMP, TIME_BUDGET_S, the _PRESSURE_* and _CONTEXT_* constants, contextlib, fnmatch, stat_mod, Iterator.
+  - _CompiledPredicate (predicates) is defined before CompiledRule (decisions), and _YamlParser is only looked up when load() is called.
+  - No method uses a self.__x name, so moving methods into mixins changes no name mangling.
+  - The dataclasses keep the facade as their module.
+- Profiler and reality-ledger: these rebuild each function on the facade's globals, so a monkeypatch on the facade reaches them.
+  - The profiler filter drops only the imported names, and the facade imports the same set.
+  - The reality-ledger binder exports each part's __all__. DETECTOR_REGISTRY holds only severity data, and dispatch.py:64-89 builds its detector table from lambdas that look names up at call time.
+  - The rebuilt classes have no zero-argument super() (which would break after rebuilding). The only staticmethod gets rebound.
+  - The default values that come from module constants (DEFAULT_DETECTOR_TIMEOUT_MS, _ABS_BACKSTOP_MS) are immutable numbers, the same as in the monolith.
+- Standard library only. No Python 3.10+ syntax or API: os.scandir(fd), stat with dir_fd and follow_symlinks=False, and the string-only annotations all work on 3.9.
+
+FAIL DIRECTION
+- PreCompact always allows. runtime.py:107-126 returns {} on a stdin or gate exception.
+- The ledger index refuses a symlinked ancestor or leaf, a FIFO, or a file whose identity changes. In that case it returns the degraded pointer (ledger_index.py:340-404), which is the correct closed direction on input. A missing .claude/plans stays silent (:192-199).
+- A failure to import _lib.policy is caught at policy_dispatch.py:45-49.
+- _python-hook.sh:416 runs the hook with exec, so a crash keeps the hook's own exit code. A PreCompact hook cannot block, so this stays open.
+- Nothing in this payload writes outside its place or follows a symlink when writing.
+
+P0: none.
+
+ALREADY DECLARED P1, STILL PRESENT (not new; it is in the signed lane notes as claude-p11 and codex-p11)
+- P1, _profile_opus_parts/latency.py:119-126 and :198-199, with the doc promise at hook_latency_docs.py:87.
+  - Failure: --hook-latency gives each entry its own HOME and CEO_AUDIT_LOG_DIR, but does not scrub CEO_AUDIT_LOG_PATH. That variable wins in _audit_emit_parts/writer.py:188-191 and :205-207.
+  - Scenario: a maintainer with CEO_AUDIT_LOG_PATH exported appends the measured hook rows to the live log.
+  - Minimal fix: add CEO_AUDIT_LOG_PATH (and the other log-location variables) to the scrub tuple.
+
+NEW FINDINGS (annex): no undeclared P1 in this payload.
+
+P2 FOLLOW-UPS
+1. The facade docstrings are overwritten. _policy_parts/__init__.py:15 and _precompact_parts/__init__.py:16 run each part with exec, so each part's docstring replaces the facade's __doc__. At runtime, _lib.policy.__doc__ becomes "Extracted policy declarations: loading." and the PreCompact hook's becomes the runtime part's one-liner. This was already raised as a P2 in rc1 and has no functional effect. Fix: save __doc__ before install and restore it after.
+2. Stale docstrings about the snapshot write. snapshot_core.py:335-341 and check_precompact_continuity.py:57-63 say the snapshot reaches store.set as a str, so the store's redactor runs. The code redacts each field before serializing and passes bytes (:385-426). Secrets are still redacted and the PostCompact reader decodes bytes (check_postcompact_reinject.py:315), so only the text is wrong. Fix: describe the field-level redaction in both docstrings.
+3. Unguarded imports of the parts packages. check_precompact_continuity.py:172 and reality-ledger.py:81 import their packages outside a try. After a partial install, PreCompact prints a traceback and exits 1 instead of the documented "breadcrumb + {}" (docstring :45-47). reality-ledger exits 1 instead of its documented internal-error code 2 (:9-10, and :65-69 for the other import). The direction stays open, so this is not an inversion. Fix: wrap each import in try/except, write a breadcrumb, then print("{}") for PreCompact and sys.exit(2) for reality-ledger.
+4. One-line flow syntax can nest without limit. _policy_parts/yaml_flows.py:59-96 recurses on nested { and [ inside one line with no depth check. Only _parse_block_node enforces _LIMIT_DEPTH, so deep nesting gives a RecursionError instead of a PolicyLoadError. Policy files are canonical repo files, and policy_dispatch catches the exception. Fix: pass a depth counter and raise depth_limit.
+
+VERDICT: GO Payload 12 contradicts none of the declared conditions and has no P0: conditions 5 and 7 hold against the code, the moved policy, PreCompact, profiler and reality-ledger code keeps its name lookup, patch points, fail-open direction and Python 3.9 standard-library compatibility, and its only P1 (the profiler not scrubbing CEO_AUDIT_LOG_PATH) is already in the signed lane notes.

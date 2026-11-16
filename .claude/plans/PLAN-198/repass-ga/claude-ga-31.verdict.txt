@@ -1,0 +1,49 @@
+PAYLOAD 31/34 (v1.4.3-rc.1..84b83324c820). In scope: .claude/scripts/{context-budget.py, derive-audit-family.py, diagnose-output-hook.py, env-inventory.json, gen-command-skill-hook-map.py, generate-available-models.py}, plus their new _lib/_context_budget_parts package. I read every hunk against the redacted candidate tree.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES (each holds against the code)
+- Cond. 3(a) holds.
+  - diagnose-output-hook.py:27-48 pops HOME, CEO_AUDIT_LOG_DIR, CEO_PROJECT_STATE_DIR, the nine CEO_AUDIT_* per-file overrides and CLAUDE_PROJECT_DIR_NATIVE, then sets HOME, CEO_AUDIT_LOG_DIR and CEO_PROJECT_STATE_DIR under the tempdir.
+  - That list equals test_isolation.py AUDIT_DIR_CARRIERS + AUDIT_CLEAR_CARRIERS (:180-212) + WHOLE_DIR_OVERRIDE_CARRIERS (:222).
+  - Every location variable that audit_hmac.py, spool_writer.py, _audit_emit_parts/writer.py and runtime_paths.py read is on that list. The cited parity test exists (.claude/scripts/tests/test_diagnose_output_hook.py).
+- Cond. 7 holds. context-budget.py keeps its path. Its logic moves to _lib/_context_budget_parts.
+  - Every name removed in the diff is in some part's __all__ (inventory, compaction, summarization, middle_out, status).
+  - install() rebuilds functions and the three Policy classes on the facade globals, so _injection_patterns, _TOKEN_ALLOWED, _FRONTMATTER_RE, the CAT_* constants and _read_text stay patch points.
+  - Cross-part names (_clamp_pct, _env_int, estimate_tokens) resolve through the facade.
+  - inventory.py duplicates CHARS_PER_TOKEN and REDACTED with the same values for HONESTY_NOTES.
+  - __kwdefaults__ is copied. No import-time dependency on facade names.
+  - The parts fall under the canonical glob .claude/hooks/_lib/**/*.py (canonical_edit/guards.py:34).
+- Cond. 9 holds for generate-available-models.py.
+  - The family-prefix branch (:47-58, :118-121) fires only on a fenced ```python assignment.
+  - Shipped ADR-149:778 carries the '#' heading form, which test_generate_available_models.py:115-119 pins as non-expanding.
+  - So the generated list stays the 8 explicit ids that .claude/settings.json:797-806 ships, as CHANGELOG.md:183 says ("The shipped availableModels is unchanged").
+- Cond. 6 and 8: the new env-inventory entries for CEO_BASH_INDIRECT_GUARD, CEO_BASH_INDIRECT_HEURISTICS and CEO_HOOK_BOUNDED_EXIT match the declared surfaces.
+- Python stays standard-library only and 3.9-compatible: FunctionType rebinding, ast, no match statements, no PEP 604 unions.
+- No hook's fail direction changes. Nothing writes outside its place: every file in this payload is read-only or writes to stdout or a tempdir.
+
+P0: none.
+
+NEW FINDINGS (annex): no undeclared P1 in this payload.
+
+P2 FOLLOW-UPS
+1. Stale "non-canonical" text after the move.
+   - Where: .claude/hooks/_lib/_context_budget_parts/status.py:97-102, with compaction.py:19-20 (same wording in the summarization and middle_out headers) and context-budget.py:94.
+   - Failure: the D2 removal_scope, rendered by --json and --probe-status, still says "non-canonical, no ceremony: the D2 block in this file". The block headers say "(this module) is non-canonical and lives here in scripts/". The code now lives under _lib/**, which guards.py:34 makes canonical. A maintainer who follows the ledger hits the sentinel gate.
+   - Fix: name the part file and the canonical ceremony in removal_scope and the headers, and update the facade docstring.
+2. Dormant prefix branch, undocumented in the docstring, with a silent fallback.
+   - Where: .claude/scripts/generate-available-models.py:2-31, :47-51.
+   - Failure: the docstring still promises "Single source ... preserving ADR order". The branch that appends model_currency._PREFIXES is undocumented, and it is dormant on the shipped ADR. ADR-149:787-790 says the generator appends prefixes "when this formal policy assignment is present", but the ADR carries only the non-triggering '#' form. If the fence is ever added and the _lib import fails, the lambda fallback silently emits the bare list.
+   - Fix: document the fence rule in the docstring. Exit 2 when the fence is present and the import fails. Align the ADR prose with the trigger form (the ADR itself is out of scope here).
+3. Hook-map generator misses or overreaches on bound parts.
+   - Where: .claude/scripts/gen-command-skill-hook-map.py:206-225.
+   - What it does: it takes the package to scan from the import and ignores the package= keyword. check_agent_spawn.py:128-129 therefore also scans _audit_emit_parts (agent_spawn is still covered by :643). It does not follow directory-exec loaders (audit_log.py:320, check_bash_safety.py:35), although the rule text at :234 says "including bound parts". The strict utf-8 read drops the old errors="replace".
+   - Effect today: none on docs/COMMAND-SKILL-HOOK-MAP.md, because the facades carry the literals.
+   - Fix: honour package=, follow the exec-loaded parts directories, and reword the rule text.
+4. Unguarded parts import in context-budget.py.
+   - Where: .claude/scripts/context-budget.py:199-203.
+   - Failure: the import of _lib._context_budget_parts sits outside a try. A partial install exits with a traceback (code 1), against the docstring's "Exit code: always 0 (advisory)". It is a CLI, not a hook, so no session is blocked.
+   - Fix: catch ImportError and print a degraded advisory, or narrow the docstring.
+5. env-inventory.json regenerated counts (note only, no action).
+   - CEO_AUDIT_SYNC_MODE 9->8 traces to a removed comment line (repass-rc1/diff-rc1-14.patch:98), not a lost read: spool_writer.py:510 still reads it and _audit_emit_parts/writer.py:582 calls is_sync_mode().
+   - CEO_WORKFLOW_LEDGER and CEO_WORKFLOW_RESUME_GUARD 7->6: launch_ledger.py and check_workflow_launch.py still reference both.
+
+VERDICT: GO The conditions this payload touches (3(a), 6, 7, 8, 9) all hold against the candidate tree, the context-budget split keeps every name, patch point and fail direction, and the only findings are maintainer-tooling and documentation P2s, with no P0 and no undeclared P1.

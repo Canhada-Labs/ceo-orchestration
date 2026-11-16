@@ -1,0 +1,75 @@
+SCOPE. Payload 29/34 holds four files:
+- .claude/scripts/check-installer-write-safety.py, now a 37-line entry point over .claude/hooks/_lib/_installer_write_safety/.
+- The new .claude/scripts/check-subprocess-tests.py, with .claude/scripts/_subprocess_census.py.
+- The CODEX_INSTALLED_COMPATIBLE branch in .claude/scripts/check-substrate-drift.py.
+- The Codex currency arm in .claude/scripts/check-substrate-watch.py.
+This was a static, read-only review: I read the code and executed nothing. The GA-only condition says the code is the rc code, so I also compared my reading with the rc verdicts for this same code (.claude/plans/PLAN-198/repass-rc1/claude-rc1-28 and codex-rc1-28). Every finding below I re-checked against the GA candidate tree.
+
+DECLARED CONDITIONS vs THIS PAYLOAD
+- Condition 7 is TRUE. The entry point keeps its path, and the logic is in _lib/_installer_write_safety (engine, syntax, commands, operands, model, verdicts_a, verdicts_b, report). bind() re-creates every function and class against the entry point's globals.
+- Condition 10 is TRUE: CODEX_VERSION_FLOOR = "0.160.0" at .claude/hooks/_lib/cli_currency.py:11.
+- Condition 9 holds. The drift and watch changes follow the version-floor policy. The drift checker reaches further than the condition's words (P2-1 below), but it is a diagnostic, not the pin, so the condition is not made false.
+- Condition 13 is consistent with what this payload carries.
+- No declared condition is false. No P0.
+
+WHAT TO VERIFY, POINT BY POINT
+1. Adopter blast radius: none. None of these files is a hook or sits on a session path. No governance hook is disabled, no model or effort changes, no session is blocked. The files that reach installs (the entry point, the package, check-subprocess-tests.py, check-substrate-watch.py) are maintainer tools that run only when invoked. check-substrate-drift's Codex arm returns "absent" in installs (check-substrate-drift.py:384-390).
+2. Fail direction: the installer census fails closed even in the carried P1 (an uncaught exception gives exit 1, which validate.yml:411-414 treats as red). One inversion is check-substrate-watch.py:67 (P2-3).
+3. Writes: nothing writes except the unchanged --write-baseline path. No symlink writes, no partial writes.
+4. Moved code:
+   - No two components define the same top-level name.
+   - Module-level names are exported through each component's __all__ (engine re-exports re, hashlib, json, argparse, Path and the typing names).
+   - dict, list and set constants are deep-copied with one shared memo, so they keep one identity.
+   - _REPO_ROOT is found by walking up to the .claude directory that has scripts/, so the default corpus and baseline paths are unchanged.
+   - instrument_sha256 now hashes the entry point plus every package/*.py, so the digest still identifies the instrument.
+   - The defects found are the carried P1 and P2-4/P2-5.
+5. Honesty: the stale docstrings and messages are listed under the P2 follow-ups.
+6. Python: standard library only and compatible with 3.9. FunctionType(code, globals, name, defaults, closure), (*KINDS, "all"), and ast.dump with show_empty only on 3.13 and later all work on 3.9.
+
+CARRIED P1 (already declared in the lane notes as claude-p08 and claude-p28; still present in the GA candidate, not new)
+P1, .claude/hooks/_lib/_installer_write_safety/__init__.py:36
+- Cause: _bind_class clones each class with original.__bases__. The entry point's Incomplete is therefore built on the original syntax.ParseError, not on the entry point's cloned ParseError (syntax.py:6-11), so issubclass(Incomplete, ParseError) is False.
+- Effect: the rebound `except ParseError` handlers no longer catch Incomplete. Confirmed at operands.py:33-37 (canon_operand); the same applies to commands.py (_expansion_refs), model.py (extract_cmd_substs, _subst_commands, _token_is_expanded) and verdicts_b.py (parse_sed_script, _sole_pipeline_producer).
+- Failure scenario: `dd "of=$dst"` in a scanned script makes the destination token `$dst"`. canon_operand then raises an Incomplete that nothing catches, and the census crashes with a traceback and exit 1, where v1.4.3-rc.1 reported a site.
+- This also makes CHANGELOG.md:112 ("Entry points keep their paths and their observable contracts") untrue for this entry point.
+- Minimal fix: in bind(), keep an original-to-clone map and rebuild bases as tuple(clones.get(b, b) for b in original.__bases__), or do not clone BaseException subclasses. Add a test that issubclass(mod.Incomplete, mod.ParseError) and a `dd "of=$x"` fixture.
+
+NEW FINDINGS (annex)
+None at P1.
+
+P2 FOLLOW-UPS
+The rc verdicts already listed P2-1 to P2-6; all of them still apply to the GA candidate. P2-7 is new.
+
+P2-1. .claude/scripts/check-substrate-drift.py:571-578
+- The compatible branch takes its floor from the pin file (>=0.128.0, .claude/governance/codex-cli-pin.txt:199), not from the pair-rail's rule. The pair-rail accepts a version only if it is at least 0.160.0 and newer than the manifest's.
+- Failure scenario: Codex 0.156.1 is installed. The drift checker reports info CODEX_INSTALLED_COMPATIBLE, --strict exits 0, and the "restore the pinned binary" advice disappears. Meanwhile --verify-codex-pin returns mismatch and the rail fails closed.
+- The message "the payload hash is verified separately" is false on the compatible route, where no manifest attests the bytes (condition 10). The docstring at lines 10-14 is stale.
+- Minimal fix: take the info branch only when cli_currency.compare_semver(installed, max(CODEX_VERSION_FLOOR, pinned)) > 0, and reword the message to "version floor only; no manifest attests these bytes".
+
+P2-2. .claude/scripts/check-substrate-watch.py:237-253
+- Any Codex at or above 0.160.0 suppresses drift and the fixture re-record runbook for codex_harness as well as codex_cli. The host-adapter fixtures are still certified at 0.139.0.
+- The summary "installed matches last_seen for all components" (line 269) becomes false, and the docstring at lines 21-24 and 41-47 is stale.
+- Minimal fix: apply the currency arm to codex_cli only, and fix the summary text.
+
+P2-3. .claude/scripts/check-substrate-watch.py:67
+- The module-level `from _lib import cli_currency` is unguarded. A missing _lib crashes the script with exit 1, against the docstring's promise of fail-open with exit 0 on infrastructure faults (lines 34-36).
+- Minimal fix: wrap the import in try/except ImportError and treat Codex as not current.
+
+P2-4. .claude/hooks/_lib/_installer_write_safety/__init__.py:29-35
+- property objects are not rebound, so Site.blocking (report.py:32) reads BLOCKING_VERDICTS from report.py, not from the entry point. That breaks the "one patchable facade namespace" promise.
+- Minimal fix: rebind fget, fset and fdel the same way methods are rebound.
+
+P2-5. .claude/hooks/_lib/_installer_write_safety/verdicts_b.py:698
+- __all__ leaks _commands (a module object) and _commands_name into the entry point's namespace.
+- Minimal fix: exclude them too.
+
+P2-6. .claude/scripts/check-subprocess-tests.py
+- Line 16: subprocess-test-baseline.json does not reach installs, so the default run in an install exits 2.
+- Line 21: a --root that does not exist scans nothing and exits 0 with zero findings.
+- Minimal fix: install the baseline or keep this checker out of installs, and refuse a root that does not exist.
+
+P2-7 (new). .claude/scripts/_subprocess_census.py:208-221
+- scan_tree raises ValueError for a symlinked test FILE. os.walk (followlinks=False) silently does not descend into a symlinked test DIRECTORY, so that directory's sites are never seen. The census fails open on that shape.
+- Minimal fix: in the walk loop, raise on any folder for which os.path.islink(os.path.join(directory, name)) is true, the same as for files.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and I found no P0 and no new P1. The installer-census exception-hierarchy P1 that the lane notes already carry is still in the GA candidate and must stay in the signed annex, with the seven P2 follow-ups (six carried from the rc review, one new).

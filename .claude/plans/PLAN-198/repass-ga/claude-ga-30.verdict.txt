@@ -1,0 +1,74 @@
+PAYLOAD 30/34: .claude/scripts/check_contamination.py split into .claude/hooks/_lib/_contamination/* (personal_constants, personal_path_scanner, personal_path_policy, personal_path_rows, personal_facade_io, personal_reporting, cli_checks, term_scan) and .claude/scripts/_contamination_inventory.py. The term rule (Rule 1) also gets the FU-144 fail-closed hardening. The GA-only condition says the code is identical to the rc, so I checked this payload against the candidate tree independently and cross-read the rc1 lane verdicts for the same content (codex-rc1-29, claude-rc1-29).
+
+WHAT I VERIFIED
+
+1. Binding of the moved code (WHAT TO VERIFY 4).
+- check_contamination.py:400-406 copies every _PERSONAL_PATH_* constant into the entry point. Then :474-506 rebuilds every function defined in personal_facade_io, personal_reporting and cli_checks over the entry point's own globals() and copies their classes by reference. _lib/_contamination/__init__.py:8-28 does the same for the __all__ of personal_path_scanner and personal_path_policy, which also pulls in the personal_path_rows helpers.
+- I listed the free names of every moved function. All of them resolve in the entry point's globals: errno, hashlib, os, re, stat, subprocess, sys, time, unicodedata, Path, FileWalker, build_pattern, _ALLOWLIST_*, _SKIP_SUFFIXES, is_never_allowlisted, _PRIVATE_TERMS_RELPATH, the copied constants, the policy constants (_PERSONAL_PATH_ROW_RE, _PERSONAL_PATH_ALLOWLIST_CONTROL_RE, _PERSONAL_PATH_REASON_MIN_INK) and the copied functions.
+- typing.NamedTuple is a function on 3.9 with __module__ 'typing'. The `annotations` feature object is neither a function nor a class. Both filters skip them, and neither __all__ picks up a typing name.
+- There is one PersonalPathUnreadable class, so every except clause catches what is raised. Lambdas inside _personal_path_mask_rel inherit the rebound globals.
+- __file__ in main (cli_checks.py:155) resolves to the entry point, so the default root is unchanged.
+- personal_path_verdict is a wrapper over _personal_path_verdict_impl (:498-505). Patch points on the entry point (FileWalker, _personal_path_index_modes, the constants, personal_path_verdict) still take effect.
+- The constants, regexes and placeholder set in personal_constants.py match the removed text exactly.
+
+2. Delivery. install.sh:1520-1550 copies every _lib entry except tests, and :1606-1612 copies every top-level .claude/scripts/*.py, which includes _contamination_inventory.py. The adopter template validate.yml.template:87 runs check-contamination.sh on ubuntu-latest.
+
+3. Standard library only, Python 3.9: yes. The NamedTuple string annotations become ForwardRefs, and typing.Pattern appears only as an annotation.
+
+4. Fail direction. This is a CI gate, not a hook, and nothing here blocks a session.
+- Rule 1 now refuses with rc 2 several inputs it used to skip: an unreadable or non-regular blob, an unsupported index mode, index snapshots that differ, a walk that does not cover the index, and a non-UTF-8 or U+FFFD tracked name.
+- A dangling or non-regular terms file is now fatal.
+- Rule 1 messages carry no path and pass through _personal_path_safe.
+- I found no input that the new Rule 1 passes where the old one flagged.
+
+5. Declared conditions.
+- Condition 7 holds for this entry point: the path is kept and the logic moves to modules. Rule 1's core sits in .claude/scripts/_contamination_inventory.py, not under _lib. That is a nuance, not a contradiction.
+- Conditions 13 and 14 are not contradicted. Nothing in this payload touches conditions 1-6 or 8-12.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1. Codex rated two items in this content P1 at rc1. I checked both against the code: both reproduce, but I rate them P2, for the reasons given under items 1 and 2 below.
+
+P2 FOLLOW-UPS
+
+1. P2 — .claude/scripts/check_contamination.py:130-135 (fail-open on a permission fault).
+- Failure: os.path.lexists() returns False on EACCES. On Python 3.9 the old Path.is_file() re-raised EACCES, because only ENOENT, ENOTDIR, EBADF and ELOOP are ignored. So when the CI user cannot search the scanned repo's scripts/ directory, every private term is now dropped in silence.
+- The comment "Only real ABSENCE means no private terms" overstates what the code does.
+- Why P2, not P1: git does not record directory modes, so a PR cannot cause this. A PR that wants the same effect can simply delete the terms file, which is absent-by-design. And in this repository, Rule 1 still returns rc 2 through other non-allowlisted tracked files under scripts/.
+- Fix: call os.lstat() and treat only ENOENT and ENOTDIR as absence; let any other error propagate.
+
+2. P2 — .claude/scripts/_contamination_inventory.py:76-81 and :89 (symlinks).
+- core.symlinks=false: for mode 120000, _blob only calls os.readlink(). On a checkout with core.symlinks=false (the Git for Windows default), git writes the link as a regular file, readlink raises EINVAL, and every non-allowlisted tracked symlink makes Rule 1 return rc 2 on every run. The base code scanned that file with read_bytes().
+- Missing links: a deleted or sparse-excluded tracked symlink also returns rc 2, while a missing regular file is skipped.
+- EMLINK: the ELOOP fallback does not handle EMLINK, which FreeBSD returns.
+- Why P2, not P1: it fails closed, and adopter CI runs on ubuntu-latest.
+- Fix: reuse Rule 2's _personal_path_read_nofollow classification. On EINVAL, read the regular file; on ENOENT or ENOTDIR, return None; treat EMLINK like ELOOP.
+
+3. P2 — CHANGELOG.md:112-117 and :342-346 (honesty).
+- The claim: CHANGELOG says entry points "keep their paths and their observable contracts", and lists check_contamination.py among them.
+- What actually changed in this script's contract:
+  - new rc 2 cases, including any non-UTF-8 or U+FFFD tracked name anywhere in the index, refused before the allowlist and with no waiver (_contamination_inventory.py:46-52);
+  - binary-suffix files are now read;
+  - symlinks are judged by their target string;
+  - the personal-path report now prints before the term report, and a Rule 2 rc 2 now skips Rule 1 (cli_checks.py:207-212).
+- CHANGELOG also calls _contamination_inventory.py a "maintenance helper", but it is the Rule 1 engine that check_contamination.py imports at startup.
+- Scenario: an adopter's template CI goes from 0 to 2 after upgrade, with no changelog line explaining why.
+- Fix: add a "Changed — contamination term rule fails closed" bullet that names these cases.
+
+4. P2 — check_contamination.py:30-31, :390-394, :437; cli_checks.py:131-138; term_scan.py:21 (stale or dead code and text).
+- The docstring still says binary suffixes are excluded by extension. _SKIP_SUFFIXES is passed as skip_suffixes and never used.
+- _TERM_GITLINK_MODE is never read, so patching it does nothing.
+- Fix: correct the docstring and remove the unused parameter and constant, or wire them in.
+
+5. P2 — .claude/hooks/_lib/_contamination/term_scan.py:12 (import path).
+- It imports the top-level module _contamination_inventory, which resolves only while .claude/scripts is sys.path[0].
+- Under -I, -P or PYTHONSAFEPATH=1, the gate dies at import with an rc 1 traceback that prints absolute paths. rc 1 is the wrapper's "contamination found" code. The base needed only the _HOOKS_DIR insert it made itself.
+- Fix: insert Path(__file__).resolve().parent in the entry point, or move the inventory into _lib/_contamination and import it relatively.
+
+6. P2 — cli_checks.py:218-219 (stale comment). It says "RULE 2 still runs below", but Rule 2 now runs first (:208). Fix the comment.
+
+7. P2 (cosmetic) — _contamination_inventory.py:123. The violation loop iterates raw `ls-files -s` entries, so during a merge conflict a violating path is reported once per stage. Fix: deduplicate by name before the loop.
+
+8. P2 — personal_facade_io.py:3. typing.get_type_hints() on PersonalPathHit, PersonalPathScan and PersonalPathVerdict raises NameError, because List, Tuple and Optional are not imported there. Runtime is unaffected. Fix: import them.
+
+VERDICT: GO The moved contamination code binds every name to the entry point's namespace, ships to installs, stays standard-library only and Python 3.9 compatible, and fails closed as a CI gate, so no declared condition is false and there is no P0 or undeclared P1, only P2 follow-ups.

@@ -1,0 +1,8 @@
+Payload 21: no P0 or false declared condition established. Conditions 5 and 7 hold: all 13 kernel additions are present, and extracted functions preserve facade globals and patch points. Python 3.9.6 compilation, imports and benign state-isolation checks passed. No files modified.
+
+NEW FINDINGS (annex): no new P1 findings.
+
+P2 follow-ups:
+P2 — .claude/hooks/audit_log.py:323: The previously noted fragment-loader issue remains. A missing, unreadable or invalid fragment raises before main(), dropping the audit event and producing a traceback with exit 1 instead of the documented exit 0. Minimal fix: catch loader exceptions during CLI invocation, emit a fallback diagnostic and exit 0; preserve exceptions for importing callers.
+
+VERDICT: GO The reviewed payload preserves normal runtime behavior and declared kernel coverage, with only a nonblocking loader error-handling follow-up.

@@ -1,0 +1,18 @@
+Payload 34/34: no P0, new P1, or false declared condition established.
+
+Carried finding, reconfirmed:
+P1 — .github/scripts/validate-pair-rail-verdict.py:88; .claude/scripts/validate-governance.sh:721. Gate decisions depend on helpers absent from gate-scripts-manifest.txt, so helper changes can alter validation without changing the pinned gate files. Already recorded by claude-p32 and carried into GA. Minimal fix: include the deciding dependencies in the integrity manifests or restore self-contained gate logic.
+
+NEW FINDINGS (annex)
+None.
+
+P2 follow-ups (carried, reconfirmed)
+P2 — .github/scripts/validate-pair-rail-verdict.py:772. After a future manifest update above 0.160.0, an older CLI still meeting that floor incorrectly receives the payload-hash exemption. Dormant with the current manifest. Minimal fix: require version_comparison > 0 for the exemption.
+
+P2 — .claude/scripts/tier_policy_cli/loader.py:251; .claude/scripts/tier_policy_cli/learn.py:462. Newly admitted model families can produce recommendations rejected by signing and apply; unranked models also receive unreliable direction labels. Minimal fix: restrict recommendations to supported models or align admission, ranking, pricing, signing and writing.
+
+P2 — .claude/scripts/subprocess-test-baseline.json:1; scripts/install.sh:1606. Installation copies the census command and Python helper but omits its required JSON baseline. Default invocation consequently exits 2. Minimal fix: install the baseline explicitly or exclude this maintenance command from adopter delivery.
+
+Validation: Python 3.9.6 syntax/import checks, shell syntax checks, JSON structure and duplicate checks, benign helper checks, and static installer/workflow integration review passed. No files modified; full installation and test suites were not run.
+
+VERDICT: GO The reviewed payload contradicts no declared condition, and its confirmed defects are already carried in the rc findings.

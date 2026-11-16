@@ -1,0 +1,8 @@
+Payload 17: no P0 or false declared condition established. Compared 206 moved declarations; in-memory Python 3.9.6 checks confirmed helper behavior, facade-global binding and patch points. No files modified.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 follow-ups:
+P2 — .claude/hooks/_lib/audit_emit.py:12. Annotation-inspecting integrations now encounter NameError when calling typing.get_type_hints() on exported functions such as scrub_audit_tokens_event: their annotations reference Callable, List or Tuple, which the facade no longer imports. Ordinary calls remain functional. Minimal fix: restore those three typing imports.
+
+VERDICT: GO This payload establishes neither a false declared condition nor a P0, and the annotation-resolution regression is nonblocking.

@@ -1,0 +1,8 @@
+Payload 15: no P0 or false declared condition established. The 331 registered actions, passthrough set and 173 ordered dispatch branches are preserved. All 251 installed functions resolve their runtime globals through the facade. Python 3.9.6 checks used in-memory collectors and a symmetric placeholder for the redacted numeric literal; no files were modified.
+
+NEW FINDINGS (annex): No new P1 findings.
+
+P2 follow-ups:
+P2 — .claude/hooks/_lib/audit_emit.py:12: Removing typing imports breaks annotation introspection for re-exported functions. For example, typing.get_type_hints(emit_lesson_write) now raises NameError because List is absent from the facade globals; ten previously resolvable functions are affected. Ordinary emitter calls remain functional. Minimal fix: restore Callable, Iterator, List and Tuple imports in the facade.
+
+VERDICT: GO The payload establishes neither a false declared condition nor a P0, and the confirmed annotation-introspection regression is a nonblocking P2.

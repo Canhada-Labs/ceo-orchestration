@@ -1,0 +1,14 @@
+Payload 32/34: no P0 or false declared condition established. The extractions preserve facade globals and path resolution; installer rules include their modules. Python 3.9.6 binding checks passed, with the lessons audit dependency isolated because of a redaction artifact. The bump pattern covers all three declared INSTALL.md examples.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups — reconfirmed carried findings:
+
+P2 — .claude/scripts/local/mac_sign_and_release.py:110. A clean local main already ahead of origin/main passes pull --ff-only; the subsequent automatic push publishes those additional commits alongside the merge. Minimal fix: require local HEAD to equal fetched origin/main before merging.
+
+P2 — .claude/scripts/local/mac_sign_and_release.py:130. The wrapper unconditionally supplies --npm-readme-reviewed, allowing a review stamp without explicit operator acknowledgment. Minimal fix: require and forward an explicit acknowledgment flag.
+
+P2 — .claude/scripts/local/verify-counts.sh:1099. The version checker watches --pin examples but misses the RC tag-list stem added to the bump writer. An independently stale tag-list line can survive release.sh’s same-version early return. Minimal fix: extend the checker to cover that stem.
+
+VERDICT: GO The reviewed changes establish no release-blocking defect or false declared condition, while three nonblocking maintainer-tooling follow-ups remain.

@@ -1,0 +1,21 @@
+Payload 28/34: no P0 or false declared condition established. Conditions 3(b–c) and 7 are supported by the reviewed code.
+
+Carried finding, reconfirmed:
+P1 — .claude/scripts/ceo-restore.sh:190, with ceo-backup.sh:264 and _restore_archive.py:112. Backup --include-plans preserves symlinks, but restore rejects the entire resulting archive, even without --restore-plans. Recovery of audit and memory data therefore fails for an archive the backup tool successfully produced. Minimal fix: snapshot plans as regular files only, and explicitly handle older archives safely. Already recorded in the rc annex.
+
+NEW FINDINGS (annex)
+No additional P1 findings.
+
+P2 follow-ups — previously recorded and still present:
+
+P2 — .claude/scripts/ceo-restore.sh:182. Fresh-machine recovery fails when the destination’s immediate parent does not exist; validation exits before mkdir -p. Minimal fix: resolve the nearest existing validated ancestor and create missing directories during apply.
+
+P2 — .claude/scripts/ceo-restore.sh:257. Preflight checks ancestor symlinks but misses non-directory ancestors. If DEST/memory is a regular file, preview succeeds; apply can overwrite audit files before failing to create the memory directory. Minimal fix: validate every existing ancestor and required directory before destination writes.
+
+P2 — .claude/scripts/check-ceremony-script.py:198 and :218. R9 marks valid heredocs BLOCKING: partially quoted delimiters are misparsed, and arithmetic-only expansion is treated as command substitution. Minimal fix: parse complete delimiter words with quote removal and distinguish arithmetic expansion from command substitution.
+
+P2 — .claude/hooks/_lib/_cost_transcripts_parts/__init__.py:55. Rebinding dataclass-generated repr wrappers removes their library globals. On Python 3.9.6, representing exported dataclass instances raises NameError for _thread, breaking debugging and representation of rollup results. Minimal fix: rebind only methods whose original globals belong to the implementation part.
+
+Validation: Python 3.9 grammar checks passed for 25 files; restore Bash syntax passed; the hook checker passed 95 references. In-memory checks confirmed malformed-record handling, facade bindings, dataclass behavior apart from repr, and the R9 false positives. Full registry verification was blocked by a redaction placeholder in generic_dispatch_04.py; this is an evidence limitation, not a reported release defect. No files modified.
+
+VERDICT: GO-WITH-CONDITIONS The checked conditions remain supported, while the previously recorded restore, lint and dataclass defects remain unresolved.

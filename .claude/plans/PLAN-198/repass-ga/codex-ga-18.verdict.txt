@@ -1,0 +1,30 @@
+Payload 18: no P0 or false declared release condition established.
+
+Carried P1 findings remain open, as declared in the rc lane notes:
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:167. Quoted parentheses inside command substitutions can cause valid commands to be rejected as unparseable. Minimal fix: track quotes, escapes and nested shell syntax when locating substitution boundaries.
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:455. Canonical-path arguments to inline interpreter programs are classified as writes even for read-only operations. Minimal fix: require evidence of a write operation before vetoing those operands.
+
+P1 — .claude/hooks/_lib/bash_indirect_guard.py:347. Recursive launcher scanning omits the depth check; recursion exhaustion reaches the hook’s infrastructure handler and allows the command. Minimal fix: enforce MAX_DEPTH at _scan_segment entry and return the closed-limit result.
+
+P1 — .claude/hooks/check_canonical_edit.py:624. A component ImportError blocks even ordinary noncanonical edits after a partial installation. Minimal fix: handle infrastructure import failures separately from integrity rejection, preserving the deliberately closed wall deadline.
+
+P1 — .claude/hooks/check_canonical_edit.py:123. Missing guard declarations become an empty list, allowing the classification oracle to report success with every path noncanonical. Minimal fix: retain the loading error and return nonzero from oracle mode.
+
+P1 — .claude/hooks/_lib/effective_config.py:544. Exclusion-matcher exceptions reach the whole-scan handler, which discards unrelated tamper findings. Minimal fix: bound matching, isolate this check, retain accumulated findings and conservatively classify unparseable exclusions.
+
+NEW FINDINGS (annex)
+No additional P1 identified.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/bash_indirect_guard.py:313. Additional false positive: _shell_body interprets -c after a script filename as a shell option. The scanner rejects the harmless string bash /dev/null -c "echo {1..129}" although the trailing words are script arguments. Confirmed by scanner-only evaluation; the command was not executed. Minimal fix: stop shell-option parsing at the script operand or -- and honor option arity.
+
+P2 — .claude/hooks/_lib/bash_indirect_telemetry.py:53. Carried: a symlinked marker directory redirects empty marker creation outside the audit directory; O_EXCL protects only the final filename. Minimal fix: open and validate the directory without following symlinks, then create markers relative to its descriptor.
+
+P2 — .claude/scripts/ceo-escalation-detector.py:375. Carried integration drift: the CLI retains its Claude-only predicate and reports admitted GPT/o VETO models as high-severity violations. Minimal fix: use the shared model predicate in the CLI.
+
+Validation: Python 3.9 syntax checks passed for all 17 payload files. Canonical facade binding checks passed; 25 moved audit functions retained their bindings and signatures, and 22 wrapper calls reached an in-memory sink. The 13 declared kernel entries and installer inclusion are present. Full audit import was obstructed by redaction-generated syntax in another component; this was not classified as a product defect. No files were modified.
+
+VERDICT: GO-WITH-CONDITIONS The declared defects remain open and one additional parsing follow-up was confirmed, without evidence of a P0 or a false declared release condition.

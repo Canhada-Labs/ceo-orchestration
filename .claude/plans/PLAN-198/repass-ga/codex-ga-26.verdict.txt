@@ -1,0 +1,11 @@
+Payload 26/34: no P0 or false declared condition established. Budget-summary namespace, patch-point and import checks passed, along with Python 3.9 syntax checks and Bash syntax validation. No files modified.
+
+NEW FINDINGS (annex): no new P1.
+
+P2 follow-ups:
+
+P2 — .claude/scripts/ceo-backup.sh:255. A traversal error in find is lost through process substitution. The script can publish and checksum an incomplete memory backup, then rotate older backups. This matches a carried RC finding. Minimal fix: complete and check traversal before copying or publishing; abort before rotation on failure.
+
+P2 — .claude/scripts/caller_repo_guard.py:53. The environment scrub leaves GIT_COMMON_DIR inherited. If it points elsewhere, snapshots can read another repository’s shared refs and miss changes in the intended caller. Minimal fix: clear Git’s repository-local environment variables, including GIT_COMMON_DIR, before invoking Git.
+
+VERDICT: GO-WITH-CONDITIONS The two P2 follow-ups warrant repair, but this payload establishes neither a false declared condition nor a P0 defect.

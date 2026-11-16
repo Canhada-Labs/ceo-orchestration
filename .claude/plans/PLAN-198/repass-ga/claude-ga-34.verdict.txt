@@ -1,0 +1,79 @@
+SCOPE (payload 34/34). The changed files are: subprocess-test-baseline.json (new), tier_policy_cli/{_types,learn,loader}.py, validate-governance.sh, .claude/settings.json, the PR template, validate-pair-rail-verdict.py, coverage.yml, validate.yml, CHANGELOG [1.4.4], INSTALL.md, Makefile, the READMEs, docs/*, the SBOM/SECURITY/VERSIONING stamps, SPEC/v1/audit-log.schema.md, VERSION, npm/package.json, pyproject.toml, scripts/_codex_harness.sh and scripts/install-npm.sh.
+
+This list matches .claude/plans/PLAN-198/repass-rc1/paths-rc1-32.txt line for line. Sampled hunks are identical in diff-rc1-32.patch: the CHANGELOG [1.4.4] span, exact_payload_pin, CODEX_VERIFIED_VERSION, cleanupPeriodDays 3650 and the install-npm.sh unpacking. That fits the GA-only claim that no in-scope byte changed after the rc tag.
+
+DECLARED CONDITIONS CHECKED AGAINST THE TREE (none found false)
+- Condition 5: coverage.yml timeout-minutes is 50.
+- Condition 9: model_currency.py:7-16 (_RETIRED = {claude-opus-4-1}, _ALLOWED, _FLOOR) admits exactly the families the CHANGELOG lists. The callers are:
+  - is_allowed_model: effective_config.py:482,721, tier_policy_cli/_types.py:35, and validate-governance.sh:721 through model_currency.main.
+  - is_veto_floor_model: agent_frontmatter.py:259 and escalation_signals.py:126.
+  - validate-pair-rail-verdict.py:768-784 skips payload-sha equality for a declared codex_cli at or above cli_currency.CODEX_VERSION_FLOOR (0.160.0) that differs from the manifest version.
+- Condition 10: gen_envelope.check_instrument (kit:1269-1295) refuses a version below the floor even with the manifest sha. It requires `compatible` to be strictly newer than the manifest and refuses the manifest sha under `compatible`.
+- Condition 11: VERSIONING.md:16-17,45 classes an additive SPEC change and a new trust boundary as MINOR.
+- Condition 12: INSTALL.md:717,719,722 carry the three lines. _release_bump_sites.py:90 `((?:--pin |git tag --list ['"]?)v)SEMVER` rewrites all three.
+- Condition 13/14: consistent with the path match above.
+- CHANGELOG claims verified:
+  - 78 top-level _lib modules: 79 *.py files including __init__.py.
+  - 201 ADR-*.md files with a "# ADR-" header.
+  - _lib/audit_emit.py is 496 lines; check_bash_safety.py is 42 lines.
+  - The six new top-level script helpers exist.
+  - templates/settings, install.sh and upgrade.sh are absent from scope-rc1.txt, which supports "unchanged since v1.4.3-rc.1".
+  - install.sh builds .claude/settings.json only from templates (install.sh:2279-2387), so 3650 and claudeMdExcludes do not reach installs.
+  - The claudeMdExcludes glob has no unmodelled syntax. Under claude_md_excludes._segments_match it matches the root CLAUDE.md only if the checkout itself sits under .claude/plans/**/staged*/.
+
+ADOPTER BLAST RADIUS, FAIL DIRECTION, MOVED CODE, PYTHON
+- No silent model change. tier_policy_cli.loader is consumed only by tier_policy_cli/cli.py. The runtime hook path uses _lib/tier_policy, a closed MODEL_ID enum that this payload does not touch. apply.py:401 still requires exact VALID_MODEL_IDS membership before rewriting any agent `model:` line, so a family id admitted by loader.py:251 or learn.py:462 is never written.
+- Fail direction is correct:
+  - The validator exits 3 (fails closed) on an unparseable pin line (:353-358, :594), a malformed verdict payload sha (:748-751) or a non-stable manifest package_version (:715).
+  - A failed `_lib` import crashes with exit 1 (INFRA), and the PLAN-166 delta gate still fails closed in optional mode.
+  - validate-governance.sh:721 counts an ERROR when python3 or model_currency.py is missing.
+  - _types.py:27-36 falls back to the exact list on ImportError.
+- Shadowing:
+  - Running `python3 .claude/hooks/_lib/model_currency.py` puts _lib/ at sys.path[0]. No _lib/*.py name collides with a stdlib module that model_currency or the interpreter needs.
+  - The new sys.path.insert(0, .claude/hooks) in _types.py:24-26 and validate-pair-rail-verdict.py:85-88 shadows nothing. No hook file has a stdlib name or the name of a module tier_policy_cli imports (apply, learn, loader, _types, _constants).
+- Removed validator names (parse_semver, semver_in_range) have no callers outside tests.
+- MODEL_ID is now `str`. It has no runtime consumer, and the VALID_MODEL_IDS reorder affects no indexer.
+- Everything is stdlib only and safe on Python 3.9.
+
+P0: none.
+
+NEW FINDINGS (annex): no new P1.
+- Carried P1, still open on this code: lane note claude-p32. validate-pair-rail-verdict.py:85-88 and :768-772 and validate-governance.sh:721 hand ADR-192 gate decisions to _lib/cli_currency.py and _lib/model_currency.py. Neither is in gate-scripts-manifest.txt, and cli_currency.py is not in pair-rail-inputs-hash-manifest.txt. Nothing between the rc tag and the GA candidate changed this.
+
+P2 FOLLOW-UPS
+1. NEW. validate-pair-rail-verdict.py:21-34, release.yml:694-696 and docs/CROSS-LLM-THREAT-MODEL.md:350 still say that a payload sha mismatch means VERDICT_INVALID, with the payload sha equal to the manifest.
+   - Failure scenario: after this delta, that is false for any declared codex_cli newer than the manifest version (version_comparison != 0 and newer_floor >= 0). A reader of step 15 or the threat model believes the hash gate is unconditional. The CHANGELOG declares the gate change and the stale operating contract, but not these three texts.
+   - Fix: amend all three to state the version-floor exemption.
+2. NEW. tier_policy_cli/cli.py:349-351 says VALID_MODEL_IDS has "claude-fable-5 [as] its first entry". _types.py:55-57 now puts claude-opus-4-8 first. Also _types.py:8,143 and tier_policy_cli/__init__.py:17 still say "MODEL_ID Literal".
+   - Fix: update the comments.
+3. Carried, latent. validate-pair-rail-verdict.py:772 `version_comparison in (None, 0)` also exempts a version OLDER than the manifest when it is at or above the floor.
+   - Status: harmless while package_version == CODEX_VERSION_FLOOR == 0.160.0 (codex-cli-pin-manifest.json:3). It becomes live at the next re-pin. The INFO text at :783 ("newer than the payload manifest") would then be false.
+   - Fix: `exact_payload_pin = version_comparison is None or version_comparison <= 0 or newer_floor is None or newer_floor < 0`.
+4. Carried. scripts/_codex_harness.sh:46,294,373,461 put CODEX_VERIFIED_VERSION=0.160.0 into two places:
+   - the requirements.toml that adopters commit ("Verified against codex-cli 0.160.0");
+   - the arming-check skew text ("certified on 0.160.0").
+   The hook fixtures date from 0.139.0. Also, the CHANGELOG calls it the helper "that install.sh sources", but upgrade.sh sources it too (header :8).
+   - Fix: add a separate CODEX_FIXTURE_VERSION=0.139.0 for the certification wording.
+5. Carried. learn.py:462 and loader.py:251 admit families, while apply.py:401 and cli.py:332-341 keep the exact list.
+   - Effect: a learned or loaded family tier can never be applied or owner-signed. learn._tier_rank:547-564 ranks such ids -1, which mislabels the direction.
+   - This fails safe. The CHANGELOG names the loader but not the learner.
+   - Fix: use one predicate across learn, load, sign and apply.
+6. Carried. check-subprocess-tests.py:16 reaches installs, but its subprocess-test-baseline.json does not. In an install it exits 2. It is a maintainer tool.
+   - Fix: ship the baseline or exclude the tool from installs.
+7. Carried. validate-governance.sh:701-710: the comment still describes a closed literal list.
+8. Carried. SPEC/v1/audit-log.schema.md:484 still says "all four learning-loop rails"; there are now five.
+9. Carried. docs/DISASTER-RECOVERY.md:79-83 omits that an ABSENT counter exits 0 with only a warning (audit-verify-chain.py:44,582).
+   - Failure scenario: in a truncated-tail investigation, a deleted sidecar reads as a pass.
+   - Fix: state the absent case.
+10. Carried. The two pin-file readers disagree on which data line they read:
+    - parse_pin_range (validator :349-358) reads the FIRST data line and fails on a mismatch;
+    - _codex_harness.sh:53 reads the LAST one.
+    A second range line would make them disagree.
+    - Fix: refuse more than one data line in both.
+11. NEW, cosmetic. The heading "[1.4.4] - 2026-11-03" predates the review stamps (2026-11-09) and the GA cut. Keep-a-Changelog headings carry the release date.
+
+NOT VERIFIABLE HERE
+- Whether gate-scripts-manifest.txt holds the current hashes of the edited validate-pair-rail-verdict.py and validate-governance.sh. I had no hashing tool and the copy is redacted. A stale hash fails release.yml closed, with no adopter impact.
+- The git history between the rc tag and the GA candidate. Only the path and hunk match above was checkable.
+
+VERDICT: GO-WITH-CONDITIONS All declared conditions this payload touches hold against the tree, there is no P0 and no new P1, and nothing reaches an adopter as a silent model change or a fail-direction inversion; the release still depends on the declared conditions, because the carried P1 (claude-p32) remains open on this same code.

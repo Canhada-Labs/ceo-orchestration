@@ -1,0 +1,194 @@
+# Conditions of v1.4.4: carried by gen_envelope.py carry-conditions from .claude/governance/pair-rail-verdict-v1.4.4-rc.1.md; the GA re-pass re-checks each one against the GA candidate. Add GA-only conditions at the end.
+- Condições do envelope — v1.4.4-rc.1 (o trem desde a v1.4.2, sobre a base v1.4.3-rc.1)
+- Este arquivo propõe condições; não é aprovação nem assinatura. Duas revisões, Codex e Claude Code, leem os mesmos payloads redigidos, e o envelope vincula a evidência delas pelo MANIFEST cujo sha256 os campos assinados carregam. Um `NO-GO` de qualquer uma bloqueia o envelope, e um `NO-GO` gravado no registro de tentativas faz o kit recusar um re-pass novo no mesmo commit, ou na mesma árvore, com qualquer tag.
+- Regra do corte (a que o Owner ratificou para a v1.4.0 e aplicou às releases seguintes; pela OQ-7 do PLAN-198, este corte segue o molde do PLAN-194 sem debate novo): `NO-GO` só por condição declarada FALSA contra o código ou por P0; um P1 não declarado vai ao veredito sob «NEW FINDINGS (annex)» como anexo assinado, porque cada arquivo de veredito entra no MANIFEST. Este texto não promete versão para a cura de nada que declara aberto, exceto o que o CHANGELOG [1.4.4] já agenda: a cura estrutural da condição declarada da correção do filtro de segredos (condição 4).
+- Base: a tag assinada `v1.4.3-rc.1`, que `gen_envelope.py` escolhe pela regra dele (a tag anotada mais nova abaixo da versão pedida, ancestral do candidato e com envelope de veredito commitado); o envelope assinado dela cobre o delta `v1.4.2..candidato` daquela rc. Adopters: quem SOBE da v1.4.2 (a v1.4.3 nunca chegou ao npm, como o CHANGELOG [1.4.4] diz) ou da v1.4.3-rc.1, por `upgrade.sh --pin v1.4.4-rc.1`, e quem instala a partir de um checkout da tag pelo `install.sh`. A rc não publica no npm: o job `publish` do `npm-publish.yml` pula as tags `-rc.`.
+- A. Dívida carregada (re-declarada)
+- 1. **O anexo P1 da v1.4.0 segue sem cura declarada pelo CHANGELOG [1.4.4] e sem versão prometida para a cura, exceto dois casos: o da condição 67, que a v1.4.3-rc.1 declarou curado e que esta release carrega, e o da condição 58, que esta release declara curado (condição 4).** Os itens são as seções «NEW FINDINGS (annex)» dos vereditos em `.claude/plans/PLAN-169/repass-rc1/` e `.claude/plans/PLAN-169/repass-ga/`, mais as condições do envelope assinado `.claude/governance/pair-rail-verdict-v1.4.0.md`; os envelopes assinados do GA v1.4.2 e da v1.4.3-rc.1 já o declararam aberto. Fora os casos das condições 58 e 67, o CHANGELOG [1.4.4] não declara curado nenhum deles; esta condição não afirma que cada achado siga reproduzível.
+- 2. **O que o envelope assinado do GA v1.4.2 (`.claude/governance/pair-rail-verdict-v1.4.2.md`) declarou aberto segue sem cura declarada pelo CHANGELOG [1.4.4], exceto o caso do P2 da parte 3 do re-pass daquele GA, que a v1.4.3-rc.1 declarou curado e que esta release carrega, e os dois casos da condição 1.** Aquele envelope declarou abertos os itens das condições dele (que carregam o anexo da v1.4.0, as condições da `v1.4.2-rc.1` e, pelas condições 13 e 14, os três P1 do anexo assinado da `v1.4.2-rc.1` e os P2 que a condição 14 mantém abertos) e os achados sob «NEW FINDINGS (annex)» e os P2 dos vereditos que ele ou o envelope da `v1.4.2-rc.1` pinam pelo MANIFEST da evidência. O P2 curado é o de um ledger de substrato com a forma errada que substituía o relatório inteiro do `check-substrate-drift.py`. O CHANGELOG [1.4.4] não declara curado nenhum outro, entre eles os três P1 do anexo assinado da `v1.4.2-rc.1`; esta condição não afirma que nada mudou na faixa.
+- 3. **Dos achados do re-pass da v1.4.3-rc.1, esta release declara curados os três casos que o CHANGELOG [1.4.4] declara em «Fixed — three findings of the v1.4.3-rc.1 re-pass».** O MANIFEST da evidência daquele re-pass (`.claude/plans/PLAN-194/repass-rc1/MANIFEST-rc1.sha256`), cujo sha256 o envelope assinado da v1.4.3-rc.1 carrega, pina os vereditos: o da parte 3 traz um P1 sob «NEW FINDINGS (annex)» e dois P2, e os das outras partes não trazem achado novo. Os três são os casos curados: (a) o P1, em que `diagnose-output-hook.py` podia escrever no log de auditoria vivo; o ambiente do filho agora tira `CEO_AUDIT_LOG_PATH` e as outras variáveis de local que o script lista, e aponta `HOME` e o diretório do log de auditoria para um diretório temporário; (b) o P2 em que `check-audit-real-loss.py` caía com um `record_id` que não é texto; o arquivo agora vai para `malformed_record_id_files` no relatório; (c) o P2 em que os verificadores só de leitura `audit_spool_state.py` e `check-audit-real-loss.py` tentavam gravar arquivos ao importar os módulos auxiliares; os dois agora desligam essa gravação antes dessas importações. Esta condição afirma só esses três casos.
+- B. O que esta release declara curado
+- 4. **O filtro de segredos corta o texto original nos deslocamentos achados no texto original: o defeito presente desde a v1.0.0 que o CHANGELOG [1.4.4] descreve na seção «Fixed» do redator de segredos e que o envelope assinado da v1.4.0 declarou como a condição 58 dele.** Em `.claude/hooks/_lib/secret_patterns.py`, os deslocamentos que `scan()` devolve indexam o texto recebido, e `redact()` e `scan_and_redact()` cortam esse mesmo texto com eles; `.claude/hooks/_lib/pii_patterns.py` aplica trechos sobrepostos como união; o catálogo de padrões não muda. A correção é o commit `54bab3cc`, assinado pelo Owner após revisão do Codex e de dois refutadores Claude; nenhum arquivo de sentinel o cobre. O Codex aprovou com uma condição, anterior à correção, que a mensagem do commit declara nestas palavras, e que o Known-open do CHANGELOG [1.4.4] também declara: «the ingress path redacts the raw answer text before parsing it, so a redaction can change whether an answer parses». A cura estrutural, redigir os valores decodificados depois do parse, está agendada para a próxima release («scheduled for the next release»).
+- 5. **A lista de hard-deny do kernel ganha 13 linhas: os sete pacotes auxiliares que recebem o código das sete entradas de kernel divididas pelo PLAN-197, cinco módulos que código de kernel chama e o pacote dos adapters live, como o CHANGELOG [1.4.4] descreve na seção «Fixed» da lista do kernel.** O commit `161e1dc3`, assinado pelo Owner após revisão de dois refutadores Claude e do Codex, leva `_KERNEL_PATHS` (`.claude/hooks/check_arbitration_kernel.py`) de 110 para 123 linhas e os arquivos de kernel rastreados de 125 para 222: uma linha recursiva para cada pacote (`canonical_edit`, `agent_spawn`, `_policy_parts`, `_audit_emit_parts`, `_audit_log_parts`, `_bash_safety_parts`, `_pair_rail_parts` e `adapters/live/`) e uma para cada módulo (`plan_paths.py`, `model_currency.py`, `cli_currency.py`, `bash_indirect_guard.py` e `bash_indirect_telemetry.py`), todos sob `.claude/hooks/_lib/`. O pacote dos adapters live fica inscrito no kernel, e uma edição nele passa pelo override do kernel, como a de qualquer arquivo de kernel. O teste novo `.claude/hooks/tests/test_kernel_decomposition_coverage.py` fica vermelho se qualquer uma das 13 linhas novas sair. O mesmo commit sobe o limite de tempo do job `coverage` do `.github/workflows/coverage.yml` de 35 para 50 minutos. Nenhum arquivo de sentinel cobre o commit.
+- As demais correções que o CHANGELOG [1.4.4] descreve são julgadas como integração nos payloads, sem condição própria, com os limites que ele declara.
+- C. O que muda para o adopter
+- 6. **O guard de Bash ganha uma varredura de execução indireta, ligada por padrão (PLAN-195, ADR-201).** A varredura (`_lib/bash_indirect_guard.py`, no `check_bash_safety.py`) roda salvo com `CEO_BASH_INDIRECT_GUARD=0`, e as formas heurísticas dela salvo com `CEO_BASH_INDIRECT_HEURISTICS=0`, no ambiente com que o Claude Code inicia. Os limites de falso positivo dela nunca foram medidos nesta implementação, como o CHANGELOG [1.4.4] declara.
+- 7. **Vários dos maiores hooks e scripts viram pontos de entrada finos sobre módulos em `.claude/hooks/_lib/` (PLAN-197, ADR-202).** Os pontos de entrada mantêm os caminhos e a lógica passa aos módulos: um hook remendado à mão precisa ser remendado de novo no módulo dele, e um módulo da condição 5 é caminho de kernel.
+- 8. **Um hook registrado deixa pendente, na saída, o trabalho do spool de auditoria, e a cura é parcial.** O `.claude/hooks/_python-hook.sh` exporta `CEO_HOOK_BOUNDED_EXIT=1`; o ADR-055-AMEND-4 está `ACCEPTED` com a implementação `PARTIAL`, e o Known-open do CHANGELOG [1.4.4] declara que não está provado que todo evento pulado seja coletado depois, sem release atribuída à cura.
+- 9. **Os merges dos pull requests 6 e 7 trouxeram ao `main` 233 caminhos canônicos sem sentinel nem arquivo de assinatura, e com eles mudou o sentido de três checagens de governança: o piso VETO, a allowlist de modelos e o pin do Codex.** O piso VETO e a allowlist passam a aceitar famílias de ids, entre eles ids que o ledger de depreciação lista como aposentados; o pin do Codex passa como `compatible` um Codex CLI mais novo que a versão do manifesto pela versão declarada, sem exigir hash igual (seção «Security and governance» do CHANGELOG [1.4.4]). Pela OQ-3 do PLAN-198, esses caminhos ficam declarados, não ratificados por bytes; o Known-open do CHANGELOG [1.4.4] declara cada um desses pontos com «No release is assigned to its cure yet».
+- 10. **O revisor Codex deste re-pass entra pela rota do piso de versão, sem re-pin (decisão OQ-2 do PLAN-198).** O runner só o aceita se o oráculo `check_pair_rail.py --verify-codex-pin` o classifica como `verified` ou `compatible`, e o gerador recusa uma versão abaixo de `CODEX_VERSION_FLOOR` (0.160.0) mesmo com o sha do manifesto. Com `compatible`, nenhum manifesto atesta os bytes do binário: a identidade do instrumento é a versão observada, o triple, o sha256 do payload e o status do pin, que a PROVENANCE e os campos assinados (`tool_versions`) registram. O GA recusa um Codex com versão, triple, sha256 do payload ou modelo diferente do da rc, a menos que a troca entre nos campos assinados como o achado `instrument-changed-since-<rc>`.
+- 11. **A release fica com o número PATCH, 1.4.4, por decisão do Owner (OQ-4 do PLAN-198).** O parágrafo «Version number.» do CHANGELOG [1.4.4] diz que o `VERSIONING.md` classifica como MINOR uma mudança aditiva de SPEC e uma nova fronteira de confiança, que este trem tem as duas, e que um upgrade a partir da v1.4.2 se planeja como um MINOR.
+- 12. **Durante o hold entre a rc e o GA, quem sobe usa `--pin v1.4.4-rc.1`.** O `release.sh bump` reescreve para a versão alvo as três linhas do exemplo de upgrade do `INSTALL.md`: a que resolve a rc mais nova (`git tag --list 'v<versão>-rc.*'`), a do GA (`--pin v<versão>`) e a da rc.1 (`--pin v<versão>-rc.1`). Num checkout-fonte que ainda não tem a tag do GA, a linha do GA sai do `upgrade.sh` com `ERROR: unknown --pin ref` (código 2), como o próprio exemplo avisa.
+- D. Escopo deste re-pass
+- 13. **Os payloads cobrem, pela forma, todo caminho que muda entre a tag base e o candidato, exceto as classes que o `OUT_OF_SCOPE` de `.claude/plans/PLAN-198/kit/gen_envelope.py` declara fora:** testes (`tests/*`, `*/tests/*`); planos (`.claude/plans/*`); notas de pesquisa (`docs/research/*`); o contrato de operação (`CLAUDE.md`); registros de decisão (`.claude/adr/*`); dados de oráculo e de teste (`.claude/data/*`, `.claude/scripts/data/*`, `.claude/eval/*`); o harness de smoke do mantenedor (`scripts/local/*`); a configuração de teste (`conftest.py`, `pytest.ini`); higiene do repositório (`.gitignore`); o espelho gerado do plugin (`dist/*`); `RELATORIO-*.md`, `REVIEW.md` e `codex-planos/*`; e os envelopes de veredito assinados (`.claude/governance/pair-rail-verdict-v*.md`). A classe de cada caminho fica em `scope-rc1.txt`, na evidência.
+- 14. **A cópia do candidato que os revisores leem passa arquivo a arquivo pelo mesmo redator dos payloads, e o kit retira dela, com o motivo, os arquivos que lista em `withheld-rc1.txt`, na evidência; a contagem deles vai para os campos assinados.** Fora do re-pass não quer dizer não entregue; este texto não afirma, classe a classe, o que chega a um adopter.
+Lane notes signed with v1.4.4-rc.1 (conditional verdicts and P0/P1 lines):
+- codex-p01 Reviewed payload 1/32 and its candidate-tree integration. No P0 or contradiction of a declared condition established within this scope.
+- claude-p01 P0: none.
+- claude-p01 NEW FINDINGS (annex): none at P1.
+- claude-p01 VERDICT: GO Payload 1 has no P0 and makes none of the declared conditions false: the kernel list carries the 13 declared rows, and the audit_emit split binds every part to the facade namespace and resolves every name its parts use. What ...
+- codex-p02 Payload 2/32: no P0 or false declared condition established.
+- claude-p02 P0: none.
+- claude-p02 VERDICT: GO Payload 2/32 only moves the audit_emit declarations into parts that rebind cleanly to the facade, with every name resolved, one transform per action, unchanged drop and default-deny behaviour, standard library only, Python 3....
+- codex-p03 P1 ? .claude/hooks/_lib/_audit_emit_parts/writer.py:761: When spool persistence is unavailable and creating the primary directory or opening its lock raises OSError, execution reaches the fallback handler before 'line' is assigned at :68...
+- codex-p03 VERDICT: GO-WITH-CONDITIONS No declared condition was found false and no P0 was identified in this payload; the confirmed audit fallback loss is recorded as an undeclared P1.
+- claude-p03 FINDINGS: no P0, and no declared condition is false against this payload.
+- claude-p03 NEW FINDINGS (annex): no undeclared P1.
+- claude-p03 VERDICT: GO These moved audit_emit and audit_log parts bind every name they use into the facade, stay standard-library-only and Python 3.9 compatible, keep their fail-open behavior and are on the kernel list, so no declared condition is ...
+- codex-p04 Payload 4: no P0 or falsified declared condition established. Namespace, path-resolution and 30 in-memory CLI smoke checks passed on Python 3.9.6; label persistence was mocked. The findings below are newly observed, not proven regression...
+- codex-p04 P1 ? .claude/hooks/_lib/_bash_safety_parts/fact_state.py:327
+- codex-p04 VERDICT: GO-WITH-CONDITIONS The identified unsafe-write defect and reporting follow-up belong in the annex under this cut?s rule; neither establishes a P0 or disproves a declared condition.
+- claude-p04 P0: none.
+- claude-p04 P1: none.
+- codex-p05 Payload 5/32: no P0, new P1, or contradicted declared condition found.
+- claude-p05 P0: none.
+- claude-p05 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:386-393 (xargs; also :394-399 find -exec), with call site .claude/hooks/_lib/_bash_safety_parts/posture_scan.py:571-584 and catch-all .claude/hooks/_lib/_bash_safety_parts/decisions_cli.py:2...
+- claude-p05 Failure scenario: _scan_segment (bash_indirect_guard.py:347) recurses once per xargs level with no depth check; MAX_DEPTH is enforced only in _scan (:472). A command 'xargs xargs ...(about 1000 times) rm -rf ~' stays under MAX_WORDS=1024...
+- claude-p05 8. The import at posture_scan.py:571 sits outside any try. A partial upgrade without bash_indirect_guard.py gives allow plus a FATAL line on every command that passes the legacy checks: the direction is correct, but main() cannot tell an...
+- claude-p05 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and no P0 was found, but the new indirect-execution guard has an undeclared P1: about 1000 nested xargs drive its recursion into a RecursionError, which main...
+- codex-p06 Payload 6: no P0 or false declared condition found.
+- codex-p06 No new P1 findings.
+- codex-p06 VERDICT: GO The two confirmed integration regressions are P2 follow-ups; neither falsifies a declared condition or constitutes a P0.
+- claude-p06 - Declared conditions: condition 7 holds for ceo-boot (thin facade, path kept). Nothing in this payload makes any of conditions 1-14 false. No P0.
+- claude-p06 P1-a ? .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:300-325 and :356
+- claude-p06 P1-b ? .claude/scripts/ceo-boot.py:120-184, against _ceo_boot_parts/model_persona.py:6 and scheduled_cache.py:376
+- claude-p06 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and no P0 was found, but two undeclared P1s must go to the signed annex: after the PLAN-197 split, sentinel-pattern derivation always falls back because it r...
+- codex-p07 Payload 7: no P0 or false declared condition identified.
+- codex-p07 No new P1 findings.
+- codex-p07 VERDICT: GO-WITH-CONDITIONS The default ceremony policy lookup needs repair, but this payload establishes neither a false declared condition nor a P0.
+- claude-p07 None at P0. None at P1.
+- claude-p07 VERDICT: GO Payload 7 contradicts no declared condition and contains no P0 or P1: the moved code resolves and binds correctly in its facades, is delivered to installs, stays Python 3.9 standard-library only and fails in the declared dire...
+- codex-p08 No declared condition was shown false in payload 8; no P0 found.
+- codex-p08 No P1 findings.
+- codex-p08 VERDICT: GO-WITH-CONDITIONS Two nonblocking compatibility regressions need follow-up, while this payload provides no evidence of a false declared condition or a P0 defect.
+- claude-p08 No declared condition is contradicted, and I found no P0.
+- claude-p08 P1. The installer-census entry point splits the ParseError/Incomplete exception hierarchy.
+- claude-p08 VERDICT: GO-WITH-CONDITIONS No declared condition is contradicted by this payload and no P0 was found, but one undeclared P1 must go into the signed annex: the installer-census entry point splits the ParseError/Incomplete hierarchy, so i...
+- codex-p09 No P1 findings.
+- codex-p09 VERDICT: GO This payload shows no false declared condition or P0, and the exception-hierarchy regression is a nonblocking P2.
+- claude-p09 P0: none.
+- claude-p09 NEW FINDINGS (annex): none at P1.
+- claude-p09 VERDICT: GO No declared condition is false against this payload and there is no P0: the worst defect, the moved installer census losing the Incomplete-to-ParseError subclass link, only affects the maintainer's CI census and fails closed,...
+- codex-p10 Payload 10: no P0 or false declared condition identified. Python 3.9 syntax checks passed for all 16 payload files; benign imports confirmed preserved facade globals for pair-rail, night-mode and PreCompact.
+- claude-p10 None is false against this payload. No P0.
+- claude-p10 P1 ? .claude/hooks/_lib/_pair_rail_parts/part_01.py:477-486, with CHANGELOG.md:191.
+- claude-p10 6. Also part_01.py:477-486: on triples absent from the manifest, the strict "newer than manifest" rule blocks the manifest's own version (0.160.0) and admits any newer one. There is no hash on that route for a same-version tamper to mism...
+- claude-p10 VERDICT: GO-WITH-CONDITIONS Every declared condition I could check against this payload holds, I found no P0, and the moved pair-rail, policy, precompact and night-mode code keeps its globals, patch points and fail directions; the one un...
+- codex-p11 No P0 or false declared condition established in payload 11. Import/global-binding checks, Python 3.9 grammar checks, and mocked PreCompact fail-open checks passed.
+- codex-p11 P1 ? .claude/hooks/_lib/_profile_opus_parts/latency.py:197
+- codex-p11 VERDICT: GO-WITH-CONDITIONS The profiler isolation defect warrants an advisory annex, while this payload establishes neither a false declared condition nor a P0.
+- claude-p11 P1 ? .claude/hooks/_lib/_profile_opus_parts/latency.py:102-126 and :198-199, with the doc claim at hook_latency_docs.py:87.
+- claude-p11 - Relation to this release: this is the same class as the v1.4.3-rc.1 P1 that condition 3(a) declares cured only for diagnose-output-hook.py. The scrub list appears to have been carried unchanged by the move (I cannot diff it against bas...
+- claude-p11 VERDICT: GO This payload's moved code binds and resolves correctly, keeps its fail-open direction, ships to adopters, and contradicts none of the declared conditions. The only P1, the profiler's isolation missing CEO_AUDIT_LOG_PATH, appe...
+- codex-p12 Payload 12: no P0 or false declared condition identified.
+- claude-p12 P1 ? .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:346-357 together with prepare.py:83-123 and agent_spawn/file_assignment.py:327-380 (_recent_file_assignments). The spawn FILE ASSIGNMENT overlap rail no longer sees earlier spawns.
+- claude-p12 VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches (5, 7, 8, 9) holds against the code, and the moved spool_writer, agent_spawn and reality-ledger code keeps its name lookup, patch points and fail-open direction, s...
+- codex-p13 Payload 13/32: no P0 or false declared condition identified.
+- codex-p13 VERDICT: GO The two P2 follow-ups do not establish a false declared condition or a P0 in this payload.
+- claude-p13 No P0. No P1.
+- claude-p13 - Rated P2, not P1: the file is already committed and protected as a canonical file, and the default inline SKILL CONTENT path has no scan at all. Raise it to P1 if the Owner treats threat-model row 10 as load-bearing.
+- codex-p14 Payload 14: no P0 or false declared condition established.
+- claude-p14 VERDICT: GO This payload splits audit_emit.py into a facade over _lib/_audit_emit_parts that keeps the action list, field filters, pass-through set, default-deny, fail-open writer, patch points and Python 3.9 compatibility, as far as cou...
+- claude-p15 No declared condition is contradicted by this payload, and I found no P0.
+- claude-p15 None at P1.
+- claude-p15 VERDICT: GO Every branch, enum, constant and fail-open path removed from audit_emit.py in this payload comes back unchanged and in the same order in _lib/_audit_emit_parts/, bound to the facade's globals so patch points still work, Pytho...
+- codex-p16 Payload 16: no declared condition demonstrated false; no P0 found.
+- codex-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:167
+- codex-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:455
+- codex-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:347
+- codex-p16 VERDICT: GO-WITH-CONDITIONS The findings warrant follow-up, but this payload establishes neither a false declared condition nor a P0.
+- claude-p16 P0: none found.
+- claude-p16 P1-1. Common valid commands are blocked as "unparseable"
+- claude-p16 P1-2. The scan's limits let commands through, against CHANGELOG [1.4.4] lines 93-94 ("fails closed ... at its depth, size and word limits")
+- claude-p16 P1-3. Two parsing defects let a simple prefix skip the scan
+- claude-p16 VERDICT: GO-WITH-CONDITIONS All three declared conditions this payload can test (5, 6 and 7) hold against the code and no P0 was found, but the new indirect-execution guard, on by default, blocks common valid $(...) one-liners and lets c...
+- codex-p17 No P0 or false declared condition was established within this payload. Python 3.9.6 syntax and ordinary helper checks passed; federation package and flat imports passed. Findings below are based on static integration review.
+- codex-p17 P1 ? .claude/hooks/check_canonical_edit.py:624; .claude/hooks/_lib/canonical_edit/entry.py:129. Component ImportError is classified as an integrity failure and blocks even noncanonical edits after a partial installation. This inverts the...
+- codex-p17 P1 ? .claude/hooks/check_canonical_edit.py:123. Failure to import guards.py silently substitutes an empty guard list. The remaining modules can bind successfully, so --is-canonical returns successful noncanonical classifications for ever...
+- codex-p17 VERDICT: GO-WITH-CONDITIONS Two undeclared P1 regressions and four P2 follow-ups remain, without a demonstrated P0 or contradiction of a declared condition in this payload.
+- claude-p17 P1 ? .claude/hooks/_lib/effective_config.py:544, .claude/hooks/_lib/claude_md_excludes.py:38-49 and :52-70. A crafted claudeMdExcludes value makes the tamper classifier fail open.
+- claude-p17 - Precondition: write access to a settings layer ? the exact case the detector exists for. Not P0, because both detectors are advisory and the project/local settings files stay canonical-guarded.
+- claude-p17 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload's code and no P0 was found, but one undeclared P1 (a crafted claudeMdExcludes value makes classify_tampering drop every settings-tamper finding) goes to the ...
+- codex-p18 No P0 or false declared condition found in payload 18. Benign Python 3.9 checks passed for original-text offsets, overlapping redactions, extracted imports, facade globals and policy exports.
+- claude-p18 - None at P1.
+- claude-p18 VERDICT: GO Conditions 4, 5, 7 and 9 hold for the code in this payload, the two moved modules keep their behavior, Python stays standard-library only and 3.9 compatible, and I found no P0 or P1, only four P2 follow-ups.
+- codex-p19 Payload 19/32: no P0 or false declared condition found. The moved functions preserve facade-global lookup, and installation includes both new packages. Bounded-exit suppression matches condition 8?s declared limitation.
+- codex-p19 VERDICT: GO No declared condition was falsified and no P0 was found; the fragment-loader failure handling remains a nonblocking P2 follow-up.
+- claude-p19 P1 ? the bounded-exit change silently blinds the spawn file-overlap rail.
+- claude-p19 - This is a governance rail disabled silently. It fails open (no session is blocked) and enforcement is opt-in, which is why this is P1 and not P0. Neither condition 8 nor the CHANGELOG mentions stale canonical-log readers. The test harn...
+- claude-p19 VERDICT: GO-WITH-CONDITIONS The declared conditions this payload touches (5 for audit_log's parts, 7 and 8) hold against the code and no P0 was found, but the new bounded-exit export silently blinds check_agent_spawn's file-overlap rail,...
+- codex-p20 VERDICT: GO No false declared condition, P0 defect, or new regression was found in payload 20.
+- claude-p20 P0: none.
+- claude-p20 P1: none.
+- claude-p20 VERDICT: GO Against the code, declared conditions 5 and 7 hold for this payload: the 13 kernel rows are present and match by segment glob, giving 123 patterns and 222 files. The check_agent_spawn split resolves every moved name through t...
+- codex-p21 VERDICT: GO This payload reveals no false declared condition or P0 defect.
+- claude-p21 P0: none.
+- claude-p21 NEW FINDINGS (annex): no undeclared P1 found in this payload.
+- claude-p21 VERDICT: GO The declared conditions this payload touches (5, 6 and 7) hold against the code, the facade's import and exec path fails open on infrastructure faults and keeps every input-side fail-closed matcher, and the only findings are ...
+- codex-p22 Payload 22: no P0 or false numbered release condition established.
+- codex-p22 P1 ? .claude/hooks/check_canonical_edit.py:624
+- codex-p22 VERDICT: GO-WITH-CONDITIONS The infrastructure-failure regression belongs in the signed annex under the cut rule, and this payload establishes neither a P0 nor a false numbered condition.
+- claude-p22 P1. check_canonical_edit.py:118-127 and :616-640; mirror at _lib/canonical_edit/entry.py:126-134. When the canonical_edit package is only partly present, the failure direction is undeclared, inverted against the stated doctrine, and spli...
+- claude-p22 Why P1 and not P0: it needs a partial or corrupted install. Normal install and upgrade deliver the package, and the user can recover through Bash or the terminal (re-run upgrade.sh), which this hook does not gate.
+- claude-p22 3. check_canonical_edit.py:36-40. The module docstring still promises "Any internal exception ? allow". The code fails closed on canonical hook faults (entry.py:384-395) and, per the P1, on component import failure.
+- claude-p22 VERDICT: GO-WITH-CONDITIONS Every declared condition that touches this payload holds against the code, and I found no P0. The rebuilt canonical-edit module keeps its names, patch points and Python 3.9 compatibility. The one undeclared P1...
+- codex-p23 Payload 23/32: no P0 or false declared condition identified. Static checks support preservation of facade globals and patch points. Python 3.9 grammar checks passed for 20 reviewed files.
+- codex-p23 No new P1 findings.
+- codex-p23 VERDICT: GO The reviewed changes reveal only nonblocking compatibility and diagnostic defects, with no P0 or demonstrated contradiction of a declared condition.
+- claude-p23 P0: none.
+- claude-p23 NEW FINDINGS (annex): none at P1.
+- claude-p23 VERDICT: GO The declared conditions this payload touches (5, 7, 9 and 10) hold against the code, the moved pair-rail and precompact code keeps its names, patch points and fail-open direction, and the remaining findings are P2 follow-ups ...
+- codex-p24 Payload 24/32: no P0 or false declared condition identified. The spool bytecode fix precedes helper imports. Refactor binding checks, 53 selected existing tests, and Python 3.9.6 smoke checks passed. No files modified.
+- codex-p24 No new P1 findings.
+- codex-p24 VERDICT: GO-WITH-CONDITIONS No release-blocking violation was found in this payload, but two nonblocking correctness issues remain.
+- claude-p24 P0: none.
+- claude-p24 NEW FINDINGS (annex): none. No undeclared P1 in this payload.
+- claude-p24 VERDICT: GO In this payload every declared condition it touches (3(c), 7 and the matching CHANGELOG lines) is true against the code, the moved audit-query and budget-summary logic keeps its name lookup, patch points and write locations, ...
+- codex-p25 Read-only review of payload 25; Bash syntax check passed. No P0 or false declared condition identified.
+- codex-p25 VERDICT: GO-WITH-CONDITIONS The unchecked traversal status warrants a backup-integrity follow-up but establishes neither a P0 nor a false declared condition.
+- claude-p25 P0: none.
+- claude-p25 NEW FINDINGS (annex): none at P1.
+- claude-p25 VERDICT: GO This payload holds only the ceo-backup.sh change, which correctly limits the memory/ snapshot to regular files and stops macOS tar from writing AppleDouble members, as the CHANGELOG states; it falsifies no declared condition ...
+- codex-p26 Payload 26/32: no P0 or declared-condition violation established.
+- codex-p26 No new P1 findings.
+- codex-p26 VERDICT: GO-WITH-CONDITIONS The decomposition preserves runtime namespace behavior, but two nonblocking source-inspection regressions require follow-up.
+- claude-p26 None. No undeclared P1 was found in this payload.
+- claude-p26 VERDICT: GO No declared condition is false against this payload and there is no P0 or undeclared P1: the ceo-boot facade keeps its runtime behavior, and the six findings are P2 follow-ups (four on narrower test, lint and check coverage, ...
+- codex-p27 No P0 or false declared condition was established in payload 27. The shown condition 3 fixes passed inspection and an in-memory malformed-record check.
+- codex-p27 No new P1 findings.
+- codex-p27 VERDICT: GO-WITH-CONDITIONS The payload has four nonblocking P2 follow-ups, with no established P0 or contradiction of a declared condition.
+- claude-p27 P1 - .claude/scripts/ceo-restore.sh:190 (with _restore_archive.py:112-113 and ceo-backup.sh:264)
+- claude-p27 VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches (3b, 3c, 7) holds and there is no P0, but one new P1 goes to the annex: ceo-backup.sh --include-plans keeps symlinks, so ceo-restore.sh refuses the whole archive; ...
+- codex-p28 Payload 28/32: no P0 or false declared condition established.
+- codex-p28 No new P1 findings.
+- codex-p28 VERDICT: GO-WITH-CONDITIONS No declared condition is falsified by this payload and no P0 was found, while five P2 defects remain for follow-up.
+- claude-p28 - No declared condition is false against this payload. No P0 found.
+- claude-p28 P1. .claude/hooks/_lib/_installer_write_safety/__init__.py:36 ? the moved code breaks the exception hierarchy.
+- claude-p28 - Not P0: the failure is still a nonzero exit, so CI fails closed, it is maintainer-only, and no file in today's scripts/*.sh corpus triggers it (grep for '"of=' and a backtick inside '$(...)' found nothing).
+- claude-p28 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and there is no P0, but the facade's rebinding breaks the Incomplete/ParseError hierarchy: the installer census now crashes (still exiting nonzero, so CI fai...
+- codex-p29 No P0 or false declared condition established in payload 29.
+- codex-p29 P1 ? .claude/scripts/check_contamination.py:132
+- codex-p29 P1 ? .claude/scripts/_contamination_inventory.py:76
+- codex-p29 VERDICT: GO-WITH-CONDITIONS This payload establishes no release-blocking condition, but two P1 regressions and three P2 follow-ups remain.
+- claude-p29 P0: none.
+- claude-p29 NEW FINDINGS (annex): none at P1.
+- claude-p29 VERDICT: GO This payload moves check_contamination.py onto thin-entry-point modules that rebind correctly to the entry point's own namespace, import and install on Python 3.9 with only the standard library, and fail closed as a CI gate; ...
+- codex-p30 Payload 30/32: no P0 or false declared condition established. Python 3.9.6 checks found no regression in the moved functions? bindings; model availability and hook-map checks passed.
+- codex-p30 No new P1 findings.
+- claude-p30 P0
+- claude-p30 No undeclared P1 in this payload.
+- claude-p30 VERDICT: GO The declared conditions this payload touches (3(a), 7, 9, 10, 12) all hold against the candidate tree, the context-budget and lessons facades keep their names, patch points and file-relative paths, and the only findings are m...
+- codex-p31 Payload 31: no P0 or false declared condition found. The three extraction reviews passed import, global-binding, export and Python 3.9 checks.
+- codex-p31 No new P1 findings.
+- claude-p31 - Declared conditions this payload touches: condition 7 (entry points keep their paths; logic moves to _lib modules; a hand-patched script must be patched again in its module) is TRUE against this diff. The candidate pin '.claude/governa...
+- claude-p31 None at P1.
+- claude-p31 - A maintainer who runs --hook-latency with CEO_AUDIT_LOG_PATH exported appends about 1,000 or more measured hook rows to the live HMAC chain. That breaks the docstring promise "never the real ~/.claude" and is the same class as the diag...
+- codex-p32 Payload 32: no P0 or false declared condition identified in the reviewed changes.
+- codex-p32 No new P1 findings.
+- codex-p32 VERDICT: GO The reviewed payload reveals only P2 follow-ups, with no identified P0 or contradiction of a declared condition.
+- claude-p32 NO P0 FOUND.
+- claude-p32 P1 ? .github/scripts/validate-pair-rail-verdict.py:85-88, :770-772 and .claude/scripts/validate-governance.sh:721, against .claude/governance/gate-scripts-manifest.txt:2,8 (ADR-192).
+- claude-p32 VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches checks out against the tree and I found no P0, but one undeclared P1 goes in the signed annex: two ADR-192 gate scripts now hand their decisions to the unpinned _l...
+GA-only conditions (v1.4.4):
+- Da tag `v1.4.4-rc.1` (commit `37a3b89bd142`) para o candidato do GA mudou um único arquivo, este `.claude/plans/PLAN-198/CONDITIONS-ga.md`: o código, os testes, a documentação e o CHANGELOG são os da rc (o `prepare` do kit recusa um candidato do GA em que algo fora de `.claude/plans/PLAN-198/` mudou depois da tag rc). As condições e as notas acima, inclusive as de P1, seguem abertas no GA como estavam na rc e voltam a ser assinadas nos campos do GA; nenhuma foi corrigida entre a rc e o GA.
+- As condições e as notas acima foram escritas para o re-pass da v1.4.4-rc.1. Onde citam um arquivo da evidência daquele re-pass (nome com `rc1`, como `scope-rc1.txt` e `withheld-rc1.txt`), no GA vale o arquivo correspondente desta evidência, com `ga` no nome (`scope-ga.txt`, `withheld-ga.txt`), e as contagens dele. A cópia do candidato que os revisores do GA leem contém também a evidência commitada do re-pass da rc (`.claude/plans/PLAN-198/repass-rc1/`); os arquivos dela acima do limite de entrada do redator saem da cópia e entram em `withheld-ga.txt` com o motivo, e por isso o GA retira mais arquivos que a rc.

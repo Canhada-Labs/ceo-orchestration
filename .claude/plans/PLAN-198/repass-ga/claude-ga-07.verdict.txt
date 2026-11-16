@@ -1,0 +1,99 @@
+PAYLOAD 7/34 (GA re-pass, v1.4.3-rc.1..84b83324c820)
+
+FILES COVERED
+- .claude/hooks/_lib/_ceo_boot_parts/: harness_governance.py, lessons_cli.py, liveness_schedule.py, model_persona.py, persona_confidence.py, scheduled_cache.py, state_plan_audit.py, telemetry_candidates.py
+- .claude/hooks/_lib/_ceremony_toolkit/: __init__.py, bundle_builder.py, preflight.py
+- .claude/hooks/_lib/_contamination/__init__.py
+All are new files.
+
+HOW I CHECKED
+- I read the redacted candidate tree statically. I had only read and search tools and executed nothing.
+- I also read:
+  - the facade .claude/scripts/ceo-boot.py and the loader _ceo_boot_parts/__init__.py;
+  - the two parts outside this payload that these call (cache_recommendations.py, candidates_lessons.py);
+  - check_canonical_edit.py, _lib/canonical_edit/{guards,paths}.py and effective_config.py;
+  - validate_governance_fast.py, check_contamination.py:395-509, install.sh:1520-1556 and _framework_manifest_set.sh:95-103.
+- The base text of ceo-boot.py is not in the tree. I therefore judged the move by reading the parts and the committed rc.1 evidence, not by a diff against the base.
+- GA-only claim (code identical to rc.1): I matched three distinctive lines of this payload against .claude/plans/PLAN-198/repass-rc1/diff-rc1-06.patch:1389 and :2689 and diff-rc1-07.patch:560. All three are present.
+
+CHECKED, NO FINDING
+1. Load order and name lookup
+- install() executes the 10 parts in _PARTS order inside the facade's globals (_ceo_boot_parts/__init__.py:12-26).
+- Every name these parts use at load time is defined by then:
+  - _rp, REPO_ROOT, _PLAN_GLOB_CACHE and check_governance_validate in the facade (ceo-boot.py:55-109);
+  - _classify_pair_rail_event, _failopen_rail_window_hours and PAIR_RAIL_TERMINAL_ACTIONS in persona_confidence, before liveness_schedule;
+  - the _sched_red_* helpers before scheduled_cache;
+  - every check function before TIER_S_CHECKS and TIER_A_CHECKS;
+  - _UNSET, _validate_boot_lesson, cached_load, render_digest, _make_recommendations, _render_morning_ledger_safe and _emit_task_candidate_markers before lessons_cli.main. All found by grep.
+- `global _PLAN_GLOB_CACHE` resolves to the facade dictionary.
+2. Paths built from __file__
+- Each part runs inside the facade's globals, so __file__ is .claude/scripts/ceo-boot.py.
+- persona_demand_* and check-confidence-gate-drift.py therefore still resolve under .claude/scripts, and parents[2] is still the repo root. Same behaviour as before the split.
+3. Fail direction
+- No hook runs ceo-boot.py. Only commands/ceo-boot.md:40 does (grep of settings.json, hooks/*.py, hooks/*.sh and commands). A broken part therefore breaks /ceo-boot visibly and never blocks a session.
+- _wrap_check still turns an exception into an "error" row.
+- The lesson render gate still drops a lesson when its validator is missing (fail-closed).
+- scheduled_workflows_red is never green on missing data and never red on stale data.
+- The new main_checkout_state check is read-only and at most yellow, so it never flips gate_pass. CHANGELOG [1.4.4]:340-341 and :479 declare it.
+4. Writes
+- This payload adds no new write path.
+- The writes that remain were already there before the split: the task dedup state and the boot cache under runtime_state_dir(), the persona-demand audit emits, and the py_compile .pyc files.
+- The ceremony toolkit only reads. Its only subprocess is `gpg --verify`, with an explicit isolated --homedir, --no-options and --no-auto-key-retrieve. It refuses symlinks, an empty fingerprint allowlist or a missing GOODSIG/VALIDSIG.
+5. Delivery
+- install_lib_selective copies every top-level _lib entry recursively.
+- _framework_path_excluded (lines 95-103) excludes none of _ceo_boot_parts, _ceremony_toolkit or _contamination.
+6. Python 3.9, standard library only
+- Everything imported is standard library.
+- shutdown(cancel_futures=True) and Path.is_relative_to exist since 3.9.
+- tuple[...] appears only in annotations, under `from __future__ import annotations`.
+- datetime.fromisoformat("...+00:00") works on 3.9.
+7. _contamination.bind_personal_paths
+- It rebinds functions to the facade's globals.
+- The component __all__ lists are built from each module's own globals (personal_path_policy.py:640-646, personal_path_scanner.py:569), so getattr cannot miss a name.
+8. Declared conditions
+- Condition 7 holds for ceo-boot: the entry point keeps its path, the logic moves into _lib/_ceo_boot_parts, and a hand patch must be re-applied in the part.
+- Condition 5: these three packages are not claimed as kernel, and no kernel code imports them.
+- Nothing in this payload makes conditions 1-14 or the GA-only conditions false. No P0.
+
+DECLARED P1s, RE-CONFIRMED (already carried as the claude-p06 lane notes and open in GA by the GA-only condition; not new)
+- P1 (declared) — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:300-325 and :356
+  - Still reproduces. check_canonical_edit.py no longer contains a `_PATTERNS` assignment; the tuple now lives at _lib/canonical_edit/paths.py:238.
+  - _sentinel_patterns() therefore always returns the 4-pattern fallback. sentinels_pending_gpg misses 6 of the guard's 10 sentinel patterns, and every boot shows "[padrões em FALLBACK — a autoridade não foi lida]".
+  - Fix as declared: parse paths.py first, and add a test that derived=True on the real tree.
+- P1 (declared) — .claude/scripts/ceo-boot.py:120-178, against _ceo_boot_parts/model_persona.py:6 and the TIER_A_CHECKS row in scheduled_cache.py
+  - Still reproduces. The facade defines check_tier_a_spec_version_drift again after install(), and the registry dispatches the copy in the part.
+  - The two bodies are identical today, so runtime behaviour is unchanged. The risk is drift between the copy that tests and lints read and the copy that runs.
+
+NEW FINDINGS (annex)
+- None at P1. I found no undeclared P1 in this payload.
+
+P2 FOLLOW-UPS
+1. P2 (new) — harness_governance.py:174-244 (check_hook_live_smoke) and .claude/scripts/validate_governance_fast.py:162-172 (governance_validate)
+   - Both compile only the hook entry files that settings.json registers. effective_config.py:848-865 (count_effective_hooks) likewise counts only entry basenames.
+   - After PLAN-197, most hook logic lives in _lib packages (for example _bash_safety_parts and canonical_edit) that none of these compile or import. Before the split, compiling the entry file covered that logic.
+   - Failure scenario: a partial upgrade or a corrupted part, for example a missing or broken file under _lib/_bash_safety_parts/. The hook then prints FATAL and fails open (or, for canonical_edit, fails closed). Meanwhile /ceo-boot still reports "N hook(s) smoke-pass", "fast pass", and an equal effective/registered hook count.
+   - The hooks are not silent, since they print FATAL, so this is a detection gap only.
+   - Minimal fix: in hook_live_smoke, also compile (in memory, with compile() rather than py_compile, which also cures follow-up 7) every .py under the _lib packages each registered entry loads, or run a subprocess import probe with a timeout. Count a missing or broken part as a failure.
+2. P2 (carried from rc.1, still present) — _ceremony_toolkit/preflight.py:50-62
+   - _canonical_patterns() searches the top-level AST of check_canonical_edit.py for _CANONICAL_GUARDS, which now lives in _lib/canonical_edit/guards.py:5.
+   - The only assignment left (`_CANONICAL_GUARDS = []` at check_canonical_edit.py:124) sits inside a Try node, so the search never sees it.
+   - Every default call (no explicit canonical_patterns) therefore returns valid=False with "canonical_guard_policy_unavailable". This fails closed, and no product code calls it.
+   - Fix: parse guards.py, and add a test that omits canonical_patterns.
+3. P2 (carried) — _ceo_boot_parts/__init__.py:23-26
+   - Executing each part's module docstring overwrites the facade's __doc__ with "Extracted ceo-boot declarations executed by the facade."
+   - Fix: save and restore __doc__ around the loop, or drop the docstrings from the parts.
+4. P2 (carried) — model_persona.py:215-252 (main_checkout_state)
+   - When refs/remotes/origin/HEAD is unset, it assumes the default branch is "main". A repo whose default is master or develop shows yellow while on its own default branch. An adopter who works on feature branches in the main checkout sees yellow on every boot.
+   - Its three sequential 0.8 s git calls can exceed the 1.0 s soft budget, which has no override for this check.
+   - Fix: read init.defaultBranch or say "assumed main" in the summary, and add a budget override.
+5. P2 (moved code, behaviour already in the base) — state_plan_audit.py:328-329
+   - The comment says an unrecognised value "keeps the plan red ... never hides it". The code does the opposite: any value outside _NO_WAIT_TOKENS counts as a declared wait. A `## Blockers` section saying "There are no blockers." or holding only a table header turns a stranded plan from red to a yellow "waiting".
+   - The plan is still named, and CHANGELOG [1.4.3]:662-663 declares "a ## Blockers section with content".
+   - Fix: correct the comment, or recognise waits positively.
+6. P2 — stale documentation
+   - .claude/commands/ceo-boot.md:35 still says "24 Tier-S checks"; the registry asserts 25.
+   - The facade docstring at ceo-boot.py:7-8 still says "15 Tier-S checks" and "Per-check timeout 500 ms". This text predates the split.
+7. P2 (carried) — harness_governance.py:236
+   - py_compile writes __pycache__/*.pyc next to the adopter's hooks on every boot.
+
+VERDICT: GO No declared condition is false against this payload and it has no P0; the only P1s in this code are the two already declared through the signed claude-p06 lane notes, and everything else is a P2 follow-up.

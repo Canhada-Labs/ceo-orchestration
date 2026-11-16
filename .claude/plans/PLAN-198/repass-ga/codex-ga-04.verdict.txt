@@ -1,0 +1,23 @@
+Payload 4/34: no P0 or false declared condition established. The reviewed splits preserve facade-global lookup and installation coverage. Python 3.9 parsing passed. Full emitter import was prevented by redaction-induced syntax damage outside this payload; isolated binding checks used a stub for that fragment. No files were modified.
+
+CARRIED FINDING
+P1 — .claude/hooks/_lib/_audit_emit_parts/writer.py:761
+The rc audit-loss finding remains. When spool persistence is unavailable and directory creation or lock opening raises OSError, the fallback handler references line before assignment. It announces fallback, then drops the event through the outer exception handler. Minimal fix: serialize event inside this handler, as the lock-timeout handler does. Source comparison confirms this predates the extraction.
+
+NEW FINDINGS (annex)
+No additional P1 identified.
+
+P2 FOLLOW-UPS
+P2 — .claude/hooks/_lib/_audit_query/labeling.py:234
+Newly identified, inherited reporting defect: current pair_rail_case events carry review_id, but fp-rate matches only run_id/pair_rail_run_id. These events increase the denominator without entering any label bucket, including unlabeled. An in-memory check with 100 current-format Case-B rows reported zero unlabeled rows and an upper FP bound of 0.037; matching FP labels were ignored. Minimal fix: recognize review_id, retain legacy aliases, and count identifier-less rows as unlabeled.
+
+P2 — .claude/hooks/audit_log.py:323
+Carried rc follow-up, introduced by extraction: missing or unreadable fragments raise before main() and its exception handler exist. A partial installation therefore exits 1 without the promised breadcrumb and loses the audit row. Minimal fix: guard fragment initialization with an independent diagnostic and fail-open hook exit.
+
+P2 — .claude/hooks/_lib/_audit_emit_parts/writer.py:76
+Carried write-safety weakness: fallback opening and subsequent chmod follow symlinks, allowing degraded audit writes and permission changes to affect another writable file. Minimal fix: use a verified private directory, refuse symlinks, validate ownership through the opened descriptor, and apply permissions through that descriptor.
+
+P2 — .claude/hooks/_lib/_audit_query/domain.py:251
+Carried rc follow-up: malformed boolean values become False despite the documented True defaults for unparseable values. This disables hint/UNKNOWN filtering and can produce spurious reopening candidates. Minimal fix: accept explicit true/false values and retain True for invalid values.
+
+VERDICT: GO-WITH-CONDITIONS The carried audit-loss defect and reporting and storage follow-ups remain, but this payload establishes neither a false declared condition nor a P0.

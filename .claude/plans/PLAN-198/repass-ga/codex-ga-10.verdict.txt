@@ -1,0 +1,22 @@
+Payload 10/34: no P0 or false declared condition established. Both packages are delivered by the installer, and lessons functions retain facade globals and file-relative paths. All 11 payload files passed Python 3.9 grammar checks. Census imports passed on Python 3.9.6; lessons binding checks passed with its audit dependency stubbed because redaction made that dependency unparsable. No files modified.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/_lib/_lessons_parts/candidates.py:136
+The writer constructs its destination from mutable record['lesson_id']. list_candidates accepts that field without matching it to the filename, and the expiry sweep passes the record back to the writer at line 479. Modified candidate metadata can therefore make routine expiry overwrite a JSON file outside candidates/; writes also follow existing symlinks. Minimal fix: validate fixed-format IDs, require agreement with the source filename, and use confined, symlink-safe replacement. Newly observed in the extracted code; not established as a regression from the base.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_lessons_parts/candidates.py:418
+Approval persists APPROVED before best-effort audit emission. If the event is lost, verified rendering rejects the candidate, while subsequent approval attempts return already_approved without repairing the missing anchor. Minimal fix: require durable audit confirmation before finalizing approval, or make retries verify and repair the anchor.
+
+P2 — .claude/hooks/_lib/_lessons_parts/lessons.py:270; .claude/hooks/_lib/_lessons_parts/candidates.py:141
+Outcome counters are read before locking, allowing concurrent updates to lose increments. Persistence truncates files in place and proceeds after lock timeout, permitting partial records. Minimal fix: lock the complete read-modify-write operation, avoid unlocked fallback writes, and replace records atomically. These persistence defects are not established extraction regressions.
+
+P2 — .claude/hooks/_lib/_installer_write_safety/syntax.py:10
+Carried exception-hierarchy defect confirmed: the binder at __init__.py:36 clones Incomplete with its original base, so exported Incomplete does not inherit exported ParseError. ParseError handlers can miss exceptions and terminate the census without its report; failure remains nonzero. Minimal fix: preserve exception identities or remap cloned bases.
+
+P2 — .claude/hooks/_lib/_installer_write_safety/report.py:32
+Carried patch-point defect confirmed: Site.blocking retains template globals because the binder skips properties. Changing facade BLOCKING_VERDICTS does not change this property's classification. Minimal fix: rebind property accessors alongside methods; ordinary unpatched operation is unaffected.
+
+VERDICT: GO-WITH-CONDITIONS No declared condition is shown false and no P0 was found, while the unconfined candidate writer warrants an advisory P1 annex.

@@ -1,0 +1,882 @@
+# Pair-Rail Verdict - v1.4.4
+
+```yaml
+verdict: GO-WITH-CONDITIONS
+generated_at: 2026-11-16T21:50:33Z
+ttl_hours: 24
+parent_sha: 84b83324c820104ae40a616b9273cd6dda4253cf
+release_tag: v1.4.4
+base_tag: v1.4.3-rc.1
+base_commit: 5e7cb65ebc259da586256ddb6b29918ba3a39ab6
+inputs_hash: b8c9de481d1f7caf2b71a019239554de397ed42882c40e660c776cdae1292dc1
+inputs_hash_paths_manifest_sha: b3ab0242a6ff4e12fdf2fd90c47cbc23649ab07226340c8b7aacbb0f9cc093e0
+delta_allowlist:
+  - .claude/governance/pair-rail-verdict-v1.4.4.md
+  - .claude/plans/PLAN-198/verdict-fields-v1.4.4.md
+  - .claude/plans/PLAN-198/repass-ga/CONDITIONS-ga.reviewed.md
+  - .claude/plans/PLAN-198/repass-ga/MANIFEST-ga.sha256
+  - .claude/plans/PLAN-198/repass-ga/PROVENANCE-ga.md
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-01.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-01.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-02.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-02.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-03.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-03.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-04.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-04.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-05.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-05.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-06.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-06.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-07.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-07.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-08.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-08.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-09.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-09.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-10.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-10.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-11.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-11.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-12.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-12.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-13.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-13.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-14.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-14.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-15.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-15.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-16.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-16.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-17.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-17.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-18.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-18.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-19.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-19.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-20.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-20.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-21.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-21.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-22.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-22.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-23.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-23.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-24.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-24.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-25.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-25.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-26.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-26.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-27.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-27.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-28.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-28.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-29.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-29.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-30.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-30.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-31.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-31.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-32.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-32.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-33.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-33.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-34.log
+  - .claude/plans/PLAN-198/repass-ga/claude-ga-34.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-01.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-01.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-02.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-02.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-03.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-03.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-04.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-04.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-05.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-05.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-06.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-06.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-07.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-07.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-08.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-08.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-09.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-09.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-10.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-10.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-11.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-11.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-12.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-12.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-13.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-13.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-14.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-14.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-15.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-15.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-16.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-16.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-17.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-17.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-18.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-18.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-19.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-19.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-20.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-20.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-21.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-21.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-22.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-22.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-23.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-23.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-24.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-24.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-25.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-25.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-26.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-26.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-27.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-27.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-28.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-28.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-29.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-29.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-30.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-30.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-31.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-31.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-32.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-32.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-33.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-33.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-34.log
+  - .claude/plans/PLAN-198/repass-ga/codex-ga-34.verdict.txt
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-01.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-02.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-03.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-04.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-05.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-06.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-07.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-08.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-09.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-10.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-11.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-12.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-13.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-14.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-15.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-16.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-17.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-18.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-19.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-20.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-21.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-22.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-23.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-24.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-25.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-26.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-27.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-28.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-29.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-30.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-31.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-32.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-33.patch
+  - .claude/plans/PLAN-198/repass-ga/diff-ga-34.patch
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-01.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-02.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-03.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-04.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-05.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-06.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-07.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-08.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-09.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-10.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-11.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-12.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-13.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-14.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-15.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-16.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-17.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-18.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-19.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-20.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-21.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-22.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-23.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-24.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-25.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-26.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-27.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-28.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-29.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-30.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-31.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-32.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-33.txt
+  - .claude/plans/PLAN-198/repass-ga/paths-ga-34.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-01.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-02.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-03.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-04.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-05.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-06.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-07.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-08.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-09.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-10.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-11.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-12.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-13.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-14.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-15.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-16.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-17.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-18.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-19.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-20.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-21.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-22.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-23.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-24.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-25.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-26.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-27.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-28.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-29.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-30.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-31.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-32.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-33.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/payload-ga-34.redacted.txt
+  - .claude/plans/PLAN-198/repass-ga/scope-ga.txt
+  - .claude/plans/PLAN-198/repass-ga/withheld-ga.txt
+delta_manifest: .claude/plans/PLAN-198/repass-ga/MANIFEST-ga.sha256
+delta_manifest_sha256: 5c2b88352b53c02c9479bcac992dcd93e94199b548ae0091ed5755db9aeaa4d7
+tool_versions:
+  codex_cli: 0.166.0
+  codex_target_triple: aarch64-apple-darwin
+  codex_payload_sha256: 39acf979729dd290f9a24ee38b2914e036c91b65952872e28ae2a6b88a7db7c1
+  codex_pin_status: compatible
+  codex_model: gpt-6-astra
+  codex_effort: ultra
+  claude_code: claude-code-cli-2.1.322
+  claude_model: claude-opus-5-5
+  claude_effort: xhigh
+  python: 3.9.6
+transcript_hash: 30251f8d2e7bd3b41c57a7de094bab49c5a2d5df279916f8b4f184666a963f9d
+rail_decisions: [codex-p01=GO, claude-p01=GO, codex-p02=GO, claude-p02=GO, codex-p03=GO, claude-p03=GO, codex-p04=GO-WITH-CONDITIONS, claude-p04=GO, codex-p05=GO-WITH-CONDITIONS, claude-p05=GO, codex-p06=GO-WITH-CONDITIONS, claude-p06=GO, codex-p07=GO-WITH-CONDITIONS, claude-p07=GO, codex-p08=GO-WITH-CONDITIONS, claude-p08=GO, codex-p09=GO, claude-p09=GO, codex-p10=GO-WITH-CONDITIONS, claude-p10=GO, codex-p11=GO-WITH-CONDITIONS, claude-p11=GO, codex-p12=GO-WITH-CONDITIONS, claude-p12=GO, codex-p13=GO-WITH-CONDITIONS, claude-p13=GO, codex-p14=GO-WITH-CONDITIONS, claude-p14=GO, codex-p15=GO, claude-p15=GO, codex-p16=GO, claude-p16=GO, codex-p17=GO, claude-p17=GO, codex-p18=GO-WITH-CONDITIONS, claude-p18=GO-WITH-CONDITIONS, codex-p19=GO, claude-p19=GO, codex-p20=GO, claude-p20=GO-WITH-CONDITIONS, codex-p21=GO, claude-p21=GO, codex-p22=GO, claude-p22=GO, codex-p23=GO-WITH-CONDITIONS, claude-p23=GO, codex-p24=GO-WITH-CONDITIONS, claude-p24=GO, codex-p25=GO-WITH-CONDITIONS, claude-p25=GO, codex-p26=GO-WITH-CONDITIONS, claude-p26=GO, codex-p27=GO-WITH-CONDITIONS, claude-p27=GO, codex-p28=GO-WITH-CONDITIONS, claude-p28=GO, codex-p29=GO-WITH-CONDITIONS, claude-p29=GO-WITH-CONDITIONS, codex-p30=GO-WITH-CONDITIONS, claude-p30=GO, codex-p31=GO, claude-p31=GO, codex-p32=GO, claude-p32=GO, codex-p33=GO, claude-p33=GO, codex-p34=GO, claude-p34=GO-WITH-CONDITIONS]
+findings: [parts-34, lanes-codex-and-claude, codex-pin-compatible, scope-declared-in-scope-ga.txt, release-scope-covers-v1.4.2, attempts-138, lane-notes-253, reviewer-copy-redacted-withheld-191, rc-custody-v1.4.4-rc.1]
+attempts_ledger_sha256: f3f05dead627a6204eb5a45ec10e388e4664c40a0ee31473a9afa14a3d0ed15f
+attempts:
+  - 2026-11-16T17:47:42Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf start resume=0 parts=34 ev=.claude/plans/PLAN-198/repass-ga prev=fd447d08d4773c5078e6096726f78232964cd85ac3658f76fd1db8777d5ab358
+  - 2026-11-16T17:47:42Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 01 id=288ac73eb48d pid=8876 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=96a6eb2383b5a0bc8c5c89fbbd2dd22598210fae1ef8e51fbceeeb77d8031af7
+  - 2026-11-16T17:47:43Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 01 id=0f45dac5966e pid=8877 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=5190bcdac83368de431202f0b91a938e6d6d2620c2017ad0291a909dd16b0c5a
+  - 2026-11-16T17:47:43Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 02 id=58ef339fc7b9 pid=8879 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=20911c6f06a378c9771819b9e6646889f8352abd998311d43b3ff8715a835260
+  - 2026-11-16T17:47:43Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 02 id=60f4ef59b569 pid=8878 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=0958d175aedd24037be13c4928b6c2d34457c14d49accf176eae389de38bc93c
+  - 2026-11-16T17:51:47Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 01 verdict GO nogo=0 id=288ac73eb48d rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=92f1ed896be77b6c0bed9bd6c1f713143cca26739df94b22d22deb04cc79739b
+  - 2026-11-16T17:52:51Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 02 verdict GO nogo=0 id=60f4ef59b569 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=9dffefa697c90169280a67647dc7c9d0c83b30e06de936ef735e6840565287c5
+  - 2026-11-16T17:53:18Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 01 verdict GO nogo=0 id=0f45dac5966e rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=cf32bfdc6c491b3f17c18383aec82e7a9110758375859ee2dcd221dbf6c74688
+  - 2026-11-16T17:55:42Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 02 verdict GO nogo=0 id=58ef339fc7b9 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=a580c04aa1113de5461dd9bbd67423c460c40b5fe2c101390c8b0e83d837da45
+  - 2026-11-16T17:55:43Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 04 id=7de77d734a18 pid=11335 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=d3252310d97fca6e82f1424d24a6327b877a9703fd9b6b204056641f46442185
+  - 2026-11-16T17:55:44Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 03 id=4b74f088c7a8 pid=11337 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=99a04161d032af33fc40bf54ad955a2185645bf5cce2bce85c69114a6f89f18c
+  - 2026-11-16T17:55:44Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 03 id=69f4ab0ad56e pid=11336 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=00034184da54a43b5091fddbb429f29dbf411945f76896aae793c10f3a3816dc
+  - 2026-11-16T17:55:44Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 04 id=43f96523952b pid=11338 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=1072b4e014a163edf950b70e076909acfe1c7d10764ab67d56fff1bcae67504b
+  - 2026-11-16T18:00:42Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 03 verdict GO nogo=0 id=4b74f088c7a8 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=a99c5c9fcb393847c7d66b28bae645c517b8672a9a1a81ea91db02f37403cfff
+  - 2026-11-16T18:02:16Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 04 verdict GO-WITH-CONDITIONS nogo=0 id=43f96523952b rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=dfea6b33c1b533a059a3eee20f89ed27aa4621237917fbd62e0313c1f841f14a
+  - 2026-11-16T18:03:09Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 04 verdict GO nogo=0 id=7de77d734a18 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=1637b83a7e580601b136e616c798adccee8215d67a37e5249a304af1376e516e
+  - 2026-11-16T18:04:11Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 03 verdict GO nogo=0 id=69f4ab0ad56e rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=a81629ce0f117a2a412155ea70d9e3230e555876b6e9f13b87b43e0563c8fb07
+  - 2026-11-16T18:04:12Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 05 id=29ecb90ef6f2 pid=12707 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=b71899ec642798d683235cc183886c50530699734b0bdcf5e271a40f1f42e6f1
+  - 2026-11-16T18:04:12Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 05 id=5a07ffd79dfc pid=12708 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=7b741ccbef14a62d1bdd70281cbd20e26532d4667fcbdacab9a5c74bd0b22a36
+  - 2026-11-16T18:04:12Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 06 id=8a220735aabe pid=12710 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=c0f1afba76de170ade6d0bfec67037437437c0b396c176715bfa3e2b26ca4c6f
+  - 2026-11-16T18:04:12Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 06 id=507ca7b60638 pid=12709 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=3b54bba4d1d981fe42b749eac008065cccf521be0eb8c842839076d4052136b3
+  - 2026-11-16T18:09:08Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 06 verdict GO-WITH-CONDITIONS nogo=0 id=507ca7b60638 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=cd3f7524008a4e9efbd30bfc7807728db6d1286806453e00d224ad502437c891
+  - 2026-11-16T18:10:34Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 05 verdict GO-WITH-CONDITIONS nogo=0 id=5a07ffd79dfc rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=09f03a0844e78b800ba72d693bb4cd057fb6da1328454c461ea5e7c20e51e474
+  - 2026-11-16T18:14:37Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 05 verdict GO nogo=0 id=29ecb90ef6f2 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=981da0796de7d8b2b7a378793f10e62929711cc3fa735659a45fc3e092c792a1
+  - 2026-11-16T18:15:43Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 06 verdict GO nogo=0 id=8a220735aabe rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=78372e2a93fdfa51548ab4b4137cefb2b197634ad07798c81dd3283db95a7456
+  - 2026-11-16T18:15:44Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 07 id=2a45cbdcd472 pid=14133 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=a26babe71941d816c3ea5b1969918fac4e9bf22522be25cc2927dcac0492dae4
+  - 2026-11-16T18:15:44Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 08 id=4cb214323184 pid=14136 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=7ec60faebb72a8840b6adaa2f76ad00b1b47c6c72db3f1b0edfa6dc1afb78550
+  - 2026-11-16T18:15:44Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 07 id=9da71f1bb2f1 pid=14134 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=4dd028f3b9b9503ae074f9f59d1c229d0997c1789f78df43c3be20ede218bb1e
+  - 2026-11-16T18:15:44Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 08 id=00062a0e8e5a pid=14135 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=ea7c24d663fea92d10ed07f990826278d89decb0925406887bd493192b6baa03
+  - 2026-11-16T18:20:54Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 07 verdict GO-WITH-CONDITIONS nogo=0 id=2a45cbdcd472 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=e729ff6dabcc99b63c6b8a0624a0233db4fba8f233a55c3ffdaa73be67d49fe9
+  - 2026-11-16T18:21:05Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 08 verdict GO-WITH-CONDITIONS nogo=0 id=00062a0e8e5a rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=77955fe98e8a3053e7a9651eb51c54bdbe7e1d47c64fc11765c67db758139674
+  - 2026-11-16T18:22:01Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 07 verdict GO nogo=0 id=9da71f1bb2f1 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=12be3676d9c5e17e78347ca9baa8676f6762cf50e8a88497cde9efcecdc4e18e
+  - 2026-11-16T18:24:32Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 08 verdict GO nogo=0 id=4cb214323184 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=e3643f9a0be234d0d19b0e28b5c11cc83c9af3b18dad941f226512db01f6394f
+  - 2026-11-16T18:24:33Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 09 id=470b34e28c46 pid=15355 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=7b54529bb996b8ccd18dd80c845c5b6748e2034111316643b3ba88e9e388fe63
+  - 2026-11-16T18:24:33Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 10 id=bc020e0a07f6 pid=15354 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=b949d6aa78fe7ec29e29a4340e30b256208477e8b7373eb654c71cc786d2ef40
+  - 2026-11-16T18:24:33Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 09 id=3cbfd8fcf6f6 pid=15356 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=8bd73a49155cf24f05710892b4be20d677c4a3380e0f6a2ff1715f1711790165
+  - 2026-11-16T18:24:33Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 10 id=576544e4b04d pid=15353 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=5beec4fd97530b7c3010614fadaff8ad7c1afd59dd46e755004fbf6eda6312a2
+  - 2026-11-16T18:28:31Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 10 verdict GO-WITH-CONDITIONS nogo=0 id=576544e4b04d rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=3878117ab91d8ff31e71ce243918b2e3fa941bfdfc1d2a8334b0fabad27bebbb
+  - 2026-11-16T18:29:15Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 09 verdict GO nogo=0 id=3cbfd8fcf6f6 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=7538f3bc01eecb5800f4631e79a4a284ed1f51a18a519bbd6ed1a26bc4a43e50
+  - 2026-11-16T18:29:24Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 10 verdict GO nogo=0 id=bc020e0a07f6 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=5ca61712cb212f6b0f7b186d542752499e39cb5c2f3df2f1964ea4e3354ac52b
+  - 2026-11-16T18:34:55Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 09 verdict GO nogo=0 id=470b34e28c46 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=b24475f22c9b1fce5bb799aab6f333147ff986b6d4dbe2580783c44bb104b19f
+  - 2026-11-16T18:34:55Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 11 id=2a376166a049 pid=17801 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=14f017b178d2e33c5df3ec632569765e10811caf3379fb92142b2ab96652bdc1
+  - 2026-11-16T18:34:55Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 12 id=3d307f10a37c pid=17804 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=c412bdbb241b41d4a54e988545be20d579e57ab136bcb486000cda3fbe817f9e
+  - 2026-11-16T18:34:55Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 12 id=28af2fb61168 pid=17803 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=2e24b412616802222dfa438977a3bdebc7209be50db9f30eceb416a3998f463a
+  - 2026-11-16T18:34:55Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 11 id=c4528fd64972 pid=17802 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=03753c3966dcb6527be3fa8c9b811b413d3e7e3e690609637485406636904838
+  - 2026-11-16T18:38:29Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 12 verdict GO-WITH-CONDITIONS nogo=0 id=28af2fb61168 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=533f5c44cf492ce961797bdf67e2561e11962c4e1dc5deec3b15d3894b8ed8ba
+  - 2026-11-16T18:39:36Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 11 verdict GO-WITH-CONDITIONS nogo=0 id=2a376166a049 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=15d8a6ddd3e7ea11a9686d0e866627396e00edfe538902b162f4c9cd7f6d413e
+  - 2026-11-16T18:41:34Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 12 verdict GO nogo=0 id=3d307f10a37c rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=799efd06c44fb3f0012e03427575a622684bd880584ec94676ea9aa31bfbc183
+  - 2026-11-16T18:43:50Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 11 verdict GO nogo=0 id=c4528fd64972 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=68ff2795031c3a9a314f03526c01387090029c4bf88d7e822742f349dc7b3ffa
+  - 2026-11-16T18:43:50Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 13 id=68f70102fa9f pid=19035 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=41422b94edeb5a59f200a6ab3544f4192644035b8b6045957f6b57d06b3014e1
+  - 2026-11-16T18:43:50Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 13 id=dbf28fabc548 pid=19034 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=7897b24e48c3e7d3637c3b7b76bb2ccc0e94ed9029bf78d819c3dfcc77fe14f4
+  - 2026-11-16T18:43:50Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 14 id=2c2b84783989 pid=19036 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=9ef0c4094f19db7081b857796ccb6a5e1b32fb1715d687817e45f3d8ca5db886
+  - 2026-11-16T18:43:50Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 14 id=64c1db1cc6a9 pid=19037 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=7682ea3198f02f7232b0f97453f05071d154647615693ef48d3cf3ae05c1448d
+  - 2026-11-16T18:48:20Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 13 verdict GO-WITH-CONDITIONS nogo=0 id=68f70102fa9f rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=3b219a8a6c8d231e061909f8a59df1f80f065b74c56e3789b014e630b0bcc87e
+  - 2026-11-16T18:48:53Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 14 verdict GO-WITH-CONDITIONS nogo=0 id=2c2b84783989 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=fe4681b6916e08e425c5cb3016f6d3880c3fda72fe7d71044464b3077ed4c31a
+  - 2026-11-16T18:52:26Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 14 verdict GO nogo=0 id=64c1db1cc6a9 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=c3e3e85029a9b10cd2148ddda5c4c5442fff011b2df9066f426d202850cb4ea5
+  - 2026-11-16T18:55:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 13 verdict GO nogo=0 id=dbf28fabc548 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=b192ba0ce17ac7c56a809a389f83b0c430ffa7a5d1006116d50fbd9992af4ecb
+  - 2026-11-16T18:55:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 16 id=6ea5adc5b041 pid=20538 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=8491aeb9982f9a06b3e333cf4c3ffcd31ba367b5fb5b55c106baa1f2bf10ef9e
+  - 2026-11-16T18:55:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 15 id=d9be6d1b33a3 pid=20537 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=aeea8ff91ff3bf50520f4be273655a511f712714210aa99138f3cdaf3fd799fc
+  - 2026-11-16T18:55:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 15 id=033a72e09893 pid=20539 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=866ccf756dd6bb363e0c4ead70cae38172a98368d5c9d4033234c47ecaacd016
+  - 2026-11-16T18:55:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 16 id=38fba4c6f583 pid=20540 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=a9733c403d10d76c4c7c2b9a954bb9a0387fe3e22d0a04db49a87ce3dbbd0528
+  - 2026-11-16T18:59:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 16 verdict GO nogo=0 id=38fba4c6f583 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=3fe8582fb35ee193da1dce7d8f2abf614d135903f5028ebe484067df6f239d91
+  - 2026-11-16T19:00:15Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 15 verdict GO nogo=0 id=d9be6d1b33a3 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=7492851ea2c5224c0808751b5df319a58d57accab6f8e72d0c561a2d6970c595
+  - 2026-11-16T19:00:17Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 16 verdict GO nogo=0 id=6ea5adc5b041 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=0b2c650088498e40f5d5504dc64a8d3f9333d8fab348373cc2461985c4dd5a7e
+  - 2026-11-16T19:01:15Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 15 verdict GO nogo=0 id=033a72e09893 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=b0c4a5e8caf3153ede0149054eba3177551c8870c4e42cf21f21dde244ed602d
+  - 2026-11-16T19:01:15Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 18 id=0e55aa9190a2 pid=21409 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=37352dc751980aaddc1624ab0e21ed50728dd15de327b460d05dad92035fbdd8
+  - 2026-11-16T19:01:15Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 17 id=b0f810516a5d pid=21410 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=02323c918b4d408ae087904316ebe6562053a79abd805101525ab02a2a3daa6d
+  - 2026-11-16T19:01:15Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 17 id=ce033d4a8d0d pid=21412 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=f64517d318e950b7d9cfe444f3ed849f290616b9314443a621a443b55bc5f95d
+  - 2026-11-16T19:01:15Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 18 id=a238184d01d1 pid=21411 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=e9147e2052d02048b76352737a330ad132d6bd7428d4b5f17347812b47dd81c9
+  - 2026-11-16T19:05:46Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 17 verdict GO nogo=0 id=b0f810516a5d rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=b7ccf47bd4da16d949f28159385932f6c23aa1f10c456589f7b0052521ac0611
+  - 2026-11-16T19:06:18Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 18 verdict GO-WITH-CONDITIONS nogo=0 id=a238184d01d1 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=0e1f777c0a9da607f32a8973ce55ca4ba4bec835669f40ffec6f294308eb525f
+  - 2026-11-16T19:07:56Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 17 verdict GO nogo=0 id=ce033d4a8d0d rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=9388fecde37585df120375d86371ab4a1e31b4b9cb7ddeeca8610453c897c1fe
+  - 2026-11-16T19:08:46Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 18 verdict GO-WITH-CONDITIONS nogo=0 id=0e55aa9190a2 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=dd964fb0151ccb89595d90c1a1ebe71ea0d6e35eb3e8a3382a157e7deefe02ff
+  - 2026-11-16T19:08:47Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 19 id=acbac33fcb28 pid=22580 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=27ad482d92e0cd489ac1a87324a0a0ff0e931b47d32119e94e6bef5706c93824
+  - 2026-11-16T19:08:47Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 19 id=f325dc38c995 pid=22581 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=3edeba1f7ed23d99456424350f3b901e891fcb9c115cd5b251ad2bdbee146216
+  - 2026-11-16T19:08:47Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 20 id=9b8262cbeb23 pid=22583 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=fd5f9556e7e7765189c9cfdc71ea59362f17badb36a2902a8b63392b08105d00
+  - 2026-11-16T19:08:47Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 20 id=ef725447637c pid=22582 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=9bfc88a105f124db8f9d3425bd4f2b7c8bf12cc37dde64402873e9ade9baf91f
+  - 2026-11-16T19:11:57Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 19 verdict GO nogo=0 id=f325dc38c995 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=e1a69b7d51434ee3d3e01740bfeee6664cedd28e8da0618beb8ad46b9b880056
+  - 2026-11-16T19:14:16Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 20 verdict GO nogo=0 id=9b8262cbeb23 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=33236abd632cbefd56e06d7d3dba3faa1dc789439c76db45d5b4e6dff0954e5a
+  - 2026-11-16T19:15:53Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 19 verdict GO nogo=0 id=acbac33fcb28 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=f08866c197f7ba748a1e2cb0863bcf7a184973002c0cefc1b282a0bcab137db4
+  - 2026-11-16T19:17:08Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 20 verdict GO-WITH-CONDITIONS nogo=0 id=ef725447637c rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=b4ea03154b34b4e7718706c7bae02aed75f2f9a62738c41569f7adce5ae8d938
+  - 2026-11-16T19:17:08Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 21 id=6c74361d3d79 pid=23845 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=84ca0580ce526098ffece59f21ac63ff9f1e9f5447552d851df0c42416b2972d
+  - 2026-11-16T19:17:08Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 22 id=bb43e99124f5 pid=23846 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=5f854767846eab453baad84f42e3e820a9aae2626dd5bc3c0b635c20164df781
+  - 2026-11-16T19:17:08Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 22 id=75a1069cb967 pid=23848 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=7262fbd3b5e621e1d955ce476cb4d929a30e7c053d0d008569410e4d3e6b0bda
+  - 2026-11-16T19:17:08Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 21 id=d7fa6fea4352 pid=23847 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=9663c6afff9f56a00e93f658e187fa9fa7c9253a3694cd2d2ef6bd7eaaa423db
+  - 2026-11-16T19:21:42Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 21 verdict GO nogo=0 id=d7fa6fea4352 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=ab4e06d8cbb116fd665ddc5e61a672d51b69d35a7c7043bc33e9841c8b89e4bf
+  - 2026-11-16T19:21:58Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 22 verdict GO nogo=0 id=75a1069cb967 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=0077286a0428e2a01e4b737d79b47e42be98f86f3e5ee8c7586cf90b39d04c8f
+  - 2026-11-16T19:23:57Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 22 verdict GO nogo=0 id=bb43e99124f5 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=50ff21acc36b743d407d709b2bc9f1e00d15d75a508edd36a6ec97d058698ccd
+  - 2026-11-16T19:26:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 21 verdict GO nogo=0 id=6c74361d3d79 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=cd967131e2bd6ad0e118b6337983398a460f066462e6dbf695674e1bbd1f97b1
+  - 2026-11-16T19:26:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 24 id=55d2c4d885ec pid=25213 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=54a31cced300d6a53d3a863d76a8325526d6fda44f4f2a3d64685cb7dddcbbf2
+  - 2026-11-16T19:26:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 23 id=cad5144413ad pid=25214 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=d05ff01a1f6edad8e714a61bd706d28a1d8d39167128fb065b0a5a8cad2b9431
+  - 2026-11-16T19:26:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 23 id=f8bcb5aeec74 pid=25216 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=2b58e7f7b4f486626e384bdff7a67052fa06d8dbb0c59ca444ec026fb75a6554
+  - 2026-11-16T19:26:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 24 id=9fb10ed8a526 pid=25215 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=f12c54d9d3f448ad83b2506d86f43b2b5c57cb7cd08e8d99fc9a62c3c58b6b2d
+  - 2026-11-16T19:30:33Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 23 verdict GO-WITH-CONDITIONS nogo=0 id=cad5144413ad rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=aa5b6fa58d9ededc43edeb80290e3f75d92b571e03767212d65d09d397860bf4
+  - 2026-11-16T19:31:32Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 24 verdict GO-WITH-CONDITIONS nogo=0 id=55d2c4d885ec rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=ff092972069aa4d72c7a64d0391896b4e63ef68fe2719af639e3e4684d96d8eb
+  - 2026-11-16T19:32:00Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 23 verdict GO nogo=0 id=f8bcb5aeec74 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=2fa9814edfe811896fac8f753288dc5e0f7fcbc98990d46b8be35fd16e64ee47
+  - 2026-11-16T19:38:19Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 24 verdict GO nogo=0 id=9fb10ed8a526 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=9ee4d9ad21ef40c03dc8f047619163ae727db4fc12fe850b9b79c47072d911d7
+  - 2026-11-16T19:38:20Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 25 id=0f977c357824 pid=26994 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=8b21e610c7b7c0db333310e8d3377079ecebbbf61ba66437b9355f1bbffe90ba
+  - 2026-11-16T19:38:20Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 25 id=517657fe7477 pid=26995 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=f428213a046dd4e23e1c829ec1a299d6802830bcb5bb6df2688651f6ebe50c70
+  - 2026-11-16T19:38:20Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 26 id=1567dea0f11f pid=26996 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=d84a70f8e45afe37fdae80247b12d7037a994718f423e50395f7d9dd4382fdfc
+  - 2026-11-16T19:38:20Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 26 id=373f56e6f0ca pid=26997 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=68b8a29886e6037d3af0d45c7c633abec923aa14e1cd727969c0ec8556b88c83
+  - 2026-11-16T19:41:35Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 26 verdict GO-WITH-CONDITIONS nogo=0 id=1567dea0f11f rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=303699cc526d01c66cffb3934386c2a6de846e14e6d92c4c4bd84c10307fab3d
+  - 2026-11-16T19:42:48Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 25 verdict GO-WITH-CONDITIONS nogo=0 id=517657fe7477 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=4b5a5a7a72d1b883e95e3dbff063d166bef1d479262629647fa522e966e58a3d
+  - 2026-11-16T19:44:14Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 26 verdict GO nogo=0 id=373f56e6f0ca rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=73e1a4524aea52620b4e985745355ddf43c491f6c0f1ac05013035fd4c109340
+  - 2026-11-16T19:45:10Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 25 verdict GO nogo=0 id=0f977c357824 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=02d120c51216eacecffec64ea43c0134aa8ee2ef737d7f312e63abb3baca7466
+  - 2026-11-16T19:45:10Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 28 id=eb8ac1eed451 pid=28140 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=bd755b8d1423bd4a4095b025e06fce76b1997e2bf50f15b325fdac6667e106d7
+  - 2026-11-16T19:45:10Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 27 id=bf5cc7bd12b9 pid=28138 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=4f0c37d22aff99e9f37b0d288aecbca1be4bed670edd710d8a646903086a6f1a
+  - 2026-11-16T19:45:10Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 28 id=319ed3d1c2ad pid=28141 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=62c68c1421b2e7bd5666b0ff33e08a670530edf327926b62a5f1c8d61ed5e011
+  - 2026-11-16T19:45:10Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 27 id=41ff65d33e37 pid=28139 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=133c7d3b70cf8b8c150113b3564febf82d1f22ca02532827903716b344a0333d
+  - 2026-11-16T19:48:53Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 28 verdict GO-WITH-CONDITIONS nogo=0 id=319ed3d1c2ad rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=137ba2acda729a9c6d26bbf13f16c66d0510f124df78776839cd729cc475c79b
+  - 2026-11-16T19:50:12Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 27 verdict GO-WITH-CONDITIONS nogo=0 id=41ff65d33e37 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=031d1ea7019906e0136de14eee6343ed164352ec7d110eddeb35e1fddfef4e58
+  - 2026-11-16T19:50:43Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 27 verdict GO nogo=0 id=bf5cc7bd12b9 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=2e737327ff10a299fc5df892a16d1e25eac7cd3b2a7d007da09cf2c9c35e00dd
+  - 2026-11-16T19:57:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 28 verdict GO nogo=0 id=eb8ac1eed451 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=f14f3eeb71ed0d15fe25be9b311bbb6c8e8b465cd7df0995287ca172e6653d1c
+  - 2026-11-16T19:57:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 30 id=4be7d8bf3ba1 pid=29726 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=2b1dc3492e6100fcaa1c67ed419cf9dc5d9c4b5da0b818e97d8680ffcb6705b4
+  - 2026-11-16T19:57:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 29 id=fe1ade3404f5 pid=29727 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=eebda963f47cb73175a908a7839314677e1a406f88dc20bb19e5ab9d96eb8e13
+  - 2026-11-16T19:57:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 30 id=f83434396ff5 pid=29728 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=a4b5cdb3ea57810cb6ddff0ba86ced6c2fbba7964162660d74903cb71f54199a
+  - 2026-11-16T19:57:45Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 29 id=c1bcc195e97b pid=29725 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=8e014aabc1f12e4fa5a46ff1086600f008790cd8cc27a18f27b2a2af4f47e813
+  - 2026-11-16T20:01:36Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 30 verdict GO-WITH-CONDITIONS nogo=0 id=4be7d8bf3ba1 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=66f61521223dc22251f8f6101f984670c1e83718202356e39282e1ef5a55b91c
+  - 2026-11-16T20:02:49Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 29 verdict GO-WITH-CONDITIONS nogo=0 id=fe1ade3404f5 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=2b91a90ac452fb1b92cb3fa72042d11128a336ed90e288c0d3a87e4c63f92443
+  - 2026-11-16T20:03:25Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 29 verdict GO-WITH-CONDITIONS nogo=0 id=c1bcc195e97b rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=cbed24a9448495b3c233ab38e44302cab0ec0ae2a9103011683033013fb06537
+  - 2026-11-16T20:04:36Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 30 verdict GO nogo=0 id=f83434396ff5 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=63aea1c6f0cb4c1a23f928b1ec4b46abbbd2ba13f90fde5fa76a0ae3b4ecb040
+  - 2026-11-16T20:04:37Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 31 id=7fe257db6609 pid=30698 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=cf3e6cf72a0ec110fd6935c504b3165ec97e30a5b5d997ee54edd451f353f3cd
+  - 2026-11-16T20:04:37Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 32 id=a43250eba6cf pid=30699 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=deda303849baa21e94fcf70767def387c1e81123b87f84e2f841f37001c614e5
+  - 2026-11-16T20:04:37Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 31 id=f7b12c98e575 pid=30700 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=449b45c4fbad8c60aa2af892cd5aa6c8451f835214197c2ef48ba6d3ed02dad1
+  - 2026-11-16T20:04:37Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 32 id=47d763277463 pid=30701 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=57f8ab84ea39c4c6598fad9fc1baa83fdea09bab7539325463407e92e3ce81d9
+  - 2026-11-16T20:09:12Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 31 verdict GO nogo=0 id=7fe257db6609 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=372681e7a362db2d92e7de7442b2c1564a666fbfd0e0ee2a54c1967e7a2a8460
+  - 2026-11-16T20:09:14Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 32 verdict GO nogo=0 id=47d763277463 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=e7fbcdc633cd6aecc0e7b4fa97723490ef5bbd26488c9323a7c800dc953c7e3a
+  - 2026-11-16T20:10:09Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 32 verdict GO nogo=0 id=a43250eba6cf rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=3d6d7ae40b3f2d197f5ad91e24062ab2029fa36dfdaa3f8d65128dd9de78f8b0
+  - 2026-11-16T20:10:28Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 31 verdict GO nogo=0 id=f7b12c98e575 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=7917856ae278a45b106a1139e782e408515b4b8b891ee57122323286a932068a
+  - 2026-11-16T20:10:29Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 33 id=03bfdf926298 pid=31683 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=4bf0435439d8bbbeb4cf647cd41035c27b914915ea0e8c4e7a91d4e373ff2436
+  - 2026-11-16T20:10:29Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane codex part 34 id=1fbb57ea3c8a pid=31686 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=62a8f4273a7146dd293f91212c23772ffb50203d85a8603ca551ce107ed771bc
+  - 2026-11-16T20:10:29Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 34 id=c4ac2fb9c47c pid=31684 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=c3364285c108ca230018b8eff6066d9820bcd8769809c4a6b758636518368e84
+  - 2026-11-16T20:10:29Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf dispatch lane claude part 33 id=8cbd31c0f859 pid=31685 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=6abd89a9b3f37ddb86f8708841336349128a28efabd956997d3c2ea854290954
+  - 2026-11-16T20:14:05Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 34 verdict GO nogo=0 id=1fbb57ea3c8a rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=73835a83043bd3376a6ba8771db266affb93e38fc8aada1c0403c398fe306ed0
+  - 2026-11-16T20:15:02Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane codex part 33 verdict GO nogo=0 id=03bfdf926298 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=5f66227d82dded2524dfc645f199c83d0c0afa54c08c252e7efdc5cfc30650e1
+  - 2026-11-16T20:18:52Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 33 verdict GO nogo=0 id=8cbd31c0f859 rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=caeb9b35b3752169aa3eb06bea158cd3bdf19d57b702835c3f704d095e52d637
+  - 2026-11-16T20:20:10Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf lane claude part 34 verdict GO-WITH-CONDITIONS nogo=0 id=c4ac2fb9c47c rc=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 prev=e275dee09fc69c0b893e1d6e4ae5df869a5dcdd06a68cc333b119ef0107cac4e
+  - 2026-11-16T20:20:28Z v1.4.4 84b83324c820104ae40a616b9273cd6dda4253cf end rc=0 nogo=0 tree=bdf525c16c6e3beca3cfa38b0b8f72637ff6bbe1 manifest=5c2b88352b53c02c9479bcac992dcd93e94199b548ae0091ed5755db9aeaa4d7 prev=02e18696aebaa5d0a197f9df986da91eedfe29c815c9daf6b66741c31b864913
+conditions:
+  - № Conditions of v1.4.4: carried by gen_envelope.py carry-conditions from .claude/governance/pair-rail-verdict-v1.4.4-rc.1.md; the GA re-pass re-checks each one against the GA candidate. Add GA-only conditions at the end.
+  - Condições do envelope — v1.4.4-rc.1 (o trem desde a v1.4.2, sobre a base v1.4.3-rc.1)
+  - Este arquivo propõe condições; não é aprovação nem assinatura. Duas revisões, Codex e Claude Code, leem os mesmos payloads redigidos, e o envelope vincula a evidência delas pelo MANIFEST cujo sha256 os campos assinados carregam. Um `NO-GO` de qualquer uma bloqueia o envelope, e um `NO-GO` gravado no registro de tentativas faz o kit recusar um re-pass novo no mesmo commit, ou na mesma árvore, com qualquer tag.
+  - Regra do corte (a que o Owner ratificou para a v1.4.0 e aplicou às releases seguintes; pela OQ-7 do PLAN-198, este corte segue o molde do PLAN-194 sem debate novo): `NO-GO` só por condição declarada FALSA contra o código ou por P0; um P1 não declarado vai ao veredito sob «NEW FINDINGS (annex)» como anexo assinado, porque cada arquivo de veredito entra no MANIFEST. Este texto não promete versão para a cura de nada que declara aberto, exceto o que o CHANGELOG [1.4.4] já agenda: a cura estrutural da condição declarada da correção do filtro de segredos (condição 4).
+  - Base: a tag assinada `v1.4.3-rc.1`, que `gen_envelope.py` escolhe pela regra dele (a tag anotada mais nova abaixo da versão pedida, ancestral do candidato e com envelope de veredito commitado); o envelope assinado dela cobre o delta `v1.4.2..candidato` daquela rc. Adopters: quem SOBE da v1.4.2 (a v1.4.3 nunca chegou ao npm, como o CHANGELOG [1.4.4] diz) ou da v1.4.3-rc.1, por `upgrade.sh --pin v1.4.4-rc.1`, e quem instala a partir de um checkout da tag pelo `install.sh`. A rc não publica no npm: o job `publish` do `npm-publish.yml` pula as tags `-rc.`.
+  - A. Dívida carregada (re-declarada)
+  - 1. **O anexo P1 da v1.4.0 segue sem cura declarada pelo CHANGELOG [1.4.4] e sem versão prometida para a cura, exceto dois casos: o da condição 67, que a v1.4.3-rc.1 declarou curado e que esta release carrega, e o da condição 58, que esta release declara curado (condição 4).** Os itens são as seções «NEW FINDINGS (annex)» dos vereditos em `.claude/plans/PLAN-169/repass-rc1/` e `.claude/plans/PLAN-169/repass-ga/`, mais as condições do envelope assinado `.claude/governance/pair-rail-verdict-v1.4.0.md`; os envelopes assinados do GA v1.4.2 e da v1.4.3-rc.1 já o declararam aberto. Fora os casos das condições 58 e 67, o CHANGELOG [1.4.4] não declara curado nenhum deles; esta condição não afirma que cada achado siga reproduzível.
+  - 2. **O que o envelope assinado do GA v1.4.2 (`.claude/governance/pair-rail-verdict-v1.4.2.md`) declarou aberto segue sem cura declarada pelo CHANGELOG [1.4.4], exceto o caso do P2 da parte 3 do re-pass daquele GA, que a v1.4.3-rc.1 declarou curado e que esta release carrega, e os dois casos da condição 1.** Aquele envelope declarou abertos os itens das condições dele (que carregam o anexo da v1.4.0, as condições da `v1.4.2-rc.1` e, pelas condições 13 e 14, os três P1 do anexo assinado da `v1.4.2-rc.1` e os P2 que a condição 14 mantém abertos) e os achados sob «NEW FINDINGS (annex)» e os P2 dos vereditos que ele ou o envelope da `v1.4.2-rc.1` pinam pelo MANIFEST da evidência. O P2 curado é o de um ledger de substrato com a forma errada que substituía o relatório inteiro do `check-substrate-drift.py`. O CHANGELOG [1.4.4] não declara curado nenhum outro, entre eles os três P1 do anexo assinado da `v1.4.2-rc.1`; esta condição não afirma que nada mudou na faixa.
+  - 3. **Dos achados do re-pass da v1.4.3-rc.1, esta release declara curados os três casos que o CHANGELOG [1.4.4] declara em «Fixed — three findings of the v1.4.3-rc.1 re-pass».** O MANIFEST da evidência daquele re-pass (`.claude/plans/PLAN-194/repass-rc1/MANIFEST-rc1.sha256`), cujo sha256 o envelope assinado da v1.4.3-rc.1 carrega, pina os vereditos: o da parte 3 traz um P1 sob «NEW FINDINGS (annex)» e dois P2, e os das outras partes não trazem achado novo. Os três são os casos curados: (a) o P1, em que `diagnose-output-hook.py` podia escrever no log de auditoria vivo; o ambiente do filho agora tira `CEO_AUDIT_LOG_PATH` e as outras variáveis de local que o script lista, e aponta `HOME` e o diretório do log de auditoria para um diretório temporário; (b) o P2 em que `check-audit-real-loss.py` caía com um `record_id` que não é texto; o arquivo agora vai para `malformed_record_id_files` no relatório; (c) o P2 em que os verificadores só de leitura `audit_spool_state.py` e `check-audit-real-loss.py` tentavam gravar arquivos ao importar os módulos auxiliares; os dois agora desligam essa gravação antes dessas importações. Esta condição afirma só esses três casos.
+  - B. O que esta release declara curado
+  - 4. **O filtro de segredos corta o texto original nos deslocamentos achados no texto original: o defeito presente desde a v1.0.0 que o CHANGELOG [1.4.4] descreve na seção «Fixed» do redator de segredos e que o envelope assinado da v1.4.0 declarou como a condição 58 dele.** Em `.claude/hooks/_lib/secret_patterns.py`, os deslocamentos que `scan()` devolve indexam o texto recebido, e `redact()` e `scan_and_redact()` cortam esse mesmo texto com eles; `.claude/hooks/_lib/pii_patterns.py` aplica trechos sobrepostos como união; o catálogo de padrões não muda. A correção é o commit `54bab3cc`, assinado pelo Owner após revisão do Codex e de dois refutadores Claude; nenhum arquivo de sentinel o cobre. O Codex aprovou com uma condição, anterior à correção, que a mensagem do commit declara nestas palavras, e que o Known-open do CHANGELOG [1.4.4] também declara: «the ingress path redacts the raw answer text before parsing it, so a redaction can change whether an answer parses». A cura estrutural, redigir os valores decodificados depois do parse, está agendada para a próxima release («scheduled for the next release»).
+  - 5. **A lista de hard-deny do kernel ganha 13 linhas: os sete pacotes auxiliares que recebem o código das sete entradas de kernel divididas pelo PLAN-197, cinco módulos que código de kernel chama e o pacote dos adapters live, como o CHANGELOG [1.4.4] descreve na seção «Fixed» da lista do kernel.** O commit `161e1dc3`, assinado pelo Owner após revisão de dois refutadores Claude e do Codex, leva `_KERNEL_PATHS` (`.claude/hooks/check_arbitration_kernel.py`) de 110 para 123 linhas e os arquivos de kernel rastreados de 125 para 222: uma linha recursiva para cada pacote (`canonical_edit`, `agent_spawn`, `_policy_parts`, `_audit_emit_parts`, `_audit_log_parts`, `_bash_safety_parts`, `_pair_rail_parts` e `adapters/live/`) e uma para cada módulo (`plan_paths.py`, `model_currency.py`, `cli_currency.py`, `bash_indirect_guard.py` e `bash_indirect_telemetry.py`), todos sob `.claude/hooks/_lib/`. O pacote dos adapters live fica inscrito no kernel, e uma edição nele passa pelo override do kernel, como a de qualquer arquivo de kernel. O teste novo `.claude/hooks/tests/test_kernel_decomposition_coverage.py` fica vermelho se qualquer uma das 13 linhas novas sair. O mesmo commit sobe o limite de tempo do job `coverage` do `.github/workflows/coverage.yml` de 35 para 50 minutos. Nenhum arquivo de sentinel cobre o commit.
+  - As demais correções que o CHANGELOG [1.4.4] descreve são julgadas como integração nos payloads, sem condição própria, com os limites que ele declara.
+  - C. O que muda para o adopter
+  - 6. **O guard de Bash ganha uma varredura de execução indireta, ligada por padrão (PLAN-195, ADR-201).** A varredura (`_lib/bash_indirect_guard.py`, no `check_bash_safety.py`) roda salvo com `CEO_BASH_INDIRECT_GUARD=0`, e as formas heurísticas dela salvo com `CEO_BASH_INDIRECT_HEURISTICS=0`, no ambiente com que o Claude Code inicia. Os limites de falso positivo dela nunca foram medidos nesta implementação, como o CHANGELOG [1.4.4] declara.
+  - 7. **Vários dos maiores hooks e scripts viram pontos de entrada finos sobre módulos em `.claude/hooks/_lib/` (PLAN-197, ADR-202).** Os pontos de entrada mantêm os caminhos e a lógica passa aos módulos: um hook remendado à mão precisa ser remendado de novo no módulo dele, e um módulo da condição 5 é caminho de kernel.
+  - 8. **Um hook registrado deixa pendente, na saída, o trabalho do spool de auditoria, e a cura é parcial.** O `.claude/hooks/_python-hook.sh` exporta `CEO_HOOK_BOUNDED_EXIT=1`; o ADR-055-AMEND-4 está `ACCEPTED` com a implementação `PARTIAL`, e o Known-open do CHANGELOG [1.4.4] declara que não está provado que todo evento pulado seja coletado depois, sem release atribuída à cura.
+  - 9. **Os merges dos pull requests 6 e 7 trouxeram ao `main` 233 caminhos canônicos sem sentinel nem arquivo de assinatura, e com eles mudou o sentido de três checagens de governança: o piso VETO, a allowlist de modelos e o pin do Codex.** O piso VETO e a allowlist passam a aceitar famílias de ids, entre eles ids que o ledger de depreciação lista como aposentados; o pin do Codex passa como `compatible` um Codex CLI mais novo que a versão do manifesto pela versão declarada, sem exigir hash igual (seção «Security and governance» do CHANGELOG [1.4.4]). Pela OQ-3 do PLAN-198, esses caminhos ficam declarados, não ratificados por bytes; o Known-open do CHANGELOG [1.4.4] declara cada um desses pontos com «No release is assigned to its cure yet».
+  - 10. **O revisor Codex deste re-pass entra pela rota do piso de versão, sem re-pin (decisão OQ-2 do PLAN-198).** O runner só o aceita se o oráculo `check_pair_rail.py --verify-codex-pin` o classifica como `verified` ou `compatible`, e o gerador recusa uma versão abaixo de `CODEX_VERSION_FLOOR` (0.160.0) mesmo com o sha do manifesto. Com `compatible`, nenhum manifesto atesta os bytes do binário: a identidade do instrumento é a versão observada, o triple, o sha256 do payload e o status do pin, que a PROVENANCE e os campos assinados (`tool_versions`) registram. O GA recusa um Codex com versão, triple, sha256 do payload ou modelo diferente do da rc, a menos que a troca entre nos campos assinados como o achado `instrument-changed-since-<rc>`.
+  - 11. **A release fica com o número PATCH, 1.4.4, por decisão do Owner (OQ-4 do PLAN-198).** O parágrafo «Version number.» do CHANGELOG [1.4.4] diz que o `VERSIONING.md` classifica como MINOR uma mudança aditiva de SPEC e uma nova fronteira de confiança, que este trem tem as duas, e que um upgrade a partir da v1.4.2 se planeja como um MINOR.
+  - 12. **Durante o hold entre a rc e o GA, quem sobe usa `--pin v1.4.4-rc.1`.** O `release.sh bump` reescreve para a versão alvo as três linhas do exemplo de upgrade do `INSTALL.md`: a que resolve a rc mais nova (`git tag --list 'v<versão>-rc.*'`), a do GA (`--pin v<versão>`) e a da rc.1 (`--pin v<versão>-rc.1`). Num checkout-fonte que ainda não tem a tag do GA, a linha do GA sai do `upgrade.sh` com `ERROR: unknown --pin ref` (código 2), como o próprio exemplo avisa.
+  - D. Escopo deste re-pass
+  - 13. **Os payloads cobrem, pela forma, todo caminho que muda entre a tag base e o candidato, exceto as classes que o `OUT_OF_SCOPE` de `.claude/plans/PLAN-198/kit/gen_envelope.py` declara fora:** testes (`tests/*`, `*/tests/*`); planos (`.claude/plans/*`); notas de pesquisa (`docs/research/*`); o contrato de operação (`CLAUDE.md`); registros de decisão (`.claude/adr/*`); dados de oráculo e de teste (`.claude/data/*`, `.claude/scripts/data/*`, `.claude/eval/*`); o harness de smoke do mantenedor (`scripts/local/*`); a configuração de teste (`conftest.py`, `pytest.ini`); higiene do repositório (`.gitignore`); o espelho gerado do plugin (`dist/*`); `RELATORIO-*.md`, `REVIEW.md` e `codex-planos/*`; e os envelopes de veredito assinados (`.claude/governance/pair-rail-verdict-v*.md`). A classe de cada caminho fica em `scope-rc1.txt`, na evidência.
+  - 14. **A cópia do candidato que os revisores leem passa arquivo a arquivo pelo mesmo redator dos payloads, e o kit retira dela, com o motivo, os arquivos que lista em `withheld-rc1.txt`, na evidência; a contagem deles vai para os campos assinados.** Fora do re-pass não quer dizer não entregue; este texto não afirma, classe a classe, o que chega a um adopter.
+  - Lane notes signed with v1.4.4-rc.1 (conditional verdicts and P0/P1 lines):
+  - codex-p01 Reviewed payload 1/32 and its candidate-tree integration. No P0 or contradiction of a declared condition established within this scope.
+  - claude-p01 P0: none.
+  - claude-p01 NEW FINDINGS (annex): none at P1.
+  - claude-p01 VERDICT: GO Payload 1 has no P0 and makes none of the declared conditions false: the kernel list carries the 13 declared rows, and the audit_emit split binds every part to the facade namespace and resolves every name its parts use. What ...
+  - codex-p02 Payload 2/32: no P0 or false declared condition established.
+  - claude-p02 P0: none.
+  - claude-p02 VERDICT: GO Payload 2/32 only moves the audit_emit declarations into parts that rebind cleanly to the facade, with every name resolved, one transform per action, unchanged drop and default-deny behaviour, standard library only, Python 3....
+  - codex-p03 P1 ? .claude/hooks/_lib/_audit_emit_parts/writer.py:761: When spool persistence is unavailable and creating the primary directory or opening its lock raises OSError, execution reaches the fallback handler before 'line' is assigned at :68...
+  - codex-p03 VERDICT: GO-WITH-CONDITIONS No declared condition was found false and no P0 was identified in this payload; the confirmed audit fallback loss is recorded as an undeclared P1.
+  - claude-p03 FINDINGS: no P0, and no declared condition is false against this payload.
+  - claude-p03 NEW FINDINGS (annex): no undeclared P1.
+  - claude-p03 VERDICT: GO These moved audit_emit and audit_log parts bind every name they use into the facade, stay standard-library-only and Python 3.9 compatible, keep their fail-open behavior and are on the kernel list, so no declared condition is ...
+  - codex-p04 Payload 4: no P0 or falsified declared condition established. Namespace, path-resolution and 30 in-memory CLI smoke checks passed on Python 3.9.6; label persistence was mocked. The findings below are newly observed, not proven regression...
+  - codex-p04 P1 ? .claude/hooks/_lib/_bash_safety_parts/fact_state.py:327
+  - codex-p04 VERDICT: GO-WITH-CONDITIONS The identified unsafe-write defect and reporting follow-up belong in the annex under this cut?s rule; neither establishes a P0 or disproves a declared condition.
+  - claude-p04 P0: none.
+  - claude-p04 P1: none.
+  - codex-p05 Payload 5/32: no P0, new P1, or contradicted declared condition found.
+  - claude-p05 P0: none.
+  - claude-p05 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:386-393 (xargs; also :394-399 find -exec), with call site .claude/hooks/_lib/_bash_safety_parts/posture_scan.py:571-584 and catch-all .claude/hooks/_lib/_bash_safety_parts/decisions_cli.py:2...
+  - claude-p05 Failure scenario: _scan_segment (bash_indirect_guard.py:347) recurses once per xargs level with no depth check; MAX_DEPTH is enforced only in _scan (:472). A command 'xargs xargs ...(about 1000 times) rm -rf ~' stays under MAX_WORDS=1024...
+  - claude-p05 8. The import at posture_scan.py:571 sits outside any try. A partial upgrade without bash_indirect_guard.py gives allow plus a FATAL line on every command that passes the legacy checks: the direction is correct, but main() cannot tell an...
+  - claude-p05 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and no P0 was found, but the new indirect-execution guard has an undeclared P1: about 1000 nested xargs drive its recursion into a RecursionError, which main...
+  - codex-p06 Payload 6: no P0 or false declared condition found.
+  - codex-p06 No new P1 findings.
+  - codex-p06 VERDICT: GO The two confirmed integration regressions are P2 follow-ups; neither falsifies a declared condition or constitutes a P0.
+  - claude-p06 - Declared conditions: condition 7 holds for ceo-boot (thin facade, path kept). Nothing in this payload makes any of conditions 1-14 false. No P0.
+  - claude-p06 P1-a ? .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:300-325 and :356
+  - claude-p06 P1-b ? .claude/scripts/ceo-boot.py:120-184, against _ceo_boot_parts/model_persona.py:6 and scheduled_cache.py:376
+  - claude-p06 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and no P0 was found, but two undeclared P1s must go to the signed annex: after the PLAN-197 split, sentinel-pattern derivation always falls back because it r...
+  - codex-p07 Payload 7: no P0 or false declared condition identified.
+  - codex-p07 No new P1 findings.
+  - codex-p07 VERDICT: GO-WITH-CONDITIONS The default ceremony policy lookup needs repair, but this payload establishes neither a false declared condition nor a P0.
+  - claude-p07 None at P0. None at P1.
+  - claude-p07 VERDICT: GO Payload 7 contradicts no declared condition and contains no P0 or P1: the moved code resolves and binds correctly in its facades, is delivered to installs, stays Python 3.9 standard-library only and fails in the declared dire...
+  - codex-p08 No declared condition was shown false in payload 8; no P0 found.
+  - codex-p08 No P1 findings.
+  - codex-p08 VERDICT: GO-WITH-CONDITIONS Two nonblocking compatibility regressions need follow-up, while this payload provides no evidence of a false declared condition or a P0 defect.
+  - claude-p08 No declared condition is contradicted, and I found no P0.
+  - claude-p08 P1. The installer-census entry point splits the ParseError/Incomplete exception hierarchy.
+  - claude-p08 VERDICT: GO-WITH-CONDITIONS No declared condition is contradicted by this payload and no P0 was found, but one undeclared P1 must go into the signed annex: the installer-census entry point splits the ParseError/Incomplete hierarchy, so i...
+  - codex-p09 No P1 findings.
+  - codex-p09 VERDICT: GO This payload shows no false declared condition or P0, and the exception-hierarchy regression is a nonblocking P2.
+  - claude-p09 P0: none.
+  - claude-p09 NEW FINDINGS (annex): none at P1.
+  - claude-p09 VERDICT: GO No declared condition is false against this payload and there is no P0: the worst defect, the moved installer census losing the Incomplete-to-ParseError subclass link, only affects the maintainer's CI census and fails closed,...
+  - codex-p10 Payload 10: no P0 or false declared condition identified. Python 3.9 syntax checks passed for all 16 payload files; benign imports confirmed preserved facade globals for pair-rail, night-mode and PreCompact.
+  - claude-p10 None is false against this payload. No P0.
+  - claude-p10 P1 ? .claude/hooks/_lib/_pair_rail_parts/part_01.py:477-486, with CHANGELOG.md:191.
+  - claude-p10 6. Also part_01.py:477-486: on triples absent from the manifest, the strict "newer than manifest" rule blocks the manifest's own version (0.160.0) and admits any newer one. There is no hash on that route for a same-version tamper to mism...
+  - claude-p10 VERDICT: GO-WITH-CONDITIONS Every declared condition I could check against this payload holds, I found no P0, and the moved pair-rail, policy, precompact and night-mode code keeps its globals, patch points and fail directions; the one un...
+  - codex-p11 No P0 or false declared condition established in payload 11. Import/global-binding checks, Python 3.9 grammar checks, and mocked PreCompact fail-open checks passed.
+  - codex-p11 P1 ? .claude/hooks/_lib/_profile_opus_parts/latency.py:197
+  - codex-p11 VERDICT: GO-WITH-CONDITIONS The profiler isolation defect warrants an advisory annex, while this payload establishes neither a false declared condition nor a P0.
+  - claude-p11 P1 ? .claude/hooks/_lib/_profile_opus_parts/latency.py:102-126 and :198-199, with the doc claim at hook_latency_docs.py:87.
+  - claude-p11 - Relation to this release: this is the same class as the v1.4.3-rc.1 P1 that condition 3(a) declares cured only for diagnose-output-hook.py. The scrub list appears to have been carried unchanged by the move (I cannot diff it against bas...
+  - claude-p11 VERDICT: GO This payload's moved code binds and resolves correctly, keeps its fail-open direction, ships to adopters, and contradicts none of the declared conditions. The only P1, the profiler's isolation missing CEO_AUDIT_LOG_PATH, appe...
+  - codex-p12 Payload 12: no P0 or false declared condition identified.
+  - claude-p12 P1 ? .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:346-357 together with prepare.py:83-123 and agent_spawn/file_assignment.py:327-380 (_recent_file_assignments). The spawn FILE ASSIGNMENT overlap rail no longer sees earlier spawns.
+  - claude-p12 VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches (5, 7, 8, 9) holds against the code, and the moved spool_writer, agent_spawn and reality-ledger code keeps its name lookup, patch points and fail-open direction, s...
+  - codex-p13 Payload 13/32: no P0 or false declared condition identified.
+  - codex-p13 VERDICT: GO The two P2 follow-ups do not establish a false declared condition or a P0 in this payload.
+  - claude-p13 No P0. No P1.
+  - claude-p13 - Rated P2, not P1: the file is already committed and protected as a canonical file, and the default inline SKILL CONTENT path has no scan at all. Raise it to P1 if the Owner treats threat-model row 10 as load-bearing.
+  - codex-p14 Payload 14: no P0 or false declared condition established.
+  - claude-p14 VERDICT: GO This payload splits audit_emit.py into a facade over _lib/_audit_emit_parts that keeps the action list, field filters, pass-through set, default-deny, fail-open writer, patch points and Python 3.9 compatibility, as far as cou...
+  - claude-p15 No declared condition is contradicted by this payload, and I found no P0.
+  - claude-p15 None at P1.
+  - claude-p15 VERDICT: GO Every branch, enum, constant and fail-open path removed from audit_emit.py in this payload comes back unchanged and in the same order in _lib/_audit_emit_parts/, bound to the facade's globals so patch points still work, Pytho...
+  - codex-p16 Payload 16: no declared condition demonstrated false; no P0 found.
+  - codex-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:167
+  - codex-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:455
+  - codex-p16 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:347
+  - codex-p16 VERDICT: GO-WITH-CONDITIONS The findings warrant follow-up, but this payload establishes neither a false declared condition nor a P0.
+  - claude-p16 P0: none found.
+  - claude-p16 P1-1. Common valid commands are blocked as "unparseable"
+  - claude-p16 P1-2. The scan's limits let commands through, against CHANGELOG [1.4.4] lines 93-94 ("fails closed ... at its depth, size and word limits")
+  - claude-p16 P1-3. Two parsing defects let a simple prefix skip the scan
+  - claude-p16 VERDICT: GO-WITH-CONDITIONS All three declared conditions this payload can test (5, 6 and 7) hold against the code and no P0 was found, but the new indirect-execution guard, on by default, blocks common valid $(...) one-liners and lets c...
+  - codex-p17 No P0 or false declared condition was established within this payload. Python 3.9.6 syntax and ordinary helper checks passed; federation package and flat imports passed. Findings below are based on static integration review.
+  - codex-p17 P1 ? .claude/hooks/check_canonical_edit.py:624; .claude/hooks/_lib/canonical_edit/entry.py:129. Component ImportError is classified as an integrity failure and blocks even noncanonical edits after a partial installation. This inverts the...
+  - codex-p17 P1 ? .claude/hooks/check_canonical_edit.py:123. Failure to import guards.py silently substitutes an empty guard list. The remaining modules can bind successfully, so --is-canonical returns successful noncanonical classifications for ever...
+  - codex-p17 VERDICT: GO-WITH-CONDITIONS Two undeclared P1 regressions and four P2 follow-ups remain, without a demonstrated P0 or contradiction of a declared condition in this payload.
+  - claude-p17 P1 ? .claude/hooks/_lib/effective_config.py:544, .claude/hooks/_lib/claude_md_excludes.py:38-49 and :52-70. A crafted claudeMdExcludes value makes the tamper classifier fail open.
+  - claude-p17 - Precondition: write access to a settings layer ? the exact case the detector exists for. Not P0, because both detectors are advisory and the project/local settings files stay canonical-guarded.
+  - claude-p17 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload's code and no P0 was found, but one undeclared P1 (a crafted claudeMdExcludes value makes classify_tampering drop every settings-tamper finding) goes to the ...
+  - codex-p18 No P0 or false declared condition found in payload 18. Benign Python 3.9 checks passed for original-text offsets, overlapping redactions, extracted imports, facade globals and policy exports.
+  - claude-p18 - None at P1.
+  - claude-p18 VERDICT: GO Conditions 4, 5, 7 and 9 hold for the code in this payload, the two moved modules keep their behavior, Python stays standard-library only and 3.9 compatible, and I found no P0 or P1, only four P2 follow-ups.
+  - codex-p19 Payload 19/32: no P0 or false declared condition found. The moved functions preserve facade-global lookup, and installation includes both new packages. Bounded-exit suppression matches condition 8?s declared limitation.
+  - codex-p19 VERDICT: GO No declared condition was falsified and no P0 was found; the fragment-loader failure handling remains a nonblocking P2 follow-up.
+  - claude-p19 P1 ? the bounded-exit change silently blinds the spawn file-overlap rail.
+  - claude-p19 - This is a governance rail disabled silently. It fails open (no session is blocked) and enforcement is opt-in, which is why this is P1 and not P0. Neither condition 8 nor the CHANGELOG mentions stale canonical-log readers. The test harn...
+  - claude-p19 VERDICT: GO-WITH-CONDITIONS The declared conditions this payload touches (5 for audit_log's parts, 7 and 8) hold against the code and no P0 was found, but the new bounded-exit export silently blinds check_agent_spawn's file-overlap rail,...
+  - codex-p20 VERDICT: GO No false declared condition, P0 defect, or new regression was found in payload 20.
+  - claude-p20 P0: none.
+  - claude-p20 P1: none.
+  - claude-p20 VERDICT: GO Against the code, declared conditions 5 and 7 hold for this payload: the 13 kernel rows are present and match by segment glob, giving 123 patterns and 222 files. The check_agent_spawn split resolves every moved name through t...
+  - codex-p21 VERDICT: GO This payload reveals no false declared condition or P0 defect.
+  - claude-p21 P0: none.
+  - claude-p21 NEW FINDINGS (annex): no undeclared P1 found in this payload.
+  - claude-p21 VERDICT: GO The declared conditions this payload touches (5, 6 and 7) hold against the code, the facade's import and exec path fails open on infrastructure faults and keeps every input-side fail-closed matcher, and the only findings are ...
+  - codex-p22 Payload 22: no P0 or false numbered release condition established.
+  - codex-p22 P1 ? .claude/hooks/check_canonical_edit.py:624
+  - codex-p22 VERDICT: GO-WITH-CONDITIONS The infrastructure-failure regression belongs in the signed annex under the cut rule, and this payload establishes neither a P0 nor a false numbered condition.
+  - claude-p22 P1. check_canonical_edit.py:118-127 and :616-640; mirror at _lib/canonical_edit/entry.py:126-134. When the canonical_edit package is only partly present, the failure direction is undeclared, inverted against the stated doctrine, and spli...
+  - claude-p22 Why P1 and not P0: it needs a partial or corrupted install. Normal install and upgrade deliver the package, and the user can recover through Bash or the terminal (re-run upgrade.sh), which this hook does not gate.
+  - claude-p22 3. check_canonical_edit.py:36-40. The module docstring still promises "Any internal exception ? allow". The code fails closed on canonical hook faults (entry.py:384-395) and, per the P1, on component import failure.
+  - claude-p22 VERDICT: GO-WITH-CONDITIONS Every declared condition that touches this payload holds against the code, and I found no P0. The rebuilt canonical-edit module keeps its names, patch points and Python 3.9 compatibility. The one undeclared P1...
+  - codex-p23 Payload 23/32: no P0 or false declared condition identified. Static checks support preservation of facade globals and patch points. Python 3.9 grammar checks passed for 20 reviewed files.
+  - codex-p23 No new P1 findings.
+  - codex-p23 VERDICT: GO The reviewed changes reveal only nonblocking compatibility and diagnostic defects, with no P0 or demonstrated contradiction of a declared condition.
+  - claude-p23 P0: none.
+  - claude-p23 NEW FINDINGS (annex): none at P1.
+  - claude-p23 VERDICT: GO The declared conditions this payload touches (5, 7, 9 and 10) hold against the code, the moved pair-rail and precompact code keeps its names, patch points and fail-open direction, and the remaining findings are P2 follow-ups ...
+  - codex-p24 Payload 24/32: no P0 or false declared condition identified. The spool bytecode fix precedes helper imports. Refactor binding checks, 53 selected existing tests, and Python 3.9.6 smoke checks passed. No files modified.
+  - codex-p24 No new P1 findings.
+  - codex-p24 VERDICT: GO-WITH-CONDITIONS No release-blocking violation was found in this payload, but two nonblocking correctness issues remain.
+  - claude-p24 P0: none.
+  - claude-p24 NEW FINDINGS (annex): none. No undeclared P1 in this payload.
+  - claude-p24 VERDICT: GO In this payload every declared condition it touches (3(c), 7 and the matching CHANGELOG lines) is true against the code, the moved audit-query and budget-summary logic keeps its name lookup, patch points and write locations, ...
+  - codex-p25 Read-only review of payload 25; Bash syntax check passed. No P0 or false declared condition identified.
+  - codex-p25 VERDICT: GO-WITH-CONDITIONS The unchecked traversal status warrants a backup-integrity follow-up but establishes neither a P0 nor a false declared condition.
+  - claude-p25 P0: none.
+  - claude-p25 NEW FINDINGS (annex): none at P1.
+  - claude-p25 VERDICT: GO This payload holds only the ceo-backup.sh change, which correctly limits the memory/ snapshot to regular files and stops macOS tar from writing AppleDouble members, as the CHANGELOG states; it falsifies no declared condition ...
+  - codex-p26 Payload 26/32: no P0 or declared-condition violation established.
+  - codex-p26 No new P1 findings.
+  - codex-p26 VERDICT: GO-WITH-CONDITIONS The decomposition preserves runtime namespace behavior, but two nonblocking source-inspection regressions require follow-up.
+  - claude-p26 None. No undeclared P1 was found in this payload.
+  - claude-p26 VERDICT: GO No declared condition is false against this payload and there is no P0 or undeclared P1: the ceo-boot facade keeps its runtime behavior, and the six findings are P2 follow-ups (four on narrower test, lint and check coverage, ...
+  - codex-p27 No P0 or false declared condition was established in payload 27. The shown condition 3 fixes passed inspection and an in-memory malformed-record check.
+  - codex-p27 No new P1 findings.
+  - codex-p27 VERDICT: GO-WITH-CONDITIONS The payload has four nonblocking P2 follow-ups, with no established P0 or contradiction of a declared condition.
+  - claude-p27 P1 - .claude/scripts/ceo-restore.sh:190 (with _restore_archive.py:112-113 and ceo-backup.sh:264)
+  - claude-p27 VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches (3b, 3c, 7) holds and there is no P0, but one new P1 goes to the annex: ceo-backup.sh --include-plans keeps symlinks, so ceo-restore.sh refuses the whole archive; ...
+  - codex-p28 Payload 28/32: no P0 or false declared condition established.
+  - codex-p28 No new P1 findings.
+  - codex-p28 VERDICT: GO-WITH-CONDITIONS No declared condition is falsified by this payload and no P0 was found, while five P2 defects remain for follow-up.
+  - claude-p28 - No declared condition is false against this payload. No P0 found.
+  - claude-p28 P1. .claude/hooks/_lib/_installer_write_safety/__init__.py:36 ? the moved code breaks the exception hierarchy.
+  - claude-p28 - Not P0: the failure is still a nonzero exit, so CI fails closed, it is maintainer-only, and no file in today's scripts/*.sh corpus triggers it (grep for '"of=' and a backtick inside '$(...)' found nothing).
+  - claude-p28 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and there is no P0, but the facade's rebinding breaks the Incomplete/ParseError hierarchy: the installer census now crashes (still exiting nonzero, so CI fai...
+  - codex-p29 No P0 or false declared condition established in payload 29.
+  - codex-p29 P1 ? .claude/scripts/check_contamination.py:132
+  - codex-p29 P1 ? .claude/scripts/_contamination_inventory.py:76
+  - codex-p29 VERDICT: GO-WITH-CONDITIONS This payload establishes no release-blocking condition, but two P1 regressions and three P2 follow-ups remain.
+  - claude-p29 P0: none.
+  - claude-p29 NEW FINDINGS (annex): none at P1.
+  - claude-p29 VERDICT: GO This payload moves check_contamination.py onto thin-entry-point modules that rebind correctly to the entry point's own namespace, import and install on Python 3.9 with only the standard library, and fail closed as a CI gate; ...
+  - codex-p30 Payload 30/32: no P0 or false declared condition established. Python 3.9.6 checks found no regression in the moved functions? bindings; model availability and hook-map checks passed.
+  - codex-p30 No new P1 findings.
+  - claude-p30 P0
+  - claude-p30 No undeclared P1 in this payload.
+  - claude-p30 VERDICT: GO The declared conditions this payload touches (3(a), 7, 9, 10, 12) all hold against the candidate tree, the context-budget and lessons facades keep their names, patch points and file-relative paths, and the only findings are m...
+  - codex-p31 Payload 31: no P0 or false declared condition found. The three extraction reviews passed import, global-binding, export and Python 3.9 checks.
+  - codex-p31 No new P1 findings.
+  - claude-p31 - Declared conditions this payload touches: condition 7 (entry points keep their paths; logic moves to _lib modules; a hand-patched script must be patched again in its module) is TRUE against this diff. The candidate pin '.claude/governa...
+  - claude-p31 None at P1.
+  - claude-p31 - A maintainer who runs --hook-latency with CEO_AUDIT_LOG_PATH exported appends about 1,000 or more measured hook rows to the live HMAC chain. That breaks the docstring promise "never the real ~/.claude" and is the same class as the diag...
+  - codex-p32 Payload 32: no P0 or false declared condition identified in the reviewed changes.
+  - codex-p32 No new P1 findings.
+  - codex-p32 VERDICT: GO The reviewed payload reveals only P2 follow-ups, with no identified P0 or contradiction of a declared condition.
+  - claude-p32 NO P0 FOUND.
+  - claude-p32 P1 ? .github/scripts/validate-pair-rail-verdict.py:85-88, :770-772 and .claude/scripts/validate-governance.sh:721, against .claude/governance/gate-scripts-manifest.txt:2,8 (ADR-192).
+  - claude-p32 VERDICT: GO-WITH-CONDITIONS Every declared condition this payload touches checks out against the tree and I found no P0, but one undeclared P1 goes in the signed annex: two ADR-192 gate scripts now hand their decisions to the unpinned _l...
+  - GA-only conditions (v1.4.4):
+  - Da tag `v1.4.4-rc.1` (commit `37a3b89bd142`) para o candidato do GA mudou um único arquivo, este `.claude/plans/PLAN-198/CONDITIONS-ga.md`: o código, os testes, a documentação e o CHANGELOG são os da rc (o `prepare` do kit recusa um candidato do GA em que algo fora de `.claude/plans/PLAN-198/` mudou depois da tag rc). As condições e as notas acima, inclusive as de P1, seguem abertas no GA como estavam na rc e voltam a ser assinadas nos campos do GA; nenhuma foi corrigida entre a rc e o GA.
+  - As condições e as notas acima foram escritas para o re-pass da v1.4.4-rc.1. Onde citam um arquivo da evidência daquele re-pass (nome com `rc1`, como `scope-rc1.txt` e `withheld-rc1.txt`), no GA vale o arquivo correspondente desta evidência, com `ga` no nome (`scope-ga.txt`, `withheld-ga.txt`), e as contagens dele. A cópia do candidato que os revisores do GA leem contém também a evidência commitada do re-pass da rc (`.claude/plans/PLAN-198/repass-rc1/`); os arquivos dela acima do limite de entrada do redator saem da cópia e entram em `withheld-ga.txt` com o motivo, e por isso o GA retira mais arquivos que a rc.
+lane_notes:
+  - codex-p01 Reviewed payload 1/34 and its candidate-tree integration. No P0 or false declared condition established within this scope.
+  - codex-p01 VERDICT: GO This payload establishes neither a false declared condition nor a P0 defect, and no new actionable finding was identified.
+  - claude-p01 P0: none.
+  - claude-p01 NEW FINDINGS (annex): none at P1.
+  - claude-p01 VERDICT: GO Payload 1 has no P0 and leaves every declared condition true against the candidate tree: the kernel list covers the new audit_emit package, the split binds and resolves every name through the facade with its fail-open and sym...
+  - codex-p02 Payload 2/34: no P0 or false declared condition established. Verified 89 unchanged declarations, 173 preserved dispatch branches, facade global lookup, and isolated Python 3.9 binding checks. The redacted numeric literal required an in-m...
+  - codex-p02 NEW FINDINGS (annex): no P1 findings.
+  - codex-p02 VERDICT: GO The diagnostic formatting regression is nonblocking, and this payload establishes neither a false declared condition nor a P0 defect.
+  - claude-p02 P0: none.
+  - claude-p02 NEW FINDINGS (annex): none at P1.
+  - claude-p02 VERDICT: GO Payload 2 only moves the audit_emit scrub arms and wrappers into parts that bind to the facade, with every name resolved and the 173 arms, 7 drop paths and default-deny in base order, still standard-library and Python 3.9 com...
+  - codex-p03 Payload 3/34: no P0 or false declared condition established.
+  - codex-p03 NEW FINDINGS (annex): none at P1.
+  - codex-p03 VERDICT: GO The annotation-introspection regression is nonblocking, and this payload reveals no P0 or contradiction of a declared condition.
+  - claude-p03 P0: none.
+  - claude-p03 NEW FINDINGS (annex): none at P1.
+  - claude-p03 VERDICT: GO The 13 audit_emit parts in this payload match the base code, apart from one additive enum the CHANGELOG declares; every name they use resolves in the facade, they stay standard-library only, Python 3.9 compatible and fail-ope...
+  - codex-p04 Payload 4/34: no P0 or false declared condition established. The reviewed splits preserve facade-global lookup and installation coverage. Python 3.9 parsing passed. Full emitter import was prevented by redaction-induced syntax damage out...
+  - codex-p04 P1 ? .claude/hooks/_lib/_audit_emit_parts/writer.py:761
+  - codex-p04 No additional P1 identified.
+  - codex-p04 VERDICT: GO-WITH-CONDITIONS The carried audit-loss defect and reporting and storage follow-ups remain, but this payload establishes neither a false declared condition nor a P0.
+  - claude-p04 P0: none.
+  - claude-p04 NEW FINDINGS (annex): none at P1.
+  - claude-p04 - writer.py:603-604/687/761: when mkdir or the FileLock open raises OSError before 'line' exists, the code raises UnboundLocalError and the event is lost with no /tmp fallback. This is the codex-p03 P1 in the signed lane notes. The base ...
+  - claude-p04 VERDICT: GO Payload 4/34 moves the audit_emit writer and workflow emitters, the audit_log parts and the audit-query parts without changing behaviour: the text matches the base, the facades rebind every name, write locations stay put, the...
+  - codex-p05 Payload 5/34: no P0 or false declared condition established. Python 3.9.6 checks confirmed shared globals, facade-relative paths and benign execution. Audit-query integration checks passed. No files modified.
+  - codex-p05 P1 ? .claude/hooks/_lib/_bash_safety_parts/fact_state.py:327
+  - codex-p05 No new P1 identified.
+  - codex-p05 VERDICT: GO-WITH-CONDITIONS The carried unsafe-write defect and two nonblocking follow-ups remain, while this payload establishes neither a P0 nor a false declared condition.
+  - claude-p05 - The fact-gate state write is byte-identical to the base. Its predictable-tmp/O_TRUNC symlink issue is codex-p04's signed P1.
+  - claude-p05 - Side effect of this delta: every indirect hit except bash_computed_canonical_target is tagged destructive=True (posture_scan.py:582). So the default-ON shadow fact gate now also persists state for those blocks. That gives the declared ...
+  - claude-p05 P0: none.
+  - claude-p05 None at P1. Every P1 that touches this payload is already in the signed lane notes:
+  - claude-p05 VERDICT: GO This payload's eleven files are byte-identical to the rc evidence, match the base code apart from the declared PLAN-195 additions, and make none of conditions 5, 6 or 7 false; I found no P0 and no new P1, only P2 follow-ups a...
+  - codex-p06 Payload 6/34: no P0 or false declared condition established. Facade-global binding and file-relative lookups are preserved. All 11 payload files parse on Python 3.9.6. No files modified.
+  - codex-p06 P1 ? .claude/hooks/_lib/_ceo_boot_parts/cache_recommendations.py:75
+  - codex-p06 VERDICT: GO-WITH-CONDITIONS No release-blocking violation was established in this payload, while one inherited unsafe-write defect and two cache reliability defects warrant advisory follow-up.
+  - claude-p06 P0: none. No declared condition is false against this payload.
+  - claude-p06 NEW FINDINGS (annex): no undeclared P1.
+  - claude-p06 - The rc ceo-boot P1-a/P1-b (in harness_governance.py, model_persona.py, scheduled_cache.py and ceo-boot.py) concern files outside this payload. They stay as declared in the lane notes.
+  - claude-p06 VERDICT: GO The moved Bash-safety, budget-summary and ceo-boot code resolves every name, keeps its fail directions and ships to installs, and no declared condition is false. The only behaviour change, an undeclared narrowing of the E3 fi...
+  - codex-p07 Payload 7: no P0 or false declared condition established. Condition 7?s extraction mechanism preserves facade globals and file-relative resolution. Python 3.9.6 compilation passed for 15 related files; isolated checks found no unresolved...
+  - codex-p07 P1 ? .claude/hooks/_lib/_ceo_boot_parts/telemetry_candidates.py:335
+  - codex-p07 VERDICT: GO-WITH-CONDITIONS The confirmed defects warrant advisory follow-up, but none establishes a P0 or contradicts a declared release condition within this payload.
+  - claude-p07 - Nothing in this payload makes conditions 1-14 or the GA-only conditions false. No P0.
+  - claude-p07 - P1 (declared) ? .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:300-325 and :356
+  - claude-p07 - P1 (declared) ? .claude/scripts/ceo-boot.py:120-178, against _ceo_boot_parts/model_persona.py:6 and the TIER_A_CHECKS row in scheduled_cache.py
+  - claude-p07 - None at P1. I found no undeclared P1 in this payload.
+  - claude-p07 VERDICT: GO No declared condition is false against this payload and it has no P0; the only P1s in this code are the two already declared through the signed claude-p06 lane notes, and everything else is a P2 follow-up.
+  - codex-p08 Payload 8: no P0 or false declared condition established. Context-budget extraction preserves its declarations and bindings. The findings below were already recorded during the rc review and remain present.
+  - codex-p08 P1 ? .claude/scripts/_contamination_inventory.py:76, reached through .claude/hooks/_lib/_contamination/term_scan.py:38. With core.symlinks=false, tracked symlinks materialize as regular files. The new reader unconditionally calls readlin...
+  - codex-p08 P1 ? .claude/scripts/check_contamination.py:132. If an ancestor of the private-terms file is inaccessible, os.path.lexists() suppresses the permission error and reports absence. The scanner silently omits private terms and can report oth...
+  - codex-p08 VERDICT: GO-WITH-CONDITIONS No release-blocking condition was established, while the carried contamination defects and compatibility regressions require follow-up.
+  - claude-p08 P0: none.
+  - claude-p08 NEW FINDINGS (annex): no undeclared P1.
+  - claude-p08 VERDICT: GO Payload 8 makes no declared condition false and holds no P0 or undeclared P1: the moved contamination and context-budget code resolves every name and patch point through its facade, ships to installs, stays standard-library a...
+  - codex-p09 Payload 9: no P0 or false declared condition established. Context-budget and transcript-cost extraction checks preserved implementation bodies and facade behavior. Python 3.9 checks and 58 existing context-policy tests passed. No files m...
+  - codex-p09 NEW FINDINGS (annex): None at P1.
+  - codex-p09 VERDICT: GO The reviewed payload establishes neither a false declared condition nor a P0 defect, and the two census compatibility issues are nonblocking follow-ups.
+  - claude-p09 P0: none.
+  - claude-p09 - P1, declared through lane notes claude-p08 and claude-p28. Location: .claude/hooks/_lib/_installer_write_safety/__init__.py:36.
+  - claude-p09 None at P1.
+  - claude-p09 VERDICT: GO This payload's 13 files match the rc1-reviewed blobs and make no declared condition false; I found no P0 and no new undeclared P1, since the one P1 still present (the census Incomplete/ParseError split) is already declared in...
+  - codex-p10 Payload 10/34: no P0 or false declared condition established. Both packages are delivered by the installer, and lessons functions retain facade globals and file-relative paths. All 11 payload files passed Python 3.9 grammar checks. Censu...
+  - codex-p10 P1 ? .claude/hooks/_lib/_lessons_parts/candidates.py:136
+  - codex-p10 VERDICT: GO-WITH-CONDITIONS No declared condition is shown false and no P0 was found, while the unconfined candidate writer warrants an advisory P1 annex.
+  - claude-p10 P0: none.
+  - claude-p10 CARRIED, NOT NEW (already in the signed lane notes as claude-p08 P1 and claude-p28 P1, codex-p09 and claude-p09 P2). I confirmed it against this payload's code:
+  - claude-p10 NEW FINDINGS (annex): none. No undeclared P1 in this payload.
+  - claude-p10 VERDICT: GO Against the code in this payload, every declared condition it touches holds (7, 5, 13 and 14), the moved census and lessons code binds to its entry points with the same names, file-relative paths and fail directions, there is...
+  - codex-p11 Payload 11: no P0 or false declared condition established. Read-only Python 3.9.6 checks confirmed facade bindings and imports. In-memory comparisons found 83 extracted function/class definitions unchanged from the base; pair-rail?s subs...
+  - codex-p11 No newly discovered P1. The following signed rc finding remains reproducible by code inspection:
+  - codex-p11 P1 ? .claude/hooks/_lib/_pair_rail_parts/part_01.py:477: When the manifest lacks the host triple, compatibility is evaluated before native-payload resolution, regular-file validation and hashing. A qualifying newer installation can retur...
+  - codex-p11 VERDICT: GO-WITH-CONDITIONS No release-blocking violation was established in this payload, while the carried payload-verification defect and nonblocking follow-ups remain open.
+  - claude-p11 - Carried annex item. The claude-p10 P1 at part_01.py:477-486 is still present: the missing-triple route computes no sha256, and CHANGELOG:191 "still computed and recorded" holds only on the sha-mismatch route. It is already in the signe...
+  - claude-p11 P0: none.
+  - claude-p11 NEW FINDINGS (annex): none at P1.
+  - codex-p12 Payload 12/34: no P0 or false declared condition identified. Python 3.9.6 syntax, import, namespace and patch-point checks passed. Policy and PreCompact moved declarations match the baseline. No files modified.
+  - codex-p12 P1 ? .claude/hooks/_lib/_profile_opus_parts/latency.py:119. Profiling inherits CEO_AUDIT_LOG_PATH and explicit audit sidecar overrides despite assigning temporary HOME and CEO_AUDIT_LOG_DIR. Synthetic events can therefore reach live audi...
+  - codex-p12 No new P1 findings.
+  - codex-p12 VERDICT: GO-WITH-CONDITIONS The carried audit-isolation defect and bootstrap follow-up remain open, without an identified P0 or falsified declared condition.
+  - claude-p12 P0: none.
+  - claude-p12 ALREADY DECLARED P1, STILL PRESENT (not new; it is in the signed lane notes as claude-p11 and codex-p11)
+  - claude-p12 - P1, _profile_opus_parts/latency.py:119-126 and :198-199, with the doc promise at hook_latency_docs.py:87.
+  - claude-p12 NEW FINDINGS (annex): no undeclared P1 in this payload.
+  - claude-p12 VERDICT: GO Payload 12 contradicts none of the declared conditions and has no P0: conditions 5 and 7 hold against the code, the moved policy, PreCompact, profiler and reality-ledger code keeps its name lookup, patch points, fail-open dir...
+  - codex-p13 Payload 13/34: no P0 or false declared condition established. Python 3.9 syntax, facade bindings and installer delivery checks passed. No files modified.
+  - codex-p13 P1 ? .claude/hooks/_lib/_spool_writer_parts/drain.py:412; also :529 and .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:188. The drain ignores os.write's returned byte count, reports the entire batch appended, then compacts journals ...
+  - codex-p13 VERDICT: GO-WITH-CONDITIONS This payload establishes neither a false declared condition nor a P0, while the inherited audit-loss defect and census weakness warrant follow-up.
+  - claude-p13 P0: none.
+  - claude-p13 NEW FINDINGS (annex): no undeclared P1.
+  - claude-p13 - The P1 already recorded in the lane notes claude-p12 and claude-p19 (the bounded exit blinds the FILE ASSIGNMENT overlap rail) still reproduces on this candidate:
+  - claude-p13 - Impact: advisory only. In State 0, decide() always allows (check_budget.py:750). This is the same class as the carried overlap-rail P1, but neither condition 8 nor the CHANGELOG names it.
+  - claude-p13 - Fix: apply the carried P1's fix (have readers also scan state/audit-spool.*.jsonl and *.draining.*, bounded and read-only, or write these governance events synchronously). Alternatively, declare in Known-open that readers of the canoni...
+  - claude-p13 VERDICT: GO Conditions 3(c), 5, 7 and 8 hold against this payload's code and the moved spool_writer and reality-ledger code keeps its bindings, defaults, patch points and fail-open direction; I found no P0 and no undeclared P1, and the o...
+  - codex-p14 Payload 14/34: no P0 or false declared condition established. Facade binding preserves global lookup and patch points. All seven spool functions retain their base ASTs; the agent-spawn comparison preserves 59 functions/classes except mai...
+  - codex-p14 P1 ? .claude/hooks/_lib/_spool_writer_parts/writer.py:416; also :192 and :323. Short writes are acknowledged as durable. If os.write returns fewer bytes than requested without raising, spool_append still records commit and sets _LAST_APP...
+  - codex-p14 P1 ? .claude/hooks/_lib/agent_spawn/file_assignment.py:558; .claude/hooks/_lib/_audit_emit_parts/writer.py:145. The classifier accepts 64 paths, but both serialization stages cap their hashes at 512 characters. Only 39 complete 12-charac...
+  - codex-p14 P1 ? .claude/hooks/_lib/agent_spawn/file_assignment.py:340; .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:348. The overlap reader consults only the canonical log, while registered hooks suppress exit draining. Pending assignments r...
+  - codex-p14 VERDICT: GO-WITH-CONDITIONS The audit-durability and overlap defects warrant advisory annex findings, while this payload establishes neither a P0 nor a false declared condition.
+  - claude-p14 P0: none.
+  - claude-p14 NEW FINDINGS (annex): none at P1.
+  - claude-p14 - P1, agent_spawn/file_assignment.py:327-380 with _python-hook.sh:410: _recent_file_assignments tails only the canonical audit log, but under the bounded exit a hook's spawn_file_assignment_recorded row stays in its per-PID spool. With C...
+  - claude-p14 VERDICT: GO Payload 14 makes none of the declared conditions it touches (5, 7, 8, 9) false: writer.py and the security-relevant agent_spawn blocks match the base text line for line, bind to their facades with fail-open infrastructure han...
+  - codex-p15 Payload 15: no P0 or false declared condition established. The 331 registered actions, passthrough set and 173 ordered dispatch branches are preserved. All 251 installed functions resolve their runtime globals through the facade. Python ...
+  - codex-p15 NEW FINDINGS (annex): No new P1 findings.
+  - codex-p15 VERDICT: GO The payload establishes neither a false declared condition nor a P0, and the confirmed annotation-introspection regression is a nonblocking P2.
+  - claude-p15 P0: none. No declared condition is false against this payload.
+  - claude-p15 None at P1 that is new. One P1 already in the signed lane notes is moved here unchanged: the unbound 'line' in _write_event's OSError fallback (codex-p03, writer.py:761). The same code is in the removed text, so it is an older defect, no...
+  - claude-p15 VERDICT: GO Everything this payload removes from audit_emit.py comes back unchanged in the facade or in _lib/_audit_emit_parts, bound to the facade's namespace with the same 331 actions and the same field filters, fail directions, patch ...
+  - codex-p16 Payload 16/34: no P0 or false declared condition established.
+  - claude-p16 No declared condition is false against this payload, and I found no P0.
+  - claude-p16 None at P1.
+  - claude-p16 VERDICT: GO Every branch, enum, constant, helper and emitter this payload removes from audit_emit.py reappears unchanged and in the same order in _lib/_audit_emit_parts/, published through __all__ and bound to the facade's globals so nam...
+  - codex-p17 Payload 17: no P0 or false declared condition established. Compared 206 moved declarations; in-memory Python 3.9.6 checks confirmed helper behavior, facade-global binding and patch points. No files modified.
+  - codex-p17 NEW FINDINGS (annex): none at P1.
+  - codex-p17 VERDICT: GO This payload establishes neither a false declared condition nor a P0, and the annotation-resolution regression is nonblocking.
+  - claude-p17 P0: none.
+  - claude-p17 NEW FINDINGS (annex): none at P1.
+  - claude-p17 5. Related, already in the rc lane notes (codex-p03, codex-p17/p22): the writer.py fallback references the variable line before it is set. The front module's import now also depends on 33 more files, which widens the partial-install clas...
+  - claude-p17 VERDICT: GO This payload only finishes moving audit_emit.py into _lib/_audit_emit_parts: the moved text is unchanged, every name resolves once and is looked up through the facade's namespace, the locks and the spool-writer hookup are kep...
+  - codex-p18 Payload 18: no P0 or false declared release condition established.
+  - codex-p18 Carried P1 findings remain open, as declared in the rc lane notes:
+  - codex-p18 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:167. Quoted parentheses inside command substitutions can cause valid commands to be rejected as unparseable. Minimal fix: track quotes, escapes and nested shell syntax when locating substitu...
+  - codex-p18 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:455. Canonical-path arguments to inline interpreter programs are classified as writes even for read-only operations. Minimal fix: require evidence of a write operation before vetoing those o...
+  - codex-p18 P1 ? .claude/hooks/_lib/bash_indirect_guard.py:347. Recursive launcher scanning omits the depth check; recursion exhaustion reaches the hook?s infrastructure handler and allows the command. Minimal fix: enforce MAX_DEPTH at _scan_segment...
+  - codex-p18 P1 ? .claude/hooks/check_canonical_edit.py:624. A component ImportError blocks even ordinary noncanonical edits after a partial installation. Minimal fix: handle infrastructure import failures separately from integrity rejection, preserv...
+  - codex-p18 P1 ? .claude/hooks/check_canonical_edit.py:123. Missing guard declarations become an empty list, allowing the classification oracle to report success with every path noncanonical. Minimal fix: retain the loading error and return nonzero ...
+  - codex-p18 P1 ? .claude/hooks/_lib/effective_config.py:544. Exclusion-matcher exceptions reach the whole-scan handler, which discards unrelated tamper findings. Minimal fix: bound matching, isolate this check, retain accumulated findings and conser...
+  - codex-p18 No additional P1 identified.
+  - codex-p18 VERDICT: GO-WITH-CONDITIONS The declared defects remain open and one additional parsing follow-up was confirmed, without evidence of a P0 or a false declared release condition.
+  - claude-p18 P0: none found.
+  - claude-p18 P1. .claude/hooks/_lib/bash_indirect_guard.py:154 (quote tracking in _command_substitutions), reached from :229-231 (the scan of an unquoted here-doc body, source_comments=False) and :234 (only shell/eval consumers get their body scanned...
+  - claude-p18 - Not a regression: v1.4.3-rc.1 allowed this too. It is a gap in the new guard, and it contradicts CHANGELOG [1.4.4] line 84, which says the scan covers rm -rf reached "inside sh -c, eval or a here-doc". It is the same class as declared ...
+  - claude-p18 VERDICT: GO-WITH-CONDITIONS Conditions 5, 6, 7, 9 and 10 hold against the code in this payload and I found no P0, but one new undeclared P1 goes to the signed annex: an apostrophe in an unquoted here-doc body hides a later $(...) from th...
+  - codex-p19 Payload 19/34: no P0 or false declared condition established. Applicable claims in conditions 4, 5, 7 and 9 hold. Federation package and flat imports passed on Python 3.9.6; extracted methods retain facade globals and relative-import con...
+  - codex-p19 None at P1.
+  - codex-p19 VERDICT: GO This payload establishes neither a P0 nor a false declared condition, and its two confirmed P2 issues remain carried open follow-ups.
+  - claude-p19 P0: none.
+  - claude-p19 - None at P1.
+  - claude-p19 VERDICT: GO No declared condition this payload touches (4, 5, 7, 9) is false against the code, and I found no P0 or new P1: the federation facade keeps globals, patch points, MRO and the 11-gate fail-closed text unchanged, the PII union ...
+  - codex-p20 Payload 20/34: no P0 or false declared condition established. The original-text offset correction, preserved policy namespace, and declared bounded-exit behavior hold. Python 3.9 checks passed for 18 files; extraction comparisons and har...
+  - codex-p20 P1 ? .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:348; .claude/hooks/_lib/agent_spawn/file_assignment.py:327. Bounded exit leaves assignment events in spools, while the overlap guard reads only the canonical log. Subsequent overla...
+  - codex-p20 No new P1 findings.
+  - codex-p20 VERDICT: GO The reviewed changes establish neither a false declared condition nor a P0, while the carried finding and P2 follow-ups remain nonblocking under this cut.
+  - claude-p20 P0: none.
+  - claude-p20 P1 ? After the bounded-exit export, the spool drains at most 100 events per non-hook process exit, while the work of each drain grows with the backlog.
+  - claude-p20 VERDICT: GO-WITH-CONDITIONS Conditions 4, 5, 7 and 8 hold against this payload's code and there is no P0, but one undeclared P1 goes into the signed annex: with the bounded-exit export, the spool drains at most 100 events per non-hook pr...
+  - codex-p21 Payload 21: no P0 or false declared condition established. Conditions 5 and 7 hold: all 13 kernel additions are present, and extracted functions preserve facade globals and patch points. Python 3.9.6 compilation, imports and benign state...
+  - codex-p21 NEW FINDINGS (annex): no new P1 findings.
+  - claude-p21 P0: none.
+  - claude-p21 NEW FINDINGS (annex): no undeclared P1 in this payload.
+  - claude-p21 VERDICT: GO The declared conditions this payload touches (5, 7 and 9) hold against the code. The 13 kernel rows give 123 patterns and 222 files, both facades keep their names, patch points, fail-open handling of infrastructure faults and...
+  - codex-p22 Payload 22: no P0 or false declared condition established. All 85 function/class declarations remain accounted for. Shared globals, patch points, file-relative paths, CLI ordering and installer delivery are preserved. Python 3.9.6 checks...
+  - codex-p22 No new P1 established. Carried findings remain open.
+  - codex-p22 VERDICT: GO This payload establishes neither a false declared condition nor a P0, and the coverage gap is a nonblocking follow-up.
+  - claude-p22 P0: none.
+  - claude-p22 NEW FINDINGS (annex): no undeclared P1 in this payload.
+  - claude-p22 VERDICT: GO The new check_bash_safety facade loads all 89 moved definitions in a working order into its own namespace, keeps patch points and fail directions, and stays standard-library Python 3.9; declared conditions 5, 6 and 7 hold aga...
+  - codex-p23 Payload 23/34: no P0 or false declared condition established. The canonical-edit package remains kernel-protected, and its normal binding path preserves facade globals and independent caches. The cost-envelope and harness-diagnostic chan...
+  - codex-p23 P1 ? .claude/hooks/check_canonical_edit.py:624; .claude/hooks/_lib/canonical_edit/entry.py:129. A missing extracted component is classified as an integrity failure. The fallback blocks matched invocations before inspecting their input, i...
+  - codex-p23 P1 ? .claude/hooks/check_canonical_edit.py:123. Failure to load guards.py silently substitutes an empty guard list without recording component failure. Other components can bind successfully, leaving --is-canonical returning successful n...
+  - codex-p23 No additional P1 findings beyond the carried findings above.
+  - codex-p23 VERDICT: GO-WITH-CONDITIONS The carried import-failure defects remain open, but this payload establishes neither a false declared condition nor a P0.
+  - claude-p23 - GA-only condition (P1 lane notes stay open): the partial-install P1 reproduces unchanged; it is described below as carried, not filed as new.
+  - claude-p23 P0: none.
+  - claude-p23 1. P1, check_canonical_edit.py:118-127 and :616-640 (same logic at _lib/canonical_edit/entry.py:126-134). Raised by claude-p22, codex-p22 and codex-p17.
+  - claude-p23 Precondition: a partial or corrupted install. Normal install and upgrade deliver the whole package, and the kernel hard-deny still covers kernel paths on its own, so this stays P1.
+  - claude-p23 2. P1, _lib/_ceo_boot_parts/harness_governance.py:300-325 (raised by claude-p06 as P1-a). It parses check_canonical_edit.py looking for an '_PATTERNS =' assignment, which now lives in _lib/canonical_edit/paths.py, so it always falls back...
+  - claude-p23 NEW FINDINGS (annex): no undeclared P1 in this payload.
+  - claude-p23 VERDICT: GO Conditions 5, 7 and the GA identity claim hold for this payload, and its code is byte-identical to the rc. The canonical-edit move keeps its names, patch points, anchors and fail directions except in the partial-install case,...
+  - codex-p24 Payload 24/34: no P0 or false declared condition established. The reviewed portions of conditions 5, 7 and 9 remain consistent with the code.
+  - codex-p24 P1 ? .claude/hooks/_lib/cli_currency.py:22; .claude/hooks/_lib/_pair_rail_parts/part_01.py:547
+  - codex-p24 P1 ? .claude/scripts/_contamination_inventory.py:76
+  - codex-p24 P1 ? .claude/scripts/_restore_archive.py:112; .claude/scripts/ceo-backup.sh:264
+  - codex-p24 VERDICT: GO-WITH-CONDITIONS The new parser fail-direction defect and carried compatibility issues warrant advisory follow-up, but this payload establishes neither a P0 nor a false declared condition.
+  - claude-p24 P0: none.
+  - claude-p24 NEW FINDINGS (annex): none at P1.
+  - claude-p24 Carried, not new: the signed claude-p10 P1 (part_01.py:477-486 with CHANGELOG.md:191) still holds in the GA tree, and this facade exposes it. When the host triple is absent from the manifest, the result is compatible with path set to the...
+  - claude-p24 VERDICT: GO Against the code in this payload, conditions 5, 7, 9 and 10 hold, the moved pair-rail and precompact code keeps its name lookup, patch points and fail directions, the new restore validator fails closed and writes only to its ...
+  - codex-p25 Payload 25/34: no P0 or false declared condition established. Condition 3(c)?s bytecode suppression precedes helper imports. The audit-query extraction preserves facade globals, patch points and installation coverage. Python 3.9 syntax c...
+  - codex-p25 No new P1 findings.
+  - codex-p25 VERDICT: GO-WITH-CONDITIONS No release-blocking violation was established, while four nonblocking correctness issues remain for follow-up.
+  - claude-p25 P0: none.
+  - claude-p25 NEW FINDINGS (annex): none at P1.
+  - claude-p25 VERDICT: GO Payload 25 touches no hook or governance gate. Declared conditions 3(c) and 7 hold against the code, and no other condition is touched or made false. The audit-query facade keeps its names, patch points, write locations and P...
+  - codex-p26 Payload 26/34: no P0 or false declared condition established. Budget-summary namespace, patch-point and import checks passed, along with Python 3.9 syntax checks and Bash syntax validation. No files modified.
+  - codex-p26 NEW FINDINGS (annex): no new P1.
+  - codex-p26 VERDICT: GO-WITH-CONDITIONS The two P2 follow-ups warrant repair, but this payload establishes neither a false declared condition nor a P0 defect.
+  - claude-p26 P0: none.
+  - claude-p26 NEW FINDINGS (annex): none at P1.
+  - claude-p26 4. Carried, not new: ceo-backup.sh:264. The --include-plans branch still copies links with cp -pR, so ceo-restore.sh refuses the whole archive. It is already declared as a P1 in the rc lane notes (claude-p27) and stays open at GA.
+  - claude-p26 VERDICT: GO Payload 26 makes no declared condition false and has no P0 or new P1: the budget-summary split keeps its names, globals, patch points and file-relative paths on Python 3.9 with only the standard library, caller_repo_guard.py ...
+  - codex-p27 Payload 27/34: no P0 or false declared condition established. Condition 7 holds for this split. All 115 base function/class declarations remain present and AST-equivalent in the extracted code. Python 3.9.6 checks confirmed shared facade...
+  - codex-p27 P1 ? .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304. Sentinel discovery still parses check_canonical_edit.py, although _PATTERNS moved to canonical_edit/paths.py:238. Verification returned four fallback patterns instead of ...
+  - codex-p27 No additional P1 findings beyond the carried RC notes.
+  - codex-p27 VERDICT: GO-WITH-CONDITIONS The carried sentinel-discovery defect and reduced lint coverage warrant follow-up, while this payload establishes neither a false declared condition nor a P0.
+  - claude-p27 - Conditions. Condition 7 holds for this file: the entry point keeps its path and the logic now lives in _lib modules. Conditions 3, 5, 13 and 14 are not contradicted by this payload. The GA condition that nothing was fixed between the r...
+  - claude-p27 CARRIED P1 (already declared as open in the signed lane note claude-p06; confirmed still present, not new)
+  - claude-p27 - P1-a: .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:300-325 and :356.
+  - claude-p27 - P1-b: .claude/scripts/ceo-boot.py:120-178, against model_persona.py:6 and scheduled_cache.py:376.
+  - claude-p27 P0
+  - claude-p27 None. I found no undeclared P1 in this payload.
+  - claude-p27 VERDICT: GO The ceo-boot facade keeps name binding, patch points, fail direction, delivery and Python 3.9 standard-library compatibility, no declared condition is contradicted, and the only P1-level defects (fallback sentinel patterns an...
+  - codex-p28 Payload 28/34: no P0 or false declared condition established. Conditions 3(b?c) and 7 are supported by the reviewed code.
+  - codex-p28 P1 ? .claude/scripts/ceo-restore.sh:190, with ceo-backup.sh:264 and _restore_archive.py:112. Backup --include-plans preserves symlinks, but restore rejects the entire resulting archive, even without --restore-plans. Recovery of audit and...
+  - codex-p28 No additional P1 findings.
+  - codex-p28 VERDICT: GO-WITH-CONDITIONS The checked conditions remain supported, while the previously recorded restore, lint and dataclass defects remain unresolved.
+  - claude-p28 P0: none.
+  - claude-p28 - claude-p06 P1-b: the redefinition at ceo-boot.py:120 is dead for dispatch, because scheduled_cache.py:376 captures the copy in model_persona.py:6. The two bodies are identical today.
+  - claude-p28 NEW FINDINGS (annex): no undeclared P1 in this payload.
+  - claude-p28 VERDICT: GO Payload 28 makes no declared condition false: conditions 3(b), 3(c) and 7 and the CHANGELOG restore and harness-gate lines hold against the code. The split code installs and fails in the stated direction, and the review found...
+  - codex-p29 Payload 29/34: no P0 or false declared condition established. The extracted installer implementation is delivered by install.sh. Python 3.9.6 import and grammar checks passed; no files were modified.
+  - codex-p29 No new P1 findings.
+  - codex-p29 VERDICT: GO-WITH-CONDITIONS The confirmed issues warrant follow-up, but this payload establishes neither a P0 defect nor a false declared condition.
+  - claude-p29 - No declared condition is false. No P0.
+  - claude-p29 2. Fail direction: the installer census fails closed even in the carried P1 (an uncaught exception gives exit 1, which validate.yml:411-414 treats as red). One inversion is check-substrate-watch.py:67 (P2-3).
+  - claude-p29 - The defects found are the carried P1 and P2-4/P2-5.
+  - claude-p29 CARRIED P1 (already declared in the lane notes as claude-p08 and claude-p28; still present in the GA candidate, not new)
+  - claude-p29 P1, .claude/hooks/_lib/_installer_write_safety/__init__.py:36
+  - claude-p29 None at P1.
+  - claude-p29 VERDICT: GO-WITH-CONDITIONS No declared condition is false against this payload and I found no P0 and no new P1. The installer-census exception-hierarchy P1 that the lane notes already carry is still in the GA candidate and must stay in ...
+  - codex-p30 Payload 30/34: no P0 or false declared condition established. The following findings remain as recorded in the rc review.
+  - codex-p30 P1 ? .claude/scripts/check_contamination.py:132
+  - codex-p30 P1 ? .claude/scripts/_contamination_inventory.py:76
+  - codex-p30 VERDICT: GO-WITH-CONDITIONS Two carried P1 defects and three P2 follow-ups remain, without evidence of a false declared condition or a P0 defect in this payload.
+  - claude-p30 P0: none.
+  - claude-p30 NEW FINDINGS (annex): none at P1. Codex rated two items in this content P1 at rc1. I checked both against the code: both reproduce, but I rate them P2, for the reasons given under items 1 and 2 below.
+  - claude-p30 - Why P2, not P1: git does not record directory modes, so a PR cannot cause this. A PR that wants the same effect can simply delete the terms file, which is absent-by-design. And in this repository, Rule 1 still returns rc 2 through othe...
+  - claude-p30 - Why P2, not P1: it fails closed, and adopter CI runs on ubuntu-latest.
+  - claude-p30 VERDICT: GO The moved contamination code binds every name to the entry point's namespace, ships to installs, stays standard-library only and Python 3.9 compatible, and fails closed as a CI gate, so no declared condition is false and ther...
+  - codex-p31 Payload 31/34: no P0 or false declared condition established. Condition 3(a)?s inherited-path fix holds. Context-budget?s 83 exports preserve facade globals and class patch points; Python 3.9.6 checks passed. Environment inventory report...
+  - codex-p31 NEW FINDINGS (annex): No new P1 findings.
+  - claude-p31 P0: none.
+  - claude-p31 NEW FINDINGS (annex): no undeclared P1 in this payload.
+  - claude-p31 VERDICT: GO The conditions this payload touches (3(a), 6, 7, 8, 9) all hold against the candidate tree, the context-budget split keeps every name, patch point and fail direction, and the only findings are maintainer-tooling and documenta...
+  - codex-p32 Payload 32/34: no P0 or false declared condition established. The extractions preserve facade globals and path resolution; installer rules include their modules. Python 3.9.6 binding checks passed, with the lessons audit dependency isola...
+  - codex-p32 No new P1 findings.
+  - claude-p32 P0
+  - claude-p32 None at P1.
+  - claude-p32 VERDICT: GO This payload makes no declared condition false and has no P0 or undeclared P1: the lessons and night-mode code moves bind to their entry points and keep their names, patch points, file-relative paths and fail direction, ship ...
+  - codex-p33 Payload 33: no P0 or false declared condition established. Read-only checks confirmed facade bindings, exports, installer delivery, and Python 3.9 compatibility. No files modified.
+  - codex-p33 No new P1 findings. The previously recorded profiler audit-path isolation defect remains unchanged.
+  - codex-p33 VERDICT: GO The confirmed issues are nonblocking P2 follow-ups, with no P0 or contradiction of a declared condition in this payload.
+  - claude-p33 - Nothing in this payload makes a declared condition FALSE. I found no P0.
+  - claude-p33 None at P1. The one P1-class defect visible in this payload is already a signed lane note (codex-p11, claude-p11), so I am not adding it again: the profiler's isolation leaves CEO_AUDIT_LOG_PATH in the environment it passes to the hooks ...
+  - claude-p33 VERDICT: GO Against the candidate tree, payload 33 moves the profiler and reality-ledger logic into modules that keep its name lookup, patch points, fail direction and installation, and hardens the re-pin generator's guard; no declared c...
+  - codex-p34 Payload 34/34: no P0, new P1, or false declared condition established.
+  - codex-p34 P1 ? .github/scripts/validate-pair-rail-verdict.py:88; .claude/scripts/validate-governance.sh:721. Gate decisions depend on helpers absent from gate-scripts-manifest.txt, so helper changes can alter validation without changing the pinned...
+  - claude-p34 P0: none.
+  - claude-p34 NEW FINDINGS (annex): no new P1.
+  - claude-p34 - Carried P1, still open on this code: lane note claude-p32. validate-pair-rail-verdict.py:85-88 and :768-772 and validate-governance.sh:721 hand ADR-192 gate decisions to _lib/cli_currency.py and _lib/model_currency.py. Neither is in ga...
+  - claude-p34 VERDICT: GO-WITH-CONDITIONS All declared conditions this payload touches hold against the tree, there is no P0 and no new P1, and nothing reaches an adopter as a silent model change or a fail-direction inversion; the release still depend...
+gpg_signature: base64:LS0tLS1CRUdJTiBQR1AgU0lHTkFUVVJFLS0tLS0KCmlKRUVBQllLQURrV0lRU3VteU52MnZCR0tIUUdER3ZQejZ6d0F6WGNkQVVDYXZ0NjNSc1VnQUFBQUFBRUFBNXQKWVc1MU1pd3lMalVyTVM0eE1pd3dMRE1BQ2drUXo4K3M4QU0xM0hSQzRnRC9ST2hCdkYvZGRoZjhndEg4U1VsbApQckdLVTdRMkFVbVMxWlBCQmx6QnhwOEEvMzgxVVRQbGtZQXJPSE14Sk8wdHNGZzJENFdKa1JZQm1JTWptY3FHCnFJQUUKPUVGY3cKLS0tLS1FTkQgUEdQIFNJR05BVFVSRS0tLS0tCg==
+```
+
+## Signature verification recipe
+
+base64 -d of the value after "base64:" gives the detached .asc; verify it against
+.claude/plans/PLAN-198/verdict-fields-v1.4.4.md (committed with this file). Signer AE9B236FDAF0462874060C6BCFCFACF00335DC74.
+The conditions, the lane notes and every attempt of this tag are part of the signed
+material (the conditions, lane_notes and attempts lists of the fields).
+
+<!-- VERDICT: GO-WITH-CONDITIONS -->
+## Review record (derived by .claude/plans/PLAN-198/kit/gen_envelope.py)
+
+- Re-pass of candidate 84b83324c820104ae40a616b9273cd6dda4253cf for v1.4.4 against the signed base v1.4.3-rc.1 and the rc tag v1.4.4-rc.1.
+- Each payload was reviewed by two lanes on the same redacted bytes: Codex (read-only
+  sandbox) and Claude Code (read-only tools). A NO-GO from either lane blocks.
+- Evidence: .claude/plans/PLAN-198/repass-ga/, every file pinned by MANIFEST-ga.sha256; the out-of-scope classes are
+  listed per path in scope-ga.txt (outside the payloads does not mean not shipped).
+- Before writing, the generator re-derived every payload and ran the step-15 validator.

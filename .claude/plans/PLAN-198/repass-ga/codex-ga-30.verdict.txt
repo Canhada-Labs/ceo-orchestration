@@ -1,0 +1,24 @@
+Payload 30/34: no P0 or false declared condition established. The following findings remain as recorded in the rc review.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/scripts/check_contamination.py:132
+os.path.lexists() suppresses permission errors. An inaccessible ancestor of the private-terms file therefore silently removes every private term from the scan, potentially producing a clean verdict. Minimal fix: use lstat(), accepting only absence and propagating other errors.
+
+P1 — .claude/scripts/_contamination_inventory.py:76
+With core.symlinks=false, Git materializes tracked link payloads as regular files. Unconditional readlink() rejects these legitimate files and makes the gate exit 2. Minimal fix: support both representations through a no-follow reader while preserving the intended missing-link refusal.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_contamination/term_scan.py:12
+Loading the facade through spec_from_file_location() fails unless .claude/scripts is separately added to sys.path. Normal CLI invocation works. Minimal fix: move the inventory helper into the package and import it relatively.
+
+P2 — .claude/hooks/_lib/_contamination/personal_facade_io.py:3
+Exported NamedTuple classes retain this module as their annotation namespace, but it lacks List, Tuple and Optional; typing.get_type_hints() raises NameError. Minimal fix: import those annotation dependencies.
+
+P2 — .claude/scripts/check_contamination.py:30
+The documentation promises binary-suffix exclusions, but the new scanner ignores skip_suffixes and reads those files. Minimal fix: document the implemented scope and remove the unused parameter.
+
+Validation: Python 3.9 grammar checks passed for all 11 relevant files; import and executable-global checks found no unresolved facade names. Installer inspection confirms delivery of the helpers. Full index-backed validation was unavailable because the supplied copy has no Git metadata. No files were modified.
+
+VERDICT: GO-WITH-CONDITIONS Two carried P1 defects and three P2 follow-ups remain, without evidence of a false declared condition or a P0 defect in this payload.

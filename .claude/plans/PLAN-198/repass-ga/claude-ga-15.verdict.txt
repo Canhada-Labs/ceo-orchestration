@@ -1,0 +1,77 @@
+PAYLOAD 15/34: the start of the .claude/hooks/_lib/audit_emit.py diff (v1.4.3-rc.1..84b83324c820)
+
+SCOPE
+This piece covers four things:
+- The new facade header: imports, guarded imports and the 331-entry _KNOWN_ACTIONS literal, now sorted.
+- The removal of the old module docstring, the fallback writer, EVENT_SCHEMA_V2 and the commented _KNOWN_ACTIONS.
+- The removal of the boot, optimizer, accelerator, quota, compaction, middle-out, supply-chain, E3, E6, model-routing, federation, passthrough, reserved, W5-ops and invisible-unicode allowlists and enums.
+- The removal of the path, lock, rotation and chain-reset-marker helpers, _write_event, _preview and the typed emitters, up to the start of emit_pair_rail_outgoing_redaction_applied.
+
+The diff's index line (c1482b9341fd..dc9e2b69eb9c) matches the one in the rc re-pass evidence (repass-rc1/diff-rc1-14/15/16.patch). So this file is the same blob the rc re-pass reviewed, which agrees with the GA-only condition. I still re-checked it against the candidate tree.
+
+WHAT I CHECKED
+1. Action registry.
+   - I rebuilt the old _KNOWN_ACTIONS from the removed and context lines, using the hunk offsets to place the unchanged hidden federation lines (old 681, 685-686, 691-695).
+   - I compared it entry by entry with the candidate literal at audit_emit.py:45-377. Both hold the same 331 names, with no additions or losses: 30 federation, 13 swarm, 11 tier_policy, 11 goap, and so on.
+   - No installed part exports _KNOWN_ACTIONS. Only actions.py does, and it is not in the install roster at audit_emit.py:415-452.
+   - Source-text readers still find the literal in the facade: check-audit-registry-coverage.py, check-audit-action-name-convention.py and _reality_ledger_parts/audit_actions.py.
+2. Pass-through and reserved sets.
+   - _EMIT_GENERIC_PASSTHROUGH (federation_schemas.py:214-399) keeps the same members and the same "MOVED/REMOVED from passthrough" notes as the old block. The diff aligned that block against the tail of the new _KNOWN_ACTIONS, so its unchanged lines show up as context.
+   - The actions that have their own field filter are still kept out of the pass-through: admin_key_lifecycle_event, bash_canonical_bypass_invoked, mcp_injection_finding, model_refusal_observed, spawn_confidence_advisory, spec_context_sanitized, statusline_sidecar_write and invisible_unicode_blocked.
+   - _RESERVED_ACTIONS is unchanged.
+3. Moved text compared with the removed lines.
+   - writer.py:35-782 has the same text, re-indented in places:
+     - the fallback path, the once-only banner and the 0600 fallback write;
+     - _audit_dir, _log_path, _log_family_dir, _lock_path and _errors_path, with the same CEO_AUDIT_LOG_* precedence;
+     - the rotation threshold and the _normalize_rotation_trigger enum;
+     - the chain-reset-marker ordering (sidecars first, marker line last), with the same fail-closed returns and the path-pollution fast path;
+     - _write_event's spool fallback, its HMAC computed under the lock, and the canary order;
+     - the M9 lock-timeout fallback and _preview.
+   - Allowlists, enums and helpers are unchanged:
+     - boot_schemas.py and federation_schemas.py;
+     - adapters.py, including _ATLAS_REGISTRY (19 rows) and _ATLAS_NAMESPACE_REGISTRY (11 IDs);
+     - _CREDENTIAL_OVERRIDE_*;
+     - the coercion helpers in writer.py:102-170.
+   - The typed emitters are unchanged in workflow.py, resource_events.py, adapters.py and security.py.
+   - emit_credential_rotation_due stays in the facade itself (audit_emit.py:386-410) with the same body.
+4. Moved-code mechanics (checklist item 4).
+   - install() (_audit_emit_parts/__init__.py:20-48) rebuilds every function with FunctionType(code, facade_globals, ...). Name lookups and test patch points (_write_event, _log_path, _breadcrumb, emit_generic and similar) therefore still resolve on the facade, and `global _FALLBACK_NOTIFIED` writes to the facade.
+   - Every global these parts read is defined somewhere:
+     - in the facade: getpass, json, os, re, sys, threading, time, zlib, datetime, timezone, Path, FileLock, FileLockTimeout, _redact, _runtime_paths and the _*_AVAILABLE flags;
+     - in another part's __all__: _AUDIT_PRODUCER_PATH_POLLUTION_REASON_CODES (operations.py:463) and _LEDGER_GATE_SIGNAL (harness_schemas.py:463).
+   - hashlib is always imported inside the function that uses it.
+   - Default values that are evaluated when a part is imported (time.monotonic and time.time) come from parts that import time themselves (streaming.py:7, rate_limits.py:7).
+   - Typing names the facade no longer imports (List, Tuple, Iterator, Callable) appear only in annotations. The module-level annotation `_ATLAS_NAMESPACE_REGISTRY: Dict[...]` in adapters.py is never evaluated, because of `from __future__ import annotations`.
+   - The import order changed (audit_rotation is now imported before audit_hmac). This is harmless: audit_rotation imports only os, pathlib and typing.
+   - The script tools that load the module by file path still work: verify-atlas-binding.py, check_atlas_fpr.py and trading-readonly-escape-hatch.sh. They read _ATLAS_REGISTRY and _ATLAS_NAMESPACE_REGISTRY with getattr after the module runs, and install() has published those names by then.
+5. Fail direction: unchanged. Each guarded import still falls back to its *_AVAILABLE=False flag. The writer still fails open and breadcrumbs any error. The marker paths keep their deliberate fail-closed returns.
+6. Python 3.9 and standard library only: no 3.10+ syntax, and the parts import only from the standard library.
+7. Conditions:
+   - Condition 5 holds for this package: check_arbitration_kernel.py:312 lists `.claude/hooks/_lib/_audit_emit_parts/**/*`.
+   - Condition 7 holds: the audit_emit.py path is unchanged and the logic now lives in _lib/_audit_emit_parts/.
+   - Adopter delivery: scripts/install.sh:1522-1541 copies each hooks/_lib entry, so the new package ships.
+
+P0: none. No declared condition is false against this payload.
+
+NEW FINDINGS (annex)
+None at P1 that is new. One P1 already in the signed lane notes is moved here unchanged: the unbound `line` in _write_event's OSError fallback (codex-p03, writer.py:761). The same code is in the removed text, so it is an older defect, not a regression.
+
+P2 FOLLOW-UPS (all already raised by the rc lanes and still open; listed so they are not lost)
+P2-1 — Duplicate action registry that nothing uses.
+- Where: .claude/hooks/_lib/_audit_emit_parts/actions.py:1-16, with actions_core.py and actions_extended.py.
+- Problem: these files hold a second 331-name _KNOWN_ACTIONS that is never installed or imported. The actions.py docstring says the facade exports it, which is false.
+- Failure scenario: a maintainer registers a new action there. It has no effect at runtime, and _write_event (writer.py:558-560) drops the event as unknown with only a breadcrumb.
+- Fix: delete the three files, or add a test that pins them equal to the facade literal.
+
+P2-2 — The module docstring and its design rules are gone.
+- Where: audit_emit.py:1.
+- Problem: the rules were additive-only, fail-open, concurrent-write safe, redaction and stdlib-only. They no longer appear anywhere in the facade.
+- Fix: restore a short docstring.
+
+P2-3 — Stand-in code in the facade.
+- Where: audit_emit.py:473-480 and :382-383/:455-461.
+- Problem: emit_generic has two branches identical to its fall-through, and iter_events is defined twice. They keep source-scanning tests and checks passing, but those checks now inspect stand-ins instead of the real dispatch (generic_dispatch_04.py) and the real generator (replay.py:342).
+- Behavior is equivalent today.
+- Fix: point the checks at the installed parts, or test behavior directly.
+
+VERDICT: GO Everything this payload removes from audit_emit.py comes back unchanged in the facade or in _lib/_audit_emit_parts, bound to the facade's namespace with the same 331 actions and the same field filters, fail directions, patch points and Python 3.9 standard-library code. Conditions 5 and 7 hold for it, and it shows no P0, no false declared condition and no new P1.

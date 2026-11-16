@@ -1,0 +1,8 @@
+Payload 31/34: no P0 or false declared condition established. Condition 3(a)’s inherited-path fix holds. Context-budget’s 83 exports preserve facade globals and class patch points; Python 3.9.6 checks passed. Environment inventory reports no name drift. No files modified.
+
+NEW FINDINGS (annex): No new P1 findings.
+
+P2 follow-ups:
+P2 — .claude/scripts/diagnose-output-hook.py:42: The child environment clears CEO_AUDIT_LOG_FALLBACK_PATH without replacing it. If a diagnostic child encounters a lock timeout or primary-log write failure after serialization, _audit_emit_parts/writer.py:755–761 can append diagnostic events to the shared /tmp/ceo-audit-fallback-<user>.log, outside temporary-directory cleanup. This residual behavior overstates the helper’s isolation promise but does not contradict condition 3(a)’s narrow fix. Minimal fix: explicitly set CEO_AUDIT_LOG_FALLBACK_PATH beneath tmp. Confirmed by read-only path resolution and static control-flow inspection; no writer was executed.
+
+VERDICT: GO The reviewed changes establish no release-blocking violation, with one nonblocking diagnostic fallback-isolation follow-up.

@@ -1,0 +1,81 @@
+PAYLOAD 33/34: .claude/scripts/profile-opus-4-7.py, .claude/scripts/re-pin-codex.py, .claude/scripts/reality-ledger.py
+
+SCOPE AND METHOD
+I read the three candidate entry points and the code they now load:
+- .claude/hooks/_lib/_profile_opus_parts/ (__init__, smoke, reference, latency, cli, hook_latency_docs)
+- .claude/hooks/_lib/_reality_ledger_parts/ (all ten modules)
+- .claude/scripts/_repin_guard.py
+I compared the moved bodies with the text this diff removes. I also checked:
+- the callers: validate.yml, reality-ledger.yml, diagnose-output-hook.py:79-83, check-substrate-drift.py:414-430;
+- the install path: scripts/install.sh:1524-1541 copies each top-level _lib entry, and :1606-1611 copies every .claude/scripts/*.py, which includes _repin_guard.py, as CHANGELOG:342-346 says;
+- the PLAN-194 constants mold, to see what it does with the values the generator writes.
+This was a static review only. I executed no code.
+
+WHAT HOLDS
+- profile-opus-4-7.py
+  - install() rebuilds every function with FunctionType over the entry point's own globals. Values are deep-copied, so a patch on the entry point reaches the logic and the template modules stay untouched.
+  - Every name the four modules use is imported by the entry point (:49-61) or defined in a sibling module. No name is defined in two modules.
+  - _REF_EXEC_SOURCE is byte-identical, so ref_source_sha256 is stable.
+  - The 103-line docstring of run_hook_latency is put back by install() (__init__.py:61-62).
+  - Adding .claude/hooks to sys.path shadows no standard-library module: no hooks/*.py has a stdlib name, and there is no .claude/scripts/_lib.
+- reality-ledger.py
+  - The ten modules export through __all__. Shared constants come in once, through constants.py.
+  - The classes are rebuilt with methods rebound, staticmethods included.
+  - _REPO_ROOT, redact_secrets and the itimer helpers still come from the entry point (:52-69).
+  - The self-exclusion gains "/_reality_ledger_parts/" (constants.py:55). The detector's findings on its own CEO_* reads therefore stay as they were when reality-ledger.py was excluded by basename.
+  - The fallback added to _read_known_actions (audit_actions.py:38-114) parses files and never imports them. It never runs today: audit_emit.py:45 still holds the literal _KNOWN_ACTIONS, and "actions" is not in the install list (audit_emit.py:415-451). The detector reads the set that is live at runtime.
+- re-pin-codex.py
+  - _GUARD[0] in _repin_guard.py equals _LEGACY_GUARD[0], so older packs are still recognised as molds (:1344-1349).
+  - The new guard reads paths the generator writes as literals, restricted to [A-Za-z0-9._/-] (:939-963), so no shell metacharacters can enter. It runs grep with env -u GREP_OPTIONS LC_ALL=C grep -F, and a grep exit code of 2 or more now refuses instead of passing. That is the intended fail-closed direction for this maintainer ceremony.
+  - _check_guard_read_files (:966-977) is consistent with the pending fields the generator writes (:1694, :1761, :1822). The inherited-prose note no longer contains TODO(owner) (:1598).
+  - parse_pin accepts the live open floor ">=0.128.0" (.claude/governance/codex-cli-pin.txt:199). Without that change the generator would refuse the live pin with EXIT_INPUT.
+- check-substrate-drift.py loads re-pin-codex.py through spec_from_file_location (:414-430).
+  - Any exception is caught and reported (fail-open, named).
+  - It sets dont_write_bytecode first (:1261).
+  - Run as a script, .claude/scripts is sys.path[0], so the _repin_guard import resolves.
+- General
+  - None of the three files is a registered hook. Nothing here disables a governance hook, changes a model or effort, or blocks a session. I found no inversion of fail direction.
+  - Writes stay where they were: the profiler writes to its tempdirs, the ledger to .claude/scripts/local/calibration-history.csv under repo_root, and the generator to the pack directory.
+  - Standard library only. I found no syntax or API newer than Python 3.9.
+- Declared conditions this payload touches
+  - Condition 7 is TRUE: the paths are kept and the logic moved to _lib modules.
+  - Conditions 9 and 10: the generator is consistent with the open-floor pin the CHANGELOG describes (CHANGELOG:199-201).
+  - Condition 2 is TRUE. The new generation-time TODO(owner) check partly addresses a P2 in the v1.4.2-rc.1 annex: before, the generator could write TODO(owner) into prose that its own guard then refuses. CHANGELOG [1.4.4]:435-436 does not claim that cure, and condition 2 explicitly does not say nothing changed in the range.
+  - Nothing in this payload makes a declared condition FALSE. I found no P0.
+
+NEW FINDINGS (annex)
+None at P1. The one P1-class defect visible in this payload is already a signed lane note (codex-p11, claude-p11), so I am not adding it again: the profiler's isolation leaves CEO_AUDIT_LOG_PATH in the environment it passes to the hooks it measures (latency.py:119-127). diagnose-output-hook.py:29-33 strips the full list.
+
+P2 FOLLOW-UPS
+P2-1. .claude/scripts/re-pin-codex.py:496-497 with :2171 (carried from the rc1 lane notes, still open)
+- Scenario: the live pin is the open floor >=0.128.0, so upper is None. plan_range returns a bounded range with widened=True, and old_upper is set equal to new_upper.
+- Four rendered texts then state a widening that never happened ("<A -> <A"):
+  - the pin .new paragraph (:1676);
+  - the commit message (:1438);
+  - the sentinel Scope line the Owner signs (:1744);
+  - the README (:1611).
+- In the constants mold, OLD_UPPER only feeds printf lines (PLAN-194 OWNER-PIN-SIGN.sh:106, :448, :562). The effect is misleading signed text, not a wrong pin.
+- Fix: carry a distinct state, for example widened="bounded-from-floor", and render "open floor >=L -> bounded >=L,<N" in all four places.
+
+P2-2. .claude/scripts/reality-ledger.py:81-83 (carried from the rc1 lane notes)
+- Scenario: the import of the new modules sits outside the FATAL ImportError block (:58-69). A partial install exits 1 with a traceback instead of the documented "2 = detector internal error". That goes against CHANGELOG:112, "Entry points keep ... their observable contracts".
+- The only workflow that runs it, reality-ledger.yml:54-75, is advisory and exits 0 whatever happens.
+- Fix: move the import and the install() call inside that try.
+
+P2-3. .claude/scripts/_repin_guard.py:6-7 against re-pin-codex.py:199, :203-204
+- TODO_MARK, PIN_OUT and the generator path written into GUARD[0] are now defined in two files. _LEGACY_GUARD and the _GUARD[0] match (:1344) only agree because those values happen to be the same.
+- Fix: import TODO_MARK and PIN_OUT from _repin_guard in re-pin-codex.py, or have a test assert they are equal.
+
+P2-4. CHANGELOG.md [1.4.4] (honesty by omission, not a false promise)
+- The entry names _repin_guard.py only as a maintenance helper the installer now copies (:342-346). It does not mention any of the generator's changes:
+  - the guard now reads literal paths;
+  - a grep failure is now a refusal;
+  - the generation-time TODO(owner) refusal;
+  - the open-floor parsing that bounds the range when a pack is generated.
+- Fix: add one line under the maintainer changes.
+
+P2-5. Housekeeping
+- .claude/governance/function-length-grandfather.yaml:1454-1465 still lists profile-opus-4-7.py smoke_checks and main. Both now live in _profile_opus_parts/smoke.py and cli.py. The lint is advisory under ADR-097.
+- .github/CODEOWNERS:122 names only the profiler's entry point, not _profile_opus_parts/ or _reality_ledger_parts/.
+
+VERDICT: GO Against the candidate tree, payload 33 moves the profiler and reality-ledger logic into modules that keep its name lookup, patch points, fail direction and installation, and hardens the re-pin generator's guard; no declared condition is false, there is no P0 and no new P1, and what remains is P2 follow-ups.

@@ -1,0 +1,95 @@
+PAYLOAD 9/34 (v1.4.3-rc.1..84b83324c820)
+
+FILES REVIEWED
+- The payload: .claude/hooks/_lib/_context_budget_parts/{middle_out,status,summarization}.py, _cost_transcripts_parts/{__init__,cli,pricing,records,rollup,routing,routing_helpers}.py and _installer_write_safety/{__init__,commands,engine}.py.
+- For integration, I also read:
+  - the three entry points: .claude/scripts/context-budget.py:180-203, ceo-cost-transcripts.py:229-255 and check-installer-write-safety.py:16-32;
+  - the sibling parts: inventory, compaction, report and the class list of the census package;
+  - the fail-soft loaders: ceo-cost.py:483-533 and _budget_summary_parts/presentation_cli.py:3-30;
+  - install.sh:1520-1550;
+  - canonical_edit/guards.py and paths.py;
+  - the rc1 verdicts for these same files: codex-rc1-08, claude-rc1-08 and claude-rc1-09.
+- Limit: I had read-only file tools and no shell, so I ran nothing. Every finding comes from reading the code against CPython 3.9 semantics.
+
+GA IDENTITY CHECK
+- Every blob id in this payload's index lines matches the one in .claude/plans/PLAN-198/repass-rc1/diff-rc1-08.patch. Examples: middle_out ce67802de5d5, _cost_transcripts_parts/__init__ 0c41b6b1414f, _installer_write_safety/__init__ 0294c5fa9766, engine 256fcf474158.
+- This agrees with the GA-only condition that nothing outside PLAN-198 changed after the rc tag.
+
+DECLARED CONDITIONS TOUCHED
+- Condition 7 is true. The three entry points keep their paths, and the logic lives in _lib packages. Binding resolves every free name:
+  - context-budget: _env_int and _clamp_pct come from compaction.__all__, _clamp_nonneg_int from summarization.__all__, estimate_tokens and _read_text from inventory.__all__. CAT_MCP, THRESHOLD_SKILL_LINES and CHARS_PER_TOKEN are defined in the entry point.
+  - cost-transcripts: the entry point defines _SCRIPT_DIR, _rp and every stdlib name the binder excludes. Every name one part uses from another resolves.
+  - census: each component copies engine's names into itself with setdefault.
+- Condition 5: none of these three packages is among the 13 rows, and the condition does not claim them. Nothing here contradicts it.
+- Conditions 13 and 14: every path is in scope, and nothing here contradicts them.
+- No declared condition is false against this payload.
+
+P0: none.
+
+ADOPTER BLAST RADIUS
+- None of these modules is on a hook path or in the settings files. Each is run by hand:
+  - context-budget.py, behind /context-budget;
+  - ceo-cost-transcripts.py, which ceo-cost.py:495-510 and presentation_cli.py:15-30 load fail-soft (`except Exception` gives a labelled "not importable" note);
+  - the census, which is a maintainer CI gate.
+- No model, effort or session-gate change.
+- install.sh:1524-1548 copies every top-level _lib entry, so the packages ship.
+- The entry points import their package with no guard. On a partial install, running context-budget or the census directly gives a traceback: an infrastructure fault, before any write, in advisory tools.
+
+FAIL DIRECTION, WRITES, PYTHON
+- Fail direction is unchanged:
+  - routing_invariant_safe still turns its own error into INCONCLUSIVE, never GREEN;
+  - a spawn whose placement is 'unplaceable' still gates the window (fails closed);
+  - census parse failures still block, except the carried Incomplete case below, which crashes with a nonzero exit.
+- Writes: context-budget and cost-transcripts stay read-only. The census --write-baseline path is unchanged.
+- Python: standard library only, plus _lib.runtime_paths and _lib.agent_frontmatter. Compatible with 3.9: I found no 3.10+ syntax or APIs.
+
+CARRIED (already declared, still present, not new)
+- P1, declared through lane notes claude-p08 and claude-p28. Location: .claude/hooks/_lib/_installer_write_safety/__init__.py:36.
+  - Cause: _bind_class clones Incomplete with its template base syntax.ParseError. In the entry point, issubclass(Incomplete, ParseError) is therefore False. The rebound `except ParseError` at commands.py:131 (in this payload; also in operands, model and verdicts_b) no longer catches the Incomplete that _read_balanced raises.
+  - Failure scenario: a scanned script with an unbalanced `${` on a sed side crashes the census (traceback, exit 1) instead of becoming an indeterminate site. CI still fails closed.
+  - Fix, as declared: remap __bases__ through the clones, or do not clone exception classes.
+
+NEW FINDINGS (annex)
+None at P1.
+
+P2 FOLLOW-UPS
+1. The D2 removal note now gives a false governance claim. This sharpens the known rc1 stale-text P2.
+   - Where: .claude/hooks/_lib/_context_budget_parts/status.py:97-102.
+   - What is wrong: --probe-status and --json emit "non-canonical, no ceremony: the D2 block in this file". The D2 block now lives in _lib/_context_budget_parts/summarization.py. That path matches the canonical guard ".claude/hooks/_lib/**/*.py" (canonical_edit/guards.py:34; `**` matches zero or more segments, paths.py:181-216). An in-session removal that follows the note is blocked by check_canonical_edit and needs a sentinel.
+   - The listed scope is also incomplete:
+     - status.py:14 imports ENV_SUMMARIZE_OLDEST from .summarization;
+     - context-budget.py:201 names "summarization" in its install tuple;
+     - so deleting the block as written breaks every context-budget.py run;
+     - MiddleOutPolicy (middle_out.py:137-140) uses _clamp_nonneg_int, which is defined in the D2 block. This coupling predates the split.
+   - Same false claim at summarization.py:20-21 and middle_out.py:22-23 ("non-canonical and lives here in scripts/").
+   - Fix: say "canonical (_lib/**): sentinel required" and list the real files: summarization.py, status.py:14 and the D2 record, and the context-budget.py install tuple and CLI flags. Move _clamp_nonneg_int out of the block first.
+
+2. Undeclared tightening of edit governance (new).
+   - What changed: the logic of context-budget.py, ceo-cost-transcripts.py and check-installer-write-safety.py moved from .claude/scripts/, which _CANONICAL_GUARDS does not list, into .claude/hooks/_lib/**, which it does.
+   - Effect on an adopter:
+     - CHANGELOG.md:37-39 and :122-123 say to re-apply a hand patch "to the module". That module now needs a sentinel ceremony that the original patch did not.
+     - Refreshing the embedded pricing table (_cost_transcripts_parts/pricing.py:21-30 and :52-55) is now a canonical edit. That table drives both the cost figures and the routing detector's alias vocabulary (routing_helpers.py:196).
+   - The entry points stay non-canonical, and an edit there can rebind any name after install(). So the guard adds friction without adding protection.
+   - Direction: closed. It blocks edits, never a session.
+   - Fix: add one CHANGELOG line saying that script logic moved into _lib is now under the canonical guard, or leave these non-governance packages outside the guard.
+
+3. Carried rc1 P2: dataclass repr() raises NameError.
+   - Where: _cost_transcripts_parts/__init__.py:54-56.
+   - Cause: the binder rebinds the dataclass __repr__ wrapper, because functools.wraps (reprlib on 3.13) stamps it with the template's __module__. In the entry point's globals, the wrapper's global _thread (get_ident on 3.13) no longer resolves.
+   - Effect: repr() of UsageRecord, ScanCounters, PricingResult and Priced raises NameError.
+   - No production path hits it: collect() returns JSON-safe data, and the `default=str` dumps at ceo-cost.py:768-772 never see a dataclass.
+   - Fix: rebind only functions whose __globals__ is the part module's dict.
+
+4. Carried rc1 P2s in the census package:
+   - _installer_write_safety/__init__.py:29-35 does not rebind property getters, so Site.blocking reads the template's BLOCKING_VERDICTS, not the entry point's.
+   - verdicts_b publishes _commands and _commands_name into the entry point.
+   - The fallback at engine.py:115, parents[3], is .claude, not the repo root.
+
+5. Stale location text (extends the known rc1 P2):
+   - ceo-cost-transcripts.py:32 says "_EMBEDDED_PRICING below", and :241-244 keeps a "Pricing tables" header over nothing.
+   - routing.py:307-321 ends with the ROOT_ENV doc comment that belongs to rollup.py:16.
+   - summarization.py:29 says the action names occur "ONLY in this file", but status.py:79-80 carries them too.
+   - docs/provider-pricing.md:152-153 sends a reader grepping ceo-cost-transcripts.py to a table that now lives in _lib/_cost_transcripts_parts/pricing.py:52.
+   - Fix: name the module paths.
+
+VERDICT: GO This payload's 13 files match the rc1-reviewed blobs and make no declared condition false; I found no P0 and no new undeclared P1, since the one P1 still present (the census Incomplete/ParseError split) is already declared in the signed lane notes and everything else is P2 follow-up.

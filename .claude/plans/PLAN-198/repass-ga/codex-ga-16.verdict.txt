@@ -1,0 +1,10 @@
+Payload 16/34: no P0 or false declared condition established.
+
+All 173 dispatcher branches preserve their order and behavior. Another 142 declarations match the removed code; two enum expansions support the declared Bash-indirect telemetry. Kernel protection and facade requirements hold for this scope.
+
+Python 3.9 checks verified facade-global bindings, exports and representative emitter patch points. One redacted numeric placeholder was substituted only in memory for validation; no files were modified.
+
+NEW FINDINGS (annex): none.
+P2 follow-ups: none.
+
+VERDICT: GO The reviewed decomposition preserves dispatch and facade behavior, with no release-blocking defect established in this payload.

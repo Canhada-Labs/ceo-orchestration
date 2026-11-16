@@ -1,0 +1,10 @@
+.claude/hooks/_lib/_spool_writer_parts/writer.py
+.claude/hooks/_lib/agent_frontmatter.py
+.claude/hooks/_lib/agent_spawn/__init__.py
+.claude/hooks/_lib/agent_spawn/advisories.py
+.claude/hooks/_lib/agent_spawn/entrypoint.py
+.claude/hooks/_lib/agent_spawn/file_assignment.py
+.claude/hooks/_lib/agent_spawn/model_routing.py
+.claude/hooks/_lib/agent_spawn/outcome_telemetry.py
+.claude/hooks/_lib/agent_spawn/prompt_rules.py
+.claude/hooks/_lib/agent_spawn/skill_reference.py

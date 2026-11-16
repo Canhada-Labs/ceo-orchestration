@@ -1,0 +1,8 @@
+Payload 2/34: no P0 or false declared condition established. Verified 89 unchanged declarations, 173 preserved dispatch branches, facade global lookup, and isolated Python 3.9 binding checks. The redacted numeric literal required an in-memory stand-in; no files were modified.
+
+NEW FINDINGS (annex): no P1 findings.
+
+P2 follow-ups:
+P2 — .claude/hooks/_lib/_audit_emit_parts/generic_dispatch_05.py:363: Unknown action names now use raw string formatting instead of the base's repr formatting. If a caller supplies an unknown name containing line-control characters, writer.py:237 appends those characters verbatim to audit-log.errors, breaking diagnostic record boundaries. Minimal fix: restore action!r formatting. Event rejection remains unchanged.
+
+VERDICT: GO The diagnostic formatting regression is nonblocking, and this payload establishes neither a false declared condition nor a P0 defect.

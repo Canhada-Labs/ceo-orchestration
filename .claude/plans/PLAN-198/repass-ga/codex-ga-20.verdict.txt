@@ -1,0 +1,18 @@
+Payload 20/34: no P0 or false declared condition established. The original-text offset correction, preserved policy namespace, and declared bounded-exit behavior hold. Python 3.9 checks passed for 18 files; extraction comparisons and harmless Unicode/overlap checks passed. No files modified.
+
+Carried finding, rechecked:
+P1 — .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:348; .claude/hooks/_lib/agent_spawn/file_assignment.py:327. Bounded exit leaves assignment events in spools, while the overlap guard reads only the canonical log. Subsequent overlapping spawns can escape detection. Minimal fix: include bounded pending-spool reads or synchronously persist assignment events. Already recorded in the rc lane notes.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/secret_patterns.py:991. When normalization changes text, both scans receive a full budget and mapping runs untimed, exceeding the advertised overall bound. Minimal fix: share one deadline across the operation or accurately document the per-frame budget. Carried finding.
+
+P2 — .claude/hooks/_lib/spool_writer.py:532. Normal bounded exits append skip breadcrumbs to audit-log.errors; ceo-diagnose.py:417 consequently reports successful operation as audit write failures. Minimal fix: separate expected-skip telemetry or exclude it from failure counts. Carried finding.
+
+P2 — .claude/hooks/_lib/policy_preprocessors.py:315. The replacement grammar excludes doubled/trailing-hyphen filenames previously checked by lifecycle processing, while other plan consumers still recognize them. Minimal fix: align consumers and document the narrowed grammar. Carried finding.
+
+P2 — .claude/hooks/_lib/_policy_parts/__init__.py:15. Executing fragment docstrings overwrites policy.__doc__, so help(policy) loses the public API documentation. Minimal fix: preserve and restore the facade docstring around installation.
+
+VERDICT: GO The reviewed changes establish neither a false declared condition nor a P0, while the carried finding and P2 follow-ups remain nonblocking under this cut.

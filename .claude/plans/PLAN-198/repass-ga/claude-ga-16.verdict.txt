@@ -1,0 +1,71 @@
+PAYLOAD 16/34: review of the .claude/hooks/_lib/audit_emit.py deletion hunk (v1.4.3-rc.1..84b83324c820)
+
+SCOPE
+This payload only removes lines from audit_emit.py:
+- the tail of emit_pair_rail_outgoing_redaction_applied;
+- the mcp_handler/cross_tenant/soak, rag_*, goap_*, mcp_server_*, policy_*, replay_*, prediction, pattern_* and threat_model_* emitters;
+- iter_events;
+- the whole emit_generic if/elif dispatch chain;
+- emit_session_start/end, emit_prompt_submitted, emit_session_stop and emit_output_scan_finding;
+- _AUDIT_TOKENS_ALLOWLIST and _TOOL_CALL_LIFECYCLE_RECORDED_ALLOWLIST;
+- the codex/grok/council, pair-rail review, directory-added, notification, night-mode and learning-loop enums, regexes and helpers;
+- the git-bypass, env-hijack, egress, adversary, persistent-instructions, hint, settings-tamper, ceremony-lint and salt allowlists;
+- the ledger enums, up to the start of _ledger_int_field.
+Under PLAN-197/ADR-202 (condition 7) this code moves to .claude/hooks/_lib/_audit_emit_parts/. I judged the deletion against where it now lives in the candidate tree. The GA-only condition states the code is byte-identical to rc.1; I did not verify that myself.
+
+WHAT I CHECKED AGAINST THE CANDIDATE TREE
+1. emit_generic. The facade (audit_emit.py:473-480) delegates to _dispatch_generic (generic_dispatch_05.py:361-377), which iterates _GENERIC_DISPATCH_HANDLERS (audit_emit.py:464-470).
+   - Every removed elif branch reappears in the same order across generic_dispatch_01.py to _05.py.
+   - Each branch ends with state["event"]=event; return True, so no branch writes the unscrubbed dict.
+   - The three whole-event-drop branches still return None, so nothing is written: persona_coverage_synthesized (_01.py:436-450), tier_policy_loader_fallback_observed (_03.py:92-96) and audit_producer_path_pollution_detected (_03.py:109-126).
+   - The passthrough is still checked last (_05.py:352). Default-deny is still {"action": action} plus a breadcrumb (_05.py:375-377).
+   - The value coercions match the removed text line by line: ledger_entry_rejected, settings_tamper_detected, salt_rotation_registered, ceremony_lint_unlock_used, pair_rail_case/review_expected (with _coerce_pair_rail_timeout_ms), credential_override_late_set_ignored, swarm_paused_owner_absent, mcp_injection_finding, session_memory_delta_observed, codex/grok/council, the lesson_* and learning branches, statusline_sidecar_write, model_refusal_observed and admin_key_lifecycle_event.
+   - The fail-open try/except around the emit_task_route_key_dropped and emit_reality_ledger_key_dropped side-emits is kept (_02.py:29-37, :132-140).
+2. Name resolution. Every name the moved branches use is defined in a part and listed in that part's __all__, which is what install() publishes (_audit_emit_parts/__init__.py:20-48).
+   - Exports checked: harness_schemas.py:10, lifecycle_schemas.py:9, compaction.py:8, security.py:8, planning.py:8, replay.py:8.
+   - Also checked: tokens_boot.py (_is_sha256_hex, the tool-lifecycle enums), context_pressure.py, federation_schemas.py (_EMIT_GENERIC_PASSTHROUGH, _RESERVED_ACTIONS, the admin/statusline caps), adapters.py (credential override constants), writer.py (_preview, _federation_safe_path_hash, _breadcrumb) and finalization.py (the key_dropped emitters).
+   - So no NameError path breaks emit_generic's never-raises contract.
+3. Constant values match the removed text: _LEDGER_ID_RE, _LEDGER_GATE_FAMILIES/REASONS/SIGNAL, _PAIR_RAIL_REVIEW_ID_RE (exactly 16 hex or empty), _PAIR_RAIL_FILE_HASH_PREFIX_RE, _PAIR_RAIL_TIMEOUT_MS_MAX=6_000_000, the 12-hex directory/notification/hostname regexes, _LEARNING_ID_RE, _LESSON_SHA256_RE, _CODEX_REVIEW_DIFF_SHA256_RE, _EGRESS_DEST_MAX_LEN=253 and _coerce_egress_destination.
+4. Moved-code mechanics (item 4):
+   - install() binds every part function to the facade's globals, so monkeypatches on audit_emit._write_event, _breadcrumb, _log_path and similar still take effect.
+   - The locks stay in the facade (audit_emit.py:483-484), so deepcopy never touches them.
+   - iter_events stays a lazy generator through the SimpleNamespace indirection (audit_emit.py:455-461), and only replay.py exports it.
+   - Typing names the facade does not import (Iterator, List) appear only in annotations, which are not evaluated under `from __future__ import annotations` or as local-variable annotations.
+   - The spool-writer forensic emitter and the exit-handler hookup at import are kept (audit_emit.py:486-496).
+5. Python 3.9 and standard library: no 3.10+ syntax and no third-party imports in the destination code. FunctionType(code, globals, name, defaults, closure) works on 3.9.
+6. Condition 5: check_arbitration_kernel.py:312 lists `.claude/hooks/_lib/_audit_emit_parts/**/*`, and the facade itself is at :105.
+7. Condition 7 holds for audit_emit: the entry-point path is unchanged and the logic lives in _lib/_audit_emit_parts/.
+8. Fail direction (item 2): unchanged. The audit emit path fails open, and default-deny drops caller fields instead of writing them. Adopter blast radius (item 1): no hook is disabled, and no model or effort changes in this payload.
+
+No declared condition is false against this payload, and I found no P0.
+
+NEW FINDINGS (annex)
+None at P1.
+
+P2 FOLLOW-UPS
+P2-1 to P2-3 were already recorded at P2 in the signed rc.1 verdict claude-rc1-15; they are still present in this tree, unchanged. P2-4 is new.
+
+P2-1 (carried): decoy branches make two structure tests pass vacuously.
+- Where: .claude/hooks/_lib/audit_emit.py:473-480.
+- Scenario: the facade's emit_generic has `if action == "tool_call_lifecycle_recorded"` and `if action == "settings_tamper_detected"`. Both do exactly what the fall-through line does. They exist only so that inspect.getsource(audit_emit.emit_generic) contains those comparisons, which .claude/hooks/tests/test_tool_lifecycle.py:541-563 and .claude/scripts/tests/test_ceo_boot_tamper_tripwires.py:521-525 require. The real scrub branches are generic_dispatch_04.py:62 and :159. If they are deleted, both tests stay green; the event would fall to default-deny, so fields would be lost, not leaked. The ghost-action guard test was updated correctly to walk _GENERIC_DISPATCH_HANDLERS.
+- Minimal fix: remove the decoys and make the two tests call emit_generic with a forbidden field, then assert the field is dropped and the enum values are coerced.
+
+P2-2 (carried): dead duplicate action registry.
+- Where: .claude/hooks/_lib/_audit_emit_parts/actions.py:7-16, with actions_core.py and actions_extended.py (331 names).
+- Scenario: the install() roster does not include these files (audit_emit.py:415-452); the runtime registry is the literal at audit_emit.py:45-377. A maintainer who registers a new action in actions_core.py, which .claude/scripts/env-inventory.json points at, gets no runtime effect, and the action is silently dropped as unknown.
+- Minimal fix: delete actions*.py, or add a parity test pinning them equal to the facade literal.
+
+P2-3 (carried, extended): the unknown-action breadcrumb lost repr escaping and can now raise.
+- Where: .claude/hooks/_lib/_audit_emit_parts/generic_dispatch_05.py:363.
+- Scenario: the removed code logged f"emit_generic: unknown action {action!r}"; the new code logs "unknown audit action dropped: %s" % action.
+  - An action string with a newline is written raw into the audit-log.errors sidecar, which is not HMAC-chained, so lines there can be forged.
+  - A tuple action is hashable, fails the membership test, and then makes the %-format raise TypeError. That breaks the never-raises contract, which the removed f-string kept.
+  - Callers pass constants today, so exposure is low.
+- Minimal fix: _breadcrumb(f"emit_generic: unknown action {action!r}").
+
+P2-4 (new): the public emit_generic lost its docstring.
+- Where: .claude/hooks/_lib/audit_emit.py:473.
+- Scenario: the removed docstring documented the contract callers rely on: it never raises, it applies no redaction, and callers must redact free-text fields before the call. help() and IDE hovers now show nothing, so a new caller loses the instruction to pre-redact.
+- Minimal fix: copy the original docstring onto the facade function.
+
+VERDICT: GO Every branch, enum, constant, helper and emitter this payload removes from audit_emit.py reappears unchanged and in the same order in _lib/_audit_emit_parts/, published through __all__ and bound to the facade's globals so names resolve and patch points still work; drop and default-deny behaviour is the same, the code is standard-library only and Python 3.9 compatible, condition 5's kernel row is present, and the only findings are P2 follow-ups, so there is no P0 and no false declared condition.

@@ -1,0 +1,65 @@
+PAYLOAD 32/34 (v1.4.3-rc.1..84b83324c820). Files: .claude/scripts/lessons.py, .claude/scripts/night-mode.py, .claude/scripts/model-deprecations.json, and four maintainer files under .claude/scripts/local/: _release_bump_sites.py, mac_sign_and_release.py (new), pair-rail-gate.sh and release.sh. The code is the same as in rc1 payloads 30 and 31. I re-checked it against the candidate tree myself instead of carrying over the rc1 verdicts.
+
+WHAT I CHECKED AND WHAT HOLDS
+- Names after the lessons.py move: every function and constant removed from lessons.py is listed in exactly one part's __all__ under _lib/_lessons_parts:
+  - storage_audit: 9 names
+  - lessons: 11 names, including VALID_CONSUMERS
+  - candidates: 15 names
+  - render: 6 names
+  - cli: 13 names, including main
+  No part exports a name the facade already defines, so namespace.update overwrites nothing.
+- How the lessons code is bound: _audit_emit_parts.install (_audit_emit_parts/__init__.py:20-48) rebuilds each function over the facade's globals. As a result:
+  - test patch points on lessons.* still work;
+  - _rp, FileLock, _FILELOCK_AVAILABLE, Lesson, redact_secrets and _emit_lesson_* resolve on the facade;
+  - __file__ in _load_injection_scanner (candidates.py:86) still points at .claude/scripts/scan-injection.py. This keeps the fail-closed promotion boundary (A4) intact.
+- Import safety: the parts use `from __future__ import annotations` and only literal defaults. The one non-literal default (_sanitize_one_liner's cap) comes from _lessons_parts/config.py and is 200, as before. install always creates __annotations__ (setdefault at :30), so the check at lessons.py:208 cannot raise NameError.
+- How the night-mode code is bound: _night_mode_parts.install binds helpers and toggles to the facade's globals. Every name the moved bodies use is defined in night-mode.py before the install call at :331: REPO_ROOT, _INVOKED_SELF, _CANONICAL_SELF_PARTS, NIGHT_MODE, _RESTORABLE_MODES, _DISCARD_HINT, _TEST_SEAM_ENV, MARKER_VERSION and the stdlib modules. Spot checks of toggles.py and helpers.py match the removed text.
+- Night-mode safeguards: these moved unchanged:
+  - the CI refusal, the whole-marker validation (_validate_marker), the atomic write with read-back, and the fail-open _emit_audit;
+  - the NF-08b self-path check, which still runs first in main().
+  There is no .claude/scripts/_lib that could shadow hooks/_lib.
+- Shipping and protection: install_lib_selective (scripts/install.sh:1520-1549) ships every top-level _lib entry except the test harness, so both new packages reach installs. The parts fall under the canonical glob .claude/hooks/_lib/**/*.py (canonical_edit/guards.py:34), so lessons.py's canonical protection carries over. install_scripts_selective (:1592-1613) copies only top-level .claude/scripts/*, so the .claude/scripts/local/* maintainer files never reach adopters.
+- Hooks: no registered hook changes in this payload. emit_architect_outcome.py imports lessons, but its own docstring says it is not wired. Nothing here disables a governance hook, changes a model or effort, or blocks a session.
+- Python: standard library only and Python 3.9 compatible. No match statements, no PEP 604 unions, and argparse's required= exists since 3.7.
+- pair-rail-gate.sh:220-235: after the verifier exits 0, the gate requires a JSON status of verified or compatible. It fails closed when the JSON is unparseable, is not an object, or carries any other status, and set -e also stops it if the parser crashes. The compatible arm prints that the payload is not hash-verified. This is the version-floor behaviour declared in conditions 9 and 10. Gate 4 still runs before the binary is executed (M4).
+- Condition 12 holds:
+  - _release_bump_sites.py:90 matches all three INSTALL.md example lines (717, 719, 722), including the `git tag --list 'v…-rc.*'` stem.
+  - The pattern has one capture group, rebuilt as \g<1>+target.
+  - INSTALL.md:721 carries the declared `unknown --pin ref` (exit 2) warning.
+  - scripts/upgrade.sh is withheld (over the redactor's input cap), so I could not check exit code 2 against its code.
+- Condition 7 holds: lessons.py and night-mode.py keep their paths and their logic moves to _lib packages.
+- Condition 9 holds: the model-deprecations.json exemptions follow the declared family allowlist; model_currency.py:11-16 accepts whole families.
+- release.sh: the new RELEASE_HEADLINE says the same as conditions 4, 5, 6, 8 and 9: 233 canonical paths, the spool cure is partial, the redactor caveat and its next-release cure, and no cure claimed for other annex items. I found no promise the code lacks.
+
+P0
+None.
+
+DECLARED CONDITIONS
+I found none false against this payload. The GA-only claim that only CONDITIONS-ga.md changed since the rc tag cannot be checked from a v1.4.3-rc.1-based diff. Nothing in this payload contradicts it.
+
+NEW FINDINGS (annex)
+None at P1.
+
+P2 FOLLOW-UPS
+1. P2: .claude/hooks/_lib/_night_mode_parts/toggles.py (cmd_on, cmd_off, cmd_off_discard_snapshot), with _lib/_bash_safety_parts/posture_tables.py (_E4_POSTURE_TOGGLE_SCRIPTS).
+   - Scenario: the code that writes the posture now lives in an importable module. A `python3 -c` body can put .claude/hooks on sys.path, install the parts into a namespace it builds, and call cmd_on(root). That body names neither night-mode.py nor settings.local.json, and the NF-08b check in main() never runs.
+   - This is the same class as the existing string-concatenation bypass, so it adds no new capability.
+   - Fix: match `_night_mode_parts` in the -c body scan, or move the self-path check into the three cmd_* functions.
+2. P2: .claude/scripts/night-mode.py:326-331. The parts import now runs at module load, before _check_self_path (:518).
+   - Scenario: a relocated copy outside a repo tree, or a partial install missing _night_mode_parts, now dies with an ImportError traceback and exit 1. Before, it refused with exit 2 and wrote the night-mode-event / night_mode_toggled pair. It still writes nothing, so the safe direction holds. But the docstring's exit-code table and CHANGELOG.md:112 ("observable contracts") are not exact for this edge case.
+   - Fix: wrap the import in try/except ImportError and exit 2 with an NF-08b-style message.
+   - Housekeeping: the header comment at :320-324 ("anchored in FUNCTIONS") now sits above an import block.
+3. P2: .claude/scripts/local/_release_bump_sites.py:90 compared with .claude/scripts/local/verify-counts.sh:1099.
+   - Scenario: the bump writer now rewrites the `git tag --list 'v…'` stem, but the oracle still matches only `--pin v(\d+\.\d+\.\d+)`. A stale RC-resolution line would go undetected, which contradicts the module's comment that sites are "anchored exactly as their oracle checks them".
+   - Fix: widen the verify-counts INSTALL.md pattern to the same alternation.
+4. P2: .claude/scripts/local/mac_sign_and_release.py:130, :16, :113, :119. This is a maintainer-only file and is not installed.
+   - :130 always passes --npm-readme-reviewed to `release.sh bump` after only printing a reminder. That turns the human attestation release.sh requires into boilerplate.
+   - :16 (TRACK) and :113 ("Merge pull request #7") are hard-coded.
+   - :119: sign-merge pushes main with no --push opt-in.
+   - Fix: require an explicit flag or an interactive confirmation for the README attestation, parameterise the track and PR number, and gate the push behind --push.
+5. P2: .claude/scripts/model-deprecations.json:366-368. Rule model-currency-family-prefixes now exempts all of _lib/model_currency.py. Its reason text describes check-model-currency.py's prefix table, not model_currency.py's literal id sets at :7-9 (_RETIRED, _LEGACY_WORKING, _LEGACY_FLOOR).
+   - Fix: give model_currency.py its own rule with an accurate reason, or narrow the exemption to the prefix lines.
+6. P2: .claude/scripts/local/pair-rail-gate.sh:197 and :242. Two comments are stale: they still say "0 = verified" and that Gate 3b is reached "ONLY after Gate 4 verified the payload sha". Exit code 0 now also covers `compatible`, which is not hash-verified.
+   - Fix: reword both comments.
+
+VERDICT: GO This payload makes no declared condition false and has no P0 or undeclared P1: the lessons and night-mode code moves bind to their entry points and keep their names, patch points, file-relative paths and fail direction, ship to installs, and stay standard-library and Python 3.9 compatible, and the maintainer release tooling matches conditions 9, 10 and 12, so only P2 follow-ups remain.

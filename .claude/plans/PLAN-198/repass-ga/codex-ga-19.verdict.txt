@@ -1,0 +1,12 @@
+Payload 19/34: no P0 or false declared condition established. Applicable claims in conditions 4, 5, 7 and 9 hold. Federation package and flat imports passed on Python 3.9.6; extracted methods retain facade globals and relative-import context. Installation includes the new parts. Benign overlap checks support the PII union correction. No files modified.
+
+NEW FINDINGS (annex)
+None at P1.
+
+P2 follow-ups — previously reported and still open
+
+P2 — .claude/hooks/_lib/plan_paths.py:34. FOLLOWUP filenames are accepted, but plan_id_from_path returns only the parent PLAN-NNN. Followup transitions and stranded-work reports therefore carry the parent's identity. Minimal fix: preserve the unique followup ID, using frontmatter or the filename, and accommodate it in event consumers.
+
+P2 — .claude/scripts/tier_policy_cli/learn.py:832, integrating .claude/hooks/_lib/model_currency.py:39. Learning accepts family IDs absent from its ranking and signing/application allowlists. A winning ID can produce a demotion recommendation that owner-sign rejects at cli.py:337 and application rejects at apply.py:401. Minimal fix: return a hold for unsupported IDs until ranking, signing and application share the same supported set.
+
+VERDICT: GO This payload establishes neither a P0 nor a false declared condition, and its two confirmed P2 issues remain carried open follow-ups.

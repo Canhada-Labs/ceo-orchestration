@@ -1,0 +1,12 @@
+Payload 27/34: no P0 or false declared condition established. Condition 7 holds for this split. All 115 base function/class declarations remain present and AST-equivalent in the extracted code. Python 3.9.6 checks confirmed shared facade globals, preserved __file__ paths, and 25 Tier-S plus 11 Tier-A registry entries. Installer enumeration includes the package. No files modified; live boot was not executed.
+
+Carried RC finding confirmed:
+P1 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304. Sentinel discovery still parses check_canonical_edit.py, although _PATTERNS moved to canonical_edit/paths.py:238. Verification returned four fallback patterns instead of ten. An unsigned post-cutoff sentinel under PLAN-*/staging/review/approved.md is omitted, allowing a green pending-signature count with only a fallback notice. Minimal fix: obtain the patterns from their current authoritative location, preferably a shared constant.
+
+NEW FINDINGS (annex)
+No additional P1 findings beyond the carried RC notes.
+
+P2 follow-ups
+P2 — .claude/scripts/check-vacuous-checks.py:133; .claude/scripts/ceo-boot.py:120. The default lint now inspects only two facade checks and exits successfully, omitting the extracted implementations. The retained spec-drift definition also differs in identity from the function captured by TIER_A_CHECKS, although their bodies currently agree. A regression in the dispatched implementation can escape facade-based inspection. Minimal fix: retain one definition and derive lint inputs from the loader’s complete parts list.
+
+VERDICT: GO-WITH-CONDITIONS The carried sentinel-discovery defect and reduced lint coverage warrant follow-up, while this payload establishes neither a false declared condition nor a P0.

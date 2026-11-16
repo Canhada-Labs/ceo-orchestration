@@ -1,0 +1,5 @@
+.claude/scripts/_subprocess_census.py
+.claude/scripts/architect-bundle-validate.py
+.claude/scripts/audit-query.py
+.claude/scripts/audit-verify-chain.py
+.claude/scripts/audit_spool_state.py

@@ -1,0 +1,74 @@
+PAYLOAD 24/34. Files: check_pair_rail.py becomes a facade over _lib/_pair_rail_parts; check_plan_edit.py now uses _lib/plan_paths; check_precompact_continuity.py becomes a facade over _lib/_precompact_parts; three new files: _contamination_inventory.py, _repin_guard.py and _restore_archive.py. The content is the same as rc payload 23. The GA conditions say only CONDITIONS-ga.md changed since the rc tag. I re-checked everything independently against the candidate tree. All checks were static reading; I had no shell, so nothing was executed.
+
+DECLARED CONDITIONS CHECKED AGAINST THIS PAYLOAD (all true)
+- C5: _KERNEL_PATHS lists .claude/hooks/_lib/_pair_rail_parts/**/* (check_arbitration_kernel.py:315), cli_currency.py (:333) and plan_paths.py (:334). The precompact hook is not kernel, so _precompact_parts not being enrolled is consistent.
+- C7: all three entry points keep their paths, and their logic moves under .claude/hooks/_lib/. _pair_rail_parts is a kernel path.
+- C9/C10: the `compatible` status is reachable through this facade. It comes from part_01.py:553-571 and needs version >= 0.160.0 and newer than the manifest's package_version, with no hash. _resolve_codex_bin (part_01.py:583) and --verify-codex-pin (part_04.py:510) both accept `verified` or `compatible`. Adopters are not affected: .claude/governance/ is not installed (scripts/install.sh has no copy of it), so the manifest is unreadable, the result is infra, and the rail is advisory as before.
+- CHANGELOG.md:332-333 (FOLLOWUP plan names) and :342-346 (the new helpers ship to installs, ceo-restore.sh uses _restore_archive.py) match the code.
+
+MOVED-CODE VERIFICATION (no defect found)
+- _pair_rail_parts.install (__init__.py:8-24) rebuilds every function with the facade's globals:
+  - `global _CURRENT_REVIEW_ID` and `global _RUBRIC_CATALOGUE_CACHE` write to the facade.
+  - Path(__file__) in part_02 and part_04 resolves to .claude/hooks/, because those functions now use the facade's globals.
+  - deepcopy leaves classes, functions and compiled patterns as the same objects. __kwdefaults__ and docstrings are kept.
+  - No part function is decorated, so none is skipped by the FunctionType check.
+  - Every free name the parts use exists in the facade, including _cli_currency. hashlib and tempfile are imported inside the functions.
+  - The facade's own _invoke_codex_review (check_pair_rail.py:29-210) replaces part_02's copy, which has identical code. The facade is the live copy.
+- _precompact_parts.install exec's the four parts in the facade's namespace and in order. I compared them against the removed text: the ledger chain (O_NOFOLLOW at each step, fstat identity check), --first-parent, the 1.0 s index share, the bytes store path after field redaction, set_session_value and the GC TTL are all unchanged. No part has an `if __name__` block.
+- Fail direction:
+  - An import failure at the top of either facade makes Python exit 1. _python-hook.sh:416 `exec`s the hook on the Claude and Codex path, so this is a non-blocking error: the doctrine's fail-open on infrastructure holds.
+  - The pin mismatch arm still blocks.
+  - _restore_archive.py fails closed (exit 2) on every refusal and on any uncaught exception, through `|| exit 2` in ceo-restore.sh.
+- Writes: _restore_archive.py writes only under a real mktemp stage directory, with O_EXCL|O_NOFOLLOW and the mode masked to 0o777. It refuses:
+  - links, devices and sparse members;
+  - duplicate names and traversal;
+  - the key files in any letter case;
+  - an archive with no end-of-archive block, or a gzip stream that does not read cleanly to its end.
+  ceo-restore.sh copies only top-level files of audit/. The other two new files only read files or produce text.
+- Python and stdlib: all six files are stdlib-only, with no syntax newer than 3.9. typing.Pattern is a deprecated alias but still exists.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+Carried, not new: the signed claude-p10 P1 (part_01.py:477-486 with CHANGELOG.md:191) still holds in the GA tree, and this facade exposes it. When the host triple is absent from the manifest, the result is compatible with path set to the PATH launcher and sha256 empty. So "The payload's sha256 is still computed and recorded" is false on that route. The re-pass host (darwin) does not take that route.
+
+P2 FOLLOW-UPS
+1. P2 — .claude/hooks/_lib/cli_currency.py:87 (parse_semver sits outside the try), with part_01.py:537-550.
+   - Problem: on a sha mismatch, any exception in _apply_currency_policy goes to the `except Exception` handler and becomes status infra (advisory), not mismatch (block).
+   - Scenario: a nearby @openai/codex package.json has a version component longer than 4300 digits. On Python 3.9.14 and later, int() raises ValueError, which the try does not cover. The pin then fails open on input it cannot parse.
+   - Impact: nil in practice. Whoever can write that file can already get `compatible` by declaring 0.999.0.
+   - Fix: move the parse inside the try, and make an exception from the currency arm keep status=mismatch.
+2. P2 — load-bearing imports that look unused.
+   - Problem: check_precompact_continuity.py:88-98 (contextlib, fnmatch, glob, re, stat_mod, subprocess, time, the typing names) feeds the exec'd parts. check_pair_rail.py:21 (_cli_currency) is already reported in the rc. Neither file has a comment saying the imports are needed.
+   - Scenario: an autofix removes them. Removing contextlib or re crashes install, because ledger_index.py:38 and :80 use them at module level. Removing glob raises NameError at snapshot_core.py:150, gate() fails, main prints {} and no snapshot is written. All of this is silent and fail-open.
+   - Fix: add a comment, plus a test that every free name in the parts resolves.
+3. P2 — dead duplicate: part_02.py:22-314 and its `__all__` entry at :508, against check_pair_rail.py:29-210.
+   - Problem: CHANGELOG.md:122-123 and condition 7 tell a maintainer to re-apply a hand patch "to the module". For _invoke_codex_review, the module copy is never used.
+   - Scenario: a fix to the read-back or ingress redaction applied only to part_02 silently does not ship.
+   - Fix: keep one copy.
+4. P2 — scripts/doctor.sh:1188 (rc codex P2, re-confirmed).
+   - Problem: the CEO_PAIR_RAIL_TIMEOUT_S default moved to part_03, so doctor's timeout coherence check now always prints a "skipped" NOTE.
+   - Scenario: an adopter whose registration timeout is below 210 s loses the warning that the harness can kill the 180 s review.
+   - Fix: read the default from part_03, or from the rebound main().
+5. P2 — plan_paths.py:34 returns filename[:8] (rc P2, re-confirmed).
+   - Problem: a followup plan's id collapses to its parent's.
+   - Scenario: check_plan_edit.py:161 emits plan_transition with the parent's id (PLAN-194) when a FOLLOWUP plan changes status.
+   - Fix: return or emit the full FOLLOWUP id.
+6. P2 — CHANGELOG.md:332 is incomplete.
+   - Problem: the new grammar (plan_paths.py:13-15) also stops matching names with double or trailing hyphens, which the old `[a-z0-9-]+` regex gated.
+   - Scenario: such plan files leave the lifecycle check without notice. This is fail-open, and PLAN-SCHEMA's kebab-case rule makes these names non-conforming.
+   - Fix: one CHANGELOG clause.
+7. P2 — docstrings and markers.
+   - Problem: check_precompact_continuity.py:45-47 still promises "missing files → breadcrumb + emit {}". A missing _lib/_precompact_parts now gives an import traceback and no {}.
+   - Problem: a missing _pair_rail_parts likewise gives no pair_rail_fatal_failopen breadcrumb.
+   - Problem: _precompact_parts/__init__.py:16 replaces the facade's __doc__ with the last part's docstring (rc P2).
+   - Fix: reword the docstrings, and restore __doc__ after install.
+8. P2 — _lib/_contamination/term_scan.py:12 imports .claude/scripts/_contamination_inventory by bare module name.
+   - Problem: that _lib module works only when .claude/scripts is on sys.path, which is true for check_contamination.py run directly; gen_envelope.py adds it by hand.
+   - Carried: _contamination_inventory.py:76 still fails on a core.symlinks=false checkout (codex rc).
+   - Fix: move the inventory module under _lib, or pass it in as a dependency.
+9. P2 — _restore_archive.py:44 (codex rc, carried).
+   - Problem: on Python 3.9, a GNU longname directory entry can keep its trailing slash. The split then yields an empty component and a valid long-path backup is refused. This is fail-closed.
+   - Fix: strip one trailing slash before validating the components.
+
+VERDICT: GO Against the code in this payload, conditions 5, 7, 9 and 10 hold, the moved pair-rail and precompact code keeps its name lookup, patch points and fail directions, the new restore validator fails closed and writes only to its stage directory, and the only findings are P2 follow-ups plus a P1 that was already in the signed annex.

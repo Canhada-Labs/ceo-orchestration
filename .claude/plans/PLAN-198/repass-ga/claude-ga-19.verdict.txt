@@ -1,0 +1,68 @@
+PAYLOAD 19/34. Files: federation/server.py, now a facade, plus six new files under federation/_server_parts/; _lib/model_currency.py (new); _lib/pii_patterns.py (_apply_redactions); _lib/plan_paths.py (new).
+
+P0: none.
+
+DECLARED CONDITIONS CHECKED AGAINST THE CODE
+- Condition 4, pii part: TRUE.
+  - pii_patterns.py:744-758 merges overlapping spans into their union before cutting. The run keeps the token of the leftmost, then longest, match.
+  - Both callers pass spans found on the string they cut: pii_patterns.py:506-508 (snippet chunk) and :845-856 (rescan of `cleaned`).
+  - This payload has no pattern-catalog hunk.
+  - The union only adds redaction. A merged run lies inside the union of characters its matches already cover. So in federation _apply_redaction_pipeline, it cannot newly cross a JSON quote and drop an event.
+- Condition 5, rows in this payload: TRUE. check_arbitration_kernel.py:332 lists model_currency.py and :334 lists plan_paths.py.
+  - The federation code is not kernel; only .claude/data/federation is.
+  - The new _server_parts/*.py files fall under the same canonical glob as server.py (`.claude/hooks/_lib/**/*.py`, canonical_edit/guards.py:34), so the split does not lower their protection.
+- Condition 7, federation/server.py: TRUE. The path and import name are kept, `__all__` is unchanged, and the logic moved to _lib/federation/_server_parts/.
+- Condition 9, model_currency.py: TRUE, and CHANGELOG lines 150-183 are honest about it.
+  - _FLOOR covers opus 4-9, gpt-5..9 and o3..9. _ALLOWED adds sonnet, haiku, gemini-2..9 and grok-3..9. Both take numeric and lowercase-word suffixes.
+  - _RETIRED holds only the bare id claude-opus-4-1, so dated retired ids pass.
+  - The callers only get wider:
+    - agent_frontmatter.py:259 keeps `or actual in allowed`.
+    - effective_config.py:721 keeps `startswith("claude-")`.
+    - validate-governance.sh:718 keeps the literal case list.
+
+MOVED CODE (no defect found)
+- Rebinding (server.py:375-419): `_bind_function` rebinds every extracted function and method to the facade's globals().
+  - Patching server.<name> still reaches the moved methods.
+  - The relative imports inside methods (`from .replay`, `from .handlers`) resolve through the facade's `__package__`.
+  - Nested closures (`_revert_inflight`, `_poll`, `_pii_redact_adapter`) inherit the rebound globals.
+  - No part uses super(), `__class__`, nonlocal or global, so no closure-cell mismatch is possible.
+- Class-level names: the only one, `timeout = HANDSHAKE_TIMEOUT_SECONDS`, is read from the snapshot at load. The old class attribute was also evaluated once.
+- MRO: _HandlerAuth comes before BaseHTTPRequestHandler, so its timeout, server_version, sys_version, parse_request, log_message and do_* overrides still win. The three mixins define no method twice. parse_request calls the base class explicitly.
+- Text checks against the removed code, all identical:
+  - the 11-gate order;
+  - the sigref regex and the 24 h TTL;
+  - the 1 MiB body cap and the 4096-byte GET read;
+  - the kill-switch values;
+  - rate-limit DEFAULT-DENY and AC6 redaction fail-closed;
+  - quarantine without revert in the reaper.
+- Reach: no production code imports server.py, and federation/__init__.py does not import it.
+- Install: install.sh:1520-1549 copies _lib/federation recursively, so _server_parts ships.
+- Python: standard library only and 3.9-compatible. That holds for FunctionType(code, globals, name, defaults, closure), the `__kwdefaults__` copy, the typing aliases in pii_patterns (Tuple is imported at :79), and plan_paths.
+- model_currency.py as a script: no module in _lib shadows the standard library when it runs that way (validate-governance.sh:721).
+
+NEW FINDINGS (annex)
+- None at P1.
+
+P2 FOLLOW-UPS
+1. P2, pii_patterns.py:731-758 against CHANGELOG [1.4.4] lines 254-272.
+   - Problem: the CHANGELOG's redactor section describes only secret_patterns. The PII union change is declared only in condition 4. It changes the redacted_text of check_output_safety.py:195-215 and of the federation audit-summary: more is redacted, and merged runs carry one family token.
+   - Minimal fix: add one CHANGELOG line.
+2. P2, plan_paths.py:13-23 against check_budget.py:155 (carried from the rc).
+   - The new grammar matches validate_governance_fast.py:63. It widens to FOLLOWUP names and Windows separators.
+   - It narrows to exclude doubled or trailing hyphens, and parents such as "x.claude/plans". check_plan_edit.py:240 and policy_preprocessors.py:315 therefore no longer gate those names, while check_budget.py:155 still treats them as plans.
+   - Mitigation: validate_governance_fast reports such names as schema errors.
+   - Minimal fix: make check_budget use plan_paths.PLAN_FILENAME_RE, and add a CHANGELOG line for the narrowing.
+3. P2, server.py:400-414 and _server_parts/handler_auth.py:11.
+   - Problem: when a part is missing (partial install), _load_part lets FileNotFoundError out of exec_module instead of ImportError. Separately, `_server_parts/` is an importable package, but importing handler_auth directly raises NameError (HANDSHAKE_TIMEOUT_SECONDS).
+   - Impact: no production importer exists, and a federation server that cannot import does not start, which is the safe direction for a network listener.
+   - Minimal fix: in _load_part, raise ImportError when `_location.is_file()` is false, and drop `__init__.py` or document that the parts are not importable alone.
+4. P2, model_currency.py:7-8 and :11-16.
+   - Problem: the Fable line is admitted only through two legacy ids, and only when no explicit list is passed. A newer Fable id such as claude-fable-5-2 is refused by validate-governance.sh:721 and by tier_policy_cli/_types.py:35 unless listed. In effective_config.py:482 it is flagged as settings_tamper_model_remap unless it is in the ADR-149 set.
+   - This is not a regression: the old closed list had the same limit. But the "currency" predicate does not follow the newest family, while the out-of-scope smoke harness admits claude-fable-[5-9]*.
+   - Minimal fix: add a Fable family row, or align the harness.
+5. P2 (wording), comment headers left detached from their code:
+   - server.py:363-366, the "Rate limiter — joint key" header;
+   - the trailing headers at the end of configuration.py ("Request handler"), handler_auth.py ("Wave D 11-gate write dispatcher"), handler_write.py ("Gate #9"), handler_read.py ("AC6 fail-CLOSED contract.") and redaction.py ("FederationServer — orchestrator").
+   - Minimal fix: move each header next to its code, or delete it.
+
+VERDICT: GO No declared condition this payload touches (4, 5, 7, 9) is false against the code, and I found no P0 or new P1: the federation facade keeps globals, patch points, MRO and the 11-gate fail-closed text unchanged, the PII union only adds redaction, and the new model and plan-path predicates match what the CHANGELOG declares, leaving only P2 follow-ups.

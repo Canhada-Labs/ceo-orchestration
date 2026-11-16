@@ -1,0 +1,79 @@
+PAYLOAD 23/34: .claude/hooks/check_canonical_edit.py (logic moved into .claude/hooks/_lib/canonical_edit/*), .claude/hooks/check_cost_envelope.py, .claude/hooks/check_harness_config.py.
+
+HOW THIS WAS CHECKED
+Static review only, against the candidate tree. There is no git here, so the base is known only from the removed lines in the payload. I ran no code.
+
+SAME CODE AS THE RC
+The three diff headers in this payload are identical to those in the committed rc evidence (.claude/plans/PLAN-198/repass-rc1/diff-rc1-22.patch, lines 2, 2613 and 2643):
+- check_canonical_edit.py: d9f5090a2257..ae94653b88aa
+- check_cost_envelope.py: 0f3052a56c21..057d8286d3f7
+- check_harness_config.py: d95dc4f21e18..cc7f27d2785c
+So the GA blobs of these files are the rc blobs. This fits the GA-only condition that no code changed between the rc and the GA. The rc verdicts on the same content are claude-rc1-22 and codex-rc1-22.
+
+DECLARED CONDITIONS TOUCHED BY THIS PAYLOAD
+- Condition 5: true. check_arbitration_kernel.py:309 lists ".claude/hooks/_lib/canonical_edit/**/*", and the hook file itself stays on the list at :94.
+- Condition 7: true. check_canonical_edit.py keeps its path, its __main__ dispatch and the --is-canonical command (:643-651). The logic now lives in _lib/canonical_edit/{guards,paths,sentinels,signature_rail,session_roots,utility,decisions,entry}.py, so a hand-applied patch must be applied again in the module, and that module is a kernel path.
+- GA-only condition (P1 lane notes stay open): the partial-install P1 reproduces unchanged; it is described below as carried, not filed as new.
+- CHANGELOG [1.4.4] lines 324-326, 329-331 and 334-336 match the diff.
+
+MOVED-CODE CHECKS (item 4), all clean
+- Binding. canonical_edit/__init__.py:16-31 rebuilds every exported function with FunctionType(code, the hook's globals, ...). As a result:
+  - The `global` writes (_SENTINEL_CACHE_HITS and _MISSES, _UNLOCK_TRUST_DIAG, _CURRENT_TOOL_NAME) land in the hook module.
+  - Patch points on check_canonical_edit (_gpg_verify, _sentinel_signers, _now, _SENTINEL_SIGNERS_FILE, _verify_signature_rail and others) still reach the moved callers.
+- Name coverage. Every upper-case global the components use is defined in the hook: the constants at :77-605 and the guards re-export at :118-122. The only other such names (_PERSONA_COVERAGE_ARCHETYPES, _LAYER_3A_REASON_CODES, _PATTERNS) appear only in comments or docstrings, or are local variables.
+- File-relative anchors. _SENTINEL_SIGNERS_REGISTRY_YAML and _SENTINEL_SIGNERS_FILE are still computed from the hook's own __file__ (:77-96), so moving the code did not move them.
+- Default arguments. All defaults in the components are literals (None or ""), so nothing is evaluated in the component modules, which import nothing.
+- Import order. The guards are bound at :118, before _CANONICAL_GUARDS_FOLDED is computed at :201. No bound function runs at import time.
+- Text. signature_rail.py and sentinels.py:1-140 match the removed text exactly.
+- Shared list. The _CANONICAL_GUARDS list object is now shared across imports, but nothing outside .claude/plans mutates it.
+- Python 3.9 and stdlib. No 3.10+ syntax, only standard-library imports.
+
+P0: none.
+
+CARRIED P1s (already declared through the signed rc lane notes; re-confirmed here, not new)
+1. P1, check_canonical_edit.py:118-127 and :616-640 (same logic at _lib/canonical_edit/entry.py:126-134). Raised by claude-p22, codex-p22 and codex-p17.
+   (a) Any component module missing (ImportError): the fallback main() prints {"decision":"block"} for every Edit, Write, MultiEdit and mcp__ event without reading the event, including non-canonical files and read-only MCP tools. That is an infrastructure fault failing CLOSED, against item 2. It also prints Claude-shaped JSON whatever the adapter is.
+   (b) Only guards.py missing or failing: :123-127 sets _CANONICAL_GUARDS = [] but leaves _COMPONENT_IMPORT_ERROR unset. bind() still succeeds, because __init__ does not import guards. Then:
+     - every canonical path is classified non-canonical and the edit is allowed, with no breadcrumb;
+     - --is-canonical prints 0 for every path and exits 0;
+     - an mcp__ event raises NameError on _MCP_WRITE_PATH_KEYS, exits 1, and is allowed.
+   Precondition: a partial or corrupted install. Normal install and upgrade deliver the whole package, and the kernel hard-deny still covers kernel paths on its own, so this stays P1.
+   Minimal fix:
+     - send a guards import failure into the _COMPONENT_IMPORT_ERROR state;
+     - make the CLI exit nonzero in that state;
+     - block only candidates whose first path segment is in _CANONICAL_PREFIXES_FOLDED, allow the rest with a breadcrumb, and emit through the resolved adapter.
+2. P1, _lib/_ceo_boot_parts/harness_governance.py:300-325 (raised by claude-p06 as P1-a). It parses check_canonical_edit.py looking for an `_PATTERNS =` assignment, which now lives in _lib/canonical_edit/paths.py, so it always falls back. Re-confirmed against this facade.
+
+NEW FINDINGS (annex): no undeclared P1 in this payload.
+
+OTHER FILES (checked, no defect beyond P2 1)
+- check_cost_envelope.py:182-187 and :248-252.
+  - With CLAUDE_PROJECT_DIR unset or relative, or runtime_paths missing, the hook writes a breadcrumb, returns {} and records no spend. That fails open on missing scope, as the CHANGELOG states, and it no longer writes a ledger under whatever the current directory is.
+  - The hook is registered only in this repo's own .claude/settings.json:318, not in templates/settings/*, and its command line already expands $CLAUDE_PROJECT_DIR. Adopter impact is nil.
+- check_harness_config.py:583-606 (exec-bit sub-check).
+  - An exception in the delegated exec-bit gate is now RED and keeps the captured stdout and stderr; exec_module was moved inside the redirect. A missing script stays a WARN.
+  - RED fails the CI step (validate.yml:1148-1152). In /ceo-boot it only shows red, which is advisory and never blocks a session (_ceo_boot_parts/liveness_schedule.py:360-367).
+  - check-active-hooks-executable.py's main() reads no argv, so the new flag cannot leak into it.
+- check_harness_config.py:922-961 and :1028-1029 (root_instruction_load).
+  - The new finding is always a WARN and never changes the exit code.
+  - A malformed, duplicate-key, NaN or unreadable evidence file gives "unobservable".
+  - claude_md_excludes.py:23-25 and :73-95 provide every name the gate uses.
+
+P2 FOLLOW-UPS
+1. NEW. check_cost_envelope.py:187 with _lib/cost_envelope.py:132-138.
+   - Cause: the spend-ledger key is sha256(project_path:user:date) over the raw string, and project_path is now os.path.abspath(CLAUDE_PROJECT_DIR) instead of the raw value.
+   - Scenario: if CLAUDE_PROJECT_DIR is absolute but not normalized (a trailing slash, or "." or ".." segments), the key changes on upgrade. Spend from earlier days in the weekly and monthly windows then stops being counted, so the cap resets once.
+   - Likelihood: low. Claude Code normally passes a normalized path, and only this repo's own settings register the hook.
+   - Fix: say so in the CHANGELOG line, or also read the old raw key while the window lasts.
+2. Carried. check_canonical_edit.py:36-40: the docstring still promises "Any internal exception → allow". The code blocks on canonical-path faults (entry.py:384-395) and on component ImportError.
+3. Carried. check_canonical_edit.py:115-117: the comment says ".claude/commands/**" stays sentinel-guarded, but only .claude/commands/council.md is guarded (guards.py:222).
+4. Carried. _lib/_ceremony_toolkit/preflight.py:50-62 reads _CANONICAL_GUARDS from check_canonical_edit.py's source. The only assignment there is now the empty fallback inside the except at :124, so default validation fails closed. Fix: read guards.py.
+5. Carried. CI coverage:
+   - coverage.yml:184: the tier-1 coverage floor still measures check_canonical_edit.py, but the moved logic is reported under _lib/canonical_edit/*.
+   - mcp-smoke.yml:56-69: the path filters miss _lib/canonical_edit/**.
+6. Carried, small:
+   - entry.py:126-134 is unreachable.
+   - check_canonical_edit.py:125-127 defines _SKILL_CONTENT_RE, _SKILL_LOADED_RE and _VALID_BLOCKED_TOOLS, which nothing uses.
+   - check_canonical_edit.py:165-168 has a garbled comment with a dangling "event." line.
+
+VERDICT: GO Conditions 5, 7 and the GA identity claim hold for this payload, and its code is byte-identical to the rc. The canonical-edit move keeps its names, patch points, anchors and fail directions except in the partial-install case, which the signed rc lane notes already carry as an open P1. There is no P0 and no new P1, only P2 follow-ups.

@@ -1,0 +1,18 @@
+Payload 11: no P0 or false declared condition established. Read-only Python 3.9.6 checks confirmed facade bindings and imports. In-memory comparisons found 83 extracted function/class definitions unchanged from the base; pair-rail’s substantive changes implement the declared version policy. Relevant kernel entries and installer package inclusion are present. No files were modified.
+
+NEW FINDINGS (annex)
+No newly discovered P1. The following signed rc finding remains reproducible by code inspection:
+
+P1 — .claude/hooks/_lib/_pair_rail_parts/part_01.py:477: When the manifest lacks the host triple, compatibility is evaluated before native-payload resolution, regular-file validation and hashing. A qualifying newer installation can return the launcher with an empty sha256 and execute that launcher. This affects source checkouts carrying the manifest; ordinary installs without it retain their documented infrastructure fallback. CHANGELOG.md:191 incorrectly promises that the payload hash is always computed and recorded. Minimal fix: resolve and validate the native payload, record its hash, then apply the version policy. This is the carried rc finding, not a GA regression or contradiction of the conditions’ declared open status.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_pair_rail_parts/part_02.py:22; .claude/hooks/check_pair_rail.py:29: The facade overrides the extracted invocation function. An adopter following the instruction to patch the implementation module changes an inactive copy. The copies currently have identical executable ASTs. Minimal fix: retain one implementation and bind it through the facade.
+
+P2 — .claude/hooks/_lib/_pair_rail_parts/part_01.py:557: Version reporting and compatibility use separate package searches. With differing qualified package versions in ancestor directories, installed_version can identify a different version from the one granting compatibility. Minimal fix: resolve one package/version and use it for both classification and reporting.
+
+P2 — .claude/hooks/_lib/_policy_parts/__init__.py:15: Executing fragments overwrites the facade’s module docstring. help(_lib.policy) consequently loses its public API documentation and displays the loading fragment’s description. Minimal fix: preserve and restore __doc__ around installation.
+
+P2 — .claude/scripts/night-mode.py:330: A missing or incomplete extracted package fails during import, before normal CLI diagnostics and the promised summary. Minimal fix: handle bootstrap failure with a standalone diagnostic and failure summary. This remains a carried rc follow-up.
+
+VERDICT: GO-WITH-CONDITIONS No release-blocking violation was established in this payload, while the carried payload-verification defect and nonblocking follow-ups remain open.

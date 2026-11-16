@@ -1,0 +1,17 @@
+Payload 5/34: no P0 or false declared condition established. Python 3.9.6 checks confirmed shared globals, facade-relative paths and benign execution. Audit-query integration checks passed. No files modified.
+
+Carried finding
+P1 — .claude/hooks/_lib/_bash_safety_parts/fact_state.py:327
+The default-enabled shadow gate opens a predictable temporary pathname with O_TRUNC. A pre-existing symlink can redirect truncation and JSON writes into another adopter file; subsequent replacement cannot undo that damage. This remains the acknowledged RC finding. Minimal fix: verify the destination directory, reject symlinked parents, and create a unique temporary file exclusively before replacement. Confirmed statically; destructive writes were not exercised.
+
+NEW FINDINGS (annex)
+No new P1 identified.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/_bash_safety_parts/fact_canonical.py:183
+Newly observed, unchanged from baseline: with fact enforcement and the citation pilot both enabled, malformed persisted timestamps can cause eviction to raise. The exception handler returns enforce_active=False, allowing the caller to use the weaker pilot despite enforcement having resolved true. Minimal fix: validate persisted numeric fields and preserve the resolved enforcement flag when returning the existing block. Static finding only.
+
+P2 — .claude/hooks/_lib/_bash_safety_parts/fact_canonical.py:147; .claude/hooks/_lib/_bash_safety_parts/fact_state.py:23
+Carried RC finding: replacement block decisions omit reason_code. When either gate reshapes an indirect-guard denial, decisions_cli.py:195 skips its reason-specific audit event. Minimal fix: preserve decision.reason_code in replacement block constructors.
+
+VERDICT: GO-WITH-CONDITIONS The carried unsafe-write defect and two nonblocking follow-ups remain, while this payload establishes neither a P0 nor a false declared condition.

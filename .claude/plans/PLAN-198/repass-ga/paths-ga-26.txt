@@ -1,0 +1,3 @@
+.claude/scripts/budget-summary.py
+.claude/scripts/caller_repo_guard.py
+.claude/scripts/ceo-backup.sh

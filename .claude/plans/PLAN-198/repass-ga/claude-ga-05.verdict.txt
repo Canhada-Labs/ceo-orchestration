@@ -1,0 +1,58 @@
+PAYLOAD 5/34. Files: .claude/hooks/_lib/_audit_query/{queries,rendering,reporting,reporting_health}.py and .claude/hooks/_lib/_bash_safety_parts/{__init__,decisions_cli,fact_canonical,fact_state,normalization,posture_parser,posture_scan}.py. I read them with the code that loads them: .claude/hooks/check_bash_safety.py:20-42 and .claude/scripts/audit-query.py:174-385. I also read their callees: bash_indirect_guard.py, bash_indirect_telemetry.py, trusted_env.py, _python-hook.sh, and audit_emit defense.py / lifecycle_schemas.py.
+
+HOW I CHECKED
+- Same bytes as the rc. The blob ids in this payload's diff headers equal the ones in the committed rc evidence (.claude/plans/PLAN-198/repass-rc1/diff-rc1-04.patch and diff-rc1-05.patch): queries 978d3f62083f, rendering 3cf2ac9f4c95, reporting a95cc0f3a008, reporting_health 3f551476dca7, __init__ 1fe2e39e31f9, decisions_cli d7454ec80a01, fact_canonical c858ace6b987, fact_state 9981f118923f, normalization f0c42fa09e3b, posture_parser 70e02a61fe35, posture_scan d9c3b7dd5ab9. For these paths this supports the GA-only condition that nothing changed after the rc tag.
+- Compared with the base code. I compared against the v1.4.3-rc.1 text that diff-rc1-21.patch (check_bash_safety.py) and diff-rc1-24.patch (audit-query.py) delete. That is the real base, not the PLAN-182 staged copy the rc lanes used as their reference.
+  - Counts match: 85 top-level def/class on both sides, and 69 top-level private assignments on both sides.
+  - These match the base text: decide_command, main, Decision, _fact_gate_state_dir, _fact_gate_load and _fact_gate_save, cmd_errors, cmd_health and cmd_export.
+  - The only differences are the declared PLAN-195 additions: the Decision.reason_code field, the trailing indirect scan at posture_scan.py:571-584, the telemetry block at decisions_cli.py:168-174 and the reason_code veto emit at :195-202. Comments and docstrings also changed.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES (none is false)
+- Condition 5: true for these packages. check_arbitration_kernel.py:314 lists _bash_safety_parts/**/*, and :335-336 list bash_indirect_guard.py and bash_indirect_telemetry.py. _audit_query is not kernel, but canonical_edit/guards.py:34 covers it as canonical.
+- Condition 6: true. posture_scan.py:573-580 reads both switches from the import-time CEO_* snapshot (trusted_env.py:36,55). Only "0" disables. A missing snapshot raises inside the try and leaves the guard ON. The scan runs only after every legacy check has passed, so it adds blocks only. An explicit disable reaches disabled_once through decisions_cli.py:171-172; that path writes an O_EXCL 0600 marker, and the rail and switch values are in the closed enums at lifecycle_schemas.py:508-517.
+- Condition 7: true.
+  - check_bash_safety.py execs the 8 fragments in order into its own globals, so __file__, patch points and global lookup are the facade's. normalization.py's _HOOKS_DIR resolves to .claude/hooks. decisions_cli is last, so `if __name__ == "__main__"` runs main() only after every fragment is loaded.
+  - audit-query.py rebinds every function of queries, reporting and reporting_health (and of the other extracted modules) to the facade's globals with FunctionType.
+  - No function name is defined in two modules, so rebind order cannot change which body wins. The facade's own default_log_path, default_errors_path, discover_logs, read_entries, cmd_benchmarks and main are not shadowed.
+  - cmd_health reaches cmd_compliance and cmd_metrics through the facade wrappers, so patching them still takes effect.
+
+FAIL DIRECTION
+- Infrastructure faults fail open, as required.
+  - A missing fragment raises in _install_parts before any output. _python-hook.sh:416 execs the hook, so its exit code is the hook's own, and the session continues.
+  - The `from _lib import bash_indirect_guard` at posture_scan.py:571 sits outside any try. An exception there reaches the catch-all at decisions_cli.py:243-249, which allows and prints FATAL on stderr.
+- Input the matchers cannot parse still fails closed. The fact gate never releases a command it cannot normalize (fact_state.py, _fact_gate_normalize returns None). The fact-gate and citation verifiers are byte-identical to the base.
+- Already declared, still present: the RecursionError from about 1000 nested xargs. It is in the signed rc lane note claude-p05 and is still at bash_indirect_guard.py:393. It reaches the catch-all through posture_scan.py:578, which turns it into an allow. It is open, not new.
+
+WRITES
+- The only new write is the telemetry marker: O_EXCL, mode 0600, under the audit family directory.
+- The fact-gate state write is byte-identical to the base. Its predictable-tmp/O_TRUNC symlink issue is codex-p04's signed P1.
+- Side effect of this delta: every indirect hit except bash_computed_canonical_target is tagged destructive=True (posture_scan.py:582). So the default-ON shadow fact gate now also persists state for those blocks. That gives the declared P1 more trigger paths but no new defect class.
+
+PYTHON
+- Standard library only. No 3.10+ syntax: no match, no slots or kw_only, no runtime `X | Y`. Each fragment's `from __future__ import annotations` comes right after its docstring, and compile() also inherits the flag from the facade.
+
+FINDINGS
+P0: none.
+
+NEW FINDINGS (annex)
+None at P1. Every P1 that touches this payload is already in the signed lane notes:
+- claude-p05: xargs recursion.
+- codex-p04: fact-gate tmp write.
+- claude-p16: the guard's false positives, limits and heredoc-consumer gaps.
+
+P2 FOLLOW-UPS (new in this pass)
+1. decisions_cli.py:193-194. The fragment keeps the two END markers (PLAN-154.F6 fact-gate END, PLAN-153.E5 citation-gate END), but their BEGIN markers were dropped in the move. Scenario: a maintainer re-applying a hand patch by its markers, as condition 7 asks, finds unpaired anchors. Fix: restore the BEGIN lines or delete both ENDs.
+2. posture_scan.py:474. The decide_command docstring still says "Pure decision function — no I/O". The trailing scan can now import the check_canonical_edit hook module, through bash_indirect_guard.py:410, whenever a command carries a redirect, tee, sed -i or dd target. That happens even for `2>/dev/null`. The scan also reads CLAUDE_PROJECT_DIR. Fix: correct the docstring.
+3. posture_scan.py:573-578 and decisions_cli.py:171 compare the switches with exact `== "0"`. Sibling switches in the same hook strip whitespace first: normalization.py _rawscan_enabled and fact_state.py _fact_gate_shadow_enabled. Scenario: CEO_BASH_INDIRECT_GUARD=" 0" leaves the guard on, which is the safe direction, and writes no disable telemetry. Fix: compare `str(v).strip()`.
+4. rendering.py:110-120. Section headers for "Argument parsing" and "PLAN-081 Phase 6-bis — label store / fp-rate" remain at the end of the file with no code under them. They point a maintainer to the wrong module. Fix: delete them.
+5. fact_canonical.py:204 and posture_scan.py:4 call re.compile at module level without importing re, and posture_tables calls _e3_basename the same way. The fragments therefore fail with NameError if imported standalone (`import _lib._bash_safety_parts.fact_canonical`). This is the same class as rc P2-3 for _audit_query. No importer exists today. Fix: a guard that raises a clear error when not loaded by the facade.
+
+STILL OPEN FROM THE SIGNED RC EVIDENCE (re-confirmed present; the bytes are unchanged)
+- check_bash_safety.py:12 says _apply_destructive_citation_gate is in rewrite_citation.py; it is at fact_state.py:4.
+- The facade's __doc__ is overwritten by the last fragment's docstring.
+- A fact-gate or citation replacement Decision drops reason_code, so the bash_indirect_* veto_triggered event is skipped in those opt-in modes.
+- bash_indirect_limit and unparseable_shell blocks are releasable through the opt-in fact gate or citation pilot.
+- normalization.py:4-55 carries a stale second module docstring with a mid-file shebang.
+- The posture_scan.py:571 import cannot be told apart from a scanner crash.
+
+VERDICT: GO This payload's eleven files are byte-identical to the rc evidence, match the base code apart from the declared PLAN-195 additions, and make none of conditions 5, 6 or 7 false; I found no P0 and no new P1, only P2 follow-ups and P1s already carried in the signed lane notes.

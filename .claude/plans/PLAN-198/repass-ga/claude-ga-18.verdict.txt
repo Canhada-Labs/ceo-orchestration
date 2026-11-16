@@ -1,0 +1,62 @@
+PAYLOAD 18/34 (GA v1.4.4, candidate 84b83324c820), reviewed against the read-only candidate tree.
+
+Files in this payload:
+- the tail of the _lib/audit_emit.py facade;
+- new: _lib/bash_indirect_guard.py and _lib/bash_indirect_telemetry.py;
+- new: _lib/canonical_edit/{__init__,decisions,entry,guards,paths,sentinels,session_roots,signature_rail,utility}.py;
+- new: _lib/claude_md_excludes.py and _lib/cli_currency.py;
+- modified: _lib/effective_config.py and _lib/escalation_signals.py;
+- new: _lib/federation/_server_parts/__init__.py.
+
+This file set is the tail of rc payload 16 plus the head of rc payload 17 (repass-rc1/diff-rc1-16.patch and diff-rc1-17.patch). I compared file lists only, not bytes.
+
+Method: I read every file in the payload and the code that consumes it: check_canonical_edit.py, posture_scan.py:571-585, decisions_cli.py:140-249, normalization.py (_split_subcommands, _tokenize, _recheck_whole_command), check_config_change.py, _pair_rail_parts/part_01.py:477-571, model_currency.py and the kernel list. I also read the rc verdicts for payloads 16-18 so I would not re-file declared items. All traces are static; I ran nothing.
+
+DECLARED CONDITIONS TOUCHED BY THIS PAYLOAD: none is false.
+- C5 holds. check_arbitration_kernel.py:309 has the recursive row .claude/hooks/_lib/canonical_edit/**/*, which covers guards.py and __init__.py. Lines 333, 335 and 336 list cli_currency.py, bash_indirect_guard.py and bash_indirect_telemetry.py.
+- C6 holds. posture_scan.py:571-580 skips the scan only when the trusted snapshot value is "0". If no snapshot is available, the scan stays on. Heuristics are gated the same way. decisions_cli.py:168-174 emits telemetry only when a switch is "0".
+- C7 holds. check_canonical_edit.py:618-620 binds every name in the __all__ of seven components into the hook's own globals: paths, sentinels, signature_rail, session_roots, utility, decisions and entry.
+  - Every name in those lists exists and is a function, so bind() cannot raise on a non-function.
+  - The global writes (_CURRENT_TOOL_NAME, cache counters, _UNLOCK_TRUST_DIAG) land on the facade.
+  - The patch points _now, _gpg_verify and the signer paths are kept.
+  - ADR-186 stays fail-CLOSED at all three places: decisions.py, at the top of the sentinel loop and after it; entry.py, in the multi-candidate loop; signature_rail and _anchored_blob_text, which latch _mark_wall_budget_exhausted when the budget is too short to spawn.
+- C9 and C10 hold as declared.
+  - model_currency families widen the allowlist and the VETO floor; escalation_signals.py:126 and effective_config.py:482 call those predicates.
+  - cli_currency.compatible_package_version needs a version at or above the 0.160.0 floor and strictly newer than the manifest version, taken from package.json with no hash.
+  - part_01.py:553-571 applies that rule, and malformed manifest versions fail closed.
+- Python: standard library only. No 3.10+ syntax in any file of this payload (I searched for walrus, match/case, PEP 604 unions, removeprefix, zip strict and dataclass slots/kw_only).
+
+P0: none found.
+
+Items already declared in the signed rc annex: I re-confirmed these against the code and do not re-file them.
+- The bash_indirect_guard defects: quoted ")" breaks $(...) parsing; python -c with canonical-path operands is blocked; nested xargs/find recursion raises RecursionError and the hook allows; the 12-launcher cap; ${#...} read as a comment; the here-doc consumer taken from the wrong word.
+- The canonical_edit partial-install fail directions: an ImportError blocks every edit; a non-ImportError or a guards.py import failure fails open, including the --is-canonical oracle.
+- The claudeMdExcludes recursion that empties classify_tampering.
+- The cli_currency and escalation-detector drift P2s.
+
+NEW FINDINGS (annex)
+
+P1. .claude/hooks/_lib/bash_indirect_guard.py:154 (quote tracking in _command_substitutions), reached from :229-231 (the scan of an unquoted here-doc body, source_comments=False) and :234 (only shell/eval consumers get their body scanned as code). An apostrophe in an unquoted here-doc body hides any later $(...) or backquote from the scan.
+- Cause: in a here-doc body, quotes are literal and bash runs every command substitution no matter what quotes surround it. _command_substitutions still treats the body as shell source and opens a single-quote state on the first "'". After that, the $( test at :156 (quote != "'") and the backquote test at :180 never fire.
+- Scenario: cat <<EOF > notes.txt / it's $(rm -rf ~) / EOF. The rm runs in bash.
+  - _extract_heredocs matches the unquoted delimiter and calls _command_substitutions on the body "it's $(rm -rf ~)\n".
+  - The apostrophe sets quote="'", so the $( is skipped and the call returns None.
+  - The consumer is "cat", not a shell, so :234 does not queue the body for a source scan, and the body is cut from the command text.
+  - The rest, "cat <<EOF > notes.txt", is clean, so scan() returns None.
+  - The base rail also allows this command. _split_subcommands does not split on newlines, the single chunk fails shlex, and _recheck_whole_command skips a chunk that is still unbalanced (normalization.py:589-594).
+- Any ordinary English contraction ("don't", "it's") earlier in the body is enough to trigger this.
+- Not a regression: v1.4.3-rc.1 allowed this too. It is a gap in the new guard, and it contradicts CHANGELOG [1.4.4] line 84, which says the scan covers rm -rf reached "inside sh -c, eval or a here-doc". It is the same class as declared rc item claude-p16 P1-3 but has a different root cause, so fixing P1-3 does not fix it.
+- Minimal fix: when source_comments is False (here-doc data), do not track quote state in _command_substitutions; honor only backslash escapes before $ and backquote. Add allow and block tests for: cat <<EOF / it's $(rm -rf ~) / EOF.
+
+P2 FOLLOW-UPS (new in this payload)
+
+P2-1. bash_indirect_guard.py:407-436 (_canonical_target) resolves targets differently from the hook it imports from.
+- It matches _CANONICAL_GUARDS case-sensitively. check_canonical_edit folds case (PLAN162_FIX_CASEFOLD, through _CANONICAL_GUARDS_FOLDED). So X=.CLAUDE/settings.json; echo x > "$X" is not flagged as a computed canonical target on APFS.
+- After cd to an absolute directory, :424 joins the target onto that absolute path and never strips the CLAUDE_PROJECT_DIR prefix. So cd "$CLAUDE_PROJECT_DIR" && sed -i s/a/b/ .claude/settings.json is never recognized, while cd .claude && ... is.
+- At :420, the absolute-path branch compares raw strings against CLAUDE_PROJECT_DIR, with no realpath (for example /var versus /private/var).
+- All three are false negatives in an additive guard; earlier rails still run.
+- Fix: call check_canonical_edit._matches_canonical_guard (case-folded, with the prefix fast-path) on a repo-relative form computed after the same prefix stripping for both the absolute and the cd-joined cases.
+
+P2-2. bash_indirect_guard.py:1-6. The module docstring says "Unrecognised input is left to the existing guards". The module actually blocks unparseable input in strict bodies (:493). It also blocks any unterminated $( or backquote, at any depth and without the strict flag (:178, :195). The CHANGELOG describes this correctly; the docstring should match.
+
+VERDICT: GO-WITH-CONDITIONS Conditions 5, 6, 7, 9 and 10 hold against the code in this payload and I found no P0, but one new undeclared P1 goes to the signed annex: an apostrophe in an unquoted here-doc body hides a later $(...) from the new indirect-execution scan.

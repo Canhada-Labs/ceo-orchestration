@@ -1,0 +1,34 @@
+Payload 29/34: no P0 or false declared condition established. The extracted installer implementation is delivered by install.sh. Python 3.9.6 import and grammar checks passed; no files were modified.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:36
+Reconfirmed rc finding: cloned Incomplete retains the original ParseError base, so it is not a subclass of the exported ParseError. Incomplete fragments can escape existing exception handlers and abort the census instead of producing a blocking report. The exit remains nonzero. Minimal fix: remap package-defined bases to their cloned counterparts.
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:29
+Reconfirmed rc finding: property accessors are not rebound. Patching the facade’s BLOCKING_VERDICTS leaves Site.blocking unchanged, breaking the promised patchable namespace. Minimal fix: rebind property getters, setters and deleters alongside methods.
+
+P2 — .claude/scripts/check-substrate-drift.py:571
+Reconfirmed rc finding: the actual >=0.128.0 range makes installed 0.139.0 report CODEX_INSTALLED_COMPATIBLE, removing downgrade remediation although the verifier rejects it against the 0.160.0 floor. Minimal fix: apply the verifier’s canonical floor and manifest-version comparison.
+
+P2 — .claude/scripts/check-substrate-watch.py:238
+Reconfirmed rc finding: treating codex_harness as compatible suppresses its outstanding fixture-reconciliation drift and runbook. Its ledger deliberately retains 0.139.0 pending fixture rerecording; installed 0.160.0 now clears that alert. Minimal fix: track harness reconciliation independently of CLI compatibility and correct the “installed matches last_seen” summary.
+
+P2 — .claude/scripts/check-substrate-watch.py:67
+Reconfirmed rc finding: the new unguarded cli_currency import makes a missing helper abort even report-only invocation, contrary to the documented infrastructure fallback. Minimal fix: guard the import and preserve advisory reporting when unavailable.
+
+P2 — .claude/scripts/check-subprocess-tests.py:16
+Reconfirmed rc finding: install.sh:1606 copies this checker and its Python helper but omits the required JSON baseline. Default invocation after fresh installation therefore exits 2. Minimal fix: explicitly ship the baseline or exclude this maintenance checker from adopter installations.
+
+P2 — .claude/scripts/check-subprocess-tests.py:21
+Reconfirmed rc finding: a nonexistent --root succeeds with zero findings, masking a CI path typo. Confirmed in a read-only invocation. Minimal fix: require an existing directory before scanning.
+
+P2 — .claude/scripts/_subprocess_census.py:187
+New integration observation: occurrence numbering includes only currently noncompliant calls. Moving a return-code assertion between two identical calls lets the newly unchecked call inherit the old baseline fingerprint; new_findings returns no additions. Confirmed by in-memory AST checks without executing subprocesses. Minimal fix: number identical calls before filtering compliant calls.
+
+Full-tree baseline validation remains limited by redacted and withheld files.
+
+VERDICT: GO-WITH-CONDITIONS The confirmed issues warrant follow-up, but this payload establishes neither a P0 defect nor a false declared condition.

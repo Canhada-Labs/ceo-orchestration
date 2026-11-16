@@ -1,0 +1,6 @@
+.claude/scripts/context-budget.py
+.claude/scripts/derive-audit-family.py
+.claude/scripts/diagnose-output-hook.py
+.claude/scripts/env-inventory.json
+.claude/scripts/gen-command-skill-hook-map.py
+.claude/scripts/generate-available-models.py

@@ -1,0 +1,21 @@
+Payload 14/34: no P0 or false declared condition established. Facade binding preserves global lookup and patch points. All seven spool functions retain their base ASTs; the agent-spawn comparison preserves 59 functions/classes except main’s added infrastructure fail-open guard. Python 3.9.6 grammar checks passed for all ten payload files. No files modified.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/_lib/_spool_writer_parts/writer.py:416; also :192 and :323. Short writes are acknowledged as durable. If os.write returns fewer bytes than requested without raising, spool_append still records commit and sets _LAST_APPEND_SUCCEEDED=True, preventing the canonical-write fallback. Journal flushing similarly clears incompletely persisted envelopes. Mocked checks confirmed both outcomes. Minimal fix: handle complete writes under the existing lock and acknowledge/clear only after all bytes and fsync succeed. This defect is inherited from the base, not introduced by extraction.
+
+P1 — .claude/hooks/_lib/agent_spawn/file_assignment.py:558; .claude/hooks/_lib/_audit_emit_parts/writer.py:145. The classifier accepts 64 paths, but both serialization stages cap their hashes at 512 characters. Only 39 complete 12-character hashes fit, while path_count can still report 64. Even after successful draining, the overlap reader cannot recognize assignments omitted by truncation. Minimal fix: preserve all accepted hashes through both stages—831 characters for 64 paths—and validate whole 12-character tokens. This is also inherited behavior.
+
+CARRIED FINDING RECONFIRMED
+
+P1 — .claude/hooks/_lib/agent_spawn/file_assignment.py:340; .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:348. The overlap reader consults only the canonical log, while registered hooks suppress exit draining. Pending assignments remain invisible until another drain occurs. Minimal fix: provide a bounded, durable reservation store shared by readers and writers, independent of deferred audit draining. Already recorded in the supplied lane notes.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/agent_spawn/skill_reference.py:166 and :184. Transient stat/read infrastructure failures become reference_missing and block legitimate spawns. Minimal fix: distinguish invalid references from infrastructure failures and route the latter through the hook’s fail-open handling. Carried from the rc review.
+
+P2 — .claude/hooks/_lib/agent_spawn/skill_reference.py:183. A separate size check precedes unbounded read_bytes(), without regular-file validation. A growing file can exceed the cap, and a special file can stall the hook. Minimal fix: open once, validate the descriptor, and read at most cap plus one byte. Carried from the rc review.
+
+Validation was limited to the redacted tree, static comparisons and in-memory checks; installation and live filesystem fault tests were not run.
+
+VERDICT: GO-WITH-CONDITIONS The audit-durability and overlap defects warrant advisory annex findings, while this payload establishes neither a P0 nor a false declared condition.

@@ -1,0 +1,47 @@
+PAYLOAD 25/34. Files: .claude/scripts/_subprocess_census.py (new), architect-bundle-validate.py (docstring made raw), audit-query.py (now a thin facade over .claude/hooks/_lib/_audit_query/), audit-verify-chain.py (new strict contract for --strict-against-counter), audit_spool_state.py (bytecode writing turned off). I read all of them in the candidate tree, together with the eight _audit_query modules, every non-test caller (mcp-server/handlers/audit_query.py, check-audit-read-api-stable.py, check-audit-hmac-null.py, check-audit-real-loss.py, check-subprocess-tests.py, the validate.yml F6 gate), audit_hmac.chain_length_path/read_chain_length/write_chain_length, and the install.sh _lib copy loop with _framework_path_excluded.
+
+P0: none.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES (checked against the code):
+- 3(c) holds. audit_spool_state.py:62 sets sys.dont_write_bytecode = True before the _lib import at :69, and check-audit-real-loss.py:67 sets it before `import audit_spool_state` at :71.
+- 7 holds. audit-query.py keeps its path and its public defs: read_entries, discover_logs, default_log_path and all 18 baseline cmd_* functions are still top-level defs, so the check-audit-read-api-stable.py AST freeze guard is satisfied. The logic moves to _lib/_audit_query/. A hand-patched copy would have to be patched again in the module.
+- 13 and 14: nothing in this payload contradicts them.
+- None of the other conditions is touched, and none is made false.
+
+ADOPTER BLAST RADIUS: no hook, settings file, model, effort or governance gate is touched. The affected surfaces are two operator CLIs (audit-query, audit-verify-chain), the read-only MCP audit_query tool (which loads audit-query.py by path and fails open on any import error), one read-only spool verifier, and a maintainer census. install.sh copies every _lib/* entry except tests, test_isolation.py, testing.py and __pycache__, so _lib/_audit_query/ reaches installs. With a partial upgrade (facade present, package missing), the CLI fails to import and the MCP tool returns warning import_failed. Both are infrastructure faults on a non-hook path, which is the correct direction.
+
+MOVED CODE (audit-query facade):
+- Every declaration in the removed block exists in one of the modules.
+- Every module-level non-function name in domain, labeling and critical is in that module's __all__. queries, reporting and reporting_health hold only functions.
+- _bind_query_functions clones every function with the facade's globals(). So module patch points (cmd_compliance used inside cmd_health, _parse_since_arg, _percentile, _LABEL_STORE_PATH, default_errors_path) still resolve through the facade, and __file__ inside _compute_label_hmac is still the facade's. parents[1]/hooks/_lib gives the same key path as at base.
+- _LABEL_STORE_PATH is set back to .claude/scripts/audit-log-labels.jsonl, the same write location as base.
+- No extracted name collides with a facade def that comes before the rebinding (default_log_path, default_errors_path, discover_logs, read_entries).
+- __kwdefaults__ is carried, so _weekly_delta(pp=) and _build_shared_parser(for_subcommand=) keep their defaults. The facade imports every stdlib name the clones use.
+- cmd_benchmarks gets _percentile from the facade globals. main reaches cmd_by_domain, cmd_label, cmd_critical, render and build_parser through the clones.
+- Python 3.9 compatible, standard library only.
+
+AUDIT-VERIFY-CHAIN:
+- Without --strict-against-counter: _ContractParser falls back to stock argparse.error (rc 2). The non-strict path resolves the log and reads the key exactly as before. verify() is called with strict off, as before; the counter_override that is no longer passed was ignored without strict anyway. check-audit-hmac-null.py still imports _iter_lines and _decode_entry, which keep compatible defaults. The CI F6 gate uses only the non-strict form.
+- With the flag:
+  - The counter is read before the log is opened, which removes the old read-after-walk race.
+  - write_chain_length uses an atomic rename, so an empty-read race cannot produce a false rc 3.
+  - Non-regular files are refused by fstat on the same descriptor, opened with O_NONBLOCK, which is POSIX-only. The project declares no Windows support (HONEST-LIMITATIONS.md:64).
+  - Every exception is mapped to a named rc with a single JSON object.
+  - An illegible counter now fails closed (rc 3) where it used to pass as 0, and the CHANGELOG [1.4.4] states this.
+  - The CHANGELOG lines 300-308 match the code apart from the two small gaps in P2-1 and P2-2.
+
+OTHER FILES:
+- architect-bundle-validate.py: the docstring's only backslash sequence is an invalid escape (\`). The value is unchanged; only the SyntaxWarning goes away.
+- _subprocess_census.py: read-only, rejects symlinked sources, 3.9-safe. The show_empty pin applies only on 3.13 and later, and the test with golden digests it cites exists. It is shipped to installs, as the CHANGELOG says, but no hook or adopter gate invokes it.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS:
+P2-1 .claude/scripts/audit-verify-chain.py:579-587 against its docstring at :46-47. The docstring says an illegible counter is rc 3, "rc 4 when the read is refused by permissions". But an os.lstat PermissionError on the counter (for example, a parent directory without search permission) is caught as a plain OSError and returns rc 3 "cannot stat"; only an os.open refusal gives rc 4. Scenario: an operator script that branches on rc 4 to mean a permissions problem misreads this case as a corrupt counter. Fix: catch PermissionError from lstat and map it to EXIT_PERM/STATUS_PERM_ERROR, or reword the docstring.
+P2-2 .claude/scripts/audit-verify-chain.py:588-590. Only the first 64 bytes of the counter are read. A file whose first 64 bytes are digits plus whitespace, followed by junk, is accepted (for example "12" + 62 spaces + "xyz" is read as 12). This goes against "not plain decimal digits → rc 3". The impact is low, because whoever can write the counter can already lower it. Fix: read 65 bytes and refuse when more than 64 are present, or read up to EOF with a small cap.
+P2-3 .claude/hooks/_lib/_audit_query/labeling.py:19-21 and :51. As a standalone module, _LABEL_STORE_PATH points to .claude/hooks/_lib/_audit_query/audit-log-labels.jsonl. _compute_label_hmac then builds .claude/hooks/_lib/hooks/_lib, a path that does not exist, and can silently fall back to the hardcoded chain key. These paths are correct only after the facade rebinds them, and no caller uses the module directly today. Scenario: a future caller imports labeling.cmd_label directly, writes labels inside the hooks tree, and computes HMACs with the wrong key. Fix: resolve both paths from the repository root, or make the module refuse to run unless it has been rebound.
+P2-4 .claude/scripts/audit-query.py:214-224. _bind_query_functions overwrites any facade global that has the same name as a function in an extracted module. Today nothing collides. A future helper named read_entries or default_log_path in a module would silently replace the facade's own definition. Fix: assert that no cloned name is already bound to a facade-defined function, apart from the intended cmd_* delegates.
+P2-5 .claude/scripts/audit-query.py:387-394. A leftover section header ("PLAN-080 Phase 1 — by-domain sub-command / Default window for by-domain") has no code under it. Fix: delete it.
+P2-6 .claude/governance/function-length-grandfather.yaml:872-883. The audit-verify-chain.py verify/main entries carry sha256 values for the old bodies, and verify has grown to about 155 lines. The check is advisory in CI (validate.yml:287-290 runs it with `|| true`), so nothing breaks. Fix: refresh the entries or add a `# justified:` comment.
+
+VERDICT: GO Payload 25 touches no hook or governance gate. Declared conditions 3(c) and 7 hold against the code, and no other condition is touched or made false. The audit-query facade keeps its names, patch points, write locations and Python 3.9 standard-library compatibility, and strict mode in audit-verify-chain fails closed while leaving non-strict behaviour unchanged. I found no P0 and no undeclared P1, only six P2 follow-ups.

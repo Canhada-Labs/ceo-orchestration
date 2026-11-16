@@ -1,0 +1,11 @@
+Payload 13/34: no P0 or false declared condition established. Python 3.9 syntax, facade bindings and installer delivery checks passed. No files modified.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/_lib/_spool_writer_parts/drain.py:412; also :529 and .claude/hooks/_lib/_spool_writer_parts/lifecycle.py:188. The drain ignores os.write's returned byte count, reports the entire batch appended, then compacts journals and deletes consumed spool records. A successful short write can therefore permanently lose audit records. The split-remainder path likewise deletes its source without confirming complete writes. An in-memory check requested 37 bytes, simulated 18 bytes written, and received two records reported appended. This is a newly observed inherited defect, not a refactor regression. Minimal fix: complete and fsync every write before acknowledgment or deletion; retain spool data on failure and repair the partial canonical suffix under the existing lock before retrying.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_shipped_path_census/census.py:48. Installer evidence relies on matching text without checking whether the copy operation is reachable. An in-memory variant with an immediate return in install_lib_selective still reported recursive delivery as proven. This can conceal a later installer regression. Minimal fix: validate a constrained executable control-flow pattern and classify unsupported forms as unproven.
+
+VERDICT: GO-WITH-CONDITIONS This payload establishes neither a false declared condition nor a P0, while the inherited audit-loss defect and census weakness warrant follow-up.

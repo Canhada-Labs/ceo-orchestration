@@ -1,0 +1,67 @@
+PAYLOAD 10/34: the parts of two split modules.
+- .claude/hooks/_lib/_installer_write_safety/{model,operands,report,syntax,verdicts_a,verdicts_b}.py
+- .claude/hooks/_lib/_lessons_parts/{__init__,candidates,cli,config,lessons}.py
+
+All of these files are new. They are the bodies of the PLAN-197 split of check-installer-write-safety.py and lessons.py. I also read the code they bind into:
+- .claude/scripts/check-installer-write-safety.py
+- _installer_write_safety/__init__.py (bind), engine.py, commands.py
+- .claude/scripts/lessons.py
+- _audit_emit_parts/__init__.py (install)
+- _lessons_parts/render.py and storage_audit.py
+- emit_architect_outcome.py, which imports lessons
+- the CHANGELOG [1.4.4] PLAN-197 section
+- the rc.1 verdict for this same file set (.claude/plans/PLAN-198/repass-rc1/claude-rc1-09.verdict.txt)
+
+I could only read files; I ran nothing.
+
+DECLARED CONDITIONS TOUCHED
+- Condition 7 holds. Both entry points keep their paths: .claude/scripts/check-installer-write-safety.py (37 lines) and .claude/scripts/lessons.py. The logic lives under .claude/hooks/_lib/, and both entry points rebind it to their own globals:
+  - The census uses _installer_write_safety.bind (__init__.py:42-55).
+  - Lessons uses _audit_emit_parts.install (__init__.py:20-48).
+  - Patch points on the entry-point module therefore still reach the bound functions, and Path(__file__) in the moved lessons code still resolves to the entry point. Example: candidates.py _load_injection_scanner resolves to .claude/scripts/scan-injection.py, which exists. So the fail-closed promotion boundary still finds its scanner and does not quarantine every candidate as scanner_unavailable.
+- Condition 5 is not undercut. Neither package is a kernel path, and neither is claimed to be one. lessons.py depends on _lib/_audit_emit_parts, which is a kernel package under condition 5.
+- Conditions 13 and 14: nothing here contradicts them.
+- Python: every file is standard-library only and compatible with Python 3.9. Each has `from __future__ import annotations`, uses typing generics only in annotations, and has no syntax newer than 3.9. No module-level statement uses a name its own module does not import. Every helper the parts use resolves in some component's __all__: classify_command, _strip_prefixes, command_basename, _KEYWORDS, expansion_names, _expansion_refs, _RE_FUNC_DEF, _RE_ASSIGN and _RE_EXPANSION. The lessons parts use only storage_audit and render helpers and facade names.
+- Adopter blast radius: none on hooks.
+  - The census is a maintainer CI ratchet (validate.yml), not a hook. Its only write is the explicit --write-baseline.
+  - The lessons parts keep the same write locations: <lessons_dir> and <lessons_dir>/candidates under $HOME or CEO_LESSONS_DIR. They also keep the same fail directions: legacy injection scan advisory and fail-open, candidate promotion fail-closed, boot sweep best-effort.
+  - No model or effort setting changes, and no hook is disabled.
+- No write outside its place, through a symlink or over an adopter's file is introduced by this payload.
+
+P0: none.
+
+CARRIED, NOT NEW (already in the signed lane notes as claude-p08 P1 and claude-p28 P1, codex-p09 and claude-p09 P2). I confirmed it against this payload's code:
+- FILE:LINE: _installer_write_safety/__init__.py:36, together with syntax.py:6-10.
+- What is wrong: _bind_class rebuilds each class with original.__bases__. The facade's Incomplete therefore subclasses syntax.ParseError, not the facade's ParseError clone.
+- Where it bites: every `except ParseError` in bound code no longer catches the Incomplete raised by _read_balanced, _read_dquote and lex:
+  - model.py:320 and :344 (_subst_commands) and :632 (_token_is_expanded)
+  - operands.py:35 (canon_operand)
+  - verdicts_b.py:141 (parse_sed_script) and :440 and :447 (_sole_pipeline_producer)
+  - commands.py:131
+- What still works: the main lexer path, because syntax.py:270 catches the facade's Incomplete and model.py:355 catches the facade's ParseError.
+- Failure scenario: a scanned script containing `sed 's/$(/X/' f` lexes fine. parse_sed_script then raises an Incomplete that nothing catches, and the census crashes (exit 1) instead of reporting an i-script-unparsed site. The failure stays closed and is maintainer-only. It does contradict the CHANGELOG [1.4.4] line 112 promise that entry points keep "their observable contracts".
+- Minimal fix: remap bases through the clones already made (bases = tuple(clones.get(b, b) for b in original.__bases__)), or do not clone exception classes. Add an issubclass test and a fixture with an unbalanced literal `$(` in a sed script.
+
+NEW FINDINGS (annex): none. No undeclared P1 in this payload.
+
+P2 FOLLOW-UPS
+P2-1 (new; patch point of moved code). _installer_write_safety/__init__.py:29-35 together with report.py:32-34.
+- What is wrong: _bind_class rebinds plain functions, staticmethods and classmethods, but not properties.
+- Effect: the getter of Site.blocking keeps report.py's module globals, so it reads report's copy of BLOCKING_VERDICTS. Before the split it read the entry module's copy. A test or harness that patches mod.BLOCKING_VERDICTS on the entry point now changes main() and render_table counts that use VERDICT_* directly, but not Site.blocking. Baseline and blocking decisions would then disagree.
+- No current test patches it, so this is latent.
+- Minimal fix: also rebind property fget, fset and fdel in _bind_class.
+
+P2-2 (carried from the rc.1 P2-5; cosmetic). verdicts_b.py:698.
+- What is wrong: __all__ excludes only _engine and _engine_name.
+- Effect: bind() publishes _commands (a module object) and _commands_name into the facade, and clones commands' classes and functions a second time, with the last clone winning. This is consistent within the facade but wasteful.
+- Minimal fix: also exclude _commands and _commands_name.
+
+P2-3 (carried from the rc.1 P2-2; root in commands.py, outside this payload, relied on by verdicts_b.py:340 and model.py:612).
+- What is wrong: _expansion_refs tracks no double-quote state.
+- Effect: `sed "s/it's/$VAL/" f` loses $VAL, and the site comes out n0-no-interpolation, which does not block.
+- Minimal fix: track double quotes and treat ' as a quote only outside them.
+
+P2-4 (honesty, moved text, predates this release). engine.py:84-86 says "Being in the baseline means a human LOOKED". report.py BASELINE_HEADER says a baseline line is "NOT a per-site human review". The rc.1 diff shows the first sentence was moved unchanged from the old entry point.
+- Minimal fix: align the docstring with the header.
+
+VERDICT: GO Against the code in this payload, every declared condition it touches holds (7, 5, 13 and 14), the moved census and lessons code binds to its entry points with the same names, file-relative paths and fail directions, there is no P0, and the one real defect, the broken Incomplete/ParseError link that fails closed in maintainer CI only, is already in the signed annex.

@@ -1,0 +1,9 @@
+Payload 22: no P0 or false declared condition established. All 85 function/class declarations remain accounted for. Shared globals, patch points, file-relative paths, CLI ordering and installer delivery are preserved. Python 3.9.6 checks, benign command checks and a mocked infrastructure-failure check passed. No files modified.
+
+NEW FINDINGS (annex)
+No new P1 established. Carried findings remain open.
+
+P2 follow-ups
+P2 — .github/workflows/coverage.yml:184; .claude/hooks/check_bash_safety.py:39: The Tier-1 coverage gate still selects only check_bash_safety.py, but execution is now attributed to fragment filenames. Coverage of the moved safety logic can fall below 86% without failing this gate. An in-memory report containing 100% facade coverage and 0% fragment coverage produced no Tier-1 failure. Minimal fix: aggregate the facade and its eight fragments under the existing threshold, or explicitly gate the fragment paths.
+
+VERDICT: GO This payload establishes neither a false declared condition nor a P0, and the coverage gap is a nonblocking follow-up.

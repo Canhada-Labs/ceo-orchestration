@@ -1,0 +1,12 @@
+Payload 12/34: no P0 or false declared condition identified. Python 3.9.6 syntax, import, namespace and patch-point checks passed. Policy and PreCompact moved declarations match the baseline. No files modified.
+
+Carried finding
+P1 — .claude/hooks/_lib/_profile_opus_parts/latency.py:119. Profiling inherits CEO_AUDIT_LOG_PATH and explicit audit sidecar overrides despite assigning temporary HOME and CEO_AUDIT_LOG_DIR. Synthetic events can therefore reach live audit files. Minimal fix: apply diagnose-output-hook.py’s complete isolation scrub list and temporary state assignments. This remains the recorded rc annex issue; condition 3(a) covers only the diagnostic script.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+P2 — .claude/hooks/_lib/_precompact_parts/__init__.py:16, called unguarded by .claude/hooks/check_precompact_continuity.py:174. A missing or unreadable fragment raises before main() can produce its fail-open {} response, including when continuity is disabled. A mocked PermissionError confirmed empty stdout and an uncaught exception; session blocking was not established. Minimal fix: guard bootstrap at the facade boundary and emit the existing breadcrumb plus {} with successful exit on infrastructure failure.
+
+VERDICT: GO-WITH-CONDITIONS The carried audit-isolation defect and bootstrap follow-up remain open, without an identified P0 or falsified declared condition.

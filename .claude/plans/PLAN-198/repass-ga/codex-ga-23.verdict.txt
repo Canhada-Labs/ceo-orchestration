@@ -1,0 +1,26 @@
+Payload 23/34: no P0 or false declared condition established. The canonical-edit package remains kernel-protected, and its normal binding path preserves facade globals and independent caches. The cost-envelope and harness-diagnostic changes match their changelog descriptions.
+
+Carried findings revalidated
+
+P1 — .claude/hooks/check_canonical_edit.py:624; .claude/hooks/_lib/canonical_edit/entry.py:129. A missing extracted component is classified as an integrity failure. The fallback blocks matched invocations before inspecting their input, including legitimate noncanonical edits. This reverses infrastructure fail-open behavior and is separate from the deliberate wall-deadline exception. Minimal fix: allow with a diagnostic on component import faults; retain input-parse and deadline blocks.
+
+P1 — .claude/hooks/check_canonical_edit.py:123. Failure to load guards.py silently substitutes an empty guard list without recording component failure. Other components can bind successfully, leaving --is-canonical returning successful noncanonical classifications for guarded paths; review consumers consequently miss their conservative fallback. Minimal fix: propagate guard-loading failure, return nonzero from oracle mode, and retain explicit infrastructure fail-open handling for hook execution.
+
+NEW FINDINGS (annex)
+No additional P1 findings beyond the carried findings above.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_ceremony_toolkit/preflight.py:52. The default policy reader searches the facade’s top-level AST for the now-extracted guard declaration. Default collection raises canonical_guard_policy_unavailable, rejecting valid ceremony packets. Minimal fix: read canonical_edit/guards.py and verify the default lookup.
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304. Sentinel discovery still searches the facade for _PATTERNS. It always falls back to four patterns, omitting six supported forms from pending-signature reporting. Minimal fix: read the declaration in canonical_edit/paths.py.
+
+P2 — .claude/hooks/check_canonical_edit.py:115. The new comment promises blanket command and skill coverage, but the list guards only council.md among commands and specific skill tiers. Minimal fix: describe the actual coverage rather than presenting scanner tokens as enforcement guarantees.
+
+P2 — .github/workflows/coverage.yml:184. The stronger coverage floor still targets the facade, while extracted functions retain component source filenames. The moved implementation therefore loses that floor. Minimal fix: include the canonical_edit package in the stronger coverage gate.
+
+P2 — .github/workflows/mcp-smoke.yml:56. Push and pull-request filters omit canonical_edit/**, so changes confined to the moved MCP enforcement code do not trigger this workflow. Minimal fix: add the package to both filters.
+
+Validation: Python 3.9.6 syntax checks passed for 14 files; all 49 extracted functions bind to facade globals with no unresolved global references. Benign classification checks passed. No files modified.
+
+VERDICT: GO-WITH-CONDITIONS The carried import-failure defects remain open, but this payload establishes neither a false declared condition nor a P0.

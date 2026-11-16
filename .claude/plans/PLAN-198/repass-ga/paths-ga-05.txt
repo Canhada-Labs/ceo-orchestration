@@ -1,0 +1,11 @@
+.claude/hooks/_lib/_audit_query/queries.py
+.claude/hooks/_lib/_audit_query/rendering.py
+.claude/hooks/_lib/_audit_query/reporting.py
+.claude/hooks/_lib/_audit_query/reporting_health.py
+.claude/hooks/_lib/_bash_safety_parts/__init__.py
+.claude/hooks/_lib/_bash_safety_parts/decisions_cli.py
+.claude/hooks/_lib/_bash_safety_parts/fact_canonical.py
+.claude/hooks/_lib/_bash_safety_parts/fact_state.py
+.claude/hooks/_lib/_bash_safety_parts/normalization.py
+.claude/hooks/_lib/_bash_safety_parts/posture_parser.py
+.claude/hooks/_lib/_bash_safety_parts/posture_scan.py

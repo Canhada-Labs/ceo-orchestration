@@ -1,0 +1,52 @@
+SCOPE: payload 4/34 (GA). Files: _lib/_audit_emit_parts/{workflow,writer}.py; _lib/_audit_log_parts/{__init__,adapters_runtime,entries_usage,paths_skills,rotation_storage}.py; _lib/_audit_query/{__init__,critical,domain,labeling,parsing}.py. I read them together with the facades that load them: _lib/audit_emit.py:413-452 with _audit_emit_parts/__init__.py:20-48 (install binder); audit_log.py:309-329 (exec loader); .claude/scripts/audit-query.py:174-228 (FunctionType rebinding). I compared the moved text with the base deletions in the rc evidence (diff-rc1-14.patch for audit_emit, diff-rc1-19.patch for audit_log, diff-rc1-24.patch for audit-query). Per the GA-only condition, the code is byte-identical to the rc.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES (all TRUE against the code)
+- Condition 3 / rc condition 67 (carried cure): append_entry (rotation_storage.py) still holds ONE FileLock (timeout 2.5) around rotation, marker, key, predecessor read, HMAC, append and last-hmac sidecar. Its text is identical to the base at diff-rc1-19.patch:3271-3434, including _emit_rotation_marker_under_lock and the chain_reset_marker_missing branch.
+- Condition 5: both rows are present at check_arbitration_kernel.py:312-313: '.claude/hooks/_lib/_audit_emit_parts/**/*' and '.claude/hooks/_lib/_audit_log_parts/**/*'. _audit_query is not on the list, and neither is its entry point .claude/scripts/audit-query.py, so moving the logic takes nothing out of kernel protection.
+- Condition 7: audit_log.py, _lib/audit_emit.py and .claude/scripts/audit-query.py keep their paths, and the logic now lives in the _lib packages. install.sh:1524-1541 copies every top-level _lib entry; _framework_path_excluded (_framework_manifest_set.sh:95-107) excludes none of the new packages.
+- Conditions 13 and 14: nothing in this payload bears on scope or withheld counts.
+
+WHAT I CHECKED
+1. Moved code and name lookup:
+- audit_emit: install() deep-copies each part's __all__ into the facade, then rebinds every function to the facade globals. So global _FALLBACK_NOTIFIED (writer.py) mutates facade state, and patch points on _lib.audit_emit reach _write_event, _preview, _breadcrumb and the rest.
+- Every free name in writer.py and workflow.py resolves in the facade: getpass, json, os, sys, datetime, timezone, Path, FileLock, FileLockTimeout, _redact, _runtime_paths, _audit_hmac, _spool_writer, _KNOWN_ACTIONS, EVENT_SCHEMA_V2, and _AUDIT_PRODUCER_PATH_POLLUTION_REASON_CODES (operations.py:463).
+- _write_event, _emit_chain_reset_marker_under_lock, _preview and the emitters I spot-checked match the base text (diff-rc1-14.patch:2884-3130, :3311, :3360, :3507, :3716). _ensure_canonical_lib_modules (audit_hmac.py:760) still sees _lib.audit_emit.__file__ in _lib, so the producer-path-pollution chokepoints are unaffected.
+- audit_log: the fragments run with exec in the facade dictionary, in the order paths_skills, entries_usage, rotation_storage, adapters_runtime. __file__ stays the hook path. Every name they use (stat, getpass, Tuple, _rp_state_dir, the _SKILL_* regexes, _ARCHETYPE_*) is defined in the facade before the exec. The _ADR_052_ROLE_TO_MODEL table is unchanged, so no model value changes.
+- audit-query: domain, rendering, labeling, critical and parsing are copied by __all__, and the __all__ lists are complete for each module's top-level names. queries, reporting and reporting_health have no module-level constants, so rebinding their functions alone is enough.
+- _LABEL_STORE_PATH is restored at audit-query.py:203, and _compute_label_hmac's Path(__file__).parents[1] resolves to .claude/hooks/_lib. The label store and the label-chain key are therefore unchanged; the base text is at diff-rc1-24.patch:1966-2000. The MCP loader (mcp-server/handlers/audit_query.py:127-135) loads the facade by path, so the same binding applies. label stays excluded from the MCP allowlist.
+2. Fail direction: unchanged.
+- Audit writers stay fail-open everywhere.
+- A missing _audit_log_parts file raises at import; the hook exits 1, which does not block a PostToolUse event (_python-hook.sh derives exit 2 only from an emitted deny).
+- A missing _audit_query module makes the MCP handler fail open, with an import_failed warning.
+3. Writes: no target moved. That covers the audit log, the lock and errors files (family-follows-log), the /tmp fallback and the label store.
+4. Python and stdlib: standard library plus _lib only, and no 3.10+ syntax. Annotations such as "_contract.NormalizedEvent | _payload.HookPayload" and List[...] are strings under from __future__ import annotations.
+5. Honesty: critical.py's "38 critical-security actions" is correct (12+3+7+3+2+1+10). The label docstrings ("Append-only via HMAC chain to .claude/scripts/audit-log-labels.jsonl") hold through the facade.
+
+CARRIED, ALREADY DECLARED (re-confirmed, not new)
+- writer.py:603-604/687/761: when mkdir or the FileLock open raises OSError before 'line' exists, the code raises UnboundLocalError and the event is lost with no /tmp fallback. This is the codex-p03 P1 in the signed lane notes. The base had the same text (diff-rc1-14.patch:3106-3110).
+
+P2 FOLLOW-UPS (new)
+P2-1. audit_log.py:311-327 with _audit_log_parts/adapters_runtime.py:258-259.
+- Defect: when the hook runs as a script, main() is called from inside the exec loop, through the 'if __name__ == "__main__": sys.exit(main())' guard at the end of the last fragment. The loop and the __doc__ restore at :328 never finish.
+- Scenario: a maintainer appends a fifth part after "adapters_runtime" in _PARTS. When the hook runs, main() executes and exits before that part is loaded, so every name defined there is missing at runtime; imports in tests would still see it. This is the same class as the rc P2 for check_bash_safety (claude-rc1-21 P2-5), which the rc did not raise for audit_log.
+- Minimal fix: remove the guard from the fragment and put 'if __name__ == "__main__": sys.exit(main())' in audit_log.py after _install_parts(), or assert _PARTS[-1] == "adapters_runtime".
+P2-2. _audit_query/domain.py:56-101 (_resolve_window_bounds), reached through mcp-server/handlers/audit_query.py:86 and :172.
+- Defect: an invalid 'window' value calls sys.exit(1). SystemExit is a BaseException, so it passes through the handler's 'except Exception' (handlers/audit_query.py:321), dispatch.py:755 and stdio_transport.run.
+- Scenario: an authenticated MCP client sends audit_query.by_domain with params {"window": "x"}. The read-only stdio MCP server process exits. This behaviour predates this release, but the moved helper keeps it.
+- Minimal fix: raise ValueError in the helper and turn it into exit 1 in audit-query main(), or catch SystemExit in the MCP handler.
+P2-3. _audit_log_parts/rotation_storage.py:154-171 (_fallback_security_breadcrumb).
+- Defect: it appends to the predictable /tmp/ceo-audit-fallback-<user>.log with open("a"), which follows symlinks. It also ignores CEO_AUDIT_LOG_FALLBACK_PATH, although its docstring says it "Mirrors _lib.audit_emit._fallback_log_path". This predates the release and is the same class as claude-rc1-03 P2-2 (writer.py).
+- Minimal fix: os.open with O_WRONLY|O_APPEND|O_CREAT|O_NOFOLLOW and mode 0o600, and honour the override.
+
+P2 FOLLOW-UPS (carried from the rc re-pass, re-confirmed in this payload's files)
+- workflow.py: List annotations on the bound emitters make typing.get_type_hints raise NameError, because the facade imports only Any, Dict and Optional (claude-rc1-03 P2-5).
+- labeling.py:19/51: correct only when rebound by the facade. Used standalone, the store path points inside _lib, and audit_hmac fails to import, so the fixed fallback key is used. No such caller exists today (claude-rc1-04 P2-3).
+- domain.py:241-251: a malformed sunset_reopen_* value becomes False, against the documented True default (codex-rc1-04 P2).
+- writer.py:42-51/76/87: the /tmp fallback follows symlinks (claude-rc1-03 P2-2).
+- audit_log.py:317-327: a missing part file makes the hook exit 1 with a traceback instead of writing a breadcrumb and exiting 0 (claude-rc1-03 P2-3).
+
+VERDICT: GO Payload 4/34 moves the audit_emit writer and workflow emitters, the audit_log parts and the audit-query parts without changing behaviour: the text matches the base, the facades rebind every name, write locations stay put, the fail direction is unchanged, the code is standard-library only and Python 3.9-compatible, the two audit part packages are kernel-listed, and no declared condition is false and no P0 or new P1 was found.

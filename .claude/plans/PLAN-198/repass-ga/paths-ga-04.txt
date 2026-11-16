@@ -1,0 +1,12 @@
+.claude/hooks/_lib/_audit_emit_parts/workflow.py
+.claude/hooks/_lib/_audit_emit_parts/writer.py
+.claude/hooks/_lib/_audit_log_parts/__init__.py
+.claude/hooks/_lib/_audit_log_parts/adapters_runtime.py
+.claude/hooks/_lib/_audit_log_parts/entries_usage.py
+.claude/hooks/_lib/_audit_log_parts/paths_skills.py
+.claude/hooks/_lib/_audit_log_parts/rotation_storage.py
+.claude/hooks/_lib/_audit_query/__init__.py
+.claude/hooks/_lib/_audit_query/critical.py
+.claude/hooks/_lib/_audit_query/domain.py
+.claude/hooks/_lib/_audit_query/labeling.py
+.claude/hooks/_lib/_audit_query/parsing.py

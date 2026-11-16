@@ -1,0 +1,66 @@
+SCOPE AND METHOD
+Payload 11/34 contains: _lessons_parts/render.py and storage_audit.py; _night_mode_parts/__init__.py, helpers.py and toggles.py; _pair_rail_parts/__init__.py, _shared.py and part_01-04.py; _policy_parts/__init__.py, decisions.py and loading.py.
+I checked each against its entry point in the candidate tree: check_pair_rail.py, _lib/policy.py, .claude/scripts/lessons.py and .claude/scripts/night-mode.py. This was a static review only: no code was run, because only read and search tools were available.
+
+WHAT I VERIFIED
+- Moved code is bound to its entry point.
+  - Pair-rail and lessons use a FunctionType rebind with deepcopy. Night-mode uses a rebind without deepcopy. Policy runs exec in the entry point's namespace.
+  - Every global the moved code uses resolves there. check_pair_rail.py:21 supplies _cli_currency, which part_01 imports at module level but does not list in __all__.
+  - hashlib, stat, tempfile, platform and fnmatch are imported inside the functions that use them.
+  - __file__-based paths resolve from the entry point: .claude/hooks for pair-rail; .claude/scripts/scan-injection.py for lessons, through candidates._load_injection_scanner. Night-mode keeps REPO_ROOT and _INVOKED_SELF in its entry point.
+  - "global _CURRENT_REVIEW_ID" and "global _RUBRIC_CATALOGUE_CACHE" write to the entry point's globals.
+  - deepcopy treats classes as atomic, so "except CodexPinMismatch" in _decide matches the class raised by _resolve_codex_bin.
+  - Patches on the entry point's attributes, for example _invoke_codex_review, are seen by _decide.
+- Fail direction.
+  - If check_pair_rail fails to import, Python exits 1 with empty stdout. _python-hook.sh:412-416 passes that code through, so the hook fails OPEN.
+  - A failed import of _lib.policy is caught at policy_dispatch.py:45-49.
+  - night-mode failures write nothing.
+  - The input-side fail-closed arms are unchanged: manifest_malformed and override_payload_missing on the triple-present route.
+- Protection.
+  - The kernel list carries _policy_parts and _pair_rail_parts (check_arbitration_kernel.py:311, :315), as condition 5 states.
+  - The lessons and night-mode parts are covered by the canonical guard ".claude/hooks/_lib/**/*.py" (canonical_edit/guards.py:34).
+- Shipping. install_lib_selective iterates the top-level _lib entries, and _framework_path_excluded does not exclude the new packages.
+- Python. Standard library only; no syntax newer than 3.9 ("tuple[str, str]" is a string annotation). dataclass CompiledRule resolves through sys.modules["_lib.policy"] at normal import, and I found no unregistered spec loader for it.
+- Adopter blast radius. Installs do not ship .claude/governance/, so the pin manifest is absent, the result is infra and the rail stays advisory (CHANGELOG:204-206). No new block is reachable compared with the base.
+- Conditions 9 and 10 hold against the code.
+  - compatible requires a version strictly above the manifest's package_version (0.160.0) and at or above CODEX_VERSION_FLOOR.
+  - _verify_pin_cli exits 0 for both verified and compatible.
+- Carried annex item. The claude-p10 P1 at part_01.py:477-486 is still present: the missing-triple route computes no sha256, and CHANGELOG:191 "still computed and recorded" holds only on the sha-mismatch route. It is already in the signed annex, so I do not count it as new.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+1. P2: part_01.py:477-486 against :506-521.
+   - Failure scenario: on any host whose triple is not in the manifest (today every host except aarch64-apple-darwin), the currency policy runs before the H1 "override must exist" check. CEO_PAIR_RAIL_CODEX_BIN pointing at a NONEXISTENT path, under a directory with a qualifying @openai/codex package.json, gives status=compatible. The run then raises CodexUnavailable and the result is advisory. The base returned triple_missing, a block.
+   - This contradicts the code's own rule "inexistente = BLOQUEIA". Real impact is low: whoever controls the environment can already use the kill switch or strip PATH, and only the framework checkout has the manifest.
+   - Minimal fix: in the missing-triple branch, when payload_override is set, require Path(payload_override).is_file(), else return mismatch/override_payload_missing.
+2. P2: stale comments and docstrings.
+   - part_01.py:408-409: "No env relaxes this comparison".
+   - part_01.py:412: the status enum leaves out "compatible".
+   - part_01.py:575: says "native payload", but the missing-triple route returns the launcher.
+   - part_04.py:499: "0 - verified (payload sha256 matches the manifest entry)".
+   - part_02.py:66: "the artifact that was hashed is the artifact that runs".
+   - Minimal fix: reword them to describe the version-floor arm.
+3. P2: part_01.py:557-570.
+   - Failure scenario: installed_version records the first qualified package.json. compatible_package_version returns the first one that meets the floor and is newer than the manifest, which can be a farther ancestor. A result can therefore read installed_version=0.150.0 with status=compatible. The attested version is also the launcher package's version, not the platform payload's.
+   - Minimal fix: record the version that compatible_package_version returns, and judge only the nearest qualified package.json.
+4. P2: part_01.py:583-584.
+   - Failure scenario: the live hook accepts compatible silently. No audit row separates a hash-verified Codex run from a version-only run.
+   - Minimal fix: emit an audit event carrying detail=version_floor_only.
+5. P2: check_pair_rail.py:29-210.
+   - Failure scenario: the entry point redefines _invoke_codex_review after the install step, so the copy at part_02.py:22-310 is dead code. A hand-patch made in the module, as condition 7 directs, is silently ignored, and the two copies can drift.
+   - Minimal fix: keep one copy.
+6. P2: _policy_parts/__init__.py:15.
+   - Failure scenario: exec of each part runs that part's docstring as a module docstring, so _lib.policy.__doc__ becomes "Extracted policy declarations: loading.". inspect.getsource(Policy) can no longer locate the class.
+   - Minimal fix: save and restore __doc__ around the install, or drop the part docstrings.
+7. P2: night-mode.py:327-331 with _night_mode_parts/toggles.py.
+   - Failure scenario: cmd_on and cmd_off, which compute settings.local.json internally, can be called from the importable _lib._night_mode_parts. That path skips the NF-08b self-path guard and need not name any _CANONICAL_GUARDS or _E4_POSTURE_TOGGLE_SCRIPTS literal. From static reading, not executed: a python -c body that builds a namespace and calls cmd_on could arm acceptEdits without tripping _e3 or _e4.
+   - Why P2: posture_tables.py:305-314 declares that this matcher does not close the boundary, and a raw overlay write with a split path string was already equally cheap.
+   - Minimal fix: call _check_self_path() inside cmd_on and cmd_off.
+8. P2: night-mode.py:330.
+   - Failure scenario: the parts import now runs at module import, before _check_self_path() (main, :518). A relocated copy whose parents[2] lacks _lib/_night_mode_parts dies with ImportError: exit 1, no night-mode-event line and no audit row. The documented NF-08b refusal is exit 2 with both records (docstring :207). It still fails closed: nothing is written.
+   - Minimal fix: run the self-path check before the import, or wrap the import.
+
+VERDICT: GO The pair-rail, policy, lessons and night-mode code moved in this payload binds and resolves through its entry points, keeps the required failure directions, ships to adopters and contradicts none of the declared conditions, and the only defects found are P2 follow-ups.

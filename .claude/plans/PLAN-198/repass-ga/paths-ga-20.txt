@@ -1,0 +1,5 @@
+.claude/hooks/_lib/policy.py
+.claude/hooks/_lib/policy_preprocessors.py
+.claude/hooks/_lib/secret_patterns.py
+.claude/hooks/_lib/spool_writer.py
+.claude/hooks/_python-hook.sh

@@ -1,0 +1,84 @@
+PAYLOAD 20/34: _lib/policy.py, _lib/policy_preprocessors.py, _lib/secret_patterns.py, _lib/spool_writer.py, _python-hook.sh. I reviewed the code by reading it. Nothing was executed: this session had no shell.
+
+P0: none.
+
+DECLARED CONDITIONS TOUCHED BY THIS PAYLOAD (4, 5, 7, 8): all true against the code.
+
+- Condition 4 (secret redactor offsets).
+  - scan() (secret_patterns.py:956-1000) matches the NFKC view and the original text.
+  - Matches from the NFKC view are mapped back to original offsets through _nfkc_segments/_original_span (:821-904).
+  - If the mapping cannot be verified, it falls back to one segment covering the whole text (:868-869). That over-redacts; it never leaks.
+  - redact() (:1024-1046) and scan_and_redact() (:1049-1067) cut the same text that scan() received.
+  - The diff does not touch the pattern catalog.
+  - pii_patterns._apply_redactions (pii_patterns.py:731-758, checked in the tree) merges overlapping spans as a union.
+  - Only standard-library imports are added (bisect, typing.Dict). The code is Python 3.9 compatible.
+- Condition 5 (kernel list).
+  - check_arbitration_kernel.py lists policy.py and policy_preprocessors.py (:101-102), _python-hook.sh (:141), secret_patterns.py (:144), `_lib/_policy_parts/**/*` (:311) and plan_paths.py (:334).
+  - spool_writer.py and the new `_spool_writer_parts/` are not kernel rows. That matches the condition's list of seven packages. Both stay canonical through `_lib/*.py` and `_lib/**/*.py` (canonical_edit/guards.py:32-34).
+- Condition 7 (thin entry points).
+  - policy.py is now 144 lines. It runs the six parts inside its own namespace (`_policy_parts/__init__.py:6-15`), so classes keep the facade as their module.
+  - `__all__` comes back from loading.py:266-271, and the moved code reads the same as the removed text.
+  - spool_writer.py:588-590 rebinds every name in the four parts' `__all__` to the facade namespace (`_spool_writer_parts/__init__.py:14-25`). Every function the parts define is in their `__all__`.
+  - So the `global` writes in spool_append and _reset_for_test land in the facade, and test patch points still work.
+  - spool_append and _ensure_spool_header read the same as the removed text.
+  - policy_preprocessors now uses plan_paths. It accepts PLAN-NNN-FOLLOWUP names and a stricter slug format. Every existing plan file name matches the new pattern.
+- Condition 8 (spool work left pending at hook exit).
+  - _python-hook.sh:410 exports CEO_HOOK_BOUNDED_EXIT=1 before both exec paths.
+  - lifecycle.py:346-350 (atexit) and :361-366 (signal) skip both drain_now and _flush_journal_buffer, leaving an exit_deadline_skip breadcrumb instead. Signal chaining is preserved.
+  - ADR-055-AMEND-4 says `status: ACCEPTED` and `implementation_status: PARTIAL` (lines 4 and 6).
+  - Known-open in CHANGELOG.md:402-405 says the cure is partial.
+
+NEW FINDINGS (annex)
+
+P1 — After the bounded-exit export, the spool drains at most 100 events per non-hook process exit, while the work of each drain grows with the backlog.
+- Where: .claude/hooks/_python-hook.sh:410, with _lib/_spool_writer_parts/lifecycle.py:346-358, _lib/_audit_emit_parts/writer.py:585-591, _lib/_spool_writer_parts/prepare.py:83-122 (should_drain) and _lib/_spool_writer_parts/drain.py (phase 4 K_MAX cap; phase 5 at :489-505).
+- Why hook processes stop draining:
+  - Inside a hook process, the only drain left is the opportunistic one at writer.py:590-591.
+  - should_drain() runs right after spool_append() has refreshed the spool file's mtime, so its 100 ms staleness test is false.
+  - Only its 100-line test can fire. A hook process that emits fewer than 100 events never drains, and with the export it no longer drains at exit either.
+- Where the events go:
+  - Hook events stay in per-PID spool files.
+  - They are collected only when a process started outside the shim imports audit_emit and exits: its atexit forced drain at lifecycle.py:352.
+- What each of those drains costs:
+  - It appends at most K_MAX = 100 entries.
+  - Phases 2-3 still rename, read, parse and sort every pending spool file.
+  - Phase 5 rewrites, fsyncs and renames every file it did not fully consume, including files with no consumed line (drain.py:489-505).
+  - All of this happens under the canonical lock.
+- Failure scenario: in a hook-heavy session, hooks write several events per tool call, more than 100 per non-hook exit.
+  - The HMAC-chained canonical log falls further behind.
+  - Readers of the log see stale data (audit-query, /ceo-boot, and the spawn file-overlap rail already annexed by claude-p12/p19).
+  - `state/` gains one file per hook process.
+  - Every later non-hook script exit pays a cost proportional to the backlog.
+- What the release declares: condition 8 and Known-open say the cure is partial and that collection is not proven. They do not say that the remaining drain capacity is 100 events per non-hook exit while the work per drain grows with the backlog.
+- Basis: derived from the code. Not measured.
+- Minimal fix:
+  - Ship the drainer with no deadline that ADR-055-AMEND-4 §4.2 names as a precondition. It must run outside the shim, for example in boot or nightly, and loop drain_now(force=True) until no spool remains.
+  - In phase 5, leave a .draining file with no consumed line untouched instead of rewriting it.
+  - Until then, state this throughput limit in Known-open.
+
+P2 FOLLOW-UPS
+
+- P2-1, spool_writer.py:515-530: `set_exit_deadline` has no caller anywhere in the tree, and `_EXIT_DEADLINE_MONOTONIC` is never compared with the clock.
+  - The docstring "hook entrypoints own the monotonic deadline" describes nothing that exists; the behaviour depends only on the environment variable.
+  - Fix: wire it up or remove it, and reword the docstring.
+- P2-2, policy.py:126: the comment "Opt-out: CEO_POLICY_ENGINE_DISABLE=1 reverts to Python-hook fallback" sits on the parts-install lines, which never read that variable.
+  - The switch lives in policy_dispatch.py:128-134. It allows the call unless CEO_POLICY_LEGACY_HOOK_PATH names a legacy hook.
+  - Fix: move or delete the comment.
+- P2-3, secret_patterns.py:989-1000: the added pass over the original text gets its own full timer budget, and its ScanBudgetExceeded is swallowed and logged only at DEBUG.
+  - Worst-case scan time becomes two budgets plus the segment mapping, which has no budget.
+  - A cut-short second pass is invisible to callers. Coverage stays at least the historical level, because the NFKC pass still raises.
+  - Fix: share one deadline across both passes, or report the truncation.
+- P2-4, _spool_writer_parts/{writer,prepare,drain,lifecycle}.py:53-66: each part redefines K_MAX, DRAIN_TRIGGER_* and SPOOL_LOCK_TIMEOUT, but these are not in `__all__`.
+  - The rebound functions read the facade's copies, so editing a constant in a part has no effect.
+  - Fix: remove the duplicates or comment that the facade's copies are the ones used.
+- P2-5, _python-hook.sh:412-416: the comment still calls the Claude/Codex path "byte-identical to the historical shim".
+  - The exec line is unchanged, but every hook, and every process it spawns (they inherit the export), now runs with CEO_HOOK_BOUNDED_EXIT=1 and skips the exit drain.
+  - Fix: update the comment.
+- P2-6, _policy_parts/__init__.py:15: running each part in the facade overwrites the facade's `__doc__` with the last part's one-line docstring. Carried from rc lanes codex-rc1-10 and claude-rc1-10; not new.
+- P2-7, policy_dispatch.py:136-142: correction to a signed rc lane note.
+  - claude-rc1-10 says a failed import of _lib.policy fails open. In fact, without CEO_POLICY_LEGACY_HOOK_PATH, policy_dispatch blocks with `policy_engine_unavailable`.
+  - A partially installed `_policy_parts/` can now reach that path.
+  - No shipped settings file registers policy_dispatch, so adopters are not affected today.
+  - Fix: make import_failure fail open, as ADR-045's table says, or correct the doctrine.
+
+VERDICT: GO-WITH-CONDITIONS Conditions 4, 5, 7 and 8 hold against this payload's code and there is no P0, but one undeclared P1 goes into the signed annex: with the bounded-exit export, the spool drains at most 100 events per non-hook process exit while each drain re-reads and rewrites the whole backlog.

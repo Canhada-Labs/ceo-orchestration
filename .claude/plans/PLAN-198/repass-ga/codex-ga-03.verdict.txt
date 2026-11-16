@@ -1,0 +1,10 @@
+Payload 3/34: no P0 or false declared condition established.
+
+Verified 256 unchanged declarations and two intentional Bash-guard telemetry enum extensions. Python 3.9.6 compilation, facade-global checks and 103 emitter smoke checks passed with persistence mocked. Full-import checks required an in-memory substitution for a redaction placeholder outside this payload; no files were modified.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 follow-ups:
+P2 — .claude/hooks/_lib/audit_emit.py:12; .claude/hooks/_lib/_audit_emit_parts/routing.py:389. The facade drops typing names still referenced by rebound annotations. An integration calling typing.get_type_hints(audit_emit.emit_pair_rail_codex_injection_detected) now raises NameError for List. Normal emitter execution is unaffected, and no production introspection caller was found. Minimal fix: restore Callable, Iterator, List and Tuple imports in the facade; doing so resolved the failure in memory.
+
+VERDICT: GO The annotation-introspection regression is nonblocking, and this payload reveals no P0 or contradiction of a declared condition.

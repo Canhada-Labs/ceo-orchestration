@@ -1,0 +1,22 @@
+Payload 7: no P0 or false declared condition established. Condition 7’s extraction mechanism preserves facade globals and file-relative resolution. Python 3.9.6 compilation passed for 15 related files; isolated checks found no unresolved globals in 116 boot functions. Contamination bindings also passed. No files modified.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/hooks/_lib/_ceo_boot_parts/telemetry_candidates.py:335
+The task-state writer opens a predictable temporary filename with O_TRUNC and follows symlinks. If that temporary path is already a symlink, an ordinary boot emitting task candidates can truncate an unrelated adopter file before os.replace runs. The advisory lock does not validate the temporary path. Minimal fix: create a unique temporary file exclusively in a validated directory, reject symlink traversal, and replace the destination only after completing the write. Confirmed by static inspection; introduction in this release is not established.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/telemetry_candidates.py:337
+The writer ignores os.write’s returned byte count and publishes the temporary file even after a short write. Dedup state becomes truncated, losing recent entries. An entirely mocked check confirmed replacement after only 1 of 14 bytes was written. Minimal fix: complete the write in a loop or use a buffered writer, and replace only after successful completion.
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:304
+Sentinel discovery still AST-parses check_canonical_edit.py, while its authoritative patterns moved to canonical_edit/paths.py. It therefore always falls back to four patterns instead of ten. Unsigned sentinels in omitted layouts disappear from the pending count, which can remain green despite the fallback annotation. Minimal fix: read the moved authority or share its pattern constant; report extraction failure as degraded status.
+
+P2 — .claude/hooks/_lib/_ceremony_toolkit/preflight.py:52
+The default policy reader searches the facade for a top-level _CANONICAL_GUARDS literal now located in canonical_edit/guards.py. Default collection raises canonical_guard_policy_unavailable, and validation rejects otherwise valid packets. No production caller was found. Minimal fix: read the authoritative declaration and test without injected canonical_patterns.
+
+P2 — .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:236; .claude/scripts/check-vacuous-checks.py:133
+Source-based verification does not follow the extraction. Hook smoke compiles only registered facades, so missing or syntactically broken implementation parts can escape its green result. The vacuity checker likewise reports success after inspecting only two facade checks, leaving 35 moved definitions outside its default scan. Minimal fix: include the implementation sources and verify coverage against the loader and check registries.
+
+VERDICT: GO-WITH-CONDITIONS The confirmed defects warrant advisory follow-up, but none establishes a P0 or contradicts a declared release condition within this payload.

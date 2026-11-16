@@ -1,0 +1,13 @@
+Payload 9: no P0 or false declared condition established. Context-budget and transcript-cost extraction checks preserved implementation bodies and facade behavior. Python 3.9 checks and 58 existing context-policy tests passed. No files modified.
+
+NEW FINDINGS (annex): None at P1.
+
+P2 follow-ups:
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:36
+The exception-hierarchy defect recorded during the rc review remains: cloned Incomplete inherits the original ParseError, not the facade's ParseError. Narrow reparsers catching the latter can let Incomplete escape, aborting the census without structured diagnostics. The CLI still exits unsuccessfully, so enforcement remains closed. Minimal fix: remap cloned base classes through an original-to-clone mapping, or preserve exception-class identity.
+
+P2 — .claude/hooks/_lib/_installer_write_safety/__init__.py:29
+Property accessors retain their original globals. Consequently, downstream callers or regression harnesses replacing the facade's BLOCKING_VERDICTS find that Site.blocking ignores the replacement. Default CLI behavior is unaffected because the constants currently agree. Minimal fix: rebuild properties with rebound getter, setter and deleter functions.
+
+VERDICT: GO The reviewed payload establishes neither a false declared condition nor a P0 defect, and the two census compatibility issues are nonblocking follow-ups.

@@ -1,0 +1,74 @@
+PAYLOAD 21/34: three files.
+- .claude/hooks/audit_log.py becomes a facade. It runs four source parts from _lib/_audit_log_parts/ inside its own namespace (exec).
+- .claude/hooks/check_agent_spawn.py becomes a facade. It loads parts from _lib/agent_spawn/ through _lib/_audit_emit_parts.install(), then binds file_assignment and skill_reference with _lib.agent_spawn.bind().
+- .claude/hooks/check_arbitration_kernel.py adds the KERNEL-DECOMPOSITION block to _KERNEL_PATHS.
+
+METHOD AND LIMITS
+- I read both facades, all five files in _audit_log_parts, all eight in agent_spawn, _audit_emit_parts/__init__.py (install), _python-hook.sh, the install.sh _lib walk, _framework_manifest_set.sh, the kernel matcher and test_kernel_decomposition_coverage.py.
+- I compared every name the diff removes with the parts' __all__ tuples and definitions.
+- No shell was available, so nothing was executed. Every claim below comes from reading the code.
+- scripts/upgrade.sh is withheld (over the redactor's input limit), so I could not confirm directly that upgrades deliver the new packages. What I did confirm: install.sh:1520-1549 copies every top-level _lib entry, and _framework_path_excluded (scripts/_framework_manifest_set.sh:95-103) does not exclude agent_spawn or _audit_log_parts.
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES (all TRUE against the code)
+- Condition 5:
+  - The 13 rows are at check_arbitration_kernel.py:309-315 (seven packages), :332-336 (five modules) and :340 (adapters/live).
+  - The list now has 123 string rows.
+  - Member counts: _audit_emit_parts 37, _pair_rail_parts 6, _policy_parts 7, adapters/live 11, canonical_edit 9, agent_spawn 8, _audit_log_parts 5, _bash_safety_parts 9, plus the 5 modules. That is 97 files, which matches 125 -> 222.
+  - _match_segments (:376-389) lets ** match zero segments, so files directly inside each package are kernel. Matching runs on lower-cased paths (:418, :434).
+  - The comment claims check out against the tree:
+    - plan_paths is imported by check_plan_edit.py:94 and policy_preprocessors.py:40;
+    - model_currency.is_veto_floor_model is called by agent_frontmatter.py:259 and escalation_signals.py:126, both kernel;
+    - cli_currency is imported by check_pair_rail.py:21 and _pair_rail_parts/part_01.py:3;
+    - bash_indirect_guard is imported at posture_scan.py:571, and bash_indirect_telemetry at decisions_cli.py:169;
+    - adapters/__init__.py:293 imports .live.claude_batch lazily.
+  - All seven facades were already kernel rows (:93, :94, :101, :105, :203, :204, :223).
+- Condition 7: both entry points keep their paths and registrations, and the logic moved into _lib modules.
+  - Removed names that resolve again: every top-level name the diff removes from check_agent_spawn.py (model routing, advisories, prompt rules, FILE ASSIGNMENT, skill reference, GOAP outcome, _BLOCK_REASON_MARKERS, main) is back in a part's __all__.
+  - Name lookup and patch points: the parts are bound to the facade's globals, so a monkeypatched facade name is still seen. _resolve_task_route's global writes land on the facade, and Path(__file__) still resolves to the facade.
+  - Fresh state: deepcopy gives each import its own _FRONTMATTER_MODEL_CACHE.
+  - No name clashes: no part's __all__ overwrites a name the facade defines.
+  - Faithful move: the audit_log parts match the removed text, including the condition-67 single-FileLock append_entry and the symlink/uid refusals.
+- Condition 9 (no silent model change): _ADR_052_ROLE_TO_MODEL moved verbatim to entries_usage.py:347-384, with the same values as the removed base text. The /effort rejection (_EFFORT_TOKEN_RE) is unchanged.
+
+FAIL DIRECTION, WRITES, PYTHON
+- check_agent_spawn, infrastructure fault: a part that fails to import, run as a hook, prints FATAL to stderr and {} to stdout and exits 0 (check_agent_spawn.py:126-135). A bind failure makes main() allow (entrypoint.py:12-16). Both fail open, which is correct.
+- check_agent_spawn, input side: the fail-closed matchers moved byte for byte (_validate_skill_reference, the prompt-defense gate, the FILE ASSIGNMENT grammar and taint rules).
+- audit_log, infrastructure fault: a missing part raises at import, leaving exit 1 and no stdout. _python-hook.sh:416 execs non-blocking events, so the session is not blocked (see P2-3).
+- Writes: no new locations. The audit dir and log keep the lstat symlink/uid refusal, 0700/0600 modes and the lock.
+- Python: standard library only and 3.9-compatible. The module-level annotations (including re.Pattern[str]) are never evaluated under `from __future__ import annotations`, and there is no 3.10+ syntax.
+
+P0: none.
+
+NEW FINDINGS (annex): no undeclared P1 in this payload.
+
+P2 FOLLOW-UPS
+P2-1 — The enforcing coverage gate on audit_log.py now measures only the facade.
+- Where: audit_log.py:194-199, with .github/workflows/coverage.yml:184 and .github/scripts/parse-coverage.py:64-72.
+- Problem: the ENFORCING ADR-139 Tier-1 gate lists audit_log.py and matches it by path suffix. It now measures only the ~45-statement facade, and this diff marks six of those lines `# pragma: no cover`. The audit writer logic (append_entry, the HMAC-under-lock section, build_entry) now sits in _lib/_audit_log_parts/*.py, which no gate lists.
+- Effect: the 86% floor on that logic is lowered without the ADR-139 amendment its "no-silent-LOWER" clause requires. The same applies to check_bash_safety.py and check_canonical_edit.py (other payloads).
+- Fix: add the part files to --tier1-modules, or have parse-coverage.py combine a facade with its parts.
+
+P2-2 — Comments that exist only to satisfy text scanners.
+- Where: audit_log.py:305 and :314; check_agent_spawn.py:22-23, :50 and :642.
+- audit_log.py:305: the ADR-052 provenance comment now sits above the part loader, away from the table it described, so that the test_adr_052_role_to_model_coverage.py:64-80 grep checks still pass.
+- The archetype grep check (:51-62) now passes on the _ARCHETYPE_TO_SKILL keys at audit_log.py:280-283, not on _ADR_052_ROLE_TO_MODEL. The importlib half of that test still checks the real dict.
+- The check_agent_spawn comments keep the derived COMMAND-SKILL-HOOK-MAP row stable. Their wording "this hook still guards that skill surface" overstates: the hook validates spawn references to SKILL.md, and edits to .claude/skills/** are guarded by other hooks.
+- Fix: point the greps and the map generator at the part files, and reword the comments.
+
+P2-3 — The audit_log docstring is stale.
+- Where: audit_log.py:111-112 and :118-152.
+- Problem: it says "any exception writes a breadcrumb to audit-log.errors and exits 0". But a missing or unreadable part raises in _install_parts (:323), outside any handler: traceback, exit 1, no breadcrumb.
+- The "Decomposition candidates (NO extraction)" section also describes destinations the split did not use.
+- Fix: wrap _install_parts() as check_agent_spawn._load_spawn_part does (write the breadcrumb, exit 0 when run as a script), and update the docstring.
+
+P2-4 — Load order is an untested invariant.
+- Where: _audit_log_parts/adapters_runtime.py:258-259, with audit_log.py:311-313.
+- Problem: main() runs from inside the exec loop, through the last part's `__name__ == "__main__"` guard. A part appended after "adapters_runtime" in _PARTS would load only after the hook has already run and exited.
+- Fix: move the guard into the facade after _install_parts(), or assert that _PARTS[-1] is "adapters_runtime".
+
+P2-5 — The kernel-coverage detector cannot see a dynamic import.
+- Where: check_agent_spawn.py:128-129 and _lib/_audit_emit_parts/__init__.py:28.
+- Problem: install(package="_lib.agent_spawn") loads its parts through import_module(f"{package}.{name}"), which the AST detector in test_kernel_decomposition_coverage.py does not parse. agent_spawn is detected today only through the static `from _lib.agent_spawn import bind` at :643. Its row already covers future files, so the gap matters only for a new package loaded this way.
+- Fix: have the detector also resolve constant package= / import_module arguments.
+
+VERDICT: GO The declared conditions this payload touches (5, 7 and 9) hold against the code. The 13 kernel rows give 123 patterns and 222 files, both facades keep their names, patch points, fail-open handling of infrastructure faults and fail-closed input matchers, and no model value changed. I found no P0 and no undeclared P1, only P2 follow-ups.

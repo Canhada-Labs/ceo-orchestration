@@ -1,0 +1,57 @@
+SCOPE OF PAYLOAD 14/34
+- New files: _lib/_spool_writer_parts/writer.py; _lib/agent_spawn/{__init__,advisories,entrypoint,file_assignment,model_routing,outcome_telemetry,prompt_rules,skill_reference}.py.
+- Modified: _lib/agent_frontmatter.py (the VETO-floor predicate).
+- Also read: the facades (spool_writer.py, check_agent_spawn.py), the binders (_spool_writer_parts/__init__.py, _audit_emit_parts/__init__.py, agent_spawn/__init__.py), model_currency.py, the kernel list, CHANGELOG [1.4.4], model-deprecations.json, redact.py, scripts/install.sh with _framework_manifest_set.sh, and _python-hook.sh.
+- Base text for comparison: the removed lines of the base check_agent_spawn.py and spool_writer.py in the committed rc evidence (.claude/plans/PLAN-198/repass-rc1/diff-rc1-20.patch and diff-rc1-19.patch).
+
+DECLARED CONDITIONS THIS PAYLOAD TOUCHES (all TRUE against the code)
+- Condition 5: check_arbitration_kernel.py:310 has ".claude/hooks/_lib/agent_spawn/**/*" and :332 has "_lib/model_currency.py". agent_frontmatter.py is a kernel path (:198). spool_writer.py has never been a kernel path, so leaving _spool_writer_parts/ off the list loses no kernel coverage.
+- Condition 7: check_agent_spawn.py and spool_writer.py are thin facades. Their logic now lives in the part modules, so a hand patch must be re-applied there. agent_spawn/ is a kernel path.
+- Condition 8: _python-hook.sh:410 still exports CEO_HOOK_BOUNDED_EXIT=1.
+- Condition 9:
+  - What the code does: agent_frontmatter.py:256-261 admits model_currency.is_veto_floor_model(actual) OR membership in VETO_FLOOR_ALLOWED. The family regex is model_currency.py:16; _RETIRED holds only "claude-opus-4-1".
+  - Retired ids pass: model-deprecations.json lists claude-opus-4-0 (retired 2026-06-15) and claude-opus-4-6-fast / claude-opus-4-7-fast (retired). All three match _FLOOR, so they pass the floor, as condition 9 says.
+  - CHANGELOG [1.4.4] lines 150-163 state this honestly, naming gpt-5-mini, o3-mini and o4-mini and the stale docstring.
+  - The expected_model path is still exact equality, so it is unchanged.
+
+MOVED-CODE VERIFICATION (no defect found)
+- writer.py: line for line the same as the base spool_writer.py text (diff-rc1-19.patch:344-702), including the deferred header fsync (sync_header=False), which predates this delta. The only addition is a QDSAA-FUNCAO-LONGA comment.
+  - Every free name it uses is defined in the facade (spool_writer.py), e.g. _SPOOL_HEADER_CACHE, _ORDINAL_COUNTER, _spool_path, _breadcrumb, _JOURNAL_BUFFER, FileLock and SPOOL_LOCK_TIMEOUT.
+  - _spool_writer_parts.install rebinds each function onto the facade's globals, so `global _IN_SPOOL_APPEND, _LAST_APPEND_SUCCEEDED` writes to the facade.
+  - __all__ exports only functions, so nothing overwrites a facade value.
+- agent_spawn: I compared the security-relevant blocks with the base text and found them identical:
+  - the FILE ASSIGNMENT grammar (regexes, _fa_* helpers, _classify_file_assignment), _recent_file_assignments and _enforce_spawn_rails;
+  - _skill_ref_resolve_path, _enforce_spec_context_unicode / _unicode_hardblock_enforced and _validate_spawn_prompt_has_no_secrets;
+  - _BLOCK_REASON_MARKERS and main(). main() only gains the _SPAWN_COMPONENT_IMPORT_ERROR allow path.
+- Binding: model_routing, advisories, prompt_rules, outcome_telemetry and entrypoint go through _audit_emit_parts.install(package="_lib.agent_spawn"), which deep-copies mutable values and rebinds functions to the hook's globals. skill_reference and file_assignment go through bind(). No two parts' __all__ share a name, and none collides with a facade name. Every free name resolves at call time.
+- outcome_telemetry._audit_log_path still reaches the real writer path, because audit_emit exports _log_path (_audit_emit_parts/writer.py:187).
+- skill_reference still sees real replacement tokens: redact.py still emits [JWT], [API_KEY] and the rest, independently of secret_patterns.py.
+- Python and stdlib: standard library only, Python 3.9-safe. Annotations are lazy under `from __future__`, and there is no 3.10+ syntax.
+- Delivery: install_lib_selective (install.sh:1520-1550) globs every top-level _lib entry, and _framework_path_excluded excludes neither new package, so a fresh install delivers both.
+- sys.path side effect: the parts insert .claude/hooks/_lib at sys.path[0]. No _lib module or subpackage name collides with a Python 3.9 stdlib module or with a .claude/scripts module today.
+
+FAIL DIRECTION
+- A component load failure under __main__ prints {} (allow) and exits 0, and main() allows on a bind failure. That is fail-open on an infrastructure fault.
+- The input-side fail-closed checks (skill-reference sub-checks, invisible-unicode hardblock when armed, prompt-defense gate) are unchanged.
+- The new code adds no write site and no symlink path.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+CARRIED, ALREADY DECLARED (signed lane notes claude-p12 / claude-p19), STILL TRUE AGAINST THIS CODE
+- P1, agent_spawn/file_assignment.py:327-380 with _python-hook.sh:410: _recent_file_assignments tails only the canonical audit log, but under the bounded exit a hook's spawn_file_assignment_recorded row stays in its per-PID spool. With CEO_SPAWN_OVERLAP_GUARD=1, a second spawn that claims the same path is therefore allowed. The miss is fail-open and blocks no legitimate session.
+
+P2 FOLLOW-UPS
+1. (new) agent_frontmatter.py:79-82
+   - Problem: the same faulty predicate module gives opposite results depending on how it fails. The import catches only ImportError. If model_currency.py is missing, the floor falls back to the closed set (stricter). If it is present but unimportable, for example a half-written file raising SyntaxError, the error escapes agent_frontmatter. check_agent_spawn.py:68-71 then sets _agent_frontmatter=None and skips the whole VETO-floor check. Unguarded importers crash instead.
+   - Fix: catch Exception and fall back to the closed set, then cover both faults with a test.
+2. (new, cosmetic) agent_frontmatter.py:139-144: the provenance comments for claude-opus-5 (ADR-181) and claude-opus-5-5 (ADR-149 Amendment 3) were deleted in the same diff that widened the floor. That runs against the module's own aim at :96-101 that floor edits stay "forensically visible in diffs". The docstrings at :22-28 and :208-212 still say "∈ VETO_FLOOR_ALLOWED". The CHANGELOG declares that staleness; the block text at check_agent_spawn.py:312-316, "set membership, not one id", is the carried rc P2. Fix: restore the comments and update the docstrings and the block text to name the family predicate.
+3. (carried from claude-rc1-13, pre-existing; redact.py is unchanged in the delta) agent_spawn/skill_reference.py:250-251: sub-check 11 calls redact_secrets(text) with the default max_chars=120. The token test therefore sees only about the first 117 characters, roughly the frontmatter, and a secret in the body of a referenced SKILL.md is never flagged. Fix: call it with max_chars=0, chunked over the 64 KiB input cap.
+4. (carried rc P2-1) _spool_writer_parts/writer.py:29-31 and :52-63:
+   - _HOOKS_DIR resolves to .claude/hooks/_lib and is inserted at sys.path[0].
+   - The part also defines its own constants (K_MAX, SPOOL_LOCK_TIMEOUT and others), which the bound functions never read; editing them silently has no effect.
+   - There is no collision today, so the risk is latent.
+   - Fix: drop the sys.path block and the constants from the part.
+
+VERDICT: GO Payload 14 makes none of the declared conditions it touches (5, 7, 8, 9) false: writer.py and the security-relevant agent_spawn blocks match the base text line for line, bind to their facades with fail-open infrastructure handling, ship to fresh installs and stay standard-library only and Python 3.9 compatible; the VETO-floor widening is honestly declared, there is no P0 and no new P1, and the one live P1 here is already declared in the signed lane notes.

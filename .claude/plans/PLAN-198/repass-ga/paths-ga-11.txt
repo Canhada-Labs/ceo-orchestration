@@ -1,0 +1,14 @@
+.claude/hooks/_lib/_lessons_parts/render.py
+.claude/hooks/_lib/_lessons_parts/storage_audit.py
+.claude/hooks/_lib/_night_mode_parts/__init__.py
+.claude/hooks/_lib/_night_mode_parts/helpers.py
+.claude/hooks/_lib/_night_mode_parts/toggles.py
+.claude/hooks/_lib/_pair_rail_parts/__init__.py
+.claude/hooks/_lib/_pair_rail_parts/_shared.py
+.claude/hooks/_lib/_pair_rail_parts/part_01.py
+.claude/hooks/_lib/_pair_rail_parts/part_02.py
+.claude/hooks/_lib/_pair_rail_parts/part_03.py
+.claude/hooks/_lib/_pair_rail_parts/part_04.py
+.claude/hooks/_lib/_policy_parts/__init__.py
+.claude/hooks/_lib/_policy_parts/decisions.py
+.claude/hooks/_lib/_policy_parts/loading.py

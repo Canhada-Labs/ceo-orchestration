@@ -1,0 +1,4683 @@
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/audit_actions.py b/.claude/hooks/_lib/_reality_ledger_parts/audit_actions.py
+new file mode 100644
+index 000000000000..fc67ac17c8b0
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/audit_actions.py
+@@ -0,0 +1,280 @@
++"""Reality ledger: audit actions."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++from .constants import *  # shared declaration defaults
++
++def _read_known_actions(audit_emit_path: Path) -> set:
++    """Parse `_KNOWN_ACTIONS = { ... }` from audit_emit.py via AST."""
++    try:
++        source = audit_emit_path.read_text(encoding="utf-8", errors="replace")
++        tree = ast.parse(source, filename=str(audit_emit_path))
++    except (OSError, SyntaxError):
++        return set()
++    out: set = set()
++    for node in ast.walk(tree):
++        if isinstance(node, ast.Assign):
++            for tgt in node.targets:
++                if isinstance(tgt, ast.Name) and tgt.id == "_KNOWN_ACTIONS":
++                    val = node.value
++                    if isinstance(val, (ast.Set, ast.List, ast.Tuple)):
++                        for elt in val.elts:
++                            if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
++                                out.add(elt.value)
++    if out:
++        return out
++
++    # Resolve only the literal roster passed to the facade's imported binder.
++    # Target files are parsed as data; none is imported or executed.
++    binders = {
++        alias.asname or alias.name
++        for node in tree.body if isinstance(node, ast.ImportFrom)
++        and node.module == "_lib._audit_emit_parts"
++        for alias in node.names if alias.name == "install"
++    }
++    roster = []
++    for node in tree.body:
++        if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)):
++            continue
++        call = node.value
++        if not (isinstance(call.func, ast.Name) and call.func.id in binders
++                and len(call.args) >= 2 and isinstance(call.args[1], (ast.Tuple, ast.List))):
++            continue
++        for item in call.args[1].elts:
++            if isinstance(item, ast.Constant) and isinstance(item.value, str) and item.value.isidentifier():
++                roster.append(item.value)
++
++    parts = audit_emit_path.parent / "_audit_emit_parts"
++    parsed = {}
++
++    def parse_part(name):
++        if name not in parsed:
++            try:
++                parsed[name] = ast.parse((parts / (name + ".py")).read_text(
++                    encoding="utf-8", errors="replace"))
++            except (OSError, SyntaxError):
++                parsed[name] = None
++        return parsed[name]
++
++    def resolve(name, symbol, visiting):
++        key = (name, symbol)
++        if key in visiting:
++            return None
++        part = parse_part(name)
++        if part is None:
++            return None
++        visiting = visiting | {key}
++        for stmt in part.body:
++            if isinstance(stmt, ast.Assign) and any(
++                isinstance(target, ast.Name) and target.id == symbol for target in stmt.targets
++            ):
++                return evaluate(name, stmt.value, visiting)
++            if isinstance(stmt, ast.ImportFrom) and stmt.level == 1 and stmt.module and stmt.module.isidentifier():
++                for alias in stmt.names:
++                    if (alias.asname or alias.name) == symbol and alias.name.isidentifier():
++                        return resolve(stmt.module, alias.name, visiting)
++        return None
++
++    def evaluate(name, expr, visiting):
++        if isinstance(expr, (ast.Set, ast.List, ast.Tuple)):
++            if all(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in expr.elts):
++                return {item.value for item in expr.elts}
++        elif isinstance(expr, ast.Name):
++            return resolve(name, expr.id, visiting)
++        elif isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.BitOr):
++            left = evaluate(name, expr.left, visiting)
++            right = evaluate(name, expr.right, visiting)
++            if left is not None and right is not None:
++                return left | right
++        return None
++
++    for name in roster:
++        part = parse_part(name)
++        if part is None:
++            continue
++        exports = resolve(name, "__all__", set())
++        if exports is not None and "_KNOWN_ACTIONS" in exports:
++            actions = resolve(name, "_KNOWN_ACTIONS", set())
++            if actions is not None:
++                out.update(actions)
++    return out
++
++
++class _EmitActionFinder(ast.NodeVisitor):
++    """Walk AST collecting action= literals from emit_generic(...) Call nodes.
++
++    AST-level avoids false positives in docstrings / regex examples / comments
++    that the regex form inevitably catches (Codex precedent: docstring example
++    literal `emit_generic(action="name", ...)` got flagged as phantom).
++    """
++
++    def __init__(self) -> None:
++        # action_name -> list of (lineno,)
++        self.actions: Dict[str, List[int]] = {}
++
++    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
++        # Only consider calls whose callee ends in `emit_generic`.
++        func = node.func
++        callee_chain: List[str] = []
++        cur: Any = func
++        while isinstance(cur, ast.Attribute):
++            callee_chain.append(cur.attr)
++            cur = cur.value
++        if isinstance(cur, ast.Name):
++            callee_chain.append(cur.id)
++        callee_chain.reverse()
++        last = callee_chain[-1] if callee_chain else ""
++        if last == "emit_generic":
++            # Find action= keyword OR first positional
++            action_val: Optional[str] = None
++            for kw in node.keywords or []:
++                if kw.arg == "action" and isinstance(kw.value, ast.Constant) \
++                        and isinstance(kw.value.value, str):
++                    action_val = kw.value.value
++                    break
++            if action_val is None and node.args:
++                first = node.args[0]
++                if isinstance(first, ast.Constant) and isinstance(first.value, str):
++                    action_val = first.value
++            if action_val:
++                self.actions.setdefault(action_val, []).append(node.lineno)
++        self.generic_visit(node)
++
++
++def _scan_emitted_actions(py_files: List[Path], *, repo_root: Path) -> Dict[str, List[str]]:
++    """Find action names emitted in code via emit_generic(...) — AST-level only.
++
++    Skips files whose path includes `tests/` to avoid catching fixture
++    strings / mocked event payloads. Skips files inside `_lib/audit_emit.py`
++    itself (its own dispatch table must reference all actions; not a phantom).
++
++    `repo_root` is required because we compute the relative path from the
++    *target* root (which may be a fixture root in tests), not the
++    framework root. Without this, a fixture under `<U+2026>/tests/fixtures/<U+2026>`
++    in the framework checkout was always filtered out as "tests/".
++    """
++    out: Dict[str, List[str]] = {}
++    for f in py_files:
++        try:
++            rel = str(f.resolve().relative_to(repo_root.resolve())).replace(os.sep, "/")
++        except (ValueError, OSError):
++            rel = _to_repo_rel(f)
++        # Exclude tests + audit_emit.py itself
++        if "/tests/" in ("/" + rel) or rel.endswith("audit_emit.py"):
++            continue
++        try:
++            source = f.read_text(encoding="utf-8", errors="replace")
++            tree = ast.parse(source, filename=str(f))
++        except (OSError, SyntaxError):
++            continue
++        finder = _EmitActionFinder()
++        try:
++            finder.visit(tree)
++        except Exception:
++            continue
++        for action, linenos in finder.actions.items():
++            for ln in linenos:
++                out.setdefault(action, []).append(f"{rel}:{ln}")
++    return out
++
++
++def _legacy_scan_emitted_actions(py_files: List[Path]) -> Dict[str, List[str]]:
++    """Backward-compat wrapper used in unit-tests of the original signature."""
++    return _scan_emitted_actions(py_files, repo_root=_REPO_ROOT)
++
++
++def detect_audit_action_phantom(
++    *,
++    repo_root: Path,
++) -> List[Dict[str, Any]]:
++    """Detector #6.
++
++    Phantom = action emitted in code but missing from `_KNOWN_ACTIONS`
++    (silent drop precedent: Codex S76 `skill_bootstrap_used` regression).
++    """
++    findings: List[Dict[str, Any]] = []
++    audit_emit_path = repo_root / ".claude" / "hooks" / "_lib" / "audit_emit.py"
++    if not audit_emit_path.exists():
++        return findings
++
++    known = _read_known_actions(audit_emit_path)
++    py_roots = [repo_root / ".claude" / "scripts", repo_root / ".claude" / "hooks"]
++    py_files = _iter_python_files(py_roots, repo_root=repo_root)
++    emitted = _scan_emitted_actions(py_files, repo_root=repo_root)
++
++    # Phantom: emitted but not registered
++    phantoms = sorted(set(emitted.keys()) - known)
++    for action in phantoms:
++        first_loc = emitted[action][0]
++        finding = _build_finding(
++            detector="audit_action_phantom",
++            severity=DETECTOR_REGISTRY["audit_action_phantom"]["severity"],
++            confidence=0.99,
++            claim_source_path=first_loc,
++            expected_evidence=(
++                f"action {action!r} present in audit_emit._KNOWN_ACTIONS"
++            ),
++            actual_evidence=(
++                f"emitted in {len(emitted[action])} site(s); not registered"
++            ),
++            advisory_action=(
++                "add action to _KNOWN_ACTIONS via KERNEL ceremony OR rename "
++                "the emit call site"
++            ),
++            extra={"action": action, "emit_sites": emitted[action][:5]},
++        )
++        findings.append(finding)
++    return findings
++
++
++# ---------------------------------------------------------------------------
++# Detector #7 — estimate_drift  (PLAN-078 Wave 2)
++# ---------------------------------------------------------------------------
++#
++# On plans whose `status: done` transition fired, compares the original
++# `estimate.compute_hours` + `estimate.owner_physical_min` against the
++# observed actuals (commit time-span + GPG-signed-commit count + manual
++# override). Finding emitted when |drift_factor| ≥ 1.2 in either axis.
++#
++# Implementation discipline (Codex re-pass + plan §4.2):
++#   - SINGLE batched `git log --pretty=%H,%aI --name-only` (~1 subprocess
++#     call, NOT 1-per-plan) — see _git_log_paths().
++#   - `created` field preferred over `created_at` (PLAN-SCHEMA §2 use).
++#   - actual_owner_physical_min derived from GPG-signed commit count + an
++#     optional `actual_owner_physical_min:` plan-frontmatter override
++#     (clamped 0..10000; non-int → fail-open warn).
++#   - severity bands: low <1.5×, medium 1.5-2×, high >2×.
++#   - systematic_bias_direction: emitted ONLY in the run-summary recommend
++#     event when N≥5 plans drift same direction.
++#   - CSV append at `.claude/scripts/local/calibration-history.csv`
++#     (gitignored). Each row keyed by `<plan_id>,<run_iso8601>` so re-runs
++#     are idempotent (existing rows are NOT duplicated).
++#   - Bypass: `CEO_REALITY_LEDGER_DETECTOR_07=0`.
++#
++# Output: List of finding dicts (run_detectors aggregator handles render +
++# emit). Each finding embeds plan-level deltas in `_extra` for forensics.
++
++_PLAN_FILE_RE = re.compile(r"^PLAN-(\d{3,4})-.*\.md$")
++_HOURS_RANGE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)")
++_SINGLE_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
++_ESTIMATE_KEY_RE = re.compile(r"^estimate:\s*$")
++_ESTIMATE_INDENT_RE = re.compile(r"^\s+(\w+):\s*(.+?)\s*$")
++_TOP_KEY_RE = re.compile(r"^[A-Za-z_]")
++
++
++
++__all__ = ['_read_known_actions', '_EmitActionFinder', '_scan_emitted_actions', '_legacy_scan_emitted_actions', 'detect_audit_action_phantom', '_PLAN_FILE_RE', '_HOURS_RANGE_RE', '_SINGLE_NUM_RE', '_ESTIMATE_KEY_RE', '_ESTIMATE_INDENT_RE', '_TOP_KEY_RE']
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/claims.py b/.claude/hooks/_lib/_reality_ledger_parts/claims.py
+new file mode 100644
+index 000000000000..66840c7b20bf
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/claims.py
+@@ -0,0 +1,270 @@
++"""Reality ledger: claims."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++from .constants import *  # shared declaration defaults
++
++def detect_installable_claim_drift(
++    *,
++    repo_root: Path,
++) -> List[Dict[str, Any]]:
++    """Detector #2.
++
++    Currently checks `.claude/rag/requirements.lock` — if the file exists
++    but contains the marker text "PLACEHOLDER" / "NOT a valid pip install
++    target", emit finding. Future: actually invoke `pip install --dry-run`.
++    """
++    findings: List[Dict[str, Any]] = []
++    target = repo_root / ".claude" / "rag" / "requirements.lock"
++    if not target.exists():
++        return findings
++    try:
++        text = target.read_text(encoding="utf-8", errors="replace")
++    except OSError:
++        return findings
++    rel = _to_repo_rel(target)
++    placeholder_markers = (
++        "PLACEHOLDER",
++        "NOT a valid pip install target",
++        "MUST refuse to run",
++    )
++    matched = [m for m in placeholder_markers if m in text]
++    if matched:
++        finding = _build_finding(
++            detector="installable_claim_drift",
++            severity=DETECTOR_REGISTRY["installable_claim_drift"]["severity"],
++            confidence=0.99,
++            claim_source_path=f"{rel}:1",
++            expected_evidence=(
++                f"pip install --require-hashes --no-deps -r {rel} returns 0"
++            ),
++            actual_evidence=(
++                f"requirements.lock is a placeholder; markers found: {matched}"
++            ),
++            advisory_action=(
++                "regenerate via pip-compile per the file's header instructions"
++            ),
++            extra={"target": rel, "markers": matched},
++        )
++        findings.append(finding)
++    return findings
++
++
++# ---------------------------------------------------------------------------
++# Detector #3 — model_assignment_divergence (advisory v1 — claim-side only)
++# ---------------------------------------------------------------------------
++
++_AGENT_FRONTMATTER_MODEL_RE = re.compile(
++    r"^model:\s*([a-zA-Z0-9._\-]+)\s*$", re.MULTILINE
++)
++
++
++def detect_model_assignment_divergence(
++    *,
++    repo_root: Path,
++    audit_log_path: Optional[Path] = None,
++) -> List[Dict[str, Any]]:
++    """Detector #3.
++
++    v1 implementation collects claimed `model:` from agent frontmatter and
++    compares against optional audit-log observation when an `audit_log_path`
++    is provided. When the audit log is absent (sandbox / fresh checkout),
++    the detector returns []. Production deployment passes
++    `~/.claude/projects/.../audit-log.jsonl` via CLI flag.
++
++    Phase 2 v1.14.0 ships the claim-collection + diff scaffold;
++    full 30d observation rollup is wired in Phase 4 advisory CI.
++    """
++    findings: List[Dict[str, Any]] = []
++    agents_dir = repo_root / ".claude" / "agents"
++    if not agents_dir.exists():
++        return findings
++
++    claimed: Dict[str, str] = {}
++    paths: Dict[str, str] = {}
++    for f in sorted(agents_dir.rglob("*.md")):
++        if _is_excluded(f, repo_root=repo_root):
++            continue
++        try:
++            text = f.read_text(encoding="utf-8", errors="replace")
++        except OSError:
++            continue
++        m = _AGENT_FRONTMATTER_MODEL_RE.search(text)
++        if not m:
++            continue
++        slug = f.stem
++        claimed[slug] = m.group(1)
++        paths[slug] = _to_repo_rel(f)
++
++    if not audit_log_path or not audit_log_path.exists():
++        return findings
++
++    observed: Dict[str, Dict[str, int]] = {}
++    try:
++        with audit_log_path.open(encoding="utf-8", errors="replace") as fh:
++            for line in fh:
++                try:
++                    ev = json.loads(line)
++                except ValueError:
++                    continue
++                if ev.get("action") != "agent_spawn":
++                    continue
++                role = ev.get("subagent_type") or ev.get("role") or ""
++                model = ev.get("model") or ""
++                if not role or not model:
++                    continue
++                observed.setdefault(role, {}).setdefault(model, 0)
++                observed[role][model] += 1
++    except OSError:
++        return findings
++
++    for role, claim_model in sorted(claimed.items()):
++        bucket = observed.get(role)
++        if not bucket:
++            continue
++        majority = max(bucket.items(), key=lambda kv: kv[1])
++        if majority[0] != claim_model:
++            finding = _build_finding(
++                detector="model_assignment_divergence",
++                severity=DETECTOR_REGISTRY["model_assignment_divergence"]["severity"],
++                confidence=0.85,
++                claim_source_path=paths.get(role, ""),
++                expected_evidence=(
++                    f"claim model={claim_model} matches observed-majority "
++                    "in last 30d audit-log"
++                ),
++                actual_evidence=(
++                    f"observed majority={majority[0]} (n={majority[1]}); "
++                    f"claim={claim_model}"
++                ),
++                advisory_action=(
++                    "either update agent frontmatter or investigate routing"
++                ),
++                extra={"role": role, "claim": claim_model,
++                       "observed": majority[0], "n": majority[1]},
++            )
++            findings.append(finding)
++    return findings
++
++
++# ---------------------------------------------------------------------------
++# Detector #4 — enforcement_commit_unpopulated
++# ---------------------------------------------------------------------------
++
++def detect_enforcement_commit_unpopulated(
++    *,
++    repo_root: Path,
++) -> List[Dict[str, Any]]:
++    """Detector #4.
++
++    For every ADR with Status containing 'ACCEPTED' (case-insensitive),
++    look for an `## Enforcement commit` section that contains either no
++    SHA reference or a placeholder string ('(populated on flip)' etc.).
++    """
++    findings: List[Dict[str, Any]] = []
++    adr_dir = repo_root / ".claude" / "adr"
++    if not adr_dir.exists():
++        return findings
++    for f in sorted(adr_dir.glob("ADR-*.md")):
++        if _is_excluded(f, repo_root=repo_root):
++            continue
++        try:
++            text = f.read_text(encoding="utf-8", errors="replace")
++        except OSError:
++            continue
++        # Find Status line (first match wins)
++        status_match = _ADR_STATUS_RE.search(text)
++        if not status_match:
++            continue
++        status_value = status_match.group(1).strip()
++        if "ACCEPTED" not in status_value.upper():
++            continue
++        # Skip SUPERSEDED / RETRACTED / REJECTED
++        if any(k in status_value.upper() for k in ("SUPERSEDED", "RETRACTED", "REJECTED")):
++            continue
++
++        header_match = _ADR_ENFORCEMENT_HEADER_RE.search(text)
++        if not header_match:
++            # Section absent on an ACCEPTED ADR is itself a finding.
++            rel = _to_repo_rel(f)
++            findings.append(_build_finding(
++                detector="enforcement_commit_unpopulated",
++                severity=DETECTOR_REGISTRY["enforcement_commit_unpopulated"]["severity"],
++                confidence=0.95,
++                claim_source_path=f"{rel}:1",
++                expected_evidence=(
++                    "## Enforcement commit section with backtick-wrapped SHA"
++                ),
++                actual_evidence="section absent",
++                advisory_action="add Enforcement commit section + SHA",
++                extra={"adr": f.name, "status": status_value},
++            ))
++            continue
++
++        # Capture body until next H2 or EOF
++        start = header_match.end()
++        next_h2 = re.search(r"^##\s+", text[start:], re.MULTILINE)
++        body_end = start + next_h2.start() if next_h2 else len(text)
++        body = text[start:body_end]
++        body_lineno = text[:header_match.start()].count("\n") + 1
++        sha_match = _ENFORCEMENT_SHA_RE.search(body)
++        placeholder_match = _ENFORCEMENT_PLACEHOLDER_RE.search(body)
++
++        unpopulated = False
++        reason = ""
++        if not sha_match:
++            unpopulated = True
++            reason = "no SHA reference"
++        elif placeholder_match:
++            # Has a SHA pattern AND a placeholder marker — placeholder wins
++            unpopulated = True
++            reason = f"placeholder marker: {placeholder_match.group(0)!r}"
++
++        # ADR-067 ground truth: text contains "(populated on flip"
++        if not sha_match and not placeholder_match:
++            # Maybe still empty (whitespace only)
++            if not body.strip():
++                unpopulated = True
++                reason = "empty body"
++
++        if unpopulated:
++            rel = _to_repo_rel(f)
++            findings.append(_build_finding(
++                detector="enforcement_commit_unpopulated",
++                severity=DETECTOR_REGISTRY["enforcement_commit_unpopulated"]["severity"],
++                confidence=0.97,
++                claim_source_path=f"{rel}:{body_lineno}",
++                expected_evidence=(
++                    "## Enforcement commit body contains backtick-wrapped SHA "
++                    "(7-40 hex chars) + no placeholder markers"
++                ),
++                actual_evidence=reason,
++                advisory_action=(
++                    "populate enforcement_commit with the SHA where the "
++                    "decision was wired"
++                ),
++                extra={"adr": f.name, "status": status_value},
++            ))
++    return findings
++
++
++# ---------------------------------------------------------------------------
++# Detector #6 — audit_action_phantom
++# ---------------------------------------------------------------------------
++
++
++__all__ = ['detect_installable_claim_drift', '_AGENT_FRONTMATTER_MODEL_RE', 'detect_model_assignment_divergence', 'detect_enforcement_commit_unpopulated']
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/constants.py b/.claude/hooks/_lib/_reality_ledger_parts/constants.py
+new file mode 100644
+index 000000000000..d51c779c0d96
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/constants.py
+@@ -0,0 +1,130 @@
++"""Shared detector constants."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++SCHEMA_VERSION = "reality-ledger-finding.v1"
++
++DEFAULT_DETECTOR_TIMEOUT_MS = 120000  # PLAN-107 S145 raised 5000->15000ms; PLAN-112-FOLLOWUP S158 raised 15000->120000ms — the AST-walk of the further-grown hooks+scripts tree now takes ~50s isolated and ~60s under full-suite load (measured), exceeding the old 15s cap consistently. 120s gives ~2x CI-hardware margin. Advisory detector; the cap only bounds completion. Honest accommodation of codebase growth, not a logic change.
++SUITE_LATENCY_BUDGET_S = 30.0  # informational p95 budget per spec
++
++# Severities (ordering matters for filtering)
++_SEVERITIES = ("low", "medium", "high")
++_SEVERITY_ORDER = {"low": 0, "medium": 1, "high": 2}
++
++# Detector registry — slug -> human label + default severity
++DETECTOR_REGISTRY: Dict[str, Dict[str, Any]] = {
++    "runtime_read_missing": {"severity": "medium"},
++    "installable_claim_drift": {"severity": "high"},
++    "model_assignment_divergence": {"severity": "medium"},
++    "enforcement_commit_unpopulated": {"severity": "low"},
++    "audit_action_phantom": {"severity": "medium"},
++    # PLAN-078 Wave 2 — estimate-drift detector. Severity is computed
++    # per-finding by drift factor (low <1.5×, medium 1.5-2×, high >2×);
++    # registry value is the default fallback when severity is unset.
++    "estimate_drift": {"severity": "medium"},
++}
++
++# Anti-self-referential exclusion globs (post Round 1 R-SEC3).
++SELF_EXCLUDE_BASENAMES = frozenset({
++    "task-route.py",
++    "reality-ledger.py",
++})
++SELF_EXCLUDE_PATH_FRAGMENTS = (
++    "owner-ceremony/archive/",
++    "/owner-ceremony/archive/",
++    # PLAN-112-FOLLOWUP S158 — exclude plan `staging/` dirs from the scan.
++    # They hold DRAFT mirrors of production code/docs (ready-to-apply
++    # packages), NOT production claims, and the ~30 staging `.md` files
++    # were inflating the `.md` detectors' scan (md_roots includes `.claude`)
++    # past the detector timeout. Drafts must not be scanned as reality.
++    "/staging/",
++    "/_reality_ledger_parts/",
++)
++
++# Audit emission allowlist (Sec MF-3 contract; extended in Phase 5 KERNEL).
++_REALITY_LEDGER_FINDING_ALLOWLIST: FrozenSet[str] = frozenset({
++    "action", "ts", "detector", "severity",
++    # confidence_bps: int basis-points (0..1000); replaces old float "confidence"
++    # which caused CanonicalJsonError in the HMAC-covered canonical_json encoder.
++    "confidence_bps",
++    "claim_source_sha256", "finding_count_in_run",
++})
++
++# Markdown-only field set (MUST be excluded from JSON/JSONL).
++_MARKDOWN_ONLY_FIELDS: FrozenSet[str] = frozenset({"claim_source_path"})
++
++# Env-var prefix convention enforced by detector #1: only names matching
++# this prefix family are surfaced as documented env-vars. Avoids the
++# combinatorial false-positive set of every UPPER_SNAKE backtick token in
++# planning docs (`_KNOWN_ACTIONS`, `VETO_HARDCODE`, `STDOUT`, etc).
++_ENV_PREFIX_RE = re.compile(
++    r"^("
++    r"CEO_|CLAUDE_|ANTHROPIC_|"
++    r"GITHUB_|GH_|"
++    r"OTEL_|OTEL_EXPORTER_|"
++    r"NPM_|"
++    r"AWS_|GCP_|GOOGLE_|"
++    r"DATABASE_|DB_|"
++    r"OPENAI_|"
++    r"COVERALLS_|CODECOV_|"
++    r"SENTRY_|"
++    r"PYTHONPATH$|PATH$|HOME$"
++    r")"
++)
++
++# Doc-side regex: env var names appearing as `$VAR`, `VAR=value`, or
++# inside backticks. Min 5 chars (e.g. `CEO_X`) to prevent matching the
++# bare prefix `CEO_` (4 chars). Convention floor `_ENV_PREFIX_RE`
++# additionally requires at least 1 char after the prefix underscore.
++# Body of the env-var name: starts upper, ≥4 chars, ends in a non-underscore.
++# Prevents `ANTHROPIC_` (trailing underscore = a prefix mention, not a name).
++_ENV_NAME_BODY = r"[A-Z][A-Z0-9_]{2,62}[A-Z0-9]"
++_BACKTICK_ENV_RE = re.compile(r"`(" + _ENV_NAME_BODY + r")`")
++_SHELL_ASSIGN_RE = re.compile(r"\b(" + _ENV_NAME_BODY + r")=[^\s]")
++_DOLLAR_VAR_RE = re.compile(r"\$(" + _ENV_NAME_BODY + r")\b")
++
++# ADR Status field forms supported.
++_ADR_STATUS_RE = re.compile(
++    r"^(?:>\s*)?\*{0,2}Status:?\*{0,2}\s*[:\-]?\s*(.+?)\s*$",
++    re.MULTILINE,
++)
++# Many ADRs use "**Status:** ACCEPTED ..." or "> **Status:** ..."
++_ADR_ENFORCEMENT_HEADER_RE = re.compile(
++    r"^##\s+Enforcement\s+commit\s*$",
++    re.MULTILINE | re.IGNORECASE,
++)
++_ENFORCEMENT_SHA_RE = re.compile(r"`([0-9a-f]{7,40})`")
++_ENFORCEMENT_PLACEHOLDER_RE = re.compile(
++    r"\((?:populated\s+on\s+flip|pending|TBD|to\s+be\s+populated|_pending_)",
++    re.IGNORECASE,
++)
++
++# Detector #6 — emit_<action> regex inside python source.
++_EMIT_CALL_RE = re.compile(
++    r"\bemit_generic\s*\(\s*action\s*=\s*[\"']([a-z][a-z0-9_]*)[\"']"
++)
++_EMIT_NAMED_RE = re.compile(
++    r"\baudit_emit\s*\.\s*emit_([a-z][a-z0-9_]*)\s*\("
++)
++
++
++# ---------------------------------------------------------------------------
++# File walking utilities (deterministic, exclusion-aware)
++# ---------------------------------------------------------------------------
++
++
++__all__ = ['SCHEMA_VERSION', 'DEFAULT_DETECTOR_TIMEOUT_MS', 'SUITE_LATENCY_BUDGET_S', '_SEVERITIES', '_SEVERITY_ORDER', 'DETECTOR_REGISTRY', 'SELF_EXCLUDE_BASENAMES', 'SELF_EXCLUDE_PATH_FRAGMENTS', '_REALITY_LEDGER_FINDING_ALLOWLIST', '_MARKDOWN_ONLY_FIELDS', '_ENV_PREFIX_RE', '_ENV_NAME_BODY', '_BACKTICK_ENV_RE', '_SHELL_ASSIGN_RE', '_DOLLAR_VAR_RE', '_ADR_STATUS_RE', '_ADR_ENFORCEMENT_HEADER_RE', '_ENFORCEMENT_SHA_RE', '_ENFORCEMENT_PLACEHOLDER_RE', '_EMIT_CALL_RE', '_EMIT_NAMED_RE']
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/dispatch.py b/.claude/hooks/_lib/_reality_ledger_parts/dispatch.py
+new file mode 100644
+index 000000000000..0a8c9854c0c8
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/dispatch.py
+@@ -0,0 +1,261 @@
++"""Reality ledger: dispatch."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++from .constants import *  # shared declaration defaults
++
++def _run_with_timeout(
++    fn,
++    *,
++    timeout_ms: int,
++    detector_name: str,
++) -> Tuple[List[Dict[str, Any]], Optional[str]]:
++    """Run a detector with ITIMER guard. Returns (findings, error_str)."""
++    budget_s = max(0.001, timeout_ms / 1000.0)
++    prev = _install_itimer_guard(budget_s)
++    try:
++        findings = fn()
++        return findings, None
++    except ScanBudgetExceeded:
++        return [], f"detector {detector_name} timed out after {timeout_ms}ms"
++    except Exception as exc:  # pragma: no cover - safety net
++        return [], f"detector {detector_name} raised {exc.__class__.__name__}: {exc}"
++    finally:
++        _clear_itimer_guard(prev)
++
++
++def run_detectors(
++    *,
++    repo_root: Path,
++    detector_names: Optional[List[str]] = None,
++    timeout_ms: int = DEFAULT_DETECTOR_TIMEOUT_MS,
++    audit_log_path: Optional[Path] = None,
++    emit_audit: bool = False,
++    audit_emit_module: Optional[Any] = None,
++    session_id: str = "",
++    project: str = "",
++) -> Tuple[List[Dict[str, Any]], List[str]]:
++    """Run requested detectors; returns (findings, errors).
++
++    Codex W1+W2 fix-pack #1: detector #7 (estimate_drift) accepts
++    ``emit_audit`` + identifier args so it can fire its TYPED emitters
++    (``emit_estimate_drift_detected`` / ``emit_estimate_drift_systematic_bias``)
++    inline. Other detectors continue to use the generic
++    ``_try_emit_finding`` path (handled by the CLI loop).
++    """
++    selected = detector_names or sorted(DETECTOR_REGISTRY.keys())
++    findings: List[Dict[str, Any]] = []
++    errors: List[str] = []
++
++    detector_fns = {
++        "runtime_read_missing": lambda: detect_runtime_read_missing(
++            repo_root=repo_root,
++        ),
++        "installable_claim_drift": lambda: detect_installable_claim_drift(
++            repo_root=repo_root,
++        ),
++        "model_assignment_divergence": lambda: detect_model_assignment_divergence(
++            repo_root=repo_root,
++            audit_log_path=audit_log_path,
++        ),
++        "enforcement_commit_unpopulated": lambda: detect_enforcement_commit_unpopulated(
++            repo_root=repo_root,
++        ),
++        "audit_action_phantom": lambda: detect_audit_action_phantom(
++            repo_root=repo_root,
++        ),
++        # PLAN-078 Wave 2 — Reality Ledger detector #7 (estimate-drift).
++        # Codex Fix #1: emit-audit + module + identifiers flow inward so the
++        # detector can call its TYPED emit wrappers (NOT generic).
++        "estimate_drift": lambda: detect_estimate_drift(
++            repo_root=repo_root,
++            emit_audit=emit_audit,
++            audit_emit_module=audit_emit_module,
++            session_id=session_id,
++            project=project,
++        ),
++    }
++
++    for name in selected:
++        if name not in detector_fns:
++            errors.append(f"unknown detector: {name}")
++            continue
++        f, err = _run_with_timeout(
++            detector_fns[name],
++            timeout_ms=timeout_ms,
++            detector_name=name,
++        )
++        if err:
++            errors.append(err)
++        findings.extend(f)
++    return findings, errors
++
++
++def filter_by_severity(findings: List[Dict[str, Any]], min_severity: str) -> List[Dict[str, Any]]:
++    if min_severity not in _SEVERITY_ORDER:
++        return findings
++    threshold = _SEVERITY_ORDER[min_severity]
++    return [f for f in findings if _SEVERITY_ORDER.get(f.get("severity", "low"), 0) >= threshold]
++
++
++# ---------------------------------------------------------------------------
++# CLI
++# ---------------------------------------------------------------------------
++
++def main(argv: Optional[List[str]] = None) -> int:
++    parser = argparse.ArgumentParser(
++        prog="reality-ledger",
++        description=(
++            "Adaptive Execution Kernel claim-vs-evidence detector "
++            "(advisory-only; never blocks)."
++        ),
++    )
++    parser.add_argument(
++        "--format",
++        choices=("markdown", "json", "jsonl"),
++        default="markdown",
++    )
++    parser.add_argument(
++        "--detector",
++        action="append",
++        default=None,
++        help="Run only this detector (repeatable). Default: all 5.",
++    )
++    parser.add_argument(
++        "--severity",
++        choices=_SEVERITIES,
++        default="low",
++        help="Minimum severity to emit (low/medium/high). Default: low.",
++    )
++    parser.add_argument(
++        "--detector-timeout-ms",
++        type=int,
++        default=DEFAULT_DETECTOR_TIMEOUT_MS,
++        help=f"Per-detector timeout. Default: {DEFAULT_DETECTOR_TIMEOUT_MS}.",
++    )
++    parser.add_argument(
++        "--since",
++        default=None,
++        help=(
++            "Time window for audit-log observations (e.g. '30d'). "
++            "Reserved for Detector #3 in Phase 4."
++        ),
++    )
++    parser.add_argument(
++        "--audit-log",
++        default=None,
++        help=(
++            "Path to audit-log.jsonl. Detector #3 only runs when supplied."
++        ),
++    )
++    parser.add_argument(
++        "--output",
++        default=None,
++        help="Output file (default: stdout).",
++    )
++    parser.add_argument(
++        "--repo-root",
++        default=str(_REPO_ROOT),
++        help="Repository root path (test override).",
++    )
++    parser.add_argument(
++        "--emit-audit",
++        action="store_true",
++        help=(
++            "Best-effort audit emit per finding. No-op if "
++            "reality_ledger_finding action is not yet registered."
++        ),
++    )
++
++    args = parser.parse_args(argv)
++
++    repo_root = Path(args.repo_root).resolve()
++    if not repo_root.exists():
++        sys.stderr.write(f"[reality-ledger] repo-root not found: {repo_root}\n")
++        return 2
++
++    audit_log_path = Path(args.audit_log).resolve() if args.audit_log else None
++
++    t0 = time.perf_counter()
++    findings, errors = run_detectors(
++        repo_root=repo_root,
++        detector_names=args.detector,
++        timeout_ms=args.detector_timeout_ms,
++        audit_log_path=audit_log_path,
++        # Codex W1+W2 fix-pack #1: detector #7 emits via typed wrappers
++        # inline; flow emit_audit + identifiers down so they reach it.
++        emit_audit=args.emit_audit,
++        session_id=os.environ.get("CEO_SESSION_ID", ""),
++        project=os.environ.get("CEO_PROJECT", ""),
++    )
++    elapsed_ms = int((time.perf_counter() - t0) * 1000)
++
++    if errors and not findings:
++        # detector internal error path with no salvage
++        for e in errors:
++            sys.stderr.write(f"[reality-ledger] {e}\n")
++        return 2
++
++    if errors:
++        # partial run — log errors but continue
++        for e in errors:
++            sys.stderr.write(f"[reality-ledger] {e}\n")
++
++    findings = filter_by_severity(findings, args.severity)
++
++    # Best-effort audit emit (advisory) — applies to detectors #1-#6 ONLY.
++    # Codex W1+W2 fix-pack #1: detector #7 (estimate_drift) already emitted
++    # via typed wrappers inline; emitting again via generic
++    # ``reality_ledger_finding`` would double-record AND defeat the typed
++    # action contract. Skip detector-7 findings here.
++    if args.emit_audit:
++        for f in findings:
++            if f.get("detector") == "estimate_drift":
++                continue  # typed emit already fired inside detect_estimate_drift
++            _try_emit_finding(f, finding_count_in_run=len(findings))
++
++    # Render
++    if args.format == "markdown":
++        rendered = render_findings_markdown(findings)
++    elif args.format == "json":
++        rendered = render_findings_json(findings)
++    else:  # jsonl
++        rendered = render_findings_jsonl(findings)
++
++    # Append run metadata as a markdown footer (only for markdown)
++    if args.format == "markdown":
++        rendered = (
++            rendered
++            + f"\n_run_id: `{uuid.uuid4()}`  ·  duration_ms: `{elapsed_ms}`_\n"
++        )
++
++    if args.output:
++        try:
++            Path(args.output).write_text(rendered, encoding="utf-8")
++        except OSError as exc:
++            sys.stderr.write(f"[reality-ledger] cannot write output: {exc}\n")
++            return 2
++    else:
++        sys.stdout.write(rendered)
++        if not rendered.endswith("\n"):
++            sys.stdout.write("\n")
++
++    return 0
++
++
++
++__all__ = ['_run_with_timeout', 'run_detectors', 'filter_by_severity', 'main']
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/environment.py b/.claude/hooks/_lib/_reality_ledger_parts/environment.py
+new file mode 100644
+index 000000000000..0438e0028e66
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/environment.py
+@@ -0,0 +1,228 @@
++"""Reality ledger: environment."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++from .constants import *  # shared declaration defaults
++
++class _EnvVarReadFinder(ast.NodeVisitor):
++    """Walk AST collecting env var names actually READ at runtime.
++
++    Recognised forms:
++      - os.environ.get('VAR'[, default])
++      - os.environ['VAR']
++      - os.getenv('VAR'[, default])
++      - subprocess.run(env={'VAR': ...})  (treated as USE — call-site sets var
++        for child process; not a "read" but proves runtime wiring.)
++      - dict-key string literals inside subprocess.run(env={...}) calls.
++    """
++
++    def __init__(self) -> None:
++        self.read_vars: set = set()
++
++    @staticmethod
++    def _arg_str(node: ast.AST) -> Optional[str]:
++        if isinstance(node, ast.Constant) and isinstance(node.value, str):
++            return node.value
++        return None
++
++    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
++        # os.getenv('VAR') / os.getenv('VAR', default)
++        # os.environ.get('VAR')
++        func = node.func
++        # Resolve attribute chain
++        attr_chain: List[str] = []
++        cur: Any = func
++        while isinstance(cur, ast.Attribute):
++            attr_chain.append(cur.attr)
++            cur = cur.value
++        if isinstance(cur, ast.Name):
++            attr_chain.append(cur.id)
++        attr_chain.reverse()
++        chain = ".".join(attr_chain)
++
++        if chain in ("os.getenv", "getenv") and node.args:
++            v = self._arg_str(node.args[0])
++            if v:
++                self.read_vars.add(v)
++        elif chain in ("os.environ.get", "environ.get") and node.args:
++            v = self._arg_str(node.args[0])
++            if v:
++                self.read_vars.add(v)
++        # subprocess.run(env={...})
++        elif chain.endswith("subprocess.run") or chain.endswith(".run") or chain == "run":
++            for kw in node.keywords or []:
++                if kw.arg == "env" and isinstance(kw.value, ast.Dict):
++                    for k in kw.value.keys:
++                        v = self._arg_str(k)
++                        if v:
++                            self.read_vars.add(v)
++        self.generic_visit(node)
++
++    def visit_Subscript(self, node: ast.Subscript) -> None:  # noqa: N802
++        # os.environ['VAR']  -> Subscript(value=Attribute(os.environ), slice=Constant)
++        val = node.value
++        attr_chain: List[str] = []
++        cur: Any = val
++        while isinstance(cur, ast.Attribute):
++            attr_chain.append(cur.attr)
++            cur = cur.value
++        if isinstance(cur, ast.Name):
++            attr_chain.append(cur.id)
++        attr_chain.reverse()
++        chain = ".".join(attr_chain)
++        if chain in ("os.environ", "environ"):
++            slc: Any = node.slice
++            if isinstance(slc, ast.Constant) and isinstance(slc.value, str):
++                self.read_vars.add(slc.value)
++        self.generic_visit(node)
++
++
++def _ast_collect_runtime_env_reads(py_files: List[Path]) -> Dict[str, List[str]]:
++    """Returns {VAR_NAME: [posix_path, ...]} of files that actually read it."""
++    out: Dict[str, List[str]] = {}
++    for f in py_files:
++        try:
++            source = f.read_text(encoding="utf-8", errors="replace")
++            tree = ast.parse(source, filename=str(f))
++        except (OSError, SyntaxError):
++            continue
++        finder = _EnvVarReadFinder()
++        try:
++            finder.visit(tree)
++        except Exception:
++            continue
++        for v in finder.read_vars:
++            out.setdefault(v, []).append(_to_repo_rel(f))
++    return out
++
++
++def _doc_collect_documented_env_vars(md_files: List[Path]) -> Dict[str, List[str]]:
++    """Returns {VAR_NAME: [posix_path:line, ...]} of doc files that mention it.
++
++    Detection forms:
++      - backtick-wrapped UPPER_SNAKE token  (`CEO_MODEL_DOWNSHIFT`)
++      - shell assignment                    (CEO_MODEL_DOWNSHIFT=1)
++      - dollar-sign reference               ($CEO_MODEL_DOWNSHIFT)
++
++    Only names matching `_ENV_PREFIX_RE` survive — this is the explicit
++    "convention floor" that prevents the planning-doc false positives
++    (`_KNOWN_ACTIONS`, `VETO_HARDCODE`, `STDOUT`, etc.).
++    """
++    out: Dict[str, List[str]] = {}
++    regexes = (_BACKTICK_ENV_RE, _SHELL_ASSIGN_RE, _DOLLAR_VAR_RE)
++    for f in md_files:
++        try:
++            text = f.read_text(encoding="utf-8", errors="replace")
++        except OSError:
++            continue
++        for lineno, line in enumerate(text.splitlines(), start=1):
++            for rgx in regexes:
++                for m in rgx.finditer(line):
++                    v = m.group(1)
++                    if _ENV_PREFIX_RE.match(v) and _is_plausible_env_var(v):
++                        out.setdefault(v, []).append(f"{_to_repo_rel(f)}:{lineno}")
++    return out
++
++
++def _is_plausible_env_var(name: str) -> bool:
++    """Filter common false positives (file extensions, Python keywords, etc.).
++
++    Heuristics:
++      - must start with letter, contain underscore OR be ≥6 chars
++      - exclude common all-caps tokens that are not env vars (HTTP, JSON, etc.)
++    """
++    if not name:
++        return False
++    if len(name) < 4:
++        return False
++    if "_" not in name and len(name) < 6:
++        return False
++    EXCLUDE = {
++        "HTTP", "HTTPS", "JSON", "YAML", "TOML", "MARKDOWN", "TODO", "FIXME",
++        "NOTE", "WARNING", "ERROR", "INFO", "DEBUG", "TRACE",
++        "README", "CLAUDE", "VERSION", "CHANGELOG", "PROTOCOL", "PYTHON",
++        "ASCII", "UTF", "UNICODE", "REGEX", "GOTCHA", "OPTIONAL", "REQUIRED",
++        "EXAMPLE", "CRITICAL", "MANDATORY", "ALL_CAPS", "UPPER_CASE",
++        "GLOBAL", "LOCAL", "STATIC", "DYNAMIC", "PUBLIC", "PRIVATE",
++        "TRUE", "FALSE", "NONE", "NULL", "UNDEFINED",
++    }
++    if name in EXCLUDE:
++        return False
++    return True
++
++
++def detect_runtime_read_missing(
++    *,
++    repo_root: Path,
++    explicit_env_vars: Optional[List[str]] = None,
++) -> List[Dict[str, Any]]:
++    """Detector #1.
++
++    For each env var documented in a .md under `docs/` or `.claude/`,
++    AST-scan `.claude/scripts` + `.claude/hooks` for runtime reads.
++    Variables documented but NEVER actually read → finding.
++    """
++    findings: List[Dict[str, Any]] = []
++
++    md_roots = [repo_root / "docs", repo_root / ".claude"]
++    py_roots = [repo_root / ".claude" / "scripts", repo_root / ".claude" / "hooks"]
++    md_files = _iter_md_files(md_roots, repo_root=repo_root)
++    py_files = _iter_python_files(py_roots, repo_root=repo_root)
++
++    documented = _doc_collect_documented_env_vars(md_files)
++    runtime = _ast_collect_runtime_env_reads(py_files)
++
++    if explicit_env_vars:
++        documented = {v: documented.get(v, []) for v in explicit_env_vars}
++
++    runtime_vars = set(runtime.keys())
++
++    for var, doc_locations in sorted(documented.items()):
++        if not doc_locations:
++            continue
++        if var in runtime_vars:
++            continue
++        # Cosmetic mentions only; no AST-level read
++        first_loc = doc_locations[0]
++        evidence = (
++            f"0 enforcement reads; {len(doc_locations)} cosmetic mention(s) filtered"
++        )
++        finding = _build_finding(
++            detector="runtime_read_missing",
++            severity=DETECTOR_REGISTRY["runtime_read_missing"]["severity"],
++            confidence=0.95,
++            claim_source_path=first_loc,
++            expected_evidence=(
++                f"ast_scan_for_env_var('{var}', "
++                "target_dirs=['.claude/scripts','.claude/hooks'], "
++                "exclude=['task-route.py','reality-ledger.py',"
++                "'owner-ceremony/archive/**'])"
++            ),
++            actual_evidence=evidence,
++            advisory_action="either wire the runtime read or amend the doc",
++            extra={"env_var": var, "doc_locations": doc_locations[:5]},
++        )
++        findings.append(finding)
++    return findings
++
++
++# ---------------------------------------------------------------------------
++# Detector #2 — installable_claim_drift
++# ---------------------------------------------------------------------------
++
++
++__all__ = ['_EnvVarReadFinder', '_ast_collect_runtime_env_reads', '_doc_collect_documented_env_vars', '_is_plausible_env_var', 'detect_runtime_read_missing']
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/estimate_detection.py b/.claude/hooks/_lib/_reality_ledger_parts/estimate_detection.py
+new file mode 100644
+index 000000000000..77c067c143db
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/estimate_detection.py
+@@ -0,0 +1,396 @@
++"""Reality ledger: estimate detection."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++from .constants import *  # shared declaration defaults
++
++def detect_estimate_drift(
++    *,
++    repo_root: Path,
++    plan_files: Optional[List[Path]] = None,
++    calibration_csv: Optional[Path] = None,
++    git_log_index: Optional[Dict[str, List[Tuple[str, str, bool]]]] = None,
++    status_done_transitions: Optional[Dict[str, Tuple[str, str]]] = None,
++    audit_emit_module: Optional[Any] = None,
++    session_id: str = "",
++    project: str = "",
++    emit_audit: bool = False,
++) -> List[Dict[str, Any]]:
++    """Detector #7 — estimate-drift on plan close-outs.
++
++    PLAN-078 Wave 2. Pure function (no global state mutation outside of
++    caller-supplied calibration_csv path). Test-friendly:
++
++      - ``plan_files`` override targets a specific subset
++      - ``calibration_csv`` override redirects CSV writes (test isolation)
++      - ``git_log_index`` override skips real git calls (mock injection;
++        used to compute GPG-signed commit count)
++      - ``status_done_transitions`` mocks the per-plan ``status: done``
++        transition commit (rel_path -> (sha, committer_iso)). When None
++        AND ``git_log_index`` is provided, the LAST commit in the index
++        is used as the transition (back-compat with existing test fixtures).
++        When None AND no index, real ``_git_status_done_transition`` runs.
++      - ``audit_emit_module`` allows tests to inject a stub for the typed
++        Wave 2 emitters (Codex Fix #1).
++      - ``session_id`` / ``project`` flow into emitted events.
++      - ``emit_audit`` opt-in flag (CLI ``--emit-audit``) gates emission.
++
++    Returns list of finding dicts. Caller (run_detectors) handles
++    redaction + render. Codex W1+W2 fix-pack:
++
++      Fix #1: emits via ``emit_estimate_drift_detected`` /
++              ``emit_estimate_drift_systematic_bias`` (typed wrappers)
++              instead of generic ``_try_emit_finding`` for detector #7.
++      Fix #3: bidirectional — flags both overruns (factor > 1.2) and
++              underruns (factor < 0.83 ≈ 1/1.2). Severity uses symmetric
++              ratio max(f, 1/f). bias_direction reflects either case.
++      Fix #5: span computed as ``status: done`` transition committer-date
++              minus plan ``created`` field (NOT first/last edit author-date
++              from arbitrary file history). Skips plans whose transition
++              cannot be located OR whose span ≤ 0h.
++    """
++    findings: List[Dict[str, Any]] = []
++    if _detect_07_disabled():
++        return findings  # bypass
++
++    plans_dir = repo_root / ".claude" / "plans"
++    if not plans_dir.exists():
++        return findings
++
++    if plan_files is None:
++        plan_files = [
++            p for p in sorted(plans_dir.glob("PLAN-*.md"))
++            if p.is_file() and not _is_excluded(p, repo_root=repo_root)
++        ]
++
++    # git_log_index is still used for GPG-signed-commit count regardless
++    # of the new transition-commit logic.
++    if git_log_index is None and status_done_transitions is None:
++        git_log_index = _git_log_paths(repo_root)
++    if git_log_index is None:
++        git_log_index = {}
++
++    csv_path = calibration_csv or (
++        repo_root / ".claude" / "scripts" / "local" / "calibration-history.csv"
++    )
++
++    drift_findings_for_summary: List[Dict[str, Any]] = []
++    run_iso = _now_iso8601()
++
++    for f in plan_files:
++        try:
++            text = f.read_text(encoding="utf-8", errors="replace")
++        except OSError:
++            continue
++        rel = _to_repo_rel(f)
++        plan_id_match = _PLAN_FILE_RE.match(f.name)
++        if not plan_id_match:
++            continue
++        plan_id = f"PLAN-{plan_id_match.group(1)}"
++
++        status = _extract_top_level_field(text, "status") or ""
++        if status.strip().lower() != "done":
++            continue  # detector only fires on close-outs
++
++        est_block = _parse_estimate_block(text)
++        compute_raw = est_block.get("compute_hours", "")
++        owner_raw = est_block.get("owner_physical_min", "")
++        if not compute_raw and not owner_raw:
++            continue  # plan has no estimate to drift against
++
++        compute_pair = _coerce_hours_to_pair(compute_raw)
++        owner_pair = _coerce_hours_to_pair(owner_raw)
++        if compute_pair is None and owner_pair is None:
++            continue
++
++        # `created` is the schema-correct field; fall back to `created_at`
++        # for plans authored before PLAN-076/077 cluster (Codex CDX-UNIQUE-06).
++        created = _extract_top_level_field(text, "created") or \
++            _extract_top_level_field(text, "created_at") or ""
++
++        # Resolve commits (for GPG count) — try multiple path forms.
++        plan_rel = rel
++        commits = git_log_index.get(plan_rel, [])
++        if not commits:
++            for alt in (
++                rel,
++                rel.replace(os.sep, "/"),
++                str(f.relative_to(repo_root)).replace(os.sep, "/"),
++            ):
++                commits = git_log_index.get(alt, []) or commits
++
++        # Codex Fix #5: locate the status:done transition commit.
++        transition: Optional[Tuple[str, str]] = None
++        if status_done_transitions is not None:
++            # Test-injected dict — try multiple path forms (matches the
++            # git_log_index multi-key fallback above).
++            try:
++                rel_to_repo = str(f.relative_to(repo_root)).replace(os.sep, "/")
++            except ValueError:
++                rel_to_repo = ""
++            for key in (
++                plan_rel,
++                rel.replace(os.sep, "/"),
++                rel_to_repo,
++            ):
++                if key and key in status_done_transitions:
++                    transition = status_done_transitions[key]
++                    break
++        elif commits:
++            # Back-compat: when caller injected git_log_index without
++            # status_done_transitions (existing test fixtures), use the
++            # LAST commit (most-recent) as the transition. This matches
++            # the prior end-of-history semantics for those fixtures.
++            commits_sorted_for_tx = sorted(commits, key=lambda x: x[1])
++            last_sha, last_iso, _ = commits_sorted_for_tx[-1]
++            transition = (last_sha, last_iso)
++        else:
++            # Real run: use the per-plan git helper (committer-date of the
++            # commit whose patch added `+status: done`).
++            transition = _git_status_done_transition(repo_root, plan_rel)
++
++        if transition is None:
++            continue  # no transition evidence; skip silently
++
++        closeout_iso = transition[1]
++        try:
++            closeout_dt = datetime.fromisoformat(closeout_iso.replace("Z", "+00:00"))
++        except ValueError:
++            continue
++        # Start: plan `created` field (date-midnight UTC).
++        start_dt = _parse_created_iso(created)
++        if start_dt is None:
++            # Fallback: if `created` is missing, use earliest commit's date.
++            if commits:
++                first_iso = sorted(commits, key=lambda x: x[1])[0][1]
++                try:
++                    start_dt = datetime.fromisoformat(first_iso.replace("Z", "+00:00"))
++                except ValueError:
++                    continue
++            else:
++                continue
++
++        span_hours = (closeout_dt - start_dt).total_seconds() / 3600.0
++        if span_hours <= 0:
++            # Plan created and closed in same commit (PLAN-072 single-commit
++            # closeout pattern) OR clock skew. Skip and breadcrumb.
++            sys.stderr.write(
++                f"[reality-ledger] {plan_id}: span ≤ 0 "
++                f"(created={created} closeout={closeout_iso}); skipped\n"
++            )
++            continue
++
++        # GPG-signed commit count proxies for owner-physical (signing = Owner ceremony)
++        gpg_count = sum(1 for c in (commits or []) if len(c) >= 3 and c[2])
++
++        # Optional manual override
++        manual_override_raw = _extract_top_level_field(
++            text, "actual_owner_physical_min"
++        )
++        manual_override: Optional[int] = None
++        if manual_override_raw:
++            try:
++                manual_override = int(float(manual_override_raw))
++            except ValueError:
++                manual_override = None
++
++        # Owner physical estimate: 5min/GPG ceremony floor + manual override.
++        actual_owner_min: float
++        if manual_override is not None:
++            actual_owner_min = float(max(0, min(10000, manual_override)))
++        else:
++            actual_owner_min = float(gpg_count * 5)
++
++        # Drift factors. Use mid of estimate range as denominator.
++        compute_drift = 1.0
++        if compute_pair is not None and span_hours > 0:
++            est_mid = (compute_pair[0] + compute_pair[1]) / 2.0
++            if est_mid > 0:
++                compute_drift = span_hours / est_mid
++
++        owner_drift = 1.0
++        if owner_pair is not None and actual_owner_min > 0:
++            # Only compute the owner-axis ratio when we have a non-zero
++            # actual measurement. ``actual_owner_min == 0`` happens when
++            # no GPG-signed commits exist for the plan AND no manual
++            # override was set; that's "no signal", not "underrun by
++            # 100%". Reporting it as drift would flag every plan that
++            # closed without an Owner ceremony — too noisy for advisory.
++            est_owner_mid = (owner_pair[0] + owner_pair[1]) / 2.0
++            if est_owner_mid > 0:
++                owner_drift = actual_owner_min / est_owner_mid
++
++        severity = _drift_severity(compute_drift, owner_drift)
++        bias = _classify_bias(
++            span_hours,
++            compute_pair[0] if compute_pair else 0.0,
++            compute_pair[1] if compute_pair else 0.0,
++        )
++
++        # Codex Fix #3: bidirectional drift detection — flag when
++        # max(factor, 1/factor) >= 1.2 in EITHER axis. Equivalent to:
++        # factor > 1.2 (overrun) OR factor < 1/1.2 ≈ 0.833 (underrun).
++        def _is_drifted(factor: float) -> bool:
++            try:
++                af = abs(float(factor))
++            except (TypeError, ValueError):
++                return False
++            if af == 0.0:
++                return True  # actual=0 with non-zero estimate → underrun
++            ratio = af if af >= 1.0 else 1.0 / af
++            return ratio >= 1.2
++
++        if not (_is_drifted(compute_drift) or _is_drifted(owner_drift)):
++            continue
++
++        finding = _build_finding(
++            detector="estimate_drift",
++            severity=severity,
++            confidence=0.85,
++            claim_source_path=f"{rel}:1",
++            expected_evidence=(
++                f"compute_hours={compute_raw} owner_physical_min={owner_raw}"
++            ),
++            actual_evidence=(
++                f"span_hours={span_hours:.1f} owner_min~={actual_owner_min:.0f} "
++                f"gpg_signed_commits={gpg_count}"
++            ),
++            advisory_action=(
++                "review estimate calibration; populate "
++                "actual_owner_physical_min in plan frontmatter for accuracy"
++            ),
++            extra={
++                "plan_id": plan_id,
++                "compute_drift_factor": round(compute_drift, 3),
++                "owner_drift_factor": round(owner_drift, 3),
++                "transition_commit_sha": transition[0],
++                "closeout_commit_iso": closeout_iso,
++                "gpg_signed_commits": gpg_count,
++                "actual_owner_min_estimated": round(actual_owner_min, 1),
++                "bias_direction": bias,
++                "created_field": created,
++            },
++        )
++        findings.append(finding)
++        drift_findings_for_summary.append(finding)
++
++        # Codex Fix #1: emit via typed estimate_drift_detected (NOT
++        # generic reality_ledger_finding). Caller's --emit-audit gate
++        # is honored. Each emit is best-effort + fail-open.
++        if emit_audit:
++            _emit_estimate_drift_detected_typed(
++                audit_emit_module=audit_emit_module,
++                session_id=session_id,
++                project=project,
++                plan_id=plan_id,
++                drift_factor_compute=compute_drift,
++                drift_factor_owner=owner_drift,
++                severity=severity,
++                plan_count_in_run=len(plan_files),
++                systematic_bias_direction=bias,
++            )
++
++        # CSV append (idempotent — Codex Fix #4 dedup excludes run_iso8601)
++        csv_row = ",".join([
++            plan_id, run_iso,
++            f"{compute_pair[0]:.1f}" if compute_pair else "",
++            f"{compute_pair[1]:.1f}" if compute_pair else "",
++            f"{span_hours:.2f}",
++            f"{owner_pair[0]:.0f}" if owner_pair else "",
++            f"{actual_owner_min:.0f}",
++            f"{compute_drift:.3f}",
++            f"{owner_drift:.3f}",
++            severity,
++            bias,
++        ])
++        _append_calibration_csv(csv_path, csv_row)
++
++    # Codex Fix #3: systematic bias tracks BOTH directions independently.
++    # N≥5 same-direction medium+ findings → emit recommendation.
++    if len(drift_findings_for_summary) >= 5:
++        bias_counter: Dict[str, int] = {"underestimate": 0, "overestimate": 0}
++        compute_factors_by_dir: Dict[str, List[float]] = {
++            "underestimate": [], "overestimate": []
++        }
++        owner_factors_by_dir: Dict[str, List[float]] = {
++            "underestimate": [], "overestimate": []
++        }
++        for fnd in drift_findings_for_summary:
++            ex = fnd.get("_extra", {})
++            sev = fnd.get("severity", "low")
++            if sev not in ("medium", "high"):
++                continue
++            bd = ex.get("bias_direction", "")
++            if bd in ("underestimate", "overestimate"):
++                bias_counter[bd] += 1
++                compute_factors_by_dir[bd].append(
++                    ex.get("compute_drift_factor", 1.0)
++                )
++                owner_factors_by_dir[bd].append(
++                    ex.get("owner_drift_factor", 1.0)
++                )
++        # Pick first direction crossing 5 (deterministic by dict insertion order)
++        for direction, count in bias_counter.items():
++            if count >= 5:
++                cf = compute_factors_by_dir[direction]
++                of = owner_factors_by_dir[direction]
++                avg_compute = sum(cf) / max(1, len(cf))
++                avg_owner = sum(of) / max(1, len(of))
++                # Append a meta-finding (no claim_source_path; recommendation event)
++                findings.append(_build_finding(
++                    detector="estimate_drift",
++                    severity="high",
++                    confidence=0.95,
++                    claim_source_path="<recommendation-event>",
++                    expected_evidence=f"systematic_{direction}_threshold>=5",
++                    actual_evidence=(
++                        f"plans_affected={count} avg_compute={avg_compute:.2f}× "
++                        f"avg_owner={avg_owner:.2f}×"
++                    ),
++                    advisory_action=(
++                        f"systematic {direction}: re-calibrate estimate baselines"
++                    ),
++                    extra={
++                        "systematic_bias_direction": direction,
++                        "plans_affected_count": count,
++                        "avg_drift_factor_compute": round(avg_compute, 3),
++                        "avg_drift_factor_owner": round(avg_owner, 3),
++                        "is_recommendation_event": True,
++                    },
++                ))
++                # Codex Fix #1: emit typed systematic_bias event.
++                if emit_audit:
++                    _emit_estimate_drift_systematic_bias_typed(
++                        audit_emit_module=audit_emit_module,
++                        session_id=session_id,
++                        project=project,
++                        bias_direction=direction,
++                        plans_affected_count=count,
++                        avg_drift_factor_compute=avg_compute,
++                        avg_drift_factor_owner=avg_owner,
++                    )
++                break
++
++    return findings
++
++
++# ---------------------------------------------------------------------------
++# Codex W1+W2 fix-pack #1 — typed Wave 2 audit emit wrappers
++# ---------------------------------------------------------------------------
++
++
++__all__ = ['detect_estimate_drift']
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/estimate_emission.py b/.claude/hooks/_lib/_reality_ledger_parts/estimate_emission.py
+new file mode 100644
+index 000000000000..0c522461f5dd
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/estimate_emission.py
+@@ -0,0 +1,132 @@
++"""Reality ledger: estimate emission."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++from .constants import *  # shared declaration defaults
++
++def _to_basis_points(value: float, *, lo: int = 0, hi: int = 1_000_000) -> int:
++    """Convert a float multiplier to integer basis-points (×1000), clamped.
++
++    Mirrors audit_emit._to_basis_points; duplicated here so reality-ledger
++    can run with a not-yet-Wave-2-extended audit_emit at HEAD (the typed
++    helpers in audit_emit are guarded by hasattr — fail-open if absent).
++    """
++    try:
++        f = float(value)
++    except (TypeError, ValueError):
++        return lo
++    if f != f or f in (float("inf"), float("-inf")):
++        return lo
++    bp = int(round(f * 1000.0))
++    if bp < lo:
++        return lo
++    if bp > hi:
++        return hi
++    return bp
++
++
++def _emit_estimate_drift_detected_typed(
++    *,
++    audit_emit_module: Optional[Any],
++    session_id: str,
++    project: str,
++    plan_id: str,
++    drift_factor_compute: float,
++    drift_factor_owner: float,
++    severity: str,
++    plan_count_in_run: int,
++    systematic_bias_direction: str,
++) -> bool:
++    """Best-effort emit of estimate_drift_detected via typed wrapper.
++
++    Codex W1+W2 fix-pack #1: detector #7 emits via the dedicated typed
++    wrapper, NOT via the generic ``reality_ledger_finding`` dispatch.
++    Fail-open per Sec NTH #5: any exception is swallowed.
++    """
++    try:
++        if audit_emit_module is None:
++            try:
++                from _lib import audit_emit as audit_emit_module  # type: ignore
++            except Exception:
++                return False
++        emit_fn = getattr(audit_emit_module, "emit_estimate_drift_detected", None)
++        if emit_fn is None:
++            return False
++        emit_fn(
++            session_id=session_id,
++            plan_id=plan_id,
++            drift_factor_compute_basis_points=_to_basis_points(
++                drift_factor_compute
++            ),
++            drift_factor_owner_basis_points=_to_basis_points(
++                drift_factor_owner
++            ),
++            severity=severity,
++            plan_count_in_run=plan_count_in_run,
++            systematic_bias_direction=systematic_bias_direction,
++            project=project,
++        )
++        return True
++    except Exception:  # pragma: no cover - fail-open invariant
++        return False
++
++
++def _emit_estimate_drift_systematic_bias_typed(
++    *,
++    audit_emit_module: Optional[Any],
++    session_id: str,
++    project: str,
++    bias_direction: str,
++    plans_affected_count: int,
++    avg_drift_factor_compute: float,
++    avg_drift_factor_owner: float,
++) -> bool:
++    """Best-effort emit of estimate_drift_systematic_bias via typed wrapper."""
++    try:
++        if audit_emit_module is None:
++            try:
++                from _lib import audit_emit as audit_emit_module  # type: ignore
++            except Exception:
++                return False
++        emit_fn = getattr(
++            audit_emit_module, "emit_estimate_drift_systematic_bias", None
++        )
++        if emit_fn is None:
++            return False
++        emit_fn(
++            session_id=session_id,
++            bias_direction=bias_direction,
++            plans_affected_count=plans_affected_count,
++            avg_drift_factor_compute_basis_points=_to_basis_points(
++                avg_drift_factor_compute
++            ),
++            avg_drift_factor_owner_basis_points=_to_basis_points(
++                avg_drift_factor_owner
++            ),
++            project=project,
++        )
++        return True
++    except Exception:  # pragma: no cover - fail-open invariant
++        return False
++
++
++# ---------------------------------------------------------------------------
++# Finding shape + redaction + rendering
++# ---------------------------------------------------------------------------
++
++
++__all__ = ['_to_basis_points', '_emit_estimate_drift_detected_typed', '_emit_estimate_drift_systematic_bias_typed']
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/estimate_history.py b/.claude/hooks/_lib/_reality_ledger_parts/estimate_history.py
+new file mode 100644
+index 000000000000..ffac886904f1
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/estimate_history.py
+@@ -0,0 +1,421 @@
++"""Reality ledger: estimate history."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++from .constants import *  # shared declaration defaults
++
++def _detect_07_disabled() -> bool:
++    """Return True if `CEO_REALITY_LEDGER_DETECTOR_07=0` (bypass)."""
++    return (os.environ.get("CEO_REALITY_LEDGER_DETECTOR_07") or "").strip() == "0"
++
++
++def _parse_estimate_block(text: str) -> Dict[str, str]:
++    """Parse the nested `estimate:` block from frontmatter text.
++
++    Returns flat dict of estimate sub-fields (compute_hours,
++    owner_physical_min, calendar_buffer_days, etc.) → raw string. The
++    base parser at `_lib/plan_frontmatter.py` only handles top-level keys
++    + simple lists; this helper reads the indented YAML-ish sub-block.
++    """
++    out: Dict[str, str] = {}
++    lines = text.splitlines()
++    in_estimate = False
++    for line in lines:
++        if not in_estimate:
++            if _ESTIMATE_KEY_RE.match(line):
++                in_estimate = True
++            continue
++        # Sub-field continues so long as line is indented (starts with space).
++        if line and line[0] not in (" ", "\t"):
++            break
++        m = _ESTIMATE_INDENT_RE.match(line)
++        if not m:
++            continue
++        # Strip inline `# comment` on the value
++        raw_val = m.group(2)
++        comment_at = raw_val.find("#")
++        if comment_at > 0:
++            raw_val = raw_val[:comment_at].rstrip()
++        out[m.group(1)] = raw_val
++    return out
++
++
++def _coerce_hours_to_pair(raw: str) -> Optional[Tuple[float, float]]:
++    """Parse '6-12' → (6.0, 12.0), '8' → (8.0, 8.0). None on failure."""
++    if not raw:
++        return None
++    rng = _HOURS_RANGE_RE.search(raw)
++    if rng:
++        try:
++            lo = float(rng.group(1))
++            hi = float(rng.group(2))
++            if hi < lo:
++                lo, hi = hi, lo
++            return (lo, hi)
++        except ValueError:
++            return None
++    single = _SINGLE_NUM_RE.search(raw)
++    if single:
++        try:
++            v = float(single.group(0))
++            return (v, v)
++        except ValueError:
++            return None
++    return None
++
++
++def _extract_top_level_field(text: str, key: str) -> Optional[str]:
++    """Extract a top-level frontmatter field (`<key>: <val>`) raw value.
++
++    Used for `created`, `created_at`, `status`, `id`, `actual_owner_physical_min`
++    where the base parser also works but we want a single API.
++    """
++    pat = re.compile(rf"^{re.escape(key)}:\s*(.+?)\s*$", re.MULTILINE)
++    m = pat.search(text)
++    if not m:
++        return None
++    val = m.group(1)
++    # Strip inline comments
++    comment_at = val.find("#")
++    if comment_at > 0:
++        val = val[:comment_at].rstrip()
++    # Strip surrounding quotes
++    if (val.startswith('"') and val.endswith('"')) or (
++        val.startswith("'") and val.endswith("'")
++    ):
++        val = val[1:-1]
++    return val
++
++
++def _git_log_paths(repo_root: Path) -> Dict[str, List[Tuple[str, str, bool]]]:
++    """Single batched `git log` run; index commits per file.
++
++    Returns dict: rel_path -> list of (commit_sha, iso_committer_date, was_gpg_signed).
++
++    Codex W1+W2 fix-pack #5: switched from author-date (%aI) to committer-date
++    (%cI). Author-date reflects original authorship and is preserved verbatim
++    across rebases/cherry-picks; that distorts the closeout timeline. Committer
++    date reflects when the commit landed in the current branch's history,
++    which is what we want for plan span computation.
++
++    GPG-signed inferred via `git log --show-signature` would slow us down
++    significantly; instead we emit a separate sub-call to enumerate signed
++    commits via `git log --format=%H %G?` (one extra subprocess; total = 2).
++
++    Returns empty dict on any git error (fail-open per Sec NTH #5).
++    """
++    result: Dict[str, List[Tuple[str, str, bool]]] = {}
++    try:
++        import subprocess
++        # 1) Path-aware log (commit, ISO committer-date, then file lines).
++        # Codex Fix #5: use --follow to track plan-file renames and %cI
++        # (committer date) so rebased/cherry-picked commits report their
++        # landing time, not their original authorship time.
++        proc = subprocess.run(
++            [
++                "git", "-C", str(repo_root), "log",
++                "--pretty=format:COMMIT %H %cI",
++                "--name-only",
++                "--no-merges",
++            ],
++            capture_output=True,
++            text=True,
++            timeout=30,
++        )
++        if proc.returncode != 0:
++            return {}
++        gpg_signed: Dict[str, bool] = {}
++        # 2) Signature mode: %G? returns G (good), B (bad), U (unknown), N (none),
++        # E/X/Y/R for various other states. We treat G/U as 'signed'.
++        try:
++            sig_proc = subprocess.run(
++                ["git", "-C", str(repo_root), "log", "--format=%H %G?"],
++                capture_output=True,
++                text=True,
++                timeout=30,
++            )
++            if sig_proc.returncode == 0:
++                for sig_line in sig_proc.stdout.splitlines():
++                    parts = sig_line.strip().split()
++                    if len(parts) == 2:
++                        gpg_signed[parts[0]] = parts[1] in ("G", "U")
++        except Exception:
++            gpg_signed = {}
++
++        cur_sha: Optional[str] = None
++        cur_iso: Optional[str] = None
++        for line in proc.stdout.splitlines():
++            if line.startswith("COMMIT "):
++                rest = line[len("COMMIT "):].split(" ", 1)
++                cur_sha = rest[0]
++                cur_iso = rest[1] if len(rest) > 1 else ""
++            elif line and cur_sha is not None and cur_iso is not None:
++                rel = line.strip()
++                if rel:
++                    result.setdefault(rel, []).append(
++                        (cur_sha, cur_iso, gpg_signed.get(cur_sha, False))
++                    )
++        return result
++    except Exception:  # pragma: no cover - fail-open
++        return {}
++
++
++def _git_status_done_transition(
++    repo_root: Path,
++    plan_rel_path: str,
++) -> Optional[Tuple[str, str]]:
++    """Find the commit that flipped a plan's frontmatter from non-done to done.
++
++    Codex W1+W2 fix-pack #5 (Fix #5): replaces the prior naive last-commit
++    span computation. Returns ``(commit_sha, committer_iso_date)`` for the
++    commit whose patch added the line ``+status: done`` to ``plan_rel_path``,
++    OR ``None`` if no such commit exists (plan still draft, or transition
++    happened in a merge commit which we skip per ``--no-merges`` discipline).
++
++    Edge cases:
++      - Plan created and closed in the same commit (PLAN-072 pattern):
++        the diff still contains ``+status: done`` so we report that single
++        commit; caller separately detects span=0 and skips emitting.
++      - Multiple flips (status: done -> reverted -> status: done again):
++        we return the LAST such transition; the most recent is the true
++        closeout.
++      - Renames/file-mv: ``--follow`` tracks the file across renames.
++      - Merge commits: ``--no-merges`` skips them; if the only flip lives
++        inside a merge, we return None (test fixture should mock this).
++
++    Uses ``git log -G`` regex search + ``git show`` per matching commit
++    to confirm the ``+status: done`` is in fact an addition (not a removal).
++    """
++    try:
++        import subprocess
++        # Step 1: enumerate commits where the plan file was modified AND
++        # the patch contains the literal "status: done" string. ``git
++        # log -G`` runs the regex against the line-pair text representing
++        # each diff hunk; line anchors (``^``) don't work the way grep
++        # expects there, so we keep the regex permissive and let the
++        # per-commit ``git show`` parser in step 2 confirm the addition.
++        proc = subprocess.run(
++            [
++                "git", "-C", str(repo_root), "log",
++                "--follow",
++                "--no-merges",
++                "--pretty=format:%H %cI",
++                "-G", r"status: *done",
++                "--",
++                plan_rel_path,
++            ],
++            capture_output=True,
++            text=True,
++            timeout=15,
++        )
++        if proc.returncode != 0 or not proc.stdout.strip():
++            return None
++
++        # Walk commits in CHRONOLOGICAL order (oldest -> newest). git log
++        # outputs newest-first; we reverse so we can detect the earliest
++        # transition and then the most recent re-flip.
++        candidates: List[Tuple[str, str]] = []
++        for line in proc.stdout.splitlines():
++            line = line.strip()
++            if not line:
++                continue
++            parts = line.split(" ", 1)
++            if len(parts) != 2:
++                continue
++            candidates.append((parts[0], parts[1]))
++        candidates.reverse()
++
++        # Step 2: For each candidate, run `git show` and check whether the
++        # patch ADDS `status: done`. We track the LAST such addition as
++        # the true closeout transition (handles re-open / re-close cycles).
++        last_transition: Optional[Tuple[str, str]] = None
++        for sha, iso in candidates:
++            try:
++                show = subprocess.run(
++                    [
++                        "git", "-C", str(repo_root), "show",
++                        "--no-color",
++                        "--pretty=format:",
++                        sha, "--", plan_rel_path,
++                    ],
++                    capture_output=True,
++                    text=True,
++                    timeout=10,
++                )
++            except Exception:
++                continue
++            if show.returncode != 0:
++                continue
++            # Match a leading '+' (addition) followed by 'status: done'.
++            # Skip '++' headers (file headers in unified diff).
++            for diff_line in show.stdout.splitlines():
++                if diff_line.startswith("++"):
++                    continue
++                if diff_line.startswith("+") and re.match(
++                    r"^\+\s*status:\s*done\b", diff_line
++                ):
++                    last_transition = (sha, iso)
++                    break
++        return last_transition
++    except Exception:  # pragma: no cover - fail-open
++        return None
++
++
++def _drift_severity(factor_compute: float, factor_owner: float) -> str:
++    """Map drift factor to severity band — bidirectional (Codex Fix #3).
++
++    Bands measured against a symmetric ratio ``r = max(f, 1/f)`` where
++    f > 0 is the drift factor. Both overruns (f > 1.2) and underruns
++    (f < 0.83) are detected.
++
++      r ≤ 1.2 → factor in [0.83, 1.2] → no drift (caller skips finding)
++      1.2 < r ≤ 1.5 → low
++      1.5 < r ≤ 2.0 → medium
++      r > 2.0 → high
++
++    A factor of 0.0 (estimate present but no actual measured) is treated
++    as r = ∞ → high (detector caller already short-circuits when actual
++    is missing, but guard here for safety).
++    """
++    def _ratio(f: float) -> float:
++        try:
++            af = abs(float(f))
++        except (TypeError, ValueError):
++            return 1.0
++        if af == 0.0:
++            return float("inf")
++        if af >= 1.0:
++            return af
++        return 1.0 / af
++
++    rmax = max(_ratio(factor_compute), _ratio(factor_owner))
++    if rmax > 2.0:
++        return "high"
++    if rmax > 1.5:
++        return "medium"
++    if rmax > 1.2:
++        return "low"
++    return "low"
++
++
++def _classify_bias(actual_compute: float, est_compute_lo: float,
++                   est_compute_hi: float) -> str:
++    """Return 'underestimate' if actual > hi, 'overestimate' if actual < lo, '' otherwise."""
++    if actual_compute > est_compute_hi:
++        return "underestimate"
++    if actual_compute < est_compute_lo:
++        return "overestimate"
++    return ""
++
++
++def _read_calibration_csv(path: Path) -> List[str]:
++    """Read existing CSV rows (idempotency check). Empty list if missing."""
++    if not path.is_file():
++        return []
++    try:
++        return path.read_text(encoding="utf-8").splitlines()
++    except OSError:
++        return []
++
++
++def _calibration_csv_dedup_key(row: str) -> str:
++    """Build a dedup key for a calibration CSV row that EXCLUDES run_iso8601.
++
++    Codex W1+W2 fix-pack #4: the prior dedup logic (`row in existing`) used
++    the entire row including the per-run timestamp ``run_iso8601`` (column
++    index 1). Repeat runs always produced a fresh ``run_iso8601`` so dedup
++    never matched and the CSV grew unboundedly with N rows per plan per run.
++
++    The dedup key uses the same row content with column-1 (run_iso8601)
++    blanked. Same plan + same drift factors + same severity → considered
++    "same finding" regardless of when it was measured. The on-disk row
++    still preserves run_iso8601 (for forensics — answers "when did we
++    first see this drift?"); dedup just doesn't compare on it.
++
++    Column order (header):
++      0: plan_id
++      1: run_iso8601                  <-- EXCLUDED from key
++      2: est_compute_lo
++      3: est_compute_hi
++      4: actual_compute_h
++      5: est_owner_min
++      6: actual_owner_min
++      7: drift_factor_compute
++      8: drift_factor_owner
++      9: severity
++      10: bias
++    """
++    cols = row.split(",")
++    if len(cols) > 1:
++        cols[1] = ""  # blank run_iso8601 from dedup key
++    return ",".join(cols)
++
++
++def _append_calibration_csv(path: Path, row: str) -> None:
++    """Append row to CSV idempotently — dedup excludes run_iso8601 (Codex Fix #4)."""
++    try:
++        existing = _read_calibration_csv(path)
++        # Build dedup-key set from existing rows, skipping the header
++        # (header row's first column literally is "plan_id" so it can
++        # never collide with a real plan id, but we explicitly skip
++        # the first line for clarity).
++        existing_keys = set()
++        for i, line in enumerate(existing):
++            if i == 0 and line.startswith("plan_id,"):
++                continue  # skip header
++            existing_keys.add(_calibration_csv_dedup_key(line))
++        if _calibration_csv_dedup_key(row) in existing_keys:
++            return  # idempotent: same plan + same drift signature already recorded
++        path.parent.mkdir(parents=True, exist_ok=True)
++        with path.open("a", encoding="utf-8") as f:
++            if not existing:
++                # Header row
++                f.write(
++                    "plan_id,run_iso8601,est_compute_lo,est_compute_hi,"
++                    "actual_compute_h,est_owner_min,actual_owner_min,"
++                    "drift_factor_compute,drift_factor_owner,severity,bias\n"
++                )
++            f.write(row + "\n")
++    except OSError:
++        pass  # fail-open
++
++
++def _parse_created_iso(raw: str) -> Optional[datetime]:
++    """Parse a `created:` frontmatter value into a UTC datetime.
++
++    Accepts ``YYYY-MM-DD`` (interpreted as 00:00:00 UTC) or full ISO8601
++    with offset/Z. Returns None on parse failure.
++    """
++    if not raw:
++        return None
++    raw = raw.strip()
++    # Date-only form: 2026-04-10
++    if re.match(r"^\d{4}-\d{2}-\d{2}$", raw):
++        try:
++            d = datetime.strptime(raw, "%Y-%m-%d")
++            return d.replace(tzinfo=timezone.utc)
++        except ValueError:
++            return None
++    # Full ISO with optional Z
++    try:
++        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
++    except ValueError:
++        return None
++
++
++
++__all__ = ['_detect_07_disabled', '_parse_estimate_block', '_coerce_hours_to_pair', '_extract_top_level_field', '_git_log_paths', '_git_status_done_transition', '_drift_severity', '_classify_bias', '_read_calibration_csv', '_calibration_csv_dedup_key', '_append_calibration_csv', '_parse_created_iso']
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/findings.py b/.claude/hooks/_lib/_reality_ledger_parts/findings.py
+new file mode 100644
+index 000000000000..44879a7ae46c
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/findings.py
+@@ -0,0 +1,203 @@
++"""Reality ledger: findings."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++from .constants import *  # shared declaration defaults
++
++def _to_repo_rel(p: Path) -> str:
++    try:
++        return str(p.resolve().relative_to(_REPO_ROOT.resolve())).replace(os.sep, "/")
++    except (ValueError, OSError):
++        return str(p)
++
++
++def _sha256_of(s: str) -> str:
++    return hashlib.sha256(s.encode("utf-8", errors="replace")).hexdigest()
++
++
++def _now_iso8601() -> str:
++    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
++
++
++def _redact(text: str) -> str:
++    """Pass through `_lib.redact.redact_secrets` without truncation.
++
++    Use max_chars=0 to disable preview truncation; rely on caller to
++    bound the string length when needed.
++    """
++    return redact_secrets(text or "", max_chars=0)
++
++
++def _build_finding(
++    *,
++    detector: str,
++    severity: str,
++    confidence: float,
++    claim_source_path: str,
++    expected_evidence: str,
++    actual_evidence: str,
++    advisory_action: str,
++    extra: Optional[Dict[str, Any]] = None,
++) -> Dict[str, Any]:
++    """Construct a finding dict with both render forms baked in.
++
++    `claim_source_path` is included for markdown only; JSON/JSONL
++    renderers strip the field per Sec MF-3 contract.
++    """
++    actual_redacted = _redact(actual_evidence)
++    sha = _sha256_of(claim_source_path or "")
++    # confidence_bps: integer basis-points (confidence × 1000, clamped 0..1000).
++    # canonical_json forbids floats in HMAC-covered fields; the old "confidence"
++    # float (0.0-1.0) caused CanonicalJsonError on every reality_ledger_finding
++    # emit. Readers recover float via confidence_bps / 1000.
++    confidence_bps = max(0, min(1000, int(round(float(confidence) * 1000))))
++    return {
++        "schema_version": SCHEMA_VERSION,
++        "finding_id": str(uuid.uuid4()),
++        "detector": detector,
++        "severity": severity,
++        "confidence_bps": confidence_bps,
++        "claim_source_path": claim_source_path,
++        "claim_source_sha256": sha,
++        "expected_evidence": expected_evidence,
++        "actual_evidence_redacted": actual_redacted,
++        "first_observed_at": _now_iso8601(),
++        "advisory_action": advisory_action,
++        "_extra": extra or {},
++    }
++
++
++def _strip_markdown_only(finding: Dict[str, Any]) -> Dict[str, Any]:
++    """Return a copy of finding without markdown-only fields (claim_source_path)."""
++    return {k: v for k, v in finding.items() if k not in _MARKDOWN_ONLY_FIELDS}
++
++
++def render_finding_markdown(finding: Dict[str, Any]) -> str:
++    lines: List[str] = []
++    # confidence_bps (int 0..1000) — display as float for human readability.
++    conf_display = finding.get("confidence_bps", 0) / 1000
++    lines.append(f"### {finding['detector']}  ·  severity={finding['severity']}  ·  conf={conf_display:.3f}")
++    lines.append("")
++    lines.append(f"- claim_source_path: `{finding['claim_source_path']}`")
++    lines.append(f"- claim_source_sha256: `{finding['claim_source_sha256']}`")
++    lines.append(f"- expected_evidence: `{finding['expected_evidence']}`")
++    lines.append(f"- actual_evidence_redacted: `{finding['actual_evidence_redacted']}`")
++    lines.append(f"- first_observed_at: `{finding['first_observed_at']}`")
++    lines.append(f"- advisory_action: {finding['advisory_action']}")
++    lines.append(f"- finding_id: `{finding['finding_id']}`")
++    return "\n".join(lines)
++
++
++def render_findings_markdown(findings: List[Dict[str, Any]]) -> str:
++    if not findings:
++        return "# reality-ledger — 0 findings\n\nNo divergence detected. (Advisory; never blocks.)"
++    counts: Dict[str, int] = {}
++    for f in findings:
++        counts[f["detector"]] = counts.get(f["detector"], 0) + 1
++    lines = [f"# reality-ledger — {len(findings)} finding(s)", ""]
++    lines.append("## Summary by detector")
++    for det in sorted(counts):
++        lines.append(f"- `{det}`: {counts[det]}")
++    lines.append("")
++    lines.append("## Findings")
++    for f in findings:
++        lines.append("")
++        lines.append(render_finding_markdown(f))
++    return "\n".join(lines) + "\n"
++
++
++def render_findings_json(findings: List[Dict[str, Any]]) -> str:
++    """JSON array with markdown-only fields excluded."""
++    safe = [_strip_markdown_only(f) for f in findings]
++    # also drop _extra (caller-private debug payload) from JSON emission
++    for s in safe:
++        s.pop("_extra", None)
++    return json.dumps(safe, indent=2, sort_keys=True, ensure_ascii=False)
++
++
++def render_findings_jsonl(findings: List[Dict[str, Any]]) -> str:
++    """One JSON object per line, markdown-only fields excluded."""
++    out: List[str] = []
++    for f in findings:
++        s = _strip_markdown_only(f)
++        s.pop("_extra", None)
++        out.append(json.dumps(s, sort_keys=True, ensure_ascii=False))
++    return "\n".join(out) + ("\n" if out else "")
++
++
++# ---------------------------------------------------------------------------
++# Audit emission (hasattr-guarded; advisory-only)
++# ---------------------------------------------------------------------------
++
++def _scrub_reality_ledger_event(
++    event: Dict[str, Any],
++    *,
++    allowlist: Optional[FrozenSet[str]] = None,
++) -> Tuple[Dict[str, Any], List[str]]:
++    """Return (kept_event, dropped_keys). Defense-in-depth on allowlist drift."""
++    aw = allowlist or _REALITY_LEDGER_FINDING_ALLOWLIST
++    kept: Dict[str, Any] = {}
++    dropped: List[str] = []
++    for k, v in event.items():
++        if k in aw:
++            kept[k] = v
++        else:
++            dropped.append(k)
++    return kept, dropped
++
++
++def _try_emit_finding(finding: Dict[str, Any], *, finding_count_in_run: int) -> bool:
++    """Best-effort audit emit; never raises. Returns True on success.
++
++    The action `reality_ledger_finding` is registered in Phase 5 KERNEL
++    ceremony. Pre-Phase-5 this call no-ops (action not in _KNOWN_ACTIONS).
++    """
++    try:
++        from _lib import audit_emit
++    except Exception:
++        return False
++    payload = {
++        "action": "reality_ledger_finding",
++        "ts": finding.get("first_observed_at"),
++        "detector": finding.get("detector"),
++        "severity": finding.get("severity"),
++        # confidence_bps is already an int (set in _make_finding); pass through.
++        "confidence_bps": finding.get("confidence_bps", 0),
++        "claim_source_sha256": finding.get("claim_source_sha256"),
++        "finding_count_in_run": finding_count_in_run,
++    }
++    scrubbed, dropped = _scrub_reality_ledger_event(payload)
++    # Prefer typed emitter when registered; fall back to emit_generic.
++    try:
++        if hasattr(audit_emit, "emit_reality_ledger_finding"):
++            getattr(audit_emit, "emit_reality_ledger_finding")(**scrubbed)
++            return True
++        if hasattr(audit_emit, "emit_generic"):
++            audit_emit.emit_generic(**scrubbed)
++            # emit_generic silently no-ops on unknown action; treat as best-effort
++            return True
++    except Exception:
++        return False
++    return False
++
++
++# ---------------------------------------------------------------------------
++# Detector dispatch
++# ---------------------------------------------------------------------------
++
++
++__all__ = ['_to_repo_rel', '_sha256_of', '_now_iso8601', '_redact', '_build_finding', '_strip_markdown_only', 'render_finding_markdown', 'render_findings_markdown', 'render_findings_json', 'render_findings_jsonl', '_scrub_reality_ledger_event', '_try_emit_finding']
+diff --git a/.claude/hooks/_lib/_reality_ledger_parts/walking.py b/.claude/hooks/_lib/_reality_ledger_parts/walking.py
+new file mode 100644
+index 000000000000..7bb25e67d1f6
+--- /dev/null
++++ b/.claude/hooks/_lib/_reality_ledger_parts/walking.py
+@@ -0,0 +1,69 @@
++"""Reality ledger: walking."""
++
++from __future__ import annotations
++
++import argparse
++import ast
++import hashlib
++import json
++import os
++import re
++import sys
++import time
++import unicodedata
++import uuid
++from datetime import datetime, timezone
++from pathlib import Path
++from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Tuple
++
++from .constants import *  # shared declaration defaults
++
++def _is_excluded(path: Path, *, repo_root: Path) -> bool:
++    try:
++        rel = path.resolve().relative_to(repo_root.resolve())
++    except (ValueError, OSError):
++        return True
++    rel_posix = str(rel).replace(os.sep, "/")
++    if path.name in SELF_EXCLUDE_BASENAMES:
++        return True
++    for frag in SELF_EXCLUDE_PATH_FRAGMENTS:
++        if frag in ("/" + rel_posix):
++            return True
++    # Hidden directories beyond .claude / .github should be ignored
++    parts = rel.parts
++    for p in parts[:-1]:
++        if p.startswith(".") and p not in (".claude", ".github"):
++            return True
++    return False
++
++
++def _iter_python_files(roots: Iterable[Path], *, repo_root: Path) -> List[Path]:
++    out: List[Path] = []
++    for root in roots:
++        if not root.exists():
++            continue
++        for p in sorted(root.rglob("*.py")):
++            if _is_excluded(p, repo_root=repo_root):
++                continue
++            out.append(p)
++    return out
++
++
++def _iter_md_files(roots: Iterable[Path], *, repo_root: Path) -> List[Path]:
++    out: List[Path] = []
++    for root in roots:
++        if not root.exists():
++            continue
++        for p in sorted(root.rglob("*.md")):
++            if _is_excluded(p, repo_root=repo_root):
++                continue
++            out.append(p)
++    return out
++
++
++# ---------------------------------------------------------------------------
++# Detector #1 — runtime_read_missing (AST-level)
++# ---------------------------------------------------------------------------
++
++
++__all__ = ['_is_excluded', '_iter_python_files', '_iter_md_files']
+diff --git a/.claude/hooks/_lib/_shipped_path_census/__init__.py b/.claude/hooks/_lib/_shipped_path_census/__init__.py
+new file mode 100644
+index 000000000000..691e58db19d9
+--- /dev/null
++++ b/.claude/hooks/_lib/_shipped_path_census/__init__.py
+@@ -0,0 +1,7 @@
++"""Conservative evidence of Python packages shipped by the selective installer."""
++
++from __future__ import annotations
++
++from .census import census_shipped_paths
++
++__all__ = ["census_shipped_paths"]
+diff --git a/.claude/hooks/_lib/_shipped_path_census/census.py b/.claude/hooks/_lib/_shipped_path_census/census.py
+new file mode 100644
+index 000000000000..31f5635e39e3
+--- /dev/null
++++ b/.claude/hooks/_lib/_shipped_path_census/census.py
+@@ -0,0 +1,172 @@
++"""AST-based census of local imports versus selective installer delivery.
++
++No shell is executed. An installer contract that cannot be established is
++reported as unproven, never treated as evidence of successful delivery.
++"""
++
++from __future__ import annotations
++
++import ast
++from pathlib import Path
++import re
++from typing import Dict, List, Optional
++
++
++def _function(shell: str, name: str) -> Optional[str]:
++    match = re.search(r"(?m)^" + re.escape(name) + r"\(\)\s*\{\s*$", shell)
++    if match is None:
++        return None
++    # The three target functions use shell blocks with closing braces at BOL.
++    end = re.search(r"(?m)^}\s*$", shell[match.end():])
++    return shell[match.end():match.end() + end.start()] if end else None
++
++
++def _installer_evidence(path: Path) -> Dict[str, str]:
++    try:
++        shell = path.read_text(encoding="utf-8")
++    except (OSError, UnicodeError) as exc:
++        return {"scripts": "unproven: installer unreadable: " + str(exc),
++                "hooks": "unproven: installer unreadable: " + str(exc),
++                "lib": "unproven: installer unreadable: " + str(exc)}
++    executable = "\n".join(line for line in shell.splitlines()
++                           if not line.lstrip().startswith("#"))
++    scripts = _function(executable, "install_scripts_selective")
++    hooks = _function(executable, "install_hooks_selective")
++    lib = _function(executable, "install_lib_selective")
++    evidence = {}
++    for name, body, glob, target in (
++        ("scripts", scripts, r'"$SOURCE_DIR/.claude/scripts/"*.py', '.claude/scripts/$base'),
++        ("hooks", hooks, r'"$SOURCE_DIR/.claude/hooks/"*.py', '.claude/hooks/$base'),
++    ):
++        if (body is not None and glob in body and
++                'install_one "' + target + '"' in body and
++                re.search(r'(?m)^install_' + re.escape(name) + r'_selective\s*$',
++                          executable) is not None):
++            evidence[name] = "proven: top-level Python files"
++        else:
++            evidence[name] = "unproven: selective top-level copy or invocation not established"
++    if (lib is not None and hooks is not None and
++            'install_lib_selective' in hooks and
++            '"$SOURCE_DIR/.claude/hooks/_lib/"*' in lib and
++            'install_one ".claude/hooks/_lib/$base"' in lib and
++            evidence["hooks"].startswith("proven:")):
++        evidence["lib"] = "proven: recursive package directories via install_one"
++    else:
++        evidence["lib"] = "unproven: recursive _lib package copy or invocation not established"
++    # install_one may change from copying directories recursively.
++    installer = _function(executable, "install_one")
++    if installer is None or not re.search(r'\bcp\s+-[A-Za-z]*[Rr]', installer):
++        evidence["lib"] = "unproven: recursive directory copy in install_one not established"
++    return evidence
++
++
++def _package_root(base: Path, module: str) -> Optional[Path]:
++    """Return the first local directory package imported by a module."""
++    first = module.split(".", 1)[0]
++    directory = base / first
++    if directory.is_dir() and (directory / "__init__.py").is_file():
++        return directory
++    return None
++
++
++def census_shipped_paths(repo_root: Path) -> Dict[str, object]:
++    """Report deterministic ``dependencies``, ``missing`` and ``unproven``.
++
++    Local imports from either entrypoint directory are resolved against both
++    their own directory and hooks/_lib (the framework's shared Python path).
++    External and stdlib modules are not guessed to be local packages.
++    """
++    root = Path(repo_root)
++    scripts = root / ".claude/scripts"
++    hooks = root / ".claude/hooks"
++    library = hooks / "_lib"
++    evidence = _installer_evidence(root / "scripts/install.sh")
++    dependencies: List[Dict[str, object]] = []
++    missing: List[Dict[str, object]] = []
++    unproven: List[Dict[str, object]] = []
++    for delivery, status in evidence.items():
++        if not status.startswith("proven:"):
++            unproven.append({"source": "scripts/install.sh", "line": 0,
++                             "reason": delivery + ": " + status})
++    scanned = 0
++    for directory, kind in ((scripts, "scripts"), (hooks, "hooks")):
++        for source in sorted(directory.glob("*.py")):
++            scanned += 1
++            relative_source = source.relative_to(root).as_posix()
++            if not evidence[kind].startswith("proven:"):
++                unproven.append({"source": relative_source, "line": 0,
++                                 "reason": evidence[kind]})
++            try:
++                tree = ast.parse(source.read_text(encoding="utf-8"), filename=relative_source)
++            except (SyntaxError, OSError, UnicodeError) as exc:
++                unproven.append({"source": relative_source, "line": 0,
++                                 "reason": "AST unavailable: " + str(exc)})
++                continue
++            found = set()
++            for node in ast.walk(tree):
++                candidates = []
++                if isinstance(node, ast.Import):
++                    candidates = [(name.name, False) for name in node.names]
++                elif isinstance(node, ast.ImportFrom):
++                    if node.level:
++                        # A relative import from a top-level module addresses
++                        # package context that the direct installer cannot prove.
++                        candidates = [(node.module or name.name, True)
++                                      for name in node.names]
++                    elif node.module:
++                        candidates = [(node.module, False)]
++                        if node.module == "_lib":
++                            candidates.extend(("_lib." + name.name, False)
++                                              for name in node.names)
++                for module, relative in candidates:
++                    package = None
++                    delivery = kind
++                    if module.startswith("_lib."):
++                        package = _package_root(library, module[5:])
++                        delivery = "lib"
++                    elif module == "_lib":
++                        package = library if (library / "__init__.py").is_file() else None
++                        delivery = "lib"
++                    else:
++                        package = _package_root(directory, module)
++                        if package is None:
++                            package = _package_root(library, module)
++                            if package is not None:
++                                delivery = "lib"
++                    if relative:
++                        record = {"source": relative_source, "line": node.lineno,
++                                  "module": "." + module,
++                                  "reason": "relative import from top-level entrypoint is not proven"}
++                        unproven.append(record)
++                        continue
++                    if package is None:
++                        continue
++                    if package.is_symlink():
++                        unproven.append({"source": relative_source, "line": node.lineno,
++                                         "module": module,
++                                         "reason": "package path is a symlink; delivery target unproven"})
++                        continue
++                    package_path = package.relative_to(root).as_posix()
++                    key = (node.lineno, module, package_path)
++                    if key in found:
++                        continue
++                    found.add(key)
++                    record = {"source": relative_source, "line": node.lineno,
++                              "module": module, "package": package_path,
++                              "delivery": delivery}
++                    dependencies.append(record)
++                    if delivery in ("scripts", "hooks"):
++                        missing.append(dict(record, reason=delivery + " selective installer copies only top-level files"))
++                    elif package.name in {"tests", "__pycache__"}:
++                        missing.append(dict(record, reason="_lib package excluded by selective installer"))
++                    elif not evidence[delivery].startswith("proven:"):
++                        unproven.append(dict(record, reason=evidence[delivery]))
++    if scanned == 0:
++        unproven.append({"source": ".claude", "line": 0,
++                         "reason": "no top-level Python entrypoints found to census"})
++    key = lambda row: (row["source"], row["line"], row.get("module", ""), row.get("reason", ""))
++    return {"ok": not missing and not unproven,
++            "installer": evidence,
++            "dependencies": sorted(dependencies, key=key),
++            "missing": sorted(missing, key=key),
++            "unproven": sorted(unproven, key=key)}
+diff --git a/.claude/hooks/_lib/_skill_telemetry_router/__init__.py b/.claude/hooks/_lib/_skill_telemetry_router/__init__.py
+new file mode 100644
+index 000000000000..569acbe1eaba
+--- /dev/null
++++ b/.claude/hooks/_lib/_skill_telemetry_router/__init__.py
+@@ -0,0 +1,11 @@
++"""Advisory-only skill discovery and model-tier planning.
++
++No telemetry is persisted and no inference request is issued here.
++"""
++
++from __future__ import annotations
++
++from .cheap_tier_cascade import select_cheap_tier_cascade
++from .discovery_telemetry import resolve_skill_slug_from_path
++
++__all__ = ["resolve_skill_slug_from_path", "select_cheap_tier_cascade"]
+diff --git a/.claude/hooks/_lib/_skill_telemetry_router/cheap_tier_cascade.py b/.claude/hooks/_lib/_skill_telemetry_router/cheap_tier_cascade.py
+new file mode 100644
+index 000000000000..26cc1c8ceac2
+--- /dev/null
++++ b/.claude/hooks/_lib/_skill_telemetry_router/cheap_tier_cascade.py
+@@ -0,0 +1,58 @@
++"""Pure advisory cascade; execution and financial verification stay elsewhere."""
++
++from __future__ import annotations
++
++from decimal import Decimal, InvalidOperation
++
++
++_TIERS = ("haiku", "sonnet", "opus")
++_MAX_TIER = {"low": "haiku", "medium": "sonnet", "high": "opus"}
++
++
++def select_cheap_tier_cascade(task_complexity: str, budget_remaining_usd: float) -> dict:
++    """Plan a possible tier order without asserting cost or executing a model.
++
++    The positive budget is a *ceiling*, not evidence of affordability: token
++    counts and live prices are unavailable. Independent verification is required
++    before any model transition or acceptance. Financial/safety tasks must be
++    governed by separate policy and cannot be downgraded by this advisor.
++    """
++    plan = {
++        "status": "blocked",
++        "task_complexity": task_complexity if isinstance(task_complexity, str) else None,
++        "budget_cap_usd": None,
++        "tiers": [],
++        "max_tier": None,
++        "estimated_cost_usd": None,
++        "requires_independent_verification": True,
++        "requires_price_and_token_check": True,
++        "executes_models": False,
++        "reason": "invalid_input",
++    }
++    if not isinstance(task_complexity, str) or task_complexity not in _MAX_TIER:
++        plan["reason"] = "invalid_complexity"
++        return plan
++    if isinstance(budget_remaining_usd, bool):
++        plan["reason"] = "invalid_budget"
++        return plan
++    try:
++        amount = Decimal(str(budget_remaining_usd))
++    except (InvalidOperation, ValueError, TypeError):
++        plan["reason"] = "invalid_budget"
++        return plan
++    if not amount.is_finite() or amount < 0:
++        plan["reason"] = "invalid_budget"
++        return plan
++    plan["budget_cap_usd"] = str(amount)
++    if amount == 0:
++        plan["reason"] = "budget_exhausted"
++        return plan
++
++    max_tier = _MAX_TIER[task_complexity]
++    plan.update(
++        status="advisory_only",
++        tiers=list(_TIERS[: _TIERS.index(max_tier) + 1]),
++        max_tier=max_tier,
++        reason="cost_and_quality_unverified; escalate_only_after_independent_failure",
++    )
++    return plan
+diff --git a/.claude/hooks/_lib/_skill_telemetry_router/discovery_telemetry.py b/.claude/hooks/_lib/_skill_telemetry_router/discovery_telemetry.py
+new file mode 100644
+index 000000000000..5502b35774d7
+--- /dev/null
++++ b/.claude/hooks/_lib/_skill_telemetry_router/discovery_telemetry.py
+@@ -0,0 +1,50 @@
++"""Identify a real skill by its canonical SKILL.md location, without I/O writes."""
++
++from __future__ import annotations
++
++from pathlib import Path
++import re
++
++
++_SLUG = re.compile(r"[a-z0-9][a-z0-9-]*\Z")
++
++
++def resolve_skill_slug_from_path(path: str) -> str:
++    """Return a verified skill directory name or ``unknown``.
++
++    Valid layouts mirror the skill inventory: core, frontend and domain skills.
++    Symlink aliases resolve to the *target* skill, not their alias names.
++    Relative paths are interpreted relative to the current working directory.
++    """
++    if not isinstance(path, str) or not path.strip() or "\x00" in path:
++        return "unknown"
++
++    candidate = Path(path)
++    # Do not silently normalize a caller-supplied parent traversal.
++    if ".." in candidate.parts:
++        return "unknown"
++    try:
++        target = candidate.resolve(strict=True)
++        if target.is_dir():
++            target = (target / "SKILL.md").resolve(strict=True)
++        if not target.is_file() or target.name != "SKILL.md":
++            return "unknown"
++    except (OSError, RuntimeError, ValueError):
++        return "unknown"
++
++    parts = target.parts
++    # Canonical target, not the link, must be below .claude/skills.
++    for index in range(len(parts) - 2):
++        if parts[index : index + 2] == (".claude", "skills"):
++            remainder = parts[index + 2 :]
++            if remainder[-1] != "SKILL.md":
++                return "unknown"
++            directories = remainder[:-1]
++            if (len(directories) == 2 and directories[0] in ("core", "frontend")
++                    or len(directories) == 3 and directories[0] == "domains"
++                    or len(directories) == 4 and directories[0] == "domains"
++                    and directories[2] == "skills"):
++                if all(_SLUG.fullmatch(part) for part in directories):
++                    return directories[-1]
++            return "unknown"
++    return "unknown"
+diff --git a/.claude/hooks/_lib/_spool_writer_parts/__init__.py b/.claude/hooks/_lib/_spool_writer_parts/__init__.py
+new file mode 100644
+index 000000000000..5420a60d6f25
+--- /dev/null
++++ b/.claude/hooks/_lib/_spool_writer_parts/__init__.py
+@@ -0,0 +1,27 @@
++"""Bind spool writer declarations to the compatibility facade namespace."""
++from __future__ import annotations
++
++from importlib import import_module
++from types import FunctionType
++
++
++def install(namespace, modules):
++    """Publish functions so runtime global lookup observes facade monkeypatches."""
++    declarations = {}
++    for name in modules:
++        module = import_module("%s.%s" % (__name__, name))
++        declarations.update({key: getattr(module, key) for key in module.__all__})
++    for name, original in declarations.items():
++        if isinstance(original, FunctionType):
++            bound = FunctionType(
++                original.__code__, namespace, original.__name__,
++                original.__defaults__, original.__closure__,
++            )
++            bound.__kwdefaults__ = original.__kwdefaults__
++            bound.__annotations__ = original.__annotations__
++            bound.__dict__.update(original.__dict__)
++            bound.__qualname__ = original.__qualname__
++            bound.__module__ = namespace["__name__"]
++            namespace[name] = bound
++        else:
++            namespace[name] = original
+diff --git a/.claude/hooks/_lib/_spool_writer_parts/drain.py b/.claude/hooks/_lib/_spool_writer_parts/drain.py
+new file mode 100644
+index 000000000000..ac11ab1492f7
+--- /dev/null
++++ b/.claude/hooks/_lib/_spool_writer_parts/drain.py
+@@ -0,0 +1,622 @@
++# PLAN-094 Wave A — spool_writer (canonical promotion of spool_writer_DRAFT.py)
++"""_lib/spool_writer.py — durable spool + drain-on-next-invoke (PLAN-094 Wave A).
++
++Implements ADR-055-AMEND-1: 5-phase atomic drain protocol, 4-tuple total
++order across concurrent producers, K_MAX/K_TAIL_WINDOW idempotent skip,
++canonical-tail prev_hmac reconstruction, per-PID spool + per-PID journal,
++atomic split-and-delete for K_MAX deferral, header/body uuid sentinel.
++
++Stdlib-only (ADR-002). Fail-open invariant — never raise to caller; any
++infra failure emits a breadcrumb and returns safely.
++"""
++
++from __future__ import annotations
++
++import atexit
++import hashlib
++import json
++import os
++import re
++import secrets
++import signal
++import sys
++import time
++import uuid
++from dataclasses import dataclass, field
++from pathlib import Path
++from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
++
++_HOOKS_DIR = Path(__file__).resolve().parent.parent
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++
++from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
++from _lib import runtime_paths as _runtime_paths  # noqa: E402  # PLAN-182 W1 single resolver (ADR-001 S318)
++
++try:
++    from _lib import audit_hmac as _audit_hmac  # noqa: E402
++    _HMAC_AVAILABLE = True
++except Exception:  # pragma: no cover
++    _audit_hmac = None  # type: ignore[assignment]
++    _HMAC_AVAILABLE = False
++
++try:
++    from _lib import canonical_json as _canonical_json  # noqa: E402
++except Exception:  # pragma: no cover
++    _canonical_json = None  # type: ignore[assignment]
++
++
++# ---------------------------------------------------------------------------
++# Constants (ADR-055-AMEND-1 §3 wave A spec)
++# ---------------------------------------------------------------------------
++
++K_MAX = 100
++K_TAIL_WINDOW = 200
++SPOOL_HEADER_VERSION = 1
++# PLAN-111 Wave B-alt4 (debate consensus + cProfile data-driven): trigger
++# raised 50 -> 100. Halves drain cascade count (40 -> 20 across 5-trial
++# emit_pair benchmark, confirmed by cprofile-post-b-darwin.txt). Per-trial
++# wall-clock 174ms -> 170ms (-2%); cumulative drain_now cumtime 364ms -> 307ms.
++# Combined with Wave A cache: per-emit 580us -> 425us (-27%). AC-C1 strict
++# <=360us NOT hit alone; Wave C.1 RELAX path engaged (200->300ms test
++# budget) with ubuntu projection ~255ms still well under.
++DRAIN_TRIGGER_SIZE = 100
++DRAIN_TRIGGER_MTIME_MS = 100
++STALE_SPOOL_TTL_DAYS = 7
++SPOOL_LOCK_TIMEOUT = 2.5
++
++
++__all__ = (
++    '_phase4_build_batch',
++    '_phase5_append_canonical',
++    '_phase5_split_and_cleanup',
++    '_journal_compact_drained',
++)
++
++# QDSAA-FUNCAO-LONGA: protocolo de durabilidade atomica; separar altera invariantes de lock e recuperacao.
++def _phase4_build_batch(
++    deduped: List[Tuple[Tuple[int, int, str, int], Dict[str, Any], _DrainingFile, int]],
++    drain_epoch: str,
++    in_recovery: bool,
++    stats: DrainStats,
++    starting_processed: int = 0,
++) -> Tuple[List[bytes], List[_DrainingFile], Dict[str, Set[int]], Optional[bytes], List[Tuple[str, int]]]:
++    """Compute HMAC chain; produce canonical-log batch lines.
++
++    Returns (batch_line_bytes, fully_consumed_files,
++    per_file_consumed_indices, last_hmac_bytes, drained_record_ids_by_pid).
++
++    iter2-P0-1: per_file_consumed is now Dict[str, Set[int]] (body indices,
++    not a prefix-count). Phase 5 splits the remainder using the COMPLEMENT
++    of the set — out-of-order index consumption (e.g. clock-skew rollback
++    where a LATER body index sorts ahead of an EARLIER one and is cut by
++    K_MAX) no longer trashes unprocessed earlier lines.
++
++    iter2-P1-1: idempotent-skip branch now ALSO appends (record_id, pid)
++    to drained_ids and marks the index consumed — without this, the matching
++    journal `commit` envelope stays as commit_no_drained forever (phantom
++    inflight count in AC10).
++
++    iter2-P2-1: canonical output honors the SOURCE file's drain_epoch
++    (src_file.drain_epoch) — important for forensic correlation when an
++    in-recovery drain re-emits entries from a prior-cycle .draining file.
++
++    iter3-P0-1: K_MAX counts TOTAL PROCESSED entries (appended + idempotent
++    skipped + intentionally consumed via tamper/duplicate paths), NOT just
++    appended. Without this, repeated partial-crash cycles where each crash
++    leaves K_MAX entries in .draining and the next drain hits all K_MAX as
++    skipped + processes K_MAX fresh can accumulate >K_TAIL_WINDOW processed
++    entries per cycle → entries fall out of the skip-guard tail window on
++    a subsequent crash cycle → re-appended duplicates in canonical log.
++    Capping TOTAL processed bounds disk-write + idempotent work per drain
++    cycle so window-overflow cannot occur.
++
++    Honors K_MAX cap; remaining un-consumed entries are left for the next
++    drain cycle via Phase 5 atomic split.
++    """
++    log_path = _canonical_log_path()
++
++    # PLAN-112-FOLLOWUP-hmac-tamper-fix Wave B.1 — Path B variant 1 hoist.
++    # Probe rotation BEFORE reading canonical tail (and therefore before
++    # computing prev_hmac), so this batch always anchors against the
++    # CURRENT canonical file (post-rotation if applicable).
++    #
++    # Prior bug: Phase 4 read prev_hmac from the about-to-rotate file;
++    # Phase 5 detected rotation but batch_lines were already HMAC-chained
++    # against the old chain → verifier (resets at file boundary per
++    # ADR-055 §2) saw STATUS_TAMPER at line 1 of the new file.
++    # Per F-7.7 (PLAN-112 wave-c-bundles/C10) + D3 confirmation.
++    # Fail-open: any rotation exception is breadcrumbed and the read
++    # proceeds against whatever log path is current.
++    try:
++        from _lib import audit_emit as _audit_emit_lazy
++        from _lib import audit_hmac as _audit_hmac_lazy
++        # PLAN-143 item-2 (audit-errors-02): guard the rotation probe.
++        # Under test/shim wiring the lazily-imported object can be an
++        # _EmitCapture double that lacks _rotate_if_needed_safe; calling
++        # it raised AttributeError into the fail-open except below, which
++        # breadcrumbed cosmetic audit-log.errors noise and silently
++        # skipped the probe. getattr-guard -> no attribute means "no
++        # rotation" (None), taking the same intended branch without noise.
++        _rotate_probe = getattr(
++            _audit_emit_lazy, "_rotate_if_needed_safe", None
++        )
++        rotated_to_phase4 = (
++            _rotate_probe(log_path) if callable(_rotate_probe) else None
++        )
++        if rotated_to_phase4 is not None and not _audit_hmac_lazy.is_disabled():
++            try:
++                _audit_hmac_lazy.reset_chain_on_rotation()
++            except Exception as re:
++                _breadcrumb(
++                    f"phase4 rotation HMAC reset failed: "
++                    f"{type(re).__name__}: {re}"
++                )
++            # PLAN-112-FOLLOWUP-hmac-tamper-fix Wave B.3 — emit
++            # chain_reset_marker as line 1 of new file + manifest. Fail-open
++            # (marker absence → verifier legacy mode, not tamper signal).
++            try:
++                _audit_emit_lazy._emit_chain_reset_marker_under_lock(
++                    log=log_path,
++                    previous_archive_path=str(rotated_to_phase4),
++                    rotation_trigger="size_threshold",
++                )
++            except Exception as me:
++                _breadcrumb(
++                    f"phase4 chain_reset_marker emit failed: "
++                    f"{type(me).__name__}: {me}"
++                )
++    except Exception as e:
++        # Fail-open: rotation probe never blocks the canonical read.
++        _breadcrumb(f"phase4 rotation probe failed: {type(e).__name__}: {e}")
++
++    # AFTER rotation probe: read tail from (now-current) file.
++    prev_hmac, tail_entries = _read_canonical_tail(log_path, K_TAIL_WINDOW)
++    drain_sha_set: set = set()
++    for e in tail_entries:
++        ds = e.get("_drain_sha256")
++        if isinstance(ds, str) and len(ds) == 64:
++            drain_sha_set.add(ds)
++
++    if _HMAC_AVAILABLE and _audit_hmac is not None and prev_hmac is None:
++        # Empty log + HMAC available → genesis (which is correct
++        # post-rotation since the new file is empty).
++        prev_hmac = _audit_hmac.GENESIS_PREV
++
++    batch_lines: List[bytes] = []
++    # iter2-P0-1: set-of-indices, not prefix-count.
++    per_file_consumed: Dict[str, Set[int]] = {}
++    drained_ids: List[Tuple[str, int]] = []  # P1-3: (record_id, pid)
++    last_hmac: Optional[bytes] = prev_hmac
++
++    def _mark(path_str: str, idx: int) -> None:
++        per_file_consumed.setdefault(path_str, set()).add(idx)
++
++    # iter3-P0-1: cap on TOTAL processed (appended + idempotent_skipped +
++    # tamper-consumed); breaking on appended-only allowed cumulative
++    # processed > K_TAIL_WINDOW across recovery cycles → window overflow.
++    # iter4-P2-2: `starting_processed` carries duplicate-cleanup count from
++    # Phase 3 so combined Phase-3 + Phase-4 work ≤ K_MAX per drain cycle.
++    processed = starting_processed
++    for key, entry, src_file, body_idx in deduped:
++        if processed >= K_MAX:
++            break
++        path_key = str(src_file.path)
++
++        # P1-3: pull record_id off the spool entry BEFORE stripping internal
++        # fields so we can emit op:"drained" with the matching id.
++        rec_id = entry.get("record_id")
++
++        entry_clean = {
++            k: v for k, v in entry.items()
++            if not (isinstance(k, str) and k.startswith("_drain_"))
++            and k != "hmac" and k != "hmac_error"
++        }
++        try:
++            sha = _sha256_of_canonical_json(entry_clean)
++        except Exception as e:
++            _breadcrumb(f"sha compute failed: {type(e).__name__}: {e}")
++            # Treat unencodable entry like a tamper — skip + count
++            stats.partial_lines_discarded += 1
++            _mark(path_key, body_idx)
++            # iter3-P0-1: tamper-consumed counts toward K_MAX budget
++            processed += 1
++            continue
++
++        if sha in drain_sha_set:
++            stats.skipped_idempotent += 1
++            severity = "INFORMATIONAL" if in_recovery else "ALARM"
++            _forensic("audit_spool_unexpected_skip", {
++                "drain_epoch": drain_epoch,
++                "spool_uuid": key[2],
++                "ordinal_within_file": key[3],
++                "skipped_sha256": sha,
++                "drain_in_recovery_mode": in_recovery,
++                "severity": severity,
++            })
++            _mark(path_key, body_idx)
++            # iter2-P1-1: also commit drained_id so the journal compactor
++            # emits op:"drained" for this record. Without this, the matching
++            # `commit` envelope stays as commit_no_drained forever in the
++            # journal (AC10 phantom inflight). The canonical batch line was
++            # already appended on the prior crashed drain — this entry is
++            # "drained" from the journal's perspective even though we are
++            # not re-appending the bytes this cycle.
++            if isinstance(rec_id, str) and rec_id:
++                drained_ids.append((rec_id, src_file.pid))
++            # iter3-P0-1: idempotent-skip counts toward K_MAX budget so
++            # window-overflow on multi-crash cycles is structurally
++            # impossible (processed ≤ K_MAX < K_TAIL_WINDOW).
++            processed += 1
++            continue
++
++        chained = dict(entry_clean)
++        chained["_drain_sha256"] = sha
++        # iter2-P2-1: honor source file's drain_epoch for forensic
++        # correlation (this entry was first staged in that cycle).
++        chained["_drain_epoch"] = src_file.drain_epoch
++
++        if (_HMAC_AVAILABLE and _audit_hmac is not None
++                and not _audit_hmac.is_disabled()):
++            try:
++                key_bytes = _audit_hmac.get_or_create_key()
++                digest = _audit_hmac.compute_entry_hmac(
++                    key_bytes,
++                    last_hmac if last_hmac is not None else _audit_hmac.GENESIS_PREV,
++                    chained,
++                )
++                chained["hmac"] = digest.hex()
++                last_hmac = digest
++            except _audit_hmac.AuditProducerPathPollutionError as ppe:
++                # PLAN-118 AC-B4 chokepoint 4 / recursion-safety case 5 —
++                # the spool fast-path (audit_emit._write_event line 1760)
++                # appends to spool BEFORE local HMAC computation; the
++                # HMAC is then computed HERE at drain time. On
++                # canonical-resolution mismatch at drain: refuse to
++                # compute HMAC for the batch entry; normalize the entry
++                # to hmac:null + closed-enum hmac_error BEFORE the entry
++                # is appended to the chain (so polluted HMACs never enter
++                # the chain at all). Emit AC-B5 breadcrumb with
++                # chokepoint=spool_drain (safe — the typed emitter's own
++                # _write_event call will also trigger this same
++                # exception and recurse-fail-OPEN through the same
++                # channel; the breadcrumb's purpose is exactly that
++                # forensic signal).
++                chained["hmac"] = None
++                chained["hmac_error"] = "producer_path_pollution_detected"
++                _breadcrumb(
++                    f"hmac_error: producer_path_pollution_detected "
++                    f"(chokepoint=spool_drain): {ppe}"
++                )
++                # Parse the exception payload for the AC-B5 breadcrumb.
++                try:
++                    _msg = str(ppe)
++                    _rc = "audit_emit_path_pollution"
++                    _psp = "[REDACTED:rg]"
++                    _ecp = "[REDACTED:rg]"
++                    _valid_rcs = (
++                        "audit_emit_path_pollution",
++                        "canonical_json_path_pollution",
++                        "audit_hmac_path_pollution",
++                    )
++                    for _tok in _msg.split():
++                        if _tok.startswith("reason_code="):
++                            _cand = _tok.split("=", 1)[1]
++                            if _cand in _valid_rcs:
++                                _rc = _cand
++                        elif _tok.startswith("path_sha256_prefix="):
++                            _cand = _tok.split("=", 1)[1]
++                            if len(_cand) == 8 and all(c in "0123456789abcdef" for c in _cand):
++                                _psp = _cand
++                        elif _tok.startswith("expected_canonical_prefix="):
++                            _cand = _tok.split("=", 1)[1]
++                            if len(_cand) == 8 and all(c in "0123456789abcdef" for c in _cand):
++                                _ecp = _cand
++                    # Lazy-import the typed emitter to avoid circular import
++                    # at module load (spool_writer is imported from audit_emit).
++                    from _lib import audit_emit as _audit_emit
++                    _audit_emit.emit_audit_producer_path_pollution_detected(
++                        chokepoint="spool_drain",
++                        reason_code=_rc,
++                        path_sha256_prefix=_psp,
++                        expected_canonical_prefix=_ecp,
++                    )
++                except Exception as _be:  # pragma: no cover
++                    _breadcrumb(
++                        f"AC-B5 spool_drain breadcrumb emit failed: "
++                        f"{type(_be).__name__}: {_be}"
++                    )
++            except Exception as e:
++                chained["hmac"] = None
++                chained["hmac_error"] = f"{type(e).__name__}: {e}"
++                _breadcrumb(f"hmac compute failed: {type(e).__name__}: {e}")
++
++        try:
++            line = json.dumps(
++                chained, separators=(",", ":"), ensure_ascii=False,
++            ).encode("utf-8") + b"\n"
++        except (TypeError, ValueError) as e:
++            _breadcrumb(f"phase4 encode failed: {type(e).__name__}: {e}")
++            _mark(path_key, body_idx)
++            # iter3-P0-1: encode-failure consumed counts toward K_MAX.
++            processed += 1
++            continue
++        batch_lines.append(line)
++        _mark(path_key, body_idx)
++        # P1-3: track for op:"drained" envelope emission
++        if isinstance(rec_id, str) and rec_id:
++            drained_ids.append((rec_id, src_file.pid))
++        # iter3-P0-1: append counts toward K_MAX (was: `appended += 1`).
++        processed += 1
++
++    fully_consumed: List[_DrainingFile] = []
++    return batch_lines, fully_consumed, per_file_consumed, last_hmac, drained_ids
++
++
++# ---------------------------------------------------------------------------
++# Phase 5 — atomic append + split + cleanup
++# ---------------------------------------------------------------------------
++
++
++# QDSAA-FUNCAO-LONGA: protocolo de durabilidade atomica; separar altera invariantes de lock e recuperacao.
++def _phase5_append_canonical(
++    batch_lines: List[bytes], last_hmac: Optional[bytes]
++) -> int:
++    """Append batch to canonical log; single fsync; update sidecar cache.
++
++    iter2-P2-3: chain_length sidecar increment counts HMAC-bearing lines
++    only — entries that failed HMAC compute (hmac=null + hmac_error set)
++    don't extend the chain even though their bytes are appended. The
++    sidecar is a cache for chain-verify performance; counting null-hmac
++    lines would diverge from the true HMAC chain length.
++    """
++    if not batch_lines:
++        return 0
++    log_path = _canonical_log_path()
++    log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
++
++    # PLAN-094-FOLLOWUP Wave A.3-rotation — probe rotation BEFORE the
++    # canonical append so spool-drained writes never accumulate past the
++    # configured threshold. Lazy-import audit_emit (circular dep at
++    # module load time) + audit_hmac for chain reset.
++    try:
++        from _lib import audit_emit as _audit_emit_lazy
++        from _lib import audit_hmac as _audit_hmac_lazy
++        # PLAN-143 item-2 (audit-errors-02): guard the rotation probe — a
++        # capture-shim object may lack _rotate_if_needed_safe (see the
++        # phase-4 probe above). getattr-guard -> missing attribute means
++        # "no rotation" (None), no AttributeError into the fail-open path.
++        _rotate_probe = getattr(
++            _audit_emit_lazy, "_rotate_if_needed_safe", None
++        )
++        rotated_to = (
++            _rotate_probe(log_path) if callable(_rotate_probe) else None
++        )
++        if rotated_to is not None and not _audit_hmac_lazy.is_disabled():
++            try:
++                _audit_hmac_lazy.reset_chain_on_rotation()
++                # Reset last_hmac so this batch re-anchors at genesis.
++                last_hmac = None
++            except Exception as re:
++                _breadcrumb(
++                    f"phase5 rotation HMAC reset failed: "
++                    f"{type(re).__name__}: {re}"
++                )
++    except Exception as e:
++        # Fail-open: rotation probe never blocks the canonical append.
++        _breadcrumb(f"phase5 rotation probe failed: {type(e).__name__}: {e}")
++
++    payload = b"".join(batch_lines)
++    fd = os.open(str(log_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
++    try:
++        os.write(fd, payload)
++        os.fsync(fd)
++    finally:
++        os.close(fd)
++
++    if (_HMAC_AVAILABLE and _audit_hmac is not None
++            and not _audit_hmac.is_disabled()
++            and last_hmac is not None
++            and len(last_hmac) == _audit_hmac.HMAC_BYTES):
++        try:
++            _audit_hmac.write_last_hmac(last_hmac)
++        except Exception as e:
++            _breadcrumb(f"write_last_hmac failed: {type(e).__name__}: {e}")
++        # iter2-P2-3: count HMAC-bearing lines only.
++        hmac_bearing = 0
++        for line in batch_lines:
++            try:
++                obj = json.loads(line.rstrip(b"\n").decode("utf-8"))
++            except (json.JSONDecodeError, UnicodeDecodeError):
++                continue
++            if not isinstance(obj, dict):
++                continue
++            hx = obj.get("hmac")
++            if isinstance(hx, str) and len(hx) == 64:
++                hmac_bearing += 1
++        try:
++            current = _audit_hmac.read_chain_length()
++            _audit_hmac.write_chain_length(current + hmac_bearing)
++        except Exception as e:
++            _breadcrumb(f"chain_length update failed: {type(e).__name__}: {e}")
++    return len(batch_lines)
++
++
++# QDSAA-FUNCAO-LONGA: protocolo de durabilidade atomica; separar altera invariantes de lock e recuperacao.
++def _phase5_split_and_cleanup(
++    files: List[_DrainingFile],
++    per_file_consumed: Dict[str, Set[int]],
++    drain_epoch: str,
++    stats: DrainStats,
++) -> None:
++    """For each draining file: unlink if fully consumed; else atomic-split.
++
++    iter2-P0-1: per_file_consumed is a Set[int] of body INDICES. The
++    remainder file is built from the COMPLEMENT (all body indices NOT in
++    the set). This correctly handles out-of-order index consumption (e.g.
++    wall_ns clock-skew rollback where a later body index sorts BEFORE an
++    earlier one and is cut by K_MAX) — prefix-based cleanup would have
++    discarded unprocessed earlier lines.
++
++    iter2-P0-3: SKIP any _DrainingFile whose .quarantined flag is set —
++    the file is already renamed to .malformed.<epoch>; trying to split
++    or unlink the original path would either fail (ENOENT) or, worse,
++    re-sweep the renamed quarantined file on a subsequent drain.
++
++    iter2-P1-3: when splitting, mint a NEW drain_epoch for the destination
++    so dst path != src path. This closes the `.split.tmp` two-step window
++    (old code reused src epoch → dst==src → os.rename(src,dst) no-op AND
++    the temp suffix dance remained). Now: tmp → fsync → rename(tmp,
++    new_dst) atomic; unlink(src). Single window if rename succeeds.
++
++    P2-4: header is written VERBATIM from file.header_raw — no JSON
++    re-encode (preserves byte identity of _spool_uuid sentinel chain).
++    """
++    for f in files:
++        # iter2-P0-3: skip quarantined files — original path doesn't exist
++        # at .draining.<epoch> anymore; it was renamed to .malformed.<epoch>.
++        if f.quarantined:
++            continue
++        path_key = str(f.path)
++        if f.header is None and not f.body_lines:
++            # Already empty (no body) — just unlink the (header-only) file.
++            try:
++                if f.path.exists():
++                    os.unlink(str(f.path))
++            except OSError:
++                pass
++            continue
++        consumed_set = per_file_consumed.get(path_key, set())
++        total = len(f.body_lines)
++        # iter2-P0-1: fully consumed iff every body index is in the set.
++        if total == 0 or all(i in consumed_set for i in range(total)):
++            try:
++                os.unlink(str(f.path))
++                stats.files_consumed_fully += 1
++            except OSError as e:
++                _breadcrumb(f"phase5 unlink failed: {type(e).__name__}: {e}")
++            continue
++
++        # iter2-P1-3: mint a NEW epoch for the split destination so
++        # dst_path differs from src_path; this collapses the prior
++        # two-step `.split.tmp` rename dance into a single rename+unlink.
++        new_epoch = secrets.token_hex(4)
++        tmp_token = secrets.token_hex(4)
++        # tmp is a sibling .tmp.<token> for atomic create+rename within same dir
++        tmp_path = f.path.with_name(f.path.name + _TMP_SUFFIX_TOKEN + tmp_token)
++        try:
++            # P2-4: verbatim header bytes — no JSON re-encode
++            header_line = f.header_raw if f.header_raw else (
++                json.dumps(
++                    f.header, separators=(",", ":"), ensure_ascii=False,
++                ).encode("utf-8") + b"\n"
++            )
++            # iter2-P0-1: rebuild remainder using COMPLEMENT of consumed_set
++            # (NOT a prefix slice). Empty lines are preserved as empty bytes
++            # in body_lines and re-emitted with the newline separator below.
++            remainder_lines = [
++                f.body_lines[i] for i in range(total) if i not in consumed_set
++            ]
++            body_remainder = b"\n".join(remainder_lines)
++            if body_remainder and not body_remainder.endswith(b"\n"):
++                body_remainder += b"\n"
++            fd = os.open(
++                str(tmp_path),
++                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_TRUNC,
++                0o600,
++            )
++            try:
++                os.write(fd, header_line)
++                if body_remainder:
++                    os.write(fd, body_remainder)
++                os.fsync(fd)
++            finally:
++                os.close(fd)
++            # iter2-P1-3: dst is .draining.<new_epoch> — distinct from src.
++            dst_path = _draining_path(_spool_path(f.pid), new_epoch)
++            # Single atomic rename + unlink source. If rename fails, the
++            # tmp file is cleaned up in the except branch.
++            os.rename(str(tmp_path), str(dst_path))
++            try:
++                os.unlink(str(f.path))
++            except OSError as e:  # pragma: no cover
++                # Source gone (race / already cleaned); rename succeeded so
++                # the remainder file is correctly in place.
++                _breadcrumb(
++                    f"phase5 src unlink after split failed: "
++                    f"{type(e).__name__}: {e}"
++                )
++            stats.files_split_remainder += 1
++        except OSError as e:
++            _breadcrumb(f"phase5 split failed: {type(e).__name__}: {e}")
++            try:
++                if tmp_path.exists():
++                    os.unlink(str(tmp_path))
++            except OSError:
++                pass
++
++
++# ---------------------------------------------------------------------------
++# Journal post-drain compaction
++# ---------------------------------------------------------------------------
++
++
++def _journal_compact_drained(
++    pid: int,
++    drained_record_ids: Iterable[str],
++    drain_epoch: str,
++) -> None:
++    """Append op=drained envelopes; rewrite journal dropping fully-completed triples.
++
++    P1-3: emits op:"drained" envelopes with the actual record_id so
++    session-start reconciliation can distinguish recovered from inflight.
++    """
++    drained_set = {r for r in drained_record_ids if isinstance(r, str) and r}
++    if not drained_set:
++        return
++    # Flush any pending in-memory journal envelopes for this PID FIRST so
++    # the compaction read sees a consistent on-disk view.
++    _flush_journal_buffer(pid)
++    journal = _journal_path(pid)
++    if not journal.exists():
++        return
++    # 1) Append drained envelopes via the buffer (then flush)
++    for rid in drained_set:
++        _write_journal_envelope(
++            pid, rid, "", -1, "", "drained", drain_epoch=drain_epoch,
++        )
++    _flush_journal_buffer(pid)
++    # 2) Rewrite journal under per-PID journal flock dropping rows whose
++    # record_id is in drained_set (begin/commit/drained triples collapse).
++    try:
++        with FileLock(_journal_flock_path(pid), timeout=SPOOL_LOCK_TIMEOUT):
++            with journal.open("r", encoding="utf-8") as f:
++                keep_lines: List[str] = []
++                for raw in f:
++                    stripped = raw.strip()
++                    if not stripped:
++                        continue
++                    try:
++                        env = json.loads(stripped)
++                    except json.JSONDecodeError:
++                        keep_lines.append(raw)
++                        continue
++                    if (isinstance(env, dict)
++                            and env.get("record_id") in drained_set):
++                        continue
++                    keep_lines.append(raw)
++            tmp = journal.with_name(journal.name + ".compact.tmp")
++            with tmp.open("w", encoding="utf-8") as f:
++                f.writelines(keep_lines)
++                f.flush()
++                os.fsync(f.fileno())
++            os.replace(str(tmp), str(journal))
++    except FileLockTimeout:
++        _breadcrumb(f"journal compact flock timeout pid={pid}")
++    except OSError as e:
++        _breadcrumb(f"journal compact failed: {type(e).__name__}: {e}")
++
++
++# ---------------------------------------------------------------------------
++# drain_now — orchestration
++# ---------------------------------------------------------------------------
+diff --git a/.claude/hooks/_lib/_spool_writer_parts/lifecycle.py b/.claude/hooks/_lib/_spool_writer_parts/lifecycle.py
+new file mode 100644
+index 000000000000..a7eb2a023872
+--- /dev/null
++++ b/.claude/hooks/_lib/_spool_writer_parts/lifecycle.py
+@@ -0,0 +1,469 @@
++# PLAN-094 Wave A — spool_writer (canonical promotion of spool_writer_DRAFT.py)
++"""_lib/spool_writer.py — durable spool + drain-on-next-invoke (PLAN-094 Wave A).
++
++Implements ADR-055-AMEND-1: 5-phase atomic drain protocol, 4-tuple total
++order across concurrent producers, K_MAX/K_TAIL_WINDOW idempotent skip,
++canonical-tail prev_hmac reconstruction, per-PID spool + per-PID journal,
++atomic split-and-delete for K_MAX deferral, header/body uuid sentinel.
++
++Stdlib-only (ADR-002). Fail-open invariant — never raise to caller; any
++infra failure emits a breadcrumb and returns safely.
++"""
++
++from __future__ import annotations
++
++import atexit
++import hashlib
++import json
++import os
++import re
++import secrets
++import signal
++import sys
++import time
++import uuid
++from dataclasses import dataclass, field
++from pathlib import Path
++from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
++
++_HOOKS_DIR = Path(__file__).resolve().parent.parent
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++
++from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
++from _lib import runtime_paths as _runtime_paths  # noqa: E402  # PLAN-182 W1 single resolver (ADR-001 S318)
++
++try:
++    from _lib import audit_hmac as _audit_hmac  # noqa: E402
++    _HMAC_AVAILABLE = True
++except Exception:  # pragma: no cover
++    _audit_hmac = None  # type: ignore[assignment]
++    _HMAC_AVAILABLE = False
++
++try:
++    from _lib import canonical_json as _canonical_json  # noqa: E402
++except Exception:  # pragma: no cover
++    _canonical_json = None  # type: ignore[assignment]
++
++
++# ---------------------------------------------------------------------------
++# Constants (ADR-055-AMEND-1 §3 wave A spec)
++# ---------------------------------------------------------------------------
++
++K_MAX = 100
++K_TAIL_WINDOW = 200
++SPOOL_HEADER_VERSION = 1
++# PLAN-111 Wave B-alt4 (debate consensus + cProfile data-driven): trigger
++# raised 50 -> 100. Halves drain cascade count (40 -> 20 across 5-trial
++# emit_pair benchmark, confirmed by cprofile-post-b-darwin.txt). Per-trial
++# wall-clock 174ms -> 170ms (-2%); cumulative drain_now cumtime 364ms -> 307ms.
++# Combined with Wave A cache: per-emit 580us -> 425us (-27%). AC-C1 strict
++# <=360us NOT hit alone; Wave C.1 RELAX path engaged (200->300ms test
++# budget) with ubuntu projection ~255ms still well under.
++DRAIN_TRIGGER_SIZE = 100
++DRAIN_TRIGGER_MTIME_MS = 100
++STALE_SPOOL_TTL_DAYS = 7
++SPOOL_LOCK_TIMEOUT = 2.5
++
++
++__all__ = (
++    '_own_spool_stale_past_trigger',
++    'drain_now',
++    'reconcile_journal_at_session_start',
++    '_journal_rec_dict',
++    '_atexit_drain',
++    '_signal_drain_handler',
++    'install_exit_handlers',
++    '_reset_for_test',
++)
++
++def _own_spool_stale_past_trigger(pid: int) -> bool:
++    """True iff our own spool's mtime age exceeds DRAIN_TRIGGER_MTIME_MS.
++
++    (ADR-055-AMEND-3) SEC veto-floor MF-1 gate. When an opportunistic
++    (force=False) drain yields the canonical lock AND our own spool is already
++    stale past the staleness trigger, the lock holder is not keeping up — that
++    is genuine drain starvation (a wedged/contended holder), distinct from
++    benign single-winner contention (a fresh spool). OSError-safe: a missing or
++    unreadable spool returns False (fail-quiet, never raises).
++    """
++    try:
++        st = _spool_path(pid).stat()
++    except OSError:
++        return False
++    if st.st_size == 0:
++        return False
++    age_ms = (time.time() - st.st_mtime) * 1000.0
++    return age_ms > DRAIN_TRIGGER_MTIME_MS
++
++
++# QDSAA-FUNCAO-LONGA: protocolo de durabilidade atomica; separar altera invariantes de lock e recuperacao.
++def drain_now(*, force: bool = False) -> DrainStats:
++    """Execute 5-phase atomic drain. Bounded ≤K_MAX entries per call.
++
++    Fail-open invariant — any error sets stats.ok=False and is captured in
++    stats.error. NEVER raises to caller.
++    """
++    stats = DrainStats()
++    if is_sync_mode() and not force:
++        return stats
++    try:
++        if not force and not should_drain():
++            return stats
++
++        drain_epoch = secrets.token_hex(4)
++        stats.drain_epoch = drain_epoch
++        state_dir = _state_dir()
++        our_pid = os.getpid()
++        log_path = _canonical_log_path()
++        log_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
++        lock_path = _canonical_log_lock()
++
++        # P1-2: flush any buffered journal envelopes BEFORE drain begins so
++        # the journal reflects all begin/commit events up to this point
++        # (op:"drained" envelopes are appended after canonical append).
++        _flush_journal_buffer(our_pid)
++
++        # Phase 1 — canonical lock (deadlock-free; writers hold only their
++        # own per-PID flocks, never the canonical lock).
++        #
++        # (ADR-055-AMEND-3) — opportunistic/forced split. A FORCED
++        # drain (recovery / exit-handler / session-start) must complete, so it
++        # blocks up to SPOOL_LOCK_TIMEOUT and a timeout there is anomalous. An
++        # OPPORTUNISTIC drain (force=False, the per-emit hot path) is
++        # best-effort: the lock holder plus the loser's own later drain cover
++        # its events, so it acquires NON-BLOCKING (timeout=0 — a clean one-shot
++        # try-lock, one flock(LOCK_NB) with no sleep) and yields silently on
++        # contention instead of blocking the hook subprocess for 2.5s.
++        canonical_timeout = SPOOL_LOCK_TIMEOUT if force else 0.0
++        try:
++            with FileLock(lock_path, timeout=canonical_timeout):
++                files, in_recovery = _phase2_sweep_and_rename(
++                    state_dir, drain_epoch, our_pid,
++                )
++                stats.in_recovery_mode = in_recovery
++
++                valid_files: List[_DrainingFile] = []
++                for f in files:
++                    if _phase2_validate_header(f, drain_epoch):
++                        # PLAN-119 WS-D1 — refuse _origin:"test" spool ONLY when
++                        # the canonical destination IS the live chain; applied
++                        # AFTER header validation and BEFORE phase 3, so test
++                        # entries never reach batch_lines / the canonical append.
++                        if _should_quarantine_test_origin(f, log_path):
++                            _quarantine_test_origin(f, drain_epoch)
++                            stats.test_origin_quarantined += 1
++                        else:
++                            valid_files.append(f)
++                    else:
++                        stats.quarantined_files += 1
++
++                # iter2-P0-1 + iter4-P2-2: phase 3 returns
++                # (deduped, Dict[str, Set[int]], duplicate_consumed_count)
++                deduped, partial_consumed, dup_consumed = (
++                    _phase3_collect_and_sort(
++                        valid_files, drain_epoch, stats,
++                    )
++                )
++
++                # P0-2 + P1-3 + iter2-P0-1: phase 4 returns
++                # (batch_lines, _, per_file_consumed_set, last_hmac, ids)
++                # iter4-P2-2: pass dup_consumed as starting_processed so
++                # combined Phase-3 + Phase-4 work bounded by K_MAX.
++                (batch_lines, _, per_file_consumed, last_hmac,
++                 drained_ids) = _phase4_build_batch(
++                    deduped, drain_epoch, in_recovery, stats,
++                    starting_processed=dup_consumed,
++                )
++
++                # iter2-P0-1: merge partial/duplicate-rejection consumed
++                # indices (Set[int] union) into the Phase-4 per-file map so
++                # Phase 5 split honors the COMPLEMENT for remainder lines.
++                for path_key, idx_set in partial_consumed.items():
++                    if path_key in per_file_consumed:
++                        per_file_consumed[path_key] |= idx_set
++                    else:
++                        per_file_consumed[path_key] = set(idx_set)
++
++                stats.appended = _phase5_append_canonical(batch_lines, last_hmac)
++
++                # P1-3: emit op:"drained" envelopes grouped by pid + flush.
++                drained_by_pid: Dict[int, List[str]] = {}
++                for rec_id, pid in drained_ids:
++                    drained_by_pid.setdefault(pid, []).append(rec_id)
++                for pid, ids in drained_by_pid.items():
++                    _journal_compact_drained(pid, ids, drain_epoch)
++
++                _phase5_split_and_cleanup(
++                    valid_files, per_file_consumed, drain_epoch, stats,
++                )
++
++                # P1-2: drain-boundary journal flush for our own PID
++                _flush_journal_buffer(our_pid)
++        except FileLockTimeout:
++            if force:
++                # Forced drain could not complete — genuinely anomalous.
++                stats.ok = False
++                stats.error = "canonical_lock_timeout"
++                _breadcrumb("drain canonical lock timeout")
++            else:
++                # Opportunistic yield — expected under concurrency, NOT an
++                # error. Another drainer holds the lock; its global sweep plus
++                # our own later drain cover our events, so ok stays True.
++                stats.contended_skip = True
++                # SEC veto-floor MF-1 (ADR-052): keep a genuinely wedged holder
++                # observable. Emit a DISTINCT, gated breadcrumb ONLY when our
++                # own spool is already stale past the staleness trigger (holder
++                # not keeping up = real starvation). Benign single-winner
++                # contention (fresh spool) stays silent, so the existing
++                # audit-log.errors line-count detectors (ceo-diagnose.py /
++                # status.py) still surface a wedge without the benign volume.
++                if _own_spool_stale_past_trigger(our_pid):
++                    _breadcrumb(
++                        "drain canonical lock STARVED: own spool stale past "
++                        "trigger while opportunistic drain yielded"
++                    )
++            return stats
++    except Exception as e:
++        stats.ok = False
++        stats.error = f"{type(e).__name__}: {e}"
++        _breadcrumb(f"drain_now unexpected: {type(e).__name__}: {e}")
++    return stats
++
++
++# ---------------------------------------------------------------------------
++# Session-start reconciliation
++# ---------------------------------------------------------------------------
++
++
++# QDSAA-FUNCAO-LONGA: protocolo de durabilidade atomica; separar altera invariantes de lock e recuperacao.
++def reconcile_journal_at_session_start() -> JournalReconciliation:
++    """Walk audit-pending.*.journal entries; classify counts; emit forensic.
++
++    Returns the JournalReconciliation populated with counts. Emits
++    audit_flush_dropped_count via wired forensic callback (caller in
++    audit_emit wires the callback before invoking this).
++    """
++    rec = JournalReconciliation()
++    state_dir = _state_dir()
++    try:
++        if not state_dir.exists():
++            _forensic("audit_flush_dropped_count", _journal_rec_dict(rec))
++            return rec
++        names = sorted(os.listdir(str(state_dir)))
++    except OSError:
++        _forensic("audit_flush_dropped_count", _journal_rec_dict(rec))
++        return rec
++
++    by_record: Dict[str, Dict[str, bool]] = {}
++    for name in names:
++        if not name.startswith(_JOURNAL_PREFIX + "."):
++            continue
++        if not name.endswith(".journal"):
++            continue
++        if name == _aggregate_journal_path().name:
++            continue
++        # Parse <pid> from "audit-pending.<pid>.journal"
++        rest = name[len(_JOURNAL_PREFIX) + 1:]
++        pid_str = rest[:-len(".journal")]
++        try:
++            pid = int(pid_str)
++        except ValueError:
++            continue
++        if pid == os.getpid():
++            continue
++        if _is_alive_pid(pid):
++            continue
++        path = state_dir / name
++        try:
++            with path.open("r", encoding="utf-8") as f:
++                for raw in f:
++                    stripped = raw.strip()
++                    if not stripped:
++                        continue
++                    try:
++                        env = json.loads(stripped)
++                    except json.JSONDecodeError:
++                        continue
++                    if not isinstance(env, dict):
++                        continue
++                    rid = env.get("record_id")
++                    op = env.get("op")
++                    if not isinstance(rid, str) or not isinstance(op, str):
++                        continue
++                    slot = by_record.setdefault(
++                        rid, {"begin": False, "commit": False, "drained": False},
++                    )
++                    if op in slot:
++                        slot[op] = True
++        except OSError:
++            continue
++
++    for rid, ops in by_record.items():
++        if ops["begin"] and not ops["commit"]:
++            rec.begin_no_commit += 1
++        elif ops["commit"] and not ops["drained"]:
++            rec.commit_no_drained += 1
++        elif ops["commit"] and ops["drained"]:
++            rec.recovered += 1
++
++    # Trigger a recovery drain to sweep commit_no_drained envelopes.
++    if rec.commit_no_drained > 0:
++        recov = drain_now(force=True)
++        if recov.ok:
++            # iter2-P1-2: canonical-append-before-unlink crash recovery
++            # produces mostly `skipped_idempotent` (the entries are already
++            # in the canonical log; next drain reads same bytes from
++            # .draining, sees them in K_TAIL_WINDOW, skips). Sum both
++            # counters so AC10 reports actual recovery count, not just the
++            # rare appended-on-recovery subset.
++            rec.recovered += recov.appended + recov.skipped_idempotent
++            # iter3-P2-1: surface intentionally_deleted (duplicate-tuple
++            # rejections during recovery) into the reconciliation counter
++            # so the audit_flush_dropped_count emit carries it.
++            rec.intentionally_deleted += recov.intentionally_deleted
++
++    _forensic("audit_flush_dropped_count", _journal_rec_dict(rec))
++    return rec
++
++
++def _journal_rec_dict(rec: JournalReconciliation) -> Dict[str, Any]:
++    return {
++        "begin_no_commit": rec.begin_no_commit,
++        "commit_no_drained": rec.commit_no_drained,
++        "recovered": rec.recovered,
++        "truly_lost": rec.truly_lost,
++        "tamper_rejected": rec.tamper_rejected,
++        "intentionally_deleted": rec.intentionally_deleted,
++    }
++
++
++# ---------------------------------------------------------------------------
++# Exit handlers
++# ---------------------------------------------------------------------------
++
++
++def _atexit_drain() -> None:
++    """Best-effort exit drain, except while a hook deadline is armed."""
++    if _exit_deadline_active():
++        _record_exit_deadline_skip("atexit")
++        return
++    try:
++        drain_now(force=True)
++    except Exception:
++        pass
++    try:
++        _flush_journal_buffer(os.getpid())
++    except Exception:
++        pass
++
++
++def _signal_drain_handler(signum: int, frame: Any) -> None:
++    """Drain when safe, then preserve the previous signal disposition."""
++    if _IN_SPOOL_APPEND:
++        _breadcrumb(f"signal {signum} arrived during spool_append; bail")
++    elif _exit_deadline_active():
++        _record_exit_deadline_skip(f"signal-{signum}")
++    else:
++        try:
++            drain_now(force=True)
++        except Exception:
++            pass
++        try:
++            _flush_journal_buffer(os.getpid())
++        except Exception:
++            pass
++    if signum == signal.SIGTERM:
++        prev = _PREV_SIGTERM_HANDLER
++    elif signum == signal.SIGINT:
++        prev = _PREV_SIGINT_HANDLER
++    else:
++        prev = signal.SIG_DFL
++    if prev is signal.SIG_IGN:
++        try:
++            signal.signal(signum, signal.SIG_IGN)
++        except (ValueError, OSError):  # pragma: no cover
++            pass
++        return
++    if callable(prev):
++        try:
++            signal.signal(signum, prev)
++        except (ValueError, OSError):  # pragma: no cover
++            pass
++        try:
++            prev(signum, frame)
++        except Exception:  # pragma: no cover
++            pass
++        return
++    try:
++        signal.signal(signum, signal.SIG_DFL)
++    except (ValueError, OSError):  # pragma: no cover
++        pass
++    try:
++        os.kill(os.getpid(), signum)
++    except OSError:  # pragma: no cover
++        pass
++
++
++def install_exit_handlers() -> None:
++    """Register atexit + SIGTERM/SIGINT drain handlers (idempotent one-shot)."""
++    global _EXIT_HANDLER_INSTALLED
++    global _PREV_SIGTERM_HANDLER, _PREV_SIGINT_HANDLER
++    if _EXIT_HANDLER_INSTALLED:
++        return
++    try:
++        atexit.register(_atexit_drain)
++    except Exception as e:  # pragma: no cover
++        _breadcrumb(f"atexit register failed: {type(e).__name__}: {e}")
++    try:
++        _PREV_SIGTERM_HANDLER = signal.signal(
++            signal.SIGTERM, _signal_drain_handler,
++        )
++        if _PREV_SIGTERM_HANDLER is _signal_drain_handler:
++            _PREV_SIGTERM_HANDLER = signal.SIG_DFL
++    except (ValueError, OSError) as e:
++        # Signal handlers only work on main thread; in worker threads
++        # signal.signal raises ValueError. Fail-open.
++        _breadcrumb(f"SIGTERM install skipped: {type(e).__name__}: {e}")
++    try:
++        _PREV_SIGINT_HANDLER = signal.signal(
++            signal.SIGINT, _signal_drain_handler,
++        )
++        if _PREV_SIGINT_HANDLER is _signal_drain_handler:
++            _PREV_SIGINT_HANDLER = signal.SIG_DFL
++    except (ValueError, OSError) as e:
++        _breadcrumb(f"SIGINT install skipped: {type(e).__name__}: {e}")
++    _EXIT_HANDLER_INSTALLED = True
++
++
++# ---------------------------------------------------------------------------
++# Test helpers (NOT public API — prefixed _; harness uses these)
++# ---------------------------------------------------------------------------
++
++
++def _reset_for_test() -> None:
++    """Clear all in-process spool state (caches + handler latch + buffer)."""
++    global _EXIT_HANDLER_INSTALLED, _IN_FORENSIC_EMIT, _IN_SPOOL_APPEND
++    global _PREV_SIGTERM_HANDLER, _PREV_SIGINT_HANDLER
++    global _EXIT_DEADLINE_MONOTONIC
++    if _EXIT_HANDLER_INSTALLED:
++        for signum, previous in (
++            (signal.SIGTERM, _PREV_SIGTERM_HANDLER),
++            (signal.SIGINT, _PREV_SIGINT_HANDLER),
++        ):
++            if previous is None:
++                continue
++            try:
++                if signal.getsignal(signum) is _signal_drain_handler:
++                    signal.signal(signum, previous)
++            except (ValueError, OSError):  # pragma: no cover
++                pass
++    _SPOOL_HEADER_CACHE.clear()
++    _ORDINAL_COUNTER.clear()
++    _JOURNAL_BUFFER.clear()
++    _EXIT_HANDLER_INSTALLED = False
++    _PREV_SIGTERM_HANDLER = None
++    _PREV_SIGINT_HANDLER = None
++    _EXIT_DEADLINE_MONOTONIC = None
++    _IN_FORENSIC_EMIT = False
++    _IN_SPOOL_APPEND = False
+diff --git a/.claude/hooks/_lib/_spool_writer_parts/prepare.py b/.claude/hooks/_lib/_spool_writer_parts/prepare.py
+new file mode 100644
+index 000000000000..08cd5288c736
+--- /dev/null
++++ b/.claude/hooks/_lib/_spool_writer_parts/prepare.py
+@@ -0,0 +1,763 @@
++# PLAN-094 Wave A — spool_writer (canonical promotion of spool_writer_DRAFT.py)
++"""_lib/spool_writer.py — durable spool + drain-on-next-invoke (PLAN-094 Wave A).
++
++Implements ADR-055-AMEND-1: 5-phase atomic drain protocol, 4-tuple total
++order across concurrent producers, K_MAX/K_TAIL_WINDOW idempotent skip,
++canonical-tail prev_hmac reconstruction, per-PID spool + per-PID journal,
++atomic split-and-delete for K_MAX deferral, header/body uuid sentinel.
++
++Stdlib-only (ADR-002). Fail-open invariant — never raise to caller; any
++infra failure emits a breadcrumb and returns safely.
++"""
++
++from __future__ import annotations
++
++import atexit
++import hashlib
++import json
++import os
++import re
++import secrets
++import signal
++import sys
++import time
++import uuid
++from dataclasses import dataclass, field
++from pathlib import Path
++from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
++
++_HOOKS_DIR = Path(__file__).resolve().parent.parent
++if str(_HOOKS_DIR) not in sys.path:
++    sys.path.insert(0, str(_HOOKS_DIR))
++
++from _lib.filelock import FileLock, FileLockTimeout  # noqa: E402
++from _lib import runtime_paths as _runtime_paths  # noqa: E402  # PLAN-182 W1 single resolver (ADR-001 S318)
++
++try:
++    from _lib import audit_hmac as _audit_hmac  # noqa: E402
++    _HMAC_AVAILABLE = True
++except Exception:  # pragma: no cover
++    _audit_hmac = None  # type: ignore[assignment]
++    _HMAC_AVAILABLE = False
++
++try:
++    from _lib import canonical_json as _canonical_json  # noqa: E402
++except Exception:  # pragma: no cover
++    _canonical_json = None  # type: ignore[assignment]
++
++
++# ---------------------------------------------------------------------------
++# Constants (ADR-055-AMEND-1 §3 wave A spec)
++# ---------------------------------------------------------------------------
++
++K_MAX = 100
++K_TAIL_WINDOW = 200
++SPOOL_HEADER_VERSION = 1
++# PLAN-111 Wave B-alt4 (debate consensus + cProfile data-driven): trigger
++# raised 50 -> 100. Halves drain cascade count (40 -> 20 across 5-trial
++# emit_pair benchmark, confirmed by cprofile-post-b-darwin.txt). Per-trial
++# wall-clock 174ms -> 170ms (-2%); cumulative drain_now cumtime 364ms -> 307ms.
++# Combined with Wave A cache: per-emit 580us -> 425us (-27%). AC-C1 strict
++# <=360us NOT hit alone; Wave C.1 RELAX path engaged (200->300ms test
++# budget) with ubuntu projection ~255ms still well under.
++DRAIN_TRIGGER_SIZE = 100
++DRAIN_TRIGGER_MTIME_MS = 100
++STALE_SPOOL_TTL_DAYS = 7
++SPOOL_LOCK_TIMEOUT = 2.5
++
++
++__all__ = (
++    'should_drain',
++    '_read_canonical_tail',
++    '_DrainingFile',
++    '_is_alive_pid',
++    '_parse_spool_pid',
++    '_phase2_sweep_and_rename',
++    '_quarantine',
++    '_should_quarantine_test_origin',
++    '_quarantine_test_origin',
++    '_phase2_validate_header',
++    '_phase3_collect_and_sort',
++)
++
++def should_drain() -> bool:
++    """Return True if current spool meets event-count or staleness trigger.
++
++    P2-1: event-count trigger uses an actual newline-count over the spool
++    body (capped at DRAIN_TRIGGER_SIZE + 2 to keep the probe cheap), NOT
++    a byte-size proxy. Header is 1 line; we trigger when body lines >=
++    DRAIN_TRIGGER_SIZE.
++    """
++    try:
++        pid = os.getpid()
++        p = _spool_path(pid)
++        if not p.exists():
++            return False
++        st = p.stat()
++        if st.st_size == 0:
++            return False
++        # Staleness trigger first (cheap)
++        age_ms = (time.time() - st.st_mtime) * 1000.0
++        if age_ms > DRAIN_TRIGGER_MTIME_MS:
++            return True
++        # P2-1: honest newline count, capped at DRAIN_TRIGGER_SIZE + 2
++        # (1 for header + 1 to early-exit once we cross the threshold).
++        cap = DRAIN_TRIGGER_SIZE + 2
++        count = 0
++        try:
++            with p.open("rb") as f:
++                while count < cap:
++                    chunk = f.read(8192)
++                    if not chunk:
++                        break
++                    count += chunk.count(b"\n")
++                    if count >= cap:
++                        break
++        except OSError:
++            return False
++        # Body lines = count - 1 (header is line 1). Trigger when
++        # body_lines >= DRAIN_TRIGGER_SIZE → count >= DRAIN_TRIGGER_SIZE+1.
++        return count >= (DRAIN_TRIGGER_SIZE + 1)
++    except Exception:
++        return False
++
++
++# ---------------------------------------------------------------------------
++# Tail read of canonical log (Phase 4 prev_hmac + _drain_sha256 set)
++# ---------------------------------------------------------------------------
++
++
++def _read_canonical_tail(
++    log_path: Path, k_lines: int
++) -> Tuple[Optional[bytes], List[Dict[str, Any]]]:
++    """Return (prev_hmac_bytes_or_None, last_k_entries) from canonical log.
++
++    Reads up to k_lines from EOF using a backward chunked scan. Returns the
++    last entry's hmac (raw bytes) plus the parsed dicts for the last K
++    well-formed JSON lines. Empty / missing log → (None, []).
++    """
++    if not log_path.exists():
++        return None, []
++    try:
++        size = log_path.stat().st_size
++    except OSError:
++        return None, []
++    if size == 0:
++        return None, []
++
++    chunk = 8192
++    buf = b""
++    lines: List[bytes] = []
++    try:
++        with log_path.open("rb") as f:
++            pos = size
++            while pos > 0 and len(lines) <= k_lines:
++                read = min(chunk, pos)
++                pos -= read
++                f.seek(pos)
++                buf = f.read(read) + buf
++                parts = buf.split(b"\n")
++                # First element may be a partial fragment until we read
++                # further; keep it in buf, take the tail-complete lines.
++                buf = parts[0]
++                # parts[1:] are complete lines (after the first newline).
++                # Reverse so we accumulate newest-first.
++                for ln in reversed(parts[1:]):
++                    if ln:
++                        lines.append(ln)
++                    if len(lines) >= k_lines:
++                        break
++            if pos == 0 and buf:
++                if len(lines) < k_lines:
++                    lines.append(buf)
++    except OSError as e:
++        _breadcrumb(f"canonical tail read failed: {type(e).__name__}: {e}")
++        return None, []
++
++    # lines is newest-first; reverse to chronological order
++    lines.reverse()
++    entries: List[Dict[str, Any]] = []
++    for raw in lines[-k_lines:]:
++        try:
++            obj = json.loads(raw.decode("utf-8"))
++            if isinstance(obj, dict):
++                entries.append(obj)
++        except (json.JSONDecodeError, UnicodeDecodeError):
++            continue
++
++    prev_hmac: Optional[bytes] = None
++    for obj in reversed(entries):
++        hx = obj.get("hmac")
++        if isinstance(hx, str) and len(hx) == 64:
++            try:
++                prev_hmac = bytes.fromhex(hx)
++                break
++            except ValueError:
++                continue
++    return prev_hmac, entries
++
++
++# ---------------------------------------------------------------------------
++# Phase 2 — sweep + atomic rename + header validation
++# ---------------------------------------------------------------------------
++
++
++@dataclass(eq=False)
++class _DrainingFile:
++    """One file under drain in the current cycle.
++
++    P0-2: declared eq=False so default object identity hash applies —
++    instances are usable as Dict keys without TypeError. (We still key
++    per_file_consumed on str(path) per Option B in the review for
++    clarity; the eq=False guard is defense-in-depth.)
++
++    P2-4: header_raw stores the verbatim bytes (incl. trailing newline)
++    of the header line, so Phase 5 atomic-split writes the byte-identical
++    header to the new .draining.<new_epoch> file (no re-encode drift).
++
++    iter2-P0-3: `quarantined` flag — set by `_quarantine()` after mid-file
++    tamper rename so Phase 5 cleanup SKIPS the entry (the file is already
++    moved aside as .malformed.<epoch>; trying to split would touch a
++    non-existent path or re-sweep the quarantined file).
++    """
++
++    path: Path
++    pid: int
++    drain_epoch: str
++    header: Optional[Dict[str, Any]] = None
++    header_raw: bytes = b""
++    body_lines: List[bytes] = field(default_factory=list)
++    consumed_count: int = 0
++    quarantined: bool = False
++
++
++def _is_alive_pid(pid: int) -> bool:
++    """Return True if a process with PID is alive in current namespace."""
++    if pid <= 0:
++        return False
++    try:
++        os.kill(pid, 0)
++    except ProcessLookupError:
++        return False
++    except PermissionError:
++        return True
++    except OSError:
++        return False
++    return True
++
++
++def _parse_spool_pid(name: str) -> Optional[int]:
++    """Extract PID from audit-spool.<pid>.* filename forms."""
++    if not name.startswith(_SPOOL_PREFIX + "."):
++        return None
++    rest = name[len(_SPOOL_PREFIX) + 1:]
++    pid_str, _, _ = rest.partition(".")
++    try:
++        return int(pid_str)
++    except ValueError:
++        return None
++
++
++# QDSAA-FUNCAO-LONGA: protocolo de durabilidade atomica; separar altera invariantes de lock e recuperacao.
++def _phase2_sweep_and_rename(
++    state_dir: Path, drain_epoch: str, our_pid: int
++) -> Tuple[List[_DrainingFile], bool]:
++    """Sweep state dir for spool/draining files; atomic-rename into batch.
++
++    Returns (list of draining files to process, in_recovery_mode_flag).
++    in_recovery_mode is True iff any pre-existing .draining.* was swept
++    (severity branching for unexpected_skip — ADR-055-AMEND-1 Phase 4).
++    """
++    files: List[_DrainingFile] = []
++    in_recovery = False
++
++    try:
++        names = sorted(os.listdir(str(state_dir)))
++    except OSError:
++        return [], False
++
++    # 1) Pre-existing .draining.* — these are stale from prior crashed drains
++    # iter3-P2-2: wire STALE_SPOOL_TTL_DAYS into the sweep. A .draining file
++    # owned by a dead PID (or even a live one) whose mtime is older than
++    # the TTL is forensically interesting — emit an audit_spool_stale_recovered
++    # advisory BEFORE processing so SOC has trace of the long-deferred
++    # recovery. Processing still proceeds; the TTL is advisory-only.
++    stale_ttl_ns = STALE_SPOOL_TTL_DAYS * 86400 * 1_000_000_000
++    now_ns = time.time_ns()
++    for name in names:
++        if _DRAINING_SUFFIX_TOKEN not in name:
++            continue
++        if not name.startswith(_SPOOL_PREFIX + "."):
++            continue
++        pid = _parse_spool_pid(name)
++        if pid is None:
++            continue
++        # Parse the existing drain_epoch from the suffix; merge in as-is.
++        try:
++            old_epoch = name.rsplit(_DRAINING_SUFFIX_TOKEN, 1)[1]
++        except IndexError:
++            old_epoch = drain_epoch
++        full_path = state_dir / name
++        # iter3-P2-2: stale-recovery advisory if age > TTL.
++        try:
++            st_mtime_ns = full_path.stat().st_mtime_ns
++            file_age_ns = now_ns - st_mtime_ns
++            if file_age_ns > stale_ttl_ns:
++                file_age_hours = file_age_ns // (3600 * 1_000_000_000)
++                _forensic("audit_spool_stale_recovered", {
++                    "original_pid": pid,
++                    "file_age_hours": int(file_age_hours),
++                    "stale_ttl_days": STALE_SPOOL_TTL_DAYS,
++                    "drain_epoch": drain_epoch,
++                    "prior_drain_epoch": old_epoch,
++                })
++        except OSError:
++            pass
++        files.append(_DrainingFile(
++            path=full_path, pid=pid, drain_epoch=old_epoch,
++        ))
++        in_recovery = True
++
++    # 2) Active spool files — atomically rename to .draining.<drain_epoch>.
++    #    Skip our own active spool (we hold it open for writes); also skip
++    #    spools of live PIDs other than ours when force-drain is not set —
++    #    let the owning process drain them. (Conservative: live-PID spools
++    #    of OTHER processes will be reaped on next aggregate sweep.)
++    for name in names:
++        if not name.startswith(_SPOOL_PREFIX + "."):
++            continue
++        if not name.endswith(".jsonl"):
++            continue
++        pid = _parse_spool_pid(name)
++        if pid is None:
++            continue
++        src = state_dir / name
++        try:
++            src_stat = src.stat()
++        except OSError:
++            continue
++        if src_stat.st_size == 0:
++            continue
++        # Only rename our own spool OR clearly-dead PID spools. Live-PID
++        # spools belong to peers — leave them for their own drain trigger
++        # to avoid stealing in-flight writes (writer flock would block us
++        # anyway; explicit check is the cheap path).
++        if pid != our_pid and _is_alive_pid(pid):
++            continue
++        # iter4-P2-1: stale-recovery advisory ALSO covers active spool files
++        # whose owning PID is dead AND mtime is older than TTL (ADR-055-
++        # AMEND-1 §A.4.5 covers both .draining.* AND orphaned active
++        # spools). Emit BEFORE the rename so SOC trace carries the
++        # forensic correlation between the orphan and the drain epoch.
++        if pid != our_pid:
++            try:
++                file_age_ns = now_ns - src_stat.st_mtime_ns
++                if file_age_ns > stale_ttl_ns:
++                    file_age_hours = file_age_ns // (3600 * 1_000_000_000)
++                    _forensic("audit_spool_stale_recovered", {
++                        "original_pid": pid,
++                        "file_age_hours": int(file_age_hours),
++                        "stale_ttl_days": STALE_SPOOL_TTL_DAYS,
++                        "drain_epoch": drain_epoch,
++                        "source": "active_spool_orphan",
++                    })
++            except OSError:
++                pass
++        # P0-1: use _draining_path helper (was: missing dot before draining)
++        dst = _draining_path(src, drain_epoch)
++        # iter3-P1-2: acquire the per-PID spool flock around rename so a
++        # concurrent writer mid-spool_append in the same PID (e.g. signal-
++        # handler-triggered drain racing the writer's own fd) is forced to
++        # complete before we steal the file. Writers hold the flock for
++        # ~10<U+00B5>s per emit; a short timeout (0.5s) is sufficient. If we time
++        # out, we skip this PID this cycle — the spool gets picked up at
++        # next drain trigger. Either path is correctness-preserving.
++        try:
++            with FileLock(_spool_flock_path(pid), timeout=0.5):
++                # Re-check existence under lock (writer may have unlinked
++                # during contention, or another concurrent drain in our PID
++                # could have renamed it first).
++                try:
++                    if not src.exists() or src.stat().st_size == 0:
++                        continue
++                except OSError:
++                    continue
++                try:
++                    os.rename(str(src), str(dst))
++                except OSError as e:
++                    _breadcrumb(
++                        f"phase2 rename failed for {name}: "
++                        f"{type(e).__name__}: {e}"
++                    )
++                    continue
++        except FileLockTimeout:
++            # Writer is mid-append on this spool; defer to next drain
++            # cycle. The spool size/mtime trigger will catch it.
++            _breadcrumb(
++                f"phase2 spool flock timeout pid={pid} (writer mid-append)"
++            )
++            continue
++        files.append(_DrainingFile(
++            path=dst, pid=pid, drain_epoch=drain_epoch,
++        ))
++        # If the renamed-away spool belonged to our pid, reset our header
++        # cache so subsequent spool_append mints a fresh _spool_uuid.
++        if pid == our_pid:
++            _SPOOL_HEADER_CACHE.pop(pid, None)
++            _ORDINAL_COUNTER.pop(pid, None)
++
++    return files, in_recovery
++
++
++def _quarantine(
++    file: _DrainingFile, mismatch_kind: str, drain_epoch: str
++) -> None:
++    """Rename a malformed/tampered spool to .malformed.<drain_epoch>; emit.
++
++    iter2-P0-3: sets `file.quarantined = True` so Phase 5 cleanup skips the
++    entry (the source .draining.<epoch> no longer exists at its original
++    path — trying to split or unlink would either fail or, worse, re-sweep
++    the renamed .malformed.<epoch> file on a subsequent drain.
++    """
++    try:
++        new_name = file.path.name.replace(
++            _DRAINING_SUFFIX_TOKEN[1:] + file.drain_epoch,
++            _MALFORMED_SUFFIX_TOKEN[1:] + drain_epoch,
++            1,
++        )
++        new_path = file.path.with_name(new_name)
++        os.rename(str(file.path), str(new_path))
++    except OSError as e:
++        _breadcrumb(f"quarantine rename failed: {type(e).__name__}: {e}")
++    # iter2-P0-3: latch quarantined flag for Phase 5 cleanup skip.
++    file.quarantined = True
++    _forensic("audit_spool_tamper_detected", {
++        "mismatch_kind": mismatch_kind,
++        "spool_pid": file.pid,
++        "drain_epoch": drain_epoch,
++    })
++
++
++def _should_quarantine_test_origin(
++    file: "_DrainingFile", canonical_log_path: Path
++) -> bool:
++    """PLAN-119 WS-D1 — True iff this spool is ``_origin:"test"`` AND the
++    canonical drain destination IS the live chain.
++
++    Conjunction-gated (Codex R2 P0-1): a redirected pytest/session tmp dir is
++    NOT the live chain, so a ``"test"`` spool drains NORMALLY there (isolated
++    drain-behavior tests keep working). Fail-SAFE to NO quarantine (Codex R3
++    P1-1) when the live-log snapshot is absent/unreadable — never risk dropping a
++    real event. Legacy spool with no ``_origin`` (or ``_origin:"live"``) is never
++    quarantined.
++    """
++    header = file.header
++    if not isinstance(header, dict) or header.get("_origin") != "test":
++        return False
++    snapshot = os.environ.get(_LIVE_LOG_SNAPSHOT_VAR)
++    if not snapshot:
++        return False  # cannot confirm destination is live → drain normally
++    try:
++        return Path(canonical_log_path).resolve() == Path(snapshot).resolve()
++    except (OSError, ValueError):
++        return False
++
++
++def _quarantine_test_origin(file: "_DrainingFile", drain_epoch: str) -> None:
++    """PLAN-119 WS-D1 — rename an ``_origin:"test"`` spool out of the drain path
++    so its entries never reach the live canonical append.
++
++    Breadcrumb-only — no new audit action (the canonical ``_KNOWN_ACTIONS`` is a
++    kernel-HARD-DENY surface; the rename + the ``DrainStats`` counter are the
++    durable trace). Mirrors ``_quarantine``'s rename discipline (latches
++    ``file.quarantined`` so Phase 5 cleanup skips the moved file).
++    """
++    try:
++        new_name = file.path.name.replace(
++            _DRAINING_SUFFIX_TOKEN[1:] + file.drain_epoch,
++            _TEST_ORIGIN_SUFFIX_TOKEN[1:] + drain_epoch,
++            1,
++        )
++        new_path = file.path.with_name(new_name)
++        os.rename(str(file.path), str(new_path))
++    except OSError as e:
++        _breadcrumb(
++            f"test-origin quarantine rename failed: {type(e).__name__}: {e}"
++        )
++    file.quarantined = True
++    # Codex P1 — compact the quarantined spool's journal records so session-start
++    # reconciliation does NOT later count them as inflight/lost and emit a spurious
++    # ``audit_flush_dropped_count``. A deliberate test-origin quarantine is a
++    # COMPLETION (the entries are intentionally not drained to the live chain),
++    # not a real-event loss. ``file.body_lines`` is populated by Phase 2.
++    try:
++        rec_ids = []
++        for raw in (file.body_lines or []):
++            try:
++                entry = json.loads(raw.decode("utf-8"))
++            except (json.JSONDecodeError, UnicodeDecodeError):
++                continue
++            rid = entry.get("record_id") if isinstance(entry, dict) else None
++            if isinstance(rid, str) and rid:
++                rec_ids.append(rid)
++        if rec_ids:
++            _journal_compact_drained(file.pid, rec_ids, drain_epoch)
++    except Exception as e:  # pragma: no cover — journal hygiene, never blocks
++        _breadcrumb(
++            f"test-origin journal compaction failed: {type(e).__name__}: {e}"
++        )
++    _breadcrumb(
++        f"test-origin spool refused at live-chain drain: pid={file.pid} "
++        f"epoch={drain_epoch}"
++    )
++
++
++def _phase2_validate_header(
++    file: _DrainingFile, drain_epoch: str
++) -> bool:
++    """Read header + first body line; validate body[0].spool_uuid sentinel.
++
++    Returns True iff header is well-formed AND header._spool_uuid matches
++    body[0].spool_uuid (when body is non-empty). Quarantines on mismatch.
++    Loads body_lines into file as a side effect.
++    """
++    try:
++        raw_lines = file.path.read_bytes().split(b"\n")
++    except OSError as e:
++        _breadcrumb(f"phase2 read failed: {type(e).__name__}: {e}")
++        return False
++
++    # Strip trailing empty fragment from final newline
++    if raw_lines and raw_lines[-1] == b"":
++        raw_lines = raw_lines[:-1]
++
++    if not raw_lines:
++        # Empty file; nothing to do — caller treats as fully-consumed
++        file.header = None
++        file.body_lines = []
++        return True
++
++    # Parse header
++    try:
++        header = json.loads(raw_lines[0].decode("utf-8"))
++    except (json.JSONDecodeError, UnicodeDecodeError):
++        _quarantine(file, "malformed_spool_header", drain_epoch)
++        return False
++    # iter5-P1: use the shared strict predicate (same one used by
++    # _ensure_spool_header for writer-side reuse) so writer and drainer
++    # validation are byte-equivalent.
++    if not _validate_spool_header_strict(header):
++        _quarantine(file, "malformed_spool_header", drain_epoch)
++        return False
++
++    file.header = header
++    # P2-4: verbatim header bytes for Phase 5 atomic split
++    file.header_raw = raw_lines[0] + b"\n"
++    file.body_lines = raw_lines[1:]
++
++    if not file.body_lines:
++        return True
++
++    # body[0] sentinel
++    body0_raw = file.body_lines[0]
++    try:
++        body0 = json.loads(body0_raw.decode("utf-8"))
++    except (json.JSONDecodeError, UnicodeDecodeError):
++        # body[0] malformed → if it's the ONLY body line, treat as partial-
++        # line crash (Phase 3 discard). Otherwise quarantine (mid-file
++        # malformed is suspicious).
++        if len(file.body_lines) == 1:
++            return True
++        _quarantine(file, "malformed_spool_header", drain_epoch)
++        return False
++    # PLAN-094-FOLLOWUP bug fix: extract spool_uuid from validated header
++    # (was UnboundLocalError NameError — refactor regression from
++    # _validate_spool_header_strict extraction; caught by Wave A.7r.1 test).
++    spool_uuid = header["_spool_uuid"]
++    if not isinstance(body0, dict) or body0.get("spool_uuid") != spool_uuid:
++        _quarantine(file, "header_body_uuid_mismatch", drain_epoch)
++        return False
++    return True
++
++
++# ---------------------------------------------------------------------------
++# Phase 3 — sort + 4-tuple uniqueness
++# ---------------------------------------------------------------------------
++
++
++# QDSAA-FUNCAO-LONGA: protocolo de durabilidade atomica; separar altera invariantes de lock e recuperacao.
++def _phase3_collect_and_sort(
++    files: List[_DrainingFile], drain_epoch: str, stats: DrainStats,
++) -> Tuple[
++    List[Tuple[Tuple[int, int, str, int], Dict[str, Any], _DrainingFile, int]],
++    Dict[str, Set[int]],
++    int,
++]:
++    """Parse body lines from each draining file; sort by 4-tuple; de-dup.
++
++    Returns (deduped, partial_discard_consumed_indices_by_path,
++    duplicate_consumed_count).
++
++    iter4-P2-2: returns the count of duplicate-tuple entries marked
++    consumed in this cycle so Phase 4 can carry it as the starting
++    `processed` value. Without this, a duplicate storm (e.g. corrupted
++    spool with N identical 4-tuples) consumes/deletes more than K_MAX
++    entries in one drain cycle, softening the K_MAX hard-cap perf
++    contract (correctness preserved — duplicates ARE discarded).
++
++    iter2-P0-1: partial-discard tracking is now a Set[int] of body indices
++    (not a prefix-count). Phase 5 splits the file using the COMPLEMENT of
++    the set, so out-of-order index consumption (later index handled before
++    earlier index) is safe.
++
++    iter2-P0-2: duplicate 4-tuple is marked CONSUMED (added to the per-file
++    set) so Phase 5 cleanup actually removes it from disk; without this,
++    the rejected entry survives split → re-detected as duplicate forever
++    (livelock). audit_spool_intentionally_deleted advisory emits.
++
++    iter2-P2-2: per-file ordinal monotonicity check — within each spool
++    file, `ordinal_within_file` of entry N+1 must be > entry N (the writer
++    issues strictly-monotonic ordinals via _next_ordinal()). Violation →
++    quarantine source with mismatch_kind="ordinal_monotonicity_violation".
++
++    Tamper / malformed handling:
++    - JSON-parse fail on the LAST line of a file → partial-line discard
++      (writer SIGKILL mid-write); emit audit_spool_partial_line_discarded
++    - JSON-parse fail on any OTHER line → tamper; quarantine the file and
++      drop ALL its remaining unconsumed body entries.
++    - Duplicate full 4-tuple → reject with audit_spool_duplicate_tuple_rejected;
++      mark consumed (iter2-P0-2).
++    - Ordinal monotonicity violation → quarantine (iter2-P2-2).
++    """
++    collected: List[Tuple[Tuple[int, int, str, int], Dict[str, Any], _DrainingFile, int]] = []
++    partial_consumed: Dict[str, Set[int]] = {}
++
++    def _mark(path_str: str, idx: int) -> None:
++        partial_consumed.setdefault(path_str, set()).add(idx)
++
++    for f in files:
++        if not f.body_lines:
++            continue
++        last_idx = len(f.body_lines) - 1
++        path_key = str(f.path)
++        # iter2-P2-2: per-file ordinal monotonicity tracking.
++        prev_ordinal: Optional[int] = None
++        for idx, raw in enumerate(f.body_lines):
++            if not raw:
++                # Empty line (double-newline) — discard silently but mark
++                # consumed so Phase 5 doesn't perpetually re-split it.
++                _mark(path_key, idx)
++                continue
++            try:
++                obj = json.loads(raw.decode("utf-8"))
++            except (json.JSONDecodeError, UnicodeDecodeError):
++                if idx == last_idx:
++                    stats.partial_lines_discarded += 1
++                    _forensic("audit_spool_partial_line_discarded", {
++                        "spool_pid": f.pid,
++                        "drain_epoch": drain_epoch,
++                        "body_index": idx,
++                    })
++                    # iter2-P0-1: mark this index consumed so Phase 5
++                    # split treats the partial line as handled.
++                    _mark(path_key, idx)
++                    continue
++                # Mid-file malformed — quarantine file and stop collecting
++                # from it (subsequent entries are suspect)
++                _quarantine(f, "malformed_spool_header", drain_epoch)
++                stats.quarantined_files += 1
++                # Drop any entries already collected from this file:
++                collected = [c for c in collected if c[2] is not f]
++                partial_consumed.pop(path_key, None)
++                break
++            if not isinstance(obj, dict):
++                if idx == last_idx:
++                    stats.partial_lines_discarded += 1
++                    _mark(path_key, idx)  # iter2-P0-1
++                    continue
++                _quarantine(f, "malformed_spool_header", drain_epoch)
++                stats.quarantined_files += 1
++                collected = [c for c in collected if c[2] is not f]
++                partial_consumed.pop(path_key, None)
++                break
++            try:
++                wall_ns = int(obj["wall_ns"])
++                pid = int(obj["pid"])
++                spool_uuid = str(obj["spool_uuid"])
++                ordinal = int(obj["ordinal_within_file"])
++            except (KeyError, TypeError, ValueError):
++                # Missing 4-tuple field — treat as tamper (would also break
++                # HMAC since spool_uuid participates in canonical_json)
++                _quarantine(f, "malformed_spool_header", drain_epoch)
++                stats.quarantined_files += 1
++                collected = [c for c in collected if c[2] is not f]
++                partial_consumed.pop(path_key, None)
++                break
++            # iter2-P2-2: per-file ordinal monotonicity (strictly increasing).
++            if prev_ordinal is not None and ordinal <= prev_ordinal:
++                _quarantine(f, "ordinal_monotonicity_violation", drain_epoch)
++                stats.quarantined_files += 1
++                collected = [c for c in collected if c[2] is not f]
++                partial_consumed.pop(path_key, None)
++                break
++            prev_ordinal = ordinal
++            key = (wall_ns, pid, spool_uuid, ordinal)
++            collected.append((key, obj, f, idx))
++
++    collected.sort(key=lambda x: x[0])
++
++    deduped: List[Tuple[Tuple[int, int, str, int], Dict[str, Any], _DrainingFile, int]] = []
++    seen: set = set()
++    # iter4-P2-2: bound duplicate-cleanup to K_MAX so a storm can't exceed
++    # the per-cycle perf cap. Unmarked duplicates survive split → next
++    # drain re-detects → bounded amortization (correctness preserved; no
++    # canonical append happens for duplicates either way).
++    duplicate_consumed = 0
++    for key, obj, f, idx in collected:
++        if key in seen:
++            if duplicate_consumed >= K_MAX:
++                # Still record the forensic so SOC sees the rejection,
++                # but DO NOT _mark() consumed (defer to next cycle).
++                stats.rejected_duplicate_tuple += 1
++                _forensic("audit_spool_duplicate_tuple_rejected", {
++                    "wall_ns": key[0],
++                    "pid": key[1],
++                    "spool_uuid": key[2],
++                    "ordinal_within_file": key[3],
++                    "drain_epoch": drain_epoch,
++                    "deferred_to_next_cycle": True,
++                })
++                continue
++            stats.rejected_duplicate_tuple += 1
++            _forensic("audit_spool_duplicate_tuple_rejected", {
++                "wall_ns": key[0],
++                "pid": key[1],
++                "spool_uuid": key[2],
++                "ordinal_within_file": key[3],
++                "drain_epoch": drain_epoch,
++            })
++            # iter2-P0-2: mark the duplicate's body index CONSUMED so Phase 5
++            # actually removes it from disk (otherwise the rejected entry
++            # survives split → re-detected forever = livelock). Emit a
++            # paired advisory so SOC has trace of the silent deletion.
++            _mark(str(f.path), idx)
++            # iter3-P2-1: surface count into DrainStats for AC10 visibility
++            # (JournalReconciliation aggregates this at session-start).
++            stats.intentionally_deleted += 1
++            duplicate_consumed += 1
++            _forensic("audit_spool_intentionally_deleted", {
++                "reason": "duplicate_tuple",
++                "spool_pid": key[1],
++                "spool_uuid": key[2],
++                "ordinal_within_file": key[3],
++                "drain_epoch": drain_epoch,
++            })
++            continue
++        seen.add(key)
++        deduped.append((key, obj, f, idx))
++    return deduped, partial_consumed, duplicate_consumed
++
++
++# ---------------------------------------------------------------------------
++# Phase 4 — idempotent chain reconstruction
++# ---------------------------------------------------------------------------

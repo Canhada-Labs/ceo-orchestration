@@ -1,0 +1,22 @@
+Payload 25/34: no P0 or false declared condition established. Condition 3(c)’s bytecode suppression precedes helper imports. The audit-query extraction preserves facade globals, patch points and installation coverage. Python 3.9 syntax checks, 28 read-only command checks and 33 targeted tests passed.
+
+NEW FINDINGS (annex)
+No new P1 findings.
+
+P2 follow-ups
+
+P2 — .claude/scripts/_subprocess_census.py:19
+TEST_ROOTS omits configured suites, including tier_policy_cli/tests and hooks/_lib/tests. New subprocess debt in those suites never reaches the ratchet. Minimal fix: derive roots from the shared test configuration, include additional CI roots, and baseline existing debt.
+
+P2 — .claude/scripts/audit-verify-chain.py:589
+Carried finding: counter validation examines only the first 64 bytes without checking EOF. A malformed remainder can be ignored and the counter accepted. Minimal fix: read one byte beyond the size limit, reject oversized files, and validate all accepted contents.
+
+P2 — .claude/scripts/audit-verify-chain.py:583
+Carried finding: PermissionError during counter lstat becomes exit 3, although the strict contract promises exit 4 for permission refusal. Minimal fix: handle PermissionError separately before the general OSError handler.
+
+P2 — .claude/scripts/audit-verify-chain.py:249
+Strict decoding rejects named nonfinite constants but permits numeric overflow to produce nonfinite floats. A malformed-HMAC report can echo such a ts/action value through json.dumps at line 229 as Infinity, violating the valid-JSON output contract. Minimal fix: reject nonfinite values through parse_float and use allow_nan=False when emitting reports.
+
+Counter-prefix and numeric-overflow findings were assessed statically; permission mapping was confirmed with mocked filesystem calls. No files were modified.
+
+VERDICT: GO-WITH-CONDITIONS No release-blocking violation was established, while four nonblocking correctness issues remain for follow-up.

@@ -1,0 +1,57 @@
+SCOPE: payload 3/34 adds 13 new files under .claude/hooks/_lib/_audit_emit_parts/: lifecycle_schemas, operations, optimizer, orchestration, pair_rail, planning, rate_limits, replay, resource_events, routing, security, streaming and tokens_boot. They hold code moved out of the base _lib/audit_emit.py by PLAN-197. I checked them against the candidate tree, and against the base text kept in the committed rc1 evidence (the removed lines in diff-rc1-14/15/16.patch).
+
+WHAT I CHECKED
+1. Binding. install() (_audit_emit_parts/__init__.py:20-48) rebuilds each function with the facade's globals, so every free name in these files is looked up in audit_emit when the function runs. Each name resolves:
+   - emit_generic: audit_emit.py:473.
+   - _write_event, _breadcrumb, _log_path, _utc_now_iso: writer __all__.
+   - _scrub_ceo_boot_event: tokens_boot.
+   - _ATLAS_REGISTRY: adapters.py:314, a plain dict, so deepcopy works.
+   - _LEDGER_GATE_SIGNAL: harness_schemas.
+   - _ESTIMATE_DRIFT_* and _CEO_BOOT_TASK_CANDIDATE_EMITTED_ALLOWLIST: governance.
+   - _CEO_BOOT_EMITTED_ALLOWLIST, _MODEL_ROUTING_ADVISED_ALLOWLIST and _OPTIMIZER_ENVELOPE (a tuple, so optimizer's tuple concatenation works): boot_schemas.
+   - os, json, _redact: facade imports.
+   - _PLAN088_RATE_LOCK and _PLAN090_BUCKET_LOCK: audit_emit.py:483-484, read only at call time; nothing calls these functions between install() and those lines.
+2. __all__. Every name in the 13 __all__ tuples exists in its module, so the getattr in install() cannot break the facade import.
+3. Collisions. Function names are unique across the 34 parts. The constants from these files that I checked by name family collide with no other part, so install order cannot change which definition wins.
+4. Behavior kept:
+   - _try_rate_admit (orchestration.py:288) calls globals(), which after rebinding returns the facade dict, so it finds _plan088_rate_admit as in the base (base text identical at rc1 diff-16:2962-2970).
+   - _PLAN088_RATE_STATE and the _PLAN090_*_BUCKETS dicts are deep-copied into the facade, and the rebound functions mutate that copy. _plan088_rate_state_clear clears the same object.
+   - Default values (time.time, time.monotonic, 4096) are evaluated as in the base.
+   - iter_events reaches the rebound replay.iter_events through the SimpleNamespace at audit_emit.py:457-461, so patching _log_path still works.
+5. Base comparison:
+   - The regexes and bounds are byte-identical to the base: the review_id gate, the 12/16/64-hex gates, _PAIR_RAIL_TIMEOUT_MS_MAX, the payload cap and the rate cap.
+   - 247 top-level defs were removed from audit_emit.py. Of those, emit_generic was rewritten in the facade, and the rest are in the parts.
+   - The odd blank lines in emit_audit_tokens_key_dropped are also in the base.
+6. The one semantic change in these files: _LEARNING_RAIL_ENUM gains bash_indirect, and _LEARNING_SWITCH_ENUM gains CEO_BASH_INDIRECT_GUARD and CEO_BASH_INDIRECT_HEURISTICS (lifecycle_schemas.py:508-516; base at rc1 diff-15:3198-3204). It is an additive closed enum, CHANGELOG.md:105 declares it, and its producer is bash_indirect_telemetry.py:59-60.
+7. Python 3.9, standard library only. The parts import re and time; install() uses copy, importlib and types. There is no syntax newer than 3.9. Annotations stay unevaluated strings under `from __future__ import annotations`. Deep-copying a compiled regex returns the same object (Python 3.7+).
+8. Fail direction. The emitters' logic is unchanged. The canonical_edit modules import audit_emit lazily, inside try blocks (utility.py:49 and :116, signature_rail.py:58-91, decisions.py:14), so an audit failure still fails open.
+9. Delivery and kernel. install.sh:1520-1550 copies every top-level _lib entry, subdirectories included. check_arbitration_kernel.py:312 carries `.claude/hooks/_lib/_audit_emit_parts/**/*` (condition 5).
+10. Already declared, not new: pair-rail-inputs-hash-manifest.txt:27 pins only audit_emit.py, not pair_rail.py and routing.py, where the emit_pair_rail_* code now lives. CHANGELOG.md:382-384 declares this in Known-open.
+
+DECLARED CONDITIONS: conditions 5 and 7 hold against this payload, and the enum part of condition 6 matches. Nothing in this payload makes any of conditions 1-14 or the GA-only conditions false.
+
+P0: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+
+P2-1. FILE:LINE: .claude/hooks/_lib/audit_emit.py:12. The annotations involved are at rate_limits.py:268 and :279, orchestration.py:475 and :478, routing.py:386-390, tokens_boot.py:80-84 and :309-312, and replay.py:342-345.
+- What changed: the base facade imported Callable, Iterator, List and Tuple (rc1 diff-14:60). The candidate facade imports only Any, Dict and Optional.
+- Why it matters: the rebound functions resolve their string annotations in the facade's namespace, and install() merges the parts' module annotations into audit_emit.__annotations__.
+- Failure scenario: get_type_hints() on audit_emit.emit_pair_rail_codex_injection_detected, _plan088_rate_admit, iter_events or scrub_audit_tokens_event, or get_type_hints(audit_emit) itself, now raises NameError; it worked in the base. I found no production consumer: test_audit_emit.py:1567 imports get_type_hints but never calls it.
+- Minimal fix: put Callable, Iterator, List and Tuple back in the facade's typing import at the next kernel ceremony.
+
+P2-2. FILE:LINE: .claude/hooks/_lib/audit_emit.py:460-461, with .claude/scripts/check-audit-read-api-stable.py:111-125.
+- What changed: the frozen read API iter_events now has the signature (*args, **kwargs) and is no longer a generator function (inspect.isgeneratorfunction returns False). Existing callers keep working.
+- Failure scenario: the freeze guard checks only the name, so a later rename of path or action_filter at replay.py:342 would pass it.
+- Minimal fix: give the facade wrapper the explicit signature (path=None, action_filter=None), or point the guard at replay.py.
+
+P2-3. Stale source-of-truth pointers left by the move:
+- .claude/governance/audit_tokens_allowlist.json:2-3 names `_lib/audit_emit.py:_AUDIT_TOKENS_ALLOWLIST` as the source of truth; it now lives at lifecycle_schemas.py:137.
+- SPEC/v1/soc2-control-map.schema.md:523-524 gives the verification method "grep '^def emit_' .claude/hooks/_lib/audit_emit.py". That now finds 2 emitters out of about 245; no script runs it, but someone following it by hand would conclude the emitters are missing.
+- docs/HONEST-LIMITATIONS.md:283.
+- Comments in pair_rail.py and routing.py still cite audit_emit.py line numbers ("audit_emit.py:386-396", "line ~3484").
+- Minimal fix: point all of these at _lib/audit_emit.py plus _lib/_audit_emit_parts/.
+
+VERDICT: GO The 13 audit_emit parts in this payload match the base code, apart from one additive enum the CHANGELOG declares; every name they use resolves in the facade, they stay standard-library only, Python 3.9 compatible and fail-open, and they make no declared condition false and contain no P0 or new P1, only three P2 follow-ups.

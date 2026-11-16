@@ -1,0 +1,33 @@
+Payload 28/34 (v1.4.3-rc.1..84b83324c820): the ceo-boot.py tail, the ceo-cost-transcripts.py split, the ceo-restore.sh hardening, the ceremony-lint waivers and rules R9/R10, check-active-hooks-executable.py, check-audit-real-loss.py and check-audit-registry-coverage.py. Static review only: no code was run.
+
+P0: none.
+
+DECLARED CONDITIONS TOUCHED BY THIS PAYLOAD (all hold against the code)
+- 3(b): check-audit-real-loss.py:113-119 no longer crashes on a non-str record_id. It adds the source file to malformed_record_id_files (:160-172, :185-190, :208) and raises attention "g6_malformed_record_id_files" (:269-270). The exit code is unchanged.
+- 3(c): check-audit-real-loss.py:67 sets sys.dont_write_bytecode before "import audit_spool_state" at :71. audit_spool_state.py:62 sets it before its _lib import at :69.
+- 7: both scripts keep their paths and become thin entry points.
+  - ceo-boot.py:114-116 runs _lib/_ceo_boot_parts inside the script's own namespace. _render_morning_ledger_safe, the lessons rail and main reappear unchanged in candidates_lessons.py:197,279-495 and lessons_cli.py:6,132. Path(__file__) still resolves to .claude/scripts, where morning_ledger.py and lessons.py exist.
+  - ceo-cost-transcripts.py:248-252 binds the six parts to its globals. The script imports exactly the library names the parts use, so name lookup and monkeypatch points are preserved. Mutable tables are deep-copied.
+  - install.sh:1606-1611 copies .claude/scripts/*.py, so _restore_archive.py ships, and copies _lib recursively. guards.py:34 makes _lib/**/*.py canonical.
+  - Standard library only, Python 3.9 compatible.
+- CHANGELOG [1.4.4] "Fixed - backup and restore" (:274-298) and the harness-gate line (:320-323) match the code: per-member validation before extraction, physical --dest resolution, refusal of link targets and link ancestors, and one staged extraction shared by preview and apply.
+- Two signed rc lane notes are confirmed still present (they are declared, not new):
+  - claude-p27: ceo-backup.sh:264 still uses cp -pR for plans, and _restore_archive.py:112-113 refuses any link member. Older archives whose memory/ held links are refused the same way.
+  - claude-p06 P1-b: the redefinition at ceo-boot.py:120 is dead for dispatch, because scheduled_cache.py:376 captures the copy in model_persona.py:6. The two bodies are identical today.
+
+NEW FINDINGS (annex): no undeclared P1 in this payload.
+
+P2 FOLLOW-UPS
+1. P2 .claude/hooks/_lib/_cost_transcripts_parts/__init__.py:48-58. Class rebinding rebinds every method whose __module__ equals the part module. That includes the dataclasses-generated __repr__ wrapper: functools.wraps or reprlib copies __module__ from the exec-generated function. The wrapper's global _thread (Python 3.9-3.12) or get_ident (3.13+) does not exist in the script's namespace. So repr() or str() of UsageRecord, ScanCounters, PricingResult or Priced obtained from ceo-cost-transcripts raises NameError. No production path renders these objects (the CLI, --json and collect() read attributes), so only debug output and test-failure messages are affected. Minimal fix: rebind only methods whose __code__.co_filename is the part file, or skip dataclass-generated methods.
+2. P2 .claude/scripts/ceo-restore.sh:182-184. _physical_dest refuses a destination whose parent does not exist. The base code ran mkdir -p "$DEST". Scenario D of docs/DISASTER-RECOVERY.md:201-215 (new machine, no out-of-repo state, ~/.claude/projects not yet created), or any --dest or CEO_AUDIT_LOG_DIR under a missing folder, exits 2 with "destination parent must be a real directory". The CHANGELOG does not state this. Fix: walk to the nearest existing ancestor, refuse any link among the existing components, then mkdir -p (or document the requirement and say "missing" in the message).
+3. P2 ceo-restore.sh:302-304. The apply prompt now names only $DEST. With --restore-plans or --restore-agent-metrics it no longer says that files under $(pwd)/.claude/plans/ and $(pwd)/.claude/agent-metrics.md will be overwritten (the base listed them). Fix: put the per-target list back in the prompt.
+4. P2 ceo-restore.sh:13-16 against :191 and :210. The header maps "SHA mismatch / refused destination" to exit 1, but both exit 2. The "no .claude/ in CWD" branches at :330-335 and :340-350 can no longer run, because the preflight at :219-228 exits 2 first. Fix: align the header and remove or annotate the dead branches.
+5. P2 ceo-restore.sh:229-234. The preview, which only listed in the base, now extracts every accepted member into $TMPDIR. A large audit/ or plans/ backup can fill /tmp and fail the preview with ENOSPC. Fix: validate only in preview and derive the targets from member names, or document the disk use.
+6. P2 ceo-boot.py:180-184. The marker comment exists to satisfy source-text tests (tests/test_ceo_boot_audit_emit.py:95; hooks/tests/test_plan_091_expected_callsites.py:57,138-143). The EXPECTED_CALLSITES assertion "ceo-boot.py must reference check_tier_policy_misrouting_24h" is now met by a comment, not by the real call site at _ceo_boot_parts/scheduled_cache.py:326. The comment also calls a test "the delivery guard". Fix: point the check at the part file or at the runtime registry.
+7. P2 minor items:
+   (a) check-active-hooks-executable.py:165-166: a hook type outside _REQUIRED_FIELDS exits 2. Through check_harness_config.py:607-611 this shows as a RED harness_config_gate in an adopter's /ceo-boot if a later Claude Code adds a hook type (advisory, never session-blocking).
+   (b) check-ceremony-script.py:90-91,203-204: a partly quoted delimiter such as <<E"OF" is parsed as the unquoted delimiter E, which never closes, so every later "$(" is flagged R9 BLOCKING (a false positive that fails closed, maintainer-only).
+   (c) ceremony-lint-waivers.json:264-540: the new waivers waive every BLOCKING rule of each content-pinned file, not only R9.
+   (d) ceo-cost-transcripts.py:32 still says "_EMBEDDED_PRICING below" and keeps an empty "Pricing tables" header (:241-243); the table now lives at _lib/_cost_transcripts_parts/pricing.py:21.
+
+VERDICT: GO Payload 28 makes no declared condition false: conditions 3(b), 3(c) and 7 and the CHANGELOG restore and harness-gate lines hold against the code. The split code installs and fails in the stated direction, and the review found no P0 and no new P1, only P2 follow-ups.

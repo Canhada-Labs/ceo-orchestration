@@ -1,0 +1,4138 @@
+diff --git a/.claude/hooks/audit_log.py b/.claude/hooks/audit_log.py
+index 4af77462baa6..bb5af63240fc 100755
+--- a/.claude/hooks/audit_log.py
++++ b/.claude/hooks/audit_log.py
+@@ -193,8 +193,8 @@ def _rp_state_dir():
+         return _rp.runtime_state_dir()
+-    import sys as _s
+-    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")
+-    from pathlib import Path as _P
+-    import os as _o
+-    _h = _o.environ.get("HOME") or str(_P.home())
+-    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback
++    import sys as _s  # pragma: no cover — partial-upgrade fallback
++    _s.stderr.write("# hook: _lib/runtime_paths ausente — fallback legado (partial upgrade)\n")  # pragma: no cover
++    from pathlib import Path as _P  # pragma: no cover
++    import os as _o  # pragma: no cover
++    _h = _o.environ.get("HOME") or str(_P.home())  # pragma: no cover
++    return _P(_h) / ".claude" / "projects" / "ceo-orchestration"  # rp-allow: partial-upgrade-fallback  # pragma: no cover
+ 
+@@ -303,1360 +303,27 @@ _FILE_ASSIGNMENT_RE = re.compile(r"^## FILE ASSIGNMENT", re.MULTILINE)
+ 
+-def audit_paths() -> Dict[str, Path]:
+-    """Resolve the audit log paths from env vars with sensible defaults."""
+-    home = Path(os.environ.get("HOME") or str(Path.home()))
+-    default_dir = _rp_state_dir()
+ 
+-    audit_dir = Path(os.environ.get("CEO_AUDIT_LOG_DIR") or str(default_dir))
+-    env_log = os.environ.get("CEO_AUDIT_LOG_PATH")
+-    audit_log = Path(env_log) if env_log else audit_dir / "audit-log.jsonl"
+-    # PLAN-182 W1 rail r1 P1-2: family-follows-log — when the LOG moved via
+-    # CEO_AUDIT_LOG_PATH, lock + errors follow its resolved parent (same
+-    # derivation as audit_emit._log_family_dir / audit_hmac), never the
+-    # default dir. One log, one lock, for every writer.
+-    family_dir = Path(env_log).resolve().parent if env_log else audit_dir
+-    audit_err = Path(
+-        os.environ.get("CEO_AUDIT_LOG_ERR") or str(family_dir / "audit-log.errors")
+-    )
+-    audit_lock = Path(
+-        os.environ.get("CEO_AUDIT_LOG_LOCK")
+-        or str(family_dir / "audit-log.lock")
+-    )
+-    return {
+-        "dir": audit_dir,
+-        "log": audit_log,
+-        "err": audit_err,
+-        "lock": audit_lock,
+-    }
++# PLAN-074 Wave 1c provenance — see docs/PLAN-086-adr-052-role-extension.md
++# Runtime declarations are split into installable, inspectable library files.
++# They execute once in this facade dictionary so private names, mutable globals
++# and monkeypatch seams retain the historical lookup behavior.
++from pathlib import Path as _FacadePath
+ 
+-
+-def rotate_threshold() -> int:
+-    """Rotation threshold in bytes, overridable via env for tests."""
+-    raw = os.environ.get("CEO_AUDIT_LOG_ROTATE_BYTES")
+-    if raw:
+-        try:
+-            return int(raw)
+-        except ValueError:
+-            pass
+-    return DEFAULT_ROTATE_AT_BYTES
+-
+-
+-# -----------------------------------------------------------------------------
+-# Field extraction
+-# -----------------------------------------------------------------------------
+-
+-
+-def bucket_prompt_length(n: int) -> str:
+-    """Bucket a prompt length into the fixed histogram buckets."""
+-    if n < 256:
+-        return "<256"
+-    if n < 1024:
+-        return "<1024"
+-    if n < 4096:
+-        return "<4096"
+-    if n < 16384:
+-        return "<16384"
+-    if n < 65536:
+-        return "<65536"
+-    return ">=65536"
+-
+-
+-def _sanitize_prompt(prompt: str) -> Optional[str]:
+-    """PLAN-065 Phase 1 / Sec MF-7 — NFKC normalize + NUL-strip + length cap.
+-
+-    Returns the safe text for regex scanning, or None if rejected. Never
+-    raises. Mirrors ``extract-skill.py._sanitize`` pre-regex hardening.
+-
+-    Rejections:
+-    - non-string inputs (defense-in-depth)
+-    - empty / whitespace-only
+-    - over ``_MAX_INPUT_CHARS`` code points or ``_MAX_INPUT_BYTES`` UTF-8
+-    - NUL byte present (post-NFKC)
+-    """
+-    if not isinstance(prompt, str):
+-        return None
+-    if not prompt or not prompt.strip():
+-        return None
+-    if len(prompt) > _MAX_INPUT_CHARS:
+-        return None
+-    # NFKC normalize first — homoglyph defense (Cyrillic 'о' U+043E → 'o' folds
+-    # under NFKC so Cyrillic-only homoglyphs that LOOK like 'o' survive as
+-    # distinct code-points, then the validator's strict ASCII charset rejects).
+-    normalized = unicodedata.normalize("NFKC", prompt)
+-    if "\x00" in normalized:
+-        return None
+-    if len(normalized.encode("utf-8", errors="replace")) > _MAX_INPUT_BYTES:
+-        return None
+-    return normalized
+-
+-
+-def _validate_skill_name(name: str) -> bool:
+-    """Defense-in-depth: re-validate captured skill name post-extract.
+-
+-    Even though each path's regex already bounds the captured group, we
+-    re-validate here so a future grammar drift cannot smuggle a
+-    pathological name out via a regex edge case.
+-
+-    Path-traversal patterns are denied here: the captured-group grammars
+-    exclude ``/`` ``..`` ``\\`` already, but we add an explicit anchor.
+-    """
+-    if not name or len(name) > _MAX_SKILL_NAME_CHARS:
+-        return False
+-    if "/" in name or ".." in name or "\\" in name:
+-        return False
+-    if not _SKILL_NAME_CHARSET_RE.match(name):
+-        return False
+-    return True
+-
+-
+-def _path_d_lookup(subagent_type: str) -> str:
+-    """PLAN-079 Path D — resolve subagent_type to canonical skill name.
+-
+-    Returns the mapped skill if subagent_type is one of the 5 canonical
+-    archetypes (``code-reviewer``, ``security-engineer``, ``qa-architect``,
+-    ``performance-engineer``, ``devops``); otherwise returns ``"unknown"``.
+-
+-    Normalization: ``strip().lower()`` is applied to mirror the
+-    archetype-routing precedent in ``check_agent_spawn.py:204``
+-    (``_extract_archetype_from_payload``). Case-fold is intentional —
+-    Agent-tool emitters may pass mixed case for the same archetype.
+-
+-    Defense-in-depth (Sec MF-7):
+-    - Non-string input rejected (``isinstance(subagent_type, str)``)
+-    - Raw input length capped at 80 chars BEFORE normalize to bound
+-      strip/lower allocation cost on the hot audit-hook path (Codex
+-      G23-04)
+-    - Post-normalize charset enforced via ``_ARCHETYPE_NAME_RE.fullmatch``
+-      (anchored both ends) — slash, dot-traversal, NUL, unicode rejected
+-
+-    Never raises.
+-    """
+-    if not isinstance(subagent_type, str):
+-        return "unknown"
+-    # G23-04: bound raw length before allocating strip/lower copy.
+-    # 80 leaves headroom for whitespace + 64-char post-normalize cap.
+-    if len(subagent_type) > 80:
+-        return "unknown"
+-    name = subagent_type.strip().lower()
+-    if not _ARCHETYPE_NAME_RE.fullmatch(name):
+-        return "unknown"
+-    return _ARCHETYPE_TO_SKILL.get(name, "unknown")
+-
+-
+-def extract_skill(prompt: str, subagent_type: str = "") -> str:
+-    """Return the skill name extracted from a spawn prompt, or 'unknown'.
+-
+-    PLAN-065 Phase 1 — 3-path matrix; PLAN-079 — +Path D archetype map.
+-
+-    Order of precedence:
+-
+-      A. Format-A inline ``^SKILL: <name>$`` (line-anchored)
+-      B. Format-B reference
+-         ``^@.claude/skills/<scope>/<name>/SKILL.md sha256=<64hex>$``
+-      C. Format-C ``## SKILL CONTENT`` block + ``SKILL LOADED: <name>`` line
+-      D. Path D (PLAN-079) — ``subagent_type`` ∈ canonical-5 archetypes
+-         maps to the skill loaded via ``.claude/agents/<name>.md`` per
+-         ADR-051. Tail fallback only — never overrides an explicit
+-         Path A/B/C envelope.
+-
+-    Multi-format prompts: Path A wins (line-order preference per
+-    PLAN-065 spec). Path D fires only if Paths A/B/C miss AND
+-    ``subagent_type`` is provided + valid.
+-
+-    Path D edge case (Codex gate #23 hardened):
+-    - Fires on TRULY EMPTY ``prompt`` (legitimate empty-body case)
+-    - Does NOT fire on ``_sanitize_prompt``-rejected prompt (G23-03)
+-      — rejected prompts may have contained a conflicting `SKILL:`
+-      envelope we failed to parse; preserving "unknown" surfaces the
+-      rejection signal in forensic logs
+-    - Does NOT fire on non-string ``prompt`` (G23-09) — None, False,
+-      0, list, dict all return "unknown" before reaching Path D
+-
+-    Sanitization (Sec MF-7) runs once before any path regex on the
+-    prompt. The ``subagent_type`` input is independently validated
+-    against ``_ARCHETYPE_NAME_RE`` inside ``_path_d_lookup`` (post-
+-    `strip().lower()` normalize, with raw-length pre-bound). Never
+-    raises — returns ``"unknown"`` on any rejection.
+-
+-    The legacy single-arg signature (``str -> str``) remains supported
+-    via the default ``subagent_type=""`` arg — pre-PLAN-079 callers
+-    continue to work unchanged.
+-
+-    Path D firing rules (Codex gate #23 hardened):
+-
+-    | prompt              | subagent_type    | result                  |
+-    |---------------------|------------------|-------------------------|
+-    | non-string          | any              | "unknown" (G23-09)      |
+-    | "" (empty)          | canonical-5      | mapped skill (Path D)   |
+-    | "" (empty)          | other / ""       | "unknown"               |
+-    | str, sanitize=None  | any              | "unknown" (G23-03)      |
+-    | str, Path A match   | any              | Path A name (precedence)|
+-    | str, Path B match   | any              | Path B name (precedence)|
+-    | str, Path C match   | any              | Path C name (precedence)|
+-    | str, A/B/C miss     | canonical-5      | mapped skill (Path D)   |
+-    | str, A/B/C miss     | other / ""       | "unknown"               |
+-    """
+-    # Codex G23-09: type-check prompt BEFORE the falsy-short-circuit
+-    # so non-string prompts (None, False, 0, [], {}) don't silently fall
+-    # through to Path D fallback via the `if not prompt` branch.
+-    if not isinstance(prompt, str):
+-        return "unknown"
+-    if not prompt:
+-        # Empty prompt is a legitimate case (archetype dispatch with no
+-        # user-visible body). Path D may resolve from subagent_type alone.
+-        if subagent_type:
+-            return _path_d_lookup(subagent_type)
+-        return "unknown"
+-    safe = _sanitize_prompt(prompt)
+-    if safe is None:
+-        # Codex G23-03: prompt was REJECTED by Sec MF-7 hardening
+-        # (oversize, NUL byte, whitespace-only). Do NOT fall back to
+-        # Path D — the rejected prompt may have contained a different
+-        # SKILL envelope we failed to parse. Returning the mapped
+-        # archetype skill here would silently override a conflicting
+-        # (but malformed) explicit claim. Returning "unknown" preserves
+-        # the rejection signal so downstream forensics see the parse
+-        # failure, not a synthesized skill identity.
+-        return "unknown"
+-
+-    # Path A — Format-A inline (precedence wins on multi-format).
+-    m = _SKILL_PATH_A_RE.search(safe)
+-    if m:
+-        name = m.group(1)
+-        if _validate_skill_name(name):
+-            return name
+-
+-    # Path B — Format-B reference.
+-    m = _SKILL_PATH_B_RE.search(safe)
+-    if m:
+-        name = m.group(1)
+-        if _validate_skill_name(name):
+-            return name
+-
+-    # Path C — `## SKILL CONTENT` block fallback (legacy).
+-    if _SKILL_PATH_C_HEADER_RE.search(safe):
+-        m = _SKILL_PATH_C_LOADED_RE.search(safe)
+-        if m:
+-            name = m.group(1)
+-            if _validate_skill_name(name):
+-                return name
+-
+-    # Path D — PLAN-079 canonical archetype → skill mapping (last resort).
+-    if subagent_type:
+-        return _path_d_lookup(subagent_type)
+-
+-    return "unknown"
+-
+-
+-def has_profile(prompt: str) -> bool:
+-    """True if the spawn prompt contains an `## AGENT PROFILE` section (spawn discipline marker)."""
+-    if not prompt:
+-        return False
+-    return bool(_PROFILE_RE.search(prompt))
+-
+-
+-def has_file_assignment(prompt: str) -> bool:
+-    """True if the spawn prompt contains a `## FILE ASSIGNMENT` section (anti-collision marker)."""
+-    if not prompt:
+-        return False
+-    return bool(_FILE_ASSIGNMENT_RE.search(prompt))
+-
+-
+-def now_iso_utc() -> str:
+-    """ISO 8601 UTC timestamp with second precision (e.g. 2026-04-11T13:15:47Z)."""
+-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+-
+-
+-def now_month_slug() -> str:
+-    """YYYY-MM for the current UTC month — used for rotated filenames."""
+-    return datetime.now(timezone.utc).strftime("%Y-%m")
+-
+-
+-# -----------------------------------------------------------------------------
+-# Entry builder
+-# -----------------------------------------------------------------------------
+-
+-
+-def build_entry(
+-    *,
+-    event: "_contract.NormalizedEvent | _payload.HookPayload",
+-    project_dir: str,
+-    hook_duration_ms: int,
+-) -> Optional[Dict[str, Any]]:
+-    """Construct a JSONL row from a NormalizedEvent (or legacy HookPayload).
+-
+-    Accepts either type for backward compatibility with older tests.
+-    Returns None if the event indicates a non-Agent tool (defensive — the
+-    matcher should already filter to Agent).
+-    """
+-    tool_name = getattr(event, "tool_name", "")
+-    if tool_name and tool_name not in ("Agent", "unknown"):
+-        return None
+-
+-    description = getattr(event, "description", "") or ""
+-    prompt = getattr(event, "prompt", "") or ""
+-    session_id = getattr(event, "session_id", "") or ""
+-    subagent_type = getattr(event, "subagent_type", "") or ""
+-    tool_response = getattr(event, "tool_response", {}) or {}
+-
+-    desc_preview = _redact.redact_secrets(description)
+-    desc_hash = _redact.hash_description(description)
+-    # PLAN-079: pass subagent_type for Path D archetype-mapping fallback.
+-    skill = extract_skill(prompt, subagent_type)
+-
+-    # PLAN-006 Phase 5b (ADR-016): extract token counts from tool_response.
+-    # Always emit the keys (even if None) so consumers can distinguish
+-    # "post-ADR-016 emitter with unknown shape" from "pre-ADR-016 emitter".
+-    tin, tout = _tokens.extract_tokens(tool_response)
+-    ttotal = _tokens.total_tokens(tool_response)
+-
+-    # PLAN-020 Phase 0 item 1: capture Anthropic usage_metadata for cache
+-    # coverage analysis. Additive v2.7 fields. Null-safe for emitters that
+-    # don't provide usage_metadata (legacy + non-Anthropic adapters).
+-    usage_metadata = _extract_usage_metadata(tool_response)
+-    # PLAN-118 WS-E (S181): the derived ratio is a FLOAT, which
+-    # ``canonical_json.encode()`` forbids in HMAC-covered payloads
+-    # (``CanonicalJsonError`` → fail-open ``hmac:null`` → chain one-way-rule
+-    # break → whole-chain ``tamper``). Encode as integer basis-points
+-    # (ratio × 10000, clamped 0..10000) BEFORE it reaches the entry dict.
+-    # Mirrors the S164 ``hit_rate`` → ``hit_rate_bps`` class fix; closes the
+-    # last live float-in-HMAC leak (the agent_spawn observer path that the
+-    # S164 emit_* introspection guard never covered).
+-    cache_coverage = _compute_cache_coverage(usage_metadata)
+-    cache_coverage_bps = (
+-        max(0, min(10000, int(round(cache_coverage * 10000))))
+-        if cache_coverage is not None
+-        else None
+-    )
+-
+-    # PLAN-020 Phase 1: dual-rail discriminator. Detect from prompt
+-    # structure (## SKILL REFERENCE = native rail; ## SKILL CONTENT =
+-    # custom inline rail) OR from subagent_type matching canonical-5.
+-    rail = _detect_rail(prompt, subagent_type)
+-
+-    # PLAN-021 ADR-052: model discriminator. Captured from Anthropic
+-    # API response when present. Null-safe for non-Anthropic adapters.
+-    # PLAN-044 audit-v2 C3-P0-01 (Wave B): fall back to ADR-052
+-    # role-to-model policy when tool_response.model is null (default
+-    # behavior of Task tool response shape at v1.11.0).
+-    model = _extract_model(tool_response, subagent_type=subagent_type)
+-
+-    # PLAN-044 audit-v2 C3-P0-08 (Wave B): archetype + dispatch_mode
+-    # fields. Audit-telemetry.py per-archetype rollups depend on these
+-    # being non-null. ADR-082 per-archetype dispatch claim was undone
+-    # at v1.11.0 because no emitter wrote them. Wave B closes the gap.
+-    archetype = subagent_type if (
+-        isinstance(subagent_type, str) and subagent_type
+-    ) else None
+-    dispatch_mode = _resolve_dispatch_mode(subagent_type or "", rail)
+-
+-    # PLAN-080 Phase 1 (M2-C3 + M2-CDX-1 iter 2): capture dispatch_archetype_hint
+-    # from the IN-PROMPT marker emitted by inject-agent-context.sh:
+-    #   `<!-- ceo-dispatch-archetype-hint: <slug> -->`
+-    # The marker propagates cross-process via the recorded `prompt` payload —
+-    # env vars do NOT survive the inject-agent-context.sh subprocess → Agent
+-    # tool dispatch → audit hook subprocess chain (Codex iter 2 finding).
+-    #
+-    # Validated via the same NFKC + ≤64 char + charset `^[a-z][a-z0-9-]*$` +
+-    # control/JSON-meta rejection contract as `_lib.audit_emit._validate_dispatch_archetype_hint`.
+-    # On rejection (or marker absent): returns None (fail-open). The field is
+-    # always emitted in the audit row — null when no hint is set/validated,
+-    # validated string otherwise.
+-    dispatch_archetype_hint = _extract_dispatch_archetype_hint(prompt)
+-
+-    entry: Dict[str, Any] = {
+-        "ts": now_iso_utc(),
+-        "action": "agent_spawn",
+-        "session_id": session_id,
+-        "project": project_dir,
+-        "tool": tool_name or "Agent",
+-        "subagent_type": subagent_type,
+-        "desc_preview": desc_preview,
+-        "desc_hash": desc_hash,
+-        "skill": skill,
+-        "has_profile": has_profile(prompt),
+-        "has_file_assignment": has_file_assignment(prompt),
+-        "prompt_len_bucket": bucket_prompt_length(len(prompt)),
+-        "response_kind": _payload.response_kind(tool_response),
+-        "hook_duration_ms": int(hook_duration_ms),
+-        # Tokens (ADR-016): optional nullable, always-present.
+-        "tokens_in": tin,
+-        "tokens_out": tout,
+-        "tokens_total": ttotal,
+-        # PLAN-020 v2.7 additions (ADDITIVE — older consumers ignore).
+-        "usage_metadata": usage_metadata,
+-        # PLAN-118 WS-E (S181): integer basis-points (ratio × 10000) — the
+-        # legacy float ``cache_coverage`` field is REMOVED (it caused
+-        # CanonicalJsonError + fail-open hmac:null on every real spawn).
+-        "cache_coverage_bps": cache_coverage_bps,
+-        "rail": rail,
+-        # PLAN-021 v2.8 addition (ADDITIVE — ADR-052 multi-model).
+-        "model": model,
+-        # PLAN-044 audit-v2 v2.14 additions (Wave B C3-P0-08).
+-        "archetype": archetype,
+-        "dispatch_mode": dispatch_mode,
+-        # PLAN-080 Phase 1 v2.24 addition (M2-C3 + M2-CDX-1) —
+-        # dispatch_archetype_hint captured pre-ADR-082-mitigation.
+-        # Validated via _lib.audit_emit redaction contract.
+-        # Always-present (null when env unset or validation rejected).
+-        "dispatch_archetype_hint": dispatch_archetype_hint,
+-    }
+-    return entry
+-
+-
+-# -----------------------------------------------------------------------------
+-# PLAN-020 v2.7 cache-header capture helpers (Phase 0 item 1)
+-# -----------------------------------------------------------------------------
+-
+-# Canonical-5 archetypes that ship with native subagent files (ADR-050).
+-# Rail discrimination: archetype is "native" IFF its name matches AND
+-# subagent_type is non-empty. Else "custom" if classic spawn signal is
+-# present. Else null (legacy / unknown).
+-_CANONICAL_5 = frozenset({
+-    "code-reviewer",
+-    "security-engineer",
+-    "qa-architect",
+-    "performance-engineer",
+-    "devops",
+-})
+-
+-# Native rail spawn-prompt sentinel (additive ADR-051; co-exists with
+-# the legacy "## SKILL CONTENT" inline sentinel).
+-_SKILL_REFERENCE_RE = re.compile(
+-    r"^##\s+SKILL\s+REFERENCE\s*$", re.MULTILINE
++_PARTS = (
++    "paths_skills", "entries_usage", "rotation_storage", "adapters_runtime",
+ )
+-_SKILL_CONTENT_RE = re.compile(
+-    r"^##\s+SKILL\s+CONTENT\s*$", re.MULTILINE
+-)
+-
+-
+-def _extract_usage_metadata(tool_response: Any) -> Optional[Dict[str, Any]]:
+-    """Extract Anthropic usage_metadata from a tool_response payload.
+-
+-    Returns a dict with `cache_creation_input_tokens`,
+-    `cache_read_input_tokens`, `uncached_input_tokens`, `output_tokens`,
+-    `thinking_tokens` — each int or None. Returns None if the payload
+-    has no `usage_metadata` field at all (legacy / non-Anthropic).
+-
+-    Defensive: never raises; returns None on any unexpected shape.
+-    """
+-    if not isinstance(tool_response, dict):
+-        return None
+-    usage = tool_response.get("usage_metadata")
+-    if not isinstance(usage, dict):
+-        # Some emitters may put it under "usage" or in nested response.
+-        usage = tool_response.get("usage")
+-        if not isinstance(usage, dict):
+-            return None
+-
+-    def _coerce_int(value: Any) -> Optional[int]:
+-        if isinstance(value, bool):
+-            return None
+-        if isinstance(value, int):
+-            return value
+-        if isinstance(value, str) and value.isdigit():
+-            return int(value)
+-        return None
+-
+-    return {
+-        "cache_creation_input_tokens": _coerce_int(
+-            usage.get("cache_creation_input_tokens")
+-        ),
+-        "cache_read_input_tokens": _coerce_int(
+-            usage.get("cache_read_input_tokens")
+-        ),
+-        "uncached_input_tokens": _coerce_int(usage.get("uncached_input_tokens")),
+-        "output_tokens": _coerce_int(usage.get("output_tokens")),
+-        "thinking_tokens": _coerce_int(usage.get("thinking_tokens")),
+-    }
+-
+-
+-def _compute_cache_coverage(
+-    usage_metadata: Optional[Dict[str, Any]],
+-) -> Optional[float]:
+-    """Derived metric: cache_read / (cache_read + cache_creation + uncached).
+-
+-    Returns None if the inputs are missing or the denominator is zero
+-    (defensive against synthetic / mocked payloads).
+-    """
+-    if not usage_metadata:
+-        return None
+-    cache_read = usage_metadata.get("cache_read_input_tokens") or 0
+-    cache_creation = usage_metadata.get("cache_creation_input_tokens") or 0
+-    uncached = usage_metadata.get("uncached_input_tokens") or 0
+-    denom = cache_read + cache_creation + uncached
+-    if denom <= 0:
+-        return None
+-    return round(cache_read / denom, 4)
+-
+-
+-# PLAN-080 Phase 1 (M2-C3 + M2-CDX-1 iter 2) — in-prompt hint marker pattern.
+-# inject-agent-context.sh emits this marker once near the top of every spawn
+-# prompt; audit_log.py extracts the slug at PostToolUse audit time. The
+-# regex captures the slug into group 1 and validates the charset inline.
+-_DISPATCH_HINT_MARKER_RE = re.compile(
+-    r"<!--\s*ceo-dispatch-archetype-hint:\s*([a-z][a-z0-9-]{0,63})\s*-->",
+-    re.IGNORECASE,
+-)
+-
+-
+-def _extract_dispatch_archetype_hint(prompt: str) -> Optional[str]:
+-    """PLAN-080 Phase 1 (M2-C3 + M2-CDX-1 iter 2) — extract validated hint.
+-
+-    Searches `prompt` for the in-prompt marker:
+-      `<!-- ceo-dispatch-archetype-hint: <slug> -->`
+-
+-    Falls back to `CEO_DISPATCH_ARCHETYPE_HINT` env var ONLY if the marker
+-    is absent (advisory path; env vars do not reliably propagate across the
+-    /spawn subprocess → Agent tool dispatch → audit hook subprocess chain
+-    per Codex Phase 1 iter 2 finding).
+-
+-    Validation contract (mirrors `_lib.audit_emit._validate_dispatch_archetype_hint`):
+-      1. NFKC normalize
+-      2. Length ≤ 64 chars post-NFKC
+-      3. Charset `^[a-z][a-z0-9-]*$` (lowercase prefix; hyphens + digits)
+-      4. Reject control bytes (0x00-0x1f, 0x7f-0x9f), null, JSON-meta `{}[]:",\\`
+-
+-    On rejection: return None (fail-open per audit hook contract; never blocks).
+-    On marker absent + env unset: return None.
+-    On accept: return normalized lowercase slug.
+-    """
+-    raw: Optional[str] = None
+-    # Primary path: in-prompt marker
+-    if isinstance(prompt, str) and prompt:
+-        m = _DISPATCH_HINT_MARKER_RE.search(prompt)
+-        if m:
+-            raw = m.group(1)
+-    # Fallback path: env var (advisory; may be set by future direct callers)
+-    if not raw:
+-        raw = os.environ.get("CEO_DISPATCH_ARCHETYPE_HINT")
+-    if not raw:
+-        return None
+-    # Defensive try/except — must NEVER throw under fail-open contract.
+-    try:
+-        # NFKC normalize then lowercase (regex was case-insensitive)
+-        norm = unicodedata.normalize("NFKC", raw).lower()
+-        # Length cap (post-NFKC)
+-        if len(norm) > 64 or len(norm) == 0:
+-            return None
+-        # Charset: ^[a-z][a-z0-9-]*$
+-        if not re.match(r"^[a-z][a-z0-9-]*$", norm):
+-            return None
+-        # Defensive: reject if any control byte slipped through
+-        if any(ord(c) < 0x20 or 0x7f <= ord(c) <= 0x9f for c in norm):
+-            return None
+-        # Defensive: JSON-meta chars
+-        if any(c in '{}[]:,"\\' for c in norm):
+-            return None
+-        return norm
+-    except Exception:  # pragma: no cover (defensive — extraction never throws)
+-        return None
+-
+-
+-def _extract_model(
+-    tool_response: Any,
+-    subagent_type: Optional[str] = None,
+-) -> Optional[str]:
+-    """PLAN-021 ADR-052: extract Claude model ID from tool_response.
+-
+-    Anthropic API responses include a `model` field (e.g. "claude-fable-5",
+-    "claude-opus-5", "claude-haiku-4-5"; older gens appear in replay). Some adapters nest
+-    it under `response.model` or `content.model`. Returns the string if
+-    found, else falls back to ADR-052 role-to-model policy table when
+-    `subagent_type` is supplied; otherwise None.
+-
+-    Canonical IDs (PLAN-169 W2.10 D1 — current fleet; the table below is
+-    the authority, this prose only illustrates):
+-      - claude-fable-5 / claude-opus-5 → orchestrator + critical VETOs
+-      - claude-sonnet-5                → mid-complexity workers
+-      - claude-haiku-4-5               → high-frequency fan-out
+-
+-    PLAN-044 audit-v2 C3-P0-01 fix (Wave B): the Task tool response
+-    shape from Claude Code's hook payload omits the `model` field on
+-    100% of agent_spawn events (verified at audit time: 199/199 events
+-    had `model: null`). Without an authoritative observation, the
+-    fallback uses the ADR-052 policy table — adopters reading the
+-    audit-log get a *policy-derived* model identity, not an
+-    *observation-derived* one. The two diverge only when an adopter
+-    overrides ADR-052 (then the audit-log over-reports the policy
+-    model rather than the actual model — known limitation; downstream
+-    cost reports re-resolve via subagent_type when present).
+-    """
+-    if isinstance(tool_response, dict):
+-        # Direct top-level (most Anthropic SDK shapes)
+-        model = tool_response.get("model")
+-        if isinstance(model, str) and model:
+-            return model
+-        # Nested under "response" (some adapter shapes)
+-        resp = tool_response.get("response")
+-        if isinstance(resp, dict):
+-            m = resp.get("model")
+-            if isinstance(m, str) and m:
+-                return m
+-        # Nested under "usage_metadata" sibling-content
+-        usage = tool_response.get("usage_metadata")
+-        if isinstance(usage, dict):
+-            m = usage.get("model")
+-            if isinstance(m, str) and m:
+-                return m
+-
+-    # Wave B fallback — ADR-052 role-to-model policy table.
+-    if isinstance(subagent_type, str) and subagent_type:
+-        policy_model = _ADR_052_ROLE_TO_MODEL.get(subagent_type)
+-        if policy_model:
+-            return policy_model
+-    return None
+-
+-
+-# PLAN-044 audit-v2 C3-P0-01 — ADR-052 §Role-to-model distribution table.
+-# Used as fallback when tool_response.model is null (which happens on 100%
+-# of Task-dispatched spawns at v1.11.0). Pinned to canonical IDs from
+-# ADR-052; if an adopter overrides ADR-052 they should also override
+-# this table OR pre-populate tool_response.model upstream.
+-# PLAN-163 T1.4 (ADR-181, OQ1=b + OQ2=migrate-now): ROUTING refresh only —
+-# Opus-tier fallbacks move claude-opus-4-8 -> claude-opus-5 and the advisory
+-# (Sonnet) tier moves claude-sonnet-4-6 -> claude-sonnet-5. This table is a
+-# routing-policy fallback, NOT a pricing surface (grok F11): historical
+-# pricing/replay tables keep the old ids. Every value MUST stay inside the
+-# ADR-149 AVAILABLE_MODELS_WORKING_SET (tied by
+-# test_adr149_validator_parity.py).
+-_ADR_052_ROLE_TO_MODEL: Dict[str, str] = {
+-    # Canonical-5 VETO archetypes — Opus floor per ADR-052 + ADR-080
+-    "code-reviewer": "claude-opus-5",
+-    "security-engineer": "claude-opus-5",
+-    "qa-architect": "claude-sonnet-5",
+-    "performance-engineer": "claude-sonnet-5",
+-    # PLAN-169 W2.10 F8: bare id — the dated pin is not in availableModels
+-    # and interacts badly with enforceAvailableModels.
+-    "devops": "claude-haiku-4-5",
+-    # Mitigated rail — general-purpose dispatch inherits CEO model.
+-    # Default-CEO is Opus-tier unless CEO_MODEL_DOWNSHIFT is honored.
+-    # ADR-149 Amendment 3 (S357): follows the session-default pin, now
+-    # claude-opus-5-5. A POLICY value, not an observation: when the Task
+-    # response carries no model (the common case, see _extract_model) the
+-    # audit log records this row even if a per-call model or alias served
+-    # the spawn.
+-    "general-purpose": "claude-opus-5-5",
+-    # Probe / specialty archetypes
+-    "growth-engineer": "claude-sonnet-5",
+-    "billing-engineer": "claude-sonnet-5",
+-    "compliance-specialist": "claude-sonnet-5",
+-    "chaos-engineer": "claude-sonnet-5",
+-    "data-engineer": "claude-sonnet-5",
+-    "real-time-systems-engineer": "claude-sonnet-5",
+-    "refactoring-lead": "claude-sonnet-5",
+-    "vp-engineering": "claude-opus-5",
+-    "vp-product": "claude-sonnet-5",
+-    "vp-operations": "claude-sonnet-5",
+-    # PLAN-074 Wave 1c provenance — see docs/PLAN-086-adr-052-role-extension.md
+-    # 4 VETO-floor archetypes added per PLAN-086 Wave B (R-019 ROLE_TO_MODEL ext).
+-    # ADR-052 §Veto-floor expansion (lines 186-210) names these as VETO-floor;
+-    # llm-finops-architect carries Opus floor for cost-ceiling integrity (see
+-    # docs §2 §Why llm-finops-architect). ADR-052 bytes NOT mutated (anti-churn).
+-    "incident-commander": "claude-opus-5",
+-    "identity-trust-architect": "claude-opus-5",
+-    "threat-detection-engineer": "claude-opus-5",
+-    "llm-finops-architect": "claude-opus-5",
+-}
+-
+-
+-def _resolve_dispatch_mode(
+-    subagent_type: str,
+-    rail: Optional[str],
+-) -> Optional[str]:
+-    """PLAN-044 audit-v2 C3-P0-08 — Wave B: derive dispatch_mode field.
+-
+-    Maps (subagent_type, rail) → "native" | "mitigated" per the
+-    PLAN-061 / ADR-082 dispatch policy:
+-
+-      - canonical-5 native rail → "native" (full tool grant per
+-        ADR-052 floor; H4 anomaly does NOT apply because empirically
+-        only `code-reviewer` is reliable; PLAN-061 default-on routes
+-        the other 4 via mitigated).
+-      - any non-canonical archetype → "mitigated" (general-purpose
+-        with persona injected via `## SKILL CONTENT`).
+-      - rail=None or unknown → None (legacy / pre-PLAN-061).
+-
+-    See ADR-082 §Routing decision and `inject-agent-context.sh` for
+-    the live override matrix (CEO_DISPATCHER_MODE,
+-    CEO_MITIGATION_DISABLE).
+-    """
+-    if not isinstance(subagent_type, str):
+-        return None
+-    # Canonical-5 native rail — only code-reviewer routes natively
+-    # by default per PLAN-061 / ADR-082. Other 4 are mitigated.
+-    if subagent_type == "code-reviewer" and rail == "native":
+-        return "native"
+-    if subagent_type in _CANONICAL_5 and rail == "custom":
+-        # Older inline ## SKILL CONTENT prompt — pre-PLAN-061 spawn.
+-        return "native_legacy"
+-    if rail is None:
+-        return None
+-    # Default mitigated rail for non-canonical-5 + non-cr canonicals
+-    # under PLAN-061 default-on.
+-    return "mitigated"
+-
+-
+-def _detect_rail(prompt: str, subagent_type: str) -> Optional[str]:
+-    """Detect spawn dispatch rail (native vs custom) from prompt + subagent.
+-
+-    Heuristic order:
+-    1. If subagent_type matches a canonical-5 archetype name AND the
+-       prompt has `## SKILL REFERENCE` sentinel → "native".
+-    2. Else if prompt has `## SKILL CONTENT` (legacy inline) → "custom".
+-    3. Else if prompt has `## SKILL REFERENCE` only → "native"
+-       (subagent_type may be empty for some adapters).
+-    4. Else None (unknown / pre-PLAN-020 / non-spawn event).
+-    """
+-    if not isinstance(prompt, str):
+-        return None
+-    has_reference = bool(_SKILL_REFERENCE_RE.search(prompt))
+-    has_content = bool(_SKILL_CONTENT_RE.search(prompt))
+-    is_canonical = (
+-        isinstance(subagent_type, str) and subagent_type in _CANONICAL_5
+-    )
+-
+-    if is_canonical and has_reference:
+-        return "native"
+-    if has_content:
+-        return "custom"
+-    if has_reference:
+-        return "native"
+-    return None
+-
+-
+-# -----------------------------------------------------------------------------
+-# Rotation
+-# -----------------------------------------------------------------------------
+-
+-
+-def rotate_if_needed(log_path: Path, threshold_bytes: int) -> Optional[Path]:
+-    """Rename log_path to a monthly rotated file if it exceeds the threshold.
+-
+-    Must be called UNDER the lock so no concurrent writer can race.
+-
+-    PLAN-045 Wave 2 P0-08: delegates to ``_lib.audit_rotation.rotate_if_needed``
+-    so both write paths (this ``append_entry`` + ``_lib.audit_emit._write_event``)
+-    share identical rotation semantics. Preserves the existing call
+-    signature for backwards compatibility.
+-
+-    PLAN-044 audit-v2 C6-P0-02 fix (Wave B): on successful rotation,
+-    invoke ``audit_hmac.reset_chain_on_rotation()`` so the HMAC chain
+-    starts a fresh genesis on the new log file. Without this, rotated
+-    logs continue chain from the previous final hmac into the new
+-    file's genesis row, which `audit-verify-chain.py` cannot validate
+-    (genesis is by definition prev_hmac=GENESIS_PREV; a non-genesis
+-    prev_hmac after rotation looks like silent tamper). Pattern was
+-    already correct in ``_lib.audit_emit._write_event`` — Wave B brings
+-    ``audit_log.py`` to parity.
+-
+-    Returns the rotated path if rotation happened, None otherwise.
+-    """
+-    try:
+-        from _lib.audit_rotation import rotate_if_needed as _shared_rotate
+-    except ImportError:
+-        # Defensive: if the shared primitive isn't available (partial
+-        # install), fall back to the inlined legacy implementation so
+-        # rotation still works in the classic path.
+-        rotated = _legacy_rotate_inline(log_path, threshold_bytes)
+-    else:
+-        rotated = _shared_rotate(log_path, threshold_bytes, now_month_slug())
+-
+-    # PLAN-044 audit-v2 C6-P0-02 — reset the per-process HMAC chain
+-    # state so the next entry written to the fresh log file is a
+-    # GENESIS_PREV-rooted row. Best-effort: missing _lib.audit_hmac
+-    # is non-fatal (older installs); chain integrity tests will catch
+-    # any rotated row that violates the genesis rule.
+-    if rotated is not None:
+-        try:
+-            from _lib import audit_hmac as _audit_hmac
+-            if hasattr(_audit_hmac, "reset_chain_on_rotation"):
+-                _audit_hmac.reset_chain_on_rotation()
+-        except Exception:
+-            pass
+-    return rotated
+-
+-
+-def _legacy_rotate_inline(
+-    log_path: Path, threshold_bytes: int
+-) -> Optional[Path]:
+-    """Fallback rotation for the rare case ``_lib.audit_rotation`` is missing.
+-
+-    Kept in-line so a half-installed framework still rotates. Mirrors
+-    the behavior of the shared primitive byte-for-byte.
+-    """
+-    try:
+-        if not log_path.is_file():
+-            return None
+-        size = log_path.stat().st_size
+-        if size <= threshold_bytes:
+-            return None
+-    except OSError:
+-        return None
+-
+-    month = now_month_slug()
+-    base = log_path.parent / f"{log_path.stem}-{month}.jsonl"
+-    candidate = base
+-    counter = 1
+-    while candidate.exists():
+-        candidate = log_path.parent / f"{log_path.stem}-{month}-{counter}.jsonl"
+-        counter += 1
+-        if counter > 1000:
+-            return None
+-
+-    try:
+-        os.replace(str(log_path), str(candidate))
+-    except OSError:
+-        return None
+-    return candidate
+-
+-
+-# -----------------------------------------------------------------------------
+-# Error breadcrumb
+-# -----------------------------------------------------------------------------
+-
+-
+-def write_breadcrumb(err_path: Path, message: str) -> None:
+-    """Best-effort write to the errors log. Never raises."""
+-    try:
+-        err_path.parent.mkdir(parents=True, exist_ok=True)
+-        ts = now_iso_utc()
+-        with open(err_path, "a", encoding="utf-8") as f:
+-            f.write(f"[{ts}] {message}\n")
+-    except OSError:
+-        # Last-resort: stderr
+-        try:
+-            sys.stderr.write(f"[audit-log] breadcrumb write failed: {message}\n")
+-        except Exception:  # pragma: no cover
+-            pass
+-
+-
+-# -----------------------------------------------------------------------------
+-# PLAN-045 F-01-06 — symlink + ownership defense
+-# -----------------------------------------------------------------------------
+-
+-
+-def _is_safe_audit_path(
+-    path: Path, expected_uid: int
+-) -> Tuple[bool, str]:
+-    """Check audit path for symlink + ownership safety.
+-
+-    Returns ``(True, "")`` if safe (nonexistent OR real file/dir owned
+-    by ``expected_uid``). Returns ``(False, reason)`` if unsafe
+-    (symlink OR owner mismatch).
+-
+-    Uses ``os.lstat`` (not ``stat``) so symlinks themselves are
+-    inspected rather than their targets. Never raises.
+-
+-    ## Threat model
+-
+-    1. **Symlink redirection.** An attacker with write access to
+-       ``$HOME/.claude/projects/`` creates
+-       ``ceo-orchestration -> /tmp/evil``. Every append goes to
+-       attacker-controlled path, defeats tamper-evident audit trail.
+-    2. **UID squatting.** Another user's process creates the audit
+-       directory. Hook runs as current user → fails to open for
+-       append (EACCES) OR leaks sensitive data into foreign-owned
+-       file if perms are too permissive.
+-
+-    Both are refused before any write. The caller logs a breadcrumb
+-    to the /tmp fallback path and returns silently (fail-open on
+-    session; forensic trail preserved).
+-    """
+-    try:
+-        st = path.lstat()
+-    except FileNotFoundError:
+-        # Nonexistent is safe — the normal first-write path.
+-        return (True, "")
+-    except OSError as e:
+-        return (False, f"lstat_error:{e.__class__.__name__}")
+-    if stat.S_ISLNK(st.st_mode):
+-        return (False, "symlink_rejected")
+-    if st.st_uid != expected_uid:
+-        return (
+-            False,
+-            f"uid_mismatch:owner={st.st_uid} proc={expected_uid}",
+-        )
+-    return (True, "")
+-
+-
+-def _fallback_security_breadcrumb(message: str) -> None:
+-    """Breadcrumb to ``/tmp`` fallback when primary audit dir is unsafe.
+-
+-    Mirrors ``_lib.audit_emit._fallback_log_path`` pattern. Never
+-    raises. Writes under the current user's namespaced filename so
+-    multi-user systems don't clobber each other.
+-    """
+-    try:
+-        try:
+-            user = getpass.getuser() or "unknown"
+-        except Exception:
+-            user = os.environ.get("USER") or "unknown"
+-        user = "".join(
+-            c for c in user if c.isalnum() or c in ("-", "_", ".")
+-        )
+-        fallback = Path("/tmp") / f"ceo-audit-fallback-{user}.log"
+-        ts = now_iso_utc()
+-        with open(fallback, "a", encoding="utf-8") as f:
+-            f.write(f"[{ts}] audit-log security: {message}\n")
+-    except Exception:
+-        pass
+-
+-
+-# -----------------------------------------------------------------------------
+-# Append entry under lock
+-# -----------------------------------------------------------------------------
+-
+-
+-def append_entry(
+-    entry: Dict[str, Any],
+-    *,
+-    paths: Dict[str, Path],
+-    threshold_bytes: int,
+-) -> None:
+-    """Append a single JSONL line under the lock, rotating if needed.
+-
+-    Any failure is logged to the errors breadcrumb and swallowed (fail-open).
+-
+-    PLAN-045 F-01-06: pre-write symlink + ownership check on audit dir
+-    and audit log file. On violation, breadcrumb to /tmp fallback +
+-    return silently (fail-open on session; entry dropped but forensic
+-    trail preserved via fallback + upstream audit_emit).
+-    """
+-    # F-01-06 symlink + uid defense BEFORE any mkdir/write.
+-    # Rationale: an attacker who plants a symlink in the audit dir can
+-    # redirect writes. Ownership mismatch indicates another user's
+-    # process created the path. Both warrant refusal + breadcrumb.
+-    expected_uid = os.geteuid()
+-    ok, reason = _is_safe_audit_path(paths["dir"], expected_uid)
+-    if not ok:
+-        _fallback_security_breadcrumb(
+-            f"audit dir unsafe: {paths['dir']} ({reason})"
+-        )
+-        return
+-    ok, reason = _is_safe_audit_path(paths["log"], expected_uid)
+-    if not ok:
+-        _fallback_security_breadcrumb(
+-            f"audit log unsafe: {paths['log']} ({reason})"
+-        )
+-        return
+-    # Ensure dir exists with restrictive perms
+-    # PLAN-024 F-sec-001 P1 fix: mkdir(mode=0o700) closes TOCTOU micro-window
+-    # between mkdir() and os.chmod() where same-UID attacker could win a race.
+-    try:
+-        paths["dir"].mkdir(parents=True, exist_ok=True, mode=0o700)
+-        # Belt-and-braces: retighten in case dir pre-existed with looser perms
+-        try:
+-            os.chmod(paths["dir"], 0o700)
+-        except OSError:
+-            pass
+-    except OSError as e:
+-        write_breadcrumb(paths["err"], f"cannot create audit dir: {e}")
+-        return
+-
+-    # PLAN-085 Wave B.3 — inline HMAC computation closes the two-writer
+-    # chain gap (F-C1-001 / T0-line-168 transition_violation root cause).
+-    # 100% of agent_spawn events now carry hmac field per ADR-055.
+-    # Reuses _lib/audit_hmac primitives; fail-OPEN per CLAUDE.md §5.
+-    # PLAN-194 (rc.1 condition 67): key, predecessor, HMAC, append and sidecar
+-    # share ONE FileLock (as in audit_emit/drain); read before it, a writer in
+-    # between forked the chain. Only the stateless import stays outside.
+-    entry.setdefault("hmac", None)
+-    entry.setdefault("hmac_error", None)
+-    _audit_hmac = None
+-    try:
+-        from _lib import audit_hmac as _audit_hmac
+-    except Exception as _b3_ie:
+-        entry["hmac"] = None
+-        entry["hmac_error"] = type(_b3_ie).__name__
+-
+-    line = ""
+-
+-    try:
+-        with FileLock(paths["lock"], timeout=2.5):
+-            # Rotate inside the lock so writers can't race past a rename
+-            rotated_to = rotate_if_needed(paths["log"], threshold_bytes)
+-            # ADR-055-AMEND-2 marker as line 1 BEFORE our HMAC reads the predecessor;
+-            # no marker on disk => never sign over a last-hmac that may name it.
+-            marker_ok = rotated_to is None or _emit_rotation_marker_under_lock(
+-                paths["log"], rotated_to, paths["err"])
+-            _b3_hmac_digest_bytes = None
+-            if _audit_hmac is not None and not marker_ok:
+-                entry["hmac"] = None
+-                entry["hmac_error"] = "chain_reset_marker_missing"
+-            elif _audit_hmac is not None:
+-                try:
+-                    if not _audit_hmac.is_disabled():
+-                        _b3_key = _audit_hmac.get_or_create_key()
+-                        _b3_prev = _audit_hmac.read_prev_hmac()  # WITH the lock held
+-                        _b3_hmac_digest_bytes = _audit_hmac.compute_entry_hmac(
+-                            _b3_key, _b3_prev,
+-                            {k: v for k, v in entry.items()
+-                             if k not in ("hmac", "hmac_error")},
+-                        )
+-                        entry["hmac"] = _audit_hmac.hex_digest(_b3_hmac_digest_bytes)
+-                except Exception as _b3_he:
+-                    _b3_hmac_digest_bytes = None
+-                    entry["hmac"] = None
+-                    entry["hmac_error"] = type(_b3_he).__name__
+-            # Serialize AFTER the hmac field is final (still under the lock).
+-            line = json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+-            try:
+-                # PLAN-024 F-sec-002 P1 fix: os.open with mode=0o600 sets perms
+-                # at create-time, closing the default-umask window between
+-                # open() and os.chmod().
+-                fd = os.open(
+-                    paths["log"],
+-                    os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+-                    0o600,
+-                )
+-                with os.fdopen(fd, "a", encoding="utf-8") as f:
+-                    f.write(line + "\n")
+-                    # PLAN-025 F-obs-002: flush + fsync so the append survives
+-                    # process/OS crash. Audit is source-of-truth for governance;
+-                    # silent loss after write() but before OS flush = forensic gap.
+-                    # Cost: one syscall per spawn (~200us). Tolerable vs the
+-                    # governance invariant "every spawn is recorded".
+-                    f.flush()
+-                    try:
+-                        os.fsync(f.fileno())
+-                    except (OSError, AttributeError):
+-                        # AttributeError on platforms without fsync; OSError on
+-                        # read-only fds or closed streams. Both acceptable — the
+-                        # write already succeeded; fsync is best-effort durability.
+-                        pass
+-                # Belt-and-braces: retighten in case file pre-existed looser
+-                try:
+-                    os.chmod(paths["log"], 0o600)
+-                except OSError:
+-                    pass
+-                # PLAN-085 Wave B.3 — update last-hmac sidecar within lock
+-                # so the next writer reads the correct prev_hmac. Best-effort.
+-                if _b3_hmac_digest_bytes is not None and _audit_hmac is not None:
+-                    try:
+-                        _audit_hmac.write_last_hmac(_b3_hmac_digest_bytes)
+-                    except Exception:
+-                        pass
+-            except OSError as e:
+-                write_breadcrumb(paths["err"], f"append failed: {e}  line={line[:200]}")
+-    except FileLockTimeout:
+-        # Fail-open: entry dropped (never chained), session never blocked;
+-        # the HMAC only exists under the lock, so the breadcrumb lacks it.
+-        line = line or json.dumps(entry, ensure_ascii=False, separators=(",", ":"))
+-        write_breadcrumb(
+-            paths["err"],
+-            f"lock timeout (stale?)  would-log={line[:200]}",
+-        )
+-    except Exception as e:  # pragma: no cover
+-        write_breadcrumb(paths["err"], f"unexpected error: {e}")
+-
+-
+-def _emit_rotation_marker_under_lock(
+-    log_path: Path, rotated_to: Path, err_path: Path
+-) -> bool:
+-    """ADR-055-AMEND-2 marker (emitter/drain helper) after OUR rotation, lock held. True =
+-    marker on disk or chain off; False = no marker on disk (when its append failed, last-hmac
+-    already names it), so the caller signs nothing over it."""
+-    try:
+-        from _lib import audit_hmac as _ah
+-        if _ah.is_disabled():
+-            return True
+-        from _lib import audit_emit as _ae
+-        if _ae._emit_chain_reset_marker_under_lock(
+-                log=log_path, previous_archive_path=str(rotated_to),
+-                rotation_trigger="size_threshold") is not None:
+-            return True
+-        why = "helper returned None"
+-    except Exception as e:
+-        why = f"{type(e).__name__}: {e}"
+-    write_breadcrumb(err_path, f"chain_reset_marker not written ({why}); "
+-                     "this agent_spawn line is left unchained")
+-    return False
+-
+-
+-# -----------------------------------------------------------------------------
+-# PLAN-155 Wave 4 — Codex host-wire audit-chain path (SENT-CX-B / ADR-161)
+-# -----------------------------------------------------------------------------
+-#
+-# Under OpenAI Codex (CEO_HOOK_ADAPTER=codex) the same audit_log.py hook is
+-# registered on the PostToolUse `*` matcher (templates/codex/hooks.json) and,
+-# via the headless `scripts/codex-exec-wrapper.sh`, is fed synthesized
+-# SessionStart/Stop bracket envelopes. The codex path reads the codex host
+-# wire through the codex adapter and appends metadata-only records to the SAME
+-# HMAC chain via `_lib.audit_emit` (the single-writer emitter that verify_chain
+-# validates). Two NEW registered actions keep the per-tool append and the
+-# turn-level backstop COUNTABLE separately (PLAN-155 Wave 4-A / Wave 4-B):
+-#
+-#   PostToolUse (any tool)  -> emit_codex_tool_recorded   (per-tool append, A)
+-#   Stop / SubagentStop     -> emit_codex_turn_ended      (turn backstop, B)
+-#   SessionStart            -> emit_session_start          (boot bracket; only
+-#                              reached via the wrapper — production codex
+-#                              routes SessionStart to SessionStart.py, so there
+-#                              is no double-count)
+-#
+-# The claude (default) path below is UNCHANGED and byte-identical when
+-# CEO_HOOK_ADAPTER is unset/`claude`. Completeness residual (named, ADR-161 +
+-# degradation page): partial shell interception means a per-tool row may be
+-# absent — absence is not evidence of absence of activity. verify_chain() and
+-# the HMAC chain shape are untouched; this path only appends.
+-
+-# Closed tool-name enum mirror of _lib.audit_emit._CODEX_TOOL_RECORDED_TOOL_NAME_ENUM.
+-# The codex adapter has already aliased apply_patch -> Write/Edit and
+-# spawn_agent -> Task before we see the event; here we only fold mcp__* down to
+-# `mcp_other` (MF-SEC-1) and leave the emitter to coerce any residual miss to
+-# `other`.
+-def _codex_tool_enum(tool_name: str) -> str:
+-    """Map a normalized codex tool name to the closed audit enum. Never raises."""
+-    if not isinstance(tool_name, str) or not tool_name:
+-        return "other"
+-    if tool_name.startswith("mcp__"):
+-        return "mcp_other"
+-    return tool_name
+-
+-
+-def _codex_audit_main(t0: float) -> int:
+-    """Codex host-wire audit append (PLAN-155 Wave 4). Exits 0 on every path.
+-
+-    Reads the codex host envelope via the codex adapter and appends the
+-    matching metadata-only action to the shared HMAC chain through
+-    `_lib.audit_emit`. Fail-open per SPEC/v1 §4 — the audit hook is
+-    observability, not an enforcement gate, so an unresolved adapter / parse
+-    error / import failure breadcrumbs and returns 0 (the completeness bound is
+-    already the named residual; a security matcher would fail CLOSED instead,
+-    but this is not one).
+-    """
+-    try:
+-        from _lib.adapters import codex as _codex_adapter
+-        from _lib import audit_emit as _audit_emit
+-    except Exception as e:  # pragma: no cover — infrastructure import failure
+-        try:
+-            write_breadcrumb(
+-                audit_paths()["err"],
+-                f"codex audit import failed (fail-open): {type(e).__name__}",
+-            )
+-        except Exception:
+-            pass
+-        return 0
+-
+-    try:
+-        event = _codex_adapter.read_post_event()
+-    except Exception as e:  # pragma: no cover — adapter never raises by contract
+-        write_breadcrumb(
+-            audit_paths()["err"],
+-            f"codex read_post_event raised (fail-open): {type(e).__name__}",
+-        )
+-        return 0
+-
+-    if getattr(event, "parse_error", None):
+-        write_breadcrumb(
+-            audit_paths()["err"],
+-            f"codex stdin parse error: {event.parse_error}",
+-        )
+-        return 0
+-
+-    # The codex wire's event name WINS over the phase arg (host adapter sets
+-    # NormalizedEvent.phase = hook_event_name). raw_payload carries the raw
+-    # codex scalars (stop_hook_active, etc.).
+-    hook_event = str(getattr(event, "phase", "") or "")
+-    raw_payload = getattr(event, "raw_payload", {}) or {}
+-    session_id = str(getattr(event, "session_id", "") or "")
+-    project_dir = str(getattr(event, "project", "") or "") or (
+-        os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+-    )
+-
+-    try:
+-        if hook_event == "PostToolUse":
+-            tool_enum = _codex_tool_enum(str(getattr(event, "tool_name", "") or ""))
+-            _audit_emit.emit_codex_tool_recorded(
+-                session_id=session_id,
+-                tool_name_enum=tool_enum,
+-                hook_event_name="PostToolUse",
+-                project=project_dir,
+-            )
+-        elif hook_event in ("Stop", "SubagentStop"):
+-            # source: derive from the event, unless the headless wrapper
+-            # overrode it (CEO_CODEX_TURN_SOURCE) to mark a wrapper bracket.
+-            derived = "subagent_stop" if hook_event == "SubagentStop" else "stop"
+-            source = os.environ.get("CEO_CODEX_TURN_SOURCE") or derived
+-            stop_active = bool(raw_payload.get("stop_hook_active"))
+-            _audit_emit.emit_codex_turn_ended(
+-                session_id=session_id,
+-                source=source,
+-                stop_hook_active=stop_active,
+-                project=project_dir,
+-            )
+-        elif hook_event == "SessionStart":
+-            # Boot bracket — only reached when the wrapper pipes a SessionStart
+-            # envelope here (production routes SessionStart -> SessionStart.py).
+-            emit_ss = getattr(_audit_emit, "emit_session_start", None)
+-            if emit_ss is not None:
+-                emit_ss(session_id=session_id, project=project_dir)
+-        # else: UserPromptSubmit / SubagentStart / PreToolUse are not this
+-        # hook's job under codex — return 0 (no append).
+-    except Exception as e:  # pragma: no cover — emit is fail-open by contract
+-        write_breadcrumb(
+-            audit_paths()["err"],
+-            f"codex audit emit failed (fail-open): {type(e).__name__}",
+-        )
+-    return 0
+-
+-
+-def _grok_tool_enum(tool_name: str) -> str:
+-    """Map a normalized grok tool name to the closed audit enum. Never raises.
+-
+-    The grok adapter has already aliased run_terminal_command -> Bash,
+-    search_replace -> Edit, spawn_subagent -> Task, etc. before we see the
+-    event; here we only fold mcp__* down to `mcp_other` (MF-SEC-1) and leave
+-    the emitter to coerce any residual miss to `other`.
+-    """
+-    if not isinstance(tool_name, str) or not tool_name:
+-        return "other"
+-    if tool_name.startswith("mcp__"):
+-        return "mcp_other"
+-    return tool_name
+-
+-
+-def _grok_audit_main(t0: float) -> int:
+-    """Grok host-wire audit append (PLAN-156 Wave 4). Exits 0 on every path.
+-
+-    Mirror of `_codex_audit_main`: reads the grok host envelope via the grok
+-    adapter and appends the matching metadata-only action to the shared HMAC
+-    chain through `_lib.audit_emit`. Fail-open per SPEC/v1 §4 — the audit hook
+-    is observability, not enforcement, so an unresolved adapter / parse error
+-    / import failure breadcrumbs and returns 0.
+-
+-    Grok specifics: PostToolUse is passive (a deny cannot block), but the
+-    append still lands. SessionEnd is unreliable in headless runs, so
+-    turn-ended accounting hangs off Stop / SubagentStop (completeness caveat,
+-    ADR-162).
+-    """
+-    try:
+-        from _lib.adapters import grok as _grok_adapter
+-        from _lib import audit_emit as _audit_emit
+-    except Exception as e:  # pragma: no cover — infrastructure import failure
+-        try:
+-            write_breadcrumb(
+-                audit_paths()["err"],
+-                f"grok audit import failed (fail-open): {type(e).__name__}",
+-            )
+-        except Exception:
+-            pass
+-        return 0
+-
+-    try:
+-        event = _grok_adapter.read_post_event()
+-    except Exception as e:  # pragma: no cover — adapter never raises by contract
+-        write_breadcrumb(
+-            audit_paths()["err"],
+-            f"grok read_post_event raised (fail-open): {type(e).__name__}",
+-        )
+-        return 0
+-
+-    if getattr(event, "parse_error", None):
+-        write_breadcrumb(
+-            audit_paths()["err"],
+-            f"grok stdin parse error: {event.parse_error}",
+-        )
+-        return 0
+-
+-    hook_event = str(getattr(event, "phase", "") or "")
+-    session_id = str(getattr(event, "session_id", "") or "")
+-    project_dir = str(getattr(event, "project", "") or "") or (
+-        os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+-    )
+-
+-    try:
+-        if hook_event == "PostToolUse":
+-            tool_enum = _grok_tool_enum(str(getattr(event, "tool_name", "") or ""))
+-            _audit_emit.emit_grok_tool_recorded(
+-                session_id=session_id,
+-                tool_name_enum=tool_enum,
+-                hook_event_name="PostToolUse",
+-                project=project_dir,
+-            )
+-        elif hook_event in ("Stop", "SubagentStop"):
+-            derived = "subagent_stop" if hook_event == "SubagentStop" else "stop"
+-            source = os.environ.get("CEO_GROK_TURN_SOURCE") or derived
+-            _audit_emit.emit_grok_turn_ended(
+-                session_id=session_id,
+-                source=source,
+-                project=project_dir,
+-            )
+-        # else: SessionStart / UserPromptSubmit / SubagentStart / PreToolUse
+-        # are not this hook's job under grok — return 0 (no append).
+-    except Exception as e:  # pragma: no cover — emit is fail-open by contract
+-        write_breadcrumb(
+-            audit_paths()["err"],
+-            f"grok audit emit failed (fail-open): {type(e).__name__}",
+-        )
+-    return 0
+-
+-
+-# -----------------------------------------------------------------------------
+-# Main entry point
+-# -----------------------------------------------------------------------------
+-
+-
+-def main() -> int:
+-    """PostToolUse hook entry point.
+-
+-    PLAN-006 Phase 1 final migration (ADR-014): uses
+-    `claude_adapter.read_post_event()` with explicit PostToolUse phase
+-    (R-SB1 fix). Reads stdin, extracts fields, redacts, writes one
+-    JSONL line to the audit log under lock. Silent on stdout. Exits 0
+-    on all paths (fail-open governance contract).
+-
+-    PLAN-155 Wave 4: under CEO_HOOK_ADAPTER=codex the codex host-wire path
+-    (`_codex_audit_main`) handles the append via `_lib.audit_emit`; the claude
+-    path below is byte-identical when the env var is unset/`claude`.
+-    """
+-    t0 = time.monotonic()
+-    _adapter = os.environ.get("CEO_HOOK_ADAPTER")
+-    if _adapter == "codex":
+-        return _codex_audit_main(t0)
+-    if _adapter == "grok":
+-        return _grok_audit_main(t0)
+-    try:
+-        event = _claude_adapter.read_post_event()
+-        if event.parse_error:
+-            paths = audit_paths()
+-            write_breadcrumb(
+-                paths["err"],
+-                f"stdin parse error: {event.parse_error}",
+-            )
+-            return 0
+-
+-        # Filter: only care about Agent spawns
+-        if event.tool_name and event.tool_name not in ("Agent", "unknown"):
+-            return 0
+-
+-        project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+-        try:
+-            project_dir = str(Path(project_dir).resolve())
+-        except OSError:
+-            pass
+-
+-        duration_ms = int((time.monotonic() - t0) * 1000)
+-        entry = build_entry(
+-            event=event, project_dir=project_dir, hook_duration_ms=duration_ms
+-        )
+-        if entry is None:
+-            return 0
+-
+-        paths = audit_paths()
+-        append_entry(
+-            entry,
+-            paths=paths,
+-            threshold_bytes=rotate_threshold(),
+-        )
+-        return 0
+-    except Exception as e:  # pragma: no cover — catastrophic
+-        try:
+-            paths = audit_paths()
+-            write_breadcrumb(paths["err"], f"fatal: {e.__class__.__name__}: {e}")
+-        except Exception:
+-            pass
+-        return 0
+-
+-
+-if __name__ == "__main__":
+-    sys.exit(main())
++# Entry payload emits "skill" key via entries_usage.py
++_FACADE_DOC = __doc__
++
++def _install_parts() -> None:
++    """Execute ordered real source fragments in this module namespace."""
++    namespace = globals()
++    directory = _FacadePath(__file__).resolve().parent / "_lib" / "_audit_log_parts"
++    for part_name in _PARTS:
++        part_path = directory / (part_name + ".py")
++        source = part_path.read_text(encoding="utf-8")
++        exec(compile(source, str(part_path), "exec"), namespace, namespace)
++
++
++_install_parts()
++__doc__ = _FACADE_DOC
++del _install_parts, _FacadePath, _FACADE_DOC
+diff --git a/.claude/hooks/check_agent_spawn.py b/.claude/hooks/check_agent_spawn.py
+index 4a98bff24676..e7d307c7346c 100755
+--- a/.claude/hooks/check_agent_spawn.py
++++ b/.claude/hooks/check_agent_spawn.py
+@@ -21,2 +21,5 @@ Without it, the spawn is blocked as a generic agent wearing a name tag.
+ 
++The extracted agent_spawn.skill_reference helpers also validate references to
++SKILL.md files under .claude/skills; this hook still guards that skill surface.
++
+ ## Output contract
+@@ -46,3 +49,3 @@ from typing import Any, Dict, List, Optional, Tuple
+ # Make the _lib package importable — hooks live in .claude/hooks/ and
+-# _lib is a sibling package.
++# _lib is a sibling package; delegated skill-reference guards cover .claude/skills/**/SKILL.md.
+ _HOOKS_DIR = Path(__file__).resolve().parent
+@@ -121,520 +124,34 @@ except Exception:  # pragma: no cover - fail-open
+ 
+-
+-# ---------------------------------------------------------------------------
+-# PLAN-078 Wave 1 — Model routing telemetry (advisory-emit-only)
+-# ---------------------------------------------------------------------------
+-# Telemetry-only: hook contract (`_lib/contract.py:112-127`) supports only
+-# allow/block/systemMessage. NO `tool_input` mutation. This block exists to
+-# observe sub-agent spawn → recommended model deltas so the CEO can hand-edit
+-# `.claude/agents/<archetype>.md` frontmatter (manual remediation path). The
+-# hard-enforcement leg is the existing VETO-floor check at
+-# check_veto_floor_for_role() which runs BEFORE this advisory.
+-#
+-# Hot-path requirement: p95 ≤ 20ms. Achieved via:
+-#   - module-level cache of task_route module + classify reference
+-#   - module-level cache of frontmatter parser
+-#   - frontmatter cache by-archetype (LRU dict, capped 64 entries) — agents
+-#     dir is small + rarely changes mid-session, so cache invalidation is
+-#     not required (next session re-imports module).
+-#
+-# Bypass: env var `CEO_MODEL_ROUTING=0` short-circuits to a no-op.
+-# Fail-open: any exception during advisory emit is swallowed (logged to
+-# breadcrumb if available) so the spawn is NEVER blocked by a routing bug.
+-
+-# Lazy task_route module reference — populated on first call. Cached.
+-_TASK_ROUTE_MODULE: Optional[Any] = None
+-_TASK_ROUTE_LOAD_FAILED: bool = False
+-
+-# In-memory cache: archetype -> (model: Optional[str], confidence: float).
+-# Cleared at module init only (process-scoped).
+-_FRONTMATTER_MODEL_CACHE: Dict[str, Tuple[Optional[str], float]] = {}
+-_FRONTMATTER_CACHE_MAX = 64
+-
+-
+-def _resolve_task_route():
+-    """Best-effort import of `.claude/scripts/task-route.py` as a module.
+-
+-    Returns the module on success, None on failure. Never raises.
+-    Cached after first call (positive or negative).
+-
+-    Resolution order:
+-      1. ``CLAUDE_PROJECT_DIR`` env var (test-friendly + adopter-respectful)
+-      2. Walk up from `_HOOKS_DIR` looking for a `.claude/scripts/task-route.py`
+-    """
+-    global _TASK_ROUTE_MODULE, _TASK_ROUTE_LOAD_FAILED
+-    if _TASK_ROUTE_MODULE is not None or _TASK_ROUTE_LOAD_FAILED:
+-        return _TASK_ROUTE_MODULE
+-    try:
+-        import importlib.util as _ilutil
+-        candidates = []
+-        env_root = os.environ.get("CLAUDE_PROJECT_DIR")
+-        if env_root:
+-            candidates.append(
+-                Path(env_root) / ".claude" / "scripts" / "task-route.py"
+-            )
+-        # Walk up from _HOOKS_DIR (stable in normal install)
+-        candidates.append(
+-            _HOOKS_DIR.parent.parent / ".claude" / "scripts" / "task-route.py"
+-        )
+-        # Walk up from this file's location (helps when the hook itself is
+-        # staged under .claude/plans/PLAN-NNN/staging/...; rare but useful
+-        # for in-tree pytest runs that exercise the staged copy).
+-        cur = Path(__file__).resolve().parent
+-        for _ in range(8):
+-            if cur == cur.parent:
+-                break
+-            cand = cur / ".claude" / "scripts" / "task-route.py"
+-            if cand.is_file():
+-                candidates.append(cand)
+-                break
+-            cur = cur.parent
+-        tr_path = next((c for c in candidates if c.is_file()), None)
+-        if tr_path is None:
+-            _TASK_ROUTE_LOAD_FAILED = True
+-            return None
+-        spec = _ilutil.spec_from_file_location("task_route", tr_path)
+-        if spec is None or spec.loader is None:
+-            _TASK_ROUTE_LOAD_FAILED = True
+-            return None
+-        mod = _ilutil.module_from_spec(spec)
+-        spec.loader.exec_module(mod)
+-        _TASK_ROUTE_MODULE = mod
+-        return mod
+-    except Exception:  # pragma: no cover - fail-open
+-        _TASK_ROUTE_LOAD_FAILED = True
+-        return None
+-
+-
+-def _read_archetype_model_frontmatter(
+-    archetype: str,
+-    agents_dir: Path,
+-) -> Tuple[Optional[str], float]:
+-    """Read `model:` field from `<agents_dir>/<archetype>.md`.
+-
+-    Returns (model, confidence). When frontmatter present + model field
+-    set, confidence is 1.0 (authoritative). When file missing or no
+-    model field, confidence is 0.0 (caller will fall back to classify).
+-    Cached by archetype to avoid re-reading on repeat spawns.
+-    """
+-    cached = _FRONTMATTER_MODEL_CACHE.get(archetype)
+-    if cached is not None:
+-        return cached
+-    result: Tuple[Optional[str], float] = (None, 0.0)
++# Components bind to the facade to preserve patched globals and isolated state.
++def _load_spawn_part(name):
+     try:
+-        if _agent_frontmatter is None:
+-            pass
+-        else:
+-            path = _agent_frontmatter.resolve_agent_file(archetype, agents_dir)
+-            if path.is_file():
+-                metadata = _agent_frontmatter.parse_agent_file(path)
+-                model = metadata.get("model", "").strip() if metadata else ""
+-                if model:
+-                    result = (model, 1.0)
+-    except Exception:  # pragma: no cover - fail-open
+-        result = (None, 0.0)
+-    # Bounded LRU-ish cache (simple FIFO eviction at cap).
+-    if len(_FRONTMATTER_MODEL_CACHE) >= _FRONTMATTER_CACHE_MAX:
+-        try:
+-            _FRONTMATTER_MODEL_CACHE.pop(next(iter(_FRONTMATTER_MODEL_CACHE)))
+-        except StopIteration:  # pragma: no cover
+-            pass
+-    _FRONTMATTER_MODEL_CACHE[archetype] = result
+-    return result
+-
+-
+-def _extract_archetype_from_payload(
+-    description: str,
+-    prompt: str,
+-    subagent_type: str,
+-) -> str:
+-    """Best-effort archetype detection from spawn payload.
++        from _lib._audit_emit_parts import install
++        install(globals(), (name,), package="_lib.agent_spawn")
++    except Exception as exc:
++        if __name__ != "__main__":
++            raise
++        print(f"[check_agent_spawn] FATAL: {type(exc).__name__}: {exc}", file=sys.stderr)
++        print(json.dumps({}))
++        sys.exit(0)
++
++_load_spawn_part("model_routing")
++_load_spawn_part("advisories")
++_load_spawn_part("prompt_rules")
+ 
+-    Order: ``subagent_type`` (Agent tool input) → first persona header
+-    line → empty string. Returns archetype slug or empty string.
+-    """
+-    if subagent_type:
+-        return subagent_type.strip().lower()
+-    # Try to find archetype from persona header in prompt
+-    if prompt:
+-        m = re.search(
+-            r"(?:archetype|role|persona):\s*([a-z][a-z0-9_-]+)",
+-            prompt,
+-            flags=re.IGNORECASE,
+-        )
+-        if m:
+-            return m.group(1).strip().lower()
+-    return ""
+-
+-
+-def _emit_model_routing_advisory(
+-    *,
+-    description: str,
+-    prompt: str,
+-    subagent_type: str,
+-    env: Optional[Dict[str, str]] = None,
+-    project_dir: Optional[str] = None,
+-) -> None:
+-    """Emit a `model_routing_advised` advisory event for this spawn.
+-
+-    PLAN-078 Wave 1. Telemetry-only — this function:
+-      - reads archetype from spawn payload
+-      - reads `.claude/agents/<archetype>.md` frontmatter `model:` if set
+-      - else calls `task_route.classify()` for a recommendation
+-      - emits via audit_emit (deny-by-default 6-field allowlist)
+-
+-    NEVER raises. Bypass via `CEO_MODEL_ROUTING=0`.
+-    """
+-    try:
+-        src_env = env if env is not None else os.environ
+-        if (src_env.get("CEO_MODEL_ROUTING") or "").strip() == "0":
+-            return  # bypass
+-        if not _AUDIT_EMIT_AVAILABLE:
+-            return  # audit emit unavailable; nothing to do
+-
+-        archetype = _extract_archetype_from_payload(
+-            description or "", prompt or "", subagent_type or ""
+-        )
+-        if not archetype:
+-            return  # generic spawn — no archetype to route
+-
+-        # Path A: agent frontmatter declared model -> authoritative.
+-        proj = project_dir or src_env.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+-        agents_dir = Path(proj) / ".claude" / "agents"
+-        fm_model, fm_conf = _read_archetype_model_frontmatter(
+-            archetype, agents_dir
+-        )
+-
+-        if fm_model:
+-            model_recommended = fm_model
+-            confidence = fm_conf
+-            applied_or_skipped = "skipped_classify_frontmatter_authoritative"
+-            override_reason = "frontmatter_model_present"
+-            task_type = "frontmatter"
+-        else:
+-            # Path B: in-process classify.
+-            tr = _resolve_task_route()
+-            if tr is None or not hasattr(tr, "classify"):
+-                # Fail-open: no recommendation available, advisory skipped.
+-                return
+-            try:
+-                desc_text = (description or "")[:8 * 1024]  # cap to 8KiB
+-                result = tr.classify(desc_text, [])
+-            except Exception:
+-                # classify() raised — fail-open with breadcrumb attempt.
+-                _emit_advisory_safe(
+-                    archetype=archetype,
+-                    task_type="classify_error",
+-                    model_recommended="",
+-                    confidence=0.0,
+-                    applied_or_skipped="skipped_classify_exception",
+-                    override_reason="classify_raised",
+-                )
+-                return
+-            classification = (
+-                result.get("classification") if isinstance(result, dict) else ""
+-            ) or ""
+-            # Conservative mapping: classify() returns S/M/L/XL classification —
+-            # not a model directly. Telemetry records the classification +
+-            # leaves model_recommended empty so PLAN-079 can decide the mapping.
+-            model_recommended = ""
+-            confidence = 0.7 if classification else 0.0
+-            applied_or_skipped = (
+-                "advisory_only_no_recommendation"
+-                if not classification
+-                else "advisory_only_classification_emitted"
+-            )
+-            override_reason = ""
+-            task_type = classification or "unclassified"
+-
+-        _emit_advisory_safe(
+-            archetype=archetype,
+-            task_type=task_type,
+-            model_recommended=model_recommended,
+-            confidence=float(confidence),
+-            applied_or_skipped=applied_or_skipped,
+-            override_reason=override_reason,
+-        )
+-    except Exception:  # pragma: no cover - fail-open invariant
+-        return
+-
+-
+-# ---------------------------------------------------------------------------
+-# PLAN-112-FOLLOWUP-persona-routing-wire W1+W2+W3 — god-mode matrix consult.
+-# ---------------------------------------------------------------------------
+-# Consult ALL THREE persona_routing APIs (AC1):
+-# `get_mode(archetype, "AUTO-05")` (recorded mode label) +
+-# `is_enforcing(archetype, "AUTO-05")` (authoritative effective-enforcing
+-# boolean that drives `decision`) + `is_killswitch_active()` (records the
+-# kill-switch state) and EMIT the resulting mode as forensic telemetry
+-# (`model_routing_enforced`). This closes the F-1.2 dead-policy (the
+-# AUTO-05 enforcing cell was never read at runtime).
+-#
+-# W3 — DEFERRED BLOCK + FLIP DOCTRINE:
+-#   The actual model-tier BLOCK is DEFERRED. A "model mismatch -> block"
+-#   predicate needs the dispatched/requested model, but the Agent hook
+-#   payload exposes only description/prompt/subagent_type/run_in_background
+-#   (SPEC/v1/hook-io.schema.md). `metadata.get("model")` (read in
+-#   `_read_archetype_model_frontmatter`) is the AGENT FRONTMATTER model, NOT
+-#   a spawn-requested model. With no requested-model input, a block would be
+-#   theater. When the harness exposes the dispatched model to PreToolUse, the
+-#   violation predicate becomes a 1-liner: fm_model present AND requested
+-#   present AND differing.
+-#   The future enable of that block is governed by OBSERVED-VIOLATION VOLUME
+-#   + a false-positive-rate threshold, NOT by elapsed calendar days
+-#   (ADR-095 / [[feedback-no-calendar-gates-ai-workflow]]). Recorded here as
+-#   the flip doctrine for a future ADR-118-AMEND-2.
+-#
+-# SECURITY INVARIANTS:
+-#   - Mode is read off the AUTHORITATIVE `subagent_type`-derived archetype
+-#     ONLY — NEVER the prompt-regex archetype (attacker-controllable; a
+-#     spoofed archetype must not flip the recorded mode). CWE-400/spoofing.
+-#   - Fail-OPEN: import/get_mode failure -> emit `model_routing_eval_error`
+-#     and return; NEVER raise in the hook hot path (CLAUDE.md §5).
+-#   - Kill-switch precedence: get_mode() already demotes an enforcing cell
+-#     to advisory under `CEO_GODMODE_ENFORCING=0`; we record the demoted
+-#     mode (advisory) so the audit reflects effective policy.
+-def _consult_model_routing_mode(
+-    *,
+-    description: str,
+-    prompt: str,
+-    subagent_type: str,
+-    env: Optional[Dict[str, str]] = None,
+-    project_dir: Optional[str] = None,
+-) -> None:
+-    """Consult the god-mode routing matrix + emit forensic telemetry.
+-
+-    CONSULT + AUDIT ONLY. NEVER blocks, NEVER mutates tool_input, NEVER
+-    raises. Consults all THREE persona_routing APIs (AC1): `get_mode`
+-    (recorded mode label), `is_enforcing` (authoritative effective-
+-    enforcing boolean that drives `decision`), and `is_killswitch_active`.
+-    Emits `model_routing_enforced` (mode/recommended_model/
+-    killswitch_armed/decision) on success, `model_routing_eval_error`
+-    (decision=eval_error) on any infra failure (fail-open).
+-    """
+-    try:
+-        src_env = env if env is not None else os.environ
+-        if not _AUDIT_EMIT_AVAILABLE:
+-            return  # nothing to audit against; consult is observability-only
+-
+-        # AUTHORITATIVE source ONLY — subagent_type. A prompt-regex archetype
+-        # is attacker-controllable and must not flip the recorded mode.
+-        archetype = (subagent_type or "").strip().lower()
+-        if not archetype:
+-            return  # no authoritative archetype -> no mode to record
+-
+-        session_id = src_env.get("CLAUDE_SESSION_ID", "") or ""
+-        proj = project_dir or src_env.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+-
+-        # Fail-OPEN guard around the matrix consult.
+-        try:
+-            if _persona_routing is None:
+-                raise RuntimeError("persona_routing import unavailable")
+-            # NEVER read _PRIMITIVE_DEFAULT_MODE directly — get_mode /
+-            # is_enforcing honor the kill-switch demotion internally.
+-            # All THREE persona_routing APIs are consulted (AC1):
+-            #   - get_mode      -> the effective (possibly demoted) mode label
+-            #                      recorded verbatim in the emit
+-            #   - is_enforcing  -> the AUTHORITATIVE effective-enforcing boolean
+-            #                      that drives `decision` (kill-switch already
+-            #                      folded in: returns False when demoted)
+-            #   - is_killswitch_active -> records whether the kill-switch armed
+-            mode = _persona_routing.get_mode(archetype, "AUTO-05")
+-            is_enforcing = bool(
+-                _persona_routing.is_enforcing(archetype, "AUTO-05")
+-            )
+-            killswitch_armed = bool(_persona_routing.is_killswitch_active())
+-        except Exception:  # noqa: BLE001 — fail-open per CLAUDE.md §5
+-            try:
+-                _audit_emit.emit_generic(
+-                    "model_routing_eval_error",
+-                    archetype=archetype[:64],
+-                    reason_code="persona_routing_eval_failed",
+-                    decision="eval_error",
+-                    session_id=session_id,
+-                    project=str(proj)[:256],
+-                )
+-            except Exception:  # noqa: BLE001
+-                pass
+-            return
+-
+-        # recommended_model: best-effort authoritative agent-frontmatter
+-        # model for this archetype (NOT a spawn-requested model). "" when
+-        # absent. Reuses the cached frontmatter reader.
+-        recommended_model = ""
+-        try:
+-            agents_dir = Path(proj) / ".claude" / "agents"
+-            fm_model, _conf = _read_archetype_model_frontmatter(
+-                archetype, agents_dir
+-            )
+-            recommended_model = (fm_model or "")[:64]
+-        except Exception:  # noqa: BLE001 — telemetry enrichment is optional
+-            recommended_model = ""
+-
+-        # decision enum: enforce_telemetry | advisory | eval_error.
+-        # NO `block` value — block deferred (§2.4). Derived from the
+-        # AUTHORITATIVE is_enforcing() boolean (NOT a re-derivation from
+-        # the `mode` string), so the kill-switch demotion already folded
+-        # into is_enforcing() drives the decision. `mode` (possibly
+-        # demoted to "advisory" by get_mode) is still recorded verbatim.
+-        decision = "enforce_telemetry" if is_enforcing else "advisory"
+-
+-        try:
+-            _audit_emit.emit_generic(
+-                "model_routing_enforced",
+-                archetype=archetype[:64],
+-                mode=str(mode)[:16],
+-                recommended_model=recommended_model,
+-                killswitch_armed=killswitch_armed,
+-                decision=decision,
+-                session_id=session_id,
+-                project=str(proj)[:256],
+-            )
+-        except Exception:  # noqa: BLE001 — fail-open
+-            return
+-    except Exception:  # pragma: no cover — fail-open invariant
+-        return
+-
+-
+-# PLAN-091 Wave A.4 (W3.1) — archetype → mcp_routing task_class heuristic.
+-#
+-# Maps the spawn's archetype to one of the 4 task_class strings declared in
+-# `_lib/mcp_routing._ROUTING_TABLE`. mcp_routing.resolve() emits its own
+-# `mcp_route_advised` advisory (PLAN-086 Wave D) — the spawn-hook wire only
+-# needs to trigger the resolver at the right callsite. NO mapping fallthrough
+-# = NO emit (advisory-only; avoid noise on every spawn).
+-_MCP_ARCHETYPE_TASK_CLASS_HINTS: Tuple[Tuple[Tuple[str, ...], str], ...] = (
+-    # ORDER MATTERS — first match wins. More-specific archetype slugs
+-    # (finops/seo/crypto) come BEFORE the bare "architect" pattern so
+-    # composite slugs like "llm-finops-architect" or "crypto-research-
+-    # analyst" route to the more specific MCP server bundle.
+-    (("finops", "cost", "budget"), "finops"),
+-    (("seo", "ahrefs", "similarweb"), "seo_research"),
+-    (("crypto", "lunarcrush", "blockchain"), "crypto_research"),
+-    (("architect", "arch-"), "arch"),
+-)
+-
+-
+-# PLAN-091 Wave A.5 (W3.3) — archetype-hint patterns triggering a
+-# `specialization_promoted` advisory when subagent_type == general-purpose.
+-# Match is FIRST-HIT, not exhaustive — keeps emit volume bounded. Hints
+-# are lowercase substring matches on (description + prompt).
+-_PROMOTION_ARCHETYPE_HINTS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+-    ("performance-engineer",
+-     ("latency", "p95", "p99", "profile", "memory leak", "throughput",
+-      "gc tuning", "hot path")),
+-    ("security-engineer",
+-     ("jwt", "oauth", "authentication", "vulnerability", "owasp",
+-      "xss", "sql injection", "csrf", "rate limiting")),
+-    ("qa-architect",
+-     ("test strategy", "mutation testing", "flake", "regression",
+-      "property-based", "fuzz", "contract test")),
+-    ("code-reviewer",
+-     ("merge gate", "code review", "veto", "review checklist")),
+-    ("incident-commander",
+-     ("incident commander", "severity classification", "all-clear",
+-      "paging policy", "post-incident review")),
+-    ("identity-trust-architect",
+-     ("token rotation", "session lifecycle", "rbac", "abac",
+-      "service-to-service trust", "mtls")),
+-    ("threat-detection-engineer",
+-     ("mitre att&ck", "siem rule", "detection rule", "alert deduplication",
+-      "purple team", "threat hunting")),
+-    ("devops",
+-     ("github actions", "sha-pin", "ci/cd pipeline", "rollback strategy",
+-      "secret rotation")),
+-)
+-
+-
+-def _emit_mcp_routing_advisory(
+-    *,
+-    description: str,
+-    prompt: str,
+-    subagent_type: str,
+-    env: Optional[Dict[str, str]] = None,
+-) -> None:
+-    """PLAN-091 Wave A.4 (W3.1) — emit `mcp_route_advised` for this spawn.
++@dataclass
++class Decision:
++    """Typed result of the governance check."""
+ 
+-    Derives task_class from the spawn's archetype via the
+-    ``_MCP_ARCHETYPE_TASK_CLASS_HINTS`` table, then delegates to
+-    ``_lib/mcp_routing.resolve()`` which performs its own emit (per
+-    PLAN-086 Wave D). Bypass: ``CEO_MCP_ROUTING_HOOK=0`` (parallel to
+-    PLAN-078 model-routing bypass; per-server kill switches live inside
+-    mcp_routing.resolve()).
++    allow: bool
++    reason: Optional[str] = None
+ 
+-    NEVER raises. Advisory-only — never mutates tool_input, never blocks.
+-    """
+-    try:
+-        src_env = env if env is not None else os.environ
+-        if (src_env.get("CEO_MCP_ROUTING_HOOK") or "").strip() == "0":
+-            return
+-        archetype = _extract_archetype_from_payload(
+-            description or "", prompt or "", subagent_type or ""
++    def to_json(self) -> str:
++        if self.allow:
++            return json.dumps({}, ensure_ascii=False)  # schema-compliant allow
++        return json.dumps(
++            {"decision": "block", "reason": self.reason or ""},
++            ensure_ascii=False,
+         )
+-        if not archetype:
+-            return
+-        archetype_lc = archetype.lower()
+-        task_class: Optional[str] = None
+-        for hints, mapped in _MCP_ARCHETYPE_TASK_CLASS_HINTS:
+-            if any(h in archetype_lc for h in hints):
+-                task_class = mapped
+-                break
+-        if task_class is None:
+-            return  # no mapping; emit volume stays bounded
+-        try:
+-            from _lib import mcp_routing as _mcpr  # type: ignore
+-            _mcpr.resolve(task_class)  # resolver fires advisory emit
+-        except Exception:  # pragma: no cover - fail-open
+-            return
+-    except Exception:  # pragma: no cover - fail-open
+-        return
+ 
+ 
+-def _emit_promotion_advisory(
+-    *,
+-    description: str,
+-    prompt: str,
+-    subagent_type: str,
+-    env: Optional[Dict[str, str]] = None,
+-) -> None:
+-    """PLAN-091 Wave A.5 (W3.3) — emit `specialization_promoted` when a
+-    ``general-purpose`` spawn matches a specialist archetype heuristic.
+-
+-    Advisory ONLY — does NOT auto-spawn the suggested specialist. Records
+-    the suggestion in audit log so PLAN-094+ can promote SEMI to AUTO once
+-    confidence is established. Bypass: ``CEO_PROMOTION_HEURISTIC=0``.
+-
+-    First-hit match wins (bounded emit volume). NEVER raises.
+-    """
+-    try:
+-        src_env = env if env is not None else os.environ
+-        if (src_env.get("CEO_PROMOTION_HEURISTIC") or "").strip() == "0":
+-            return
+-        if (subagent_type or "").strip().lower() != "general-purpose":
+-            return
+-        if not _AUDIT_EMIT_AVAILABLE:
+-            return
+-        text = ((description or "") + "\n" + (prompt or "")).lower()
+-        text = text[: 8 * 1024]  # 8KiB cap on hint-scan window
+-        for suggested, hints in _PROMOTION_ARCHETYPE_HINTS:
+-            for hint in hints:
+-                if hint in text:
+-                    try:
+-                        # PLAN-088 R2 iter-2 STRICKEN specialization_promoted
+-                        # as separate action; routed via mcp_route_advised
+-                        # with signal_source discriminator per audit_emit.py
+-                        # 5099-5105 contract.
+-                        _audit_emit.emit_generic(
+-                            "mcp_route_advised",
+-                            session_id="",
+-                            task_class="promotion",
+-                            suggested_servers=suggested[:64],
+-                            kill_switch_overrides="",
+-                            signal_source="specialization_promoted",
+-                        )
+-                    except Exception:  # pragma: no cover - fail-open
+-                        pass
+-                    return  # first-hit wins
+-    except Exception:  # pragma: no cover - fail-open
+-        return
+-
+ 
+@@ -707,1655 +224,2 @@ def _emit_cookbook_pattern_advisory(
+ 
+-def _emit_advisory_safe(
+-    *,
+-    archetype: str,
+-    task_type: str,
+-    model_recommended: str,
+-    confidence: float,
+-    applied_or_skipped: str,
+-    override_reason: str,
+-) -> None:
+-    """Wrapper around audit_emit.emit_generic for `model_routing_advised`.
+-
+-    Allowlist enforced by audit_emit dispatcher (defense-in-depth). Caller
+-    only fills the 6 contract fields; ts/session/project added by emit_generic.
+-
+-    Codex W1+W2 fix-pack #2: ``confidence`` (float 0..1) is converted at
+-    emission time to ``confidence_basis_points`` (int 0..1000) — floats
+-    are forbidden in HMAC-covered fields (canonical_json invariant). The
+-    in-process API surface still accepts ``confidence: float`` for
+-    ergonomic continuity; conversion is colocated with the emit call.
+-    """
+-    try:
+-        if not _AUDIT_EMIT_AVAILABLE:
+-            return
+-        # Convert float confidence -> int basis-points. NaN / out-of-range
+-        # collapse to 0 (lower clamp in audit_emit emitter).
+-        try:
+-            conf_f = float(confidence)
+-        except (TypeError, ValueError):
+-            conf_f = 0.0
+-        if conf_f != conf_f or conf_f in (float("inf"), float("-inf")):
+-            conf_f = 0.0
+-        if conf_f < 0.0:
+-            conf_f = 0.0
+-        if conf_f > 1.0:
+-            conf_f = 1.0
+-        confidence_bp = int(round(conf_f * 1000.0))
+-        # Length-bound caller strings (defense-in-depth on adopter drift).
+-        _audit_emit.emit_generic(
+-            "model_routing_advised",
+-            archetype=(archetype or "")[:64],
+-            task_type=(task_type or "")[:32],
+-            model_recommended=(model_recommended or "")[:64],
+-            confidence_basis_points=confidence_bp,
+-            applied_or_skipped=(applied_or_skipped or "")[:64],
+-            override_reason=(override_reason or "")[:128],
+-        )
+-    except Exception:  # pragma: no cover - fail-open
+-        return
+-
+-
+-# Persona header patterns — must appear at the START of a line.
+-_PERSONA_HEADER_RE = re.compile(
+-    r"^(?:PERSONA:|## AGENT PROFILE|## PERSONA)",
+-    flags=re.MULTILINE,
+-)
+-
+-# Governance requirement: named spawns must include this literal section.
+-_SKILL_CONTENT_MARKER = "## SKILL CONTENT"
+-
+-# PLAN-019 Phase 2B P1-SEC-B — minimum body size (non-whitespace bytes)
+-# required between `## SKILL CONTENT` and the next `##` heading / EOF for
+-# the marker to count as a real skill-content section. Rejects empty-body,
+-# stub-only, or single-line "see file X" shells.
+-_SKILL_CONTENT_MIN_BYTES = 256
+-
+-# Regex to find the marker ON ITS OWN LINE (ignoring trailing whitespace).
+-_SKILL_CONTENT_MARKER_RE = re.compile(
+-    r"^## SKILL CONTENT[ \t]*$",
+-    flags=re.MULTILINE,
+-)
+-
+-# Regex to find the next `##`-level heading (to bound the body extraction).
+-_NEXT_H2_RE = re.compile(r"^##[ \t]", flags=re.MULTILINE)
+-
+-# Code-fence markers (``` or ~~~ with optional language tag).
+-_CODE_FENCE_RE = re.compile(r"^(?:```|~~~)", flags=re.MULTILINE)
+-
+-# HTML comment pair — non-greedy across lines.
+-_HTML_COMMENT_RE = re.compile(r"<!--.*?-->", flags=re.DOTALL)
+-
+-# Regex to extract ## SPEC CONTEXT block content (between its header and next
+-# ## heading or EOF). Used by _sanitize_spec_context_advisory() below.
+-_SPEC_CONTEXT_HEADER_RE = re.compile(
+-    r"^##[ \t]+SPEC[ \t]+CONTEXT[ \t]*$",
+-    flags=re.MULTILINE,
+-)
+-
+-
+-def _sanitize_spec_context_advisory(prompt: str, env=None) -> None:
+-    """PLAN-113 WIRE-DEADMOD / ADR-089 SEC-P0-01 — sanitize ## SPEC CONTEXT
+-    payload and emit telemetry advisory.
+-
+-    Extracts the ## SPEC CONTEXT block from the spawn prompt, runs it
+-    through spec_context_sanitizer.sanitize(), and emits a
+-    `spec_context_sanitized` audit-emit event so sentinel violations,
+-    truncation, and control-char counts are observable.
+-
+-    ADVISORY ONLY — never blocks the spawn. Fail-open on any exception.
+-    Kill-switch: CEO_SPEC_CTX_SANITIZER_ENABLED=0.
+-    """
+-    try:
+-        if not _SPEC_CTX_SANITIZER_AVAILABLE or not _AUDIT_EMIT_AVAILABLE:
+-            return
+-        src_env = env if env is not None else os.environ
+-        val = (src_env.get("CEO_SPEC_CTX_SANITIZER_ENABLED") or "1").strip()
+-        if val in ("0", "false", "False", "no", "off"):
+-            return
+-        if not prompt:
+-            return
+-        # Extract ## SPEC CONTEXT block content
+-        m = _SPEC_CONTEXT_HEADER_RE.search(prompt)
+-        if m is None:
+-            return  # no SPEC CONTEXT block — nothing to sanitize
+-        block_start = m.end()
+-        next_h2 = _NEXT_H2_RE.search(prompt, block_start)
+-        block_end = next_h2.start() if next_h2 else len(prompt)
+-        spec_payload = prompt[block_start:block_end]
+-
+-        result = _spec_ctx_sanitizer.sanitize(spec_payload)
+-
+-        # Emit telemetry (advisory only; sentinel violations logged for CEO)
+-        try:
+-            _audit_emit.emit_generic(
+-                "spec_context_sanitized",
+-                original_bytes=result.original_bytes,
+-                cleaned_bytes=result.cleaned_bytes,
+-                truncated=1 if result.truncated else 0,
+-                sentinel_violations=len(result.sentinel_violations),
+-                control_chars_stripped=result.control_chars_stripped,
+-                bidi_zw_chars_stripped=result.bidi_zw_chars_stripped,
+-                # PLAN-133 A2 — surface the Tag-block count too (allowlisted in
+-                # audit_emit §7d). Harmless if the SanitizeResult lacks the field
+-                # (getattr default 0) so this stays import-order tolerant.
+-                tag_chars_stripped=getattr(result, "tag_chars_stripped", 0),
+-                header_escape_count=result.header_escape_count,
+-            )
+-        except Exception:  # pragma: no cover - fail-open
+-            pass
+-    except Exception:  # pragma: no cover - fail-open
+-        return
+-
+-
+-def _enforce_spec_context_unicode(prompt: str, env=None):
+-    """PLAN-133 A2 — fail-CLOSED invisible-unicode guard on the spawn prompt.
+-
+-    Scans the WHOLE spawn prompt (not just the ## SPEC CONTEXT block — an attacker
+-    can smuggle Tag-block/bidi chars anywhere in the named-spawn body) for invisible
+-    /smuggling unicode (control / bidi / zero-width / U+E0000-E007F Tag-block).
+-
+-    Default-OFF (doctrine #1): the BLOCK fires only when CEO_UNICODE_HARDBLOCK=='1'
+-    in the import-time trusted_env snapshot. Otherwise advisory — the breadcrumb is
+-    emitted with enforced=0 (measure-first) and None is returned (no block).
+-
+-    Returns a block-reason string when enforced AND a detection fires, else None.
+-    Fail-OPEN on any infra exception (never blocks the session on a scanner bug).
+-    Master kill: CEO_SOTA_DISABLE=1 forces advisory.
+-    """
+-    try:
+-        if not _SPEC_CTX_SANITIZER_AVAILABLE:
+-            return None
+-        src_env = env if env is not None else os.environ
+-        if not prompt:
+-            return None
+-        # Default-OFF flag, read from the trusted_env snapshot when available so a
+-        # late-set value can't toggle enforcement mid-process. Master kill wins.
+-        if (src_env.get("CEO_SOTA_DISABLE") or "").strip() == "1":
+-            enforce = False
+-        else:
+-            enforce = _unicode_hardblock_enforced(src_env)
+-
+-        result = _spec_ctx_sanitizer.sanitize(prompt)
+-        count = _spec_ctx_sanitizer.invisible_unicode_count(result)
+-        if count <= 0:
+-            return None  # clean — nothing to do
+-
+-        unicode_class = _spec_ctx_sanitizer.classify_invisible_unicode(result)
+-
+-        # Emit the closed-enum breadcrumb on BOTH advisory and enforced paths
+-        # (the denominator must be real from day one — no 0/0/0 trap).
+-        if _AUDIT_EMIT_AVAILABLE:
+-            try:
+-                _audit_emit.emit_generic(
+-                    "invisible_unicode_blocked",
+-                    surface="spawn",
+-                    unicode_class=unicode_class,
+-                    char_count=int(count),
+-                    enforced=1 if enforce else 0,
+-                )
+-            except Exception:  # pragma: no cover - fail-open
+-                pass
+-
+-        if not enforce:
+-            return None  # advisory only
+-
+-        return (
+-            "GOVERNANCE: invisible_unicode_blocked: the spawn prompt contains "
+-            f"{count} invisible/smuggling character(s) (class={unicode_class}: "
+-            "control / bidi / zero-width / Unicode-Tags-block). These are "
+-            "removed by the sanitizer and rejected fail-CLOSED before review. "
+-            "Remove the hidden characters and re-spawn. To run advisory-only, "
+-            "unset CEO_UNICODE_HARDBLOCK."
+-        )
+-    except Exception:  # pragma: no cover - fail-open invariant
+-        return None
+-
+-
+-def _unicode_hardblock_enforced(src_env) -> bool:
+-    """True iff CEO_UNICODE_HARDBLOCK=='1' (PLAN-133 A2). Prefers the trusted_env
+-    snapshot; falls back to the passed env dict. Pure; never raises."""
+-    try:
+-        from _lib import trusted_env as _te  # noqa: E402
+-        val = _te.get_trusted("CEO_UNICODE_HARDBLOCK")
+-        if val is not None:
+-            return (val or "").strip() == "1"
+-    except Exception:  # pragma: no cover
+-        pass
+-    return (src_env.get("CEO_UNICODE_HARDBLOCK") or "").strip() == "1"
+-
+-
+-def _emit_spawn_confidence_advisory(
+-    *,
+-    action_type: str,
+-    is_named_spawn: bool,
+-    env=None,
+-) -> None:
+-    """PLAN-113 WIRE-DEADMOD — confidence_labels (PLAN-083 Wave 1.10).
+-
+-    Classifies the spawn as an action and emits `spawn_confidence_advisory`
+-    so recommender / receipt formatter surfaces have a hook-level confidence
+-    signal for governance dashboards.
+-
+-    ADVISORY ONLY — never blocks. Fail-open on any exception.
+-    Kill-switch: CEO_SPAWN_CONFIDENCE_ENABLED=0.
+-    """
+-    try:
+-        if not _CONFIDENCE_LABELS_AVAILABLE or not _AUDIT_EMIT_AVAILABLE:
+-            return
+-        src_env = env if env is not None else os.environ
+-        val = (src_env.get("CEO_SPAWN_CONFIDENCE_ENABLED") or "1").strip()
+-        if val in ("0", "false", "False", "no", "off"):
+-            return
+-
+-        ctx = {"canonical": False}
+-        conf = _confidence_labels.classify(action_type, ctx)
+-        marker = _confidence_labels.as_emoji_free_marker(conf)
+-
+-        try:
+-            _audit_emit.emit_generic(
+-                "spawn_confidence_advisory",
+-                action_type=(action_type or "")[:32],
+-                confidence_level=(conf.level or "")[:32],
+-                confidence_marker=(marker or "")[:32],
+-                reason_code=(conf.reason_code or "")[:64],
+-                is_named_spawn=1 if is_named_spawn else 0,
+-            )
+-        except Exception:  # pragma: no cover - fail-open
+-            pass
+-    except Exception:  # pragma: no cover - fail-open
+-        return
+-
+-
+-def _strip_fenced_and_comments(text: str) -> str:
+-    """Return a version of ``text`` with HTML comments removed and
+-    fenced-code-block content masked so marker/body searches cannot
+-    match inside them (P1-SEC-B bypass hardening)."""
+-    stripped = _HTML_COMMENT_RE.sub("", text)
+-    out_parts = []
+-    in_fence = False
+-    for line in stripped.splitlines(keepends=True):
+-        if _CODE_FENCE_RE.match(line):
+-            in_fence = not in_fence
+-            out_parts.append(line)
+-            continue
+-        if in_fence:
+-            out_parts.append("".join(
+-                "\n" if c == "\n" else " " for c in line
+-            ))
+-        else:
+-            out_parts.append(line)
+-    return "".join(out_parts)
+-
+-
+-def _has_skill_content(prompt: str) -> bool:
+-    """True iff ``prompt`` contains a real `## SKILL CONTENT` section.
+-
+-    Enforces four bypass-resistant checks (P1-SEC-B):
+-    1. Marker on own line (not inline narrative).
+-    2. Marker NOT inside HTML comment.
+-    3. Marker NOT inside fenced code block.
+-    4. >=_SKILL_CONTENT_MIN_BYTES non-ws bytes between marker and next ##.
+-    """
+-    if not prompt:
+-        return False
+-    return _has_skill_content_sanitized(_strip_fenced_and_comments(prompt))
+-
+-
+-def _has_skill_content_sanitized(sanitized: str) -> bool:
+-    """Shared ``## SKILL CONTENT`` check against already-sanitized text.
+-
+-    PLAN-023 Phase F (F-perf-003) — split out so ``decide`` and other
+-    callers can share a single ``_strip_fenced_and_comments`` pass
+-    rather than re-stripping inside each sub-check.
+-    """
+-    match = _SKILL_CONTENT_MARKER_RE.search(sanitized)
+-    if match is None:
+-        return False
+-    body_start = match.end()
+-    next_heading = _NEXT_H2_RE.search(sanitized, body_start)
+-    body_end = next_heading.start() if next_heading else len(sanitized)
+-    body = sanitized[body_start:body_end]
+-    non_ws_bytes = sum(1 for c in body if not c.isspace())
+-    return non_ws_bytes >= _SKILL_CONTENT_MIN_BYTES
+-
+-
+-# =============================================================================
+-# PLAN-020 Phase 2 — `## SKILL REFERENCE` additive sentinel (ADR-051)
+-# =============================================================================
+-#
+-# Parallel accept-path. Does NOT replace `_has_skill_content`. Hardened
+-# against 14 attack classes documented in ADR-051 §Threat model.
+-#
+-# Hook recognition order in decide():
+-#   1. If prompt has `## SKILL REFERENCE` → strict validation, fail-CLOSED.
+-#   2. Else if prompt has `## SKILL CONTENT` → inline path (existing P1-SEC-B).
+-#   3. Else block with the legacy `missing_skill_content` reason.
+-
+-# Module-level toggles (Phase revert = single-line flip to False).
+-ENABLE_NATIVE_SUBAGENTS = True
+-ENABLE_SKILL_REFERENCE_MODE = True
+-
+-# Reference sentinel header — must be on own line, not inside fences.
+-_SKILL_REFERENCE_HEADER_RE = re.compile(
+-    r"^##[ \t]+SKILL[ \t]+REFERENCE[ \t]*$",
+-    flags=re.MULTILINE,
+-)
+-
+-# Reference body line: `@<path> sha256=<64-hex>`. Path may be relative.
+-_SKILL_REFERENCE_LINE_RE = re.compile(
+-    r"^@(?P<path>\S+)[ \t]+sha256=(?P<hash>[0-9a-f]{64})\b",
+-    flags=re.MULTILINE,
+-)
+-
+-# Caps + thresholds (ADR-051 §Synchronous validation).
+-_SKILL_REFERENCE_MAX_BYTES = 1_048_576  # 1 MiB DoS cap
+-_SKILL_REFERENCE_MIN_BODY_BYTES = 512   # distinct from inline 256 floor
+-
+-# 12 telemetry reason codes (ADR-051 §Telemetry reason codes).
+-REASON_REFERENCE_MISSING = "reference_missing"
+-REASON_REFERENCE_UNSAFE_PATH = "reference_unsafe_path"
+-REASON_REFERENCE_HASH_MISMATCH = "reference_hash_mismatch"
+-REASON_REFERENCE_SYMLINK_REFUSED = "reference_symlink_refused"
+-REASON_REFERENCE_TOO_LARGE = "reference_too_large"
+-REASON_REFERENCE_REDACTION_HIT = "reference_redaction_hit"
+-REASON_REFERENCE_WRONG_FILENAME = "reference_wrong_filename"
+-REASON_REFERENCE_MISSING_FRONTMATTER = "reference_missing_frontmatter"
+-REASON_REFERENCE_BYTE_FLOOR_UNDERFLOW = "reference_byte_floor_underflow"
+-REASON_REFERENCE_UNICODE_NORMALIZATION_MISMATCH = (
+-    "reference_unicode_normalization_mismatch"
+-)
+-REASON_REFERENCE_OUTSIDE_SKILLS_ROOT = "reference_outside_skills_root"
+-REASON_MISSING_SKILL_CONTENT = "missing_skill_content"  # legacy/inline
+-
+-# Session 32 BUGFIX — _lib.redact.redact_secrets whitespace-collapses
+-# always; equality check with original text is not a valid "secret
+-# detected" signal. Instead we look for specific replacement tokens
+-# that `_redact._PATTERNS` inserts when a secret matches.
+-_SECRET_TOKENS_IN_OUTPUT = frozenset({
+-    "[JWT]",
+-    "[API_KEY]",
+-    "[GITHUB_PAT]",
+-    "[AWS_KEY]",
+-    "[TOKEN]",
+-    "[URL_WITH_CREDS]",
+-    "[HEX_SECRET]",
+-    "[REDACTED]",
+-    "[SLACK_BOT]",
+-    "[STRIPE_KEY]",
+-    "[GOOGLE_REFRESH]",
+-    # PLAN-024 F-hooks-001 P0 fix: redact.py replaces the PEM header
+-    # with "[SSH_PRIVATE_KEY_HEADER]" — matching raw "-----BEGIN" will
+-    # never fire after redaction. Check the replacement token instead.
+-    "[SSH_PRIVATE_KEY_HEADER]",
+-})
+-
+-
+-def _is_enabled(env_var: str, default: bool, env: Optional[dict] = None) -> bool:
+-    """Live read of an env-var toggle with a module default fallback.
+-
+-    Allows runtime opt-out via env (`CEO_SKILL_REFERENCE_MODE=0`,
+-    `CEO_NATIVE_SUBAGENTS=0`) without restarting Claude Code.
+-    `CEO_SOTA_DISABLE=1` is the master kill — overrides everything.
+-    """
+-    src_env = env if env is not None else os.environ
+-    if (src_env.get("CEO_SOTA_DISABLE") or "").strip() == "1":
+-        return False
+-    raw = (src_env.get(env_var) or "").strip()
+-    if raw == "":
+-        return default
+-    return raw not in ("0", "false", "FALSE", "False", "no", "off")
+-
+-
+-def _has_valid_frontmatter_with_name(text: str) -> bool:
+-    """Stdlib-only frontmatter parser (no PyYAML).
+-
+-    Returns True iff the file starts with `---` on first line, has a
+-    closing `---` line, and has at least one `name: <value>` line.
+-    """
+-    if not text.startswith("---\n") and not text.startswith("---\r\n"):
+-        return False
+-    body_start = 4 if text.startswith("---\n") else 5
+-    closing = text.find("\n---", body_start)
+-    if closing == -1:
+-        return False
+-    fm_block = text[body_start:closing]
+-    return bool(re.search(r"^name:\s*\S+", fm_block, flags=re.MULTILINE))
+-
+-
+-def _skill_ref_parse_sentinel(
+-    sanitized: str,
+-) -> Tuple[Optional[Tuple[bool, Optional[str], Optional[str]]], Optional[str], Optional[str]]:
+-    """Sub-checks 1-2: locate `## SKILL REFERENCE` header + body.
+-
+-    Returns ``(error_tuple, raw_path, expected_hash)``. On failure,
+-    ``error_tuple`` is populated and the other fields are None.
+-    """
+-    if not _SKILL_REFERENCE_HEADER_RE.search(sanitized):
+-        return (
+-            (False, REASON_REFERENCE_MISSING, "no `## SKILL REFERENCE` header"),
+-            None,
+-            None,
+-        )
+-    body_match = _SKILL_REFERENCE_LINE_RE.search(sanitized)
+-    if not body_match:
+-        return (
+-            (
+-                False,
+-                REASON_REFERENCE_MISSING,
+-                "header found but no `@<path> sha256=<hex>` body",
+-            ),
+-            None,
+-            None,
+-        )
+-    return None, body_match.group("path"), body_match.group("hash").lower()
+-
+-
+-def _skill_ref_resolve_path(
+-    raw_path: str,
+-    repo_root: Path,
+-) -> Tuple[Optional[Tuple[bool, Optional[str], Optional[str]]], Optional[Path], Optional[Path]]:
+-    """Sub-checks 3-5: resolve path, confirm under skills root, filename = SKILL.md, not symlink.
+-
+-    Returns ``(error_tuple, candidate, resolved)``. On failure, the
+-    latter two are None.
+-    """
+-    skills_root = (repo_root / ".claude" / "skills").resolve()
+-    candidate = Path(raw_path)
+-    if not candidate.is_absolute():
+-        candidate = repo_root / raw_path
+-    try:
+-        resolved = candidate.resolve(strict=True)
+-    except (FileNotFoundError, OSError) as exc:
+-        return (
+-            (False, REASON_REFERENCE_MISSING, f"resolve failed: {exc}"),
+-            None,
+-            None,
+-        )
+-    try:
+-        resolved.relative_to(skills_root)
+-    except ValueError:
+-        return (
+-            (
+-                False,
+-                REASON_REFERENCE_OUTSIDE_SKILLS_ROOT,
+-                f"{resolved} not under {skills_root}",
+-            ),
+-            None,
+-            None,
+-        )
+-    if resolved.name != "SKILL.md":
+-        return (
+-            (
+-                False,
+-                REASON_REFERENCE_WRONG_FILENAME,
+-                f"filename is {resolved.name!r}, expected 'SKILL.md'",
+-            ),
+-            None,
+-            None,
+-        )
+-    if candidate.is_symlink():
+-        return (
+-            (
+-                False,
+-                REASON_REFERENCE_SYMLINK_REFUSED,
+-                f"{candidate} is a symlink",
+-            ),
+-            None,
+-            None,
+-        )
+-    return None, candidate, resolved
+-
+-
+-def _skill_ref_validate_unicode(
+-    candidate: Path,
+-) -> Optional[Tuple[bool, Optional[str], Optional[str]]]:
+-    """Sub-check 6: NFC unicode normalization. Returns error_tuple or None."""
+-    raw_str = str(candidate)
+-    nfc_str = unicodedata.normalize("NFC", raw_str)
+-    if nfc_str != raw_str:
+-        return (
+-            False,
+-            REASON_REFERENCE_UNICODE_NORMALIZATION_MISMATCH,
+-            "path not NFC-normalized",
+-        )
+-    return None
+-
+-
+-def _skill_ref_read_bounded(
+-    resolved: Path,
+-) -> Tuple[Optional[Tuple[bool, Optional[str], Optional[str]]], Optional[bytes], Optional[str]]:
+-    """Sub-checks 7-8: size cap + body floor on non-ws bytes.
+-
+-    Returns ``(error_tuple, content_bytes, decoded_text)``.
+-    """
+-    try:
+-        size = resolved.stat().st_size
+-    except OSError as exc:
+-        return (
+-            (False, REASON_REFERENCE_MISSING, f"stat failed: {exc}"),
+-            None,
+-            None,
+-        )
+-    if size > _SKILL_REFERENCE_MAX_BYTES:
+-        return (
+-            (
+-                False,
+-                REASON_REFERENCE_TOO_LARGE,
+-                f"{size} bytes > {_SKILL_REFERENCE_MAX_BYTES} cap",
+-            ),
+-            None,
+-            None,
+-        )
+-    try:
+-        content_bytes = resolved.read_bytes()
+-    except OSError as exc:
+-        return (
+-            (False, REASON_REFERENCE_MISSING, f"read failed: {exc}"),
+-            None,
+-            None,
+-        )
+-    try:
+-        text = content_bytes.decode("utf-8")
+-    except UnicodeDecodeError as exc:
+-        return (
+-            (False, REASON_REFERENCE_MISSING_FRONTMATTER, f"decode: {exc}"),
+-            None,
+-            None,
+-        )
+-    non_ws = sum(1 for c in text if not c.isspace())
+-    if non_ws < _SKILL_REFERENCE_MIN_BODY_BYTES:
+-        return (
+-            (
+-                False,
+-                REASON_REFERENCE_BYTE_FLOOR_UNDERFLOW,
+-                f"{non_ws} non-ws bytes < {_SKILL_REFERENCE_MIN_BODY_BYTES} floor",
+-            ),
+-            None,
+-            None,
+-        )
+-    return None, content_bytes, text
+-
+-
+-def _skill_ref_validate_frontmatter(
+-    text: str,
+-) -> Optional[Tuple[bool, Optional[str], Optional[str]]]:
+-    """Sub-check 9: YAML frontmatter parseable + has `name:` key."""
+-    if not _has_valid_frontmatter_with_name(text):
+-        return (
+-            False,
+-            REASON_REFERENCE_MISSING_FRONTMATTER,
+-            "missing or malformed YAML frontmatter / no `name:` key",
+-        )
+-    return None
+-
+-
+-def _skill_ref_validate_hash_and_redact(
+-    content_bytes: bytes,
+-    text: str,
+-    expected_hash: str,
+-) -> Optional[Tuple[bool, Optional[str], Optional[str]]]:
+-    """Sub-checks 10-11: SHA-256 match + redaction scan.
+-
+-    Per PLAN-025 F-perf-006: SHA-256 on reference-mode skill content
+-    costs ~1ms for a 5KB skill per invocation. Acceptable at current
+-    spawn volumes.
+-
+-    Per Session 32 bugfix: `_redact.redact_secrets` whitespace-collapses
+-    output, so direct string compare would always mismatch. Instead
+-    we check for the specific secret-indicator tokens that only appear
+-    when a pattern matched.
+-    """
+-    actual_hash = hashlib.sha256(content_bytes).hexdigest()
+-    if actual_hash != expected_hash:
+-        return (
+-            False,
+-            REASON_REFERENCE_HASH_MISMATCH,
+-            f"expected {expected_hash[:8]}..., got {actual_hash[:8]}...",
+-        )
+-    redacted = _redact.redact_secrets(text)
+-    if any(tok in redacted for tok in _SECRET_TOKENS_IN_OUTPUT):
+-        return (
+-            False,
+-            REASON_REFERENCE_REDACTION_HIT,
+-            "secret pattern detected in skill content",
+-        )
+-    return None
+-
+-
+-def _validate_skill_reference(
+-    prompt: str,
+-    repo_root: Optional[Path] = None,
+-) -> Tuple[bool, Optional[str], Optional[str]]:
+-    """Validate `## SKILL REFERENCE` sentinel via 11 synchronous sub-checks.
+-
+-    Refactored (PLAN-050 Phase 1b F-02-03-e) into 6 named helpers for
+-    readability + per-check test coverage. Same contract: fail-CLOSED
+-    on any failure, sub-check order preserved from ADR-051 §Synchronous
+-    validation (sub-check 11 = redaction scan added Session 32;
+-    PLAN-024 F-hooks-003 doc drift close).
+-    """
+-    if not prompt or not isinstance(prompt, str):
+-        return False, REASON_REFERENCE_MISSING, "empty prompt"
+-
+-    sanitized = _strip_fenced_and_comments(prompt)
+-
+-    err, raw_path, expected_hash = _skill_ref_parse_sentinel(sanitized)
+-    if err:
+-        return err
+-
+-    if repo_root is None:
+-        repo_root = Path(
+-            os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+-        )
+-
+-    err, candidate, resolved = _skill_ref_resolve_path(raw_path, repo_root)
+-    if err:
+-        return err
+-
+-    err = _skill_ref_validate_unicode(candidate)
+-    if err:
+-        return err
+-
+-    err, content_bytes, text = _skill_ref_read_bounded(resolved)
+-    if err:
+-        return err
+-
+-    err = _skill_ref_validate_frontmatter(text)
+-    if err:
+-        return err
+-
+-    err = _skill_ref_validate_hash_and_redact(
+-        content_bytes, text, expected_hash
+-    )
+-    if err:
+-        return err
+-
+-    return True, None, None
+-
+-
+-def _has_skill_reference(
+-    prompt: str,
+-    repo_root: Optional[Path] = None,
+-) -> bool:
+-    """Backward-compat wrapper: True iff reference passes all sub-checks."""
+-    ok, _, _ = _validate_skill_reference(prompt, repo_root=repo_root)
+-    return ok
+-
+-
+-# =============================================================================
+-# PLAN-020 Phase 3 — `/effort` token rejection in spawn prompts
+-# =============================================================================
+-#
+-# `/effort` hints (low/default/high/max + `ultrathink` keyword) are
+-# CEO-only. They MUST NOT appear in spawn prompts (sub-agents inherit
+-# their thinking budget from Anthropic defaults). PLAN-020 §4 Phase 3
+-# §scope clause (QA must-fix #7).
+-
+-_EFFORT_TOKEN_RE = re.compile(
+-    r"(?:^|[^\w/])/effort(?:[ \t]+(?:low|default|high|max))?\b",
+-    flags=re.IGNORECASE,
+-)
+-
+-
+-def _has_effort_token(prompt: str) -> bool:
+-    """True iff prompt contains a `/effort [tier]` slash-command token."""
+-    if not prompt:
+-        return False
+-    sanitized = _strip_fenced_and_comments(prompt)
+-    return bool(_EFFORT_TOKEN_RE.search(sanitized))
+-
+-
+-
+-# ---------------------------------------------------------------------------
+-# PLAN-045 F-10-04 — spawn-prompt secret-scan pre-dispatch
+-# ---------------------------------------------------------------------------
+-# Spawn prompts are the #1 vector for accidentally shipping secrets into a
+-# sub-agent's context. A CEO that copy-pastes a `.env` into a task prompt
+-# or builds a prompt that interpolates an env var leaks the secret to
+-# whatever model the sub-agent uses AND to the audit log (spawn prompts
+-# are recorded for governance).
+-#
+-# Reject spawns whose prompt contains any of 6 high-signal secret shapes.
+-# Each shape is a narrow regex to avoid false-positives on docs / test
+-# fixtures (prefix-bound + entropy-adjacent). Audit emits
+-# `veto_triggered(reason_code=spawn_prompt_contains_secret)` on reject.
+-#
+-# Kill-switch: `CEO_SPAWN_SECRET_SCAN=0` for the rare case where a prompt
+-# legitimately contains a long opaque id that trips the scan; Owner-only
+-# escape logged via veto_triggered(reason_code=spawn_secret_scan_bypassed).
+-_SPAWN_SECRET_PATTERNS: List[Tuple[str, re.Pattern[str]]] = [
+-    # AWS access key ID (AKIA prefix, 16 uppercase alnum after).
+-    ("aws_access_key_id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+-    # Generic AWS secret access key.
+-    (
+-        "aws_secret_access_key",
+-        re.compile(
+-            r"\b(?:aws[_-]?secret[_-]?access[_-]?key)\b\s*[:=]\s*"
+-            r"[\"\']?[A-Za-z0-9/+=]{40}[\"\']?",
+-            re.IGNORECASE,
+-        ),
+-    ),
+-    # Stripe live/test secret key.
+-    ("stripe_secret_key", re.compile(r"\bsk_(?:live|test)_[0-9A-Za-z]{24,}\b")),
+-    # GitHub personal access token.
+-    ("github_pat", re.compile(r"\bghp_[0-9A-Za-z]{36,}\b")),
+-    # OpenAI API key.
+-    ("openai_api_key", re.compile(r"\bsk-[A-Za-z0-9]{48,}\b")),
+-    # PEM private key preamble.
+-    (
+-        "pem_private_key",
+-        re.compile(
+-            r"-----BEGIN (?:RSA |EC |OPENSSH |PGP |DSA )?PRIVATE KEY-----"
+-        ),
+-    ),
+-]
+-
+-
+-
+-def _inject_terse_marker(prompt: str, subagent_type: str) -> str:
+-    """Inject ## TERSE-MODE marker per PLAN-047 Phase 2."""
+-    if os.environ.get("CEO_TERSE_MODE", "0") != "1":
+-        return prompt
+-    veto_roles = {"code-reviewer", "security-engineer", "qa-architect", "compliance-specialist"}
+-    if (subagent_type or "") in veto_roles:
+-        return prompt + "\n\n## TERSE-MODE-DISABLED — VETO role requires full-prose rationale.\n"
+-    return prompt + "\n\n## TERSE-MODE — fragments OK in exploratory flows; never truncate code or numbers.\n"
+-
+-def _validate_spawn_prompt_has_no_secrets(
+-    prompt: str,
+-) -> Tuple[bool, Optional[str], Optional[str]]:
+-    """Return (ok, reason_code, detail) — ok=False means BLOCK spawn.
+-
+-    Short-circuits with ok=True when `CEO_SPAWN_SECRET_SCAN=0` is set
+-    (Owner bypass; any non-"0" value enforces).
+-    """
+-    # Session 75 Codex Finding 4 closure (Owner D4 staged rollout):
+-    # default OFF, opt-in via CEO_SPAWN_SECRET_SCAN=1. Without the env
+-    # var (or with =0), function returns ok=True without scanning. Soak
+-    # protocol: ≥3 sessions of opt-in usage with FPR<1%% before any
+-    # default flip ADR. Until then, this is a wire-only landing.
+-    if os.environ.get("CEO_SPAWN_SECRET_SCAN", "0") != "1":
+-        return True, None, None
+-    if not prompt:
+-        return True, None, None
+-    for family, pattern in _SPAWN_SECRET_PATTERNS:
+-        m = pattern.search(prompt)
+-        if m:
+-            return (
+-                False,
+-                "spawn_prompt_contains_secret",
+-                f"family={family} prompt_len={len(prompt)}",
+-            )
+-    return True, None, None
+-
+-
+-@dataclass
+-class Decision:
+-    """Typed result of the governance check."""
+-
+-    allow: bool
+-    reason: Optional[str] = None
+-
+-    def to_json(self) -> str:
+-        if self.allow:
+-            return json.dumps({}, ensure_ascii=False)  # schema-compliant allow
+-        return json.dumps(
+-            {"decision": "block", "reason": self.reason or ""},
+-            ensure_ascii=False,
+-        )
+-
+-
+-# Sprint 5 Phase 7 (ADR-010) — Architect recursion guard.
+-# When CEO_ARCHITECT_ACTIVE=1 is in the env, any spawn whose
+-# description/prompt names "Agent Architect" is BLOCKED. Prevents
+-# meta-agent recursion (Architect-spawning-Architect).
+-_ARCHITECT_NAME_RE = re.compile(
+-    r"\bAgent\s+Architect\b",
+-    flags=re.IGNORECASE,
+-)
+-
+-
+-# ---------------------------------------------------------------------------
+-# PLAN-133 E3 — Per-spawn tool scoping + depth/overlap rails.
+-# ---------------------------------------------------------------------------
+-# Ports the Goose recipe "declared capability scope + one-level recursion +
+-# file partition" idea, re-implemented from scratch in stdlib (rite §2). All
+-# three rails are ADVISORY by default (emit only) and become BLOCKING only
+-# under their per-rail env flag. NEVER raises (fail-open per CLAUDE.md §5).
+-#
+-# Rail 1 — Tool allow-list: a spawn profile MAY declare
+-#     ## TOOL ALLOW-LIST
+-#     - Read
+-#     - Edit
+-#     - Bash
+-# When declared AND the prompt's ## TASK/## RESTRICTIONS text requests a tool
+-# OUTSIDE that set (heuristic keyword scan, bounded), emit/block. A profile
+-# with NO ## TOOL ALLOW-LIST block is unrestricted (back-compat: silent allow).
+-#
+-# Rail 2 — Depth fence: a sub-agent that itself emits a NAMED spawn is a
+-# depth-2 spawn. The harness Agent payload has no native depth field, so we
+-# read the advisory marker the CEO injects into a delegated prompt
+-# (## SUBAGENT-CONTEXT depth=N) AND the env breadcrumb CEO_SPAWN_DEPTH. If
+-# EITHER says depth>=1 AND this spawn is itself NAMED, it is depth-over-one.
+-#
+-# Rail 3 — FILE ASSIGNMENT overlap: parse this spawn's `CAN edit:` file list
+-# from its ## FILE ASSIGNMENT block, compare against the `CAN edit:` lists of
+-# other spawns recorded in the audit log within a short concurrency window
+-# (same session, same plan). Any shared concrete path = clobber risk.
+-
+-# --- Rail 1: tool allow-list ----------------------------------------------
+-_TOOL_ALLOWLIST_HEADER_RE = re.compile(
+-    r"^##[ \t]+TOOL[ \t]+ALLOW-?LIST[ \t]*$",
+-    flags=re.MULTILINE,
+-)
+-# A bullet line inside the block: "- Read" / "* Bash" / "Read,Edit".
+-_TOOL_BULLET_RE = re.compile(
+-    r"^[ \t]*[-*][ \t]*([A-Za-z][A-Za-z0-9_/ ,]+)$",
+-    flags=re.MULTILINE,
+-)
+-# Canonical Claude Code tool names we recognize (closed set — anything not
+-# here in a request is ignored, NOT blocked; we only gate KNOWN tools so an
+-# unknown token can never cause a false block).
+-_KNOWN_TOOL_NAMES = frozenset({
+-    "read", "edit", "write", "multiedit", "bash", "glob", "grep",
+-    "webfetch", "websearch", "task", "agent", "notebookedit",
+-})
+-# Heuristic: which tools a spawn is REQUESTING, inferred from prompt text.
+-# First-hit, bounded scan. Conservative — only fires on high-signal verbs so
+-# a profile that simply mentions a word does not trip the rail.
+-_TOOL_REQUEST_HINTS: Tuple[Tuple[str, Tuple[str, ...]], ...] = (
+-    ("bash", ("run the command", "run `", "execute the script", "shell out",
+-              "git commit", "git push", "npm install", "curl ", "subprocess")),
+-    ("write", ("create the file", "write a new file", "write the file")),
+-    ("edit", ("edit the file", "modify the file", "apply the patch")),
+-    ("webfetch", ("fetch the url", "download from http", "fetch http")),
+-    ("websearch", ("search the web", "web search")),
+-)
+-_TOOL_SCAN_WINDOW = 8 * 1024  # bytes of prompt scanned for tool hints
+-
+-# --- Rail 2: depth fence ---------------------------------------------------
+-_SUBAGENT_DEPTH_MARKER_RE = re.compile(
+-    r"^##[ \t]+SUBAGENT-CONTEXT\b[^\n]*\bdepth=(\d+)",
+-    flags=re.MULTILINE,
+-)
+-
+-# --- Rail 3: FILE ASSIGNMENT overlap --------------------------------------
+-# Case-insensitive + 0-3 space indent (codex r32 P1): `## File
+-# Assignment` and ` ## FILE ASSIGNMENT` are the SAME heading to a
+-# Markdown renderer/agent — recognizing them (instead of enumerating
+-# taints) keeps the parser aligned with what the agent SEES.
+-_FILE_ASSIGNMENT_HEADER_RE = re.compile(
+-    r"^[ ]{0,3}##[ \t]+FILE[ \t]+ASSIGNMENT[ \t]*$",
+-    flags=re.MULTILINE | re.IGNORECASE,
+-)
+-# "- CAN edit: a/b.py, c/d.py" (rest of line after the colon, comma-split).
+-# Leading indent 0-3 SPACES only (codex r33 P1): 4+ spaces (or a tab)
+-# make the line a CommonMark CODE BLOCK — example text, never a grant.
+-_CAN_EDIT_LINE_RE = re.compile(
+-    r"^[ ]{0,3}[-*+][ \t]*CAN[ \t]+edit:[ \t]*(.+)$",
+-    flags=re.MULTILINE | re.IGNORECASE,
+-)
+-# STRUCTURAL closure of the parser-differential class (codex r25→r32:
+-# MAY/MUST edit, `+`/numbered markers, header variants — each enumerated
+-# fix bred the next variant). ONE rule instead: inside a FILE ASSIGNMENT
+-# block, every LIST line (any CommonMark marker: -, *, +, 1., 1)) must
+-# match a CLOSED whitelist of recognized forms — anything else is a
+-# visible grant/instruction the parser did not validate => taint.
+-_FA_LIST_LINE_RE = re.compile(
+-    r"^[ ]{0,3}(?:[-*+]|\d+[.)])[ \t]+\S[^\n]*$",
+-    flags=re.MULTILINE,
+-)
+-_FA_ALLOWED_GRANT_LINE_RE = re.compile(
+-    r"^[ ]{0,3}[-*+][ \t]*CAN[ \t]+edit:",
+-    flags=re.IGNORECASE,
+-)
+-_FA_ALLOWED_PROSE_LINE_RE = re.compile(
+-    r"^[ ]{0,3}[-*+][ \t]*(?:"
+-    r"CANNOT[ \t]+edit"        # negative prose (not parsed, harmless)
+-    r"|MAY[ \t]+read\b"        # architect read declaration
+-    r"|FORBIDDEN\b"             # architect forbidden list
+-    # canonical template escape-hatch prose — the FULL fixed phrase, so
+-    # the prefix CONSUMES its own `edit` and the suffix rule below can
+-    # ban any further edit-grant text (codex r34 P1)
+-    r"|If[ \t]+you[ \t]+need[ \t]+to[ \t]+edit[ \t]+a[ \t]+forbidden[ \t]+file"
+-    r")",
+-    flags=re.IGNORECASE,
+-)
+-# Authority words banned in an allowed-prose SUFFIX (codex r34+r41+r42:
+-# the axis moved from `edit` to synonyms — `MUST write hidden.py`).
+-# WHOLE-TOKEN semantics, not substring (r42 FP: a denied path like
+-# `src/write.py` carries "write" INSIDE a path token — filenames are not
+-# authority). A token is a whitespace-delimited word stripped of edge
+-# punctuation; tokens containing / or . are path-like and never match.
+-_FA_AUTHORITY_WORDS = frozenset((
+-    "edit", "write", "create", "modify", "delete", "append", "overwrite",
+-    "rename", "move", "must", "should", "allowed",
+-))
+-
+-
+-def _fa_suffix_has_authority(suffix: str) -> bool:
+-    """True when the prose suffix carries a bare authority word."""
+-    for tok in suffix.split():
+-        if "/" in tok or "." in tok:
+-            continue  # path-like token — filename parts are not authority
+-        if tok.strip(";:,()[]{}'\"!?-").lower() in _FA_AUTHORITY_WORDS:
+-            return True
+-    return False
+-
+-
+-def _fa_list_line_allowed(line: str) -> bool:
+-    """Closed whitelist for list lines inside a FILE ASSIGNMENT block.
+-
+-    Anchored semantics (codex r33+r34 P1): a PROSE form may not smuggle
+-    ANY edit grant in its suffix — `- MAY read docs; MUST edit x` and
+-    `- If you need permission: CAN edit: x` are tainted, not laundered.
+-    Each prose prefix consumes its own `edit` (when it has one); any
+-    FURTHER `edit` word after the matched prefix rejects the line.
+-    """
+-    if _FA_ALLOWED_GRANT_LINE_RE.match(line):
+-        return True
+-    m = _FA_ALLOWED_PROSE_LINE_RE.match(line)
+-    if m:
+-        return not _fa_suffix_has_authority(line[m.end():])
+-    return False
+-_OVERLAP_LOOKBACK_S = 600          # 10-minute concurrency window
+-_OVERLAP_MAX_PATHS = 64            # bound the per-spawn path set
+-_OVERLAP_TAIL_LINES = 256          # bounded audit-log tail (~512KB)
+-
+-
+-def _parse_tool_allowlist(prompt: str) -> Optional[frozenset]:
+-    """Return the declared lowercase tool allow-list, or None if no
+-    `## TOOL ALLOW-LIST` block is present (= unrestricted, back-compat).
+-
+-    Pure. Never raises. Bounded to the block between its header and the next
+-    `##` heading. Only KNOWN tool names are retained; unknown tokens dropped
+-    (so a typo cannot create a phantom allow-list that blocks everything).
+-    """
+-    if not prompt:
+-        return None
+-    sanitized = _strip_fenced_and_comments(prompt)
+-    m = _TOOL_ALLOWLIST_HEADER_RE.search(sanitized)
+-    if m is None:
+-        return None
+-    block_start = m.end()
+-    nxt = _NEXT_H2_RE.search(sanitized, block_start)
+-    block = sanitized[block_start: nxt.start() if nxt else len(sanitized)]
+-    allowed = set()
+-    for bm in _TOOL_BULLET_RE.finditer(block):
+-        for tok in bm.group(1).replace(",", " ").split():
+-            t = tok.strip().lower()
+-            if t in _KNOWN_TOOL_NAMES:
+-                allowed.add(t)
+-    # An empty-but-present block = "deny all known tools" (intentional).
+-    return frozenset(allowed)
+-
+-
+-def _requested_tools(prompt: str) -> frozenset:
+-    """Heuristic set of KNOWN tools this spawn appears to request.
+-
+-    First-hit per family, bounded scan. Conservative (high-signal verbs only).
+-    Pure; never raises.
+-    """
+-    if not prompt:
+-        return frozenset()
+-    text = _strip_fenced_and_comments(prompt)[:_TOOL_SCAN_WINDOW].lower()
+-    out = set()
+-    for tool, hints in _TOOL_REQUEST_HINTS:
+-        if any(h in text for h in hints):
+-            out.add(tool)
+-    return frozenset(out)
+-
+-
+-def _check_tool_scope(
+-    prompt: str,
+-) -> Optional[Tuple[str, str]]:
+-    """Rail 1. Return (reason_code, detail) if a requested tool is OUTSIDE
+-    the declared allow-list, else None.
+-
+-    `detail` NEVER contains a path or the raw prompt — only the offending
+-    tool NAME(s) (a closed-enum-safe value) + counts. No-value-echo safe.
+-    """
+-    allow = _parse_tool_allowlist(prompt)
+-    if allow is None:
+-        return None  # no declared scope -> unrestricted (back-compat)
+-    requested = _requested_tools(prompt)
+-    out_of_scope = sorted(requested - allow)
+-    if not out_of_scope:
+-        return None
+-    return (
+-        "spawn_tool_out_of_scope",
+-        f"tools={','.join(out_of_scope)} declared={len(allow)}",
+-    )
+-
+-
+-def _spawn_depth(prompt: str, env: Dict[str, str]) -> int:
+-    """Best-effort current spawn depth. 0 = top-level CEO spawn.
+-
+-    Two independent signals, max() wins (fail-toward-detection):
+-      - `## SUBAGENT-CONTEXT depth=N` marker in the prompt (CEO-injected when
+-        delegating to a sub-agent that may itself coordinate).
+-      - `CEO_SPAWN_DEPTH` env breadcrumb (harness/CEO-set).
+-    Pure-ish (reads env dict only). Never raises.
+-    """
+-    depth = 0
+-    try:
+-        m = _SUBAGENT_DEPTH_MARKER_RE.search(prompt or "")
+-        if m:
+-            depth = max(depth, int(m.group(1)))
+-    except Exception:  # pragma: no cover - fail-open
+-        pass
+-    try:
+-        raw = (env.get("CEO_SPAWN_DEPTH") or "").strip()
+-        if raw.isdigit():
+-            depth = max(depth, int(raw))
+-    except Exception:  # pragma: no cover - fail-open
+-        pass
+-    return depth
+-
+-
+-# PLAN-178 C1 / ADR-191 — the ONLY valid explicit "this spawn writes
+-# nothing" declaration. The bare token `none` stays a DROPPED placeholder
+-# (indistinguishable from omission BY DESIGN — that ambiguity is the cell
+-# ADR-191 cures): read-only intent must be spelled out with this token.
+-_FA_READONLY_TOKEN = "none-read-only"
+-
+-# CommonMark fences indented 1-3 spaces (codex r29 P1): the shared
+-# `_strip_fenced_and_comments` masks column-zero fences only — a fenced
+-# FILE ASSIGNMENT example indented by 1-3 spaces (still a valid fence per
+-# CommonMark) would leak into classification and could satisfy the gate
+-# for a spawn with NO real assignment. Masked LOCALLY here (small blast
+-# radius; the shared regex serves every other block parser unchanged).
+-# CommonMark-correct fence masking for THIS classifier (codex r29+r30+
+-# r35): indent 0-3 (column zero included — the SHARED masker is a naive
+-# toggle that ignores opener type/length, so a 4-backtick opener "closed"
+-# by 3 backticks, or ``` closed by ~~~, leaks fenced content); closing
+-# fence must be the SAME char and >= opener length (\1 + absorb longer);
+-# an unclosed fence masks to EOF (\Z). Applied BEFORE the shared masker.
+-# Closer must be the SAME character, length >= opener (codex r37 P2:
+-# the old [`~]* suffix accepted a mixed ```~~~ "close"). Group 2 captures
+-# the fence char; closer = \1 (full opener string) + \2* (same char
+-# only). A shorter/mismatched closer falls through to \Z — masking to
+-# EOF, the fail-CLOSED direction.
+-_FA_FENCE_RE = re.compile(
+-    r"^[ ]{0,3}((`|~)\2{2,})[^\n]*\n.*?(?:^[ ]{0,3}\1\2*[ \t]*$|\Z)",
+-    flags=re.MULTILINE | re.DOTALL,
+-)
+-
+-# Telemetry marker hash for the explicit read-only declaration. DOMAIN-
+-# SEPARATED from real path hashes (codex r1 P2, Lote B): hashing the bare
+-# token collided with a legitimate concrete path `./none-read-only` (the
+-# token check runs BEFORE ./-normalization, so that path survives as
+-# concrete and would hash identically — under CEO_SPAWN_OVERLAP_GUARD=1 it
+-# would false-block against every prior read-only spawn). NUL bytes cannot
+-# appear in a real declared path, so this input is unreachable from
+-# _path_hash(path) space.
+-
+-
+-def _classify_file_assignment(prompt: str) -> Tuple[str, frozenset]:
+-    """Classify the spawn's `## FILE ASSIGNMENT` declaration (PLAN-178 C1).
+-
+-    Returns ``(state, concrete_paths)`` with ``state`` in a closed enum:
+-
+-    - ``"absent"``      — no `## FILE ASSIGNMENT` header in the sanitized
+-      prompt (fenced/comment content never counts — same masking rule as
+-      every other block parser in this hook).
+-    - ``"concrete"``    — >=1 concrete `CAN edit:` path AND zero dropped
+-      tokens (codex r15 P1: `safe.py, src/**` must NOT classify concrete —
+-      the agent still READS the wildcard grant while telemetry records
+-      only the concrete path; any dropped token taints the whole
+-      declaration to unparseable).
+-    - ``"readonly"``    — explicit `CAN edit: NONE-READ-ONLY` and no
+-      concrete path. Case-insensitive token match; conformant.
+-    - ``"unparseable"`` — header(s) present but no concrete path and no
+-      explicit read-only token (wildcard-only / placeholder-only / empty
+-      block). Named rejection under enforce (ADR-191 §1, B nice-4).
+-
+-    ALL `## FILE ASSIGNMENT` blocks in the prompt are aggregated (codex
+-    r2 P1, Lote B): the canonical generator emits an unconditional block
+-    and documented caller flows (/spawn, /debate) APPEND their own
+-    concrete block afterwards — reading only the first block would hide
+-    the writer's paths from overlap telemetry AND enforcement. Union of
+-    concrete paths wins over a read-only declaration in any block.
+-
+-    Pure. Never raises. Bounded to _OVERLAP_MAX_PATHS.
+-    """
+-    if not prompt:
+-        return ("absent", frozenset())
+-    # CommonMark-correct fence mask FIRST (raw prompt), THEN the shared
+-    # comment/fence stripper — order matters: the shared toggle-masker
+-    # mis-parses length/type-mismatched fences (codex r35 P1).
+-    sanitized = _FA_FENCE_RE.sub("", prompt)
+-    sanitized = _strip_fenced_and_comments(sanitized)
+-    # Unclosed HTML comment extends to EOF (codex r39 P2): the shared
+-    # stripper removes only CLOSED <!-- --> pairs — an unclosed opener
+-    # would leave commented-out content visible to this classifier.
+-    _oc = sanitized.find("<!--")
+-    if _oc != -1 and "-->" not in sanitized[_oc:]:
+-        sanitized = sanitized[:_oc]
+-    headers = list(_FILE_ASSIGNMENT_HEADER_RE.finditer(sanitized))
+-    # Block bound recognizes 0-3-space-indented H2 too (codex r33 P2) —
+-    # otherwise an indented `## TASK` leaves task bullets INSIDE the
+-    # assignment parser. Local to this classifier.
+-    _fa_next_h2 = re.compile(r"^[ ]{0,3}##[ \t]", flags=re.MULTILINE)
+-    if not headers:
+-        return ("absent", frozenset())
+-    paths = set()
+-    readonly_declared = False
+-    invalid_seen = False
+-    for m in headers:
+-        block_start = m.end()
+-        nxt = _fa_next_h2.search(sanitized, block_start)
+-        block = sanitized[
+-            block_start: nxt.start() if nxt else len(sanitized)
+-        ]
+-        block_had_line = False
+-        for list_line in _FA_LIST_LINE_RE.finditer(block):
+-            if not _fa_list_line_allowed(list_line.group(0)):
+-                # Structural rule (codex r25→r32): an unrecognized list
+-                # line inside the block is authority/instruction the
+-                # parser did not validate — taint, whatever its phrasing.
+-                invalid_seen = True
+-        for lm in _CAN_EDIT_LINE_RE.finditer(block):
+-            block_had_line = True
+-            for raw in lm.group(1).split(","):
+-                p = raw.strip().strip("`").strip()
+-                if not p:
+-                    continue
+-                if p.lower() == _FA_READONLY_TOKEN:
+-                    # Explicit read-only form — never a concrete path,
+-                    # never a hashable overlap participant (guaranteed by
+-                    # this branch running BEFORE the concrete-path add).
+-                    readonly_declared = True
+-                    continue
+-                # Drop placeholders + wildcards (cannot prove a clobber).
+-                # Angle brackets included (codex r1 P2): a scaffold literal
+-                # like `CAN edit: <concrete paths>` must classify
+-                # unparseable, not concrete — especially since the hook's
+-                # own block message shows that exact scaffold string.
+-                # Every drop marks the declaration TAINTED (codex r14 P1):
+-                # an earlier NONE-READ-ONLY must not hide a later wildcard
+-                # grant the agent still READS in its prompt.
+-                # ALL glob/expansion syntax rejected ANYWHERE in the
+-                # token (codex r19 P1): `src/?.py`, `src/[ab].py` and
+-                # `src/{a,b}.py` are multi-file grants the agent reads
+-                # while telemetry hashes only literal tokens (brace forms
+-                # additionally split into bogus comma paths upstream).
+-                if any(ch in p for ch in "*?[]{}<>") or p.lower() in (
+-                    "none", "n/a", "tbd",
+-                ):
+-                    invalid_seen = True
+-                    continue
+-                # Codex r9 P2: filesystem paths cannot carry NUL/control
+-                # chars — a crafted value could otherwise classify as
+-                # concrete AND hash into the domain-separated read-only
+-                # telemetry marker (which is NUL-framed precisely so real
+-                # paths can never reach it). Reject, do not sanitize.
+-                # Broad prose ("all files", "any path") and shell-
+-                # expansion forms ("$HOME/...") are NOT concrete paths
+-                # (codex r31 P1): a concrete grant in this grammar has no
+-                # spaces and no `$` — declared in ADR-191 §2.1.
+-                if any(ch.isspace() for ch in p) or "$" in p:
+-                    invalid_seen = True
+-                    continue
+-                # Unicode line/paragraph separators included (codex r28
+-                # P1): U+0085 NEL, U+2028 LS, U+2029 PS present injected
+-                # prompt STRUCTURE to the agent while hashing as one path
+-                # — and CEO_UNICODE_HARDBLOCK may be unset.
+-                if any(
+-                    ord(ch) < 32
+-                    or ch in ("\x7f", "\u0085", "\u2028", "\u2029")
+-                    for ch in p
+-                ):
+-                    invalid_seen = True
+-                    continue
+-                # Normalize: strip a leading ./, collapse; POSIX paths are
+-                # case-sensitive so keep case, normalize separators only.
+-                p = p.lstrip("./").replace("\\", "/")
+-                if not p:
+-                    # Codex r3 P1: `...` / `./` normalize to "" — an empty
+-                    # "path" must never make the declaration concrete (it
+-                    # would record path_count=1 and hide a would-block
+-                    # input from the advisory window).
+-                    invalid_seen = True
+-                    continue
+-                # Cap STORED paths without stopping the scan (codex r16
+-                # P1). Exceeding the cap TAINTS the declaration (codex r31
+-                # P2): silently dropping path 65+ would hide granted
+-                # authority from the overlap guard — an assignment that
+-                # large is a partition smell anyway.
+-                if len(paths) < _OVERLAP_MAX_PATHS:
+-                    paths.add(p)
+-                else:
+-                    invalid_seen = True
+-        if not block_had_line:
+-            # Codex r23 P1: an appended block with ZERO parseable
+-            # `CAN edit:` lines (`- MAY edit: ...`, misspellings, empty)
+-            # is a write grant the agent READS but the parser never saw —
+-            # it must taint the declaration, not vanish behind an earlier
+-            # read-only block.
+-            invalid_seen = True
+-    if paths and not invalid_seen:
+-        return ("concrete", frozenset(paths))
+-    if readonly_declared and not paths and not invalid_seen:
+-        return ("readonly", frozenset())
+-    # ANY dropped token taints the WHOLE declaration (codex r14+r15 P1):
+-    # a readonly token or a valid path must not launder a wildcard/
+-    # placeholder/control-char grant past the enforce gate — the agent
+-    # still READ that grant in its prompt. Mixed declarations classify
+-    # unparseable; concrete paths are still returned for overlap
+-    # telemetry (recording them costs nothing and keeps the collision
+-    # detector informed even on a tainted spawn).
+-    return ("unparseable", frozenset(paths))
+-
+-
+-def _parse_file_assignment(prompt: str) -> frozenset:
+-    """Return the set of concrete `CAN edit:` paths declared in the spawn's
+-    `## FILE ASSIGNMENT` block. Empty set if none.
+-
+-    Back-compat thin wrapper over :func:`_classify_file_assignment` (the
+-    single scanner since PLAN-178 C1 — one grammar, two consumers).
+-    """
+-    return _classify_file_assignment(prompt)[1]
+-
+-
+-def _path_hash(p: str) -> str:
+-    """12-hex sha256 prefix of a path. The ONLY path representation that
+-    enters the audit log (no raw path body ever persists — Sec MF-3)."""
+-    return hashlib.sha256(p.encode("utf-8", "replace")).hexdigest()[:12]
+-
+-
+-def _recent_file_assignments(
+-    env: Dict[str, str],
+-    session_id: str,
+-    max_age_s: int = _OVERLAP_LOOKBACK_S,
+-) -> frozenset:
+-    """Tail the audit log for `CAN edit:` path-HASHES emitted by OTHER spawns
+-    in this session within the window. Returns a set of 12-hex path hashes.
+-
+-    Reads only `spawn_file_assignment_recorded` advisory rows (emitted at the
+-    allow-path of a prior spawn — see 4d). Bounded tail. Never raises; returns
+-    empty set on any error (fail-open -> no overlap detected -> allow).
+-    """
+-    try:
+-        log_path = _audit_log_path()
+-        if log_path is None or not log_path.exists():
+-            return frozenset()
+-        import json as _json
+-        import time as _time
+-        with log_path.open("r", encoding="utf-8") as f:
+-            try:
+-                f.seek(0, 2)
+-                size = f.tell()
+-                read_back = min(size, _OVERLAP_TAIL_LINES * 2048)
+-                start = max(0, size - read_back)
+-                f.seek(start, 0)
+-                if start > 0:
+-                    f.readline()
+-                tail = f.readlines()
+-            except OSError:
+-                tail = f.readlines()[-_OVERLAP_TAIL_LINES:]
+-        now = _time.time()
+-        seen = set()
+-        for line in reversed(tail):
+-            try:
+-                ev = _json.loads(line)
+-            except Exception:
+-                continue
+-            if ev.get("action") != "spawn_file_assignment_recorded":
+-                continue
+-            if session_id and ev.get("session_id") != session_id:
+-                continue
+-            ts_f = _parse_event_ts(ev.get("ts"))
+-            if ts_f is None or (now - ts_f) > max_age_s:
+-                continue
+-            ph = ev.get("path_hashes")
+-            if isinstance(ph, str):
+-                for h in ph.split(","):
+-                    h = h.strip()
+-                    if h:
+-                        seen.add(h)
+-        return frozenset(seen)
+-    except Exception:  # pragma: no cover - fail-open
+-        return frozenset()
+-
+-
+-def _enforce_spawn_rails(
+-    *,
+-    prompt: str,
+-    is_named_spawn: bool,
+-    env: Dict[str, str],
+-    session_id: str,
+-) -> Optional[Tuple[str, str]]:
+-    """PLAN-133 E3 rails + PLAN-178 C1 FILE ASSIGNMENT grammar. Returns
+-    (reason_code, detail) when a rail is in ENFORCING mode (its flag=1)
+-    AND fires; else None.
+-
+-    In ADVISORY mode (flag unset/0) each rail still EMITS its closed-enum
+-    event with enforced=0 (measure-first) and returns None (allow).
+-
+-    NEVER raises. Each rail independently flagged (CEO_SPAWN_TOOL_SCOPE /
+-    CEO_SPAWN_DEPTH_GUARD / CEO_SPAWN_OVERLAP_GUARD /
+-    CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED); CEO_SOTA_DISABLE=1 forces
+-    advisory for ALL of them — that master kill is the named, tested
+-    recovery route for the grammar gate (ADR-186 pattern).
+-    """
+-    try:
+-        master_off = (env.get("CEO_SOTA_DISABLE") or "").strip() == "1"
+-
+-        def _flag(name: str) -> bool:
+-            if master_off:
+-                return False
+-            return (env.get(name) or "").strip() == "1"
+-
+-        # --- Rail 1: tool scope (applies to ANY spawn that declares a list) -
+-        scope_hit = _check_tool_scope(prompt)
+-        if scope_hit is not None:
+-            code, detail = scope_hit
+-            enforced = _flag("CEO_SPAWN_TOOL_SCOPE")
+-            _emit_tool_scope_violation(detail=detail, enforced=enforced)
+-            if enforced:
+-                return (code, detail)
+-
+-        # Rails 2 + 3 only matter for NAMED spawns (a generic research task
+-        # neither recurses into named delegation nor partitions files).
+-        if is_named_spawn:
+-            # --- Rail 2: depth fence ---------------------------------------
+-            depth = _spawn_depth(prompt, env)
+-            if depth >= 1:
+-                enforced = _flag("CEO_SPAWN_DEPTH_GUARD")
+-                _emit_depth_or_overlap(
+-                    rail="depth", enforced=enforced, count=depth,
+-                )
+-                if enforced:
+-                    return (
+-                        "spawn_depth_over_one",
+-                        f"depth={depth}",
+-                    )
+-
+-            # --- Rail 3: FILE ASSIGNMENT (grammar + overlap) ---------------
+-            # PLAN-178 C1 / ADR-191: the block is part of the spawn
+-            # acceptance contract. EVERY named spawn records an event now —
+-            # path_count=0 on absent/readonly/unparseable — so omission is
+-            # visible to the advisory window AND the session's collision
+-            # detector no longer goes blind on it (R-SEC1 cure; the old emit
+-            # lived inside the concrete-paths branch only). Absent/
+-            # unparseable block ONLY under CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED
+-            # =1 (measure-first flip, same doctrine as C5); CEO_SOTA_DISABLE
+-            # =1 forces advisory — the TESTED recovery route (ADR-186
+-            # pattern).
+-            fa_state, mine = _classify_file_assignment(prompt)
+-            # Overlap intersection runs for ANY declared concrete path —
+-            # including a TAINTED declaration's paths (codex r16 P1: with
+-            # only the overlap guard armed, `owned.py, src/**` must still
+-            # trip the clash on owned.py; the grammar gate may be advisory
+-            # in that window). BRANCH ON STATE for the grammar gate itself
+-            # (codex r15 P1: never on `mine`).
+-            my_hashes = {_path_hash(p) for p in mine} if mine else set()
+-            if my_hashes:
+-                others = _recent_file_assignments(env, session_id)
+-                clobber = my_hashes & others
+-                if clobber:
+-                    enforced = _flag("CEO_SPAWN_OVERLAP_GUARD")
+-                    _emit_depth_or_overlap(
+-                        rail="overlap", enforced=enforced, count=len(clobber),
+-                    )
+-                    if enforced:
+-                        return (
+-                            "spawn_file_assignment_overlap",
+-                            f"overlap_count={len(clobber)}",
+-                        )
+-            if fa_state in ("absent", "unparseable"):
+-                enforced = _flag("CEO_SPAWN_FILE_ASSIGNMENT_REQUIRED")
+-                if enforced:
+-                    # No reservation for a spawn that never dispatches
+-                    # (codex r16 P2): recording hashes here would leave a
+-                    # 10-minute phantom that falsely rejects the corrected
+-                    # RETRY under the overlap guard. The block itself is
+-                    # the audit trail (veto_triggered carries the code).
+-                    return (
+-                        (
+-                            "spawn_file_assignment_missing"
+-                            if fa_state == "absent"
+-                            else "spawn_file_assignment_unparseable"
+-                        ),
+-                        "fa_state=%s" % fa_state,
+-                    )
+-            # Advisory record for every DISPATCHING named spawn.
+-            # Telemetry discriminator (allowlist-safe — no new fields):
+-            # concrete records its hashes with the real count; readonly
+-            # records the NUL-framed constant marker; absent records an
+-            # empty set; a tainted-but-advisory declaration records its
+-            # concrete hashes. Everything except concrete records
+-            # path_count=0 — the would-block signal the AC-2b advisory
+-            # window counts.
+-            if fa_state == "concrete":
+-                _emit_file_assignment_recorded(my_hashes, session_id)
+-            else:
+-                marker = (
+-                    {_path_hash("\x00fa-readonly-marker\x00")}
+-                    if fa_state == "readonly" else my_hashes
+-                )
+-                _emit_file_assignment_recorded(
+-                    marker, session_id, path_count=0,
+-                )
+-        return None
+-    except Exception:  # pragma: no cover - fail-open invariant
+-        return None
+-
+-
+-def _emit_tool_scope_violation(*, detail: str, enforced: bool) -> None:
+-    """Emit `spawn_tool_scope_violation` (closed-enum). No-value-echo:
+-    `detail` carries only tool NAMES + counts (no path / prompt body)."""
+-    try:
+-        if not _AUDIT_EMIT_AVAILABLE:
+-            return
+-        _audit_emit.emit_generic(
+-            "spawn_tool_scope_violation",
+-            rail="tool_scope",
+-            enforced=1 if enforced else 0,
+-            detail=(detail or "")[:96],
+-        )
+-    except Exception:  # pragma: no cover - fail-open
+-        return
+-
+-
+-def _emit_depth_or_overlap(*, rail: str, enforced: bool, count: int) -> None:
+-    """Emit `spawn_depth_or_overlap_blocked` (closed-enum). `rail` is a
+-    closed enum (depth|overlap); `count` is a bounded int. No path / prompt."""
+-    try:
+-        if not _AUDIT_EMIT_AVAILABLE:
+-            return
+-        _audit_emit.emit_generic(
+-            "spawn_depth_or_overlap_blocked",
+-            rail=(rail if rail in ("depth", "overlap") else "other"),
+-            enforced=1 if enforced else 0,
+-            count=count,
+-        )
+-    except Exception:  # pragma: no cover - fail-open
+-        return
+-
+-
+-def _emit_file_assignment_recorded(
+-    path_hashes: set,
+-    session_id: str,
+-    path_count: Optional[int] = None,
+-) -> None:
+-    """Advisory: record THIS spawn's CAN-edit path HASHES so a later
+-    concurrent spawn can detect an overlap. Only 12-hex hashes persist.
+-
+-    ``path_count`` override (PLAN-178 C1): the readonly-declaration path
+-    records the constant token hash for telemetry attribution but MUST
+-    report path_count=0 — it declares zero writable paths. Default keeps
+-    the historical len() semantics for concrete assignments.
+-    """
+-    try:
+-        if not _AUDIT_EMIT_AVAILABLE:
+-            return
+-        joined = ",".join(sorted(path_hashes))[:512]
+-        _audit_emit.emit_generic(
+-            "spawn_file_assignment_recorded",
+-            session_id=(session_id or "")[:64],
+-            path_hashes=joined,
+-            path_count=(
+-                min(len(path_hashes), 99)
+-                if path_count is None else max(0, min(int(path_count), 99))
+-            ),
+-        )
+-    except Exception:  # pragma: no cover - fail-open
+-        return
+-
+-
+-# ---------------------------------------------------------------------------
+-# PLAN-153 Wave E item 7 (ADR-175) — Prompt Defense Baseline gate.  [BEGIN]
+-# ---------------------------------------------------------------------------
+-# NAMED spawns whose task indicates contact with UNTRUSTED CONTENT (web
+-# fetch/search, scraping, imported/upstream/third-party material) MUST carry
+-# the 6-bullet `## PROMPT DEFENSE` anti-injection block that
+-# `.claude/scripts/inject-agent-context.sh` now emits unconditionally.
+-#
+-# Failure semantics (CLAUDE.md §4 doctrine):
+-#   - INPUT side is fail-CLOSED: heuristic matched + section missing/thin
+-#     => BLOCK (precedent: check_bash_safety.py `_e3` parse gate + C4).
+-#   - INFRASTRUCTURE side is fail-OPEN: any exception inside this gate
+-#     => allow (never punish the session for our own bug).
+-#
+-# Detection is a CONSERVATIVE lowercase-substring keyword set scanned over
+-# the sanitized (fence/comment-stripped) description + prompt. HONESTY —
+-# documented false negatives, by design:
+-#   - synonyms/other languages are missed ("crawl", "harvest", "baixar",
+-#     "read the vendor tarball", ...);
+-#   - obfuscated intents (base64, hyphenation, l33t) are missed;
+-#   - keywords appearing ONLY inside fenced code blocks are masked by
+-#     `_strip_fenced_and_comments` and therefore missed;
+-#   - scan is capped at `_PROMPT_DEFENSE_SCAN_CAP` bytes; mentions beyond
+-#     the cap are missed.
+-# The cheap mitigation for every miss-class is the same: the spawn template
+-# emits the block UNCONDITIONALLY, so any template-generated prompt passes
+-# regardless of heuristic reach. This gate exists to catch hand-rolled
+-# prompts that bypass the template.
+-#
+-# Kill-switches (advisory demotion — event still emitted, spawn allowed):
+-#   CEO_PROMPT_DEFENSE_GATE=0   per-gate opt-out
+-#   CEO_SOTA_DISABLE=1          master kill (E3-rail precedent)
+-_PROMPT_DEFENSE_HEADER_RE = re.compile(
+-    r"^##[ \t]+PROMPT[ \t]+DEFENSE[ \t]*$",
+-    flags=re.MULTILINE,
+-)
+-# A bullet line: "-" or "*" + whitespace + at least one non-space char.
+-_PROMPT_DEFENSE_BULLET_RE = re.compile(
+-    r"^[ \t]*[-*][ \t]+\S",
+-    flags=re.MULTILINE,
+-)
+-_PROMPT_DEFENSE_MIN_BULLETS = 6
+-_PROMPT_DEFENSE_SCAN_CAP = 256 * 1024  # bytes of sanitized text scanned
+-# Closed, lowercase substring set. Ordering = report priority (first hit
+-# wins; the matched token is the ONLY prompt-derived value that reaches the
+-# audit log — closed-enum-safe, no prompt body echo).
+-_UNTRUSTED_CONTENT_HINTS: Tuple[str, ...] = (
+-    "webfetch",
+-    "websearch",
+-    "web search",
+-    "search the web",
+-    "fetch the url",
+-    "fetch url",
+-    "fetch http",
+-    "download from http",
+-    "scrape",
+-    "scraping",
+-    "imported",
+-    "upstream",
+-    "third-party",
+-    "third party",
+-    "untrusted",
+-)
+-
+-
+-def _prompt_defense_required(
+-    description: str, prompt_sanitized: str
+-) -> Optional[str]:
+-    """Return the first matched untrusted-content hint, or None.
+-
+-    Pure. Never raises. Bounded scan over lowercase(description + sanitized
+-    prompt) capped at `_PROMPT_DEFENSE_SCAN_CAP` bytes.
+-    """
+-    haystack = (
+-        (description or "") + "\n" + (prompt_sanitized or "")
+-    )[:_PROMPT_DEFENSE_SCAN_CAP].lower()
+-    for hint in _UNTRUSTED_CONTENT_HINTS:
+-        if hint in haystack:
+-            return hint
+-    return None
+-
+-
+-def _has_prompt_defense_block(prompt_sanitized: str) -> bool:
+-    """True iff sanitized prompt has `## PROMPT DEFENSE` on its own line
+-    with >= `_PROMPT_DEFENSE_MIN_BULLETS` bullet lines before the next
+-    `##` heading / EOF. Fence/comment-masked headers do NOT count
+-    (P1-SEC-B precedent — caller passes pre-sanitized text)."""
+-    if not prompt_sanitized:
+-        return False
+-    m = _PROMPT_DEFENSE_HEADER_RE.search(prompt_sanitized)
+-    if m is None:
+-        return False
+-    block_start = m.end()
+-    nxt = _NEXT_H2_RE.search(prompt_sanitized, block_start)
+-    block = prompt_sanitized[
+-        block_start: nxt.start() if nxt else len(prompt_sanitized)
+-    ]
+-    bullets = len(_PROMPT_DEFENSE_BULLET_RE.findall(block))
+-    return bullets >= _PROMPT_DEFENSE_MIN_BULLETS
+-
+-
+-def _emit_prompt_defense_event(
+-    *, keyword: str, present: bool, enforced: bool
+-) -> None:
+-    """Emit `spawn_prompt_defense_gate` telemetry. `keyword` is from the
+-    closed `_UNTRUSTED_CONTENT_HINTS` enum — no prompt body ever persists.
+-    Fail-open."""
+-    try:
+-        if not _AUDIT_EMIT_AVAILABLE:
+-            return
+-        _audit_emit.emit_generic(
+-            "spawn_prompt_defense_gate",
+-            keyword=(keyword or "")[:32],
+-            present=1 if present else 0,
+-            enforced=1 if enforced else 0,
+-        )
+-    except Exception:  # pragma: no cover - fail-open
+-        return
+-
+-
+-def _enforce_prompt_defense(
+-    *,
+-    description: str,
+-    prompt: str,
+-    env: Dict[str, str],
+-) -> Optional[Tuple[str, str]]:
+-    """Evaluate the Prompt Defense Baseline gate for a NAMED spawn.
+-
+-    Returns (reason_code, detail) when the gate is ENFORCING and fires;
+-    None otherwise. NEVER raises (infra fail-open); the block itself is
+-    the input-side fail-CLOSED posture (matched + missing => BLOCK).
+-    """
+-    try:
+-        sanitized = _strip_fenced_and_comments(prompt or "")
+-        keyword = _prompt_defense_required(description or "", sanitized)
+-        if keyword is None:
+-            return None  # no untrusted-content signal — out of scope
+-        present = _has_prompt_defense_block(sanitized)
+-        master_off = (env.get("CEO_SOTA_DISABLE") or "").strip() == "1"
+-        raw = (env.get("CEO_PROMPT_DEFENSE_GATE") or "").strip()
+-        gate_off = raw in ("0", "false", "False", "no", "off")
+-        enforced = (not master_off) and (not gate_off)
+-        _emit_prompt_defense_event(
+-            keyword=keyword, present=present, enforced=enforced
+-        )
+-        if present or not enforced:
+-            return None
+-        return (
+-            "spawn_prompt_defense_missing",
+-            f"keyword={keyword} min_bullets={_PROMPT_DEFENSE_MIN_BULLETS}",
+-        )
+-    except Exception:  # pragma: no cover - fail-open invariant
+-        return None
+ # ---------------------------------------------------------------------------
+@@ -2364,3 +228,2 @@ def _enforce_prompt_defense(
+ 
+-
+ def decide(
+@@ -2722,367 +585,3 @@ def decide(
+ 
+-# ---------------------------------------------------------------------------
+-# PLAN-105 Wave A.6 — Deferred-emit override detection helper.
+-#
+-# Reads the most-recent goap_recommendation_rendered event in the current
+-# session (≤5 min window, matching plan_id), compares the spawn's
+-# `goap-action-id:` marker, and emits goap_recommendation_accepted on
+-# exact match OR goap_recommendation_overridden with the appropriate
+-# `override_type` (substituted_action / no_render_prior / marker_absent).
+-#
+-# Kill-switches:
+-#   CEO_GOAP_ADVISORY_ENABLED=0  → all 3 emits silent (existing PLAN-098 kill-switch)
+-#   CEO_GOAP_OVERRIDE_DETECTION_DISABLED=1  → always emit _accepted on allow-path (diagnostic only)
+-# ---------------------------------------------------------------------------
+-
+-_GOAP_RENDER_LOOKBACK_S = 300  # 5 minutes
+-
+-
+-def _audit_log_path() -> Optional[Path]:
+-    """Resolve audit log path — delegates to audit_emit._log_path() for
+-    byte-identical write/read paths.
+-
+-    PLAN-105 R2 P0 #2 fold: previously derived a slug from CLAUDE_PROJECT_DIR,
+-    which diverged from audit_emit's `~/.claude/projects/<native-slug>`
+-    default. Now imports the real resolver so reader path == writer path.
+-    """
+-    try:
+-        from _lib import audit_emit as _ae  # type: ignore
+-        path = _ae._log_path()
+-        return path if path else None
+-    except Exception:
+-        # Fallback: env-driven path so unit tests using CEO_AUDIT_LOG_PATH
+-        # work pre-import.
+-        env_path = os.environ.get("CEO_AUDIT_LOG_PATH")
+-        if env_path:
+-            return Path(env_path)
+-        env_dir = os.environ.get("CEO_AUDIT_LOG_DIR")
+-        if env_dir:
+-            return Path(env_dir) / "audit-log.jsonl"
+-        return None
+-
+-
+-def _parse_event_ts(ts) -> Optional[float]:
+-    """Parse audit-log ts field (ISO-8601 UTC string or epoch float) → epoch seconds."""
+-    if ts is None:
+-        return None
+-    if isinstance(ts, (int, float)):
+-        return float(ts)
+-    if isinstance(ts, str):
+-        s = ts.strip()
+-        if not s:
+-            return None
+-        # Try epoch first.
+-        try:
+-            return float(s)
+-        except (TypeError, ValueError):
+-            pass
+-        # ISO-8601 — strip trailing Z, parse via datetime.fromisoformat.
+-        import datetime as _dt
+-        try:
+-            if s.endswith("Z"):
+-                s = s[:-1] + "+00:00"
+-            return _dt.datetime.fromisoformat(s).timestamp()
+-        except Exception:
+-            return None
+-    return None
+-
+-
+-def _tail_recent_rendered(
+-    plan_id: str,
+-    max_age_s: int = _GOAP_RENDER_LOOKBACK_S,
+-    session_id: Optional[str] = None,
+-):
+-    """Tail audit log for most-recent goap_recommendation_rendered matching plan_id.
+-
+-    PLAN-105 R2 P1 fold:
+-    - Optional `session_id` filter — same-session join (concurrent sessions
+-      with same plan_id within 5 min cannot misclassify).
+-    - Conservative ts handling — unparseable / missing ts treated as
+-      out-of-window (skipped), not as "match-anyway".
+-
+-    Returns parsed event dict (Optional[dict]). Returns None if no match
+-    within `max_age_s` seconds. Bounded tail = last 256 lines (~512KB).
+-    """
+-    log_path = _audit_log_path()
+-    if log_path is None or not log_path.exists():
+-        return None
+-    try:
+-        import json as _json
+-        import time as _time
+-        with log_path.open("r", encoding="utf-8") as f:
+-            # Read last ~256 lines via seek-from-end (bounded perf).
+-            try:
+-                f.seek(0, 2)
+-                size = f.tell()
+-                read_back = min(size, 256 * 2048)  # ~512KB max
+-                start_offset = max(0, size - read_back)
+-                f.seek(start_offset, 0)
+-                # Only discard partial first line if we didn't seek to 0
+-                # (otherwise we'd lose the first real line of a small file).
+-                if start_offset > 0:
+-                    f.readline()
+-                tail = f.readlines()
+-            except OSError:
+-                tail = f.readlines()[-256:]
+-        now = _time.time()
+-        for line in reversed(tail):
+-            try:
+-                ev = _json.loads(line)
+-            except Exception:
+-                continue
+-            if ev.get("action") != "goap_recommendation_rendered":
+-                continue
+-            if ev.get("plan_id") != plan_id:
+-                continue
+-            # PLAN-105 R2 P1-3 fold — same-session filter when provided.
+-            if session_id is not None and ev.get("session_id") != session_id:
+-                continue
+-            ts_f = _parse_event_ts(ev.get("ts"))
+-            # PLAN-105 R2 P1-2 fold — conservative: unparseable ts skipped.
+-            if ts_f is None:
+-                continue
+-            if (now - ts_f) > max_age_s:
+-                # Older than the window — skip.
+-                continue
+-            return ev
+-        return None
+-    except Exception:
+-        return None
+-
+-
+-def _resolve_session_id_from_env(env: Dict[str, str]) -> str:
+-    """Resolve session_id from harness env (CLAUDE_SESSION_ID) — PLAN-105 R2 P1-1 fold."""
+-    for key in ("CLAUDE_SESSION_ID", "CEO_SESSION_ID"):
+-        v = (env.get(key) or "").strip()
+-        if v:
+-            return v[:64]
+-    return ""
+-
+-
+-def _resolve_project_from_env(env: Dict[str, str]) -> str:
+-    """Derive project slug from CLAUDE_PROJECT_DIR basename — PLAN-105 R2 P1-1 fold."""
+-    pd = (env.get("CLAUDE_PROJECT_DIR") or "").strip()
+-    if pd:
+-        return Path(pd).name[:64]
+-    return ""
+-
+-
+-def _emit_persona_coverage_synthesized(
+-    subagent_type: str,
+-    description: str,
+-    prompt: str,
+-    source: str,
+-    env: dict,
+-) -> None:
+-    """PLAN-106 Wave C — emit persona_coverage_synthesized at allow path.
+-
+-    Maps (subagent_type, derived task_type) → 4×4 cell, emits one
+-    event via audit_emit.emit_generic. Best-effort; any exception is
+-    swallowed (fail-open). Bypass: ``CEO_PERSONA_COVERAGE_EMIT=0``.
+-
+-    The closed-enum sets (archetype + task_type) MUST match
+-    `_lib/audit_emit.py:_PERSONA_COVERAGE_ARCHETYPES` /
+-    `_PERSONA_COVERAGE_TASK_TYPES`. Both lists are duplicated here
+-    intentionally so the hook does no extra import at hot-path.
+-    """
+-    if (env.get("CEO_PERSONA_COVERAGE_EMIT") or "").strip() == "0":
+-        return
+-    if not _AUDIT_EMIT_AVAILABLE:
+-        return
+-    # Closed-set archetype filter — only emit for the 4 VETO-floor personas.
+-    arch_lower = (subagent_type or "").strip().lower()
+-    if arch_lower not in {
+-        "code-reviewer", "security-engineer", "qa-architect",
+-        "threat-detection-engineer",
+-    }:
+-        return
+-    # Derive task_type via simple description+prompt keyword scan.
+-    haystack = " ".join([
+-        (description or "").lower(),
+-        (prompt or "")[:4096].lower(),  # bounded — security R1 P1 NFKC budget
+-    ])
+-    # NFKC normalize once (Cf-injected bypass guard — full-width chars
+-    # in adversarial spawn prompts).
+-    haystack = unicodedata.normalize("NFKC", haystack)
+-    task_type = ""
+-    # Order matters: most specific first.
+-    for keyword, t in (
+-        ("review", "review"),
+-        ("audit", "review"),  # reviewer aliases
+-        ("vet", "vet"),
+-        ("validate", "vet"),
+-        ("verify", "vet"),
+-        ("test", "test"),
+-        ("detect", "detect"),
+-        ("triage", "detect"),
+-        ("incident", "detect"),
+-    ):
+-        if keyword in haystack:
+-            task_type = t
+-            break
+-    if not task_type:
+-        # No keyword match → no cell signal. Skip emit; do not
+-        # arbitrarily bin into a default cell (would skew coverage).
+-        return
+-
+-    # cell_id = sha256[:8] of canonical f"{arch_lower}:{task_type}".
+-    # Deterministic across calls so dedup at audit layer can collapse
+-    # repeats from check_agent_spawn + check_canonical_edit on the
+-    # same (archetype, task_type) within a window.
+-    cell_input = f"{arch_lower}:{task_type}".encode("utf-8")
+-    cell_id = hashlib.sha256(cell_input).hexdigest()[:8]
+-
+-    try:
+-        _audit_emit.emit_generic(
+-            "persona_coverage_synthesized",
+-            archetype=arch_lower,
+-            task_type=task_type,
+-            cell_id=cell_id,
+-            source=source,
+-        )
+-    except Exception:  # noqa: BLE001 — fail-open, never block spawn
+-        pass
+-
+-
+-def _emit_goap_deferred_outcome(
+-    plan_id: Optional[str],
+-    action_id: Optional[str],
+-    env: Dict[str, str],
+-) -> None:
+-    """Emit goap_recommendation_accepted or _overridden at decide() allow-return.
+-
+-    PLAN-105 Wave A.6. Silent no-op if plan_id is None (non-GOAP spawn).
+-    Silent no-op if kill-switch CEO_GOAP_ADVISORY_ENABLED=0.
+-
+-    PLAN-105 R2 P1-1 fold: session_id + project propagated from env so
+-    audit consumers can correlate spawn outcome with rendered event.
+-    """
+-    if not plan_id:
+-        return
+-    if (env.get("CEO_GOAP_ADVISORY_ENABLED", "1") or "").strip() == "0":
+-        return
+-    try:
+-        from _lib import audit_emit as _ae  # type: ignore
+-    except Exception:
+-        return
+-
+-    session_id = _resolve_session_id_from_env(env)
+-    project = _resolve_project_from_env(env)
+-
+-    diag_force_accept = (
+-        env.get("CEO_GOAP_OVERRIDE_DETECTION_DISABLED", "0") or ""
+-    ).strip() == "1"
+-    if diag_force_accept:
+-        fn = getattr(_ae, "emit_goap_recommendation_accepted", None)
+-        if fn is not None:
+-            try:
+-                fn(plan_id=plan_id, action_id=(action_id or "DIAG_FORCED"),
+-                   session_id=session_id, project=project)
+-            except Exception:
+-                pass
+-        return
+-
+-    # PLAN-105 R2 P1-3 fold — same-session filter when session_id available.
+-    rendered = _tail_recent_rendered(
+-        plan_id,
+-        session_id=session_id if session_id else None,
+-    )
+-    if rendered is None:
+-        # Try a second pass without session-id filter — covers cases where
+-        # the _rendered event was emitted from /goap CLI invocation that
+-        # didn't carry session_id (or session env was unset at planner time).
+-        rendered = _tail_recent_rendered(plan_id)
+-    if rendered is None:
+-        # No recent _rendered for this plan_id — emit _overridden:no_render_prior.
+-        fn = getattr(_ae, "emit_goap_recommendation_overridden", None)
+-        if fn is not None:
+-            try:
+-                fn(plan_id=plan_id,
+-                   original_action_id="NO_RENDER_PRIOR",
+-                   dispatched_action_id=(action_id or "MARKER_ABSENT"),
+-                   override_type="no_render_prior",
+-                   session_id=session_id, project=project)
+-            except Exception:
+-                pass
+-        return
+-
+-    if action_id is None:
+-        # Spawn lacks goap-action-id marker — emit _overridden:marker_absent.
+-        fn = getattr(_ae, "emit_goap_recommendation_overridden", None)
+-        if fn is not None:
+-            try:
+-                fn(plan_id=plan_id,
+-                   original_action_id=(rendered.get("action_ids_csv", "") or "")[:64],
+-                   dispatched_action_id="MARKER_ABSENT",
+-                   override_type="marker_absent",
+-                   session_id=session_id, project=project)
+-            except Exception:
+-                pass
+-        return
+-
+-    rendered_csv = rendered.get("action_ids_csv", "") or ""
+-    rendered_ids = [s.strip() for s in rendered_csv.split(",") if s.strip()]
+-    if action_id in rendered_ids:
+-        fn = getattr(_ae, "emit_goap_recommendation_accepted", None)
+-        if fn is not None:
+-            try:
+-                fn(plan_id=plan_id, action_id=action_id,
+-                   session_id=session_id, project=project)
+-            except Exception:
+-                pass
+-    else:
+-        fn = getattr(_ae, "emit_goap_recommendation_overridden", None)
+-        if fn is not None:
+-            try:
+-                fn(plan_id=plan_id,
+-                   original_action_id=rendered_csv[:64],
+-                   dispatched_action_id=action_id,
+-                   override_type="substituted_action",
+-                   session_id=session_id, project=project)
+-            except Exception:
+-                pass
+-
+-
+-# Session 75 Codex re-pass remaining concern: derive a stable
+-# reason_code from the human-readable Decision.reason so the audit
+-# trail correctly classifies the block path. Order is significant —
+-# more-specific prefixes first, generic fallback last.
+-# PLAN-098 Wave C.2 (ADR-132) - GOAP advisory-only invariant enforcement.
+-_GOAP_PLAN_ID_RE = re.compile(r"\bgoap-plan-id\s*:\s*\S+", re.IGNORECASE)
+-_GOAP_CONFIRM_HEADER_RE = re.compile(
+-    r"^##\s+GOAP\s+CONFIRM\b", re.IGNORECASE | re.MULTILINE
+-)
+-# PLAN-105 Wave A.6 - capture value of goap-plan-id / goap-action-id markers
+-# for deferred-emit override detection at decide() allow-path return.
+-_GOAP_PLAN_ID_VALUE_RE = re.compile(
+-    r"\bgoap-plan-id\s*:\s*(\S+)", re.IGNORECASE
+-)
+-_GOAP_ACTION_ID_VALUE_RE = re.compile(
+-    r"\bgoap-action-id\s*:\s*(\S+)", re.IGNORECASE
+-)
+-
+-
+-_BLOCK_REASON_MARKERS = (
+-    ("SPAWN-SECRET-BLOCKED", "secret_in_spawn_prompt"),
+-    ("GOVERNANCE: veto_floor_demoted", "veto_floor_demoted"),
+-    ("ARCHITECT-RECURSION", "architect_role_not_delegable"),
+-    ("GOVERNANCE: spawn prompt contains a `/effort` token", "effort_token_in_spawn"),
+-    # Skill-reference path: reason text format is
+-    # "GOVERNANCE: <reason_code>: <detail>..." — extract the embedded code.
+-    ("GOVERNANCE: reference_", "__REFERENCE_PREFIX__"),
+-    # PLAN-098 Wave C.2 (ADR-132) - GOAP advisory-only invariant.
+-    ("GOVERNANCE: goap_advisory_without_owner_confirm", "goap_advisory_without_owner_confirm"),
+-    # PLAN-133 E3 — per-spawn tool scoping + depth/overlap rails.
+-    ("GOVERNANCE: spawn_tool_out_of_scope", "spawn_tool_out_of_scope"),
+-    ("GOVERNANCE: spawn_depth_over_one", "spawn_depth_over_one"),
+-    ("GOVERNANCE: spawn_file_assignment_overlap", "spawn_file_assignment_overlap"),
+-    # PLAN-178 C1 / ADR-191 - FILE ASSIGNMENT grammar (measure-first flip).
+-    ("GOVERNANCE: spawn_file_assignment_missing", "spawn_file_assignment_missing"),
+-    ("GOVERNANCE: spawn_file_assignment_unparseable", "spawn_file_assignment_unparseable"),
+-    # PLAN-153 Wave E item 7 (ADR-175) — Prompt Defense Baseline gate.
+-    ("GOVERNANCE: spawn_prompt_defense_missing", "spawn_prompt_defense_missing"),
+-    # NAMED-spawn-without-skill is the historical default — keep last.
+-    ("GOVERNANCE: Agent spawn detected as NAMED", "missing_skill_content"),
+-)
+-
++_load_spawn_part("outcome_telemetry")
+ 
+@@ -3109,3 +608,2 @@ def _classify_block_reason(reason: str) -> str:
+ 
+-
+ def _to_contract_decision(d: "Decision") -> _contract.Decision:
+@@ -3116,62 +614,3 @@ def _to_contract_decision(d: "Decision") -> _contract.Decision:
+ 
+-def main() -> int:
+-    """Hook entry point: read stdin, decide, write stdout, exit 0.
+-
+-    PLAN-006 Phase 1 migration (ADR-014): Adapter Layer I/O.
+-    Fail-open on any exception.
+-    """
+-    try:
+-        event = _claude_adapter.read_event(phase="PreToolUse")
+-        if event.parse_error:
+-            print(
+-                f"[check_agent_spawn] WARN: stdin parse error: {event.parse_error}",
+-                file=sys.stderr,
+-            )
+-            _claude_adapter.emit_decision(_contract.allow())
+-            return 0
+-
+-        project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+-        try:
+-            names_regex = _team.load_names(project_dir)
+-        except Exception as e:  # pragma: no cover
+-            print(
+-                f"[check_agent_spawn] WARN: team load failed: {e}",
+-                file=sys.stderr,
+-            )
+-            names_regex = None
+-
+-        decision = decide(
+-            description=event.description,
+-            prompt=event.prompt,
+-            names_regex=names_regex,
+-            subagent_type=event.subagent_type,
+-        )
+-
+-        # Side-effect: emit veto_triggered event on block path (v2 stream).
+-        # Session 75 Codex re-pass: reason_code derived from decision.reason
+-        # via _classify_block_reason() so the audit trail correctly
+-        # discriminates secret_in_spawn_prompt / effort_token_in_spawn /
+-        # architect_role_not_delegable / veto_floor_demoted / etc.
+-        # Previously hardcoded "missing_skill_content" misclassified all blocks.
+-        if not decision.allow and _AUDIT_EMIT_AVAILABLE:
+-            try:
+-                _audit_emit.emit_veto_triggered(
+-                    hook="check_agent_spawn",
+-                    reason_code=_classify_block_reason(decision.reason or ""),
+-                    reason_preview=decision.reason or "",
+-                    blocked_tool="Agent",
+-                    project=project_dir,
+-                )
+-            except Exception:
+-                pass
+-
+-        _claude_adapter.emit_decision(_to_contract_decision(decision))
+-        return 0
+-    except Exception as e:  # pragma: no cover
+-        print(
+-            f"[check_agent_spawn] FATAL: {e.__class__.__name__}: {e}",
+-            file=sys.stderr,
+-        )
+-        _claude_adapter.emit_decision(_contract.allow())
+-        return 0
++_load_spawn_part("entrypoint")
+ 
+@@ -3198,2 +637,14 @@ def aggregate_subagent_findings(*args, **kwargs):
+ 
++# Keep every extracted function on the historical module's globals so callers
++# can patch its seams and each import retains independent invocation state.
++_SPAWN_COMPONENT_IMPORT_ERROR = None
++try:
++    # Surface guard: .claude/skills/** and SKILL.md (via _lib/agent_spawn/skill_reference.py)
++    from _lib.agent_spawn import bind as _bind_spawn_components
++    _bind_spawn_components(globals())
++    del _bind_spawn_components
++except Exception as _spawn_component_exc:
++    _SPAWN_COMPONENT_IMPORT_ERROR = type(_spawn_component_exc).__name__
++
++
+ if __name__ == "__main__":
+diff --git a/.claude/hooks/check_arbitration_kernel.py b/.claude/hooks/check_arbitration_kernel.py
+index 7c16e2d0ac62..73173050f0ee 100755
+--- a/.claude/hooks/check_arbitration_kernel.py
++++ b/.claude/hooks/check_arbitration_kernel.py
+@@ -21,2 +21,8 @@ anything.
+    .jsonl fixtures (these drive policy_dispatch.py decisions).
++4. **Code the v1.4.4 split moved, and the listed modules kernel code
++   calls** — the seven helper packages that hold the code of seven
++   facades since the v1.4.4 split (`_lib/canonical_edit/`,
++   `_lib/_policy_parts/`, ...), each kernel in full, plus the five flat
++   `_lib` modules and the live-adapter package listed in the
++   KERNEL-DECOMPOSITION block of `_KERNEL_PATHS`.
+ 
+@@ -294,2 +300,48 @@ _KERNEL_PATHS: List[str] = [
+     ".claude/policies/.drift-manifest.json",
++    # KERNEL-DECOMPOSITION (v1.4.4 train, merge 888e9e6c). These rows
++    # cover the code the v1.4.4 split moved out of seven kernel facades,
++    # the plan-path predicate the train put in place of regexes in two
++    # kernel files, and the modules listed below that kernel code calls.
++    #   - Seven facades moved their code into helper packages. One recursive
++    #     row per package makes that code HARD-DENY again, as it was inside
++    #     the facades in v1.4.2, and a file added there later is HARD-DENY
++    #     too (the federation-dir precedent above).
++    ".claude/hooks/_lib/canonical_edit/**/*",  # check_canonical_edit.py
++    ".claude/hooks/_lib/agent_spawn/**/*",  # check_agent_spawn.py
++    ".claude/hooks/_lib/_policy_parts/**/*",  # _lib/policy.py
++    ".claude/hooks/_lib/_audit_emit_parts/**/*",  # _lib/audit_emit.py
++    ".claude/hooks/_lib/_audit_log_parts/**/*",  # audit_log.py
++    ".claude/hooks/_lib/_bash_safety_parts/**/*",  # check_bash_safety.py
++    ".claude/hooks/_lib/_pair_rail_parts/**/*",  # check_pair_rail.py
++    #   - Five flat modules that kernel code calls:
++    #     plan_paths.py — the plan-path predicate (is_plan_path,
++    #       plan_id_from_path) that replaces the plan-path regexes the train
++    #       removed from check_plan_edit.py and policy_preprocessors.py; it
++    #       is HARD-DENY again, as those regexes were in v1.4.2;
++    #     model_currency.py — is_veto_floor_model(), the VETO-floor predicate
++    #       that kernel files now call as part of their VETO-floor check
++    #       (the F-01-03 demotion check above rides on it);
++    #     cli_currency.py, bash_indirect_guard.py, bash_indirect_telemetry.py
++    #       — each added by this train and called by kernel code:
++    #       cli_currency.py is the Codex payload-pin currency arm, which
++    #       decides whether a payload SHA mismatch is accepted as
++    #       "compatible" (called by the pair-rail code; ADR-182 trust root);
++    #       bash_indirect_guard.py is the indirect-command BLOCK matcher and
++    #       bash_indirect_telemetry.py the disabled-rail telemetry, both
++    #       called by the bash-safety parts.
++    ".claude/hooks/_lib/model_currency.py",
++    ".claude/hooks/_lib/cli_currency.py",
++    ".claude/hooks/_lib/plan_paths.py",
++    ".claude/hooks/_lib/bash_indirect_guard.py",
++    ".claude/hooks/_lib/bash_indirect_telemetry.py",
++    #   - adapters/live/ — the live-adapter transport package, present since
++    #     v1.0.0 and enrolled now because the kernel adapters/__init__.py
++    #     loads it; its siblings above are already kernel.
++    ".claude/hooks/_lib/adapters/live/**/*",
++    # tests/test_kernel_decomposition_coverage.py checks that each package
++    # below _lib/ that a kernel source reaches by an import statement or
++    # by a / chain of string literals (resolved against the source's
++    # directory or .claude/hooks) is kernel in full, and that each of the
++    # five flat modules above is kernel and still imported by a kernel
++    # source.
+ ]

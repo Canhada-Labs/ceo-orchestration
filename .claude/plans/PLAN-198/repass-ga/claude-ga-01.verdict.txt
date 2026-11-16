@@ -1,0 +1,59 @@
+PAYLOAD 1/34 (v1.4.3-rc.1..84b83324c820): what it contains
+Version bumps (.claude-plugin/marketplace.json, .claude-plugin/plugin.json, .claude/.framework-version -> 1.4.4); .claude/commands/ceo-boot.md 24 -> 25 Tier-S checks; .claude/governance/codex-cli-pin.txt ">=0.128.0,<0.161.0" -> unbounded ">=0.128.0"; gate-scripts-manifest.txt new hashes for validate-governance.sh, release.sh and validate-pair-rail-verdict.py; the new package .claude/hooks/_lib/_audit_emit_parts/ (__init__.install, actions*, adapters, boot_schemas, compaction, confidence, context_pressure, defense, federation_persona, federation_schemas).
+
+VERIFIED AGAINST THE CANDIDATE TREE
+- Condition 5: .claude/hooks/check_arbitration_kernel.py:312 carries ".claude/hooks/_lib/_audit_emit_parts/**/*"; the other declared rows are at :309-315, :332-336 and :340. The new package in this payload is kernel-covered.
+- Condition 7: .claude/hooks/_lib/audit_emit.py is a thin entry point. It calls _install_parts(globals(), 33 part names) at :413-452.
+- Moved code (item 4):
+  - install() (__init__.py:21-48) rebinds every exported FunctionType onto the facade's globals. Lookups of _write_event, emit_generic, _breadcrumb and _scrub_ceo_boot_event, global writes (writer._FALLBACK_NOTIFIED) and test patch points therefore all go through _lib.audit_emit.
+  - Mutable declarations are deep-copied once per import, with one shared memo, so aliases such as _MCP_CANONICAL_GUARD_BLOCKED_ALLOWLIST stay intact. Compiled regexes deepcopy to themselves.
+  - No part exports emit_generic, _KNOWN_ACTIONS, EVENT_SCHEMA_V2 or emit_credential_rotation_due. Only replay exports iter_events, and the re-delegation at audit_emit.py:455-461 behaves as its comment says.
+  - I traced every outside name used by this payload's parts: the defense.py enums and allowlists (harness_schemas.py:10 and lifecycle_schemas.py:9 __all__), the writer helpers (writer.py:5-33), _PERSONA_MATCH_MODALITY_ENUM (boot_schemas), the _CONTEXT_PRESSURE_* constants (compaction), and zlib/os/time/Path/re (audit_emit.py:2-12). Every one resolves.
+  - _lib.redact.redact_secrets exists (redact.py:120).
+  - Outside the facade, only lessons.py:204 and check_agent_spawn.py:128 import the package, and they use only install().
+- ceo-boot.md "25 Tier-S checks" is true: TIER_S_CHECKS has 25 entries, with an assert (.claude/hooks/_lib/_ceo_boot_parts/scheduled_cache.py:303-370). The CHANGELOG (:340, :479) documents main_checkout_state.
+- The unbounded pin range parses in every consumer I checked:
+  - validate-pair-rail-verdict.py:345-359 and :609-624 accept an optional upper bound.
+  - scripts/_codex_harness.sh:76-86 skips a missing max.
+  - pair-rail-gate.sh gates on the payload-pin oracle.
+  Condition 9 and CHANGELOG [1.4.4] :184-208 declare the change honestly.
+- Condition 10: "compatible" requires >= CODEX_VERSION_FLOOR 0.160.0 and a version strictly newer than the manifest (cli_currency.py:11, :34-51; _pair_rail_parts/part_01.py:557-567). The manifest package_version is 0.160.0.
+- Item 2 (fail direction) and item 3 (writes): context-pressure hysteresis and GC stay fail-open on I/O errors. The marker and shard-cursor writes use O_CREAT|O_EXCL|O_NOFOLLOW random-named temp files plus os.replace. GC unlinks only names with the marker prefix and removes symlinks rather than their targets (context_pressure.py:73-290).
+- Item 6: everything is standard library only. The code is Python 3.9 compatible: FunctionType(code, globals, name, defaults, closure); annotations as strings under the future import; frozenset|set unions; no runtime PEP 604/match syntax.
+- Version sites agree: npm/package.json, .claude-plugin/plugin.json and marketplace.json are all 1.4.4.
+
+P0: none.
+DECLARED CONDITIONS FOUND FALSE IN THIS PAYLOAD: none.
+
+NEW FINDINGS (annex): none at P1.
+
+P2 FOLLOW-UPS
+1. P2 - .claude/hooks/_lib/_audit_emit_parts/actions.py:12, actions_core.py:4, actions_extended.py:4. A dead duplicate action registry sits in kernel code.
+   - "actions" is not in the install roster (audit_emit.py:415-451). The live registry is the literal at audit_emit.py:45-377.
+   - Both docstrings say "combined by schemas_actions", and no module of that name exists.
+   - Failure scenario: a maintainer registers a new action only in actions_extended.py. It stays unregistered at runtime and is dropped to a breadcrumb.
+   - Fix: delete the three files, or add a test asserting actions._KNOWN_ACTIONS == audit_emit._KNOWN_ACTIONS, and correct the docstrings.
+2. P2 (honesty, already disclosed) - .claude/governance/codex-cli-pin.txt:196-198. The comment says releases ">= 0.128.0 are compatible version evidence".
+   - The oracle's "compatible" actually requires >= 0.160.0 and a version newer than the manifest.
+   - Lines :165-166 still call widen-upper-only "the only safe shape".
+   - Effect: scripts/_codex_harness.sh no longer prints VERSION SKEW for any Codex 0.161 or later, while the hook fixtures are still certified on 0.139.0.
+   - Declared in CHANGELOG [1.4.4] :199-201, :207-208 and condition 9.
+   - Fix: reword the comment to say the range is the installer and validator version gate only, and that "compatible" requires CODEX_VERSION_FLOOR and a version newer than the manifest.
+3. P2 - .claude/hooks/_lib/_audit_emit_parts/__init__.py:37-48. install() silently skips any exported callable that is not a FunctionType.
+   - A class, functools-wrapped callable or partial would keep its template module's globals. It would then bypass facade patches, or raise NameError on facade-only names.
+   - No current part (audit_emit, agent_spawn, lessons) exports one.
+   - Fix: raise TypeError on such exports.
+4. P2 (doc) - .claude/commands/ceo-boot.md:43-50. The text says "25 Tier-S checks across 6 categories" but lists only 15 check names. The gap predates this delta, and the count bump widens it to 10. Fix: list all 25, or drop the category enumeration.
+5. P2 (doc, trivial) - .claude/hooks/_lib/_audit_emit_parts/defense.py:18-25 and actions_extended.py:302-306 say learning_rail_disabled is shared by "four" rails. _LEARNING_RAIL_ENUM (lifecycle_schemas.py:508) now also carries "bash_indirect", emitted by bash_indirect_telemetry.py:59-65. Fix: update the wording.
+6. P2 (latent; cross-reference, the code is in another payload) - .github/scripts/validate-pair-rail-verdict.py:770-773.
+   - exact_payload_pin is False whenever codex_cli >= CODEX_VERSION_FLOOR and differs from the manifest version, including when it is OLDER than the manifest.
+   - cli_currency.compatible_package_version and CHANGELOG :188 require strictly newer.
+   - It is vacuous today, because the manifest (0.160.0) equals the floor. After a re-pin above the floor without raising CODEX_VERSION_FLOOR, a verdict declaring an older version would pass with an unattested payload sha.
+   - Fix: exact_payload_pin = version_comparison is None or version_comparison <= 0 or newer_floor is None or newer_floor < 0.
+
+LIMITS OF THIS REVIEW
+- I did not hash the files named in gate-scripts-manifest.txt: the tree is redacted and I had no shell. Only CI workflows read that manifest, so a mismatch fails CI loudly; it does not reach adopters.
+- I had no base tree, so moved-code equivalence was checked by structure (name resolution, binding mechanics, duplicate exports, registry), not line by line.
+- I could not confirm from this tree that only CONDITIONS-ga.md changed between the rc tag and the GA candidate.
+
+VERDICT: GO Payload 1 has no P0 and leaves every declared condition true against the candidate tree: the kernel list covers the new audit_emit package, the split binds and resolves every name through the facade with its fail-open and symlink-safe writes intact, the 25-check count is correct, and the unbounded Codex pin range parses in every consumer as condition 9 and the CHANGELOG declare. Only six P2 follow-ups remain.

@@ -1,0 +1,59 @@
+Scope: payload 22/34. It holds one file, .claude/hooks/check_bash_safety.py. The 4,236-line hook becomes a 42-line facade that exec-compiles eight parts from .claude/hooks/_lib/_bash_safety_parts/ into its own globals. I checked the facade against the candidate tree: the parts, kernel list, installer, shim, health check, coverage gate and CHANGELOG.
+
+P0: none.
+
+Declared conditions this payload touches, all true against the code:
+- Condition 5: check_arbitration_kernel.py:204 lists .claude/hooks/check_bash_safety.py, and :314 lists .claude/hooks/_lib/_bash_safety_parts/**/*. The parts are also canonical-guarded through _lib/canonical_edit/guards.py:34 (.claude/hooks/_lib/**/*.py), so the Bash _e3 interceptor and Edit/Write both cover them.
+- Condition 6: decide_command (posture_scan.py:571-584) runs bash_indirect_guard.scan after the legacy checks. Its switches come from the import-time trusted_env snapshot. If the snapshot is missing, the switches read None and the scan stays on. main() (decisions_cli.py:168-174) writes the disabled-once telemetry fail-open.
+- Condition 7: the entry point keeps its path, executable mode (100755) and registration. The logic lives in the parts.
+- CHANGELOG lines 81 and 115 ("after its existing checks"; "a 42-line entry point") match the code.
+
+Moved-code checks:
+- Every top-level def and class of the old file exists in exactly one part. That is 89 names, from _normalize_command_tokens through main.
+- Load order satisfies the module-level dependencies. For example, posture_tables.py:377 calls _e3_basename, which fact_canonical.py (loaded earlier) defines. _E3_* tables are defined before their unions.
+- globals and locals are the same dict, so generator expressions resolve correctly.
+- __file__ is the facade's, so _HOOKS_DIR and sys.path behave as before. Decision.__module__ stays the facade's module name, so dataclasses and get_type_hints still resolve. Monkeypatching facade globals still reaches the moved functions.
+- Inherited and explicit `from __future__ import annotations` keeps annotations lazy.
+- The `if __name__ == "__main__"` block is in the last part (decisions_cli.py:252), so main() runs only after all eight parts are bound.
+- Parts are compiled from source on every run, so a stale .pyc cannot shadow them. A script entry point was never .pyc-cached anyway, so compile cost is unchanged.
+- No __all__ existed before or after. Imports are standard library plus _lib only. I found no 3.10+ syntax (match, parenthesized with, X|Y in isinstance, strict=, removeprefix, walrus).
+
+Fail direction:
+- A missing or broken part raises at import. Python exits 1 with no stdout. _python-hook.sh execs the hook on the Claude path, and on the grok path empty stdout returns the hook's own exit code. That is never exit 2, so it fails open, as the infrastructure doctrine requires.
+- Input-side fail-closed matchers are unchanged in place: the _e3 parse gate, the credential scan, the citation verifier and the posture brace budget.
+
+NEW FINDINGS (annex): no undeclared P1 in this payload.
+
+P2 follow-ups:
+
+1. P2: a partial install silently drops the whole Bash guard, and the health check cannot see it. Location: check_bash_safety.py:35-42, with .claude/scripts/ceo-health.py:79-91.
+- Scenario: an interrupted upgrade, or a hand copy that misses _lib/_bash_safety_parts/. read_text raises FileNotFoundError on every Bash call, so every check in the hook is off: rm -rf, git reset --hard, the canonical-path interceptor, the night-mode toggle guard, the credential scan and the indirect guard.
+- The direction is correct, but the framework's own contract in check-hook-stdout-schema.py:15-17 says to emit {} and exit 0. Here the hook exits 1 with a traceback.
+- ceo-health only checks that the facade exists and is executable, so the install reports healthy.
+- The old file had this property only for its four hard _lib imports; the split adds eight more files.
+- Minimal fix: in ceo-health, require the eight part files (or import the hook in a subprocess). Optionally, when __name__ == "__main__", catch Exception from _install_parts(), write a stderr breadcrumb, print {} and exit 0.
+
+2. P2: the facade's module docstring is overwritten. Location: check_bash_safety.py:26-42.
+- Each part's leading string literal is stored as __doc__ in the shared namespace. After import, check_bash_safety.__doc__ is decisions_cli.py's "Decision conversion, audit emitters, and hook entry point."
+- audit_log.py:315 and :328 save and restore __doc__ for exactly this reason; this facade does not.
+- Fix: save __doc__ before _install_parts() and restore it after.
+
+3. P2 (honesty): the compatibility marker gives the wrong file. Location: check_bash_safety.py:12.
+- It says _apply_destructive_citation_gate is "implementation in rewrite_citation.py". It is defined at _lib/_bash_safety_parts/fact_state.py:4.
+- An adopter re-applying a hand patch, as condition 7 tells them to, is sent to the wrong module.
+- Fix: correct the marker to fact_state.py.
+
+4. P2 (stale pointer, shipped to adopters): the settings _comment says "See check_bash_safety.py docstring for full logic". Locations: templates/settings/settings.base.json:20, templates/settings/settings.user.json:260, .claude/settings.json:147.
+- The facade docstring no longer describes the logic. The old text survives only as a plain string expression at _lib/_bash_safety_parts/normalization.py:5-55, whose numbered list also skips step 3.
+- Fix: point the comment at normalization.py.
+
+5. Declared, confirmed, not new: the ADR-139 Tier-1 gate measures only the facade. Locations: .github/workflows/coverage.yml:184 and .github/scripts/parse-coverage.py:64-72.
+- The gate matches check_bash_safety.py by path suffix, so it measures the 42-line facade, which any import covers fully. The 86% gate no longer measures the bash-safety logic. The same applies to the audit_log.py facade.
+- CHANGELOG Known-open (lines 376-381) declares this.
+
+Limits of this review:
+- scripts/upgrade.sh is withheld from the copy. Upgrade delivery of _lib/_bash_safety_parts/ therefore rests on three things: install.sh:1520-1549 (fresh install copies every top-level _lib entry), _framework_manifest_set.sh:100-102 (excludes only the test harness), and CHANGELOG line 31 (upgrade.sh unchanged since v1.4.3-rc.1).
+- The rc lane notes refer to 32 payloads, and this cut has 34. The GA-only condition says nothing outside .claude/plans/PLAN-198/ changed, so the difference should come from the kit's splitting. I cannot verify that from this payload.
+- I could only read and search files here, with no shell, so every check is static. I executed no code.
+
+VERDICT: GO The new check_bash_safety facade loads all 89 moved definitions in a working order into its own namespace, keeps patch points and fail directions, and stays standard-library Python 3.9; declared conditions 5, 6 and 7 hold against it, and I found no P0 and no undeclared P1, only four P2 follow-ups plus one already-declared coverage gap.

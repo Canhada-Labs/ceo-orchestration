@@ -1,0 +1,66 @@
+PAYLOAD 8/34 (GA v1.4.4, candidate 84b83324). All files are new:
+- .claude/hooks/_lib/_contamination/: cli_checks.py, personal_constants.py, personal_facade_io.py, personal_path_policy.py, personal_path_rows.py, personal_path_scanner.py, personal_reporting.py, term_scan.py
+- .claude/hooks/_lib/_context_budget_parts/: __init__.py, compaction.py, inventory.py
+
+Most of this is code moved out of .claude/scripts/check_contamination.py and .claude/scripts/context-budget.py. The GA-only condition says this code is byte-identical to v1.4.4-rc.1, so I re-checked it against the candidate tree. I also compared it with the base text removed in the committed rc1 evidence (.claude/plans/PLAN-198/repass-rc1/diff-rc1-29.patch and diff-rc1-30.patch).
+
+WHAT I CHECKED AND FOUND SOUND
+1. Name lookup after the move (check_contamination.py:402-506). The parts import almost nothing themselves. Every free name in every function of the eight _contamination parts resolves in the facade namespace when it is called:
+   - stdlib modules imported by the facade (argparse, errno, hashlib, os, re, stat, subprocess, sys, time, unicodedata, Path, typing);
+   - the _PERSONAL_PATH_* constants copied from personal_constants;
+   - _PERSONAL_PATH_ROW_RE, _PERSONAL_PATH_ALLOWLIST_CONTROL_RE and _PERSONAL_PATH_REASON_MIN_INK, which reach the facade through the policy module's __all__;
+   - _PERSONAL_PATH_NAME_LINE, through the scanner's __all__;
+   - _emit_personal_path_rows and _personal_path_mask_owner, re-exported through policy.__all__ and rebound by bind_personal_paths whatever their __module__;
+   - FileWalker, build_pattern, _ALLOWLIST_*, is_never_allowlisted, PersonalPathUsage and _PersonalPathParser.
+   No two parts define the same exported name. The public personal_path_verdict is the facade_io wrapper over _personal_path_verdict_impl, which is the bound policy function, in the right order. The NamedTuple and exception classes each keep one identity. Defining NamedTuples under "from __future__ import annotations" is safe on 3.9: the annotations become ForwardRefs and are never evaluated.
+2. Default root. main() resolves Path(__file__).parent^3 through the facade globals, so it still points at the checkout root and not at .claude/hooks.
+3. Patch points. Patching check_contamination.X still takes effect, because every moved function reads its collaborators from the facade globals at call time. term_scan receives FileWalker and the index-mode function as arguments on every call.
+4. Rule 2 text. scan_personal_paths, report_personal_paths and the base Rule 2 constants match the removed base text line for line. Fail directions are unchanged: unreadable input gives rc 2, and every printed string goes through _personal_path_safe.
+5. context-budget install() (_context_budget_parts/__init__.py):
+   - deepcopy is safe for the inventory and compaction declarations: functions and classes are copied as themselves, compiled regexes return themselves, tuples and frozensets copy by value;
+   - CompactionPolicy is rebuilt per facade, with its methods bound to the facade;
+   - kwdefaults are kept (fence_token, decide_compaction);
+   - _injection_patterns, _TOKEN_ALLOWED, _FRONTMATTER_RE, CAT_*, THRESHOLD_*, probe_status and PROBE_STATUS_NOTE all resolve;
+   - the copies of CHARS_PER_TOKEN=4 and REDACTED in inventory.py match the facade (context-budget.py:145,189);
+   - compaction stays pure and fail-open.
+6. Standard library only and Python 3.9: no syntax or API newer than 3.9.
+7. No file writes anywhere in this payload; Rule 2 only runs read-only git commands.
+8. Delivery: install_lib_selective copies every top-level _lib entry recursively (scripts/install.sh:1520-1556).
+9. No hook imports check_contamination.py or context-budget.py. Nothing here can block a session, disable a hook, or change a model or effort.
+10. Condition 7 is TRUE for both scripts: the entry points keep their paths and the logic moves under .claude/hooks/_lib/.
+11. Condition 5: these two packages are not among the 13 kernel rows, and the condition does not claim them.
+12. Conditions 13 and 14: every path in this payload is in scope and present in the read-only copy.
+No declared condition is false against this payload.
+
+FINDINGS
+P0: none.
+
+NEW FINDINGS (annex): no undeclared P1.
+
+P2 FOLLOW-UPS
+1. P2 (new). Symlinks in the term rule fail closed on checkouts the personal-path rule already handles.
+   - Where: .claude/scripts/_contamination_inventory.py:76-81, reached through .claude/hooks/_lib/_contamination/term_scan.py:38-47.
+   - Defect: for index mode 120000, Rule 1 calls os.readlink() and turns any OSError into RuleOneInputError.
+   - Scenario A: under core.symlinks=false (the Git for Windows default), git writes a tracked link as a regular file. readlink fails with EINVAL, so any repo with a tracked symlink anywhere gets "FATAL ... cannot read a tracked symlink payload" and rc 2.
+   - Scenario B: a tracked link that is absent from the worktree (sparse checkout, or a local deletion) also gives rc 2 (ENOENT). An absent regular file is skipped (:87-88).
+   - Contrast: the base followed the link and passed. Rule 2's _personal_path_read_nofollow handles both cases (it reads the file, or returns None when it is absent). The facade census (check_contamination.py:455-457) says "tracked but absent is still not unreadable", but test_fu144_tracked_but_absent_is_still_not_unreadable covers only a regular file.
+   - Impact: limited. The adopter template runs on ubuntu-latest (validate.yml.template:34), and the failure is in the closed direction of a gate, not a hook.
+   - Fix: when readlink fails with EINVAL on a regular file, read that file's bytes as the payload. Return None on ENOENT. Add both cases to the fu144 tests.
+2. P2 (carried from rc1 claude-p07 #2, still open in GA). The term rule's contract changed without a CHANGELOG line.
+   - Where: term_scan.py:21 and cli_checks.py:131-138, against CHANGELOG.md:112-117 ("Entry points keep their paths and their observable contracts", which names check_contamination.py).
+   - The term rule now exits 2 where the base exited 0 on: a non-UTF-8 tracked name anywhere in the index, an unreadable blob, an unsupported index mode, or a mismatch between the index and the walk.
+   - It reads a symlink's target string instead of following the link.
+   - It now runs after Rule 2 (cli_checks.py:207-212), so the report order is reversed, and a Rule 2 rc 2 now skips the term scan.
+   - It no longer skips by suffix: skip_suffixes is a dead parameter, and every .png, .pdf or .zip that is not allowlisted is read whole. Meanwhile check_contamination.py:30-31 still says "Binary file suffixes are excluded by extension".
+   - The CHANGELOG has no FU-144 or term-rule line.
+   - Fix: add one CHANGELOG line, drop the dead parameter (or restore the suffix skip for regular blobs), and correct the docstring.
+3. P2 (carried). The comment at cli_checks.py:218-219 says "RULE 2 still runs below"; in fact Rule 2 already ran at :208, and an rc 2 from it returns early at :211. Fix: correct the comment.
+4. P2 (carried). The moved logic is now canonical while its entry points are not.
+   - .claude/scripts/check_contamination.py and context-budget.py are not in the canonical guards, but their logic now sits under the guard ".claude/hooks/_lib/**/*.py" (_lib/canonical_edit/guards.py:34). Editing it from a Claude Code session now needs a sentinel, in adopters too.
+   - This tightens governance in the closed direction, but neither condition 7 nor the CHANGELOG says so.
+   - Stale comment: compaction.py:19-20 still says the decision module "is non-canonical and lives here in scripts/".
+   - Fix: one CHANGELOG sentence and the corrected comment.
+5. P2 (new, documentation). personal_constants.py:491 says the allowlist is "NEXT TO this file, under .claude/scripts/". After the move, the file is .claude/hooks/_lib/_contamination/personal_constants.py. Fix: name the path explicitly.
+6. P2 (carried). inventory.py:13-14 duplicates CHARS_PER_TOKEN and REDACTED so that HONESTY_NOTES can be built when the part is imported. If the facade value ever changes, the notes would no longer describe the estimate actually used. Fix: build the notes after install, or assert the two values are equal.
+
+VERDICT: GO Payload 8 makes no declared condition false and holds no P0 or undeclared P1: the moved contamination and context-budget code resolves every name and patch point through its facade, ships to installs, stays standard-library and Python 3.9, writes nothing and blocks no session, and the remaining defects are P2s that fail closed in a CI gate or are documentation gaps.

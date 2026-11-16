@@ -1,0 +1,19 @@
+Payload 8: no P0 or false declared condition established. Context-budget extraction preserves its declarations and bindings. The findings below were already recorded during the rc review and remain present.
+
+NEW FINDINGS (annex)
+
+P1 — .claude/scripts/_contamination_inventory.py:76, reached through .claude/hooks/_lib/_contamination/term_scan.py:38. With core.symlinks=false, tracked symlinks materialize as regular files. The new reader unconditionally calls readlink(), so a legitimate non-allowlisted entry makes the gate exit 2. Minimal fix: support regular-file link payloads through the no-follow reader while retaining index-based classification.
+
+P1 — .claude/scripts/check_contamination.py:132. If an ancestor of the private-terms file is inaccessible, os.path.lexists() suppresses the permission error and reports absence. The scanner silently omits private terms and can report otherwise-readable subjects clean. Minimal fix: use lstat(), treating only genuine absence as optional and propagating permission failures.
+
+P2 follow-ups
+
+P2 — .claude/hooks/_lib/_contamination/term_scan.py:12. Importing the facade using spec_from_file_location() fails with ModuleNotFoundError unless the caller adds .claude/scripts to sys.path. The facade itself adds only hooks. Minimal fix: move the inventory helper into the package and import it relatively.
+
+P2 — .claude/hooks/_lib/_contamination/personal_facade_io.py:3. typing.get_type_hints() fails for PersonalPathHit, PersonalPathScan and PersonalPathVerdict because their defining module lacks Tuple, Optional and List. Re-exporting the classes does not repair annotation resolution. Minimal fix: import those typing names in this module.
+
+P2 — .claude/hooks/_lib/_contamination/term_scan.py:21; CHANGELOG.md:112. skip_suffixes is unused, although the facade still promises suffix exclusions and the changelog promises preserved observable contracts. Upgrades now scan previously excluded suffixes and introduce additional fatal term-scan outcomes. Minimal fix: document the changed scope and error behavior, correct the facade documentation, and remove the unused parameter.
+
+Validation: Python 3.9.6 checks confirmed facade global bindings, default-root resolution and ordinary verdict behavior; 26 context-budget tests passed. Import and annotation failures were reproduced. No files changed. Full index-backed validation was unavailable because the supplied snapshot has no .git metadata.
+
+VERDICT: GO-WITH-CONDITIONS No release-blocking condition was established, while the carried contamination defects and compatibility regressions require follow-up.

@@ -1,0 +1,64 @@
+SCOPE
+Payload 27/34 is the first part of the .claude/scripts/ceo-boot.py diff. The ceo-boot body is removed and the file becomes a thin entry point. That entry point defines check_governance_validate, calls install(globals()) from .claude/hooks/_lib/_ceo_boot_parts/__init__.py, and then redefines check_tier_a_spec_version_drift. install() compiles 10 part files and runs them, in a fixed order, inside the entry point's own namespace. I judged the diff against the candidate tree: every part file, the loader, install.sh and _framework_manifest_set.sh, the kernel list, the canonical-edit pattern source, CHANGELOG [1.4.4], commands/ceo-boot.md, and every file outside tests that names ceo-boot.py. I also read the committed rc.1 verdicts for this file (claude-rc1-06, claude-rc1-26). The GA-only condition says nothing outside PLAN-198 changed since the rc tag, and these files are the same as the ones those verdicts describe.
+
+CHECKED, NO DEFECT
+- How names bind. The parts run inside the entry point's globals (__init__.py:20-26). So:
+  - __file__ is still ceo-boot.py. Lookups based on scripts_dir and parents[2] resolve as before (persona_confidence.py:183,216,275; candidates_lessons.py:202,374).
+  - `global _PLAN_GLOB_CACHE` binds the entry point's variable (state_plan_audit.py:6, ceo-boot.py:65).
+  - Monkeypatching module attributes still reaches the part functions.
+  - No part rebinds REPO_ROOT, _rp, the stdlib imports or check_governance_validate.
+  - Every import in the parts is a local one the base already had.
+  - No part has __all__, a __name__ guard, a dataclass or an Enum.
+- Load order. Everything evaluated at load time resolves:
+  - REPO_ROOT, _rp, _PLAN_GLOB_CACHE and check_governance_validate are defined before install() (ceo-boot.py:55-116).
+  - TIER_S_CHECKS (25 rows) and TIER_A_CHECKS (11 rows) are built in scheduled_cache.py:303-387, after every check they reference.
+- Moved text. These match the removed base text line for line: state_plan_audit.py (sanitizer, plan/wait logic, audit freshness, test-pollution and ghost filters), harness_governance.py, and the body of the spec-drift check.
+- Fail direction is unchanged:
+  - The _wrap_check floor still turns an exception into "error".
+  - The lesson render gate (_validate_boot_lesson, candidates_lessons.py:405-472) still drops the lesson when the validator is unavailable or raises (fail-closed).
+  - The settings tamper, model-currency, scheduled-red and liveness checks still never report green on missing data.
+- Partial install. No registered hook runs ceo-boot.py; settings.json and the hooks only mention /ceo-boot in nudges. So a partial install without _ceo_boot_parts makes /ceo-boot fail loudly with ImportError at ceo-boot.py:114 and blocks no session.
+- Startup cost. The parts compile from source on every run, but a __main__ script was never cached as bytecode either, so this is no regression.
+- Delivery. install.sh:1520-1556 copies every top-level _lib entry except tests, test_isolation.py and testing.py (_framework_manifest_set.sh:95-102). Upgrade enumerates .claude/hooks as a whole (_framework_manifest_set.sh:179). So _ceo_boot_parts ships. scripts/upgrade.sh and package.json are not in the reviewed copy.
+- Python. Standard library only. Compatible with 3.9: no match statement, no zip(strict=), no PEP 604 unions at runtime. The future annotations import is present in each part and is also inherited through compile().
+- Kernel and canonical status. _ceo_boot_parts is not on _KERNEL_PATHS (check_arbitration_kernel.py:309-340), which is consistent with conditions 5 and 7. It falls under the canonical guard on _lib/**/*.py, which is stricter than before for ceo-boot logic.
+- Conditions. Condition 7 holds for this file: the entry point keeps its path and the logic now lives in _lib modules. Conditions 3, 5, 13 and 14 are not contradicted by this payload. The GA condition that nothing was fixed between the rc and the GA holds for the two P1 notes below: both are still present.
+
+CARRIED P1 (already declared as open in the signed lane note claude-p06; confirmed still present, not new)
+- P1-a: .claude/hooks/_lib/_ceo_boot_parts/harness_governance.py:300-325 and :356.
+  - Cause: _sentinel_patterns() parses .claude/hooks/check_canonical_edit.py for `_PATTERNS =`. A grep finds no _PATTERNS there. The tuple now lives at .claude/hooks/_lib/canonical_edit/paths.py:238.
+  - Effect: the function always returns the 4-pattern fallback. On every /ceo-boot, sentinels_pending_gpg skips 6 of the 10 patterns: the architect/wave-* grandfathers, staging/review and audit-v2. The row always ends with "[padrões em FALLBACK — a autoridade não foi lida]".
+  - Minimal fix: parse paths.py first, keep check_canonical_edit.py as the fallback, and add a test that asserts derived=True and at least 10 patterns on the real tree.
+- P1-b: .claude/scripts/ceo-boot.py:120-178, against model_persona.py:6 and scheduled_cache.py:376.
+  - Cause: the entry point redefines check_tier_a_spec_version_drift after install(). TIER_A_CHECKS still holds the copy from the part file, so the entry point's copy is never dispatched.
+  - Effect: test_check_vacuous_checks.py:189-203 extracts the never-dispatched copy by AST, so reverting the PLAN-178 C3 cure in model_persona.py leaves those tests green.
+  - Honesty: the docstring at :123, "Lesson validation remains delegated to `_validate_boot_lesson`", has nothing to do with this function. It exists only to satisfy a text grep. This also contradicts the entry point's own comment at :111-113 that patch points "retain their historical identity".
+  - Minimal fix: delete the duplicate and the marker text, and assert that module.check_tier_a_spec_version_drift is dict(module.TIER_A_CHECKS)["tier_a_spec_version_drift"].
+
+P0
+None.
+
+NEW FINDINGS (annex)
+None. I found no undeclared P1 in this payload.
+
+P2 FOLLOW-UPS (all carried from the rc.1 verdicts and re-confirmed; none new)
+- P2-1: ceo-boot.py:180-184 and check-vacuous-checks.py:133.
+  - Problem: the vacuity lint's default target is the entry point, which now holds 2 check_* functions. A new always-green check in any part passes the lint.
+  - Problem: test_plan_091_expected_callsites and test_ceo_boot_audit_emit pass on the marker comments at :180 and :184, whether or not the registry still wires the check.
+  - Fix: point the lint at the entry point plus _lib/_ceo_boot_parts/*.py, and assert registry membership instead of grepping text.
+- P2-2: harness_governance.py:174-250 (check_hook_live_smoke).
+  - Problem: it runs py_compile only on the registered hook entry points, which are now thin. A syntax error or a missing part file in _lib/*_parts makes the hook crash at import and fail open, while this check still reports green.
+  - Fix: also compile every file in each _PARTS tuple and report a missing part as `missing:`.
+- P2-3: _ceo_boot_parts/__init__.py:25-26.
+  - Problem: each part's module docstring overwrites the entry point's __doc__ with "Extracted ceo-boot declarations executed by the facade." This is cosmetic; argparse uses an explicit description.
+  - Fix: save and restore __doc__ around the loop, or drop the part docstrings.
+- P2-4: stale text.
+  - .claude/commands/ceo-boot.md:35 still says "the 24 Tier-S checks"; the registry asserts 25.
+  - SessionEnd.py:662 and docs/threat-model.md still point at ceo-boot.py::_validate_boot_lesson, which now lives at candidates_lessons.py:405.
+  - The entry point's docstring still says "15 Tier-S checks" and "per-check timeout 500 ms".
+- P2-5: model_persona.py:241 (main_checkout_state).
+  - Problem: when refs/remotes/origin/HEAD is unset, the check assumes the default branch is "main", so a master or develop repo shows a false yellow.
+  - Problem: three sequential git calls with 0.8 s timeouts have no PER_CHECK_TIMEOUT_OVERRIDES_S entry, which costs only a "slow" annotation.
+  - Fix: say "assumed main" in the summary, or read init.defaultBranch.
+
+VERDICT: GO The ceo-boot facade keeps name binding, patch points, fail direction, delivery and Python 3.9 standard-library compatibility, no declared condition is contradicted, and the only P1-level defects (fallback sentinel patterns and the never-dispatched spec-drift duplicate) are already carried as open in the signed claude-p06 lane notes, so this payload adds no P0 and no undeclared P1.
